@@ -18,6 +18,9 @@ export const LOGOS = {
   statamic: { ch: 'S', c: '#a78bfa' },
   codeigniter: { ch: 'C', c: '#f97316' },
   tempest:  { ch: 'T', c: '#29ABE2' },
+  winter:   { ch: 'W', c: '#2da7c7' },
+  bedrock:  { ch: 'B', c: '#21759b' },
+  lumen:    { ch: 'L', c: '#f4645f' },
   claude:   { ch: 'C', c: '#ff8a65' },
   cursor:   { ch: '⌘', c: '#e5e7eb' },
   codex:    { ch: '{', c: '#34d399' },
@@ -93,6 +96,20 @@ export const SVC_SHOW = [
   { logo: 'mailpit',  name: 'Mailpit',     port: ':1025' },
   { logo: 'mongo',    name: 'MongoDB',     port: ':27017' },
   { logo: 'stripe',   name: 'Stripe Mock', port: ':12111' },
+]
+
+/* ---- The rest of the store, named rather than carded, so the section stays compact.
+   Split the way the store itself splits them: a preset with admin_for fronts another
+   service rather than being one you would reach for on its own. ---- */
+export const SVC_MORE = [
+  'MariaDB', 'Valkey', 'Memcached', 'Typesense', 'ClickHouse', 'Elasticsearch',
+  'OpenSearch', 'RabbitMQ', 'Beanstalkd', 'Soketi', 'Selenium', 'Gotenberg',
+  'pgvector', 'TimescaleDB',
+]
+
+export const SVC_ADMIN = [
+  'phpMyAdmin', 'pgAdmin', 'Mongo Express', 'RedisInsight',
+  'Elasticvue', 'Typesense Dashboard', 'OpenSearch Dashboards',
 ]
 
 /* ---- Quick-start steps ---- */

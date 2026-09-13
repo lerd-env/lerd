@@ -53,13 +53,13 @@ func TestLerdReservedPorts_includesInstalledCustomService(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	svc := &config.CustomService{Name: "my-thing", Image: "example/my-thing:1", Ports: []string{"34567:80"}}
+	svc := &config.CustomService{Name: "my-thing", Image: "example/my-thing:1", Ports: []string{"14567:80"}}
 	if err := config.SaveCustomService(svc); err != nil {
 		t.Fatalf("SaveCustomService: %v", err)
 	}
 
-	if !lerdReservedPorts()[34567] {
-		t.Errorf("the guard must reserve an installed custom service's host port 34567; got %v", lerdReservedPorts())
+	if !lerdReservedPorts()[14567] {
+		t.Errorf("the guard must reserve an installed custom service's host port 14567; got %v", lerdReservedPorts())
 	}
 }
 
@@ -120,18 +120,18 @@ func TestPortClaimedByOtherInstalled(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	sib := &config.CustomService{Name: "sib", Image: "example/x:1", Ports: []string{"33061:3306"}}
+	sib := &config.CustomService{Name: "sib", Image: "example/x:1", Ports: []string{"13061:3306"}}
 	if err := config.SaveCustomService(sib); err != nil {
 		t.Fatalf("SaveCustomService: %v", err)
 	}
-	if !portClaimedByOtherInstalled("newsib", 33061) {
-		t.Error("an installed sibling holding 33061 must count as a claim")
+	if !portClaimedByOtherInstalled("newsib", 13061) {
+		t.Error("an installed sibling holding 13061 must count as a claim")
 	}
-	if portClaimedByOtherInstalled("sib", 33061) {
+	if portClaimedByOtherInstalled("sib", 13061) {
 		t.Error("a service must not count as claiming its own port")
 	}
-	if portClaimedByOtherInstalled("newsib", 33062) {
-		t.Error("no service holds 33062; must not be claimed")
+	if portClaimedByOtherInstalled("newsib", 13062) {
+		t.Error("no service holds 13062; must not be claimed")
 	}
 
 	// A default preset seeded in config but with no installed quadlet is a phantom
@@ -140,11 +140,11 @@ func TestPortClaimedByOtherInstalled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadGlobal: %v", err)
 	}
-	cfg.Services["mysql"] = config.ServiceConfig{Enabled: true, Port: 33070}
+	cfg.Services["mysql"] = config.ServiceConfig{Enabled: true, Port: 13070}
 	if err := config.SaveGlobal(cfg); err != nil {
 		t.Fatalf("SaveGlobal: %v", err)
 	}
-	if portClaimedByOtherInstalled("mariadb", 33070) {
+	if portClaimedByOtherInstalled("mariadb", 13070) {
 		t.Error("a seeded-but-uninstalled default preset must not claim its port (#704)")
 	}
 }
@@ -157,7 +157,7 @@ func TestPortClaimedByOtherInstalled_SecondaryDefault(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	svc := &config.CustomService{Name: "twoport", Image: "example/x:1", Ports: []string{"33061:3306", "8025:8025"}}
+	svc := &config.CustomService{Name: "twoport", Image: "example/x:1", Ports: []string{"13061:3306", "8025:8025"}}
 	if err := config.SaveCustomService(svc); err != nil {
 		t.Fatalf("SaveCustomService: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestPortClaimedByOtherInstalled_SecondaryDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadGlobal: %v", err)
 	}
-	cfg.Services["twoport"] = config.ServiceConfig{Enabled: true, Port: 33061}
+	cfg.Services["twoport"] = config.ServiceConfig{Enabled: true, Port: 13061}
 	if err := config.SaveGlobal(cfg); err != nil {
 		t.Fatalf("SaveGlobal: %v", err)
 	}
@@ -175,8 +175,8 @@ func TestPortClaimedByOtherInstalled_SecondaryDefault(t *testing.T) {
 	if !portClaimedByOtherInstalled("other", 8025) {
 		t.Error("the un-overridden secondary default 8025 must count as claimed")
 	}
-	if !portClaimedByOtherInstalled("other", 33061) {
-		t.Error("the primary default 33061 must count as claimed")
+	if !portClaimedByOtherInstalled("other", 13061) {
+		t.Error("the primary default 13061 must count as claimed")
 	}
 	if portClaimedByOtherInstalled("other", 9999) {
 		t.Error("an unrelated port must not be claimed")

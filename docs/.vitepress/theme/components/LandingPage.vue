@@ -2,6 +2,7 @@
 import { onMounted, onBeforeUnmount, ref, defineAsyncComponent } from 'vue'
 import { withBase } from 'vitepress'
 import * as D from '../landing-data.js'
+import { data as starData } from '../stars.data'
 
 // VitePress's real local docs search, lazy-loaded and opened from the nav / ⌘K.
 const VPLocalSearchBox = defineAsyncComponent(
@@ -24,7 +25,24 @@ function later(fn, ms) {
   return id
 }
 
+const stars = ref(starData.stars)
+const starLabel = (n) => (n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(n))
+
+async function refreshStars() {
+  try {
+    const res = await fetch('https://api.github.com/repos/lerd-env/lerd', {
+      headers: { Accept: 'application/vnd.github+json' },
+    })
+    if (!res.ok) return
+    const n = Number((await res.json()).stargazers_count)
+    if (n > 0) stars.value = n
+  } catch {
+    /* the baked-in count stands */
+  }
+}
+
 onMounted(() => {
+  refreshStars()
   const el = root.value
   if (!el) return
   const $ = (s) => el.querySelector(s)
@@ -140,11 +158,23 @@ onMounted(() => {
   // (A fixed terminalFontSize would pin the size and stop it resizing.)
   // Respect reduced-motion: don't auto-play/loop, and expose controls instead.
   const reduceMotion = Boolean(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)
-  const castOpts = { autoPlay: !reduceMotion, loop: !reduceMotion, controls: reduceMotion, fit: 'width' }
+  // terminalFontFamily is not decoration: the player sizes its column grid from
+  // the width of "0" in this stack and then draws the line in it, so the two
+  // have to be the same font. Left to its default, "0" resolved to a face half
+  // an em wide while the letters came from a 0.6em one, and every coloured run
+  // landed short of where the previous one ended, overlapping it.
+  const castFont = '"DejaVu Sans Mono", "Liberation Mono", Menlo, Consolas, monospace'
+  const castOpts = { autoPlay: !reduceMotion, loop: !reduceMotion, controls: reduceMotion, fit: 'width', terminalFontFamily: castFont }
   async function mountCast(sel, src, extra) {
     const el = $(sel)
     if (!el) return null
     const mod = await loadAP()
+    // The player sizes the terminal from the width of one character, so it has
+    // to measure in the font it will actually draw in. Mounting before the
+    // fonts settle measures a proportional face, whose digit is half an em
+    // against a monospace 0.6, and every column after the first lands short:
+    // the coloured runs then overlap each other along the line.
+    if (document.fonts && document.fonts.ready) { try { await document.fonts.ready } catch (e) {} }
     if (!alive) return null
     const p = mod.create(withBase(src), el, { ...castOpts, ...extra })
     players.push(p)
@@ -190,6 +220,14 @@ onMounted(() => {
       <span class="svc-t"><b>${s.name}</b><span>${s.port}</span></span>
     </div>`).join('')
   $$('#svc-cards .reveal').forEach(observeReveal)
+
+  /* The store carries far more than the eight above, and carding all of them
+     would bury the section. They are named instead, in one wrapped row. */
+  const pills = (names) => names.map((n) => `<span class="svc-more-item">${n}</span>`).join('')
+  const svcMore = $('#svc-more-list')
+  if (svcMore && D.SVC_MORE) svcMore.innerHTML = pills(D.SVC_MORE)
+  const svcAdmin = $('#svc-admin-list')
+  if (svcAdmin && D.SVC_ADMIN) svcAdmin.innerHTML = pills(D.SVC_ADMIN)
 
   /* ---------- Quick-start stepper ---------- */
   const stepList = $('#step-list')
@@ -254,6 +292,7 @@ onBeforeUnmount(() => {
         </a>
         <div class="nav-links">
           <a href="#features">Features</a>
+          <a href="#macos">macOS</a>
           <a href="#dashboard">Dashboard</a>
           <a href="#mcp">AI / MCP</a>
           <a href="#compare">Why Lerd</a>
@@ -292,6 +331,7 @@ onBeforeUnmount(() => {
               <span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-4z"/></svg><b>Rootless</b> · no sudo</span>
               <span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg><b>No Docker</b> daemon</span>
               <span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>PHP <b>7.4 – 8.5</b></span>
+              <span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M2 14h3M19 10h3M19 14h3"/></svg><b>PHP on the host</b> · macOS beta</span>
             </div>
           </div>
 
@@ -334,8 +374,9 @@ onBeforeUnmount(() => {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
                 See the Web UI
               </a>
-              <a class="btn btn-ghost btn-icon" href="https://github.com/lerd-env/lerd" target="_blank" rel="noopener" aria-label="GitHub">
+              <a class="btn btn-ghost btn-stars" href="https://github.com/lerd-env/lerd" target="_blank" rel="noopener" :aria-label="stars ? `GitHub, ${stars} stars` : 'GitHub'">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222 0 1.606-.014 2.898-.014 3.293 0 .322.216.694.825.576C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+                <span v-if="stars" class="star-n">{{ starLabel(stars) }}</span>
               </a>
             </div>
           </div>
@@ -350,12 +391,17 @@ onBeforeUnmount(() => {
             <a class="strip-item" :href="withBase('/getting-started/symfony')"><span class="gl" data-bare data-logo="symfony"></span> Symfony</a>
             <a class="strip-item" :href="withBase('/getting-started/wordpress')"><span class="gl" data-bare data-logo="wordpress"></span> WordPress</a>
             <a class="strip-item" :href="withBase('/getting-started/drupal')"><span class="gl" data-bare data-logo="drupal"></span> Drupal</a>
+          </div>
+          <div class="strip-items strip-items-sm">
             <a class="strip-item" :href="withBase('/getting-started/typo3')"><span class="gl" data-bare data-logo="typo3"></span> TYPO3</a>
             <a class="strip-item" :href="withBase('/getting-started/magento')"><span class="gl" data-bare data-logo="magento"></span> Magento</a>
             <a class="strip-item" :href="withBase('/getting-started/cakephp')"><span class="gl" data-bare data-logo="cake"></span> CakePHP</a>
             <a class="strip-item" :href="withBase('/getting-started/statamic')"><span class="gl" data-bare data-logo="statamic"></span> Statamic</a>
             <a class="strip-item" :href="withBase('/getting-started/codeigniter')"><span class="gl" data-bare data-logo="codeigniter"></span> CodeIgniter</a>
             <a class="strip-item" :href="withBase('/getting-started/tempest')"><span class="gl" data-bare data-logo="tempest"></span> Tempest</a>
+            <a class="strip-item" :href="withBase('/getting-started/winter')"><span class="gl" data-bare data-logo="winter"></span> Winter CMS</a>
+            <a class="strip-item" :href="withBase('/getting-started/bedrock')"><span class="gl" data-bare data-logo="bedrock"></span> Bedrock</a>
+            <a class="strip-item" :href="withBase('/getting-started/lumen')"><span class="gl" data-bare data-logo="lumen"></span> Lumen</a>
           </div>
         </div>
       </div>
@@ -418,6 +464,37 @@ onBeforeUnmount(() => {
             <span class="feat-chip">FrankenPHP &amp; Octane</span>
             <span class="feat-chip">Tabbed mouse-driven TUI &amp; system tray</span>
             <span class="feat-chip">Polyglot sites · Node, Python, Go &amp; Ruby</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ MACOS ============ -->
+      <section id="macos">
+        <div class="wrap">
+          <div class="sec-head reveal">
+            <span class="eyebrow"><span class="dot"></span>macOS, same binary</span>
+            <h2 class="h-section" style="margin-top:18px">Local PHP development on a Mac,<br/>with nothing to buy.</h2>
+            <p class="lead">Nginx, PHP-FPM and your services run as rootless Podman containers, the way they do on Linux, with the same <code class="kbd">.test</code> domains, per-project PHP and Node, one-command TLS, and the same dashboard, TUI, profiler and MCP server behind them. One binary, one line to install.</p>
+          </div>
+
+          <div class="mac-grid">
+            <div class="card mac-card reveal">
+              <h3>There is no paid tier</h3>
+              <p>Everything on this page ships in one MIT-licensed binary: the profiler, the dump debugger, Tinker, the dashboard, the TUI, the MCP server. You never make an account, and nothing waits behind an upgrade.</p>
+            </div>
+            <div class="card mac-card reveal d1">
+              <h3>PHP on the host, in beta</h3>
+              <p>A project on a Mac is bind-mounted into a VM, so a containerised PHP crosses that boundary on every file it reads. An opt-in runtime moves PHP-FPM, the CLI, composer and the workers onto the host and leaves nginx and the services where they are.</p>
+              <p class="mac-note">Off by default. Turn it on in System → Runtime, or with <code class="kbd">lerd php:runtime</code>. Native builds cover PHP 8.1 and up; anything older keeps its container.</p>
+            </div>
+          </div>
+
+          <div class="mac-cta reveal d2">
+            <div class="cmd-row">
+              <span class="prompt">$</span>
+              <span class="cmd-text">curl -fsSL https://lerd.sh/install.sh | bash</span>
+            </div>
+            <a class="btn-ghost" :href="withBase('/getting-started/installation')">macOS install guide →</a>
           </div>
         </div>
       </section>
@@ -503,6 +580,18 @@ onBeforeUnmount(() => {
             <p class="lead">Toggle them per workspace from the CLI, dashboard or MCP. Need something else? Drop a <code class="kbd">Containerfile.lerd</code> to run Node, Python, Ruby or Go alongside your PHP sites.</p>
           </div>
           <div class="svc-grid" id="svc-cards"></div>
+
+          <div class="svc-more reveal">
+            <p class="svc-more-label">and every other preset in the store</p>
+            <div class="svc-more-list" id="svc-more-list"></div>
+
+            <p class="svc-more-label svc-admin-label">with a UI for the ones that have one</p>
+            <div class="svc-more-list" id="svc-admin-list"></div>
+            <p class="svc-more-foot">
+              <code class="kbd">lerd service:add &lt;name&gt;</code> or pick one in the dashboard.
+              <a :href="withBase('/getting-started/services')">Browse the services →</a>
+            </p>
+          </div>
         </div>
       </section>
 
