@@ -21,8 +21,16 @@ if [ -z "$summary" ]; then
   exit 1
 fi
 
-if [ "${#summary}" -gt 300 ]; then
-  summary="${summary:0:300}…"
+# Cut at a sentence boundary, a hard character cut lands mid-clause and reads
+# like the message was damaged rather than shortened.
+if [ "${#summary}" -gt 320 ]; then
+  head="${summary:0:320}"
+  cut="${head%. *}"
+  if [ "$cut" != "$head" ] && [ "${#cut}" -gt 120 ]; then
+    summary="$cut."
+  else
+    summary="${head% *}…"
+  fi
 fi
 
 case "$VERSION" in
@@ -54,11 +62,9 @@ payload=$(jq -n \
       color: $colour,
       fields: [
         { name: "New install", value: "```\ncurl -fsSL https://lerd.sh/install.sh | bash\n```" },
-        { name: "Already have lerd", value: ("```\n" + $update + "\n```") },
-        { name: "Notes", value: ("[" + $url + "](" + $url + ")") }
+        { name: "Already have lerd", value: ("```\n" + $update + "\n```") }
       ],
-      footer: { text: "lerd.sh" },
-      timestamp: (now | todate)
+      footer: { text: "lerd.sh" }
     }]
   }')
 
