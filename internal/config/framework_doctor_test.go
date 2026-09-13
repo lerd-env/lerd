@@ -33,13 +33,17 @@ doctor:
       unknown_on_error: true
       timeout: 25
       fix: migrate
+    - name: cache_on_bind_mount
+      type: host_mounted_path
+      paths:
+        - var/cache
 `
 	var fw Framework
 	if err := yaml.Unmarshal([]byte(src), &fw); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if fw.Doctor == nil || len(fw.Doctor.Checks) != 3 {
-		t.Fatalf("expected 3 doctor checks, got %+v", fw.Doctor)
+	if fw.Doctor == nil || len(fw.Doctor.Checks) != 4 {
+		t.Fatalf("expected 4 doctor checks, got %+v", fw.Doctor)
 	}
 
 	combo := fw.Doctor.Checks[0]
@@ -54,6 +58,10 @@ doctor:
 	if cmd.Command != "php artisan migrate:status" || cmd.FailIfOutputContains != "Pending" ||
 		cmd.FailIfErrorContains != "Migration table not found" || !cmd.UnknownOnError || cmd.TimeoutSeconds != 25 {
 		t.Errorf("command not parsed: %+v", cmd)
+	}
+	mounted := fw.Doctor.Checks[3]
+	if mounted.Type != "host_mounted_path" || len(mounted.Paths) != 1 || mounted.Paths[0] != "var/cache" {
+		t.Errorf("host_mounted_path not parsed: %+v", mounted)
 	}
 }
 

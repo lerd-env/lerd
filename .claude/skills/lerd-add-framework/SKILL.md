@@ -42,7 +42,8 @@ and test against, but the pull request goes to **lerd-env/frameworks**.
      major (see step 4).
    - `setup` — post-link steps (migrate, storage:link…) with sensible `default:`
    - `doctor.checks` — declarative health checks (`env_combo`, `symlink`,
-     `command`) with a `fix:` command and a human `detail:` string
+     `host_mounted_path`, `command`) with a `fix:` command and a human
+     `detail:` string
    - `commands` — dashboard/TUI custom commands with `icon` and `confirm` where
      destructive
    - `devtools.jobs` — the method that runs a queued job, so the Debug window

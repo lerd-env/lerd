@@ -514,6 +514,8 @@ func runDeclaredCheck(ctx context.Context, path, envPath, envFormat string, spec
 		c, ok = checkEnvCombo(read, spec), true
 	case "symlink":
 		c, ok = checkSymlink(path, spec)
+	case "host_mounted_path":
+		c, ok = checkHostMountedPath(path, spec)
 	case "command":
 		c, ok = checkCommand(ctx, path, spec), true
 	default:

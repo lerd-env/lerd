@@ -35,6 +35,8 @@ The pools run on demand: a version nothing has asked for in a minute drops to ze
 
 FrankenPHP sites, custom containers and host-proxy sites are unaffected either way: they never used the shared FPM container.
 
+If you stay on the container runtime, the site doctor points out the one directory that costs the most across that boundary. A framework that compiles its cache into the project, Symfony into `var/cache`, reads and writes it over the mount on every request, and the doctor's `Cache Directory` check tells you how to move it onto a container local path. The check only appears on macOS in container mode, since neither Linux nor the native runtime crosses a mount at all.
+
 ## Installing and updating
 
 The builds are downloaded, not compiled here. Switching to the native runtime fetches whatever versions your sites run, verifying each against a published sha256, and `lerd use <version>` fetches one on demand:

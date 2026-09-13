@@ -698,7 +698,8 @@ type FrameworkDoctor struct {
 }
 
 // DoctorCheck is one declarative health check; Type selects the evaluator
-// (env_key_set, env_combo, symlink, command) and which other fields apply.
+// (env_key_set, env_combo, symlink, host_mounted_path, command) and which other
+// fields apply.
 type DoctorCheck struct {
 	Name  string `yaml:"name"`
 	Type  string `yaml:"type"`
@@ -727,6 +728,9 @@ type DoctorCheck struct {
 	Link        string `yaml:"link,omitempty"`
 	Target      string `yaml:"target,omitempty"`
 	RequiresDir string `yaml:"requires_dir,omitempty"`
+
+	// host_mounted_path
+	Paths []string `yaml:"paths,omitempty"`
 
 	// command
 	Command              string `yaml:"command,omitempty"`

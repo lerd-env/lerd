@@ -456,7 +456,7 @@ doctor:
   migrate_command: doctrine:migrations:migrate   # the command that applies the schema
   checks:
     - name: storage_link              # stable id
-      type: symlink                   # env_key_set | env_combo | symlink | command
+      type: symlink                   # env_key_set | env_combo | symlink | host_mounted_path | command
       label: Storage Link             # display label
       link: public/storage            # the path that must be a symlink
       target: storage/app/public      # skipped unless this dir exists
@@ -621,6 +621,17 @@ There are four check types, each with its own fields.
 
 `symlink` checks that a path is a symlink, for the likes of Laravel's `public/storage`. It takes `link`, the path that should be one, and `target`, the directory it should point into. The check skips itself entirely when `target` does not exist, since the link is meaningless then, and `requires_dir` adds a second directory that must exist for the check to apply at all.
 
+`host_mounted_path` warns when a directory the framework compiles into sits on the macOS bind mount. It takes `paths`, a list of paths relative to the project root, and triggers when any of them exists. On macOS the project is shared into the Podman machine over virtiofs, where a stat costs roughly twenty times what it costs on a container-local path, so a framework writing its compiled cache there pays it on every request and every cache clear. The check stays silent on Linux, where the project and PHP share a filesystem, and on a site served by the native runtime, which runs PHP on the host with no VM boundary to cross. lerd cannot move the directory itself, since a framework that hardcodes it reads no environment variable lerd could write, so `detail` should carry the framework's own remedy.
+
+```yaml
+- name: cache_on_bind_mount
+  type: host_mounted_path
+  label: Cache Directory
+  paths:
+    - var/cache
+  detail: var/cache sits on the macOS bind mount, so every compile crosses virtiofs.
+```
+
 `command` runs a console command inside the site's container and judges the result. It takes `command`, and `fail_if_output_contains`, a plain substring that marks the finding as triggered when it appears in the output. `timeout` caps the run in seconds, defaulting to 25. `unknown_on_error: true` is the important one: when the command cannot run at all, because the app is wedged or the database is unreachable, the check reports "unknown" instead of failing, so a down app does not turn the whole panel red with checks that never actually ran.
 
 `fail_if_error_contains` is the escape hatch from that. Some commands exit non-zero for the very condition the check exists to catch: `php artisan migrate:status` fails with "Migration table not found" on a database that has never been migrated, which is the normal state of a freshly linked project and exactly what `fix: migrate` resolves. A substring named here is matched against the output of a non-zero run and reports the finding with its fix, ahead of `unknown_on_error`. Anything else still degrades to "unknown", so that bucket keeps meaning genuine connectivity problems.
@@ -637,7 +648,7 @@ There are four check types, each with its own fields.
   fix: migrate
 ```
 
-`severity` overrides the status a triggered check reports, and takes `warn` or `fail`. The default differs by type, which is not something you would guess: a `command` check defaults to `fail`, and the other three default to `warn`. So a pending-migrations check is a failure unless you say otherwise, while a missing symlink is a warning. An unrecognised severity is ignored rather than rejected, falling back to the type default.
+`severity` overrides the status a triggered check reports, and takes `warn` or `fail`. The default differs by type, which is not something you would guess: a `command` check defaults to `fail`, and the others default to `warn`. So a pending-migrations check is a failure unless you say otherwise, while a missing symlink is a warning. An unrecognised severity is ignored rather than rejected, falling back to the type default.
 
 An unknown `type` is skipped rather than treated as an error, so a definition using a check type a newer lerd added still loads on an older binary; the new check just does not run.
 
