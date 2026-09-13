@@ -64,8 +64,7 @@ payload=$(jq -n \
         { name: "New install", value: "```\ncurl -fsSL https://lerd.sh/install.sh | bash\n```" },
         { name: "Already have lerd", value: ("```\n" + $update + "\n```") }
       ],
-      footer: { text: "lerd.sh" },
-      timestamp: (now | todate)
+      footer: { text: "lerd.sh" }
     }]
   }')
 
