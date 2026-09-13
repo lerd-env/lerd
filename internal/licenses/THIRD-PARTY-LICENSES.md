@@ -4208,13 +4208,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 | @types/deep-eql | 4.0.2 | MIT |
 | @types/estree | 1.0.8 | MIT |
 | @types/trusted-types | 2.0.7 | MIT |
-| @vitest/expect | 4.1.8 | MIT |
-| @vitest/mocker | 4.1.8 | MIT |
-| @vitest/pretty-format | 4.1.8 | MIT |
-| @vitest/runner | 4.1.8 | MIT |
-| @vitest/snapshot | 4.1.8 | MIT |
-| @vitest/spy | 4.1.8 | MIT |
-| @vitest/utils | 4.1.8 | MIT |
+| @vitest/expect | 4.1.11 | MIT |
+| @vitest/mocker | 4.1.11 | MIT |
+| @vitest/pretty-format | 4.1.11 | MIT |
+| @vitest/runner | 4.1.11 | MIT |
+| @vitest/snapshot | 4.1.11 | MIT |
+| @vitest/spy | 4.1.11 | MIT |
+| @vitest/utils | 4.1.11 | MIT |
 | acorn | 8.16.0 | MIT |
 | agent-base | 7.1.4 | MIT |
 | ansi-regex | 5.0.1 | MIT |
@@ -4302,7 +4302,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 | monaco-editor | 0.55.1 | MIT |
 | mri | 1.2.0 | MIT |
 | ms | 2.1.3 | MIT |
-| nanoid | 3.3.16 | MIT |
+| nanoid | 3.3.19 | MIT |
 | nwsapi | 2.2.23 | MIT |
 | obug | 2.1.1 | MIT |
 | parse5 | 7.3.0 | MIT |
@@ -4336,7 +4336,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 | tinybench | 2.9.0 | MIT |
 | tinyexec | 1.2.4 | MIT |
 | tinyglobby | 0.2.16 | MIT |
-| tinyrainbow | 3.1.0 | MIT |
+| tinyrainbow | 3.1.1 | MIT |
 | tldts | 6.1.86 | MIT |
 | tldts-core | 6.1.86 | MIT |
 | tough-cookie | 5.1.2 | BSD-3-Clause |
@@ -4348,7 +4348,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 | uuid | 14.0.0 | MIT |
 | vite | 7.3.5 | MIT |
 | vitefu | 1.1.3 | MIT |
-| vitest | 4.1.8 | MIT |
+| vitest | 4.1.11 | MIT |
 | w3c-xmlserializer | 5.0.0 | MIT |
 | webidl-conversions | 7.0.0 | BSD-2-Clause |
 | webpack-virtual-modules | 0.6.2 | MIT |
@@ -4905,7 +4905,7 @@ MIT License
     SOFTWARE
 ```
 
-### @vitest/expect 4.1.8, @vitest/mocker 4.1.8, @vitest/pretty-format 4.1.8, @vitest/runner 4.1.8, @vitest/snapshot 4.1.8, @vitest/spy 4.1.8, @vitest/utils 4.1.8
+### @vitest/expect 4.1.11, @vitest/mocker 4.1.11, @vitest/pretty-format 4.1.11, @vitest/runner 4.1.11, @vitest/snapshot 4.1.11, @vitest/spy 4.1.11, @vitest/utils 4.1.11
 
 MIT
 
@@ -8124,7 +8124,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### nanoid 3.3.16
+### nanoid 3.3.19
 
 MIT
 
@@ -9387,7 +9387,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### tinybench 2.9.0, tinyrainbow 3.1.0
+### tinybench 2.9.0, tinyrainbow 3.1.1
 
 MIT
 
@@ -11844,7 +11844,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### vitest 4.1.8
+### vitest 4.1.11
 
 MIT
 
