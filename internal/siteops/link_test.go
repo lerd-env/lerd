@@ -13,6 +13,7 @@ import (
 // rather than clamped up to the Laravel 10 minimum.
 func TestDetectSiteVersions_GuessedFrameworkSkipsPHPClamp(t *testing.T) {
 	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
@@ -118,6 +119,7 @@ func TestCleanupRelink_NoExisting(t *testing.T) {
 // cap gives a site that 500s on its own platform check, so the project wins.
 func TestDetectSiteVersions_ProjectRequirementOverrulesRange(t *testing.T) {
 	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 

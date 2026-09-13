@@ -3,9 +3,10 @@
 package php
 
 import (
-	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 var fpmPlistRe = regexp.MustCompile(`^lerd-php(\d)(\d+)-fpm\.plist$`)
@@ -14,8 +15,11 @@ var fpmPlistRe = regexp.MustCompile(`^lerd-php(\d)(\d+)-fpm\.plist$`)
 // ~/Library/LaunchAgents. On macOS, plists replace systemd quadlet files, so
 // the QuadletDir glob in ListInstalled always returns nothing.
 func listInstalledFromServiceDir() []string {
-	home, _ := os.UserHomeDir()
-	pattern := filepath.Join(home, "Library", "LaunchAgents", "lerd-php*-fpm.plist")
+	dir := config.LaunchAgentsDir()
+	if dir == "" {
+		return nil
+	}
+	pattern := filepath.Join(dir, "lerd-php*-fpm.plist")
 	matches, _ := filepath.Glob(pattern)
 	var versions []string
 	for _, m := range matches {
