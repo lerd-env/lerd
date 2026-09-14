@@ -58,6 +58,8 @@ type Plan struct {
 	// Used is every image lerd's own stack occupies disk with, live ones
 	// included. It is context for the reclaimable total, not part of it.
 	Used []UsedImage
+	// UsedTotal is the disk those images hold with shared layers counted once.
+	UsedTotal int64
 	// Held counts dangling images a running container still holds that would
 	// otherwise be reaped. They can't be removed now, but a restart recreates the
 	// container on the current image and releases them, so the caller can hint it.
@@ -73,14 +75,10 @@ type UsedImage struct {
 	Bytes int64
 }
 
-// UsedBytes is the disk lerd's own images occupy right now.
-func (p Plan) UsedBytes() int64 {
-	var total int64
-	for _, u := range p.Used {
-		total += u.Bytes
-	}
-	return total
-}
+// UsedBytes is the disk lerd's own images occupy right now, with a layer shared
+// between them counted once. The per-image Used rows do not sum to it: each one
+// carries the whole cost of its chain, most of which its neighbours share.
+func (p Plan) UsedBytes() int64 { return p.UsedTotal }
 
 // HeldByContainers tallies reclaimable disk a restart would free.
 type HeldByContainers struct {
@@ -154,7 +152,21 @@ func podmanImages() ([]image, error) {
 	if err := json.Unmarshal([]byte(out), &imgs); err != nil {
 		return nil, fmt.Errorf("parsing podman images: %w", err)
 	}
+	applyUniqueBytes(imgs, readUniqueBytes())
 	return imgs, nil
+}
+
+// applyUniqueBytes rewrites SharedSize from podman's layer-aware accounting, so
+// reclaimable() reports what removing an image would actually free. An image
+// the lookup does not cover keeps the size podman images gave it: a df that
+// cannot answer should overstate the way it always has rather than report a
+// stack with nothing reclaimable in it.
+func applyUniqueBytes(imgs []image, unique map[string]int64) {
+	for i := range imgs {
+		if u, ok := unique[shortID(imgs[i].ID)]; ok {
+			imgs[i].SharedSize = imgs[i].Size - u
+		}
+	}
 }
 
 func podmanImageLayers(ids []string) (map[string][]string, error) {
@@ -282,6 +294,7 @@ func Inspect(scope Scope) (Plan, error) {
 			p.Targets = append(p.Targets, deepTargets(imgs, repos, prot, canonPulled(), scope)...)
 		}
 	}
+	p.UsedTotal = usedTotal(imgs, repos, prot)
 	p.Targets = append(p.Targets, staleServiceFiles()...)
 	// podman lists a multi-tag image once per tag, so dedupe by ref/ID to avoid
 	// counting or trying to remove the same target twice.
@@ -428,6 +441,12 @@ func removeTarget(t Target) error {
 // children gone first. A target that never succeeds (e.g. it became referenced
 // since Inspect) is simply left, so one stuck image can't abort the sweep.
 func Apply(p Plan) (removed int, reclaimed int64) {
+	// The per-target estimate is a floor: a layer two targets share is freed by
+	// the second removal and charged to neither, since podman credits it to
+	// neither alone. Measuring the store on both sides is the only way to report
+	// what actually came back, so the estimate is the fallback, not the answer.
+	before := readStoreBytes()
+	var estimate, files int64
 	remaining := p.Targets
 	for len(remaining) > 0 {
 		var stuck []Target
@@ -438,7 +457,10 @@ func Apply(p Plan) (removed int, reclaimed int64) {
 				continue
 			}
 			removed++
-			reclaimed += t.Bytes
+			estimate += t.Bytes
+			if t.Kind == KindFiles {
+				files += t.Bytes
+			}
 			progress = true
 		}
 		if !progress {
@@ -446,7 +468,12 @@ func Apply(p Plan) (removed int, reclaimed int64) {
 		}
 		remaining = stuck
 	}
-	return removed, reclaimed
+	// Rendered config lives outside the image store, so its bytes are added to
+	// whichever image figure is used.
+	if after := readStoreBytes(); before > 0 && after > 0 && after <= before {
+		return removed, before - after + files
+	}
+	return removed, estimate
 }
 
 // isLerd reports whether the image was built by lerd, proven by a dev.lerd.*

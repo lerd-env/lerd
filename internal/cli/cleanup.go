@@ -123,7 +123,10 @@ func runCleanup(dryRun, yes, safe bool) error {
 	}
 	feedback.Header("Reclaimable lerd disk")
 	feedback.Table([]string{"TARGET", "KIND", "RECLAIMABLE"}, rows)
-	feedback.Note(fmt.Sprintf("About %s across %d item(s).", humanSize(plan.ReclaimBytes()), len(plan.Targets)))
+	// A floor, not an estimate: each row is the disk only that image holds, so a
+	// chain of superseded builds that goes when its last tag does is credited to
+	// nobody here and turns up in the measured total afterwards.
+	feedback.Note(fmt.Sprintf("At least %s across %d item(s).", humanSize(plan.ReclaimBytes()), len(plan.Targets)))
 
 	if dryRun {
 		showHeldHint(plan)
@@ -135,6 +138,9 @@ func runCleanup(dryRun, yes, safe bool) error {
 
 	_, freed := cleanup.Apply(plan)
 	feedback.Done(fmt.Sprintf("Freed about %s.", humanSize(freed)))
+	if hint := reclaimedHostHint(); hint != "" && freed > 0 {
+		feedback.Note(hint)
+	}
 	showHeldHint(plan)
 	return nil
 }

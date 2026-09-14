@@ -10,6 +10,20 @@ import (
 	"github.com/geodro/lerd/internal/imgledger"
 )
 
+// withoutDiskReadings stops a test shelling out to the real podman for its disk
+// accounting. With no reading available the code falls back to the per-target
+// estimate, which is what most of these tests assert; the ones that care about
+// the measured delta stub these seams themselves.
+func withoutDiskReadings(t *testing.T) {
+	t.Helper()
+	readStoreBytes = func() int64 { return 0 }
+	readUniqueBytes = func() map[string]int64 { return nil }
+	t.Cleanup(func() {
+		readStoreBytes = podmanStoreBytes
+		readUniqueBytes = podmanUniqueBytes
+	})
+}
+
 // withImages swaps the image-scan and layer-inspect seams for fixtures and
 // restores them after. layers maps an image ID to its RootFS layers.
 func withImages(t *testing.T, imgs []image, layers map[string][]string) {
@@ -33,6 +47,7 @@ func withImages(t *testing.T, imgs []image, layers map[string][]string) {
 	// Default to an empty ledger so a test that doesn't care never reads the real
 	// on-disk file; catalog-reap tests override this after calling withImages.
 	loadPulledImages = func() map[string]bool { return map[string]bool{} }
+	withoutDiskReadings(t)
 	t.Cleanup(func() {
 		scanImages = podmanImages
 		imageLayers = podmanImageLayers
@@ -297,6 +312,7 @@ func TestInspect_ReclaimsOrphanBasesKeepsInUse(t *testing.T) {
 
 func TestApply_RemovesTargetsAndSumsReclaimed(t *testing.T) {
 	var removed []string
+	withoutDiskReadings(t)
 	removeImage = func(id string) error { removed = append(removed, id); return nil }
 	t.Cleanup(func() { removeImage = podmanRemoveImage })
 
@@ -317,6 +333,7 @@ func TestApply_RemovesTargetsAndSumsReclaimed(t *testing.T) {
 // a later pass once the child is gone, so a single Apply reclaims the whole
 // dangling build chain even when the parent is listed first.
 func TestApply_RetriesUntilDependentsFreed(t *testing.T) {
+	withoutDiskReadings(t)
 	present := map[string]bool{"child": true, "parent": true}
 	removeImage = func(id string) error {
 		if id == "parent" && present["child"] {
@@ -343,6 +360,7 @@ func TestApply_RetriesUntilDependentsFreed(t *testing.T) {
 // A removal that fails (e.g. the image became referenced since Inspect) is
 // skipped so one stuck image can't abort the sweep, and its bytes aren't counted.
 func TestApply_SkipsFailedRemovalsButContinues(t *testing.T) {
+	withoutDiskReadings(t)
 	removeImage = func(id string) error {
 		if id == "bad" {
 			return errors.New("image is in use")

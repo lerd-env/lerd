@@ -97,7 +97,7 @@
   "dashboard_disk_ownerOther": "Other images",
   "dashboard_disk_reclaimable": "Reclaimable disk",
   "dashboard_disk_split": "{lerd} lerd, {other} other",
-  "dashboard_disk_usageBody": "lerd's own images take {size} across {count} image(s). Nothing here is removed by a cleanup while it is still referenced.",
+  "dashboard_disk_usageBody": "lerd's own images take {size} across {count} image(s). Each row is the full cost of that image's layers, so rows overlap where they share a base and the total counts a shared layer once. Nothing here is removed by a cleanup while it is still referenced.",
   "dashboard_disk_usageTitle": "Disk used by lerd",
   "dashboard_disk_usedByLerd": "Disk",
   "dashboard_health_attention": "Attention",

@@ -91,6 +91,7 @@ func TestSweepDeep_ReapsUnusedServiceImages(t *testing.T) {
 func TestSweepDeep_GatedOffNoOp(t *testing.T) {
 	autoEnabled = func() bool { return false }
 	scanned := false
+	withoutDiskReadings(t)
 	scanImages = func() ([]image, error) { scanned = true; return nil, nil }
 	t.Cleanup(func() {
 		autoEnabled = defaultAutoEnabled
@@ -106,6 +107,7 @@ func TestSweepDeep_GatedOffNoOp(t *testing.T) {
 func TestSweepSafe_GatedOffNoOp(t *testing.T) {
 	autoEnabled = func() bool { return false }
 	scanned := false
+	withoutDiskReadings(t)
 	scanImages = func() ([]image, error) { scanned = true; return nil, nil }
 	t.Cleanup(func() {
 		autoEnabled = defaultAutoEnabled

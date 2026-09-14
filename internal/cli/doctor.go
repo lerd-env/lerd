@@ -617,7 +617,7 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 	}
 
 	if plan, planErr := cleanup.Inspect(cleanupScope(false)); planErr == nil && plan.ReclaimBytes() > 0 {
-		info("Reclaimable disk", fmt.Sprintf("about %s (run: lerd cleanup)", humanSize(plan.ReclaimBytes())))
+		info("Reclaimable disk", fmt.Sprintf("at least %s (run: lerd cleanup)", humanSize(plan.ReclaimBytes())))
 		rep.fixLast(autoFix(fixCleanup, "", "reclaim disk space (lerd cleanup)"))
 	}
 

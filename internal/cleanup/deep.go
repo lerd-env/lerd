@@ -193,7 +193,31 @@ func usedImage(img image, repos, protected map[string]bool) (UsedImage, bool) {
 	if len(img.Names) > 0 {
 		ref = img.Names[0]
 	}
-	return UsedImage{Ref: ref, InUse: inUse(img), Bytes: reclaimable(img)}, true
+	// A breakdown row carries the whole cost of the image's chain, which is the
+	// number podman images shows and the one that makes a heavy image obvious.
+	// The rows therefore overlap; Plan.UsedTotal is the deduplicated figure.
+	return UsedImage{Ref: ref, InUse: inUse(img), Bytes: img.Size}, true
+}
+
+// usedTotal is the disk lerd's images hold with every layer counted once:
+// podman's whole image store less the bytes only foreign images hold. A layer
+// lerd shares with a foreign image counts as lerd's, since lerd needs it
+// either way, which keeps the two figures adding up to the store podman
+// reports. Returns 0 when podman could not size the store at all.
+func usedTotal(imgs []image, repos, protected map[string]bool) int64 {
+	total := readStoreBytes()
+	if total <= 0 {
+		return 0
+	}
+	for _, img := range imgs {
+		if !lerdOwned(img, repos, protected) {
+			total -= reclaimable(img)
+		}
+	}
+	if total < 0 {
+		return 0
+	}
+	return total
 }
 
 // ownerOf maps an image to the owner its target is credited to.
