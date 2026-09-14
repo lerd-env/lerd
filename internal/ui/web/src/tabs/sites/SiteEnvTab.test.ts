@@ -22,6 +22,27 @@ const proposeSiteEnv = vi.fn(async () => ({
   entries: [],
 }));
 
+// Monaco can't run in jsdom, and its async import outliving the test file tears
+// the environment down mid-load.
+vi.mock("$lib/monaco", () => ({
+  loadMonaco: () =>
+    Promise.resolve({
+      editor: {
+        create: (_el: HTMLElement, opts: { value?: string }) => ({
+          getValue: () => opts.value ?? "",
+          setValue: () => {},
+          onDidChangeModelContent: () => ({ dispose() {} }),
+          updateOptions: () => {},
+          dispose: () => {},
+        }),
+        setTheme: () => {},
+        defineTheme: () => {},
+      },
+    }),
+  lerdThemeName: () => "lerd-dark",
+  applyEditorAccent: () => {},
+}));
+
 vi.mock("$stores/sites", () => ({
   loadSiteEnvFiles: (...a: unknown[]) => loadSiteEnvFiles(...(a as [])),
   loadSiteEnv: (...a: unknown[]) =>
