@@ -106,6 +106,60 @@ describe('AppLogsTab', () => {
     expect(parentCalls.every((u) => !u.includes('branch='))).toBe(true);
   });
 
+  // The tab has no stream of its own: it used to refresh only because every
+  // websocket snapshot invalidated its effect. It polls on its own now.
+  describe('polling', () => {
+    function serveOneFile() {
+      globalThis.fetch = vi.fn(async (url: string) => {
+        calls.push(url);
+        const body = url.includes('/laravel.log') ? { entries: [] } : { files: [{ name: 'laravel.log', size: 10 }] };
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }) as unknown as typeof fetch;
+    }
+    const entryCalls = () => calls.filter((u) => u.includes('/laravel.log')).length;
+
+    beforeEach(() => {
+      serveOneFile();
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('re-fetches the entries every 5 seconds', async () => {
+      render(SiteHarness, { props: { site: siteWith() } });
+      await vi.advanceTimersByTimeAsync(0);
+      const initial = entryCalls();
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(entryCalls()).toBe(initial + 1);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(entryCalls()).toBe(initial + 2);
+    });
+
+    it('does not poll a suspended site', async () => {
+      render(SiteHarness, { props: { site: siteWith({ idle_suspended: true }) } });
+      await vi.advanceTimersByTimeAsync(0);
+      const initial = entryCalls();
+
+      await vi.advanceTimersByTimeAsync(15000);
+      expect(entryCalls()).toBe(initial);
+    });
+
+    it('stops polling once the tab is closed', async () => {
+      const { unmount } = render(SiteHarness, { props: { site: siteWith() } });
+      await vi.advanceTimersByTimeAsync(0);
+
+      unmount();
+      const afterClose = entryCalls();
+      await vi.advanceTimersByTimeAsync(15000);
+      expect(entryCalls()).toBe(afterClose);
+    });
+  });
+
   it('clears logs only after the confirmation modal is confirmed', async () => {
     const methodCalls: string[] = [];
     globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
