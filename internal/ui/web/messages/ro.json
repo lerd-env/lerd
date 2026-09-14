@@ -99,7 +99,7 @@
   "dashboard_disk_split": "{lerd} lerd, {other} altele",
   "dashboard_disk_usageBody": "Imaginile proprii lerd ocupă {size} în {count} imagine/imagini. Nimic de aici nu e șters la o curățare cât timp este referențiat.",
   "dashboard_disk_usageTitle": "Disc folosit de lerd",
-  "dashboard_disk_usedByLerd": "Folosit de lerd",
+  "dashboard_disk_usedByLerd": "Disc",
   "dashboard_health_attention": "Atenție",
   "dashboard_health_dns": "Resolver DNS (*.{tld})",
   "dashboard_health_dumpBridge": "Punte de depanare",

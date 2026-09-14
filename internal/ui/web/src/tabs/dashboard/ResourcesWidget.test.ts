@@ -50,7 +50,7 @@ describe('ResourcesWidget disk block', () => {
   it('shows what lerd uses even when there is nothing to reclaim', () => {
     disk.set(snap({ used_by_lerd_bytes: 5 * 1024 ** 3 }));
     const { getByText, queryByText } = render(ResourcesWidget);
-    expect(getByText('Used by lerd')).toBeTruthy();
+    expect(getByText('Disk')).toBeTruthy();
     expect(queryByText('Clean up')).toBeNull();
   });
 
@@ -94,6 +94,6 @@ describe('ResourcesWidget disk block', () => {
   it('stays hidden while the scan is unavailable', () => {
     disk.set(snap({ available: false, used_by_lerd_bytes: 5 * 1024 ** 3 }));
     const { queryByText } = render(ResourcesWidget);
-    expect(queryByText('Used by lerd')).toBeNull();
+    expect(queryByText('Disk')).toBeNull();
   });
 });

@@ -99,7 +99,7 @@
   "dashboard_disk_split": "{lerd} lerd, {other} altre",
   "dashboard_disk_usageBody": "Le immagini di lerd occupano {size} su {count} immagine/i. Nulla viene rimosso da una pulizia finché è referenziato.",
   "dashboard_disk_usageTitle": "Disco usato da lerd",
-  "dashboard_disk_usedByLerd": "Usato da lerd",
+  "dashboard_disk_usedByLerd": "Disco",
   "dashboard_health_attention": "Attenzione",
   "dashboard_health_dns": "Resolver DNS (*.{tld})",
   "dashboard_health_dumpBridge": "Bridge di debug",

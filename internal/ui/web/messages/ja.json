@@ -99,7 +99,7 @@
   "dashboard_disk_split": "lerd {lerd}、その他 {other}",
   "dashboard_disk_usageBody": "lerd 自身のイメージが {count} 件で {size} を使用しています。参照されている限り、クリーンアップで削除されることはありません。",
   "dashboard_disk_usageTitle": "lerd が使用しているディスク",
-  "dashboard_disk_usedByLerd": "lerd の使用量",
+  "dashboard_disk_usedByLerd": "ディスク",
   "dashboard_health_attention": "要注意",
   "dashboard_health_dns": "DNS リゾルバ（*.{tld}）",
   "dashboard_health_dumpBridge": "デバッグブリッジ",

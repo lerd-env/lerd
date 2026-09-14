@@ -99,7 +99,7 @@
   "dashboard_disk_split": "{lerd} lerd, {other} inne",
   "dashboard_disk_usageBody": "Własne obrazy lerd zajmują {size} w {count} obraz(ach). Nic z tego nie zostanie usunięte podczas czyszczenia, dopóki jest używane.",
   "dashboard_disk_usageTitle": "Dysk zajęty przez lerd",
-  "dashboard_disk_usedByLerd": "Zajęte przez lerd",
+  "dashboard_disk_usedByLerd": "Dysk",
   "dashboard_health_attention": "Uwaga",
   "dashboard_health_dns": "Resolver DNS (*.{tld})",
   "dashboard_health_dumpBridge": "Mostek debugowania",

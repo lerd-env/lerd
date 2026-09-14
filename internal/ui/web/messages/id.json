@@ -99,7 +99,7 @@
   "dashboard_disk_split": "{lerd} lerd, {other} lainnya",
   "dashboard_disk_usageBody": "Image milik lerd memakai {size} pada {count} image. Tidak ada yang dihapus saat pembersihan selama masih dirujuk.",
   "dashboard_disk_usageTitle": "Disk yang dipakai lerd",
-  "dashboard_disk_usedByLerd": "Dipakai lerd",
+  "dashboard_disk_usedByLerd": "Disk",
   "dashboard_health_attention": "Perhatian",
   "dashboard_health_dns": "Resolver DNS (*.{tld})",
   "dashboard_health_dumpBridge": "Jembatan debug",

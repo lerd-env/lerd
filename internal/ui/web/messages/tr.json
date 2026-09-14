@@ -99,7 +99,7 @@
   "dashboard_disk_split": "{lerd} lerd, {other} diğer",
   "dashboard_disk_usageBody": "lerd'in kendi imajları {count} imajda {size} yer kaplıyor. Referans verildiği sürece temizlikte hiçbiri silinmez.",
   "dashboard_disk_usageTitle": "lerd tarafından kullanılan disk",
-  "dashboard_disk_usedByLerd": "lerd kullanımı",
+  "dashboard_disk_usedByLerd": "Disk",
   "dashboard_health_attention": "Dikkat",
   "dashboard_health_dns": "DNS çözümleyici (*.{tld})",
   "dashboard_health_dumpBridge": "Debug köprüsü",

@@ -99,7 +99,7 @@
   "dashboard_disk_split": "{lerd} lerd, {other} overig",
   "dashboard_disk_usageBody": "De eigen images van lerd nemen {size} in beslag over {count} image(s). Niets hiervan wordt door een opruiming verwijderd zolang ernaar verwezen wordt.",
   "dashboard_disk_usageTitle": "Schijf gebruikt door lerd",
-  "dashboard_disk_usedByLerd": "Gebruikt door lerd",
+  "dashboard_disk_usedByLerd": "Schijf",
   "dashboard_health_attention": "Aandacht",
   "dashboard_health_dns": "DNS-resolver (*.{tld})",
   "dashboard_health_dumpBridge": "Debug-bridge",

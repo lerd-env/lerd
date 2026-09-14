@@ -99,7 +99,7 @@
   "dashboard_disk_split": "{lerd} lerd, {other} khác",
   "dashboard_disk_usageBody": "Các image của lerd chiếm {size} trên {count} image. Không có gì bị xóa khi dọn dẹp nếu vẫn còn được tham chiếu.",
   "dashboard_disk_usageTitle": "Dung lượng lerd đang dùng",
-  "dashboard_disk_usedByLerd": "lerd đang dùng",
+  "dashboard_disk_usedByLerd": "Ổ đĩa",
   "dashboard_health_attention": "Cần chú ý",
   "dashboard_health_dns": "Bộ phân giải DNS (*.{tld})",
   "dashboard_health_dumpBridge": "Cầu nối gỡ lỗi",

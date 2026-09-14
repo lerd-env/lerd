@@ -99,7 +99,7 @@
   "dashboard_disk_split": "lerd {lerd}，其他 {other}",
   "dashboard_disk_usageBody": "lerd 自身的镜像在 {count} 个镜像中占用 {size}。只要仍被引用，清理就不会删除其中任何一个。",
   "dashboard_disk_usageTitle": "lerd 占用的磁盘",
-  "dashboard_disk_usedByLerd": "lerd 占用",
+  "dashboard_disk_usedByLerd": "磁盘",
   "dashboard_health_attention": "需关注",
   "dashboard_health_dns": "DNS 解析器（*.{tld}）",
   "dashboard_health_dumpBridge": "调试桥",
