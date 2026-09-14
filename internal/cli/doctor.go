@@ -348,6 +348,25 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 			ok(fmt.Sprintf("PHP default version (%s)", cfg.PHP.DefaultVersion))
 		}
 
+		// The shims dir is prepended to PATH once, at install. Anything that
+		// appends its own PHP to the rc afterwards wins, and the only symptom
+		// is container hostnames failing to resolve for CLI commands.
+		if !cfg.Shims.PathDisabled {
+			for _, tool := range []string{"php", "composer"} {
+				if !shimInstalled(tool) {
+					continue
+				}
+				shim, resolved, lookErr := resolvedShimPath(tool)
+				switch status, detail := shimShadowFinding(tool, shim, resolved, lookErr); status {
+				case "warn":
+					warn(tool+" on PATH", detail)
+					rep.fixLast(manualFixWith("put lerd's shims back in front: move its PATH line to the end of your shell rc, or run `lerd path:disable` to keep your own " + tool))
+				default:
+					ok(tool + " on PATH (lerd shim)")
+				}
+			}
+		}
+
 		if cfg.Nginx.HTTPPort <= 0 || cfg.Nginx.HTTPSPort <= 0 {
 			fail("nginx ports", fmt.Sprintf("http=%d https=%d", cfg.Nginx.HTTPPort, cfg.Nginx.HTTPSPort), "set valid ports in "+cfgFile)
 		} else {
