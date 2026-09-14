@@ -5,11 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	phpDet "github.com/geodro/lerd/internal/php"
@@ -300,16 +298,7 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 	}
 
 	// Handle proxy port assignment and command augmentation.
-	command = withPinnedWorkerPort(siteName, workerName, w, command)
-	if w.Proxy != nil && w.Proxy.PortEnvKey != "" && !w.Proxy.PinnedPort() {
-		envPath := filepath.Join(sitePath, ".env")
-		port := envfile.ReadKey(envPath, w.Proxy.PortEnvKey)
-		if port == "" {
-			port = strconv.Itoa(assignWorkerProxyPort(sitePath, w.Proxy.PortEnvKey, w.Proxy.DefaultPort))
-			_ = envfile.ApplyUpdates(envPath, map[string]string{w.Proxy.PortEnvKey: port})
-		}
-		command = command + " --port=" + port
-	}
+	command = withWorkerProxyPort(siteName, sitePath, workerName, w, command)
 
 	// A host worker that starts a known dev server is pinned to a port and
 	// pointed at a generated config, so it answers on the site's own domain.

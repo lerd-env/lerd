@@ -152,6 +152,24 @@ func pinnedWorkerPort(siteName, workerName string, defaultPort int) int {
 	return port
 }
 
+// withWorkerProxyPort gives a proxied worker the port its server must answer
+// on: the one lerd allocated and owns, or the one the site's .env names,
+// assigning and recording it the first time. The vhost proxies there, so a
+// worker rebuilt without it comes back where nothing is listening.
+func withWorkerProxyPort(siteName, sitePath, workerName string, w config.FrameworkWorker, command string) string {
+	command = withPinnedWorkerPort(siteName, workerName, w, command)
+	if w.Proxy == nil || w.Proxy.PortEnvKey == "" || w.Proxy.PinnedPort() {
+		return command
+	}
+	envPath := filepath.Join(sitePath, ".env")
+	port := envfile.ReadKey(envPath, w.Proxy.PortEnvKey)
+	if port == "" {
+		port = strconv.Itoa(assignWorkerProxyPort(sitePath, w.Proxy.PortEnvKey, w.Proxy.DefaultPort))
+		_ = envfile.ApplyUpdates(envPath, map[string]string{w.Proxy.PortEnvKey: port})
+	}
+	return command + " --port=" + port
+}
+
 // withPinnedWorkerPort hands the worker the port lerd picked, through the key
 // the definition names, so the tool's own config reads it from the environment
 // rather than lerd guessing a flag the command may not take.

@@ -67,7 +67,14 @@ func checkServiceWiringOn(path, envFile string, fw *config.Framework, loopback b
 		if envfile.ReferencesContainer(string(content), name) {
 			continue
 		}
-		if loopback && envfile.ReferencesHostWiring(string(content), hostPorts(name), config.ServiceDomain(name)) {
+		// The published port only reaches a site whose PHP runs on the host, but
+		// a service's proxy domain resolves from inside a container too, so it
+		// counts as wiring wherever the site runs.
+		var ports []string
+		if loopback {
+			ports = hostPorts(name)
+		}
+		if envfile.ReferencesHostWiring(string(content), ports, config.ServiceDomain(name)) {
 			continue
 		}
 		unwired = append(unwired, name)
