@@ -264,7 +264,7 @@ func probeNetworkIPv6(name string) (ok, timedOut bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), probeNetworkIPv6Timeout)
 	defer cancel()
 	cmd := execCommandContext(ctx, PodmanBin(), "run", "--rm", "--network", name,
-		"--pull", "never", "alpine:latest", "true")
+		"--pull", "never", ProbeImage, "true")
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		return true, false

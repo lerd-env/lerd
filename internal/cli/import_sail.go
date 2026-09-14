@@ -1140,7 +1140,7 @@ func sailFindMinio(cf *sailComposeFile, portRemap map[int]int) (name string, por
 
 // sailImportS3 mirrors a Sail MinIO bucket into lerd's RustFS using mc.
 func sailImportS3(s3 *sailS3Env, minioPort int, dbName string) error {
-	const mcImage = "docker.io/minio/mc:latest"
+	const mcImage = podman.MinioClientImage
 
 	if err := ensureServiceRunning("rustfs"); err != nil {
 		return fmt.Errorf("starting rustfs: %w", err)

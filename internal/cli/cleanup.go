@@ -23,7 +23,7 @@ func NewCleanupCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be reclaimed without removing anything")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Remove without confirming")
-	cmd.Flags().BoolVar(&safe, "safe", false, "Only reclaim images provably built by lerd, keep unused service and dangling images")
+	cmd.Flags().BoolVar(&safe, "safe", false, "Only reclaim images provably built by lerd, keep unused and dangling images")
 	// --deep is now the default; kept as a hidden no-op so existing muscle memory
 	// and scripts don't break.
 	cmd.Flags().BoolVar(&deep, "deep", false, "")

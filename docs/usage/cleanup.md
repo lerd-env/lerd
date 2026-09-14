@@ -13,10 +13,11 @@ By default (and automatically) cleanup reclaims everything below. Pass `--safe` 
 - **Orphaned PHP build images**: the old `lerd-php<ver>-fpm:local` / `lerd-frankenphp<ver>:local` image a rebuild left dangling when it re-pointed the tag.
 - **Orphaned base images**: a pre-built `lerd-php*-fpm-base` image nothing live is built on: an old Containerfile hash, or a PHP version you no longer have installed. Whether a base is still in use is decided by **layer ancestry** (is its top layer part of any live image?), so a base the current PHP image is built on is always kept, never untagged into a needless re-pull.
 
-**Unused service images** (the deep tier, default):
+**Unused images** (the deep tier, default):
 
-- A **catalog service image** that no installed service references any more and that no container currently holds, e.g. an old `mysql:8.0` after you upgraded to `8.4`. Each service's **current image and its one-back rollback target are kept**, so a rollback still works.
-- This tier does **not** require that lerd pulled the image. Any image whose repo appears in the service catalog (`postgres`, `mysql`, `mariadb`, `redis`, `mongo`, `elasticsearch`, `valkey` and the rest) is in scope once nothing references it, including a copy you pulled yourself for a non-lerd project. That is deliberate: an unreferenced catalog image is the single largest thing a mixed-workload machine accumulates. If you park stopped containers' images for other stacks, run `--safe` instead; anything reclaimed here comes back with a `podman pull`.
+- Any tagged image no container holds and nothing lerd knows about references. That covers the obvious case, an old `mysql:8.0` after you upgraded to `8.4`, and the one that used to be invisible: the base layer of a custom container. A site whose `Containerfile.lerd` says `FROM golang:1.25` pulls that 890 MB base once, keeps it across every rebuild, and strands it the moment the Containerfile picks a different base or the site goes away. It is not a service image and lerd's pull ledger never recorded it, so no narrower rule could ever reach it.
+- Each service's **current image and its one-back rollback target are kept**, so a rollback still works, as is every installed quadlet's image, including the PHP-FPM image of a site that happens to be stopped.
+- This tier does **not** require that lerd pulled the image, so on a machine that also runs podman for other work it can reclaim something you pulled yourself once its containers are gone. That is deliberate: an unreferenced image is the single largest thing a mixed-workload machine accumulates. Run `--safe` if you park stopped containers' images for other stacks; anything reclaimed here comes back with a `podman pull`.
 
 **Dangling images** (the deep tier, default):
 
@@ -26,19 +27,20 @@ By default (and automatically) cleanup reclaims everything below. Pass `--safe` 
 
 - **Named data volumes**: your databases are never in scope.
 - **Any tagged image in use**: an image a running container uses, and each installed service's current image and one-back rollback target, are always kept.
-- **A tagged image outside the service catalog**: your own application images, another tool's base images, anything still carrying a tag whose repo lerd doesn't recognise as a service. (Untagged leftovers are a different matter, the deep tier reaps those wherever they came from.)
+- **lerd's own tool images**: the `alpine` it runs the IPv6 network probe with (with `--pull never`, so losing it would quietly downgrade the probe) and the `minio/mc` it provisions S3 buckets with. Neither leaves a container behind, so nothing else marks them as live.
+- **A tagged image outside the service catalog**, in the unattended tiers and under `--safe`: your own application images, another tool's base images. The interactive default does reap these once nothing references them, which is the whole point of the tier.
 - With **`--safe`**, only images provably built by lerd (a `dev.lerd.*` label or the `lerd-php*-fpm-base` repo name) are removed, and nothing else is touched at all.
 
-The default reaches further than `--safe` in two places: it also removes **dangling** (untagged) images, and **unreferenced catalog images regardless of who pulled them**. On a machine that also runs podman for non-lerd projects, that means the interactive `lerd cleanup` can reclaim a `postgres` or `redis` you pulled for another stack once its containers are gone. The unattended daily sweep never does either of these, it stays strictly on images lerd pulled. Use `--safe` if you want cleanup scoped to lerd alone. Removal is reference-count safe throughout: shared layers stay on disk, and an image that turns out to be in use is skipped rather than forced.
+The default reaches further than `--safe` in two places: it also removes **dangling** (untagged) images, and **every unused tagged image regardless of who pulled it**. The unattended daily sweep never does either, it stays strictly on catalog images lerd recorded pulling. Use `--safe` if you want cleanup scoped to lerd alone. Removal is reference-count safe throughout: shared layers stay on disk, and an image that turns out to be in use is skipped rather than forced.
 
-Both the CLI preview and the dashboard modal itemise every image before anything is removed, so you always see a catalog image of your own listed by name and size before confirming.
+Both the CLI preview and the dashboard modal itemise every image before anything is removed, so you always see an image of your own listed by name and size before confirming.
 
 ## Commands
 
 ```bash
-lerd cleanup              # preview, confirm, then reclaim orphaned lerd, unused service, and dangling images
+lerd cleanup              # preview, confirm, then reclaim orphaned lerd, unused, and dangling images
 lerd cleanup --dry-run    # show what would be reclaimed and the size, remove nothing
-lerd cleanup --safe       # only reclaim images provably built by lerd, keep unused service and dangling images
+lerd cleanup --safe       # only reclaim images provably built by lerd, keep unused and dangling images
 lerd cleanup --yes        # skip the confirmation prompt (for scripts)
 ```
 
@@ -53,7 +55,7 @@ The dashboard surfaces this too. The resources widget shows the reclaimable tota
 Cleanup is on by default and safe, so the disk doesn't grow on its own:
 
 - **On rebuild / service change**: a PHP rebuild (`lerd use`, `lerd php:rebuild`, `lerd php:ext`/`php:pkg`, a `lerd update` that bumps the Containerfile) reclaims the image it just superseded immediately. A `lerd service update` or `lerd service remove` reclaims that service's now-unused versions, scoped to that one service.
-- **Daily backstop**: the `lerd-watcher` runs a managed sweep about once a day (throttled by a timestamp so a restarting watcher can't sweep more often), catching lerd's own orphaned build images and old service versions that fell out of the one-back rollback window. It keeps every tagged image in use (the current image and the rollback target) and never removes an image lerd didn't pull, so it stays safe unattended. The wider reap that also clears foreign untagged leftovers and unreferenced catalog images you pulled yourself is left to the interactive `lerd cleanup`, so nothing running another podman workload is surprised by an unattended prune.
+- **Daily backstop**: the `lerd-watcher` runs a managed sweep about once a day (throttled by a timestamp so a restarting watcher can't sweep more often), catching lerd's own orphaned build images and old service versions that fell out of the one-back rollback window. It keeps every tagged image in use (the current image and the rollback target) and never removes an image lerd didn't pull, so it stays safe unattended. The wider reap that also clears foreign untagged leftovers and any unused tagged image, a build base or a copy you pulled yourself included, is left to the interactive `lerd cleanup`, so nothing running another podman workload is surprised by an unattended prune.
 
 Toggle automatic cleanup with `lerd cleanup auto on` / `lerd cleanup auto off` (or set `auto_cleanup` in [`~/.config/lerd/config.yaml`](../configuration.md)); `lerd cleanup auto status` shows the current state. When off, `lerd cleanup` stays available on demand.
 

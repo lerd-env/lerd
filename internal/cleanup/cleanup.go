@@ -153,8 +153,9 @@ const (
 	// run unattended; this is the daily watcher's tier.
 	ScopeManaged
 	// ScopeDeep additionally reclaims every remaining dangling image on the host
-	// and every unreferenced catalog image regardless of who pulled it, foreign
-	// ones included. Interactive only, and the default for `lerd cleanup`.
+	// and every unused image regardless of who pulled it, foreign ones included:
+	// the stranded base layer of a custom container lives here and nothing
+	// narrower can see it. Interactive only, and the default for `lerd cleanup`.
 	ScopeDeep
 )
 
@@ -169,10 +170,11 @@ const (
 // Both removals are refcount-safe: layers a live image still shares are kept.
 //
 // ScopeManaged widens this to lerd's catalog upgrade leftovers, ScopeDeep to
-// every remaining dangling image (foreign included). An image a container holds
-// is always skipped, and the catalog reap is skipped if the protected set fails.
+// every remaining dangling image and every unused image (foreign included). An
+// image a container holds is always skipped, and the unused reap is skipped if
+// the protected set fails.
 func Inspect(scope Scope) (Plan, error) {
-	reapCatalog := scope >= ScopeManaged
+	reapUnused := scope >= ScopeManaged
 	reapAllDangling := scope >= ScopeDeep
 	imgs, err := scanImages()
 	if err != nil {
@@ -226,11 +228,11 @@ func Inspect(scope Scope) (Plan, error) {
 		}
 	}
 
-	if reapCatalog {
+	if reapUnused {
 		repos, repoErr := serviceRepos()
 		prot, protErr := protectedImages()
 		if repoErr == nil && protErr == nil {
-			p.Targets = append(p.Targets, deepTargets(imgs, repos, prot, canonPulled(), reapAllDangling)...)
+			p.Targets = append(p.Targets, deepTargets(imgs, repos, prot, canonPulled(), scope)...)
 		}
 	}
 	p.Targets = append(p.Targets, staleServiceFiles()...)

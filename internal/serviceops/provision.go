@@ -118,7 +118,7 @@ func S3BucketName(name string) string {
 func EnsureS3Bucket(name string) (bool, error) {
 	const (
 		alias   = "lerd"
-		mcImage = "docker.io/minio/mc:latest"
+		mcImage = podman.MinioClientImage
 		mcEnv   = "MC_HOST_lerd=http://lerd:lerdpassword@lerd-rustfs:9000"
 	)
 

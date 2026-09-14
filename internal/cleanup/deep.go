@@ -28,8 +28,8 @@ var (
 	installedServiceImages = realInstalledServiceImages
 
 	// loadPulledImages is the seam onto lerd's pull ledger. The managed tier gates
-	// the catalog reap on it; the deep tier passes ignoreLedger and reaps any
-	// unreferenced catalog image, a user's own copy included.
+	// the catalog reap on it; the deep tier ignores it and reaps any unused
+	// image, a user's own copy included.
 	loadPulledImages = imgledger.Load
 )
 
@@ -88,20 +88,23 @@ func realReferencedImages(candidates map[string]bool) map[string]bool {
 	return found
 }
 
-// deepTargets reclaims service images lerd pulled but nothing references any
-// more: an image whose every tag is an unprotected catalog ref. Treating lerd's
-// managed service images as lerd's own, this catches an old mysql:5.7 left
-// behind after upgrading, while the protected set keeps the live image and the
-// one-back rollback target, and an image carrying any non-catalog tag (one the
-// user added themselves) is left entirely alone.
-// ignoreLedger drops the "lerd recorded pulling this" requirement, so the deep
-// tier can recover catalog images pulled outside lerd's explicit pull path
-// (podman auto-pulls a quadlet's Image= on first start, which the ledger never
-// sees). The managed and safe tiers keep the ledger gate.
-func deepTargets(imgs []image, repos, protected, pulled map[string]bool, ignoreLedger bool) []Target {
+// deepTargets reclaims images nothing references any more. The managed tier
+// stays inside lerd's catalog: an image whose every tag is an unprotected
+// catalog ref lerd recorded pulling, which catches an old mysql:5.7 left behind
+// after an upgrade while the protected set keeps the live image and the
+// one-back rollback target.
+//
+// The deep tier drops both gates and reaps every unused image on the host. Most
+// of what accumulates is not a catalog image at all: the base layer of a custom
+// container (FROM golang:1.25) survives every rebuild of the site that pulled
+// it and is stranded the moment the Containerfile changes or the site goes
+// away, and lerd's pull ledger never recorded it, so no narrower rule can ever
+// see it. Anything a container holds, or that lerd's own config, quadlets or
+// tool set names, is protected in both tiers.
+func deepTargets(imgs []image, repos, protected, pulled map[string]bool, scope Scope) []Target {
 	var out []Target
 	for _, img := range imgs {
-		refs := removableServiceRefs(img, repos, protected, pulled, ignoreLedger)
+		refs := removableRefs(img, repos, protected, pulled, scope)
 		// Remove every owned tag so the image actually frees on the last one;
 		// credit the reclaimable bytes once (on that last removal), since
 		// untagging the earlier aliases frees nothing on its own.
@@ -110,29 +113,33 @@ func deepTargets(imgs []image, repos, protected, pulled map[string]bool, ignoreL
 			if i == len(refs)-1 {
 				bytes = reclaimable(img)
 			}
-			out = append(out, Target{Kind: "image", ID: ref, Desc: "unused service image", Bytes: bytes})
+			out = append(out, Target{Kind: "image", ID: ref, Desc: describeUnused(img, repos), Bytes: bytes})
 		}
 	}
 	return out
 }
 
-// removableServiceRefs returns the tags to remove for an unused service image,
-// or nil to keep it. An image is removable only when EVERY one of its tags is an
-// unprotected catalog ref AND lerd's ledger records having pulled it: a protected
-// tag (current image or rollback target), a non-catalog tag the user added, or an
-// image lerd never pulled all mean "leave this whole image alone", so cleanup
-// never untags an image the user owns or that something else still relies on.
-func removableServiceRefs(img image, repos, protected, pulled map[string]bool, ignoreLedger bool) []string {
+// removableRefs returns the tags to remove for an unused image, or nil to keep
+// it. A protected tag (a live service image, a rollback target, an installed
+// quadlet's image, one of lerd's tool images) always keeps the whole image,
+// since an image frees only when its last tag goes. Below ScopeDeep the image
+// must additionally be a catalog ref lerd's ledger records pulling, which keeps
+// the unattended tiers off anything the user owns.
+func removableRefs(img image, repos, protected, pulled map[string]bool, scope Scope) []string {
 	// An image a container still holds can't be removed by podman, so keep it even
 	// when no service config references it (a container running a catalog image the
 	// config no longer names would otherwise be listed forever).
 	if len(img.Names) == 0 || inUse(img) {
 		return nil
 	}
+	catalogOnly := scope < ScopeDeep
 	refs := make([]string, 0, len(img.Names))
 	lerdPulled := false
 	for _, n := range img.Names {
-		if protected[canonRef(n)] || !repos[canonRepo(n)] {
+		if protected[canonRef(n)] {
+			return nil
+		}
+		if catalogOnly && !repos[canonRepo(n)] {
 			return nil
 		}
 		if pulled[canonRef(n)] {
@@ -140,10 +147,22 @@ func removableServiceRefs(img image, repos, protected, pulled map[string]bool, i
 		}
 		refs = append(refs, n)
 	}
-	if !ignoreLedger && !lerdPulled {
+	if catalogOnly && !lerdPulled {
 		return nil
 	}
 	return refs
+}
+
+// describeUnused names an unused image for the plan the user confirms, so a
+// service upgrade leftover reads differently from the stranded base layer of a
+// custom container.
+func describeUnused(img image, repos map[string]bool) string {
+	for _, n := range img.Names {
+		if repos[canonRepo(n)] {
+			return "unused service image"
+		}
+	}
+	return "unused image"
 }
 
 // canonRef / canonRepo canonicalise an image reference through the shared
@@ -212,12 +231,16 @@ func realProtectedImages() (map[string]bool, error) {
 	for _, ref := range installedServiceImages() {
 		add(ref)
 	}
+	for _, ref := range podman.ToolImages() {
+		add(ref)
+	}
 	return prot, nil
 }
 
-// installedServiceImages returns the current Image= of every installed service
+// installedServiceImages returns the current Image= of every installed lerd
 // quadlet, so a service that is installed but not running is still protected.
-// PHP-FPM units are skipped: their images are handled by the safe tier.
+// PHP-FPM units are included: the deep tier reaps any unused image, and a
+// stopped site's FPM image would otherwise read as one and cost a full rebuild.
 func realInstalledServiceImages() []string {
 	entries, err := os.ReadDir(config.QuadletDir())
 	if err != nil {
@@ -230,9 +253,6 @@ func realInstalledServiceImages() []string {
 			continue
 		}
 		unit := strings.TrimSuffix(name, ".container")
-		if strings.HasPrefix(unit, "lerd-php") && strings.HasSuffix(unit, "-fpm") {
-			continue
-		}
 		if img := podman.InstalledImage(unit); img != "" {
 			out = append(out, img)
 		}
