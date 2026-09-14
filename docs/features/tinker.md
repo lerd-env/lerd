@@ -99,7 +99,7 @@ Because it analyzes the real project, completions are genuinely project-aware: y
 
 Quick fixes and imports are wired in too: the "Class not found" diagnostic offers an **Import `App\Models\X`** action, and accepting a class from the completion list brings its `use` statement along. Imports land at the top of the buffer with a blank line separating them from your code. Document formatting runs through phpantom on `Shift+Alt+F` and automatically on paste.
 
-Highlighting is semantic, not just grammar-based: the editor colours each token from what phpantom actually resolved it to, so a real method reads differently from an unresolved one and framework magic (facades, Eloquent properties) is coloured like the real symbol it maps to. Monaco falls back to its plain PHP grammar when the server is unavailable.
+Highlighting comes from Monaco's own PHP grammar, registered to start inside PHP because tinker buffers carry no `<?php` opener, with phpantom's semantic tokens layered over it for what a grammar cannot know, such as a static call or a closure parameter. The grammar colours the buffer on its own when the server is unavailable.
 
 The browser connects to the server over a WebSocket (`/api/lsp/php`). `lerd-ui` spawns one `phpantom_lsp` process per connection, rooted at the site (or worktree) path, and bridges its stdio LSP traffic to Monaco. Tinker buffers are headerless PHP, so the bridge presents the document to the server with a synthetic leading `<?php` line (and offsets positions accordingly), you keep typing bare snippets while the server still parses valid PHP.
 
