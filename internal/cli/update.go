@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/download"
@@ -265,16 +266,31 @@ func refreshStoreFrameworks(idx *store.Index) {
 	// One line for the whole catalogue: a machine holding every framework the
 	// store publishes plus the package layer is dozens of fetches, and a line
 	// each buries the rest of the install in a wall nobody reads.
-	client := store.NewClient()
 	bar := feedback.StartProgress(fmt.Sprintf("refreshing %d store definition%s", len(targets), pluralS(len(targets))), len(targets))
-	for _, t := range targets {
-		if err := t.fetch(client); err != nil {
-			bar.Failed(t.label, err.Error())
-			continue
-		}
-		bar.Step(t.label)
-	}
+	runStoreRefresh(store.NewClient(), targets, bar)
 	bar.Done(storeRefreshTally(bar.Completed(), bar.Failures()))
+}
+
+// runStoreRefresh pulls every target, a bounded number at a time, reporting each
+// outcome on the progress line. A definition fetch is nearly all round trip, so
+// a whole catalogue done one at a time is minutes of waiting for nothing.
+func runStoreRefresh(client *store.Client, targets []storeRefreshTarget, bar *feedback.Progress) {
+	slot := make(chan struct{}, store.FetchConcurrency)
+	var wg sync.WaitGroup
+	for _, t := range targets {
+		wg.Add(1)
+		slot <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-slot }()
+			if err := t.fetch(client); err != nil {
+				bar.Failed(t.label, err.Error())
+				return
+			}
+			bar.Step(t.label)
+		}()
+	}
+	wg.Wait()
 }
 
 // storeRefreshTarget is one file to pull from the store, named for the progress
@@ -434,14 +450,18 @@ func refreshStorePresets() {
 		return
 	}
 	sort.Strings(names)
-	bar := feedback.StartProgress(fmt.Sprintf("refreshing %d service preset%s", len(names), pluralS(len(names))), len(names))
+	targets := make([]storeRefreshTarget, 0, len(names))
 	for _, name := range names {
-		if _, err := client.FetchServicePreset(name); err != nil {
-			bar.Failed(name, err.Error())
-			continue
-		}
-		bar.Step(name)
+		targets = append(targets, storeRefreshTarget{
+			label: name,
+			fetch: func(c *store.Client) error {
+				_, err := c.FetchServicePreset(name)
+				return err
+			},
+		})
 	}
+	bar := feedback.StartProgress(fmt.Sprintf("refreshing %d service preset%s", len(names), pluralS(len(names))), len(names))
+	runStoreRefresh(client, targets, bar)
 	bar.Done(storeRefreshTally(bar.Completed(), bar.Failures()))
 }
 

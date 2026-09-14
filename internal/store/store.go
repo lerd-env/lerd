@@ -22,6 +22,21 @@ const (
 	fetchRetryBackoff = 400 * time.Millisecond
 )
 
+// FetchConcurrency is how many store fetches a bulk refresh keeps in flight. The
+// whole catalogue is dozens of small files off a static origin, so the cost is
+// round trips rather than bandwidth, and a cap this side of a scrape keeps
+// raw.githubusercontent.com happy.
+const FetchConcurrency = 8
+
+// httpTransport is shared by every fetch. The default keeps only two idle
+// connections per host, so a parallel refresh would hand back six of its eight
+// connections after each wave and handshake them again on the next.
+var httpTransport = func() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.MaxIdleConnsPerHost = FetchConcurrency
+	return t
+}()
+
 // sleepFn is the backoff sleep, a seam so tests don't wait in real time.
 var sleepFn = time.Sleep
 
@@ -324,7 +339,7 @@ func (c *Client) fetch(path string) ([]byte, error) {
 // a caller reading a part of the store that lives outside the definitions
 // directory passes its own bases rather than a path full of parent segments.
 func (c *Client) fetchFrom(bases []string, path string) ([]byte, error) {
-	client := &http.Client{Timeout: httpTimeout}
+	client := &http.Client{Timeout: httpTimeout, Transport: httpTransport}
 	var errs []string
 	for _, base := range bases {
 		body, err := fetchWithRetry(client, base+"/"+path)

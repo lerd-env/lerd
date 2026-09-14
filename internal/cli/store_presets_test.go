@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -166,5 +168,52 @@ func TestRefreshStorePresets_SkipsRefreshWhenTheIndexIsUnreachable(t *testing.T)
 
 	if presetAsked {
 		t.Error("refreshStorePresets fetched presets without an index to check them against")
+	}
+}
+
+// An install with a handful of services pays one round trip per preset, and the
+// preset refresh is the same shape as the definition one: overlap the fetches.
+func TestRefreshStorePresets_FetchesInParallel(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	names := []string{"mysql", "postgres", "redis", "meilisearch"}
+	for _, name := range names {
+		if err := config.SaveCustomService(&config.CustomService{
+			Name: name, Image: "docker.io/library/" + name + ":latest", Preset: name,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var mu sync.Mutex
+	inFlight, peak := 0, 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("/index.json", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"services":[{"name":"mysql"},{"name":"postgres"},{"name":"redis"},{"name":"meilisearch"}]}`))
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		inFlight++
+		peak = max(peak, inFlight)
+		mu.Unlock()
+		time.Sleep(25 * time.Millisecond)
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		name := strings.TrimSuffix(filepath.Base(r.URL.Path), ".yaml")
+		_, _ = w.Write([]byte("name: " + name + "\nimage: docker.io/library/" + name + ":latest\n"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	t.Setenv("LERD_SERVICES_BASE_URL", srv.URL)
+
+	refreshStorePresets()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if peak < 2 {
+		t.Errorf("peak concurrent fetches = %d, want the refresh to overlap them", peak)
 	}
 }
