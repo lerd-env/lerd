@@ -187,7 +187,7 @@ func writeWorkerExecUnit(unitName, siteName, sitePath, phpVersion, command, rest
 	_ = fpmUnit
 	container := resolveWorkerFPMUnit(siteName, phpVersion)
 
-	podmanExec := buildWorkerExecCommand(podman.PodmanBin(), podman.ShellQuote(sitePath), container, command, workerExecEnvArgs(sitePath))
+	podmanExec := buildWorkerExecCommand(podman.PodmanBin(), podman.ShellQuote(sitePath), siteName, container, command, workerExecEnvArgs(sitePath))
 	script := buildDarwinExecWorkerGuardScript(pidFile, podman.PodmanBin(), container, sitePath, command, podmanExec)
 	if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil {
 		return false, fmt.Errorf("writing worker guard script: %w", err)
@@ -310,9 +310,10 @@ func restoreWorker(siteName, sitePath, phpVersion, workerName string, w config.F
 			return
 		}
 	}
-	// The unit is rewritten here on every `lerd start`, so the dev server flags
-	// have to be rebuilt with it or the worker comes back on its own port and
-	// the site's page is refused the assets it asks for.
+	// The unit is rewritten here on every `lerd start`, so the proxy port and
+	// the dev server flags have to be rebuilt with it or the worker comes back
+	// on its own port and the site's page is refused the assets it asks for.
+	command = withWorkerProxyPort(siteName, sitePath, workerName, w, command)
 	command = devServerCommand(siteName, sitePath, workerName, command, w)
 
 	fpmUnit := resolveWorkerFPMUnit(siteName, phpVersion)

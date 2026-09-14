@@ -49,8 +49,14 @@ func buildDarwinExecWorkerGuardScript(pidFile, podmanBin, container, sitePath, w
 // worker runs. The colour vars are passed through so the worker's output keeps
 // its ANSI escapes on the way to the launchd log file, and envArgs carries any
 // `--env=` the worker itself needs (the reload watcher's poll interval).
-func buildWorkerExecCommand(podmanBin, sitePath, container, command string, envArgs []string) string {
+//
+// LERD_SITE is what attributes the worker's debug rows to a site, so the jobs
+// it runs reach that site's debug view rather than being reported site-less.
+func buildWorkerExecCommand(podmanBin, sitePath, siteName, container, command string, envArgs []string) string {
 	parts := []string{podmanBin, "exec", "-w", sitePath}
+	if siteName != "" {
+		parts = append(parts, "--env=LERD_SITE="+podman.ShellQuote(siteName))
+	}
 	parts = append(parts, envArgs...)
 	parts = append(parts, logcolor.PodmanExecArgs()...)
 	parts = append(parts, container, command)

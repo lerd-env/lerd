@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/svelte';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { flushSync } from 'svelte';
 import Harness from './AppLogsTab.test.svelte';
+import SiteHarness from './AppLogsTabSite.test.svelte';
 import type { Site } from '$stores/sites';
 
 function siteWith(extra: Partial<Site> = {}): Site {
@@ -59,6 +60,28 @@ describe('AppLogsTab', () => {
     const wtCalls = calls.filter((u) => u.startsWith('/api/app-logs/theregistry.test'));
     expect(wtCalls.length).toBeGreaterThan(0);
     expect(wtCalls.some((u) => /[?&]branch=main(&|$)/.test(u))).toBe(true);
+  });
+
+  // Every snapshot replaces the site objects, so an effect keyed on the object
+  // rather than on the domain reloads the list under the user and puts a
+  // scrolled log back at the top.
+  it('does not re-fetch when the store hands it a new site object', async () => {
+    const { rerender } = render(SiteHarness, { props: { site: siteWith() } });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    flushSync();
+    await Promise.resolve();
+    expect(calls.length).toBeGreaterThan(0);
+
+    calls.length = 0;
+    await rerender({ site: siteWith() });
+    await Promise.resolve();
+    await Promise.resolve();
+    flushSync();
+    await Promise.resolve();
+
+    expect(calls).toEqual([]);
   });
 
   it('re-fetches when switching back from worktree to parent', async () => {

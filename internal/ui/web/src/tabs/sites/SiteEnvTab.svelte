@@ -53,6 +53,12 @@
   let inserting = $state(false);
   let insertError = $state('');
 
+  // The sites store replaces every site object on each snapshot, so an effect
+  // that reads site.domain re-runs on a payload that changed nothing here and
+  // reloads the file under the user, losing their place in it. Reading the
+  // string through a derived stops at the value, which does not change.
+  const siteDomain = $derived(site.domain);
+
   const envPath = $derived.by(() => {
     if (branch) {
       const wt = (site.worktrees || []).find((w) => w.branch === branch);
@@ -99,17 +105,17 @@
   const canPropose = $derived(missingCount > 0 && file === proposeFile && !loading && !error && !dirty);
 
   function refreshProposal() {
-    const domain = site.domain;
+    const domain = siteDomain;
     const b = branch;
     proposeSiteEnv(domain, b, false)
       .then((p) => {
-        if (site.domain !== domain || branch !== b) return;
+        if (siteDomain !== domain || branch !== b) return;
         missingCount = p.added.length;
         proposeFile = p.file;
         proposeEntries = p.entries;
       })
       .catch(() => {
-        if (site.domain !== domain || branch !== b) return;
+        if (siteDomain !== domain || branch !== b) return;
         missingCount = 0;
         proposeEntries = [];
       });
@@ -127,18 +133,18 @@
   // unsaved change, not a separate mode.
   async function stageKeys(keys: string[]) {
     if (keys.length === 0) return;
-    const domain = site.domain;
+    const domain = siteDomain;
     const b = branch;
     inserting = true;
     insertError = '';
     try {
       const p = await proposeSiteEnv(domain, b, false, keys);
-      if (site.domain !== domain || branch !== b || file !== p.file) return;
+      if (siteDomain !== domain || branch !== b || file !== p.file) return;
       // Staging the merge makes the buffer differ from disk, so highlightLines
       // (derived from that diff) lights up the inserted lines on its own.
       text = p.merged;
     } catch (e: unknown) {
-      if (site.domain !== domain || branch !== b) return;
+      if (siteDomain !== domain || branch !== b) return;
       insertError = e instanceof Error ? e.message : m.envEditor_proposeFailed();
     } finally {
       inserting = false;
@@ -150,10 +156,10 @@
   // the primary files[0] if there are no unsaved edits; a dirty buffer for a
   // file that vanished on disk stays open so the user can copy out or save it.
   $effect(() => {
-    const domain = site.domain;
+    const domain = siteDomain;
     const b = branch;
     loadSiteEnvFiles(domain, b).then((list) => {
-      if (site.domain !== domain || branch !== b) return;
+      if (siteDomain !== domain || branch !== b) return;
       files = list;
       if (!list.includes(file) && !dirty) file = list[0] ?? '.env';
     });
@@ -163,7 +169,7 @@
   // proposal targets the framework env file, so it's independent of the file
   // dropdown and doesn't need to re-run when only `file` changes.
   $effect(() => {
-    void site.domain;
+    void siteDomain;
     void branch;
     refreshProposal();
   });
@@ -173,7 +179,7 @@
   // the empty initial value would load one file and then immediately reload the
   // one we snap to, and the editor must not be typeable against no file at all.
   $effect(() => {
-    const domain = site.domain;
+    const domain = siteDomain;
     const b = branch;
     const f = file;
     loading = true;
@@ -185,7 +191,7 @@
     backups = [];
     Promise.all([loadSiteEnv(domain, b, f), loadSiteEnvBackups(domain, b, f)])
       .then(([t, list]) => {
-        if (site.domain !== domain || branch !== b || file !== f) return;
+        if (siteDomain !== domain || branch !== b || file !== f) return;
         original = t;
         text = t;
         backups = list;
@@ -194,11 +200,11 @@
         // Guard the error setter the same way the success branch does, so
         // a stale rejection from a previous site cannot blow away the
         // current view's error state.
-        if (site.domain !== domain || branch !== b || file !== f) return;
+        if (siteDomain !== domain || branch !== b || file !== f) return;
         error = e instanceof Error ? e.message : String(e);
       })
       .finally(() => {
-        if (site.domain === domain && branch === b && file === f) loading = false;
+        if (siteDomain === domain && branch === b && file === f) loading = false;
       });
   });
 
@@ -234,7 +240,7 @@
         // the file we restored, not whatever is current at completion.
         const restoredFile = file;
         const restoredBranch = branch;
-        const restoredDomain = site.domain;
+        const restoredDomain = siteDomain;
         const backupContent = await loadSiteEnvBackupContent(
           restoredDomain,
           latestBackup.name,
@@ -255,7 +261,7 @@
             // the file we restored; if they navigated away, the next
             // load effect for the new context will populate fresh state.
             if (
-              site.domain !== restoredDomain ||
+              siteDomain !== restoredDomain ||
               branch !== restoredBranch ||
               file !== restoredFile
             ) {
@@ -282,7 +288,7 @@
     // Snapshot the file we are saving so a concurrent file-list refresh
     // (or any other reactive change) cannot redirect the post-save reload
     // at the wrong file.
-    const savedDomain = site.domain;
+    const savedDomain = siteDomain;
     const savedBranch = branch;
     const savedFile = file;
     openEnvSaveModal(
@@ -295,7 +301,7 @@
         // Only apply if the user is still on the file we saved; otherwise
         // the load effect for the new file will populate its own state.
         if (
-          site.domain !== savedDomain ||
+          siteDomain !== savedDomain ||
           branch !== savedBranch ||
           file !== savedFile
         ) {
