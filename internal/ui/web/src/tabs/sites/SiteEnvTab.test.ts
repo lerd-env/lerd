@@ -1,6 +1,7 @@
 import { render, waitFor } from "@testing-library/svelte";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import SiteEnvTab from "./SiteEnvTab.svelte";
+import Harness from "./SiteEnvTab.test.svelte";
 import type { Site } from "$stores/sites";
 
 // The tab must open the file the framework actually reads, which the server
@@ -95,6 +96,21 @@ describe("SiteEnvTab", () => {
     });
 
     await waitFor(() => getByText("/home/u/Code/sf-feat/.env.local"));
+  });
+
+  it("does not reload the file when the store hands it a new site object", async () => {
+    const { rerender } = render(Harness, { props: { site } });
+
+    await waitFor(() => expect(loadSiteEnv).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Every snapshot replaces the site objects, so a reload keyed on the object
+    // rather than on the domain empties the editor and loses the user's place.
+    await rerender({ site: { ...site } as unknown as Site });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(loadSiteEnv).toHaveBeenCalledTimes(1);
+    expect(loadSiteEnvFiles).toHaveBeenCalledTimes(1);
   });
 
   it("opens a nested dotenv when that is the only file the framework has", async () => {
