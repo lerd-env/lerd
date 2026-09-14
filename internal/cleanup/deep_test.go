@@ -244,3 +244,65 @@ func TestRealInstalledServiceImages_IncludesPHPFPM(t *testing.T) {
 		t.Errorf("a non-lerd quadlet must not be scanned, got %v", got)
 	}
 }
+
+// "Used by lerd" has to mean the whole stack, not just the service catalog:
+// nginx and a stripe-listen sidecar come from quadlets, and the probe and mc
+// images from lerd's tool set, none of which the catalog knows about.
+func TestUsedImage_CountsQuadletAndToolImages(t *testing.T) {
+	repos := map[string]bool{"docker.io/library/mysql": true}
+	protected := map[string]bool{
+		"docker.io/library/nginx:alpine":     true,
+		"docker.io/stripe/stripe-cli:latest": true,
+		"docker.io/library/alpine:latest":    true,
+	}
+	cases := []struct {
+		name string
+		img  image
+		want bool
+	}{
+		{"catalog service", image{Names: []string{"docker.io/library/mysql:8.4"}}, true},
+		{"quadlet image", image{Names: []string{"docker.io/library/nginx:alpine"}}, true},
+		{"worker sidecar", image{Names: []string{"docker.io/stripe/stripe-cli:latest"}}, true},
+		{"tool image", image{Names: []string{"alpine:latest"}}, true},
+		{"someone else's", image{Names: []string{"docker.io/library/golang:1.25"}}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if _, ok := usedImage(c.img, repos, protected); ok != c.want {
+				t.Errorf("usedImage(%v) counted = %v, want %v", c.img.Names, ok, c.want)
+			}
+		})
+	}
+}
+
+// A dangling image has no tag left, so the breakdown has to fall back to the
+// short ID rather than showing a blank row.
+func TestUsedImage_NamesDanglingByShortID(t *testing.T) {
+	img := image{ID: "abcdef0123456789", Labels: map[string]string{"dev.lerd.kind": "fpm"}, Size: 500}
+	u, ok := usedImage(img, map[string]bool{}, map[string]bool{})
+	if !ok {
+		t.Fatal("a lerd-built image must be counted")
+	}
+	if u.Ref != shortID(img.ID) {
+		t.Errorf("ref = %q, want the short ID %q", u.Ref, shortID(img.ID))
+	}
+}
+
+// A site's workers run as plain containers rather than quadlets, so their
+// images have to come from the container list or a stripe-listen sidecar reads
+// as someone else's image on the dashboard.
+func TestRealProtectedImages_IncludesWorkerContainerImages(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("HOME", tmp)
+	containerImages = func() []string { return []string{"docker.io/stripe/stripe-cli:latest"} }
+	t.Cleanup(func() { containerImages = podmanContainerImages })
+
+	prot, err := realProtectedImages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !prot[canonRef("docker.io/stripe/stripe-cli:latest")] {
+		t.Errorf("a worker container's image must be protected, got %v", prot)
+	}
+}

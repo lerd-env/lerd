@@ -3,6 +3,7 @@
   import DashboardCard from './DashboardCard.svelte';
   import DetailButton from '$components/DetailButton.svelte';
   import CleanupModal from './CleanupModal.svelte';
+  import UsageModal from './UsageModal.svelte';
   import { stats, statsLoaded, startStatsPolling, formatBytes } from '$stores/stats';
   import { disk, startDiskPolling, runCleanup } from '$stores/disk';
   import { m } from '../../paraglide/messages.js';
@@ -19,6 +20,7 @@
   });
 
   let modalOpen = $state(false);
+  let usageOpen = $state(false);
   let cleaning = $state(false);
   let cleanupError = $state<string | undefined>(undefined);
 
@@ -88,14 +90,22 @@
       <div class="pt-2 mt-2 border-t border-gray-100 dark:border-lerd-border">
         <div class="flex items-center justify-between gap-2">
           <div class="flex gap-5">
-            <div>
+            <button
+              type="button"
+              class="text-left rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-lerd-red/40"
+              onclick={() => (usageOpen = true)}
+            >
               <div class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">{m.dashboard_disk_usedByLerd()}</div>
-              <div class="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{formatBytes($disk.used_by_lerd_bytes)}</div>
-            </div>
-            <div>
-              <div class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">{m.dashboard_disk_reclaimable()}</div>
-              <div class="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{formatBytes($disk.reclaimable_bytes)}</div>
-            </div>
+              <div class="text-sm font-semibold text-gray-900 dark:text-white tabular-nums underline decoration-dotted underline-offset-2">
+                {formatBytes($disk.used_by_lerd_bytes)}
+              </div>
+            </button>
+            {#if $disk.reclaimable_bytes > 0}
+              <div>
+                <div class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">{m.dashboard_disk_reclaimable()}</div>
+                <div class="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{formatBytes($disk.reclaimable_bytes)}</div>
+              </div>
+            {/if}
           </div>
           {#if $disk.reclaimable_bytes > 0}
             <DetailButton tone="warn" onclick={openModal}>{m.dashboard_disk_cleanup()}</DetailButton>
@@ -133,6 +143,13 @@
     {/if}
   {/if}
 </DashboardCard>
+
+<UsageModal
+  open={usageOpen}
+  images={$disk.used_images}
+  usedBytes={$disk.used_by_lerd_bytes}
+  onclose={() => (usageOpen = false)}
+/>
 
 <CleanupModal
   open={modalOpen}

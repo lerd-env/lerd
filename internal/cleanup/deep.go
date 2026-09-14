@@ -113,7 +113,7 @@ func deepTargets(imgs []image, repos, protected, pulled map[string]bool, scope S
 			if i == len(refs)-1 {
 				bytes = reclaimable(img)
 			}
-			out = append(out, Target{Kind: "image", ID: ref, Desc: describeUnused(img, repos), Owner: ownerOf(img, repos), Bytes: bytes})
+			out = append(out, Target{Kind: "image", ID: ref, Desc: describeUnused(img, repos), Owner: ownerOf(img, repos, protected), Bytes: bytes})
 		}
 	}
 	return out
@@ -166,24 +166,39 @@ func describeUnused(img image, repos map[string]bool) string {
 }
 
 // lerdOwned reports whether an image belongs to the stack lerd manages: one it
-// built, a PHP base it pulled, or a service image from the catalog. Everything
-// else on the host is someone else's, including the build bases a custom
-// container pulled, which lerd never chose and cannot re-pull on its own.
-func lerdOwned(img image, repos map[string]bool) bool {
+// built, a PHP base it pulled, an image one of its quadlets or tools names, or
+// a service image from the catalog. Everything else on the host is someone
+// else's, including the build bases a custom container pulled, which lerd never
+// chose and cannot re-pull on its own.
+func lerdOwned(img image, repos, protected map[string]bool) bool {
 	if isLerd(img) || baseName(img) != "" {
 		return true
 	}
 	for _, n := range img.Names {
-		if repos[canonRepo(n)] {
+		if protected[canonRef(n)] || repos[canonRepo(n)] {
 			return true
 		}
 	}
 	return false
 }
 
+// usedImage describes one of lerd's own images for the usage breakdown, or
+// reports false for an image that is not lerd's. A dangling image is named by
+// its short ID, the only handle it has left.
+func usedImage(img image, repos, protected map[string]bool) (UsedImage, bool) {
+	if !lerdOwned(img, repos, protected) {
+		return UsedImage{}, false
+	}
+	ref := shortID(img.ID)
+	if len(img.Names) > 0 {
+		ref = img.Names[0]
+	}
+	return UsedImage{Ref: ref, InUse: inUse(img), Bytes: reclaimable(img)}, true
+}
+
 // ownerOf maps an image to the owner its target is credited to.
-func ownerOf(img image, repos map[string]bool) string {
-	if lerdOwned(img, repos) {
+func ownerOf(img image, repos, protected map[string]bool) string {
+	if lerdOwned(img, repos, protected) {
 		return OwnerLerd
 	}
 	return OwnerOther
@@ -258,7 +273,32 @@ func realProtectedImages() (map[string]bool, error) {
 	for _, ref := range podman.ToolImages() {
 		add(ref)
 	}
+	for _, ref := range containerImages() {
+		add(ref)
+	}
 	return prot, nil
+}
+
+// containerImages is the seam tests override; it lists the image of every
+// lerd-named container on the host.
+var containerImages = podmanContainerImages
+
+// podmanContainerImages returns the image of every lerd-* container, running or
+// stopped. Not every image lerd runs comes from a quadlet: a site's workers run
+// as plain containers, so without this a stripe-listen sidecar's image reads as
+// someone else's on the dashboard.
+func podmanContainerImages() []string {
+	out, err := podman.Run("ps", "-a", "--filter", "name=lerd-", "--format", "{{.Image}}")
+	if err != nil {
+		return nil
+	}
+	var refs []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if ref := strings.TrimSpace(line); ref != "" {
+			refs = append(refs, ref)
+		}
+	}
+	return refs
 }
 
 // installedServiceImages returns the current Image= of every installed lerd

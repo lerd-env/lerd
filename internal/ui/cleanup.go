@@ -2,6 +2,7 @@ package ui
 
 import (
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 
@@ -32,13 +33,22 @@ type diskImage struct {
 	Bytes int64  `json:"bytes"`
 }
 
+// usedImage is one of lerd's own images in the usage breakdown the widget's
+// "used by lerd" figure opens.
+type usedImage struct {
+	Ref   string `json:"ref"`
+	InUse bool   `json:"in_use"`
+	Bytes int64  `json:"bytes"`
+}
+
 // diskSnapshot is the reclaimable-disk preview the widget polls and the modal
-// itemizes. UsedByLerdBytes is context rather than part of the reclaim: the disk
-// lerd's own images occupy right now. Held is disk locked behind running
-// containers that a restart, not this cleanup, would release.
+// itemizes. UsedByLerdBytes and UsedImages are context rather than part of the
+// reclaim: the disk lerd's own images occupy right now. Held is disk locked
+// behind running containers that a restart, not this cleanup, would release.
 type diskSnapshot struct {
 	Available        bool        `json:"available"`
 	UsedByLerdBytes  int64       `json:"used_by_lerd_bytes"`
+	UsedImages       []usedImage `json:"used_images"`
 	ReclaimableBytes int64       `json:"reclaimable_bytes"`
 	LerdBytes        int64       `json:"lerd_bytes"`
 	OtherBytes       int64       `json:"other_bytes"`
@@ -81,9 +91,18 @@ func scanDisk() diskSnapshot {
 	for _, t := range plan.Targets {
 		imgs = append(imgs, diskImage{ID: t.ID, Desc: t.Desc, Owner: t.Owner, Bytes: t.Bytes})
 	}
+	// Heaviest first: the breakdown exists to answer "what is taking the space",
+	// and a reader should not have to scan a list to find out.
+	used := make([]usedImage, 0, len(plan.Used))
+	for _, u := range plan.Used {
+		used = append(used, usedImage{Ref: u.Ref, InUse: u.InUse, Bytes: u.Bytes})
+	}
+	sort.Slice(used, func(i, j int) bool { return used[i].Bytes > used[j].Bytes })
+
 	return diskSnapshot{
 		Available:        true,
-		UsedByLerdBytes:  plan.UsedByLerd,
+		UsedByLerdBytes:  plan.UsedBytes(),
+		UsedImages:       used,
 		ReclaimableBytes: plan.ReclaimBytes(),
 		LerdBytes:        plan.ReclaimBytesBy(cleanup.OwnerLerd),
 		OtherBytes:       plan.ReclaimBytesBy(cleanup.OwnerOther),

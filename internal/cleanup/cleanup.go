@@ -55,13 +55,31 @@ type Target struct {
 // Plan is the set of lerd-owned resources that are safe to reclaim.
 type Plan struct {
 	Targets []Target
-	// UsedByLerd is the disk lerd's own images occupy right now, live ones
+	// Used is every image lerd's own stack occupies disk with, live ones
 	// included. It is context for the reclaimable total, not part of it.
-	UsedByLerd int64
+	Used []UsedImage
 	// Held counts dangling images a running container still holds that would
 	// otherwise be reaped. They can't be removed now, but a restart recreates the
 	// container on the current image and releases them, so the caller can hint it.
 	Held HeldByContainers
+}
+
+// UsedImage is one image lerd's stack occupies disk with. InUse marks the ones
+// a container currently holds, which is what tells a live service's image apart
+// from one sitting there between rebuilds.
+type UsedImage struct {
+	Ref   string
+	InUse bool
+	Bytes int64
+}
+
+// UsedBytes is the disk lerd's own images occupy right now.
+func (p Plan) UsedBytes() int64 {
+	var total int64
+	for _, u := range p.Used {
+		total += u.Bytes
+	}
+	return total
 }
 
 // HeldByContainers tallies reclaimable disk a restart would free.
@@ -204,8 +222,10 @@ func Inspect(scope Scope) (Plan, error) {
 		return Plan{}, err
 	}
 	// Resolved once for both the owner split and the reap: an unreadable catalog
-	// means nothing is recognised as a service image, never that the reap widens.
+	// or protected set means nothing is recognised as lerd's, never that the reap
+	// widens.
 	repos, repoErr := serviceRepos()
+	prot, protErr := protectedImages()
 
 	var p Plan
 	add := func(id, desc string, owner string, bytes int64) {
@@ -213,8 +233,8 @@ func Inspect(scope Scope) (Plan, error) {
 	}
 	var baseCandidates []image
 	for _, img := range imgs {
-		if lerdOwned(img, repos) {
-			p.UsedByLerd += reclaimable(img)
+		if u, ok := usedImage(img, repos, prot); ok {
+			p.Used = append(p.Used, u)
 		}
 		switch {
 		case inUse(img):
@@ -232,7 +252,7 @@ func Inspect(scope Scope) (Plan, error) {
 			// disk and strands nothing. Provable lerd orphans go in every tier;
 			// other dangling leftovers only when the deep tier is on.
 			if isLerd(img) || reapAllDangling {
-				add(shortID(img.ID), describeOrphan(img), ownerOf(img, repos), reclaimable(img))
+				add(shortID(img.ID), describeOrphan(img), ownerOf(img, repos, prot), reclaimable(img))
 			}
 		default:
 			if baseName(img) != "" {
@@ -258,7 +278,6 @@ func Inspect(scope Scope) (Plan, error) {
 	}
 
 	if reapUnused {
-		prot, protErr := protectedImages()
 		if repoErr == nil && protErr == nil {
 			p.Targets = append(p.Targets, deepTargets(imgs, repos, prot, canonPulled(), scope)...)
 		}
