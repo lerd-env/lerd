@@ -21,6 +21,7 @@ func wiringFramework() *config.Framework {
 				"mysql":    {Vars: []string{"DB_HOST=lerd-mysql", "DB_NAME={{site}}"}},
 				"postgres": {Vars: []string{"DB_HOST=lerd-postgres", "DB_NAME={{site}}"}},
 				"redis":    {Vars: []string{"REDIS_HOST=lerd-redis"}},
+				"rustfs":   {Vars: []string{"AWS_ENDPOINT=http://lerd-rustfs:9000"}},
 			},
 		},
 	}
@@ -225,5 +226,60 @@ func TestCheckServiceWiring_loopbackStillReportsNothingPointingAtIt(t *testing.T
 	}
 	if c.Status != StatusWarn || !strings.Contains(c.Detail, "redis") {
 		t.Errorf("status = %v (%s), want a warning naming redis", c.Status, c.Detail)
+	}
+}
+
+// setServiceDomain gives a service the hostname it is served on, the way
+// `lerd service domain` does.
+func setServiceDomain(t *testing.T, service, domain string) {
+	t.Helper()
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	if cfg.Services == nil {
+		cfg.Services = map[string]config.ServiceConfig{}
+	}
+	sc := cfg.Services[service]
+	sc.Domain = domain
+	cfg.Services[service] = sc
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+}
+
+// A service with a proxy domain is wired through that hostname and names its
+// container nowhere. Containers resolve the domain as well as the host does, so
+// accepting it only for loopback sites read every such project as unwired.
+func TestCheckServiceWiring_domainWiringCountsForAContainer(t *testing.T) {
+	dir := wiringProject(t, "services:\n  - rustfs\n", ".env",
+		"AWS_ENDPOINT=https://rustfs.test\nAWS_BUCKET=acme\n")
+	setServiceDomain(t, "rustfs", "rustfs.test")
+
+	c, ok := checkServiceWiringOn(dir, ".env", wiringFramework(), false)
+	if !ok {
+		t.Fatal("the check must run for a project that picks a service")
+	}
+	if c.Status != StatusOK {
+		t.Errorf("status = %v (%s), want OK", c.Status, c.Detail)
+	}
+}
+
+// The domain is the only host wiring a containerised site gets: a published
+// port in its .env still points at nothing that PHP can reach.
+func TestCheckServiceWiring_publishedPortIsStillNotEnoughForAContainer(t *testing.T) {
+	dir := wiringProject(t, "services:\n  - rustfs\n", ".env",
+		"AWS_ENDPOINT=http://127.0.0.1:9000\n")
+	setServiceDomain(t, "rustfs", "rustfs.test")
+	prev := hostPorts
+	t.Cleanup(func() { hostPorts = prev })
+	hostPorts = func(string) []string { return []string{"9000"} }
+
+	c, ok := checkServiceWiringOn(dir, ".env", wiringFramework(), false)
+	if !ok {
+		t.Fatal("the check must run for a project that picks a service")
+	}
+	if c.Status != StatusWarn || !strings.Contains(c.Detail, "rustfs") {
+		t.Errorf("status = %v (%s), want a warning naming rustfs", c.Status, c.Detail)
 	}
 }
