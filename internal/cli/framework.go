@@ -749,26 +749,50 @@ func updateAllFrameworks(client *store.Client, showDiff bool) error {
 		return nil
 	}
 
-	// A diff per definition is the point of --check, so that run keeps its lines
-	// and only the plain update collapses into one.
-	var bar *feedback.Progress
-	if !showDiff {
-		bar = feedback.StartProgress(fmt.Sprintf("updating %d definition%s", total, pluralS(total)), total)
+	// A diff per definition is the point of --check, so that run keeps its
+	// sequential lines. The plain update collapses into one progress line and
+	// fetches in parallel, which is the difference between seconds and a minute
+	// on a catalogue this size.
+	if showDiff {
+		return diffAllFrameworks(client, installed, packages)
 	}
+
+	targets := make([]storeRefreshTarget, 0, total)
+	for _, info := range installed {
+		targets = append(targets, storeRefreshTarget{
+			label: info.Name + "@" + info.Version,
+			fetch: func(c *store.Client) error {
+				remote, err := c.FetchFramework(info.Name, info.Version)
+				if err != nil {
+					return err
+				}
+				if err := config.SaveStoreFramework(remote); err != nil {
+					return err
+				}
+				config.RemoveUserFramework(info.Name)
+				return nil
+			},
+		})
+	}
+	targets = append(targets, packages...)
+
+	bar := feedback.StartProgress(fmt.Sprintf("updating %d definition%s", total, pluralS(total)), total)
+	runStoreRefresh(client, targets, bar)
+	bar.Done(storeRefreshTally(bar.Completed(), bar.Failures()))
+	return nil
+}
+
+// diffAllFrameworks is the --check run: fetch each definition in turn and print
+// what changed, leaving an unchanged one with a one-line note.
+func diffAllFrameworks(client *store.Client, installed []config.FrameworkInfo, packages []storeRefreshTarget) error {
 	updated := 0
 	report := func(label string, err error) {
-		switch {
-		case bar != nil && err != nil:
-			bar.Failed(label, err.Error())
-		case bar != nil:
-			bar.Step(label)
-			updated++
-		case err != nil:
+		if err != nil {
 			feedback.Warn("%s: %v", label, err)
-		default:
-			feedback.Note("updated " + label)
-			updated++
+			return
 		}
+		feedback.Note("updated " + label)
+		updated++
 	}
 
 	for _, info := range installed {
@@ -778,16 +802,14 @@ func updateAllFrameworks(client *store.Client, showDiff bool) error {
 			report(label, fetchErr)
 			continue
 		}
-		if showDiff {
-			changed, diffErr := showFrameworkDiff(info.Name, info.Framework, remote)
-			if diffErr != nil {
-				report(label, diffErr)
-				continue
-			}
-			if !changed {
-				fmt.Printf("  %s@%s — up to date\n", info.Name, versionOrLatest(remote))
-				continue
-			}
+		changed, diffErr := showFrameworkDiff(info.Name, info.Framework, remote)
+		if diffErr != nil {
+			report(label, diffErr)
+			continue
+		}
+		if !changed {
+			fmt.Printf("  %s@%s — up to date\n", info.Name, versionOrLatest(remote))
+			continue
 		}
 		if saveErr := config.SaveStoreFramework(remote); saveErr != nil {
 			report(label, saveErr)
@@ -801,10 +823,6 @@ func updateAllFrameworks(client *store.Client, showDiff bool) error {
 		report(t.label, t.fetch(client))
 	}
 
-	if bar != nil {
-		bar.Done(storeRefreshTally(bar.Completed(), bar.Failures()))
-		return nil
-	}
 	if updated == 0 {
 		feedback.Line("no frameworks to update")
 	} else {

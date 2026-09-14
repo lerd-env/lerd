@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/store"
@@ -81,5 +83,58 @@ func TestUpdateAllFrameworks_refreshesEveryCachedVersion(t *testing.T) {
 		if strings.Contains(body, "stale") {
 			t.Errorf("laravel@%s.yaml still contains stale marker", v)
 		}
+	}
+}
+
+// A plain `framework update` is the whole catalogue, dozens of round trips, so
+// it has to fetch in parallel. The --check run keeps its sequential diffs.
+func TestUpdateAllFrameworks_FetchesInParallel(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	storeDir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(storeDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	versions := []string{"10", "11", "12", "13"}
+	for _, v := range versions {
+		body := "name: laravel\nlabel: Laravel\nversion: \"" + v + "\"\nconsole: artisan\n"
+		if err := os.WriteFile(filepath.Join(storeDir, "laravel@"+v+".yaml"), []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var mu sync.Mutex
+	inFlight, peak := 0, 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("/index.json", func(w http.ResponseWriter, _ *http.Request) {
+		data, _ := json.Marshal(store.Index{Frameworks: []store.IndexEntry{
+			{Name: "laravel", Label: "Laravel", Versions: versions, Latest: "13"},
+		}})
+		_, _ = w.Write(data)
+	})
+	mux.HandleFunc("/laravel/", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		inFlight++
+		peak = max(peak, inFlight)
+		mu.Unlock()
+		time.Sleep(25 * time.Millisecond)
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		v := strings.TrimSuffix(filepath.Base(r.URL.Path), ".yaml")
+		_, _ = w.Write([]byte("name: laravel\nlabel: Laravel\nversion: \"" + v + "\"\nconsole: artisan\n"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	if err := updateAllFrameworks(&store.Client{BaseURL: srv.URL}, false); err != nil {
+		t.Fatalf("updateAllFrameworks: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if peak < 2 {
+		t.Errorf("peak concurrent fetches = %d, want the update to overlap them", peak)
 	}
 }
