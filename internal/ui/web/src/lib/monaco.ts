@@ -4,7 +4,7 @@
 // promise, so the module, the worker wiring, and the themes are set up
 // exactly once.
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
-import { configLanguages } from '$lib/monaco-langs';
+import { configLanguages, phpFragmentLanguage } from '$lib/monaco-langs';
 
 // We deliberately load the bare editor API rather than the `monaco-editor`
 // barrel: the barrel registers every bundled language plus the ts/json/
@@ -103,8 +103,11 @@ export function loadMonaco(): Promise<MonacoModule> {
     monacoPromise = (async () => {
       const monaco = await import('monaco-editor/esm/vs/editor/editor.api');
       // PHP highlighting for tinker; config-format grammars for the
-      // nginx/ini/dotenv editors.
+      // nginx/ini/dotenv editors. The stock PHP grammar is re-registered to
+      // start inside PHP, since tinker's buffer carries no `<?php` opener.
       await import('monaco-editor/esm/vs/basic-languages/php/php.contribution');
+      const { language: php } = await import('monaco-editor/esm/vs/basic-languages/php/php');
+      monaco.languages.setMonarchTokensProvider('php', phpFragmentLanguage(php) as any);
       configureWorkers();
       defineThemes(monaco);
       registerConfigLanguages(monaco);

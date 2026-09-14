@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { compile } from 'monaco-editor/esm/vs/editor/standalone/common/monarch/monarchCompile';
 import { MonarchTokenizer } from 'monaco-editor/esm/vs/editor/standalone/common/monarch/monarchLexer';
-import { nginxLanguage, iniLanguage, dotenvLanguage } from './monaco-langs';
+import { language as phpLanguage } from 'monaco-editor/esm/vs/basic-languages/php/php';
+import { nginxLanguage, iniLanguage, dotenvLanguage, phpFragmentLanguage } from './monaco-langs';
 
 // Drive the config grammars through Monaco's real Monarch engine so a broken
 // tokenizer (invalid action, missing token, swallowed value) fails the build
@@ -48,5 +49,23 @@ describe('config Monarch grammars', () => {
     expect(env['7']).toBe('cfgOp');
     expect(env['8']).toBe('cfgValue');
     expect(tokenTypes(dotenvLanguage, 'dotenv', 'APP_KEY="base64:xx"')['8']).toBe('cfgString');
+  });
+});
+
+describe('tinker PHP grammar', () => {
+  it('colours a fragment that has no <?php opener', () => {
+    const def = phpFragmentLanguage(phpLanguage);
+    const line = tokenTypes(def, 'php', "$user = \\App\\Models\\User::query();");
+    expect(line['0']).toBe('variable');
+    expect(line['9']).toBe('identifier');
+    expect(line['26']).toBe('identifier');
+
+    const echo = tokenTypes(def, 'php', "echo 'done';");
+    expect(echo['0']).toBe('keyword');
+    expect(echo['5']).toBe('string');
+  });
+
+  it('leaves the stock grammar in its HTML state, which is why we override it', () => {
+    expect(tokenTypes(phpLanguage, 'php', '$user = 1;')['0']).toBe('');
   });
 });

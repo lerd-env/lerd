@@ -62,3 +62,12 @@ export const configLanguages = [
   { id: 'ini', def: iniLanguage },
   { id: 'dotenv', def: dotenvLanguage }
 ] as const;
+
+// The tinker editor's buffer is a PHP fragment: the `<?php` opener lives only
+// in what the LSP bridge sends the server, so Monaco's stock PHP grammar sits
+// in its HTML state and colours nothing. This starts the same grammar inside
+// PHP instead. Highlighting can't depend on the language server, which since
+// phpantom 0.10.0 sends only the tokens an editor grammar can't infer.
+export function phpFragmentLanguage(php: any) {
+  return { ...php, tokenizer: { ...php.tokenizer, root: php.tokenizer.phpRoot } };
+}
