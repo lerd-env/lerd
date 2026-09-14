@@ -23,6 +23,7 @@
   // reading site.domain re-runs on a payload that changed nothing here and
   // reloads the list under the user. A derived stops at the value.
   const siteDomain = $derived(site.domain);
+  const suspended = $derived(site.idle_suspended === true);
 
   let files = $state<AppLogFile[]>([]);
   let selectedFile = $state('');
@@ -92,6 +93,23 @@
     }
     await tick();
     if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+  }
+
+  // The tab has no log stream of its own, so without a timer it only ever showed
+  // what was on disk when it opened. It is mounted only while it is the selected
+  // source, so the poll lives and dies with the tab; a suspended site writes
+  // nothing worth asking for.
+  $effect(() => {
+    if (suspended) return;
+    const poll = setInterval(refreshEntries, 5000);
+    return () => clearInterval(poll);
+  });
+
+  // The poll must not flicker the spinner or move the reader's scroll, so it
+  // swaps the entries in and leaves the view exactly where it was.
+  async function refreshEntries() {
+    if (!selectedFile || loading) return;
+    entries = await loadAppLogEntries(siteDomain, selectedFile, showAll, branch);
   }
 
   // Re-fetch the file list whenever the active site or branch changes.
