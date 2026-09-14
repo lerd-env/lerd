@@ -6,6 +6,9 @@ declare module 'monaco-editor/esm/vs/editor/editor.api' {
   export * from 'monaco-editor';
 }
 declare module 'monaco-editor/esm/vs/basic-languages/php/php.contribution';
+declare module 'monaco-editor/esm/vs/basic-languages/php/php' {
+  export const language: { tokenizer: Record<string, unknown> };
+}
 
 // Internal Monarch entrypoints, used only by the grammar tests to tokenise
 // the config languages through Monaco's real engine.
