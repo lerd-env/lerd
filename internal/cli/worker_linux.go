@@ -229,16 +229,7 @@ func restoreWorker(siteName, sitePath, phpVersion, workerName string, w config.F
 			return
 		}
 	}
-	command = withPinnedWorkerPort(siteName, workerName, w, command)
-	if w.Proxy != nil && w.Proxy.PortEnvKey != "" && !w.Proxy.PinnedPort() {
-		envPath := filepath.Join(sitePath, ".env")
-		port := envfile.ReadKey(envPath, w.Proxy.PortEnvKey)
-		if port == "" {
-			port = strconv.Itoa(assignWorkerProxyPort(sitePath, w.Proxy.PortEnvKey, w.Proxy.DefaultPort))
-			_ = envfile.ApplyUpdates(envPath, map[string]string{w.Proxy.PortEnvKey: port})
-		}
-		command = command + " --port=" + port
-	}
+	command = withWorkerProxyPort(siteName, sitePath, workerName, w, command)
 	// The unit is rewritten here on every `lerd start`, so the dev server flags
 	// have to be rebuilt with it or the worker comes back on its own port and
 	// the site's page is refused the assets it asks for.
