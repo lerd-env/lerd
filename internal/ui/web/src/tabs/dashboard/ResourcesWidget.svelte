@@ -84,15 +84,31 @@
       </div>
     </div>
 
-    {#if $disk.available && $disk.reclaimable_bytes > 0}
+    {#if $disk.available && ($disk.used_by_lerd_bytes > 0 || $disk.reclaimable_bytes > 0)}
       <div class="pt-2 mt-2 border-t border-gray-100 dark:border-lerd-border">
         <div class="flex items-center justify-between gap-2">
-          <div>
-            <div class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">{m.dashboard_disk_reclaimable()}</div>
-            <div class="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{formatBytes($disk.reclaimable_bytes)}</div>
+          <div class="flex gap-5">
+            <div>
+              <div class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">{m.dashboard_disk_usedByLerd()}</div>
+              <div class="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{formatBytes($disk.used_by_lerd_bytes)}</div>
+            </div>
+            <div>
+              <div class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">{m.dashboard_disk_reclaimable()}</div>
+              <div class="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{formatBytes($disk.reclaimable_bytes)}</div>
+            </div>
           </div>
-          <DetailButton tone="warn" onclick={openModal}>{m.dashboard_disk_cleanup()}</DetailButton>
+          {#if $disk.reclaimable_bytes > 0}
+            <DetailButton tone="warn" onclick={openModal}>{m.dashboard_disk_cleanup()}</DetailButton>
+          {/if}
         </div>
+        {#if $disk.lerd_bytes > 0 && $disk.other_bytes > 0}
+          <div class="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+            {m.dashboard_disk_split({
+              lerd: formatBytes($disk.lerd_bytes),
+              other: formatBytes($disk.other_bytes)
+            })}
+          </div>
+        {/if}
         {#if $disk.held_bytes > 0}
           <div class="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
             {m.dashboard_disk_held({ size: formatBytes($disk.held_bytes) })}

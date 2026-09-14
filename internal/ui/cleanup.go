@@ -23,19 +23,25 @@ var (
 	applyDisk   = cleanup.Apply
 )
 
-// diskImage is one reclaimable image in the preview the modal lists.
+// diskImage is one reclaimable image in the preview the modal lists. Owner
+// splits lerd's own leftovers from everything else the deep tier can reach.
 type diskImage struct {
 	ID    string `json:"id"`
 	Desc  string `json:"desc"`
+	Owner string `json:"owner"`
 	Bytes int64  `json:"bytes"`
 }
 
 // diskSnapshot is the reclaimable-disk preview the widget polls and the modal
-// itemizes. Held is disk locked behind running containers that a restart, not
-// this cleanup, would release.
+// itemizes. UsedByLerdBytes is context rather than part of the reclaim: the disk
+// lerd's own images occupy right now. Held is disk locked behind running
+// containers that a restart, not this cleanup, would release.
 type diskSnapshot struct {
 	Available        bool        `json:"available"`
+	UsedByLerdBytes  int64       `json:"used_by_lerd_bytes"`
 	ReclaimableBytes int64       `json:"reclaimable_bytes"`
+	LerdBytes        int64       `json:"lerd_bytes"`
+	OtherBytes       int64       `json:"other_bytes"`
 	Images           []diskImage `json:"images"`
 	HeldBytes        int64       `json:"held_bytes"`
 	HeldCount        int         `json:"held_count"`
@@ -73,11 +79,14 @@ func scanDisk() diskSnapshot {
 	}
 	imgs := make([]diskImage, 0, len(plan.Targets))
 	for _, t := range plan.Targets {
-		imgs = append(imgs, diskImage{ID: t.ID, Desc: t.Desc, Bytes: t.Bytes})
+		imgs = append(imgs, diskImage{ID: t.ID, Desc: t.Desc, Owner: t.Owner, Bytes: t.Bytes})
 	}
 	return diskSnapshot{
 		Available:        true,
+		UsedByLerdBytes:  plan.UsedByLerd,
 		ReclaimableBytes: plan.ReclaimBytes(),
+		LerdBytes:        plan.ReclaimBytesBy(cleanup.OwnerLerd),
+		OtherBytes:       plan.ReclaimBytesBy(cleanup.OwnerOther),
 		Images:           imgs,
 		HeldBytes:        plan.Held.Bytes,
 		HeldCount:        plan.Held.Count,

@@ -113,7 +113,7 @@ func deepTargets(imgs []image, repos, protected, pulled map[string]bool, scope S
 			if i == len(refs)-1 {
 				bytes = reclaimable(img)
 			}
-			out = append(out, Target{Kind: "image", ID: ref, Desc: describeUnused(img, repos), Bytes: bytes})
+			out = append(out, Target{Kind: "image", ID: ref, Desc: describeUnused(img, repos), Owner: ownerOf(img, repos), Bytes: bytes})
 		}
 	}
 	return out
@@ -163,6 +163,30 @@ func describeUnused(img image, repos map[string]bool) string {
 		}
 	}
 	return "unused image"
+}
+
+// lerdOwned reports whether an image belongs to the stack lerd manages: one it
+// built, a PHP base it pulled, or a service image from the catalog. Everything
+// else on the host is someone else's, including the build bases a custom
+// container pulled, which lerd never chose and cannot re-pull on its own.
+func lerdOwned(img image, repos map[string]bool) bool {
+	if isLerd(img) || baseName(img) != "" {
+		return true
+	}
+	for _, n := range img.Names {
+		if repos[canonRepo(n)] {
+			return true
+		}
+	}
+	return false
+}
+
+// ownerOf maps an image to the owner its target is credited to.
+func ownerOf(img image, repos map[string]bool) string {
+	if lerdOwned(img, repos) {
+		return OwnerLerd
+	}
+	return OwnerOther
 }
 
 // canonRef / canonRepo canonicalise an image reference through the shared

@@ -35,17 +35,29 @@ const (
 	KindFiles = "files"
 )
 
+// Owners. A target is lerd's own when lerd built or pulled it as part of the
+// stack it manages; everything else on the host is foreign, which is what lets
+// the dashboard say how much of the reclaim is lerd cleaning up after itself.
+const (
+	OwnerLerd  = "lerd"
+	OwnerOther = "other"
+)
+
 // Target is one reclaimable resource.
 type Target struct {
 	Kind  string // KindImage or KindFiles
 	ID    string // short image ID, or the directory path for KindFiles
 	Desc  string // human description for the plan output
+	Owner string // OwnerLerd or OwnerOther
 	Bytes int64
 }
 
 // Plan is the set of lerd-owned resources that are safe to reclaim.
 type Plan struct {
 	Targets []Target
+	// UsedByLerd is the disk lerd's own images occupy right now, live ones
+	// included. It is context for the reclaimable total, not part of it.
+	UsedByLerd int64
 	// Held counts dangling images a running container still holds that would
 	// otherwise be reaped. They can't be removed now, but a restart recreates the
 	// container on the current image and releases them, so the caller can hint it.
@@ -63,6 +75,17 @@ func (p Plan) ReclaimBytes() int64 {
 	var total int64
 	for _, t := range p.Targets {
 		total += t.Bytes
+	}
+	return total
+}
+
+// ReclaimBytesBy is the disk the plan would free from one owner's targets.
+func (p Plan) ReclaimBytesBy(owner string) int64 {
+	var total int64
+	for _, t := range p.Targets {
+		if t.Owner == owner {
+			total += t.Bytes
+		}
 	}
 	return total
 }
@@ -180,13 +203,19 @@ func Inspect(scope Scope) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
+	// Resolved once for both the owner split and the reap: an unreadable catalog
+	// means nothing is recognised as a service image, never that the reap widens.
+	repos, repoErr := serviceRepos()
 
 	var p Plan
-	add := func(id, desc string, bytes int64) {
-		p.Targets = append(p.Targets, Target{Kind: KindImage, ID: id, Desc: desc, Bytes: bytes})
+	add := func(id, desc string, owner string, bytes int64) {
+		p.Targets = append(p.Targets, Target{Kind: KindImage, ID: id, Desc: desc, Owner: owner, Bytes: bytes})
 	}
 	var baseCandidates []image
 	for _, img := range imgs {
+		if lerdOwned(img, repos) {
+			p.UsedByLerd += reclaimable(img)
+		}
 		switch {
 		case inUse(img):
 			// A container still holds this image; podman can't remove it, so skip
@@ -203,7 +232,7 @@ func Inspect(scope Scope) (Plan, error) {
 			// disk and strands nothing. Provable lerd orphans go in every tier;
 			// other dangling leftovers only when the deep tier is on.
 			if isLerd(img) || reapAllDangling {
-				add(shortID(img.ID), describeOrphan(img), reclaimable(img))
+				add(shortID(img.ID), describeOrphan(img), ownerOf(img, repos), reclaimable(img))
 			}
 		default:
 			if baseName(img) != "" {
@@ -221,7 +250,7 @@ func Inspect(scope Scope) (Plan, error) {
 			if baseLayers, err := imageLayers(imageIDs(baseCandidates)); err == nil {
 				for _, img := range baseCandidates {
 					if !builtUpon(baseLayers[img.ID], live) {
-						add(baseName(img), "orphaned PHP base image", reclaimable(img))
+						add(baseName(img), "orphaned PHP base image", OwnerLerd, reclaimable(img))
 					}
 				}
 			}
@@ -229,7 +258,6 @@ func Inspect(scope Scope) (Plan, error) {
 	}
 
 	if reapUnused {
-		repos, repoErr := serviceRepos()
 		prot, protErr := protectedImages()
 		if repoErr == nil && protErr == nil {
 			p.Targets = append(p.Targets, deepTargets(imgs, repos, prot, canonPulled(), scope)...)
@@ -265,6 +293,7 @@ func staleServiceFiles() []Target {
 			Kind:  KindFiles,
 			ID:    dir,
 			Desc:  "rendered config left by removed service " + name,
+			Owner: OwnerLerd,
 			Bytes: dirBytes(dir),
 		})
 	}
