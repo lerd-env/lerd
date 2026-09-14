@@ -9,10 +9,10 @@ describe('EnvBlock', () => {
     });
   });
 
-  it('renders sorted KEY=value pairs', () => {
+  it('renders one sorted row per var', () => {
     render(EnvBlock, { props: { vars: { B: 'two', A: 'one' } } });
-    const pre = document.querySelector('pre')!;
-    expect(pre.textContent).toBe('A=one\nB=two');
+    const keys = [...document.querySelectorAll('code')].map((c) => c.textContent);
+    expect(keys).toEqual(['A', 'one', 'B', 'two']);
   });
 
   it('uses custom label', () => {
@@ -20,12 +20,21 @@ describe('EnvBlock', () => {
     expect(screen.getByText('Config')).toBeInTheDocument();
   });
 
-  it('copies joined env text to clipboard', async () => {
+  it('copies the whole block as KEY=value lines', async () => {
     const writeText = vi.fn(async () => {});
     Object.assign(navigator, { clipboard: { writeText } });
-    render(EnvBlock, { props: { vars: { A: '1' } } });
-    screen.getByText('Copy').click();
+    render(EnvBlock, { props: { vars: { B: 'two', A: 'one' } } });
+    screen.getAllByLabelText('Copy')[0].click();
     await Promise.resolve();
-    expect(writeText).toHaveBeenCalledWith('A=1');
+    expect(writeText).toHaveBeenCalledWith('A=one\nB=two');
+  });
+
+  it('copies a single row as a KEY=value line', async () => {
+    const writeText = vi.fn(async () => {});
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(EnvBlock, { props: { vars: { DB_PASSWORD: 'lerd' } } });
+    screen.getAllByLabelText('Copy')[1].click();
+    await Promise.resolve();
+    expect(writeText).toHaveBeenCalledWith('DB_PASSWORD=lerd');
   });
 });

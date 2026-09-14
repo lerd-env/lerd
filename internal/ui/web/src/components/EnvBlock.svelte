@@ -1,47 +1,33 @@
 <script lang="ts">
+  import CopyButton from './CopyButton.svelte';
   import { m } from '../paraglide/messages.js';
+
   interface Props {
-    vars?: Record<string, string>;
-    text?: string;
+    vars: Record<string, string>;
     label?: string;
   }
-  let { vars, text: rawText, label = '.env' }: Props = $props();
+  let { vars, label = '.env' }: Props = $props();
 
-  const text = $derived(
-    rawText !== undefined
-      ? rawText
-      : Object.keys(vars ?? {})
-          .sort()
-          .map((k) => `${k}=${(vars ?? {})[k]}`)
-          .join('\n')
+  const entries = $derived(
+    Object.keys(vars)
+      .sort()
+      .map((k) => [k, vars[k]] as const)
   );
-
-  let copied = $state(false);
-  let resetTimer: ReturnType<typeof setTimeout> | null = null;
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(text);
-      copied = true;
-      if (resetTimer) clearTimeout(resetTimer);
-      resetTimer = setTimeout(() => (copied = false), 1500);
-    } catch {
-      /* no-op */
-    }
-  }
+  const text = $derived(entries.map(([k, v]) => `${k}=${v}`).join('\n'));
 </script>
 
-<div class="bg-black sticky top-0 z-10">
-  <div class="flex items-center justify-between bg-gray-50 dark:bg-white/3 px-3 py-1.5 border-b border-gray-200 dark:border-lerd-border">
-    <span class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{label}</span>
-    <button onclick={copy} class="text-[10px] font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
-      {#if copied}
-        <span class="text-emerald-600 dark:text-emerald-500">{m.common_copied()}</span>
-      {:else}
-        {m.common_copy()}
-      {/if}
-    </button>
+<div class="rounded-xl border border-gray-200/80 dark:border-lerd-border bg-white dark:bg-lerd-card overflow-hidden">
+  <div class="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-gray-100 dark:border-lerd-border/60">
+    <span class="text-sm font-medium text-gray-800 dark:text-gray-200">{label}</span>
+    <CopyButton {text} label={m.common_copy()} />
+  </div>
+  <div class="divide-y divide-gray-100 dark:divide-lerd-border/60">
+    {#each entries as [key, value] (key)}
+      <div class="flex items-start gap-3 px-4 py-2 hover:bg-gray-50 dark:hover:bg-white/3 transition-colors">
+        <code class="w-44 shrink-0 truncate font-mono text-xs text-gray-500 dark:text-gray-400" title={key}>{key}</code>
+        <code class="min-w-0 flex-1 break-all font-mono text-xs text-gray-800 dark:text-gray-100">{value}</code>
+        <CopyButton text={`${key}=${value}`} label={m.common_copy()} tone="faint" class="mt-0.5" />
+      </div>
+    {/each}
   </div>
 </div>
-<pre class="bg-gray-50 dark:bg-black/40 text-gray-600 dark:text-gray-400 px-3 py-2.5 text-[10px] leading-relaxed overflow-x-auto whitespace-pre"
->{text}</pre>

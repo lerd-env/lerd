@@ -39,7 +39,7 @@ describe('CopyButton', () => {
     expect(marked()).toBe(false);
   });
 
-  it('stays quiet when there is no clipboard', async () => {
+  it('falls back to a selection copy when the API refuses', async () => {
     Object.assign(navigator, {
       clipboard: {
         writeText: async () => {
@@ -47,9 +47,25 @@ describe('CopyButton', () => {
         }
       }
     });
+    document.execCommand = vi.fn(() => true);
     const { container } = render(CopyButton, { props: { text: 'x', label: 'Copy path' } });
     screen.getByLabelText('Copy path').click();
-    await vi.advanceTimersByTimeAsync(10);
-    expect(container.querySelector('.text-emerald-600')).toBeNull();
+    await vi.waitFor(() => expect(container.querySelector('.text-emerald-600')).not.toBeNull());
+  });
+
+  it('marks a copy that could not happen', async () => {
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: async () => {
+          throw new Error('not a secure context');
+        }
+      }
+    });
+    document.execCommand = vi.fn(() => false);
+    const { container } = render(CopyButton, { props: { text: 'x', label: 'Copy path' } });
+    screen.getByLabelText('Copy path').click();
+    await vi.waitFor(() => expect(container.querySelector('.text-red-500')).not.toBeNull());
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(container.querySelector('.text-red-500')).toBeNull();
   });
 });
