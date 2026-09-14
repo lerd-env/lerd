@@ -10,7 +10,25 @@ func NewMachineCmd() *cobra.Command {
 		Short: "Manage the Podman Machine VM (macOS)",
 	}
 	cmd.AddCommand(newMachineResetCmd())
+	cmd.AddCommand(newMachineReclaimCmd())
 	return cmd
+}
+
+func newMachineReclaimCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "reclaim",
+		Short: "Return disk the Podman Machine VM no longer uses to the host (macOS)",
+		Long: `Return disk the Podman Machine VM is holding but no longer using.
+
+The VM's disk image is a sparse file that only ever grows: blocks freed inside
+the VM stay charged to the host until the guest filesystem is trimmed. This
+caps the VM's systemd journal, vacuums it, then trims the filesystem, and
+reports how much host disk came back. Containers, images and site data are
+untouched.`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runMachineReclaim()
+		},
+	}
 }
 
 func newMachineResetCmd() *cobra.Command {

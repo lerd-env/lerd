@@ -268,14 +268,24 @@ func recreateBrokenMachine(name string, running bool, targetMemoryMiB int64) {
 	}
 }
 
-// ensurePodmanMachineRunning ensures a Podman Machine VM exists, is rootful,
+// ensurePodmanMachineRunning brings the VM up, then applies the housekeeping
+// lerd wants on every machine it runs against.
+func ensurePodmanMachineRunning() error {
+	if err := startPodmanMachineIfNeeded(); err != nil {
+		return err
+	}
+	applyJournalCap(selectedMachineName())
+	return nil
+}
+
+// startPodmanMachineIfNeeded ensures a Podman Machine VM exists, is rootful,
 // and is running. If no machine exists it initialises one with --rootful.
 // If an existing machine is rootless it is stopped, switched, and restarted.
 // On macOS all container operations require the VM to be up. It returns an
 // error only when the VM cannot be started, so callers (install, start) can
 // halt instead of cascading into a wall of confusing podman "exit status 125"
 // failures from every command that follows.
-func ensurePodmanMachineRunning() error {
+func startPodmanMachineIfNeeded() error {
 	// machine list only exposes Name and Running; use inspect for Rootful.
 	listOut, _ := machineQuery("machine", "list", "--format", "{{.Name}}\t{{.Running}}")
 
