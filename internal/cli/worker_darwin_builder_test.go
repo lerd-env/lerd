@@ -226,7 +226,7 @@ func TestWorkerBuilders_ForceColour(t *testing.T) {
 		t.Errorf("host worker guard should export the colour vars:\n%s", guard)
 	}
 
-	exec := buildWorkerExecCommand("/usr/bin/podman", "/site", "lerd-php84-fpm", "php artisan queue:work", nil)
+	exec := buildWorkerExecCommand("/usr/bin/podman", "/site", "acme", "lerd-php84-fpm", "php artisan queue:work", nil)
 	if !strings.Contains(exec, "--env=FORCE_COLOR=1") {
 		t.Errorf("exec worker command should pass the colour vars:\n%s", exec)
 	}
@@ -238,7 +238,7 @@ func TestWorkerBuilders_ForceColour(t *testing.T) {
 // The worker's own env has to land before the container name, or podman reads
 // it as part of the command instead of as a flag.
 func TestBuildWorkerExecCommand_EnvArgsPrecedeContainer(t *testing.T) {
-	exec := buildWorkerExecCommand("/usr/bin/podman", "/site", "lerd-php84-fpm", "php artisan queue:work",
+	exec := buildWorkerExecCommand("/usr/bin/podman", "/site", "acme", "lerd-php84-fpm", "php artisan queue:work",
 		[]string{"--env=CHOKIDAR_INTERVAL=2000"})
 
 	if !strings.Contains(exec, "--env=CHOKIDAR_INTERVAL=2000") {
@@ -286,7 +286,7 @@ func TestDarwinHostWorkerGuard_WorkingDirWithQuoteIsReadableBack(t *testing.T) {
 
 func TestDarwinExecWorkerGuard_WorkingDirIsReadableBack(t *testing.T) {
 	site := "/Users/u/Projects/app-feat-login"
-	run := buildWorkerExecCommand("/usr/bin/podman", site, "lerd-php84-fpm", "php artisan queue:work", nil)
+	run := buildWorkerExecCommand("/usr/bin/podman", site, "acme", "lerd-php84-fpm", "php artisan queue:work", nil)
 	guard := buildDarwinExecWorkerGuardScript("/run/w.pid", "/usr/bin/podman", "lerd-php84-fpm", site, "php artisan queue:work", run)
 	if got := services.WorkerGuardWorkingDir(guard); got != site {
 		t.Errorf("WorkerGuardWorkingDir = %q, want %q\n%s", got, site, guard)
@@ -302,5 +302,29 @@ func TestDarwinContainerWorkerGuard_PinsNoWorkingDir(t *testing.T) {
 		"/usr/bin/podman start -a lerd-queue-app")
 	if got := services.WorkerGuardWorkingDir(guard); got != "" {
 		t.Errorf("WorkerGuardWorkingDir = %q, want empty for a guard that pins no directory\n%s", got, guard)
+	}
+}
+
+// A worker's debug rows are attributed to a site by LERD_SITE. The Linux unit
+// has always passed it and the exec path did not, so every job a macOS worker
+// ran was reported site-less and filtered out of that site's debug view.
+func TestBuildWorkerExecCommand_CarriesTheSiteName(t *testing.T) {
+	exec := buildWorkerExecCommand("/usr/bin/podman", "/site", "acme", "lerd-php84-fpm", "php artisan queue:work", nil)
+
+	if !strings.Contains(exec, `--env=LERD_SITE='acme'`) {
+		t.Fatalf("exec worker command should pass the site name:\n%s", exec)
+	}
+	if strings.Index(exec, "LERD_SITE") > strings.Index(exec, "lerd-php84-fpm") {
+		t.Errorf("the site env must come before the container name:\n%s", exec)
+	}
+}
+
+// The name lands in a generated shell script, so one with a space is one
+// argument, not a command that ends early.
+func TestBuildWorkerExecCommand_QuotesASiteNameWithASpace(t *testing.T) {
+	exec := buildWorkerExecCommand("/usr/bin/podman", "/site", "my app", "lerd-php84-fpm", "php artisan queue:work", nil)
+
+	if !strings.Contains(exec, `--env=LERD_SITE='my app'`) {
+		t.Errorf("a site name with a space should be quoted:\n%s", exec)
 	}
 }

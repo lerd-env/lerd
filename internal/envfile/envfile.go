@@ -219,9 +219,8 @@ func ReferencesContainer(content, serviceName string) bool {
 
 // ReferencesHostWiring reports whether an env file points at a service through
 // the host rather than through container DNS: the service's published port, or
-// its own domain. A site whose PHP runs on the host (native runtime, host
-// proxy) is wired that way, so looking only for the lerd-<service> hostname
-// reads every one of them as unwired.
+// its own domain. Callers pass no ports for a site whose PHP runs in a
+// container, where only the domain resolves.
 func ReferencesHostWiring(content string, hostPorts []string, domain string) bool {
 	for _, line := range strings.Split(content, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "#") {

@@ -176,6 +176,21 @@ lerd retries the build with your host's real upstream nameservers pinned, which 
 If every attempt fails, lerd says so at the end of the install rather than reporting a clean finish: without the image, lerd-dns cannot start and no `.test` name resolves. Check what the container network can reach with `lerd doctor`, in particular the `internet DNS from containers` line, fix it, then run `lerd install` again.
 :::
 
+::: details `php artisan` fails with "could not translate host name lerd-postgres" while the site works in the browser
+The site's `.env` names the service container and its internal port, `lerd-postgres:5432`, which is correct: that is how nginx and PHP-FPM reach the database, and it is why the browser is fine. The name exists only on the lerd network, so a PHP that runs on the host cannot look it up, and every console command fails on the name while nothing else does. Pointing the `.env` at `127.0.0.1` swaps the symptom rather than fixing it, the CLI starts working and the site stops.
+
+The command is meant to run inside the container, and normally does: `lerd install` puts a `php` shim in `~/.local/share/lerd/bin/` ahead of your PATH, and `php artisan migrate` routes through the project's PHP-FPM container. What breaks it is another PHP arriving in front of the shim. lerd writes its PATH line to your shell rc once, at install, so anything appended below it later, Herd, a Homebrew `shellenv`, mise, asdf or phpenv, takes `php` back, and so does an install that wrote to a different rc than your terminal reads.
+
+Check which one you have:
+
+```bash
+which php        # expect ~/.local/share/lerd/bin/php
+lerd doctor      # the Configuration section reports what leads
+```
+
+Doctor's `php on PATH` line names the binary in front when it is not lerd's. Move lerd's `export PATH` line to the end of your shell rc and open a new shell, and if the entry is missing entirely, `lerd path:enable` writes it back. To keep your own PHP in front deliberately, run `lerd path:disable` and type `lerd artisan migrate` instead, which always runs in the container whatever your PATH says.
+:::
+
 ::: details composer or npm fails with "could not resolve host" inside a container
 Composer, npm and the framework store all run inside the container, not on the host, so they use the resolver the lerd network hands aardvark-dns rather than yours. Those two can differ: `.test` domains and container names are answered by aardvark-dns from its own records and keep working regardless, so a broken forwarder shows up only as downloads that fail with `could not resolve host` or `curl error 28 while downloading`, with nothing else complaining.
 
