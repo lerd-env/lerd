@@ -11,7 +11,7 @@ StartLimitIntervalSec=300
 StartLimitBurst=20
 
 [Container]
-Image=lerd-php{{.VersionShort}}-fpm:local
+Image=localhost/lerd-php{{.VersionShort}}-fpm:local
 ContainerName=lerd-php{{.VersionShort}}-fpm
 {{.HostNameLine}}
 Network=lerd

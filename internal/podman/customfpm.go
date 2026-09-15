@@ -78,7 +78,10 @@ func generateCustomFPMQuadlet(siteName, version string) (string, error) {
 		return "", err
 	}
 	short := strings.ReplaceAll(version, ".", "")
-	content = strings.ReplaceAll(content, "Image=lerd-php"+short+"-fpm:local", "Image="+CustomImageName(siteName))
+	// Both sides stay fully qualified: podman tags a local build "localhost/...",
+	// and a registry-less name in the quadlet makes a missing image read as a
+	// failed registry pull rather than an image that is not there.
+	content = strings.ReplaceAll(content, "Image=localhost/lerd-php"+short+"-fpm:local", "Image=localhost/"+CustomImageName(siteName))
 	content = strings.ReplaceAll(content, "ContainerName=lerd-php"+short+"-fpm", "ContainerName="+CustomFPMContainerName(siteName))
 	content = strings.ReplaceAll(content, "Description=Lerd PHP "+version+" FPM", "Description=Lerd PHP "+version+" FPM (custom: "+siteName+")")
 	return content, nil
