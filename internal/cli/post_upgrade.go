@@ -16,6 +16,13 @@ import (
 // upgradeSkipCommands never trigger the reapply: `install` is what the reapply
 // runs, the others either do their own or are daemons that would be restarted
 // out from under themselves.
+//
+// The shimmed tools are here for a different reason. Each is a file on PATH
+// that execs lerd, so the caller asked for npm or php and is waiting on its
+// output, frequently from a build script with no terminal of its own. Pulling
+// images and restarting every container underneath one turns a compile into a
+// reinstall, which is what `make build-ui` running lerd's own npm shim did.
+// The reapply is not lost, only deferred to the next command someone typed.
 var upgradeSkipCommands = map[string]bool{
 	"install":       true,
 	"bootstrap":     true,
@@ -27,6 +34,14 @@ var upgradeSkipCommands = map[string]bool{
 	"tray":          true,
 	"mcp":           true,
 	"dns-forwarder": true,
+
+	// Shims written by addShellShims.
+	"php":         true,
+	"composer":    true,
+	"node":        true,
+	"npm":         true,
+	"npx":         true,
+	"client-exec": true,
 }
 
 // installInProgressEnv marks the process tree of a running `lerd install`.

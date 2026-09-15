@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -13,13 +14,13 @@ import (
 // A package manager swaps the binary and runs nothing else, so the first
 // command after the swap is what has to reapply the environment.
 func TestShouldApplyUpgradeOnAVersionItHasNotSetUpYet(t *testing.T) {
-	if !shouldApplyUpgrade("php", "1.32.0", "1.31.0", true, true) {
+	if !shouldApplyUpgrade("sites", "1.32.0", "1.31.0", true, true) {
 		t.Error("a set-up install running a newer binary should reapply the environment")
 	}
 }
 
 func TestShouldApplyUpgradeSkipsWhenTheVersionIsUnchanged(t *testing.T) {
-	if shouldApplyUpgrade("php", "1.32.0", "1.32.0", true, true) {
+	if shouldApplyUpgrade("sites", "1.32.0", "1.32.0", true, true) {
 		t.Error("nothing changed, so nothing should run")
 	}
 }
@@ -28,7 +29,7 @@ func TestShouldApplyUpgradeSkipsWhenTheVersionIsUnchanged(t *testing.T) {
 // user's own next step, and running it behind their back on the first command
 // would take the choices that step asks them.
 func TestShouldApplyUpgradeSkipsAMachineThatWasNeverSetUp(t *testing.T) {
-	if shouldApplyUpgrade("php", "1.32.0", "", false, true) {
+	if shouldApplyUpgrade("sites", "1.32.0", "", false, true) {
 		t.Error("a machine with no lerd install should be left to `lerd install`")
 	}
 }
@@ -36,7 +37,7 @@ func TestShouldApplyUpgradeSkipsAMachineThatWasNeverSetUp(t *testing.T) {
 // Every install predating the stamp has no recorded version, so the upgrade
 // that introduces it is the one that reapplies the environment once.
 func TestShouldApplyUpgradeOnAnInstallFromBeforeTheStamp(t *testing.T) {
-	if !shouldApplyUpgrade("php", "1.32.0", "", true, true) {
+	if !shouldApplyUpgrade("sites", "1.32.0", "", true, true) {
 		t.Error("a set-up install with no recorded version should reapply once")
 	}
 }
@@ -44,7 +45,7 @@ func TestShouldApplyUpgradeOnAnInstallFromBeforeTheStamp(t *testing.T) {
 // Reapplying restarts services and can take minutes, which is not something to
 // spring on a script, a daemon or a pipe.
 func TestShouldApplyUpgradeSkipsWithoutATerminal(t *testing.T) {
-	if shouldApplyUpgrade("php", "1.32.0", "1.31.0", true, false) {
+	if shouldApplyUpgrade("sites", "1.32.0", "1.31.0", true, false) {
 		t.Error("a non-interactive invocation should not start an install")
 	}
 }
@@ -63,7 +64,7 @@ func TestShouldApplyUpgradeSkipsTheCommandsThatRunItThemselves(t *testing.T) {
 // every commit, so honouring it would reinstall the environment all day.
 func TestShouldApplyUpgradeSkipsDevelopmentBuilds(t *testing.T) {
 	for _, v := range []string{"1.32.0-12-g5ca3460", "1.32.0-12-g5ca3460-dirty", "", "dev"} {
-		if shouldApplyUpgrade("php", v, "1.31.0", true, true) {
+		if shouldApplyUpgrade("sites", v, "1.31.0", true, true) {
 			t.Errorf("version %q should not trigger the reapply", v)
 		}
 	}
@@ -152,5 +153,52 @@ func TestMarkInstallInProgressIsInheritedByChildren(t *testing.T) {
 	markInstallInProgress()
 	if os.Getenv(installInProgressEnv) == "" {
 		t.Error("the install should mark its process tree so children skip the reapply")
+	}
+}
+
+// The shims on PATH are tool proxies: something is already waiting on the
+// output of npm, php or psql, often a build script with no terminal of its own.
+// Reapplying the environment underneath one pulls images and restarts every
+// container in the middle of the command the caller actually asked for, which
+// is how `make build-ui` ended up reinstalling lerd.
+func TestShouldApplyUpgradeSkipsTheShimmedTools(t *testing.T) {
+	for _, name := range []string{"php", "composer", "node", "npm", "npx", "client-exec"} {
+		if shouldApplyUpgrade(name, "1.32.0", "1.31.0", true, true) {
+			t.Errorf("%s is a shim on PATH and should not trigger the reapply", name)
+		}
+	}
+}
+
+// The reapply still has to happen somewhere, or a package-manager upgrade
+// leaves the environment half applied, which is what it exists for.
+func TestShouldApplyUpgradeStillFiresOnAnOrdinaryCommand(t *testing.T) {
+	for _, name := range []string{"sites", "status", "doctor", "link", "start"} {
+		if !shouldApplyUpgrade(name, "1.32.0", "1.31.0", true, true) {
+			t.Errorf("%s should still trigger the reapply", name)
+		}
+	}
+}
+
+// version.Version is stored without a leading v, and the banner and the update
+// prompts add one when they print it. The release workflow injects
+// ${GITHUB_REF_NAME#v} accordingly, so a local build that passed `git describe`
+// through untouched announced itself as "upgraded to vv1.35.0".
+func TestMakefileStripsTheTagPrefixFromTheVersion(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "Makefile"))
+	if err != nil {
+		t.Fatalf("read Makefile: %v", err)
+	}
+	var line string
+	for _, l := range strings.Split(string(b), "\n") {
+		if strings.HasPrefix(l, "VERSION") && strings.Contains(l, "git describe") {
+			line = l
+			break
+		}
+	}
+	if line == "" {
+		t.Fatal("no VERSION line deriving the version from git describe")
+	}
+	if !strings.Contains(line, "patsubst v%,%") {
+		t.Errorf("VERSION keeps the tag's leading v, which doubles it wherever the version is printed: %s", line)
 	}
 }
