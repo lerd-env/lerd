@@ -40,7 +40,15 @@ Services prefixed with `From .lerd.yaml` were not referenced in the env file but
 
 ## Automatic backup
 
-The first time `lerd env` modifies an existing `.env` that has not yet been touched by lerd, it saves a copy as `.env.before_lerd` in the project root and adds the file to `.gitignore` (if one exists). Once lerd has written its connection values to `.env`, subsequent runs skip the backup entirely, so deleting `.env.before_lerd` is safe and it will never be recreated.
+The first time `lerd env` modifies an existing env file that has not yet been touched by lerd, it saves a copy next to that file and adds the copy to `.gitignore` (if one exists). Once lerd has written its connection values, subsequent runs skip the backup entirely, so deleting it is safe and it will never be recreated.
+
+The backup is named after the file it copies, so it sits beside the configuration it belongs to whatever the framework reads:
+
+| Framework | File lerd writes | Backup |
+| --- | --- | --- |
+| Laravel, WordPress (Bedrock) | `.env` | `.env.before_lerd` |
+| Symfony | `.env.local` | `.env.local.before_lerd` |
+| CakePHP | `config/app_local.php` | `config/app_local.php.before_lerd` |
 
 The backup lets you:
 - **See exactly what lerd changed**: diff `.env.before_lerd` against `.env`
@@ -51,7 +59,7 @@ Example output when the backup is created:
 
 ```
 Updating existing .env...
-  Backed up original .env to .env.before_lerd
+  Backed up original .env → .env.before_lerd
   Detected mysql:        applying lerd connection values
   ...
 Done.
@@ -65,7 +73,7 @@ Done.
 lerd env:restore
 ```
 
-Copies `.env.before_lerd` back to `.env`. Useful when switching a project back to Laravel Sail or another local environment.
+Copies the backup back over the file it was taken from, so a CakePHP project gets its `config/app_local.php` back and a Laravel one its `.env`. Useful when switching a project back to Laravel Sail or another local environment.
 
 After restoring, run `lerd env` again to re-apply lerd connection values.
 

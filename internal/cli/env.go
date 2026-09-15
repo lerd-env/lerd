@@ -779,14 +779,15 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		// can inspect what changed and restore with `lerd env:restore`), but only
 		// if lerd hasn't already written to it — detected by presence of the word
 		// "lerd" in the file (e.g. DB_HOST=lerd-mysql).
-		backupPath := filepath.Join(cwd, ".env.before_lerd")
+		backupRelPath := envBackupPath(envRelPath)
+		backupPath := filepath.Join(cwd, backupRelPath)
 		if !envFileHasLerd(envPath) {
 			if _, err := os.Stat(backupPath); os.IsNotExist(err) {
 				if err := copyEnvFile(envPath, backupPath); err != nil {
 					feedback.Warn("could not back up %s: %v", envRelPath, err)
 				} else {
-					envInfo("  Backed up original %s → .env.before_lerd\n", envRelPath)
-					addToGitignore(cwd, ".env.before_lerd")
+					envInfo("  Backed up original %s → %s\n", envRelPath, backupRelPath)
+					addToGitignore(cwd, backupRelPath)
 				}
 			}
 		}
@@ -1674,13 +1675,37 @@ func runSiteInit(svc *config.CustomService, ctx siteTemplateCtx) {
 func NewEnvRestoreCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "env:restore",
-		Short: "Restore .env from the pre-lerd backup (.env.before_lerd)",
-		Long: `Restores the .env file from the backup that 'lerd env' created the first
-time it was run on this project (.env.before_lerd).
+		Short: "Restore the env file from the pre-lerd backup",
+		Long: `Restores the project's env file from the backup that 'lerd env' created the
+first time it was run on this project, kept next to the file itself
+(.env.before_lerd for a plain dotenv project).
 
 Useful when switching back from lerd to Laravel Sail or another environment.`,
 		RunE: runEnvRestore,
 	}
+}
+
+// envBackupPath names the pre-lerd copy of an env file, next to the file it was
+// taken from. A project whose env is the root .env keeps the long-standing
+// .env.before_lerd; one whose configuration lives elsewhere (CakePHP's
+// config/app_local.php, WordPress's wp-config.php) keeps its backup beside it
+// rather than as PHP source under a dotenv name at the project root.
+func envBackupPath(envRelPath string) string {
+	return envRelPath + ".before_lerd"
+}
+
+// restoreEnvBackup copies the pre-lerd backup back over the env file it was
+// taken from.
+func restoreEnvBackup(cwd, envRelPath string) error {
+	backupRelPath := envBackupPath(envRelPath)
+	backupPath := filepath.Join(cwd, backupRelPath)
+	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
+		return fmt.Errorf("%s not found — run 'lerd env' first to create a backup", backupRelPath)
+	}
+	if err := copyEnvFile(backupPath, filepath.Join(cwd, envRelPath)); err != nil {
+		return fmt.Errorf("restoring %s: %w", envRelPath, err)
+	}
+	return nil
 }
 
 func runEnvRestore(_ *cobra.Command, _ []string) error {
@@ -1689,16 +1714,21 @@ func runEnvRestore(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	backupPath := filepath.Join(cwd, ".env.before_lerd")
-	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
-		return fmt.Errorf(".env.before_lerd not found — run 'lerd env' first to create a backup")
+	// The file to restore is the one the framework declares, not a root .env:
+	// writing there would leave the real configuration lerd edited untouched.
+	envRelPath := ".env"
+	if fwName, ok := config.DetectFrameworkForDir(cwd); ok {
+		if fw, found := config.GetFrameworkForDir(fwName, cwd); found {
+			if rel, _ := fw.Env.ResolveWrite(cwd); rel != "" {
+				envRelPath = rel
+			}
+		}
 	}
 
-	envPath := filepath.Join(cwd, ".env")
-	if err := copyEnvFile(backupPath, envPath); err != nil {
-		return fmt.Errorf("restoring .env: %w", err)
+	if err := restoreEnvBackup(cwd, envRelPath); err != nil {
+		return err
 	}
-	fmt.Println("Restored .env from .env.before_lerd")
+	fmt.Printf("Restored %s from %s\n", envRelPath, envBackupPath(envRelPath))
 	fmt.Println("Run 'lerd env' again to re-apply lerd connection settings.")
 	return nil
 }

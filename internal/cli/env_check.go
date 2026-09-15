@@ -76,8 +76,9 @@ func findEnvFiles(dir string) []string {
 		}
 		// Skip files lerd manages internally: .env.example is the baseline we
 		// compare against, .env.lerd_override is a partial personal overlay, and
-		// .env.before_lerd is a pre-lerd backup — none are full env files.
-		if name == ".env.example" || name == envOverrideFile || name == ".env.before_lerd" {
+		// anything .before_lerd is a pre-lerd backup named after the file it
+		// copies (.env.local.before_lerd for Symfony) — none are full env files.
+		if name == ".env.example" || name == envOverrideFile || strings.HasSuffix(name, ".before_lerd") {
 			continue
 		}
 		files = append(files, filepath.Join(dir, name))

@@ -146,3 +146,28 @@ func TestFindEnvFiles_findsVariants(t *testing.T) {
 		t.Error("should not include unrelated.txt")
 	}
 }
+
+// A backup is named after the file it copies, so a Symfony project's is
+// .env.local.before_lerd. It still starts with ".env" and must not be read back
+// as one of the project's own env files.
+func TestFindEnvFiles_skipsEveryBackup(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, ".env", "A=1\n")
+	writeFile(t, dir, ".env.before_lerd", "A=0\n")
+	writeFile(t, dir, ".env.local", "A=1\n")
+	writeFile(t, dir, ".env.local.before_lerd", "A=0\n")
+
+	found := map[string]bool{}
+	for _, f := range findEnvFiles(dir) {
+		found[filepath.Base(f)] = true
+	}
+	if found[".env.before_lerd"] {
+		t.Error("should not include .env.before_lerd")
+	}
+	if found[".env.local.before_lerd"] {
+		t.Error("should not include .env.local.before_lerd")
+	}
+	if !found[".env"] || !found[".env.local"] {
+		t.Error("expected the project's own env files to survive")
+	}
+}
