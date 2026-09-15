@@ -10,7 +10,10 @@ const (
 	// removing it downgrades the probe to inconclusive rather than pulling.
 	ProbeImage = "alpine:latest"
 	// MinioClientImage provisions S3 buckets on the rustfs/minio services.
-	MinioClientImage = "docker.io/minio/mc:latest"
+	// Pulled from quay.io rather than Docker Hub: docker.io/minio/mc stopped
+	// answering for every tag, so a fresh install could not create a bucket at
+	// all while a cached image hid it on machines that already had one.
+	MinioClientImage = "quay.io/minio/mc:latest"
 )
 
 // ToolImages lists every image lerd runs as a throw-away container.

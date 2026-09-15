@@ -31,7 +31,7 @@ introspect:
   entities:
     - kind: buckets
       label: Buckets
-      image: docker.io/minio/mc:latest
+      image: quay.io/minio/mc:latest
       env:
         - MC_HOST_lerd=http://lerd:lerdpassword@lerd-rustfs:9000
       owner_env: AWS_BUCKET
