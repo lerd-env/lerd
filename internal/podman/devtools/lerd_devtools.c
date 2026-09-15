@@ -765,25 +765,78 @@ static void lerd_boot_end(zend_execute_data *execute_data, zval *retval)
 	zend_eval_string(code, NULL, "lerd-laravel-adapter");
 }
 
+/* lerd_collector_has reports whether the collector's file actually defined one
+ * of its functions. The function table keys a namespaced function lowercased
+ * and without a leading separator, which is what "Lerd\\Collector\\event"
+ * folds to. */
+static int lerd_collector_has(const char *fn, size_t fn_len)
+{
+	zend_string *lc = zend_string_alloc(fn_len, 0);
+	int found;
+
+	zend_str_tolower_copy(ZSTR_VAL(lc), fn, fn_len);
+	found = zend_hash_exists(EG(function_table), lc) ? 1 : 0;
+	zend_string_release(lc);
+	return found;
+}
+
+#define LERD_COLLECTOR_EMIT "Lerd\\Collector\\emit"
+
 /* The agnostic collector is a framework-neutral PHP file that extracts and
  * emits events for shared libraries (mail today). Loaded lazily on first need
  * so non-framework apps pay nothing until they actually send mail etc. */
 static void lerd_ensure_collector(void)
 {
+	char path[512], code[768];
+
 	if (LERD_G(collector_loaded)) {
 		return;
 	}
-	LERD_G(collector_loaded) = 1;
-	{
-		char path[512], code[768];
-		lerd_asset(path, sizeof(path), "devtools-collector.php");
-		snprintf(code, sizeof(code),
-			"if (!function_exists('Lerd\\\\Collector\\\\emit')) {"
-			" @include '%s';"
-			"}", path);
-		zend_eval_string(code, NULL, "lerd-collector-load");
+	lerd_asset(path, sizeof(path), "devtools-collector.php");
+	/* Same rule as the Laravel adapter: with no assets directory there is
+	 * nothing to load, and pretending otherwise only arms calls into functions
+	 * that will never exist. */
+	if (access(path, F_OK) != 0) {
+		return;
+	}
+	snprintf(code, sizeof(code),
+		"if (!function_exists('Lerd\\\\Collector\\\\emit')) {"
+		" @include '%s';"
+		"}", path);
+	zend_eval_string(code, NULL, "lerd-collector-load");
+	/* Latch on the result, not on the attempt. Evaluating the include from
+	 * inside an observer handler does not always take, and marking it loaded
+	 * anyway left every later seam in the request calling a function that was
+	 * never defined. */
+	LERD_G(collector_loaded) = lerd_collector_has(LERD_COLLECTOR_EMIT, sizeof(LERD_COLLECTOR_EMIT) - 1);
+}
+
+/* lerd_call_collector loads the collector if it is not in yet and invokes one of
+ * its functions, taking ownership of args either way. Capture is a side-channel
+ * the page must never depend on: calling a function the collector did not define
+ * raises an "Invalid callback" the application cannot catch, which turns the
+ * page the visitor asked for into a 500. Skipping the capture costs a dump; the
+ * alternative costs the request. */
+static void lerd_call_collector(const char *fn, size_t fn_len, zval *args, uint32_t nargs)
+{
+	uint32_t i;
+
+	lerd_ensure_collector();
+	if (lerd_collector_has(fn, fn_len)) {
+		zval fname, rv;
+		ZVAL_STRINGL(&fname, fn, fn_len);
+		if (call_user_function(NULL, NULL, &fname, &rv, nargs, args) == SUCCESS) {
+			zval_ptr_dtor(&rv);
+		}
+		zval_ptr_dtor(&fname);
+	}
+	for (i = 0; i < nargs; i++) {
+		zval_ptr_dtor(&args[i]);
 	}
 }
+
+#define LERD_CALL_COLLECTOR(fn, args, nargs) \
+	lerd_call_collector((fn), sizeof(fn) - 1, (args), (nargs))
 
 /* lerd_mail_end captures one outgoing mail. Laravel claims mail via its own
  * adapter, so we stand down there; everyone else (Symfony, raw PHP on Symfony
@@ -801,15 +854,9 @@ static void lerd_mail_end(zend_execute_data *execute_data, zval *retval)
 	if (!msg || Z_TYPE_P(msg) != IS_OBJECT) {
 		return;
 	}
-	lerd_ensure_collector();
-	zval fname, rv, args[1];
-	ZVAL_STRINGL(&fname, "Lerd\\Collector\\mail", sizeof("Lerd\\Collector\\mail") - 1);
+	zval args[1];
 	ZVAL_COPY(&args[0], msg);
-	if (call_user_function(NULL, NULL, &fname, &rv, 1, args) == SUCCESS) {
-		zval_ptr_dtor(&rv);
-	}
-	zval_ptr_dtor(&fname);
-	zval_ptr_dtor(&args[0]);
+	LERD_CALL_COLLECTOR("Lerd\\Collector\\mail", args, 1);
 }
 
 /* lerd_view_end captures one Twig render. Twig is the de-facto Symfony view
@@ -831,9 +878,7 @@ static void lerd_view_end(zend_execute_data *execute_data, zval *retval)
 	if (!name) {
 		return;
 	}
-	lerd_ensure_collector();
-	zval fname, rv, args[3];
-	ZVAL_STRINGL(&fname, "Lerd\\Collector\\view", sizeof("Lerd\\Collector\\view") - 1);
+	zval args[3];
 	ZVAL_COPY(&args[0], &execute_data->This);
 	ZVAL_COPY(&args[1], name);
 	if (ctx) {
@@ -841,13 +886,7 @@ static void lerd_view_end(zend_execute_data *execute_data, zval *retval)
 	} else {
 		ZVAL_NULL(&args[2]);
 	}
-	if (call_user_function(NULL, NULL, &fname, &rv, 3, args) == SUCCESS) {
-		zval_ptr_dtor(&rv);
-	}
-	zval_ptr_dtor(&fname);
-	zval_ptr_dtor(&args[0]);
-	zval_ptr_dtor(&args[1]);
-	zval_ptr_dtor(&args[2]);
+	LERD_CALL_COLLECTOR("Lerd\\Collector\\view", args, 3);
 }
 
 /* lerd_event_end captures one Symfony event dispatch. The dispatcher is the
@@ -887,21 +926,14 @@ static void lerd_event_end(zend_execute_data *execute_data, zval *retval)
 		}
 	}
 	zval *name = ZEND_CALL_NUM_ARGS(execute_data) >= 2 ? ZEND_CALL_ARG(execute_data, 2) : NULL;
-	lerd_ensure_collector();
-	zval fname, rv, args[2];
-	ZVAL_STRINGL(&fname, "Lerd\\Collector\\event", sizeof("Lerd\\Collector\\event") - 1);
+	zval args[2];
 	ZVAL_COPY(&args[0], event);
 	if (name && Z_TYPE_P(name) == IS_STRING) {
 		ZVAL_COPY(&args[1], name);
 	} else {
 		ZVAL_NULL(&args[1]);
 	}
-	if (call_user_function(NULL, NULL, &fname, &rv, 2, args) == SUCCESS) {
-		zval_ptr_dtor(&rv);
-	}
-	zval_ptr_dtor(&fname);
-	zval_ptr_dtor(&args[0]);
-	zval_ptr_dtor(&args[1]);
+	LERD_CALL_COLLECTOR("Lerd\\Collector\\event", args, 2);
 }
 
 /* lerd_job_end captures one message dispatched to the Symfony Messenger bus.
@@ -921,15 +953,9 @@ static void lerd_job_end(zend_execute_data *execute_data, zval *retval)
 	if (!msg || Z_TYPE_P(msg) != IS_OBJECT) {
 		return;
 	}
-	lerd_ensure_collector();
-	zval fname, rv, args[1];
-	ZVAL_STRINGL(&fname, "Lerd\\Collector\\job", sizeof("Lerd\\Collector\\job") - 1);
+	zval args[1];
 	ZVAL_COPY(&args[0], msg);
-	if (call_user_function(NULL, NULL, &fname, &rv, 1, args) == SUCCESS) {
-		zval_ptr_dtor(&rv);
-	}
-	zval_ptr_dtor(&fname);
-	zval_ptr_dtor(&args[0]);
+	LERD_CALL_COLLECTOR("Lerd\\Collector\\job", args, 1);
 }
 
 /* Store-declared capture seams. lerd writes one line per observed method to
@@ -1031,7 +1057,6 @@ static void lerd_seam_begin(zend_execute_data *execute_data)
 		return;
 	}
 	zend_function *fn = execute_data->func;
-	lerd_ensure_collector();
 
 	zval args;
 	array_init(&args);
@@ -1051,8 +1076,7 @@ static void lerd_seam_begin(zend_execute_data *execute_data)
 		add_index_zval(&args, i, &copy);
 	}
 
-	zval fname, rv, a[4];
-	ZVAL_STRINGL(&fname, "Lerd\\Collector\\seam_begin", sizeof("Lerd\\Collector\\seam_begin") - 1);
+	zval a[4];
 	ZVAL_STR_COPY(&a[0], fn->common.scope->name);
 	ZVAL_STR_COPY(&a[1], fn->common.function_name);
 	if (Z_TYPE(execute_data->This) == IS_OBJECT) {
@@ -1061,13 +1085,7 @@ static void lerd_seam_begin(zend_execute_data *execute_data)
 		ZVAL_NULL(&a[2]);
 	}
 	ZVAL_COPY_VALUE(&a[3], &args);
-	if (call_user_function(NULL, NULL, &fname, &rv, 4, a) == SUCCESS) {
-		zval_ptr_dtor(&rv);
-	}
-	zval_ptr_dtor(&fname);
-	for (int i = 0; i < 4; i++) {
-		zval_ptr_dtor(&a[i]);
-	}
+	LERD_CALL_COLLECTOR("Lerd\\Collector\\seam_begin", a, 4);
 }
 
 /* lerd_seam_end closes the job the matching begin opened. The observer runs on
@@ -1080,9 +1098,7 @@ static void lerd_seam_end(zend_execute_data *execute_data, zval *retval)
 		return;
 	}
 	zend_function *fn = execute_data->func;
-	lerd_ensure_collector();
-	zval fname, rv, a[4];
-	ZVAL_STRINGL(&fname, "Lerd\\Collector\\seam_end", sizeof("Lerd\\Collector\\seam_end") - 1);
+	zval a[4];
 	ZVAL_STR_COPY(&a[0], fn->common.scope->name);
 	ZVAL_STR_COPY(&a[1], fn->common.function_name);
 	ZVAL_BOOL(&a[2], EG(exception) != NULL);
@@ -1104,15 +1120,9 @@ static void lerd_seam_end(zend_execute_data *execute_data, zval *retval)
 	if (pending) {
 		EG(exception) = NULL;
 	}
-	if (call_user_function(NULL, NULL, &fname, &rv, 4, a) == SUCCESS) {
-		zval_ptr_dtor(&rv);
-	}
+	LERD_CALL_COLLECTOR("Lerd\\Collector\\seam_end", a, 4);
 	if (pending) {
 		EG(exception) = pending;
-	}
-	zval_ptr_dtor(&fname);
-	for (int i = 0; i < 4; i++) {
-		zval_ptr_dtor(&a[i]);
 	}
 }
 
@@ -1132,17 +1142,10 @@ static void lerd_http_begin(zend_execute_data *execute_data)
 	if (!url || Z_TYPE_P(url) != IS_STRING) {
 		return;
 	}
-	lerd_ensure_collector();
-	zval fname, rv, args[2];
-	ZVAL_STRINGL(&fname, "Lerd\\Collector\\http", sizeof("Lerd\\Collector\\http") - 1);
+	zval args[2];
 	ZVAL_COPY(&args[0], method);
 	ZVAL_COPY(&args[1], url);
-	if (call_user_function(NULL, NULL, &fname, &rv, 2, args) == SUCCESS) {
-		zval_ptr_dtor(&rv);
-	}
-	zval_ptr_dtor(&fname);
-	zval_ptr_dtor(&args[0]);
-	zval_ptr_dtor(&args[1]);
+	LERD_CALL_COLLECTOR("Lerd\\Collector\\http", args, 2);
 }
 
 static zend_observer_fcall_handlers lerd_observer_init(zend_execute_data *execute_data)

@@ -2,6 +2,7 @@ package podman
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -78,5 +79,39 @@ func TestWriteDevtoolsSource_StagesFiles(t *testing.T) {
 		if _, err := os.Stat(dir + "/internal/podman/devtools/" + name); err != nil {
 			t.Errorf("expected staged %s: %v", name, err)
 		}
+	}
+}
+
+// Every collector call goes through lerd_call_collector, which skips the call
+// when the collector did not load. Calling a missing function raises an
+// "Invalid callback" the application cannot catch, and that turned the first
+// request on a Symfony worker into a 500. A new seam that calls the collector
+// directly would bring the class of bug straight back.
+func TestDevtoolsCollectorCallsAreGuarded(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("devtools", "lerd_devtools.c"))
+	if err != nil {
+		t.Fatalf("read extension source: %v", err)
+	}
+	body := string(src)
+
+	// The helper itself is the one place allowed to reach call_user_function.
+	if n := strings.Count(body, "call_user_function("); n != 1 {
+		t.Errorf("expected exactly one call_user_function (inside lerd_call_collector), found %d", n)
+	}
+	if !strings.Contains(body, "lerd_collector_has(fn, fn_len)") {
+		t.Error("lerd_call_collector no longer checks the function exists before calling it")
+	}
+	// Loading must latch on the result, not on the attempt, or a failed include
+	// leaves every later seam in the request calling a function that is absent.
+	if strings.Contains(body, "LERD_G(collector_loaded) = 1;") {
+		t.Error("collector load latches before the include is known to have worked")
+	}
+	if !strings.Contains(body, "LERD_G(collector_loaded) = lerd_collector_has(") {
+		t.Error("collector load no longer latches on whether the functions appeared")
+	}
+	// A missing assets directory is a no-op, the same rule the Laravel adapter
+	// already followed.
+	if !strings.Contains(body, "lerd_asset(path, sizeof(path), \"devtools-collector.php\");\n\t/* Same rule as the Laravel adapter") {
+		t.Error("collector load no longer checks the asset exists before including it")
 	}
 }
