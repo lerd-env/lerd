@@ -566,34 +566,24 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 		ok("lerd-nginx service installed")
 	}
 
-	phpVersions, _ := phpPkg.ListInstalled()
+	// The native runtime has no images, and the rebuild these findings point at
+	// refuses there, so the host builds are reported instead. They are also the
+	// list to walk: judging the container-registered versions failed ones that
+	// exist only as a quadlet and that this runtime is never asked to serve.
+	native := false
+	if cfg, cerr := config.LoadGlobal(); cerr == nil {
+		native = cfg.PHPRuntimeMode() == config.PHPRuntimeNative
+	}
+	containerVersions, _ := phpPkg.ListInstalled()
+	phpVersions, imageVersions := phpVersionsForDoctor(native, containerVersions, nativephp.ListInstalled())
 	if len(phpVersions) == 0 {
 		warn("PHP versions", "none installed — run: lerd use 8.4")
 	}
-	// The native runtime has no images, and the rebuild these findings point at
-	// refuses there, so it is checked against the published builds instead.
-	if cfg, cerr := config.LoadGlobal(); cerr == nil && cfg.PHPRuntimeMode() == config.PHPRuntimeNative {
-		pins := tools.Load(context.Background())
-		for _, v := range phpVersions {
-			_, statErr := os.Stat(nativephp.BinaryPath(v))
-			status, detail := nativeBuildFinding(statErr == nil,
-				tools.InstalledVersion(nativeTool(v)), pins.Tools[nativeTool(v)].Version)
-			switch status {
-			case "fail":
-				hint := "lerd use " + v
-				if pins.Tools[nativeTool(v)].Version == "" {
-					hint = "keep this version on the container runtime"
-				}
-				fail(fmt.Sprintf("PHP %s", v), detail, hint)
-			case "warn":
-				warn(fmt.Sprintf("PHP %s", v), detail+", run: lerd php:update "+v)
-			default:
-				ok(fmt.Sprintf("PHP %s", v))
-			}
-		}
-		phpVersions = nil
+	if native {
+		printNativePHPFindings(phpVersions, tools.Load(context.Background()),
+			func(v string) string { return tools.InstalledVersion(nativeTool(v)) }, ok, warn)
 	}
-	for _, v := range phpVersions {
+	for _, v := range imageVersions {
 		short := strings.ReplaceAll(v, ".", "")
 		image := "lerd-php" + short + "-fpm:local"
 		// The base tag is the recipe hash, so an upstream PHP or Alpine fix
@@ -743,17 +733,36 @@ func PortInUseIn(port, output string) bool {
 // nativeBuildFinding decides what doctor says about one version's native build.
 // A pin that could not be fetched leaves an installed build alone: being
 // offline is not a reason to call a working PHP stale.
-func nativeBuildFinding(present bool, installed, pinned string) (status, detail string) {
-	if !present {
-		if pinned == "" {
-			return "fail", "no native build is published for this version"
-		}
-		return "fail", "not installed"
-	}
+func nativeBuildFinding(installed, pinned string) (status, detail string) {
 	// A build installed before lerd recorded patches carries no stamp. It is on
 	// disk and serving, so the only honest thing is to leave it alone.
 	if installed != "" && pinned != "" && pinned != installed {
 		return "warn", "a newer build is published (" + pinned + ")"
 	}
 	return "ok", ""
+}
+
+// phpVersionsForDoctor splits the versions to report from the ones with an
+// image to inspect. Under the native runtime there are no images, but the host
+// builds are still installed and still belong in Version Info, which used to
+// read the same slice the image loop emptied and say none were.
+func phpVersionsForDoctor(native bool, container, host []string) (reported, images []string) {
+	if native {
+		return host, nil
+	}
+	return container, container
+}
+
+// printNativePHPFindings reports each installed host build against the patch
+// lerd publishes for it.
+func printNativePHPFindings(versions []string, pins *tools.Manifest,
+	installed func(string) string, ok func(string), warn func(string, string)) {
+	for _, v := range versions {
+		status, detail := nativeBuildFinding(installed(v), pins.Tools[nativeTool(v)].Version)
+		if status == "warn" {
+			warn("PHP "+v, detail+", run: lerd php:update "+v)
+			continue
+		}
+		ok("PHP " + v)
+	}
 }

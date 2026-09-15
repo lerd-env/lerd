@@ -20,12 +20,18 @@
   import { openPhpRemoveModal, openPhpRebuildModal } from '$stores/modals';
   import { phpRuntime, loadPHPRuntime } from '$stores/phpRuntime';
   import { notifyLocalInfo } from '$lib/notify';
+  import { onMount } from 'svelte';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
     version: string;
   }
   let { version }: Props = $props();
+
+  // The side panel that loads this on desktop is not mounted on mobile, where
+  // an unloaded store reads as the container runtime and offers image actions
+  // to an install that has no images.
+  onMount(loadPHPRuntime);
 
   const isDefault = $derived($status.php_default === version);
   const siteCount = $derived($sitesByPhp.get(version) ?? 0);

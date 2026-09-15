@@ -6,12 +6,14 @@ package nativephp
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -332,6 +334,22 @@ func ListInstalled() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// Running reports whether a version's pool is accepting connections on its
+// port, which is the same question nginx asks of it before proxying. Cheaper
+// and more honest than asking launchd: a job can be loaded and not yet serving.
+func Running(version string) bool {
+	port, err := PortFor(version)
+	if err != nil {
+		return false
+	}
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 300*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }
 
 // ToolName is the manifest entry and version-stamp name for a version's host

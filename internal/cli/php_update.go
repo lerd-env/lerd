@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -101,4 +102,40 @@ func nativeVersionsToUpdate(args []string) ([]string, error) {
 		return []string{v}, nil
 	}
 	return nativephp.ListInstalled(), nil
+}
+
+// UpdateNativePHPVersion brings one version's host build up to the published
+// patch and restarts the pool running it. This is what the dashboard's update
+// action does under the native runtime, where rebuilding an image would produce
+// an artifact nothing serves from.
+//
+// The pins are refreshed past their cache, as the command is: someone pressing
+// update wants to know about a build published since the last passive check.
+func UpdateNativePHPVersion(version string, w io.Writer) error {
+	version, err := config.NormalizePHPVersion(version)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(nativephp.BinaryPath(version)); err != nil {
+		return fmt.Errorf("php %s has no native build installed", version)
+	}
+	pins := &pinnedTools{m: tools.Refresh(context.Background())}
+	patch, need := nativeUpdatePlan(pins.m.Tools[nativeTool(version)].Version, tools.InstalledVersion(nativeTool(version)))
+	if patch == "" {
+		return fmt.Errorf("lerd publishes no native build for php %s", version)
+	}
+	if !need {
+		fmt.Fprintf(w, "PHP %s is already on %s.\n", version, patch)
+		return nil
+	}
+	if _, err := installNativePHP(pins, version, w); err != nil {
+		return err
+	}
+	// The running pool holds the old binary and its extensions open, so it
+	// keeps serving them until it is replaced.
+	if err := nativephp.Reload(version); err != nil {
+		return fmt.Errorf("restarting native php-fpm %s: %w", version, err)
+	}
+	fmt.Fprintf(w, "PHP %s updated to %s.\n", version, patch)
+	return nil
 }

@@ -6,12 +6,17 @@
   import { closeModal } from '$stores/modals';
   import { streamPhpRebuild } from '$stores/phpVersions';
   import { loadStatus } from '$stores/status';
+  import { phpRuntime } from '$stores/phpRuntime';
   import { m } from '../paraglide/messages.js';
 
   interface Props {
     version: string;
   }
   let { version }: Props = $props();
+
+  // The native runtime downloads a published build rather than building an
+  // image, so the same endpoint is an update there and has to say so.
+  const native = $derived($phpRuntime === 'native');
 
   let finished = $state(false);
   let error = $state('');
@@ -53,12 +58,12 @@
       if (!alive) return;
       await loadStatus();
       if (box.done && !box.ok) {
-        error = box.error || m.system_php_rebuildFailed();
+        error = box.error || (native ? m.system_php_updateFailed() : m.system_php_rebuildFailed());
       }
       finished = true;
     } catch (e) {
       if (!alive) return;
-      error = e instanceof Error ? e.message : m.system_php_rebuildFailed();
+      error = e instanceof Error ? e.message : native ? m.system_php_updateFailed() : m.system_php_rebuildFailed();
       finished = true;
     }
   }
@@ -68,7 +73,7 @@
   });
 </script>
 
-<Modal open title={m.system_php_rebuildTitleFor({ version })} onclose={closeModal} size="lg">
+<Modal open title={native ? m.system_php_updateTitleFor({ version }) : m.system_php_rebuildTitleFor({ version })} onclose={closeModal} size="lg">
   <div class="px-5 py-3 space-y-2">
     {#if finished && error}
       <div class="rounded-lg border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300">
@@ -82,7 +87,7 @@
     {#if finished}
       <DetailButton tone="primary" onclick={closeModal}>{m.common_close()}</DetailButton>
     {:else}
-      <DetailButton tone="primary" disabled loading={true}>{m.system_php_rebuilding()}</DetailButton>
+      <DetailButton tone="primary" disabled loading={true}>{native ? m.system_php_updating() : m.system_php_rebuilding()}</DetailButton>
     {/if}
   {/snippet}
 </Modal>

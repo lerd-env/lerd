@@ -1547,5 +1547,9 @@
   "system_phpRuntime_removeImagesHint": "Frees the disk they hold. Switching back rebuilds them, which takes a few minutes.",
   "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s).",
   "system_php_updateBuild": "Update build",
-  "system_php_updateBuildTitle": "Download the newest published build for this version"
+  "system_php_updateBuildTitle": "Download the newest published build for this version",
+  "system_php_updateTitleFor": "Update PHP {version}",
+  "system_php_updating": "Updating…",
+  "system_php_updateFailed": "Update failed",
+  "system_php_removeConfirmBodyNative": "This stops this version's PHP-FPM pool and deletes its native binaries. Run 'lerd use {version}' to fetch it again."
 }

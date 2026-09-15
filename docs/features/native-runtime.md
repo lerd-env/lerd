@@ -54,6 +54,8 @@ New patches arrive without a lerd release. The pins live in a manifest lerd read
 
 The binaries land in `~/.local/share/lerd/bin` as `php-native-<version>`, with their loadable extensions in `~/.local/share/lerd/native-php/<version>/modules`. Extensions are kept per version because they are named for the extension rather than the build, and a module only loads into the PHP it was compiled against. An update replaces the binary and its extensions together and then restarts the pool, since a running pool holds both open and keeps serving what it started with.
 
+**System → PHP** follows the runtime too. A version card here offers **Update build** and **Remove**, and nothing that names an image: there is no base to rebuild, no ports to map and no container to open a shell in. Update is `php:update` for that one version, downloading the published build and restarting its pool, and Remove takes the host build down and deletes its binaries, extensions and generated pool config, which is what it takes for the version to actually leave the list.
+
 ## What stays the same
 
 `php:ini` still edits the same files: the native runtime reads the shared, per-version, mail and xdebug fragments through `PHP_INI_SCAN_DIR`, so a setting applies whichever runtime you are on. Xdebug works, shipped as a loadable extension alongside the binary. `dump()` and `dd()` capture works too, with the bridge reading its assets from their host copies. nginx keeps serving and terminating TLS, so HTTPS, domains, worktrees and site groups are untouched.

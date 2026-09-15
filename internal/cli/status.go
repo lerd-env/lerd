@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/lifecycle"
+	"github.com/geodro/lerd/internal/nativephp"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
@@ -59,6 +61,47 @@ func NewStatusCmd() *cobra.Command {
 	}
 }
 
+// printNativePHPStatus reports the host pools, which are what serves under the
+// native runtime. Looking for images there failed every version at once while
+// PHP was up, since none of them has an image and the rebuild it pointed at
+// refuses on this runtime.
+func printNativePHPStatus(versions []string, running func(string) bool) {
+	if len(versions) == 0 {
+		warn2("PHP versions", "none installed — run: lerd use 8.4")
+		return
+	}
+	for _, v := range versions {
+		if running(v) {
+			ok2("PHP " + v)
+			continue
+		}
+		fail2("PHP "+v, "pool not running", "lerd start")
+	}
+}
+
+// printContainerPHPStatus reports the shared FPM container per version, which
+// needs both an image to run and the container up to serve.
+func printContainerPHPStatus() {
+	versions, _ := phpPkg.ListInstalled()
+	if len(versions) == 0 {
+		warn2("PHP versions", "none installed — run: lerd use 8.4")
+		return
+	}
+	for _, v := range versions {
+		unit := "lerd-php" + strings.ReplaceAll(v, ".", "") + "-fpm"
+		if err := podman.RunSilent("image", "exists", unit+":local"); err != nil {
+			fail2("PHP "+v+" FPM", "image missing", "lerd php:rebuild "+v)
+			continue
+		}
+		running, _ := podman.ContainerRunning(unit)
+		if running {
+			ok2("PHP " + v + " FPM")
+		} else {
+			fail2("PHP "+v+" FPM", unit+" not running", serviceStartHint(unit))
+		}
+	}
+}
+
 func runStatus(_ *cobra.Command, _ []string) error {
 	cfg, err := config.LoadGlobal()
 	if err != nil {
@@ -98,35 +141,13 @@ func runStatus(_ *cobra.Command, _ []string) error {
 			serviceStatusHint("lerd-nginx"))
 	}
 
-	// PHP FPM
-	fmt.Println("\n[PHP FPM]")
-	versions, _ := phpPkg.ListInstalled()
-	if len(versions) == 0 {
-		warn2("PHP versions", "none installed — run: lerd use 8.4")
-	}
-	for _, v := range versions {
-		short := ""
-		for _, c := range v {
-			if c != '.' {
-				short += string(c)
-			}
-		}
-		image := "lerd-php" + short + "-fpm:local"
-		containerName := "lerd-php" + short + "-fpm"
-		if err := podman.RunSilent("image", "exists", image); err != nil {
-			fail2("PHP "+v+" FPM",
-				"image missing",
-				"lerd php:rebuild "+v)
-			continue
-		}
-		running, _ := podman.ContainerRunning(containerName)
-		if running {
-			ok2("PHP " + v + " FPM")
-		} else {
-			fail2("PHP "+v+" FPM",
-				containerName+" not running",
-				serviceStartHint(containerName))
-		}
+	// PHP
+	if cfg.PHPRuntimeMode() == config.PHPRuntimeNative {
+		fmt.Println("\n[PHP (native)]")
+		printNativePHPStatus(nativephp.ListInstalled(), nativephp.Running)
+	} else {
+		fmt.Println("\n[PHP FPM]")
+		printContainerPHPStatus()
 	}
 
 	// Custom Containers

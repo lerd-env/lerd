@@ -1546,6 +1546,10 @@
   "system_phpRuntime_removeImages": "Also remove the PHP-FPM images",
   "system_phpRuntime_removeImagesHint": "Frees the disk they hold. Switching back rebuilds them, which takes a few minutes.",
   "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s).",
-  "system_php_updateBuild": "Update build",
-  "system_php_updateBuildTitle": "Download the newest published build for this version"
+  "system_php_updateBuild": "ビルドを更新",
+  "system_php_updateBuildTitle": "このバージョンの最新の公開ビルドをダウンロードします",
+  "system_php_updateTitleFor": "PHP {version} を更新",
+  "system_php_updating": "更新中…",
+  "system_php_updateFailed": "更新に失敗しました",
+  "system_php_removeConfirmBodyNative": "このバージョンの PHP-FPM プールを停止し、ネイティブバイナリを削除します。再度取得するには 'lerd use {version}' を実行してください。"
 }
