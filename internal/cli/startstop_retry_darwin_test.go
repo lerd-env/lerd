@@ -31,12 +31,18 @@ func withPATH(t *testing.T, dir string) {
 // a stale SSH port behind; a second start reassigns it and boots. The helper must
 // retry once and report success without surfacing the first failure as fatal.
 func TestStartPodmanMachineWithRetry_RecoversOnSecondAttempt(t *testing.T) {
-	counter := filepath.Join(t.TempDir(), "n")
+	tmp := t.TempDir()
+	counter := filepath.Join(tmp, "n")
+	booted := filepath.Join(tmp, "booted")
 	dir := writeFakePodman(t, `
 if [ "$1" = "machine" ] && [ "$2" = "start" ]; then
   n=$(cat "`+counter+`" 2>/dev/null || echo 0); n=$((n+1)); echo "$n" > "`+counter+`"
   [ "$n" -eq 1 ] && { echo "vfkit exited unexpectedly with exit code 1" >&2; exit 125; }
+  echo started > "`+booted+`"
   exit 0
+fi
+if [ "$1" = "ps" ]; then
+  [ -f "`+booted+`" ] || { echo "Cannot connect to Podman" >&2; exit 125; }
 fi
 exit 0
 `)
@@ -57,11 +63,37 @@ func TestStartPodmanMachineWithRetry_FailsAfterRetry(t *testing.T) {
 if [ "$1" = "machine" ] && [ "$2" = "start" ]; then
   echo "vfkit exited unexpectedly with exit code 1" >&2; exit 125
 fi
+if [ "$1" = "ps" ]; then
+  echo "Cannot connect to Podman" >&2; exit 125
+fi
 exit 0
 `)
 	withPATH(t, dir)
 
 	if err := startPodmanMachineWithRetry(); err == nil {
 		t.Fatal("expected an error when the VM never boots, got nil")
+	}
+}
+
+// podman can report a running machine as stopped, which is the only reason the
+// start is attempted, and then refuse that start as "already running". Asking
+// the container stack settles it: the VM is up, so there is nothing to retry
+// and nothing to fail on.
+func TestStartPodmanMachineWithRetry_AcceptsAMachineThatIsAlreadyUp(t *testing.T) {
+	counter := filepath.Join(t.TempDir(), "n")
+	dir := writeFakePodman(t, `
+if [ "$1" = "machine" ] && [ "$2" = "start" ]; then
+  n=$(cat "`+counter+`" 2>/dev/null || echo 0); n=$((n+1)); echo "$n" > "`+counter+`"
+  echo 'Error: unable to start "podman-machine-default": already running' >&2; exit 125
+fi
+exit 0
+`)
+	withPATH(t, dir)
+
+	if err := startPodmanMachineWithRetry(); err != nil {
+		t.Fatalf("a usable machine must not read as a failed boot, got %v", err)
+	}
+	if b, _ := os.ReadFile(counter); string(b) != "1\n" {
+		t.Fatalf("retrying a machine that is already up is wasted, got %q attempts", b)
 	}
 }

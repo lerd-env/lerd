@@ -469,6 +469,14 @@ func startPodmanMachineWithRetry() error {
 		return nil
 	}
 
+	// `podman machine list` sometimes reports a running machine as stopped,
+	// which is the only reason we are here, and podman then refuses the start
+	// as "already running". Neither answer can be trusted on its own, so ask
+	// the container stack, which is what the caller actually needs.
+	if machineAlreadyUsable() {
+		return nil
+	}
+
 	feedback.Warn("podman machine start: %v", err)
 	feedback.Line("Retrying Podman Machine start once…")
 	// Brief settle before retrying: when vfkit crashes it can take a moment to
@@ -485,4 +493,12 @@ func startPodmanMachineWithRetry() error {
 	feedback.Note("The Podman Machine VM would not boot. On new macOS releases this is often a vfkit issue that leaves a stale SSH port behind.")
 	feedback.Note("Try: podman machine stop && podman machine start. If it keeps failing, run `lerd machine reset` to recreate the VM, then `lerd install` again.")
 	return fmt.Errorf("podman machine start: %w", err)
+}
+
+// machineAlreadyUsable reports whether container operations work right now.
+// `podman ps` exercises the whole stack rather than a status field, so it
+// answers the question a failed start leaves open: is the VM actually down, or
+// did podman just describe it wrongly.
+func machineAlreadyUsable() bool {
+	return podman.Cmd("ps", "-q").Run() == nil
 }
