@@ -1,5 +1,8 @@
 BINARY      = lerd
-VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.1.0")
+# Tags carry a leading v, the version string does not: the release workflow
+# injects ${GITHUB_REF_NAME#v}, so stripping it here keeps a local build's
+# `lerd --version` and its upgrade banner identical to a released one.
+VERSION    ?= $(patsubst v%,%,$(shell git describe --tags --always --dirty 2>/dev/null || echo "0.1.0"))
 COMMIT     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
 DATE       ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 BUILD_DIR   = ./build
