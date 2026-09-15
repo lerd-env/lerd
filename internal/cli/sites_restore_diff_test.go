@@ -54,3 +54,42 @@ func TestDiffSiteRegistries_namesTLSAndDomainMoves(t *testing.T) {
 		t.Errorf("diff should name the domain move, got: %q", got)
 	}
 }
+
+// The case the first version of this diff let through, found by a lane A rerun.
+// A backup taken while a site was mid-FrankenPHP-switch carries
+// runtime: frankenphp. The diff compared only what a site is, not how it is
+// served, so it reported "nothing would change", restored without asking, and
+// repointed the vhost at a per-site container that had already been removed.
+// The site then 502'd indefinitely with nothing said.
+func TestDiffSiteRegistries_namesARuntimeMove(t *testing.T) {
+	cur := []config.Site{{Name: "demo", PHPVersion: "8.5"}} // "" is the shared FPM pool
+	bak := []config.Site{{Name: "demo", PHPVersion: "8.5", Runtime: "frankenphp"}}
+
+	got := strings.Join(diffSiteRegistries(cur, bak), "\n")
+	if !strings.Contains(got, "runtime fpm → frankenphp") {
+		t.Errorf("diff should name the runtime move, got: %q", got)
+	}
+}
+
+// Two sites on the shared pool must not read as a change just because the
+// runtime field is empty on both.
+func TestDiffSiteRegistries_quietWhenBothOnTheSharedPool(t *testing.T) {
+	sites := []config.Site{{Name: "demo", PHPVersion: "8.5"}}
+	if got := diffSiteRegistries(sites, sites); len(got) != 0 {
+		t.Errorf("identical sites produced %v", got)
+	}
+}
+
+// An unset port on both sides is not a change, or every diff would carry noise.
+func TestDiffSiteRegistries_ignoresUnsetPorts(t *testing.T) {
+	cur := []config.Site{{Name: "demo", ContainerPort: 0, HostPort: 0}}
+	bak := []config.Site{{Name: "demo", ContainerPort: 0, HostPort: 0}}
+	if got := diffSiteRegistries(cur, bak); len(got) != 0 {
+		t.Errorf("unset ports reported as a change: %v", got)
+	}
+	cur2 := []config.Site{{Name: "demo", HostPort: 0}}
+	bak2 := []config.Site{{Name: "demo", HostPort: 8080}}
+	if got := strings.Join(diffSiteRegistries(cur2, bak2), "\n"); !strings.Contains(got, "host port") {
+		t.Errorf("a real port move should be named, got: %q", got)
+	}
+}

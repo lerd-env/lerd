@@ -73,7 +73,34 @@ func changedSiteFields(cur, bak config.Site) []string {
 	add("path", cur.Path, bak.Path)
 	add("domains", strings.Join(cur.Domains, " "), strings.Join(bak.Domains, " "))
 	add("TLS", strconv.FormatBool(cur.Secured), strconv.FormatBool(bak.Secured))
+	// How the site is served, not just what it is. A backup taken mid-switch
+	// carries the runtime that was live then, and restoring it repoints the
+	// vhost at a per-site container that no longer exists: the site 502s with
+	// nothing said, which is the failure this diff exists to prevent.
+	add("runtime", runtimeName(cur.Runtime), runtimeName(bak.Runtime))
+	add("runtime worker", strconv.FormatBool(cur.RuntimeWorker), strconv.FormatBool(bak.RuntimeWorker))
+	add("public dir", cur.PublicDir, bak.PublicDir)
+	add("container port", portText(cur.ContainerPort), portText(bak.ContainerPort))
+	add("host port", portText(cur.HostPort), portText(bak.HostPort))
 	return out
+}
+
+// runtimeName spells the empty runtime as what it actually means, so a move
+// between the shared pool and a per-site container reads as one.
+func runtimeName(r string) string {
+	if r == "" {
+		return "fpm"
+	}
+	return r
+}
+
+// portText renders an unset port as empty so add() treats two unset ports as
+// unchanged rather than reporting "0 → 0".
+func portText(p int) string {
+	if p == 0 {
+		return ""
+	}
+	return strconv.Itoa(p)
 }
 
 func orNone(s string) string {
