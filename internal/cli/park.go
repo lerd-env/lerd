@@ -469,7 +469,71 @@ func ensuredFPMVersions() []string {
 	if reg, err := config.LoadSites(); err == nil && reg != nil {
 		sites = reg.Sites
 	}
-	return fpmVersionsToEnsure(defaultPHP, sites)
+	return mergeVersions(fpmVersionsToEnsure(defaultPHP, sites), parkedFPMVersions(cfg))
+}
+
+// mergeVersions appends what is missing, keeping the first list's order so the
+// default version stays at the front of what the install announces.
+func mergeVersions(base, extra []string) []string {
+	seen := make(map[string]bool, len(base))
+	for _, v := range base {
+		seen[v] = true
+	}
+	for _, v := range extra {
+		if v != "" && !seen[v] {
+			seen[v] = true
+			base = append(base, v)
+		}
+	}
+	return base
+}
+
+// parkedFPMVersions is the PHP an install is about to need but cannot see in the
+// registry yet. The default parked directory ships in the config, so installing
+// on a machine that already holds projects there adopts them moments later
+// through the watcher, with no image built for whatever version they pin: the
+// first `lerd status` after "installation complete" then reported a missing
+// image for a version nothing had been asked to build, until self-heal caught up
+// minutes later.
+//
+// Resolve is the same read-only pass the watcher registers through, and the
+// admission checks are the ones RegisterProjectDeferred applies, so the version
+// built here is the version that will be registered rather than a second guess
+// at it. A project already in the registry resolves as not-registered under the
+// watcher policy and is skipped, which is correct: the registry branch above
+// already covers it.
+func parkedFPMVersions(cfg *config.GlobalConfig) []string {
+	if cfg == nil {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	policy := linker.WatcherPolicy()
+	for _, parked := range cfg.ParkedDirectories {
+		dir := expandHomePath(parked)
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			projectDir := filepath.Join(dir, e.Name())
+			if !parkAdmits(projectDir) {
+				continue
+			}
+			plan, err := linker.Resolve(projectDir, cfg, policy)
+			if err != nil || !plan.Registered() || plan.Mode != linker.ModeFPM {
+				continue
+			}
+			if v := plan.Site.PHPVersion; v != "" && !seen[v] {
+				seen[v] = true
+				out = append(out, v)
+			}
+		}
+	}
+	return out
 }
 
 // fpmEnsurePlan splits versions into the ones with an image to build and the
