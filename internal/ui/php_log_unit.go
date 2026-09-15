@@ -2,8 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"net"
-	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/nativephp"
@@ -42,18 +40,7 @@ func phpVersionRunning(version string, native bool, containerRunning, listenerRu
 
 // nativeListenerRunning reports whether the host FPM for a version is accepting
 // connections on its port.
-func nativeListenerRunning(version string) bool {
-	port, err := nativephp.PortFor(version)
-	if err != nil {
-		return false
-	}
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 300*time.Millisecond)
-	if err != nil {
-		return false
-	}
-	conn.Close()
-	return true
-}
+func nativeListenerRunning(version string) bool { return nativephp.Running(version) }
 
 // installedPHPVersions lists the PHP versions this install can actually serve
 // with, asking whichever runtime is active. Returns an empty slice rather than
