@@ -1958,18 +1958,31 @@ func DetectFramework(dir string) (string, bool) {
 	// Frameworks built on top of Laravel (e.g. Statamic) are more specific
 	// than the generic Laravel detection, so they should win.
 	var matches []string
+	matched := map[string]bool{}
 	seen := map[string]bool{}
 	for _, fwDir := range []string{FrameworksDir(), StoreFrameworksDir()} {
 		entries, _ := filepath.Glob(filepath.Join(fwDir, "*.yaml"))
+		// Every major of a framework gets a look, because majors can detect on
+		// entirely different evidence: CodeIgniter 3 keys off
+		// system/core/CodeIgniter.php and CodeIgniter 4 off spark, so stopping at
+		// the first file the glob returns leaves one of them undetectable. Names
+		// are claimed per directory instead, so a user definition still shadows
+		// the store's copy of the same framework outright.
+		claimed := map[string]bool{}
 		for _, yamlPath := range entries {
 			fw := loadFrameworkYAML(yamlPath)
 			if fw == nil || seen[fw.Name] {
 				continue
 			}
-			seen[fw.Name] = true
-			if matchesFramework(dir, fw) {
-				matches = append(matches, fw.Name)
+			claimed[fw.Name] = true
+			if matched[fw.Name] || !matchesFramework(dir, fw) {
+				continue
 			}
+			matched[fw.Name] = true
+			matches = append(matches, fw.Name)
+		}
+		for name := range claimed {
+			seen[name] = true
 		}
 	}
 
@@ -1980,14 +1993,17 @@ func DetectFramework(dir string) (string, bool) {
 			continue
 		}
 		seen[e.Name] = true
-		if matchesFramework(dir, &Framework{Name: e.Name, Detect: e.Detect}) {
-			matches = append(matches, e.Name)
+		if matched[e.Name] || !matchesFramework(dir, &Framework{Name: e.Name, Detect: e.Detect}) {
+			continue
 		}
+		matched[e.Name] = true
+		matches = append(matches, e.Name)
 	}
 
 	// Built-in Laravel and Symfony as fallbacks.
 	for _, fw := range builtinFrameworks() {
-		if !seen[fw.Name] && matchesFramework(dir, fw) {
+		if !seen[fw.Name] && !matched[fw.Name] && matchesFramework(dir, fw) {
+			matched[fw.Name] = true
 			matches = append(matches, fw.Name)
 		}
 	}
@@ -2591,10 +2607,32 @@ func matchesFramework(dir string, fw *Framework) bool {
 func frameworkDetectRules(frameworkName string) []FrameworkRule {
 	matches, _ := filepath.Glob(filepath.Join(StoreFrameworksDir(), frameworkName+"@*.yaml"))
 	matches = append(matches, filepath.Join(StoreFrameworksDir(), frameworkName+".yaml"))
+	// Every major contributes its rules. DetectMajorVersion walks them looking
+	// for the package the project actually locked, and two majors can name
+	// different packages (codeigniter/framework vs codeigniter4/framework), so
+	// one file's rules alone can never tell them apart.
+	var rules []FrameworkRule
+	seen := map[string]bool{}
 	for _, path := range matches {
-		if fw := loadFrameworkYAML(path); fw != nil && len(fw.Detect) > 0 {
-			return fw.Detect
+		fw := loadFrameworkYAML(path)
+		if fw == nil {
+			continue
 		}
+		for _, rule := range fw.Detect {
+			key := strings.Join([]string{
+				rule.File, rule.MissingFile, rule.Composer,
+				strings.Join(rule.ComposerSections, ","),
+				rule.VersionKey, rule.VersionFile, rule.VersionPattern,
+			}, "\x00")
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			rules = append(rules, rule)
+		}
+	}
+	if len(rules) > 0 {
+		return rules
 	}
 	if e := cachedStoreEntryByName(frameworkName); e != nil && len(e.Detect) > 0 {
 		return e.Detect
