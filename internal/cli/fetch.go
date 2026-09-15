@@ -9,6 +9,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 )
@@ -117,7 +118,35 @@ func runFetch(cmd *cobra.Command, args []string) error {
 	}
 	restartRebuiltFPMUnits(rebuilt)
 	feedback.Done("all requested PHP images ready")
+	// An image is not yet a runtime: php:list and `lerd new` read the quadlet,
+	// so a fetched version they still call missing has to be named here rather
+	// than contradicted by the next command.
+	if installed, err := phpPkg.ListInstalled(); err == nil {
+		if missing := phpVersionsWithoutRuntime(versions, installed); len(missing) > 0 {
+			if len(missing) == 1 {
+				feedback.Note(fmt.Sprintf("PHP %s has an image but no runtime yet — run 'lerd php:rebuild %s' to install it", missing[0], missing[0]))
+			} else {
+				feedback.Note(fmt.Sprintf("PHP %s have images but no runtime yet — run 'lerd php:rebuild <version>' to install one", strings.Join(missing, ", ")))
+			}
+		}
+	}
 	return nil
+}
+
+// phpVersionsWithoutRuntime returns the requested versions that have no
+// installed runtime behind them, in the order they were requested.
+func phpVersionsWithoutRuntime(requested, installed []string) []string {
+	have := make(map[string]bool, len(installed))
+	for _, v := range installed {
+		have[v] = true
+	}
+	var missing []string
+	for _, v := range requested {
+		if !have[v] {
+			missing = append(missing, v)
+		}
+	}
+	return missing
 }
 
 // restartRebuiltFPMUnits bounces the containers of versions whose image this run

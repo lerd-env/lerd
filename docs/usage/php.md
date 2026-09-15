@@ -323,6 +323,15 @@ lerd fetch --local 8.5
 lerd php:rebuild --local
 ```
 
+`lerd fetch` prepares the image; it does not install the version. A version whose image is ready but that has no PHP-FPM service behind it yet is still missing as far as `lerd php:list` and `lerd new` are concerned, and the fetch says so:
+
+```
+ ✓ all requested PHP images ready
+ → PHP 7.4 has an image but no runtime yet — run 'lerd php:rebuild 7.4' to install it
+```
+
+Linking a project that needs the version installs it on demand, so this only comes up when you fetch ahead of time.
+
 ### When the base image is refreshed
 
 The base image tag is a hash of the recipe, so an upstream `php:X.Y-fpm-alpine` refresh, including a security patch Alpine has already shipped, republishes the same tag with new content. Nothing about your machine changes when that happens, so lerd records the digest of the base each image was built from and compares it against what the registry serves now, a manifest lookup with no pull. When they differ, the version is flagged as having an update available.
