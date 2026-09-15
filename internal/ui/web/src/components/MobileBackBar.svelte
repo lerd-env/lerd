@@ -6,7 +6,10 @@
     goToTab($tab);
   }
 
-  const title = $derived($routeRest || $tab);
+  // What was drilled into, not the route that got there: the rest of the hash
+  // carries the tab too (shop.test/logs/queue), and the tab strip sits right
+  // below this bar already.
+  const title = $derived($routeRest.split('/')[0] || $tab);
 </script>
 
 <div class="flex items-center gap-2 px-3 py-1.5 border-b border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shrink-0 sticky top-0 z-10">
