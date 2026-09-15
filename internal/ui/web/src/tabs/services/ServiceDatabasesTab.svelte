@@ -15,8 +15,12 @@
   let { svc }: Props = $props();
 
   // Reload whenever the selected service changes so switching between two
-  // engines doesn't show the previous one's databases.
+  // engines doesn't show the previous one's databases. Only an engine that has
+  // databases is asked: switching to a service that has none re-runs this
+  // effect one frame before the parent swaps the tab away, and the endpoint
+  // answers 404 for a tab the viewer never asked for.
   $effect(() => {
+    if (!svc.is_database) return;
     void loadEngine(svc.name);
   });
 

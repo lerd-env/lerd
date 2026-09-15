@@ -29,8 +29,10 @@
 
   onMount(loadAutoSnapshot);
   // The snapshots ride along with the engine's databases, so the tab reads the
-  // same listing the Databases tab does rather than fetching its own.
+  // same listing the Databases tab does rather than fetching its own, and skips
+  // a service that has no databases for the same reason it does.
   $effect(() => {
+    if (!svc.is_database) return;
     void loadEngine(svc.name);
   });
 

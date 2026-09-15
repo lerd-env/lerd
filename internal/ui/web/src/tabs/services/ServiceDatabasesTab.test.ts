@@ -88,3 +88,39 @@ describe('ServiceDatabasesTab', () => {
     expect(queryByText('Loading...')).toBeNull();
   });
 });
+
+describe('ServiceDatabasesTab engine loading', () => {
+  beforeEach(() => {
+    databases.set([]);
+    engineLoads.reset();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    databases.set([]);
+    engineLoads.reset();
+  });
+
+  // Switching from MySQL to Redis re-runs this tab's effect with the new
+  // service one frame before the parent swaps the tab away, and Redis has no
+  // databases endpoint: the request 404s and the console fills up for a tab the
+  // viewer never asked for.
+  it('asks for nothing when the service is not a database engine', async () => {
+    const fetchSpy = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetchSpy);
+    render(ServiceDatabasesTab, {
+      props: { svc: { name: 'redis', status: 'active', site_count: 0, is_database: false } as Service }
+    });
+    await Promise.resolve();
+    const asked = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(asked.filter((u) => u.includes('/api/databases/'))).toEqual([]);
+  });
+
+  it('still loads the engine for a database service', async () => {
+    const fetchSpy = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetchSpy);
+    render(ServiceDatabasesTab, { props: { svc: svc() } });
+    await Promise.resolve();
+    const asked = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(asked.some((u) => u.includes('/api/databases/mysql'))).toBe(true);
+  });
+});
