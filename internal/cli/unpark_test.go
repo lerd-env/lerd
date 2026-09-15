@@ -19,7 +19,17 @@ func TestUnpark_stopsTheWorkersOfEverySiteItRemoves(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
 
+	// Created before it is canonicalised, and canonicalised before it is used:
+	// CanonicalPath resolves symlinks only for a path that exists, and on macOS
+	// t.TempDir() hands back /var/folders/... which is a symlink to
+	// /private/var/folders/.... Canonicalising a directory that is not there yet
+	// falls back to Clean, leaving a prefix that matches no stored site, and
+	// unpark then walks past every one of them.
 	parked := filepath.Join(home, "Projects")
+	if err := os.MkdirAll(parked, 0755); err != nil {
+		t.Fatal(err)
+	}
+	parked = config.CanonicalPath(parked)
 	// The real teardown reaches podman and nginx; only the routing is under test,
 	// so both seams are stubbed and the worker hook is what we watch.
 	var stopped []string
@@ -45,7 +55,7 @@ func TestUnpark_stopsTheWorkersOfEverySiteItRemoves(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := config.AddSite(config.Site{
-			Name: name, Domains: []string{name + ".test"}, Path: dir, PHPVersion: "8.5",
+			Name: name, Domains: []string{name + ".test"}, Path: config.CanonicalPath(dir), PHPVersion: "8.5",
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -56,7 +66,7 @@ func TestUnpark_stopsTheWorkersOfEverySiteItRemoves(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := config.AddSite(config.Site{
-		Name: "gamma", Domains: []string{"gamma.test"}, Path: outside, PHPVersion: "8.5",
+		Name: "gamma", Domains: []string{"gamma.test"}, Path: config.CanonicalPath(outside), PHPVersion: "8.5",
 	}); err != nil {
 		t.Fatal(err)
 	}
