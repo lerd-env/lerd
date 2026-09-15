@@ -151,3 +151,26 @@ func TestPhpExtAdd_rejectsABundledExtension(t *testing.T) {
 		t.Errorf("a rejected add must not declare the extension: %v", cfg.GetExtensions())
 	}
 }
+
+// The mirror of TestPhpExtAdd_rejectsABundledExtension. A bundled extension
+// lives in the base image, so a rebuild leaves it loaded: remove used to pay
+// for the rebuild and the FPM restart and then report a removal that had not
+// happened, while add refused the same extension outright.
+func TestPhpExtRemove_rejectsABundledExtension(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
+
+	cmd := newPhpExtRemoveCmd()
+	cmd.SetArgs([]string{"ftp"})
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("removing a bundled extension must fail")
+	}
+	if !strings.Contains(err.Error(), "cannot be removed") {
+		t.Errorf("error should say it cannot be removed, got: %v", err)
+	}
+}

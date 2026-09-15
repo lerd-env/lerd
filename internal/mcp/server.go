@@ -4534,6 +4534,11 @@ func execPHPExtRemove(args map[string]any) (any, *rpcError) {
 	if err != nil {
 		return toolErr(err.Error()), nil
 	}
+	// Same refusal as the CLI: a bundled extension survives the rebuild, so
+	// removing it would report a change that did not happen.
+	if len(podman.WithoutBundled(version, []string{ext})) == 0 {
+		return toolErr(fmt.Sprintf("extension %q ships in the PHP %s image and cannot be removed", ext, version)), nil
+	}
 
 	if err := config.UpdateGlobal(func(c *config.GlobalConfig) { c.RemoveExtension(ext) }); err != nil {
 		return toolErr("saving config: " + err.Error()), nil
