@@ -187,3 +187,51 @@ func TestSetSnapshotKept(t *testing.T) {
 		t.Error("an unknown snapshot should be rejected")
 	}
 }
+
+// CreateSnapshot stamps every snapshot with a UTC timestamp, so the label a
+// user types is never the directory on disk. Restore and delete have always
+// resolved that; keep looked the name up literally, so the only name it
+// accepted was the generated one read back off `db:snapshots`.
+func TestSetSnapshotKept_resolvesAShortName(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	seedSnapshot(t, autoSnap("nightly-20260915-123300", time.Now().UTC()))
+
+	if err := SetSnapshotKept("mysql", "myapp", "nightly", false, true); err != nil {
+		t.Fatalf("keeping by the typed label: %v", err)
+	}
+	snaps, err := ListSnapshots("mysql", "myapp", false)
+	if err != nil {
+		t.Fatalf("ListSnapshots: %v", err)
+	}
+	for _, s := range snaps {
+		if s.Name == "nightly-20260915-123300" && !s.Kept {
+			t.Error("the snapshot the label resolves to should be kept")
+		}
+	}
+}
+
+// Repeating a label is what the newest-wins rule is for, and keep has to land
+// on the same snapshot restore and delete would pick.
+func TestSetSnapshotKept_shortNamePicksTheNewest(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	now := time.Now().UTC()
+	seedSnapshot(t, autoSnap("nightly-20260101-000000", now.Add(-48*time.Hour)))
+	seedSnapshot(t, autoSnap("nightly-20260915-123300", now))
+
+	if err := SetSnapshotKept("mysql", "myapp", "nightly", false, true); err != nil {
+		t.Fatalf("keeping by the typed label: %v", err)
+	}
+	snaps, _ := ListSnapshots("mysql", "myapp", false)
+	for _, s := range snaps {
+		switch s.Name {
+		case "nightly-20260915-123300":
+			if !s.Kept {
+				t.Error("the newest snapshot carrying the label should be the one kept")
+			}
+		case "nightly-20260101-000000":
+			if s.Kept {
+				t.Error("the older snapshot should be left under retention")
+			}
+		}
+	}
+}
