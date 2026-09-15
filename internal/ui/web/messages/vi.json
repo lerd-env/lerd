@@ -1546,6 +1546,10 @@
   "system_phpRuntime_removeImages": "Also remove the PHP-FPM images",
   "system_phpRuntime_removeImagesHint": "Frees the disk they hold. Switching back rebuilds them, which takes a few minutes.",
   "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s).",
-  "system_php_updateBuild": "Update build",
-  "system_php_updateBuildTitle": "Download the newest published build for this version"
+  "system_php_updateBuild": "Cập nhật bản dựng",
+  "system_php_updateBuildTitle": "Tải bản dựng mới nhất được phát hành cho phiên bản này",
+  "system_php_updateTitleFor": "Cập nhật PHP {version}",
+  "system_php_updating": "Đang cập nhật…",
+  "system_php_updateFailed": "Cập nhật thất bại",
+  "system_php_removeConfirmBodyNative": "Thao tác này dừng pool PHP-FPM của phiên bản này và xóa các tệp nhị phân gốc. Chạy 'lerd use {version}' để tải lại."
 }

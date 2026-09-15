@@ -1546,6 +1546,10 @@
   "system_phpRuntime_removeImages": "Also remove the PHP-FPM images",
   "system_phpRuntime_removeImagesHint": "Frees the disk they hold. Switching back rebuilds them, which takes a few minutes.",
   "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s).",
-  "system_php_updateBuild": "Update build",
-  "system_php_updateBuildTitle": "Download the newest published build for this version"
+  "system_php_updateBuild": "更新构建",
+  "system_php_updateBuildTitle": "下载此版本最新发布的构建",
+  "system_php_updateTitleFor": "更新 PHP {version}",
+  "system_php_updating": "正在更新…",
+  "system_php_updateFailed": "更新失败",
+  "system_php_removeConfirmBodyNative": "这将停止此版本的 PHP-FPM 进程池并删除其原生二进制文件。运行 'lerd use {version}' 可重新获取。"
 }

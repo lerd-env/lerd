@@ -4,9 +4,13 @@
   import { closeModal, modal } from '$stores/modals';
   import { removePhp, loadPhpVersions } from '$stores/phpVersions';
   import { loadStatus } from '$stores/status';
+  import { phpRuntime } from '$stores/phpRuntime';
   import { m } from '../paraglide/messages.js';
 
   const target = $derived($modal.phpRemove);
+  // Nothing containerised is removed under the native runtime: the pool comes
+  // down and the host binaries go, which is a different promise to make.
+  const native = $derived($phpRuntime === 'native');
 
   let busy = $state(false);
   let error = $state('');
@@ -44,7 +48,11 @@
     {#if !target}
       <p class="text-sm text-gray-500 dark:text-gray-400">{m.common_loading()}</p>
     {:else}
-      <p class="text-sm text-gray-700 dark:text-gray-300">{m.system_php_removeConfirmBody()}</p>
+      <p class="text-sm text-gray-700 dark:text-gray-300">
+        {native
+          ? m.system_php_removeConfirmBodyNative({ version: target.version })
+          : m.system_php_removeConfirmBody()}
+      </p>
       {#if target.siteCount > 0}
         <div class="text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg px-3 py-2">
           {m.system_php_removeWarn({ count: target.siteCount })}

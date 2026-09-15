@@ -4847,6 +4847,14 @@ func hostProxyAppLifecycleOp(isHostProxy bool, workerName, branch, op string) (s
 // terminal emulator.
 var containerRunning = podman.Cache.Running
 
+// The runtime-dependent halves of the version actions, as seams: a test can
+// drive either runtime without a global config, a live podman or a download.
+var (
+	removeNativePHP  = nativephp.Remove
+	updateNativePHP  = cli.UpdateNativePHPVersion
+	teardownPHPFPMFn = teardownPHPFPM
+)
+
 // phpShellScript is what the spawned terminal runs: lerd's own shell command,
 // not a hand-built podman exec. The container script it ends up running
 // contains "$PATH", which the host shell would expand on the way through,
@@ -4978,7 +4986,14 @@ func handlePHPVersionAction(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, map[string]any{"ok": true})
 	case "remove":
-		if err := teardownPHPFPM(version); err != nil {
+		// The native runtime serves from binaries on disk and lists what is
+		// installed from them, so removing the quadlet there reports success
+		// and leaves the version exactly where it was.
+		remove := teardownPHPFPMFn
+		if nativeRuntimeActive() {
+			remove = removeNativePHP
+		}
+		if err := remove(version); err != nil {
 			writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -5172,6 +5187,10 @@ func handlePHPRebuild(w http.ResponseWriter, r *http.Request, version string) {
 		http.Error(w, "streaming not supported", http.StatusInternalServerError)
 		return
 	}
+	if nativeRuntimeActive() {
+		handleNativePHPUpdate(sw, done, version)
+		return
+	}
 	if !slices.Contains(fullyInstalledPHPVersions(), version) {
 		done(map[string]any{"ok": false, "error": "PHP " + version + " is not installed"})
 		return
@@ -5192,6 +5211,25 @@ func handlePHPRebuild(w http.ResponseWriter, r *http.Request, version string) {
 		return
 	}
 	refreshAfterPHPBuild(version)
+	done(map[string]any{"ok": true, "version": version})
+}
+
+// handleNativePHPUpdate is the native half of the update action: there is no
+// image to rebuild, so it downloads the published build and restarts the pool,
+// streaming the same log the container rebuild does.
+func handleNativePHPUpdate(sw *sseLineWriter, done func(map[string]any), version string) {
+	if _, busy := phpBuildInFlight.LoadOrStore(version, struct{}{}); busy {
+		done(map[string]any{"ok": false, "error": "PHP " + version + " is already updating"})
+		return
+	}
+	defer phpBuildInFlight.Delete(version)
+
+	err := updateNativePHP(version, sw)
+	sw.flushTail()
+	if err != nil {
+		done(map[string]any{"ok": false, "error": err.Error(), "version": version})
+		return
+	}
 	done(map[string]any{"ok": true, "version": version})
 }
 

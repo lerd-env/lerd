@@ -23,7 +23,9 @@ func phpLogUnit(site config.Site, phpVersion string, native bool) string {
 }
 
 // nativeRuntimeActive reports whether this install serves PHP from the host.
-func nativeRuntimeActive() bool {
+// A var so a test can pin the runtime the version actions branch on without
+// writing a global config.
+var nativeRuntimeActive = func() bool {
 	cfg, err := config.LoadGlobal()
 	return err == nil && cfg.PHPRuntimeMode() == config.PHPRuntimeNative
 }

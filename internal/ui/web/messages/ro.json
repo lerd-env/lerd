@@ -1546,6 +1546,10 @@
   "system_phpRuntime_removeImages": "Also remove the PHP-FPM images",
   "system_phpRuntime_removeImagesHint": "Frees the disk they hold. Switching back rebuilds them, which takes a few minutes.",
   "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s).",
-  "system_php_updateBuild": "Update build",
-  "system_php_updateBuildTitle": "Download the newest published build for this version"
+  "system_php_updateBuild": "Actualizează build-ul",
+  "system_php_updateBuildTitle": "Descarcă cel mai nou build publicat pentru această versiune",
+  "system_php_updateTitleFor": "Actualizează PHP {version}",
+  "system_php_updating": "Se actualizează…",
+  "system_php_updateFailed": "Actualizarea a eșuat",
+  "system_php_removeConfirmBodyNative": "Asta oprește pool-ul PHP-FPM pentru această versiune și îi șterge binarele native. Rulează 'lerd use {version}' pentru a o descărca din nou."
 }
