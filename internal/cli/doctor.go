@@ -480,6 +480,7 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 	// config change can resolve (#1544).
 	httpPort, httpsPort := config.NginxPorts()
 	nginxRunning, _ := podman.ContainerRunning("lerd-nginx")
+	nginxInstalled := services.Mgr.ContainerUnitInstalled("lerd-nginx")
 	for _, p := range []int{httpPort, httpsPort} {
 		port := strconv.Itoa(p)
 		switch {
@@ -487,6 +488,11 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 			ok(fmt.Sprintf("port %-4s (nginx running)", port))
 		case PortInUse(port):
 			fail("port "+port, "in use by another process", "find the process: "+FindListenerCmd(port))
+		case nginxInstalled:
+			// Free is the right answer to "is anything squatting here", and the
+			// wrong thing to read as health: nothing is serving. The finding
+			// belongs to the nginx check below, so say why rather than tick.
+			ok(fmt.Sprintf("port %-4s (free — nginx is not running)", port))
 		default:
 			ok(fmt.Sprintf("port %-4s (free)", port))
 		}
@@ -559,11 +565,13 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 	section = "Containers & Images"
 	fmt.Fprintln(w, "\n[Containers & Images]")
 
-	if !services.Mgr.ContainerUnitInstalled("lerd-nginx") {
-		fail("lerd-nginx service", "not installed", "run: lerd install")
-		rep.fixLast(autoFix(fixInstall, "", "install the lerd services (lerd install)"))
+	if detail, hint, healthy := nginxServiceFinding(nginxInstalled, nginxRunning); healthy {
+		ok("lerd-nginx service running")
 	} else {
-		ok("lerd-nginx service installed")
+		fail("lerd-nginx service", detail, hint)
+		if !nginxInstalled {
+			rep.fixLast(autoFix(fixInstall, "", "install the lerd services (lerd install)"))
+		}
 	}
 
 	// The native runtime has no images, and the rebuild these findings point at
@@ -644,27 +652,6 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 			}
 			warn(fmt.Sprintf("site %s", site.Name),
 				fmt.Sprintf("%s; switch with: lerd runtime frankenphp", hints[0].Reason))
-		}
-	}
-
-	// ── Sites ────────────────────────────────────────────────────────────────
-	// The broad command has to be broad: an environment that passes every check
-	// above while three sites are failing is not a healthy machine. Each site
-	// gets the cheap half of `lerd site:doctor`, which is named for the detail.
-	section = "Sites"
-	fmt.Fprintln(w, "\n[Sites]")
-	swept := sweepSites()
-	if len(swept) == 0 {
-		ok("no linked sites to check")
-	}
-	for _, s := range swept {
-		switch {
-		case s.Failures > 0:
-			fail(s.Label, s.Summary, "run: lerd site:doctor "+s.Label)
-		case s.Warnings > 0:
-			warn(s.Label, s.Summary+", run: lerd site:doctor "+s.Label)
-		default:
-			ok(s.Label)
 		}
 	}
 
