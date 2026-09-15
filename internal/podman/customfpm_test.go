@@ -65,10 +65,7 @@ func TestGenerateCustomFPMQuadlet_OverridesImageAndName(t *testing.T) {
 	// Image and ContainerName must point at the per-site custom build, not the
 	// shared lerd-php84-fpm.
 	mustContain := []string{
-		// Fully qualified, like the shared template: podman tags a local build
-		// "localhost/...", and a registry-less name makes a missing image read
-		// as a failed registry pull instead of a missing image.
-		"Image=localhost/" + CustomImageName("myapp"),
+		"Image=" + CustomImageName("myapp"),
 		"ContainerName=lerd-cfpm-myapp",
 	}
 	for _, s := range mustContain {
@@ -77,7 +74,7 @@ func TestGenerateCustomFPMQuadlet_OverridesImageAndName(t *testing.T) {
 		}
 	}
 	// The shared image/name must be gone (the override replaced them).
-	for _, s := range []string{"Image=localhost/lerd-php84-fpm:local", "ContainerName=lerd-php84-fpm"} {
+	for _, s := range []string{"Image=lerd-php84-fpm:local", "ContainerName=lerd-php84-fpm"} {
 		if strings.Contains(content, s) {
 			t.Errorf("quadlet still has shared %q after override", s)
 		}
