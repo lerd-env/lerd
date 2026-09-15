@@ -176,6 +176,23 @@ func TestAnonymizer_replacesSiteNamesAndDomains(t *testing.T) {
 	}
 }
 
+// A project's .lerd.yaml lists its domains bare, without the TLD the registry
+// carries, and the report dumps that file verbatim. The bare spelling has to be
+// anonymized too or the real domain ships out under a header that claims it was
+// not.
+func TestAnonymizer_replacesBareProjectDomains(t *testing.T) {
+	setupAnonFixtures(t, "dns:\n    enabled: true\n    tld: test\n", `sites:
+  - name: frontend
+    domains: [astrolov.test, admin.astrolov.test]
+    path: /srv/astrolov
+`)
+	a := newAnonymizer()
+	out := a.Apply("domains:\n  - astrolov\n  - admin.astrolov\n")
+	if strings.Contains(out, "astrolov") {
+		t.Errorf("bare project domain leaked: %s", out)
+	}
+}
+
 func TestAnonymizer_replacesParkedDir(t *testing.T) {
 	t.Setenv("HOME", "/home/u")
 	setupAnonFixtures(t, "parked_directories:\n  - /home/u/Projects\n  - /srv/extra\n", "sites: []\n")

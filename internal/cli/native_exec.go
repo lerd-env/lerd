@@ -80,6 +80,18 @@ func nativeShellRefusal(cwd string) error {
 	return errors.New("there is no container shell under the native runtime: PHP runs on this machine, so use your own shell. Switch back with 'lerd php:runtime container' if you need the container")
 }
 
+// nativeVersionShellRefusal is nativeShellRefusal for `lerd shell <version>`,
+// where the version is given rather than detected from a directory. The runtime
+// mode alone decides: under native there is no FPM container for any version,
+// and ensuring one pulls an image that was never built.
+func nativeVersionShellRefusal() error {
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg.PHPRuntimeMode() != config.PHPRuntimeNative {
+		return nil
+	}
+	return errors.New("there is no container shell under the native runtime: PHP runs on this machine, so use your own shell. Switch back with 'lerd php:runtime container' if you need the container")
+}
+
 // nativeImageCommandRefusal returns the error a command that only makes sense
 // against the PHP image should fail with under the native runtime, or nil in
 // container mode. The native binary's extensions are compiled in and there is

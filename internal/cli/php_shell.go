@@ -94,6 +94,9 @@ func runPhpShellExec(container, workDir string) error {
 
 func runPhpShell(_ *cobra.Command, args []string) error {
 	if len(args) == 1 {
+		if err := nativeVersionShellRefusal(); err != nil {
+			return err
+		}
 		return runVersionShell(args[0])
 	}
 

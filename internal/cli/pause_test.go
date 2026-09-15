@@ -61,19 +61,24 @@ func TestRefreshHostProxyEnvOnResume(t *testing.T) {
 		return nil
 	}
 
-	// Container site (no HostPort): no refresh.
+	// Container site under the container runtime: no refresh.
 	container := &config.Site{Name: "shop", Path: "/p/shop"}
-	if refreshHostProxyEnvOnResume(container) {
+	if refreshHostProxyEnvOnResume(container, config.PHPRuntimeContainer) {
 		t.Error("container site should not trigger an env refresh on resume")
 	}
 
 	// Host-proxy site (HostPort > 0): refresh its path.
 	proxy := &config.Site{Name: "api", Path: "/p/api", HostPort: 3100}
-	if !refreshHostProxyEnvOnResume(proxy) {
+	if !refreshHostProxyEnvOnResume(proxy, config.PHPRuntimeContainer) {
 		t.Error("host-proxy site should trigger an env refresh on resume")
 	}
 	if len(refreshed) != 1 || refreshed[0] != "/p/api" {
 		t.Errorf("refreshed = %v, want exactly [/p/api]", refreshed)
+	}
+
+	// The same site under the native runtime reaches services over loopback too.
+	if !refreshHostProxyEnvOnResume(container, config.PHPRuntimeNative) {
+		t.Error("native site should trigger an env refresh on resume")
 	}
 }
 

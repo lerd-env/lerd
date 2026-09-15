@@ -51,7 +51,29 @@ func NewAutostartCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newAutostartEnableCmd())
 	cmd.AddCommand(newAutostartDisableCmd())
+	cmd.AddCommand(newAutostartStatusCmd())
 	return cmd
+}
+
+// autostartStatusLine is the one-line report of the autostart switch, split out
+// so the wording is covered without a config on disk.
+func autostartStatusLine(enabled bool) string {
+	if enabled {
+		return "autostart enabled — lerd starts automatically on login"
+	}
+	return "autostart disabled — lerd does not start on login; run 'lerd start' yourself"
+}
+
+func newAutostartStatusCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "status",
+		Short: "Show whether lerd starts on login",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			feedback.Begin()
+			feedback.Note(autostartStatusLine(lerdSystemd.IsAutostartEnabled()))
+			return nil
+		},
+	}
 }
 
 func newAutostartEnableCmd() *cobra.Command {

@@ -262,6 +262,7 @@ Lerd can boot itself every time you log in. Autostart is a single switch over ev
 ```bash
 lerd autostart enable      # boot lerd on every login
 lerd autostart disable     # stop booting on login
+lerd autostart status      # report which one is in force
 ```
 
 `lerd autostart enable` runs `systemctl --user enable` on the full set; `lerd autostart disable` runs the matching `disable`. The dashboard's enabled state is the canonical "is autostart on" indicator surfaced by the UI and tray.

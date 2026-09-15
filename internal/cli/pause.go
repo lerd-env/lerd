@@ -168,13 +168,13 @@ func setSiteContainerAutostart(site *config.Site, on bool) bool {
 // package var so tests can stub the re-exec; production points it at runLerdEnv.
 var hostProxyEnvRefresh = runLerdEnv
 
-// refreshHostProxyEnvOnResume regenerates a host-proxy site's .env as it unpauses,
-// so a published port that moved while it was paused (and was skipped by the
-// move-time follow) is picked up before its dev server comes back. Container sites
-// reach services by name on the unchanged internal port, so this no-ops for them.
+// refreshHostProxyEnvOnResume regenerates the .env of a site that reaches services
+// over loopback as it unpauses, so a published port that moved while it was paused
+// is picked up before its dev server comes back. Container sites reach services by
+// name on the unchanged internal port, so this no-ops for them.
 // Reports whether a refresh ran.
-func refreshHostProxyEnvOnResume(site *config.Site) bool {
-	if site == nil || !site.IsHostProxy() {
+func refreshHostProxyEnvOnResume(site *config.Site, mode string) bool {
+	if site == nil || !usesLoopbackServicesIn(site, mode) {
 		return false
 	}
 	if err := hostProxyEnvRefresh(site.Path); err != nil {
@@ -295,7 +295,11 @@ func UnpauseSite(name string) error {
 	// A port move that landed while this site was paused skipped it (the follow
 	// excludes paused sites), so a host-proxy site's .env can still point at a
 	// vacated published port. Regenerate before the dev server resumes below.
-	refreshHostProxyEnvOnResume(site)
+	resumeMode := config.PHPRuntimeContainer
+	if cfg, err := config.LoadGlobal(); err == nil {
+		resumeMode = cfg.PHPRuntimeMode()
+	}
+	refreshHostProxyEnvOnResume(site, resumeMode)
 
 	resumed := site.PausedWorkers
 	for _, w := range resumed {

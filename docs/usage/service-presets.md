@@ -12,12 +12,12 @@ Both kinds use the same YAML schema in `internal/config/presets/*.yaml` and the 
 Beyond the presets bundled in the binary, lerd can fetch presets from an external store repo, so new services can be published without shipping a new lerd release. This mirrors the [framework store](framework-definitions.md): the presets live in the `lerd-env/services` repo as a flat `index.json` plus one `<name>.yaml` per preset, optionally with a `<name>.svg` beside it carrying the preset's own mark.
 
 ```bash
-lerd service search                # list everything the store offers
-lerd service search search-engine  # filter by name, description, or family
+lerd service search                # list every preset on offer
+lerd service search search-engine  # filter by name, description, or category
 lerd service preset <name>         # install a store preset (fetched on demand)
 ```
 
-`lerd service search` shows whether each hit is already `installed`, available `local`ly (bundled or cached), or only in the `store`. Installing a store-only preset fetches its YAML, validates it, and caches it under `~/.local/share/lerd/service-presets/`, after which it behaves exactly like a bundled preset. A cached preset older than 24 hours is refreshed opportunistically on the next install. A store preset of the same name as a bundled one supersedes the built-in only when it validates.
+`lerd service search` covers the bundled presets as well as the store, so a service you already run answers to its own name. It shows whether each hit is already `installed`, available `local`ly (bundled or cached), or only in the `store`. Installing a store-only preset fetches its YAML, validates it, and caches it under `~/.local/share/lerd/service-presets/`, after which it behaves exactly like a bundled preset. A cached preset older than 24 hours is refreshed opportunistically on the next install. A store preset of the same name as a bundled one supersedes the built-in only when it validates.
 
 The binary embeds the default presets as a permanent offline fallback, and `lerd install` and `lerd update` re-fetch the store preset backing every installed service into that same cache, so an add-on service (pgAdmin, phpMyAdmin, and the rest that live only in the store) keeps resolving by name, config-mount files included, even when the store is later unreachable. If the store can't be reached during install the previously cached copy is left in place, so an offline install never breaks a service that already resolved.
 

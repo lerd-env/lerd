@@ -40,6 +40,13 @@ func usesLoopbackServices(site *config.Site) bool {
 	return site.IsHostProxy() || site.IsNative()
 }
 
+// usesLoopbackServicesIn is usesLoopbackServices against a runtime mode given to
+// it rather than read from the config, so the callers that already know the mode
+// (or have to work without a config on disk) share the same rule.
+func usesLoopbackServicesIn(site *config.Site, mode string) bool {
+	return site.IsHostProxy() || site.ServedNatively(mode)
+}
+
 // rewriteEnvForHostProxy adapts lerd's computed service connection values for a
 // host-proxy app. Bare "lerd-*" hostnames become 127.0.0.1, and *_PORT values
 // map from the container port to the service's published host port (e.g. mariadb

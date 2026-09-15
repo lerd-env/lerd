@@ -9,7 +9,7 @@
 | `lerd service restart <name>` | Restart a service container; refreshes the quadlet first so config edits land |
 | `lerd service status <name>` | Show systemd unit status |
 | `lerd service list` | All services with status, version, and an Update column |
-| `lerd service search [query]` | Browse the external service-preset store; install a hit with `lerd service preset <name>` |
+| `lerd service search [query]` | Browse every service preset, bundled and store alike; install a hit with `lerd service preset <name>` |
 | `lerd service update <name> [tag]` | Pull a newer image and restart; tag selects an explicit upgrade target |
 | `lerd service migrate <name> <version>` | SQL dump + restore for cross-version moves (mysql, mariadb, postgres); `<version>` is a preset version label such as `18` |
 | `lerd service rollback <name>` | Swap back to the previously-running image (toggles) |
@@ -83,7 +83,7 @@ lerd service port mysql 3307
 lerd service port mysql --reset   # or: lerd service port mysql 0
 ```
 
-The container-internal port never changes, so containerized apps (which reach the service by name over the `lerd` network) are unaffected. Only host clients pointed at the old published port need to follow. [Host-proxy sites](host-proxy.md) that connect over the published loopback port have their `.env` regenerated automatically when the port moves. A host-proxy site that is paused when the port moves is skipped at that moment and picks up the new port when it is next unpaused.
+The container-internal port never changes, so containerized apps (which reach the service by name over the `lerd` network) are unaffected. Only host clients pointed at the old published port need to follow. Sites that connect over the published loopback port have their `.env` regenerated automatically when the port moves: [host-proxy sites](host-proxy.md), and every site under the [native runtime](../features/native-runtime.md), whose PHP runs on the host and reaches services the same way. A site that is paused when the port moves is skipped at that moment and picks up the new port when it is next unpaused.
 
 Some services publish more than one host port: Mailpit exposes SMTP on `1025` and its web UI on `8025`, RustFS the S3 API on `9000` and the console on `9001`, Selenium the WebDriver on `4444` and the noVNC view on `7900`. `lerd service port <name> <port>` moves the primary (first) mapping. To move any other published port, name the mapping by its container-internal port with `--container`:
 
