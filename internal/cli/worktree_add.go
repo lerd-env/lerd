@@ -377,6 +377,13 @@ func fileExistsAt(path string) bool {
 // configured. Default: share the parent's database (no isolation). The other
 // options call into the same helpers the dashboard toggle uses.
 func promptDBIsolation(site *config.Site, branch string) error {
+	// The documented default is sharing the parent's database, so that is what a
+	// run with no terminal gets. Failing instead left the worktree with no
+	// database wiring at all and a prompt-library error in place of a reason.
+	if !promptableTTY() {
+		feedback.Note("no terminal to ask on, sharing the parent's database. Change it with 'lerd db:isolate' in the worktree")
+		return nil
+	}
 	type choice string
 	const (
 		share     choice = "share"
