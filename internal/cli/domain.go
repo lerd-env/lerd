@@ -115,7 +115,7 @@ func runDomainAdd(_ *cobra.Command, args []string) error {
 		feedback.Warn("updating container hosts file: %v", err)
 	}
 
-	nginx.ReloadOrWarn("")
+	nginx.ReloadAndSettleOrWarn("")
 
 	if err := siteops.SyncEnvIfPrimaryChanged(site, oldPrimary); err != nil {
 		feedback.Warn("syncing .env to new primary domain: %v", err)
@@ -189,7 +189,7 @@ func runDomainRemove(_ *cobra.Command, args []string) error {
 		feedback.Warn("updating container hosts file: %v", err)
 	}
 
-	nginx.ReloadOrWarn("")
+	nginx.ReloadAndSettleOrWarn("")
 
 	if err := siteops.SyncEnvIfPrimaryChanged(site, oldPrimary); err != nil {
 		feedback.Warn("syncing .env to new primary domain: %v", err)
