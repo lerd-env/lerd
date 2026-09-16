@@ -4461,7 +4461,7 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			_ = certs.ReissueCertForWorktree(*site)
 		}
 		_ = podman.WriteContainerHosts()
-		_ = nginx.Reload()
+		_ = nginx.ReloadAndSettle()
 		if err := siteops.SyncEnvIfPrimaryChanged(site, oldPrimary); err != nil {
 			fmt.Fprintf(os.Stderr, "lerd-ui: syncing .env to new primary domain: %v\n", err)
 		}
@@ -4511,7 +4511,7 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			_ = certs.ReissueCertForWorktree(*site)
 		}
 		_ = podman.WriteContainerHosts()
-		_ = nginx.Reload()
+		_ = nginx.ReloadAndSettle()
 		if err := siteops.SyncEnvIfPrimaryChanged(site, oldPrimary); err != nil {
 			fmt.Fprintf(os.Stderr, "lerd-ui: syncing .env to new primary domain: %v\n", err)
 		}
@@ -4591,7 +4591,7 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			_ = certs.ReissueCertForWorktree(*site)
 		}
 		_ = podman.WriteContainerHosts()
-		_ = nginx.Reload()
+		_ = nginx.ReloadAndSettle()
 		if err := siteops.SyncEnvIfPrimaryChanged(site, oldPrimary); err != nil {
 			fmt.Fprintf(os.Stderr, "lerd-ui: syncing .env to new primary domain: %v\n", err)
 		}
