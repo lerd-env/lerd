@@ -31,6 +31,20 @@ Clicking a command (or pressing Enter on a palette entry, or running `lerd run <
 
 The dashboard modal streams output as it arrives via Server-Sent Events from `POST /api/sites/:domain/commands/:name/run`; the CLI streams straight to your terminal (`lerd run` is stdio-passthrough).
 
+### Where a command runs
+
+The shell itself runs on your host, in the project directory, but the tools it calls don't. `php`, `composer`, `node` and `npm` on your PATH are lerd shims that exec into the site's PHP container, and each installed service ships client shims (`mysql`, `mysqldump`, `psql`, `pg_dump`, `redis-cli`) that exec into that service's container. So a single command can step across containers the way a Lando `tooling` entry does, with the target implied by the tool rather than named per step:
+
+```yaml
+commands:
+  - name: refresh-data
+    label: Rebuild demo data
+    command: ./bin/refresh-data     # php artisan …, then mysqldump …, then php artisan …
+    output: text
+```
+
+What this does not give you is a step inside an arbitrary container: a command that has to run in a custom service's container has no route, since the only containers reachable this way are the site's PHP container and the services that publish client shims.
+
 ## Pinned commands
 
 The command a project runs twenty times a day shouldn't cost the same two clicks as the one it runs twice a year, so a command can be pinned: it then draws its own button on the site's control row, next to the PHP and Node pickers and the doctor button, and clicking it runs exactly what the dropdown entry would, confirm gate and terminal spawn included.
