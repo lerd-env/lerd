@@ -696,9 +696,36 @@ func Success(msg string, d time.Duration) {
 	fmt.Fprintf(target(), "%s%s %s %s\n", pad, paint(okStyle, "✓"), msg, paint(dimStyle, "in "+humanDur(d)))
 }
 
+// confirmReader is where Confirm reads the answer from. Swappable so a test can
+// drive it without a terminal.
+var confirmReader io.Reader = os.Stdin
+
+// stdinInteractiveFn backs StdinInteractive so tests can pin it.
+var stdinInteractiveFn = func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
+
+// StdinInteractive reports whether stdin is a terminal, i.e. whether there is
+// anyone there to answer a prompt. Interactive() asks the same of stdout, which
+// is the wrong question for a read: stdout can be a terminal while stdin is a
+// pipe that never delivers a line.
+func StdinInteractive() bool { return stdinInteractiveFn() }
+
+// SetStdinInteractive overrides StdinInteractive for a test and returns a
+// restore func.
+func SetStdinInteractive(on bool) func() {
+	prev := stdinInteractiveFn
+	stdinInteractiveFn = func() bool { return on }
+	return func() { stdinInteractiveFn = prev }
+}
+
 // Confirm prints a styled yes/no prompt (preceded by a blank line) and reads
 // the answer from stdin, returning defaultYes on an empty response. The prompt
 // matches the step styling: an accent "?" lead-in and a dim "[Y/n]" hint.
+//
+// With no terminal on stdin there is nobody to answer, so it takes the default
+// instead of reading. A bare read there does not return quickly, it blocks for
+// as long as the pipe stays open: an ssh session or a CI runner holding stdin
+// open used to wedge the whole command until it was killed. The question is
+// still printed, so a captured log shows what was asked and answered.
 func Confirm(question string, defaultYes bool) bool {
 	hint := "[Y/n]"
 	if !defaultYes {
@@ -708,8 +735,19 @@ func Confirm(question string, defaultYes bool) bool {
 	fmt.Fprintf(target(), "\n%s%s %s %s ", pad, paint(promptStyle, "?"), question, paint(dimStyle, hint))
 	mu.Unlock()
 
+	if !StdinInteractive() {
+		answered := "no"
+		if defaultYes {
+			answered = "yes"
+		}
+		mu.Lock()
+		fmt.Fprintf(target(), "%s\n", paint(dimStyle, answered+" (not a terminal)"))
+		mu.Unlock()
+		return defaultYes
+	}
+
 	var answer string
-	fmt.Scanln(&answer) //nolint:errcheck
+	fmt.Fscanln(confirmReader, &answer) //nolint:errcheck
 	answer = strings.TrimSpace(strings.ToLower(answer))
 	if answer == "" {
 		return defaultYes
