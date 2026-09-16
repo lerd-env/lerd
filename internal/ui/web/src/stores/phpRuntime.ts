@@ -12,6 +12,7 @@ export const phpRuntimeLoading = writable<boolean>(false);
 interface SettingsResponse {
   php_runtime?: string;
   php_runtime_applies?: boolean;
+  php_runtime_switching?: boolean;
 }
 
 // Anything unrecognised is treated as container, matching the daemon: a
@@ -26,6 +27,10 @@ export async function loadPHPRuntime() {
     const res = await apiJson<SettingsResponse>('/api/settings');
     phpRuntime.set(normalize(res.php_runtime));
     phpRuntimeApplies.set(Boolean(res.php_runtime_applies));
+    // The daemon owns this, not the tab that happened to start the switch: one
+    // begun from the CLI, or a dashboard reloaded mid-switch, has to show the
+    // same loading state as the tab that clicked Apply.
+    phpRuntimeLoading.set(Boolean(res.php_runtime_switching));
   } catch {
     phpRuntimeApplies.set(false);
   }

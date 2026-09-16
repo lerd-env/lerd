@@ -13,7 +13,7 @@ This page covers getting a project registered and served: the init wizard, linki
 | `lerd link [domain]` | Register the current directory as a site (domain name without TLD, defaults to directory name). On a fresh project in an interactive terminal it runs the `lerd init` wizard first |
 | `lerd unlink` | Unlink the current directory site (removes all domains) |
 | `lerd sites` | Table view of all registered sites |
-| `lerd sites:restore [backup]` | Put the site registry back from one of its automatic backups |
+| `lerd sites:restore [backup]` | Put the site registry back from one of its automatic backups, showing what it would change and confirming first |
 | `lerd open [name]` | Open the site in the default browser |
 | `lerd code [name]` | Open the site's directory in the configured editor |
 | `lerd secure [name]` | Issue a mkcert TLS cert and enable HTTPS, updates `APP_URL` in `.env` |
@@ -238,7 +238,10 @@ Every registered site lives in `~/.local/share/lerd/sites.yaml`. Lerd copies tha
 lerd sites:restore --list     # what is kept, with the number of sites in each
 lerd sites:restore            # put the newest one back
 lerd sites:restore sites-20260908-141530.000.yaml
+lerd sites:restore --force    # skip the confirmation
 ```
+
+A restore shows what it would change first and asks before it happens, because a backup carries whatever was true when it was taken: a PHP pin, a domain or a TLS state moved back can stop a site serving. Pass `--force` to skip the prompt, which is also how a restore runs outside a terminal.
 
 Restoring rewrites `sites.yaml` and regenerates the nginx vhosts for the sites that came back. The registry it replaced is backed up in turn, so restoring the wrong version is undone by restoring again. Containers and workers are not touched, run `lerd start` afterwards to bring them back up.
 

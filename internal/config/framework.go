@@ -751,10 +751,40 @@ type FrameworkServiceDef struct {
 
 // FrameworkServiceDetect is a single detection condition.
 // The service is considered active when Key exists in the env file and,
-// if ValuePrefix is set, its value starts with that prefix.
+// if ValuePrefix is set, its value starts with that prefix. With Absent the
+// condition inverts: it matches when the key is not set at all, which is how a
+// framework whose scaffold leaves the engine unset still resolves to the engine
+// that framework itself defaults to.
 type FrameworkServiceDetect struct {
 	Key         string `yaml:"key"`
 	ValuePrefix string `yaml:"value_prefix,omitempty"`
+	Absent      bool   `yaml:"absent,omitempty"`
+}
+
+// DetectRulesMatch reports whether any of a declaration's detect rules matches
+// the values read from a project. No rules means nothing rules it out, so the
+// declaration applies. Shared by every caller so the three that evaluate these
+// rules cannot drift apart.
+func DetectRulesMatch(rules []FrameworkServiceDetect, vals map[string]string) bool {
+	if len(rules) == 0 {
+		return true
+	}
+	for _, rule := range rules {
+		val, exists := vals[rule.Key]
+		if rule.Absent {
+			if !exists || val == "" {
+				return true
+			}
+			continue
+		}
+		if !exists {
+			continue
+		}
+		if rule.ValuePrefix == "" || strings.HasPrefix(val, rule.ValuePrefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // ResolveWrite returns the env file lerd writes for a project, and its format.

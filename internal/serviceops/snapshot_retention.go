@@ -128,7 +128,11 @@ func SetSnapshotKept(service, database, name string, allDatabases, kept bool) er
 			return err
 		}
 	}
-	clean, err := sanitizeSnapshotName(name)
+	// Through resolveSnapshotName like restore and delete, or the label someone
+	// typed never matches: CreateSnapshot stamps every name with a timestamp, so
+	// the only name that worked here was the generated one read back off
+	// db:snapshots.
+	clean, err := resolveSnapshotName(service, database, name, allDatabases)
 	if err != nil {
 		return err
 	}

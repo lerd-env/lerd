@@ -8,9 +8,16 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
-	"github.com/geodro/lerd/internal/nginx"
-	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/siteops"
 	"github.com/spf13/cobra"
+)
+
+// The teardown seams tests replace, so an unpark can be exercised without a
+// container runtime: the tail rewrites quadlets and container hosts, which a
+// unit test has no business doing.
+var (
+	teardownSiteFn      = siteops.TeardownSite
+	finishSiteRemovalFn = siteops.FinishSiteRemoval
 )
 
 // NewUnparkCmd returns the unpark command.
@@ -69,32 +76,30 @@ func runUnpark(_ *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Through the shared teardown rather than dropping the vhost and the
+	// registry entry by hand: that left every site's workers running, and a
+	// queue worker whose project is no longer a site restart-loops for as long
+	// as the machine is up. The teardown also stops shares, drops the worktree
+	// vhosts and the certificates, and forgets the site's recorded state.
+	// The parked list is saved without this directory above, so IsParkedSite is
+	// already false here and the sites are removed rather than ignored.
 	feedback.Begin()
 	removed := 0
 	for _, site := range reg.Sites {
 		if !strings.HasPrefix(site.Path, absDir+string(filepath.Separator)) {
 			continue
 		}
-		if err := nginx.RemoveVhost(site.PrimaryDomain()); err != nil {
-			feedback.Warn("removing vhost for %s: %v", site.Name, err)
-		}
-		if err := config.RemoveSite(site.Name); err != nil {
-			feedback.Warn("removing site %s: %v", site.Name, err)
-			continue
-		}
-		_ = config.RemoveSiteFromWorkspaces(site.Name)
+		teardownSiteFn(&site, cfg.ParkedDirectories)
 		feedback.Start("unlinking " + site.Name).OK(feedback.Val(site.PrimaryDomain()))
 		removed++
 	}
 
 	feedback.Done(fmt.Sprintf("unparked %s · %d site(s) removed", filepath.Base(absDir), removed))
 
-	if removed > 0 {
-		nginx.ReloadOrWarn("  ")
+	// The install-wide tail runs once for the whole batch rather than per site.
+	if err := finishSiteRemovalFn(); err != nil {
+		feedback.Warn("reloading nginx: %v", err)
 	}
-
-	// Rewrite FPM quadlets to remove volume mounts that are no longer needed.
-	_ = podman.RewriteFPMQuadlets()
 
 	return nil
 }

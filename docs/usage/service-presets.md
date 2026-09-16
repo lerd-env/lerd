@@ -12,12 +12,12 @@ Both kinds use the same YAML schema in `internal/config/presets/*.yaml` and the 
 Beyond the presets bundled in the binary, lerd can fetch presets from an external store repo, so new services can be published without shipping a new lerd release. This mirrors the [framework store](framework-definitions.md): the presets live in the `lerd-env/services` repo as a flat `index.json` plus one `<name>.yaml` per preset, optionally with a `<name>.svg` beside it carrying the preset's own mark.
 
 ```bash
-lerd service search                # list everything the store offers
-lerd service search search-engine  # filter by name, description, or family
+lerd service search                # list every preset on offer
+lerd service search search-engine  # filter by name, description, or category
 lerd service preset <name>         # install a store preset (fetched on demand)
 ```
 
-`lerd service search` shows whether each hit is already `installed`, available `local`ly (bundled or cached), or only in the `store`. Installing a store-only preset fetches its YAML, validates it, and caches it under `~/.local/share/lerd/service-presets/`, after which it behaves exactly like a bundled preset. A cached preset older than 24 hours is refreshed opportunistically on the next install. A store preset of the same name as a bundled one supersedes the built-in only when it validates.
+`lerd service search` covers the bundled presets as well as the store, so a service you already run answers to its own name. It shows whether each hit is already `installed`, available `local`ly (bundled or cached), or only in the `store`. Installing a store-only preset fetches its YAML, validates it, and caches it under `~/.local/share/lerd/service-presets/`, after which it behaves exactly like a bundled preset. A cached preset older than 24 hours is refreshed opportunistically on the next install. A store preset of the same name as a bundled one supersedes the built-in only when it validates.
 
 The binary embeds the default presets as a permanent offline fallback, and `lerd install` and `lerd update` re-fetch the store preset backing every installed service into that same cache, so an add-on service (pgAdmin, phpMyAdmin, and the rest that live only in the store) keeps resolving by name, config-mount files included, even when the store is later unreachable. If the store can't be reached during install the previously cached copy is left in place, so an offline install never breaks a service that already resolved.
 
@@ -488,16 +488,22 @@ declares none.
 A service whose own image ships no client tooling can name an `image:` on the
 entity, and lerd runs every command in an ephemeral container of that image on
 the lerd network instead of exec-ing the service container, with the entity's
-`env:` pairs carrying the client's connection settings. RustFS is the model
-case: it holds S3 buckets but no S3 client, so its buckets entity runs through
-`minio/mc`. A single action can override the image and env for itself, because
-one tool rarely covers everything: bucket archives need `tar`, which the mc
-image does not carry, so the export and import actions run on `rclone/rclone`
-while listing stays on mc. An `owner_env:` on the entity names the site .env
+`env:` pairs carrying the client's connection settings. A single action can
+override the image and env for itself, because one tool rarely covers
+everything: on the RustFS buckets entity, a bucket archive needs `tar`, so the
+export and import actions run on `rclone/rclone`. An `owner_env:` on the entity names the site .env
 key whose value is the entity a site owns (`AWS_BUCKET` for buckets), which is
 what links each row to its site in the UI; only sites whose .env references
 this service count, so a project pointed at real AWS never claims a local
 bucket of the same name.
+
+An entity can also name a `driver:` instead of commands, and lerd speaks the
+protocol itself: the list and the actions are served by the client compiled into
+the binary, with the entity's `env:` carrying `S3_PORT`, `S3_ACCESS_KEY` and
+`S3_SECRET_KEY`. Only `s3` exists, and the RustFS buckets entity uses it. It is
+there because the S3 client images are public images on registries lerd does not
+control, and when Docker Hub stopped serving `minio/mc` a fresh install could
+not create a bucket at all. A driven entity pulls nothing and works offline.
 
 The single-command `introspect.list_databases` form from before entities existed
 is still honoured as a list-only databases declaration, so presets published for

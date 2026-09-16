@@ -11,6 +11,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
 	gitpkg "github.com/geodro/lerd/internal/git"
+	"github.com/geodro/lerd/internal/nativephp"
 	nodePkg "github.com/geodro/lerd/internal/node"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
@@ -239,6 +240,11 @@ var (
 	containerRunningFn = func(name string) (bool, error) {
 		return podman.Cache.Running(name), nil
 	}
+	nativeRuntimeFn = func() bool {
+		cfg, err := config.LoadGlobal()
+		return err == nil && cfg.PHPRuntimeMode() == config.PHPRuntimeNative
+	}
+	nativePoolRunningFn = nativephp.Loaded
 )
 
 // LoadAll loads all non-ignored sites and enriches them according to flags.
@@ -483,10 +489,19 @@ func (e *EnrichedSite) enrichFPM() {
 		e.FPMRunning, _ = containerRunningFn("lerd-fp-" + e.Name)
 		return
 	}
-	if e.PHPVersion != "" {
-		short := strings.ReplaceAll(e.PHPVersion, ".", "")
-		e.FPMRunning, _ = containerRunningFn("lerd-php" + short + "-fpm")
+	if e.PHPVersion == "" {
+		return
 	}
+	// Under the native runtime a plain FPM site is served by the version's host
+	// pool, and the container it used to look for does not exist. This runs per
+	// site on every poll, so it reads the pool's job rather than dialling its
+	// port: a dial is handed to a child and resets the ondemand idle timer.
+	if nativeRuntimeFn() {
+		e.FPMRunning = nativePoolRunningFn(e.PHPVersion)
+		return
+	}
+	short := strings.ReplaceAll(e.PHPVersion, ".", "")
+	e.FPMRunning, _ = containerRunningFn("lerd-php" + short + "-fpm")
 }
 
 func (e *EnrichedSite) enrichStripe() {

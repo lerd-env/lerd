@@ -443,3 +443,19 @@ func TestApply_RemovesRenderedFileTargets(t *testing.T) {
 		t.Errorf("directory should be gone, stat err = %v", err)
 	}
 }
+
+func TestDedupeImages_CollapsesMultiRepoTags(t *testing.T) {
+	// podman lists an image once per repository it is tagged under, each row
+	// carrying the same ID and the same full Names list.
+	imgs := dedupeImages([]image{
+		{ID: "sha256:mc", Names: []string{"quay.io/minio/mc:latest", "docker.io/minio/mc:latest"}, Size: 85},
+		{ID: "sha256:mc", Names: []string{"quay.io/minio/mc:latest", "docker.io/minio/mc:latest"}, Size: 85},
+		{ID: "sha256:other", Names: []string{"redis:7"}, Size: 40},
+	})
+	if len(imgs) != 2 {
+		t.Fatalf("want 2 images, got %d: %+v", len(imgs), imgs)
+	}
+	if imgs[0].ID != "sha256:mc" || imgs[1].ID != "sha256:other" {
+		t.Fatalf("order not preserved: %+v", imgs)
+	}
+}

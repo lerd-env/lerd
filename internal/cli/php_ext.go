@@ -146,6 +146,13 @@ func newPhpExtRemoveCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// A bundled extension lives in the base image, so a rebuild leaves it
+			// loaded. Removing it used to pay for a rebuild and an FPM restart and
+			// then report a removal that had not happened, while `add` refused the
+			// same extension outright.
+			if len(podman.WithoutBundled(version, []string{ext})) == 0 {
+				return fmt.Errorf("extension %q ships in the PHP %s image and cannot be removed", ext, version)
+			}
 
 			if err := config.UpdateGlobal(func(c *config.GlobalConfig) { c.RemoveExtension(ext) }); err != nil {
 				return fmt.Errorf("saving config: %w", err)

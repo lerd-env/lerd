@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -80,17 +81,41 @@ func ApplyWithStart(version, rawMode, start string) (Result, error) {
 		return Result{Version: version}, fmt.Errorf("writing xdebug ini: %w", err)
 	}
 
-	if err := podman.WriteFPMQuadlet(version); err != nil {
-		return Result{Version: version}, fmt.Errorf("writing FPM quadlet: %w", err)
+	res, err := applyRestart(version, cfg.PHPRuntimeMode())
+	if err != nil {
+		return Result{Version: version}, err
 	}
+	res.Mode = targetMode
+	res.Enabled = targetMode != ""
+	return res, nil
+}
 
-	res := Result{
-		Version: version,
-		Mode:    targetMode,
-		Enabled: targetMode != "",
+// Seams for the restart step, so the runtime split is testable without launchd
+// or podman.
+var (
+	writeFPMQuadlet  = podman.WriteFPMQuadlet
+	restartFPMUnit   = podman.RestartUnit
+	reloadNativePool = nativephp.Reload
+)
+
+// applyRestart makes a changed xdebug ini reach the processes serving requests.
+// Under the native runtime that is the version's host pool; there is no FPM
+// container, and writing its quadlet then restarting it fails against an image
+// that was never built.
+func applyRestart(version, mode string) (Result, error) {
+	res := Result{Version: version}
+	if mode == config.PHPRuntimeNative {
+		if err := reloadNativePool(version); err != nil {
+			res.RestartErr = err
+			return res, nil
+		}
+		res.Restarted = true
+		return res, nil
 	}
-	unit := "lerd-php" + strings.ReplaceAll(version, ".", "") + "-fpm"
-	if err := podman.RestartUnit(unit); err != nil {
+	if err := writeFPMQuadlet(version); err != nil {
+		return res, fmt.Errorf("writing FPM quadlet: %w", err)
+	}
+	if err := restartFPMUnit(FPMUnit(version)); err != nil {
 		res.RestartErr = err
 		return res, nil
 	}

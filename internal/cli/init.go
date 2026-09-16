@@ -1080,15 +1080,14 @@ func detectServicesFromRules(envFilePath, envFormat string, rules map[string]con
 		if !ok || len(def.Detect) == 0 {
 			continue
 		}
+		vals := make(map[string]string, len(def.Detect))
 		for _, cond := range def.Detect {
-			val := readKey(cond.Key)
-			if val == "" {
-				continue
+			if v := readKey(cond.Key); v != "" {
+				vals[cond.Key] = v
 			}
-			if cond.ValuePrefix == "" || strings.HasPrefix(val, cond.ValuePrefix) {
-				detected = append(detected, svc)
-				break
-			}
+		}
+		if config.DetectRulesMatch(def.Detect, vals) {
+			detected = append(detected, svc)
 		}
 	}
 	return detected

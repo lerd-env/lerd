@@ -27,7 +27,7 @@ By default (and automatically) cleanup reclaims everything below. Pass `--safe` 
 
 - **Named data volumes**: your databases are never in scope.
 - **Any tagged image in use**: an image a running container uses, and each installed service's current image and one-back rollback target, are always kept.
-- **lerd's own tool images**: the `alpine` it runs the IPv6 network probe with (with `--pull never`, so losing it would quietly downgrade the probe) and the `minio/mc` it provisions S3 buckets with. Neither leaves a container behind, so nothing else marks them as live.
+- **lerd's own tool images**: the `alpine` it runs the IPv6 network probe with, with `--pull never`, so losing it would quietly downgrade the probe. It leaves no container behind, so nothing else marks it as live.
 - **A tagged image outside the service catalog**, in the unattended tiers and under `--safe`: your own application images, another tool's base images. The interactive default does reap these once nothing references them, which is the whole point of the tier.
 - With **`--safe`**, only images provably built by lerd (a `dev.lerd.*` label or the `lerd-php*-fpm-base` repo name) are removed, and nothing else is touched at all.
 

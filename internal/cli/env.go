@@ -40,6 +40,13 @@ func usesLoopbackServices(site *config.Site) bool {
 	return site.IsHostProxy() || site.IsNative()
 }
 
+// usesLoopbackServicesIn is usesLoopbackServices against a runtime mode given to
+// it rather than read from the config, so the callers that already know the mode
+// (or have to work without a config on disk) share the same rule.
+func usesLoopbackServicesIn(site *config.Site, mode string) bool {
+	return site.IsHostProxy() || site.ServedNatively(mode)
+}
+
 // rewriteEnvForHostProxy adapts lerd's computed service connection values for a
 // host-proxy app. Bare "lerd-*" hostnames become 127.0.0.1, and *_PORT values
 // map from the container port to the service's published host port (e.g. mariadb
@@ -495,6 +502,11 @@ func emptyEnvFile(envFormat string) []byte {
 func frameworkManagesEnv(cwd string) bool {
 	name, ok := config.DetectFrameworkForDir(cwd)
 	if !ok {
+		// Nothing declares one either: there is no env mapping to write, and
+		// running anyway only prints "no framework detected" on every sweep.
+		if proj, err := config.LoadProjectConfig(cwd); err == nil && proj != nil && proj.Framework == "" {
+			return false
+		}
 		return true // unknown framework: let runEnv decide as before
 	}
 	fw, ok := config.GetFrameworkForDir(name, cwd)
@@ -1428,16 +1440,12 @@ func alignWorktreeEnvDBConnection(site *config.Site, mainEnvPath, envRelPath, en
 
 // frameworkServiceDetected returns true if any detect rule in def matches the env map.
 func frameworkServiceDetected(def config.FrameworkServiceDef, envMap map[string]string) bool {
-	for _, rule := range def.Detect {
-		val, exists := envMap[rule.Key]
-		if !exists {
-			continue
-		}
-		if rule.ValuePrefix == "" || strings.HasPrefix(val, rule.ValuePrefix) {
-			return true
-		}
+	// Unlike the database-target lookup, a service declaring no rules here is
+	// not written: there is nothing saying the project uses it.
+	if len(def.Detect) == 0 {
+		return false
 	}
-	return false
+	return config.DetectRulesMatch(def.Detect, envMap)
 }
 
 // CreateDatabase is the exported variant of createDatabase. Used by callers

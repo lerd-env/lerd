@@ -68,28 +68,35 @@ it.
 
 ---
 
-## What 1.34.0 adds to this plan
+## What 1.35.0 adds to this plan
 
 The checks a release brings live in the phase they belong to rather than in a
 section of their own, so a phase is always the whole story for its subject. This
-index is only a reminder of where 1.34.0's went, and of what to delete from the
+index is only a reminder of where 1.35.0's went, and of what to delete from the
 phases once the next release makes it ordinary.
 
 | Change | Phase |
 |---|---|
-| Image downloads disclosed first, `--no-pull`, `LERD_OFFLINE`, `start --dry-run` | 1, 4, 5 |
-| A host with IPv6 turned off | 1 |
-| Starting lerd from the dashboard, the desktop entry and the macOS app | 1 |
-| PHP 8.6 as a prerelease tier, and a shell in a version's container | 4 |
-| Worker options in `.lerd.yaml`, worker commands generated from the definition | 6 |
-| The store's package layer under `lerd framework list` | 6, 9 |
-| NativePHP, desktop and mobile | 9 |
-| A pinned command on the site's control row | 10 |
-| The tray being optional, and the desktop's own terminal | 10 |
-| The TUI's databases pane and service facets | 10 |
-| `lerd doctor` sweeping every linked site | 11 |
-| `lerd update` reporting what changed once it lands | 12 |
-| An uninstall that says it keeps the data keeping it | 13 |
+| PHP on the host: the native runtime and every surface that reads it | 14 |
+| `.lerd.local.yaml` overriding the committed project config | 2 |
+| A fetched version with no runtime behind it saying so | 4 |
+| A service on its own `.test` domain | 5, 11 |
+| Scheduled database snapshots and `db:snapshot:keep` | 5 |
+| A worker declaring its dev server and owning its port | 6 |
+| `worktree_include` | 7 |
+| A re-link keeping what only the registry knew | 8 |
+| Detection reading every major's rules, and the env file a framework has | 9 |
+| `lerd wp` and `lerd drush` running their wrapper | 9 |
+| A package routing a globally installed CLI onto the host PHP | 9, 14 |
+| Eleven dashboard themes kept in the config, and the share line | 10 |
+| A worker's logs one click from its toggle | 10 |
+| A shim on PATH not reapplying the whole environment | 10 |
+| Doctor catching a host php in front of the shim | 11 |
+| Disk reclaimed and reported honestly | 11, 14 |
+| Rolling backups of the site registry and `lerd sites:restore` | 11 |
+| A catalogue refresh in two seconds instead of fourteen | 11 |
+| Beta updates following the beta line, `lerd update:beta` | 12 |
+| An update no longer doing its own install pass twice | 12 |
 
 ---
 
@@ -179,12 +186,25 @@ lerd setup --all --skip-open
 - [ ] `lerd new` scaffolds through the framework's own create command
 - [ ] `lerd setup --all` runs composer install, npm install, `lerd env`, and the
       framework's own setup steps (migrations, storage link) without prompting
-- [ ] `.lerd.yaml` and `.env` exist, `.env.before_lerd` was written
+- [ ] `.lerd.yaml` and `.env` exist, and the backup is named after the file the
+      framework actually reads and sits beside it (`.env.before_lerd` at the
+      root for a plain dotenv project)
 - [ ] `lerd sites` lists `demo` with the right PHP version and doc root
 - [ ] `lerd which` resolves PHP version, Node version, doc root, nginx config
 - [ ] **`curl -k -s -o /dev/null -w '%{http_code}' https://demo.test` → 200**
 - [ ] The framework's welcome page renders in a browser with a valid padlock
 - [ ] `lerd site:doctor` is clean
+
+A `.lerd.yaml` is committed, so the answers that belong to this machine alone
+live beside it and have to win without ever being written back to the repo:
+
+- [ ] A key set in `.lerd.local.yaml` overrides the same key in `.lerd.yaml`,
+      and a save from any command keeps the local key out of the committed file
+- [ ] A PHP or Node version pinned only in the local file is the one the link
+      applies and the one `lerd which` reports
+- [ ] Changing a key the local file owns from the CLI says so rather than
+      appearing to take
+- [ ] `git status` in the project is clean after all of it
 
 ### The `.test` HTTP / HTTPS toggle
 
@@ -291,6 +311,9 @@ than flipping it to the canonical default.
       the dashboard's shell button opens the same one
 - [ ] `lerd php:ports` and `lerd php:pkg` report the version's ports and packages
 - [ ] `lerd php:rebuild` discloses the base image and its size before pulling
+- [ ] `lerd fetch` names the versions whose image is built but that nothing
+      serves from yet, and points at `lerd php:rebuild`, so `lerd php:list` and
+      `lerd new` no longer contradict the command before them
 
 ---
 
@@ -323,12 +346,22 @@ Add, use, and remove at least one database and one non-database service.
       the missing database rather than the app 500ing silently
 - [ ] Reinstall mysql, restore, **https → 200 again**
 
+A service can be reached on a domain rather than on a port:
+
+- [ ] A preset that declares one is served at its own `.test` domain, answers a
+      browser preflight there, and `lerd env` writes that domain into the site
+- [ ] The app and the browser use the same address, and `lerd site:doctor` calls
+      the site wired whether its PHP runs in a container or on the host
+
 Database operations:
 
 - [ ] `lerd db:export -o dump.sql` then `lerd db:import dump.sql` round trips
 - [ ] `lerd db:snapshot before-change`, change data, `lerd db:restore
       before-change` puts it back, `lerd db:snapshots` lists it,
       `lerd db:snapshot:rm` removes it
+- [ ] `lerd db:snapshot:auto` schedules snapshots globally and per site,
+      retention drops the oldest past the window, and `lerd db:snapshot:keep`
+      exempts one from it for good
 - [ ] `lerd db:shell` opens an interactive shell
 - [ ] `lerd db:move --from mysql --to mariadb --site demo` moves the schema and
       repoints `.env`, **https → 200**
@@ -372,6 +405,14 @@ what they accept has to come from the definition rather than from a fixed set:
       the link hint rather than an unknown command
 - [ ] A worker declaring `requires_service` refuses to start without it, and its
       unit orders after that service rather than racing it at boot
+
+A worker can also declare the dev server it starts and hold the port it needs:
+
+- [ ] A worker declaring a `dev_server` starts it, the page it serves answers,
+      and the host reaches it through the worker's proxy
+- [ ] Its `dev_server_port` is held while the worker runs, carried into the
+      container, and released when it stops
+- [ ] Two sites running such a worker at once do not collide on a port
 
 A project's answers to those flags are committed rather than retyped:
 
@@ -426,10 +467,19 @@ lerd worktree add -b feat-x
 - [ ] Remove the isolated one with the drop-database option **off**, re-add the
       branch, and confirm the preserved schema is offered for reuse
 - [ ] Remove it again with drop-database **on**, schema is gone
-- [ ] `lerd db:isolate` on a worktree that shares the parent's schema clones it
-      and repoints the worktree `.env`, **200**
+- [ ] `lerd db:isolate --source main` clones the parent's schema into
+      `<parent_db>_<branch>`, repoints the worktree's env key and writes
+      `db_isolated: true`, **200**
+- [ ] A bare `lerd db:isolate` takes its documented default and starts the
+      schema **empty**, so a framework that keeps sessions or cache in the
+      database answers 500 until something populates it. That is the contract,
+      not a fault: the check is that the empty schema exists and `db:share`
+      recovers, not that the site keeps serving
+- [ ] `lerd db:isolate --source <branch>` clones from another isolated worktree
 - [ ] `lerd db:share` drops the isolated schema and puts the worktree back on
       the parent's, **200**
+- [ ] Paths listed under `worktree_include` are copied into a fresh worktree,
+      and one the worktree already carries is left as git checked it out
 - [ ] **Parent site still → 200 after all worktree churn**
 
 ---
@@ -467,6 +517,10 @@ lerd worktree add -b feat-x
       the listener (it once stopped one instead), then stops it
 - [ ] `lerd nginx` opens the site's override, a location-scope block survives a
       `lerd restart`, and `lerd nginx reset` puts it back, **200** after each
+- [ ] A re-link re-detects the framework and keeps everything only the registry
+      knew: approved host commands, the pinned dev-server and worker ports, the
+      LAN and public share ports, the group, the idle bookkeeping, the per
+      machine `APP_URL` override and the paused state
 - [ ] `lerd import` pulls a project in from another local environment
 - [ ] Custom container path: a non-PHP project with `Containerfile.lerd` plus
       `container: {port: N}` links, `lerd rebuild` works, **200**
@@ -484,6 +538,12 @@ cd shop && lerd setup --all --skip-open
 ```
 
 - [ ] Detection picks the right framework definition
+- [ ] A framework shipping one definition per major is matched on the right
+      major's own rules: CodeIgniter 3 and 4 both link, each on the PHP range
+      its definition declares, rather than one file claiming the name
+- [ ] On a framework whose configuration is not a dotenv file (CakePHP,
+      WordPress, Magento), the backup sits beside the file lerd edits and
+      `lerd env:restore` puts it back over that file
 - [ ] `lerd console` maps to that framework's console binary
 - [ ] Its env wiring, workers, and doctor checks come from the store YAML
 - [ ] **https → 200 on the second site**
@@ -493,6 +553,10 @@ cd shop && lerd setup --all --skip-open
       steps and doctor checks to whichever framework carries it, and a package
       scoped to one framework stays out of the other
 - [ ] `lerd sail` maps a Sail-shaped project onto lerd's own containers
+- [ ] `lerd wp` on WordPress and `lerd drush` on Drupal run the command rather
+      than printing their own wrapper's source and exiting clean
+- [ ] A package that installs a binary globally puts it where the host can run
+      it and reports which binaries it moved
 
 NativePHP is supported end to end, and both halves need a look:
 
@@ -517,7 +581,24 @@ Dashboard (drive it in a browser, not with curl):
       reload, and unpins again
 - [ ] The shell button opens the terminal the desktop is configured to use, not
       whatever happens to be on PATH, on both platforms
+- [ ] Selecting a service that is not a database engine requests neither its
+      databases nor its snapshots, and logs no 404
+- [ ] The service Env tab matches the current card style and its copy button
+      behaves like every other one
+- [ ] At phone width the back bar names the site rather than the rest of the
+      route
 - [ ] After every UI action, **the affected site still → 200**
+
+Themes:
+
+- [ ] Each of the eleven themes applies, and its accent reads correctly as link
+      text on both the light and the dark tone
+- [ ] The choice lives in the config, not in browser storage: it survives a hard
+      reload, follows you to another browser, and reaches a second open
+      dashboard the moment it changes
+- [ ] The installed app's own chrome takes the theme too
+- [ ] The Theme card's share line opens a prefilled post on X, Bluesky or
+      Reddit, about the theme and carrying no list of local sites
 
 TUI:
 
@@ -540,8 +621,17 @@ Tray:
 Other surfaces:
 
 - [ ] `lerd logs -f` for the site, `nginx`, a service, and a PHP version
+- [ ] Every worker toggle's second segment opens the Logs tab with that worker
+      already selected, the address reads `sites/<domain>/logs/<source>` and
+      survives a reload, and a site with no Logs tab keeps the plain toggle
+- [ ] The app logs tab refreshes on its own while it is the selected source,
+      keeps the reader's scroll position, and stops polling for a site the idle
+      engine has suspended
+- [ ] The tinker editor highlights PHP the way the editor does everywhere else
 - [ ] `lerd dump on`, a `dump()` in a request shows in dashboard, TUI and
       `lerd dump tail`; `dump clear`; `dump off` restores containers
+- [ ] A worker whose dump bridge never loaded costs the dump, not the request:
+      the site answers **200** instead of a 500 from an invalid callback
 - [ ] `lerd profile on`, load a page, `lerd profile open` shows a flame graph;
       `lerd profile run` on a CLI command; `profile clear`; `profile off`
 - [ ] `lerd notify on|target|status|off`, a notification actually arrives
@@ -557,6 +647,12 @@ Other surfaces:
 - [ ] `lerd completion bash|zsh|fish` produces working completion
 - [ ] `lerd path:disable` takes lerd's shims off PATH and `path:enable` puts
       them back, with `lerd shims` reporting the same state either way
+- [ ] After an upgrade, a shim on PATH (`php`, `composer`, `node`, `npm`,
+      `npx`, and the ones behind `mysql` and `psql`) runs the command it was
+      given instead of reapplying the whole environment first, and the next
+      command typed by hand does the reapply
+- [ ] A build from a checkout reports its version with a single `v` in the
+      banner and in the dashboard footer
 - [ ] `lerd open demo` opens the browser
 - [ ] Node: `node:install`, `node:use`, `isolate:node`, `lerd npm run build`
 - [ ] `lerd node:manage` installs the shims and a default, `node:manager` shows
@@ -583,14 +679,38 @@ Other surfaces:
       itself, **https → 200** afterwards
 - [ ] The doctor reports whether containers can resolve an internet name, and
       says so honestly with the network down
+- [ ] Put a host `php` ahead of lerd's shim in the shell rc: doctor names what
+      leads, and stays quiet on a machine that chose its own with
+      `lerd path:disable`
+- [ ] A site pointed at a service's own domain is not reported as unwired, and
+      the offered fix does not overwrite the hostname the browser and the app
+      have to agree on
+- [ ] A doctor fix clicked in the dashboard finds `lerd` under the daemon's own
+      PATH and actually lands, rather than coming back as exit 127
 - [ ] `lerd site:doctor --json` on both sites
 - [ ] `lerd dns:repair` fixes a deliberately broken but enabled `.test` setup
 - [ ] `lerd check` validates `.lerd.yaml`, and rejects a deliberately broken one
 - [ ] `lerd cleanup --dry-run` then `lerd cleanup --yes` reclaims only what it
       listed, and no in-use image, database or volume is touched
+- [ ] The interactive tier reaps a tagged image nothing holds, including the
+      base a custom container's `Containerfile` pulled and then moved off, while
+      the unattended tiers stay catalog-only
+- [ ] Every installed quadlet's image counts as protected: a cleanup run while a
+      site is stopped does not cost that site a rebuild
+- [ ] What a run reports freed is measured against the image store on both
+      sides and matches roughly what the disk gave back, and the preview says
+      at least rather than about
+- [ ] The resources widget's disk figure is what lerd's images occupy whether or
+      not any of it is reclaimable, and clicking it opens the breakdown heaviest
+      first
 - [ ] `lerd cleanup auto status|off|on`
 - [ ] `lerd bug-report -o report.txt` anonymizes names by default and
       `--show-real-names` keeps them
+- [ ] `lerd framework update` finishes in a couple of seconds rather than
+      fourteen, and `--check` still reports a diff per definition
+- [ ] `sites.bkp` beside the registry holds the last ten versions, a save that
+      changes nothing takes no slot, and `lerd sites:restore` lists them and
+      puts one back with every site serving **200** afterwards
 - [ ] `lerd tools:update` brings Composer/fnm/mkcert to the current pins
 - [ ] `lerd env:check`, `lerd env:override`, `lerd env:restore` round trip
 - [ ] `lerd auth ssh` loads a key and `lerd composer` reaches a private repo
@@ -622,6 +742,16 @@ install with real sites survives the jump.
 - [ ] `lerd update --rollback` reverts to N-1, **https → 200**
 - [ ] `lerd update` again returns to the RC, **https → 200**
 - [ ] `lerd update --beta` on a guest tracking pre-releases picks the RC
+- [ ] An install already running a beta is offered the next beta rather than
+      going quiet until the stable release overtakes it, and the stable release
+      of that cycle outranks the betas it supersedes
+- [ ] `lerd update:beta on` and `off` set `update.beta`, the bare command
+      reports where the install sits, and the dashboard's Beta updates card on
+      the Lerd page agrees with it
+- [ ] A build that is itself a beta follows the beta line whatever the flag says
+- [ ] One `lerd update` writes each AI skill file once and bounces each daemon
+      once, and with autostart off it leaves a stopped daemon stopped while
+      still restarting one that was running
 - [ ] On a packaged guest (apt/dnf/brew), `lerd update` **defers** to the package
       manager with the right command instead of self-replacing
 
@@ -657,6 +787,60 @@ Run last on each guest, because it is destructive.
 
 ---
 
+---
+
+## Phase 14 — PHP on the host (macOS only, by hand)
+
+No guest in the matrix can reach this. The native runtime exists to remove a
+boundary only macOS has, and on every other platform lerd reports the container
+runtime whatever the config file says, deliberately, so a config arriving
+through a synced home cannot point Linux vhosts at a listener that does not
+exist. Run this on a Mac against a real site, or record the whole phase as
+skipped rather than quietly passing it.
+
+- [ ] `lerd php:runtime` reports the current runtime, and the dashboard's
+      System, Runtime card agrees with it
+- [ ] Switching to native rewrites each site's env for the addresses the new
+      runtime can reach, regenerates the vhosts, drops the framework config
+      caches and restarts the workers, and tears the old runtime down only once
+      nginx is serving from the new one, **https → 200 across the switch**
+- [ ] Sites reach their services over loopback and the published host ports,
+      including a service the project never declared, and including a framework
+      whose configuration is a PHP array with dotted keys
+- [ ] With a site pinned to 8.0 or 7.4, the switch refuses up front and names
+      every site standing in the way
+- [ ] `lerd php:ext` and `lerd php:pkg` refuse under this runtime, and
+      `lerd shell` says there is no container to enter rather than starting one
+- [ ] Xdebug, `dump()` and the profiler all still work, **200 with each**
+- [ ] An untouched site's pool falls to zero workers
+- [ ] `lerd status` lists the host builds and says whether each pool is
+      accepting connections, hinting at `lerd start` when one is down, instead
+      of failing every version with a rebuild hint that refuses here
+- [ ] `lerd doctor` walks the host builds: no build missing for a version that
+      exists only as an image, no unbuildable for a prerelease, and a site
+      pinning a version with no native build is still caught per site
+- [ ] Version Info reports the builds that are serving rather than none
+- [ ] Removing a version from the dashboard takes the launchd pool down and
+      deletes the build, its extensions and the generated pool config, the
+      version really leaves `lerd php:list`, and the confirmation names the
+      binaries it deletes and the command that fetches them back
+- [ ] The update action downloads the published build and restarts the pool,
+      and its modal says update rather than rebuild
+- [ ] At phone width the detail panel loads the runtime itself, so no image
+      actions are offered there
+- [ ] A vendor binary that is a shell script, and a globally installed package
+      CLI, both run on the host with the project's own `vendor/bin` ahead of
+      lerd's shim dir
+- [ ] A proxied worker keeps its port across a restart, and a container worker
+      is started with its site name
+- [ ] A command the store declares that calls `lerd` works from the dashboard,
+      which launchd started with the system PATH and nothing else
+- [ ] `lerd machine reclaim` caps the guest journal, vacuums what it grew past,
+      trims the filesystem and reports the host disk returned, touching no
+      container, image, volume or site data
+- [ ] Switching back to the container runtime brings every site home,
+      **https → 200**
+
 ## Sign-off
 
 One row per lane per guest. A lane passes only when its final 200 check passed
@@ -671,14 +855,16 @@ after the last destructive step in it.
 | D — brew | fedora43-2-clone | | | | |
 | E — Silverblue | silverblue | | | | |
 | E — Bazzite | bazzite | | | | |
+| Native runtime | a Mac (phase 14) | | | | |
 
 ## What this matrix cannot reach
 
 Three surfaces have no guest here and are signed off by hand on real hardware,
-or knowingly skipped and recorded as skipped rather than quietly passed:
-`lerd machine` and the macOS app on a Mac, `lerd wsl:setup` on Windows, and any
-tray or spawned-terminal behaviour on a desktop other than omarchy's, which is
-the only guest with a graphical session.
+or knowingly skipped and recorded as skipped rather than quietly passed: the Mac
+(`lerd machine`, the macOS app, and all of phase 14, which is the release's
+headline and reaches no guest at all), `lerd wsl:setup` on Windows, and any tray
+or spawned-terminal behaviour on a desktop other than omarchy's, which is the
+only guest with a graphical session.
 
 Anything that failed gets an issue before the tag goes out. A release ships only
 when lane A is green and every mandatory lane for that release type is green.

@@ -1478,7 +1478,10 @@ func WriteFileAtomic(path string, data []byte, mode os.FileMode) error {
 	return nil
 }
 
-// renderDefaultVhost returns the canonical _default.conf content.
+// renderDefaultVhost returns the canonical _default.conf content. An unknown or
+// just-unlinked domain lands here and has to be told so with a 404: try_files
+// serves the page it finds with a 200, and its =404 only fires when the file is
+// missing, which left an unlinked site looking like it was still served.
 // Separate from the writer so callers (and tests) can compute the same
 // bytes lerd would write without touching disk.
 func renderDefaultVhost() []byte {
@@ -1488,7 +1491,11 @@ func renderDefaultVhost() []byte {
     listen [::]:80 default_server;
     root %s;
     location / {
-        try_files /404.html =404;
+        return 404;
+    }
+    error_page 404 /404.html;
+    location = /404.html {
+        internal;
         default_type text/html;
     }
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
@@ -125,6 +126,11 @@ func ApplyPHPRuntime(mode string) error {
 	if err != nil {
 		return err
 	}
+	// Containers stop, env is rewritten and the other runtime starts, so for a
+	// few seconds nginx, the pools and every site are legitimately down. The
+	// marker lets the status surfaces say "switching" instead of "broken".
+	_ = config.MarkRuntimeSwitch()
+	defer config.ClearRuntimeSwitch()
 	versions, _ := phpDet.ListInstalled()
 
 	// Preflight before writing anything: a missing binary must refuse the
@@ -209,6 +215,7 @@ func ApplyPHPRuntime(mode string) error {
 		if err := regenerateSiteVhost(s); err != nil {
 			feedback.Warn("regenerating the vhost for %s: %v", s.Name, err)
 		}
+		regenerateWorktreeVhosts(s)
 		runEnvIfManaged(s.Path, func() error {
 			if out, err := envCommandFor(s.Path).CombinedOutput(); err != nil {
 				return fmt.Errorf("%v: %s", err, strings.TrimSpace(string(out)))
@@ -270,6 +277,28 @@ func versionsInUse(installed []string) []string {
 
 // regenerateSiteVhost rewrites a site's vhost so nginx fastcgi's at the runtime
 // now serving it.
+// Seams for the worktree sweep, so the switch can be tested without git or nginx.
+var (
+	switchWorktreesFor       = gitpkg.DetectWorktrees
+	switchWriteWorktreeVhost = nginx.GenerateWorktreeVhostFor
+)
+
+// regenerateWorktreeVhosts rewrites the vhost of every worktree a site has. A
+// worktree is not a registry entry of its own, so the loop above never reached
+// one: after a switch its vhost still named the upstream the other runtime
+// served, and every worktree answered 502 while its parent was fine.
+func regenerateWorktreeVhosts(s *config.Site) {
+	wts, err := switchWorktreesFor(s.Path, s.PrimaryDomain())
+	if err != nil {
+		return
+	}
+	for _, wt := range wts {
+		if err := switchWriteWorktreeVhost(wt.Domain, wt.Path, s.PHPVersion, s.PrimaryDomain(), s.Name, wt.Branch, s.Secured); err != nil {
+			feedback.Warn("regenerating the vhost for %s: %v", wt.Domain, err)
+		}
+	}
+}
+
 func regenerateSiteVhost(s *config.Site) error {
 	if s.Secured {
 		if err := nginx.GenerateSSLVhost(*s, s.PHPVersion); err != nil {

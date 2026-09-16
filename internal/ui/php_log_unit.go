@@ -38,9 +38,13 @@ func phpVersionRunning(version string, native bool, containerRunning, listenerRu
 	return containerRunning(version)
 }
 
-// nativeListenerRunning reports whether the host FPM for a version is accepting
-// connections on its port.
-func nativeListenerRunning(version string) bool { return nativephp.Running(version) }
+// nativeListenerRunning reports whether the host FPM for a version is up. The
+// dashboard polls this continuously, so it reads the pool's launchd job rather
+// than dialling its port: a dial is handed to a child and resets the ondemand
+// idle timer, so no pool would ever fall to zero while a dashboard is open. It
+// is the same question the container side answers with "is the container
+// running"; `lerd status` still dials, because a person asked it to.
+func nativeListenerRunning(version string) bool { return nativephp.Loaded(version) }
 
 // installedPHPVersions lists the PHP versions this install can actually serve
 // with, asking whichever runtime is active. Returns an empty slice rather than

@@ -59,6 +59,8 @@ func runNativePHP(cwd, phpVersion string, args []string, extraEnv []string) (int
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	groupNativeRun(cmd)
+	defer reapProcessGroup(cmd)
 	if err := cmd.Run(); err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
@@ -75,6 +77,18 @@ func runNativePHP(cwd, phpVersion string, args []string, extraEnv []string) (int
 // ensuring it would start a container the mode just stopped.
 func nativeShellRefusal(cwd string) error {
 	if _, ok := nativeRuntimeVersion(cwd); !ok {
+		return nil
+	}
+	return errors.New("there is no container shell under the native runtime: PHP runs on this machine, so use your own shell. Switch back with 'lerd php:runtime container' if you need the container")
+}
+
+// nativeVersionShellRefusal is nativeShellRefusal for `lerd shell <version>`,
+// where the version is given rather than detected from a directory. The runtime
+// mode alone decides: under native there is no FPM container for any version,
+// and ensuring one pulls an image that was never built.
+func nativeVersionShellRefusal() error {
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg.PHPRuntimeMode() != config.PHPRuntimeNative {
 		return nil
 	}
 	return errors.New("there is no container shell under the native runtime: PHP runs on this machine, so use your own shell. Switch back with 'lerd php:runtime container' if you need the container")

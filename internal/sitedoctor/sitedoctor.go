@@ -305,6 +305,9 @@ func RunWith(ctx context.Context, path string, fw *config.Framework, opts Option
 		resp.add(c)
 	}
 	if !opts.Quick {
+		if c, ok := checkHTTPResponse(path); ok {
+			resp.add(c)
+		}
 		if c, ok := checkSlowRoutes(path); ok {
 			resp.add(c)
 		}

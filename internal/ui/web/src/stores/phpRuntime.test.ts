@@ -96,4 +96,34 @@ describe('php runtime store', () => {
     expect(res.ok).toBe(true);
     expect(seen).toEqual(['Building PHP 8.2 image...', 'Building PHP 8.3 image...']);
   });
+
+  // A switch started from the CLI, or a dashboard reloaded while one is running,
+  // used to show a settled runtime while containers were still moving. The
+  // daemon owns this state, not the tab that happened to click Apply.
+  it('shows loading while the daemon reports a switch in progress', async () => {
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response(
+          '{"php_runtime":"container","php_runtime_applies":true,"php_runtime_switching":true}',
+          { status: 200 }
+        )
+    ) as unknown as typeof fetch;
+    const { loadPHPRuntime, phpRuntimeLoading } = await import('./phpRuntime');
+    await loadPHPRuntime();
+    expect(get(phpRuntimeLoading)).toBe(true);
+  });
+
+  it('clears loading once the switch has finished', async () => {
+    const { loadPHPRuntime, phpRuntimeLoading } = await import('./phpRuntime');
+    phpRuntimeLoading.set(true);
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response(
+          '{"php_runtime":"native","php_runtime_applies":true,"php_runtime_switching":false}',
+          { status: 200 }
+        )
+    ) as unknown as typeof fetch;
+    await loadPHPRuntime();
+    expect(get(phpRuntimeLoading)).toBe(false);
+  });
 });

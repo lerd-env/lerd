@@ -5457,7 +5457,8 @@ type SettingsResponse struct {
 	WorkerExecMode            string   `json:"worker_exec_mode"`
 	WorkerModeApplies         bool     `json:"worker_mode_applies"` // true on macOS only
 	PHPRuntime                string   `json:"php_runtime"`
-	PHPRuntimeApplies         bool     `json:"php_runtime_applies"` // Apple silicon only
+	PHPRuntimeApplies         bool     `json:"php_runtime_applies"`   // Apple silicon only
+	PHPRuntimeSwitching       bool     `json:"php_runtime_switching"` // a switch is running; every red row below is transient
 	IdleSuspendEnabled        bool     `json:"idle_suspend_enabled"`
 	IdleSuspendTimeoutMinutes int      `json:"idle_suspend_timeout_minutes"`
 	DNSEnabled                bool     `json:"dns_enabled"`
@@ -5495,6 +5496,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		StartOnDashboardOpen:      startOnOpen,
 		WorkerExecMode:            mode,
 		PHPRuntime:                cfg.PHPRuntimeMode(),
+		PHPRuntimeSwitching:       config.RuntimeSwitchInProgress(),
 		PHPRuntimeApplies:         nativeRuntimeApplies(runtime.GOOS, runtime.GOARCH),
 		WorkerModeApplies:         runtime.GOOS == "darwin",
 		IdleSuspendEnabled:        idleEnabled,

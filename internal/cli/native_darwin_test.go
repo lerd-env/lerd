@@ -83,3 +83,30 @@ func TestImageOnlyCommandsRefuseUnderNative(t *testing.T) {
 		}
 	}
 }
+
+// `lerd shell 8.5` takes the explicit-version path, which used to run before the
+// refusal and try to start (and pull) an FPM image that does not exist here.
+func TestVersionShellRefusesUnderNative(t *testing.T) {
+	nativeMode(t)
+	err := nativeVersionShellRefusal()
+	if err == nil {
+		t.Fatal("expected a refusal for an explicit version under the native runtime")
+	}
+	for _, want := range []string{"native", "container"} {
+		if !strings.Contains(strings.ToLower(err.Error()), want) {
+			t.Errorf("error should explain the runtime, got: %v", err)
+		}
+	}
+}
+
+func TestVersionShellAllowedUnderContainerRuntime(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfg := &config.GlobalConfig{}
+	cfg.PHP.Runtime = config.PHPRuntimeContainer
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+	if err := nativeVersionShellRefusal(); err != nil {
+		t.Errorf("container runtime must allow a version shell, got: %v", err)
+	}
+}

@@ -690,6 +690,43 @@ func ConsumeWatcherManagedStop() bool {
 	return err == nil && time.Since(st.ModTime()) < watcherManagedStopTTL
 }
 
+// runtimeSwitchMarkerPath is the sentinel lerd writes while it moves the install
+// between the container and native PHP runtimes. The switch stops containers,
+// rewrites every site's env and starts the other runtime, so for a few seconds
+// nginx, the pools and the sites are all legitimately down. Without this the
+// status surfaces read that transient as breakage and tell the reader to repair
+// something that is already being rebuilt.
+func runtimeSwitchMarkerPath() string {
+	return filepath.Join(RunDir(), "php-runtime-switch")
+}
+
+// runtimeSwitchTTL bounds how long the marker is believed. A switch killed
+// part-way would otherwise leave lerd claiming to be switching forever, and a
+// real failure after that would never be reported.
+const runtimeSwitchTTL = 30 * time.Minute
+
+// MarkRuntimeSwitch records that a runtime switch is under way.
+func MarkRuntimeSwitch() error {
+	if err := os.MkdirAll(RunDir(), 0755); err != nil {
+		return err
+	}
+	guardRealWrite(runtimeSwitchMarkerPath())
+	return os.WriteFile(runtimeSwitchMarkerPath(), []byte("switching\n"), 0644)
+}
+
+// ClearRuntimeSwitch drops the marker once the switch has finished, however it
+// finished: a failed switch is over too, and the reader needs the real state.
+func ClearRuntimeSwitch() {
+	guardRealWrite(runtimeSwitchMarkerPath())
+	_ = os.Remove(runtimeSwitchMarkerPath())
+}
+
+// RuntimeSwitchInProgress reports whether a switch is running right now.
+func RuntimeSwitchInProgress() bool {
+	st, err := os.Stat(runtimeSwitchMarkerPath())
+	return err == nil && time.Since(st.ModTime()) < runtimeSwitchTTL
+}
+
 // PprofMarkerPath is the sentinel that unlocks lerd-ui's profiling endpoints.
 // Exported so the CLI and docs can name the exact file a user has to create.
 func PprofMarkerPath() string {

@@ -680,10 +680,15 @@ func newAnonymizer() *anonymizer {
 					continue
 				}
 				tld := tldSuffix(d)
-				if di == 0 {
-					pairs = append(pairs, pair{d, repl + tld})
-				} else {
-					pairs = append(pairs, pair{d, fmt.Sprintf("%s-extra%d%s", repl, di, tld)})
+				domainRepl := repl
+				if di > 0 {
+					domainRepl = fmt.Sprintf("%s-extra%d", repl, di)
+				}
+				pairs = append(pairs, pair{d, domainRepl + tld})
+				// A project's .lerd.yaml spells its domains without the TLD, and
+				// the report dumps that file as it stands.
+				if bare := strings.TrimSuffix(d, tld); bare != "" && bare != d {
+					pairs = append(pairs, pair{bare, domainRepl})
 				}
 			}
 			pairs = append(pairs, pair{s.Name, repl})

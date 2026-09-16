@@ -247,6 +247,18 @@ func canonRepo(ref string) string {
 	return r.Registry + "/" + r.Repo
 }
 
+// localhostRef is the canonical "localhost/" form of a reference that names no
+// registry of its own, and "" for anything that already names one. Only the
+// bare form is ambiguous: podman resolves it from local storage first, so the
+// same string can mean a Docker Hub image or a locally built one, and a
+// protected set has to cover both readings.
+func localhostRef(ref string) string {
+	if strings.Contains(ref, "/") {
+		return ""
+	}
+	return canonRef("localhost/" + ref)
+}
+
 func realServiceRepos() (map[string]bool, error) {
 	presets, err := config.ListPresets()
 	if err != nil {
@@ -270,8 +282,18 @@ func realServiceRepos() (map[string]bool, error) {
 func realProtectedImages() (map[string]bool, error) {
 	prot := map[string]bool{}
 	add := func(ref string) {
-		if ref != "" {
-			prot[canonRef(ref)] = true
+		if ref == "" {
+			return
+		}
+		prot[canonRef(ref)] = true
+		// A quadlet names a lerd-built image without a registry
+		// ("Image=lerd-php83-fpm:local"), and canonRef resolves a registry-less
+		// name to Docker Hub, while podman tags the built image "localhost/...".
+		// The protected entry then lands under a key no image can hold, so the
+		// quadlet walk protected none of lerd's own images: a stopped pool lost
+		// its image to cleanup and could not start again.
+		if localRef := localhostRef(ref); localRef != "" {
+			prot[localRef] = true
 		}
 	}
 

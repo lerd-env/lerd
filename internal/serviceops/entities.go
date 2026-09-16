@@ -125,8 +125,11 @@ func runEntityCommand(service string, spec *config.EntitySpec, image string, env
 
 // ListEntities runs a spec's list command and parses its tab-separated rows.
 func ListEntities(service string, spec *config.EntitySpec) ([]EntityRow, error) {
-	if spec == nil || strings.TrimSpace(spec.List) == "" {
+	if spec == nil || (strings.TrimSpace(spec.List) == "" && spec.Driver == "") {
 		return nil, nil
+	}
+	if spec.Driver == s3Driver {
+		return listS3Entities(service, spec)
 	}
 	out, err := runEntityCommand(service, spec, spec.Image, spec.Env, spec.List, introspectTimeout)
 	if err != nil {
@@ -173,6 +176,9 @@ func RunEntityAction(service string, spec *config.EntitySpec, action, name strin
 	act, ok := entityAction(spec, action)
 	if !ok {
 		return fmt.Errorf("%s does not support %s on %s", service, action, spec.Kind)
+	}
+	if spec.Driver == s3Driver {
+		return runS3EntityAction(service, spec, action, name)
 	}
 	cmd, err := expandEntityCommand(act.Exec, name)
 	if err != nil {

@@ -98,6 +98,21 @@ func newWorktreeRemoveCmd() *cobra.Command {
 // database — the safer choice if the user hasn't backed it up. Skipping
 // here preserves the registry entry too, so re-adding the worktree later
 // reconnects to the existing data.
+// promptableTTY is the seam interactiveTTY is read through, so the fallback can
+// be driven in a test without a terminal.
+var promptableTTY = interactiveTTY
+
+// worktreeDBPromptPlan decides whether a worktree's database question can be put
+// to a human, and what to say when it cannot. Without a terminal the answer is
+// the one that destroys nothing, said plainly: the alternative was handing the
+// reader the prompt library's own failure to open /dev/tty.
+func worktreeDBPromptPlan(interactive bool, dbName, service string) (string, bool) {
+	if interactive {
+		return "", true
+	}
+	return fmt.Sprintf("no terminal to ask on, keeping the isolated database %q in %q. Drop it with 'lerd db:drop %s' when you no longer need it", dbName, service, dbName), false
+}
+
 func promptDeleteIsolatedDB(site *config.Site, branch string) error {
 	entry, ok, err := config.FindWorktreeDB(site.Name, branch)
 	if err != nil || !ok {
@@ -115,6 +130,10 @@ func promptDeleteIsolatedDB(site *config.Site, branch string) error {
 			).
 			Value(&picked),
 	))
+	if msg, ask := worktreeDBPromptPlan(promptableTTY(), entry.DBName, entry.Service); !ask {
+		feedback.Note(msg)
+		return nil
+	}
 	if err := form.Run(); err != nil {
 		return err
 	}

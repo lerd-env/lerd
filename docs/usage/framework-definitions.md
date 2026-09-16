@@ -162,6 +162,9 @@ env:
         - DB_PASSWORD=lerd
 ```
 
+A rule normally matches when its `key` is set and, with `value_prefix`, starts with that prefix. `absent: true` inverts it: the rule matches when the key is not set at all. That is for a framework whose scaffold leaves the engine unset because it inherits a default elsewhere, as CakePHP does with the driver in `app.php`. Give the rule to the engine the framework itself defaults to, so an untouched project resolves there while a project that names another engine keeps matching its own rule and only its own.
+
+
 ### Which file lerd writes
 
 `file` is the env file lerd writes, and `lerd env` creates it when it is not there yet, from `example_file` when the definition names one and empty otherwise. `fallback_file` is only ever read, so a project that is already configured is detected through the file it actually has.

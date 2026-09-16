@@ -46,7 +46,9 @@ export async function loadStats(): Promise<void> {
     stats.set({ ...empty, ...res });
     statsLoaded.set(true);
   } catch {
-    /* keep previous */
+    // Keep whatever we had, but record that a fetch finished: otherwise the
+    // widget sits on its loading message claiming to read stats it gave up on.
+    statsLoaded.set(true);
   } finally {
     inflight = false;
   }

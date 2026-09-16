@@ -52,6 +52,13 @@ func warn2(label, msg string) {
 	fmt.Printf("  %s %s %s\n", feedback.Amber(feedback.GlyphWarn), label, feedback.Dim("("+msg+")"))
 }
 
+// note2 reports something that is deliberately not running, like a PHP version
+// no site is pinned to. Neither green nor red: nothing is wrong, and nothing is
+// serving either.
+func note2(label, msg string) {
+	fmt.Printf("  %s %s %s\n", feedback.Dim("·"), label, feedback.Dim("("+msg+")"))
+}
+
 // NewStatusCmd returns the status command.
 func NewStatusCmd() *cobra.Command {
 	return &cobra.Command{
@@ -81,25 +88,77 @@ func printNativePHPStatus(versions []string, running func(string) bool) {
 
 // printContainerPHPStatus reports the shared FPM container per version, which
 // needs both an image to run and the container up to serve.
+// phpRowState is how a PHP version's status row reads. A version no site is
+// pinned to is idle rather than broken: lerd never starts it, and `lerd fetch`
+// never builds it, so failing the row asks the reader to repair a deliberate
+// absence.
+type phpRowState int
+
+const (
+	phpRowOK phpRowState = iota
+	phpRowImageMissing
+	phpRowDown
+	phpRowNotBuilt
+	phpRowIdle
+)
+
+func phpVersionRowState(imageExists, running, used bool) phpRowState {
+	if !imageExists {
+		if used {
+			return phpRowImageMissing
+		}
+		return phpRowNotBuilt
+	}
+	if running {
+		return phpRowOK
+	}
+	if used {
+		return phpRowDown
+	}
+	return phpRowIdle
+}
+
 func printContainerPHPStatus() {
 	versions, _ := phpPkg.ListInstalled()
 	if len(versions) == 0 {
 		warn2("PHP versions", "none installed — run: lerd use 8.4")
 		return
 	}
+	used := map[string]bool{}
+	for _, v := range versionsInUse(versions) {
+		used[v] = true
+	}
 	for _, v := range versions {
 		unit := "lerd-php" + strings.ReplaceAll(v, ".", "") + "-fpm"
-		if err := podman.RunSilent("image", "exists", unit+":local"); err != nil {
-			fail2("PHP "+v+" FPM", "image missing", "lerd php:rebuild "+v)
-			continue
+		imageExists := podman.RunSilent("image", "exists", unit+":local") == nil
+		running := false
+		if imageExists {
+			running, _ = podman.ContainerRunning(unit)
 		}
-		running, _ := podman.ContainerRunning(unit)
-		if running {
-			ok2("PHP " + v + " FPM")
-		} else {
-			fail2("PHP "+v+" FPM", unit+" not running", serviceStartHint(unit))
+		label := "PHP " + v + " FPM"
+		switch phpVersionRowState(imageExists, running, used[v]) {
+		case phpRowOK:
+			ok2(label)
+		case phpRowImageMissing:
+			fail2(label, "image missing", "lerd php:rebuild "+v)
+		case phpRowDown:
+			fail2(label, unit+" not running", serviceStartHint(unit))
+		case phpRowNotBuilt:
+			note2(label, "not built — no site uses it; build with: lerd php:rebuild "+v)
+		case phpRowIdle:
+			note2(label, "idle — no site uses it")
 		}
 	}
+}
+
+// runtimeSwitchBanner warns that the rows below are mid-switch. Containers stop
+// and start and sites answer 500 for a few seconds, so a red row there is the
+// switch in progress rather than something to repair.
+func runtimeSwitchBanner(switching bool) string {
+	if !switching {
+		return ""
+	}
+	return "\n  ⟳ a PHP runtime switch is running; anything down below is mid-move. Run this again once it finishes."
 }
 
 func runStatus(_ *cobra.Command, _ []string) error {
@@ -110,6 +169,9 @@ func runStatus(_ *cobra.Command, _ []string) error {
 
 	fmt.Println("Lerd Status")
 	fmt.Println("═══════════════════════════════════════")
+	if banner := runtimeSwitchBanner(config.RuntimeSwitchInProgress()); banner != "" {
+		fmt.Println(banner)
+	}
 
 	// DNS check
 	fmt.Println("\n[DNS]")

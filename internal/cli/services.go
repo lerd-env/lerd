@@ -921,17 +921,30 @@ func printPresetList() error {
 	return nil
 }
 
-// newServiceSearchCmd returns the `service search` command, which queries the
-// external service-preset store so users can discover presets that aren't
-// bundled with this build. Install any hit with `lerd service preset <name>`,
-// which fetches it on demand.
+// matchPresets filters the installable presets by a case-insensitive substring
+// of the name, description or category. An empty query matches everything.
+func matchPresets(presets []config.PresetMeta, query string) []config.PresetMeta {
+	q := strings.ToLower(strings.TrimSpace(query))
+	out := make([]config.PresetMeta, 0, len(presets))
+	for _, p := range presets {
+		haystack := strings.ToLower(p.Name + " " + p.Description + " " + p.Category)
+		if q == "" || strings.Contains(haystack, q) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// newServiceSearchCmd returns the `service search` command, which filters every
+// installable preset, bundled and store alike. Searching only the store made a
+// service that is already installed answer as if it did not exist.
 func newServiceSearchCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "search [query]",
-		Short: "Search the external service-preset store",
-		Long: `Search the external service-preset store for installable presets.
+		Short: "Search the service presets",
+		Long: `Search the service presets, bundled and store alike.
 
-Run with no query to list everything the store offers:
+Run with no query to list everything on offer:
   lerd service search
 
 Filter by a substring of the name, description, or family:
@@ -945,12 +958,13 @@ Install any result with the usual command, which fetches it on demand:
 			if len(args) > 0 {
 				query = args[0]
 			}
-			results, err := store.NewServiceClient().SearchServices(query)
+			presets, err := ListInstallablePresets()
 			if err != nil {
-				return fmt.Errorf("searching the service store: %w", err)
+				return fmt.Errorf("searching the service presets: %w", err)
 			}
+			results := matchPresets(presets, query)
 			if len(results) == 0 {
-				fmt.Println("No matching presets in the service store.")
+				fmt.Println("No matching service presets.")
 				return nil
 			}
 			var rows [][]string
@@ -961,7 +975,7 @@ Install any result with the usual command, which fetches it on demand:
 				} else if config.PresetExists(e.Name) {
 					where = "local"
 				}
-				family := e.Family
+				family := e.Category
 				if family == "" {
 					family = "-"
 				}
@@ -1293,6 +1307,22 @@ container-internal port of the mapping to move:
 	return cmd
 }
 
+// sitesToRefreshForPortMove picks the sites whose .env has to follow a service's
+// published port. Both host-proxy and native-runtime sites connect over loopback
+// on that published port, so both go stale when it moves; container sites reach
+// the service by name on its unchanged internal port. A site with no framework
+// has no env mapping to write, and `lerd env` there only fails noisily.
+func sitesToRefreshForPortMove(sites []config.Site, mode string) []config.Site {
+	out := make([]config.Site, 0, len(sites))
+	for _, s := range sites {
+		if s.Framework == "" || !usesLoopbackServicesIn(&s, mode) {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
 // refreshHostProxySitesForService regenerates the .env of every host-proxy site
 // that uses service, so a published-port change — set manually via `lerd service
 // port` or by the auto port-ownership guard — is reflected in the loopback
@@ -1301,19 +1331,20 @@ container-internal port of the mapping to move:
 // container-internal port, which a published-port move never alters. Per site it
 // warns rather than failing, so one unwritable site can't block the rest.
 func refreshHostProxySitesForService(service string) {
+	mode := config.PHPRuntimeContainer
+	if cfg, err := config.LoadGlobal(); err == nil {
+		mode = cfg.PHPRuntimeMode()
+	}
 	refreshed := 0
-	for _, s := range config.SitesUsingService(service) {
-		if !s.IsHostProxy() {
-			continue
-		}
+	for _, s := range sitesToRefreshForPortMove(config.SitesUsingService(service), mode) {
 		if err := runLerdEnv(s.Path); err != nil {
-			fmt.Printf("Warning: could not refresh host-proxy site %q for the new %s port: %v\n", s.Name, service, err)
+			fmt.Printf("Warning: could not refresh site %q for the new %s port: %v\n", s.Name, service, err)
 			continue
 		}
 		refreshed++
 	}
 	if refreshed > 0 {
-		fmt.Printf("Refreshed %d host-proxy site(s) to follow %s's published port.\n", refreshed, service)
+		fmt.Printf("Refreshed %d site(s) to follow %s's published port.\n", refreshed, service)
 	}
 }
 

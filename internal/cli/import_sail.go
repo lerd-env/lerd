@@ -13,6 +13,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -662,22 +663,6 @@ func sailCountTables(composeArgs []string, service string, env *dbEnv, composeBi
 	return n, nil
 }
 
-// Counts objects in a Sail MinIO bucket via `mc ls --recursive`.
-func sailCountBucketObjects(mcImage, sailMCEnv, bucket string) (int, error) {
-	cmd := podman.Cmd("run", "--rm", "-e", sailMCEnv, mcImage, "ls", "--recursive", "sail/"+bucket)
-	out, err := cmd.Output()
-	if err != nil {
-		return 0, err
-	}
-	count := 0
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if strings.TrimSpace(line) != "" {
-			count++
-		}
-	}
-	return count, nil
-}
-
 // Prints a numbered list and returns the chosen option. An invalid or empty
 // answer re-prompts; we return "" only if options is empty.
 func promptSelect(prompt string, options []string) string {
@@ -1138,10 +1123,8 @@ func sailFindMinio(cf *sailComposeFile, portRemap map[int]int) (name string, por
 	return "", 0, "", ""
 }
 
-// sailImportS3 mirrors a Sail MinIO bucket into lerd's RustFS using mc.
+// sailImportS3 mirrors a Sail MinIO bucket into lerd's RustFS.
 func sailImportS3(s3 *sailS3Env, minioPort int, dbName string) error {
-	const mcImage = podman.MinioClientImage
-
 	if err := ensureServiceRunning("rustfs"); err != nil {
 		return fmt.Errorf("starting rustfs: %w", err)
 	}
@@ -1151,12 +1134,13 @@ func sailImportS3(s3 *sailS3Env, minioPort int, dbName string) error {
 		return fmt.Errorf("creating lerd bucket %q: %w", lerdBucket, err)
 	}
 
-	const hostGW = "host.containers.internal"
-	sailMCEnv := fmt.Sprintf("MC_HOST_sail=http://%s:%s@%s:%d",
-		s3.accessKey, s3.secretKey, hostGW, minioPort)
-	lerdMCEnv := fmt.Sprintf("MC_HOST_lerd=http://lerd:lerdpassword@%s:9000", hostGW)
+	sail := serviceops.S3Remote{
+		Endpoint: fmt.Sprintf("127.0.0.1:%d", minioPort),
+		Access:   s3.accessKey,
+		Secret:   s3.secretKey,
+	}
 
-	sourceBucket, err := sailResolveSourceBucket(mcImage, sailMCEnv, s3.bucket)
+	sourceBucket, err := sailResolveSourceBucket(sail, s3.bucket)
 	if err != nil {
 		return err
 	}
@@ -1166,7 +1150,7 @@ func sailImportS3(s3 *sailS3Env, minioPort int, dbName string) error {
 
 	// Count objects before mirror: skip (and don't touch lerd) if the source
 	// bucket is empty, and otherwise prompt before overwriting lerd.
-	objectCount, err := sailCountBucketObjects(mcImage, sailMCEnv, sourceBucket)
+	objectCount, err := serviceops.S3RemoteObjectCount(sail, sourceBucket)
 	if err != nil {
 		return fmt.Errorf("listing bucket %q: %w", sourceBucket, err)
 	}
@@ -1180,39 +1164,23 @@ func sailImportS3(s3 *sailS3Env, minioPort int, dbName string) error {
 		return nil
 	}
 
-	mirrorCmd := podman.Cmd("run", "--rm",
-		"-e", sailMCEnv,
-		"-e", lerdMCEnv,
-		mcImage,
-		"mirror", "--overwrite",
-		"sail/"+sourceBucket,
-		"lerd/"+lerdBucket,
-	)
-	mirrorCmd.Stdout = os.Stdout
-	mirrorCmd.Stderr = os.Stderr
-	return mirrorCmd.Run()
+	progress := func(copied int) {
+		fmt.Printf("\r  Copied %d/%d files", copied, objectCount)
+	}
+	if err := serviceops.S3MirrorInto(sail, sourceBucket, lerdBucket, progress); err != nil {
+		fmt.Println()
+		return err
+	}
+	fmt.Println()
+	return nil
 }
 
-// Lists buckets on the Sail MinIO via `mc ls sail/` and picks the right one:
-// prefer the configured name, fall back to the only one present, or error
-// with the available options.
-func sailResolveSourceBucket(mcImage, sailMCEnv, configured string) (string, error) {
-	lsCmd := podman.Cmd("run", "--rm", "-e", sailMCEnv, mcImage, "ls", "sail")
-	out, err := lsCmd.Output()
+// Lists the buckets on the Sail MinIO and picks the right one: prefer the
+// configured name, fall back to the only one present, or ask.
+func sailResolveSourceBucket(sail serviceops.S3Remote, configured string) (string, error) {
+	buckets, err := serviceops.S3RemoteBuckets(sail)
 	if err != nil {
 		return "", fmt.Errorf("listing Sail buckets: %w", err)
-	}
-	var buckets []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		// `mc ls` output: "[date] PREFIX bucket/"
-		fields := strings.Fields(line)
-		if len(fields) == 0 {
-			continue
-		}
-		name := strings.TrimSuffix(fields[len(fields)-1], "/")
-		if name != "" {
-			buckets = append(buckets, name)
-		}
 	}
 	if len(buckets) == 0 {
 		return "", fmt.Errorf("no buckets found on Sail MinIO")
