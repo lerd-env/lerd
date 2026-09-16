@@ -915,3 +915,12 @@ func TestEnvProvisionFailure_NamesEveryMissingEntity(t *testing.T) {
 		}
 	}
 }
+
+// A service declaration with no detect rules is not written: nothing says the
+// project uses it. The database-target lookup treats empty rules the other way
+// round, and the two must not be collapsed into one another.
+func TestFrameworkServiceDetectedIgnoresARuleLessDeclaration(t *testing.T) {
+	if frameworkServiceDetected(config.FrameworkServiceDef{}, map[string]string{"DB_CONNECTION": "mysql"}) {
+		t.Error("a declaration with no rules must not be written")
+	}
+}

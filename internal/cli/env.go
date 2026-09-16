@@ -1440,16 +1440,12 @@ func alignWorktreeEnvDBConnection(site *config.Site, mainEnvPath, envRelPath, en
 
 // frameworkServiceDetected returns true if any detect rule in def matches the env map.
 func frameworkServiceDetected(def config.FrameworkServiceDef, envMap map[string]string) bool {
-	for _, rule := range def.Detect {
-		val, exists := envMap[rule.Key]
-		if !exists {
-			continue
-		}
-		if rule.ValuePrefix == "" || strings.HasPrefix(val, rule.ValuePrefix) {
-			return true
-		}
+	// Unlike the database-target lookup, a service declaring no rules here is
+	// not written: there is nothing saying the project uses it.
+	if len(def.Detect) == 0 {
+		return false
 	}
-	return false
+	return config.DetectRulesMatch(def.Detect, envMap)
 }
 
 // CreateDatabase is the exported variant of createDatabase. Used by callers

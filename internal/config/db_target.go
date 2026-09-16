@@ -278,19 +278,7 @@ func declaredFallbackTarget(projectDir, service string, vals map[string]string) 
 // to rule it out, so it is taken as applying and the values read at its keys
 // decide whether it resolves to a database at all.
 func serviceDetectedIn(detect []FrameworkServiceDetect, vals map[string]string) bool {
-	if len(detect) == 0 {
-		return true
-	}
-	for _, rule := range detect {
-		val, exists := vals[rule.Key]
-		if !exists {
-			continue
-		}
-		if rule.ValuePrefix == "" || strings.HasPrefix(val, rule.ValuePrefix) {
-			return true
-		}
-	}
-	return false
+	return DetectRulesMatch(detect, vals)
 }
 
 // DBServiceFor returns the lerd service backing a project's database, given the
