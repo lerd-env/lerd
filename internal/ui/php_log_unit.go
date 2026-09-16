@@ -82,3 +82,16 @@ func nativeRuntimeApplies(goos, goarch string) bool {
 	_ = goarch
 	return goos == "darwin"
 }
+
+// reportedRuntime is the runtime the dashboard sees for a site. The frontend
+// keys "does this site have a container" off it, and already treats "native" as
+// none; nothing ever set that, because native is an install-wide mode rather
+// than a per-site one. Only a plain FPM site moves: FrankenPHP, custom FPM,
+// custom containers and host proxies keep their own runtime, since the switch
+// never took them off theirs.
+func reportedRuntime(siteRuntime string, native bool, containerPort, hostPort int) string {
+	if native && siteRuntime == "" && containerPort == 0 && hostPort == 0 {
+		return "native"
+	}
+	return siteRuntime
+}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/nativephp"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
@@ -158,11 +159,39 @@ func RestartSite(name string) error {
 	if site.PHPVersion == "" {
 		return fmt.Errorf("site %q has no PHP version set", name)
 	}
-	short := strings.ReplaceAll(site.PHPVersion, ".", "")
-	unit := "lerd-php" + short + "-fpm"
-	if err := podman.RestartUnit(unit); err != nil {
-		return fmt.Errorf("restarting %s: %w", unit, err)
+	mode := config.PHPRuntimeContainer
+	if cfg, cfgErr := config.LoadGlobal(); cfgErr == nil {
+		mode = cfg.PHPRuntimeMode()
 	}
-	feedback.Done("restarted " + feedback.Val(name) + " · " + unit)
+	target, err := restartPlainFPM(name, site.PHPVersion, mode)
+	if err != nil {
+		return err
+	}
+	feedback.Done("restarted " + feedback.Val(name) + " · " + target)
 	return nil
+}
+
+// Seams for the plain-FPM restart, so the runtime split is testable without
+// podman or launchd.
+var (
+	restartFPMContainer = podman.RestartUnit
+	restartNativePool   = nativephp.Reload
+)
+
+// restartPlainFPM bounces whatever serves a plain FPM site on this runtime and
+// names it. Under native that is the version's host pool: the shared FPM
+// container does not exist there, and reaching for it sent the command after an
+// image nothing had built.
+func restartPlainFPM(name, version, mode string) (string, error) {
+	if mode == config.PHPRuntimeNative {
+		if err := restartNativePool(version); err != nil {
+			return "", fmt.Errorf("restarting PHP %s on the host: %w", version, err)
+		}
+		return "PHP " + version + " on the host", nil
+	}
+	unit := "lerd-php" + strings.ReplaceAll(version, ".", "") + "-fpm"
+	if err := restartFPMContainer(unit); err != nil {
+		return "", fmt.Errorf("restarting %s: %w", unit, err)
+	}
+	return unit, nil
 }

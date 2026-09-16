@@ -1247,7 +1247,7 @@ func buildSites() ([]SiteResponse, error) {
 			CustomContainer:      e.ContainerPort > 0,
 			ContainerPort:        e.ContainerPort,
 			ContainerImage:       e.ContainerImage,
-			Runtime:              e.Runtime,
+			Runtime:              reportedRuntime(e.Runtime, nativeRuntime, e.ContainerPort, e.HostPort),
 			PHPLogUnit: phpLogUnit(
 				config.Site{Name: e.Name, Runtime: e.Runtime, ContainerPort: e.ContainerPort, HostPort: e.HostPort},
 				e.PHPVersion,

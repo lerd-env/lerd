@@ -48,6 +48,9 @@ func TestRestartSite_CustomContainer(t *testing.T) {
 func TestRestartSite_PHPSite(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", tmp)
+	// A plain FPM site's restart follows the runtime, so the config this reads
+	// has to be this test's rather than the developer's own install.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	siteDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(siteDir, "composer.json"), []byte(`{}`), 0644); err != nil {

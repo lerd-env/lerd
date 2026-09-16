@@ -5,6 +5,7 @@
   import { frameworkMarks } from '$stores/frameworkMarks';
   import {
     type Site,
+    fpmContainer,
     pauseSite,
     resumeSite,
     pinSite,
@@ -662,7 +663,10 @@
             role="menu"
             class="absolute right-0 top-full mt-1 min-w-[12rem] rounded-md border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-bg shadow-lg z-30 py-1"
           >
-            {#if !site.paused && !site.host_proxy && (site.uses_php || site.custom_container)}
+            <!-- Only offered when there is a container behind the site: under the
+                 native runtime a plain FPM site is a host process, and the
+                 restart used to reach for an image nothing had built. -->
+            {#if !site.paused && !site.host_proxy && (site.uses_php || site.custom_container) && fpmContainer(site) !== ''}
               <button
                 type="button"
                 role="menuitem"
