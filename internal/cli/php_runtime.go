@@ -125,6 +125,11 @@ func ApplyPHPRuntime(mode string) error {
 	if err != nil {
 		return err
 	}
+	// Containers stop, env is rewritten and the other runtime starts, so for a
+	// few seconds nginx, the pools and every site are legitimately down. The
+	// marker lets the status surfaces say "switching" instead of "broken".
+	_ = config.MarkRuntimeSwitch()
+	defer config.ClearRuntimeSwitch()
 	versions, _ := phpDet.ListInstalled()
 
 	// Preflight before writing anything: a missing binary must refuse the

@@ -102,6 +102,16 @@ func printContainerPHPStatus() {
 	}
 }
 
+// runtimeSwitchBanner warns that the rows below are mid-switch. Containers stop
+// and start and sites answer 500 for a few seconds, so a red row there is the
+// switch in progress rather than something to repair.
+func runtimeSwitchBanner(switching bool) string {
+	if !switching {
+		return ""
+	}
+	return "\n  ⟳ a PHP runtime switch is running; anything down below is mid-move. Run this again once it finishes."
+}
+
 func runStatus(_ *cobra.Command, _ []string) error {
 	cfg, err := config.LoadGlobal()
 	if err != nil {
@@ -110,6 +120,9 @@ func runStatus(_ *cobra.Command, _ []string) error {
 
 	fmt.Println("Lerd Status")
 	fmt.Println("═══════════════════════════════════════")
+	if banner := runtimeSwitchBanner(config.RuntimeSwitchInProgress()); banner != "" {
+		fmt.Println(banner)
+	}
 
 	// DNS check
 	fmt.Println("\n[DNS]")
