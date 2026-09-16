@@ -970,12 +970,10 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// quadlet refresh above already rewrote FrankenPHP quadlets to point at the
 	// localhost derived image, so the image must exist or the next container
 	// restart (reboot, manual, a php.ini save) would reference a missing image.
-	// BuildFrankenPHPImage no-ops when the image is already current; it never
-	// restarts a container, so it's safe to run with autostart disabled.
-	for _, v := range activeFrankenPHPVersions() {
-		if err := podman.BuildFrankenPHPImage(v, false, os.Stdout); err != nil {
-			fmt.Printf("  WARN: building FrankenPHP image for PHP %s: %v\n", v, err)
-		}
+	// It never restarts a container, so it's safe with autostart disabled.
+	if jobs := frankenPHPBuildJobs(activeFrankenPHPVersions()); len(jobs) > 0 {
+		feedback.Header("Building FrankenPHP images")
+		RunParallel(jobs) //nolint:errcheck
 	}
 
 	// Start service containers and workers only when autostart is on.
@@ -1963,3 +1961,24 @@ func ensureZshFpath(zshrc, dir string) {
 	defer f.Close()
 	fmt.Fprintf(f, "\n# Lerd completions\n%s\nautoload -Uz compinit && compinit\n", line)
 }
+
+// frankenPHPBuildJobs returns a spinner job per FrankenPHP version whose derived
+// image is missing or stale. Buffering the build behind RunParallel keeps a
+// several-minute podman build from spilling its whole log over the install
+// output, the way the PHP-FPM builds already do.
+func frankenPHPBuildJobs(versions []string) []BuildJob {
+	var jobs []BuildJob
+	for _, v := range versions {
+		ver := v
+		if !needsFrankenPHPRebuild([]string{ver}) {
+			continue
+		}
+		jobs = append(jobs, BuildJob{
+			Label: "FrankenPHP " + ver,
+			Run:   func(w io.Writer) error { return podman.BuildFrankenPHPImage(ver, false, w) },
+		})
+	}
+	return jobs
+}
+
+var needsFrankenPHPRebuild = podman.NeedsFrankenPHPRebuild
