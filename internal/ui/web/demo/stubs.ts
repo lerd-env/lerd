@@ -22,6 +22,7 @@ import stats from './fixtures/stats.json';
 import disk from './fixtures/disk.json';
 import workersHealth from './fixtures/workers_health.json';
 import databasesFixture from './fixtures/databases.json';
+import autoSnapshot from './fixtures/auto-snapshot.json';
 import docsFixture from './fixtures/docs.json';
 
 // Demo follows the system theme (auto). Reset any stale value a previous demo
@@ -585,6 +586,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
 
   // Live (mutable) collections
   if (path === '/api/sites') return jsonResponse(sites);
+  if (path === '/api/auto-snapshot') return jsonResponse(autoSnapshot);
   if (path === '/api/services') return jsonResponse(services);
   if (path === '/api/services/presets') return jsonResponse(presets);
   // Marks and brand colours captured from the store the same way every other

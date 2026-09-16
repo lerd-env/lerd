@@ -1,9 +1,10 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitepress'
 
 const SITE_URL = 'https://lerd.sh'
 const OG_IMAGE = `${SITE_URL}/assets/social-preview.png`
+const PUBLIC_DIR = fileURLToPath(new URL('../public', import.meta.url))
 const DIGEST_DIR = fileURLToPath(new URL('../public/digest', import.meta.url))
 
 // Read the version off the Go source of truth so the structured data can't
@@ -372,5 +373,26 @@ export default defineConfig({
       pattern: 'https://github.com/lerd-env/lerd/edit/main/docs/:path',
       text: 'Edit this page on GitHub',
     },
+  },
+
+  vite: {
+    plugins: [
+      {
+        // A static host resolves a directory under public/ to its index.html;
+        // the dev server hands those paths to the SPA instead, which is how the
+        // demo iframe and the profiler stand-in both ended up loading the docs
+        // site into themselves. Resolve them here so dev matches the deploy.
+        name: 'lerd-public-dir-index',
+        configureServer(server) {
+          server.middlewares.use((req, _res, next) => {
+            const [path, query] = (req.url || '').split('?')
+            if (path.endsWith('/') && existsSync(PUBLIC_DIR + path + 'index.html')) {
+              req.url = path + 'index.html' + (query ? '?' + query : '')
+            }
+            next()
+          })
+        },
+      },
+    ],
   },
 })
