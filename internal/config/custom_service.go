@@ -63,6 +63,11 @@ type Introspect struct {
 type EntitySpec struct {
 	Kind  string `yaml:"kind" json:"kind"`
 	Label string `yaml:"label,omitempty" json:"label,omitempty"`
+	// Driver, when set, names a protocol lerd speaks itself: the list and the
+	// actions are served by compiled-in code and the entity declares no
+	// commands. Only "s3" exists, for object storage, whose client images are
+	// public ones lerd cannot keep on a registry.
+	Driver string `yaml:"driver,omitempty" json:"driver,omitempty"`
 	// List is run via sh -c and must print one entity per line: the name, then
 	// one tab-separated field per declared column, in declaration order.
 	List    string         `yaml:"list" json:"list"`

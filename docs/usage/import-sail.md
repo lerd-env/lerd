@@ -127,7 +127,7 @@ lerd sail import --sail-db-user root --sail-db-password secret
 
 **S3 import fails**
 
-Run the import with `--skip-s3` and mirror the files manually using `mc`:
+Run the import with `--skip-s3` and mirror the files manually:
 
 ```bash
 lerd sail import --skip-s3
