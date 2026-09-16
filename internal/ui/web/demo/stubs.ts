@@ -36,6 +36,16 @@ try {
 const sites = structuredClone(sitesFixture) as Array<Record<string, unknown>>;
 const services = structuredClone(servicesFixture) as Array<Record<string, unknown>>;
 const presets = structuredClone(presetsFixture) as Array<Record<string, unknown>>;
+// A service dashboard is framed same-origin by the real app, so the captured
+// localhost URLs would load nothing here. Point them at the same mockup an
+// external open gets, which keeps the rail icons and the overlay honest.
+for (const svc of services) {
+  if (typeof svc.dashboard === 'string') {
+    const host = new URL(svc.dashboard).host;
+    svc.dashboard = `preview.html?host=${encodeURIComponent(host)}&url=${encodeURIComponent(svc.dashboard)}`;
+  }
+}
+
 // Status is mutable too, so applying a tool update lands on the card that asked.
 const status = structuredClone(statusFixture) as Record<string, unknown>;
 
