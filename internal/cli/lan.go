@@ -353,7 +353,15 @@ func newLANStatusCmd() *cobra.Command {
 					feedback.Note("managed services: loopback-only")
 				}
 			} else {
-				feedback.Line("loopback-only (127.0.0.1) — LAN devices cannot reach it")
+				feedback.Line("loopback-only (127.0.0.1) — LAN devices cannot reach the dashboard")
+			}
+			// A per-site share answers on its own port whichever way the global
+			// setting is set, so saying only that the dashboard is loopback-only
+			// left the reader believing nothing was reachable while a site was.
+			sites, worktrees := lanShareSources()
+			lanIP, _ := detectPrimaryLANIP()
+			for _, line := range lanShareLines(sites, worktrees, lanIP) {
+				feedback.Note(line)
 			}
 			return nil
 		},

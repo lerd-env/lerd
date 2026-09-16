@@ -289,6 +289,36 @@ func shouldRunLANShareProxy(s config.Site) bool {
 	return s.LANPort != 0 && !s.Paused
 }
 
+// lanShareSources reads the two places a live LAN share is recorded.
+func lanShareSources() ([]config.Site, []config.WorktreeLANEntry) {
+	var sites []config.Site
+	if reg, err := config.LoadSites(); err == nil {
+		sites = reg.Sites
+	}
+	worktrees, _ := config.LoadWorktreeLANRegistry()
+	return sites, worktrees
+}
+
+// lanShareLines describes every site and worktree currently served on the LAN.
+// Empty when nothing is shared, so status stays quiet rather than printing a
+// heading with nothing under it.
+func lanShareLines(sites []config.Site, worktrees []config.WorktreeLANEntry, lanIP string) []string {
+	if lanIP == "" {
+		lanIP = "(unknown)"
+	}
+	var out []string
+	for _, s := range sites {
+		if s.LANPort == 0 {
+			continue
+		}
+		out = append(out, fmt.Sprintf("shared on the LAN: %s at http://%s:%d", s.Name, lanIP, s.LANPort))
+	}
+	for _, e := range worktrees {
+		out = append(out, fmt.Sprintf("shared on the LAN: %s/%s at http://%s:%d", e.Site, e.Branch, lanIP, e.Port))
+	}
+	return out
+}
+
 // assignLANSharePort finds the lowest unused port >= 9100 across all site +
 // worktree LAN shares. excludeSiteName is the site whose port is being
 // (re)assigned and should not block itself.
