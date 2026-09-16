@@ -24,6 +24,7 @@ func TestEnrichFPMUsesTheHostPoolUnderNative(t *testing.T) {
 		}
 		return true
 	}
+
 	e := &EnrichedSite{PHPVersion: "8.5"}
 	e.enrichFPM()
 	if !e.FPMRunning {

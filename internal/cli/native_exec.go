@@ -59,6 +59,8 @@ func runNativePHP(cwd, phpVersion string, args []string, extraEnv []string) (int
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	groupNativeRun(cmd)
+	defer reapProcessGroup(cmd)
 	if err := cmd.Run(); err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {

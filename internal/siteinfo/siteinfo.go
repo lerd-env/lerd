@@ -244,7 +244,7 @@ var (
 		cfg, err := config.LoadGlobal()
 		return err == nil && cfg.PHPRuntimeMode() == config.PHPRuntimeNative
 	}
-	nativePoolRunningFn = nativephp.Running
+	nativePoolRunningFn = nativephp.Loaded
 )
 
 // LoadAll loads all non-ignored sites and enriches them according to flags.
@@ -493,7 +493,9 @@ func (e *EnrichedSite) enrichFPM() {
 		return
 	}
 	// Under the native runtime a plain FPM site is served by the version's host
-	// pool, and the container it used to look for does not exist.
+	// pool, and the container it used to look for does not exist. This runs per
+	// site on every poll, so it reads the pool's job rather than dialling its
+	// port: a dial is handed to a child and resets the ondemand idle timer.
 	if nativeRuntimeFn() {
 		e.FPMRunning = nativePoolRunningFn(e.PHPVersion)
 		return

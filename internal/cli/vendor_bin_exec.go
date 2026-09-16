@@ -152,7 +152,36 @@ func RunHostVendorBin(cwd, rel string, args []string) error {
 	c.Dir = cwd
 	c.Env = append(os.Environ(), "PATH="+hostVendorBinPath(cwd))
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
-	return runAndPropagate(c)
+	if err := runHostAndReap(c, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+// runHostAndReap runs a host binary in its own process group and kills whatever
+// it leaves behind before returning. The reap cannot be deferred: the exit path
+// below calls os.Exit, which skips defers, and the orphan (pest-plugin-browser
+// leaves a Playwright server) holds the inherited stdout so a pipeline hangs.
+// started, when set, is called with the running command, for tests.
+func runHostAndReap(cmd *exec.Cmd, started func(*exec.Cmd)) error {
+	grouped := groupNativeRun(cmd)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	if started != nil {
+		started(cmd)
+	}
+	err := cmd.Wait()
+	if grouped {
+		reapProcessGroup(cmd)
+	}
+	if err != nil {
+		if exit, ok := err.(*exec.ExitError); ok {
+			os.Exit(exit.ExitCode())
+		}
+		return err
+	}
+	return nil
 }
 
 // runAndPropagate runs cmd and exits with the child's status, so a failing

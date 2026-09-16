@@ -58,7 +58,15 @@ func runDeclaredHostCommand(cwd string, argv []string, extraEnv []string) (int, 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	// A declared command can leave a server running behind it (pest's browser
+	// plugin starts Playwright), which holds the inherited stdout and hangs a
+	// pipeline; reap whatever outlives the run.
+	grouped := groupNativeRun(cmd)
+	err := cmd.Run()
+	if grouped {
+		reapProcessGroup(cmd)
+	}
+	if err != nil {
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
 			return ee.ExitCode(), true, nil

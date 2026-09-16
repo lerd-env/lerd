@@ -502,6 +502,11 @@ func emptyEnvFile(envFormat string) []byte {
 func frameworkManagesEnv(cwd string) bool {
 	name, ok := config.DetectFrameworkForDir(cwd)
 	if !ok {
+		// Nothing declares one either: there is no env mapping to write, and
+		// running anyway only prints "no framework detected" on every sweep.
+		if proj, err := config.LoadProjectConfig(cwd); err == nil && proj != nil && proj.Framework == "" {
+			return false
+		}
 		return true // unknown framework: let runEnv decide as before
 	}
 	fw, ok := config.GetFrameworkForDir(name, cwd)

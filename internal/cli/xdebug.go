@@ -89,6 +89,21 @@ func xdebugVersion(args []string) (string, error) {
 	return v, nil
 }
 
+// xdebugRestartTarget names what the toggle restarts so a message points at the
+// thing that actually serves requests on this runtime.
+func xdebugRestartTarget(version, mode string) string {
+	if mode == config.PHPRuntimeNative {
+		return "PHP " + version + " on the host"
+	}
+	return xdebugops.FPMUnit(version)
+}
+
+// xdebugRestartsSiteContainers reports whether per-site containers need the
+// kick. Only the container runtime has any.
+func xdebugRestartsSiteContainers(mode string) bool {
+	return mode != config.PHPRuntimeNative
+}
+
 func runXdebugToggle(args []string, enable bool, mode, start string) error {
 	version, err := xdebugVersion(args)
 	if err != nil {
@@ -115,17 +130,28 @@ func runXdebugToggle(args []string, enable bool, mode, start string) error {
 		return nil
 	}
 
+	runtimeMode := config.PHPRuntimeContainer
+	if cfg, cfgErr := config.LoadGlobal(); cfgErr == nil {
+		runtimeMode = cfg.PHPRuntimeMode()
+	}
+	target := xdebugRestartTarget(version, runtimeMode)
 	if res.RestartErr != nil {
-		unit := xdebugops.FPMUnit(version)
-		feedback.Warn("restart %s: %v", unit, res.RestartErr)
-		fmt.Printf("Run: systemctl --user restart %s\n", unit)
+		feedback.Warn("restart %s: %v", target, res.RestartErr)
+		if runtimeMode == config.PHPRuntimeContainer {
+			fmt.Printf("Run: systemctl --user restart %s\n", target)
+		} else {
+			fmt.Printf("Run: lerd start to bring PHP %s back up\n", version)
+		}
 	} else if res.Restarted {
-		feedback.Note("restarted " + xdebugops.FPMUnit(version))
+		feedback.Note("restarted " + target)
 	}
 
 	// Per-site containers (custom-FPM and FrankenPHP) on this version mount the
-	// same xdebug ini; restart them so the toggle takes effect there too.
-	podman.RestartSiteContainersForVersion(version)
+	// same xdebug ini; restart them so the toggle takes effect there too. Under
+	// the native runtime the host pool the toggle just reloaded is what serves.
+	if xdebugRestartsSiteContainers(runtimeMode) {
+		podman.RestartSiteContainersForVersion(version)
+	}
 
 	if res.Enabled {
 		feedback.Done("Xdebug enabled for PHP " + version + " " + feedback.Val(fmt.Sprintf("mode=%s · start=%s · port 9003", res.Mode, start)))

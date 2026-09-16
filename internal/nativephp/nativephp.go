@@ -98,6 +98,17 @@ func DevtoolsExtensionPath(version string) string {
 	return path
 }
 
+// XdebugExtensionPath is the xdebug.so a native build ships, or "" when it did
+// not ship one. Xdebug is a zend_extension, so it loads by path from the ini
+// rather than from an image package the way the container runtime gets it.
+func XdebugExtensionPath(version string) string {
+	path := filepath.Join(ModulesDir(version), "xdebug.so")
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	return path
+}
+
 // ModulesDir holds the shared objects a native build ships beside its binary.
 // Per version, because they are named for the extension and not for the PHP
 // they were built against: one directory would leave every version loading
@@ -334,6 +345,19 @@ func ListInstalled() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// poolJobLoaded is the launchd lookup behind Loaded, injectable for tests.
+var poolJobLoaded = unitLoaded
+
+// Loaded reports whether a version's pool job is up, without connecting to it.
+// It answers the same question the container runtime answers with "is the
+// container running", and is what a repeated status poll must use: a dial into
+// the FastCGI port is handed to a child, which resets the ondemand idle timer,
+// so polling with Running keeps a pool that should fall to zero alive forever.
+// Running stays the right call for a command a person typed.
+func Loaded(version string) bool {
+	return poolJobLoaded(UnitLabel(version))
 }
 
 // Running reports whether a version's pool is accepting connections on its
