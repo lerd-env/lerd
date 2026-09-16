@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -209,7 +210,35 @@ func Reload(version string) error {
 	if err := Ensure(version); err != nil {
 		return err
 	}
-	return reloadWith(UnitLabel(version), unitLoaded, restartUnit)
+	if err := reloadWith(UnitLabel(version), unitLoaded, restartUnit); err != nil {
+		return err
+	}
+	// kickstart returns once launchd has taken the job, not once php-fpm holds
+	// the socket again, and nginx meets the gap as a 502 on the next request.
+	// Not an error when it runs out: the pool usually arrives just after, and
+	// failing the command over it would be worse than the wait it replaces.
+	waitAccepting(func() bool { return Running(version) }, reloadSettleTimeout, time.Sleep)
+	return nil
+}
+
+// reloadSettleTimeout bounds the wait for a restarted pool to start accepting.
+const reloadSettleTimeout = 10 * time.Second
+
+// reloadSettleInterval is how often the pool is probed while settling.
+const reloadSettleInterval = 50 * time.Millisecond
+
+// waitAccepting polls until the pool accepts or the budget runs out, reporting
+// whether it came up. tick is injected so a test spends no real time.
+func waitAccepting(accepting func() bool, budget time.Duration, tick func(time.Duration)) bool {
+	for waited := time.Duration(0); ; waited += reloadSettleInterval {
+		if accepting() {
+			return true
+		}
+		if waited >= budget {
+			return false
+		}
+		tick(reloadSettleInterval)
+	}
 }
 
 // reloadWith is Reload's decision with its launchctl calls injected. A listener
