@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -132,4 +133,44 @@ func TestPTYHelperProgressThenPrompt(t *testing.T) {
 	}
 	fmt.Printf("first=%v\n", confirmInstallPromptDefault("first question", false))
 	fmt.Printf("second=%v\n", confirmInstallPromptDefault("second question", false))
+}
+
+// TestProgressViewOverDevTTYDoesNotPark is the guard for the other install
+// freeze, the one TestPromptAfterProgressViewsGetsItsAnswer cannot see. That
+// test's child reads the pseudo terminal's slave device; the installer script
+// hands lerd install `</dev/tty` instead, and on macOS poll(2) does not support
+// that device. It returns POLLNVAL at once, the reader takes that for input and
+// parks in a read that only a full line ends, and the view's stop waits on it,
+// so the install stood still after the PHP images until someone pressed Enter.
+func TestProgressViewOverDevTTYDoesNotPark(t *testing.T) {
+	s := startPTY(t, "TestPTYHelperProgressViaDevTTY")
+
+	if !s.waitFor("first question", 15*time.Second) {
+		t.Fatalf("the view never finished: stop parked on its reader; terminal held:\n%s", s.output())
+	}
+	s.send("y\n")
+	if !s.waitFor("first=true", 15*time.Second) {
+		t.Fatalf("the answer typed at the prompt never reached it; terminal held:\n%s", s.output())
+	}
+}
+
+// TestPTYHelperProgressViaDevTTY is the child TestProgressViewOverDevTTYDoesNotPark
+// drives. It reopens /dev/tty as its stdin, which is what install.sh does before
+// running lerd install.
+func TestPTYHelperProgressViaDevTTY(t *testing.T) {
+	if os.Getenv(ptyHelperEnv) == "" {
+		return
+	}
+	tty, err := os.OpenFile("/dev/tty", os.O_RDONLY, 0)
+	if err != nil {
+		fmt.Printf("no /dev/tty: %v\n", err)
+		return
+	}
+	if err := syscall.Dup2(int(tty.Fd()), 0); err != nil {
+		fmt.Printf("dup2: %v\n", err)
+		return
+	}
+	job := BuildJob{Label: "job", Run: func(io.Writer) error { return nil }}
+	RunParallel([]BuildJob{job}) //nolint:errcheck
+	fmt.Printf("first=%v\n", confirmInstallPromptDefault("first question", false))
 }

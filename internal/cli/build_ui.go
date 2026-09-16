@@ -107,13 +107,7 @@ func runParallelTUI(jobs []BuildJob) error {
 	// Ctrl+O toggles output visibility.
 	var showOutput atomic.Bool
 
-	// Enter raw terminal mode so we can read single keypresses.
-	var restore func()
-	if oldState, err := term.MakeRaw(int(os.Stdin.Fd())); err == nil {
-		restore = func() { term.Restore(int(os.Stdin.Fd()), oldState) } //nolint:errcheck
-	} else {
-		restore = func() {}
-	}
+	restore := func() {}
 
 	// Handle SIGINT / Ctrl+C gracefully.
 	sigCh := make(chan os.Signal, 1)
@@ -140,6 +134,15 @@ func runParallelTUI(jobs []BuildJob) error {
 		}
 	})
 	defer keys.stop()
+
+	// Raw mode exists only so that reader can see single keypresses. Without a
+	// reader it would cost Ctrl+C, which raw mode stops turning into the SIGINT
+	// the handler above is waiting for, and buy nothing.
+	if keys != nil {
+		if oldState, err := term.MakeRaw(int(os.Stdin.Fd())); err == nil {
+			restore = func() { term.Restore(int(os.Stdin.Fd()), oldState) } //nolint:errcheck
+		}
+	}
 
 	termWidth := 120
 	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {

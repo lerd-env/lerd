@@ -29,10 +29,22 @@ type hotkeyReader struct {
 
 // startHotkeys duplicates src and passes each byte read from it to handle,
 // until stop is called or the descriptor ends. Returns nil, which stop accepts,
-// when the descriptor cannot be duplicated.
+// when the descriptor cannot be duplicated or cannot be polled.
+//
+// The poll check is not optional. On macOS poll(2) does not support devices,
+// and /dev/tty, which the installer script hands lerd as stdin, is one: poll
+// returns POLLNVAL at once, and a reader that took that for input parked in a
+// read only a full line could end, while the view's stop waited on it. That is
+// the install standing still after the PHP images until someone pressed Enter.
+// A descriptor poll cannot watch gets no reader at all, and the view stays in
+// cooked mode so Ctrl+C still reaches it as a signal.
 func startHotkeys(src int, handle func(b byte)) *hotkeyReader {
 	fd, err := syscall.Dup(src)
 	if err != nil {
+		return nil
+	}
+	if !pollable(fd) {
+		syscall.Close(fd) //nolint:errcheck
 		return nil
 	}
 	k := &hotkeyReader{quit: make(chan struct{}), done: make(chan struct{})}
@@ -46,7 +58,8 @@ func startHotkeys(src int, handle func(b byte)) *hotkeyReader {
 				return
 			default:
 			}
-			n, err := unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, hotkeyPollInterval)
+			pfd := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
+			n, err := unix.Poll(pfd, hotkeyPollInterval)
 			if err != nil {
 				if err == unix.EINTR {
 					continue
@@ -54,6 +67,14 @@ func startHotkeys(src int, handle func(b byte)) *hotkeyReader {
 				return
 			}
 			if n == 0 {
+				continue
+			}
+			// n counts descriptors with any event, not only input. Reading on
+			// POLLNVAL or POLLHUP would park in a read nothing ends.
+			if pfd[0].Revents&unix.POLLNVAL != 0 {
+				return
+			}
+			if pfd[0].Revents&unix.POLLIN == 0 {
 				continue
 			}
 			read, err := unix.Read(fd, buf)
@@ -66,6 +87,17 @@ func startHotkeys(src int, handle func(b byte)) *hotkeyReader {
 		}
 	}()
 	return k
+}
+
+// pollable reports whether poll(2) can watch fd. A zero timeout answers at
+// once: a descriptor poll rejects comes back with POLLNVAL instead of waiting.
+func pollable(fd int) bool {
+	pfd := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
+	n, err := unix.Poll(pfd, 0)
+	if err != nil && err != unix.EINTR {
+		return false
+	}
+	return n == 0 || pfd[0].Revents&unix.POLLNVAL == 0
 }
 
 // stop ends the reader and returns only once its goroutine is gone, so the
