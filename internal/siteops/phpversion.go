@@ -45,6 +45,9 @@ var (
 
 	phpConstraintsFor = func(site *config.Site) []string {
 		project := php.ComposerPHPConstraint(site.Path)
+		// What the resolved tree requires, which can be stricter than what the
+		// project's own manifest claims, and is what the first request obeys.
+		locked := php.LockedPlatformPHPConstraint(site.Path)
 		framework := ""
 		if site.Framework != "" {
 			if fw, ok := getFrameworkFn(site.Framework, site.Path); ok && !fw.VersionGuessed {
@@ -53,13 +56,13 @@ var (
 		}
 		switch {
 		case framework == "":
-			return compactConstraints(project)
+			return compactConstraints(project, locked)
 		case project == "":
-			return compactConstraints(framework)
+			return compactConstraints(framework, locked)
 		case !php.ConstraintsOverlap(framework, project):
-			return compactConstraints(project)
+			return compactConstraints(project, locked)
 		}
-		return compactConstraints(framework, project)
+		return compactConstraints(framework, project, locked)
 	}
 )
 

@@ -5,7 +5,7 @@
 | Command | Description |
 |---|---|
 | `lerd use <version>` | Set the global PHP version and build the FPM image if needed |
-| `lerd isolate <version>` | Pin PHP version for cwd: writes `.php-version` and updates `.lerd.yaml` if it exists, then re-links. Builds the version's image first when the machine does not have it yet, so the site is never pointed at a runtime that cannot start. Refuses a version the framework or the project's `composer.json` rules out; `--force` pins it anyway |
+| `lerd isolate <version>` | Pin PHP version for cwd: writes `.php-version` and updates `.lerd.yaml` if it exists, then re-links. Builds the version's image first when the machine does not have it yet, so the site is never pointed at a runtime that cannot start. Refuses a version the framework, the project's `composer.json`, or its installed dependencies rule out; `--force` pins it anyway |
 | `lerd php:list` | List all installed PHP-FPM versions |
 | `lerd php:rebuild [version] [--local]` | Force-rebuild PHP-FPM images, or add a version this machine does not have yet; `--local` builds from source instead of pulling a base |
 | `lerd php:update [version]` | Update PHP to the newest published patch. On the native runtime this downloads the new build and restarts the pools; on the container runtime it rebuilds the images from the newest base |
@@ -45,6 +45,8 @@ When a command needs a version that is not installed and you decline the install
 So that the project agrees with what actually runs, `lerd link` pins the resolved version into `.php-version`, the same file `lerd isolate` and the dashboard's PHP dropdown write. A version outside the framework's range is clamped rather than accepted, so the file, the site registry and the container can never drift apart, and when the clamp moves a version `php_version` asked for, the link says so rather than reporting the version it landed on as the choice. Sites with no lerd-managed PHP version (host-proxy, and custom containers whose version comes from their Containerfile) are left untouched.
 
 `lerd isolate` answers differently, because there a human named the version: a request the framework range or the project's own `composer.json` rules out is refused and nothing is written, so a file the project commits is never edited to agree with a version its owner did not choose. The refusal names what the version had to satisfy and the closest installed version that does, and `--force` pins it regardless.
+
+What the installed dependencies require counts too, and it can be stricter than the project's own manifest. Laravel 13 declares `"php": "^8.3"` and then resolves Symfony 8 components that each require `>=8.4.1`, so the app cannot boot on 8.3 even though its manifest allows it. Composer works this out when it installs and records it in `vendor/composer/platform_check.php`; lerd reads that floor alongside the other two, which is why a fresh Laravel 13 site refuses `lerd isolate 8.3` rather than accepting it and answering 500 on the first request. A project with nothing installed yet has no such file, and composer omits the check when no package constrains PHP, so in both cases only the framework range and the manifest apply.
 
 A framework definition describes the framework, `composer.json` describes the application that has to boot, and both apply. Where the two cannot both be met, the project wins: an app served by a definition whose cap sits below what its own dependencies require would otherwise be linked onto a version that fails at the first request.
 
