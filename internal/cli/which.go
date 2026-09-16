@@ -14,6 +14,18 @@ import (
 )
 
 // NewWhichCmd returns the which command.
+// whichPHPVersion reports the version a linked site actually runs on. The vhost
+// is generated from the registry, so that is the answer; re-detecting made which
+// disagree with every other surface as soon as a newer PHP was built, and could
+// name a prerelease nothing serves from. Detection only fills in for a site
+// linked before lerd recorded one.
+func whichPHPVersion(site *config.Site, detected string) string {
+	if site != nil && site.PHPVersion != "" {
+		return site.PHPVersion
+	}
+	return detected
+}
+
 func NewWhichCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "which",
@@ -33,7 +45,8 @@ func runWhich(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("no site registered for %s — link it first with lerd link", cwd)
 	}
 
-	phpVersion, _ := phpDet.DetectVersion(cwd)
+	detected, _ := phpDet.DetectVersion(cwd)
+	phpVersion := whichPHPVersion(site, detected)
 	nodeVersion, _ := nodeDet.DetectVersion(cwd)
 
 	publicDir := config.PublicDirFor(*site)
