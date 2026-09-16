@@ -94,7 +94,7 @@ nav:
       - Queue Workers: usage/queue-workers.md
   - Features:
       - Web UI: features/web-ui.md
-      - Framework Commands: features/commands.md
+      - Framework Commands: usage/framework-commands.md
       - Tinker tab: features/tinker.md
       - Dump viewer: features/dumps.md
       - Query viewer: features/queries.md
@@ -108,7 +108,7 @@ nav:
       - Logs: features/logs.md
   - Reference:
       - Command Reference: reference/commands.md
-      - Configuration: reference/configuration.md
+      - Configuration: configuration.md
       - Directory Layout: reference/directory-layout.md
       - Architecture: reference/architecture.md
   - Contributing:

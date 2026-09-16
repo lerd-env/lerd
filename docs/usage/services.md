@@ -113,7 +113,7 @@ The shift is decided at quadlet-write time, from whether the port can be bound r
 
 Moving lerd's published port lets a host-installed server keep its own. The step past that is pointing a project at your server instead of lerd's container: the database you already have, with your data and your users, while lerd keeps managing everything else.
 
-It takes two things, both in the project's personal, gitignored [`.env.lerd_override`](../features/env-setup.md#personal-overrides-env-lerd-override): the connection values that point at your server, and the reserved `LERD_EXTERNAL_SERVICES` key that tells lerd to stay out of the way.
+It takes two things, both in the project's personal, gitignored [`.env.lerd_override`](../features/env-setup.md#personal-overrides-envlerd_override): the connection values that point at your server, and the reserved `LERD_EXTERNAL_SERVICES` key that tells lerd to stay out of the way.
 
 ```dotenv
 # .env.lerd_override: this project uses the MySQL installed on the machine

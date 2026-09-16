@@ -189,7 +189,7 @@ Once you are on a beta you stay on the beta line without asking again: `lerd upd
 To be offered betas while still on a stable version, turn on **Beta updates** on the dashboard's Lerd page, or run `lerd update:beta on` (`off` puts you back on stable-only, `lerd update:beta` reports where you are). It changes what you are offered, not what you are running: the next `lerd update` is what moves you, and the notice starts naming betas as soon as one is published.
 
 ::: warning Running something older than 1.26?
-`lerd update` fails on builds from before the project moved to the lerd-env organisation, with an error about an unexpected release URL. [Updating from a version before 1.26](./updating-from-pre-1.26) gets you across in one step.
+`lerd update` fails on builds from before the project moved to the lerd-env organisation, with an error about an unexpected release URL. [Updating from a version before 1.26](./updating-from-pre-1.26.md) gets you across in one step.
 :::
 
 ---
