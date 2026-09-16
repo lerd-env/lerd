@@ -42,6 +42,21 @@ func stopJobWait(declared time.Duration) time.Duration {
 	return jobWaitFloor
 }
 
+// unitOpJobWait is how long any unit op waits for its job result. A stop has to
+// outlast the window the unit declares, and so does a start or a restart: both
+// are queued behind a stop that is already in flight, so they wait out that stop
+// before their own work begins. Giving them the bare floor made every db command
+// issued during a slow service's restart fail with "start … timed out after 30s"
+// while the service itself came up in a second once its turn arrived.
+func unitOpJobWait(op string, declaredStop time.Duration) time.Duration {
+	switch op {
+	case "stop", "start", "restart":
+		return stopJobWait(declaredStop)
+	default:
+		return jobWaitFloor
+	}
+}
+
 // unitOpTimeoutError builds the caller-facing timeout message, reporting the
 // wait that actually elapsed rather than the fixed number it used to name.
 func unitOpTimeoutError(verb, name string, wait time.Duration) error {
@@ -106,12 +121,7 @@ func dbusUnitOp(op, verb, name string) error {
 	}
 	unit := withServiceSuffix(name)
 
-	// A stop is the one op that has to outlast a window the unit itself sets,
-	// so it is read from the unit; the others keep the floor.
-	wait := jobWaitFloor
-	if op == "stop" {
-		wait = stopJobWait(declaredStopTimeout(conn, unit))
-	}
+	wait := unitOpJobWait(op, declaredStopTimeout(conn, unit))
 
 	// attempt enqueues one job and waits for systemd to report its result,
 	// returning the result string ("done", "canceled", "failed", …) or a

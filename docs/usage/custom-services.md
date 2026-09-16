@@ -277,6 +277,8 @@ stop_timeout: 60
 
 The unit that runs the container is given that window plus fifteen seconds, because podman only starts counting once the stop reaches it and still has to reap and remove the container afterwards. That matters more than it sounds: a unit inherits `DefaultTimeoutStopSec` when nothing sets it, and Arch-family distributions ship that at 10 seconds, so without the longer unit timeout systemd would `SIGKILL` the stop long before podman had spent the grace the service asked for.
 
+Lerd waits out that same window whenever it starts or restarts the service too, not only when it stops it. systemd queues a start behind a stop that is already running, so a start issued during one spends the stop's window before its own work begins. Giving it the shorter default made commands fail on a service that was coming back perfectly well: a `lerd db:export` issued while MySQL was restarting reported `could not start mysql: start lerd-mysql timed out after 30s` even though the server was accepting a second after its turn arrived.
+
 ::: tip
 Raise this only for services that flush on shutdown. A longer window on an image that hangs rather than exits just makes every stop wait it out.
 :::
