@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -146,6 +147,11 @@ func resolveDB(cwd, flagService, flagDatabase string) (*dbEnv, error) {
 		// Fall back to .env with generic key inference
 		loaded, err := loadDBEnv(cwd)
 		if err != nil {
+			// A SQLite project already carries the reason; anything else really
+			// is "nothing here told us which database to use".
+			if errors.Is(err, errSQLiteProject) {
+				return nil, err
+			}
 			return nil, fmt.Errorf(
 				"no DB config found — use --service <name>, add a db: block to .lerd.yaml, or create a .env file with DB_CONNECTION and DB_DATABASE",
 			)
@@ -196,7 +202,10 @@ func resolveDBLenient(cwd, flagService, flagDatabase string) (*dbEnv, error) {
 		if env = resolveDBFromFramework(cwd); env != nil {
 			break
 		}
-		loaded, _ := loadDBEnvLenient(cwd)
+		loaded, err := loadDBEnvLenient(cwd)
+		if errors.Is(err, errSQLiteProject) {
+			return nil, err
+		}
 		if loaded != nil {
 			env = loaded
 		} else {
@@ -235,6 +244,9 @@ func loadDBEnv(cwd string) (*dbEnv, error) {
 	urlEnv := parseDBURL(vals["DATABASE_URL"])
 
 	conn := inferDBConnection(vals)
+	if err := errIfSQLite(conn, vals, urlEnv); err != nil {
+		return nil, err
+	}
 	if conn == "" {
 		return nil, fmt.Errorf("cannot determine DB type from .env — set DB_CONNECTION, DB_TYPE, TYPEORM_CONNECTION, DATABASE_URL, or DB_PORT")
 	}
@@ -606,6 +618,46 @@ func connToService(conn string) string {
 
 // inferDBConnection resolves the database dialect from a parsed .env map.
 // Checks in priority order: DB_CONNECTION → DB_TYPE → TYPEORM_CONNECTION → DATABASE_URL → DB_PORT.
+// errSQLiteProject marks the refusal a SQLite project gets, so the resolution
+// chain can hand it straight to the user instead of replacing it with its own
+// "no DB config found", which says nothing about why.
+var errSQLiteProject = errors.New("this project uses SQLite")
+
+// errIfSQLite stops a SQLite project before its DB_DATABASE is mistaken for a
+// database name. Every lerd db command drives a database service container;
+// SQLite is a file and has none, so the honest answer names SQLite rather than
+// letting the file path reach the service layer's name validator, which used to
+// reject "database/database.sqlite" as an invalid database name. Laravel
+// defaults to SQLite, so this is the out-of-the-box path.
+func errIfSQLite(conn string, vals map[string]string, urlEnv *dbEnv) error {
+	// parseDBURL only knows the server dialects, so a sqlite DATABASE_URL leaves
+	// conn empty and has to be recognised from the scheme itself.
+	rawURL := strings.ToLower(strings.TrimSpace(vals["DATABASE_URL"]))
+	viaURL := strings.HasPrefix(rawURL, "sqlite:") || strings.HasPrefix(rawURL, "sqlite3:")
+	if !viaURL && !strings.EqualFold(conn, "sqlite") && !strings.EqualFold(conn, "sqlite3") {
+		return nil
+	}
+	file := vals["DB_DATABASE"]
+	if file == "" {
+		file = vals["TYPEORM_DATABASE"]
+	}
+	if file == "" && urlEnv != nil {
+		file = urlEnv.database
+	}
+	if file == "" && viaURL {
+		_, path, _ := strings.Cut(vals["DATABASE_URL"], ":")
+		file = strings.TrimLeft(path, "/")
+	}
+	where := ""
+	if file != "" {
+		where = fmt.Sprintf(" (%s)", file)
+	}
+	return fmt.Errorf("%w%s, which is a file rather than a database service, so lerd's database commands do not apply to it — "+
+		"point the command at a service with --service <name>, or move the project onto one with 'lerd db:move'",
+		errSQLiteProject, where,
+	)
+}
+
 func inferDBConnection(vals map[string]string) string {
 	for _, key := range []string{"DB_CONNECTION", "DB_TYPE", "TYPEORM_CONNECTION"} {
 		if v := vals[key]; v != "" {
@@ -683,6 +735,9 @@ func loadDBEnvLenient(cwd string) (*dbEnv, error) {
 	urlEnv := parseDBURL(vals["DATABASE_URL"])
 
 	conn := inferDBConnection(vals)
+	if err := errIfSQLite(conn, vals, urlEnv); err != nil {
+		return nil, err
+	}
 
 	db := vals["DB_DATABASE"]
 	if db == "" {

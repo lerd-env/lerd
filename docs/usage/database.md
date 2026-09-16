@@ -303,6 +303,8 @@ Installed family alternates are valid picks too: `mariadb` / `mariadb-10-11`, `m
 
 For SQLite, the `database/database.sqlite` file is created automatically if it doesn't exist. No service is started.
 
+Because no service is started, the commands on this page do not apply to a SQLite project: they drive a database engine running in a container, and SQLite is a file your framework opens directly. Running one there refuses with a message naming the file it found rather than trying to treat the path as a database name. Back a SQLite project up by copying the file, and use your framework's own tooling (`php artisan migrate:fresh`, for example) to reset it. To move the project onto an engine these commands do cover, run `lerd db:move --to mysql`, or point a single command at a service you already have with `--service`.
+
 For MySQL or PostgreSQL (and their family alternates), the matching `lerd-<service>` container is started if it isn't already, and the project database (plus a `_testing` variant) is created via `lerd db:create`.
 
 You can change the choice at any time by editing the `services:` list in `.lerd.yaml` and re-running `lerd env`, or by running `lerd init --fresh` and picking a different database in the wizard.
