@@ -14,7 +14,7 @@
 | `lerd update --beta` | Update to the latest pre-release build, from a stable version |
 | `lerd update:beta on\|off` | Offer beta releases to a stable install; with no argument it reports where the install sits |
 | `lerd update --rollback` | Revert to the previously installed version |
-| `lerd whatsnew` | Show what changed between the installed version and the latest release |
+| `lerd whatsnew` | Show what changed between the installed version and the latest release on the line it follows |
 | `lerd uninstall` | Stop all containers and remove Lerd; a package-installed binary is left for apt/dnf/brew to remove |
 | `lerd uninstall --force` | Same, skipping all confirmation prompts |
 | `lerd autostart enable` | Start Lerd automatically on every login |

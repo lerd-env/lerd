@@ -20,6 +20,8 @@ For example: `admin.example.com` becomes `admin-example.test`
 
 `lerd domain add`, `lerd domain remove`, `lerd link --name` and the `domains:` list in `.lerd.yaml` all take the name with or without the TLD, so `shop.acme` and `shop.acme.test` both mean `shop.acme.test`. A trailing TLD used to be appended to rather than recognised, which put an unreachable `shop.acme.test.test` in the site's `.lerd.yaml`.
 
+Adding or removing a domain returns once nginx is actually serving the change, not once it has been told about it. A reload signals nginx and lets the workers already handling requests finish on the old configuration, so for a moment both are live and a request can land on either; the commands and the dashboard's Manage Domains modal both wait for the previous set of workers to retire before they answer. That means a domain is reachable the instant `lerd domain add` returns, and a removed one has stopped answering by the time `lerd domain remove` does.
+
 ---
 
 ## Multiple domains
