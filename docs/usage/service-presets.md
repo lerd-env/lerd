@@ -488,16 +488,22 @@ declares none.
 A service whose own image ships no client tooling can name an `image:` on the
 entity, and lerd runs every command in an ephemeral container of that image on
 the lerd network instead of exec-ing the service container, with the entity's
-`env:` pairs carrying the client's connection settings. RustFS is the model
-case: it holds S3 buckets but no S3 client, so its buckets entity runs through
-`minio/mc`. A single action can override the image and env for itself, because
-one tool rarely covers everything: bucket archives need `tar`, which the mc
-image does not carry, so the export and import actions run on `rclone/rclone`
-while listing stays on mc. An `owner_env:` on the entity names the site .env
+`env:` pairs carrying the client's connection settings. A single action can
+override the image and env for itself, because one tool rarely covers
+everything: on the RustFS buckets entity, a bucket archive needs `tar`, so the
+export and import actions run on `rclone/rclone`. An `owner_env:` on the entity names the site .env
 key whose value is the entity a site owns (`AWS_BUCKET` for buckets), which is
 what links each row to its site in the UI; only sites whose .env references
 this service count, so a project pointed at real AWS never claims a local
 bucket of the same name.
+
+An entity can also name a `driver:` instead of commands, and lerd speaks the
+protocol itself: the list and the actions are served by the client compiled into
+the binary, with the entity's `env:` carrying `S3_PORT`, `S3_ACCESS_KEY` and
+`S3_SECRET_KEY`. Only `s3` exists, and the RustFS buckets entity uses it. It is
+there because the S3 client images are public images on registries lerd does not
+control, and when Docker Hub stopped serving `minio/mc` a fresh install could
+not create a bucket at all. A driven entity pulls nothing and works offline.
 
 The single-command `introspect.list_databases` form from before entities existed
 is still honoured as a list-only databases declaration, so presets published for

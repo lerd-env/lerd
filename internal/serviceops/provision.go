@@ -1,12 +1,11 @@
 package serviceops
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/geodro/lerd/internal/podman"
 )
 
 // databaseNamePattern is the strict shape an entity name must have to reach a
@@ -110,44 +109,49 @@ func S3BucketName(name string) string {
 	return out
 }
 
-// EnsureS3Bucket creates a bucket for the given name in lerd-rustfs using an
-// ephemeral mc container. Returns (true, nil) if created, (false, nil) if it
-// already existed, or (false, err) on failure. Retries up to 3 times (2s apart)
-// to bridge the window between the host TCP port becoming reachable and the
-// container network being fully ready for mc operations.
+// EnsureS3Bucket creates a bucket for the given name on the S3 service.
+// Returns (true, nil) if created, (false, nil) if it already existed, or
+// (false, err) on failure. Retries up to 3 times (2s apart) to bridge the
+// window between the host port becoming reachable and the service answering
+// on it.
 func EnsureS3Bucket(name string) (bool, error) {
-	const (
-		alias   = "lerd"
-		mcImage = podman.MinioClientImage
-		mcEnv   = "MC_HOST_lerd=http://lerd:lerdpassword@lerd-rustfs:9000"
-	)
+	if err := ValidateDatabaseName(name); err != nil {
+		return false, err
+	}
+	spec := EntityFor(s3Service, "buckets")
+	if spec == nil || spec.Driver != s3Driver {
+		return false, fmt.Errorf("%s declares no S3 buckets", s3Service)
+	}
+	c, err := s3ClientFor(s3Service, spec.Env)
+	if err != nil {
+		return false, err
+	}
 
-	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
-		if attempt > 0 {
-			time.Sleep(2 * time.Second)
+	// One attempt: the existence check and the create share a deadline, and a
+	// failure of either is what the retry is for.
+	attempt := func() (bool, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), s3Timeout)
+		defer cancel()
+		exists, err := c.BucketExists(ctx, name)
+		if err != nil {
+			return false, err
 		}
-
-		lsCmd := podman.Cmd("run", "--rm", "--network", "lerd",
-			"-e", mcEnv, mcImage, "ls", alias+"/"+name)
-		if lsCmd.Run() == nil {
+		if exists {
 			return false, nil
 		}
+		return true, s3CreateBucket(ctx, c, name)
+	}
 
-		mbCmd := podman.Cmd("run", "--rm", "--network", "lerd",
-			"-e", mcEnv, mcImage, "mb", alias+"/"+name)
-		out, err := mbCmd.CombinedOutput()
-		if err != nil {
-			lastErr = fmt.Errorf("%s", strings.TrimSpace(string(out)))
-			continue
+	var lastErr error
+	for i := 0; i < 3; i++ {
+		if i > 0 {
+			time.Sleep(2 * time.Second)
 		}
-
-		pubCmd := podman.Cmd("run", "--rm", "--network", "lerd",
-			"-e", mcEnv, mcImage, "anonymous", "set", "public", alias+"/"+name)
-		if out, err := pubCmd.CombinedOutput(); err != nil {
-			return false, fmt.Errorf("mc anonymous set public: %s", strings.TrimSpace(string(out)))
+		created, err := attempt()
+		if err == nil {
+			return created, nil
 		}
-		return true, nil
+		lastErr = err
 	}
 	return false, lastErr
 }

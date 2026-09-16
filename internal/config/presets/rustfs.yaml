@@ -31,16 +31,12 @@ introspect:
   entities:
     - kind: buckets
       label: Buckets
-      image: quay.io/minio/mc:latest
+      driver: s3
       env:
-        - MC_HOST_lerd=http://lerd:lerdpassword@lerd-rustfs:9000
+        - S3_PORT=9000
+        - S3_ACCESS_KEY=lerd
+        - S3_SECRET_KEY=lerdpassword
       owner_env: AWS_BUCKET
-      list: >
-        mc du --depth 2 --json lerd/ | while IFS= read -r l; do
-        p=${l#*\"prefix\":\"}; p=${p%%\"*};
-        s=${l#*\"size\":}; s=${s%%,*};
-        o=${l#*\"objects\":}; o=${o%%,*};
-        [ -n "$p" ] && printf '%s\t%s\t%s\n' "$p" "$o" "$s"; done; exit 0
       columns:
         - key: objects
           label: Objects
@@ -49,12 +45,11 @@ introspect:
           label: Size
           format: bytes
       actions:
-        create: mc mb lerd/{{name}} && mc anonymous set public lerd/{{name}}
+        create:
         delete:
-          exec: mc rb --force lerd/{{name}}
           destructive: true
-        # The archive actions run on rclone rather than mc: streaming a bucket
-        # as one file needs tar, which the mc image does not carry.
+        # The archive actions run a client image: streaming a bucket as one
+        # file needs tar, which the S3 API has no equivalent of.
         export:
           exec: >
             mkdir -p /tmp/b && rclone copy -q :s3:{{name}} /tmp/b &&

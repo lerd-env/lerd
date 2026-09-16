@@ -5,19 +5,14 @@ import (
 	"testing"
 )
 
-// Docker Hub stopped answering for minio/mc on every tag, so a fresh install
-// could not create an S3 bucket at all while a cached image hid it on machines
-// that already had one. Keep every throw-away tool image off that registry.
-func TestToolImagesAvoidDockerHubMinio(t *testing.T) {
+// S3 buckets used to be provisioned by running the minio client image, until
+// Docker Hub stopped answering for it on every tag and a fresh install could
+// not create a bucket at all. lerd speaks S3 itself now, so no tool image may
+// carry a client whose registry lerd does not control.
+func TestToolImagesCarryNoS3Client(t *testing.T) {
 	for _, img := range ToolImages() {
-		if strings.Contains(img, "docker.io/minio/") {
-			t.Errorf("tool image %q is back on Docker Hub, which no longer serves minio/mc", img)
+		if strings.Contains(img, "minio") || strings.Contains(img, "rclone") {
+			t.Errorf("tool image %q is an S3 client; S3 is served by the compiled-in client", img)
 		}
-	}
-}
-
-func TestMinioClientImageIsPullable(t *testing.T) {
-	if !strings.HasPrefix(MinioClientImage, "quay.io/minio/mc") {
-		t.Errorf("MinioClientImage = %q, want the quay.io mirror", MinioClientImage)
 	}
 }
