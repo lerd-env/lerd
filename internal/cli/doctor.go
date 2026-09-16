@@ -591,6 +591,12 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 		printNativePHPFindings(phpVersions, tools.Load(context.Background()),
 			func(v string) string { return tools.InstalledVersion(nativeTool(v)) }, ok, warn)
 	}
+	// A version no site is pinned to is never built by `lerd fetch` and never
+	// started, so a missing image there is a deliberate absence, not a fault.
+	imagesUsed := map[string]bool{}
+	for _, v := range versionsInUse(imageVersions) {
+		imagesUsed[v] = true
+	}
 	for _, v := range imageVersions {
 		short := strings.ReplaceAll(v, ".", "")
 		image := "lerd-php" + short + "-fpm:local"
@@ -603,6 +609,8 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 			base = podman.CheckBaseImageFreshness(v)
 		}
 		switch {
+		case !exists && !imagesUsed[v]:
+			info(fmt.Sprintf("PHP %s image", v), "not built — no site uses it; build with: lerd php:rebuild "+v)
 		case !exists:
 			fail(fmt.Sprintf("PHP %s image", v), "missing", "lerd php:rebuild "+v)
 			rep.fixLast(autoFix(fixPhpRebuild, v, "rebuild the PHP "+v+" image"))
