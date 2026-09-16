@@ -5,6 +5,7 @@
   import StatusPill from '$components/StatusPill.svelte';
   import InfoRow from '$components/InfoRow.svelte';
   import LogViewer from '$components/LogViewer.svelte';
+  import { logHighlight } from '$lib/logHighlight';
   import DnsConfigTab from './DnsConfigTab.svelte';
   import { status, dnsState } from '$stores/status';
   import { escapeHtml } from '$lib/html';
@@ -63,6 +64,7 @@
     </div>
     {#if logsEnabled}
       <LogViewer
+        highlight={logHighlight}
         path="/api/logs/lerd-dns"
         emptyLabel={m.system_dns_quietDefault({ option: '`log-queries`', path: '~/.local/share/lerd/dnsmasq/lerd.conf' })}
       />

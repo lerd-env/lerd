@@ -4,6 +4,7 @@
   import DetailTabs, { type TabItem } from '$components/DetailTabs.svelte';
   import StatusPill from '$components/StatusPill.svelte';
   import LogViewer from '$components/LogViewer.svelte';
+  import { logHighlight } from '$lib/logHighlight';
   import NginxConfigTab from './NginxConfigTab.svelte';
   import { status } from '$stores/status';
   import { m } from '../../paraglide/messages.js';
@@ -15,11 +16,6 @@
     { id: 'config', label: m.services_tabs_tuning() }
   ];
 
-  function highlight(line: string): string | null {
-    if (/error|Error|crit/.test(line)) return 'text-red-500';
-    if (/warn/.test(line)) return 'text-yellow-600 dark:text-yellow-400';
-    return null;
-  }
 </script>
 
 {#snippet pill()}
@@ -35,6 +31,6 @@
   {#if active === 'config'}
     <NginxConfigTab />
   {:else if active === 'logs'}
-    <LogViewer path="/api/logs/lerd-nginx" {highlight} />
+    <LogViewer path="/api/logs/lerd-nginx" highlight={logHighlight} />
   {/if}
 </DetailPanel>

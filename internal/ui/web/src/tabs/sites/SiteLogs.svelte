@@ -3,6 +3,7 @@
   import DetailTabs, { type TabItem } from '$components/DetailTabs.svelte';
   import AppLogsTab from './AppLogsTab.svelte';
   import { type Site, fpmContainer } from '$stores/sites';
+  import { logHighlight } from '$lib/logHighlight';
   import { routeRest, goToTab } from '$stores/route';
   import { m } from '../../paraglide/messages.js';
 
@@ -97,12 +98,6 @@
 
   const name = $derived(site.name || site.domain);
 
-  function fpmHighlight(line: string): string | null {
-    if (/ERROR|Error|PHP Fatal|PHP Warning/.test(line)) return 'text-red-500';
-    if (/WARNING|Warning|PHP Notice/.test(line)) return 'text-yellow-600 dark:text-yellow-400';
-    return null;
-  }
-
   const streamPath = $derived.by(() => {
     if (active === 'fpm') {
       // The daemon names the unit only under the native runtime, where the log
@@ -139,7 +134,7 @@
     {/key}
   {:else if streamPath}
     {#key active + '@' + streamPath}
-      <LogViewer path={streamPath} highlight={active === 'fpm' ? fpmHighlight : undefined} />
+      <LogViewer path={streamPath} highlight={logHighlight} />
     {/key}
   {:else}
     <div class="flex-1 flex items-center justify-center text-xs text-gray-400 dark:text-gray-500">

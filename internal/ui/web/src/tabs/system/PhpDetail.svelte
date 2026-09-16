@@ -2,6 +2,7 @@
   import ButtonMenu, { type ButtonMenuAction } from '$components/ButtonMenu.svelte';
   import DetailTabs, { type TabItem } from '$components/DetailTabs.svelte';
   import LogViewer from '$components/LogViewer.svelte';
+  import { logHighlight } from '$lib/logHighlight';
   import PhpIniTab from './PhpIniTab.svelte';
   import PhpPortsTab from './PhpPortsTab.svelte';
   import PhpExtensionsTab from './PhpExtensionsTab.svelte';
@@ -384,7 +385,7 @@
 
 <DetailTabs {tabs} {active} onchange={(id) => (active = id)} actions={detailActions} />
 {#if active === 'logs' && running}
-  <LogViewer path={'/api/logs/' + logUnit} />
+  <LogViewer path={'/api/logs/' + logUnit} highlight={logHighlight} />
 {:else if active === 'config'}
   <PhpIniTab {version} />
 {:else if active === 'ports'}

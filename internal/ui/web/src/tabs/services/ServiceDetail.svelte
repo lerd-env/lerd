@@ -1,6 +1,7 @@
 <script lang="ts">
   import DetailPanel from '$components/DetailPanel.svelte';
   import LogViewer from '$components/LogViewer.svelte';
+  import { logHighlight } from '$lib/logHighlight';
   import DetailTabs, { type TabItem } from '$components/DetailTabs.svelte';
   import ServiceHeader from './ServiceHeader.svelte';
   import ServiceEnvTab from './ServiceEnvTab.svelte';
@@ -90,11 +91,6 @@
     return `/api/logs/lerd-${svc.name}`;
   });
 
-  function highlight(line: string): string | null {
-    if (/ERROR|Error/.test(line)) return 'text-red-500';
-    if (/WARNING|Warning/.test(line)) return 'text-yellow-600 dark:text-yellow-400';
-    return null;
-  }
 </script>
 
 <DetailPanel>
@@ -111,7 +107,7 @@
     <ServiceEntitiesTab {svc} />
   {:else if active === 'logs'}
     {#key svc.name + ':' + logPath}
-      <LogViewer path={logPath} {highlight} />
+      <LogViewer path={logPath} highlight={logHighlight} />
     {/key}
   {:else if active === 'env'}
     <ServiceEnvTab {svc} />
