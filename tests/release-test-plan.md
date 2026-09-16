@@ -186,9 +186,11 @@ lerd setup --all --skip-open
 - [ ] `lerd new` scaffolds through the framework's own create command
 - [ ] `lerd setup --all` runs composer install, npm install, `lerd env`, and the
       framework's own setup steps (migrations, storage link) without prompting
-- [ ] `.lerd.yaml` and `.env` exist, and the backup is named after the file the
-      framework actually reads and sits beside it (`.env.before_lerd` at the
-      root for a plain dotenv project)
+- [ ] `.env` exists, and the backup is named after the file the framework
+      actually reads and sits beside it (`.env.before_lerd` at the root for a
+      plain dotenv project). `.lerd.yaml` is written on demand, by the commands
+      that have something to record in it, so a freshly scaffolded project not
+      having one yet is correct
 - [ ] `lerd sites` lists `demo` with the right PHP version and doc root
 - [ ] `lerd which` resolves PHP version, Node version, doc root, nginx config
 - [ ] **`curl -k -s -o /dev/null -w '%{http_code}' https://demo.test` → 200**
@@ -424,7 +426,8 @@ A project's answers to those flags are committed rather than retyped:
 - [ ] The dashboard's gear beside a worker offers one field per declared option,
       prefilled from the project and showing the definition's default, and
       saving restarts a running worker
-- [ ] `lerd workers` reports what is running across the machine
+- [ ] macOS: `lerd workers mode` shows and sets how workers are launched. On
+      Linux the command is config only and reports nothing about what is running
 
 The store's package layer sits under the definitions:
 
@@ -546,7 +549,10 @@ cd shop && lerd setup --all --skip-open
       `lerd env:restore` puts it back over that file
 - [ ] `lerd console` maps to that framework's console binary
 - [ ] Its env wiring, workers, and doctor checks come from the store YAML
-- [ ] **https → 200 on the second site**
+- [ ] **https → 200 on the second site.** A bare skeleton with no routes of its
+      own answers 404 on `/` by design (Symfony serves its welcome page with
+      that status), so either scaffold one route first or read the check as
+      "the framework answered", not "200"
 - [ ] `lerd framework list` shows both, `lerd framework prune` leaves both alone
 - [ ] Both sites serve simultaneously, **200 on each**
 - [ ] A package the project requires contributes its workers, commands, setup
@@ -670,9 +676,13 @@ Other surfaces:
 ## Phase 11 — diagnostics and housekeeping
 
 - [ ] `lerd doctor` clean; `lerd doctor --json` well-formed with fix tiers
-- [ ] Break something on purpose (stop `lerd-nginx`), confirm doctor names it,
-      `lerd doctor --fix --dry-run` previews, `--fix --yes` repairs it,
-      **https → 200 afterwards**
+- [ ] Break something on purpose (stop `lerd-nginx`) and confirm doctor names
+      it and hints `lerd start`. It offers no auto fix for this one on purpose:
+      starting nginx means `lerd start`, which reconfigures the resolver under
+      sudo, and the auto tier never does that. Run the hint, **https → 200
+      afterwards**
+- [ ] `lerd doctor --fix --dry-run` previews the fixes it does offer, and
+      `--fix --yes` applies them, still confirming the ones classified heavy
 - [ ] `lerd doctor` sweeps **every** linked site, not only the host, and names
       the site each finding belongs to
 - [ ] Drop a site's database, then let the doctor create it from the finding
