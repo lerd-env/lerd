@@ -1,0 +1,22 @@
+{
+  "available": true,
+  "used_by_lerd_bytes": 3355443200,
+  "reclaimable_bytes": 508559360,
+  "lerd_bytes": 402653184,
+  "other_bytes": 105906176,
+  "held_bytes": 2846883840,
+  "held_count": 9,
+  "used_images": [
+    { "ref": "localhost/lerd-php85-fpm:local", "in_use": true, "bytes": 579862528 },
+    { "ref": "localhost/lerd-php84-fpm:local", "in_use": true, "bytes": 561512448 },
+    { "ref": "docker.io/library/mysql:8.4", "in_use": true, "bytes": 872415232 },
+    { "ref": "docker.io/library/nginx:alpine", "in_use": true, "bytes": 73819750 },
+    { "ref": "docker.io/library/redis:7-alpine", "in_use": true, "bytes": 41875931 },
+    { "ref": "docker.io/axllent/mailpit:latest", "in_use": true, "bytes": 44249088 },
+    { "ref": "localhost/lerd-dnsmasq:local", "in_use": true, "bytes": 9657483 }
+  ],
+  "images": [
+    { "id": "6f3a1c27b840", "desc": "localhost/lerd-php83-fpm:local", "owner": "lerd", "bytes": 402653184 },
+    { "id": "b91d4e07aa52", "desc": "docker.io/library/golang:1.25", "owner": "other", "bytes": 105906176 }
+  ]
+}

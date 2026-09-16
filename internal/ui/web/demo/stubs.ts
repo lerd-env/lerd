@@ -19,6 +19,7 @@ import lanStatus from './fixtures/lan_status.json';
 import dumpsStatus from './fixtures/dumps_status.json';
 import profilerStatus from './fixtures/profiler_status.json';
 import stats from './fixtures/stats.json';
+import disk from './fixtures/disk.json';
 import workersHealth from './fixtures/workers_health.json';
 import databasesFixture from './fixtures/databases.json';
 import docsFixture from './fixtures/docs.json';
@@ -52,6 +53,7 @@ const ROUTES: Record<string, unknown> = {
   '/api/devtools/status': { enabled: true },
   '/api/profiler/status': profilerStatus,
   '/api/stats': stats,
+  '/api/disk': disk,
   '/api/workers/health': workersHealth,
 };
 
