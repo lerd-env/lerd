@@ -152,8 +152,25 @@ func podmanImages() ([]image, error) {
 	if err := json.Unmarshal([]byte(out), &imgs); err != nil {
 		return nil, fmt.Errorf("parsing podman images: %w", err)
 	}
+	imgs = dedupeImages(imgs)
 	applyUniqueBytes(imgs, readUniqueBytes())
 	return imgs, nil
+}
+
+// dedupeImages keeps one row per image ID. podman lists an image once per
+// repository it is tagged under, so a multi-repo image (quay.io and docker.io
+// for the same digest) would otherwise be counted, listed and reaped twice.
+func dedupeImages(imgs []image) []image {
+	seen := make(map[string]bool, len(imgs))
+	out := imgs[:0]
+	for _, img := range imgs {
+		if seen[img.ID] {
+			continue
+		}
+		seen[img.ID] = true
+		out = append(out, img)
+	}
+	return out
 }
 
 // applyUniqueBytes rewrites SharedSize from podman's layer-aware accounting, so
