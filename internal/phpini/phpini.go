@@ -139,8 +139,9 @@ func Restart(scope string) error {
 func RestartNoSeed(scope string) error {
 	if scope == SharedScope {
 		_ = podman.EnsureSharedIni()
+		native := runtimeIsNative()
 		var firstErr error
-		for _, v := range installedVersions() {
+		for _, v := range versionsToReload(installedVersions(), native, nativephp.ListInstalled) {
 			if err := restartFPMUnit(v); err != nil && firstErr == nil {
 				firstErr = err
 			}
@@ -164,7 +165,7 @@ func RestartNoSeed(scope string) error {
 // its per-site containers, so a shared-ini change reaches every PHP container.
 func restartAllVersions() error {
 	var firstErr error
-	for _, v := range installedVersions() {
+	for _, v := range versionsToReload(installedVersions(), runtimeIsNative(), nativephp.ListInstalled) {
 		if err := restartVersion(v); err != nil && firstErr == nil {
 			firstErr = err
 		}
@@ -204,6 +205,33 @@ var restartFPMUnit = func(version string) error {
 		mode = cfg.PHPRuntimeMode()
 	}
 	return restartForRuntime(version, mode, restartContainerFPM, nativephp.Reload)
+}
+
+// versionsToReload narrows the shared-scope sweep to what can actually be
+// reloaded. Under the native runtime a version registered without a host build
+// has no pool to reach, and trying failed the whole command after the change had
+// already reached every version that serves.
+func versionsToReload(registered []string, native bool, builtNatively func() []string) []string {
+	if !native {
+		return registered
+	}
+	built := map[string]bool{}
+	for _, v := range builtNatively() {
+		built[v] = true
+	}
+	out := make([]string, 0, len(registered))
+	for _, v := range registered {
+		if built[v] {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// runtimeIsNative reports whether this install serves PHP from the host.
+func runtimeIsNative() bool {
+	cfg, err := config.LoadGlobal()
+	return err == nil && cfg.PHPRuntimeMode() == config.PHPRuntimeNative
 }
 
 // restartForRuntime reloads whichever FPM is actually serving. Restarting the
