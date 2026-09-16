@@ -197,6 +197,8 @@ systemctl --user stop   lerd-php84-fpm
 
 ## Xdebug
 
+Toggling Xdebug restarts the version's FPM container, and the command waits for the pool to start accepting again before it reports success. That wait is the point: a restarted container comes back on a new address on the lerd network, and returning as soon as systemd reported the job done meant the next request could still reach the old one and sit there until it timed out. Every command that restarts a pool (`lerd php:ext`, `lerd php:rebuild`, `lerd php:ini`, a runtime switch) waits the same way, so when one of them returns, the site is serving.
+
 ::: details Xdebug configuration values
 Xdebug is configured with:
 

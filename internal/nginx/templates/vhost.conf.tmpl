@@ -51,6 +51,7 @@ server {
         set $fpm "{{.FPMContainer}}";
         fastcgi_pass $fpm:{{.FPMPort}};
         fastcgi_index index.php;
+        fastcgi_connect_timeout 5s;
         fastcgi_read_timeout {{.RequestTimeout}}s;
         fastcgi_send_timeout {{.RequestTimeout}}s;
         fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;

@@ -510,6 +510,7 @@ func RestartUnit(name string) error {
 		err := UnitLifecycle.Restart(name)
 		if err == nil {
 			notifyUnitChange(name)
+			return awaitFPMIfNeeded(name)
 		}
 		return err
 	}
@@ -517,6 +518,40 @@ func RestartUnit(name string) error {
 		return err
 	}
 	notifyUnitChange(name)
+	return awaitFPMIfNeeded(name)
+}
+
+// awaitFPMIfNeeded holds a PHP pool's restart open until the new container is
+// accepting. systemd reports its job done as soon as the container is created,
+// which is well before php-fpm binds its port, and the restart also moves the
+// container to a new address on the lerd network that nginx has yet to
+// re-resolve. Returning at the job result made the command print a tick over a
+// site that then answered 502 or 504 for up to a minute. Only FPM units wait;
+// nothing else here is behind nginx in the same way.
+func awaitFPMIfNeeded(unit string) error {
+	// A test drives an injected lifecycle with no container behind it, so the
+	// probe would shell out to podman and spend the whole timeout finding
+	// nothing. awaitFPM itself is covered directly in its own test.
+	if config.UnderTest() {
+		return nil
+	}
+	return awaitFPM(unit)
+}
+
+// awaitFPM is awaitFPMIfNeeded without the test guard: it waits for a restarted
+// pool to accept, then clears the address nginx resolved for it before the
+// restart. Non-FPM units pass straight through.
+func awaitFPM(unit string) error {
+	if !isFPMUnit(unit) {
+		return nil
+	}
+	if err := waitFPMAccepting(unit, fpmRestartReadyTimeout); err != nil {
+		return err
+	}
+	// The pool answers, but nginx is still holding the address the container had
+	// before the restart. Clear it here, while the command is still running, so
+	// the first request after it returns reaches the new container.
+	dropNginxUpstreamCache()
 	return nil
 }
 
