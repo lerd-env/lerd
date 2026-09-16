@@ -386,6 +386,6 @@ The file takes the same fields as `.lerd.yaml`, in the same shapes. Merging is p
 
 Add it to `.gitignore`. Lerd never creates it, never writes to it, and will not clean it up for you.
 
-Because the committed file stays the source of truth for everything else, commands that persist a setting still write `.lerd.yaml`, and a save never leaks a locally overridden value into it. Changing a setting the local file owns, say running `lerd runtime frankenphp` while the local file pins `runtime`, does nothing and says so: the local file has to change for that value to change.
+Because the committed file stays the source of truth for everything else, commands that persist a setting still write `.lerd.yaml`, and a save never leaks a locally overridden value into it. Changing a setting the local file owns, say running `lerd runtime frankenphp` while the local file pins `runtime`, is refused before anything is written: the local file has to change for that value to change. That includes the pins that also have a dotfile of their own, so `lerd isolate` and `lerd isolate:node` refuse rather than writing a `.php-version` or `.node-version` the next link would undo.
 
 `lerd site:doctor` names the overridden keys in its `project_config` line, so a domain or a database that is not in `.lerd.yaml` is visible rather than looking like lerd ignoring the committed file. The watcher monitors the local file exactly like `.lerd.yaml`, so editing it re-applies the PHP and Node versions on the spot.

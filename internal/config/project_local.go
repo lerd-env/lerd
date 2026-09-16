@@ -160,3 +160,31 @@ func warnLocalOverride(keys []string) {
 	feedback.Warn("%s sets %s and keeps winning, so the new value was not saved. Change it there instead.",
 		LocalOverrideFile, strings.Join(keys, ", "))
 }
+
+// LocalOverrideOwns reports whether dir's local override file sets key. A
+// command that is about to change that key should ask first and refuse, rather
+// than doing the work and warning afterwards that it did not stick: the local
+// file wins on the next read either way, so a change that "took" only until the
+// next link leaves the project moving between two values on its own.
+func LocalOverrideOwns(dir, key string) (bool, error) {
+	keys, err := LocalOverrideKeys(dir)
+	if err != nil {
+		return false, err
+	}
+	for _, k := range keys {
+		if k == key {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// LocalOverrideRefusal is the answer a command gives when the key it was asked
+// to change belongs to the local override file. It names the file to edit
+// instead, in the same shape as the other refusals that write nothing.
+func LocalOverrideRefusal(key string) error {
+	return fmt.Errorf(
+		"%s sets %s, and it wins over the committed config, so changing it here would not stick — set it in %s instead",
+		LocalOverrideFile, key, LocalOverrideFile,
+	)
+}

@@ -29,6 +29,14 @@ func runIsolateNode(_ *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Same reason as the PHP pin: a key the local override owns cannot be
+	// changed from here without the next link undoing it.
+	if owns, err := config.LocalOverrideOwns(cwd, "node_version"); err != nil {
+		return err
+	} else if owns {
+		return config.LocalOverrideRefusal("node_version")
+	}
+
 	nodeVersionFile := filepath.Join(cwd, ".node-version")
 	if err := os.WriteFile(nodeVersionFile, []byte(version+"\n"), 0644); err != nil {
 		return fmt.Errorf("writing .node-version: %w", err)

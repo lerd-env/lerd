@@ -66,6 +66,15 @@ func runIsolate(_ *cobra.Command, args []string) error {
 		return err
 	}
 
+	// The local override file wins over everything this command writes, so a pin
+	// it owns would be undone by the next link. Refuse before touching
+	// .php-version or the pool, the way a refused range does.
+	if owns, err := config.LocalOverrideOwns(cwd, "php_version"); err != nil {
+		return err
+	} else if owns {
+		return config.LocalOverrideRefusal("php_version")
+	}
+
 	// Worktree path: the override travels with the branch, so the parent site's
 	// own version is left alone.
 	if site, branch, ok := FindParentSiteForWorktree(cwd); ok {
