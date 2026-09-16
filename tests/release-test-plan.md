@@ -597,7 +597,7 @@ Dashboard (drive it in a browser, not with curl):
 
 Themes:
 
-- [ ] Each of the eleven themes applies, and its accent reads correctly as link
+- [ ] Each of the twelve themes applies, and its accent reads correctly as link
       text on both the light and the dark tone
 - [ ] The choice lives in the config, not in browser storage: it survives a hard
       reload, follows you to another browser, and reaches a second open

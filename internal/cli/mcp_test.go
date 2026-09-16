@@ -622,7 +622,15 @@ func TestLerdReference_underSizeCeiling(t *testing.T) {
 	// backups to the surface an assistant has to know about. Around 800 bytes
 	// of existing prose was compressed first, which is what the message below
 	// asks for before the number moves.
-	const ceiling = 35500
+	//
+	// 35500 → 36500 for the refusals this release introduces, which an
+	// assistant meets rather than reads about: every db action refuses on a
+	// sqlite project, which is the state a fresh Laravel clone is in; a version
+	// pin is refused by the floor composer recorded when it installed, not only
+	// by what composer.json declares; and a key .lerd.local.yaml owns cannot be
+	// set from here at all. Each one looks like a broken tool if it arrives
+	// unexplained. The site_doctor entry was compressed first.
+	const ceiling = 36500
 	if got := len(lerdReference); got > ceiling {
 		t.Errorf("lerd-reference.md is %d bytes, ceiling is %d — trim before raising", got, ceiling)
 	}
