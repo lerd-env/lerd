@@ -618,11 +618,11 @@ onBeforeUnmount(() => {
 
       <!-- ============ DEV DIGEST BANNER ============ -->
       <div class="wrap">
-        <a class="digest" :href="withBase('/digest/v1.34.0.html')" target="_blank" rel="noopener">
+        <a class="digest" :href="withBase('/digest/v1.35.0.html')" target="_blank" rel="noopener">
           <span class="digest-pill">NEW</span>
           <span class="digest-body">
-            <span class="digest-title">v1.34.0 dev digest</span>
-            <span class="digest-sub">NativePHP end to end, a worker declared once instead of once per framework major, and three ways into lerd that are not a terminal.</span>
+            <span class="digest-title">v1.35.0 dev digest</span>
+            <span class="digest-sub">PHP on the host instead of across a bind mount, twelve dashboard themes kept in the config, and disk figures that stopped counting a shared layer once per image.</span>
           </span>
           <span class="digest-cta">Read the digest&nbsp;→</span>
         </a>
