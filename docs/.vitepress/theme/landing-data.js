@@ -65,9 +65,8 @@ export function glyph(name, size, opts = {}) {
 
 /* ---- Install commands per OS (canonical lerd.sh) ---- */
 export const INSTALL = {
-  linux: 'curl -fsSL https://lerd.sh/install.sh | bash',
-  macos: 'curl -fsSL https://lerd.sh/install.sh | bash',
-  wsl:   'wsl curl -fsSL https://lerd.sh/install.sh | bash',
+  unix: 'curl -fsSL https://lerd.sh/install.sh | bash',
+  wsl:  'wsl curl -fsSL https://lerd.sh/install.sh | bash',
 }
 
 /* ---- Comparison ---- */

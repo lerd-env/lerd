@@ -127,7 +127,7 @@ onMounted(() => {
 
   /* ---------- Hero: OS tabs + install command ---------- */
   const installCmd = $('#install-cmd')
-  let currentOS = 'linux'
+  let currentOS = 'unix'
   function setOS(os) {
     currentOS = os
     $$('.os-tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.os === os)))
@@ -267,7 +267,7 @@ onMounted(() => {
   cleanups.push(() => document.removeEventListener('keydown', onSearchKey))
 
   /* ---------- Boot ---------- */
-  setOS('linux')
+  setOS('unix')
 })
 
 onBeforeUnmount(() => {
@@ -346,13 +346,10 @@ onBeforeUnmount(() => {
 
             <div class="install reveal d3" id="install">
               <div class="os-tabs" role="tablist" aria-label="Operating system">
-                <button class="os-tab" role="tab" aria-selected="true" data-os="linux">
-                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c-2 0-3 2-3 4 0 1 .2 2 .2 3-1 1.5-3 4-3 7 0 2 1 3 2 3 .5 1 1.5 2 3.8 2s3.3-1 3.8-2c1 0 2-1 2-3 0-3-2-5.5-3-7 0-1 .2-2 .2-3 0-2-1-4-3-4z"/></svg>
-                  Linux
-                </button>
-                <button class="os-tab" role="tab" aria-selected="false" data-os="macos">
-                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 3c-1 .1-2.2.8-2.9 1.6-.6.7-1.2 1.9-1 3 1.1.1 2.3-.6 3-1.4.6-.8 1.1-1.9.9-3.2zM19 17c-.5 1.2-.8 1.7-1.5 2.7-.9 1.4-2.3 3.1-3.9 3.1-1.5 0-1.9-.9-3.9-.9s-2.4.9-3.9.9c-1.6 0-2.9-1.6-3.8-3C-.4 16.6-.7 11 1.8 8.3 3 7 4.6 6.2 6.3 6.2c1.7 0 2.8 1 4.2 1 1.4 0 2.2-1 4.2-1 1.5 0 3.1.8 4.2 2.2-3.7 2-3.1 7.3.9 8.6z"/></svg>
-                  macOS
+                <button class="os-tab" role="tab" aria-selected="true" data-os="unix">
+                  <svg viewBox="0 -0.5 24 24" fill="currentColor"><path d="M12 2c-2 0-3 2-3 4 0 1 .2 2 .2 3-1 1.5-3 4-3 7 0 2 1 3 2 3 .5 1 1.5 2 3.8 2s3.3-1 3.8-2c1 0 2-1 2-3 0-3-2-5.5-3-7 0-1 .2-2 .2-3 0-2-1-4-3-4z"/></svg>
+                  Linux &amp; macOS
+                  <svg viewBox="-3.1 -0.1 26 26" fill="currentColor"><path d="M16 3c-1 .1-2.2.8-2.9 1.6-.6.7-1.2 1.9-1 3 1.1.1 2.3-.6 3-1.4.6-.8 1.1-1.9.9-3.2zM19 17c-.5 1.2-.8 1.7-1.5 2.7-.9 1.4-2.3 3.1-3.9 3.1-1.5 0-1.9-.9-3.9-.9s-2.4.9-3.9.9c-1.6 0-2.9-1.6-3.8-3C-.4 16.6-.7 11 1.8 8.3 3 7 4.6 6.2 6.3 6.2c1.7 0 2.8 1 4.2 1 1.4 0 2.2-1 4.2-1 1.5 0 3.1.8 4.2 2.2-3.7 2-3.1 7.3.9 8.6z"/></svg>
                 </button>
                 <button class="os-tab" role="tab" aria-selected="false" data-os="wsl">
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 11 4v7.5H3V5.5zM12 3.8 21 2.5v9H12V3.8zM3 12.5h8V20l-8-1.5v-6zM12 12.5h9v9l-9-1.3v-7.7z"/></svg>
