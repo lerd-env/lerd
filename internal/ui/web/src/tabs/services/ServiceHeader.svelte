@@ -22,6 +22,7 @@
     updateProgress
   } from '$stores/services';
   import { adminServiceFor } from '$stores/presetSuggestions';
+  import { openAdminForEngine } from '$stores/dashboard';
   import { openDashboard, openServiceDashboard } from '$stores/dashboard';
   import { databases } from '$stores/databases';
   import { accessMode } from '$stores/accessMode';
@@ -60,6 +61,12 @@
 
   async function openAdmin() {
     if (!admin) return;
+    // A tool fronting several engines opens on this one rather than on whichever
+    // it would pick for itself, which for a Postgres page was MySQL.
+    if (svc.is_database) {
+      await openAdminForEngine(svc.name);
+      return;
+    }
     await openServiceDashboard(admin);
   }
 
