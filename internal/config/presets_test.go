@@ -1662,3 +1662,59 @@ func TestRewriteDependencyHosts_StopsAtANameBoundary(t *testing.T) {
 		t.Errorf("URL = %q, want the host rewritten in place", got)
 	}
 }
+
+func TestResolveDynamicEnv_DiscoverFirst(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if err := SaveCustomService(&CustomService{Name: "spamassassin", Image: "x", Family: "spamassassin"}); err != nil {
+		t.Fatalf("SaveCustomService: %v", err)
+	}
+
+	svc := &CustomService{
+		Name: "mailpit", Image: "x",
+		DynamicEnv: map[string]string{
+			"MP_ENABLE_SPAMASSASSIN": "discover_first:spamassassin={host}:783",
+		},
+	}
+	if err := ResolveDynamicEnv(svc); err != nil {
+		t.Fatalf("ResolveDynamicEnv: %v", err)
+	}
+	if got := svc.Environment["MP_ENABLE_SPAMASSASSIN"]; got != "lerd-spamassassin:783" {
+		t.Errorf("MP_ENABLE_SPAMASSASSIN = %q, want lerd-spamassassin:783", got)
+	}
+}
+
+func TestResolveDynamicEnv_DiscoverFirst_NoMemberClearsValue(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	svc := &CustomService{
+		Name: "mailpit", Image: "x",
+		Environment: map[string]string{"MP_ENABLE_SPAMASSASSIN": "stale:783"},
+		DynamicEnv: map[string]string{
+			"MP_ENABLE_SPAMASSASSIN": "discover_first:spamassassin={host}:783",
+		},
+	}
+	if err := ResolveDynamicEnv(svc); err != nil {
+		t.Fatalf("ResolveDynamicEnv: %v", err)
+	}
+	if got, ok := svc.Environment["MP_ENABLE_SPAMASSASSIN"]; ok {
+		t.Errorf("MP_ENABLE_SPAMASSASSIN = %q, want the key dropped when no member is installed", got)
+	}
+}
+
+func TestMailpitPresetScoresThroughSpamassassin(t *testing.T) {
+	p, err := LoadPreset("mailpit")
+	if err != nil {
+		t.Fatalf("LoadPreset: %v", err)
+	}
+	svc, err := p.Resolve("")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got := svc.DynamicEnv["MP_ENABLE_SPAMASSASSIN"]; got != "discover_first:spamassassin={host}:783" {
+		t.Errorf("MP_ENABLE_SPAMASSASSIN directive = %q, want the spamassassin discovery", got)
+	}
+}

@@ -191,6 +191,16 @@ Additional UIs:
 
 Captured emails can pop a notification with the subject and sender; clicking the notification opens the captured message in the Mailpit overlay. This is one of several notification kinds the dashboard supports, see [Notifications](../features/notifications.md) for the full list (worker failures, finished service operations, service updates, dumps) and how to configure them under **System → Notifications**.
 
+### Spam scoring
+
+Mailpit can report an Apache SpamAssassin score for every message it catches, once there is a SpamAssassin to ask. Install the preset and the catcher picks it up:
+
+```bash
+lerd service install spamassassin
+```
+
+The scoring endpoint is wired by discovery, not by configuration: mailpit is regenerated to point at the new service when it starts and back to no scoring at all when it is removed, so there is nothing to undo. The score shows on each message in the Mailpit UI.
+
 ### RustFS, per-site buckets
 
 Mail sent through PHP's own `mail()` reaches Mailpit too, without any project configuration. The FPM image's `sendmail` is BusyBox's, which talks to `127.0.0.1:25` and finds nothing listening inside the container, so lerd writes a `sendmail_path` pointing at the mail catcher it runs and mounts it into every PHP container. That covers the frameworks that send through `mail()` rather than SMTP, Drupal and WordPress among them, which would otherwise report that mail could not be sent with nothing to show for it. A `sendmail_path` you set yourself in the shared or per-version `php.ini` wins, since lerd's file loads before both.

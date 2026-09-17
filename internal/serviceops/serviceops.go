@@ -738,12 +738,25 @@ func EnsureDefaultPresetQuadlet(name string) error {
 // Callers outside the reinstall path should use EnsureDefaultPresetQuadlet
 // (which passes pinnedImage="").
 func EnsureDefaultPresetQuadletPinned(name, pinnedImage string) error {
+	svc, err := resolveDefaultPresetService(name, pinnedImage)
+	if err != nil {
+		return err
+	}
+	return EnsureCustomServiceQuadlet(svc)
+}
+
+// resolveDefaultPresetService builds the CustomService a default preset renders
+// to, with the image pins, platform override and version corrections already
+// applied. Split out of EnsureDefaultPresetQuadletPinned so the dynamic_env
+// consumer scan can resolve a default the same way the install path does,
+// instead of handing the shared preset cache to a resolver that writes to it.
+func resolveDefaultPresetService(name, pinnedImage string) (*config.CustomService, error) {
 	if !config.IsDefaultPreset(name) {
-		return fmt.Errorf("not a default preset: %q", name)
+		return nil, fmt.Errorf("not a default preset: %q", name)
 	}
 	p, err := config.LoadPreset(name)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	canonicalPin := ""
 	pinnedUserImage := ""
@@ -780,7 +793,7 @@ func EnsureDefaultPresetQuadletPinned(name, pinnedImage string) error {
 		svc, err = p.Resolve("")
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if hasUserPin {
 		svc.Image = pinnedUserImage
@@ -857,7 +870,7 @@ func EnsureDefaultPresetQuadletPinned(name, pinnedImage string) error {
 		}
 	}
 	p.ApplyPlatformOverride(svc, runtime.GOOS)
-	return EnsureCustomServiceQuadlet(svc)
+	return svc, nil
 }
 
 // dataDirVersionTag reports the preset version tag that wrote the service's
@@ -1257,10 +1270,7 @@ func RegenerateDynamicEnvConsumersForService(name string) {
 // start with an empty PMA_HOSTS written during pre-start reconcile when no
 // engine was up yet, and RedisInsight can keep a stale RI_REDIS_HOST.
 func RefreshDiscoverFamilyConsumers() {
-	customs, err := config.ListCustomServices()
-	if err != nil {
-		return
-	}
+	customs := dynamicEnvConsumers()
 	seen := map[string]bool{}
 	var families []string
 	for _, c := range customs {
@@ -1291,10 +1301,7 @@ func RefreshDiscoverFamilyConsumers() {
 // dependency host name can satisfy, so RedisInsight picks up lerd-valkey when
 // Valkey starts (or drops it when the last redis-role engine stops).
 func RegenerateDependencyHostConsumers(name string) {
-	customs, err := config.ListCustomServices()
-	if err != nil {
-		return
-	}
+	customs := dynamicEnvConsumers()
 	for _, c := range customs {
 		if !consumesDependencyHostSatisfiedBy(c, name) {
 			continue
@@ -1402,16 +1409,44 @@ func waitUntilInactive(unit string, timeout time.Duration) {
 // bounced only when the rendered unit changed, so a bulk start that already
 // has the right host list does not restart phpMyAdmin on every lerd start.
 func RegenerateFamilyConsumers(family string) {
-	customs, err := config.ListCustomServices()
-	if err != nil {
-		return
-	}
+	customs := dynamicEnvConsumers()
 	for _, c := range customs {
 		if !consumesFamily(c, family) {
 			continue
 		}
 		bounceConsumerIfChanged(c, "updated "+family+" family members")
 	}
+}
+
+// dynamicEnvConsumers returns every service whose quadlet is computed from what
+// other services are running: the installed presets, plus any default-stack
+// preset that declares a family directive of its own (mailpit's spam endpoint).
+// Defaults are resolved through the install path rather than the preset cache,
+// which hands out a shared Environment map that resolution would write into.
+func dynamicEnvConsumers() []*config.CustomService {
+	customs, err := config.ListCustomServices()
+	if err != nil {
+		customs = nil
+	}
+	installed := map[string]bool{}
+	for _, c := range customs {
+		installed[c.Name] = true
+	}
+	for _, name := range config.DefaultPresetNames() {
+		if installed[name] {
+			continue
+		}
+		meta, err := config.DefaultPresetMeta(name)
+		if err != nil || (len(meta.DynamicEnv) == 0 && len(meta.ExpandEnv) == 0) {
+			continue
+		}
+		svc, err := resolveDefaultPresetService(name, "")
+		if err != nil {
+			continue
+		}
+		customs = append(customs, svc)
+	}
+	return customs
 }
 
 func consumesFamily(svc *config.CustomService, family string) bool {
@@ -1450,7 +1485,7 @@ func consumerDiscoverFamilies(svc *config.CustomService) []string {
 		list := parts[1]
 		switch parts[0] {
 		case "discover_family":
-		case "repeat_family":
+		case "repeat_family", "discover_first":
 			// The family list comes ahead of "=<value>".
 			eq := strings.Index(list, "=")
 			if eq < 0 {

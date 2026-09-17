@@ -538,6 +538,23 @@ func ResolveDynamicEnv(svc *CustomService) error {
 		case "discover_family":
 			hosts := uniqueFamilyHosts(parts[1])
 			svc.Environment[k] = strings.Join(hosts, ",")
+		case "discover_first":
+			// discover_first:<families>={host} template → the first running
+			// member expanded into the template, key dropped when there is
+			// none. Unlike discover_family the value is a single endpoint, so
+			// an empty list has to leave no variable behind at all: mailpit
+			// reads MP_ENABLE_SPAMASSASSIN as "off" only when it is unset.
+			eq := strings.Index(parts[1], "=")
+			if eq < 0 {
+				return fmt.Errorf("service %s: discover_first needs <families>=<template>, got %q", svc.Name, parts[1])
+			}
+			hosts := uniqueFamilyHosts(parts[1][:eq])
+			if len(hosts) == 0 {
+				delete(svc.Environment, k)
+				continue
+			}
+			value := strings.ReplaceAll(parts[1][eq+1:], "{host}", hosts[0])
+			svc.Environment[k] = strings.ReplaceAll(value, "{name}", strings.TrimPrefix(hosts[0], "lerd-"))
 		case "repeat_family":
 			// repeat_family:<families>=<value> → N copies of <value>, comma-joined,
 			// where N = number of unique hosts across the listed families. Used to

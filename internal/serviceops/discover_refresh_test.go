@@ -153,3 +153,38 @@ func readQuadlet(t *testing.T, name string) string {
 	}
 	return string(b)
 }
+
+func TestRefreshDiscoverFamilyConsumers_rewritesDefaultPresetConsumer(t *testing.T) {
+	withServiceHome(t)
+	stubDaemonReload(t)
+	prevWait := waitReadyFn
+	waitReadyFn = func(string, time.Duration) error { return nil }
+	t.Cleanup(func() { waitReadyFn = prevWait })
+
+	prevRun := config.ServiceRunning
+	config.ServiceRunning = func(name string) bool { return name == "spamassassin" }
+	t.Cleanup(func() { config.ServiceRunning = prevRun })
+
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "spamassassin", Image: "x", Family: "spamassassin", Preset: "spamassassin",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Pre-start reconcile: nothing running yet, so mailpit is seeded with no
+	// scoring endpoint at all.
+	config.ServiceRunning = func(string) bool { return false }
+	if err := EnsureDefaultPresetQuadlet("mailpit"); err != nil {
+		t.Fatalf("seed mailpit quadlet: %v", err)
+	}
+	if seeded := readQuadlet(t, "lerd-mailpit"); strings.Contains(seeded, "MP_ENABLE_SPAMASSASSIN") {
+		t.Fatalf("seed quadlet should carry no scoring endpoint yet:\n%s", seeded)
+	}
+
+	config.ServiceRunning = func(name string) bool { return name == "spamassassin" }
+	RefreshDiscoverFamilyConsumers()
+
+	got := readQuadlet(t, "lerd-mailpit")
+	if !strings.Contains(got, "MP_ENABLE_SPAMASSASSIN=lerd-spamassassin:783") {
+		t.Fatalf("mailpit is a default preset but still a discover consumer:\n%s", got)
+	}
+}
