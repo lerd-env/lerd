@@ -235,6 +235,7 @@
   "debug_disabled_title": "调试捕获已禁用",
   "debug_enable": "启用捕获",
   "debug_loadMore": "加载更多 · 共 {total} 条，已显示 {shown} 条",
+  "debug_mail_renderedFrom": "渲染自",
   "debug_searchPlaceholder": "搜索…",
   "debug_show_tests": "显示测试运行",
   "debug_tab_cache": "缓存",

@@ -235,6 +235,7 @@
   "debug_disabled_title": "La capture de débogage est désactivée",
   "debug_enable": "Activer la capture",
   "debug_loadMore": "Charger plus · {shown} sur {total}",
+  "debug_mail_renderedFrom": "rendu depuis",
   "debug_searchPlaceholder": "Rechercher…",
   "debug_show_tests": "Afficher les exécutions de tests",
   "debug_tab_cache": "Cache",

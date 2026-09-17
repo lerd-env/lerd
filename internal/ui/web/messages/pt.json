@@ -235,6 +235,7 @@
   "debug_disabled_title": "A captura de depuração está desativada",
   "debug_enable": "Ativar captura",
   "debug_loadMore": "Carregar mais · {shown} de {total}",
+  "debug_mail_renderedFrom": "renderizado de",
   "debug_searchPlaceholder": "Pesquisar…",
   "debug_show_tests": "Mostrar execuções de testes",
   "debug_tab_cache": "Cache",

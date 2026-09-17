@@ -235,6 +235,7 @@
   "debug_disabled_title": "デバッグキャプチャは無効です",
   "debug_enable": "キャプチャを有効化",
   "debug_loadMore": "さらに読み込む · {total} 件中 {shown} 件",
+  "debug_mail_renderedFrom": "レンダリング元",
   "debug_searchPlaceholder": "検索…",
   "debug_show_tests": "テスト実行を表示",
   "debug_tab_cache": "キャッシュ",

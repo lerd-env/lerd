@@ -235,6 +235,7 @@
   "debug_disabled_title": "Debug capture is disabled",
   "debug_enable": "Enable capture",
   "debug_loadMore": "Load more · {shown} of {total}",
+  "debug_mail_renderedFrom": "rendered from",
   "debug_searchPlaceholder": "Search…",
   "debug_show_tests": "Show test runs",
   "debug_tab_cache": "Cache",

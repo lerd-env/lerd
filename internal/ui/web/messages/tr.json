@@ -235,6 +235,7 @@
   "debug_disabled_title": "Debug yakalama devre dışı",
   "debug_enable": "Yakalamayı etkinleştir",
   "debug_loadMore": "Daha fazla yükle · {total} kayıttan {shown} tanesi",
+  "debug_mail_renderedFrom": "şuradan oluşturuldu",
   "debug_searchPlaceholder": "Ara…",
   "debug_show_tests": "Test çalıştırmalarını göster",
   "debug_tab_cache": "Önbellek",

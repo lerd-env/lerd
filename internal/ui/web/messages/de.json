@@ -235,6 +235,7 @@
   "debug_disabled_title": "Die Debug-Erfassung ist deaktiviert",
   "debug_enable": "Erfassung aktivieren",
   "debug_loadMore": "Mehr laden · {shown} von {total}",
+  "debug_mail_renderedFrom": "gerendert aus",
   "debug_searchPlaceholder": "Suchen…",
   "debug_show_tests": "Testläufe anzeigen",
   "debug_tab_cache": "Cache",

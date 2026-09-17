@@ -235,6 +235,7 @@
   "debug_disabled_title": "Przechwytywanie debugowania jest wyłączone",
   "debug_enable": "Włącz przechwytywanie",
   "debug_loadMore": "Załaduj więcej · {shown} z {total}",
+  "debug_mail_renderedFrom": "wyrenderowano z",
   "debug_searchPlaceholder": "Szukaj…",
   "debug_show_tests": "Pokaż uruchomienia testów",
   "debug_tab_cache": "Cache",

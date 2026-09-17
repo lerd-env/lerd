@@ -235,6 +235,7 @@
   "debug_disabled_title": "Debugvastlegging staat uit",
   "debug_enable": "Vastleggen inschakelen",
   "debug_loadMore": "Meer laden · {shown} van {total}",
+  "debug_mail_renderedFrom": "gerenderd uit",
   "debug_searchPlaceholder": "Zoeken…",
   "debug_show_tests": "Testruns tonen",
   "debug_tab_cache": "Cache",
