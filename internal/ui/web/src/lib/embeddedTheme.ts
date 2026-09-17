@@ -48,6 +48,44 @@ function flipMediaRules(doc: Document, dark: boolean): void {
   }
 }
 
+// Bootstrap 5 reads its mode off an attribute rather than a media query, so a
+// page built on it (Mailpit) switches only when that attribute moves. Setting it
+// costs nothing on a page that is not Bootstrap's, which is why no preset has to
+// declare that it is.
+// The surfaces an embedded page is dressed in. The palette carries only the dark
+// ones, light mode in the dashboard being the greys app.css names inline, so
+// those greys are repeated here rather than invented. Concrete values, not var()
+// references, because a page whose design needs them broken into rgb parts
+// (Bootstrap's translucency) cannot do that arithmetic in CSS.
+export interface EmbeddedSurfaces {
+  bg: string;
+  card: string;
+  border: string;
+  accent: string;
+  accentHover: string;
+}
+
+const LIGHT_SURFACES = { bg: '#f9fafb', card: '#ffffff', border: '#e5e7eb' };
+
+export function embeddedSurfaces(
+  dark: boolean,
+  host: HTMLElement | null = typeof document === 'undefined' ? null : document.documentElement
+): EmbeddedSurfaces {
+  const read = (name: string, fallback: string) =>
+    (host?.style.getPropertyValue(name) || '').trim() || fallback;
+  return {
+    bg: dark ? read('--lerd-bg', '#0d0d0d') : LIGHT_SURFACES.bg,
+    card: dark ? read('--lerd-card', '#161616') : LIGHT_SURFACES.card,
+    border: dark ? read('--lerd-border', '#262626') : LIGHT_SURFACES.border,
+    accent: read('--lerd-accent', '#ff2d20'),
+    accentHover: read('--lerd-accent-hover', '#e02419')
+  };
+}
+
+function setBootstrapTheme(root: HTMLElement | null, dark: boolean): void {
+  if (root) root.setAttribute('data-bs-theme', dark ? 'dark' : 'light');
+}
+
 function copyPalette(from: HTMLElement, to: HTMLElement): void {
   const style = from.style;
   for (const name of PALETTE_VARS) {
@@ -81,6 +119,7 @@ export function syncEmbeddedTheme(
       el.media = wantsDark === dark ? 'all' : 'not all';
     }
     flipMediaRules(doc, dark);
+    setBootstrapTheme(doc.documentElement, dark);
   } catch {
     // Cross-origin, or a frame that navigated away mid-call. Nothing to sync.
   }

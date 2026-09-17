@@ -147,3 +147,15 @@ describe('a theme gated inside the stylesheet', () => {
     expect(condition(doc)).toBe('print');
   });
 });
+
+describe('a page that themes itself off an attribute', () => {
+  // Bootstrap 5 reads data-bs-theme rather than the media query, which is how
+  // Mailpit switches.
+  it('moves the attribute with lerd', () => {
+    const d = document.implementation.createHTMLDocument('x');
+    syncEmbeddedTheme(d, true);
+    expect(d.documentElement.getAttribute('data-bs-theme')).toBe('dark');
+    syncEmbeddedTheme(d, false);
+    expect(d.documentElement.getAttribute('data-bs-theme')).toBe('light');
+  });
+});

@@ -83,14 +83,22 @@ func TestBuildServiceResponse_dashboardFollowsPublishedPort(t *testing.T) {
 // TestBuildServiceResponse_secondaryPortDashboardUntouched guards the regression
 // the other way: mailpit's dashboard is its 8025 web UI, published behind the
 // primary 1025 SMTP port. A published-port move shifts only the primary, so the
-// dashboard must keep 8025 rather than being dragged onto the primary's port.
+// upstream must keep 8025 rather than being dragged onto the primary's port. The
+// response itself carries the same-origin mount, so the port lives where the
+// proxy resolves its upstream.
 func TestBuildServiceResponse_secondaryPortDashboardUntouched(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
-	base := buildServiceResponse("mailpit")
-	if !strings.Contains(base.Dashboard, ":8025") {
-		t.Fatalf("mailpit Dashboard = %q, want the 8025 web UI port", base.Dashboard)
+	if got := buildServiceResponse("mailpit").Dashboard; got != dashProxyPath("mailpit") {
+		t.Fatalf("mailpit Dashboard = %q, want the same-origin mount", got)
+	}
+
+	upstream := func() string {
+		return resolveDashboardURL(config.DefaultPresetService("mailpit"), loadServicesMap())
+	}
+	if !strings.Contains(upstream(), ":8025") {
+		t.Fatalf("mailpit upstream = %q, want the 8025 web UI port", upstream())
 	}
 
 	cfg, err := config.LoadGlobal()
@@ -104,20 +112,17 @@ func TestBuildServiceResponse_secondaryPortDashboardUntouched(t *testing.T) {
 	if err := config.SaveGlobal(cfg); err != nil {
 		t.Fatalf("SaveGlobal: %v", err)
 	}
-
-	moved := buildServiceResponse("mailpit")
-	if !strings.Contains(moved.Dashboard, ":8025") || strings.Contains(moved.Dashboard, ":1026") {
-		t.Errorf("mailpit Dashboard after primary move = %q, want the untouched 8025 web UI", moved.Dashboard)
+	if moved := upstream(); !strings.Contains(moved, ":8025") || strings.Contains(moved, ":1026") {
+		t.Errorf("mailpit upstream after primary move = %q, want the untouched 8025 web UI", moved)
 	}
 
-	// Now move the 8025 UI mapping itself: the dashboard must follow to 8026.
+	// Now move the 8025 UI mapping itself: the upstream must follow to 8026.
 	cfg.Services["mailpit"] = config.ServiceConfig{Enabled: true, Port: 1025, PublishedPorts: map[int]int{8025: 8026}}
 	if err := config.SaveGlobal(cfg); err != nil {
 		t.Fatalf("SaveGlobal: %v", err)
 	}
-	uiMoved := buildServiceResponse("mailpit")
-	if !strings.Contains(uiMoved.Dashboard, ":8026") || strings.Contains(uiMoved.Dashboard, ":8025") {
-		t.Errorf("mailpit Dashboard after UI-port move = %q, want 8026", uiMoved.Dashboard)
+	if uiMoved := upstream(); !strings.Contains(uiMoved, ":8026") || strings.Contains(uiMoved, ":8025") {
+		t.Errorf("mailpit upstream after UI-port move = %q, want 8026", uiMoved)
 	}
 }
 

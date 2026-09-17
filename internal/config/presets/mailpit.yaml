@@ -9,6 +9,12 @@ ports:
   - "8025:8025"
 data_dir: /data
 dashboard: http://localhost:8025
+# Embedded same-origin so the dashboard can theme it; Mailpit has no setting for
+# a mount path, and giving it one through MP_WEBROOT would leave localhost:8025
+# answering nothing, which is the URL every framework's mail docs hand people.
+dashboard_proxy_strip: true
+dashboard_proxy_rebase:
+  - data-webroot
 environment:
   MP_DATA_FILE: /data/mailpit.db
   MP_WEBHOOK_URL: http://host.containers.internal:7073/api/webhooks/mailpit

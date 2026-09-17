@@ -20,6 +20,7 @@
   } from '$lib/spxControls';
   import { m } from '../paraglide/messages.js';
   import { syncEmbeddedTheme } from '$lib/embeddedTheme';
+  import { rememberMailpitTheme, themeMailpitDocument } from '$lib/mailpitTheme';
 
   let busy = $state(false);
   let clearing = $state(false);
@@ -100,11 +101,21 @@
     // SPX gates its light mode inside its stylesheet and paints from variables of
     // its own, so the switch alone leaves it wearing upstream's colours.
     if (isProfiler && w) themeSpxDocument(w.document, dark);
+    if ($dashboardOpen?.name === 'mailpit') {
+      rememberMailpitTheme(dark);
+      // Mailpit is Bootstrap's own greys until its variables are told otherwise.
+      if (w?.document) themeMailpitDocument(w.document, dark);
+    }
   }
 
   // The theme switcher toggles that class on the host page, so watching it keeps
   // an open dashboard in step without the overlay knowing how themes are stored.
   $effect(() => {
+    // Mailpit reads its preference as it boots, which is after the frame's load
+    // event, so it is written on open rather than once the frame is there.
+    if ($dashboardOpen?.name === 'mailpit') {
+      rememberMailpitTheme(document.documentElement.classList.contains('dark'));
+    }
     const obs = new MutationObserver(() => applyTheme());
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     return () => obs.disconnect();

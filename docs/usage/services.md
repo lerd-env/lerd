@@ -97,6 +97,8 @@ lerd service port mailpit --reset --container 8025
 
 The dashboard link for a service always follows the port its dashboard is served on, so moving Mailpit's UI port re-points the dashboard and the "open dashboard" iframe automatically.
 
+Mailpit's view is served through the dashboard's own origin rather than framed from its port, which is what lets it wear lerd's theme: it follows the light and dark you picked, on the surfaces of the palette you picked, and its header takes the raised surface instead of Bootstrap's brand blue. Its own address keeps working exactly as before, so `http://localhost:8025` and anything pointing at it are untouched.
+
 The chosen ports are persisted in `~/.config/lerd/config.yaml` and reapplied on every start: the primary under `services.<name>.published_port`, any other mapping under `services.<name>.published_ports` keyed by container port. Once a port is set, automatically or with `lerd service port`, it sticks: lerd never moves it again on its own, not even back to the default when that frees up later. Change it only with `lerd service port`.
 
 Removing a service leaves its recorded ports in `config.yaml`, so reinstalling it later lands back on the same ports rather than picking new ones. While it is gone those ports are free again: another service can be moved onto one, and the automatic shift can hand one out. If that happens, the reinstall passes through the ownership guard like a fresh install and takes a free port instead of publishing on top of whoever holds it now.

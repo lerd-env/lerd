@@ -64,6 +64,36 @@ func DashboardProxyStrips(svc *CustomService) bool {
 	return err == nil && p.DashboardProxyStrip
 }
 
+// DashboardProxyRebases returns the HTML attributes whose root-absolute values
+// the proxy rewrites onto the mount for this service. Read from the preset, like
+// the flags above.
+func DashboardProxyRebases(svc *CustomService) []string {
+	if svc == nil || svc.Dashboard == "" || svc.Preset == "" {
+		return nil
+	}
+	p, err := LoadPreset(svc.Preset)
+	if err != nil {
+		return nil
+	}
+	return p.DashboardProxyRebase
+}
+
+// DefaultPresetService describes a default-stack service the way the proxy and
+// the dashboard link expect a bundled preset: as the CustomService a preset
+// install would have written. A default service has no such file, since lerd
+// ships it rather than the user adding it, which is the only reason the proxy
+// could not reach one. Returns nil for anything that is not a default preset.
+func DefaultPresetService(name string) *CustomService {
+	if !IsDefaultPreset(name) {
+		return nil
+	}
+	dash := DefaultPresetDashboard(name)
+	if dash == "" {
+		return nil
+	}
+	return &CustomService{Name: name, Preset: name, Dashboard: dash, Ports: PresetPorts(name)}
+}
+
 // PresetProxyEnv returns the container env that makes a bundled upstream serve
 // its UI under the same /_svc/<name> path the lerd-ui proxy mounts it at, so
 // the dashboard embeds same-origin. It is injected at quadlet generation (not
