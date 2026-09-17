@@ -27,6 +27,7 @@
     repaintMeilisearch,
     watchMeilisearchRules
   } from '$lib/meilisearchTheme';
+  import { rememberRustfsTheme, themeRustfsDocument } from '$lib/rustfsTheme';
 
   let busy = $state(false);
   let clearing = $state(false);
@@ -112,6 +113,10 @@
       // Mailpit is Bootstrap's own greys until its variables are told otherwise.
       if (w?.document) themeMailpitDocument(w.document, dark);
     }
+    if ($dashboardOpen?.name === 'rustfs' && w?.document) {
+      rememberRustfsTheme(dark);
+      themeRustfsDocument(w.document, dark);
+    }
     if ($dashboardOpen?.name === 'meilisearch' && w?.document) {
       themeMeilisearchDocument(w.document, dark);
       // The rules already there are swept; the ones its components add as they
@@ -126,11 +131,12 @@
   // keeps step with a theme change as well as a light/dark one, without the
   // overlay knowing how either is stored.
   $effect(() => {
-    // Mailpit reads its preference as it boots, which is after the frame's load
-    // event, so it is written on open rather than once the frame is there.
-    if ($dashboardOpen?.name === 'mailpit') {
-      rememberMailpitTheme(document.documentElement.classList.contains('dark'));
-    }
+    // Both of these read their own preference as they boot, which is after the
+    // frame's load event, so the mode is written on open rather than once the
+    // frame is there.
+    const dark = document.documentElement.classList.contains('dark');
+    if ($dashboardOpen?.name === 'mailpit') rememberMailpitTheme(dark);
+    if ($dashboardOpen?.name === 'rustfs') rememberRustfsTheme(dark);
     const obs = new MutationObserver(() => applyTheme());
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });
     return () => obs.disconnect();
