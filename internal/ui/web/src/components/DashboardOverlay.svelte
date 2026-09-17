@@ -15,6 +15,7 @@
     isSpxReportView,
     setSpxConfigHidden,
     padSpxControlPanel,
+    themeSpxDocument,
     fetchSpxReportCount
   } from '$lib/spxControls';
   import { m } from '../paraglide/messages.js';
@@ -93,7 +94,12 @@
   // The embedded page follows lerd rather than the browser, re-applied on every
   // navigation inside the frame because each one loads a fresh document.
   function applyTheme() {
-    syncEmbeddedTheme(iframeWindow()?.document ?? null, document.documentElement.classList.contains('dark'));
+    const w = iframeWindow();
+    const dark = document.documentElement.classList.contains('dark');
+    syncEmbeddedTheme(w?.document ?? null, dark);
+    // SPX gates its light mode inside its stylesheet and paints from variables of
+    // its own, so the switch alone leaves it wearing upstream's colours.
+    if (isProfiler && w) themeSpxDocument(w.document, dark);
   }
 
   // The theme switcher toggles that class on the host page, so watching it keeps

@@ -38,6 +38,8 @@ Only a GET route lerd has seen a real example URL for can be profiled this way, 
 
 The Profiler view embeds the SPX report UI, served by a dedicated `profiler.localhost` nginx vhost so it does not depend on any one site. Its landing page is SPX's control panel, the list of captured reports. SPX's Configuration form above the list is collapsed by default so the list takes the whole view; the **Show configuration** button in the header brings it back. Each report lists wall time, CPU time, memory, and the call tree. SPX's time-line view is an interactive flame graph: wide frames are where the time went. Click a frame to zoom, and use the flat-profile table to find the most expensive functions.
 
+The embedded UI follows the dashboard rather than the browser: it switches with lerd's light and dark mode, and its surfaces, borders and highlights come from the theme you picked. The flame graph keeps SPX's own colours, which it draws into a canvas, and its colour-scheme panel still lets you change them.
+
 All reports land in one shared directory, `~/.local/share/lerd/spx/`, regardless of which site or PHP version produced them. Each report is labelled with its request host and URI so they stay distinguishable.
 
 ## Profiling CLI commands

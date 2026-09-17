@@ -2,8 +2,8 @@
 // overlay reach into it. Most of them ship their themes behind prefers-color-scheme
 // media queries, so an embedded tool follows the browser rather than the theme the
 // user picked in lerd, and a dark dashboard can end up framing a white page.
-// Flipping those links settles it: the page keeps its own design, only the switch
-// moves.
+// Flipping those queries settles it, on the link or inside the sheet: the page
+// keeps its own design, only the switch moves.
 const DARK = 'prefers-color-scheme: dark';
 const LIGHT = 'prefers-color-scheme: light';
 
@@ -18,6 +18,35 @@ const PALETTE_VARS = [
   '--lerd-border',
   '--lerd-muted'
 ];
+
+// A theme can also be gated inside the stylesheet rather than on the link to it,
+// which is how php-spx ships its light mode. Same-origin sheets are mutable, so
+// there the condition itself is what moves. The original is kept per rule, since
+// rewriting it is what makes the rule unrecognisable on the next pass.
+const gates = new WeakMap<CSSRule, string>();
+
+function flipMediaRules(doc: Document, dark: boolean): void {
+  for (const sheet of Array.from(doc.styleSheets)) {
+    let rules: CSSRuleList | null = null;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue; // A cross-origin sheet the page pulled in. Not ours to read.
+    }
+    for (const rule of Array.from(rules ?? [])) {
+      // instanceof would test the wrong realm's CSSMediaRule, so ask the rule
+      // whether it carries a media condition at all.
+      const media = (rule as CSSMediaRule).media;
+      if (!media || typeof media.mediaText !== 'string') continue;
+      const gate = (gates.get(rule) ?? media.mediaText).replace(/\s+/g, ' ');
+      const wantsDark = gate.includes(DARK);
+      const wantsLight = gate.includes(LIGHT);
+      if (!wantsDark && !wantsLight) continue;
+      gates.set(rule, gate);
+      media.mediaText = wantsDark === dark ? 'all' : 'not all';
+    }
+  }
+}
 
 function copyPalette(from: HTMLElement, to: HTMLElement): void {
   const style = from.style;
@@ -51,6 +80,7 @@ export function syncEmbeddedTheme(
       el.dataset.lerdMedia = gate;
       el.media = wantsDark === dark ? 'all' : 'not all';
     }
+    flipMediaRules(doc, dark);
   } catch {
     // Cross-origin, or a frame that navigated away mid-call. Nothing to sync.
   }

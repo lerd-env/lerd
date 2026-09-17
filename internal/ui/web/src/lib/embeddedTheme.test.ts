@@ -99,3 +99,51 @@ describe('palette', () => {
     expect(d.documentElement.style.getPropertyValue('--lerd-accent')).toBe('');
   });
 });
+
+describe('a theme gated inside the stylesheet', () => {
+  // php-spx ships one sheet whose light mode is a media block in the file, so
+  // there is no link to flip. The frame is real because a detached document
+  // parses no stylesheets.
+  function framed(css: string): Document {
+    const frame = document.createElement('iframe');
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument!;
+    const style = doc.createElement('style');
+    style.textContent = css;
+    doc.head.appendChild(style);
+    return doc;
+  }
+
+  const SPX = ':root{--text-color:#089}@media (prefers-color-scheme: light){:root{--text-color:black}}';
+
+  function condition(doc: Document): string {
+    return (doc.styleSheets[0].cssRules[1] as CSSMediaRule).media.mediaText;
+  }
+
+  it('turns the light block on when lerd is light', () => {
+    const doc = framed(SPX);
+    syncEmbeddedTheme(doc, false);
+    expect(condition(doc)).toBe('all');
+  });
+
+  it('turns it off when lerd is dark', () => {
+    const doc = framed(SPX);
+    syncEmbeddedTheme(doc, true);
+    expect(condition(doc)).toBe('not all');
+  });
+
+  it('keeps flipping after the query has been rewritten', () => {
+    const doc = framed(SPX);
+    syncEmbeddedTheme(doc, true);
+    syncEmbeddedTheme(doc, false);
+    expect(condition(doc)).toBe('all');
+    syncEmbeddedTheme(doc, true);
+    expect(condition(doc)).toBe('not all');
+  });
+
+  it('leaves a block gated on something else alone', () => {
+    const doc = framed(':root{--a:1}@media print{:root{--a:2}}');
+    syncEmbeddedTheme(doc, true);
+    expect(condition(doc)).toBe('print');
+  });
+});
