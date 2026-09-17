@@ -860,6 +860,7 @@ func ListInstallablePresets() ([]config.PresetMeta, error) {
 				Icon:           e.Icon,
 				Color:          config.NormalizeBrandColor(e.Color),
 				AdminFor:       e.AdminFor,
+				AdminRank:      e.AdminRank,
 			})
 		}
 	}

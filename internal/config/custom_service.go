@@ -224,6 +224,11 @@ type CustomService struct {
 	// mariadb too, and RedisInsight administers valkey while depending on redis
 	// (satisfied by valkey via env_role).
 	AdminFor []string `yaml:"admin_for,omitempty" json:"admin_for,omitempty"`
+	// AdminRank breaks a tie between tools that administer the same service.
+	// Higher wins; undeclared is 0, which leaves every existing preset where it
+	// was. Without it the winner is whichever the UI happens to iterate first,
+	// so a tool covering many engines would displace a specialist by name alone.
+	AdminRank int `yaml:"admin_rank,omitempty" json:"admin_rank,omitempty"`
 	// Files is deprecated as a YAML user field but kept with its yaml tag so
 	// LoadCustomServiceFromFile can detect legacy on-disk entries and migrate
 	// them away. The authoritative source of file mounts is presetFiles in

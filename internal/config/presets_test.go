@@ -2,6 +2,8 @@ package config
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -1716,5 +1718,34 @@ func TestMailpitPresetScoresThroughSpamassassin(t *testing.T) {
 	}
 	if got := svc.DynamicEnv["MP_ENABLE_SPAMASSASSIN"]; got != "discover_first:spamassassin={host}:783" {
 		t.Errorf("MP_ENABLE_SPAMASSASSIN directive = %q, want the spamassassin discovery", got)
+	}
+}
+
+// TestPresetMeta_CarriesAdminRank checks the tie-break a preset declares reaches
+// the UI, which is what stops the alphabet deciding between two admin tools.
+func TestPresetMeta_CarriesAdminRank(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dir)
+	presets := filepath.Join(dir, "lerd", "service-presets")
+	if err := os.MkdirAll(presets, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	yaml := "name: adminer\nimage: x\nadmin_for:\n  - mysql\nadmin_rank: 10\n"
+	if err := os.WriteFile(filepath.Join(presets, "adminer.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p, err := LoadPreset("adminer")
+	if err != nil {
+		t.Fatalf("LoadPreset: %v", err)
+	}
+	if p.AdminRank != 10 {
+		t.Errorf("preset AdminRank = %d, want 10", p.AdminRank)
+	}
+	svc, err := p.Resolve("")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if svc.AdminRank != 10 {
+		t.Errorf("resolved service AdminRank = %d, want 10", svc.AdminRank)
 	}
 }

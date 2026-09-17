@@ -131,3 +131,40 @@ describe('suggestionFor', () => {
     expect(get(suggestionFor(svc({ name: 'postgres-17', preset: 'postgres' })))).toBeNull();
   });
 });
+
+describe('admin preference', () => {
+  it('picks the admin with the highest rank, not the first in the list', async () => {
+    const { adminServiceFor } = await import('./presetSuggestions');
+    const engine = { name: 'mysql', preset: 'mysql' } as never;
+    const list = [
+      { name: 'adminer', preset: 'adminer', admin_for: ['mysql'], admin_rank: 10 },
+      { name: 'phpmyadmin', preset: 'phpmyadmin', admin_for: ['mysql'] }
+    ] as never[];
+    expect(adminServiceFor(engine, list)?.name).toBe('adminer');
+    // Order in the list must not decide it.
+    expect(adminServiceFor(engine, [...list].reverse())?.name).toBe('adminer');
+  });
+
+  it('keeps list order when no one declares a rank', async () => {
+    const { adminServiceFor } = await import('./presetSuggestions');
+    const engine = { name: 'mysql', preset: 'mysql' } as never;
+    const list = [
+      { name: 'phpmyadmin', preset: 'phpmyadmin', admin_for: ['mysql'] },
+      { name: 'zzadmin', preset: 'zzadmin', admin_for: ['mysql'] }
+    ] as never[];
+    expect(adminServiceFor(engine, list)?.name).toBe('phpmyadmin');
+  });
+
+  it('suggests the highest ranked admin that is not installed', async () => {
+    const { presets } = await import('./presets');
+    const { suggestedPresetFor, dismissedSuggestions } = await import('./presetSuggestions');
+    dismissedSuggestions.set([]);
+    presets.set([
+      { name: 'pgadmin', admin_for: ['postgres'], installed: false },
+      { name: 'adminer', admin_for: ['postgres'], installed: false, admin_rank: 10 }
+    ] as never[]);
+    expect(suggestedPresetFor({ name: 'postgres', preset: 'postgres' } as never)?.name).toBe(
+      'adminer'
+    );
+  });
+});
