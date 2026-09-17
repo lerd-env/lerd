@@ -1552,5 +1552,6 @@
   "system_php_updateTitleFor": "更新 PHP {version}",
   "system_php_updating": "正在更新…",
   "system_php_updateFailed": "更新失败",
-  "system_php_removeConfirmBodyNative": "这将停止此版本的 PHP-FPM 进程池并删除其原生二进制文件。运行 'lerd use {version}' 可重新获取。"
+  "system_php_removeConfirmBodyNative": "这将停止此版本的 PHP-FPM 进程池并删除其原生二进制文件。运行 'lerd use {version}' 可重新获取。",
+  "entities_open_in_dashboard": "在仪表板中打开"
 }

@@ -1552,5 +1552,6 @@
   "system_php_updateTitleFor": "PHP {version} güncelle",
   "system_php_updating": "Güncelleniyor…",
   "system_php_updateFailed": "Güncelleme başarısız",
-  "system_php_removeConfirmBodyNative": "Bu, bu sürümün PHP-FPM havuzunu durdurur ve yerel ikili dosyalarını siler. Yeniden indirmek için 'lerd use {version}' komutunu çalıştırın."
+  "system_php_removeConfirmBodyNative": "Bu, bu sürümün PHP-FPM havuzunu durdurur ve yerel ikili dosyalarını siler. Yeniden indirmek için 'lerd use {version}' komutunu çalıştırın.",
+  "entities_open_in_dashboard": "Panoda aç"
 }

@@ -183,16 +183,24 @@ func DashboardLoginScript(svc *CustomService) string {
 	return "<script>(function(){var F=" + string(fields) +
 		",P=" + strconv.Quote(login.Path) +
 		",S=" + strconv.Quote(login.Submit) +
-		",D=" + strconv.Quote(login.Done) + ",sent=false;" +
-		"function go(){if(sent)return true;" +
+		",D=" + strconv.Quote(login.Done) + ",K='lerd-dashboard-return',sent=false;" +
+		// A deep link is lost when the app sends an unauthenticated visitor to its
+		// login page, so where it was headed is kept until it is logged in.
+		"function stash(){try{if(D&&!localStorage.getItem(D)&&location.pathname.indexOf(P)!==0)" +
+		"{sessionStorage.setItem(K,location.href);}}catch(e){}}" +
+		"function back(){try{var u=sessionStorage.getItem(K);" +
+		"if(u&&(!D||localStorage.getItem(D))){sessionStorage.removeItem(K);" +
+		"if(u!==location.href){location.replace(u);}return true;}}catch(e){}return false;}" +
+		"function go(){if(back())return true;if(sent)return false;" +
 		"try{if(D&&localStorage.getItem(D))return true;}catch(e){}" +
 		"if(P&&location.pathname.indexOf(P)!==0)return false;" +
 		"var b=document.querySelector(S);if(!b)return false;" +
 		"var set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;" +
 		"for(var i=0;i<F.length;i++){var el=document.querySelector(F[i][0]);if(!el)return false;" +
 		"set.call(el,F[i][1]);el.dispatchEvent(new Event('input',{bubbles:true}));}" +
-		"sent=true;b.click();return true;}" +
-		"var n=0,t=setInterval(function(){if(go()||++n>100)clearInterval(t);},100);" +
+		"sent=true;b.click();return false;}" +
+		"stash();" +
+		"var n=0,t=setInterval(function(){if(go()||++n>150)clearInterval(t);},100);" +
 		"document.addEventListener('DOMContentLoaded',go);})();</script>"
 }
 

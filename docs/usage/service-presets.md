@@ -514,6 +514,8 @@ what links each row to its site in the UI; only sites whose .env references
 this service count, so a project pointed at real AWS never claims a local
 bucket of the same name.
 
+An entity can say where it lives inside the service's own dashboard with `dashboard_link`, written relative to that dashboard and with `{{name}}` standing for the entity: RustFS's buckets use `browser/?bucket={{name}}`. Each card then carries a button that opens the entity itself rather than the dashboard's front page, and the entity rides in the route, so a reload or a shared link opens it again. Left out, the card offers no such button, which is right for a dashboard with no address per entity.
+
 An entity can also name a `driver:` instead of commands, and lerd speaks the
 protocol itself: the list and the actions are served by the client compiled into
 the binary, with the entity's `env:` carrying `S3_PORT`, `S3_ACCESS_KEY` and

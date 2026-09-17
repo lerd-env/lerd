@@ -33,6 +33,10 @@ export interface EntityRow {
 export interface EntityKind {
   kind: string;
   label?: string;
+  // Where one entity lives inside the service's own dashboard, relative to it,
+  // with {{name}} standing for the entity. Absent when that dashboard has no
+  // address per entity.
+  dashboard_link?: string;
   columns: EntityColumn[];
   actions: EntityAction[];
   rows: EntityRow[];

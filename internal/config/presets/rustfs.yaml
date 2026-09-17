@@ -54,6 +54,9 @@ introspect:
         - S3_ACCESS_KEY=lerd
         - S3_SECRET_KEY=lerdpassword
       owner_env: AWS_BUCKET
+      # The console's own address for one bucket, so a card opens the bucket
+      # rather than the bucket list.
+      dashboard_link: browser/?bucket={{name}}
       columns:
         - key: objects
           label: Objects

@@ -166,4 +166,66 @@ describe('dashboard store', () => {
     initDashboardRoute();
     expect(get(dashboardOpen)?.extraPath).toBe('?lerd_server=lerd-postgres&db=dating');
   });
+
+  it('opens one entity at the address its preset declares', async () => {
+    const { services } = await import('./services');
+    const { entities } = await import('./entities');
+    const { openEntityInDashboard, dashboardOpen } = await import('./dashboard');
+
+    const rustfs = {
+      name: 'rustfs',
+      status: 'active' as const,
+      site_count: 0,
+      dashboard: '/rustfs/console/'
+    };
+    services.set([rustfs]);
+    entities.set({
+      rustfs: [
+        {
+          kind: 'buckets',
+          columns: [],
+          actions: [],
+          rows: [],
+          dashboard_link: 'browser/?bucket={{name}}'
+        }
+      ]
+    });
+
+    await openEntityInDashboard(rustfs, 'buckets', 'my bucket');
+    expect(get(dashboardOpen)?.extraPath).toBe('browser/?bucket=my%20bucket');
+    expect(location.hash).toBe('#service/rustfs/entity/buckets/my%20bucket');
+  });
+
+  it('rehydrates an entity deep-link from the hash', async () => {
+    const { services } = await import('./services');
+    const { entities } = await import('./entities');
+    const { initDashboardRoute, dashboardOpen } = await import('./dashboard');
+
+    services.set([{ name: 'rustfs', status: 'active', site_count: 0, dashboard: '/rustfs/console/' }]);
+    entities.set({
+      rustfs: [
+        { kind: 'buckets', columns: [], actions: [], rows: [], dashboard_link: 'browser/?bucket={{name}}' }
+      ]
+    });
+    location.hash = 'service/rustfs/entity/buckets/astrolov';
+    initDashboardRoute();
+
+    expect(get(dashboardOpen)?.extraPath).toBe('browser/?bucket=astrolov');
+  });
+
+  // A service whose dashboard has no address per entity offers no such link, and
+  // the card shows no button.
+  it('opens nothing when the entity has no declared address', async () => {
+    const { services } = await import('./services');
+    const { entities } = await import('./entities');
+    const { openEntityInDashboard, dashboardOpen } = await import('./dashboard');
+
+    const svc = { name: 'redis', status: 'active' as const, site_count: 0, dashboard: '/_svc/redis/' };
+    services.set([svc]);
+    entities.set({ redis: [{ kind: 'keys', columns: [], actions: [], rows: [] }] });
+    dashboardOpen.set(null);
+
+    await openEntityInDashboard(svc, 'keys', 'session');
+    expect(get(dashboardOpen)).toBeNull();
+  });
 });

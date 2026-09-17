@@ -1552,5 +1552,6 @@
   "system_php_updateTitleFor": "Perbarui PHP {version}",
   "system_php_updating": "Memperbarui…",
   "system_php_updateFailed": "Pembaruan gagal",
-  "system_php_removeConfirmBodyNative": "Ini menghentikan pool PHP-FPM untuk versi ini dan menghapus biner nativenya. Jalankan 'lerd use {version}' untuk mengunduhnya lagi."
+  "system_php_removeConfirmBodyNative": "Ini menghentikan pool PHP-FPM untuk versi ini dan menghapus biner nativenya. Jalankan 'lerd use {version}' untuk mengunduhnya lagi.",
+  "entities_open_in_dashboard": "Buka di dasbor"
 }

@@ -19,12 +19,15 @@ import (
 // generically from the preset declaration: the UI knows only names, columns and
 // actions, never the engine.
 type entityKindResponse struct {
-	Kind    string                 `json:"kind"`
-	Label   string                 `json:"label,omitempty"`
-	Columns []entityColumnResponse `json:"columns"`
-	Actions []entityActionResponse `json:"actions"`
-	Rows    []entityRowResponse    `json:"rows"`
-	Error   string                 `json:"error,omitempty"`
+	Kind  string `json:"kind"`
+	Label string `json:"label,omitempty"`
+	// DashboardLink is where one entity lives inside the service's dashboard,
+	// relative to it, with {{name}} standing for the entity.
+	DashboardLink string                 `json:"dashboard_link,omitempty"`
+	Columns       []entityColumnResponse `json:"columns"`
+	Actions       []entityActionResponse `json:"actions"`
+	Rows          []entityRowResponse    `json:"rows"`
+	Error         string                 `json:"error,omitempty"`
 }
 
 type entityColumnResponse struct {
@@ -174,11 +177,12 @@ func entityOverview(service string, specs []config.EntitySpec) []entityKindRespo
 	for i := range specs {
 		spec := &specs[i]
 		kind := entityKindResponse{
-			Kind:    spec.Kind,
-			Label:   spec.Label,
-			Columns: []entityColumnResponse{},
-			Actions: []entityActionResponse{},
-			Rows:    []entityRowResponse{},
+			Kind:          spec.Kind,
+			Label:         spec.Label,
+			DashboardLink: spec.DashboardLink,
+			Columns:       []entityColumnResponse{},
+			Actions:       []entityActionResponse{},
+			Rows:          []entityRowResponse{},
 		}
 		for _, c := range spec.Columns {
 			kind.Columns = append(kind.Columns, entityColumnResponse{Key: c.Key, Label: c.Label, Format: c.Format})

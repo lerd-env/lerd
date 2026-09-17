@@ -1552,5 +1552,6 @@
   "system_php_updateTitleFor": "Cập nhật PHP {version}",
   "system_php_updating": "Đang cập nhật…",
   "system_php_updateFailed": "Cập nhật thất bại",
-  "system_php_removeConfirmBodyNative": "Thao tác này dừng pool PHP-FPM của phiên bản này và xóa các tệp nhị phân gốc. Chạy 'lerd use {version}' để tải lại."
+  "system_php_removeConfirmBodyNative": "Thao tác này dừng pool PHP-FPM của phiên bản này và xóa các tệp nhị phân gốc. Chạy 'lerd use {version}' để tải lại.",
+  "entities_open_in_dashboard": "Mở trong bảng điều khiển"
 }
