@@ -84,12 +84,18 @@ type Preset struct {
 	// are rebased anyway; this is for a page that hands its own router a base
 	// path in an attribute of its own (Mailpit's data-webroot), which nothing
 	// else would recognise as a link.
-	DashboardProxyRebase []string              `yaml:"dashboard_proxy_rebase,omitempty" json:"dashboard_proxy_rebase,omitempty"`
-	Versions             []PresetVersion       `yaml:"versions,omitempty"`
-	DefaultVersion       string                `yaml:"default_version,omitempty"`
-	Default              bool                  `yaml:"default,omitempty"`
-	UpdateStrategy       string                `yaml:"update_strategy,omitempty"`
-	PlatformOverrides    []PresetPlatformImage `yaml:"platform_overrides,omitempty"`
+	DashboardProxyRebase []string `yaml:"dashboard_proxy_rebase,omitempty" json:"dashboard_proxy_rebase,omitempty"`
+	// DashboardProxyReroute funnels the page's own requests back into the mount,
+	// for an app that builds its API URLs from the origin it is served at
+	// (Meilisearch's mini-dashboard reads window.location.origin, which under the
+	// mount is lerd's root rather than the upstream's). Rebasing cannot reach a
+	// URL a script computes at call time, so fetch and XHR are wrapped instead.
+	DashboardProxyReroute bool                  `yaml:"dashboard_proxy_reroute,omitempty" json:"dashboard_proxy_reroute,omitempty"`
+	Versions              []PresetVersion       `yaml:"versions,omitempty"`
+	DefaultVersion        string                `yaml:"default_version,omitempty"`
+	Default               bool                  `yaml:"default,omitempty"`
+	UpdateStrategy        string                `yaml:"update_strategy,omitempty"`
+	PlatformOverrides     []PresetPlatformImage `yaml:"platform_overrides,omitempty"`
 	// AllowMajorUpgrade lets the cross-strategy "Upgrade" button cross numeric
 	// major boundaries. Default false: major upgrades typically require manual
 	// data migration and should be installed as a separate alternate instead.

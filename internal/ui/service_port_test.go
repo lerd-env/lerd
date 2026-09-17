@@ -48,18 +48,24 @@ func TestBuildServiceResponse_publishedPortAndURL(t *testing.T) {
 	}
 }
 
-// TestBuildServiceResponse_dashboardFollowsPublishedPort proves the dashboard URL
-// tracks a moved published port. The left-rail launcher and the iframe overlay
-// both open ServiceResponse.Dashboard verbatim, so a `lerd service port` move must
-// re-point it the same way ConnectionURL is, or the dashboard opens the old port.
+// TestBuildServiceResponse_dashboardFollowsPublishedPort proves the dashboard
+// tracks a moved published port. A service opened at its own origin carries the
+// port in the URL the launcher and the overlay open verbatim; one embedded
+// same-origin carries the mount instead, and the port is then what the proxy
+// dials, so both are checked where they live.
 func TestBuildServiceResponse_dashboardFollowsPublishedPort(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
+	upstream := func() string {
+		return resolveDashboardURL(config.DefaultPresetService("meilisearch"), loadServicesMap())
+	}
 	// No override → the preset default dashboard port (meilisearch 7700).
-	base := buildServiceResponse("meilisearch")
-	if !strings.Contains(base.Dashboard, ":7700") {
-		t.Fatalf("meilisearch Dashboard with no override = %q, want host port 7700", base.Dashboard)
+	if got := buildServiceResponse("meilisearch").Dashboard; got != dashProxyPath("meilisearch") {
+		t.Fatalf("meilisearch Dashboard = %q, want the same-origin mount", got)
+	}
+	if !strings.Contains(upstream(), ":7700") {
+		t.Fatalf("meilisearch upstream with no override = %q, want host port 7700", upstream())
 	}
 
 	cfg, err := config.LoadGlobal()
@@ -74,9 +80,8 @@ func TestBuildServiceResponse_dashboardFollowsPublishedPort(t *testing.T) {
 		t.Fatalf("SaveGlobal: %v", err)
 	}
 
-	moved := buildServiceResponse("meilisearch")
-	if !strings.Contains(moved.Dashboard, ":7701") || strings.Contains(moved.Dashboard, ":7700") {
-		t.Errorf("meilisearch Dashboard after move = %q, want host port 7701 not 7700", moved.Dashboard)
+	if moved := upstream(); !strings.Contains(moved, ":7701") || strings.Contains(moved, ":7700") {
+		t.Errorf("meilisearch upstream after move = %q, want host port 7701 not 7700", moved)
 	}
 }
 

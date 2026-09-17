@@ -410,3 +410,25 @@ func TestDefaultServiceIsProxyEligible(t *testing.T) {
 		t.Error("a service with no dashboard should not be proxied")
 	}
 }
+
+// An app that builds its API URLs from the origin it is served at reaches lerd's
+// own root under the mount, which rebasing cannot fix: the URL does not exist
+// until a script computes it.
+func TestDashboardRerouteScript(t *testing.T) {
+	svc := config.DefaultPresetService("meilisearch")
+	if svc == nil {
+		t.Fatal("no synthesised service for meilisearch")
+	}
+	tw := dashProxyTweaksFor(svc)
+	if !tw.stripPrefix {
+		t.Error("meilisearch should be served by stripping the mount prefix")
+	}
+	if !strings.Contains(tw.bootstrap, "/_svc/meilisearch") {
+		t.Errorf("reroute script missing the mount: %q", tw.bootstrap)
+	}
+	for _, want := range []string{"window.fetch", "XMLHttpRequest.prototype.open"} {
+		if !strings.Contains(tw.bootstrap, want) {
+			t.Errorf("reroute script does not wrap %s", want)
+		}
+	}
+}

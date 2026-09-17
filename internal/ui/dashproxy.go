@@ -74,6 +74,11 @@ func dashProxyTweaksFor(svc *config.CustomService) dashProxyTweaks {
 		stripPrefix: config.DashboardProxyStrips(svc),
 		rebaseAttrs: config.DashboardProxyRebases(svc),
 	}
+	// The reroute goes in first: it has to be in place before the app's own
+	// scripts build their first URL.
+	if config.DashboardProxyReroutes(svc) {
+		tw.bootstrap = config.DashboardRerouteScript(svc.Name) + tw.bootstrap
+	}
 	if k, v, ok := config.PresetProxyHeader(svc); ok {
 		tw.headerKey, tw.headerValue = k, v
 	}
