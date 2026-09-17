@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1699,6 +1700,7 @@ func EnsureLerdVhost() error {
     location ^~ /_svc/ {
         proxy_pass http://host.containers.internal:7073;
     }
+%[2]s
 
     location ^~ /docs/ {
         proxy_pass http://host.containers.internal:7073;
@@ -1720,7 +1722,7 @@ func EnsureLerdVhost() error {
         return 444;
     }
 }
-`, token)
+`, token, dashboardMountLocations("        proxy_pass http://host.containers.internal:7073;"))
 	} else {
 		content = fmt.Sprintf(`server {
     listen 80;
@@ -1752,6 +1754,7 @@ func EnsureLerdVhost() error {
     location ^~ /_svc/ {
         proxy_pass http://unix:%[1]s:$request_uri;
     }
+%[2]s
 
     location ^~ /docs/ {
         proxy_pass http://unix:%[1]s:$request_uri;
@@ -1773,10 +1776,31 @@ func EnsureLerdVhost() error {
         return 444;
     }
 }
-`, config.UISocketPath())
+`, config.UISocketPath(), dashboardMountLocations("        proxy_pass http://unix:"+config.UISocketPath()+":$request_uri;"))
 	}
 	config.GuardRealWrite(filepath.Join(config.NginxConfD(), "lerd.localhost.conf"))
 	return os.WriteFile(filepath.Join(config.NginxConfD(), "lerd.localhost.conf"), []byte(content), 0644)
+}
+
+// dashboardMountLocations renders one location per dashboard served at a path
+// of its own. The lerd vhost answers only the paths it names and closes the rest,
+// so a console mounted where its own build expects has to be named here too; the
+// paths come from the presets, which is the same place lerd-ui reads them.
+func dashboardMountLocations(pass string) string {
+	mounts := config.DashboardMounts()
+	if len(mounts) == 0 {
+		return ""
+	}
+	paths := make([]string, 0, len(mounts))
+	for _, path := range mounts {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	var b strings.Builder
+	for _, path := range paths {
+		fmt.Fprintf(&b, "\n    location ^~ %s {\n%s\n    }\n", path, pass)
+	}
+	return b.String()
 }
 
 // EnsureNginxConfig copies the base nginx.conf to the data dir if it is missing.

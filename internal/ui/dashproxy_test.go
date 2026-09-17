@@ -432,3 +432,48 @@ func TestDashboardRerouteScript(t *testing.T) {
 		}
 	}
 }
+
+// A dashboard served where its own build expects is matched by path rather than
+// registered on the mux, so a service installed while lerd-ui runs is served
+// without a restart.
+func TestDashMountFor(t *testing.T) {
+	svc, mount := dashMountFor("/rustfs/console/browser/")
+	if svc == nil || svc.Name != "rustfs" {
+		t.Fatalf("dashMountFor = %v, want rustfs", svc)
+	}
+	if mount != "/rustfs/console/" {
+		t.Errorf("mount = %q, want /rustfs/console/", mount)
+	}
+	if got, _ := dashMountFor("/api/services"); got != nil {
+		t.Errorf("lerd's own path claimed by %s", got.Name)
+	}
+	if got, _ := dashMountFor("/rustfs/console"); got == nil {
+		t.Error("the mount root without its slash should still be served")
+	}
+}
+
+// The mount answers at the upstream's own path, so cookies and redirects are
+// scoped there and the browser's Host is forwarded for the signature to hold.
+func TestDashMountTweaks(t *testing.T) {
+	svc := config.DefaultPresetService("rustfs")
+	tw := dashProxyTweaksFor(svc)
+	if !tw.keepHost {
+		t.Error("rustfs signs its requests; the Host must be forwarded as it arrived")
+	}
+	if !strings.Contains(tw.bootstrap, "#accessKey") {
+		t.Error("the login form is not filled in")
+	}
+	if !strings.Contains(tw.bootstrap, "/rustfs/console/") {
+		t.Error("the reroute does not leave the console's own path alone")
+	}
+}
+
+func TestWithDashboardMountsPassesOtherPaths(t *testing.T) {
+	served := false
+	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { served = true })
+	rec := httptest.NewRecorder()
+	withDashboardMounts(next).ServeHTTP(rec, httptest.NewRequest("GET", "/api/services", nil))
+	if !served {
+		t.Error("a path no dashboard claims should reach the rest of lerd-ui")
+	}
+}

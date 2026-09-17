@@ -386,7 +386,7 @@ func Start(currentVersion string) error {
 	})
 	mux.Handle("/", serveSvelte())
 
-	handler := withRemoteControlGate(mux)
+	handler := withDashboardMounts(withRemoteControlGate(mux))
 
 	// Unix socket listener for the lerd.localhost nginx vhost. Linux only:
 	// on macOS, lerd-nginx runs inside the podman-machine VM and unix
@@ -1529,8 +1529,8 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		connURL = config.DefaultPresetConnectionURL(name)
 		// A default service's dashboard is proxied on the same terms as a
 		// bundled preset's, so the overlay can reach into it.
-		if dashProxyEligible(config.DefaultPresetService(name)) {
-			dashboardRaw = dashProxyPath(name)
+		if svc := config.DefaultPresetService(name); dashProxyEligible(svc) {
+			dashboardRaw = config.DashboardMountPath(svc)
 		}
 	case custom != nil:
 		envKVs = custom.EnvVars
@@ -1543,7 +1543,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		// trouble) are proxied same-origin under /_svc/<name>/ so they embed in
 		// the iframe overlay; user custom services keep the new tab.
 		if dashProxyEligible(custom) {
-			dashboardRaw, dashExternal = dashProxyPath(name), false
+			dashboardRaw, dashExternal = config.DashboardMountPath(custom), false
 		}
 	}
 

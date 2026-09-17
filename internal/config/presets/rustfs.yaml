@@ -12,6 +12,23 @@ exec: --console-enable /data
 userns: keep-id:uid=10001,gid=10001
 chown_data: true
 dashboard: http://localhost:9001/rustfs/console/
+# The console is a Next build rooted at /rustfs/console, so lerd serves it there
+# rather than under /_svc/, and the /_svc/rustfs/ mount carries what it asks of
+# the S3 root. Its requests are signed, and a signature covers the Host header,
+# so the browser's own Host is forwarded rather than the upstream's.
+dashboard_proxy_at_path: true
+dashboard_proxy_strip: true
+dashboard_proxy_reroute: true
+dashboard_proxy_keep_host: true
+# Lerd provisioned these keys, so the console opens on the bucket browser rather
+# than on a form asking for them back.
+dashboard_login:
+  path: /rustfs/console/auth/login/
+  fields:
+    "#accessKey": RUSTFS_ACCESS_KEY
+    "#secretKey": RUSTFS_SECRET_KEY
+  submit: form button[type="submit"]
+  done: auth.credentials
 environment:
   RUSTFS_ACCESS_KEY: lerd
   RUSTFS_SECRET_KEY: lerdpassword

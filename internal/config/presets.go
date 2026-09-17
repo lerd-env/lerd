@@ -59,6 +59,17 @@ type PresetPlatformImage struct {
 // DefaultVersion for families that ship multiple selectable image tags. After
 // the user picks a tag, Resolve() materialises a concrete CustomService whose
 // Name and Image are version-specific while every other field stays shared.
+// DashboardLogin is a preset's description of its own login form: where it
+// lives, which field takes which provisioned credential, what submits it, and
+// what the app stores once it is in, which is also how lerd knows not to fill
+// the form again.
+type DashboardLogin struct {
+	Path   string            `yaml:"path" json:"path"`
+	Fields map[string]string `yaml:"fields" json:"fields"`
+	Submit string            `yaml:"submit" json:"submit"`
+	Done   string            `yaml:"done" json:"done"`
+}
+
 type Preset struct {
 	CustomService `yaml:",inline"`
 	// DashboardProxy asks lerd-ui to serve this dashboard same-origin under
@@ -90,12 +101,27 @@ type Preset struct {
 	// (Meilisearch's mini-dashboard reads window.location.origin, which under the
 	// mount is lerd's root rather than the upstream's). Rebasing cannot reach a
 	// URL a script computes at call time, so fetch and XHR are wrapped instead.
-	DashboardProxyReroute bool                  `yaml:"dashboard_proxy_reroute,omitempty" json:"dashboard_proxy_reroute,omitempty"`
-	Versions              []PresetVersion       `yaml:"versions,omitempty"`
-	DefaultVersion        string                `yaml:"default_version,omitempty"`
-	Default               bool                  `yaml:"default,omitempty"`
-	UpdateStrategy        string                `yaml:"update_strategy,omitempty"`
-	PlatformOverrides     []PresetPlatformImage `yaml:"platform_overrides,omitempty"`
+	DashboardProxyReroute bool `yaml:"dashboard_proxy_reroute,omitempty" json:"dashboard_proxy_reroute,omitempty"`
+	// DashboardProxyAtPath serves the dashboard at the path its own build was
+	// compiled for rather than at /_svc/<name>/, for an app whose base path is
+	// baked in (RustFS's console is a Next build rooted at /rustfs/console).
+	// The /_svc/<name>/ mount still stands, carrying what the page asks of the
+	// upstream's root.
+	DashboardProxyAtPath bool `yaml:"dashboard_proxy_at_path,omitempty" json:"dashboard_proxy_at_path,omitempty"`
+	// DashboardProxyKeepHost forwards the Host the browser sent instead of the
+	// upstream's own. An API whose requests are signed needs it: the signature
+	// covers the Host header, so rewriting it invalidates every call the page
+	// makes.
+	DashboardProxyKeepHost bool `yaml:"dashboard_proxy_keep_host,omitempty" json:"dashboard_proxy_keep_host,omitempty"`
+	// DashboardLogin describes a login form lerd fills in with the credentials
+	// it provisioned the service with, so the dashboard opens where the user
+	// wanted to be rather than on a form asking for what lerd already knows.
+	DashboardLogin    *DashboardLogin       `yaml:"dashboard_login,omitempty" json:"dashboard_login,omitempty"`
+	Versions          []PresetVersion       `yaml:"versions,omitempty"`
+	DefaultVersion    string                `yaml:"default_version,omitempty"`
+	Default           bool                  `yaml:"default,omitempty"`
+	UpdateStrategy    string                `yaml:"update_strategy,omitempty"`
+	PlatformOverrides []PresetPlatformImage `yaml:"platform_overrides,omitempty"`
 	// AllowMajorUpgrade lets the cross-strategy "Upgrade" button cross numeric
 	// major boundaries. Default false: major upgrades typically require manual
 	// data migration and should be installed as a separate alternate instead.
