@@ -56,11 +56,19 @@ type dashProxyTweaks struct {
 	headerKey   string
 	headerValue string
 	bootstrap   string
+	// stripPrefix removes /_svc/<name> from the request before forwarding, for
+	// an upstream that has no setting for its mount path. The target URL's own
+	// path carries what is left, so a UI whose assets are path-relative (Solr,
+	// the Mercure hub UI) resolves them under the mount without being told.
+	stripPrefix bool
 }
 
 // dashProxyTweaksFor collects what the proxy must add for a service's preset.
 func dashProxyTweaksFor(svc *config.CustomService) dashProxyTweaks {
-	tw := dashProxyTweaks{bootstrap: config.PresetDashboardBootstrap(svc)}
+	tw := dashProxyTweaks{
+		bootstrap:   config.PresetDashboardBootstrap(svc),
+		stripPrefix: config.DashboardProxyStrips(svc),
+	}
 	if k, v, ok := config.PresetProxyHeader(svc); ok {
 		tw.headerKey, tw.headerValue = k, v
 	}
@@ -96,6 +104,16 @@ func newDashProxy(name string, target *url.URL, tw dashProxyTweaks) *httputil.Re
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	orig := proxy.Director
 	proxy.Director = func(req *http.Request) {
+		// Before the single-host director joins the target's base path: the
+		// upstream never sees the mount, so what it gets is target.Path + the
+		// remainder, which is the path it actually serves.
+		if tw.stripPrefix {
+			rest := strings.TrimPrefix(req.URL.Path, prefix)
+			if rest == "" {
+				rest = "/"
+			}
+			req.URL.Path = rest
+		}
 		orig(req)
 		req.Host = target.Host
 		// Set, not add: the mount path is ours to state, and a client-supplied
@@ -136,7 +154,11 @@ func newDashProxy(name string, target *url.URL, tw dashProxyTweaks) *httputil.Re
 		}
 		rewriteSetCookiePaths(resp.Header, prefix+"/")
 		if loc := resp.Header.Get("Location"); loc != "" {
-			resp.Header.Set("Location", rewriteLocation(loc, target.Host, prefix))
+			base := ""
+			if tw.stripPrefix {
+				base = target.Path
+			}
+			resp.Header.Set("Location", rewriteLocationFrom(loc, target.Host, prefix, base))
 		}
 		if tw.bootstrap != "" {
 			return injectDashboardBootstrap(resp, tw.bootstrap)
@@ -213,6 +235,13 @@ func rewriteCookiePath(cookie, mountPath string) string {
 // the /_svc/<name> mount instead of escaping to the lerd-ui root or the
 // upstream's own host.
 func rewriteLocation(loc, targetHost, prefix string) string {
+	return rewriteLocationFrom(loc, targetHost, prefix, "")
+}
+
+// rewriteLocationFrom is rewriteLocation for a stripping mount, where the
+// upstream names its own base path (/solr/...) in the redirect and the browser
+// would follow it out of the mount. basePath is empty for a forwarding mount.
+func rewriteLocationFrom(loc, targetHost, prefix, basePath string) string {
 	if u, err := url.Parse(loc); err == nil && u.Host != "" {
 		if u.Host != targetHost {
 			// Off-origin redirect (a foreign absolute URL, or a scheme-relative
@@ -237,6 +266,13 @@ func rewriteLocation(loc, targetHost, prefix string) string {
 	}
 	if loc == prefix || strings.HasPrefix(loc, prefix+"/") {
 		return loc
+	}
+	if basePath != "" && basePath != "/" {
+		trimmed := strings.TrimSuffix(basePath, "/")
+		if loc == trimmed {
+			return prefix + "/"
+		}
+		loc = strings.TrimPrefix(loc, trimmed)
 	}
 	return prefix + loc
 }

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -271,5 +273,67 @@ func TestHandleDashProxy_UnknownService404(t *testing.T) {
 	handleDashProxy(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404 for an unknown/ineligible service", rec.Code)
+	}
+}
+
+// TestDashProxyDirector_StripsPrefixForUpstreamsThatCannotBeTold covers the
+// upstream that has no setting for its mount path (Solr, the Mercure hub UI).
+// The prefix is removed instead of forwarded, and the target's own base path
+// carries what is left, so a relative-asset UI resolves under the mount.
+func TestDashProxyDirector_StripsPrefixForUpstreamsThatCannotBeTold(t *testing.T) {
+	target, _ := url.Parse("http://localhost:8983/solr/")
+	p := newDashProxy("solr", target, dashProxyTweaks{stripPrefix: true})
+	for _, tc := range []struct{ in, want string }{
+		{"/_svc/solr/", "/solr/"},
+		{"/_svc/solr/css/angular/common.css", "/solr/css/angular/common.css"},
+		{"/_svc/solr/admin/cores", "/solr/admin/cores"},
+		{"/_svc/solr", "/solr/"},
+	} {
+		req := httptest.NewRequest("GET", "http://lerd.localhost"+tc.in, nil)
+		p.Director(req)
+		if req.URL.Path != tc.want {
+			t.Errorf("%s -> %q, want %q", tc.in, req.URL.Path, tc.want)
+		}
+	}
+}
+
+func TestDashProxyDirector_KeepsQueryWhenStripping(t *testing.T) {
+	target, _ := url.Parse("http://localhost:8983/solr/")
+	p := newDashProxy("solr", target, dashProxyTweaks{stripPrefix: true})
+	req := httptest.NewRequest("GET", "http://lerd.localhost/_svc/solr/admin/cores?action=STATUS", nil)
+	p.Director(req)
+	if req.URL.RawQuery != "action=STATUS" {
+		t.Errorf("RawQuery = %q, want action=STATUS", req.URL.RawQuery)
+	}
+}
+
+// A redirect from a stripping upstream names its own base path, which the
+// browser would resolve outside the mount.
+func TestRewriteLocation_StripsUpstreamBasePath(t *testing.T) {
+	got := rewriteLocationFrom("/solr/admin/", "localhost:8983", "/_svc/solr", "/solr/")
+	if got != "/_svc/solr/admin/" {
+		t.Errorf("Location = %q, want /_svc/solr/admin/", got)
+	}
+}
+
+// A preset that only asks for the stripping mode must still be proxied, or the
+// dashboard opens at a path its upstream does not serve.
+func TestDashProxyEligible_StripOnlyPreset(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dir)
+	presets := filepath.Join(dir, "lerd", "service-presets")
+	if err := os.MkdirAll(presets, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	yaml := "name: solr\nimage: x\ndashboard: http://localhost:8983/solr/\ndashboard_proxy_strip: true\n"
+	if err := os.WriteFile(filepath.Join(presets, "solr.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := &config.CustomService{Name: "solr", Dashboard: "http://localhost:8983/solr/", Preset: "solr"}
+	if !dashProxyEligible(svc) {
+		t.Error("dashboard_proxy_strip must be enough to route through the proxy")
+	}
+	if !config.DashboardProxyStrips(svc) {
+		t.Error("the stripping mode must be read back from the preset")
 	}
 }
