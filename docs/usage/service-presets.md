@@ -213,6 +213,10 @@ a versioned member like `mariadb-11-8` still resolves to `mariadb`. A service th
 list names gets its admin UI suggested on its service page, and its dashboard
 button opens that UI once it is installed.
 
+The suggestion appears only while nothing administers the service yet. Once any
+tool that names it is installed, the banner goes quiet rather than offering the
+alternatives, which would otherwise be permanent on every database service page.
+
 When more than one installed tool administers the same service, `admin_rank`
 decides: higher wins, and a preset that declares none counts as zero. It settles
 both which tool the service card opens and which one the suggestion banner

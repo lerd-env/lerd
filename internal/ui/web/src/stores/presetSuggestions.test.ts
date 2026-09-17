@@ -168,3 +168,35 @@ describe('admin preference', () => {
     );
   });
 });
+
+describe('suggestion when an admin is already installed', () => {
+  it('stays quiet once an installed service administers the engine', async () => {
+    const { presets } = await import('./presets');
+    const { services } = await import('./services');
+    const { suggestedPresetFor, dismissedSuggestions } = await import('./presetSuggestions');
+    dismissedSuggestions.set([]);
+
+    presets.set([
+      { name: 'adminer', admin_for: ['mysql'], installed: false },
+      { name: 'phpmyadmin', admin_for: ['mysql'], installed: true }
+    ] as never[]);
+    services.set([
+      { name: 'mysql', preset: 'mysql' },
+      { name: 'phpmyadmin', preset: 'phpmyadmin', admin_for: ['mysql'] }
+    ] as never[]);
+
+    expect(suggestedPresetFor({ name: 'mysql', preset: 'mysql' } as never)).toBeNull();
+  });
+
+  it('still suggests one when nothing administers the engine yet', async () => {
+    const { presets } = await import('./presets');
+    const { services } = await import('./services');
+    const { suggestedPresetFor, dismissedSuggestions } = await import('./presetSuggestions');
+    dismissedSuggestions.set([]);
+
+    presets.set([{ name: 'adminer', admin_for: ['mysql'], installed: false }] as never[]);
+    services.set([{ name: 'mysql', preset: 'mysql' }] as never[]);
+
+    expect(suggestedPresetFor({ name: 'mysql', preset: 'mysql' } as never)?.name).toBe('adminer');
+  });
+});

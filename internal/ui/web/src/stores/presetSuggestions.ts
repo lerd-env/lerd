@@ -1,6 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import { presets, type Preset } from './presets';
-import type { Service } from './services';
+import { services, type Service } from './services';
 
 const STORAGE_KEY = 'lerd-dismissed-preset-suggestions';
 
@@ -64,8 +64,17 @@ export function adminServiceFor(svc: Service, services: Service[]): Service | nu
   return bestAdmin(services, key);
 }
 
-function pickSuggestion(presetList: Preset[], dismissed: string[], key: string | null): Preset | null {
+function pickSuggestion(
+  presetList: Preset[],
+  dismissed: string[],
+  key: string | null,
+  installedServices: Service[] = []
+): Preset | null {
   if (!key) return null;
+  // Nothing to suggest once something already administers this engine. Without
+  // this the moment two tools name the same service, installing one leaves the
+  // other suggested for good, on every database service page.
+  if (installedServices.some((s) => administers(s, key))) return null;
   const p = bestAdmin(
     presetList.filter((x) => !x.installed && !(x.missing_deps || []).length),
     key
@@ -78,11 +87,13 @@ function pickSuggestion(presetList: Preset[], dismissed: string[], key: string |
 }
 
 export function suggestedPresetFor(svc: Service): Preset | null {
-  return pickSuggestion(get(presets), get(dismissedSuggestions), adminKeyFor(svc));
+  return pickSuggestion(get(presets), get(dismissedSuggestions), adminKeyFor(svc), get(services));
 }
 
 // Reactive helper so UIs can bind to it
 export const suggestionFor = (svc: Service | null | undefined) =>
-  derived([presets, dismissedSuggestions], ([$presets, $dismissed]): Preset | null =>
-    pickSuggestion($presets, $dismissed, adminKeyFor(svc))
+  derived(
+    [presets, dismissedSuggestions, services],
+    ([$presets, $dismissed, $services]): Preset | null =>
+      pickSuggestion($presets, $dismissed, adminKeyFor(svc), $services)
   );
