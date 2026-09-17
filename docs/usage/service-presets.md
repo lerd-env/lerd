@@ -199,6 +199,7 @@ icon: search          # key in the UI icon set
 color: "#00758f"      # brand colour the dashboard tints the mark with
 admin_for:            # the services this preset's UI administers
   - opensearch
+admin_rank: 10        # tie-break when several tools administer the same service
 ```
 
 `admin_for` is not `depends_on`. `depends_on` orders container startup (and is
@@ -211,6 +212,18 @@ lerd matches `admin_for` against the **preset a service was installed from**, so
 a versioned member like `mariadb-11-8` still resolves to `mariadb`. A service the
 list names gets its admin UI suggested on its service page, and its dashboard
 button opens that UI once it is installed.
+
+When more than one installed tool administers the same service, `admin_rank`
+decides: higher wins, and a preset that declares none counts as zero. It settles
+both which tool the service card opens and which one the suggestion banner
+offers. Without it the winner is whichever the dashboard iterates first, which is
+alphabetical order, so a tool covering many engines would displace a specialist
+installed on purpose by name alone.
+
+A tool that administers several engines at once is opened scoped to the engine it
+was opened from, rather than at its own root where it would pick one for itself.
+Only the container name travels in the URL: which driver and credentials go with
+it is the tool's business, so the dashboard carries no table of that.
 
 An unrecognised `category` falls back to `other` and an unrecognised `icon` to a
 generic glyph, so a preset written for a newer lerd degrades rather than breaks.
