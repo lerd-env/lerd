@@ -488,8 +488,9 @@
   <a href="#themes"><i>02</i> Themes</a>
   <a href="#store"><i>03</i> Store</a>
   <a href="#disk"><i>04</i> Disk</a>
-  <a href="#updates"><i>05</i> Updates</a>
-  <a href="#fixes"><i>06</i> Fixes</a>
+  <a href="#snapshots"><i>05</i> Snapshots</a>
+  <a href="#updates"><i>06</i> Updates</a>
+  <a href="#fixes"><i>07</i> Fixes</a>
 </nav>
 
 <section class="hero"><div class="wrap">
@@ -666,10 +667,44 @@
   </div>
 </div></section>
 
-<!-- ============ 05 UPDATES ============ -->
-<section id="updates" class="chapter fx"><div class="wrap">
+<!-- ============ 05 SNAPSHOTS ============ -->
+<section id="snapshots" class="chapter fx"><div class="wrap">
   <div class="ch-head">
     <span class="ch-num">05</span>
+    <h2>Snapshots</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div>
+  </div>
+  <p class="ch-intro">A local database is the one database nobody backs up, and <b>a <code>migrate:fresh</code> pointed at the wrong one takes an afternoon with it</b>. Snapshots have been there for a while; taking them was something you had to remember at the moment you least would.</p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>IT SHIPS ON, AND DUMPS NOTHING</span><span>a schedule that ships off is a schedule nobody finds</span></div>
+    <div class="flow">
+      <div class="fnode ok"><div class="t">schedule</div><div class="v">on</div><div class="d">enabled on a fresh install</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode warn"><div class="t">selection</div><div class="v">opt-in</div><div class="d">no database covered yet</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode ok"><div class="t">per database</div><div class="v">one click</div><div class="d">the clock beside its size</div></div>
+    </div>
+    <div class="flow-note"><b>Opt-out is the same policy read the other way</b> — every site's database is taken and you exclude the noisy one. The schedule's own switch still gates everything, so turning it off stops a site that opted in too.</div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Taken by the watcher, on nobody's behalf <a class="pr" href="https://github.com/lerd-env/lerd/pull/1671">#1671</a></h4><p>The watcher checks every hour whether the schedule is due, which is the only resident process already awake for it. A database whose engine is stopped is <b>skipped rather than started behind your back</b>, and picked up at the next check once it is running again. Two sites pointing at one database are snapshotted once.</p><span class="file">lerd db:snapshot:auto</span></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Retention never touches what you took yourself <a class="pr" href="https://github.com/lerd-env/lerd/pull/1671">#1671</a></h4><p><code>--keep &lt;n&gt;</code> holds the last n automatic snapshots per database and <code>--keep-for</code> drops anything older than a duration, whichever fires first. An automatic snapshot is an ordinary snapshot, same directory and same <code>meta.json</code>, only marked as automatic, and <b>that mark is the whole difference between what retention may delete and what it may not</b>. A <code>pre-migration</code> you made by hand is safe whatever the schedule does.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>The one that has to outlive the window <a class="pr" href="https://github.com/lerd-env/lerd/pull/1671">#1671</a></h4><p><code>db:snapshot:keep</code> pins an automatic snapshot for good and <code>--off</code> puts it back. <b>A kept snapshot takes no slot in the rolling window</b>, so rescuing the one from before the migration does not quietly shrink the set of recent ones you still have.</p><span class="file">lerd db:snapshot:keep</span></div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>The history as one table, not a card at a time <a class="pr" href="https://github.com/lerd-env/lerd/pull/1671">#1671</a></h4><p>Every engine carries a Snapshots tab: its whole history newest first, with the site and database each one came from, when it was taken, its size, and <b>what retention is going to do with it</b>, spelled out rather than implied. Filters by site and by age, twenty rows a page, and restore and delete name what they are about to overwrite before they do it.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>Covered or not, from the grid <a class="pr" href="https://github.com/lerd-env/lerd/pull/1671">#1671</a></h4><p>The clock beside a database's size is lit while the schedule covers it and dimmed while it does not, and clicking it includes or excludes it in one go. A database no linked site points at carries neither, <b>because the schedule resolves its targets through sites</b> and there is nothing to attribute that one to.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>A run that took nothing says nothing <a class="pr" href="https://github.com/lerd-env/lerd/pull/1671">#1671</a></h4><p>A finished run raises one notification naming how many databases it took across how many sites, in a category of its own so it can be muted without muting anything else. <b>Nothing is announced when a run starts</b>, and a run that took nothing stays quiet. One policy throughout: System → Snapshots, the TUI settings pane, and the MCP <code>db</code> tool read and write the same thing.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ 06 UPDATES ============ -->
+<section id="updates" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">06</span>
     <h2>Updates</h2>
     <div class="ch-pills"><span class="pill fix">FIX</span><span class="pill feat">FEAT</span></div>
   </div>
@@ -699,10 +734,10 @@
   </div>
 </div></section>
 
-<!-- ============ 06 FIXES ============ -->
+<!-- ============ 07 FIXES ============ -->
 <section id="fixes" class="chapter fx"><div class="wrap">
   <div class="ch-head">
-    <span class="ch-num">06</span>
+    <span class="ch-num">07</span>
     <h2>Fixes</h2>
     <div class="ch-pills"><span class="pill fix">FIX</span></div>
   </div>
