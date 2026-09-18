@@ -16,6 +16,14 @@ ContainerName=lerd-php{{.VersionShort}}-fpm
 {{.HostNameLine}}
 Network=lerd
 Volume=%h/.local/share/lerd/hosts:/etc/hosts:ro,z
+# unixODBC's driver registry, generated from the drivers registered with
+# `lerd php:odbc`, plus the directory each driver outside $HOME lives in. Left
+# out until a driver is registered, so a site whose own image writes
+# /etc/odbcinst.ini is not shadowed by an empty registry. Above the home and
+# extra-volume mounts on purpose: a driver directory that happens to contain a
+# parked project has to be mounted before that project, or the later mount is
+# the one that disappears.
+{{.OdbcInstMountLine}}
 Volume=%h:%h:rw
 # Shared ssh-agent socket (lerd auth ssh) so composer's git-over-SSH can reach
 # the user's passphrase-protected keys. Named volume, auto-created by podman;
@@ -28,10 +36,6 @@ Volume=lerd-ssh-agent:/ssh-agent
 Volume={{.XdebugIniPath}}:/usr/local/etc/php/conf.d/99-xdebug.ini:ro
 Volume={{.UserIniPath}}:/usr/local/etc/php/conf.d/98-lerd-user.ini:ro
 Volume={{.SharedIniPath}}:/usr/local/etc/php/conf.d/95-lerd-shared.ini:ro
-# unixODBC's driver registry, generated from the drivers registered with
-# `lerd php:odbc`. Left out until one is, so a site whose own image writes
-# /etc/odbcinst.ini is not shadowed by an empty registry.
-{{.OdbcInstMountLine}}
 Volume={{.DumpsDir}}:/usr/local/etc/lerd:ro
 Volume={{.DumpsIniPath}}:/usr/local/etc/php/conf.d/97-lerd-dump.ini:ro
 Volume={{.DevtoolsIniPath}}:/usr/local/etc/php/conf.d/96-lerd-devtools.ini:ro

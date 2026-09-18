@@ -59,9 +59,6 @@ func ExtraVolumePaths() []string {
 		candidates = append(candidates, cfg.ParkedDirectories...)
 		candidates = append(candidates, cfg.Mounts...)
 	}
-	// A registered ODBC driver outside home would otherwise be named in
-	// odbcinst.ini at a path the container cannot see.
-	candidates = append(candidates, ODBCDriverDirs()...)
 	if reg, err := config.LoadSites(); err == nil {
 		for _, site := range reg.Sites {
 			candidates = append(candidates, site.Path)
@@ -1055,7 +1052,7 @@ func renderFPMQuadletContent(version string) (string, error) {
 	content = strings.ReplaceAll(content, "{{.XdebugIniPath}}", config.PHPConfFile(version))
 	content = strings.ReplaceAll(content, "{{.UserIniPath}}", config.PHPUserIniFile(version))
 	content = strings.ReplaceAll(content, "{{.SharedIniPath}}", config.SharedIniFile())
-	content = strings.ReplaceAll(content, "{{.OdbcInstMountLine}}", odbcInstMountLine())
+	content = strings.ReplaceAll(content, "{{.OdbcInstMountLine}}", odbcFPMMountLines())
 	content = strings.ReplaceAll(content, "{{.DumpsDir}}", config.DumpsAssetsDir())
 	content = strings.ReplaceAll(content, "{{.DumpsIniPath}}", config.DumpsIniFile())
 	content = strings.ReplaceAll(content, "{{.DevtoolsIniPath}}", config.DevtoolsIniFile())

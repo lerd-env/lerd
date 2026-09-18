@@ -196,3 +196,217 @@ func TestParseODBCProbeReportsAMissingLibrary(t *testing.T) {
 		t.Error("a driver missing a library reported as loadable")
 	}
 }
+
+// A vendor driver is a licensed file the container only ever reads, and the
+// FrankenPHP quadlet already mounts its directory read-only. The FPM quadlet
+// reached the same directory through ExtraVolumePaths, which exists for parked
+// projects and mounts read-write, so the two runtimes disagreed on the same path.
+func TestFPMQuadletMountsDriverDirsReadOnly(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	driverDir := t.TempDir() // outside the fake home, so %h:%h cannot cover it
+	if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+		c.SetODBCDriver(config.ODBCDriver{Name: "HDBODBC", Driver: filepath.Join(driverDir, "libodbcHDB.so")})
+	}); err != nil {
+		t.Fatalf("UpdateGlobal: %v", err)
+	}
+
+	content, err := renderFPMQuadletContent("8.4")
+	if err != nil {
+		t.Fatalf("renderFPMQuadletContent: %v", err)
+	}
+	if want := "Volume=" + driverDir + ":" + driverDir + ":ro"; !strings.Contains(content, want) {
+		t.Errorf("FPM quadlet does not mount the driver directory read-only (%s):\n%s", want, content)
+	}
+	if bad := "Volume=" + driverDir + ":" + driverDir + ":rw"; strings.Contains(content, bad) {
+		t.Errorf("driver directory is still mounted read-write:\n%s", content)
+	}
+}
+
+// ExtraVolumePaths is the parked-project and site-path list; a driver directory
+// riding along in it is what made the mount read-write. It also feeds the nginx
+// quadlet, which has no business reaching a database driver at all.
+func TestExtraVolumePathsLeavesDriverDirsAlone(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	driverDir := t.TempDir()
+	if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+		c.SetODBCDriver(config.ODBCDriver{Name: "HDBODBC", Driver: filepath.Join(driverDir, "libodbcHDB.so")})
+	}); err != nil {
+		t.Fatalf("UpdateGlobal: %v", err)
+	}
+	for _, p := range ExtraVolumePaths() {
+		if p == driverDir {
+			t.Errorf("ExtraVolumePaths() still carries the ODBC driver dir %q", p)
+		}
+	}
+}
+
+// A driver that lives inside a parked directory keeps that directory's
+// read-write mount: the parked project is the reason the path is mounted at all,
+// and a read-only line for the same path would take the write access away.
+func TestFPMQuadletKeepsAParkedDirWritable(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	parked := t.TempDir()
+	if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+		c.ParkedDirectories = []string{parked}
+		c.SetODBCDriver(config.ODBCDriver{Name: "HDBODBC", Driver: filepath.Join(parked, "libodbcHDB.so")})
+	}); err != nil {
+		t.Fatalf("UpdateGlobal: %v", err)
+	}
+
+	content, err := renderFPMQuadletContent("8.4")
+	if err != nil {
+		t.Fatalf("renderFPMQuadletContent: %v", err)
+	}
+	if want := "Volume=" + parked + ":" + parked + ":rw"; !strings.Contains(content, want) {
+		t.Errorf("parked directory lost its read-write mount (%s):\n%s", want, content)
+	}
+	if bad := "Volume=" + parked + ":" + parked + ":ro"; strings.Contains(content, bad) {
+		t.Errorf("parked directory was downgraded to read-only:\n%s", content)
+	}
+}
+
+// A driver under $HOME is already reachable through the quadlet's %h:%h line,
+// which is read-write. Adding a read-only line for the same subtree would make
+// the directory holding the driver unwritable for PHP, which is a regression for
+// any project that keeps its driver inside the tree it also writes to.
+func TestFPMQuadletLeavesDriverDirsUnderHomeToTheHomeMount(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	driverDir := filepath.Join(home, "vendordrv")
+	if err := os.MkdirAll(driverDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+		c.SetODBCDriver(config.ODBCDriver{Name: "HDBODBC", Driver: filepath.Join(driverDir, "libodbcHDB.so")})
+	}); err != nil {
+		t.Fatalf("UpdateGlobal: %v", err)
+	}
+
+	content, err := renderFPMQuadletContent("8.4")
+	if err != nil {
+		t.Fatalf("renderFPMQuadletContent: %v", err)
+	}
+	if strings.Contains(content, "Volume="+driverDir+":") {
+		t.Errorf("driver dir under $HOME got its own mount, shadowing the read-write %%h:%%h one:\n%s", content)
+	}
+	if want := "Volume=" + config.OdbcInstFile() + ":/etc/odbcinst.ini:ro"; !strings.Contains(content, want) {
+		t.Errorf("registry mount missing (%s):\n%s", want, content)
+	}
+}
+
+// The FPM quadlet skips a driver dir under $HOME because %h:%h already covers
+// it; a FrankenPHP site mounts its project and not the home, so the same
+// directory has to travel with it or the driver is a path it cannot see. The two
+// runtimes disagree here on purpose.
+func TestFrankenPHPQuadletStillCarriesADriverUnderHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	driverDir := filepath.Join(home, "vendordrv")
+	if err := os.MkdirAll(driverDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+		c.SetODBCDriver(config.ODBCDriver{Name: "HDBODBC", Driver: filepath.Join(driverDir, "libodbcHDB.so")})
+	}); err != nil {
+		t.Fatalf("UpdateGlobal: %v", err)
+	}
+
+	content, err := GenerateFrankenPHPQuadlet("myapp", filepath.Join(home, "myapp"), "8.4", nil, nil)
+	if err != nil {
+		t.Fatalf("GenerateFrankenPHPQuadlet: %v", err)
+	}
+	if want := "Volume=" + driverDir + ":" + driverDir + ":ro"; !strings.Contains(content, want) {
+		t.Errorf("FrankenPHP quadlet dropped a driver dir under $HOME (%s):\n%s", want, content)
+	}
+}
+
+// A driver kept inside a parked project is reached through that project's
+// read-write mount. A read-only line for the subdirectory would nest inside it
+// and take write access away from exactly the tree the user parked to work in.
+func TestFPMQuadletLeavesADriverDirInsideAParkedDirAlone(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	parked := t.TempDir()
+	driverDir := filepath.Join(parked, "vendor", "odbc")
+	if err := os.MkdirAll(driverDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+		c.ParkedDirectories = []string{parked}
+		c.SetODBCDriver(config.ODBCDriver{Name: "HDBODBC", Driver: filepath.Join(driverDir, "libodbcHDB.so")})
+	}); err != nil {
+		t.Fatalf("UpdateGlobal: %v", err)
+	}
+
+	content, err := renderFPMQuadletContent("8.4")
+	if err != nil {
+		t.Fatalf("renderFPMQuadletContent: %v", err)
+	}
+	if strings.Contains(content, "Volume="+driverDir+":") {
+		t.Errorf("driver dir inside a parked dir got its own mount, nesting read-only inside the parked read-write one:\n%s", content)
+	}
+	if want := "Volume=" + parked + ":" + parked + ":rw"; !strings.Contains(content, want) {
+		t.Errorf("parked dir lost its read-write mount (%s):\n%s", want, content)
+	}
+}
+
+// The other direction: a driver sitting in a directory that happens to contain a
+// parked project. Both have to be mounted, and the driver's directory has to come
+// first, or the parked project's mount is the one that disappears underneath it.
+// Leaving the driver dir out instead is not an option: the probe mounts it
+// directly and would report a driver the FPM container cannot actually see as
+// one that loads.
+func TestFPMQuadletMountsADriverDirBeforeAParkedDirInsideIt(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	driverDir := t.TempDir()
+	parked := filepath.Join(driverDir, "project")
+	if err := os.MkdirAll(parked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+		c.ParkedDirectories = []string{parked}
+		c.SetODBCDriver(config.ODBCDriver{Name: "HDBODBC", Driver: filepath.Join(driverDir, "libodbcHDB.so")})
+	}); err != nil {
+		t.Fatalf("UpdateGlobal: %v", err)
+	}
+
+	content, err := renderFPMQuadletContent("8.4")
+	if err != nil {
+		t.Fatalf("renderFPMQuadletContent: %v", err)
+	}
+	driverLine := "Volume=" + driverDir + ":" + driverDir + ":ro"
+	parkedLine := "Volume=" + parked + ":" + parked + ":rw"
+	di, pi := strings.Index(content, driverLine), strings.Index(content, parkedLine)
+	if di < 0 {
+		t.Fatalf("driver dir is not mounted (%s), so the container cannot see the driver:\n%s", driverLine, content)
+	}
+	if pi < 0 {
+		t.Fatalf("parked dir lost its mount (%s):\n%s", parkedLine, content)
+	}
+	if di > pi {
+		t.Errorf("driver dir is mounted after the parked dir inside it, which hides the parked mount:\n%s", content)
+	}
+}

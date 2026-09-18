@@ -78,6 +78,93 @@ func odbcInstMountLine() string {
 	return "Volume=" + config.OdbcInstFile() + ":/etc/odbcinst.ini:ro"
 }
 
+// odbcFPMMountLines renders the registry mount plus a read-only mount for each
+// driver directory the FPM container cannot already reach. A vendor driver is a
+// licensed file the container only reads, so where lerd adds a mount for it the
+// mount is read-only, exactly as the FrankenPHP quadlet does it.
+//
+// Two kinds of directory are left alone, because both already have a mount and a
+// second line for the same subtree would only take write access away: anything
+// under $HOME, which the %h:%h line covers, and anything ExtraVolumePaths
+// carries for a parked project.
+func odbcFPMMountLines() string {
+	line := odbcInstMountLine()
+	if line == "" {
+		return ""
+	}
+	// Resolved, because an ostree system keeps home at /var/home behind a /home
+	// symlink and a driver registered before paths were canonicalised may still
+	// name the link. Comparing the raw strings there would mount a directory the
+	// %h:%h line already carries.
+	home := resolvePath(homeDir())
+	homePrefix := home
+	if homePrefix != "" && !strings.HasSuffix(homePrefix, "/") {
+		homePrefix += "/"
+	}
+	extra := ExtraVolumePaths()
+	lines := []string{line}
+	for _, raw := range ODBCDriverDirs() {
+		dir := resolvePath(raw)
+		if home != "" && (dir == home || strings.HasPrefix(dir, homePrefix)) {
+			continue
+		}
+		if withinAnyPath(dir, extra) {
+			continue
+		}
+		lines = append(lines, "Volume="+dir+":"+dir+":ro")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// withinAnyPath reports whether dir is one of paths or sits inside one. Such a
+// directory is already reached through that mount, which is read-write because
+// it exists for a parked project, and a read-only line for the same subtree
+// would take the write access away.
+//
+// The opposite case, a driver directory that contains one of paths, is not
+// skipped: it is mounted, and the template puts these lines above the extra
+// volumes so the parked project mounts on top of it rather than vanishing under
+// it.
+func withinAnyPath(dir string, paths []string) bool {
+	dir = filepath.Clean(dir)
+	for _, p := range paths {
+		p = filepath.Clean(p)
+		if dir == p || pathWithin(dir, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// homeDir is the user's home directory, or "" when it cannot be determined.
+func homeDir() string {
+	h, _ := os.UserHomeDir()
+	return h
+}
+
+// resolvePath follows symlinks where it can, and otherwise hands back what it
+// was given: a path that is gone still has to compare as itself.
+func resolvePath(p string) string {
+	if p == "" {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		return resolved
+	}
+	return filepath.Clean(p)
+}
+
+// pathWithin reports whether child sits under parent.
+func pathWithin(child, parent string) bool {
+	if parent == "" || child == "" {
+		return false
+	}
+	if !strings.HasSuffix(parent, "/") {
+		parent += "/"
+	}
+	return strings.HasPrefix(child, parent)
+}
+
 // ODBCDriverDirs returns the directories holding registered drivers, so a
 // container that does not already mount the whole home can still reach them.
 // Missing and unmountable paths are dropped: a Volume= line for a path that is
