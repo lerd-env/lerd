@@ -165,6 +165,29 @@ func pathWithin(child, parent string) bool {
 	return strings.HasPrefix(child, parent)
 }
 
+// containerRuntimeDirs are the directories the PHP image keeps its own runtime
+// in. Bind-mounting a host directory onto one of these replaces what the
+// container needs to run: mounting a glibc /usr/lib over Alpine's takes away
+// every library PHP links against, and the unit restart-loops with no container
+// left to inspect. Vendor packages do install ODBC drivers straight into system
+// library directories, so this is reachable by following a driver's own install
+// instructions. /usr/lib64 is deliberately absent, since the Alpine image has no
+// such directory and that is where a Fedora driver lives.
+var containerRuntimeDirs = map[string]bool{
+	"/": true, "/bin": true, "/sbin": true, "/lib": true, "/lib64": true,
+	"/usr": true, "/usr/bin": true, "/usr/sbin": true, "/usr/lib": true,
+	"/usr/local": true, "/usr/local/bin": true, "/usr/local/sbin": true,
+	"/usr/local/lib": true, "/usr/local/etc": true,
+	"/etc": true, "/var": true, "/run": true, "/root": true, "/tmp": true,
+	"/proc": true, "/sys": true, "/dev": true,
+}
+
+// ODBCDirShadowsRuntime reports whether mounting dir into a PHP container would
+// cover part of the container's own runtime.
+func ODBCDirShadowsRuntime(dir string) bool {
+	return containerRuntimeDirs[filepath.Clean(dir)]
+}
+
 // ODBCDriverDirs returns the directories holding registered drivers, so a
 // container that does not already mount the whole home can still reach them.
 // Missing and unmountable paths are dropped: a Volume= line for a path that is
@@ -178,7 +201,7 @@ func ODBCDriverDirs() []string {
 	var dirs []string
 	for _, d := range cfg.GetODBCDrivers() {
 		dir := filepath.Dir(strings.TrimSpace(d.Driver))
-		if !bindMountable(dir) || seen[dir] {
+		if !bindMountable(dir) || ODBCDirShadowsRuntime(dir) || seen[dir] {
 			continue
 		}
 		if _, statErr := os.Stat(dir); statErr != nil {
@@ -248,7 +271,10 @@ func parseODBCProbe(text, driverName string) ODBCDriverStatus {
 func InspectODBCDriver(version string, d config.ODBCDriver) (ODBCDriverStatus, error) {
 	var status ODBCDriverStatus
 	args := []string{"run", "--rm", "-v", config.OdbcInstFile() + ":/etc/odbcinst.ini:ro"}
-	if dir := filepath.Dir(d.Driver); bindMountable(dir) {
+	// Same guard as the quadlet: mounting a runtime directory here would shadow
+	// the probe container's own libraries and report the driver as needing
+	// libraries that were there until the mount hid them.
+	if dir := filepath.Dir(d.Driver); bindMountable(dir) && !ODBCDirShadowsRuntime(dir) {
 		args = append(args, "-v", dir+":"+dir+":ro")
 	}
 	script := "test -f '" + d.Driver + "' && echo LERD_FOUND; odbcinst -q -d 2>/dev/null; ldd '" + d.Driver + "' 2>&1"

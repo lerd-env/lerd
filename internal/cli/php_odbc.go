@@ -187,7 +187,16 @@ func odbcDriverPath(raw string) (string, error) {
 	if info.IsDir() {
 		return "", fmt.Errorf("driver %q is a directory, point at the driver library itself", path)
 	}
-	return odbcPathForContainer(path), nil
+	final := odbcPathForContainer(path)
+	// Refuse before anything is written. lerd mounts the driver's directory into
+	// every PHP container, and a directory the container keeps its own runtime in
+	// would be covered by the host's, leaving the unit restart-looping with every
+	// site on that version down. Vendor packages do install drivers here, so the
+	// way out has to be named.
+	if dir := filepath.Dir(final); podman.ODBCDirShadowsRuntime(dir) {
+		return "", fmt.Errorf("driver %q sits in %s, which the PHP container keeps its own libraries in: mounting it would take the container down. Copy the driver somewhere of its own (say ~/odbc-drivers) and register that path", final, dir)
+	}
+	return final, nil
 }
 
 // odbcPathForContainer rewrites a driver path into the spelling the PHP

@@ -410,3 +410,58 @@ func TestFPMQuadletMountsADriverDirBeforeAParkedDirInsideIt(t *testing.T) {
 		t.Errorf("driver dir is mounted after the parked dir inside it, which hides the parked mount:\n%s", content)
 	}
 }
+
+// A vendor package installs its ODBC driver straight into a system library
+// directory, so following the vendor's own instructions points lerd at one. The
+// container keeps its own libraries there, and mounting the host's over them
+// leaves PHP with nothing to link against: the unit restart-loops and every site
+// on that version answers 502. Nothing may mount such a directory.
+func TestODBCDriverDirsRefusesTheContainersOwnRuntime(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+		c.SetODBCDriver(config.ODBCDriver{Name: "UsrLib", Driver: "/usr/lib/psqlodbcw.so"})
+		c.SetODBCDriver(config.ODBCDriver{Name: "Lib", Driver: "/lib/psqlodbcw.so"})
+		c.SetODBCDriver(config.ODBCDriver{Name: "Etc", Driver: "/etc/psqlodbcw.so"})
+	}); err != nil {
+		t.Fatalf("UpdateGlobal: %v", err)
+	}
+	if dirs := ODBCDriverDirs(); len(dirs) != 0 {
+		t.Errorf("ODBCDriverDirs() = %v, want none of the container's own runtime directories", dirs)
+	}
+
+	content, err := renderFPMQuadletContent("8.4")
+	if err != nil {
+		t.Fatalf("renderFPMQuadletContent: %v", err)
+	}
+	for _, bad := range []string{"Volume=/usr/lib:", "Volume=/lib:", "Volume=/etc:"} {
+		if strings.Contains(content, bad) {
+			t.Errorf("FPM quadlet mounts over the container's runtime (%s):\n%s", bad, content)
+		}
+	}
+
+	franken, err := GenerateFrankenPHPQuadlet("myapp", filepath.Join(tmp, "myapp"), "8.4", nil, nil)
+	if err != nil {
+		t.Fatalf("GenerateFrankenPHPQuadlet: %v", err)
+	}
+	if strings.Contains(franken, "Volume=/usr/lib:") {
+		t.Errorf("FrankenPHP quadlet mounts over the container's runtime:\n%s", franken)
+	}
+}
+
+// The guard has to stay narrow. /usr/lib64 is where a Fedora driver lives and
+// the Alpine image has no such directory, and /opt is where a vendor client is
+// normally unpacked, so both still mount.
+func TestODBCDirShadowsRuntimeLeavesUsableDirsAlone(t *testing.T) {
+	for _, dir := range []string{"/usr/lib64", "/opt", "/opt/hana/hdbclient", "/srv/drivers", "/home/me/drv"} {
+		if ODBCDirShadowsRuntime(dir) {
+			t.Errorf("ODBCDirShadowsRuntime(%q) = true, want the directory to stay mountable", dir)
+		}
+	}
+	for _, dir := range []string{"/usr/lib", "/lib", "/usr/local/lib", "/etc", "/var", "/", "/usr/lib/"} {
+		if !ODBCDirShadowsRuntime(dir) {
+			t.Errorf("ODBCDirShadowsRuntime(%q) = false, want it refused", dir)
+		}
+	}
+}

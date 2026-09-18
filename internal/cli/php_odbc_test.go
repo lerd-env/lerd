@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -117,5 +118,31 @@ func TestOdbcDriverPathResolvesOutsideHome(t *testing.T) {
 	}
 	if got != want {
 		t.Errorf("odbcDriverPath = %q, want the resolved path %q", got, want)
+	}
+}
+
+// Registering has to refuse before anything is written, because the damage lands
+// on every site of that PHP version and the failure that follows looks like a
+// broken PHP install rather than a driver that was just registered.
+func TestOdbcDriverPathRefusesAContainerRuntimeDir(t *testing.T) {
+	// A real file, so the guard is what refuses it rather than the exists check.
+	probe := ""
+	for _, c := range []string{"/usr/lib/libz.so.1", "/usr/lib/libc.so.6", "/usr/lib/os-release"} {
+		if info, err := os.Stat(c); err == nil && !info.IsDir() {
+			probe = c
+			break
+		}
+	}
+	if probe == "" {
+		t.Skip("no regular file directly in /usr/lib on this machine")
+	}
+	_, err := odbcDriverPath(probe)
+	if err == nil {
+		t.Fatal("odbcDriverPath accepted a driver in /usr/lib, which mounts over the container's own libraries")
+	}
+	for _, want := range []string{"/usr/lib", "Copy the driver"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should name %q and the way out, got: %v", want, err)
+		}
 	}
 }
