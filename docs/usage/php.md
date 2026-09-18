@@ -388,7 +388,7 @@ lerd isolate 8.6
 
 ## Custom extensions
 
-The default lerd FPM image ships ~30 extensions covering the vast majority of Laravel projects (`bcmath`, `bz2`, `calendar`, `curl`, `dba`, `exif`, `ftp`, `gd`, `gmp`, `igbinary`, `imagick`, `intl`, `ldap`, `mbstring`, `mongodb`, `mysqli`, `opcache`, `pcntl`, `pdo_mysql`, `pdo_pgsql`, `pdo_sqlite`, `redis`, `soap`, `shmop`, `sockets`, `sqlite3`, `sysvmsg`, `sysvsem`, `sysvshm`, `xdebug`, `xsl`, `zip`, and more).
+The default lerd FPM image ships ~30 extensions covering the vast majority of Laravel projects (`bcmath`, `bz2`, `calendar`, `curl`, `dba`, `exif`, `ftp`, `gd`, `gmp`, `igbinary`, `imagick`, `intl`, `ldap`, `mbstring`, `mongodb`, `mysqli`, `odbc`, `opcache`, `pcntl`, `pdo_mysql`, `pdo_odbc`, `pdo_pgsql`, `pdo_sqlite`, `redis`, `soap`, `shmop`, `sockets`, `sqlite3`, `sysvmsg`, `sysvsem`, `sysvshm`, `xdebug`, `xsl`, `zip`, and more).
 
 Two of those names are version-gated, because the image genuinely cannot build them everywhere: `random` is a PHP core extension only from 8.2, and `mongodb` builds only on 8.1 and up. On older versions they are not part of the bundle, and `lerd park` warns when a project requires one rather than staying quiet and letting `composer install` fail its platform check.
 
@@ -497,6 +497,147 @@ The FPM image is Alpine-based, so it uses musl libc rather than glibc. Two conse
 - **The C-library `setlocale()` / `localeconv()` path stays in the C locale.** musl does not implement locale-specific `LC_NUMERIC` / `LC_MONETARY` rules, so `setlocale(LC_ALL, 'nl_NL')` will return a value but `localeconv()` keeps returning `.` / empty separators, and `number_format()` without explicit separators won't switch. Pass separators explicitly (`number_format($n, 2, ',', '.')`) or use `ext-intl`.
 
 If a library you depend on calls `setlocale()` and branches on whether it succeeded, adding the `musl-locales` / `musl-locales-lang` apk packages makes the call return a value, but it still will not change number or currency formatting.
+
+---
+
+## ODBC databases
+
+The image ships the ODBC stack whole: unixODBC as the driver manager, `ext-odbc` for the `odbc_*` functions and their `odbc.defaultlrl` / `odbc.defaultbinmode` settings, and `ext-pdo_odbc` so `new PDO('odbc:...')` and any framework connection built on it work with nothing to declare and no extension to add.
+
+What the image cannot ship is the driver itself. Every ODBC driver (SAP HANA, Oracle, SQL Server, Snowflake) is vendor-licensed and downloaded from the vendor, so you bring the `.so` and register it. The images carry `gcompat` and `libstdc++` for exactly that moment: vendor drivers are built against glibc while lerd's images are Alpine/musl, and without the shim unixODBC cannot load them at all.
+
+### Turning it on
+
+There is nothing to enable. The extensions are part of the image recipe, so a version whose image is built from the current recipe has them, and one built before it does not until it is rebuilt.
+
+`lerd update` does that rebuild for you: the recipe changed, so the install step that follows an update rebuilds every PHP image, pulling the matching [pre-built base](#pre-built-images) rather than compiling. To force it, or to bring one version forward on its own:
+
+```bash
+lerd php:rebuild            # every installed version
+lerd php:rebuild 8.5        # just this one
+```
+
+Check what landed from inside the container:
+
+```bash
+lerd shell
+php -m | grep -i odbc                      # odbc, PDO_ODBC
+php -r 'print_r(PDO::getAvailableDrivers());'
+```
+
+The dashboard shows the same list under **System → PHP → Extensions**, read from the image itself.
+
+Two site kinds need one more step. An Octane site's FrankenPHP image is rebuilt by the same `lerd php:rebuild`. A site with its own `Containerfile.lerd` builds `FROM` the base image, so it keeps the image it has until you rebuild it:
+
+```bash
+cd my-project && lerd rebuild
+```
+
+That is also the moment such a project can drop its own `pdo_odbc` build steps, since the base it builds on carries them now.
+
+### Registering a driver
+
+A driver is named in `/etc/odbcinst.ini`, the driver manager's registry. lerd generates that file from the drivers you register and mounts it read-only into every PHP container, so one registration covers every version and every site:
+
+```bash
+lerd php:odbc add HDBODBC ~/sap/hdbclient/libodbcHDB.so --description "SAP HANA"
+lerd php:odbc list
+lerd php:odbc remove HDBODBC
+```
+
+The driver file itself stays where the vendor's installer put it; lerd only points at it. Anything under your home directory is already visible inside the containers at the same path, and a driver elsewhere has its directory mounted along with the registry.
+
+Until you register something, lerd mounts no registry at all, so a site whose own image writes `/etc/odbcinst.ini` keeps the drivers it baked in. Once a driver is registered, lerd's registry is what every container reads, and a driver baked into a site image has to be registered here too.
+
+`add` then reads the driver back from inside the image and says what it found, because a registration that looks fine on the host is exactly the one that fails later as a connection error with nothing in it:
+
+```
+$ lerd php:odbc add HDBODBC ~/sap/hdbclient/libodbcHDB.so
+ › registering ODBC driver HDBODBC
+   /Users/you/sap/hdbclient/libodbcHDB.so
+ ⚠ PHP 8.5 cannot load the driver, gcompat does not carry these glibc symbols:
+   qfcvt_r, qecvt_r, fcvt_r, backtrace, __strcpy_chk, gethostent_r, ...
+   a driver needing more than gcompat has to be patched in a per-site
+   Containerfile, see the ODBC section of the PHP docs
+ ✓ driver HDBODBC registered, but PHP 8.5 cannot load it yet
+```
+
+The three ways a registration fails are worth telling apart, because unixODBC reports all of them at connect time as `Can't open lib '...' : file not found`, whatever the real cause. The container cannot see the path; the driver needs a library the image does not have; or every library resolved but one of them is musl standing in for glibc and does not carry a symbol the driver wants. Only the last one lists symbols, and those symbols are the shopping list for the shim below.
+
+`lerd php:odbc list` re-runs the check, so it reports what each driver does now rather than what it did when you registered it.
+
+### Drivers that need more than gcompat
+
+Some vendor clients want glibc symbols `gcompat` does not provide, and a few need patching before the loader will touch them at all. Those are prepared in a per-site [custom image](#custom-image-containerfile), where the driver can be unpacked, patched and registered in one place.
+
+SAP HANA is the fullest version of this problem, so it makes the best example. Its client is a glibc build, its ODBC library needs thirteen symbols musl does not have, and SAP's own installer cannot run on Alpine at all: `hdbinst` runs on a bundled perl built against glibc, which `gcompat` does not satisfy. The payloads inside the archive are plain tarballs, though, so they can be unpacked directly.
+
+Download the Linux client for your architecture from SAP (it is licensed, so it is not something lerd or your image registry can ship) and drop the tarball in `docker/hana/` next to a small C file supplying the missing symbols:
+
+```c
+// docker/hana/glibc-shim.c — one stub per symbol `lerd php:odbc add` listed.
+#include <string.h>
+#include <stdlib.h>
+
+void *__memcpy_chk(void *d, const void *s, size_t n, size_t dl) { (void)dl; return memcpy(d, s, n); }
+char *__strcpy_chk(char *d, const char *s, size_t dl) { (void)dl; return strcpy(d, s); }
+int backtrace(void **b, int size) { (void)b; (void)size; return 0; }
+// ... qfcvt_r, qecvt_r, fcvt_r, gethostent_r, getpwent_r, getservent_r,
+// getspent_r, pthread_mutexattr_setkind_np, __register_atfork
+```
+
+```dockerfile
+# Containerfile.lerd
+FROM lerd-php85-fpm:local
+
+# SAP ships glibc builds and the base is Alpine/musl. gcompat covers most of the
+# gap; the shim supplies what it does not, and patchelf wires it in as a
+# DT_NEEDED entry with an $ORIGIN rpath so whatever dlopens the driver, unixODBC
+# here, pulls the shim in with it.
+COPY docker/hana/ /tmp/hana/
+
+RUN set -eux; \
+    apk add --no-cache --virtual .hana-build patchelf build-base; \
+    mkdir -p /tmp/hana/x /usr/sap/hdbclient; \
+    tar -xzf /tmp/hana/hanaclient-*.tar.gz -C /tmp/hana/x; \
+    tar -xzf /tmp/hana/x/client/client/ODBC.TGZ -C /usr/sap/hdbclient; \
+    cc -shared -fPIC -O2 -o /usr/sap/hdbclient/libhdbglibcshim.so /tmp/hana/glibc-shim.c; \
+    patchelf --add-needed libhdbglibcshim.so --set-rpath '$ORIGIN' /usr/sap/hdbclient/libodbcHDB.so; \
+    ldd /usr/sap/hdbclient/libodbcHDB.so; \
+    printf '[HDBODBC]\nDescription=SAP HANA\nDriver=/usr/sap/hdbclient/libodbcHDB.so\n' > /etc/odbcinst.ini; \
+    apk del .hana-build; \
+    rm -rf /tmp/hana
+
+ENV LD_LIBRARY_PATH=/usr/sap/hdbclient
+```
+
+The `ldd` in the middle is deliberate: it runs during the build, so a shim that is still a symbol short fails visibly there rather than as a connection error weeks later.
+
+```yaml
+# .lerd.yaml — no port, so the site is served by fastcgi from this image
+domains:
+  - myapp
+container:
+  containerfile: Containerfile.lerd
+```
+
+Then `lerd rebuild`, and the DSN resolves through the name registered in the image:
+
+```php
+// config/database.php
+'hana' => [
+    'driver'   => 'odbc',
+    'dsn'      => 'odbc:Driver={HDBODBC};ServerNode=hana.example:30015;char_as_utf8=true;',
+    'username' => env('HANA_USERNAME'),
+    'password' => env('HANA_PASSWORD'),
+],
+```
+
+Laravel has no `odbc` database driver of its own, so a connection like this one needs a connector registered for it in a service provider, extending `Illuminate\Database\Connectors\Connector` and returning a PDO built from the `dsn` key. That part is your application's, not lerd's; what the image owes you is a driver the PDO constructor can actually open.
+
+A site whose image registers a driver this way keeps working exactly as before, because lerd mounts its own registry over `/etc/odbcinst.ini` only once you register something with `lerd php:odbc`. If you do both, lerd's registry is what the container reads, so register the in-image driver there too.
+
+unixODBC's own tools come with the image, so `lerd shell` is where a registration is checked by hand: `odbcinst -q -d` lists the drivers the manager can see, `isql -v HDBODBC user password` connects without PHP in the way, and `ldd /usr/sap/hdbclient/libodbcHDB.so` is the one that explains a driver that will not open. Its `Error relocating ...: symbol not found` lines are each a function the shim has to supply, and a driver whose libraries all resolve can still fail on every one of them.
 
 ---
 

@@ -226,6 +226,7 @@ func main() {
 	root.AddCommand(cli.NewPhpExtCmd())
 	root.AddCommand(cli.NewPhpBunCmd())
 	root.AddCommand(cli.NewPhpPkgCmd())
+	root.AddCommand(cli.NewPhpOdbcCmd())
 	root.AddCommand(cli.NewPhpPortsCmd())
 	root.AddCommand(cli.NewPestBrowserCmd())
 	root.AddCommand(cli.NewPhpIniCmd())

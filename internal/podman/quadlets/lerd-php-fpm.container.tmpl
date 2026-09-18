@@ -28,6 +28,10 @@ Volume=lerd-ssh-agent:/ssh-agent
 Volume={{.XdebugIniPath}}:/usr/local/etc/php/conf.d/99-xdebug.ini:ro
 Volume={{.UserIniPath}}:/usr/local/etc/php/conf.d/98-lerd-user.ini:ro
 Volume={{.SharedIniPath}}:/usr/local/etc/php/conf.d/95-lerd-shared.ini:ro
+# unixODBC's driver registry, generated from the drivers registered with
+# `lerd php:odbc`. Left out until one is, so a site whose own image writes
+# /etc/odbcinst.ini is not shadowed by an empty registry.
+{{.OdbcInstMountLine}}
 Volume={{.DumpsDir}}:/usr/local/etc/lerd:ro
 Volume={{.DumpsIniPath}}:/usr/local/etc/php/conf.d/97-lerd-dump.ini:ro
 Volume={{.DevtoolsIniPath}}:/usr/local/etc/php/conf.d/96-lerd-devtools.ini:ro

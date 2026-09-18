@@ -79,6 +79,15 @@ func GenerateFrankenPHPQuadlet(siteName, projectPath, phpVersion string, entrypo
 	// still wins. Mounted here too so a site switched FPM->FrankenPHP keeps the
 	// shared baseline instead of silently losing it.
 	fmt.Fprintf(&b, "Volume=%s:/usr/local/etc/php/conf.d/95-lerd-shared.ini:ro\n", config.SharedIniFile())
+	// unixODBC's driver registry, plus the directory each registered driver lives
+	// in: this container mounts the project, not the whole home, so a driver named
+	// in the registry would otherwise be a path it cannot see.
+	if line := odbcInstMountLine(); line != "" {
+		fmt.Fprintf(&b, "%s\n", line)
+		for _, dir := range ODBCDriverDirs() {
+			fmt.Fprintf(&b, "Volume=%s:%s:ro\n", dir, dir)
+		}
+	}
 	fmt.Fprintf(&b, "Volume=%s:%s:rw\n", config.RunDir(), config.RunDir())
 	fmt.Fprintf(&b, "PodmanArgs=--security-opt=label=disable --workdir=%s\n", projectPath)
 	for _, k := range sortedKeys(env) {
@@ -142,6 +151,7 @@ func WriteFrankenPHPQuadlet(siteName, projectPath, phpVersion string, entrypoint
 func WriteFrankenPHPQuadletDiff(siteName, projectPath, phpVersion string, entrypoint []string, env map[string]string) (bool, error) {
 	_ = EnsureSitePHPUserIni(siteName)
 	_ = EnsureSharedIni()
+	_ = EnsureOdbcInst()
 	_ = EnsureXdebugIni(phpVersion)
 	_ = EnsureDumpAssets()
 	_ = EnsureDevtoolsAssets()
