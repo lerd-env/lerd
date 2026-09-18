@@ -245,3 +245,33 @@ func TestFPMPortsRenderAsLoopbackPublish(t *testing.T) {
 		t.Errorf("expected bare LAN publish line, got:\n%s", lan)
 	}
 }
+
+// Quadlet reads PublishPort only from [Container], and the FPM template ends
+// with [Service] and [Install], so the extra ports can't just be appended.
+func TestFPMPortsLandInContainerSection(t *testing.T) {
+	fpmTestEnv(t)
+	content, err := renderFPMQuadletContent("8.3")
+	if err != nil {
+		t.Fatalf("renderFPMQuadletContent: %v", err)
+	}
+	content = ApplyExtraPorts(content, []string{"3000:3000", "5173:5173"})
+
+	section, found := "", 0
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			section = trimmed
+			continue
+		}
+		if !strings.HasPrefix(trimmed, "PublishPort=") {
+			continue
+		}
+		found++
+		if section != "[Container]" {
+			t.Errorf("%s landed in %s, want [Container]", trimmed, section)
+		}
+	}
+	if found != 2 {
+		t.Errorf("found %d PublishPort lines, want 2:\n%s", found, content)
+	}
+}

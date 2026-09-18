@@ -191,14 +191,33 @@ func ApplyNginxPorts(content string, httpPort, httpsPort int) string {
 	return strings.Join(lines, "\n")
 }
 
-// ApplyExtraPorts appends extra PublishPort lines to quadlet content.
+// ApplyExtraPorts adds extra PublishPort lines to the [Container] section.
+// Quadlet ignores the key in any other section, so they can't just be appended.
 func ApplyExtraPorts(content string, extraPorts []string) string {
-	var sb strings.Builder
-	sb.WriteString(content)
-	for _, p := range extraPorts {
-		fmt.Fprintf(&sb, "PublishPort=%s\n", p)
+	if len(extraPorts) == 0 {
+		return content
 	}
-	return sb.String()
+	lines := make([]string, 0, len(extraPorts))
+	for _, p := range extraPorts {
+		lines = append(lines, "PublishPort="+p)
+	}
+	return insertAfterImage(content, lines...)
+}
+
+// insertAfterImage places lines right after the Image= line, which always sits
+// in [Container]. Content without an Image= line is returned unchanged.
+func insertAfterImage(content string, extra ...string) string {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "Image=") {
+			out := make([]string, 0, len(lines)+len(extra))
+			out = append(out, lines[:i+1]...)
+			out = append(out, extra...)
+			out = append(out, lines[i+1:]...)
+			return strings.Join(out, "\n")
+		}
+	}
+	return content
 }
 
 // StripInstallSection removes the [Install] section from a quadlet's content
@@ -261,17 +280,7 @@ func InjectPodmanArgs(content, arg string) string {
 			}
 		}
 	}
-	lines := strings.Split(content, "\n")
-	for i, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "Image=") {
-			out := make([]string, 0, len(lines)+1)
-			out = append(out, lines[:i+1]...)
-			out = append(out, "PodmanArgs="+arg)
-			out = append(out, lines[i+1:]...)
-			return strings.Join(out, "\n")
-		}
-	}
-	return content
+	return insertAfterImage(content, "PodmanArgs="+arg)
 }
 
 // InjectExtraVolumes adds Volume= lines for paths that are not already covered
