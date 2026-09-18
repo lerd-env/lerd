@@ -39,8 +39,8 @@ func BundledExtensions(phpVersion string) []string {
 		"spl", "tokenizer", "xml", "xmlreader", "xmlwriter", "zlib",
 		// docker-php-ext-install
 		"bcmath", "bz2", "calendar", "curl", "dba", "exif", "ftp", "gd", "gmp",
-		"intl", "ldap", "mbstring", "mysqli", "opcache", "pcntl",
-		"pdo_mysql", "pdo_pgsql", "pdo_sqlite", "soap", "shmop",
+		"intl", "ldap", "mbstring", "mysqli", "odbc", "opcache", "pcntl",
+		"pdo_mysql", "pdo_odbc", "pdo_pgsql", "pdo_sqlite", "soap", "shmop",
 		"sockets", "sqlite3", "sysvmsg", "sysvsem", "sysvshm", "xsl", "zip",
 		// PECL
 		"redis", "imagick", "igbinary", "mongodb", "pcov", "xdebug",

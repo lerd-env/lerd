@@ -27,12 +27,14 @@ mbstring
 mongodb
 mysqli
 mysqlnd
+odbc
 openssl
 pcntl
 pcov
 pcre
 PDO
 pdo_mysql
+PDO_ODBC
 pdo_pgsql
 pdo_sqlite
 Phar

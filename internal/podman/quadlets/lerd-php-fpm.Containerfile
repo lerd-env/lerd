@@ -37,6 +37,7 @@ RUN apk update && apk add --no-cache \
         oniguruma-dev \
         libxml2-dev \
         postgresql-dev \
+        unixodbc-dev \
         imagemagick-dev \
         gmp-dev \
         bzip2-dev \
@@ -59,10 +60,15 @@ RUN apk update && apk add --no-cache \
        else \
            docker-php-ext-configure ftp --with-ftp-ssl; \
        fi \
+    # pdo_odbc defaults to the IBM DB2 backend and fails the build; unixODBC has
+    # to be named. This is what makes an odbc: DSN work once a vendor driver is
+    # registered in /etc/odbcinst.ini.
+    && docker-php-ext-configure pdo_odbc --with-pdo-odbc=unixODBC,/usr \
     && docker-php-ext-install -j$(nproc) \
         curl \
         pdo_mysql \
         pdo_pgsql \
+        pdo_odbc \
         bcmath \
         mbstring \
         xml \
@@ -108,6 +114,19 @@ RUN apk update && apk add --no-cache \
     && mkdir -p /usr/local/share/misc/php-spx/assets/web-ui \
     && rm -rf /tmp/php-spx /tmp/pear /var/cache/apk/*
 
+# ext/odbc (odbc_* functions, odbc.defaultlrl/defaultbinmode) needs a pass of its
+# own: built statically, every --with-<backend> defaults to on, so configure stops
+# at the first backend it cannot find. Neutering PHP_ALWAYS_SHARED leaves only the
+# unixODBC backend asked for here (docker-library/php#103).
+RUN set -eux; \
+    docker-php-source extract; \
+    { echo 'AC_DEFUN([PHP_ALWAYS_SHARED],[])'; echo; cat /usr/src/php/ext/odbc/config.m4; } > /tmp/odbc-config.m4; \
+    mv /tmp/odbc-config.m4 /usr/src/php/ext/odbc/config.m4; \
+    docker-php-ext-configure odbc --with-unixODBC=shared,/usr; \
+    docker-php-ext-install -j"$(nproc)" odbc; \
+    docker-php-source delete; \
+    rm -rf /var/cache/apk/*
+
 # Xdebug compiled in the builder too. Legacy PHP needs older xdebug majors.
 RUN PHPVER="$(php -r 'echo PHP_MAJOR_VERSION,".",PHP_MINOR_VERSION;')" \
     && case "$PHPVER" in \
@@ -140,8 +159,9 @@ RUN { cd /tmp/lerd-devtools && phpize && ./configure --enable-lerd-devtools && m
 # ── Runtime stage ───────────────────────────────────────────────────────────
 FROM docker.io/library/php:{{.Version}}-fpm-alpine
 
-# Runtime libraries only (no -dev headers, no toolchain). PHP's
-# compiled extensions dlopen these.
+# Runtime libraries only (no -dev headers, no toolchain). PHP's compiled
+# extensions dlopen these. gcompat + libstdc++ are the musl/glibc shim a vendor
+# ODBC driver (HANA, Oracle, MSSQL) needs before unixODBC can load it at all.
 RUN apk update && apk add --no-cache \
         ghostscript \
         imagemagick \
@@ -162,11 +182,14 @@ RUN apk update && apk add --no-cache \
         oniguruma \
         libxml2 \
         libpq \
+        unixodbc \
         gmp \
         bzip2 \
         libldap \
         sqlite-libs \
         libxslt \
+        gcompat \
+        libstdc++ \
     && rm -rf /var/cache/apk/*
 
 # icu-data-full carries the full CLDR locale set for ext-intl (#332). Alpine
