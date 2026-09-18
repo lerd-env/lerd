@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -322,5 +323,24 @@ func TestNgrokArgsRejectAMissingFile(t *testing.T) {
 	err := applyNgrokArgs(tool, "--traffic-policy-file=/no/such/policy.yml", "")
 	if err == nil || !strings.Contains(err.Error(), "policy.yml") {
 		t.Errorf("error = %v, want the missing file named", err)
+	}
+}
+
+// ngrok config files named on the command line are mounted in from the host,
+// normally out of the home directory, which SELinux will not let the container
+// read without the opt-out. A tunnel with no files mounted keeps its confinement.
+func TestNgrokMountedConfigOptsOutOfSELinuxLabelling(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "ngrok.yml")
+	if err := os.WriteFile(cfg, []byte("version: 2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withFile := strings.Join(ngrokContainerCmdFor(65483, "tok", false, "lerd-ngrok-t", "linux", "--config", cfg).Args, " ")
+	if !strings.Contains(withFile, "label=disable") {
+		t.Errorf("a mounted config did not opt out of labelling:\n%s", withFile)
+	}
+	plain := strings.Join(ngrokContainerCmdFor(65483, "tok", false, "lerd-ngrok-t", "linux").Args, " ")
+	if strings.Contains(plain, "label=disable") {
+		t.Errorf("a tunnel with nothing mounted should keep its confinement:\n%s", plain)
 	}
 }
