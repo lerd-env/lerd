@@ -187,7 +187,35 @@ func odbcDriverPath(raw string) (string, error) {
 	if info.IsDir() {
 		return "", fmt.Errorf("driver %q is a directory, point at the driver library itself", path)
 	}
-	return path, nil
+	return odbcPathForContainer(path), nil
+}
+
+// odbcPathForContainer rewrites a driver path into the spelling the PHP
+// container will see. An ostree system (Silverblue, Kinoite) keeps home at
+// /var/home behind a /home symlink, and the two distributions disagree about
+// which one lands in passwd, so the quadlet's %h mount is /var/home/you on one
+// and /home/you on the other. A driver under home therefore has to be named the
+// way %h names it, or the registry points at a path that does not exist inside
+// the container. Anything outside home is resolved instead, since lerd mounts it
+// by that path itself.
+func odbcPathForContainer(path string) string {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return resolved
+	}
+	resolvedHome, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		return resolved
+	}
+	rel, err := filepath.Rel(resolvedHome, resolved)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return resolved
+	}
+	return filepath.Join(home, rel)
 }
 
 // applyODBCChange rewrites the registry and restarts every container that mounts
