@@ -119,6 +119,22 @@ jobs:
           pattern: lerd-tray-darwin-*
           path: dist-tray
 
+      # The previous tag is taken literally, and before a stable release stands
+      # the last beta of its own cycle, so the notes would cover the beta run
+      # rather than the release. A beta keeps the default: what came before it
+      # is what its testers last had.
+      - name: Compare a stable release against the last stable tag
+        if: ${{ !contains(github.ref_name, '-beta') && !contains(github.ref_name, '-rc') }}
+        run: |
+          # Version sort puts a prerelease above the release it belongs to, so
+          # the previous stable is the first tag carrying no dash that is not
+          # this one, rather than whatever sits in second place.
+          previous=$(git tag -l 'v*' --sort=-v:refname | awk -v t="${{ github.ref_name }}" '!/-/ && $0 != t' | head -1)
+          if [ -n "$previous" ]; then
+            echo "Comparing ${{ github.ref_name }} against $previous"
+            echo "GORELEASER_PREVIOUS_TAG=$previous" >> "$GITHUB_ENV"
+          fi
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
