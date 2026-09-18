@@ -69,7 +69,7 @@ func newPhpOdbcAddCmd() *cobra.Command {
 			version, err := phpPkgVersion("")
 			loadable := err != nil || reportODBCDriverStatus(version, entry)
 			if !loadable {
-				feedback.Done("driver " + feedback.Val(name) + " registered, but PHP " + version + " cannot load it yet")
+				feedback.Done("driver " + feedback.Val(name) + " registered for every PHP version, but the PHP " + version + " image cannot load it yet")
 				return nil
 			}
 			feedback.Done("driver " + feedback.Val(name) + " registered, use it as Driver={" + name + "} in a DSN")
@@ -123,6 +123,14 @@ func newPhpOdbcListCmd() *cobra.Command {
 				return err
 			}
 			drivers := cfg.GetODBCDrivers()
+			// The probe below bind-mounts the generated registry, and podman
+			// refuses a run whose mount source is missing, which would read back
+			// as every driver being invisible. Seed it before asking.
+			if len(drivers) > 0 {
+				if err := podman.EnsureOdbcInst(); err != nil {
+					return fmt.Errorf("writing the ODBC driver registry: %w", err)
+				}
+			}
 			if len(drivers) == 0 {
 				fmt.Println("No ODBC drivers registered.")
 				fmt.Println("The images ship unixODBC, ext-odbc and ext-pdo_odbc; register a vendor driver with:")
