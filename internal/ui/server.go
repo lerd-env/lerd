@@ -1315,6 +1315,7 @@ type ServiceResponse struct {
 	Icon              string            `json:"icon,omitempty"`
 	Color             string            `json:"color,omitempty"`
 	AdminFor          []string          `json:"admin_for,omitempty"`
+	AdminRank         int               `json:"admin_rank,omitempty"`
 	// Preset this service was installed from ("mariadb" for "mariadb-11-8"), so
 	// the UI can match it against another preset's admin_for without guessing.
 	Preset string `json:"preset,omitempty"`
@@ -1472,10 +1473,11 @@ func presetNameOf(name string, custom *config.CustomService) string {
 // it: the section it groups under, the glyph and brand colour it draws with,
 // and the services its UI administers.
 type presentation struct {
-	Category string
-	Icon     string
-	Color    string
-	AdminFor []string
+	Category  string
+	Icon      string
+	Color     string
+	AdminFor  []string
+	AdminRank int
 }
 
 // resolvePresentation reads that metadata from the service's preset, so a
@@ -1487,10 +1489,10 @@ func resolvePresentation(name string, custom *config.CustomService) presentation
 		presetName = custom.Preset
 	}
 	if p, err := config.LoadPreset(presetName); err == nil {
-		return presentation{p.Category, p.Icon, config.NormalizeBrandColor(p.Color), p.AdminFor}
+		return presentation{p.Category, p.Icon, config.NormalizeBrandColor(p.Color), p.AdminFor, p.AdminRank}
 	}
 	if custom != nil {
-		return presentation{custom.Category, custom.Icon, config.NormalizeBrandColor(custom.Color), custom.AdminFor}
+		return presentation{custom.Category, custom.Icon, config.NormalizeBrandColor(custom.Color), custom.AdminFor, custom.AdminRank}
 	}
 	return presentation{}
 }
@@ -1575,6 +1577,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		Icon:              pres.Icon,
 		Color:             pres.Color,
 		AdminFor:          pres.AdminFor,
+		AdminRank:         pres.AdminRank,
 		Preset:            presetNameOf(name, custom),
 		Port:              hostPort,
 		SiteCount:         countSitesUsingService(name),
@@ -1845,6 +1848,7 @@ type PresetResponse struct {
 	Icon           string                 `json:"icon,omitempty"`
 	Color          string                 `json:"color,omitempty"`
 	AdminFor       []string               `json:"admin_for,omitempty"`
+	AdminRank      int                    `json:"admin_rank,omitempty"`
 }
 
 // handleServicePresets returns the list of bundled presets and whether each is
@@ -1906,6 +1910,7 @@ func handleServicePresets(w http.ResponseWriter, r *http.Request) {
 			Icon:           p.Icon,
 			Color:          p.Color,
 			AdminFor:       p.AdminFor,
+			AdminRank:      p.AdminRank,
 		})
 	}
 	writeJSON(w, out)

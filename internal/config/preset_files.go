@@ -50,7 +50,18 @@ func DashboardProxied(svc *CustomService) bool {
 		return false
 	}
 	p, err := LoadPreset(svc.Preset)
-	return err == nil && (p.DashboardProxy || p.DashboardExternal)
+	return err == nil && (p.DashboardProxy || p.DashboardExternal || p.DashboardProxyStrip)
+}
+
+// DashboardProxyStrips reports whether this service's dashboard is served by
+// stripping the mount prefix rather than forwarding it. Read from the preset,
+// like DashboardProxied, so a store change reaches installs that never reinstall.
+func DashboardProxyStrips(svc *CustomService) bool {
+	if svc == nil || svc.Dashboard == "" || svc.Preset == "" {
+		return false
+	}
+	p, err := LoadPreset(svc.Preset)
+	return err == nil && p.DashboardProxyStrip
 }
 
 // PresetProxyEnv returns the container env that makes a bundled upstream serve

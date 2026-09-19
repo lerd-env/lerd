@@ -96,6 +96,20 @@ const DB_DEEP_LINK: Record<string, (db: string) => string> = {
   'mongo-express': (db) => `/db/${encodeURIComponent(db)}`
 };
 
+// ENGINE_LINK is for an admin tool that fronts more than one engine at once.
+// Opened at its root it picks one for you, which is the wrong one as often as
+// not, so the engine it was opened from travels in the URL. Only the container
+// name is passed: which driver and credentials go with it is the tool's own
+// business, not something the dashboard should carry a table for.
+const ENGINE_LINK: Record<string, (engine: string, db: string) => string> = {
+  adminer: (engine, db) =>
+    `?lerd_server=lerd-${engine}` + (db ? `&db=${encodeURIComponent(db)}` : '')
+};
+
+function engineLinker(admin: Service): ((engine: string, db: string) => string) | undefined {
+  return ENGINE_LINK[admin.preset || admin.name];
+}
+
 function dbDeepLinker(admin: Service): ((db: string) => string) | undefined {
   return DB_DEEP_LINK[admin.preset || admin.name];
 }
@@ -120,8 +134,26 @@ export async function openDatabaseAdmin(engineName: string, database: string) {
   const admin = databaseAdminFor(engineName);
   if (!admin) return;
   if (admin.status !== 'active' && !(await serviceAction(admin.name, 'start'))) return;
+  if (engineLinker(admin)) {
+    location.hash =
+      `service/${admin.name}/on/${engineName}` +
+      (database ? `/${encodeURIComponent(database)}` : '');
+    return;
+  }
   location.hash = dbDeepLinker(admin)
     ? `service/${admin.name}/db/${encodeURIComponent(database)}`
+    : `service/${admin.name}`;
+}
+
+// openAdminForEngine opens an engine's admin tool scoped to that engine, for
+// the header button on a database service's own page, where no one database is
+// in play yet. Starts the tool first when it is stopped, like openDatabaseAdmin.
+export async function openAdminForEngine(engineName: string) {
+  const admin = databaseAdminFor(engineName);
+  if (!admin) return;
+  if (admin.status !== 'active' && !(await serviceAction(admin.name, 'start'))) return;
+  location.hash = engineLinker(admin)
+    ? `service/${admin.name}/on/${engineName}`
     : `service/${admin.name}`;
 }
 
@@ -174,6 +206,22 @@ function refFromHash(): DashboardRef | null {
           dashboard: mp.dashboard,
           icon: mp.icon,
           extraPath: '/view/' + mpDeep[1]
+        };
+      }
+    }
+    // service/<admin>/on/<engine>[/<database>] scopes a multi-engine admin tool
+    // to the engine it was opened from.
+    const onEngine = rest.match(/^(.+?)\/on\/([^/]+)(?:\/(.+))?$/);
+    if (onEngine) {
+      const admin = get(services).find((x) => x.name === onEngine[1]);
+      const linker = admin ? engineLinker(admin) : undefined;
+      if (admin?.dashboard && linker) {
+        return {
+          name: admin.name,
+          label: admin.name,
+          dashboard: admin.dashboard,
+          icon: admin.icon,
+          extraPath: linker(onEngine[2], onEngine[3] ? decodeURIComponent(onEngine[3]) : '')
         };
       }
     }

@@ -47,6 +47,10 @@ export default defineConfig(() => ({
     // transform cost again while every other file is transforming too, which
     // outruns the 5s default on a loaded machine. The assertions themselves
     // finish in milliseconds.
-    testTimeout: 20000
+    testTimeout: 20000,
+    // One worker per core means one jsdom and one transform pipeline per core,
+    // which on a 32-thread machine is several gigabytes of resident memory for
+    // a suite that finishes just as fast on eight.
+    maxWorkers: 8
   }
 }));

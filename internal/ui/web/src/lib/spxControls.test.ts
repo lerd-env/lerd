@@ -3,6 +3,7 @@ import {
   isSpxReportView,
   setSpxConfigHidden,
   padSpxControlPanel,
+  themeSpxDocument,
   fetchSpxReportCount
 } from './spxControls';
 
@@ -60,6 +61,47 @@ describe('padSpxControlPanel', () => {
     padSpxControlPanel(document);
     expect(document.querySelectorAll('#lerd-spx-pad').length).toBe(1);
     expect(document.getElementById('lerd-spx-pad')!.textContent).toContain('padding');
+  });
+});
+
+describe('themeSpxDocument', () => {
+  beforeEach(() => {
+    document.head.innerHTML = '';
+  });
+
+  it('points SPX\'s own variables at lerd\'s dark surfaces', () => {
+    themeSpxDocument(document, true);
+    const css = document.getElementById('lerd-spx-theme')!.textContent!;
+    expect(css).toContain('--gradient-end: var(--lerd-bg)');
+    expect(css).toContain('--border-color: var(--lerd-border)');
+  });
+
+  // The palette holds the dark surfaces only, so reusing them in light mode is
+  // what kept the profiler dark whatever the dashboard was wearing.
+  it('leaves the dark surfaces out of light mode', () => {
+    themeSpxDocument(document, false);
+    const css = document.getElementById('lerd-spx-theme')!.textContent!;
+    expect(css).not.toContain('var(--lerd-bg)');
+    expect(css).not.toContain('var(--lerd-card)');
+    expect(css).toContain('--gradient-begin: #ffffff');
+    // The accent is not a surface: it has a tone for each mode already.
+    expect(css).toContain('--hover-color: var(--lerd-accent)');
+  });
+
+  it('rewrites the one style tag when the mode changes', () => {
+    themeSpxDocument(document, true);
+    themeSpxDocument(document, false);
+    expect(document.querySelectorAll('#lerd-spx-theme').length).toBe(1);
+    expect(document.getElementById('lerd-spx-theme')!.textContent).toContain('#ffffff');
+  });
+
+  it('lands after the sheet it has to outrank', () => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '?SPX_UI_URI=/css/main.css';
+    document.head.appendChild(link);
+    themeSpxDocument(document, true);
+    expect(document.head.lastElementChild!.id).toBe('lerd-spx-theme');
   });
 });
 

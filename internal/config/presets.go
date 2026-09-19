@@ -73,12 +73,17 @@ type Preset struct {
 	// exactly as it does today. A preset carrying its own mount path in the YAML
 	// (rabbitmq's path prefix, phpmyadmin's apache alias) needs no such care and
 	// keeps using dashboard_external, which works on every binary.
-	DashboardProxy    bool                  `yaml:"dashboard_proxy,omitempty" json:"dashboard_proxy,omitempty"`
-	Versions          []PresetVersion       `yaml:"versions,omitempty"`
-	DefaultVersion    string                `yaml:"default_version,omitempty"`
-	Default           bool                  `yaml:"default,omitempty"`
-	UpdateStrategy    string                `yaml:"update_strategy,omitempty"`
-	PlatformOverrides []PresetPlatformImage `yaml:"platform_overrides,omitempty"`
+	DashboardProxy bool `yaml:"dashboard_proxy,omitempty" json:"dashboard_proxy,omitempty"`
+	// DashboardProxyStrip asks the proxy to remove its mount prefix before
+	// forwarding, for a UI that cannot be told where it is mounted (Solr serves
+	// only under /solr, the Mercure hub UI only under /.well-known). It works
+	// where that UI's own links are path-relative, which is the common case.
+	DashboardProxyStrip bool                  `yaml:"dashboard_proxy_strip,omitempty" json:"dashboard_proxy_strip,omitempty"`
+	Versions            []PresetVersion       `yaml:"versions,omitempty"`
+	DefaultVersion      string                `yaml:"default_version,omitempty"`
+	Default             bool                  `yaml:"default,omitempty"`
+	UpdateStrategy      string                `yaml:"update_strategy,omitempty"`
+	PlatformOverrides   []PresetPlatformImage `yaml:"platform_overrides,omitempty"`
 	// AllowMajorUpgrade lets the cross-strategy "Upgrade" button cross numeric
 	// major boundaries. Default false: major upgrades typically require manual
 	// data migration and should be installed as a separate alternate instead.
@@ -132,6 +137,7 @@ type PresetMeta struct {
 	Icon           string          `json:"icon,omitempty"`
 	Color          string          `json:"color,omitempty"`
 	AdminFor       []string        `json:"admin_for,omitempty"`
+	AdminRank      int             `json:"admin_rank,omitempty"`
 }
 
 // ListPresets returns the metadata for all bundled service presets, sorted by
@@ -163,6 +169,7 @@ func ListPresets() ([]PresetMeta, error) {
 			Icon:           p.Icon,
 			Color:          NormalizeBrandColor(p.Color),
 			AdminFor:       p.AdminFor,
+			AdminRank:      p.AdminRank,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })

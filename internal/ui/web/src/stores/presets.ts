@@ -24,6 +24,7 @@ export interface Preset {
   icon?: string;
   color?: string;
   admin_for?: string[];
+  admin_rank?: number;
   missing_deps?: string[];
   installed?: boolean;
   installed_tags?: string[];

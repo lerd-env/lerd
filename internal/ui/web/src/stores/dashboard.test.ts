@@ -103,4 +103,67 @@ describe('dashboard store', () => {
     const cur = get(dashboardOpen);
     expect(cur?.extraPath).toBe('/view/id%2Fwith%20spaces');
   });
+
+  it('opens an admin on the engine it was opened from, not the first one it finds', async () => {
+    const { services } = await import('./services');
+    const { openAdminForEngine } = await import('./dashboard');
+
+    services.set([
+      { name: 'postgres', status: 'active', site_count: 0, is_database: true },
+      {
+        name: 'adminer',
+        status: 'active',
+        site_count: 0,
+        dashboard: 'http://localhost:8081',
+        preset: 'adminer',
+        admin_for: ['mysql', 'postgres']
+      }
+    ]);
+
+    await openAdminForEngine('postgres');
+    expect(location.hash).toBe('#service/adminer/on/postgres');
+  });
+
+  it('rehydrates an engine-scoped admin deep-link from the hash', async () => {
+    const { services } = await import('./services');
+    const { initDashboardRoute, dashboardOpen } = await import('./dashboard');
+
+    services.set([
+      { name: 'postgres', status: 'active', site_count: 0, is_database: true },
+      {
+        name: 'adminer',
+        status: 'active',
+        site_count: 0,
+        dashboard: 'http://localhost:8081',
+        preset: 'adminer',
+        admin_for: ['mysql', 'postgres']
+      }
+    ]);
+    location.hash = 'service/adminer/on/postgres';
+    initDashboardRoute();
+
+    expect(get(dashboardOpen)?.extraPath).toBe('?lerd_server=lerd-postgres');
+  });
+
+  it('carries the engine alongside the database when both are known', async () => {
+    const { services } = await import('./services');
+    const { openDatabaseAdmin, dashboardOpen, initDashboardRoute } = await import('./dashboard');
+
+    services.set([
+      { name: 'postgres', status: 'active', site_count: 0, is_database: true },
+      {
+        name: 'adminer',
+        status: 'active',
+        site_count: 0,
+        dashboard: 'http://localhost:8081',
+        preset: 'adminer',
+        admin_for: ['mysql', 'postgres']
+      }
+    ]);
+
+    await openDatabaseAdmin('postgres', 'dating');
+    expect(location.hash).toBe('#service/adminer/on/postgres/dating');
+    initDashboardRoute();
+    expect(get(dashboardOpen)?.extraPath).toBe('?lerd_server=lerd-postgres&db=dating');
+  });
 });

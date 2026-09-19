@@ -15,9 +15,11 @@
     isSpxReportView,
     setSpxConfigHidden,
     padSpxControlPanel,
+    themeSpxDocument,
     fetchSpxReportCount
   } from '$lib/spxControls';
   import { m } from '../paraglide/messages.js';
+  import { syncEmbeddedTheme } from '$lib/embeddedTheme';
 
   let busy = $state(false);
   let clearing = $state(false);
@@ -89,8 +91,28 @@
     }
   }
 
+  // The embedded page follows lerd rather than the browser, re-applied on every
+  // navigation inside the frame because each one loads a fresh document.
+  function applyTheme() {
+    const w = iframeWindow();
+    const dark = document.documentElement.classList.contains('dark');
+    syncEmbeddedTheme(w?.document ?? null, dark);
+    // SPX gates its light mode inside its stylesheet and paints from variables of
+    // its own, so the switch alone leaves it wearing upstream's colours.
+    if (isProfiler && w) themeSpxDocument(w.document, dark);
+  }
+
+  // The theme switcher toggles that class on the host page, so watching it keeps
+  // an open dashboard in step without the overlay knowing how themes are stored.
+  $effect(() => {
+    const obs = new MutationObserver(() => applyTheme());
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => obs.disconnect();
+  });
+
   function onIframeLoad() {
     const w = iframeWindow();
+    applyTheme();
     const href = w?.location.href ?? '';
     if (href === '' || !w) {
       canGoBack = false;

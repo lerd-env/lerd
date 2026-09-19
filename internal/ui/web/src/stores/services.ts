@@ -56,6 +56,7 @@ export interface Service {
   icon?: string;
   color?: string;
   admin_for?: string[];
+  admin_rank?: number;
   // The preset this service came from ("mariadb" for "mariadb-11-8"), matched
   // against another preset's admin_for to find the UI that administers it.
   preset?: string;
