@@ -28,6 +28,8 @@
     watchMeilisearchRules
   } from '$lib/meilisearchTheme';
   import { rememberRustfsTheme, themeRustfsDocument } from '$lib/rustfsTheme';
+  import { repaintLightOnly, themeLightOnlyDocument } from '$lib/lightOnlyTheme';
+  import { repaintPgadmin, watchPgadminRules, themePgadminDocument } from '$lib/pgadminTheme';
 
   let busy = $state(false);
   let clearing = $state(false);
@@ -116,6 +118,19 @@
     if ($dashboardOpen?.name === 'rustfs' && w?.document) {
       rememberRustfsTheme(dark);
       themeRustfsDocument(w.document, dark);
+    }
+    // phpMyAdmin ships no dark mode in any of its themes, so its own stylesheet
+    // is what gets turned around.
+    if ($dashboardOpen?.name === 'phpmyadmin' && w?.document) {
+      repaintLightOnly(w.document, dark);
+      themeLightOnlyDocument(w.document, dark);
+    }
+    // pgAdmin takes its own dark design as soon as the proxy answers its question
+    // about the scheme, so what is left is bringing that design onto the palette.
+    if ($dashboardOpen?.name === 'pgadmin' && w?.document) {
+      themePgadminDocument(w.document, dark);
+      repaintPgadmin(w.document, dark);
+      watchPgadminRules(w, () => document.documentElement.classList.contains('dark'));
     }
     if ($dashboardOpen?.name === 'meilisearch' && w?.document) {
       themeMeilisearchDocument(w.document, dark);
