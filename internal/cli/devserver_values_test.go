@@ -72,3 +72,47 @@ func TestWriteDevServerValues_PortIsANumber(t *testing.T) {
 		t.Errorf("port was quoted\n%s", body)
 	}
 }
+
+// lerd proxies the dev server over plain HTTP, so the generated config has to
+// say the server speaks HTTP and not leave it to whatever the project resolves
+// to. A Herd or Valet install left on the machine carries certificates named
+// after the project directory, and laravel-vite-plugin finds those and turns
+// the dev server to HTTPS on their strength, which answers the vhost's
+// proxy_pass with a 502 (#1858). The plugin takes `userConfig.server.https ??
+// its own`, so an explicit false is what settles it.
+func TestDevServerConfigKeepsTheServerOnPlainHTTP(t *testing.T) {
+	dir := t.TempDir()
+	tool := viteToolForTest(t)
+	addr := devServerAddr{
+		Origin:  "https://winter.test",
+		Hosts:   []string{"winter.test"},
+		Origins: []string{"https://winter.test"},
+	}
+
+	rel, err := writeDevServerValues(dir, tool, addr, 5173)
+	if err != nil {
+		t.Fatalf("writeDevServerValues: %v", err)
+	}
+	values, err := os.ReadFile(filepath.Join(dir, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(values), "https: false") {
+		t.Errorf("the values module leaves https to the project:\n%s", values)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "vite.config.js"), []byte("export default {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wrapRel, err := writeDevServerWrapper(dir, tool, addr)
+	if err != nil {
+		t.Fatalf("writeDevServerWrapper: %v", err)
+	}
+	wrapper, err := os.ReadFile(filepath.Join(dir, wrapRel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(wrapper), "https: false") {
+		t.Errorf("the wrapper leaves https to the project:\n%s", wrapper)
+	}
+}
