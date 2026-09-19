@@ -76,6 +76,10 @@ func newFakeS3(t *testing.T, f *fakeS3) *httptest.Server {
 // fakeS3Env is the env a driven entity declares, pointed at the stub.
 func fakeS3Env(t *testing.T, srv *httptest.Server) []string {
 	t.Helper()
+	// s3Endpoint reads the service's published-port override out of the global
+	// config, so without a config home of its own the client built from this
+	// env talks to the real S3 service on the machine running the test.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	u, err := url.Parse(srv.URL)
 	if err != nil {
 		t.Fatal(err)

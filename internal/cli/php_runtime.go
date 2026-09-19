@@ -179,6 +179,12 @@ func ApplyPHPRuntime(mode string) error {
 		return err
 	}
 
+	// The xdebug ini belongs to the runtime that wrote it, and only a switch
+	// changes which one that is.
+	if err := podman.RefreshXdebugInis(versions); err != nil {
+		feedback.Warn("refreshing the xdebug ini: %v (xdebug may not load)", err)
+	}
+
 	if mode == config.PHPRuntimeNative {
 		// The native runtime auto-prepends the bridge from its host copy, which
 		// is otherwise only refreshed when an image is built. A stale copy here
