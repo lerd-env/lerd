@@ -110,6 +110,8 @@ The tray is also started automatically by `lerd start` if it isn't already runni
 
 The tray preference wins over the autostart one: with the tray off, `lerd autostart enable` arms everything else at login and leaves `lerd-tray.service` disabled, so turning autostart back on never brings back a tray you removed.
 
+The two can still come apart, since a config restored from a snapshot carries the preference back without touching systemd. An armed unit is started by the desktop session itself, which never reads the preference, so the tray would otherwise return on every boot with nothing in the settings to explain it. `lerd start` disarms a unit it finds enabled while the tray is off, and says so when it does.
+
 The unit is wired to `graphical-session.target`, which is reached automatically by GNOME, KDE Plasma, and any Wayland compositor launched through `uwsm` (including Omarchy's Hyprland setup). On bare Hyprland / Sway / i3 launched without `uwsm`, `graphical-session.target` is never started, so the tray will not autostart. Either run the compositor under `uwsm` or replace `WantedBy=graphical-session.target` with `WantedBy=default.target` in `~/.config/systemd/user/lerd-tray.service`.
 
 ---

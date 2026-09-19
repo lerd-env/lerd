@@ -526,6 +526,10 @@ func startLerd(emit func(StartEvent), skip []string) error {
 		fmt.Println("  " + repairSummary(units, shims))
 	}
 
+	if healArmedTrayUnit() {
+		fmt.Println("  Disarmed the lerd-tray unit, which was still set to start at login with the tray switched off")
+	}
+
 	// Restore quadlets and worker units that may be missing after an
 	// uninstall/reinstall cycle. Reads .lerd.yaml from each active site.
 	restoreSiteInfrastructure()
