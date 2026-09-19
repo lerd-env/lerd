@@ -317,3 +317,67 @@ func TestMySQLPresetExcludesRemovedDirectives(t *testing.T) {
 		}
 	}
 }
+
+// A console whose build is rooted at a path of its own is served there, not at
+// the /_svc/ mount, or its own asset and router paths point nowhere.
+func TestDashboardMountPathForOwnPath(t *testing.T) {
+	svc := DefaultPresetService("rustfs")
+	if svc == nil {
+		t.Fatal("no synthesised service for rustfs")
+	}
+	if !DashboardProxyAtOwnPath(svc) {
+		t.Fatal("rustfs should be served at its own path")
+	}
+	if got := DashboardMountPath(svc); got != "/rustfs/console/" {
+		t.Errorf("DashboardMountPath = %q, want /rustfs/console/", got)
+	}
+	if !DashboardProxyKeepsHost(svc) {
+		t.Error("rustfs signs its requests, so the browser's Host must be kept")
+	}
+	if got := DashboardMounts()["rustfs"]; got != "/rustfs/console/" {
+		t.Errorf("DashboardMounts[rustfs] = %q, want /rustfs/console/", got)
+	}
+}
+
+// A service with no path of its own keeps the /_svc/<name>/ mount.
+func TestDashboardMountPathDefault(t *testing.T) {
+	svc := DefaultPresetService("mailpit")
+	if got := DashboardMountPath(svc); got != DashboardProxyPath("mailpit") {
+		t.Errorf("DashboardMountPath = %q, want %q", got, DashboardProxyPath("mailpit"))
+	}
+	if _, ok := DashboardMounts()["mailpit"]; ok {
+		t.Error("mailpit should not claim a path of its own")
+	}
+}
+
+func TestDashboardLoginScript(t *testing.T) {
+	svc := DefaultPresetService("rustfs")
+	script := DashboardLoginScript(svc)
+	for _, want := range []string{"#accessKey", "#secretKey", "lerd", "lerdpassword", "auth.credentials", "/rustfs/console/auth/login/"} {
+		if !strings.Contains(script, want) {
+			t.Errorf("login script missing %q", want)
+		}
+	}
+	// The form belongs to a framework that tracks its inputs, so a value has to
+	// be announced rather than assigned.
+	if !strings.Contains(script, "dispatchEvent") {
+		t.Error("login script assigns values without announcing them")
+	}
+	if DashboardLoginScript(DefaultPresetService("mailpit")) != "" {
+		t.Error("a preset that declares no login form should get no script")
+	}
+}
+
+// The wrapper has to hand a rebuilt request a body it can send: a Request built
+// from a Request carries a stream, which a browser refuses over HTTP/1.1.
+func TestDashboardRerouteScriptShape(t *testing.T) {
+	script := DashboardRerouteScript("rustfs", "/rustfs/console/")
+	for _, want := range []string{"/_svc/rustfs", "/rustfs/console/", "return m+u;}", "arrayBuffer", "XMLHttpRequest.prototype.open"} {
+		if !strings.Contains(script, want) {
+			t.Errorf("reroute script missing %q", want)
+		}
+	}
+	if opens, closes := strings.Count(script, "{"), strings.Count(script, "}"); opens != closes {
+		t.Errorf("reroute script braces unbalanced: %d open, %d close", opens, closes)
+	}
+}

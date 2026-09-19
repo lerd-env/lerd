@@ -20,12 +20,14 @@
   } from '$lib/spxControls';
   import { m } from '../paraglide/messages.js';
   import { syncEmbeddedTheme } from '$lib/embeddedTheme';
+  import { joinDashboardPath } from '$lib/dashboardPath';
   import { rememberMailpitTheme, themeMailpitDocument } from '$lib/mailpitTheme';
   import {
     themeMeilisearchDocument,
     repaintMeilisearch,
     watchMeilisearchRules
   } from '$lib/meilisearchTheme';
+  import { rememberRustfsTheme, themeRustfsDocument } from '$lib/rustfsTheme';
 
   let busy = $state(false);
   let clearing = $state(false);
@@ -48,7 +50,7 @@
     isDocs
       ? docsHref
       : $dashboardOpen
-        ? $dashboardOpen.dashboard + ($dashboardOpen.extraPath ?? '')
+        ? joinDashboardPath($dashboardOpen.dashboard, $dashboardOpen.extraPath)
         : ''
   );
 
@@ -111,6 +113,10 @@
       // Mailpit is Bootstrap's own greys until its variables are told otherwise.
       if (w?.document) themeMailpitDocument(w.document, dark);
     }
+    if ($dashboardOpen?.name === 'rustfs' && w?.document) {
+      rememberRustfsTheme(dark);
+      themeRustfsDocument(w.document, dark);
+    }
     if ($dashboardOpen?.name === 'meilisearch' && w?.document) {
       themeMeilisearchDocument(w.document, dark);
       // The rules already there are swept; the ones its components add as they
@@ -125,11 +131,12 @@
   // keeps step with a theme change as well as a light/dark one, without the
   // overlay knowing how either is stored.
   $effect(() => {
-    // Mailpit reads its preference as it boots, which is after the frame's load
-    // event, so it is written on open rather than once the frame is there.
-    if ($dashboardOpen?.name === 'mailpit') {
-      rememberMailpitTheme(document.documentElement.classList.contains('dark'));
-    }
+    // Both of these read their own preference as they boot, which is after the
+    // frame's load event, so the mode is written on open rather than once the
+    // frame is there.
+    const dark = document.documentElement.classList.contains('dark');
+    if ($dashboardOpen?.name === 'mailpit') rememberMailpitTheme(dark);
+    if ($dashboardOpen?.name === 'rustfs') rememberRustfsTheme(dark);
     const obs = new MutationObserver(() => applyTheme());
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });
     return () => obs.disconnect();
@@ -198,7 +205,7 @@
 
 {#if $dashboardOpen}
   {@const d = $dashboardOpen}
-  {@const iframeSrc = d.dashboard + (d.extraPath ?? '')}
+  {@const iframeSrc = joinDashboardPath(d.dashboard, d.extraPath)}
   <div class="fixed top-0 right-0 left-0 bottom-16 md:left-14 md:bottom-0 z-30 flex flex-col bg-white dark:bg-lerd-bg">
     <div class="flex items-center justify-between px-3 py-3 border-b border-gray-200 dark:border-lerd-border shrink-0">
       <div class="flex items-center gap-3 min-w-0">

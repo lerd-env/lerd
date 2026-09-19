@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/serviceops"
@@ -65,6 +66,12 @@ type dashProxyTweaks struct {
 	// rewritten onto the mount alongside href and src, for a page that hands its
 	// own router a base path in an attribute of its own.
 	rebaseAttrs []string
+	// keepHost forwards the Host the browser sent. An upstream whose API is
+	// signed needs it, the signature covering that header.
+	keepHost bool
+	// mount is the path this proxy answers at, when that is not /_svc/<name>/.
+	// Cookies and redirects are scoped to it the same way.
+	mount string
 }
 
 // dashProxyTweaksFor collects what the proxy must add for a service's preset.
@@ -73,11 +80,18 @@ func dashProxyTweaksFor(svc *config.CustomService) dashProxyTweaks {
 		bootstrap:   config.PresetDashboardBootstrap(svc),
 		stripPrefix: config.DashboardProxyStrips(svc),
 		rebaseAttrs: config.DashboardProxyRebases(svc),
+		keepHost:    config.DashboardProxyKeepsHost(svc),
 	}
+	tw.bootstrap += config.DashboardLoginScript(svc)
 	// The reroute goes in first: it has to be in place before the app's own
-	// scripts build their first URL.
+	// scripts build their first URL. A dashboard served at its own path keeps
+	// that path out of it, since those requests are already where they belong.
 	if config.DashboardProxyReroutes(svc) {
-		tw.bootstrap = config.DashboardRerouteScript(svc.Name) + tw.bootstrap
+		keep := ""
+		if config.DashboardProxyAtOwnPath(svc) {
+			keep = config.DashboardMountPath(svc)
+		}
+		tw.bootstrap = config.DashboardRerouteScript(svc.Name, keep) + tw.bootstrap
 	}
 	if k, v, ok := config.PresetProxyHeader(svc); ok {
 		tw.headerKey, tw.headerValue = k, v
@@ -93,7 +107,7 @@ var (
 // dashProxyFor returns a cached reverse proxy for the named service, keyed by
 // name and target so a changed dashboard URL rebuilds.
 func dashProxyFor(name string, target *url.URL, tw dashProxyTweaks) *httputil.ReverseProxy {
-	key := name + "|" + target.String()
+	key := name + "|" + target.String() + "|" + tw.mount
 	dashProxyMu.Lock()
 	defer dashProxyMu.Unlock()
 	if p, ok := dashProxyCache[key]; ok {
@@ -111,6 +125,9 @@ func dashProxyFor(name string, target *url.URL, tw dashProxyTweaks) *httputil.Re
 // cookies and redirects to the mount path).
 func newDashProxy(name string, target *url.URL, tw dashProxyTweaks) *httputil.ReverseProxy {
 	prefix := strings.TrimSuffix(dashProxyPath(name), "/")
+	if tw.mount != "" {
+		prefix = strings.TrimSuffix(tw.mount, "/")
+	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	orig := proxy.Director
 	proxy.Director = func(req *http.Request) {
@@ -125,7 +142,9 @@ func newDashProxy(name string, target *url.URL, tw dashProxyTweaks) *httputil.Re
 			req.URL.Path = rest
 		}
 		orig(req)
-		req.Host = target.Host
+		if !tw.keepHost {
+			req.Host = target.Host
+		}
 		// Set, not add: the mount path is ours to state, and a client-supplied
 		// value would otherwise steer where the upstream thinks it lives.
 		if tw.headerKey != "" {
@@ -424,5 +443,104 @@ func handleDashProxy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("dashboard for %s must be loopback", name), http.StatusBadGateway)
 		return
 	}
+	// A dashboard served at its own path is reached there; what arrives here is
+	// what the page asks of the upstream's root, so the dashboard's own path is
+	// not part of the target.
+	if config.DashboardProxyAtOwnPath(svc) {
+		target = &url.URL{Scheme: target.Scheme, Host: target.Host}
+	}
 	dashProxyFor(name, target, dashProxyTweaksFor(svc)).ServeHTTP(w, r)
+}
+
+// dashMounts caches which service answers at which path, for the dashboards
+// served at a path of their own rather than under /_svc/. It is rebuilt on a
+// timer rather than on demand: every request to lerd-ui passes this way, and a
+// service is installed far less often than a page is loaded.
+var (
+	dashMountMu   sync.Mutex
+	dashMountAt   time.Time
+	dashMountList map[string]*config.CustomService
+)
+
+const dashMountTTL = 5 * time.Second
+
+func dashMountsNow() map[string]*config.CustomService {
+	dashMountMu.Lock()
+	defer dashMountMu.Unlock()
+	if time.Since(dashMountAt) < dashMountTTL && dashMountList != nil {
+		return dashMountList
+	}
+	mounts := map[string]*config.CustomService{}
+	add := func(svc *config.CustomService) {
+		if svc == nil || !dashProxyEligible(svc) || !config.DashboardProxyAtOwnPath(svc) {
+			return
+		}
+		mounts[config.DashboardMountPath(svc)] = svc
+	}
+	for _, name := range config.DefaultPresetNames() {
+		add(config.DefaultPresetService(name))
+	}
+	if custom, err := config.ListCustomServices(); err == nil {
+		for _, svc := range custom {
+			add(svc)
+		}
+	}
+	dashMountList, dashMountAt = mounts, time.Now()
+	return mounts
+}
+
+// dashMountFor returns the service serving this request path, for a dashboard
+// mounted where its own build expects to be.
+func dashMountFor(path string) (*config.CustomService, string) {
+	for mount, svc := range dashMountsNow() {
+		if path == strings.TrimSuffix(mount, "/") || strings.HasPrefix(path, mount) {
+			return svc, mount
+		}
+	}
+	return nil, ""
+}
+
+// withDashboardMounts serves a dashboard that has to live at a path of its own
+// before the rest of lerd-ui sees the request. The path is the upstream's, not
+// lerd's, so it is matched against what the presets declare rather than
+// registered on the mux, and a service installed while lerd-ui runs is served
+// without a restart.
+func withDashboardMounts(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		svc, mount := dashMountFor(r.URL.Path)
+		if svc == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		serveDashMount(w, r, svc, mount)
+	})
+}
+
+// serveDashMount proxies one request to a dashboard mounted at its own path.
+// The upstream is its origin: the path the browser asked for is the path the
+// upstream serves, so nothing is stripped and nothing is joined.
+func serveDashMount(w http.ResponseWriter, r *http.Request, svc *config.CustomService, mount string) {
+	if !hasHostActionAuthority(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "cross-site", "same-site":
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	target, err := url.Parse(resolveDashboardURL(svc, loadServicesMap()))
+	if err != nil || target.Host == "" {
+		http.Error(w, fmt.Sprintf("invalid dashboard URL for %s", svc.Name), http.StatusBadGateway)
+		return
+	}
+	if !isLoopbackTarget(target.Hostname()) {
+		http.Error(w, fmt.Sprintf("dashboard for %s must be loopback", svc.Name), http.StatusBadGateway)
+		return
+	}
+	origin := &url.URL{Scheme: target.Scheme, Host: target.Host}
+	tw := dashProxyTweaksFor(svc)
+	tw.stripPrefix = false
+	tw.mount = mount
+	dashProxyFor(svc.Name, origin, tw).ServeHTTP(w, r)
 }

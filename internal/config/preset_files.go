@@ -3,6 +3,8 @@ package config
 import (
 	"encoding/base64"
 	"encoding/json"
+	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -88,24 +90,157 @@ func DashboardProxyReroutes(svc *CustomService) bool {
 	return err == nil && p.DashboardProxyReroute
 }
 
+// DashboardProxyAtOwnPath reports whether this dashboard is served at the path
+// its own build expects rather than at the /_svc/<name>/ mount.
+func DashboardProxyAtOwnPath(svc *CustomService) bool {
+	if svc == nil || svc.Dashboard == "" || svc.Preset == "" {
+		return false
+	}
+	p, err := LoadPreset(svc.Preset)
+	return err == nil && p.DashboardProxyAtPath
+}
+
+// DashboardProxyKeepsHost reports whether the browser's Host is forwarded as it
+// arrived. A signed API needs it, the signature covering that header.
+func DashboardProxyKeepsHost(svc *CustomService) bool {
+	if svc == nil || svc.Dashboard == "" || svc.Preset == "" {
+		return false
+	}
+	p, err := LoadPreset(svc.Preset)
+	return err == nil && p.DashboardProxyKeepHost
+}
+
+// DashboardMountPath is the path lerd-ui serves this dashboard at: the path the
+// dashboard URL names when the preset asks for its own, and the /_svc/<name>/
+// mount otherwise.
+func DashboardMountPath(svc *CustomService) string {
+	if !DashboardProxyAtOwnPath(svc) {
+		return DashboardProxyPath(svc.Name)
+	}
+	u, err := url.Parse(svc.Dashboard)
+	if err != nil || u.Path == "" || u.Path == "/" {
+		return DashboardProxyPath(svc.Name)
+	}
+	if !strings.HasSuffix(u.Path, "/") {
+		return u.Path + "/"
+	}
+	return u.Path
+}
+
+// DashboardMounts returns the paths lerd-ui serves dashboards at for the
+// presets that ask to be served where their own build expects, keyed by service
+// name. Both the proxy and the lerd.localhost vhost read it, so the path lerd
+// answers at and the path nginx forwards cannot drift apart.
+func DashboardMounts() map[string]string {
+	mounts := map[string]string{}
+	add := func(svc *CustomService) {
+		if svc == nil || !DashboardProxied(svc) || !DashboardProxyAtOwnPath(svc) {
+			return
+		}
+		mounts[svc.Name] = DashboardMountPath(svc)
+	}
+	for _, name := range DefaultPresetNames() {
+		add(DefaultPresetService(name))
+	}
+	if custom, err := ListCustomServices(); err == nil {
+		for _, svc := range custom {
+			add(svc)
+		}
+	}
+	return mounts
+}
+
+// DashboardLoginScript returns an inline <script> that fills the dashboard's own
+// login form with the credentials lerd provisioned the service with and submits
+// it. The form belongs to a framework that tracks its inputs in JavaScript, so a
+// value is written through the native setter and announced, the way a keystroke
+// would be, rather than assigned and left unnoticed.
+func DashboardLoginScript(svc *CustomService) string {
+	if svc == nil || svc.Preset == "" {
+		return ""
+	}
+	p, err := LoadPreset(svc.Preset)
+	if err != nil || p.DashboardLogin == nil {
+		return ""
+	}
+	login := p.DashboardLogin
+	pairs := make([][2]string, 0, len(login.Fields))
+	for selector, envKey := range login.Fields {
+		value := svc.Environment[envKey]
+		if value == "" {
+			value = presetEnvDefault(p, envKey)
+		}
+		if value == "" {
+			return "" // A credential lerd does not hold; leave the form alone.
+		}
+		pairs = append(pairs, [2]string{selector, value})
+	}
+	sort.Slice(pairs, func(i, j int) bool { return pairs[i][0] < pairs[j][0] })
+	fields, err := json.Marshal(pairs)
+	if err != nil {
+		return ""
+	}
+	return "<script>(function(){var F=" + string(fields) +
+		",P=" + strconv.Quote(login.Path) +
+		",S=" + strconv.Quote(login.Submit) +
+		",D=" + strconv.Quote(login.Done) + ",K='lerd-dashboard-return',sent=false;" +
+		// A deep link is lost when the app sends an unauthenticated visitor to its
+		// login page, so where it was headed is kept until it is logged in.
+		"function stash(){try{if(D&&!localStorage.getItem(D)&&location.pathname.indexOf(P)!==0)" +
+		"{sessionStorage.setItem(K,location.href);}}catch(e){}}" +
+		"function back(){try{var u=sessionStorage.getItem(K);" +
+		"if(u&&(!D||localStorage.getItem(D))){sessionStorage.removeItem(K);" +
+		"if(u!==location.href){location.replace(u);}return true;}}catch(e){}return false;}" +
+		"function go(){if(back())return true;if(sent)return false;" +
+		"try{if(D&&localStorage.getItem(D))return true;}catch(e){}" +
+		"if(P&&location.pathname.indexOf(P)!==0)return false;" +
+		"var b=document.querySelector(S);if(!b)return false;" +
+		"var set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;" +
+		"for(var i=0;i<F.length;i++){var el=document.querySelector(F[i][0]);if(!el)return false;" +
+		"set.call(el,F[i][1]);el.dispatchEvent(new Event('input',{bubbles:true}));}" +
+		"sent=true;b.click();return false;}" +
+		"stash();" +
+		"var n=0,t=setInterval(function(){if(go()||++n>150)clearInterval(t);},100);" +
+		"document.addEventListener('DOMContentLoaded',go);})();</script>"
+}
+
+// presetEnvDefault reads a credential from the preset's own environment block,
+// for a service installed before the value was ever written to its file.
+func presetEnvDefault(p *Preset, key string) string {
+	if p == nil {
+		return ""
+	}
+	return p.Environment[key]
+}
+
 // DashboardRerouteScript returns an inline <script> that sends the page's own
 // root-absolute requests through the mount. It runs before the app's scripts, so
 // a URL the app computes from its origin (Meilisearch's mini-dashboard asks
 // window.location.origin for the API host) reaches the upstream rather than
 // lerd's own root. Requests already inside the mount, other origins and relative
 // URLs are left exactly as they are.
-func DashboardRerouteScript(name string) string {
+func DashboardRerouteScript(name, keep string) string {
 	mount := strings.TrimSuffix(DashboardProxyPath(name), "/")
-	return "<script>(function(){var m=" + strconv.Quote(mount) + ";" +
+	return "<script>(function(){var m=" + strconv.Quote(mount) + ",k=" + strconv.Quote(keep) + ";" +
 		"function r(u){try{u=String(u);}catch(e){return u;}" +
 		"var o=location.origin;" +
 		"if(u.indexOf(o+'/')===0){u=u.slice(o.length);}" +
 		"else if(u.charAt(0)!=='/'||u.charAt(1)==='/'){return u;}" +
 		"if(u===m||u.indexOf(m+'/')===0){return u;}" +
+		"if(k&&u.indexOf(k)===0){return u;}" +
 		"return m+u;}" +
-		"var f=window.fetch;window.fetch=function(i,o){try{" +
-		"if(i&&typeof i==='object'&&i.url){i=new Request(r(i.url),i);}else{i=r(i);}" +
-		"}catch(e){}return f.call(this,i,o);};" +
+		// Rebuilding a Request from a Request turns its body into a stream, which
+		// a browser will not send over HTTP/1.1, so the body is read first and
+		// passed as it was.
+		"var f=window.fetch;window.fetch=function(i,o){" +
+		"try{" +
+		"if(i&&typeof i==='object'&&i.url){var n=r(i.url);if(n===i.url){return f.call(this,i,o);}" +
+		"var self=this;return i.arrayBuffer().then(function(b){" +
+		"var init={method:i.method,headers:i.headers,mode:i.mode==='navigate'?'same-origin':i.mode," +
+		"credentials:i.credentials,cache:i.cache,redirect:i.redirect,integrity:i.integrity};" +
+		"if(i.method!=='GET'&&i.method!=='HEAD'){init.body=b;}" +
+		"return f.call(self,n,init);});}" +
+		"i=r(i);}catch(e){}return f.call(this,i,o);};" +
 		"var x=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(){" +
 		"try{arguments[1]=r(arguments[1]);}catch(e){}return x.apply(this,arguments);};" +
 		"})();</script>"

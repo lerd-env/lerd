@@ -1,6 +1,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { services, serviceAction, type Service } from './services';
 import { adminServiceFor } from './presetSuggestions';
+import { entities } from './entities';
 import { DEFAULT_DOCS_ROUTE, parseDocsHash } from './docs';
 
 export interface DashboardRef {
@@ -84,6 +85,40 @@ export function openMailpitMessage(id: string) {
     extraPath: '/view/' + safeId
   });
   location.hash = 'service/mailpit/view/' + safeId;
+}
+
+// openEntityInDashboard opens the service's own dashboard on one entity, from
+// the address the preset declares for it. The link is the upstream's to describe,
+// so nothing here knows what a bucket or an index is called inside it.
+export async function openEntityInDashboard(svc: Service, kind: string, name: string) {
+  const link = entityLinkFor(svc, kind);
+  if (!svc.dashboard || !link) return;
+  if (svc.status !== 'active' && !(await serviceAction(svc.name, 'start'))) return;
+  const current = get(services).find((s) => s.name === svc.name) || svc;
+  dashboardOpen.set({
+    name: current.name,
+    label: current.name,
+    dashboard: current.dashboard || svc.dashboard,
+    icon: current.icon,
+    extraPath: entityExtraPath(link, name)
+  });
+  // The entity rides in the route, so a reload or a re-hydrate opens it again
+  // rather than snapping the frame back to the dashboard's front page.
+  location.hash =
+    'service/' + current.name + '/entity/' + encodeURIComponent(kind) + '/' + encodeURIComponent(name);
+}
+
+// entityExtraPath fills the address a preset declares for one entity. The link
+// is the upstream's to describe, so nothing here knows what a bucket or an index
+// is called inside it.
+export function entityExtraPath(link: string, name: string): string {
+  return link.replaceAll('{{name}}', encodeURIComponent(name));
+}
+
+// entityLinkFor reads the declared address from the kinds already loaded for
+// this service.
+function entityLinkFor(svc: Service, kind: string): string {
+  return get(entities)[svc.name]?.find((k) => k.kind === kind)?.dashboard_link ?? '';
 }
 
 // DB_DEEP_LINK maps an admin tool to the URL suffix that opens a specific
@@ -206,6 +241,22 @@ function refFromHash(): DashboardRef | null {
           dashboard: mp.dashboard,
           icon: mp.icon,
           extraPath: '/view/' + mpDeep[1]
+        };
+      }
+    }
+    // service/<name>/entity/<kind>/<entity> opens one entity inside the
+    // service's own dashboard, at the address its preset declares.
+    const entityDeep = rest.match(/^(.+?)\/entity\/([^/]+)\/(.+)$/);
+    if (entityDeep) {
+      const svc = get(services).find((x) => x.name === entityDeep[1]);
+      const link = svc ? entityLinkFor(svc, decodeURIComponent(entityDeep[2])) : '';
+      if (svc?.dashboard && link) {
+        return {
+          name: svc.name,
+          label: svc.name,
+          dashboard: svc.dashboard,
+          icon: svc.icon,
+          extraPath: entityExtraPath(link, decodeURIComponent(entityDeep[3]))
         };
       }
     }

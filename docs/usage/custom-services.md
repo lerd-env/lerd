@@ -241,6 +241,22 @@ Stripping alone is not enough for a page whose own links start at the origin roo
 A URL a script computes at call time is past rebasing, since it does not exist in the page. `dashboard_proxy_reroute` covers that: an inline script wraps `fetch` and `XMLHttpRequest` before the app's own scripts run, so a root-absolute request the app builds from the origin it was served at goes through the mount instead of lerd's root. Meilisearch's mini-dashboard asks `window.location.origin` for its API host, which is what needs it. Requests already inside the mount, other origins and relative URLs are untouched.
 :::
 
+Some dashboards cannot be moved at all. RustFS's console is a Next build rooted at `/rustfs/console`, with that path compiled into its own routing, so `dashboard_proxy_at_path` serves it there instead of under the mount, and the `/_svc/<name>/` mount stays for what the page asks of the upstream's root. The lerd vhost names the path alongside its own, so nothing has to be registered by hand. Such a dashboard usually signs its requests, and a signature covers the `Host` header, so `dashboard_proxy_keep_host` forwards the Host the browser sent rather than the upstream's, or every call the page makes is rejected.
+
+A preset can also describe its own login form, which lerd then fills with the credentials it provisioned the service with:
+
+```yaml
+dashboard_login:
+  path: /rustfs/console/auth/login/   # only act here
+  fields:
+    "#accessKey": RUSTFS_ACCESS_KEY   # selector: the env var holding the value
+    "#secretKey": RUSTFS_SECRET_KEY
+  submit: form button[type="submit"]
+  done: auth.credentials              # what the app stores once it is in
+```
+
+The values are written through the input's native setter and announced as a keystroke would be, so a form that tracks its fields in JavaScript sees them. `done` is read before anything is typed, so a dashboard already logged in is left alone.
+
 ## Site handle placeholders
 
 `env_vars` values and `site_init.exec` support two placeholders that are substituted per-project when `lerd env` runs:

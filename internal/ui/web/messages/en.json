@@ -1552,5 +1552,6 @@
   "system_php_updateTitleFor": "Update PHP {version}",
   "system_php_updating": "Updating…",
   "system_php_updateFailed": "Update failed",
-  "system_php_removeConfirmBodyNative": "This stops this version's PHP-FPM pool and deletes its native binaries. Run 'lerd use {version}' to fetch it again."
+  "system_php_removeConfirmBodyNative": "This stops this version's PHP-FPM pool and deletes its native binaries. Run 'lerd use {version}' to fetch it again.",
+  "entities_open_in_dashboard": "Open in the dashboard"
 }

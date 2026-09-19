@@ -1791,3 +1791,31 @@ func TestGenerateCustomVhost_includesLocationScopedCustomD(t *testing.T) {
 		t.Errorf("expected the location-scope include inside location /, got:\n%s", content)
 	}
 }
+
+// The lerd vhost answers only the paths it names and closes the rest, so a
+// dashboard mounted where its own build expects has to be named there too.
+func TestDashboardMountLocations(t *testing.T) {
+	got := dashboardMountLocations("        proxy_pass http://unix:/run/lerd.sock:$request_uri;")
+	if !strings.Contains(got, "location ^~ /rustfs/console/ {") {
+		t.Errorf("rustfs console not served by the lerd vhost: %q", got)
+	}
+	if !strings.Contains(got, "proxy_pass http://unix:/run/lerd.sock:$request_uri;") {
+		t.Errorf("location carries no proxy_pass: %q", got)
+	}
+}
+
+func TestLerdVhostCarriesDashboardMounts(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("XDG_DATA_HOME", dir)
+	if err := EnsureLerdVhost(); err != nil {
+		t.Fatalf("EnsureLerdVhost: %v", err)
+	}
+	out, err := os.ReadFile(filepath.Join(config.NginxConfD(), "lerd.localhost.conf"))
+	if err != nil {
+		t.Fatalf("reading vhost: %v", err)
+	}
+	if !strings.Contains(string(out), "/rustfs/console/") {
+		t.Error("the generated vhost does not forward the rustfs console")
+	}
+}

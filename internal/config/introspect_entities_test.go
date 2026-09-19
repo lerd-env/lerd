@@ -142,3 +142,26 @@ func TestDatabasesEntityPrefersDeclaredEntities(t *testing.T) {
 		t.Error("an introspect block with neither form must resolve to nil")
 	}
 }
+
+// An entity can name where it lives inside the service's own dashboard, so a
+// card opens that entity rather than the dashboard's front page.
+func TestEntityDashboardLink(t *testing.T) {
+	svc := DefaultPresetService("rustfs")
+	if svc == nil {
+		t.Fatal("no synthesised service for rustfs")
+	}
+	full, err := LoadPreset("rustfs")
+	if err != nil {
+		t.Fatalf("LoadPreset: %v", err)
+	}
+	if full.Introspect == nil || len(full.Introspect.Entities) == 0 {
+		t.Fatal("rustfs declares no entities")
+	}
+	buckets := full.Introspect.Entities[0]
+	if buckets.Kind != "buckets" {
+		t.Fatalf("first entity is %q, want buckets", buckets.Kind)
+	}
+	if buckets.DashboardLink != "browser/?bucket={{name}}" {
+		t.Errorf("DashboardLink = %q, want the console's own address for a bucket", buckets.DashboardLink)
+	}
+}

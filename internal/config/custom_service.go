@@ -89,6 +89,12 @@ type EntitySpec struct {
 	// (AWS_BUCKET for buckets), so the UI can link each row to its site the way
 	// database cards do. Only sites whose .env references this service count.
 	OwnerEnv string `yaml:"owner_env,omitempty" json:"owner_env,omitempty"`
+	// DashboardLink is where one entity lives inside the service's own
+	// dashboard, relative to it, with {{name}} standing for the entity. A card
+	// then opens that entity rather than the dashboard's front page. Left out,
+	// the card offers no such button, which is right for a service whose
+	// dashboard has no address per entity.
+	DashboardLink string `yaml:"dashboard_link,omitempty" json:"dashboard_link,omitempty"`
 }
 
 // EntityColumn describes one field the list command prints after the name.

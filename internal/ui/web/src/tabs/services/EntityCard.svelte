@@ -13,6 +13,8 @@
     type EntityRow
   } from '$stores/entities';
   import { goToTab } from '$stores/route';
+  import { openEntityInDashboard } from '$stores/dashboard';
+  import { services } from '$stores/services';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -21,6 +23,10 @@
     row: EntityRow;
   }
   let { service, kind, row }: Props = $props();
+
+  // The card is handed a service name; the entity's own address inside that
+  // service's dashboard needs the service itself.
+  const svc = $derived($services.find((s) => s.name === service));
 
   // The destructive action awaiting its confirmation, or null.
   let confirm = $state<string | null>(null);
@@ -147,6 +153,18 @@
   {/snippet}
 
   {#snippet actions()}
+    {#if kind.dashboard_link && svc?.dashboard}
+      <button
+        type="button"
+        use:tooltip={m.entities_open_in_dashboard()}
+        aria-label={m.entities_open_in_dashboard()}
+        onclick={() => svc && openEntityInDashboard(svc, kind.kind, row.name)}
+        class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+      >
+        <Icon name="external" class="w-3.5 h-3.5" />
+      </button>
+    {/if}
+
     {#if hasExport}
       <a
         href={entityExportUrl(service, kind.kind, row.name)}
