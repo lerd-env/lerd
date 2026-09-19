@@ -31,6 +31,8 @@
   import { repaintLightOnly, themeLightOnlyDocument } from '$lib/lightOnlyTheme';
   import { repaintPgadmin, watchPgadminRules, themePgadminDocument } from '$lib/pgadminTheme';
 
+  const LIGHT_ONLY = ['phpmyadmin', 'mongo-express'];
+
   let busy = $state(false);
   let clearing = $state(false);
   let iframeEl = $state<HTMLIFrameElement | null>(null);
@@ -119,9 +121,10 @@
       rememberRustfsTheme(dark);
       themeRustfsDocument(w.document, dark);
     }
-    // phpMyAdmin ships no dark mode in any of its themes, so its own stylesheet
-    // is what gets turned around.
-    if ($dashboardOpen?.name === 'phpmyadmin' && w?.document) {
+    // Neither of these ships a dark design to switch to, phpMyAdmin carrying none
+    // in any of its four themes and Mongo Express sitting on a Bootstrap 3 that
+    // predates the idea, so their own stylesheets are what gets turned around.
+    if (LIGHT_ONLY.includes($dashboardOpen?.name ?? '') && w?.document) {
       repaintLightOnly(w.document, dark);
       themeLightOnlyDocument(w.document, dark);
     }
