@@ -198,7 +198,15 @@ function mappedColour(doc: Document, text: string, dark: boolean, role: Role): s
 
 // What a declaration said before lerd repainted it, so a second theme is applied
 // to the dashboard's own colours rather than to the first theme's.
-const originals = new WeakMap<CSSStyleDeclaration, Record<string, string>>();
+type Kept = Record<string, string>;
+const originals = new WeakMap<CSSStyleDeclaration, Kept>();
+
+// setPainted records what a declaration said before lerd changed it, so light
+// mode gives the design back rather than the theme's second guess at it.
+function setPainted(style: CSSStyleDeclaration, kept: Kept, prop: string, value: string): void {
+  if (kept[prop] === undefined) kept[prop] = style.getPropertyValue(prop);
+  style.setProperty(prop, value, style.getPropertyPriority(prop));
+}
 
 // paintValue turns around every colour one declaration carries. A property that
 // paints is read for names as well, and a custom property holding a bare triple
@@ -274,7 +282,7 @@ function keepsItsOwnText(doc: Document, style: CSSStyleDeclaration): boolean {
 // two close together, leaning on a shadow or a border to tell them apart. Turned
 // around, that margin is all there is, so the text is walked away from its own
 // surface until it clears the floor.
-function guardPair(doc: Document, style: CSSStyleDeclaration, dark: boolean): void {
+function guardPair(doc: Document, style: CSSStyleDeclaration, kept: Kept, dark: boolean): void {
   const fg = firstColour(doc, style.getPropertyValue('color'));
   const bg = firstColour(
     doc,
@@ -285,7 +293,24 @@ function guardPair(doc: Document, style: CSSStyleDeclaration, dark: boolean): vo
   const s = embeddedSurfaces(dark);
   const ends: Rgb[] = [lifted, parseHex(DARK_TEXT)!, parseHex(s.bg)!];
   const best = ends.reduce((a, b) => (contrast(b, bg) > contrast(a, bg) ? b : a));
-  style.setProperty('color', toHex(best), style.getPropertyPriority('color'));
+  setPainted(style, kept, 'color', toHex(best));
+}
+
+// A filled button keeps the tone it chose for its own label, so it is the fill
+// that moves: deep enough for that label to be read, and still the colour it was
+// saying, since a green that means view and a red that means delete are carrying
+// the meaning between them. Light designs pitch these fills bright, which reads
+// as a lamp on a dark page as well as failing to be read.
+function guardFill(doc: Document, style: CSSStyleDeclaration, kept: Kept): void {
+  const prop = style.getPropertyValue('background-color') ? 'background-color' : 'background';
+  const value = style.getPropertyValue(prop);
+  const fg = firstColour(doc, style.getPropertyValue('color'));
+  const bg = firstColour(doc, value);
+  if (!fg || !bg || contrast(fg, bg) >= AA_TEXT) return;
+  const seated = readableOn(bg, fg, AA_TEXT);
+  const match = value.match(NAMED);
+  if (!match) return;
+  setPainted(style, kept, prop, value.replace(match[0], toHex(seated)));
 }
 
 function repaintDeclaration(doc: Document, style: CSSStyleDeclaration, dark: boolean): void {
@@ -311,8 +336,9 @@ function repaintDeclaration(doc: Document, style: CSSStyleDeclaration, dark: boo
     style.setProperty(prop, painted, style.getPropertyPriority(prop));
     touched = true;
   }
-  if (!touched && !seen) return;
-  if (!ownText) guardPair(doc, style, dark);
+  if (ownText) guardFill(doc, style, kept);
+  else guardPair(doc, style, kept, dark);
+  if (!touched && !Object.keys(kept).length) return;
   originals.set(style, kept);
 }
 

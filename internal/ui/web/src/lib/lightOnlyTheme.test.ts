@@ -86,6 +86,26 @@ describe('repaintLightOnly', () => {
     expect(parseInt(painted.slice(1, 3), 16)).toBeLessThan(0x10);
   });
 
+  it('deepens a filled button until its own label can be read, keeping the hue', () => {
+    // Bootstrap 3 pitches these bright: white on its green is 2.5 to 1 before
+    // anything is turned around.
+    const doc = sheetWith('.btn-success { background-color: #5cb85c; color: #ffffff; }');
+    repaintLightOnly(doc, true);
+    expect(rule(doc).getPropertyValue('color')).toBe('#ffffff');
+    const fill = rule(doc).getPropertyValue('background-color');
+    expect(fill).not.toBe('#5cb85c');
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(fill.slice(i, i + 2), 16));
+    expect(g).toBeGreaterThan(r); // still the green it was saying
+    expect(g).toBeGreaterThan(b);
+    expect(g).toBeLessThan(0xb8); // deeper than it was
+  });
+
+  it('leaves a filled button alone when its label already reads', () => {
+    const doc = sheetWith('.btn-dark { background-color: #14532d; color: #ffffff; }');
+    repaintLightOnly(doc, true);
+    expect(rule(doc).getPropertyValue('background-color')).toBe('#14532d');
+  });
+
   it('leaves the sheet lerd itself wrote alone', () => {
     const frame = document.createElement('iframe');
     document.body.appendChild(frame);
