@@ -18,6 +18,8 @@
     lg: 'w-12 h-12'
   };
 
+  // The size is the size: as a flex item in a column that has run out of room, a
+  // button would otherwise be squashed flat instead of letting the column scroll.
   const sizeClass = $derived(sizeMap[size]);
 </script>
 
@@ -25,7 +27,7 @@
   aria-label={title}
   {onclick}
   use:tooltip={{ label: title ?? '', placement: 'right' }}
-  class="{sizeClass} rounded-xl flex items-center justify-center transition-colors {active
+  class="{sizeClass} shrink-0 rounded-xl flex items-center justify-center transition-colors {active
     ? 'bg-lerd-red/10 text-lerd-red'
     : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-700 dark:hover:text-gray-300'}"
 >
