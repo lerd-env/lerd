@@ -258,7 +258,7 @@
                   {:else if wireKind === 'cache'}<code>{d.key}</code>
                   {:else if wireKind === 'http'}<span class="font-mono">{d.method} {d.url}</span>
                   {:else if wireKind === 'log'}{d.message}
-                  {:else if wireKind === 'exception'}{#if d.type && d.type !== 'message'}<span class="font-mono">{d.type}</span> {/if}{d.message}
+                  {:else if wireKind === 'exception'}{#if d.type && d.type !== 'message'}<span class="font-mono">{d.type}</span>{' '}{/if}{d.message}
                   {:else}{d.name}{/if}
                 </span>
                 <span class="flex items-center gap-1 shrink-0">
@@ -268,7 +268,7 @@
                   {:else if wireKind === 'http'}<span class="text-[10px] rounded-sm px-1 py-0.5 {d.failed ? ROSE : SKY}">{d.failed ? 'failed' : m.http_sent()}</span>
                   {:else if wireKind === 'mail' && d.to?.length}<span class="text-[11px] text-gray-400 break-all">→ {d.to[0]}</span>
                   {:else if wireKind === 'log'}{#if d.channel}<span class="text-[11px] text-gray-400">{d.channel}</span>{/if}<span class="text-[10px] rounded-sm px-1 py-0.5 {levelTone(d.level)}">{d.level}</span>
-                  {:else if wireKind === 'exception'}<span class="text-[10px] rounded-sm px-1 py-0.5 {levelTone(d.level)}">{d.level}</span>{/if}
+                  {:else if wireKind === 'exception'}{#if d.source}<span class="text-[11px] text-gray-400">{d.source}</span>{/if}<span class="text-[10px] rounded-sm px-1 py-0.5 {levelTone(d.level)}">{d.level}</span>{/if}
                 </span>
               </button>
               {#if expanded[ev.id]}

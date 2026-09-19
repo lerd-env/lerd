@@ -926,7 +926,7 @@ function seam_begin($class, $method, $self, $args): void
         $stack[] = ['skip' => true];
         $GLOBALS['__lerd_seam_stack'] = $stack;
         if ($seam) {
-            capture($seam['kind'], (string) $method, $self, is_array($args) ? $args : []);
+            capture($seam['kind'], (string) $method, $self, is_array($args) ? $args : [], $seam['name']);
         }
         return;
     }
@@ -983,7 +983,7 @@ function seam_end($class, $method, $failed, $error = ''): void
 // capture reports a call a store-declared capture seam claimed, where the whole
 // event is the call itself rather than a span with a beginning and an end. The
 // kind names the library; each one's extraction is its own function below.
-function capture(string $kind, string $method, $self, array $args): void
+function capture(string $kind, string $method, $self, array $args, string $name = ''): void
 {
     if ($kind === 'ray') {
         ray($args);
@@ -994,8 +994,26 @@ function capture(string $kind, string $method, $self, array $args): void
         return;
     }
     if ($kind === 'exception') {
-        sentry_event($args);
+        error_report($args, $name);
     }
+}
+
+// error_report reports what an app was about to send to an error monitor.
+// Locally the report usually goes nowhere, there being no key configured, and
+// where one is set it goes to a project nobody watches for a developer's own
+// laptop, so the report that matters is the one in front of them.
+//
+// The two shapes a reporter hands over are a throwable, which is everything
+// needed, and Sentry's event plus hint, which is where that SDK keeps the
+// throwable while the event itself is still empty.
+function error_report(array $args, string $source = ''): void
+{
+    $first = isset($args[1]) ? $args[1] : null;
+    if ($first instanceof \Throwable) {
+        throwable_event($first, 'error', $source);
+        return;
+    }
+    sentry_event($args, $source);
 }
 
 // log_record reports one record written to a logger. Monolog is the seam every
@@ -1160,39 +1178,34 @@ function dump_html_to_text(string $html): string
     return trim(str_replace("\xc2\xa0", ' ', $out));
 }
 
-// sentry_event reports what an app was about to send to Sentry. Locally the
-// event usually goes nowhere, there being no DSN configured, and where one is
-// configured it goes to a project nobody watches for a developer's own laptop,
-// so the report that matters is the one in front of them.
-//
-// Sentry hands the throwable in the hint rather than on the event: capturing an
-// exception builds an empty event and lets the pipeline attach the frames
-// later, so the hint is read first, the event's own exceptions second, and a
-// captured message last.
-function sentry_event(array $args): void
+// sentry_event reports one event on its way to Sentry. The throwable is handed
+// in the hint rather than on the event, capturing an exception building an
+// empty event and letting the pipeline attach the frames later, so the hint is
+// read first, the event's own exceptions second, and a captured message last.
+function sentry_event(array $args, string $source = ''): void
 {
     $event = isset($args[1]) ? $args[1] : null;
     $hint = isset($args[2]) ? $args[2] : null;
     $level = sentry_level($event);
     if (is_object($hint) && isset($hint->exception) && $hint->exception instanceof \Throwable) {
-        throwable_event($hint->exception, $level);
+        throwable_event($hint->exception, $level, $source);
         return;
     }
     $thrown = sentry_exception_bag($event);
     if ($thrown) {
-        emit('exception', array_merge($thrown, ['level' => $level]));
+        emit('exception', with_source(array_merge($thrown, ['level' => $level]), $source));
         return;
     }
     $message = is_object($event) && method_exists($event, 'getMessage') ? $event->getMessage() : null;
     if (is_string($message) && $message !== '') {
-        emit('exception', ['type' => 'message', 'message' => $message, 'level' => $level]);
+        emit('exception', with_source(['type' => 'message', 'message' => $message, 'level' => $level], $source));
     }
 }
 
 // throwable_event reports one throwable with its own origin: the frames it was
 // thrown from rather than the ones that reported it, resolved by the same rule
 // the collector resolves a caller with, so the line named is the developer's.
-function throwable_event(\Throwable $t, string $level): void
+function throwable_event(\Throwable $t, string $level, string $source = ''): void
 {
     $frames = [['file' => $t->getFile(), 'line' => $t->getLine(), 'func' => '']];
     foreach ($t->getTrace() as $f) {
@@ -1217,7 +1230,18 @@ function throwable_event(\Throwable $t, string $level): void
     if ($previous instanceof \Throwable) {
         $data['previous'] = get_class($previous) . ': ' . $previous->getMessage();
     }
-    emit_with('exception', $data, $src, $frames);
+    emit_with('exception', with_source($data, $source), $src, $frames);
+}
+
+// with_source names the reporter an event was taken from, which the store's
+// seam declares. An app running one reporter sees the same word on every row,
+// and one running two can tell which saw what.
+function with_source(array $data, string $source): array
+{
+    if ($source !== '') {
+        $data['source'] = $source;
+    }
+    return $data;
 }
 
 // sentry_level reads the severity off an event, defaulting to the one Sentry
