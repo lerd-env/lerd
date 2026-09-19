@@ -389,7 +389,7 @@ func TestDashboardLoginScriptReadsSessionExpiry(t *testing.T) {
 // flips reach nothing. It asks the browser which scheme it is in, and that is
 // the question lerd answers.
 func TestDashboardColorSchemeScript(t *testing.T) {
-	script := DashboardColorSchemeScript()
+	script := DashboardColorSchemeScript("")
 	for _, want := range []string{
 		"parent.document.documentElement",
 		"window.matchMedia=function(q)",
@@ -406,6 +406,26 @@ func TestDashboardColorSchemeScript(t *testing.T) {
 	}
 	if opens, closes := strings.Count(script, "{"), strings.Count(script, "}"); opens != closes {
 		t.Errorf("colour scheme script braces unbalanced: %d open, %d close", opens, closes)
+	}
+	// An app that remembers a side it was given never asks again, so what it was
+	// told is forgotten on the way in.
+	keyed := DashboardColorSchemeScript("mode")
+	if !strings.Contains(keyed, `K="mode"`) || !strings.Contains(keyed, "localStorage.removeItem(K)") {
+		t.Errorf("colour scheme script does not forget the remembered scheme\n%s", keyed)
+	}
+	if strings.Contains(script, "removeItem") && !strings.Contains(script, `K=""`) {
+		t.Error("a dashboard that remembers nothing should have nothing cleared")
+	}
+}
+
+// An app that namespaces its storage by where it is served cannot name the key
+// outright, so the preset writes the mount into it.
+func TestDashboardSchemeKeyCarriesTheMount(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	writeStorePreset(t, "ri", "name: ri\nimage: example/ri:1\ndashboard_scheme_key: \"{{mount}}_theme\"\n")
+	svc := &CustomService{Name: "ri", Preset: "ri", Dashboard: "http://localhost:8085"}
+	if got := DashboardSchemeKey(svc); got != "_svc/ri_theme" {
+		t.Errorf("DashboardSchemeKey = %q, want _svc/ri_theme", got)
 	}
 }
 
