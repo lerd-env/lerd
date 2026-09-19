@@ -64,6 +64,69 @@ func DashboardProxyStrips(svc *CustomService) bool {
 	return err == nil && p.DashboardProxyStrip
 }
 
+// DashboardProxyRebases returns the HTML attributes whose root-absolute values
+// the proxy rewrites onto the mount for this service. Read from the preset, like
+// the flags above.
+func DashboardProxyRebases(svc *CustomService) []string {
+	if svc == nil || svc.Dashboard == "" || svc.Preset == "" {
+		return nil
+	}
+	p, err := LoadPreset(svc.Preset)
+	if err != nil {
+		return nil
+	}
+	return p.DashboardProxyRebase
+}
+
+// DashboardProxyReroutes reports whether the page's own requests are funnelled
+// back into the mount. Read from the preset, like the flags above.
+func DashboardProxyReroutes(svc *CustomService) bool {
+	if svc == nil || svc.Dashboard == "" || svc.Preset == "" {
+		return false
+	}
+	p, err := LoadPreset(svc.Preset)
+	return err == nil && p.DashboardProxyReroute
+}
+
+// DashboardRerouteScript returns an inline <script> that sends the page's own
+// root-absolute requests through the mount. It runs before the app's scripts, so
+// a URL the app computes from its origin (Meilisearch's mini-dashboard asks
+// window.location.origin for the API host) reaches the upstream rather than
+// lerd's own root. Requests already inside the mount, other origins and relative
+// URLs are left exactly as they are.
+func DashboardRerouteScript(name string) string {
+	mount := strings.TrimSuffix(DashboardProxyPath(name), "/")
+	return "<script>(function(){var m=" + strconv.Quote(mount) + ";" +
+		"function r(u){try{u=String(u);}catch(e){return u;}" +
+		"var o=location.origin;" +
+		"if(u.indexOf(o+'/')===0){u=u.slice(o.length);}" +
+		"else if(u.charAt(0)!=='/'||u.charAt(1)==='/'){return u;}" +
+		"if(u===m||u.indexOf(m+'/')===0){return u;}" +
+		"return m+u;}" +
+		"var f=window.fetch;window.fetch=function(i,o){try{" +
+		"if(i&&typeof i==='object'&&i.url){i=new Request(r(i.url),i);}else{i=r(i);}" +
+		"}catch(e){}return f.call(this,i,o);};" +
+		"var x=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(){" +
+		"try{arguments[1]=r(arguments[1]);}catch(e){}return x.apply(this,arguments);};" +
+		"})();</script>"
+}
+
+// DefaultPresetService describes a default-stack service the way the proxy and
+// the dashboard link expect a bundled preset: as the CustomService a preset
+// install would have written. A default service has no such file, since lerd
+// ships it rather than the user adding it, which is the only reason the proxy
+// could not reach one. Returns nil for anything that is not a default preset.
+func DefaultPresetService(name string) *CustomService {
+	if !IsDefaultPreset(name) {
+		return nil
+	}
+	dash := DefaultPresetDashboard(name)
+	if dash == "" {
+		return nil
+	}
+	return &CustomService{Name: name, Preset: name, Dashboard: dash, Ports: PresetPorts(name)}
+}
+
 // PresetProxyEnv returns the container env that makes a bundled upstream serve
 // its UI under the same /_svc/<name> path the lerd-ui proxy mounts it at, so
 // the dashboard embeds same-origin. It is injected at quadlet generation (not

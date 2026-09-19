@@ -1527,6 +1527,11 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		presetPorts = config.PresetPorts(name)
 		dashboardRaw = config.DefaultPresetDashboard(name)
 		connURL = config.DefaultPresetConnectionURL(name)
+		// A default service's dashboard is proxied on the same terms as a
+		// bundled preset's, so the overlay can reach into it.
+		if dashProxyEligible(config.DefaultPresetService(name)) {
+			dashboardRaw = dashProxyPath(name)
+		}
 	case custom != nil:
 		envKVs = custom.EnvVars
 		presetPorts = custom.Ports

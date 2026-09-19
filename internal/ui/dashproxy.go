@@ -61,6 +61,10 @@ type dashProxyTweaks struct {
 	// path carries what is left, so a UI whose assets are path-relative (Solr,
 	// the Mercure hub UI) resolves them under the mount without being told.
 	stripPrefix bool
+	// rebaseAttrs are the extra HTML attributes whose root-absolute values are
+	// rewritten onto the mount alongside href and src, for a page that hands its
+	// own router a base path in an attribute of its own.
+	rebaseAttrs []string
 }
 
 // dashProxyTweaksFor collects what the proxy must add for a service's preset.
@@ -68,6 +72,12 @@ func dashProxyTweaksFor(svc *config.CustomService) dashProxyTweaks {
 	tw := dashProxyTweaks{
 		bootstrap:   config.PresetDashboardBootstrap(svc),
 		stripPrefix: config.DashboardProxyStrips(svc),
+		rebaseAttrs: config.DashboardProxyRebases(svc),
+	}
+	// The reroute goes in first: it has to be in place before the app's own
+	// scripts build their first URL.
+	if config.DashboardProxyReroutes(svc) {
+		tw.bootstrap = config.DashboardRerouteScript(svc.Name) + tw.bootstrap
 	}
 	if k, v, ok := config.PresetProxyHeader(svc); ok {
 		tw.headerKey, tw.headerValue = k, v
@@ -136,9 +146,9 @@ func newDashProxy(name string, target *url.URL, tw dashProxyTweaks) *httputil.Re
 				req.Header.Set("X-Forwarded-Proto", "http")
 			}
 		}
-		// We rewrite the HTML to inject the auth bootstrap, so ask the upstream
-		// for an uncompressed body we can edit.
-		if tw.bootstrap != "" {
+		// We rewrite the HTML to inject the auth bootstrap or to rebase its own
+		// links, so ask the upstream for an uncompressed body we can edit.
+		if tw.bootstrap != "" || tw.stripPrefix {
 			req.Header.Del("Accept-Encoding")
 		}
 	}
@@ -159,6 +169,11 @@ func newDashProxy(name string, target *url.URL, tw dashProxyTweaks) *httputil.Re
 				base = target.Path
 			}
 			resp.Header.Set("Location", rewriteLocationFrom(loc, target.Host, prefix, base))
+		}
+		if tw.stripPrefix {
+			if err := rebaseDashboardHTML(resp, prefix, tw.rebaseAttrs); err != nil {
+				return err
+			}
 		}
 		if tw.bootstrap != "" {
 			return injectDashboardBootstrap(resp, tw.bootstrap)
@@ -277,6 +292,56 @@ func rewriteLocationFrom(loc, targetHost, prefix, basePath string) string {
 	return prefix + loc
 }
 
+// rebaseDashboardHTML moves a page's own root-absolute links onto the mount it
+// is served at. Stripping the prefix lets an upstream that cannot be told where
+// it lives answer at all, but its page still asks for /dist/app.css, which on
+// the shared lerd-ui origin is lerd's own root rather than the upstream's.
+// Attributes whose value does not start with a single slash are left alone, so
+// a relative link, an absolute URL and a protocol-relative one all pass through.
+func rebaseDashboardHTML(resp *http.Response, prefix string, extra []string) error {
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
+		return nil
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return err
+	}
+	html := string(body)
+	for _, attr := range append([]string{"href", "src"}, extra...) {
+		html = rebaseAttribute(html, attr, prefix)
+	}
+	resp.Body = io.NopCloser(strings.NewReader(html))
+	resp.ContentLength = int64(len(html))
+	resp.Header.Set("Content-Length", strconv.Itoa(len(html)))
+	resp.Header.Del("Content-Encoding")
+	return nil
+}
+
+// rebaseAttribute prefixes every root-absolute value of one HTML attribute. A
+// protocol-relative URL starts with two slashes and is another origin's, so the
+// second character decides.
+func rebaseAttribute(html, attr, prefix string) string {
+	var b strings.Builder
+	rest := html
+	for {
+		i := strings.Index(rest, attr+`="/`)
+		if i < 0 {
+			break
+		}
+		cut := i + len(attr) + 2
+		b.WriteString(rest[:cut])
+		if strings.HasPrefix(rest[cut:], "//") {
+			rest = rest[cut:]
+			continue
+		}
+		b.WriteString(prefix)
+		rest = rest[cut:]
+	}
+	b.WriteString(rest)
+	return b.String()
+}
+
 // injectDashboardBootstrap rewrites an HTML dashboard response to insert the
 // auth bootstrap script right after <head>, so it runs before the app's own
 // scripts and the dashboard opens already logged in. Non-HTML responses (assets,
@@ -338,7 +403,11 @@ func handleDashProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	svc, err := config.LoadCustomService(name)
-	if err != nil || !dashProxyEligible(svc) {
+	if err != nil {
+		// A default-stack service has no service file to load; it is the preset.
+		svc = config.DefaultPresetService(name)
+	}
+	if svc == nil || !dashProxyEligible(svc) {
 		http.NotFound(w, r)
 		return
 	}

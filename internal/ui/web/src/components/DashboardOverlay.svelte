@@ -20,6 +20,12 @@
   } from '$lib/spxControls';
   import { m } from '../paraglide/messages.js';
   import { syncEmbeddedTheme } from '$lib/embeddedTheme';
+  import { rememberMailpitTheme, themeMailpitDocument } from '$lib/mailpitTheme';
+  import {
+    themeMeilisearchDocument,
+    repaintMeilisearch,
+    watchMeilisearchRules
+  } from '$lib/meilisearchTheme';
 
   let busy = $state(false);
   let clearing = $state(false);
@@ -100,13 +106,32 @@
     // SPX gates its light mode inside its stylesheet and paints from variables of
     // its own, so the switch alone leaves it wearing upstream's colours.
     if (isProfiler && w) themeSpxDocument(w.document, dark);
+    if ($dashboardOpen?.name === 'mailpit') {
+      rememberMailpitTheme(dark);
+      // Mailpit is Bootstrap's own greys until its variables are told otherwise.
+      if (w?.document) themeMailpitDocument(w.document, dark);
+    }
+    if ($dashboardOpen?.name === 'meilisearch' && w?.document) {
+      themeMeilisearchDocument(w.document, dark);
+      // The rules already there are swept; the ones its components add as they
+      // mount are caught as they arrive.
+      repaintMeilisearch(w.document, dark);
+      watchMeilisearchRules(w, () => document.documentElement.classList.contains('dark'));
+    }
   }
 
-  // The theme switcher toggles that class on the host page, so watching it keeps
-  // an open dashboard in step without the overlay knowing how themes are stored.
+  // The switcher toggles a class for the mode and rewrites the palette as inline
+  // custom properties, so both attributes are watched: an open dashboard then
+  // keeps step with a theme change as well as a light/dark one, without the
+  // overlay knowing how either is stored.
   $effect(() => {
+    // Mailpit reads its preference as it boots, which is after the frame's load
+    // event, so it is written on open rather than once the frame is there.
+    if ($dashboardOpen?.name === 'mailpit') {
+      rememberMailpitTheme(document.documentElement.classList.contains('dark'));
+    }
     const obs = new MutationObserver(() => applyTheme());
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });
     return () => obs.disconnect();
   });
 

@@ -12,6 +12,11 @@ ports:
   - "7700:7700"
 data_dir: /meili_data
 dashboard: http://localhost:7700
+# The mini-dashboard is embedded same-origin so it can be themed. It has no
+# setting for a mount path, and it asks window.location.origin for the API host,
+# so its own requests are sent back through the mount.
+dashboard_proxy_strip: true
+dashboard_proxy_reroute: true
 env_vars:
   - SCOUT_DRIVER=meilisearch
   - MEILISEARCH_HOST=http://lerd-meilisearch:7700

@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -335,5 +336,99 @@ func TestDashProxyEligible_StripOnlyPreset(t *testing.T) {
 	}
 	if !config.DashboardProxyStrips(svc) {
 		t.Error("the stripping mode must be read back from the preset")
+	}
+}
+
+// A page that cannot be told where it is mounted still asks for its assets at
+// the origin root, which on the shared lerd-ui origin is lerd's own.
+func TestRebaseDashboardHTML(t *testing.T) {
+	const page = `<html><head><link rel=stylesheet href="/dist/app.css"><script src="/dist/app.js"></script>` +
+		`<link rel=icon href="//cdn.example/x.svg"><a href="reports/1">rel</a></head>` +
+		`<body><div id="app" data-webroot="/"></div></body></html>`
+	resp := &http.Response{
+		Header: http.Header{"Content-Type": []string{"text/html; charset=utf-8"}},
+		Body:   io.NopCloser(strings.NewReader(page)),
+	}
+	if err := rebaseDashboardHTML(resp, "/_svc/mailpit", []string{"data-webroot"}); err != nil {
+		t.Fatalf("rebase: %v", err)
+	}
+	out, _ := io.ReadAll(resp.Body)
+	got := string(out)
+	for _, want := range []string{
+		`href="/_svc/mailpit/dist/app.css"`,
+		`src="/_svc/mailpit/dist/app.js"`,
+		`data-webroot="/_svc/mailpit/"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s in %s", want, got)
+		}
+	}
+	// Another origin's URL and a relative link are not ours to move.
+	if !strings.Contains(got, `href="//cdn.example/x.svg"`) {
+		t.Errorf("protocol-relative URL rebased: %s", got)
+	}
+	if !strings.Contains(got, `href="reports/1"`) {
+		t.Errorf("relative link rebased: %s", got)
+	}
+	if resp.Header.Get("Content-Length") != strconv.Itoa(len(got)) {
+		t.Errorf("Content-Length %q, body %d", resp.Header.Get("Content-Length"), len(got))
+	}
+}
+
+func TestRebaseDashboardHTMLSkipsNonHTML(t *testing.T) {
+	resp := &http.Response{
+		Header: http.Header{"Content-Type": []string{"application/json"}},
+		Body:   io.NopCloser(strings.NewReader(`{"href":"/api/v1"}`)),
+	}
+	if err := rebaseDashboardHTML(resp, "/_svc/mailpit", nil); err != nil {
+		t.Fatalf("rebase: %v", err)
+	}
+	out, _ := io.ReadAll(resp.Body)
+	if string(out) != `{"href":"/api/v1"}` {
+		t.Errorf("JSON body rewritten: %s", out)
+	}
+}
+
+// Mailpit is part of the default stack, so it has no service file; the proxy has
+// to recognise it from the preset alone or the overlay embeds nothing.
+func TestDefaultServiceIsProxyEligible(t *testing.T) {
+	svc := config.DefaultPresetService("mailpit")
+	if svc == nil {
+		t.Fatal("no synthesised service for mailpit")
+	}
+	if !dashProxyEligible(svc) {
+		t.Error("mailpit not eligible for the same-origin proxy")
+	}
+	tw := dashProxyTweaksFor(svc)
+	if !tw.stripPrefix {
+		t.Error("mailpit should be served by stripping the mount prefix")
+	}
+	if len(tw.rebaseAttrs) == 0 {
+		t.Error("mailpit should rebase the base path it hands its own router")
+	}
+	if config.DefaultPresetService("mysql") != nil && config.DashboardProxied(config.DefaultPresetService("mysql")) {
+		t.Error("a service with no dashboard should not be proxied")
+	}
+}
+
+// An app that builds its API URLs from the origin it is served at reaches lerd's
+// own root under the mount, which rebasing cannot fix: the URL does not exist
+// until a script computes it.
+func TestDashboardRerouteScript(t *testing.T) {
+	svc := config.DefaultPresetService("meilisearch")
+	if svc == nil {
+		t.Fatal("no synthesised service for meilisearch")
+	}
+	tw := dashProxyTweaksFor(svc)
+	if !tw.stripPrefix {
+		t.Error("meilisearch should be served by stripping the mount prefix")
+	}
+	if !strings.Contains(tw.bootstrap, "/_svc/meilisearch") {
+		t.Errorf("reroute script missing the mount: %q", tw.bootstrap)
+	}
+	for _, want := range []string{"window.fetch", "XMLHttpRequest.prototype.open"} {
+		if !strings.Contains(tw.bootstrap, want) {
+			t.Errorf("reroute script does not wrap %s", want)
+		}
 	}
 }
