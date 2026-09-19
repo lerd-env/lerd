@@ -275,7 +275,13 @@ func parseODBCProbe(text, driverName string) ODBCDriverStatus {
 // nothing useful in it.
 func InspectODBCDriver(version string, d config.ODBCDriver) (ODBCDriverStatus, error) {
 	var status ODBCDriverStatus
-	args := []string{"run", "--rm", "-v", config.OdbcInstFile() + ":/etc/odbcinst.ini:ro"}
+	// The registry and the driver both come off the host, and on an SELinux
+	// distribution a container is refused the home directory they live under, so
+	// the probe would read an empty registry and report a working driver as one
+	// the image cannot see.
+	args := []string{"run", "--rm"}
+	args = append(args, HostMountRunArgs()...)
+	args = append(args, "-v", config.OdbcInstFile()+":/etc/odbcinst.ini:ro")
 	// Same guard as the quadlet: mounting a runtime directory here would shadow
 	// the probe container's own libraries and report the driver as needing
 	// libraries that were there until the mount hid them.

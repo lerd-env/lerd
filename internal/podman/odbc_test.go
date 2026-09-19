@@ -1,12 +1,12 @@
 package podman
 
 import (
+	"github.com/geodro/lerd/internal/config"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/geodro/lerd/internal/config"
 )
 
 // The registry is generated, so a driver registered once has to come out as a
@@ -511,5 +511,28 @@ func TestQuadletsMountADriverDirAtTheSpellingTheRegistryUses(t *testing.T) {
 	}
 	if !strings.Contains(franken, want) {
 		t.Errorf("FrankenPHP quadlet disagrees with the FPM one about the same driver (%s):\n%s", want, franken)
+	}
+}
+
+// The probe mounts the generated registry and the driver, both out of the home
+// directory, so on an SELinux distribution it has to opt out of labelling the
+// way every other lerd container does. Without it the registry reads as empty
+// and a driver that loads perfectly is reported as one the image cannot see.
+func TestODBCProbeOptsOutOfSELinuxLabelling(t *testing.T) {
+	var got []string
+	restore := execCommand
+	execCommand = func(name string, args ...string) *exec.Cmd {
+		got = args
+		return exec.Command("true")
+	}
+	defer func() { execCommand = restore }()
+
+	_, _ = InspectODBCDriver("8.4", config.ODBCDriver{Name: "HDBODBC", Driver: "/opt/hana/libodbcHDB.so"})
+	joined := strings.Join(got, " ")
+	if !strings.Contains(joined, "label=disable") {
+		t.Errorf("probe run = %q, want the SELinux opt-out the quadlets use", joined)
+	}
+	if !strings.Contains(joined, "/etc/odbcinst.ini:ro") {
+		t.Errorf("probe run = %q, want the registry still mounted", joined)
 	}
 }
