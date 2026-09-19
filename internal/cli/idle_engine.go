@@ -12,7 +12,6 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/nginx"
 	nodeDet "github.com/geodro/lerd/internal/node"
-	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/siteinfo"
 	"github.com/geodro/lerd/internal/siteops"
 )
@@ -131,8 +130,8 @@ func idleWorkerResumable(site *config.Site, workerName string) bool {
 // engine self-heal stale suspended state after a `lerd start` restarted them.
 func ResumeWorkersForIdle(site *config.Site, workers []string) {
 	phpVersion := site.PHPVersion
-	if detected, err := phpDet.DetectVersion(site.Path); err == nil && detected != "" {
-		phpVersion = detected
+	if resolved, err := phpVersionForDir(site.Path); err == nil && resolved != "" {
+		phpVersion = resolved
 	}
 	for _, w := range workers {
 		resumeWorkerByName(site, w, phpVersion)
@@ -252,8 +251,8 @@ func SuspendWorktreeWorkersForIdle(site *config.Site, wtPath string) []string {
 // workers. Idempotent, like ResumeWorkersForIdle.
 func ResumeWorktreeWorkersForIdle(site *config.Site, wtPath string, workers []string) {
 	phpVersion := site.PHPVersion
-	if detected, err := phpDet.DetectVersion(wtPath); err == nil && detected != "" {
-		phpVersion = detected
+	if resolved, err := phpVersionForDir(wtPath); err == nil && resolved != "" {
+		phpVersion = resolved
 	}
 	fw, ok := config.GetFrameworkForDir(site.Framework, site.Path)
 	if !ok || fw.Workers == nil {
