@@ -259,3 +259,51 @@ func TestWriteDumpBridgeAssets_WritesSeamsFile(t *testing.T) {
 		t.Errorf("seam file missing its header:\n%s", b)
 	}
 }
+
+// TestDevtoolsSeamsConf_RendersPackageCaptures checks a capture seam a package
+// declares reaches the file the extension reads, carrying the kind the store
+// gave it, so a library's own call can be reported without Go naming it.
+func TestDevtoolsSeamsConf_RendersPackageCaptures(t *testing.T) {
+	withTempXDG(t)
+	fwDir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatalf("mkdir store frameworks: %v", err)
+	}
+	index := `{"frameworks":[],"packages":[{"name":"acme/ray","latest":""}]}`
+	if err := os.WriteFile(config.StoreIndexFile(), []byte(index), 0o644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+	pkg := `package: acme/ray
+devtools:
+  captures:
+    - kind: ray
+      class: Acme\Ray\Ray
+      method: send
+    - kind: ray
+      class: Acme\Ray\Ray
+      method: sendRequest
+    - kind: ray
+      class: Acme\Broken|Pipe
+      method: run
+`
+	path := config.StorePackageFile("acme/ray", "")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir store packages: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(pkg), 0o644); err != nil {
+		t.Fatalf("write package: %v", err)
+	}
+
+	got := DevtoolsSeamsConf()
+	for _, want := range []string{
+		"ray|class|Acme\\Ray\\Ray|send|",
+		"ray|class|Acme\\Ray\\Ray|sendRequest|",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("seam file missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "Acme\\Broken") {
+		t.Errorf("a seam whose target holds the separator must be dropped:\n%s", got)
+	}
+}

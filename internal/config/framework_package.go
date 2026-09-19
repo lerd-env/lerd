@@ -59,6 +59,11 @@ type FrameworkPackage struct {
 	HostBinaries []string            `yaml:"host_binaries,omitempty"`
 	Setup        []FrameworkSetupCmd `yaml:"setup,omitempty"`
 	Doctor       *FrameworkDoctor    `yaml:"doctor,omitempty"`
+	// Devtools declares the capture seams this package brings. They belong to
+	// the package rather than to any framework: the class a seam names ships
+	// with the package, so a project on any framework that requires it gets the
+	// same capture.
+	Devtools *FrameworkDevtools `yaml:"devtools,omitempty"`
 	// Removes takes entries away from the resolved framework, for a major of the
 	// package that dropped a command or a worker. Declaring an entry is how a
 	// package replaces one, and this is how it deletes one, which it cannot do by
@@ -478,5 +483,21 @@ func ListStorePackages(projectDir string) []StorePackageInfo {
 		}
 		return out[i].Name < out[j].Name
 	})
+	return out
+}
+
+// PackageDevtools returns the devtools declaration of every package the store
+// publishes and this machine has cached. The seam file is written from the
+// union rather than from one project's resolved layer: a seam names a class
+// that exists only where its package is installed, so a line for a package this
+// machine happens not to run can never fire.
+func PackageDevtools() []*FrameworkDevtools {
+	var out []*FrameworkDevtools
+	for _, entry := range cachedStorePackages() {
+		pkg := loadPackageYAML(StorePackageFile(entry.Name, pickPackageVersion("", entry)))
+		if pkg != nil && pkg.Devtools != nil {
+			out = append(out, pkg.Devtools)
+		}
+	}
 	return out
 }
