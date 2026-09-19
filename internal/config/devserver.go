@@ -55,6 +55,13 @@ var devServerTools = []DevServerTool{{
 export default {
     server: {
         host: true,
+        // lerd proxies this over plain HTTP, so say so rather than leaving it
+        // to whatever the project resolves to. A Herd or Valet install left on
+        // the machine carries certificates named after the project directory,
+        // and laravel-vite-plugin turns the server to HTTPS on their strength,
+        // which answers the vhost with a 502. The plugin reads this value
+        // before its own, so being explicit settles it.
+        https: false,
         port: %s,
         strictPort: true,
         origin: %s,
@@ -117,6 +124,13 @@ const lerd = {
     plugins: [publishPublicUrl],
     server: {
         host: true,
+        // lerd proxies this over plain HTTP, so say so rather than leaving it
+        // to whatever the project resolves to. A Herd or Valet install left on
+        // the machine carries certificates named after the project directory,
+        // and laravel-vite-plugin turns the server to HTTPS on their strength,
+        // which answers the vhost with a 502. The plugin reads this value
+        // before its own, so being explicit settles it.
+        https: false,
         origin: %s,
         allowedHosts: %s,
         // Naming an origin makes some framework plugins treat it as the whole
