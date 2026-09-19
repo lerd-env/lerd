@@ -768,7 +768,7 @@ namespace {
 func TestCollectorPHP_SentryEventsLandAsExceptions(t *testing.T) {
 	dir := t.TempDir()
 	seams := "# header\n" +
-		"exception|class|Fixture\\Sentry\\Client|captureEvent|\n"
+		"exception|class|Fixture\\Sentry\\Client|captureEvent|sentry\n"
 	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
 		t.Fatalf("write seams: %v", err)
 	}
@@ -836,6 +836,7 @@ namespace {
 			Type    string  `json:"type"`
 			Message string  `json:"message"`
 			Level   string  `json:"level"`
+			Source  string  `json:"source"`
 			Trace   []frame `json:"trace"`
 		} `json:"data"`
 	}
@@ -871,5 +872,75 @@ namespace {
 	}
 	if events[2].Data.Type != "message" || events[2].Data.Message != "a note from the app" {
 		t.Errorf("third event = %q/%q, want the captured message", events[2].Data.Type, events[2].Data.Message)
+	}
+	for i, e := range events {
+		if e.Data.Source != "sentry" {
+			t.Errorf("event %d source = %q, want the reporter the store named", i, e.Data.Source)
+		}
+	}
+}
+
+// TestCollectorPHP_ThrowableReportLandsAsException checks a reporter that hands
+// over the throwable itself, the way Inspector does, is reported with the
+// frames it was thrown from rather than the line that reported it.
+func TestCollectorPHP_ThrowableReportLandsAsException(t *testing.T) {
+	dir := t.TempDir()
+	seams := "# header\n" +
+		"exception|class|Fixture\\Apm\\Inspector|reportException|inspector\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
+		t.Fatalf("write seams: %v", err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace Fixture\Apm {
+    class Inspector { public function reportException($throwable, $handled = true) {} }
+}
+namespace App\Billing {
+    function charge() { throw new \RuntimeException('the gateway refused', 7); }
+}
+namespace {
+    require COLLECTOR;
+    $apm = new \Fixture\Apm\Inspector();
+    try {
+        \App\Billing\charge();
+    } catch (\RuntimeException $e) {
+        $wrapped = new \LogicException('checkout failed', 0, $e);
+        \Lerd\Collector\seam_begin('Fixture\\Apm\\Inspector', 'reportException', $apm, [1 => $wrapped, 2 => true]);
+        \Lerd\Collector\seam_end('Fixture\\Apm\\Inspector', 'reportException', false);
+    }
+}
+`)
+
+	type ev struct {
+		Kind string `json:"kind"`
+		Src  struct {
+			File string `json:"file"`
+			Line int    `json:"line"`
+		} `json:"src"`
+		Data struct {
+			Type     string `json:"type"`
+			Message  string `json:"message"`
+			Level    string `json:"level"`
+			Previous string `json:"previous"`
+			Source   string `json:"source"`
+		} `json:"data"`
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d events, want the reported throwable: %v", len(got), got)
+	}
+	var e ev
+	if err := json.Unmarshal([]byte(got[0]), &e); err != nil {
+		t.Fatalf("bad JSON line %q: %v", got[0], err)
+	}
+	if e.Kind != "exception" || e.Data.Type != "LogicException" || e.Data.Message != "checkout failed" {
+		t.Errorf("event = %q/%q/%q, want the reported class and its message", e.Kind, e.Data.Type, e.Data.Message)
+	}
+	if !strings.Contains(e.Data.Previous, "RuntimeException") || !strings.Contains(e.Data.Previous, "the gateway refused") {
+		t.Errorf("previous = %q, want the cause it wrapped", e.Data.Previous)
+	}
+	if !strings.HasSuffix(e.Src.File, "probe.php") || e.Src.Line == 0 {
+		t.Errorf("src = %+v, want the line it was thrown from", e.Src)
+	}
+	if e.Data.Source != "inspector" {
+		t.Errorf("source = %q, want the reporter the store named", e.Data.Source)
 	}
 }
