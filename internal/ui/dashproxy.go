@@ -2,11 +2,13 @@ package ui
 
 import (
 	"fmt"
+	"hash/fnv"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -83,6 +85,11 @@ func dashProxyTweaksFor(svc *config.CustomService) dashProxyTweaks {
 		keepHost:    config.DashboardProxyKeepsHost(svc),
 	}
 	tw.bootstrap += config.DashboardLoginScript(svc)
+	// Before the app's own scripts, since an app that reads the colour scheme
+	// reads it as it boots.
+	if config.DashboardFollowsColorScheme(svc) {
+		tw.bootstrap = config.DashboardColorSchemeScript(config.DashboardSchemeKey(svc)) + tw.bootstrap
+	}
 	// The reroute goes in first: it has to be in place before the app's own
 	// scripts build their first URL. A dashboard served at its own path keeps
 	// that path out of it, since those requests are already where they belong.
@@ -104,10 +111,23 @@ var (
 	dashProxyCache = map[string]*httputil.ReverseProxy{}
 )
 
+// fingerprint is everything this proxy does to a request and a response on the
+// way through. It belongs in the cache key because the tweaks are read from a
+// preset, and a preset can change under a lerd-ui that is already running: the
+// store ships without a release, which is the whole point of it. Keyed on the
+// name alone, the first proxy built for a service would go on injecting a script
+// the preset no longer asks for until someone restarted the process.
+func (tw dashProxyTweaks) fingerprint() string {
+	h := fnv.New64a()
+	fmt.Fprintf(h, "%q|%q|%q|%t|%q|%t|%q", tw.headerKey, tw.headerValue, tw.bootstrap,
+		tw.stripPrefix, strings.Join(tw.rebaseAttrs, ","), tw.keepHost, tw.mount)
+	return strconv.FormatUint(h.Sum64(), 36)
+}
+
 // dashProxyFor returns a cached reverse proxy for the named service, keyed by
 // name and target so a changed dashboard URL rebuilds.
 func dashProxyFor(name string, target *url.URL, tw dashProxyTweaks) *httputil.ReverseProxy {
-	key := name + "|" + target.String() + "|" + tw.mount
+	key := name + "|" + target.String() + "|" + tw.fingerprint()
 	dashProxyMu.Lock()
 	defer dashProxyMu.Unlock()
 	if p, ok := dashProxyCache[key]; ok {
@@ -176,10 +196,11 @@ func newDashProxy(name string, target *url.URL, tw dashProxyTweaks) *httputil.Re
 		// embeds them in an iframe, so drop the framing guards. Same intent as
 		// pgadmin's X_FRAME_OPTIONS='' config mount, applied here upstream-agnostic.
 		resp.Header.Del("X-Frame-Options")
-		if csp := stripFrameAncestors(resp.Header.Get("Content-Security-Policy")); csp == "" {
+		csp := resp.Header.Get("Content-Security-Policy")
+		if stripped := stripFrameAncestors(csp); stripped == "" {
 			resp.Header.Del("Content-Security-Policy")
 		} else {
-			resp.Header.Set("Content-Security-Policy", csp)
+			resp.Header.Set("Content-Security-Policy", stripped)
 		}
 		rewriteSetCookiePaths(resp.Header, prefix+"/")
 		if loc := resp.Header.Get("Location"); loc != "" {
@@ -195,7 +216,7 @@ func newDashProxy(name string, target *url.URL, tw dashProxyTweaks) *httputil.Re
 			}
 		}
 		if tw.bootstrap != "" {
-			return injectDashboardBootstrap(resp, tw.bootstrap)
+			return injectDashboardBootstrap(resp, withScriptNonce(tw.bootstrap, csp))
 		}
 		return nil
 	}
@@ -221,6 +242,21 @@ func isLoopbackTarget(host string) bool {
 // stripFrameAncestors removes the frame-ancestors directive from a CSP value so
 // the dashboard can be embedded same-origin, leaving the rest of the policy
 // intact. Returns the empty string when nothing else remains.
+// nonceIn reads the nonce a page's own policy hands its inline scripts. An
+// upstream that sets one (pgAdmin) refuses every other inline script, so what
+// lerd injects has to carry the same one or it is never run.
+var nonceIn = regexp.MustCompile(`'nonce-([A-Za-z0-9+/=_-]+)'`)
+
+// withScriptNonce stamps the page's own nonce onto the scripts lerd injects,
+// leaving the policy itself as the upstream wrote it.
+func withScriptNonce(script, csp string) string {
+	m := nonceIn.FindStringSubmatch(csp)
+	if m == nil || script == "" {
+		return script
+	}
+	return strings.ReplaceAll(script, "<script>", `<script nonce="`+m[1]+`">`)
+}
+
 func stripFrameAncestors(csp string) string {
 	if csp == "" {
 		return ""

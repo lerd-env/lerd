@@ -28,6 +28,15 @@
     watchMeilisearchRules
   } from '$lib/meilisearchTheme';
   import { rememberRustfsTheme, themeRustfsDocument } from '$lib/rustfsTheme';
+  import { repaintLightOnly, themeLightOnlyDocument } from '$lib/lightOnlyTheme';
+  import {
+    hasFrameDesign,
+    repaintFrameDesign,
+    watchFrameDesign,
+    themeFrameDocument
+  } from '$lib/frameThemes';
+
+  const LIGHT_ONLY = ['phpmyadmin', 'mongo-express', 'rabbitmq'];
 
   let busy = $state(false);
   let clearing = $state(false);
@@ -116,6 +125,24 @@
     if ($dashboardOpen?.name === 'rustfs' && w?.document) {
       rememberRustfsTheme(dark);
       themeRustfsDocument(w.document, dark);
+    }
+    // None of these ships a dark design to switch to: phpMyAdmin carries none in
+    // any of its four themes, Mongo Express sits on a Bootstrap 3 that predates
+    // the idea, and RabbitMQ's management UI has one stylesheet and no second
+    // half to it. So their own stylesheets are what gets turned around.
+    if (LIGHT_ONLY.includes($dashboardOpen?.name ?? '') && w?.document) {
+      repaintLightOnly(w.document, dark);
+      themeLightOnlyDocument(w.document, dark);
+    }
+    // These take a dark design of their own as soon as the proxy answers their
+    // question about the scheme. Dark is not themed though: left there they wear
+    // their own greys inside an overlay wearing lerd's, so the design is laid
+    // over the palette.
+    const design = $dashboardOpen?.name ?? '';
+    if (hasFrameDesign(design) && w?.document) {
+      themeFrameDocument(w.document, dark);
+      repaintFrameDesign(w.document, design, dark);
+      watchFrameDesign(w, design, () => document.documentElement.classList.contains('dark'));
     }
     if ($dashboardOpen?.name === 'meilisearch' && w?.document) {
       themeMeilisearchDocument(w.document, dark);

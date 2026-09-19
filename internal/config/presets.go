@@ -113,6 +113,18 @@ type Preset struct {
 	// covers the Host header, so rewriting it invalidates every call the page
 	// makes.
 	DashboardProxyKeepHost bool `yaml:"dashboard_proxy_keep_host,omitempty" json:"dashboard_proxy_keep_host,omitempty"`
+	// DashboardFollowsColorScheme asks the proxy to tell the embedded page which
+	// colour scheme it is in, for an app that reads prefers-color-scheme from
+	// JavaScript rather than from a media query. Flipping the query inside a
+	// stylesheet cannot reach that, and the app has a dark design of its own
+	// waiting behind it (pgAdmin ships its theme preference set to system).
+	DashboardFollowsColorScheme bool `yaml:"dashboard_follows_color_scheme,omitempty" json:"dashboard_follows_color_scheme,omitempty"`
+	// DashboardSchemeKey names where the app keeps a colour scheme it was told to
+	// remember, so lerd can forget it on the way in. An app that has been given a
+	// side once goes on taking it and never asks the question lerd is answering,
+	// and inside lerd's own overlay the dashboard's theme is the one that should
+	// win. Its own switcher still works for the session.
+	DashboardSchemeKey string `yaml:"dashboard_scheme_key,omitempty" json:"dashboard_scheme_key,omitempty"`
 	// DashboardLogin describes a login form lerd fills in with the credentials
 	// it provisioned the service with, so the dashboard opens where the user
 	// wanted to be rather than on a form asking for what lerd already knows.

@@ -19,6 +19,11 @@ dashboard: http://localhost:8081
 # dashboard_external: pgadmin learns that path from a header lerd sends, so a
 # binary that predates it would proxy to a mount pgadmin does not answer on.
 dashboard_proxy: true
+# pgAdmin builds its palette in JavaScript, so there is no query to flip, but it
+# ships its theme preference set to system and asks the browser which scheme it
+# is in. Answering with lerd's own gets its proper dark design rather than one
+# painted over it.
+dashboard_follows_color_scheme: true
 files:
   - target: /pgadmin4/servers.json
     generator: pgadmin_servers
