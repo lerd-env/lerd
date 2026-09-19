@@ -16,6 +16,14 @@ ContainerName=lerd-php{{.VersionShort}}-fpm
 {{.HostNameLine}}
 Network=lerd
 Volume=%h/.local/share/lerd/hosts:/etc/hosts:ro,z
+# unixODBC's driver registry, generated from the drivers registered with
+# `lerd php:odbc`, plus the directory each driver outside $HOME lives in. Left
+# out until a driver is registered, so a site whose own image writes
+# /etc/odbcinst.ini is not shadowed by an empty registry. Above the home and
+# extra-volume mounts on purpose: a driver directory that happens to contain a
+# parked project has to be mounted before that project, or the later mount is
+# the one that disappears.
+{{.OdbcInstMountLine}}
 Volume=%h:%h:rw
 # Shared ssh-agent socket (lerd auth ssh) so composer's git-over-SSH can reach
 # the user's passphrase-protected keys. Named volume, auto-created by podman;

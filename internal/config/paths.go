@@ -230,6 +230,13 @@ func SharedIniFile() string {
 	return filepath.Join(DataDir(), "php", "shared", "95-shared.ini")
 }
 
+// OdbcInstFile returns the host path for the generated unixODBC driver registry.
+// One file for every PHP version, bind-mounted read-only at /etc/odbcinst.ini,
+// so a driver registered once resolves in every container.
+func OdbcInstFile() string {
+	return filepath.Join(DataDir(), "php", "shared", "odbcinst.ini")
+}
+
 // SharedIniBkpDir holds timestamped backups of the shared ini produced by the
 // editor, next to (not inside) the shared dir so no FPM container's conf.d scan
 // loads a backup as live config.

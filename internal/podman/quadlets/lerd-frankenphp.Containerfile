@@ -34,7 +34,11 @@ RUN install-php-extensions {{.CoreExtensions}} \
 # work without an apk add at container start; git + openssh-client so git over
 # SSH (private composer packages, source installs run inside this container)
 # works without auth failures. All matching the FPM image.
-RUN apk add --no-cache nodejs npm git openssh-client && rm -rf /var/cache/apk/*
+#
+# gcompat + libstdc++ are the musl/glibc shim a vendor ODBC driver needs before
+# unixODBC can load it, and unixodbc brings isql/odbcinst along for debugging.
+RUN apk add --no-cache nodejs npm git openssh-client unixodbc gcompat libstdc++ \
+    && rm -rf /var/cache/apk/*
 
 # lerd_devtools: lerd's engine-level Debug-window capture (queries, mail, views,
 # events, jobs, http), compiled here for the ZTS base since install-php-extensions

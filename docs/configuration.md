@@ -138,6 +138,14 @@ php:
                         # to you, not to a version, so a site that changes version
                         # keeps them.
   packages: [chromium]  # extra Alpine packages (`lerd php:pkg`), same model.
+  odbc_drivers:         # vendor ODBC drivers registered with `lerd php:odbc`.
+    - name: HDBODBC     # the name a DSN's Driver={...} asks for.
+      driver: /home/you/sap/hdbclient/libodbcHDB.so
+      description: SAP HANA
+                        # lerd generates the unixODBC registry from this list and
+                        # mounts it into every PHP container, so one registration
+                        # covers every version and every site. The driver file
+                        # itself stays where the vendor's installer put it.
   ext_apk_deps:         # extra Alpine packages required at build time by
                         # `lerd php:ext add <ext> --apk-deps <pkgs>` invocations.
                         # Keyed by extension name (build deps don't vary by PHP
