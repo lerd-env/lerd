@@ -385,6 +385,42 @@ func TestDashboardLoginScriptReadsSessionExpiry(t *testing.T) {
 	}
 }
 
+// pgAdmin builds its palette in JavaScript, so the media queries the overlay
+// flips reach nothing. It asks the browser which scheme it is in, and that is
+// the question lerd answers.
+func TestDashboardColorSchemeScript(t *testing.T) {
+	script := DashboardColorSchemeScript()
+	for _, want := range []string{
+		"parent.document.documentElement",
+		"window.matchMedia=function(q)",
+		"prefers-color-scheme",
+		"parent.MutationObserver",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("colour scheme script missing %q", want)
+		}
+	}
+	// A query the page asks for anything else has to reach the browser unchanged.
+	if !strings.Contains(script, "return real(q);") {
+		t.Error("colour scheme script swallows every media query, not just the scheme")
+	}
+	if opens, closes := strings.Count(script, "{"), strings.Count(script, "}"); opens != closes {
+		t.Errorf("colour scheme script braces unbalanced: %d open, %d close", opens, closes)
+	}
+}
+
+func TestPgadminIsToldItsColourScheme(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	svc := &CustomService{Name: "pgadmin", Preset: "pgadmin", Dashboard: "http://localhost:8081"}
+	if !DashboardFollowsColorScheme(svc) {
+		t.Error("pgadmin has a dark theme of its own and must be told which scheme it is in")
+	}
+	// A dashboard whose design answers the media query needs no such telling.
+	if DashboardFollowsColorScheme(&CustomService{Name: "adminer", Preset: "adminer", Dashboard: "http://localhost:8080"}) {
+		t.Error("adminer themes itself from the query the overlay flips")
+	}
+}
+
 // The wrapper has to hand a rebuilt request a body it can send: a Request built
 // from a Request carries a stream, which a browser refuses over HTTP/1.1.
 func TestDashboardRerouteScriptShape(t *testing.T) {

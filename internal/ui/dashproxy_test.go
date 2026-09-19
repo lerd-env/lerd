@@ -477,3 +477,17 @@ func TestWithDashboardMountsPassesOtherPaths(t *testing.T) {
 		t.Error("a path no dashboard claims should reach the rest of lerd-ui")
 	}
 }
+
+// pgAdmin hands its own inline scripts a nonce and refuses every other one, so
+// what lerd injects has to carry the same one to run at all.
+func TestWithScriptNonceCarriesThePagesOwn(t *testing.T) {
+	csp := "default-src 'self'; script-src 'self' 'nonce-Ab3-_x=' 'unsafe-eval'"
+	got := withScriptNonce("<script>a()</script><script>b()</script>", csp)
+	if want := `<script nonce="Ab3-_x=">a()</script><script nonce="Ab3-_x=">b()</script>`; got != want {
+		t.Errorf("withScriptNonce = %q, want %q", got, want)
+	}
+	// A page with no policy of its own is left exactly as it is.
+	if got := withScriptNonce("<script>a()</script>", ""); got != "<script>a()</script>" {
+		t.Errorf("withScriptNonce with no policy = %q", got)
+	}
+}

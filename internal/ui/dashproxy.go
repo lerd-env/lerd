@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -83,6 +84,11 @@ func dashProxyTweaksFor(svc *config.CustomService) dashProxyTweaks {
 		keepHost:    config.DashboardProxyKeepsHost(svc),
 	}
 	tw.bootstrap += config.DashboardLoginScript(svc)
+	// Before the app's own scripts, since an app that reads the colour scheme
+	// reads it as it boots.
+	if config.DashboardFollowsColorScheme(svc) {
+		tw.bootstrap = config.DashboardColorSchemeScript() + tw.bootstrap
+	}
 	// The reroute goes in first: it has to be in place before the app's own
 	// scripts build their first URL. A dashboard served at its own path keeps
 	// that path out of it, since those requests are already where they belong.
@@ -176,10 +182,11 @@ func newDashProxy(name string, target *url.URL, tw dashProxyTweaks) *httputil.Re
 		// embeds them in an iframe, so drop the framing guards. Same intent as
 		// pgadmin's X_FRAME_OPTIONS='' config mount, applied here upstream-agnostic.
 		resp.Header.Del("X-Frame-Options")
-		if csp := stripFrameAncestors(resp.Header.Get("Content-Security-Policy")); csp == "" {
+		csp := resp.Header.Get("Content-Security-Policy")
+		if stripped := stripFrameAncestors(csp); stripped == "" {
 			resp.Header.Del("Content-Security-Policy")
 		} else {
-			resp.Header.Set("Content-Security-Policy", csp)
+			resp.Header.Set("Content-Security-Policy", stripped)
 		}
 		rewriteSetCookiePaths(resp.Header, prefix+"/")
 		if loc := resp.Header.Get("Location"); loc != "" {
@@ -195,7 +202,7 @@ func newDashProxy(name string, target *url.URL, tw dashProxyTweaks) *httputil.Re
 			}
 		}
 		if tw.bootstrap != "" {
-			return injectDashboardBootstrap(resp, tw.bootstrap)
+			return injectDashboardBootstrap(resp, withScriptNonce(tw.bootstrap, csp))
 		}
 		return nil
 	}
@@ -221,6 +228,21 @@ func isLoopbackTarget(host string) bool {
 // stripFrameAncestors removes the frame-ancestors directive from a CSP value so
 // the dashboard can be embedded same-origin, leaving the rest of the policy
 // intact. Returns the empty string when nothing else remains.
+// nonceIn reads the nonce a page's own policy hands its inline scripts. An
+// upstream that sets one (pgAdmin) refuses every other inline script, so what
+// lerd injects has to carry the same one or it is never run.
+var nonceIn = regexp.MustCompile(`'nonce-([A-Za-z0-9+/=_-]+)'`)
+
+// withScriptNonce stamps the page's own nonce onto the scripts lerd injects,
+// leaving the policy itself as the upstream wrote it.
+func withScriptNonce(script, csp string) string {
+	m := nonceIn.FindStringSubmatch(csp)
+	if m == nil || script == "" {
+		return script
+	}
+	return strings.ReplaceAll(script, "<script>", `<script nonce="`+m[1]+`">`)
+}
+
 func stripFrameAncestors(csp string) string {
 	if csp == "" {
 		return ""
