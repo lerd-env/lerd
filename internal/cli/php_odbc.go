@@ -67,12 +67,18 @@ func newPhpOdbcAddCmd() *cobra.Command {
 			// declaration, and unregistering it would lose the path. The closing
 			// line has to stop short of promising a DSN that would fail, though.
 			version, err := phpPkgVersion("")
-			loadable := err != nil || reportODBCDriverStatus(version, entry)
-			if !loadable {
-				feedback.Done("driver " + feedback.Val(name) + " registered for every PHP version, but the PHP " + version + " image cannot load it yet")
-				return nil
+			check := odbcCheckUnknown
+			if err == nil {
+				check = reportODBCDriverStatus(version, entry)
 			}
-			feedback.Done("driver " + feedback.Val(name) + " registered, use it as Driver={" + name + "} in a DSN")
+			switch check {
+			case odbcCheckFails:
+				feedback.Done("driver " + feedback.Val(name) + " registered for every PHP version, but the PHP " + version + " image cannot load it yet")
+			case odbcCheckUnknown:
+				feedback.Done("driver " + feedback.Val(name) + " registered, but it was not read back from an image, so run 'lerd php:odbc list' once the runtime is up to see whether it loads")
+			default:
+				feedback.Done("driver " + feedback.Val(name) + " registered, use it as Driver={" + name + "} in a DSN")
+			}
 			return nil
 		},
 	}
@@ -145,10 +151,12 @@ func newPhpOdbcListCmd() *cobra.Command {
 					fmt.Printf("    %s\n", d.Description)
 				}
 				if verErr != nil {
+					fmt.Println("    not checked, no PHP version resolved here")
 					continue
 				}
 				status, statusErr := podman.InspectODBCDriver(version, d)
 				if statusErr != nil {
+					fmt.Printf("    PHP %s: not checked, the image could not be read\n", version)
 					continue
 				}
 				fmt.Printf("    PHP %s: %s\n", version, odbcStatusLine(status))
@@ -268,31 +276,43 @@ func applyODBCChange() error {
 // driver, and reports whether it would actually load. A driver that registers
 // but cannot load is the case worth spelling out: unixODBC answers it as
 // "file not found" later, whatever the real reason was.
-func reportODBCDriverStatus(version string, d config.ODBCDriver) bool {
+func reportODBCDriverStatus(version string, d config.ODBCDriver) odbcCheck {
 	status, err := podman.InspectODBCDriver(version, d)
 	if err != nil {
-		return true // nothing to go on, so nothing to claim
+		return odbcCheckUnknown
 	}
 	if !status.Found {
 		feedback.Warn("PHP %s cannot see %s from inside the image; on macOS the Podman VM shares your home directory, so a driver outside it reaches no container", version, d.Driver)
-		return false
+		return odbcCheckFails
 	}
 	if len(status.Unresolved) > 0 {
 		feedback.Warn("PHP %s cannot load the driver, it needs libraries the image does not have: %s", version, strings.Join(status.Unresolved, ", "))
 		feedback.Note(odbcShimHint)
-		return false
+		return odbcCheckFails
 	}
 	if len(status.Symbols) > 0 {
 		feedback.Warn("PHP %s cannot load the driver, gcompat does not carry these glibc symbols: %s", version, strings.Join(status.Symbols, ", "))
 		feedback.Note(odbcShimHint)
-		return false
+		return odbcCheckFails
 	}
 	if !status.Registered {
 		feedback.Warn("PHP %s does not list %s in odbcinst -q -d", version, d.Name)
-		return false
+		return odbcCheckFails
 	}
-	return true
+	return odbcCheckLoads
 }
+
+// odbcCheck is what reading a driver back from the image established. The third
+// case is the one that used to be folded into success: when the check cannot run
+// at all, nothing has been established, and saying the driver is ready to use in
+// a DSN is a claim nothing supports.
+type odbcCheck int
+
+const (
+	odbcCheckLoads odbcCheck = iota
+	odbcCheckFails
+	odbcCheckUnknown
+)
 
 // odbcShimHint is what to do about a driver the loader cannot satisfy. The
 // shim has to be built against the driver inside the image, which is a per-site

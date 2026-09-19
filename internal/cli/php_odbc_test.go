@@ -146,3 +146,16 @@ func TestOdbcDriverPathRefusesAContainerRuntimeDir(t *testing.T) {
 		}
 	}
 }
+
+// The closing line of add has to separate a driver that was read back and loads
+// from one that was never read back at all. Folding the second into the first
+// meant a registration nothing had inspected still told the user to go ahead and
+// use it in a DSN.
+func TestOdbcCheckSeparatesUncheckedFromLoads(t *testing.T) {
+	if odbcCheckUnknown == odbcCheckLoads {
+		t.Fatal("an unchecked driver reads as one that loads, which is the claim this exists to stop")
+	}
+	if odbcCheckFails == odbcCheckLoads || odbcCheckFails == odbcCheckUnknown {
+		t.Error("the three outcomes must stay distinct")
+	}
+}
