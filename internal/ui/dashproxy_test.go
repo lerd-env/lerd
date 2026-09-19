@@ -491,3 +491,26 @@ func TestWithScriptNonceCarriesThePagesOwn(t *testing.T) {
 		t.Errorf("withScriptNonce with no policy = %q", got)
 	}
 }
+
+// A preset can change under a lerd-ui that is already running, the store
+// shipping without a release, so the proxy a service is served through has to be
+// rebuilt when what it injects changes rather than served from the first one.
+func TestDashProxyCacheFollowsTheTweaks(t *testing.T) {
+	target, err := url.Parse("http://localhost:9999/")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	plain := dashProxyTweaks{}
+	withScript := dashProxyTweaks{bootstrap: "<script>lerd()</script>"}
+	if dashProxyFor("svc", target, plain) == dashProxyFor("svc", target, withScript) {
+		t.Error("a preset that started asking for a script is still served the proxy that had none")
+	}
+	// The same tweaks are still the same proxy, or every request builds one.
+	if dashProxyFor("svc", target, plain) != dashProxyFor("svc", target, plain) {
+		t.Error("unchanged tweaks rebuilt the proxy instead of reusing it")
+	}
+	// Two services that ask for nothing are still two proxies, one per upstream.
+	if dashProxyFor("svc", target, plain) == dashProxyFor("other", target, plain) {
+		t.Error("two services share one proxy")
+	}
+}
