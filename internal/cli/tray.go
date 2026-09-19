@@ -98,6 +98,19 @@ func setTrayPreference(enabled bool) (bool, error) {
 	return true, nil
 }
 
+// healArmedTrayUnit disarms a tray unit left enabled while the preference is
+// off, reporting whether it had to. The desktop session starts an armed unit at
+// login without consulting the preference, so the two coming apart, which a
+// restored config or an older build can do, brings the tray back on every boot
+// with nothing in the settings to explain it.
+func healArmedTrayUnit() bool {
+	if trayEnabled() || !services.Mgr.IsEnabled("lerd-tray") {
+		return false
+	}
+	disableTrayUnit()
+	return true
+}
+
 // trayEnabled reports the configured preference for the start and install
 // paths. A config that will not load keeps the tray, so a broken file never
 // silently removes a surface the user expects.
