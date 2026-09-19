@@ -80,5 +80,8 @@ export async function removePalette(id: string): Promise<boolean> {
 export function watchThemeChanges() {
   return wsMessage.subscribe((msg) => {
     if (msg?.theme !== undefined) adoptTheme(msg.theme);
+    // The desktop theme keeps its id when its colours change, so the list has to
+    // be refetched rather than reapplied from what is already in hand.
+    if (msg?.type === 'theme_list') void loadPalettes();
   });
 }

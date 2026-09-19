@@ -33,6 +33,25 @@ describe('palettes store', () => {
     expect(get(paletteErrors)).toHaveLength(1);
   });
 
+  it('refetches the list when the daemon says the themes on offer changed', async () => {
+    const fetchSpy = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ themes: [{ id: 'omarchy', name: 'Omarchy (nord)', accent: '#81a1c1' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        })
+    );
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    const { watchThemeChanges } = await import('./palettes');
+    const { wsMessage } = await import('$lib/ws');
+
+    const stop = watchThemeChanges();
+    fetchSpy.mockClear();
+    wsMessage.set({ type: 'theme_list' });
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    stop();
+  });
+
   it('lets a file replace the built-in it is named after', async () => {
     globalThis.fetch = vi.fn(async () =>
       new Response(JSON.stringify({ themes: [{ id: 'nord', name: 'My Nord', accent: '#112233' }] }), {

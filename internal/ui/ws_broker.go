@@ -114,6 +114,14 @@ func (b *wsBroker) broadcastTheme(id string) {
 	b.broadcast(wsMessage{Kinds: []string{"theme"}, Theme: payload})
 }
 
+// broadcastThemeList tells every open dashboard that the set of themes on offer
+// changed, so it refetches the list. It carries no payload: the colours behind
+// an id can change without the id doing so, which is what a desktop theme swap
+// looks like from here, and the list is one request away.
+func (b *wsBroker) broadcastThemeList() {
+	b.broadcast(wsMessage{Kinds: []string{"theme_list"}})
+}
+
 func (b *wsBroker) broadcast(msg wsMessage) {
 	b.mu.Lock()
 	var drop []chan wsMessage
