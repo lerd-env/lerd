@@ -183,16 +183,22 @@ func DashboardLoginScript(svc *CustomService) string {
 	return "<script>(function(){var F=" + string(fields) +
 		",P=" + strconv.Quote(login.Path) +
 		",S=" + strconv.Quote(login.Submit) +
-		",D=" + strconv.Quote(login.Done) + ",K='lerd-dashboard-return',sent=false;" +
+		",D=" + strconv.Quote(login.Done) +
+		",X=" + strconv.Quote(login.Expires) + ",K='lerd-dashboard-return',sent=false;" +
+		// A session that has run out leaves its key behind, so the moment it
+		// stored is read too. Anything unreadable counts as out: the worst that
+		// costs is a form filled in again on the page already asking for it.
+		"function live(){try{var v=localStorage.getItem(D);if(!v)return false;if(!X)return true;" +
+		"var e=JSON.parse(v)[X];return !e||Date.parse(e)>Date.now();}catch(e){return false;}}" +
 		// A deep link is lost when the app sends an unauthenticated visitor to its
 		// login page, so where it was headed is kept until it is logged in.
-		"function stash(){try{if(D&&!localStorage.getItem(D)&&location.pathname.indexOf(P)!==0)" +
+		"function stash(){try{if(D&&!live()&&location.pathname.indexOf(P)!==0)" +
 		"{sessionStorage.setItem(K,location.href);}}catch(e){}}" +
 		"function back(){try{var u=sessionStorage.getItem(K);" +
-		"if(u&&(!D||localStorage.getItem(D))){sessionStorage.removeItem(K);" +
+		"if(u&&(!D||live())){sessionStorage.removeItem(K);" +
 		"if(u!==location.href){location.replace(u);}return true;}}catch(e){}return false;}" +
 		"function go(){if(back())return true;if(sent)return false;" +
-		"try{if(D&&localStorage.getItem(D))return true;}catch(e){}" +
+		"if(D&&live())return true;" +
 		"if(P&&location.pathname.indexOf(P)!==0)return false;" +
 		"var b=document.querySelector(S);if(!b)return false;" +
 		"var set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;" +

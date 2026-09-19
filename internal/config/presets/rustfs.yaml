@@ -29,6 +29,9 @@ dashboard_login:
     "#secretKey": RUSTFS_SECRET_KEY
   submit: form button[type="submit"]
   done: auth.credentials
+  # The console logs in through STS, so what it stores runs out; without this
+  # the leftover key reads as a session and the form is never filled again.
+  expires: Expiration
 environment:
   RUSTFS_ACCESS_KEY: lerd
   RUSTFS_SECRET_KEY: lerdpassword

@@ -253,9 +253,10 @@ dashboard_login:
     "#secretKey": RUSTFS_SECRET_KEY
   submit: form button[type="submit"]
   done: auth.credentials              # what the app stores once it is in
+  expires: Expiration                 # the field in it saying when that runs out
 ```
 
-The values are written through the input's native setter and announced as a keystroke would be, so a form that tracks its fields in JavaScript sees them. `done` is read before anything is typed, so a dashboard already logged in is left alone.
+The values are written through the input's native setter and announced as a keystroke would be, so a form that tracks its fields in JavaScript sees them. `done` is read before anything is typed, so a dashboard already logged in is left alone. A dashboard whose session runs out leaves that key behind when it goes stale, which would read as still being logged in, so `expires` names the field inside the stored value holding the moment it stops counting.
 
 ## Site handle placeholders
 
