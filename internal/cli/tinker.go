@@ -17,7 +17,6 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envpass"
 	"github.com/geodro/lerd/internal/nativephp"
-	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -78,13 +77,9 @@ func RunTinker(ctx context.Context, sitePath, siteName, branch, code string) (Ti
 		return res, fmt.Errorf("code is empty")
 	}
 
-	version, err := phpDet.DetectVersion(sitePath)
+	version, err := phpVersionForDir(sitePath)
 	if err != nil {
-		cfg, cfgErr := config.LoadGlobal()
-		if cfgErr != nil {
-			return res, fmt.Errorf("cannot detect PHP version: %w", err)
-		}
-		version = cfg.PHP.DefaultVersion
+		return res, fmt.Errorf("cannot detect PHP version: %w", err)
 	}
 	container := fpmContainerForDir(sitePath, version)
 

@@ -15,7 +15,6 @@ import (
 	"github.com/geodro/lerd/internal/freeport"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
-	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
 )
@@ -240,8 +239,8 @@ func regenSiteOrWorktreeVhost(site *config.Site, sitePath string) {
 		return
 	}
 	phpVer := site.PHPVersion
-	if detected, err := phpDet.DetectVersion(sitePath); err == nil && detected != "" {
-		phpVer = detected
+	if resolved, err := phpVersionForDir(sitePath); err == nil && resolved != "" {
+		phpVer = resolved
 	}
 	if err := nginx.GenerateWorktreeVhostFor(wt.Domain, sitePath, phpVer, site.PrimaryDomain(), site.Name, wt.Branch, site.Secured); err == nil {
 		_ = nginx.Reload()

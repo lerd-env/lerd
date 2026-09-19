@@ -8,7 +8,6 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
-	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/siteops"
 	"github.com/spf13/cobra"
 )
@@ -68,10 +67,9 @@ func newOctaneReloadCmd(use string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			phpVersion, err := phpDet.DetectVersion(cwd)
+			phpVersion, err := phpVersionForDir(cwd)
 			if err != nil {
-				cfg, _ := config.LoadGlobal()
-				phpVersion = cfg.PHP.DefaultVersion
+				return err
 			}
 			if err := ApplyOctaneReload(siteName, cwd, phpVersion, enable); err != nil {
 				return err

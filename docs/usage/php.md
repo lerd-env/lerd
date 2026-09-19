@@ -127,6 +127,8 @@ When serving a request, Lerd picks the PHP version for a project in this order:
 3. `composer.json`: `require.php` constraint, resolved to the best installed version (e.g. `^8.4` with PHP 8.4 and 8.5 installed resolves to `8.5`)
 4. Global default in `~/.config/lerd/config.yaml`
 
+Once a project is linked, that order is what lerd detects with, not what it runs. Linking clamps the detected version to the range the framework supports and stores the result in the site registry, and everything scoped to the site afterwards, the vhost, `lerd console`, `lerd php`, tinker, the workers and `lerd logs`, uses the stored version. So a project pinned to a version its framework does not support is served by the clamped one, and the pin only takes effect once it falls inside the range. A worktree inherits its parent site's version unless its own `.lerd.yaml` overrides it.
+
 When `.php-version` changes on disk, the lerd watcher automatically updates the site registry and regenerates the nginx vhost, no manual reload needed.
 
 To pin a project permanently:
