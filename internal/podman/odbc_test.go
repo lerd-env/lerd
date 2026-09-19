@@ -584,3 +584,43 @@ func TestODBCProbeRefusesRuntimeDirs(t *testing.T) {
 		}
 	}
 }
+
+// An ostree system keeps /opt behind a symlink to /var/opt, so a project parked
+// as /opt/proj is mounted at that spelling while a driver inside it registers as
+// /var/opt/proj/vendor. Inside the container /opt is an ordinary directory, so
+// the parked mount does not put the driver anywhere the registry points at, and
+// treating the two as overlapping left the driver unopenable.
+func TestFPMQuadletMountsADriverWhoseParkedDirIsSpeltDifferently(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	realProj := filepath.Join(root, "var", "proj", "vendor")
+	if err := os.MkdirAll(realProj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "var", "proj"), filepath.Join(root, "proj")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	parked := filepath.Join(root, "proj") // parked at the link spelling
+	if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+		c.ParkedDirectories = []string{parked}
+		c.SetODBCDriver(config.ODBCDriver{Name: "HDBODBC", Driver: filepath.Join(realProj, "libodbcHDB.so")})
+	}); err != nil {
+		t.Fatalf("UpdateGlobal: %v", err)
+	}
+
+	content, err := renderFPMQuadletContent("8.4")
+	if err != nil {
+		t.Fatalf("renderFPMQuadletContent: %v", err)
+	}
+	want := "Volume=" + realProj + ":" + realProj + ":ro"
+	if !strings.Contains(content, want) {
+		t.Errorf("driver is not mounted at the spelling the registry names (%s), so the container cannot open it:\n%s", want, content)
+	}
+	if parkedLine := "Volume=" + parked + ":" + parked + ":rw"; !strings.Contains(content, parkedLine) {
+		t.Errorf("parked project lost its mount (%s):\n%s", parkedLine, content)
+	}
+}

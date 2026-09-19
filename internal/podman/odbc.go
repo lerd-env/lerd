@@ -114,9 +114,9 @@ func odbcFPMMountLines() string {
 // volumes so the parked project mounts on top of it rather than vanishing under
 // it.
 func withinAnyPath(dir string, paths []string) bool {
-	dir = resolvePath(dir)
+	dir = filepath.Clean(dir)
 	for _, p := range paths {
-		p = resolvePath(p)
+		p = filepath.Clean(p)
 		if dir == p || pathWithin(dir, p) {
 			return true
 		}
@@ -207,11 +207,14 @@ func ODBCDriverDirs() []string {
 // a path ExtraVolumePaths carries arrives through that project's read-write
 // mount, where a second read-only line would only take the write access away.
 //
-// Resolved for the comparisons and returned as registered, because the driver
-// manager opens the path odbcinst.ini names and an ostree system reaches the
-// same directory through more than one spelling.
+// Compared by spelling rather than by what the paths resolve to, because what
+// decides coverage is whether the registry's path falls inside a mount the
+// container already has. An ostree system parks /opt/proj and registers the
+// driver under /var/opt/proj, and the container mounts the first spelling while
+// /opt inside it is an ordinary directory, so the resolved paths overlapping
+// says nothing about whether the driver can be opened.
 func odbcDriverMountDirs() []string {
-	home := resolvePath(homeDir())
+	home := filepath.Clean(homeDir())
 	homePrefix := home
 	if homePrefix != "" && !strings.HasSuffix(homePrefix, "/") {
 		homePrefix += "/"
@@ -219,8 +222,8 @@ func odbcDriverMountDirs() []string {
 	extra := ExtraVolumePaths()
 	var dirs []string
 	for _, raw := range ODBCDriverDirs() {
-		dir := resolvePath(raw)
-		if home != "" && (dir == home || strings.HasPrefix(dir, homePrefix)) {
+		dir := filepath.Clean(raw)
+		if home != "" && home != "." && (dir == home || strings.HasPrefix(dir, homePrefix)) {
 			continue
 		}
 		if withinAnyPath(dir, extra) {
