@@ -120,6 +120,23 @@ func DashboardFollowsColorScheme(svc *CustomService) bool {
 	return err == nil && p.DashboardFollowsColorScheme
 }
 
+// DashboardSchemeKey is where the dashboard remembers a colour scheme it was
+// given, for lerd to clear so the answer it gives is the one the app reads.
+func DashboardSchemeKey(svc *CustomService) string {
+	if svc == nil || svc.Dashboard == "" || svc.Preset == "" {
+		return ""
+	}
+	p, err := LoadPreset(svc.Preset)
+	if err != nil {
+		return ""
+	}
+	// An app that namespaces its storage by where it is served cannot name the
+	// key outright, so the preset writes the mount into it. Bare, since that is
+	// how such a key is built: RedisInsight keeps "_svc/redisinsight_theme".
+	mount := strings.Trim(DashboardMountPath(svc), "/")
+	return strings.ReplaceAll(p.DashboardSchemeKey, "{{mount}}", mount)
+}
+
 // DashboardMountPath is the path lerd-ui serves this dashboard at: the path the
 // dashboard URL names when the preset asks for its own, and the /_svc/<name>/
 // mount otherwise.
@@ -232,9 +249,12 @@ func presetEnvDefault(p *Preset, key string) string {
 // The mode is read off the dashboard framing it, which is the same origin, and
 // the class carrying it is watched, so a switch made while the view is open
 // reaches every query the app is already listening to.
-func DashboardColorSchemeScript() string {
+func DashboardColorSchemeScript(remembered string) string {
 	return "<script>(function(){try{" +
 		"var host=parent.document.documentElement,real=window.matchMedia.bind(window),live=[];" +
+		// An app handed a side once stops asking, so what it was told is forgotten
+		// on the way in. Its own switcher still works for as long as the view is open.
+		"var K=" + strconv.Quote(remembered) + ";if(K){try{localStorage.removeItem(K);}catch(e){}}" +
 		"function dark(){return host.classList.contains('dark');}" +
 		"window.matchMedia=function(q){if(!/prefers-color-scheme/i.test(q))return real(q);" +
 		"var wants=/dark/i.test(q),fns=[],view={media:q,onchange:null," +
