@@ -28,7 +28,9 @@ export interface WsMessage {
   devtools_status?: unknown;
   profiler_status?: unknown;
   notification?: NotificationEvent;
-  // The theme the config now holds, sent when another device switched it.
+  // The theme the config now holds, sent when another device switched it. A
+  // message typed theme_list carries nothing and means the themes on offer
+  // changed, which is what a desktop theme swap looks like from here.
   theme?: string;
 }
 

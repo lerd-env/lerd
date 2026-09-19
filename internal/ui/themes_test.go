@@ -197,3 +197,104 @@ func TestBroadcastThemeReachesEveryPeer(t *testing.T) {
 		}
 	}
 }
+
+// withOmarchyTheme lays out the state directory Omarchy keeps its active theme
+// in, so the handler is exercised against a real tree.
+func installOmarchyTheme(t *testing.T, name, colors string) {
+	t.Helper()
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	dir := filepath.Join(state, "omarchy", "current", "theme")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "colors.toml"), []byte(colors), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(state, "omarchy", "current", "theme.name"), []byte(name), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestHandleThemesOffersTheDesktopTheme(t *testing.T) {
+	isolateThemesDir(t)
+	installOmarchyTheme(t, "tokyo-night", "mode = \"dark\"\naccent = \"#7aa2f7\"\nbackground = \"#1a1b26\"\n")
+
+	rec := httptest.NewRecorder()
+	handleThemes(rec, httptest.NewRequest(http.MethodGet, "/api/themes", nil))
+
+	var got struct {
+		Themes []config.UITheme `json:"themes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode %s: %v", rec.Body.String(), err)
+	}
+	var found *config.UITheme
+	for i := range got.Themes {
+		if got.Themes[i].ID == config.OmarchyThemeID {
+			found = &got.Themes[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("themes = %+v, want the desktop theme among them", got.Themes)
+	}
+	if found.Accent != "#7aa2f7" {
+		t.Errorf("Accent = %q, want the desktop accent", found.Accent)
+	}
+	if found.Name != "Omarchy (tokyo-night)" {
+		t.Errorf("Name = %q, want the desktop theme named", found.Name)
+	}
+}
+
+func TestHandleThemesWithoutOmarchyOffersNothingExtra(t *testing.T) {
+	isolateThemesDir(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	rec := httptest.NewRecorder()
+	handleThemes(rec, httptest.NewRequest(http.MethodGet, "/api/themes", nil))
+
+	var got struct {
+		Themes []config.UITheme `json:"themes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode %s: %v", rec.Body.String(), err)
+	}
+	for _, th := range got.Themes {
+		if th.ID == config.OmarchyThemeID {
+			t.Errorf("themes carry %q where Omarchy is not installed", th.ID)
+		}
+	}
+}
+
+// A theme file named omarchy.yaml must not quietly replace the desktop entry,
+// or picking the desktop theme would silently get someone else's colours.
+func TestHandleThemesKeepsTheDesktopEntryOverAFileOfTheSameName(t *testing.T) {
+	dir := isolateThemesDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "omarchy.yaml"), []byte("name: Impostor\naccent: \"#ff0000\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	installOmarchyTheme(t, "nord", "mode = \"dark\"\naccent = \"#81a1c1\"\n")
+
+	rec := httptest.NewRecorder()
+	handleThemes(rec, httptest.NewRequest(http.MethodGet, "/api/themes", nil))
+
+	var got struct {
+		Themes []config.UITheme `json:"themes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode %s: %v", rec.Body.String(), err)
+	}
+	seen := 0
+	for _, th := range got.Themes {
+		if th.ID != config.OmarchyThemeID {
+			continue
+		}
+		seen++
+		if th.Accent != "#81a1c1" {
+			t.Errorf("Accent = %q, want the desktop accent rather than the file's", th.Accent)
+		}
+	}
+	if seen != 1 {
+		t.Errorf("found %d entries for %q, want exactly one", seen, config.OmarchyThemeID)
+	}
+}

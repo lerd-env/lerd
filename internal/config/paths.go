@@ -31,6 +31,14 @@ func xdgDataHome() string {
 	return filepath.Join(home, ".local", "share")
 }
 
+func xdgStateHome() string {
+	if v := os.Getenv("XDG_STATE_HOME"); v != "" {
+		return v
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".local", "state")
+}
+
 // ConfigDir returns ~/.config/lerd/ (or $XDG_CONFIG_HOME/lerd/).
 func ConfigDir() string {
 	return filepath.Join(xdgConfigHome(), "lerd")
