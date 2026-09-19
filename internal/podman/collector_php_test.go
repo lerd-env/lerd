@@ -760,3 +760,116 @@ namespace {
 		t.Errorf("RFC severity = %q, want debug", events[2].Data.Level)
 	}
 }
+
+// TestCollectorPHP_SentryEventsLandAsExceptions checks a store-declared
+// exception capture reports what an app was about to send to Sentry: a
+// throwable handed over in the hint, an event carrying its own exception, and
+// a captured message, each with the level the event was raised at.
+func TestCollectorPHP_SentryEventsLandAsExceptions(t *testing.T) {
+	dir := t.TempDir()
+	seams := "# header\n" +
+		"exception|class|Fixture\\Sentry\\Client|captureEvent|\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
+		t.Fatalf("write seams: %v", err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace Fixture\Sentry {
+    class Client { public function captureEvent($event, $hint = null) {} }
+    class Severity { private $n; public function __construct($n) { $this->n = $n; } public function __toString() { return $this->n; } }
+    class Event {
+        private $level; private $message; private $exceptions = [];
+        public function __construct($level = null, $message = null, array $exceptions = []) {
+            $this->level = $level; $this->message = $message; $this->exceptions = $exceptions;
+        }
+        public function getLevel() { return $this->level; }
+        public function getMessage() { return $this->message; }
+        public function getExceptions() { return $this->exceptions; }
+    }
+    class Bag {
+        private $type; private $value;
+        public function __construct($type, $value) { $this->type = $type; $this->value = $value; }
+        public function getType() { return $this->type; }
+        public function getValue() { return $this->value; }
+    }
+    class Hint { public $exception = null; }
+}
+namespace App\Billing {
+    function charge() { throw new \RuntimeException('the gateway refused'); }
+}
+namespace {
+    require COLLECTOR;
+    $client = new \Fixture\Sentry\Client();
+
+    // captureException: an empty event and the throwable on the hint.
+    try {
+        \App\Billing\charge();
+    } catch (\RuntimeException $e) {
+        $hint = new \Fixture\Sentry\Hint();
+        $hint->exception = $e;
+        \Lerd\Collector\seam_begin('Fixture\\Sentry\\Client', 'captureEvent', $client, [1 => new \Fixture\Sentry\Event(new \Fixture\Sentry\Severity('error')), 2 => $hint]);
+        \Lerd\Collector\seam_end('Fixture\\Sentry\\Client', 'captureEvent', false);
+    }
+
+    // An event the app assembled itself, exception already attached.
+    $event = new \Fixture\Sentry\Event(new \Fixture\Sentry\Severity('warning'), null, [new \Fixture\Sentry\Bag('App\\Exceptions\\Retryable', 'try again')]);
+    \Lerd\Collector\seam_begin('Fixture\\Sentry\\Client', 'captureEvent', $client, [1 => $event]);
+    \Lerd\Collector\seam_end('Fixture\\Sentry\\Client', 'captureEvent', false);
+
+    // captureMessage.
+    \Lerd\Collector\seam_begin('Fixture\\Sentry\\Client', 'captureEvent', $client, [1 => new \Fixture\Sentry\Event(new \Fixture\Sentry\Severity('info'), 'a note from the app')]);
+    \Lerd\Collector\seam_end('Fixture\\Sentry\\Client', 'captureEvent', false);
+
+    // An event with nothing in it is not a report.
+    \Lerd\Collector\seam_begin('Fixture\\Sentry\\Client', 'captureEvent', $client, [1 => new \Fixture\Sentry\Event()]);
+    \Lerd\Collector\seam_end('Fixture\\Sentry\\Client', 'captureEvent', false);
+}
+`)
+
+	type frame struct {
+		File string `json:"file"`
+		Line int    `json:"line"`
+	}
+	type ev struct {
+		Kind string `json:"kind"`
+		Src  frame  `json:"src"`
+		Data struct {
+			Type    string  `json:"type"`
+			Message string  `json:"message"`
+			Level   string  `json:"level"`
+			Trace   []frame `json:"trace"`
+		} `json:"data"`
+	}
+	var events []ev
+	for _, line := range got {
+		var e ev
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			t.Fatalf("bad JSON line %q: %v", line, err)
+		}
+		events = append(events, e)
+	}
+	if len(events) != 3 {
+		t.Fatalf("got %d events, want one per report with something in it: %v", len(events), got)
+	}
+	for _, e := range events {
+		if e.Kind != "exception" {
+			t.Errorf("kind = %q, want exception", e.Kind)
+		}
+	}
+	if events[0].Data.Type != "RuntimeException" || events[0].Data.Message != "the gateway refused" {
+		t.Errorf("first event = %q/%q, want the thrown class and its message", events[0].Data.Type, events[0].Data.Message)
+	}
+	if events[0].Data.Level != "error" {
+		t.Errorf("level = %q, want error", events[0].Data.Level)
+	}
+	// The frames are the throwable's own, so the first one is the throw site
+	// rather than the line that handed the exception to Sentry.
+	if len(events[0].Data.Trace) == 0 || !strings.HasSuffix(events[0].Src.File, "probe.php") {
+		t.Errorf("src/trace = %+v / %d frames, want the throwable's own origin", events[0].Src, len(events[0].Data.Trace))
+	}
+	if events[1].Data.Type != "App\\Exceptions\\Retryable" || events[1].Data.Level != "warning" {
+		t.Errorf("second event = %q/%q, want the attached exception and its level", events[1].Data.Type, events[1].Data.Level)
+	}
+	if events[2].Data.Type != "message" || events[2].Data.Message != "a note from the app" {
+		t.Errorf("third event = %q/%q, want the captured message", events[2].Data.Type, events[2].Data.Message)
+	}
+}
