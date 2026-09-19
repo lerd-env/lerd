@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"hash/fnv"
 	"io"
 	"net"
 	"net/http"
@@ -87,7 +88,7 @@ func dashProxyTweaksFor(svc *config.CustomService) dashProxyTweaks {
 	// Before the app's own scripts, since an app that reads the colour scheme
 	// reads it as it boots.
 	if config.DashboardFollowsColorScheme(svc) {
-		tw.bootstrap = config.DashboardColorSchemeScript() + tw.bootstrap
+		tw.bootstrap = config.DashboardColorSchemeScript(config.DashboardSchemeKey(svc)) + tw.bootstrap
 	}
 	// The reroute goes in first: it has to be in place before the app's own
 	// scripts build their first URL. A dashboard served at its own path keeps
@@ -110,10 +111,23 @@ var (
 	dashProxyCache = map[string]*httputil.ReverseProxy{}
 )
 
+// fingerprint is everything this proxy does to a request and a response on the
+// way through. It belongs in the cache key because the tweaks are read from a
+// preset, and a preset can change under a lerd-ui that is already running: the
+// store ships without a release, which is the whole point of it. Keyed on the
+// name alone, the first proxy built for a service would go on injecting a script
+// the preset no longer asks for until someone restarted the process.
+func (tw dashProxyTweaks) fingerprint() string {
+	h := fnv.New64a()
+	fmt.Fprintf(h, "%q|%q|%q|%t|%q|%t|%q", tw.headerKey, tw.headerValue, tw.bootstrap,
+		tw.stripPrefix, strings.Join(tw.rebaseAttrs, ","), tw.keepHost, tw.mount)
+	return strconv.FormatUint(h.Sum64(), 36)
+}
+
 // dashProxyFor returns a cached reverse proxy for the named service, keyed by
 // name and target so a changed dashboard URL rebuilds.
 func dashProxyFor(name string, target *url.URL, tw dashProxyTweaks) *httputil.ReverseProxy {
-	key := name + "|" + target.String() + "|" + tw.mount
+	key := name + "|" + target.String() + "|" + tw.fingerprint()
 	dashProxyMu.Lock()
 	defer dashProxyMu.Unlock()
 	if p, ok := dashProxyCache[key]; ok {
