@@ -111,7 +111,12 @@ func odbcFPMMountLines() string {
 		if withinAnyPath(dir, extra) {
 			continue
 		}
-		lines = append(lines, "Volume="+dir+":"+dir+":ro")
+		// Mounted at the spelling the registry names, not the resolved one. The
+		// driver manager opens the path in odbcinst.ini, and macOS reaches a
+		// temp or /var path through a symlink, so a resolved mount would put the
+		// driver somewhere the registry never points at, and somewhere the
+		// FrankenPHP quadlet does not mount it either.
+		lines = append(lines, "Volume="+raw+":"+raw+":ro")
 	}
 	return strings.Join(lines, "\n")
 }
@@ -126,9 +131,9 @@ func odbcFPMMountLines() string {
 // volumes so the parked project mounts on top of it rather than vanishing under
 // it.
 func withinAnyPath(dir string, paths []string) bool {
-	dir = filepath.Clean(dir)
+	dir = resolvePath(dir)
 	for _, p := range paths {
-		p = filepath.Clean(p)
+		p = resolvePath(p)
 		if dir == p || pathWithin(dir, p) {
 			return true
 		}

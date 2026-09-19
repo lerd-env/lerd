@@ -465,3 +465,51 @@ func TestODBCDirShadowsRuntimeLeavesUsableDirsAlone(t *testing.T) {
 		}
 	}
 }
+
+// The driver manager opens exactly the path odbcinst.ini names, so the mount has
+// to be written at that spelling and not at what it resolves to. macOS reaches
+// its temp directories and /var through a symlink, which made the FPM quadlet
+// mount a resolved path the registry never points at while the FrankenPHP
+// quadlet mounted the stored one, so the two disagreed about the same driver.
+func TestQuadletsMountADriverDirAtTheSpellingTheRegistryUses(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	real := filepath.Join(root, "real", "drv")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "real"), filepath.Join(root, "link")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	stored := filepath.Join(root, "link", "drv", "libodbcHDB.so")
+	storedDir := filepath.Dir(stored)
+	if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+		c.SetODBCDriver(config.ODBCDriver{Name: "HDBODBC", Driver: stored})
+	}); err != nil {
+		t.Fatalf("UpdateGlobal: %v", err)
+	}
+
+	want := "Volume=" + storedDir + ":" + storedDir + ":ro"
+	fpm, err := renderFPMQuadletContent("8.4")
+	if err != nil {
+		t.Fatalf("renderFPMQuadletContent: %v", err)
+	}
+	if !strings.Contains(fpm, want) {
+		t.Errorf("FPM quadlet does not mount the driver dir as the registry names it (%s):\n%s", want, fpm)
+	}
+	if resolved := "Volume=" + real + ":" + real; strings.Contains(fpm, resolved) {
+		t.Errorf("FPM quadlet mounted the resolved path, which the registry never names:\n%s", fpm)
+	}
+
+	franken, err := GenerateFrankenPHPQuadlet("myapp", filepath.Join(root, "myapp"), "8.4", nil, nil)
+	if err != nil {
+		t.Fatalf("GenerateFrankenPHPQuadlet: %v", err)
+	}
+	if !strings.Contains(franken, want) {
+		t.Errorf("FrankenPHP quadlet disagrees with the FPM one about the same driver (%s):\n%s", want, franken)
+	}
+}
