@@ -479,7 +479,7 @@ func runClientExec(tool string, args []string) error {
 	// owned by you. A cwd outside home is mounted alongside. Joined to the lerd
 	// network so a local target (-h lerd-<service>) resolves and external hosts
 	// stay reachable.
-	runFlags := []string{"run", "--rm", "-i", "--network", "lerd", "--entrypoint", "sh"}
+	runFlags := clientExecBaseFlags()
 	home, _ := os.UserHomeDir()
 	mounted := map[string]bool{}
 	addMount := func(p string) {
@@ -529,4 +529,12 @@ func runClientExec(tool string, args []string) error {
 		return err
 	}
 	return nil
+}
+
+// clientExecBaseFlags is where a client tool's throwaway container starts: the
+// run itself, the lerd network, and the SELinux opt-out it needs before it can
+// read the home directory mounted in below.
+func clientExecBaseFlags() []string {
+	flags := []string{"run", "--rm", "-i", "--network", "lerd", "--entrypoint", "sh"}
+	return append(flags, podman.HostMountRunArgs()...)
 }

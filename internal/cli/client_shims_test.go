@@ -2,6 +2,7 @@ package cli
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -385,4 +386,19 @@ func TestResolveLoopbackTarget(t *testing.T) {
 			t.Errorf("got (%v, %v, %q), want (%v, false, mysql) with -psecret preserved", args, hostGiven, prefer, want)
 		}
 	})
+}
+
+// A client tool runs in a throwaway container with the home directory mounted in,
+// so it can read a CA cert and write its dump to a host path. On an SELinux
+// distribution that read is denied unless the run opts out of labelling the way
+// every lerd quadlet already does, and the tool reports it as its own permission
+// error: mysqldump answers a --result-file under home with OS errno 13.
+func TestClientExecBaseFlagsOptOutOfSELinuxLabelling(t *testing.T) {
+	joined := strings.Join(clientExecBaseFlags(), " ")
+	if !strings.Contains(joined, "label=disable") {
+		t.Errorf("clientExecBaseFlags() = %q, want the SELinux opt-out before the home mount", joined)
+	}
+	if !strings.Contains(joined, "--network lerd") {
+		t.Errorf("clientExecBaseFlags() = %q, want the lerd network kept", joined)
+	}
 }
