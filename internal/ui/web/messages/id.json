@@ -235,6 +235,7 @@
   "debug_disabled_title": "Penangkapan debug dinonaktifkan",
   "debug_enable": "Aktifkan penangkapan",
   "debug_loadMore": "Muat lebih banyak · {shown} dari {total}",
+  "debug_mail_renderedFrom": "dirender dari",
   "debug_searchPlaceholder": "Cari…",
   "debug_show_tests": "Tampilkan proses pengujian",
   "debug_tab_cache": "Cache",

@@ -303,6 +303,9 @@
                     <div class="text-gray-400 break-all">
                       {#if d.from?.length}from {d.from.join(', ')} · {/if}to {(d.to ?? []).join(', ')}{#if d.cc?.length} · cc {d.cc.join(', ')}{/if}
                     </div>
+                    {#if d.views?.length}
+                      <div class="text-gray-400 break-all">{m.debug_mail_renderedFrom()} {d.views.join(', ')}</div>
+                    {/if}
                     {#if d.html}<iframe sandbox="" class="w-full h-64 bg-white rounded-sm border border-gray-200 dark:border-lerd-border" srcdoc={d.html} title={d.subject ?? 'mail'}></iframe>{/if}
                   {/if}
                   {#if wireKind !== 'view'}<TraceBlock src={ev.src} trace={d.trace} />{/if}

@@ -235,6 +235,7 @@
   "debug_disabled_title": "Captura de depanare este dezactivată",
   "debug_enable": "Activează captura",
   "debug_loadMore": "Încarcă mai multe · {shown} din {total}",
+  "debug_mail_renderedFrom": "randat din",
   "debug_searchPlaceholder": "Caută…",
   "debug_show_tests": "Arată rulările de teste",
   "debug_tab_cache": "Cache",

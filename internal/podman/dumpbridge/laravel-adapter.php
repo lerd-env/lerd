@@ -34,6 +34,9 @@ const REGISTERED = 1;
 const PAYLOAD_KEYS = 60;
 const PAYLOAD_NESTED = 20;
 
+// How many recent template names a message can name as its own.
+const VIEW_STACK = 10;
+
 // full reports whether this process captures every kind. A worker is not one of
 // them unless the user opted into full worker capture: everything it does
 // besides running jobs is background polling that would bury the request being
@@ -664,18 +667,35 @@ try {
         return;
     }
 
+    // Templates rendered since the last message went out. A mailable renders
+    // its own view immediately before handing the message to the transport, so
+    // whatever is in here at that point is the mail's view stack.
+    $renderedViews = [];
+
     if ($events) {
         // Mail — captured before send so a failed send is still recorded.
-        $events->listen(\Illuminate\Mail\Events\MessageSending::class, static function ($e) {
+        $events->listen(\Illuminate\Mail\Events\MessageSending::class, static function ($e) use (&$renderedViews) {
             $m = $e->message ?? null;
             if (!$m) {
                 return;
+            }
+            $views = array_slice($renderedViews, -VIEW_STACK);
+            $renderedViews = [];
+            // The catcher has no idea which template produced a message, so the
+            // answer travels with it: the header shows up in mailpit's own
+            // Headers tab, not just in the lerd debug window.
+            if ($views && method_exists($m, 'getHeaders')) {
+                try {
+                    $m->getHeaders()->addTextHeader('X-Lerd-View', implode(', ', $views));
+                } catch (\Throwable $ignored) {
+                }
             }
             $html = method_exists($m, 'getHtmlBody') ? (string) $m->getHtmlBody() : '';
             if ($html === '' && method_exists($m, 'getTextBody')) {
                 $html = (string) $m->getTextBody();
             }
             emit('mail', [
+                'views'   => $views,
                 'subject' => method_exists($m, 'getSubject') ? (string) $m->getSubject() : '',
                 'to'      => addrs(method_exists($m, 'getTo') ? $m->getTo() : []),
                 'from'    => addrs(method_exists($m, 'getFrom') ? $m->getFrom() : []),
@@ -750,15 +770,22 @@ try {
     $view = $app['view'] ?? null;
     if ($view) {
         $compiled = compiled_view_dir($app);
-        $view->composer('*', static function ($v) use ($compiled) {
+        $view->composer('*', static function ($v) use ($compiled, &$renderedViews) {
             $path = method_exists($v, 'getPath') ? (string) $v->getPath() : '';
             if (is_synthetic_view($path, $compiled)) {
                 return;
             }
+            $name = method_exists($v, 'getName') ? (string) $v->getName() : '';
+            if ($name !== '') {
+                $renderedViews[] = $name;
+                if (count($renderedViews) > VIEW_STACK) {
+                    array_shift($renderedViews);
+                }
+            }
             $vars = method_exists($v, 'getData') ? $v->getData() : [];
             $preview = preview_data($vars, shared_view_data($v));
             emit('view', [
-                'name'         => method_exists($v, 'getName') ? (string) $v->getName() : '',
+                'name'         => $name,
                 'path'         => $path,
                 'data_keys'    => array_keys($preview),
                 'data_preview' => $preview,

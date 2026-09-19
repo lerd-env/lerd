@@ -235,6 +235,7 @@
   "debug_disabled_title": "La cattura di debug è disabilitata",
   "debug_enable": "Abilita cattura",
   "debug_loadMore": "Carica altri · {shown} di {total}",
+  "debug_mail_renderedFrom": "generato da",
   "debug_searchPlaceholder": "Cerca…",
   "debug_show_tests": "Mostra esecuzioni dei test",
   "debug_tab_cache": "Cache",

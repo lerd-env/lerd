@@ -434,3 +434,82 @@ $events->fire('Illuminate\\Queue\\Events\\JobQueued', $queued);
 		}
 	}
 }
+
+// TestLaravelAdapterPHP_NamesTheTemplateThatBuiltTheMail checks a caught message
+// carries the template it was rendered from, both in the capture event and as a
+// header the mail catcher itself shows.
+func TestLaravelAdapterPHP_NamesTheTemplateThatBuiltTheMail(t *testing.T) {
+	lines := runLaravelAdapterPHP(t, `<?php
+`+fakeLaravelApp+`
+class FakeHeaders {
+    public $added = [];
+    public function addTextHeader($name, $value) { $this->added[$name] = $value; }
+}
+class FakeMessage {
+    public $headers;
+    public function __construct() { $this->headers = new FakeHeaders(); }
+    public function getHeaders() { return $this->headers; }
+    public function getSubject() { return 'Your invoice'; }
+    public function getHtmlBody() { return '<p>hi</p>'; }
+    public function getTo() { return []; }
+    public function getFrom() { return []; }
+    public function getCc() { return []; }
+}
+class FakeViewFile {
+    private $name; private $path;
+    public function __construct($name, $path) { $this->name = $name; $this->path = $path; }
+    public function getName() { return $this->name; }
+    public function getPath() { return $this->path; }
+    public function getData() { return ['invoice' => 'INV-1']; }
+}
+class FakeViewFactory {
+    public $cbs = [];
+    public function composer($pattern, $cb) { $this->cbs[] = $cb; }
+    public function compose($v) { foreach ($this->cbs as $cb) { $cb($v); } }
+    public function getShared() { return []; }
+}
+$GLOBALS['__lerd_fake_app']['view'] = new FakeViewFactory();
+$GLOBALS['__lerd_fake_app']['config'] = ['view.compiled' => '/app/storage/framework/views'];
+define('LERD_DEVTOOLS_ON', true);
+require ADAPTER;
+$app = $GLOBALS['__lerd_fake_app'];
+$app['view']->compose(new FakeViewFile('mail.invoice', '/app/resources/views/mail/invoice.blade.php'));
+$msg = new FakeMessage();
+$e = new FakeMailEvent();
+$e->message = $msg;
+$app['events']->fire('Illuminate\\Mail\\Events\\MessageSending', $e);
+\Lerd\LaravelAdapter\emit('header', ['value' => $msg->headers->added['X-Lerd-View'] ?? 'MISSING']);
+`)
+
+	type ev struct {
+		Kind string `json:"kind"`
+		Data struct {
+			Views   []string `json:"views"`
+			Subject string   `json:"subject"`
+			Value   string   `json:"value"`
+		} `json:"data"`
+	}
+	var mail, header *ev
+	for _, line := range lines {
+		var e ev
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			t.Fatalf("bad JSON line %q: %v", line, err)
+		}
+		cp := e
+		switch e.Kind {
+		case "mail":
+			mail = &cp
+		case "header":
+			header = &cp
+		}
+	}
+	if mail == nil {
+		t.Fatalf("no mail event captured: %v", lines)
+	}
+	if len(mail.Data.Views) != 1 || mail.Data.Views[0] != "mail.invoice" {
+		t.Errorf("mail views = %v, want the template it rendered", mail.Data.Views)
+	}
+	if header == nil || header.Data.Value != "mail.invoice" {
+		t.Errorf("X-Lerd-View = %v, want the template the catcher should show", header)
+	}
+}

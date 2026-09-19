@@ -235,6 +235,7 @@
   "debug_disabled_title": "Bắt giữ gỡ lỗi đang tắt",
   "debug_enable": "Bật bắt giữ",
   "debug_loadMore": "Tải thêm · {shown} trên {total}",
+  "debug_mail_renderedFrom": "kết xuất từ",
   "debug_searchPlaceholder": "Tìm kiếm…",
   "debug_show_tests": "Hiện lần chạy kiểm thử",
   "debug_tab_cache": "Cache",
