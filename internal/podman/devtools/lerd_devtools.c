@@ -965,8 +965,9 @@ static void lerd_job_end(zend_execute_data *execute_data, zval *retval)
  * the ini next to it.
  *
  * Line format: kind|match|target|method|name, where match is class, implements
- * or extends. The name expression is passed through to the collector, which is
- * where the extraction vocabulary lives. */
+ * or extends. The kind is not read here: every seam is observed the same way
+ * and the collector decides what the call means, which is also where the name
+ * expression is resolved and where the extraction vocabulary lives. */
 #define LERD_MAX_SEAMS 64
 #define LERD_SEAMS_NAME "devtools-seams.conf"
 
@@ -1010,7 +1011,7 @@ static void load_seams(void)
 		}
 		char kind[16], match[16];
 		const char *p = copy_field(line, kind, sizeof(kind));
-		if (!p || strcmp(kind, "job") != 0) {
+		if (!p || kind[0] == '\0') {
 			continue;
 		}
 		p = copy_field(p, match, sizeof(match));

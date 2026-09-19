@@ -57,8 +57,10 @@ func DumpBridgeIni() (string, error) {
 	return out, nil
 }
 
-// DevtoolsSeamsConf renders every job seam the framework store declares, one
-// per line as kind|match|target|method|name.
+// DevtoolsSeamsConf renders every seam the store declares, one per line as
+// kind|match|target|method|name. Job seams come from the framework layer, where
+// a queue belongs; capture seams name their own kind and come from both layers,
+// since a library a package brings is the same library on every framework.
 //
 // The union of all frameworks is written rather than only the linked ones: a
 // seam names classes that exist solely in the app that has them, so a line for
@@ -67,27 +69,37 @@ func DumpBridgeIni() (string, error) {
 func DevtoolsSeamsConf() string {
 	var lines []string
 	seen := map[string]bool{}
+	add := func(kind string, seam config.DevtoolsSeam) {
+		match, target := seam.Target()
+		if kind == "" || target == "" || seam.Method == "" {
+			return
+		}
+		line := strings.Join([]string{kind, match, target, seam.Method, seam.Name}, "|")
+		// A field carrying the separator or a newline would shift every field
+		// after it, so drop the seam rather than write a broken line.
+		if strings.ContainsAny(kind+target+seam.Method+seam.Name, "|\n\r") || seen[line] {
+			return
+		}
+		seen[line] = true
+		lines = append(lines, line)
+	}
 	for _, fw := range config.ListFrameworks() {
 		if fw == nil || fw.Devtools == nil {
 			continue
 		}
 		for _, seam := range fw.Devtools.Jobs {
-			match, target := seam.Target()
-			name := seam.Name
-			if name == "" {
-				name = "this"
+			if seam.Name == "" {
+				seam.Name = "this"
 			}
-			if target == "" || seam.Method == "" {
-				continue
-			}
-			line := strings.Join([]string{"job", match, target, seam.Method, name}, "|")
-			// A field carrying the separator or a newline would shift every
-			// field after it, so drop the seam rather than write a broken line.
-			if strings.ContainsAny(target+seam.Method+name, "|\n\r") || seen[line] {
-				continue
-			}
-			seen[line] = true
-			lines = append(lines, line)
+			add("job", seam)
+		}
+		for _, seam := range fw.Devtools.Captures {
+			add(seam.Kind, seam)
+		}
+	}
+	for _, dt := range config.PackageDevtools() {
+		for _, seam := range dt.Captures {
+			add(seam.Kind, seam)
 		}
 	}
 	sort.Strings(lines)

@@ -590,3 +590,87 @@ namespace {
 		}
 	}
 }
+
+// TestCollectorPHP_RayCapturesLandAsDumps checks a store-declared ray capture
+// turns the call the package would have shipped to the Ray app into a dump: a
+// plain ray() labelled as one, a payload that built itself labelled by what it
+// is, and the payloads that only tell the app how to draw itself dropped.
+func TestCollectorPHP_RayCapturesLandAsDumps(t *testing.T) {
+	dir := t.TempDir()
+	seams := "# header\n" +
+		"ray|class|Fixture\\Ray\\Ray|sendRequest|\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
+		t.Fatalf("write seams: %v", err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace Fixture\Ray {
+    class Ray { public function sendRequest($payloads) {} }
+    class Payload {
+        private $type; private $content;
+        public function __construct($type, $content) { $this->type = $type; $this->content = $content; }
+        public function getType() { return $this->type; }
+        public function getContent() { return $this->content; }
+    }
+}
+namespace {
+    require COLLECTOR;
+    $ray = new \Fixture\Ray\Ray();
+
+    // ray('hello') — the package converted the argument on its way out.
+    $log = new \Fixture\Ray\Payload('log', ['values' => ['hello'], 'meta' => [['clipboard_data' => 'hello']]]);
+    \Lerd\Collector\seam_begin('Fixture\\Ray\\Ray', 'sendRequest', $ray, [1 => $log]);
+    \Lerd\Collector\seam_end('Fixture\\Ray\\Ray', 'sendRequest', false);
+
+    // ray()->table([...]) — markup and all.
+    $table = new \Fixture\Ray\Payload('table', [
+        'values' => ['Name' => 'Ada', 'Rows' => '<pre class=sf-dump id=sf-dump-1>array:1 [&hellip;]</pre><script>sfdump()</script>'],
+        'label' => 'Users',
+    ]);
+    \Lerd\Collector\seam_begin('Fixture\\Ray\\Ray', 'sendRequest', $ray, [1 => [$table]]);
+    \Lerd\Collector\seam_end('Fixture\\Ray\\Ray', 'sendRequest', false);
+
+    // ray()->green() — nothing to show in a window that is not Ray.
+    $color = new \Fixture\Ray\Payload('color', ['color' => 'green']);
+    \Lerd\Collector\seam_begin('Fixture\\Ray\\Ray', 'sendRequest', $ray, [1 => $color]);
+    \Lerd\Collector\seam_end('Fixture\\Ray\\Ray', 'sendRequest', false);
+}
+`)
+
+	type ev struct {
+		Kind  string `json:"kind"`
+		Label string `json:"label"`
+		Text  string `json:"text"`
+	}
+	var events []ev
+	for _, line := range got {
+		var e ev
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			t.Fatalf("bad JSON line %q: %v", line, err)
+		}
+		events = append(events, e)
+	}
+	if len(events) != 2 {
+		t.Fatalf("got %d events, want the log and the table: %v", len(events), got)
+	}
+	for _, e := range events {
+		if e.Kind != "dump" {
+			t.Errorf("kind = %q, want dump", e.Kind)
+		}
+	}
+	if events[0].Label != "ray" || events[0].Text != "hello" {
+		t.Errorf("first event = %q/%q, want a plain ray and its value", events[0].Label, events[0].Text)
+	}
+	e := events[1]
+	if e.Label != "ray:table" {
+		t.Errorf("label = %q, want the payload type", e.Label)
+	}
+	if !strings.Contains(e.Text, "Name: Ada") || !strings.Contains(e.Text, "label: Users") {
+		t.Errorf("table text = %q, want the payload's own values", e.Text)
+	}
+	if strings.Contains(e.Text, "<pre") || strings.Contains(e.Text, "sfdump()") {
+		t.Errorf("table text = %q, want the markup taken back out of it", e.Text)
+	}
+	if !strings.Contains(e.Text, "array:1 […]") {
+		t.Errorf("table text = %q, want the dump the markup was drawing", e.Text)
+	}
+}

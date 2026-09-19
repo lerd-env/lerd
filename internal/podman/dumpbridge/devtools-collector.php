@@ -305,6 +305,54 @@ function emit(string $kind, array $data): void
     }
 }
 
+// render_var renders one variable to the text a dump shows, through Symfony's
+// cloner when the project has it and through print_r when it does not. Every
+// capture that ships a whole value goes through here, so dump(), dd() and a
+// ray() all read the same way.
+function render_var($var): string
+{
+    if (!class_exists(\Symfony\Component\VarDumper\Cloner\VarCloner::class, true)
+        || !class_exists(\Symfony\Component\VarDumper\Dumper\CliDumper::class, true)) {
+        return is_scalar($var) ? (string) $var : print_r($var, true);
+    }
+    $cloner = new \Symfony\Component\VarDumper\Cloner\VarCloner();
+    $maxItems = (int) (getenv('LERD_DUMP_MAX_ITEMS') ?: 2500);
+    $cloner->setMaxItems($maxItems > 0 ? $maxItems : 2500);
+    $cloner->setMaxString(4096);
+    $dumper = new \Symfony\Component\VarDumper\Dumper\CliDumper();
+    $dumper->setColors(false);
+    $rendered = $dumper->dump($cloner->cloneVar($var), true);
+    return is_string($rendered) ? $rendered : '';
+}
+
+// send_dump ships one variable as a dump event. The dump envelope (top-level
+// label and text) differs from the structured kinds, so it is built here rather
+// than through emit(); everything else is the same transport.
+function send_dump($var, $label = null): void
+{
+    send_text(render_var($var), $label);
+}
+
+// send_text is send_dump for a value that is already the text to show.
+function send_text(string $text, $label = null): void
+{
+    try {
+        $bt = backtrace();
+        send([
+            'v'     => 1,
+            'id'    => new_id(),
+            'ts'    => ts(),
+            'kind'  => 'dump',
+            'ctx'   => context(),
+            'src'   => $bt['src'],
+            'label' => $label,
+            'text'  => $text,
+        ]);
+    } catch (\Throwable $_) {
+        // never throw out of a debug bridge
+    }
+}
+
 // preview_value renders one view variable as a short label, enough to tell a
 // string from a 40-item collection from a model.
 //
@@ -739,10 +787,11 @@ function job($message): void
     emit('job', $data);
 }
 
-// seams returns the capture seams the framework store declared, parsed once per
-// process from the file lerd writes next to this collector. One line each:
+// seams returns the capture seams the store declared, parsed once per process
+// from the file lerd writes next to this collector. One line each:
 // kind|match|target|method|name. Keyed by method, since that is what the
-// extension matched on; the target settles which one applies.
+// extension matched on; the target settles which one applies and the kind says
+// what the call means.
 function seams(): array
 {
     static $parsed = null;
@@ -765,10 +814,10 @@ function seams(): array
             continue;
         }
         $f = explode('|', $line);
-        if (count($f) < 5 || $f[0] !== 'job') {
+        if (count($f) < 5 || $f[0] === '') {
             continue;
         }
-        $parsed[strtolower($f[3])][] = ['target' => $f[2], 'name' => $f[4]];
+        $parsed[strtolower($f[3])][] = ['kind' => $f[0], 'target' => $f[2], 'name' => $f[4]];
     }
     return $parsed;
 }
@@ -859,9 +908,15 @@ function seam_begin($class, $method, $self, $args): void
 {
     $seam = seam_for((string) $class, (string) $method, $self);
     $stack = isset($GLOBALS['__lerd_seam_stack']) ? $GLOBALS['__lerd_seam_stack'] : [];
-    if (!$seam) {
+    // A frame is pushed for a capture seam too: the extension observes the way
+    // out of every seam it claimed, and an unbalanced stack would let that end
+    // close a job that is still running.
+    if (!$seam || $seam['kind'] !== 'job') {
         $stack[] = ['skip' => true];
         $GLOBALS['__lerd_seam_stack'] = $stack;
+        if ($seam) {
+            capture($seam['kind'], (string) $method, is_array($args) ? $args : []);
+        }
         return;
     }
     $args = is_array($args) ? $args : [];
@@ -912,6 +967,122 @@ function seam_end($class, $method, $failed, $error = ''): void
     if ($frame['previous'] !== '') {
         $GLOBALS['__lerd_rid'] = $frame['previous'];
     }
+}
+
+// capture reports a call a store-declared capture seam claimed, where the whole
+// event is the call itself rather than a span with a beginning and an end. The
+// kind names the library; each one's extraction is its own function below.
+function capture(string $kind, string $method, array $args): void
+{
+    if ($kind === 'ray') {
+        ray($args);
+    }
+}
+
+// ray_silent reports a payload the Ray app draws rather than reads: a colour, a
+// screen switch, a lock. There is nothing in one to show in a window that is
+// not Ray, so they are dropped instead of arriving as empty rows.
+function ray_silent(string $type): bool
+{
+    static $silent = [
+        'clear_all' => 1, 'color' => 1, 'confetti' => 1, 'create_lock' => 1,
+        'expand' => 1, 'hide' => 1, 'hide_app' => 1, 'label' => 1,
+        'new_screen' => 1, 'remove' => 1, 'screen_color' => 1, 'separator' => 1,
+        'show_app' => 1, 'size' => 1,
+    ];
+    return isset($silent[$type]);
+}
+
+// ray reports the payloads of one ray() call as dumps. Every call funnels into
+// the one method this seam observes, whatever built it, so a plain ray($user)
+// and a ray()->table() both arrive here; the payload has already been converted
+// for the Ray app by the time it does, so it is unwrapped from that form rather
+// than rendered. A plain call is labelled `ray` and everything else by the kind
+// of payload it is.
+function ray(array $args): void
+{
+    $payloads = isset($args[1]) ? $args[1] : null;
+    if (!is_array($payloads)) {
+        $payloads = [$payloads];
+    }
+    foreach ($payloads as $payload) {
+        $type = ray_type($payload);
+        if ($type === '' || ray_silent($type)) {
+            continue;
+        }
+        send_text(ray_content_text($payload), $type === 'log' ? 'ray' : 'ray:' . $type);
+    }
+}
+
+// ray_type reads a payload's type, from the object or from the array form a
+// payload turns into on the wire.
+function ray_type($payload): string
+{
+    if (is_object($payload) && method_exists($payload, 'getType')) {
+        return (string) $payload->getType();
+    }
+    if (is_array($payload) && isset($payload['type'])) {
+        return (string) $payload['type'];
+    }
+    return '';
+}
+
+// ray_content_text renders a payload's content as the lines the dumps lens
+// shows. Meta is the package's own bookkeeping (versions, clipboard copies) and
+// is dropped; a single unnamed value is its own text, and anything else is
+// listed by the name the payload gave it.
+function ray_content_text($payload): string
+{
+    $content = [];
+    if (is_object($payload) && method_exists($payload, 'getContent')) {
+        $content = $payload->getContent();
+    } elseif (is_array($payload) && isset($payload['content'])) {
+        $content = $payload['content'];
+    }
+    if (!is_array($content)) {
+        $content = [$content];
+    }
+    unset($content['meta']);
+    // A payload keeps what it is showing under 'values' and its own settings
+    // beside it, so the values are lifted out and listed first.
+    $values = [];
+    if (isset($content['values']) && is_array($content['values'])) {
+        $values = $content['values'];
+        unset($content['values']);
+    }
+    $lines = [];
+    foreach (array_merge($values, $content) as $key => $value) {
+        if ($value === null || $value === '' || $value === []) {
+            continue;
+        }
+        // A rendered value ends in its own newline, which between the lines of
+        // a listed payload reads as a blank row.
+        $text = rtrim(is_string($value) ? dump_html_to_text($value) : render_var($value));
+        $lines[] = is_int($key) ? $text : $key . ': ' . $text;
+    }
+    return implode("\n", $lines);
+}
+
+// dump_html_to_text turns the HTML a package rendered a value into back into
+// text. Ray converts every non-scalar argument with Symfony's HtmlDumper and
+// escapes every plain one before either leaves the process, and neither reads
+// as anything in a terminal or a text lens, so the markup is taken back off.
+// A value carrying neither is returned as it came, since a string a developer
+// dumped may well contain an ampersand it is meant to keep.
+function dump_html_to_text(string $html): string
+{
+    $markup = strpos($html, '<') !== false;
+    if (!$markup && strpos($html, '&') === false) {
+        return $html;
+    }
+    $out = $html;
+    if ($markup) {
+        $out = preg_replace('~<(script|style)\b[^>]*>.*?</\1>~is', '', $out);
+        $out = preg_replace('~<br\s*/?>~i', "\n", (string) $out);
+        $out = strip_tags((string) $out);
+    }
+    $out = html_entity_decode((string) $out, \ENT_QUOTES, 'UTF-8');
+    return trim(str_replace("\xc2\xa0", ' ', $out));
 }
 
 // http captures one outgoing Symfony HttpClient request at call time. The

@@ -123,11 +123,14 @@ type Framework struct {
 	Requires []string `yaml:"requires,omitempty"`
 }
 
-// FrameworkDevtools declares engine-level capture seams. Jobs are the only kind
-// so far: one entry per method that runs a queued job, which the extension
-// observes and reports as processing then processed or failed.
+// FrameworkDevtools declares engine-level capture seams. Jobs are one method
+// per entry that runs a queued job, which the extension observes and reports as
+// processing then processed or failed. Captures are the seams whose kind is
+// declared per entry, for a library whose own call is the event (a ray() sent
+// to a debug app that is not running here).
 type FrameworkDevtools struct {
-	Jobs []DevtoolsSeam `yaml:"jobs,omitempty"`
+	Jobs     []DevtoolsSeam `yaml:"jobs,omitempty"`
+	Captures []DevtoolsSeam `yaml:"captures,omitempty"`
 }
 
 // DevtoolsSeam is one observed method. Exactly one of Class, Implements or
@@ -135,6 +138,9 @@ type FrameworkDevtools struct {
 // name comes from: "this" or "arg:N", each optionally with a ".method:getHook"
 // or ".prop:queue" accessor. An object with no accessor yields its class.
 type DevtoolsSeam struct {
+	// Kind is what the collector should make of the call, for a capture seam.
+	// Job seams leave it empty: the list they are declared in says what they are.
+	Kind       string `yaml:"kind,omitempty"`
 	Class      string `yaml:"class,omitempty"`
 	Implements string `yaml:"implements,omitempty"`
 	Extends    string `yaml:"extends,omitempty"`

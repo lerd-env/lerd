@@ -36,6 +36,14 @@ The receiver's transport depends on the host:
 - **CLI**: `lerd dump tail` streams events to your terminal, with `--site` and `--ctx` filters.
 - **MCP**: `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle` for AI-agent access.
 
+## Ray
+
+`ray()` is a dump call like any other, except that the package ships it over loopback to the Ray desktop app instead of returning it to the page. From inside an FPM container that address answers nothing, so the call has always been silent here. lerd takes the payload on its way out and puts it in the Debug window, which means `ray()` works with the composer package alone: no desktop app, no licence, nothing listening on 23517.
+
+The capture is a store-declared seam on the package (`packages/spatie-ray.yaml`), so it reaches every install through the store rather than through a release. Every ray call funnels through one method, whatever built it, so a plain `ray($user, $order)` arrives as one dump per argument labelled `ray`, and the chained calls that build their own payload (`->table()`, `->measure()`, `->text()`, `->exception()`, `->json()`) arrive labelled with what they are, `ray:table` and so on. The package converts a value for its own app before it reaches the seam, wrapping anything that is not a scalar in the markup Symfony's HTML dumper draws, so lerd takes that markup back off and shows the dump that was inside it. The calls that only tell the app how to draw itself, a colour, a screen switch, a size, have nothing to show in a window that is not Ray, so they are dropped rather than arriving as empty rows.
+
+Ray's own transport still runs and still fails to reach anything, which costs a refused connection per call and nothing else. Nothing about the project changes: no `RAY_HOST`, no config file, no service provider.
+
 ## Wire format
 
 Each event is one line of JSON. The shape is stable from v1 of the protocol:

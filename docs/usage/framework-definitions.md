@@ -471,13 +471,19 @@ doctor:
         composer: nativephp/electron
 
 # Where the Debug window's engine-level capture should observe this framework
-# (optional). Jobs are the only kind so far: one entry per method that runs a
-# queued job, reported as processing then processed or failed, timed.
+# (optional). Jobs are one entry per method that runs a queued job, reported as
+# processing then processed or failed, timed. Captures are calls that are the
+# whole event by themselves, each naming the kind the collector should make of
+# it; a package file declares those for the library it speaks for.
 devtools:
   jobs:
     - implements: Drupal\Core\Queue\QueueWorkerInterface   # or class: / extends:
       method: processItem
       name: this                    # this | arg:N, optionally .method:getHook / .prop:queue
+  captures:
+    - kind: ray                     # what the collector makes of the call
+      class: Spatie\Ray\Ray         # or implements: / extends:
+      method: sendRequest
 
 # Extra nginx config spliced into the site's server block (optional)
 nginx:
@@ -505,6 +511,12 @@ Exactly one of `class`, `implements` or `extends` selects what the seam applies 
 `name` says where the job's label comes from, and defaults to `this`. The vocabulary is deliberately small: `this` or `arg:N` names the subject, and an optional `.method:getHook` or `.prop:queue` reads one value off it. A subject with no accessor yields its class, which is what a queued job is normally called; WordPress is the exception, where every job is an `ActionScheduler_Action` and the useful name is the hook it runs, so its seam reads `name: this.method:get_hook`.
 
 Nothing about a seam is compiled in, so adding one is a store change that reaches every install within a day. A container already running picks up a new seam when it next restarts.
+
+## Capture seams
+
+A capture seam is the same machinery pointed at a call that is the whole event rather than the start of one. `kind` says what the collector should make of it, and the extraction for each kind lives in the collector, so the store declares where to look and never how to read it. `ray` is the kind so far: it takes what `ray()` was about to ship to a desktop app that is not running here and puts it in the dumps lens instead.
+
+These belong in a package file rather than a framework one whenever the class they name ships with a composer package, which is the usual case: `packages/spatie-ray.yaml` declares Ray's seam once, and every framework a project might be built on gets the capture. Pick a method whose arguments are declared parameters: a variadic one carries its arguments where the observer cannot read them, so the seam sees the call and nothing in it. A kind the collector does not know is ignored, so a seam can be published before the release that reads it.
 
 ## The framework's own mark
 
