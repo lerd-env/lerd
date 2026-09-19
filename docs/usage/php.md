@@ -559,12 +559,38 @@ $ lerd php:odbc add HDBODBC ~/sap/hdbclient/libodbcHDB.so
    qfcvt_r, qecvt_r, fcvt_r, backtrace, __strcpy_chk, gethostent_r, ...
    a driver needing more than gcompat has to be patched in a per-site
    Containerfile, see the ODBC section of the PHP docs
- ✓ driver HDBODBC registered, but PHP 8.5 cannot load it yet
+ ✓ driver HDBODBC registered for every PHP version, but the PHP 8.5 image cannot load it yet
 ```
 
 The three ways a registration fails are worth telling apart, because unixODBC reports all of them at connect time as `Can't open lib '...' : file not found`, whatever the real cause. The container cannot see the path; the driver needs a library the image does not have; or every library resolved but one of them is musl standing in for glibc and does not carry a symbol the driver wants. Only the last one lists symbols, and those symbols are the shopping list for the shim below.
 
 `lerd php:odbc list` re-runs the check, so it reports what each driver does now rather than what it did when you registered it.
+
+A fourth outcome is worth reading carefully, because it is not a verdict on the driver. When the check cannot run at all, say the runtime is down or the version has no image yet, the registration still stands but nothing was established about it:
+
+```
+ ✓ driver HDBODBC registered, but it was not read back from an image, so run
+   'lerd php:odbc list' once the runtime is up to see whether it loads
+```
+
+`list` says `not checked` for the same reason. Neither means the driver is broken, only that no image has been asked yet.
+
+### Where a driver may live
+
+The driver stays where the vendor put it, with one refusal. A driver sitting directly in a directory the container keeps its own libraries in is turned away, because lerd mounts the directory holding a driver into every PHP container and the host's copy would cover the container's own:
+
+```
+$ lerd php:odbc add PgOdbc /usr/lib/psqlodbcw.so
+ ✗ driver "/usr/lib/psqlodbcw.so" sits in /usr/lib, which the PHP container keeps
+   its own libraries in: mounting it would take the container down. Copy the driver
+   somewhere of its own (say ~/odbc-drivers) and register that path
+```
+
+That is only the handful of directories the runtime itself occupies, `/usr/lib`, `/lib`, `/etc`, `/var` and their neighbours. A vendor client unpacked under `/opt` is the normal case and mounts as it is, and so does `/usr/lib64`, which the Alpine image does not have. Distributions that package an ODBC driver into `/usr/lib` are the ones to copy out.
+
+A driver already reachable inside the container gets no mount of its own. Anything under your home directory arrives through the home mount, and anything inside a parked project arrives through that project's, which keeps it writable where a read-only mount of lerd's own would not.
+
+If the driver directory later disappears, through an uninstall or a disk that is not plugged in, the registry entry stays and `list` reports the driver as one the container cannot see. The mount is dropped from the quadlets the next time the watcher starts, so the containers do not stay stuck on a path that has gone.
 
 ### Drivers that need more than gcompat
 
