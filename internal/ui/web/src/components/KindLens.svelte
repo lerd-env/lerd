@@ -26,21 +26,24 @@
   import { m } from '../paraglide/messages.js';
 
   interface Props {
-    kind: 'jobs' | 'views' | 'mail' | 'cache' | 'events' | 'http';
+    kind: 'jobs' | 'views' | 'mail' | 'cache' | 'events' | 'http' | 'logs';
     siteScope?: string;
   }
   let { kind, siteScope = '' }: Props = $props();
   const scoped = $derived(siteScope !== '');
   // Event `kind` on the wire is singular.
   const wireKind = $derived(
-    ({ jobs: 'job', views: 'view', mail: 'mail', cache: 'cache', events: 'event', http: 'http' })[kind]
+    ({ jobs: 'job', views: 'view', mail: 'mail', cache: 'cache', events: 'event', http: 'http', logs: 'log' })[
+      kind
+    ]
   );
 
   let localText = $state('');
   let textInput = $state('');
-  // Jobs report a whole lifecycle (queued, processing, then the outcome), so
-  // that lens gets a status filter to cut three rows per job down to one.
-  let statusFilter = $state('');
+  // Jobs report a whole lifecycle (queued, processing, then the outcome) and a
+  // request logs at a handful of levels, so both lenses get a filter that cuts
+  // the list down to the rows being looked for.
+  let facetFilter = $state('');
 
   onMount(() => {
     startDumpsStream();
@@ -60,14 +63,14 @@
   // Debug tabs; unscoped keeps a local search.
   const effectiveText = $derived(scoped ? $debugSearch : localText);
   const groups = $derived(
-    buildKindGroups($debugEvents, wireKind, scoped ? siteScope : $queryFilterSite, effectiveText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers), statusFilter)
+    buildKindGroups($debugEvents, wireKind, scoped ? siteScope : $queryFilterSite, effectiveText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers), facetFilter)
   );
 
   // Only the newest LENS_PAGE rows render; the rest arrive as the user
   // reaches the end. Changing a filter or tab starts the window over.
   let limit = $state(LENS_PAGE);
   const win = $derived(windowGroups(groups, (g) => g.events, limit));
-  const filterKey = $derived(`${wireKind}|${scoped ? siteScope : $queryFilterSite}|${effectiveText}|${$queryFilterWorker}|${statusFilter}`);
+  const filterKey = $derived(`${wireKind}|${scoped ? siteScope : $queryFilterSite}|${effectiveText}|${$queryFilterWorker}|${facetFilter}`);
   $effect(() => {
     filterKey;
     limit = LENS_PAGE;
@@ -96,18 +99,24 @@
     }
   }
 
-  const jobStatuses = $derived(
-    wireKind !== 'job'
-      ? []
-      : Array.from(
-          new Set(
-            $debugEvents
-              .filter((ev) => ev.kind === 'job')
-              .map((ev) => (ev.data as { status?: string } | undefined)?.status)
-              .filter((v): v is string => Boolean(v))
-          )
-        ).sort()
-  );
+  // Levels read in severity order rather than alphabetically, which is the
+  // order someone scanning for the bad ones expects them in.
+  const LEVELS = ['emergency', 'alert', 'critical', 'error', 'warning', 'notice', 'info', 'debug'];
+  const facetField = $derived(wireKind === 'job' ? 'status' : wireKind === 'log' ? 'level' : '');
+  const facets = $derived.by(() => {
+    if (!facetField) return [] as string[];
+    const seen = new Set(
+      $debugEvents
+        .filter((ev) => ev.kind === wireKind)
+        .map((ev) => (ev.data as Record<string, string> | undefined)?.[facetField])
+        .filter((v): v is string => Boolean(v))
+    );
+    const known = LEVELS.filter((l) => seen.has(l));
+    const rest = Array.from(seen)
+      .filter((v) => !LEVELS.includes(v))
+      .sort();
+    return facetField === 'level' ? [...known, ...rest] : rest;
+  });
 
   // A Laravel job's payload is only readable where it was dispatched, so the
   // worker's rows borrow it from the queued row they share a uuid with. The
@@ -137,12 +146,23 @@
   const ROSE = 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300';
   const AMBER = 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300';
   const SKY = 'bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300';
+  const GREY = 'bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400';
 
   // Status badge tone per status/op value.
   function tone(v: string): string {
     if (v === 'processed' || v === 'hit') return EMERALD;
     if (v === 'failed') return ROSE;
     if (v === 'miss' || v === 'forget') return AMBER;
+    return SKY;
+  }
+  // Log levels take the same tones as everything else in the window: what wants
+  // attention is rose, what might is amber, the rest stays quiet.
+  function levelTone(level: string): string {
+    if (['emergency', 'alert', 'critical', 'error'].includes(level)) return ROSE;
+    if (['warning', 'notice'].includes(level)) return AMBER;
+    // Debug is the level a request writes most of and reads least of, so it
+    // stays grey rather than taking the tone info is in.
+    if (level === 'debug') return GREY;
     return SKY;
   }
   function httpTone(status: number): string {
@@ -170,14 +190,14 @@
         onchange={(v) => queryFilterSite.set(v)}
       />
     {/if}
-    {#if jobStatuses.length > 1}
+    {#if facets.length > 1}
       <Dropdown
-        value={statusFilter}
+        value={facetFilter}
         options={[
-          { value: '', label: m.jobs_filter_allStatuses() },
-          ...jobStatuses.map((s) => ({ value: s, label: s }))
+          { value: '', label: facetField === 'level' ? m.logs_filter_allLevels() : m.jobs_filter_allStatuses() },
+          ...facets.map((s) => ({ value: s, label: s }))
         ]}
-        onchange={(v) => (statusFilter = v)}
+        onchange={(v) => (facetFilter = v)}
       />
     {/if}
     {#if $knownWorkerCommands.length > 0}
@@ -237,6 +257,7 @@
                   {:else if wireKind === 'mail'}{d.subject || '(no subject)'}
                   {:else if wireKind === 'cache'}<code>{d.key}</code>
                   {:else if wireKind === 'http'}<span class="font-mono">{d.method} {d.url}</span>
+                  {:else if wireKind === 'log'}{d.message}
                   {:else}{d.name}{/if}
                 </span>
                 <span class="flex items-center gap-1 shrink-0">
@@ -244,7 +265,8 @@
                   {:else if wireKind === 'cache'}<span class="text-[10px] rounded-sm px-1 py-0.5 {tone(d.op)}">{d.op}</span>
                   {:else if wireKind === 'http' && d.status}<span class="text-[10px] tabular-nums rounded-sm px-1 py-0.5 {httpTone(d.status)}">{d.status}</span>
                   {:else if wireKind === 'http'}<span class="text-[10px] rounded-sm px-1 py-0.5 {d.failed ? ROSE : SKY}">{d.failed ? 'failed' : m.http_sent()}</span>
-                  {:else if wireKind === 'mail' && d.to?.length}<span class="text-[11px] text-gray-400 break-all">→ {d.to[0]}</span>{/if}
+                  {:else if wireKind === 'mail' && d.to?.length}<span class="text-[11px] text-gray-400 break-all">→ {d.to[0]}</span>
+                  {:else if wireKind === 'log'}{#if d.channel}<span class="text-[11px] text-gray-400">{d.channel}</span>{/if}<span class="text-[10px] rounded-sm px-1 py-0.5 {levelTone(d.level)}">{d.level}</span>{/if}
                 </span>
               </button>
               {#if expanded[ev.id]}
@@ -298,6 +320,9 @@
                         </table>
                       </div>
                     {/if}
+                  {/if}
+                  {#if wireKind === 'log' && d.context}
+                    <pre class="whitespace-pre-wrap break-all text-gray-700 dark:text-gray-300">{d.context}</pre>
                   {/if}
                   {#if wireKind === 'mail'}
                     <div class="text-gray-400 break-all">

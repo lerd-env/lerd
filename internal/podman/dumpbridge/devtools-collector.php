@@ -915,7 +915,7 @@ function seam_begin($class, $method, $self, $args): void
         $stack[] = ['skip' => true];
         $GLOBALS['__lerd_seam_stack'] = $stack;
         if ($seam) {
-            capture($seam['kind'], (string) $method, is_array($args) ? $args : []);
+            capture($seam['kind'], (string) $method, $self, is_array($args) ? $args : []);
         }
         return;
     }
@@ -972,11 +972,71 @@ function seam_end($class, $method, $failed, $error = ''): void
 // capture reports a call a store-declared capture seam claimed, where the whole
 // event is the call itself rather than a span with a beginning and an end. The
 // kind names the library; each one's extraction is its own function below.
-function capture(string $kind, string $method, array $args): void
+function capture(string $kind, string $method, $self, array $args): void
 {
     if ($kind === 'ray') {
         ray($args);
+        return;
     }
+    if ($kind === 'log') {
+        log_record($self, $args);
+    }
+}
+
+// log_record reports one record written to a logger. Monolog is the seam every
+// framework's logging ends up going through, and its entry point has carried
+// the same three arguments since Monolog 1, so one capture covers the field.
+// The level arrives as an integer on the older majors and as an enum on the
+// newest, and the channel is the logger's own name.
+function log_record($self, array $args): void
+{
+    $message = isset($args[2]) ? $args[2] : '';
+    if (!is_string($message) || $message === '') {
+        return;
+    }
+    $data = ['level' => log_level(isset($args[1]) ? $args[1] : null), 'message' => $message];
+    if (is_object($self) && method_exists($self, 'getName')) {
+        $channel = (string) $self->getName();
+        if ($channel !== '') {
+            $data['channel'] = $channel;
+        }
+    }
+    // The context is what the developer chose to attach to the line, so it is
+    // rendered in full the way a dump is, rather than reduced to its shape.
+    if (isset($args[3]) && is_array($args[3]) && $args[3] !== []) {
+        $data['context'] = rtrim(render_var($args[3]));
+    }
+    emit('log', $data);
+}
+
+// log_level names the severity a record was written at. Monolog 3 passes an
+// enum, Monolog 1 and 2 an integer of their own scale, and either major accepts
+// an RFC 5424 severity in place of one, which is the same range as the low end
+// of theirs; the enum is asked first and the two scales are told apart by size,
+// since Monolog's own start at 100.
+function log_level($level): string
+{
+    if (is_object($level)) {
+        if (method_exists($level, 'getName')) {
+            return strtolower((string) $level->getName());
+        }
+        return isset($level->name) ? strtolower((string) $level->name) : '';
+    }
+    if (!is_int($level)) {
+        return is_string($level) ? strtolower($level) : '';
+    }
+    static $monolog = [
+        100 => 'debug', 200 => 'info', 250 => 'notice', 300 => 'warning',
+        400 => 'error', 500 => 'critical', 550 => 'alert', 600 => 'emergency',
+    ];
+    static $rfc = [
+        0 => 'emergency', 1 => 'alert', 2 => 'critical', 3 => 'error',
+        4 => 'warning', 5 => 'notice', 6 => 'info', 7 => 'debug',
+    ];
+    if (isset($monolog[$level])) {
+        return $monolog[$level];
+    }
+    return isset($rfc[$level]) ? $rfc[$level] : (string) $level;
 }
 
 // ray_silent reports a payload the Ray app draws rather than reads: a colour, a
