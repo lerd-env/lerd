@@ -52,7 +52,9 @@ export function groupLabel(ev: DumpEvent, hideSitePrefix: boolean): GroupLabel {
 function labelText(ev: DumpEvent): string {
   if (ev.ctx.worker) return ev.ctx.worker;
   if (ev.ctx.type === 'fpm') return ev.ctx.request || '(request)';
-  return `cli (pid ${ev.ctx.pid ?? '?'})`;
+  // An event posted over HTTP has no process behind it, so there is no pid to
+  // name and a question mark in its place says nothing.
+  return ev.ctx.pid ? `cli (pid ${ev.ctx.pid})` : 'cli';
 }
 
 // labelString flattens a GroupLabel back to the single-string form, for

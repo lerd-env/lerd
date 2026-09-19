@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestEvent_Valid(t *testing.T) {
@@ -94,5 +95,45 @@ func TestEvent_Query(t *testing.T) {
 	}
 	if _, ok := (Event{Kind: KindQuery, Data: json.RawMessage(`{`)}).Query(); ok {
 		t.Error("Query() on malformed data returned ok = true")
+	}
+}
+
+// TestNormalized_FillsWhatACallerCannotKnow covers the shape a poster outside
+// the bridge sends: a message and a site, with the protocol fields defaulted.
+func TestNormalized_FillsWhatACallerCannotKnow(t *testing.T) {
+	when := time.Date(2026, 9, 20, 10, 30, 0, 0, time.UTC)
+	got, err := Event{Text: "deploy finished", Ctx: Context{Site: "acme"}}.Normalized(when, "id-1")
+	if err != nil {
+		t.Fatalf("Normalized: %v", err)
+	}
+	if got.V != ProtocolVersion || got.ID != "id-1" || got.Kind != KindDump {
+		t.Errorf("event = %+v, want the protocol fields defaulted", got)
+	}
+	if got.TS != "2026-09-20T10:30:00.000Z" {
+		t.Errorf("ts = %q, want the time it arrived", got.TS)
+	}
+	if got.Ctx.Type != "cli" || got.Ctx.Site != "acme" {
+		t.Errorf("ctx = %+v, want a cli context and the site it named", got.Ctx)
+	}
+}
+
+// TestNormalized_KeepsWhatTheCallerSet checks a caller that fills the envelope
+// itself is left alone, so an agent replaying captured events keeps their ids.
+func TestNormalized_KeepsWhatTheCallerSet(t *testing.T) {
+	in := Event{V: 1, ID: "own", TS: "2026-01-01T00:00:00.000Z", Kind: KindLog, Ctx: Context{Type: "fpm"}, Data: json.RawMessage(`{"level":"error"}`)}
+	got, err := in.Normalized(time.Now(), "generated")
+	if err != nil {
+		t.Fatalf("Normalized: %v", err)
+	}
+	if got.ID != "own" || got.TS != in.TS || got.Kind != KindLog || got.Ctx.Type != "fpm" {
+		t.Errorf("event = %+v, want the caller's own envelope", got)
+	}
+}
+
+// TestNormalized_RejectsAnEmptyEvent keeps a row that says nothing out of the
+// buffer, since the poster gets an error back rather than a silent no-op.
+func TestNormalized_RejectsAnEmptyEvent(t *testing.T) {
+	if _, err := (Event{Ctx: Context{Site: "acme"}}).Normalized(time.Now(), "id-1"); err == nil {
+		t.Error("an event with no text, label or data must be refused")
 	}
 }

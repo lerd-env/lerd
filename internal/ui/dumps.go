@@ -2,6 +2,8 @@ package ui
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -308,4 +310,61 @@ func handleDumpsToggle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, res)
+}
+
+// maxIngestBody caps a posted event. The bridge's own events are capped by the
+// cloner long before this, and the cap is what keeps a stray upload from
+// filling the ring with one row.
+const maxIngestBody = 256 << 10
+
+// handleDumpsIngest accepts one event over HTTP, so the Debug window can be
+// written to by something that is not PHP in a lerd container: a deploy script,
+// a build step, a sidecar, a test harness. The fields a caller cannot know are
+// filled in, so a message and a site name is a valid post.
+//
+// It requires dashboard-control authority for the same reason clearing does:
+// writing to the window puts a row in front of the developer, and that is not
+// something the network at large should be able to do.
+func handleDumpsIngest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !hasHostActionAuthority(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	cfg, _ := config.LoadGlobal()
+	if cfg == nil || !cfg.IsDumpsEnabled() {
+		http.Error(w, "debug bridge is off; enable it with `lerd dump on`", http.StatusConflict)
+		return
+	}
+	srv := dumpsServer.Load()
+	if srv == nil {
+		http.Error(w, "receiver is not listening", http.StatusServiceUnavailable)
+		return
+	}
+	var ev dumps.Event
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxIngestBody)).Decode(&ev); err != nil {
+		http.Error(w, "invalid event: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	ev, err := ev.Normalized(time.Now(), newIngestID())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	ev.Ctx.Site = resolveSiteName(ev.Ctx.Site)
+	srv.Push(ev)
+	writeJSON(w, map[string]string{"id": ev.ID})
+}
+
+// newIngestID mints the id a posted event gets when it brings none, in the
+// shape the bridge's own ids take.
+func newIngestID() string {
+	var b [12]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return strconv.FormatInt(time.Now().UnixNano(), 16)
+	}
+	return hex.EncodeToString(b[:])
 }

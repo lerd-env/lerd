@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -290,5 +293,105 @@ func TestHandleDumpsStream_DeliversLiveEvent(t *testing.T) {
 	body := rec.bodyString()
 	if !strings.Contains(body, "live1") {
 		t.Errorf("live event missing\n--- body ---\n%s", body)
+	}
+}
+
+// writeDumpsConfig points the config at a temp dir with the bridge in the
+// given state, so the ingest endpoint's gate can be driven both ways.
+func writeDumpsConfig(t *testing.T, enabled bool) {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "lerd")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Dir(dir))
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "dns:\n  enabled: false\n  tld: test\ndumps:\n  enabled: " + strconv.FormatBool(enabled) + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestHandleDumpsIngest_AcceptsABareMessage covers the shape a script posts:
+// a message and a site, with everything the protocol needs filled in for it.
+func TestHandleDumpsIngest_AcceptsABareMessage(t *testing.T) {
+	writeDumpsConfig(t, true)
+	srv := withDumpsServer(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/dumps/ingest", strings.NewReader(`{"text":"deploy finished","ctx":{"site":"acme"}}`))
+	req.RemoteAddr = "127.0.0.1:1234"
+	rec := httptest.NewRecorder()
+	handleDumpsIngest(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	got := srv.Snapshot()
+	if len(got) != 1 {
+		t.Fatalf("buffered %d events, want the posted one", len(got))
+	}
+	ev := got[0]
+	if ev.Text != "deploy finished" || ev.Ctx.Site != "acme" {
+		t.Errorf("event = %+v, want the posted text and site", ev)
+	}
+	if ev.V != dumps.ProtocolVersion || ev.ID == "" || ev.TS == "" || ev.Kind != dumps.KindDump || ev.Ctx.Type != "cli" {
+		t.Errorf("event = %+v, want the envelope filled in", ev)
+	}
+	if !strings.Contains(rec.Body.String(), ev.ID) {
+		t.Errorf("body = %s, want the id it was given", rec.Body.String())
+	}
+}
+
+// TestHandleDumpsIngest_RefusesAnEmptyEvent keeps a row that says nothing out
+// of the buffer, and says so rather than accepting it silently.
+func TestHandleDumpsIngest_RefusesAnEmptyEvent(t *testing.T) {
+	writeDumpsConfig(t, true)
+	srv := withDumpsServer(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/dumps/ingest", strings.NewReader(`{"ctx":{"site":"acme"}}`))
+	req.RemoteAddr = "127.0.0.1:1234"
+	rec := httptest.NewRecorder()
+	handleDumpsIngest(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	if len(srv.Snapshot()) != 0 {
+		t.Error("an event with nothing to show must not reach the ring")
+	}
+}
+
+// TestHandleDumpsIngest_RefusedWhileTheBridgeIsOff makes the endpoint follow
+// the one flag every other way into the window follows.
+func TestHandleDumpsIngest_RefusedWhileTheBridgeIsOff(t *testing.T) {
+	writeDumpsConfig(t, false)
+	srv := withDumpsServer(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/dumps/ingest", strings.NewReader(`{"text":"deploy finished"}`))
+	req.RemoteAddr = "127.0.0.1:1234"
+	rec := httptest.NewRecorder()
+	handleDumpsIngest(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", rec.Code)
+	}
+	if len(srv.Snapshot()) != 0 {
+		t.Error("nothing may reach the ring while the bridge is off")
+	}
+}
+
+// TestHandleDumpsIngest_RejectsNonLoopback keeps the window off the network:
+// writing to it puts a row in front of the developer.
+func TestHandleDumpsIngest_RejectsNonLoopback(t *testing.T) {
+	writeDumpsConfig(t, true)
+	withDumpsServer(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/dumps/ingest", strings.NewReader(`{"text":"from the lan"}`))
+	req.RemoteAddr = "192.168.1.50:44444"
+	rec := httptest.NewRecorder()
+	handleDumpsIngest(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rec.Code)
 	}
 }

@@ -73,3 +73,9 @@ describe('groupLabel', () => {
     expect(labelString(groupLabel(ev({ branch: '', site: '' }), false))).toBe('GET /checkout');
   });
 });
+
+describe('groupLabel without a process', () => {
+  it('names a posted event cli, with no pid in brackets', () => {
+    expect(groupLabel(ev({ type: 'cli', pid: undefined }), false).text).toBe('cli');
+  });
+});

@@ -4,7 +4,11 @@
 // socket; tests bind TCP loopback. See docs/features/dumps.md.
 package dumps
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
 
 // ProtocolVersion is the wire-format version this package understands.
 // Events with a different `v` are dropped.
@@ -116,4 +120,34 @@ func (e Event) Query() (QueryData, bool) {
 // the listener before it is appended to the ring.
 func (e Event) Valid() bool {
 	return e.V == ProtocolVersion && e.ID != "" && e.Kind != ""
+}
+
+// Normalized fills in the fields a caller outside the bridge cannot be expected
+// to produce, so posting an event by hand is a message and a site rather than a
+// protocol exercise: the version, an id, a timestamp, the dump kind and the cli
+// context are all defaulted. It returns an error when there is nothing to show,
+// since an event with no payload is a row that says nothing.
+func (e Event) Normalized(now time.Time, id string) (Event, error) {
+	if e.V == 0 {
+		e.V = ProtocolVersion
+	}
+	if e.ID == "" {
+		e.ID = id
+	}
+	if e.TS == "" {
+		e.TS = now.UTC().Format("2006-01-02T15:04:05.000Z")
+	}
+	if e.Kind == "" {
+		e.Kind = KindDump
+	}
+	if e.Ctx.Type == "" {
+		e.Ctx.Type = "cli"
+	}
+	if !e.Valid() {
+		return Event{}, fmt.Errorf("event is not v%d, or has no kind", ProtocolVersion)
+	}
+	if e.Text == "" && e.Label == "" && len(e.Data) == 0 && len(e.Tree) == 0 {
+		return Event{}, fmt.Errorf("event has nothing to show: set text, label or data")
+	}
+	return e, nil
 }

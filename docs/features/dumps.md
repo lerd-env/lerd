@@ -44,6 +44,21 @@ The capture is a store-declared seam on the package (`packages/spatie-ray.yaml`)
 
 Ray's own transport still runs and still fails to reach anything, which costs a refused connection per call and nothing else. Nothing about the project changes: no `RAY_HOST`, no config file, no service provider.
 
+## Posting an event from outside PHP
+
+The bridge is the way in for PHP running in a lerd container, and everything else, a deploy script, a build step, a sidecar, a test harness, had nowhere to put a line. `POST /api/dumps/ingest` on lerd-ui takes one event in the wire format below and drops it into the same buffer, so it reaches the dashboard, the TUI, `lerd dump tail` and the MCP tools like any other.
+
+```bash
+curl --unix-socket ~/.local/share/lerd/run/lerd-ui.sock \
+  -H 'content-type: application/json' \
+  -d '{"text":"deploy finished","ctx":{"site":"acme"}}' \
+  http://localhost/api/dumps/ingest
+```
+
+The fields a caller cannot know are filled in rather than demanded: the protocol version, an id, a timestamp, the `dump` kind and a `cli` context all default, so a message and a site name is a valid post and the reply carries the id the event was given. Anything the caller does set is kept, so an agent replaying captured events keeps their ids and timestamps. An event with no `text`, `label` or `data` is refused rather than accepted as a row that says nothing.
+
+It follows the same flag as everything else: while the bridge is off the endpoint answers 409 and writes nothing. It also answers only where the dashboard's own control actions do, the loopback interface and the per-user unix socket, since writing to the window puts a row in front of whoever is looking at it.
+
 ## Wire format
 
 Each event is one line of JSON. The shape is stable from v1 of the protocol:

@@ -286,6 +286,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/dumps/stream", withCORS(handleDumpsStream))
 	mux.HandleFunc("/api/dumps/status", withCORS(handleDumpsStatus))
 	mux.HandleFunc("/api/dumps/clear", withCORS(handleDumpsClear))
+	mux.HandleFunc("/api/dumps/ingest", withCORS(handleDumpsIngest))
 	mux.HandleFunc("/api/dumps/toggle", withCORS(publishAfter(handleDumpsToggle, eventbus.KindDumpsStatus)))
 	mux.HandleFunc("/api/dumps/passthrough", withCORS(publishAfter(handleDumpsPassthrough, eventbus.KindDumpsStatus)))
 	mux.HandleFunc("/api/dumps/notify-changed", withCORS(handleDumpsNotifyChanged))
