@@ -368,6 +368,23 @@ func TestDashboardLoginScript(t *testing.T) {
 	}
 }
 
+// A session that has run out leaves its key in place, so the key's presence
+// alone cannot stand for being logged in.
+func TestDashboardLoginScriptReadsSessionExpiry(t *testing.T) {
+	script := DashboardLoginScript(DefaultPresetService("rustfs"))
+	for _, want := range []string{`,X="Expiration"`, "Date.parse(e)>Date.now()"} {
+		if !strings.Contains(script, want) {
+			t.Errorf("login script missing %q", want)
+		}
+	}
+	if n := strings.Count(script, "localStorage.getItem(D)"); n != 1 {
+		t.Errorf("the stored key is read in %d places; only the session check should read it", n)
+	}
+	if opens, closes := strings.Count(script, "{"), strings.Count(script, "}"); opens != closes {
+		t.Errorf("login script braces unbalanced: %d open, %d close", opens, closes)
+	}
+}
+
 // The wrapper has to hand a rebuilt request a body it can send: a Request built
 // from a Request carries a stream, which a browser refuses over HTTP/1.1.
 func TestDashboardRerouteScriptShape(t *testing.T) {
