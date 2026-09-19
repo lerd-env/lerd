@@ -26,14 +26,14 @@
   import { m } from '../paraglide/messages.js';
 
   interface Props {
-    kind: 'jobs' | 'views' | 'mail' | 'cache' | 'events' | 'http' | 'logs';
+    kind: 'jobs' | 'views' | 'mail' | 'cache' | 'events' | 'http' | 'logs' | 'exceptions';
     siteScope?: string;
   }
   let { kind, siteScope = '' }: Props = $props();
   const scoped = $derived(siteScope !== '');
   // Event `kind` on the wire is singular.
   const wireKind = $derived(
-    ({ jobs: 'job', views: 'view', mail: 'mail', cache: 'cache', events: 'event', http: 'http', logs: 'log' })[
+    ({ jobs: 'job', views: 'view', mail: 'mail', cache: 'cache', events: 'event', http: 'http', logs: 'log', exceptions: 'exception' })[
       kind
     ]
   );
@@ -102,7 +102,7 @@
   // Levels read in severity order rather than alphabetically, which is the
   // order someone scanning for the bad ones expects them in.
   const LEVELS = ['emergency', 'alert', 'critical', 'error', 'warning', 'notice', 'info', 'debug'];
-  const facetField = $derived(wireKind === 'job' ? 'status' : wireKind === 'log' ? 'level' : '');
+  const facetField = $derived(wireKind === 'job' ? 'status' : wireKind === 'log' || wireKind === 'exception' ? 'level' : '');
   const facets = $derived.by(() => {
     if (!facetField) return [] as string[];
     const seen = new Set(
@@ -258,6 +258,7 @@
                   {:else if wireKind === 'cache'}<code>{d.key}</code>
                   {:else if wireKind === 'http'}<span class="font-mono">{d.method} {d.url}</span>
                   {:else if wireKind === 'log'}{d.message}
+                  {:else if wireKind === 'exception'}{#if d.type && d.type !== 'message'}<span class="font-mono">{d.type}</span> {/if}{d.message}
                   {:else}{d.name}{/if}
                 </span>
                 <span class="flex items-center gap-1 shrink-0">
@@ -266,7 +267,8 @@
                   {:else if wireKind === 'http' && d.status}<span class="text-[10px] tabular-nums rounded-sm px-1 py-0.5 {httpTone(d.status)}">{d.status}</span>
                   {:else if wireKind === 'http'}<span class="text-[10px] rounded-sm px-1 py-0.5 {d.failed ? ROSE : SKY}">{d.failed ? 'failed' : m.http_sent()}</span>
                   {:else if wireKind === 'mail' && d.to?.length}<span class="text-[11px] text-gray-400 break-all">→ {d.to[0]}</span>
-                  {:else if wireKind === 'log'}{#if d.channel}<span class="text-[11px] text-gray-400">{d.channel}</span>{/if}<span class="text-[10px] rounded-sm px-1 py-0.5 {levelTone(d.level)}">{d.level}</span>{/if}
+                  {:else if wireKind === 'log'}{#if d.channel}<span class="text-[11px] text-gray-400">{d.channel}</span>{/if}<span class="text-[10px] rounded-sm px-1 py-0.5 {levelTone(d.level)}">{d.level}</span>
+                  {:else if wireKind === 'exception'}<span class="text-[10px] rounded-sm px-1 py-0.5 {levelTone(d.level)}">{d.level}</span>{/if}
                 </span>
               </button>
               {#if expanded[ev.id]}
@@ -320,6 +322,9 @@
                         </table>
                       </div>
                     {/if}
+                  {/if}
+                  {#if wireKind === 'exception' && d.previous}
+                    <div class="text-gray-400">caused by {d.previous}</div>
                   {/if}
                   {#if wireKind === 'log' && d.context}
                     <pre class="whitespace-pre-wrap break-all text-gray-700 dark:text-gray-300">{d.context}</pre>

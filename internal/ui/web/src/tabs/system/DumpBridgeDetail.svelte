@@ -34,7 +34,8 @@
     { id: 'cache', label: m.debug_tab_cache(), hidden: !anyLaravel, count: counts['cache'] },
     { id: 'events', label: m.debug_tab_events(), count: counts['event'] },
     { id: 'http', label: m.debug_tab_http(), count: counts['http'] },
-    { id: 'logs', label: m.debug_tab_logs(), count: counts['log'] }
+    { id: 'logs', label: m.debug_tab_logs(), count: counts['log'] },
+    { id: 'exceptions', label: m.debug_tab_exceptions(), count: counts['exception'] }
   ]);
 
   $effect(() => {
@@ -136,7 +137,7 @@
     </div>
     {:else}
     <div class="flex-1 min-h-0 overflow-hidden">
-      <KindLens kind={$debugLens as 'jobs' | 'views' | 'mail' | 'cache' | 'events' | 'http' | 'logs'} />
+      <KindLens kind={$debugLens as 'jobs' | 'views' | 'mail' | 'cache' | 'events' | 'http' | 'logs' | 'exceptions'} />
     </div>
     {/if}
   {/if}

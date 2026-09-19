@@ -291,14 +291,25 @@ function emit(string $kind, array $data): void
 {
     try {
         $bt = backtrace();
-        $data['trace'] = $bt['trace'];
+        emit_with($kind, $data, $bt['src'], $bt['trace']);
+    } catch (\Throwable $_) {
+    }
+}
+
+// emit_with is emit for an event whose origin is not the call that captured it:
+// a throwable carries the frames it was thrown from, and reporting the line
+// that handed it to Sentry instead would name the reporting, not the fault.
+function emit_with(string $kind, array $data, array $src, array $trace): void
+{
+    try {
+        $data['trace'] = $trace;
         send([
             'v'    => 1,
             'id'   => new_id(),
             'ts'   => ts(),
             'kind' => $kind,
             'ctx'  => context(),
-            'src'  => $bt['src'],
+            'src'  => $src,
             'data' => $data,
         ]);
     } catch (\Throwable $_) {
@@ -980,6 +991,10 @@ function capture(string $kind, string $method, $self, array $args): void
     }
     if ($kind === 'log') {
         log_record($self, $args);
+        return;
+    }
+    if ($kind === 'exception') {
+        sentry_event($args);
     }
 }
 
@@ -1143,6 +1158,100 @@ function dump_html_to_text(string $html): string
     }
     $out = html_entity_decode((string) $out, \ENT_QUOTES, 'UTF-8');
     return trim(str_replace("\xc2\xa0", ' ', $out));
+}
+
+// sentry_event reports what an app was about to send to Sentry. Locally the
+// event usually goes nowhere, there being no DSN configured, and where one is
+// configured it goes to a project nobody watches for a developer's own laptop,
+// so the report that matters is the one in front of them.
+//
+// Sentry hands the throwable in the hint rather than on the event: capturing an
+// exception builds an empty event and lets the pipeline attach the frames
+// later, so the hint is read first, the event's own exceptions second, and a
+// captured message last.
+function sentry_event(array $args): void
+{
+    $event = isset($args[1]) ? $args[1] : null;
+    $hint = isset($args[2]) ? $args[2] : null;
+    $level = sentry_level($event);
+    if (is_object($hint) && isset($hint->exception) && $hint->exception instanceof \Throwable) {
+        throwable_event($hint->exception, $level);
+        return;
+    }
+    $thrown = sentry_exception_bag($event);
+    if ($thrown) {
+        emit('exception', array_merge($thrown, ['level' => $level]));
+        return;
+    }
+    $message = is_object($event) && method_exists($event, 'getMessage') ? $event->getMessage() : null;
+    if (is_string($message) && $message !== '') {
+        emit('exception', ['type' => 'message', 'message' => $message, 'level' => $level]);
+    }
+}
+
+// throwable_event reports one throwable with its own origin: the frames it was
+// thrown from rather than the ones that reported it, resolved by the same rule
+// the collector resolves a caller with, so the line named is the developer's.
+function throwable_event(\Throwable $t, string $level): void
+{
+    $frames = [['file' => $t->getFile(), 'line' => $t->getLine(), 'func' => '']];
+    foreach ($t->getTrace() as $f) {
+        if (!isset($f['file'])) {
+            continue;
+        }
+        $func = (isset($f['class']) ? $f['class'] . (isset($f['type']) ? $f['type'] : '::') : '') . (isset($f['function']) ? $f['function'] : '');
+        $frames[] = ['file' => $f['file'], 'line' => isset($f['line']) ? $f['line'] : 0, 'func' => $func];
+    }
+    $src = null;
+    foreach ($frames as $f) {
+        if ($f['file'] !== '' && !is_dependency($f['file'])) {
+            $src = ['file' => $f['file'], 'line' => $f['line']];
+            break;
+        }
+    }
+    if ($src === null) {
+        $src = ['file' => $frames[0]['file'], 'line' => $frames[0]['line']];
+    }
+    $data = ['type' => get_class($t), 'message' => $t->getMessage(), 'level' => $level];
+    $previous = $t->getPrevious();
+    if ($previous instanceof \Throwable) {
+        $data['previous'] = get_class($previous) . ': ' . $previous->getMessage();
+    }
+    emit_with('exception', $data, $src, $frames);
+}
+
+// sentry_level reads the severity off an event, defaulting to the one Sentry
+// itself defaults to. The level is an object that renders as its own name.
+function sentry_level($event): string
+{
+    if (!is_object($event) || !method_exists($event, 'getLevel')) {
+        return 'error';
+    }
+    $level = $event->getLevel();
+    if ($level === null) {
+        return 'error';
+    }
+    return strtolower((string) $level);
+}
+
+// sentry_exception_bag reads the first exception off an event that was built
+// with one already attached, which is how an event reaches the client when the
+// app assembled it itself rather than handing over a throwable.
+function sentry_exception_bag($event): array
+{
+    if (!is_object($event) || !method_exists($event, 'getExceptions')) {
+        return [];
+    }
+    foreach ($event->getExceptions() as $bag) {
+        if (!is_object($bag) || !method_exists($bag, 'getType')) {
+            continue;
+        }
+        return [
+            'type'    => (string) $bag->getType(),
+            'message' => method_exists($bag, 'getValue') ? (string) $bag->getValue() : '',
+        ];
+    }
+    return [];
 }
 
 // http captures one outgoing Symfony HttpClient request at call time. The
