@@ -258,8 +258,8 @@ jobs:
       - name: Collect the recipe hashes recent releases pull
         id: plan
         run: |
-          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
-          import hashlib, json, re, subprocess, time
+          python3 - <<'EOF'
+          import hashlib, json, os, re, subprocess, time
 
           RECIPE = 'internal/podman/quadlets/lerd-php-fpm.Containerfile'
           # Stable releases only, from the last month, and at most two distinct
@@ -303,8 +303,11 @@ jobs:
               seen.add(h)
               (entries if len(entries) < MAX_HASHES else dropped).append({'tag': tag, 'hash': h})
 
-          print(f'entries={json.dumps(entries)}')
-          print(f'count={len(entries)}')
+          # The notices below are workflow commands, so the outputs go straight
+          # to the file rather than through a redirect of the whole stdout.
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f'entries={json.dumps(entries)}\n')
+              out.write(f'count={len(entries)}\n')
           for e in entries:
               print(f"::notice::rebuilding historic base {e['hash']} (from {e['tag']})")
           for e in dropped:
