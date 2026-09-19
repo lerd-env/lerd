@@ -22,7 +22,7 @@ export interface Palette {
   card: string;
   border: string;
   muted: string;
-  source: 'builtin' | 'user';
+  source: 'builtin' | 'user' | 'desktop';
 }
 
 // PaletteFile is a theme as it comes off disk, in the snake_case the YAML uses.
@@ -37,6 +37,9 @@ export interface PaletteFile {
   card?: string;
   border?: string;
   muted?: string;
+  // Set when the theme came from somewhere other than a file the user can edit,
+  // which is what keeps a remove button off it.
+  source?: string;
 }
 
 export interface PaletteError {
@@ -235,7 +238,7 @@ export function resolvePalette(file: PaletteFile): Palette | null {
     card: hex(file.card) || DEFAULT_PALETTE.card,
     border: hex(file.border) || DEFAULT_PALETTE.border,
     muted: hex(file.muted) || DEFAULT_PALETTE.muted,
-    source: 'user'
+    source: file.source === 'desktop' ? 'desktop' : 'user'
   };
 }
 

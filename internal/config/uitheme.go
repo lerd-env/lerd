@@ -27,6 +27,9 @@ type UITheme struct {
 	Card            string `yaml:"card,omitempty"               json:"card,omitempty"`
 	Border          string `yaml:"border,omitempty"             json:"border,omitempty"`
 	Muted           string `yaml:"muted,omitempty"              json:"muted,omitempty"`
+	// Source says where the theme came from when it was not a file the user can
+	// edit. It is never read off a file, so a theme cannot claim to be one.
+	Source string `yaml:"-" json:"source,omitempty"`
 }
 
 // UIThemeError names a file in the themes directory that could not be used and

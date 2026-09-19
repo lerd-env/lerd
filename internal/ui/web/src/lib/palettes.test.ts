@@ -19,6 +19,11 @@ describe('resolvePalette', () => {
     expect(p.source).toBe('user');
   });
 
+  it('marks a theme the desktop supplied so nothing offers to remove it', () => {
+    const p = resolvePalette({ id: 'omarchy', name: 'Omarchy (nord)', accent: '#81a1c1', source: 'desktop' })!;
+    expect(p.source).toBe('desktop');
+  });
+
   it('lifts a near-black accent so it reads on the dark card', () => {
     const p = resolvePalette({ id: 'ink', name: 'Ink', accent: '#050505' })!;
     expect(p.accentDark).not.toBe(p.accent);

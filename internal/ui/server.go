@@ -119,6 +119,10 @@ func Start(currentVersion string) error {
 	// podman inspect subprocesses.
 	podman.Cache.Start(context.Background())
 
+	// Follow the desktop theme where there is one. The error is the ordinary
+	// answer on a machine without Omarchy, so it is dropped rather than logged.
+	_ = watchOmarchyTheme(context.Background(), config.OmarchyCurrentDir(), 300*time.Millisecond, broker.broadcastThemeList)
+
 	// Restart any LAN share proxies that were active before this process started.
 	go cli.RestoreLANShareProxies()
 	go cli.RestorePublicShareProxies()

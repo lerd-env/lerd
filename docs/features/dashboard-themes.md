@@ -84,6 +84,23 @@ in it is listed under the picker with the reason, rather than quietly missing.
 `~/.config/lerd/themes/` for you, then selects it. The trash icon beside a theme
 asks before it deletes the file.
 
+## Following the desktop theme
+
+On [Omarchy](https://omarchy.org), the desktop's own theme shows up in the picker
+as one more entry, named after whatever theme the desktop is currently on, such
+as `Omarchy (tokyo-night)`. Pick it once and lerd follows the desktop from then
+on: run `omarchy-theme-set` and every open dashboard repaints, including the
+embedded service views. A theme you chose deliberately is never overridden, and
+on a machine without Omarchy the entry is simply absent.
+
+The colours are read from the active theme's `colors.toml`, which every theme
+Omarchy ships carries. A dark desktop theme lends its accent and its surfaces; a
+light one lends only its accent, because the surface fields are the dark ones and
+a pale background would land behind type coloured to sit on a dark card.
+
+There is no file to manage and no trash icon beside it. The desktop is the
+source, so the entry goes away when Omarchy does.
+
 ## Installed as an app
 
 Installed from the browser, the window and the launch splash are painted by the
