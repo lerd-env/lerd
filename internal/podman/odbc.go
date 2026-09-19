@@ -92,25 +92,8 @@ func odbcFPMMountLines() string {
 	if line == "" {
 		return ""
 	}
-	// Resolved, because an ostree system keeps home at /var/home behind a /home
-	// symlink and a driver registered before paths were canonicalised may still
-	// name the link. Comparing the raw strings there would mount a directory the
-	// %h:%h line already carries.
-	home := resolvePath(homeDir())
-	homePrefix := home
-	if homePrefix != "" && !strings.HasSuffix(homePrefix, "/") {
-		homePrefix += "/"
-	}
-	extra := ExtraVolumePaths()
 	lines := []string{line}
-	for _, raw := range ODBCDriverDirs() {
-		dir := resolvePath(raw)
-		if home != "" && (dir == home || strings.HasPrefix(dir, homePrefix)) {
-			continue
-		}
-		if withinAnyPath(dir, extra) {
-			continue
-		}
+	for _, raw := range odbcDriverMountDirs() {
 		// Mounted at the spelling the registry names, not the resolved one. The
 		// driver manager opens the path in odbcinst.ini, and macOS reaches a
 		// temp or /var path through a symlink, so a resolved mount would put the
@@ -218,6 +201,65 @@ func ODBCDriverDirs() []string {
 	return dirs
 }
 
+// odbcDriverMountDirs returns the driver directories a PHP container needs a
+// mount of its own for: everything registered, minus what it already reaches.
+// A directory under $HOME arrives through the quadlet's %h mount, and one inside
+// a path ExtraVolumePaths carries arrives through that project's read-write
+// mount, where a second read-only line would only take the write access away.
+//
+// Resolved for the comparisons and returned as registered, because the driver
+// manager opens the path odbcinst.ini names and an ostree system reaches the
+// same directory through more than one spelling.
+func odbcDriverMountDirs() []string {
+	home := resolvePath(homeDir())
+	homePrefix := home
+	if homePrefix != "" && !strings.HasSuffix(homePrefix, "/") {
+		homePrefix += "/"
+	}
+	extra := ExtraVolumePaths()
+	var dirs []string
+	for _, raw := range ODBCDriverDirs() {
+		dir := resolvePath(raw)
+		if home != "" && (dir == home || strings.HasPrefix(dir, homePrefix)) {
+			continue
+		}
+		if withinAnyPath(dir, extra) {
+			continue
+		}
+		dirs = append(dirs, raw)
+	}
+	return dirs
+}
+
+// odbcProbeMountArgs returns the -v arguments that give a probe container the
+// same reach as the PHP container the site is served by: the home directory the
+// quadlet mounts, the parked directories and site paths it carries, and the
+// driver directories mounted on their own. Derived from the same places the
+// quadlet is, so a driver the real container will not be able to open cannot
+// quietly pass the check by being mounted here and nowhere else.
+func odbcProbeMountArgs() []string {
+	var args []string
+	seen := map[string]bool{}
+	add := func(p string) {
+		if p == "" || !bindMountable(p) || seen[p] || ODBCDirShadowsRuntime(p) {
+			return
+		}
+		if _, err := os.Stat(p); err != nil {
+			return
+		}
+		seen[p] = true
+		args = append(args, "-v", p+":"+p+":ro")
+	}
+	add(homeDir())
+	for _, p := range ExtraVolumePaths() {
+		add(p)
+	}
+	for _, p := range odbcDriverMountDirs() {
+		add(p)
+	}
+	return args
+}
+
 // ODBCDriverStatus is what the image says about a registered driver: whether
 // the container can see the file, whether the driver manager lists it, and what
 // the loader cannot satisfy — libraries that are absent, and symbols that are
@@ -282,12 +324,7 @@ func InspectODBCDriver(version string, d config.ODBCDriver) (ODBCDriverStatus, e
 	args := []string{"run", "--rm"}
 	args = append(args, HostMountRunArgs()...)
 	args = append(args, "-v", config.OdbcInstFile()+":/etc/odbcinst.ini:ro")
-	// Same guard as the quadlet: mounting a runtime directory here would shadow
-	// the probe container's own libraries and report the driver as needing
-	// libraries that were there until the mount hid them.
-	if dir := filepath.Dir(d.Driver); bindMountable(dir) && !ODBCDirShadowsRuntime(dir) {
-		args = append(args, "-v", dir+":"+dir+":ro")
-	}
+	args = append(args, odbcProbeMountArgs()...)
 	script := "test -f '" + d.Driver + "' && echo LERD_FOUND; odbcinst -q -d 2>/dev/null; ldd '" + d.Driver + "' 2>&1"
 	args = append(args, FPMImageName(version), "sh", "-c", script)
 

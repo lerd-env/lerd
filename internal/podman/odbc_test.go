@@ -536,3 +536,51 @@ func TestODBCProbeOptsOutOfSELinuxLabelling(t *testing.T) {
 		t.Errorf("probe run = %q, want the registry still mounted", joined)
 	}
 }
+
+// The probe exists to say whether the container that serves the site can open
+// the driver, so it has to reach exactly what that container reaches. Mounting
+// the driver's directory unconditionally made it answer for a container of its
+// own: a driver the quadlet has reason to leave out still read back as fine.
+func TestODBCProbeMountsWhatTheContainerReaches(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	outside := t.TempDir()
+	if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+		c.SetODBCDriver(config.ODBCDriver{Name: "Out", Driver: filepath.Join(outside, "libodbcHDB.so")})
+	}); err != nil {
+		t.Fatalf("UpdateGlobal: %v", err)
+	}
+
+	joined := strings.Join(odbcProbeMountArgs(), " ")
+	if !strings.Contains(joined, outside) {
+		t.Errorf("probe does not mount the driver dir the quadlet mounts (%s):\n%s", outside, joined)
+	}
+	if !strings.Contains(joined, home) {
+		t.Errorf("probe does not mount the home directory the quadlet mounts:\n%s", joined)
+	}
+}
+
+// A driver in a directory the container keeps its own runtime in is refused at
+// registration, and the probe must not mount it either: doing so hid the probe's
+// own libraries and reported the driver as needing libraries the image had.
+func TestODBCProbeRefusesRuntimeDirs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+		c.SetODBCDriver(config.ODBCDriver{Name: "UsrLib", Driver: "/usr/lib/psqlodbcw.so"})
+	}); err != nil {
+		t.Fatalf("UpdateGlobal: %v", err)
+	}
+	for _, arg := range odbcProbeMountArgs() {
+		if strings.HasPrefix(arg, "/usr/lib:") {
+			t.Errorf("probe mounts a runtime directory: %q", arg)
+		}
+	}
+}
