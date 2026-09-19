@@ -958,6 +958,23 @@ func hasHostGatewayEntry(path string) bool {
 	return err == nil && strings.Contains(string(body), "host.containers.internal")
 }
 
+// RefreshXdebugInis rewrites the xdebug ini of each version from the runtime in
+// force. The file names a module path and a client host that belong to whichever
+// runtime wrote it, and nothing else revisits it, so a switch would leave a
+// native xdebug.so named inside a container or no xdebug at all on the host.
+func RefreshXdebugInis(versions []string) error {
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return err
+	}
+	for _, v := range versions {
+		if err := WriteXdebugIni(v, cfg.GetXdebugMode(v), cfg.GetXdebugStart(v)); err != nil {
+			return fmt.Errorf("php %s: %w", v, err)
+		}
+	}
+	return nil
+}
+
 // EnsureXdebugIni creates the xdebug ini file for the given PHP version if it doesn't
 // already exist as a regular file. This prevents Podman from auto-creating a directory
 // at the bind-mount source path when the container starts before the file is written.
@@ -985,6 +1002,9 @@ func WriteFPMQuadlet(version string) error {
 	}
 	if err := EnsureSharedIni(); err != nil {
 		return fmt.Errorf("creating shared ini: %w", err)
+	}
+	if err := EnsureOdbcInst(); err != nil {
+		return fmt.Errorf("creating odbcinst registry: %w", err)
 	}
 	if err := EnsureXdebugIni(version); err != nil {
 		return fmt.Errorf("creating xdebug ini: %w", err)
@@ -1049,6 +1069,7 @@ func renderFPMQuadletContent(version string) (string, error) {
 	content = strings.ReplaceAll(content, "{{.XdebugIniPath}}", config.PHPConfFile(version))
 	content = strings.ReplaceAll(content, "{{.UserIniPath}}", config.PHPUserIniFile(version))
 	content = strings.ReplaceAll(content, "{{.SharedIniPath}}", config.SharedIniFile())
+	content = strings.ReplaceAll(content, "{{.OdbcInstMountLine}}", odbcFPMMountLines())
 	content = strings.ReplaceAll(content, "{{.DumpsDir}}", config.DumpsAssetsDir())
 	content = strings.ReplaceAll(content, "{{.DumpsIniPath}}", config.DumpsIniFile())
 	content = strings.ReplaceAll(content, "{{.DevtoolsIniPath}}", config.DevtoolsIniFile())

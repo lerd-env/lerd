@@ -23,8 +23,8 @@ import (
 // tracked separately.
 var frankenPHPRuntimeExtensions = []string{
 	"bcmath", "bz2", "calendar", "dba", "exif", "ftp", "gd", "gmp", "intl", "ldap",
-	"mysqli", "opcache", "pcntl", "pdo_mysql", "pdo_pgsql", "shmop", "soap",
-	"sockets", "sysvmsg", "sysvsem", "sysvshm", "xsl", "zip",
+	"mysqli", "odbc", "opcache", "pcntl", "pdo_mysql", "pdo_odbc", "pdo_pgsql",
+	"shmop", "soap", "sockets", "sysvmsg", "sysvsem", "sysvshm", "xsl", "zip",
 	"redis", "igbinary", "imagick", "mongodb",
 }
 

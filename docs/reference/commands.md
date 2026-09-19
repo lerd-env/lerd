@@ -171,6 +171,9 @@ Supported PHP versions: **8.5**, **8.4**, **8.3**, **8.2**, **8.1**, the prerele
 | `lerd php:pkg add <package...>` | Add extra Alpine packages to every FPM image and rebuild the current version; the list is persisted so future rebuilds reapply it |
 | `lerd php:pkg remove <package...>` | Remove extra Alpine packages from every FPM image and rebuild |
 | `lerd php:pkg list` | List your declared Alpine packages, and what each PHP version's image actually installed |
+| `lerd php:odbc add <name> <path-to-driver.so> [--description TEXT]` | Register a vendor ODBC driver under the name a DSN's `Driver={...}` asks for; lerd writes the odbcinst registry every PHP container mounts and reports what the image makes of the driver |
+| `lerd php:odbc remove <name>` | Unregister an ODBC driver |
+| `lerd php:odbc list` | List the registered ODBC drivers and whether each one loads in the current version's image |
 | `lerd php:ports add <host:container...> [--php VERSION]` | Publish extra host ports on the version's shell (FPM) container so a process in `lerd shell` is reachable at `localhost:PORT`; a bare number publishes straight through, and a busy host port shifts to the next free one |
 | `lerd php:ports remove <host...> [--php VERSION]` | Unpublish host ports from the version's shell container |
 | `lerd php:ports list [--php VERSION]` | List the extra host ports published for a PHP version |

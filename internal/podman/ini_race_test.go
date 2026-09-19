@@ -433,3 +433,36 @@ func TestEnsureUserIni_healsStaleDirectory(t *testing.T) {
 		t.Errorf("expected default user ini content, got:\n%s", body)
 	}
 }
+
+// ── RefreshXdebugInis ────────────────────────────────────────────────────────
+
+// A runtime switch leaves the ini exactly as the runtime before it wrote it,
+// and nothing else revisits the file: a native xdebug.so goes on being named
+// inside a container, where every PHP call answers "Exec format error".
+func TestRefreshXdebugInisDropsTheNativeModuleUnderContainers(t *testing.T) {
+	setupConfigHome(t)
+	writeConfigYAML(t, "8.4", false)
+
+	path := config.PHPConfFile("8.4")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	stale := "[xdebug]\nzend_extension=/home/me/.local/share/lerd/native-php/8.4/modules/xdebug.so\nxdebug.mode=off\nxdebug.client_host=127.0.0.1\n"
+	if err := os.WriteFile(path, []byte(stale), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := RefreshXdebugInis([]string{"8.4"}); err != nil {
+		t.Fatalf("RefreshXdebugInis: %v", err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "zend_extension=") {
+		t.Errorf("native module still loaded under the container runtime:\n%s", body)
+	}
+	if !strings.Contains(string(body), "xdebug.client_host=host.containers.internal") {
+		t.Errorf("client host still points at the native listener:\n%s", body)
+	}
+}

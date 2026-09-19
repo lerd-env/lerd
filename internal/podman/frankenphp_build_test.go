@@ -83,6 +83,31 @@ func fpmDockerExtInstallList(containerfile string) []string {
 	return out
 }
 
+// fpmStandaloneExtInstalls picks up the extensions installed by a
+// docker-php-ext-install of their own, outside the main continued block: ext/odbc
+// needs a separate pass to get its configure flags, and is built by one.
+func fpmStandaloneExtInstalls(containerfile string) []string {
+	var out []string
+	for _, ln := range strings.Split(containerfile, "\n") {
+		s := strings.TrimSpace(ln)
+		if strings.HasPrefix(s, "#") {
+			continue
+		}
+		_, after, found := strings.Cut(s, "docker-php-ext-install")
+		if !found {
+			continue
+		}
+		for _, tok := range strings.Fields(after) {
+			tok = strings.Trim(tok, "()|&;\\")
+			if tok == "" || strings.HasPrefix(tok, "-") {
+				continue // the -j"$(nproc)" jobs flag, not an extension
+			}
+			out = append(out, tok)
+		}
+	}
+	return out
+}
+
 // fpmContainerfileExtensions is everything the FPM Containerfile makes available:
 // the docker-php-ext-install block plus the docker-php-ext-enable names (opcache
 // and the pecl-built extensions). spx + lerd_devtools are lerd-internal best-effort
@@ -93,6 +118,9 @@ func fpmContainerfileExtensions(containerfile string) []string {
 		set[e] = true
 	}
 	skip := map[string]bool{"spx": true, "lerd_devtools": true}
+	for _, e := range fpmStandaloneExtInstalls(containerfile) {
+		set[e] = true
+	}
 	for _, ln := range strings.Split(containerfile, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(ln), "#") {
 			continue // a comment mentioning docker-php-ext-enable isn't an install

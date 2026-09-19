@@ -232,36 +232,34 @@ release:
   header: |
     ## Lerd {{ .Version }}
 
-    Lerd — Podman-powered local PHP dev environment for Linux & macOS.
+    Lerd gives every PHP project on your machine what it would have on a server:
+    its own `.test` domain over HTTPS, its own PHP version, its own databases,
+    cache and mail catcher. Nginx, PHP-FPM and every service run as rootless
+    Podman containers, so nothing is installed system-wide and nothing keeps
+    running once you stop it. There is a dashboard, a terminal UI, a CLI and an
+    MCP server over the same environment.
 
-    ### Install on Linux
+    ### Install
+
+    One line on Linux and macOS alike:
 
     ```bash
     curl -fsSL https://lerd.sh/install.sh | bash
     ```
 
-    Or if already installed:
+    It installs what is missing, puts the binary in `~/.local/bin`, and runs
+    `lerd install` to set the environment up. Setup asks for sudo once, at the
+    start, and nothing after that.
+
+    Already installed:
 
     ```bash
     lerd update
     ```
 
-    Also available through apt (PPA), dnf (COPR) and Homebrew, see the
+    Also available through apt (PPA), dnf (COPR), a NixOS flake, and Homebrew
+    (`brew install lerd-env/lerd/lerd && lerd install`, then `brew upgrade lerd`
+    to update), see the
     [installation docs](https://lerd.sh/getting-started/installation).
-
-    ### Install on macOS
-
-    ```bash
-    brew tap lerd-env/lerd
-    brew install lerd
-    lerd install
-    ```
-
-    Or if already installed:
-
-    ```bash
-    brew upgrade lerd
-    lerd install
-    ```
   footer: |
     **Full Changelog**: https://github.com/lerd-env/lerd/compare/{{ .PreviousTag }}...{{ .Tag }}

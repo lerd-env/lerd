@@ -151,6 +151,13 @@ func ngrokContainerCmdFor(proxyPort int, token string, headless bool, containerN
 	netArgs, upstream := ngrokContainerUpstream(proxyPort, goos)
 	args = append(args, netArgs...)
 	mounts, extra := ngrokContainerFiles(extra)
+	if len(mounts) > 0 {
+		// The config files come off the host, usually out of the home directory,
+		// which an SELinux distribution will not let the container read without
+		// this. Only when something is actually mounted, so a plain tunnel keeps
+		// the confinement it has.
+		args = append(args, podman.HostMountRunArgs()...)
+	}
 	args = append(args, mounts...)
 	args = append(args,
 		"--name", containerName,

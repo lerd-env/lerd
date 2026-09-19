@@ -103,6 +103,10 @@ type GlobalConfig struct {
 		// every FPM image's runtime stage, for CLI tools and runtime libraries
 		// users want in the container; re-applied on rebuild.
 		Packages []string `yaml:"packages,omitempty" mapstructure:"packages"`
+		// ODBCDrivers registers vendor ODBC drivers (lerd php:odbc) in the
+		// odbcinst.ini every PHP container mounts. The images ship unixODBC and
+		// the odbc extensions; the licensed driver files stay on the host.
+		ODBCDrivers []ODBCDriver `yaml:"odbc_drivers,omitempty" mapstructure:"odbc_drivers"`
 		// Realised records what each version's image actually loaded, verified
 		// after its build. The declared set above is what the user asked for; not
 		// every version can honour all of it (mongodb needs 8.1+, the 7.4/8.0
