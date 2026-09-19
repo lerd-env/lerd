@@ -499,6 +499,18 @@ func newWatchCmd() *cobra.Command {
 				fmt.Printf("[WARN] default vhost: %v\n", err)
 			}
 
+			// A quadlet written while a host path existed still names it after
+			// that path goes, and podman refuses the container rather than
+			// skipping the mount, so every site on that version answers 502 in a
+			// restart loop. Rewriting drops what is gone; the units retry every
+			// two seconds, so they come up on their own from here.
+			if stale := podman.StaleQuadletMounts(); len(stale) > 0 {
+				fmt.Printf("[WARN] dropping mounts that no longer exist: %s\n", strings.Join(stale, ", "))
+				if _, err := podman.HealStaleQuadletMounts(); err != nil {
+					fmt.Printf("[WARN] rewriting quadlets: %v\n", err)
+				}
+			}
+
 			// Periodically catch deletions that happen while the watcher is busy.
 			go func() {
 				for range time.Tick(30 * time.Second) {
