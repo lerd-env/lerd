@@ -65,3 +65,22 @@ func TestWorkerStartPreflight_noUsableNodeIsActionable(t *testing.T) {
 		t.Errorf("non-Node command should pass: %v", err)
 	}
 }
+
+// A restart policy from a newer store reaches the unit's Restart= line, where
+// systemd ignores what it cannot parse and silently falls back to Restart=no:
+// the worker starts, then never comes back from its first crash. Refuse the
+// value instead, the way an unknown env format is refused.
+func TestValidateWorkerUnitFields_RejectsUnknownRestart(t *testing.T) {
+	err := validateWorkerUnitFields("lerd-queue-mysite", map[string]string{"restart": "never"})
+	if err == nil {
+		t.Fatal("expected an unknown restart policy to be refused")
+	}
+	if !strings.Contains(err.Error(), "never") {
+		t.Errorf("error should name the offending value, got %q", err)
+	}
+	for _, ok := range []string{"", "always", "on-failure", "on-abnormal", "no"} {
+		if err := validateWorkerUnitFields("lerd-queue-mysite", map[string]string{"restart": ok}); err != nil {
+			t.Errorf("restart %q should be accepted: %v", ok, err)
+		}
+	}
+}

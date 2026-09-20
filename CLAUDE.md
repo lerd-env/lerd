@@ -12,10 +12,10 @@ habit, the rule wins.
 
 ---
 
-## 1. The three design laws
+## 1. The four design laws
 
 Almost every mistake an agent makes here is a violation of one of these. Check
-your change against all three before writing code.
+your change against all four before writing code.
 
 1. **Store-first, never hardcode.** lerd ships only the default stack. Every
    framework lives in `lerd-frameworks/` and every service in `lerd-services/`,
@@ -33,7 +33,15 @@ your change against all three before writing code.
    yourself branching on a framework name in Go, the logic is in the wrong layer
    — move it into the store as declarative data.
 
-3. **Env belongs to sites, not workers.** All environment variables live in the
+3. **A store change must not break an older binary.** Definitions reach every
+   install within a day with no version gate, so the schema may only grow: add
+   optional keys, never retype or remove one, and treat a key's accepted values
+   as part of its type — widening an enum breaks the old binary's switch exactly
+   as retyping does. In Go, a value from the store you do not recognise is
+   refused with a message naming it, never defaulted. See
+   `docs/usage/framework-definitions.md` for the full rule.
+
+4. **Env belongs to sites, not workers.** All environment variables live in the
    site's `.env`. Workers never declare env vars. Service presets inject their
    host/port/credentials into the site `.env` via the framework's `env.services`
    mapping.
