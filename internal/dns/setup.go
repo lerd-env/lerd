@@ -266,6 +266,15 @@ func lerdDNSInterfaces() []string {
 	return parseLerdDNSInterfaces(string(out))
 }
 
+// resolvedInterfacesToRevert is lerdDNSInterfaces gated on resolved actually
+// running, since reverting an interface is a thing only resolved understands.
+func resolvedInterfacesToRevert() []string {
+	if !isSystemdResolvedActive() {
+		return nil
+	}
+	return lerdDNSInterfaces()
+}
+
 // parseLerdDNSInterfaces extracts interface names from resolvectl status output
 // that have 127.0.0.1:5300 configured as a DNS server.
 func parseLerdDNSInterfaces(output string) []string {
@@ -923,7 +932,14 @@ func Teardown() {
 	// The dispatcher script applies DNS to every interface on "up", not just
 	// the default one, so reverting only the default leaves virtual bridges
 	// (virbr0, vnet*) pointing at the dead dnsmasq port.
-	for _, iface := range lerdDNSInterfaces() {
+	//
+	// Only where resolved is the resolver. resolvectl ships with systemd
+	// whether or not resolved runs, so on a NetworkManager plus dnsmasq host
+	// these calls reach for a service that is not there and fail with "Could
+	// not activate remote peer org.freedesktop.resolve1", which reads as a
+	// broken uninstall while nothing is actually wrong: NetworkManager owns
+	// resolv.conf there and the restart below is what restores DNS.
+	for _, iface := range resolvedInterfacesToRevert() {
 		revertCmd := exec.Command("sudo", "resolvectl", "revert", iface)
 		revertCmd.Stdin = os.Stdin
 		revertCmd.Stdout = os.Stdout
@@ -942,8 +958,10 @@ func Teardown() {
 
 		// NM restart doesn't always re-push DHCP DNS to resolved after a
 		// resolvectl revert. Explicitly apply the DHCP-assigned servers so
-		// internet DNS works immediately after uninstall.
-		if iface := defaultInterface(); iface != "" {
+		// internet DNS works immediately after uninstall. Nothing to push
+		// where resolved is not the resolver: NM has already written
+		// resolv.conf itself by the time the restart returns.
+		if iface := defaultInterface(); iface != "" && isSystemdResolvedActive() {
 			upstreams := nmcliDNSFunc()
 			if len(upstreams) > 0 {
 				args := append([]string{"sudo", "resolvectl", "dns", iface}, upstreams...)
