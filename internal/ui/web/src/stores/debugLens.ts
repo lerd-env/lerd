@@ -13,7 +13,8 @@ export type DebugLens =
   | 'events'
   | 'http'
   | 'logs'
-  | 'exceptions';
+  | 'exceptions'
+  | 'messages';
 
 const KEY = 'lerd:debugLens';
 
@@ -27,7 +28,8 @@ const VALID: DebugLens[] = [
   'events',
   'http',
   'logs',
-  'exceptions'
+  'exceptions',
+  'messages'
 ];
 
 function initial(): DebugLens {

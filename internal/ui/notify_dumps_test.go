@@ -227,3 +227,79 @@ func TestNotificationForFailedJob_FallsBackWithoutDetail(t *testing.T) {
 		t.Errorf("job/error = %q/%q, want readable fallbacks", n.Params["job"], n.Params["error"])
 	}
 }
+
+// TestNotificationForMessage_NamesWhereItWentAndWhatItSaid covers the row a
+// developer is told about: nothing catches an SMS, so the notification is the
+// only sign it left the machine.
+func TestNotificationForMessage_NamesWhereItWentAndWhatItSaid(t *testing.T) {
+	evt := dumps.Event{
+		ID:   "m1",
+		Kind: dumps.KindMessage,
+		Ctx:  dumps.Context{Site: "acme", Type: "fpm"},
+		Data: json.RawMessage(`{"channel":"sms","transport":"twilio","to":"+40711000000","body":"your order shipped"}`),
+	}
+	n := notificationForMessage(evt)
+
+	if n.Kind != "message" || n.Data["id"] != "m1" {
+		t.Errorf("notification = %+v, want the message kind and the event id", n)
+	}
+	if !strings.Contains(n.Title, "acme") {
+		t.Errorf("title = %q, want the site that sent it", n.Title)
+	}
+	for _, want := range []string{"sms", "twilio", "+40711000000", "your order shipped"} {
+		if !strings.Contains(n.Body, want) {
+			t.Errorf("body = %q, want it to carry %q", n.Body, want)
+		}
+	}
+}
+
+// TestNotificationForMessage_FallsBackToWhatBuiltIt covers a Laravel
+// notification, whose text lives in code lerd must not run: the class that
+// built it is what names the message instead.
+func TestNotificationForMessage_FallsBackToWhatBuiltIt(t *testing.T) {
+	evt := dumps.Event{
+		ID:   "m2",
+		Kind: dumps.KindMessage,
+		Ctx:  dumps.Context{Site: "acme"},
+		Data: json.RawMessage(`{"channel":"vonage","to":"+40711000000","notification":"App\\Notifications\\OrderShipped"}`),
+	}
+	n := notificationForMessage(evt)
+
+	if !strings.Contains(n.Body, "OrderShipped") || !strings.Contains(n.Body, "+40711000000") {
+		t.Errorf("body = %q, want the notification class and the recipient", n.Body)
+	}
+}
+
+// TestRunDumpsNotifier_NotifiesOneMessagePerWindow keeps a notification fanned
+// out to several recipients from arriving as several pop-ups.
+func TestRunDumpsNotifier_NotifiesOneMessagePerWindow(t *testing.T) {
+	var got []string
+	prev := notifyDispatch
+	notifyDispatch = func(n push.Notification) { got = append(got, n.Kind+":"+n.Data["id"]) }
+	t.Cleanup(func() { notifyDispatch = prev })
+
+	msg := func(id string) dumps.Event {
+		return dumps.Event{ID: id, Kind: dumps.KindMessage, Ctx: dumps.Context{Site: "acme"}, Data: json.RawMessage(`{"channel":"sms","body":"hi"}`)}
+	}
+	runDumpsNotifier(&fakeSubscriber{evs: []dumps.Event{msg("m1"), msg("m2"), msg("m3")}})
+
+	if len(got) != 1 || got[0] != "message:m1" {
+		t.Errorf("notified %v, want one message per site per window", got)
+	}
+}
+
+// TestNotificationForMessage_TagsEachSendOnItsOwn keeps a second message from
+// replacing the first in the tray: a repeated tag updates a notification in
+// place, which reads as nothing happening.
+func TestNotificationForMessage_TagsEachSendOnItsOwn(t *testing.T) {
+	data := json.RawMessage(`{"channel":"sms","body":"hi"}`)
+	a := notificationForMessage(dumps.Event{ID: "m1", Kind: dumps.KindMessage, Ctx: dumps.Context{Site: "acme"}, Data: data})
+	b := notificationForMessage(dumps.Event{ID: "m2", Kind: dumps.KindMessage, Ctx: dumps.Context{Site: "acme"}, Data: data})
+
+	if a.Tag == b.Tag {
+		t.Errorf("both sends tagged %q, want one tag per send", a.Tag)
+	}
+	if !strings.Contains(a.Tag, "acme") {
+		t.Errorf("tag = %q, want the site in it", a.Tag)
+	}
+}

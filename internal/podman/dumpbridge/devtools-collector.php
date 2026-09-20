@@ -995,7 +995,61 @@ function capture(string $kind, string $method, $self, array $args, string $name 
     }
     if ($kind === 'exception') {
         error_report($args, $name);
+        return;
     }
+    if ($kind === 'message') {
+        notifier_message(isset($args[1]) ? $args[1] : null);
+    }
+}
+
+// notifier_message reports one message an app sent to somebody: an SMS, a chat
+// post, a push. Mail has had a lens since the window was built and everything
+// else a site sends had none, even though it is the same question, did it go
+// out and what did it say, asked of a different channel.
+//
+// Symfony's Notifier is where to take it: every transport it ships, Twilio,
+// Vonage, Slack and the rest, is reached through the same two entry points, and
+// each message answers the same small interface whatever channel it is for.
+function notifier_message($message): void
+{
+    if (!is_object($message) || !method_exists($message, 'getSubject')) {
+        return;
+    }
+    $data = ['channel' => message_channel(get_class($message))];
+    $body = (string) $message->getSubject();
+    if ($body !== '') {
+        $data['body'] = $body;
+    }
+    // An SMS names the phone it is going to, everything else a recipient id.
+    if (method_exists($message, 'getPhone')) {
+        $data['to'] = (string) $message->getPhone();
+    } elseif (method_exists($message, 'getRecipientId')) {
+        $data['to'] = (string) $message->getRecipientId();
+    }
+    if (method_exists($message, 'getFrom')) {
+        $from = (string) $message->getFrom();
+        if ($from !== '') {
+            $data['from'] = $from;
+        }
+    }
+    if (method_exists($message, 'getTransport')) {
+        $transport = (string) $message->getTransport();
+        if ($transport !== '') {
+            $data['transport'] = $transport;
+        }
+    }
+    emit('message', $data);
+}
+
+// message_channel names the kind of message from its class, so SmsMessage is an
+// sms and ChatMessage a chat, whatever namespace it came from.
+function message_channel(string $class): string
+{
+    $short = strtolower(substr($class, strrpos($class, '\\') === false ? 0 : strrpos($class, '\\') + 1));
+    if (substr($short, -7) === 'message') {
+        $short = substr($short, 0, -7);
+    }
+    return $short !== '' ? $short : 'message';
 }
 
 // error_report reports what an app was about to send to an error monitor.

@@ -513,3 +513,82 @@ $app['events']->fire('Illuminate\\Mail\\Events\\MessageSending', $e);
 		t.Errorf("X-Lerd-View = %v, want the template the catcher should show", header)
 	}
 }
+
+// TestLaravelAdapterPHP_ReportsNotificationsOffTheMailChannel checks a
+// notification sent on any channel but mail reaches the messages lens with the
+// channel, the notification that built it and where it was routed, and that a
+// mail notification is left to the mail listener that reports it in full.
+func TestLaravelAdapterPHP_ReportsNotificationsOffTheMailChannel(t *testing.T) {
+	lines := runLaravelAdapterPHP(t, `<?php
+`+fakeLaravelApp+`
+class FakeNotificationEvent { public $notifiable; public $notification; public $channel; }
+class OrderShipped {}
+class FakeUser {
+    public function routeNotificationFor($channel) { return $channel === 'vonage' ? '+40711000000' : null; }
+}
+class RefusingUser {
+    public function routeNotificationFor($channel) { throw new \RuntimeException('no route'); }
+}
+define('LERD_DEVTOOLS_ON', true);
+require ADAPTER;
+$events = $GLOBALS['__lerd_fake_app']['events'];
+
+$e = new FakeNotificationEvent();
+$e->notifiable = new FakeUser();
+$e->notification = new OrderShipped();
+$e->channel = 'vonage';
+$events->fire('Illuminate\\Notifications\\Events\\NotificationSending', $e);
+
+// A custom channel arrives as its class and reads as its own short name.
+$e2 = new FakeNotificationEvent();
+$e2->notifiable = new FakeUser();
+$e2->notification = new OrderShipped();
+$e2->channel = 'App\\Notifications\\Channels\\WhatsAppChannel';
+$events->fire('Illuminate\\Notifications\\Events\\NotificationSending', $e2);
+
+// Mail is the mail listener's, reported there in full.
+$e3 = new FakeNotificationEvent();
+$e3->notifiable = new FakeUser();
+$e3->notification = new OrderShipped();
+$e3->channel = 'mail';
+$events->fire('Illuminate\\Notifications\\Events\\NotificationSending', $e3);
+
+// A notifiable that refuses to answer must not take the row down with it.
+$e4 = new FakeNotificationEvent();
+$e4->notifiable = new RefusingUser();
+$e4->notification = new OrderShipped();
+$e4->channel = 'vonage';
+$events->fire('Illuminate\\Notifications\\Events\\NotificationSending', $e4);
+`)
+
+	type ev struct {
+		Kind string `json:"kind"`
+		Data struct {
+			Channel      string `json:"channel"`
+			To           string `json:"to"`
+			Notification string `json:"notification"`
+		} `json:"data"`
+	}
+	var msgs []ev
+	for _, line := range lines {
+		var e ev
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			t.Fatalf("bad JSON line %q: %v", line, err)
+		}
+		if e.Kind == "message" {
+			msgs = append(msgs, e)
+		}
+	}
+	if len(msgs) != 3 {
+		t.Fatalf("got %d messages, want one per non-mail notification: %v", len(msgs), lines)
+	}
+	if msgs[0].Data.Channel != "vonage" || msgs[0].Data.To != "+40711000000" || msgs[0].Data.Notification != "OrderShipped" {
+		t.Errorf("first = %+v, want the channel, the route and the notification", msgs[0].Data)
+	}
+	if msgs[1].Data.Channel != "whatsapp" {
+		t.Errorf("custom channel = %q, want its own short name", msgs[1].Data.Channel)
+	}
+	if msgs[2].Data.To != "" || msgs[2].Data.Channel != "vonage" {
+		t.Errorf("refusing notifiable = %+v, want the row without a recipient", msgs[2].Data)
+	}
+}
