@@ -291,17 +291,76 @@ function emit(string $kind, array $data): void
 {
     try {
         $bt = backtrace();
-        $data['trace'] = $bt['trace'];
+        emit_with($kind, $data, $bt['src'], $bt['trace']);
+    } catch (\Throwable $_) {
+    }
+}
+
+// emit_with is emit for an event whose origin is not the call that captured it:
+// a throwable carries the frames it was thrown from, and reporting the line
+// that handed it to Sentry instead would name the reporting, not the fault.
+function emit_with(string $kind, array $data, array $src, array $trace): void
+{
+    try {
+        $data['trace'] = $trace;
         send([
             'v'    => 1,
             'id'   => new_id(),
             'ts'   => ts(),
             'kind' => $kind,
             'ctx'  => context(),
-            'src'  => $bt['src'],
+            'src'  => $src,
             'data' => $data,
         ]);
     } catch (\Throwable $_) {
+    }
+}
+
+// render_var renders one variable to the text a dump shows, through Symfony's
+// cloner when the project has it and through print_r when it does not. Every
+// capture that ships a whole value goes through here, so dump(), dd() and a
+// ray() all read the same way.
+function render_var($var): string
+{
+    if (!class_exists(\Symfony\Component\VarDumper\Cloner\VarCloner::class, true)
+        || !class_exists(\Symfony\Component\VarDumper\Dumper\CliDumper::class, true)) {
+        return is_scalar($var) ? (string) $var : print_r($var, true);
+    }
+    $cloner = new \Symfony\Component\VarDumper\Cloner\VarCloner();
+    $maxItems = (int) (getenv('LERD_DUMP_MAX_ITEMS') ?: 2500);
+    $cloner->setMaxItems($maxItems > 0 ? $maxItems : 2500);
+    $cloner->setMaxString(4096);
+    $dumper = new \Symfony\Component\VarDumper\Dumper\CliDumper();
+    $dumper->setColors(false);
+    $rendered = $dumper->dump($cloner->cloneVar($var), true);
+    return is_string($rendered) ? $rendered : '';
+}
+
+// send_dump ships one variable as a dump event. The dump envelope (top-level
+// label and text) differs from the structured kinds, so it is built here rather
+// than through emit(); everything else is the same transport.
+function send_dump($var, $label = null): void
+{
+    send_text(render_var($var), $label);
+}
+
+// send_text is send_dump for a value that is already the text to show.
+function send_text(string $text, $label = null): void
+{
+    try {
+        $bt = backtrace();
+        send([
+            'v'     => 1,
+            'id'    => new_id(),
+            'ts'    => ts(),
+            'kind'  => 'dump',
+            'ctx'   => context(),
+            'src'   => $bt['src'],
+            'label' => $label,
+            'text'  => $text,
+        ]);
+    } catch (\Throwable $_) {
+        // never throw out of a debug bridge
     }
 }
 
@@ -739,10 +798,11 @@ function job($message): void
     emit('job', $data);
 }
 
-// seams returns the capture seams the framework store declared, parsed once per
-// process from the file lerd writes next to this collector. One line each:
+// seams returns the capture seams the store declared, parsed once per process
+// from the file lerd writes next to this collector. One line each:
 // kind|match|target|method|name. Keyed by method, since that is what the
-// extension matched on; the target settles which one applies.
+// extension matched on; the target settles which one applies and the kind says
+// what the call means.
 function seams(): array
 {
     static $parsed = null;
@@ -765,10 +825,10 @@ function seams(): array
             continue;
         }
         $f = explode('|', $line);
-        if (count($f) < 5 || $f[0] !== 'job') {
+        if (count($f) < 5 || $f[0] === '') {
             continue;
         }
-        $parsed[strtolower($f[3])][] = ['target' => $f[2], 'name' => $f[4]];
+        $parsed[strtolower($f[3])][] = ['kind' => $f[0], 'target' => $f[2], 'name' => $f[4]];
     }
     return $parsed;
 }
@@ -859,9 +919,15 @@ function seam_begin($class, $method, $self, $args): void
 {
     $seam = seam_for((string) $class, (string) $method, $self);
     $stack = isset($GLOBALS['__lerd_seam_stack']) ? $GLOBALS['__lerd_seam_stack'] : [];
-    if (!$seam) {
+    // A frame is pushed for a capture seam too: the extension observes the way
+    // out of every seam it claimed, and an unbalanced stack would let that end
+    // close a job that is still running.
+    if (!$seam || $seam['kind'] !== 'job') {
         $stack[] = ['skip' => true];
         $GLOBALS['__lerd_seam_stack'] = $stack;
+        if ($seam) {
+            capture($seam['kind'], (string) $method, $self, is_array($args) ? $args : [], $seam['name']);
+        }
         return;
     }
     $args = is_array($args) ? $args : [];
@@ -912,6 +978,358 @@ function seam_end($class, $method, $failed, $error = ''): void
     if ($frame['previous'] !== '') {
         $GLOBALS['__lerd_rid'] = $frame['previous'];
     }
+}
+
+// capture reports a call a store-declared capture seam claimed, where the whole
+// event is the call itself rather than a span with a beginning and an end. The
+// kind names the library; each one's extraction is its own function below.
+function capture(string $kind, string $method, $self, array $args, string $name = ''): void
+{
+    if ($kind === 'ray') {
+        ray($args);
+        return;
+    }
+    if ($kind === 'log') {
+        log_record($self, $args);
+        return;
+    }
+    if ($kind === 'exception') {
+        error_report($args, $name);
+        return;
+    }
+    if ($kind === 'message') {
+        notifier_message(isset($args[1]) ? $args[1] : null);
+    }
+}
+
+// notifier_message reports one message an app sent to somebody: an SMS, a chat
+// post, a push. Mail has had a lens since the window was built and everything
+// else a site sends had none, even though it is the same question, did it go
+// out and what did it say, asked of a different channel.
+//
+// Symfony's Notifier is where to take it: every transport it ships, Twilio,
+// Vonage, Slack and the rest, is reached through the same two entry points, and
+// each message answers the same small interface whatever channel it is for.
+function notifier_message($message): void
+{
+    if (!is_object($message) || !method_exists($message, 'getSubject')) {
+        return;
+    }
+    $data = ['channel' => message_channel(get_class($message))];
+    $body = (string) $message->getSubject();
+    if ($body !== '') {
+        $data['body'] = $body;
+    }
+    // An SMS names the phone it is going to, everything else a recipient id.
+    if (method_exists($message, 'getPhone')) {
+        $data['to'] = (string) $message->getPhone();
+    } elseif (method_exists($message, 'getRecipientId')) {
+        $data['to'] = (string) $message->getRecipientId();
+    }
+    if (method_exists($message, 'getFrom')) {
+        $from = (string) $message->getFrom();
+        if ($from !== '') {
+            $data['from'] = $from;
+        }
+    }
+    if (method_exists($message, 'getTransport')) {
+        $transport = (string) $message->getTransport();
+        if ($transport !== '') {
+            $data['transport'] = $transport;
+        }
+    }
+    emit('message', $data);
+}
+
+// message_channel names the kind of message from its class, so SmsMessage is an
+// sms and ChatMessage a chat, whatever namespace it came from.
+function message_channel(string $class): string
+{
+    $short = strtolower(substr($class, strrpos($class, '\\') === false ? 0 : strrpos($class, '\\') + 1));
+    if (substr($short, -7) === 'message') {
+        $short = substr($short, 0, -7);
+    }
+    return $short !== '' ? $short : 'message';
+}
+
+// error_report reports what an app was about to send to an error monitor.
+// Locally the report usually goes nowhere, there being no key configured, and
+// where one is set it goes to a project nobody watches for a developer's own
+// laptop, so the report that matters is the one in front of them.
+//
+// The two shapes a reporter hands over are a throwable, which is everything
+// needed, and Sentry's event plus hint, which is where that SDK keeps the
+// throwable while the event itself is still empty.
+function error_report(array $args, string $source = ''): void
+{
+    $first = isset($args[1]) ? $args[1] : null;
+    if ($first instanceof \Throwable) {
+        throwable_event($first, 'error', $source);
+        return;
+    }
+    sentry_event($args, $source);
+}
+
+// log_record reports one record written to a logger. Monolog is the seam every
+// framework's logging ends up going through, and its entry point has carried
+// the same three arguments since Monolog 1, so one capture covers the field.
+// The level arrives as an integer on the older majors and as an enum on the
+// newest, and the channel is the logger's own name.
+function log_record($self, array $args): void
+{
+    $message = isset($args[2]) ? $args[2] : '';
+    if (!is_string($message) || $message === '') {
+        return;
+    }
+    $data = ['level' => log_level(isset($args[1]) ? $args[1] : null), 'message' => $message];
+    if (is_object($self) && method_exists($self, 'getName')) {
+        $channel = (string) $self->getName();
+        if ($channel !== '') {
+            $data['channel'] = $channel;
+        }
+    }
+    // The context is what the developer chose to attach to the line, so it is
+    // rendered in full the way a dump is, rather than reduced to its shape.
+    if (isset($args[3]) && is_array($args[3]) && $args[3] !== []) {
+        $data['context'] = rtrim(render_var($args[3]));
+    }
+    emit('log', $data);
+}
+
+// log_level names the severity a record was written at. Monolog 3 passes an
+// enum, Monolog 1 and 2 an integer of their own scale, and either major accepts
+// an RFC 5424 severity in place of one, which is the same range as the low end
+// of theirs; the enum is asked first and the two scales are told apart by size,
+// since Monolog's own start at 100.
+function log_level($level): string
+{
+    if (is_object($level)) {
+        if (method_exists($level, 'getName')) {
+            return strtolower((string) $level->getName());
+        }
+        return isset($level->name) ? strtolower((string) $level->name) : '';
+    }
+    if (!is_int($level)) {
+        return is_string($level) ? strtolower($level) : '';
+    }
+    static $monolog = [
+        100 => 'debug', 200 => 'info', 250 => 'notice', 300 => 'warning',
+        400 => 'error', 500 => 'critical', 550 => 'alert', 600 => 'emergency',
+    ];
+    static $rfc = [
+        0 => 'emergency', 1 => 'alert', 2 => 'critical', 3 => 'error',
+        4 => 'warning', 5 => 'notice', 6 => 'info', 7 => 'debug',
+    ];
+    if (isset($monolog[$level])) {
+        return $monolog[$level];
+    }
+    return isset($rfc[$level]) ? $rfc[$level] : (string) $level;
+}
+
+// ray_silent reports a payload the Ray app draws rather than reads: a colour, a
+// screen switch, a lock. There is nothing in one to show in a window that is
+// not Ray, so they are dropped instead of arriving as empty rows.
+function ray_silent(string $type): bool
+{
+    static $silent = [
+        'clear_all' => 1, 'color' => 1, 'confetti' => 1, 'create_lock' => 1,
+        'expand' => 1, 'hide' => 1, 'hide_app' => 1, 'label' => 1,
+        'new_screen' => 1, 'remove' => 1, 'screen_color' => 1, 'separator' => 1,
+        'show_app' => 1, 'size' => 1,
+    ];
+    return isset($silent[$type]);
+}
+
+// ray reports the payloads of one ray() call as dumps. Every call funnels into
+// the one method this seam observes, whatever built it, so a plain ray($user)
+// and a ray()->table() both arrive here; the payload has already been converted
+// for the Ray app by the time it does, so it is unwrapped from that form rather
+// than rendered. A plain call is labelled `ray` and everything else by the kind
+// of payload it is.
+function ray(array $args): void
+{
+    $payloads = isset($args[1]) ? $args[1] : null;
+    if (!is_array($payloads)) {
+        $payloads = [$payloads];
+    }
+    foreach ($payloads as $payload) {
+        $type = ray_type($payload);
+        if ($type === '' || ray_silent($type)) {
+            continue;
+        }
+        send_text(ray_content_text($payload), $type === 'log' ? 'ray' : 'ray:' . $type);
+    }
+}
+
+// ray_type reads a payload's type, from the object or from the array form a
+// payload turns into on the wire.
+function ray_type($payload): string
+{
+    if (is_object($payload) && method_exists($payload, 'getType')) {
+        return (string) $payload->getType();
+    }
+    if (is_array($payload) && isset($payload['type'])) {
+        return (string) $payload['type'];
+    }
+    return '';
+}
+
+// ray_content_text renders a payload's content as the lines the dumps lens
+// shows. Meta is the package's own bookkeeping (versions, clipboard copies) and
+// is dropped; a single unnamed value is its own text, and anything else is
+// listed by the name the payload gave it.
+function ray_content_text($payload): string
+{
+    $content = [];
+    if (is_object($payload) && method_exists($payload, 'getContent')) {
+        $content = $payload->getContent();
+    } elseif (is_array($payload) && isset($payload['content'])) {
+        $content = $payload['content'];
+    }
+    if (!is_array($content)) {
+        $content = [$content];
+    }
+    unset($content['meta']);
+    // A payload keeps what it is showing under 'values' and its own settings
+    // beside it, so the values are lifted out and listed first.
+    $values = [];
+    if (isset($content['values']) && is_array($content['values'])) {
+        $values = $content['values'];
+        unset($content['values']);
+    }
+    $lines = [];
+    foreach (array_merge($values, $content) as $key => $value) {
+        if ($value === null || $value === '' || $value === []) {
+            continue;
+        }
+        // A rendered value ends in its own newline, which between the lines of
+        // a listed payload reads as a blank row.
+        $text = rtrim(is_string($value) ? dump_html_to_text($value) : render_var($value));
+        $lines[] = is_int($key) ? $text : $key . ': ' . $text;
+    }
+    return implode("\n", $lines);
+}
+
+// dump_html_to_text turns the HTML a package rendered a value into back into
+// text. Ray converts every non-scalar argument with Symfony's HtmlDumper and
+// escapes every plain one before either leaves the process, and neither reads
+// as anything in a terminal or a text lens, so the markup is taken back off.
+// A value carrying neither is returned as it came, since a string a developer
+// dumped may well contain an ampersand it is meant to keep.
+function dump_html_to_text(string $html): string
+{
+    $markup = strpos($html, '<') !== false;
+    if (!$markup && strpos($html, '&') === false) {
+        return $html;
+    }
+    $out = $html;
+    if ($markup) {
+        $out = preg_replace('~<(script|style)\b[^>]*>.*?</\1>~is', '', $out);
+        $out = preg_replace('~<br\s*/?>~i', "\n", (string) $out);
+        $out = strip_tags((string) $out);
+    }
+    $out = html_entity_decode((string) $out, \ENT_QUOTES, 'UTF-8');
+    return trim(str_replace("\xc2\xa0", ' ', $out));
+}
+
+// sentry_event reports one event on its way to Sentry. The throwable is handed
+// in the hint rather than on the event, capturing an exception building an
+// empty event and letting the pipeline attach the frames later, so the hint is
+// read first, the event's own exceptions second, and a captured message last.
+function sentry_event(array $args, string $source = ''): void
+{
+    $event = isset($args[1]) ? $args[1] : null;
+    $hint = isset($args[2]) ? $args[2] : null;
+    $level = sentry_level($event);
+    if (is_object($hint) && isset($hint->exception) && $hint->exception instanceof \Throwable) {
+        throwable_event($hint->exception, $level, $source);
+        return;
+    }
+    $thrown = sentry_exception_bag($event);
+    if ($thrown) {
+        emit('exception', with_source(array_merge($thrown, ['level' => $level]), $source));
+        return;
+    }
+    $message = is_object($event) && method_exists($event, 'getMessage') ? $event->getMessage() : null;
+    if (is_string($message) && $message !== '') {
+        emit('exception', with_source(['type' => 'message', 'message' => $message, 'level' => $level], $source));
+    }
+}
+
+// throwable_event reports one throwable with its own origin: the frames it was
+// thrown from rather than the ones that reported it, resolved by the same rule
+// the collector resolves a caller with, so the line named is the developer's.
+function throwable_event(\Throwable $t, string $level, string $source = ''): void
+{
+    $frames = [['file' => $t->getFile(), 'line' => $t->getLine(), 'func' => '']];
+    foreach ($t->getTrace() as $f) {
+        if (!isset($f['file'])) {
+            continue;
+        }
+        $func = (isset($f['class']) ? $f['class'] . (isset($f['type']) ? $f['type'] : '::') : '') . (isset($f['function']) ? $f['function'] : '');
+        $frames[] = ['file' => $f['file'], 'line' => isset($f['line']) ? $f['line'] : 0, 'func' => $func];
+    }
+    $src = null;
+    foreach ($frames as $f) {
+        if ($f['file'] !== '' && !is_dependency($f['file'])) {
+            $src = ['file' => $f['file'], 'line' => $f['line']];
+            break;
+        }
+    }
+    if ($src === null) {
+        $src = ['file' => $frames[0]['file'], 'line' => $frames[0]['line']];
+    }
+    $data = ['type' => get_class($t), 'message' => $t->getMessage(), 'level' => $level];
+    $previous = $t->getPrevious();
+    if ($previous instanceof \Throwable) {
+        $data['previous'] = get_class($previous) . ': ' . $previous->getMessage();
+    }
+    emit_with('exception', with_source($data, $source), $src, $frames);
+}
+
+// with_source names the reporter an event was taken from, which the store's
+// seam declares. An app running one reporter sees the same word on every row,
+// and one running two can tell which saw what.
+function with_source(array $data, string $source): array
+{
+    if ($source !== '') {
+        $data['source'] = $source;
+    }
+    return $data;
+}
+
+// sentry_level reads the severity off an event, defaulting to the one Sentry
+// itself defaults to. The level is an object that renders as its own name.
+function sentry_level($event): string
+{
+    if (!is_object($event) || !method_exists($event, 'getLevel')) {
+        return 'error';
+    }
+    $level = $event->getLevel();
+    if ($level === null) {
+        return 'error';
+    }
+    return strtolower((string) $level);
+}
+
+// sentry_exception_bag reads the first exception off an event that was built
+// with one already attached, which is how an event reaches the client when the
+// app assembled it itself rather than handing over a throwable.
+function sentry_exception_bag($event): array
+{
+    if (!is_object($event) || !method_exists($event, 'getExceptions')) {
+        return [];
+    }
+    foreach ($event->getExceptions() as $bag) {
+        if (!is_object($bag) || !method_exists($bag, 'getType')) {
+            continue;
+        }
+        return [
+            'type'    => (string) $bag->getType(),
+            'message' => method_exists($bag, 'getValue') ? (string) $bag->getValue() : '',
+        ];
+    }
+    return [];
 }
 
 // http captures one outgoing Symfony HttpClient request at call time. The

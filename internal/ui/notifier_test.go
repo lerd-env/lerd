@@ -116,3 +116,42 @@ func TestDispatchNotification_NativeSinkGoesThroughTheSeam(t *testing.T) {
 		t.Errorf("the desktop notification did not go through the seam, got %+v", got)
 	}
 }
+
+// TestDispatchNotification_MessageReachesTheDesktopWhileFocused covers the one
+// kind the focus rule does not apply to. A focused dashboard is assumed to be
+// showing what the notification would say, which is not true of a message: it
+// went to a real person, off a machine that cannot take it back, and a
+// developer on another tab has no sign of it.
+func TestDispatchNotification_MessageReachesTheDesktopWhileFocused(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfgDir := config.ConfigDir()
+	if err := os.MkdirAll(cfgDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"),
+		[]byte("notifications:\n  target: native\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var got []string
+	prev := emitDesktopNotification
+	prevSupported := desktopSupported
+	emitDesktopNotification = func(r desktopnotify.Request) (uint32, error) {
+		got = append(got, r.Summary)
+		return 0, nil
+	}
+	desktopSupported = func() bool { return true }
+	noteFocus(1, true)
+	t.Cleanup(func() {
+		emitDesktopNotification = prev
+		desktopSupported = prevSupported
+		dropFocus(1)
+	})
+
+	dispatchNotification(push.Notification{Kind: "mail", Title: "New email"})
+	dispatchNotification(push.Notification{Kind: "message", Title: "Message sent from acme"})
+
+	if len(got) != 1 || got[0] != "Message sent from acme" {
+		t.Errorf("raised %v, want the message alone: mail waits in the bell while the dashboard has focus", got)
+	}
+}

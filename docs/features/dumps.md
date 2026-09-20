@@ -4,7 +4,7 @@
 
 ![Dump viewer on a site's Dumps tab](/assets/screenshots/site-detail-dumps.png)
 
-The feature is **off by default**. Enable it with `lerd dump on`, the antenna toggle in the Sites sidebar, the Enable button on a per-site Dumps tab, the *Debug bridge* item in the system tray menu, or `dumps_toggle` via MCP. All of these flip the same global flag, and that one flag arms the entire Debug window: `dump()` / `dd()` capture plus the `lerd_devtools` collector (queries, mail, views, events, jobs, outgoing HTTP).
+The feature is **off by default**. Enable it with `lerd dump on`, the antenna toggle in the Sites sidebar, the Enable button on a per-site Dumps tab, the *Debug bridge* item in the system tray menu, or `dumps_toggle` via MCP. All of these flip the same global flag, and that one flag arms the entire Debug window: `dump()` / `dd()` capture plus the `lerd_devtools` collector (queries, mail, views, events, jobs, logs, outgoing HTTP).
 
 ## How it works
 
@@ -35,6 +35,14 @@ The receiver's transport depends on the host:
 - **TUI**: press **D** in `lerd tui` to swap the detail pane for the live dump feed (global).
 - **CLI**: `lerd dump tail` streams events to your terminal, with `--site` and `--ctx` filters.
 - **MCP**: `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle` for AI-agent access.
+
+## Ray
+
+`ray()` is a dump call like any other, except that the package ships it over loopback to the Ray desktop app instead of returning it to the page. From inside an FPM container that address answers nothing, so the call has always been silent here. lerd takes the payload on its way out and puts it in the Debug window, which means `ray()` works with the composer package alone: no desktop app, no licence, nothing listening on 23517.
+
+The capture is a store-declared seam on the package (`packages/spatie-ray.yaml`), so it reaches every install through the store rather than through a release. Every ray call funnels through one method, whatever built it, so a plain `ray($user, $order)` arrives as one dump per argument labelled `ray`, and the chained calls that build their own payload (`->table()`, `->measure()`, `->text()`, `->exception()`, `->json()`) arrive labelled with what they are, `ray:table` and so on. The package converts a value for its own app before it reaches the seam, wrapping anything that is not a scalar in the markup Symfony's HTML dumper draws, so lerd takes that markup back off and shows the dump that was inside it. The calls that only tell the app how to draw itself, a colour, a screen switch, a size, have nothing to show in a window that is not Ray, so they are dropped rather than arriving as empty rows.
+
+Ray's own transport still runs and still fails to reach anything, which costs a refused connection per call and nothing else. Nothing about the project changes: no `RAY_HOST`, no config file, no service provider.
 
 ## Wire format
 
@@ -86,7 +94,7 @@ None of these commands restart any FPM container or worker.
 
 ## Caveats
 
-- **The bridge intercepts `dump()` / `dd()`; the rest of the Debug window comes from the engine-level collector.** Database queries, outgoing mail, rendered views, dispatched events, queued jobs as they run, and outgoing HTTP requests are all captured by the `lerd_devtools` extension and shown as sibling tabs in the same Debug view, see the [Query viewer](queries.md) for the full set, the framework-agnostic seams, and the N+1 / slow-query analysis. The bridge and the collector share one enable flag, so a single toggle arms the whole window.
+- **The bridge intercepts `dump()` / `dd()`; the rest of the Debug window comes from the engine-level collector.** Database queries, outgoing mail, rendered views, dispatched events, queued jobs as they run, log records, messages sent on any channel and outgoing HTTP requests are all captured by the `lerd_devtools` extension and shown as sibling tabs in the same Debug view, see the [Query viewer](queries.md) for the full set, the framework-agnostic seams, and the N+1 / slow-query analysis. The bridge and the collector share one enable flag, so a single toggle arms the whole window.
 - **Response output is suppressed by default.** While the bridge is on, `dump()` and `dd()` ship to the dashboard only, the HTTP response stays clean. If you'd rather keep the original `sf-dump` output in the response too (useful as a fallback when `lerd-ui` isn't running), flip the "Also print to response (passthrough)" toggle on **System > Debug bridge**, or set `dumps.passthrough: true` in `~/.config/lerd/config.yaml`. Passthrough is read at PHP-FPM startup, so toggling it via the UI restarts every `lerd-php*-fpm` unit; editing the config file by hand requires a manual restart for the change to take effect. Tinker invocations always run with passthrough on regardless of this setting, otherwise the REPL would print nothing when a bare expression like `User::count()` gets auto-wrapped in `dump()`.
 - **VarCloner caps.** Defaults are `setMaxItems(2500)` and `setMaxString(4096)`. Override via `LERD_DUMP_MAX_ITEMS` in the site's `.env`.
 - **Loopback only.** On Linux the receiver binds a per-user Unix socket under `~/.local/share/lerd/run/lerd-dumps.sock` (no host TCP listener). On macOS it binds `127.0.0.1:9913`, reachable from FPM inside podman-machine via gvproxy's `host.containers.internal:9913` mapping, not from the LAN.

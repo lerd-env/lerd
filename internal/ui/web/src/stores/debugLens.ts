@@ -11,11 +11,32 @@ export type DebugLens =
   | 'mail'
   | 'cache'
   | 'events'
-  | 'http';
+  | 'http'
+  | 'logs'
+  | 'exceptions'
+  | 'messages';
 
 const KEY = 'lerd:debugLens';
 
-const VALID: DebugLens[] = ['dumps', 'queries', 'jobs', 'views', 'mail', 'cache', 'events', 'http'];
+const VALID: DebugLens[] = [
+  'dumps',
+  'queries',
+  'jobs',
+  'views',
+  'mail',
+  'cache',
+  'events',
+  'http',
+  'logs',
+  'exceptions',
+  'messages'
+];
+
+// isDebugLens reports whether a route segment names a lens, so a deep link can
+// open the one the notification was about.
+export function isDebugLens(v: string | undefined): v is DebugLens {
+  return !!v && (VALID as string[]).includes(v);
+}
 
 function initial(): DebugLens {
   if (typeof localStorage === 'undefined') return 'dumps';

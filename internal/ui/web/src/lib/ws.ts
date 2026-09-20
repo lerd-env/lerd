@@ -51,8 +51,16 @@ function windowFocused(): boolean {
 
 let lastFocus: boolean | null = null;
 
-function sendFocus(focused: boolean) {
-  if (!socket || socket.readyState !== WebSocket.OPEN || focused === lastFocus) return;
+// The server holds focus as a short lease rather than a flag, so a window that
+// goes away stops suppressing desktop notifications within seconds instead of
+// keeping them silenced until its socket is reaped. This is how often the
+// window that has focus says so again.
+const focusRenewMs = 10_000;
+let focusRenewTimer: ReturnType<typeof setInterval> | null = null;
+
+function sendFocus(focused: boolean, renewal = false) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  if (!renewal && focused === lastFocus) return;
   try {
     socket.send(JSON.stringify({ type: 'focus', focused }));
     lastFocus = focused;
@@ -69,6 +77,12 @@ function watchFocus() {
   window.addEventListener('focus', () => sendFocus(true));
   window.addEventListener('blur', () => sendFocus(false));
   document.addEventListener('visibilitychange', () => sendFocus(windowFocused()));
+  // Renew while this window still has focus. Nothing is sent otherwise: a
+  // lease nobody renews runs out, which is what releases a window that was
+  // closed, suspended or navigated away from without saying so.
+  focusRenewTimer = setInterval(() => {
+    if (windowFocused()) sendFocus(true, true);
+  }, focusRenewMs);
 }
 
 let focusWatched = false;
@@ -121,6 +135,10 @@ export function disconnectWs() {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
+  // Tell the server on the way out. The lease covers the case where this
+  // never lands, a crashed tab or a killed browser, but saying so is instant
+  // and the page is usually still able to.
+  sendFocus(false);
   if (socket) {
     socket.close();
     socket = null;

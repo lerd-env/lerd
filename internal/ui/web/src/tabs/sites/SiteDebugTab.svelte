@@ -40,7 +40,10 @@
     { id: 'mail', label: m.debug_tab_mail(), count: counts['mail'] },
     { id: 'cache', label: m.debug_tab_cache(), hidden: !isLaravel, count: counts['cache'] },
     { id: 'events', label: m.debug_tab_events(), count: counts['event'] },
-    { id: 'http', label: m.debug_tab_http(), count: counts['http'] }
+    { id: 'http', label: m.debug_tab_http(), count: counts['http'] },
+    { id: 'logs', label: m.debug_tab_logs(), count: counts['log'] },
+    { id: 'exceptions', label: m.debug_tab_exceptions(), count: counts['exception'] },
+    { id: 'messages', label: m.debug_tab_messages(), count: counts['message'] }
   ]);
 
   // If the remembered lens isn't available for this framework, fall back.
@@ -60,7 +63,7 @@
       {:else if $debugLens === 'queries'}
         <QueriesLens siteScope={siteName} />
       {:else}
-        <KindLens kind={$debugLens as 'jobs' | 'views' | 'mail' | 'cache' | 'events' | 'http'} siteScope={siteName} />
+        <KindLens kind={$debugLens as 'jobs' | 'views' | 'mail' | 'cache' | 'events' | 'http' | 'logs' | 'exceptions' | 'messages'} siteScope={siteName} />
       {/if}
     </div>
   {/if}

@@ -590,3 +590,445 @@ namespace {
 		}
 	}
 }
+
+// TestCollectorPHP_RayCapturesLandAsDumps checks a store-declared ray capture
+// turns the call the package would have shipped to the Ray app into a dump: a
+// plain ray() labelled as one, a payload that built itself labelled by what it
+// is, and the payloads that only tell the app how to draw itself dropped.
+func TestCollectorPHP_RayCapturesLandAsDumps(t *testing.T) {
+	dir := t.TempDir()
+	seams := "# header\n" +
+		"ray|class|Fixture\\Ray\\Ray|sendRequest|\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
+		t.Fatalf("write seams: %v", err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace Fixture\Ray {
+    class Ray { public function sendRequest($payloads) {} }
+    class Payload {
+        private $type; private $content;
+        public function __construct($type, $content) { $this->type = $type; $this->content = $content; }
+        public function getType() { return $this->type; }
+        public function getContent() { return $this->content; }
+    }
+}
+namespace {
+    require COLLECTOR;
+    $ray = new \Fixture\Ray\Ray();
+
+    // ray('hello') — the package converted the argument on its way out.
+    $log = new \Fixture\Ray\Payload('log', ['values' => ['hello'], 'meta' => [['clipboard_data' => 'hello']]]);
+    \Lerd\Collector\seam_begin('Fixture\\Ray\\Ray', 'sendRequest', $ray, [1 => $log]);
+    \Lerd\Collector\seam_end('Fixture\\Ray\\Ray', 'sendRequest', false);
+
+    // ray()->table([...]) — markup and all.
+    $table = new \Fixture\Ray\Payload('table', [
+        'values' => ['Name' => 'Ada', 'Rows' => '<pre class=sf-dump id=sf-dump-1>array:1 [&hellip;]</pre><script>sfdump()</script>'],
+        'label' => 'Users',
+    ]);
+    \Lerd\Collector\seam_begin('Fixture\\Ray\\Ray', 'sendRequest', $ray, [1 => [$table]]);
+    \Lerd\Collector\seam_end('Fixture\\Ray\\Ray', 'sendRequest', false);
+
+    // ray()->green() — nothing to show in a window that is not Ray.
+    $color = new \Fixture\Ray\Payload('color', ['color' => 'green']);
+    \Lerd\Collector\seam_begin('Fixture\\Ray\\Ray', 'sendRequest', $ray, [1 => $color]);
+    \Lerd\Collector\seam_end('Fixture\\Ray\\Ray', 'sendRequest', false);
+}
+`)
+
+	type ev struct {
+		Kind  string `json:"kind"`
+		Label string `json:"label"`
+		Text  string `json:"text"`
+	}
+	var events []ev
+	for _, line := range got {
+		var e ev
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			t.Fatalf("bad JSON line %q: %v", line, err)
+		}
+		events = append(events, e)
+	}
+	if len(events) != 2 {
+		t.Fatalf("got %d events, want the log and the table: %v", len(events), got)
+	}
+	for _, e := range events {
+		if e.Kind != "dump" {
+			t.Errorf("kind = %q, want dump", e.Kind)
+		}
+	}
+	if events[0].Label != "ray" || events[0].Text != "hello" {
+		t.Errorf("first event = %q/%q, want a plain ray and its value", events[0].Label, events[0].Text)
+	}
+	e := events[1]
+	if e.Label != "ray:table" {
+		t.Errorf("label = %q, want the payload type", e.Label)
+	}
+	if !strings.Contains(e.Text, "Name: Ada") || !strings.Contains(e.Text, "label: Users") {
+		t.Errorf("table text = %q, want the payload's own values", e.Text)
+	}
+	if strings.Contains(e.Text, "<pre") || strings.Contains(e.Text, "sfdump()") {
+		t.Errorf("table text = %q, want the markup taken back out of it", e.Text)
+	}
+	if !strings.Contains(e.Text, "array:1 […]") {
+		t.Errorf("table text = %q, want the dump the markup was drawing", e.Text)
+	}
+}
+
+// TestCollectorPHP_LogRecordsLandAsLogs checks a store-declared log capture
+// turns a write to a logger into a log event: the channel from the logger, the
+// level named whichever scale it arrived on, and the context rendered the way a
+// dump is.
+func TestCollectorPHP_LogRecordsLandAsLogs(t *testing.T) {
+	dir := t.TempDir()
+	seams := "# header\n" +
+		"log|class|Fixture\\Log\\Logger|addRecord|\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
+		t.Fatalf("write seams: %v", err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace Fixture\Log {
+    class Logger {
+        private $name;
+        public function __construct($name) { $this->name = $name; }
+        public function getName() { return $this->name; }
+        public function addRecord($level, $message, array $context = []) {}
+    }
+    // Monolog 3 hands its own enum, which names itself.
+    class Level { public $name = 'Error'; public function getName() { return $this->name; } }
+}
+namespace {
+    require COLLECTOR;
+    $log = new \Fixture\Log\Logger('app');
+
+    \Lerd\Collector\seam_begin('Fixture\\Log\\Logger', 'addRecord', $log, [1 => 400, 2 => 'the gateway refused', 3 => ['order' => 42]]);
+    \Lerd\Collector\seam_end('Fixture\\Log\\Logger', 'addRecord', false);
+
+    \Lerd\Collector\seam_begin('Fixture\\Log\\Logger', 'addRecord', $log, [1 => new \Fixture\Log\Level(), 2 => 'an enum level']);
+    \Lerd\Collector\seam_end('Fixture\\Log\\Logger', 'addRecord', false);
+
+    // An RFC 5424 severity, which either Monolog major accepts.
+    \Lerd\Collector\seam_begin('Fixture\\Log\\Logger', 'addRecord', $log, [1 => 7, 2 => 'a debug line']);
+    \Lerd\Collector\seam_end('Fixture\\Log\\Logger', 'addRecord', false);
+
+    // Nothing to report without a message.
+    \Lerd\Collector\seam_begin('Fixture\\Log\\Logger', 'addRecord', $log, [1 => 400]);
+    \Lerd\Collector\seam_end('Fixture\\Log\\Logger', 'addRecord', false);
+}
+`)
+
+	type ev struct {
+		Kind string `json:"kind"`
+		Data struct {
+			Level   string `json:"level"`
+			Channel string `json:"channel"`
+			Message string `json:"message"`
+			Context string `json:"context"`
+		} `json:"data"`
+	}
+	var events []ev
+	for _, line := range got {
+		var e ev
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			t.Fatalf("bad JSON line %q: %v", line, err)
+		}
+		events = append(events, e)
+	}
+	if len(events) != 3 {
+		t.Fatalf("got %d events, want one per record with a message: %v", len(events), got)
+	}
+	for _, e := range events {
+		if e.Kind != "log" {
+			t.Errorf("kind = %q, want log", e.Kind)
+		}
+		if e.Data.Channel != "app" {
+			t.Errorf("channel = %q, want the logger's own name", e.Data.Channel)
+		}
+	}
+	if events[0].Data.Level != "error" || events[0].Data.Message != "the gateway refused" {
+		t.Errorf("first record = %q/%q, want error and its message", events[0].Data.Level, events[0].Data.Message)
+	}
+	// Rendered by the cloner where the project has it and by print_r where it
+	// does not, so the assertion is on the values rather than on the shape.
+	if !strings.Contains(events[0].Data.Context, "order") || !strings.Contains(events[0].Data.Context, "42") {
+		t.Errorf("context = %q, want the attached values rendered", events[0].Data.Context)
+	}
+	if events[1].Data.Level != "error" {
+		t.Errorf("enum level = %q, want error", events[1].Data.Level)
+	}
+	if events[2].Data.Level != "debug" {
+		t.Errorf("RFC severity = %q, want debug", events[2].Data.Level)
+	}
+}
+
+// TestCollectorPHP_SentryEventsLandAsExceptions checks a store-declared
+// exception capture reports what an app was about to send to Sentry: a
+// throwable handed over in the hint, an event carrying its own exception, and
+// a captured message, each with the level the event was raised at.
+func TestCollectorPHP_SentryEventsLandAsExceptions(t *testing.T) {
+	dir := t.TempDir()
+	seams := "# header\n" +
+		"exception|class|Fixture\\Sentry\\Client|captureEvent|sentry\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
+		t.Fatalf("write seams: %v", err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace Fixture\Sentry {
+    class Client { public function captureEvent($event, $hint = null) {} }
+    class Severity { private $n; public function __construct($n) { $this->n = $n; } public function __toString() { return $this->n; } }
+    class Event {
+        private $level; private $message; private $exceptions = [];
+        public function __construct($level = null, $message = null, array $exceptions = []) {
+            $this->level = $level; $this->message = $message; $this->exceptions = $exceptions;
+        }
+        public function getLevel() { return $this->level; }
+        public function getMessage() { return $this->message; }
+        public function getExceptions() { return $this->exceptions; }
+    }
+    class Bag {
+        private $type; private $value;
+        public function __construct($type, $value) { $this->type = $type; $this->value = $value; }
+        public function getType() { return $this->type; }
+        public function getValue() { return $this->value; }
+    }
+    class Hint { public $exception = null; }
+}
+namespace App\Billing {
+    function charge() { throw new \RuntimeException('the gateway refused'); }
+}
+namespace {
+    require COLLECTOR;
+    $client = new \Fixture\Sentry\Client();
+
+    // captureException: an empty event and the throwable on the hint.
+    try {
+        \App\Billing\charge();
+    } catch (\RuntimeException $e) {
+        $hint = new \Fixture\Sentry\Hint();
+        $hint->exception = $e;
+        \Lerd\Collector\seam_begin('Fixture\\Sentry\\Client', 'captureEvent', $client, [1 => new \Fixture\Sentry\Event(new \Fixture\Sentry\Severity('error')), 2 => $hint]);
+        \Lerd\Collector\seam_end('Fixture\\Sentry\\Client', 'captureEvent', false);
+    }
+
+    // An event the app assembled itself, exception already attached.
+    $event = new \Fixture\Sentry\Event(new \Fixture\Sentry\Severity('warning'), null, [new \Fixture\Sentry\Bag('App\\Exceptions\\Retryable', 'try again')]);
+    \Lerd\Collector\seam_begin('Fixture\\Sentry\\Client', 'captureEvent', $client, [1 => $event]);
+    \Lerd\Collector\seam_end('Fixture\\Sentry\\Client', 'captureEvent', false);
+
+    // captureMessage.
+    \Lerd\Collector\seam_begin('Fixture\\Sentry\\Client', 'captureEvent', $client, [1 => new \Fixture\Sentry\Event(new \Fixture\Sentry\Severity('info'), 'a note from the app')]);
+    \Lerd\Collector\seam_end('Fixture\\Sentry\\Client', 'captureEvent', false);
+
+    // An event with nothing in it is not a report.
+    \Lerd\Collector\seam_begin('Fixture\\Sentry\\Client', 'captureEvent', $client, [1 => new \Fixture\Sentry\Event()]);
+    \Lerd\Collector\seam_end('Fixture\\Sentry\\Client', 'captureEvent', false);
+}
+`)
+
+	type frame struct {
+		File string `json:"file"`
+		Line int    `json:"line"`
+	}
+	type ev struct {
+		Kind string `json:"kind"`
+		Src  frame  `json:"src"`
+		Data struct {
+			Type    string  `json:"type"`
+			Message string  `json:"message"`
+			Level   string  `json:"level"`
+			Source  string  `json:"source"`
+			Trace   []frame `json:"trace"`
+		} `json:"data"`
+	}
+	var events []ev
+	for _, line := range got {
+		var e ev
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			t.Fatalf("bad JSON line %q: %v", line, err)
+		}
+		events = append(events, e)
+	}
+	if len(events) != 3 {
+		t.Fatalf("got %d events, want one per report with something in it: %v", len(events), got)
+	}
+	for _, e := range events {
+		if e.Kind != "exception" {
+			t.Errorf("kind = %q, want exception", e.Kind)
+		}
+	}
+	if events[0].Data.Type != "RuntimeException" || events[0].Data.Message != "the gateway refused" {
+		t.Errorf("first event = %q/%q, want the thrown class and its message", events[0].Data.Type, events[0].Data.Message)
+	}
+	if events[0].Data.Level != "error" {
+		t.Errorf("level = %q, want error", events[0].Data.Level)
+	}
+	// The frames are the throwable's own, so the first one is the throw site
+	// rather than the line that handed the exception to Sentry.
+	if len(events[0].Data.Trace) == 0 || !strings.HasSuffix(events[0].Src.File, "probe.php") {
+		t.Errorf("src/trace = %+v / %d frames, want the throwable's own origin", events[0].Src, len(events[0].Data.Trace))
+	}
+	if events[1].Data.Type != "App\\Exceptions\\Retryable" || events[1].Data.Level != "warning" {
+		t.Errorf("second event = %q/%q, want the attached exception and its level", events[1].Data.Type, events[1].Data.Level)
+	}
+	if events[2].Data.Type != "message" || events[2].Data.Message != "a note from the app" {
+		t.Errorf("third event = %q/%q, want the captured message", events[2].Data.Type, events[2].Data.Message)
+	}
+	for i, e := range events {
+		if e.Data.Source != "sentry" {
+			t.Errorf("event %d source = %q, want the reporter the store named", i, e.Data.Source)
+		}
+	}
+}
+
+// TestCollectorPHP_ThrowableReportLandsAsException checks a reporter that hands
+// over the throwable itself, the way Inspector does, is reported with the
+// frames it was thrown from rather than the line that reported it.
+func TestCollectorPHP_ThrowableReportLandsAsException(t *testing.T) {
+	dir := t.TempDir()
+	seams := "# header\n" +
+		"exception|class|Fixture\\Apm\\Inspector|reportException|inspector\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
+		t.Fatalf("write seams: %v", err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace Fixture\Apm {
+    class Inspector { public function reportException($throwable, $handled = true) {} }
+}
+namespace App\Billing {
+    function charge() { throw new \RuntimeException('the gateway refused', 7); }
+}
+namespace {
+    require COLLECTOR;
+    $apm = new \Fixture\Apm\Inspector();
+    try {
+        \App\Billing\charge();
+    } catch (\RuntimeException $e) {
+        $wrapped = new \LogicException('checkout failed', 0, $e);
+        \Lerd\Collector\seam_begin('Fixture\\Apm\\Inspector', 'reportException', $apm, [1 => $wrapped, 2 => true]);
+        \Lerd\Collector\seam_end('Fixture\\Apm\\Inspector', 'reportException', false);
+    }
+}
+`)
+
+	type ev struct {
+		Kind string `json:"kind"`
+		Src  struct {
+			File string `json:"file"`
+			Line int    `json:"line"`
+		} `json:"src"`
+		Data struct {
+			Type     string `json:"type"`
+			Message  string `json:"message"`
+			Level    string `json:"level"`
+			Previous string `json:"previous"`
+			Source   string `json:"source"`
+		} `json:"data"`
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d events, want the reported throwable: %v", len(got), got)
+	}
+	var e ev
+	if err := json.Unmarshal([]byte(got[0]), &e); err != nil {
+		t.Fatalf("bad JSON line %q: %v", got[0], err)
+	}
+	if e.Kind != "exception" || e.Data.Type != "LogicException" || e.Data.Message != "checkout failed" {
+		t.Errorf("event = %q/%q/%q, want the reported class and its message", e.Kind, e.Data.Type, e.Data.Message)
+	}
+	if !strings.Contains(e.Data.Previous, "RuntimeException") || !strings.Contains(e.Data.Previous, "the gateway refused") {
+		t.Errorf("previous = %q, want the cause it wrapped", e.Data.Previous)
+	}
+	if !strings.HasSuffix(e.Src.File, "probe.php") || e.Src.Line == 0 {
+		t.Errorf("src = %+v, want the line it was thrown from", e.Src)
+	}
+	if e.Data.Source != "inspector" {
+		t.Errorf("source = %q, want the reporter the store named", e.Data.Source)
+	}
+}
+
+// TestCollectorPHP_NotifierMessagesLandAsMessages checks a store-declared
+// message capture reports what a site sent to somebody: the channel it went
+// on, the transport that carried it, who it went to and what it said.
+func TestCollectorPHP_NotifierMessagesLandAsMessages(t *testing.T) {
+	dir := t.TempDir()
+	seams := "# header\n" +
+		"message|class|Fixture\\Notifier\\Texter|send|notifier\n" +
+		"message|class|Fixture\\Notifier\\Chatter|send|notifier\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
+		t.Fatalf("write seams: %v", err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace Fixture\Notifier {
+    class Texter { public function send($message) {} }
+    class Chatter { public function send($message) {} }
+    class SmsMessage {
+        public function __construct(private $phone, private $subject, private $from, private $transport) {}
+        public function getPhone() { return $this->phone; }
+        public function getRecipientId() { return $this->phone; }
+        public function getSubject() { return $this->subject; }
+        public function getFrom() { return $this->from; }
+        public function getTransport() { return $this->transport; }
+    }
+    class ChatMessage {
+        public function __construct(private $subject, private $transport) {}
+        public function getSubject() { return $this->subject; }
+        public function getRecipientId() { return null; }
+        public function getTransport() { return $this->transport; }
+    }
+}
+namespace {
+    require COLLECTOR;
+    $texter = new \Fixture\Notifier\Texter();
+    $chatter = new \Fixture\Notifier\Chatter();
+
+    $sms = new \Fixture\Notifier\SmsMessage('+40711000000', 'your order shipped', 'Acme', 'twilio');
+    \Lerd\Collector\seam_begin('Fixture\\Notifier\\Texter', 'send', $texter, [1 => $sms]);
+    \Lerd\Collector\seam_end('Fixture\\Notifier\\Texter', 'send', false);
+
+    $chat = new \Fixture\Notifier\ChatMessage('deploy finished', 'slack');
+    \Lerd\Collector\seam_begin('Fixture\\Notifier\\Chatter', 'send', $chatter, [1 => $chat]);
+    \Lerd\Collector\seam_end('Fixture\\Notifier\\Chatter', 'send', false);
+
+    // Something that is not a message must not be reported as one.
+    \Lerd\Collector\seam_begin('Fixture\\Notifier\\Texter', 'send', $texter, [1 => new \stdClass()]);
+    \Lerd\Collector\seam_end('Fixture\\Notifier\\Texter', 'send', false);
+}
+`)
+
+	type ev struct {
+		Kind string `json:"kind"`
+		Data struct {
+			Channel   string `json:"channel"`
+			Transport string `json:"transport"`
+			To        string `json:"to"`
+			From      string `json:"from"`
+			Body      string `json:"body"`
+		} `json:"data"`
+	}
+	var events []ev
+	for _, line := range got {
+		var e ev
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			t.Fatalf("bad JSON line %q: %v", line, err)
+		}
+		events = append(events, e)
+	}
+	if len(events) != 2 {
+		t.Fatalf("got %d events, want one per message: %v", len(events), got)
+	}
+	for _, e := range events {
+		if e.Kind != "message" {
+			t.Errorf("kind = %q, want message", e.Kind)
+		}
+	}
+	sms := events[0].Data
+	if sms.Channel != "sms" || sms.Transport != "twilio" || sms.To != "+40711000000" || sms.From != "Acme" {
+		t.Errorf("sms = %+v, want the channel, transport and both ends", sms)
+	}
+	if sms.Body != "your order shipped" {
+		t.Errorf("body = %q, want what the message said", sms.Body)
+	}
+	chat := events[1].Data
+	if chat.Channel != "chat" || chat.Transport != "slack" || chat.Body != "deploy finished" {
+		t.Errorf("chat = %+v, want the chat channel and its transport", chat)
+	}
+}

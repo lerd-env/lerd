@@ -124,4 +124,36 @@ describe('ws focus reporting', () => {
     expect(sock.sent.at(-1)).toBe(JSON.stringify({ type: 'focus', focused: false }));
     disconnectWs();
   });
+
+  it('keeps saying so while it holds focus, so the lease does not run out', async () => {
+    const { connectWs, disconnectWs } = await import('./ws');
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    connectWs();
+    const sock = MockWebSocket.instances[0];
+    sock.readyState = MockWebSocket.OPEN;
+    sock.fire('open', {});
+    const before = sock.sent.length;
+
+    vi.advanceTimersByTime(25_000);
+
+    const renewals = sock.sent
+      .slice(before)
+      .filter((m: string) => m === JSON.stringify({ type: 'focus', focused: true }));
+    expect(renewals.length).toBeGreaterThan(0);
+    hasFocus.mockRestore();
+    disconnectWs();
+  });
+
+  it('says it is gone on the way out rather than leaving the claim to expire', async () => {
+    const { connectWs, disconnectWs } = await import('./ws');
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    connectWs();
+    const sock = MockWebSocket.instances[0];
+    sock.readyState = MockWebSocket.OPEN;
+    sock.fire('open', {});
+
+    disconnectWs();
+    expect(sock.sent).toContain(JSON.stringify({ type: 'focus', focused: false }));
+    hasFocus.mockRestore();
+  });
 });

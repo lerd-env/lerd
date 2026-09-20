@@ -40,4 +40,21 @@ describe('NavRail', () => {
     expect(mark.closest('.mark-brand')).toBeNull();
     expect(mark.closest('[style*="--mark-tint"]')).toBeNull();
   });
+
+  // With every dashboard installed the launchers outgrow a short window, and
+  // before this they simply ran off the bottom, taking the actions below them
+  // with it and leaving nothing to scroll.
+  it('scrolls the dashboard launchers rather than pushing the rail past the window', () => {
+    const { container } = render(NavRail);
+    const launchers = container.querySelector('.overflow-y-auto');
+    expect(launchers).not.toBeNull();
+    // It can only scroll if it is allowed to be shorter than its contents.
+    expect(launchers!.className).toContain('min-h-0');
+    expect(launchers!.className).toContain('flex-1');
+    // The tabs above and the actions below are not part of what moves.
+    const tabs = container.querySelector('aside > div');
+    expect(tabs!.className).toContain('shrink-0');
+    const actions = container.querySelector('aside > div:last-child');
+    expect(actions!.className).toContain('shrink-0');
+  });
 });

@@ -231,6 +231,41 @@ function emit(string $kind, array $data): void
     emit_with($kind, $data, $bt['src'], $bt['trace']);
 }
 
+// notification_channel names the channel a notification went out on. Laravel
+// passes either a short driver name or the class of a custom channel, and the
+// class is the one worth shortening: a row reading vonage or slack says what a
+// fully qualified channel class does not.
+function notification_channel(string $channel): string
+{
+    if (strpos($channel, '\\') === false) {
+        return $channel;
+    }
+    $short = substr($channel, strrpos($channel, '\\') + 1);
+    if (substr($short, -7) === 'Channel') {
+        $short = substr($short, 0, -7);
+    }
+    return strtolower($short !== '' ? $short : $channel);
+}
+
+// notifiable_route asks the notifiable where this channel should deliver, the
+// same question Laravel asks it a moment later. It is the app's own method, so
+// anything it throws is swallowed and the row simply goes without a recipient.
+function notifiable_route($notifiable, string $channel): string
+{
+    if (!is_object($notifiable) || !method_exists($notifiable, 'routeNotificationFor')) {
+        return '';
+    }
+    try {
+        $route = $notifiable->routeNotificationFor($channel);
+    } catch (\Throwable $_) {
+        return '';
+    }
+    if (is_string($route) || is_numeric($route)) {
+        return (string) $route;
+    }
+    return is_object($route) ? get_class($route) : '';
+}
+
 // compiled_view_dir returns where Blade writes compiled templates, read from
 // the app's own config so a project that moves the cache is still understood.
 function compiled_view_dir($app): string
@@ -702,6 +737,31 @@ try {
                 'cc'      => addrs(method_exists($m, 'getCc') ? $m->getCc() : []),
                 'html'    => substr($html, 0, 20000),
             ]);
+        });
+
+        // Notifications on every channel but mail, which the mail listener above
+        // already reports in full. Captured as it goes out rather than after,
+        // so one that fails is still on the record.
+        //
+        // What the notification says is built inside the channel, by a to*
+        // method lerd must not call: it is the app's own code, it can query,
+        // and running it a second time to read the text would change what the
+        // request did. So the row is who it went to on which channel, and the
+        // notification class is what names the content.
+        $events->listen(\Illuminate\Notifications\Events\NotificationSending::class, static function ($e) {
+            $channel = (string) ($e->channel ?? '');
+            if ($channel === '' || $channel === 'mail') {
+                return;
+            }
+            $data = ['channel' => notification_channel($channel)];
+            if (isset($e->notification) && is_object($e->notification)) {
+                $data['notification'] = get_class($e->notification);
+            }
+            $to = notifiable_route($e->notifiable ?? null, $channel);
+            if ($to !== '') {
+                $data['to'] = $to;
+            }
+            emit('message', $data);
         });
 
         // Cache. Skip framework-internal keys (queue restart signals, the

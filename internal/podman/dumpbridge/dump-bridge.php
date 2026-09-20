@@ -7,9 +7,9 @@
 // helpers stay in charge. Flipping the bridge on or off is a single
 // touch/rm of that file — no FPM restart, no worker cascade.
 //
-// Transport (socket send, request context, ids, source frame) is shared with
-// the lerd_devtools collector so there is one implementation, not two: this
-// file only owns the dump()/dd() override and rendering the variable to text.
+// Transport (socket send, request context, ids, source frame) and the rendering
+// of a variable to text are shared with the lerd_devtools collector so there is
+// one implementation, not two: this file only owns the dump()/dd() override.
 //
 // This file must never throw, never block, and never emit output. It is an
 // auto_prepend_file for every PHP lerd builds, down to the 7.2 legacy tier, so
@@ -63,41 +63,12 @@ namespace Lerd\DumpBridge {
         return is_string($cfg) && ($cfg === '1' || strcasecmp($cfg, 'true') === 0);
     }
 
-    // emit renders one variable to text and ships it on the shared collector
-    // transport. The dump envelope (top-level label + text) differs from the
-    // structured kinds, so it's built here rather than via the collector's
-    // emit(); everything else (id, ts, context, source frame, socket) is reused.
+    // emit ships one variable as a dump event. Rendering and transport both
+    // live in the collector, so a dump() and a ray() land as the same text on
+    // the same socket; this file only owns which calls get captured.
     function emit($var, ?string $label = null): void
     {
-        try {
-            if (!class_exists(\Symfony\Component\VarDumper\Cloner\VarCloner::class, true)
-                || !class_exists(\Symfony\Component\VarDumper\Dumper\CliDumper::class, true)) {
-                $text = is_scalar($var) ? (string) $var : print_r($var, true);
-            } else {
-                $cloner = new \Symfony\Component\VarDumper\Cloner\VarCloner();
-                $maxItems = (int) (getenv('LERD_DUMP_MAX_ITEMS') ?: 2500);
-                $cloner->setMaxItems($maxItems > 0 ? $maxItems : 2500);
-                $cloner->setMaxString(4096);
-                $data = $cloner->cloneVar($var);
-                $dumper = new \Symfony\Component\VarDumper\Dumper\CliDumper();
-                $dumper->setColors(false);
-                $rendered = $dumper->dump($data, true);
-                $text = is_string($rendered) ? $rendered : '';
-            }
-            $bt = \Lerd\Collector\backtrace();
-            \Lerd\Collector\send([
-                'v'     => 1,
-                'id'    => \Lerd\Collector\new_id(),
-                'ts'    => \Lerd\Collector\ts(),
-                'kind'  => 'dump',
-                'ctx'   => \Lerd\Collector\context(),
-                'src'   => $bt['src'],
-                'label' => $label,
-                'text'  => $text,
-            ]);
-        } catch (\Throwable $_) {
-            // never throw out of a debug bridge
-        }
+        \Lerd\Collector\send_dump($var, $label);
     }
 }
 
