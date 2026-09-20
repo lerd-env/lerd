@@ -92,6 +92,34 @@ func TestFPMTemplateHasBunVolume(t *testing.T) {
 	}
 }
 
+// bun lives in a mounted volume, so nothing in the image can put it on PATH.
+// The quadlet has to, or a bare `bun`/`bunx` only resolves in the shell lerd
+// exports it into and fails everywhere else (FPM requests, console commands).
+func TestFPMTemplateHasBunOnPath(t *testing.T) {
+	tmpl, err := GetQuadletTemplate("lerd-php-fpm.container.tmpl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(tmpl, "Environment=PATH={{.ContainerPath}}") {
+		t.Error("fpm template must set PATH from ContainerPath")
+	}
+	if !strings.HasPrefix(ContainerPath, "/root/.bun/bin:") {
+		t.Errorf("ContainerPath = %q, want the bun volume's bin dir first", ContainerPath)
+	}
+	// A quadlet Environment line replaces the image's PATH instead of extending
+	// it, so the base image's own directories have to be spelled out after it.
+	if !strings.Contains(ContainerPath, ":/usr/local/bin:") || !strings.HasSuffix(ContainerPath, ":/bin") {
+		t.Errorf("ContainerPath = %q, want the base image's directories kept after the bun bin dir", ContainerPath)
+	}
+	rendered, err := renderFPMQuadletContent("8.4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rendered, "Environment=PATH="+ContainerPath) {
+		t.Errorf("rendered quadlet did not carry the container PATH:\n%s", rendered)
+	}
+}
+
 func TestApplyShellMounts_RendersPlaywrightVolume(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

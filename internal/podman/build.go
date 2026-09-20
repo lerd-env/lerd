@@ -1078,6 +1078,7 @@ func renderFPMQuadletContent(version string) (string, error) {
 	content = strings.ReplaceAll(content, "{{.SpxDataDir}}", config.SpxDataDir())
 	content = strings.ReplaceAll(content, "{{.HostNameLine}}", hostNameLine())
 	content = strings.ReplaceAll(content, "{{.ComposerMountLine}}", composerMountLine())
+	content = strings.ReplaceAll(content, "{{.ContainerPath}}", ContainerPath)
 	content = applyShellMounts(content, short)
 	content = InjectExtraVolumes(content, ExtraVolumePaths())
 	return content, nil
@@ -1203,6 +1204,13 @@ func applyShellMounts(content, versionShort string) string {
 	content = strings.ReplaceAll(content, "{{.PlaywrightVolumeDir}}", PlaywrightVolumeDir())
 	return content
 }
+
+// ContainerPath is the PATH every FPM container runs with, and the PATH lerd
+// gives every exec into one. The opt-in bun volume (lerd php:bun install) leads
+// it because nothing in the image can put a mounted volume on PATH; the rest is
+// what the php:*-fpm-alpine base ships, spelled out because both users of this
+// replace the image's PATH rather than extending it.
+const ContainerPath = "/root/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 // BunVolumeDir is the host directory backing the container's /root/.bun mount,
 // where an opt-in in-container musl bun lives (lerd php:bun install). Shared

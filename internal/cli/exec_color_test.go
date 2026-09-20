@@ -45,7 +45,4 @@ func TestPhpShellExecArgs(t *testing.T) {
 	if !strings.Contains(got, "--env=COLORTERM=truecolor") {
 		t.Errorf("phpShellExecArgs() = %q, missing the terminal colour environment", got)
 	}
-	if !strings.Contains(got, "/root/.bun/bin") {
-		t.Errorf("phpShellExecArgs() = %q, missing the bun PATH export", got)
-	}
 }

@@ -79,16 +79,6 @@ func TestPhpShellExecArgs_OmitsWorkDirWhenThereIsNoProject(t *testing.T) {
 	}
 }
 
-// The container script prepends to the container's own PATH. It must reach
-// podman as one argv element: anything that runs it through a host shell first
-// expands $PATH there, and $HOME is bind mounted, so the host's php shim would
-// win over the container's own binary.
-func TestPhpShellInnerScript_LeavesPathToTheContainer(t *testing.T) {
-	if !strings.Contains(phpShellInnerScript(), `"/root/.bun/bin:$PATH"`) {
-		t.Errorf("inner script = %q, want the container's own $PATH kept", phpShellInnerScript())
-	}
-}
-
 // An interactive shell is a one-shot command like any other, so a provider's
 // declared variables have to reach it too, forwarded by name.
 func TestPhpShellExecArgsForwardsPassthroughEnv(t *testing.T) {

@@ -36,13 +36,6 @@ func shellWorkDir(cwd string) string {
 	return phpDet.SiteRootFor(cwd)
 }
 
-// phpShellInnerScript is what runs inside the container: the opt-in
-// in-container bun (lerd php:bun install) on PATH so a bare `bun` resolves,
-// harmless when bun isn't installed, then lerd's interactive shell.
-func phpShellInnerScript() string {
-	return `export PATH="/root/.bun/bin:$PATH"; ` + podman.InteractiveShellScript()
-}
-
 // phpShellExecArgs builds the interactive shell exec. It forwards the
 // terminal's colour capability so starship and the tools run in the session
 // render as they do on the host. An empty workDir leaves the container on its
@@ -53,7 +46,7 @@ func phpShellExecArgs(container, workDir string) []string {
 		args = append(args, "-w", workDir)
 		args = append(args, envpass.Args(workDir, os.Environ())...)
 	}
-	return append(args, container, "sh", "-c", phpShellInnerScript())
+	return append(args, container, "sh", "-c", podman.InteractiveShellScript())
 }
 
 // runVersionShell opens a shell in a version's shared FPM container with no
