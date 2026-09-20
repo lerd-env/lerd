@@ -110,6 +110,33 @@ func DashboardProxyKeepsHost(svc *CustomService) bool {
 	return err == nil && p.DashboardProxyKeepHost
 }
 
+// DashboardFollowsColorScheme reports whether the embedded page should be told
+// which colour scheme it is in rather than left to ask the browser.
+func DashboardFollowsColorScheme(svc *CustomService) bool {
+	if svc == nil || svc.Dashboard == "" || svc.Preset == "" {
+		return false
+	}
+	p, err := LoadPreset(svc.Preset)
+	return err == nil && p.DashboardFollowsColorScheme
+}
+
+// DashboardSchemeKey is where the dashboard remembers a colour scheme it was
+// given, for lerd to clear so the answer it gives is the one the app reads.
+func DashboardSchemeKey(svc *CustomService) string {
+	if svc == nil || svc.Dashboard == "" || svc.Preset == "" {
+		return ""
+	}
+	p, err := LoadPreset(svc.Preset)
+	if err != nil {
+		return ""
+	}
+	// An app that namespaces its storage by where it is served cannot name the
+	// key outright, so the preset writes the mount into it. Bare, since that is
+	// how such a key is built: RedisInsight keeps "_svc/redisinsight_theme".
+	mount := strings.Trim(DashboardMountPath(svc), "/")
+	return strings.ReplaceAll(p.DashboardSchemeKey, "{{mount}}", mount)
+}
+
 // DashboardMountPath is the path lerd-ui serves this dashboard at: the path the
 // dashboard URL names when the preset asks for its own, and the /_svc/<name>/
 // mount otherwise.
@@ -217,6 +244,39 @@ func presetEnvDefault(p *Preset, key string) string {
 		return ""
 	}
 	return p.Environment[key]
+}
+
+// DashboardColorSchemeScript returns an inline <script> that answers the page's
+// own question about the colour scheme with the one lerd is wearing. An app that
+// reads the preference from JavaScript is out of reach of the media queries the
+// overlay flips, and its dark design is the upstream's own rather than something
+// lerd has to paint.
+//
+// The mode is read off the dashboard framing it, which is the same origin, and
+// the class carrying it is watched, so a switch made while the view is open
+// reaches every query the app is already listening to.
+func DashboardColorSchemeScript(remembered string) string {
+	return "<script>(function(){try{" +
+		"var host=parent.document.documentElement,real=window.matchMedia.bind(window),live=[];" +
+		// An app handed a side once stops asking, so what it was told is forgotten
+		// on the way in. Its own switcher still works for as long as the view is open.
+		"var K=" + strconv.Quote(remembered) + ";if(K){try{localStorage.removeItem(K);}catch(e){}}" +
+		"function dark(){return host.classList.contains('dark');}" +
+		"window.matchMedia=function(q){if(!/prefers-color-scheme/i.test(q))return real(q);" +
+		"var wants=/dark/i.test(q),fns=[],view={media:q,onchange:null," +
+		"get matches(){return wants===dark();}," +
+		"addEventListener:function(t,f){if(t==='change')fns.push(f);}," +
+		"removeEventListener:function(t,f){var i=fns.indexOf(f);if(i>=0)fns.splice(i,1);}," +
+		"addListener:function(f){fns.push(f);}," +
+		"removeListener:function(f){var i=fns.indexOf(f);if(i>=0)fns.splice(i,1);}," +
+		"dispatchEvent:function(){return true;}," +
+		"tell:function(){var e={matches:view.matches,media:q};" +
+		"if(typeof view.onchange==='function'){try{view.onchange(e);}catch(x){}}" +
+		"fns.slice().forEach(function(f){try{f(e);}catch(x){}});}};" +
+		"live.push(view);return view;};" +
+		"new parent.MutationObserver(function(){live.forEach(function(v){v.tell();});})" +
+		".observe(host,{attributes:true,attributeFilter:['class']});" +
+		"}catch(e){}})();</script>"
 }
 
 // DashboardRerouteScript returns an inline <script> that sends the page's own

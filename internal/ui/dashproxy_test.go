@@ -477,3 +477,40 @@ func TestWithDashboardMountsPassesOtherPaths(t *testing.T) {
 		t.Error("a path no dashboard claims should reach the rest of lerd-ui")
 	}
 }
+
+// pgAdmin hands its own inline scripts a nonce and refuses every other one, so
+// what lerd injects has to carry the same one to run at all.
+func TestWithScriptNonceCarriesThePagesOwn(t *testing.T) {
+	csp := "default-src 'self'; script-src 'self' 'nonce-Ab3-_x=' 'unsafe-eval'"
+	got := withScriptNonce("<script>a()</script><script>b()</script>", csp)
+	if want := `<script nonce="Ab3-_x=">a()</script><script nonce="Ab3-_x=">b()</script>`; got != want {
+		t.Errorf("withScriptNonce = %q, want %q", got, want)
+	}
+	// A page with no policy of its own is left exactly as it is.
+	if got := withScriptNonce("<script>a()</script>", ""); got != "<script>a()</script>" {
+		t.Errorf("withScriptNonce with no policy = %q", got)
+	}
+}
+
+// A preset can change under a lerd-ui that is already running, the store
+// shipping without a release, so the proxy a service is served through has to be
+// rebuilt when what it injects changes rather than served from the first one.
+func TestDashProxyCacheFollowsTheTweaks(t *testing.T) {
+	target, err := url.Parse("http://localhost:9999/")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	plain := dashProxyTweaks{}
+	withScript := dashProxyTweaks{bootstrap: "<script>lerd()</script>"}
+	if dashProxyFor("svc", target, plain) == dashProxyFor("svc", target, withScript) {
+		t.Error("a preset that started asking for a script is still served the proxy that had none")
+	}
+	// The same tweaks are still the same proxy, or every request builds one.
+	if dashProxyFor("svc", target, plain) != dashProxyFor("svc", target, plain) {
+		t.Error("unchanged tweaks rebuilt the proxy instead of reusing it")
+	}
+	// Two services that ask for nothing are still two proxies, one per upstream.
+	if dashProxyFor("svc", target, plain) == dashProxyFor("other", target, plain) {
+		t.Error("two services share one proxy")
+	}
+}
