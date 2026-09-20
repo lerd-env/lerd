@@ -26,14 +26,14 @@
   import { m } from '../paraglide/messages.js';
 
   interface Props {
-    kind: 'jobs' | 'views' | 'mail' | 'cache' | 'events' | 'http' | 'logs' | 'exceptions';
+    kind: 'jobs' | 'views' | 'mail' | 'cache' | 'events' | 'http' | 'logs' | 'exceptions' | 'messages';
     siteScope?: string;
   }
   let { kind, siteScope = '' }: Props = $props();
   const scoped = $derived(siteScope !== '');
   // Event `kind` on the wire is singular.
   const wireKind = $derived(
-    ({ jobs: 'job', views: 'view', mail: 'mail', cache: 'cache', events: 'event', http: 'http', logs: 'log', exceptions: 'exception' })[
+    ({ jobs: 'job', views: 'view', mail: 'mail', cache: 'cache', events: 'event', http: 'http', logs: 'log', exceptions: 'exception', messages: 'message' })[
       kind
     ]
   );
@@ -102,7 +102,15 @@
   // Levels read in severity order rather than alphabetically, which is the
   // order someone scanning for the bad ones expects them in.
   const LEVELS = ['emergency', 'alert', 'critical', 'error', 'warning', 'notice', 'info', 'debug'];
-  const facetField = $derived(wireKind === 'job' ? 'status' : wireKind === 'log' || wireKind === 'exception' ? 'level' : '');
+  const facetField = $derived(
+    wireKind === 'job'
+      ? 'status'
+      : wireKind === 'log' || wireKind === 'exception'
+        ? 'level'
+        : wireKind === 'message'
+          ? 'channel'
+          : ''
+  );
   const facets = $derived.by(() => {
     if (!facetField) return [] as string[];
     const seen = new Set(
@@ -194,7 +202,15 @@
       <Dropdown
         value={facetFilter}
         options={[
-          { value: '', label: facetField === 'level' ? m.logs_filter_allLevels() : m.jobs_filter_allStatuses() },
+          {
+            value: '',
+            label:
+              facetField === 'level'
+                ? m.logs_filter_allLevels()
+                : facetField === 'channel'
+                  ? m.messages_filter_allChannels()
+                  : m.jobs_filter_allStatuses()
+          },
           ...facets.map((s) => ({ value: s, label: s }))
         ]}
         onchange={(v) => (facetFilter = v)}
@@ -259,6 +275,7 @@
                   {:else if wireKind === 'http'}<span class="font-mono">{d.method} {d.url}</span>
                   {:else if wireKind === 'log'}{d.message}
                   {:else if wireKind === 'exception'}{#if d.type && d.type !== 'message'}<span class="font-mono">{d.type}</span>{' '}{/if}{d.message}
+                  {:else if wireKind === 'message'}{d.body || d.notification || '(no body)'}
                   {:else}{d.name}{/if}
                 </span>
                 <span class="flex items-center gap-1 shrink-0">
@@ -268,7 +285,8 @@
                   {:else if wireKind === 'http'}<span class="text-[10px] rounded-sm px-1 py-0.5 {d.failed ? ROSE : SKY}">{d.failed ? 'failed' : m.http_sent()}</span>
                   {:else if wireKind === 'mail' && d.to?.length}<span class="text-[11px] text-gray-400 break-all">→ {d.to[0]}</span>
                   {:else if wireKind === 'log'}{#if d.channel}<span class="text-[11px] text-gray-400">{d.channel}</span>{/if}<span class="text-[10px] rounded-sm px-1 py-0.5 {levelTone(d.level)}">{d.level}</span>
-                  {:else if wireKind === 'exception'}{#if d.source}<span class="text-[11px] text-gray-400">{d.source}</span>{/if}<span class="text-[10px] rounded-sm px-1 py-0.5 {levelTone(d.level)}">{d.level}</span>{/if}
+                  {:else if wireKind === 'exception'}{#if d.source}<span class="text-[11px] text-gray-400">{d.source}</span>{/if}<span class="text-[10px] rounded-sm px-1 py-0.5 {levelTone(d.level)}">{d.level}</span>
+                  {:else if wireKind === 'message'}{#if d.to}<span class="text-[11px] text-gray-400 break-all">→ {d.to}</span>{/if}{#if d.transport}<span class="text-[10px] rounded-sm px-1 py-0.5 {SKY}">{d.transport}</span>{/if}<span class="text-[10px] rounded-sm px-1 py-0.5 {GREY}">{d.channel}</span>{/if}
                 </span>
               </button>
               {#if expanded[ev.id]}
@@ -322,6 +340,11 @@
                         </table>
                       </div>
                     {/if}
+                  {/if}
+                  {#if wireKind === 'message' && (d.from || d.notification)}
+                    <div class="text-gray-400">
+                      {[d.from ? `from ${d.from}` : '', d.notification ?? ''].filter(Boolean).join(' · ')}
+                    </div>
                   {/if}
                   {#if wireKind === 'exception' && d.previous}
                     <div class="text-gray-400">caused by {d.previous}</div>

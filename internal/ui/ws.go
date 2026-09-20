@@ -16,9 +16,43 @@ import (
 
 var (
 	visibleClients atomic.Int32
-	focusedClients atomic.Int32
 	sessionIdle    atomic.Bool
 )
+
+// Focus is a lease each dashboard window renews while it has focus, not a flag
+// it sets once. A flag outlives the window that set it: a second tab, a window
+// on another screen, or every page reconnecting at once after lerd-ui
+// restarted each claimed focus, and only the socket the client was holding
+// ever took the claim back, so a claim from a page nobody was looking at
+// silenced every desktop notification until the read deadline reaped the
+// connection a minute and a quarter later. A lease that is not renewed simply
+// runs out.
+const focusLeaseTTL = 25 * time.Second
+
+var (
+	focusMu     sync.Mutex
+	focusLeases = map[uint64]time.Time{}
+	focusSeq    atomic.Uint64
+)
+
+// noteFocus records or clears one connection's claim on focus. The claim is
+// good for focusLeaseTTL and the page renews it while it still holds focus.
+func noteFocus(conn uint64, focused bool) {
+	focusMu.Lock()
+	defer focusMu.Unlock()
+	if !focused {
+		delete(focusLeases, conn)
+		return
+	}
+	focusLeases[conn] = time.Now().Add(focusLeaseTTL)
+}
+
+// dropFocus releases a connection's claim when it goes away.
+func dropFocus(conn uint64) {
+	focusMu.Lock()
+	defer focusMu.Unlock()
+	delete(focusLeases, conn)
+}
 
 const (
 	intervalFocused      = 15 * time.Second
@@ -56,20 +90,23 @@ func recomputeInterval() {
 	podman.Cache.SetInterval(chooseInterval(visibleClients.Load(), sessionIdle.Load()))
 }
 
-// noteFocus tracks how many dashboard windows currently have focus. It is kept
-// apart from the visibility counter, which drives the poll cadence: a window
-// left open beside another app is still worth polling for, but is not somewhere
-// the user is looking.
-func noteFocus(focused bool) {
-	if focused {
-		focusedClients.Add(1)
-	} else if focusedClients.Add(-1) < 0 {
-		focusedClients.Store(0)
+// uiWindowFocused reports whether any dashboard window holds a live claim on
+// focus. Expired claims are dropped as they are found, so a page that stopped
+// renewing stops suppressing whether or not its socket has been reaped yet.
+func uiWindowFocused() bool {
+	now := time.Now()
+	focusMu.Lock()
+	defer focusMu.Unlock()
+	live := false
+	for conn, until := range focusLeases {
+		if until.After(now) {
+			live = true
+			continue
+		}
+		delete(focusLeases, conn)
 	}
+	return live
 }
-
-// uiWindowFocused reports whether any dashboard window has focus right now.
-func uiWindowFocused() bool { return focusedClients.Load() > 0 }
 
 func noteVisibility(visible bool) {
 	if visible {
@@ -164,6 +201,8 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 	// assuming focus would silence desktop notifications for a window that is
 	// merely open. The client sends its state right after the socket opens.
 	connFocused := false
+	connID := focusSeq.Add(1)
+	defer dropFocus(connID)
 
 	// Reader goroutine: handle ping/pong/close/visibility frames. The read
 	// deadline is reset before every frame; if the client falls silent
@@ -204,8 +243,11 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				case msg.Type == "visibility" && msg.Visible != connVisible:
 					noteVisibility(msg.Visible)
 					connVisible = msg.Visible
-				case msg.Type == "focus" && msg.Focused != connFocused:
-					noteFocus(msg.Focused)
+				// A renewal repeats what the connection already said, so the
+				// state is recorded on every focus frame rather than only on a
+				// change: the lease is what expires, not the flag.
+				case msg.Type == "focus":
+					noteFocus(connID, msg.Focused)
 					connFocused = msg.Focused
 				}
 			}
@@ -224,7 +266,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			noteVisibility(false)
 		}
 		if connFocused {
-			noteFocus(false)
+			dropFocus(connID)
 		}
 	}()
 

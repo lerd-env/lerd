@@ -17,6 +17,13 @@ const subsFile = "push-subscriptions.json"
 // Subscription is the persisted per-browser push subscription. EnabledKinds
 // gates push fan-out so a user can mute categories per device; an empty
 // slice with Enabled=true means "all kinds" (default for new subs).
+//
+// KnownKinds is every kind the browser knew about when it last saved, which is
+// what tells a kind the user muted from one that did not exist yet. Without it
+// a category added in a later release is silently dead for everyone who had
+// notifications on before it shipped, since their stored list cannot mention
+// it. A record saved before this field existed has none, so anything it does
+// not name falls back to that kind's default.
 type Subscription struct {
 	Endpoint     string   `json:"endpoint"`
 	P256dh       string   `json:"p256dh"`
@@ -25,6 +32,7 @@ type Subscription struct {
 	AddedAt      int64    `json:"added_at"`
 	Enabled      bool     `json:"enabled"`
 	EnabledKinds []string `json:"enabled_kinds,omitempty"`
+	KnownKinds   []string `json:"known_kinds,omitempty"`
 }
 
 func (s Subscription) id() string { return s.Endpoint }
@@ -47,7 +55,27 @@ func (s Subscription) Allows(kind string) bool {
 			return true
 		}
 	}
-	return false
+	// Not enabled. Muted, or newer than this subscription's last save: the
+	// kinds it knew about settle which, and a kind it never heard of takes the
+	// default it would have been given had the browser saved today.
+	for _, k := range s.KnownKinds {
+		if k == kind {
+			return false
+		}
+	}
+	return DefaultForKind(kind)
+}
+
+// DefaultForKind is whether a category notifies when nobody has said. It
+// mirrors the defaults the dashboard ships (notify.ts): everything announces
+// itself except the two that fire often enough to be noise.
+func DefaultForKind(kind string) bool {
+	switch kind {
+	case "dump", "slow_route":
+		return false
+	default:
+		return true
+	}
 }
 
 var storeMu sync.Mutex

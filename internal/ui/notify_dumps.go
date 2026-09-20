@@ -91,7 +91,7 @@ func notificationForDump(evt dumps.Event) push.Notification {
 			"text": body,
 		},
 		Tag:     "lerd-dump-" + site,
-		URL:     debugRouteForContext(evt.Ctx),
+		URL:     debugRouteForContext(evt.Ctx, evt.Kind),
 		Data:    map[string]string{"site": site, "id": evt.ID},
 		Urgency: "low",
 		TTL:     60,
@@ -133,9 +133,72 @@ func notificationForFailedJob(evt dumps.Event) push.Notification {
 			"error": reason,
 		},
 		Tag:     "lerd-job-failed-" + site + "-" + job,
-		URL:     debugRouteForContext(evt.Ctx),
+		URL:     debugRouteForContext(evt.Ctx, evt.Kind),
 		Data:    map[string]string{"site": site, "id": evt.ID},
 		Urgency: "high",
+		TTL:     300,
+	}
+}
+
+// notificationForMessage reports one message a site sent to somebody, an SMS,
+// a chat post, a push. Mail already announces itself when the catcher takes
+// it; nothing else a site sends is caught anywhere, so the notification is the
+// only sign it went out.
+func notificationForMessage(evt dumps.Event) push.Notification {
+	site := evt.Ctx.Site
+	if site == "" {
+		site = "(unknown site)"
+	}
+	var d struct {
+		Channel      string `json:"channel"`
+		Transport    string `json:"transport"`
+		To           string `json:"to"`
+		Body         string `json:"body"`
+		Notification string `json:"notification"`
+	}
+	_ = json.Unmarshal(evt.Data, &d)
+	channel := d.Channel
+	if channel == "" {
+		channel = "message"
+	}
+	// What it said where there is a body, and what built it where there is
+	// not: a Laravel notification's text lives in code lerd must not run.
+	body := dumpPreview(d.Body)
+	if body == "" {
+		body = d.Notification
+	}
+	if d.To != "" {
+		if body == "" {
+			body = "to " + d.To
+		} else {
+			body = d.To + ": " + body
+		}
+	}
+	if body == "" {
+		body = "sent with no body captured"
+	}
+	via := channel
+	if d.Transport != "" {
+		via = channel + " via " + d.Transport
+	}
+	return push.Notification{
+		Kind:     "message",
+		TitleKey: "notify_message_title",
+		Title:    "Message sent from " + site,
+		BodyKey:  "notify_message_body",
+		Body:     via + " — " + body,
+		Params: map[string]string{
+			"site":    site,
+			"channel": via,
+			"text":    body,
+		},
+		// Per event, not per site: a tag the OS has already seen replaces the
+		// notification in place rather than announcing itself, so a second
+		// send would land silently in the tray.
+		Tag:     "lerd-message-" + site + "-" + evt.ID,
+		URL:     debugRouteForContext(evt.Ctx, evt.Kind),
+		Data:    map[string]string{"site": site, "id": evt.ID},
+		Urgency: "normal",
 		TTL:     300,
 	}
 }
@@ -170,6 +233,9 @@ func runDumpsNotifier(src dumpsSubscriber) {
 	// the same class failing three times in a row is one thing to be told about.
 	jobs := newDumpDebouncer(dumpDebounceWindow)
 	np := newNPlusOneTracker()
+	// Messages debounce on their own clock: a notification fanned out to a
+	// handful of recipients is one send to be told about, not five.
+	msgs := newDumpDebouncer(dumpDebounceWindow)
 	for evt := range ch {
 		switch evt.Kind {
 		case dumps.KindDump:
@@ -182,6 +248,10 @@ func runDumpsNotifier(src dumpsSubscriber) {
 			// warning per route/script.
 			if n := np.observe(evt); n != nil {
 				notifyDispatch(*n)
+			}
+		case dumps.KindMessage:
+			if msgs.allow(evt.Ctx.Site) {
+				notifyDispatch(notificationForMessage(evt))
 			}
 		case dumps.KindJob:
 			if jobStatus(evt) != failedJobStatus {

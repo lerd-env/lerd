@@ -18,6 +18,7 @@ const AUTO_SUB_KEY = 'lerd:notify:auto-subscribe';
 // subscription's stored EnabledKinds to gate Web Push delivery.
 export type NotifyKind =
   | 'mail'
+  | 'message'
   | 'worker_failed'
   | 'job_failed'
   | 'op_done'
@@ -29,6 +30,7 @@ export type NotifyKind =
 
 export const ALL_KINDS: NotifyKind[] = [
   'mail',
+  'message',
   'worker_failed',
   'job_failed',
   'op_done',
@@ -48,6 +50,9 @@ const DEFAULTS: NotifyPrefs = {
   enabled: true,
   kinds: {
     mail: true,
+    // Something a site sends to a real person is caught nowhere, so the
+    // notification is the only sign it went out. On, like mail.
+    message: true,
     worker_failed: true,
     // A queued job that fails is a real failure the queue would otherwise
     // swallow, and it is deduped per job class, so it is on by default.
@@ -584,7 +589,10 @@ async function postSubscription(sub: PushSubscription) {
       enabled: prefs.enabled,
       enabled_kinds: Object.entries(prefs.kinds)
         .filter(([, on]) => on)
-        .map(([k]) => k)
+        .map(([k]) => k),
+      // What this build knows about, so the backend can tell a kind muted here
+      // from one that shipped after this subscription was last saved.
+      known_kinds: ALL_KINDS
     })
   });
 }

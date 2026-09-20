@@ -1,6 +1,6 @@
 # Notifications
 
-The dashboard can pop OS-level notifications for events you'd otherwise have to keep an eye on a tab to catch: a captured email, a worker that just crashed, a long-running service operation that finished, a new image tag available for a service, or a `ray()`/`dump()` arriving from a site you're debugging. Notifications fire even when the dashboard tab is minimised, in the background, or fully closed, they're delivered via Web Push, which wakes the registered service worker through your browser vendor's push infrastructure (FCM for Chrome/Brave/Edge, Mozilla autopush for Firefox).
+The dashboard can pop OS-level notifications for events you'd otherwise have to keep an eye on a tab to catch: a captured email, a message your app sent to a real person, a worker that just crashed, a long-running service operation that finished, a new image tag available for a service, or a `ray()`/`dump()` arriving from a site you're debugging. Notifications fire even when the dashboard tab is minimised, in the background, or fully closed, they're delivered via Web Push, which wakes the registered service worker through your browser vendor's push infrastructure (FCM for Chrome/Brave/Edge, Mozilla autopush for Firefox).
 
 The first time you open the dashboard a small banner offers to enable browser notifications; clicking *Enable* prompts your browser for permission once. Granting it is sticky, the dashboard re-uses the permission across sessions and re-registers the push subscription on every page load so the server's subscription list stays in sync after browser resets or sub expiry.
 
@@ -38,6 +38,7 @@ In native mode, clicking a notification opens the [Lerd desktop app](https://ler
 | Kind | Fires when | Default | Urgency |
 | --- | --- | --- | --- |
 | `mail` | Mailpit captures an outgoing email | on | normal |
+| `message` | A site sends an SMS, a chat post or a push. Unlike mail, nothing catches these locally, so the notification is the only sign one left the machine. Deduped per site over a five-second window, so one notification fanned out to several recipients is reported once. The only category besides the test that reaches the desktop while a dashboard window has focus: what it announces has already left the machine, and the developer on another tab has no other sign of it | on | normal |
 | `worker_failed` | A queue / horizon / reverb / schedule / stripe worker needs healing: it entered the `failed` state, or it's still enabled yet found stopped (drift, e.g. an FPM restart knocked it out). The dashboard banner surfaces both and offers a one-click heal | on | high |
 | `job_failed` | A queued job ends in the `failed` state, in a queue worker or wherever else it ran. Deduped per site and job class over a five-second window, so a job that is retried three times in a row is reported once | on | high |
 | `nplusone` | A request (or worker invocation) runs the same query shape 3+ times, a likely N+1. Fires at most once per route/script per session so it warns without nagging | on | normal |
@@ -46,6 +47,8 @@ In native mode, clicking a notification opens the [Lerd desktop app](https://ler
 | `snapshot` | A scheduled [snapshot run](../usage/database.md#automatic-snapshots) finishes, naming how many databases it took and on how many sites | on | low |
 | `update_available` | Something installed has fallen behind: a newer image tag for a service, a republished PHP base image, or a host tool (Composer, fnm, mkcert) whose pin has moved. One notification per item, when it first goes stale | on | low |
 | `dump` | A `ray()` / `dump()` / var-dump packet arrives | **off** | low |
+
+A desktop notification is held back while a dashboard window has focus, since that window is already showing whatever the notification would say; the event still rides the websocket, so the bell and the notification centre have it either way. Focus is a lease each window renews every ten seconds and the server forgets after twenty five, not a flag a window sets once: a page that is closed, suspended, navigated away from or reconnecting after a restart stops holding notifications back within seconds of going quiet, rather than keeping them silenced until its socket is reaped. Messages are the exception and reach the desktop regardless, because what they announce has already left the machine.
 
 The diagnostic categories (`nplusone`, `slow_route`) report a problem lerd found in your app rather than an action that completed, so the toast and the notification centre draw them as amber warnings, between the blue informational entries and the red failures.
 

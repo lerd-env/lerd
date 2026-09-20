@@ -368,6 +368,79 @@ func TestDashboardLoginScript(t *testing.T) {
 	}
 }
 
+// A session that has run out leaves its key in place, so the key's presence
+// alone cannot stand for being logged in.
+func TestDashboardLoginScriptReadsSessionExpiry(t *testing.T) {
+	script := DashboardLoginScript(DefaultPresetService("rustfs"))
+	for _, want := range []string{`,X="Expiration"`, "Date.parse(e)>Date.now()"} {
+		if !strings.Contains(script, want) {
+			t.Errorf("login script missing %q", want)
+		}
+	}
+	if n := strings.Count(script, "localStorage.getItem(D)"); n != 1 {
+		t.Errorf("the stored key is read in %d places; only the session check should read it", n)
+	}
+	if opens, closes := strings.Count(script, "{"), strings.Count(script, "}"); opens != closes {
+		t.Errorf("login script braces unbalanced: %d open, %d close", opens, closes)
+	}
+}
+
+// pgAdmin builds its palette in JavaScript, so the media queries the overlay
+// flips reach nothing. It asks the browser which scheme it is in, and that is
+// the question lerd answers.
+func TestDashboardColorSchemeScript(t *testing.T) {
+	script := DashboardColorSchemeScript("")
+	for _, want := range []string{
+		"parent.document.documentElement",
+		"window.matchMedia=function(q)",
+		"prefers-color-scheme",
+		"parent.MutationObserver",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("colour scheme script missing %q", want)
+		}
+	}
+	// A query the page asks for anything else has to reach the browser unchanged.
+	if !strings.Contains(script, "return real(q);") {
+		t.Error("colour scheme script swallows every media query, not just the scheme")
+	}
+	if opens, closes := strings.Count(script, "{"), strings.Count(script, "}"); opens != closes {
+		t.Errorf("colour scheme script braces unbalanced: %d open, %d close", opens, closes)
+	}
+	// An app that remembers a side it was given never asks again, so what it was
+	// told is forgotten on the way in.
+	keyed := DashboardColorSchemeScript("mode")
+	if !strings.Contains(keyed, `K="mode"`) || !strings.Contains(keyed, "localStorage.removeItem(K)") {
+		t.Errorf("colour scheme script does not forget the remembered scheme\n%s", keyed)
+	}
+	if strings.Contains(script, "removeItem") && !strings.Contains(script, `K=""`) {
+		t.Error("a dashboard that remembers nothing should have nothing cleared")
+	}
+}
+
+// An app that namespaces its storage by where it is served cannot name the key
+// outright, so the preset writes the mount into it.
+func TestDashboardSchemeKeyCarriesTheMount(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	writeStorePreset(t, "ri", "name: ri\nimage: example/ri:1\ndashboard_scheme_key: \"{{mount}}_theme\"\n")
+	svc := &CustomService{Name: "ri", Preset: "ri", Dashboard: "http://localhost:8085"}
+	if got := DashboardSchemeKey(svc); got != "_svc/ri_theme" {
+		t.Errorf("DashboardSchemeKey = %q, want _svc/ri_theme", got)
+	}
+}
+
+func TestPgadminIsToldItsColourScheme(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	svc := &CustomService{Name: "pgadmin", Preset: "pgadmin", Dashboard: "http://localhost:8081"}
+	if !DashboardFollowsColorScheme(svc) {
+		t.Error("pgadmin has a dark theme of its own and must be told which scheme it is in")
+	}
+	// A dashboard whose design answers the media query needs no such telling.
+	if DashboardFollowsColorScheme(&CustomService{Name: "adminer", Preset: "adminer", Dashboard: "http://localhost:8080"}) {
+		t.Error("adminer themes itself from the query the overlay flips")
+	}
+}
+
 // The wrapper has to hand a rebuilt request a body it can send: a Request built
 // from a Request carries a stream, which a browser refuses over HTTP/1.1.
 func TestDashboardRerouteScriptShape(t *testing.T) {

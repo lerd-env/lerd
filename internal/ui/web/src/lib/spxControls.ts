@@ -26,15 +26,21 @@ function themeCss(dark: boolean): string {
   const card = dark ? 'var(--lerd-card)' : '#ffffff';
   const bg = dark ? 'var(--lerd-bg)' : '#f9fafb';
   const border = dark ? 'var(--lerd-border)' : '#e5e7eb';
+  // SPX writes every word on the page in one colour, a teal of its own, so that
+  // is the tone text reads in rather than an accent: `* { color: var(--text-color) }`.
+  const text = dark ? '#e5e7eb' : '#212529';
   return `
 :root {
   --gradient-begin: ${card};
   --gradient-end: ${bg};
   --border-color: ${border};
+  --text-color: ${text};
   --form-element-background: ${card};
   --hover-color: var(--lerd-accent);
+  --progress-bar-color: var(--lerd-accent);
   --table-sort-field-background: color-mix(in srgb, var(--lerd-accent) 22%, transparent);
 }
+a, a:visited { color: var(--lerd-accent); }
 .widget { border-color: ${border}; }
 #search-container button { background: var(--lerd-accent); }
 #colorscheme-panel hr { border-color: ${border}; }

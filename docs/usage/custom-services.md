@@ -243,6 +243,10 @@ A URL a script computes at call time is past rebasing, since it does not exist i
 
 Some dashboards cannot be moved at all. RustFS's console is a Next build rooted at `/rustfs/console`, with that path compiled into its own routing, so `dashboard_proxy_at_path` serves it there instead of under the mount, and the `/_svc/<name>/` mount stays for what the page asks of the upstream's root. The lerd vhost names the path alongside its own, so nothing has to be registered by hand. Such a dashboard usually signs its requests, and a signature covers the `Host` header, so `dashboard_proxy_keep_host` forwards the Host the browser sent rather than the upstream's, or every call the page makes is rejected.
 
+An embedded dashboard wears the theme lerd is wearing rather than the one the browser is set to. Most of them ship their dark half behind a `prefers-color-scheme` query, and the overlay flips that query where it finds it, on the link or inside the sheet. An app that reads the preference from JavaScript instead is out of reach of that, so `dashboard_follows_color_scheme` has lerd answer the question directly, which is how pgAdmin gets its own dark design: it ships its theme preference set to `system` and asks the browser which scheme it is in.
+
+A dashboard with no dark design at all, phpMyAdmin being the case in point, is turned around instead: lerd reads the greys off its own stylesheet and maps them onto the palette, so what the design used for its page becomes the page and what it used for text becomes the tone text reads in. A colour carrying a hue keeps it and is only moved far enough to be read, and every pair is held to the WCAG AA floor.
+
 A preset can also describe its own login form, which lerd then fills with the credentials it provisioned the service with:
 
 ```yaml
@@ -253,9 +257,10 @@ dashboard_login:
     "#secretKey": RUSTFS_SECRET_KEY
   submit: form button[type="submit"]
   done: auth.credentials              # what the app stores once it is in
+  expires: Expiration                 # the field in it saying when that runs out
 ```
 
-The values are written through the input's native setter and announced as a keystroke would be, so a form that tracks its fields in JavaScript sees them. `done` is read before anything is typed, so a dashboard already logged in is left alone.
+The values are written through the input's native setter and announced as a keystroke would be, so a form that tracks its fields in JavaScript sees them. `done` is read before anything is typed, so a dashboard already logged in is left alone. A dashboard whose session runs out leaves that key behind when it goes stale, which would read as still being logged in, so `expires` names the field inside the stored value holding the moment it stops counting.
 
 ## Site handle placeholders
 

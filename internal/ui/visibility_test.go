@@ -2,6 +2,7 @@ package ui
 
 import (
 	"testing"
+	"time"
 )
 
 func TestNoteVisibilityCounter(t *testing.T) {
@@ -63,28 +64,66 @@ func TestNoteVisibilityMultipleConnections(t *testing.T) {
 	}
 }
 
-// Focus is counted per connection and never goes negative, so a window that
-// blurs and then disconnects cannot leave the count stuck below zero and
-// silently re-enable desktop popups for a window that is still focused.
-func TestNoteFocusCounter(t *testing.T) {
-	focusedClients.Store(0)
-	t.Cleanup(func() { focusedClients.Store(0) })
+// TestFocusLeaseExpires is the bug this replaced a flag to fix: a window that
+// claimed focus and then went quiet, a second tab, a page that reconnected
+// after a restart, kept every desktop notification suppressed until its socket
+// was reaped a minute and a quarter later.
+func TestFocusLeaseExpires(t *testing.T) {
+	resetFocus(t)
 
+	noteFocus(1, true)
+	if !uiWindowFocused() {
+		t.Fatal("a window that just claimed focus must count")
+	}
+	// Reach into the lease rather than wait out the TTL.
+	focusMu.Lock()
+	focusLeases[1] = time.Now().Add(-time.Second)
+	focusMu.Unlock()
 	if uiWindowFocused() {
-		t.Error("no connection has reported focus yet")
+		t.Error("a claim nobody renewed must run out")
 	}
-	noteFocus(true)
-	noteFocus(true)
+}
+
+// TestFocusLeaseRenewalKeepsIt checks the window that is actually focused
+// holds on to it, since it says so again every few seconds.
+func TestFocusLeaseRenewalKeepsIt(t *testing.T) {
+	resetFocus(t)
+
+	noteFocus(1, true)
+	focusMu.Lock()
+	focusLeases[1] = time.Now().Add(-time.Second)
+	focusMu.Unlock()
+	noteFocus(1, true)
 	if !uiWindowFocused() {
-		t.Error("two focused windows should report focused")
+		t.Error("a renewed claim must keep the window counted")
 	}
-	noteFocus(false)
+}
+
+// TestFocusClaimsAreSeparatePerConnection covers the shape that broke it: one
+// page blurring must not release another's claim, and a connection going away
+// must release its own.
+func TestFocusClaimsAreSeparatePerConnection(t *testing.T) {
+	resetFocus(t)
+
+	noteFocus(1, true)
+	noteFocus(2, true)
+	noteFocus(1, false)
 	if !uiWindowFocused() {
-		t.Error("one window still has focus")
+		t.Error("the other window still has focus")
 	}
-	noteFocus(false)
-	noteFocus(false)
-	if v := focusedClients.Load(); v != 0 {
-		t.Errorf("counter should not go below 0, got %d", v)
+	dropFocus(2)
+	if uiWindowFocused() {
+		t.Error("the last claim went away with its connection")
 	}
+}
+
+func resetFocus(t *testing.T) {
+	t.Helper()
+	clear := func() {
+		focusMu.Lock()
+		focusLeases = map[uint64]time.Time{}
+		focusMu.Unlock()
+	}
+	clear()
+	t.Cleanup(clear)
 }

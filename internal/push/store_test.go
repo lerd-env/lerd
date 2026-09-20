@@ -144,3 +144,40 @@ func TestSubscription_Allows_TestAlwaysPasses(t *testing.T) {
 		t.Error("test still must respect master switch")
 	}
 }
+
+// TestSubscription_Allows_KindAddedAfterTheLastSave is the case that made a
+// new notification category silently dead: a browser that saved its list
+// before the category existed cannot mention it, and dropping it there means
+// nobody who already had notifications on ever sees the new kind.
+func TestSubscription_Allows_KindAddedAfterTheLastSave(t *testing.T) {
+	old := Subscription{
+		Enabled:      true,
+		EnabledKinds: []string{"mail", "worker_failed"},
+	}
+	if !old.Allows("message") {
+		t.Error("a kind the subscription never heard of must take its default, not silence")
+	}
+	if old.Allows("dump") {
+		t.Error("a kind that defaults off must stay off when nobody has said otherwise")
+	}
+}
+
+// TestSubscription_Allows_MutedKindStaysMuted checks the other half: once a
+// browser reports what it knows about, a kind missing from the enabled list is
+// a choice and is respected.
+func TestSubscription_Allows_MutedKindStaysMuted(t *testing.T) {
+	current := Subscription{
+		Enabled:      true,
+		EnabledKinds: []string{"mail"},
+		KnownKinds:   []string{"mail", "message", "dump"},
+	}
+	if current.Allows("message") {
+		t.Error("a kind the browser knows about and left off must stay off")
+	}
+	if !current.Allows("mail") {
+		t.Error("an enabled kind must still be delivered")
+	}
+	if !current.Allows("snapshot") {
+		t.Error("a kind newer than even this list must take its default")
+	}
+}

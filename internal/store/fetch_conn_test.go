@@ -13,6 +13,13 @@ import (
 // to hold the whole wave. Go's default keeps two idle connections per host and
 // closes the rest, which makes every wave after the first pay a fresh TCP and
 // TLS handshake for each definition it pulls.
+//
+// What is measured is the second wave rather than the total, because the total
+// cannot be pinned down: asked for a connection the transport races a fresh dial
+// against waiting for an idle one and keeps whichever answers first, so the
+// first wave opens seven or eight and either is fine. The second wave is the
+// one that tells the story. Pooled it opens next to nothing; with Go's default
+// of two idle it opens around six of its eight again.
 func TestFetch_ReusesTheConnectionsAcrossParallelWaves(t *testing.T) {
 	var conns atomic.Int64
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -41,10 +48,14 @@ func TestFetch_ReusesTheConnectionsAcrossParallelWaves(t *testing.T) {
 		wg.Wait()
 	}
 	wave()
+	first := conns.Load()
 	wave()
+	second := conns.Load() - first
 
-	if n := conns.Load(); n > FetchConcurrency {
-		t.Errorf("opened %d connections for two waves of %d fetches, want at most %d",
-			n, FetchConcurrency, FetchConcurrency)
+	// Half a wave is well clear of both: a pooled second wave opens none or one,
+	// an unpooled one opens most of eight.
+	if second >= FetchConcurrency/2 {
+		t.Errorf("the second wave opened %d connections of its own after the first opened %d, want fewer than %d: it is handshaking again rather than reusing the pool",
+			second, first, FetchConcurrency/2)
 	}
 }
