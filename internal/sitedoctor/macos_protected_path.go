@@ -26,11 +26,10 @@ func protectedPathCheck(goos, path, home, manager string) (Check, bool) {
 		return Check{}, false
 	}
 	// The grant follows the real files, so a project reached through a symlink
-	// from somewhere unguarded is guarded all the same.
-	real := path
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		real = resolved
-	}
+	// from somewhere unguarded is guarded all the same. Home is resolved too, or
+	// a home behind a symlink never matches the path we just canonicalised.
+	real := resolve(path)
+	home = resolve(home)
 	for _, folder := range guardedHomeFolders {
 		guarded := filepath.Join(home, folder)
 		if real != guarded && !strings.HasPrefix(real, guarded+string(filepath.Separator)) {
@@ -59,4 +58,12 @@ func checkProtectedPath(path string) (Check, bool) {
 		return Check{}, false
 	}
 	return protectedPathCheck(runtime.GOOS, path, home, cfg.NodeManager())
+}
+
+// resolve canonicalises a path, leaving it untouched when it cannot be read.
+func resolve(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return path
 }
