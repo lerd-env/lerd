@@ -203,6 +203,13 @@ func newDashProxy(name string, target *url.URL, tw dashProxyTweaks) *httputil.Re
 			resp.Header.Set("Content-Security-Policy", stripped)
 		}
 		rewriteSetCookiePaths(resp.Header, prefix+"/")
+		// The upstream marks its session cookie Secure to survive the cross-origin
+		// framing an older lerd does. Proxied same-origin, the attribute is only a
+		// liability: a browser stores nothing Secure that arrives over plain http,
+		// so the session this proxy exists to keep would never be stored at all.
+		if resp.Request == nil || resp.Request.Header.Get("X-Forwarded-Proto") != "https" {
+			unsecureSetCookies(resp.Header)
+		}
 		if loc := resp.Header.Get("Location"); loc != "" {
 			base := ""
 			if tw.stripPrefix {
@@ -272,6 +279,40 @@ func stripFrameAncestors(csp string) string {
 		kept = append(kept, strings.TrimSpace(d))
 	}
 	return strings.Join(kept, "; ")
+}
+
+// unsecureSetCookies drops what a browser refuses to store over plain http from
+// every cookie the upstream set: the Secure attribute, and the SameSite=None
+// that is invalid without it.
+func unsecureSetCookies(h http.Header) {
+	cookies := h["Set-Cookie"]
+	for i, c := range cookies {
+		cookies[i] = unsecureCookie(c)
+	}
+}
+
+func unsecureCookie(cookie string) string {
+	// A __Secure- or __Host- name is only valid with the attribute that names it,
+	// so such a cookie is left as it came: without Secure the browser refuses it
+	// either way, and rewriting it would only hide where the problem is.
+	name := strings.ToLower(strings.TrimSpace(cookie))
+	if strings.HasPrefix(name, "__secure-") || strings.HasPrefix(name, "__host-") {
+		return cookie
+	}
+	parts := strings.Split(cookie, ";")
+	kept := make([]string, 0, len(parts))
+	for _, p := range parts {
+		t := strings.TrimSpace(p)
+		lower := strings.ToLower(t)
+		if lower == "secure" {
+			continue
+		}
+		if strings.HasPrefix(lower, "samesite=") && strings.TrimSpace(lower[len("samesite="):]) == "none" {
+			p = " SameSite=Lax"
+		}
+		kept = append(kept, p)
+	}
+	return strings.Join(kept, ";")
 }
 
 // rewriteSetCookiePaths scopes root-path cookies to the proxy mount so cookies
