@@ -25,3 +25,18 @@ describe('debugLens', () => {
     expect(localStorage.getItem('lerd:debugLens')).toBe('queries');
   });
 });
+
+describe('isDebugLens', () => {
+  it('accepts a lens a deep link can open', async () => {
+    const { isDebugLens } = await import('./debugLens');
+    expect(isDebugLens('messages')).toBe(true);
+    expect(isDebugLens('queries')).toBe(true);
+  });
+
+  it('rejects anything else, so a stray segment leaves the lens alone', async () => {
+    const { isDebugLens } = await import('./debugLens');
+    expect(isDebugLens('nginx')).toBe(false);
+    expect(isDebugLens('')).toBe(false);
+    expect(isDebugLens(undefined)).toBe(false);
+  });
+});

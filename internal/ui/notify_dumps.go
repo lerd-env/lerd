@@ -91,7 +91,7 @@ func notificationForDump(evt dumps.Event) push.Notification {
 			"text": body,
 		},
 		Tag:     "lerd-dump-" + site,
-		URL:     debugRouteForContext(evt.Ctx),
+		URL:     debugRouteForContext(evt.Ctx, evt.Kind),
 		Data:    map[string]string{"site": site, "id": evt.ID},
 		Urgency: "low",
 		TTL:     60,
@@ -133,7 +133,7 @@ func notificationForFailedJob(evt dumps.Event) push.Notification {
 			"error": reason,
 		},
 		Tag:     "lerd-job-failed-" + site + "-" + job,
-		URL:     debugRouteForContext(evt.Ctx),
+		URL:     debugRouteForContext(evt.Ctx, evt.Kind),
 		Data:    map[string]string{"site": site, "id": evt.ID},
 		Urgency: "high",
 		TTL:     300,
@@ -196,7 +196,7 @@ func notificationForMessage(evt dumps.Event) push.Notification {
 		// notification in place rather than announcing itself, so a second
 		// send would land silently in the tray.
 		Tag:     "lerd-message-" + site + "-" + evt.ID,
-		URL:     debugRouteForContext(evt.Ctx),
+		URL:     debugRouteForContext(evt.Ctx, evt.Kind),
 		Data:    map[string]string{"site": site, "id": evt.ID},
 		Urgency: "normal",
 		TTL:     300,

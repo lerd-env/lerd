@@ -6,13 +6,14 @@ import (
 	"testing"
 )
 
-// The focus/visibility decrement in handleWS reads connFocused/connVisible,
-// which only the reader goroutine writes. If the cleanup runs while the reader
-// is still live, a lost focus decrement leaves focusedClients above zero for the
-// life of the process and silences every native notification and web push. The
-// cleanup therefore has to close the socket (to unblock ReadFrame) and join the
-// reader (<-done) before it reads the flags. This pins that ordering so a
-// refactor that reintroduces the race fails here rather than in the field.
+// The focus release and visibility decrement in handleWS read
+// connFocused/connVisible, which only the reader goroutine writes. If the
+// cleanup runs while the reader is still live, the read races the write and the
+// connection can go away still holding a claim on focus, which silences native
+// notifications until its lease runs out. The cleanup therefore has to close
+// the socket (to unblock ReadFrame) and join the reader (<-done) before it
+// reads the flags. This pins that ordering so a refactor that reintroduces the
+// race fails here rather than in the field.
 func TestHandleWS_cleanupJoinsReaderBeforeReadingFocusFlags(t *testing.T) {
 	src, err := os.ReadFile("ws.go")
 	if err != nil {
@@ -29,11 +30,11 @@ func TestHandleWS_cleanupJoinsReaderBeforeReadingFocusFlags(t *testing.T) {
 			joinAt = closeAt + rel
 		}
 	}
-	focusAt := strings.Index(body, "noteFocus(false)")
+	focusAt := strings.Index(body, "dropFocus(connID)\n\t\t}")
 	visibleAt := strings.Index(body, "noteVisibility(false)")
 
 	if closeAt < 0 || joinAt < 0 || focusAt < 0 || visibleAt < 0 {
-		t.Fatal("handleWS cleanup must close the socket, join the reader, then decrement focus and visibility")
+		t.Fatal("handleWS cleanup must close the socket, join the reader, then release focus and decrement visibility")
 	}
 	if !(closeAt < joinAt && joinAt < focusAt && joinAt < visibleAt) {
 		t.Errorf("cleanup order is wrong: close=%d join=%d focus=%d visible=%d; the join must sit after the close and before both decrements",

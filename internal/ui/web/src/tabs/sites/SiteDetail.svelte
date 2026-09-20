@@ -9,6 +9,7 @@
   import SiteDebugTab from '$tabs/sites/SiteDebugTab.svelte';
   import { resumeSite, loadSites, activeWorktreeDomain, siteHasLogSources, type Site } from '$stores/sites';
   import { routeRest, goToTab } from '$stores/route';
+  import { debugLens, isDebugLens, type DebugLens } from '$stores/debugLens';
   import { m } from '../../paraglide/messages.js';
 
   let resumeBusy = $state(false);
@@ -53,14 +54,18 @@
 
   // The route can deep-link a sub-tab (e.g. dump notifications go to
   // #sites/<domain>/dumps). When the second segment names a tab, honour it
-  // and overwrite the stored selection.
+  // and overwrite the stored selection. A third segment names the Debug lens,
+  // so a notification opens on what was clicked rather than on whichever lens
+  // was last looked at.
   $effect(() => {
-    const seg = $routeRest.split('/')[1] ?? '';
+    const parts = $routeRest.split('/');
+    const seg = parts[1] ?? '';
     if (seg === 'nginx') {
       nginxOpen = true;
     } else if (seg === 'logs' || seg === 'tinker' || seg === 'env' || seg === 'dumps' || seg === 'overview') {
       active = seg;
     }
+    if (seg === 'dumps' && isDebugLens(parts[2])) debugLens.set(parts[2] as DebugLens);
   });
 
   $effect(() => {

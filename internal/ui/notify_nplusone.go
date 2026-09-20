@@ -176,7 +176,9 @@ func notificationForNPlusOne(ev dumps.Event, count int) push.Notification {
 		Title: "Possible N+1 query on " + site,
 		Body:  body,
 		Tag:   "lerd-nplusone-" + routeKeyForQuery(ev),
-		URL:   debugRouteForContext(ev.Ctx),
+		// An N+1 is a statement about the request's queries, so it opens the
+		// lens that shows them whatever kind the event that tripped it was.
+		URL: debugRouteForContext(ev.Ctx, dumps.KindQuery),
 		Data: map[string]string{
 			"site":    ev.Ctx.Site,
 			"worker":  ev.Ctx.Worker,
