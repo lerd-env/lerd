@@ -944,3 +944,91 @@ namespace {
 		t.Errorf("source = %q, want the reporter the store named", e.Data.Source)
 	}
 }
+
+// TestCollectorPHP_NotifierMessagesLandAsMessages checks a store-declared
+// message capture reports what a site sent to somebody: the channel it went
+// on, the transport that carried it, who it went to and what it said.
+func TestCollectorPHP_NotifierMessagesLandAsMessages(t *testing.T) {
+	dir := t.TempDir()
+	seams := "# header\n" +
+		"message|class|Fixture\\Notifier\\Texter|send|notifier\n" +
+		"message|class|Fixture\\Notifier\\Chatter|send|notifier\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
+		t.Fatalf("write seams: %v", err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace Fixture\Notifier {
+    class Texter { public function send($message) {} }
+    class Chatter { public function send($message) {} }
+    class SmsMessage {
+        public function __construct(private $phone, private $subject, private $from, private $transport) {}
+        public function getPhone() { return $this->phone; }
+        public function getRecipientId() { return $this->phone; }
+        public function getSubject() { return $this->subject; }
+        public function getFrom() { return $this->from; }
+        public function getTransport() { return $this->transport; }
+    }
+    class ChatMessage {
+        public function __construct(private $subject, private $transport) {}
+        public function getSubject() { return $this->subject; }
+        public function getRecipientId() { return null; }
+        public function getTransport() { return $this->transport; }
+    }
+}
+namespace {
+    require COLLECTOR;
+    $texter = new \Fixture\Notifier\Texter();
+    $chatter = new \Fixture\Notifier\Chatter();
+
+    $sms = new \Fixture\Notifier\SmsMessage('+40711000000', 'your order shipped', 'Acme', 'twilio');
+    \Lerd\Collector\seam_begin('Fixture\\Notifier\\Texter', 'send', $texter, [1 => $sms]);
+    \Lerd\Collector\seam_end('Fixture\\Notifier\\Texter', 'send', false);
+
+    $chat = new \Fixture\Notifier\ChatMessage('deploy finished', 'slack');
+    \Lerd\Collector\seam_begin('Fixture\\Notifier\\Chatter', 'send', $chatter, [1 => $chat]);
+    \Lerd\Collector\seam_end('Fixture\\Notifier\\Chatter', 'send', false);
+
+    // Something that is not a message must not be reported as one.
+    \Lerd\Collector\seam_begin('Fixture\\Notifier\\Texter', 'send', $texter, [1 => new \stdClass()]);
+    \Lerd\Collector\seam_end('Fixture\\Notifier\\Texter', 'send', false);
+}
+`)
+
+	type ev struct {
+		Kind string `json:"kind"`
+		Data struct {
+			Channel   string `json:"channel"`
+			Transport string `json:"transport"`
+			To        string `json:"to"`
+			From      string `json:"from"`
+			Body      string `json:"body"`
+		} `json:"data"`
+	}
+	var events []ev
+	for _, line := range got {
+		var e ev
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			t.Fatalf("bad JSON line %q: %v", line, err)
+		}
+		events = append(events, e)
+	}
+	if len(events) != 2 {
+		t.Fatalf("got %d events, want one per message: %v", len(events), got)
+	}
+	for _, e := range events {
+		if e.Kind != "message" {
+			t.Errorf("kind = %q, want message", e.Kind)
+		}
+	}
+	sms := events[0].Data
+	if sms.Channel != "sms" || sms.Transport != "twilio" || sms.To != "+40711000000" || sms.From != "Acme" {
+		t.Errorf("sms = %+v, want the channel, transport and both ends", sms)
+	}
+	if sms.Body != "your order shipped" {
+		t.Errorf("body = %q, want what the message said", sms.Body)
+	}
+	chat := events[1].Data
+	if chat.Channel != "chat" || chat.Transport != "slack" || chat.Body != "deploy finished" {
+		t.Errorf("chat = %+v, want the chat channel and its transport", chat)
+	}
+}

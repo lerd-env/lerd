@@ -187,6 +187,7 @@
 
   const kindLabel: Record<NotifyKind, string> = {
     mail: m.notify_settings_category_mail(),
+    message: m.notify_settings_category_message(),
     worker_failed: m.notify_settings_category_worker_failed(),
     job_failed: m.notify_settings_category_job_failed(),
     op_done: m.notify_settings_category_op_done(),
@@ -198,6 +199,7 @@
   };
   const kindHint: Record<NotifyKind, string> = {
     mail: m.notify_settings_category_mail_hint(),
+    message: m.notify_settings_category_message_hint(),
     worker_failed: m.notify_settings_category_worker_failed_hint(),
     job_failed: m.notify_settings_category_job_failed_hint(),
     op_done: m.notify_settings_category_op_done_hint(),

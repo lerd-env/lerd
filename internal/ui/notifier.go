@@ -62,6 +62,18 @@ var (
 	desktopSupported        = desktopnotify.Supported
 )
 
+// alwaysRaised names the kinds that reach the desktop even while a dashboard
+// window has focus. The focus rule exists because the dashboard is already
+// showing whatever the notification would say, which holds for a captured mail
+// or a finished operation sitting on screen. It does not hold for a message: it
+// went to a real person, off a machine that cannot take it back and usually for
+// money, and the developer watching a different tab of the dashboard has no
+// sign of it at all. The test notification is raised for its own reason, being
+// the proof that the desktop path works.
+func alwaysRaised(kind string) bool {
+	return kind == "test" || kind == "message"
+}
+
 func dispatchNotification(n push.Notification) {
 	cfg, err := config.LoadGlobal()
 	if err != nil {
@@ -72,7 +84,7 @@ func dispatchNotification(n push.Notification) {
 	// one is open. The event still rides the websocket to the page. The test
 	// notification is the exception: its whole job is to prove the desktop path
 	// works, and it is always sent from the settings panel, which has focus.
-	focused := uiWindowFocused() && n.Kind != "test"
+	focused := uiWindowFocused() && !alwaysRaised(n.Kind)
 	switch notifySink(cfg, desktopSupported) {
 	case sinkOff:
 		return

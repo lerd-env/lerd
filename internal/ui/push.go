@@ -39,6 +39,7 @@ func handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
 		} `json:"keys"`
 		Enabled      *bool    `json:"enabled,omitempty"`
 		EnabledKinds []string `json:"enabled_kinds,omitempty"`
+		KnownKinds   []string `json:"known_kinds,omitempty"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body); err != nil {
 		http.Error(w, "invalid subscription", http.StatusBadRequest)
@@ -59,6 +60,7 @@ func handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
 		UA:           r.Header.Get("User-Agent"),
 		Enabled:      enabled,
 		EnabledKinds: body.EnabledKinds,
+		KnownKinds:   body.KnownKinds,
 	}
 	if err := push.Add(sub); err != nil {
 		http.Error(w, "store error: "+err.Error(), http.StatusInternalServerError)

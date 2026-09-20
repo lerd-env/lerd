@@ -26,6 +26,7 @@ const (
 	KindHTTP      = "http"
 	KindLog       = "log"
 	KindException = "exception"
+	KindMessage   = "message"
 )
 
 // Source identifies the file:line that produced a dump.
