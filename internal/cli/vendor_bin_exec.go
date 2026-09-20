@@ -57,7 +57,7 @@ func containerExecEnvArgs(cwd string) []string {
 	args := []string{
 		"--env", "HOME=" + home,
 		"--env", "COMPOSER_HOME=" + composerHome,
-		"--env", "PATH=" + projectVendorBin + ":/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:" + composerBin,
+		"--env", "PATH=" + projectVendorBin + ":" + podman.ContainerPath + ":" + composerBin,
 	}
 	args = append(args, debugSiteEnvArgs(cwd)...)
 	args = append(args, terminalColorEnvArgs()...)

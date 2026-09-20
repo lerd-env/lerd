@@ -71,7 +71,8 @@ func newPhpBunInstallCmd() *cobra.Command {
 		Use:   "install [php-version]",
 		Short: "Install (or update) bun inside the PHP-FPM container",
 		Long: "Installs a musl bun into the container's persistent /root/.bun volume using the bundled npm, so it survives image rebuilds and is shared across every PHP version. " +
-			"Run `bun upgrade` inside `lerd shell` to update it later; lerd does not pin a version.",
+			"It lands on the container's PATH, so a bare `bun` or `bunx` resolves in `lerd shell`, in console commands and in requests. " +
+			"Run `lerd php:bun update` to update it later; lerd does not pin a version.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := nativeImageCommandRefusal("php:bun"); err != nil {
@@ -250,7 +251,7 @@ func installContainerBun(version, pin string, w io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("bun did not run in the container after install: %w\n%s", err, out)
 	}
-	fmt.Fprintf(w, "bun %s installed in PHP %s container. Use it from `lerd shell`; update it with `bun upgrade`.\n", strings.TrimSpace(string(out)), version)
+	fmt.Fprintf(w, "bun %s installed in PHP %s container. `bun` and `bunx` are on its PATH; update it with `lerd php:bun update`.\n", strings.TrimSpace(string(out)), version)
 	return nil
 }
 

@@ -52,6 +52,10 @@ Volume={{.BunVolumeDir}}:/root/.bun:rw
 # shims so they survive image rebuilds. Empty until the user opts in.
 Volume={{.PlaywrightVolumeDir}}:/root/.cache/ms-playwright:rw
 Environment=HOME=/root
+# The opt-in bun (lerd php:bun install) lives in the volume above, so no image
+# ENV can reach it and a bare `bun` or `bunx` would resolve nowhere. Rendered
+# from ContainerPath, which the exec routes use too so the two cannot drift.
+Environment=PATH={{.ContainerPath}}
 PodmanArgs=--security-opt=label=disable
 Exec=php-fpm -F -R
 

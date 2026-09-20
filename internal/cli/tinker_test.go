@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/podman"
 )
 
 func TestTinkerEnvArgs(t *testing.T) {
@@ -13,7 +15,7 @@ func TestTinkerEnvArgs(t *testing.T) {
 	want := []string{
 		"--env", "HOME=/home/u",
 		"--env", "COMPOSER_HOME=/home/u/.config/composer",
-		"--env", "PATH=/home/u/site/vendor/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/u/.config/composer/vendor/bin",
+		"--env", "PATH=/home/u/site/vendor/bin:" + podman.ContainerPath + ":/home/u/.config/composer/vendor/bin",
 		"--env", "NO_COLOR=1",
 		"--env", "TERM=dumb",
 		"--env", "PSYSH_TRUST_PROJECT=1",

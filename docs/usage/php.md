@@ -739,7 +739,7 @@ If you want extra packages in the image (additional CLI tools, language toolchai
 
 For other tools and runtime libraries, `lerd php:pkg add <packages>` installs Alpine packages into the FPM image's runtime stage and rebuilds, for example `lerd php:pkg add htop vim`. The packages are saved in `~/.config/lerd/config.yaml` (under `php.packages`) and re-applied on every rebuild, so they survive `php:rebuild` and base image updates, exactly like custom extensions. Like extensions, one declared set applies to every PHP version. They are layered onto the shared image rather than baked into the published base, so they only affect your local build. A non-existent package name fails the rebuild and the change is reverted.
 
-For [bun](https://bun.sh) specifically, run `lerd php:bun install` to drop a musl bun into the container's persistent `/root/.bun` volume (so `lerd shell` has it without rebuilding the image). See [bun](node#bun) for the full host and container story.
+For [bun](https://bun.sh) specifically, run `lerd php:bun install` to drop a musl bun into the container's persistent `/root/.bun` volume (so a bare `bun` resolves inside the container without rebuilding the image). See [bun](node#bun) for the full host and container story.
 
 ### Reachable ports
 
