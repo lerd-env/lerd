@@ -68,7 +68,7 @@
 
   {#if !remote}
     <div
-      class="flex flex-col items-center gap-1 mt-3 pt-3 border-t border-gray-200 dark:border-lerd-border w-8 min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar"
+      class="flex flex-col items-center gap-1 mt-3 pt-3 border-t border-gray-200 dark:border-lerd-border w-10 min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar"
     >
       <IconButton
         title={m.nav_profiler()}
