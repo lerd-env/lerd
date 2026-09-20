@@ -58,3 +58,21 @@ describe('NavRail', () => {
     expect(actions!.className).toContain('shrink-0');
   });
 });
+
+// The dashboard launchers scroll, and a scroll container clips what overflows
+// it sideways as well as vertically. Narrower than the buttons it holds, it
+// shaved 8px off each one and their hover and active backgrounds came out as
+// tall rectangles while the tab buttons above, in no such container, stayed
+// square.
+it('gives the scrolling launchers as much width as the buttons in them', () => {
+  const { container } = render(NavRail);
+  const scroller = container.querySelector('.overflow-y-auto');
+  expect(scroller).not.toBeNull();
+  const button = scroller?.querySelector('button');
+  expect(button).not.toBeNull();
+
+  const widthOf = (el: Element | null | undefined) =>
+    Number(/(?:^|\s)w-(\d+)(?:\s|$)/.exec(el?.className ?? '')?.[1] ?? 0);
+
+  expect(widthOf(scroller)).toBeGreaterThanOrEqual(widthOf(button));
+});
