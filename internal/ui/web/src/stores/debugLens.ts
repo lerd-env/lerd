@@ -32,6 +32,12 @@ const VALID: DebugLens[] = [
   'messages'
 ];
 
+// isDebugLens reports whether a route segment names a lens, so a deep link can
+// open the one the notification was about.
+export function isDebugLens(v: string | undefined): v is DebugLens {
+  return !!v && (VALID as string[]).includes(v);
+}
+
 function initial(): DebugLens {
   if (typeof localStorage === 'undefined') return 'dumps';
   const v = localStorage.getItem(KEY) as DebugLens | null;

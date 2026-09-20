@@ -60,7 +60,7 @@ func TestNotificationForDump_Shape(t *testing.T) {
 	// No site is registered with that name in this test, so siteDomainForRoute
 	// falls back to the input verbatim. The URL still lands on a sites sub-tab
 	// route shape the frontend can parse.
-	if n.URL != "#sites/starlane.test/dumps" {
+	if n.URL != "#sites/starlane.test/dumps/dumps" {
 		t.Errorf("URL = %q", n.URL)
 	}
 }
@@ -175,8 +175,8 @@ func TestNotificationForDump_URLResolvesNameToDomain(t *testing.T) {
 
 	evt := dumps.Event{ID: "z", Kind: "dump", Ctx: dumps.Context{Site: "rapids", Type: "fpm"}}
 	n := notificationForDump(evt)
-	if n.URL != "#sites/harborlist.test/dumps" {
-		t.Errorf("URL = %q, want #sites/harborlist.test/dumps", n.URL)
+	if n.URL != "#sites/harborlist.test/dumps/dumps" {
+		t.Errorf("URL = %q, want #sites/harborlist.test/dumps/dumps", n.URL)
 	}
 }
 
