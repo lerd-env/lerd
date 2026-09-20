@@ -1029,3 +1029,37 @@ func TestMain(m *testing.M) {
 	HostOwnsResolver = func() bool { return false }
 	os.Exit(m.Run())
 }
+
+// resolvectl ships with systemd whether or not resolved runs it, so on a host
+// where NetworkManager owns resolv.conf the teardown's revert and DNS push
+// reach for a service that is not there and fail with "Could not activate
+// remote peer org.freedesktop.resolve1". Nothing is actually wrong, but an
+// uninstall that prints two red lines reads as a broken one.
+func TestResolvedInterfacesToRevert_EmptyWithoutResolved(t *testing.T) {
+	orig := isSystemdResolvedActive
+	t.Cleanup(func() { isSystemdResolvedActive = orig })
+
+	isSystemdResolvedActive = func() bool { return false }
+	if got := resolvedInterfacesToRevert(); got != nil {
+		t.Errorf("interfaces = %v, want none: there is no resolved to revert them in", got)
+	}
+}
+
+// The DNS push after the NetworkManager restart is resolved's too, so it has
+// to be gated the same way.
+func TestTeardown_pushesDNSOnlyWhereResolvedRuns(t *testing.T) {
+	src, err := os.ReadFile("setup.go")
+	if err != nil {
+		t.Fatalf("reading setup.go: %v", err)
+	}
+	_, teardown, found := strings.Cut(string(src), "func Teardown()")
+	if !found {
+		t.Fatal("Teardown not found in setup.go")
+	}
+	if !strings.Contains(teardown, `iface := defaultInterface(); iface != "" && isSystemdResolvedActive()`) {
+		t.Error("the resolvectl dns push must be gated on resolved running, or it fails loudly on a NetworkManager host")
+	}
+	if !strings.Contains(teardown, "resolvedInterfacesToRevert()") {
+		t.Error("the revert loop must go through the resolved-gated lister")
+	}
+}
