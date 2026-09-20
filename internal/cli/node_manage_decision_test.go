@@ -118,15 +118,15 @@ func TestNodeManagerChoice(t *testing.T) {
 		{"saved nvm survives a managed answer", "nvm", true, true, "nvm"},
 		{"saved fnm survives a decline", "fnm", false, true, "fnm"},
 
-		// lerd-managed Node drives the bundled fnm, even when nvm is around:
-		// managing means lerd owns the versions, in its own tool.
-		{"managed picks fnm", "", true, false, "fnm"},
-		{"managed picks fnm despite nvm", "", true, true, "fnm"},
+		// lerd-managed Node drives mise, even when nvm is around: managing means
+		// lerd owns the versions, in its own tool.
+		{"managed picks mise", "", true, false, "mise"},
+		{"managed picks mise despite nvm", "", true, true, "mise"},
 
 		// Declining hands Node back to the user, so lerd follows their nvm
-		// rather than an fnm it will never install a version into.
+		// rather than a manager it will never install a version into.
 		{"decline with nvm picks nvm", "", false, true, "nvm"},
-		{"decline without nvm keeps fnm", "", false, false, "fnm"},
+		{"decline without nvm keeps mise", "", false, false, "mise"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

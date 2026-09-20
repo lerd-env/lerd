@@ -98,6 +98,7 @@
   let manageError = $state('');
 
   const managerOptions = [
+    { value: 'mise' as const, label: 'mise', title: m.system_node_managerMise() },
     { value: 'fnm' as const, label: 'fnm', title: m.system_node_managerFnm() },
     {
       value: 'nvm' as const,
@@ -107,7 +108,7 @@
     }
   ];
 
-  async function onSwitchManager(manager: 'fnm' | 'nvm') {
+  async function onSwitchManager(manager: 'mise' | 'fnm' | 'nvm') {
     if (managerBusy || manageBusy || manager === $status.node_manager) return;
     if (manager === 'nvm' && !$status.nvm_available) return;
     managerBusy = true;

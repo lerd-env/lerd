@@ -58,15 +58,15 @@ func runNodeManage(_ *cobra.Command, _ []string) error {
 }
 
 // NewNodeManagerCmd returns the node:manager command, which reports or switches
-// the Node version manager lerd drives ("fnm" or "nvm"). Switching persists the
+// the Node version manager lerd drives ("mise", "fnm" or "nvm"). Switching persists the
 // choice and, when lerd is managing Node, rewrites the shims, ensures a default
 // version, and re-syncs host workers so the new manager takes effect at once.
 func NewNodeManagerCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:       "node:manager [fnm|nvm]",
+		Use:       "node:manager [mise|fnm|nvm]",
 		Short:     "Show or switch the Node version manager lerd drives",
 		Args:      cobra.MaximumNArgs(1),
-		ValidArgs: []string{"fnm", "nvm"},
+		ValidArgs: []string{"mise", "fnm", "nvm"},
 		RunE:      runNodeSetManager,
 	}
 }
@@ -89,8 +89,8 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 	}
 
 	target := args[0]
-	if target != "fnm" && target != "nvm" {
-		return fmt.Errorf("unknown manager %q — use 'fnm' or 'nvm'", target)
+	if target != "mise" && target != "fnm" && target != "nvm" {
+		return fmt.Errorf("unknown manager %q — use 'mise', 'fnm' or 'nvm'", target)
 	}
 	if target == current {
 		feedback.Begin()
@@ -109,9 +109,22 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 		}
 		step.OK("")
 	}
+	// mise is installed only when the host has none, so a user's own copy stays
+	// the one lerd drives.
+	if target == "mise" && !nodeDet.ManagerByName("mise").Available() {
+		step := feedback.Start("installing mise")
+		if err := ensureMiseBinary(os.Stdout); err != nil {
+			step.Fail(err)
+			return fmt.Errorf("mise install: %w", err)
+		}
+		step.OK("")
+	}
 	if !nodeDet.ManagerByName(target).Available() {
-		if target == "nvm" {
+		switch target {
+		case "nvm":
 			return fmt.Errorf("nvm not found — install it first (https://github.com/nvm-sh/nvm)")
+		case "mise":
+			return fmt.Errorf("mise not found — install failed; check your network and retry")
 		}
 		return fmt.Errorf("fnm not found — download failed; check your network and retry")
 	}

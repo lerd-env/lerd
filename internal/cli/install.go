@@ -314,7 +314,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		if nodeManager == "nvm" {
 			feedback.Line("leaving Node to your nvm, lerd will run npm and npx through it")
 		} else {
-			feedback.Line("using the bundled fnm for lerd-managed Node, switch with: lerd node:manager nvm")
+			feedback.Line("using mise for lerd-managed Node, switch with: lerd node:manager nvm")
 		}
 	}
 
@@ -1485,7 +1485,10 @@ func nodeManagerChoice(saved string, wantLerdNode, nvmDetected bool) string {
 	if !wantLerdNode && nvmDetected {
 		return "nvm"
 	}
-	return "fnm"
+	// New installs get mise: it is signed under a stable Developer ID, so macOS
+	// keeps a folder grant across version bumps where fnm loses it (#1906). A
+	// config that already names a manager is left alone above.
+	return "mise"
 }
 
 // nodeStateFlipped reports whether this install run changed which Node host

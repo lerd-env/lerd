@@ -17,6 +17,7 @@ import (
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/imagepull"
 	"github.com/geodro/lerd/internal/nativephp"
+	nodeDet "github.com/geodro/lerd/internal/node"
 	"github.com/geodro/lerd/internal/tools"
 )
 
@@ -56,6 +57,45 @@ func ensureFnmBinary(w io.Writer) error {
 	}
 	var pins pinnedTools
 	return installFnm(&pins, w)
+}
+
+// ensureMiseBinary installs mise into its own canonical location when the host
+// has none. A mise the user already manages is left alone: lerd drives whatever
+// it finds, so it never ends up fighting a second copy.
+func ensureMiseBinary(w io.Writer) error {
+	if nodeDet.ManagerByName("mise").Available() {
+		return nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("mise install: %w", err)
+	}
+	var pins pinnedTools
+	return installMise(&pins, home, w)
+}
+
+// installMise downloads the pinned mise tarball and extracts the single binary
+// it carries at mise/bin/mise into ~/.local/bin.
+func installMise(pins *pinnedTools, home string, w io.Writer) error {
+	dest := filepath.Join(home, ".local", "bin", "mise")
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		return fmt.Errorf("mise install: %w", err)
+	}
+	tarball := dest + ".tar.gz"
+	v, err := pins.download("mise", tarball, 0644, w)
+	if err != nil {
+		return fmt.Errorf("mise download: %w", err)
+	}
+	defer os.Remove(tarball)
+	extract := exec.Command("tar", "xzf", tarball, "-C", filepath.Dir(dest), "--strip-components=2", "mise/bin/mise")
+	extract.Stdout = w
+	extract.Stderr = w
+	if err := extract.Run(); err != nil {
+		return fmt.Errorf("mise extract: %w", err)
+	}
+	os.Chmod(dest, 0755) //nolint:errcheck
+	_ = tools.WriteStamp("mise", v)
+	return nil
 }
 
 // installFnm downloads and extracts the pinned fnm, overwriting any existing
