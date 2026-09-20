@@ -304,6 +304,9 @@ func RunWith(ctx context.Context, path string, fw *config.Framework, opts Option
 	if c, ok := checkStaleWorkers(path, fw); ok {
 		resp.add(c)
 	}
+	if c, ok := checkProtectedPath(path); ok {
+		resp.add(c)
+	}
 	if !opts.Quick {
 		if c, ok := checkHTTPResponse(path); ok {
 			resp.add(c)

@@ -412,6 +412,22 @@ If podman is no longer installed either, `sudo rm -rf ~/.local/share/lerd` is th
 An uninstall also takes `~/.cache/lerd`, the `lerd-tray` binary alongside `lerd`, both PATH entries lerd ever wrote into your shell rc, and the images it built itself (`lerd-php*-fpm`, `lerd-custom-*`, `lerd-dnsmasq`) when you accept the purge. Images it only pulled, your databases and your project files are never touched.
 :::
 
+::: details macOS keeps asking fnm for access to Documents, Desktop or Downloads
+Symptom: on macOS, "fnm would like to access files in your Documents folder" comes back for a project that never moved, most often right after lerd bumps the Node version manager it downloads.
+
+Cause: macOS remembers a Files and Folders grant against the signing identity of the binary that asked. Tooling lerd runs for a site reads the project, macOS attributes that to `fnm` rather than to lerd, and the fnm builds published upstream carry no Developer ID, only the ad-hoc signature the linker adds. That identity is derived from the bytes, so the next pinned version is a stranger to the system and the folder is asked for again. This is how macOS treats any unsigned tool; it is not specific to fnm.
+
+Two ways out, either of them permanent:
+
+```bash
+lerd node:manager nvm   # your own nvm, a shell function rather than its own binary
+```
+
+nvm runs inside the terminal you have already granted, so nothing asks on its own. lerd drives it for installs, versions and workers exactly as it drives fnm; see [Node](usage/node.md#version-manager-fnm-or-nvm).
+
+Or keep the project outside the folders macOS guards, `~/Documents`, `~/Desktop` and `~/Downloads`. A symlink from one of them does not help, the grant follows the real files. `lerd doctor` flags a site that sits in one of these while the bundled fnm is in use.
+:::
+
 ::: details Workers missing after reinstall
 If you ran `lerd uninstall` and then reinstalled, worker units and service quadlets are deleted during uninstall. Running `lerd start` after reinstalling automatically restores them from the `workers` list saved in each site's `.lerd.yaml`. If `.lerd.yaml` does not exist or was not committed, you will need to start workers again manually (`lerd queue:start`, etc.).
 
