@@ -85,6 +85,27 @@ func TestRewriteCookiePath(t *testing.T) {
 	}
 }
 
+// An admin UI marks its session cookie Secure so it survives the cross-origin
+// framing an older lerd does. Proxied same-origin over plain http, a browser
+// stores none of that, so the session the proxy exists to keep is dropped on
+// arrival and every AJAX call comes back "connection to server has been lost".
+func TestUnsecureCookie(t *testing.T) {
+	cases := map[string]string{
+		"pga4_session=abc; Secure; HttpOnly; Path=/_svc/pgadmin/; SameSite=None": "pga4_session=abc; HttpOnly; Path=/_svc/pgadmin/; SameSite=Lax",
+		"sid=abc; secure":          "sid=abc",
+		"sid=abc; HttpOnly":        "sid=abc; HttpOnly",
+		"sid=abc; SameSite=Strict": "sid=abc; SameSite=Strict",
+		// A __Secure- name is only valid with the attribute, so it is left as the
+		// upstream wrote it rather than rewritten into a cookie no browser takes.
+		"__Secure-sid=abc; Secure; SameSite=None": "__Secure-sid=abc; Secure; SameSite=None",
+	}
+	for in, want := range cases {
+		if got := unsecureCookie(in); got != want {
+			t.Errorf("unsecureCookie(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestRewriteLocation(t *testing.T) {
 	cases := map[string]string{
 		"/":                            "/_svc/rabbitmq/",
@@ -103,6 +124,28 @@ func TestRewriteLocation(t *testing.T) {
 	for in, want := range cases {
 		if got := rewriteLocation(in, "localhost:15672", "/_svc/rabbitmq"); got != want {
 			t.Errorf("rewriteLocation(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// Over https the attribute is what the browser wants, so the response keeps it;
+// over http the same cookie would be thrown away on arrival.
+func TestDashProxyKeepsSecureOverHTTPS(t *testing.T) {
+	target, _ := url.Parse("http://localhost:5050")
+	p := newDashProxy("pgadmin", target, dashProxyTweaks{})
+	for _, tc := range []struct{ proto, want string }{
+		{"https", "pga4_session=abc; Path=/_svc/pgadmin/; Secure; SameSite=None"},
+		{"http", "pga4_session=abc; Path=/_svc/pgadmin/; SameSite=Lax"},
+	} {
+		req := &http.Request{Header: http.Header{}}
+		req.Header.Set("X-Forwarded-Proto", tc.proto)
+		resp := &http.Response{Header: http.Header{}, Request: req}
+		resp.Header.Set("Set-Cookie", "pga4_session=abc; Path=/; Secure; SameSite=None")
+		if err := p.ModifyResponse(resp); err != nil {
+			t.Fatalf("ModifyResponse: %v", err)
+		}
+		if got := resp.Header.Get("Set-Cookie"); got != tc.want {
+			t.Errorf("over %s Set-Cookie = %q, want %q", tc.proto, got, tc.want)
 		}
 	}
 }
