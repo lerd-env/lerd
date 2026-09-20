@@ -149,3 +149,32 @@ func TestServiceStoreBaseURLs_OverrideWins(t *testing.T) {
 		t.Errorf("override should be used verbatim, got %v", got)
 	}
 }
+
+// The chain has to step through every schema down to the unprefixed path, not
+// jump from the newest to the oldest. A definition introduced at schema 2 lives
+// only in that tree and is deliberately absent from the legacy one, so a schema 3
+// binary that skipped schema 2 would fail to fetch a preset it can run.
+func TestSchemaBases_StepsThroughEverySchema(t *testing.T) {
+	got := schemaBases("https://store.example", 3, "services")
+	want := []string{
+		"https://store.example/schema/3/services",
+		"https://store.example/schema/2/services",
+		"https://store.example/services",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("base %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// Schema 1 is the unprefixed path itself, so it has no prefixed tree.
+func TestSchemaBases_SchemaOneIsTheLegacyPathAlone(t *testing.T) {
+	got := schemaBases("https://store.example", 1, "services")
+	if len(got) != 1 || got[0] != "https://store.example/services" {
+		t.Errorf("got %v, want just the unprefixed path", got)
+	}
+}
