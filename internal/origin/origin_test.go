@@ -1,6 +1,7 @@
 package origin
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -117,5 +118,34 @@ func TestStoreHostEmptyWhenBaseIsNotAURL(t *testing.T) {
 	t.Setenv("LERD_STORE_BASE_URL", "not a url")
 	if got := StoreHost(); got != "" {
 		t.Errorf("store host = %q, want empty", got)
+	}
+}
+
+// The store publishes a rendered tree per schema. This binary asks for the one
+// it understands and falls back to the unprefixed path, which is schema 1 and
+// what every binary up to 1.35.0 fetches, so a store that has not published the
+// newer schema yet still resolves.
+func TestServiceStoreBaseURLs_PrefersItsOwnSchema(t *testing.T) {
+	t.Setenv("LERD_SERVICES_BASE_URL", "")
+	got := ServiceStoreBaseURLs()
+	if len(got) != 2 {
+		t.Fatalf("expected the schema path and the legacy fallback, got %v", got)
+	}
+	want := fmt.Sprintf("/main/schema/%d/services", StoreSchema)
+	if !strings.HasSuffix(got[0], want) {
+		t.Errorf("first base should be the schema tree %q, got %q", want, got[0])
+	}
+	if !strings.HasSuffix(got[1], "/main/services") {
+		t.Errorf("fallback should be the legacy unprefixed path, got %q", got[1])
+	}
+}
+
+// An explicit override is taken as given: a mirror or a test server carries
+// whatever layout its owner published.
+func TestServiceStoreBaseURLs_OverrideWins(t *testing.T) {
+	t.Setenv("LERD_SERVICES_BASE_URL", "https://mirror.example/services")
+	got := ServiceStoreBaseURLs()
+	if len(got) != 1 || got[0] != "https://mirror.example/services" {
+		t.Errorf("override should be used verbatim, got %v", got)
 	}
 }

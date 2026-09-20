@@ -6,6 +6,7 @@
 package origin
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"strings"
@@ -39,13 +40,25 @@ func StoreHost() string {
 	return u.Hostname()
 }
 
-// ServiceStoreBaseURLs returns the service-preset-store base, nested under a
-// services/ subdir.
+// StoreSchema is the definition schema this binary reads. The store publishes a
+// rendered tree per schema, and the unprefixed path is schema 1: every binary up
+// to 1.35.0 computes that URL for itself and cannot be taught another, so it has
+// to keep meaning what those binaries expect. A newer schema lives under its own
+// prefix, which only a binary that knows the schema asks for.
+const StoreSchema = 2
+
+// ServiceStoreBaseURLs returns the service-preset-store bases, newest schema
+// first. The legacy unprefixed path follows as the fallback, so a binary running
+// against a store that has not published this schema yet still resolves.
 func ServiceStoreBaseURLs() []string {
 	if list := splitList(os.Getenv("LERD_SERVICES_BASE_URL")); len(list) > 0 {
 		return list
 	}
-	return []string{"https://raw.githubusercontent.com/" + servicesRepo + "/main/services"}
+	base := "https://raw.githubusercontent.com/" + servicesRepo + "/main"
+	return []string{
+		fmt.Sprintf("%s/schema/%d/services", base, StoreSchema),
+		base + "/services",
+	}
 }
 
 // ReleaseBaseURLs lists GitHub releases bases.
