@@ -6,33 +6,19 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
-func TestDeclaredFalse(t *testing.T) {
-	for _, v := range []string{"false", "FALSE", " false "} {
-		if !declaredFalse(v) {
-			t.Errorf("declaredFalse(%q) = false, want true", v)
-		}
-	}
-	// Empty and "auto" mean "detect", not "opt out".
-	for _, v := range []string{"", "auto", "true"} {
-		if declaredFalse(v) {
-			t.Errorf("declaredFalse(%q) = true, want false", v)
-		}
-	}
-}
-
 // A framework definition declaring `npm: false` (Magento, Drupal, WordPress)
 // must not have its JS steps offered, and the same for `composer: false`.
 func TestFrameworkOptOutGatesPackageManagers(t *testing.T) {
 	magento := &config.Framework{Composer: "auto", NPM: "false"}
-	if declaredFalse(magento.Composer) {
+	if !packageManagerEnabled(magento.Composer, "composer") {
 		t.Error("composer: auto should not be treated as opted out")
 	}
-	if !declaredFalse(magento.NPM) {
+	if packageManagerEnabled(magento.NPM, "npm") {
 		t.Error("npm: false should be treated as opted out")
 	}
 
 	wordpress := &config.Framework{Composer: "false", NPM: "false"}
-	if !declaredFalse(wordpress.Composer) || !declaredFalse(wordpress.NPM) {
+	if packageManagerEnabled(wordpress.Composer, "composer") || packageManagerEnabled(wordpress.NPM, "npm") {
 		t.Error("wordpress opts out of both")
 	}
 }
@@ -43,7 +29,7 @@ func TestFrameworkForSetupNeverNil(t *testing.T) {
 		t.Fatal("frameworkForSetup returned nil")
 	}
 	// Reading fields on the zero value must not panic.
-	if declaredFalse(fw.NPM) || declaredFalse(fw.Composer) {
+	if !packageManagerEnabled(fw.NPM, "npm") || !packageManagerEnabled(fw.Composer, "composer") {
 		t.Error("zero framework should not opt out of anything")
 	}
 }
@@ -98,5 +84,23 @@ func TestFrameworkMapsService(t *testing.T) {
 	}
 	if frameworkMapsService(&config.Framework{}, "mysql") {
 		t.Error("framework with no env section maps nothing")
+	}
+}
+
+// A package-manager state added to the store after this binary shipped must not
+// be read as "yes" just because it is not the literal string "false". Unknown
+// states fall back to auto-detection and say so, rather than silently running
+// composer install against a definition that asked for something else.
+func TestPackageManagerState_UnknownIsNotSilentlyEnabled(t *testing.T) {
+	for _, v := range []string{"", "auto", "true"} {
+		if state := packageManagerState(v); state != pkgManagerAuto {
+			t.Errorf("packageManagerState(%q) = %v, want auto", v, state)
+		}
+	}
+	if state := packageManagerState("false"); state != pkgManagerOff {
+		t.Errorf("packageManagerState(\"false\") = %v, want off", state)
+	}
+	if state := packageManagerState("prompt"); state != pkgManagerUnknown {
+		t.Errorf("packageManagerState(\"prompt\") = %v, want unknown", state)
 	}
 }

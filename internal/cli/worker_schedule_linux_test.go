@@ -94,3 +94,48 @@ func TestWriteWorkerUnitFile_DaemonRemovesStaleTimer(t *testing.T) {
 		t.Errorf("daemon worker service missing Restart=always:\n%s", svc)
 	}
 }
+
+// A schedule expression this host's systemd cannot parse makes the .timer unit
+// refuse to load outright, so the scheduled worker silently stops existing.
+// Refuse to write it, and leave no half-built pair behind.
+func TestWriteWorkerUnitFile_UnparseableScheduleRefuses(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	orig := calendarValidFn
+	calendarValidFn = func(string) bool { return false }
+	defer func() { calendarValidFn = orig }()
+
+	_, err := writeWorkerUnitFile(
+		"lerd-schedule-mysite", "Task Scheduler", "mysite",
+		"/srv/mysite", "8.3", "php artisan schedule:run",
+		"always", "every-other-tuesday", "lerd-php83-fpm", "", false,
+	)
+	if err == nil {
+		t.Fatal("expected an unparseable schedule to be refused")
+	}
+	if !strings.Contains(err.Error(), "every-other-tuesday") {
+		t.Errorf("error should name the offending expression, got %q", err)
+	}
+	systemdDir := filepath.Join(tmp, "systemd", "user")
+	if _, statErr := os.Stat(filepath.Join(systemdDir, "lerd-schedule-mysite.timer")); statErr == nil {
+		t.Error("a refused schedule must not leave a timer unit behind")
+	}
+	if _, statErr := os.Stat(filepath.Join(systemdDir, "lerd-schedule-mysite.service")); statErr == nil {
+		t.Error("a refused schedule must not leave a service unit behind")
+	}
+}
+
+// The real validator answers for this host's systemd, which is the version-skew
+// question worth asking. Skipped where systemd-analyze is not installed.
+func TestCalendarValid_UsesHostSystemd(t *testing.T) {
+	if !systemdAnalyzeAvailable() {
+		t.Skip("systemd-analyze not installed")
+	}
+	if !calendarValid("minutely") {
+		t.Error("minutely should be accepted by systemd-analyze")
+	}
+	if calendarValid("every-other-tuesday") {
+		t.Error("every-other-tuesday should be rejected by systemd-analyze")
+	}
+}

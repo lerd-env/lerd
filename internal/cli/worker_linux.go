@@ -5,6 +5,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -59,6 +60,9 @@ func writeWorkerUnitFile(unitName, label, siteName, sitePath, phpVersion, comman
 	container := fpmUnit
 
 	if schedule != "" {
+		if !calendarValidFn(schedule) {
+			return false, fmt.Errorf("worker unit %q: schedule %q is not a calendar expression this host's systemd can parse; update lerd or systemd to use this framework definition", unitName, schedule)
+		}
 		serviceUnit := fmt.Sprintf(`[Unit]
 Description=Lerd %s (%s)
 After=network.target %s.service
@@ -259,4 +263,24 @@ func restoreWorker(siteName, sitePath, phpVersion, workerName string, w config.F
 			feedback.Warn("enable %s: %v", enableTarget, err)
 		}
 	}
+}
+
+// calendarValidFn answers whether this host's systemd can parse an OnCalendar
+// expression; a seam so tests need no systemd. A timer whose calendar fails to
+// parse is refused by systemd outright rather than ignored ("Timer unit lacks
+// value setting"), so the scheduled worker silently stops existing. The store
+// reaches binaries older than the definition that shipped, which makes this
+// host's systemd the only version worth asking.
+var calendarValidFn = calendarValid
+
+func calendarValid(expr string) bool {
+	if !systemdAnalyzeAvailable() {
+		return true
+	}
+	return exec.Command("systemd-analyze", "calendar", expr).Run() == nil
+}
+
+func systemdAnalyzeAvailable() bool {
+	_, err := exec.LookPath("systemd-analyze")
+	return err == nil
 }

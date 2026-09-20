@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -33,7 +34,23 @@ func validateWorkerUnitFields(unitName string, fields map[string]string) error {
 			return fmt.Errorf("worker unit %q: %s must not contain newline or NUL", unitName, name)
 		}
 	}
-	return nil
+	return validateRestartPolicy(unitName, fields["restart"])
+}
+
+// knownRestartPolicies are the systemd Restart= values lerd writes. systemd
+// ignores a value it cannot parse and falls back to Restart=no, so a policy
+// added to the store after this binary shipped would produce a worker that
+// starts once and never returns from its first crash. Refuse it instead, the
+// way an unknown env format is refused rather than written.
+var knownRestartPolicies = []string{
+	"no", "always", "on-success", "on-failure", "on-abnormal", "on-abort", "on-watchdog",
+}
+
+func validateRestartPolicy(unitName, restart string) error {
+	if restart == "" || slices.Contains(knownRestartPolicies, restart) {
+		return nil
+	}
+	return fmt.Errorf("worker unit %q: restart policy %q is not one this version of lerd can write; update lerd to use this framework definition", unitName, restart)
 }
 
 // workerStartPreflight gates a WorkerStartForSite call on the framework's
