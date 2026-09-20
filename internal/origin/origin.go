@@ -47,18 +47,29 @@ func StoreHost() string {
 // prefix, which only a binary that knows the schema asks for.
 const StoreSchema = 2
 
+// schemaBases lists a store's trees from the given schema down to the
+// unprefixed path, which is schema 1 and has no prefix of its own.
+//
+// Every tree in between is named, not just the ends. A definition a schema
+// introduced lives in that schema's tree alone and is deliberately absent from
+// the ones below, so a binary that jumped straight from its own schema to the
+// unprefixed path would 404 twice over a preset it is perfectly able to run.
+func schemaBases(base string, schema int, leaf string) []string {
+	out := make([]string, 0, schema)
+	for v := schema; v > 1; v-- {
+		out = append(out, fmt.Sprintf("%s/schema/%d/%s", base, v, leaf))
+	}
+	return append(out, base+"/"+leaf)
+}
+
 // ServiceStoreBaseURLs returns the service-preset-store bases, newest schema
-// first. The legacy unprefixed path follows as the fallback, so a binary running
-// against a store that has not published this schema yet still resolves.
+// first, down to the legacy unprefixed path. A binary running against a store
+// that has not published its schema yet resolves through the ones below.
 func ServiceStoreBaseURLs() []string {
 	if list := splitList(os.Getenv("LERD_SERVICES_BASE_URL")); len(list) > 0 {
 		return list
 	}
-	base := "https://raw.githubusercontent.com/" + servicesRepo + "/main"
-	return []string{
-		fmt.Sprintf("%s/schema/%d/services", base, StoreSchema),
-		base + "/services",
-	}
+	return schemaBases("https://raw.githubusercontent.com/"+servicesRepo+"/main", StoreSchema, "services")
 }
 
 // ReleaseBaseURLs lists GitHub releases bases.

@@ -48,7 +48,7 @@ func DashboardProxyPath(name string) string {
 // the dashboard still opens at its own root leaves the app answering nowhere the
 // UI looks.
 func DashboardProxied(svc *CustomService) bool {
-	if svc == nil || svc.Dashboard == "" || svc.Preset == "" {
+	if svc == nil || svc.Preset == "" || ServiceDashboard(svc) == "" {
 		return false
 	}
 	p, err := LoadPreset(svc.Preset)
@@ -59,7 +59,7 @@ func DashboardProxied(svc *CustomService) bool {
 // stripping the mount prefix rather than forwarding it. Read from the preset,
 // like DashboardProxied, so a store change reaches installs that never reinstall.
 func DashboardProxyStrips(svc *CustomService) bool {
-	if svc == nil || svc.Dashboard == "" || svc.Preset == "" {
+	if svc == nil || svc.Preset == "" || ServiceDashboard(svc) == "" {
 		return false
 	}
 	p, err := LoadPreset(svc.Preset)
@@ -70,7 +70,7 @@ func DashboardProxyStrips(svc *CustomService) bool {
 // the proxy rewrites onto the mount for this service. Read from the preset, like
 // the flags above.
 func DashboardProxyRebases(svc *CustomService) []string {
-	if svc == nil || svc.Dashboard == "" || svc.Preset == "" {
+	if svc == nil || svc.Preset == "" || ServiceDashboard(svc) == "" {
 		return nil
 	}
 	p, err := LoadPreset(svc.Preset)
@@ -83,7 +83,7 @@ func DashboardProxyRebases(svc *CustomService) []string {
 // DashboardProxyReroutes reports whether the page's own requests are funnelled
 // back into the mount. Read from the preset, like the flags above.
 func DashboardProxyReroutes(svc *CustomService) bool {
-	if svc == nil || svc.Dashboard == "" || svc.Preset == "" {
+	if svc == nil || svc.Preset == "" || ServiceDashboard(svc) == "" {
 		return false
 	}
 	p, err := LoadPreset(svc.Preset)
@@ -93,7 +93,7 @@ func DashboardProxyReroutes(svc *CustomService) bool {
 // DashboardProxyAtOwnPath reports whether this dashboard is served at the path
 // its own build expects rather than at the /_svc/<name>/ mount.
 func DashboardProxyAtOwnPath(svc *CustomService) bool {
-	if svc == nil || svc.Dashboard == "" || svc.Preset == "" {
+	if svc == nil || svc.Preset == "" || ServiceDashboard(svc) == "" {
 		return false
 	}
 	p, err := LoadPreset(svc.Preset)
@@ -103,7 +103,7 @@ func DashboardProxyAtOwnPath(svc *CustomService) bool {
 // DashboardProxyKeepsHost reports whether the browser's Host is forwarded as it
 // arrived. A signed API needs it, the signature covering that header.
 func DashboardProxyKeepsHost(svc *CustomService) bool {
-	if svc == nil || svc.Dashboard == "" || svc.Preset == "" {
+	if svc == nil || svc.Preset == "" || ServiceDashboard(svc) == "" {
 		return false
 	}
 	p, err := LoadPreset(svc.Preset)
@@ -113,7 +113,7 @@ func DashboardProxyKeepsHost(svc *CustomService) bool {
 // DashboardFollowsColorScheme reports whether the embedded page should be told
 // which colour scheme it is in rather than left to ask the browser.
 func DashboardFollowsColorScheme(svc *CustomService) bool {
-	if svc == nil || svc.Dashboard == "" || svc.Preset == "" {
+	if svc == nil || svc.Preset == "" || ServiceDashboard(svc) == "" {
 		return false
 	}
 	p, err := LoadPreset(svc.Preset)
@@ -123,7 +123,7 @@ func DashboardFollowsColorScheme(svc *CustomService) bool {
 // DashboardSchemeKey is where the dashboard remembers a colour scheme it was
 // given, for lerd to clear so the answer it gives is the one the app reads.
 func DashboardSchemeKey(svc *CustomService) string {
-	if svc == nil || svc.Dashboard == "" || svc.Preset == "" {
+	if svc == nil || svc.Preset == "" || ServiceDashboard(svc) == "" {
 		return ""
 	}
 	p, err := LoadPreset(svc.Preset)
@@ -144,7 +144,7 @@ func DashboardMountPath(svc *CustomService) string {
 	if !DashboardProxyAtOwnPath(svc) {
 		return DashboardProxyPath(svc.Name)
 	}
-	u, err := url.Parse(svc.Dashboard)
+	u, err := url.Parse(ServiceDashboard(svc))
 	if err != nil || u.Path == "" || u.Path == "/" {
 		return DashboardProxyPath(svc.Name)
 	}
