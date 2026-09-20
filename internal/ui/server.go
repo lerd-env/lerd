@@ -1539,7 +1539,9 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 	case custom != nil:
 		envKVs = custom.EnvVars
 		presetPorts = custom.Ports
-		dashboardRaw = custom.Dashboard
+		// Resolved rather than read straight off the record: a service installed
+		// before its preset carried a dashboard has none of its own.
+		dashboardRaw = config.ServiceDashboard(custom)
 		dashExternal = custom.DashboardExternal
 		connURL = custom.ConnectionURL
 		dependsOn = custom.DependsOn
