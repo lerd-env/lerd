@@ -53,6 +53,18 @@ function job(id: string, status: string, worker = ''): DumpEvent {
   };
 }
 
+function log(id: string, level: string): DumpEvent {
+  return {
+    v: 1,
+    id,
+    ts: '2026-07-21T10:00:0' + id.slice(-1) + '.000Z',
+    kind: 'log',
+    ctx: { type: 'fpm', site: 'acme', rid: id },
+    src: { file: '/app/Http/Controllers/X.php', line: 30 },
+    data: { level, channel: 'app', message: 'the gateway refused' }
+  };
+}
+
 describe('buildKindGroups', () => {
   it('keeps a worker\'s jobs on screen with worker capture off', () => {
     const events = [job('1', 'processed', 'queue:work'), job('2', 'failed', 'queue:work')];
@@ -69,5 +81,12 @@ describe('buildKindGroups', () => {
     const groups = buildKindGroups(events, 'job', '', '', false, '', true, 'failed');
     expect(groups).toHaveLength(1);
     expect(groups[0].events[0].id).toBe('5');
+  });
+
+  it('narrows to one log level with the same filter', () => {
+    const events = [log('6', 'debug'), log('7', 'error')];
+    const groups = buildKindGroups(events, 'log', '', '', false, '', true, 'error');
+    expect(groups).toHaveLength(1);
+    expect(groups[0].events[0].id).toBe('7');
   });
 });

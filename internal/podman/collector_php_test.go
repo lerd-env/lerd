@@ -674,3 +674,89 @@ namespace {
 		t.Errorf("table text = %q, want the dump the markup was drawing", e.Text)
 	}
 }
+
+// TestCollectorPHP_LogRecordsLandAsLogs checks a store-declared log capture
+// turns a write to a logger into a log event: the channel from the logger, the
+// level named whichever scale it arrived on, and the context rendered the way a
+// dump is.
+func TestCollectorPHP_LogRecordsLandAsLogs(t *testing.T) {
+	dir := t.TempDir()
+	seams := "# header\n" +
+		"log|class|Fixture\\Log\\Logger|addRecord|\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
+		t.Fatalf("write seams: %v", err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace Fixture\Log {
+    class Logger {
+        private $name;
+        public function __construct($name) { $this->name = $name; }
+        public function getName() { return $this->name; }
+        public function addRecord($level, $message, array $context = []) {}
+    }
+    // Monolog 3 hands its own enum, which names itself.
+    class Level { public $name = 'Error'; public function getName() { return $this->name; } }
+}
+namespace {
+    require COLLECTOR;
+    $log = new \Fixture\Log\Logger('app');
+
+    \Lerd\Collector\seam_begin('Fixture\\Log\\Logger', 'addRecord', $log, [1 => 400, 2 => 'the gateway refused', 3 => ['order' => 42]]);
+    \Lerd\Collector\seam_end('Fixture\\Log\\Logger', 'addRecord', false);
+
+    \Lerd\Collector\seam_begin('Fixture\\Log\\Logger', 'addRecord', $log, [1 => new \Fixture\Log\Level(), 2 => 'an enum level']);
+    \Lerd\Collector\seam_end('Fixture\\Log\\Logger', 'addRecord', false);
+
+    // An RFC 5424 severity, which either Monolog major accepts.
+    \Lerd\Collector\seam_begin('Fixture\\Log\\Logger', 'addRecord', $log, [1 => 7, 2 => 'a debug line']);
+    \Lerd\Collector\seam_end('Fixture\\Log\\Logger', 'addRecord', false);
+
+    // Nothing to report without a message.
+    \Lerd\Collector\seam_begin('Fixture\\Log\\Logger', 'addRecord', $log, [1 => 400]);
+    \Lerd\Collector\seam_end('Fixture\\Log\\Logger', 'addRecord', false);
+}
+`)
+
+	type ev struct {
+		Kind string `json:"kind"`
+		Data struct {
+			Level   string `json:"level"`
+			Channel string `json:"channel"`
+			Message string `json:"message"`
+			Context string `json:"context"`
+		} `json:"data"`
+	}
+	var events []ev
+	for _, line := range got {
+		var e ev
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			t.Fatalf("bad JSON line %q: %v", line, err)
+		}
+		events = append(events, e)
+	}
+	if len(events) != 3 {
+		t.Fatalf("got %d events, want one per record with a message: %v", len(events), got)
+	}
+	for _, e := range events {
+		if e.Kind != "log" {
+			t.Errorf("kind = %q, want log", e.Kind)
+		}
+		if e.Data.Channel != "app" {
+			t.Errorf("channel = %q, want the logger's own name", e.Data.Channel)
+		}
+	}
+	if events[0].Data.Level != "error" || events[0].Data.Message != "the gateway refused" {
+		t.Errorf("first record = %q/%q, want error and its message", events[0].Data.Level, events[0].Data.Message)
+	}
+	// Rendered by the cloner where the project has it and by print_r where it
+	// does not, so the assertion is on the values rather than on the shape.
+	if !strings.Contains(events[0].Data.Context, "order") || !strings.Contains(events[0].Data.Context, "42") {
+		t.Errorf("context = %q, want the attached values rendered", events[0].Data.Context)
+	}
+	if events[1].Data.Level != "error" {
+		t.Errorf("enum level = %q, want error", events[1].Data.Level)
+	}
+	if events[2].Data.Level != "debug" {
+		t.Errorf("RFC severity = %q, want debug", events[2].Data.Level)
+	}
+}

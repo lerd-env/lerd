@@ -11,11 +11,22 @@ export type DebugLens =
   | 'mail'
   | 'cache'
   | 'events'
-  | 'http';
+  | 'http'
+  | 'logs';
 
 const KEY = 'lerd:debugLens';
 
-const VALID: DebugLens[] = ['dumps', 'queries', 'jobs', 'views', 'mail', 'cache', 'events', 'http'];
+const VALID: DebugLens[] = [
+  'dumps',
+  'queries',
+  'jobs',
+  'views',
+  'mail',
+  'cache',
+  'events',
+  'http',
+  'logs'
+];
 
 function initial(): DebugLens {
   if (typeof localStorage === 'undefined') return 'dumps';

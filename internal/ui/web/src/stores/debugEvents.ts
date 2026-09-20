@@ -18,6 +18,7 @@ export interface DebugGroup {
 
 // buildKindGroups filters the shared event stream to one kind and groups it by
 // request, newest-first. Search matches the event's data payload and worker.
+// facet is the one value a kind narrows on: a job's status, a log's level.
 export function buildKindGroups(
   events: DumpEvent[],
   kind: string,
@@ -26,7 +27,7 @@ export function buildKindGroups(
   hideSitePrefix = false,
   worker = '',
   showWorkers = true,
-  status = ''
+  facet = ''
 ): DebugGroup[] {
   const needle = text ? text.toLowerCase() : '';
   const groups = new Map<string, DebugGroup>();
@@ -39,7 +40,7 @@ export function buildKindGroups(
     // the only feedback a queue being drained gives.
     if (!showWorkers && kind !== 'job' && ev.ctx.worker) continue;
     if (worker && ev.ctx.worker !== worker) continue;
-    if (status && (ev.data as { status?: string } | undefined)?.status !== status) continue;
+    if (facet && facetOf(ev) !== facet) continue;
     if (needle && !kindHaystack(ev).includes(needle)) continue;
     const key = groupKey(ev);
     let g = groups.get(key);
@@ -53,6 +54,13 @@ export function buildKindGroups(
   const out = Array.from(groups.values()).sort((a, b) => b.ts.localeCompare(a.ts));
   for (const g of out) g.events.reverse();
   return out;
+}
+
+// facetOf is the value a kind is narrowed by. A job carries a status and a log
+// a level; no kind carries both, so one accessor serves the filter.
+function facetOf(ev: DumpEvent): string {
+  const d = ev.data as { status?: string; level?: string } | undefined;
+  return d?.status ?? d?.level ?? '';
 }
 
 // countKinds tallies buffered events per wire-kind (optionally scoped to a
