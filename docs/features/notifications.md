@@ -48,6 +48,8 @@ In native mode, clicking a notification opens the [Lerd desktop app](https://ler
 | `update_available` | Something installed has fallen behind: a newer image tag for a service, a republished PHP base image, or a host tool (Composer, fnm, mkcert) whose pin has moved. One notification per item, when it first goes stale | on | low |
 | `dump` | A `ray()` / `dump()` / var-dump packet arrives | **off** | low |
 
+A desktop notification is held back while a dashboard window has focus, since that window is already showing whatever the notification would say; the event still rides the websocket, so the bell and the notification centre have it either way. Focus is a lease each window renews every ten seconds and the server forgets after twenty five, not a flag a window sets once: a page that is closed, suspended, navigated away from or reconnecting after a restart stops holding notifications back within seconds of going quiet, rather than keeping them silenced until its socket is reaped. Messages are the exception and reach the desktop regardless, because what they announce has already left the machine.
+
 The diagnostic categories (`nplusone`, `slow_route`) report a problem lerd found in your app rather than an action that completed, so the toast and the notification centre draw them as amber warnings, between the blue informational entries and the red failures.
 
 Clicking a debug notification (`dump`, `job_failed`, `nplusone`, `slow_route`) opens the originating site's **Debug** tab, where the event and its surrounding context are. The site is resolved from the event's site name, or from the request domain when the bridge never saw one; if neither resolves, the click lands on the sites list rather than the global debug bridge view.

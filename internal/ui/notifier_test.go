@@ -141,11 +141,11 @@ func TestDispatchNotification_MessageReachesTheDesktopWhileFocused(t *testing.T)
 		return 0, nil
 	}
 	desktopSupported = func() bool { return true }
-	focusedClients.Store(1)
+	noteFocus(1, true)
 	t.Cleanup(func() {
 		emitDesktopNotification = prev
 		desktopSupported = prevSupported
-		focusedClients.Store(0)
+		dropFocus(1)
 	})
 
 	dispatchNotification(push.Notification{Kind: "mail", Title: "New email"})
