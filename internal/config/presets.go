@@ -68,6 +68,10 @@ type DashboardLogin struct {
 	Fields map[string]string `yaml:"fields" json:"fields"`
 	Submit string            `yaml:"submit" json:"submit"`
 	Done   string            `yaml:"done" json:"done"`
+	// Expires names the field inside the stored value holding the moment it
+	// stops being a session. Without it a login that expires leaves its key
+	// behind, and lerd reads that key as still being in.
+	Expires string `yaml:"expires" json:"expires"`
 }
 
 type Preset struct {
