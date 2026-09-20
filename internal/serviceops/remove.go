@@ -34,6 +34,12 @@ type RemoveOptions struct {
 	// its own.
 	SnapshotLabel string
 
+	// KeepStorePreset leaves the cached store preset in place. Set by
+	// ReinstallService, which is about to install from that very definition:
+	// pruned, the install step finds nothing local and refetches, and a preset
+	// the store does not serve right now leaves the user with no service at all.
+	KeepStorePreset bool
+
 	// SkipFamilyRegen suppresses the post-remove RegenerateFamilyConsumers
 	// pass. Set by ReinstallService, which then drives the regen itself
 	// after install: InstallPresetByName regenerates internally for custom
@@ -190,7 +196,7 @@ func RemoveService(name string, opts RemoveOptions, emit func(PhaseEvent)) error
 	// so a removed add-on reverts from "local" back to "store" and a reinstall
 	// fetches a fresh definition. Never touches embedded presets. Best-effort: a
 	// leftover cache file is harmless, so a failure here doesn't fail the removal.
-	if preset != "" && !presetStillReferenced(preset) {
+	if preset != "" && !opts.KeepStorePreset && !presetStillReferenced(preset) {
 		_ = config.RemoveStorePreset(preset)
 	}
 

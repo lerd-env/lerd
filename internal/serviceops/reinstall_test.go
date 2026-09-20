@@ -159,3 +159,23 @@ func TestReinstallService_EmitsReinstallStartingPhase(t *testing.T) {
 		t.Errorf("expected first phase reinstall_starting, got %v", events)
 	}
 }
+
+// The install step reinstalls from the cached store preset, so the remove step
+// must not prune it. Without this a reinstall of a service whose preset the
+// store is not serving right now removes the service and then fails, leaving
+// the user with neither.
+func TestReinstallRemoveOptions_KeepsTheCachedPreset(t *testing.T) {
+	got := reinstallRemoveOptions(ReinstallOptions{})
+	if !got.KeepStorePreset {
+		t.Error("the reinstall's remove must keep the cached store preset")
+	}
+	if !got.SkipFamilyRegen {
+		t.Error("the reinstall drives family regen itself after the install")
+	}
+	if got.SnapshotLabel != reinstallSnapshotLabel {
+		t.Errorf("snapshot label = %q, want the reinstall's own", got.SnapshotLabel)
+	}
+	if reinstallRemoveOptions(ReinstallOptions{ResetData: true}).RemoveData != true {
+		t.Error("ResetData must reach the remove as RemoveData")
+	}
+}
