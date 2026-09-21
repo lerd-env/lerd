@@ -31,16 +31,20 @@ func TestProtectedPathCheck(t *testing.T) {
 		t.Error("only macOS guards these folders; Linux must stay quiet")
 	}
 	// nvm runs as a shell function inside the terminal the user already granted,
-	// so it never asks on its own and there is nothing to tell them.
+	// so it never asks on its own and there is nothing to tell them. The same
+	// goes for mise, which the grant survives.
 	if _, ok := protectedPathCheck("darwin", under, home, "nvm"); ok {
 		t.Error("nvm sidesteps the prompt, so the check must not fire for it")
+	}
+	if _, ok := protectedPathCheck("darwin", under, home, "mise"); ok {
+		t.Error("mise keeps the grant across an update, so there is nothing to warn about")
 	}
 
 	c, _ := protectedPathCheck("darwin", under, home, "fnm")
 	if c.Status != StatusWarn {
 		t.Errorf("status = %q, want a warning: the site works, it just keeps asking", c.Status)
 	}
-	if !strings.Contains(c.Detail, "node:manager nvm") {
+	if !strings.Contains(c.Detail, "node:manager mise") {
 		t.Errorf("detail = %q, want the way out named", c.Detail)
 	}
 }

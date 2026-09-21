@@ -15,12 +15,13 @@ import (
 var guardedHomeFolders = []string{"Documents", "Desktop", "Downloads"}
 
 // protectedPathCheck warns when a macOS project sits in a folder the system
-// guards and lerd drives the bundled fnm. Tooling run for the site reads the
+// guards and lerd is still driving fnm. Tooling run for the site reads the
 // project, macOS attributes that to fnm rather than to lerd, and the grant it
-// remembers is keyed to that binary's signing identity. fnm ships without a
-// stable one, so the next pinned version is a stranger to the system and the
-// same folder is asked for again (#1906). Split from the caller and given its
-// platform so it is testable off a Mac.
+// remembers is keyed to that binary's signing identity. fnm ships unsigned, so
+// the next pinned version is a stranger to the system and the same folder is
+// asked for again (#1906). mise is signed under a Developer ID that survives an
+// update, which is the way out the warning names. Split from the caller and
+// given its platform so it is testable off a Mac.
 func protectedPathCheck(goos, path, home, manager string) (Check, bool) {
 	if goos != "darwin" || manager != "fnm" || home == "" {
 		return Check{}, false
@@ -39,7 +40,7 @@ func protectedPathCheck(goos, path, home, manager string) (Check, bool) {
 			Name:   "macos_protected_path",
 			Label:  "macOS folder access",
 			Status: StatusWarn,
-			Detail: fmt.Sprintf("This project is in %s, which macOS guards, so fnm asks for access to it and asks again after every fnm version bump. Run 'lerd node:manager nvm' to let your own nvm take over, or keep the project outside %s.",
+			Detail: fmt.Sprintf("This project is in %s, which macOS guards, so fnm asks for access to it and asks again after every fnm version bump, losing the answer you gave. Run 'lerd node:manager mise' to switch to a signed manager the grant survives, or keep the project outside %s.",
 				folder, strings.Join(guardedHomeFolders, ", ")),
 		}, true
 	}
