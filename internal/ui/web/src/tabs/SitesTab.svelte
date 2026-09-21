@@ -493,7 +493,7 @@
           <button
             type="button"
             onclick={submitNewWorkspace}
-            class="px-2 py-1 text-xs font-medium rounded-md bg-lerd-red hover:bg-lerd-redhov text-white">{m.common_add()}</button
+            class="px-2 py-1 text-xs font-medium rounded-md bg-lerd-red hover:bg-lerd-redhov text-lerd-onred">{m.common_add()}</button
           >
         </div>
       </div>

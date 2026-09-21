@@ -71,7 +71,7 @@
       type="button"
       disabled={busy || !clean || !valid}
       onclick={() => onsubmit(clean)}
-      class="{btn} bg-lerd-red hover:bg-lerd-redhov text-white">{m.common_save()}</button
+      class="{btn} bg-lerd-red hover:bg-lerd-redhov text-lerd-onred">{m.common_save()}</button
     >
   {/snippet}
 </Modal>

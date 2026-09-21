@@ -39,7 +39,7 @@
       <Icon name="bell" class="w-5 h-5" />
       {#if $unreadNotifications > 0}
         <span
-          class="absolute -top-1 -right-1 min-w-3.5 h-3.5 px-0.5 rounded-full bg-lerd-red text-white text-[9px] font-semibold flex items-center justify-center"
+          class="absolute -top-1 -right-1 min-w-3.5 h-3.5 px-0.5 rounded-full bg-lerd-red text-lerd-onred text-[9px] font-semibold flex items-center justify-center"
         >{$unreadNotifications > 9 ? '9+' : $unreadNotifications}</span>
       {/if}
     </span>

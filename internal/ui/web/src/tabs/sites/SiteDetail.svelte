@@ -144,7 +144,7 @@
           type="button"
           onclick={onResume}
           disabled={resumeBusy}
-          class="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-lerd-red hover:bg-lerd-redhov text-white disabled:opacity-50 transition-colors"
+          class="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-lerd-red hover:bg-lerd-redhov text-lerd-onred disabled:opacity-50 transition-colors"
         >
           {resumeBusy ? m.sites_pausedDetail_busy() : m.sites_pausedDetail_action()}
         </button>

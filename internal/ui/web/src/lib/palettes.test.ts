@@ -4,6 +4,7 @@ import {
   BUILTIN_PALETTES,
   DEFAULT_PALETTE_ID,
   asDesktopStandIn,
+  onAccent,
   paletteById,
   paletteVars,
   resolvePalette
@@ -160,5 +161,25 @@ describe('asDesktopStandIn', () => {
   it('leaves a file alone, whatever it is called', () => {
     const f = asDesktopStandIn({ id: 'plasma', name: 'My Plasma', accent: '#112233' });
     expect(f.id).toBe('plasma');
+  });
+});
+
+describe('onAccent', () => {
+  it('writes white on a dark accent', () => {
+    expect(onAccent(BUILTIN_PALETTES[0].accent)).toBe('#ffffff');
+    expect(onAccent('#1c71d8')).toBe('#ffffff');
+    expect(onAccent('#e93a9a')).toBe('#ffffff');
+  });
+
+  // Where the desktop themes land: a bright accent with white on it is pale
+  // text on a pale fill.
+  it('writes near black on a bright accent', () => {
+    expect(onAccent('#3dd425')).toBe('#0d0d0d');
+    expect(onAccent('#c88800')).toBe('#0d0d0d');
+    expect(onAccent('#3daee9')).toBe('#0d0d0d');
+  });
+
+  it('falls back to white for anything that is not a colour', () => {
+    expect(onAccent('rebeccapurple')).toBe('#ffffff');
   });
 });

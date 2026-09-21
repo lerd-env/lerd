@@ -51,7 +51,7 @@
       {#if $accessMode.localControl}
         <button
           onclick={openPresetModal}
-          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-lerd-red hover:bg-lerd-redhov text-white transition-colors"
+          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-lerd-red hover:bg-lerd-redhov text-lerd-onred transition-colors"
         >
           <Icon name="plus" class="w-3.5 h-3.5" />
           {m.dashboard_services_add()}

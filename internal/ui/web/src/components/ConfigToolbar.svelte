@@ -107,7 +107,7 @@
         <button
           type="button"
           onclick={onSave}
-          class="text-xs px-3 py-1 rounded-sm bg-lerd-red hover:bg-lerd-redhov text-white transition-colors"
+          class="text-xs px-3 py-1 rounded-sm bg-lerd-red hover:bg-lerd-redhov text-lerd-onred transition-colors"
         >
           {m.common_save()}
         </button>

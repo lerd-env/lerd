@@ -377,7 +377,7 @@
           type="button"
           onclick={save}
           disabled={!dirty || loading}
-          class="text-xs px-3 py-1 rounded-sm bg-lerd-red hover:bg-lerd-redhov text-white disabled:opacity-40 transition-colors"
+          class="text-xs px-3 py-1 rounded-sm bg-lerd-red hover:bg-lerd-redhov text-lerd-onred disabled:opacity-40 transition-colors"
         >
           {m.common_save()}
         </button>

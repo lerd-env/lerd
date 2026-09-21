@@ -93,7 +93,7 @@
       type="button"
       onclick={confirm}
       disabled={!canConfirm}
-      class="text-xs px-3 py-1.5 rounded-sm {resetData ? 'bg-lerd-red hover:bg-lerd-redhov' : 'bg-lerd-red/80 hover:bg-lerd-red'} text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      class="text-xs px-3 py-1.5 rounded-sm {resetData ? 'bg-lerd-red hover:bg-lerd-redhov' : 'bg-lerd-red/80 hover:bg-lerd-red'} text-lerd-onred transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
     >{submitting ? m.services_reinstall_submitting() : resetData ? m.services_reinstall_withReset() : m.services_reinstall_action()}</button>
   {/snippet}
 </Modal>

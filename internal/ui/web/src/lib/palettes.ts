@@ -9,7 +9,7 @@
 // or white, the dark accent is the light one lifted until it reads on the dark
 // card, and the surfaces fall back to the built-in ones.
 
-import { brandTint, mix, parseHex, toHex } from './brandTint';
+import { brandTint, luminance, mix, parseHex, toHex } from './brandTint';
 
 export interface Palette {
   id: string;
@@ -248,6 +248,42 @@ export function asDesktopStandIn(file: PaletteFile): PaletteFile {
   };
 }
 
+// onAccent is the label a filled accent button carries. White is right for the
+// brand red and wrong for a bright green or a yellow, so it is measured against
+// the accent in use rather than assumed: white stays while it reads at least as
+// well as it does on lerd's own red, the palest fill the dashboard has ever put
+// white on. Anything paler takes the dark label instead.
+const whiteContrast = (rgb: [number, number, number]) => 1.05 / (luminance(rgb) + 0.05);
+const ON_ACCENT_FLOOR = whiteContrast(parseHex(DEFAULT_PALETTE.accent)!);
+
+export function onAccent(accent: string): string {
+  const rgb = parseHex(accent);
+  if (!rgb) return '#ffffff';
+  return whiteContrast(rgb) >= ON_ACCENT_FLOOR ? '#ffffff' : '#0d0d0d';
+}
+
+// resolvePalette fills a theme file out into the full set of tones, or returns
+// null when the accent is not a plain hex. The daemon already refuses anything
+// else; this is the second gate, right before the value becomes CSS.
+export function resolvePalette(file: PaletteFile): Palette | null {
+  const accent = hex(file.accent);
+  if (!accent || !file.id || !file.name) return null;
+  const accentDark = hex(file.accent_dark) || brandTint(accent)!.dark;
+  return {
+    id: file.id,
+    name: file.name,
+    accent,
+    accentHover: hex(file.accent_hover) || step(accent, 0),
+    accentDark,
+    accentHoverDark: hex(file.accent_hover_dark) || step(accentDark, 255),
+    bg: hex(file.bg) || DEFAULT_PALETTE.bg,
+    card: hex(file.card) || DEFAULT_PALETTE.card,
+    border: hex(file.border) || DEFAULT_PALETTE.border,
+    muted: hex(file.muted) || DEFAULT_PALETTE.muted,
+    source: file.source === 'desktop' ? 'desktop' : 'user'
+  };
+}
+
 // paletteById returns the named theme, falling back to the default one. A theme
 // whose file the user deleted leaves its id behind in localStorage, and the
 // dashboard has to keep drawing.
@@ -258,8 +294,10 @@ export function paletteById(palettes: Palette[], id: string): Palette {
 // paletteVars maps a theme onto the custom properties app.css declares, picking
 // the tone that reads on the surface the current mode paints.
 export function paletteVars(palette: Palette, dark: boolean): Record<string, string> {
+  const accent = dark ? palette.accentDark : palette.accent;
   return {
-    '--lerd-accent': dark ? palette.accentDark : palette.accent,
+    '--lerd-accent': accent,
+    '--lerd-on-accent': onAccent(accent),
     '--lerd-accent-hover': dark ? palette.accentHoverDark : palette.accentHover,
     '--lerd-bg': palette.bg,
     '--lerd-card': palette.card,
