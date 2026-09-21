@@ -147,7 +147,8 @@ member of a family defaults to the family's canonical host port (`3306` for
 mysql/mariadb, `5432` for postgres). The first service to claim the port keeps
 it; when you install a second same-family service, the port-ownership guard
 shifts it once to the next free port and records that choice, so it stays put
-afterwards. A single database of any family therefore lands on the familiar
+afterwards, unless something else takes that port while the service is down, in
+which case it moves once more rather than fail to start. A single database of any family therefore lands on the familiar
 canonical port. `lerd service port <service> <port>` overrides the assignment,
 and `lerd service expose <service> <other:3306>` adds an extra mapping.
 

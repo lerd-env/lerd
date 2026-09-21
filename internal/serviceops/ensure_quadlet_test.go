@@ -331,3 +331,221 @@ func TestEnsureCustomServiceQuadlet_portShiftNoticeAvoidsStdout(t *testing.T) {
 		t.Errorf("port-shift notice leaked to os.Stdout (would corrupt MCP JSON-RPC): %q", buf.String())
 	}
 }
+
+// TestEnsureCustomServiceQuadlet_reshiftsRecordedPortTakenByHost pins #1917: a
+// recorded published port is only good while nothing else holds it. Something
+// bound it while the service was down, so starting on it fails at the bind; the
+// guard has to move the service the same way it moves one off a taken default.
+func TestEnsureCustomServiceQuadlet_reshiftsRecordedPortTakenByHost(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(tmp, "data"))
+
+	orig := podman.DaemonReloadFn
+	t.Cleanup(func() { podman.DaemonReloadFn = orig })
+	podman.DaemonReloadFn = func() error { return nil }
+	origStatus := ensureUnitStatus
+	t.Cleanup(func() { ensureUnitStatus = origStatus })
+	ensureUnitStatus = func(string) (string, error) { return "inactive", nil }
+
+	// A squatter holds the port the service is recorded on; its own default is free.
+	squatter, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("cannot bind a loopback port: %v", err)
+	}
+	defer squatter.Close()
+	taken := squatter.Addr().(*net.TCPAddr).Port
+	def := freeLoopbackPort(t)
+
+	if err := persistPublishedPort("objects", taken); err != nil {
+		t.Fatalf("persistPublishedPort: %v", err)
+	}
+	svc := &config.CustomService{
+		Name:  "objects",
+		Image: "example/objects:1",
+		Ports: []string{fmt.Sprintf("127.0.0.1:%d:9000", def)},
+	}
+	if err := EnsureCustomServiceQuadlet(svc); err != nil {
+		t.Fatalf("EnsureCustomServiceQuadlet: %v", err)
+	}
+
+	moved := config.ServicePublishedPort("objects")
+	if moved == taken {
+		t.Fatalf("published port stayed on %d, the port a host process already binds", taken)
+	}
+	if moved == 0 {
+		t.Fatal("the shift must be persisted, so the quadlet never publishes a port config does not record")
+	}
+	if got := podman.PrimaryHostPort(svc.Ports); got != moved {
+		t.Errorf("rendered mapping publishes %d, want the shifted %d", got, moved)
+	}
+}
+
+// TestEnsureCustomServiceQuadlet_reshiftsRecordedSecondaryPortTakenByHost: the
+// same for a secondary mapping (an object store's console, a mail catcher's web
+// UI), whose override is recorded per container port.
+func TestEnsureCustomServiceQuadlet_reshiftsRecordedSecondaryPortTakenByHost(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(tmp, "data"))
+
+	orig := podman.DaemonReloadFn
+	t.Cleanup(func() { podman.DaemonReloadFn = orig })
+	podman.DaemonReloadFn = func() error { return nil }
+	origStatus := ensureUnitStatus
+	t.Cleanup(func() { ensureUnitStatus = origStatus })
+	ensureUnitStatus = func(string) (string, error) { return "inactive", nil }
+
+	squatter, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("cannot bind a loopback port: %v", err)
+	}
+	defer squatter.Close()
+	taken := squatter.Addr().(*net.TCPAddr).Port
+	primary, secondary := freeLoopbackPort(t), freeLoopbackPort(t)
+
+	if err := persistPublishedPortFor("objects", 9001, taken); err != nil {
+		t.Fatalf("persistPublishedPortFor: %v", err)
+	}
+	svc := &config.CustomService{
+		Name:  "objects",
+		Image: "example/objects:1",
+		Ports: []string{
+			fmt.Sprintf("127.0.0.1:%d:9000", primary),
+			fmt.Sprintf("127.0.0.1:%d:9001", secondary),
+		},
+	}
+	if err := EnsureCustomServiceQuadlet(svc); err != nil {
+		t.Fatalf("EnsureCustomServiceQuadlet: %v", err)
+	}
+
+	moved := config.ServicePublishedPorts("objects")[9001]
+	if moved == taken || moved == 0 {
+		t.Fatalf("published_ports[9001] = %d, want a free port off the taken %d", moved, taken)
+	}
+	rendered := 0
+	for _, spec := range svc.Ports {
+		if podman.ContainerPort(spec) == 9001 {
+			rendered = podman.PrimaryHostPort([]string{spec})
+		}
+	}
+	if rendered != moved {
+		t.Errorf("rendered console mapping publishes %d, want the shifted %d", rendered, moved)
+	}
+}
+
+// TestEnsureCustomServiceQuadlet_shiftSyncsDashboardVhost: a service that moves
+// may be one lerd's vhost predates, and the file answers only the paths it
+// names, so the dashboard mount has to be re-rendered when the guard shifts.
+func TestEnsureCustomServiceQuadlet_shiftSyncsDashboardVhost(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(tmp, "data"))
+
+	orig := podman.DaemonReloadFn
+	t.Cleanup(func() { podman.DaemonReloadFn = orig })
+	podman.DaemonReloadFn = func() error { return nil }
+	origStatus := ensureUnitStatus
+	t.Cleanup(func() { ensureUnitStatus = origStatus })
+	ensureUnitStatus = func(string) (string, error) { return "inactive", nil }
+
+	synced := 0
+	origSync := syncLerdVhostFn
+	t.Cleanup(func() { syncLerdVhostFn = origSync })
+	syncLerdVhostFn = func() (bool, error) {
+		synced++
+		return false, nil
+	}
+
+	free := freeLoopbackPort(t)
+	svc := &config.CustomService{
+		Name:  "objects",
+		Image: "example/objects:1",
+		Ports: []string{fmt.Sprintf("127.0.0.1:%d:9000", free)},
+	}
+	if err := EnsureCustomServiceQuadlet(svc); err != nil {
+		t.Fatalf("EnsureCustomServiceQuadlet: %v", err)
+	}
+	if synced != 0 {
+		t.Fatalf("a quadlet write that moves nothing must not touch the vhost, synced %d times", synced)
+	}
+
+	squatter, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("cannot bind a loopback port: %v", err)
+	}
+	defer squatter.Close()
+	taken := squatter.Addr().(*net.TCPAddr).Port
+	if err := persistPublishedPort("objects", taken); err != nil {
+		t.Fatalf("persistPublishedPort: %v", err)
+	}
+	svc.Ports = []string{fmt.Sprintf("127.0.0.1:%d:9000", free)}
+	if err := EnsureCustomServiceQuadlet(svc); err != nil {
+		t.Fatalf("EnsureCustomServiceQuadlet: %v", err)
+	}
+	if synced != 1 {
+		t.Errorf("a shift must re-render lerd's vhost once, synced %d times", synced)
+	}
+}
+
+// TestEnsureCustomServiceQuadlet_shiftsWhileUnitRestartsOnABindFailure: systemd
+// restarts a unit that cannot bind, and reports it as "activating" for as long
+// as it keeps trying, so unit state alone names a service that cannot start as
+// the owner of the port it cannot bind. What settles it is whether its own
+// container is running; when it is not, the port belongs to someone else.
+func TestEnsureCustomServiceQuadlet_shiftsWhileUnitRestartsOnABindFailure(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(tmp, "data"))
+
+	orig := podman.DaemonReloadFn
+	t.Cleanup(func() { podman.DaemonReloadFn = orig })
+	podman.DaemonReloadFn = func() error { return nil }
+	origStatus := ensureUnitStatus
+	t.Cleanup(func() { ensureUnitStatus = origStatus })
+	ensureUnitStatus = func(string) (string, error) { return "activating", nil }
+	origRunning := ensureContainerRunning
+	t.Cleanup(func() { ensureContainerRunning = origRunning })
+	ensureContainerRunning = func(string) bool { return false }
+
+	squatter, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("cannot bind a loopback port: %v", err)
+	}
+	defer squatter.Close()
+	taken := squatter.Addr().(*net.TCPAddr).Port
+
+	svc := &config.CustomService{
+		Name:  "objects",
+		Image: "example/objects:1",
+		Ports: []string{fmt.Sprintf("127.0.0.1:%d:9000", taken)},
+	}
+	if err := EnsureCustomServiceQuadlet(svc); err != nil {
+		t.Fatalf("EnsureCustomServiceQuadlet: %v", err)
+	}
+	if got := config.ServicePublishedPort("objects"); got == 0 || got == taken {
+		t.Fatalf("published port = %d, want a shift off the taken %d while the unit restarts", got, taken)
+	}
+
+	// A service whose container is genuinely up owns the port: never move it.
+	ensureContainerRunning = func(string) bool { return true }
+	ensureUnitStatus = func(string) (string, error) { return "active", nil }
+	if err := persistPublishedPort("held", taken); err != nil {
+		t.Fatalf("persistPublishedPort: %v", err)
+	}
+	up := &config.CustomService{
+		Name:  "held",
+		Image: "example/held:1",
+		Ports: []string{fmt.Sprintf("127.0.0.1:%d:9000", taken)},
+	}
+	if err := EnsureCustomServiceQuadlet(up); err != nil {
+		t.Fatalf("EnsureCustomServiceQuadlet: %v", err)
+	}
+	if got := config.ServicePublishedPort("held"); got != taken {
+		t.Errorf("published port = %d, want the running service left on its own %d", got, taken)
+	}
+}

@@ -140,12 +140,24 @@ func firePublishedPortShiftForced(service string, newPort int) {
 // can decide it instead of inheriting whatever the developer happens to be running.
 var ensureUnitStatus = podman.UnitStatus
 
-// unitActive reports whether a service's own systemd unit is currently up. The
-// generic port guard uses it to avoid treating the service's *own* published
-// listener as a foreign owner of the port (see maybeShiftPublishedPort).
+// unitActive reports whether a service's own systemd unit is currently up.
 func unitActive(name string) bool {
 	status, _ := ensureUnitStatus("lerd-" + name)
 	return status == "active" || status == "activating"
+}
+
+// ensureContainerRunning is the seam the port guard reads container state
+// through, so tests decide it instead of inheriting the live runtime.
+var ensureContainerRunning = podman.ContainerRunningQuiet
+
+// holdsItsPort reports whether a service is itself the owner of the port it
+// publishes, which is what stops the guard from treating its own listener as a
+// foreign one (see maybeShiftPublishedPort). The unit being up is not enough:
+// a unit that cannot bind is restarted by systemd and reads as "activating"
+// throughout, so the unit state alone would name a service that cannot start as
+// the owner of the port it cannot bind, and the guard would never move it.
+func holdsItsPort(name string) bool {
+	return unitActive(name) && ensureContainerRunning("lerd-"+name)
 }
 
 // maybeShiftPublishedPort decides whether a service whose primary host port is
@@ -175,6 +187,14 @@ func maybeShiftPublishedPort(name string, primary int, active bool) int {
 	return freeport.FirstFree(primary+1, func(p int) bool {
 		return reserved[p] || !freeport.Bindable(p)
 	})
+}
+
+// notePortShift tells the user a service moved off a port it could not bind and
+// how to put it somewhere else. Stderr, never stdout: this path runs in-process
+// inside the MCP stdio server, which reserves stdout for the JSON-RPC stream.
+func notePortShift(name string, from, to int) {
+	fmt.Fprintf(os.Stderr, "Note: 127.0.0.1:%d is in use; publishing lerd-%s on 127.0.0.1:%d instead.\n", from, name, to)
+	fmt.Fprintf(os.Stderr, "      (override with: lerd service port %s <port>)\n", name)
 }
 
 // portClaimedByOtherInstalled reports whether host port p is held by an INSTALLED
@@ -944,12 +964,10 @@ func EnsureCustomServiceQuadlet(svc *config.CustomService) error {
 func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 	// Generic port-ownership guard — the single place every service quadlet
 	// (DB presets, redis, meilisearch, custom) passes through. When this service
-	// has no published port recorded yet and its primary host port can't be bound,
-	// shift to the next free port and persist it. Port availability is the ONLY
-	// signal: lerd never inspects host files, sockets, or binaries. Persist FIRST,
-	// failing closed, so the quadlet never publishes a port the config doesn't
-	// record. Once a port is recorded it sticks (the published_port>0 apply below
-	// short-circuits the probe), never auto-reverting — `lerd service port` changes it.
+	// is down and the host port it would publish can't be bound, shift to the next
+	// free port and persist it. Port availability is the ONLY signal: lerd never
+	// inspects host files, sockets, or binaries. Persist FIRST, failing closed, so
+	// the quadlet never publishes a port the config doesn't record.
 	pp := config.ServicePublishedPort(svc.Name)
 	// The one exception: another installed service already publishes the recorded
 	// port. A removed service keeps its config entry, so its port can be handed on
@@ -961,21 +979,24 @@ func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 		}
 		pp = 0
 	}
-	if pp == 0 {
-		primary := podman.PrimaryHostPort(svc.Ports)
-		if free := maybeShiftPublishedPort(svc.Name, primary, unitActive(svc.Name)); free > 0 {
-			if err := persistPublishedPort(svc.Name, free); err != nil {
-				return false, fmt.Errorf("shifting lerd-%s off in-use port %d: %w", svc.Name, primary, err)
-			}
-			pp = free // use the just-persisted value directly — no second config read to diverge
-			// Stderr, never stdout: this path runs in-process inside the MCP stdio
-			// server, which reserves stdout for the JSON-RPC stream.
-			fmt.Fprintf(os.Stderr, "Note: 127.0.0.1:%d is in use; publishing lerd-%s on 127.0.0.1:%d instead.\n", primary, svc.Name, free)
-			fmt.Fprintf(os.Stderr, "      (override with: lerd service port %s <port>)\n", svc.Name)
-			// Host-proxy sites reach this service over the published loopback port,
-			// so their .env must follow the shift. The CLI registers the refresh hook.
-			firePublishedPortShift(svc.Name, free)
+	shifted := false
+	// The guard tests the recorded published port when there is one and the preset
+	// default otherwise: a recorded port something else took while the service was
+	// down is no more bindable than a taken default, and starting on it fails.
+	primary := pp
+	if primary == 0 {
+		primary = podman.PrimaryHostPort(svc.Ports)
+	}
+	if free := maybeShiftPublishedPort(svc.Name, primary, holdsItsPort(svc.Name)); free > 0 {
+		if err := persistPublishedPort(svc.Name, free); err != nil {
+			return false, fmt.Errorf("shifting lerd-%s off in-use port %d: %w", svc.Name, primary, err)
 		}
+		pp = free // use the just-persisted value directly — no second config read to diverge
+		notePortShift(svc.Name, primary, free)
+		// Host-proxy sites reach this service over the published loopback port,
+		// so their .env must follow the shift. The CLI registers the refresh hook.
+		firePublishedPortShift(svc.Name, free)
+		shifted = true
 	}
 	// Apply the recorded published port (guard-shifted or set via `lerd service
 	// port`) to the primary host mapping and the connection URL, leaving the
@@ -998,18 +1019,26 @@ func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 		if cport == 0 {
 			continue
 		}
-		if hport, ok := overrides[cport]; ok && hport > 0 {
-			svc.Ports = podman.SetHostPortForContainerPort(svc.Ports, cport, hport)
-			continue
-		}
 		host := podman.PrimaryHostPort([]string{spec})
-		if free := maybeShiftPublishedPort(svc.Name, host, unitActive(svc.Name)); free > 0 && free != host {
+		if hport, ok := overrides[cport]; ok && hport > 0 {
+			host = hport
+		}
+		if free := maybeShiftPublishedPort(svc.Name, host, holdsItsPort(svc.Name)); free > 0 && free != host {
 			if err := persistPublishedPortFor(svc.Name, cport, free); err != nil {
 				return false, fmt.Errorf("shifting lerd-%s off in-use port %d: %w", svc.Name, host, err)
 			}
-			svc.Ports = podman.SetHostPortForContainerPort(svc.Ports, cport, free)
-			fmt.Fprintf(os.Stderr, "Note: 127.0.0.1:%d is in use; publishing lerd-%s on 127.0.0.1:%d instead.\n", host, svc.Name, free)
+			notePortShift(svc.Name, host, free)
+			host = free
+			shifted = true
 		}
+		if host > 0 && host != podman.PrimaryHostPort([]string{spec}) {
+			svc.Ports = podman.SetHostPortForContainerPort(svc.Ports, cport, host)
+		}
+	}
+	if shifted {
+		// lerd's own vhost names the mount of every dashboard served at a path of
+		// its own, and a service that just moved may be one the file predates.
+		syncDashboardVhost()
 	}
 	// Extra published ports (set via `lerd service expose` / the Web UI ports
 	// modal) apply to any bundled preset, not just default-stack ones. Appended
