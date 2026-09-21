@@ -205,7 +205,7 @@ func missingMajors(from, to []string) []string {
 func NewNodeUnmanageCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "node:unmanage",
-		Short: "Stop managing Node.js: remove lerd's node shims and the Node versions lerd installed",
+		Short: "Stop managing Node.js: remove lerd's node shims",
 		Args:  cobra.NoArgs,
 		RunE:  runNodeUnmanage,
 	}
