@@ -198,8 +198,18 @@ func TestBroadcastThemeReachesEveryPeer(t *testing.T) {
 	}
 }
 
-// withOmarchyTheme lays out the state directory Omarchy keeps its active theme
-// in, so the handler is exercised against a real tree.
+// noDesktopToFollow puts the handler on a machine with no desktop colours to
+// read, whatever the machine running the test is actually wearing: an empty
+// state directory, no session to claim GNOME, and nothing on PATH to ask.
+func noDesktopToFollow(t *testing.T) {
+	t.Helper()
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("XDG_CURRENT_DESKTOP", "")
+	t.Setenv("PATH", t.TempDir())
+}
+
+// installOmarchyTheme lays out the state directory Omarchy keeps its active
+// theme in, so the handler is exercised against a real tree.
 func installOmarchyTheme(t *testing.T, name, colors string) {
 	t.Helper()
 	state := t.TempDir()
@@ -218,6 +228,7 @@ func installOmarchyTheme(t *testing.T, name, colors string) {
 
 func TestHandleThemesOffersTheDesktopTheme(t *testing.T) {
 	isolateThemesDir(t)
+	noDesktopToFollow(t)
 	installOmarchyTheme(t, "tokyo-night", "mode = \"dark\"\naccent = \"#7aa2f7\"\nbackground = \"#1a1b26\"\n")
 
 	rec := httptest.NewRecorder()
@@ -246,9 +257,9 @@ func TestHandleThemesOffersTheDesktopTheme(t *testing.T) {
 	}
 }
 
-func TestHandleThemesWithoutOmarchyOffersNothingExtra(t *testing.T) {
+func TestHandleThemesWithoutADesktopOffersNothingExtra(t *testing.T) {
 	isolateThemesDir(t)
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	noDesktopToFollow(t)
 
 	rec := httptest.NewRecorder()
 	handleThemes(rec, httptest.NewRequest(http.MethodGet, "/api/themes", nil))
@@ -260,9 +271,49 @@ func TestHandleThemesWithoutOmarchyOffersNothingExtra(t *testing.T) {
 		t.Fatalf("decode %s: %v", rec.Body.String(), err)
 	}
 	for _, th := range got.Themes {
-		if th.ID == config.OmarchyThemeID {
-			t.Errorf("themes carry %q where Omarchy is not installed", th.ID)
+		if th.Source == config.UIThemeSourceDesktop {
+			t.Errorf("themes carry %q where there is no desktop to follow", th.ID)
 		}
+	}
+}
+
+// The second desktop through the same door: Plasma publishes its accent and the
+// surfaces of the scheme it is on, and the entry has to reach the picker the same
+// way Omarchy's does.
+func TestHandleThemesOffersThePlasmaAccent(t *testing.T) {
+	isolateThemesDir(t)
+	noDesktopToFollow(t)
+	scheme := "[Colors:View]\nBackgroundNormal=20,22,24\n\n[Colors:Window]\nBackgroundNormal=32,35,38\n\n[General]\nAccentColor=61,212,37\nColorScheme=Breeze Dark\n"
+	if err := os.WriteFile(filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "kdeglobals"), []byte(scheme), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	handleThemes(rec, httptest.NewRequest(http.MethodGet, "/api/themes", nil))
+
+	var got struct {
+		Themes []config.UITheme `json:"themes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode %s: %v", rec.Body.String(), err)
+	}
+	var found *config.UITheme
+	for i := range got.Themes {
+		if got.Themes[i].ID == config.PlasmaThemeID {
+			found = &got.Themes[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("themes = %+v, want the Plasma theme among them", got.Themes)
+	}
+	if found.Accent != "#3dd425" {
+		t.Errorf("Accent = %q, want the Plasma accent", found.Accent)
+	}
+	if found.Card != "#202326" {
+		t.Errorf("Card = %q, want the scheme's window background", found.Card)
+	}
+	if found.Name != "Plasma (Breeze Dark)" {
+		t.Errorf("Name = %q, want the scheme named", found.Name)
 	}
 }
 
@@ -273,6 +324,7 @@ func TestHandleThemesKeepsTheDesktopEntryOverAFileOfTheSameName(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "omarchy.yaml"), []byte("name: Impostor\naccent: \"#ff0000\"\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
+	noDesktopToFollow(t)
 	installOmarchyTheme(t, "nord", "mode = \"dark\"\naccent = \"#81a1c1\"\n")
 
 	rec := httptest.NewRecorder()

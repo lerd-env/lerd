@@ -86,20 +86,56 @@ asks before it deletes the file.
 
 ## Following the desktop theme
 
-On [Omarchy](https://omarchy.org), the desktop's own theme shows up in the picker
-as one more entry, named after whatever theme the desktop is currently on, such
-as `Omarchy (tokyo-night)`. Pick it once and lerd follows the desktop from then
-on: run `omarchy-theme-set` and every open dashboard repaints, including the
-embedded service views. A theme you chose deliberately is never overridden, and
-on a machine without Omarchy the entry is simply absent.
+On Omarchy, KDE Plasma and GNOME, the desktop's own colours show up in the picker
+as one more entry: `Omarchy (tokyo-night)` names the theme the desktop is on, and
+on Plasma and GNOME the entry is the familiar `Breeze` or `Adwaita`, wearing
+whatever the desktop is actually set to rather than a fixed copy of it. Pick it once
+and lerd follows the desktop from then on: change the theme or the accent and
+every open dashboard repaints, including the embedded service views. A theme you
+chose deliberately is never overridden, and on a machine with no desktop to read
+the entry is simply absent. There is one entry at most, and no trash icon beside
+it: the desktop is the source, so the entry goes away when the desktop does.
 
-The colours are read from the active theme's `colors.toml`, which every theme
-Omarchy ships carries. A dark desktop theme lends its accent and its surfaces; a
+**Omarchy** publishes everything in the active theme's `colors.toml`, which every
+theme it ships carries. A dark desktop theme lends its accent and its surfaces; a
 light one lends only its accent, because the surface fields are the dark ones and
-a pale background would land behind type coloured to sit on a dark card.
+a pale background would land behind type coloured to sit on a dark card. The
+watch sits on `~/.local/state/omarchy/current`, which is where
+`omarchy-theme-set` moves the new theme into place.
 
-There is no file to manage and no trash icon beside it. The desktop is the
-source, so the entry goes away when Omarchy does.
+**Plasma** keeps the accent and a copy of the active colour scheme in
+`~/.config/kdeglobals`, so the entry carries surfaces too: the view background,
+the window background and its alternate become the page, the cards and their
+borders. Whether the scheme counts as dark is read off the window background
+rather than the scheme's name. A stock Plasma that never had an accent picked
+lends the scheme's selection colour instead.
+
+**GNOME** publishes the accent alone, one of the nine libadwaita colours, read
+from `org.gnome.desktop.interface accent-color`. That is all it lends, since the
+desktop's surfaces are not something you picked; the Adwaita entry keeps the
+surfaces it always had and only its accent follows the desktop. GNOME 46 and
+older have no accent setting, so there is nothing to follow there.
+
+The entry has to be the desktop in front of you, not a file left behind by an
+application. `kdeglobals` exists on any machine that has ever run a Qt app, and
+the GNOME schemas ship with half the desktop packages out there, so a desktop
+counts when `XDG_CURRENT_DESKTOP` says so, or when the accent is one you actually
+recorded in that desktop's own settings. Picking up a live change needs the watch
+that was set when `lerd-ui` started, so if you install a desktop or set an accent
+for the first time, `lerd restart` once.
+
+On Plasma and GNOME the desktop entry takes the place of the built-in that
+imitates it, Breeze and Adwaita, rather than sitting beside it: the built-in is a
+snapshot of one scheme, and the machine in front of you has the real one, on
+whichever scheme it is currently wearing. It keeps that built-in's name, so the
+picker still offers Breeze and Adwaita and picking one now follows the desktop. A
+dashboard already set to either starts following it too, and any tone the desktop
+does not publish comes from the built-in it replaced, which is where the GNOME
+entry gets its surfaces.
+
+A theme file named `omarchy.yaml`, `breeze.yaml` or `adwaita.yaml` is shadowed by
+the desktop entry rather than replacing it: picking the entry named after a
+desktop has to give you that desktop's colours.
 
 ## Installed as an app
 

@@ -12,10 +12,6 @@ import (
 // reserved: a user theme file of the same name would be shadowed by it.
 const OmarchyThemeID = "omarchy"
 
-// UIThemeSourceDesktop marks a theme that came from the desktop rather than
-// from a file, which is what keeps a remove button off it.
-const UIThemeSourceDesktop = "desktop"
-
 // omarchyColors is the part of an Omarchy theme's colors.toml a dashboard
 // theme has a use for. Every theme Omarchy ships carries this file, so it is
 // read directly rather than inferred from a terminal or editor config.
@@ -26,6 +22,22 @@ type omarchyColors struct {
 	Selection         string `toml:"selection"`
 	Background        string `toml:"background"`
 	LighterBackground string `toml:"lighter_background"`
+}
+
+// omarchyDesktop reads Omarchy as a desktop to follow. The watch sits on the
+// state directory rather than on the theme itself because omarchy-theme-set
+// stages the new theme beside the old one and moves it into place, so the path
+// being watched would be the one that goes away.
+func omarchyDesktop() Desktop {
+	theme := OmarchyTheme()
+	if theme == nil {
+		return Desktop{}
+	}
+	return Desktop{
+		Theme:      theme,
+		WatchDir:   OmarchyCurrentDir(),
+		WatchNames: []string{"theme", "theme.name"},
+	}
 }
 
 // OmarchyCurrentDir returns the state directory Omarchy keeps the active theme

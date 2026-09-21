@@ -3,6 +3,7 @@ import { luminance, parseHex } from './brandTint';
 import {
   BUILTIN_PALETTES,
   DEFAULT_PALETTE_ID,
+  asDesktopStandIn,
   paletteById,
   paletteVars,
   resolvePalette
@@ -108,3 +109,56 @@ function contrast(a: string, b: string): number {
   const lb = luminance(parseHex(b)!);
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
+
+describe('asDesktopStandIn', () => {
+  const builtin = (id: string) => BUILTIN_PALETTES.find((p) => p.id === id)!;
+
+  it('gives a Plasma entry the id of the built-in it stands in for', () => {
+    const f = asDesktopStandIn({
+      id: 'plasma',
+      name: 'Plasma (Breeze Dark)',
+      accent: '#3dd425',
+      bg: '#141618',
+      card: '#202326',
+      border: '#292c30',
+      source: 'desktop'
+    });
+    expect(f.id).toBe('breeze');
+    // The palette people know by name, wearing what the desktop is actually on.
+    expect(f.name).toBe('Breeze');
+    expect(f.card).toBe('#202326');
+    // Plasma publishes no tone for dim text, and Breeze's own reads better
+    // against its surfaces than the default grey would.
+    expect(f.muted).toBe(builtin('breeze').muted);
+  });
+
+  it('lends the Adwaita surfaces to a GNOME entry that carries only an accent', () => {
+    const f = asDesktopStandIn({
+      id: 'gnome',
+      name: 'GNOME (purple)',
+      accent: '#9141ac',
+      source: 'desktop'
+    });
+    expect(f.id).toBe('adwaita');
+    expect(f.name).toBe('Adwaita');
+    expect(f.accent).toBe('#9141ac');
+    expect(f.bg).toBe(builtin('adwaita').bg);
+    expect(f.card).toBe(builtin('adwaita').card);
+  });
+
+  it('leaves a desktop with no built-in of its own alone', () => {
+    const f = asDesktopStandIn({
+      id: 'omarchy',
+      name: 'Omarchy (nord)',
+      accent: '#81a1c1',
+      source: 'desktop'
+    });
+    expect(f.id).toBe('omarchy');
+    expect(f.bg).toBeUndefined();
+  });
+
+  it('leaves a file alone, whatever it is called', () => {
+    const f = asDesktopStandIn({ id: 'plasma', name: 'My Plasma', accent: '#112233' });
+    expect(f.id).toBe('plasma');
+  });
+});

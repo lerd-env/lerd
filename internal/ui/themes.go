@@ -17,7 +17,7 @@ func handleThemes(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		themes, errs := config.UIThemes()
-		themes = withOmarchyTheme(themes)
+		themes = withDesktopTheme(themes)
 		if themes == nil {
 			themes = []config.UITheme{}
 		}
@@ -109,17 +109,17 @@ func handleSettingsTheme(w http.ResponseWriter, r *http.Request) {
 // so it is kept to the same slug a file could be called.
 var validThemeName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
-// withOmarchyTheme adds the active Omarchy desktop theme to the list, replacing
-// any file that claimed the same id. The desktop is the more specific answer,
-// and picking the entry called Omarchy has to give you Omarchy's colours.
-func withOmarchyTheme(themes []config.UITheme) []config.UITheme {
-	desktop := config.OmarchyTheme()
+// withDesktopTheme adds the desktop's own theme to the list, replacing any file
+// that claimed the same id. The desktop is the more specific answer, and picking
+// the entry named after a desktop has to give you that desktop's colours.
+func withDesktopTheme(themes []config.UITheme) []config.UITheme {
+	desktop := config.DesktopTheme()
 	if desktop == nil {
 		return themes
 	}
 	out := make([]config.UITheme, 0, len(themes)+1)
 	for _, t := range themes {
-		if t.ID != config.OmarchyThemeID {
+		if t.ID != desktop.ID {
 			out = append(out, t)
 		}
 	}

@@ -220,25 +220,31 @@ export const BUILTIN_PALETTES: Palette[] = [
 
 const DEFAULT_PALETTE = BUILTIN_PALETTES[0];
 
-// resolvePalette fills a theme file out into the full set of tones, or returns
-// null when the accent is not a plain hex. The daemon already refuses anything
-// else; this is the second gate, right before the value becomes CSS.
-export function resolvePalette(file: PaletteFile): Palette | null {
-  const accent = hex(file.accent);
-  if (!accent || !file.id || !file.name) return null;
-  const accentDark = hex(file.accent_dark) || brandTint(accent)!.dark;
+// The built-in each desktop's own entry stands in for. A machine running that
+// desktop has the real thing, live and on whichever scheme it happens to be
+// wearing, and the built-in beside it is a snapshot of one of them.
+const DESKTOP_STANDS_IN_FOR: Record<string, string> = {
+  plasma: 'breeze',
+  gnome: 'adwaita'
+};
+
+// asDesktopStandIn hands a desktop theme the id and the name of the built-in it
+// replaces, so a dashboard already set to that built-in follows the desktop from
+// now on and the picker keeps the name people know the palette by. The tones the
+// desktop does not publish come from the built-in as well, rather than from the
+// default greys. Anything else is handed back untouched.
+export function asDesktopStandIn(file: PaletteFile): PaletteFile {
+  if (file.source !== 'desktop') return file;
+  const builtin = BUILTIN_PALETTES.find((p) => p.id === DESKTOP_STANDS_IN_FOR[file.id]);
+  if (!builtin) return file;
   return {
-    id: file.id,
-    name: file.name,
-    accent,
-    accentHover: hex(file.accent_hover) || step(accent, 0),
-    accentDark,
-    accentHoverDark: hex(file.accent_hover_dark) || step(accentDark, 255),
-    bg: hex(file.bg) || DEFAULT_PALETTE.bg,
-    card: hex(file.card) || DEFAULT_PALETTE.card,
-    border: hex(file.border) || DEFAULT_PALETTE.border,
-    muted: hex(file.muted) || DEFAULT_PALETTE.muted,
-    source: file.source === 'desktop' ? 'desktop' : 'user'
+    ...file,
+    id: builtin.id,
+    name: builtin.name,
+    bg: file.bg || builtin.bg,
+    card: file.card || builtin.card,
+    border: file.border || builtin.border,
+    muted: file.muted || builtin.muted
   };
 }
 

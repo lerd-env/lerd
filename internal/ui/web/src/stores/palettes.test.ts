@@ -52,6 +52,35 @@ describe('palettes store', () => {
     stop();
   });
 
+  it('lets the desktop entry replace the built-in that imitates it', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          themes: [
+            {
+              id: 'plasma',
+              name: 'Plasma (Breeze Dark)',
+              accent: '#3dd425',
+              card: '#202326',
+              source: 'desktop'
+            }
+          ]
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    ) as unknown as typeof fetch;
+    const { loadPalettes } = await import('./palettes');
+    const { palettes } = await import('./theme');
+
+    await loadPalettes();
+
+    const breeze = get(palettes).filter((p) => p.id === 'breeze');
+    expect(breeze).toHaveLength(1);
+    expect(breeze[0].name).toBe('Breeze');
+    expect(breeze[0].accent).toBe('#3dd425');
+    expect(get(palettes).some((p) => p.id === 'plasma')).toBe(false);
+  });
+
   it('lets a file replace the built-in it is named after', async () => {
     globalThis.fetch = vi.fn(async () =>
       new Response(JSON.stringify({ themes: [{ id: 'nord', name: 'My Nord', accent: '#112233' }] }), {
