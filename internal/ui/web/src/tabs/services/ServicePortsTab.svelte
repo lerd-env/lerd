@@ -134,7 +134,7 @@
             type="button"
             onclick={save}
             disabled={saving}
-            class="text-xs px-3 py-1 rounded-sm bg-lerd-red hover:bg-lerd-redhov text-white transition-colors disabled:opacity-40"
+            class="text-xs px-3 py-1 rounded-sm bg-lerd-red hover:bg-lerd-redhov text-lerd-onred transition-colors disabled:opacity-40"
           >
             {saving ? m.services_ports_applying() : m.common_save()}
           </button>

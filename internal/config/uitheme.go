@@ -27,6 +27,10 @@ type UITheme struct {
 	Card            string `yaml:"card,omitempty"               json:"card,omitempty"`
 	Border          string `yaml:"border,omitempty"             json:"border,omitempty"`
 	Muted           string `yaml:"muted,omitempty"              json:"muted,omitempty"`
+	// ChromeLight is the tone the rail and the sidebar take in light mode, where
+	// the surfaces above are the dark ones. A theme that declares none leaves
+	// them white.
+	ChromeLight string `yaml:"chrome_light,omitempty" json:"chrome_light,omitempty"`
 	// Source says where the theme came from when it was not a file the user can
 	// edit. It is never read off a file, so a theme cannot claim to be one.
 	Source string `yaml:"-" json:"source,omitempty"`
@@ -132,6 +136,7 @@ func parseUITheme(id string, data []byte) (*UITheme, error) {
 		"accent": &t.Accent, "accent_hover": &t.AccentHover,
 		"accent_dark": &t.AccentDark, "accent_hover_dark": &t.AccentHoverDark,
 		"bg": &t.Bg, "card": &t.Card, "border": &t.Border, "muted": &t.Muted,
+		"chrome_light": &t.ChromeLight,
 	}
 	for label, field := range colours {
 		if *field == "" {

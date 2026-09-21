@@ -13,10 +13,13 @@
 @theme {
   --color-lerd-red: var(--lerd-accent, #ff2d20);
   --color-lerd-redhov: var(--lerd-accent-hover, #e02419);
+  --color-lerd-onred: var(--lerd-on-accent, #ffffff);
   --color-lerd-bg: var(--lerd-bg, #0d0d0d);
   --color-lerd-card: var(--lerd-card, #161616);
   --color-lerd-border: var(--lerd-border, #262626);
   --color-lerd-muted: var(--lerd-muted, #404040);
+  --color-lerd-chrome-light: var(--lerd-chrome-light, #ffffff);
+  --color-lerd-chromeborder: var(--lerd-chrome-border, #e5e7eb);
 
   --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
 }

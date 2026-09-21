@@ -98,7 +98,7 @@
       type="button"
       onclick={confirm}
       disabled={!canConfirm}
-      class="text-xs px-3 py-1.5 rounded-sm bg-lerd-red hover:bg-lerd-redhov text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      class="text-xs px-3 py-1.5 rounded-sm bg-lerd-red hover:bg-lerd-redhov text-lerd-onred transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
     >{submitting ? m.services_delete_submitting() : m.common_remove()}</button>
   {/snippet}
 </Modal>

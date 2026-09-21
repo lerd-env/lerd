@@ -108,7 +108,7 @@
       <div class="flex items-center gap-2">
         <button
           type="button"
-          class="px-3 py-1.5 rounded-lg text-sm font-medium bg-lerd-red hover:bg-lerd-redhov text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          class="px-3 py-1.5 rounded-lg text-sm font-medium bg-lerd-red hover:bg-lerd-redhov text-lerd-onred disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           disabled={!dirty || $phpRuntimeLoading}
           onclick={() => {
             applyError = '';

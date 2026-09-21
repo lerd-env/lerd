@@ -120,8 +120,11 @@ func Start(currentVersion string) error {
 	podman.Cache.Start(context.Background())
 
 	// Follow the desktop theme where there is one. The error is the ordinary
-	// answer on a machine without Omarchy, so it is dropped rather than logged.
-	_ = watchOmarchyTheme(context.Background(), config.OmarchyCurrentDir(), 300*time.Millisecond, broker.broadcastThemeList)
+	// answer on a machine with no desktop to read, so it is dropped rather than
+	// logged.
+	if d := config.CurrentDesktop(); d.WatchDir != "" {
+		_ = watchDesktopTheme(context.Background(), d.WatchDir, d.WatchNames, 300*time.Millisecond, broker.broadcastThemeList)
+	}
 
 	// Restart any LAN share proxies that were active before this process started.
 	go cli.RestoreLANShareProxies()
@@ -346,7 +349,7 @@ func Start(currentVersion string) error {
 		// colours in use rather than the brand default. The browser reads these
 		// once at install, which is why they arrive on the URL rather than being
 		// looked up: the choice lives in the browser, not on this side.
-		theme := manifestColor(r.URL.Query().Get("theme_color"), "#ff2d20")
+		theme := manifestColor(r.URL.Query().Get("theme_color"), "#161616")
 		background := manifestColor(r.URL.Query().Get("background_color"), "#0d0d0d")
 		w.Write([]byte(`{"name":"Lerd","short_name":"Lerd","description":"Local Laravel development environment","start_url":"` + base + `/","display":"standalone","background_color":"` + background + `","theme_color":"` + theme + `","protocol_handlers":[{"protocol":"web+lerd","url":"` + base + `/?lerd=%s"}],"icons":[{"src":"` + base + `/icons/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},{"src":"` + base + `/icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},{"src":"` + base + `/icons/icon-maskable-192.png","sizes":"192x192","type":"image/png","purpose":"maskable"},{"src":"` + base + `/icons/icon-maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"},{"src":"` + base + `/icons/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}`)) //nolint:errcheck
 	})

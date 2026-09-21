@@ -3,6 +3,9 @@ import { luminance, parseHex } from './brandTint';
 import {
   BUILTIN_PALETTES,
   DEFAULT_PALETTE_ID,
+  asDesktopStandIn,
+  chromeBorder,
+  onAccent,
   paletteById,
   paletteVars,
   resolvePalette
@@ -108,3 +111,133 @@ function contrast(a: string, b: string): number {
   const lb = luminance(parseHex(b)!);
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
+
+describe('asDesktopStandIn', () => {
+  const builtin = (id: string) => BUILTIN_PALETTES.find((p) => p.id === id)!;
+
+  it('gives a Plasma entry the id of the built-in it stands in for', () => {
+    const f = asDesktopStandIn({
+      id: 'plasma',
+      name: 'Plasma (Breeze Dark)',
+      accent: '#3dd425',
+      bg: '#141618',
+      card: '#202326',
+      border: '#292c30',
+      source: 'desktop'
+    });
+    expect(f.id).toBe('breeze');
+    // The palette people know by name, wearing what the desktop is actually on.
+    expect(f.name).toBe('Breeze');
+    expect(f.card).toBe('#202326');
+    // Plasma publishes no tone for dim text, and Breeze's own reads better
+    // against its surfaces than the default grey would.
+    expect(f.muted).toBe(builtin('breeze').muted);
+  });
+
+  it('lends the Adwaita surfaces to a GNOME entry that carries only an accent', () => {
+    const f = asDesktopStandIn({
+      id: 'gnome',
+      name: 'GNOME (purple)',
+      accent: '#9141ac',
+      source: 'desktop'
+    });
+    expect(f.id).toBe('adwaita');
+    expect(f.name).toBe('Adwaita');
+    expect(f.accent).toBe('#9141ac');
+    expect(f.bg).toBe(builtin('adwaita').bg);
+    expect(f.card).toBe(builtin('adwaita').card);
+  });
+
+  it('keeps the macOS surfaces under the accent the Mac is set to', () => {
+    const f = asDesktopStandIn({
+      id: 'macos',
+      name: 'macOS (green)',
+      accent: '#62ba46',
+      source: 'desktop'
+    });
+    expect(f.id).toBe('macos');
+    expect(f.name).toBe('macOS');
+    expect(f.accent).toBe('#62ba46');
+    expect(f.card).toBe(builtin('macos').card);
+    expect(f.chrome_light).toBe(builtin('macos').chromeLight);
+  });
+
+  it('leaves a desktop with no built-in of its own alone', () => {
+    const f = asDesktopStandIn({
+      id: 'omarchy',
+      name: 'Omarchy (nord)',
+      accent: '#81a1c1',
+      source: 'desktop'
+    });
+    expect(f.id).toBe('omarchy');
+    expect(f.bg).toBeUndefined();
+  });
+
+  it('leaves a file alone, whatever it is called', () => {
+    const f = asDesktopStandIn({ id: 'plasma', name: 'My Plasma', accent: '#112233' });
+    expect(f.id).toBe('plasma');
+  });
+});
+
+describe('onAccent', () => {
+  it('writes white on a dark accent', () => {
+    expect(onAccent(BUILTIN_PALETTES[0].accent)).toBe('#ffffff');
+    expect(onAccent('#1c71d8')).toBe('#ffffff');
+    expect(onAccent('#e93a9a')).toBe('#ffffff');
+  });
+
+  // Where the desktop themes land: a bright accent with white on it is pale
+  // text on a pale fill.
+  it('writes near black on a bright accent', () => {
+    expect(onAccent('#3dd425')).toBe('#0d0d0d');
+    expect(onAccent('#c88800')).toBe('#0d0d0d');
+    expect(onAccent('#3daee9')).toBe('#0d0d0d');
+  });
+
+  it('falls back to white for anything that is not a colour', () => {
+    expect(onAccent('rebeccapurple')).toBe('#ffffff');
+  });
+});
+
+describe('the light mode chrome', () => {
+  it('is tinted on the desktop palettes, the ones whose desktops tint their own', () => {
+    const tinted = BUILTIN_PALETTES.filter((p) => p.chromeLight);
+    expect(tinted.map((p) => p.id)).toEqual(['breeze', 'adwaita', 'macos']);
+  });
+
+  // A light Plasma scheme publishes the tone it tints its own chrome with, and
+  // that beats the one Breeze ships.
+  it('takes the tone a light scheme published over the built-in\u2019s', () => {
+    const f = asDesktopStandIn({
+      id: 'plasma',
+      name: 'Plasma',
+      accent: '#3daee9',
+      chrome_light: '#e8e6e3',
+      source: 'desktop'
+    });
+    expect(f.chrome_light).toBe('#e8e6e3');
+  });
+
+  // The separators are drawn off the chrome rather than off a fixed grey, or a
+  // tinted rail loses the lines a white one had.
+  it('draws its lines off the tone the chrome is wearing', () => {
+    expect(chromeBorder('#ffffff')).toBe('#e6e6e6');
+    expect(chromeBorder('#eff0f1')).toBe('#d7d8d9');
+    expect(chromeBorder('#ebebeb')).toBe('#d4d4d4');
+  });
+
+  it('follows the theme onto the border variable', () => {
+    const p = resolvePalette({ id: 'breeze', name: 'Breeze', accent: '#17698f', chrome_light: '#eff0f1' })!;
+    expect(paletteVars(p, false)['--lerd-chrome-border']).toBe('#d7d8d9');
+  });
+
+  it('stays white for a theme that does not ask for one', () => {
+    const p = resolvePalette({ id: 'ocean', name: 'Ocean', accent: '#3b7ea1' })!;
+    expect(paletteVars(p, false)['--lerd-chrome-light']).toBe('#ffffff');
+  });
+
+  it('follows the theme that does', () => {
+    const p = resolvePalette({ id: 'macos', name: 'macOS', accent: '#62ba46', chrome_light: '#F3F4F6' })!;
+    expect(paletteVars(p, false)['--lerd-chrome-light']).toBe('#f3f4f6');
+  });
+});

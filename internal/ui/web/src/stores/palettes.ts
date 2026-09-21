@@ -1,6 +1,7 @@
 import { apiFetch, apiJson } from '$lib/api';
 import {
   BUILTIN_PALETTES,
+  asDesktopStandIn,
   resolvePalette,
   type PaletteError,
   type PaletteFile
@@ -32,12 +33,15 @@ export async function loadPalettes() {
   }
   try {
     const res = await apiJson<ThemesResponse>('/api/themes');
-    const user = (res.themes || []).map(resolvePalette).filter((p) => p !== null);
+    const user = (res.themes || []).map(asDesktopStandIn).map(resolvePalette).filter((p) => p !== null);
     // A file named after a built-in replaces it rather than sitting beside it as
     // a second entry with the same name. The file is the more specific answer,
-    // and the picker has to stay unambiguous.
-    const shadowed = new Set(user.map((p) => p.id));
-    palettes.set([...BUILTIN_PALETTES.filter((p) => !shadowed.has(p.id)), ...user]);
+    // and the picker has to stay unambiguous. A desktop entry claims a built-in's
+    // id the same way, and the daemon lists it last, so it wins over a file that
+    // claimed the same one.
+    const offered = [...new Map(user.map((p) => [p.id, p])).values()];
+    const shadowed = new Set(offered.map((p) => p.id));
+    palettes.set([...BUILTIN_PALETTES.filter((p) => !shadowed.has(p.id)), ...offered]);
     paletteErrors.set(res.errors || []);
   } catch {
     /* keep previous */

@@ -142,7 +142,7 @@
         type="button"
         onclick={save}
         disabled={!canSave}
-        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-lerd-red hover:bg-lerd-redhov text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-lerd-red hover:bg-lerd-redhov text-lerd-onred disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
       >
         {#if saving}
           <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">

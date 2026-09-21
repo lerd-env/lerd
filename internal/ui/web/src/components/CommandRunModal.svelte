@@ -117,7 +117,7 @@
         <button onclick={closeRun} class="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5">{m.common_cancel()}</button>
         <button
           onclick={() => $currentRun.kind === 'confirm' && executeCommand($currentRun.domain, cmd, $currentRun.branch, true)}
-          class="px-3 py-1.5 rounded-md text-xs font-medium bg-lerd-red hover:bg-lerd-redhov text-white"
+          class="px-3 py-1.5 rounded-md text-xs font-medium bg-lerd-red hover:bg-lerd-redhov text-lerd-onred"
         >{m.cmdrun_runAnyway()}</button>
       </div>
     </div>
@@ -168,7 +168,7 @@
               <button onclick={() => $currentRun.kind === 'done' && copyUrl($currentRun.url!)} class="shrink-0 px-2 py-1 rounded text-[11px] font-medium bg-gray-200 hover:bg-gray-300 dark:bg-white/10 dark:hover:bg-white/20 text-gray-800 dark:text-gray-100">
                 {copied ? 'Copied' : 'Copy'}
               </button>
-              <a href={$currentRun.url} target="_blank" rel="noopener" class="shrink-0 px-2 py-1 rounded text-[11px] font-medium bg-lerd-red hover:bg-lerd-redhov text-white">{m.common_open()}</a>
+              <a href={$currentRun.url} target="_blank" rel="noopener" class="shrink-0 px-2 py-1 rounded text-[11px] font-medium bg-lerd-red hover:bg-lerd-redhov text-lerd-onred">{m.common_open()}</a>
             </div>
           </div>
         {/if}

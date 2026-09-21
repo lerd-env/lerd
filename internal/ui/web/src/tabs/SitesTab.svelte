@@ -493,7 +493,7 @@
           <button
             type="button"
             onclick={submitNewWorkspace}
-            class="px-2 py-1 text-xs font-medium rounded-md bg-lerd-red hover:bg-lerd-redhov text-white">{m.common_add()}</button
+            class="px-2 py-1 text-xs font-medium rounded-md bg-lerd-red hover:bg-lerd-redhov text-lerd-onred">{m.common_add()}</button
           >
         </div>
       </div>
@@ -554,7 +554,7 @@
 {#snippet siteRow(s: Site, grouped = false)}
   <button
     onclick={() => select(s)}
-    class="group relative w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors border-b border-gray-50 dark:border-lerd-border/50 {selected ===
+    class="group relative w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors border-b border-lerd-chromeborder/50 dark:border-lerd-border/50 {selected ===
     s.domain
       ? 'bg-lerd-red/10 text-lerd-red'
       : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/3'}"
@@ -597,7 +597,7 @@
   <section
     class="{hasWorkspaces && (zones[key]?.length ?? 0) === 0 ? 'min-h-[1.75rem]' : ''} {key === UNGROUPED &&
     hasWorkspaces
-      ? 'border-t border-gray-100 dark:border-lerd-border'
+      ? 'border-t border-lerd-chromeborder dark:border-lerd-border'
       : ''}"
     use:stopDragBubbling
     use:dndzone={{ items: zones[key] ?? [], type: dndType, flipDurationMs: FLIP_MS, dragDisabled, dropTargetStyle: {} }}
@@ -726,7 +726,7 @@
         {#each paused as s (s.domain)}
           <button
             onclick={() => select(s)}
-            class="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors border-t border-gray-50 dark:border-lerd-border/50 {selected === s.domain
+            class="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors border-t border-lerd-chromeborder/50 dark:border-lerd-border/50 {selected === s.domain
               ? 'bg-lerd-red/10 text-lerd-red'
               : 'text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-white/3'}"
           >

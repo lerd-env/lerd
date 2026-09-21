@@ -9,7 +9,7 @@
 // or white, the dark accent is the light one lifted until it reads on the dark
 // card, and the surfaces fall back to the built-in ones.
 
-import { brandTint, mix, parseHex, toHex } from './brandTint';
+import { brandTint, luminance, mix, parseHex, toHex } from './brandTint';
 
 export interface Palette {
   id: string;
@@ -22,6 +22,10 @@ export interface Palette {
   card: string;
   border: string;
   muted: string;
+  // The light mode's rail and sidebar, where a theme wants them off white. Only
+  // macOS does, which is the one desktop that tints its own chrome, so the rest
+  // leave it unset and keep the white app.css falls back to.
+  chromeLight?: string;
   source: 'builtin' | 'user' | 'desktop';
 }
 
@@ -37,6 +41,7 @@ export interface PaletteFile {
   card?: string;
   border?: string;
   muted?: string;
+  chrome_light?: string;
   // Set when the theme came from somewhere other than a file the user can edit,
   // which is what keeps a remove button off it.
   source?: string;
@@ -58,7 +63,9 @@ const HOVER_STEP = 0.12;
 // from what those desktops actually ship, not from memory of them: Breeze from
 // Plasma 6.7's BreezeDark.colors, Adwaita from libadwaita 1.9's named colours,
 // macOS from Apple's documented system blue and window background. All three
-// have been darkened since the values most write-ups still quote.
+// have been darkened since the values most write-ups still quote. Their light
+// chrome is the tone each desktop tints its own sidebar with, Breeze's window
+// colour and libadwaita's sidebar_bg_color.
 export const BUILTIN_PALETTES: Palette[] = [
   {
     id: 'lerd',
@@ -184,6 +191,7 @@ export const BUILTIN_PALETTES: Palette[] = [
     accentHover: '#12556f',
     accentDark: '#3daee9',
     accentHoverDark: '#5fbdee',
+    chromeLight: '#eff0f1',
     bg: '#141618',
     card: '#202326',
     border: '#292c30',
@@ -197,6 +205,7 @@ export const BUILTIN_PALETTES: Palette[] = [
     accentHover: '#1a5fb4',
     accentDark: '#3584e4',
     accentHoverDark: '#62a0ea',
+    chromeLight: '#ebebeb',
     bg: '#1d1d20',
     card: '#252529',
     border: '#2e2e32',
@@ -214,11 +223,70 @@ export const BUILTIN_PALETTES: Palette[] = [
     card: '#282828',
     border: '#3a3a3a',
     muted: '#4a4a4a',
+    chromeLight: '#f3f4f6',
     source: 'builtin'
   }
 ];
 
 const DEFAULT_PALETTE = BUILTIN_PALETTES[0];
+
+// The built-in each desktop's own entry stands in for. A machine running that
+// desktop has the real thing, live and on whichever scheme it happens to be
+// wearing, and the built-in beside it is a snapshot of one of them.
+// macOS is in here against its own name: the built-in it replaces is the one
+// already called macOS, and the entry still wants that palette's surfaces under
+// the accent the Mac in front of you is set to.
+const DESKTOP_STANDS_IN_FOR: Record<string, string> = {
+  plasma: 'breeze',
+  gnome: 'adwaita',
+  macos: 'macos'
+};
+
+// asDesktopStandIn hands a desktop theme the id and the name of the built-in it
+// replaces, so a dashboard already set to that built-in follows the desktop from
+// now on and the picker keeps the name people know the palette by. The tones the
+// desktop does not publish come from the built-in as well, rather than from the
+// default greys. Anything else is handed back untouched.
+export function asDesktopStandIn(file: PaletteFile): PaletteFile {
+  if (file.source !== 'desktop') return file;
+  const builtin = BUILTIN_PALETTES.find((p) => p.id === DESKTOP_STANDS_IN_FOR[file.id]);
+  if (!builtin) return file;
+  return {
+    ...file,
+    id: builtin.id,
+    name: builtin.name,
+    bg: file.bg || builtin.bg,
+    card: file.card || builtin.card,
+    border: file.border || builtin.border,
+    muted: file.muted || builtin.muted,
+    chrome_light: file.chrome_light || builtin.chromeLight
+  };
+}
+
+// onAccent is the label a filled accent button carries. White is right for the
+// brand red and wrong for a bright green or a yellow, so it is measured against
+// the accent in use rather than assumed: white stays while it reads at least as
+// well as it does on lerd's own red, the palest fill the dashboard has ever put
+// white on. Anything paler takes the dark label instead.
+const whiteContrast = (rgb: [number, number, number]) => 1.05 / (luminance(rgb) + 0.05);
+const ON_ACCENT_FLOOR = whiteContrast(parseHex(DEFAULT_PALETTE.accent)!);
+
+// chromeBorder is the line drawn on the light chrome: the tone itself stepped
+// toward black, so a tinted rail keeps the separators a white one had. Rows take
+// it at half strength, the way the dark surfaces already do.
+const CHROME_BORDER_STEP = 0.1;
+
+export function chromeBorder(chrome: string): string {
+  const rgb = parseHex(chrome);
+  if (!rgb) return '#e5e7eb';
+  return toHex(mix(rgb, 0, CHROME_BORDER_STEP));
+}
+
+export function onAccent(accent: string): string {
+  const rgb = parseHex(accent);
+  if (!rgb) return '#ffffff';
+  return whiteContrast(rgb) >= ON_ACCENT_FLOOR ? '#ffffff' : '#0d0d0d';
+}
 
 // resolvePalette fills a theme file out into the full set of tones, or returns
 // null when the accent is not a plain hex. The daemon already refuses anything
@@ -238,6 +306,7 @@ export function resolvePalette(file: PaletteFile): Palette | null {
     card: hex(file.card) || DEFAULT_PALETTE.card,
     border: hex(file.border) || DEFAULT_PALETTE.border,
     muted: hex(file.muted) || DEFAULT_PALETTE.muted,
+    chromeLight: hex(file.chrome_light) || undefined,
     source: file.source === 'desktop' ? 'desktop' : 'user'
   };
 }
@@ -252,13 +321,17 @@ export function paletteById(palettes: Palette[], id: string): Palette {
 // paletteVars maps a theme onto the custom properties app.css declares, picking
 // the tone that reads on the surface the current mode paints.
 export function paletteVars(palette: Palette, dark: boolean): Record<string, string> {
+  const accent = dark ? palette.accentDark : palette.accent;
   return {
-    '--lerd-accent': dark ? palette.accentDark : palette.accent,
+    '--lerd-accent': accent,
+    '--lerd-on-accent': onAccent(accent),
     '--lerd-accent-hover': dark ? palette.accentHoverDark : palette.accentHover,
     '--lerd-bg': palette.bg,
     '--lerd-card': palette.card,
     '--lerd-border': palette.border,
-    '--lerd-muted': palette.muted
+    '--lerd-muted': palette.muted,
+    '--lerd-chrome-light': palette.chromeLight || '#ffffff',
+    '--lerd-chrome-border': chromeBorder(palette.chromeLight || '#ffffff')
   };
 }
 

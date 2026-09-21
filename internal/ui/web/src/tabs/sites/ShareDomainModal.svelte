@@ -100,7 +100,7 @@
         type="button"
         disabled={busy || !clean}
         onclick={() => onsubmit(clean, remember)}
-        class="{btnBase} bg-lerd-red hover:bg-lerd-redhov text-white">{m.shareDomain_use()}</button
+        class="{btnBase} bg-lerd-red hover:bg-lerd-redhov text-lerd-onred">{m.shareDomain_use()}</button
       >
     {:else}
       <button
@@ -114,7 +114,7 @@
         type="button"
         disabled={busy}
         onclick={() => onsubmit(clean, remember)}
-        class="{btnBase} bg-lerd-red hover:bg-lerd-redhov text-white">{m.common_save()}</button
+        class="{btnBase} bg-lerd-red hover:bg-lerd-redhov text-lerd-onred">{m.common_save()}</button
       >
     {/if}
   {/snippet}

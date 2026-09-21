@@ -135,7 +135,7 @@
       type="button"
       disabled={busy || (!clean && !argsChanged)}
       onclick={save}
-      class="{btnBase} bg-lerd-red hover:bg-lerd-redhov text-white">{m.common_save()}</button
+      class="{btnBase} bg-lerd-red hover:bg-lerd-redhov text-lerd-onred">{m.common_save()}</button
     >
   {/snippet}
 </Modal>

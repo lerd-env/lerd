@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+// omarchyNames is what the Omarchy reader hands the watch: the theme directory
+// and the file naming it.
+var omarchyNames = []string{"theme", "theme.name"}
+
 // waitForSignal drains one change off the channel, or fails. The watcher runs
 // on real filesystem events, so the test waits on the signal rather than on a
 // fixed sleep.
@@ -20,7 +24,7 @@ func waitForSignal(t *testing.T, ch <-chan struct{}) {
 	}
 }
 
-func TestWatchOmarchyThemeReportsAThemeSwap(t *testing.T) {
+func TestWatchDesktopThemeReportsAThemeSwap(t *testing.T) {
 	state := t.TempDir()
 	current := filepath.Join(state, "omarchy", "current")
 	if err := os.MkdirAll(filepath.Join(current, "theme"), 0755); err != nil {
@@ -30,8 +34,8 @@ func TestWatchOmarchyThemeReportsAThemeSwap(t *testing.T) {
 	changed := make(chan struct{}, 4)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if err := watchOmarchyTheme(ctx, current, 20*time.Millisecond, func() { changed <- struct{}{} }); err != nil {
-		t.Fatalf("watchOmarchyTheme: %v", err)
+	if err := watchDesktopTheme(ctx, current, omarchyNames, 20*time.Millisecond, func() { changed <- struct{}{} }); err != nil {
+		t.Fatalf("watchDesktopTheme: %v", err)
 	}
 
 	// What omarchy-theme-set does: stage the new theme beside the old one, then
@@ -49,7 +53,7 @@ func TestWatchOmarchyThemeReportsAThemeSwap(t *testing.T) {
 	waitForSignal(t, changed)
 }
 
-func TestWatchOmarchyThemeReportsANameChange(t *testing.T) {
+func TestWatchDesktopThemeReportsANameChange(t *testing.T) {
 	state := t.TempDir()
 	current := filepath.Join(state, "omarchy", "current")
 	if err := os.MkdirAll(filepath.Join(current, "theme"), 0755); err != nil {
@@ -59,8 +63,8 @@ func TestWatchOmarchyThemeReportsANameChange(t *testing.T) {
 	changed := make(chan struct{}, 4)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if err := watchOmarchyTheme(ctx, current, 20*time.Millisecond, func() { changed <- struct{}{} }); err != nil {
-		t.Fatalf("watchOmarchyTheme: %v", err)
+	if err := watchDesktopTheme(ctx, current, omarchyNames, 20*time.Millisecond, func() { changed <- struct{}{} }); err != nil {
+		t.Fatalf("watchDesktopTheme: %v", err)
 	}
 
 	if err := os.WriteFile(filepath.Join(current, "theme.name"), []byte("nord\n"), 0644); err != nil {
@@ -71,7 +75,7 @@ func TestWatchOmarchyThemeReportsANameChange(t *testing.T) {
 
 // A swap fires a burst of events. The dashboard should be told once, or every
 // open tab refetches the theme list several times for one keystroke.
-func TestWatchOmarchyThemeCollapsesABurst(t *testing.T) {
+func TestWatchDesktopThemeCollapsesABurst(t *testing.T) {
 	state := t.TempDir()
 	current := filepath.Join(state, "omarchy", "current")
 	if err := os.MkdirAll(current, 0755); err != nil {
@@ -81,8 +85,8 @@ func TestWatchOmarchyThemeCollapsesABurst(t *testing.T) {
 	changed := make(chan struct{}, 16)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if err := watchOmarchyTheme(ctx, current, 150*time.Millisecond, func() { changed <- struct{}{} }); err != nil {
-		t.Fatalf("watchOmarchyTheme: %v", err)
+	if err := watchDesktopTheme(ctx, current, omarchyNames, 150*time.Millisecond, func() { changed <- struct{}{} }); err != nil {
+		t.Fatalf("watchDesktopTheme: %v", err)
 	}
 
 	for i := 0; i < 5; i++ {
@@ -100,11 +104,11 @@ func TestWatchOmarchyThemeCollapsesABurst(t *testing.T) {
 
 // Nothing to watch is the ordinary case on a machine without Omarchy, and it
 // must not take the daemon down with it.
-func TestWatchOmarchyThemeWithoutOmarchy(t *testing.T) {
+func TestWatchDesktopThemeWithoutADesktop(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	err := watchOmarchyTheme(ctx, filepath.Join(t.TempDir(), "absent"), time.Millisecond, func() {})
+	err := watchDesktopTheme(ctx, filepath.Join(t.TempDir(), "absent"), omarchyNames, time.Millisecond, func() {})
 	if err == nil {
-		t.Error("watchOmarchyTheme on a missing directory = nil, want an error the caller can ignore")
+		t.Error("watchDesktopTheme on a missing directory = nil, want an error the caller can ignore")
 	}
 }
