@@ -1239,7 +1239,7 @@
   "system_node_cannotRemoveSystem": "Node lo gestiona el sistema",
   "system_node_defaultVersion": "Versión predeterminada",
   "system_node_installFailed": "Instalación fallida",
-  "system_node_installNewHint": "Introduce una versión mayor (p. ej. {major}) o una específica (p. ej. {specific}). Se instala vía fnm.",
+  "system_node_installNewHint": "Introduce una versión mayor (p. ej. {major}) o una específica (p. ej. {specific}). Se instala vía {manager}.",
   "system_node_installNewTitle": "Instalar una versión nueva",
   "system_node_installPlaceholder": "p. ej. 22",
   "system_node_installed": "¡Instalada!",

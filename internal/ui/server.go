@@ -684,9 +684,6 @@ type StatusResponse struct {
 	// NvmAvailable is true when a user-installed nvm is present (nvm.sh found),
 	// so the dashboard can disable the nvm switch rather than error on click.
 	NvmAvailable bool `json:"nvm_available"`
-	// MiseAvailable reports whether a mise is installed, the user's own or the
-	// one lerd fetched.
-	MiseAvailable bool `json:"mise_available"`
 	// BunAvailable is true when a bun binary is installed on the host;
 	// BunVersion carries its version for an at-a-glance reference.
 	// UsingSystemBun is true when lerd isn't managing Node and there's no system
@@ -815,7 +812,7 @@ func buildStatus() StatusResponse {
 	usingSystemBun := bunAvailable && !nodeManagedByLerd && !lerdNode.SystemNodeAvailable()
 	toolStatuses := []tools.ToolStatus{}
 	for _, s := range tools.StatusAll(context.Background()) {
-		if (s.Name == "fnm" || s.Name == "mise") && s.Name != nodeManager {
+		if s.Name == "fnm" && nodeManager != "fnm" {
 			continue
 		}
 		toolStatuses = append(toolStatuses, s)
@@ -834,7 +831,6 @@ func buildStatus() StatusResponse {
 		NodeManagedByLerd:     nodeManagedByLerd,
 		NodeManager:           nodeManager,
 		NvmAvailable:          lerdNode.ManagerByName("nvm").Available(),
-		MiseAvailable:         lerdNode.ManagerByName("mise").Available(),
 		BunAvailable:          bunAvailable,
 		BunVersion:            bunVersion,
 		UsingSystemBun:        usingSystemBun,

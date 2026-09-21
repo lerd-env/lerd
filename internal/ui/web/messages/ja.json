@@ -1239,7 +1239,7 @@
   "system_node_cannotRemoveSystem": "Node はシステムが管理しています",
   "system_node_defaultVersion": "デフォルトバージョン",
   "system_node_installFailed": "インストールに失敗しました",
-  "system_node_installNewHint": "メジャーバージョン（例: {major}）または特定のバージョン（例: {specific}）を入力してください。fnm 経由でインストールされます。",
+  "system_node_installNewHint": "メジャーバージョン（例: {major}）または特定のバージョン（例: {specific}）を入力してください。{manager} 経由でインストールされます。",
   "system_node_installNewTitle": "新しいバージョンをインストール",
   "system_node_installPlaceholder": "例: 22",
   "system_node_installed": "インストールしました！",

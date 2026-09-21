@@ -1239,7 +1239,7 @@
   "system_node_cannotRemoveSystem": "Node este gestionat de sistem",
   "system_node_defaultVersion": "Versiune implicită",
   "system_node_installFailed": "Instalare eșuată",
-  "system_node_installNewHint": "Introdu o versiune majoră (de ex. {major}) sau una specifică (de ex. {specific}). Instalat prin fnm.",
+  "system_node_installNewHint": "Introdu o versiune majoră (de ex. {major}) sau una specifică (de ex. {specific}). Instalat prin {manager}.",
   "system_node_installNewTitle": "Instalează o versiune nouă",
   "system_node_installPlaceholder": "de ex. 22",
   "system_node_installed": "Instalat!",

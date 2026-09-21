@@ -1239,7 +1239,7 @@
   "system_node_cannotRemoveSystem": "Node do hệ thống quản lý",
   "system_node_defaultVersion": "Phiên bản mặc định",
   "system_node_installFailed": "Cài đặt thất bại",
-  "system_node_installNewHint": "Nhập phiên bản major (ví dụ {major}) hoặc một phiên bản cụ thể (ví dụ {specific}). Cài đặt qua fnm.",
+  "system_node_installNewHint": "Nhập phiên bản major (ví dụ {major}) hoặc một phiên bản cụ thể (ví dụ {specific}). Cài đặt qua {manager}.",
   "system_node_installNewTitle": "Cài đặt phiên bản mới",
   "system_node_installPlaceholder": "ví dụ 22",
   "system_node_installed": "Đã cài đặt!",

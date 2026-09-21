@@ -1239,7 +1239,7 @@
   "system_node_cannotRemoveSystem": "Node 由系统管理",
   "system_node_defaultVersion": "默认版本",
   "system_node_installFailed": "安装失败",
-  "system_node_installNewHint": "输入一个主版本号（例如 {major}）或具体版本号（例如 {specific}）。通过 fnm 安装。",
+  "system_node_installNewHint": "输入一个主版本号（例如 {major}）或具体版本号（例如 {specific}）。通过 {manager} 安装。",
   "system_node_installNewTitle": "安装新版本",
   "system_node_installPlaceholder": "例如 22",
   "system_node_installed": "已安装！",

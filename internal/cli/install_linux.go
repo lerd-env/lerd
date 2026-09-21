@@ -42,6 +42,7 @@ func downloadBinaries(w io.Writer) error {
 		if err := ensureMiseBinary(w); err != nil {
 			return err
 		}
+		removeFnmBinary()
 	}
 
 	// mkcert

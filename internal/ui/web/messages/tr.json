@@ -1239,7 +1239,7 @@
   "system_node_cannotRemoveSystem": "Node sistem tarafından yönetiliyor",
   "system_node_defaultVersion": "Varsayılan sürüm",
   "system_node_installFailed": "Kurulum başarısız",
-  "system_node_installNewHint": "Ana sürüm (örn. {major}) veya belirli bir sürüm (örn. {specific}) girin. fnm aracılığıyla kurulur.",
+  "system_node_installNewHint": "Ana sürüm (örn. {major}) veya belirli bir sürüm (örn. {specific}) girin. {manager} aracılığıyla kurulur.",
   "system_node_installNewTitle": "Yeni bir sürüm kur",
   "system_node_installPlaceholder": "örn. 22",
   "system_node_installed": "Kuruldu!",

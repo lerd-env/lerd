@@ -138,6 +138,9 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 	if err := config.SaveGlobal(cfg); err != nil {
 		return fmt.Errorf("saving config: %w", err)
 	}
+	if target == "mise" {
+		removeFnmBinary()
+	}
 
 	// Only rewrite shims/workers when lerd is actually managing Node; otherwise
 	// the choice is just persisted and applies whenever management is enabled.
@@ -156,13 +159,13 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 }
 
 // NewNodeUnmanageCmd returns the node:unmanage command, which removes lerd's
-// node shims and, when lerd owns the version manager (fnm), the Node binaries it
+// node shims and, when lerd owns the version manager, the Node binaries it
 // installed — leaving a clean system so the user can rely on bun or their own
 // system Node.
 func NewNodeUnmanageCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "node:unmanage",
-		Short: "Stop managing Node.js: remove lerd's node shims and fnm-installed versions",
+		Short: "Stop managing Node.js: remove lerd's node shims and the Node versions lerd installed",
 		Args:  cobra.NoArgs,
 		RunE:  runNodeUnmanage,
 	}

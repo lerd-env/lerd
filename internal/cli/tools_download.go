@@ -82,8 +82,7 @@ func installMise(pins *pinnedTools, home string, w io.Writer) error {
 		return fmt.Errorf("mise install: %w", err)
 	}
 	tarball := dest + ".tar.gz"
-	v, err := pins.download("mise", tarball, 0644, w)
-	if err != nil {
+	if _, err := pins.download("mise", tarball, 0644, w); err != nil {
 		return fmt.Errorf("mise download: %w", err)
 	}
 	defer os.Remove(tarball)
@@ -94,8 +93,16 @@ func installMise(pins *pinnedTools, home string, w io.Writer) error {
 		return fmt.Errorf("mise extract: %w", err)
 	}
 	os.Chmod(dest, 0755) //nolint:errcheck
-	_ = tools.WriteStamp("mise", v)
 	return nil
+}
+
+// removeFnmBinary drops lerd's own fnm once another manager drives Node. The
+// copy in BinDir is lerd's, so it goes rather than lingering as a tool nothing
+// runs; switching back with `lerd node:manager fnm` downloads it again.
+func removeFnmBinary() {
+	fnm := filepath.Join(config.BinDir(), "fnm")
+	os.Remove(fnm)              //nolint:errcheck
+	os.Remove(fnm + ".version") //nolint:errcheck
 }
 
 // installFnm downloads and extracts the pinned fnm, overwriting any existing

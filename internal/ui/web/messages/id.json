@@ -1239,7 +1239,7 @@
   "system_node_cannotRemoveSystem": "Node dikelola oleh sistem",
   "system_node_defaultVersion": "Versi bawaan",
   "system_node_installFailed": "Pemasangan gagal",
-  "system_node_installNewHint": "Masukkan versi mayor (mis. {major}) atau versi spesifik (mis. {specific}). Dipasang via fnm.",
+  "system_node_installNewHint": "Masukkan versi mayor (mis. {major}) atau versi spesifik (mis. {specific}). Dipasang via {manager}.",
   "system_node_installNewTitle": "Pasang versi baru",
   "system_node_installPlaceholder": "mis. 22",
   "system_node_installed": "Terpasang!",

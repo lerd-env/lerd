@@ -1239,7 +1239,7 @@
   "system_node_cannotRemoveSystem": "Node is managed by the system",
   "system_node_defaultVersion": "Default version",
   "system_node_installFailed": "Install failed",
-  "system_node_installNewHint": "Enter a major version (e.g. {major}) or a specific one (e.g. {specific}). Installed via fnm.",
+  "system_node_installNewHint": "Enter a major version (e.g. {major}) or a specific one (e.g. {specific}). Installed via {manager}.",
   "system_node_installNewTitle": "Install a new version",
   "system_node_installPlaceholder": "e.g. 22",
   "system_node_installed": "Installed!",

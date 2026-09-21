@@ -1239,7 +1239,7 @@
   "system_node_cannotRemoveSystem": "Node wordt door het systeem beheerd",
   "system_node_defaultVersion": "Standaardversie",
   "system_node_installFailed": "Installatie mislukt",
-  "system_node_installNewHint": "Voer een hoofdversie in (bijv. {major}) of een specifieke (bijv. {specific}). Geïnstalleerd via fnm.",
+  "system_node_installNewHint": "Voer een hoofdversie in (bijv. {major}) of een specifieke (bijv. {specific}). Geïnstalleerd via {manager}.",
   "system_node_installNewTitle": "Een nieuwe versie installeren",
   "system_node_installPlaceholder": "bijv. 22",
   "system_node_installed": "Geïnstalleerd!",
