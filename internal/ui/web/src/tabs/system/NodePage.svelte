@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { status, loadStatus } from '$stores/status';
   import { nodeVersions, loadNodeVersions, setDefaultNode, removeNode, installNode, manageNode, unmanageNode, setNodeManager } from '$stores/nodeVersions';
   import { sites, sitesByNode } from '$stores/sites';
@@ -11,6 +12,10 @@
   // reactivity is direct (bypasses any auto-subscription edge case).
   let nodeDefault = $state('');
   $effect(() => status.subscribe((s) => { nodeDefault = s.node_default || ''; }));
+
+  // The list is otherwise fetched once at app start, so a version installed
+  // from the CLI stays invisible in an open dashboard.
+  onMount(loadNodeVersions);
 
   let defaultBusy = $state<string | null>(null);
   let saveError = $state('');
@@ -160,9 +165,9 @@
     </div>
     <div class="flex items-center gap-2">
       {#if manageError}<span class="text-xs text-red-500">{manageError}</span>{/if}
-      <!-- Hidden without nvm (nothing to switch to), unless the manager is
-           already nvm so a stranded install keeps its way back to fnm. -->
-      {#if !$status.using_system_bun && ($status.nvm_available || $status.node_manager === 'nvm')}
+      <!-- mise and fnm are always both on offer; nvm is only ever a choice on a
+           host that has one, and the option disables itself when it does not. -->
+      {#if !$status.using_system_bun}
         <SegmentedControl
           options={managerOptions}
           value={$status.node_manager}
