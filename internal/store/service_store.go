@@ -128,16 +128,23 @@ func (c *Client) RefreshServiceIcons() int {
 	return added
 }
 
-// WatchServiceIcons sweeps the store's marks once at startup and then on every
-// interval tick, so a preset published after this binary shipped still shows its
-// logo. Meant to run as a goroutine from the long-running watcher.
-func WatchServiceIcons(interval time.Duration) {
-	NewServiceClient().RefreshServiceIcons()
+// WatchServiceStore sweeps the store once at startup and then on every interval
+// tick: the marks of every published preset, so one published after this binary
+// shipped still shows its logo, and the definition of every installed service,
+// so a store change reaches a host already running it. Meant to run as a
+// goroutine from the long-running watcher.
+func WatchServiceStore(interval time.Duration) {
+	sweepServiceStore()
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for range t.C {
-		NewServiceClient().RefreshServiceIcons()
+		sweepServiceStore()
 	}
+}
+
+func sweepServiceStore() {
+	NewServiceClient().RefreshServiceIcons()
+	RefreshInstalledPresets()
 }
 
 // SearchServices filters the store index by a case-insensitive substring match
