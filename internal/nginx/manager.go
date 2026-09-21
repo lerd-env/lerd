@@ -1127,6 +1127,7 @@ var (
 		_, err := podman.Run("exec", "lerd-nginx", "nginx", "-s", "reload")
 		return err
 	}
+	configTestFn = Test
 )
 
 // Reload signals nginx to reload its configuration. A failed signal is
@@ -1134,12 +1135,32 @@ var (
 // no extra inspect and a genuine podman failure is never mistaken for a
 // stopped container.
 func Reload() error {
+	return withConfigDiagnostics(reloadOnce())
+}
+
+func reloadOnce() error {
 	err := reloadExecFn()
 	if err == nil {
 		return nil
 	}
 	if running, rerr := containerRunningFn("lerd-nginx"); rerr == nil && !running {
 		return ErrNotRunning
+	}
+	return err
+}
+
+// withConfigDiagnostics appends nginx -t output to a reload that failed for a
+// reason other than a stopped container. podman reports only the exit status,
+// which never says which line nginx objected to, and a definition from a newer
+// store can ship a directive this build has no module for. Applied once per
+// call rather than inside the retry loop, where an exec per attempt would
+// stretch the caller's timeout well past what it asked for.
+func withConfigDiagnostics(err error) error {
+	if err == nil || errors.Is(err, ErrNotRunning) {
+		return err
+	}
+	if out, _ := configTestFn(); out != "" {
+		return fmt.Errorf("%w\n%s", err, out)
 	}
 	return err
 }
@@ -1152,7 +1173,7 @@ func Reload() error {
 // once the swap has settled, succeeds. nginx keeps serving its previous config
 // across a rejected reload, so retrying is safe.
 func ReloadWithRetry(timeout time.Duration) error {
-	return reloadWithRetry(Reload, timeout)
+	return withConfigDiagnostics(reloadWithRetry(reloadOnce, timeout))
 }
 
 func reloadWithRetry(reload func() error, timeout time.Duration) error {

@@ -470,7 +470,7 @@ func injectDashboardBootstrap(resp *http.Response, script string) error {
 // so follow the move the same way the dashboard link does, or the proxy keeps
 // dialing the stale port after the container rebinds.
 func resolveDashboardURL(svc *config.CustomService, services map[string]config.ServiceConfig) string {
-	return serviceops.WithDashboardPort(svc.Dashboard, svc.Ports, services[svc.Name])
+	return serviceops.WithDashboardPort(config.ServiceDashboard(svc), svc.Ports, services[svc.Name])
 }
 
 // handleDashProxy serves a bundled service dashboard same-origin under

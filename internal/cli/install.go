@@ -309,12 +309,12 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 	// Only on the run that actually makes the choice: once persisted, savedManager
 	// is set and neither line comes back.
-	nodeManager := nodeManagerChoice(savedManager, wantLerdNode, nvmDetected)
+	nodeManager := nodeManagerChoice(savedManager, wantLerdNode, nvmDetected, nodeDet.ManagerByName("fnm").Available())
 	if savedManager == "" && nvmDetected {
 		if nodeManager == "nvm" {
 			feedback.Line("leaving Node to your nvm, lerd will run npm and npx through it")
 		} else {
-			feedback.Line("using the bundled fnm for lerd-managed Node, switch with: lerd node:manager nvm")
+			feedback.Line("using mise for lerd-managed Node, switch with: lerd node:manager nvm")
 		}
 	}
 
@@ -1478,14 +1478,23 @@ func nodeManageDecision(fromUpdate, unattended bool, saved *bool, systemNodeDete
 // and setup runs follow it instead of an fnm no version is ever installed into.
 // Users who want lerd to manage Node through their nvm switch with
 // `lerd node:manager nvm` or the dashboard.
-func nodeManagerChoice(saved string, wantLerdNode, nvmDetected bool) string {
+func nodeManagerChoice(saved string, wantLerdNode, nvmDetected, fnmInstalled bool) string {
 	if saved != "" {
 		return saved
 	}
 	if !wantLerdNode && nvmDetected {
 		return "nvm"
 	}
-	return "fnm"
+	// An fnm already in lerd's bin dir is an install from before node.manager
+	// existed, and it was driving fnm. Updates leave it there; moving it to mise
+	// is the user's call, with `lerd node:manager mise`.
+	if fnmInstalled {
+		return "fnm"
+	}
+	// New installs get mise: it is signed under a stable Developer ID, so macOS
+	// keeps a folder grant across version bumps where fnm loses it (#1906). A
+	// config that already names a manager is left alone above.
+	return "mise"
 }
 
 // nodeStateFlipped reports whether this install run changed which Node host

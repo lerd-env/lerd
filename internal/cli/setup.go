@@ -199,9 +199,40 @@ func siteServedByPHPFPM(site *config.Site) bool {
 	return !site.IsHostProxy() && !site.IsCustomContainer()
 }
 
-// declaredFalse reports a framework definition explicitly opting a package
-// manager out (`composer: false`, `npm: false`). Empty and "auto" mean "detect".
-func declaredFalse(v string) bool { return strings.EqualFold(strings.TrimSpace(v), "false") }
+// pkgManagerState is what a framework definition's `composer:` / `npm:` field
+// asks for. Anything outside the known set comes from a store newer than this
+// binary, and must not be read as "yes" merely because it is not "false".
+type pkgManagerState int
+
+const (
+	pkgManagerAuto pkgManagerState = iota
+	pkgManagerOff
+	pkgManagerUnknown
+)
+
+func packageManagerState(v string) pkgManagerState {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "auto", "true":
+		return pkgManagerAuto
+	case "false":
+		return pkgManagerOff
+	}
+	return pkgManagerUnknown
+}
+
+// packageManagerEnabled reports whether a setup step should be offered. An
+// unrecognised state falls back to auto-detection, which is what every
+// definition wanted before the field existed, and says so rather than guessing
+// in silence.
+func packageManagerEnabled(declared, name string) bool {
+	switch packageManagerState(declared) {
+	case pkgManagerOff:
+		return false
+	case pkgManagerUnknown:
+		feedback.Warn("framework definition sets %s: %q, which this version of lerd does not understand; falling back to auto-detection. Update lerd to honour it.", name, declared)
+	}
+	return true
+}
 
 // frameworkForSetup resolves the site's framework definition, falling back to
 // detection. Returns a zero Framework rather than nil so callers can read its
@@ -375,8 +406,8 @@ func planSetupSteps(cwd string, skipOpen bool) []setupStep {
 	// Drupal, WordPress). Honour it, and never offer a JS step to a project with
 	// no package.json at all.
 	setupFW := frameworkForSetup(site, cwd)
-	wantComposer := hasComposerJSON && !declaredFalse(setupFW.Composer)
-	wantJS := hasPackageJSON && !declaredFalse(setupFW.NPM)
+	wantComposer := hasComposerJSON && packageManagerEnabled(setupFW.Composer, "composer")
+	wantJS := hasPackageJSON && packageManagerEnabled(setupFW.NPM, "npm")
 
 	steps := []setupStep{}
 	// composer install only makes sense for a PHP project; skip it entirely for

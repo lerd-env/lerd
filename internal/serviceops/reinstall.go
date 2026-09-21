@@ -123,12 +123,7 @@ func ReinstallService(name string, opts ReinstallOptions, emit func(PhaseEvent))
 
 	// Suppress regen-during-remove; we drive it ourselves below to
 	// eliminate the launchctl bootout/bootstrap race on macOS.
-	removeOpts := RemoveOptions{
-		RemoveData:      opts.ResetData,
-		SkipSnapshot:    opts.SkipSnapshot,
-		SnapshotLabel:   reinstallSnapshotLabel,
-		SkipFamilyRegen: true,
-	}
+	removeOpts := reinstallRemoveOptions(opts)
 	if err := RemoveService(name, removeOpts, emit); err != nil {
 		return fmt.Errorf("reinstall: remove step: %w", err)
 	}
@@ -302,4 +297,19 @@ func realReinstallInstall(name string, spec reinstallSpec, emit func(PhaseEvent)
 		return &config.CustomService{Name: name}, nil
 	}
 	return reinstallStreamingFn(spec.presetName, spec.version, emit)
+}
+
+// reinstallRemoveOptions is how a reinstall asks for its remove. Family regen is
+// suppressed because the reinstall drives it itself after the install, and the
+// cached store preset is kept because the install step is about to read it: a
+// reinstall that pruned it would refetch, and a preset the store is not serving
+// right now would leave the user with no service at all.
+func reinstallRemoveOptions(opts ReinstallOptions) RemoveOptions {
+	return RemoveOptions{
+		RemoveData:      opts.ResetData,
+		SkipSnapshot:    opts.SkipSnapshot,
+		SnapshotLabel:   reinstallSnapshotLabel,
+		SkipFamilyRegen: true,
+		KeepStorePreset: true,
+	}
 }

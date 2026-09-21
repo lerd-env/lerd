@@ -112,26 +112,33 @@ func TestNodeManagerChoice(t *testing.T) {
 		saved        string
 		wantLerdNode bool
 		nvm          bool
+		fnmInstalled bool
 		want         string
 	}{
 		// A saved manager is never revisited, whatever the answers are.
-		{"saved nvm survives a managed answer", "nvm", true, true, "nvm"},
-		{"saved fnm survives a decline", "fnm", false, true, "fnm"},
+		{"saved nvm survives a managed answer", "nvm", true, true, false, "nvm"},
+		{"saved fnm survives a decline", "fnm", false, true, false, "fnm"},
 
-		// lerd-managed Node drives the bundled fnm, even when nvm is around:
-		// managing means lerd owns the versions, in its own tool.
-		{"managed picks fnm", "", true, false, "fnm"},
-		{"managed picks fnm despite nvm", "", true, true, "fnm"},
+		// lerd-managed Node drives mise, even when nvm is around: managing means
+		// lerd owns the versions, in its own tool.
+		{"managed picks mise", "", true, false, false, "mise"},
+		{"managed picks mise despite nvm", "", true, true, false, "mise"},
 
 		// Declining hands Node back to the user, so lerd follows their nvm
-		// rather than an fnm it will never install a version into.
-		{"decline with nvm picks nvm", "", false, true, "nvm"},
-		{"decline without nvm keeps fnm", "", false, false, "fnm"},
+		// rather than a manager it will never install a version into.
+		{"decline with nvm picks nvm", "", false, true, false, "nvm"},
+		{"decline without nvm keeps mise", "", false, false, false, "mise"},
+
+		// An fnm in lerd's bin dir with no manager in config is an install from
+		// before the setting existed: it was driving fnm and keeps driving it,
+		// rather than being moved to mise behind the user's back by an update.
+		{"an existing fnm install stays on fnm", "", true, false, true, "fnm"},
+		{"an existing fnm install stays on fnm despite nvm", "", true, true, true, "fnm"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := nodeManagerChoice(tc.saved, tc.wantLerdNode, tc.nvm); got != tc.want {
-				t.Errorf("nodeManagerChoice(%q, %v, %v) = %q, want %q", tc.saved, tc.wantLerdNode, tc.nvm, got, tc.want)
+			if got := nodeManagerChoice(tc.saved, tc.wantLerdNode, tc.nvm, tc.fnmInstalled); got != tc.want {
+				t.Errorf("nodeManagerChoice(%q, %v, %v, %v) = %q, want %q", tc.saved, tc.wantLerdNode, tc.nvm, tc.fnmInstalled, got, tc.want)
 			}
 		})
 	}

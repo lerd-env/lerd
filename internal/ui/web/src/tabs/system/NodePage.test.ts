@@ -14,6 +14,8 @@ vi.mock('$stores/nodeVersions', async (orig) => {
   return { ...actual, loadNodeVersions: vi.fn(), setNodeManager: vi.fn() };
 });
 
+import { loadNodeVersions } from '$stores/nodeVersions';
+
 function setStatus(patch: Record<string, unknown>) {
   status.update((s) => ({ ...s, ...patch }));
 }
@@ -23,7 +25,17 @@ describe('NodePage manager switcher', () => {
     setStatus({ node_managed_by_lerd: true, using_system_bun: false, node_manager: 'fnm', nvm_available: false });
   });
 
-  it('hides the fnm/nvm switcher when nvm is not installed', () => {
+  // mise and fnm are both lerd's to install, so there is always a switch to
+  // make even on a host that has never heard of nvm.
+  it('shows the switcher without nvm', () => {
+    const { getByRole } = render(NodePage);
+    const group = getByRole('group', { name: 'Version manager' });
+    expect(group.textContent).toContain('mise');
+    expect(group.textContent).toContain('fnm');
+  });
+
+  it('hides the switcher when the host runs on system bun', () => {
+    setStatus({ using_system_bun: true });
     const { queryByRole } = render(NodePage);
     expect(queryByRole('group', { name: 'Version manager' })).toBeNull();
   });
@@ -40,6 +52,16 @@ describe('NodePage manager switcher', () => {
     setStatus({ node_manager: 'nvm', nvm_available: false });
     const { getByRole } = render(NodePage);
     expect(getByRole('group', { name: 'Version manager' })).toBeTruthy();
+  });
+});
+
+// Versions installed from the CLI never reach an open dashboard otherwise: the
+// list is fetched once when the app starts.
+describe('NodePage refresh', () => {
+  it('refetches the versions when the page opens', () => {
+    vi.mocked(loadNodeVersions).mockClear();
+    render(NodePage);
+    expect(loadNodeVersions).toHaveBeenCalled();
   });
 });
 

@@ -508,3 +508,29 @@ func TestRemoveService_KeepsSharedStorePreset(t *testing.T) {
 		t.Error("a store preset still used by another service must not be pruned")
 	}
 }
+
+// A reinstall removes the service and puts it straight back, so the cached
+// store preset it is about to reinstall from must survive the remove. Pruned,
+// the install step finds nothing local and goes to the network, and a preset the
+// store does not serve, one still in review or published only to a newer schema,
+// leaves the user with no service at all.
+func TestRemoveService_KeepStorePresetSurvivesForReinstall(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	stubPodmanRemove(t)
+
+	if err := config.SaveCustomService(&config.CustomService{Name: "solr", Image: "docker.io/library/solr:9", Preset: "solr"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SaveStorePreset("solr", []byte("name: solr\nimage: docker.io/library/solr:9\n")); err != nil {
+		t.Fatal(err)
+	}
+	cachePath := filepath.Join(config.StorePresetsDir(), "solr.yaml")
+
+	if err := RemoveService("solr", RemoveOptions{KeepStorePreset: true}, func(PhaseEvent) {}); err != nil {
+		t.Fatalf("RemoveService: %v", err)
+	}
+	if _, err := os.Stat(cachePath); err != nil {
+		t.Error("a reinstall's remove must leave the cached preset it reinstalls from in place")
+	}
+}

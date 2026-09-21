@@ -24,6 +24,14 @@ A `.lerd.yaml` ships inside a project, so its embedded `framework_def` is treate
 A project's own host extensions still work, just with consent: a `host: true` entry in top-level `custom_workers`, and any top-level `commands:` you run via `lerd run` or the dashboard, prompt once showing the exact command before they run on your host, and the approval is remembered per site. Set `host_commands.skip_confirmation: true` (or `host_commands.disabled: true` to refuse them outright) in the global config to change that.
 :::
 
+## Writing for binaries older than the definition
+
+A store definition reaches every install within a day, whatever version of lerd it runs, and there is no version gate on the way in. An old binary will therefore read a definition written after it shipped, which makes backward compatibility a property of how the schema is allowed to change rather than something a release can fix later.
+
+Two rules cover it. Add optional keys, never retype an existing one and never remove it, so a definition stays readable by every binary that came before; a key an old lerd has never heard of is ignored, while one whose meaning moved under it is not. And treat the accepted values of a key as part of its type: widening an enum is the same break as retyping the key, because the old binary's switch has no case for the new value and falls through to whatever its default happens to be.
+
+On lerd's side the answer to a value it does not recognise is to refuse and say so, never to guess. An env format it cannot write is refused rather than appended as dotenv lines into a PHP settings file. A worker restart policy or schedule expression it cannot parse is refused rather than written into a unit systemd would then quietly downgrade or reject. An unknown doctor check type, preset file generator or update strategy is skipped, leaving the project exactly as it was. Refusing is the worst a binary too old for its definition should ever do, and `lerd update` is what resolves it.
+
 ## Package definitions
 
 Most of what a definition declares is not really the framework's. A Horizon worker belongs to `laravel/horizon`, a fixtures command to `doctrine/doctrine-fixtures-bundle`, and NativePHP's worker, commands and checks to `nativephp/electron` and `nativephp/mobile`. Written into the version files, each one has to be repeated in every major of every framework that can carry the package, and corrected in all of them at once.
@@ -382,15 +390,19 @@ workers:
                                   # `when_env` narrows the requirement to sites whose .env
                                   # carries that KEY=VALUE. lerd refuses the start and names
                                   # the service instead of letting the worker crash-loop.
-    restart: always               # always | on-failure (default: always)
+    restart: always               # a systemd Restart= policy (default: always). Validated
+                                  # before the unit is written; a value this lerd does not
+                                  # know is refused rather than written, since systemd
+                                  # silently downgrades one it cannot parse to Restart=no.
     schedule: ""                  # systemd OnCalendar expression (optional). When set, the
                                   # worker is run as a Type=oneshot service triggered by a
                                   # sibling .timer instead of a long-running daemon. Use this
                                   # for cron-style commands like Laravel <=10's
                                   # `php artisan schedule:run`, which exits immediately and
                                   # would otherwise restart-loop under restart=always. Any
-                                  # systemd OnCalendar value is accepted (e.g. `minutely`,
-                                  # `*:0/5`, `Mon..Fri *-*-* 02:00:00`). Linux only; on
+                                  # value this host's systemd can parse is accepted (e.g.
+                                  # `minutely`, `*:0/5`, `Mon..Fri *-*-* 02:00:00`), and one
+                                  # it cannot is refused rather than written. Linux only; on
                                   # macOS scheduled workers currently log a warning and skip.
     check:                        # only shown when check passes (optional)
       composer: symfony/messenger # matches a package composer installed, not
