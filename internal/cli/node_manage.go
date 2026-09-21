@@ -138,12 +138,10 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 	if err := config.SaveGlobal(cfg); err != nil {
 		return fmt.Errorf("saving config: %w", err)
 	}
-	if target == "mise" {
-		removeFnmBinary()
-	}
 
 	// Only rewrite shims/workers when lerd is actually managing Node; otherwise
 	// the choice is just persisted and applies whenever management is enabled.
+	carried := true
 	if lerdManagesNode() {
 		step := feedback.Start("updating Node PATH shims for " + target)
 		if err := addShellShims(true); err != nil {
@@ -151,11 +149,53 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 			return fmt.Errorf("writing shims: %w", err)
 		}
 		step.OK("")
+		carried = carryNodeVersions(nodeDet.ManagerByName(current), nodeDet.ManagerByName(target))
 		ensureDefaultNode()
 		regenerateHostWorkers()
 	}
+	// Last, and only once every version made it across: the old fnm is what the
+	// versions were read from, and a site pinning one that did not carry still
+	// needs it.
+	if target == "mise" && carried {
+		removeFnmBinary()
+	}
 	feedback.Done("Node version manager set to " + feedback.Val(target))
 	return nil
+}
+
+// carryNodeVersions installs under the new manager every Node major the old one
+// could run, so a switch does not silently take versions away from sites that
+// pin them. Reports whether everything made it across.
+func carryNodeVersions(from, to nodeDet.Manager) bool {
+	if !from.Available() {
+		return true
+	}
+	ok := true
+	for _, v := range missingMajors(from.List(), to.List()) {
+		step := feedback.Start("installing Node " + v + " under " + to.Name())
+		if err := to.Install(v); err != nil {
+			step.Fail(err)
+			ok = false
+			continue
+		}
+		step.OK("")
+	}
+	return ok
+}
+
+// missingMajors is the majors in from that to does not have, in from's order.
+func missingMajors(from, to []string) []string {
+	have := make(map[string]bool, len(to))
+	for _, v := range to {
+		have[v] = true
+	}
+	var out []string
+	for _, v := range from {
+		if !have[v] {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // NewNodeUnmanageCmd returns the node:unmanage command, which removes lerd's
