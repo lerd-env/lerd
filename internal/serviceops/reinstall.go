@@ -147,6 +147,7 @@ func ReinstallService(name string, opts ReinstallOptions, emit func(PhaseEvent))
 	if err := reinstallReprovFn(name, emit); err != nil {
 		return fmt.Errorf("reinstall: reprovision step: %w", err)
 	}
+	syncDashboardVhost()
 	return nil
 }
 

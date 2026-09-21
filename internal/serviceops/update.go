@@ -198,6 +198,7 @@ func UpdateServiceStreaming(name, targetImage string, emit func(PhaseEvent)) err
 	// not the whole repo, so a user's own same-repo image is never touched. The
 	// protected set still guards against removing an image another service holds.
 	cleanup.SweepRefs(superseded)
+	syncDashboardVhost()
 	return nil
 }
 

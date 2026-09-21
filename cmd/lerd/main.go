@@ -647,8 +647,9 @@ func newWatchCmd() *cobra.Command {
 			go store.WatchIndex(6 * time.Hour)
 
 			// Cache the mark of every preset the service store publishes, so the
-			// discovery grid draws a service's own logo before it is installed.
-			go store.WatchServiceIcons(6 * time.Hour)
+			// discovery grid draws a service's own logo before it is installed, and
+			// re-read the definition of every service already installed here.
+			go store.WatchServiceStore(6 * time.Hour)
 
 			// Idle-suspend: suspends/resumes workers by activity. The whole session,
 			// including the source-file watcher passed here, only runs while the
