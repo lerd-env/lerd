@@ -210,6 +210,7 @@ func RemoveService(name string, opts RemoveOptions, emit func(PhaseEvent)) error
 	// unreferenced unless another service shares them. Reclaim exactly those refs
 	// (auto_cleanup gated); the protected set keeps any another service still holds.
 	cleanup.SweepRefs(removedImage, removedPrev)
+	syncDashboardVhost()
 	return nil
 }
 

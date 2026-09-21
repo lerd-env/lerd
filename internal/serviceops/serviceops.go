@@ -408,6 +408,7 @@ func InstallPresetStreaming(name, version string, emit func(PhaseEvent)) (*confi
 	for _, adopted := range AdoptDefaultServiceDomains() {
 		emit(PhaseEvent{Phase: "domain_adopted", Message: adopted + ": " + config.ServiceDomain(adopted)})
 	}
+	syncDashboardVhost()
 	return svc, nil
 }
 
