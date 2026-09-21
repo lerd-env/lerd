@@ -432,6 +432,7 @@ func InstallPresetByName(name, version string) (*config.CustomService, error) {
 	// Same reason as the streaming path: the name has to exist before anything
 	// signs a URL against it.
 	AdoptDefaultServiceDomains()
+	syncDashboardVhost()
 	return svc, nil
 }
 
