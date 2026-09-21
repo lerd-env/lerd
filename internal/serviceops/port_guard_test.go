@@ -237,8 +237,8 @@ func TestGenericGuard_shiftsWhenPrimaryBusy(t *testing.T) {
 
 // TestGenericGuard_sticksOncePersisted: the guard never moves a service whose
 // own unit is up (its own listener isn't a foreign owner), and never moves one
-// whose primary port is free. Combined with the published_port>0 gate in the
-// caller, this is what makes an auto-shifted port stick rather than reshuffle.
+// whose primary port is free. That is what makes a shifted port stick rather
+// than reshuffle; a recorded port only moves again once it stops being bindable.
 func TestGenericGuard_sticksOncePersisted(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
@@ -261,12 +261,12 @@ func TestGenericGuard_sticksOncePersisted(t *testing.T) {
 		t.Errorf("maybeShiftPublishedPort(0, active=false) = %d, want 0", got)
 	}
 
-	// The published_port==0 gate is what the caller consults; once a port is
-	// recorded, ServicePublishedPort is non-zero and the probe is skipped entirely.
+	// A recorded port is what the caller probes on the next write, so the shift
+	// has to be readable back.
 	if err := persistPublishedPort("redis", 6380); err != nil {
 		t.Fatalf("persistPublishedPort: %v", err)
 	}
 	if config.ServicePublishedPort("redis") == 0 {
-		t.Error("after a shift is persisted, ServicePublishedPort must be non-zero so the guard skips the probe")
+		t.Error("after a shift is persisted, ServicePublishedPort must report it")
 	}
 }
