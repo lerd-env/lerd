@@ -10,8 +10,9 @@ import (
 )
 
 // Manager abstracts a Node.js version manager so lerd can install, list, and
-// execute Node without hardcoding one tool. Two implementations exist: fnm (the
-// bundled default binary) and nvm (a user-installed shell function). Callers
+// execute Node without hardcoding one tool. Three implementations exist: mise
+// and fnm (binaries lerd can install) and nvm (a user-installed shell
+// function). Callers
 // select one via Active(), which reads the node.manager config setting.
 //
 // Two flavours of output are exposed because lerd drives the manager from two
@@ -19,7 +20,7 @@ import (
 // shell scripts where the lerd binary may be unreachable — worker units,
 // launchd guard scripts, and PATH shims (ExecPrefix and ShimScript).
 type Manager interface {
-	// Name is the manager's identifier: "fnm" or "nvm".
+	// Name is the manager's identifier: "mise", "fnm" or "nvm".
 	Name() string
 	// Available reports whether the manager is usable on this host.
 	Available() bool
@@ -97,6 +98,8 @@ func ManagerByName(name string) Manager {
 	switch name {
 	case "nvm":
 		return nvmManager{}
+	case "mise":
+		return newMiseManager()
 	default:
 		return fnmManager{}
 	}

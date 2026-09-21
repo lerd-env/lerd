@@ -10,19 +10,21 @@ php:
 node:
   default_version: "22"
   managed: true           # optional. Whether lerd manages Node (install/use/default
-                          # via the active manager). With fnm that includes PATH
-                          # shims; with nvm the user's shell keeps owning
+                          # via the active manager). With mise or fnm that
+                          # includes PATH shims; with nvm the user's shell owns
                           # node/npm/npx. Written by the install prompt and by
                           # lerd node:manage / node:unmanage; honoured on lerd
                           # update so an opt-out is not undone. Omitted on
                           # configs predating it, which fall back to whether a
                           # node shim is on disk.
-  manager: fnm            # optional. Which version manager lerd drives: "fnm"
-                          # (the bundled default) or "nvm" (a user-installed nvm,
-                          # picked automatically when you decline managed Node and
-                          # nvm is present). Switchable from the dashboard's Node
-                          # page; switching to fnm downloads it on demand if an
-                          # nvm-only install skipped it. Empty means fnm.
+  manager: mise           # optional. Which version manager lerd drives: "mise"
+                          # (the default, installed only when the host has none),
+                          # "fnm", or "nvm" (a user-installed nvm, picked
+                          # automatically when you decline managed Node and nvm
+                          # is present). Switchable from the dashboard's Node
+                          # page; switching to fnm or mise fetches it on demand.
+                          # Empty means fnm, which is what configs predating
+                          # this setting were using.
   nvm_dir: ~/.nvm         # optional. Where nvm lives when manager is nvm.
                           # Written at install/switch so lerd-ui and the watcher
                           # (which never load your shell rc) find a custom
