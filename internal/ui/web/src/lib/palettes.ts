@@ -63,7 +63,9 @@ const HOVER_STEP = 0.12;
 // from what those desktops actually ship, not from memory of them: Breeze from
 // Plasma 6.7's BreezeDark.colors, Adwaita from libadwaita 1.9's named colours,
 // macOS from Apple's documented system blue and window background. All three
-// have been darkened since the values most write-ups still quote.
+// have been darkened since the values most write-ups still quote. Their light
+// chrome is the tone each desktop tints its own sidebar with, Breeze's window
+// colour and libadwaita's sidebar_bg_color.
 export const BUILTIN_PALETTES: Palette[] = [
   {
     id: 'lerd',
@@ -189,6 +191,7 @@ export const BUILTIN_PALETTES: Palette[] = [
     accentHover: '#12556f',
     accentDark: '#3daee9',
     accentHoverDark: '#5fbdee',
+    chromeLight: '#eff0f1',
     bg: '#141618',
     card: '#202326',
     border: '#292c30',
@@ -202,6 +205,7 @@ export const BUILTIN_PALETTES: Palette[] = [
     accentHover: '#1a5fb4',
     accentDark: '#3584e4',
     accentHoverDark: '#62a0ea',
+    chromeLight: '#ebebeb',
     bg: '#1d1d20',
     card: '#252529',
     border: '#2e2e32',
@@ -267,6 +271,17 @@ export function asDesktopStandIn(file: PaletteFile): PaletteFile {
 const whiteContrast = (rgb: [number, number, number]) => 1.05 / (luminance(rgb) + 0.05);
 const ON_ACCENT_FLOOR = whiteContrast(parseHex(DEFAULT_PALETTE.accent)!);
 
+// chromeBorder is the line drawn on the light chrome: the tone itself stepped
+// toward black, so a tinted rail keeps the separators a white one had. Rows take
+// it at half strength, the way the dark surfaces already do.
+const CHROME_BORDER_STEP = 0.1;
+
+export function chromeBorder(chrome: string): string {
+  const rgb = parseHex(chrome);
+  if (!rgb) return '#e5e7eb';
+  return toHex(mix(rgb, 0, CHROME_BORDER_STEP));
+}
+
 export function onAccent(accent: string): string {
   const rgb = parseHex(accent);
   if (!rgb) return '#ffffff';
@@ -315,7 +330,8 @@ export function paletteVars(palette: Palette, dark: boolean): Record<string, str
     '--lerd-card': palette.card,
     '--lerd-border': palette.border,
     '--lerd-muted': palette.muted,
-    '--lerd-chrome-light': palette.chromeLight || '#ffffff'
+    '--lerd-chrome-light': palette.chromeLight || '#ffffff',
+    '--lerd-chrome-border': chromeBorder(palette.chromeLight || '#ffffff')
   };
 }
 

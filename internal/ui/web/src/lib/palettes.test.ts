@@ -4,6 +4,7 @@ import {
   BUILTIN_PALETTES,
   DEFAULT_PALETTE_ID,
   asDesktopStandIn,
+  chromeBorder,
   onAccent,
   paletteById,
   paletteVars,
@@ -199,9 +200,35 @@ describe('onAccent', () => {
 });
 
 describe('the light mode chrome', () => {
-  it('is tinted on macOS alone, since it is the desktop that tints its own', () => {
+  it('is tinted on the desktop palettes, the ones whose desktops tint their own', () => {
     const tinted = BUILTIN_PALETTES.filter((p) => p.chromeLight);
-    expect(tinted.map((p) => p.id)).toEqual(['macos']);
+    expect(tinted.map((p) => p.id)).toEqual(['breeze', 'adwaita', 'macos']);
+  });
+
+  // A light Plasma scheme publishes the tone it tints its own chrome with, and
+  // that beats the one Breeze ships.
+  it('takes the tone a light scheme published over the built-in\u2019s', () => {
+    const f = asDesktopStandIn({
+      id: 'plasma',
+      name: 'Plasma',
+      accent: '#3daee9',
+      chrome_light: '#e8e6e3',
+      source: 'desktop'
+    });
+    expect(f.chrome_light).toBe('#e8e6e3');
+  });
+
+  // The separators are drawn off the chrome rather than off a fixed grey, or a
+  // tinted rail loses the lines a white one had.
+  it('draws its lines off the tone the chrome is wearing', () => {
+    expect(chromeBorder('#ffffff')).toBe('#e6e6e6');
+    expect(chromeBorder('#eff0f1')).toBe('#d7d8d9');
+    expect(chromeBorder('#ebebeb')).toBe('#d4d4d4');
+  });
+
+  it('follows the theme onto the border variable', () => {
+    const p = resolvePalette({ id: 'breeze', name: 'Breeze', accent: '#17698f', chrome_light: '#eff0f1' })!;
+    expect(paletteVars(p, false)['--lerd-chrome-border']).toBe('#d7d8d9');
   });
 
   it('stays white for a theme that does not ask for one', () => {

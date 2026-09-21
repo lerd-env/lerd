@@ -107,7 +107,9 @@ watch sits on `~/.local/state/omarchy/current`, which is where
 `~/.config/kdeglobals`, so the entry carries surfaces too: the view background,
 the window background and its alternate become the page, the cards and their
 borders. Whether the scheme counts as dark is read off the window background
-rather than the scheme's name. A stock Plasma that never had an accent picked
+rather than the scheme's name. A light scheme lends one tone instead, the window
+background it tints its own chrome with, which the dashboard puts behind the rail
+and the sidebar in light mode. A stock Plasma that never had an accent picked
 lends the scheme's selection colour instead.
 
 **GNOME** publishes the accent alone, one of the nine libadwaita colours, read
@@ -122,9 +124,14 @@ The eight swatches map onto Apple's own hexes and multicolor, which is what an
 account that never touched the picker is on, follows the system blue. The macOS
 entry keeps the surfaces it always had, and the watch sits on
 `~/Library/Preferences`, so a change shows up once macOS flushes the domain to
-disk rather than the instant the swatch is clicked. It is also the one theme
-whose light mode tints the rail and the sidebar rather than leaving them white,
-since a Mac tints its own chrome, and the installed app's title bar follows them.
+disk rather than the instant the swatch is clicked.
+
+Light mode tints the rail and the sidebar rather than leaving them white on the
+three desktop palettes, Breeze, Adwaita and macOS, since those are the desktops
+that tint their own chrome; the tone is Breeze's window colour, libadwaita's
+sidebar colour and the grey a Mac uses. A live Plasma entry on a light scheme
+publishes its own instead, and the installed app's title bar follows whatever the
+rail is wearing. The editor schemes and lerd's own themes keep the white rail.
 
 The entry has to be the desktop in front of you, not a file left behind by an
 application. `kdeglobals` exists on any machine that has ever run a Qt app, and

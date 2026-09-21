@@ -101,6 +101,24 @@ AccentColor=61,174,233
 	if theme.Bg != "" || theme.Card != "" || theme.Border != "" {
 		t.Errorf("light scheme lent surfaces: bg %q card %q border %q", theme.Bg, theme.Card, theme.Border)
 	}
+	// The one tone a light scheme does have a use for: Plasma tints the chrome
+	// around its content, and the window background is what it tints it with.
+	if theme.ChromeLight != "#eff0f1" {
+		t.Errorf("ChromeLight = %q, want the window background", theme.ChromeLight)
+	}
+}
+
+// A dark scheme says nothing about what light mode should look like, so the
+// entry inherits the built-in's tint rather than inventing one.
+func TestPlasmaThemeLendsNoLightChromeOnADarkScheme(t *testing.T) {
+	writeKdeGlobals(t, "KDE", breezeDark)
+	theme := plasmaTheme()
+	if theme == nil {
+		t.Fatal("plasmaTheme() = nil")
+	}
+	if theme.ChromeLight != "" {
+		t.Errorf("ChromeLight = %q, want nothing off a dark scheme", theme.ChromeLight)
+	}
 }
 
 // Plasma stops writing ColorScheme once a custom accent turns the scheme into a
