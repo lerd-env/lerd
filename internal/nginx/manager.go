@@ -1683,12 +1683,22 @@ func EnsureLerdVhost() error {
 	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
 		return err
 	}
+	content, err := renderLerdVhost()
+	if err != nil {
+		return err
+	}
+	return writeLerdVhost(content)
+}
 
+// renderLerdVhost builds the vhost lerd would serve its own dashboard from right
+// now, dashboard mounts included. Split from the write so a caller can compare
+// it with what is on disk before touching the file.
+func renderLerdVhost() (string, error) {
 	var content string
 	if runtime.GOOS == "darwin" {
 		token, err := LoadOrGenerateTrustToken()
 		if err != nil {
-			return fmt.Errorf("loading trust token: %w", err)
+			return "", fmt.Errorf("loading trust token: %w", err)
 		}
 		content = fmt.Sprintf(`server {
     listen 80;
@@ -1799,8 +1809,41 @@ func EnsureLerdVhost() error {
 }
 `, config.UISocketPath(), dashboardMountLocations("        proxy_pass http://unix:"+config.UISocketPath()+":$request_uri;"))
 	}
-	config.GuardRealWrite(filepath.Join(config.NginxConfD(), "lerd.localhost.conf"))
-	return os.WriteFile(filepath.Join(config.NginxConfD(), "lerd.localhost.conf"), []byte(content), 0644)
+	return content, nil
+}
+
+func writeLerdVhost(content string) error {
+	path := filepath.Join(config.NginxConfD(), "lerd.localhost.conf")
+	config.GuardRealWrite(path)
+	return os.WriteFile(path, []byte(content), 0644)
+}
+
+// SyncLerdVhost rewrites the lerd vhost when what lerd would serve no longer
+// matches the file doing the serving, and reports whether it had to. Service
+// operations call it because the vhost names the dashboard mounts of the
+// services installed at the time it was written: one installed later is served
+// by nobody, and its console is closed by the catch-all, until this runs.
+// Unchanged means untouched, so an operation that moves nothing never provokes
+// a reload.
+func SyncLerdVhost() (bool, error) {
+	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
+		return false, err
+	}
+	content, err := renderLerdVhost()
+	if err != nil {
+		return false, err
+	}
+	current, err := os.ReadFile(filepath.Join(config.NginxConfD(), "lerd.localhost.conf"))
+	if err == nil && string(current) == content {
+		return false, nil
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return false, err
+	}
+	if err := writeLerdVhost(content); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // dashboardMountLocations renders one location per dashboard served at a path

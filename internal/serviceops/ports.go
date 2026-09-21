@@ -142,6 +142,7 @@ func SetPublishedPort(name string, port int) (PortChange, error) {
 	// refresh their .env to follow the change (no-op when none use it). Fired
 	// once here with the final port, bypassing our own suppression window.
 	firePublishedPortShiftForced(name, res.Actual)
+	syncDashboardVhost()
 	return res, nil
 }
 
@@ -277,6 +278,7 @@ func SetPublishedPortFor(name string, containerPort, hostPort int) (PortChange, 
 	res.Installed = true
 	// Same stop-before-write and start-failure rollback the primary path gets: a
 	// secondary move whose new port can't bind must not leave the unit down.
+	defer syncDashboardVhost()
 	return res, applyServicePortRestart(name, &res, prevPublished,
 		func() int {
 			actual := hostPort

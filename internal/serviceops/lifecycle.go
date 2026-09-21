@@ -49,6 +49,10 @@ func StartService(name string) error {
 		}
 	}
 	RegenerateDynamicEnvConsumersForService(name)
+	// Starting is where the port guard shifts a service off a port something
+	// else took while it was down, and where a service installed since the last
+	// start first needs its dashboard served.
+	syncDashboardVhost()
 	return nil
 }
 
@@ -79,6 +83,7 @@ func RestartService(name string) error {
 	_ = config.SetServicePaused(name, false)
 	_ = config.SetServiceManuallyStarted(name, true)
 	RegenerateDynamicEnvConsumersForService(name)
+	syncDashboardVhost()
 	return nil
 }
 
