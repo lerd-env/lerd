@@ -105,12 +105,14 @@ describe('theme store', () => {
     const manifest = () =>
       document.querySelector<HTMLLinkElement>('link[rel="manifest"]')!.getAttribute('href')!;
 
-    expect(meta()).toBe('#b04a42');
-    expect(manifest()).toContain('theme_color=%23b04a42');
+    // The window chrome wears the surface the nav rail wears, not the accent.
+    expect(meta()).toBe('#ffffff');
+    expect(manifest()).toContain('theme_color=%23ffffff');
     expect(manifest()).toContain('background_color=%23ffffff');
 
     media.setDark(true);
-    expect(meta()).toBe('#d98d84');
+    expect(meta()).toBe('#1a1a1c');
+    expect(manifest()).toContain('theme_color=%231a1a1c');
     expect(manifest()).toContain('background_color=%23111113');
   });
 

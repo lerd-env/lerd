@@ -112,7 +112,7 @@ func TestManifestColorAcceptsOnlyHex(t *testing.T) {
 		t.Errorf("manifestColor(hex) = %q", got)
 	}
 	for _, bad := range []string{"", "rebeccapurple", `red"},"name":"evil`, "url(x)"} {
-		if got := manifestColor(bad, "#ff2d20"); got != "#ff2d20" {
+		if got := manifestColor(bad, "#161616"); got != "#161616" {
 			t.Errorf("manifestColor(%q) = %q, want the fallback", bad, got)
 		}
 	}

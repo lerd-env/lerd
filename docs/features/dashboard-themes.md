@@ -140,10 +140,13 @@ desktop has to give you that desktop's colours.
 ## Installed as an app
 
 Installed from the browser, the window and the launch splash are painted by the
-browser rather than by the page. The title bar tint follows the theme as soon as
-you switch, and the manifest carries the current tones so the app you install
-matches what you were looking at. The splash is read once at install, so a theme
-switch afterwards reaches it only when the browser next refreshes the manifest.
+browser rather than by the page. The title bar wears what the sidebar wears, the
+card surface in dark mode and white in light, so the frame carries on into the
+app instead of banding the accent across the top of it. It follows the theme as
+soon as you switch, and the manifest carries the current tones so the app you
+install matches what you were looking at. The manifest is read once at install,
+so a theme switch afterwards reaches the splash only when the browser next
+refreshes it.
 
 ## Asking an assistant for one
 

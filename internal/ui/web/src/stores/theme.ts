@@ -41,14 +41,18 @@ function apply(theme: Theme) {
 // The meta follows a theme switch straight away; the manifest is read once at
 // install, so the current tones ride along on its URL and the app someone
 // installs matches what they were looking at.
+//
+// The title bar is chrome rather than content, so it wears what the nav rail
+// wears and the frame carries on into the sidebar. An accent up there is a band
+// of colour the desktop never asked for.
 function applyAppChrome(p: Palette, dark: boolean) {
-  const accent = dark ? p.accentDark : p.accent;
+  const chrome = dark ? p.card : '#ffffff';
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', accent);
+  if (meta) meta.setAttribute('content', chrome);
 
   const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
   if (!link) return;
-  const q = new URLSearchParams({ theme_color: accent, background_color: dark ? p.bg : '#ffffff' });
+  const q = new URLSearchParams({ theme_color: chrome, background_color: dark ? p.bg : '#ffffff' });
   link.href = `/manifest.webmanifest?${q}`;
 }
 
