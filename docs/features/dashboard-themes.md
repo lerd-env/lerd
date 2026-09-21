@@ -86,9 +86,9 @@ asks before it deletes the file.
 
 ## Following the desktop theme
 
-On Omarchy, KDE Plasma and GNOME, the desktop's own colours show up in the picker
-as one more entry: `Omarchy (tokyo-night)` names the theme the desktop is on, and
-on Plasma and GNOME the entry is the familiar `Breeze` or `Adwaita`, wearing
+On Omarchy, KDE Plasma, GNOME and macOS, the desktop's own colours show up in the
+picker as one more entry: `Omarchy (tokyo-night)` names the theme the desktop is
+on, and elsewhere the entry is the familiar `Breeze`, `Adwaita` or `macOS`, wearing
 whatever the desktop is actually set to rather than a fixed copy of it. Pick it once
 and lerd follows the desktop from then on: change the theme or the accent and
 every open dashboard repaints, including the embedded service views. A theme you
@@ -116,6 +116,14 @@ desktop's surfaces are not something you picked; the Adwaita entry keeps the
 surfaces it always had and only its accent follows the desktop. GNOME 46 and
 older have no accent setting, so there is nothing to follow there.
 
+**macOS** publishes the accent alone as well, the one picked in System Settings
+under Appearance, read from `AppleAccentColor` in the global preferences domain.
+The eight swatches map onto Apple's own hexes and multicolor, which is what an
+account that never touched the picker is on, follows the system blue. The macOS
+entry keeps the surfaces it always had, and the watch sits on
+`~/Library/Preferences`, so a change shows up once macOS flushes the domain to
+disk rather than the instant the swatch is clicked.
+
 The entry has to be the desktop in front of you, not a file left behind by an
 application. `kdeglobals` exists on any machine that has ever run a Qt app, and
 the GNOME schemas ship with half the desktop packages out there, so a desktop
@@ -124,17 +132,18 @@ recorded in that desktop's own settings. Picking up a live change needs the watc
 that was set when `lerd-ui` started, so if you install a desktop or set an accent
 for the first time, `lerd restart` once.
 
-On Plasma and GNOME the desktop entry takes the place of the built-in that
-imitates it, Breeze and Adwaita, rather than sitting beside it: the built-in is a
+On Plasma, GNOME and macOS the desktop entry takes the place of the built-in that
+imitates it, Breeze, Adwaita and macOS, rather than sitting beside it: the built-in is a
 snapshot of one scheme, and the machine in front of you has the real one, on
 whichever scheme it is currently wearing. It keeps that built-in's name, so the
-picker still offers Breeze and Adwaita and picking one now follows the desktop. A
+picker still offers Breeze, Adwaita and macOS, and picking one now follows the
+desktop. A
 dashboard already set to either starts following it too, and any tone the desktop
 does not publish comes from the built-in it replaced, which is where the GNOME
 entry gets its surfaces.
 
-A theme file named `omarchy.yaml`, `breeze.yaml` or `adwaita.yaml` is shadowed by
-the desktop entry rather than replacing it: picking the entry named after a
+A theme file named `omarchy.yaml`, `breeze.yaml`, `adwaita.yaml` or `macos.yaml`
+is shadowed by the desktop entry rather than replacing it: picking the entry named after a
 desktop has to give you that desktop's colours.
 
 ## Installed as an app

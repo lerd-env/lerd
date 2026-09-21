@@ -22,9 +22,10 @@ type Desktop struct {
 // CurrentDesktop returns the one desktop whose colours the dashboard follows.
 // The readers run in order of how definite their evidence is: Omarchy keeps a
 // state directory nothing else writes and ships full themes, while Plasma and
-// GNOME are read off files and schemas any machine may happen to carry.
+// GNOME are read off files and schemas any machine may happen to carry. macOS
+// comes last because it is the only one of them a Mac can answer to.
 func CurrentDesktop() Desktop {
-	for _, read := range []func() Desktop{omarchyDesktop, plasmaDesktop, gnomeDesktop} {
+	for _, read := range []func() Desktop{omarchyDesktop, plasmaDesktop, gnomeDesktop, macosDesktop} {
 		if d := read(); d.Theme != nil {
 			return d
 		}

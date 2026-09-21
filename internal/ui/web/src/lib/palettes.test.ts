@@ -147,6 +147,19 @@ describe('asDesktopStandIn', () => {
     expect(f.card).toBe(builtin('adwaita').card);
   });
 
+  it('keeps the macOS surfaces under the accent the Mac is set to', () => {
+    const f = asDesktopStandIn({
+      id: 'macos',
+      name: 'macOS (green)',
+      accent: '#62ba46',
+      source: 'desktop'
+    });
+    expect(f.id).toBe('macos');
+    expect(f.name).toBe('macOS');
+    expect(f.accent).toBe('#62ba46');
+    expect(f.card).toBe(builtin('macos').card);
+  });
+
   it('leaves a desktop with no built-in of its own alone', () => {
     const f = asDesktopStandIn({
       id: 'omarchy',

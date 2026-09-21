@@ -42,3 +42,17 @@ func TestCurrentDesktopWithNoDesktopToFollow(t *testing.T) {
 		t.Error("DesktopTheme() lent a theme with no desktop to read")
 	}
 }
+
+// A Mac has no Omarchy state and no Plasma session, and the accent it does have
+// is the one desktop it can answer with.
+func TestCurrentDesktopFallsBackToMacos(t *testing.T) {
+	requireDarwin(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CURRENT_DESKTOP", "")
+	stubDesktopTool(t, "defaults", "2")
+	d := CurrentDesktop()
+	if d.Theme == nil || d.Theme.ID != MacosThemeID {
+		t.Fatalf("CurrentDesktop() = %+v, want the macOS theme", d.Theme)
+	}
+}

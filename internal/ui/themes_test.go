@@ -26,6 +26,7 @@ func isolateThemesDir(t *testing.T) string {
 
 func TestHandleThemesListsAndReportsBadFiles(t *testing.T) {
 	dir := isolateThemesDir(t)
+	noDesktopToFollow(t)
 	if err := os.WriteFile(filepath.Join(dir, "ocean.yaml"), []byte("name: Ocean\naccent: \"#3b7ea1\"\n"), 0644); err != nil {
 		t.Fatal(err)
 	}

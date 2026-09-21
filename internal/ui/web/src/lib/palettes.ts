@@ -223,9 +223,13 @@ const DEFAULT_PALETTE = BUILTIN_PALETTES[0];
 // The built-in each desktop's own entry stands in for. A machine running that
 // desktop has the real thing, live and on whichever scheme it happens to be
 // wearing, and the built-in beside it is a snapshot of one of them.
+// macOS is in here against its own name: the built-in it replaces is the one
+// already called macOS, and the entry still wants that palette's surfaces under
+// the accent the Mac in front of you is set to.
 const DESKTOP_STANDS_IN_FOR: Record<string, string> = {
   plasma: 'breeze',
-  gnome: 'adwaita'
+  gnome: 'adwaita',
+  macos: 'macos'
 };
 
 // asDesktopStandIn hands a desktop theme the id and the name of the built-in it
