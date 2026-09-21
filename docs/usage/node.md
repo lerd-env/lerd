@@ -111,7 +111,7 @@ On macOS the choice decides whether folder permissions stick. The system asks be
 
 The choice is stored in `~/.config/lerd/config.yaml` under `node.manager` (`mise`, `fnm` or `nvm`) and, for nvm, `node.nvm_dir` (so `lerd-ui` and the watcher find nvm even without your shell rc). Switch later with `lerd node:manager mise|fnm|nvm` or from the dashboard's Node page, which shows a **mise / fnm / nvm** toggle (nvm is offered only when it is installed, since there is nothing to switch to otherwise). Switching to fnm downloads it on demand, and switching to mise installs one only when the host has none, then drops the fnm lerd had downloaded once the versions are across, since nothing runs it any more. Switching updates PATH shims, installs under the new manager every version the old one had so nothing a site pins goes missing, and re-syncs host workers so the new manager takes effect at once. `node:install` and `node:use` act on whichever manager is active; `node:uninstall` and `node:unmanage` only ever remove Node versions when lerd owns them and leave your nvm-installed versions alone.
 
-An existing install keeps the manager it already has, since its config names one. Moving to mise is `lerd node:manager mise`, which leaves your fnm-installed versions where they are.
+An existing install keeps the manager it already has. A config that names one is left alone, and one from before the setting existed is recognised by the fnm in lerd's bin dir, so an update never moves you off fnm on its own. Moving to mise is `lerd node:manager mise`, which leaves your fnm-installed versions where they are.
 
 ---
 
