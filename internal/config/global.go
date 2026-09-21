@@ -1383,8 +1383,8 @@ func (c *GlobalConfig) NodeManager() string {
 	return c.Node.Manager
 }
 
-// SetNodeManager records which Node version manager lerd drives ("fnm" or
-// "nvm"). Persist via SaveGlobal.
+// SetNodeManager records which Node version manager lerd drives ("mise", "fnm"
+// or "nvm"). Persist via SaveGlobal.
 func (c *GlobalConfig) SetNodeManager(manager string) {
 	c.Node.Manager = manager
 }

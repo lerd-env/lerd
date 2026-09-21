@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { status, loadStatus } from '$stores/status';
   import { nodeVersions, loadNodeVersions, setDefaultNode, removeNode, installNode, manageNode, unmanageNode, setNodeManager } from '$stores/nodeVersions';
   import { sites, sitesByNode } from '$stores/sites';
@@ -11,6 +12,10 @@
   // reactivity is direct (bypasses any auto-subscription edge case).
   let nodeDefault = $state('');
   $effect(() => status.subscribe((s) => { nodeDefault = s.node_default || ''; }));
+
+  // The list is otherwise fetched once at app start, so a version installed
+  // from the CLI stays invisible in an open dashboard.
+  onMount(loadNodeVersions);
 
   let defaultBusy = $state<string | null>(null);
   let saveError = $state('');
@@ -98,6 +103,7 @@
   let manageError = $state('');
 
   const managerOptions = [
+    { value: 'mise' as const, label: 'mise', title: m.system_node_managerMise() },
     { value: 'fnm' as const, label: 'fnm', title: m.system_node_managerFnm() },
     {
       value: 'nvm' as const,
@@ -107,7 +113,7 @@
     }
   ];
 
-  async function onSwitchManager(manager: 'fnm' | 'nvm') {
+  async function onSwitchManager(manager: 'mise' | 'fnm' | 'nvm') {
     if (managerBusy || manageBusy || manager === $status.node_manager) return;
     if (manager === 'nvm' && !$status.nvm_available) return;
     managerBusy = true;
@@ -159,9 +165,9 @@
     </div>
     <div class="flex items-center gap-2">
       {#if manageError}<span class="text-xs text-red-500">{manageError}</span>{/if}
-      <!-- Hidden without nvm (nothing to switch to), unless the manager is
-           already nvm so a stranded install keeps its way back to fnm. -->
-      {#if !$status.using_system_bun && ($status.nvm_available || $status.node_manager === 'nvm')}
+      <!-- mise and fnm are always both on offer; nvm is only ever a choice on a
+           host that has one, and the option disables itself when it does not. -->
+      {#if !$status.using_system_bun}
         <SegmentedControl
           options={managerOptions}
           value={$status.node_manager}
@@ -274,7 +280,7 @@
     <div class="border border-dashed border-gray-200 dark:border-lerd-border rounded-lg p-3 bg-gray-50/50 dark:bg-white/2">
       <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">{m.system_node_installNewTitle()}</p>
       <p class="text-xs text-gray-400 mb-2">
-        {@html m.system_node_installNewHint({ major: '<code class="font-mono bg-gray-100 dark:bg-white/5 px-1 rounded-sm">22</code>', specific: '<code class="font-mono bg-gray-100 dark:bg-white/5 px-1 rounded-sm">22.12.0</code>' })}
+        {@html m.system_node_installNewHint({ major: '<code class="font-mono bg-gray-100 dark:bg-white/5 px-1 rounded-sm">22</code>', specific: '<code class="font-mono bg-gray-100 dark:bg-white/5 px-1 rounded-sm">22.12.0</code>', manager: $status.node_manager || 'mise' })}
       </p>
       <div class="flex items-center gap-2">
         <input
