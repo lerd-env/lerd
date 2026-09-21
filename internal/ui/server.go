@@ -678,7 +678,8 @@ type StatusResponse struct {
 	PHPDefault        string       `json:"php_default"`
 	NodeDefault       string       `json:"node_default"`
 	NodeManagedByLerd bool         `json:"node_managed_by_lerd"`
-	// NodeManager is the active Node version manager lerd drives: "fnm" or "nvm".
+	// NodeManager is the active Node version manager lerd drives: "mise", "fnm"
+	// or "nvm".
 	NodeManager string `json:"node_manager"`
 	// NvmAvailable is true when a user-installed nvm is present (nvm.sh found),
 	// so the dashboard can disable the nvm switch rather than error on click.
@@ -811,7 +812,7 @@ func buildStatus() StatusResponse {
 	usingSystemBun := bunAvailable && !nodeManagedByLerd && !lerdNode.SystemNodeAvailable()
 	toolStatuses := []tools.ToolStatus{}
 	for _, s := range tools.StatusAll(context.Background()) {
-		if s.Name == "fnm" && nodeManager == "nvm" {
+		if s.Name == "fnm" && nodeManager != "fnm" {
 			continue
 		}
 		toolStatuses = append(toolStatuses, s)
@@ -5316,7 +5317,7 @@ func handleNodeSetManager(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Manager string `json:"manager"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.Manager != "fnm" && req.Manager != "nvm") {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.Manager != "mise" && req.Manager != "fnm" && req.Manager != "nvm") {
 		writeJSON(w, map[string]any{"ok": false, "error": "invalid manager"})
 		return
 	}

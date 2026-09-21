@@ -95,14 +95,21 @@ func downloadBinaries(w io.Writer) error {
 		}
 	}
 
-	// fnm — macOS universal binary. Skipped when the user drives Node via their
-	// own nvm, since lerd never provisions nvm and fnm would sit unused.
-	// Switching back with `lerd node:manager fnm` calls ensureFnmBinary on demand.
+	// The Node version manager lerd drives. Skipped for nvm, which the user
+	// installs themselves. mise is only fetched when the host has none, so a
+	// mise they already manage stays the one in charge.
 	cfg, _ := config.LoadGlobal()
-	if cfg == nil || cfg.NodeManager() != "nvm" {
+	switch {
+	case cfg != nil && cfg.NodeManager() == "nvm":
+	case cfg != nil && cfg.NodeManager() == "fnm":
 		if err := ensureFnmBinary(w); err != nil {
 			return err
 		}
+	default:
+		if err := ensureMiseBinary(w); err != nil {
+			return err
+		}
+		removeFnmBinary()
 	}
 
 	// mkcert

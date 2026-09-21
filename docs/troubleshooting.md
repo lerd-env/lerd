@@ -412,6 +412,28 @@ If podman is no longer installed either, `sudo rm -rf ~/.local/share/lerd` is th
 An uninstall also takes `~/.cache/lerd`, the `lerd-tray` binary alongside `lerd`, both PATH entries lerd ever wrote into your shell rc, and the images it built itself (`lerd-php*-fpm`, `lerd-custom-*`, `lerd-dnsmasq`) when you accept the purge. Images it only pulled, your databases and your project files are never touched.
 :::
 
+::: details macOS keeps asking for access to Documents, Desktop or Downloads
+Symptom: on macOS, "fnm would like to access files in your Documents folder" comes back for a project that never moved, most often right after lerd bumps the Node version manager it downloads. Allowing it does not make it stop.
+
+Cause: macOS remembers a Files and Folders grant against the signing identity of the binary that asked. Tooling lerd runs for a site reads the project, macOS attributes that to the Node version manager rather than to lerd, and the fnm builds published upstream carry no signature at all. On Apple Silicon the system ad-hoc signs such a binary the first time it runs, and that identity is derived from the bytes, so the next pinned version is a stranger and the folder is asked for again. This is how macOS treats any unsigned tool; it is not specific to fnm.
+
+The fix is a version manager the system can recognise again after an update, which is why new installs use mise:
+
+```bash
+lerd node:manager mise
+```
+
+mise is signed and notarized under a Developer ID that stays the same from release to release, so the answer you give keeps matching and the prompt does not come back. lerd drives whichever mise you already have, and installs one to `~/.local/bin/mise` only if you have none. Your Node versions under fnm are left alone, so you can switch back with `lerd node:manager fnm`.
+
+Your own nvm avoids it too, being a shell function inside a terminal you have already granted:
+
+```bash
+lerd node:manager nvm
+```
+
+Keeping the project outside the folders macOS guards, `~/Documents`, `~/Desktop` and `~/Downloads`, works as well. A symlink from one of them does not help, the grant follows the real files.
+:::
+
 ::: details Workers missing after reinstall
 If you ran `lerd uninstall` and then reinstalled, worker units and service quadlets are deleted during uninstall. Running `lerd start` after reinstalling automatically restores them from the `workers` list saved in each site's `.lerd.yaml`. If `.lerd.yaml` does not exist or was not committed, you will need to start workers again manually (`lerd queue:start`, etc.).
 

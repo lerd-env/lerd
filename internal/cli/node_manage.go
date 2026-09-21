@@ -58,15 +58,15 @@ func runNodeManage(_ *cobra.Command, _ []string) error {
 }
 
 // NewNodeManagerCmd returns the node:manager command, which reports or switches
-// the Node version manager lerd drives ("fnm" or "nvm"). Switching persists the
+// the Node version manager lerd drives ("mise", "fnm" or "nvm"). Switching persists the
 // choice and, when lerd is managing Node, rewrites the shims, ensures a default
 // version, and re-syncs host workers so the new manager takes effect at once.
 func NewNodeManagerCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:       "node:manager [fnm|nvm]",
+		Use:       "node:manager [mise|fnm|nvm]",
 		Short:     "Show or switch the Node version manager lerd drives",
 		Args:      cobra.MaximumNArgs(1),
-		ValidArgs: []string{"fnm", "nvm"},
+		ValidArgs: []string{"mise", "fnm", "nvm"},
 		RunE:      runNodeSetManager,
 	}
 }
@@ -89,8 +89,8 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 	}
 
 	target := args[0]
-	if target != "fnm" && target != "nvm" {
-		return fmt.Errorf("unknown manager %q — use 'fnm' or 'nvm'", target)
+	if target != "mise" && target != "fnm" && target != "nvm" {
+		return fmt.Errorf("unknown manager %q — use 'mise', 'fnm' or 'nvm'", target)
 	}
 	if target == current {
 		feedback.Begin()
@@ -109,9 +109,22 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 		}
 		step.OK("")
 	}
+	// mise is installed only when the host has none, so a user's own copy stays
+	// the one lerd drives.
+	if target == "mise" && !nodeDet.ManagerByName("mise").Available() {
+		step := feedback.Start("installing mise")
+		if err := ensureMiseBinary(os.Stdout); err != nil {
+			step.Fail(err)
+			return fmt.Errorf("mise install: %w", err)
+		}
+		step.OK("")
+	}
 	if !nodeDet.ManagerByName(target).Available() {
-		if target == "nvm" {
+		switch target {
+		case "nvm":
 			return fmt.Errorf("nvm not found — install it first (https://github.com/nvm-sh/nvm)")
+		case "mise":
+			return fmt.Errorf("mise not found — install failed; check your network and retry")
 		}
 		return fmt.Errorf("fnm not found — download failed; check your network and retry")
 	}
@@ -128,6 +141,7 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 
 	// Only rewrite shims/workers when lerd is actually managing Node; otherwise
 	// the choice is just persisted and applies whenever management is enabled.
+	carried := true
 	if lerdManagesNode() {
 		step := feedback.Start("updating Node PATH shims for " + target)
 		if err := addShellShims(true); err != nil {
@@ -135,21 +149,63 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 			return fmt.Errorf("writing shims: %w", err)
 		}
 		step.OK("")
+		carried = carryNodeVersions(nodeDet.ManagerByName(current), nodeDet.ManagerByName(target))
 		ensureDefaultNode()
 		regenerateHostWorkers()
+	}
+	// Last, and only once every version made it across: the old fnm is what the
+	// versions were read from, and a site pinning one that did not carry still
+	// needs it.
+	if target == "mise" && carried {
+		removeFnmBinary()
 	}
 	feedback.Done("Node version manager set to " + feedback.Val(target))
 	return nil
 }
 
+// carryNodeVersions installs under the new manager every Node major the old one
+// could run, so a switch does not silently take versions away from sites that
+// pin them. Reports whether everything made it across.
+func carryNodeVersions(from, to nodeDet.Manager) bool {
+	if !from.Available() {
+		return true
+	}
+	ok := true
+	for _, v := range missingMajors(from.List(), to.List()) {
+		step := feedback.Start("installing Node " + v + " under " + to.Name())
+		if err := to.Install(v); err != nil {
+			step.Fail(err)
+			ok = false
+			continue
+		}
+		step.OK("")
+	}
+	return ok
+}
+
+// missingMajors is the majors in from that to does not have, in from's order.
+func missingMajors(from, to []string) []string {
+	have := make(map[string]bool, len(to))
+	for _, v := range to {
+		have[v] = true
+	}
+	var out []string
+	for _, v := range from {
+		if !have[v] {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 // NewNodeUnmanageCmd returns the node:unmanage command, which removes lerd's
-// node shims and, when lerd owns the version manager (fnm), the Node binaries it
+// node shims and, when lerd owns the version manager, the Node binaries it
 // installed — leaving a clean system so the user can rely on bun or their own
 // system Node.
 func NewNodeUnmanageCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "node:unmanage",
-		Short: "Stop managing Node.js: remove lerd's node shims and fnm-installed versions",
+		Short: "Stop managing Node.js: remove lerd's node shims",
 		Args:  cobra.NoArgs,
 		RunE:  runNodeUnmanage,
 	}
