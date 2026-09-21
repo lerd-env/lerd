@@ -46,7 +46,7 @@ function apply(theme: Theme) {
 // wears and the frame carries on into the sidebar. An accent up there is a band
 // of colour the desktop never asked for.
 function applyAppChrome(p: Palette, dark: boolean) {
-  const chrome = dark ? p.card : '#ffffff';
+  const chrome = dark ? p.card : p.chromeLight || '#ffffff';
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', chrome);
 

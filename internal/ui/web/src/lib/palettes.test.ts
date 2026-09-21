@@ -158,6 +158,7 @@ describe('asDesktopStandIn', () => {
     expect(f.name).toBe('macOS');
     expect(f.accent).toBe('#62ba46');
     expect(f.card).toBe(builtin('macos').card);
+    expect(f.chrome_light).toBe(builtin('macos').chromeLight);
   });
 
   it('leaves a desktop with no built-in of its own alone', () => {
@@ -194,5 +195,22 @@ describe('onAccent', () => {
 
   it('falls back to white for anything that is not a colour', () => {
     expect(onAccent('rebeccapurple')).toBe('#ffffff');
+  });
+});
+
+describe('the light mode chrome', () => {
+  it('is tinted on macOS alone, since it is the desktop that tints its own', () => {
+    const tinted = BUILTIN_PALETTES.filter((p) => p.chromeLight);
+    expect(tinted.map((p) => p.id)).toEqual(['macos']);
+  });
+
+  it('stays white for a theme that does not ask for one', () => {
+    const p = resolvePalette({ id: 'ocean', name: 'Ocean', accent: '#3b7ea1' })!;
+    expect(paletteVars(p, false)['--lerd-chrome-light']).toBe('#ffffff');
+  });
+
+  it('follows the theme that does', () => {
+    const p = resolvePalette({ id: 'macos', name: 'macOS', accent: '#62ba46', chrome_light: '#F3F4F6' })!;
+    expect(paletteVars(p, false)['--lerd-chrome-light']).toBe('#f3f4f6');
   });
 });

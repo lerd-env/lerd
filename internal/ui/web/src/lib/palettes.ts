@@ -22,6 +22,10 @@ export interface Palette {
   card: string;
   border: string;
   muted: string;
+  // The light mode's rail and sidebar, where a theme wants them off white. Only
+  // macOS does, which is the one desktop that tints its own chrome, so the rest
+  // leave it unset and keep the white app.css falls back to.
+  chromeLight?: string;
   source: 'builtin' | 'user' | 'desktop';
 }
 
@@ -37,6 +41,7 @@ export interface PaletteFile {
   card?: string;
   border?: string;
   muted?: string;
+  chrome_light?: string;
   // Set when the theme came from somewhere other than a file the user can edit,
   // which is what keeps a remove button off it.
   source?: string;
@@ -214,6 +219,7 @@ export const BUILTIN_PALETTES: Palette[] = [
     card: '#282828',
     border: '#3a3a3a',
     muted: '#4a4a4a',
+    chromeLight: '#f3f4f6',
     source: 'builtin'
   }
 ];
@@ -248,7 +254,8 @@ export function asDesktopStandIn(file: PaletteFile): PaletteFile {
     bg: file.bg || builtin.bg,
     card: file.card || builtin.card,
     border: file.border || builtin.border,
-    muted: file.muted || builtin.muted
+    muted: file.muted || builtin.muted,
+    chrome_light: file.chrome_light || builtin.chromeLight
   };
 }
 
@@ -284,6 +291,7 @@ export function resolvePalette(file: PaletteFile): Palette | null {
     card: hex(file.card) || DEFAULT_PALETTE.card,
     border: hex(file.border) || DEFAULT_PALETTE.border,
     muted: hex(file.muted) || DEFAULT_PALETTE.muted,
+    chromeLight: hex(file.chrome_light) || undefined,
     source: file.source === 'desktop' ? 'desktop' : 'user'
   };
 }
@@ -306,7 +314,8 @@ export function paletteVars(palette: Palette, dark: boolean): Record<string, str
     '--lerd-bg': palette.bg,
     '--lerd-card': palette.card,
     '--lerd-border': palette.border,
-    '--lerd-muted': palette.muted
+    '--lerd-muted': palette.muted,
+    '--lerd-chrome-light': palette.chromeLight || '#ffffff'
   };
 }
 

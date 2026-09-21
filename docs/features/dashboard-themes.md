@@ -122,7 +122,9 @@ The eight swatches map onto Apple's own hexes and multicolor, which is what an
 account that never touched the picker is on, follows the system blue. The macOS
 entry keeps the surfaces it always had, and the watch sits on
 `~/Library/Preferences`, so a change shows up once macOS flushes the domain to
-disk rather than the instant the swatch is clicked.
+disk rather than the instant the swatch is clicked. It is also the one theme
+whose light mode tints the rail and the sidebar rather than leaving them white,
+since a Mac tints its own chrome, and the installed app's title bar follows them.
 
 The entry has to be the desktop in front of you, not a file left behind by an
 application. `kdeglobals` exists on any machine that has ever run a Qt app, and
