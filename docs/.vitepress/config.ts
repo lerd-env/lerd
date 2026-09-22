@@ -245,6 +245,7 @@ export default defineConfig({
             { text: 'Terminal Dashboard', link: '/features/tui' },
             { text: 'System Tray', link: '/features/system-tray' },
             { text: 'Omarchy Bar Widget', link: '/features/omarchy-glance' },
+            { text: 'PhpStorm Plugin', link: '/features/phpstorm-plugin' },
             { text: 'AI Integration (MCP)', link: '/features/mcp' },
           ],
         },
