@@ -91,3 +91,26 @@ func TestResolve_firstLinkIsUnaffected(t *testing.T) {
 		t.Errorf("a fresh link invented state: %+v", plan.Site)
 	}
 }
+
+// Unlinking a site inside a parked directory tombstones its entry so the
+// watcher leaves it alone. Re-linking is what the docs promise will bring it
+// back, and it used to carry the tombstone forward untouched.
+func TestResolve_relinkClearsTheIgnoredTombstone(t *testing.T) {
+	dir := projectDir(t, "portal", "")
+	if err := config.AddSite(config.Site{
+		Name:    "portal",
+		Domains: []string{"portal.test"},
+		Path:    dir,
+		Ignored: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := Resolve(dir, testConfig(), CLIPolicy("portal", false, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Site.Ignored {
+		t.Error("the entry is still ignored, so the site stays hidden after a re-link")
+	}
+}

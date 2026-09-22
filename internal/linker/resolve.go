@@ -209,6 +209,11 @@ func keepRegistryState(dir string, derived config.Site) config.Site {
 	site.HostPort = derived.HostPort
 	site.HostSSL = derived.HostSSL
 	site.HostCommand = derived.HostCommand
+	// An unlink inside a parked directory tombstones the entry so the watcher
+	// leaves it alone. An explicit link on that directory is the undo, and
+	// carrying the flag forward left the site hidden with no way back but an
+	// edit of sites.yaml (#1925).
+	site.Ignored = false
 	return site
 }
 
