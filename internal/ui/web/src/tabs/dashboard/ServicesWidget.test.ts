@@ -69,7 +69,26 @@ describe('ServicesWidget', () => {
     expect(tileLabels(container)[0]).toBe('MySQL');
   });
 
-  it('keeps the store order among services without updates', () => {
+  it('leads with the service the most sites use', () => {
+    services.set([
+      svc({ name: 'redis', site_count: 1 }),
+      svc({ name: 'mysql', site_count: 4 }),
+      svc({ name: 'mailpit', site_count: 2 })
+    ]);
+    const { container } = render(ServicesWidget);
+    expect(tileLabels(container)).toEqual(['MySQL', 'Mailpit', 'Redis']);
+  });
+
+  it('still floats an update above a busier service', () => {
+    services.set([
+      svc({ name: 'mysql', site_count: 4 }),
+      svc({ name: 'redis', update_available: true })
+    ]);
+    const { container } = render(ServicesWidget);
+    expect(tileLabels(container)[0]).toBe('Redis');
+  });
+
+  it('keeps the store order among services with the same site count', () => {
     services.set([svc({ name: 'redis' }), svc({ name: 'mailpit' }), svc({ name: 'mysql' })]);
     const { container } = render(ServicesWidget);
     expect(tileLabels(container)).toEqual(['Redis', 'Mailpit', 'MySQL']);
