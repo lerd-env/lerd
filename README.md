@@ -84,6 +84,8 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 - 🚀 **Start it without a terminal.** The dashboard brings lerd up from its own banner when the environment is stopped, streaming the start back unit by unit. `lerd install` writes a Lerd entry to the macOS Applications folder and to the Linux application list, so a cold start is a click with a progress splash behind it. The system tray is optional, for a desktop that already shows this somewhere else.
 
+- 🧩 **PhpStorm plugin.** [Lerd for PhpStorm](https://plugins.jetbrains.com/plugin/34420-lerd) resolves the project you have open to its site and brings its logs, PHP version, workers, services, query findings and dumps into the IDE, with a path in a stack trace one click from the line that threw it.
+
 - 🪟 **Omarchy bar widget.** [lerd Glance](https://github.com/lerd-env/lerd-omarchy-glance) puts sites, services, workers and container CPU and memory in the Omarchy Quattro bar, quiet until something breaks, so you can see the state of the environment without opening a tab.
 
 - ✏️ **Edit config in the browser.** Per-site and global nginx, at server scope and at the location scope that can outrank what the generated vhost sets, `php.ini` with the version's own file and the shared scope side by side, `.env` files, and database/service runtime tuning, each validated (`nginx -t` where it applies), with timestamped backups and one-click restore.
