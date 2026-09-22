@@ -7,19 +7,17 @@
   import { openLinkModal } from '$stores/modals';
   import { goToTab } from '$stores/route';
   import { accessMode } from '$stores/accessMode';
+  import { sitesSort } from '$stores/sitesSort';
+  import { sortSites } from '$lib/sitesOrder';
   import { m } from '../../paraglide/messages.js';
 
   const total = $derived($sites.length);
   const running = $derived($sites.filter((s) => s.fpm_running && !s.paused).length);
   const failing = $derived($sites.filter((s) => siteWorkerFailing(s)).length);
 
-  // The backend serialises sites.yaml in registry order — AddSite appends
-  // and RemoveSite preserves the rest's positions, so the position of a
-  // site in the array reflects when it was registered (oldest first).
-  // Reverse and drop paused sites so the dashboard shows the most recently
-  // added active projects at the top — paused sites are still visible on
-  // the Sites tab.
-  const sorted = $derived($sites.filter((s) => !s.paused).reverse());
+  // Same order as the Sites tab, so the dashboard never contradicts the list
+  // the user arranged. Paused sites stay out; they are only on the Sites tab.
+  const sorted = $derived(sortSites($sites.filter((s) => !s.paused), $sitesSort));
 </script>
 
 <DashboardCard title={m.dashboard_sites_title()} tone={failing > 0 ? 'critical' : 'default'}>

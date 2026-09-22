@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import SitesWidget from './SitesWidget.svelte';
 import { sites, sitesLoaded, type Site } from '$stores/sites';
 import { accessMode } from '$stores/accessMode';
+import { sitesSort } from '$stores/sitesSort';
 
 function site(over: Partial<Site> = {}): Site {
   return { domain: 'app.test', name: 'app', fpm_running: true, ...over } as Site;
@@ -20,6 +21,7 @@ describe('SitesWidget', () => {
     sites.set([]);
     sitesLoaded.set(true);
     accessMode.set({ localControl: true, lanExposed: false, checked: true });
+    sitesSort.set('manual');
   });
 
   it('points at lerd park when no site is linked', () => {
@@ -33,7 +35,7 @@ describe('SitesWidget', () => {
     sites.set([site(), site({ domain: 'blog.test', name: 'blog' })]);
     const { container } = render(SitesWidget);
     expect(container.querySelectorAll('.rounded-lg.p-2\\.5')).toHaveLength(2);
-    expect(tileTitles(container)).toEqual(['blog.test', 'app.test']);
+    expect(tileTitles(container)).toEqual(['app.test', 'blog.test']);
   });
 
   it('carries the app name and the framework subline the tile builds', () => {
@@ -43,18 +45,38 @@ describe('SitesWidget', () => {
     expect(getByText('app.test · Laravel · PHP 8.4')).toBeTruthy();
   });
 
-  // Registry order is oldest first, so the newest linked project leads.
-  it('reverses registry order and drops paused sites', () => {
+  it('keeps registry order and drops paused sites in manual mode', () => {
     sites.set([
       site({ domain: 'one.test', name: 'one' }),
       site({ domain: 'two.test', name: 'two', paused: true }),
       site({ domain: 'three.test', name: 'three' })
     ]);
     const { container } = render(SitesWidget);
+    expect(tileTitles(container)).toEqual(['one.test', 'three.test']);
+  });
+
+  it('follows the sort mode the Sites tab is set to', () => {
+    sitesSort.set('alpha');
+    sites.set([
+      site({ domain: 'two.test', name: 'two' }),
+      site({ domain: 'one.test', name: 'one' })
+    ]);
+    const { container } = render(SitesWidget);
+    expect(tileTitles(container)).toEqual(['one.test', 'two.test']);
+  });
+
+  it('leads with the newest linked project in newest mode', () => {
+    sitesSort.set('newest');
+    sites.set([
+      site({ domain: 'one.test', name: 'one' }),
+      site({ domain: 'three.test', name: 'three' })
+    ]);
+    const { container } = render(SitesWidget);
     expect(tileTitles(container)).toEqual(['three.test', 'one.test']);
   });
 
-  it('leaves the store order alone while reversing its own view', () => {
+  it('leaves the store order alone while sorting its own view', () => {
+    sitesSort.set('newest');
     const rows = [site({ domain: 'one.test' }), site({ domain: 'two.test' })];
     sites.set(rows);
     render(SitesWidget);
