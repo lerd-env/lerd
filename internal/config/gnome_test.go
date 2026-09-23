@@ -40,9 +40,10 @@ func TestGnomeThemeMapsTheAccentsGnomeOffers(t *testing.T) {
 		"blue": "#3584e4", "teal": "#2190a4", "green": "#3a944a",
 		"yellow": "#c88800", "orange": "#ed5b00", "red": "#e62d42",
 		"pink": "#d56199", "purple": "#9141ac", "slate": "#6f8396",
+		"brown": "#b39169",
 	}
 	for name, hex := range want {
-		theme := gnomeTheme(name)
+		theme := gnomeTheme(name, "Adwaita")
 		if theme == nil {
 			t.Errorf("gnomeTheme(%q) = nil, want %s", name, hex)
 			continue
@@ -53,10 +54,27 @@ func TestGnomeThemeMapsTheAccentsGnomeOffers(t *testing.T) {
 	}
 }
 
+// Ubuntu's libadwaita paints each accent with its Yaru tone instead, so the
+// dashboard follows what the desktop actually shows, not the name alone.
+func TestGnomeThemeWearsYaruTonesUnderAYaruTheme(t *testing.T) {
+	want := map[string]string{
+		"blue": "#0073e5", "teal": "#308280", "green": "#4b8501",
+		"yellow": "#c88800", "orange": "#e95420", "red": "#da3450",
+		"pink": "#b34cb3", "purple": "#7764d8", "slate": "#657b69",
+		"brown": "#b39169",
+	}
+	for name, hex := range want {
+		theme := gnomeTheme(name, "Yaru-olive-dark")
+		if theme == nil || theme.Accent != hex || theme.AccentDark != hex {
+			t.Errorf("gnomeTheme(%q, Yaru) = %+v, want %s", name, theme, hex)
+		}
+	}
+}
+
 // A GNOME that grows a tenth accent must not be painted with a ninth one's
 // colour: an accent we do not know is no accent.
 func TestGnomeThemeRefusesAnAccentItDoesNotKnow(t *testing.T) {
-	if theme := gnomeTheme("chartreuse"); theme != nil {
+	if theme := gnomeTheme("chartreuse", "Adwaita"); theme != nil {
 		t.Errorf("gnomeTheme(\"chartreuse\") = %+v, want nil", theme)
 	}
 }
@@ -64,7 +82,7 @@ func TestGnomeThemeRefusesAnAccentItDoesNotKnow(t *testing.T) {
 // GNOME's surfaces are not the user's choice, and the built-in Adwaita theme
 // already offers them, so the desktop entry lends its accent alone.
 func TestGnomeThemeLendsOnlyItsAccent(t *testing.T) {
-	theme := gnomeTheme("purple")
+	theme := gnomeTheme("purple", "Adwaita")
 	if theme == nil {
 		t.Fatal("gnomeTheme(\"purple\") = nil")
 	}
@@ -85,8 +103,8 @@ func TestGnomeThemeLendsOnlyItsAccent(t *testing.T) {
 func TestGnomeAccentNameReadsWhatTheUserRecorded(t *testing.T) {
 	stubDesktopTools(t, "'purple'", "'blue'")
 	t.Setenv("XDG_CURRENT_DESKTOP", "")
-	if got := gnomeAccentName(); got != "purple" {
-		t.Errorf("gnomeAccentName() = %q, want purple", got)
+	if got := gnomeInterface("accent-color"); got != "purple" {
+		t.Errorf("gnomeInterface(accent-color) = %q, want purple", got)
 	}
 }
 
@@ -95,8 +113,8 @@ func TestGnomeAccentNameReadsWhatTheUserRecorded(t *testing.T) {
 func TestGnomeAccentNameFallsBackToTheSessionDefault(t *testing.T) {
 	stubDesktopTools(t, "", "'teal'")
 	t.Setenv("XDG_CURRENT_DESKTOP", "ubuntu:GNOME")
-	if got := gnomeAccentName(); got != "teal" {
-		t.Errorf("gnomeAccentName() = %q, want teal", got)
+	if got := gnomeInterface("accent-color"); got != "teal" {
+		t.Errorf("gnomeInterface(accent-color) = %q, want teal", got)
 	}
 }
 
@@ -105,8 +123,8 @@ func TestGnomeAccentNameFallsBackToTheSessionDefault(t *testing.T) {
 func TestGnomeAccentNameStaysQuietOnAnotherDesktop(t *testing.T) {
 	stubDesktopTools(t, "", "'blue'")
 	t.Setenv("XDG_CURRENT_DESKTOP", "KDE")
-	if got := gnomeAccentName(); got != "" {
-		t.Errorf("gnomeAccentName() = %q, want nothing off a GNOME session", got)
+	if got := gnomeInterface("accent-color"); got != "" {
+		t.Errorf("gnomeInterface(accent-color) = %q, want nothing off a GNOME session", got)
 	}
 }
 

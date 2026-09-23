@@ -112,11 +112,14 @@ background it tints its own chrome with, which the dashboard puts behind the rai
 and the sidebar in light mode. A stock Plasma that never had an accent picked
 lends the scheme's selection colour instead.
 
-**GNOME** publishes the accent alone, one of the nine libadwaita colours, read
+**GNOME** publishes the accent alone, one of the ten libadwaita colours, read
 from `org.gnome.desktop.interface accent-color`. That is all it lends, since the
 desktop's surfaces are not something you picked; the Adwaita entry keeps the
-surfaces it always had and only its accent follows the desktop. GNOME 46 and
-older have no accent setting, so there is nothing to follow there.
+surfaces it always had and only its accent follows the desktop. Ubuntu paints
+each accent in its own Yaru tone rather than libadwaita's, so under a Yaru GTK
+theme the dashboard takes the Yaru tone, the olive green or Ubuntu orange the
+rest of the desktop is wearing. GNOME 46 and older have no accent setting, so
+there is nothing to follow there.
 
 **macOS** publishes the accent alone as well, the one picked in System Settings
 under Appearance, read from `AppleAccentColor` in the global preferences domain.
