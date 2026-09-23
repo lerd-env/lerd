@@ -17,6 +17,10 @@ BINARY="lerd"
 # with native desktop notifications), distributed as a Flatpak. Overridable so
 # the ref URL can move.
 DESKTOP_INSTALL_CMD="${LERD_DESKTOP_INSTALL_CMD:-flatpak install --user https://lerd.sh/lerd.flatpakref}"
+# On Omarchy the Glance bar plugin shows lerd's state, so it replaces the tray.
+OMARCHY_PLUGIN_REPO="https://github.com/lerd-env/lerd-omarchy-glance"
+OMARCHY_PLUGIN_ID="sh.lerd.glance"
+OMARCHY_PLUGINS_DIR="$HOME/.config/omarchy/plugins"
 INSTALL_DIR="${LERD_INSTALL_DIR:-$HOME/.local/bin}"
 LERD_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/lerd"
 LERD_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/lerd"
@@ -719,7 +723,43 @@ cmd_install() {
     offer_desktop_app
   fi
 
+  # Only a fresh install, so an update never re-adds a plugin the user removed.
+  if [ -z "$was_installed" ] && [ "$(uname -s)" = "Linux" ]; then
+    setup_omarchy
+  fi
+
   star_note
+}
+
+# setup_omarchy swaps the tray for the Glance bar plugin on Omarchy, whose bar
+# already has a place for lerd's state. Off Omarchy it does nothing.
+setup_omarchy() {
+  command -v omarchy-plugin-add &>/dev/null || return 0
+  header "Omarchy"
+  "${INSTALL_DIR}/${BINARY}" tray off >/dev/null 2>&1 || true
+  success "System tray off, the Omarchy bar shows Lerd instead"
+  # omarchy-plugin-add refuses an id already on disk, and a plugin the user
+  # disabled stays disabled.
+  if [ -d "$OMARCHY_PLUGINS_DIR/${OMARCHY_PLUGIN_ID}" ]; then
+    success "Lerd Glance plugin already installed"
+  elif omarchy-plugin-add "$OMARCHY_PLUGIN_REPO" --enable --yes; then
+    success "Lerd Glance plugin added to the bar"
+  else
+    warn "Could not add the Lerd Glance plugin. Add it later with:"
+    echo -e "     ${CYAN}omarchy-plugin-add ${OMARCHY_PLUGIN_REPO} --enable --yes${RESET}"
+  fi
+}
+
+# remove_omarchy_plugin takes the Glance plugin off the bar with lerd, and
+# leaves the command behind if Omarchy refuses, rather than a silent leftover.
+remove_omarchy_plugin() {
+  [ -d "$OMARCHY_PLUGINS_DIR/${OMARCHY_PLUGIN_ID}" ] || return 0
+  if omarchy-plugin-remove "$OMARCHY_PLUGIN_ID" --yes >/dev/null 2>&1; then
+    success "Removed the Lerd Glance plugin"
+  else
+    warn "Could not remove the Lerd Glance plugin. Remove it with:"
+    echo -e "     ${CYAN}omarchy-plugin-remove ${OMARCHY_PLUGIN_ID} --yes${RESET}"
+  fi
 }
 
 # offer_desktop_app asks whether to use the Lerd desktop app (which delivers
@@ -931,6 +971,7 @@ cmd_uninstall_linux() {
   header "Uninstalling Lerd"
 
   uninstall_linux_dns
+  remove_omarchy_plugin
 
   # Stop and remove systemd units — discover from quadlet files on disk
   local quadlet_dir="${XDG_CONFIG_HOME:-$HOME/.config}/containers/systemd"

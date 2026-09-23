@@ -46,6 +46,8 @@ Reinstalling for an update or a test reuses what is already in place and does no
 
 After install, reload your shell or open a new terminal so `PATH` takes effect.
 
+On Omarchy a fresh install also turns the system tray off (`lerd tray off`) and adds the [Lerd Glance](https://github.com/lerd-env/lerd-omarchy-glance) plugin to the bar, which shows the same state where Omarchy already keeps it. `lerd tray on` brings the tray back.
+
 `lerd install` will:
 
 1. Check that the host ports lerd binds first (HTTP 80, HTTPS 443, DNS 5300) are free
@@ -218,6 +220,8 @@ lerd uninstall --force
 If lerd came from apt, dnf or Homebrew, the teardown is the same but the binary stays where it is: deleting a file the package manager owns would leave it believing lerd is still installed. `lerd uninstall` prints the matching removal command at that step, so finish with `sudo apt remove lerd`, `sudo dnf remove lerd` or `brew uninstall lerd`.
 
 The installer's own `--uninstall` stops the user units and removes the binary, but the DNS setup lives outside your home directory and only lerd can take it back out: the `lerd0` link unit, the NetworkManager rules and dispatcher, the drop-in that empties `FallbackDNS`, and the passwordless sudoers rule the DNS operations run under. So when it finds that configuration it offers to run `lerd dns:disable` first, and prints the root commands to clear it by hand if you decline or the binary has already gone.
+
+On Omarchy the installer's `--uninstall` also removes the Lerd Glance plugin from the bar.
 
 ---
 
