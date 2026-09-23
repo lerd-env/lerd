@@ -263,3 +263,45 @@ func TestSQLiteCreationTarget(t *testing.T) {
 		}
 	})
 }
+
+// A worktree is seeded from the file the parent project really opens, so the
+// lookup reports it relative to the project, and only when it exists.
+func TestProjectSQLiteFile_findsTheExistingFileRelativeToTheProject(t *testing.T) {
+	project := t.TempDir()
+	if err := os.WriteFile(filepath.Join(project, ".env"), []byte("DB_CONNECTION=sqlite\nDB_DATABASE=database/app.sqlite\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ProjectSQLiteFile(project, laravelish()); ok {
+		t.Fatal("reported a database that is not on disk")
+	}
+	if err := os.MkdirAll(filepath.Join(project, "database"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "database", "app.sqlite"), []byte("db"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rel, ok := ProjectSQLiteFile(project, laravelish())
+	if !ok || rel != filepath.Join("database", "app.sqlite") {
+		t.Errorf("ProjectSQLiteFile = %q, %v; want database/app.sqlite, true", rel, ok)
+	}
+}
+
+// An absolute path is one file every checkout already shares, and an in-memory
+// database has no file at all, so neither is something to copy.
+func TestProjectSQLiteFile_skipsAbsoluteAndInMemory(t *testing.T) {
+	for _, db := range []string{filepath.Join(t.TempDir(), "shared.sqlite"), ":memory:"} {
+		project := t.TempDir()
+		if err := os.WriteFile(filepath.Join(project, ".env"), []byte("DB_CONNECTION=sqlite\nDB_DATABASE="+db+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if filepath.IsAbs(db) {
+			if err := os.WriteFile(db, []byte("db"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if rel, ok := ProjectSQLiteFile(project, laravelish()); ok {
+			t.Errorf("DB_DATABASE=%s: ProjectSQLiteFile = %q, want none", db, rel)
+		}
+	}
+}

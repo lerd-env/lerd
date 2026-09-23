@@ -1025,6 +1025,7 @@ func scanWorktrees() ([]func(), bool) {
 // workers, in that order because each one needs what the previous put in place.
 // The vhost is already written and reloaded by the time this runs.
 func provisionWorktree(site config.Site, wt gitpkg.Worktree) {
+	seedWorktreeSQLite(&site, wt)
 	// Skip the install when the UI/CLI holds the cross-process lock: it is
 	// running composer/npm install with streamed output and would race the
 	// watcher's vendor seed otherwise.
@@ -1050,6 +1051,14 @@ func provisionWorktree(site config.Site, wt gitpkg.Worktree) {
 	// boot too, not just when fsnotify fires onAdded. Without this, units
 	// stopped during downtime never come back.
 	cli.AutoStartOptedInWorktreeWorkers(&site, wt.Path, config.WorktreePHPVersion(wt.Path, site.PHPVersion))
+}
+
+func seedWorktreeSQLite(site *config.Site, wt gitpkg.Worktree) {
+	if seeded, err := cli.SeedWorktreeSQLite(site, wt.Path); err != nil {
+		fmt.Printf("[WARN] SQLite database for worktree %s: %v\n", wt.Branch, err)
+	} else if seeded {
+		fmt.Printf("Worktree DB: copied the SQLite database into %s\n", wt.Branch)
+	}
 }
 
 // rescanWorktreeInstalls re-runs EnsureWorktreeDeps for any worktree whose
@@ -1107,6 +1116,11 @@ func syncWorktree(sitePath, worktreeName, action string, pruneStale bool) bool {
 	for _, wt := range worktrees {
 		if wt.Name != worktreeName {
 			continue
+		}
+		// Ahead of the install so the site answers its first request. Only on
+		// creation: a database the user deleted from the worktree stays deleted.
+		if shouldProvisionWorktreeDBOnSync(action) {
+			seedWorktreeSQLite(site, wt)
 		}
 		// Skip the install when the UI/CLI holds the cross-process lock:
 		// it is running composer/npm install with streamed output and
