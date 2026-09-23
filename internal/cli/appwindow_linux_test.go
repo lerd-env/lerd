@@ -78,3 +78,19 @@ func TestHyprlandAppWindow(t *testing.T) {
 		t.Errorf("got %q from unreadable output", got)
 	}
 }
+
+func TestAppWindowWanted(t *testing.T) {
+	cases := map[string]bool{
+		"KDE":          true,
+		"Hyprland":     true,
+		"":             true,
+		"GNOME":        false,
+		"ubuntu:GNOME": false,
+		"pop:GNOME":    false,
+	}
+	for desktop, want := range cases {
+		if got := appWindowWanted(desktop); got != want {
+			t.Errorf("appWindowWanted(%q) = %v, want %v", desktop, got, want)
+		}
+	}
+}

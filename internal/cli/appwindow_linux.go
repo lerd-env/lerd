@@ -40,6 +40,9 @@ var chromiumBrowsers = []chromiumBrowser{
 // Chromium opens a fresh --app window on every call, so a window already open
 // is focused instead where the compositor lets us find it.
 func openDashboard(dashURL string) error {
+	if !appWindowWanted(os.Getenv("XDG_CURRENT_DESKTOP")) {
+		return openBrowser(dashURL)
+	}
 	key := appWindowKey(dashURL)
 	if focusAppWindow(key) {
 		return nil
@@ -52,6 +55,18 @@ func openDashboard(dashURL string) error {
 	// Best effort: without it the window opens all the same, with a generic icon.
 	_ = desktopapp.WriteWindowEntry(brand + "-" + key + "-Default")
 	return exec.Command(cmd[0], cmd[1:]...).Start()
+}
+
+// appWindowWanted leaves GNOME on a browser tab. GNOME makes every window draw
+// its own frame, and Chromium draws an --app window's as a fixed grey bar that
+// ignores the page's theme-color, which looks worse than the tab it replaces.
+func appWindowWanted(desktop string) bool {
+	for _, d := range strings.Split(desktop, ":") {
+		if d == "GNOME" {
+			return false
+		}
+	}
+	return true
 }
 
 // appWindowCommand picks the browser to open url in as an app window, the
