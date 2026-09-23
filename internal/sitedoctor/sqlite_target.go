@@ -208,6 +208,24 @@ func SQLiteCreationTarget(projectPath string, fw *config.Framework, dbFile strin
 	return paths[0], true
 }
 
+// ProjectSQLiteFile returns the SQLite file the project at path opens, relative
+// to path, when its env names one by a relative path and it exists. An absolute
+// path is already shared by every checkout, so it is not reported.
+func ProjectSQLiteFile(path string, fw *config.Framework) (string, bool) {
+	envFile, envFormat, _ := envSetup(fw, path)
+	dbFile, ok := declaredSQLiteFile(filepath.Join(path, envFile), envFormat, fw)
+	if !ok || dbFile == ":memory:" || filepath.IsAbs(dbFile) {
+		return "", false
+	}
+	for _, abs := range sqliteFilePaths(path, publicDirOf(fw), filepath.FromSlash(dbFile)) {
+		if info, err := os.Stat(abs); err == nil && info.Mode().IsRegular() {
+			rel, err := filepath.Rel(path, abs)
+			return rel, err == nil
+		}
+	}
+	return "", false
+}
+
 func sqliteFilePaths(projectPath, publicDir, dbFile string) []string {
 	if filepath.IsAbs(dbFile) {
 		return []string{dbFile}

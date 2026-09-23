@@ -377,6 +377,10 @@ func fileExistsAt(path string) bool {
 // configured. Default: share the parent's database (no isolation). The other
 // options call into the same helpers the dashboard toggle uses.
 func promptDBIsolation(site *config.Site, branch string) error {
+	if WorktreeUsesSQLite(site) {
+		feedback.Note("SQLite project, the worktree has its own copy of main's database")
+		return nil
+	}
 	// The documented default is sharing the parent's database, so that is what a
 	// run with no terminal gets. Failing instead left the worktree with no
 	// database wiring at all and a prompt-library error in place of a reason.

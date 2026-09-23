@@ -97,3 +97,25 @@ func hasOption(opts []labeledOption, v string) bool {
 	}
 	return false
 }
+
+// A SQLite project's worktree gets a copy of the file, so the server-database
+// choices, which fail on it, are not offered.
+func TestWorktreeDBOptions_SQLiteProjectOffersOnlyTheCopy(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	sitePath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sitePath, ".env"), []byte("DB_CONNECTION=sqlite\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(sitePath, "database"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sitePath, "database", "database.sqlite"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := worktreeDBOptions(&config.Site{Name: "shop", Path: sitePath}, "")
+	if len(opts) != 1 || opts[0].Value != "share" {
+		t.Errorf("worktreeDBOptions = %+v, want the single copy choice", opts)
+	}
+}
