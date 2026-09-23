@@ -143,3 +143,51 @@ func TestLauncherName_alsoSeesAPackagedApp(t *testing.T) {
 		t.Errorf("with a packaged app: got %q, want %q", got, "Start Lerd")
 	}
 }
+
+func TestWindowEntry_givesAnAppWindowTheLerdIcon(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dir)
+
+	const class = "chrome-lerd.localhost__-Default"
+	if err := WriteWindowEntry(class); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, "applications", class+".desktop"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	// The desktop matches the window to this file by name, so it only has to
+	// carry the icon and stay out of the application list.
+	for _, want := range []string{"Icon=" + iconPath(), "NoDisplay=true", "StartupWMClass=" + class} {
+		if !strings.Contains(text, want) {
+			t.Errorf("entry lacks %q:\n%s", want, text)
+		}
+	}
+	if _, err := os.Stat(iconPath()); err != nil {
+		t.Errorf("icon not written: %v", err)
+	}
+}
+
+func TestRemove_takesTheWindowEntriesToo(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dir)
+	t.Setenv("XDG_DATA_DIRS", t.TempDir())
+	if err := WriteWindowEntry("brave-lerd.localhost__-Default"); err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(dir, "applications", "brave-browser.desktop")
+	if err := os.WriteFile(other, []byte("[Desktop Entry]\nName=Brave\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Remove(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "applications", "brave-lerd.localhost__-Default.desktop")); !os.IsNotExist(err) {
+		t.Errorf("window entry survived Remove: %v", err)
+	}
+	if _, err := os.Stat(other); err != nil {
+		t.Errorf("Remove took an entry that is not lerd's: %v", err)
+	}
+}

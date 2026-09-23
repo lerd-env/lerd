@@ -47,7 +47,7 @@ func runDashboard(withSplash bool) error {
 	}
 	url := dashboard.URL()
 	fmt.Printf("Opening %s\n", url)
-	return openBrowser(url)
+	return openDashboard(url)
 }
 
 // startForDashboard runs the start, drawing a progress window when the caller
