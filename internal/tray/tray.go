@@ -11,14 +11,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/dashboard"
-	"github.com/geodro/lerd/internal/desktopnotify"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	lerdUpdate "github.com/geodro/lerd/internal/update"
 	"github.com/geodro/lerd/internal/version"
@@ -477,19 +474,8 @@ func applyLoop(menu *menuState, updateCh <-chan *Snapshot, mono bool, icons *ico
 
 func handleDash(item *systray.MenuItem, refresh func()) {
 	for range item.ClickedCh {
-		// Prefer the desktop app when it's the registered lerd:// handler.
-		if desktopnotify.AppInstalled() {
-			if err := desktopnotify.OpenApp(""); err == nil {
-				continue
-			}
-		}
-		if dashboard.Serving() {
-			openURL(dashboard.URL())
-			continue
-		}
-		// Nothing is serving it, so hand the click to `lerd dashboard`, which
-		// starts the stack before opening. Keeps start-then-open in one place
-		// rather than reimplementing the start here.
+		// `lerd dashboard` owns the whole choice: the desktop app, a Chromium
+		// app window or a browser tab, starting the stack first when it is down.
 		go runAndRefresh(lerdCmd("dashboard"), refresh)
 	}
 }
@@ -648,12 +634,4 @@ func handleQuit(item *systray.MenuItem, cancel context.CancelFunc) {
 	cancel()
 	_ = lerdCmd("quit").Run()
 	systray.Quit()
-}
-
-func openURL(url string) {
-	cmd := "open"
-	if runtime.GOOS == "linux" {
-		cmd = "xdg-open"
-	}
-	_ = exec.Command(cmd, url).Start()
 }
