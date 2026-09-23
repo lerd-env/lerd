@@ -6372,6 +6372,9 @@ func worktreeBuildOptions(site *config.Site) []labeledOption {
 // mirrors `lerd worktree add`'s prompt: when a preserved isolated DB exists
 // for that branch it adds "reuse" and "reset" and drops the plain "empty".
 func worktreeDBOptions(site *config.Site, branch string) []labeledOption {
+	if cli.WorktreeUsesSQLite(site) {
+		return []labeledOption{{Value: "share", Label: "Copy of main's SQLite database"}}
+	}
 	var opts []labeledOption
 	var preserved config.WorktreeDBEntry
 	hasPreserved := false

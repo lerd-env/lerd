@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -152,6 +153,52 @@ func refreshDesktopDatabase(dir string) {
 	_ = exec.Command(bin, dir).Run()
 }
 
+// windowEntryMarker tags the hidden entries WriteWindowEntry leaves, so Remove
+// can find them without knowing which browsers were used.
+const windowEntryMarker = "X-Lerd-App-Window=true"
+
+// WriteWindowEntry names a dashboard app window for the desktop. A Chromium
+// --app window's class is derived from its URL, and a taskbar looks the icon up
+// in the entry of that name, so without one the window shows a generic icon.
+// The entry is hidden: it exists to be matched, not launched.
+func WriteWindowEntry(class string) error {
+	dir := dataHome()
+	if dir == "" {
+		return fmt.Errorf("locating the home directory")
+	}
+	icon := iconPath()
+	if err := os.MkdirAll(filepath.Dir(icon), 0755); err != nil {
+		return fmt.Errorf("creating %s: %w", filepath.Dir(icon), err)
+	}
+	if err := os.WriteFile(icon, markPNG, 0644); err != nil {
+		return fmt.Errorf("writing the icon: %w", err)
+	}
+	apps := filepath.Join(dir, "applications")
+	if err := os.MkdirAll(apps, 0755); err != nil {
+		return fmt.Errorf("creating %s: %w", apps, err)
+	}
+	body := "[Desktop Entry]\n" +
+		"Type=Application\n" +
+		"Name=" + Name + "\n" +
+		"Exec=" + config.LerdBinary() + " dashboard --splash\n" +
+		"Icon=" + icon + "\n" +
+		"StartupWMClass=" + class + "\n" +
+		"NoDisplay=true\n" +
+		windowEntryMarker + "\n"
+	return os.WriteFile(filepath.Join(apps, class+".desktop"), []byte(body), 0644)
+}
+
+// removeWindowEntries deletes every entry WriteWindowEntry left.
+func removeWindowEntries(apps string) {
+	entries, _ := filepath.Glob(filepath.Join(apps, "*.desktop"))
+	for _, path := range entries {
+		body, err := os.ReadFile(path)
+		if err == nil && strings.Contains(string(body), windowEntryMarker) {
+			_ = os.Remove(path)
+		}
+	}
+}
+
 // Remove deletes the desktop entry and its icon. Missing is success.
 //
 // Only the icon file: it sits directly in lerd's data directory, so removing
@@ -165,6 +212,7 @@ func Remove() error {
 	if err := os.Remove(entry); err != nil && !os.IsNotExist(err) {
 		return err
 	}
+	removeWindowEntries(filepath.Dir(entry))
 	_ = os.Remove(iconPath())
 	refreshDesktopDatabase(filepath.Dir(entry))
 	return nil

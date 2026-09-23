@@ -253,6 +253,12 @@ func RunWorktreeAdd(site *config.Site, req WorktreeAddRequest, log io.Writer) (s
 		logf(log, "[WARN] writing .git/info/exclude: %v", err)
 	}
 
+	if seeded, err := SeedWorktreeSQLite(site, checkoutPath); err != nil {
+		logf(log, "[WARN] SQLite database: %v", err)
+	} else if seeded {
+		logf(log, "Copied the SQLite database from main.")
+	}
+
 	worktreeDomain := branch + "." + site.PrimaryDomain()
 	logf(log, "Installing dependencies (composer + JS)...")
 	warnsBefore := len(capturer.warnings)

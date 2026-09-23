@@ -8,6 +8,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
 	gitpkg "github.com/geodro/lerd/internal/git"
+	"github.com/geodro/lerd/internal/sitedoctor"
 )
 
 // DropOrphanedWorktreeDBs scans the registry for orphaned worktree state
@@ -199,4 +200,42 @@ func FindParentSiteForWorktree(dir string) (*config.Site, string, bool) {
 		}
 	}
 	return nil, "", false
+}
+
+// SeedWorktreeSQLite copies the parent's SQLite database into a new worktree.
+// The file is gitignored, so the checkout arrives without it while its env still
+// names it, and the site fails its first request. A copy rather than a shared
+// file keeps the branch's migrations off main's data. The write-ahead log goes
+// with it so recent writes still in it are not lost. Returns true when it copied.
+func SeedWorktreeSQLite(site *config.Site, worktreePath string) (bool, error) {
+	fw, _ := config.GetFrameworkForDir(site.Framework, site.Path)
+	rel, ok := sitedoctor.ProjectSQLiteFile(site.Path, fw)
+	if !ok {
+		return false, nil
+	}
+	dst := filepath.Join(worktreePath, rel)
+	if _, err := os.Lstat(dst); err == nil {
+		return false, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return false, err
+	}
+	for _, suffix := range []string{"", "-wal"} {
+		src := filepath.Join(site.Path, rel) + suffix
+		if _, err := os.Stat(src); err != nil {
+			continue
+		}
+		if err := gitpkg.CopyTree(src, dst+suffix); err != nil {
+			return false, fmt.Errorf("copying %s into the worktree: %w", rel+suffix, err)
+		}
+	}
+	return true, nil
+}
+
+// WorktreeUsesSQLite reports whether the site's worktrees get their database as
+// a copied file, which the mysql/postgres isolation choices cannot act on.
+func WorktreeUsesSQLite(site *config.Site) bool {
+	fw, _ := config.GetFrameworkForDir(site.Framework, site.Path)
+	_, ok := sitedoctor.ProjectSQLiteFile(site.Path, fw)
+	return ok
 }
