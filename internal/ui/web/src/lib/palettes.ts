@@ -205,7 +205,7 @@ export const BUILTIN_PALETTES: Palette[] = [
     accentHover: '#1a5fb4',
     accentDark: '#3584e4',
     accentHoverDark: '#62a0ea',
-    chromeLight: '#ebebeb',
+    chromeLight: '#ebebed',
     bg: '#1d1d20',
     card: '#252529',
     border: '#2e2e32',

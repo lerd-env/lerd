@@ -205,6 +205,10 @@ describe('the light mode chrome', () => {
     expect(tinted.map((p) => p.id)).toEqual(['breeze', 'adwaita', 'macos']);
   });
 
+  it("wears libadwaita's own sidebar_bg_color on Adwaita", () => {
+    expect(BUILTIN_PALETTES.find((p) => p.id === 'adwaita')!.chromeLight).toBe('#ebebed');
+  });
+
   // A light Plasma scheme publishes the tone it tints its own chrome with, and
   // that beats the one Breeze ships.
   it('takes the tone a light scheme published over the built-in\u2019s', () => {
