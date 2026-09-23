@@ -48,3 +48,19 @@ func TestShimShadowFindingExplainsTheSymptom(t *testing.T) {
 		}
 	}
 }
+
+// A Node version manager that re-prepends its own bin after lerd's PATH line
+// (nvm's `use`, fnm, volta) hands back `node`, and the build then fails on a
+// Node the project never targeted. The message has to name Node, not the
+// container network php loses.
+func TestShimShadowFindingNodeExplainsTheVersion(t *testing.T) {
+	_, detail := shimShadowFinding("node", "/home/u/.local/share/lerd/bin/node", "/home/u/.nvm/versions/node/v16.20.1/bin/node", nil)
+	for _, want := range []string{"/home/u/.nvm/versions/node/v16.20.1/bin/node", "Node"} {
+		if !strings.Contains(detail, want) {
+			t.Errorf("detail %q should mention %q", detail, want)
+		}
+	}
+	if strings.Contains(detail, "lerd-") {
+		t.Errorf("detail %q should not reuse the php hostname symptom", detail)
+	}
+}
