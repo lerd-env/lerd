@@ -693,6 +693,82 @@ EOF
   grep -q "notify target browser" "$d/calls"
 }
 
+# ── Omarchy ──────────────────────────────────────────────────────────────────
+
+# Omarchy's plugin CLI stands in for the whole desktop: where it is on PATH the
+# bar is Omarchy's and the Glance plugin replaces the tray.
+_fake_omarchy() {
+  local d; d="$(_fake_lerd_dir)"
+  for c in omarchy-plugin-add omarchy-plugin-remove; do
+    printf '#!/usr/bin/env bash\necho "%s $*" >> "%s/calls"\n' "$c" "$d" > "$d/$c"
+    chmod +x "$d/$c"
+  done
+  echo "$d"
+}
+
+@test "setup_omarchy turns the tray off and adds the Glance plugin" {
+  local d; d="$(_fake_omarchy)"
+  INSTALL_DIR="$d"; BINARY="lerd"; PATH="$d:$PATH"
+  run setup_omarchy
+  [ "$status" -eq 0 ]
+  grep -q "^tray off" "$d/calls"
+  grep -q "^omarchy-plugin-add $OMARCHY_PLUGIN_REPO --enable --yes" "$d/calls"
+}
+
+@test "setup_omarchy leaves an already installed Glance plugin alone" {
+  local d; d="$(_fake_omarchy)"
+  INSTALL_DIR="$d"; BINARY="lerd"; PATH="$d:$PATH"
+  mkdir -p "$OMARCHY_PLUGINS_DIR/$OMARCHY_PLUGIN_ID"
+  run setup_omarchy
+  [ "$status" -eq 0 ]
+  grep -q "^tray off" "$d/calls"
+  ! grep -q "^omarchy-plugin-add" "$d/calls"
+}
+
+@test "setup_omarchy does nothing off Omarchy" {
+  local d; d="$(_fake_lerd_dir)"
+  INSTALL_DIR="$d"; BINARY="lerd"
+  command() { [ "$2" = "omarchy-plugin-add" ] && return 1; builtin command "$@"; }
+  run setup_omarchy
+  [ "$status" -eq 0 ]
+  [ ! -f "$d/calls" ]
+}
+
+@test "remove_omarchy_plugin removes an installed Glance plugin" {
+  local d; d="$(_fake_omarchy)"
+  PATH="$d:$PATH"
+  mkdir -p "$OMARCHY_PLUGINS_DIR/$OMARCHY_PLUGIN_ID"
+  run remove_omarchy_plugin
+  [ "$status" -eq 0 ]
+  grep -q "^omarchy-plugin-remove $OMARCHY_PLUGIN_ID --yes" "$d/calls"
+}
+
+@test "remove_omarchy_plugin skips a plugin that is not installed" {
+  local d; d="$(_fake_omarchy)"
+  PATH="$d:$PATH"
+  run remove_omarchy_plugin
+  [ "$status" -eq 0 ]
+  [ ! -f "$d/calls" ]
+}
+
+# Omarchy's plugin commands need the desktop session's environment, so a
+# refusal has to leave the user the command rather than a silent leftover.
+@test "remove_omarchy_plugin prints the command when Omarchy refuses" {
+  local d; d="$(_fake_omarchy)"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$d/omarchy-plugin-remove"
+  PATH="$d:$PATH"
+  mkdir -p "$OMARCHY_PLUGINS_DIR/$OMARCHY_PLUGIN_ID"
+  run remove_omarchy_plugin
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"omarchy-plugin-remove $OMARCHY_PLUGIN_ID --yes"* ]]
+}
+
+@test "only a fresh linux install and the linux uninstall touch Omarchy" {
+  [[ "$(declare -f cmd_install)" == *"setup_omarchy"* ]]
+  [[ "$(declare -f cmd_update)" != *"setup_omarchy"* ]]
+  [[ "$(declare -f cmd_uninstall_linux)" == *"remove_omarchy_plugin"* ]]
+}
+
 # ── uninstall_linux_dns ───────────────────────────────────────────────────────
 
 _stub_dns_files() {
