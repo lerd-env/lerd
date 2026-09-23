@@ -200,7 +200,7 @@ To be offered betas while still on a stable version, turn on **Beta updates** on
 lerd uninstall
 ```
 
-Stops all containers, disables and removes Quadlet units, removes the watcher service, removes the binary, tears down the `lerd` podman network (including aardvark-dns runtime state), and cleans up the `PATH` entry from your shell config. It also deletes `/etc/sysctl.d/99-lerd-ports.conf` through `sudo`, so the lowered unprivileged port start that let Podman bind 80 and 443 no longer applies after the next reboot.
+Stops all containers, disables and removes Quadlet units, removes the watcher service, removes the binary, tears down the `lerd` podman network (including aardvark-dns runtime state), and cleans up the `PATH` entry from your shell config. It also deletes `/etc/sysctl.d/99-lerd-ports.conf` through `sudo`, so the lowered unprivileged port start that let Podman bind 80 and 443 no longer applies after the next reboot. On distros that build the initramfs with dracut (Fedora, Ubuntu 26.04), the image carries its own copy of the drop-in and applies it at boot until it is rebuilt, so uninstall prints `sudo dracut -f` when it finds one there.
 
 Four opt-in prompts before finishing:
 
