@@ -20,7 +20,19 @@ func shimShadowFinding(tool, shim, resolved string, lookErr error) (status, deta
 	case resolved == shim:
 		return "ok", ""
 	default:
-		return "warn", fmt.Sprintf("%s leads instead of lerd's shim, so %s runs on the host and cannot reach the lerd-… hostnames in a site's .env — move lerd's PATH line to the end of your shell rc", resolved, tool)
+		return "warn", fmt.Sprintf("%s leads instead of lerd's shim, so %s %s — move lerd's PATH line to the end of your shell rc", resolved, tool, shimShadowSymptom(tool))
+	}
+}
+
+// shimShadowSymptom is what actually breaks when a host binary wins over the
+// shim, which differs by tool: php leaves the container network, node leaves
+// the version lerd pins.
+func shimShadowSymptom(tool string) string {
+	switch tool {
+	case "node", "npm", "npx":
+		return "runs under whatever Node your version manager has active rather than the Node default lerd pins, and a build can fail on a version the project never targeted"
+	default:
+		return "runs on the host and cannot reach the lerd-… hostnames in a site's .env"
 	}
 }
 
