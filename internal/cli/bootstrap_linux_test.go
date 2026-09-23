@@ -3,7 +3,9 @@
 package cli
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/dns"
@@ -95,5 +97,31 @@ func TestRunBootstrapSystemNoTargetUser(t *testing.T) {
 	}
 	if len(*users) != 0 {
 		t.Errorf("sudoers written with no target user: %v", *users)
+	}
+}
+
+func TestRemovePortDropInDeletesItThroughSudo(t *testing.T) {
+	runs, _ := stubBootstrapSystem(t)
+	if err := os.WriteFile(unprivPortDropIn, []byte(unprivPortSetting+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	removePortDropIn()
+
+	want := []string{"sudo", "rm", "-f", unprivPortDropIn}
+	if len(*runs) != 1 || strings.Join((*runs)[0], " ") != strings.Join(want, " ") {
+		t.Errorf("commands = %v, want [%v]", *runs, want)
+	}
+}
+
+// No drop-in means lerd never lowered the port start, so there is nothing to
+// ask sudo for.
+func TestRemovePortDropInSkipsWhenAbsent(t *testing.T) {
+	runs, _ := stubBootstrapSystem(t)
+
+	removePortDropIn()
+
+	if len(*runs) != 0 {
+		t.Errorf("commands = %v, want none", *runs)
 	}
 }
