@@ -349,10 +349,10 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 		}
 
 		// The shims dir is prepended to PATH once, at install. Anything that
-		// appends its own PHP to the rc afterwards wins, and the only symptom
-		// is container hostnames failing to resolve for CLI commands.
+		// appends its own PHP or Node to the rc afterwards wins, and so does a
+		// version manager switched inside the session (nvm use, fnm, volta).
 		if !cfg.Shims.PathDisabled {
-			for _, tool := range []string{"php", "composer"} {
+			for _, tool := range []string{"php", "composer", "node"} {
 				if !shimInstalled(tool) {
 					continue
 				}

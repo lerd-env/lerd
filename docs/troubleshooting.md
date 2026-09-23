@@ -194,6 +194,19 @@ lerd doctor      # the Configuration section reports what leads
 Doctor's `php on PATH` line names the binary in front when it is not lerd's. Move lerd's `export PATH` line to the end of your shell rc and open a new shell, and if the entry is missing entirely, `lerd path:enable` writes it back. To keep your own PHP in front deliberately, run `lerd path:disable` and type `lerd artisan migrate` instead, which always runs in the container whatever your PATH says.
 :::
 
+::: details `npm run build` fails on a Node version you never chose
+lerd pins a Node default and puts `node`, `npm` and `npx` shims in `~/.local/share/lerd/bin/` ahead of your PATH, so a project builds under the version lerd drives through mise. A Node version manager takes them back two ways: its rc line sits below lerd's, or you ran something like `nvm use 16` in that terminal, which prepends its bin for the rest of the session. The build then runs on whatever that manager had active and fails on an API the project assumed, `structuredClone is not defined` on Node 16 being the usual one.
+
+Check which one you have:
+
+```bash
+which node       # expect ~/.local/share/lerd/bin/node
+lerd doctor      # the Configuration section reports what leads
+```
+
+Doctor's `node on PATH` line names the binary in front when it is not lerd's. If you switched by hand, a new shell is enough. If a manager's rc line is the cause, move lerd's `export PATH` line to the end of your shell rc, and `lerd path:enable` writes the entry back when it is missing entirely. To keep your own Node in front deliberately, run `lerd path:disable`.
+:::
+
 ::: details composer or npm fails with "could not resolve host" inside a container
 Composer, npm and the framework store all run inside the container, not on the host, so they use the resolver the lerd network hands aardvark-dns rather than yours. Those two can differ: `.test` domains and container names are answered by aardvark-dns from its own records and keep working regardless, so a broken forwarder shows up only as downloads that fail with `could not resolve host` or `curl error 28 while downloading`, with nothing else complaining.
 

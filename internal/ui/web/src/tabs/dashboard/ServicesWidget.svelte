@@ -15,10 +15,15 @@
 
   // The card scrolls once the list outgrows it, so a service with an update
   // can sit below the fold. Float those to the top and the tile's own arrow
-  // is on screen without a banner repeating it. Sort is stable, so the rest
-  // keeps the order the store hands over.
+  // is on screen without a banner repeating it. Below them the busiest
+  // services lead, on the count of sites wired to each; the sort is stable,
+  // so an equal count keeps the order the store hands over.
   const rank = (s: Service) => (s.update_available ? 0 : 1);
-  const sorted = $derived([...$coreServices].sort((a, b) => rank(a) - rank(b)));
+  const sorted = $derived(
+    [...$coreServices].sort(
+      (a, b) => rank(a) - rank(b) || (b.site_count ?? 0) - (a.site_count ?? 0)
+    )
+  );
 </script>
 
 <DashboardCard title={m.dashboard_services_title()} tone={updates > 0 ? 'warn' : 'default'}>
