@@ -21,6 +21,41 @@ beforeEach(() => {
 });
 
 describe('WorkersWidget', () => {
+  // Group headings, told apart from the rows by the heading's own truncate span.
+  function groupLabels(container: HTMLElement): string[] {
+    return [...container.querySelectorAll('.flex-1.truncate.text-left')].map(
+      (n) => n.textContent?.trim() ?? ''
+    );
+  }
+
+  it('leads with the group running the most workers', () => {
+    sites.set([
+      { domain: 'shop.test', name: 'shop' },
+      { domain: 'blog.test', name: 'blog' }
+    ] as never);
+    services.set([
+      { name: 'horizon-shop', status: 'active', horizon_site: 'shop' },
+      { name: 'queue-shop', status: 'active', queue_site: 'shop' },
+      { name: 'queue-blog', status: 'active', queue_site: 'blog' }
+    ] as never);
+    const { container } = render(WorkersWidget);
+    expect(groupLabels(container)).toEqual(['Queues', 'Horizon']);
+  });
+
+  it('breaks a tie on active workers with the size of the group', () => {
+    sites.set([
+      { domain: 'shop.test', name: 'shop' },
+      { domain: 'blog.test', name: 'blog' }
+    ] as never);
+    services.set([
+      { name: 'horizon-shop', status: 'active', horizon_site: 'shop' },
+      { name: 'queue-shop', status: 'active', queue_site: 'shop' },
+      { name: 'queue-blog', status: 'inactive', queue_site: 'blog' }
+    ] as never);
+    const { container } = render(WorkersWidget);
+    expect(groupLabels(container)).toEqual(['Queues', 'Horizon']);
+  });
+
   it('names the site once and leaves the worker type to the heading', () => {
     render(WorkersWidget);
     expect(screen.getByText('shop')).toBeInTheDocument();

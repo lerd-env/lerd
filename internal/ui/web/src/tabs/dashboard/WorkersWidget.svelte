@@ -101,6 +101,9 @@
     return [...new Set(names.map((n) => siteFor(n)?.framework).filter(Boolean) as string[])];
   }
 
+  const activeIn = (g: MergedGroup) => g.running.filter((i) => i.status === 'active').length;
+  const unitsIn = (g: MergedGroup) => g.running.length + g.asleep.length;
+
   const groups = $derived.by((): MergedGroup[] => {
     const map = new Map<string, MergedGroup>();
     for (const g of $workerGroups) {
@@ -123,7 +126,12 @@
           addAsleep(w, name + '/' + (wt.branch || ''), name);
       }
     }
-    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
+    // Busiest group first: the count of workers actually up, then the size of
+    // the group, so a big idle group never outranks a smaller one that is
+    // working. Equal on both, the label decides and the order stays stable.
+    return [...map.values()].sort(
+      (a, b) => activeIn(b) - activeIn(a) || unitsIn(b) - unitsIn(a) || a.label.localeCompare(b.label)
+    );
   });
 
   const totalUnits = $derived(groups.reduce((n, g) => n + g.running.length + g.asleep.length, 0));
