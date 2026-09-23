@@ -3,7 +3,7 @@
 Lerd includes a browser dashboard available at **`http://lerd.localhost`**, served by the `lerd-ui` systemd service (started automatically with `lerd install`).
 
 ```bash
-lerd dashboard   # open in your default browser
+lerd dashboard   # open the dashboard in its own window
 ```
 
 The `.localhost` TLD resolves to `127.0.0.1` natively on all modern systems, no DNS configuration needed. The dashboard is also reachable directly at `http://127.0.0.1:7073` if nginx is not running.
@@ -22,7 +22,9 @@ The dashboard is a Progressive Web App (PWA). You can install it as a standalone
 2. Click the **install** icon (⊕) in the address bar
 3. Click **Install**
 
-Once installed, Lerd opens in its own window without browser chrome, just like a native app.
+Once installed, Lerd opens in its own window, with Chromium's slim app title bar above it.
+
+On Linux you don't need to install anything for a window of its own: when the Lerd desktop app isn't installed, `lerd dashboard` and the tray's **Open Dashboard** open the dashboard as a Chromium `--app` window, which has no tabs, no address bar and no browser title bar, the same way Omarchy launches its web apps. Your default browser is used if it's Chromium-based, otherwise the first of Chromium, Chrome, Brave, Edge, Vivaldi or Helium that is installed, native or flatpak. With none of them installed, the dashboard opens in a normal browser tab. On Hyprland (Omarchy included) and KDE Plasma, running it again brings the open window to the front instead of opening a second one. lerd also leaves a hidden entry in `~/.local/share/applications` named after the window, so the taskbar shows the Lerd icon; `lerd uninstall` removes it.
 
 `lerd dashboard`, the tray's **Open Dashboard** and the macOS **Lerd** app all start lerd first when nothing is serving it, so opening the dashboard on a stopped environment brings it up rather than landing on a page whose only content is a button to press. The command shows the same spinner `lerd start` does; the macOS app shows a [native progress window](../getting-started/installation#lerd-in-the-app-list). A dashboard already open in a browser tab is the one case that cannot shell out; that is what the **Start when the dashboard opens** setting below covers.
 
