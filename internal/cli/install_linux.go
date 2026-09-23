@@ -182,3 +182,16 @@ func removeSystemTrustAnchor() {
 		feedback.Warn("removing the mkcert CA: %v", err)
 	}
 }
+
+// removePortDropIn drops the sysctl drop-in bootstrap wrote, so the lowered
+// port start stops applying from the next boot. The live value is left alone
+// because another tool may bind a low port under it right now.
+func removePortDropIn() {
+	if _, err := os.Stat(unprivPortDropIn); err != nil {
+		return
+	}
+	feedback.Sudo("Removing the unprivileged port setting")
+	if err := bootstrapRunner("sudo", "rm", "-f", unprivPortDropIn); err != nil {
+		feedback.Warn("removing %s: %v", unprivPortDropIn, err)
+	}
+}

@@ -84,6 +84,9 @@ func ensureMkcertCA(unattended bool) {
 // keychain entry, and nothing here writes a separate anchor.
 func removeSystemTrustAnchor() {}
 
+// removePortDropIn is a no-op on macOS, which has no port sysctl to undo.
+func removePortDropIn() {}
+
 func downloadBinaries(w io.Writer) error {
 	var pins pinnedTools
 
