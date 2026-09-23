@@ -69,6 +69,7 @@ func runUninstall(force bool) error {
 	// the lock glyph warns that the password prompt below is expected.
 	feedback.Sudo("Removing DNS configuration")
 	dns.Teardown()
+	removePortDropIn()
 
 	step("Stopping containers and services")
 	{
