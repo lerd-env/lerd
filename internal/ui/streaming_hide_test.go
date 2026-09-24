@@ -2,8 +2,6 @@ package ui
 
 import (
 	"testing"
-
-	"github.com/geodro/lerd/internal/stats"
 )
 
 func TestHideStreamingServicesDropsAHiddenSitesWorkers(t *testing.T) {
@@ -29,16 +27,6 @@ func TestHideStreamingServicesLeavesEverythingWhenNothingIsHidden(t *testing.T) 
 	in := []ServiceResponse{{Name: "vite-open", WorkerSite: "open"}}
 	if out := hideStreamingServices(in, map[string]bool{}, map[string]bool{}); len(out) != 1 {
 		t.Fatalf("got %+v, want the list untouched", out)
-	}
-}
-
-func TestHideStreamingContainersDropsAHiddenSitesContainers(t *testing.T) {
-	snap := stats.Snapshot{Containers: []stats.ContainerStat{
-		{Name: "lerd-mysql"}, {Name: "lerd-vite-secret"}, {Name: "lerd-vite-secret-feat-x"}, {Name: "lerd-vite-open"},
-	}}
-	out := hideStreamingContainers(snap, map[string]bool{"secret": true})
-	if len(out.Containers) != 2 || out.Containers[0].Name != "lerd-mysql" || out.Containers[1].Name != "lerd-vite-open" {
-		t.Fatalf("got %+v, want lerd-mysql and lerd-vite-open only", out.Containers)
 	}
 }
 

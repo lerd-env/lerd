@@ -3,10 +3,8 @@ package ui
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/stats"
 )
 
 const errStreamingDisabled = "streaming mode is disabled, enable it in Lerd settings or with lerd streaming enable"
@@ -124,31 +122,6 @@ func hideStreamingServices(list []ServiceResponse, hidden, domains map[string]bo
 		out = append(out, s)
 	}
 	return out
-}
-
-// hideStreamingContainers drops a hidden site's containers from the resource
-// stats. They are named lerd-<worker>-<site>, with -<worktree> for a worktree.
-func hideStreamingContainers(snap stats.Snapshot, hidden map[string]bool) stats.Snapshot {
-	if len(hidden) == 0 {
-		return snap
-	}
-	kept := make([]stats.ContainerStat, 0, len(snap.Containers))
-	for _, c := range snap.Containers {
-		if !containerOfHiddenSite(c.Name, hidden) {
-			kept = append(kept, c)
-		}
-	}
-	snap.Containers = kept
-	return snap
-}
-
-func containerOfHiddenSite(name string, hidden map[string]bool) bool {
-	for site := range hidden {
-		if strings.HasSuffix(name, "-"+site) || strings.Contains(name, "-"+site+"-") {
-			return true
-		}
-	}
-	return false
 }
 
 // hideStreamingDatabases drops the databases a hidden site or its worktrees
