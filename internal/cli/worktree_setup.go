@@ -44,12 +44,14 @@ func RunWorktreeSetup(site *config.Site, worktreePath, branch, build, db string,
 		applyWorktreeBuildRequest(site, worktreePath, build, log)
 	}
 	fw, hasFramework := config.GetFrameworkForDir(site.Framework, site.Path)
-	choice := unattendedWorktreeDBChoice(fw, db)
+	choice, reason, needsMigrate := planUnattendedWorktreeDB(fw, db, site.Path, worktreePath)
+	if reason != "" {
+		logf(log, "Database: %s, since %s.", choice, reason)
+	}
 	if err := ApplyWorktreeDBChoice(site, branch, choice, log); err != nil {
 		return fmt.Errorf("database setup: %w", err)
 	}
-	// An empty schema serves nothing until it is migrated.
-	if migrate := worktreeMigrateCommand(fw); migrate != "" && dbChoiceYieldsEmptySchema(choice) {
+	if migrate := worktreeMigrateCommand(fw); migrate != "" && needsMigrate {
 		logf(log, "Running %s...", migrate)
 		cmd := exec.Command("sh", "-c", migrate)
 		cmd.Dir = worktreePath

@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"io"
+	"io/fs"
+	"path/filepath"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -84,4 +86,75 @@ func worktreeMigrateCommand(fw *config.Framework) string {
 		}
 	}
 	return ""
+}
+
+// migrationsDBChoiceFor picks a worktree's database from its migrations when the
+// definition says where they live, or returns "" to leave the choice alone.
+func migrationsDBChoiceFor(fw *config.Framework, parentPath, worktreePath string) (choice, reason string) {
+	if fw == nil || fw.Worktree == nil || fw.Worktree.Migrations == "" {
+		return "", ""
+	}
+	return migrationsDBChoice(filepath.Join(parentPath, fw.Worktree.Migrations), filepath.Join(worktreePath, fw.Worktree.Migrations))
+}
+
+// migrationsDBChoice compares the migration files of the parent checkout, whose
+// database share reuses and clone-main copies, with the new worktree's. A branch
+// behind the parent cannot run on the parent's newer schema, so it starts empty.
+func migrationsDBChoice(parentDir, worktreeDir string) (choice, reason string) {
+	parent, err := migrationFiles(parentDir)
+	if err != nil {
+		return "", ""
+	}
+	branch, err := migrationFiles(worktreeDir)
+	if err != nil {
+		return "", ""
+	}
+	branchOnly, parentOnly := 0, 0
+	for f := range branch {
+		if !parent[f] {
+			branchOnly++
+		}
+	}
+	for f := range parent {
+		if !branch[f] {
+			parentOnly++
+		}
+	}
+	switch {
+	case parentOnly > 0:
+		return "empty", fmt.Sprintf("the parent checkout has migrations this branch lacks (%d), so its database is ahead of this code", parentOnly)
+	case branchOnly > 0:
+		return "clone-main", fmt.Sprintf("this branch adds migrations the parent checkout lacks (%d), so it gets a copy of the parent's database to run them on", branchOnly)
+	default:
+		return "share", "the migrations match the parent checkout's"
+	}
+}
+
+// migrationFiles lists the files under dir by path relative to it.
+func migrationFiles(dir string) (map[string]bool, error) {
+	files := map[string]bool{}
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			rel, _ := filepath.Rel(dir, path)
+			files[rel] = true
+		}
+		return nil
+	})
+	return files, err
+}
+
+// planUnattendedWorktreeDB decides the database for a setup with nobody to ask:
+// with no explicit or required choice it compares migrations, and it migrates
+// any database the branch's code has not been run against yet.
+func planUnattendedWorktreeDB(fw *config.Framework, requested, parentPath, worktreePath string) (choice, reason string, migrate bool) {
+	if requested == "" && requiredWorktreeDBChoice(fw) == "" {
+		if c, why := migrationsDBChoiceFor(fw, parentPath, worktreePath); c != "" {
+			return c, why, c != "share"
+		}
+	}
+	choice = unattendedWorktreeDBChoice(fw, requested)
+	return choice, "", dbChoiceYieldsEmptySchema(choice)
 }
