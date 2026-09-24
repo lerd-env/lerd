@@ -419,3 +419,22 @@ func TestView_RendersEachTab(t *testing.T) {
 		}
 	}
 }
+
+// Streaming mode drops a private site from the snapshot and brings it back when
+// it ends. Neither is an unlink or a link, and naming it would show it on screen.
+func TestDiffSnapshots_IgnoresAPrivateSiteHiddenOrShownByStreaming(t *testing.T) {
+	now := time.Now()
+	shown := fakeSnap()
+	name := shown.Sites[0].Name
+	shown.Private = map[string]bool{name: true}
+	hidden := shown
+	hidden.Sites = shown.Sites[1:]
+
+	for label, pair := range map[string][2]Snapshot{"hide": {shown, hidden}, "show": {hidden, shown}} {
+		for _, e := range diffSnapshots(pair[0], pair[1], now) {
+			if strings.Contains(e.text, "linked") || strings.Contains(e.text, "removed") {
+				t.Errorf("%s: unexpected event %q", label, e.text)
+			}
+		}
+	}
+}

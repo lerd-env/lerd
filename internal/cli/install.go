@@ -930,9 +930,9 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		// absent, which an immutable image can't install without layering a
 		// package and rebooting. Leave the unit on disk but don't run it, or
 		// the failures drag the whole systemd user session to "degraded".
-		if missing := tray.MissingLibs(tray.HelperPath()); len(missing) > 0 {
+		if reason := tray.Unavailable(tray.HelperPath()); reason != "" {
 			disableTrayUnit()
-			feedback.Note("system tray unavailable: this host has no " + strings.Join(missing, ", "))
+			feedback.Note("system tray unavailable: " + reason)
 		} else if autostartOn && trayEnabled() {
 			if err := services.Mgr.Enable("lerd-tray"); err != nil {
 				fmt.Printf("    WARN: %v\n", err)

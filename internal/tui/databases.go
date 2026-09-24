@@ -21,7 +21,31 @@ type databasesMsg struct{ engines []dbview.Engine }
 // databases execs a query inside each container, far too slow to run inline in
 // a refresh tick.
 func databasesCmd() tea.Cmd {
-	return func() tea.Msg { return databasesMsg{engines: dbview.LoadAll()} }
+	return func() tea.Msg { return databasesMsg{engines: withoutStreamingHidden(dbview.LoadAll())} }
+}
+
+// withoutStreamingHidden drops the databases a site streaming mode hides owns.
+func withoutStreamingHidden(engines []dbview.Engine) []dbview.Engine {
+	cfg, _ := config.LoadGlobal()
+	reg, err := config.LoadSites()
+	if err != nil {
+		return engines
+	}
+	hidden := cfg.StreamingHidden(reg)
+	domains := config.HiddenDomains(reg, hidden)
+	if len(hidden) == 0 {
+		return engines
+	}
+	for i := range engines {
+		kept := []dbview.Entry{}
+		for _, db := range engines[i].Databases {
+			if !config.EntityHidden(db.Name, db.Owner.Domain, hidden, domains) {
+				kept = append(kept, db)
+			}
+		}
+		engines[i].Databases = kept
+	}
+	return engines
 }
 
 // ensureDatabases loads the engine listing the first time the Databases tab is

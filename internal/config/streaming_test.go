@@ -81,3 +81,25 @@ func TestDisablingTheFeatureClearsTheMode(t *testing.T) {
 		t.Errorf("after disabling: enabled %v mode %v, want both off", cfg.UI.StreamingEnabled, cfg.UI.StreamingMode)
 	}
 }
+
+func TestDomainHiddenCoversWorktreeDomains(t *testing.T) {
+	reg := &SiteRegistry{Sites: []Site{{Name: "secret", Domains: []string{"secret.test"}}, {Name: "open", Domains: []string{"open.test"}}}}
+	domains := HiddenDomains(reg, map[string]bool{"secret": true})
+	for d, want := range map[string]bool{"secret.test": true, "feat-x.secret.test": true, "open.test": false, "notsecret.test": false, "": false} {
+		if got := DomainHidden(d, domains); got != want {
+			t.Errorf("DomainHidden(%q) = %v, want %v", d, got, want)
+		}
+	}
+}
+
+func TestEntityHiddenJudgesAnUnclaimedEntityByName(t *testing.T) {
+	hidden := map[string]bool{"vplus-test": true}
+	for name, want := range map[string]bool{"vplus_test": true, "vplus_test_testing": true, "vplus_test_feat_x": true, "vplus-test-media": true, "vplus": false, "other": false} {
+		if got := EntityHidden(name, "", hidden, map[string]bool{}); got != want {
+			t.Errorf("EntityHidden(%q) = %v, want %v", name, got, want)
+		}
+	}
+	if EntityHidden("vplus_test", "open.test", hidden, map[string]bool{"vplus.test": true}) {
+		t.Error("a database another site owns was hidden by its name")
+	}
+}

@@ -22,6 +22,9 @@ type Snapshot struct {
 	// Workspaces group sites for display only, in the order the user's config
 	// lists them. The TUI shows them and never edits them.
 	Workspaces []config.Workspace
+	// Private names the sites streaming mode hides whenever it is on, so the
+	// activity diff can tell one leaving or returning from an unlink or a link.
+	Private map[string]bool
 }
 
 // ServiceRow is a flat row for the services pane. Sourced from podman unit
@@ -77,6 +80,7 @@ func loadSnapshot() Snapshot {
 	hidden := map[string]bool{}
 	if reg, err := config.LoadSites(); err == nil {
 		hidden = cfg.StreamingHidden(reg)
+		snap.Private = cfg.PrivateSites(reg)
 	}
 
 	enriched, err := siteinfo.LoadAll(siteinfo.EnrichUI)

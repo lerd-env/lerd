@@ -163,8 +163,8 @@ func execNodeManager(args map[string]any) (any, *rpcError) {
 			"managed":       lerdNode.Managed(),
 		}), nil
 	}
-	if target != "fnm" && target != "nvm" {
-		return toolErr(fmt.Sprintf("unknown manager %q: use fnm or nvm", target)), nil
+	if target != "mise" && target != "fnm" && target != "nvm" {
+		return toolErr(fmt.Sprintf("unknown manager %q: use mise, fnm or nvm", target)), nil
 	}
 	if target == current {
 		return toolOK("already using " + target), nil

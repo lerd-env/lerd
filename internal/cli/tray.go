@@ -75,8 +75,8 @@ func ApplyTray(enabled bool) (bool, error) {
 		return changed, nil
 	}
 	// Re-enabling only makes sense where the unit would have been enabled in the
-	// first place: autostart on, and an appindicator library actually present.
-	if lerdSystemd.IsAutostartEnabled() && len(tray.MissingLibs(tray.HelperPath())) == 0 {
+	// first place: autostart on, and a helper that can actually run.
+	if lerdSystemd.IsAutostartEnabled() && tray.Unavailable(tray.HelperPath()) == "" {
 		_ = services.Mgr.Enable("lerd-tray")
 	}
 	return changed, launchTray()

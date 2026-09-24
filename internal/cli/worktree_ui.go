@@ -77,54 +77,13 @@ func buildWorktreeAddGitArgs(req WorktreeAddRequest, checkoutPath string) ([]str
 	}
 }
 
-// ensureNestedWorktreeExclude appends "/<base>-*/" to .git/info/exclude in
-// sitePath (idempotent) so nested worktree dirs don't show up in git status
-// of the parent repo. No-op when .git isn't a dir or when basename
-// contains gitignore meta-chars we'd have to escape.
-func ensureNestedWorktreeExclude(sitePath string) error {
-	gitInfo, err := os.Stat(filepath.Join(sitePath, ".git"))
-	if err != nil || !gitInfo.IsDir() {
-		return nil
-	}
-	base := filepath.Base(sitePath)
-	if strings.ContainsAny(base, "[]?*!#\\") {
-		return nil
-	}
-	return appendGitExclude(sitePath, "/"+base+"-*/")
-}
-
 // ensureLocalOverrideExcluded keeps the worktree override file lerd writes out of
 // git status. The site's exclude file is shared by all its worktrees.
 func ensureLocalOverrideExcluded(sitePath string) error {
 	if info, err := os.Stat(filepath.Join(sitePath, ".git")); err != nil || !info.IsDir() {
 		return nil
 	}
-	return appendGitExclude(sitePath, "/"+config.LocalOverrideFile)
-}
-
-// appendGitExclude adds pattern to the site's .git/info/exclude once.
-func appendGitExclude(sitePath, pattern string) error {
-	excludePath := filepath.Join(sitePath, ".git", "info", "exclude")
-	existing, _ := os.ReadFile(excludePath)
-	for _, line := range strings.Split(string(existing), "\n") {
-		if strings.TrimSpace(line) == pattern {
-			return nil
-		}
-	}
-	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	prefix := ""
-	if len(existing) > 0 && existing[len(existing)-1] != '\n' {
-		prefix = "\n"
-	}
-	_, err = f.WriteString(prefix + pattern + "\n")
-	return err
+	return gitpkg.AppendExclude(sitePath, "/"+config.LocalOverrideFile)
 }
 
 // resolveBuildChoice maps a UI build request ("auto"|"skip"|"worker:<n>"|
@@ -242,7 +201,7 @@ func RunWorktreeAdd(site *config.Site, req WorktreeAddRequest, log io.Writer) (s
 	if err := gitpkg.Run(site.Path, log, gitArgs...); err != nil {
 		return "", "", capturer.warnings, fmt.Errorf("git worktree add: %w", err)
 	}
-	if err := ensureNestedWorktreeExclude(site.Path); err != nil {
+	if err := gitpkg.EnsureNestedWorktreeExclude(site.Path); err != nil {
 		logf(log, "[WARN] writing .git/info/exclude: %v", err)
 	}
 

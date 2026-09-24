@@ -85,3 +85,92 @@ func handleSettingsStreamingEnabled(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]any{"ok": true, "enabled": body.Enabled})
 }
+
+// streamingHiddenNow returns the sites streaming mode hides right now and their
+// domains, both empty while it is off.
+func streamingHiddenNow() (map[string]bool, map[string]bool) {
+	cfg, _ := config.LoadGlobal()
+	reg, err := config.LoadSites()
+	if err != nil {
+		return map[string]bool{}, map[string]bool{}
+	}
+	hidden := cfg.StreamingHidden(reg)
+	return hidden, config.HiddenDomains(reg, hidden)
+}
+
+// hideStreamingServices drops the workers a hidden site owns and its domains
+// from the services a service is wired to, so no card names a private site.
+func hideStreamingServices(list []ServiceResponse, hidden, domains map[string]bool) []ServiceResponse {
+	if len(hidden) == 0 {
+		return list
+	}
+	out := make([]ServiceResponse, 0, len(list))
+	for _, s := range list {
+		owner := s.WorkerSite + s.QueueSite + s.ScheduleWorkerSite + s.ReverbSite + s.HorizonSite + s.StripeListenerSite
+		if hidden[owner] {
+			continue
+		}
+		if len(s.SiteDomains) > 0 {
+			kept := []string{}
+			for _, d := range s.SiteDomains {
+				if !config.DomainHidden(d, domains) {
+					kept = append(kept, d)
+				}
+			}
+			s.SiteDomains = kept
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+// hideStreamingDatabases drops the databases a hidden site or its worktrees
+// own, and the snapshots listed under them with them.
+func hideStreamingDatabases(engines []dbEngineResponse, hidden, domains map[string]bool) []dbEngineResponse {
+	if len(hidden) == 0 {
+		return engines
+	}
+	for i := range engines {
+		kept := []dbEntryResponse{}
+		for _, db := range engines[i].Databases {
+			if !config.EntityHidden(db.Name, db.Site, hidden, domains) {
+				kept = append(kept, db)
+			}
+		}
+		engines[i].Databases = kept
+	}
+	return engines
+}
+
+// hideStreamingEntityRows drops the buckets, keyspaces and other entities a
+// hidden site owns.
+func hideStreamingEntityRows(kinds []entityKindResponse, hidden, domains map[string]bool) []entityKindResponse {
+	if len(hidden) == 0 {
+		return kinds
+	}
+	for i := range kinds {
+		kept := []entityRowResponse{}
+		for _, row := range kinds[i].Rows {
+			if !config.EntityHidden(row.Name, row.Site, hidden, domains) {
+				kept = append(kept, row)
+			}
+		}
+		kinds[i].Rows = kept
+	}
+	return kinds
+}
+
+// hideStreamingAutoSnapshot drops a hidden site from the snapshot schedule list.
+func hideStreamingAutoSnapshot(resp autoSnapshotResponse, hidden map[string]bool) autoSnapshotResponse {
+	if len(hidden) == 0 {
+		return resp
+	}
+	kept := []autoSnapshotSiteStatus{}
+	for _, s := range resp.Sites {
+		if !hidden[s.Site] {
+			kept = append(kept, s)
+		}
+	}
+	resp.Sites = kept
+	return resp
+}

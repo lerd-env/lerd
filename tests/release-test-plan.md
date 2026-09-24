@@ -68,35 +68,40 @@ it.
 
 ---
 
-## What 1.35.0 adds to this plan
+## What 1.36.0 adds to this plan
 
 The checks a release brings live in the phase they belong to rather than in a
 section of their own, so a phase is always the whole story for its subject. This
-index is only a reminder of where 1.35.0's went, and of what to delete from the
+index is only a reminder of where 1.36.0's went, and of what to delete from the
 phases once the next release makes it ordinary.
 
 | Change | Phase |
 |---|---|
-| PHP on the host: the native runtime and every surface that reads it | 14 |
-| `.lerd.local.yaml` overriding the committed project config | 2 |
-| A fetched version with no runtime behind it saying so | 4 |
-| A service on its own `.test` domain | 5, 11 |
-| Scheduled database snapshots and `db:snapshot:keep` | 5 |
-| A worker declaring its dev server and owning its port | 6 |
-| `worktree_include` | 7 |
-| A re-link keeping what only the registry knew | 8 |
-| Detection reading every major's rules, and the env file a framework has | 9 |
-| `lerd wp` and `lerd drush` running their wrapper | 9 |
-| A package routing a globally installed CLI onto the host PHP | 9, 14 |
-| Eleven dashboard themes kept in the config, and the share line | 10 |
-| A worker's logs one click from its toggle | 10 |
-| A shim on PATH not reapplying the whole environment | 10 |
-| Doctor catching a host php in front of the shim | 11 |
-| Disk reclaimed and reported honestly | 11, 14 |
-| Rolling backups of the site registry and `lerd sites:restore` | 11 |
-| A catalogue refresh in two seconds instead of fourteen | 11 |
-| Beta updates following the beta line, `lerd update:beta` | 12 |
-| An update no longer doing its own install pass twice | 12 |
+| Lerd Glance in place of the tray on Omarchy | 1, 13 |
+| Node driven through mise by default | 1, 10, 12 |
+| The ODBC stack in every PHP image, `lerd php:odbc` | 4 |
+| `php:ports` actually publishing, tinker on the served PHP | 4 |
+| A service moving off a port taken while it was down | 5 |
+| lerd's vhost following service installs, RustFS console logins | 5 |
+| SpamAssassin scoring caught mail, admin tools fronting several engines | 5 |
+| Store values an older binary cannot honour refused, schema-tree fetch | 5, 8 |
+| Vite kept on plain HTTP, Vite+ `vp dev` served on the site domain | 6 |
+| A partial user overlay keeping store detection | 6 |
+| A SQLite project's worktree getting its own database copy | 7 |
+| The MCP worktree tool leaving a tree ready, and picking its database | 7 |
+| `db_isolated` living in `.lerd.local.yaml` | 7 |
+| A parked site coming back when it is linked again | 8 |
+| Debug lenses for ray, the app log, exceptions and messages | 10 |
+| N+1 bursts grouped, test runs kept out of the buffer | 10 |
+| Streaming mode hiding private workspaces | 10 |
+| Desktop accents (Omarchy, KDE, GNOME, Yaru) and themed embedded dashboards | 10 |
+| The dashboard as a chromeless app window on Linux | 10 |
+| One header frame, git state on worktree tabs, card ordering | 10 |
+| Notifications no longer silenced by a background tab | 10 |
+| The tray unit disarmed when the tray is off | 10 |
+| Doctor naming a Node manager in front of the shim | 11 |
+| Store presets of installed services refreshed by the watcher | 12 |
+| Uninstall removing the port drop-in and warning about dracut | 13 |
 
 ---
 
@@ -141,6 +146,10 @@ make build && bash install.sh --local ./build/lerd
 - [ ] `--local` install completes and `lerd status` is healthy
 - [ ] Re-running the installer on this machine does **not** ask the DNS question
       again and does not change the mode it settled on
+- [ ] A fresh install drives Node through mise, reusing a host mise when there
+      is one, and `lerd status` lists no missing fnm
+- [ ] On Omarchy a fresh install turns the tray off and puts Lerd Glance on the
+      bar, and a Glance plugin already installed is left as it was
 
 Nothing may download without saying so first, and there has to be a way to say
 no. The estimates are read off the registry manifest, so working them out must
@@ -312,6 +321,14 @@ than flipping it to the canonical default.
 - [ ] `lerd shell 8.5` drops into that version's container from anywhere, and
       the dashboard's shell button opens the same one
 - [ ] `lerd php:ports` and `lerd php:pkg` report the version's ports and packages
+- [ ] `lerd php:ports add 5199` really publishes the port (`podman port` on the
+      FPM container shows it), and `php:ports remove` takes it back off
+- [ ] `lerd php -m` lists odbc and PDO_ODBC on every version, and
+      `lerd php:odbc add <name> <driver.so>` registers a vendor driver that
+      `php:odbc list` shows loading, **https → 200** after `remove`
+- [ ] A site linked on one version while its `.lerd.yaml` pins a version that
+      is not installed runs `lerd tinker` and `lerd logs` on the version it is
+      served with, the one the dashboard shows
 - [ ] `lerd php:rebuild` discloses the base image and its size before pulling
 - [ ] `lerd fetch` names the versions whose image is built but that nothing
       serves from yet, and points at `lerd php:rebuild`, so `lerd php:list` and
@@ -331,6 +348,13 @@ Add, use, and remove at least one database and one non-database service.
 - [ ] **https → 200 on a route that hits the database**
 - [ ] `lerd service start redis`, env wiring lands, cache/queue driver works
 - [ ] `lerd service start mailpit`, its web UI answers on its published port
+- [ ] Stop mailpit, bind its web port with another process, start it again: it
+      moves to a free port instead of restart-looping, and `.env` and the
+      dashboard follow
+- [ ] `lerd service preset spamassassin` rewires mailpit with no setting, a
+      caught message shows a score, and removing it unwires mailpit
+- [ ] A Laravel mail carries `X-Lerd-View` naming its Blade templates, and the
+      Mail lens shows them
 - [ ] `lerd service list` shows status, version, and the Update column
 - [ ] `lerd service port mysql 3307` moves the published port, `.env` follows,
       **https → 200**
@@ -341,6 +365,16 @@ Add, use, and remove at least one database and one non-database service.
 - [ ] `lerd service migrate mysql <target>` does the dump + restore and the old
       data dir and dump are under `~/.local/share/lerd/backups`
 - [ ] `lerd service reinstall redis` comes back at the same version
+- [ ] Start RustFS after `lerd start`, from the CLI and from the dashboard: its
+      console opens straight away through lerd's own vhost, already logged in on
+      the bucket clicked, and again once its session has run out
+- [ ] With phpMyAdmin and Adminer both installed, a PostgreSQL card opens
+      Adminer on PostgreSQL, the higher `admin_rank` wins on MySQL, and the
+      suggestion banner stays quiet
+- [ ] pgAdmin opened over plain `http://127.0.0.1:7073` keeps its session
+      across actions
+- [ ] On Fedora or Silverblue, `mysqldump --result-file ~/dump.sql` through the
+      shim writes the file instead of failing on SELinux
 - [ ] `lerd service remove mailpit` stops and removes it cleanly
 - [ ] `lerd service remove mysql --purge` renames the data dir aside as
       `mysql.pre-remove-<ts>` and leaves it recoverable
@@ -415,6 +449,10 @@ A worker can also declare the dev server it starts and hold the port it needs:
 - [ ] Its `dev_server_port` is held while the worker runs, carried into the
       container, and released when it stops
 - [ ] Two sites running such a worker at once do not collide on a port
+- [ ] A vite worker stays on plain HTTP even with a Valet or Herd certificate
+      named after the project on disk, and assets and HMR load, **200**
+- [ ] A Laravel starter kit on Vite+ (`vp dev`) starts its vite worker and the
+      page loads `/@vite/client` through the site's own domain, **200**
 
 A project's answers to those flags are committed rather than retyped:
 
@@ -434,6 +472,8 @@ The store's package layer sits under the definitions:
 - [ ] `lerd framework list` prints every package the store publishes, what each
       declares, which file answers for the project you are in, and whether that
       project requires it, reading the cache without fetching
+- [ ] A user overlay in `~/.config/lerd/frameworks` that only adds a worker
+      keeps the project detected as its framework, and the worker is listed
 - [ ] A package declaration wins a name collision with a version file, and a
       user overlay and the project's `.lerd.yaml` still sit above both
 - [ ] With the network down, a version never fetched falls back to the newest
@@ -451,12 +491,14 @@ lerd worktree add -b feat-x
 ```
 
 - [ ] The wrapper prompts for DB isolation and the frontend build
-- [ ] The checkout lands at `~/Projects/demo-feat-x`
+- [ ] The checkout lands inside the project at `~/Projects/demo/demo-feat-x`,
+      and the parent's `git status` stays clean
 - [ ] Dependencies install, env is seeded, a vhost appears
 - [ ] `lerd sites` lists the worktree site
 - [ ] **`curl -k https://feat-x.demo.test` (or the assigned domain) → 200**
 - [ ] With isolated DB: the schema `demo_feat_x` exists, the worktree `.env`
-      points at it, `db_isolated: true` is in its `.lerd.yaml`
+      points at it, `db_isolated: true` is in its `.lerd.local.yaml`, the
+      committed `.lerd.yaml` is untouched and `git status` in it is clean
 - [ ] With shared DB: the worktree uses the parent's schema
 - [ ] Per-worktree asset worker starts as its own unit and Vite picks a free port
 - [ ] `lerd worktree wait ../demo-feat-x --timeout 10m` returns only once the
@@ -472,7 +514,7 @@ lerd worktree add -b feat-x
 - [ ] Remove it again with drop-database **on**, schema is gone
 - [ ] `lerd db:isolate --source main` clones the parent's schema into
       `<parent_db>_<branch>`, repoints the worktree's env key and writes
-      `db_isolated: true`, **200**
+      `db_isolated: true` to `.lerd.local.yaml`, **200**
 - [ ] A bare `lerd db:isolate` takes its documented default and starts the
       schema **empty**, so a framework that keeps sessions or cache in the
       database answers 500 until something populates it. That is the contract,
@@ -483,6 +525,17 @@ lerd worktree add -b feat-x
       the parent's, **200**
 - [ ] Paths listed under `worktree_include` are copied into a fresh worktree,
       and one the worktree already carries is left as git checked it out
+- [ ] On a SQLite project a new worktree gets its own copy of the database file,
+      from the wrapper and from bare git alike, `lerd worktree add` skips the
+      database prompt, and a write in the worktree leaves the parent's file
+      alone, **200 on both**
+- [ ] Over MCP, `worktree` `add` returns `ready: true` with assets built, the
+      database wired and the definition's setup commands run, **200 on the new
+      worktree**
+- [ ] With the definition declaring `worktree.migrations`, an add with no
+      database choice shares on an identical set, clones and migrates when the
+      branch adds migrations, starts empty when it is behind, and prints its
+      `Database:` reason, **200** each time
 - [ ] **Parent site still → 200 after all worktree churn**
 
 ---
@@ -497,6 +550,8 @@ lerd worktree add -b feat-x
 - [ ] `lerd unlink` stops serving it (connection refused or 404, not a stale 200)
 - [ ] `lerd park ~/Projects` picks up existing projects and a newly created one
 - [ ] `lerd unpark ~/Projects` unlinks them
+- [ ] `lerd unlink` a site inside a parked directory, then `lerd link` it again:
+      it is back in `lerd sites` and the dashboard, **200**
 - [ ] Groups: `lerd group add demo admin` serves the secondary at
       `admin.demo.test` → **200**; `lerd group db share` then `separate` both
       work; `lerd group list`; `lerd group remove` restores a standalone domain
@@ -520,6 +575,8 @@ lerd worktree add -b feat-x
       the listener (it once stopped one instead), then stops it
 - [ ] `lerd nginx` opens the site's override, a location-scope block survives a
       `lerd restart`, and `lerd nginx reset` puts it back, **200** after each
+- [ ] A broken directive saved through `lerd nginx edit` is rolled back and the
+      error names the directive and line, not only an exit status
 - [ ] A re-link re-detects the framework and keeps everything only the registry
       knew: approved host commands, the pinned dev-server and worker ports, the
       LAN and public share ports, the group, the idle bookkeeping, the per
@@ -582,6 +639,15 @@ Dashboard (drive it in a browser, not with curl):
 - [ ] Creating a site, adding a worktree, and toggling HTTPS from the UI all work
       and the modal streams progress
 - [ ] No empty cards or placeholder widgets anywhere
+- [ ] The status sits in the header as a pill and turns red naming what is down
+      when `lerd-nginx` stops, and a worktree tab with uncommitted work shows
+      `*`, with the hover naming the counts
+- [ ] The dashboard Sites card follows the Sites tab's sort, Services ranks by
+      sites wired below any with an update, Workers puts the busiest group first
+- [ ] `lerd dashboard` and the tray's Open Dashboard open one chromeless app
+      window on Linux, and a second call focuses it rather than opening another
+- [ ] With every preset installed, at a 560px high window the rail scrolls its
+      launchers and settings stay on screen
 - [ ] The System tab's LAN and remote-access toggles match the CLI state
 - [ ] A command pinned to a site's control row runs from there, survives a
       reload, and unpins again
@@ -605,6 +671,12 @@ Themes:
 - [ ] The installed app's own chrome takes the theme too
 - [ ] The Theme card's share line opens a prefilled post on X, Bluesky or
       Reddit, about the theme and carrying no list of local sites
+- [ ] On Omarchy the picker offers the desktop's theme by name and follows an
+      `omarchy-theme-set` switch live; on KDE (bazzite) and GNOME (silverblue)
+      the desktop entry follows the accent live, brown and Yaru tones included
+- [ ] Every embedded dashboard (Mailpit, Meilisearch, pgAdmin, phpMyAdmin, Mongo
+      Express, RabbitMQ, Kafbat, RedisInsight, the profiler) wears the theme's
+      accent inside the frame and flips with the dashboard's mode
 
 TUI:
 
@@ -623,6 +695,8 @@ Tray:
 - [ ] `lerd tray icon high-contrast` changes the running icon
 - [ ] The tray can be turned off, and everything else keeps working with no
       tray unit running and nothing reporting it as broken
+- [ ] With the tray off, `systemctl --user enable lerd-tray` then `lerd start`
+      disarms the unit and says so
 
 Other surfaces:
 
@@ -638,6 +712,22 @@ Other surfaces:
       `lerd dump tail`; `dump clear`; `dump off` restores containers
 - [ ] A worker whose dump bridge never loaded costs the dump, not the request:
       the site answers **200** instead of a 500 from an invalid callback
+- [ ] With spatie/ray required, `ray($x)` lands in the Dumps lens labelled ray,
+      with no Ray app running
+- [ ] A `Log::warning()` in a request shows in the App log lens with its level
+      and channel, and `dumps_recent` over MCP returns it as kind `log`
+- [ ] With sentry/sentry and no DSN, `report(new Exception)` shows in Exceptions
+      at the throw line, and an Inspector-reported fault lands there too
+- [ ] A Laravel notification on a non-mail channel shows in Messages and raises
+      a desktop notification even with the dashboard focused, and a background
+      dashboard tab does not silence it
+- [ ] A test suite with an N+1 raises one grouped notification, and leaves the
+      Debug buffer alone until Show test runs is ticked
+- [ ] `lerd streaming enable`, mark a workspace private, `lerd streaming on`:
+      its sites vanish from every card, widget, the palette and the TUI on every
+      open dashboard, `off` brings them back, **200 on a hidden site throughout**
+- [ ] On Omarchy with streaming enabled, a screen share turns it on and ending
+      the share turns it off
 - [ ] `lerd profile on`, load a page, `lerd profile open` shows a flame graph;
       `lerd profile run` on a CLI command; `profile clear`; `profile off`
 - [ ] `lerd notify on|target|status|off`, a notification actually arrives
@@ -663,6 +753,8 @@ Other surfaces:
 - [ ] Node: `node:install`, `node:use`, `isolate:node`, `lerd npm run build`
 - [ ] `lerd node:manage` installs the shims and a default, `node:manager` shows
       and switches the manager, `node:unmanage` and `node:uninstall` undo it
+- [ ] `lerd node:manager mise` carries every installed major across and drops
+      lerd's fnm, and `lerd status` and the dashboard stop listing fnm
 - [ ] `lerd npx` and `lerd cpx` both run through the project's own versions
 - [ ] `lerd pest:browser` runs headed, and the headless Playwright binary is
       shimmed so a plain run works too
@@ -692,6 +784,8 @@ Other surfaces:
 - [ ] Put a host `php` ahead of lerd's shim in the shell rc: doctor names what
       leads, and stays quiet on a machine that chose its own with
       `lerd path:disable`
+- [ ] Put an nvm or fnm `node` ahead of lerd's shim: doctor names it with the
+      Node message
 - [ ] A site pointed at a service's own domain is not reported as unwired, and
       the offered fix does not overwrite the hostname the browser and the app
       have to agree on
@@ -721,7 +815,7 @@ Other surfaces:
 - [ ] `sites.bkp` beside the registry holds the last ten versions, a save that
       changes nothing takes no slot, and `lerd sites:restore` lists them and
       puts one back with every site serving **200** afterwards
-- [ ] `lerd tools:update` brings Composer/fnm/mkcert to the current pins
+- [ ] `lerd tools:update` brings Composer, the Node manager and mkcert to the current pins
 - [ ] `lerd env:check`, `lerd env:override`, `lerd env:restore` round trip
 - [ ] `lerd auth ssh` loads a key and `lerd composer` reaches a private repo
 - [ ] `lerd autostart on|status|off`, and with autostart **off** no worker is
@@ -758,6 +852,9 @@ install with real sites survives the jump.
 - [ ] `lerd update:beta on` and `off` set `update.beta`, the bare command
       reports where the install sits, and the dashboard's Beta updates card on
       the Lerd page agrees with it
+- [ ] An N-1 install with no `node.manager` set stays on fnm after the upgrade
+- [ ] A service installed on N-1 whose preset has since gained a dashboard shows
+      it by the next watcher sweep, without a reinstall
 - [ ] A build that is itself a beta follows the beta line whatever the flag says
 - [ ] One `lerd update` writes each AI skill file once and bounces each daemon
       once, and with autostart off it leaves a stopped daemon stopped while
@@ -778,6 +875,10 @@ Run last on each guest, because it is destructive.
 
 - [ ] `lerd uninstall` prompts, then stops every container and unit
 - [ ] The sudoers rule and the mkcert CA are removed from the system
+- [ ] `/etc/sysctl.d/99-lerd-ports.conf` is gone, and on a dracut host whose
+      initramfs still carries it the run prints `sudo dracut -f`
+- [ ] On Omarchy `install.sh --uninstall` takes Lerd Glance off the bar
+- [ ] On a host without systemd-resolved (omarchy) no DNS step is drawn failed
 - [ ] `~/.local/bin/lerd` is gone on a script install; on a packaged install the
       binary **stays** and the matching `apt remove` / `dnf remove` /
       `brew uninstall` command is printed

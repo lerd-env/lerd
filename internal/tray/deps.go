@@ -24,6 +24,19 @@ func HelperPath() string {
 	return filepath.Join(filepath.Dir(exe), "lerd-tray")
 }
 
+// Unavailable says why the tray helper cannot run here, or "" when it can: no
+// helper beside this lerd (a local build installed on its own), or a shared
+// library the host lacks.
+func Unavailable(helper string) string {
+	if _, err := os.Stat(helper); err != nil {
+		return "no lerd-tray helper beside this lerd binary"
+	}
+	if missing := MissingLibs(helper); len(missing) > 0 {
+		return "this host has no " + strings.Join(missing, ", ")
+	}
+	return ""
+}
+
 // MissingLibs returns the shared libraries the tray helper links that this host
 // cannot resolve. lerd-tray needs libayatana-appindicator, which an immutable
 // image cannot simply install: without the library the helper exits 127 on

@@ -126,7 +126,8 @@ func handleEntities(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(parts) == 1 && r.Method == http.MethodGet {
-		writeJSON(w, entityOverview(service, specs))
+		hidden, domains := streamingHiddenNow()
+		writeJSON(w, hideStreamingEntityRows(entityOverview(service, specs), hidden, domains))
 		return
 	}
 

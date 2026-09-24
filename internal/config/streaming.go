@@ -1,6 +1,9 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // Streaming reports whether private workspaces are being hidden right now,
 // which needs the feature enabled as well as the mode on.
@@ -45,6 +48,59 @@ func (c *GlobalConfig) PrivateSites(reg *SiteRegistry) map[string]bool {
 		}
 	}
 	return hidden
+}
+
+// HiddenDomains returns the domains of the sites in hidden.
+func HiddenDomains(reg *SiteRegistry, hidden map[string]bool) map[string]bool {
+	domains := map[string]bool{}
+	if reg == nil {
+		return domains
+	}
+	for _, s := range reg.Sites {
+		if hidden[s.Name] {
+			for _, d := range s.Domains {
+				domains[d] = true
+			}
+		}
+	}
+	return domains
+}
+
+// DomainHidden reports whether d is one of domains or a worktree's domain under
+// one of them, which is <branch>.<domain>.
+func DomainHidden(d string, domains map[string]bool) bool {
+	if domains[d] {
+		return true
+	}
+	for hd := range domains {
+		if strings.HasSuffix(d, "."+hd) {
+			return true
+		}
+	}
+	return false
+}
+
+// NamedForHidden reports whether a database or bucket no site claims carries a
+// hidden site's name the way one is named for it: the site slug, alone or with
+// a _testing or _<branch> suffix, or the site name itself with a - suffix, since
+// bucket names cannot hold an underscore.
+func NamedForHidden(name string, hidden map[string]bool) bool {
+	for site := range hidden {
+		slug := SiteSlug(site)
+		if name == slug || strings.HasPrefix(name, slug+"_") || name == site || strings.HasPrefix(name, site+"-") {
+			return true
+		}
+	}
+	return false
+}
+
+// EntityHidden judges an owned database or bucket by its owner's domain and an
+// unclaimed one by its name, since a leftover still names the project it was for.
+func EntityHidden(name, owner string, hidden, domains map[string]bool) bool {
+	if owner != "" {
+		return DomainHidden(owner, domains)
+	}
+	return NamedForHidden(name, hidden)
 }
 
 // VisibleWorkspaceNames is WorkspaceNames minus the private workspaces while

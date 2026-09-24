@@ -436,7 +436,7 @@ The fix is a version manager the system can recognise again after an update, whi
 lerd node:manager mise
 ```
 
-mise is signed and notarized under a Developer ID that stays the same from release to release, so the answer you give keeps matching and the prompt does not come back. lerd drives whichever mise you already have, and installs one to `~/.local/bin/mise` only if you have none. Your Node versions under fnm are left alone, so you can switch back with `lerd node:manager fnm`.
+mise is signed and notarized under a Developer ID that stays the same from release to release, so the answer you give keeps matching and the prompt does not come back. lerd drives whichever mise you already have, and installs one to `~/.local/bin/mise` only if you have none. The switch carries your installed Node versions across to mise and then removes lerd's fnm; `lerd node:manager fnm` switches back and downloads fnm again. While a site in one of these folders still runs under fnm, `lerd site:doctor` flags it with a macOS folder access warning that points here.
 
 Your own nvm avoids it too, being a shell function inside a terminal you have already granted:
 
