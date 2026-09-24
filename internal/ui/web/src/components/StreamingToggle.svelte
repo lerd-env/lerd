@@ -14,15 +14,17 @@
   }
 </script>
 
-<button
-  type="button"
-  onclick={toggle}
-  aria-label={label}
-  aria-pressed={on}
-  use:tooltip={{ label, placement: 'bottom' }}
-  class="inline-flex items-center justify-center w-5 h-5 rounded transition-colors {on
-    ? 'text-lerd-red'
-    : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'}"
->
-  <Icon name="eyeOff" class="w-3.5 h-3.5" />
-</button>
+{#if $status.streaming_enabled}
+  <button
+    type="button"
+    onclick={toggle}
+    aria-label={label}
+    aria-pressed={on}
+    use:tooltip={{ label, placement: 'bottom' }}
+    class="inline-flex items-center justify-center w-5 h-5 rounded transition-colors {on
+      ? 'text-lerd-red'
+      : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'}"
+  >
+    <Icon name="eyeOff" class="w-3.5 h-3.5" />
+  </button>
+{/if}

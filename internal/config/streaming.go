@@ -2,18 +2,24 @@ package config
 
 import "fmt"
 
+// Streaming reports whether private workspaces are being hidden right now,
+// which needs the feature enabled as well as the mode on.
+func (c *GlobalConfig) Streaming() bool {
+	return c != nil && c.UI.StreamingEnabled && c.UI.StreamingMode
+}
+
 // StreamingHidden returns the names of the sites that must stay off screen
-// right now: nothing while streaming mode is off, otherwise PrivateSites.
+// right now: nothing while streaming is off, otherwise PrivateSites.
 func (c *GlobalConfig) StreamingHidden(reg *SiteRegistry) map[string]bool {
-	if c == nil || !c.UI.StreamingMode {
+	if !c.Streaming() {
 		return map[string]bool{}
 	}
 	return c.PrivateSites(reg)
 }
 
-// PrivateSites returns the sites streaming mode hides: every private site,
-// every member of a private workspace, and the secondaries of a hidden group
-// main, which render inside their main.
+// PrivateSites returns the sites streaming mode hides: every member of a
+// private workspace, and the secondaries of a hidden group main, which render
+// inside their main.
 func (c *GlobalConfig) PrivateSites(reg *SiteRegistry) map[string]bool {
 	hidden := map[string]bool{}
 	if c == nil || reg == nil {
@@ -29,9 +35,6 @@ func (c *GlobalConfig) PrivateSites(reg *SiteRegistry) map[string]bool {
 	}
 	hiddenGroups := map[string]bool{}
 	for _, s := range reg.Sites {
-		if s.Private {
-			hidden[s.Name] = true
-		}
 		if hidden[s.Name] && s.Group != "" && s.GroupSubdomain == "" {
 			hiddenGroups[s.Group] = true
 		}
@@ -52,7 +55,7 @@ func (c *GlobalConfig) VisibleWorkspaceNames() []string {
 	}
 	names := make([]string, 0, len(c.Workspaces))
 	for _, w := range c.Workspaces {
-		if c.UI.StreamingMode && w.Private {
+		if c.Streaming() && w.Private {
 			continue
 		}
 		names = append(names, w.Name)
@@ -80,10 +83,14 @@ func SetStreamingMode(on bool) error {
 	})
 }
 
-// SetStreamingAuto opts in or out of turning streaming mode on during a share.
-func SetStreamingAuto(on bool) error {
+// SetStreamingEnabled turns the streaming feature on or off. Disabling it also
+// clears the mode, so enabling it later never hides anything straight away.
+func SetStreamingEnabled(on bool) error {
 	return mutateGlobal(func(c *GlobalConfig) error {
-		c.UI.StreamingAuto = on
+		c.UI.StreamingEnabled = on
+		if !on {
+			c.UI.StreamingMode = false
+		}
 		return nil
 	})
 }

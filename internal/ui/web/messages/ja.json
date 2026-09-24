@@ -1571,5 +1571,9 @@
   "nav_streamingOff": "配信モード: 非公開のサイトとワークスペースを隠す",
   "nav_streamingOn": "配信モードがオンです。非公開のサイトとワークスペースは非表示です",
   "sites_hideWhileStreaming": "配信中は隠す",
-  "sites_showWhileStreaming": "配信中も表示する"
+  "sites_showWhileStreaming": "配信中も表示する",
+  "system_streaming_title": "ストリーミングモード",
+  "system_streaming_description": "画面の共有や録画中にクライアントの作業を隠します。各ワークスペースに目のアイコンを追加してプライベートに設定でき、Wayland の Linux では共有中に自動でプライベートなワークスペースを隠します。",
+  "system_streaming_toggleOn": "ストリーミングモードを有効にする",
+  "system_streaming_toggleOff": "ストリーミングモードを無効にする"
 }

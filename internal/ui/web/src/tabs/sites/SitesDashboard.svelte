@@ -8,6 +8,7 @@
   import FrameworkMark from '$components/FrameworkMark.svelte';
   import SiteTile from './SiteTile.svelte';
   import StreamingToggle from '$components/StreamingToggle.svelte';
+  import WorkspaceHideToggle from '$components/WorkspaceHideToggle.svelte';
   import { sites, sitesLoaded, siteWorkerFailing, type Site } from '$stores/sites';
   import { accessMode } from '$stores/accessMode';
   import { status } from '$stores/status';
@@ -79,6 +80,9 @@
         <DashboardSection label={group.label}>
           {#snippet icon()}
             <FrameworkMark name={group.framework} />
+          {/snippet}
+          {#snippet trailing()}
+            {#if hasWorkspaces}<WorkspaceHideToggle workspace={group.label} />{/if}
           {/snippet}
           {#each group.sites as site (site.domain)}
             <SiteTile {site} />

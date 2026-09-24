@@ -49,22 +49,19 @@ Press `o` in the sites pane to cycle the sort order until it reads `sort: worksp
 
 ## Streaming mode
 
-When you share your screen, a stream or a meetup talk can show client projects you would rather keep to yourself. Mark those sites or whole workspaces private, then turn streaming mode on while you share.
+When you share your screen, a stream or a meetup talk can show client projects you would rather keep to yourself. Streaming mode hides them. It is off until you enable it, with **Streaming mode** in the dashboard's Lerd settings or with `lerd streaming enable`. Until then none of its controls show up.
 
-To mark something private, pick **Hide while streaming** in the menu on a workspace header, or in a site's overflow menu. A private workspace takes every site in it along, and a [group secondary](site-groups.md) follows its main. The flags are stored as `private: true` on the workspace in `config.yaml` and on the site in the registry.
+Once it is enabled, put those sites in a workspace and mark the workspace private. Hover a workspace header in the sidebar or on the Sites Overview and click the eye next to its name, or pick **Hide while streaming** in the sidebar menu. The eye stays on a private workspace so you can see which ones will disappear. Every site in it goes along, and so does a [group secondary](site-groups.md) whose main is in it. The flag is stored as `private: true` on the workspace in `config.yaml`.
 
-Turn the mode on with the eye button before the running count on the Sites card of the dashboard and in the Sites Overview header, or from a shell:
+On Linux under Wayland lerd then hides them for you: the watcher turns streaming mode on as soon as a screen share starts and off again when it ends. It never turns off a mode you switched on yourself, and switching it off by hand during a share sticks until the next one. Detection reads PipeWire: every Wayland share goes through the desktop portal, which publishes the captured screen as a video source, so it works the same for a browser call, OBS or a meeting app. Recording counts as well when the recorder goes through PipeWire, as OBS, Spectacle and GNOME's built-in recorder do, and so does a virtual camera published over PipeWire. Plasma's taskbar previews use the same streams but are ignored. Recorders that grab the screen directly, such as wf-recorder or gpu-screen-recorder, cannot be seen. X11 sessions and macOS have no way to see a share, so there you switch it yourself.
+
+Switch it by hand with the eye button before the running count on the Sites card of the dashboard and in the Sites Overview header, or from a shell:
 
 | Command | Description |
 |---|---|
-| `lerd streaming on` | Hide private sites and workspaces |
+| `lerd streaming enable` | Enable streaming mode and its controls |
+| `lerd streaming disable` | Disable it, showing everything again |
+| `lerd streaming on` | Hide private workspaces and their sites |
 | `lerd streaming off` | Show them again |
 
-On Linux under Wayland lerd can also switch it for you. Run `lerd streaming auto on` and the watcher turns streaming mode on as soon as a screen share starts, then off again when the share ends. It never turns off a mode you switched on yourself, and switching it off by hand during a share sticks until the next one. Detection reads PipeWire: every Wayland share goes through the desktop portal, which publishes the captured screen as a video source, so it works the same for a browser call, OBS or a meeting app. Recording counts as well when the recorder goes through PipeWire, as OBS, Spectacle and GNOME's built-in recorder do, and so does a virtual camera published over PipeWire. Plasma's taskbar previews use the same streams but are ignored. Recorders that grab the screen directly, such as wf-recorder or gpu-screen-recorder, cannot be seen. X11 sessions and macOS have no way to see a share, so there the toggle stays manual.
-
-| Command | Description |
-|---|---|
-| `lerd streaming auto on` | Turn streaming mode on while the screen is shared |
-| `lerd streaming auto off` | Stop following screen shares |
-
-While it is on, the private sites and workspaces are left out of what lerd-ui sends to the browser, so they are absent from the sidebar, the dashboard, the overview and the command palette on every open dashboard, and from the TUI. Rearranging the sidebar in the meantime leaves them where they were. The CLI and the MCP tools still see everything, and logs or debug captures from a private site are not filtered, so keep those panels closed while you share.
+While it is on, the private workspaces and their sites are left out of what lerd-ui sends to the browser, so they are absent from the sidebar, the dashboard, the overview and the command palette on every open dashboard, and from the TUI. Rearranging the sidebar in the meantime leaves them where they were. The CLI and the MCP tools still see everything, and logs or debug captures from a private site are not filtered, so keep those panels closed while you share.

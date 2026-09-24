@@ -16,7 +16,7 @@
   let { label, count, collapsed, ontoggle, draggable = false, trailing }: Props = $props();
 </script>
 
-<div class="flex items-center gap-1 pl-2 pr-2 border-t border-gray-100 dark:border-lerd-border bg-gray-50/60 dark:bg-white/2">
+<div class="group flex items-center gap-1 pl-2 pr-2 border-t border-gray-100 dark:border-lerd-border bg-gray-50/60 dark:bg-white/2">
   <button
     type="button"
     onclick={ontoggle}

@@ -1571,5 +1571,9 @@
   "nav_streamingOff": "Tryb streamingu: ukryj prywatne strony i obszary robocze",
   "nav_streamingOn": "Tryb streamingu jest włączony, prywatne strony i obszary robocze są ukryte",
   "sites_hideWhileStreaming": "Ukryj podczas streamingu",
-  "sites_showWhileStreaming": "Pokaż podczas streamingu"
+  "sites_showWhileStreaming": "Pokaż podczas streamingu",
+  "system_streaming_title": "Tryb streamingu",
+  "system_streaming_description": "Ukrywa projekty klientów, gdy udostępniasz lub nagrywasz ekran. Dodaje oko do każdego workspace'a, by oznaczyć go jako prywatny, a na Linuksie z Waylandem sam ukrywa prywatne workspace'y podczas udostępniania.",
+  "system_streaming_toggleOn": "Włącz tryb streamingu",
+  "system_streaming_toggleOff": "Wyłącz tryb streamingu"
 }

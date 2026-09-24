@@ -44,6 +44,9 @@ export const setWorkspacePrivate = (name: string, priv: boolean) =>
 
 export const setStreamingMode = (enabled: boolean) => send('/api/settings/streaming', 'POST', { enabled });
 
+export const setStreamingEnabled = (enabled: boolean) =>
+  send('/api/settings/streaming-enabled', 'POST', { enabled });
+
 // An empty workspace ungroups the sites. Pass create to make a workspace that
 // doesn't exist yet, so the picker's "New workspace…" is a single round trip.
 export const assignSiteWorkspace = (sites: string[], workspace: string, create = false) =>

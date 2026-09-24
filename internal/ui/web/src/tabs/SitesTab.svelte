@@ -7,6 +7,7 @@
   import Icon from '$components/Icon.svelte';
   import SiteIcon from '$components/SiteIcon.svelte';
   import SiteIndicators from '$components/SiteIndicators.svelte';
+  import WorkspaceHideToggle from '$components/WorkspaceHideToggle.svelte';
   import SitesSectionHeader from '$components/SitesSectionHeader.svelte';
   import LoadingRow from '$components/LoadingRow.svelte';
   import { accessMode } from '$stores/accessMode';
@@ -623,6 +624,7 @@
 {/snippet}
 
 {#snippet workspaceMenu(key: string)}
+  <WorkspaceHideToggle workspace={key} />
   <div class="relative">
     <button
       type="button"
@@ -650,15 +652,17 @@
           class="w-full px-3 py-1.5 text-left text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5"
           >{m.workspaces_rename()}</button
         >
-        <button
-          type="button"
-          role="menuitem"
-          onclick={() => toggleWorkspacePrivate(key)}
-          class="w-full px-3 py-1.5 text-left text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5"
-          >{($status.private_workspaces ?? []).includes(key)
-            ? m.sites_showWhileStreaming()
-            : m.sites_hideWhileStreaming()}</button
-        >
+        {#if $status.streaming_enabled}
+          <button
+            type="button"
+            role="menuitem"
+            onclick={() => toggleWorkspacePrivate(key)}
+            class="w-full px-3 py-1.5 text-left text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5"
+            >{($status.private_workspaces ?? []).includes(key)
+              ? m.sites_showWhileStreaming()
+              : m.sites_hideWhileStreaming()}</button
+          >
+        {/if}
         <button
           type="button"
           role="menuitem"
