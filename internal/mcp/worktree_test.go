@@ -410,7 +410,7 @@ func TestExecWorktreeAdd_derivesThePathForANewBranch(t *testing.T) {
 	}); rpcErr != nil || result.(map[string]any)["isError"] == true {
 		t.Fatalf("add failed: %v %v", rpcErr, result)
 	}
-	if want := filepath.Join(repo, filepath.Base(repo)+"-feat-x"); *gotPath != want {
+	if want := filepath.Join(repo, filepath.Base(repo)+"-feat-x"); !samePath(t, *gotPath, want) {
 		t.Errorf("worktree at %q, want %q", *gotPath, want)
 	}
 }
@@ -427,7 +427,7 @@ func TestExecWorktreeAdd_branchCreatesAMissingBranch(t *testing.T) {
 	}); rpcErr != nil || result.(map[string]any)["isError"] == true {
 		t.Fatalf("add failed: %v %v", rpcErr, result)
 	}
-	if want := filepath.Join(repo, filepath.Base(repo)+"-feat-y"); *gotPath != want {
+	if want := filepath.Join(repo, filepath.Base(repo)+"-feat-y"); !samePath(t, *gotPath, want) {
 		t.Errorf("worktree at %q, want %q", *gotPath, want)
 	}
 }
@@ -494,4 +494,13 @@ func TestExecWorktreeRemove_removesADetachedWorktree(t *testing.T) {
 	if _, err := os.Stat(wt); !os.IsNotExist(err) {
 		t.Error("the detached worktree is still on disk")
 	}
+}
+
+// samePath compares two paths after resolving symlinks, since git reports the
+// real path and macOS temp dirs sit behind the /var -> /private/var link.
+func samePath(t *testing.T, a, b string) bool {
+	t.Helper()
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	return errA == nil && errB == nil && ra == rb
 }
