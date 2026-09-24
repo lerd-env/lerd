@@ -1,7 +1,7 @@
 <script lang="ts">
   import ThemeSwitcher from './ThemeSwitcher.svelte';
   import NotificationCenter from './NotificationCenter.svelte';
-  import { version } from '$stores/version';
+  import VersionLabel from './VersionLabel.svelte';
 </script>
 
 <div
@@ -10,7 +10,7 @@
   <div class="flex items-center gap-2">
     <img src="/icons/icon.svg" class="w-6 h-6 rounded-md" alt="Lerd" />
     <span class="font-semibold text-sm text-gray-900 dark:text-white">Lerd</span>
-    <span class="text-xs text-gray-400 dark:text-gray-600 font-mono">v{$version.current}</span>
+    <VersionLabel size="header" />
   </div>
   <div class="flex items-center gap-1">
     <NotificationCenter size="md" align="right" />

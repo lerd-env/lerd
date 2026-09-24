@@ -128,7 +128,6 @@
   "dashboard_hero_startingLerd": "開始中...",
   "dashboard_hero_startingLerdCount": "開始中... {done}/{total}",
   "dashboard_hero_updatesMixed": "Lerd v{lerd} とサービスの更新 {count} 件が利用可能です",
-  "dashboard_hero_workersFailing": "ワーカー {count} 個が失敗中",
   "dashboard_lerd_manage": "管理 →",
   "dashboard_lerd_title": "Lerd",
   "dashboard_lerd_viewChangelog": "新着情報を見る",
@@ -1561,5 +1560,12 @@
   "system_php_updating": "更新中…",
   "system_php_updateFailed": "更新に失敗しました",
   "system_php_removeConfirmBodyNative": "このバージョンの PHP-FPM プールを停止し、ネイティブバイナリを削除します。再度取得するには 'lerd use {version}' を実行してください。",
-  "entities_open_in_dashboard": "ダッシュボードで開く"
+  "entities_open_in_dashboard": "ダッシュボードで開く",
+  "version_copyHint": "{value} · クリックでコピー",
+  "gitStatus_conflicted": "競合 {count}",
+  "gitStatus_untracked": "未追跡 {count}",
+  "gitStatus_modified": "変更 {count}",
+  "gitStatus_staged": "ステージ済み {count}",
+  "gitStatus_ahead": "{count} 件先行",
+  "gitStatus_behind": "{count} 件遅れ"
 }

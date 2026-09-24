@@ -41,6 +41,9 @@
   import ShareLink from './ShareLink.svelte';
   import ShareMenu from './ShareMenu.svelte';
   import WorkspacePicker from './WorkspacePicker.svelte';
+  import WorkspaceMenuItems from './WorkspaceMenuItems.svelte';
+  import GitStatusBadge from '$components/GitStatusBadge.svelte';
+  import { loadGitStatus, checkoutFor, type GitCheckout } from '$lib/gitStatus';
   import { m } from '../../paraglide/messages.js';
 
   import type { Snippet } from 'svelte';
@@ -111,21 +114,43 @@
   const activePathLabel = $derived(homeShorten(activePath, $status.home));
   const activeFrameworkLabel = $derived(activeWorktree?.framework_label || site.framework_label);
 
-  type TabEntry = { branch: string; domain: string; isMain: boolean };
+  type TabEntry = { branch: string; domain: string; path: string; isMain: boolean };
   const tabEntries = $derived.by<TabEntry[]>(() => {
     const main: TabEntry = {
       branch: site.branch || 'main',
       domain: site.domain,
+      path: site.path || '',
       isMain: true
     };
     const wts: TabEntry[] = (site.worktrees || []).map((wt) => ({
       branch: wt.branch || '',
       domain: wt.domain || '',
+      path: wt.path || '',
       isMain: false
     }));
     return [main, ...wts];
   });
   const showWorktreeTabs = $derived(Boolean(site.branch) && !site.paused);
+
+  // Git state changes outside lerd (an editor, a terminal), so it is polled while
+  // the site is open and re-read when the window regains focus.
+  let gitCheckouts = $state<GitCheckout[]>([]);
+  $effect(() => {
+    const domain = site.domain;
+    if (!showWorktreeTabs) return;
+    const refresh = () => {
+      if (document.hidden) return;
+      loadGitStatus(domain).then((c) => (gitCheckouts = c)).catch(() => (gitCheckouts = []));
+    };
+    refresh();
+    const timer = setInterval(refresh, 10_000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+      gitCheckouts = [];
+    };
+  });
   const urlEditable = $derived(!site.paused && !activeWorktreeBranch);
   const dnsEnabled = $derived($status.dns?.enabled !== false);
   const tlsToggleable = $derived(urlEditable && dnsEnabled);
@@ -261,20 +286,21 @@
 
 <div class="border-b border-gray-100 dark:border-lerd-border shrink-0 @container flex flex-col">
   {#if showWorktreeTabs}
-    <div class="flex items-end bg-gray-50/60 dark:bg-white/[0.02]">
-      <div class="flex items-center gap-0.5 px-3 pt-3 overflow-x-auto flex-1 min-w-0">
+    <div class="flex items-center page-header">
+      <div class="flex items-center gap-1 px-3 overflow-x-auto flex-1 min-w-0">
       {#each tabEntries as e (e.isMain ? '__main__' : e.branch)}
         {@const isActive = e.isMain ? activeWorktreeBranch === '' : e.branch === activeWorktreeBranch}
+        {@const git = checkoutFor(gitCheckouts, e)}
         <div
-          class="group flex items-center rounded-t-md border-t border-l border-r transition-colors max-w-56 shrink-0 {isActive
-            ? 'bg-white dark:bg-lerd-bg border-gray-200 dark:border-lerd-border'
-            : 'bg-transparent border-transparent hover:bg-gray-100/60 dark:hover:bg-white/5'}"
+          class="group flex items-center rounded-lg transition-colors max-w-56 shrink-0 {isActive
+            ? 'bg-white dark:bg-white/10 shadow-sm dark:shadow-none'
+            : 'hover:bg-gray-200/60 dark:hover:bg-white/5'}"
         >
           <button
             type="button"
             onclick={() => pickWorktree(e)}
             use:tooltip={e.domain}
-            class="flex items-center gap-1.5 pl-3 pr-3 py-2.5 text-xs min-w-0 {isActive
+            class="flex items-center gap-1.5 pl-3 pr-3 py-2 text-xs min-w-0 {isActive
               ? 'text-gray-800 dark:text-gray-100 font-medium'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}"
           >
@@ -305,6 +331,7 @@
               </svg>
             {/if}
             <span class="font-mono truncate leading-none">{e.branch}</span>
+            {#if git}<GitStatusBadge status={git} />{/if}
           </button>
           {#if !e.isMain}
             <button
@@ -328,7 +355,7 @@
         <button
           type="button"
           onclick={() => openWorktreeAddModal(site)}
-          class="ml-1 mb-0.5 w-6 h-6 flex items-center justify-center rounded-md text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors shrink-0"
+          class="ml-1 w-6 h-6 flex items-center justify-center rounded-md text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors shrink-0"
           use:tooltip={m.worktreeMgr_add()}
           aria-label={m.worktreeMgr_add()}
         >
@@ -470,7 +497,13 @@
           <!-- A worktree reports its own framework_label but never a framework
                name of its own, so the mark and the tone come from the site. -->
           {@const framework = site.framework}
-          <span class="hidden @md:inline-flex">
+          <span
+            class="@2xl:hidden inline-flex w-4 h-4"
+            role="img"
+            aria-label={activeFrameworkLabel}
+            use:tooltip={activeFrameworkLabel}><FrameworkMark name={framework} /></span
+          >
+          <span class="hidden @2xl:inline-flex">
             <Badge tone="framework" brand={framework ? $frameworkMarks[framework]?.color : undefined}>
               <FrameworkMark name={framework} tint={false} />
               {activeFrameworkLabel}
@@ -572,7 +605,7 @@
           onclick={() => openGroupModal(site)}
           aria-label={m.group_manage()}
           use:tooltip={site.group ? 'Manage group' : 'Group with another site'}
-          class="w-8 h-8 flex items-center justify-center rounded-md transition-colors hover:bg-gray-100 dark:hover:bg-white/5 {site.group
+          class="hidden @2xl:flex w-8 h-8 items-center justify-center rounded-md transition-colors hover:bg-gray-100 dark:hover:bg-white/5 {site.group
             ? 'text-lerd-red'
             : 'text-gray-500 dark:text-gray-400 hover:text-lerd-red'}"
         >
@@ -583,7 +616,7 @@
       <!-- A group secondary shows its main's workspace and moves with it, so it
            has nothing of its own to pick. -->
       {#if $accessMode.localControl && !activeWorktreeBranch && !site.group_subdomain}
-        <WorkspacePicker {site} />
+        <div class="hidden @2xl:block"><WorkspacePicker {site} /></div>
       {/if}
 
       {#if showLanToggle}
@@ -594,7 +627,7 @@
           {lanBusy}
           lanUrl={lanURL}
           onToggleLan={flipLAN}
-          visibleClass="hidden @md:flex"
+          visibleClass="hidden @2xl:flex"
         />
       {/if}
 
@@ -770,6 +803,28 @@
                 {m.sites_manageDomains()}
               </button>
             {/if}
+            {#if !activeWorktreeBranch && !site.host_proxy}
+              <button
+                type="button"
+                role="menuitem"
+                onclick={() => {
+                  overflowOpen = false;
+                  openGroupModal(site);
+                }}
+                class="@2xl:hidden w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 transition-colors hover:bg-gray-50 dark:hover:bg-white/5 {site.group
+                  ? 'text-lerd-red'
+                  : 'text-gray-700 dark:text-gray-200'}"
+              >
+                <Icon name="group" class="w-3.5 h-3.5 shrink-0" />
+                {site.group ? 'Manage group' : 'Group with another site'}
+              </button>
+            {/if}
+            {#if $accessMode.localControl && !activeWorktreeBranch && !site.group_subdomain}
+              <div class="@2xl:hidden border-y border-gray-100 dark:border-lerd-border my-1 py-1">
+                <p class="px-3 pt-0.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">{m.workspaces_pickerLabel()}</p>
+                <WorkspaceMenuItems {site} onDone={() => (overflowOpen = false)} />
+              </div>
+            {/if}
             {#if showLanToggle}
               <button
                 type="button"
@@ -779,7 +834,7 @@
                   flipLAN();
                 }}
                 disabled={lanBusy}
-                class="@md:hidden w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50 {lanOn ? 'text-teal-600 dark:text-teal-400' : 'text-gray-700 dark:text-gray-200'}"
+                class="@2xl:hidden w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50 {lanOn ? 'text-teal-600 dark:text-teal-400' : 'text-gray-700 dark:text-gray-200'}"
               >
                 <Icon name="wifi" class="w-3.5 h-3.5 shrink-0" />
                 {lanOn ? m.sites_controls_lanToggle_on() : m.sites_controls_lanToggle_off()}
@@ -795,7 +850,7 @@
                   else startTunnelAuto();
                 }}
                 disabled={tunnelBusy}
-                class="@md:hidden w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50 {tunnelURL ? 'text-violet-600 dark:text-violet-400' : 'text-gray-700 dark:text-gray-200'}"
+                class="@2xl:hidden w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50 {tunnelURL ? 'text-violet-600 dark:text-violet-400' : 'text-gray-700 dark:text-gray-200'}"
               >
                 <Icon name="globe" class="w-3.5 h-3.5 shrink-0" />
                 {tunnelBusy ? '...' : tunnelURL ? m.share_stopTunnel() : m.share_viaTunnel()}

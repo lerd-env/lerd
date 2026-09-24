@@ -13,7 +13,7 @@
 
 <div class="relative flex flex-col h-full">
   <ListPanelHeader {title} {actions} />
-  <div class="flex-1 overflow-y-auto">
+  <div class="flex-1 overflow-y-auto md:border-x border-lerd-chromeborder dark:border-lerd-border">
     {@render children()}
   </div>
   {#if overlay}{@render overlay()}{/if}

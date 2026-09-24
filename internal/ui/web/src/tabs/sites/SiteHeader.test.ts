@@ -1,8 +1,10 @@
-import { render } from '@testing-library/svelte';
+import { render, fireEvent } from '@testing-library/svelte';
 import { describe, it, expect } from 'vitest';
 import Harness from './SiteHeader.test.svelte';
 import type { Site } from '$stores/sites';
 import { frameworkMarks } from '$stores/frameworkMarks';
+import { accessMode } from '$stores/accessMode';
+import { status } from '$stores/status';
 
 const site = {
   domain: 'app.test',
@@ -99,5 +101,26 @@ describe('SiteHeader', () => {
 
     const badge = getByText(/Slim/).closest('span[class*="rounded-full"]') as HTMLElement;
     expect(badge.className).toContain('text-lerd-red');
+  });
+
+  // A narrow header keeps only the mark; the name moves to a tooltip under it.
+  it('names the framework on its compact mark', () => {
+    frameworkMarks.set({});
+    const { getByRole } = render(Harness, {
+      props: { site: { ...site, framework: 'laravel', framework_label: 'Laravel 12' } as unknown as Site }
+    });
+    expect(getByRole('img', { name: 'Laravel 12' })).toBeInTheDocument();
+  });
+
+  // Group and workspace leave the bar on a narrow header, so the overflow menu carries them.
+  it('offers group and workspace in the overflow menu', async () => {
+    accessMode.set({ localControl: true, lanExposed: false, checked: true });
+    status.update((s) => ({ ...s, workspaces: ['client-a'] }));
+    const { getByLabelText, getByRole } = render(Harness, { props: { site: { ...site, name: 'app' } as unknown as Site } });
+
+    await fireEvent.click(getByLabelText('More actions'));
+    const menu = getByRole('menu');
+    expect(menu).toHaveTextContent('Group with another site');
+    expect(menu).toHaveTextContent('client-a');
   });
 });

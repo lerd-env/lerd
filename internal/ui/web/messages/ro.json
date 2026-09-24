@@ -128,7 +128,6 @@
   "dashboard_hero_startingLerd": "Se pornește...",
   "dashboard_hero_startingLerdCount": "Se pornește... {done}/{total}",
   "dashboard_hero_updatesMixed": "Lerd v{lerd} și {count} actualizare(i) de serviciu disponibile",
-  "dashboard_hero_workersFailing": "{count} worker(i) cu probleme",
   "dashboard_lerd_manage": "Gestionează →",
   "dashboard_lerd_title": "Lerd",
   "dashboard_lerd_viewChangelog": "Vezi noutățile",
@@ -1561,5 +1560,12 @@
   "system_php_updating": "Se actualizează…",
   "system_php_updateFailed": "Actualizarea a eșuat",
   "system_php_removeConfirmBodyNative": "Asta oprește pool-ul PHP-FPM pentru această versiune și îi șterge binarele native. Rulează 'lerd use {version}' pentru a o descărca din nou.",
-  "entities_open_in_dashboard": "Deschide în dashboard"
+  "entities_open_in_dashboard": "Deschide în dashboard",
+  "version_copyHint": "{value} · click pentru a copia",
+  "gitStatus_conflicted": "{count} în conflict",
+  "gitStatus_untracked": "{count} neurmărite",
+  "gitStatus_modified": "{count} modificate",
+  "gitStatus_staged": "{count} în stage",
+  "gitStatus_ahead": "{count} înainte",
+  "gitStatus_behind": "{count} în urmă"
 }

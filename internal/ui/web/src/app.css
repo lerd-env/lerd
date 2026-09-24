@@ -69,6 +69,33 @@ button {
   cursor: pointer;
 }
 
+/* Top strip of every page, painted like the nav rail so the two read as one
+   frame, and as tall as the list panel header so their borders line up
+   whether or not the strip carries buttons. */
+@utility page-header {
+  min-height: 49px;
+  background-color: var(--color-lerd-chrome-light);
+  border-bottom: 1px solid var(--color-lerd-chromeborder);
+  &:is(.dark *) {
+    background-color: var(--color-lerd-card);
+    border-bottom-color: var(--color-lerd-border);
+  }
+}
+
+/* The scrollbar keeps its room but only shows its thumb while the area is
+   hovered. The standard properties, unlike ::-webkit-scrollbar, repaint on an
+   ancestor's :hover, and they give the bar the same width in both states. */
+@utility scrollbar-autohide {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  &:hover {
+    scrollbar-color: #ccc transparent;
+  }
+  &:is(.dark *):hover {
+    scrollbar-color: #333 transparent;
+  }
+}
+
 @utility no-scrollbar {
   scrollbar-width: none;
   -ms-overflow-style: none;

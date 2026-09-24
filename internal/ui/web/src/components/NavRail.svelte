@@ -50,7 +50,7 @@
 </script>
 
 <aside
-  class="hidden md:flex flex-col items-center w-14 shrink-0 min-h-0 bg-lerd-chrome-light dark:bg-lerd-card border-r border-lerd-chromeborder dark:border-lerd-border py-3 z-20"
+  class="hidden md:flex flex-col items-center w-14 shrink-0 min-h-0 bg-lerd-chrome-light dark:bg-lerd-card py-3 z-20"
 >
   <RailLogo />
 

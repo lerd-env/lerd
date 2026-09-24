@@ -124,10 +124,18 @@ describe('HeroStatus', () => {
     expect(getByText('mysql')).toBeTruthy();
   });
 
-  // Failing workers are healed, not started: that branch keeps its own action.
-  it('leaves the worker failure banner alone', () => {
+  // The healthy summary lives in the dashboard header, so a healthy stack
+  // costs no row of its own.
+  it('renders nothing while everything is running', () => {
+    const { container } = render(HeroStatus);
+    expect(container.textContent?.trim()).toBe('');
+  });
+
+  // Failing workers already get the floating heal toast; a second banner
+  // here would say the same thing twice.
+  it('leaves failing workers to the heal toast', () => {
     unhealthyWorkers.set([{ unit: 'lerd-q', worker: 'queue', site: 'app.test' }] as never);
-    const { queryByText } = render(HeroStatus);
-    expect(queryByText('Start Lerd')).toBeNull();
+    const { container } = render(HeroStatus);
+    expect(container.textContent?.trim()).toBe('');
   });
 });

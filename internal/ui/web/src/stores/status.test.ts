@@ -35,6 +35,22 @@ describe('status store', () => {
     expect(get(status).php_default).toBe('8.5');
   });
 
+  // A VPN-degraded resolver is not an outage, so it never names DNS as down.
+  it('coreDown names only the components that are really down', async () => {
+    const { status, statusLoaded, coreDown } = await import('./status');
+    expect(get(coreDown)).toEqual([]);
+    statusLoaded.set(true);
+    status.update((s) => ({
+      ...s,
+      dns: { ok: false, status: 'degraded', enabled: true, tld: 'test' },
+      nginx: { running: false },
+      watcher_running: true
+    }));
+    expect(get(coreDown)).toEqual(['Nginx']);
+    status.update((s) => ({ ...s, dns: { ...s.dns, status: 'down' }, watcher_running: false }));
+    expect(get(coreDown)).toEqual(['DNS', 'Nginx', 'Watcher']);
+  });
+
   it('lerdStatusColor is gray before load', async () => {
     const { lerdStatusColor } = await import('./status');
     expect(get(lerdStatusColor)).toBe('gray');

@@ -147,7 +147,7 @@
 </script>
 
 <div class="flex-1 overflow-y-auto">
-  <div class="flex flex-wrap items-center justify-between gap-y-2 p-3 border-b border-gray-100 dark:border-lerd-border">
+  <div class="flex flex-wrap items-center justify-between gap-y-2 px-3 py-1.5 page-header">
     <div class="flex items-center gap-3">
       <span class="font-semibold text-gray-900 dark:text-white text-base">{$status.using_system_bun ? m.dashboard_health_jsRuntime() : m.system_nodeJs()}</span>
       {#if !$status.node_managed_by_lerd}

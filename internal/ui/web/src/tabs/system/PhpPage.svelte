@@ -75,7 +75,7 @@
 </script>
 
 <DetailPanel>
-  <div class="bg-gray-50/60 dark:bg-white/[0.02] border-b border-gray-100 dark:border-lerd-border shrink-0">
+  <div class="page-header shrink-0">
     <div class="flex items-stretch gap-3 px-3 py-3 overflow-x-auto snap-x">
       {#each ordered as v (v)}
         <PhpVersionCard

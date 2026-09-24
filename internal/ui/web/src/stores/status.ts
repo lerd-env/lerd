@@ -130,6 +130,17 @@ export function dnsState(s: StatusResponse): DnsState {
   return s.dns.status ?? (s.dns.ok ? 'ok' : 'down');
 }
 
+// Only a genuine lerd-dns outage counts. "degraded" means the system resolver
+// is bypassed (typically a VPN), which lerd recovers from on its own.
+export const coreDown = derived([status, statusLoaded], ([$s, $loaded]): string[] => {
+  if (!$loaded) return [];
+  const issues: string[] = [];
+  if ($s.dns?.enabled !== false && dnsState($s) === 'down') issues.push('DNS');
+  if (!$s.nginx.running) issues.push('Nginx');
+  if (!$s.watcher_running) issues.push('Watcher');
+  return issues;
+});
+
 export type LerdStatusColor = 'green' | 'yellow' | 'red' | 'gray';
 
 export const lerdStatusColor = derived([status, statusLoaded, version], ([$s, $loaded, $v]): LerdStatusColor => {

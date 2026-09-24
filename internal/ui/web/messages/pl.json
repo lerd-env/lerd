@@ -128,7 +128,6 @@
   "dashboard_hero_startingLerd": "Uruchamianie...",
   "dashboard_hero_startingLerdCount": "Uruchamianie... {done}/{total}",
   "dashboard_hero_updatesMixed": "Dostępny Lerd v{lerd} oraz {count} aktualizacji usług",
-  "dashboard_hero_workersFailing": "{count} niesprawnych workerów",
   "dashboard_lerd_manage": "Zarządzaj →",
   "dashboard_lerd_title": "Lerd",
   "dashboard_lerd_viewChangelog": "Zobacz nowości",
@@ -1561,5 +1560,12 @@
   "system_php_updating": "Aktualizowanie…",
   "system_php_updateFailed": "Aktualizacja nie powiodła się",
   "system_php_removeConfirmBodyNative": "Zatrzymuje pulę PHP-FPM tej wersji i usuwa jej natywne pliki binarne. Uruchom 'lerd use {version}', aby pobrać ją ponownie.",
-  "entities_open_in_dashboard": "Otwórz w panelu"
+  "entities_open_in_dashboard": "Otwórz w panelu",
+  "version_copyHint": "{value} · kliknij, aby skopiować",
+  "gitStatus_conflicted": "{count} w konflikcie",
+  "gitStatus_untracked": "{count} nieśledzonych",
+  "gitStatus_modified": "{count} zmienionych",
+  "gitStatus_staged": "{count} w poczekalni",
+  "gitStatus_ahead": "{count} do przodu",
+  "gitStatus_behind": "{count} do tyłu"
 }

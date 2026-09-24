@@ -128,7 +128,6 @@
   "dashboard_hero_startingLerd": "正在启动...",
   "dashboard_hero_startingLerdCount": "正在启动... {done}/{total}",
   "dashboard_hero_updatesMixed": "Lerd v{lerd} 及 {count} 个服务更新可用",
-  "dashboard_hero_workersFailing": "{count} 个 worker 失败",
   "dashboard_lerd_manage": "管理 →",
   "dashboard_lerd_title": "Lerd",
   "dashboard_lerd_viewChangelog": "查看新功能",
@@ -1561,5 +1560,12 @@
   "system_php_updating": "正在更新…",
   "system_php_updateFailed": "更新失败",
   "system_php_removeConfirmBodyNative": "这将停止此版本的 PHP-FPM 进程池并删除其原生二进制文件。运行 'lerd use {version}' 可重新获取。",
-  "entities_open_in_dashboard": "在仪表板中打开"
+  "entities_open_in_dashboard": "在仪表板中打开",
+  "version_copyHint": "{value} · 点击复制",
+  "gitStatus_conflicted": "{count} 个冲突",
+  "gitStatus_untracked": "{count} 个未跟踪",
+  "gitStatus_modified": "{count} 个已修改",
+  "gitStatus_staged": "{count} 个已暂存",
+  "gitStatus_ahead": "领先 {count}",
+  "gitStatus_behind": "落后 {count}"
 }

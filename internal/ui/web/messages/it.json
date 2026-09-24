@@ -128,7 +128,6 @@
   "dashboard_hero_startingLerd": "Avvio...",
   "dashboard_hero_startingLerdCount": "Avvio... {done}/{total}",
   "dashboard_hero_updatesMixed": "Lerd v{lerd} e {count} aggiornamenti di servizio disponibili",
-  "dashboard_hero_workersFailing": "{count} worker in errore",
   "dashboard_lerd_manage": "Gestisci →",
   "dashboard_lerd_title": "Lerd",
   "dashboard_lerd_viewChangelog": "Vedi le novità",
@@ -1561,5 +1560,12 @@
   "system_php_updating": "Aggiornamento…",
   "system_php_updateFailed": "Aggiornamento fallito",
   "system_php_removeConfirmBodyNative": "Questo ferma il pool PHP-FPM di questa versione ed elimina i suoi binari nativi. Esegui 'lerd use {version}' per scaricarla di nuovo.",
-  "entities_open_in_dashboard": "Apri nella dashboard"
+  "entities_open_in_dashboard": "Apri nella dashboard",
+  "version_copyHint": "{value} · clic per copiare",
+  "gitStatus_conflicted": "{count} in conflitto",
+  "gitStatus_untracked": "{count} non tracciati",
+  "gitStatus_modified": "{count} modificati",
+  "gitStatus_staged": "{count} in stage",
+  "gitStatus_ahead": "{count} avanti",
+  "gitStatus_behind": "{count} indietro"
 }

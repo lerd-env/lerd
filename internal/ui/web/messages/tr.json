@@ -128,7 +128,6 @@
   "dashboard_hero_startingLerd": "Başlatılıyor...",
   "dashboard_hero_startingLerdCount": "Başlatılıyor... {done}/{total}",
   "dashboard_hero_updatesMixed": "Lerd v{lerd} ve {count} servis güncellemesi mevcut",
-  "dashboard_hero_workersFailing": "{count} worker hatalı",
   "dashboard_lerd_manage": "Yönet →",
   "dashboard_lerd_title": "Lerd",
   "dashboard_lerd_viewChangelog": "Yenilikleri gör",
@@ -1561,5 +1560,12 @@
   "system_php_updating": "Güncelleniyor…",
   "system_php_updateFailed": "Güncelleme başarısız",
   "system_php_removeConfirmBodyNative": "Bu, bu sürümün PHP-FPM havuzunu durdurur ve yerel ikili dosyalarını siler. Yeniden indirmek için 'lerd use {version}' komutunu çalıştırın.",
-  "entities_open_in_dashboard": "Panoda aç"
+  "entities_open_in_dashboard": "Panoda aç",
+  "version_copyHint": "{value} · kopyalamak için tıklayın",
+  "gitStatus_conflicted": "{count} çakışmalı",
+  "gitStatus_untracked": "{count} izlenmeyen",
+  "gitStatus_modified": "{count} değiştirilmiş",
+  "gitStatus_staged": "{count} hazırlanmış",
+  "gitStatus_ahead": "{count} ileride",
+  "gitStatus_behind": "{count} geride"
 }
