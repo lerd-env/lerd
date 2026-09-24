@@ -16,5 +16,6 @@ const statsClientPollInterval = 5 * time.Second
 // internal/stats cache. Kept as a thin wrapper so the JSON shape exposed
 // to the web UI stays stable while the parsing logic lives in one place.
 func handleStats(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, stats.Cached(stats.CacheTTL))
+	hidden, _ := streamingHiddenNow()
+	writeJSON(w, hideStreamingContainers(stats.Cached(stats.CacheTTL), hidden))
 }
