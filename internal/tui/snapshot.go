@@ -92,7 +92,7 @@ func loadSnapshot() Snapshot {
 
 	workspaces, _ := config.ListWorkspaces()
 	for _, w := range workspaces {
-		if cfg != nil && cfg.UI.StreamingMode && w.Private {
+		if cfg.Streaming() && w.Private {
 			continue
 		}
 		snap.Workspaces = append(snap.Workspaces, w)

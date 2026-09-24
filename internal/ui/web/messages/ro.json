@@ -1571,5 +1571,9 @@
   "nav_streamingOff": "Mod streaming: ascunde site-urile și workspace-urile private",
   "nav_streamingOn": "Modul streaming este pornit, site-urile și workspace-urile private sunt ascunse",
   "sites_hideWhileStreaming": "Ascunde în timpul streamingului",
-  "sites_showWhileStreaming": "Arată în timpul streamingului"
+  "sites_showWhileStreaming": "Arată în timpul streamingului",
+  "system_streaming_title": "Mod streaming",
+  "system_streaming_description": "Ascunde proiectele clienților când partajezi sau înregistrezi ecranul. Adaugă un ochi fiecărui workspace pentru a-l marca privat, iar pe Linux sub Wayland ascunde singur workspace-urile private cât timp rulează o partajare.",
+  "system_streaming_toggleOn": "Activează modul streaming",
+  "system_streaming_toggleOff": "Dezactivează modul streaming"
 }

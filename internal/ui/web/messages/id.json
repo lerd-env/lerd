@@ -1571,5 +1571,9 @@
   "nav_streamingOff": "Mode streaming: sembunyikan situs dan workspace pribadi",
   "nav_streamingOn": "Mode streaming aktif, situs dan workspace pribadi disembunyikan",
   "sites_hideWhileStreaming": "Sembunyikan saat streaming",
-  "sites_showWhileStreaming": "Tampilkan saat streaming"
+  "sites_showWhileStreaming": "Tampilkan saat streaming",
+  "system_streaming_title": "Mode streaming",
+  "system_streaming_description": "Sembunyikan pekerjaan klien saat kamu membagikan atau merekam layar. Menambahkan ikon mata di setiap workspace untuk menandainya privat, dan di Linux dengan Wayland menyembunyikan workspace privat secara otomatis selama berbagi layar.",
+  "system_streaming_toggleOn": "Aktifkan mode streaming",
+  "system_streaming_toggleOff": "Nonaktifkan mode streaming"
 }

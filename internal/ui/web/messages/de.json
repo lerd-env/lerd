@@ -1571,5 +1571,9 @@
   "nav_streamingOff": "Streaming-Modus: private Sites und Workspaces ausblenden",
   "nav_streamingOn": "Streaming-Modus ist an, private Sites und Workspaces sind ausgeblendet",
   "sites_hideWhileStreaming": "Beim Streamen ausblenden",
-  "sites_showWhileStreaming": "Beim Streamen anzeigen"
+  "sites_showWhileStreaming": "Beim Streamen anzeigen",
+  "system_streaming_title": "Streaming-Modus",
+  "system_streaming_description": "Blendet Kundenprojekte aus, während du deinen Bildschirm teilst oder aufnimmst. Fügt jedem Workspace ein Auge hinzu, um ihn als privat zu markieren, und blendet unter Linux mit Wayland private Workspaces während einer Freigabe von selbst aus.",
+  "system_streaming_toggleOn": "Streaming-Modus aktivieren",
+  "system_streaming_toggleOff": "Streaming-Modus deaktivieren"
 }

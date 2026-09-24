@@ -24,6 +24,7 @@
     toggleBetaUpdates
   } from '$stores/autostart';
   import { idleEnabled, idleTimeoutMinutes, loadIdle, saveIdle } from '$stores/idle';
+  import { setStreamingEnabled } from '$stores/workspaces';
   import Toggle from '$components/Toggle.svelte';
   import DetailButton from '$components/DetailButton.svelte';
   import Icon from '$components/Icon.svelte';
@@ -153,6 +154,18 @@
     }
   }
 
+  const streamingEnabled = $derived(Boolean($status.streaming_enabled));
+  let streamingBusy = $state(false);
+  async function onToggleStreaming() {
+    streamingBusy = true;
+    try {
+      const res = await setStreamingEnabled(!streamingEnabled);
+      if (!res.ok) console.error('streaming mode failed:', res.error);
+    } finally {
+      streamingBusy = false;
+    }
+  }
+
   let updateTerminalLoading = $state(false);
   let updateTerminalError = $state('');
 
@@ -195,12 +208,10 @@
 
   <div class="p-3 space-y-3">
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-    <!-- Both columns stack two cards so the row ends level: updates on the
-         left, appearance on the right. The cards stretch to share the row, or a
-         column that runs short leaves the page background showing through
-         beside a taller one. -->
-    <div class="flex flex-col gap-3">
-    <SettingsCard class="flex-1">
+    <!-- One grid, with each row pairing cards of about the same height, so a
+         card never stretches around empty space and a row never ends with a
+         gap. Tray has no partner and takes the full row. -->
+    <SettingsCard>
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0 text-sm">
           {#if $version.checked && !$version.hasUpdate}
@@ -275,30 +286,15 @@
       </div>
     </SettingsCard>
 
-    <SettingsCard class="flex-1">
-      <div class="flex items-center justify-between gap-3 mb-2">
-        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_betaUpdates_title()}</span>
-        {#if $accessMode.localControl}
-          <Toggle
-            on={$betaUpdates}
-            loading={betaBusy}
-            onclick={onToggleBetaUpdates}
-            title={$betaUpdates ? m.system_betaUpdates_toggleOff() : m.system_betaUpdates_toggleOn()}
-          />
-        {:else}
-          <StatusPill
-            size="sm"
-            tone={$betaUpdates ? 'ok' : 'muted'}
-            label={$betaUpdates ? m.common_enabled() : m.common_disabled()}
-          />
-        {/if}
+    <SettingsCard>
+      <div class="flex items-center justify-between gap-4 mb-2">
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_language_title()}</span>
+        <LanguageSwitcher />
       </div>
-      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_betaUpdates_description()}</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_language_description()}</p>
     </SettingsCard>
-    </div>
 
-    <div class="flex flex-col gap-3">
-    <SettingsCard class="flex-1">
+    <SettingsCard>
       <div class="flex items-center justify-between mb-2">
         <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_theme_title()}</span>
         <PaletteSwitcher />
@@ -340,37 +336,107 @@
       {#each $paletteErrors as e (e.file)}
         <p class="mt-2 text-xs text-red-600 dark:text-red-400"><span class="font-mono">{e.file}</span>: {e.error}</p>
       {/each}
-      {#if $accessMode.localControl}
-        <div class="mt-3">
-          <DetailButton onclick={() => (importThemeOpen = true)}>{m.system_theme_importAction()}</DetailButton>
+      <div class="flex items-center justify-between gap-3 mt-3">
+        <div class="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <Icon name="camera" class="w-3.5 h-3.5 shrink-0 mt-0.5 text-lerd-red" />
+          <p class="leading-relaxed">
+            {m.system_theme_shareBlurb()}
+            <a href={shareOnX} target="_blank" rel="noopener" class="font-medium text-lerd-red hover:text-lerd-redhov underline-offset-2 hover:underline">X</a>
+            <span aria-hidden="true">&middot;</span>
+            <a href={shareOnBluesky} target="_blank" rel="noopener" class="font-medium text-lerd-red hover:text-lerd-redhov underline-offset-2 hover:underline">Bluesky</a>
+            <span aria-hidden="true">&middot;</span>
+            <a href={shareOnReddit} target="_blank" rel="noopener" class="font-medium text-lerd-red hover:text-lerd-redhov underline-offset-2 hover:underline">Reddit</a>
+          </p>
         </div>
-      {/if}
-
-      <div class="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400 mt-3">
-        <Icon name="camera" class="w-3.5 h-3.5 shrink-0 mt-0.5 text-lerd-red" />
-        <p class="leading-relaxed">
-          {m.system_theme_shareBlurb()}
-          <a href={shareOnX} target="_blank" rel="noopener" class="font-medium text-lerd-red hover:text-lerd-redhov underline-offset-2 hover:underline">X</a>
-          <span aria-hidden="true">&middot;</span>
-          <a href={shareOnBluesky} target="_blank" rel="noopener" class="font-medium text-lerd-red hover:text-lerd-redhov underline-offset-2 hover:underline">Bluesky</a>
-          <span aria-hidden="true">&middot;</span>
-          <a href={shareOnReddit} target="_blank" rel="noopener" class="font-medium text-lerd-red hover:text-lerd-redhov underline-offset-2 hover:underline">Reddit</a>
-        </p>
+        {#if $accessMode.localControl}
+          <DetailButton onclick={() => (importThemeOpen = true)}>{m.system_theme_importAction()}</DetailButton>
+        {/if}
       </div>
 
     </SettingsCard>
 
-    <SettingsCard class="flex-1">
-      <div class="flex items-center justify-between gap-4 mb-2">
-        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_language_title()}</span>
-        <LanguageSwitcher />
+    <SettingsCard>
+      <div class="flex items-center justify-between gap-3 mb-2">
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_idle_title()}</span>
+        {#if $accessMode.localControl}
+          <Toggle
+            on={$idleEnabled}
+            loading={idleBusy}
+            onclick={onToggleIdle}
+            title={$idleEnabled ? m.system_idle_toggleOff() : m.system_idle_toggleOn()}
+          />
+        {:else}
+          <StatusPill
+            size="sm"
+            tone={$idleEnabled ? 'ok' : 'muted'}
+            label={$idleEnabled ? m.common_enabled() : m.common_disabled()}
+          />
+        {/if}
       </div>
-      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_language_description()}</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_idle_description()}</p>
+      <div class="flex items-center justify-between gap-4 mt-3">
+        <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_idle_timeoutLabel()}</p>
+        {#if $accessMode.localControl}
+          <div class="flex items-center gap-2">
+            <input
+              type="number"
+              min="1"
+              bind:value={idleMinutesInput}
+              onblur={onSaveIdleTimeout}
+              onkeydown={(e) => e.key === 'Enter' && onSaveIdleTimeout()}
+              disabled={idleBusy}
+              class="text-sm bg-white dark:bg-lerd-card border border-gray-200 dark:border-lerd-border rounded-lg px-3 py-1.5 w-20 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:border-lerd-red/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+            <span class="text-xs text-gray-500 dark:text-gray-400">{m.system_idle_minutes()}</span>
+          </div>
+        {:else}
+          <span class="text-xs text-gray-500 dark:text-gray-400">{idleMinutesInput} {m.system_idle_minutes()}</span>
+        {/if}
+      </div>
     </SettingsCard>
-    </div>
-    </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <SettingsCard>
+      <div class="flex items-center justify-between gap-3 mb-2">
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_betaUpdates_title()}</span>
+        {#if $accessMode.localControl}
+          <Toggle
+            on={$betaUpdates}
+            loading={betaBusy}
+            onclick={onToggleBetaUpdates}
+            title={$betaUpdates ? m.system_betaUpdates_toggleOff() : m.system_betaUpdates_toggleOn()}
+          />
+        {:else}
+          <StatusPill
+            size="sm"
+            tone={$betaUpdates ? 'ok' : 'muted'}
+            label={$betaUpdates ? m.common_enabled() : m.common_disabled()}
+          />
+        {/if}
+      </div>
+      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_betaUpdates_description()}</p>
+    </SettingsCard>
+
+    <SettingsCard>
+      <div class="flex items-center justify-between gap-3 mb-2">
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_streaming_title()}</span>
+        {#if $accessMode.localControl}
+          <Toggle
+            on={streamingEnabled}
+            loading={streamingBusy}
+            onclick={onToggleStreaming}
+            title={streamingEnabled ? m.system_streaming_toggleOff() : m.system_streaming_toggleOn()}
+          />
+        {:else}
+          <StatusPill
+            size="sm"
+            tone={streamingEnabled ? 'ok' : 'muted'}
+            label={streamingEnabled ? m.common_enabled() : m.common_disabled()}
+          />
+        {/if}
+      </div>
+      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_streaming_description()}</p>
+    </SettingsCard>
+
     <SettingsCard>
       <div class="flex items-center justify-between gap-3 mb-2">
         <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_autostart_title()}</span>
@@ -413,7 +479,7 @@
       <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_startOnOpen_description()}</p>
     </SettingsCard>
 
-    <SettingsCard>
+    <SettingsCard class="sm:col-span-2">
       <div class="flex items-center justify-between gap-3 mb-2">
         <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_tray_title()}</span>
         {#if $accessMode.localControl}
@@ -432,46 +498,6 @@
         {/if}
       </div>
       <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_tray_description()}</p>
-    </SettingsCard>
-
-    <SettingsCard>
-      <div class="flex items-center justify-between gap-3 mb-2">
-        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_idle_title()}</span>
-        {#if $accessMode.localControl}
-          <Toggle
-            on={$idleEnabled}
-            loading={idleBusy}
-            onclick={onToggleIdle}
-            title={$idleEnabled ? m.system_idle_toggleOff() : m.system_idle_toggleOn()}
-          />
-        {:else}
-          <StatusPill
-            size="sm"
-            tone={$idleEnabled ? 'ok' : 'muted'}
-            label={$idleEnabled ? m.common_enabled() : m.common_disabled()}
-          />
-        {/if}
-      </div>
-      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_idle_description()}</p>
-      <div class="flex items-center justify-between gap-4 mt-3">
-        <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_idle_timeoutLabel()}</p>
-        {#if $accessMode.localControl}
-          <div class="flex items-center gap-2">
-            <input
-              type="number"
-              min="1"
-              bind:value={idleMinutesInput}
-              onblur={onSaveIdleTimeout}
-              onkeydown={(e) => e.key === 'Enter' && onSaveIdleTimeout()}
-              disabled={idleBusy}
-              class="text-sm bg-white dark:bg-lerd-card border border-gray-200 dark:border-lerd-border rounded-lg px-3 py-1.5 w-20 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:border-lerd-red/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            />
-            <span class="text-xs text-gray-500 dark:text-gray-400">{m.system_idle_minutes()}</span>
-          </div>
-        {:else}
-          <span class="text-xs text-gray-500 dark:text-gray-400">{idleMinutesInput} {m.system_idle_minutes()}</span>
-        {/if}
-      </div>
     </SettingsCard>
     </div>
 

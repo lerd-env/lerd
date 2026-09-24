@@ -1571,5 +1571,9 @@
   "nav_streamingOff": "Streaming mode: hide private sites and workspaces",
   "nav_streamingOn": "Streaming mode is on, private sites and workspaces are hidden",
   "sites_hideWhileStreaming": "Hide while streaming",
-  "sites_showWhileStreaming": "Show while streaming"
+  "sites_showWhileStreaming": "Show while streaming",
+  "system_streaming_title": "Streaming mode",
+  "system_streaming_description": "Hide client work while you share or record your screen. Adds an eye to each workspace to mark it private, and on Linux under Wayland hides private workspaces by itself while a share runs.",
+  "system_streaming_toggleOn": "Enable streaming mode",
+  "system_streaming_toggleOff": "Disable streaming mode"
 }

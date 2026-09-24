@@ -1571,5 +1571,9 @@
   "nav_streamingOff": "Streamingmodus: privésites en werkruimtes verbergen",
   "nav_streamingOn": "Streamingmodus staat aan, privésites en werkruimtes zijn verborgen",
   "sites_hideWhileStreaming": "Verbergen tijdens streamen",
-  "sites_showWhileStreaming": "Tonen tijdens streamen"
+  "sites_showWhileStreaming": "Tonen tijdens streamen",
+  "system_streaming_title": "Streamingmodus",
+  "system_streaming_description": "Verbergt klantwerk terwijl je je scherm deelt of opneemt. Voegt een oog toe aan elke workspace om hem privé te maken, en verbergt op Linux met Wayland privé-workspaces vanzelf zolang er gedeeld wordt.",
+  "system_streaming_toggleOn": "Streamingmodus inschakelen",
+  "system_streaming_toggleOff": "Streamingmodus uitschakelen"
 }

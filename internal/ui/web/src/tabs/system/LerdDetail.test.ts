@@ -4,6 +4,8 @@ import { get } from 'svelte/store';
 import LerdDetail from './LerdDetail.svelte';
 import { version } from '$stores/version';
 import { modal } from '$stores/modals';
+import { status } from '$stores/status';
+import { accessMode } from '$stores/accessMode';
 
 const notes = 'v1.34.3\n- a change worth reading\n- another one';
 
@@ -57,5 +59,18 @@ describe('LerdDetail', () => {
 
     const reddit = screen.getByRole('link', { name: 'Reddit' }) as HTMLAnchorElement;
     expect(reddit.href).toContain('reddit.com/r/lerd/submit?title=');
+  });
+
+  it('enables streaming mode from its card', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ json: async () => ({ ok: true }) });
+    vi.stubGlobal('fetch', fetchMock);
+    accessMode.update((a) => ({ ...a, localControl: true }));
+    status.update((st) => ({ ...st, streaming_enabled: false }));
+    render(LerdDetail);
+
+    await fireEvent.click(screen.getByTitle('Enable streaming mode'));
+    const call = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/settings/streaming-enabled'));
+    expect(call).toBeTruthy();
+    expect(JSON.parse(call![1].body)).toEqual({ enabled: true });
   });
 });

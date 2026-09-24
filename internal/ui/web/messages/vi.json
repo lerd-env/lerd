@@ -1571,5 +1571,9 @@
   "nav_streamingOff": "Chế độ phát trực tiếp: ẩn site và workspace riêng tư",
   "nav_streamingOn": "Chế độ phát trực tiếp đang bật, site và workspace riêng tư đã bị ẩn",
   "sites_hideWhileStreaming": "Ẩn khi phát trực tiếp",
-  "sites_showWhileStreaming": "Hiện khi phát trực tiếp"
+  "sites_showWhileStreaming": "Hiện khi phát trực tiếp",
+  "system_streaming_title": "Chế độ streaming",
+  "system_streaming_description": "Ẩn công việc của khách hàng khi bạn chia sẻ hoặc ghi màn hình. Thêm biểu tượng con mắt cho mỗi workspace để đánh dấu riêng tư, và trên Linux dùng Wayland sẽ tự ẩn các workspace riêng tư khi đang chia sẻ.",
+  "system_streaming_toggleOn": "Bật chế độ streaming",
+  "system_streaming_toggleOff": "Tắt chế độ streaming"
 }

@@ -1571,5 +1571,9 @@
   "nav_streamingOff": "Modalità streaming: nascondi siti e workspace privati",
   "nav_streamingOn": "La modalità streaming è attiva, siti e workspace privati sono nascosti",
   "sites_hideWhileStreaming": "Nascondi durante lo streaming",
-  "sites_showWhileStreaming": "Mostra durante lo streaming"
+  "sites_showWhileStreaming": "Mostra durante lo streaming",
+  "system_streaming_title": "Modalità streaming",
+  "system_streaming_description": "Nasconde i progetti dei clienti mentre condividi o registri lo schermo. Aggiunge un occhio a ogni workspace per segnarlo come privato e, su Linux con Wayland, nasconde da sola i workspace privati durante una condivisione.",
+  "system_streaming_toggleOn": "Attiva la modalità streaming",
+  "system_streaming_toggleOff": "Disattiva la modalità streaming"
 }

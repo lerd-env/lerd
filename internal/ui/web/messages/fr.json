@@ -1571,5 +1571,9 @@
   "nav_streamingOff": "Mode streaming : masquer les sites et espaces de travail privés",
   "nav_streamingOn": "Le mode streaming est actif, les sites et espaces de travail privés sont masqués",
   "sites_hideWhileStreaming": "Masquer pendant le streaming",
-  "sites_showWhileStreaming": "Afficher pendant le streaming"
+  "sites_showWhileStreaming": "Afficher pendant le streaming",
+  "system_streaming_title": "Mode streaming",
+  "system_streaming_description": "Masque les projets clients pendant que tu partages ou enregistres ton écran. Ajoute un œil à chaque workspace pour le marquer privé et, sous Linux avec Wayland, masque tout seul les workspaces privés pendant un partage.",
+  "system_streaming_toggleOn": "Activer le mode streaming",
+  "system_streaming_toggleOff": "Désactiver le mode streaming"
 }

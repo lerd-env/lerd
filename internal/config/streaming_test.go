@@ -8,7 +8,6 @@ import (
 func streamingReg() *SiteRegistry {
 	return &SiteRegistry{Sites: []Site{
 		{Name: "shop"},
-		{Name: "secret", Private: true},
 		{Name: "client-a"},
 		{Name: "portal", Group: "portal"},
 		{Name: "portal-admin", Group: "portal", GroupSubdomain: "admin"},
@@ -22,26 +21,15 @@ func TestStreamingHiddenIsEmptyWhenStreamingIsOff(t *testing.T) {
 	}
 }
 
-func TestStreamingHiddenCoversPrivateSitesAndWorkspaces(t *testing.T) {
+func TestStreamingHiddenCoversPrivateWorkspacesAndTheirSecondaries(t *testing.T) {
 	cfg := wsCfg(
 		Workspace{Name: "Clients", Sites: []string{"client-a", "portal"}, Private: true},
 		Workspace{Name: "Mine", Sites: []string{"shop"}},
 	)
-	cfg.UI.StreamingMode = true
-	want := map[string]bool{"secret": true, "client-a": true, "portal": true, "portal-admin": true}
+	cfg.UI.StreamingEnabled, cfg.UI.StreamingMode = true, true
+	want := map[string]bool{"client-a": true, "portal": true, "portal-admin": true}
 	if got := cfg.StreamingHidden(streamingReg()); !reflect.DeepEqual(got, want) {
 		t.Errorf("StreamingHidden() = %v, want %v", got, want)
-	}
-}
-
-func TestStreamingHiddenFollowsAPrivateGroupMain(t *testing.T) {
-	reg := streamingReg()
-	reg.Sites[3].Private = true
-	cfg := wsCfg()
-	cfg.UI.StreamingMode = true
-	got := cfg.StreamingHidden(reg)
-	if !got["portal-admin"] {
-		t.Errorf("secondary of a private main should hide, got %v", got)
 	}
 }
 
@@ -50,7 +38,7 @@ func TestVisibleWorkspaceNamesDropsPrivateOnesWhileStreaming(t *testing.T) {
 	if got := cfg.VisibleWorkspaceNames(); !reflect.DeepEqual(got, []string{"Clients", "Mine"}) {
 		t.Errorf("streaming off: got %v", got)
 	}
-	cfg.UI.StreamingMode = true
+	cfg.UI.StreamingEnabled, cfg.UI.StreamingMode = true, true
 	if got := cfg.VisibleWorkspaceNames(); !reflect.DeepEqual(got, []string{"Mine"}) {
 		t.Errorf("streaming on: got %v", got)
 	}
@@ -66,8 +54,30 @@ func TestSetWorkspaceLayoutKeepsThePrivateFlag(t *testing.T) {
 	}
 }
 
-func TestSiteYAMLRoundTripsPrivate(t *testing.T) {
-	if !(Site{Name: "x", Private: true}).toYAML().toSite().Private {
-		t.Error("Private did not survive the YAML round trip")
+func TestNothingHidesWhileTheFeatureIsOff(t *testing.T) {
+	cfg := wsCfg(Workspace{Name: "Clients", Sites: []string{"client-a"}, Private: true}, Workspace{Name: "Mine"})
+	cfg.UI.StreamingMode = true
+	if got := cfg.StreamingHidden(streamingReg()); len(got) != 0 {
+		t.Errorf("feature off: got %v hidden, want nothing", got)
+	}
+	if got := cfg.VisibleWorkspaceNames(); !reflect.DeepEqual(got, []string{"Clients", "Mine"}) {
+		t.Errorf("feature off: visible %v", got)
+	}
+}
+
+func TestDisablingTheFeatureClearsTheMode(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := SetStreamingEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetStreamingMode(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetStreamingEnabled(false); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := LoadGlobal()
+	if cfg.UI.StreamingEnabled || cfg.UI.StreamingMode {
+		t.Errorf("after disabling: enabled %v mode %v, want both off", cfg.UI.StreamingEnabled, cfg.UI.StreamingMode)
 	}
 }

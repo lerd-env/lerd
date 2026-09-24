@@ -331,6 +331,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/settings/dns-upstream", withCORS(handleSettingsDNSUpstream))
 	mux.HandleFunc("/api/settings/theme", withCORS(handleSettingsTheme))
 	mux.HandleFunc("/api/settings/streaming", withCORS(publishAfter(handleSettingsStreaming, eventbus.KindStatus, eventbus.KindSites)))
+	mux.HandleFunc("/api/settings/streaming-enabled", withCORS(publishAfter(handleSettingsStreamingEnabled, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/settings/beta-updates", withCORS(handleSettingsBetaUpdates))
 	mux.HandleFunc("/api/themes", withCORS(handleThemes))
 	mux.HandleFunc("/api/themes/", withCORS(handleThemeItem))
@@ -720,8 +721,10 @@ type StatusResponse struct {
 	// Workspaces are the configured workspace names in display order, empty
 	// ones included, so the sidebar can render a section the user just created.
 	Workspaces []string `json:"workspaces"`
-	// StreamingMode is on while private sites and workspaces are hidden.
-	StreamingMode bool `json:"streaming_mode"`
+	// StreamingEnabled shows the streaming controls at all; StreamingMode is
+	// on while private workspaces and their sites are hidden.
+	StreamingEnabled bool `json:"streaming_enabled"`
+	StreamingMode    bool `json:"streaming_mode"`
 	// PrivateWorkspaces are the listed workspaces streaming mode would hide.
 	PrivateWorkspaces []string `json:"private_workspaces"`
 	// Instance identifies this lerd-ui process. An open dashboard reloads when
@@ -857,7 +860,8 @@ func buildStatus() StatusResponse {
 		PrereleasePHPVersions: config.PrereleasePHPVersions,
 		Home:                  homeDir,
 		Workspaces:            workspaces,
-		StreamingMode:         cfg != nil && cfg.UI.StreamingMode,
+		StreamingEnabled:      cfg != nil && cfg.UI.StreamingEnabled,
+		StreamingMode:         cfg.Streaming(),
 		PrivateWorkspaces:     privateWorkspaceNames(cfg),
 		Instance:              serverInstance,
 		Tools:                 toolStatuses,
@@ -971,10 +975,8 @@ type SiteResponse struct {
 	Paused        bool                                 `json:"paused"`
 	// Pinned excludes the site from idle-suspend (kept always-warm).
 	Pinned bool `json:"pinned,omitempty"`
-	// Private hides the site while streaming mode is on.
-	Private bool `json:"private,omitempty"`
-	// HiddenWhileStreaming also covers a site hidden through its workspace or
-	// group main, so the dashboard can hide it the instant streaming turns on
+	// HiddenWhileStreaming marks a site hidden through its workspace or group
+	// main, so the dashboard can hide it the instant streaming turns on
 	// and not report its disappearance as an unlink.
 	HiddenWhileStreaming bool `json:"hidden_while_streaming,omitempty"`
 	// LastActive is the unix-seconds time the site last saw a request, from the
@@ -1100,14 +1102,12 @@ func buildSites() ([]SiteResponse, error) {
 	suspendedWorkers := map[string][]string{}
 	wtSuspendedWorkers := map[string][]string{}
 	pinnedSites := map[string]bool{}
-	privateSites := map[string]bool{}
 	streamingHidden := map[string]bool{}
 	hiddenWhileStreaming := map[string]bool{}
 	if reg, err := config.LoadSites(); err == nil {
 		streamingHidden = idleCfg.StreamingHidden(reg)
 		hiddenWhileStreaming = idleCfg.PrivateSites(reg)
 		for _, s := range reg.Sites {
-			privateSites[s.Name] = s.Private
 			if len(s.IdleSuspendedWorkers) > 0 {
 				suspendedWorkers[s.Name] = s.IdleSuspendedWorkers
 			}
@@ -1273,7 +1273,6 @@ func buildSites() ([]SiteResponse, error) {
 			Idle:                 idleSiteIsIdle(idleActivity, e.Name, e.Paused, idleExempt, idleOn, idleTimeout, idleNow),
 			IdleSuspendedWorkers: suspendedWorkers[e.Name],
 			Pinned:               pinnedSites[e.Name],
-			Private:              privateSites[e.Name],
 			HiddenWhileStreaming: hiddenWhileStreaming[e.Name],
 			Branch:               e.Branch,
 			Worktrees:            worktreeResponses,
@@ -4198,13 +4197,6 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		return
 	case "unpin":
 		if err := cli.SetSitePinned(site.Name, false); err != nil {
-			writeJSON(w, SiteActionResponse{Error: err.Error()})
-			return
-		}
-		writeJSON(w, SiteActionResponse{OK: true})
-		return
-	case "private", "public":
-		if err := config.SetSitePrivate(site.Name, action == "private"); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}
