@@ -8,7 +8,7 @@
   let { title, stats }: Props = $props();
 </script>
 
-<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 border-b border-gray-100 dark:border-lerd-border">
+<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-1.5 page-header">
   <h1 class="text-base font-semibold text-gray-900 dark:text-white">{title}</h1>
   {#if stats}
     <div class="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">

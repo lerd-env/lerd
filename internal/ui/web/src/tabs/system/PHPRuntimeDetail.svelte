@@ -72,7 +72,7 @@
 
 {#if $phpRuntimeApplies}
   <div>
-    <div class="flex flex-wrap items-center justify-between gap-y-2 p-3 border-b border-gray-100 dark:border-lerd-border">
+    <div class="flex flex-wrap items-center justify-between gap-y-2 px-3 py-1.5 page-header">
       <span class="font-semibold text-gray-900 dark:text-white text-base">{m.system_phpRuntime_title()}</span>
       <span
         class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full {$phpRuntime === 'native'

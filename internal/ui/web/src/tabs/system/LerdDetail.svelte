@@ -188,7 +188,7 @@
 </script>
 
 <div class="flex-1 overflow-y-auto">
-  <div class="flex flex-wrap items-center justify-between gap-y-2 p-3 border-b border-gray-100 dark:border-lerd-border">
+  <div class="flex flex-wrap items-center justify-between gap-y-2 px-3 py-1.5 page-header">
     <span class="font-semibold text-gray-900 dark:text-white text-base">{m.system_lerd()}</span>
     <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 font-mono">v{$version.current}</span>
   </div>
