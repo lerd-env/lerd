@@ -75,3 +75,46 @@ func TestWorktreeSetupArgsNeedsAConsole(t *testing.T) {
 		t.Errorf("worktreeSetupArgs = %v, want nil when the framework declares no console", got)
 	}
 }
+
+// An unattended setup takes the caller's database choice unless the definition
+// requires isolation, since sharing would break the parent site.
+func TestUnattendedWorktreeDBChoice(t *testing.T) {
+	required := &config.Framework{Worktree: &config.FrameworkWorktree{DBIsolation: "required", DBSource: "main"}}
+	cases := []struct {
+		name      string
+		fw        *config.Framework
+		requested string
+		want      string
+	}{
+		{"no framework keeps the request", nil, "empty", "empty"},
+		{"nothing requested shares the parent", &config.Framework{}, "", "share"},
+		{"a required isolation overrides sharing", required, "share", "clone-main"},
+		{"a required isolation overrides nothing requested", required, "", "clone-main"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := unattendedWorktreeDBChoice(c.fw, c.requested); got != c.want {
+				t.Errorf("unattendedWorktreeDBChoice = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// An empty database is only usable once its schema is applied, and the command
+// that does that is whatever the definition names, so Go never spells it.
+func TestWorktreeMigrateCommand(t *testing.T) {
+	fw := &config.Framework{
+		Doctor:   &config.FrameworkDoctor{MigrateCommand: "migrate"},
+		Commands: []config.FrameworkCommand{{Name: "migrate", Command: "php artisan migrate --force"}},
+	}
+	if got := worktreeMigrateCommand(fw); got != "php artisan migrate --force" {
+		t.Errorf("worktreeMigrateCommand = %q, want the declared command", got)
+	}
+	fw.Doctor.MigrateCommand = "missing"
+	if got := worktreeMigrateCommand(fw); got != "" {
+		t.Errorf("a name the definition does not declare must run nothing, got %q", got)
+	}
+	if got := worktreeMigrateCommand(nil); got != "" {
+		t.Errorf("no framework must run nothing, got %q", got)
+	}
+}

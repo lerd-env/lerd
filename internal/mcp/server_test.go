@@ -587,3 +587,26 @@ func TestHostCommandEnv_PutsShimDirOnPath(t *testing.T) {
 		t.Errorf("PATH = %q, want the inherited entries kept", got)
 	}
 }
+
+// Clients load tool schemas lazily, so without instructions an assistant sees
+// only the name "worktree" and runs plain git instead.
+func TestInitialize_instructionsPointAtWorktreeTool(t *testing.T) {
+	result, rpcErr := dispatch(&rpcRequest{Method: "initialize"})
+	if rpcErr != nil {
+		t.Fatal(rpcErr.Message)
+	}
+	instructions, _ := result.(map[string]any)["instructions"].(string)
+	if !strings.Contains(instructions, "`worktree`") || !strings.Contains(instructions, "git worktree add") {
+		t.Errorf("instructions do not steer worktree creation to the tool: %q", instructions)
+	}
+}
+
+// Sharing main's database breaks a branch whose schema differs, in either
+// direction, so the always-loaded instructions say how to pick one.
+func TestInitialize_instructionsPickTheWorktreeDatabase(t *testing.T) {
+	for _, want := range []string{"migrations", "clone-main", "empty", "share"} {
+		if !strings.Contains(serverInstructions, want) {
+			t.Errorf("instructions do not mention %q", want)
+		}
+	}
+}

@@ -58,3 +58,30 @@ func runWorktreeSetupCommands(fw *config.Framework, worktreePath string, log io.
 		step.OK("")
 	}
 }
+
+// unattendedWorktreeDBChoice is the database choice for a setup with nobody to
+// ask: the definition's required isolation wins, otherwise the caller's request,
+// otherwise the parent's database like the prompt's documented default.
+func unattendedWorktreeDBChoice(fw *config.Framework, requested string) string {
+	if forced := requiredWorktreeDBChoice(fw); forced != "" {
+		return forced
+	}
+	if requested == "" {
+		return "share"
+	}
+	return requested
+}
+
+// worktreeMigrateCommand returns the shell command the definition names as the
+// one that applies its schema, or "" when it declares none.
+func worktreeMigrateCommand(fw *config.Framework) string {
+	if fw == nil || fw.Doctor == nil || fw.Doctor.MigrateCommand == "" {
+		return ""
+	}
+	for _, c := range fw.Commands {
+		if c.Name == fw.Doctor.MigrateCommand {
+			return c.Command
+		}
+	}
+	return ""
+}

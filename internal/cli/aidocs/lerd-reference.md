@@ -141,10 +141,10 @@ Actions: `sources`, `fetch`. Debug without opening files by hand.
 
 #### `worktree` — git worktrees
 Actions: `list`, `add`, `remove`, `wait`, `db_isolate`, `db_share`.
-- `add` installs deps and offers an asset-worker / build-step prompt; secured sites get `*.<branch>.<site>.test` wildcard cert SANs + nginx `server_name` automatically. It waits for setup and reports `provisioned` (`false` + note means still running, not failed; `timeout_seconds` default 300)
-- `wait` is that readiness check alone, for a worktree made with plain `git worktree add`. **Never** judge readiness from the tree: `node_modules/` exists from the first extracted package and composer fills *existing* `vendor/<org>/` dirs, so both read as finished mid-install, and racing the watcher is how `vendor/` ends up with no `autoload.php`
+- create worktrees with `add`, never plain `git worktree add`; it waits for deps, runs asset build + DB setup, reports `provisioned` and `ready` (`provisioned: false` = still running; `timeout_seconds` default 300). `build` (`auto`|`skip`|`worker:<n>`|`script:<n>`) and `db` (`share`|`empty`|`clone-main`|`clone-<branch>`) override defaults. Always pick `db` by diffing migrations with the parent checkout (site folder's branch, not git `main`): branch-only: `clone-main` then migrate; parent-only: behind (merge, or `empty`, migrated by `add`); none: `share`. New branch off a ref: `branch`+`base`. Secured sites get `*.<branch>.<site>.test` wildcard cert SANs + nginx `server_name`
+- `wait` is that readiness check alone, for a plain-git worktree. **Never** judge readiness from the tree: `node_modules/` and `vendor/` read as finished mid-install, and racing the watcher leaves `vendor/` with no `autoload.php`
 - `db_isolate` gives a worktree its own database (seed via `source`: empty|main|<branch>); `db_share` points it back at the main; `remove` keeps an isolated DB unless `keep_db: false`
-- a framework definition can declare what its worktrees need (an isolated database, what it is cloned from, console commands to run once it is in place), so `add` does that work rather than leaving it to be run by hand
+- a framework definition can declare what its worktrees need (an isolated database, its source, setup commands), and `add` does that work
 - request timing is recorded per worktree; pass `branch` to `route_timing`, `optimize_route` and `dumps_recent` to read one branch's traffic
 
 #### `workspace` — group sites for display

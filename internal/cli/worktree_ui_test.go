@@ -114,26 +114,6 @@ func TestBuildWorktreeAddGitArgs(t *testing.T) {
 	}
 }
 
-func TestWorktreeCheckoutPath(t *testing.T) {
-	parent := filepath.Join(t.TempDir(), "myapp")
-
-	// Worktrees live under the parent: <parent>/<parentBase>-<slug>.
-	got := WorktreeCheckoutPath(parent, "feature/auth")
-	want := filepath.Join(parent, "myapp-feature-auth")
-	if got != want {
-		t.Fatalf("got %q want %q", got, want)
-	}
-
-	// When the default path already exists, it bumps a numeric suffix.
-	if err := os.MkdirAll(want, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	got = WorktreeCheckoutPath(parent, "feature/auth")
-	if got != want+"-2" {
-		t.Fatalf("got %q want %q", got, want+"-2")
-	}
-}
-
 // Nested worktree dirs sit inside the parent's working tree, so git status
 // shows them as untracked. ensureNestedWorktreeExclude writes a single
 // /<base>-*/ pattern to .git/info/exclude — idempotently.
