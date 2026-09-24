@@ -381,6 +381,9 @@ type FrameworkWorktree struct {
 	// Commands are console commands run in the worktree once its env file and
 	// database are in place, e.g. Magento's app:config:import.
 	Commands []string `yaml:"commands,omitempty"`
+	// Migrations is the folder, relative to the project root, holding the
+	// schema migrations; comparing it across checkouts picks the database.
+	Migrations string `yaml:"migrations,omitempty"`
 }
 
 type FrameworkSetupCmd struct {

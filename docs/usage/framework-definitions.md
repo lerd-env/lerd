@@ -510,9 +510,12 @@ worktree:
   db_source: main                     # what an isolated database starts from: empty | main
   commands:                           # console commands run once env and database are ready
     - app:config:import
+  migrations: database/migrations     # folder holding the schema migrations, relative to the project root
 ```
 
 An app that keeps deployment state in its database cannot share the parent's. Magento hashes its file config and stores the hash in the database, so seeding a worktree's own base URL into `env.php` makes the store refuse to serve until `app:config:import` re-syncs it, and running that import against a shared database would rewrite the hash out from under the parent site. `db_isolation: required` therefore skips the prompt and isolates, `db_source: main` clones the parent's data (an empty schema is useless to a store that cannot bootstrap itself), and `commands` run afterwards, in the worktree, through the framework's own `console` binary.
+
+`migrations` names the folder holding the schema migrations. When a worktree is added with no database choice, from the MCP tool or a `lerd worktree add` with no terminal, lerd compares the files in that folder between the new worktree and the parent checkout, the branch the site's own folder has checked out. The same set shares the parent's database. Migrations only the branch has get a copy of the parent's database, and migrations only the parent has mean the branch's code is older than the parent's schema, so it gets an empty database. Either way the definition's `doctor.migrate_command` then runs on the new database. A required isolation or an explicit choice always wins over the comparison.
 
 ## Queued job seams
 

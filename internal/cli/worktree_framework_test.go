@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -116,5 +118,86 @@ func TestWorktreeMigrateCommand(t *testing.T) {
 	}
 	if got := worktreeMigrateCommand(nil); got != "" {
 		t.Errorf("no framework must run nothing, got %q", got)
+	}
+}
+
+func writeMigrations(t *testing.T, dir string, names ...string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range names {
+		if err := os.WriteFile(filepath.Join(dir, n), []byte("<?php\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// The database a worktree can use follows from how its schema compares with the
+// parent checkout's, whose database sharing reuses and cloning copies.
+func TestMigrationsDBChoice(t *testing.T) {
+	cases := []struct {
+		name           string
+		parent, branch []string
+		want           string
+	}{
+		{"same set shares", []string{"a", "b"}, []string{"a", "b"}, "share"},
+		{"branch ahead clones and migrates", []string{"a"}, []string{"a", "b"}, "clone-main"},
+		{"branch behind starts empty", []string{"a", "b"}, []string{"a"}, "empty"},
+		{"diverged starts empty", []string{"a", "b"}, []string{"a", "c"}, "empty"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root := t.TempDir()
+			parent, branch := filepath.Join(root, "parent"), filepath.Join(root, "branch")
+			writeMigrations(t, parent, c.parent...)
+			writeMigrations(t, branch, c.branch...)
+			got, reason := migrationsDBChoice(parent, branch)
+			if got != c.want {
+				t.Errorf("choice = %q, want %q", got, c.want)
+			}
+			if reason == "" {
+				t.Error("the choice needs a reason the caller can report")
+			}
+		})
+	}
+}
+
+// Without a declared migrations folder, or with nothing to compare, lerd does
+// not guess: the caller's choice or the parent's database stands.
+func TestMigrationsDBChoiceFor_needsTheDeclaredFolder(t *testing.T) {
+	root := t.TempDir()
+	writeMigrations(t, filepath.Join(root, "p", "db"), "a")
+	writeMigrations(t, filepath.Join(root, "w", "db"), "a", "b")
+	if got, _ := migrationsDBChoiceFor(&config.Framework{}, filepath.Join(root, "p"), filepath.Join(root, "w")); got != "" {
+		t.Errorf("no migrations key must not pick, got %q", got)
+	}
+	fw := &config.Framework{Worktree: &config.FrameworkWorktree{Migrations: "db"}}
+	if got, _ := migrationsDBChoiceFor(fw, filepath.Join(root, "p"), filepath.Join(root, "w")); got != "clone-main" {
+		t.Errorf("declared folder: got %q, want clone-main", got)
+	}
+	if got, _ := migrationsDBChoiceFor(fw, filepath.Join(root, "missing"), filepath.Join(root, "w")); got != "" {
+		t.Errorf("a parent with no migrations folder must not pick, got %q", got)
+	}
+}
+
+// An explicit choice and a required isolation both win over the comparison, and
+// a picked copy or empty database is migrated so the branch's code can run on it.
+func TestPlanUnattendedWorktreeDB(t *testing.T) {
+	root := t.TempDir()
+	parent, wt := filepath.Join(root, "p"), filepath.Join(root, "w")
+	writeMigrations(t, filepath.Join(parent, "db"), "a")
+	writeMigrations(t, filepath.Join(wt, "db"), "a", "b")
+	fw := &config.Framework{Worktree: &config.FrameworkWorktree{Migrations: "db"}}
+
+	if choice, reason, migrate := planUnattendedWorktreeDB(fw, "", parent, wt); choice != "clone-main" || reason == "" || !migrate {
+		t.Errorf("picked = %q %q migrate=%v, want clone-main with a reason, migrated", choice, reason, migrate)
+	}
+	if choice, _, migrate := planUnattendedWorktreeDB(fw, "share", parent, wt); choice != "share" || migrate {
+		t.Errorf("explicit share = %q migrate=%v, want share, not migrated", choice, migrate)
+	}
+	required := &config.Framework{Worktree: &config.FrameworkWorktree{Migrations: "db", DBIsolation: "required"}}
+	if choice, _, _ := planUnattendedWorktreeDB(required, "", parent, wt); choice != "empty" {
+		t.Errorf("required isolation = %q, want the definition's empty", choice)
 	}
 }
