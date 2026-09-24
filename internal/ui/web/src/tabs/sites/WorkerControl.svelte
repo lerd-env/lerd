@@ -44,7 +44,7 @@
   const segmented = $derived(hasGear || Boolean(onLogs));
 </script>
 
-<div class="inline-flex items-center">
+<div class="inline-flex shrink-0 items-center">
   <ToggleButton
     {label}
     on={running}
