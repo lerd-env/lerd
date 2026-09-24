@@ -74,3 +74,21 @@ func TestMissingLibsOnResolvableBinary(t *testing.T) {
 		t.Errorf("MissingLibs(self) = %v, want nil — the running binary resolves", got)
 	}
 }
+
+// A lerd built on its own, installed with install.sh --local, has no helper
+// beside it, and a unit pointing at a missing binary degrades the user session.
+func TestUnavailableWhenTheHelperIsMissing(t *testing.T) {
+	if Unavailable(filepath.Join(t.TempDir(), "lerd-tray")) == "" {
+		t.Error("a missing helper reported the tray as available")
+	}
+}
+
+func TestAvailableWhenTheHelperCannotBeProbed(t *testing.T) {
+	helper := filepath.Join(t.TempDir(), "lerd-tray")
+	if err := os.WriteFile(helper, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if reason := Unavailable(helper); reason != "" {
+		t.Errorf("an unprobeable helper reported %q, want available", reason)
+	}
+}
