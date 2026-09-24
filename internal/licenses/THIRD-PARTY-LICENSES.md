@@ -5337,7 +5337,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 | delayed-stream | 1.0.0 | MIT |
 | dequal | 2.0.3 | MIT |
 | detect-libc | 2.1.2 | Apache-2.0 |
-| devalue | 5.8.1 | MIT |
+| devalue | 5.9.4 | MIT |
 | dom-accessibility-api | 0.5.16 | MIT |
 | dom-accessibility-api | 0.6.3 | MIT |
 | dompurify | 3.4.14 | (MPL-2.0 OR Apache-2.0) |
@@ -7056,7 +7056,7 @@ Apache License
    limitations under the License.
 ```
 
-### devalue 5.8.1
+### devalue 5.9.4
 
 MIT
 
