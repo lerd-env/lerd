@@ -132,6 +132,37 @@ require ADAPTER;
 	}
 }
 
+// TestLaravelAdapterPHP_SiteFallsBackToWorkingDir pins the collector's fallback:
+// a parallel test runner's worker processes do not inherit LERD_SITE, so the
+// site comes from the project directory the CLI runs in.
+func TestLaravelAdapterPHP_SiteFallsBackToWorkingDir(t *testing.T) {
+	lines := runLaravelAdapterPHP(t, `<?php
+putenv('LERD_SITE');
+unset($_SERVER['LERD_SITE'], $_ENV['LERD_SITE']);
+$dir = sys_get_temp_dir() . '/acme-site-' . getmypid();
+@mkdir($dir);
+chdir($dir);
+define('LERD_DEVTOOLS_ON', true);
+require ADAPTER;
+\Lerd\LaravelAdapter\emit('query', ['sql' => 'select 1']);
+rmdir($dir);
+`)
+	if len(lines) != 1 {
+		t.Fatalf("got %d events, want 1: %v", len(lines), lines)
+	}
+	var e struct {
+		Ctx struct {
+			Site string `json:"site"`
+		} `json:"ctx"`
+	}
+	if err := json.Unmarshal([]byte(lines[0]), &e); err != nil {
+		t.Fatalf("bad JSON line %q: %v", lines[0], err)
+	}
+	if !strings.HasPrefix(e.Ctx.Site, "acme-site-") {
+		t.Errorf("ctx.site = %q, want the working directory's name", e.Ctx.Site)
+	}
+}
+
 // TestLaravelAdapterPHP_SkipsViewsBladeCompiledForItself checks that a render
 // whose template is the compiled artefact, which is what an inline or anonymous
 // component resolves to, is left out, while a template in the project is kept.
