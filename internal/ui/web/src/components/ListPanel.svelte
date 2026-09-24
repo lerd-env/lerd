@@ -13,7 +13,8 @@
 
 <div class="relative flex flex-col h-full">
   <ListPanelHeader {title} {actions} />
-  <div class="flex-1 overflow-y-auto md:border-x border-lerd-chromeborder dark:border-lerd-border">
+  <!-- On desktop the header line becomes this border so the frame corner can curve. -->
+  <div class="flex-1 overflow-y-auto md:border-x md:border-t md:rounded-tl-xl border-lerd-chromeborder dark:border-lerd-border">
     {@render children()}
   </div>
   {#if overlay}{@render overlay()}{/if}
