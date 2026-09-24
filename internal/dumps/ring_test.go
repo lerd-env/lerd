@@ -169,3 +169,19 @@ func equalIDs(es []Event, want []string) bool {
 	}
 	return true
 }
+
+func TestRing_RemoveKeepsOrderAndFreesSpace(t *testing.T) {
+	r := NewRing(3)
+	for _, id := range []string{"a", "b", "c", "d"} {
+		r.Append(Event{ID: id, Ctx: Context{Test: id == "c"}})
+	}
+	r.Remove(func(e Event) bool { return e.Ctx.Test })
+	got := r.Snapshot()
+	if len(got) != 2 || got[0].ID != "b" || got[1].ID != "d" {
+		t.Fatalf("after remove = %v, want b d", got)
+	}
+	r.Append(Event{ID: "e"})
+	if got := r.Snapshot(); len(got) != 3 || got[2].ID != "e" {
+		t.Errorf("after append = %v, want b d e", got)
+	}
+}

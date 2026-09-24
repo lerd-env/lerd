@@ -56,20 +56,20 @@ func (m *Model) cycleDebugLens(delta int) {
 	m.dumpsScroll = 0
 }
 
-// toggleDebugWorkers flips capture of queue/scheduler worker events, the TUI
-// equivalent of the dashboard's "Show worker queries" toggle. devtoolsops
-// writes the sentinel and config flag; the next render reads the new state.
+// toggleDebugWorkers shows or hides queue/scheduler worker events, the TUI
+// equivalent of the dashboard's "Show worker queries" toggle. The next render
+// reads the new state.
 func (m *Model) toggleDebugWorkers() tea.Cmd {
 	cfg, _ := config.LoadGlobal()
 	enabled := cfg != nil && cfg.IsDevtoolsWorkers()
 	if _, err := devtoolsops.SetWorkers(!enabled); err != nil {
-		m.setStatus("worker capture: "+err.Error(), 4*time.Second)
+		m.setStatus("worker events: "+err.Error(), 4*time.Second)
 		return nil
 	}
 	if enabled {
-		m.setStatus("worker capture off", 3*time.Second)
+		m.setStatus("worker events hidden", 3*time.Second)
 	} else {
-		m.setStatus("worker capture on", 3*time.Second)
+		m.setStatus("worker events shown", 3*time.Second)
 	}
 	return nil
 }
@@ -104,9 +104,15 @@ func debugMatches(ev lerddumps.Event, needle string) bool {
 func (m *Model) debugFiltered(site string) []lerddumps.Event {
 	kind := m.activeLensKind()
 	needle := strings.ToLower(strings.TrimSpace(m.dumpsFilter))
+	cfg, _ := config.LoadGlobal()
+	// Jobs are a worker's own feedback, so they show whatever the toggle says.
+	hideWorkers := (cfg == nil || !cfg.IsDevtoolsWorkers()) && kind != lerddumps.KindJob
 	out := make([]lerddumps.Event, 0, len(m.debug))
 	for _, ev := range m.debug {
 		if ev.Kind != kind {
+			continue
+		}
+		if hideWorkers && ev.Ctx.Worker != "" {
 			continue
 		}
 		if site != "" && ev.Ctx.Site != site {

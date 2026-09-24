@@ -231,3 +231,36 @@ func TestToggleDebugWorkers_PersistsState(t *testing.T) {
 // firstReturn drops the cursor-line second return so a test can inline a
 // ([]string, int) call into strings.Join.
 func firstReturn(lines []string, _ int) []string { return lines }
+
+// TestDebugFiltered_HidesWorkersUnlessShown pins the TUI side of the worker
+// checkbox: worker events are always captured, so the view does the hiding,
+// except for jobs, which are a worker's own feedback.
+func TestDebugFiltered_HidesWorkersUnlessShown(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	m := NewModel("test")
+	web := qEv("1", "r1", "select 1", 1)
+	worker := qEv("2", "r2", "select 1", 1)
+	worker.Ctx.Worker = "queue:work"
+	job := evWithData(dumps.KindJob, map[string]any{"class": "App\\Jobs\\X"})
+	job.Ctx.Worker = "queue:work"
+	m.debug = []dumps.Event{web, worker, job}
+
+	setLens(m, dumps.KindQuery)
+	if got := m.debugFiltered(""); len(got) != 1 || got[0].ID != "1" {
+		t.Fatalf("workers off: got %d query events, want only the web one", len(got))
+	}
+	setLens(m, dumps.KindJob)
+	if got := m.debugFiltered(""); len(got) != 1 {
+		t.Fatalf("worker jobs must stay visible, got %d", len(got))
+	}
+
+	cfg, _ := config.LoadGlobal()
+	cfg.SetDevtoolsWorkers(true)
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatal(err)
+	}
+	setLens(m, dumps.KindQuery)
+	if got := m.debugFiltered(""); len(got) != 2 {
+		t.Fatalf("workers on: got %d query events, want 2", len(got))
+	}
+}

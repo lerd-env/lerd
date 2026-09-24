@@ -304,6 +304,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/dumps/notify-changed", withCORS(handleDumpsNotifyChanged))
 	mux.HandleFunc("/api/devtools/status", withCORS(handleDevtoolsStatus))
 	mux.HandleFunc("/api/devtools/workers", withCORS(publishAfter(handleDevtoolsWorkers, eventbus.KindDevtoolsStatus)))
+	mux.HandleFunc("/api/devtools/tests", withCORS(publishAfter(handleDevtoolsTests, eventbus.KindDevtoolsStatus)))
 	mux.HandleFunc("/api/open-editor", withCORS(handleOpenEditor))
 	mux.HandleFunc("/api/open-folder", withCORS(handleOpenFolder))
 	mux.HandleFunc("/api/profiler/toggle", withCORS(publishAfter(handleProfilerToggle, eventbus.KindProfilerStatus)))

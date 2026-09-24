@@ -51,6 +51,9 @@ func EnsureDevtoolsAssets() error {
 	if err != nil {
 		return err
 	}
+	if err := ensureDevtoolsWorkersFlag(); err != nil {
+		return err
+	}
 	path := config.DevtoolsIniFile()
 	if info, err := os.Stat(path); err == nil {
 		if info.IsDir() {
@@ -67,23 +70,15 @@ func EnsureDevtoolsAssets() error {
 	return nil
 }
 
-// SetDevtoolsWorkersFlag flips the sentinel that opts queue/scheduler worker
-// queries into capture. Present = workers captured, absent = skipped. Like the
-// enable flag, it sits under the dumps assets dir (mounted at
-// /usr/local/etc/lerd) so no FPM restart is needed.
-func SetDevtoolsWorkersFlag(enabled bool) error {
+// ensureDevtoolsWorkersFlag keeps worker capture always on. The dashboard's
+// worker checkbox only hides worker rows, so hiding them never loses events.
+func ensureDevtoolsWorkersFlag() error {
 	flag := config.DevtoolsWorkersFlagFile()
-	if enabled {
-		if err := os.MkdirAll(filepath.Dir(flag), 0755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(flag, []byte("1\n"), 0644); err != nil {
-			return fmt.Errorf("writing devtools workers flag: %w", err)
-		}
-		return nil
+	if err := os.MkdirAll(filepath.Dir(flag), 0755); err != nil {
+		return err
 	}
-	if err := os.Remove(flag); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("removing devtools workers flag: %w", err)
+	if err := os.WriteFile(flag, []byte("1\n"), 0644); err != nil {
+		return fmt.Errorf("writing devtools workers flag: %w", err)
 	}
 	return nil
 }

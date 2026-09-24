@@ -327,13 +327,16 @@ type GlobalConfig struct {
 		Passthrough bool `yaml:"passthrough,omitempty" mapstructure:"passthrough"`
 	} `yaml:"dumps,omitempty" mapstructure:"dumps"`
 	Devtools struct {
-		// Workers includes long-running queue/scheduler worker queries in
-		// capture. Off by default because their constant polling floods the
-		// buffer; toggled from the dashboard "Show worker queries" checkbox.
+		// Workers shows long-running queue/scheduler worker events in the
+		// Debug views. They are always captured; this only hides them, off by
+		// default because their constant polling buries everything else.
 		// The collector's enable state is shared with the debug bridge: one
 		// sentinel (enabled.flag) and one config flag (Dumps.Enabled) arm both,
 		// so there is no separate devtools enable toggle.
 		Workers bool `yaml:"workers,omitempty" mapstructure:"workers"`
+		// Tests records events from PHPUnit/Pest runs. Off by default because
+		// one suite fills the whole buffer; toggled from "Show test runs".
+		Tests bool `yaml:"tests,omitempty" mapstructure:"tests"`
 	} `yaml:"devtools,omitempty" mapstructure:"devtools"`
 	Profiler struct {
 		// Enabled toggles the SPX profiler globally. When on, nginx injects
@@ -1229,15 +1232,24 @@ func (c *GlobalConfig) SetDumpsEnabled(enabled bool) {
 	c.Dumps.Enabled = enabled
 }
 
-// IsDevtoolsWorkers reports whether queue/scheduler worker queries are captured.
+// IsDevtoolsWorkers reports whether queue/scheduler worker events are shown.
 func (c *GlobalConfig) IsDevtoolsWorkers() bool {
 	return c.Devtools.Workers
 }
 
-// SetDevtoolsWorkers flips worker-query capture. Persist via SaveGlobal and run
-// devtoolsops.SetWorkers to touch the runtime sentinel.
+// SetDevtoolsWorkers flips whether worker events are shown. Persist via SaveGlobal.
 func (c *GlobalConfig) SetDevtoolsWorkers(enabled bool) {
 	c.Devtools.Workers = enabled
+}
+
+// IsDevtoolsTests reports whether events from test runs are recorded.
+func (c *GlobalConfig) IsDevtoolsTests() bool {
+	return c.Devtools.Tests
+}
+
+// SetDevtoolsTests flips test-run recording. Persist via SaveGlobal.
+func (c *GlobalConfig) SetDevtoolsTests(enabled bool) {
+	c.Devtools.Tests = enabled
 }
 
 // IsProfilerEnabled reports whether the SPX profiler is globally armed.

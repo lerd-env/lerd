@@ -28,9 +28,11 @@ func buildDevtoolsStatusJSON() []byte {
 	resp := struct {
 		Enabled bool `json:"enabled"`
 		Workers bool `json:"workers"`
+		Tests   bool `json:"tests"`
 	}{
 		Enabled: cfg != nil && cfg.IsDumpsEnabled(),
 		Workers: cfg != nil && cfg.IsDevtoolsWorkers(),
+		Tests:   cfg != nil && cfg.IsDevtoolsTests(),
 	}
 	b, _ := json.Marshal(resp)
 	return b
@@ -60,4 +62,39 @@ func handleDevtoolsWorkers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, res)
+}
+
+// handleDevtoolsTests switches recording of test-run events. The receiver
+// filters them, not the collector, so it applies without touching PHP.
+// Host authority because switching off deletes the buffered test events.
+func handleDevtoolsTests(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !hasHostActionAuthority(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	var req struct {
+		Enable bool `json:"enable"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	cfg.SetDevtoolsTests(req.Enable)
+	if err := config.SaveGlobal(cfg); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if srv := dumpsServer.Load(); srv != nil {
+		srv.SetKeepTests(req.Enable)
+	}
+	writeJSON(w, map[string]bool{"tests": req.Enable})
 }

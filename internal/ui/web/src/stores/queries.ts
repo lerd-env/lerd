@@ -5,6 +5,7 @@ import { groupKey, groupLabel, type GroupLabel } from '$lib/eventGroup';
 import { queryHaystack } from '$lib/eventSearch';
 import { dumps, toggleDumps, status as dumpsStatus, type DumpsStatus } from '$stores/dumps';
 import { wsMessage } from '$lib/ws';
+import { showTests } from '$stores/debugLens';
 
 // Queries reuse the dumps receiver/stream: the lerd_devtools extension ships
 // kind === 'query' events to the same socket, so they arrive in the shared
@@ -24,9 +25,14 @@ const NPLUSONE_AT = 3;
 export interface DevtoolsStatus {
   enabled: boolean;
   workers: boolean;
+  tests: boolean;
 }
 
 export const devtoolsStatus = writable<DevtoolsStatus | null>(null);
+
+devtoolsStatus.subscribe((s) => {
+  if (s) showTests.set(Boolean(s.tests));
+});
 
 export interface QueryRow {
   event: DumpEvent;
@@ -185,6 +191,18 @@ export async function toggleDevtoolsWorkers(enable: boolean): Promise<void> {
     body: JSON.stringify({ enable })
   });
   void refreshDevtoolsStatus();
+}
+
+// toggleDevtoolsTests switches whether the receiver records test-run events.
+// The checkbox moves at once; the status refresh settles it on what was saved.
+export async function toggleDevtoolsTests(enable: boolean): Promise<void> {
+  showTests.set(enable);
+  await apiFetch('/api/devtools/tests', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enable })
+  });
+  await refreshDevtoolsStatus();
 }
 
 // debugCaptureEnabled is the whole Debug window's one switch. The debug bridge

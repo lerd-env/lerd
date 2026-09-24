@@ -56,7 +56,7 @@ For Laravel apps, the extension loads a small in-app adapter at `Application::bo
 - **Connection name**: e.g. `pgsql`, `mysql`.
 - **Per-job grouping**: the adapter resets the request id on every `JobProcessing`, so each queued job is its own group instead of a worker's jobs lumping together.
 
-Non-Laravel apps (and queries that run before the framework boots) still fall back to the engine-level PDO capture. The adapter respects the same on/off and worker-capture policy as the engine path, never throws, and emits to the same socket.
+Non-Laravel apps (and queries that run before the framework boots) still fall back to the engine-level PDO capture. The adapter respects the same on/off policy as the engine path, never throws, and emits to the same socket.
 
 Beyond queries, the same adapter feeds additional Debug sub-tabs:
 
@@ -134,21 +134,19 @@ lerd renders every framework's declarations into `devtools-seams.conf` next to t
 
 A seam matches on `class`, `implements` or `extends`, and the optional `name` says where the job's label comes from: `this` (the default) or `arg:N`, either followed by `.method:getHook` or `.prop:queue`. An object with no accessor yields its class, which is what a job is usually called. Ship the seams today: CakePHP (`Cake\Queue\Job\JobInterface::execute`), CodeIgniter (`CodeIgniter\Queue\Interfaces\JobInterface::process`), Drupal (`Drupal\Core\Queue\QueueWorkerInterface::processItem`), TYPO3 (`TYPO3\CMS\Scheduler\Task\AbstractTask::execute`) and WordPress (Action Scheduler, labelled by the hook it runs). Magento and Tempest are not covered yet: neither has a per-message seam that can be named with confidence without checking it against a real install.
 
-## Queue workers (opt-in)
+## Queue workers (hidden by default)
 
-Long-running queue and scheduler workers (`queue:work`, `horizon`, `schedule:work`, `messenger:consume`) poll the database constantly, so capturing them by default would flood the in-memory buffer and bury the web-request queries you're actually debugging. Worker capture is therefore **off by default**: web requests and one-off CLI commands (artisan, tinker, migrations) are always captured, but worker processes are skipped unless you opt in.
+Long-running queue and scheduler workers (`queue:work`, `horizon`, `schedule:work`, `messenger:consume`) poll the database constantly, so showing them by default would bury the web-request queries you're actually debugging. Worker events are therefore **hidden by default**. They are still recorded, so a worker's queries from before you ticked the box are there when you do.
 
-Jobs are the exception, and are captured from a worker whatever this toggle says. A worker's jobs are the queue's own feedback rather than noise about it, and hiding them behind the opt-in is what left a queue being drained looking like nothing was happening at all. The Jobs lens therefore carries no worker checkbox; it offers a status filter instead, because one job now reports every state it passes through.
+Jobs are the exception, and are shown whatever this toggle says. A worker's jobs are the queue's own feedback rather than noise about it, and hiding them is what left a queue being drained looking like nothing was happening at all. The Jobs lens therefore carries no worker checkbox; it offers a status filter instead, because one job now reports every state it passes through.
 
-Turn it on with the **Show worker queries** checkbox in the Debug window toolbar (present on every lens but Jobs: Queries, Views, Mail, Cache, Events, HTTP). Checking it arms worker capture by writing the `devtools-workers.flag` sentinel; from then on each worker invocation is captured and grouped on its own, labelled by the worker command, and a per-command filter dropdown appears so you can narrow to one worker. The Laravel adapter resets the request id on every `JobProcessing`, so each queued job is its own group rather than a worker's jobs lumping together.
+Show them with the **Show worker queries** checkbox in the Debug window toolbar (present on every lens but Jobs: Queries, Views, Mail, Cache, Events, HTTP). Each worker invocation is grouped on its own, labelled by the worker command, and a per-command filter dropdown appears so you can narrow to one worker. The Laravel adapter resets the request id on every `JobProcessing`, so each queued job is its own group rather than a worker's jobs lumping together. Unchecking it hides the worker rows again. The setting is saved in `devtools.workers`, is shared with the TUI's `w` key, and is independent of the main Debug on/off switch.
 
-Unchecking **Show worker queries** does two things: it stops capturing worker output going forward, and it immediately hides the worker rows already buffered in the view, so the lenses fall back to web and CLI activity without waiting for a buffer clear. Jobs stay put through both. The toggle is independent of the main Debug on/off switch.
+## Test runs (not recorded by default)
 
-## Test runs (hidden by default)
+A test suite is the other kind of flood: it is CLI, high volume, and a feature suite fires hundreds of simulated requests, so one run can clear the buffer of everything you were looking at. Every event captured inside a PHPUnit or Pest run therefore carries `ctx.test`, and lerd does not record those events by default.
 
-A test suite is the other kind of flood: it is CLI, high volume, and a feature suite fires hundreds of simulated requests, so one run can clear the buffer of everything you were looking at. Every event captured inside a PHPUnit or Pest run therefore carries `ctx.test`, and the Debug lenses hide those events by default.
-
-Unlike worker capture this is a view filter, not a capture switch: the events are still recorded, because a dump or a query you are inspecting from inside a failing test is exactly the case that matters. The **Show test runs** checkbox in each lens toolbar reveals them, and reports how many are currently hidden so nothing disappears without a reason on screen. The tab counters follow the same filter, so a lens never advertises rows it isn't showing.
+Unlike worker events, test events are not recorded while this is off: the receiver drops test events before they reach the buffer, so a suite cannot evict anything else and fires no N+1 warnings. Tick **Show test runs** in any lens toolbar and rerun the test when you need to inspect a dump or a query from inside it. Unticking it also removes the test events already buffered, freeing the space they held. The setting is saved in `devtools.tests` in the global config, so it holds across restarts and for every open dashboard.
 
 The signal is PHPUnit's own `PHPUNIT_COMPOSER_INSTALL` bootstrap constant, which Pest inherits, so it is ecosystem-level rather than tied to a framework. Filtering on `ctx.type` would not do: artisan, tinker and queue workers are all CLI too.
 

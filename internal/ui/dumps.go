@@ -16,6 +16,7 @@ import (
 	"github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/dumpsops"
 	"github.com/geodro/lerd/internal/eventbus"
+	"github.com/geodro/lerd/internal/podman"
 )
 
 // dumpsServer is the singleton dump receiver started by ui.Start. It's nil
@@ -53,6 +54,13 @@ func startDumpsServer() {
 	if err != nil {
 		fmt.Printf("[WARN] dumps receiver: %v — `lerd dump tail` and the dashboard Dumps tab will be empty\n", err)
 		return
+	}
+	if cfg, err := config.LoadGlobal(); err == nil {
+		srv.SetKeepTests(cfg.IsDevtoolsTests())
+	}
+	// Worker capture is always on now; an install from before that has no flag.
+	if err := podman.EnsureDevtoolsAssets(); err != nil {
+		fmt.Printf("[WARN] devtools assets: %v\n", err)
 	}
 	dumpsServer.Store(srv)
 	fmt.Printf("Lerd dumps receiver listening on %s:%s\n", network, srv.Addr())
