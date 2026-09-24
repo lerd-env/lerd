@@ -128,7 +128,6 @@
   "dashboard_hero_startingLerd": "Memulai...",
   "dashboard_hero_startingLerdCount": "Memulai... {done}/{total}",
   "dashboard_hero_updatesMixed": "Lerd v{lerd} dan {count} pembaruan layanan tersedia",
-  "dashboard_hero_workersFailing": "{count} worker gagal",
   "dashboard_lerd_manage": "Kelola →",
   "dashboard_lerd_title": "Lerd",
   "dashboard_lerd_viewChangelog": "Lihat yang baru",

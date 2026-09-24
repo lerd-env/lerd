@@ -128,7 +128,6 @@
   "dashboard_hero_startingLerd": "正在启动...",
   "dashboard_hero_startingLerdCount": "正在启动... {done}/{total}",
   "dashboard_hero_updatesMixed": "Lerd v{lerd} 及 {count} 个服务更新可用",
-  "dashboard_hero_workersFailing": "{count} 个 worker 失败",
   "dashboard_lerd_manage": "管理 →",
   "dashboard_lerd_title": "Lerd",
   "dashboard_lerd_viewChangelog": "查看新功能",

@@ -128,7 +128,6 @@
   "dashboard_hero_startingLerd": "Đang khởi động...",
   "dashboard_hero_startingLerdCount": "Đang khởi động... {done}/{total}",
   "dashboard_hero_updatesMixed": "Có Lerd v{lerd} và {count} bản cập nhật dịch vụ",
-  "dashboard_hero_workersFailing": "{count} worker đang lỗi",
   "dashboard_lerd_manage": "Quản lý →",
   "dashboard_lerd_title": "Lerd",
   "dashboard_lerd_viewChangelog": "Xem có gì mới",

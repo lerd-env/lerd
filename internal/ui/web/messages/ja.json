@@ -128,7 +128,6 @@
   "dashboard_hero_startingLerd": "開始中...",
   "dashboard_hero_startingLerdCount": "開始中... {done}/{total}",
   "dashboard_hero_updatesMixed": "Lerd v{lerd} とサービスの更新 {count} 件が利用可能です",
-  "dashboard_hero_workersFailing": "ワーカー {count} 個が失敗中",
   "dashboard_lerd_manage": "管理 →",
   "dashboard_lerd_title": "Lerd",
   "dashboard_lerd_viewChangelog": "新着情報を見る",

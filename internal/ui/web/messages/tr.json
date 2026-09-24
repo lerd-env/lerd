@@ -128,7 +128,6 @@
   "dashboard_hero_startingLerd": "Başlatılıyor...",
   "dashboard_hero_startingLerdCount": "Başlatılıyor... {done}/{total}",
   "dashboard_hero_updatesMixed": "Lerd v{lerd} ve {count} servis güncellemesi mevcut",
-  "dashboard_hero_workersFailing": "{count} worker hatalı",
   "dashboard_lerd_manage": "Yönet →",
   "dashboard_lerd_title": "Lerd",
   "dashboard_lerd_viewChangelog": "Yenilikleri gör",

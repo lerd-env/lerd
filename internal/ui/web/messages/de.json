@@ -128,7 +128,6 @@
   "dashboard_hero_startingLerd": "Wird gestartet...",
   "dashboard_hero_startingLerdCount": "Wird gestartet... {done}/{total}",
   "dashboard_hero_updatesMixed": "Lerd v{lerd} und {count} Dienst-Update(s) verfügbar",
-  "dashboard_hero_workersFailing": "{count} Worker fehlgeschlagen",
   "dashboard_lerd_manage": "Verwalten →",
   "dashboard_lerd_title": "Lerd",
   "dashboard_lerd_viewChangelog": "Neuerungen ansehen",

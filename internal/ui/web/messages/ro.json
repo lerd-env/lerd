@@ -128,7 +128,6 @@
   "dashboard_hero_startingLerd": "Se pornește...",
   "dashboard_hero_startingLerdCount": "Se pornește... {done}/{total}",
   "dashboard_hero_updatesMixed": "Lerd v{lerd} și {count} actualizare(i) de serviciu disponibile",
-  "dashboard_hero_workersFailing": "{count} worker(i) cu probleme",
   "dashboard_lerd_manage": "Gestionează →",
   "dashboard_lerd_title": "Lerd",
   "dashboard_lerd_viewChangelog": "Vezi noutățile",

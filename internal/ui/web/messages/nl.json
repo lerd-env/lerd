@@ -128,7 +128,6 @@
   "dashboard_hero_startingLerd": "Bezig met starten...",
   "dashboard_hero_startingLerdCount": "Bezig met starten... {done}/{total}",
   "dashboard_hero_updatesMixed": "Lerd v{lerd} en {count} service-update(s) beschikbaar",
-  "dashboard_hero_workersFailing": "{count} worker(s) mislukt",
   "dashboard_lerd_manage": "Beheren →",
   "dashboard_lerd_title": "Lerd",
   "dashboard_lerd_viewChangelog": "Bekijk wat er nieuw is",

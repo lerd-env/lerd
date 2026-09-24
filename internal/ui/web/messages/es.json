@@ -128,7 +128,6 @@
   "dashboard_hero_startingLerd": "Iniciando...",
   "dashboard_hero_startingLerdCount": "Iniciando... {done}/{total}",
   "dashboard_hero_updatesMixed": "Lerd v{lerd} y {count} actualización(es) de servicios disponibles",
-  "dashboard_hero_workersFailing": "{count} worker(s) con fallos",
   "dashboard_lerd_manage": "Gestionar →",
   "dashboard_lerd_title": "Lerd",
   "dashboard_lerd_viewChangelog": "Ver novedades",

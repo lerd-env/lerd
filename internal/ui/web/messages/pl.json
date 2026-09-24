@@ -128,7 +128,6 @@
   "dashboard_hero_startingLerd": "Uruchamianie...",
   "dashboard_hero_startingLerdCount": "Uruchamianie... {done}/{total}",
   "dashboard_hero_updatesMixed": "Dostępny Lerd v{lerd} oraz {count} aktualizacji usług",
-  "dashboard_hero_workersFailing": "{count} niesprawnych workerów",
   "dashboard_lerd_manage": "Zarządzaj →",
   "dashboard_lerd_title": "Lerd",
   "dashboard_lerd_viewChangelog": "Zobacz nowości",
