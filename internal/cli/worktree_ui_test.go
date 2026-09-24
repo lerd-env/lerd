@@ -146,6 +146,24 @@ func TestEnsureNestedWorktreeExclude(t *testing.T) {
 	}
 }
 
+// Worktrees write .lerd.local.yaml, which has to stay out of git status even in a
+// repo that does not ignore it itself.
+func TestEnsureLocalOverrideExcluded(t *testing.T) {
+	sitePath := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(sitePath, ".git", "info"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := ensureLocalOverrideExcluded(sitePath); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, _ := os.ReadFile(filepath.Join(sitePath, ".git", "info", "exclude"))
+	if n := strings.Count(string(data), "/.lerd.local.yaml\n"); n != 1 {
+		t.Errorf("exclude has the pattern %d times, want once: %q", n, data)
+	}
+}
+
 func TestApplyWorktreeDBChoice_noopChoices(t *testing.T) {
 	// "share" and "" must not touch the registry or any database, so they
 	// succeed even for a site that doesn't exist.

@@ -394,7 +394,7 @@ db_isolated: true
 
 The file takes the same fields as `.lerd.yaml`, in the same shapes. Merging is per top-level key: a list replaces the committed list entirely, a map (`env_overrides`, `worker_options`) merges key by key, and everything the local file does not mention keeps the committed value. The file is optional and may exist on its own, without a `.lerd.yaml` next to it.
 
-Add it to `.gitignore`. Lerd never creates it, never writes to it, and will not clean it up for you.
+Add it to `.gitignore`. Lerd writes it in one case only: isolating or sharing a worktree's database records `db_isolated` in that worktree's `.lerd.local.yaml`, keeping every other key in the file as it was, and adds the file to the site's `.git/info/exclude` so it never shows up in `git status`. Lerd never removes it.
 
 Because the committed file stays the source of truth for everything else, commands that persist a setting still write `.lerd.yaml`, and a save never leaks a locally overridden value into it. Changing a setting the local file owns, say running `lerd runtime frankenphp` while the local file pins `runtime`, is refused before anything is written: the local file has to change for that value to change. That includes the pins that also have a dotfile of their own, so `lerd isolate` and `lerd isolate:node` refuse rather than writing a `.php-version` or `.node-version` the next link would undo.
 
