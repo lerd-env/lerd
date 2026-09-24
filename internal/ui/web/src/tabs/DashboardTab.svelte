@@ -54,7 +54,7 @@
     </button>
   </div>
 
-  <div class="p-3 space-y-3 xl:flex-1 xl:min-h-0 xl:flex xl:flex-col">
+  <div class="p-3 space-y-3 md:border-l border-lerd-chromeborder dark:border-lerd-border flex-1 xl:min-h-0 xl:flex xl:flex-col">
     <OnboardingPanel />
     <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 xl:flex-1 xl:min-h-0 xl:auto-rows-fr">
       <SitesWidget />

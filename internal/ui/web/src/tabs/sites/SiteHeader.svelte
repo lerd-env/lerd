@@ -261,20 +261,20 @@
 
 <div class="border-b border-gray-100 dark:border-lerd-border shrink-0 @container flex flex-col">
   {#if showWorktreeTabs}
-    <div class="flex items-end bg-gray-50/60 dark:bg-white/[0.02]">
-      <div class="flex items-center gap-0.5 px-3 pt-3 overflow-x-auto flex-1 min-w-0">
+    <div class="flex items-center page-header">
+      <div class="flex items-center gap-1 px-3 overflow-x-auto flex-1 min-w-0">
       {#each tabEntries as e (e.isMain ? '__main__' : e.branch)}
         {@const isActive = e.isMain ? activeWorktreeBranch === '' : e.branch === activeWorktreeBranch}
         <div
-          class="group flex items-center rounded-t-md border-t border-l border-r transition-colors max-w-56 shrink-0 {isActive
-            ? 'bg-white dark:bg-lerd-bg border-gray-200 dark:border-lerd-border'
-            : 'bg-transparent border-transparent hover:bg-gray-100/60 dark:hover:bg-white/5'}"
+          class="group flex items-center rounded-lg transition-colors max-w-56 shrink-0 {isActive
+            ? 'bg-white dark:bg-white/10 shadow-sm dark:shadow-none'
+            : 'hover:bg-gray-200/60 dark:hover:bg-white/5'}"
         >
           <button
             type="button"
             onclick={() => pickWorktree(e)}
             use:tooltip={e.domain}
-            class="flex items-center gap-1.5 pl-3 pr-3 py-2.5 text-xs min-w-0 {isActive
+            class="flex items-center gap-1.5 pl-3 pr-3 py-2 text-xs min-w-0 {isActive
               ? 'text-gray-800 dark:text-gray-100 font-medium'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}"
           >
@@ -328,7 +328,7 @@
         <button
           type="button"
           onclick={() => openWorktreeAddModal(site)}
-          class="ml-1 mb-0.5 w-6 h-6 flex items-center justify-center rounded-md text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors shrink-0"
+          class="ml-1 w-6 h-6 flex items-center justify-center rounded-md text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors shrink-0"
           use:tooltip={m.worktreeMgr_add()}
           aria-label={m.worktreeMgr_add()}
         >
