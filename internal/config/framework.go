@@ -2010,6 +2010,11 @@ func DetectFramework(dir string) (string, bool) {
 			if fw == nil || seen[fw.Name] {
 				continue
 			}
+			// An overlay without detect rules only adds workers or setup, so it
+			// must leave the store and built-in detection for its name in place.
+			if len(fw.Detect) == 0 {
+				continue
+			}
 			claimed[fw.Name] = true
 			if matched[fw.Name] || !matchesFramework(dir, fw) {
 				continue

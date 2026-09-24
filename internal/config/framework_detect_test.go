@@ -32,6 +32,23 @@ func TestDetectFrameworkForDir_FromLerdYAML(t *testing.T) {
 	}
 }
 
+// A user overlay that only adds workers is additive: it must not hide the
+// store/built-in detection rules of the framework it extends (#1910).
+func TestDetectFramework_PartialOverlayKeepsBaseDetection(t *testing.T) {
+	setConfigDir(t)
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "artisan"), []byte("#!/usr/bin/env php"), 0644) //nolint:errcheck
+
+	os.MkdirAll(FrameworksDir(), 0755) //nolint:errcheck
+	overlay := "name: laravel\nversion: \"10\"\nworkers:\n  pulse:\n    command: php artisan pulse:check\n"
+	os.WriteFile(filepath.Join(FrameworksDir(), "laravel.yaml"), []byte(overlay), 0644) //nolint:errcheck
+
+	if name, ok := DetectFramework(dir); !ok || name != "laravel" {
+		t.Fatalf("DetectFramework = %q, %v; want laravel, true", name, ok)
+	}
+}
+
 func TestDetectFrameworkForDir_FromFileDetection(t *testing.T) {
 	setConfigDir(t)
 	dir := t.TempDir()
