@@ -79,6 +79,18 @@ describe('DashboardOverlay', () => {
 
   // The header names the service the frame belongs to, so it leads with the
   // mark the preset ships rather than the generic glyph for its category.
+  // The strip above the frame is painted like the rail, as on every other page,
+  // and the frame curves where the two meet.
+  it('paints the header as chrome and rounds the frame corner under it', () => {
+    dashboardOpen.set({ name: 'mailpit', label: 'Mailpit', dashboard: 'http://localhost:8025' });
+    const { container } = render(DashboardOverlay);
+
+    const iframe = container.querySelector('iframe')!;
+    const frame = iframe.parentElement!;
+    expect(frame.className).toContain('md:rounded-tl-xl');
+    expect(frame.previousElementSibling!.className).toContain('page-header');
+  });
+
   it('heads the frame with the service mark, inked in the declared colour', () => {
     services.set([
       {

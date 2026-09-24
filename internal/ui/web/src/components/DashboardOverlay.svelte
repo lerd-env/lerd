@@ -233,8 +233,8 @@
 {#if $dashboardOpen}
   {@const d = $dashboardOpen}
   {@const iframeSrc = joinDashboardPath(d.dashboard, d.extraPath)}
-  <div class="fixed top-0 right-0 left-0 bottom-16 md:left-14 md:bottom-0 z-30 flex flex-col bg-white dark:bg-lerd-bg">
-    <div class="flex items-center justify-between px-3 py-3 border-b border-gray-200 dark:border-lerd-border shrink-0">
+  <div class="fixed top-0 right-0 left-0 bottom-16 md:left-14 md:bottom-0 z-30 flex flex-col bg-white dark:bg-lerd-bg md:bg-lerd-chrome-light md:dark:bg-lerd-card">
+    <div class="flex items-center justify-between px-3 py-3 page-header md:border-b-0! shrink-0">
       <div class="flex items-center gap-3 min-w-0">
         {#if isProfiler}
           <button
@@ -319,23 +319,26 @@
         </button>
       </div>
     </div>
-    {#if isDocs}
-      <DocsViewer />
-    {:else}
-      <!-- Keyed on the source so switching dashboards tears the frame down and
-           builds a new one. Re-pointing the old frame is a navigation, which
-           runs the embedded app's beforeunload handler; an admin UI that
-           registers one (pgAdmin) then blocks the swap behind a native confirm
-           the overlay has no way to answer. -->
-      {#key iframeSrc}
-        <iframe
-          bind:this={iframeEl}
-          onload={onIframeLoad}
-          src={iframeSrc}
-          class="flex-1 w-full bg-white border-0"
-          title={d.label || d.name}
-        ></iframe>
-      {/key}
-    {/if}
+    <!-- On desktop the header line moves onto the frame's top border so the corner can curve. -->
+    <div class="flex-1 min-h-0 flex flex-col overflow-hidden bg-white dark:bg-lerd-bg md:border-l md:border-t md:rounded-tl-xl border-lerd-chromeborder dark:border-lerd-border">
+      {#if isDocs}
+        <DocsViewer />
+      {:else}
+        <!-- Keyed on the source so switching dashboards tears the frame down and
+             builds a new one. Re-pointing the old frame is a navigation, which
+             runs the embedded app's beforeunload handler; an admin UI that
+             registers one (pgAdmin) then blocks the swap behind a native confirm
+             the overlay has no way to answer. -->
+        {#key iframeSrc}
+          <iframe
+            bind:this={iframeEl}
+            onload={onIframeLoad}
+            src={iframeSrc}
+            class="flex-1 w-full bg-white border-0"
+            title={d.label || d.name}
+          ></iframe>
+        {/key}
+      {/if}
+    </div>
   </div>
 {/if}
