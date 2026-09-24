@@ -90,7 +90,20 @@ func ensureNestedWorktreeExclude(sitePath string) error {
 	if strings.ContainsAny(base, "[]?*!#\\") {
 		return nil
 	}
-	pattern := "/" + base + "-*/"
+	return appendGitExclude(sitePath, "/"+base+"-*/")
+}
+
+// ensureLocalOverrideExcluded keeps the worktree override file lerd writes out of
+// git status. The site's exclude file is shared by all its worktrees.
+func ensureLocalOverrideExcluded(sitePath string) error {
+	if info, err := os.Stat(filepath.Join(sitePath, ".git")); err != nil || !info.IsDir() {
+		return nil
+	}
+	return appendGitExclude(sitePath, "/"+config.LocalOverrideFile)
+}
+
+// appendGitExclude adds pattern to the site's .git/info/exclude once.
+func appendGitExclude(sitePath, pattern string) error {
 	excludePath := filepath.Join(sitePath, ".git", "info", "exclude")
 	existing, _ := os.ReadFile(excludePath)
 	for _, line := range strings.Split(string(existing), "\n") {

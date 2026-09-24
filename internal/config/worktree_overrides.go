@@ -1,5 +1,11 @@
 package config
 
+import (
+	"strconv"
+
+	"gopkg.in/yaml.v3"
+)
+
 // WorktreePHPVersion returns the worktree's effective PHP version: the
 // override from its .lerd.yaml when set, otherwise fallback (the parent's).
 // Used by every code path that materialises worktree state on disk.
@@ -58,16 +64,10 @@ func WorktreeDBIsolated(worktreePath string) bool {
 	return false
 }
 
-// SetWorktreeDBIsolated writes the flag to the worktree's .lerd.yaml,
-// creating the file if missing.
+// SetWorktreeDBIsolated writes the flag to the worktree's .lerd.local.yaml, the
+// untracked override, so the choice stays with this checkout instead of dirtying
+// .lerd.yaml and following the branch into main. The value is always written,
+// since sharing has to win over a db_isolated: true an older lerd committed.
 func SetWorktreeDBIsolated(worktreePath string, isolated bool) error {
-	cfg, err := LoadProjectConfig(worktreePath)
-	if err != nil {
-		return err
-	}
-	if cfg == nil {
-		cfg = &ProjectConfig{}
-	}
-	cfg.DBIsolated = isolated
-	return SaveProjectConfig(worktreePath, cfg)
+	return setLocalOverride(worktreePath, "db_isolated", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: strconv.FormatBool(isolated)})
 }

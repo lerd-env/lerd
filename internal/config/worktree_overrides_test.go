@@ -1,6 +1,9 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -112,5 +115,49 @@ func TestSetWorktreeDBIsolated_roundtrip(t *testing.T) {
 	}
 	if WorktreeDBIsolated(dir) {
 		t.Errorf("WorktreeDBIsolated after Set(false) = true")
+	}
+}
+
+// The flag is a per-checkout choice, so it lives in the untracked override file:
+// written to .lerd.yaml it dirtied the worktree and followed the branch into main.
+func TestSetWorktreeDBIsolated_leavesTheCommittedFileAlone(t *testing.T) {
+	dir := t.TempDir()
+	committed := "workers:\n  - queue\n"
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte(committed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(LocalOverridePath(dir), []byte("php_version: \"8.4\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetWorktreeDBIsolated(dir, true); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, ".lerd.yaml")); string(got) != committed {
+		t.Errorf(".lerd.yaml changed to %q", got)
+	}
+	local, _ := os.ReadFile(LocalOverridePath(dir))
+	if !strings.Contains(string(local), "db_isolated: true") || !strings.Contains(string(local), "php_version") {
+		t.Errorf("local override = %q, want db_isolated added beside php_version", local)
+	}
+	if !WorktreeDBIsolated(dir) {
+		t.Error("WorktreeDBIsolated = false after isolating")
+	}
+}
+
+// A branch that already committed db_isolated: true keeps working, and sharing
+// it again has to win over that committed value.
+func TestSetWorktreeDBIsolated_sharingOverridesACommittedFlag(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte("db_isolated: true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !WorktreeDBIsolated(dir) {
+		t.Fatal("a committed db_isolated: true must still read as isolated")
+	}
+	if err := SetWorktreeDBIsolated(dir, false); err != nil {
+		t.Fatal(err)
+	}
+	if WorktreeDBIsolated(dir) {
+		t.Error("sharing did not win over the committed flag")
 	}
 }

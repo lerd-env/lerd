@@ -105,8 +105,8 @@ func SetWorktreeDBIsolated(site *config.Site, branch string, isolated bool, sour
 		}); err != nil {
 			return fmt.Errorf("recording worktree db: %w", err)
 		}
-		if err := config.SetWorktreeDBIsolated(wt.Path, true); err != nil {
-			return fmt.Errorf("updating .lerd.yaml: %w", err)
+		if err := setWorktreeDBIsolatedFlag(site.Path, wt.Path, true); err != nil {
+			return err
 		}
 		if err := applyDBEnvUpdate(wtEnv, binding.Format, map[string]string{binding.NameKey: dbName}); err != nil {
 			return fmt.Errorf("rewriting worktree env: %w", err)
@@ -117,8 +117,8 @@ func SetWorktreeDBIsolated(site *config.Site, branch string, isolated bool, sour
 	if entry, removed, err := config.RemoveWorktreeDB(site.Name, branch); err == nil && removed {
 		_, _ = DropDatabase(entry.Service, entry.DBName)
 	}
-	if err := config.SetWorktreeDBIsolated(wt.Path, false); err != nil {
-		return fmt.Errorf("updating .lerd.yaml: %w", err)
+	if err := setWorktreeDBIsolatedFlag(site.Path, wt.Path, false); err != nil {
+		return err
 	}
 	if _, err := os.Stat(wtEnv); err == nil {
 		if err := applyDBEnvUpdate(wtEnv, binding.Format, map[string]string{binding.NameKey: parentDB}); err != nil {
@@ -171,6 +171,18 @@ func resolveCloneSource(site *config.Site, branch, source, parentDB string) stri
 		}
 		return ""
 	}
+}
+
+// setWorktreeDBIsolatedFlag records the choice in the worktree's untracked
+// override file, excluded from git first so it never shows up as a change.
+func setWorktreeDBIsolatedFlag(sitePath, worktreePath string, isolated bool) error {
+	if err := ensureLocalOverrideExcluded(sitePath); err != nil {
+		return fmt.Errorf("excluding %s from git: %w", config.LocalOverrideFile, err)
+	}
+	if err := config.SetWorktreeDBIsolated(worktreePath, isolated); err != nil {
+		return fmt.Errorf("updating %s: %w", config.LocalOverrideFile, err)
+	}
+	return nil
 }
 
 // FindParentSiteForWorktree looks up the registered site whose worktrees

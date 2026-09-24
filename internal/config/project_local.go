@@ -16,6 +16,24 @@ import (
 // database or switch PHP without that choice ending up in the repo. Git-ignore it.
 const LocalOverrideFile = ".lerd.local.yaml"
 
+// setLocalOverride sets key in dir's local override file, creating the file
+// when missing and keeping every other key, comment and ordering as it was.
+func setLocalOverride(dir, key string, val *yaml.Node) error {
+	root, err := loadMapping(LocalOverridePath(dir))
+	if err != nil {
+		return err
+	}
+	if root == nil {
+		root = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	}
+	setMappingValue(root, key, val)
+	data, err := yaml.Marshal(&yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(LocalOverridePath(dir), data, 0o644)
+}
+
 // LocalOverridePath returns the path of dir's local override file, whether or
 // not it exists.
 func LocalOverridePath(dir string) string {
