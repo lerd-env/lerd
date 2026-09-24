@@ -43,6 +43,10 @@ func TestEnsureDevtoolsAssets_WritesIni(t *testing.T) {
 	if !strings.Contains(string(b), "lerd.devtools_host=") {
 		t.Errorf("ini content unexpected: %s", string(b))
 	}
+	// Worker events are always captured; the dashboard checkbox only hides them.
+	if _, err := os.Stat(config.DevtoolsWorkersFlagFile()); err != nil {
+		t.Errorf("workers sentinel missing: %v", err)
+	}
 }
 
 // The Containerfile compiles lerd_devtools in the builder stage and carries a

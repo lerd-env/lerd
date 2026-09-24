@@ -10,7 +10,6 @@ import (
 	"fmt"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/podman"
 )
 
 // WorkersResult reports the post-apply state of the worker-capture toggle.
@@ -19,10 +18,9 @@ type WorkersResult struct {
 	NoChange bool
 }
 
-// SetWorkers opts queue/scheduler worker queries into (or out of) capture by
-// touching the workers sentinel and persisting the flag. Restart-free, same as
-// the enable toggle. Long-running workers pick up the change when they next
-// recycle (Horizon) or run (scheduler); a one-off restart isn't forced.
+// SetWorkers persists whether the dashboard and TUI show worker events. It
+// is a view setting: worker capture is always on (see EnsureDevtoolsAssets),
+// so switching it never loses what a worker did while hidden.
 func SetWorkers(enabled bool) (WorkersResult, error) {
 	cfg, err := config.LoadGlobal()
 	if err != nil {
@@ -31,23 +29,9 @@ func SetWorkers(enabled bool) (WorkersResult, error) {
 	if cfg.IsDevtoolsWorkers() == enabled {
 		return WorkersResult{Workers: enabled, NoChange: true}, nil
 	}
-	if enabled {
-		if err := podman.SetDevtoolsWorkersFlag(true); err != nil {
-			return WorkersResult{Workers: false}, err
-		}
-		cfg.SetDevtoolsWorkers(true)
-		if err := config.SaveGlobal(cfg); err != nil {
-			_ = podman.SetDevtoolsWorkersFlag(false)
-			return WorkersResult{Workers: false}, fmt.Errorf("saving config: %w", err)
-		}
-		return WorkersResult{Workers: true}, nil
-	}
-	cfg.SetDevtoolsWorkers(false)
+	cfg.SetDevtoolsWorkers(enabled)
 	if err := config.SaveGlobal(cfg); err != nil {
-		return WorkersResult{Workers: true}, fmt.Errorf("saving config: %w", err)
+		return WorkersResult{Workers: !enabled}, fmt.Errorf("saving config: %w", err)
 	}
-	if err := podman.SetDevtoolsWorkersFlag(false); err != nil {
-		return WorkersResult{Workers: false}, err
-	}
-	return WorkersResult{Workers: false}, nil
+	return WorkersResult{Workers: enabled}, nil
 }

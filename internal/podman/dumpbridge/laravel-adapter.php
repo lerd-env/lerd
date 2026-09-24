@@ -145,11 +145,23 @@ function command_line(): string
     return strlen($line) > 120 ? substr($line, 0, 117) . '...' : $line;
 }
 
+// detect_site mirrors the collector's: a parallel test runner's worker
+// processes do not inherit LERD_SITE, so the CLI falls back to the project dir.
+function detect_site(): string
+{
+    $v = lerd_var('LERD_SITE');
+    if ($v !== '' || \PHP_SAPI !== 'cli') {
+        return $v;
+    }
+    $cwd = @getcwd();
+    return $cwd ? basename($cwd) : '';
+}
+
 function context(): array
 {
     $ctx = [
         'type'   => \PHP_SAPI === 'cli' ? 'cli' : 'fpm',
-        'site'   => lerd_var('LERD_SITE'),
+        'site'   => detect_site(),
         'branch' => lerd_var('LERD_BRANCH'),
         'rid'    => rid(),
     ];

@@ -77,6 +77,23 @@ func (r *Ring) Clear() {
 	}
 }
 
+// Remove drops every entry drop matches, keeping the rest in order and freeing
+// their slots for new events.
+func (r *Ring) Remove(drop func(Event) bool) {
+	kept := make([]Event, 0, r.Len())
+	for _, e := range r.Snapshot() {
+		if !drop(e) {
+			kept = append(kept, e)
+		}
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	clear(r.buf)
+	copy(r.buf, kept)
+	r.size = len(kept)
+	r.head = len(kept) % r.cap
+}
+
 // FilterOpts narrows a Snapshot. Zero-value fields are ignored.
 type FilterOpts struct {
 	// Site exact-matches Ctx.Site when non-empty.

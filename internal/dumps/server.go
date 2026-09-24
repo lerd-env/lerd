@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -66,6 +67,9 @@ type Server struct {
 	wg     sync.WaitGroup
 	closed chan struct{}
 	once   sync.Once
+	// keepTests records events from PHPUnit/Pest runs. Off by default: one
+	// suite fills the whole ring and pushes out everything else.
+	keepTests atomic.Bool
 }
 
 // Listen binds a TCP listener on addr and starts the accept loop. If addr
@@ -147,10 +151,21 @@ func (s *Server) Len() int { return s.ring.Len() }
 // Subscribers returns the current subscriber count.
 func (s *Server) Subscribers() int { return s.hub.Count() }
 
+// SetKeepTests switches recording of test-run events. Switching it off also
+// drops the ones already buffered, since the space they hold is the reason.
+func (s *Server) SetKeepTests(keep bool) {
+	s.keepTests.Store(keep)
+	if !keep {
+		s.ring.Remove(func(e Event) bool { return e.Ctx.Test })
+	}
+}
+
 // Push injects an event as if it had arrived on the wire. Used by tests to
 // avoid juggling sockets when only ring/hub semantics matter.
-func (s *Server) Push(e Event) {
-	if !e.Valid() {
+func (s *Server) Push(e Event) { s.record(e) }
+
+func (s *Server) record(e Event) {
+	if !e.Valid() || (e.Ctx.Test && !s.keepTests.Load()) {
 		return
 	}
 	s.ring.Append(e)
@@ -196,11 +211,7 @@ func (s *Server) handle(conn net.Conn) {
 		if err := json.Unmarshal(line, &ev); err != nil {
 			continue
 		}
-		if !ev.Valid() {
-			continue
-		}
-		s.ring.Append(ev)
-		s.hub.Publish(ev)
+		s.record(ev)
 	}
 	// scanner.Err() is intentionally swallowed: the bridge is fire-and-forget
 	// and connection-level failures (timeout, oversized line) must not affect

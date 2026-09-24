@@ -233,6 +233,7 @@ func runDumpsNotifier(src dumpsSubscriber) {
 	// the same class failing three times in a row is one thing to be told about.
 	jobs := newDumpDebouncer(dumpDebounceWindow)
 	np := newNPlusOneTracker()
+	npBatch := newNPlusOneBatch(nPlusOneBatchWindow, func(n push.Notification) { notifyDispatch(n) })
 	// Messages debounce on their own clock: a notification fanned out to a
 	// handful of recipients is one send to be told about, not five.
 	msgs := newDumpDebouncer(dumpDebounceWindow)
@@ -245,9 +246,10 @@ func runDumpsNotifier(src dumpsSubscriber) {
 		case dumps.KindQuery:
 			// Queries are far too high-volume to notify on individually, but a
 			// repeated query shape within one request is an N+1 worth a single
-			// warning per route/script.
+			// warning per route/script, batched per site so a parallel test
+			// run is one notification rather than one per worker process.
 			if n := np.observe(evt); n != nil {
-				notifyDispatch(*n)
+				npBatch.add(*n)
 			}
 		case dumps.KindMessage:
 			if msgs.allow(evt.Ctx.Site) {

@@ -167,3 +167,26 @@ func waitFor(cond func() bool, d time.Duration) bool {
 	}
 	return cond()
 }
+
+func TestServer_DropsTestRunsUnlessKept(t *testing.T) {
+	s := startServer(t)
+	testEv := Event{V: 1, ID: "t1", Kind: "query", Ctx: Context{Type: "cli", Test: true}}
+	s.Push(Event{V: 1, ID: "a", Kind: "dump"})
+	s.Push(testEv)
+	if s.Len() != 1 {
+		t.Fatalf("test event recorded while tests are off; len = %d", s.Len())
+	}
+
+	s.SetKeepTests(true)
+	dialAndSend(t, s.Addr(), mustJSON(t, testEv))
+	if !waitFor(func() bool { return s.Len() == 2 }, time.Second) {
+		t.Fatalf("test event dropped while kept; len = %d", s.Len())
+	}
+
+	// Switching them off frees the space they took, which is the point.
+	s.SetKeepTests(false)
+	got := s.Snapshot()
+	if len(got) != 1 || got[0].ID != "a" {
+		t.Errorf("after dropping tests ring = %v, want only a", got)
+	}
+}

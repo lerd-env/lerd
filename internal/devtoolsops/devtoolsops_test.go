@@ -23,7 +23,9 @@ func fileExists(p string) bool {
 	return err == nil
 }
 
-func TestSetWorkersTogglesFlag(t *testing.T) {
+// TestSetWorkersOnlyChangesTheView pins that the worker checkbox is a view
+// setting: capture stays on either way, so hiding workers never loses events.
+func TestSetWorkersOnlyChangesTheView(t *testing.T) {
 	isolate(t)
 
 	res, err := SetWorkers(true)
@@ -33,8 +35,8 @@ func TestSetWorkersTogglesFlag(t *testing.T) {
 	if !res.Workers || res.NoChange {
 		t.Fatalf("enable result = %+v, want {Workers:true NoChange:false}", res)
 	}
-	if !fileExists(config.DevtoolsWorkersFlagFile()) {
-		t.Fatal("workers sentinel missing after enable")
+	if cfg, _ := config.LoadGlobal(); !cfg.IsDevtoolsWorkers() {
+		t.Fatal("enable was not persisted")
 	}
 
 	res, err = SetWorkers(true)
@@ -52,7 +54,10 @@ func TestSetWorkersTogglesFlag(t *testing.T) {
 	if res.Workers {
 		t.Fatalf("disable result = %+v, want Workers:false", res)
 	}
+	if cfg, _ := config.LoadGlobal(); cfg.IsDevtoolsWorkers() {
+		t.Fatal("disable was not persisted")
+	}
 	if fileExists(config.DevtoolsWorkersFlagFile()) {
-		t.Fatal("workers sentinel still present after disable")
+		t.Fatal("SetWorkers must not touch the capture sentinel")
 	}
 }
