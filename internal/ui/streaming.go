@@ -97,15 +97,7 @@ func streamingHiddenNow() (map[string]bool, map[string]bool) {
 		return map[string]bool{}, map[string]bool{}
 	}
 	hidden := cfg.StreamingHidden(reg)
-	domains := map[string]bool{}
-	for _, s := range reg.Sites {
-		if hidden[s.Name] {
-			for _, d := range s.Domains {
-				domains[d] = true
-			}
-		}
-	}
-	return hidden, domains
+	return hidden, config.HiddenDomains(reg, hidden)
 }
 
 // hideStreamingServices drops the workers a hidden site owns and its domains
@@ -123,7 +115,7 @@ func hideStreamingServices(list []ServiceResponse, hidden, domains map[string]bo
 		if len(s.SiteDomains) > 0 {
 			kept := []string{}
 			for _, d := range s.SiteDomains {
-				if !domains[d] {
+				if !config.DomainHidden(d, domains) {
 					kept = append(kept, d)
 				}
 			}
@@ -157,4 +149,55 @@ func containerOfHiddenSite(name string, hidden map[string]bool) bool {
 		}
 	}
 	return false
+}
+
+// hideStreamingDatabases drops the databases a hidden site or its worktrees
+// own, and the snapshots listed under them with them.
+func hideStreamingDatabases(engines []dbEngineResponse, hidden, domains map[string]bool) []dbEngineResponse {
+	if len(hidden) == 0 {
+		return engines
+	}
+	for i := range engines {
+		kept := []dbEntryResponse{}
+		for _, db := range engines[i].Databases {
+			if !config.EntityHidden(db.Name, db.Site, hidden, domains) {
+				kept = append(kept, db)
+			}
+		}
+		engines[i].Databases = kept
+	}
+	return engines
+}
+
+// hideStreamingEntityRows drops the buckets, keyspaces and other entities a
+// hidden site owns.
+func hideStreamingEntityRows(kinds []entityKindResponse, hidden, domains map[string]bool) []entityKindResponse {
+	if len(hidden) == 0 {
+		return kinds
+	}
+	for i := range kinds {
+		kept := []entityRowResponse{}
+		for _, row := range kinds[i].Rows {
+			if !config.EntityHidden(row.Name, row.Site, hidden, domains) {
+				kept = append(kept, row)
+			}
+		}
+		kinds[i].Rows = kept
+	}
+	return kinds
+}
+
+// hideStreamingAutoSnapshot drops a hidden site from the snapshot schedule list.
+func hideStreamingAutoSnapshot(resp autoSnapshotResponse, hidden map[string]bool) autoSnapshotResponse {
+	if len(hidden) == 0 {
+		return resp
+	}
+	kept := []autoSnapshotSiteStatus{}
+	for _, s := range resp.Sites {
+		if !hidden[s.Site] {
+			kept = append(kept, s)
+		}
+	}
+	resp.Sites = kept
+	return resp
 }
