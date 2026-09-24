@@ -105,7 +105,13 @@ func WatchWorktrees(
 
 			// Event inside .git/ — watch for worktrees/ being (re-)created.
 			if sitePath, known := siteForGitDir[dir]; known {
+				// A deleted worktrees/ takes its watch with it; a stale map entry
+				// would stop addWorktreesWatch from watching the re-created dir.
+				if filepath.Base(event.Name) == "worktrees" && event.Op&(fsnotify.Remove|fsnotify.Rename) != 0 {
+					delete(siteForWorktreesDir, event.Name)
+				}
 				if filepath.Base(event.Name) == "worktrees" && event.Op&fsnotify.Create != 0 {
+					delete(siteForWorktreesDir, event.Name)
 					addWorktreesWatch(sitePath)
 					// Git may have already written entries by the time we receive
 					// this event (race: worktrees/ created and populated before our
@@ -151,10 +157,7 @@ func WatchWorktrees(
 
 				case event.Op&fsnotify.Remove != 0:
 					onRemoved(sitePath, name)
-					// If the worktrees dir itself was deleted (fsnotify fires a
-					// Remove for the watched dir), remove it from our map so we
-					// can re-watch it when git re-creates it.
-					delete(siteForWorktreesDir, event.Name)
+					delete(siteForEntryDir, event.Name)
 				}
 				continue
 			}

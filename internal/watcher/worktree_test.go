@@ -122,3 +122,67 @@ func TestWatchWorktrees_HEADWriteTriggersChangedForExistingWorktree(t *testing.T
 		}
 	}
 }
+
+func writeWorktreeEntry(t *testing.T, site, name string) {
+	t.Helper()
+	entry := filepath.Join(site, ".git", "worktrees", name)
+	if err := os.MkdirAll(entry, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	checkout := t.TempDir()
+	if err := os.WriteFile(filepath.Join(entry, "gitdir"), []byte(filepath.Join(checkout, ".git")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(entry, "HEAD"), []byte("ref: refs/heads/"+name+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Removing a site's last worktree deletes .git/worktrees/, and the watch on it
+// goes with it. Git re-creates the dir for the next worktree, and every one
+// after that has to be seen too, not only the one that re-created it.
+func TestWatchWorktrees_keepsWatchingAfterWorktreesDirIsRecreated(t *testing.T) {
+	site := t.TempDir()
+	writeWorktreeEntry(t, site, "first")
+
+	added := make(chan string, 8)
+	changed := make(chan string, 8)
+	go func() {
+		_ = WatchWorktrees(
+			func() []string { return []string{site} },
+			func(_, name string) { added <- name },
+			func(_, name string) { changed <- name },
+			func(_, _ string) {},
+		)
+	}()
+
+	// A HEAD write only reaches onChanged once the watches are in place.
+	head := filepath.Join(site, ".git", "worktrees", "first", "HEAD")
+	ready := time.NewTicker(50 * time.Millisecond)
+	defer ready.Stop()
+	for waiting := true; waiting; {
+		select {
+		case <-changed:
+			waiting = false
+		case <-ready.C:
+			_ = os.WriteFile(head, []byte("ref: refs/heads/first\n"), 0o644)
+		case <-time.After(5 * time.Second):
+			t.Fatal("watcher never came up")
+		}
+	}
+
+	if err := os.RemoveAll(filepath.Join(site, ".git", "worktrees")); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"second", "third"} {
+		writeWorktreeEntry(t, site, name)
+		deadline := time.After(10 * time.Second)
+		for got := ""; got != name; {
+			select {
+			case got = <-added:
+			case <-deadline:
+				t.Fatalf("worktree %q was never reported", name)
+			}
+		}
+	}
+}
