@@ -82,6 +82,20 @@ button {
   }
 }
 
+/* The scrollbar keeps its room but only shows its thumb while the area is
+   hovered. The standard properties, unlike ::-webkit-scrollbar, repaint on an
+   ancestor's :hover, and they give the bar the same width in both states. */
+@utility scrollbar-autohide {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  &:hover {
+    scrollbar-color: #ccc transparent;
+  }
+  &:is(.dark *):hover {
+    scrollbar-color: #333 transparent;
+  }
+}
+
 @utility no-scrollbar {
   scrollbar-width: none;
   -ms-overflow-style: none;
