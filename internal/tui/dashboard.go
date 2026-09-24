@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/stats"
 	zone "github.com/lrstanley/bubblezone/v2"
 )
@@ -34,15 +35,27 @@ func runStatsPoller(ctx context.Context, p *tea.Program) {
 	defer ticker.Stop()
 	// First read happens immediately so the user doesn't see "no stats"
 	// for a full tick after entering the dashboard.
-	p.Send(statsMsg{snap: stats.Cached(stats.CacheTTL)})
+	p.Send(statsMsg{snap: streamingStats()})
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			p.Send(statsMsg{snap: stats.Cached(stats.CacheTTL)})
+			p.Send(statsMsg{snap: streamingStats()})
 		}
 	}
+}
+
+// streamingStats is the cached snapshot minus the containers of the sites
+// streaming mode hides, which the resource card would otherwise name.
+func streamingStats() stats.Snapshot {
+	snap := stats.Cached(stats.CacheTTL)
+	cfg, _ := config.LoadGlobal()
+	reg, err := config.LoadSites()
+	if err != nil {
+		return snap
+	}
+	return stats.WithoutSites(snap, cfg.StreamingHidden(reg))
 }
 
 // numDashCards is the number of cards in the dashboard grid; it bounds the

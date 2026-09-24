@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { sites, sitesLoaded } from '$stores/sites';
+  import { status } from '$stores/status';
   import { openLinkModal, openPresetModal } from '$stores/modals';
   import { openDocs } from '$stores/dashboard';
   import { accessMode } from '$stores/accessMode';
@@ -27,7 +28,8 @@
     }
   }
 
-  const visible = $derived($sitesLoaded && $sites.length === 0 && !dismissed);
+  // Streaming mode can hide every site, which is not a fresh install.
+  const visible = $derived($sitesLoaded && $sites.length === 0 && !$status.streaming_mode && !dismissed);
 </script>
 
 {#if visible}

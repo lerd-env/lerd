@@ -111,7 +111,7 @@ On macOS the choice decides whether folder permissions stick. The system asks be
 
 The choice is stored in `~/.config/lerd/config.yaml` under `node.manager` (`mise`, `fnm` or `nvm`) and, for nvm, `node.nvm_dir` (so `lerd-ui` and the watcher find nvm even without your shell rc). Switch later with `lerd node:manager mise|fnm|nvm` or from the dashboard's Node page, which shows a **mise / fnm / nvm** toggle (nvm is offered only when it is installed, since there is nothing to switch to otherwise). Switching to fnm downloads it on demand, and switching to mise installs one only when the host has none, then drops the fnm lerd had downloaded once the versions are across, since nothing runs it any more. Switching updates PATH shims, installs under the new manager every version the old one had so nothing a site pins goes missing, and re-syncs host workers so the new manager takes effect at once. `node:install` and `node:use` act on whichever manager is active; `node:uninstall` and `node:unmanage` only ever remove Node versions when lerd owns them and leave your nvm-installed versions alone.
 
-An existing install keeps the manager it already has. A config that names one is left alone, and one from before the setting existed is recognised by the fnm in lerd's bin dir, so an update never moves you off fnm on its own. Moving to mise is `lerd node:manager mise`, which leaves your fnm-installed versions where they are.
+An existing install keeps the manager it already has. A config that names one is left alone, and one from before the setting existed is recognised by the fnm in lerd's bin dir, so an update never moves you off fnm on its own. Moving to mise is `lerd node:manager mise`, which carries your installed majors across before dropping lerd's fnm.
 
 ---
 
@@ -146,12 +146,12 @@ With unmanaged Node, host workers (Vite and other `host: true` workers) run agai
 
 You can flip the choice at any time without re-running the whole installer:
 
-- `lerd node:manage` opts in (writes fnm shims when using fnm, or just records managed mode for nvm) and installs a default version.
+- `lerd node:manage` opts in (writes the PATH shims when using mise or fnm, or just records managed mode for nvm) and installs a default version.
 - `lerd node:unmanage` removes any node/npm/npx shims and, when lerd owns the manager (fnm), uninstalls the Node versions it installed, leaving a clean system so your own Node (or bun) is used directly. With nvm it only clears managed mode: your nvm versions stay put.
 
 Both also regenerate any host worker units (Vite and other `host: true` workers) so they switch between the managed Node, your system Node, and bun to match the new state. The dashboard and Settings exposes the same toggle: the Node page shows a **Let lerd manage Node** / **Stop managing** button.
 
-The question is asked once and then remembered in `~/.config/lerd/config.yaml` (`node.managed`, alongside `node.manager` for the fnm/nvm choice). After that, neither `lerd install` nor `lerd update` asks again or undoes your choice, you change it only with `lerd node:manage` / `lerd node:unmanage`. A config predating this adopts whatever lerd is currently doing (shims present means managed) as the remembered choice without prompting, so existing installs are never re-asked.
+The question is asked once and then remembered in `~/.config/lerd/config.yaml` (`node.managed`, alongside `node.manager` for the mise/fnm/nvm choice). After that, neither `lerd install` nor `lerd update` asks again or undoes your choice, you change it only with `lerd node:manage` / `lerd node:unmanage`. A config predating this adopts whatever lerd is currently doing (shims present means managed) as the remembered choice without prompting, so existing installs are never re-asked.
 
 ---
 

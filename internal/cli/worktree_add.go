@@ -67,6 +67,9 @@ func newWorktreeAddCmd() *cobra.Command {
 			if err := gitpkg.RunTTY("", gitArgs...); err != nil {
 				return fmt.Errorf("git worktree add: %w", err)
 			}
+			if err := gitpkg.EnsureNestedWorktreeExclude(site.Path); err != nil {
+				feedback.Warn("writing .git/info/exclude: %v", err)
+			}
 
 			worktreePath, branch, err := newestWorktree(cwd)
 			if err != nil {

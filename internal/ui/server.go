@@ -331,8 +331,8 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/settings/idle-suspend", withCORS(publishAfter(handleSettingsIdleSuspend, eventbus.KindSites)))
 	mux.HandleFunc("/api/settings/dns-upstream", withCORS(handleSettingsDNSUpstream))
 	mux.HandleFunc("/api/settings/theme", withCORS(handleSettingsTheme))
-	mux.HandleFunc("/api/settings/streaming", withCORS(publishAfter(handleSettingsStreaming, eventbus.KindStatus, eventbus.KindSites)))
-	mux.HandleFunc("/api/settings/streaming-enabled", withCORS(publishAfter(handleSettingsStreamingEnabled, eventbus.KindStatus, eventbus.KindSites)))
+	mux.HandleFunc("/api/settings/streaming", withCORS(publishAfter(handleSettingsStreaming, eventbus.KindStatus, eventbus.KindSites, eventbus.KindServices)))
+	mux.HandleFunc("/api/settings/streaming-enabled", withCORS(publishAfter(handleSettingsStreamingEnabled, eventbus.KindStatus, eventbus.KindSites, eventbus.KindServices)))
 	mux.HandleFunc("/api/settings/beta-updates", withCORS(handleSettingsBetaUpdates))
 	mux.HandleFunc("/api/themes", withCORS(handleThemes))
 	mux.HandleFunc("/api/themes/", withCORS(handleThemeItem))
@@ -1801,7 +1801,8 @@ func buildServicesList() []ServiceResponse {
 			services = append(services, frameworkWorkerServicesForSite(s, fw2, frameworkUnitStatus, gitpkg.DetectWorktrees)...)
 		}
 	}
-	return services
+	hidden, domains := streamingHiddenNow()
+	return hideStreamingServices(services, hidden, domains)
 }
 
 // frameworkUnitStatus is the production status lookup; tests swap this with a

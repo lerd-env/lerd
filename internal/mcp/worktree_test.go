@@ -415,6 +415,24 @@ func TestExecWorktreeAdd_derivesThePathForANewBranch(t *testing.T) {
 	}
 }
 
+// The checkout lands inside the parent, so without an exclude the parent's git
+// status lists it as untracked.
+func TestExecWorktreeAdd_keepsTheParentStatusClean(t *testing.T) {
+	repo := initRepoSite(t, "demo")
+	stubWorktreeWait(t, 0)
+
+	if result, rpcErr := execWorktreeAdd(map[string]any{"site": "demo", "branch": "feat-x"}); rpcErr != nil || result.(map[string]any)["isError"] == true {
+		t.Fatalf("add failed: %v %v", rpcErr, result)
+	}
+	out, err := exec.Command("git", "-C", repo, "status", "--porcelain").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(out)) != "" {
+		t.Errorf("parent status not clean:\n%s", out)
+	}
+}
+
 // branch names a branch that may not exist yet; asking for a worktree on it is
 // asking for the branch too.
 func TestExecWorktreeAdd_branchCreatesAMissingBranch(t *testing.T) {

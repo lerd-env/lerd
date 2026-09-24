@@ -2,9 +2,11 @@
   import DashboardCard from './DashboardCard.svelte';
   import StatusPill from '$components/StatusPill.svelte';
   import StreamingToggle from '$components/StreamingToggle.svelte';
+  import SitesEmptyState from '$components/SitesEmptyState.svelte';
   import Icon from '$components/Icon.svelte';
   import SiteTile from '$tabs/sites/SiteTile.svelte';
   import { sites, sitesLoaded, siteWorkerFailing } from '$stores/sites';
+  import { status } from '$stores/status';
   import { openLinkModal } from '$stores/modals';
   import { goToTab } from '$stores/route';
   import { accessMode } from '$stores/accessMode';
@@ -25,7 +27,8 @@
   {#snippet badge()}
     {#if $sitesLoaded}
       <span class="inline-flex items-center gap-1.5">
-        <StreamingToggle />
+        <!-- The empty state carries the toggle once streaming hides every site. -->
+        {#if total > 0 || !$status.streaming_mode}<StreamingToggle />{/if}
         <StatusPill
           tone={failing > 0 ? 'error' : running > 0 ? 'ok' : 'muted'}
           label={m.dashboard_sites_summary({ running, total })}
@@ -35,9 +38,7 @@
   {/snippet}
 
   {#if $sitesLoaded && total === 0}
-    <p class="text-sm text-gray-500 dark:text-gray-400">
-      {@html m.sites_emptyHint({ cmd: '<code class="bg-gray-100 dark:bg-white/5 px-1 rounded-sm font-mono">lerd park</code>' })}
-    </p>
+    <SitesEmptyState size="sm" />
   {:else}
     <div class="space-y-1.5">
       {#each sorted as site (site.domain)}
