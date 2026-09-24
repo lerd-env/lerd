@@ -22,13 +22,13 @@ describe('DashboardOverlay', () => {
     serviceIcons.set({});
   });
 
-  it('disables Back until the embedded iframe has somewhere to go back to', () => {
+  it('hides Back until the embedded iframe has somewhere to go back to', () => {
     openProfiler();
     render(DashboardOverlay);
 
     // Freshly opened: the SPX iframe has no internal history yet, so Back is a
-    // dead end. It must be disabled rather than silently tear down the overlay.
-    expect(screen.getByTitle('Back')).toBeDisabled();
+    // dead end, and a greyed out arrow in the header only reads as clutter.
+    expect(screen.queryByTitle('Back')).toBeNull();
   });
 
   it('shows the profiler toggle as off: muted, not pressed, no live dot', () => {
@@ -40,6 +40,20 @@ describe('DashboardOverlay', () => {
     expect(btn.getAttribute('aria-pressed')).toBe('false');
     expect(btn.className).not.toMatch(/emerald/);
     expect(container.querySelector('.animate-pulse')).toBeNull();
+  });
+
+  // On the rail-coloured strip an outline alone vanished and grey-500 text fell
+  // under AA, so the header buttons take the filled secondary tone pages use.
+  it('draws the profiler header buttons in the filled secondary tone', () => {
+    openProfiler();
+    render(DashboardOverlay);
+
+    for (const name of [/configuration/i, /clear data/i, /start profiling/i]) {
+      const btn = screen.getByRole('button', { name });
+      expect(btn.className).toContain('dark:bg-white/5');
+      expect(btn.className).toContain('text-gray-700');
+      expect(btn.className).not.toContain('text-gray-500');
+    }
   });
 
   it('shows the profiler toggle as on: emerald, pressed, live pulsing dot', () => {
@@ -79,6 +93,28 @@ describe('DashboardOverlay', () => {
 
   // The header names the service the frame belongs to, so it leads with the
   // mark the preset ships rather than the generic glyph for its category.
+  // The strip above the frame is painted like the rail, as on every other page,
+  // and the frame curves where the two meet.
+  it('paints the header as chrome and rounds the frame corner under it', () => {
+    dashboardOpen.set({ name: 'mailpit', label: 'Mailpit', dashboard: 'http://localhost:8025' });
+    const { container } = render(DashboardOverlay);
+
+    const iframe = container.querySelector('iframe')!;
+    const frame = iframe.parentElement!;
+    expect(frame.className).toContain('md:rounded-tl-xl');
+    expect(frame.previousElementSibling!.className).toContain('page-header');
+  });
+
+  // The address is one click away behind the new-tab button; printed in the
+  // header it was only lerd's proxy path.
+  it('leaves the address to the new-tab button rather than printing it', () => {
+    dashboardOpen.set({ name: 'pgadmin', label: 'pgAdmin', dashboard: '/_svc/pgadmin/' });
+    const { container } = render(DashboardOverlay);
+
+    expect(container.textContent).not.toContain('/_svc/pgadmin/');
+    expect(screen.getByTitle(/new tab/i).getAttribute('href')).toContain('/_svc/pgadmin/');
+  });
+
   it('heads the frame with the service mark, inked in the declared colour', () => {
     services.set([
       {

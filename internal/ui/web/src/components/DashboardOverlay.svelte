@@ -9,6 +9,7 @@
   } from '$stores/profiler';
   import Icon from './Icon.svelte';
   import StatusDot from './StatusDot.svelte';
+  import DetailButton from './DetailButton.svelte';
   import DocsViewer from './DocsViewer.svelte';
   import { docsLocation, docsSiteURL } from '$stores/docs';
   import {
@@ -63,9 +64,6 @@
         : ''
   );
 
-  const headerBtnClass =
-    'text-xs rounded-sm border border-gray-200 dark:border-lerd-border px-2 py-1 ' +
-    'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors';
 
   // Reset iframe-history tracking whenever a different dashboard opens.
   $effect(() => {
@@ -233,55 +231,42 @@
 {#if $dashboardOpen}
   {@const d = $dashboardOpen}
   {@const iframeSrc = joinDashboardPath(d.dashboard, d.extraPath)}
-  <div class="fixed top-0 right-0 left-0 bottom-16 md:left-14 md:bottom-0 z-30 flex flex-col bg-white dark:bg-lerd-bg">
-    <div class="flex items-center justify-between px-3 py-3 border-b border-gray-200 dark:border-lerd-border shrink-0">
+  <div class="fixed top-0 right-0 left-0 bottom-16 md:left-14 md:bottom-0 z-30 flex flex-col bg-white dark:bg-lerd-bg md:bg-lerd-chrome-light md:dark:bg-lerd-card">
+    <div class="flex items-center justify-between px-3 py-3 page-header md:border-b-0! shrink-0">
       <div class="flex items-center gap-3 min-w-0">
-        {#if isProfiler}
+        {#if isProfiler && canGoBack}
           <button
             onclick={goBack}
-            disabled={!canGoBack}
             title={m.common_back()}
             aria-label={m.common_back()}
-            class="text-gray-400 enabled:hover:text-gray-700 dark:enabled:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0"
+            class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors shrink-0"
           >
             <Icon name="back" />
           </button>
         {/if}
         <ServiceIcon name={d.name} icon={d.icon} bare compact />
         <span class="text-sm font-medium text-gray-900 dark:text-white truncate">{d.label || d.name}</span>
-        <a
-          href={externalHref}
-          target="_blank"
-          rel="noopener"
-          class="font-mono text-[10px] text-sky-600 dark:text-sky-400 hover:underline truncate"
-        >{externalHref}</a>
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if isProfiler}
           {#if !isReportView}
-            <button
+            <DetailButton
               onclick={toggleConfig}
               title={configHidden ? m.profiler_config_show() : m.profiler_config_hide()}
-              class={headerBtnClass}
             >
               {configHidden ? m.profiler_config_show() : m.profiler_config_hide()}
-            </button>
+            </DetailButton>
           {/if}
-          <button
-            onclick={clearProfilerReports}
-            disabled={clearing}
-            title={m.profiler_clear_title()}
-            class="{headerBtnClass} disabled:opacity-50"
-          >
+          <DetailButton onclick={clearProfilerReports} disabled={clearing} title={m.profiler_clear_title()}>
             {clearing ? m.profiler_clear_busy() : m.profiler_clear()}
-          </button>
+          </DetailButton>
           <button
             onclick={toggleProfiler}
             disabled={busy}
             aria-pressed={$profilerEnabled}
-            class="flex items-center gap-1.5 text-xs rounded-sm border px-2 py-1 transition-colors disabled:opacity-50 {$profilerEnabled
+            class="flex items-center gap-1.5 text-xs font-medium rounded-lg border px-3 py-1.5 transition-colors disabled:opacity-50 {$profilerEnabled
               ? 'border-emerald-500/40 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:border-emerald-500'
-              : 'border-gray-200 dark:border-lerd-border text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}"
+              : 'bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-lerd-border'}"
           >
             {#if $profilerEnabled}
               <StatusDot color="emerald" size="xs" pulse />
@@ -319,23 +304,26 @@
         </button>
       </div>
     </div>
-    {#if isDocs}
-      <DocsViewer />
-    {:else}
-      <!-- Keyed on the source so switching dashboards tears the frame down and
-           builds a new one. Re-pointing the old frame is a navigation, which
-           runs the embedded app's beforeunload handler; an admin UI that
-           registers one (pgAdmin) then blocks the swap behind a native confirm
-           the overlay has no way to answer. -->
-      {#key iframeSrc}
-        <iframe
-          bind:this={iframeEl}
-          onload={onIframeLoad}
-          src={iframeSrc}
-          class="flex-1 w-full bg-white border-0"
-          title={d.label || d.name}
-        ></iframe>
-      {/key}
-    {/if}
+    <!-- On desktop the header line moves onto the frame's top border so the corner can curve. -->
+    <div class="flex-1 min-h-0 flex flex-col overflow-hidden bg-white dark:bg-lerd-bg md:border-l md:border-t md:rounded-tl-xl border-lerd-chromeborder dark:border-lerd-border">
+      {#if isDocs}
+        <DocsViewer />
+      {:else}
+        <!-- Keyed on the source so switching dashboards tears the frame down and
+             builds a new one. Re-pointing the old frame is a navigation, which
+             runs the embedded app's beforeunload handler; an admin UI that
+             registers one (pgAdmin) then blocks the swap behind a native confirm
+             the overlay has no way to answer. -->
+        {#key iframeSrc}
+          <iframe
+            bind:this={iframeEl}
+            onload={onIframeLoad}
+            src={iframeSrc}
+            class="flex-1 w-full bg-white border-0"
+            title={d.label || d.name}
+          ></iframe>
+        {/key}
+      {/if}
+    </div>
   </div>
 {/if}
