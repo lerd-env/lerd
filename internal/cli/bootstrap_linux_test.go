@@ -16,10 +16,13 @@ import (
 func stubBootstrapSystem(t *testing.T) (*[][]string, *[]string) {
 	t.Helper()
 	origPath, origRunner, origSudoers, origOwns := unprivPortDropIn, bootstrapRunner, writeDNSSudoers, dns.HostOwnsResolver
+	origInitramfs := initramfsHasPortDropIn
 	t.Cleanup(func() {
 		unprivPortDropIn, bootstrapRunner, writeDNSSudoers = origPath, origRunner, origSudoers
 		dns.HostOwnsResolver = origOwns
+		initramfsHasPortDropIn = origInitramfs
 	})
+	initramfsHasPortDropIn = func() bool { return false }
 	unprivPortDropIn = filepath.Join(t.TempDir(), "99-lerd-ports.conf")
 	dns.HostOwnsResolver = func() bool { return false }
 
@@ -124,4 +127,39 @@ func TestRemovePortDropInSkipsWhenAbsent(t *testing.T) {
 	if len(*runs) != 0 {
 		t.Errorf("commands = %v, want none", *runs)
 	}
+}
+
+// dracut copies /etc/sysctl.d into the initramfs, which goes on applying the
+// drop-in at boot until it is rebuilt, so the user gets the rebuild command.
+func TestRemovePortDropInWarnsWhenInitramfsKeepsIt(t *testing.T) {
+	stubBootstrapSystem(t)
+	stubInitramfsHasPortDropIn(t, true)
+	if err := os.WriteFile(unprivPortDropIn, []byte(unprivPortSetting+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := captureStdout(t, removePortDropIn)
+
+	if !strings.Contains(out, "sudo dracut -f") {
+		t.Errorf("output = %q, want the dracut rebuild command", out)
+	}
+}
+
+func TestRemovePortDropInQuietWhenInitramfsIsClean(t *testing.T) {
+	stubBootstrapSystem(t)
+	stubInitramfsHasPortDropIn(t, false)
+	if err := os.WriteFile(unprivPortDropIn, []byte(unprivPortSetting+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := captureStdout(t, removePortDropIn)
+
+	if strings.Contains(out, "dracut") {
+		t.Errorf("output = %q, want no rebuild hint", out)
+	}
+}
+
+func stubInitramfsHasPortDropIn(t *testing.T, has bool) {
+	t.Helper()
+	initramfsHasPortDropIn = func() bool { return has }
 }

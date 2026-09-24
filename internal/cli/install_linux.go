@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/composer"
@@ -193,5 +194,21 @@ func removePortDropIn() {
 	feedback.Sudo("Removing the unprivileged port setting")
 	if err := bootstrapRunner("sudo", "rm", "-f", unprivPortDropIn); err != nil {
 		feedback.Warn("removing %s: %v", unprivPortDropIn, err)
+		return
 	}
+	if initramfsHasPortDropIn() {
+		feedback.Warn("the initramfs still applies the port setting at boot, rebuild it with: sudo dracut -f")
+	}
+}
+
+// initramfsHasPortDropIn reports whether the running kernel's initramfs still
+// carries the drop-in: dracut copies /etc/sysctl.d in and applies it at boot
+// until the image is rebuilt. Only dracut ships lsinitrd, the other generators
+// leave sysctl.d out.
+var initramfsHasPortDropIn = func() bool {
+	if _, err := exec.LookPath("lsinitrd"); err != nil {
+		return false
+	}
+	out, _ := exec.Command("sudo", "lsinitrd", "-f", strings.TrimPrefix(unprivPortDropIn, "/")).Output()
+	return strings.Contains(string(out), unprivPortSetting)
 }
