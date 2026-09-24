@@ -1,0 +1,4 @@
+[
+  {"id": 86, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {"device.api": "v4l2", "media.class": "Video/Source", "node.name": "v4l2_input.usb-cam"}}},
+  {"id": 162, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {"media.class": "Stream/Input/Video", "node.name": "brave"}}}
+]

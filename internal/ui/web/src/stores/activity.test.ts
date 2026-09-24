@@ -24,6 +24,14 @@ function unhealthy(unit: string, site: string, worker: string): UnhealthyWorker 
 }
 
 describe('diffSitesEvents', () => {
+  it('stays quiet about sites streaming mode hides or brings back', () => {
+    const hidden = site('secret.test', { hidden_while_streaming: true });
+    const shown = site('shop.test');
+    const before = new Map([hidden, shown].map((s) => [s.domain, s]));
+    expect(diffSitesEvents(before, [shown])).toEqual([]);
+    expect(diffSitesEvents(new Map([[shown.domain, shown]]), [shown, hidden])).toEqual([]);
+  });
+
   it('returns empty when prev is null (initial hydration is silent)', () => {
     expect(diffSitesEvents(null, [site('a.test')])).toEqual([]);
   });

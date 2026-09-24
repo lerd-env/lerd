@@ -1,0 +1,5 @@
+[
+  {"id": 68, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {"media.class": "Video/Source", "node.name": "xdpw_stream"}}},
+  {"id": 70, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {"media.class": "Stream/Input/Video", "node.name": "obs"}}},
+  {"id": 71, "type": "PipeWire:Interface:Link", "info": {"output-node-id": 68, "input-node-id": 70, "state": "active", "props": {}}}
+]

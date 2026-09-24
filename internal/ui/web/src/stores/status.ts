@@ -39,6 +39,8 @@ export interface StatusResponse {
   home: string;
   // Workspace names in display order, empty ones included.
   workspaces?: string[];
+  streaming_mode?: boolean;
+  private_workspaces?: string[];
   // Identifier of the lerd-ui process that answered. A change means the server
   // restarted, so the page is reloaded onto the assets it now serves.
   instance?: string;

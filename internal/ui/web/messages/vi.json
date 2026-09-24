@@ -1567,5 +1567,9 @@
   "gitStatus_modified": "{count} đã sửa",
   "gitStatus_staged": "{count} đã stage",
   "gitStatus_ahead": "{count} đi trước",
-  "gitStatus_behind": "{count} đi sau"
+  "gitStatus_behind": "{count} đi sau",
+  "nav_streamingOff": "Chế độ phát trực tiếp: ẩn site và workspace riêng tư",
+  "nav_streamingOn": "Chế độ phát trực tiếp đang bật, site và workspace riêng tư đã bị ẩn",
+  "sites_hideWhileStreaming": "Ẩn khi phát trực tiếp",
+  "sites_showWhileStreaming": "Hiện khi phát trực tiếp"
 }

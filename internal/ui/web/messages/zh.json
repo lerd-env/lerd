@@ -1567,5 +1567,9 @@
   "gitStatus_modified": "{count} 个已修改",
   "gitStatus_staged": "{count} 个已暂存",
   "gitStatus_ahead": "领先 {count}",
-  "gitStatus_behind": "落后 {count}"
+  "gitStatus_behind": "落后 {count}",
+  "nav_streamingOff": "直播模式：隐藏私有站点和工作区",
+  "nav_streamingOn": "直播模式已开启，私有站点和工作区已隐藏",
+  "sites_hideWhileStreaming": "直播时隐藏",
+  "sites_showWhileStreaming": "直播时显示"
 }

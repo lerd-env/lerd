@@ -19,6 +19,7 @@
     UNGROUPED,
     createWorkspace,
     renameWorkspace,
+    setWorkspacePrivate,
     saveWorkspaceLayout,
     toggleWorkspaceCollapse,
     workspaceCollapse,
@@ -385,6 +386,12 @@
     if (!res.ok) console.error('rename workspace failed:', res.error);
   }
 
+  async function toggleWorkspacePrivate(key: string) {
+    menuKey = null;
+    const res = await setWorkspacePrivate(key, !($status.private_workspaces ?? []).includes(key));
+    if (!res.ok) console.error('workspace privacy failed:', res.error);
+  }
+
   // Every member is ungrouped by a delete, paused ones included, so the count in
   // the confirmation is drawn from the whole list rather than the visible rows.
   function removeWorkspace(key: string) {
@@ -642,6 +649,15 @@
           onclick={() => startRename(key)}
           class="w-full px-3 py-1.5 text-left text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5"
           >{m.workspaces_rename()}</button
+        >
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => toggleWorkspacePrivate(key)}
+          class="w-full px-3 py-1.5 text-left text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5"
+          >{($status.private_workspaces ?? []).includes(key)
+            ? m.sites_showWhileStreaming()
+            : m.sites_hideWhileStreaming()}</button
         >
         <button
           type="button"

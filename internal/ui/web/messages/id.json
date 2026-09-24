@@ -1567,5 +1567,9 @@
   "gitStatus_modified": "{count} diubah",
   "gitStatus_staged": "{count} di-stage",
   "gitStatus_ahead": "{count} di depan",
-  "gitStatus_behind": "{count} di belakang"
+  "gitStatus_behind": "{count} di belakang",
+  "nav_streamingOff": "Mode streaming: sembunyikan situs dan workspace pribadi",
+  "nav_streamingOn": "Mode streaming aktif, situs dan workspace pribadi disembunyikan",
+  "sites_hideWhileStreaming": "Sembunyikan saat streaming",
+  "sites_showWhileStreaming": "Tampilkan saat streaming"
 }

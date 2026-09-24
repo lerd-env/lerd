@@ -1567,5 +1567,9 @@
   "gitStatus_modified": "{count} gewijzigd",
   "gitStatus_staged": "{count} gestaged",
   "gitStatus_ahead": "{count} voor",
-  "gitStatus_behind": "{count} achter"
+  "gitStatus_behind": "{count} achter",
+  "nav_streamingOff": "Streamingmodus: privésites en werkruimtes verbergen",
+  "nav_streamingOn": "Streamingmodus staat aan, privésites en werkruimtes zijn verborgen",
+  "sites_hideWhileStreaming": "Verbergen tijdens streamen",
+  "sites_showWhileStreaming": "Tonen tijdens streamen"
 }

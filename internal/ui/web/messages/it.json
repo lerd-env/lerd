@@ -1567,5 +1567,9 @@
   "gitStatus_modified": "{count} modificati",
   "gitStatus_staged": "{count} in stage",
   "gitStatus_ahead": "{count} avanti",
-  "gitStatus_behind": "{count} indietro"
+  "gitStatus_behind": "{count} indietro",
+  "nav_streamingOff": "Modalità streaming: nascondi siti e workspace privati",
+  "nav_streamingOn": "La modalità streaming è attiva, siti e workspace privati sono nascosti",
+  "sites_hideWhileStreaming": "Nascondi durante lo streaming",
+  "sites_showWhileStreaming": "Mostra durante lo streaming"
 }

@@ -1,0 +1,5 @@
+[
+  {"id": 151, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {"media.class": "Stream/Output/Video", "media.name": "kwin-screencast-org.kde.konsole", "node.name": "kwin_wayland"}}},
+  {"id": 173, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {"media.class": "Stream/Input/Video", "media.name": "plasma-screencast-node-173", "node.name": "plasmashell"}}},
+  {"id": 153, "type": "PipeWire:Interface:Link", "info": {"output-node-id": 151, "input-node-id": 173, "state": "active", "props": {}}}
+]

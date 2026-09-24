@@ -48,6 +48,8 @@ export interface Site {
   has_env?: boolean;
   paused?: boolean;
   pinned?: boolean;
+  private?: boolean;
+  hidden_while_streaming?: boolean;
   idle_suspended?: boolean;
   idle?: boolean;
   idle_suspended_workers?: string[];
@@ -636,6 +638,7 @@ export const pauseSite = (d: string) => postAction(site(d, 'pause'));
 export const resumeSite = (d: string) => postAction(site(d, 'unpause'));
 export const pinSite = (d: string) => postAction(site(d, 'pin'));
 export const unpinSite = (d: string) => postAction(site(d, 'unpin'));
+export const setSitePrivate = (d: string, priv: boolean) => postAction(site(d, priv ? 'private' : 'public'));
 export const unlinkSite = (d: string) => postAction(site(d, 'unlink'));
 export const openTerminal = (d: string, branch: string = '') =>
   postAction(site(d, 'terminal') + (branch ? `?branch=${encodeURIComponent(branch)}` : ''));

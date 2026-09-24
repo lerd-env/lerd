@@ -30,6 +30,9 @@ type Site struct {
 	// when the global idle policy is on, so a site you want always-warm never
 	// sleeps.
 	Pinned bool `yaml:"pinned,omitempty"`
+	// Private keeps the site off every dashboard while streaming mode is on,
+	// for a client project that must not show up on a shared screen.
+	Private bool `yaml:"private,omitempty"`
 	// AutoSnapshot overrides the global automatic-snapshot policy for this site:
 	// "on" always snapshots it, "off" never does, and the empty default follows
 	// the global config. See AutoSnapshotCovers.
@@ -246,6 +249,7 @@ type siteYAML struct {
 	Paused                bool                `yaml:"paused,omitempty"`
 	PausedWorkers         []string            `yaml:"paused_workers,omitempty"`
 	Pinned                bool                `yaml:"pinned,omitempty"`
+	Private               bool                `yaml:"private,omitempty"`
 	AutoSnapshot          string              `yaml:"auto_snapshot,omitempty"`
 	Framework             string              `yaml:"framework,omitempty"`
 	PublicDir             string              `yaml:"public_dir,omitempty"`
@@ -285,6 +289,7 @@ func (s Site) toYAML() siteYAML {
 		Paused:                s.Paused,
 		PausedWorkers:         s.PausedWorkers,
 		Pinned:                s.Pinned,
+		Private:               s.Private,
 		AutoSnapshot:          s.AutoSnapshot,
 		Framework:             s.Framework,
 		PublicDir:             s.PublicDir,
@@ -329,6 +334,7 @@ func (sy siteYAML) toSite() Site {
 		Paused:                sy.Paused,
 		PausedWorkers:         sy.PausedWorkers,
 		Pinned:                sy.Pinned,
+		Private:               sy.Private,
 		AutoSnapshot:          sy.AutoSnapshot,
 		Framework:             sy.Framework,
 		PublicDir:             sy.PublicDir,
@@ -744,6 +750,23 @@ func SetSitePinned(name string, pinned bool) error {
 	for i := range reg.Sites {
 		if reg.Sites[i].Name == name {
 			reg.Sites[i].Pinned = pinned
+			return SaveSites(reg)
+		}
+	}
+	return fmt.Errorf("site %q not found", name)
+}
+
+// SetSitePrivate atomically updates just a site's streaming-mode privacy flag.
+func SetSitePrivate(name string, private bool) error {
+	siteWriteMu.Lock()
+	defer siteWriteMu.Unlock()
+	reg, err := LoadSites()
+	if err != nil {
+		return err
+	}
+	for i := range reg.Sites {
+		if reg.Sites[i].Name == name {
+			reg.Sites[i].Private = private
 			return SaveSites(reg)
 		}
 	}

@@ -7,6 +7,7 @@
   import DashboardSection from '$components/DashboardSection.svelte';
   import FrameworkMark from '$components/FrameworkMark.svelte';
   import SiteTile from './SiteTile.svelte';
+  import StreamingToggle from '$components/StreamingToggle.svelte';
   import { sites, sitesLoaded, siteWorkerFailing, type Site } from '$stores/sites';
   import { accessMode } from '$stores/accessMode';
   import { status } from '$stores/status';
@@ -115,6 +116,7 @@
 </div>
 
 {#snippet summary()}
+  <StreamingToggle />
   <span class="inline-flex items-center gap-1.5">
     <StatusDot color={running > 0 ? 'green' : 'gray'} />
     {m.dashboard_sites_summary({ running, total })}

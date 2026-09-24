@@ -10,6 +10,7 @@
     resumeSite,
     pinSite,
     unpinSite,
+    setSitePrivate,
     restartSite,
     openSiteInBrowser,
     openTerminal,
@@ -68,6 +69,7 @@
   let tlsBusy = $state(false);
   let lanBusy = $state(false);
   let pinBusy = $state(false);
+  let privateBusy = $state(false);
   let xdebugBusy = $state(false);
 
   async function togglePin() {
@@ -76,6 +78,14 @@
       await (site.pinned ? unpinSite(site.domain) : pinSite(site.domain));
     } finally {
       pinBusy = false;
+    }
+  }
+  async function togglePrivate() {
+    privateBusy = true;
+    try {
+      await setSitePrivate(site.domain, !site.private);
+    } finally {
+      privateBusy = false;
     }
   }
   let overflowOpen = $state(false);
@@ -738,6 +748,21 @@
                   <path d="M16 9V4h1a1 1 0 0 0 0-2H7a1 1 0 0 0 0 2h1v5l-2 3v2h5v5l1 1 1-1v-5h5v-2l-2-3z" />
                 </svg>
                 {pinBusy ? '...' : site.pinned ? m.sites_unpin() : m.sites_pin()}
+              </button>
+            {/if}
+            {#if !activeWorktreeBranch && !site.group_subdomain}
+              <button
+                type="button"
+                role="menuitem"
+                onclick={() => {
+                  overflowOpen = false;
+                  togglePrivate();
+                }}
+                disabled={privateBusy}
+                class="w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50 text-gray-700 dark:text-gray-200"
+              >
+                <Icon name="eyeOff" class="w-3.5 h-3.5 shrink-0" />
+                {privateBusy ? '...' : site.private ? m.sites_showWhileStreaming() : m.sites_hideWhileStreaming()}
               </button>
             {/if}
             {#if !activeWorktreeBranch}
