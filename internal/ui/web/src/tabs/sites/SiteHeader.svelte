@@ -41,6 +41,7 @@
   import ShareLink from './ShareLink.svelte';
   import ShareMenu from './ShareMenu.svelte';
   import WorkspacePicker from './WorkspacePicker.svelte';
+  import WorkspaceMenuItems from './WorkspaceMenuItems.svelte';
   import GitStatusBadge from '$components/GitStatusBadge.svelte';
   import { loadGitStatus, checkoutFor, type GitCheckout } from '$lib/gitStatus';
   import { m } from '../../paraglide/messages.js';
@@ -496,7 +497,13 @@
           <!-- A worktree reports its own framework_label but never a framework
                name of its own, so the mark and the tone come from the site. -->
           {@const framework = site.framework}
-          <span class="hidden @md:inline-flex">
+          <span
+            class="@2xl:hidden inline-flex w-4 h-4"
+            role="img"
+            aria-label={activeFrameworkLabel}
+            use:tooltip={activeFrameworkLabel}><FrameworkMark name={framework} /></span
+          >
+          <span class="hidden @2xl:inline-flex">
             <Badge tone="framework" brand={framework ? $frameworkMarks[framework]?.color : undefined}>
               <FrameworkMark name={framework} tint={false} />
               {activeFrameworkLabel}
@@ -598,7 +605,7 @@
           onclick={() => openGroupModal(site)}
           aria-label={m.group_manage()}
           use:tooltip={site.group ? 'Manage group' : 'Group with another site'}
-          class="w-8 h-8 flex items-center justify-center rounded-md transition-colors hover:bg-gray-100 dark:hover:bg-white/5 {site.group
+          class="hidden @2xl:flex w-8 h-8 items-center justify-center rounded-md transition-colors hover:bg-gray-100 dark:hover:bg-white/5 {site.group
             ? 'text-lerd-red'
             : 'text-gray-500 dark:text-gray-400 hover:text-lerd-red'}"
         >
@@ -609,7 +616,7 @@
       <!-- A group secondary shows its main's workspace and moves with it, so it
            has nothing of its own to pick. -->
       {#if $accessMode.localControl && !activeWorktreeBranch && !site.group_subdomain}
-        <WorkspacePicker {site} />
+        <div class="hidden @2xl:block"><WorkspacePicker {site} /></div>
       {/if}
 
       {#if showLanToggle}
@@ -620,7 +627,7 @@
           {lanBusy}
           lanUrl={lanURL}
           onToggleLan={flipLAN}
-          visibleClass="hidden @md:flex"
+          visibleClass="hidden @2xl:flex"
         />
       {/if}
 
@@ -796,6 +803,28 @@
                 {m.sites_manageDomains()}
               </button>
             {/if}
+            {#if !activeWorktreeBranch && !site.host_proxy}
+              <button
+                type="button"
+                role="menuitem"
+                onclick={() => {
+                  overflowOpen = false;
+                  openGroupModal(site);
+                }}
+                class="@2xl:hidden w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 transition-colors hover:bg-gray-50 dark:hover:bg-white/5 {site.group
+                  ? 'text-lerd-red'
+                  : 'text-gray-700 dark:text-gray-200'}"
+              >
+                <Icon name="group" class="w-3.5 h-3.5 shrink-0" />
+                {site.group ? 'Manage group' : 'Group with another site'}
+              </button>
+            {/if}
+            {#if $accessMode.localControl && !activeWorktreeBranch && !site.group_subdomain}
+              <div class="@2xl:hidden border-y border-gray-100 dark:border-lerd-border my-1 py-1">
+                <p class="px-3 pt-0.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">{m.workspaces_pickerLabel()}</p>
+                <WorkspaceMenuItems {site} onDone={() => (overflowOpen = false)} />
+              </div>
+            {/if}
             {#if showLanToggle}
               <button
                 type="button"
@@ -805,7 +834,7 @@
                   flipLAN();
                 }}
                 disabled={lanBusy}
-                class="@md:hidden w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50 {lanOn ? 'text-teal-600 dark:text-teal-400' : 'text-gray-700 dark:text-gray-200'}"
+                class="@2xl:hidden w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50 {lanOn ? 'text-teal-600 dark:text-teal-400' : 'text-gray-700 dark:text-gray-200'}"
               >
                 <Icon name="wifi" class="w-3.5 h-3.5 shrink-0" />
                 {lanOn ? m.sites_controls_lanToggle_on() : m.sites_controls_lanToggle_off()}
@@ -821,7 +850,7 @@
                   else startTunnelAuto();
                 }}
                 disabled={tunnelBusy}
-                class="@md:hidden w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50 {tunnelURL ? 'text-violet-600 dark:text-violet-400' : 'text-gray-700 dark:text-gray-200'}"
+                class="@2xl:hidden w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50 {tunnelURL ? 'text-violet-600 dark:text-violet-400' : 'text-gray-700 dark:text-gray-200'}"
               >
                 <Icon name="globe" class="w-3.5 h-3.5 shrink-0" />
                 {tunnelBusy ? '...' : tunnelURL ? m.share_stopTunnel() : m.share_viaTunnel()}
