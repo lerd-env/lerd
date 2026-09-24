@@ -1560,5 +1560,6 @@
   "system_php_updating": "Aktualizowanie…",
   "system_php_updateFailed": "Aktualizacja nie powiodła się",
   "system_php_removeConfirmBodyNative": "Zatrzymuje pulę PHP-FPM tej wersji i usuwa jej natywne pliki binarne. Uruchom 'lerd use {version}', aby pobrać ją ponownie.",
-  "entities_open_in_dashboard": "Otwórz w panelu"
+  "entities_open_in_dashboard": "Otwórz w panelu",
+  "version_copyHint": "{value} · kliknij, aby skopiować"
 }

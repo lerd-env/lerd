@@ -1560,5 +1560,6 @@
   "system_php_updating": "Se actualizează…",
   "system_php_updateFailed": "Actualizarea a eșuat",
   "system_php_removeConfirmBodyNative": "Asta oprește pool-ul PHP-FPM pentru această versiune și îi șterge binarele native. Rulează 'lerd use {version}' pentru a o descărca din nou.",
-  "entities_open_in_dashboard": "Deschide în dashboard"
+  "entities_open_in_dashboard": "Deschide în dashboard",
+  "version_copyHint": "{value} · click pentru a copia"
 }

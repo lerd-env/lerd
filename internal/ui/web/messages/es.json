@@ -1560,5 +1560,6 @@
   "system_php_updating": "Actualizando…",
   "system_php_updateFailed": "Fallo al actualizar",
   "system_php_removeConfirmBodyNative": "Esto detiene el pool PHP-FPM de esta versión y elimina sus binarios nativos. Ejecuta 'lerd use {version}' para volver a descargarla.",
-  "entities_open_in_dashboard": "Abrir en el panel"
+  "entities_open_in_dashboard": "Abrir en el panel",
+  "version_copyHint": "{value} · clic para copiar"
 }

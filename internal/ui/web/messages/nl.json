@@ -1560,5 +1560,6 @@
   "system_php_updating": "Bezig met bijwerken…",
   "system_php_updateFailed": "Bijwerken mislukt",
   "system_php_removeConfirmBodyNative": "Dit stopt de PHP-FPM-pool van deze versie en verwijdert de native binaries. Voer 'lerd use {version}' uit om ze opnieuw op te halen.",
-  "entities_open_in_dashboard": "Openen in het dashboard"
+  "entities_open_in_dashboard": "Openen in het dashboard",
+  "version_copyHint": "{value} · klik om te kopiëren"
 }

@@ -1560,5 +1560,6 @@
   "system_php_updating": "更新中…",
   "system_php_updateFailed": "更新に失敗しました",
   "system_php_removeConfirmBodyNative": "このバージョンの PHP-FPM プールを停止し、ネイティブバイナリを削除します。再度取得するには 'lerd use {version}' を実行してください。",
-  "entities_open_in_dashboard": "ダッシュボードで開く"
+  "entities_open_in_dashboard": "ダッシュボードで開く",
+  "version_copyHint": "{value} · クリックでコピー"
 }
