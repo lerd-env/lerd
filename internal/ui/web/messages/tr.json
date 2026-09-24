@@ -1561,5 +1561,11 @@
   "system_php_updateFailed": "Güncelleme başarısız",
   "system_php_removeConfirmBodyNative": "Bu, bu sürümün PHP-FPM havuzunu durdurur ve yerel ikili dosyalarını siler. Yeniden indirmek için 'lerd use {version}' komutunu çalıştırın.",
   "entities_open_in_dashboard": "Panoda aç",
-  "version_copyHint": "{value} · kopyalamak için tıklayın"
+  "version_copyHint": "{value} · kopyalamak için tıklayın",
+  "gitStatus_conflicted": "{count} çakışmalı",
+  "gitStatus_untracked": "{count} izlenmeyen",
+  "gitStatus_modified": "{count} değiştirilmiş",
+  "gitStatus_staged": "{count} hazırlanmış",
+  "gitStatus_ahead": "{count} ileride",
+  "gitStatus_behind": "{count} geride"
 }

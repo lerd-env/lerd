@@ -1561,5 +1561,11 @@
   "system_php_updateFailed": "Falha na atualização",
   "system_php_removeConfirmBodyNative": "Isto para o pool PHP-FPM desta versão e elimina os binários nativos. Execute 'lerd use {version}' para a obter novamente.",
   "entities_open_in_dashboard": "Abrir no painel",
-  "version_copyHint": "{value} · clique para copiar"
+  "version_copyHint": "{value} · clique para copiar",
+  "gitStatus_conflicted": "{count} em conflito",
+  "gitStatus_untracked": "{count} não rastreados",
+  "gitStatus_modified": "{count} modificados",
+  "gitStatus_staged": "{count} preparados",
+  "gitStatus_ahead": "{count} à frente",
+  "gitStatus_behind": "{count} atrás"
 }

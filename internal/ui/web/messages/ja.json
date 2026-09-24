@@ -1561,5 +1561,11 @@
   "system_php_updateFailed": "更新に失敗しました",
   "system_php_removeConfirmBodyNative": "このバージョンの PHP-FPM プールを停止し、ネイティブバイナリを削除します。再度取得するには 'lerd use {version}' を実行してください。",
   "entities_open_in_dashboard": "ダッシュボードで開く",
-  "version_copyHint": "{value} · クリックでコピー"
+  "version_copyHint": "{value} · クリックでコピー",
+  "gitStatus_conflicted": "競合 {count}",
+  "gitStatus_untracked": "未追跡 {count}",
+  "gitStatus_modified": "変更 {count}",
+  "gitStatus_staged": "ステージ済み {count}",
+  "gitStatus_ahead": "{count} 件先行",
+  "gitStatus_behind": "{count} 件遅れ"
 }

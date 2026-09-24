@@ -1561,5 +1561,11 @@
   "system_php_updateFailed": "Cập nhật thất bại",
   "system_php_removeConfirmBodyNative": "Thao tác này dừng pool PHP-FPM của phiên bản này và xóa các tệp nhị phân gốc. Chạy 'lerd use {version}' để tải lại.",
   "entities_open_in_dashboard": "Mở trong bảng điều khiển",
-  "version_copyHint": "{value} · nhấn để sao chép"
+  "version_copyHint": "{value} · nhấn để sao chép",
+  "gitStatus_conflicted": "{count} xung đột",
+  "gitStatus_untracked": "{count} chưa theo dõi",
+  "gitStatus_modified": "{count} đã sửa",
+  "gitStatus_staged": "{count} đã stage",
+  "gitStatus_ahead": "{count} đi trước",
+  "gitStatus_behind": "{count} đi sau"
 }

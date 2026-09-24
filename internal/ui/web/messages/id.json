@@ -1561,5 +1561,11 @@
   "system_php_updateFailed": "Pembaruan gagal",
   "system_php_removeConfirmBodyNative": "Ini menghentikan pool PHP-FPM untuk versi ini dan menghapus biner nativenya. Jalankan 'lerd use {version}' untuk mengunduhnya lagi.",
   "entities_open_in_dashboard": "Buka di dasbor",
-  "version_copyHint": "{value} · klik untuk menyalin"
+  "version_copyHint": "{value} · klik untuk menyalin",
+  "gitStatus_conflicted": "{count} konflik",
+  "gitStatus_untracked": "{count} tidak dilacak",
+  "gitStatus_modified": "{count} diubah",
+  "gitStatus_staged": "{count} di-stage",
+  "gitStatus_ahead": "{count} di depan",
+  "gitStatus_behind": "{count} di belakang"
 }

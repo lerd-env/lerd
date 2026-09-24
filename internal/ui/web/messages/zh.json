@@ -1561,5 +1561,11 @@
   "system_php_updateFailed": "更新失败",
   "system_php_removeConfirmBodyNative": "这将停止此版本的 PHP-FPM 进程池并删除其原生二进制文件。运行 'lerd use {version}' 可重新获取。",
   "entities_open_in_dashboard": "在仪表板中打开",
-  "version_copyHint": "{value} · 点击复制"
+  "version_copyHint": "{value} · 点击复制",
+  "gitStatus_conflicted": "{count} 个冲突",
+  "gitStatus_untracked": "{count} 个未跟踪",
+  "gitStatus_modified": "{count} 个已修改",
+  "gitStatus_staged": "{count} 个已暂存",
+  "gitStatus_ahead": "领先 {count}",
+  "gitStatus_behind": "落后 {count}"
 }

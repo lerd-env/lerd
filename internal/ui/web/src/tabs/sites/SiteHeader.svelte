@@ -41,6 +41,8 @@
   import ShareLink from './ShareLink.svelte';
   import ShareMenu from './ShareMenu.svelte';
   import WorkspacePicker from './WorkspacePicker.svelte';
+  import GitStatusBadge from '$components/GitStatusBadge.svelte';
+  import { loadGitStatus, checkoutFor, type GitCheckout } from '$lib/gitStatus';
   import { m } from '../../paraglide/messages.js';
 
   import type { Snippet } from 'svelte';
@@ -111,21 +113,43 @@
   const activePathLabel = $derived(homeShorten(activePath, $status.home));
   const activeFrameworkLabel = $derived(activeWorktree?.framework_label || site.framework_label);
 
-  type TabEntry = { branch: string; domain: string; isMain: boolean };
+  type TabEntry = { branch: string; domain: string; path: string; isMain: boolean };
   const tabEntries = $derived.by<TabEntry[]>(() => {
     const main: TabEntry = {
       branch: site.branch || 'main',
       domain: site.domain,
+      path: site.path || '',
       isMain: true
     };
     const wts: TabEntry[] = (site.worktrees || []).map((wt) => ({
       branch: wt.branch || '',
       domain: wt.domain || '',
+      path: wt.path || '',
       isMain: false
     }));
     return [main, ...wts];
   });
   const showWorktreeTabs = $derived(Boolean(site.branch) && !site.paused);
+
+  // Git state changes outside lerd (an editor, a terminal), so it is polled while
+  // the site is open and re-read when the window regains focus.
+  let gitCheckouts = $state<GitCheckout[]>([]);
+  $effect(() => {
+    const domain = site.domain;
+    if (!showWorktreeTabs) return;
+    const refresh = () => {
+      if (document.hidden) return;
+      loadGitStatus(domain).then((c) => (gitCheckouts = c)).catch(() => (gitCheckouts = []));
+    };
+    refresh();
+    const timer = setInterval(refresh, 10_000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+      gitCheckouts = [];
+    };
+  });
   const urlEditable = $derived(!site.paused && !activeWorktreeBranch);
   const dnsEnabled = $derived($status.dns?.enabled !== false);
   const tlsToggleable = $derived(urlEditable && dnsEnabled);
@@ -265,6 +289,7 @@
       <div class="flex items-center gap-1 px-3 overflow-x-auto flex-1 min-w-0">
       {#each tabEntries as e (e.isMain ? '__main__' : e.branch)}
         {@const isActive = e.isMain ? activeWorktreeBranch === '' : e.branch === activeWorktreeBranch}
+        {@const git = checkoutFor(gitCheckouts, e)}
         <div
           class="group flex items-center rounded-lg transition-colors max-w-56 shrink-0 {isActive
             ? 'bg-white dark:bg-white/10 shadow-sm dark:shadow-none'
@@ -305,6 +330,7 @@
               </svg>
             {/if}
             <span class="font-mono truncate leading-none">{e.branch}</span>
+            {#if git}<GitStatusBadge status={git} />{/if}
           </button>
           {#if !e.isMain}
             <button

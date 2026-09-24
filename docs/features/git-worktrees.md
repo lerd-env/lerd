@@ -159,7 +159,7 @@ Paths that resolve outside the project root (`../secrets`, or an absolute path) 
 
 ## Web UI
 
-In the Sites tab, a git-backed site carries a tab strip above its address bar: the main checkout first, then one tab per worktree, each wearing a git-branch icon. Selecting a tab switches the whole detail view to that checkout, and the path on the tab row follows it.
+In the Sites tab, a git-backed site carries a tab strip above its address bar: the main checkout first, then one tab per worktree, each wearing a git-branch icon. Selecting a tab switches the whole detail view to that checkout, and the path on the tab row follows it. A tab whose checkout has uncommitted work shows a `*` after the branch name, the way a shell prompt does, with `⇡` or `⇣` when it is ahead of or behind its upstream and the `*` in red on a merge conflict; hovering spells it out ("3 untracked · 11 modified"), and a clean checkout shows nothing. The state is read while the site is open and refreshed every few seconds and whenever the window regains focus.
 
 ![Worktree tab strip on a site detail](/assets/screenshots/worktree-tabs.png)
 

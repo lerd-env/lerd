@@ -273,6 +273,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/node/set-manager", withCORS(publishAfter(handleNodeSetManager, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/sites/reorder", withCORS(publishAfter(handleSiteReorder, eventbus.KindSites)))
 	mux.HandleFunc("/api/sites/worktree-options", withCORS(handleSiteWorktreeOptions))
+	mux.HandleFunc("/api/sites/git-status", withCORS(handleSiteGitStatus))
 	mux.HandleFunc("/api/sites/worktree-add", withCORS(publishAfter(handleSiteWorktreeAdd, eventbus.KindSites)))
 	mux.HandleFunc("/api/browse", withCORS(handleBrowse))
 	mux.HandleFunc("/api/runs", withCORS(publishAfter(handleRuns, eventbus.KindSites)))
@@ -6491,6 +6492,52 @@ func handleSiteWorktreeOptions(w http.ResponseWriter, r *http.Request) {
 		"db_options":           worktreeDBOptions(site, branch),
 		"can_migrate":          canMigrate,
 	})
+}
+
+// handleSiteGitStatus answers GET /api/sites/git-status?domain=... with the
+// working-tree state of the main checkout and each worktree, main first.
+func handleSiteGitStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	site, err := config.FindSiteByDomain(r.URL.Query().Get("domain"))
+	if err != nil {
+		http.Error(w, "site not found", http.StatusNotFound)
+		return
+	}
+	type checkout struct {
+		Branch string `json:"branch"`
+		Path   string `json:"path"`
+		Main   bool   `json:"main"`
+		gitpkg.Status
+	}
+	checkouts := []checkout{}
+	var path, branch string
+	// git lists the main checkout first; comparing paths would trip on a symlinked site path.
+	seen := 0
+	flush := func() {
+		if path == "" {
+			return
+		}
+		// A worktree whose directory is gone can't be read; the others still can.
+		if st, err := gitpkg.ReadStatus(path); err == nil {
+			checkouts = append(checkouts, checkout{Branch: branch, Path: path, Main: seen == 0, Status: st})
+		}
+		seen++
+		path, branch = "", ""
+	}
+	for _, line := range strings.Split(runGitOutput(site.Path, "worktree", "list", "--porcelain"), "\n") {
+		switch {
+		case strings.HasPrefix(line, "worktree "):
+			flush()
+			path = strings.TrimPrefix(line, "worktree ")
+		case strings.HasPrefix(line, "branch refs/heads/"):
+			branch = strings.TrimPrefix(line, "branch refs/heads/")
+		}
+	}
+	flush()
+	writeJSON(w, map[string]any{"checkouts": checkouts})
 }
 
 // sseLineWriter buffers writes into newline-delimited SSE `data:` frames so
