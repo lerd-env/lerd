@@ -22,8 +22,9 @@
   const everythingHealthy = $derived($statusLoaded && $unhealthyWorkers.length === 0 && $coreDown.length === 0);
 </script>
 
-<div class="flex-1 min-h-0 flex flex-col overflow-y-auto">
-  <div class="shrink-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-1.5 page-header">
+<!-- On desktop the header line moves onto the content's top border so the frame corner can curve. -->
+<div class="flex-1 min-h-0 flex flex-col overflow-y-auto md:bg-lerd-chrome-light md:dark:bg-lerd-card">
+  <div class="shrink-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-1.5 page-header md:border-b-0!">
     <div class="min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
       <h1 class="sr-only">{m.dashboard_title()}</h1>
       {#if everythingHealthy}
@@ -54,7 +55,7 @@
     </button>
   </div>
 
-  <div class="p-3 space-y-3 md:border-l border-lerd-chromeborder dark:border-lerd-border flex-1 xl:min-h-0 xl:flex xl:flex-col">
+  <div class="p-3 space-y-3 bg-gray-50 dark:bg-lerd-bg md:border-l md:border-t md:rounded-tl-xl border-lerd-chromeborder dark:border-lerd-border flex-1 xl:min-h-0 xl:flex xl:flex-col">
     <OnboardingPanel />
     <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 xl:flex-1 xl:min-h-0 xl:auto-rows-fr">
       <SitesWidget />
