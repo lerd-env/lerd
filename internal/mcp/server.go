@@ -42,6 +42,10 @@ import (
 
 const protocolVersion = "2024-11-05"
 
+// serverInstructions is sent on initialize because clients load tool schemas
+// lazily; without it an assistant sees bare tool names and falls back to raw git.
+const serverInstructions = "This project runs on lerd. Prefer lerd's tools over the raw commands they wrap: create and remove git worktrees with the `worktree` tool, never `git worktree add` or `git worktree remove`, because add also installs dependencies, builds assets, issues the branch domain and cert and sets up the database. For a new branch off another ref pass branch plus base, never both in git_args. Before add, always compare the new branch's migrations with the parent checkout's (the branch the site's own folder has checked out, whose database `share` reuses and `clone-main` copies), never assume: extra migrations on the new branch mean `clone-main` and then run them; migrations only the parent has mean the branch is behind, so suggest merging or use `empty`, which add migrates; the same set means `share`. Run console commands and composer through `exec`, and manage services and workers through `service` and `worker`. Call `site` with action list first to find the site."
+
 // knownServices returns the default-preset names. Wrapper so the existing
 // MCP call sites (`for _, s := range knownServices`) keep compiling.
 func knownServices() []string { return config.DefaultPresetNames() }
@@ -194,6 +198,7 @@ func dispatch(req *rpcRequest) (any, *rpcError) {
 			"protocolVersion": protocolVersion,
 			"capabilities":    map[string]any{"tools": map[string]any{}},
 			"serverInfo":      map[string]any{"name": "lerd", "version": version.Version},
+			"instructions":    serverInstructions,
 		}, nil
 	case "tools/list":
 		return map[string]any{"tools": toolList()}, nil

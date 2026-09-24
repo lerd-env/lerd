@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -114,12 +115,14 @@ func initRepoSite(t *testing.T, name string) string {
 }
 
 // stubWorktreeWait swaps the wait seam so tests need neither a lerd binary on
-// PATH nor a running watcher, and records the path it was asked about. The
+// PATH nor a running watcher, and records the path it was asked about. Setup is
+// stubbed too, since the real one shells out to the running binary. The
 // watcher is reported up so the wait is reached whatever the host's systemd
 // state, which the not-running case below overrides for itself.
 func stubWorktreeWait(t *testing.T, code int) *string {
 	t.Helper()
 	stubWatcherRunning(t, true)
+	stubWorktreeSetup(t, nil)
 	var gotPath string
 	orig := worktreeWaitFn
 	t.Cleanup(func() { worktreeWaitFn = orig })
@@ -291,4 +294,213 @@ func TestExecWorktreeAdd_doesNotWaitWhenTheWatcherIsDown(t *testing.T) {
 	if !strings.Contains(parsed.Note, "lerd-watcher") {
 		t.Errorf("note %q must name the watcher so the caller can fix it", parsed.Note)
 	}
+}
+
+type worktreeSetupCall struct{ path, build, db string }
+
+func stubWorktreeSetup(t *testing.T, err error) *[]worktreeSetupCall {
+	t.Helper()
+	var calls []worktreeSetupCall
+	orig := worktreeSetupFn
+	t.Cleanup(func() { worktreeSetupFn = orig })
+	worktreeSetupFn = func(path, build, db string) (string, error) {
+		calls = append(calls, worktreeSetupCall{path, build, db})
+		return "", err
+	}
+	return &calls
+}
+
+// Deps alone leave a tree that fails its first request: no asset build and no
+// database wiring. add finishes the setup the way the dashboard's add does.
+func TestExecWorktreeAdd_finishesSetupOnceProvisioned(t *testing.T) {
+	repo := initRepoSite(t, "demo")
+	stubWorktreeWait(t, 0)
+	calls := stubWorktreeSetup(t, nil)
+
+	result, rpcErr := execWorktreeAdd(map[string]any{
+		"site":     "demo",
+		"git_args": []any{filepath.Join(repo, "feature"), "-b", "feature"},
+	})
+	if rpcErr != nil {
+		t.Fatal("unexpected rpc error:", rpcErr.Message)
+	}
+	var parsed struct {
+		Ready bool `json:"ready"`
+	}
+	decodeContent(t, result, &parsed)
+	if len(*calls) != 1 {
+		t.Fatalf("setup ran %d times, want once", len(*calls))
+	}
+	got := (*calls)[0]
+	if filepath.Base(got.path) != "feature" || got.build != "auto" || got.db != "" {
+		t.Errorf("setup called with %+v, want the new worktree, build auto, no db request", got)
+	}
+	if !parsed.Ready {
+		t.Error("a finished setup must report ready")
+	}
+}
+
+func TestExecWorktreeAdd_passesBuildAndDBChoices(t *testing.T) {
+	repo := initRepoSite(t, "demo")
+	stubWorktreeWait(t, 0)
+	calls := stubWorktreeSetup(t, nil)
+
+	if _, rpcErr := execWorktreeAdd(map[string]any{
+		"site":     "demo",
+		"git_args": []any{filepath.Join(repo, "feature"), "-b", "feature"},
+		"build":    "skip",
+		"db":       "clone-main",
+	}); rpcErr != nil {
+		t.Fatal("unexpected rpc error:", rpcErr.Message)
+	}
+	if len(*calls) != 1 || (*calls)[0].build != "skip" || (*calls)[0].db != "clone-main" {
+		t.Errorf("setup calls %+v, want build skip and db clone-main forwarded", *calls)
+	}
+}
+
+// Building into a tree still being installed is the race wait exists to stop.
+func TestExecWorktreeAdd_skipsSetupUntilProvisioned(t *testing.T) {
+	repo := initRepoSite(t, "demo")
+	stubWorktreeWait(t, 1)
+	calls := stubWorktreeSetup(t, nil)
+
+	if _, rpcErr := execWorktreeAdd(map[string]any{
+		"site":     "demo",
+		"git_args": []any{filepath.Join(repo, "feature"), "-b", "feature"},
+	}); rpcErr != nil {
+		t.Fatal("unexpected rpc error:", rpcErr.Message)
+	}
+	if len(*calls) != 0 {
+		t.Errorf("setup ran on an unprovisioned tree: %+v", *calls)
+	}
+}
+
+func TestExecWorktreeAdd_reportsAFailedSetup(t *testing.T) {
+	repo := initRepoSite(t, "demo")
+	stubWorktreeWait(t, 0)
+	stubWorktreeSetup(t, errors.New("exit status 1"))
+
+	result, rpcErr := execWorktreeAdd(map[string]any{
+		"site":     "demo",
+		"git_args": []any{filepath.Join(repo, "feature"), "-b", "feature"},
+	})
+	if rpcErr != nil {
+		t.Fatal("unexpected rpc error:", rpcErr.Message)
+	}
+	var parsed struct {
+		OK    bool   `json:"ok"`
+		Ready bool   `json:"ready"`
+		Note  string `json:"note"`
+	}
+	decodeContent(t, result, &parsed)
+	if !parsed.OK || parsed.Ready || parsed.Note == "" {
+		t.Errorf("ok=%v ready=%v note=%q, want ok, not ready, and a note", parsed.OK, parsed.Ready, parsed.Note)
+	}
+}
+
+// git refuses `worktree add -b <branch>` without a path, so add fills in the
+// same checkout path the CLI and the dashboard use.
+func TestExecWorktreeAdd_derivesThePathForANewBranch(t *testing.T) {
+	repo := initRepoSite(t, "demo")
+	gotPath := stubWorktreeWait(t, 0)
+
+	if result, rpcErr := execWorktreeAdd(map[string]any{
+		"site":     "demo",
+		"git_args": []any{"-b", "feat-x"},
+	}); rpcErr != nil || result.(map[string]any)["isError"] == true {
+		t.Fatalf("add failed: %v %v", rpcErr, result)
+	}
+	if want := filepath.Join(repo, filepath.Base(repo)+"-feat-x"); !samePath(t, *gotPath, want) {
+		t.Errorf("worktree at %q, want %q", *gotPath, want)
+	}
+}
+
+// branch names a branch that may not exist yet; asking for a worktree on it is
+// asking for the branch too.
+func TestExecWorktreeAdd_branchCreatesAMissingBranch(t *testing.T) {
+	repo := initRepoSite(t, "demo")
+	gotPath := stubWorktreeWait(t, 0)
+
+	if result, rpcErr := execWorktreeAdd(map[string]any{
+		"site":   "demo",
+		"branch": "feat-y",
+	}); rpcErr != nil || result.(map[string]any)["isError"] == true {
+		t.Fatalf("add failed: %v %v", rpcErr, result)
+	}
+	if want := filepath.Join(repo, filepath.Base(repo)+"-feat-y"); !samePath(t, *gotPath, want) {
+		t.Errorf("worktree at %q, want %q", *gotPath, want)
+	}
+}
+
+func gitOut(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).Output()
+	if err != nil {
+		t.Fatalf("git %v: %v", args, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// Passing a start point as git_args beside branch used to drop the branch and
+// leave a detached checkout named after the start point.
+func TestExecWorktreeAdd_baseStartsTheNewBranchFromIt(t *testing.T) {
+	repo := initRepoSite(t, "demo")
+	gitRun(t, repo, "branch", "release")
+	gitRun(t, repo, "checkout", "-q", "release")
+	gitRun(t, repo, "commit", "-q", "--allow-empty", "-m", "ahead")
+	gitRun(t, repo, "checkout", "-q", "-")
+	stubWorktreeWait(t, 0)
+
+	if result, rpcErr := execWorktreeAdd(map[string]any{
+		"site":   "demo",
+		"branch": "explore",
+		"base":   "release",
+	}); rpcErr != nil || result.(map[string]any)["isError"] == true {
+		t.Fatalf("add failed: %v %v", rpcErr, result)
+	}
+	wt := filepath.Join(repo, filepath.Base(repo)+"-explore")
+	if got := gitOut(t, wt, "rev-parse", "--abbrev-ref", "HEAD"); got != "explore" {
+		t.Errorf("worktree is on %q, want the new branch explore", got)
+	}
+	if gitOut(t, wt, "rev-parse", "HEAD") != gitOut(t, repo, "rev-parse", "release") {
+		t.Error("explore must start from base")
+	}
+}
+
+func TestExecWorktreeAdd_refusesBranchWithGitArgs(t *testing.T) {
+	initRepoSite(t, "demo")
+	stubWorktreeWait(t, 0)
+
+	result, _ := execWorktreeAdd(map[string]any{
+		"site":     "demo",
+		"branch":   "explore",
+		"git_args": []any{"-b", "other"},
+	})
+	if result.(map[string]any)["isError"] != true {
+		t.Error("branch beside git_args must be refused, not silently dropped")
+	}
+}
+
+// list names a detached checkout detached-<sha>, which is no path git knows.
+func TestExecWorktreeRemove_removesADetachedWorktree(t *testing.T) {
+	repo := initRepoSite(t, "demo")
+	wt := filepath.Join(repo, "demo-detached")
+	gitRun(t, repo, "worktree", "add", "-q", "--detach", wt)
+	branch := "detached-" + gitOut(t, repo, "rev-parse", "--short=7", "HEAD")
+
+	if result, rpcErr := execWorktreeRemove(map[string]any{"site": "demo", "branch": branch}); rpcErr != nil || result.(map[string]any)["isError"] == true {
+		t.Fatalf("remove failed: %v %v", rpcErr, result)
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Error("the detached worktree is still on disk")
+	}
+}
+
+// samePath compares two paths after resolving symlinks, since git reports the
+// real path and macOS temp dirs sit behind the /var -> /private/var link.
+func samePath(t *testing.T, a, b string) bool {
+	t.Helper()
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	return errA == nil && errB == nil && ra == rb
 }

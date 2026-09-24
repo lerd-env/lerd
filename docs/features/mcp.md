@@ -157,6 +157,8 @@ Either form leaves stdout to the server: anything lerd needs to say while starti
 
 The MCP surface is **twelve grouped tools**, each driven by an `action` argument. Always pass `action`; start by calling `site` with `action: "list"` to discover sites.
 
+The server also sends short instructions when a client connects, telling the assistant to use these tools rather than the raw commands they wrap. Clients such as Claude Code load tool schemas only when needed, so without those instructions an assistant would see just a tool named `worktree` and run `git worktree add` itself, skipping the dependency install, branch domain and database isolation that `add` handles.
+
 | Tool | Actions |
 |---|---|
 | `site` | `list` (discover sites, call first), `link`, `unlink`, `domain_add`, `domain_remove`, `group_assign`, `group_unassign`, `group_label`, `group_db`, `group_list`, `tls_enable`, `tls_disable`, `tls_renew`, `php`, `node`, `pause`, `unpause`, `restart`, `rebuild`, `runtime`, `nginx_read`, `nginx_write`, `nginx_reset`, `park`, `unpark` |
@@ -177,6 +179,8 @@ The injected context files document each action's arguments and the key conventi
 ### Creating a worktree from an assistant
 
 `worktree add` blocks until the watcher's setup pipeline has finished and reports `provisioned: true`, because the pipeline starts the moment git writes the worktree entry, and an action that returned earlier would hand back a tree being written underneath the assistant. Two installers in one tree is how `vendor/` ends up with packages extracted but no `autoload.php`, which then presents as a Composer autoload bug rather than a race.
+
+Once dependencies are in, `add` finishes the worktree the way the dashboard's Add worktree form does: it builds the frontend assets (or starts the asset worker that replaces the build), wires the database, and runs any setup commands the framework definition declares, then reports `ready: true`. `build` (`auto`, `skip`, `worker:<name>`, `script:<name>`) and `db` (`share`, `empty`, `clone-main`, `clone-<branch>`) override the defaults, which are the automatic build pick and the parent's database; a framework that requires an isolated database gets one either way. The server's instructions tell the assistant to always choose `db` by comparing the new branch's migrations with the parent checkout's, meaning whichever branch the site's own folder has checked out, since that is the database sharing reuses and cloning copies, not necessarily git's `main`. Migrations only the new branch has call for a clone with those migrations run on it, migrations only the parent has mean the branch is behind (merge, or start from an empty database and migrate), and an identical set can share the parent's database. An `empty` database is migrated as part of `add`, using the migrate command the framework definition names. To start a new branch from another ref, pass `branch` with `base` (for example `base: origin/main`); `git_args` is for anything else and cannot be combined with `branch`.
 
 `wait` is the same check on its own, for a worktree created with plain git or after `add` with `wait=false`. Both accept `timeout_seconds` (default 300) and report `provisioned: false` with a note rather than an error when setup is still running, since an unfinished install is a "not yet", not a failure.
 

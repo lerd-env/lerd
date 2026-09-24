@@ -635,3 +635,9 @@ func TestLerdReference_underSizeCeiling(t *testing.T) {
 		t.Errorf("lerd-reference.md is %d bytes, ceiling is %d — trim before raising", got, ceiling)
 	}
 }
+
+func TestSkillDescription_mentionsWorktrees(t *testing.T) {
+	if !strings.Contains(skillDescription, "worktree") {
+		t.Error("skill description should name worktrees so worktree requests load the skill")
+	}
+}

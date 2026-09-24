@@ -174,6 +174,8 @@ If a step fails, you are prompted to continue or abort:
 | `--list-steps` | Print the steps this directory would run as JSON and exit, configuring nothing |
 | `--step "<label>"` | Run only the named step, repeatable, skipping the configure phase |
 
+Run without a terminal and with none of these flags, `lerd setup` asks nothing: the configure phase takes the same auto-detected path `--all` does, and the steps that are selected by default run, so a script gets the same result as pressing Enter at the selector.
+
 `--list-steps` and `--step` are how a caller with no terminal works through the
 same list the selector shows: the dashboard's site wizard enumerates the steps
 for a project, shows them as checkboxes, and runs the ticked ones one at a time.

@@ -21,19 +21,22 @@ import (
 func worktreeTool() mcpTool {
 	return mcpTool{
 		Name:        "worktree",
-		Description: "Manage git worktrees. list / add / remove / wait / db_isolate (empty|main|<branch>) / db_share. Watcher auto-installs deps on add; add waits for that and reports provisioned, and wait does the same for a worktree made with plain git. Never judge readiness from tree contents, they read as finished mid-install. add also presents a unified asset-worker / npm-build prompt (replaces_build+per_worktree workers alongside npm scripts; picks start with persist=false). Worktrees on secured sites get *.branch.domain.test wildcard cert SANs and nginx server_name automatically. .lerd.yaml env_overrides ({{domain}}/{{scheme}}/{{site}} placeholders) layers per-worktree env vars on top of the APP_URL rewrite. Workers with per_worktree:true run under lerd-<wname>-<site>-<wt> units. Remove keeps isolated DB unless keep_db=false. SQLite: add copies main's db file.",
+		Description: "Manage git worktrees; use this, not git worktree add. add waits for the watcher's dep install, then runs the asset build and database setup (build/db params) and reports provisioned and ready; wait is that install check alone for a plain-git worktree. Never judge readiness from tree contents. Secured sites get per-worktree wildcard certs. .lerd.yaml env_overrides ({{domain}}/{{scheme}}/{{site}}) layers per-worktree env vars on the APP_URL rewrite. Workers with per_worktree:true run as lerd-<wname>-<site>-<wt>. Remove keeps isolated DB unless keep_db=false. SQLite: add copies main's db file.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
 				"action":          {Type: "string", Enum: []string{"list", "add", "remove", "wait", "db_isolate", "db_share"}},
 				"site":            {Type: "string", Description: "Defaults to cwd's site."},
 				"branch":          {Type: "string"},
+				"base":            {Type: "string", Description: "add: new branch start point."},
 				"git_args":        {Type: "array", Items: stringItems, Description: "Forwarded to git worktree."},
 				"force":           {Type: "boolean", Description: "remove: --force."},
 				"keep_db":         {Type: "boolean", Description: "remove: preserve DB (default true)."},
 				"source":          {Type: "string", Description: "db_isolate seed."},
 				"wait":            {Type: "boolean", Description: "add: wait for setup (default true)."},
 				"timeout_seconds": {Type: "integer", Description: "add/wait: seconds, default 300."},
+				"build":           {Type: "string", Description: "add: auto|skip|worker:<n>|script:<n>."},
+				"db":              {Type: "string", Description: "add: share|empty|clone-main|clone-<branch>."},
 			},
 			Required: []string{"action"},
 		},
@@ -140,19 +143,32 @@ func execWorktreeAdd(args map[string]any) (any, *rpcError) {
 	if errResp != nil {
 		return errResp, nil
 	}
-	gitArgs := []string{"worktree", "add"}
+	var addArgs []string
 	extra, _ := args["git_args"].([]any)
+	branch, base := strArg(args, "branch"), strArg(args, "base")
+	if len(extra) > 0 && (branch != "" || base != "") {
+		return toolErr("pass branch (and optionally base) or git_args, not both"), nil
+	}
 	if len(extra) == 0 {
-		branch := strArg(args, "branch")
-		if branch == "" {
+		switch {
+		case branch == "":
 			return toolErr("branch or git_args required"), nil
+		case !gitpkg.BranchExists(site.Path, branch):
+			addArgs = []string{"-b", branch}
+			if base != "" {
+				addArgs = append(addArgs, base)
+			}
+		case base != "":
+			return toolErr(fmt.Sprintf("branch %q already exists, so base does not apply; drop base to check it out", branch)), nil
+		default:
+			addArgs = []string{branch}
 		}
-		gitArgs = append(gitArgs, branch)
 	} else {
 		for _, v := range extra {
-			gitArgs = append(gitArgs, fmt.Sprint(v))
+			addArgs = append(addArgs, fmt.Sprint(v))
 		}
 	}
+	gitArgs := append([]string{"worktree", "add"}, gitpkg.DeriveWorktreeAddArgs(site.Path, addArgs)...)
 	before := worktreePaths(site)
 	out, err := runIn(site.Path, "git", gitArgs...)
 	if err != nil {
@@ -180,6 +196,19 @@ func execWorktreeAdd(args map[string]any) (any, *rpcError) {
 				if waitOut != "" {
 					resp["wait_output"] = waitOut
 				}
+				break
+			}
+			build := strArg(args, "build")
+			if build == "" {
+				build = "auto"
+			}
+			setupOut, err := worktreeSetupFn(path, build, strArg(args, "db"))
+			resp["ready"] = err == nil
+			if setupOut != "" {
+				resp["setup_output"] = setupOut
+			}
+			if err != nil {
+				resp["note"] = "dependencies are installed but setup failed: " + err.Error()
 			}
 		}
 	}
@@ -247,11 +276,16 @@ func execWorktreeRemove(args map[string]any) (any, *rpcError) {
 		}
 	}
 
+	// git knows worktrees by path, and a detached one's name here is synthetic.
+	wtPath := worktreePathFor(site, sanitized)
+	if wtPath == "" {
+		return toolErr(fmt.Sprintf("no worktree for branch %q on site %q", branch, site.Name)), nil
+	}
 	gitArgs := []string{"worktree", "remove"}
 	if boolArg(args, "force") {
 		gitArgs = append(gitArgs, "--force")
 	}
-	gitArgs = append(gitArgs, branch)
+	gitArgs = append(gitArgs, wtPath)
 	out, err := runIn(site.Path, "git", gitArgs...)
 	if err != nil {
 		return toolErr("git " + strings.Join(gitArgs, " ") + ": " + out), nil
@@ -334,6 +368,16 @@ func runIn(dir, name string, args ...string) (string, error) {
 // worktreeWaitFn is the seam the wait goes through, so tests need neither a
 // lerd binary on PATH nor a running watcher.
 var worktreeWaitFn = shellWorktreeWait
+
+// worktreeSetupFn finishes an installed worktree: asset build, database and the
+// framework's setup commands. A seam so tests don't shell out to the binary.
+var worktreeSetupFn = func(worktreePath, build, db string) (string, error) {
+	args := []string{"worktree", "setup", "--build", build}
+	if db != "" {
+		args = append(args, "--db", db)
+	}
+	return runIn(worktreePath, lerdSelf(), args...)
+}
 
 // watcherRunningFn reports whether the watcher is up. A seam so tests don't
 // depend on the caller's systemd state.

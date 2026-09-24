@@ -114,26 +114,6 @@ func ensureNestedWorktreeExclude(sitePath string) error {
 	return err
 }
 
-// WorktreeCheckoutPath returns the directory a new worktree for branch should
-// be checked out into: a child of the parent site, "<sitePath>/<base>-<slug>"
-// where <base> is filepath.Base(sitePath). Bumps a numeric suffix if the
-// default path already exists. RunWorktreeAdd also writes a `/<base>-*/`
-// pattern into .git/info/exclude so git status doesn't show siblings.
-// Caveat: non-git tools (composer, IDEs, find/rsync/tar) walking the
-// parent tree DO descend into the worktree — gitignore doesn't hide it
-// from them. Most callers don't care; flag if you do.
-func WorktreeCheckoutPath(sitePath, branch string) string {
-	parentBase := filepath.Base(sitePath)
-	base := filepath.Join(sitePath, parentBase+"-"+gitpkg.SanitizeBranch(branch))
-	candidate := base
-	for i := 2; ; i++ {
-		if _, err := os.Stat(candidate); os.IsNotExist(err) {
-			return candidate
-		}
-		candidate = fmt.Sprintf("%s-%d", base, i)
-	}
-}
-
 // resolveBuildChoice maps a UI build request ("auto"|"skip"|"worker:<n>"|
 // "script:<n>") to a concrete (kind, value): kind is "worker", "script" or
 // "skip". eligible = workers able to replace the build at the target path;
@@ -233,7 +213,7 @@ func RunWorktreeAdd(site *config.Site, req WorktreeAddRequest, log io.Writer) (s
 		branchInput = req.ExistingBranch
 	}
 	branch := gitpkg.SanitizeBranch(branchInput)
-	checkoutPath := WorktreeCheckoutPath(site.Path, branchInput)
+	checkoutPath := gitpkg.WorktreeCheckoutPath(site.Path, branchInput)
 
 	release, err := gitpkg.LockInstall(checkoutPath, 30*time.Second)
 	if err != nil {

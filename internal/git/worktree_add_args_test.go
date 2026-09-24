@@ -1,6 +1,7 @@
-package cli
+package git
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -13,7 +14,7 @@ func TestDeriveWorktreeAddArgs_fillsInTheDocumentedNewBranchForm(t *testing.T) {
 	site := t.TempDir()
 	want := WorktreeCheckoutPath(site, "feat-x")
 
-	got := deriveWorktreeAddArgs(site, []string{"-b", "feat-x"})
+	got := DeriveWorktreeAddArgs(site, []string{"-b", "feat-x"})
 
 	if !reflect.DeepEqual(got, []string{"-b", "feat-x", want}) {
 		t.Errorf("args = %v, want -b feat-x %s", got, want)
@@ -26,7 +27,7 @@ func TestDeriveWorktreeAddArgs_putsThePathBeforeAStartPoint(t *testing.T) {
 	site := t.TempDir()
 	want := WorktreeCheckoutPath(site, "feat-x")
 
-	got := deriveWorktreeAddArgs(site, []string{"--track", "-b", "feat-x", "origin/feat"})
+	got := DeriveWorktreeAddArgs(site, []string{"--track", "-b", "feat-x", "origin/feat"})
 
 	if !reflect.DeepEqual(got, []string{"--track", "-b", "feat-x", want, "origin/feat"}) {
 		t.Errorf("args = %v, want the path before origin/feat", got)
@@ -39,7 +40,7 @@ func TestDeriveWorktreeAddArgs_existingBranchGetsPathThenBranch(t *testing.T) {
 	site := t.TempDir()
 	want := WorktreeCheckoutPath(site, "feature/auth")
 
-	got := deriveWorktreeAddArgs(site, []string{"feature/auth"})
+	got := DeriveWorktreeAddArgs(site, []string{"feature/auth"})
 
 	if !reflect.DeepEqual(got, []string{want, "feature/auth"}) {
 		t.Errorf("args = %v, want %s feature/auth", got, want)
@@ -62,7 +63,7 @@ func TestDeriveWorktreeAddArgs_leavesAnExplicitPathAlone(t *testing.T) {
 	site := t.TempDir()
 	in := []string{"-b", "feat-x", "../demo-feat-x"}
 
-	if got := deriveWorktreeAddArgs(site, in); !reflect.DeepEqual(got, in) {
+	if got := DeriveWorktreeAddArgs(site, in); !reflect.DeepEqual(got, in) {
 		t.Errorf("args = %v, want them untouched", got)
 	}
 }
@@ -73,7 +74,7 @@ func TestDeriveWorktreeAddArgs_passesThroughWhenAmbiguous(t *testing.T) {
 	site := t.TempDir()
 	in := []string{"--detach", "feat-x", "abc1234"}
 
-	if got := deriveWorktreeAddArgs(site, in); !reflect.DeepEqual(got, in) {
+	if got := DeriveWorktreeAddArgs(site, in); !reflect.DeepEqual(got, in) {
 		t.Errorf("args = %v, want them untouched", got)
 	}
 }
@@ -82,7 +83,7 @@ func TestDeriveWorktreeAddArgs_passesThroughWhenAmbiguous(t *testing.T) {
 // produces and the one .git/info/exclude is written for.
 func TestDeriveWorktreeAddArgs_derivesAChildOfTheSite(t *testing.T) {
 	site := t.TempDir()
-	got := deriveWorktreeAddArgs(site, []string{"-b", "feat-x"})
+	got := DeriveWorktreeAddArgs(site, []string{"-b", "feat-x"})
 
 	path := got[len(got)-1]
 	if filepath.Dir(path) != site {
@@ -90,5 +91,25 @@ func TestDeriveWorktreeAddArgs_derivesAChildOfTheSite(t *testing.T) {
 	}
 	if !strings.HasSuffix(path, filepath.Base(site)+"-feat-x") {
 		t.Errorf("path %s does not follow <base>-<branch>", path)
+	}
+}
+
+func TestWorktreeCheckoutPath(t *testing.T) {
+	parent := filepath.Join(t.TempDir(), "myapp")
+
+	// Worktrees live under the parent: <parent>/<parentBase>-<slug>.
+	got := WorktreeCheckoutPath(parent, "feature/auth")
+	want := filepath.Join(parent, "myapp-feature-auth")
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+
+	// When the default path already exists, it bumps a numeric suffix.
+	if err := os.MkdirAll(want, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got = WorktreeCheckoutPath(parent, "feature/auth")
+	if got != want+"-2" {
+		t.Fatalf("got %q want %q", got, want+"-2")
 	}
 }

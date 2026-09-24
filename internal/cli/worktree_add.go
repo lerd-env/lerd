@@ -29,6 +29,7 @@ func NewWorktreeCmd() *cobra.Command {
 	cmd.AddCommand(newWorktreeAddCmd())
 	cmd.AddCommand(newWorktreeRemoveCmd())
 	cmd.AddCommand(newWorktreeWaitCmd())
+	cmd.AddCommand(newWorktreeSetupCmd())
 	return cmd
 }
 
@@ -59,7 +60,7 @@ func newWorktreeAddCmd() *cobra.Command {
 				return fmt.Errorf("not inside a registered lerd site (cwd=%s)", cwd)
 			}
 
-			args = deriveWorktreeAddArgs(cwd, args)
+			args = gitpkg.DeriveWorktreeAddArgs(cwd, args)
 			gitArgs := append([]string{"worktree", "add"}, args...)
 			feedback.Begin()
 			feedback.Line("git " + strings.Join(gitArgs, " "))
@@ -84,23 +85,14 @@ func newWorktreeAddCmd() *cobra.Command {
 			if optedIn := OptedInHostWorkers(site, worktreePath); len(optedIn) > 0 {
 				feedback.Note("auto-starting opted-in workers: " + strings.Join(optedIn, ", "))
 			}
-			ApplyWorktreeBuildChoice(site, worktreePath, promptWorktreeBuild(site, worktreePath), os.Stdout)
-
-			fw, hasFramework := config.GetFrameworkForDir(site.Framework, site.Path)
-
-			// A framework whose deployment state lives in the database cannot share
-			// the parent's, so its definition picks the choice instead of prompting.
-			if forced := requiredWorktreeDBChoice(fw); hasFramework && forced != "" {
-				feedback.Note(site.Framework + " worktrees need their own database; using " + forced)
-				if err := ApplyWorktreeDBChoice(site, branch, forced, os.Stdout); err != nil {
-					feedback.Warn("DB setup failed: %v", err)
+			// Without a terminal the prompts cannot be answered, and skipping them
+			// left a tree with no asset build that failed its first request.
+			if !promptableTTY() {
+				if err := RunWorktreeSetup(site, worktreePath, branch, "auto", "", os.Stdout); err != nil {
+					feedback.Warn("%v", err)
 				}
-			} else if err := promptDBIsolation(site, branch); err != nil {
-				feedback.Warn("DB setup skipped: %v", err)
-			}
-
-			if hasFramework {
-				runWorktreeSetupCommands(fw, worktreePath, os.Stdout)
+			} else {
+				promptWorktreeSetup(site, worktreePath, branch)
 			}
 
 			scheme := "http"
@@ -112,6 +104,29 @@ func newWorktreeAddCmd() *cobra.Command {
 		},
 	}
 	return cmd
+}
+
+// promptWorktreeSetup asks for the asset build and database choices, then runs
+// the framework's setup commands.
+func promptWorktreeSetup(site *config.Site, worktreePath, branch string) {
+	ApplyWorktreeBuildChoice(site, worktreePath, promptWorktreeBuild(site, worktreePath), os.Stdout)
+
+	fw, hasFramework := config.GetFrameworkForDir(site.Framework, site.Path)
+
+	// A framework whose deployment state lives in the database cannot share
+	// the parent's, so its definition picks the choice instead of prompting.
+	if forced := requiredWorktreeDBChoice(fw); hasFramework && forced != "" {
+		feedback.Note(site.Framework + " worktrees need their own database; using " + forced)
+		if err := ApplyWorktreeDBChoice(site, branch, forced, os.Stdout); err != nil {
+			feedback.Warn("DB setup failed: %v", err)
+		}
+	} else if err := promptDBIsolation(site, branch); err != nil {
+		feedback.Warn("DB setup skipped: %v", err)
+	}
+
+	if hasFramework {
+		runWorktreeSetupCommands(fw, worktreePath, os.Stdout)
+	}
 }
 
 // worktreeBuildChoice tags the user's pick from promptWorktreeBuild so the

@@ -1,8 +1,13 @@
-package cli
+package git
 
-import "strings"
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
 
-// deriveWorktreeAddArgs supplies the checkout path `git worktree add` requires
+// DeriveWorktreeAddArgs supplies the checkout path `git worktree add` requires
 // when the user did not type one. The docs describe every form without a path
 // (`lerd worktree add -b feat-x`), and the dashboard honours that by computing
 // the path through WorktreeCheckoutPath, but the CLI forwarded its arguments to
@@ -12,7 +17,7 @@ import "strings"
 // single bare existing branch. Anything else is passed through exactly as typed,
 // because guessing which positional is a path and which is a commit-ish is how
 // a wrapper starts checking out the wrong thing.
-func deriveWorktreeAddArgs(sitePath string, args []string) []string {
+func DeriveWorktreeAddArgs(sitePath string, args []string) []string {
 	if hasWorktreePathArg(args) {
 		return args
 	}
@@ -67,4 +72,24 @@ func splitWorktreeArgs(args []string) (flags, positionals []string) {
 		positionals = append(positionals, a)
 	}
 	return flags, positionals
+}
+
+// WorktreeCheckoutPath returns the directory a new worktree for branch should
+// be checked out into: a child of the parent site, "<sitePath>/<base>-<slug>"
+// where <base> is filepath.Base(sitePath). Bumps a numeric suffix if the
+// default path already exists. RunWorktreeAdd also writes a `/<base>-*/`
+// pattern into .git/info/exclude so git status doesn't show siblings.
+// Caveat: non-git tools (composer, IDEs, find/rsync/tar) walking the
+// parent tree DO descend into the worktree — gitignore doesn't hide it
+// from them. Most callers don't care; flag if you do.
+func WorktreeCheckoutPath(sitePath, branch string) string {
+	parentBase := filepath.Base(sitePath)
+	base := filepath.Join(sitePath, parentBase+"-"+SanitizeBranch(branch))
+	candidate := base
+	for i := 2; ; i++ {
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate
+		}
+		candidate = fmt.Sprintf("%s-%d", base, i)
+	}
 }
