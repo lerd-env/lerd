@@ -387,6 +387,16 @@ button {
   animation: lerd-panel-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* The looping animations stop while the window is blurred or hidden (see
+   $lib/windowIdle): an unfocused window still repaints them every frame.
+   Transitions go too, so a background poll repaints once instead of animating. */
+:root[data-window-idle] :is(.animate-ping, .animate-pulse, .animate-spin, .lerd-pulse-ping) {
+  animation-play-state: paused;
+}
+:root[data-window-idle] * {
+  transition: none !important;
+}
+
 /* Someone who asked their system for less motion gets none of it, including the
    transitions Svelte compiles to CSS animations. */
 @media (prefers-reduced-motion: reduce) {
