@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dumps"
@@ -168,7 +169,8 @@ func notificationForNPlusOne(ev dumps.Event, count int) push.Notification {
 		site = "(unknown site)"
 	}
 	body := fmt.Sprintf("Ran a similar query %d× in one request", count)
-	if where := whereForQuery(ev); where != "" {
+	where := whereForQuery(ev)
+	if where != "" {
 		body = fmt.Sprintf("%s ran a similar query %d×", where, count)
 	}
 	return push.Notification{
@@ -183,8 +185,73 @@ func notificationForNPlusOne(ev dumps.Event, count int) push.Notification {
 			"site":    ev.Ctx.Site,
 			"worker":  ev.Ctx.Worker,
 			"command": ev.Ctx.Command,
+			"where":   where,
 		},
 		Urgency: "normal",
 		TTL:     120,
+	}
+}
+
+// nPlusOneBatchWindow is how long a site's warnings are held so a burst reads
+// as one notification. A parallel test runner gives every worker process its
+// own command line, so each trips its own warning within the same second.
+const nPlusOneBatchWindow = 3 * time.Second
+
+// nPlusOneBatch holds a site's N+1 warnings for one window after the first,
+// then sends the lone warning as is or a single notification for the group.
+type nPlusOneBatch struct {
+	mu      sync.Mutex
+	window  time.Duration
+	send    func(push.Notification)
+	pending map[string][]push.Notification // site -> warnings in the window
+}
+
+func newNPlusOneBatch(window time.Duration, send func(push.Notification)) *nPlusOneBatch {
+	return &nPlusOneBatch{window: window, send: send, pending: map[string][]push.Notification{}}
+}
+
+func (b *nPlusOneBatch) add(n push.Notification) {
+	site := n.Data["site"]
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.pending[site] = append(b.pending[site], n)
+	if len(b.pending[site]) == 1 {
+		time.AfterFunc(b.window, func() { b.flush(site) })
+	}
+}
+
+func (b *nPlusOneBatch) flush(site string) {
+	b.mu.Lock()
+	ns := b.pending[site]
+	delete(b.pending, site)
+	b.mu.Unlock()
+	switch len(ns) {
+	case 0:
+	case 1:
+		b.send(ns[0])
+	default:
+		b.send(notificationForNPlusOneGroup(site, ns))
+	}
+}
+
+func notificationForNPlusOneGroup(site string, ns []push.Notification) push.Notification {
+	first := ns[0]
+	label := site
+	if label == "" {
+		label = "(unknown site)"
+	}
+	body := fmt.Sprintf("%d runs repeated a similar query", len(ns))
+	if where := first.Data["where"]; where != "" {
+		body += ", first " + where
+	}
+	return push.Notification{
+		Kind:    "nplusone",
+		Title:   "Possible N+1 queries on " + label,
+		Body:    body,
+		Tag:     "lerd-nplusone-site-" + site,
+		URL:     first.URL,
+		Data:    map[string]string{"site": site},
+		Urgency: first.Urgency,
+		TTL:     first.TTL,
 	}
 }
