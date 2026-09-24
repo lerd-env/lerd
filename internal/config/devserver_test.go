@@ -34,6 +34,27 @@ func TestDevServerToolForMatchesADirectInvocation(t *testing.T) {
 	}
 }
 
+// Vite+ starts Vite through its own `vp dev`, which forwards the flags lerd
+// appends straight to Vite.
+func TestDevServerToolForMatchesViteThroughVitePlus(t *testing.T) {
+	dir := viteProject(t, "vp dev")
+	tool := DevServerToolFor(dir, "npm run dev")
+	if tool == nil || tool.Name != "vite" {
+		t.Fatalf("DevServerToolFor() = %v, want the vite tool for vp dev", tool)
+	}
+}
+
+// Every other vp subcommand is a build, a lint or a task runner, never the dev
+// server, so the flags must not be appended to it.
+func TestDevServerToolForIgnoresOtherVitePlusCommands(t *testing.T) {
+	for _, script := range []string{"vp build", "vp run dev", "vp"} {
+		dir := viteProject(t, script)
+		if tool := DevServerToolFor(dir, "npm run dev"); tool != nil {
+			t.Fatalf("DevServerToolFor(%q) = %v, want nil", script, tool)
+		}
+	}
+}
+
 // The flags lerd appends are handed to whatever the command starts. A runner
 // that reaches vite later in the line would get them instead, so it must not
 // match.
