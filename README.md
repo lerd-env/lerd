@@ -318,6 +318,18 @@ lerd service preset pgadmin             # install a store-only preset
 - [Services](https://lerd.sh/usage/services)
 - [Command Reference](https://lerd.sh/reference/commands)
 
+## Sponsors
+
+Lerd is free and open source, kept going by the people and companies who sponsor it. [Become a sponsor](https://github.com/sponsors/geodro).
+
+### Companies
+
+<a href="https://www.motional.io"><img src="https://avatars.githubusercontent.com/u/34476080?s=120&v=4" width="60" alt="Motional"></a>
+
+### Backers
+
+[Edward van Tonder](https://github.com/EA-Wardie) · [rolaca11](https://github.com/rolaca11) · [rais](https://github.com/raisilhamn) · [Anca Emcken](https://github.com/ancaemcken)
+
 ## Built on
 
 Lerd stands on a set of excellent open-source projects it bundles or fetches to power the experience:
