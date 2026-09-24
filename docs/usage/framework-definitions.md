@@ -14,7 +14,7 @@ Lerd resolves framework definitions from multiple sources. Higher priority wins:
 | 4 | Store-installed | `~/.local/share/lerd/frameworks/<name>@<version>.yaml` | Community definitions (auto-fetched) |
 | 5 | Built-in | Compiled into lerd binary | Laravel fallback only |
 
-Workers from the user overlay and project `.lerd.yaml` are merged on top of store or built-in definitions. See [Framework workers](framework-workers.md) for the worker lifecycle and how custom workers are added and managed.
+Workers from the user overlay and project `.lerd.yaml` are merged on top of store or built-in definitions. An overlay with no `detect:` block leaves detection to the store or built-in definition of the same name, so one that only adds workers never stops a project from being recognised. See [Framework workers](framework-workers.md) for the worker lifecycle and how custom workers are added and managed.
 
 `lerd install` seeds the store: it pulls the index early, so detection sees the whole published catalogue rather than only the frameworks compiled into the binary, then fetches every definition the index lists. A fresh machine therefore ends up with the same definitions an established one has, and resolves any of them offline, instead of collecting them one at a time as the projects that need each one turn up. The refresh keeps any definition you already have that the store has since stopped publishing, and the watcher refreshes the index every six hours. An install that cannot reach the store keeps working on the built-ins and seeds itself on the next run.
 
