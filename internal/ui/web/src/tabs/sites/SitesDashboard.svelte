@@ -1,7 +1,7 @@
 <script lang="ts">
   import StatusDot from '$components/StatusDot.svelte';
   import Icon from '$components/Icon.svelte';
-  import EmptyState from '$components/EmptyState.svelte';
+  import SitesEmptyState from '$components/SitesEmptyState.svelte';
   import LoadingRow from '$components/LoadingRow.svelte';
   import DashboardHeader from '$components/DashboardHeader.svelte';
   import DashboardSection from '$components/DashboardSection.svelte';
@@ -74,7 +74,7 @@
     {#if !$sitesLoaded}
       <LoadingRow />
     {:else if total === 0}
-      <EmptyState title={m.sites_empty()} hint={parkHint} />
+      <SitesEmptyState />
     {:else}
       {#each groups as group (group.label)}
         <DashboardSection label={group.label}>
@@ -139,6 +139,3 @@
   {/if}
 {/snippet}
 
-{#snippet parkHint()}
-  {@html m.sites_emptyHint({ cmd: '<code class="bg-gray-100 dark:bg-white/5 px-1 rounded-sm">lerd park</code>' })}
-{/snippet}

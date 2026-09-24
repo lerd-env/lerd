@@ -175,6 +175,9 @@ func execWorktreeAdd(args map[string]any) (any, *rpcError) {
 		return toolErr("git " + strings.Join(gitArgs, " ") + ": " + out), nil
 	}
 	resp := map[string]any{"ok": true, "site": site.Name, "output": out}
+	if err := gitpkg.EnsureNestedWorktreeExclude(site.Path); err != nil {
+		resp["exclude_warning"] = err.Error()
+	}
 	// The watcher starts installing the moment git writes the worktree entry, so
 	// returning here would hand back a tree being written underneath the caller.
 	// Waiting is the default because acting on the tree is the whole point of

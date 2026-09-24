@@ -95,7 +95,9 @@ func diffSnapshots(prev, cur Snapshot, now time.Time) []activityEvent {
 		curSites[s.Name] = true
 		old, ok := prevSites[s.Name]
 		if !ok {
-			add("linked "+siteSubject(s), toneGood)
+			if !cur.Private[s.Name] {
+				add("linked "+siteSubject(s), toneGood)
+			}
 			continue
 		}
 		switch {
@@ -114,7 +116,9 @@ func diffSnapshots(prev, cur Snapshot, now time.Time) []activityEvent {
 		}
 	}
 	for name, s := range prevSites {
-		if !curSites[name] {
+		// Streaming mode drops a private site from the snapshot, and naming it
+		// here would put it straight back on the shared screen.
+		if !curSites[name] && !prev.Private[name] {
 			add("removed "+siteSubject(s), toneBad)
 		}
 	}

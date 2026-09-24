@@ -140,7 +140,8 @@ func autoSnapshotStatus() autoSnapshotResponse {
 		}
 		out.Sites = append(out.Sites, row)
 	}
-	return out
+	hidden, _ := streamingHiddenNow()
+	return hideStreamingAutoSnapshot(out, hidden)
 }
 
 // lastAutoSnapshotAt reports when the schedule last snapshotted a database, read

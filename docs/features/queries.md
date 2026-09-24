@@ -11,7 +11,7 @@ Unlike the debug bridge, which works by redefining `dump()` from an `auto_prepen
 Capture is gated by the **same** runtime sentinel as the debug bridge, so the whole Debug window is one switch and toggling never restarts FPM:
 
 - The extension and its config ini (`/usr/local/etc/php/conf.d/96-lerd-devtools.ini`) are always present in the image / mounted.
-- `/usr/local/etc/lerd/enabled.flag` is the shared runtime sentinel. Both the debug bridge and the extension stat it once per request; present = capture, absent = no-op. There is no separate devtools enable flag, `lerd dump on/off` (or the dashboard Debug toggle) arms both at once. The worker-capture sub-toggle has its own `devtools-workers.flag`.
+- `/usr/local/etc/lerd/enabled.flag` is the shared runtime sentinel. Both the debug bridge and the extension stat it once per request; present = capture, absent = no-op. There is no separate devtools enable flag, `lerd dump on/off` (or the dashboard Debug toggle) arms both at once. Worker capture has its own `devtools-workers.flag`, which lerd keeps set, so the dashboard's worker checkbox only hides worker rows and never loses events.
 
 Events ship over the **same** Unix socket (Linux) or TCP loopback (macOS) the debug bridge uses, so `lerd-ui` buffers them in the same 500-event ring and fans them out through the same SSE stream. The web client filters by `kind` to render the Queries lens.
 
@@ -158,7 +158,7 @@ Every warning names the run the queries came from: the worker command if the cap
 
 ## Debugging over MCP
 
-The same capture is available to an AI assistant through lerd's MCP server, so an agent can debug and fix performance issues end to end. The loop: `dumps_toggle` to arm capture, `dumps_clear` for a clean slate, trigger the page or job, then `analyze_queries` for a per-request N+1 and slow-query report, each finding carries the originating `file:line`, so the agent can open the offending code and add a `with()` eager-load, an index, or a cache, then re-run to confirm the count dropped. `dumps_recent` with a `kind` filter (`query`, `mail`, `view`, …) pulls the raw events for anything the report doesn't cover. The analysis is server-side, so it uses the same fingerprinting as the dashboard badge and the N+1 notification.
+The same capture is available to an AI assistant through lerd's MCP server, so an agent can debug and fix performance issues end to end. The loop: `dumps_toggle` to arm capture, `dumps_clear` for a clean slate, trigger the page or job, then `analyze_queries` for a per-request N+1 and slow-query report, each finding carries the originating `file:line`, so the agent can open the offending code and add a `with()` eager-load, an index, or a cache, then re-run to confirm the count dropped. `dumps_recent` with a `kind` filter (`query`, `mail`, `view`, `log`, `exception`, `message`, …) pulls the raw events for anything the report doesn't cover. The analysis is server-side, so it uses the same fingerprinting as the dashboard badge and the N+1 notification.
 
 ## Open in editor
 

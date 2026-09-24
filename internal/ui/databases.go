@@ -137,7 +137,8 @@ func handleDatabases(w http.ResponseWriter, _ *http.Request) {
 	for _, name := range names {
 		engines = append(engines, databaseEngine(name, indexes[name]))
 	}
-	writeJSON(w, engines)
+	hidden, domains := streamingHiddenNow()
+	writeJSON(w, hideStreamingDatabases(engines, hidden, domains))
 }
 
 // handleDatabaseAction routes the mutating and export/import endpoints under

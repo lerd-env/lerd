@@ -3,7 +3,7 @@
   import ActionButton from '$components/ActionButton.svelte';
   import DumpBridgeToggle from '$components/DumpBridgeToggle.svelte';
   import ProfilerToggle from '$components/ProfilerToggle.svelte';
-  import EmptyState from '$components/EmptyState.svelte';
+  import SitesEmptyState from '$components/SitesEmptyState.svelte';
   import Icon from '$components/Icon.svelte';
   import SiteIcon from '$components/SiteIcon.svelte';
   import SiteIndicators from '$components/SiteIndicators.svelte';
@@ -469,9 +469,6 @@
   {/if}
 {/snippet}
 
-{#snippet parkHint()}
-  {@html m.sites_emptyHint({ cmd: '<code class="bg-gray-100 dark:bg-white/5 px-1 rounded-sm">lerd park</code>' })}
-{/snippet}
 
 {#snippet overlayControls()}
   <!-- Spans the panel so the popovers can size to the column rather than to the
@@ -707,7 +704,7 @@
   {#if !$sitesLoaded}
     <LoadingRow />
   {:else if $sites.length === 0}
-    <EmptyState title={m.sites_empty()} hint={parkHint} size="sm" />
+    <SitesEmptyState size="sm" />
   {:else}
     <div
       use:dndzone={{

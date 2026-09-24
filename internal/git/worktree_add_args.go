@@ -93,3 +93,44 @@ func WorktreeCheckoutPath(sitePath, branch string) string {
 		candidate = fmt.Sprintf("%s-%d", base, i)
 	}
 }
+
+// EnsureNestedWorktreeExclude appends "/<base>-*/" to .git/info/exclude in
+// sitePath (idempotent) so nested worktree dirs don't show up in git status
+// of the parent repo. No-op when .git isn't a dir or when basename
+// contains gitignore meta-chars we'd have to escape.
+func EnsureNestedWorktreeExclude(sitePath string) error {
+	gitInfo, err := os.Stat(filepath.Join(sitePath, ".git"))
+	if err != nil || !gitInfo.IsDir() {
+		return nil
+	}
+	base := filepath.Base(sitePath)
+	if strings.ContainsAny(base, "[]?*!#\\") {
+		return nil
+	}
+	return AppendExclude(sitePath, "/"+base+"-*/")
+}
+
+// AppendExclude adds pattern to the site's .git/info/exclude once.
+func AppendExclude(sitePath, pattern string) error {
+	excludePath := filepath.Join(sitePath, ".git", "info", "exclude")
+	existing, _ := os.ReadFile(excludePath)
+	for _, line := range strings.Split(string(existing), "\n") {
+		if strings.TrimSpace(line) == pattern {
+			return nil
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	prefix := ""
+	if len(existing) > 0 && existing[len(existing)-1] != '\n' {
+		prefix = "\n"
+	}
+	_, err = f.WriteString(prefix + pattern + "\n")
+	return err
+}
