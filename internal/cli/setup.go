@@ -133,6 +133,35 @@ func printSetupStepPlan(cwd string, skipOpen bool) error {
 	return enc.Encode(setupStepPlan(planSetupSteps(cwd, skipOpen)))
 }
 
+// chooseSetupSteps returns the labels of the steps to run: every step with all,
+// the default selection when there is no terminal to ask on, otherwise the
+// user's pick from a multi-select preloaded with the defaults.
+func chooseSetupSteps(steps []setupStep, all bool) ([]string, error) {
+	var labels, defaults []string
+	for _, s := range steps {
+		labels = append(labels, s.label)
+		if s.enabled {
+			defaults = append(defaults, s.label)
+		}
+	}
+	if all {
+		return labels, nil
+	}
+	if !promptableTTY() {
+		feedback.Note("no terminal to ask on, running the default steps. Pass --all for every step")
+		return defaults, nil
+	}
+	selected := defaults
+	if err := huh.NewForm(
+		huh.NewGroup(
+			newMultiSelect("Setup steps", "", labels, &selected),
+		),
+	).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
+		return nil, err
+	}
+	return selected, nil
+}
+
 // selectSetupSteps picks the named steps out of a plan, in plan order rather
 // than the order the names arrived in, since the steps depend on each other
 // (the asset build needs the install that precedes it). A name the plan does
@@ -265,38 +294,17 @@ func runSetup(allSteps, skipOpen bool) error {
 	if !linkApplied {
 		feedback.Line("configuring site")
 	}
-	if err := runSetupInit(cwd, allSteps); err != nil {
+	// With no terminal the wizard cannot run either, so it takes the same
+	// auto-detected path --all does.
+	if err := runSetupInit(cwd, allSteps || !promptableTTY()); err != nil {
 		feedback.Warn("%v", err)
 	}
 
 	steps := planSetupSteps(cwd, skipOpen)
-
-	// Determine which steps to run.
-	var selected []string
-	if allSteps {
-		feedback.Begin()
-		for _, s := range steps {
-			selected = append(selected, s.label)
-		}
-	} else {
-		options := make([]string, len(steps))
-		defaults := []string{}
-		for i, s := range steps {
-			options[i] = s.label
-			if s.enabled {
-				defaults = append(defaults, s.label)
-			}
-		}
-
-		selected = defaults // pre-select enabled steps
-		feedback.Begin()
-		if err := huh.NewForm(
-			huh.NewGroup(
-				newMultiSelect("Setup steps", "", options, &selected),
-			),
-		).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
-			return err
-		}
+	feedback.Begin()
+	selected, err := chooseSetupSteps(steps, allSteps)
+	if err != nil {
+		return err
 	}
 
 	if len(selected) == 0 {
