@@ -91,6 +91,16 @@ describe('DashboardOverlay', () => {
     expect(frame.previousElementSibling!.className).toContain('page-header');
   });
 
+  // The address is one click away behind the new-tab button; printed in the
+  // header it was only lerd's proxy path.
+  it('leaves the address to the new-tab button rather than printing it', () => {
+    dashboardOpen.set({ name: 'pgadmin', label: 'pgAdmin', dashboard: '/_svc/pgadmin/' });
+    const { container } = render(DashboardOverlay);
+
+    expect(container.textContent).not.toContain('/_svc/pgadmin/');
+    expect(screen.getByTitle(/new tab/i).getAttribute('href')).toContain('/_svc/pgadmin/');
+  });
+
   it('heads the frame with the service mark, inked in the declared colour', () => {
     services.set([
       {

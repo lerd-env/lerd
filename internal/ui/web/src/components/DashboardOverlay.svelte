@@ -249,12 +249,6 @@
         {/if}
         <ServiceIcon name={d.name} icon={d.icon} bare compact />
         <span class="text-sm font-medium text-gray-900 dark:text-white truncate">{d.label || d.name}</span>
-        <a
-          href={externalHref}
-          target="_blank"
-          rel="noopener"
-          class="font-mono text-[10px] text-sky-600 dark:text-sky-400 hover:underline truncate"
-        >{externalHref}</a>
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if isProfiler}
