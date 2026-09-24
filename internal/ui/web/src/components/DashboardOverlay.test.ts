@@ -22,13 +22,13 @@ describe('DashboardOverlay', () => {
     serviceIcons.set({});
   });
 
-  it('disables Back until the embedded iframe has somewhere to go back to', () => {
+  it('hides Back until the embedded iframe has somewhere to go back to', () => {
     openProfiler();
     render(DashboardOverlay);
 
     // Freshly opened: the SPX iframe has no internal history yet, so Back is a
-    // dead end. It must be disabled rather than silently tear down the overlay.
-    expect(screen.getByTitle('Back')).toBeDisabled();
+    // dead end, and a greyed out arrow in the header only reads as clutter.
+    expect(screen.queryByTitle('Back')).toBeNull();
   });
 
   it('shows the profiler toggle as off: muted, not pressed, no live dot', () => {

@@ -234,13 +234,12 @@
   <div class="fixed top-0 right-0 left-0 bottom-16 md:left-14 md:bottom-0 z-30 flex flex-col bg-white dark:bg-lerd-bg md:bg-lerd-chrome-light md:dark:bg-lerd-card">
     <div class="flex items-center justify-between px-3 py-3 page-header md:border-b-0! shrink-0">
       <div class="flex items-center gap-3 min-w-0">
-        {#if isProfiler}
+        {#if isProfiler && canGoBack}
           <button
             onclick={goBack}
-            disabled={!canGoBack}
             title={m.common_back()}
             aria-label={m.common_back()}
-            class="text-gray-400 enabled:hover:text-gray-700 dark:enabled:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0"
+            class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors shrink-0"
           >
             <Icon name="back" />
           </button>
