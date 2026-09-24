@@ -42,6 +42,20 @@ describe('DashboardOverlay', () => {
     expect(container.querySelector('.animate-pulse')).toBeNull();
   });
 
+  // On the rail-coloured strip an outline alone vanished and grey-500 text fell
+  // under AA, so the header buttons take the filled secondary tone pages use.
+  it('draws the profiler header buttons in the filled secondary tone', () => {
+    openProfiler();
+    render(DashboardOverlay);
+
+    for (const name of [/configuration/i, /clear data/i, /start profiling/i]) {
+      const btn = screen.getByRole('button', { name });
+      expect(btn.className).toContain('dark:bg-white/5');
+      expect(btn.className).toContain('text-gray-700');
+      expect(btn.className).not.toContain('text-gray-500');
+    }
+  });
+
   it('shows the profiler toggle as on: emerald, pressed, live pulsing dot', () => {
     profilerEnabled.set(true);
     openProfiler();

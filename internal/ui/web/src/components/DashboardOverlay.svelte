@@ -9,6 +9,7 @@
   } from '$stores/profiler';
   import Icon from './Icon.svelte';
   import StatusDot from './StatusDot.svelte';
+  import DetailButton from './DetailButton.svelte';
   import DocsViewer from './DocsViewer.svelte';
   import { docsLocation, docsSiteURL } from '$stores/docs';
   import {
@@ -63,9 +64,6 @@
         : ''
   );
 
-  const headerBtnClass =
-    'text-xs rounded-sm border border-gray-200 dark:border-lerd-border px-2 py-1 ' +
-    'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors';
 
   // Reset iframe-history tracking whenever a different dashboard opens.
   $effect(() => {
@@ -253,29 +251,23 @@
       <div class="flex items-center gap-2 shrink-0">
         {#if isProfiler}
           {#if !isReportView}
-            <button
+            <DetailButton
               onclick={toggleConfig}
               title={configHidden ? m.profiler_config_show() : m.profiler_config_hide()}
-              class={headerBtnClass}
             >
               {configHidden ? m.profiler_config_show() : m.profiler_config_hide()}
-            </button>
+            </DetailButton>
           {/if}
-          <button
-            onclick={clearProfilerReports}
-            disabled={clearing}
-            title={m.profiler_clear_title()}
-            class="{headerBtnClass} disabled:opacity-50"
-          >
+          <DetailButton onclick={clearProfilerReports} disabled={clearing} title={m.profiler_clear_title()}>
             {clearing ? m.profiler_clear_busy() : m.profiler_clear()}
-          </button>
+          </DetailButton>
           <button
             onclick={toggleProfiler}
             disabled={busy}
             aria-pressed={$profilerEnabled}
-            class="flex items-center gap-1.5 text-xs rounded-sm border px-2 py-1 transition-colors disabled:opacity-50 {$profilerEnabled
+            class="flex items-center gap-1.5 text-xs font-medium rounded-lg border px-3 py-1.5 transition-colors disabled:opacity-50 {$profilerEnabled
               ? 'border-emerald-500/40 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:border-emerald-500'
-              : 'border-gray-200 dark:border-lerd-border text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}"
+              : 'bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-lerd-border'}"
           >
             {#if $profilerEnabled}
               <StatusDot color="emerald" size="xs" pulse />
