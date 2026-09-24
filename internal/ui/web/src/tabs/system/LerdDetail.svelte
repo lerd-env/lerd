@@ -206,11 +206,12 @@
     <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 font-mono">v{$version.current}</span>
   </div>
 
-  <div class="p-3 space-y-3">
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+  <div class="p-3 space-y-3 @container">
+    <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-3">
     <!-- One grid, with each row pairing cards of about the same height, so a
          card never stretches around empty space and a row never ends with a
-         gap. Tray has no partner and takes the full row. -->
+         gap. Tray has no partner and takes the full row. The breakpoint reads
+         the pane, not the window, since the sidebar can leave half a screen. -->
     <SettingsCard>
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0 text-sm">
@@ -479,7 +480,7 @@
       <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_startOnOpen_description()}</p>
     </SettingsCard>
 
-    <SettingsCard class="sm:col-span-2">
+    <SettingsCard class="@3xl:col-span-2">
       <div class="flex items-center justify-between gap-3 mb-2">
         <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_tray_title()}</span>
         {#if $accessMode.localControl}
