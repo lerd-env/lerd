@@ -11,43 +11,73 @@ jobs:
     permissions:
       actions: write
     steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@v4
 
-      - name: Restore cached digests
-        uses: actions/cache/restore@v4
-        with:
-          path: /tmp/php-digests
-          key: php-upstream-digests-dummy
-          restore-keys: php-upstream-digests-
-
-      - name: Check upstream digests
+      # No saved state: the published base image is the record of what it was
+      # built from. The Actions cache used to hold the last seen digests, but
+      # the base image build evicts it, which turned every run into a rebuild.
+      - name: Compare upstream layers with the published base images
         id: compare
         run: |
-          mkdir -p /tmp/php-digests
-          CHANGED=""
+          python3 <<'EOF'
+          import hashlib, json, os, urllib.error, urllib.request
+
           # 8.6 is still a prerelease upstream, so it is watched on its -rc tag
           # (see config.UpstreamPHPTag); swap it for the plain one on release day.
-          for V in 8.1 8.2 8.3 8.4 8.5 8.6-rc; do
-            CURRENT=$(docker buildx imagetools inspect \
-              "docker.io/library/php:${V}-fpm-alpine" \
-              --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"')
+          VERSIONS = {'8.1': '8.1', '8.2': '8.2', '8.3': '8.3', '8.4': '8.4', '8.5': '8.5', '8.6': '8.6-rc'}
+          ARCHES = ('amd64', 'arm64')
+          ACCEPT = ','.join('application/vnd.' + t for t in (
+              'oci.image.index.v1+json', 'docker.distribution.manifest.list.v2+json',
+              'oci.image.manifest.v1+json', 'docker.distribution.manifest.v2+json'))
 
-            PREVIOUS=""
-            [ -f "/tmp/php-digests/${V}" ] && PREVIOUS=$(cat "/tmp/php-digests/${V}")
+          with open('internal/podman/quadlets/lerd-php-fpm.Containerfile') as f:
+              recipe = f.read()
+          for ph in ('{{.CustomExtensions}}', '{{.CustomExtensionsRuntime}}',
+                     '{{.CustomPackages}}', '{{.MkcertCA}}'):
+              recipe = recipe.replace(ph, '')
+          tag = hashlib.sha256(recipe.encode()).hexdigest()[:12]
 
-            if [ -n "$CURRENT" ] && [ "$CURRENT" != "$PREVIOUS" ]; then
-              echo "PHP ${V}: upstream changed (${PREVIOUS:-none} -> ${CURRENT})"
-              CHANGED="${CHANGED}${V},"
-              echo "$CURRENT" > "/tmp/php-digests/${V}"
-            else
-              echo "PHP ${V}: no change"
-            fi
-          done
-          echo "changed=${CHANGED}" >> "$GITHUB_OUTPUT"
+          def fetch(url, token, accept=ACCEPT):
+              req = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}', 'Accept': accept})
+              return json.load(urllib.request.urlopen(req))
+
+          def diff_ids(host, token_url, repo, ref, arch):
+              token = json.load(urllib.request.urlopen(token_url))['token']
+              m = fetch(f'https://{host}/v2/{repo}/manifests/{ref}', token)
+              if 'manifests' in m:
+                  digest = next(x['digest'] for x in m['manifests']
+                                if x['platform']['architecture'] == arch and x['platform']['os'] == 'linux')
+                  m = fetch(f'https://{host}/v2/{repo}/manifests/{digest}', token)
+              return fetch(f'https://{host}/v2/{repo}/blobs/{m["config"]["digest"]}', token, '*/*')['rootfs']['diff_ids']
+
+          # Our image is FROM upstream, so it carries upstream's layers as a
+          # prefix; once upstream republishes, that prefix stops matching.
+          changed = []
+          for version, upstream_tag in VERSIONS.items():
+              repo = 'lerd-env/lerd-php' + version.replace('.', '') + '-fpm-base'
+              for arch in ARCHES:
+                  upstream = diff_ids('registry-1.docker.io',
+                                      'https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/php:pull',
+                                      'library/php', f'{upstream_tag}-fpm-alpine', arch)
+                  try:
+                      ours = diff_ids('ghcr.io', f'https://ghcr.io/token?scope=repository:{repo}:pull',
+                                      repo, f'{tag}-{arch}', arch)
+                  except urllib.error.HTTPError as e:
+                      if e.code != 404:
+                          raise
+                      ours = []
+                  if ours[:len(upstream)] != upstream:
+                      print(f'PHP {version} ({arch}): {repo}:{tag}-{arch} is not built on the current {upstream_tag}-fpm-alpine')
+                      changed.append(version)
+                      break
+              else:
+                  print(f'PHP {version}: up to date')
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f'changed={",".join(changed)}\n')
+          EOF
 
       - name: Trigger base image rebuild
-        id: trigger
         if: steps.compare.outputs.changed != ''
         uses: actions/github-script@v7
         with:
@@ -58,13 +88,7 @@ jobs:
               workflow_id: 'base-images.yml',
               ref: 'main',
               inputs: {
-                force_rebuild: 'true'
+                force_rebuild: 'true',
+                versions: '${{ steps.compare.outputs.changed }}'
               }
             });
-
-      - name: Save updated digests
-        if: steps.trigger.outcome == 'success'
-        uses: actions/cache/save@v4
-        with:
-          path: /tmp/php-digests
-          key: php-upstream-digests-${{ github.run_id }}

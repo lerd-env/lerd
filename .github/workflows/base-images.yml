@@ -13,6 +13,10 @@ on:
         description: 'Force rebuild for upstream updates'
         required: false
         default: 'false'
+      versions:
+        description: 'Comma-separated PHP versions the force applies to (empty: all)'
+        required: false
+        default: ''
 
 jobs:
   build:
@@ -82,7 +86,11 @@ jobs:
       - name: Check if image already exists
         id: check
         run: |
-          if [ "${{ inputs.force_rebuild }}" = "true" ]; then
+          # A forced run rebuilds only the versions it names, so an upstream
+          # refresh of one version leaves the frozen ones alone.
+          VERSIONS="${{ inputs.versions }}"
+          if [ "${{ inputs.force_rebuild }}" = "true" ] && { [ -z "$VERSIONS" ] || [[ ",${VERSIONS}," == *",${{ matrix.php }},"* ]]; }; then
+            echo "forced=true" >> "$GITHUB_OUTPUT"
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "Force rebuild requested, skipping existence check."
           else
@@ -106,7 +114,7 @@ jobs:
           context: .
           file: /tmp/Containerfile
           push: true
-          pull: ${{ inputs.force_rebuild == 'true' }}
+          pull: ${{ steps.check.outputs.forced == 'true' }}
           platforms: linux/${{ matrix.arch.name }}
           tags: ghcr.io/lerd-env/lerd-php${{ steps.tag.outputs.php_short }}-fpm-base:${{ steps.tag.outputs.tag }}-${{ matrix.arch.name }}
           cache-from: type=gha,scope=php-${{ matrix.php }}-${{ matrix.arch.name }}
@@ -216,7 +224,11 @@ jobs:
       - name: Check if manifest already exists
         id: check
         run: |
-          if [ "${{ inputs.force_rebuild }}" = "true" ]; then
+          # A forced run rebuilds only the versions it names, so an upstream
+          # refresh of one version leaves the frozen ones alone.
+          VERSIONS="${{ inputs.versions }}"
+          if [ "${{ inputs.force_rebuild }}" = "true" ] && { [ -z "$VERSIONS" ] || [[ ",${VERSIONS}," == *",${{ matrix.php }},"* ]]; }; then
+            echo "forced=true" >> "$GITHUB_OUTPUT"
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "Force rebuild requested, recreating manifest."
           else
@@ -249,6 +261,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       entries: ${{ steps.plan.outputs.entries }}
+      versions: ${{ steps.plan.outputs.versions }}
       count: ${{ steps.plan.outputs.count }}
     steps:
       - uses: actions/checkout@v4
@@ -257,6 +270,8 @@ jobs:
 
       - name: Collect the recipe hashes recent releases pull
         id: plan
+        env:
+          ONLY: ${{ inputs.versions }}
         run: |
           python3 - <<'EOF'
           import hashlib, json, os, re, subprocess, time
@@ -269,6 +284,11 @@ jobs:
           WINDOW = 30 * 24 * 3600
           MAX_HASHES = 2
           STABLE = re.compile(r'^v[0-9]+\.[0-9]+(\.[0-9]+)?$')
+          # Stable PHP only: a prerelease is newer than these release tags, so
+          # no binary they built ever asks for its base image.
+          PHP = ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5']
+          only = [v for v in os.environ['ONLY'].split(',') if v]
+          versions = [v for v in PHP if not only or v in only]
 
           def recipe_hash(blob):
               for ph in ('{{.CustomExtensions}}', '{{.CustomExtensionsRuntime}}',
@@ -307,7 +327,8 @@ jobs:
           # to the file rather than through a redirect of the whole stdout.
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               out.write(f'entries={json.dumps(entries)}\n')
-              out.write(f'count={len(entries)}\n')
+              out.write(f'versions={json.dumps(versions)}\n')
+              out.write(f'count={len(entries) if versions else 0}\n')
           for e in entries:
               print(f"::notice::rebuilding historic base {e['hash']} (from {e['tag']})")
           for e in dropped:
@@ -324,9 +345,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Stable only: a prerelease is newer than these release tags, so no
-        # binary they built ever asks for its base image.
-        php: ["7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]
+        php: ${{ fromJSON(needs.historic-plan.outputs.versions) }}
         arch:
           - { name: amd64, runner: ubuntu-latest }
           - { name: arm64, runner: ubuntu-24.04-arm }
@@ -379,7 +398,9 @@ jobs:
           platforms: linux/${{ matrix.arch.name }}
           tags: ghcr.io/lerd-env/lerd-php${{ steps.prep.outputs.php_short }}-fpm-base:${{ matrix.entry.hash }}-${{ matrix.arch.name }}
           cache-from: type=gha,scope=php-${{ matrix.php }}-${{ matrix.arch.name }}-${{ matrix.entry.hash }}
-          cache-to: type=gha,mode=max,scope=php-${{ matrix.php }}-${{ matrix.arch.name }}-${{ matrix.entry.hash }}
+          # Min mode: each historic hash gets its own scope, and max mode's
+          # intermediate layers for all of them overran the 10 GB cache quota.
+          cache-to: type=gha,scope=php-${{ matrix.php }}-${{ matrix.arch.name }}-${{ matrix.entry.hash }}
 
       - name: Smoke-test built image
         run: |
@@ -422,7 +443,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php: ["7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]
+        php: ${{ fromJSON(needs.historic-plan.outputs.versions) }}
         entry: ${{ fromJSON(needs.historic-plan.outputs.entries) }}
 
     steps:
