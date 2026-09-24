@@ -111,6 +111,9 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd workspace assign <site> <workspace\|none>` | Move a site into a workspace, or out of one with `none`; assign a group main, not a secondary |
 | `lerd workspace move <name> <position>` | Reposition a workspace in the display order (`0` is first) |
 | `lerd workspace list` | List the workspaces and their sites |
+| `lerd streaming on` | Hide private sites and workspaces while screen sharing |
+| `lerd streaming off` | Show private sites and workspaces again |
+| `lerd streaming auto on\|off` | Turn streaming mode on by itself while the screen is shared (Linux Wayland) |
 | `lerd env` | Configure `.env` for the current project with lerd service connection settings; backs up the original as `.env.before_lerd` on first run (skipped if lerd has already written to the file) |
 | `lerd env:restore` | Restore `.env` from the pre-lerd backup (`.env.before_lerd`) |
 | `lerd env:override [KEY=VALUE ...]` | Create/seed a personal, gitignored `.env.lerd_override` whose values win over lerd's defaults on `lerd env`; `LERD_EXTERNAL_SERVICES=` marks services lerd should not start or provision |

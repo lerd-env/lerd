@@ -26,8 +26,9 @@ func resolveSiteWorkspace(e siteinfo.EnrichedSite, groupMainName, siteWorkspace 
 // Nothing here touches a site's serving setup; see internal/config/workspaces.go.
 
 type WorkspaceResponse struct {
-	Name  string   `json:"name"`
-	Sites []string `json:"sites"`
+	Name    string   `json:"name"`
+	Sites   []string `json:"sites"`
+	Private bool     `json:"private,omitempty"`
 }
 
 type workspaceCreateRequest struct {
@@ -63,15 +64,9 @@ func handleWorkspaces(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}
-		out := make([]WorkspaceResponse, 0, len(list))
-		for _, ws := range list {
-			sites := ws.Sites
-			if sites == nil {
-				sites = []string{}
-			}
-			out = append(out, WorkspaceResponse{Name: ws.Name, Sites: sites})
-		}
-		writeJSON(w, out)
+		cfg, _ := config.LoadGlobal()
+		streaming, hidden := streamingState(cfg)
+		writeJSON(w, visibleWorkspaces(list, streaming, hidden))
 	case http.MethodPost:
 		var req workspaceCreateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -121,6 +116,20 @@ func handleWorkspaceRoutes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeWorkspaceResult(w, config.AssignSiteWorkspace(req.Sites, req.Workspace, req.Create))
+	case "private":
+		if r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		var req struct {
+			Name    string `json:"name"`
+			Private bool   `json:"private"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, SiteActionResponse{Error: "invalid request body"})
+			return
+		}
+		writeWorkspaceResult(w, config.SetWorkspacePrivate(req.Name, req.Private))
 	case "layout":
 		if r.Method != http.MethodPut {
 			http.NotFound(w, r)
@@ -144,9 +153,11 @@ func handleWorkspaceRoutes(w http.ResponseWriter, r *http.Request) {
 // failure to roll back rather than a half-applied pair.
 func applyWorkspaceLayout(req workspaceLayoutRequest) error {
 	var prev []config.Workspace
+	cfg, _ := config.LoadGlobal()
+	_, hidden := streamingState(cfg)
 	err := config.SetWorkspaceLayoutWith(func(current []config.Workspace) []config.Workspace {
 		prev = current
-		return mergeWorkspaceLayout(req.Workspaces, current)
+		return mergeWorkspaceLayout(req.Workspaces, current, hidden)
 	})
 	if err != nil {
 		return err
@@ -168,18 +179,46 @@ func applyWorkspaceLayout(req workspaceLayoutRequest) error {
 // layout built from a stale snapshot therefore reorders and reassigns without
 // deleting a workspace someone created meanwhile; deletion has its own route.
 // SetWorkspaceLayout keeps a site's first listing, so a move wins over the
-// workspace the site is being moved out of.
-func mergeWorkspaceLayout(sent []WorkspaceResponse, existing []config.Workspace) []config.Workspace {
-	named := make(map[string]bool, len(sent))
+// workspace the site is being moved out of. Sites streaming mode hid from the
+// client stay in the workspace they were in, since the client never saw them.
+func mergeWorkspaceLayout(sent []WorkspaceResponse, existing []config.Workspace, hidden map[string]bool) []config.Workspace {
+	named := make(map[string]int, len(sent))
 	out := make([]config.Workspace, 0, len(sent)+len(existing))
 	for _, ws := range sent {
-		named[strings.TrimSpace(ws.Name)] = true
+		named[strings.TrimSpace(ws.Name)] = len(out)
 		out = append(out, config.Workspace{Name: ws.Name, Sites: ws.Sites})
 	}
 	for _, ws := range existing {
-		if !named[ws.Name] {
+		i, ok := named[ws.Name]
+		if !ok {
 			out = append(out, ws)
+			continue
 		}
+		out[i].Private = ws.Private
+		for _, s := range ws.Sites {
+			if hidden[s] {
+				out[i].Sites = append(out[i].Sites, s)
+			}
+		}
+	}
+	return out
+}
+
+// visibleWorkspaces shapes the workspace list for the dashboard, leaving out
+// the private workspaces and hidden sites while streaming mode is on.
+func visibleWorkspaces(list []config.Workspace, streaming bool, hidden map[string]bool) []WorkspaceResponse {
+	out := make([]WorkspaceResponse, 0, len(list))
+	for _, ws := range list {
+		if streaming && ws.Private {
+			continue
+		}
+		sites := []string{}
+		for _, s := range ws.Sites {
+			if !hidden[s] {
+				sites = append(sites, s)
+			}
+		}
+		out = append(out, WorkspaceResponse{Name: ws.Name, Sites: sites, Private: ws.Private})
 	}
 	return out
 }

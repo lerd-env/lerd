@@ -1567,5 +1567,9 @@
   "gitStatus_modified": "{count} zmienionych",
   "gitStatus_staged": "{count} w poczekalni",
   "gitStatus_ahead": "{count} do przodu",
-  "gitStatus_behind": "{count} do tyłu"
+  "gitStatus_behind": "{count} do tyłu",
+  "nav_streamingOff": "Tryb streamingu: ukryj prywatne strony i obszary robocze",
+  "nav_streamingOn": "Tryb streamingu jest włączony, prywatne strony i obszary robocze są ukryte",
+  "sites_hideWhileStreaming": "Ukryj podczas streamingu",
+  "sites_showWhileStreaming": "Pokaż podczas streamingu"
 }

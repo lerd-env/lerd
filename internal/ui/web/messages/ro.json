@@ -1567,5 +1567,9 @@
   "gitStatus_modified": "{count} modificate",
   "gitStatus_staged": "{count} în stage",
   "gitStatus_ahead": "{count} înainte",
-  "gitStatus_behind": "{count} în urmă"
+  "gitStatus_behind": "{count} în urmă",
+  "nav_streamingOff": "Mod streaming: ascunde site-urile și workspace-urile private",
+  "nav_streamingOn": "Modul streaming este pornit, site-urile și workspace-urile private sunt ascunse",
+  "sites_hideWhileStreaming": "Ascunde în timpul streamingului",
+  "sites_showWhileStreaming": "Arată în timpul streamingului"
 }

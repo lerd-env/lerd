@@ -122,6 +122,13 @@ func (b *wsBroker) broadcastThemeList() {
 	b.broadcast(wsMessage{Kinds: []string{"theme_list"}})
 }
 
+// broadcastStreamingOn tells every open dashboard to hide its private sites now,
+// from what it already holds, rather than after the snapshot rebuild that
+// follows. That rebuild is the source of truth; this only closes the gap.
+func (b *wsBroker) broadcastStreamingOn() {
+	b.broadcast(wsMessage{Kinds: []string{"streaming_on"}})
+}
+
 func (b *wsBroker) broadcast(msg wsMessage) {
 	b.mu.Lock()
 	var drop []chan wsMessage

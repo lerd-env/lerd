@@ -1,0 +1,3 @@
+[
+  {"id": 69, "type": "PipeWire:Interface:Node", "info": {"state": "paused", "props": {"media.class": "Stream/Output/Video", "media.name": "kwin-screencast-DP-4", "node.name": "kwin_wayland"}}}
+]

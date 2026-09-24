@@ -73,14 +73,30 @@ type StatusRow struct {
 func loadSnapshot() Snapshot {
 	snap := Snapshot{}
 
+	cfg, _ := config.LoadGlobal()
+	hidden := map[string]bool{}
+	if reg, err := config.LoadSites(); err == nil {
+		hidden = cfg.StreamingHidden(reg)
+	}
+
 	enriched, err := siteinfo.LoadAll(siteinfo.EnrichUI)
 	if err == nil {
 		_ = siteinfo.PersistVersionChanges(enriched)
 		sort.Slice(enriched, func(i, j int) bool { return enriched[i].Name < enriched[j].Name })
-		snap.Sites = enriched
+		for _, e := range enriched {
+			if !hidden[e.Name] {
+				snap.Sites = append(snap.Sites, e)
+			}
+		}
 	}
 
-	snap.Workspaces, _ = config.ListWorkspaces()
+	workspaces, _ := config.ListWorkspaces()
+	for _, w := range workspaces {
+		if cfg != nil && cfg.UI.StreamingMode && w.Private {
+			continue
+		}
+		snap.Workspaces = append(snap.Workspaces, w)
+	}
 
 	snap.Services = loadServices()
 	// Workers live on sites but belong in the services pane too — same

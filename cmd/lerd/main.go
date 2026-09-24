@@ -220,6 +220,7 @@ func main() {
 	root.AddCommand(cli.NewXdebugCmd())
 	root.AddCommand(cli.NewDumpCmd())
 	root.AddCommand(cli.NewIdleCmd())
+	root.AddCommand(cli.NewStreamingCmd())
 	root.AddCommand(cli.NewWSLSetupCmd())
 	root.AddCommand(cli.NewProfileCmd())
 	root.AddCommand(cli.NewNotifyCmd())
@@ -630,6 +631,10 @@ func newWatchCmd() *cobra.Command {
 			// would otherwise keep polling at the mains rate. No-op where the
 			// reload watcher doesn't have to poll.
 			go watcher.WatchPower(30 * time.Second)
+
+			// Turn streaming mode on while the screen is shared, for users who
+			// opted in. Returns at once on hosts without PipeWire.
+			go watcher.WatchScreenShare(10 * time.Second)
 
 			// Reclaim orphaned lerd images (safe tier) on a slow daily cadence,
 			// so rebuild leftovers and stale base images don't pile up. Gated by

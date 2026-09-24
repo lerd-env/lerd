@@ -282,6 +282,13 @@ type GlobalConfig struct {
 		// Empty = the default theme. The light/dark mode stays per browser,
 		// since that follows the room someone is sitting in.
 		Theme string `yaml:"theme,omitempty" mapstructure:"theme"`
+
+		// StreamingMode hides private sites and workspaces from the web UI and
+		// the TUI, for screen sharing. Toggled via `lerd streaming on/off`.
+		StreamingMode bool `yaml:"streaming_mode,omitempty" mapstructure:"streaming_mode"`
+		// StreamingAuto lets the watcher turn StreamingMode on while the screen
+		// is shared. Linux Wayland only. Toggled via `lerd streaming auto on/off`.
+		StreamingAuto bool `yaml:"streaming_auto,omitempty" mapstructure:"streaming_auto"`
 	} `yaml:"ui,omitempty" mapstructure:"ui"`
 	Workers struct {
 		// ExecMode controls how framework workers (queue, schedule, horizon,

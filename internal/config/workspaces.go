@@ -24,6 +24,8 @@ var (
 type Workspace struct {
 	Name  string   `yaml:"name"            mapstructure:"name"`
 	Sites []string `yaml:"sites,omitempty" mapstructure:"sites"`
+	// Private hides the workspace and every site in it while streaming mode is on.
+	Private bool `yaml:"private,omitempty" mapstructure:"private"`
 }
 
 // globalWriteMu serializes the read-modify-write cycles below within one
@@ -241,7 +243,7 @@ func (c *GlobalConfig) setWorkspaceLayout(layout []Workspace) error {
 			seenSite[s] = true
 			sites = append(sites, s)
 		}
-		out = append(out, Workspace{Name: name, Sites: sites})
+		out = append(out, Workspace{Name: name, Sites: sites, Private: w.Private})
 	}
 	c.Workspaces = out
 	return nil

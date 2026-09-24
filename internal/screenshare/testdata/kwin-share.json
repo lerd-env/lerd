@@ -1,0 +1,6 @@
+[
+  {"id": 86, "type": "PipeWire:Interface:Node", "info": {"state": "suspended", "props": {"device.api": "v4l2", "media.class": "Video/Source", "media.role": "Camera", "node.name": "v4l2_input.usb-cam"}}},
+  {"id": 69, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {"media.class": "Stream/Output/Video", "media.name": "kwin-screencast-DP-4", "node.name": "kwin_wayland"}}},
+  {"id": 162, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {"media.class": "Stream/Input/Video", "media.name": "webrtc-consume-stream", "node.name": "brave"}}},
+  {"id": 170, "type": "PipeWire:Interface:Link", "info": {"output-node-id": 69, "input-node-id": 162, "state": "active", "props": {}}}
+]

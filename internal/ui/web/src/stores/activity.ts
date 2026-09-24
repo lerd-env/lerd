@@ -79,7 +79,8 @@ export function diffSitesEvents(prev: Map<string, Site> | null, current: Site[])
   for (const [domain, s] of cur) {
     const old = prev.get(domain);
     if (!old) {
-      out.push({ kind: 'site_linked', subject: domain });
+      // A private site coming back when streaming mode turns off was never unlinked.
+      if (!s.hidden_while_streaming) out.push({ kind: 'site_linked', subject: domain });
       continue;
     }
     if (Boolean(old.paused) !== Boolean(s.paused)) {
@@ -99,8 +100,10 @@ export function diffSitesEvents(prev: Map<string, Site> | null, current: Site[])
       out.push({ kind: 'worker_woke', subject: domain });
     }
   }
-  for (const [domain] of prev) {
-    if (!cur.has(domain)) out.push({ kind: 'site_removed', subject: domain });
+  // Streaming mode drops private sites from the list, and naming them in the
+  // timeline would put them straight back on the shared screen.
+  for (const [domain, s] of prev) {
+    if (!cur.has(domain) && !s.hidden_while_streaming) out.push({ kind: 'site_removed', subject: domain });
   }
   return out;
 }

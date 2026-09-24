@@ -1,0 +1,6 @@
+[
+  {"id": 55, "type": "PipeWire:Interface:Device", "info": {"props": {"device.api": "v4l2", "media.class": "Video/Device"}}},
+  {"id": 86, "type": "PipeWire:Interface:Node", "info": {"state": "suspended", "props": {"device.api": "v4l2", "media.class": "Video/Source", "node.name": "v4l2_input.usb-cam"}}},
+  {"id": 90, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {"media.class": "Audio/Sink", "node.name": "alsa_output.speakers"}}},
+  {"id": 3, "type": "PipeWire:Interface:Module", "info": {"props": null}}
+]

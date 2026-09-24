@@ -1,6 +1,7 @@
 <script lang="ts">
   import DashboardCard from './DashboardCard.svelte';
   import StatusPill from '$components/StatusPill.svelte';
+  import StreamingToggle from '$components/StreamingToggle.svelte';
   import Icon from '$components/Icon.svelte';
   import SiteTile from '$tabs/sites/SiteTile.svelte';
   import { sites, sitesLoaded, siteWorkerFailing } from '$stores/sites';
@@ -23,10 +24,13 @@
 <DashboardCard title={m.dashboard_sites_title()} tone={failing > 0 ? 'critical' : 'default'}>
   {#snippet badge()}
     {#if $sitesLoaded}
-      <StatusPill
-        tone={failing > 0 ? 'error' : running > 0 ? 'ok' : 'muted'}
-        label={m.dashboard_sites_summary({ running, total })}
-      />
+      <span class="inline-flex items-center gap-1.5">
+        <StreamingToggle />
+        <StatusPill
+          tone={failing > 0 ? 'error' : running > 0 ? 'ok' : 'muted'}
+          label={m.dashboard_sites_summary({ running, total })}
+        />
+      </span>
     {/if}
   {/snippet}
 

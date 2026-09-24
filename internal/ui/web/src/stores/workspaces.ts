@@ -39,6 +39,11 @@ export const renameWorkspace = (old: string, next: string) =>
 
 export const deleteWorkspace = (name: string) => send('/api/workspaces/delete', 'POST', { name });
 
+export const setWorkspacePrivate = (name: string, priv: boolean) =>
+  send('/api/workspaces/private', 'POST', { name, private: priv });
+
+export const setStreamingMode = (enabled: boolean) => send('/api/settings/streaming', 'POST', { enabled });
+
 // An empty workspace ungroups the sites. Pass create to make a workspace that
 // doesn't exist yet, so the picker's "New workspace…" is a single round trip.
 export const assignSiteWorkspace = (sites: string[], workspace: string, create = false) =>

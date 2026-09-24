@@ -1567,5 +1567,9 @@
   "gitStatus_modified": "{count} değiştirilmiş",
   "gitStatus_staged": "{count} hazırlanmış",
   "gitStatus_ahead": "{count} ileride",
-  "gitStatus_behind": "{count} geride"
+  "gitStatus_behind": "{count} geride",
+  "nav_streamingOff": "Yayın modu: özel siteleri ve çalışma alanlarını gizle",
+  "nav_streamingOn": "Yayın modu açık, özel siteler ve çalışma alanları gizli",
+  "sites_hideWhileStreaming": "Yayın sırasında gizle",
+  "sites_showWhileStreaming": "Yayın sırasında göster"
 }
