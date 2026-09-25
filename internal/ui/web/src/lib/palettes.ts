@@ -292,9 +292,12 @@ export function onAccent(accent: string): string {
 // null when the accent is not a plain hex. The daemon already refuses anything
 // else; this is the second gate, right before the value becomes CSS.
 export function resolvePalette(file: PaletteFile): Palette | null {
-  const accent = hex(file.accent);
-  if (!accent || !file.id || !file.name) return null;
-  const accentDark = hex(file.accent_dark) || brandTint(accent)!.dark;
+  const declared = hex(file.accent);
+  if (!declared || !file.id || !file.name) return null;
+  const accentDark = hex(file.accent_dark) || brandTint(declared)!.dark;
+  // A desktop publishes one accent, tuned for its own surfaces: a dark
+  // desktop's pastel is unreadable as link text on the light tone.
+  const accent = file.source === 'desktop' ? readableOnWhite(declared) : declared;
   return {
     id: file.id,
     name: file.name,
@@ -338,6 +341,18 @@ export function paletteVars(palette: Palette, dark: boolean): Record<string, str
 function hex(v: string | undefined): string | null {
   const rgb = parseHex(v);
   return rgb ? toHex(rgb) : null;
+}
+
+// readableOnWhite steps color toward black until it reaches the WCAG AA text
+// contrast against white, keeping its hue.
+const TEXT_ON_WHITE_FLOOR = 4.5;
+
+function readableOnWhite(color: string): string {
+  let rgb = parseHex(color)!;
+  for (let i = 0; i < 40 && whiteContrast(rgb) < TEXT_ON_WHITE_FLOOR; i++) {
+    rgb = mix(rgb, 0, 0.05);
+  }
+  return toHex(rgb);
 }
 
 function step(color: string, target: number): string {

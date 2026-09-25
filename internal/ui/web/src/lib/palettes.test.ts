@@ -27,6 +27,24 @@ describe('resolvePalette', () => {
     expect(p.source).toBe('desktop');
   });
 
+  it('darkens a desktop accent picked for dark surfaces until it reads on white', () => {
+    const p = resolvePalette({
+      id: 'omarchy',
+      name: 'Omarchy (catppuccin)',
+      accent: '#89b4fa',
+      accent_dark: '#89b4fa',
+      source: 'desktop'
+    })!;
+    const onWhite = 1.05 / (luminance(parseHex(p.accent)!) + 0.05);
+    expect(onWhite).toBeGreaterThanOrEqual(4.5);
+    expect(p.accentDark).toBe('#89b4fa');
+  });
+
+  it('leaves a desktop accent that already reads on white alone', () => {
+    const p = resolvePalette({ id: 'omarchy', name: 'Omarchy', accent: '#1e66f5', source: 'desktop' })!;
+    expect(p.accent).toBe('#1e66f5');
+  });
+
   it('lifts a near-black accent so it reads on the dark card', () => {
     const p = resolvePalette({ id: 'ink', name: 'Ink', accent: '#050505' })!;
     expect(p.accentDark).not.toBe(p.accent);
