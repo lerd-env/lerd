@@ -963,6 +963,8 @@
   "sites_extraMore": "+{count} altri",
   "sites_fileLoadFailed": "Impossibile caricare {file} ({status})",
   "sites_gitWorktrees": "Git Worktree",
+  "sites_initGit": "Inizializza git",
+  "sites_initGitHint": "Crea un repository git in questa cartella per usare branch e worktree",
   "sites_idle": "inattivo",
   "sites_idleHint": "Worker sospesi dopo il timeout di inattività; riprendono alla richiesta successiva.",
   "sites_linkNew": "Aggiungi un sito",

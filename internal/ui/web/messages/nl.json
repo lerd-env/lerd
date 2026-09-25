@@ -963,6 +963,8 @@
   "sites_extraMore": "+{count} meer",
   "sites_fileLoadFailed": "Kan {file} niet laden ({status})",
   "sites_gitWorktrees": "Git-worktrees",
+  "sites_initGit": "Git initialiseren",
+  "sites_initGitHint": "Maak een git-repository in deze map om branches en worktrees te gebruiken",
   "sites_idle": "inactief",
   "sites_idleHint": "Workers gepauzeerd na de inactiviteitstime-out; ze hervatten bij de volgende aanvraag.",
   "sites_linkNew": "Site toevoegen",

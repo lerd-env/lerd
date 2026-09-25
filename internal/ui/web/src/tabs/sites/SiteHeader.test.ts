@@ -1,5 +1,5 @@
-import { render, fireEvent } from '@testing-library/svelte';
-import { describe, it, expect } from 'vitest';
+import { render, fireEvent, waitFor } from '@testing-library/svelte';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import Harness from './SiteHeader.test.svelte';
 import type { Site } from '$stores/sites';
 import { frameworkMarks } from '$stores/frameworkMarks';
@@ -122,5 +122,36 @@ describe('SiteHeader', () => {
     const menu = getByRole('menu');
     expect(menu).toHaveTextContent('Group with another site');
     expect(menu).toHaveTextContent('client-a');
+  });
+
+  describe('without git', () => {
+    afterEach(() => vi.unstubAllGlobals());
+    const stubCheckouts = (checkouts: unknown[]) => {
+      const fetchMock = vi.fn(async (url: string) =>
+        new Response(JSON.stringify(url.includes('git-status') ? { checkouts } : { ok: true }))
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      return fetchMock;
+    };
+
+    it('offers to initialize git where the tabs would be', async () => {
+      const fetchMock = stubCheckouts([]);
+      const { findByText } = render(Harness, { props: { site } });
+
+      await fireEvent.click(await findByText('Initialize git'));
+      await waitFor(() =>
+        expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith('/api/sites/app.test/git:init'))).toBe(true)
+      );
+    });
+
+    // A subfolder of a larger repo has no branch of its own but is already under git.
+    it('stays hidden inside a parent repository', async () => {
+      const fetchMock = stubCheckouts([{ branch: 'main', path: '/home/u/Code', main: true }]);
+      const { queryByText } = render(Harness, { props: { site } });
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      await Promise.resolve();
+      expect(queryByText('Initialize git')).not.toBeInTheDocument();
+    });
   });
 });

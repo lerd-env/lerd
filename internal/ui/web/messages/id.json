@@ -963,6 +963,8 @@
   "sites_extraMore": "+{count} lagi",
   "sites_fileLoadFailed": "Gagal memuat {file} ({status})",
   "sites_gitWorktrees": "Git Worktree",
+  "sites_initGit": "Inisialisasi git",
+  "sites_initGitHint": "Buat repositori git di folder ini untuk memakai branch dan worktree",
   "sites_idle": "menganggur",
   "sites_idleHint": "Worker dihentikan setelah batas waktu menganggur; dilanjutkan pada permintaan berikutnya.",
   "sites_linkNew": "Tambah site",

@@ -963,6 +963,8 @@
   "sites_extraMore": "+{count} 个",
   "sites_fileLoadFailed": "加载 {file} 失败（{status}）",
   "sites_gitWorktrees": "Git Worktree",
+  "sites_initGit": "初始化 git",
+  "sites_initGitHint": "在此文件夹中创建 git 仓库，以使用分支和工作树",
   "sites_idle": "空闲",
   "sites_idleHint": "工作进程在空闲超时后挂起，将在下次请求时恢复。",
   "sites_linkNew": "添加站点",

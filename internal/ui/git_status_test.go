@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -79,5 +80,48 @@ func TestHandleSiteGitStatus_unknownSite(t *testing.T) {
 	handleSiteGitStatus(rec, httptest.NewRequest(http.MethodGet, "/api/sites/git-status?domain=nope.test", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("want 404, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleSiteAction_gitInit(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	sitePath := t.TempDir()
+	if err := config.AddSite(config.Site{Name: "acme", Path: sitePath, Domains: []string{"acme.test"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	handleSiteAction(rec, httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/git:init", nil))
+
+	if !strings.Contains(rec.Body.String(), `"ok":true`) {
+		t.Fatalf("want ok, got %s", rec.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(sitePath, ".git", "HEAD")); err != nil {
+		t.Errorf("repo not created: %v", err)
+	}
+}
+
+func TestHandleSiteGitStatus_ignoredByParent(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	parent := t.TempDir()
+	gitIn(t, parent, "init", "-q", "-b", "main")
+	if err := os.WriteFile(filepath.Join(parent, ".gitignore"), []byte("sites\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sitePath := filepath.Join(parent, "sites", "shop")
+	if err := os.MkdirAll(sitePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "shop", Path: sitePath, Domains: []string{"shop.test"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	handleSiteGitStatus(rec, httptest.NewRequest(http.MethodGet, "/api/sites/git-status?domain=shop.test", nil))
+
+	if got := strings.TrimSpace(rec.Body.String()); got != `{"checkouts":[]}` {
+		t.Fatalf("want no checkouts, got %s", got)
 	}
 }

@@ -11,6 +11,7 @@
     pinSite,
     unpinSite,
     restartSite,
+    initGit,
     openSiteInBrowser,
     openTerminal,
     openFolder,
@@ -151,6 +152,31 @@
       gitCheckouts = [];
     };
   });
+  // No branch can also mean a subfolder of a bigger repo, where a nested init
+  // would shadow the parent; git-status sees the parent's checkouts there.
+  let noRepo = $state(false);
+  $effect(() => {
+    noRepo = false;
+    if (site.branch || site.paused) return;
+    const domain = site.domain;
+    loadGitStatus(domain)
+      .then((c) => {
+        if (domain === site.domain) noRepo = c.length === 0;
+      })
+      .catch(() => {});
+  });
+  let initingGit = $state(false);
+  async function runInitGit() {
+    initingGit = true;
+    const res = await initGit(site.domain);
+    initingGit = false;
+    if (!res.ok) {
+      openErrorModal(res.error || m.common_requestFailed(), m.sites_initGit());
+      return;
+    }
+    await loadSites();
+  }
+
   const urlEditable = $derived(!site.paused && !activeWorktreeBranch);
   const dnsEnabled = $derived($status.dns?.enabled !== false);
   const tlsToggleable = $derived(urlEditable && dnsEnabled);
@@ -365,6 +391,21 @@
         </button>
       {/if}
       </div>
+    </div>
+  {:else if noRepo && !site.paused}
+    <div class="flex items-center page-header px-3">
+      <button
+        type="button"
+        onclick={runInitGit}
+        disabled={initingGit}
+        use:tooltip={m.sites_initGitHint()}
+        class="flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg bg-white dark:bg-white/10 shadow-sm dark:shadow-none text-gray-800 dark:text-gray-100 font-medium opacity-60 hover:opacity-100 transition-opacity disabled:opacity-40"
+      >
+        <svg class="w-3.5 h-3.5 shrink-0 text-lerd-red" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <path d="M6 3v12M15 6a3 3 0 1 0 6 0a3 3 0 1 0-6 0M3 18a3 3 0 1 0 6 0a3 3 0 1 0-6 0M18 9a9 9 0 0 1-9 9" />
+        </svg>
+        <span>{m.sites_initGit()}</span>
+      </button>
     </div>
   {/if}
 
