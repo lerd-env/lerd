@@ -3,6 +3,7 @@ package ui
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/geodro/lerd/internal/siteops"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -40,7 +41,7 @@ func runProjectName(name string) bool {
 	if strings.ContainsAny(name, `/\`) || strings.HasPrefix(name, "-") {
 		return false
 	}
-	return name == filepath.Clean(name)
+	return name == filepath.Clean(name) && siteops.CheckProjectName(name) == nil
 }
 
 // runArgv turns a request into the command lerd-ui runs, the directory to run

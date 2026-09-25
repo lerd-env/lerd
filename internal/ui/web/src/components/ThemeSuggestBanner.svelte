@@ -1,10 +1,11 @@
 <script lang="ts">
   import { desktopSuggestion, keepCurrentTheme, useSuggestedTheme } from '$stores/palettes';
+  import { bannersAllowed } from '$stores/setup';
   import { m } from '../paraglide/messages.js';
   import BottomBanner from './BottomBanner.svelte';
 </script>
 
-{#if $desktopSuggestion}
+{#if $desktopSuggestion && $bannersAllowed}
   <BottomBanner
     title={m.theme_suggest_title({ name: $desktopSuggestion.name })}
     subtitle={m.theme_suggest_subtitle()}

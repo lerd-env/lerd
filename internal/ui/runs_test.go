@@ -166,7 +166,7 @@ func TestRunArgvBuildsScaffold(t *testing.T) {
 // it, or that would be read as a flag, is refused before a command is built.
 func TestRunArgvRejectsEscapingNames(t *testing.T) {
 	parent := t.TempDir()
-	for _, name := range []string{"", ".", "..", "../evil", "a/b", `a\b`, "--framework=x"} {
+	for _, name := range []string{"", ".", "..", "../evil", "a/b", `a\b`, "--framework=x", "My App", "my app"} {
 		if _, _, _, err := runArgv("/usr/bin/lerd", RunRequest{Kind: runKindScaffold, Dir: parent, Name: name}); err == nil {
 			t.Errorf("name %q should be refused", name)
 		}

@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"github.com/geodro/lerd/internal/siteops"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
@@ -255,7 +257,8 @@ func validateProjectName(s string) error {
 	if strings.ContainsRune(s, 0) {
 		return fmt.Errorf("the name cannot contain a NUL byte")
 	}
-	return nil
+	// A path is fine, but the folder it ends in becomes the site's name.
+	return siteops.CheckProjectName(filepath.Base(strings.TrimSpace(s)))
 }
 
 // askProjectName prompts for the target when the command was called without one.

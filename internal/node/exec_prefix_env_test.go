@@ -48,14 +48,14 @@ func TestFnmExecPrefixWithEnv_InjectsAfterActivation(t *testing.T) {
 func TestNvmExecPrefixWithEnv_InjectsAfterNvmUse(t *testing.T) {
 	m := nvmManager{}
 	prefix := m.ExecPrefixWithEnv("default", []string{"npm_config_prefix=/tmp/lerd-global"})
-	useIdx := strings.Index(prefix, "nvm use")
+	useIdx := strings.Index(prefix, "nvm which")
 	exportIdx := strings.Index(prefix, "export npm_config_prefix=")
 	execIdx := strings.Index(prefix, `exec "$@"`)
 	if useIdx < 0 || exportIdx < 0 || execIdx < 0 {
 		t.Fatalf("nvm ExecPrefixWithEnv missing pieces:\n%s", prefix)
 	}
 	if !(useIdx < exportIdx && exportIdx < execIdx) {
-		t.Errorf("export must sit after nvm use and before exec:\n%s", prefix)
+		t.Errorf("export must sit after nvm activation and before exec:\n%s", prefix)
 	}
 	if !strings.Contains(prefix, "export npm_config_prefix=") || !strings.Contains(prefix, "/tmp/lerd-global") {
 		t.Errorf("expected shell-quoted export of npm_config_prefix:\n%s", prefix)

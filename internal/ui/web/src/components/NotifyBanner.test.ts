@@ -1,7 +1,15 @@
 import { render } from '@testing-library/svelte';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import NotifyBanner from './NotifyBanner.svelte';
 import { permissionState, dismissed, notifyDelivery } from '$lib/notify';
+
+// Get started asks these questions itself; these tests are about an install
+// that never went through it.
+vi.mock('$stores/setup', async () => {
+  const { readable } = await import('svelte/store');
+  return { bannersAllowed: readable(true) };
+});
+
 
 const realLocation = window.location;
 

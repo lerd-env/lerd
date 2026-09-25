@@ -7,6 +7,7 @@
     dismissNotifyBanner
   } from '$lib/notify';
   import { onFallbackOrigin } from '$lib/vhost';
+  import { bannersAllowed } from '$stores/setup';
   import { m } from '../paraglide/messages.js';
   import BottomBanner from './BottomBanner.svelte';
 
@@ -19,7 +20,8 @@
     $permissionState === 'default' &&
       !$dismissed &&
       $notifyDelivery !== 'native' &&
-      !onFallbackOrigin()
+      !onFallbackOrigin() &&
+      $bannersAllowed
   );
 
   async function onEnable() {

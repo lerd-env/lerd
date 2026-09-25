@@ -4,6 +4,7 @@
   import Dropdown from '$components/Dropdown.svelte';
   import FrameworkMark from '$components/FrameworkMark.svelte';
   import WizardField from './WizardField.svelte';
+  import { slugifyProjectName } from '$lib/projectName';
   import { frameworkCatalogue, type FrameworkChoice } from '$stores/wizard';
   import { m } from '../../paraglide/messages.js';
 
@@ -54,7 +55,12 @@
     <input
       type="text"
       value={name}
-      oninput={(e) => emit({ name: (e.currentTarget as HTMLInputElement).value })}
+      oninput={(e) => {
+        const input = e.currentTarget as HTMLInputElement;
+        const slug = slugifyProjectName(input.value);
+        input.value = slug;
+        emit({ name: slug });
+      }}
       placeholder={m.siteWizard_projectNamePlaceholder()}
       class="w-full text-sm bg-white dark:bg-lerd-bg border border-gray-200 dark:border-lerd-border rounded-sm px-2 py-1.5 text-gray-700 dark:text-gray-300 focus:outline-hidden focus:border-lerd-red/50"
     />

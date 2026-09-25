@@ -175,13 +175,12 @@ func nvmDefaultUsable(raw string) bool {
 	return v != "" && v != "N/A" && v != "system"
 }
 
-// nvmActivate returns the shell prelude that sources nvm, selects version, and
-// puts that version's bin dir at the front of PATH. Both checks are required:
-// nvm use can return 0 on the system branch (default alias "system" with a
-// host node) while running nvm deactivate and unsetting NVM_BIN, and an empty
-// NVM_BIN would make PATH=":$PATH" put the current directory on PATH. Honouring
-// the exit status catches a missing pin; requiring a non-empty NVM_BIN catches
-// the system fall-through.
+// nvmActivate returns the shell prelude that sources nvm, resolves version to
+// its node binary, and puts that binary's dir at the front of PATH. It asks
+// `nvm which` rather than `nvm use`: use refuses outright when ~/.npmrc sets a
+// prefix, a common setup, while which resolves the same version untouched. The
+// binary has to live under $NVM_DIR, which is what refuses a default alias of
+// "system": that resolves to the host node, and nvm is not managing it.
 func nvmActivate(version string) string {
 	// The version is bound to a shell variable once and only ever referenced
 	// through it. Interpolating it into the messages as well would put an
@@ -189,8 +188,9 @@ func nvmActivate(version string) string {
 	// the value is enough to end the string and start a command.
 	return sourceScript() + fmt.Sprintf(
 		`__lerd_nv=%s; `+
-			`nvm use "$__lerd_nv" >/dev/null 2>&1 || { echo "lerd: no nvm Node available for $__lerd_nv (run: lerd node:install)" >&2; exit 1; }; `+
-			`if [ -z "$NVM_BIN" ]; then echo "lerd: no nvm Node available for $__lerd_nv (run: lerd node:install)" >&2; exit 1; fi; `+
+			`__lerd_nb=$(nvm which "$__lerd_nv" 2>/dev/null); `+
+			`case "$__lerd_nb" in "$NVM_DIR"/*/node) ;; *) echo "lerd: no nvm Node available for $__lerd_nv (run: lerd node:install)" >&2; exit 1;; esac; `+
+			`NVM_BIN="${__lerd_nb%%/node}"; export NVM_BIN; `+
 			`PATH="$NVM_BIN:$PATH"; export PATH; `,
 		shellQuote(execVersion(version)))
 }

@@ -82,6 +82,8 @@ The Dashboard is the root page (`#dashboard`) and the default destination when t
 
 Every widget is driven by the same Svelte stores that power the rest of the dashboard, so all values stay live over the WebSocket without polling.
 
+On a fresh install the grid opens with a **Get started with Lerd** card in the first slot, standing in for the Lerd card. It lists its steps with a progress ring: add your first site (or create a project in the parked `~/Lerd`), start a service, turn on notifications, match your desktop's theme (only when Lerd detects one), turn on **Start when the dashboard opens**, and turn on idle-suspend. Because it asks about notifications and the theme itself, the banners that offer those two stay hidden while it runs and after it is finished or dismissed; they are kept for installs that never went through Get started. Each step ticks itself off from the same state the rest of the dashboard reads, so doing it from the CLI or the System page counts too. When the last one ticks, the card says so for a moment and hands its place back to the Lerd card, which returns to the end of the grid. Dismissing it does the same straight away. It only starts when a dashboard first opens on an install with no sites, so an install already in use keeps its Lerd card. Where it stands is kept in the global config (`ui.setup`), so a browser, the desktop app and any other window all show the same checklist, and finishing or dismissing it in one clears it from the rest. Once finished or dismissed it stays gone.
+
 ### Command palette
 
 ![Command palette overlay](/assets/screenshots/command-palette.png)

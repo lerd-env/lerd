@@ -43,17 +43,20 @@ func WatchWorktrees(
 	// siteForEntryDir maps <site>/.git/worktrees/<name>/ → site path
 	siteForEntryDir := map[string]string{}
 
-	addWorktreesWatch := func(sitePath string) {
+	// addWorktreesWatch returns the entry dirs it started watching, so a caller
+	// that re-watches after a gap can report the worktrees created during it.
+	addWorktreesWatch := func(sitePath string) []string {
 		worktreesDir := filepath.Join(sitePath, ".git", "worktrees")
 		if _, already := siteForWorktreesDir[worktreesDir]; already {
-			return
+			return nil
 		}
 		if _, err := os.Stat(worktreesDir); err != nil {
-			return
+			return nil
 		}
 		if err := w.Add(worktreesDir); err == nil {
 			siteForWorktreesDir[worktreesDir] = sitePath
 		}
+		var added []string
 		entries, _ := os.ReadDir(worktreesDir)
 		for _, e := range entries {
 			if !e.IsDir() {
@@ -65,8 +68,10 @@ func WatchWorktrees(
 			}
 			if err := w.Add(entryDir); err == nil {
 				siteForEntryDir[entryDir] = sitePath
+				added = append(added, entryDir)
 			}
 		}
+		return added
 	}
 
 	addSite := func(sitePath string) {
@@ -109,6 +114,11 @@ func WatchWorktrees(
 				// would stop addWorktreesWatch from watching the re-created dir.
 				if filepath.Base(event.Name) == "worktrees" && event.Op&(fsnotify.Remove|fsnotify.Rename) != 0 {
 					delete(siteForWorktreesDir, event.Name)
+					// On kqueue this can land after git has already re-created the dir,
+					// and fsnotify drops the watch by path, the new dir's included.
+					for _, entryDir := range addWorktreesWatch(sitePath) {
+						go handleNewEntry(entryDir, sitePath, filepath.Base(entryDir), onAdded)
+					}
 				}
 				if filepath.Base(event.Name) == "worktrees" && event.Op&fsnotify.Create != 0 {
 					delete(siteForWorktreesDir, event.Name)
