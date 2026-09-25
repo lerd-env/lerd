@@ -21,6 +21,7 @@ DESKTOP_INSTALL_CMD="${LERD_DESKTOP_INSTALL_CMD:-flatpak install --user https://
 OMARCHY_PLUGIN_REPO="https://github.com/lerd-env/lerd-omarchy-glance"
 OMARCHY_PLUGIN_ID="sh.lerd.glance"
 OMARCHY_PLUGINS_DIR="$HOME/.config/omarchy/plugins"
+OMARCHY_SYSTEM_PATH="/usr/share/omarchy"
 INSTALL_DIR="${LERD_INSTALL_DIR:-$HOME/.local/bin}"
 LERD_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/lerd"
 LERD_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/lerd"
@@ -731,10 +732,20 @@ cmd_install() {
   star_note
 }
 
+# omarchy_path_default points OMARCHY_PATH at the packaged install when the
+# shell running us never set it. Only Omarchy's interactive bashrc exports it,
+# and its plugin commands refuse to run without it.
+omarchy_path_default() {
+  [ -n "${OMARCHY_PATH:-}" ] && return 0
+  [ -d "$OMARCHY_SYSTEM_PATH" ] && export OMARCHY_PATH="$OMARCHY_SYSTEM_PATH"
+  return 0
+}
+
 # setup_omarchy swaps the tray for the Glance bar plugin on Omarchy, whose bar
 # already has a place for lerd's state. Off Omarchy it does nothing.
 setup_omarchy() {
   command -v omarchy-plugin-add &>/dev/null || return 0
+  omarchy_path_default
   header "Omarchy"
   "${INSTALL_DIR}/${BINARY}" tray off >/dev/null 2>&1 || true
   success "System tray off, the Omarchy bar shows Lerd instead"
@@ -754,6 +765,7 @@ setup_omarchy() {
 # leaves the command behind if Omarchy refuses, rather than a silent leftover.
 remove_omarchy_plugin() {
   [ -d "$OMARCHY_PLUGINS_DIR/${OMARCHY_PLUGIN_ID}" ] || return 0
+  omarchy_path_default
   if omarchy-plugin-remove "$OMARCHY_PLUGIN_ID" --yes >/dev/null 2>&1; then
     success "Removed the Lerd Glance plugin"
   else
@@ -967,6 +979,19 @@ uninstall_linux_dns() {
   lerd_dns_cleanup_hint
 }
 
+# Stops and removes every lerd user unit: the daemons, the tray, and the host
+# workers (vite and friends), which would otherwise keep running a dev server
+# for a site nothing serves any more.
+remove_lerd_user_units() {
+  local dir="$1" f unit
+  for f in "$dir"/lerd-*.service "$dir"/lerd-*.timer; do
+    [ -f "$f" ] || continue
+    unit="$(basename "$f")"
+    systemctl --user disable --now "$unit" 2>/dev/null || true
+    rm -f "$f"
+  done
+}
+
 cmd_uninstall_linux() {
   header "Uninstalling Lerd"
 
@@ -991,16 +1016,7 @@ cmd_uninstall_linux() {
     info "Removed Quadlet units from $quadlet_dir"
   fi
 
-  # Stop and remove user service unit files. The tray is one of them: it is
-  # installed alongside the binary and left running it would keep polling an
-  # API that is going away.
-  for svc in lerd-watcher lerd-ui lerd-tray; do
-    if systemctl --user is-active --quiet "$svc" 2>/dev/null; then
-      systemctl --user stop "$svc" 2>/dev/null || true
-    fi
-    systemctl --user disable "$svc" 2>/dev/null || true
-    rm -f "$systemd_user_dir/${svc}.service"
-  done
+  remove_lerd_user_units "$systemd_user_dir"
 
   systemctl --user daemon-reload 2>/dev/null || true
   # A unit stopped by removing its file underneath it is left behind as failed

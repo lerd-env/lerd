@@ -151,8 +151,11 @@ func TestReload_StoppedContainerSkipsConfigTest(t *testing.T) {
 // normal. Running nginx -t on each of them would add an exec per attempt and
 // stretch the caller's timeout well past the window it asked for.
 func TestReloadWithRetry_DiagnosesOnceNotPerAttempt(t *testing.T) {
-	origReload, origRunning, origTest := reloadExecFn, containerRunningFn, configTestFn
-	defer func() { reloadExecFn, containerRunningFn, configTestFn = origReload, origRunning, origTest }()
+	origReload, origRunning, origTest, origPIDs := reloadExecFn, containerRunningFn, configTestFn, nginxWorkerPIDs
+	defer func() {
+		reloadExecFn, containerRunningFn, configTestFn, nginxWorkerPIDs = origReload, origRunning, origTest, origPIDs
+	}()
+	nginxWorkerPIDs = func() ([]string, error) { return nil, nil }
 
 	tests := 0
 	reloadExecFn = func() error { return errors.New("exit status 1") }
@@ -164,5 +167,31 @@ func TestReloadWithRetry_DiagnosesOnceNotPerAttempt(t *testing.T) {
 	}
 	if tests != 1 {
 		t.Errorf("nginx -t ran %d times, want 1", tests)
+	}
+}
+
+// A site linked or unlinked is reported done when this returns, so it has to
+// outlast the workers still serving the previous configuration.
+func TestReloadWithRetry_WaitsForTheOldWorkers(t *testing.T) {
+	origReload, origRunning, origPIDs := reloadExecFn, containerRunningFn, nginxWorkerPIDs
+	defer func() { reloadExecFn, containerRunningFn, nginxWorkerPIDs = origReload, origRunning, origPIDs }()
+
+	reloaded := false
+	reloadExecFn = func() error { reloaded = true; return nil }
+	containerRunningFn = func(string) (bool, error) { return true, nil }
+	reads := 0
+	nginxWorkerPIDs = func() ([]string, error) {
+		reads++
+		if !reloaded || reads < 4 {
+			return []string{"10"}, nil
+		}
+		return []string{"20"}, nil
+	}
+
+	if err := ReloadWithRetry(time.Second); err != nil {
+		t.Fatalf("ReloadWithRetry: %v", err)
+	}
+	if reads < 4 {
+		t.Errorf("returned after %d worker reads, before the old worker retired", reads)
 	}
 }

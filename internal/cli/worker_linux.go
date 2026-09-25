@@ -172,7 +172,9 @@ func writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, resta
 			return false, errNoUsableNode()
 		}
 	}
-	escaped := strings.ReplaceAll(shellCommand, "'", `'"'"'`)
+	// systemd expands $VAR and %-specifiers in ExecStart before sh runs, so both
+	// are doubled to reach the shell literally.
+	escaped := strings.NewReplacer("'", `'"'"'`, "$", "$$", "%", "%%").Replace(shellCommand)
 	// Order after and pull up the site's FPM container: host tools like Vite
 	// run wayfinder (php artisan) at startup, which fails if FPM isn't up yet
 	// at boot. Wants, not BindsTo, so a transient FPM restart can't kill Vite.

@@ -21,7 +21,7 @@ import (
 func NewSiteDoctorCmd() *cobra.Command {
 	var asJSON, fix bool
 	cmd := &cobra.Command{
-		Use:          "site:doctor [domain]",
+		Use:          "site:doctor [site]",
 		Short:        "Run app-level health checks for a site",
 		Long:         "Run app-level health checks (env, dependencies, security audit, framework specifics) for a site. Defaults to the site in the current directory; pass a domain to target another.",
 		Example:      "  lerd site:doctor\n  lerd site:doctor acme.test\n  lerd site:doctor --json\n  lerd site:doctor --fix",
@@ -219,7 +219,10 @@ func resolveSiteDoctorTarget(domain string) (path, fwName, label string, err err
 	if domain != "" {
 		site, err := config.FindSiteByDomain(domain)
 		if err != nil {
-			return "", "", "", fmt.Errorf("site not found: %s", domain)
+			// `lerd sites` lists names first, so a name is what people type.
+			if site, err = config.FindSite(domain); err != nil {
+				return "", "", "", fmt.Errorf("site not found: %s", domain)
+			}
 		}
 		return site.Path, site.Framework, domain, nil
 	}

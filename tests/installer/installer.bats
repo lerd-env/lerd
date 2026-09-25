@@ -743,6 +743,18 @@ _fake_omarchy() {
   grep -q "^omarchy-plugin-remove $OMARCHY_PLUGIN_ID --yes" "$d/calls"
 }
 
+@test "remove_omarchy_plugin sets OMARCHY_PATH when a non-interactive shell left it out" {
+  local d; d="$(_fake_omarchy)"
+  printf '#!/usr/bin/env bash\n[ -n "$OMARCHY_PATH" ] || exit 1\necho "remove $OMARCHY_PATH" >> "%s/calls"\n' "$d" > "$d/omarchy-plugin-remove"
+  PATH="$d:$PATH"
+  unset OMARCHY_PATH
+  OMARCHY_SYSTEM_PATH="$d"
+  mkdir -p "$OMARCHY_PLUGINS_DIR/$OMARCHY_PLUGIN_ID"
+  run remove_omarchy_plugin
+  [ "$status" -eq 0 ]
+  grep -q "^remove $d" "$d/calls"
+}
+
 @test "remove_omarchy_plugin skips a plugin that is not installed" {
   local d; d="$(_fake_omarchy)"
   PATH="$d:$PATH"
@@ -913,8 +925,24 @@ _undeletable_dir() {
 # tray on PATH polling an API that is gone.
 @test "the linux uninstall removes the tray binary and its unit" {
   local body; body="$(declare -f cmd_uninstall_linux)"
-  [[ "$body" == *"lerd-tray"* ]]
+  [[ "$body" == *"remove_lerd_user_units"* ]]
   [[ "$body" == *"reset-failed"* ]]
+}
+
+@test "remove_lerd_user_units stops and removes worker units too" {
+  local dir="$HOME/units"
+  mkdir -p "$dir"
+  touch "$dir/lerd-ui.service" "$dir/lerd-tray.service" "$dir/lerd-vite-demo.service" \
+    "$dir/lerd-schedule-demo.timer" "$dir/other.service"
+  systemctl() { echo "$*" >> "$HOME/systemctl.log"; }
+
+  remove_lerd_user_units "$dir"
+
+  [ ! -e "$dir/lerd-vite-demo.service" ]
+  [ ! -e "$dir/lerd-tray.service" ]
+  [ ! -e "$dir/lerd-schedule-demo.timer" ]
+  [ -e "$dir/other.service" ]
+  grep -q -- "--user disable --now lerd-vite-demo.service" "$HOME/systemctl.log"
 }
 
 @test "remove_from_path removes the unmarked lerd bin entry" {

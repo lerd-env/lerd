@@ -115,7 +115,7 @@ func TeardownSite(site *config.Site, parkedDirs []string) {
 func FinishSiteRemoval() error {
 	_ = podman.WriteContainerHosts()
 	_ = podman.RewriteFPMQuadlets()
-	return nginx.Reload()
+	return nginx.ReloadAndSettle()
 }
 
 // forgetSiteState drops the per-site request-timing and idle state the watcher

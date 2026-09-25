@@ -837,3 +837,30 @@ func TestShutdownOnSignal_InterruptLeavesTheMarkerAlone(t *testing.T) {
 		t.Error("a SIGINT exit must leave the managed-stop marker for the real stop")
 	}
 }
+
+func TestAcceptDetectedPHP(t *testing.T) {
+	installed := func(v string) bool { return v == "8.5" || v == "8.4" }
+	var out bytes.Buffer
+	if !acceptDetectedPHP("demo", "8.5", "8.4", installed, &out) {
+		t.Error("an installed version must be accepted")
+	}
+	if acceptDetectedPHP("demo", "8.5", "8.3", installed, &out) {
+		t.Error("a version with no FPM container must be refused")
+	}
+	if !strings.Contains(out.String(), "PHP 8.3") || !strings.Contains(out.String(), "still serving 8.5") {
+		t.Errorf("warning should name both versions, got %q", out.String())
+	}
+}
+
+func TestAnnounceSiteFilesChangedReachesLerdUI(t *testing.T) {
+	orig := notifyUI
+	defer func() { notifyUI = orig }()
+	var called bool
+	notifyUI = func(string) { called = true }
+
+	announceSiteFilesChanged()
+
+	if !called {
+		t.Error("a site file change must be posted to lerd-ui, the watcher's event bus stays in its own process")
+	}
+}

@@ -1,6 +1,9 @@
 package cli
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func boolPtr(b bool) *bool { return &b }
 
@@ -141,5 +144,17 @@ func TestNodeManagerChoice(t *testing.T) {
 				t.Errorf("nodeManagerChoice(%q, %v, %v, %v) = %q, want %q", tc.saved, tc.wantLerdNode, tc.nvm, tc.fnmInstalled, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestNodeManagerNotice(t *testing.T) {
+	if got := nodeManagerNotice("fnm"); got != "" {
+		t.Errorf("an fnm kept from an older install should print nothing, got %q", got)
+	}
+	if got := nodeManagerNotice("mise"); !strings.Contains(got, "using mise") {
+		t.Errorf("mise notice = %q", got)
+	}
+	if got := nodeManagerNotice("nvm"); !strings.Contains(got, "leaving Node to your nvm") {
+		t.Errorf("nvm notice = %q", got)
 	}
 }

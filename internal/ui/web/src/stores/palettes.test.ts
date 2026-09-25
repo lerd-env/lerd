@@ -60,7 +60,7 @@ describe('palettes store', () => {
             {
               id: 'plasma',
               name: 'Plasma (Breeze Dark)',
-              accent: '#3dd425',
+              accent: '#1b6e10',
               card: '#202326',
               source: 'desktop'
             }
@@ -77,7 +77,7 @@ describe('palettes store', () => {
     const breeze = get(palettes).filter((p) => p.id === 'breeze');
     expect(breeze).toHaveLength(1);
     expect(breeze[0].name).toBe('Breeze');
-    expect(breeze[0].accent).toBe('#3dd425');
+    expect(breeze[0].accent).toBe('#1b6e10');
     expect(get(palettes).some((p) => p.id === 'plasma')).toBe(false);
   });
 
