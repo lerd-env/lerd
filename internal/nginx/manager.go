@@ -1171,9 +1171,12 @@ func withConfigDiagnostics(err error) error {
 // change) can momentarily pair a new cert with the old key. A reload that lands
 // in that window crashes with "cannot load certificate"; retrying a beat later,
 // once the swap has settled, succeeds. nginx keeps serving its previous config
-// across a rejected reload, so retrying is safe.
+// across a rejected reload, so retrying is safe. It returns once the previous
+// workers have retired, since every caller reports a site change as live.
 func ReloadWithRetry(timeout time.Duration) error {
-	return withConfigDiagnostics(reloadWithRetry(reloadOnce, timeout))
+	return reloadAndSettle(func() error {
+		return withConfigDiagnostics(reloadWithRetry(reloadOnce, timeout))
+	}, nginxWorkerPIDs, settleTimeout, time.Sleep)
 }
 
 func reloadWithRetry(reload func() error, timeout time.Duration) error {
