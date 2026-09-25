@@ -55,7 +55,12 @@ func setStreaming(on bool) error {
 		return err
 	}
 	feedback.Begin()
-	feedback.Done("streaming mode " + onOff(on))
+	// Worded apart from enable/disable, which switch the feature rather than hide anything.
+	msg := "private workspaces shown again"
+	if on {
+		msg = "private workspaces hidden"
+	}
+	feedback.Done(msg)
 	return nil
 }
 
