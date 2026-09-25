@@ -457,10 +457,15 @@ install:
   command: php vendor/drush/drush/drush.php site:install --yes ...
 
 # Service presets the setup wizard offers for this framework, unticked, whether or
-# not they are installed yet (optional). A package declares the same key, and its
-# services are ticked, since requiring the package means the project uses them.
+# not they are installed yet (optional). The reason is shown beside the suggestion.
+# A package declares the same key, and its services are ticked in the wizard and
+# suggested on the site's Overview, since requiring the package means the project
+# uses them. A package's entries are alternatives, most important first: lerd puts
+# forward the first one this machine already runs, else the first, and none at all
+# when the project already uses one of them.
 suggest_services:
-  - solr
+  - name: solr
+    reason: Search API's usual search backend
 
 # Application log files shown in the UI "App Logs" tab
 logs:

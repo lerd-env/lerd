@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -68,11 +69,11 @@ type Framework struct {
 	Install *FrameworkInstall `yaml:"install,omitempty"`
 	// SuggestServices are service presets the setup wizard offers for this
 	// framework, unticked, whether or not they are installed yet.
-	SuggestServices []string `yaml:"suggest_services,omitempty"`
+	SuggestServices []ServiceSuggestion `yaml:"suggest_services,omitempty"`
 	// PackageServices are the suggest_services of the composer packages merged
 	// onto this definition. The wizard ticks these: the project requiring the
 	// package is evidence it uses them.
-	PackageServices []string `yaml:"-"`
+	PackageServices []ServiceSuggestion `yaml:"-"`
 	// Worktree declares what a worktree needs beyond the seeded env file.
 	Worktree *FrameworkWorktree `yaml:"worktree,omitempty"`
 	// Commands are on-demand actions surfaced in the dashboard "Run command"
@@ -402,6 +403,46 @@ type FrameworkSetupCmd struct {
 	Command string         `yaml:"command"`
 	Default bool           `yaml:"default,omitempty"`
 	Check   *FrameworkRule `yaml:"check,omitempty"` // only show when check passes (file exists or composer package installed)
+}
+
+// ServiceSuggestion is a service preset a definition suggests, with the reason
+// the dashboard shows beside it so a user can tell whether it is for them.
+type ServiceSuggestion struct {
+	Name   string `yaml:"name" json:"name"`
+	Reason string `yaml:"reason,omitempty" json:"reason,omitempty"`
+	// Package is the composer package that made the suggestion, set on merge.
+	Package string `yaml:"-" json:"package,omitempty"`
+}
+
+// PickPackageSuggestions narrows each package's suggestions, listed most
+// important first because they are alternatives, to the one it puts forward:
+// the first installed on this machine, else the first listed. A package whose
+// project already uses any of them puts nothing forward, and a service two
+// packages put forward is listed once.
+func PickPackageSuggestions(all []ServiceSuggestion, uses, installed func(string) bool) []ServiceSuggestion {
+	var order []string
+	byPkg := map[string][]ServiceSuggestion{}
+	for _, sg := range all {
+		if _, seen := byPkg[sg.Package]; !seen {
+			order = append(order, sg.Package)
+		}
+		byPkg[sg.Package] = append(byPkg[sg.Package], sg)
+	}
+	var out []ServiceSuggestion
+	for _, pkg := range order {
+		alts := byPkg[pkg]
+		if slices.ContainsFunc(alts, func(sg ServiceSuggestion) bool { return uses(sg.Name) }) {
+			continue
+		}
+		pick := alts[0]
+		if i := slices.IndexFunc(alts, func(sg ServiceSuggestion) bool { return installed(sg.Name) }); i >= 0 {
+			pick = alts[i]
+		}
+		if !slices.ContainsFunc(out, func(sg ServiceSuggestion) bool { return sg.Name == pick.Name }) {
+			out = append(out, pick)
+		}
+	}
+	return out
 }
 
 // FrameworkInstall is a framework's own installer, offered by setup while
@@ -1710,7 +1751,7 @@ func cloneFrameworkMutable(in *Framework) *Framework {
 		cp.Checks = append([]DoctorCheck(nil), in.Doctor.Checks...)
 		out.Doctor = &cp
 	}
-	out.PackageServices = append([]string(nil), in.PackageServices...)
+	out.PackageServices = append([]ServiceSuggestion(nil), in.PackageServices...)
 	return &out
 }
 

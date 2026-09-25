@@ -431,26 +431,32 @@ func TestGetFrameworkForDir_packageVersionPrefersTheLock(t *testing.T) {
 
 // A package's services are kept apart from the framework's own suggestions: the
 // project requiring the package is evidence it uses them, so they are ticked
-// where the framework's are only offered.
+// where the framework's are only offered. Each is kept, in order, carrying the
+// package it came from, for PickPackageSuggestions to narrow.
 func TestApplyPackage_suggestServices(t *testing.T) {
-	fw := &Framework{Name: "drupal", SuggestServices: []string{"solr", "memcached"}}
-	applyPackage(fw, &FrameworkPackage{Package: "drupal/search_api_solr", SuggestServices: []string{"solr"}})
-	applyPackage(fw, &FrameworkPackage{Package: "drupal/search_api_solr_extra", SuggestServices: []string{"solr"}})
+	fw := &Framework{Name: "drupal", SuggestServices: []ServiceSuggestion{{Name: "solr"}, {Name: "memcached"}}}
+	applyPackage(fw, &FrameworkPackage{Package: "drupal/search_api_solr", SuggestServices: []ServiceSuggestion{{Name: "solr", Reason: "Search backend"}}})
+	applyPackage(fw, &FrameworkPackage{Package: "drupal/search_api_solr_extra", SuggestServices: []ServiceSuggestion{{Name: "solr"}}})
 
-	if !slices.Equal(fw.SuggestServices, []string{"solr", "memcached"}) {
+	if len(fw.SuggestServices) != 2 {
 		t.Errorf("framework suggestions changed: %v", fw.SuggestServices)
 	}
-	if !slices.Equal(fw.PackageServices, []string{"solr"}) {
-		t.Errorf("package services = %v, want [solr] once", fw.PackageServices)
+	want := []ServiceSuggestion{
+		{Name: "solr", Reason: "Search backend", Package: "drupal/search_api_solr"},
+		{Name: "solr", Package: "drupal/search_api_solr_extra"},
+	}
+	if !slices.Equal(fw.PackageServices, want) {
+		t.Errorf("package services = %v, want %v", fw.PackageServices, want)
 	}
 }
 
 func TestFrameworkPackage_suggestServicesYAML(t *testing.T) {
 	var pkg FrameworkPackage
-	if err := yaml.Unmarshal([]byte("package: drupal/search_api_solr\nsuggest_services: [solr]\n"), &pkg); err != nil {
+	src := "package: drupal/search_api_solr\nsuggest_services:\n  - name: solr\n    reason: Search backend\n"
+	if err := yaml.Unmarshal([]byte(src), &pkg); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(pkg.SuggestServices, []string{"solr"}) {
+	if !slices.Equal(pkg.SuggestServices, []ServiceSuggestion{{Name: "solr", Reason: "Search backend"}}) {
 		t.Errorf("suggest_services not bound: %v", pkg.SuggestServices)
 	}
 }
