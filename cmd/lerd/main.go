@@ -731,6 +731,9 @@ func newWatchCmd() *cobra.Command {
 									}
 								}
 								detected := phpDet.DetectVersionClamped(sitePath, phpMin, phpMax, site.PHPVersion)
+								if !acceptDetectedPHP(site.Name, site.PHPVersion, detected, phpDet.IsInstalled, os.Stdout) {
+									detected = site.PHPVersion
+								}
 								if detected != site.PHPVersion {
 									fmt.Printf("PHP version changed for %s: %s -> %s\n", site.Name, site.PHPVersion, detected)
 									site.PHPVersion = detected
@@ -1321,4 +1324,16 @@ func removeStale(_ *config.GlobalConfig) bool {
 		}
 	}
 	return removed
+}
+
+// acceptDetectedPHP reports whether the watcher may move a site onto the PHP
+// version its files now ask for. A version with no FPM container would leave
+// the vhost pointing at nothing, so the site keeps what it is served with and
+// the install is left to lerd link, which builds it first.
+func acceptDetectedPHP(site, current, detected string, installed func(string) bool, w io.Writer) bool {
+	if detected == current || installed(detected) {
+		return true
+	}
+	fmt.Fprintf(w, "[WARN] %s asks for PHP %s, which is not installed; still serving %s (run lerd link to install it)\n", site, detected, current)
+	return false
 }
