@@ -105,7 +105,7 @@ export function initTheme() {
   });
 }
 
-function saveTheme(id: string) {
+export function saveTheme(id: string) {
   return apiFetch('/api/settings/theme', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

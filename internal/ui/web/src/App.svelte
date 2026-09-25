@@ -31,6 +31,7 @@
   import DashboardOverlay from '$components/DashboardOverlay.svelte';
   import WorkerHealthBanner from '$components/WorkerHealthBanner.svelte';
   import NotifyBanner from '$components/NotifyBanner.svelte';
+  import ThemeSuggestBanner from '$components/ThemeSuggestBanner.svelte';
   import NotificationToasts from '$components/NotificationToasts.svelte';
   import WizardBubble from '$components/WizardBubble.svelte';
   import CommandPalette from '$components/CommandPalette.svelte';
@@ -169,7 +170,10 @@
   <ModalHost />
   <DashboardOverlay />
   <WorkerHealthBanner />
-  <NotifyBanner />
+  <div class="fixed bottom-3 left-1/2 -translate-x-1/2 z-60 w-[min(92vw,640px)] flex flex-col gap-2">
+    <NotifyBanner />
+    <ThemeSuggestBanner />
+  </div>
   <NotificationToasts />
   <WizardBubble />
   <CommandPalette />

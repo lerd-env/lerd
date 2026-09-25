@@ -1575,5 +1575,9 @@
   "system_streaming_title": "Streaming mode",
   "system_streaming_description": "Hide client work while you share or record your screen. Adds an eye to each workspace to mark it private, and on Linux under Wayland hides private workspaces by itself while a share runs.",
   "system_streaming_toggleOn": "Enable streaming mode",
-  "system_streaming_toggleOff": "Disable streaming mode"
+  "system_streaming_toggleOff": "Disable streaming mode",
+  "theme_suggest_keep": "Keep current theme",
+  "theme_suggest_subtitle": "lerd can wear your desktop's colours and follow them when they change. You can switch any time from the theme picker.",
+  "theme_suggest_title": "Match your desktop with {name}",
+  "theme_suggest_use": "Use it"
 }
