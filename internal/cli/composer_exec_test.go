@@ -95,10 +95,17 @@ func TestSyncComposerGlobalBins_RemovesOrphans(t *testing.T) {
 }
 
 func TestComposerGlobalBinDir_UsesXDG(t *testing.T) {
+	// Its own home, so a ~/.composer on the machine running the test, which
+	// composer would take over a missing XDG directory, cannot answer instead.
+	t.Setenv("HOME", t.TempDir())
+	xdg := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(xdg, "composer"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("COMPOSER_HOME", "")
-	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg")
+	t.Setenv("XDG_CONFIG_HOME", xdg)
 	got := composerGlobalBinDir()
-	want := "/tmp/xdg/composer/vendor/bin"
+	want := filepath.Join(xdg, "composer", "vendor", "bin")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
