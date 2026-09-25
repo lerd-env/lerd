@@ -502,3 +502,6 @@ func startPodmanMachineWithRetry() error {
 func machineAlreadyUsable() bool {
 	return podman.Cmd("ps", "-q").Run() == nil
 }
+
+// traySessionAvailable is always true on macOS, where a login is the session.
+func traySessionAvailable() bool { return true }

@@ -804,7 +804,9 @@ func startLerd(emit func(StartEvent), skip []string) error {
 	// unit never kept it away; the preference has to be checked here instead.
 	if trayEnabled() {
 		tray := feedback.Start("starting lerd-tray")
-		if err := launchTray(); err != nil {
+		if !traySessionAvailable() {
+			tray.OK("no desktop session, it starts at the next login")
+		} else if err := launchTray(); err != nil {
 			tray.Fail(err)
 		} else {
 			tray.OK("")
@@ -907,6 +909,9 @@ func startRestoredServices() {
 // launchctl hangs waiting for the tray process to die.
 func launchTray() error {
 	killTray()
+	if !traySessionAvailable() {
+		return nil
+	}
 	if services.Mgr.IsEnabled("lerd-tray") {
 		return services.Mgr.Start("lerd-tray")
 	}
