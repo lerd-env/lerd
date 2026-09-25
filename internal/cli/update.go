@@ -558,6 +558,11 @@ func gatherProjectPaths() []string {
 		if err != nil {
 			return
 		}
+		// Where /home links to /var/home a site is registered under one
+		// spelling and parked under the other, and it is still one project.
+		if real, err := filepath.EvalSymlinks(abs); err == nil {
+			abs = real
+		}
 		seen[abs] = struct{}{}
 	}
 

@@ -172,6 +172,8 @@ func withTempCache(t *testing.T, tag string) {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", dir)
+	// The beta switch lives in the config, so a real one must not steer the check.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	cacheDir := filepath.Dir(config.UpdateCheckFile())
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		t.Fatal(err)
