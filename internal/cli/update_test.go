@@ -356,6 +356,15 @@ func TestCopyFile_missingSource(t *testing.T) {
 // ── runUpdate (integration-style) ────────────────────────────────────────────
 
 func TestRunUpdate_alreadyLatest(t *testing.T) {
+	// A real config with update.beta on sends the check to GitHub's prerelease
+	// list, which this stub does not cover, and the test then installs the
+	// published beta over the real binary.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	origBeta := lerdUpdate.BetaChannel
+	lerdUpdate.BetaChannel = func() bool { return false }
+	defer func() { lerdUpdate.BetaChannel = origBeta }()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, r.URL.String()+"/tag/v1.0.0", http.StatusFound)
 	}))
