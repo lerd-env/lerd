@@ -182,13 +182,37 @@ onMounted(() => {
   }
   cleanups.push(() => { players.forEach((p) => { try { p.dispose() } catch (e) {} }); players.length = 0 })
 
-  /* ---------- Hero terminal (asciinema) ---------- */
-  const heroIO = new IntersectionObserver((es) => {
-    es.forEach((e) => { if (e.isIntersecting) { heroIO.disconnect(); mountCast('#hero-cast', '/casts/hero.cast') } })
-  }, { threshold: 0.3 })
-  heroIO.observe($('#hero-cast'))
-  observers.push(heroIO)
 
+  /* ---------- Product film ---------- */
+  // Plays while on screen unless the visitor paused it or prefers reduced motion.
+  // The source is picked here rather than in the markup so a phone never
+  // starts downloading the landscape cut before it gets the portrait one.
+  const spot = $('#spot-video')
+  const spotCut = matchMedia('(max-aspect-ratio: 3/4)').matches ? '-vertical' : ''
+  spot.poster = withBase(`/assets/lerd-spot${spotCut}-poster.jpg`)
+  spot.src = withBase(`/assets/lerd-spot${spotCut}.mp4`)
+  spot.preload = 'auto'
+  const spotToggle = $('#spot-toggle')
+  let spotHeld = matchMedia('(prefers-reduced-motion: reduce)').matches
+  const syncSpotToggle = () => {
+    spotToggle.textContent = spot.paused ? 'Play' : 'Pause'
+    spotToggle.setAttribute('aria-label', spot.paused ? 'Play film' : 'Pause film')
+  }
+  spot.addEventListener('play', syncSpotToggle)
+  spot.addEventListener('pause', syncSpotToggle)
+  spotToggle.addEventListener('click', () => {
+    spotHeld = !spot.paused
+    spot.paused ? spot.play().catch(() => {}) : spot.pause()
+  })
+  syncSpotToggle()
+  const spotIO = new IntersectionObserver((es) => {
+    es.forEach((e) => {
+      if (!e.isIntersecting) spot.pause()
+      else if (!spotHeld) spot.play().catch(() => {})
+    })
+  }, { threshold: 0.5 })
+  spotIO.observe(spot)
+  observers.push(spotIO)
 
   /* ---------- MCP terminal (asciinema) ---------- */
   let mcpStarted = false
@@ -320,62 +344,56 @@ onBeforeUnmount(() => {
     <main id="top">
 
       <!-- ============ HERO ============ -->
-      <section class="hero">
-        <div class="wrap hero-grid">
-          <div class="hero-copy">
-            <span class="eyebrow reveal"><span class="dot"></span>Open-source · Podman-native · Rootless</span>
-            <h1 class="h-display reveal d1">Local PHP development for <span class="accent">Linux</span><span class="hero-mac"> &amp; macOS</span></h1>
-            <p class="lead reveal d2">Lerd runs Nginx, PHP-FPM and your services as rootless Podman containers. Automatic <code class="kbd">.test</code> domains, per-project PHP &amp; Node, one-command TLS. No Docker daemon, no sudo, no system pollution.</p>
+      <!-- ============ PRODUCT FILM ============ -->
+      <section id="spot" class="spot">
+        <video id="spot-video" class="spot-video" muted loop playsinline preload="none" aria-label="Lerd product film"></video>
+        <button id="spot-toggle" class="spot-toggle" type="button" aria-label="Pause film">Pause</button>
+      </section>
 
-            <div class="hero-meta reveal d4">
-              <span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-4z"/></svg><b>Rootless</b> · no sudo</span>
-              <span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg><b>No Docker</b> daemon</span>
-              <span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>PHP <b>7.4 – 8.5</b></span>
-              <span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M2 14h3M19 10h3M19 14h3"/></svg><b>PHP on the host</b> · macOS beta</span>
+      <section class="hero">
+        <div class="wrap hero-center">
+          <span class="eyebrow reveal"><span class="dot"></span>Open-source · Podman-native · Rootless</span>
+          <h1 class="h-display reveal d1">Local PHP development for <span class="accent">Linux</span><span class="hero-mac"> &amp; macOS</span></h1>
+          <p class="lead reveal d2">Lerd runs Nginx, PHP-FPM and your services as rootless Podman containers. Automatic <code class="kbd">.test</code> domains, per-project PHP &amp; Node, one-command TLS. No Docker daemon, no sudo, no system pollution.</p>
+
+          <div class="install reveal d3" id="install">
+            <div class="os-tabs" role="tablist" aria-label="Operating system">
+              <button class="os-tab" role="tab" aria-selected="true" data-os="unix">
+                <svg viewBox="0 -0.5 24 24" fill="currentColor"><path d="M12 2c-2 0-3 2-3 4 0 1 .2 2 .2 3-1 1.5-3 4-3 7 0 2 1 3 2 3 .5 1 1.5 2 3.8 2s3.3-1 3.8-2c1 0 2-1 2-3 0-3-2-5.5-3-7 0-1 .2-2 .2-3 0-2-1-4-3-4z"/></svg>
+                Linux &amp; macOS
+                <svg viewBox="-3.1 -0.1 26 26" fill="currentColor"><path d="M16 3c-1 .1-2.2.8-2.9 1.6-.6.7-1.2 1.9-1 3 1.1.1 2.3-.6 3-1.4.6-.8 1.1-1.9.9-3.2zM19 17c-.5 1.2-.8 1.7-1.5 2.7-.9 1.4-2.3 3.1-3.9 3.1-1.5 0-1.9-.9-3.9-.9s-2.4.9-3.9.9c-1.6 0-2.9-1.6-3.8-3C-.4 16.6-.7 11 1.8 8.3 3 7 4.6 6.2 6.3 6.2c1.7 0 2.8 1 4.2 1 1.4 0 2.2-1 4.2-1 1.5 0 3.1.8 4.2 2.2-3.7 2-3.1 7.3.9 8.6z"/></svg>
+              </button>
+              <button class="os-tab" role="tab" aria-selected="false" data-os="wsl">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 11 4v7.5H3V5.5zM12 3.8 21 2.5v9H12V3.8zM3 12.5h8V20l-8-1.5v-6zM12 12.5h9v9l-9-1.3v-7.7z"/></svg>
+                WSL2
+              </button>
+            </div>
+            <div class="cmd-row">
+              <span class="prompt">$</span>
+              <span class="cmd-text" id="install-cmd"></span>
+              <button class="copy-btn" id="copy-install" aria-label="Copy install command">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+              </button>
             </div>
           </div>
 
-          <div class="hero-term-wrap reveal d2">
-            <div class="win term">
-              <div class="win-bar">
-                <span class="win-dots"><i></i><i></i><i></i></span>
-                <span class="win-title">~/code/acme · lerd</span>
-              </div>
-              <div class="cast" id="hero-cast" role="img" aria-label="Terminal recording: lerd link auto-detecting a Laravel project and provisioning HTTPS"></div>
-            </div>
+          <div class="hero-actions reveal d4">
+            <a class="btn btn-primary" :href="withBase('/getting-started/requirements')">Get started in 60 seconds</a>
+            <a class="btn btn-ghost" href="#dashboard">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+              See the Web UI
+            </a>
+            <a class="btn btn-ghost btn-stars" href="https://github.com/lerd-env/lerd" target="_blank" rel="noopener" :aria-label="stars ? `GitHub, ${stars} stars` : 'GitHub'">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222 0 1.606-.014 2.898-.014 3.293 0 .322.216.694.825.576C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+              <span v-if="stars" class="star-n">{{ starLabel(stars) }}</span>
+            </a>
+          </div>
 
-            <div class="install reveal d3" id="install">
-              <div class="os-tabs" role="tablist" aria-label="Operating system">
-                <button class="os-tab" role="tab" aria-selected="true" data-os="unix">
-                  <svg viewBox="0 -0.5 24 24" fill="currentColor"><path d="M12 2c-2 0-3 2-3 4 0 1 .2 2 .2 3-1 1.5-3 4-3 7 0 2 1 3 2 3 .5 1 1.5 2 3.8 2s3.3-1 3.8-2c1 0 2-1 2-3 0-3-2-5.5-3-7 0-1 .2-2 .2-3 0-2-1-4-3-4z"/></svg>
-                  Linux &amp; macOS
-                  <svg viewBox="-3.1 -0.1 26 26" fill="currentColor"><path d="M16 3c-1 .1-2.2.8-2.9 1.6-.6.7-1.2 1.9-1 3 1.1.1 2.3-.6 3-1.4.6-.8 1.1-1.9.9-3.2zM19 17c-.5 1.2-.8 1.7-1.5 2.7-.9 1.4-2.3 3.1-3.9 3.1-1.5 0-1.9-.9-3.9-.9s-2.4.9-3.9.9c-1.6 0-2.9-1.6-3.8-3C-.4 16.6-.7 11 1.8 8.3 3 7 4.6 6.2 6.3 6.2c1.7 0 2.8 1 4.2 1 1.4 0 2.2-1 4.2-1 1.5 0 3.1.8 4.2 2.2-3.7 2-3.1 7.3.9 8.6z"/></svg>
-                </button>
-                <button class="os-tab" role="tab" aria-selected="false" data-os="wsl">
-                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 11 4v7.5H3V5.5zM12 3.8 21 2.5v9H12V3.8zM3 12.5h8V20l-8-1.5v-6zM12 12.5h9v9l-9-1.3v-7.7z"/></svg>
-                  WSL2
-                </button>
-              </div>
-              <div class="cmd-row">
-                <span class="prompt">$</span>
-                <span class="cmd-text" id="install-cmd"></span>
-                <button class="copy-btn" id="copy-install" aria-label="Copy install command">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
-                </button>
-              </div>
-            </div>
-
-            <div class="hero-actions reveal d4">
-              <a class="btn btn-primary" :href="withBase('/getting-started/requirements')">Get started in 60 seconds</a>
-              <a class="btn btn-ghost" href="#dashboard">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
-                See the Web UI
-              </a>
-              <a class="btn btn-ghost btn-stars" href="https://github.com/lerd-env/lerd" target="_blank" rel="noopener" :aria-label="stars ? `GitHub, ${stars} stars` : 'GitHub'">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222 0 1.606-.014 2.898-.014 3.293 0 .322.216.694.825.576C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
-                <span v-if="stars" class="star-n">{{ starLabel(stars) }}</span>
-              </a>
-            </div>
+          <div class="hero-meta reveal d4">
+            <span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-4z"/></svg><b>Rootless</b> · no sudo</span>
+            <span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg><b>No Docker</b> daemon</span>
+            <span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>PHP <b>7.4 – 8.5</b></span>
+            <span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M2 14h3M19 10h3M19 14h3"/></svg><b>PHP on the host</b> · macOS beta</span>
           </div>
         </div>
       </section>
