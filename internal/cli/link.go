@@ -166,13 +166,7 @@ func runLink(args []string) error {
 		}
 	}
 
-	// Write .node-version from .lerd.yaml if the file is not already present.
-	if proj != nil && proj.NodeVersion != "" {
-		nodeVersionFile := filepath.Join(cwd, ".node-version")
-		if _, statErr := os.Stat(nodeVersionFile); os.IsNotExist(statErr) {
-			_ = os.WriteFile(nodeVersionFile, []byte(proj.NodeVersion+"\n"), 0644)
-		}
-	}
+	writeNodeVersionFile(cwd, proj)
 
 	requested := ""
 	if len(args) > 0 {
@@ -253,6 +247,22 @@ func runLink(args []string) error {
 
 // printLinkSummary prints the green success line and an aligned details block,
 // deriving every field from the registered site so callers don't repeat them.
+// writeNodeVersionFile writes .node-version from the project config when the
+// file is missing. A pin only .lerd.local.yaml sets stays out of it: the file
+// lands in the working tree, and detection reads the local pin anyway.
+func writeNodeVersionFile(dir string, proj *config.ProjectConfig) {
+	if proj == nil || proj.NodeVersion == "" {
+		return
+	}
+	if local, _ := config.LocalOverrideOwns(dir, "node_version"); local {
+		return
+	}
+	path := filepath.Join(dir, ".node-version")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		_ = os.WriteFile(path, []byte(proj.NodeVersion+"\n"), 0644)
+	}
+}
+
 func printLinkSummary(site config.Site, start time.Time, wroteDataSource bool) {
 	// Reached on every successful link path, so this is where we record that the
 	// site is linked for this process (even when the summary itself is deferred).
