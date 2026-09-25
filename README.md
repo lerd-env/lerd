@@ -12,7 +12,7 @@
 [![Reddit](https://img.shields.io/badge/Reddit-r%2Flerd-ff2d20?logo=reddit)](https://reddit.com/r/lerd)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/5JK54s7xCC)
 
-![Lerd dashboard tour](docs/assets/screenshots/tour.gif)
+https://github.com/user-attachments/assets/707ca4cc-7eef-4285-b7bf-fdeb37f61458
 
 Lerd runs Nginx, PHP-FPM, and your services as rootless [Podman](https://podman.io) containers,
 designed for PHP developers on Linux and macOS, and on Windows through WSL2 (beta).
