@@ -963,6 +963,8 @@
   "sites_extraMore": "+{count} weitere",
   "sites_fileLoadFailed": "{file} konnte nicht geladen werden ({status})",
   "sites_gitWorktrees": "Git-Worktrees",
+  "sites_initGit": "Git initialisieren",
+  "sites_initGitHint": "Ein Git-Repository in diesem Ordner anlegen, um Branches und Worktrees zu nutzen",
   "sites_idle": "inaktiv",
   "sites_idleHint": "Worker nach dem Leerlauf-Timeout angehalten; sie starten bei der nächsten Anfrage wieder.",
   "sites_linkNew": "Site hinzufügen",

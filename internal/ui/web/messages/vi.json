@@ -963,6 +963,8 @@
   "sites_extraMore": "+{count} nữa",
   "sites_fileLoadFailed": "Không thể tải {file} ({status})",
   "sites_gitWorktrees": "Git Worktrees",
+  "sites_initGit": "Khởi tạo git",
+  "sites_initGitHint": "Tạo kho git trong thư mục này để dùng nhánh và worktree",
   "sites_idle": "rảnh",
   "sites_idleHint": "Worker bị tạm dừng sau thời gian chờ rảnh; chúng tiếp tục ở yêu cầu tiếp theo.",
   "sites_linkNew": "Thêm site",

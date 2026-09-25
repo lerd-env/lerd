@@ -4209,6 +4209,13 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
+	case "git:init":
+		if err := gitpkg.Init(site.Path); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
 	case "restart":
 		if err := cli.RestartSite(site.Name); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
@@ -6570,6 +6577,11 @@ func handleSiteGitStatus(w http.ResponseWriter, r *http.Request) {
 		gitpkg.Status
 	}
 	checkouts := []checkout{}
+	// A folder the enclosing repo ignores has no git of its own to report.
+	if _, ok := gitpkg.EnclosingRepo(site.Path); !ok {
+		writeJSON(w, map[string]any{"checkouts": checkouts})
+		return
+	}
 	var path, branch string
 	// git lists the main checkout first; comparing paths would trip on a symlinked site path.
 	seen := 0

@@ -963,6 +963,8 @@
   "sites_extraMore": "+{count} 件",
   "sites_fileLoadFailed": "{file} の読み込みに失敗しました（{status}）",
   "sites_gitWorktrees": "Git ワークツリー",
+  "sites_initGit": "git を初期化",
+  "sites_initGitHint": "このフォルダに git リポジトリを作成し、ブランチとワークツリーを使えるようにします",
   "sites_idle": "アイドル",
   "sites_idleHint": "アイドルタイムアウト後にワーカーを停止し、次のリクエストで再開します。",
   "sites_linkNew": "サイトを追加",

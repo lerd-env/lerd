@@ -963,6 +963,8 @@
   "sites_extraMore": "+{count} więcej",
   "sites_fileLoadFailed": "Nie udało się załadować {file} ({status})",
   "sites_gitWorktrees": "Git Worktrees",
+  "sites_initGit": "Zainicjuj git",
+  "sites_initGitHint": "Utwórz repozytorium git w tym folderze, aby korzystać z gałęzi i worktree",
   "sites_idle": "bezczynna",
   "sites_idleHint": "Workery wstrzymane po limicie bezczynności; wznawiają się przy następnym żądaniu.",
   "sites_linkNew": "Dodaj witrynę",

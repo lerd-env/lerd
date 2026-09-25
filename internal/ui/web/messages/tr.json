@@ -963,6 +963,8 @@
   "sites_extraMore": "+{count} daha",
   "sites_fileLoadFailed": "{file} yüklenemedi ({status})",
   "sites_gitWorktrees": "Git Worktree'leri",
+  "sites_initGit": "Git'i başlat",
+  "sites_initGitHint": "Dal ve worktree kullanmak için bu klasörde bir git deposu oluştur",
   "sites_idle": "boşta",
   "sites_idleHint": "İşçiler boşta kalma süresinden sonra askıya alındı; sonraki istekte devam ederler.",
   "sites_linkNew": "Site ekle",

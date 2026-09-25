@@ -963,6 +963,8 @@
   "sites_extraMore": "+{count} în plus",
   "sites_fileLoadFailed": "Încărcarea {file} a eșuat ({status})",
   "sites_gitWorktrees": "Worktree-uri Git",
+  "sites_initGit": "Inițializează git",
+  "sites_initGitHint": "Creează un depozit git în acest folder ca să folosești branch-uri și worktree-uri",
   "sites_idle": "inactiv",
   "sites_idleHint": "Workerele sunt suspendate după timpul de inactivitate; se reiau la următoarea cerere.",
   "sites_linkNew": "Adaugă un site",

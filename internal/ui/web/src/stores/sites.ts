@@ -641,6 +641,7 @@ export async function restoreSiteNginx(
 }
 
 export const restartSite = (d: string) => postAction(site(d, 'restart'));
+export const initGit = (d: string) => postAction(site(d, 'git:init'));
 export const pauseSite = (d: string) => postAction(site(d, 'pause'));
 export const resumeSite = (d: string) => postAction(site(d, 'unpause'));
 export const pinSite = (d: string) => postAction(site(d, 'pin'));
