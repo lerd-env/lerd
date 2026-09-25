@@ -21,6 +21,13 @@ export interface WorkerOption {
   default?: string;
 }
 
+// A service a site's packages suggest, with why and which package asked.
+export interface ServiceSuggestion {
+  name: string;
+  reason?: string;
+  package?: string;
+}
+
 export interface Site {
   name?: string;
   // Display-only grouping; a group secondary reports its main's workspace.
@@ -53,6 +60,7 @@ export interface Site {
   idle?: boolean;
   idle_suspended_workers?: string[];
   services?: string[];
+  suggested_services?: ServiceSuggestion[];
   db_database?: string;
   custom_container?: boolean;
   container_image?: string;

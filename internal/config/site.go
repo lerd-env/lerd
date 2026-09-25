@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -94,6 +95,9 @@ type Site struct {
 	// .lerd.yaml declared, so a preference stays personal instead of becoming a
 	// diff every teammate carries.
 	PinnedCommands map[string]bool `yaml:"pinned_commands,omitempty"`
+	// DismissedServices are service suggestions this user turned down for the
+	// site, kept here rather than in .lerd.yaml since the choice is personal.
+	DismissedServices []string `yaml:"dismissed_services,omitempty"`
 	// Group is the group key shared by a main site and its secondaries. It is
 	// set to the main site's name. Empty when the site is not grouped.
 	Group string `yaml:"group,omitempty"`
@@ -265,6 +269,7 @@ type siteYAML struct {
 	HostCommand           string              `yaml:"host_command,omitempty"`
 	ApprovedCommands      []string            `yaml:"approved_commands,omitempty"`
 	PinnedCommands        map[string]bool     `yaml:"pinned_commands,omitempty"`
+	DismissedServices     []string            `yaml:"dismissed_services,omitempty"`
 	Group                 string              `yaml:"group,omitempty"`
 	GroupSubdomain        string              `yaml:"group_subdomain,omitempty"`
 	GroupSharedDB         bool                `yaml:"group_shared_db,omitempty"`
@@ -304,6 +309,7 @@ func (s Site) toYAML() siteYAML {
 		HostCommand:           s.HostCommand,
 		ApprovedCommands:      s.ApprovedCommands,
 		PinnedCommands:        s.PinnedCommands,
+		DismissedServices:     s.DismissedServices,
 		Group:                 s.Group,
 		GroupSubdomain:        s.GroupSubdomain,
 		GroupSharedDB:         s.GroupSharedDB,
@@ -348,6 +354,7 @@ func (sy siteYAML) toSite() Site {
 		HostCommand:           sy.HostCommand,
 		ApprovedCommands:      sy.ApprovedCommands,
 		PinnedCommands:        sy.PinnedCommands,
+		DismissedServices:     sy.DismissedServices,
 		Group:                 sy.Group,
 		GroupSubdomain:        sy.GroupSubdomain,
 		GroupSharedDB:         sy.GroupSharedDB,
@@ -458,6 +465,9 @@ func cloneSiteRegistry(in *SiteRegistry) *SiteRegistry {
 		}
 		if s.IdleSuspendedWorkers != nil {
 			cp.IdleSuspendedWorkers = append([]string(nil), s.IdleSuspendedWorkers...)
+		}
+		if s.DismissedServices != nil {
+			cp.DismissedServices = append([]string(nil), s.DismissedServices...)
 		}
 		if s.WorktreeIdleSuspended != nil {
 			cp.WorktreeIdleSuspended = make(map[string][]string, len(s.WorktreeIdleSuspended))
@@ -768,6 +778,28 @@ func SetSiteCommandPinned(name, command string, pinned bool) error {
 			reg.Sites[i].PinnedCommands = map[string]bool{}
 		}
 		reg.Sites[i].PinnedCommands[command] = pinned
+		return SaveSites(reg)
+	}
+	return fmt.Errorf("site %q not found", name)
+}
+
+// DismissSiteService records that the user turned down the suggestion of
+// service for the site, under the same write lock as the other mutators.
+func DismissSiteService(name, service string) error {
+	siteWriteMu.Lock()
+	defer siteWriteMu.Unlock()
+	reg, err := LoadSites()
+	if err != nil {
+		return err
+	}
+	for i := range reg.Sites {
+		if reg.Sites[i].Name != name {
+			continue
+		}
+		if slices.Contains(reg.Sites[i].DismissedServices, service) {
+			return nil
+		}
+		reg.Sites[i].DismissedServices = append(reg.Sites[i].DismissedServices, service)
 		return SaveSites(reg)
 	}
 	return fmt.Errorf("site %q not found", name)
