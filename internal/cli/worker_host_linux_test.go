@@ -505,3 +505,26 @@ func TestWorkerStartForSite_worktreeUnitNaming(t *testing.T) {
 		t.Errorf("expected per-worktree unit name lerd-vite-mysite-<dir>, got: %v", names)
 	}
 }
+
+// systemd expands $VAR and %-specifiers inside ExecStart before sh sees the
+// line, so the nvm prelude's ${__lerd_nb%/node} arrived empty.
+func TestWriteHostWorkerUnitFile_escapesSystemdExpansion(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if _, err := writeHostWorkerUnitFile(
+		"lerd-echo-mysite", "Echo", "mysite", t.TempDir(),
+		`b="${__lerd_nb%/node}"; echo $b 100%`, "on-failure", "", "",
+	); err != nil {
+		t.Fatalf("writeHostWorkerUnitFile: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(tmp, "systemd", "user", "lerd-echo-mysite.service"))
+	if err != nil {
+		t.Fatalf("read unit: %v", err)
+	}
+	want := `ExecStart=/bin/sh -c 'b="$${__lerd_nb%%/node}"; echo $$b 100%%'`
+	if !strings.Contains(string(data), want) {
+		t.Errorf("want %s in unit, got:\n%s", want, data)
+	}
+}
