@@ -102,6 +102,13 @@ phases once the next release makes it ordinary.
 | Doctor naming a Node manager in front of the shim | 11 |
 | Store presets of installed services refreshed by the watcher | 12 |
 | Uninstall removing the port drop-in and warning about dracut | 13 |
+| Get started card, desktop theme suggestion, pre-release badges | 10 |
+| Slug project names, nvm behind an npm prefix | 2, 11 |
+| A framework's own installer, suggested services | 2, 9 |
+| Initialize git on a site without a repository | 10 |
+| Animations paused while the dashboard is unfocused | 10 |
+| A reinstall keeping the preset it reads | 5 |
+| Doctor explaining repeated macOS folder prompts, Xdebug across a runtime switch | 14 |
 
 ---
 
@@ -205,6 +212,15 @@ lerd setup --all --skip-open
 - [ ] **`curl -k -s -o /dev/null -w '%{http_code}' https://demo.test` → 200**
 - [ ] The framework's welcome page renders in a browser with a valid padlock
 - [ ] `lerd site:doctor` is clean
+- [ ] `lerd new "My Demo"` refuses the name and suggests `my-demo`, the
+      wizard slugs the name as you type, and linking a folder with spaces in
+      its name puts dashes in the domain, **200**
+- [ ] With nvm as the Node manager and a `prefix` set in `~/.npmrc`, `lerd
+      setup --all` runs every npm step, and `~/.npmrc` is left untouched
+- [ ] On a project whose packages want a service (Redis, Meilisearch), the setup
+      wizard suggests one, naming the package, and puts forward the one this
+      machine already runs. A linked site shows the same as a Suggested card on
+      its Overview; Add wires it into `.env`, dismiss keeps it gone for good
 
 A `.lerd.yaml` is committed, so the answers that belong to this machine alone
 live beside it and have to win without ever being written back to the repo:
@@ -364,7 +380,8 @@ Add, use, and remove at least one database and one non-database service.
 - [ ] `lerd service rollback mysql` swaps back, **https → 200**
 - [ ] `lerd service migrate mysql <target>` does the dump + restore and the old
       data dir and dump are under `~/.local/share/lerd/backups`
-- [ ] `lerd service reinstall redis` comes back at the same version
+- [ ] `lerd service reinstall redis` comes back at the same version, and a
+      reinstall keeps the preset it reads instead of refetching it from the store
 - [ ] Start RustFS after `lerd start`, from the CLI and from the dashboard: its
       console opens straight away through lerd's own vhost, already logged in on
       the bucket clicked, and again once its session has run out
@@ -604,6 +621,9 @@ cd shop && lerd setup --all --skip-open
 - [ ] On a framework whose configuration is not a dotenv file (CakePHP,
       WordPress, Magento), the backup sits beside the file lerd edits and
       `lerd env:restore` puts it back over that file
+- [ ] A Drupal scaffold offers the framework's own installer ticked in setup,
+      it runs and installs the site, and the step is hidden once installed,
+      **200**
 - [ ] `lerd console` maps to that framework's console binary
 - [ ] Its env wiring, workers, and doctor checks come from the store YAML
 - [ ] **https → 200 on the second site.** A bare skeleton with no routes of its
@@ -639,6 +659,18 @@ Dashboard (drive it in a browser, not with curl):
 - [ ] Creating a site, adding a worktree, and toggling HTTPS from the UI all work
       and the modal streams progress
 - [ ] No empty cards or placeholder widgets anywhere
+- [ ] A fresh install with no sites opens on the Get started with Lerd card in
+      the first slot, the grid still six cards; its steps tick themselves off,
+      the progress agrees across the browser and the app, and finishing or
+      dismissing it gives the slot back to the Lerd card. An install already in
+      use never sees it
+- [ ] A site whose folder is not a git repository shows Initialize git where the
+      worktree tabs would be, clicking it runs `git init` and the tabs appear;
+      a site inside a bigger repository gets no button
+- [ ] With the window unfocused but visible, the pings and pulses stop and CPU
+      settles; focusing it brings them back
+- [ ] Worker button labels stay on one line, the header's corner is rounded
+      where it meets the content, and a rail launcher's hover is square
 - [ ] The status sits in the header as a pill and turns red naming what is down
       when `lerd-nginx` stops, and a worktree tab with uncommitted work shows
       `*`, with the hover naming the counts
@@ -671,6 +703,11 @@ Themes:
 - [ ] The installed app's own chrome takes the theme too
 - [ ] The Theme card's share line opens a prefilled post on X, Bluesky or
       Reddit, about the theme and carrying no list of local sites
+- [ ] An install that never chose a theme gets a banner suggesting the
+      desktop's; either button writes the answer to the config and it does not
+      come back, and it stacks with the notifications banner rather than over it
+- [ ] The Lerd card and System, Lerd show a dev or beta build as its tag with a
+      badge, and a dev badge copies its commit on click
 - [ ] On Omarchy the picker offers the desktop's theme by name and follows an
       `omarchy-theme-set` switch live; on KDE (bazzite) and GNOME (silverblue)
       the desktop entry follows the accent live, brown and Yaru tones included
@@ -775,10 +812,10 @@ Other surfaces:
       afterwards**
 - [ ] `lerd doctor --fix --dry-run` previews the fixes it does offer, and
       `--fix --yes` applies them, still confirming the ones classified heavy
-- [ ] `lerd doctor` sweeps **every** linked site, not only the host, and names
-      the site each finding belongs to
-- [ ] Drop a site's database, then let the doctor create it from the finding
-      itself, **https → 200** afterwards
+- [ ] `lerd doctor` reports the machine only, and a site's findings come from
+      `lerd site:doctor`
+- [ ] Drop a site's database, then let `lerd site:doctor --fix` create it from
+      the finding itself, **https → 200** afterwards
 - [ ] The doctor reports whether containers can resolve an internet name, and
       says so honestly with the network down
 - [ ] Put a host `php` ahead of lerd's shim in the shell rc: doctor names what
@@ -923,6 +960,12 @@ skipped rather than quietly passing it.
 - [ ] `lerd php:ext` and `lerd php:pkg` refuse under this runtime, and
       `lerd shell` says there is no container to enter rather than starting one
 - [ ] Xdebug, `dump()` and the profiler all still work, **200 with each**
+- [ ] With Xdebug on, switch native to container and back: the ini is rewritten
+      each way, and `lerd php -v` inside the container shows no failed load of
+      the native `xdebug.so`
+- [ ] A site under Documents, Desktop or Downloads while Node is still on fnm
+      gets a doctor finding explaining the repeated folder prompt and pointing
+      at mise
 - [ ] An untouched site's pool falls to zero workers
 - [ ] `lerd status` lists the host builds and says whether each pool is
       accepting connections, hinting at `lerd start` when one is down, instead
