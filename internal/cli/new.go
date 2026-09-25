@@ -243,6 +243,9 @@ func runNew(target, frameworkName, frameworkVersion string, extraArgs []string) 
 		}
 		target = answer
 	}
+	if err := validateProjectName(target); err != nil {
+		return err
+	}
 	if newShouldAskFramework(interactive, frameworkName != "") {
 		name, version, err := askScaffoldFramework(scaffoldCatalogue())
 		if err != nil {

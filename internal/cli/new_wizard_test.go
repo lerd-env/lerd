@@ -318,7 +318,7 @@ func TestInitialScaffoldFramework(t *testing.T) {
 // A blank answer cannot become a directory, so the prompt has to reject it there
 // rather than let the scaffold fail several steps later.
 func TestValidateProjectName(t *testing.T) {
-	for _, bad := range []string{"", "   ", "\t"} {
+	for _, bad := range []string{"", "   ", "\t", "My App", "apps/My App"} {
 		if err := validateProjectName(bad); err == nil {
 			t.Errorf("validateProjectName(%q) = nil, want an error", bad)
 		}
