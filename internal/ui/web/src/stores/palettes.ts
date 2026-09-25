@@ -24,14 +24,20 @@ export const configTheme = writable<string | null>(null);
 // desktopSuggestion is the desktop's own theme, offered once to an install that
 // never chose a theme and still wears the default. A choice already made, even
 // the default one, is never second guessed.
-export const desktopSuggestion = derived([palettes, palette, configTheme], ([$palettes, $palette, $config]) => {
+// desktopPalette is the theme read off the desktop the daemon runs on, if any.
+export const desktopPalette = derived(
+  palettes,
+  ($palettes) => $palettes.find((p) => p.source === 'desktop' && p.id !== DEFAULT_PALETTE_ID) ?? null
+);
+
+export const desktopSuggestion = derived([desktopPalette, palette, configTheme], ([$desktop, $palette, $config]) => {
   // An empty id is what a cleared config broadcasts, and it paints the default.
   if ($config !== '' || ($palette || DEFAULT_PALETTE_ID) !== DEFAULT_PALETTE_ID) return null;
-  return $palettes.find((p) => p.source === 'desktop' && p.id !== DEFAULT_PALETTE_ID) ?? null;
+  return $desktop;
 });
 
 export function useSuggestedTheme() {
-  const suggested = get(desktopSuggestion);
+  const suggested = get(desktopPalette);
   if (!suggested) return;
   configTheme.set(suggested.id);
   palette.set(suggested.id);

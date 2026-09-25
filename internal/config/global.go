@@ -283,6 +283,12 @@ type GlobalConfig struct {
 		// since that follows the room someone is sitting in.
 		Theme string `yaml:"theme,omitempty" mapstructure:"theme"`
 
+		// Setup is where the dashboard's first-run checklist stands: empty until
+		// a dashboard first opens on an install with no sites, "active" while it
+		// runs, "done" once finished or dismissed. It lives here so the browser,
+		// the desktop app and every other window share one answer.
+		Setup string `yaml:"setup,omitempty" mapstructure:"setup"`
+
 		// StreamingEnabled opts into streaming mode: the private workspace
 		// controls, and the watcher turning it on during a screen share.
 		// Toggled via `lerd streaming enable/disable`.

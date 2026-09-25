@@ -1,9 +1,17 @@
 import { render } from '@testing-library/svelte';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import ThemeSuggestBanner from './ThemeSuggestBanner.svelte';
 import { configTheme } from '$stores/palettes';
 import { palette, palettes } from '$stores/theme';
 import { BUILTIN_PALETTES } from '$lib/palettes';
+
+// Get started asks these questions itself; these tests are about an install
+// that never went through it.
+vi.mock('$stores/setup', async () => {
+  const { readable } = await import('svelte/store');
+  return { bannersAllowed: readable(true) };
+});
+
 
 const adwaita = { ...BUILTIN_PALETTES.find((p) => p.id === 'adwaita')!, source: 'desktop' as const };
 

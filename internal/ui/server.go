@@ -331,6 +331,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/settings/idle-suspend", withCORS(publishAfter(handleSettingsIdleSuspend, eventbus.KindSites)))
 	mux.HandleFunc("/api/settings/dns-upstream", withCORS(handleSettingsDNSUpstream))
 	mux.HandleFunc("/api/settings/theme", withCORS(handleSettingsTheme))
+	mux.HandleFunc("/api/settings/setup", withCORS(handleSettingsSetup))
 	mux.HandleFunc("/api/settings/streaming", withCORS(publishAfter(handleSettingsStreaming, eventbus.KindStatus, eventbus.KindSites, eventbus.KindServices)))
 	mux.HandleFunc("/api/settings/streaming-enabled", withCORS(publishAfter(handleSettingsStreamingEnabled, eventbus.KindStatus, eventbus.KindSites, eventbus.KindServices)))
 	mux.HandleFunc("/api/settings/beta-updates", withCORS(handleSettingsBetaUpdates))
@@ -5522,6 +5523,7 @@ type SettingsResponse struct {
 	TrayEnabled               bool     `json:"tray_enabled"`
 	BetaUpdates               bool     `json:"beta_updates"`
 	Theme                     string   `json:"theme"` // dashboard colour theme id, empty = the default
+	Setup                     string   `json:"setup"` // first-run checklist: "", "active" or "done"
 }
 
 func handleSettings(w http.ResponseWriter, _ *http.Request) {
@@ -5533,6 +5535,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 	startOnOpen := false
 	trayEnabled := true
 	theme := ""
+	setup := ""
 	betaUpdates := false
 	var dnsUpstream []string
 	if cfg != nil {
@@ -5544,6 +5547,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		startOnOpen = cfg.Autostart.OnDashboardOpen
 		trayEnabled = cfg.IsTrayEnabled()
 		theme = cfg.UI.Theme
+		setup = cfg.UI.Setup
 		betaUpdates = cfg.IsBetaChannel()
 	}
 	writeJSON(w, SettingsResponse{
@@ -5561,6 +5565,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		DNSUpstreamDetected:       dns.ReadUpstreamDNS(),
 		TrayEnabled:               trayEnabled,
 		Theme:                     theme,
+		Setup:                     setup,
 		BetaUpdates:               betaUpdates,
 	})
 }

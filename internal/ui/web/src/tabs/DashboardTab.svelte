@@ -4,7 +4,7 @@
   import { unhealthyWorkers } from '$stores/workerHealth';
   import { statusLoaded, coreDown } from '$stores/status';
   import HeroStatus from './dashboard/HeroStatus.svelte';
-  import OnboardingPanel from './dashboard/OnboardingPanel.svelte';
+  import SetupCard from './dashboard/SetupCard.svelte';
   import SystemHealthWidget from './dashboard/SystemHealthWidget.svelte';
   import LerdInfoWidget from './dashboard/LerdInfoWidget.svelte';
   import SitesWidget from './dashboard/SitesWidget.svelte';
@@ -12,6 +12,8 @@
   import WorkersWidget from './dashboard/WorkersWidget.svelte';
   import ResourcesWidget from './dashboard/ResourcesWidget.svelte';
   import { openCommandPalette } from '$stores/commandPalette';
+  import { setupVisible } from '$stores/setup';
+  import { fade } from 'svelte/transition';
   import { m } from '../paraglide/messages.js';
 
   // Stack status sits beside the title in both states, so neither a healthy
@@ -56,14 +58,20 @@
   </div>
 
   <div class="p-3 space-y-3 bg-gray-50 dark:bg-lerd-bg md:border-l md:border-t md:rounded-tl-xl border-lerd-chromeborder dark:border-lerd-border flex-1 xl:min-h-0 xl:flex xl:flex-col">
-    <OnboardingPanel />
     <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 xl:flex-1 xl:min-h-0 xl:auto-rows-fr">
+      <!-- Setup leads the grid while it runs; the Lerd card it stands in for returns to the end. -->
+      {#if $setupVisible}
+        <SetupCard />
+      {/if}
       <SitesWidget />
       <ServicesWidget />
       <WorkersWidget />
       <SystemHealthWidget />
       <ResourcesWidget />
-      <LerdInfoWidget />
+      {#if !$setupVisible}
+        <!-- Fades in only when setup hands its slot over; intros skip the first render. -->
+        <div class="grid" in:fade={{ duration: 500 }}><LerdInfoWidget /></div>
+      {/if}
     </div>
   </div>
 </div>

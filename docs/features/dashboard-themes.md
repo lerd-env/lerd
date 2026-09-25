@@ -96,9 +96,10 @@ chose deliberately is never overridden, and on a machine with no desktop to read
 the entry is simply absent. There is one entry at most, and no trash icon beside
 it: the desktop is the source, so the entry goes away when the desktop does.
 
-An install that has never had a theme chosen gets a banner offering the desktop's
-entry, with one button to switch to it and one to keep the current theme. lerd
-never switches on its own. Either answer is written to the config like any other
+On a fresh install the offer is one of the **Get started with Lerd** steps. An
+install that never went through Get started and has never had a theme chosen gets
+a banner offering the desktop's entry instead, with one button to switch to it and
+one to keep the current theme. lerd never switches on its own. Either answer is written to the config like any other
 pick, so the banner shows up once per install, not once per browser, and it never
 comes back after a theme has been chosen.
 
