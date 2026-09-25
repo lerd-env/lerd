@@ -62,6 +62,10 @@ type Framework struct {
 	NPM        string                     `yaml:"npm,omitempty"`      // auto | true | false
 	Workers    map[string]FrameworkWorker `yaml:"workers,omitempty"`
 	Setup      []FrameworkSetupCmd        `yaml:"setup,omitempty"`
+	// Install is the command that installs a fresh project. It is a block of its
+	// own rather than a setup step: an older binary ignores it, where a step would
+	// be run as plain argv, or offered on a project that is already installed.
+	Install *FrameworkInstall `yaml:"install,omitempty"`
 	// Worktree declares what a worktree needs beyond the seeded env file.
 	Worktree *FrameworkWorktree `yaml:"worktree,omitempty"`
 	// Commands are on-demand actions surfaced in the dashboard "Run command"
@@ -391,6 +395,15 @@ type FrameworkSetupCmd struct {
 	Command string         `yaml:"command"`
 	Default bool           `yaml:"default,omitempty"`
 	Check   *FrameworkRule `yaml:"check,omitempty"` // only show when check passes (file exists or composer package installed)
+}
+
+// FrameworkInstall is a framework's own installer, offered by setup while
+// MissingFile, the file that installing writes, is absent. Command runs through
+// sh -c the way a framework command does.
+type FrameworkInstall struct {
+	Label       string `yaml:"label"`
+	Command     string `yaml:"command"`
+	MissingFile string `yaml:"missing_file"`
 }
 
 // FrameworkCommand describes a one-shot, on-demand action surfaced in the

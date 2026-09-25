@@ -75,3 +75,26 @@ func TestMatchesRule_EmptyRuleNeverMatches(t *testing.T) {
 		t.Error("an empty rule must not match")
 	}
 }
+
+// A framework whose project is installed by a command of its own declares it as
+// an install block, which carries the file that command writes.
+func TestFramework_InstallYAML(t *testing.T) {
+	src := []byte(`
+name: drupal
+version: "11"
+install:
+  label: Install Drupal
+  command: php vendor/bin/drush site:install --yes
+  missing_file: web/sites/default/settings.php
+`)
+	var fw Framework
+	if err := yaml.Unmarshal(src, &fw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if fw.Install == nil {
+		t.Fatal("install block not bound")
+	}
+	if fw.Install.Label != "Install Drupal" || fw.Install.MissingFile != "web/sites/default/settings.php" {
+		t.Errorf("install block bound wrong: %+v", fw.Install)
+	}
+}
