@@ -40,6 +40,8 @@ func SiteNameAndDomain(dirName, tld string) (string, string) {
 	// Strip characters that would be unsafe in a systemd unit name/body derived
 	// from this handle (newline/NUL inject a directive, slash escapes the path).
 	name = unsafeNameChars.ReplaceAllString(name, "")
+	// A folder named with spaces still has to produce a valid DNS label.
+	name = nameSpaces.ReplaceAllString(name, "-")
 	if name == "" {
 		name = "site"
 	}
@@ -57,6 +59,8 @@ func QualifyDomain(arg, tld string) string {
 // unsafeNameChars matches characters that must never reach a site handle used
 // in systemd unit names and bodies.
 var unsafeNameChars = regexp.MustCompile(`[\n\r\x00/]`)
+
+var nameSpaces = regexp.MustCompile(`[ \t]+`)
 
 func stripGTLD(name string) (string, bool) {
 	for _, ext := range gTLDs {

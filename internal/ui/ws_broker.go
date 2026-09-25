@@ -122,6 +122,12 @@ func (b *wsBroker) broadcastThemeList() {
 	b.broadcast(wsMessage{Kinds: []string{"theme_list"}})
 }
 
+// broadcastSetup tells every open dashboard the first-run checklist moved on.
+// It carries no payload; the state is one settings request away.
+func (b *wsBroker) broadcastSetup() {
+	b.broadcast(wsMessage{Kinds: []string{"setup"}})
+}
+
 // broadcastStreamingOn tells every open dashboard to hide its private sites now,
 // from what it already holds, rather than after the snapshot rebuild that
 // follows. That rebuild is the source of truth; this only closes the gap.

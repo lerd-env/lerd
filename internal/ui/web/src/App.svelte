@@ -30,6 +30,7 @@
   import ModalHost from './modals/ModalHost.svelte';
   import DashboardOverlay from '$components/DashboardOverlay.svelte';
   import WorkerHealthBanner from '$components/WorkerHealthBanner.svelte';
+  import { loadSetup, watchSetup } from '$stores/setup';
   import NotifyBanner from '$components/NotifyBanner.svelte';
   import ThemeSuggestBanner from '$components/ThemeSuggestBanner.svelte';
   import NotificationToasts from '$components/NotificationToasts.svelte';
@@ -60,6 +61,8 @@
     loadAutostart();
     loadPalettes();
     watchThemeChanges();
+    loadSetup();
+    watchSetup();
     loadIdle();
     loadSites();
     loadServices();

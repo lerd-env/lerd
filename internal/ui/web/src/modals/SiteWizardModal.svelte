@@ -8,6 +8,7 @@
   import BuildLog from '$components/BuildLog.svelte';
   import WizardStart from './wizard/WizardStart.svelte';
   import WizardBrowse from './wizard/WizardBrowse.svelte';
+  import { finishProjectName } from '$lib/projectName';
   import WizardCreate from './wizard/WizardCreate.svelte';
   import WizardQuestions from './wizard/WizardQuestions.svelte';
   import WizardSetup from './wizard/WizardSetup.svelte';
@@ -217,13 +218,13 @@
   }
 
   async function scaffold() {
-    if (!name.trim()) return;
+    if (!finishProjectName(name)) return;
     // The target is known before the run starts, and persisting it now is what
     // lets a resume carry on into the questions even after the finished run has
     // aged out of the registry.
-    dir = joinPath(parent, name.trim());
+    dir = joinPath(parent, finishProjectName(name));
     const ok = await runAndWait(
-      { kind: 'scaffold', dir: parent, name: name.trim(), framework, framework_version: frameworkVersion },
+      { kind: 'scaffold', dir: parent, name: finishProjectName(name), framework, framework_version: frameworkVersion },
       m.siteWizard_scaffolding()
     );
     if (!ok) return;
@@ -548,7 +549,7 @@
       >
         {m.siteWizard_back()}
       </DetailButton>
-      <DetailButton tone="primary" onclick={scaffold} disabled={!name.trim() || !framework}>
+      <DetailButton tone="primary" onclick={scaffold} disabled={!finishProjectName(name) || !framework}>
         {m.siteWizard_create()}
       </DetailButton>
     {:else if step === 'questions'}
