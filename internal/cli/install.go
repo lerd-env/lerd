@@ -316,10 +316,6 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	// Captured before the save below: a flip either way leaves existing host
-	// worker units routing through the old manager until they are regenerated.
-	nodeStateChanged := nodeStateFlipped(lerdManagesNode(), savedManager, wantLerdNode, nodeManager)
-
 	nvmDirToSave := savedNvmDir
 	if nodeManager == "nvm" {
 		if nvmDirToSave == "" {
@@ -1084,8 +1080,10 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// management question move existing workers onto the manager that answer
 	// selects, the way node:manage / node:unmanage already do. Gated on autostart
 	// (don't start units the user disabled); change-detection inside means only
-	// workers whose command actually changes get restarted.
-	if autostartOn && (bunPath != "" || nodeStateChanged) {
+	// workers whose command actually changes get restarted. It runs on every
+	// install because a unit written by another binary, 1.35.0 after a rollback,
+	// can still name the fnm this install just removed.
+	if autostartOn {
 		regenerateHostWorkers()
 	}
 
@@ -1508,17 +1506,6 @@ func nodeManagerNotice(manager string) string {
 		return ""
 	}
 	return "using " + manager + " for lerd-managed Node, switch with: lerd node:manager nvm"
-}
-
-// nodeStateFlipped reports whether this install run changed which Node host
-// workers should run: the management answer moved, or the version manager did.
-// An empty prevManager is a config predating the setting, which meant fnm, so a
-// first-time write of "fnm" is not a flip.
-func nodeStateFlipped(prevManaged bool, prevManager string, managed bool, manager string) bool {
-	if prevManager == "" {
-		prevManager = "fnm"
-	}
-	return prevManaged != managed || prevManager != manager
 }
 
 // ensureNodeManaged is called by the node:install/use/uninstall commands to
