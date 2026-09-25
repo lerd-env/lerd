@@ -29,6 +29,8 @@ func TestWhatsnewTargetResolution(t *testing.T) {
 		{"a checkout build of a beta still follows betas", "1.35.0-beta.3-10-gabc1234", beta},
 	}
 
+	// update.beta in a real config would put every install on the beta line.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			restore := setWhatsnewTargets(stable, beta)

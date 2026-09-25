@@ -78,8 +78,9 @@ func newAutostartStatusCmd() *cobra.Command {
 
 func newAutostartEnableCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "enable",
-		Short: "Enable lerd autostart on login",
+		Use:     "enable",
+		Aliases: []string{"on"},
+		Short:   "Enable lerd autostart on login",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if err := ApplyAutostart(false); err != nil {
 				return fmt.Errorf("enabling autostart: %w", err)
@@ -93,8 +94,9 @@ func newAutostartEnableCmd() *cobra.Command {
 
 func newAutostartDisableCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "disable",
-		Short: "Disable lerd autostart on login",
+		Use:     "disable",
+		Aliases: []string{"off"},
+		Short:   "Disable lerd autostart on login",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if err := ApplyAutostart(true); err != nil {
 				return fmt.Errorf("disabling autostart: %w", err)

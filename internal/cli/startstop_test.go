@@ -255,3 +255,16 @@ func TestRunStart_notesNixOSOwnsResolver(t *testing.T) {
 		t.Error("every ConfigureResolver call on the start path must be paired with NoteNixOSOwnsResolver")
 	}
 }
+
+// A pull that failed must not be followed by starting the unit anyway: the
+// quadlet would pull again inside systemd and time out minutes later.
+func TestUnitsMissingImage(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	units := []string{"lerd-php84-fpm", "lerd-php85-fpm", "lerd-nothing"}
+	exists := func(image string) bool { return image == "lerd-php85-fpm:local" }
+	got := unitsMissingImage(units, exists)
+	if len(got) != 1 || got[0] != "lerd-php84-fpm" {
+		t.Errorf("unitsMissingImage = %v, want [lerd-php84-fpm]", got)
+	}
+}

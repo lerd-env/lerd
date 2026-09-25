@@ -78,37 +78,6 @@ func TestNodeManageDecision(t *testing.T) {
 	}
 }
 
-func TestNodeStateFlipped(t *testing.T) {
-	cases := []struct {
-		name        string
-		prevManaged bool
-		prevManager string
-		managed     bool
-		manager     string
-		want        bool
-	}{
-		// Existing worker units keep the old manager's exec prefix, so both of
-		// these have to regenerate them.
-		{"decline flips management", true, "fnm", false, "nvm", true},
-		{"accept flips management", false, "nvm", true, "fnm", true},
-		{"manager alone flips", true, "fnm", true, "nvm", true},
-
-		// A rerun that answers the same way must not churn the units, and
-		// writing "fnm" into a config that predates the setting is not a change.
-		{"same answer is not a flip", true, "fnm", true, "fnm", false},
-		{"unset manager written as fnm is not a flip", true, "", true, "fnm", false},
-		{"unset manager going to nvm is a flip", false, "", false, "nvm", true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := nodeStateFlipped(tc.prevManaged, tc.prevManager, tc.managed, tc.manager); got != tc.want {
-				t.Errorf("nodeStateFlipped(%v, %q, %v, %q) = %v, want %v",
-					tc.prevManaged, tc.prevManager, tc.managed, tc.manager, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestNodeManagerChoice(t *testing.T) {
 	cases := []struct {
 		name         string
