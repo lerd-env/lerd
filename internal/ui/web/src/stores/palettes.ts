@@ -1,13 +1,14 @@
 import { apiFetch, apiJson } from '$lib/api';
 import {
   BUILTIN_PALETTES,
+  DEFAULT_PALETTE_ID,
   asDesktopStandIn,
   resolvePalette,
   type PaletteError,
   type PaletteFile
 } from '$lib/palettes';
-import { writable } from 'svelte/store';
-import { adoptTheme, palettes } from '$stores/theme';
+import { derived, get, writable } from 'svelte/store';
+import { adoptTheme, palette, palettes, saveTheme } from '$stores/theme';
 import { wsMessage } from '$lib/ws';
 import { m } from '../paraglide/messages.js';
 
@@ -15,6 +16,34 @@ import { m } from '../paraglide/messages.js';
 // hand-written theme is told what is wrong with it rather than left wondering
 // why it never showed up.
 export const paletteErrors = writable<PaletteError[]>([]);
+
+// The theme the config holds: empty while nobody has ever picked one, null until
+// the daemon has said.
+export const configTheme = writable<string | null>(null);
+
+// desktopSuggestion is the desktop's own theme, offered once to an install that
+// never chose a theme and still wears the default. A choice already made, even
+// the default one, is never second guessed.
+export const desktopSuggestion = derived([palettes, palette, configTheme], ([$palettes, $palette, $config]) => {
+  // An empty id is what a cleared config broadcasts, and it paints the default.
+  if ($config !== '' || ($palette || DEFAULT_PALETTE_ID) !== DEFAULT_PALETTE_ID) return null;
+  return $palettes.find((p) => p.source === 'desktop' && p.id !== DEFAULT_PALETTE_ID) ?? null;
+});
+
+export function useSuggestedTheme() {
+  const suggested = get(desktopSuggestion);
+  if (!suggested) return;
+  configTheme.set(suggested.id);
+  palette.set(suggested.id);
+}
+
+// Declining is recorded as a choice of the current theme, so the question is
+// answered for every device that opens the dashboard, not once per browser.
+export function keepCurrentTheme() {
+  const current = get(palette);
+  configTheme.set(current);
+  void saveTheme(current);
+}
 
 interface ThemesResponse {
   themes?: PaletteFile[];
@@ -28,6 +57,7 @@ export async function loadPalettes() {
   try {
     const chosen = await apiJson<{ theme?: string }>('/api/settings');
     if (chosen.theme) adoptTheme(chosen.theme);
+    configTheme.set(chosen.theme ?? '');
   } catch {
     /* keep whatever the browser remembered */
   }
@@ -83,7 +113,10 @@ export async function removePalette(id: string): Promise<boolean> {
 // written straight back to the config it came from.
 export function watchThemeChanges() {
   return wsMessage.subscribe((msg) => {
-    if (msg?.theme !== undefined) adoptTheme(msg.theme);
+    if (msg?.theme !== undefined) {
+      adoptTheme(msg.theme);
+      configTheme.set(msg.theme);
+    }
     // The desktop theme keeps its id when its colours change, so the list has to
     // be refetched rather than reapplied from what is already in hand.
     if (msg?.type === 'theme_list') void loadPalettes();

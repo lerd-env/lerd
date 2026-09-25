@@ -1575,5 +1575,9 @@
   "system_streaming_title": "Streamingmodus",
   "system_streaming_description": "Verbergt klantwerk terwijl je je scherm deelt of opneemt. Voegt een oog toe aan elke workspace om hem privé te maken, en verbergt op Linux met Wayland privé-workspaces vanzelf zolang er gedeeld wordt.",
   "system_streaming_toggleOn": "Streamingmodus inschakelen",
-  "system_streaming_toggleOff": "Streamingmodus uitschakelen"
+  "system_streaming_toggleOff": "Streamingmodus uitschakelen",
+  "theme_suggest_keep": "Huidig thema houden",
+  "theme_suggest_subtitle": "lerd kan de kleuren van je desktop overnemen en ze volgen als ze veranderen. Je kunt altijd wisselen via de themakiezer.",
+  "theme_suggest_title": "Laat lerd aansluiten op je desktop met {name}",
+  "theme_suggest_use": "Gebruiken"
 }

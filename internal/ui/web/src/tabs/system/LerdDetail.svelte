@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import CheckUpdatesButton from '$components/CheckUpdatesButton.svelte';
   import { version, loadVersion } from '$stores/version';
+  import VersionPill from '$components/VersionPill.svelte';
   import { accessMode } from '$stores/accessMode';
   import { lan, loadLANStatus, toggleLAN, generateRemoteSetupCode, copySetupCurl } from '$stores/lan';
   import { status } from '$stores/status';
@@ -203,7 +204,7 @@
 <div class="flex-1 overflow-y-auto">
   <div class="flex flex-wrap items-center justify-between gap-y-2 px-3 py-1.5 page-header">
     <span class="font-semibold text-gray-900 dark:text-white text-base">{m.system_lerd()}</span>
-    <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 font-mono">v{$version.current}</span>
+    <VersionPill />
   </div>
 
   <div class="p-3 space-y-3 @container">

@@ -166,4 +166,81 @@ describe('palettes store', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     stop();
   });
+  describe('desktop theme suggestion', () => {
+    // The daemon answers the chosen theme and the list from two endpoints, and
+    // the POST that records a choice from a third.
+    function daemon(chosen: string) {
+      return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === 'POST') return new Response('{"ok":true}', { status: 200 });
+        const body = String(input).endsWith('/api/settings')
+          ? { theme: chosen }
+          : { themes: [{ id: 'gnome', name: 'GNOME', accent: '#3584e4', source: 'desktop' }] };
+        return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      });
+    }
+
+    async function load(chosen: string) {
+      const fetchMock = daemon(chosen);
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+      (window as unknown as { matchMedia: unknown }).matchMedia = vi.fn(() => ({
+        matches: false,
+        addEventListener: () => {},
+        removeEventListener: () => {}
+      }));
+      localStorage.clear();
+      const store = await import('./palettes');
+      const theme = await import('./theme');
+      theme.initTheme();
+      await store.loadPalettes();
+      fetchMock.mockClear();
+      return { ...store, ...theme, fetchMock };
+    }
+
+    const posted = (fetchMock: ReturnType<typeof daemon>) =>
+      fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST').map(([, init]) => JSON.parse(String(init!.body)));
+
+    it('offers the desktop theme while no theme was ever chosen', async () => {
+      const { desktopSuggestion } = await load('');
+      expect(get(desktopSuggestion)).toMatchObject({ id: 'adwaita', name: 'Adwaita' });
+    });
+
+    it('stays quiet once a theme was chosen, even the default one', async () => {
+      const { desktopSuggestion } = await load('lerd');
+      expect(get(desktopSuggestion)).toBeNull();
+    });
+
+    it('switches to the suggested theme and records it', async () => {
+      const { desktopSuggestion, useSuggestedTheme, palette, fetchMock } = await load('');
+      useSuggestedTheme();
+      expect(get(palette)).toBe('adwaita');
+      expect(get(desktopSuggestion)).toBeNull();
+      expect(posted(fetchMock)).toEqual([{ theme: 'adwaita' }]);
+    });
+
+    it('keeps the current theme by recording it as the choice', async () => {
+      const { desktopSuggestion, keepCurrentTheme, palette, fetchMock } = await load('');
+      keepCurrentTheme();
+      expect(get(palette)).toBe('lerd');
+      expect(get(desktopSuggestion)).toBeNull();
+      expect(posted(fetchMock)).toEqual([{ theme: 'lerd' }]);
+    });
+
+    it('offers it again when the config is cleared on another device', async () => {
+      const { desktopSuggestion, watchThemeChanges } = await load('lerd');
+      const { wsMessage } = await import('$lib/ws');
+      const stop = watchThemeChanges();
+      wsMessage.set({ type: 'theme', theme: '' });
+      expect(get(desktopSuggestion)).toMatchObject({ id: 'adwaita' });
+      stop();
+    });
+
+    it('stops offering once another device answers', async () => {
+      const { desktopSuggestion, watchThemeChanges } = await load('');
+      const { wsMessage } = await import('$lib/ws');
+      const stop = watchThemeChanges();
+      wsMessage.set({ type: 'theme', theme: 'lerd' });
+      expect(get(desktopSuggestion)).toBeNull();
+      stop();
+    });
+  });
 });

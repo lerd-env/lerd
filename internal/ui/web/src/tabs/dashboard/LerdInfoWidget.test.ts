@@ -21,6 +21,15 @@ describe('LerdInfoWidget', () => {
     });
   });
 
+  it('marks a dev build next to its version', () => {
+    version.update((v) => ({ ...v, current: '1.35.0-66-g7ef9e61e-dirty' }));
+    render(LerdInfoWidget);
+
+    expect(screen.getByRole('button', { name: /7ef9e61e/ }).textContent?.trim()).toBe('dev');
+    expect(screen.getByText('v1.35.0')).toBeInTheDocument();
+    expect(screen.queryByText(/g7ef9e61e/)).toBeNull();
+  });
+
   // Expanding the notes in place pushed the rest of the dashboard down, so the
   // card only offers a way in and the text lives in the modal.
   it('keeps the release notes out of the card', async () => {

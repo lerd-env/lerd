@@ -1575,5 +1575,9 @@
   "system_streaming_title": "Mode streaming",
   "system_streaming_description": "Masque les projets clients pendant que tu partages ou enregistres ton écran. Ajoute un œil à chaque workspace pour le marquer privé et, sous Linux avec Wayland, masque tout seul les workspaces privés pendant un partage.",
   "system_streaming_toggleOn": "Activer le mode streaming",
-  "system_streaming_toggleOff": "Désactiver le mode streaming"
+  "system_streaming_toggleOff": "Désactiver le mode streaming",
+  "theme_suggest_keep": "Garder le thème actuel",
+  "theme_suggest_subtitle": "lerd peut reprendre les couleurs de votre bureau et les suivre quand elles changent. Vous pouvez changer à tout moment depuis le sélecteur de thème.",
+  "theme_suggest_title": "Assortir lerd à votre bureau avec {name}",
+  "theme_suggest_use": "Utiliser"
 }

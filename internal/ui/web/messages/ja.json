@@ -1575,5 +1575,9 @@
   "system_streaming_title": "ストリーミングモード",
   "system_streaming_description": "画面の共有や録画中にクライアントの作業を隠します。各ワークスペースに目のアイコンを追加してプライベートに設定でき、Wayland の Linux では共有中に自動でプライベートなワークスペースを隠します。",
   "system_streaming_toggleOn": "ストリーミングモードを有効にする",
-  "system_streaming_toggleOff": "ストリーミングモードを無効にする"
+  "system_streaming_toggleOff": "ストリーミングモードを無効にする",
+  "theme_suggest_keep": "現在のテーマのまま",
+  "theme_suggest_subtitle": "lerd はデスクトップの配色をまとい、変更にも追従できます。テーマ選択からいつでも切り替えられます。",
+  "theme_suggest_title": "デスクトップに合わせて {name} を使う",
+  "theme_suggest_use": "使う"
 }

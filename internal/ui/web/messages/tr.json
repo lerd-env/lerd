@@ -1575,5 +1575,9 @@
   "system_streaming_title": "Yayın modu",
   "system_streaming_description": "Ekranını paylaşırken veya kaydederken müşteri işlerini gizler. Her workspace'e onu özel olarak işaretlemek için bir göz ekler ve Wayland kullanan Linux'ta paylaşım sürerken özel workspace'leri kendiliğinden gizler.",
   "system_streaming_toggleOn": "Yayın modunu etkinleştir",
-  "system_streaming_toggleOff": "Yayın modunu devre dışı bırak"
+  "system_streaming_toggleOff": "Yayın modunu devre dışı bırak",
+  "theme_suggest_keep": "Mevcut temayı koru",
+  "theme_suggest_subtitle": "lerd masaüstünüzün renklerini kullanabilir ve değiştiklerinde onları izleyebilir. Tema seçiciden istediğiniz zaman değiştirebilirsiniz.",
+  "theme_suggest_title": "Masaüstünüze uyum için {name} kullanın",
+  "theme_suggest_use": "Kullan"
 }

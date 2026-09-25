@@ -1575,5 +1575,9 @@
   "system_streaming_title": "直播模式",
   "system_streaming_description": "在共享或录制屏幕时隐藏客户项目。为每个工作区添加一个眼睛图标用于设为私有，在使用 Wayland 的 Linux 上会在共享期间自动隐藏私有工作区。",
   "system_streaming_toggleOn": "启用直播模式",
-  "system_streaming_toggleOff": "停用直播模式"
+  "system_streaming_toggleOff": "停用直播模式",
+  "theme_suggest_keep": "保留当前主题",
+  "theme_suggest_subtitle": "lerd 可以使用桌面的配色，并在其变化时自动跟随。你可以随时在主题选择器中切换。",
+  "theme_suggest_title": "使用 {name} 与桌面保持一致",
+  "theme_suggest_use": "使用"
 }

@@ -1575,5 +1575,9 @@
   "system_streaming_title": "Mode streaming",
   "system_streaming_description": "Sembunyikan pekerjaan klien saat kamu membagikan atau merekam layar. Menambahkan ikon mata di setiap workspace untuk menandainya privat, dan di Linux dengan Wayland menyembunyikan workspace privat secara otomatis selama berbagi layar.",
   "system_streaming_toggleOn": "Aktifkan mode streaming",
-  "system_streaming_toggleOff": "Nonaktifkan mode streaming"
+  "system_streaming_toggleOff": "Nonaktifkan mode streaming",
+  "theme_suggest_keep": "Pertahankan tema saat ini",
+  "theme_suggest_subtitle": "lerd bisa memakai warna desktop Anda dan mengikutinya saat berubah. Anda bisa menggantinya kapan saja dari pemilih tema.",
+  "theme_suggest_title": "Samakan dengan desktop Anda memakai {name}",
+  "theme_suggest_use": "Gunakan"
 }

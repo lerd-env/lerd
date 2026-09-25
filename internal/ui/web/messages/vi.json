@@ -1575,5 +1575,9 @@
   "system_streaming_title": "Chế độ streaming",
   "system_streaming_description": "Ẩn công việc của khách hàng khi bạn chia sẻ hoặc ghi màn hình. Thêm biểu tượng con mắt cho mỗi workspace để đánh dấu riêng tư, và trên Linux dùng Wayland sẽ tự ẩn các workspace riêng tư khi đang chia sẻ.",
   "system_streaming_toggleOn": "Bật chế độ streaming",
-  "system_streaming_toggleOff": "Tắt chế độ streaming"
+  "system_streaming_toggleOff": "Tắt chế độ streaming",
+  "theme_suggest_keep": "Giữ giao diện hiện tại",
+  "theme_suggest_subtitle": "lerd có thể dùng màu của môi trường desktop và theo chúng khi thay đổi. Bạn có thể đổi bất cứ lúc nào trong bộ chọn giao diện.",
+  "theme_suggest_title": "Đồng bộ với màn hình nền bằng {name}",
+  "theme_suggest_use": "Dùng"
 }

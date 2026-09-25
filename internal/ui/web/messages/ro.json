@@ -1575,5 +1575,9 @@
   "system_streaming_title": "Mod streaming",
   "system_streaming_description": "Ascunde proiectele clienților când partajezi sau înregistrezi ecranul. Adaugă un ochi fiecărui workspace pentru a-l marca privat, iar pe Linux sub Wayland ascunde singur workspace-urile private cât timp rulează o partajare.",
   "system_streaming_toggleOn": "Activează modul streaming",
-  "system_streaming_toggleOff": "Dezactivează modul streaming"
+  "system_streaming_toggleOff": "Dezactivează modul streaming",
+  "theme_suggest_keep": "Păstrează tema actuală",
+  "theme_suggest_subtitle": "lerd poate prelua culorile desktopului și le poate urma când se schimbă. Poți schimba oricând din selectorul de teme.",
+  "theme_suggest_title": "Potrivește lerd cu desktopul tău folosind {name}",
+  "theme_suggest_use": "Folosește"
 }

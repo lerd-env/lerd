@@ -1575,5 +1575,9 @@
   "system_streaming_title": "Tryb streamingu",
   "system_streaming_description": "Ukrywa projekty klientów, gdy udostępniasz lub nagrywasz ekran. Dodaje oko do każdego workspace'a, by oznaczyć go jako prywatny, a na Linuksie z Waylandem sam ukrywa prywatne workspace'y podczas udostępniania.",
   "system_streaming_toggleOn": "Włącz tryb streamingu",
-  "system_streaming_toggleOff": "Wyłącz tryb streamingu"
+  "system_streaming_toggleOff": "Wyłącz tryb streamingu",
+  "theme_suggest_keep": "Zachowaj obecny motyw",
+  "theme_suggest_subtitle": "lerd może używać kolorów Twojego pulpitu i podążać za ich zmianami. W każdej chwili możesz to zmienić w wyborze motywu.",
+  "theme_suggest_title": "Dopasuj lerd do pulpitu motywem {name}",
+  "theme_suggest_use": "Użyj"
 }
