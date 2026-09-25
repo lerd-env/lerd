@@ -33,7 +33,7 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 - 🧱 **Host-proxy sites.** Run a Node, Python, Go or any non-PHP dev server on the host and have nginx serve it at a `.test` domain with HTTPS, git worktrees included. A wedged dev server can be bounced from the site header without reaching for a terminal.
 
-- 🌳 **First-class git worktrees.** Auto-detected branch domains, per-worktree PHP and Node versions, optional database isolation, wildcard cert SANs and a per-branch Vite worker. A bare `git worktree add` from any tool is provisioned automatically, and `lerd worktree wait` blocks until the tree is ready.
+- 🌳 **First-class git worktrees.** Auto-detected branch domains, per-worktree PHP and Node versions, a database shared, copied or started empty depending on the branch's migrations, wildcard cert SANs and a per-branch Vite worker. A bare `git worktree add` from any tool is provisioned automatically, and `lerd worktree wait` blocks until the tree is ready.
 
 - 🌍 **Share a site.** On your LAN with a stable port and a QR code, or publicly through ngrok, cloudflared, Expose, Pinggy, serveo or localhost.run. Set a base domain once and every share keeps the same URL between runs, through a tunnel service or the reverse proxy you already run.
 
@@ -41,14 +41,14 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 ### PHP, Node and runtimes
 
-- 🐘 **Per-project PHP version.** 8.1 to 8.5, plus a frozen 7.4 / 8.0 legacy tier for projects on the old stack and 8.6 as a prerelease tier nothing picks for you, switched with one click. Custom extensions and Alpine packages are declared once and applied to every image lerd builds.
+- 🐘 **Per-project PHP version.** 8.1 to 8.5, plus a frozen 7.4 / 8.0 legacy tier for projects on the old stack and 8.6 as a prerelease tier nothing picks for you, switched with one click. Custom extensions and Alpine packages are declared once and applied to every image lerd builds. The ODBC stack ships in every image, with `lerd php:odbc` to register a vendor driver.
 - ⚡ **PHP on the host, on macOS** (beta). A native runtime runs PHP-FPM, the CLI, composer and the workers directly on the host and leaves nginx and the services in containers, removing the bind-mount boundary a Mac pays on every file PHP reads. On a Laravel app with Horizon and Filament that took 62 requests per second to 238. Switch the whole install with `lerd php:runtime`; containers stay the default until you do, and Linux never had the boundary and is unchanged.
 
 - ⚡ **FrankenPHP runtime.** Per site, as an alternative to shared PHP-FPM, with Laravel Octane and Symfony Runtime worker mode.
 
 - 📱 **NativePHP, desktop and mobile.** The Electron app runs as a host worker and the mobile build reaches an emulator, a simulator or a device. A console command whose runtime cannot live in a container is declared as one that has to run on the host, so `native:run` opens its window instead of dying inside the PHP container two seconds after the shim sent it there.
 
-- 📦 **Node.js isolation.** Node 22 or 24 per project, through the bundled fnm or an nvm you already have, switchable from the dashboard. Or **bun** as the JS runtime on the host and, opt-in, inside the container.
+- 📦 **Node.js isolation.** Node 22 or 24 per project, through mise (the default for new installs), fnm or an nvm you already have, switchable from the dashboard. Or **bun** as the JS runtime on the host and, opt-in, inside the container.
 
 - 🪄 **No per-framework setup.** Workers, env values and the nginx vhost are configured for you when you link a project. "Env" means whatever file your framework actually reads: a `.env`, WordPress's `wp-config.php`, Magento's `env.php` or Drupal's `settings.php`, written in place. A worker's start command, its flags and their defaults come from the same definition, and the queues and limits you answer with are committed to the project's `.lerd.yaml` instead of being retyped on every start.
 
@@ -64,7 +64,7 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 ### Debugging and performance
 
-- 🛰️ **Debug window.** Intercepts every `dump()` / `dd()` and streams it to the dashboard, TUI, MCP and `lerd dump tail`, scoped per site and per worktree branch. The same window captures SQL with N+1 and slow-query detection, plus mail, views, events, queued jobs and outgoing HTTP, on Laravel and Symfony.
+- 🛰️ **Debug window.** Intercepts every `dump()` / `dd()` and streams it to the dashboard, TUI, MCP and `lerd dump tail`, scoped per site and per worktree branch. The same window captures SQL with N+1 and slow-query detection, plus mail, views, events, queued jobs and outgoing HTTP, on Laravel and Symfony. `ray()` calls, the app's own log, exceptions handed to Sentry or Inspector, and the SMS, Slack and notification messages a site sends land there too, with no desktop app or hosted account.
 
 - 🔥 **[SPX](https://github.com/NoiseByNorthwest/php-spx) profiler** with one-click on/off. Every PHP-FPM request becomes a flame graph viewable in a same-origin Profiler view in the dashboard, with no FPM restart and no code changes, and `lerd profile run` profiles a one-shot artisan or CLI command.
 
@@ -74,7 +74,7 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 ### Interfaces
 
-- 🖥️ **Built-in Web UI.** Sites and services dashboards, live widgets, a global Cmd+K command palette, install/remove of PHP and Node versions with a shell into any version's container, and the framework command you run all day pinned to the site's control row, in fourteen languages and twelve themes that follow you between machines. Reachable from another machine behind credentials, with the actions that touch the host staying local until you grant them.
+- 🖥️ **Built-in Web UI.** Sites and services dashboards, live widgets, a global Cmd+K command palette, install/remove of PHP and Node versions with a shell into any version's container, and the framework command you run all day pinned to the site's control row, in fourteen languages and twelve themes that follow you between machines, or your desktop's own colours on Omarchy, KDE Plasma, GNOME and macOS, carried into every embedded admin dashboard. A streaming mode keeps private workspaces off a shared screen. Reachable from another machine behind credentials, with the actions that touch the host staying local until you grant them.
 
 - ✨ **Start a project from the dashboard.** The `+` in Sites scaffolds a project from the framework store or links one you already have, asks what `lerd init` asks, then runs composer and the JS build in the modal. Close the tab mid-install and it picks back up.
 
@@ -110,7 +110,7 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 - 📶 **Nothing downloads behind your back.** Every command that can pull or rebuild a container image names it and roughly how big it is before the first byte moves, read from the registry manifest so asking costs nothing. The dashboard turns that into a confirmation, an assistant over MCP has to come back with your answer, and `--no-pull`, `LERD_OFFLINE=1` and `lerd start --dry-run` cover a connection you would rather not spend.
 
-- 📌 **Pinned host tools.** Composer, fnm and mkcert are pinned behind a published manifest rather than whatever `releases/latest` served that day, so an upstream release cannot break a fresh install overnight, and the System page reports each against its pin and applies the update on the card that flagged it.
+- 📌 **Pinned host tools.** Composer, mise, fnm and mkcert are pinned behind a published manifest rather than whatever `releases/latest` served that day, so an upstream release cannot break a fresh install overnight, and the System page reports each against its pin and applies the update on the card that flagged it.
 
 - 🔒 **Rootless and daemonless.** Podman-native, no Docker required, dual-stack IPv4 + IPv6.
 

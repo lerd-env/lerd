@@ -44,7 +44,7 @@ func RunWorktreeSetup(site *config.Site, worktreePath, branch, build, db string,
 		applyWorktreeBuildRequest(site, worktreePath, build, log)
 	}
 	fw, hasFramework := config.GetFrameworkForDir(site.Framework, site.Path)
-	choice, reason, needsMigrate := planUnattendedWorktreeDB(fw, db, site.Path, worktreePath)
+	choice, reason, needsMigrate := planUnattendedWorktreeDB(fw, db, site.Path, worktreePath, WorktreeUsesSQLite(site))
 	if reason != "" {
 		logf(log, "Database: %s, since %s.", choice, reason)
 	}
