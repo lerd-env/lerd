@@ -2,6 +2,7 @@
   import DashboardCard from './DashboardCard.svelte';
   import CheckUpdatesButton from '$components/CheckUpdatesButton.svelte';
   import StatusPill from '$components/StatusPill.svelte';
+  import VersionPill from '$components/VersionPill.svelte';
   import ActivityList from './ActivityList.svelte';
   import { version, loadVersion } from '$stores/version';
   import { autostartEnabled } from '$stores/autostart';
@@ -32,9 +33,7 @@
 
 <DashboardCard title={m.dashboard_lerd_title()} tone={$version.hasUpdate ? 'warn' : 'default'}>
   {#snippet badge()}
-    <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 font-mono">
-      v{$version.current}
-    </span>
+    <VersionPill />
   {/snippet}
 
   {#if $version.checked && !$version.hasUpdate}

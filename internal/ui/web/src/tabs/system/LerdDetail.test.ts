@@ -25,6 +25,30 @@ describe('LerdDetail', () => {
 
   // Release notes run long enough to push the rest of the settings off screen,
   // so the card only offers a way in and the text lives in the modal.
+  it('marks a dev build next to its version', () => {
+    version.update((v) => ({ ...v, current: '1.35.0-66-g7ef9e61e-dirty' }));
+    render(LerdDetail);
+
+    expect(screen.getByRole('button', { name: /7ef9e61e/ }).textContent?.trim()).toBe('dev');
+    expect(screen.getByText('v1.35.0')).toBeInTheDocument();
+    expect(screen.queryByText(/g7ef9e61e/)).toBeNull();
+  });
+
+  it('marks a beta next to its version', () => {
+    version.update((v) => ({ ...v, current: '1.35.0-beta.4' }));
+    render(LerdDetail);
+
+    expect(screen.getByText('beta')).toBeInTheDocument();
+    expect(screen.getByText('v1.35.0')).toBeInTheDocument();
+  });
+
+  it('adds no badge to a release', () => {
+    render(LerdDetail);
+
+    expect(screen.queryByText('dev')).toBeNull();
+    expect(screen.queryByText('beta')).toBeNull();
+  });
+
   it('keeps the release notes out of the card', () => {
     render(LerdDetail);
 
