@@ -59,6 +59,9 @@ type FrameworkPackage struct {
 	HostBinaries []string            `yaml:"host_binaries,omitempty"`
 	Setup        []FrameworkSetupCmd `yaml:"setup,omitempty"`
 	Doctor       *FrameworkDoctor    `yaml:"doctor,omitempty"`
+	// SuggestServices are service presets a project requiring this package
+	// uses, ticked in the setup wizard.
+	SuggestServices []string `yaml:"suggest_services,omitempty"`
 	// Devtools declares the capture seams this package brings. They belong to
 	// the package rather than to any framework: the class a seam names ships
 	// with the package, so a project on any framework that requires it gets the
@@ -249,6 +252,11 @@ func applyPackage(fw *Framework, pkg *FrameworkPackage) {
 		}
 		for _, check := range pkg.Doctor.Checks {
 			fw.Doctor.Checks = upsertDoctorCheck(fw.Doctor.Checks, check)
+		}
+	}
+	for _, name := range pkg.SuggestServices {
+		if !slices.Contains(fw.PackageServices, name) {
+			fw.PackageServices = append(fw.PackageServices, name)
 		}
 	}
 	applyPackageRemovals(fw, pkg.Removes)

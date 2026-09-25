@@ -66,6 +66,13 @@ type Framework struct {
 	// own rather than a setup step: an older binary ignores it, where a step would
 	// be run as plain argv, or offered on a project that is already installed.
 	Install *FrameworkInstall `yaml:"install,omitempty"`
+	// SuggestServices are service presets the setup wizard offers for this
+	// framework, unticked, whether or not they are installed yet.
+	SuggestServices []string `yaml:"suggest_services,omitempty"`
+	// PackageServices are the suggest_services of the composer packages merged
+	// onto this definition. The wizard ticks these: the project requiring the
+	// package is evidence it uses them.
+	PackageServices []string `yaml:"-"`
 	// Worktree declares what a worktree needs beyond the seeded env file.
 	Worktree *FrameworkWorktree `yaml:"worktree,omitempty"`
 	// Commands are on-demand actions surfaced in the dashboard "Run command"
@@ -1703,6 +1710,7 @@ func cloneFrameworkMutable(in *Framework) *Framework {
 		cp.Checks = append([]DoctorCheck(nil), in.Doctor.Checks...)
 		out.Doctor = &cp
 	}
+	out.PackageServices = append([]string(nil), in.PackageServices...)
 	return &out
 }
 

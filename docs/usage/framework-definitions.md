@@ -456,6 +456,12 @@ install:
   missing_file: web/sites/default/settings.php
   command: php vendor/drush/drush/drush.php site:install --yes ...
 
+# Service presets the setup wizard offers for this framework, unticked, whether or
+# not they are installed yet (optional). A package declares the same key, and its
+# services are ticked, since requiring the package means the project uses them.
+suggest_services:
+  - solr
+
 # Application log files shown in the UI "App Logs" tab
 logs:
   - path: "var/log/*.log"             # glob relative to project root

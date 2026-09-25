@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 	nodeDet "github.com/geodro/lerd/internal/node"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/store"
 )
 
 // The kinds of project the init questions come in. A directory is one of them
@@ -193,6 +195,39 @@ func fillServiceQuestions(q *ProjectQuestions, cwd string, defaults *config.Proj
 	}
 	q.ServiceOptions = nonDatabaseServiceNames(dbNameSet)
 	q.Database, q.Services = wizardServiceDefaults(cwd, defaults, dbNameSet)
+	q.ServiceOptions, q.Services = addSuggestedServices(q.ServiceOptions, q.Services, fw, dbNameSet, len(defaults.Services) > 0, presetAvailable)
+}
+
+// addSuggestedServices offers the presets the framework and its packages
+// suggest. A package's are ticked on a project that has not saved its services
+// yet, since requiring the package is evidence the project uses them.
+func addSuggestedServices(options, selected []string, fw *config.Framework, dbNameSet map[string]bool, saved bool, available func(string) bool) ([]string, []string) {
+	if fw == nil {
+		return options, selected
+	}
+	for _, name := range append(append([]string(nil), fw.SuggestServices...), fw.PackageServices...) {
+		if dbNameSet[name] || !available(name) {
+			continue
+		}
+		if !slices.Contains(options, name) {
+			options = append(options, name)
+		}
+		if !saved && slices.Contains(fw.PackageServices, name) && !slices.Contains(selected, name) {
+			selected = append(selected, name)
+		}
+	}
+	return options, selected
+}
+
+// presetAvailable reports whether name is a preset lerd can install, fetching
+// it from the store when this machine has not cached it, so that picking it
+// records a preset that link installs rather than a name that resolves to nothing.
+func presetAvailable(name string) bool {
+	if config.PresetExists(name) {
+		return true
+	}
+	_, err := store.NewServiceClient().FetchServicePreset(name)
+	return err == nil
 }
 
 // fillPHPQuestions fills in what a PHP project is asked: the version to serve

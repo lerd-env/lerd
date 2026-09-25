@@ -3,8 +3,11 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // packageSandbox lays out a store holding one acme@11 definition and an index
@@ -423,5 +426,31 @@ func TestGetFrameworkForDir_packageVersionPrefersTheLock(t *testing.T) {
 	fw, _ := GetFrameworkForDir("acme", project)
 	if got := fw.Workers["native"].Command; got != "php acme five" {
 		t.Errorf("worker command = %q, want the file for the locked major", got)
+	}
+}
+
+// A package's services are kept apart from the framework's own suggestions: the
+// project requiring the package is evidence it uses them, so they are ticked
+// where the framework's are only offered.
+func TestApplyPackage_suggestServices(t *testing.T) {
+	fw := &Framework{Name: "drupal", SuggestServices: []string{"solr", "memcached"}}
+	applyPackage(fw, &FrameworkPackage{Package: "drupal/search_api_solr", SuggestServices: []string{"solr"}})
+	applyPackage(fw, &FrameworkPackage{Package: "drupal/search_api_solr_extra", SuggestServices: []string{"solr"}})
+
+	if !slices.Equal(fw.SuggestServices, []string{"solr", "memcached"}) {
+		t.Errorf("framework suggestions changed: %v", fw.SuggestServices)
+	}
+	if !slices.Equal(fw.PackageServices, []string{"solr"}) {
+		t.Errorf("package services = %v, want [solr] once", fw.PackageServices)
+	}
+}
+
+func TestFrameworkPackage_suggestServicesYAML(t *testing.T) {
+	var pkg FrameworkPackage
+	if err := yaml.Unmarshal([]byte("package: drupal/search_api_solr\nsuggest_services: [solr]\n"), &pkg); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(pkg.SuggestServices, []string{"solr"}) {
+		t.Errorf("suggest_services not bound: %v", pkg.SuggestServices)
 	}
 }
