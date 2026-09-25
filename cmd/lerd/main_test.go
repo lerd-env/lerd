@@ -851,3 +851,16 @@ func TestAcceptDetectedPHP(t *testing.T) {
 		t.Errorf("warning should name both versions, got %q", out.String())
 	}
 }
+
+func TestAnnounceSiteFilesChangedReachesLerdUI(t *testing.T) {
+	orig := notifyUI
+	defer func() { notifyUI = orig }()
+	var called bool
+	notifyUI = func(string) { called = true }
+
+	announceSiteFilesChanged()
+
+	if !called {
+		t.Error("a site file change must be posted to lerd-ui, the watcher's event bus stays in its own process")
+	}
+}

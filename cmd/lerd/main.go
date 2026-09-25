@@ -765,7 +765,7 @@ func newWatchCmd() *cobra.Command {
 						if err := cli.QueueRestartForSite(site.Name, sitePath, site.PHPVersion); err != nil {
 							fmt.Printf("[WARN] queue restart for %s: %v\n", site.Name, err)
 						}
-						eventbus.Default.Publish(eventbus.KindSites)
+						announceSiteFilesChanged()
 					},
 				)
 				if err != nil {
@@ -1336,4 +1336,16 @@ func acceptDetectedPHP(site, current, detected string, installed func(string) bo
 	}
 	fmt.Fprintf(w, "[WARN] %s asks for PHP %s, which is not installed; still serving %s (run lerd link to install it)\n", site, detected, current)
 	return false
+}
+
+// notifyUI is notifyLerdUI, swappable for tests.
+var notifyUI = notifyLerdUI
+
+// announceSiteFilesChanged tells both the watcher's own subscribers and lerd-ui
+// that a site's files changed. The event bus is per process, so without the
+// POST an open dashboard only saw a new composer package, and the service it
+// suggests, once its snapshot expired.
+func announceSiteFilesChanged() {
+	eventbus.Default.Publish(eventbus.KindSites)
+	notifyUI("sites")
 }
