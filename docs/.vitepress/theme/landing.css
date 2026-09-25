@@ -270,11 +270,31 @@
    HERO
    =========================================================== */
 .lerd-landing .hero { padding-top: clamp(120px, 16vh, 180px); padding-bottom: clamp(60px, 8vw, 100px); }
-.lerd-landing .hero-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: clamp(36px, 5vw, 72px); align-items: start; }
+/* The film opens the page under the fixed nav, filling the first screen; the
+   hero after it no longer has to clear the nav itself. */
+.lerd-landing .spot { position: relative; padding: 66px 0 0; background: #000; }
+.lerd-landing .spot-video { display: block; width: 100%; height: min(56.25vw, calc(100svh - 66px)); object-fit: contain; background: #000; }
+@media (max-aspect-ratio: 3/4) { .lerd-landing .spot-video { height: calc(100svh - 66px); } }
+.lerd-landing .spot-toggle {
+  position: absolute; right: clamp(16px, 3vw, 32px); bottom: clamp(16px, 3vw, 32px);
+  padding: 6px 14px; border: 0; border-radius: 99px; cursor: pointer;
+  font: 600 13px/1.4 inherit; color: #fff; background: rgba(255, 255, 255, .14); backdrop-filter: blur(8px);
+}
+.lerd-landing .spot-toggle:hover { background: rgba(255, 255, 255, .24); }
+.lerd-landing .spot + .hero { padding-top: clamp(60px, 8vw, 100px); }
+/* One centred column under the film, the install command front and centre. */
+.lerd-landing .hero-center { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.lerd-landing .hero-center .lead { max-width: 680px; }
+.lerd-landing .hero-center .install { width: 100%; max-width: 560px; text-align: left; }
+.lerd-landing .hero-center .hero-actions { justify-content: center; }
+.lerd-landing .hero-center .hero-actions .btn { flex: 0 0 auto; }
+.lerd-landing .hero-center .hero-meta { justify-content: center; }
+/* On a phone the pill wraps and strands its dot, so it tightens to one line. */
+@media (max-width: 480px) {
+  .lerd-landing .hero-center .eyebrow { white-space: nowrap; font-size: 11px; letter-spacing: 0.06em; }
+}
 /* Grid/flex children default to min-width:auto, so a wide cast terminal or a long
    install command would force the column wider than the viewport. Let them shrink. */
-.lerd-landing .hero-copy,
-.lerd-landing .hero-term-wrap,
 .lerd-landing .mcp-chat,
 .lerd-landing .mcp-tools,
 .lerd-landing .step-vis { min-width: 0; }
@@ -293,8 +313,6 @@
 /* OS tabs + install command */
 .lerd-landing .install { margin-top: 30px; max-width: 480px; }
 /* install + actions now live under the hero terminal — span the terminal column */
-.lerd-landing .hero-term-wrap .install { max-width: none; margin-top: 22px; }
-.lerd-landing .hero-term-wrap .hero-actions { margin-top: 16px; }
 .lerd-landing .os-tabs { display: flex; gap: 4px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px 12px 0 0; border-bottom: none; }
 .lerd-landing .os-tab {
   flex: 1; font: inherit; font-size: 13px; font-weight: 500;
@@ -314,6 +332,11 @@
 .lerd-landing .cmd-text { flex: 1; color: var(--ink); white-space: nowrap; overflow: hidden; }
 .lerd-landing .cmd-text .cursor { display:inline-block; width:8px; height:1.05em; background: var(--accent-2); vertical-align:-2px; margin-left:2px; animation: ll-blink 1s steps(1) infinite; }
 @keyframes ll-blink { 50% { opacity: 0; } }
+/* A phone can't fit the one-line command, so it wraps between words instead of clipping. */
+@media (max-width: 480px) {
+  .lerd-landing .cmd-row { font-size: 13px; align-items: flex-start; }
+  .lerd-landing .cmd-text { white-space: normal; overflow-wrap: anywhere; }
+}
 .lerd-landing .copy-btn {
   background: var(--panel-2); border: 1px solid var(--line-2); color: var(--ink-2);
   border-radius: 8px; padding: 7px; cursor: pointer; display: grid; place-items: center;
@@ -339,11 +362,6 @@
 }
 .lerd-landing .cast .ap-overlay-start, .lerd-landing .cast .ap-overlay-loading { background: transparent; }
 .lerd-landing .cast .ap-overlay-start .ap-play-button { display: none; }
-
-@media (max-width: 900px) {
-  .lerd-landing .hero-grid { grid-template-columns: 1fr; }
-  .lerd-landing .hero-term-wrap { order: 2; }
-}
 
 /* ===========================================================
    LOGO / framework strip
