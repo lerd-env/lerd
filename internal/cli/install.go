@@ -311,10 +311,8 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// is set and neither line comes back.
 	nodeManager := nodeManagerChoice(savedManager, wantLerdNode, nvmDetected, nodeDet.ManagerByName("fnm").Available())
 	if savedManager == "" && nvmDetected {
-		if nodeManager == "nvm" {
-			feedback.Line("leaving Node to your nvm, lerd will run npm and npx through it")
-		} else {
-			feedback.Line("using mise for lerd-managed Node, switch with: lerd node:manager nvm")
+		if notice := nodeManagerNotice(nodeManager); notice != "" {
+			feedback.Line(notice)
 		}
 	}
 
@@ -930,10 +928,13 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		// absent, which an immutable image can't install without layering a
 		// package and rebooting. Leave the unit on disk but don't run it, or
 		// the failures drag the whole systemd user session to "degraded".
-		if reason := tray.Unavailable(tray.HelperPath()); reason != "" {
+		if !trayEnabled() {
+			// Turned off on purpose: why it couldn't run is not worth a note.
+			disableTrayUnit()
+		} else if reason := tray.Unavailable(tray.HelperPath()); reason != "" {
 			disableTrayUnit()
 			feedback.Note("system tray unavailable: " + reason)
-		} else if autostartOn && trayEnabled() {
+		} else if autostartOn {
 			if err := services.Mgr.Enable("lerd-tray"); err != nil {
 				fmt.Printf("    WARN: %v\n", err)
 			}
@@ -1495,6 +1496,18 @@ func nodeManagerChoice(saved string, wantLerdNode, nvmDetected, fnmInstalled boo
 	// keeps a folder grant across version bumps where fnm loses it (#1906). A
 	// config that already names a manager is left alone above.
 	return "mise"
+}
+
+// nodeManagerNotice is the line an install next to an nvm prints about the
+// manager it chose. An fnm kept from an older install is not news.
+func nodeManagerNotice(manager string) string {
+	switch manager {
+	case "nvm":
+		return "leaving Node to your nvm, lerd will run npm and npx through it"
+	case "fnm":
+		return ""
+	}
+	return "using " + manager + " for lerd-managed Node, switch with: lerd node:manager nvm"
 }
 
 // nodeStateFlipped reports whether this install run changed which Node host
