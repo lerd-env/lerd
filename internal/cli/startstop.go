@@ -55,11 +55,12 @@ type imageWork struct {
 
 // ensureImages checks all images required by units that are about to start,
 // discloses everything it is about to download, and then builds or pulls any
-// that are missing using the parallel spinner UI.
-func ensureImages() {
+// that are missing using the parallel spinner UI. It returns the units whose
+// image is still missing afterwards.
+func ensureImages() []string {
 	work := pendingImageWork()
 	if len(work) == 0 {
-		return
+		return nil
 	}
 	plan := make(imagepull.Plan, len(work))
 	jobs := make([]BuildJob, len(work))
@@ -68,30 +69,54 @@ func ensureImages() {
 	}
 	plan.Fill().Report(os.Stdout)
 	if imagepull.DryRun() {
-		return
+		return nil
 	}
-	RunParallel(jobs) //nolint:errcheck
+	if RunParallel(jobs) == nil {
+		return nil
+	}
+	return unitsMissingImage(imageUnits(), func(image string) bool {
+		return podman.RunSilent("image", "exists", image) == nil
+	})
+}
+
+// imageUnits lists the units whose image a start has to have.
+func imageUnits() []string {
+	units := append(lifecycle.CoreUnits(), lifecycle.InstalledServiceUnits()...)
+	return append(units, lifecycle.InstalledCustomContainerUnits()...)
+}
+
+// unitImage returns the image unit runs, or "" when it names none.
+func unitImage(unit string) string {
+	image := quadletImage(unit)
+	// On macOS there are no quadlet files, so quadletImage returns "".
+	// Derive the image name from the unit name for PHP-FPM units so that
+	// images are rebuilt after a VM reset without requiring manual intervention.
+	if image == "" && strings.HasPrefix(unit, "lerd-php") && strings.HasSuffix(unit, "-fpm") {
+		short := strings.TrimSuffix(strings.TrimPrefix(unit, "lerd-php"), "-fpm")
+		image = "lerd-php" + short + "-fpm:local"
+	}
+	return image
+}
+
+// unitsMissingImage returns the units whose image exists does not find.
+func unitsMissingImage(units []string, exists func(string) bool) []string {
+	var missing []string
+	for _, unit := range units {
+		if image := unitImage(unit); image != "" && !exists(image) {
+			missing = append(missing, unit)
+		}
+	}
+	return missing
 }
 
 // pendingImageWork lists every image a start would have to build or pull
 // because it is not in the local store.
 func pendingImageWork() []imageWork {
-	units := append(lifecycle.CoreUnits(), lifecycle.InstalledServiceUnits()...)
-	units = append(units, lifecycle.InstalledCustomContainerUnits()...)
 	var work []imageWork
 	seen := map[string]bool{}
 
-	for _, unit := range units {
-		image := quadletImage(unit)
-
-		// On macOS there are no quadlet files, so quadletImage returns "".
-		// Derive the image name from the unit name for PHP-FPM units so that
-		// images are rebuilt after a VM reset without requiring manual intervention.
-		if image == "" && strings.HasPrefix(unit, "lerd-php") && strings.HasSuffix(unit, "-fpm") {
-			short := strings.TrimSuffix(strings.TrimPrefix(unit, "lerd-php"), "-fpm")
-			image = "lerd-php" + short + "-fpm:local"
-		}
-
+	for _, unit := range imageUnits() {
+		image := unitImage(unit)
 		if image == "" || seen[image] {
 			continue
 		}
@@ -570,7 +595,10 @@ func startLerd(emit func(StartEvent), skip []string) error {
 
 	// Build or pull any missing images before starting containers.
 	report(StartEvent{Phase: "step", Step: "images"})
-	ensureImages()
+	// A unit whose image could not be fetched is not started: its quadlet would
+	// only pull again inside systemd and time out minutes later.
+	noImage := ensureImages()
+	skip = append(skip, noImage...)
 
 	// Rewrite nginx.conf so any config changes in new binary versions take effect.
 	if err := nginx.EnsureNginxConfig(); err != nil {
@@ -814,6 +842,9 @@ func startLerd(emit func(StartEvent), skip []string) error {
 	}
 
 	report(StartEvent{Phase: "done"})
+	if len(noImage) > 0 {
+		return fmt.Errorf("not started, their image could not be pulled or built: %s", strings.Join(noImage, ", "))
+	}
 	return nil
 }
 
