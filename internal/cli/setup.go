@@ -545,6 +545,9 @@ func planSetupSteps(cwd string, skipOpen bool) []setupStep {
 			fwName, _ = config.DetectFrameworkForDir(cwd)
 		}
 		if fw, ok := config.GetFrameworkForDir(fwName, cwd); ok {
+			if step, ok := frameworkInstallStep(cwd, fw); ok {
+				steps = append(steps, step)
+			}
 			tplCtx := sitetpl.ForSite(site)
 			for _, sc := range fw.Setup {
 				// Skip commands whose check doesn't pass.
@@ -771,6 +774,35 @@ func composerInContainer(dir string, args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// frameworkInstallStep offers the framework's own installer while the file it
+// writes is absent, ticked, since a fresh project is not usable without it.
+func frameworkInstallStep(cwd string, fw *config.Framework) (setupStep, bool) {
+	inst := fw.Install
+	if inst == nil {
+		return setupStep{}, false
+	}
+	if inst.MissingFile == "" {
+		feedback.Warn("framework definition declares install %q with no missing_file, so lerd cannot tell whether the project is installed; skipping it", inst.Label)
+		return setupStep{}, false
+	}
+	if !config.MatchesRule(cwd, config.FrameworkRule{MissingFile: inst.MissingFile}) {
+		return setupStep{}, false
+	}
+	return setupStep{
+		label:   inst.Label,
+		enabled: true,
+		// Through lerd's shims, like `lerd run`, so php and composer reach the
+		// site's container with the framework's cli_ini applied.
+		run: func() error {
+			c := newCommandExec(cwd, inst.Command)
+			c.Stdin = os.Stdin
+			c.Stdout = os.Stdout
+			c.Stderr = os.Stderr
+			return c.Run()
+		},
+	}, true
 }
 
 func execInContainer(dir, command string) error {

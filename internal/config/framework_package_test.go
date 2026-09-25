@@ -3,8 +3,11 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // packageSandbox lays out a store holding one acme@11 definition and an index
@@ -423,5 +426,37 @@ func TestGetFrameworkForDir_packageVersionPrefersTheLock(t *testing.T) {
 	fw, _ := GetFrameworkForDir("acme", project)
 	if got := fw.Workers["native"].Command; got != "php acme five" {
 		t.Errorf("worker command = %q, want the file for the locked major", got)
+	}
+}
+
+// A package's services are kept apart from the framework's own suggestions: the
+// project requiring the package is evidence it uses them, so they are ticked
+// where the framework's are only offered. Each is kept, in order, carrying the
+// package it came from, for PickPackageSuggestions to narrow.
+func TestApplyPackage_suggestServices(t *testing.T) {
+	fw := &Framework{Name: "drupal", SuggestServices: []ServiceSuggestion{{Name: "solr"}, {Name: "memcached"}}}
+	applyPackage(fw, &FrameworkPackage{Package: "drupal/search_api_solr", SuggestServices: []ServiceSuggestion{{Name: "solr", Reason: "Search backend"}}})
+	applyPackage(fw, &FrameworkPackage{Package: "drupal/search_api_solr_extra", SuggestServices: []ServiceSuggestion{{Name: "solr"}}})
+
+	if len(fw.SuggestServices) != 2 {
+		t.Errorf("framework suggestions changed: %v", fw.SuggestServices)
+	}
+	want := []ServiceSuggestion{
+		{Name: "solr", Reason: "Search backend", Package: "drupal/search_api_solr"},
+		{Name: "solr", Package: "drupal/search_api_solr_extra"},
+	}
+	if !slices.Equal(fw.PackageServices, want) {
+		t.Errorf("package services = %v, want %v", fw.PackageServices, want)
+	}
+}
+
+func TestFrameworkPackage_suggestServicesYAML(t *testing.T) {
+	var pkg FrameworkPackage
+	src := "package: drupal/search_api_solr\nsuggest_services:\n  - name: solr\n    reason: Search backend\n"
+	if err := yaml.Unmarshal([]byte(src), &pkg); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(pkg.SuggestServices, []ServiceSuggestion{{Name: "solr", Reason: "Search backend"}}) {
+		t.Errorf("suggest_services not bound: %v", pkg.SuggestServices)
 	}
 }

@@ -448,6 +448,25 @@ setup:
     check:
       missing_file: config/installed.php             # only while the app is not installed yet
 
+# The framework's own installer (optional). Setup offers it ticked, first among the
+# framework's steps, while missing_file is absent, and runs command through `sh -c`
+# the way a custom command runs. A definition without missing_file is refused.
+install:
+  label: Install Drupal
+  missing_file: web/sites/default/settings.php
+  command: php vendor/drush/drush/drush.php site:install --yes ...
+
+# Service presets the setup wizard offers for this framework, unticked, whether or
+# not they are installed yet (optional). The reason is shown beside the suggestion.
+# A package declares the same key, and its services are ticked in the wizard and
+# suggested on the site's Overview, since requiring the package means the project
+# uses them. A package's entries are alternatives, most important first: lerd puts
+# forward the first one this machine already runs, else the first, and none at all
+# when the project already uses one of them.
+suggest_services:
+  - name: solr
+    reason: Search API's usual search backend
+
 # Application log files shown in the UI "App Logs" tab
 logs:
   - path: "var/log/*.log"             # glob relative to project root
@@ -571,6 +590,8 @@ built-in set for a button in the dashboard and is a different thing entirely.
 The <code v-pre>{{site}}</code>, <code v-pre>{{site_testing}}</code>, <code v-pre>{{bucket}}</code>, <code v-pre>{{domain}}</code>, <code v-pre>{{scheme}}</code>, and <code v-pre>{{&lt;service&gt;_version}}</code> placeholders listed above are expanded in three places: the `env.services` vars, every `setup:` command, and every `commands:` entry. They resolve against the registered site the command runs for. A git worktree is not a registered site, so a command run against one resolves <code v-pre>{{site}}</code> but leaves <code v-pre>{{domain}}</code> and <code v-pre>{{scheme}}</code> alone.
 
 This is what lets a framework whose bootstrap needs to know where the site lives declare that step as data. Magento 2.4 removed its web installer, so a fresh store is installed with `bin/magento setup:install --base-url=… --db-name=…`; the definition can now express exactly that. A step that creates schema should carry `default: false` so it is opt-in rather than running on every `lerd setup`, and it should gate itself on `check: missing_file:` naming the file the install writes, so it is offered on a project that has never been bootstrapped and nowhere else. `default: false` alone is not enough for that: `lerd setup --all` runs every step it is offered regardless of the default, and rerunning an installer over a working app is how its data goes away.
+
+A framework whose fresh project is unusable until its own installer runs declares that installer as `install:` rather than as a setup step. Setup offers it ticked while its `missing_file` is absent and not at all once the file exists, so a scaffolded Drupal lands installed and a working one is never reinstalled. It is a block of its own because a setup step runs as plain arguments with no shell, and because a binary that predates the block ignores it, where the same step in `setup:` would be offered on every project by a binary that predates `missing_file`.
 
 A placeholder whose value is empty, or one lerd does not recognise, is left in the command verbatim rather than being replaced with an empty string, so a half-resolved context can never quietly produce `--base-url=://`.
 

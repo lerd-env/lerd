@@ -1007,6 +1007,9 @@ type SiteResponse struct {
 	// project's .lerd.yaml. Used by the dashboard to render service badges
 	// on the site detail panel.
 	Services []string `json:"services,omitempty"`
+	// SuggestedServices are presets the site's packages suggest that it does
+	// not use yet and the user has not dismissed.
+	SuggestedServices []config.ServiceSuggestion `json:"suggested_services,omitempty"`
 	// DBDatabase is the site's DB_DATABASE, so the overview's database card can
 	// open the admin tool straight to this site's database.
 	DBDatabase      string `json:"db_database,omitempty"`
@@ -1279,6 +1282,7 @@ func buildSites() ([]SiteResponse, error) {
 			Branch:               e.Branch,
 			Worktrees:            worktreeResponses,
 			Services:             e.Services,
+			SuggestedServices:    e.SuggestedServices,
 			DBDatabase:           envfile.ReadKey(filepath.Join(e.Path, ".env"), "DB_DATABASE"),
 			LANPort:              e.LANPort,
 			LANShareURL:          cli.LANShareURL(e.LANPort),
@@ -4207,6 +4211,20 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		return
 	case "restart":
 		if err := cli.RestartSite(site.Name); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "service:add":
+		if err := addSiteService(site, r.URL.Query().Get("name")); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "service:dismiss":
+		if err := config.DismissSiteService(site.Name, r.URL.Query().Get("name")); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}

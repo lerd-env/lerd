@@ -2,6 +2,7 @@
   import { scrollbarInPadding } from '$lib/scrollbarInPadding';
   import SiteControls from './SiteControls.svelte';
   import SiteServiceCard from './SiteServiceCard.svelte';
+  import SiteSuggestedServiceCard from './SiteSuggestedServiceCard.svelte';
   import SiteRequestTiming from './SiteRequestTiming.svelte';
   import type { Site } from '$stores/sites';
   import { m } from '../../paraglide/messages.js';
@@ -13,6 +14,7 @@
   let { site, activeWorktreeBranch = '' }: Props = $props();
 
   const svcNames = $derived(site.services || []);
+  const suggested = $derived(site.suggested_services || []);
 </script>
 
 {#snippet sectionTitle(title: string)}
@@ -27,12 +29,15 @@
     <SiteControls {site} {activeWorktreeBranch} />
   </section>
 
-  {#if svcNames.length > 0}
+  {#if svcNames.length > 0 || suggested.length > 0}
     <section>
       {@render sectionTitle(m.services_title())}
       <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
         {#each svcNames as name (name)}
           <SiteServiceCard {name} database={site.db_database} />
+        {/each}
+        {#each suggested as suggestion (suggestion.name)}
+          <SiteSuggestedServiceCard {suggestion} domain={site.domain} />
         {/each}
       </div>
     </section>

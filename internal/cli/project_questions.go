@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 	nodeDet "github.com/geodro/lerd/internal/node"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/store"
 )
 
 // The kinds of project the init questions come in. A directory is one of them
@@ -193,6 +195,49 @@ func fillServiceQuestions(q *ProjectQuestions, cwd string, defaults *config.Proj
 	}
 	q.ServiceOptions = nonDatabaseServiceNames(dbNameSet)
 	q.Database, q.Services = wizardServiceDefaults(cwd, defaults, dbNameSet)
+	q.ServiceOptions, q.Services = addSuggestedServices(q.ServiceOptions, q.Services, fw, dbNameSet, len(defaults.Services) > 0, presetAvailable, serviceInstalled)
+}
+
+// addSuggestedServices offers the presets the framework and its packages
+// suggest. Each package puts one of its alternatives forward, the first
+// installed here or else its first, ticked on a project that has not saved its
+// services yet, since requiring the package is evidence the project uses it.
+func addSuggestedServices(options, selected []string, fw *config.Framework, dbNameSet map[string]bool, saved bool, available, installed func(string) bool) ([]string, []string) {
+	if fw == nil {
+		return options, selected
+	}
+	picked := config.PickPackageSuggestions(fw.PackageServices, func(name string) bool { return slices.Contains(selected, name) }, installed)
+	for _, sg := range append(append([]config.ServiceSuggestion(nil), fw.SuggestServices...), picked...) {
+		name := sg.Name
+		if name == "" || dbNameSet[name] || !available(name) {
+			continue
+		}
+		if !slices.Contains(options, name) {
+			options = append(options, name)
+		}
+	}
+	for _, sg := range picked {
+		if !saved && slices.Contains(options, sg.Name) && !slices.Contains(selected, sg.Name) {
+			selected = append(selected, sg.Name)
+		}
+	}
+	return options, selected
+}
+
+// serviceInstalled reports whether this machine already runs the service.
+func serviceInstalled(name string) bool {
+	return podman.QuadletInstalled("lerd-" + name)
+}
+
+// presetAvailable reports whether name is a preset lerd can install, fetching
+// it from the store when this machine has not cached it, so that picking it
+// records a preset that link installs rather than a name that resolves to nothing.
+func presetAvailable(name string) bool {
+	if config.PresetExists(name) {
+		return true
+	}
+	_, err := store.NewServiceClient().FetchServicePreset(name)
+	return err == nil
 }
 
 // fillPHPQuestions fills in what a PHP project is asked: the version to serve

@@ -3,6 +3,7 @@ package siteinfo
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -170,6 +171,9 @@ type EnrichedSite struct {
 
 	// Services
 	Services []string
+	// SuggestedServices are presets the site's packages suggest that it neither
+	// uses nor had dismissed, for the dashboard to offer.
+	SuggestedServices []config.ServiceSuggestion
 
 	// Custom container
 	ContainerPort  int
@@ -377,6 +381,11 @@ func Enrich(s config.Site, flags EnrichFlag) EnrichedSite {
 
 	if flags&EnrichServices != 0 {
 		e.enrichServices()
+		if hasFw {
+			e.SuggestedServices = suggestedServices(fw.PackageServices, e.Services, s.DismissedServices, func(name string) bool {
+				return podman.QuadletInstalled("lerd-" + name)
+			})
+		}
 	}
 
 	if flags&EnrichDomainConflicts != 0 {
@@ -802,6 +811,14 @@ func (e *EnrichedSite) enrichServices() {
 			}
 		}
 	}
+}
+
+// suggestedServices is what the site's packages put forward. A dismissed
+// service counts as an answer for its package, so turning down redis does not
+// bring valkey up in its place.
+func suggestedServices(suggested []config.ServiceSuggestion, have, dismissed []string, installed func(string) bool) []config.ServiceSuggestion {
+	answered := func(name string) bool { return slices.Contains(have, name) || slices.Contains(dismissed, name) }
+	return config.PickPackageSuggestions(suggested, answered, installed)
 }
 
 func (e *EnrichedSite) enrichDomainConflicts() {
