@@ -321,3 +321,10 @@ func IsPrerelease(v string) bool {
 	_, pre := splitPrerelease(v)
 	return pre != ""
 }
+
+// ForgetCachedLatest drops the cached latest release, which belongs to the
+// update line the install followed when it was written. Switching lines calls
+// it so the next check asks again instead of answering for the old line.
+func ForgetCachedLatest() {
+	_ = os.Remove(config.UpdateCheckFile())
+}

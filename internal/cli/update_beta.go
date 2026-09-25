@@ -35,6 +35,7 @@ func setBetaChannel(on bool) error {
 	if err := config.SaveGlobal(cfg); err != nil {
 		return fmt.Errorf("saving config: %w", err)
 	}
+	lerdUpdate.ForgetCachedLatest()
 	feedback.Begin()
 	if on {
 		feedback.Done("beta updates on — lerd update will offer prereleases as they are published")

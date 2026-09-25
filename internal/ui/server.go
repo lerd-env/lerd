@@ -5843,6 +5843,7 @@ func handleSettingsBetaUpdates(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+	lerdUpdate.ForgetCachedLatest()
 	writeJSON(w, map[string]any{"ok": true, "beta_updates": body.Enabled})
 }
 
