@@ -28,3 +28,15 @@ func TestAutostartHasStatusSubcommand(t *testing.T) {
 		}
 	}
 }
+
+// on and off are what idle, dump and streaming take, so autostart answers to
+// them too instead of printing its help and exiting 0.
+func TestAutostartAcceptsOnAndOff(t *testing.T) {
+	cmd := NewAutostartCmd()
+	for _, pair := range [][2]string{{"on", "enable"}, {"off", "disable"}} {
+		sub, _, err := cmd.Find([]string{pair[0]})
+		if err != nil || sub.Name() != pair[1] {
+			t.Errorf("autostart %s resolved to %v (err %v), want %s", pair[0], sub, err, pair[1])
+		}
+	}
+}

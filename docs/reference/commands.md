@@ -17,8 +17,8 @@
 | `lerd whatsnew` | Show what changed between the installed version and the latest release on the line it follows |
 | `lerd uninstall` | Stop all containers and remove Lerd; a package-installed binary is left for apt/dnf/brew to remove |
 | `lerd uninstall --force` | Same, skipping all confirmation prompts |
-| `lerd autostart enable` | Start Lerd automatically on every login |
-| `lerd autostart disable` | Disable autostart on login |
+| `lerd autostart enable` | Start Lerd automatically on every login (`on` works too) |
+| `lerd autostart disable` | Disable autostart on login (`off` works too) |
 | `lerd path:disable` | Take lerd's shims (`php`, `composer`, `node`…) off your shell PATH; `lerd php` etc. keep working, and installs/updates stop re-adding the entry |
 | `lerd path:enable` | Put lerd's shims back on your shell PATH (the default) |
 | `lerd tray` | Launch the system tray applet (detaches from terminal) |
