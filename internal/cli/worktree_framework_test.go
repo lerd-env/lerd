@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -190,14 +191,25 @@ func TestPlanUnattendedWorktreeDB(t *testing.T) {
 	writeMigrations(t, filepath.Join(wt, "db"), "a", "b")
 	fw := &config.Framework{Worktree: &config.FrameworkWorktree{Migrations: "db"}}
 
-	if choice, reason, migrate := planUnattendedWorktreeDB(fw, "", parent, wt); choice != "clone-main" || reason == "" || !migrate {
+	// A SQLite worktree already has its own copy of the file, so there is no
+	// schema to clone, only the branch's extra migrations to run on the copy.
+	if choice, reason, migrate := planUnattendedWorktreeDB(fw, "", parent, wt, true); choice != "share" || !strings.Contains(reason, "SQLite") || !migrate {
+		t.Errorf("sqlite = %q %q migrate=%v, want share on its own copy, migrated", choice, reason, migrate)
+	}
+	writeMigrations(t, filepath.Join(parent, "db"), "a", "b", "c")
+	if choice, _, migrate := planUnattendedWorktreeDB(fw, "", parent, wt, true); choice != "share" || migrate {
+		t.Errorf("sqlite behind = %q migrate=%v, want share, not migrated", choice, migrate)
+	}
+	_ = os.Remove(filepath.Join(parent, "db", "b"))
+	_ = os.Remove(filepath.Join(parent, "db", "c"))
+	if choice, reason, migrate := planUnattendedWorktreeDB(fw, "", parent, wt, false); choice != "clone-main" || reason == "" || !migrate {
 		t.Errorf("picked = %q %q migrate=%v, want clone-main with a reason, migrated", choice, reason, migrate)
 	}
-	if choice, _, migrate := planUnattendedWorktreeDB(fw, "share", parent, wt); choice != "share" || migrate {
+	if choice, _, migrate := planUnattendedWorktreeDB(fw, "share", parent, wt, false); choice != "share" || migrate {
 		t.Errorf("explicit share = %q migrate=%v, want share, not migrated", choice, migrate)
 	}
 	required := &config.Framework{Worktree: &config.FrameworkWorktree{Migrations: "db", DBIsolation: "required"}}
-	if choice, _, _ := planUnattendedWorktreeDB(required, "", parent, wt); choice != "empty" {
+	if choice, _, _ := planUnattendedWorktreeDB(required, "", parent, wt, false); choice != "empty" {
 		t.Errorf("required isolation = %q, want the definition's empty", choice)
 	}
 }

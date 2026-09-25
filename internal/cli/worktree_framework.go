@@ -148,8 +148,14 @@ func migrationFiles(dir string) (map[string]bool, error) {
 
 // planUnattendedWorktreeDB decides the database for a setup with nobody to ask:
 // with no explicit or required choice it compares migrations, and it migrates
-// any database the branch's code has not been run against yet.
-func planUnattendedWorktreeDB(fw *config.Framework, requested, parentPath, worktreePath string) (choice, reason string, migrate bool) {
+// any database the branch's code has not been run against yet. A SQLite
+// worktree already carries its own copy of the file, so the only question left
+// is whether the branch adds migrations to run on it.
+func planUnattendedWorktreeDB(fw *config.Framework, requested, parentPath, worktreePath string, sqlite bool) (choice, reason string, migrate bool) {
+	if requested == "" && sqlite {
+		c, _ := migrationsDBChoiceFor(fw, parentPath, worktreePath)
+		return "share", "a SQLite project's worktree gets its own copy of the database file", c == "clone-main"
+	}
 	if requested == "" && requiredWorktreeDBChoice(fw) == "" {
 		if c, why := migrationsDBChoiceFor(fw, parentPath, worktreePath); c != "" {
 			return c, why, c != "share"
