@@ -42,15 +42,7 @@ func vendorBinIsPHP(path string) bool {
 // RunPHPVersionCaptureEnv so the two exec routes cannot drift.
 func containerExecEnvArgs(cwd string) []string {
 	home := os.Getenv("HOME")
-	composerHome := os.Getenv("COMPOSER_HOME")
-	if composerHome == "" {
-		// Respect XDG: prefer ~/.config/composer, fall back to ~/.composer
-		xdgConfig := os.Getenv("XDG_CONFIG_HOME")
-		if xdgConfig == "" {
-			xdgConfig = filepath.Join(home, ".config")
-		}
-		composerHome = filepath.Join(xdgConfig, "composer")
-	}
+	composerHome := composerHomeDir()
 	composerBin := filepath.Join(composerHome, "vendor", "bin")
 	projectVendorBin := filepath.Join(cwd, "vendor", "bin")
 

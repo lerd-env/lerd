@@ -764,7 +764,7 @@ func composerInContainer(dir string, args ...string) error {
 
 	cmdArgs := []string{"exec", "-i", "-w", dir,
 		"--env", "HOME=" + home,
-		"--env", "COMPOSER_HOME=" + filepath.Join(home, ".config", "composer"),
+		"--env", "COMPOSER_HOME=" + composerHomeDir(),
 		container, "php", composerPhar,
 	}
 	cmdArgs = append(cmdArgs, args...)
