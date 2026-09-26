@@ -3,9 +3,12 @@
 
   interface Props {
     compact?: boolean;
+    // A service the site does not have yet: a dashed border sets it apart from
+    // the ones it does.
+    suggested?: boolean;
     children: Snippet;
   }
-  let { compact = false, children }: Props = $props();
+  let { compact = false, suggested = false, children }: Props = $props();
 
   // Full static class strings for Tailwind. The compact variant is the site
   // overview's tighter card; the default is the services dashboard grid.
@@ -16,7 +19,9 @@
     compact: 'gap-2.5 rounded-lg p-2.5 hover:shadow-sm'
   };
 
-  const shell = $derived(`${BASE} ${compact ? VARIANT.compact : VARIANT.full}`);
+  const shell = $derived(
+    `${BASE} ${compact ? VARIANT.compact : VARIANT.full}${suggested ? ' border-dashed' : ''}`
+  );
 </script>
 
 <div class={shell}>
