@@ -915,10 +915,11 @@ server {
 const WakeHoldPath = "/_lerd/wake"
 
 // wakeHoldLocations holds a request to a sleeping site in lerd-ui until the
-// site is back, then lerd-ui redirects it to itself, so the client lands on the
-// app in the time the wake takes instead of polling a waking page. The body is
-// dropped because the client resends it after the 307; any failure (lerd-ui
-// down, a remote caller refused, a slow wake) falls back to the static page.
+// site is back, then lerd-ui sends it on to the app and returns the app's own
+// response, so any client, a webhook or an API call as much as a browser, gets
+// its answer in the time the wake takes. The method and body travel with it.
+// Only a failure of the hold itself answers 599, the one code turned into the
+// static waking page, so the app's own errors reach the client untouched.
 func wakeHoldLocations() string {
 	upstream := "http://host.containers.internal:7073" + WakeHoldPath
 	if runtime.GOOS != "darwin" {
@@ -928,14 +929,13 @@ func wakeHoldLocations() string {
         # Held requests are not the app's; the hold reports the activity itself.
         access_log off;
         proxy_pass %s;
-        proxy_method GET;
-        proxy_pass_request_body off;
-        proxy_set_header Content-Length "";
+        proxy_http_version 1.1;
         proxy_set_header X-Lerd-Wake-Host $host;
         proxy_set_header X-Lerd-Wake-Uri $request_uri;
+        proxy_set_header X-Lerd-Wake-Scheme $scheme;
         proxy_read_timeout 90s;
         proxy_intercept_errors on;
-        error_page 403 404 500 502 503 504 = @waking;
+        error_page 502 504 599 = @waking;
     }
     location @waking {
         try_files /waking.html =503;
