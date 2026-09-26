@@ -131,6 +131,13 @@ func writeWorkerHostUnit(unitName, sitePath, command, restart, phpBinDir string)
 		}
 	}
 
+	home, _ := os.UserHomeDir()
+	if dirs := rubyShimDirs(sitePath, home); len(dirs) > 0 {
+		if extraBinDirs != "" {
+			dirs = append(dirs, extraBinDirs)
+		}
+		extraBinDirs = strings.Join(dirs, ":")
+	}
 	script := buildDarwinHostWorkerGuardScript(execPrefix, config.BinDir(), sitePath, command, workerBinDirs(phpBinDir, extraBinDirs), pidFile)
 	if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil {
 		return false, fmt.Errorf("writing host worker guard script: %w", err)

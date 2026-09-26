@@ -854,6 +854,7 @@
   "siteWizard_version": "Version",
   "siteWizard_versionLatest": "Dernière",
   "siteWizard_vitePitfall": "Vite bloque les requêtes du proxy selon leur en-tête Host. Ajoutez le domaine du site à server.allowedHosts dans vite.config, et --host à la commande, sinon les requêtes passant par le proxy échouent.",
+  "siteWizard_railsPitfall": "Rails bloque les requêtes passant par le proxy selon leur en-tête Host. Ajoutez le domaine du site à config.hosts dans config/environments/development.rb, sinon les requêtes via le proxy échouent.",
   "siteWizard_workers": "Workers",
   "siteWizard_workersHint": "Démarrés automatiquement lors de la liaison du site",
   "sites_appLogs_all": "Tous",

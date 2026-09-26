@@ -854,6 +854,7 @@
   "siteWizard_version": "Versione",
   "siteWizard_versionLatest": "Ultima",
   "siteWizard_vitePitfall": "Vite blocca le richieste passate dal proxy in base all'header Host. Aggiungi il dominio del sito a server.allowedHosts in vite.config e --host al comando, altrimenti le richieste attraverso il proxy falliscono.",
+  "siteWizard_railsPitfall": "Rails blocca le richieste inoltrate dal proxy in base all'header Host. Aggiungi il dominio del sito a config.hosts in config/environments/development.rb, altrimenti le richieste tramite il proxy falliscono.",
   "siteWizard_workers": "Worker",
   "siteWizard_workersHint": "Si avviano da soli quando il sito viene collegato",
   "sites_appLogs_all": "Tutti",

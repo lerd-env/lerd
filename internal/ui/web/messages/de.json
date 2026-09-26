@@ -854,6 +854,7 @@
   "siteWizard_version": "Version",
   "siteWizard_versionLatest": "Neueste",
   "siteWizard_vitePitfall": "Vite blockiert weitergeleitete Anfragen anhand des Host-Headers. Trage die Domain der Site in server.allowedHosts in vite.config ein und ergänze --host im Befehl, sonst schlagen Anfragen über den Proxy fehl.",
+  "siteWizard_railsPitfall": "Rails blockiert weitergeleitete Anfragen anhand ihres Host-Headers. Füge die Site-Domain zu config.hosts in config/environments/development.rb hinzu, sonst schlagen Anfragen über den Proxy fehl.",
   "siteWizard_workers": "Worker",
   "siteWizard_workersHint": "Starten automatisch, wenn die Site verknüpft wird",
   "sites_appLogs_all": "Alle",

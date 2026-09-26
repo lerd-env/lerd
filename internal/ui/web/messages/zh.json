@@ -854,6 +854,7 @@
   "siteWizard_version": "版本",
   "siteWizard_versionLatest": "最新",
   "siteWizard_vitePitfall": "Vite 会按 Host 头拦截经代理转发的请求。请把站点域名加入 vite.config 的 server.allowedHosts，并在命令中加上 --host，否则经代理的请求会失败。",
+  "siteWizard_railsPitfall": "Rails 会根据 Host 请求头拦截经过代理的请求。请将站点域名添加到 config/environments/development.rb 的 config.hosts 中，否则通过代理的请求会失败。",
   "siteWizard_workers": "Worker",
   "siteWizard_workersHint": "站点关联时自动启动",
   "sites_appLogs_all": "全部",

@@ -854,6 +854,7 @@
   "siteWizard_version": "Versi",
   "siteWizard_versionLatest": "Terbaru",
   "siteWizard_vitePitfall": "Vite memblokir permintaan proxy berdasarkan header Host. Tambahkan domain site ke server.allowedHosts di vite.config, dan --host pada perintahnya, atau permintaan lewat proxy akan gagal.",
+  "siteWizard_railsPitfall": "Rails memblokir permintaan lewat proxy berdasarkan header Host. Tambahkan domain situs ke config.hosts di config/environments/development.rb, atau permintaan lewat proxy akan gagal.",
   "siteWizard_workers": "Worker",
   "siteWizard_workersHint": "Dijalankan otomatis saat site ditautkan",
   "sites_appLogs_all": "Semua",

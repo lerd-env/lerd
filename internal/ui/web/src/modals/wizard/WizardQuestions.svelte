@@ -119,6 +119,9 @@
     {#if questions.proxy_vite_pitfall}
       <p class="text-xs text-amber-600 dark:text-amber-500">{m.siteWizard_vitePitfall()}</p>
     {/if}
+    {#if questions.proxy_rails_pitfall}
+      <p class="text-xs text-amber-600 dark:text-amber-500">{m.siteWizard_railsPitfall()}</p>
+    {/if}
     </div>
   {/if}
 

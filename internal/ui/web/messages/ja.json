@@ -854,6 +854,7 @@
   "siteWizard_version": "バージョン",
   "siteWizard_versionLatest": "最新",
   "siteWizard_vitePitfall": "Vite は Host ヘッダーでプロキシ経由のリクエストを拒否します。vite.config の server.allowedHosts にサイトのドメインを追加し、コマンドに --host を付けないと、プロキシ経由のリクエストは失敗します。",
+  "siteWizard_railsPitfall": "Rails は Host ヘッダーでプロキシ経由のリクエストをブロックします。config/environments/development.rb の config.hosts にサイトのドメインを追加しないと、プロキシ経由のリクエストは失敗します。",
   "siteWizard_workers": "ワーカー",
   "siteWizard_workersHint": "サイトのリンク時に自動で起動します",
   "sites_appLogs_all": "すべて",
