@@ -641,12 +641,6 @@ func newWatchCmd() *cobra.Command {
 			// the auto_cleanup config; never touches service images (--deep).
 			go watcher.WatchCleanup(time.Hour)
 
-			// Take the scheduled database snapshots of every site the
-			// automatic-snapshot policy covers, and prune what retention has
-			// expired. Off unless the user turns it on; the hourly tick only
-			// decides whether the configured schedule is due.
-			go watcher.WatchAutoSnapshot(time.Hour)
-
 			// Keep the cached framework store index fresh so offline detection and
 			// listing resolve the full catalogue without a network round trip.
 			go store.WatchIndex(6 * time.Hour)
@@ -693,6 +687,14 @@ func newWatchCmd() *cobra.Command {
 					)
 				},
 			)
+
+			// Take the scheduled database snapshots of every site the
+			// automatic-snapshot policy covers, and prune what retention has
+			// expired. Off unless the user turns it on; the hourly tick only
+			// decides whether the configured schedule is due. Started after the
+			// idle engine exists, since its first pass may have to wake a
+			// sleeping database through it.
+			go watcher.WatchAutoSnapshot(time.Hour)
 
 			// Watch key site config files and signal queue:restart on change.
 			go func() {
