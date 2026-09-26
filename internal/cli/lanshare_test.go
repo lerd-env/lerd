@@ -658,6 +658,36 @@ func mustStartLANShareProxy(t *testing.T, domain string, httpPort, httpsPort int
 	return nil, 0
 }
 
+func TestLANShareProxy_dropsSecureFlagFromCookies(t *testing.T) {
+	// A secured site marks its cookies secure, and a browser on the plain-HTTP
+	// share never stores them, so every form post fails its CSRF check. None
+	// without secure is refused outright, so it falls back to lax.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Set-Cookie", "session=abc; path=/; secure; httponly; samesite=lax")
+		w.Header().Add("Set-Cookie", "embed=xyz; Path=/; Secure; SameSite=None")
+		w.Header().Add("Set-Cookie", "securely=1; path=/")
+	}))
+	defer upstream.Close()
+
+	_, proxyPort := mustStartLANShareProxy(t, "laravel.test", mustExtractPort(t, upstream.URL), 0, false, reachLAN)
+
+	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/", proxyPort))
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	resp.Body.Close()
+
+	want := []string{
+		"session=abc; path=/; httponly; samesite=lax",
+		"embed=xyz; Path=/; SameSite=Lax",
+		"securely=1; path=/",
+	}
+	got := resp.Header.Values("Set-Cookie")
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("Set-Cookie:\nGOT:\n%s\nWANT:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
 func TestLANShareProxy_rewritesHTTPSLocationRedirects(t *testing.T) {
 	// Upstream stands in for nginx/the app. It builds a redirect Location from
 	// the path: /to-domain uses the origin domain, /to-lanhost uses the

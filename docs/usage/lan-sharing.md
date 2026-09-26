@@ -23,6 +23,7 @@ What it does:
 - Starts a host-level reverse proxy inside the lerd daemon (`lerd-ui`) listening on `0.0.0.0:<port>`.
 - Rewrites the `Host` header on every request so nginx routes to the correct vhost.
 - Rewrites absolute URLs (from `https://myapp.test/...` to `http://192.168.1.42:9100/...`) in HTML, CSS, and JS response bodies so assets and redirects work from the client device without a `.test` DNS resolver. The JSON-escaped form (`https:\/\/myapp.test`) that Ziggy route lists and Inertia page payloads carry is rewritten too, so client-side links stay on the share.
+- Drops the `secure` flag from cookies a secured site sets, since a browser on the plain-HTTP share would refuse to store them and every form post would fail its CSRF check with a 419.
 - Forwards `X-Forwarded-Port` to the upstream so framework URL builders (Ziggy, Symfony `Request::getSchemeAndHttpHost()`, etc.) emit the share port instead of nginx's listen port. URLs that frameworks compute from `SERVER_PORT` no longer leak `:443` into the rendered page.
 - Prints a QR code you can scan to open the site on a phone.
 

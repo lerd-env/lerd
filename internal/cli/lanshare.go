@@ -568,6 +568,9 @@ func startLANShareProxy(domain string, port, httpPort, httpsPort int, secured bo
 			loc = strings.ReplaceAll(loc, "https://"+lanHost, scheme+"://"+lanHost)
 			resp.Header.Set("Location", loc)
 		}
+		if scheme == "http" {
+			dropSecureCookieFlag(resp.Header)
+		}
 
 		ct := resp.Header.Get("Content-Type")
 		enc := resp.Header.Get("Content-Encoding")
@@ -1000,6 +1003,27 @@ func rewriteLANShareBody(body []byte, domain, lanHost string, reach shareReach) 
 		body = rewriteLoopbackViteURLs(body, lanHost)
 	}
 	return body
+}
+
+// dropSecureCookieFlag strips secure from every cookie a secured site sets, since
+// a browser on a plain-HTTP share never stores one and each form post then fails
+// its CSRF check. SameSite=None is only accepted with secure, so it becomes Lax.
+func dropSecureCookieFlag(h http.Header) {
+	cookies := h.Values("Set-Cookie")
+	for i, c := range cookies {
+		attrs := strings.Split(c, ";")
+		kept := attrs[:1]
+		for _, a := range attrs[1:] {
+			switch strings.ToLower(strings.TrimSpace(a)) {
+			case "secure":
+				continue
+			case "samesite=none":
+				a = " SameSite=Lax"
+			}
+			kept = append(kept, a)
+		}
+		cookies[i] = strings.Join(kept, ";")
+	}
 }
 
 func escapeSlashes(s string) string { return strings.ReplaceAll(s, "/", `\/`) }
