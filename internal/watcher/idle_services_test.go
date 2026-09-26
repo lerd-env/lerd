@@ -2,6 +2,7 @@ package watcher
 
 import (
 	"reflect"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -342,5 +343,44 @@ func TestWithServiceBriefly_startsRunsAndStopsWithoutWaking(t *testing.T) {
 	}
 	if !config.ServiceIsIdleSuspended("mysql") {
 		t.Fatal("a snapshot wake cleared the sleeping flag")
+	}
+}
+
+// spamassassin has no site of its own; it lives on mailpit's, so it stays up
+// while a site sending mail is busy and wakes with it.
+func TestServiceKeys_followConsumersDownTheChain(t *testing.T) {
+	now := time.Now()
+	f := installFakeServices(t)
+	f.running["spamassassin"], f.running["mailpit"] = true, true
+	f.users["mailpit"] = []config.Site{{Name: "shop"}}
+	f.deps["spamassassin"] = []string{"mailpit"} // mailpit discovers it
+
+	e := newIdleEngine(idleTracker(now, map[string]time.Duration{
+		"shop": time.Minute, "svc:mailpit": time.Hour, "svc:spamassassin": time.Hour,
+	}))
+	e.tickServices(true, svcTimeout, now)
+	e.wait()
+	if len(f.callLog()) != 0 {
+		t.Fatalf("slept a service whose consumer's site is busy: %v", f.callLog())
+	}
+
+	e2 := newIdleEngine(idleTracker(now, map[string]time.Duration{
+		"shop": time.Hour, "svc:mailpit": time.Hour, "svc:spamassassin": time.Hour,
+	}))
+	e2.tickServices(true, svcTimeout, now)
+	e2.wait()
+	got := f.callLog()
+	sort.Strings(got)
+	if !reflect.DeepEqual(got, []string{"suspend mailpit", "suspend spamassassin"}) {
+		t.Fatalf("calls = %v, want both asleep once the site is idle", got)
+	}
+
+	f.calls = nil
+	e2.OnActivity("shop")
+	e2.wait()
+	got = f.callLog()
+	sort.Strings(got)
+	if !reflect.DeepEqual(got, []string{"wake mailpit", "wake spamassassin"}) {
+		t.Fatalf("calls = %v, want the site to wake both", got)
 	}
 }

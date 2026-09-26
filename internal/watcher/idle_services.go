@@ -81,14 +81,26 @@ func (e *idleEngine) tickServices(on bool, timeout time.Duration, now time.Time)
 }
 
 // serviceKeys returns the activity keys that keep a service awake, and whether
-// it is exempt because it is pinned or a site using it never idles.
+// it is exempt because it is pinned or a site using it never idles. A service
+// others rely on inherits their keys, all the way down the chain, so
+// spamassassin stays up exactly as long as the sites sending mail to mailpit.
 func (e *idleEngine) serviceKeys(name string) (keys []string, exempt bool) {
-	sites, dependents := serviceUsers(name)
-	keys = []string{svcKey(name)}
-	for _, dep := range dependents {
-		keys = append(keys, svcKey(dep))
+	return e.collectServiceKeys(name, map[string]bool{})
+}
+
+func (e *idleEngine) collectServiceKeys(name string, seen map[string]bool) (keys []string, exempt bool) {
+	if seen[name] {
+		return nil, false
 	}
+	seen[name] = true
+	sites, consumers := serviceUsers(name)
+	keys = []string{svcKey(name)}
 	exempt = servicePinned(name)
+	for _, c := range consumers {
+		k, ex := e.collectServiceKeys(c, seen)
+		keys = append(keys, k...)
+		exempt = exempt || ex
+	}
 	for i := range sites {
 		s := &sites[i]
 		if neverIdles(s) {

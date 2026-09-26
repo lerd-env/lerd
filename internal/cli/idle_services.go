@@ -17,16 +17,17 @@ import (
 // The service operations idle-suspend drives, vars so tests can stand in for
 // the containers and nginx.
 var (
-	idleStopService    = serviceops.StopWithDependents
-	idleEnsureService  = serviceops.WakeService
-	idleServiceUp      = serviceUnitUp
-	idleSitesUsing     = config.SitesUsingService
-	idleSwapToWaking   = swapSiteToWaking
-	idleRestoreVhost   = func(s *config.Site) error { return siteops.RegenerateSiteVhost(s, s.PrimaryDomain()) }
-	idleReloadNginx    = func() { nginx.ReloadOrWarn("") }
-	idleDependentsOf   = serviceops.DependentsOf
-	idleAdminToolsFor  = serviceops.AdminToolsFor
-	idleServiceFlagged = config.ServiceIsIdleSuspended
+	idleStopService          = serviceops.StopWithDependents
+	idleEnsureService        = serviceops.WakeService
+	idleServiceUp            = serviceUnitUp
+	idleSitesUsing           = config.SitesUsingService
+	idleSwapToWaking         = swapSiteToWaking
+	idleRestoreVhost         = func(s *config.Site) error { return siteops.RegenerateSiteVhost(s, s.PrimaryDomain()) }
+	idleReloadNginx          = func() { nginx.ReloadOrWarn("") }
+	idleDependentsOf         = serviceops.DependentsOf
+	idleAdminToolsFor        = serviceops.AdminToolsFor
+	idleDiscoveringConsumers = serviceops.DiscoveringConsumers
+	idleServiceFlagged       = config.ServiceIsIdleSuspended
 )
 
 // RunningServicesForIdle lists the installed, unpaused services whose unit is
@@ -42,11 +43,20 @@ func RunningServicesForIdle() []string {
 	return out
 }
 
-// IdleServiceUsers returns the sites using a service and the services built on
-// it (dependents and the admin tools that administer it), whose activity keeps
-// it awake.
-func IdleServiceUsers(name string) (sites []config.Site, dependents []string) {
-	return idleSitesUsing(name), append(idleDependentsOf(name), idleAdminToolsFor(name)...)
+// IdleServiceUsers returns the sites using a service and the services that rely
+// on it (dependents, admin tools administering it, services discovering it
+// through their env), whose own users keep it awake.
+func IdleServiceUsers(name string) (sites []config.Site, consumers []string) {
+	seen := map[string]bool{}
+	for _, list := range [][]string{idleDependentsOf(name), idleAdminToolsFor(name), idleDiscoveringConsumers(name)} {
+		for _, c := range list {
+			if !seen[c] {
+				seen[c] = true
+				consumers = append(consumers, c)
+			}
+		}
+	}
+	return idleSitesUsing(name), consumers
 }
 
 // SuspendServiceForIdle puts a service to sleep: the sites using it get the
