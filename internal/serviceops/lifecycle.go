@@ -242,6 +242,41 @@ func WaitDashboard(target string, max time.Duration) bool {
 	return true
 }
 
+// dataWake is the seam wakeForData wakes a service through.
+var dataWake = WakeService
+
+// wakeForData brings back a service idle-suspend put to sleep before something
+// reaches into it (a database list, dump, restore, bucket operation), so every
+// caller works on a sleeping engine the same as on a running one. A service
+// the user stopped is left alone and the caller gets its usual error.
+func wakeForData(service string) error {
+	if !config.ServiceIsIdleSuspended(service) || serviceIsRunning(service) {
+		return nil
+	}
+	return dataWake(service)
+}
+
+// WakeSiteServices wakes, and waits for, every service idle-suspend put to
+// sleep that the site at path uses. For callers that run the app's code
+// straight away (an MCP artisan call) and cannot count on the watcher's wake,
+// which answers the same activity in the background. A service the user
+// stopped is left alone.
+func WakeSiteServices(path string) error {
+	var firstErr error
+	for _, svc := range config.IdleSuspendedServices() {
+		for _, site := range config.SitesUsingService(svc) {
+			if site.Path != path {
+				continue
+			}
+			if err := wakeForData(svc); err != nil && firstErr == nil {
+				firstErr = fmt.Errorf("waking %s: %w", svc, err)
+			}
+			break
+		}
+	}
+	return firstErr
+}
+
 // wakeStartUnit is the seam WakeService starts a unit through.
 var wakeStartUnit = startUnitRetry
 

@@ -10,7 +10,6 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dbview"
-	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
 )
 
@@ -166,8 +165,8 @@ func handleDatabaseAction(w http.ResponseWriter, r *http.Request) {
 	}
 	action := parts[1]
 
-	// Exports stream from the browser and read from disk, so they run without the
-	// engine; every other action mutates and requires it running.
+	// A database export checks the engine itself as it streams; every other
+	// action below reaches into the engine and requires it running or asleep.
 	if action == "export" && r.Method == http.MethodGet {
 		handleDatabaseExport(w, r, service)
 		return
@@ -182,7 +181,7 @@ func handleDatabaseAction(w http.ResponseWriter, r *http.Request) {
 		handleSnapshotKeep(w, r, service)
 		return
 	}
-	if status, _ := podman.UnitStatus("lerd-" + service); status != "active" {
+	if !serviceUsable(service) {
 		writeDBError(w, "start the engine before running database operations")
 		return
 	}
@@ -415,7 +414,7 @@ func handleDatabaseExport(w http.ResponseWriter, r *http.Request, service string
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if status, _ := podman.UnitStatus("lerd-" + service); status != "active" {
+	if !serviceUsable(service) {
 		http.Error(w, "start the engine before exporting", http.StatusConflict)
 		return
 	}
