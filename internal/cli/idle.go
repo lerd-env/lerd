@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -27,6 +28,7 @@ request. It is a single global setting, off by default.`,
 	cmd.AddCommand(newIdleToggleCmd("on", true))
 	cmd.AddCommand(newIdleToggleCmd("off", false))
 	cmd.AddCommand(newIdleTimeoutCmd())
+	cmd.AddCommand(newIdleServicesCmd())
 	cmd.AddCommand(newIdlePinCmd("pin", true))
 	cmd.AddCommand(newIdlePinCmd("unpin", false))
 	return cmd
@@ -71,6 +73,44 @@ func newIdleToggleCmd(verb string, enabled bool) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE:  func(_ *cobra.Command, _ []string) error { return setIdleEnabled(enabled) },
 	}
+}
+
+func newIdleServicesCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:       "services <on|off>",
+		Short:     "Also stop services once every site using them is idle",
+		Args:      cobra.ExactArgs(1),
+		ValidArgs: []string{"on", "off"},
+		RunE: func(_ *cobra.Command, args []string) error {
+			switch args[0] {
+			case "on":
+				return setIdleServices(true)
+			case "off":
+				return setIdleServices(false)
+			}
+			return fmt.Errorf("unknown value %q, use on or off", args[0])
+		},
+	}
+}
+
+// setIdleServices saves the services half of idle-suspend. The running engine
+// reads it on its next tick, which also wakes what it slept when turned off.
+func setIdleServices(on bool) error {
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return err
+	}
+	cfg.IdleSuspend.Services = on
+	if err := config.SaveGlobal(cfg); err != nil {
+		return err
+	}
+	feedback.Begin()
+	msg := "idle services " + onOff(on)
+	if on && !cfg.IdleSuspend.Enabled {
+		msg += " (takes effect once idle-suspend is on: lerd idle on)"
+	}
+	feedback.Done(msg)
+	return nil
 }
 
 func newIdleTimeoutCmd() *cobra.Command {
@@ -163,7 +203,12 @@ func runIdleStatus() error {
 		return err
 	}
 
-	fmt.Printf("Idle-suspend: %s, timeout %s\n\n", onOff(cfg.IdleSuspend.Enabled), compactDuration(cfg.IdleSuspendTimeout()))
+	fmt.Printf("Idle-suspend: %s, timeout %s\n", onOff(cfg.IdleSuspend.Enabled), compactDuration(cfg.IdleSuspendTimeout()))
+	fmt.Printf("Services: %s", onOff(cfg.IdleSuspend.Services))
+	if asleep := config.IdleSuspendedServices(); len(asleep) > 0 {
+		fmt.Printf(", sleeping: %s", strings.Join(asleep, ", "))
+	}
+	fmt.Print("\n\n")
 
 	states, uiErr := fetchIdleSites()
 	lastActive := make(map[string]int64, len(states))

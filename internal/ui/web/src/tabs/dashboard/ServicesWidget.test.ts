@@ -100,15 +100,33 @@ describe('ServicesWidget', () => {
     services.set([svc({ update_available: true }), svc({ name: 'redis', status: 'inactive' })]);
     const { container, getByText, queryByText } = render(ServicesWidget);
     expect(getByText('1/2 active')).toBeTruthy();
-    expect(getByText('1 update(s) available')).toBeTruthy();
+    expect(getByText('1 update(s)')).toBeTruthy();
     expect(queryByText('↑')).toBeTruthy();
     expect(container.querySelector('.bg-yellow-50')).toBeNull();
+  });
+
+  it('counts sleeping services in their own badge and keeps the running one green', () => {
+    services.set([
+      svc({ name: 'mysql', status: 'inactive', idle_suspended: true }),
+      svc({ name: 'redis', status: 'inactive', idle_suspended: true }),
+      svc({ name: 'mailpit', status: 'active' })
+    ]);
+    const { getByText } = render(ServicesWidget);
+    expect(getByText('2/3 suspended').closest('span')!.className).toMatch(/text-sky-700/);
+    expect(getByText('1/3 active').closest('span')!.className).toMatch(/text-emerald-700/);
+  });
+
+  it('still turns the running count amber for a service that is simply stopped', () => {
+    services.set([svc({ name: 'mysql', status: 'inactive' }), svc({ name: 'redis', status: 'active' })]);
+    const { getByText, queryByText } = render(ServicesWidget);
+    expect(getByText('1/2 active').closest('span')!.className).toMatch(/text-yellow-700/);
+    expect(queryByText(/suspended/)).toBeNull();
   });
 
   it('shows no update pill when everything is current', () => {
     services.set([svc()]);
     const { queryByText } = render(ServicesWidget);
-    expect(queryByText('0 update(s) available')).toBeNull();
+    expect(queryByText('0 update(s)')).toBeNull();
   });
 
   it('hides the add button without local control', () => {

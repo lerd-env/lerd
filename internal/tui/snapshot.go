@@ -188,6 +188,8 @@ func buildServiceRow(name string, custom bool) ServiceRow {
 	}
 	if config.ServiceIsPaused(name) {
 		state = statePaused
+	} else if state == stateStopped && config.ServiceIsIdleSuspended(name) {
+		state = stateSuspended
 	}
 	version := podman.ServiceVersionLabel(podman.InstalledImage(unit))
 	if custom && version == "" {

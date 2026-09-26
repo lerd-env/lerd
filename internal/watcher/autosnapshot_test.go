@@ -272,3 +272,64 @@ func TestAutoSnapshotStamps_roundTrip(t *testing.T) {
 		t.Errorf("stamp = %v, want %v", got["mysql\x00shop"], at)
 	}
 }
+
+// A sleeping engine is woken once per pass for every database on it, but only
+// when it went to sleep after its last snapshot; otherwise nothing changed.
+func TestRunAutoSnapshots_sleepingEngineWakesOnlyWithChanges(t *testing.T) {
+	taken := autoSnapshotEnv(t)
+	writeAutoSnapshotConfig(t, "auto_snapshot:\n  enabled: true\n  every: 24h\n")
+	shop := seedAutoSnapshotSite(t, "shop", "mysql", "shop_db", config.AutoSnapshotOn)
+	blog := seedAutoSnapshotSite(t, "blog", "mysql", "blog_db", config.AutoSnapshotOn)
+	if err := config.SaveSites(&config.SiteRegistry{Sites: []config.Site{shop, blog}}); err != nil {
+		t.Fatal(err)
+	}
+	autoSnapshotRunning = func(string) bool { return false }
+	_ = config.SetServiceIdleSuspended("mysql", true)
+
+	var wakes []string
+	prevWake := autoSnapshotWhileAsleep
+	t.Cleanup(func() { autoSnapshotWhileAsleep = prevWake })
+	autoSnapshotWhileAsleep = func(service string, fn func() error) error {
+		wakes = append(wakes, service)
+		return fn()
+	}
+
+	now := time.Unix(2_000_000_000, 0)
+	_ = config.SetServiceSleptAt("mysql", now.Add(-time.Hour)) // never snapshotted, so changed
+	runAutoSnapshots(now)
+	if len(wakes) != 1 || len(*taken) != 2 {
+		t.Fatalf("wakes=%v taken=%d, want one wake covering both databases", wakes, len(*taken))
+	}
+
+	// A day later, still asleep since before those snapshots: nothing to do.
+	wakes, *taken = nil, nil
+	runAutoSnapshots(now.Add(25 * time.Hour))
+	if len(wakes) != 0 || len(*taken) != 0 {
+		t.Fatalf("woke %v for an engine asleep since its last snapshot", wakes)
+	}
+
+	// It woke, was used and slept again: the next due pass captures it.
+	_ = config.SetServiceSleptAt("mysql", now.Add(26*time.Hour))
+	runAutoSnapshots(now.Add(50 * time.Hour))
+	if len(wakes) != 1 || len(*taken) != 2 {
+		t.Fatalf("wakes=%v taken=%d after it slept with changes", wakes, len(*taken))
+	}
+}
+
+func TestRunAutoSnapshots_leavesAStoppedEngineAlone(t *testing.T) {
+	taken := autoSnapshotEnv(t)
+	writeAutoSnapshotConfig(t, "auto_snapshot:\n  enabled: true\n  every: 24h\n")
+	site := seedAutoSnapshotSite(t, "shop", "mysql", "shop_db", config.AutoSnapshotOn)
+	if err := config.SaveSites(&config.SiteRegistry{Sites: []config.Site{site}}); err != nil {
+		t.Fatal(err)
+	}
+	autoSnapshotRunning = func(string) bool { return false } // stopped, not asleep
+	prevWake := autoSnapshotWhileAsleep
+	t.Cleanup(func() { autoSnapshotWhileAsleep = prevWake })
+	autoSnapshotWhileAsleep = func(string, func() error) error { t.Fatal("woke a stopped engine"); return nil }
+
+	runAutoSnapshots(time.Unix(2_000_000_000, 0))
+	if len(*taken) != 0 {
+		t.Fatalf("snapshotted a stopped engine: %v", *taken)
+	}
+}

@@ -29,6 +29,17 @@ describe('dashboard store', () => {
     open.mockRestore();
   });
 
+  it('keeps a sleeping service in the sidebar, since opening it wakes it', async () => {
+    const { services } = await import('./services');
+    const { dashboardServices } = await import('./dashboard');
+    const pma = { name: 'phpmyadmin', site_count: 0, dashboard: '/_svc/phpmyadmin/' };
+    services.set([
+      { ...pma, status: 'inactive', idle_suspended: true },
+      { ...pma, name: 'pgadmin', status: 'inactive' }
+    ]);
+    expect(get(dashboardServices).map((s) => s.name)).toEqual(['phpmyadmin']);
+  });
+
   it('user external dashboard still opens in a new tab and is not embedded', async () => {
     const { services } = await import('./services');
     const { openDashboard, dashboardOpen, dashboardServices } = await import('./dashboard');
@@ -227,5 +238,26 @@ describe('dashboard store', () => {
 
     await openEntityInDashboard(svc, 'keys', 'session');
     expect(get(dashboardOpen)).toBeNull();
+  });
+});
+
+describe('keepServiceAwake', () => {
+  it('pings at once and every interval until stopped', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { keepServiceAwake, KEEP_AWAKE_MS } = await import('./dashboard');
+
+    const stop = keepServiceAwake('mailpit');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/dashboard/keepalive?name=mailpit');
+    vi.advanceTimersByTime(KEEP_AWAKE_MS * 2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    stop();
+    vi.advanceTimersByTime(KEEP_AWAKE_MS * 3);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 });

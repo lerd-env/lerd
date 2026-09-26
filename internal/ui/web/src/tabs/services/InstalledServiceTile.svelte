@@ -1,5 +1,5 @@
 <script lang="ts">
-  import StatusDot from '$components/StatusDot.svelte';
+  import ServiceStatusDot from '$components/ServiceStatusDot.svelte';
   import Icon from '$components/Icon.svelte';
   import ServiceCardShell from '$components/ServiceCardShell.svelte';
   import ServiceDashboardButton from '$components/ServiceDashboardButton.svelte';
@@ -41,8 +41,8 @@
       </span>
       <span class="flex items-center gap-2 text-[10px] text-gray-500 dark:text-gray-400">
         <span class="flex items-center gap-1">
-          <StatusDot color={svc.status === 'active' ? 'green' : 'gray'} />
-          {svc.status === 'active' ? m.common_running() : m.common_stopped()}
+          <ServiceStatusDot {svc} />
+          {svc.status === 'active' ? m.common_running() : svc.idle_suspended ? m.services_sleeping() : m.common_stopped()}
         </span>
         {#if svc.version}
           <span class="truncate font-mono tabular-nums text-gray-400 dark:text-gray-500">{svc.version}</span>

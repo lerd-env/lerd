@@ -33,7 +33,7 @@
 
 <DashboardCard title={m.dashboard_lerd_title()} tone={$version.hasUpdate ? 'warn' : 'default'}>
   {#snippet badge()}
-    <VersionPill />
+    <VersionPill size="sm" />
   {/snippet}
 
   {#if $version.checked && !$version.hasUpdate}

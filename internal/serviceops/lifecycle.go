@@ -2,6 +2,7 @@ package serviceops
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -31,6 +32,11 @@ func StartService(name string) error {
 		if err := StartDependencies(svc); err != nil {
 			return err
 		}
+		for _, engine := range sleepingBackers(svc) {
+			if err := WakeService(engine); err != nil {
+				feedback.Warn("could not wake %s for %s: %v", engine, name, err)
+			}
+		}
 		if err := EnsureCustomServiceQuadlet(svc); err != nil {
 			return err
 		}
@@ -57,6 +63,223 @@ func StartService(name string) error {
 	return nil
 }
 
+// WakeService starts a service whose unit is already installed exactly as it
+// was, dependencies first, and waits until it is ready. It skips the quadlet
+// refresh EnsureServiceRunning does, which can ask a registry for a newer tag
+// and hold a waiting request for seconds; a service woken from idle-suspend
+// has an unchanged unit. Anything not installed goes the full way.
+func WakeService(name string) error {
+	return wakeService(name, map[string]bool{})
+}
+
+func wakeService(name string, seen map[string]bool) error {
+	if seen[name] {
+		return nil
+	}
+	seen[name] = true
+	unit := "lerd-" + name
+	if !podman.QuadletInstalled(unit) {
+		return EnsureServiceRunning(name)
+	}
+	if svc, err := config.LoadCustomService(name); err == nil {
+		for _, dep := range svc.DependsOn {
+			if key := ResolveDependency(dep); key != "" {
+				if err := wakeService(key, seen); err != nil {
+					return fmt.Errorf("starting dependency %q for %q: %w", dep, name, err)
+				}
+			}
+		}
+		// An admin tool is no use with its engines asleep, nor mailpit with the
+		// spamassassin it scores mail through.
+		for _, engine := range sleepingBackers(svc) {
+			if err := wakeService(engine, seen); err != nil {
+				return fmt.Errorf("waking %q for %q: %w", engine, name, err)
+			}
+		}
+	}
+	if err := wakeStartUnit(unit); err != nil {
+		return err
+	}
+	return waitReadyFn(name, 60*time.Second)
+}
+
+// AdministeredServices returns the installed services an admin tool's
+// admin_for names, matched by service name or by family, so phpMyAdmin
+// covers a mariadb-11-8 as well as mysql.
+func AdministeredServices(tool *config.CustomService) []string {
+	if tool == nil || len(tool.AdminFor) == 0 {
+		return nil
+	}
+	var out []string
+	for _, name := range installedServiceNames() {
+		if name == tool.Name {
+			continue
+		}
+		family := config.FamilyOfName(name)
+		for _, target := range tool.AdminFor {
+			if target == name || (family != "" && target == family) {
+				out = append(out, name)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// AdminToolsFor is AdministeredServices the other way round: the installed
+// admin tools that administer name.
+func AdminToolsFor(name string) []string {
+	customs, err := config.ListCustomServices()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, tool := range customs {
+		for _, n := range AdministeredServices(tool) {
+			if n == name {
+				out = append(out, tool.Name)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// DiscoveringConsumers returns the installed services that find name through
+// their dynamic_env (mailpit scoring mail with spamassassin, phpMyAdmin listing
+// every mysql), so what keeps them awake keeps name awake too.
+func DiscoveringConsumers(name string) []string {
+	family := ServiceFamily(name)
+	var out []string
+	for _, c := range dynamicEnvConsumers() {
+		if c.Name == name || !ServiceInstalled(c.Name) {
+			continue
+		}
+		for _, f := range consumerDiscoverFamilies(c) {
+			if f == name || (family != "" && f == family) {
+				out = append(out, c.Name)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// discoveredServices is DiscoveringConsumers the other way round: the installed
+// services svc finds through its dynamic_env.
+func discoveredServices(svc *config.CustomService) []string {
+	families := map[string]bool{}
+	for _, f := range consumerDiscoverFamilies(svc) {
+		families[f] = true
+	}
+	if len(families) == 0 {
+		return nil
+	}
+	var out []string
+	for _, n := range installedServiceNames() {
+		if n != svc.Name && (families[n] || families[ServiceFamily(n)]) {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// sleepingBackers is the part of what svc administers or discovers that
+// idle-suspend put to sleep. A stopped or paused one is the user's choice and
+// stays down.
+func sleepingBackers(svc *config.CustomService) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, n := range append(AdministeredServices(svc), discoveredServices(svc)...) {
+		if !seen[n] && config.ServiceIsIdleSuspended(n) {
+			seen[n] = true
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+func installedServiceNames() []string {
+	var out []string
+	for _, n := range config.DefaultPresetNames() {
+		if ServiceInstalled(n) {
+			out = append(out, n)
+		}
+	}
+	if customs, err := config.ListCustomServices(); err == nil {
+		for _, c := range customs {
+			out = append(out, c.Name)
+		}
+	}
+	return out
+}
+
+// DashboardAnswers reports whether a dashboard serves HTTP yet. A running unit
+// is not enough: rootless podman accepts connections on the published port
+// before the app inside listens, so only a real response counts.
+func DashboardAnswers(target string) bool {
+	client := http.Client{
+		Timeout:       time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	resp, err := client.Get(target)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode < http.StatusInternalServerError
+}
+
+// WaitDashboard polls DashboardAnswers until the dashboard serves or max runs out.
+func WaitDashboard(target string, max time.Duration) bool {
+	deadline := time.Now().Add(max)
+	for !DashboardAnswers(target) {
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return true
+}
+
+// dataWake is the seam wakeForData wakes a service through.
+var dataWake = WakeService
+
+// wakeForData brings back a service idle-suspend put to sleep before something
+// reaches into it (a database list, dump, restore, bucket operation), so every
+// caller works on a sleeping engine the same as on a running one. A service
+// the user stopped is left alone and the caller gets its usual error.
+func wakeForData(service string) error {
+	if !config.ServiceIsIdleSuspended(service) || serviceIsRunning(service) {
+		return nil
+	}
+	return dataWake(service)
+}
+
+// WakeSiteServices wakes, and waits for, every service idle-suspend put to
+// sleep that the site at path uses. For callers that run the app's code
+// straight away (an MCP artisan call) and cannot count on the watcher's wake,
+// which answers the same activity in the background. A service the user
+// stopped is left alone.
+func WakeSiteServices(path string) error {
+	var firstErr error
+	for _, svc := range config.IdleSuspendedServices() {
+		for _, site := range config.SitesUsingService(svc) {
+			if site.Path != path {
+				continue
+			}
+			if err := wakeForData(svc); err != nil && firstErr == nil {
+				firstErr = fmt.Errorf("waking %s: %w", svc, err)
+			}
+			break
+		}
+	}
+	return firstErr
+}
+
+// wakeStartUnit is the seam WakeService starts a unit through.
+var wakeStartUnit = startUnitRetry
+
 // StopService is the shared stop path for CLI, UI, TUI (via CLI), and MCP:
 // cascade-stop dependents when no other running satisfier remains, stop name,
 // mark it paused, and regenerate dynamic_env consumers.
@@ -66,6 +289,8 @@ func StopService(name string) error {
 	}
 	_ = config.SetServicePaused(name, true)
 	_ = config.SetServiceManuallyStarted(name, false)
+	// A user stop outranks idle-suspend, which would otherwise wake it again.
+	_ = config.SetServiceIdleSuspended(name, false)
 	RegenerateDynamicEnvConsumersForService(name)
 	return nil
 }

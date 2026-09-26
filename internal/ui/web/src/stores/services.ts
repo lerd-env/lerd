@@ -49,6 +49,8 @@ export interface Service {
   site_domains?: string[];
   pinned?: boolean;
   paused?: boolean;
+  // Stopped by idle-suspend; it wakes on the next request or dashboard visit.
+  idle_suspended?: boolean;
   depends_on?: string[];
   // Resolved from the service's preset YAML, so a service predating these
   // fields still renders with the right category, icon and brand colour.
@@ -709,6 +711,12 @@ export async function resetServiceTuning(name: string): Promise<ResetTuningResul
 
 export function findService(name: string): Service | undefined {
   return get(services).find((s) => s.name === name);
+}
+
+// serviceOpenable reports whether a service's dashboard can be opened: it is
+// running, or idle-suspend put it to sleep and opening the dashboard wakes it.
+export function serviceOpenable(svc: Service): boolean {
+  return svc.status === 'active' || !!svc.idle_suspended;
 }
 
 export function serviceLabel(name: string): string {

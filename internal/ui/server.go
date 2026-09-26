@@ -313,6 +313,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/profiler/clear", withCORS(handleProfilerClear))
 	mux.HandleFunc("/_spx/", handleSpxProxy)
 	mux.HandleFunc("/_svc/", handleDashProxy)
+	mux.HandleFunc("/api/dashboard/keepalive", withCORS(handleDashboardKeepAlive))
 	mux.HandleFunc("/api/queue/", withCORS(handleUnitLogStream))
 	mux.HandleFunc("/api/horizon/", withCORS(handleUnitLogStream))
 	mux.HandleFunc("/api/stripe/", withCORS(handleUnitLogStream))
@@ -407,7 +408,7 @@ func Start(currentVersion string) error {
 	})
 	mux.Handle("/", serveSvelte())
 
-	handler := withDashboardMounts(withRemoteControlGate(mux))
+	handler := withWakeHold(withDashboardMounts(withRemoteControlGate(mux)))
 
 	// Unix socket listener for the lerd.localhost nginx vhost. Linux only:
 	// on macOS, lerd-nginx runs inside the podman-machine VM and unix
@@ -1400,10 +1401,12 @@ type ServiceResponse struct {
 	IsDatabase bool `json:"is_database,omitempty"`
 	// EntityKinds are the non-database entity kinds this service declares
 	// (buckets, keyspaces…), so the detail view can show a generic overview tab.
-	EntityKinds        []string `json:"entity_kinds,omitempty"`
-	SiteCount          int      `json:"site_count"`
-	SiteDomains        []string `json:"site_domains,omitempty"`
-	Pinned             bool     `json:"pinned"`
+	EntityKinds []string `json:"entity_kinds,omitempty"`
+	SiteCount   int      `json:"site_count"`
+	SiteDomains []string `json:"site_domains,omitempty"`
+	Pinned      bool     `json:"pinned"`
+	// IdleSuspended marks a service idle-suspend stopped; it wakes on its own.
+	IdleSuspended      bool     `json:"idle_suspended,omitempty"`
 	Paused             bool     `json:"paused,omitempty"`
 	DependsOn          []string `json:"depends_on,omitempty"`
 	QueueSite          string   `json:"queue_site,omitempty"`
@@ -1638,6 +1641,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		SiteDomains:       sitesUsingService(name),
 		Pinned:            config.ServiceIsPinned(name),
 		Paused:            config.ServiceIsPaused(name),
+		IdleSuspended:     config.ServiceIsIdleSuspended(name),
 		IsDefault:         isDefault,
 		IsDatabase:        name != "sqlite" && isDatabaseEngine(name),
 		EntityKinds:       serviceops.EntityKinds(name),
@@ -5542,6 +5546,7 @@ type SettingsResponse struct {
 	PHPRuntimeSwitching       bool     `json:"php_runtime_switching"` // a switch is running; every red row below is transient
 	IdleSuspendEnabled        bool     `json:"idle_suspend_enabled"`
 	IdleSuspendTimeoutMinutes int      `json:"idle_suspend_timeout_minutes"`
+	IdleSuspendServices       bool     `json:"idle_suspend_services"`
 	DNSEnabled                bool     `json:"dns_enabled"`
 	DNSUpstream               []string `json:"dns_upstream"`          // pinned upstreams, empty = auto-detect
 	DNSUpstreamDetected       []string `json:"dns_upstream_detected"` // what auto-detection currently sees
@@ -5556,6 +5561,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 	mode := config.WorkerExecModeExec
 	idleEnabled := false
 	idleMinutes := int(config.DefaultIdleSuspendTimeout / time.Minute)
+	idleServices := false
 	dnsEnabled := true
 	startOnOpen := false
 	trayEnabled := true
@@ -5567,6 +5573,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		mode = cfg.WorkerExecMode()
 		idleEnabled = cfg.IdleSuspend.Enabled
 		idleMinutes = int(cfg.IdleSuspendTimeout() / time.Minute)
+		idleServices = cfg.IdleSuspend.Services
 		dnsEnabled = cfg.DNSManaged()
 		dnsUpstream = cfg.DNS.Upstream
 		startOnOpen = cfg.Autostart.OnDashboardOpen
@@ -5585,6 +5592,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		WorkerModeApplies:         runtime.GOOS == "darwin",
 		IdleSuspendEnabled:        idleEnabled,
 		IdleSuspendTimeoutMinutes: idleMinutes,
+		IdleSuspendServices:       idleServices,
 		DNSEnabled:                dnsEnabled,
 		DNSUpstream:               dnsUpstream,
 		DNSUpstreamDetected:       dns.ReadUpstreamDNS(),
@@ -5604,8 +5612,9 @@ func handleSettingsIdleSuspend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Enabled        bool `json:"enabled"`
-		TimeoutMinutes int  `json:"timeout_minutes"`
+		Enabled        bool  `json:"enabled"`
+		TimeoutMinutes int   `json:"timeout_minutes"`
+		Services       *bool `json:"services"` // omitted leaves it as it is
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)
@@ -5622,6 +5631,9 @@ func handleSettingsIdleSuspend(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg.IdleSuspend.Enabled = body.Enabled
 	cfg.IdleSuspend.Timeout = (time.Duration(body.TimeoutMinutes) * time.Minute).String()
+	if body.Services != nil {
+		cfg.IdleSuspend.Services = *body.Services
+	}
 	if err := config.SaveGlobal(cfg); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return

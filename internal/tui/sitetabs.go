@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	lerddumps "github.com/geodro/lerd/internal/dumps"
+	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/siteinfo"
 	zone "github.com/lrstanley/bubblezone/v2"
 )
@@ -305,8 +306,32 @@ func (m *Model) openServiceDashboardCmd() tea.Cmd {
 		m.setStatus(svc.Name+" has no dashboard to open", 3*time.Second)
 		return nil
 	}
-	return m.openURL(svc.Dashboard)
+	if svc.State != stateSuspended {
+		return m.openURL(svc.Dashboard)
+	}
+	// The dashboard is a bare localhost port, so nothing wakes a service
+	// idle-suspend put to sleep but us; start it before the browser gets there.
+	open := m.openURL(svc.Dashboard)
+	if open == nil {
+		return nil
+	}
+	m.setStatus("waking "+svc.Name+"…", 30*time.Second)
+	name, url := svc.Name, svc.Dashboard
+	return func() tea.Msg {
+		if err := tuiWakeService(name); err != nil {
+			return ActionResult{Summary: "wake " + name, Err: err}
+		}
+		tuiWaitDashboard(url, time.Minute)
+		return open()
+	}
 }
+
+// tuiWakeService starts a sleeping service and waits for it to be ready; a var
+// so tests stand in for the container.
+var (
+	tuiWakeService   = serviceops.WakeService
+	tuiWaitDashboard = serviceops.WaitDashboard
+)
 
 // openURL launches the default browser on url via the platform opener, or
 // surfaces a status message when no opener exists. The browser detaches, so the

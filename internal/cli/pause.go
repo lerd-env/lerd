@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"html"
 	"os"
 	"path/filepath"
 	"sort"
@@ -705,17 +706,22 @@ func writePausedHTML(_ *config.Site) error {
 	return os.WriteFile(filepath.Join(dir, "paused.html"), []byte(pausedPageHTML), 0644)
 }
 
-// wakingPageHTML is the static landing page served while an idle-suspended
-// host-proxy site's dev server is starting back up. Unlike the paused page it
-// has no Resume button: the request that loaded it already drove idle-resume, so
-// it just auto-refreshes (native meta refresh) until the proxy vhost is restored
-// and the reload lands on the live app.
-const wakingPageHTML = `<!DOCTYPE html>
+// WakingPage is the landing page served while something idle-suspend put to
+// sleep starts back up: a site (its dev server or its services) or a service
+// dashboard. Unlike the paused page it has no Resume button: the request that
+// loaded it already drove the wake, so it just auto-refreshes (native meta
+// refresh) until the reload lands on the live page. label names what is waking;
+// empty shows the page's own host.
+func WakingPage(label string) string {
+	return strings.Replace(wakingPageHTML, "{{label}}", html.EscapeString(label), 1)
+}
+
+var wakingPageHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="refresh" content="3">
+  <meta http-equiv="refresh" content="1">
   <title>Waking up</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
@@ -762,11 +768,11 @@ const wakingPageHTML = `<!DOCTYPE html>
 <body>
   <div class="card">
     <div class="spinner"></div>
-    <h1>Waking the dev server</h1>
-    <p class="host" id="host"></p>
-    <p>This site was idle and is starting back up. This page refreshes automatically.</p>
+    <h1>Waking up</h1>
+    <p class="host" id="host">{{label}}</p>
+    <p>This was idle and is starting back up. This page refreshes automatically.</p>
   </div>
-  <script>document.getElementById('host').textContent = location.hostname;</script>
+  <script>var h = document.getElementById('host'); if (!h.textContent) h.textContent = location.hostname;</script>
 </body>
 </html>
 `
@@ -778,7 +784,7 @@ func writeWakingHTML(_ *config.Site) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "waking.html"), []byte(wakingPageHTML), 0644)
+	return os.WriteFile(filepath.Join(dir, "waking.html"), []byte(WakingPage("")), 0644)
 }
 
 // pauseWorktrees generates paused HTML and nginx vhosts for every worktree of

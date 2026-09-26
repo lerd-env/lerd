@@ -7,6 +7,7 @@
   import { autoSnapshot, loadAutoSnapshot } from '$stores/autoSnapshot';
   import ListGroupHeader from '$components/ListGroupHeader.svelte';
   import StatusDot from '$components/StatusDot.svelte';
+  import ServiceStatusDot from '$components/ServiceStatusDot.svelte';
   import LoadingRow from '$components/LoadingRow.svelte';
   import { accessMode } from '$stores/accessMode';
   import { routeRest, goToTab } from '$stores/route';
@@ -73,7 +74,7 @@
         trailing={group.key === 'databases' ? snapshotMark : undefined}
       />
       {#each group.items as svc (svc.name)}
-        {#snippet leading()}<StatusDot color={svc.status === 'active' ? 'green' : 'gray'} />{/snippet}
+        {#snippet leading()}<ServiceStatusDot {svc} />{/snippet}
         {#snippet trailing()}
           {#if svc.status !== 'active' && svc.port_conflicts && svc.port_conflicts.length > 0}
             <span

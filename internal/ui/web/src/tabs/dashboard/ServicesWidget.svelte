@@ -11,6 +11,10 @@
 
   const total = $derived($coreServices.length);
   const running = $derived($coreServices.filter((s) => s.status === 'active').length);
+  // A sleeping service is healthy, just stopped until the next request, so it
+  // gets its own badge and does not turn the running count amber.
+  const asleep = $derived($coreServices.filter((s) => s.status !== 'active' && s.idle_suspended).length);
+  const awake = $derived(running + asleep);
   const updates = $derived($coreServices.filter((s) => s.update_available).length);
 
   // The card scrolls once the list outgrows it, so a service with an update
@@ -29,13 +33,19 @@
 <DashboardCard title={m.dashboard_services_title()} tone={updates > 0 ? 'warn' : 'default'}>
   {#snippet badge()}
     {#if $servicesLoaded}
-      <div class="flex items-center gap-1.5">
+      <!-- Three pills outgrow a narrow card, so they stay compact and wrap onto
+           a second row rather than squeezing their labels onto two lines. -->
+      <div class="flex flex-wrap items-center justify-end gap-1.5 min-w-0">
         <StatusPill
-          tone={total === 0 ? 'muted' : running === total ? 'ok' : running > 0 ? 'warn' : 'error'}
+          size="sm"
+          tone={total === 0 ? 'muted' : awake === total ? 'ok' : awake > 0 ? 'warn' : 'error'}
           label={m.dashboard_services_summary({ running, total })}
         />
+        {#if asleep > 0}
+          <StatusPill size="sm" tone="asleep" label={m.dashboard_services_asleep({ count: asleep, total })} />
+        {/if}
         {#if updates > 0}
-          <StatusPill tone="warn" label={m.dashboard_services_updates({ count: updates })} />
+          <StatusPill size="sm" tone="warn" label={m.dashboard_services_updates({ count: updates })} />
         {/if}
       </div>
     {/if}

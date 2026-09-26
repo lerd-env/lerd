@@ -159,11 +159,7 @@ func swapHostProxyVhostToWaking(site *config.Site, suspended []string) {
 	if !hostProxyVhostSwapApplies(site.IsHostProxy(), suspended) {
 		return
 	}
-	if err := writeWakingHTML(site); err != nil {
-		fmt.Printf("[WARN] idle-suspend waking page %s: %v\n", site.Name, err)
-		return
-	}
-	if err := nginx.GenerateWakingVhost(*site); err != nil {
+	if err := swapSiteToWaking(site); err != nil {
 		fmt.Printf("[WARN] idle-suspend waking vhost %s: %v\n", site.Name, err)
 		return
 	}

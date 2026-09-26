@@ -409,6 +409,10 @@ type GlobalConfig struct {
 		// a Go duration string ("30m"). Empty or unparseable falls back to
 		// DefaultIdleSuspendTimeout; read it via IdleSuspendTimeout.
 		Timeout string `yaml:"timeout,omitempty" mapstructure:"timeout"`
+		// Services extends idle-suspend to service containers: a service stops
+		// once every site using it has been idle past Timeout, and wakes on the
+		// next request. Off by default; only read while Enabled is on.
+		Services bool `yaml:"services,omitempty" mapstructure:"services"`
 	} `yaml:"idle_suspend,omitempty" mapstructure:"idle_suspend"`
 	AutoSnapshot struct {
 		// Enabled turns on scheduled database snapshots: every AutoSnapshotEvery,

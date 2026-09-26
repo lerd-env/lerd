@@ -13,6 +13,7 @@ lerd idle status        # global policy, plus each site and worktree's last-acti
 lerd idle on            # enable
 lerd idle off           # disable (resumes everything immediately)
 lerd idle timeout 30m   # set the timeout (e.g. 5m, 30m, 2h)
+lerd idle services on   # also sleep services nobody is using (off by default)
 lerd idle pin <site>    # keep a site always-warm (never suspended)
 lerd idle unpin <site>  # let a pinned site sleep again
 ```
@@ -23,6 +24,7 @@ You can also toggle it and set the timeout from the dashboard's **System → ler
 
 ```
 Idle-suspend: enabled, timeout 30m
+Services: enabled, sleeping: meilisearch, mysql
 
   myapp                 active 2m ago
     myapp/feature       active 8m ago
@@ -40,6 +42,27 @@ Suspension is graceful: workers receive `SIGTERM` and finish their current job b
 A suspended worker's unit is removed entirely, so the only record that it is asleep (rather than simply off) is the persisted list. If that list is ever lost while the units stay gone, which replacing the lerd binary mid-session can do, the watcher re-marks the affected workers as suspended on its next evaluation, reading the site's declared workers from `.lerd.yaml`, so they show as sleeping again instead of off. It only re-marks a worker whose unit is gone entirely (idle-suspend's own signature); one that merely crashed or stopped keeps its unit and is left to the usual worker-healing, and one you genuinely stopped or removed is dropped from `.lerd.yaml`, so neither is revived this way.
 
 **Vite is a special case.** Stopping the Vite dev server makes Laravel's `@vite` directive fall back to the built asset manifest, so before suspending Vite lerd runs `npm run build` (once, if no usable build exists) and clears `public/hot`. A sleeping site then serves built assets instead of a broken page. If a build can't be produced, Vite is left running for that site.
+
+## Sleeping services
+
+With `lerd idle services on` (or the **Sleep unused services** switch on the same dashboard card), idle-suspend also stops service containers. A service goes to sleep once everything that could be using it has been idle past the timeout: every site whose `.lerd.yaml` or env file points at it, each of those sites' worktrees, its own dashboard, and the dashboards of the services built on it (phpMyAdmin keeps MySQL awake while you browse it). When every site is asleep, nothing is left running but nginx, PHP-FPM and DNS.
+
+Stopping a database under a live app would turn the next request into a connection error, so before a service stops, every site using it is switched to a waking vhost, the same one a sleeping host-proxy site gets. The first request after a break is held there while the services the site needs start in parallel. Once they accept connections and nginx serves the real vhost again, lerd sends that same request on to the app and returns the app's own response, so any client gets its answer in the time the wake takes: a browser, `curl`, an API client or a webhook sender, with the method and body intact and no redirect to follow. A websocket upgrade, which cannot be replayed, is redirected to the same URL instead. If the wake takes longer than a minute, or lerd-ui is not running, the request gets an auto-refreshing "waking up" page. The held request is not recorded in the site's request timings, and the first real request after it counts as a cold start, so waking never skews them. The site's workers resume right after. If the wake takes longer than a minute, or lerd-ui is not running, the request gets an auto-refreshing "waking up" page instead.
+
+A service also wakes when:
+
+- you run a console command, `composer` or `php` in the project, which already starts the services it needs;
+- anything reaches into it: a database list, dump, import, snapshot or restore, creating or dropping a database (a worktree's isolated database included), a bucket operation, or a service client such as `mysql` or `redis-cli`, whether from the CLI, the MCP tools, the TUI or the dashboard;
+- an MCP tool runs the project's code (artisan, composer, a vendor binary), which waits for the site's services before it starts;
+- you open its dashboard, from the dashboard, the TUI or a bookmarked `/_svc/<name>/` page. It starts along with the services it depends on or administers (adminer brings its databases), the dashboard shows a "waking up" page meanwhile, and that page reloads itself onto the dashboard once it answers. While the dashboard stays open in lerd it counts as in use, however long the page sits idle, so the service and what it needs stay up until you close it;
+- a request reaches its own domain, for a service that has one;
+- you run `lerd service start`, or turn the setting or idle-suspend off.
+
+[Automatic snapshots](database.md#snapshots) keep working while a database sleeps. A database asleep since before its last snapshot is skipped, since nothing can have changed. One that went to sleep with changes no snapshot has captured yet is started just for the dump, every due database on it in one go, and stopped again straight after; its sites stay on the waking page and it stays asleep.
+
+`lerd start` leaves sleeping services asleep, as it does sleeping workers. `lerd status` and `lerd service list` show them as sleeping rather than stopped.
+
+A connection straight to a service's published host port, from a desktop database client for instance, reaches no part of lerd, so it cannot wake the service and does not keep it awake. The same holds for an app that reaches a service by its host port rather than its lerd name, such as a [host-proxy](host-proxy.md) dev server: list the service under `services:` in the site's `.lerd.yaml` so lerd counts the site as using it. [Pin the service](../reference/commands.md) (`lerd service pin <name>`) if you use it that way; a pinned service never sleeps, and neither does one used by a pinned site. Stopping a sleeping service yourself with `lerd service stop` keeps it stopped: idle-suspend only wakes what it put to sleep.
 
 ## Pinning a site
 

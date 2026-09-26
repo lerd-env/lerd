@@ -419,11 +419,25 @@ func StoppedDeclaredServices(path string, fw *config.Framework) []string {
 		if !serviceInstalledFn(name) {
 			continue
 		}
-		if status, _ := unitStatusFn("lerd-" + name); status != "active" {
+		if serviceDown(name) {
 			stopped = append(stopped, name)
 		}
 	}
 	return stopped
+}
+
+// idleAsleepFn is the seam serviceDown asks whether idle-suspend holds a
+// service asleep.
+var idleAsleepFn = config.ServiceIsIdleSuspended
+
+// serviceDown reports a declared service that is not running and will not come
+// back on its own. One idle-suspend put to sleep is healthy: the site's next
+// request wakes it.
+func serviceDown(name string) bool {
+	if status, _ := unitStatusFn("lerd-" + name); status == "active" {
+		return false
+	}
+	return !idleAsleepFn(name)
 }
 
 // checkRequiredServices reports the services a site declares that are absent or
@@ -441,7 +455,7 @@ func checkRequiredServices(path string, fw *config.Framework) (Check, bool) {
 			missing = append(missing, name)
 			continue
 		}
-		if status, _ := unitStatusFn("lerd-" + name); status != "active" {
+		if serviceDown(name) {
 			stopped = append(stopped, name)
 		}
 	}

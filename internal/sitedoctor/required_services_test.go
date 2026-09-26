@@ -15,6 +15,9 @@ func withStubs(t *testing.T, installed map[string]bool, status map[string]string
 	origStatus := unitStatusFn
 	unitStatusFn = func(unit string) (string, error) { return status[unit], nil }
 	t.Cleanup(func() { unitStatusFn = origStatus })
+	origAsleep := idleAsleepFn
+	idleAsleepFn = func(string) bool { return false }
+	t.Cleanup(func() { idleAsleepFn = origAsleep })
 
 	names := map[string]bool{}
 	for unit, ok := range installed {
@@ -112,5 +115,19 @@ func TestRequiredServicesMissingOutranksStopped(t *testing.T) {
 	}
 	if !strings.Contains(c.Detail, "opensearch") {
 		t.Errorf("detail should name the missing service: %q", c.Detail)
+	}
+}
+
+// A service idle-suspend put to sleep is healthy: the site's next request
+// wakes it, so the doctor must not tell the user to start it.
+func TestRequiredServicesOKWhenAsleep(t *testing.T) {
+	withStubs(t, map[string]bool{"lerd-opensearch": true}, map[string]string{"lerd-opensearch": "inactive"})
+	idleAsleepFn = func(name string) bool { return name == "opensearch" }
+	c, ok := checkRequiredServices(t.TempDir(), &config.Framework{Requires: []string{"opensearch"}})
+	if !ok || c.Status != StatusOK {
+		t.Fatalf("got %+v, want OK for a sleeping service", c)
+	}
+	if got := StoppedDeclaredServices(t.TempDir(), &config.Framework{Requires: []string{"opensearch"}}); len(got) != 0 {
+		t.Fatalf("StoppedDeclaredServices = %v, want none", got)
 	}
 }
