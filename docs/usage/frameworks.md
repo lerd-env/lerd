@@ -224,6 +224,7 @@ Default workers:
 | `schedule` | Task Scheduler | `php artisan schedule:work` | - | - |
 | `reverb` | Reverb WebSocket | `php artisan reverb:start` | `laravel/reverb` | proxy at `/app`, auto-assigned port |
 | `horizon` | Horizon | `php artisan horizon` | `laravel/horizon` | conflicts with `queue`; auto-reload via `horizon:listen` (see [queue workers](queue-workers.md)) |
+| `mix` | Laravel Mix | `npm run watch` | `node_modules/laravel-mix` | runs on the host and rebuilds into `public/`, which nginx already serves, so nothing is proxied and a full reload picks up changes |
 | `native` | NativePHP | `php artisan native:serve` | `nativephp/electron` | runs on the host, see [NativePHP](#nativephp) |
 | `jump` | NativePHP Jump | `php artisan native:jump` | `nativephp/mobile` | runs on the host, see [NativePHP](#nativephp) |
 
