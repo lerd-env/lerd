@@ -108,6 +108,7 @@ phases once the next release makes it ordinary.
 | Initialize git on a site without a repository | 10 |
 | Animations paused while the dashboard is unfocused | 10 |
 | A reinstall keeping the preset it reads | 5 |
+| Idle-suspend putting services to sleep, waking them per request | 6 |
 | Doctor explaining repeated macOS folder prompts, Xdebug across a runtime switch | 14 |
 
 ---
@@ -430,6 +431,17 @@ Every service path that can pull says what it will fetch first:
 - [ ] The MCP server answers with the image and its size instead of starting a
       download on behalf of someone who never typed the command
 
+
+Removing a service and what it leaves behind:
+
+- [ ] `lerd service remove <svc>` on a service a site's `.lerd.yaml` still
+      lists: `lerd install` and `lerd link` skip it and it stays gone; the
+      site's card shows it "Not installed" with a + action that installs it
+- [ ] A service container nothing installed owns shows in the Resources card's
+      Orphaned list, and its trash button stops and removes it
+- [ ] RustFS's console opened straight after the service starts loads, rather
+      than answering "server context is not ready"
+
 ---
 
 ## Phase 6 — workers
@@ -446,6 +458,43 @@ Every service path that can pull says what it will fetch first:
       hit the site and confirm they resume, **https → 200**
 - [ ] `lerd idle pin demo` keeps it awake; `lerd idle status` reports both states
 - [ ] `lerd idle off` resumes everything
+
+Idle-suspend can put services to sleep too (`idle_suspend.services`, off by
+default). Run this on at least two distros, with one mysql site on **https**,
+and `lerd idle timeout 1m` so each round takes a couple of minutes:
+
+- [ ] `lerd idle services on`: once every site using a service has been idle a
+      minute, `lerd idle status` lists it sleeping, `podman ps` shows only nginx,
+      dns and php-fpm, and the dashboard shows the moon and "N/M suspended"
+- [ ] A cold request to a sleeping site answers the app's own response in the
+      wake time, **https → 200**, with no redirect: `curl -sk` without `-L`.
+      Record the time; mysql lands around 1.3–1.6s, redis around 0.5s
+- [ ] A cold `curl -X POST -d a=1` reaches the app with its body and gets the
+      app's own answer (a 405 or 419 is fine), not a 307 and not the waking page
+- [ ] Fire a request the instant `lerd idle status` lists mysql, while its stop
+      is still running: it still answers **200**, and the watcher log shows mysql
+      waking straight away, not on the next tick
+- [ ] `lerd stop && lerd start` while asleep leaves the services asleep and the
+      next cold request still answers **200**
+- [ ] `lerd install` while asleep keeps the sites on their waking vhost
+      (`grep _lerd/wake` on the vhost) and the next cold request answers **200**
+- [ ] A site's `php artisan` (or the framework console) wakes its database, and
+      the next page load is warm with no redirect
+- [ ] Opening a sleeping service's dashboard shows the waking page, then the
+      dashboard; adminer wakes its databases with it, mailpit wakes spamassassin
+- [ ] A dashboard left open keeps its service awake past the timeout, and the
+      service sleeps once the overlay is closed
+- [ ] A sleeping engine's Databases tab wakes it and lists the databases, with
+      no "start the engine" hint and no connection error
+- [ ] Automatic snapshots on (`lerd db snapshot:auto on --every 1m`) with mysql
+      asleep since a change: restarting the watcher starts mysql once for every
+      due database, dumps them, and stops it again (a few seconds); a second
+      pass with nothing changed takes no snapshot
+- [ ] `lerd service pin <svc>` keeps it awake; the pin button sits in the
+      service's button group while services sleep
+- [ ] `lerd service stop <svc>` on a sleeping service keeps it stopped
+- [ ] `lerd idle services off` wakes everything, puts the real vhosts back, and
+      the sites answer **200**
 
 The named start commands are generated from the framework definition now, so
 what they accept has to come from the definition rather than from a fixed set:
@@ -800,6 +849,12 @@ Other surfaces:
 - [ ] Runtime: `lerd runtime frankenphp` → **200**, `--worker` → **200**,
       `lerd octane:reload on`, then `lerd runtime fpm` → **200**
 
+- [ ] Stopping a service logs one "stopped" in the activity feed, not two
+- [ ] A stopped service's Logs tab says it is not running instead of retrying a
+      stream; a stopped worker still shows its journal
+- [ ] A site's suggested services sit faded with a dashed border and come back
+      to full on hover, while their + and × stay fully visible
+
 ---
 
 ## Phase 11 — diagnostics and housekeeping
@@ -861,6 +916,10 @@ Other surfaces:
 - [ ] Reboot the guest: with autostart enabled everything comes back on login,
       **200 on both sites without any manual command**
 - [ ] `lerd quit` stops everything including `lerd-dns`, UI, watcher and tray
+
+
+- [ ] With a site's stripe listener asleep under idle-suspend, `lerd cleanup`
+      does not offer `docker.io/stripe/stripe-cli` for removal
 
 ---
 
