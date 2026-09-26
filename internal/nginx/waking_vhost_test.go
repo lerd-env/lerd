@@ -18,10 +18,10 @@ func TestGenerateWakingVhost_holdsInLerdUIWithWakingPageFallback(t *testing.T) {
 	conf := readConf(t, filepath.Join(confD, "rr.test.conf"))
 	for _, want := range []string{
 		WakeHoldPath + ";",
-		"proxy_method GET;",
 		"access_log off;",
 		"proxy_set_header X-Lerd-Wake-Uri $request_uri;",
-		"error_page 403 404 500 502 503 504 = @waking;",
+		"proxy_set_header X-Lerd-Wake-Scheme $scheme;",
+		"error_page 502 504 599 = @waking;",
 		"try_files /waking.html =503",
 	} {
 		if !strings.Contains(conf, want) {
@@ -68,5 +68,20 @@ func TestGeneratePausedVhost_stillServesPausedPage(t *testing.T) {
 	conf := readConf(t, filepath.Join(confD, "app.test.conf"))
 	if !strings.Contains(conf, "try_files /paused.html =503") {
 		t.Errorf("paused vhost should serve paused.html, got:\n%s", conf)
+	}
+}
+
+// The held request must reach lerd-ui whole, method and body, since lerd-ui
+// replays it to the app once the site is back.
+func TestGenerateWakingVhost_forwardsTheRequestWhole(t *testing.T) {
+	confD := setupConfD(t)
+	if err := GenerateWakingVhost(config.Site{Name: "rr", Domains: []string{"rr.test"}, Path: "/srv/rr"}); err != nil {
+		t.Fatal(err)
+	}
+	conf := readConf(t, filepath.Join(confD, "rr.test.conf"))
+	for _, banned := range []string{"proxy_method", "proxy_pass_request_body off", "error_page 404", "error_page 500"} {
+		if strings.Contains(conf, banned) {
+			t.Errorf("waking vhost still has %q:\n%s", banned, conf)
+		}
 	}
 }
