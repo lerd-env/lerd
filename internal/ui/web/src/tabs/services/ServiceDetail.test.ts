@@ -80,3 +80,22 @@ describe('ServiceDetail entities tab', () => {
     expect(queryByRole('button', { name: 'Buckets' })).toBeNull();
   });
 });
+
+describe('ServiceDetail logs tab', () => {
+  beforeEach(() => accessMode.set({ localControl: true, lanExposed: false, checked: true }));
+  const redis = (over: Partial<Service> = {}) =>
+    ({ name: 'redis', status: 'active', site_count: 0, ...over }) as Service;
+
+  it('streams the logs of a running service', () => {
+    const { getAllByTestId, queryByText } = render(ServiceDetail, { props: { svc: redis() } });
+    expect(getAllByTestId('child-stub')).toHaveLength(3); // header, banner, log viewer
+    expect(queryByText(/no logs to stream/)).toBeNull();
+  });
+
+  it('opens no stream for a stopped service', () => {
+    const { getAllByTestId, getByText } = render(ServiceDetail, { props: { svc: redis({ status: 'inactive' }) } });
+    expect(getAllByTestId('child-stub')).toHaveLength(2);
+    expect(getByText(/Not running, so there are no logs to stream/)).toBeInTheDocument();
+  });
+});
+

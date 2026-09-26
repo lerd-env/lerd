@@ -674,6 +674,7 @@
   "services_pin": "Przypnij",
   "services_pinTitle": "Przypnij, zapobiegnij automatycznemu zatrzymaniu, gdy nieużywane",
   "services_pinned": "Przypięte",
+  "services_logsStopped": "Nie działa, więc nie ma logów do pokazania. Pojawią się po uruchomieniu.",
   "services_portConflictTitle": "Port {ports} jest już używany na hoście. Zatrzymaj kolidujący proces lub zmień port lerd. Uruchom `lerd doctor`, aby uzyskać polecenie wyszukiwania dla Twojego systemu.",
   "services_portPillTitle": "Aktywny · dostępny pod {addr} (kliknij, aby skopiować)",
   "services_ports_applying": "Stosowanie…",

@@ -674,6 +674,7 @@
   "services_pin": "Fixează",
   "services_pinTitle": "Fixează, împiedică oprirea automată când nu este folosit",
   "services_pinned": "Fixat",
+  "services_logsStopped": "Nu rulează, deci nu sunt loguri de afișat. Apar imediat ce pornește.",
   "services_portConflictTitle": "Portul {ports} este deja folosit pe host. Oprește procesul care intră în conflict sau schimbă portul lerd. Execută `lerd doctor` pentru comanda de căutare specifică sistemului tău de operare.",
   "services_portPillTitle": "Activ · accesibil la {addr} (clic pentru a copia)",
   "services_ports_applying": "Se aplică…",

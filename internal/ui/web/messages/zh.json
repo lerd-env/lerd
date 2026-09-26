@@ -674,6 +674,7 @@
   "services_pin": "固定",
   "services_pinTitle": "固定，闲置时阻止自动停止",
   "services_pinned": "已固定",
+  "services_logsStopped": "未运行，因此没有可显示的日志。启动后即会显示。",
   "services_portConflictTitle": "端口 {ports} 已在主机上被占用。请停止冲突的进程或更改 lerd 端口。运行 `lerd doctor` 获取适用于你操作系统的查找命令。",
   "services_portPillTitle": "运行中 · 可通过 {addr} 访问（点击复制）",
   "services_ports_applying": "正在应用…",
