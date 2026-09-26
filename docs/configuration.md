@@ -296,7 +296,7 @@ worker_options:
 
 A value equal to the framework's own default is not written, values may not contain whitespace, and an option the definition does not declare is ignored. See [Worker options](./usage/queue-workers.md#worker-options).
 
-Framework yamls (under `lerd-frameworks/frameworks/<framework>/<version>.yaml`) declare workers under a sibling `workers:` block with the same shape, so `host`, `per_worktree`, and `replaces_build` apply there too. Every framework yaml that builds assets with vite (Laravel 9+, Statamic 4+, Symfony 5+, CakePHP 4+, Tempest) uses this for `vite` (`host: true`, `per_worktree: true`, `replaces_build: true`), gated on `node_modules/vite` so the worker only appears once the project actually installs a dev server, and any custom framework can do the same to teach lerd about per-branch dev servers.
+Framework yamls (under `lerd-frameworks/frameworks/<framework>/<version>.yaml`) declare workers under a sibling `workers:` block with the same shape, so `host`, `per_worktree`, and `replaces_build` apply there too. Every framework yaml that builds assets with vite (Laravel 9+, Statamic 4+, Symfony 5+, CakePHP 4+, Tempest) uses this for `vite` (`host: true`, `per_worktree: true`, `replaces_build: true`), gated on `node_modules/vite` so the worker only appears once the project actually installs a dev server. Laravel also declares `mix` in the same shape for projects still on Laravel Mix, gated on `node_modules/laravel-mix`. Any custom framework can do the same to teach lerd about per-branch dev servers.
 
 ### Inline custom service definitions
 
