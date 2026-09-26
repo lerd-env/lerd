@@ -345,6 +345,22 @@ func isNodeProject(dir string) bool {
 	return false
 }
 
+// rubyShimDirs returns the Ruby version-manager shim dirs present under home
+// for a Ruby site. Host workers run with a fixed PATH, so a bundle installed
+// through mise, rbenv or asdf would otherwise not resolve.
+func rubyShimDirs(sitePath, home string) []string {
+	if !fileExists(filepath.Join(sitePath, "Gemfile")) && !fileExists(filepath.Join(sitePath, "config.ru")) {
+		return nil
+	}
+	var dirs []string
+	for _, d := range []string{".local/share/mise/shims", ".rbenv/shims", ".asdf/shims"} {
+		if p := filepath.Join(home, d); fileExists(p) {
+			dirs = append(dirs, p)
+		}
+	}
+	return dirs
+}
+
 // reservedHostPorts returns host ports already claimed by other host-proxy
 // sites in the registry, so two sites never get assigned the same port even
 // when the other site's dev server isn't currently running. exceptSite is

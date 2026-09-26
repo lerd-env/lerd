@@ -70,6 +70,21 @@ If a server reads `HOST` for something else, or you already set it in your `.env
 
 Vite checks the request's `Host` header against its `allowedHosts` list and answers anything else with `403 Blocked request`. Because nginx proxies with the site domain as the `Host`, a default Vite project returns 403 through the lerd proxy until you allow the domain. Add it to `server.allowedHosts` in `vite.config` (or set `allowedHosts: true`). The raw Vite CLI also ignores `HOST` (see [Binding](#binding)), so add `--host` to the command. `lerd init` prints these reminders when it detects a Vite dev command.
 
+## Ruby and Rack
+
+`lerd init` treats a project with a `config.ru` as a Rack app, even when a `package.json` sits next to it, as it does in a Rails app with jsbundling. The default command depends on what it finds:
+
+| Project | Default command |
+|---------|-----------------|
+| Rails (`bin/rails` present) | `sh -c 'exec bin/rails server --binding "$HOST"'` |
+| Any other Rack app (Sinatra, Roda, Hanami…) | `sh -c 'exec bundle exec rackup --host "$HOST" --port "$PORT"'` |
+
+The shell wrapper is there because these servers don't bind from lerd's variables on their own: rackup ignores `PORT` and `HOST` entirely, and Rails reads `PORT` but takes its bind address from `BINDING`. Reading the variables inside `sh -c` keeps the port lerd assigns, including a worktree's own port, and follows the host gateway when it changes.
+
+Rails also answers requests for an unknown `Host` with "Blocked hosts" in development, and its default list only covers localhost. Add your site domain in `config/environments/development.rb`, for example `config.hosts << ".test"`. `lerd init` and the web wizard remind you when they detect a Rails app.
+
+Lerd doesn't manage Ruby itself. The dev server runs with a fixed PATH rather than your login shell's, so for a Ruby project lerd adds the mise, rbenv and asdf shim directories it finds in your home, and the shims pick the version the way they do in your shell: rbenv reads `.ruby-version`, while mise and asdf want `.tool-versions` (or `mise.toml`), since mise ignores `.ruby-version` unless you enable idiomatic version files. A system Ruby in `/usr/bin` works as is. If you'd rather not install Ruby on the host, use a [custom container](custom-containers.md): the starter Containerfile `lerd init` writes for a Rack app installs your gems and runs rackup on the chosen port.
+
 ## Lifecycle
 
 The dev server is the site's main process, not a togglable worker. Its health drives the site's running indicator, and its lifecycle follows the site:

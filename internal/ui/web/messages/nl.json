@@ -854,6 +854,7 @@
   "siteWizard_version": "Versie",
   "siteWizard_versionLatest": "Nieuwste",
   "siteWizard_vitePitfall": "Vite blokkeert doorgestuurde verzoeken op hun Host-header. Zet het domein van de site in server.allowedHosts in vite.config en voeg --host toe aan het commando, anders mislukken verzoeken via de proxy.",
+  "siteWizard_railsPitfall": "Rails blokkeert geproxyde verzoeken op basis van hun Host-header. Voeg het sitedomein toe aan config.hosts in config/environments/development.rb, anders mislukken verzoeken via de proxy.",
   "siteWizard_workers": "Workers",
   "siteWizard_workersHint": "Starten automatisch zodra de site gekoppeld wordt",
   "sites_appLogs_all": "Alle",

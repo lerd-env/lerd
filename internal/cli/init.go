@@ -686,6 +686,14 @@ func runHostProxyWizard(cwd string, defaults *config.ProjectConfig, gcfg *config
 		fmt.Println("all interfaces, otherwise the proxy can't reach it.")
 	}
 
+	// Rails answers unknown Host headers with "Blocked hosts" in development,
+	// and its default list covers localhost only, not the site's domain.
+	if isRailsApp(cwd) {
+		fmt.Println("\nNote: Rails blocks proxied requests by their Host header. Add your site")
+		fmt.Println("domain to config.hosts in config/environments/development.rb, or requests")
+		fmt.Println("through the lerd proxy fail with \"Blocked hosts\".")
+	}
+
 	return &config.ProjectConfig{
 		Secured:     persistedSecured(secured, httpsAvailable, defaults.Secured),
 		Services:    buildProjectServices(selectedServices, defaults),
@@ -892,6 +900,14 @@ type projectRuntime struct {
 // First match wins on detection. Node's manifests mirror isNodeProject so the
 // two agree on what a Node project is.
 var knownRuntimes = []projectRuntime{
+	// Rack leads because a Rails app with jsbundling also has a package.json.
+	// rackup ignores PORT/HOST, so the command reads them through a shell.
+	{
+		label:      "Rack",
+		manifests:  []string{"config.ru"},
+		devCommand: `sh -c 'exec bundle exec rackup --host "$HOST" --port "$PORT"'`,
+		container:  "FROM ruby:3.3-slim\nRUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*\nCMD [\"sh\", \"-c\", \"bundle install && exec bundle exec rackup --host 0.0.0.0 --port {port}\"]\n",
+	},
 	{
 		label:      "Node",
 		manifests:  []string{"package.json", ".nvmrc", ".node-version"},
@@ -950,7 +966,15 @@ func defaultDevCommand(cwd string) string {
 	if rt.label == "Python" && fileExists(filepath.Join(cwd, "manage.py")) {
 		return "python manage.py runserver"
 	}
+	// Rails reads PORT itself but binds from BINDING, not HOST.
+	if isRailsApp(cwd) {
+		return `sh -c 'exec bin/rails server --binding "$HOST"'`
+	}
 	return rt.devCommand
+}
+
+func isRailsApp(cwd string) bool {
+	return fileExists(filepath.Join(cwd, "config.ru")) && fileExists(filepath.Join(cwd, "bin", "rails"))
 }
 
 // starterContainerfile returns a commented starter Containerfile.lerd tailored
@@ -964,7 +988,7 @@ func starterContainerfile(cwd string, port int) string {
 		"# come from the mounted project. Your app must listen on port %d.\n\n", port)
 	body := "FROM alpine:latest\n# RUN <install the global dev tools your app needs>\n# CMD [\"<command that starts your server>\"]\n"
 	if rt, ok := detectProjectRuntime(cwd); ok {
-		body = rt.container
+		body = strings.ReplaceAll(rt.container, "{port}", strconv.Itoa(port))
 	}
 	return header + body
 }

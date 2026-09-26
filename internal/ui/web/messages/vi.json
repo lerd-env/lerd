@@ -854,6 +854,7 @@
   "siteWizard_version": "Phiên bản",
   "siteWizard_versionLatest": "Mới nhất",
   "siteWizard_vitePitfall": "Vite chặn các yêu cầu qua proxy dựa trên header Host. Thêm tên miền của site vào server.allowedHosts trong vite.config và thêm --host vào lệnh, nếu không các yêu cầu qua proxy sẽ lỗi.",
+  "siteWizard_railsPitfall": "Rails chặn các yêu cầu qua proxy theo header Host. Hãy thêm tên miền của trang vào config.hosts trong config/environments/development.rb, nếu không các yêu cầu qua proxy sẽ thất bại.",
   "siteWizard_workers": "Worker",
   "siteWizard_workersHint": "Tự khởi động khi site được liên kết",
   "sites_appLogs_all": "Tất cả",

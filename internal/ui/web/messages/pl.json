@@ -854,6 +854,7 @@
   "siteWizard_version": "Wersja",
   "siteWizard_versionLatest": "Najnowsza",
   "siteWizard_vitePitfall": "Vite blokuje żądania z proxy na podstawie nagłówka Host. Dodaj domenę witryny do server.allowedHosts w vite.config, a do polecenia --host, inaczej żądania przez proxy będą kończyć się błędem.",
+  "siteWizard_railsPitfall": "Rails blokuje żądania przez proxy na podstawie nagłówka Host. Dodaj domenę strony do config.hosts w config/environments/development.rb, inaczej żądania przez proxy nie przejdą.",
   "siteWizard_workers": "Workery",
   "siteWizard_workersHint": "Uruchamiane automatycznie przy podłączaniu witryny",
   "sites_appLogs_all": "Wszystkie",
