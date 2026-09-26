@@ -313,6 +313,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/profiler/clear", withCORS(handleProfilerClear))
 	mux.HandleFunc("/_spx/", handleSpxProxy)
 	mux.HandleFunc("/_svc/", handleDashProxy)
+	mux.HandleFunc("/api/dashboard/keepalive", withCORS(handleDashboardKeepAlive))
 	mux.HandleFunc("/api/queue/", withCORS(handleUnitLogStream))
 	mux.HandleFunc("/api/horizon/", withCORS(handleUnitLogStream))
 	mux.HandleFunc("/api/stripe/", withCORS(handleUnitLogStream))

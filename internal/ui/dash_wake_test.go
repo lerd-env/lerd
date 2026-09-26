@@ -78,7 +78,9 @@ func TestServeWhileWaking_assetsWaitForTheDashboardToAnswer(t *testing.T) {
 	s := stubDashWake(t, true)
 	results := make(chan bool, 3)
 	for range 3 {
-		go func() { results <- serveWhileWaking(httptest.NewRecorder(), dashRequest("script"), "mailpit", dashTarget) }()
+		go func() {
+			results <- serveWhileWaking(httptest.NewRecorder(), dashRequest("script"), "mailpit", dashTarget)
+		}()
 	}
 	select {
 	case <-results:
@@ -118,5 +120,25 @@ func waitFor(t *testing.T, ok func() bool) {
 			t.Fatal("condition never met")
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestDashboardKeepAlive_countsAsUseOfAKnownService(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	prev := serviceKeepAlivePing
+	t.Cleanup(func() { serviceKeepAlivePing = prev })
+	var pinged []string
+	serviceKeepAlivePing = func(k string) { pinged = append(pinged, k) }
+
+	for name, want := range map[string]int{"mailpit": http.StatusNoContent, "nothing-here": http.StatusNotFound} {
+		w := httptest.NewRecorder()
+		handleDashboardKeepAlive(w, httptest.NewRequest(http.MethodPost, "/api/dashboard/keepalive?name="+name, nil))
+		if w.Code != want {
+			t.Errorf("%s: %d, want %d", name, w.Code, want)
+		}
+	}
+	if len(pinged) != 1 || pinged[0] != "svc:mailpit" {
+		t.Fatalf("pinged %v, want only the known service", pinged)
 	}
 }

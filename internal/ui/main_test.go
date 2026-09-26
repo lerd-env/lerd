@@ -22,6 +22,7 @@ func TestMain(m *testing.M) {
 	emitDesktopNotification = func(desktopnotify.Request) (uint32, error) { return 0, nil }
 	// Nor may a proxied dashboard test ping the developer's own idle watcher.
 	dashPing = func(string) {}
+	serviceKeepAlivePing = func(string) {}
 	wakeHoldPing = func(string) {}
 	os.Exit(m.Run())
 }
