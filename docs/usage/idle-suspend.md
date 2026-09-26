@@ -60,7 +60,7 @@ A service also wakes when:
 
 `lerd start` leaves sleeping services asleep, as it does sleeping workers. `lerd status` and `lerd service list` show them as sleeping rather than stopped.
 
-A connection straight to a service's published host port, from a desktop database client for instance, reaches no part of lerd, so it cannot wake the service and does not keep it awake. [Pin the service](../reference/commands.md) (`lerd service pin <name>`) if you use it that way; a pinned service never sleeps, and neither does one used by a pinned site. Stopping a sleeping service yourself with `lerd service stop` keeps it stopped: idle-suspend only wakes what it put to sleep.
+A connection straight to a service's published host port, from a desktop database client for instance, reaches no part of lerd, so it cannot wake the service and does not keep it awake. The same holds for an app that reaches a service by its host port rather than its lerd name, such as a [host-proxy](host-proxy.md) dev server: list the service under `services:` in the site's `.lerd.yaml` so lerd counts the site as using it. [Pin the service](../reference/commands.md) (`lerd service pin <name>`) if you use it that way; a pinned service never sleeps, and neither does one used by a pinned site. Stopping a sleeping service yourself with `lerd service stop` keeps it stopped: idle-suspend only wakes what it put to sleep.
 
 ## Pinning a site
 
