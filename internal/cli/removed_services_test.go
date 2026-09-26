@@ -11,6 +11,8 @@ import (
 // The install pass restoring a site's inline service must leave it installed,
 // not as a unit with no definition that runs while lerd calls it not installed.
 func TestRestoreInlineService_savesTheDefinitionWithTheUnit(t *testing.T) {
+	// macOS writes a launchd plist under HOME alongside the unit.
+	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	prev := podman.DaemonReloadFn
