@@ -52,7 +52,7 @@ Stopping a database under a live app would turn the next request into a connecti
 A service also wakes when:
 
 - you run a console command, `composer` or `php` in the project, which already starts the services it needs;
-- you open its dashboard, from the dashboard, the TUI or a bookmarked `/_svc/<name>/` page. It starts along with the services it depends on or administers (adminer brings its databases), the dashboard shows a "waking up" page meanwhile, and that page reloads itself onto the dashboard once it answers;
+- you open its dashboard, from the dashboard, the TUI or a bookmarked `/_svc/<name>/` page. It starts along with the services it depends on or administers (adminer brings its databases), the dashboard shows a "waking up" page meanwhile, and that page reloads itself onto the dashboard once it answers. While the dashboard stays open in lerd it counts as in use, however long the page sits idle, so the service and what it needs stay up until you close it;
 - a request reaches its own domain, for a service that has one;
 - you run `lerd service start`, or turn the setting or idle-suspend off.
 

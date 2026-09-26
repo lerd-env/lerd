@@ -16,11 +16,13 @@ import (
 // The seams dashboard waking goes through, vars so tests stand in for the
 // watcher, the containers and the upstream.
 var (
-	dashPing     = activityping.Site
-	dashAsleep   = config.ServiceIsIdleSuspended
-	dashWake     = serviceops.WakeService
-	dashUpstream = func(u *url.URL) bool { return serviceops.DashboardAnswers(u.String()) }
-	dashWakeMax  = 60 * time.Second
+	dashPing = activityping.Site
+	// serviceKeepAlivePing is what an open dashboard's heartbeat goes through.
+	serviceKeepAlivePing = activityping.Site
+	dashAsleep           = config.ServiceIsIdleSuspended
+	dashWake             = serviceops.WakeService
+	dashUpstream         = func(u *url.URL) bool { return serviceops.DashboardAnswers(u.String()) }
+	dashWakeMax          = 60 * time.Second
 )
 
 // dashPingEvery bounds the activity pings: a dashboard page fires a burst of
@@ -108,4 +110,21 @@ func isPageLoad(r *http.Request) bool {
 		return strings.Contains(r.Header.Get("Accept"), "text/html")
 	}
 	return false
+}
+
+// handleDashboardKeepAlive is the heartbeat of an open dashboard: it counts as
+// use of the service, so idle-suspend never sleeps it, or what it needs, under
+// someone still looking at it, however long they leave the page idle.
+func handleDashboardKeepAlive(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	name := r.URL.Query().Get("name")
+	if !config.IsDefaultPreset(name) && !config.CustomServiceExists(name) {
+		http.NotFound(w, r)
+		return
+	}
+	serviceKeepAlivePing("svc:" + name)
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -240,3 +240,24 @@ describe('dashboard store', () => {
     expect(get(dashboardOpen)).toBeNull();
   });
 });
+
+describe('keepServiceAwake', () => {
+  it('pings at once and every interval until stopped', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { keepServiceAwake, KEEP_AWAKE_MS } = await import('./dashboard');
+
+    const stop = keepServiceAwake('mailpit');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/dashboard/keepalive?name=mailpit');
+    vi.advanceTimersByTime(KEEP_AWAKE_MS * 2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    stop();
+    vi.advanceTimersByTime(KEEP_AWAKE_MS * 3);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+});
