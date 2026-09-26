@@ -78,9 +78,9 @@
     if (active === 'ports' && !hasPorts) active = fallback;
   });
 
-  // A stopped service has no container to stream from, so the tab would only
-  // keep reconnecting. A worker keeps its journal, worth reading while it is
-  // down.
+  // A stopped or sleeping service has no container to stream from, so the tab
+  // would only keep reconnecting. A worker keeps its journal, worth reading
+  // while it is down.
   const logsIdle = $derived(!isServiceWorker(svc) && svc.status !== 'active');
 
   const logPath = $derived.by(() => {
@@ -112,7 +112,9 @@
     <ServiceEntitiesTab {svc} />
   {:else if active === 'logs'}
     {#if logsIdle}
-      <p class="p-3 sm:p-5 text-sm text-gray-400 dark:text-gray-500">{m.services_logsStopped()}</p>
+      <p class="p-3 sm:p-5 text-sm text-gray-400 dark:text-gray-500">
+        {svc.idle_suspended ? m.services_logsSleeping() : m.services_logsStopped()}
+      </p>
     {:else}
       {#key svc.name + ':' + logPath}
         <LogViewer path={logPath} highlight={logHighlight} />

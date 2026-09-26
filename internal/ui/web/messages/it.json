@@ -681,6 +681,7 @@
   "services_pinned": "Fissato",
   "services_sleeping": "In pausa",
   "services_logsStopped": "Non è in esecuzione, quindi non ci sono log da mostrare. Compaiono appena si avvia.",
+  "services_logsSleeping": "È in pausa, quindi non ci sono log da mostrare. Compaiono appena si risveglia.",
   "services_portConflictTitle": "Porta {ports} già in uso sull'host. Ferma il processo in conflitto o cambia la porta di lerd. Esegui `lerd doctor` per il comando di ricerca adatto al tuo SO.",
   "services_portPillTitle": "Attivo · raggiungibile su {addr} (clic per copiare)",
   "services_ports_applying": "Applicazione…",

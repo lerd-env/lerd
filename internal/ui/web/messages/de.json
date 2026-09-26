@@ -681,6 +681,7 @@
   "services_pinned": "Angeheftet",
   "services_sleeping": "Schläft",
   "services_logsStopped": "Läuft nicht, daher gibt es keine Logs zu streamen. Sie erscheinen, sobald er startet.",
+  "services_logsSleeping": "Schläft, daher gibt es keine Logs zu streamen. Sie erscheinen, sobald er aufwacht.",
   "services_portConflictTitle": "Port {ports} ist auf dem Host bereits belegt. Beende den kollidierenden Prozess oder ändere den lerd-Port. Führe `lerd doctor` aus für den passenden Suchbefehl auf deinem System.",
   "services_portPillTitle": "Aktiv · erreichbar unter {addr} (zum Kopieren klicken)",
   "services_ports_applying": "Wird angewendet…",

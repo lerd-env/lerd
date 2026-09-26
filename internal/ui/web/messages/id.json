@@ -681,6 +681,7 @@
   "services_pinned": "Disematkan",
   "services_sleeping": "Tidur",
   "services_logsStopped": "Tidak berjalan, jadi tidak ada log untuk ditampilkan. Log muncul setelah layanan dimulai.",
+  "services_logsSleeping": "Sedang tidur, jadi tidak ada log untuk ditampilkan. Log muncul setelah layanan bangun.",
   "services_portConflictTitle": "Port {ports} sudah dipakai di host. Hentikan proses yang bentrok atau ubah port lerd. Jalankan `lerd doctor` untuk perintah pencarian di sistem Anda.",
   "services_portPillTitle": "Aktif · dapat diakses di {addr} (klik untuk menyalin)",
   "services_ports_applying": "Menerapkan…",

@@ -681,6 +681,7 @@
   "services_pinned": "Pinned",
   "services_sleeping": "Sleeping",
   "services_logsStopped": "Not running, so there are no logs to stream. They appear once it starts.",
+  "services_logsSleeping": "Asleep, so there are no logs to stream. They appear once it wakes.",
   "services_portConflictTitle": "Port {ports} already in use on the host. Stop the conflicting process or change the lerd port. Run `lerd doctor` for the find command on your OS.",
   "services_portPillTitle": "Active · reachable at {addr} (click to copy)",
   "services_ports_applying": "Applying…",

@@ -681,6 +681,7 @@
   "services_pinned": "Fixado",
   "services_sleeping": "Em repouso",
   "services_logsStopped": "Não está em execução, por isso não há registos a mostrar. Aparecem assim que arrancar.",
+  "services_logsSleeping": "Está em repouso, por isso não há registos a mostrar. Aparecem assim que acordar.",
   "services_portConflictTitle": "A porta {ports} já está em uso no host. Pare o processo em conflito ou altere a porta do lerd. Execute `lerd doctor` para o comando de busca no seu sistema.",
   "services_portPillTitle": "Ativo · acessível em {addr} (clique para copiar)",
   "services_ports_applying": "Aplicando…",

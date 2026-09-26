@@ -681,6 +681,7 @@
   "services_pinned": "Sabitlendi",
   "services_sleeping": "Uykuda",
   "services_logsStopped": "Çalışmıyor, bu yüzden gösterilecek log yok. Başladığında görünür.",
+  "services_logsSleeping": "Uykuda, bu yüzden gösterilecek log yok. Uyandığında görünür.",
   "services_portConflictTitle": "{ports} portu host'ta zaten kullanımda. Çakışan süreci durdurun veya lerd portunu değiştirin. İşletim sisteminize göre find komutu için `lerd doctor` çalıştırın.",
   "services_portPillTitle": "Etkin · {addr} üzerinden erişilebilir (kopyalamak için tıklayın)",
   "services_ports_applying": "Uygulanıyor…",

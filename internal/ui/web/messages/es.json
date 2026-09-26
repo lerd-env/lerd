@@ -681,6 +681,7 @@
   "services_pinned": "Fijado",
   "services_sleeping": "En reposo",
   "services_logsStopped": "No está en marcha, así que no hay registros que transmitir. Aparecen en cuanto arranque.",
+  "services_logsSleeping": "Está en reposo, así que no hay registros que transmitir. Aparecen en cuanto despierte.",
   "services_portConflictTitle": "El puerto {ports} ya está en uso en el host. Detén el proceso en conflicto o cambia el puerto de lerd. Ejecuta `lerd doctor` para el comando de búsqueda en tu sistema.",
   "services_portPillTitle": "Activo · accesible en {addr} (haz clic para copiar)",
   "services_ports_applying": "Aplicando…",

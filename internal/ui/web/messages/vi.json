@@ -681,6 +681,7 @@
   "services_pinned": "Đã ghim",
   "services_sleeping": "Đang ngủ",
   "services_logsStopped": "Không chạy nên không có log để hiển thị. Log sẽ xuất hiện khi khởi động.",
+  "services_logsSleeping": "Đang ngủ nên không có log để hiển thị. Log sẽ xuất hiện khi thức dậy.",
   "services_portConflictTitle": "Cổng {ports} đã được dùng trên host. Dừng tiến trình xung đột hoặc đổi cổng lerd. Chạy `lerd doctor` để biết lệnh tìm trên hệ điều hành của bạn.",
   "services_portPillTitle": "Đang hoạt động · truy cập tại {addr} (nhấp để sao chép)",
   "services_ports_applying": "Đang áp dụng…",
