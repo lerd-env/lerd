@@ -123,6 +123,17 @@ describe('diffServicesEvents', () => {
     ]);
   });
 
+  it('says a service idle-suspend stopped went to sleep, and woke up when it returns', () => {
+    const up = service('mysql', { status: 'active' });
+    const asleep = service('mysql', { status: 'inactive', idle_suspended: true });
+    expect(diffServicesEvents(new Map([['mysql', up]]), [asleep])).toEqual([
+      { kind: 'service_slept', subject: 'mysql' }
+    ]);
+    expect(diffServicesEvents(new Map([['mysql', asleep]]), [up])).toEqual([
+      { kind: 'service_woke', subject: 'mysql' }
+    ]);
+  });
+
   it('logs one stop, not one per state the unit passes through', () => {
     const prev = new Map([['soketi', service('soketi', { status: 'deactivating' })]]);
     expect(diffServicesEvents(prev, [service('soketi', { status: 'inactive' })])).toEqual([]);

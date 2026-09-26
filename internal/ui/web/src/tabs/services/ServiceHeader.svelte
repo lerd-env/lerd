@@ -13,6 +13,7 @@
     type Service,
     services as allServices,
     serviceLabel,
+    serviceOpenable,
     detailLabel,
     isServiceWorker,
     parentSiteDomain,
@@ -77,6 +78,7 @@
   const parent = $derived(isWorker ? parentSiteDomain(svc) : null);
   const siteDomains = $derived(!isWorker && svc.site_domains ? svc.site_domains : []);
   const active = $derived(svc.status === 'active');
+  const openable = $derived(serviceOpenable(svc));
   // When active and a host port is exposed, the status pill shows the port (a
   // moved port reads at a glance) and copies 127.0.0.1:<port> on click; otherwise
   // it falls back to the status word.
@@ -95,7 +97,7 @@
       /* clipboard unavailable; nothing to recover */
     }
   }
-  const pillLabel = $derived(exposedPort ? String(exposedPort) : svc.status);
+  const pillLabel = $derived(exposedPort ? String(exposedPort) : svc.idle_suspended ? m.services_sleeping() : svc.status);
   const pillTitle = $derived(
     exposedPort
       ? portCopied
@@ -247,7 +249,7 @@
         ? { id: a.id, tone: a.tone, icon: a.icon, disabled: true, label: `${a.label} · ${m.services_hostOnly()}`, title: m.services_hostOnly() }
         : a;
 
-    if (active && admin) {
+    if (openable && admin) {
       const adminLabel = m.services_openAdmin({ name: serviceLabel(admin.name) });
       rest.push(openAct({
         id: 'admin',
@@ -257,7 +259,7 @@
         title: adminLabel,
         onclick: openAdmin
       }));
-    } else if (active && svc.dashboard) {
+    } else if (openable && svc.dashboard) {
       rest.push(openAct({
         id: 'dashboard',
         icon: icons.external,
@@ -388,7 +390,7 @@
           <span class="text-xs font-normal tabular-nums text-gray-500 dark:text-gray-400">{svc.version}</span>
         {/if}
         <StatusPill
-          tone={active ? 'ok' : 'muted'}
+          tone={active ? 'ok' : svc.idle_suspended ? 'asleep' : 'muted'}
           label={pillLabel}
           title={pillTitle}
           onclick={exposedPort ? copyExposedAddr : undefined}

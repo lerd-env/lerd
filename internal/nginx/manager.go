@@ -875,6 +875,13 @@ func GenerateWorktreeHostProxyVhostFor(domain, path, parentDomain string, upstre
 // plain sites a single 80 server.
 func landingVhostConf(site config.Site, pausedDir, htmlFile string) string {
 	serverNames := serverNamesWithWildcards(site.Domains)
+	location := fmt.Sprintf(`    location / {
+        try_files /%s =503;
+        default_type text/html;
+    }`, htmlFile)
+	if htmlFile == "waking.html" {
+		location = wakeHoldLocations()
+	}
 	if site.Secured {
 		return fmt.Sprintf(`server {
     listen 80;
@@ -890,24 +897,50 @@ server {
     ssl_certificate /etc/nginx/certs/%s.crt;
     ssl_certificate_key /etc/nginx/certs/%s.key;
     root %s;
-    location / {
-        try_files /%s =503;
-        default_type text/html;
-    }
+%s
 }
-`, serverNames, serverNames, site.PrimaryDomain(), site.PrimaryDomain(), nginxQuote(pausedDir), htmlFile)
+`, serverNames, serverNames, site.PrimaryDomain(), site.PrimaryDomain(), nginxQuote(pausedDir), location)
 	}
 	return fmt.Sprintf(`server {
     listen 80;
     listen [::]:80;
     server_name %s;
     root %s;
-    location / {
-        try_files /%s =503;
-        default_type text/html;
-    }
+%s
 }
-`, serverNames, nginxQuote(pausedDir), htmlFile)
+`, serverNames, nginxQuote(pausedDir), location)
+}
+
+// WakeHoldPath is the lerd-ui endpoint a waking vhost hands each request to.
+const WakeHoldPath = "/_lerd/wake"
+
+// wakeHoldLocations holds a request to a sleeping site in lerd-ui until the
+// site is back, then lerd-ui redirects it to itself, so the client lands on the
+// app in the time the wake takes instead of polling a waking page. The body is
+// dropped because the client resends it after the 307; any failure (lerd-ui
+// down, a remote caller refused, a slow wake) falls back to the static page.
+func wakeHoldLocations() string {
+	upstream := "http://host.containers.internal:7073" + WakeHoldPath
+	if runtime.GOOS != "darwin" {
+		upstream = "http://unix:" + config.UISocketPath() + ":" + WakeHoldPath
+	}
+	return fmt.Sprintf(`    location / {
+        # Held requests are not the app's; the hold reports the activity itself.
+        access_log off;
+        proxy_pass %s;
+        proxy_method GET;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header X-Lerd-Wake-Host $host;
+        proxy_set_header X-Lerd-Wake-Uri $request_uri;
+        proxy_read_timeout 90s;
+        proxy_intercept_errors on;
+        error_page 403 404 500 502 503 504 = @waking;
+    }
+    location @waking {
+        try_files /waking.html =503;
+        default_type text/html;
+    }`, upstream)
 }
 
 // writeLandingVhost writes site's static-page vhost (serving htmlFile) to
@@ -1134,6 +1167,23 @@ var (
 // classified after the fact rather than pre-checked, so the common path costs
 // no extra inspect and a genuine podman failure is never mistaken for a
 // stopped container.
+// reloadedMarker is touched after every successful reload, so another process
+// can tell whether nginx has picked up a vhost written before it.
+func reloadedMarker() string { return filepath.Join(config.RunDir(), "nginx-reloaded") }
+
+func markReloaded() {
+	if err := os.MkdirAll(config.RunDir(), 0755); err == nil {
+		_ = os.WriteFile(reloadedMarker(), nil, 0644)
+	}
+}
+
+// ServesVhostWrittenAt reports whether nginx has reloaded since a vhost file
+// was last written at mod, i.e. whether it is serving that file yet.
+func ServesVhostWrittenAt(mod time.Time) bool {
+	st, err := os.Stat(reloadedMarker())
+	return err == nil && !st.ModTime().Before(mod)
+}
+
 func Reload() error {
 	return withConfigDiagnostics(reloadOnce())
 }
@@ -1141,6 +1191,7 @@ func Reload() error {
 func reloadOnce() error {
 	err := reloadExecFn()
 	if err == nil {
+		markReloaded()
 		return nil
 	}
 	if running, rerr := containerRunningFn("lerd-nginx"); rerr == nil && !running {

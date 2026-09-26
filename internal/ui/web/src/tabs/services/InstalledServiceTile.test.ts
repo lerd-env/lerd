@@ -42,6 +42,14 @@ describe('InstalledServiceTile', () => {
     expect(container.querySelector('.bg-emerald-500')).toBeTruthy();
   });
 
+  it('reads sleeping rather than stopped when idle-suspend stopped it', () => {
+    const { getByText, queryByText } = render(InstalledServiceTile, {
+      props: { svc: svc({ idle_suspended: true }) }
+    });
+    expect(getByText('Sleeping')).toBeTruthy();
+    expect(queryByText('Stopped')).toBeNull();
+  });
+
   it('shows version and site count when present', () => {
     const { getByText } = render(InstalledServiceTile, {
       props: { svc: svc({ version: 'v8.4', site_count: 3 }) }

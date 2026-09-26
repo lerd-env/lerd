@@ -9,18 +9,27 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
-func TestGenerateWakingVhost_servesWakingPageNotProxy(t *testing.T) {
+func TestGenerateWakingVhost_holdsInLerdUIWithWakingPageFallback(t *testing.T) {
 	confD := setupConfD(t)
-	site := config.Site{Name: "rr", Domains: []string{"rr.test"}, Path: "/srv/rr"}
+	site := config.Site{Name: "rr", Domains: []string{"rr.test"}, Path: "/srv/rr", HostPort: 5173}
 	if err := GenerateWakingVhost(site); err != nil {
 		t.Fatalf("GenerateWakingVhost: %v", err)
 	}
 	conf := readConf(t, filepath.Join(confD, "rr.test.conf"))
-	if !strings.Contains(conf, "try_files /waking.html =503") {
-		t.Errorf("waking vhost should serve waking.html, got:\n%s", conf)
+	for _, want := range []string{
+		WakeHoldPath + ";",
+		"proxy_method GET;",
+		"access_log off;",
+		"proxy_set_header X-Lerd-Wake-Uri $request_uri;",
+		"error_page 403 404 500 502 503 504 = @waking;",
+		"try_files /waking.html =503",
+	} {
+		if !strings.Contains(conf, want) {
+			t.Errorf("waking vhost lacks %q:\n%s", want, conf)
+		}
 	}
-	if strings.Contains(conf, "proxy_pass") {
-		t.Errorf("waking vhost must not proxy to the stopped dev server, got:\n%s", conf)
+	if strings.Count(conf, "proxy_pass ") != 1 || strings.Contains(conf, ":5173") {
+		t.Errorf("waking vhost must proxy only to the wake hold, never the stopped app:\n%s", conf)
 	}
 }
 
