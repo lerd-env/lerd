@@ -676,6 +676,7 @@
   "services_pin": "Sabitle",
   "services_pinTitle": "Sabitle, kullanılmadığında otomatik durdurma",
   "services_pinned": "Sabitlendi",
+  "services_logsStopped": "Çalışmıyor, bu yüzden gösterilecek log yok. Başladığında görünür.",
   "services_portConflictTitle": "{ports} portu host'ta zaten kullanımda. Çakışan süreci durdurun veya lerd portunu değiştirin. İşletim sisteminize göre find komutu için `lerd doctor` çalıştırın.",
   "services_portPillTitle": "Etkin · {addr} üzerinden erişilebilir (kopyalamak için tıklayın)",
   "services_ports_applying": "Uygulanıyor…",

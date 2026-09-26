@@ -676,6 +676,7 @@
   "services_pin": "ピン留め",
   "services_pinTitle": "ピン留めして、未使用時の自動停止を防ぐ",
   "services_pinned": "ピン留め済み",
+  "services_logsStopped": "実行されていないため、表示するログはありません。起動すると表示されます。",
   "services_portConflictTitle": "ポート {ports} はホスト上で既に使用中です。競合しているプロセスを停止するか、lerd のポートを変更してください。お使いの OS での検索コマンドは `lerd doctor` を実行してください。",
   "services_portPillTitle": "稼働中 · {addr} で接続可能（クリックでコピー）",
   "services_ports_applying": "適用中…",

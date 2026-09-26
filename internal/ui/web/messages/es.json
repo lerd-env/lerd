@@ -676,6 +676,7 @@
   "services_pin": "Fijar",
   "services_pinTitle": "Fijar, impedir auto-apagado cuando no se use",
   "services_pinned": "Fijado",
+  "services_logsStopped": "No está en marcha, así que no hay registros que transmitir. Aparecen en cuanto arranque.",
   "services_portConflictTitle": "El puerto {ports} ya está en uso en el host. Detén el proceso en conflicto o cambia el puerto de lerd. Ejecuta `lerd doctor` para el comando de búsqueda en tu sistema.",
   "services_portPillTitle": "Activo · accesible en {addr} (haz clic para copiar)",
   "services_ports_applying": "Aplicando…",
