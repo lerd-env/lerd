@@ -112,6 +112,9 @@ func RunPHPCaptureEnv(cwd string, args []string, extraEnv []string) (int, error)
 // framework supports, since the empty parent directory would otherwise resolve
 // to the machine default and break composer's platform check.
 func RunPHPVersionCaptureEnv(cwd, version string, args []string, extraEnv []string) (int, error) {
+	// Before any branch: the host and native paths reach the same services.
+	ensureServicesForCwd(cwd)
+
 	// Some console commands cannot work in the container at all, and the
 	// framework says which. Checked before anything starts a container for them.
 	if code, took, err := runDeclaredHostCommand(cwd, args, extraEnv); took {
@@ -153,7 +156,6 @@ func RunPHPVersionCaptureEnv(cwd, version string, args []string, extraEnv []stri
 	}
 
 	podman.EnsurePathMounted(cwd, version)
-	ensureServicesForCwd(cwd)
 
 	// PHP runs the first non-option operand as its script. When that script is an
 	// absolute path the container can't read (e.g. /tmp/ide-phpinfo.php written by

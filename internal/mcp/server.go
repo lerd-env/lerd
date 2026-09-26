@@ -312,6 +312,11 @@ func isKnownService(name string) bool { return config.IsDefaultPreset(name) }
 // never prompts: it starts an installed-but-stopped container, or returns a
 // tool-error body (install hint / start failure) for the caller to hand back to
 // the client. Returns nil when the container is already running or just started.
+// wakeSiteServicesMCP wakes what a project's code is about to reach: the
+// activity ping every call sends wakes it too, but in the background, and the
+// command would race it.
+var wakeSiteServicesMCP = serviceops.WakeSiteServices
+
 func ensureFPMStartedMCP(phpVersion, short, container string) map[string]any {
 	err := phpDet.StartFPM(phpVersion, container)
 	if err == nil {
@@ -354,6 +359,9 @@ func execArtisan(args map[string]any) (any, *rpcError) {
 	container := phpDet.FPMContainerForDir(projectPath, phpVersion)
 	if errBody := ensureFPMStartedMCP(phpVersion, short, container); errBody != nil {
 		return errBody, nil
+	}
+	if err := wakeSiteServicesMCP(projectPath); err != nil {
+		return toolErr(err.Error()), nil
 	}
 
 	// No -it flags — non-interactive, output captured to buffer.
@@ -933,6 +941,9 @@ func execComposer(args map[string]any) (any, *rpcError) {
 	if errBody := ensureFPMStartedMCP(phpVersion, short, container); errBody != nil {
 		return errBody, nil
 	}
+	if err := wakeSiteServicesMCP(projectPath); err != nil {
+		return toolErr(err.Error()), nil
+	}
 
 	cmdArgs := composerExecArgs(container, projectPath, agentenv.MCPInject(os.Environ()), composerArgs)
 
@@ -1010,6 +1021,9 @@ func execVendorRun(args map[string]any) (any, *rpcError) {
 	container := phpDet.FPMContainerForDir(projectPath, phpVersion)
 	if errBody := ensureFPMStartedMCP(phpVersion, short, container); errBody != nil {
 		return errBody, nil
+	}
+	if err := wakeSiteServicesMCP(projectPath); err != nil {
+		return toolErr(err.Error()), nil
 	}
 
 	cmdArgs := []string{"exec", "-w", projectPath}
@@ -3882,6 +3896,9 @@ func execSetup(args map[string]any) (any, *rpcError) {
 		if errBody := ensureFPMStartedMCP(phpVersion, strings.ReplaceAll(phpVersion, ".", ""), container); errBody != nil {
 			return errBody, nil
 		}
+	}
+	if err := wakeSiteServicesMCP(projectPath); err != nil {
+		return toolErr(err.Error()), nil
 	}
 
 	var out bytes.Buffer

@@ -50,6 +50,9 @@ func runConsole(_ *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Before any branch: the host and native paths reach the same services.
+	ensureServicesForCwd(cwd)
+
 	// `lerd artisan native:run` has to reach the same host binary `lerd php
 	// artisan native:run` does, so the console name is put back in front of the
 	// arguments and the declaration is matched on the command as typed.
@@ -89,7 +92,6 @@ func runConsole(_ *cobra.Command, args []string) error {
 	}
 
 	podman.EnsurePathMounted(cwd, version)
-	ensureServicesForCwd(cwd)
 
 	cmd := podman.Cmd(consoleCmdArgs(cwd, container, consoleCmd, term.IsTerminal(int(os.Stdin.Fd())), args)...)
 	cmd.Stdin = os.Stdin
