@@ -3,6 +3,7 @@
   import StatusPill from '$components/StatusPill.svelte';
   import Icon from '$components/Icon.svelte';
   import ButtonMenu, { type ButtonMenuAction } from '$components/ButtonMenu.svelte';
+  import { idleEnabled, idleServices } from '$stores/idle';
   import ServiceIcon from '$components/ServiceIcon.svelte';
   import SitesPopover from '$components/SitesPopover.svelte';
   import ParentSiteBadge from './ParentSiteBadge.svelte';
@@ -72,6 +73,19 @@
   }
 
   const isWorker = $derived(isServiceWorker(svc));
+  // With services sleeping when idle, pinning is what keeps one awake, so it
+  // earns a place in the button group instead of the dropdown.
+  const pinInGroup = $derived(!isWorker && $idleEnabled && $idleServices);
+  function pinAction(icon: Snippet): ButtonMenuAction {
+    return {
+      id: 'pin',
+      tone: svc.pinned ? 'warn' : undefined,
+      icon,
+      label: svc.pinned ? m.services_pinned() : m.services_pin(),
+      title: svc.pinned ? m.services_unpinTitle() : m.services_pinTitle(),
+      onclick: () => run(svc.pinned ? 'unpin' : 'pin')
+    };
+  }
   // A worker answers to one site, which reads better stated inline than folded
   // behind a dropdown of one; a service is used by however many, so those
   // collapse into the count control.
@@ -306,15 +320,8 @@
       });
     }
 
-    if (!isWorker) {
-      rest.push({
-        id: 'pin',
-        tone: svc.pinned ? 'warn' : 'secondary',
-        icon: icons.pin,
-        label: svc.pinned ? m.services_pinned() : m.services_pin(),
-        title: svc.pinned ? m.services_unpinTitle() : m.services_pinTitle(),
-        onclick: () => run(svc.pinned ? 'unpin' : 'pin')
-      });
+    if (!isWorker && !pinInGroup) {
+      rest.push({ ...pinAction(icons.pin), tone: svc.pinned ? 'warn' : 'secondary' });
     }
 
     if (!isWorker && !updating) {
@@ -525,6 +532,7 @@
           trash: trashIcon,
           checkUpdates: checkUpdatesIcon
         })}
+        inline={pinInGroup ? pinAction(pinIcon) : undefined}
         {busy}
       />
     </div>
