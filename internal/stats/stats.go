@@ -26,6 +26,8 @@ type ContainerStat struct {
 	MemBytes   int64   `json:"mem_bytes"`
 	MemLimit   int64   `json:"mem_limit_bytes"`
 	MemPercent float64 `json:"mem_percent"`
+	// Orphaned marks a service container with no installed service behind it.
+	Orphaned bool `json:"orphaned,omitempty"`
 }
 
 // Snapshot is the aggregated view returned by Read. Totals are summed

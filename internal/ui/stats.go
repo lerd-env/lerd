@@ -2,8 +2,10 @@ package ui
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/stats"
 )
 
@@ -17,5 +19,22 @@ const statsClientPollInterval = 5 * time.Second
 // to the web UI stays stable while the parsing logic lives in one place.
 func handleStats(w http.ResponseWriter, _ *http.Request) {
 	hidden, _ := streamingHiddenNow()
-	writeJSON(w, stats.WithoutSites(stats.Cached(stats.CacheTTL), hidden))
+	writeJSON(w, markOrphans(stats.WithoutSites(stats.Cached(stats.CacheTTL), hidden), statsOrphaned))
+}
+
+// statsOrphaned is the seam markOrphans asks through.
+var statsOrphaned = serviceops.ServiceOrphaned
+
+// markOrphans flags the service containers nothing installed stands behind, so
+// the dashboard can offer to remove them. It copies the rows: the snapshot is
+// the shared cached one.
+func markOrphans(snap stats.Snapshot, orphaned func(string) bool) stats.Snapshot {
+	rows := make([]stats.ContainerStat, len(snap.Containers))
+	for i, c := range snap.Containers {
+		name, ok := strings.CutPrefix(c.Name, "lerd-")
+		c.Orphaned = ok && orphaned(name)
+		rows[i] = c
+	}
+	snap.Containers = rows
+	return snap
 }

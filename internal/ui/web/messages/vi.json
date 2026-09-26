@@ -134,6 +134,8 @@
   "dashboard_resources_cpu": "CPU",
   "dashboard_resources_loading": "Đang đọc số liệu container…",
   "dashboard_resources_memory": "Bộ nhớ",
+  "dashboard_resources_orphaned": "mồ côi",
+  "dashboard_resources_orphanedHint": "Không có dịch vụ đã cài nào sở hữu container này. Gỡ bỏ sẽ dừng và xóa nó.",
   "dashboard_resources_ofHost": "trên",
   "dashboard_resources_title": "Tài nguyên",
   "dashboard_resources_top": "Tiêu thụ nhiều nhất",

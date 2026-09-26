@@ -680,6 +680,9 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 						continue
 					}
 					seenSvc[svc.Name] = true
+					if config.ServiceIsRemoved(svc.Name) {
+						continue // removed on purpose; a site listing it does not undo that
+					}
 					// Diff the quadlet so the safety net restarts a running
 					// custom service whose content changed this run, e.g. a
 					// family/tuning service gaining the new tuning Volume= mount
@@ -689,7 +692,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 					path := filepath.Join(config.QuadletDir(), "lerd-"+svc.Name+".container")
 					before, _ := os.ReadFile(path)
 					if svc.Custom != nil {
-						ensureCustomServiceQuadlet(installedServiceDefinition(svc.Name, svc.Custom)) //nolint:errcheck
+						restoreInlineService(svc.Name, svc.Custom) //nolint:errcheck
 					} else {
 						ensureServiceQuadlet(svc.Name) //nolint:errcheck
 					}

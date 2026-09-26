@@ -63,6 +63,17 @@ func ServiceInstalled(name string) bool {
 	return config.CustomServiceExists(name)
 }
 
+// ServiceOrphaned reports whether a lerd-managed service unit exists with no
+// installed service behind it, e.g. one an older install restored from a site's
+// .lerd.yaml without its definition. Such a unit may run, but nothing manages it.
+func ServiceOrphaned(name string) bool {
+	if name == "" || ServiceInstalled(name) {
+		return false
+	}
+	data, err := os.ReadFile(filepath.Join(config.QuadletDir(), "lerd-"+name+".container"))
+	return err == nil && strings.Contains(string(data), podman.CustomServiceQuadletMarker)
+}
+
 // UnitInstalledFn reports whether the platform container unit is installed.
 // Defaults to the .container check; the CLI overrides it with the platform-aware
 // services.Mgr.ContainerUnitInstalled (launchd plist on macOS) for reconcile.
@@ -498,6 +509,8 @@ func resolvePresetForInstall(name, version string) (*config.CustomService, error
 // the quadlet, and regenerates family consumers. Run only after any required
 // image pull has succeeded.
 func registerPreset(svc *config.CustomService) error {
+	// Installing on purpose undoes a removal.
+	_ = config.SetServiceRemoved(svc.Name, false)
 	// A canonical built-in is a removed default preset being reinstalled: recreate
 	// its default quadlet instead of persisting a custom-service YAML that would
 	// collide with the built-in of the same name.
@@ -1101,6 +1114,10 @@ func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 // helper.
 func EnsureServiceRunning(name string) error {
 	unit := "lerd-" + name
+	// A site still naming a service the user removed must not bring it back.
+	if config.ServiceIsRemoved(name) {
+		return fmt.Errorf("%s was removed with `lerd service remove`; install it again to use it", name)
+	}
 	status, _ := podman.UnitStatus(unit)
 	if status == "active" {
 		if err := waitReadyFn(name, 30*time.Second); err != nil {

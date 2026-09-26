@@ -134,6 +134,8 @@
   "dashboard_resources_cpu": "CPU",
   "dashboard_resources_loading": "读取容器统计中…",
   "dashboard_resources_memory": "内存",
+  "dashboard_resources_orphaned": "孤立",
+  "dashboard_resources_orphanedHint": "没有已安装的服务拥有此容器。移除会停止并删除它。",
   "dashboard_resources_ofHost": "/",
   "dashboard_resources_title": "资源",
   "dashboard_resources_top": "占用最高",
