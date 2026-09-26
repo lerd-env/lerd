@@ -85,3 +85,32 @@ func TestGenerateWakingVhost_forwardsTheRequestWhole(t *testing.T) {
 		}
 	}
 }
+
+// Whatever rewrites a site's vhost while a service it needs sleeps (install,
+// secure, a PHP switch) must keep it on the waking vhost, or the next request
+// reaches an app whose database is down.
+func TestGenerateVhost_keepsTheWakingVhostWhileAServiceSleeps(t *testing.T) {
+	confD := setupConfD(t)
+	prev := siteWaitsOnSleepingService
+	t.Cleanup(func() { siteWaitsOnSleepingService = prev })
+	siteWaitsOnSleepingService = func(name string) bool { return name == "shop" }
+
+	shop := config.Site{Name: "shop", Domains: []string{"shop.test"}, Path: "/srv/shop", Secured: true}
+	if err := GenerateSSLVhost(shop, "8.4"); err != nil {
+		t.Fatal(err)
+	}
+	if err := InstallSSLVhost("shop.test"); err != nil {
+		t.Fatal(err)
+	}
+	if conf := readConf(t, filepath.Join(confD, "shop.test.conf")); !strings.Contains(conf, WakeHoldPath) {
+		t.Fatalf("a sleeping site's vhost was rewritten to the real one:\n%s", conf)
+	}
+
+	blog := config.Site{Name: "blog", Domains: []string{"blog.test"}, Path: "/srv/blog"}
+	if err := GenerateVhost(blog, "8.4"); err != nil {
+		t.Fatal(err)
+	}
+	if conf := readConf(t, filepath.Join(confD, "blog.test.conf")); strings.Contains(conf, WakeHoldPath) {
+		t.Fatal("a site with nothing asleep got the waking vhost")
+	}
+}

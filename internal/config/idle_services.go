@@ -76,3 +76,17 @@ func loadSleptAt() map[string]int64 {
 	}
 	return m
 }
+
+// SiteWaitsOnSleepingService reports whether any service the site uses is held
+// asleep by idle-suspend, so whatever writes its vhost keeps it on the waking
+// one: the real vhost would send requests to an app whose database is down.
+func SiteWaitsOnSleepingService(siteName string) bool {
+	for _, svc := range IdleSuspendedServices() {
+		for _, s := range SitesUsingService(svc) {
+			if s.Name == siteName {
+				return true
+			}
+		}
+	}
+	return false
+}

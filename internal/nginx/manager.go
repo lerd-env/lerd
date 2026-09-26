@@ -537,7 +537,7 @@ func GenerateVhost(site config.Site, phpVersion string) error {
 	if err != nil {
 		return err
 	}
-	return writeSiteConf(site.PrimaryDomain()+".conf", rendered)
+	return writeSiteConf(site.PrimaryDomain()+".conf", keepWaking(site, rendered))
 }
 
 // GenerateSSLVhost renders the SSL vhost template and writes it to conf.d.
@@ -546,7 +546,21 @@ func GenerateSSLVhost(site config.Site, phpVersion string) error {
 	if err != nil {
 		return err
 	}
-	return writeSiteConf(site.PrimaryDomain()+"-ssl.conf", rendered)
+	return writeSiteConf(site.PrimaryDomain()+"-ssl.conf", keepWaking(site, rendered))
+}
+
+// siteWaitsOnSleepingService is the seam keepWaking asks through.
+var siteWaitsOnSleepingService = config.SiteWaitsOnSleepingService
+
+// keepWaking returns the waking vhost instead of the real one while a service
+// the site needs is asleep. Every path that rewrites a site's vhost (install,
+// secure, a PHP switch) goes through here, and handing back the real vhost
+// then would send the next request to an app whose database is down.
+func keepWaking(site config.Site, rendered []byte) []byte {
+	if !siteWaitsOnSleepingService(site.Name) {
+		return rendered
+	}
+	return []byte(landingVhostConf(site, config.PausedDir(), "waking.html"))
 }
 
 // InstallSSLVhost moves the SSL vhost every Generate*SSLVhost writes onto the
