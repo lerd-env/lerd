@@ -24,7 +24,7 @@
     betaUpdates,
     toggleBetaUpdates
   } from '$stores/autostart';
-  import { idleEnabled, idleTimeoutMinutes, loadIdle, saveIdle } from '$stores/idle';
+  import { idleEnabled, idleTimeoutMinutes, idleServices, loadIdle, saveIdle } from '$stores/idle';
   import { setStreamingEnabled } from '$stores/workspaces';
   import Toggle from '$components/Toggle.svelte';
   import DetailButton from '$components/DetailButton.svelte';
@@ -87,6 +87,15 @@
       idleBusy = false;
     }
   }
+  async function onToggleIdleServices() {
+    idleBusy = true;
+    try {
+      await saveIdle($idleEnabled, $idleTimeoutMinutes, !$idleServices);
+    } finally {
+      idleBusy = false;
+    }
+  }
+
   async function onSaveIdleTimeout() {
     const v = Math.max(1, Math.floor(Number(idleMinutesInput) || 0));
     if (v === $idleTimeoutMinutes) return;
@@ -393,6 +402,27 @@
           </div>
         {:else}
           <span class="text-xs text-gray-500 dark:text-gray-400">{idleMinutesInput} {m.system_idle_minutes()}</span>
+        {/if}
+      </div>
+      <div class="flex items-center justify-between gap-4 mt-3">
+        <div>
+          <p class="text-xs text-gray-700 dark:text-gray-300">{m.system_idle_services()}</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_idle_servicesHint()}</p>
+        </div>
+        {#if $accessMode.localControl}
+          <Toggle
+            on={$idleServices}
+            loading={idleBusy}
+            disabled={!$idleEnabled}
+            onclick={onToggleIdleServices}
+            title={m.system_idle_services()}
+          />
+        {:else}
+          <StatusPill
+            size="sm"
+            tone={$idleServices ? 'ok' : 'muted'}
+            label={$idleServices ? m.common_enabled() : m.common_disabled()}
+          />
         {/if}
       </div>
     </SettingsCard>

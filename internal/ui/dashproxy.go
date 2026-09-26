@@ -526,6 +526,9 @@ func handleDashProxy(w http.ResponseWriter, r *http.Request) {
 	if config.DashboardProxyAtOwnPath(svc) {
 		target = &url.URL{Scheme: target.Scheme, Host: target.Host}
 	}
+	if !serveWhileWaking(w, r, name, target) {
+		return
+	}
 	dashProxyFor(name, target, dashProxyTweaksFor(svc)).ServeHTTP(w, r)
 }
 
@@ -619,5 +622,8 @@ func serveDashMount(w http.ResponseWriter, r *http.Request, svc *config.CustomSe
 	tw := dashProxyTweaksFor(svc)
 	tw.stripPrefix = false
 	tw.mount = mount
+	if !serveWhileWaking(w, r, svc.Name, origin) {
+		return
+	}
 	dashProxyFor(svc.Name, origin, tw).ServeHTTP(w, r)
 }

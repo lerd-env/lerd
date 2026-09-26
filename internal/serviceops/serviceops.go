@@ -1232,6 +1232,9 @@ func stopWithDependents(name string, seen map[string]bool) error {
 	return firstErr
 }
 
+// DependentsOf is dependentsOf for callers outside the package.
+func DependentsOf(name string) []string { return dependentsOf(name) }
+
 // dependentsOf returns installed custom services for which name can satisfy
 // some depends_on entry (literal, family, or env_role), whether or not it is
 // the current ResolveDependency pick.

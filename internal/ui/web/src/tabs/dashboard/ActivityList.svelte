@@ -27,6 +27,8 @@
     service_removed: 'gray',
     service_active: 'green',
     service_inactive: 'red',
+    service_slept: 'sky',
+    service_woke: 'green',
     service_update: 'amber',
     service_version: 'violet',
     worker_failed: 'red',
@@ -52,6 +54,8 @@
       case 'service_removed': return m.activity_service_removed({ subject: e.subject });
       case 'service_active': return m.activity_service_active({ subject: e.subject });
       case 'service_inactive': return m.activity_service_inactive({ subject: e.subject });
+      case 'service_slept': return m.activity_service_slept({ subject: e.subject });
+      case 'service_woke': return m.activity_service_woke({ subject: e.subject });
       case 'service_update': return m.activity_service_update({ subject: e.subject, version: v || '?' });
       case 'service_version': return m.activity_service_version({ subject: e.subject, version: v });
       case 'worker_failed': return m.activity_worker_failed({ worker: w, subject: e.subject });

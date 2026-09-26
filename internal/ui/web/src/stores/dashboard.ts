@@ -1,5 +1,5 @@
 import { writable, derived, get } from 'svelte/store';
-import { services, serviceAction, type Service } from './services';
+import { services, serviceAction, serviceOpenable, type Service } from './services';
 import { adminServiceFor } from './presetSuggestions';
 import { entities } from './entities';
 import { DEFAULT_DOCS_ROUTE, parseDocsHash } from './docs';
@@ -219,9 +219,9 @@ export function closeDashboard() {
   location.hash = fallbackHash();
 }
 
-// Services eligible for an iframe dashboard entry (active + has dashboard + not external-only).
+// Services eligible for an iframe dashboard entry (running or asleep + has dashboard + not external-only).
 export const dashboardServices = derived(services, ($s) =>
-  $s.filter((x) => x.status === 'active' && x.dashboard && !x.dashboard_external)
+  $s.filter((x) => serviceOpenable(x) && x.dashboard && !x.dashboard_external)
 );
 
 function refFromHash(): DashboardRef | null {

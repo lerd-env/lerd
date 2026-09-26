@@ -15,6 +15,8 @@ export type ActivityKind =
   | 'service_removed'
   | 'service_active'
   | 'service_inactive'
+  | 'service_slept'
+  | 'service_woke'
   | 'service_update'
   | 'service_version'
   | 'worker_failed'
@@ -108,6 +110,11 @@ export function diffSitesEvents(prev: Map<string, Site> | null, current: Site[])
   return out;
 }
 
+function serviceChangeKind(isUp: boolean, old: Service, s: Service): ActivityKind {
+  if (isUp) return old.idle_suspended ? 'service_woke' : 'service_active';
+  return s.idle_suspended ? 'service_slept' : 'service_inactive';
+}
+
 export function diffServicesEvents(
   prev: Map<string, Service> | null,
   current: Service[]
@@ -127,11 +134,11 @@ export function diffServicesEvents(
       continue;
     }
     // Only a real up/down change counts: active -> deactivating -> inactive is
-    // one stop, not two.
+    // one stop, not two. One idle-suspend stopped or started reads as sleep.
     const wasUp = old.status === 'active';
     const isUp = s.status === 'active';
     if (wasUp !== isUp) {
-      out.push({ kind: isUp ? 'service_active' : 'service_inactive', subject: name });
+      out.push({ kind: serviceChangeKind(isUp, old, s), subject: name });
     }
     if (!old.update_available && s.update_available) {
       out.push({

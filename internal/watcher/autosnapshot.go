@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -31,6 +32,9 @@ var (
 		return status == "active"
 	}
 	autoSnapshotStampPathFn = defaultAutoSnapshotStampPath
+	autoSnapshotWhileAsleep = func(service string, fn func() error) error {
+		return idleEng.withServiceBriefly(service, fn)
+	}
 )
 
 // WatchAutoSnapshot periodically snapshots the database of every site the
@@ -69,24 +73,16 @@ func runAutoSnapshots(now time.Time) {
 	changed := false
 	sites := map[string]bool{}
 	took := 0
-	for _, t := range targets {
-		if now.Sub(stamps[t.Key()]) < every {
-			continue
-		}
-		// A stopped engine is left alone: starting containers behind the user's
-		// back to take a backup is a bigger surprise than a missed one, and the
-		// next tick picks it up once the engine is back.
-		if !autoSnapshotSupported(t.Service) || !autoSnapshotRunning(t.Service) {
-			continue
-		}
+	// snapshot dumps one target with its engine up, then stamps and prunes it.
+	// It reports failure only by not stamping, so the next tick retries instead
+	// of waiting a full schedule for a transient engine failure.
+	snapshot := func(t config.AutoSnapshotTarget) {
 		target := serviceops.SnapshotTarget{Service: t.Service, Family: t.Family, Database: t.Database}
 		meta := serviceops.SnapshotMeta{Site: t.Site, GitBranch: autoSnapshotBranch(t.Path), Auto: true}
 		snap, err := autoSnapshotCreate(target, autoSnapshotName, meta)
 		if err != nil {
-			// Don't stamp: the next tick retries instead of waiting a full
-			// schedule for a transient engine failure.
 			logger.Warn("automatic snapshot failed", "service", t.Service, "database", t.Database, "error", err)
-			continue
+			return
 		}
 		stamps[t.Key()] = now
 		changed = true
@@ -97,10 +93,44 @@ func runAutoSnapshots(now time.Time) {
 		removed, err := autoSnapshotPrune(t.Service, t.Database, policy)
 		if err != nil {
 			logger.Warn("pruning automatic snapshots failed", "service", t.Service, "database", t.Database, "error", err)
-			continue
+			return
 		}
 		if len(removed) > 0 {
 			logger.Info("automatic snapshots pruned", "service", t.Service, "database", t.Database, "removed", strings.Join(removed, ","))
+		}
+	}
+
+	asleep := map[string][]config.AutoSnapshotTarget{}
+	for _, t := range targets {
+		if now.Sub(stamps[t.Key()]) < every || !autoSnapshotSupported(t.Service) {
+			continue
+		}
+		switch {
+		case autoSnapshotRunning(t.Service):
+			snapshot(t)
+		case config.ServiceIsIdleSuspended(t.Service):
+			// Asleep since before its last snapshot: nothing can have changed.
+			// Otherwise it went to sleep with changes nothing has captured yet.
+			if sleptAt, ok := config.ServiceSleptAt(t.Service); ok && !sleptAt.After(stamps[t.Key()]) {
+				continue
+			}
+			asleep[t.Service] = append(asleep[t.Service], t)
+		default:
+			// A stopped engine is left alone: starting containers behind the
+			// user's back to take a backup is a bigger surprise than a missed
+			// one, and the next tick picks it up once the engine is back.
+		}
+	}
+	// One brief wake per sleeping engine covers every database on it.
+	for _, service := range sortedKeys(asleep) {
+		err := autoSnapshotWhileAsleep(service, func() error {
+			for _, t := range asleep[service] {
+				snapshot(t)
+			}
+			return nil
+		})
+		if err != nil {
+			logger.Warn("automatic snapshot could not wake its engine", "service", service, "error", err)
 		}
 	}
 	if changed {
@@ -174,4 +204,13 @@ func saveAutoSnapshotStamps(stamps map[string]time.Time) {
 		return
 	}
 	_ = os.WriteFile(autoSnapshotStampPathFn(), data, 0600)
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }

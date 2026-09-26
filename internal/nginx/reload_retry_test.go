@@ -195,3 +195,25 @@ func TestReloadWithRetry_WaitsForTheOldWorkers(t *testing.T) {
 		t.Errorf("returned after %d worker reads, before the old worker retired", reads)
 	}
 }
+
+func TestReload_marksWhenNginxHasReloaded(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	prev := reloadExecFn
+	t.Cleanup(func() { reloadExecFn = prev })
+	reloadExecFn = func() error { return errors.New("exit status 1") }
+	before := time.Now().Add(-time.Second)
+	_ = reloadOnce()
+	if ServesVhostWrittenAt(before) {
+		t.Fatal("a failed reload marked nginx as reloaded")
+	}
+	reloadExecFn = func() error { return nil }
+	if err := reloadOnce(); err != nil {
+		t.Fatal(err)
+	}
+	if !ServesVhostWrittenAt(before) {
+		t.Fatal("a successful reload left no mark")
+	}
+	if ServesVhostWrittenAt(time.Now().Add(time.Hour)) {
+		t.Fatal("reload counted for a vhost written after it")
+	}
+}

@@ -686,6 +686,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 	serviceUnits = append(serviceUnits, lifecycle.InstalledCustomContainerUnits()...)
 	serviceUnits = append(serviceUnits, "lerd-ui", "lerd-watcher")
 	serviceUnits = dropSkipped(serviceUnits, skip)
+	serviceUnits = dropIdleSuspendedServiceUnits(serviceUnits)
 
 	// Phase 2: worker units that depend on running containers.
 	workerUnits := append(lifecycle.RegisteredQueueUnits(), lifecycle.RegisteredStripeUnits()...)
@@ -735,7 +736,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 		return jobs
 	}
 
-	startedServiceUnits := lifecycle.InstalledServiceUnits()
+	startedServiceUnits := dropIdleSuspendedServiceUnits(lifecycle.InstalledServiceUnits())
 	serviceErr := RunParallel(makeJobs(serviceUnits))
 	// When the Podman Machine's container storage is left corrupt after an
 	// unclean host shutdown, every container start fails. Remount storage and
@@ -852,7 +853,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 // installed but are not yet running. Called from lerd install to bring back services
 // (mysql, redis, etc.) that were restored from .lerd.yaml.
 func startRestoredServices() {
-	units := lifecycle.InstalledServiceUnits()
+	units := dropIdleSuspendedServiceUnits(lifecycle.InstalledServiceUnits())
 	if len(units) == 0 {
 		return
 	}
@@ -1257,6 +1258,16 @@ func suspendedWorkerUnitSet() map[string]bool {
 // scheduled worker's timer is dropped too.
 func dropIdleSuspendedUnits(units []string) []string {
 	return filterSuspendedUnits(units, suspendedWorkerUnitSet())
+}
+
+// dropIdleSuspendedServiceUnits leaves the services idle-suspend put to sleep
+// out of a start list; the next request to a site using one wakes it.
+func dropIdleSuspendedServiceUnits(units []string) []string {
+	asleep := map[string]bool{}
+	for _, name := range config.IdleSuspendedServices() {
+		asleep["lerd-"+name] = true
+	}
+	return filterSuspendedUnits(units, asleep)
 }
 
 // filterSuspendedUnits is the pure filter behind dropIdleSuspendedUnits: it

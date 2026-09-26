@@ -29,6 +29,17 @@ describe('dashboard store', () => {
     open.mockRestore();
   });
 
+  it('keeps a sleeping service in the sidebar, since opening it wakes it', async () => {
+    const { services } = await import('./services');
+    const { dashboardServices } = await import('./dashboard');
+    const pma = { name: 'phpmyadmin', site_count: 0, dashboard: '/_svc/phpmyadmin/' };
+    services.set([
+      { ...pma, status: 'inactive', idle_suspended: true },
+      { ...pma, name: 'pgadmin', status: 'inactive' }
+    ]);
+    expect(get(dashboardServices).map((s) => s.name)).toEqual(['phpmyadmin']);
+  });
+
   it('user external dashboard still opens in a new tab and is not embedded', async () => {
     const { services } = await import('./services');
     const { openDashboard, dashboardOpen, dashboardServices } = await import('./dashboard');

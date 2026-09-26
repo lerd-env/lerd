@@ -1495,6 +1495,9 @@ func autoStopUnusedFPMs() {
 // serviceInactiveReason returns an extra note for an inactive service explaining
 // why it is stopped, if the reason is that no sites are using it.
 func serviceInactiveReason(name string) string {
+	if config.ServiceIsIdleSuspended(name) {
+		return " (sleeping, wakes on the next request)"
+	}
 	if config.CountSitesUsingService(name) == 0 {
 		return " (no sites using this service)"
 	}
