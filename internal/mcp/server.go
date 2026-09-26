@@ -811,11 +811,11 @@ After=network.target
 Type=simple
 Restart=on-failure
 RestartSec=5
-ExecStart=%s run --rm --replace --name %s --network host docker.io/stripe/stripe-cli:latest listen --api-key %s --forward-to %s --skip-verify
+ExecStart=%s run --rm --replace --name %s --network host %s listen --api-key %s --forward-to %s --skip-verify
 
 [Install]
 WantedBy=default.target
-`, siteName, podman.PodmanBin(), containerName, apiKey, forwardTo)
+`, siteName, podman.PodmanBin(), containerName, podman.StripeCLIImage, apiKey, forwardTo)
 
 	if err := lerdSystemd.WriteService(unitName, unit); err != nil {
 		return toolErr("writing service unit: " + err.Error()), nil
