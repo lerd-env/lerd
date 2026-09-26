@@ -126,11 +126,12 @@ export function diffServicesEvents(
       }
       continue;
     }
-    if (old.status !== s.status) {
-      out.push({
-        kind: s.status === 'active' ? 'service_active' : 'service_inactive',
-        subject: name
-      });
+    // Only a real up/down change counts: active -> deactivating -> inactive is
+    // one stop, not two.
+    const wasUp = old.status === 'active';
+    const isUp = s.status === 'active';
+    if (wasUp !== isUp) {
+      out.push({ kind: isUp ? 'service_active' : 'service_inactive', subject: name });
     }
     if (!old.update_available && s.update_available) {
       out.push({
