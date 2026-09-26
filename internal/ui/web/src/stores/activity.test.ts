@@ -123,6 +123,11 @@ describe('diffServicesEvents', () => {
     ]);
   });
 
+  it('logs one stop, not one per state the unit passes through', () => {
+    const prev = new Map([['soketi', service('soketi', { status: 'deactivating' })]]);
+    expect(diffServicesEvents(prev, [service('soketi', { status: 'inactive' })])).toEqual([]);
+  });
+
   it('emits service_update when update_available goes false → true', () => {
     const prev = new Map<string, Service>([
       ['mysql', service('mysql', { update_available: false })]

@@ -134,6 +134,8 @@
   "dashboard_resources_cpu": "CPU",
   "dashboard_resources_loading": "Membaca statistik kontainer…",
   "dashboard_resources_memory": "Memori",
+  "dashboard_resources_orphaned": "yatim",
+  "dashboard_resources_orphanedHint": "Tidak ada layanan terpasang yang memiliki kontainer ini. Menghapusnya akan menghentikan dan menghapusnya.",
   "dashboard_resources_ofHost": "dari",
   "dashboard_resources_title": "Sumber daya",
   "dashboard_resources_top": "Konsumen teratas",

@@ -200,6 +200,10 @@ func RemoveService(name string, opts RemoveOptions, emit func(PhaseEvent)) error
 		_ = config.RemoveStorePreset(preset)
 	}
 
+	// Remembered so a site whose .lerd.yaml still lists it cannot bring it back:
+	// install, link and every auto-start skip it until it is installed again.
+	_ = config.SetServiceRemoved(name, true)
+
 	emit(PhaseEvent{Phase: "regenerating_consumers"})
 	if family != "" && !opts.SkipFamilyRegen {
 		removeRegenerateFamilyFn(family)

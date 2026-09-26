@@ -134,6 +134,8 @@
   "dashboard_resources_cpu": "CPU",
   "dashboard_resources_loading": "Reading container stats…",
   "dashboard_resources_memory": "Memory",
+  "dashboard_resources_orphaned": "orphaned",
+  "dashboard_resources_orphanedHint": "No installed service owns this container. Removing it stops and deletes it.",
   "dashboard_resources_ofHost": "of",
   "dashboard_resources_title": "Resources",
   "dashboard_resources_top": "Top consumers",

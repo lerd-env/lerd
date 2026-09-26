@@ -134,6 +134,8 @@
   "dashboard_resources_cpu": "CPU",
   "dashboard_resources_loading": "Lecture des stats des conteneurs…",
   "dashboard_resources_memory": "Mémoire",
+  "dashboard_resources_orphaned": "orphelin",
+  "dashboard_resources_orphanedHint": "Aucun service installé ne possède ce conteneur. Le supprimer l'arrête et l'efface.",
   "dashboard_resources_ofHost": "sur",
   "dashboard_resources_title": "Ressources",
   "dashboard_resources_top": "Plus gros consommateurs",

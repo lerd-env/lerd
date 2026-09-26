@@ -134,6 +134,8 @@
   "dashboard_resources_cpu": "CPU",
   "dashboard_resources_loading": "Se citesc statisticile containerului…",
   "dashboard_resources_memory": "Memorie",
+  "dashboard_resources_orphaned": "orfan",
+  "dashboard_resources_orphanedHint": "Niciun serviciu instalat nu deține acest container. Eliminarea îl oprește și îl șterge.",
   "dashboard_resources_ofHost": "din",
   "dashboard_resources_title": "Resurse",
   "dashboard_resources_top": "Cei mai mari consumatori",

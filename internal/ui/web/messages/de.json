@@ -134,6 +134,8 @@
   "dashboard_resources_cpu": "CPU",
   "dashboard_resources_loading": "Container-Statistiken werden gelesen…",
   "dashboard_resources_memory": "Speicher",
+  "dashboard_resources_orphaned": "verwaist",
+  "dashboard_resources_orphanedHint": "Kein installierter Dienst gehört zu diesem Container. Entfernen stoppt und löscht ihn.",
   "dashboard_resources_ofHost": "von",
   "dashboard_resources_title": "Ressourcen",
   "dashboard_resources_top": "Größte Verbraucher",

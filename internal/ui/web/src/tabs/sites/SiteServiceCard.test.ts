@@ -1,4 +1,4 @@
-import { render } from '@testing-library/svelte';
+import { render, fireEvent } from '@testing-library/svelte';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import SiteServiceCard from './SiteServiceCard.svelte';
 import { services } from '$stores/services';
@@ -117,5 +117,13 @@ describe('SiteServiceCard', () => {
     services.set([{ name: 'mysql', status: 'inactive' }, phpmyadmin] as never);
     const { queryByLabelText } = render(SiteServiceCard, { props: { name: 'mysql' } });
     expect(queryByLabelText('Open phpMyAdmin')).toBeNull();
+  });
+
+  it('offers a + install action when the site lists a service that is not installed', async () => {
+    const { getByRole } = render(SiteServiceCard, { props: { name: 'phpmyadmin' } });
+    const btn = getByRole('button', { name: 'Install phpMyAdmin' });
+    expect(btn.querySelector('svg')).toBeTruthy();
+    await fireEvent.click(btn);
+    expect(openServiceInstallModal).toHaveBeenCalledWith('phpmyadmin');
   });
 });

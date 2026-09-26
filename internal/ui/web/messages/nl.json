@@ -134,6 +134,8 @@
   "dashboard_resources_cpu": "CPU",
   "dashboard_resources_loading": "Containerstatistieken lezen…",
   "dashboard_resources_memory": "Geheugen",
+  "dashboard_resources_orphaned": "wees",
+  "dashboard_resources_orphanedHint": "Geen geïnstalleerde service hoort bij deze container. Verwijderen stopt en wist hem.",
   "dashboard_resources_ofHost": "van",
   "dashboard_resources_title": "Resources",
   "dashboard_resources_top": "Grootste verbruikers",
