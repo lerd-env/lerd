@@ -123,4 +123,29 @@ describe('ServiceDatabasesTab engine loading', () => {
     const asked = fetchSpy.mock.calls.map((c) => String(c[0]));
     expect(asked.some((u) => u.includes('/api/databases/mysql'))).toBe(true);
   });
+
+  // A sleeping engine is woken by looking at it, not left behind a start hint,
+  // and nothing asks it for databases before it is up.
+  it('wakes a sleeping engine and waits for it instead of asking to start it', async () => {
+    const fetchSpy = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetchSpy);
+    const sleeping = { ...svc('inactive'), idle_suspended: true } as Service;
+    const { getByText, queryByText } = render(ServiceDatabasesTab, { props: { svc: sleeping } });
+    await Promise.resolve();
+    expect(getByText('Loading...')).toBeInTheDocument();
+    expect(queryByText('Start the engine to view its databases.')).toBeNull();
+    const asked = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(asked.some((u) => u.includes('/api/dashboard/keepalive?name=mysql'))).toBe(true);
+    expect(asked.some((u) => u.includes('/api/databases/'))).toBe(false);
+  });
+
+  it('waits for a woken engine to be ready, not just its unit to be up', async () => {
+    const fetchSpy = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetchSpy);
+    const waking = { ...svc('active'), idle_suspended: true } as Service;
+    render(ServiceDatabasesTab, { props: { svc: waking } });
+    await Promise.resolve();
+    const asked = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(asked.some((u) => u.includes('/api/databases/'))).toBe(false);
+  });
 });
