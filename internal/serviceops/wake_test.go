@@ -102,3 +102,41 @@ func TestWakeService_wakesTheSleepingEnginesAnAdminToolAdministers(t *testing.T)
 		t.Fatalf("AdminToolsFor(pg-16) = %v", got)
 	}
 }
+
+// Waking a service wakes what it finds through its env and idle-suspend put to
+// sleep: mailpit is no use scoring mail against a sleeping spamassassin.
+func TestWakeService_wakesWhatItDiscovers(t *testing.T) {
+	withServiceHome(t)
+	stubLifecycle(t)
+	if err := os.MkdirAll(config.QuadletDir(), 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, svc := range []*config.CustomService{
+		{Name: "catcher", Image: "docker.io/library/alpine:latest", DynamicEnv: map[string]string{"SPAM": "discover_first:spamassassin={host}:783"}},
+		{Name: "spamassassin", Image: "docker.io/library/alpine:latest", Family: "spamassassin"},
+	} {
+		if err := config.SaveCustomService(svc); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(config.QuadletDir(), "lerd-"+svc.Name+".container"), []byte("[Container]\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = config.SetServiceIdleSuspended("spamassassin", true)
+
+	var started []string
+	prevStart, prevWait := wakeStartUnit, waitReadyFn
+	t.Cleanup(func() { wakeStartUnit, waitReadyFn = prevStart, prevWait })
+	wakeStartUnit = func(unit string) error { started = append(started, unit); return nil }
+	waitReadyFn = func(string, time.Duration) error { return nil }
+
+	if err := WakeService("catcher"); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(started, []string{"lerd-spamassassin", "lerd-catcher"}) {
+		t.Fatalf("started %v", started)
+	}
+	if got := DiscoveringConsumers("spamassassin"); !reflect.DeepEqual(got, []string{"catcher"}) {
+		t.Fatalf("DiscoveringConsumers = %v", got)
+	}
+}

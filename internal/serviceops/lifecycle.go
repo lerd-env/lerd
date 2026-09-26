@@ -32,7 +32,7 @@ func StartService(name string) error {
 		if err := StartDependencies(svc); err != nil {
 			return err
 		}
-		for _, engine := range sleepingAdministered(svc) {
+		for _, engine := range sleepingBackers(svc) {
 			if err := WakeService(engine); err != nil {
 				feedback.Warn("could not wake %s for %s: %v", engine, name, err)
 			}
@@ -89,8 +89,9 @@ func wakeService(name string, seen map[string]bool) error {
 				}
 			}
 		}
-		// An admin tool is no use with the engines it administers asleep.
-		for _, engine := range sleepingAdministered(svc) {
+		// An admin tool is no use with its engines asleep, nor mailpit with the
+		// spamassassin it scores mail through.
+		for _, engine := range sleepingBackers(svc) {
 			if err := wakeService(engine, seen); err != nil {
 				return fmt.Errorf("waking %q for %q: %w", engine, name, err)
 			}
@@ -144,12 +145,54 @@ func AdminToolsFor(name string) []string {
 	return out
 }
 
-// sleepingAdministered is the part of AdministeredServices idle-suspend put to
-// sleep. A stopped or paused engine is the user's choice and stays down.
-func sleepingAdministered(tool *config.CustomService) []string {
+// DiscoveringConsumers returns the installed services that find name through
+// their dynamic_env (mailpit scoring mail with spamassassin, phpMyAdmin listing
+// every mysql), so what keeps them awake keeps name awake too.
+func DiscoveringConsumers(name string) []string {
+	family := ServiceFamily(name)
 	var out []string
-	for _, n := range AdministeredServices(tool) {
-		if config.ServiceIsIdleSuspended(n) {
+	for _, c := range dynamicEnvConsumers() {
+		if c.Name == name || !ServiceInstalled(c.Name) {
+			continue
+		}
+		for _, f := range consumerDiscoverFamilies(c) {
+			if f == name || (family != "" && f == family) {
+				out = append(out, c.Name)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// discoveredServices is DiscoveringConsumers the other way round: the installed
+// services svc finds through its dynamic_env.
+func discoveredServices(svc *config.CustomService) []string {
+	families := map[string]bool{}
+	for _, f := range consumerDiscoverFamilies(svc) {
+		families[f] = true
+	}
+	if len(families) == 0 {
+		return nil
+	}
+	var out []string
+	for _, n := range installedServiceNames() {
+		if n != svc.Name && (families[n] || families[ServiceFamily(n)]) {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// sleepingBackers is the part of what svc administers or discovers that
+// idle-suspend put to sleep. A stopped or paused one is the user's choice and
+// stays down.
+func sleepingBackers(svc *config.CustomService) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, n := range append(AdministeredServices(svc), discoveredServices(svc)...) {
+		if !seen[n] && config.ServiceIsIdleSuspended(n) {
+			seen[n] = true
 			out = append(out, n)
 		}
 	}
