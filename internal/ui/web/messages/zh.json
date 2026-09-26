@@ -150,7 +150,7 @@
   "dashboard_services_summary": "{running}/{total} 活动中",
   "dashboard_services_asleep": "{count}/{total} 已挂起",
   "dashboard_services_title": "服务",
-  "dashboard_services_updates": "{count} 个更新可用",
+  "dashboard_services_updates": "{count} 个更新",
   "dashboard_sites_failing": "失败",
   "dashboard_sites_frameworks": "框架",
   "dashboard_sites_link": "添加站点",

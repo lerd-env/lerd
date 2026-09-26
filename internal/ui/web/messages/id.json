@@ -150,7 +150,7 @@
   "dashboard_services_summary": "{running}/{total} aktif",
   "dashboard_services_asleep": "{count}/{total} ditangguhkan",
   "dashboard_services_title": "Layanan",
-  "dashboard_services_updates": "{count} pembaruan tersedia",
+  "dashboard_services_updates": "{count} pembaruan",
   "dashboard_sites_failing": "Gagal",
   "dashboard_sites_frameworks": "Framework",
   "dashboard_sites_link": "Tambah site",

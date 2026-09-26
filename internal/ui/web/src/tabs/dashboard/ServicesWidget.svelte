@@ -33,16 +33,19 @@
 <DashboardCard title={m.dashboard_services_title()} tone={updates > 0 ? 'warn' : 'default'}>
   {#snippet badge()}
     {#if $servicesLoaded}
-      <div class="flex items-center gap-1.5">
+      <!-- Three pills outgrow a narrow card, so they stay compact and wrap onto
+           a second row rather than squeezing their labels onto two lines. -->
+      <div class="flex flex-wrap items-center justify-end gap-1.5 min-w-0">
         <StatusPill
+          size="sm"
           tone={total === 0 ? 'muted' : awake === total ? 'ok' : awake > 0 ? 'warn' : 'error'}
           label={m.dashboard_services_summary({ running, total })}
         />
         {#if asleep > 0}
-          <StatusPill tone="asleep" label={m.dashboard_services_asleep({ count: asleep, total })} />
+          <StatusPill size="sm" tone="asleep" label={m.dashboard_services_asleep({ count: asleep, total })} />
         {/if}
         {#if updates > 0}
-          <StatusPill tone="warn" label={m.dashboard_services_updates({ count: updates })} />
+          <StatusPill size="sm" tone="warn" label={m.dashboard_services_updates({ count: updates })} />
         {/if}
       </div>
     {/if}

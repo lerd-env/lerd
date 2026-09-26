@@ -150,7 +150,7 @@
   "dashboard_services_summary": "{running}/{total} aktif",
   "dashboard_services_asleep": "{count}/{total} askıda",
   "dashboard_services_title": "Servisler",
-  "dashboard_services_updates": "{count} güncelleme mevcut",
+  "dashboard_services_updates": "{count} güncelleme",
   "dashboard_sites_failing": "Hatalı",
   "dashboard_sites_frameworks": "Framework'ler",
   "dashboard_sites_link": "Site ekle",

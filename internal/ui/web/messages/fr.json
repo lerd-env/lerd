@@ -150,7 +150,7 @@
   "dashboard_services_summary": "{running}/{total} actifs",
   "dashboard_services_asleep": "{count}/{total} suspendus",
   "dashboard_services_title": "Services",
-  "dashboard_services_updates": "{count} mise(s) à jour disponible(s)",
+  "dashboard_services_updates": "{count} mise(s) à jour",
   "dashboard_sites_failing": "En échec",
   "dashboard_sites_frameworks": "Frameworks",
   "dashboard_sites_link": "Ajouter un site",

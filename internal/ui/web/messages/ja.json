@@ -150,7 +150,7 @@
   "dashboard_services_summary": "{running}/{total} 稼働中",
   "dashboard_services_asleep": "{count}/{total} 休止中",
   "dashboard_services_title": "サービス",
-  "dashboard_services_updates": "更新が {count} 件あります",
+  "dashboard_services_updates": "更新 {count} 件",
   "dashboard_sites_failing": "失敗中",
   "dashboard_sites_frameworks": "フレームワーク",
   "dashboard_sites_link": "サイトを追加",

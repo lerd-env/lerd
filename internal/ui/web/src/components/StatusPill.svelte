@@ -39,7 +39,7 @@
   };
 
   const pillClass = $derived(
-    `inline-flex items-center gap-1.5 font-medium rounded-full ${sizeClass[size]} ${toneClass[tone]}`
+    `inline-flex items-center gap-1.5 whitespace-nowrap font-medium rounded-full ${sizeClass[size]} ${toneClass[tone]}`
   );
 </script>
 

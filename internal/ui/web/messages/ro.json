@@ -150,7 +150,7 @@
   "dashboard_services_summary": "{running}/{total} active",
   "dashboard_services_asleep": "{count}/{total} suspendate",
   "dashboard_services_title": "Servicii",
-  "dashboard_services_updates": "{count} actualizare(i) disponibile",
+  "dashboard_services_updates": "{count} actualizare(i)",
   "dashboard_sites_failing": "Cu probleme",
   "dashboard_sites_frameworks": "Framework-uri",
   "dashboard_sites_link": "Adaugă un site",

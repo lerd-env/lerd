@@ -100,7 +100,7 @@ describe('ServicesWidget', () => {
     services.set([svc({ update_available: true }), svc({ name: 'redis', status: 'inactive' })]);
     const { container, getByText, queryByText } = render(ServicesWidget);
     expect(getByText('1/2 active')).toBeTruthy();
-    expect(getByText('1 update(s) available')).toBeTruthy();
+    expect(getByText('1 update(s)')).toBeTruthy();
     expect(queryByText('↑')).toBeTruthy();
     expect(container.querySelector('.bg-yellow-50')).toBeNull();
   });
@@ -126,7 +126,7 @@ describe('ServicesWidget', () => {
   it('shows no update pill when everything is current', () => {
     services.set([svc()]);
     const { queryByText } = render(ServicesWidget);
-    expect(queryByText('0 update(s) available')).toBeNull();
+    expect(queryByText('0 update(s)')).toBeNull();
   });
 
   it('hides the add button without local control', () => {

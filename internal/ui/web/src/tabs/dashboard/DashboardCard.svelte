@@ -26,7 +26,7 @@
      instead, and min-h-0 lets it shrink with that row rather than overflow. -->
 <div class="flex flex-col min-h-[280px] max-h-[340px] xl:min-h-0 xl:max-h-none bg-white dark:bg-lerd-card border border-gray-100 dark:border-lerd-border rounded-xl overflow-hidden {accent[tone]}">
   <div class="shrink-0 flex items-center justify-between gap-3 px-3 py-2.5 border-b border-gray-100 dark:border-lerd-border">
-    <span class="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</span>
+    <span class="shrink-0 text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</span>
     {#if badge}{@render badge()}{/if}
   </div>
   <div class="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-2.5">

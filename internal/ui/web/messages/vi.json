@@ -150,7 +150,7 @@
   "dashboard_services_summary": "{running}/{total} đang hoạt động",
   "dashboard_services_asleep": "{count}/{total} tạm dừng",
   "dashboard_services_title": "Dịch vụ",
-  "dashboard_services_updates": "Có {count} bản cập nhật",
+  "dashboard_services_updates": "{count} bản cập nhật",
   "dashboard_sites_failing": "Đang lỗi",
   "dashboard_sites_frameworks": "Frameworks",
   "dashboard_sites_link": "Thêm site",
