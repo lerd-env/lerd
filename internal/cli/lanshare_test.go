@@ -114,6 +114,22 @@ func TestRewriteLANShareBody_downgradesAlreadyRewrittenHTTPS(t *testing.T) {
 	}
 }
 
+func TestRewriteLANShareBody_rewritesJSONEscapedURLs(t *testing.T) {
+	// Ziggy's route list and Inertia's page payload are json_encode output, which
+	// escapes slashes, so the plain-form passes never see these URLs.
+	in := []byte(`{"url":"https:\/\/192.168.1.42:9100","port":null}
+{"home":"https:\/\/laravel.test\/home","asset":"https:\/\/192.168.1.42:443\/build\/app.js"}`)
+
+	got := string(rewriteLANShareBody(in, "laravel.test", "192.168.1.42:9100", reachLAN))
+
+	want := `{"url":"http:\/\/192.168.1.42:9100","port":null}
+{"home":"http:\/\/192.168.1.42:9100\/home","asset":"http:\/\/192.168.1.42:9100\/build\/app.js"}`
+
+	if got != want {
+		t.Errorf("rewriteLANShareBody escaped:\nGOT:\n%s\nWANT:\n%s", got, want)
+	}
+}
+
 func TestRewriteLANShareBody_leavesUnrelatedURLsAlone(t *testing.T) {
 	in := []byte(`<img src="https://cdn.example.com/logo.png">
 <a href="https://other.test/foo">other</a>`)

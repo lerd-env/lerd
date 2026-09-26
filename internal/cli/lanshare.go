@@ -977,16 +977,22 @@ func PrintLANShareQR(rawURL string) {
 // through the share proxy's Vite prefix so LAN devices can reach them.
 func rewriteLANShareBody(body []byte, domain, lanHost string, reach shareReach) []byte {
 	scheme := reach.scheme()
-	body = bytes.ReplaceAll(body, []byte("https://"+domain), []byte(scheme+"://"+lanHost))
-	body = bytes.ReplaceAll(body, []byte("http://"+domain), []byte(scheme+"://"+lanHost))
+	// json_encode escapes slashes, so Ziggy routes and Inertia payloads carry
+	// every URL as https:\/\/host and each pass runs on that form too.
+	replace := func(from, to string) {
+		body = bytes.ReplaceAll(body, []byte(from), []byte(to))
+		body = bytes.ReplaceAll(body, []byte(escapeSlashes(from)), []byte(escapeSlashes(to)))
+	}
+	replace("https://"+domain, scheme+"://"+lanHost)
+	replace("http://"+domain, scheme+"://"+lanHost)
 	if reach == reachLAN {
-		body = bytes.ReplaceAll(body, []byte("https://"+lanHost), []byte("http://"+lanHost))
+		replace("https://"+lanHost, "http://"+lanHost)
 	}
 	if lanIP, _, err := net.SplitHostPort(lanHost); err == nil && lanIP != "" {
 		// Terminator class covers HTML/JS quotes, JSON terminators, plus
-		// `)` for CSS url(...) and `;` for CSS rules.
-		re := regexp.MustCompile(`https?://` + regexp.QuoteMeta(lanIP) + `(?::\d+)?([/"'<>?#;)\s])`)
-		body = re.ReplaceAll(body, []byte(scheme+"://"+lanHost+"$1"))
+		// `)` for CSS url(...), `;` for CSS rules and `\` for an escaped path.
+		re := regexp.MustCompile(`https?:(//|\\/\\/)` + regexp.QuoteMeta(lanIP) + `(?::\d+)?([/"'<>?#;)\s\\])`)
+		body = re.ReplaceAll(body, []byte(scheme+":${1}"+lanHost+"${2}"))
 	}
 	// Only a LAN audience can be pointed back at this machine's loopback ports;
 	// a public share must not advertise a route to them.
@@ -995,6 +1001,8 @@ func rewriteLANShareBody(body []byte, domain, lanHost string, reach shareReach) 
 	}
 	return body
 }
+
+func escapeSlashes(s string) string { return strings.ReplaceAll(s, "/", `\/`) }
 
 // loopbackViteURLRe matches http(s)://<loopback>:<port> URLs that leaked into
 // a response body. The first capture is the port, the second is the URL
