@@ -1,6 +1,8 @@
 package podman
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -75,5 +77,35 @@ func TestReadyFamilyRoutesVersionedNames(t *testing.T) {
 		if got := readyFamily(service); got != want {
 			t.Errorf("readyFamily(%q) = %q, want %q", service, got, want)
 		}
+	}
+}
+
+// rustfs accepts connections and answers /health before it can serve, so only
+// its readiness endpoint answering 200 counts as ready.
+func TestRustfsReady_waitsForTheReadinessEndpoint(t *testing.T) {
+	ready := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/minio/health/ready" {
+			w.WriteHeader(http.StatusOK) // /health and friends are already up
+			return
+		}
+		if !ready {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	addr := strings.TrimPrefix(srv.URL, "http://")
+
+	if rustfsReady(addr) {
+		t.Fatal("ready while the readiness endpoint answers 503")
+	}
+	ready = true
+	if !rustfsReady(addr) {
+		t.Fatal("not ready once the readiness endpoint answers 200")
+	}
+	if rustfsReady("") {
+		t.Fatal("ready with nothing to ask")
 	}
 }
