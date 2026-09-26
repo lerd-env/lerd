@@ -137,8 +137,8 @@ func (e *idleEngine) sleepingFor(key string) []string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	var out []string
-	for name, asleep := range e.sleeping {
-		if !asleep {
+	for name := range e.svcKeys {
+		if !e.asleepLocked(name) {
 			continue
 		}
 		for _, k := range e.svcKeys[name] {
@@ -251,11 +251,18 @@ func (e *idleEngine) asleepOf(names []string) []string {
 	defer e.mu.Unlock()
 	var out []string
 	for _, n := range names {
-		if e.sleeping[n] {
+		if e.asleepLocked(n) {
 			out = append(out, n)
 		}
 	}
 	return out
+}
+
+// asleepLocked counts a service still being put to sleep as asleep: a request
+// landing mid-stop must wake it once the stop is done, which a wake queued on
+// svcMu then does, rather than leave it down until the next tick. Needs e.mu.
+func (e *idleEngine) asleepLocked(name string) bool {
+	return e.sleeping[name] || e.inFlight[svcKey(name)]
 }
 
 // withServiceBriefly starts a sleeping service just long enough to run fn and

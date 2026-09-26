@@ -384,3 +384,49 @@ func TestServiceKeys_followConsumersDownTheChain(t *testing.T) {
 		t.Fatalf("calls = %v, want the site to wake both", got)
 	}
 }
+
+// A request landing while a service is still being put to sleep must wake it
+// the moment the stop is done, not a tick later, and the site's workers must
+// wait for it: resuming them first can hand the site back while its database
+// is still down.
+func TestOnActivity_wakesAServiceCaughtMidSuspend(t *testing.T) {
+	now := time.Now()
+	f := installFakeServices(t)
+	f.running["mysql"] = true
+	if err := config.AddSite(config.Site{Name: "shop", Path: "/srv/shop", Domains: []string{"shop.test"}, IdleSuspendedWorkers: []string{"queue"}}); err != nil {
+		t.Fatal(err)
+	}
+	f.users["mysql"] = []config.Site{{Name: "shop"}}
+
+	release := make(chan struct{})
+	suspendService = func(name string) ([]string, error) {
+		f.log("suspend " + name)
+		<-release // the stop is still running when the request arrives
+		_ = config.SetServiceIdleSuspended(name, true)
+		return []string{name}, nil
+	}
+
+	e := newIdleEngine(idleTracker(now, map[string]time.Duration{"shop": time.Hour, "svc:mysql": time.Hour}))
+	e.suspended["shop"] = true
+	e.tickServices(true, svcTimeout, now) // starts the suspend and blocks in it
+	waitUntil(t, func() bool { return len(f.callLog()) == 1 })
+
+	e.OnActivity("shop")
+	close(release)
+	e.wait()
+	want := []string{"suspend mysql", "wake mysql", "resume workers shop"}
+	if got := f.callLog(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("calls = %v, want %v", got, want)
+	}
+}
+
+func waitUntil(t *testing.T, ok func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for !ok() {
+		if time.Now().After(deadline) {
+			t.Fatal("condition never met")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
