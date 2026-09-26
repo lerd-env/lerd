@@ -703,6 +703,7 @@ Or specify inline with flags (--name and --image are required):
 			if err := config.SaveCustomService(svc); err != nil {
 				return fmt.Errorf("saving service config: %w", err)
 			}
+			_ = config.SetServiceRemoved(svc.Name, false)
 			if err := ensureCustomServiceQuadlet(svc); err != nil {
 				return fmt.Errorf("writing quadlet: %w", err)
 			}
@@ -1145,6 +1146,20 @@ func installedServiceDefinition(name string, inline *config.CustomService) *conf
 		return installed
 	}
 	return inline
+}
+
+// restoreInlineService brings back a site's inline service on install. A unit
+// written without its definition runs as an orphan the rest of lerd calls not
+// installed, so a service with no installed YAML gets the site's copy saved too.
+func restoreInlineService(name string, inline *config.CustomService) error {
+	def := installedServiceDefinition(name, inline)
+	if _, err := config.LoadCustomService(name); err != nil {
+		def.Name = name
+		if err := config.SaveCustomService(def); err != nil {
+			return err
+		}
+	}
+	return ensureCustomServiceQuadlet(def)
 }
 
 // newServiceExposeCmd returns the `service expose` command.

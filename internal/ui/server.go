@@ -2759,8 +2759,8 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Validate service name — built-in or custom
-	if !config.IsDefaultPreset(name) {
+	// Validate service name — built-in or custom, or an orphan being removed
+	if !config.IsDefaultPreset(name) && !(action == "remove" && serviceops.ServiceOrphaned(name)) {
 		if _, loadErr := config.LoadCustomService(name); loadErr != nil {
 			http.Error(w, "unknown service", http.StatusNotFound)
 			return

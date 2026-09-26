@@ -40,6 +40,7 @@ func StartService(name string) error {
 	}
 	_ = config.SetServicePaused(name, false)
 	_ = config.SetServiceManuallyStarted(name, true)
+	_ = config.SetServiceRemoved(name, false)
 
 	// Bring up admin UIs (and similar) that declare a depends_on this service
 	// can satisfy — family / env_role aware, not literal name only.

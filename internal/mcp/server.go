@@ -1496,6 +1496,7 @@ func execServiceAdd(args map[string]any) (any, *rpcError) {
 	if err := config.SaveCustomService(svc); err != nil {
 		return toolErr("saving service config: " + err.Error()), nil
 	}
+	_ = config.SetServiceRemoved(svc.Name, false)
 
 	if err := serviceops.EnsureCustomServiceQuadlet(svc); err != nil {
 		return toolErr("writing quadlet: " + err.Error()), nil

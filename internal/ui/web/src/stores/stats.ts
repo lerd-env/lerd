@@ -7,6 +7,8 @@ export interface ContainerStat {
   mem_bytes: number;
   mem_limit_bytes: number;
   mem_percent: number;
+  // A service container no installed service owns.
+  orphaned?: boolean;
 }
 
 export interface StatsResponse {

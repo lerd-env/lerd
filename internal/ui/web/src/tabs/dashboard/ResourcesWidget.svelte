@@ -2,10 +2,13 @@
   import { onMount, onDestroy } from 'svelte';
   import DashboardCard from './DashboardCard.svelte';
   import DetailButton from '$components/DetailButton.svelte';
+  import Icon from '$components/Icon.svelte';
   import CleanupModal from './CleanupModal.svelte';
   import UsageModal from './UsageModal.svelte';
   import { stats, statsLoaded, startStatsPolling, formatBytes } from '$stores/stats';
   import { disk, startDiskPolling, runCleanup } from '$stores/disk';
+  import { serviceAction } from '$stores/services';
+  import { accessMode } from '$stores/accessMode';
   import { m } from '../../paraglide/messages.js';
 
   let stop: (() => void) | null = null;
@@ -41,12 +44,26 @@
     }
   }
 
-  const rows = $derived($stats.containers);
+  // Orphans get their own list: they are not lerd's to count as running.
+  const rows = $derived($stats.containers.filter((c) => !c.orphaned));
+  const orphans = $derived($stats.containers.filter((c) => c.orphaned));
   const memPercentOfHost = $derived(
     $stats.host_mem_bytes > 0 ? ($stats.total_mem_bytes / $stats.host_mem_bytes) * 100 : 0
   );
   const cpuBarWidth = $derived(Math.min(100, $stats.total_cpu_percent));
   const memBarWidth = $derived(Math.min(100, memPercentOfHost));
+
+  // Removing an orphan goes through the normal service removal, which the
+  // server allows for a unit no installed service owns; its data is kept.
+  let removing = $state<string | null>(null);
+  async function removeOrphan(name: string) {
+    removing = name;
+    try {
+      await serviceAction(name, 'remove');
+    } finally {
+      removing = null;
+    }
+  }
 
   function shortName(n: string): string {
     return n.startsWith('lerd-') ? n.slice(5) : n;
@@ -139,6 +156,34 @@
             </div>
           {/each}
         </div>
+      </div>
+    {/if}
+
+    {#if orphans.length > 0}
+      <div class="pt-2 mt-2 border-t border-gray-100 dark:border-lerd-border space-y-1">
+        <div
+          class="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide"
+          title={m.dashboard_resources_orphanedHint()}
+        >{m.dashboard_resources_orphaned()}</div>
+        {#each orphans as c (c.name)}
+          <div class="flex items-center gap-2 text-xs">
+            <span class="flex-1 truncate text-gray-600 dark:text-gray-300" title={m.dashboard_resources_orphanedHint()}>{shortName(c.name)}</span>
+            <span class="shrink-0 font-mono tabular-nums text-gray-500 dark:text-gray-400 w-16 text-right">{formatBytes(c.mem_bytes)}</span>
+            <span class="shrink-0 font-mono tabular-nums text-gray-400 dark:text-gray-500 w-14 text-right">{c.cpu_percent.toFixed(2)}%</span>
+            {#if $accessMode.localControl}
+              <button
+                type="button"
+                class="shrink-0 flex items-center justify-center w-7 h-7 -my-1 rounded-md text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                title={m.dashboard_resources_orphanedHint()}
+                aria-label={m.common_remove() + ' ' + shortName(c.name)}
+                disabled={removing === shortName(c.name)}
+                onclick={() => removeOrphan(shortName(c.name))}
+              >
+                <Icon name="trash" class="w-4 h-4" />
+              </button>
+            {/if}
+          </div>
+        {/each}
       </div>
     {/if}
   {/if}

@@ -456,6 +456,10 @@ func linkApplyServices(cwd string, site config.Site, proj *config.ProjectConfig)
 		if svc.Name == "sqlite" {
 			continue
 		}
+		if config.ServiceIsRemoved(svc.Name) {
+			fmt.Printf("  Skipped service %s (removed; install it again to use it)\n", svc.Name)
+			continue
+		}
 		// A bare entry whose name is a bundled tool preset (e.g. phpmyadmin from a
 		// detected docker-compose, or an older .lerd.yaml written before this was
 		// normalised) has no Preset/Custom set; resolve it to its preset so it
