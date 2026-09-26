@@ -97,5 +97,13 @@ describe('ServiceDetail logs tab', () => {
     expect(getAllByTestId('child-stub')).toHaveLength(2);
     expect(getByText(/Not running, so there are no logs to stream/)).toBeInTheDocument();
   });
+
+  it('opens no stream for a sleeping service', () => {
+    const { getAllByTestId, getByText } = render(ServiceDetail, {
+      props: { svc: redis({ status: 'inactive', idle_suspended: true }) }
+    });
+    expect(getAllByTestId('child-stub')).toHaveLength(2);
+    expect(getByText(/Asleep, so there are no logs to stream/)).toBeInTheDocument();
+  });
 });
 
