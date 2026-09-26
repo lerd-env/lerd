@@ -47,8 +47,14 @@
   }
 </script>
 
-<ServiceCardShell compact>
-  <span class="flex min-w-0 flex-1 items-center gap-2.5" use:tooltip={why}>
+<ServiceCardShell compact suggested>
+  <!-- Faded until hovered, so a suggestion never reads as a service the site
+       already has; the actions stay at full strength to read as clickable. -->
+  <span
+    class="flex min-w-0 flex-1 items-center gap-2.5 opacity-60 group-hover:opacity-100 transition-opacity"
+    data-testid="suggested-identity"
+    use:tooltip={why}
+  >
     <ServiceIcon {name} compact />
     <span class="min-w-0 flex-1">
       <span class="block text-xs font-semibold text-gray-800 dark:text-gray-100 truncate">{serviceLabel(name)}</span>

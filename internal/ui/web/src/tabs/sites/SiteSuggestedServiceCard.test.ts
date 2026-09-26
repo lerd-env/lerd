@@ -37,4 +37,19 @@ describe('SiteSuggestedServiceCard', () => {
     await fireEvent.click(getByLabelText(/suggest/i));
     expect(apiFetch).toHaveBeenCalledWith('/api/sites/shop.test/service:dismiss?name=solr', { method: 'POST' });
   });
+
+  // A suggestion must not read as a service the site already has: the card is
+  // dashed and its label faded until hovered, while its actions stay clickable.
+  it('fades the suggestion but not its actions', () => {
+    const { container, getByTestId, getByLabelText } = render(SiteSuggestedServiceCard, {
+      suggestion: { name: 'solr', reason: 'Search backend' },
+      domain: 'shop.test'
+    });
+    expect(container.firstElementChild?.className).toContain('border-dashed');
+    const identity = getByTestId('suggested-identity').className;
+    expect(identity).toContain('opacity-60');
+    expect(identity).toContain('group-hover:opacity-100');
+    expect(getByLabelText('Add Solr to this site').className).not.toContain('opacity-60');
+  });
 });
+
