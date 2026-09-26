@@ -134,6 +134,8 @@
   "dashboard_resources_cpu": "CPU",
   "dashboard_resources_loading": "Konteyner istatistikleri okunuyor…",
   "dashboard_resources_memory": "Bellek",
+  "dashboard_resources_orphaned": "sahipsiz",
+  "dashboard_resources_orphanedHint": "Bu konteynerin sahibi olan kurulu bir servis yok. Kaldırmak onu durdurur ve siler.",
   "dashboard_resources_ofHost": "/",
   "dashboard_resources_title": "Kaynaklar",
   "dashboard_resources_top": "En çok tüketenler",

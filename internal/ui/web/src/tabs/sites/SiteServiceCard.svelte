@@ -72,5 +72,15 @@
     </button>
   {:else if installed}
     <ServiceDashboardButton {name} />
+  {:else}
+    <button
+      type="button"
+      onclick={() => openServiceInstallModal(name)}
+      use:tooltip={m.services_install_tooltip({ name: serviceLabel(name) })}
+      aria-label={m.services_install_tooltip({ name: serviceLabel(name) })}
+      class="shrink-0 flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+    >
+      <Icon name="plus" class="w-3.5 h-3.5" />
+    </button>
   {/if}
 </ServiceCardShell>

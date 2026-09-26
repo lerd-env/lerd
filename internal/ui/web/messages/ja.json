@@ -134,6 +134,8 @@
   "dashboard_resources_cpu": "CPU",
   "dashboard_resources_loading": "コンテナの統計を読み込み中…",
   "dashboard_resources_memory": "メモリ",
+  "dashboard_resources_orphaned": "孤立",
+  "dashboard_resources_orphanedHint": "このコンテナを管理するインストール済みサービスがありません。削除すると停止して削除します。",
   "dashboard_resources_ofHost": "／",
   "dashboard_resources_title": "リソース",
   "dashboard_resources_top": "使用量の多い順",

@@ -322,7 +322,37 @@ func realProtectedImages() (map[string]bool, error) {
 	for _, ref := range containerImages() {
 		add(ref)
 	}
+	for _, ref := range sleepingWorkerImages() {
+		add(ref)
+	}
 	return prot, nil
+}
+
+// sleepingWorkerImages is the seam tests override for sleepingWorkerImagesFrom.
+var sleepingWorkerImages = func() []string {
+	reg, err := config.LoadSites()
+	if err != nil {
+		return nil
+	}
+	return sleepingWorkerImagesFrom(reg.Sites)
+}
+
+// sleepingWorkerImagesFrom lists the images of workers idle-suspend stopped.
+// Their containers are gone while they sleep, so nothing else shows the image
+// in use, and reclaiming it would cost a pull on the next wake.
+func sleepingWorkerImagesFrom(sites []config.Site) []string {
+	for _, s := range sites {
+		asleep := append([]string(nil), s.IdleSuspendedWorkers...)
+		for _, ws := range s.WorktreeIdleSuspended {
+			asleep = append(asleep, ws...)
+		}
+		for _, w := range asleep {
+			if w == "stripe" {
+				return []string{podman.StripeCLIImage}
+			}
+		}
+	}
+	return nil
 }
 
 // containerImages is the seam tests override; it lists the image of every

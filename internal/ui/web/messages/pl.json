@@ -134,6 +134,8 @@
   "dashboard_resources_cpu": "CPU",
   "dashboard_resources_loading": "Odczytywanie statystyk kontenera…",
   "dashboard_resources_memory": "Pamięć",
+  "dashboard_resources_orphaned": "osierocony",
+  "dashboard_resources_orphanedHint": "Żadna zainstalowana usługa nie jest właścicielem tego kontenera. Usunięcie go zatrzyma i skasuje.",
   "dashboard_resources_ofHost": "z",
   "dashboard_resources_title": "Zasoby",
   "dashboard_resources_top": "Najbardziej obciążające",
