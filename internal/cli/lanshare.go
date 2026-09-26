@@ -568,6 +568,9 @@ func startLANShareProxy(domain string, port, httpPort, httpsPort int, secured bo
 			loc = strings.ReplaceAll(loc, "https://"+lanHost, scheme+"://"+lanHost)
 			resp.Header.Set("Location", loc)
 		}
+		if scheme == "http" {
+			dropSecureCookieFlag(resp.Header)
+		}
 
 		ct := resp.Header.Get("Content-Type")
 		enc := resp.Header.Get("Content-Encoding")
@@ -977,16 +980,22 @@ func PrintLANShareQR(rawURL string) {
 // through the share proxy's Vite prefix so LAN devices can reach them.
 func rewriteLANShareBody(body []byte, domain, lanHost string, reach shareReach) []byte {
 	scheme := reach.scheme()
-	body = bytes.ReplaceAll(body, []byte("https://"+domain), []byte(scheme+"://"+lanHost))
-	body = bytes.ReplaceAll(body, []byte("http://"+domain), []byte(scheme+"://"+lanHost))
+	// json_encode escapes slashes, so Ziggy routes and Inertia payloads carry
+	// every URL as https:\/\/host and each pass runs on that form too.
+	replace := func(from, to string) {
+		body = bytes.ReplaceAll(body, []byte(from), []byte(to))
+		body = bytes.ReplaceAll(body, []byte(escapeSlashes(from)), []byte(escapeSlashes(to)))
+	}
+	replace("https://"+domain, scheme+"://"+lanHost)
+	replace("http://"+domain, scheme+"://"+lanHost)
 	if reach == reachLAN {
-		body = bytes.ReplaceAll(body, []byte("https://"+lanHost), []byte("http://"+lanHost))
+		replace("https://"+lanHost, "http://"+lanHost)
 	}
 	if lanIP, _, err := net.SplitHostPort(lanHost); err == nil && lanIP != "" {
 		// Terminator class covers HTML/JS quotes, JSON terminators, plus
-		// `)` for CSS url(...) and `;` for CSS rules.
-		re := regexp.MustCompile(`https?://` + regexp.QuoteMeta(lanIP) + `(?::\d+)?([/"'<>?#;)\s])`)
-		body = re.ReplaceAll(body, []byte(scheme+"://"+lanHost+"$1"))
+		// `)` for CSS url(...), `;` for CSS rules and `\` for an escaped path.
+		re := regexp.MustCompile(`https?:(//|\\/\\/)` + regexp.QuoteMeta(lanIP) + `(?::\d+)?([/"'<>?#;)\s\\])`)
+		body = re.ReplaceAll(body, []byte(scheme+":${1}"+lanHost+"${2}"))
 	}
 	// Only a LAN audience can be pointed back at this machine's loopback ports;
 	// a public share must not advertise a route to them.
@@ -995,6 +1004,29 @@ func rewriteLANShareBody(body []byte, domain, lanHost string, reach shareReach) 
 	}
 	return body
 }
+
+// dropSecureCookieFlag strips secure from every cookie a secured site sets, since
+// a browser on a plain-HTTP share never stores one and each form post then fails
+// its CSRF check. SameSite=None is only accepted with secure, so it becomes Lax.
+func dropSecureCookieFlag(h http.Header) {
+	cookies := h.Values("Set-Cookie")
+	for i, c := range cookies {
+		attrs := strings.Split(c, ";")
+		kept := attrs[:1]
+		for _, a := range attrs[1:] {
+			switch strings.ToLower(strings.TrimSpace(a)) {
+			case "secure":
+				continue
+			case "samesite=none":
+				a = " SameSite=Lax"
+			}
+			kept = append(kept, a)
+		}
+		cookies[i] = strings.Join(kept, ";")
+	}
+}
+
+func escapeSlashes(s string) string { return strings.ReplaceAll(s, "/", `\/`) }
 
 // loopbackViteURLRe matches http(s)://<loopback>:<port> URLs that leaked into
 // a response body. The first capture is the port, the second is the URL

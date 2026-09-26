@@ -114,6 +114,22 @@ func TestRewriteLANShareBody_downgradesAlreadyRewrittenHTTPS(t *testing.T) {
 	}
 }
 
+func TestRewriteLANShareBody_rewritesJSONEscapedURLs(t *testing.T) {
+	// Ziggy's route list and Inertia's page payload are json_encode output, which
+	// escapes slashes, so the plain-form passes never see these URLs.
+	in := []byte(`{"url":"https:\/\/192.168.1.42:9100","port":null}
+{"home":"https:\/\/laravel.test\/home","asset":"https:\/\/192.168.1.42:443\/build\/app.js"}`)
+
+	got := string(rewriteLANShareBody(in, "laravel.test", "192.168.1.42:9100", reachLAN))
+
+	want := `{"url":"http:\/\/192.168.1.42:9100","port":null}
+{"home":"http:\/\/192.168.1.42:9100\/home","asset":"http:\/\/192.168.1.42:9100\/build\/app.js"}`
+
+	if got != want {
+		t.Errorf("rewriteLANShareBody escaped:\nGOT:\n%s\nWANT:\n%s", got, want)
+	}
+}
+
 func TestRewriteLANShareBody_leavesUnrelatedURLsAlone(t *testing.T) {
 	in := []byte(`<img src="https://cdn.example.com/logo.png">
 <a href="https://other.test/foo">other</a>`)
@@ -640,6 +656,36 @@ func mustStartLANShareProxy(t *testing.T, domain string, httpPort, httpsPort int
 	}
 	t.Fatalf("startLANShareProxy: %v", lastErr)
 	return nil, 0
+}
+
+func TestLANShareProxy_dropsSecureFlagFromCookies(t *testing.T) {
+	// A secured site marks its cookies secure, and a browser on the plain-HTTP
+	// share never stores them, so every form post fails its CSRF check. None
+	// without secure is refused outright, so it falls back to lax.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Set-Cookie", "session=abc; path=/; secure; httponly; samesite=lax")
+		w.Header().Add("Set-Cookie", "embed=xyz; Path=/; Secure; SameSite=None")
+		w.Header().Add("Set-Cookie", "securely=1; path=/")
+	}))
+	defer upstream.Close()
+
+	_, proxyPort := mustStartLANShareProxy(t, "laravel.test", mustExtractPort(t, upstream.URL), 0, false, reachLAN)
+
+	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/", proxyPort))
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	resp.Body.Close()
+
+	want := []string{
+		"session=abc; path=/; httponly; samesite=lax",
+		"embed=xyz; Path=/; SameSite=Lax",
+		"securely=1; path=/",
+	}
+	got := resp.Header.Values("Set-Cookie")
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("Set-Cookie:\nGOT:\n%s\nWANT:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
 }
 
 func TestLANShareProxy_rewritesHTTPSLocationRedirects(t *testing.T) {
