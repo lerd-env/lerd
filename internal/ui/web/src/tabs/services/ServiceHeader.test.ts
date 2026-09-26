@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/svelte';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { idleEnabled, idleServices } from '$stores/idle';
 import ServiceHeader from './ServiceHeader.svelte';
 import { sites } from '$stores/sites';
 import { serviceIcons } from '$stores/serviceIcons';
@@ -52,3 +53,32 @@ describe('ServiceHeader site links', () => {
     expect(screen.queryByLabelText(/sites$/)).not.toBeInTheDocument();
   });
 });
+
+describe('ServiceHeader pin', () => {
+  afterEach(() => {
+    idleEnabled.set(false);
+    idleServices.set(false);
+  });
+
+  it('keeps pin in the button group while services sleep when idle', () => {
+    idleEnabled.set(true);
+    idleServices.set(true);
+    const { getByTestId } = render(ServiceHeader, { props: { svc: service() } });
+    const pin = getByTestId('button-menu-inline-pin');
+    expect(pin.getAttribute('aria-label')).toBe('Pin, prevent auto-stop when unused');
+  });
+
+  it('leaves pin in the menu otherwise', () => {
+    idleEnabled.set(true);
+    const { queryByTestId } = render(ServiceHeader, { props: { svc: service() } });
+    expect(queryByTestId('button-menu-inline-pin')).toBeNull();
+  });
+
+  it('shows a pinned service as pinned in the group', () => {
+    idleEnabled.set(true);
+    idleServices.set(true);
+    const { getByTestId } = render(ServiceHeader, { props: { svc: service({ pinned: true }) } });
+    expect(getByTestId('button-menu-inline-pin').className).toMatch(/amber/);
+  });
+});
+
