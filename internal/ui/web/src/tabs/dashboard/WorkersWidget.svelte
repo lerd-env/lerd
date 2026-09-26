@@ -188,14 +188,14 @@
   {#snippet badge()}
     <div class="flex items-center gap-1.5">
       {#if failingCount > 0}
-        <StatusPill tone="error" label={m.dashboard_workers_failing({ count: failingCount })} />
+        <StatusPill size="sm" tone="error" label={m.dashboard_workers_failing({ count: failingCount })} />
       {:else if totalUnits > 0}
-        <StatusPill tone="ok" label={m.dashboard_workers_summary({ active: totalActive, total: totalUnits })} />
+        <StatusPill size="sm" tone="ok" label={m.dashboard_workers_summary({ active: totalActive, total: totalUnits })} />
         {#if asleepCount > 0}
-          <StatusPill tone="muted" label={m.dashboard_workers_asleep({ count: asleepCount, total: totalUnits })} />
+          <StatusPill size="sm" tone="asleep" label={m.dashboard_workers_asleep({ count: asleepCount, total: totalUnits })} />
         {/if}
       {:else}
-        <StatusPill tone="muted" label={m.dashboard_workers_none()} />
+        <StatusPill size="sm" tone="muted" label={m.dashboard_workers_none()} />
       {/if}
     </div>
   {/snippet}

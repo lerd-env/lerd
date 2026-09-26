@@ -30,6 +30,7 @@
         <!-- The empty state carries the toggle once streaming hides every site. -->
         {#if total > 0 || !$status.streaming_mode}<StreamingToggle />{/if}
         <StatusPill
+          size="sm"
           tone={failing > 0 ? 'error' : running > 0 ? 'ok' : 'muted'}
           label={m.dashboard_sites_summary({ running, total })}
         />
