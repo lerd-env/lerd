@@ -5,6 +5,7 @@
   import LoadFailedRow from '$components/LoadFailedRow.svelte';
   import { databases, engineLoads, loadEngine, createDatabase } from '$stores/databases';
   import type { Service } from '$stores/services';
+  import { keepServiceAwake } from '$stores/dashboard';
   import { pairDatabases } from '$lib/databasePairs';
   import DatabaseCard from '../databases/DatabaseCard.svelte';
   import { m } from '../../paraglide/messages.js';
@@ -20,14 +21,24 @@
   // effect one frame before the parent swaps the tab away, and the endpoint
   // answers 404 for a tab the viewer never asked for.
   $effect(() => {
-    if (!svc.is_database) return;
+    if (!svc.is_database || !up) return;
     void loadEngine(svc.name);
+  });
+
+  // Looking at an engine's databases counts as using it: a sleeping one wakes,
+  // and it stays up while the tab is open.
+  $effect(() => {
+    if (!svc.is_database) return;
+    return keepServiceAwake(svc.name);
   });
 
   const engine = $derived($databases.find((e) => e.service === svc.name));
   // The service's own status is the live one; the engine's arrives with the
   // fetch, so reading it before then would call a running engine stopped.
-  const stopped = $derived(svc.status !== 'active');
+  // A woken engine's unit is up before it takes connections; idle-suspend
+  // clears its flag only once it is ready, so wait for that too.
+  const up = $derived(svc.status === 'active' && !svc.idle_suspended);
+  const stopped = $derived(!up && !svc.idle_suspended);
   const load = $derived($engineLoads[svc.name]);
   const failed = $derived(!engine && Boolean(load?.failed));
   const pairs = $derived(pairDatabases(engine?.databases ?? []));
@@ -54,6 +65,8 @@
 <div class="p-3 sm:p-5 space-y-4 overflow-y-auto">
   {#if stopped}
     <p class="text-sm text-gray-400 dark:text-gray-500">{m.databases_startHint()}</p>
+  {:else if !up}
+    <LoadingRow />
   {:else if failed}
     <LoadFailedRow
       message={m.databases_loadFailed()}
