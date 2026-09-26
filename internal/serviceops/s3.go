@@ -75,6 +75,9 @@ func s3Endpoint(service string, s s3Settings) string {
 
 // s3ClientFor builds the client for a driven entity of the named service.
 func s3ClientFor(service string, env []string) (*minio.Client, error) {
+	if err := wakeForData(service); err != nil {
+		return nil, err
+	}
 	s, err := parseS3Env(env)
 	if err != nil {
 		return nil, err

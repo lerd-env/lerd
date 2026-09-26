@@ -52,6 +52,8 @@ Stopping a database under a live app would turn the next request into a connecti
 A service also wakes when:
 
 - you run a console command, `composer` or `php` in the project, which already starts the services it needs;
+- anything reaches into it: a database list, dump, import, snapshot or restore, creating or dropping a database (a worktree's isolated database included), a bucket operation, or a service client such as `mysql` or `redis-cli`, whether from the CLI, the MCP tools, the TUI or the dashboard;
+- an MCP tool runs the project's code (artisan, composer, a vendor binary), which waits for the site's services before it starts;
 - you open its dashboard, from the dashboard, the TUI or a bookmarked `/_svc/<name>/` page. It starts along with the services it depends on or administers (adminer brings its databases), the dashboard shows a "waking up" page meanwhile, and that page reloads itself onto the dashboard once it answers. While the dashboard stays open in lerd it counts as in use, however long the page sits idle, so the service and what it needs stay up until you close it;
 - a request reaches its own domain, for a service that has one;
 - you run `lerd service start`, or turn the setting or idle-suspend off.

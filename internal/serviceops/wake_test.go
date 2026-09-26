@@ -140,3 +140,53 @@ func TestWakeService_wakesWhatItDiscovers(t *testing.T) {
 		t.Fatalf("DiscoveringConsumers = %v", got)
 	}
 }
+
+// Anything reaching into a service (a database list, a dump, a bucket) wakes it
+// first when idle-suspend put it to sleep, and leaves one the user stopped alone.
+func TestWakeForData_wakesOnlyASleepingService(t *testing.T) {
+	withServiceHome(t)
+	var woke []string
+	prevWake, prevRun := dataWake, config.ServiceRunning
+	t.Cleanup(func() { dataWake, config.ServiceRunning = prevWake, prevRun })
+	dataWake = func(n string) error { woke = append(woke, n); return nil }
+	config.ServiceRunning = func(string) bool { return false }
+
+	_ = config.SetServiceIdleSuspended("mysql", true)
+	for _, n := range []string{"mysql", "postgres"} { // postgres: stopped by the user
+		if err := wakeForData(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !reflect.DeepEqual(woke, []string{"mysql"}) {
+		t.Fatalf("woke %v, want only the sleeping mysql", woke)
+	}
+
+}
+
+// An MCP artisan call wakes exactly the sleeping services its site uses.
+func TestWakeSiteServices_wakesWhatTheSiteUses(t *testing.T) {
+	withServiceHome(t)
+	shop, blog := t.TempDir(), t.TempDir()
+	_ = os.WriteFile(filepath.Join(shop, ".env"), []byte("DB_HOST=lerd-mysql\nREDIS_HOST=lerd-redis\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(blog, ".env"), []byte("DB_HOST=lerd-postgres\n"), 0o644)
+	for _, s := range []config.Site{{Name: "shop", Path: shop, Domains: []string{"shop.test"}}, {Name: "blog", Path: blog, Domains: []string{"blog.test"}}} {
+		if err := config.AddSite(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, n := range []string{"mysql", "postgres"} {
+		_ = config.SetServiceIdleSuspended(n, true)
+	}
+	var woke []string
+	prevWake, prevRun := dataWake, config.ServiceRunning
+	t.Cleanup(func() { dataWake, config.ServiceRunning = prevWake, prevRun })
+	dataWake = func(n string) error { woke = append(woke, n); return nil }
+	config.ServiceRunning = func(string) bool { return false }
+
+	if err := WakeSiteServices(shop); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(woke, []string{"mysql"}) {
+		t.Fatalf("woke %v, want only shop's sleeping mysql", woke)
+	}
+}
