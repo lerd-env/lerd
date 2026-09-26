@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -589,6 +590,23 @@ func rustfsProbeAddr(svc config.ServiceConfig) string {
 	return fmt.Sprintf("localhost:%d", hp[0])
 }
 
+// rustfsReady asks rustfs's readiness endpoint rather than dialling the port:
+// the port accepts connections, and /health answers 200, a moment before the
+// server can serve, and a request landing then gets "server context is not
+// ready".
+func rustfsReady(addr string) bool {
+	if addr == "" {
+		return false
+	}
+	client := http.Client{Timeout: time.Second}
+	resp, err := client.Get("http://" + addr + "/minio/health/ready")
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
 func readyFamily(service string) string {
 	for _, fam := range []string{"mariadb", "mysql", "postgres", "redis", "rustfs"} {
 		if service == fam || strings.HasPrefix(service, fam+"-") {
@@ -634,17 +652,7 @@ func WaitReady(service string, timeout time.Duration) error {
 		}
 	case "rustfs":
 		addr := rustfsProbeAddr(config.ServiceConfigFor(service))
-		probe = func() bool {
-			if addr == "" {
-				return false
-			}
-			conn, err := net.DialTimeout("tcp", addr, time.Second)
-			if err != nil {
-				return false
-			}
-			conn.Close()
-			return true
-		}
+		probe = func() bool { return rustfsReady(addr) }
 	default:
 		probe = func() bool {
 			status, _ := UnitStatus(unit)

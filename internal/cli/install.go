@@ -1352,14 +1352,7 @@ func ensureUnprivilegedPorts() error {
 // home is bind-mounted into the FPM container, so the package files live
 // on the host and can be detected with a plain stat.
 func laravelInstallerPresent() bool {
-	composerHome := os.Getenv("COMPOSER_HOME")
-	if composerHome == "" {
-		xdgConfig := os.Getenv("XDG_CONFIG_HOME")
-		if xdgConfig == "" {
-			xdgConfig = filepath.Join(os.Getenv("HOME"), ".config")
-		}
-		composerHome = filepath.Join(xdgConfig, "composer")
-	}
+	composerHome := composerHomeDir()
 	_, err := os.Stat(filepath.Join(composerHome, "vendor", "laravel", "installer"))
 	return err == nil
 }
@@ -1408,14 +1401,7 @@ func installLaravelInstaller() error {
 	}
 
 	home := os.Getenv("HOME")
-	composerHome := os.Getenv("COMPOSER_HOME")
-	if composerHome == "" {
-		xdgConfig := os.Getenv("XDG_CONFIG_HOME")
-		if xdgConfig == "" {
-			xdgConfig = filepath.Join(home, ".config")
-		}
-		composerHome = filepath.Join(xdgConfig, "composer")
-	}
+	composerHome := composerHomeDir()
 
 	composerPhar := composer.PharPath()
 	// --no-interaction prevents composer from blocking on plugin trust prompts
@@ -1783,14 +1769,7 @@ func addShellShims(manageNode bool) error {
 	}
 
 	// Write laravel shim (laravel/installer global package)
-	composerHome := os.Getenv("COMPOSER_HOME")
-	if composerHome == "" {
-		xdgConfig := os.Getenv("XDG_CONFIG_HOME")
-		if xdgConfig == "" {
-			xdgConfig = filepath.Join(home, ".config")
-		}
-		composerHome = filepath.Join(xdgConfig, "composer")
-	}
+	composerHome := composerHomeDir()
 	laravelShim := shimPreamble(lerdBin) + fmt.Sprintf("exec \"$LERD\" php %s/vendor/bin/laravel \"$@\"\n", composerHome)
 	if err := os.WriteFile(filepath.Join(binDir, "laravel"), []byte(laravelShim), 0755); err != nil {
 		return fmt.Errorf("writing laravel shim: %w", err)

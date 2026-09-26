@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/geodro/lerd/internal/composer"
 	"github.com/geodro/lerd/internal/config"
@@ -52,19 +53,59 @@ func runComposer(args []string) error {
 	return nil
 }
 
-// composerHomeDir resolves composer's own home, honouring COMPOSER_HOME and
-// XDG. It is a composer project like any other: the manifest and lock naming
-// what `composer global require` installed live here.
+// composerHomeDir resolves composer's own home the way composer does, so its
+// global auth.json and packages are the ones lerd's composer sees. It is a
+// composer project like any other: the manifest and lock naming what
+// `composer global require` installed live here.
 func composerHomeDir() string {
-	if v := os.Getenv("COMPOSER_HOME"); v != "" {
+	home, _ := os.UserHomeDir()
+	return resolveComposerHome(os.Environ(), home, func(p string) bool {
+		info, err := os.Stat(p)
+		return err == nil && info.IsDir()
+	})
+}
+
+// resolveComposerHome mirrors composer's Factory::getHomeDir: COMPOSER_HOME
+// when set, else the first existing of the XDG directory (only on a system
+// that uses XDG) and ~/.composer, else the first of those candidates.
+func resolveComposerHome(environ []string, home string, isDir func(string) bool) string {
+	get := func(key string) string {
+		for _, e := range environ {
+			if k, v, ok := strings.Cut(e, "="); ok && k == key {
+				return v
+			}
+		}
+		return ""
+	}
+	if v := get("COMPOSER_HOME"); v != "" {
 		return v
 	}
-	home, _ := os.UserHomeDir()
-	xdg := os.Getenv("XDG_CONFIG_HOME")
-	if xdg == "" {
-		xdg = filepath.Join(home, ".config")
+	var dirs []string
+	if composerUsesXDG(environ, isDir) {
+		cfg := get("XDG_CONFIG_HOME")
+		if cfg == "" {
+			cfg = filepath.Join(home, ".config")
+		}
+		dirs = append(dirs, filepath.Join(cfg, "composer"))
 	}
-	return filepath.Join(xdg, "composer")
+	dirs = append(dirs, filepath.Join(home, ".composer"))
+	for _, d := range dirs {
+		if isDir(d) {
+			return d
+		}
+	}
+	return dirs[0]
+}
+
+// composerUsesXDG is composer's own test: any XDG_ variable set, or /etc/xdg
+// on disk.
+func composerUsesXDG(environ []string, isDir func(string) bool) bool {
+	for _, e := range environ {
+		if strings.HasPrefix(e, "XDG_") {
+			return true
+		}
+	}
+	return isDir("/etc/xdg")
 }
 
 // composerGlobalBinDir resolves the directory where composer drops binaries

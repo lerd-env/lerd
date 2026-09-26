@@ -106,14 +106,7 @@ func RunTinker(ctx context.Context, sitePath, siteName, branch, code string) (Ti
 	res.Mode = mode
 
 	home := os.Getenv("HOME")
-	composerHome := os.Getenv("COMPOSER_HOME")
-	if composerHome == "" {
-		xdgConfig := os.Getenv("XDG_CONFIG_HOME")
-		if xdgConfig == "" {
-			xdgConfig = filepath.Join(home, ".config")
-		}
-		composerHome = filepath.Join(xdgConfig, "composer")
-	}
+	composerHome := composerHomeDir()
 
 	dumpFn := detectDumpFunction(sitePath, mode)
 	envArgs := tinkerEnvArgs(sitePath, home, composerHome)

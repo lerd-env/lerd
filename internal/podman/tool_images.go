@@ -11,6 +11,9 @@ const (
 	ProbeImage = "alpine:latest"
 )
 
+// StripeCLIImage is the image a site's stripe listener worker runs.
+const StripeCLIImage = "docker.io/stripe/stripe-cli:latest"
+
 // ToolImages lists every image lerd runs as a throw-away container.
 func ToolImages() []string {
 	return []string{ProbeImage}
