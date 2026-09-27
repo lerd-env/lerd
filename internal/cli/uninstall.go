@@ -14,6 +14,7 @@ import (
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
+	"github.com/geodro/lerd/internal/wsl"
 	"github.com/spf13/cobra"
 )
 
@@ -113,6 +114,15 @@ func runUninstall(force bool) error {
 		step("Removing the " + desktopapp.Name + " launcher")
 		_ = desktopapp.Remove()
 		ok()
+	}
+
+	if wsl.IsWSL() {
+		step("Removing lerd from Windows")
+		if err := removeWindowsSide(); err != nil {
+			fmt.Printf(" %v\n", err)
+		} else {
+			ok()
+		}
 	}
 
 	step("Reloading service manager")
@@ -328,12 +338,15 @@ var shellRCMarkers = []struct {
 	{"# Lerd", 1},
 }
 
-// removeInstalledBinaries deletes the lerd binary and the tray binary the
-// installer puts beside it. The tray can be launched from a desktop entry
-// without a unit, so leaving it behind outlives the uninstall that removed lerd.
+// removeInstalledBinaries deletes the lerd binary and the tray binary and
+// lerd.exe the installer puts beside it. The tray can be launched from a
+// desktop entry without a unit, so leaving it behind outlives the uninstall
+// that removed lerd.
 func removeInstalledBinaries(self string) {
-	os.Remove(self)                                           //nolint:errcheck
-	os.Remove(filepath.Join(filepath.Dir(self), "lerd-tray")) //nolint:errcheck
+	os.Remove(self) //nolint:errcheck
+	for _, name := range []string{"lerd-tray", "lerd.exe"} {
+		os.Remove(filepath.Join(filepath.Dir(self), name)) //nolint:errcheck
+	}
 }
 
 // removeScriptInstalledBinaries clears the pair lerd's own installers write to
@@ -348,7 +361,7 @@ func removeScriptInstalledBinaries(self string) {
 	if err != nil {
 		return
 	}
-	for _, name := range []string{"lerd", "lerd-tray"} {
+	for _, name := range []string{"lerd", "lerd-tray", "lerd.exe"} {
 		p := filepath.Join(home, ".local", "bin", name)
 		if p == self {
 			continue

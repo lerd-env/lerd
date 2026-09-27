@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode/utf16"
 
 	"github.com/geodro/lerd/internal/config"
@@ -83,7 +84,7 @@ func installWindowsSide(w io.Writer) error {
 	if _, err := powershell(elevated(addNRPTScript(tld))); err != nil {
 		return fmt.Errorf("adding the Windows DNS rule for .%s: %w", tld, err)
 	}
-	if out, _ := powershell(nrptPresentScript(tld)); strings.TrimSpace(out) != "yes" {
+	if !nrptPresentSoon(tld) {
 		return fmt.Errorf("the Windows DNS rule for .%s was not added (was the admin prompt declined?)", tld)
 	}
 	fmt.Fprintf(w, "  ✓ Windows resolves *.%s through lerd\n", tld)
@@ -114,7 +115,9 @@ func agentRunValue(winDir string) string {
 
 func agentScript(winDir string) string {
 	return fmt.Sprintf(`$ErrorActionPreference = 'Stop'
-Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'lerd' -Value '%s'
+$k = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+if (-not (Test-Path $k)) { New-Item -Path $k | Out-Null }
+Set-ItemProperty -Path $k -Name 'lerd' -Value '%s'
 Get-CimInstance Win32_Process -Filter "name='lerd.exe'" | Where-Object { $_.CommandLine -like '*--agent*' } | Invoke-CimMethod -MethodName Terminate | Out-Null
 Start-Process conhost.exe -ArgumentList '--headless','"%s\lerd.exe"','--agent' -WindowStyle Hidden`, agentRunValue(winDir), winDir)
 }
@@ -129,6 +132,18 @@ if (($p -split ';') -notcontains $d) {
 
 func nrptPresentScript(tld string) string {
 	return fmt.Sprintf(`if (Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.%s' -and $_.NameServers -contains '127.0.0.1' }) { 'yes' } else { 'no' }`, tld)
+}
+
+// nrptPresentSoon waits a few seconds for the rule: Windows lists a freshly
+// added NRPT rule only once the DNS client has picked the policy up.
+func nrptPresentSoon(tld string) bool {
+	for i := 0; i < 10; i++ {
+		if out, _ := powershell(nrptPresentScript(tld)); strings.TrimSpace(out) == "yes" {
+			return true
+		}
+		time.Sleep(time.Second)
+	}
+	return false
 }
 
 // addNRPTScript replaces rather than adds, so a rerun after a rule that landed
@@ -187,4 +202,36 @@ func windowsPath(p string) (string, error) {
 		return "", fmt.Errorf("wslpath -w %s: %w", p, err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// removeWindowsSide undoes installWindowsSide, so no agent is left booting a
+// distro with no lerd in it at every login. lerd's CA stays in the Windows
+// trust store: removing it raises a dialog a script cannot answer.
+func removeWindowsSide() error {
+	local, err := windowsEnvPath("LOCALAPPDATA")
+	if err != nil {
+		return err
+	}
+	dir := filepath.Join(local, "lerd")
+	winBin, err := windowsPath(filepath.Join(dir, "bin"))
+	if err != nil {
+		return err
+	}
+	if _, err := powershell(removeWindowsSideScript(winBin)); err != nil {
+		return err
+	}
+	if out, _ := powershell(`if (Get-DnsClientNrptRule | Where-Object { $_.Comment -eq 'lerd' }) { 'yes' }`); strings.TrimSpace(out) == "yes" {
+		if _, err := powershell(elevated(`Get-DnsClientNrptRule | Where-Object { $_.Comment -eq 'lerd' } | Remove-DnsClientNrptRule -Force; Clear-DnsClientCache`)); err != nil {
+			return fmt.Errorf("removing the Windows DNS rule: %w", err)
+		}
+	}
+	return os.RemoveAll(dir)
+}
+
+func removeWindowsSideScript(winBin string) string {
+	return fmt.Sprintf(`Get-CimInstance Win32_Process -Filter "name='lerd.exe'" | Where-Object { $_.CommandLine -like '*--agent*' } | Invoke-CimMethod -MethodName Terminate | Out-Null
+Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'lerd' -ErrorAction SilentlyContinue
+$d = '%s'
+$p = [Environment]::GetEnvironmentVariable('Path', 'User')
+[Environment]::SetEnvironmentVariable('Path', (($p -split ';') | Where-Object { $_ -and $_ -ne $d }) -join ';', 'User')`, winBin)
 }
