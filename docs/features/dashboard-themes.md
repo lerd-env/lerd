@@ -15,6 +15,9 @@ since that follows the room you are sitting in rather than the install.
 | Theme | Accent | Background (dark mode) |
 |---|---|---|
 | `lerd` | the bright brand red | `#0d0d0d` |
+| Breeze | Plasma blue | `#141618` |
+| Adwaita | Adwaita blue | `#1d1d20` |
+| macOS | the system blue | `#1e1e1e` |
 | `muted` | a desaturated brick | `#111113` |
 | Ocean | a calm steel blue | `#0d1418` |
 | Solarized Dark | Solarized blue | `#002b36` |
@@ -23,9 +26,6 @@ since that follows the room you are sitting in rather than the install.
 | Dracula | Dracula purple | `#282a36` |
 | Nord | Nord frost | `#2e3440` |
 | Gruvbox Dark | Gruvbox orange | `#282828` |
-| Breeze | Plasma blue | `#141618` |
-| Adwaita | Adwaita blue | `#1d1d20` |
-| macOS | the system blue | `#1e1e1e` |
 
 `lerd` is the default. `muted` is there for anyone who finds the default red too
 sharp, especially on a bright screen.
