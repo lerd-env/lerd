@@ -79,7 +79,7 @@ func TestEnsureSectionLine_KeyBeforeNextSectionPreserved(t *testing.T) {
 func TestWSLConfigLines_AppliedAllAndIdempotent(t *testing.T) {
 	content := ""
 	for _, kv := range WSLConfigLines {
-		content, _ = EnsureSectionLine(content, "wsl2", kv.Key, kv.Line)
+		content, _ = EnsureSectionLine(content, kv.Section, kv.Key, kv.Line)
 	}
 	for _, kv := range WSLConfigLines {
 		if !strings.Contains(content, kv.Line) {
@@ -90,9 +90,12 @@ func TestWSLConfigLines_AppliedAllAndIdempotent(t *testing.T) {
 	if strings.Contains(content, "localhostForwarding") || strings.Contains(content, "pageReporting") {
 		t.Errorf("recommended a warning-producing key: %q", content)
 	}
+	if !strings.Contains(content, "[general]\ninstanceIdleTimeout=-1") {
+		t.Errorf("idle timeout not disabled under [general]: %q", content)
+	}
 	// Re-applying changes nothing.
 	for _, kv := range WSLConfigLines {
-		if _, changed := EnsureSectionLine(content, "wsl2", kv.Key, kv.Line); changed {
+		if _, changed := EnsureSectionLine(content, kv.Section, kv.Key, kv.Line); changed {
 			t.Errorf("second pass changed %q", kv.Key)
 		}
 	}
@@ -107,5 +110,25 @@ func TestHasEventsLoggerJournald(t *testing.T) {
 	}
 	if HasEventsLoggerJournald("[engine]\nevents_logger = \"file\"\n") {
 		t.Error("file must not match")
+	}
+}
+
+func TestEnsureSectionLine_AppendsDirectlyUnderLastKey(t *testing.T) {
+	// A file written by an earlier run ends with a newline; the new key must sit
+	// right under the last one, not after a blank line, and keep the file
+	// newline-terminated so a later append doesn't glue onto it.
+	got, _ := EnsureSectionLine("[wsl2]\nnetworkingMode=mirrored\n", "wsl2", "dnsTunneling", "dnsTunneling=true")
+	want := "[wsl2]\nnetworkingMode=mirrored\ndnsTunneling=true\n"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestEnsureSectionLine_InsertsAboveBlankLineBeforeNextSection(t *testing.T) {
+	start := "[wsl2]\nmemory=8GB\n\n[experimental]\nfoo=bar\n"
+	got, _ := EnsureSectionLine(start, "wsl2", "networkingMode", "networkingMode=mirrored")
+	want := "[wsl2]\nmemory=8GB\nnetworkingMode=mirrored\n\n[experimental]\nfoo=bar\n"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }

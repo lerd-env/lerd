@@ -46,7 +46,7 @@ func EnsureSectionLine(content, section, key, line string) (string, bool) {
 				inSection = true
 			} else if inSection {
 				// Left our section without finding the key — insert at its end.
-				return insertAt(lines, i, line), true
+				return insertAt(lines, lastContent(lines, i), line), true
 			} else {
 				inSection = false
 			}
@@ -63,7 +63,7 @@ func EnsureSectionLine(content, section, key, line string) (string, bool) {
 
 	if inSection {
 		// Section was the last block and the key was absent — append the line.
-		return strings.Join(append(lines, line), "\n"), true
+		return insertAt(lines, lastContent(lines, len(lines)), line), true
 	}
 
 	// Section absent entirely — append it.
@@ -72,6 +72,15 @@ func EnsureSectionLine(content, section, key, line string) (string, bool) {
 		prefix += "\n"
 	}
 	return prefix + sectionHeader + "\n" + line + "\n", true
+}
+
+// lastContent steps back from i over blank lines, so a key added to the end of
+// a section sits under its last key instead of after the separating blank line.
+func lastContent(lines []string, i int) int {
+	for i > 0 && strings.TrimSpace(lines[i-1]) == "" {
+		i--
+	}
+	return i
 }
 
 // insertAt splices line into lines just before index i, returning the joined text.
@@ -83,16 +92,19 @@ func insertAt(lines []string, i int, line string) string {
 	return strings.Join(out, "\n")
 }
 
-// WSLConfigLines are the [wsl2] settings lerd recommends in %USERPROFILE%\.wslconfig:
+// WSLConfigLines are the settings lerd recommends in %USERPROFILE%\.wslconfig:
 // mirrored networking so Windows browsers can reach *.test / *.localhost, with the
-// related DNS/firewall/proxy toggles. Deliberately omits localhostForwarding and
-// pageReporting, which are a no-op under mirrored mode and an unrecognized key
-// respectively, and so spam WSL with warnings on every terminal launch.
-var WSLConfigLines = []struct{ Key, Line string }{
-	{"networkingMode", "networkingMode=mirrored"},
-	{"dnsTunneling", "dnsTunneling=true"},
-	{"firewall", "firewall=true"},
-	{"autoProxy", "autoProxy=true"},
+// related DNS/firewall/proxy toggles, and no idle timeout, because WSL otherwise
+// stops the distro, and every lerd container with it, seconds after the last
+// terminal closes. Deliberately omits localhostForwarding and pageReporting,
+// which are a no-op under mirrored mode and an unrecognized key respectively,
+// and so spam WSL with warnings on every terminal launch.
+var WSLConfigLines = []struct{ Section, Key, Line string }{
+	{"wsl2", "networkingMode", "networkingMode=mirrored"},
+	{"wsl2", "dnsTunneling", "dnsTunneling=true"},
+	{"wsl2", "firewall", "firewall=true"},
+	{"wsl2", "autoProxy", "autoProxy=true"},
+	{"general", "instanceIdleTimeout", "instanceIdleTimeout=-1"},
 }
 
 // HasEventsLoggerJournald reports whether a containers.conf already sets

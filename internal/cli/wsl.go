@@ -67,7 +67,7 @@ func runWSLSetup(cmd *cobra.Command, _ []string) error {
 	if changed, err := patchWSLConfig(); err != nil {
 		fmt.Fprintf(w, "  ! .wslconfig: %v (add [wsl2] networkingMode=mirrored manually)\n", err)
 	} else if changed {
-		fmt.Fprintln(w, "  ✓ enabled mirrored networking in .wslconfig")
+		fmt.Fprintln(w, "  ✓ enabled mirrored networking and disabled the idle timeout in .wslconfig")
 		needShutdown = true
 	} else {
 		fmt.Fprintln(w, "  - .wslconfig already set for mirrored networking")
@@ -152,7 +152,7 @@ func patchWSLConfig() (bool, error) {
 		changedAny := false
 		for _, kv := range wsl.WSLConfigLines {
 			var ch bool
-			c, ch = wsl.EnsureSectionLine(c, "wsl2", kv.Key, kv.Line)
+			c, ch = wsl.EnsureSectionLine(c, kv.Section, kv.Key, kv.Line)
 			changedAny = changedAny || ch
 		}
 		return c, changedAny
