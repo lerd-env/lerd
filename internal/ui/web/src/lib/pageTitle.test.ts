@@ -24,4 +24,10 @@ describe('pageTitle', () => {
   it('drops an empty subject', () => {
     expect(pageTitle('System', '')).toBe('System · Lerd');
   });
+
+  // An installed app's window already puts the app name in front of the title.
+  it('leaves the product name off inside the installed app', () => {
+    expect(pageTitle('Sites', 'app.test', true)).toBe('app.test · Sites');
+    expect(pageTitle('Dashboard', '', true)).toBe('Dashboard');
+  });
 });

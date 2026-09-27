@@ -11,6 +11,8 @@ export function pageSubject(tab: TabId, rest: string): string {
   return '';
 }
 
-export function pageTitle(section: string, subject: string): string {
-  return [subject, section, 'Lerd'].filter(Boolean).join(' · ');
+// installed drops the product name: an installed app's window prefixes the app
+// name on its own, which would otherwise read "Lerd - Dashboard · Lerd".
+export function pageTitle(section: string, subject: string, installed = false): string {
+  return [subject, section, installed ? '' : 'Lerd'].filter(Boolean).join(' · ');
 }
