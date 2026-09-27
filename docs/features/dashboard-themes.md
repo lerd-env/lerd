@@ -26,6 +26,7 @@ since that follows the room you are sitting in rather than the install.
 | Breeze | Plasma blue | `#141618` |
 | Adwaita | Adwaita blue | `#1d1d20` |
 | macOS | the system blue | `#1e1e1e` |
+| Windows | the Windows 11 blue | `#202020` |
 
 `lerd` is the default. `muted` is there for anyone who finds the default red too
 sharp, especially on a bright screen.
@@ -33,7 +34,9 @@ sharp, especially on a bright screen.
 The desktop themes are taken from what those desktops ship today, not from the
 values most write-ups still quote: Breeze from Plasma 6.7's `BreezeDark.colors`,
 Adwaita from libadwaita 1.9's named colours, macOS from Apple's documented system
-blue and window background. All three have been darkened over the years.
+blue and window background. All three have been darkened over the years. Windows
+takes its surfaces from WinUI's `Common_themeresources_any.xaml` and its accents
+the way WinUI apps use Windows 11's default palette.
 
 Each theme carries a light tone and a dark tone for its accent, so switching
 between light and dark keeps the colour readable on whichever surface the mode
@@ -86,9 +89,9 @@ asks before it deletes the file.
 
 ## Following the desktop theme
 
-On Omarchy, KDE Plasma, GNOME and macOS, the desktop's own colours show up in the
+On Omarchy, KDE Plasma, GNOME, macOS and Windows (under WSL), the desktop's own colours show up in the
 picker as one more entry: `Omarchy (tokyo-night)` names the theme the desktop is
-on, and elsewhere the entry is the familiar `Breeze`, `Adwaita` or `macOS`, wearing
+on, and elsewhere the entry is the familiar `Breeze`, `Adwaita`, `macOS` or `Windows`, wearing
 whatever the desktop is actually set to rather than a fixed copy of it. Pick it once
 and lerd follows the desktop from then on: change the theme or the accent and
 every open dashboard repaints, including the embedded service views. A theme you
@@ -136,10 +139,16 @@ entry keeps the surfaces it always had, and the watch sits on
 `~/Library/Preferences`, so a change shows up once macOS flushes the domain to
 disk rather than the instant the swatch is clicked.
 
+**Windows** publishes the accent alone, read under WSL from the `AccentPalette`
+Windows derives from the colour picked in Settings under Personalisation. The
+entry takes the shades WinUI apps use, the darker one in light mode and the
+lighter one in dark, and keeps the Windows entry's surfaces. The registry has no
+file to watch, so a new accent shows up the next time the dashboard loads.
+
 Light mode tints the rail and the sidebar rather than leaving them white on the
-three desktop palettes, Breeze, Adwaita and macOS, since those are the desktops
-that tint their own chrome; the tone is Breeze's window colour, libadwaita's
-sidebar colour and the grey a Mac uses. A live Plasma entry on a light scheme
+four desktop palettes, Breeze, Adwaita, macOS and Windows, since those are the
+desktops that tint their own chrome; the tone is Breeze's window colour,
+libadwaita's sidebar colour, the grey a Mac uses and WinUI's light base. A live Plasma entry on a light scheme
 publishes its own instead, and the installed app's title bar follows whatever the
 rail is wearing. The editor schemes and lerd's own themes keep the white rail.
 

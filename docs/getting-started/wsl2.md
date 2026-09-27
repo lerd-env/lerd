@@ -37,6 +37,17 @@ Every step checks before it acts, so running it again after a failure picks up w
 
 It is idempotent, so run it again whenever something drifts. `lerd doctor` adds a `[WSL2]` section that re-checks the Linux side on demand.
 
+## Working on your sites from Windows
+
+Your sites live on the distro's own disk, not in `C:\Users\you`, and the two are not synced. Windows reaches the same files at `\\wsl.localhost\<distro>\home\<user>`, which is what everything below uses:
+
+- **Explorer.** `lerd wsl:setup` pins your sites folder (`~/Lerd` and any other parked directory) to Quick access. It also shows under **Linux** in the sidebar.
+- **Editor.** VS Code with the WSL extension (`code .` from a WSL terminal, or open the `\\wsl.localhost` folder), or PhpStorm opening that path with the WSL PHP interpreter. Both edit the files where they live.
+- **Terminal.** `lerd` works in Windows Terminal from inside a `\\wsl.localhost` folder as well as from a WSL shell.
+- **Browser.** `https://<site>.test` from any Windows browser, with the certificate trusted.
+
+Keep projects on the Linux side. A folder under `C:\` works through `/mnt/c`, but file access there is roughly an order of magnitude slower, which composer and npm make obvious; see step 5.
+
 ## 1. Enable systemd inside WSL2
 
 The whole architecture, Quadlet containers, watcher, UI, FPM, runs as systemd user units. Without systemd as PID 1, nothing starts.
