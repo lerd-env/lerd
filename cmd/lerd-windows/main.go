@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/geodro/lerd/internal/winshim"
 )
@@ -50,7 +51,7 @@ func main() {
 		if err == nil {
 			log.SetOutput(f)
 		}
-		log.Fatal(agent(cfg))
+		log.Fatal(agent(cfg, filepath.Join(dir, winshim.ConfigName)))
 	}
 	os.Exit(shim(cfg))
 }
@@ -73,7 +74,14 @@ func shim(cfg winshim.Config) int {
 	return 0
 }
 
-func agent(cfg winshim.Config) error {
+// agent keeps running until its config file is removed or rewritten, which is
+// how uninstall and a rerun of wsl:setup stop it: the installer may have
+// started it elevated, and an unelevated lerd is not allowed to kill that.
+func agent(cfg winshim.Config, confPath string) error {
+	started, err := os.Stat(confPath)
+	if err != nil {
+		return err
+	}
 	// Starting any process boots the distro, and with it systemd and lerd's
 	// services; instanceIdleTimeout=-1 keeps it up after this one exits.
 	if out, err := exec.Command("wsl.exe", "-d", cfg.Distro, "--exec", "/bin/true").CombinedOutput(); err != nil {
@@ -90,7 +98,15 @@ func agent(cfg winshim.Config) error {
 	log.Printf("answering *.%s on 127.0.0.1:53", cfg.TLD)
 	buf := make([]byte, 1500)
 	for {
+		if now, err := os.Stat(confPath); err != nil || !now.ModTime().Equal(started.ModTime()) {
+			log.Print("config removed or rewritten, stopping")
+			return nil
+		}
+		pc.SetReadDeadline(time.Now().Add(2 * time.Second)) //nolint:errcheck
 		n, addr, err := pc.ReadFrom(buf)
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			continue
+		}
 		if err != nil {
 			return err
 		}

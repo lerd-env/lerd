@@ -118,7 +118,12 @@ func agentScript(winDir string) string {
 $k = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 if (-not (Test-Path $k)) { New-Item -Path $k | Out-Null }
 Set-ItemProperty -Path $k -Name 'lerd' -Value '%s'
-Get-CimInstance Win32_Process -Filter "name='lerd.exe'" | Where-Object { $_.CommandLine -like '*--agent*' } | Invoke-CimMethod -MethodName Terminate | Out-Null
+# The config was just rewritten, which makes a running agent exit within
+# seconds; wait for it so the new one can take port 53.
+for ($i = 0; $i -lt 10; $i++) {
+  if (-not (Get-CimInstance Win32_Process -Filter "name='lerd.exe'" | Where-Object { $_.CommandLine -like '*--agent*' })) { break }
+  Start-Sleep 1
+}
 Start-Process conhost.exe -ArgumentList '--headless','"%s\lerd.exe"','--agent' -WindowStyle Hidden`, agentRunValue(winDir), winDir)
 }
 
@@ -217,6 +222,8 @@ func removeWindowsSide() error {
 	if err != nil {
 		return err
 	}
+	// The agent exits on its own once its config is gone, elevated or not.
+	os.Remove(filepath.Join(dir, "bin", winshim.ConfigName)) //nolint:errcheck
 	if _, err := powershell(removeWindowsSideScript(winBin)); err != nil {
 		return err
 	}
@@ -225,12 +232,18 @@ func removeWindowsSide() error {
 			return fmt.Errorf("removing the Windows DNS rule: %w", err)
 		}
 	}
-	return os.RemoveAll(dir)
+	// lerd.exe stays locked for a moment after the agent exits.
+	for i := 0; ; i++ {
+		err := os.RemoveAll(dir)
+		if err == nil || i == 10 {
+			return err
+		}
+		time.Sleep(time.Second)
+	}
 }
 
 func removeWindowsSideScript(winBin string) string {
-	return fmt.Sprintf(`Get-CimInstance Win32_Process -Filter "name='lerd.exe'" | Where-Object { $_.CommandLine -like '*--agent*' } | Invoke-CimMethod -MethodName Terminate | Out-Null
-Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'lerd' -ErrorAction SilentlyContinue
+	return fmt.Sprintf(`Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'lerd' -ErrorAction SilentlyContinue
 $d = '%s'
 $p = [Environment]::GetEnvironmentVariable('Path', 'User')
 [Environment]::SetEnvironmentVariable('Path', (($p -split ';') | Where-Object { $_ -and $_ -ne $d }) -join ';', 'User')`, winBin)
