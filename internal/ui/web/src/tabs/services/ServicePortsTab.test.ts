@@ -24,6 +24,15 @@ function svc(over: Partial<Service> = {}): Service {
 describe('ServicePortsTab', () => {
   beforeEach(() => setServicePorts.mockClear());
 
+  // With nothing to save the bar was an empty band between the tabs and the form.
+  it('shows the save bar only once something changed', async () => {
+    const { container } = render(ServicePortsTab, { props: { svc: svc() } });
+    expect(container.querySelector('.sticky')).toBeNull();
+    const input = container.querySelector('input[type="number"]') as HTMLInputElement;
+    await fireEvent.input(input, { target: { value: '1026' } });
+    expect(container.querySelector('.sticky')).not.toBeNull();
+  });
+
   it('saves a changed primary port', async () => {
     const { container, getByText } = render(ServicePortsTab, { props: { svc: svc() } });
     const input = container.querySelector('input[type="number"]') as HTMLInputElement;

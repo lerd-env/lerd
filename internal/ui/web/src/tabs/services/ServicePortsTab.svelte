@@ -113,15 +113,15 @@
 </script>
 
 <div class="flex flex-col h-full">
-  <div class="sticky top-0 z-10">
-    <div class="flex items-center justify-between bg-gray-50 dark:bg-white/3 px-3 py-1.5 border-b border-gray-200 dark:border-lerd-border">
-      <div class="flex items-center gap-2 min-w-0">
-        {#if dirty && !saving}
-          <span class="text-[10px] font-medium text-amber-600 dark:text-amber-400">{m.tuningEditor_unsaved()}</span>
-        {/if}
-      </div>
-      <div class="flex items-center gap-2 shrink-0">
-        {#if dirty}
+  {#if dirty}
+    <div class="sticky top-0 z-10">
+      <div class="flex items-center justify-between bg-gray-50 dark:bg-white/3 px-3 py-1.5 border-b border-gray-200 dark:border-lerd-border">
+        <div class="flex items-center gap-2 min-w-0">
+          {#if !saving}
+            <span class="text-[10px] font-medium text-amber-600 dark:text-amber-400">{m.tuningEditor_unsaved()}</span>
+          {/if}
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onclick={revert}
@@ -138,10 +138,10 @@
           >
             {saving ? m.services_ports_applying() : m.common_save()}
           </button>
-        {/if}
+        </div>
       </div>
     </div>
-  </div>
+  {/if}
 
   <div class="flex-1 overflow-y-auto p-3 sm:p-5 space-y-5">
     <div class="space-y-2">
