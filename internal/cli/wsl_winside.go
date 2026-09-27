@@ -80,12 +80,8 @@ func installWindowsSide(w io.Writer) error {
 		fmt.Fprintf(w, "  - Windows already sends .%s to lerd\n", tld)
 		return nil
 	}
-	fmt.Fprintf(w, "  → routing .%s to lerd in Windows DNS, approve the admin prompt on the Windows desktop\n", tld)
-	if _, err := powershell(elevated(addNRPTScript(tld))); err != nil {
-		return fmt.Errorf("adding the Windows DNS rule for .%s: %w", tld, err)
-	}
-	if !nrptPresentSoon(tld) {
-		return fmt.Errorf("the Windows DNS rule for .%s was not added (was the admin prompt declined?)", tld)
+	if err := addNRPTRule(w, tld); err != nil {
+		return err
 	}
 	fmt.Fprintf(w, "  ✓ Windows resolves *.%s through lerd\n", tld)
 	return nil
@@ -139,17 +135,34 @@ func nrptPresentScript(tld string) string {
 	return fmt.Sprintf(`if (Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.%s' -and $_.NameServers -contains '127.0.0.1' }) { 'yes' } else { 'no' }`, tld)
 }
 
-// nrptPresentSoon waits a few seconds for the rule: Windows lists a freshly
-// added NRPT rule only once the DNS client has picked the policy up.
-func nrptPresentSoon(tld string) bool {
-	for i := 0; i < 10; i++ {
-		if out, _ := powershell(nrptPresentScript(tld)); strings.TrimSpace(out) == "yes" {
-			return true
+// addNRPTRule adds the rule sending tld to the agent. Run from an elevated
+// process (the installer) it adds and checks in one call; otherwise it goes
+// through UAC and waits for the rule, since removing an old one alone can take
+// ten seconds.
+func addNRPTRule(w io.Writer, tld string) error {
+	if out, _ := powershell(isElevatedScript); strings.TrimSpace(out) == "True" {
+		out, err := powershell(addNRPTScript(tld) + "\n" + nrptPresentScript(tld))
+		if err != nil || strings.TrimSpace(out) != "yes" {
+			return fmt.Errorf("adding the Windows DNS rule for .%s failed: %v %s", tld, err, strings.TrimSpace(out))
+		}
+		return nil
+	}
+	fmt.Fprintf(w, "  → routing .%s to lerd in Windows DNS, approve the admin prompt on the Windows desktop\n", tld)
+	if _, err := powershell(elevated(addNRPTScript(tld))); err != nil {
+		return fmt.Errorf("adding the Windows DNS rule for .%s: %w", tld, err)
+	}
+	var out string
+	for i := 0; i < 30; i++ {
+		out, _ = powershell(nrptPresentScript(tld))
+		if strings.TrimSpace(out) == "yes" {
+			return nil
 		}
 		time.Sleep(time.Second)
 	}
-	return false
+	return fmt.Errorf("the Windows DNS rule for .%s did not appear (was the admin prompt declined?): %s", tld, strings.TrimSpace(out))
 }
+
+const isElevatedScript = `([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)`
 
 // addNRPTScript replaces rather than adds, so a rerun after a rule that landed
 // late (or a changed TLD) never leaves duplicates behind.
@@ -176,10 +189,17 @@ func encodePowerShell(script string) string {
 	return base64.StdEncoding.EncodeToString(b)
 }
 
+// powershell runs script and returns its stdout alone: PowerShell reports
+// progress ("Preparing modules for first use") as CLIXML on stderr, which
+// would otherwise land in the middle of an answer like "yes".
 func powershell(script string) (string, error) {
-	out, err := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encodePowerShell(script)).CombinedOutput()
+	var stderr bytes.Buffer
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand",
+		encodePowerShell("$ProgressPreference = 'SilentlyContinue'\n"+script))
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	return string(out), nil
 }

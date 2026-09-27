@@ -247,10 +247,15 @@ func run(name string, args ...string) error {
 	return cmd.Run()
 }
 
+// powershell returns stdout alone; PowerShell's progress stream goes to stderr
+// as CLIXML and would corrupt an answer like "Enabled".
 func powershell(script string) (string, error) {
-	out, err := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script).CombinedOutput()
+	var stderr strings.Builder
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "$ProgressPreference = 'SilentlyContinue'; "+script)
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	return string(out), nil
 }
