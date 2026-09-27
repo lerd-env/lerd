@@ -20,7 +20,8 @@ Download `lerd-setup.exe` from the [latest release](https://github.com/lerd-env/
 2. Installs WSL from Microsoft's GitHub release, then an Ubuntu 24.04 distro.
 3. Creates your Linux user (it suggests your Windows name) and asks you to choose its password, which `sudo` asks for later.
 4. Runs lerd's normal installer inside the distro, then `lerd wsl:setup`.
-5. Restarts WSL and opens the dashboard.
+5. Offers the Lerd desktop app: the dashboard in its own window, a tray icon to start and stop lerd, and native Windows notifications. It starts with Windows and closing its window keeps it in the tray.
+6. Restarts WSL and opens the app, or the dashboard in your browser if you skipped it.
 
 Every step checks before it acts, so running it again after a failure picks up where it stopped. Windows shows a certificate warning when lerd's local CA is trusted, answer Yes.
 
@@ -174,15 +175,9 @@ cp "$(~/.local/share/lerd/bin/mkcert -CAROOT)/rootCA.pem" /mnt/c/Users/$USER/Des
 
 Double-click `lerd-rootCA.crt`, pick **Place all certificates in the following store**, choose **Trusted Root Certification Authorities**, finish, and restart the browser.
 
-## 7. The system tray service does not work on WSL2
+## 7. The tray lives in the Windows desktop app
 
-`lerd-tray` needs a graphical tray host implementing the `StatusNotifierItem` or `AppIndicator` protocol, and WSL2 does not provide one. Nothing else is affected, the CLI and the dashboard at `http://lerd.localhost` (or `http://127.0.0.1:7073` directly) cover everything.
-
-Mask the unit so it stops complaining in logs:
-
-```bash
-systemctl --user mask lerd-tray.service
-```
+`lerd-tray` needs a graphical tray host implementing the `StatusNotifierItem` or `AppIndicator` protocol, and WSL2 does not provide one, so lerd disables it inside WSL. The Lerd desktop app puts the tray on the Windows side instead. Without it, the CLI and the dashboard at `http://lerd.localhost` (or `http://127.0.0.1:7073` directly) cover everything.
 
 ## Verifying the install
 
