@@ -35,7 +35,7 @@
       <ol class="font-mono space-y-0.5 mt-1">
         {#each trace as frame}
           {@const app = !frame.file.includes('/vendor/')}
-          <li class={app ? 'text-gray-700 dark:text-gray-200' : 'text-gray-400 dark:text-gray-500'}>
+          <li class={app ? 'text-gray-700 dark:text-gray-200' : 'text-gray-500 dark:text-gray-400'}>
             <span class={app ? 'font-semibold' : ''}>{frame.func}</span> ·
             <SourcePath file={frame.file} line={frame.line} muted={!app} />
           </li>

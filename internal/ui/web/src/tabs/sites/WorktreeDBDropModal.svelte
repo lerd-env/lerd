@@ -21,7 +21,7 @@
   <div class="px-5 py-4 space-y-3">
     <p class="text-sm text-gray-700 dark:text-gray-300">{m.worktreeDb_dropBody({ branch })}</p>
     {#if database}
-      <p class="text-[11px] font-mono text-gray-400 dark:text-gray-500">{database}</p>
+      <p class="text-[11px] font-mono text-gray-500 dark:text-gray-400">{database}</p>
     {/if}
   </div>
   {#snippet footer()}

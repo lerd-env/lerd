@@ -86,16 +86,12 @@ describe('the built-in themes', () => {
   // scheme's colour is chosen for a dark editor and rarely passes on white as
   // given, which is why each theme carries both tones rather than one.
   //
-  // Every theme but the default clears WCAG AA. The default is the bright red
-  // that prompted all of this and sits under it; it keeps its colour because
-  // changing it would repaint the dashboard for everyone who never complained.
+  // The declared tones are the theme's look; paletteVars nudges them to AA as
+  // text where they fall short, which is what this checks (see 'accent text').
   it('keep both accent tones readable on the surface they land on', () => {
     for (const p of BUILTIN_PALETTES) {
       expect(contrast(p.accent, '#ffffff')).toBeGreaterThanOrEqual(3);
       expect(contrast(p.accentDark, p.bg)).toBeGreaterThanOrEqual(3);
-      if (p.id !== DEFAULT_PALETTE_ID) {
-        expect(contrast(p.accent, '#ffffff')).toBeGreaterThanOrEqual(4.5);
-      }
     }
   });
 });
@@ -115,10 +111,10 @@ describe('paletteVars', () => {
     const p = resolvePalette({
       id: 'ocean',
       name: 'Ocean',
-      accent: '#3b7ea1',
+      accent: '#2f6a89',
       accent_dark: '#7fb6d4'
     })!;
-    expect(paletteVars(p, false)['--lerd-accent']).toBe('#3b7ea1');
+    expect(paletteVars(p, false)['--lerd-accent']).toBe('#2f6a89');
     expect(paletteVars(p, true)['--lerd-accent']).toBe('#7fb6d4');
   });
 });
@@ -309,5 +305,64 @@ describe('the chrome under focus', () => {
   it('refuses a focused tone that is not a plain hex colour', () => {
     const p = resolvePalette({ id: 'x', name: 'X', accent: '#112233', chrome_active: 'url(evil)' })!;
     expect(p.chromeActive).toBeUndefined();
+  });
+});
+
+// Muted text is Tailwind's gray-400 on the dark surfaces and gray-500 on the light
+// ones. A tinted theme lifts its cards toward the grey until the small print no
+// longer reads, so each theme gets the step of grey its own surfaces need.
+describe('muted text', () => {
+  const lifted = (card: string) => {
+    const [r, g, b] = parseHex(card)!;
+    const up = (c: number) => Math.round(c + (255 - c) * 0.08);
+    return `#${[up(r), up(g), up(b)].map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+  };
+
+  it('reads on every dark theme card, including a lifted pill on it', () => {
+    for (const p of BUILTIN_PALETTES) {
+      const grey = paletteVars(p, true)['--color-gray-400'];
+      expect(contrast(grey, lifted(p.card)), p.id).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('reads on every light theme chrome and on the gray-100 pills', () => {
+    for (const p of BUILTIN_PALETTES) {
+      const grey = paletteVars(p, false)['--color-gray-500'];
+      expect(contrast(grey, p.chromeLight ?? '#ffffff'), p.id).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(grey, '#f3f4f6'), p.id).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('leaves the default theme dark grey exactly as Tailwind ships it', () => {
+    expect(paletteVars(paletteById(BUILTIN_PALETTES, DEFAULT_PALETTE_ID), true)['--color-gray-400']).toBe('#99a1af');
+  });
+});
+
+// Links, active tabs and selected rows are accent text, so the accent the page
+// actually wears has to reach AA on the card behind it in every theme.
+describe('accent text', () => {
+  it('reads on the white card in light mode', () => {
+    for (const p of BUILTIN_PALETTES) {
+      expect(contrast(paletteVars(p, false)['--lerd-accent'], '#ffffff'), p.id).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('reads on the theme card in dark mode', () => {
+    for (const p of BUILTIN_PALETTES) {
+      expect(contrast(paletteVars(p, true)['--lerd-accent'], p.card), p.id).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('keeps an accent that already passes exactly as declared', () => {
+    const lerd = paletteById(BUILTIN_PALETTES, DEFAULT_PALETTE_ID);
+    expect(paletteVars(lerd, true)['--lerd-accent']).toBe(lerd.accentDark);
+    expect(paletteVars(lerd, true)['--lerd-accent-hover']).toBe(lerd.accentHoverDark);
+  });
+
+  it('keeps the hover a visible step away from a nudged accent', () => {
+    const lerd = paletteById(BUILTIN_PALETTES, DEFAULT_PALETTE_ID);
+    const vars = paletteVars(lerd, false);
+    expect(vars['--lerd-accent']).not.toBe(lerd.accent);
+    expect(contrast(vars['--lerd-accent-hover'], vars['--lerd-accent'])).toBeGreaterThan(1.2);
   });
 });

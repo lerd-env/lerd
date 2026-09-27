@@ -1,4 +1,4 @@
-import { render } from '@testing-library/svelte';
+import { render, screen } from '@testing-library/svelte';
 import { describe, it, expect, vi } from 'vitest';
 import Toggle from './Toggle.svelte';
 
@@ -38,5 +38,13 @@ describe('Toggle', () => {
     const { container } = render(Toggle, { props: { on: false, onclick } });
     container.querySelector('button')!.click();
     expect(onclick).toHaveBeenCalledOnce();
+  });
+
+  it('announces itself as a switch with its on/off state', async () => {
+    const { rerender } = render(Toggle, { props: { on: false, title: 'Autostart' } });
+    const sw = screen.getByRole('switch', { name: 'Autostart' });
+    expect(sw).toHaveAttribute('aria-checked', 'false');
+    await rerender({ on: true, title: 'Autostart' });
+    expect(sw).toHaveAttribute('aria-checked', 'true');
   });
 });

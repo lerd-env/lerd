@@ -77,7 +77,7 @@
 </script>
 
 {#if $activity.length === 0}
-  <p class="text-xs text-gray-400 dark:text-gray-500">{m.dashboard_activity_empty()}</p>
+  <p class="text-xs text-gray-500 dark:text-gray-400">{m.dashboard_activity_empty()}</p>
 {:else}
   <div class="space-y-1">
     {#each $activity as e (e.id)}
@@ -87,7 +87,7 @@
       >
         <span class="mt-1.5 shrink-0"><StatusDot color={dotColor[e.kind]} size="xs" /></span>
         <span class="flex-1 text-gray-700 dark:text-gray-300 leading-snug truncate">{label(e)}</span>
-        <span class="shrink-0 text-[10px] font-mono text-gray-400 dark:text-gray-500 mt-0.5">{relative(e.at, $now)}</span>
+        <span class="shrink-0 text-[10px] font-mono text-gray-500 dark:text-gray-400 mt-0.5">{relative(e.at, $now)}</span>
       </div>
     {/each}
   </div>

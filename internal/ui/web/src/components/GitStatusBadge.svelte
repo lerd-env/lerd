@@ -29,7 +29,7 @@
 
 {#if marker.text}
   <span
-    class="font-mono text-xs leading-none -ml-1 {marker.conflicted ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}"
+    class="font-mono text-xs leading-none -ml-1 {marker.conflicted ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}"
     use:tooltip={label}
     aria-label={label}
     role="img">{marker.text}</span

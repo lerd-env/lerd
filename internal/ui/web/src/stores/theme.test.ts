@@ -48,7 +48,7 @@ describe('theme store', () => {
     localStorage.setItem('lerd-theme', 'light');
     const { initTheme, palette } = await import('./theme');
     initTheme();
-    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#ff2d20');
+    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#e4281d') // #ff2d20 nudged to AA on white;
 
     palette.set('muted');
     expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#b04a42');
@@ -73,7 +73,7 @@ describe('theme store', () => {
     localStorage.setItem('lerd-palette', 'deleted-by-hand');
     const { initTheme } = await import('./theme');
     initTheme();
-    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#ff2d20');
+    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#e4281d');
   });
 
   it('repaints when a theme arrives from the daemon after the first paint', async () => {
@@ -83,13 +83,13 @@ describe('theme store', () => {
     const { initTheme, palettes } = await import('./theme');
     const { BUILTIN_PALETTES, resolvePalette } = await import('$lib/palettes');
     initTheme();
-    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#ff2d20');
+    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#e4281d');
 
     palettes.set([
       ...BUILTIN_PALETTES,
-      resolvePalette({ id: 'lagoon', name: 'Lagoon', accent: '#3b7ea1' })!
+      resolvePalette({ id: 'lagoon', name: 'Lagoon', accent: '#2f6a89' })!
     ]);
-    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#3b7ea1');
+    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#2f6a89');
   });
 
   it('paints the installed app chrome from the theme in effect', async () => {

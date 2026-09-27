@@ -76,7 +76,7 @@
       title={m.sites_gitWorktrees()}
     >
       <span class="font-mono">git:({active.branch})</span>
-      <span class="text-[10px] text-gray-400 dark:text-gray-500">{entries.length}</span>
+      <span class="text-[10px] text-gray-500 dark:text-gray-400">{entries.length}</span>
       <svg class="w-3 h-3 transition-transform {open ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
       </svg>
@@ -105,9 +105,9 @@
               </svg>
               <span class="font-mono truncate {selected ? 'text-lerd-red font-semibold' : 'text-gray-700 dark:text-gray-300'}">{e.branch}</span>
               {#if e.isMain}
-                <span class="shrink-0 text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">main</span>
+                <span class="shrink-0 text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">main</span>
               {/if}
-              <span class="ml-auto pl-2 font-mono text-[11px] text-gray-400 dark:text-gray-500 truncate">{e.domain}</span>
+              <span class="ml-auto pl-2 font-mono text-[11px] text-gray-500 dark:text-gray-400 truncate">{e.domain}</span>
             </button>
             <button
               type="button"

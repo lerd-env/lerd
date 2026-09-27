@@ -90,7 +90,7 @@
       <span
         class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full {$workerExecMode === 'container'
           ? 'bg-sky-100 dark:bg-sky-500/10 text-sky-700 dark:text-sky-400'
-          : 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-500'}"
+          : 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'}"
       >
         <span class="w-1.5 h-1.5 rounded-full {$workerExecMode === 'container' ? 'bg-sky-500' : 'bg-emerald-500'}"></span>
         {$workerExecMode === 'container' ? m.system_workerMode_containerBadge() : m.system_workerMode_execBadge()}

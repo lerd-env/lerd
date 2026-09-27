@@ -11,11 +11,11 @@
   let { title, actions, overlay, children }: Props = $props();
 </script>
 
-<div class="relative flex flex-col h-full">
+<nav aria-label={title} class="relative flex flex-col h-full">
   <ListPanelHeader {title} {actions} />
   <!-- On desktop the header line becomes this border so the frame corner can curve. -->
   <div class="flex-1 overflow-y-auto md:border-x md:border-t md:rounded-tl-xl border-lerd-headerborder md:bg-lerd-chrome-light md:dark:bg-lerd-card">
     {@render children()}
   </div>
   {#if overlay}{@render overlay()}{/if}
-</div>
+</nav>

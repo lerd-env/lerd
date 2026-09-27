@@ -20,8 +20,8 @@
   };
 
   const toneClass: Record<PillTone, string> = {
-    ok: 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-500',
-    error: 'bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400',
+    ok: 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+    error: 'bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-300',
     warn: 'bg-yellow-100 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-400',
     muted: 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400'
   };

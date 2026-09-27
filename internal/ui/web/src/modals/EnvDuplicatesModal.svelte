@@ -55,7 +55,7 @@
                   onchange={() => (keep = { ...keep, [dupe.key]: occ.line })}
                   class="border-gray-300 dark:border-lerd-border shrink-0"
                 />
-                <span class="text-[10px] text-gray-400 dark:text-gray-500 shrink-0 tabular-nums">
+                <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0 tabular-nums">
                   {m.envEditor_duplicateLine({ n: occ.line + 1 })}
                 </span>
                 <span

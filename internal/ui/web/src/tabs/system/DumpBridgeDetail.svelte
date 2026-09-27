@@ -122,7 +122,7 @@
         {#if switchingPassthrough}
           <span class="text-[11px] text-amber-600 dark:text-amber-400">{m.dumps_bridge_passthroughRestarting()}</span>
         {:else}
-          <span class="text-[11px] text-gray-400 dark:text-gray-500">{m.dumps_bridge_passthroughHint()}</span>
+          <span class="text-[11px] text-gray-500 dark:text-gray-400">{m.dumps_bridge_passthroughHint()}</span>
         {/if}
       </div>
     </div>

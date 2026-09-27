@@ -66,7 +66,7 @@
             <span class="truncate">{d.name}</span>
             {#if linked[d.path]}
               <span
-                class="ml-auto shrink-0 text-[11px] text-gray-400 dark:text-gray-500"
+                class="ml-auto shrink-0 text-[11px] text-gray-500 dark:text-gray-400"
                 title={m.siteWizard_alreadyLinked()}
               >
                 {linked[d.path]}

@@ -49,7 +49,7 @@
   <div class="flex items-center justify-between bg-gray-50 dark:bg-white/3 px-3 py-1.5 border-b border-gray-200 dark:border-lerd-border">
     <div class="flex items-center gap-2 min-w-0">
       {#if path}
-        <span class="text-[10px] text-gray-400 dark:text-gray-600 font-mono truncate" title={path}>{path}</span>
+        <span class="text-[10px] text-gray-500 dark:text-gray-400 font-mono truncate" title={path}>{path}</span>
       {/if}
       {#if dirty && !loading && !error}
         <span class="text-[10px] font-medium text-amber-600 dark:text-amber-400">{m.nginxEditor_unsaved()}</span>

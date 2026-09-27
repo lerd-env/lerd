@@ -48,7 +48,7 @@
     aria-label={running ? m.common_running() : m.common_stopped()}
   ></span>
   <span class="font-mono font-medium tabular-nums">
-    {minor}<span class="text-gray-400 dark:text-gray-500">{tail}</span>
+    {minor}<span class="text-gray-500 dark:text-gray-400">{tail}</span>
   </span>
   {#if isDefault}
     <svg class="w-3.5 h-3.5 shrink-0 text-lerd-red" fill="currentColor" viewBox="0 0 20 20" aria-label={m.common_default()}>

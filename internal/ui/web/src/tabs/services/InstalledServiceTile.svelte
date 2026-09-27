@@ -45,7 +45,7 @@
           {svc.status === 'active' ? m.common_running() : m.common_stopped()}
         </span>
         {#if svc.version}
-          <span class="truncate font-mono tabular-nums text-gray-400 dark:text-gray-500">{svc.version}</span>
+          <span class="truncate font-mono tabular-nums text-gray-500 dark:text-gray-400">{svc.version}</span>
         {/if}
         {#if svc.site_count > 0}
           <span class="inline-flex shrink-0 items-center gap-1 tabular-nums" title={m.common_sites()}>

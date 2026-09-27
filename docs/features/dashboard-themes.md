@@ -40,6 +40,14 @@ between light and dark keeps the colour readable on whichever surface the mode
 paints. The editor and desktop schemes are dark schemes: their backgrounds apply
 in dark mode, and in light mode you get their accent on the usual white.
 
+Whatever a theme declares, the dashboard keeps its text readable. An accent that
+falls short of WCAG AA contrast as link text on the card behind it is nudged
+darker in light mode or lighter in dark mode, just far enough to pass, and its
+hover tone follows. The muted grey used for secondary text gets the same
+treatment against each theme's own surfaces, which is what keeps small print
+legible on tinted schemes like Cobalt and Nord. An accent that already passes
+is used exactly as written.
+
 ## Writing your own
 
 Drop a YAML file into `~/.config/lerd/themes/`. The file name is the theme's id,

@@ -29,7 +29,7 @@ describe('LANServicesSetting', () => {
   it('renders its control once lerd is exposed', () => {
     setLAN({ exposed: true });
     const { getByRole, container } = render(LANServicesSetting);
-    expect(getByRole('button')).toBeInTheDocument();
+    expect(getByRole('switch')).toBeInTheDocument();
     expect(container.textContent).toContain('Managed service LAN access');
   });
 
@@ -86,13 +86,13 @@ describe('LANServicesSetting while lerd is loopback only', () => {
   it('keeps showing an already enabled setting so it can be cleared', () => {
     setLAN({ exposed: false, servicesEnabled: true });
     const { getByRole, container } = render(LANServicesSetting);
-    expect(getByRole('button')).not.toBeDisabled();
+    expect(getByRole('switch')).not.toBeDisabled();
     expect(container.textContent).toContain('Managed service LAN access');
   });
 
   it('reappears once lerd is exposed', () => {
     setLAN({ exposed: true, servicesEnabled: false });
     const { getByRole } = render(LANServicesSetting);
-    expect(getByRole('button')).not.toBeDisabled();
+    expect(getByRole('switch')).not.toBeDisabled();
   });
 });

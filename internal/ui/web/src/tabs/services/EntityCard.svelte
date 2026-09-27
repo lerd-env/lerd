@@ -113,7 +113,7 @@
     <Icon name="cube" class="w-4 h-4 mt-0.5 shrink-0 text-gray-300 dark:text-gray-600" />
     <div class="min-w-0 flex-1">
       <p class="truncate text-sm font-semibold text-gray-800 dark:text-gray-100" title={row.name}>{row.name}</p>
-      <p class="flex flex-wrap items-center gap-x-1.5 text-xs text-gray-400 dark:text-gray-500">
+      <p class="flex flex-wrap items-center gap-x-1.5 text-xs text-gray-500 dark:text-gray-400">
         {#each kind.columns as col, i (col.key)}
           {#if i > 0}<span class="shrink-0" aria-hidden="true">·</span>{/if}
           <span class="shrink-0 tabular-nums" use:tooltip={col.label || col.key}>
@@ -159,7 +159,7 @@
         use:tooltip={m.entities_open_in_dashboard()}
         aria-label={m.entities_open_in_dashboard()}
         onclick={() => svc && openEntityInDashboard(svc, kind.kind, row.name)}
-        class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+        class="flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
       >
         <Icon name="external" class="w-3.5 h-3.5" />
       </button>
@@ -170,7 +170,7 @@
         href={entityExportUrl(service, kind.kind, row.name)}
         use:tooltip={m.databases_export()}
         aria-label={m.databases_export()}
-        class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+        class="flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
       >
         <Icon name="download" class="w-3.5 h-3.5" />
       </a>
@@ -183,7 +183,7 @@
         aria-label={m.databases_import()}
         onclick={() => fileInput?.click()}
         disabled={importBusy}
-        class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+        class="flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
       >
         <Icon name={importBusy ? 'spinner' : 'upload'} class="w-3.5 h-3.5 {importBusy ? 'animate-spin' : ''}" />
       </button>
@@ -198,8 +198,8 @@
         onclick={() => (action.destructive ? (confirm = action.name) : run(action.name))}
         disabled={busy}
         class="flex items-center justify-center w-7 h-7 rounded-md transition-colors {action.destructive
-          ? 'ml-auto text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10'
-          : 'text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5'}"
+          ? 'ml-auto text-gray-500 dark:text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10'
+          : 'text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5'}"
       >
         <Icon name={action.destructive ? 'trash' : 'play'} class="w-3.5 h-3.5" />
       </button>

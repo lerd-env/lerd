@@ -344,7 +344,7 @@
                  never disappears under a long snippet list. -->
             <div class="max-h-60 overflow-y-auto">
             {#if snippets.length === 0}
-              <p class="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">{m.tinker_snippetsEmpty()}</p>
+              <p class="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{m.tinker_snippetsEmpty()}</p>
             {/if}
             {#each snippets as s (s.source + ':' + s.name)}
               <div class="group flex items-center pr-1">
@@ -446,7 +446,7 @@
       {#if !result && running}
         <p class="text-xs text-gray-400">{m.tinker_running()}</p>
       {:else if !result}
-        <p class="text-[11px] text-gray-400 dark:text-gray-500 font-mono whitespace-pre-line">{placeholder}</p>
+        <p class="text-[11px] text-gray-500 dark:text-gray-400 font-mono whitespace-pre-line">{placeholder}</p>
       {:else}
         {#if result.error}
           <div class="output-row" data-line="!">
@@ -481,7 +481,7 @@
             </div>
             {#if block.line !== undefined && block.kind !== 'query'}
               <span
-                class="output-line shrink-0 select-none text-[10px] text-gray-400 dark:text-gray-500"
+                class="output-line shrink-0 select-none text-[10px] text-gray-500 dark:text-gray-400"
                 title={m.tinker_lineTitle({ n: block.line })}
               >{m.tinker_lineLabel({ n: block.line })}</span>
             {/if}

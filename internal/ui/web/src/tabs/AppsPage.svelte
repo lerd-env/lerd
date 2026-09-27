@@ -7,7 +7,7 @@
 
 <div class="flex-1 overflow-y-auto p-4">
   {#if $dashboardServices.length === 0}
-    <div class="text-center text-sm text-gray-400 dark:text-gray-500 py-16">
+    <div class="text-center text-sm text-gray-500 dark:text-gray-400 py-16">
       {m.apps_empty()}
     </div>
   {:else}

@@ -61,7 +61,7 @@
         {#snippet keyList(entries: EnvProposeEntry[], heading: string)}
           {#if entries.length > 0}
             <div class="space-y-1">
-              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">{heading}</p>
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{heading}</p>
               {#each entries as e (e.key)}
                 <label class="flex items-center gap-2 py-1 px-1.5 rounded-sm hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer">
                   <input
@@ -70,7 +70,7 @@
                     class="rounded-sm border-gray-300 dark:border-lerd-border shrink-0"
                   />
                   <span class="font-mono text-xs text-gray-800 dark:text-gray-200 shrink-0">{e.key}</span>
-                  <span class="font-mono text-xs text-gray-400 dark:text-gray-500 truncate" title={e.value}>
+                  <span class="font-mono text-xs text-gray-500 dark:text-gray-400 truncate" title={e.value}>
                     ={e.value}
                   </span>
                 </label>

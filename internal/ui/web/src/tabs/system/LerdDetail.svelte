@@ -396,6 +396,7 @@
             <input
               type="number"
               min="1"
+              aria-label={m.system_idle_timeoutLabel()}
               bind:value={idleMinutesInput}
               onblur={onSaveIdleTimeout}
               onkeydown={(e) => e.key === 'Enter' && onSaveIdleTimeout()}
@@ -759,7 +760,7 @@
             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >{m.system_remote_enable()}</button>
           {#if !$lan.exposed}
-            <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">{m.system_remote_exposeFirst()}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">{m.system_remote_exposeFirst()}</p>
           {/if}
         </div>
       {/if}

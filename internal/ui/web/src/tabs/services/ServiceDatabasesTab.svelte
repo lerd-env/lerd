@@ -53,7 +53,7 @@
 
 <div class="p-3 sm:p-5 space-y-4 overflow-y-auto">
   {#if stopped}
-    <p class="text-sm text-gray-400 dark:text-gray-500">{m.databases_startHint()}</p>
+    <p class="text-sm text-gray-500 dark:text-gray-400">{m.databases_startHint()}</p>
   {:else if failed}
     <LoadFailedRow
       message={m.databases_loadFailed()}
@@ -85,7 +85,7 @@
     {#if engine.error}
       <p class="text-xs text-red-500">{engine.error}</p>
     {:else if engine.databases.length === 0}
-      <p class="text-sm text-gray-400 dark:text-gray-500">{m.databases_noDatabases()}</p>
+      <p class="text-sm text-gray-500 dark:text-gray-400">{m.databases_noDatabases()}</p>
     {:else}
       <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {#each pairs as pair (pair.entry.name)}

@@ -243,7 +243,7 @@
       {#if !$debugCaptureEnabled}
         <div class="px-3 py-10 text-center space-y-3">
           <p class="text-sm text-gray-500 dark:text-gray-400">{m.debug_disabled_title()}</p>
-          <p class="text-[11px] text-gray-400 dark:text-gray-500">{m.debug_disabled_body()}</p>
+          <p class="text-[11px] text-gray-500 dark:text-gray-400">{m.debug_disabled_body()}</p>
           <button type="button" disabled={enabling} onclick={onEnable} class="inline-flex items-center gap-1.5 text-xs rounded-sm border border-emerald-500/40 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 px-3 py-1.5 hover:border-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 disabled:opacity-50">
             {enabling ? m.queries_enabling() : m.debug_enable()}
           </button>
@@ -279,7 +279,7 @@
                   {:else}{d.name}{/if}
                 </span>
                 <span class="flex items-center gap-1 shrink-0">
-                  {#if wireKind === 'job'}{#if d.time_ms}<span class="text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{fmtMs(d.time_ms)} ms</span>{/if}<span class="text-[10px] rounded-sm px-1 py-0.5 {tone(d.status)}">{d.status}</span>
+                  {#if wireKind === 'job'}{#if d.time_ms}<span class="text-[11px] tabular-nums text-gray-500 dark:text-gray-400">{fmtMs(d.time_ms)} ms</span>{/if}<span class="text-[10px] rounded-sm px-1 py-0.5 {tone(d.status)}">{d.status}</span>
                   {:else if wireKind === 'cache'}<span class="text-[10px] rounded-sm px-1 py-0.5 {tone(d.op)}">{d.op}</span>
                   {:else if wireKind === 'http' && d.status}<span class="text-[10px] tabular-nums rounded-sm px-1 py-0.5 {httpTone(d.status)}">{d.status}</span>
                   {:else if wireKind === 'http'}<span class="text-[10px] rounded-sm px-1 py-0.5 {d.failed ? ROSE : SKY}">{d.failed ? 'failed' : m.http_sent()}</span>

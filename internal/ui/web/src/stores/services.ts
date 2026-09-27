@@ -6,6 +6,7 @@ import { pullSize } from '$lib/bytes';
 import { confirmDownload } from './downloadConfirm';
 import { sites } from './sites';
 import { groupByCategory, type CategoryGroup } from '$lib/presetCategories';
+import { announce, serviceStatusChanges } from '$lib/announce';
 
 // One published port of a service: its container-internal port, its preset
 // default host port, and the current host override (0/undefined = on default).
@@ -132,8 +133,12 @@ export async function loadServices() {
 
 export function applyServices(data: unknown) {
   if (!Array.isArray(data)) return;
+  const changes = serviceStatusChanges(get(services), data as Service[], isWorker);
   services.set(data as Service[]);
   servicesLoaded.set(true);
+  if (changes.length > 0) {
+    announce(changes.map((c) => `${serviceLabel(c.name)}: ${c.running ? m.common_running() : m.common_stopped()}`).join('. '));
+  }
 }
 
 wsMessage.subscribe((msg) => {

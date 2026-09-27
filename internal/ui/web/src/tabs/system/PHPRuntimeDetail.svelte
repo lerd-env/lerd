@@ -76,7 +76,7 @@
       <span class="font-semibold text-gray-900 dark:text-white text-base">{m.system_phpRuntime_title()}</span>
       <span
         class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full {$phpRuntime === 'native'
-          ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-500'
+          ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
           : 'bg-sky-100 dark:bg-sky-500/10 text-sky-700 dark:text-sky-400'}"
       >
         <span class="w-1.5 h-1.5 rounded-full {$phpRuntime === 'native' ? 'bg-emerald-500' : 'bg-sky-500'}"></span>

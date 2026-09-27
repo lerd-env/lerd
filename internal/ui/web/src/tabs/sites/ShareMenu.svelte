@@ -338,7 +338,7 @@
       style="position:fixed; left:{menuX}px; top:{menuY}px; width:{MENU_WIDTH}px; z-index:40"
       class="rounded-md border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-bg shadow-lg py-1"
     >
-      <div class="px-3 pt-1.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+      <div class="px-3 pt-1.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
         {m.share_localNetwork()}
       </div>
       {#if lanBusy}
@@ -381,7 +381,7 @@
       {/if}
 
       <div class="my-1 border-t border-gray-100 dark:border-lerd-border"></div>
-      <div class="px-3 pt-0.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+      <div class="px-3 pt-0.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
         {m.publicShare_title()}
       </div>
 
@@ -430,7 +430,7 @@
       {/if}
 
       <div class="my-1 border-t border-gray-100 dark:border-lerd-border"></div>
-      <div class="px-3 pt-0.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+      <div class="px-3 pt-0.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
         {m.share_publicTunnel()}
       </div>
 

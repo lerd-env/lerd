@@ -87,7 +87,7 @@
 <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
   <div class="min-w-0">
     <p class="text-xs font-medium text-gray-600 dark:text-gray-400">{m.snapshots_auto_selection()}</p>
-    <p class="text-[11px] text-gray-400 dark:text-gray-500">
+    <p class="text-[11px] text-gray-500 dark:text-gray-400">
       {$autoSnapshot.selection === 'opt_in'
         ? m.snapshots_auto_selectionOptInHint()
         : m.snapshots_auto_selectionOptOutHint()}

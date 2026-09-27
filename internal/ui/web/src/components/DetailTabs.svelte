@@ -12,6 +12,7 @@
 
 <script lang="ts" generics="T extends string">
   import type { Snippet } from 'svelte';
+  import { tablist } from '$lib/tablist';
 
   interface Props {
     tabs: TabItem<T>[];
@@ -28,10 +29,13 @@
 
 {#if visible.length > 1 || actions}
   <div class="flex items-end justify-between gap-3 border-b border-gray-100 dark:border-lerd-border pt-3 px-3 shrink-0">
-    <div class="flex items-end gap-4 min-w-0 overflow-x-auto">
+    <div use:tablist role={visible.length > 1 ? 'tablist' : undefined} class="flex items-end gap-4 min-w-0 overflow-x-auto">
       {#if visible.length > 1}
         {#each visible as t (t.id)}
           <button
+            role="tab"
+            aria-selected={active === t.id}
+            tabindex={active === t.id ? 0 : -1}
             onclick={() => onchange(t.id)}
             class="shrink-0 pb-1 text-xs font-medium transition-colors border-b-2 flex items-center gap-1 {active === t.id
               ? 'border-lerd-red text-lerd-red'

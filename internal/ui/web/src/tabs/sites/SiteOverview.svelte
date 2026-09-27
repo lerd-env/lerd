@@ -18,7 +18,7 @@
 </script>
 
 {#snippet sectionTitle(title: string)}
-  <h3 class="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+  <h3 class="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
     {title}
   </h3>
 {/snippet}

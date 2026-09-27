@@ -48,7 +48,7 @@
       <p class="text-sm text-gray-700 dark:text-gray-300">
         {m.nginxGlobalEditor_resetBody()}
       </p>
-      <p class="text-[10px] text-gray-400 dark:text-gray-600 font-mono break-all">{target.path}</p>
+      <p class="text-[10px] text-gray-500 dark:text-gray-400 font-mono break-all">{target.path}</p>
 
       {#if error}
         <p class="text-xs text-red-500">{error}</p>

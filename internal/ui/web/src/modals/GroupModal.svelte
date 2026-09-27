@@ -268,7 +268,7 @@
               disabled={loading}
               class="text-[10px] font-medium px-1.5 py-0.5 rounded-sm shrink-0 transition-colors disabled:opacity-50 {sec.group_shared_db
                 ? 'text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/20'
-                : 'text-gray-400 dark:text-gray-500 hover:text-violet-500'}"
+                : 'text-gray-500 dark:text-gray-400 hover:text-violet-500'}"
               title={sec.group_shared_db ? m.group_sharedDbTitleOn() : m.group_sharedDbTitleOff()}
             >
               {sec.group_shared_db ? m.group_sharedDbBadge() : m.group_ownDbBadge()}

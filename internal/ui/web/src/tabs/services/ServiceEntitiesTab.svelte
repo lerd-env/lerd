@@ -58,7 +58,7 @@
 
 <div class="p-3 sm:p-5 space-y-5 overflow-y-auto">
   {#if stopped}
-    <p class="text-sm text-gray-400 dark:text-gray-500">{m.entities_startHint()}</p>
+    <p class="text-sm text-gray-500 dark:text-gray-400">{m.entities_startHint()}</p>
   {:else if failed}
     <LoadFailedRow
       message={m.entities_loadFailed()}
@@ -68,7 +68,7 @@
   {:else if !loaded}
     <LoadingRow />
   {:else if kinds.length === 0}
-    <p class="text-sm text-gray-400 dark:text-gray-500">{m.entities_empty()}</p>
+    <p class="text-sm text-gray-500 dark:text-gray-400">{m.entities_empty()}</p>
   {:else}
     {#each kinds as kind (kind.kind)}
       <div class="space-y-4">
@@ -103,7 +103,7 @@
         {#if kind.error}
           <p class="text-xs text-red-500">{kind.error}</p>
         {:else if kind.rows.length === 0}
-          <p class="text-sm text-gray-400 dark:text-gray-500">{m.entities_empty()}</p>
+          <p class="text-sm text-gray-500 dark:text-gray-400">{m.entities_empty()}</p>
         {:else}
           <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {#each kind.rows as row (row.name)}

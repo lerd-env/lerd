@@ -236,18 +236,18 @@
             {m.snapshots_auto_title()}
           </p>
           {#if !scheduled}
-            <p class="text-[11px] text-gray-400 dark:text-gray-500">{m.snapshots_auto_noSiteForDatabase()}</p>
+            <p class="text-[11px] text-gray-500 dark:text-gray-400">{m.snapshots_auto_noSiteForDatabase()}</p>
           {:else if scheduled.covered}
             <!-- Two rows: the pair of full timestamps runs past the dialog on
                  one line, and the block sits next to the mode control. -->
-            <p class="text-[11px] text-gray-400 dark:text-gray-500">
+            <p class="text-[11px] text-gray-500 dark:text-gray-400">
               {m.snapshots_auto_last()}: {when(scheduled.last)}
             </p>
-            <p class="text-[11px] text-gray-400 dark:text-gray-500">
+            <p class="text-[11px] text-gray-500 dark:text-gray-400">
               {m.snapshots_auto_next()}: {when(scheduled.next)}
             </p>
           {:else}
-            <p class="text-[11px] text-gray-400 dark:text-gray-500">{m.common_disabled()}</p>
+            <p class="text-[11px] text-gray-500 dark:text-gray-400">{m.common_disabled()}</p>
           {/if}
         </div>
         <div class="flex items-center gap-1.5 shrink-0">
@@ -265,7 +265,7 @@
             onclick={() => (showSettings = true)}
             use:tooltip={m.snapshots_auto_settings()}
             aria-label={m.snapshots_auto_settings()}
-            class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+            class="flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
           >
             <Icon name="system" class="w-3.5 h-3.5" />
           </button>
@@ -274,7 +274,7 @@
     </div>
 
     {#if snapshots.length === 0}
-      <p class="text-sm text-gray-400 dark:text-gray-500">{m.databases_noSnapshots()}</p>
+      <p class="text-sm text-gray-500 dark:text-gray-400">{m.databases_noSnapshots()}</p>
     {:else}
       <ul class="divide-y divide-gray-100 dark:divide-lerd-border/60 rounded-lg border border-gray-100 dark:border-lerd-border">
         {#each snapshots as snap (snap.name)}
@@ -282,7 +282,7 @@
           <li class="flex items-center gap-2 px-3 py-2">
             <div class="min-w-0 flex-1">
               <p class="truncate text-sm font-medium text-gray-800 dark:text-gray-200" title={snap.name}>{snapshotBaseName(snap.name)}</p>
-              <p class="text-[11px] text-gray-400 dark:text-gray-500">
+              <p class="text-[11px] text-gray-500 dark:text-gray-400">
                 {#if snapDateLabel(snap)}{snapDateLabel(snap)} · {/if}{formatBytes(snap.size_bytes)}{#if expiryLabel(snap)} · {expiryLabel(snap)}{/if}
               </p>
             </div>
@@ -296,7 +296,7 @@
                 aria-pressed={Boolean(snap.kept)}
                 class="flex items-center justify-center w-7 h-7 rounded-md transition-colors {snap.kept
                   ? 'text-lerd-red'
-                  : 'text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5'}"
+                  : 'text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5'}"
               >
                 <Icon name="bookmark" class="w-3.5 h-3.5" />
               </button>
@@ -305,7 +305,7 @@
               href={snapshotExportUrl(engine.service, entry.name, snap.name)}
               use:tooltip={m.databases_export()}
               aria-label={m.databases_export()}
-              class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+              class="flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
             >
               <Icon name="download" class="w-3.5 h-3.5" />
             </a>

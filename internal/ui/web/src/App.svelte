@@ -1,5 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { m } from './paraglide/messages.js';
+  import { announcement } from '$lib/announce';
+  import { pageSubject, pageTitle } from '$lib/pageTitle';
   import NavRail from '$components/NavRail.svelte';
   import SidePanel from '$components/SidePanel.svelte';
   import MobileHeader from '$components/MobileHeader.svelte';
@@ -103,9 +106,26 @@
   const showMobileDetail = $derived(Boolean($routeRest));
   const onApps = $derived($mobileView === 'apps');
   const onDashboard = $derived($tab === 'dashboard');
+
+  const sectionLabels = $derived({
+    dashboard: m.nav_dashboard(),
+    sites: m.nav_sites(),
+    services: m.nav_services(),
+    system: m.nav_system()
+  });
+  const subject = $derived(pageSubject($tab, $routeRest));
+  $effect(() => {
+    document.title = pageTitle(sectionLabels[$tab], subject);
+  });
 </script>
 
 <div class="h-screen flex">
+  <!-- A button, not a #main link: the hash is the router, so a fragment would navigate away. -->
+  <button
+    type="button"
+    onclick={() => document.getElementById('main')?.focus()}
+    class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-3 focus:py-2 focus:rounded-md focus:bg-white dark:focus:bg-lerd-card focus:text-gray-900 dark:focus:text-white focus:shadow-lg focus:ring-2 focus:ring-lerd-red"
+  >{m.common_skipToContent()}</button>
   <NavRail />
 
   {#if !onDashboard}
@@ -120,7 +140,12 @@
     </SidePanel>
   {/if}
 
-  <main class="flex-1 flex flex-col overflow-hidden">
+  <div class="sr-only" aria-live="polite">{$announcement}</div>
+  <main id="main" tabindex="-1" class="flex-1 flex flex-col overflow-hidden outline-none">
+    <!-- The Sites and Services overviews carry their own h1; an open item and System do not. -->
+    {#if subject || $tab === 'system'}
+      <h1 class="sr-only">{subject || sectionLabels[$tab]}</h1>
+    {/if}
     {#if !showMobileDetail}
       <MobileHeader />
     {/if}

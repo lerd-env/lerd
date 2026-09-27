@@ -69,7 +69,7 @@
     use:tooltip={m.sites_suggestedService_add({ name: serviceLabel(name) })}
     aria-label={m.sites_suggestedService_add({ name: serviceLabel(name) })}
     onclick={() => act('service:add')}
-    class="shrink-0 flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
+    class="shrink-0 flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
   >
     <Icon name={busy ? 'spinner' : 'plus'} class="w-3.5 h-3.5 {busy ? 'animate-spin' : ''}" />
   </button>
@@ -79,7 +79,7 @@
     use:tooltip={m.sites_suggestedService_dismiss({ name: serviceLabel(name) })}
     aria-label={m.sites_suggestedService_dismiss({ name: serviceLabel(name) })}
     onclick={() => act('service:dismiss')}
-    class="shrink-0 flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
+    class="shrink-0 flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
   >
     <Icon name="close" class="w-3.5 h-3.5" />
   </button>

@@ -27,3 +27,15 @@ describe('StatusDot', () => {
     expect(cls(container)).toMatch(/w-1\.5/);
   });
 });
+
+describe('StatusDot for screen readers', () => {
+  it('is hidden when it only repeats the text beside it', () => {
+    const { container } = render(StatusDot, { props: { color: 'green' } });
+    expect(container.querySelector('span')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('speaks its label when the colour is the only signal', () => {
+    const { getByRole } = render(StatusDot, { props: { color: 'red', label: 'Worker failing' } });
+    expect(getByRole('img', { name: 'Worker failing' })).toBeInTheDocument();
+  });
+});

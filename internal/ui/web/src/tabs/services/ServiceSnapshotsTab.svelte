@@ -258,19 +258,19 @@
          the tab states it rather than offering a second set of controls. -->
     <dl class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 text-xs">
       <div>
-        <dt class="text-gray-400 dark:text-gray-500">{m.snapshots_auto_every()}</dt>
+        <dt class="text-gray-500 dark:text-gray-400">{m.snapshots_auto_every()}</dt>
         <dd class="text-gray-700 dark:text-gray-300">{intervalLabel}</dd>
       </div>
       <div>
-        <dt class="text-gray-400 dark:text-gray-500">{m.snapshots_auto_keep()}</dt>
+        <dt class="text-gray-500 dark:text-gray-400">{m.snapshots_auto_keep()}</dt>
         <dd class="text-gray-700 dark:text-gray-300 tabular-nums">{$autoSnapshot.keep}</dd>
       </div>
       <div>
-        <dt class="text-gray-400 dark:text-gray-500">{m.snapshots_auto_keepFor()}</dt>
+        <dt class="text-gray-500 dark:text-gray-400">{m.snapshots_auto_keepFor()}</dt>
         <dd class="text-gray-700 dark:text-gray-300">{keepForLabel}</dd>
       </div>
       <div>
-        <dt class="text-gray-400 dark:text-gray-500">{m.snapshots_auto_selection()}</dt>
+        <dt class="text-gray-500 dark:text-gray-400">{m.snapshots_auto_selection()}</dt>
         <dd class="text-gray-700 dark:text-gray-300">
           {$autoSnapshot.selection === 'opt_in'
             ? m.snapshots_auto_selectionOptIn()
@@ -295,7 +295,7 @@
         </p>
       {/if}
       <p>{m.snapshots_totalUsage({ count: rows.length, size: formatBytes(totalBytes) })}</p>
-      <p class="basis-full text-gray-400 dark:text-gray-500">{m.snapshots_auto_perDatabaseHint()}</p>
+      <p class="basis-full text-gray-500 dark:text-gray-400">{m.snapshots_auto_perDatabaseHint()}</p>
     </div>
   </SettingsCard>
 
@@ -323,13 +323,13 @@
     {/if}
 
     {#if rows.length === 0}
-      <p class="text-sm text-gray-400 dark:text-gray-500">{m.databases_noSnapshots()}</p>
+      <p class="text-sm text-gray-500 dark:text-gray-400">{m.databases_noSnapshots()}</p>
     {:else if filtered.length === 0}
-      <p class="text-sm text-gray-400 dark:text-gray-500">{m.snapshots_noMatches()}</p>
+      <p class="text-sm text-gray-500 dark:text-gray-400">{m.snapshots_noMatches()}</p>
     {:else}
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm">
-          <thead class="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500">
+          <thead class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400">
             <tr class="border-b border-gray-100 dark:border-lerd-border">
               <th class="w-8 py-2 pr-2">
                 <input
@@ -393,7 +393,7 @@
                         class="flex items-center justify-center w-7 h-7 rounded-md transition-colors {row.snap
                           .kept
                           ? 'text-lerd-red'
-                          : 'text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5'}"
+                          : 'text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5'}"
                       >
                         <Icon name="bookmark" class="w-3.5 h-3.5" />
                       </button>
@@ -402,7 +402,7 @@
                       href={snapshotExportUrl(svc.name, row.database, row.snap.name)}
                       use:tooltip={m.databases_export()}
                       aria-label={m.databases_export()}
-                      class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+                      class="flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
                     >
                       <Icon name="download" class="w-3.5 h-3.5" />
                     </a>
@@ -412,7 +412,7 @@
                       disabled={Boolean(busy)}
                       use:tooltip={m.databases_restore()}
                       aria-label={m.databases_restore()}
-                      class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+                      class="flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
                     >
                       <Icon name="refresh" class="w-3.5 h-3.5" />
                     </button>
@@ -422,7 +422,7 @@
                       disabled={Boolean(busy)}
                       use:tooltip={m.databases_delete()}
                       aria-label={m.databases_delete()}
-                      class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+                      class="flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
                     >
                       <Icon name="trash" class="w-3.5 h-3.5" />
                     </button>
@@ -450,7 +450,7 @@
               disabled={current === 0}
               use:tooltip={m.snapshots_pagePrev()}
               aria-label={m.snapshots_pagePrev()}
-              class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 enabled:hover:text-gray-700 dark:enabled:hover:text-gray-200 enabled:hover:bg-gray-100 dark:enabled:hover:bg-white/5 disabled:opacity-40 transition-colors"
+              class="flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 enabled:hover:text-gray-700 dark:enabled:hover:text-gray-200 enabled:hover:bg-gray-100 dark:enabled:hover:bg-white/5 disabled:opacity-40 transition-colors"
             >
               <Icon name="back" class="w-3.5 h-3.5" />
             </button>
@@ -460,7 +460,7 @@
               disabled={current === maxPage}
               use:tooltip={m.snapshots_pageNext()}
               aria-label={m.snapshots_pageNext()}
-              class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 enabled:hover:text-gray-700 dark:enabled:hover:text-gray-200 enabled:hover:bg-gray-100 dark:enabled:hover:bg-white/5 disabled:opacity-40 transition-colors"
+              class="flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 enabled:hover:text-gray-700 dark:enabled:hover:text-gray-200 enabled:hover:bg-gray-100 dark:enabled:hover:bg-white/5 disabled:opacity-40 transition-colors"
             >
               <Icon name="chevron" class="w-3.5 h-3.5 -rotate-90" />
             </button>

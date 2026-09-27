@@ -53,7 +53,7 @@
         class="w-full text-sm font-mono px-2.5 py-1.5 rounded-sm border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-lerd-red"
       />
     {/each}
-    <p class="text-[11px] text-gray-400 dark:text-gray-500">
+    <p class="text-[11px] text-gray-500 dark:text-gray-400">
       {m.sites_controls_workerOptionsHint()}
     </p>
   </div>

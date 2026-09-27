@@ -60,7 +60,7 @@
     </div>
 
     {#if $notificationHistory.length === 0}
-      <p class="px-3 py-4 text-[11px] text-gray-400 dark:text-gray-500">{m.notify_center_empty()}</p>
+      <p class="px-3 py-4 text-[11px] text-gray-500 dark:text-gray-400">{m.notify_center_empty()}</p>
     {:else}
       <ul class="max-h-[60vh] overflow-y-auto divide-y divide-gray-100 dark:divide-lerd-border/60">
         {#each $notificationHistory as n (n.id)}

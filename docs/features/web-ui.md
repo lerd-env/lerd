@@ -54,6 +54,12 @@ Dracula, Nord, Gruvbox Dark) and the desktop ones (Breeze, Adwaita, macOS). You 
 YAML file, either by hand or through the import button; see
 [Dashboard themes](/features/dashboard-themes).
 
+### Keyboard and screen readers
+
+Everything in the dashboard works from the keyboard. The first Tab stop is a **Skip to content** button that jumps past the rail and the list straight into the page. Dialogs take focus when they open, keep Tab inside them, close on Escape and hand focus back to whatever opened them. Detail tabs (Overview, Logs, Env and the rest) move with the arrow keys, Home and End, and a site row can be reordered by focusing it, pressing Space and moving it with the arrows.
+
+For screen readers, toggles announce themselves as switches with their on or off state, the rail marks the page you are on, and the small icons on a site row (sharing, worktrees, sleeping or failing workers) are read out rather than left to a hover tooltip. A service starting or stopping is announced as it happens, and the browser tab's title names the site or service that is open.
+
 ### Language
 
 The dashboard ships in fourteen languages: English, German, Spanish, French, Indonesian, Dutch, Portuguese, Turkish, Simplified Chinese, Japanese, Romanian, Italian, Polish, and Vietnamese. The first time you open the dashboard, the language is autodetected from your browser's preferred locale (Paraglide reads `navigator.language` and picks the closest match, falling back to English). To change it later, open **System → Lerd** and use the language picker in the settings section; the choice persists in `localStorage` so subsequent sessions open in the same language. Strings are wired through Paraglide; new keys fall back to English when a locale hasn't been translated yet.

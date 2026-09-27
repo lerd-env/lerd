@@ -23,6 +23,12 @@ describe('NotificationToasts', () => {
     expect(container.textContent).toBe('');
   });
 
+  // A live region only announces changes to itself, so it has to exist before the first toast lands in it.
+  it('keeps its live region mounted while empty', () => {
+    const { container } = render(NotificationToasts);
+    expect(container.querySelector('[aria-live="polite"]')).toBeInTheDocument();
+  });
+
   it('shows a failure as an alert and keeps it until dismissed', async () => {
     vi.useFakeTimers();
     const { getByRole, getByLabelText } = render(NotificationToasts);

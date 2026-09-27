@@ -18,7 +18,7 @@
         onclick={() => changeLocale(l)}
         class="px-2 py-1.5 text-[10px] font-medium transition-colors {$locale === l
           ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white'
-          : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5'}"
+          : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5'}"
       >{LOCALE_CODES[l]}</button>
     {/each}
   </div>

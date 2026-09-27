@@ -28,6 +28,6 @@
     <div class="whitespace-pre-wrap break-all">{@html ansiToHtml(line)}</div>
   {/each}
   {#if logs.length === 0}
-    <div class="text-gray-400 dark:text-gray-500">{m.link_waitingOutput()}</div>
+    <div class="text-gray-500 dark:text-gray-400">{m.link_waitingOutput()}</div>
   {/if}
 </div>

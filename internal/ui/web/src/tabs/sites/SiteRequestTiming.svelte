@@ -255,9 +255,9 @@
 
 {#snippet kpi(label: string, value: string, unit: string, meta: string, tone: string)}
   <div class="rounded-lg border border-gray-200/80 dark:border-lerd-border bg-white dark:bg-lerd-card p-3">
-    <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{label}</div>
+    <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{label}</div>
     <div class="mt-2 text-2xl font-semibold tracking-tight tabular-nums {tone}">
-      {value}<span class="text-sm font-medium text-gray-400 dark:text-gray-500 ml-0.5">{unit}</span>
+      {value}<span class="text-sm font-medium text-gray-500 dark:text-gray-400 ml-0.5">{unit}</span>
     </div>
     <div class="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400 truncate">{meta}</div>
   </div>
@@ -280,7 +280,7 @@
     onclick={(e) => { e.stopPropagation(); onclick(); }}
     use:tooltip={m.sites_timing_removeRow()}
     aria-label={m.sites_timing_removeRow()}
-    class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+    class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
   >
     <Icon name="trash" class="w-3.5 h-3.5" />
   </button>
@@ -293,7 +293,7 @@
       onclick={(e) => { e.stopPropagation(); inspectRoute(routeKey); }}
       use:tooltip={m.sites_timing_inspectQueries()}
       aria-label={m.sites_timing_inspectQueries()}
-      class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+      class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
     >
       <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <ellipse cx="12" cy="5" rx="8" ry="3" />
@@ -305,7 +305,7 @@
 
 <section>
   <div class="mb-2.5 flex items-center justify-between gap-3">
-    <h3 class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+    <h3 class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
       {m.sites_reqstats_title()}
     </h3>
     <div class="flex items-center gap-1.5">
@@ -325,7 +325,7 @@
         onclick={() => (excludesOpen = true)}
         use:tooltip={m.sites_timing_excludedManage()}
         aria-label={m.sites_timing_excludedManage()}
-        class="relative shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+        class="relative shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
       >
         <Icon name="system" class="w-3.5 h-3.5" />
         {#if excluded.length > 0}
@@ -336,7 +336,7 @@
   </div>
 
   {#if !hasData}
-    <div class="rounded-lg border border-dashed border-gray-200 dark:border-lerd-border p-6 text-center text-xs text-gray-400 dark:text-gray-500">
+    <div class="rounded-lg border border-dashed border-gray-200 dark:border-lerd-border p-6 text-center text-xs text-gray-500 dark:text-gray-400">
       {m.sites_reqstats_watching()}
     </div>
   {:else if data}
@@ -349,7 +349,7 @@
     </div>
 
     {#if data.cold_starts > 0}
-      <div class="mt-2 flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500">
+      <div class="mt-2 flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
         <span class="text-sky-500 dark:text-sky-400">❄</span>
         {m.sites_timing_coldExcluded({ n: data.cold_starts })}
       </div>
@@ -358,12 +358,12 @@
     <!-- charts -->
     <div class="mt-3 grid md:grid-cols-2 gap-3">
       <div class="rounded-lg border border-gray-200/80 dark:border-lerd-border bg-white dark:bg-lerd-card p-3">
-        <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">{m.sites_timing_responseTime()}</div>
+        <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">{m.sites_timing_responseTime()}</div>
         <div class="flex items-end gap-1.5 h-24">
           {#each data.distribution as b, i (i)}
             <div class="flex-1 flex flex-col items-center justify-end h-full gap-1" use:tooltip={`${b.count} · ${bucketLabel(b, i, data.distribution)}`}>
               <div class="w-full rounded-t-sm {SEV_BG[bucketSev(b.upper_millis)]}" style="height:{Math.max(2, (b.count / histMax) * 100)}%"></div>
-              <div class="text-[8px] text-gray-400 dark:text-gray-500 leading-none">{bucketLabel(b, i, data.distribution)}</div>
+              <div class="text-[8px] text-gray-500 dark:text-gray-400 leading-none">{bucketLabel(b, i, data.distribution)}</div>
             </div>
           {/each}
         </div>
@@ -371,12 +371,12 @@
 
       <div class="rounded-lg border border-gray-200/80 dark:border-lerd-border bg-white dark:bg-lerd-card p-3">
         <div class="flex items-baseline justify-between mb-3">
-          <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{m.sites_timing_throughput()}</div>
-          <div class="text-[10px] text-gray-400 dark:text-gray-500">{m.sites_timing_perMin()}</div>
+          <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{m.sites_timing_throughput()}</div>
+          <div class="text-[10px] text-gray-500 dark:text-gray-400">{m.sites_timing_perMin()}</div>
         </div>
         {#if tput}
           <div class="flex gap-1.5">
-            <div class="flex flex-col justify-between items-end w-6 py-0.5 text-[9px] tabular-nums text-gray-400 dark:text-gray-500 leading-none">
+            <div class="flex flex-col justify-between items-end w-6 py-0.5 text-[9px] tabular-nums text-gray-500 dark:text-gray-400 leading-none">
               <span>{tput.max}</span>
               <span>0</span>
             </div>
@@ -386,21 +386,21 @@
                 <path d={tput.area} class="fill-lerd-red/10" />
                 <path d={tput.line} fill="none" class="stroke-lerd-red" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" />
               </svg>
-              <div class="flex justify-between text-[9px] tabular-nums text-gray-400 dark:text-gray-500 mt-1">
+              <div class="flex justify-between text-[9px] tabular-nums text-gray-500 dark:text-gray-400 mt-1">
                 <span>{fmtTime(tput.first)}</span>
                 <span>{fmtTime(tput.last)}</span>
               </div>
             </div>
           </div>
         {:else}
-          <div class="h-24 flex items-center justify-center text-[11px] text-gray-400 dark:text-gray-500">{m.sites_reqstats_watching()}</div>
+          <div class="h-24 flex items-center justify-center text-[11px] text-gray-500 dark:text-gray-400">{m.sites_reqstats_watching()}</div>
         {/if}
       </div>
     </div>
 
     <!-- slowest routes -->
     <div class="mt-3 rounded-lg border border-gray-200/80 dark:border-lerd-border bg-white dark:bg-lerd-card p-3">
-      <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">{m.sites_timing_slowest()}</div>
+      <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2.5">{m.sites_timing_slowest()}</div>
       <div class="flex flex-col gap-2">
         {#each slowest as r (r.method + r.route)}
           <div class="flex items-center gap-2">
@@ -420,7 +420,7 @@
         {/each}
       </div>
       {#if profileStatus}
-        <div class="mt-2.5 text-[11px] {profileFailed ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}">
+        <div class="mt-2.5 text-[11px] {profileFailed ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'}">
           {profileStatus}
         </div>
       {/if}
@@ -439,7 +439,7 @@
         <div class="overflow-x-auto">
           <table class="w-full text-xs">
             <thead>
-              <tr class="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">
+              <tr class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">
                 <th class="text-left font-semibold px-3 py-2">{m.sites_timing_route()}</th>
                 <th class="text-right font-semibold px-3 py-2">p50</th>
                 <th class="text-right font-semibold px-3 py-2">p95</th>
@@ -477,14 +477,14 @@
         <div class="divide-y divide-gray-100 dark:divide-lerd-border">
           {#each data.recent as r, i (r.at_millis + '-' + r.uri + '-' + i)}
             <div class="flex items-center gap-3 px-3 py-2 text-xs">
-              <span class="shrink-0 font-mono text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{fmtTime(r.at_millis)}</span>
+              <span class="shrink-0 font-mono text-[11px] tabular-nums text-gray-500 dark:text-gray-400">{fmtTime(r.at_millis)}</span>
               <span class="shrink-0 font-mono text-[9px] font-semibold px-1 py-0.5 rounded {methClass(r.method)}">{r.method}</span>
               <span class="font-mono text-gray-700 dark:text-gray-200 truncate flex-1 min-w-0">{r.uri}</span>
               {#if r.cold}
                 <span class="shrink-0 text-[11px] text-sky-500 dark:text-sky-400" use:tooltip={m.sites_timing_coldHint()} aria-label={m.sites_timing_cold()}>❄</span>
               {/if}
               <span class="shrink-0 font-mono text-[11px] font-semibold {statusClass(r.status)}">{r.status}</span>
-              <span class="shrink-0 tabular-nums font-medium text-right w-16 {r.cold ? 'text-gray-400 dark:text-gray-500' : SEV_TEXT[sev(r.millis)]}">{fmtMs(r.millis)}</span>
+              <span class="shrink-0 tabular-nums font-medium text-right w-16 {r.cold ? 'text-gray-500 dark:text-gray-400' : SEV_TEXT[sev(r.millis)]}">{fmtMs(r.millis)}</span>
               {@render removeBtn(() => askRemoveRequest(r))}
             </div>
           {/each}
@@ -502,7 +502,7 @@
   <div class="px-5 py-4">
     <p class="text-[11px] text-gray-500 dark:text-gray-400">{m.sites_timing_excludedHint()}</p>
     {#if excluded.length === 0}
-      <p class="mt-3 text-sm text-gray-400 dark:text-gray-500">{m.sites_timing_excludedNone()}</p>
+      <p class="mt-3 text-sm text-gray-500 dark:text-gray-400">{m.sites_timing_excludedNone()}</p>
     {:else}
       <div class="mt-3 flex flex-col gap-1.5">
         {#each excluded as route (route)}
@@ -513,7 +513,7 @@
               onclick={() => watchAgain(route)}
               use:tooltip={m.sites_timing_unexclude()}
               aria-label={m.sites_timing_unexclude()}
-              class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+              class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
             >
               <Icon name="refresh" class="w-3.5 h-3.5" />
             </button>

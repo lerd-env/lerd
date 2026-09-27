@@ -54,7 +54,7 @@
         {m.system_php_ports_title()}
       </span>
       {#if saving}
-        <span class="text-[11px] text-gray-400 dark:text-gray-500">{m.services_ports_applying()}</span>
+        <span class="text-[11px] text-gray-500 dark:text-gray-400">{m.services_ports_applying()}</span>
       {/if}
     </div>
     <p class="text-xs text-gray-500 dark:text-gray-400 -mt-2">

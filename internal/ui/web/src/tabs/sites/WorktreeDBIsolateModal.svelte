@@ -56,7 +56,7 @@
       options={options}
       onchange={(v) => (selected = v)}
     />
-    <p class="text-[11px] text-gray-400 dark:text-gray-500">
+    <p class="text-[11px] text-gray-500 dark:text-gray-400">
       {m.worktreeDb_cloningHint()}
     </p>
   </div>

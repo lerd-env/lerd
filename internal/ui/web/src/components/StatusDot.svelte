@@ -7,8 +7,10 @@
     color: StatusColor;
     size?: 'xs' | 'sm' | 'md';
     pulse?: boolean;
+    // Only when the dot is the sole signal; beside a status word it stays hidden.
+    label?: string;
   }
-  let { color, size = 'sm', pulse = false }: Props = $props();
+  let { color, size = 'sm', pulse = false, label }: Props = $props();
 
   const colorClass: Record<StatusColor, string> = {
     green: 'bg-emerald-500',
@@ -32,4 +34,8 @@
   const dotClass = $derived(`${sizeClass[size]} ${colorClass[color]} rounded-full shrink-0${pulse ? ' animate-pulse' : ''}`);
 </script>
 
-<span class={dotClass}></span>
+{#if label}
+  <span class={dotClass} role="img" aria-label={label}></span>
+{:else}
+  <span class={dotClass} aria-hidden="true"></span>
+{/if}

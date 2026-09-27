@@ -203,7 +203,7 @@
     <span class="text-[11px] uppercase tracking-wide font-semibold text-gray-500 dark:text-gray-400"
       >{title}</span
     >
-    <span class="text-[11px] text-gray-400 dark:text-gray-500 truncate">{hint}</span>
+    <span class="text-[11px] text-gray-500 dark:text-gray-400 truncate">{hint}</span>
   </div>
   <ConfigToolbar
     {path}

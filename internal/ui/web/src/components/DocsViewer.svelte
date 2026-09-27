@@ -121,7 +121,7 @@
             >
               <div class="text-[13px] text-gray-700 dark:text-gray-200 truncate">{r.title}</div>
               {#if r.snippet}
-                <div class="text-[11px] text-gray-400 dark:text-gray-500 line-clamp-2">
+                <div class="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2">
                   {r.snippet}
                 </div>
               {/if}

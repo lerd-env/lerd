@@ -384,7 +384,7 @@
       {@const wtWorkers = activeWorktree?.framework_workers || []}
       {#if wtWorkers.length === 0}
         <span
-          class="text-[11px] text-gray-400 dark:text-gray-500 italic"
+          class="text-[11px] text-gray-500 dark:text-gray-400 italic"
           title={m.sites_controls_workersFromMainTitle()}
         >
           {m.sites_controls_workersFromMain()}

@@ -48,6 +48,7 @@
   import { m } from '../../paraglide/messages.js';
 
   import type { Snippet } from 'svelte';
+  import { tablist } from '$lib/tablist';
 
   interface Props {
     site: Site;
@@ -332,7 +333,7 @@
           >
             {#if e.isMain}
               <svg
-                class="w-3.5 h-3.5 shrink-0 {isActive ? 'text-lerd-red' : 'text-gray-400 dark:text-gray-500'}"
+                class="w-3.5 h-3.5 shrink-0 {isActive ? 'text-lerd-red' : 'text-gray-500 dark:text-gray-400'}"
                 fill="none"
                 stroke="currentColor"
                 stroke-width="2"
@@ -424,7 +425,7 @@
           use:tooltip={site.tls ? m.sites_controls_httpsToggle_on() : m.sites_controls_httpsToggle_off()}
           class="shrink-0 -ml-1 p-1 rounded-sm transition-colors disabled:opacity-50 {site.tls
             ? 'text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
-            : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5'}"
+            : 'text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5'}"
         >
           {#if tlsBusy}
             <svg class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
@@ -464,7 +465,7 @@
         </span>
       {:else if !dnsEnabled}
         <span
-          class="shrink-0 -ml-1 p-1 inline-flex items-center text-gray-400 dark:text-gray-500"
+          class="shrink-0 -ml-1 p-1 inline-flex items-center text-gray-500 dark:text-gray-400"
           title={m.sites_controls_httpsUnavailable()}
           aria-label={m.sites_controls_httpsUnavailable()}
         >
@@ -478,7 +479,7 @@
           </svg>
         </span>
       {:else}
-        <span class="shrink-0 -ml-1 p-1 inline-flex items-center text-gray-400 dark:text-gray-500" aria-label={m.sites_tls_off()}>
+        <span class="shrink-0 -ml-1 p-1 inline-flex items-center text-gray-500 dark:text-gray-400" aria-label={m.sites_tls_off()}>
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
@@ -499,7 +500,7 @@
         />
       {:else}
         <svg
-          class="w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500"
+          class="w-4 h-4 shrink-0 text-gray-500 dark:text-gray-400"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -521,12 +522,12 @@
           aria-label={m.sites_manageDomains()}
           class="flex items-center min-w-0 flex-1 font-mono cursor-text text-left pt-1.5"
         >
-          <span class="text-sm text-gray-400 dark:text-gray-500 shrink-0 leading-none">{scheme}</span>
+          <span class="text-sm text-gray-500 dark:text-gray-400 shrink-0 leading-none">{scheme}</span>
           <span class="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate leading-none">{activeDomain}</span>
         </button>
       {:else}
         <span title={scheme + activeDomain} class="flex items-baseline min-w-0 flex-1 font-mono pt-1.5">
-          <span class="text-sm text-gray-400 dark:text-gray-500 shrink-0 leading-none">{scheme}</span>
+          <span class="text-sm text-gray-500 dark:text-gray-400 shrink-0 leading-none">{scheme}</span>
           <span class="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate leading-none">{activeDomain}</span>
         </span>
       {/if}
@@ -585,7 +586,7 @@
           onclick={onOpenNginx}
           aria-label={m.sites_nginx_editTitle()}
           use:tooltip={m.sites_nginx_editTitle()}
-          class="shrink-0 -mr-1 p-1 rounded-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+          class="shrink-0 -mr-1 p-1 rounded-sm text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
         >
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
             <line x1="3" y1="8" x2="21" y2="8" />
@@ -986,7 +987,7 @@
 
   {#if tabs}
     <div class="px-3 flex items-end justify-between gap-4 -mb-px pt-1">
-      <div class="flex items-end gap-4 min-w-0 overflow-x-auto">{@render tabs()}</div>
+      <div use:tablist role="tablist" class="flex items-end gap-4 min-w-0 overflow-x-auto">{@render tabs()}</div>
       {#if activePath}
         <div class="self-center min-w-0 max-w-[50%] flex items-center text-[11px] leading-none text-gray-500 dark:text-gray-400">
           {@render pathLabel()}

@@ -344,13 +344,19 @@ export function paletteById(palettes: Palette[], id: string): Palette {
 // the tone that reads on the surface the current mode paints and, for the
 // chrome, whether the window has focus.
 export function paletteVars(palette: Palette, dark: boolean, focused = false): Record<string, string> {
-  const accent = dark ? palette.accentDark : palette.accent;
+  // The accent is link and tab text, so it is nudged to AA on the card behind
+  // it: darker on white, lighter on a dark card. A tone that already reads is
+  // kept as declared, hover and all.
+  const declared = dark ? palette.accentDark : palette.accent;
+  const accent = readableOn(declared, dark ? palette.card : '#ffffff', dark ? 255 : 0);
+  const accentHover =
+    accent === declared ? (dark ? palette.accentHoverDark : palette.accentHover) : step(accent, dark ? 255 : 0);
   const header = (focused && palette.chromeActive) || palette.card;
   const headerLight = (focused && palette.chromeLightActive) || palette.chromeLight || '#ffffff';
   return {
     '--lerd-accent': accent,
     '--lerd-on-accent': onAccent(accent),
-    '--lerd-accent-hover': dark ? palette.accentHoverDark : palette.accentHover,
+    '--lerd-accent-hover': accentHover,
     '--lerd-bg': palette.bg,
     '--lerd-card': palette.card,
     '--lerd-border': palette.border,
@@ -361,8 +367,27 @@ export function paletteVars(palette: Palette, dark: boolean, focused = false): R
     // that follows focus; the sidebar between them holds still.
     '--lerd-header': header,
     '--lerd-header-light': headerLight,
-    '--lerd-header-border': dark ? headerBorderDark(header, palette) : chromeBorder(headerLight)
+    '--lerd-header-border': dark ? headerBorderDark(header, palette) : chromeBorder(headerLight),
+    // Always set, even when unchanged: apply() only writes properties, so a value
+    // left over from the previous theme would otherwise stick.
+    '--color-gray-400': dark ? readableOn(GRAY_400, liftedCard(palette.card), 255) : GRAY_400,
+    '--color-gray-500': dark ? GRAY_500 : readableOn(GRAY_500, darker(headerLight, GRAY_100), 0)
   };
+}
+
+// Tailwind's gray-400, the muted text on dark surfaces, and gray-500 on light ones.
+const GRAY_400 = '#99a1af';
+const GRAY_500 = '#6a7282';
+const GRAY_100 = '#f3f4f6';
+
+// The brightest surface muted text lands on in dark mode: a pill of white/5 or
+// so on the card. Tinted themes lift it enough to sink gray-400 below AA.
+function liftedCard(card: string): string {
+  return toHex(mix(parseHex(card)!, 255, 0.08));
+}
+
+function darker(a: string, b: string): string {
+  return luminance(parseHex(a)!) < luminance(parseHex(b)!) ? a : b;
 }
 
 function hex(v: string | undefined): string | null {
@@ -375,9 +400,22 @@ function hex(v: string | undefined): string | null {
 const TEXT_ON_WHITE_FLOOR = 4.5;
 
 function readableOnWhite(color: string): string {
+  return readableOn(color, '#ffffff', 0);
+}
+
+// readableOn steps color toward target (0 black, 255 white) until it reaches
+// the WCAG AA text contrast against surface. A colour that already passes comes
+// back as it was.
+function readableOn(color: string, surface: string, target: number): string {
   let rgb = parseHex(color)!;
-  for (let i = 0; i < 40 && whiteContrast(rgb) < TEXT_ON_WHITE_FLOOR; i++) {
-    rgb = mix(rgb, 0, 0.05);
+  const bg = luminance(parseHex(surface)!);
+  const ratio = (fg: number) => (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
+
+  // Small steps stop at the first tone that passes, as close to the declared one as AA allows.
+  // Measured on the rounded hex, since that is what the page paints.
+  const passes = () => ratio(luminance(parseHex(toHex(rgb))!)) >= TEXT_ON_WHITE_FLOOR;
+  for (let i = 0; i < 200 && !passes(); i++) {
+    rgb = mix(rgb, target, 0.01);
   }
   return toHex(rgb);
 }
