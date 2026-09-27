@@ -1,5 +1,7 @@
 <script lang="ts">
   import DetailPanel from '$components/DetailPanel.svelte';
+  import DetailHeader from '$components/DetailHeader.svelte';
+  import DetailButton from '$components/DetailButton.svelte';
   import PhpDetail from './PhpDetail.svelte';
   import PhpVersionCard from './PhpVersionCard.svelte';
   import { phpVersions } from '$stores/phpVersions';
@@ -75,33 +77,32 @@
 </script>
 
 <DetailPanel>
-  <div class="page-header shrink-0">
-    <div class="flex items-stretch gap-3 px-3 py-3 overflow-x-auto snap-x">
-      {#each ordered as v (v)}
-        <PhpVersionCard
-          version={v}
-          patch={fpmFor(v)?.patch}
-          running={fpmFor(v)?.running ?? false}
-          isDefault={v === phpDefault}
-          updateAvailable={fpmFor(v)?.update_available ?? false}
-          prerelease={($status.prerelease_php_versions || []).includes(v)}
-          selected={v === active}
-          onselect={() => pickVersion(v)}
-        />
-      {/each}
-      <button
-        type="button"
-        onclick={() => openPhpAddModal()}
-        class="shrink-0 w-24 snap-start flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-gray-200 dark:border-lerd-border text-gray-400 hover:text-lerd-red hover:border-lerd-red hover:bg-lerd-red/5 transition-colors"
-        title={m.system_php_add()}
-        aria-label={m.system_php_add()}
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-        </svg>
-        <span class="text-xs font-medium">{m.system_php_add()}</span>
-      </button>
-    </div>
+  <DetailHeader title="PHP">
+    {#snippet trailing()}
+      <DetailButton onclick={() => openPhpAddModal()} title={m.system_php_addHint()}>
+        {#snippet icon()}
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+        {/snippet}
+        {m.system_php_add()}
+      </DetailButton>
+    {/snippet}
+  </DetailHeader>
+
+  <div class="shrink-0 flex items-center gap-2 px-3 pt-3 overflow-x-auto">
+    {#each ordered as v (v)}
+      <PhpVersionCard
+        version={v}
+        patch={fpmFor(v)?.patch}
+        running={fpmFor(v)?.running ?? false}
+        isDefault={v === phpDefault}
+        updateAvailable={fpmFor(v)?.update_available ?? false}
+        prerelease={($status.prerelease_php_versions || []).includes(v)}
+        selected={v === active}
+        onselect={() => pickVersion(v)}
+      />
+    {/each}
   </div>
 
   {#if active}
