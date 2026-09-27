@@ -31,6 +31,9 @@ var terminalInputPatterns = []*regexp.Regexp{
 // user's keystrokes, so add one only after checking it cannot run while
 // something else is reading.
 var terminalInputOwners = map[string]bool{
+	// The Windows installer is a process of its own and reads only between
+	// steps, never while a child it started (passwd, install.sh) has the console.
+	"cmd/lerd-windows/setup.go":            true,
 	"internal/cli/build_ui.go":             true,
 	"internal/cli/fpm_ensure.go":           true,
 	"internal/cli/framework.go":            true,

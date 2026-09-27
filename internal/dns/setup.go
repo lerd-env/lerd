@@ -469,6 +469,9 @@ func ConfigureResolver() error {
 	if HostOwnsResolver() {
 		return nil
 	}
+	if err := handResolvConfToResolved(); err != nil {
+		return fmt.Errorf("handing WSL's resolv.conf to systemd-resolved: %w", err)
+	}
 	if isSystemdResolvedActive() {
 		if isNetworkManagerActive() {
 			return setupNMWithResolved()

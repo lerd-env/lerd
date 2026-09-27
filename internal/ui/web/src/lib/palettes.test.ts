@@ -180,6 +180,21 @@ describe('asDesktopStandIn', () => {
     expect(f.chrome_light).toBe(builtin('macos').chromeLight);
   });
 
+  it('keeps the Windows surfaces under the accent Windows is set to', () => {
+    const f = asDesktopStandIn({
+      id: 'windows',
+      name: 'Windows',
+      accent: '#c30052',
+      accent_dark: '#ff8fb6',
+      source: 'desktop'
+    });
+    expect(f.id).toBe('windows');
+    expect(f.name).toBe('Windows');
+    expect(f.accent).toBe('#c30052');
+    expect(f.bg).toBe(builtin('windows').bg);
+    expect(f.chrome_light).toBe(builtin('windows').chromeLight);
+  });
+
   it('leaves a desktop with no built-in of its own alone', () => {
     const f = asDesktopStandIn({
       id: 'omarchy',
@@ -220,7 +235,7 @@ describe('onAccent', () => {
 describe('the light mode chrome', () => {
   it('is tinted on the desktop palettes, the ones whose desktops tint their own', () => {
     const tinted = BUILTIN_PALETTES.filter((p) => p.chromeLight);
-    expect(tinted.map((p) => p.id)).toEqual(['breeze', 'adwaita', 'macos']);
+    expect(tinted.map((p) => p.id)).toEqual(['breeze', 'adwaita', 'macos', 'windows']);
   });
 
   it("wears libadwaita's own sidebar_bg_color on Adwaita", () => {

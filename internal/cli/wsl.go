@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/wsl"
 	"github.com/spf13/cobra"
 )
@@ -67,7 +68,7 @@ func runWSLSetup(cmd *cobra.Command, _ []string) error {
 	if changed, err := patchWSLConfig(); err != nil {
 		fmt.Fprintf(w, "  ! .wslconfig: %v (add [wsl2] networkingMode=mirrored manually)\n", err)
 	} else if changed {
-		fmt.Fprintln(w, "  ✓ enabled mirrored networking in .wslconfig")
+		fmt.Fprintln(w, "  ✓ enabled mirrored networking and disabled the idle timeout in .wslconfig")
 		needShutdown = true
 	} else {
 		fmt.Fprintln(w, "  - .wslconfig already set for mirrored networking")
@@ -88,6 +89,11 @@ func runWSLSetup(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintln(w, "  ✓ masked lerd-tray (no tray host on WSL2)")
 	} else {
 		fmt.Fprintln(w, "  - lerd-tray already masked or absent")
+	}
+
+	// 6. Windows side: lerd.exe on PATH, its login agent, and .test for Windows.
+	if err := installWindowsSide(w); err != nil {
+		fmt.Fprintf(w, "  ! Windows integration: %v\n", err)
 	}
 
 	fmt.Fprintln(w)
@@ -143,7 +149,7 @@ func patchRootFile(w io.Writer, path string, patch func(string) (string, bool)) 
 // applies the recommended [wsl2] lines. Returns changed=false / err set when
 // interop is unavailable so the caller can fall back to a manual hint.
 func patchWSLConfig() (bool, error) {
-	profile, err := windowsUserProfilePath()
+	profile, err := windowsEnvPath("USERPROFILE")
 	if err != nil {
 		return false, err
 	}
@@ -152,29 +158,11 @@ func patchWSLConfig() (bool, error) {
 		changedAny := false
 		for _, kv := range wsl.WSLConfigLines {
 			var ch bool
-			c, ch = wsl.EnsureSectionLine(c, "wsl2", kv.Key, kv.Line)
+			c, ch = wsl.EnsureSectionLine(c, kv.Section, kv.Key, kv.Line)
 			changedAny = changedAny || ch
 		}
 		return c, changedAny
 	})
-}
-
-// windowsUserProfilePath returns the WSL path to the Windows user profile dir
-// (e.g. /mnt/c/Users/name), using powershell.exe + wslpath interop.
-func windowsUserProfilePath() (string, error) {
-	out, err := exec.Command("powershell.exe", "-NoProfile", "-Command", "$env:USERPROFILE").Output()
-	if err != nil {
-		return "", fmt.Errorf("powershell.exe interop unavailable: %w", err)
-	}
-	win := strings.TrimRight(strings.TrimSpace(string(out)), "\r\n")
-	if win == "" {
-		return "", fmt.Errorf("USERPROFILE empty")
-	}
-	p, err := exec.Command("wslpath", "-u", win).Output()
-	if err != nil {
-		return "", fmt.Errorf("wslpath: %w", err)
-	}
-	return strings.TrimSpace(string(p)), nil
 }
 
 type caResult int
@@ -189,18 +177,11 @@ const (
 // it into the per-user Root store via certutil.exe (no admin needed), so
 // https://*.test is trusted by Edge/Chrome on the Windows side.
 func trustCAOnWindows() caResult {
-	if _, err := exec.LookPath("mkcert"); err != nil {
+	pem, ok := mkcertRootCAPEM()
+	if !ok {
 		return caSkippedNoMkcert
 	}
-	rootOut, err := exec.Command("mkcert", "-CAROOT").Output()
-	if err != nil {
-		return caSkippedNoMkcert
-	}
-	pem := filepath.Join(strings.TrimSpace(string(rootOut)), "rootCA.pem")
-	if _, err := os.Stat(pem); err != nil {
-		return caSkippedNoMkcert
-	}
-	profile, err := windowsUserProfilePath()
+	profile, err := windowsEnvPath("USERPROFILE")
 	if err != nil {
 		return caSkippedNoInterop
 	}
@@ -216,6 +197,20 @@ func trustCAOnWindows() caResult {
 		return caSkippedNoInterop
 	}
 	return caTrusted
+}
+
+// mkcertRootCAPEM finds rootCA.pem through lerd's own mkcert, which lives in
+// BinDir and is never on PATH.
+func mkcertRootCAPEM() (string, bool) {
+	root, err := certs.CARoot()
+	if err != nil || root == "" {
+		return "", false
+	}
+	pem := filepath.Join(root, "rootCA.pem")
+	if _, err := os.Stat(pem); err != nil {
+		return "", false
+	}
+	return pem, true
 }
 
 func copyFileContents(src, dst string) error {
