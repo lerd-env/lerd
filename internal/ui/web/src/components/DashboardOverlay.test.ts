@@ -152,6 +152,14 @@ describe('DashboardOverlay', () => {
     expect(container.querySelector('iframe')).not.toBe(first);
   });
 
+  // White under a dark theme flashed on every switch before the app painted,
+  // and bled through the frame's rounded corner once it had.
+  it('backs the frame with the theme background, not plain white', () => {
+    dashboardOpen.set({ name: 'pgadmin', label: 'pgAdmin', dashboard: '/_svc/pgadmin/' });
+    const { container } = render(DashboardOverlay);
+    expect(container.querySelector('iframe')?.className).toContain('dark:bg-lerd-bg');
+  });
+
   // docs and profiler are not services and ship no mark; their built-in glyph
   // has to survive the switch to the shared icon.
   it('keeps the built-in glyph for a dashboard no service backs', () => {

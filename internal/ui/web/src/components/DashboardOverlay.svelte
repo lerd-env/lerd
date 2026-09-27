@@ -319,7 +319,7 @@
             bind:this={iframeEl}
             onload={onIframeLoad}
             src={iframeSrc}
-            class="flex-1 w-full bg-white border-0"
+            class="flex-1 w-full bg-white dark:bg-lerd-bg border-0"
             title={d.label || d.name}
           ></iframe>
         {/key}
