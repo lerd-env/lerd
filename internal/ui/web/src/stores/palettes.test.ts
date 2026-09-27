@@ -81,6 +81,32 @@ describe('palettes store', () => {
     expect(get(palettes).some((p) => p.id === 'plasma')).toBe(false);
   });
 
+  // The desktop's own themes are the likeliest pick after lerd's, so they sit
+  // right under it rather than after every editor scheme, the live desktop
+  // entry included.
+  it('lists the system themes right under lerd', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          themes: [
+            { id: 'lagoon', name: 'Lagoon', accent: '#3b7ea1' },
+            { id: 'plasma', name: 'Plasma', accent: '#1b6e10', source: 'desktop' },
+            { id: 'omarchy', name: 'Omarchy (nord)', accent: '#81a1c1', source: 'desktop' }
+          ]
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    ) as unknown as typeof fetch;
+    const { loadPalettes } = await import('./palettes');
+    const { palettes } = await import('./theme');
+
+    await loadPalettes();
+
+    const ids = get(palettes).map((p) => p.id);
+    expect(ids.slice(0, 5)).toEqual(['lerd', 'breeze', 'adwaita', 'macos', 'omarchy']);
+    expect(ids.at(-1)).toBe('lagoon');
+  });
+
   it('lets a file replace the built-in it is named after', async () => {
     globalThis.fetch = vi.fn(async () =>
       new Response(JSON.stringify({ themes: [{ id: 'nord', name: 'My Nord', accent: '#112233' }] }), {

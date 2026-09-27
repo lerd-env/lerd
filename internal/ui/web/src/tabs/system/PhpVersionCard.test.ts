@@ -32,4 +32,14 @@ describe('PhpVersionCard', () => {
     render(PhpVersionCard, { props: base });
     expect(screen.queryByLabelText('Base image updated')).not.toBeInTheDocument();
   });
+
+  // The page is already titled PHP, so a chip carries its state in a dot rather
+  // than a logo and a pill.
+  it('shows running or stopped as a dot, without repeating the PHP mark', () => {
+    const { rerender } = render(PhpVersionCard, { props: base });
+    expect(screen.getByLabelText('Running')).toBeInTheDocument();
+    expect(screen.queryByText('PHP')).not.toBeInTheDocument();
+    rerender({ ...base, running: false });
+    expect(screen.getByLabelText('Stopped')).toBeInTheDocument();
+  });
 });

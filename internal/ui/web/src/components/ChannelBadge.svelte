@@ -7,7 +7,12 @@
 
   // Marks a dev or beta build; a release gets nothing. Only a dev build's commit
   // is worth copying, so only that badge is a button.
-  let { placement = 'bottom', class: extra = '' }: { placement?: 'right' | 'bottom'; class?: string } = $props();
+  // md matches the version pill it sits beside; sm fits under the rail's label.
+  let {
+    placement = 'bottom',
+    size = 'sm',
+    class: extra = ''
+  }: { placement?: 'right' | 'bottom'; size?: 'sm' | 'md'; class?: string } = $props();
 
   const build = $derived(parseBuildVersion($version.current));
   const tone = $derived(
@@ -15,7 +20,8 @@
       ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
       : 'bg-sky-100 text-sky-800 hover:bg-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:hover:bg-sky-500/25'
   );
-  const cls = $derived(`${extra} ${tone} px-1.5 py-px rounded-full text-[10px] font-semibold uppercase tracking-wide`);
+  const sizing = $derived(size === 'md' ? 'px-2.5 py-1 text-xs' : 'px-1.5 py-px text-[10px]');
+  const cls = $derived(`${extra} ${tone} ${sizing} rounded-full font-semibold uppercase tracking-wide`);
 
   let copied = $state(false);
   async function copy(commit: string) {

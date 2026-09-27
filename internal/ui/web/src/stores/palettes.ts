@@ -2,6 +2,7 @@ import { apiFetch, apiJson } from '$lib/api';
 import {
   BUILTIN_PALETTES,
   DEFAULT_PALETTE_ID,
+  SYSTEM_PALETTE_IDS,
   asDesktopStandIn,
   resolvePalette,
   type PaletteError,
@@ -75,9 +76,18 @@ export async function loadPalettes() {
     // and the picker has to stay unambiguous. A desktop entry claims a built-in's
     // id the same way, and the daemon lists it last, so it wins over a file that
     // claimed the same one.
-    const offered = [...new Map(user.map((p) => [p.id, p])).values()];
-    const shadowed = new Set(offered.map((p) => p.id));
-    palettes.set([...BUILTIN_PALETTES.filter((p) => !shadowed.has(p.id)), ...offered]);
+    const offered = new Map(user.map((p) => [p.id, p]));
+    const builtins = BUILTIN_PALETTES.map((p) => offered.get(p.id) ?? p);
+    const extra = [...offered.values()].filter((p) => !BUILTIN_PALETTES.some((b) => b.id === p.id));
+    // A desktop without a built-in of its own, Omarchy, joins the system themes
+    // under lerd's rather than landing after the editor schemes.
+    const systemEnd = Math.max(...SYSTEM_PALETTE_IDS.map((id) => builtins.findIndex((p) => p.id === id))) + 1;
+    palettes.set([
+      ...builtins.slice(0, systemEnd),
+      ...extra.filter((p) => p.source === 'desktop'),
+      ...builtins.slice(systemEnd),
+      ...extra.filter((p) => p.source !== 'desktop')
+    ]);
     paletteErrors.set(res.errors || []);
   } catch {
     /* keep previous */

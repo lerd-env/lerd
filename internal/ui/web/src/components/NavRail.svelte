@@ -109,8 +109,18 @@
   {/if}
 
   <div class="mt-auto shrink-0 flex flex-col items-center gap-2">
+    <!-- Ordered by how often they need you: the badge first, the settings last. -->
+    <NotificationCenter size="sm" />
+    <IconButton
+      title={m.nav_documentation()}
+      active={$dashboardOpen?.name === 'docs'}
+      onclick={openDocs}
+      size="sm"
+    >
+      <Icon name="docs" />
+    </IconButton>
     {#if showOpenInApp}
-      <IconButton title={m.nav_open_in_app()} onclick={openInDesktopApp}>
+      <IconButton title={m.nav_open_in_app()} onclick={openInDesktopApp} size="sm">
         <svg
           class="w-5 h-5"
           fill="none"
@@ -124,14 +134,6 @@
         </svg>
       </IconButton>
     {/if}
-    <IconButton
-      title={m.nav_documentation()}
-      active={$dashboardOpen?.name === 'docs'}
-      onclick={openDocs}
-    >
-      <Icon name="docs" />
-    </IconButton>
-    <NotificationCenter size="sm" />
     <ThemeSwitcher size="sm" />
     <VersionLabel />
   </div>

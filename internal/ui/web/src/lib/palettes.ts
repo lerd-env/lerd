@@ -64,9 +64,10 @@ export const DEFAULT_PALETTE_ID = 'lerd';
 // built-in #ff2d20 and its #e02419 hover.
 const HOVER_STEP = 0.12;
 
-// lerd, muted and Ocean are the dashboard's own. The editor schemes are their
-// published palettes. The desktop ones are read
-// from what those desktops actually ship, not from memory of them: Breeze from
+// lerd, muted and Ocean are the dashboard's own, and the desktop ones follow
+// lerd's straight away since they are the likeliest pick after it. The editor
+// schemes are their published palettes. The desktop ones are read from what
+// those desktops actually ship, not from memory of them: Breeze from
 // Plasma 6.7's BreezeDark.colors, Adwaita from libadwaita 1.9's named colours,
 // macOS from Apple's documented system blue and window background. All three
 // have been darkened since the values most write-ups still quote. Their light
@@ -84,6 +85,48 @@ export const BUILTIN_PALETTES: Palette[] = [
     card: '#161616',
     border: '#262626',
     muted: '#404040',
+    source: 'builtin'
+  },
+  {
+    id: 'breeze',
+    name: 'Breeze',
+    accent: '#17698f',
+    accentHover: '#12556f',
+    accentDark: '#3daee9',
+    accentHoverDark: '#5fbdee',
+    chromeLight: '#eff0f1',
+    bg: '#141618',
+    card: '#202326',
+    border: '#292c30',
+    muted: '#3a3f45',
+    source: 'builtin'
+  },
+  {
+    id: 'adwaita',
+    name: 'Adwaita',
+    accent: '#1c71d8',
+    accentHover: '#1a5fb4',
+    accentDark: '#3584e4',
+    accentHoverDark: '#62a0ea',
+    chromeLight: '#ebebed',
+    bg: '#1d1d20',
+    card: '#252529',
+    border: '#2e2e32',
+    muted: '#39393d',
+    source: 'builtin'
+  },
+  {
+    id: 'macos',
+    name: 'macOS',
+    accent: '#0066cc',
+    accentHover: '#0052a3',
+    accentDark: '#0a84ff',
+    accentHoverDark: '#3d9dff',
+    bg: '#1e1e1e',
+    card: '#282828',
+    border: '#3a3a3a',
+    muted: '#4a4a4a',
+    chromeLight: '#f3f4f6',
     source: 'builtin'
   },
   {
@@ -189,48 +232,6 @@ export const BUILTIN_PALETTES: Palette[] = [
     border: '#3c3836',
     muted: '#928374',
     source: 'builtin'
-  },
-  {
-    id: 'breeze',
-    name: 'Breeze',
-    accent: '#17698f',
-    accentHover: '#12556f',
-    accentDark: '#3daee9',
-    accentHoverDark: '#5fbdee',
-    chromeLight: '#eff0f1',
-    bg: '#141618',
-    card: '#202326',
-    border: '#292c30',
-    muted: '#3a3f45',
-    source: 'builtin'
-  },
-  {
-    id: 'adwaita',
-    name: 'Adwaita',
-    accent: '#1c71d8',
-    accentHover: '#1a5fb4',
-    accentDark: '#3584e4',
-    accentHoverDark: '#62a0ea',
-    chromeLight: '#ebebed',
-    bg: '#1d1d20',
-    card: '#252529',
-    border: '#2e2e32',
-    muted: '#39393d',
-    source: 'builtin'
-  },
-  {
-    id: 'macos',
-    name: 'macOS',
-    accent: '#0066cc',
-    accentHover: '#0052a3',
-    accentDark: '#0a84ff',
-    accentHoverDark: '#3d9dff',
-    bg: '#1e1e1e',
-    card: '#282828',
-    border: '#3a3a3a',
-    muted: '#4a4a4a',
-    chromeLight: '#f3f4f6',
-    source: 'builtin'
   }
 ];
 
@@ -247,6 +248,8 @@ const DESKTOP_STANDS_IN_FOR: Record<string, string> = {
   gnome: 'adwaita',
   macos: 'macos'
 };
+
+export const SYSTEM_PALETTE_IDS = Object.values(DESKTOP_STANDS_IN_FOR);
 
 // asDesktopStandIn hands a desktop theme the id and the name of the built-in it
 // replaces, so a dashboard already set to that built-in follows the desktop from
