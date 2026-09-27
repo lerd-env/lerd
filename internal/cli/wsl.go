@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/wsl"
 	"github.com/spf13/cobra"
 )
@@ -189,15 +190,8 @@ const (
 // it into the per-user Root store via certutil.exe (no admin needed), so
 // https://*.test is trusted by Edge/Chrome on the Windows side.
 func trustCAOnWindows() caResult {
-	if _, err := exec.LookPath("mkcert"); err != nil {
-		return caSkippedNoMkcert
-	}
-	rootOut, err := exec.Command("mkcert", "-CAROOT").Output()
-	if err != nil {
-		return caSkippedNoMkcert
-	}
-	pem := filepath.Join(strings.TrimSpace(string(rootOut)), "rootCA.pem")
-	if _, err := os.Stat(pem); err != nil {
+	pem, ok := mkcertRootCAPEM()
+	if !ok {
 		return caSkippedNoMkcert
 	}
 	profile, err := windowsUserProfilePath()
@@ -216,6 +210,20 @@ func trustCAOnWindows() caResult {
 		return caSkippedNoInterop
 	}
 	return caTrusted
+}
+
+// mkcertRootCAPEM finds rootCA.pem through lerd's own mkcert, which lives in
+// BinDir and is never on PATH.
+func mkcertRootCAPEM() (string, bool) {
+	root, err := certs.CARoot()
+	if err != nil || root == "" {
+		return "", false
+	}
+	pem := filepath.Join(root, "rootCA.pem")
+	if _, err := os.Stat(pem); err != nil {
+		return "", false
+	}
+	return pem, true
 }
 
 func copyFileContents(src, dst string) error {
