@@ -260,6 +260,11 @@ release:
   draft: false
   prerelease: auto
   replace_existing_artifacts: true
+  # The Windows installer is the same lerd.exe the Linux archive carries; run
+  # on its own, without wsl:setup's config beside it, it installs everything.
+  extra_files:
+    - glob: dist/lerd-windows-amd64_windows_amd64*/lerd.exe
+      name_template: lerd-setup.exe
   header: |
     ## Lerd {{ .Version }}
 
@@ -281,6 +286,9 @@ release:
     It installs what is missing, puts the binary in `~/.local/bin`, and runs
     `lerd install` to set the environment up. Setup asks for sudo once, at the
     start, and nothing after that.
+
+    On Windows, download and run `lerd-setup.exe` below. It installs WSL, an
+    Ubuntu distro and lerd inside it, then wires lerd into Windows.
 
     Already installed:
 
