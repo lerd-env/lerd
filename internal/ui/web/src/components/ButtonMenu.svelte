@@ -99,7 +99,7 @@
   <button
     type="button"
     onclick={onSettings}
-    class="{baseBtn} border-l border-black/10 dark:border-white/10 px-1.5 {buttonMenuToneClass[tone]}"
+    class="{baseBtn} border-l border-l-black/10 dark:border-l-white/10 px-1.5 {buttonMenuToneClass[tone]}"
     disabled={busy}
     aria-label={settingsTitle ?? m.common_settings()}
     title={settingsTitle ?? m.common_settings()}
@@ -184,7 +184,7 @@
     <button
       type="button"
       onclick={toggle}
-      class="{baseBtn} rounded-r-lg border-l border-black/10 dark:border-white/10 px-1.5 {buttonMenuToneClass[tone]}"
+      class="{baseBtn} rounded-r-lg border-l border-l-black/10 dark:border-l-white/10 px-1.5 {buttonMenuToneClass[tone]}"
       aria-haspopup="menu"
       aria-expanded={open}
       aria-label={menuLabel ?? m.common_moreActions()}
