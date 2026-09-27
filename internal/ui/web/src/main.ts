@@ -2,11 +2,13 @@ import { mount } from 'svelte';
 import App from './App.svelte';
 import './app.css';
 import { initTheme } from '$stores/theme';
+import { syncDashboardLocale } from '$stores/locale';
 import { trackWindowIdle } from '$lib/windowIdle';
 // Registers the streaming_on listener app-wide, whatever page is open.
 import '$stores/streaming';
 
 initTheme();
+syncDashboardLocale();
 trackWindowIdle();
 
 if ('serviceWorker' in navigator) {

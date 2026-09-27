@@ -557,3 +557,37 @@ func TestDashProxyCacheFollowsTheTweaks(t *testing.T) {
 		t.Error("two services share one proxy")
 	}
 }
+
+// A dashboard learns its language from Accept-Language, which is the browser's,
+// so a language picked in lerd itself travels in a cookie and the proxy states
+// it upstream instead.
+func TestDashProxyDirector_SpeaksTheLanguageChosenInLerd(t *testing.T) {
+	target, _ := url.Parse("http://localhost:8082")
+	p := newDashProxy("adminer", target, dashProxyTweaks{})
+
+	req := httptest.NewRequest("GET", "http://lerd.localhost/_svc/adminer/", nil)
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.AddCookie(&http.Cookie{Name: dashLocaleCookie, Value: "ro"})
+	p.Director(req)
+	if got := req.Header.Get("Accept-Language"); got != "ro,en;q=0.5" {
+		t.Errorf("Accept-Language = %q, want the lerd choice first", got)
+	}
+
+	// Without a choice the browser's own preference goes through untouched.
+	req = httptest.NewRequest("GET", "http://lerd.localhost/_svc/adminer/", nil)
+	req.Header.Set("Accept-Language", "de-DE,de;q=0.9")
+	p.Director(req)
+	if got := req.Header.Get("Accept-Language"); got != "de-DE,de;q=0.9" {
+		t.Errorf("Accept-Language = %q, want the browser's unchanged", got)
+	}
+
+	// The cookie is client input, so anything that is not a language tag is
+	// ignored rather than written into a header.
+	req = httptest.NewRequest("GET", "http://lerd.localhost/_svc/adminer/", nil)
+	req.Header.Set("Accept-Language", "fr")
+	req.AddCookie(&http.Cookie{Name: dashLocaleCookie, Value: "ro,x;q=9"})
+	p.Director(req)
+	if got := req.Header.Get("Accept-Language"); got != "fr" {
+		t.Errorf("Accept-Language = %q, want a malformed cookie ignored", got)
+	}
+}

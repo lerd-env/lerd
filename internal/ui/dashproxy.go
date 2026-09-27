@@ -143,6 +143,14 @@ func dashProxyFor(name string, target *url.URL, tw dashProxyTweaks) *httputil.Re
 // because the upstream is mounted at the same prefix; the response is rewritten
 // so it can be embedded in the lerd-ui iframe (strip framing headers, scope
 // cookies and redirects to the mount path).
+// dashLocaleCookie carries the language picked in the dashboard, which lives in
+// the browser's own storage and never reaches the proxy any other way.
+const dashLocaleCookie = "lerd_locale"
+
+// validLocaleTag is a BCP 47 language with an optional region; the cookie is
+// client input headed for a request header, so nothing else gets through.
+var validLocaleTag = regexp.MustCompile(`^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$`)
+
 func newDashProxy(name string, target *url.URL, tw dashProxyTweaks) *httputil.ReverseProxy {
 	prefix := strings.TrimSuffix(dashProxyPath(name), "/")
 	if tw.mount != "" {
@@ -184,6 +192,11 @@ func newDashProxy(name string, target *url.URL, tw dashProxyTweaks) *httputil.Re
 			} else {
 				req.Header.Set("X-Forwarded-Proto", "http")
 			}
+		}
+		// The browser's Accept-Language is what a dashboard picks its language
+		// from, and it can differ from the one chosen in lerd, so that choice wins.
+		if c, err := req.Cookie(dashLocaleCookie); err == nil && validLocaleTag.MatchString(c.Value) {
+			req.Header.Set("Accept-Language", c.Value+",en;q=0.5")
 		}
 		// We rewrite the HTML to inject the auth bootstrap or to rebase its own
 		// links, so ask the upstream for an uncompressed body we can edit.
