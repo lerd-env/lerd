@@ -58,6 +58,8 @@ YAML file, either by hand or through the import button; see
 
 The dashboard ships in fourteen languages: English, German, Spanish, French, Indonesian, Dutch, Portuguese, Turkish, Simplified Chinese, Japanese, Romanian, Italian, Polish, and Vietnamese. The first time you open the dashboard, the language is autodetected from your browser's preferred locale (Paraglide reads `navigator.language` and picks the closest match, falling back to English). To change it later, open **System → Lerd** and use the language picker in the settings section; the choice persists in `localStorage` so subsequent sessions open in the same language. Strings are wired through Paraglide; new keys fall back to English when a locale hasn't been translated yet.
 
+Service dashboards opened inside lerd, such as Adminer, phpMyAdmin and pgAdmin, follow the same language where they are translated. Left alone they already match, since they read the browser's preference just as lerd does. A language picked in lerd is passed on to them as well, so a dashboard set to Romanian opens Adminer in Romanian even when the browser prefers English. A dashboard that only ships in English stays in English, and one where you picked a language in its own settings keeps that.
+
 ![System → Lerd settings with the language picker](/assets/screenshots/system-lerd.png)
 
 ---
