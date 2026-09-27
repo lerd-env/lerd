@@ -91,6 +91,11 @@ func runWSLSetup(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintln(w, "  - lerd-tray already masked or absent")
 	}
 
+	// 6. Windows side: lerd.exe on PATH, its login agent, and .test for Windows.
+	if err := installWindowsSide(w); err != nil {
+		fmt.Fprintf(w, "  ! Windows integration: %v\n", err)
+	}
+
 	fmt.Fprintln(w)
 	if needShutdown {
 		fmt.Fprintln(w, "Done. One manual step left, from a Windows PowerShell or CMD prompt run:")
@@ -144,7 +149,7 @@ func patchRootFile(w io.Writer, path string, patch func(string) (string, bool)) 
 // applies the recommended [wsl2] lines. Returns changed=false / err set when
 // interop is unavailable so the caller can fall back to a manual hint.
 func patchWSLConfig() (bool, error) {
-	profile, err := windowsUserProfilePath()
+	profile, err := windowsEnvPath("USERPROFILE")
 	if err != nil {
 		return false, err
 	}
@@ -158,24 +163,6 @@ func patchWSLConfig() (bool, error) {
 		}
 		return c, changedAny
 	})
-}
-
-// windowsUserProfilePath returns the WSL path to the Windows user profile dir
-// (e.g. /mnt/c/Users/name), using powershell.exe + wslpath interop.
-func windowsUserProfilePath() (string, error) {
-	out, err := exec.Command("powershell.exe", "-NoProfile", "-Command", "$env:USERPROFILE").Output()
-	if err != nil {
-		return "", fmt.Errorf("powershell.exe interop unavailable: %w", err)
-	}
-	win := strings.TrimRight(strings.TrimSpace(string(out)), "\r\n")
-	if win == "" {
-		return "", fmt.Errorf("USERPROFILE empty")
-	}
-	p, err := exec.Command("wslpath", "-u", win).Output()
-	if err != nil {
-		return "", fmt.Errorf("wslpath: %w", err)
-	}
-	return strings.TrimSpace(string(p)), nil
 }
 
 type caResult int
@@ -194,7 +181,7 @@ func trustCAOnWindows() caResult {
 	if !ok {
 		return caSkippedNoMkcert
 	}
-	profile, err := windowsUserProfilePath()
+	profile, err := windowsEnvPath("USERPROFILE")
 	if err != nil {
 		return caSkippedNoInterop
 	}

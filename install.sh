@@ -672,6 +672,9 @@ cmd_install() {
     # ── Local binary path supplied (e.g. ./build/lerd) ──
     [ -f "$local_binary" ] || die "File not found: $local_binary"
     install -m 755 "$local_binary" "${INSTALL_DIR}/${BINARY}"
+    # lerd.exe is the Windows side of a WSL install; wsl:setup copies it out.
+    local local_exe; local_exe="$(dirname "$local_binary")/lerd.exe"
+    [ -f "$local_exe" ] && install -m 755 "$local_exe" "${INSTALL_DIR}/lerd.exe"
     local version; version="$("${INSTALL_DIR}/${BINARY}" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "dev")"
     success "Installed lerd ${version} (local) → ${INSTALL_DIR}/${BINARY}"
   else
@@ -694,6 +697,7 @@ cmd_install() {
     download_binary "$version" "$arch" "$tmpdir"
     install -m 755 "${tmpdir}/lerd" "${INSTALL_DIR}/${BINARY}"
     [ -f "${tmpdir}/lerd-tray" ] && install -m 755 "${tmpdir}/lerd-tray" "${INSTALL_DIR}/lerd-tray"
+    [ -f "${tmpdir}/lerd.exe" ] && install -m 755 "${tmpdir}/lerd.exe" "${INSTALL_DIR}/lerd.exe"
     rm -rf "$tmpdir"
     success "Installed lerd v${version} → ${INSTALL_DIR}/${BINARY}"
   fi
@@ -816,6 +820,7 @@ cmd_update() {
   download_binary "$latest" "$arch" "$tmpdir"
   install -m 755 "${tmpdir}/lerd" "${INSTALL_DIR}/${BINARY}"
   [ -f "${tmpdir}/lerd-tray" ] && install -m 755 "${tmpdir}/lerd-tray" "${INSTALL_DIR}/lerd-tray"
+  [ -f "${tmpdir}/lerd.exe" ] && install -m 755 "${tmpdir}/lerd.exe" "${INSTALL_DIR}/lerd.exe"
   rm -rf "$tmpdir"
   success "Updated to lerd v${latest}"
   star_note
@@ -896,7 +901,7 @@ cmd_uninstall_macos() {
   rm -rf "$HOME/Library/Logs/lerd"
 
   # Remove binaries
-  for b in "$BINARY" lerd-tray; do
+  for b in "$BINARY" lerd-tray lerd.exe; do
     if [ -f "${INSTALL_DIR}/${b}" ]; then
       rm -f "${INSTALL_DIR}/${b}"
       success "Removed ${INSTALL_DIR}/${b}"
@@ -1026,7 +1031,7 @@ cmd_uninstall_linux() {
 
   # Remove binaries. The tray ships beside lerd, so an uninstall that took only
   # one of them left the other on PATH with nothing to talk to.
-  for b in "$BINARY" lerd-tray; do
+  for b in "$BINARY" lerd-tray lerd.exe; do
     if [ -f "${INSTALL_DIR}/${b}" ]; then
       rm -f "${INSTALL_DIR}/${b}"
       success "Removed ${INSTALL_DIR}/${b}"

@@ -44,3 +44,50 @@ func TestMkcertRootCAPEM_NoCAYet(t *testing.T) {
 		t.Fatalf("expected no CA without mkcert, got %q", got)
 	}
 }
+
+func TestEncodePowerShell_UTF16LEBase64(t *testing.T) {
+	// powershell -EncodedCommand takes base64 of UTF-16LE; "ab" is 61 00 62 00.
+	if got := encodePowerShell("ab"); got != "YQBiAA==" {
+		t.Errorf("got %q, want YQBiAA==", got)
+	}
+}
+
+func TestAgentRunValue_Headless(t *testing.T) {
+	got := agentRunValue(`C:\Users\me\AppData\Local\lerd\bin`)
+	want := `conhost.exe --headless "C:\Users\me\AppData\Local\lerd\bin\lerd.exe" --agent`
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestReplaceRunningExe(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "lerd.exe")
+
+	if err := replaceRunningExe(path, []byte("v1")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path + ".old"); err == nil {
+		t.Error("a first install has nothing to move aside")
+	}
+
+	// A newer build moves the running one aside rather than overwriting it.
+	if err := replaceRunningExe(path, []byte("v2")); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "v2" {
+		t.Errorf("new exe = %q, want v2", b)
+	}
+	if b, _ := os.ReadFile(path + ".old"); string(b) != "v1" {
+		t.Errorf("old exe = %q, want v1", b)
+	}
+
+	// The same build again touches nothing.
+	os.Remove(path + ".old")
+	if err := replaceRunningExe(path, []byte("v2")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path + ".old"); err == nil {
+		t.Error("an unchanged exe should not be moved aside")
+	}
+}
