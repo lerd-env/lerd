@@ -1,6 +1,8 @@
 package wsl
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -159,5 +161,17 @@ func TestResolvedUpstreamDropin(t *testing.T) {
 	want := "[Resolve]\nDNS=10.255.255.254 1.1.1.1\n"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestWindowsTool_PrefersPath(t *testing.T) {
+	dir := t.TempDir()
+	tool := filepath.Join(dir, "reg.exe")
+	if err := os.WriteFile(tool, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	if got := WindowsTool("reg.exe"); got != tool {
+		t.Errorf("got %q, want %q", got, tool)
 	}
 }

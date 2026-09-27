@@ -6,6 +6,7 @@ package wsl
 
 import (
 	"os"
+	"os/exec"
 	"regexp"
 	"strings"
 )
@@ -141,4 +142,19 @@ func GeneratedNameservers(resolvConf string) []string {
 // DNS proxy as the upstream once resolved owns resolv.conf.
 func ResolvedUpstreamDropin(nameservers []string) string {
 	return "[Resolve]\nDNS=" + strings.Join(nameservers, " ") + "\n"
+}
+
+// WindowsTool resolves a Windows program such as reg.exe. A login shell finds it
+// on PATH, but a systemd service's PATH carries no Windows directories, though
+// interop still runs the program by its full path; that path comes from
+// wslpath so a custom automount root is honoured.
+func WindowsTool(name string) string {
+	if p, err := exec.LookPath(name); err == nil {
+		return p
+	}
+	out, err := exec.Command("wslpath", "-u", `C:\Windows\System32\`+name).Output()
+	if err != nil {
+		return name
+	}
+	return strings.TrimSpace(string(out))
 }
