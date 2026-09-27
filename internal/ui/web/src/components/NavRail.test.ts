@@ -76,3 +76,22 @@ it('gives the scrolling launchers as much width as the buttons in them', () => {
 
   expect(widthOf(scroller)).toBeGreaterThanOrEqual(widthOf(button));
 });
+
+// The notification badge is the one that asks for attention, so it leads;
+// the theme is set once and sits last, beside the version.
+it('orders the bottom actions by how often they need you', () => {
+  const { getByLabelText } = render(NavRail);
+  const order = [/notifications/i, /documentation/i, /auto|light|dark/i].map((l) => getByLabelText(l));
+  for (let i = 1; i < order.length; i++) {
+    expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  }
+});
+
+// A bigger hover square on one of them made the column look uneven.
+it('gives every bottom action the same hover area', () => {
+  const { getByLabelText } = render(NavRail);
+  const sizes = [/notifications/i, /documentation/i, /auto|light|dark/i].map(
+    (l) => getByLabelText(l).className.match(/\bw-\d+ h-\d+\b/)?.[0]
+  );
+  expect(new Set(sizes).size).toBe(1);
+});
