@@ -60,7 +60,7 @@
       disabled={$lerdStarting || $lerdStopping}
       loading={$lerdStopping}
     >
-      <Icon name="stop" class="w-3.5 h-3.5" />
+      <Icon name="power" class="w-3.5 h-3.5" />
     </ActionButton>
   {/if}
 {/snippet}
