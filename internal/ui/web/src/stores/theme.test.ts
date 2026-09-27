@@ -141,4 +141,31 @@ describe('theme store', () => {
     media.setDark(true);
     expect(document.documentElement.classList.contains('dark')).toBe(true);
   });
+
+  // Focus handed to an embedded dashboard blurs this window while the app as a
+  // whole still has it, which is why the check is hasFocus and not the event.
+  it('lifts the chrome while the window has focus and drops it on blur', async () => {
+    mockMatchMedia(true);
+    localStorage.setItem('lerd-theme', 'dark');
+    localStorage.setItem('lerd-palette', 'breeze');
+    let focused = true;
+    vi.spyOn(document, 'hasFocus').mockImplementation(() => focused);
+    const { initTheme, palettes } = await import('./theme');
+    const { BUILTIN_PALETTES, resolvePalette } = await import('$lib/palettes');
+    initTheme();
+    palettes.set([
+      ...BUILTIN_PALETTES.filter((p) => p.id !== 'breeze'),
+      resolvePalette({ id: 'breeze', name: 'Breeze', accent: '#3daee9', card: '#202326', chrome_active: '#292c30' })!
+    ]);
+    const chrome = () => document.documentElement.style.getPropertyValue('--lerd-header');
+    expect(chrome()).toBe('#292c30');
+
+    focused = false;
+    window.dispatchEvent(new Event('blur'));
+    expect(chrome()).toBe('#202326');
+
+    focused = true;
+    window.dispatchEvent(new Event('focus'));
+    expect(chrome()).toBe('#292c30');
+  });
 });

@@ -119,6 +119,14 @@ background it tints its own chrome with, which the dashboard puts behind the rai
 and the sidebar in light mode. A stock Plasma that never had an accent picked
 lends the scheme's selection colour instead.
 
+The chrome also follows focus the way Plasma's own windows do. Breeze draws a
+focused window's header in its own tone and an unfocused one in the window
+colour, and the scheme's `[Colors:Header]` group says what that focused tone is.
+While the dashboard window has focus the rail and the page headers take it, in
+dark and light mode alike, and they drop back to the window colour as soon as
+focus moves to another window. The sidebar between them holds still. A scheme
+without a header group, as schemes from before Plasma 6 are, keeps a single tone.
+
 **GNOME** publishes the accent alone, one of the ten libadwaita colours, read
 from `org.gnome.desktop.interface accent-color`. That is all it lends, since the
 desktop's surfaces are not something you picked; the Adwaita entry keeps the

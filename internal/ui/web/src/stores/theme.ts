@@ -29,11 +29,11 @@ function apply(theme: Theme) {
   document.documentElement.classList.toggle('dark', dark);
 
   const p = paletteById(get(palettes), get(palette));
-  const vars = paletteVars(p, dark);
+  const vars = paletteVars(p, dark, document.hasFocus());
   for (const [name, value] of Object.entries(vars)) {
     document.documentElement.style.setProperty(name, value);
   }
-  applyAppChrome(p, dark);
+  applyAppChrome(dark ? vars['--lerd-header'] : vars['--lerd-header-light'], dark ? p.bg : '#ffffff');
 }
 
 // Installed as an app, the window and the launch splash are painted by the
@@ -45,14 +45,13 @@ function apply(theme: Theme) {
 // The title bar is chrome rather than content, so it wears what the nav rail
 // wears and the frame carries on into the sidebar. An accent up there is a band
 // of colour the desktop never asked for.
-function applyAppChrome(p: Palette, dark: boolean) {
-  const chrome = dark ? p.card : p.chromeLight || '#ffffff';
+function applyAppChrome(chrome: string, background: string) {
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', chrome);
 
   const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
   if (!link) return;
-  const q = new URLSearchParams({ theme_color: chrome, background_color: dark ? p.bg : '#ffffff' });
+  const q = new URLSearchParams({ theme_color: chrome, background_color: background });
   link.href = `/manifest.webmanifest?${q}`;
 }
 
@@ -103,6 +102,10 @@ export function initTheme() {
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     apply(get(theme));
   });
+  // A theme with a focused chrome tone follows the window's focus. Focus moved
+  // into an embedded dashboard blurs this window too, which hasFocus sees past.
+  window.addEventListener('focus', () => apply(get(theme)));
+  window.addEventListener('blur', () => apply(get(theme)));
 }
 
 export function saveTheme(id: string) {

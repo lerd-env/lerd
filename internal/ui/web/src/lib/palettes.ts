@@ -26,6 +26,10 @@ export interface Palette {
   // macOS does, which is the one desktop that tints its own chrome, so the rest
   // leave it unset and keep the white app.css falls back to.
   chromeLight?: string;
+  // What the chrome turns while the window has focus, the way Breeze lifts a
+  // focused window's header. Only a live Plasma scheme publishes them.
+  chromeActive?: string;
+  chromeLightActive?: string;
   source: 'builtin' | 'user' | 'desktop';
 }
 
@@ -42,6 +46,8 @@ export interface PaletteFile {
   border?: string;
   muted?: string;
   chrome_light?: string;
+  chrome_active?: string;
+  chrome_light_active?: string;
   // Set when the theme came from somewhere other than a file the user can edit,
   // which is what keeps a remove button off it.
   source?: string;
@@ -282,6 +288,14 @@ export function chromeBorder(chrome: string): string {
   return toHex(mix(rgb, 0, CHROME_BORDER_STEP));
 }
 
+// headerBorderDark keeps the frame's lines visible on a lifted header. Breeze's
+// focused header is the very tone its borders are drawn in, so while it shows
+// the line steps off it toward white instead.
+function headerBorderDark(header: string, palette: Palette): string {
+  if (header === palette.card) return palette.border;
+  return toHex(mix(parseHex(header)!, 255, CHROME_BORDER_STEP));
+}
+
 export function onAccent(accent: string): string {
   const rgb = parseHex(accent);
   if (!rgb) return '#ffffff';
@@ -310,6 +324,8 @@ export function resolvePalette(file: PaletteFile): Palette | null {
     border: hex(file.border) || DEFAULT_PALETTE.border,
     muted: hex(file.muted) || DEFAULT_PALETTE.muted,
     chromeLight: hex(file.chrome_light) || undefined,
+    chromeActive: hex(file.chrome_active) || undefined,
+    chromeLightActive: hex(file.chrome_light_active) || undefined,
     source: file.source === 'desktop' ? 'desktop' : 'user'
   };
 }
@@ -322,9 +338,12 @@ export function paletteById(palettes: Palette[], id: string): Palette {
 }
 
 // paletteVars maps a theme onto the custom properties app.css declares, picking
-// the tone that reads on the surface the current mode paints.
-export function paletteVars(palette: Palette, dark: boolean): Record<string, string> {
+// the tone that reads on the surface the current mode paints and, for the
+// chrome, whether the window has focus.
+export function paletteVars(palette: Palette, dark: boolean, focused = false): Record<string, string> {
   const accent = dark ? palette.accentDark : palette.accent;
+  const header = (focused && palette.chromeActive) || palette.card;
+  const headerLight = (focused && palette.chromeLightActive) || palette.chromeLight || '#ffffff';
   return {
     '--lerd-accent': accent,
     '--lerd-on-accent': onAccent(accent),
@@ -334,7 +353,12 @@ export function paletteVars(palette: Palette, dark: boolean): Record<string, str
     '--lerd-border': palette.border,
     '--lerd-muted': palette.muted,
     '--lerd-chrome-light': palette.chromeLight || '#ffffff',
-    '--lerd-chrome-border': chromeBorder(palette.chromeLight || '#ffffff')
+    '--lerd-chrome-border': chromeBorder(palette.chromeLight || '#ffffff'),
+    // The header is the rail and the page's top strips, the part of the chrome
+    // that follows focus; the sidebar between them holds still.
+    '--lerd-header': header,
+    '--lerd-header-light': headerLight,
+    '--lerd-header-border': dark ? headerBorderDark(header, palette) : chromeBorder(headerLight)
   };
 }
 

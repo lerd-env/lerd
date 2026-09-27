@@ -263,3 +263,51 @@ describe('the light mode chrome', () => {
     expect(paletteVars(p, false)['--lerd-chrome-light']).toBe('#f3f4f6');
   });
 });
+
+// Breeze lifts a focused window's header off the window colour, so a theme that
+// publishes that tone moves the chrome with focus and one that does not holds.
+describe('the chrome under focus', () => {
+  const plasma = resolvePalette({
+    id: 'breeze',
+    name: 'Breeze',
+    accent: '#3daee9',
+    card: '#202326',
+    chrome_light: '#eff0f1',
+    chrome_active: '#292c30',
+    chrome_light_active: '#dee0e2',
+    source: 'desktop'
+  })!;
+
+  it('wears the card while the window is in the background', () => {
+    expect(paletteVars(plasma, true, false)['--lerd-header']).toBe('#202326');
+    expect(paletteVars(plasma, false, false)['--lerd-header-light']).toBe('#eff0f1');
+  });
+
+  it('lifts to the focused header tone while the window has focus', () => {
+    expect(paletteVars(plasma, true, true)['--lerd-header']).toBe('#292c30');
+    expect(paletteVars(plasma, false, true)['--lerd-header-light']).toBe('#dee0e2');
+    // The sidebar between the rail and the page is not header, so it holds.
+    expect(paletteVars(plasma, false, true)['--lerd-chrome-light']).toBe('#eff0f1');
+  });
+
+  // The focused header is the tone Breeze draws its borders in, so the frame's
+  // lines have to step off it or they vanish.
+  it('keeps the frame lines visible on the lifted header', () => {
+    expect(paletteVars(plasma, true, false)['--lerd-header-border']).toBe(plasma.border);
+    const lifted = paletteVars(plasma, true, true)['--lerd-header-border'];
+    expect(lifted).not.toBe('#292c30');
+    expect(lifted).not.toBe(plasma.border);
+    expect(paletteVars(plasma, false, true)['--lerd-header-border']).toBe(chromeBorder('#dee0e2'));
+  });
+
+  it('holds still for a theme without a focused tone', () => {
+    const p = resolvePalette({ id: 'ocean', name: 'Ocean', accent: '#3b7ea1', card: '#141b1f' })!;
+    expect(paletteVars(p, true, true)['--lerd-header']).toBe('#141b1f');
+    expect(paletteVars(p, false, true)['--lerd-header-light']).toBe('#ffffff');
+  });
+
+  it('refuses a focused tone that is not a plain hex colour', () => {
+    const p = resolvePalette({ id: 'x', name: 'X', accent: '#112233', chrome_active: 'url(evil)' })!;
+    expect(p.chromeActive).toBeUndefined();
+  });
+});

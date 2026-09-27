@@ -18,6 +18,9 @@
   --color-lerd-card: var(--lerd-card, #161616);
   --color-lerd-border: var(--lerd-border, #262626);
   --color-lerd-muted: var(--lerd-muted, #404040);
+  --color-lerd-header: var(--lerd-header, var(--lerd-card, #161616));
+  --color-lerd-header-light: var(--lerd-header-light, var(--lerd-chrome-light, #ffffff));
+  --color-lerd-headerborder: var(--lerd-header-border, var(--lerd-chrome-border, #e5e7eb));
   --color-lerd-chrome-light: var(--lerd-chrome-light, #ffffff);
   --color-lerd-chromeborder: var(--lerd-chrome-border, #e5e7eb);
 
@@ -74,11 +77,10 @@ button {
    whether or not the strip carries buttons. */
 @utility page-header {
   min-height: 49px;
-  background-color: var(--color-lerd-chrome-light);
-  border-bottom: 1px solid var(--color-lerd-chromeborder);
+  background-color: var(--color-lerd-header-light);
+  border-bottom: 1px solid var(--color-lerd-headerborder);
   &:is(.dark *) {
-    background-color: var(--color-lerd-card);
-    border-bottom-color: var(--color-lerd-border);
+    background-color: var(--color-lerd-header);
   }
 }
 

@@ -61,12 +61,16 @@ func plasmaTheme() *UITheme {
 		theme.Bg = kdeColor(groups["Colors:View"]["BackgroundNormal"])
 		theme.Card = kdeColor(groups["Colors:Window"]["BackgroundNormal"])
 		theme.Border = kdeColor(groups["Colors:Window"]["BackgroundAlternate"])
+		// Breeze draws an unfocused header in the window colour the card already
+		// is, so only the focused one needs reading.
+		theme.ChromeActive = kdeColor(groups["Colors:Header"]["BackgroundNormal"])
 	} else {
 		// A light scheme has one tone the dashboard can use: Plasma tints the
 		// chrome around its content with the window background and leaves the
 		// content itself on the view background, which light mode already paints
 		// white.
 		theme.ChromeLight = kdeColor(groups["Colors:Window"]["BackgroundNormal"])
+		theme.ChromeLightActive = kdeColor(groups["Colors:Header"]["BackgroundNormal"])
 	}
 	return theme
 }

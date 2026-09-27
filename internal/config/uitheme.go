@@ -31,6 +31,11 @@ type UITheme struct {
 	// the surfaces above are the dark ones. A theme that declares none leaves
 	// them white.
 	ChromeLight string `yaml:"chrome_light,omitempty" json:"chrome_light,omitempty"`
+	// ChromeActive and ChromeLightActive are what the chrome turns while the
+	// window has focus, the way Breeze lifts a focused window's header. Without
+	// them the chrome keeps one tone.
+	ChromeActive      string `yaml:"chrome_active,omitempty"       json:"chrome_active,omitempty"`
+	ChromeLightActive string `yaml:"chrome_light_active,omitempty" json:"chrome_light_active,omitempty"`
 	// Source says where the theme came from when it was not a file the user can
 	// edit. It is never read off a file, so a theme cannot claim to be one.
 	Source string `yaml:"-" json:"source,omitempty"`
@@ -136,7 +141,8 @@ func parseUITheme(id string, data []byte) (*UITheme, error) {
 		"accent": &t.Accent, "accent_hover": &t.AccentHover,
 		"accent_dark": &t.AccentDark, "accent_hover_dark": &t.AccentHoverDark,
 		"bg": &t.Bg, "card": &t.Card, "border": &t.Border, "muted": &t.Muted,
-		"chrome_light": &t.ChromeLight,
+		"chrome_light": &t.ChromeLight, "chrome_active": &t.ChromeActive,
+		"chrome_light_active": &t.ChromeLightActive,
 	}
 	for label, field := range colours {
 		if *field == "" {

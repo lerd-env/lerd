@@ -50,7 +50,7 @@
 </script>
 
 <aside
-  class="hidden md:flex flex-col items-center w-14 shrink-0 min-h-0 bg-lerd-chrome-light dark:bg-lerd-card py-3 z-20"
+  class="hidden md:flex flex-col items-center w-14 shrink-0 min-h-0 bg-lerd-header-light dark:bg-lerd-header py-3 z-20"
 >
   <RailLogo />
 
@@ -68,7 +68,7 @@
 
   {#if !remote}
     <div
-      class="flex flex-col items-center gap-1 mt-3 pt-3 border-t border-lerd-chromeborder dark:border-lerd-border w-10 min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar"
+      class="flex flex-col items-center gap-1 mt-3 pt-3 border-t border-lerd-headerborder w-10 min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar"
     >
       <IconButton
         title={m.nav_profiler()}
@@ -82,7 +82,7 @@
           {#if $profilerEnabled}
             <span
               title={m.profiler_toggle_on()}
-              class="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-lerd-chrome-light dark:ring-lerd-card"
+              class="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-lerd-header-light dark:ring-lerd-header"
             ></span>
           {/if}
         </span>
