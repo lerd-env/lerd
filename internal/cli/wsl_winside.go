@@ -73,6 +73,14 @@ func installWindowsSide(w io.Writer) error {
 	}
 	fmt.Fprintln(w, "  ✓ lerd agent starts at Windows login and is running")
 
+	if dirs := parkedWindowsPaths(); len(dirs) > 0 {
+		if _, err := powershell(pinFoldersScript(dirs)); err != nil {
+			fmt.Fprintf(w, "  ! pinning your sites folder in Explorer: %v\n", err)
+		} else {
+			fmt.Fprintln(w, "  ✓ your sites folder is pinned in Explorer's Quick access")
+		}
+	}
+
 	if tld == "" {
 		return nil
 	}
@@ -85,6 +93,56 @@ func installWindowsSide(w io.Writer) error {
 	}
 	fmt.Fprintf(w, "  ✓ Windows resolves *.%s through lerd\n", tld)
 	return nil
+}
+
+// parkedWindowsPaths returns the parked directories that exist, as the
+// \\wsl.localhost paths Windows opens them by. Sites live on the distro's own
+// disk, which a Windows user otherwise has no obvious way to find.
+func parkedWindowsPaths() []string {
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg == nil {
+		return nil
+	}
+	var out []string
+	for _, d := range cfg.ParkedDirectories {
+		if _, err := os.Stat(d); err != nil {
+			continue
+		}
+		if p, err := windowsPath(d); err == nil {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// quickAccess is Explorer's Quick access folder, where pintohome puts a pin.
+const quickAccess = `shell:::{679f85cb-0220-4080-b29b-5540cc05aab6}`
+
+func psList(items []string) string {
+	quoted := make([]string, len(items))
+	for i, it := range items {
+		quoted[i] = "'" + strings.ReplaceAll(it, "'", "''") + "'"
+	}
+	return "@(" + strings.Join(quoted, ",") + ")"
+}
+
+// pinFoldersScript pins each folder to Quick access unless it already is: the
+// pintohome verb on a pinned folder would do nothing useful.
+func pinFoldersScript(dirs []string) string {
+	return fmt.Sprintf(`$sh = New-Object -ComObject Shell.Application
+$pinned = @($sh.Namespace('%s').Items() | ForEach-Object { $_.Path })
+foreach ($d in %s) {
+  if ($pinned -notcontains $d) {
+    $f = $sh.Namespace($d)
+    if ($f) { $f.Self.InvokeVerb('pintohome') }
+  }
+}`, quickAccess, psList(dirs))
+}
+
+// unpinFoldersScript takes those pins back out of Quick access.
+func unpinFoldersScript(dirs []string) string {
+	return fmt.Sprintf(`$sh = New-Object -ComObject Shell.Application
+$sh.Namespace('%s').Items() | Where-Object { %s -contains $_.Path } | ForEach-Object { $_.InvokeVerb('unpinfromhome') }`, quickAccess, psList(dirs))
 }
 
 // replaceRunningExe writes exe to path even while the old one runs: Windows
@@ -241,6 +299,9 @@ func removeWindowsSide() error {
 	winBin, err := windowsPath(filepath.Join(dir, "bin"))
 	if err != nil {
 		return err
+	}
+	if dirs := parkedWindowsPaths(); len(dirs) > 0 {
+		powershell(unpinFoldersScript(dirs)) //nolint:errcheck // a leftover pin is harmless
 	}
 	// The agent exits on its own once its config is gone, elevated or not.
 	os.Remove(filepath.Join(dir, "bin", winshim.ConfigName)) //nolint:errcheck

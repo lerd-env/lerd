@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -89,5 +90,15 @@ func TestReplaceRunningExe(t *testing.T) {
 	}
 	if _, err := os.Stat(path + ".old"); err == nil {
 		t.Error("an unchanged exe should not be moved aside")
+	}
+}
+
+func TestPinFoldersScript_QuotesPaths(t *testing.T) {
+	got := pinFoldersScript([]string{`\\wsl.localhost\Ubuntu\home\o'brien\Lerd`})
+	if !strings.Contains(got, `@('\\wsl.localhost\Ubuntu\home\o''brien\Lerd')`) {
+		t.Errorf("path not quoted for PowerShell:\n%s", got)
+	}
+	if !strings.Contains(got, "pintohome") || !strings.Contains(got, quickAccess) {
+		t.Errorf("script does not pin to Quick access:\n%s", got)
 	}
 }
