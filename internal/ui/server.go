@@ -326,6 +326,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/settings/autostart", withCORS(handleSettingsAutostart))
 	mux.HandleFunc("/api/settings/tray", withCORS(handleSettingsTray))
 	mux.HandleFunc("/api/settings/start-on-open", withCORS(handleSettingsStartOnOpen))
+	mux.HandleFunc("/api/settings/mcp", withCORS(handleSettingsMCP))
 	mux.HandleFunc("/api/settings/worker-mode", withCORS(handleSettingsWorkerMode))
 	mux.HandleFunc("/api/settings/php-runtime", withCORS(handleSettingsPHPRuntime))
 	mux.HandleFunc("/api/settings/idle-suspend", withCORS(publishAfter(handleSettingsIdleSuspend, eventbus.KindSites)))
@@ -5547,8 +5548,9 @@ type SettingsResponse struct {
 	DNSUpstreamDetected       []string `json:"dns_upstream_detected"` // what auto-detection currently sees
 	TrayEnabled               bool     `json:"tray_enabled"`
 	BetaUpdates               bool     `json:"beta_updates"`
-	Theme                     string   `json:"theme"` // dashboard colour theme id, empty = the default
-	Setup                     string   `json:"setup"` // first-run checklist: "", "active" or "done"
+	Theme                     string   `json:"theme"`      // dashboard colour theme id, empty = the default
+	Setup                     string   `json:"setup"`      // first-run checklist: "", "active" or "done"
+	MCPGlobal                 bool     `json:"mcp_global"` // lerd's MCP server is registered with the AI assistants
 }
 
 func handleSettings(w http.ResponseWriter, _ *http.Request) {
@@ -5592,6 +5594,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		Theme:                     theme,
 		Setup:                     setup,
 		BetaUpdates:               betaUpdates,
+		MCPGlobal:                 mcpConfigured(),
 	})
 }
 

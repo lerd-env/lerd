@@ -132,4 +132,34 @@ describe('autostart store', () => {
     expect(init.method).toBe('POST');
     expect(init.body).toBe(JSON.stringify({ enabled: true }));
   });
+  it('loads mcp_global from /api/settings', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ mcp_global: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    ) as unknown as typeof fetch;
+    const { mcpGlobal, loadAutostart } = await import('./autostart');
+    await loadAutostart();
+    expect(get(mcpGlobal)).toBe(true);
+  });
+
+  it('toggleMCP POSTs and flips the store once registration succeeds', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true, mcp_global: true }), { status: 200 }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const { mcpGlobal, toggleMCP } = await import('./autostart');
+    expect(await toggleMCP(true)).toBe(true);
+    expect(get(mcpGlobal)).toBe(true);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/settings/mcp');
+    expect(init.method).toBe('POST');
+    expect(init.body).toBe(JSON.stringify({ enabled: true }));
+  });
+
+  it('toggleMCP leaves the switch where it was when registration fails', async () => {
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: false, error: 'no home directory' }), { status: 200 })) as unknown as typeof fetch;
+    const { mcpGlobal, toggleMCP } = await import('./autostart');
+    expect(await toggleMCP(true)).toBe(false);
+    expect(get(mcpGlobal)).toBe(false);
+  });
 });

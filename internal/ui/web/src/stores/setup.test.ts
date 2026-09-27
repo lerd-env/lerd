@@ -24,7 +24,7 @@ async function fresh(opts: { setup?: string; sites?: number; streaming?: boolean
   const { sites, sitesLoaded } = await import('./sites');
   const { status } = await import('./status');
   const { services } = await import('./services');
-  const { startOnDashboardOpen } = await import('./autostart');
+  const { startOnDashboardOpen, mcpGlobal } = await import('./autostart');
   const { idleEnabled } = await import('./idle');
   const { permissionState, notifyDelivery } = await import('$lib/notify');
   const { palettes } = await import('./theme');
@@ -38,7 +38,7 @@ async function fresh(opts: { setup?: string; sites?: number; streaming?: boolean
   sitesLoaded.set(true);
   status.set({ streaming_mode: !!opts.streaming } as never);
   await setup.loadSetup();
-  return { ...setup, sites, services, startOnDashboardOpen, idleEnabled, permissionState, notifyDelivery, configTheme, fetchMock };
+  return { ...setup, sites, services, startOnDashboardOpen, mcpGlobal, idleEnabled, permissionState, notifyDelivery, configTheme, fetchMock };
 }
 
 describe('setup checklist', () => {
@@ -105,8 +105,8 @@ describe('setup checklist', () => {
     const f = await fresh({ desktop: true });
     const ids = () => get(f.setupSteps).map((s) => s.id);
     const done = () => get(f.setupSteps).map((s) => s.done);
-    expect(ids()).toEqual(['site', 'service', 'notify', 'theme', 'open', 'idle']);
-    expect(done()).toEqual([false, false, false, false, false, false]);
+    expect(ids()).toEqual(['site', 'service', 'notify', 'theme', 'open', 'idle', 'mcp']);
+    expect(done()).toEqual([false, false, false, false, false, false, false]);
 
     f.sites.set([{ name: 'a' } as never]);
     f.services.set([{ name: 'mysql', status: 'active' } as never]);
@@ -114,8 +114,9 @@ describe('setup checklist', () => {
     f.configTheme.set('adwaita');
     f.startOnDashboardOpen.set(true);
     f.idleEnabled.set(true);
+    f.mcpGlobal.set(true);
 
-    expect(done()).toEqual([true, true, true, true, true, true]);
+    expect(done()).toEqual([true, true, true, true, true, true, true]);
     expect(get(f.setupDone)).toBe(true);
   });
 

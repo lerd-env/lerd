@@ -231,6 +231,7 @@ func TestIsLoopbackOnlyPath(t *testing.T) {
 		{"/api/databases/postgres/snapshots/nightly", true},
 		{"/api/databases-overview", false},
 		{"/api/tools/composer/update", true},
+		{"/api/settings/mcp", true},
 		{"/api/share-tools", false},
 		{"/api/sites", false},
 		{"/api/sites/myapp.test", false},

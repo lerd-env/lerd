@@ -4,12 +4,12 @@ import { wsMessage } from '$lib/ws';
 import { sites, sitesLoaded } from '$stores/sites';
 import { coreServices } from '$stores/services';
 import { status } from '$stores/status';
-import { startOnDashboardOpen } from '$stores/autostart';
+import { startOnDashboardOpen, mcpGlobal } from '$stores/autostart';
 import { idleEnabled } from '$stores/idle';
 import { permissionState, notifyDelivery } from '$lib/notify';
 import { configTheme, desktopPalette } from '$stores/palettes';
 
-export type SetupStepId = 'site' | 'service' | 'notify' | 'theme' | 'open' | 'idle';
+export type SetupStepId = 'site' | 'service' | 'notify' | 'theme' | 'open' | 'idle' | 'mcp';
 
 export interface SetupStep {
   id: SetupStepId;
@@ -73,15 +73,16 @@ export function watchSetup() {
 }
 
 export const setupSteps = derived(
-  [sites, coreServices, permissionState, notifyDelivery, desktopPalette, configTheme, startOnDashboardOpen, idleEnabled],
-  ([$sites, $services, $permission, $delivery, $desktop, $theme, $openStart, $idle]): SetupStep[] => [
+  [sites, coreServices, permissionState, notifyDelivery, desktopPalette, configTheme, startOnDashboardOpen, idleEnabled, mcpGlobal],
+  ([$sites, $services, $permission, $delivery, $desktop, $theme, $openStart, $idle, $mcp]): SetupStep[] => [
     { id: 'site', done: $sites.length > 0 },
     { id: 'service', done: $services.some((s) => s.status === 'active') },
     { id: 'notify', done: $permission === 'granted' || $delivery === 'native' },
     // Matching the desktop only makes sense where there is a desktop to match.
     ...($desktop ? [{ id: 'theme' as const, done: !!$theme }] : []),
     { id: 'open', done: $openStart },
-    { id: 'idle', done: $idle }
+    { id: 'idle', done: $idle },
+    { id: 'mcp', done: $mcp }
   ]
 );
 
