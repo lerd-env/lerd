@@ -693,6 +693,20 @@ EOF
   grep -q "notify target browser" "$d/calls"
 }
 
+@test "is_wsl true on a WSL kernel" {
+  OSRELEASE_FILE="$BATS_TMPDIR/osrelease-$$"
+  echo "6.18.33.2-microsoft-standard-WSL2" > "$OSRELEASE_FILE"
+  run is_wsl
+  [ "$status" -eq 0 ]
+}
+
+@test "is_wsl false on a regular kernel" {
+  OSRELEASE_FILE="$BATS_TMPDIR/osrelease-$$"
+  echo "7.2.7-1-cachyos" > "$OSRELEASE_FILE"
+  run is_wsl
+  [ "$status" -ne 0 ]
+}
+
 # ── Omarchy ──────────────────────────────────────────────────────────────────
 
 # Omarchy's plugin CLI stands in for the whole desktop: where it is on PATH the
