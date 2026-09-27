@@ -2,29 +2,39 @@
 
 Lerd runs on Windows through WSL2. There is no native Windows build, the architecture leans on systemd user services and rootless Podman, both of which only exist on Linux. WSL2 with systemd enabled gives you a real Linux user session where the standard Linux build runs unchanged, install script, Quadlets, watcher and all.
 
-This page is the minimum configuration to get a working setup, with the WSL2 specific gotchas called out so you do not lose an afternoon to them.
+On a Windows machine with nothing set up, `lerd-setup.exe` does all of it for you. If you already run WSL, `lerd wsl:setup` wires an existing install into Windows. The rest of this page documents each piece by hand, as the reference for what those two do and as the fallback.
 
 ::: warning Beta
-Windows support via WSL2 is **beta**. The standard Linux build runs unchanged inside a systemd WSL2 session and is fine for daily development, but this path gets less testing than native Linux or macOS and a couple of steps still need manual Windows-side setup (mirrored networking and trusting the mkcert root CA, both below). Please report anything that misbehaves on the [issue tracker](https://github.com/lerd-env/lerd/issues).
+Windows support via WSL2 is **beta**. The standard Linux build runs unchanged inside a systemd WSL2 session and is fine for daily development, but this path gets less testing than native Linux or macOS. Please report anything that misbehaves on the [issue tracker](https://github.com/lerd-env/lerd/issues).
 :::
 
 ::: warning Supported distros
 Ubuntu 22.04 or newer, or Debian 12 or newer, running on WSL 0.67.6 or newer (the release that brought official systemd support). Older WSL versions need workarounds like `genie` or `subsystemctl`, which are not tested here.
 :::
 
-## Automated setup
+## Install with lerd-setup.exe
 
-Once lerd is installed (step 4 below), most of this page is one command:
+Download `lerd-setup.exe` from the [latest release](https://github.com/lerd-env/lerd/releases/latest/download/lerd-setup.exe) and run it. It asks for administrator rights once, then:
 
-```bash
-lerd wsl:setup
-```
+1. Enables the two Windows features WSL 2 runs on and asks to restart. After you log back in it carries on by itself.
+2. Installs WSL from Microsoft's GitHub release, then an Ubuntu 24.04 distro.
+3. Creates your Linux user (it suggests your Windows name) and asks you to choose its password, which `sudo` asks for later.
+4. Runs lerd's normal installer inside the distro, then `lerd wsl:setup`.
+5. Restarts WSL and opens the dashboard.
 
-It's idempotent and applies the WSL-specific tweaks for you: enabling systemd in `/etc/wsl.conf`, setting the Podman `events_logger`, turning on mirrored networking in your Windows `.wslconfig`, importing the mkcert root CA into the Windows trust store, and masking the tray. It prints anything it couldn't do (for example when Windows interop isn't reachable) so you can apply that step by hand. The one thing it can't do for you is the reboot, afterwards run `wsl --shutdown` from a Windows prompt and reopen the distro.
+Every step checks before it acts, so running it again after a failure picks up where it stopped. Windows shows a certificate warning when lerd's local CA is trusted, answer Yes.
 
-`lerd doctor` adds a `[WSL2]` section that re-checks these on demand.
+## What lerd sets up on the Windows side
 
-The sections below document each step manually, both as the reference for what `lerd wsl:setup` does and as the fallback if you'd rather do it by hand.
+`lerd wsl:setup`, which the installer runs for you, puts these in place:
+
+- **`lerd` in any Windows terminal.** `lerd.exe` in `%LOCALAPPDATA%\lerd\bin`, on your PATH, runs lerd inside the distro from the folder you are in, including a project opened through `\\wsl.localhost\...`.
+- **lerd at login.** A background agent starts with Windows and boots the distro, so sites and the dashboard are up without a WSL window open. WSL's idle timeout is switched off in `%USERPROFILE%\.wslconfig`, which otherwise stops the distro, and every container with it, seconds after the last terminal closes.
+- **`.test` in Windows browsers, wildcards included.** The agent answers DNS for your site TLD on `127.0.0.1`, and a Windows DNS rule (NRPT) sends the TLD there. It is the one step that needs administrator rights. Answering DNS rather than writing hosts file lines is what keeps `*.branch.site.test` worktree domains working.
+- **HTTPS trusted by Windows browsers.** lerd's local CA is imported into your Windows user's trust store.
+- **Mirrored networking**, so Windows reaches WSL's loopback, plus systemd, the Podman `events_logger` fix and the masked tray covered below.
+
+It is idempotent, so run it again whenever something drifts. `lerd doctor` adds a `[WSL2]` section that re-checks the Linux side on demand.
 
 ## 1. Enable systemd inside WSL2
 
@@ -68,7 +78,12 @@ networkingMode=mirrored
 dnsTunneling=true
 firewall=true
 autoProxy=true
+
+[general]
+instanceIdleTimeout=-1
 ```
+
+`instanceIdleTimeout=-1` keeps the distro running after the last terminal closes; without it WSL stops it within seconds and every site goes down.
 
 Then `wsl --shutdown` again.
 
@@ -147,22 +162,17 @@ lerd link
 
 If you edit from VS Code on Windows, use the Remote-WSL extension and launch from the WSL side with `code .` from inside `~/projects/myapp`. The Windows VS Code process will attach to the WSL server, but the files stay on ext4.
 
-## 6. HTTPS and the mkcert root CA
+## 6. `.test` DNS and HTTPS
 
-`lerd secure` installs the mkcert root CA into the WSL trust store, not the Windows one. So out of the box:
+Inside the distro, WSL writes its own `/etc/resolv.conf` pointing straight at its DNS proxy, which bypasses systemd-resolved and so every `.test` route. lerd hands that file to systemd-resolved on install: it sets `generateResolvConf=false` in `/etc/wsl.conf`, keeps WSL's proxy as resolved's upstream in `/etc/systemd/resolved.conf.d/wsl-upstream.conf`, and from there takes the same path as on any Ubuntu machine. That drop-in is deliberately not removed by an uninstall, since the distro would be left with no upstream DNS.
 
-- A browser installed inside WSL (Firefox or Chromium from apt) trusts the cert.
-- Chrome, Edge, Firefox on Windows do not.
-
-To get a Windows browser to trust lerd certs, export the root CA out of WSL and import it on the Windows side:
+Windows resolves `.test` through the lerd agent described above. To trust HTTPS by hand instead of through `lerd wsl:setup`, copy the CA out of WSL and import it:
 
 ```bash
-cp "$(mkcert -CAROOT)/rootCA.pem" /mnt/c/Users/$USER/Desktop/lerd-rootCA.crt
+cp "$(~/.local/share/lerd/bin/mkcert -CAROOT)/rootCA.pem" /mnt/c/Users/$USER/Desktop/lerd-rootCA.crt
 ```
 
-Then on Windows, double-click `lerd-rootCA.crt`. In the Certificate Import Wizard, pick **Place all certificates in the following store**, browse to **Trusted Root Certification Authorities**, and finish the import. Restart the browser. From then on `https://*.test` is trusted from Windows.
-
-If you don't need HTTPS, plain `http://yoursite.test` (or `.localhost`) works from a Windows browser as soon as mirrored networking is on.
+Double-click `lerd-rootCA.crt`, pick **Place all certificates in the following store**, choose **Trusted Root Certification Authorities**, finish, and restart the browser.
 
 ## 7. The system tray service does not work on WSL2
 
@@ -192,16 +202,16 @@ If all of those come back green, `cd ~/projects/myapp && lerd link` behaves exac
 
 ## Known WSL2 quirks
 
-::: details Dashboard shows "system resolver isn't routing your domains to it"
-The dashboard runs a check that compares the host's resolver against `lerd-dns`. On WSL2 the resolver is `wsl.localhost` (managed by Windows), and lerd's per-container DNS still works correctly even when the host resolver isn't pointed at `lerd-dns`. Sites resolve, the warning is benign on WSL2 today.
+::: details WSL prints "Nested virtualisation is not supported on this machine"
+Windows itself is running in a virtual machine. It only means you cannot run a VM inside WSL, which lerd never needs.
 :::
 
 ::: details Composer or npm install is painfully slow
 The project is somewhere under `/mnt/c/...`. Move it into `~/projects/` and re-link.
 :::
 
-::: details `lerd doctor` complains about NetworkManager dispatcher hooks
-You picked the `.test` mode and your distro has neither `systemd-resolved` nor NetworkManager managing DNS. Either install one, or reinstall and pick the `.localhost` mode.
+::: details `curl.exe` on Windows rejects a `.test` certificate that browsers accept
+Windows' own curl insists on a certificate revocation check, which a local CA cannot answer. Browsers do not, so this is curl only; `curl.exe --ssl-no-revoke` gets past it.
 :::
 
 ::: details `podman build` fails on overlay
