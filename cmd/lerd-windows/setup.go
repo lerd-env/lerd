@@ -53,6 +53,7 @@ func setup() error {
 		{"Linux user", ensureLinuxUser},
 		{"lerd", installLerd},
 		{"Windows integration", runWSLSetup},
+		{"desktop app", installDesktopApp},
 		{"start", startLerd},
 	}
 	for _, s := range steps {
@@ -200,6 +201,51 @@ func runWSLSetup() error {
 	return run("wsl.exe", "-d", setupDistro, "--cd", "~", "--exec", "bash", "-lc", "~/.local/bin/lerd wsl:setup")
 }
 
+// desktopAppURL always serves the newest build of the Lerd desktop app.
+const desktopAppURL = "https://github.com/lerd-env/lerd-desktop/releases/latest/download/Lerd-Setup.exe"
+
+// desktopAppPath is where the app's per-user installer puts it; the folder
+// takes the package name, not the product name.
+func desktopAppPath() string {
+	return filepath.Join(os.Getenv("LOCALAPPDATA"), "Programs", "lerd-desktop", "Lerd.exe")
+}
+
+// installDesktopApp offers the Lerd desktop app: the dashboard in its own
+// window, a tray icon and native notifications. Optional, so a no is fine.
+func installDesktopApp() error {
+	if _, err := os.Stat(desktopAppPath()); err == nil {
+		fmt.Println("✓ Lerd desktop app installed")
+		return nil
+	}
+	if !confirm("Install the Lerd desktop app (its own window, a tray icon and notifications)?") {
+		return nil
+	}
+	setupExe := filepath.Join(os.Getenv("LERD_SETUP_LOCAL"), "Lerd-Setup.exe")
+	if _, err := os.Stat(setupExe); os.Getenv("LERD_SETUP_LOCAL") == "" || err != nil {
+		fmt.Println("→ downloading the Lerd desktop app")
+		b, err := httpGet(desktopAppURL)
+		if err != nil {
+			return err
+		}
+		setupExe = filepath.Join(os.TempDir(), "Lerd-Setup.exe")
+		if err := os.WriteFile(setupExe, b, 0o755); err != nil {
+			return err
+		}
+		defer os.Remove(setupExe)
+	}
+	fmt.Println("→ installing the Lerd desktop app")
+	// Started directly with this console's handles the NSIS installer crashed
+	// (0xc0000005); through Start-Process it installs cleanly.
+	out, err := powershell(fmt.Sprintf(`(Start-Process -FilePath '%s' -ArgumentList '/S' -Wait -PassThru).ExitCode`, setupExe))
+	if err != nil {
+		return err
+	}
+	if code := strings.TrimSpace(out); code != "0" {
+		return fmt.Errorf("the desktop app installer exited with %s", code)
+	}
+	return nil
+}
+
 // startLerd restarts WSL so mirrored networking and the resolver handover take
 // effect, boots the distro again, and waits for the dashboard to answer.
 func startLerd() error {
@@ -214,11 +260,24 @@ func startLerd() error {
 		if resp, err := http.Get("http://127.0.0.1:7073/"); err == nil {
 			resp.Body.Close()
 			fmt.Println("✓ lerd is up")
-			return exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", "http://lerd.localhost").Run()
+			return openForUser()
 		}
 		time.Sleep(2 * time.Second)
 	}
 	return fmt.Errorf("the dashboard did not answer on 127.0.0.1:7073 within 3 minutes")
+}
+
+// openForUser opens the desktop app, or the dashboard when it is not
+// installed. explorer.exe starts it as the signed-in user, where starting it
+// from here would hand the app or browser this installer's admin rights.
+func openForUser() error {
+	target := "http://lerd.localhost"
+	if _, err := os.Stat(desktopAppPath()); err == nil {
+		target = desktopAppPath()
+	}
+	// explorer.exe exits non-zero even when it opened the target.
+	exec.Command("explorer.exe", target).Run() //nolint:errcheck
+	return nil
 }
 
 // asRoot runs script as root. --exec, not --, because `wsl.exe --` hands the
