@@ -30,6 +30,9 @@ var debugLenses = []struct {
 	{lerddumps.KindCache, "Cache"},
 	{lerddumps.KindEvent, "Events"},
 	{lerddumps.KindHTTP, "HTTP"},
+	{lerddumps.KindLog, "Logs"},
+	{lerddumps.KindException, "Exceptions"},
+	{lerddumps.KindMessage, "Messages"},
 }
 
 // inDebugView reports whether the Debug lenses are on screen: the global D
@@ -485,6 +488,12 @@ func lensNoun(kind string) string {
 		return "events"
 	case lerddumps.KindHTTP:
 		return "HTTP calls"
+	case lerddumps.KindLog:
+		return "log entries"
+	case lerddumps.KindException:
+		return "exceptions"
+	case lerddumps.KindMessage:
+		return "messages"
 	default:
 		return "events"
 	}
@@ -569,6 +578,34 @@ type namedData struct {
 	Name string `json:"name"`
 }
 
+// logData covers the log, exception and message lenses, which share the
+// level/channel facets the web window filters on.
+type logData struct {
+	Message      string `json:"message"`
+	Level        string `json:"level"`
+	Channel      string `json:"channel"`
+	Type         string `json:"type"`
+	Source       string `json:"source"`
+	Body         string `json:"body"`
+	Notification string `json:"notification"`
+	To           string `json:"to"`
+	From         string `json:"from"`
+	Transport    string `json:"transport"`
+	Previous     string `json:"previous"`
+}
+
+func levelTag(level string) string {
+	switch level {
+	case "emergency", "alert", "critical", "error":
+		return failingStyle.Render(level)
+	case "warning", "notice":
+		return pausedStyle.Render(level)
+	case "":
+		return ""
+	}
+	return dimStyle.Render(level)
+}
+
 // debugRowMain returns the one-line summary for an event in the given lens.
 // dup is the per-group fingerprint counts (query lens only) for the ×N badge.
 func debugRowMain(kind string, ev lerddumps.Event, dup map[string]int) string {
@@ -625,6 +662,33 @@ func debugRowMain(kind string, ev lerddumps.Event, dup map[string]int) string {
 			line += "  " + dimStyle.Render("sent")
 		}
 		return line
+	case lerddumps.KindLog:
+		var d logData
+		_ = json.Unmarshal(ev.Data, &d)
+		return oneLine(d.Message) + "  " + levelTag(d.Level) + dimStyle.Render("  "+d.Channel)
+	case lerddumps.KindException:
+		var d logData
+		_ = json.Unmarshal(ev.Data, &d)
+		line := oneLine(d.Message)
+		if d.Type != "" && d.Type != "message" {
+			line = d.Type + "  " + line
+		}
+		return line + "  " + levelTag(d.Level)
+	case lerddumps.KindMessage:
+		var d logData
+		_ = json.Unmarshal(ev.Data, &d)
+		body := d.Body
+		if body == "" {
+			body = d.Notification
+		}
+		if body == "" {
+			body = "(no body)"
+		}
+		line := oneLine(body)
+		if d.To != "" {
+			line += dimStyle.Render("  → " + d.To)
+		}
+		return line + dimStyle.Render("  "+d.Channel)
 	default: // events
 		var d namedData
 		_ = json.Unmarshal(ev.Data, &d)
@@ -694,7 +758,26 @@ func debugRowDetail(kind string, ev lerddumps.Event) []string {
 		if d.Store != "" {
 			out = append(out, "store: "+d.Store)
 		}
-	default: // http, events
+	case lerddumps.KindException:
+		var d logData
+		_ = json.Unmarshal(ev.Data, &d)
+		if d.Source != "" {
+			out = append(out, "source: "+d.Source)
+		}
+		if d.Previous != "" {
+			out = append(out, "previous: "+oneLine(d.Previous))
+		}
+		out = appendCaller(out, ev)
+	case lerddumps.KindMessage:
+		var d logData
+		_ = json.Unmarshal(ev.Data, &d)
+		if d.From != "" {
+			out = append(out, "from: "+d.From)
+		}
+		if d.Transport != "" {
+			out = append(out, "transport: "+d.Transport)
+		}
+	default: // http, events, logs
 		out = appendCaller(out, ev)
 	}
 	return out

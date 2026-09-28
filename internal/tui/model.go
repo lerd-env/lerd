@@ -689,6 +689,19 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "t":
 		return m, m.actionShell()
 
+	case "E":
+		if s := m.currentSite(); s != nil && m.activeTab == tabSites {
+			m.setStatus("opening "+s.Name+" in your editor…", 5*time.Second)
+			return m, runLerd(s.Path, "code")
+		}
+		return m, nil
+
+	case "F":
+		if s := m.currentSite(); s != nil && m.activeTab == tabSites && s.Path != "" {
+			return m, m.openURL(s.Path)
+		}
+		return m, nil
+
 	case "/":
 		if m.detailMode == detailDumps {
 			m.dumpsFilterActive = true

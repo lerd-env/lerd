@@ -42,6 +42,8 @@ var helpReference = []helpSection{
 			{"r", "restart the focused site or service"},
 			{"p", "pause / unpause toggle for a site"},
 			{"t", "open an interactive shell inside the focused container"},
+			{"E", "open the selected site in your editor"},
+			{"F", "open the selected site's folder"},
 			{"O", "open in the browser: the focused site's primary domain, or the focused service's dashboard URL"},
 			{"u", "service update — pull a newer image and restart (services pane)"},
 			{"b", "service rollback — revert to the previously-running image (services pane)"},

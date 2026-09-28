@@ -67,6 +67,10 @@ const (
 	kindWorktreeNode
 	kindSnapshotKeep
 	kindAutoSnapshot
+	kindPin
+	kindRuntime
+	kindHorizonReload
+	kindStripe
 )
 
 // detailRows returns the rows the detail view draws, in the order the Overview
@@ -92,6 +96,16 @@ func detailRows(s *siteinfo.EnrichedSite) []detailRow {
 	}
 	rows = append(rows, detailRow{kind: kindLANShare})
 	rows = append(rows, detailRow{kind: kindAutoSnapshot})
+	rows = append(rows, detailRow{kind: kindPin})
+	if s.ContainerPort == 0 && s.PHPVersion != "" {
+		rows = append(rows, detailRow{kind: kindRuntime})
+	}
+	if s.HasHorizon {
+		rows = append(rows, detailRow{kind: kindHorizonReload})
+	}
+	if s.StripeSecretSet {
+		rows = append(rows, detailRow{kind: kindStripe})
+	}
 	if s.HasQueueWorker {
 		rows = append(rows, detailRow{kind: kindWorker, workerName: "queue"})
 	}
@@ -202,6 +216,36 @@ func (m *Model) detailToggleSelected(s *siteinfo.EnrichedSite, rows []detailRow,
 		mode, label := nextAutoSnapshotMode(s.AutoSnapshot)
 		m.setStatus("automatic snapshots for "+s.Name+": "+label+"…", 5*time.Second)
 		return runLerd(s.Path, "db:snapshot:auto", "site", s.Name, mode)
+	case kindPin:
+		if m.snap.Pinned[s.Name] {
+			m.setStatus("letting "+s.Name+" idle again…", 5*time.Second)
+			return tea.Sequence(runLerd("", "idle", "unpin", s.Name), loadCmd())
+		}
+		m.setStatus("keeping "+s.Name+" awake…", 5*time.Second)
+		return tea.Sequence(runLerd("", "idle", "pin", s.Name), loadCmd())
+	case kindRuntime:
+		// Switching restarts the site's workers, so it runs as its own action
+		// the user asked for, never as a side effect of anything else.
+		if s.Runtime == "frankenphp" {
+			m.setStatus("switching "+s.Name+" to php-fpm…", 30*time.Second)
+			return tea.Sequence(runLerd(s.Path, "runtime", "fpm"), loadCmd())
+		}
+		m.setStatus("switching "+s.Name+" to frankenphp…", 30*time.Second)
+		return tea.Sequence(runLerd(s.Path, "runtime", "frankenphp"), loadCmd())
+	case kindHorizonReload:
+		state := "on"
+		if m.snap.HorizonReload[s.Name] {
+			state = "off"
+		}
+		m.setStatus("turning reload horizon on code change "+state+" for "+s.Name+"…", 10*time.Second)
+		return tea.Sequence(runLerd(s.Path, "horizon:reload", state), loadCmd())
+	case kindStripe:
+		if s.StripeRunning {
+			m.setStatus("stopping the stripe listener for "+s.Name+"…", 10*time.Second)
+			return tea.Sequence(runLerd(s.Path, "stripe:listen", "stop"), loadCmd())
+		}
+		m.setStatus("starting the stripe listener for "+s.Name+"…", 10*time.Second)
+		return tea.Sequence(runLerd(s.Path, "stripe:listen"), loadCmd())
 	case kindPHP:
 		m.openPHPPicker(s)
 		return nil
@@ -602,9 +646,10 @@ func detailContentLines(m *Model, site *siteinfo.EnrichedSite, focused bool, inn
 	// Identity and the tab strip live in the site view's fixed header.
 	var secs []ovSection
 	secs = append(secs, overviewDomains(m, site, rows, sel, scheme, colW)...)
-	secs = append(secs, overviewToggles(site, rows, sel, colW)...)
+	secs = append(secs, overviewToggles(m, site, rows, sel, colW)...)
 	secs = append(secs, overviewServices(m, site, colW)...)
 	secs = append(secs, overviewWorkers(site, rows, sel, colW)...)
+	secs = append(secs, overviewSuggested(site, innerW)...)
 	secs = append(secs, overviewWorktrees(site, rows, sel, scheme, innerW)...)
 	secs = append(secs, overviewTiming(m, site, innerW)...)
 
@@ -709,7 +754,7 @@ func overviewDomains(m *Model, site *siteinfo.EnrichedSite, rows []detailRow, se
 	return b.section(ovHalf)
 }
 
-func overviewToggles(site *siteinfo.EnrichedSite, rows []detailRow, sel func(int) bool, w int) []ovSection {
+func overviewToggles(m *Model, site *siteinfo.EnrichedSite, rows []detailRow, sel func(int) bool, w int) []ovSection {
 	b := newOvBuilder(w)
 	b.plain(sectionStyle.Render("Toggles"))
 	for i, row := range rows {
@@ -726,6 +771,24 @@ func overviewToggles(site *siteinfo.EnrichedSite, rows []detailRow, sel func(int
 		case kindAutoSnapshot:
 			covered := autoSnapshotCovered(site.AutoSnapshot)
 			b.add(renderDetailRow(s, onOffGlyph(covered), "Auto snapshots", autoSnapshotModeText(site.AutoSnapshot)), s)
+		case kindPin:
+			pinned := m.snap.Pinned[site.Name]
+			state := dimStyle.Render("idles when unused")
+			if pinned {
+				state = runningStyle.Render("always awake")
+			}
+			b.add(renderDetailRow(s, onOffGlyph(pinned), "Keep awake", state), s)
+		case kindRuntime:
+			rt := "php-fpm"
+			if site.Runtime == "frankenphp" {
+				rt = "frankenphp"
+			}
+			b.add(renderDetailRow(s, accentStyle.Render("⇄"), "Runtime", dimStyle.Render(rt)), s)
+		case kindHorizonReload:
+			on := m.snap.HorizonReload[site.Name]
+			b.add(renderDetailRow(s, onOffGlyph(on), "Reload horizon", onOffText(on)), s)
+		case kindStripe:
+			b.add(renderDetailRow(s, onOffGlyph(site.StripeRunning), "Stripe listener", onOffText(site.StripeRunning)), s)
 		}
 	}
 	b.plain("")
@@ -773,6 +836,26 @@ func overviewServices(m *Model, site *siteinfo.EnrichedSite, w int) []ovSection 
 	}
 	b.plain("")
 	return b.section(ovHalf)
+}
+
+// overviewSuggested lists the services the site's packages ask for and it does
+// not have yet. Read only: adding one rewrites .lerd.yaml and .env, so it stays
+// in the CLI and the web UI.
+func overviewSuggested(site *siteinfo.EnrichedSite, w int) []ovSection {
+	if len(site.SuggestedServices) == 0 {
+		return nil
+	}
+	b := newOvBuilder(w)
+	b.plain(sectionStyle.Render("Suggested services"))
+	for _, sug := range site.SuggestedServices {
+		why := sug.Reason
+		if sug.Package != "" {
+			why = strings.TrimSpace(sug.Package + "  " + why)
+		}
+		b.plain("   " + accentStyle.Render("+") + " " + padRight(sug.Name, 18) + dimStyle.Render(why))
+	}
+	b.plain("")
+	return b.section(ovFull)
 }
 
 func overviewWorkers(site *siteinfo.EnrichedSite, rows []detailRow, sel func(int) bool, w int) []ovSection {
