@@ -241,6 +241,9 @@ type Model struct {
 	// pane; commits as `lerd <args>` via runLerd.
 	paletteActive bool
 	paletteInput  string
+	// paletteDir is where the next palette command runs; empty means the TUI's
+	// own working directory. Set by shortcuts that open the palette for a site.
+	paletteDir string
 
 	// Help modal: replaces the prior detailHelp pane-swap. `?` toggles it
 	// on; renders as a centered overlay so the user keeps their current
@@ -688,6 +691,12 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "t":
 		return m, m.actionShell()
+
+	case "W":
+		if s := m.currentSite(); s != nil && m.activeTab == tabSites {
+			m.openPaletteIn(s.Path, "worktree add ")
+		}
+		return m, nil
 
 	case "E":
 		if s := m.currentSite(); s != nil && m.activeTab == tabSites {

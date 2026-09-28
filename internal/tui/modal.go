@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -219,6 +220,10 @@ func (m *Model) renderPaletteModal(w, h int) string {
 	suggestions := paletteSuggestions(m.paletteInput, paletteCommands, 12)
 
 	bodyLines := []string{prompt, ""}
+	if m.paletteDir != "" {
+		home, _ := os.UserHomeDir()
+		bodyLines = []string{prompt, dimStyle.Render("runs in " + shortHome(m.paletteDir, home)), ""}
+	}
 	if len(suggestions) == 0 {
 		if strings.TrimSpace(m.paletteInput) == "" {
 			bodyLines = append(bodyLines, dimStyle.Render("start typing — tab completes the matching command"))
