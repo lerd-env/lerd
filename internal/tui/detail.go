@@ -477,7 +477,12 @@ func workerLabel(s *siteinfo.EnrichedSite, name string) string {
 // by default, or the global settings rows when detailMode == detailSettings.
 // Both live in the same pane so `S` is a toggle, not a separate screen.
 func (m *Model) renderDetailInline(w, h int, focused bool) string {
-	style := paneStyle(focused)
+	return m.renderDetailIn(paneStyle(focused), w, h, focused)
+}
+
+// renderDetailIn draws the detail content inside style, which is a bordered
+// pane for services and databases and a bare frame inside the site view.
+func (m *Model) renderDetailIn(style lipgloss.Style, w, h int, focused bool) string {
 	innerW, innerH := innerSize(style, w, h)
 
 	contentW := innerW - 1 // reserve 1 cell for scrollbar
@@ -558,10 +563,6 @@ func settingsContentLines(m *Model, focused bool, innerW int) []string {
 	out := make([]string, 0, len(rows)+4)
 	add := func(s string) { out = append(out, padToWidth(clipLine(s, innerW), innerW)) }
 
-	add(sectionStyle.Render("Settings"))
-	add(dimStyle.Render("  press S again to return to site detail"))
-	add("")
-
 	if len(rows) == 0 {
 		add(dimStyle.Render("  no settings available"))
 		return out
@@ -598,8 +599,8 @@ func detailContentLines(m *Model, site *siteinfo.EnrichedSite, focused bool, inn
 		scheme = "https"
 	}
 
+	// Identity and the tab strip live in the site view's fixed header.
 	var secs []ovSection
-	secs = append(secs, overviewIdentity(m, site, innerW)...)
 	secs = append(secs, overviewDomains(m, site, rows, sel, scheme, colW)...)
 	secs = append(secs, overviewToggles(site, rows, sel, colW)...)
 	secs = append(secs, overviewServices(m, site, colW)...)
@@ -608,47 +609,7 @@ func detailContentLines(m *Model, site *siteinfo.EnrichedSite, focused bool, inn
 	secs = append(secs, overviewTiming(m, site, innerW)...)
 
 	body, cursorLine := composeOverview(secs, innerW)
-	out := renderSiteTabHeader(tabSiteOverview, innerW, availableSiteTabs(site))
-	if cursorLine >= 0 {
-		cursorLine += len(out)
-	} else {
-		cursorLine = 0
-	}
-	return append(out, body...), cursorLine
-}
-
-// overviewIdentity is the header: primary domain, then the facts about the site
-// packed onto as few lines as the pane allows.
-func overviewIdentity(m *Model, site *siteinfo.EnrichedSite, innerW int) []ovSection {
-	b := newOvBuilder(innerW)
-
-	// Lead with the primary domain (what users see in the browser). The internal
-	// registry name is still surfaced below, since commands and filters take it.
-	header := site.PrimaryDomain()
-	if header == "" {
-		header = site.Name
-	}
-	b.plain(sectionStyle.Render(header))
-
-	var facts []string
-	if site.AppName != "" {
-		facts = append(facts, dimStyle.Render("app: ")+site.AppName)
-	}
-	if site.Name != header {
-		facts = append(facts, dimStyle.Render("name: ")+site.Name)
-	}
-	if g := siteGroupLine(m, site); g != "" {
-		facts = append(facts, dimStyle.Render(g))
-	}
-	for _, ln := range joinInfo(facts, innerW-2) {
-		b.plain("  " + ln)
-	}
-	if site.Path != "" {
-		b.plain(dimStyle.Render("  path: ") + site.Path)
-	}
-	b.plain("  " + siteRuntimeLine(site))
-	b.plain("")
-	return b.section(ovFull)
+	return body, max(0, cursorLine)
 }
 
 // siteGroupLine describes the site's place in a group, or "" when it isn't in one.

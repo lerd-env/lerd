@@ -1,0 +1,208 @@
+package tui
+
+import (
+	"fmt"
+	"os"
+	"strings"
+
+	"charm.land/lipgloss/v2"
+	"github.com/geodro/lerd/internal/siteinfo"
+	zone "github.com/lrstanley/bubblezone/v2"
+)
+
+// The site view is a fixed header (breadcrumb, identity, tab bar) over the
+// active tab's content. The header never scrolls, so the site and the tabs
+// stay in view however long the Overview or the log tail gets.
+
+var bareFrame = lipgloss.NewStyle()
+
+// renderSitesMain picks what the Sites main area shows: the settings, system
+// or debug window when one is open, otherwise the selected site.
+func (m *Model) renderSitesMain(w, h int) string {
+	if m.detailMode != detailSite {
+		titles := map[detailMode]string{detailSettings: "Settings", detailSystem: "System", detailDumps: "Debug"}
+		return m.renderFramed(w, h, []string{titles[m.detailMode]}, []seg{sp("esc ", nil), sp("back to the site", colDim)}, zone.Mark("pane:detail", m.renderDetailIn(bareFrame, m.contentWidth(w), h-3, m.focus == paneDetail)))
+	}
+	if m.currentSite() == nil {
+		msg := []string{"No sites linked yet", "cd into a project and run lerd link, or press : and type link"}
+		if len(m.snap.Sites) > 0 {
+			msg = []string{"No site matches the filter", "press / then esc to clear it"}
+		}
+		cw := m.contentWidth(w)
+		body := strings.Join([]string{row(nil, cw, sp(msg[0], nil)), row(nil, cw, sp(msg[1], colDim))}, "\n")
+		return m.renderFramed(w, h, []string{"Sites"}, nil, body)
+	}
+	return m.renderSiteView(w, h)
+}
+
+// contentWidth is the main area's width inside its side margins.
+func (m *Model) contentWidth(w int) int {
+	return w - 2*max(1, layoutFor(m.width, m.height).padX-1)
+}
+
+// renderFramed draws a breadcrumb over body, all inside the main-area margins,
+// as exactly h lines of width w.
+func (m *Model) renderFramed(w, h int, crumb []string, right []seg, body string) string {
+	cw := m.contentWidth(w)
+	lines := []string{row(nil, cw), crumbRow(cw, crumb, right), row(nil, cw)}
+	return frameLines(w, h, cw, append(lines, strings.Split(body, "\n")...))
+}
+
+func (m *Model) renderSiteView(w, h int) string {
+	site := m.currentSite()
+	cw := m.contentWidth(w)
+	head := m.siteHeader(site, cw)
+	bodyH := max(3, h-len(head))
+	var body string
+	if m.siteTab == tabSiteLogs {
+		body = zone.Mark("pane:logs", m.renderLogsIn(bareFrame, cw, bodyH, nil))
+	} else {
+		body = zone.Mark("pane:detail", m.renderDetailIn(bareFrame, cw, bodyH, m.focus == paneDetail && !m.sideFocus))
+	}
+	return frameLines(w, h, cw, append(head, strings.Split(body, "\n")...))
+}
+
+// frameLines pads or cuts lines to h rows of width cw and adds the side margins.
+func frameLines(w, h, cw int, lines []string) string {
+	pad := (w - cw) / 2
+	left, right := row(nil, pad), row(nil, w-cw-pad)
+	out := make([]string, h)
+	for i := range out {
+		l := ""
+		if i < len(lines) {
+			l = lines[i]
+		}
+		out[i] = left + padToWidth(clipLine(l, cw), cw) + right
+	}
+	return strings.Join(out, "\n")
+}
+
+func crumbRow(cw int, parts []string, right []seg) string {
+	var left []seg
+	for i, p := range parts {
+		if i > 0 {
+			left = append(left, sp("  ›  ", colDim))
+		}
+		fg := colDim
+		if i == len(parts)-1 {
+			fg = nil
+		}
+		left = append(left, sp(p, fg))
+	}
+	return rowLR(nil, cw, left, right)
+}
+
+// siteHeader is the fixed top of the site view.
+func (m *Model) siteHeader(site *siteinfo.EnrichedSite, cw int) []string {
+	domain := site.PrimaryDomain()
+	if domain == "" {
+		domain = site.Name
+	}
+	var branch []seg
+	if site.Branch != "" {
+		branch = []seg{sp("git ", colDim), sp(site.Branch, nil)}
+	}
+	out := []string{row(nil, cw), crumbRow(cw, []string{"Sites", domain}, branch), row(nil, cw)}
+
+	// The trailing gap keeps the left facts from butting into the right ones
+	// when the pane is only just wide enough for both.
+	title := []seg{bd(domain, nil)}
+	if site.AppName != "" && site.AppName != domain {
+		title = append(title, sp("   "+site.AppName, colDim))
+	}
+	out = append(out, rowLR(nil, cw, append(title, sp("   ", nil)), siteVersions(site)))
+
+	scheme := "http"
+	if site.Secured {
+		scheme = "https"
+	}
+	where := []seg{sp(scheme+"://"+domain, colAccent)}
+	if site.Path != "" {
+		home, _ := os.UserHomeDir()
+		where = append(where, sp("    "+shortHome(site.Path, home), colDim))
+	}
+	out = append(out, rowLR(nil, cw, append(where, sp("   ", nil)), siteFlags(site)))
+	if g := siteGroupLine(m, site); g != "" {
+		out = append(out, row(nil, cw, sp(g, colDim)))
+	}
+	out = append(out, row(nil, cw))
+	return append(out, m.siteTabBar(site, cw)...)
+}
+
+func siteVersions(site *siteinfo.EnrichedSite) []seg {
+	var out []seg
+	add := func(label, value string) {
+		if value == "" {
+			return
+		}
+		if len(out) > 0 {
+			out = append(out, sp("   ", nil))
+		}
+		if label != "" {
+			out = append(out, sp(label+" ", colDim))
+		}
+		out = append(out, sp(value, nil))
+	}
+	add("", site.FrameworkLabel)
+	php := site.PHPVersion
+	if php == "" && site.ContainerPort > 0 {
+		php = "custom"
+	}
+	add("php", php)
+	add("node", site.NodeVersion)
+	if site.Runtime == "frankenphp" {
+		rt := "frankenphp"
+		if site.RuntimeWorker {
+			rt += " worker"
+		}
+		add("runtime", rt)
+	}
+	return out
+}
+
+func siteFlags(site *siteinfo.EnrichedSite) []seg {
+	flag := func(on bool, label string) []seg {
+		if on {
+			return []seg{sp(glyphRunning+" ", colRunning), sp(label, colDim)}
+		}
+		return []seg{sp(glyphStopped+" ", colDim), sp(label, colDim)}
+	}
+	out := flag(site.Secured, "https")
+	out = append(out, sp("     ", nil))
+	out = append(out, flag(site.LANPort > 0, "lan")...)
+	if site.Paused {
+		out = append(append([]seg{sp(glyphPaused+" ", colPaused), sp("paused", colPaused)}, sp("     ", nil)), out...)
+	}
+	return out
+}
+
+// siteTabBar is the tab labels over a hairline the active tab thickens in the
+// accent. Each label is a click zone that selects its tab.
+func (m *Model) siteTabBar(site *siteinfo.EnrichedSite, cw int) []string {
+	var labels strings.Builder
+	x, ax, aw := 0, 0, 0
+	for i, t := range availableSiteTabs(site) {
+		name := siteTabLabel(t)
+		if i > 0 {
+			labels.WriteString(row(nil, 4))
+			x += 4
+		}
+		label := row(nil, len(name), sp(name, colDim))
+		if t == m.siteTab {
+			label, ax, aw = row(nil, len(name), bd(name, nil)), x, len(name)
+		}
+		labels.WriteString(zone.Mark(fmt.Sprintf("sitetab:%d", i), label))
+		x += len(name)
+	}
+	line := row(nil, cw, sp(strings.Repeat("─", ax), colDivider), sp(strings.Repeat("━", aw), colAccent), sp(strings.Repeat("─", max(0, cw-ax-aw)), colDivider))
+	return []string{padToWidth(labels.String(), cw), line, row(nil, cw)}
+}
+
+// shortHome writes a path under the user's home as ~/…, which is how people
+// read their own project paths.
+func shortHome(path, home string) string {
+	if home != "" && (path == home || strings.HasPrefix(path, home+"/")) {
+		return "~" + strings.TrimPrefix(path, home)
+	}
+	return path
+}

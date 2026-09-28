@@ -184,8 +184,11 @@ func (m *Model) renderBody(width, topH int) string {
 	if m.activeTab == tabDashboard {
 		return m.renderDashboard(width, topH)
 	}
-	// Sites and services are picked in the sidebar, so the main area is all detail.
-	if m.activeTab != tabDatabases {
+	if m.activeTab == tabSites {
+		return m.renderSitesMain(width, topH)
+	}
+	// Services are picked in the sidebar, so the main area is all detail.
+	if m.activeTab == tabServices {
 		return m.renderDetailColumn(width, topH, m.focus == paneDetail)
 	}
 
@@ -207,11 +210,6 @@ func (m *Model) renderBody(width, topH int) string {
 // other tabs stay one keypress away. The Services tab instead splits a logs
 // sub-pane beneath the service detail. Everything else is the plain detail pane.
 func (m *Model) renderDetailColumn(w, h int, focused bool) string {
-	if m.siteLogsActive() {
-		innerW, _ := innerSize(paneStyle(focused), w, h)
-		header := renderSiteTabHeader(tabSiteLogs, innerW, availableSiteTabs(m.currentSite()))
-		return zone.Mark("pane:logs", m.renderLogs(w, h, header, focused))
-	}
 	if !m.serviceLogsActive() {
 		return zone.Mark("pane:detail", m.renderDetailInline(w, h, focused))
 	}
@@ -345,7 +343,7 @@ func (m *Model) footChips() []footChip {
 	case tabDatabases:
 		return []footChip{nav("↑↓", "nav"), nav("tab", "panes"), act("n", "snapshot"), act("R", "refresh"), nav("?", "help")}
 	}
-	return []footChip{back, nav("↑↓", "nav"), act("space", "toggle"), act("s", "start"), act("x", "stop"), act("r", "restart"), nav("l", "logs"),
+	return []footChip{back, nav("1-5", "tabs"), nav("↑↓", "nav"), act("space", "toggle"), act("s", "start"), act("x", "stop"), act("r", "restart"), nav("l", "logs"),
 		act("t", "shell"), nav("S", "settings"), nav("Y", "system"), nav("D", "debug"), nav("?", "help")}
 }
 
@@ -860,7 +858,12 @@ func renderServiceRow(selected bool, s ServiceRow, paneW int) string {
 // costs one row each; focused picks the border colour, so the pane reads as part
 // of the detail column when it stands in for it.
 func (m *Model) renderLogs(w, h int, header []string, focused bool) string {
-	style := paneStyle(focused)
+	return m.renderLogsIn(paneStyle(focused), w, h, header)
+}
+
+// renderLogsIn draws the log tail inside style: a bordered pane for the
+// full-width overlay and services, a bare frame inside the site view.
+func (m *Model) renderLogsIn(style lipgloss.Style, w, h int, header []string) string {
 	innerW, innerH := innerSize(style, w, h)
 
 	target := m.logTail.Target()

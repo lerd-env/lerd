@@ -347,7 +347,7 @@ func TestRenderLogs_NoSourceEmptyState(t *testing.T) {
 	m.activeTab = tabSites
 	m.siteTab = tabSiteLogs
 
-	out := stripANSI(m.renderDetailColumn(80, 16, true))
+	out := stripANSI(m.renderSiteView(80, 16))
 	if strings.Contains(out, "Logs ·") {
 		t.Fatalf("no-source header should not dangle a separator:\n%s", out)
 	}
@@ -365,9 +365,9 @@ func TestRenderLogs_LogsTabKeepsTabStrip(t *testing.T) {
 	m.activeTab = tabSites
 	m.siteTab = tabSiteLogs
 
-	out := stripANSI(m.renderDetailColumn(80, 20, true))
-	if !strings.Contains(out, "[2] Logs") {
-		t.Fatalf("Logs tab should keep the site tab strip on top:\n%s", out)
+	out := stripANSI(m.renderSiteView(80, 20))
+	if !strings.Contains(out, "Overview") || !strings.Contains(out, "Doctor") {
+		t.Fatalf("Logs tab should keep the site tab bar on top:\n%s", out)
 	}
 	if !strings.Contains(out, "Logs ·") {
 		t.Fatalf("Logs tab should render the tail header:\n%s", out)
