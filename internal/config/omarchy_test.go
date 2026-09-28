@@ -143,3 +143,26 @@ func TestOmarchyThemeNamesItselfWithoutTheNameFile(t *testing.T) {
 		t.Errorf("Name = %q, want the bare product name", theme.Name)
 	}
 }
+
+// An install that never chose a theme takes Omarchy's on install or upgrade; a
+// choice already made, the default included, is left as it is.
+func TestAdoptOmarchyTheme(t *testing.T) {
+	writeOmarchyTheme(t, "tokyo-night", "accent = \"#7aa2f7\"\n")
+
+	var fresh GlobalConfig
+	if !fresh.AdoptOmarchyTheme() || fresh.UI.Theme != OmarchyThemeID {
+		t.Errorf("unset theme = %q, want %q", fresh.UI.Theme, OmarchyThemeID)
+	}
+
+	var chosen GlobalConfig
+	chosen.UI.Theme = "lerd"
+	if chosen.AdoptOmarchyTheme() || chosen.UI.Theme != "lerd" {
+		t.Errorf("chosen theme became %q, want it kept", chosen.UI.Theme)
+	}
+
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	var elsewhere GlobalConfig
+	if elsewhere.AdoptOmarchyTheme() || elsewhere.UI.Theme != "" {
+		t.Errorf("without Omarchy the theme became %q", elsewhere.UI.Theme)
+	}
+}

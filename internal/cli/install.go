@@ -346,6 +346,15 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil && cfg.AdoptOmarchyTheme() {
+		step("Dressing the dashboard in the Omarchy theme")
+		if err := config.SaveGlobal(cfg); err != nil {
+			fmt.Printf("\n    WARN: persist the Omarchy theme: %v\n", err)
+		} else {
+			ok()
+		}
+	}
+
 	// 3. Binaries (composer, fnm, mkcert) — after manager is persisted so an
 	// nvm choice skips the fnm download.
 	step("Downloading binaries")

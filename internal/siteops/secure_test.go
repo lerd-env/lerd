@@ -134,6 +134,30 @@ func TestSetSecured_unsecuringCallsUnsecureSiteAndFlipsFlag(t *testing.T) {
 	}
 }
 
+// Unsecuring while DNS is off must also drop the HTTPS remembered from before
+// the disable, or dns:enable brings back the scheme the user just turned off.
+func TestSetSecured_unsecuringForgetsHTTPSRememberedAcrossDNSOff(t *testing.T) {
+	stubSecureDeps(t)
+	projectDir := withTempEnv(t)
+
+	site := &config.Site{Name: "myapp", Domains: []string{"myapp.localhost"}, Path: projectDir, SecuredBeforeDNSOff: true}
+	if err := config.AddSite(*site); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SetSecured(site, false); err != nil {
+		t.Fatalf("SetSecured: %v", err)
+	}
+
+	reg, err := config.FindSite("myapp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reg.SecuredBeforeDNSOff {
+		t.Errorf("secured_before_dns_off still set after unsecure, dns:enable would restore HTTPS")
+	}
+}
+
 func TestSetSecured_notifiesDaemonForStripeAndLANShare(t *testing.T) {
 	// Every successful toggle must notify the daemon to refresh both
 	// dependent listeners. Missing either has been the source of past bugs

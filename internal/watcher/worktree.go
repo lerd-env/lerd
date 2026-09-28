@@ -17,6 +17,10 @@ import (
 // extraction by clobbering each other's vendor/composer/tmp-*.zip files.
 var inFlightWorktrees sync.Map
 
+// sitePollInterval is how often the site list is re-read, which is also how a
+// site that became a git repository after start gets its watches.
+var sitePollInterval = 30 * time.Second
+
 // WatchWorktrees monitors the .git/worktrees/ directory for each site returned
 // by getSites and calls onAdded/onRemoved when entries appear or disappear.
 // It calls onChanged when worktree metadata changes, such as HEAD being
@@ -74,32 +78,38 @@ func WatchWorktrees(
 		return added
 	}
 
-	addSite := func(sitePath string) {
+	// addSite returns the worktree entries it found already in place.
+	addSite := func(sitePath string) []string {
 		gitDir := filepath.Join(sitePath, ".git")
 		if _, already := siteForGitDir[gitDir]; already {
-			return
+			return nil
 		}
 		if info, err := os.Stat(gitDir); err != nil || !info.IsDir() {
-			return
+			return nil
 		}
 		if err := w.Add(gitDir); err == nil {
 			siteForGitDir[gitDir] = sitePath
 		}
-		addWorktreesWatch(sitePath)
+		return addWorktreesWatch(sitePath)
 	}
 
+	// Worktrees present at start are the daemon's boot pass to handle.
 	for _, sitePath := range getSites() {
 		addSite(sitePath)
 	}
 
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(sitePollInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
+			// A site picked up here became a repo since the last poll, and its
+			// first worktree can predate the watch that would have reported it.
 			for _, sitePath := range getSites() {
-				addSite(sitePath)
+				for _, entryDir := range addSite(sitePath) {
+					go handleNewEntry(entryDir, sitePath, filepath.Base(entryDir), onAdded)
+				}
 			}
 
 		case event, ok := <-w.Events:

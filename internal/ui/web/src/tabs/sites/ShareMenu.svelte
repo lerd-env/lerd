@@ -126,6 +126,14 @@
     open = false;
   }
 
+  // The hover grace is for a pointer crossing the gap to the menu; focus that
+  // has moved elsewhere is not coming back, so the menu goes at once.
+  function onFocusOut(e: FocusEvent) {
+    const root = e.currentTarget as HTMLElement;
+    if (e.relatedTarget instanceof Node && !root.contains(e.relatedTarget)) closeNow();
+    else scheduleClose();
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') closeNow();
   }
@@ -297,13 +305,13 @@
   onmouseenter={openMenu}
   onmouseleave={scheduleClose}
   onfocusin={openMenu}
-  onfocusout={scheduleClose}
+  onfocusout={onFocusOut}
 >
   <button
     bind:this={btnEl}
     type="button"
     onclick={onButtonClick}
-    disabled={shareBusy}
+    aria-disabled={shareBusy}
     aria-label={tunnelOn
       ? m.share_stopTunnel()
       : publicShared

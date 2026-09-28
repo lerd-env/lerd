@@ -9,6 +9,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -74,15 +75,19 @@ type dashProxyTweaks struct {
 	// mount is the path this proxy answers at, when that is not /_svc/<name>/.
 	// Cookies and redirects are scoped to it the same way.
 	mount string
+	// localeCookies are where the dashboard remembers its own language; they
+	// are held back while lerd names one, or they would outrank it.
+	localeCookies []string
 }
 
 // dashProxyTweaksFor collects what the proxy must add for a service's preset.
 func dashProxyTweaksFor(svc *config.CustomService) dashProxyTweaks {
 	tw := dashProxyTweaks{
-		bootstrap:   config.PresetDashboardBootstrap(svc),
-		stripPrefix: config.DashboardProxyStrips(svc),
-		rebaseAttrs: config.DashboardProxyRebases(svc),
-		keepHost:    config.DashboardProxyKeepsHost(svc),
+		bootstrap:     config.PresetDashboardBootstrap(svc),
+		stripPrefix:   config.DashboardProxyStrips(svc),
+		rebaseAttrs:   config.DashboardProxyRebases(svc),
+		keepHost:      config.DashboardProxyKeepsHost(svc),
+		localeCookies: config.DashboardLocaleCookies(svc),
 	}
 	tw.bootstrap += config.DashboardLoginScript(svc)
 	// Before the app's own scripts, since an app that reads the colour scheme
@@ -119,8 +124,9 @@ var (
 // the preset no longer asks for until someone restarted the process.
 func (tw dashProxyTweaks) fingerprint() string {
 	h := fnv.New64a()
-	fmt.Fprintf(h, "%q|%q|%q|%t|%q|%t|%q", tw.headerKey, tw.headerValue, tw.bootstrap,
-		tw.stripPrefix, strings.Join(tw.rebaseAttrs, ","), tw.keepHost, tw.mount)
+	fmt.Fprintf(h, "%q|%q|%q|%t|%q|%t|%q|%q", tw.headerKey, tw.headerValue, tw.bootstrap,
+		tw.stripPrefix, strings.Join(tw.rebaseAttrs, ","), tw.keepHost, tw.mount,
+		strings.Join(tw.localeCookies, ","))
 	return strconv.FormatUint(h.Sum64(), 36)
 }
 
@@ -197,6 +203,7 @@ func newDashProxy(name string, target *url.URL, tw dashProxyTweaks) *httputil.Re
 		// from, and it can differ from the one chosen in lerd, so that choice wins.
 		if c, err := req.Cookie(dashLocaleCookie); err == nil && validLocaleTag.MatchString(c.Value) {
 			req.Header.Set("Accept-Language", c.Value+",en;q=0.5")
+			dropRequestCookies(req, tw.localeCookies)
 		}
 		// We rewrite the HTML to inject the auth bootstrap or to rebase its own
 		// links, so ask the upstream for an uncompressed body we can edit.
@@ -633,4 +640,17 @@ func serveDashMount(w http.ResponseWriter, r *http.Request, svc *config.CustomSe
 	tw.stripPrefix = false
 	tw.mount = mount
 	dashProxyFor(svc.Name, origin, tw).ServeHTTP(w, r)
+}
+
+// dropRequestCookies rewrites the Cookie header without the named cookies.
+func dropRequestCookies(req *http.Request, names []string) {
+	if len(names) == 0 {
+		return
+	}
+	kept := req.Cookies()
+	kept = slices.DeleteFunc(kept, func(c *http.Cookie) bool { return slices.Contains(names, c.Name) })
+	req.Header.Del("Cookie")
+	for _, c := range kept {
+		req.AddCookie(c)
+	}
 }

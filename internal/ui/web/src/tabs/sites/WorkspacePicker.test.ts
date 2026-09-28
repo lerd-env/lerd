@@ -85,4 +85,17 @@ describe('WorkspacePicker', () => {
     await fireEvent.click(getByText('Add'));
     expect(assignSiteWorkspace).not.toHaveBeenCalled();
   });
+
+  // Tabbing on to the next control must not leave this menu open under it.
+  it('closes as soon as keyboard focus leaves it', async () => {
+    const { container, queryByRole } = render(WorkspacePicker, { props: { site: site() } });
+    const wrapper = container.querySelector('div.relative')!;
+    await fireEvent.focusIn(wrapper);
+    expect(queryByRole('menu')).toBeTruthy();
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+    await fireEvent.focusOut(wrapper, { relatedTarget: outside });
+    expect(queryByRole('menu')).toBeNull();
+    outside.remove();
+  });
 });

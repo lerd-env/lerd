@@ -110,6 +110,19 @@ func DashboardProxyKeepsHost(svc *CustomService) bool {
 	return err == nil && p.DashboardProxyKeepHost
 }
 
+// DashboardLocaleCookies returns the cookies the dashboard remembers its own
+// language in, which the proxy holds back while lerd names one.
+func DashboardLocaleCookies(svc *CustomService) []string {
+	if svc == nil || svc.Preset == "" || ServiceDashboard(svc) == "" {
+		return nil
+	}
+	p, err := LoadPreset(svc.Preset)
+	if err != nil {
+		return nil
+	}
+	return p.DashboardLocaleCookies
+}
+
 // DashboardFollowsColorScheme reports whether the embedded page should be told
 // which colour scheme it is in rather than left to ask the browser.
 func DashboardFollowsColorScheme(svc *CustomService) bool {

@@ -114,8 +114,9 @@
     system: m.nav_system()
   });
   const subject = $derived(pageSubject($tab, $routeRest));
+  const installed = window.matchMedia('(display-mode: standalone)').matches;
   $effect(() => {
-    document.title = pageTitle(sectionLabels[$tab], subject);
+    document.title = pageTitle(sectionLabels[$tab], subject, installed);
   });
 </script>
 

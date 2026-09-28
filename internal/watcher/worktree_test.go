@@ -186,3 +186,34 @@ func TestWatchWorktrees_keepsWatchingAfterWorktreesDirIsRecreated(t *testing.T) 
 		}
 	}
 }
+
+// A site that becomes a git repository after the watcher started is only picked
+// up on the next poll, by which time its first worktree may already exist; that
+// worktree has to be reported, not silently adopted into the watch set.
+func TestWatchWorktrees_reportsAWorktreeFoundWhenTheSiteBecomesARepo(t *testing.T) {
+	orig := sitePollInterval
+	sitePollInterval = 50 * time.Millisecond
+	t.Cleanup(func() { sitePollInterval = orig })
+
+	site := t.TempDir()
+	added := make(chan string, 8)
+	go func() {
+		_ = WatchWorktrees(
+			func() []string { return []string{site} },
+			func(_, name string) { added <- name },
+			func(_, _ string) {},
+			func(_, _ string) {},
+		)
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+	writeWorktreeEntry(t, site, "feat-a")
+	select {
+	case name := <-added:
+		if name != "feat-a" {
+			t.Errorf("reported %q, want feat-a", name)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the first worktree of a freshly initialised repo was never reported")
+	}
+}
