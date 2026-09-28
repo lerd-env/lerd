@@ -187,9 +187,8 @@ func (m *Model) renderBody(width, topH int) string {
 	if m.activeTab == tabSites {
 		return m.renderSitesMain(width, topH)
 	}
-	// Services are picked in the sidebar, so the main area is all detail.
 	if m.activeTab == tabServices {
-		return m.renderDetailColumn(width, topH, m.focus == paneDetail)
+		return m.renderServiceView(width, topH)
 	}
 
 	// Databases keeps its own list beside the detail until it gets its own view.
@@ -338,8 +337,12 @@ func (m *Model) footChips() []footChip {
 	case tabDashboard:
 		return []footChip{back, nav("↑↓", "nav"), nav("enter", "open"), act("H", "heal"), nav("?", "help"), act("q", "quit")}
 	case tabServices:
-		return []footChip{back, nav("↑↓", "nav"), act("s", "start"), act("x", "stop"), act("r", "restart"), act("u", "update"), act("b", "rollback"),
-			act("t", "shell"), act("O", "open"), nav("?", "help")}
+		chips := []footChip{back, nav("1-2", "tabs"), act("s", "start"), act("x", "stop"), act("r", "restart"), act("P", "pin"), act("A", "add preset"),
+			act("u", "update"), act("b", "rollback"), act("t", "shell")}
+		if svc := m.currentService(); svc != nil && svc.Dashboard != "" {
+			chips = append(chips[:6], append([]footChip{act("O", "dashboard")}, chips[6:]...)...)
+		}
+		return append(chips, nav("?", "help"))
 	case tabDatabases:
 		return []footChip{nav("↑↓", "nav"), nav("tab", "panes"), act("n", "snapshot"), act("R", "refresh"), nav("?", "help")}
 	}

@@ -278,6 +278,7 @@ type Model struct {
 	// dashboard renders a "collecting…" placeholder.
 	stats stats.Snapshot
 
+	svcTab     int       // service view tab: svcTabOverview or svcTabLogs
 	dashCursor int       // selected Needs-attention card
 	cpuHist    []float64 // recent total CPU samples for the dashboard sparkline
 
@@ -525,6 +526,9 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	if cmd, handled := m.handleDashKey(msg); handled {
+		return m, cmd
+	}
+	if cmd, handled := m.handleServiceKey(msg); handled {
 		return m, cmd
 	}
 	switch msg.String() {

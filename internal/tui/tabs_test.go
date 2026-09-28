@@ -294,15 +294,16 @@ func TestLKey_SelectsLogsTabOnSites(t *testing.T) {
 func TestLKey_ClosesAnOverlayCarriedInFromAnotherTab(t *testing.T) {
 	m := NewModel("test")
 	m.snap = fakeSnap()
-	// `l` on the Services tab sets showLogs, though the pane stays hidden behind
-	// the service detail's own tail. Walking onto the Sites tab then reveals it.
-	m.activeTab = tabServices
+	// `l` in the Settings window opens the full-width log overlay, since the
+	// window has no Logs tab of its own. Leaving the window keeps the overlay.
+	m.activeTab = tabSites
+	m.detailMode = detailSettings
 	m.sideFocus = false
 	m.handleMainKey(tea.KeyPressMsg{Code: 'l', Text: "l"})
 	if !m.showLogs {
-		t.Fatal("l on the Services tab should set showLogs")
+		t.Fatal("l in the Settings window should set showLogs")
 	}
-	m.activeTab = tabSites
+	m.detailMode = detailSite
 
 	// l must close the pane rather than select the tab underneath it, or the
 	// overlay would be stuck open with no key that dismisses it.

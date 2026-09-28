@@ -207,7 +207,7 @@ func (m *Model) siteLogsActive() bool {
 // selected on that tab. The streaming tail is fed by the same logTail the
 // manual `l` pane uses, retargeted by syncLogs as the selection moves.
 func (m *Model) serviceLogsActive() bool {
-	return m.activeTab == tabServices && m.currentService() != nil
+	return m.activeTab == tabServices && m.currentService() != nil && m.svcTab == svcTabLogs
 }
 
 // logsInDetail reports whether the tail is already showing inside the detail
