@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/geodro/lerd/internal/envfile"
@@ -59,11 +60,11 @@ func CountSitesUsingPHP(version string) int {
 	return count
 }
 
-// SitesUsingService returns the active (non-ignored, non-paused) sites whose
-// .lerd.yaml lists the service or whose env file references lerd-{name}. The
-// env file is the one the framework declares, so a project keeping its
-// configuration in wp-config.php or app/etc/env.php counts the same as one
-// keeping it in .env.
+// SitesUsingService returns the active (non-ignored, non-paused) sites lerd env
+// wired to the service, whose .lerd.yaml lists it, or whose env file references
+// lerd-{name}. The env file is the one the framework declares, so a project
+// keeping its configuration in wp-config.php or app/etc/env.php counts the same
+// as one keeping it in .env.
 func SitesUsingService(name string) []Site {
 	reg, err := LoadSites()
 	if err != nil {
@@ -73,6 +74,12 @@ func SitesUsingService(name string) []Site {
 	var out []Site
 	for _, s := range reg.Sites {
 		if s.Ignored || s.Paused {
+			continue
+		}
+		// A loopback runtime rewrites the host to 127.0.0.1, so a site's env
+		// stops naming the container and only lerd's own record still does.
+		if slices.Contains(s.WiredServices, name) {
+			out = append(out, s)
 			continue
 		}
 		if proj, pErr := LoadProjectConfig(s.Path); pErr == nil {
@@ -100,15 +107,6 @@ func SitesUsingService(name string) []Site {
 			// name back when the domain goes away, and the provisioning that
 			// keeps its database or bucket there.
 			if domain != "" && strings.Contains(string(data), domain) {
-				out = append(out, s)
-				continue
-			}
-			// On a loopback runtime the host is rewritten to 127.0.0.1, which
-			// leaves a site with no .lerd.yaml naming the service nowhere at
-			// all. The framework still declares how to recognise it from the
-			// env, and the driver survives the rewrite, so those rules are the
-			// last way to see that the site is on this service.
-			if siteDetectsService(&s, name) {
 				out = append(out, s)
 			}
 		}
@@ -207,24 +205,4 @@ func ServiceDomains() map[string]string {
 		}
 	}
 	return out
-}
-
-// siteDetectsService reports whether a framework's own detect rules recognise
-// the service in a site's env. Only a declaration that carries rules counts: an
-// entry with none applies to everything, which as a membership test would put
-// every site on every service.
-func siteDetectsService(s *Site, name string) bool {
-	if s.Framework == "" {
-		return false
-	}
-	fw, ok := GetFrameworkForDir(s.Framework, s.Path)
-	if !ok || fw == nil {
-		return false
-	}
-	def, ok := fw.Env.Services[name]
-	if !ok || len(def.Detect) == 0 {
-		return false
-	}
-	envFile, format := EnvFileFor(s.Path)
-	return DetectRulesMatch(def.Detect, envfile.Values(filepath.Join(s.Path, envFile), format))
 }

@@ -98,6 +98,10 @@ type Site struct {
 	// DismissedServices are service suggestions this user turned down for the
 	// site, kept here rather than in .lerd.yaml since the choice is personal.
 	DismissedServices []string `yaml:"dismissed_services,omitempty"`
+	// WiredServices are the services the last `lerd env` wired into the site's
+	// env. A loopback runtime rewrites the host to 127.0.0.1, so the env alone
+	// no longer says which service the site is on.
+	WiredServices []string `yaml:"wired_services,omitempty"`
 	// Group is the group key shared by a main site and its secondaries. It is
 	// set to the main site's name. Empty when the site is not grouped.
 	Group string `yaml:"group,omitempty"`
@@ -270,6 +274,7 @@ type siteYAML struct {
 	ApprovedCommands      []string            `yaml:"approved_commands,omitempty"`
 	PinnedCommands        map[string]bool     `yaml:"pinned_commands,omitempty"`
 	DismissedServices     []string            `yaml:"dismissed_services,omitempty"`
+	WiredServices         []string            `yaml:"wired_services,omitempty"`
 	Group                 string              `yaml:"group,omitempty"`
 	GroupSubdomain        string              `yaml:"group_subdomain,omitempty"`
 	GroupSharedDB         bool                `yaml:"group_shared_db,omitempty"`
@@ -310,6 +315,7 @@ func (s Site) toYAML() siteYAML {
 		ApprovedCommands:      s.ApprovedCommands,
 		PinnedCommands:        s.PinnedCommands,
 		DismissedServices:     s.DismissedServices,
+		WiredServices:         s.WiredServices,
 		Group:                 s.Group,
 		GroupSubdomain:        s.GroupSubdomain,
 		GroupSharedDB:         s.GroupSharedDB,
@@ -355,6 +361,7 @@ func (sy siteYAML) toSite() Site {
 		ApprovedCommands:      sy.ApprovedCommands,
 		PinnedCommands:        sy.PinnedCommands,
 		DismissedServices:     sy.DismissedServices,
+		WiredServices:         sy.WiredServices,
 		Group:                 sy.Group,
 		GroupSubdomain:        sy.GroupSubdomain,
 		GroupSharedDB:         sy.GroupSharedDB,
@@ -468,6 +475,9 @@ func cloneSiteRegistry(in *SiteRegistry) *SiteRegistry {
 		}
 		if s.DismissedServices != nil {
 			cp.DismissedServices = append([]string(nil), s.DismissedServices...)
+		}
+		if s.WiredServices != nil {
+			cp.WiredServices = append([]string(nil), s.WiredServices...)
 		}
 		if s.WorktreeIdleSuspended != nil {
 			cp.WorktreeIdleSuspended = make(map[string][]string, len(s.WorktreeIdleSuspended))
@@ -800,6 +810,25 @@ func DismissSiteService(name, service string) error {
 			return nil
 		}
 		reg.Sites[i].DismissedServices = append(reg.Sites[i].DismissedServices, service)
+		return SaveSites(reg)
+	}
+	return fmt.Errorf("site %q not found", name)
+}
+
+// SetSiteWiredServices replaces the record of the services `lerd env` wired into
+// the site, under the same write lock as the other mutators.
+func SetSiteWiredServices(name string, services []string) error {
+	siteWriteMu.Lock()
+	defer siteWriteMu.Unlock()
+	reg, err := LoadSites()
+	if err != nil {
+		return err
+	}
+	for i := range reg.Sites {
+		if reg.Sites[i].Name != name {
+			continue
+		}
+		reg.Sites[i].WiredServices = services
 		return SaveSites(reg)
 	}
 	return fmt.Errorf("site %q not found", name)
