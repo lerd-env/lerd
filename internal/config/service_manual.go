@@ -101,6 +101,15 @@ func SitesUsingService(name string) []Site {
 			// keeps its database or bucket there.
 			if domain != "" && strings.Contains(string(data), domain) {
 				out = append(out, s)
+				continue
+			}
+			// On a loopback runtime the host is rewritten to 127.0.0.1, which
+			// leaves a site with no .lerd.yaml naming the service nowhere at
+			// all. The framework still declares how to recognise it from the
+			// env, and the driver survives the rewrite, so those rules are the
+			// last way to see that the site is on this service.
+			if siteDetectsService(&s, name) {
+				out = append(out, s)
 			}
 		}
 	}
@@ -198,4 +207,24 @@ func ServiceDomains() map[string]string {
 		}
 	}
 	return out
+}
+
+// siteDetectsService reports whether a framework's own detect rules recognise
+// the service in a site's env. Only a declaration that carries rules counts: an
+// entry with none applies to everything, which as a membership test would put
+// every site on every service.
+func siteDetectsService(s *Site, name string) bool {
+	if s.Framework == "" {
+		return false
+	}
+	fw, ok := GetFrameworkForDir(s.Framework, s.Path)
+	if !ok || fw == nil {
+		return false
+	}
+	def, ok := fw.Env.Services[name]
+	if !ok || len(def.Detect) == 0 {
+		return false
+	}
+	envFile, format := EnvFileFor(s.Path)
+	return DetectRulesMatch(def.Detect, envfile.Values(filepath.Join(s.Path, envFile), format))
 }
