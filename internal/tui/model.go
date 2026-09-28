@@ -94,8 +94,8 @@ type Model struct {
 	sideFocus   bool
 	sideKey     string
 	sideScroll  int
-	sideOverlay bool   // narrow terminals show the sidebar only on demand
-	sideWS      string // selected workspace tab: "" for all, wsOther, or a name
+	sideOverlay bool // narrow terminals show the sidebar only on demand
+	collapsedWS map[string]bool
 
 	detailMode detailMode
 	focus      focusPane
@@ -1304,14 +1304,6 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// drive the hit-testing below.
 	if _, ok := msg.(tea.MouseClickMsg); !ok || msg.Mouse().Button != tea.MouseLeft {
 		return m, nil
-	}
-	for _, t := range m.workspaceTabs() {
-		if zone.Get("sidews:" + t.key).InBounds(msg) {
-			m.sideWS = t.key
-			m.sideScroll = 0
-			m.focusSidebar()
-			return m, nil
-		}
 	}
 	for _, it := range m.sideItems() {
 		if it.selectable() && zone.Get("side:"+it.key).InBounds(msg) {

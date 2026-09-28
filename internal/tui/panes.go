@@ -328,9 +328,6 @@ func act(key, label string) footChip { return footChip{key, label, true} }
 func (m *Model) footChips() []footChip {
 	if m.sideFocus {
 		chips := []footChip{nav("↑↓", "move"), nav("enter", "open"), nav("/", "filter"), nav("tab", "main"), nav(":", "commands"), nav("?", "help"), act("q", "quit")}
-		if len(m.workspaceTabs()) > 0 {
-			chips = append(chips[:2], append([]footChip{nav("←→", "workspace")}, chips[2:]...)...)
-		}
 		if m.sideOverlay {
 			chips = append([]footChip{nav("\\", "close")}, chips...)
 		}

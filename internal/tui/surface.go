@@ -73,11 +73,10 @@ type seg struct {
 	t    string
 	fg   color.Color
 	bold bool
-	bg   color.Color // overrides the row's surface, for a pill inside a row
 }
 
-func sp(t string, fg color.Color) seg { return seg{t: t, fg: fg} }
-func bd(t string, fg color.Color) seg { return seg{t: t, fg: fg, bold: true} }
+func sp(t string, fg color.Color) seg { return seg{t, fg, false} }
+func bd(t string, fg color.Color) seg { return seg{t, fg, true} }
 
 // row paints segs onto one surface and pads or cuts it to exactly w cells.
 // Every seg carries the surface itself, because an inner style reset would
@@ -93,11 +92,7 @@ func row(bg color.Color, w int, segs ...seg) string {
 		if fg == nil {
 			fg = lipgloss.NoColor{}
 		}
-		segBg := bg
-		if g.bg != nil {
-			segBg = g.bg
-		}
-		b.WriteString(lipgloss.NewStyle().Foreground(fg).Background(segBg).Bold(g.bold).Render(g.t))
+		b.WriteString(lipgloss.NewStyle().Foreground(fg).Background(bg).Bold(g.bold).Render(g.t))
 		n += ansi.StringWidth(g.t)
 	}
 	if n > w {
