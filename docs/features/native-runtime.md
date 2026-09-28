@@ -52,6 +52,8 @@ Builds are published per PHP patch, so `8.4.24` and `8.4.25` are separate downlo
 
 New patches arrive without a lerd release. The pins live in a manifest lerd reads at runtime, so a PHP released this week is offered to every install within a day of being built.
 
+A patch is sometimes rebuilt without PHP itself changing, which is what happens when the engine-level extension beside it is fixed. The version is then the same on both sides and cannot say whether you hold that build, so each pin also carries the date it was published and lerd records it next to the binary. An update is offered when either the patch or that date moves, which means a rebuild reaches you the same way a new patch does.
+
 The binaries land in `~/.local/share/lerd/bin` as `php-native-<version>`, with their loadable extensions in `~/.local/share/lerd/native-php/<version>/modules`. Extensions are kept per version because they are named for the extension rather than the build, and a module only loads into the PHP it was compiled against. An update replaces the binary and its extensions together and then restarts the pool, since a running pool holds both open and keeps serving what it started with.
 
 **System → PHP** follows the runtime too. A version card here offers **Update build** and **Remove**, and nothing that names an image: there is no base to rebuild, no ports to map and no container to open a shell in. Update is `php:update` for that one version, downloading the published build and restarting its pool, and Remove takes the host build down and deletes its binaries, extensions and generated pool config, which is what it takes for the version to actually leave the list.

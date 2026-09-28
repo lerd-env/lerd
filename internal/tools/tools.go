@@ -49,6 +49,11 @@ type Tool struct {
 	// Sizes is the asset's byte count per GOOS/GOARCH, so a command can say what
 	// it is about to fetch before it starts. Optional, like Digests.
 	Sizes map[string]int64 `yaml:"sizes,omitempty"`
+	// Published dates the build behind this pin, per GOOS/GOARCH like the two
+	// above. A rebuild that replaces what a version ships without changing the
+	// version itself moves this and nothing else, so it is what says an install
+	// is holding the older one. Optional, like the two above.
+	Published map[string]string `yaml:"published,omitempty"`
 }
 
 // Manifest is the parsed tools.yaml.
@@ -116,6 +121,13 @@ func (t Tool) valid() bool {
 // pins none for this platform.
 func (m *Manifest) Digest(name, goos, goarch string) string {
 	return m.Tools[name].Digests[goos+"/"+goarch]
+}
+
+// PublishedAt returns when an asset was built, empty when the manifest carries
+// no date for it. A pin whose version is unchanged still names a different
+// build when this moves.
+func (m *Manifest) PublishedAt(name, goos, goarch string) string {
+	return m.Tools[name].Published[goos+"/"+goarch]
 }
 
 // Size returns the published byte count for an asset, zero when the manifest
@@ -269,6 +281,35 @@ func binPath(name string) string {
 // status can report it without executing anything.
 func WriteStamp(name, version string) error {
 	return os.WriteFile(binPath(name)+".version", []byte(version+"\n"), 0o644)
+}
+
+// WritePublished records when the build now on disk was published, and clears
+// the record when the pin carries no date. Kept beside the version stamp rather
+// than inside it, so a binary that predates the field reads as having no date
+// rather than as having an unparseable version.
+func WritePublished(name, published string) error {
+	path := binPath(name) + ".published"
+	if published == "" {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	return os.WriteFile(path, []byte(published+"\n"), 0o644)
+}
+
+// InstalledPublished reports the publish date recorded for an installed tool,
+// empty when the binary is gone or nothing was recorded.
+func InstalledPublished(name string) string {
+	path := binPath(name)
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	b, err := os.ReadFile(path + ".published")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
 }
 
 // InstalledVersion reports the version of an installed tool: the stamp

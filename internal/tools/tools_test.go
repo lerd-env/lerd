@@ -513,3 +513,46 @@ func TestEmbeddedManifest_hostPHPIsPinnedAndDigestedEverywhere(t *testing.T) {
 		}
 	}
 }
+
+// A rebuild of an already published patch keeps its version, so the publish
+// date is what tells an install it is holding the older build. It is recorded
+// beside the version stamp and cleared when a pin carries no date, so a manifest
+// that stops publishing one does not leave a stale answer behind.
+func TestPublishedStampRoundTrip(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	const name = "php-native-8.4"
+
+	if got := InstalledPublished(name); got != "" {
+		t.Errorf("with no binary, published = %q, want empty", got)
+	}
+
+	path := binPath(name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("bin dir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("write binary: %v", err)
+	}
+	if got := InstalledPublished(name); got != "" {
+		t.Errorf("with nothing recorded, published = %q, want empty", got)
+	}
+
+	const stamp = "2026-09-28T12:00:00Z"
+	if err := WritePublished(name, stamp); err != nil {
+		t.Fatalf("WritePublished: %v", err)
+	}
+	if got := InstalledPublished(name); got != stamp {
+		t.Errorf("published = %q, want %q", got, stamp)
+	}
+
+	if err := WritePublished(name, ""); err != nil {
+		t.Fatalf("clearing: %v", err)
+	}
+	if got := InstalledPublished(name); got != "" {
+		t.Errorf("after clearing, published = %q, want empty", got)
+	}
+	// Clearing twice is how a pin with no date behaves on every later install.
+	if err := WritePublished(name, ""); err != nil {
+		t.Fatalf("clearing an absent stamp: %v", err)
+	}
+}
