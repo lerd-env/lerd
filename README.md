@@ -74,7 +74,7 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 ### Interfaces
 
-- 🖥️ **Built-in Web UI.** Sites and services dashboards, live widgets, a global Cmd+K command palette, install/remove of PHP and Node versions with a shell into any version's container, and the framework command you run all day pinned to the site's control row, in fourteen languages and twelve themes that follow you between machines, or your desktop's own colours on Omarchy, KDE Plasma, GNOME and macOS, carried into every embedded admin dashboard. A streaming mode keeps private workspaces off a shared screen. Reachable from another machine behind credentials, with the actions that touch the host staying local until you grant them.
+- 🖥️ **Built-in Web UI.** Sites and services dashboards, live widgets, a global Cmd+K command palette, install/remove of PHP and Node versions with a shell into any version's container, and the framework command you run all day pinned to the site's control row, in fourteen languages and twelve themes that follow you between machines, or your desktop's own colours on Omarchy, KDE Plasma, GNOME and macOS, carried into every embedded admin dashboard along with the language. Usable by keyboard and screen reader, with text held to WCAG AA contrast on every theme. A streaming mode keeps private workspaces off a shared screen. Reachable from another machine behind credentials, with the actions that touch the host staying local until you grant them.
 
 - ✨ **Start a project from the dashboard.** The `+` in Sites scaffolds a project from the framework store or links one you already have, asks what `lerd init` asks, then runs composer and the JS build in the modal. Close the tab mid-install and it picks back up.
 
@@ -94,7 +94,7 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 - 🔔 **Notifications** for the things worth interrupting you, delivered to open dashboards, to subscribed browsers over Web Push, or to your desktop's native notification daemon. Every one also lands in the dashboard's sidebar bell, which keeps the last 50 with an unread count across reloads.
 
-- 🤖 **MCP server.** Let AI assistants (Claude Code, Cursor, JetBrains Junie, Codex CLI, Gemini CLI, GitHub Copilot, Google Antigravity, Windsurf, OpenCode) manage your environment directly.
+- 🤖 **MCP server.** Let AI assistants (Claude Code, Cursor, JetBrains Junie, Codex CLI, Gemini CLI, GitHub Copilot, Google Antigravity, Windsurf, OpenCode) manage your environment directly, registered with one command or one switch in the dashboard.
 
 ### Health and upkeep
 
