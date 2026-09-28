@@ -267,13 +267,11 @@ func (m *Model) renderSidebar(w, h int) []string {
 	slim := w < 30
 	blank := row(surf.s1, w)
 	item := func(key string, left, right []seg) string {
-		// The sidebar is itself raised, so its selection climbs two steps
-		// higher to stand out, and one more with the accent bar when focused.
 		bar, bg := sp("  ", nil), surf.s1
 		if key == m.sideKey {
-			bg = surf.s3
+			bg = surf.sideSel
 			if m.sideFocus {
-				bar, bg = bd("▌ ", colAccent), surf.s4
+				bar, bg = bd("▌ ", colAccent), surf.sideFocus
 			}
 		}
 		line := rowLR(bg, w, append([]seg{bar}, left...), append(right, sp("  ", nil)))

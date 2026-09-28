@@ -2,6 +2,7 @@ package tui
 
 import (
 	"image/color"
+	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
@@ -96,13 +97,32 @@ func TestApplySurfacesRaisesTowardForeground(t *testing.T) {
 	defer applySurfaces(nil)
 	applySurfaces(color.RGBA{0x1a, 0x1b, 0x26, 0xff})
 	lum := func(c color.Color) uint32 { r, g, b, _ := c.RGBA(); return r + g + b }
-	// The sidebar sits above the content, and its selection above the sidebar.
-	if !(lum(surf.bg) < lum(surf.s2) && lum(surf.s2) < lum(surf.s1) && lum(surf.s1) < lum(surf.s3) && lum(surf.s3) < lum(surf.s4)) {
-		t.Fatalf("dark surfaces not ordered: bg %v s2 %v s1 %v s3 %v s4 %v", surf.bg, surf.s2, surf.s1, surf.s3, surf.s4)
+	// The content sits below the sidebar's terminal background, its cards and
+	// selection rise from there, and the sidebar selection rises from the bg.
+	if lum(surf.main) >= lum(surf.s1) || lum(surf.s1) != lum(surf.bg) {
+		t.Fatalf("content should be darker than the sidebar: main %v sidebar %v", surf.main, surf.s1)
+	}
+	if !(lum(surf.main) < lum(surf.s2) && lum(surf.s2) < lum(surf.s3) && lum(surf.s3) < lum(surf.s4)) {
+		t.Fatalf("content tints not ordered: main %v s2 %v s3 %v s4 %v", surf.main, surf.s2, surf.s3, surf.s4)
+	}
+	if !(lum(surf.bg) < lum(surf.sideSel) && lum(surf.sideSel) < lum(surf.sideFocus)) {
+		t.Fatalf("sidebar selection should rise: bg %v sel %v focus %v", surf.bg, surf.sideSel, surf.sideFocus)
 	}
 
 	applySurfaces(color.RGBA{0xef, 0xf1, 0xf5, 0xff})
 	if !(lum(surf.s2) < lum(surf.bg) && lum(surf.s3) < lum(surf.s2)) {
 		t.Fatalf("light surfaces should darken: bg %v s2 %v s3 %v", surf.bg, surf.s2, surf.s3)
+	}
+}
+
+func TestPaintBackgroundSurvivesResets(t *testing.T) {
+	bg := color.RGBA{0x10, 0x20, 0x30, 0xff}
+	got := paintBackground("a\x1b[1mb\x1b[mc\x1b[49md", bg)
+	set := "\x1b[48;2;16;32;48m"
+	if !strings.HasPrefix(got, set) || strings.Count(got, set) != 3 {
+		t.Fatalf("background not re-applied after the reset and the default: %q", got)
+	}
+	if got := paintBackground("plain", lipgloss.NoColor{}); got != "plain" {
+		t.Fatalf("an unknown background should leave the line alone, got %q", got)
 	}
 }

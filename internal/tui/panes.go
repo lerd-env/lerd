@@ -96,7 +96,7 @@ func (m *Model) render() string {
 		if i < len(mainLines) {
 			ml = mainLines[i]
 		}
-		lines[i] = " " + padToWidth(clipLine(ml, mainW), mainW) + " "
+		lines[i] = paintBackground(" "+padToWidth(clipLine(ml, mainW), mainW)+" ", surf.main)
 	}
 	switch {
 	case sideW > 0:

@@ -10,18 +10,22 @@ import (
 )
 
 // surfaces are the background tints that separate regions instead of box
-// borders: s1 is the sidebar, raised above the terminal background the content
-// sits on, as in the web UI; s2..s4 are cards, selection and overlays. They are derived from the terminal's
-// own background, so every theme gets matching tints without configuration.
+// borders, as in the web UI: the sidebar keeps the terminal background and the
+// content sits a shade darker (main). Cards, selection and overlays in the
+// content rise from main (s2..s4); the sidebar's selection rises from its own
+// background. All derive from the terminal's background, so every theme gets
+// matching tints without configuration.
 type surfaces struct {
-	bg, s1, s2, s3, s4 color.Color
+	bg, main               color.Color
+	s1, sideSel, sideFocus color.Color
+	s2, s3, s4             color.Color
 }
 
 var surf = untinted()
 
 func untinted() surfaces {
 	n := lipgloss.NoColor{}
-	return surfaces{n, n, n, n, n}
+	return surfaces{n, n, n, n, n, n, n, n}
 }
 
 // applySurfaces derives the tints from the terminal background bubbletea
@@ -33,12 +37,31 @@ func applySurfaces(bg color.Color) {
 		return
 	}
 	r, g, b, _ := bg.RGBA()
-	dark := (r>>8)*299+(g>>8)*587+(b>>8)*114 < 128000
-	if dark {
-		surf = surfaces{bg, mix(bg, color.White, 0.06), mix(bg, color.White, 0.045), mix(bg, color.White, 0.11), mix(bg, color.White, 0.16)}
-		return
+	lift, depth := color.Color(color.White), 0.18
+	if (r>>8)*299+(g>>8)*587+(b>>8)*114 >= 128000 {
+		lift, depth = color.Black, 0.03
 	}
-	surf = surfaces{bg, mix(bg, color.White, 0.6), mix(bg, color.Black, 0.04), mix(bg, color.Black, 0.08), mix(bg, color.Black, 0.12)}
+	main := mix(bg, color.Black, depth)
+	surf = surfaces{
+		bg: bg, main: main,
+		s1: bg, sideSel: mix(bg, lift, 0.045), sideFocus: mix(bg, lift, 0.09),
+		s2: mix(main, lift, 0.045), s3: mix(main, lift, 0.09), s4: mix(main, lift, 0.14),
+	}
+}
+
+// paintBackground keeps a rendered line on bg: styled spans end with a reset
+// that would fall back to the terminal's own background, so the background is
+// re-applied after every reset and wherever a span asks for the default.
+func paintBackground(line string, bg color.Color) string {
+	if _, none := bg.(lipgloss.NoColor); none || bg == nil {
+		return line
+	}
+	r, g, b, _ := bg.RGBA()
+	set := fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r>>8, g>>8, b>>8)
+	line = strings.ReplaceAll(line, "\x1b[49m", set)
+	line = strings.ReplaceAll(line, "\x1b[m", "\x1b[m"+set)
+	line = strings.ReplaceAll(line, "\x1b[0m", "\x1b[0m"+set)
+	return set + line + "\x1b[m"
 }
 
 func mix(a, b color.Color, t float64) color.Color {
