@@ -291,6 +291,7 @@ func TestSpaceKey_TogglesTheFocusedRow(t *testing.T) {
 	m := NewModel("test")
 	m.activeTab = tabSites
 	m.focus = paneDetail
+	m.sideFocus = false
 	m.detailMode = detailDumps
 	setLens(m, dumps.KindQuery)
 	m.appendDebug(qEv("1", "r1", "select 1", 1))

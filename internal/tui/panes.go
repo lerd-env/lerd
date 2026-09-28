@@ -53,20 +53,19 @@ func (m *Model) render() string {
 		return out
 	}
 
-	tabs := m.renderTabs(m.width)
-	footer := m.renderFooter()
+	sideW := layoutFor(m.width, m.height).sideW
+	// One column of air on each side keeps the main area off the sidebar's edge.
+	mainW := m.width - sideW - 2
+	hints := m.renderHints(mainW)
 	statusBar := m.renderStatus()
 
 	// Toasts float over the content as an overlay rather than claiming layout
 	// rows, so a transient notification never reflows the panes underneath.
-	reserved := lipgloss.Height(tabs) + lipgloss.Height(footer)
+	reserved := 1
 	if statusBar != "" {
-		reserved += lipgloss.Height(statusBar)
+		reserved++
 	}
-	bodyH := m.height - reserved
-	if bodyH < 6 {
-		bodyH = 6
-	}
+	bodyH := max(6, m.height-reserved)
 
 	// The full-width logs pane is the manual `l` toggle. When the tail already
 	// shows inside the detail column (the site Logs tab, or a selected service)
@@ -77,38 +76,46 @@ func (m *Model) render() string {
 	// leaving only a sliver of the top pane so the log view dominates.
 	logH := 0
 	if showFullLogs {
-		logH = bodyH / 2
-		if h := m.height / 2; h > logH {
-			logH = h
-		}
-		if logH < 10 {
-			logH = 10
-		}
-		if logH > bodyH-4 {
-			logH = bodyH - 4
-		}
+		logH = clamp(max(bodyH/2, m.height/2, 10), 0, bodyH-4)
 	}
-	topH := bodyH - logH
-	if topH < 4 {
-		topH = 4
-	}
+	topH := max(4, bodyH-logH)
 
-	top := m.renderBody(topH)
-
-	sections := []string{tabs, top}
+	sections := []string{m.renderBody(mainW, topH)}
 	if showFullLogs {
-		sections = append(sections, zone.Mark("pane:logs", m.renderLogs(m.width, logH, nil, false)))
+		sections = append(sections, zone.Mark("pane:logs", m.renderLogs(mainW, logH, nil, false)))
 	}
 	if statusBar != "" {
 		sections = append(sections, statusBar)
 	}
-	sections = append(sections, footer)
+	sections = append(sections, hints)
 
-	out := lipgloss.JoinVertical(lipgloss.Left, sections...)
-	// Composite toasts over the bottom-right, just above the footer, without
+	mainLines := strings.Split(lipgloss.JoinVertical(lipgloss.Left, sections...), "\n")
+	lines := make([]string, m.height)
+	for i := range lines {
+		ml := ""
+		if i < len(mainLines) {
+			ml = mainLines[i]
+		}
+		lines[i] = " " + padToWidth(clipLine(ml, mainW), mainW) + " "
+	}
+	switch {
+	case sideW > 0:
+		side := m.renderSidebar(sideW, m.height)
+		for i := range lines {
+			lines[i] = side[i] + lines[i]
+		}
+	case m.sideOverlay:
+		side := m.renderSidebar(overlaySideW(m.width), m.height)
+		for i := range lines {
+			lines[i] = splice(lines[i], side[i], 0)
+		}
+	}
+
+	out := strings.Join(lines, "\n")
+	// Composite toasts over the bottom-right, just above the hint line, without
 	// having reserved any rows for them above.
 	if stack := m.toastStack(); stack != "" {
-		out = overlayBottomRight(out, stack, lipgloss.Height(footer))
+		out = overlayBottomRight(out, stack, 1)
 	}
 	return zone.Scan(out)
 }
@@ -173,59 +180,25 @@ func (m *Model) renderTabs(width int) string {
 // six-card dashboard grid, the sites list + site detail, or the services list
 // + service detail. Sites/Services reuse the wide/narrow split that the old
 // combined layout used, minus the second list pane.
-func (m *Model) renderBody(topH int) string {
+func (m *Model) renderBody(width, topH int) string {
 	if m.activeTab == tabDashboard {
-		return m.renderDashboardGrid(m.width, topH)
+		return m.renderDashboardGrid(width, topH)
+	}
+	// Sites and services are picked in the sidebar, so the main area is all detail.
+	if m.activeTab != tabDatabases {
+		return m.renderDetailColumn(width, topH, m.focus == paneDetail)
 	}
 
-	listPane := m.renderSites
-	listZone := "pane:sites"
-	switch m.activeTab {
-	case tabServices:
-		listPane = m.renderServices
-		listZone = "pane:services"
-	case tabDatabases:
-		listPane = m.renderDatabases
-		listZone = "pane:databases"
-	}
-
-	if m.width < narrowWidth {
-		// Narrow: stack the list on top, detail below.
-		listH := topH * 2 / 5
-		if listH < 6 {
-			listH = 6
-		}
-		if listH > topH-6 {
-			listH = topH - 6
-		}
-		detailH := topH - listH
-
-		// Settings / system / dumps take the full height so the content isn't
-		// cramped between the list and a slim detail pane (Sites tab only).
-		if m.activeTab == tabSites && (m.detailMode == detailSettings || m.detailMode == detailSystem || m.detailMode == detailDumps) {
-			return zone.Mark("pane:detail", m.renderDetailInline(m.width, topH, true))
-		}
-		list := zone.Mark(listZone, listPane(m.width, listH))
-		detail := m.renderDetailColumn(m.width, detailH, m.focus == paneDetail)
+	// Databases keeps its own list beside the detail until it gets its own view.
+	if width < narrowWidth {
+		listH := clamp(topH*2/5, 6, max(6, topH-6))
+		list := zone.Mark("pane:databases", m.renderDatabases(width, listH))
+		detail := m.renderDetailColumn(width, topH-listH, m.focus == paneDetail)
 		return lipgloss.JoinVertical(lipgloss.Left, list, detail)
 	}
-
-	// Wide: list on the left, detail on the right. The lists are slim (status
-	// dot, name, short meta), so they take about a quarter of the width and are
-	// capped so they never sprawl on a wide terminal — the detail gets the rest.
-	leftW := m.width / 4
-	if leftW < 28 {
-		leftW = 28
-	}
-	if leftW > 46 {
-		leftW = 46
-	}
-	if leftW > m.width-30 {
-		leftW = m.width - 30
-	}
-	rightW := m.width - leftW
-	left := zone.Mark(listZone, listPane(leftW, topH))
-	detail := m.renderDetailColumn(rightW, topH, m.focus == paneDetail)
+	leftW := clamp(width/4, 28, min(46, width-30))
+	left := zone.Mark("pane:databases", m.renderDatabases(leftW, topH))
+	detail := m.renderDetailColumn(width-leftW, topH, m.focus == paneDetail)
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, detail)
 }
 
@@ -352,61 +325,74 @@ type footChip struct {
 func nav(key, label string) footChip { return footChip{key, label, false} }
 func act(key, label string) footChip { return footChip{key, label, true} }
 
-// renderFootChips joins coloured key-hints with dim dot separators and clips
-// the result to the window width.
-func (m *Model) renderFootChips(chips []footChip) string {
-	parts := make([]string, len(chips))
-	for i, c := range chips {
-		keyStyle := footNavKeyStyle
-		if c.action {
-			keyStyle = footActionKeyStyle
+// footChips are the key hints for whatever has focus, most useful first, so a
+// narrow hint line can drop from the end.
+func (m *Model) footChips() []footChip {
+	if m.sideFocus {
+		chips := []footChip{nav("↑↓", "move"), nav("enter", "open"), nav("/", "filter"), nav("tab", "main"), nav(":", "commands"), nav("?", "help"), act("q", "quit")}
+		if m.sideOverlay {
+			chips = append([]footChip{nav("\\", "close")}, chips...)
 		}
-		parts[i] = keyStyle.Render(c.key) + " " + footLabelStyle.Render(c.label)
+		return chips
 	}
-	sep := footLabelStyle.Render("  ·  ")
-	return clipLine("  "+strings.Join(parts, sep), m.width)
-}
-
-func (m *Model) renderFooter() string {
-	if m.filterActive {
-		return helpStyle.Render("  filter: type to match · enter apply · esc clear")
-	}
-
-	// Narrow terminals only have room for the essentials; `?` reveals the rest.
-	if m.width < narrowWidth {
-		return m.renderFootChips([]footChip{
-			nav("ctrl+←→", "tabs"), nav("↑↓", "nav"), act("space", "toggle"), nav("?", "help"), act("q", "quit"),
-		})
-	}
-
-	// Context-aware: each tab shows only the keys that act on it, so the bar
-	// reads as a relevant cheat-sheet rather than a wall of every binding.
-	var chips []footChip
+	back := nav("tab", "sidebar")
 	switch m.activeTab {
 	case tabDashboard:
-		chips = []footChip{
-			nav("ctrl+←→", "tabs"), nav("↑↓", "nav"), nav("tab", "card"), nav("enter", "open"),
-			act("H", "heal"), nav("?", "help"), act("q", "quit"),
-		}
+		return []footChip{back, nav("↑↓", "nav"), nav("enter", "open"), act("H", "heal"), nav("?", "help"), act("q", "quit")}
 	case tabServices:
-		chips = []footChip{
-			nav("ctrl+←→", "tabs"), nav("↑↓", "nav"), nav("/", "filter"),
-			act("s", "start"), act("x", "stop"), act("r", "restart"), act("u", "update"), act("b", "rollback"),
-			act("t", "shell"), act("O", "open"), nav("?", "help"), act("q", "quit"),
-		}
+		return []footChip{back, nav("↑↓", "nav"), act("s", "start"), act("x", "stop"), act("r", "restart"), act("u", "update"), act("b", "rollback"),
+			act("t", "shell"), act("O", "open"), nav("?", "help")}
 	case tabDatabases:
-		chips = []footChip{
-			nav("ctrl+←→", "tabs"), nav("tab", "panes"), nav("↑↓", "nav"),
-			act("n", "snapshot"), act("R", "refresh"), nav("?", "help"), act("q", "quit"),
-		}
-	default: // tabSites
-		chips = []footChip{
-			nav("ctrl+←→", "tabs"), nav("tab", "panes"), nav("↑↓", "nav"), act("space", "toggle"), nav("/", "filter"),
-			act("s", "start"), act("x", "stop"), act("r", "restart"), nav("l", "logs"), act("t", "shell"),
-			nav("S", "settings"), nav("Y", "system"), nav("D", "debug"), nav("?", "help"), act("q", "quit"),
+		return []footChip{nav("↑↓", "nav"), nav("tab", "panes"), act("n", "snapshot"), act("R", "refresh"), nav("?", "help")}
+	}
+	return []footChip{back, nav("↑↓", "nav"), act("space", "toggle"), act("s", "start"), act("x", "stop"), act("r", "restart"), nav("l", "logs"),
+		act("t", "shell"), nav("S", "settings"), nav("Y", "system"), nav("D", "debug"), nav("?", "help")}
+}
+
+// renderHints is the single bottom line of the main area: site health counts
+// on the left, key hints on the right, dropping hints that no longer fit.
+func (m *Model) renderHints(w int) string {
+	if m.filterActive {
+		return row(nil, w, sp("  filter  ", colAccent), sp("type to match · enter apply · esc clear", colDim))
+	}
+	running, paused, failing := 0, 0, 0
+	for _, s := range m.snap.Sites {
+		switch {
+		case siteHasFailingWorker(s):
+			failing++
+		case s.Paused:
+			paused++
+		case s.FPMRunning:
+			running++
 		}
 	}
-	return m.renderFootChips(chips)
+	left := []seg{sp("  ", nil), sp(glyphRunning+" ", colRunning), sp(fmt.Sprintf("%d running", running), colDim)}
+	if paused > 0 {
+		left = append(left, sp("   "+glyphPaused+" ", colPaused), sp(fmt.Sprintf("%d paused", paused), colDim))
+	}
+	if failing > 0 {
+		left = append(left, bd("   "+glyphFailing+" ", colFailing), sp(fmt.Sprintf("%d failing", failing), colFailing))
+	}
+	chips := m.footChips()
+	for len(chips) > 1 {
+		var right []seg
+		for i, c := range chips {
+			if i > 0 {
+				right = append(right, sp("   ", nil))
+			}
+			keyFg := colAccent
+			if c.action {
+				keyFg = colPaused
+			}
+			right = append(right, bd(c.key, keyFg), sp(" "+c.label, colDim))
+		}
+		right = append(right, sp("  ", nil))
+		if segsWidth(left)+segsWidth(right)+2 <= w {
+			return rowLR(nil, w, left, right)
+		}
+		chips = chips[:len(chips)-1]
+	}
+	return row(nil, w, left...)
 }
 
 func (m *Model) renderStatus() string {

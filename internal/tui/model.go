@@ -87,7 +87,16 @@ type Model struct {
 
 	snap Snapshot
 
-	activeTab  topTab
+	activeTab topTab
+
+	// Sidebar state. sideFocus says the sidebar owns the arrow keys; sideKey is
+	// its selected row, kept in step with activeTab and the list cursors.
+	sideFocus   bool
+	sideKey     string
+	sideScroll  int
+	sideOverlay bool // narrow terminals show the sidebar only on demand
+	collapsedWS map[string]bool
+
 	detailMode detailMode
 	focus      focusPane
 
@@ -315,6 +324,8 @@ func NewModel(version string) *Model {
 		height:      30,
 		activeTab:   tabDashboard,
 		focus:       paneDetail,
+		sideFocus:   true,
+		sideKey:     "dash",
 		logTail:     newLogTail(),
 		timingRange: defaultTimingRange,
 		sub:         eventbus.Default.Subscribe(),
@@ -515,6 +526,9 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.domainInputActive {
 		return m.handleDomainInputKey(msg)
+	}
+	if cmd, handled := m.handleSidebarKey(msg); handled {
+		return m, cmd
 	}
 	switch msg.String() {
 	case "ctrl+c", "q":
@@ -1274,12 +1288,28 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if _, ok := msg.(tea.MouseWheelMsg); ok {
+		if msg.Mouse().X < m.sideWidth() {
+			m.followCursor = false
+			delta := 3
+			if msg.Mouse().Button == tea.MouseWheelUp {
+				delta = -3
+			}
+			m.scrollOffset(&m.sideScroll, delta)
+			return m, nil
+		}
 		return m.handleWheel(msg)
 	}
 	// bubbletea v2 delivers a press as its own MouseClickMsg; only left clicks
 	// drive the hit-testing below.
 	if _, ok := msg.(tea.MouseClickMsg); !ok || msg.Mouse().Button != tea.MouseLeft {
 		return m, nil
+	}
+	for _, it := range m.sideItems() {
+		if it.selectable() && zone.Get("side:"+it.key).InBounds(msg) {
+			m.sideFocus = true
+			m.sideActivateItem(it)
+			return m, m.afterNav()
+		}
 	}
 	for _, t := range orderedTabs {
 		if zone.Get("tab:" + t.label()).InBounds(msg) {
@@ -1694,7 +1724,11 @@ func (m *Model) clampCursors() {
 // this so filtered-out rows are invisible to navigation, not just hidden
 // visually.
 func (m *Model) visibleSites() []siteinfo.EnrichedSite {
-	return filteredSortedSites(m.snap.Sites, m.siteFilter, m.siteSort, m.snap.Workspaces)
+	sites := filteredSortedSites(m.snap.Sites, m.siteFilter, m.siteSort, m.snap.Workspaces)
+	if len(m.snap.Workspaces) == 0 {
+		return sites
+	}
+	return orderByWorkspace(sites, siteWorkspaces(sites, m.snap.Workspaces), workspaceRanks(m.snap.Workspaces))
 }
 
 func (m *Model) visibleServices() []ServiceRow {

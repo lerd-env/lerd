@@ -15,14 +15,14 @@ func TestMouseClick_IgnoredWhileModalOpen(t *testing.T) {
 	m.snap = fakeSnap()
 	m.activeTab = tabDashboard
 	m.width, m.height = 150, 40
-	_ = m.render() // register the base-frame zones, including the Services tab
+	_ = m.render() // register the base-frame zones, including the sidebar rows
 
-	z := waitZone("tab:" + tabServices.label())
+	z := waitZone("side:svc:redis")
 	if z.IsZero() {
-		t.Fatalf("services tab zone not registered after render")
+		t.Fatalf("redis sidebar row not registered after render")
 	}
 
-	// Open a modal, then click where the Services tab used to be.
+	// Open a modal, then click where the redis row used to be.
 	m.paletteActive = true
 	msg := tea.MouseClickMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft}
 	next, _ := m.Update(msg)
@@ -37,7 +37,7 @@ func TestMouseClick_IgnoredWhileModalOpen(t *testing.T) {
 }
 
 // A picker open in modal mode must not be dismissed by a stray click, since
-// switchTab (reachable from a tab-zone click) calls closePicker().
+// switchTab (reachable from a sidebar click) calls closePicker().
 func TestMouseClick_DoesNotDismissOpenPicker(t *testing.T) {
 	m := NewModel("test")
 	m.snap = fakeSnap()
@@ -46,9 +46,9 @@ func TestMouseClick_DoesNotDismissOpenPicker(t *testing.T) {
 	m.width, m.height = 150, 40
 	_ = m.render()
 
-	z := waitZone("tab:" + tabServices.label())
+	z := waitZone("side:svc:redis")
 	if z.IsZero() {
-		t.Fatalf("services tab zone not registered after render")
+		t.Fatalf("redis sidebar row not registered after render")
 	}
 
 	m.pickerKind = kindPHP // open the picker in modal mode
