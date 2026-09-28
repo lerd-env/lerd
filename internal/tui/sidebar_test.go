@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/charmbracelet/x/ansi"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/siteinfo"
@@ -45,26 +47,54 @@ func sideKeys(items []sideItem) []string {
 	return out
 }
 
-func TestSideItemsGroupSitesByWorkspaceInConfigOrder(t *testing.T) {
+func TestSideItemsListAllSitesInWorkspaceOrder(t *testing.T) {
 	m := sidebarModel()
 	got := strings.Join(sideKeys(m.sideItems()), " ")
-	want := "dash dbs ws:studio site:blog ws:acme site:api site:shop site:loose svc:mysql svc:redis"
+	want := "dash dbs site:blog site:api site:shop site:loose svc:mysql svc:redis"
 	if got != want {
 		t.Fatalf("sidebar order\n got %s\nwant %s", got, want)
 	}
 }
 
-func TestSideItemsHideSitesOfCollapsedWorkspace(t *testing.T) {
+func TestWorkspaceTabFiltersTheSites(t *testing.T) {
 	m := sidebarModel()
-	m.collapsedWS = map[string]bool{"acme": true}
-	got := strings.Join(sideKeys(m.sideItems()), " ")
-	if strings.Contains(got, "site:api") || strings.Contains(got, "site:shop") || !strings.Contains(got, "ws:acme") {
-		t.Fatalf("collapsed workspace still lists its sites: %s", got)
+	m.sideWS = "acme"
+	if got := strings.Join(sideKeys(m.sideItems()), " "); got != "dash dbs site:api site:shop svc:mysql svc:redis" {
+		t.Fatalf("acme tab shows %s", got)
+	}
+	m.sideWS = wsOther
+	if got := strings.Join(sideKeys(m.sideItems()), " "); got != "dash dbs site:loose svc:mysql svc:redis" {
+		t.Fatalf("Other tab shows %s", got)
 	}
 }
 
-// A crashed worker has to be visible from the collapsed workspace row, or the
-// failure hides behind a fold the user has no reason to open.
+func TestWorkspaceTabsCycleWithArrows(t *testing.T) {
+	m := sidebarModel()
+	var seen []string
+	for i := 0; i < 5; i++ {
+		seen = append(seen, m.sideWS)
+		m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	}
+	if got := strings.Join(seen, ","); got != ",studio,acme,"+wsOther+"," {
+		t.Fatalf("right should walk All, studio, acme, Other and wrap, got %q", got)
+	}
+	m.sideWS = ""
+	m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	if m.sideWS != wsOther {
+		t.Fatalf("left from All should wrap to Other, got %q", m.sideWS)
+	}
+}
+
+func TestNoWorkspacesMeansNoTabs(t *testing.T) {
+	m := sidebarModel()
+	m.snap.Workspaces = nil
+	if tabs := m.workspaceTabs(); tabs != nil {
+		t.Fatalf("no workspaces should draw no tabs, got %+v", tabs)
+	}
+}
+
+// A crashed worker has to be visible on a workspace tab that is not selected,
+// or the failure hides behind a tab the user has no reason to open.
 func TestWorkspaceRollupCountsFailingSites(t *testing.T) {
 	m := sidebarModel()
 	failing, paused := m.workspaceRollup("acme")
@@ -79,7 +109,7 @@ func TestWorkspaceRollupCountsFailingSites(t *testing.T) {
 
 func TestSideMoveSelectsSiteAndSwitchesTab(t *testing.T) {
 	m := sidebarModel()
-	m.sideMove(3) // dash -> dbs -> ws:studio -> site:blog
+	m.sideMove(2) // dash -> dbs -> site:blog
 	if m.activeTab != tabSites {
 		t.Fatalf("activeTab = %v, want sites", m.activeTab)
 	}
@@ -92,26 +122,9 @@ func TestSideMoveSelectsSiteAndSwitchesTab(t *testing.T) {
 	}
 }
 
-func TestSideMoveStopsOnWorkspaceWithoutChangingTab(t *testing.T) {
+func TestSideActivateOpensSite(t *testing.T) {
 	m := sidebarModel()
 	m.sideMove(2)
-	if m.sideKey != "ws:studio" || m.activeTab != tabDashboard {
-		t.Fatalf("sideKey = %q tab %v, want ws:studio on the dashboard", m.sideKey, m.activeTab)
-	}
-}
-
-func TestSideActivateTogglesWorkspaceAndOpensSite(t *testing.T) {
-	m := sidebarModel()
-	m.sideMove(2)
-	m.sideActivate()
-	if !m.collapsedWS["studio"] {
-		t.Fatal("enter on a workspace should collapse it")
-	}
-	m.sideActivate()
-	if m.collapsedWS["studio"] {
-		t.Fatal("enter again should expand it")
-	}
-	m.sideMove(1)
 	m.sideActivate()
 	if m.sideFocus || m.focus != paneDetail {
 		t.Fatalf("enter on a site should hand focus to the detail, got sideFocus=%v focus=%v", m.sideFocus, m.focus)
@@ -143,7 +156,7 @@ func TestRenderSidebarFitsItsBox(t *testing.T) {
 		}
 		joined += ansi.Strip(l) + "\n"
 	}
-	for _, want := range []string{"Dashboard", "SITES", "studio", "shop.test", "SERVICES", "mysql", "dns"} {
+	for _, want := range []string{"Dashboard", "SITES", " All ", "studio", "acme", "✖1", "shop.test", "SERVICES", "mysql", "dns"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("sidebar missing %q:\n%s", want, joined)
 		}

@@ -20,7 +20,6 @@ type sideKind int
 const (
 	sideDash sideKind = iota
 	sideDatabases
-	sideWorkspace
 	sideSite
 	sideService
 	sideWorktree
@@ -31,7 +30,6 @@ const (
 type sideItem struct {
 	kind   sideKind
 	key    string
-	ws     string // workspace name for sideWorkspace
 	idx    int    // index into visibleSites / visibleServices
 	branch string // worktree branch for sideWorktree
 	text   string // header label
@@ -39,28 +37,20 @@ type sideItem struct {
 
 func (it sideItem) selectable() bool { return it.kind != sideHeader && it.kind != sideBlank }
 
-// sideItems lists the sidebar rows top to bottom. Sites follow visibleSites,
-// which already orders them by workspace, so a workspace row is emitted each
-// time the owning workspace changes.
+// wsOther is the tab for sites in no workspace. Workspace names are trimmed
+// when saved, so a leading space can never collide with a real one.
+const wsOther = " other"
+
+// sideItems lists the sidebar rows top to bottom. The sites shown are the
+// ones in the selected workspace tab, each followed by its worktrees.
 func (m *Model) sideItems() []sideItem {
 	items := []sideItem{{kind: sideDash, key: "dash"}, {kind: sideDatabases, key: "dbs"}, {kind: sideBlank}}
 
 	sites := m.visibleSites()
 	items = append(items, sideItem{kind: sideHeader, key: "h:sites", text: "Sites"})
 	of := siteWorkspaces(sites, m.snap.Workspaces)
-	current, first := "", true
 	for i, s := range sites {
-		ws := of[s.Name]
-		if ws != current || first {
-			if !first {
-				items = append(items, sideItem{kind: sideBlank, text: "optional"})
-			}
-			if ws != "" {
-				items = append(items, sideItem{kind: sideWorkspace, key: "ws:" + ws, ws: ws})
-			}
-			current, first = ws, false
-		}
-		if ws != "" && m.collapsedWS[ws] {
+		if !m.inSideWorkspace(of[s.Name]) {
 			continue
 		}
 		items = append(items, sideItem{kind: sideSite, key: "site:" + s.Name, idx: i})
@@ -102,21 +92,65 @@ func (m *Model) sideKeyFromState() string {
 
 func worktreeKey(site, branch string) string { return "wt:" + site + "/" + branch }
 
-// syncSideKey follows selection made anywhere else. Workspace and worktree
-// rows are selections the model has no other record of, so they survive while
-// they exist, a worktree only while its site is still the one selected.
+// syncSideKey follows selection made anywhere else. A worktree row is a
+// selection the model has no other record of, so it survives while its site
+// is still the one selected.
 func (m *Model) syncSideKey() {
-	if strings.HasPrefix(m.sideKey, "ws:") || strings.HasPrefix(m.sideKey, "wt:") {
+	if strings.HasPrefix(m.sideKey, "wt:") {
 		for _, it := range m.sideItems() {
-			if it.key != m.sideKey {
-				continue
-			}
-			if it.kind == sideWorkspace || (m.activeTab == tabSites && m.siteCursor == it.idx) {
+			if it.key == m.sideKey && m.activeTab == tabSites && m.siteCursor == it.idx {
 				return
 			}
 		}
 	}
 	m.sideKey = m.sideKeyFromState()
+}
+
+type wsTab struct{ key, label string }
+
+// workspaceTabs are the sidebar's workspace tabs: All, each workspace in
+// config order, and Other when some sites belong to none. No workspaces, no tabs.
+func (m *Model) workspaceTabs() []wsTab {
+	if len(m.snap.Workspaces) == 0 {
+		return nil
+	}
+	tabs := []wsTab{{"", "All"}}
+	for _, ws := range m.snap.Workspaces {
+		tabs = append(tabs, wsTab{ws.Name, ws.Name})
+	}
+	of := siteWorkspaces(m.snap.Sites, m.snap.Workspaces)
+	for _, s := range m.snap.Sites {
+		if of[s.Name] == "" {
+			return append(tabs, wsTab{wsOther, "Other"})
+		}
+	}
+	return tabs
+}
+
+func (m *Model) inSideWorkspace(ws string) bool {
+	switch m.sideWS {
+	case "":
+		return true
+	case wsOther:
+		return ws == ""
+	}
+	return ws == m.sideWS
+}
+
+// cycleSideWS moves the workspace tab by delta, wrapping at both ends.
+func (m *Model) cycleSideWS(delta int) {
+	tabs := m.workspaceTabs()
+	if len(tabs) == 0 {
+		return
+	}
+	i := 0
+	for j, t := range tabs {
+		if t.key == m.sideWS {
+			i = j
+		}
+	}
+	m.sideWS = tabs[((i+delta)%len(tabs)+len(tabs))%len(tabs)].key
+	m.sideScroll = 0
 }
 
 func (m *Model) sideIndex(items []sideItem) int {
@@ -188,13 +222,6 @@ func (m *Model) sideActivate() {
 
 func (m *Model) sideActivateItem(it sideItem) {
 	m.sideKey = it.key
-	if it.kind == sideWorkspace {
-		if m.collapsedWS == nil {
-			m.collapsedWS = map[string]bool{}
-		}
-		m.collapsedWS[it.ws] = !m.collapsedWS[it.ws]
-		return
-	}
 	m.sideSelect(it)
 	m.focusMain()
 }
@@ -238,12 +265,13 @@ func worktreeCursor(s *siteinfo.EnrichedSite, branch string) int {
 	return 0
 }
 
-// workspaceRollup counts the sites in a workspace that need attention, so a
-// folded workspace still shows a crashed worker inside it.
-func (m *Model) workspaceRollup(ws string) (failing, paused int) {
+// workspaceRollup counts the sites behind a workspace tab that need
+// attention, so a crashed worker shows on a tab that is not selected.
+func (m *Model) workspaceRollup(tab string) (failing, paused int) {
 	of := siteWorkspaces(m.snap.Sites, m.snap.Workspaces)
 	for _, s := range m.snap.Sites {
-		if of[s.Name] != ws {
+		ws := of[s.Name]
+		if tab == wsOther && ws != "" || tab != wsOther && tab != "" && ws != tab {
 			continue
 		}
 		switch {
@@ -337,9 +365,7 @@ func (m *Model) renderSidebar(w, h int) []string {
 		case sideDatabases:
 			top = append(top, item(it.key, []seg{sp("≡  ", colDim), bd("Databases", nil)}, nil), blank)
 		case sideBlank:
-			// Short terminals drop the gaps between workspaces, never the one
-			// before a section header.
-			if len(list) > 0 && !(it.text == "optional" && layoutFor(m.width, m.height).compact) {
+			if len(list) > 0 {
 				list = append(list, blank)
 			}
 		case sideHeader:
@@ -347,20 +373,11 @@ func (m *Model) renderSidebar(w, h int) []string {
 			if f := m.sideFilterRow(it.key, w); f != "" {
 				list = append(list, f)
 			}
-		case sideWorkspace:
-			arrow := "▾ "
-			if m.collapsedWS[it.ws] {
-				arrow = "▸ "
+			if it.key == "h:sites" {
+				if tabs := m.sideWSTabRows(w); len(tabs) > 0 {
+					list = append(append(list, tabs...), blank)
+				}
 			}
-			failing, paused := m.workspaceRollup(it.ws)
-			var roll []seg
-			switch {
-			case failing > 0:
-				roll = []seg{bd(fmt.Sprintf("%s %d", glyphFailing, failing), colFailing)}
-			case paused > 0:
-				roll = []seg{sp(glyphPaused, colPaused)}
-			}
-			list = append(list, item(it.key, []seg{sp(arrow, colDim), bd(it.ws, nil)}, roll))
 		case sideSite:
 			s := m.visibleSites()[it.idx]
 			name := s.PrimaryDomain()
@@ -417,6 +434,43 @@ func (m *Model) renderSidebar(w, h int) []string {
 	}
 	out := append(append(top, visible...), foot...)
 	return out[:h]
+}
+
+// sideWSTabRows draws the workspace tabs as pills that wrap onto more rows
+// when the names do not fit, each a click zone. A tab whose sites have a
+// crashed worker carries the count, so nothing hides behind another tab.
+func (m *Model) sideWSTabRows(w int) []string {
+	tabs := m.workspaceTabs()
+	if len(tabs) == 0 {
+		return nil
+	}
+	var rows []string
+	var line strings.Builder
+	used := 2
+	line.WriteString(row(surf.s1, 2))
+	flush := func() {
+		rows = append(rows, line.String()+row(surf.s1, w-used))
+		line.Reset()
+		line.WriteString(row(surf.s1, 2))
+		used = 2
+	}
+	for _, t := range tabs {
+		segs := []seg{sp(" "+t.label+" ", colDim)}
+		if t.key == m.sideWS {
+			segs = []seg{{t: " " + t.label + " ", bold: true, bg: surf.s3}}
+		}
+		if failing, _ := m.workspaceRollup(t.key); failing > 0 {
+			segs = append(segs, bd(fmt.Sprintf("%s%d ", glyphFailing, failing), colFailing))
+		}
+		tw := segsWidth(segs)
+		if used+tw > w-1 && used > 2 {
+			flush()
+		}
+		line.WriteString(zone.Mark("sidews:"+t.key, row(surf.s1, tw, segs...)))
+		used += tw
+	}
+	flush()
+	return rows
 }
 
 func (m *Model) sideHeaderRow(key string, w int) string {
@@ -554,7 +608,21 @@ func (m *Model) handleSidebarKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		m.sideMove(-1 << 20)
 	case "end", "G":
 		m.sideMove(1 << 20)
-	case "enter", "space", "right", "l":
+	case "left", "h", "right", "l":
+		// Arrows across switch workspace tabs; without workspaces, right opens.
+		if len(m.workspaceTabs()) == 0 {
+			if key == "right" || key == "l" {
+				m.sideActivate()
+			}
+			break
+		}
+		delta := 1
+		if key == "left" || key == "h" {
+			delta = -1
+		}
+		m.cycleSideWS(delta)
+		return nil, true
+	case "enter", "space":
 		m.sideActivate()
 	case "tab", "shift+tab":
 		// Nothing selected means nothing to show, so focus has nowhere to go.
