@@ -25,9 +25,10 @@ describe('pageTitle', () => {
     expect(pageTitle('System', '')).toBe('System · Lerd');
   });
 
-  // An installed app's window already puts the app name in front of the title.
-  it('leaves the product name off inside the installed app', () => {
-    expect(pageTitle('Sites', 'app.test', true)).toBe('app.test · Sites');
-    expect(pageTitle('Dashboard', '', true)).toBe('Dashboard');
+  // Chromium prefixes an installed app's title unless it already starts with
+  // the app name, and a plain --app window never does, so both read the same.
+  it('leads with the product name inside an app window', () => {
+    expect(pageTitle('Sites', 'app.test', true)).toBe('Lerd · app.test · Sites');
+    expect(pageTitle('Dashboard', '', true)).toBe('Lerd · Dashboard');
   });
 });

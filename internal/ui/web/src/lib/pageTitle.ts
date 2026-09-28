@@ -11,8 +11,10 @@ export function pageSubject(tab: TabId, rest: string): string {
   return '';
 }
 
-// installed drops the product name: an installed app's window prefixes the app
-// name on its own, which would otherwise read "Lerd - Dashboard · Lerd".
+// An app window leads with the product name: an installed app's window then
+// leaves its own prefix off, and a --app window, which never adds one, still
+// names Lerd.
 export function pageTitle(section: string, subject: string, installed = false): string {
-  return [subject, section, installed ? '' : 'Lerd'].filter(Boolean).join(' · ');
+  const parts = [subject, section].filter(Boolean);
+  return (installed ? ['Lerd', ...parts] : [...parts, 'Lerd']).join(' · ');
 }
