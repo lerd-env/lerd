@@ -107,9 +107,11 @@ it: the desktop is the source, so the entry goes away when the desktop does.
 On a fresh install the offer is one of the **Get started with Lerd** steps. An
 install that never went through Get started and has never had a theme chosen gets
 a banner offering the desktop's entry instead, with one button to switch to it and
-one to keep the current theme. lerd never switches on its own. Either answer is written to the config like any other
+one to keep the current theme. Either answer is written to the config like any other
 pick, so the banner shows up once per install, not once per browser, and it never
 comes back after a theme has been chosen.
+
+Omarchy is the one desktop lerd switches to on its own: installing or upgrading lerd on Omarchy puts an install that has never had a theme chosen on the Omarchy entry straight away, since that desktop is built around a single theme everything follows. A theme already chosen, the default included, is left alone, and picking another one afterwards sticks.
 
 **Omarchy** publishes everything in the active theme's `colors.toml`, which every
 theme it ships carries. A dark desktop theme lends its accent and its surfaces; a

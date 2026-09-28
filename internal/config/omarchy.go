@@ -102,3 +102,13 @@ func omarchyThemeName() string {
 	}
 	return "Omarchy (" + name + ")"
 }
+
+// AdoptOmarchyTheme puts an install that never chose a theme on Omarchy's own,
+// reporting whether it did. A choice already made, the default included, stays.
+func (c *GlobalConfig) AdoptOmarchyTheme() bool {
+	if c.UI.Theme != "" || OmarchyTheme() == nil {
+		return false
+	}
+	c.UI.Theme = OmarchyThemeID
+	return true
+}
