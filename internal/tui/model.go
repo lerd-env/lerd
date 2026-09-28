@@ -376,6 +376,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.BackgroundColorMsg:
 		applyBackground(msg.IsDark())
+		applySurfaces(msg.Color)
 		return m, nil
 
 	case tea.KeyPressMsg:
