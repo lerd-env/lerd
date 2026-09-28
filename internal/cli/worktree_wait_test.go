@@ -23,10 +23,25 @@ func registerWorktreeSite(t *testing.T, branch string) string {
 	site := filepath.Join(t.TempDir(), "app")
 	wt := filepath.Join(site, "wt", branch)
 	makeWorktree(t, site, wt, branch)
-	if err := config.AddSite(config.Site{Name: "app", Path: site, PHPVersion: "8.4"}); err != nil {
+	head := filepath.Join(site, ".git", "worktrees", branch, "HEAD")
+	if err := os.WriteFile(head, []byte("ref: refs/heads/"+branch+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "app", Domains: []string{"app.test"}, Path: site, PHPVersion: "8.4"}); err != nil {
 		t.Fatal(err)
 	}
 	return wt
+}
+
+// writeWorktreeVhost stands in for the watcher having served the worktree.
+func writeWorktreeVhost(t *testing.T, branch string) {
+	t.Helper()
+	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(config.NginxConfD(), branch+".app.test.conf"), []byte("server {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // A path lerd does not manage has to be rejected outright. Callers need "not
@@ -63,6 +78,7 @@ func TestWaitForManagedWorktree_rejectsTheParentSitePath(t *testing.T) {
 
 func TestWaitForManagedWorktree_returnsOnceSettled(t *testing.T) {
 	wt := registerWorktreeSite(t, "feature")
+	writeWorktreeVhost(t, "feature")
 	if err := os.WriteFile(filepath.Join(wt, ".env"), []byte("APP_ENV=local\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -77,6 +93,7 @@ func TestWaitForManagedWorktree_returnsOnceSettled(t *testing.T) {
 // finished; while an installer holds the lock the wait must not report ready.
 func TestWaitForWorktreeReady_waitsOutAnInstallHoldingTheLock(t *testing.T) {
 	wt := registerWorktreeSite(t, "feature")
+	writeWorktreeVhost(t, "feature")
 	for name, body := range map[string]string{
 		".env":                "APP_ENV=local\n",
 		"composer.json":       "{}\n",
@@ -113,8 +130,37 @@ func TestWaitForWorktreeReady_waitsOutAnInstallHoldingTheLock(t *testing.T) {
 
 func TestWaitForWorktreeReady_timesOutWhenArtifactsNeverAppear(t *testing.T) {
 	wt := registerWorktreeSite(t, "feature")
+	parent := filepath.Dir(filepath.Dir(wt))
+	if err := os.WriteFile(filepath.Join(parent, ".env"), []byte("APP_ENV=local\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := WaitForWorktreeReady(wt, 2*time.Second); err == nil {
 		t.Error("want a timeout error when .env never lands")
+	}
+}
+
+// The worktree's env file is copied from the parent's, so a parent without one
+// (a plain PHP site) means none is coming, and waiting for it can only time out.
+func TestWaitForWorktreeReady_doesNotWaitForAnEnvTheParentLacks(t *testing.T) {
+	wt := registerWorktreeSite(t, "feature")
+	writeWorktreeVhost(t, "feature")
+
+	if err := WaitForWorktreeReady(wt, 5*time.Second); err != nil {
+		t.Errorf("waited for a .env nothing will write: %v", err)
+	}
+}
+
+// Until the watcher writes the worktree's vhost, its domain falls through to the
+// parent's wildcard and serves the parent's code, so "ready" has to wait for it.
+func TestWaitForWorktreeReady_waitsForTheWorktreeVhost(t *testing.T) {
+	wt := registerWorktreeSite(t, "feature")
+
+	if err := WaitForWorktreeReady(wt, 3*time.Second); err == nil {
+		t.Fatal("reported ready before the worktree had a vhost")
+	}
+	writeWorktreeVhost(t, "feature")
+	if err := WaitForWorktreeReady(wt, 10*time.Second); err != nil {
+		t.Errorf("after the vhost landed: %v", err)
 	}
 }

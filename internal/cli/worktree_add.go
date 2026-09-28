@@ -326,10 +326,13 @@ func newestWorktree(sitePath string) (string, string, error) {
 func WaitForWorktreeReady(worktreePath string, deadline time.Duration) error {
 	end := time.Now().Add(deadline)
 	envFile := worktreeEnvFile(worktreePath)
+	if parentLacksEnvFile(worktreePath, envFile) {
+		envFile = ""
+	}
 	hasComposer := fileExistsAt(filepath.Join(worktreePath, "composer.json"))
 	hasJS := fileExistsAt(filepath.Join(worktreePath, "package.json"))
 	for time.Now().Before(end) {
-		if worktreeArtifactsPresent(worktreePath, envFile, hasComposer, hasJS) && !installInFlight(worktreePath) {
+		if worktreeArtifactsPresent(worktreePath, envFile, hasComposer, hasJS) && worktreeServed(worktreePath) && !installInFlight(worktreePath) {
 			return nil
 		}
 		time.Sleep(2 * time.Second)
@@ -362,11 +365,36 @@ func worktreeEnvFile(worktreePath string) string {
 	return file
 }
 
+// worktreeServed reports whether the watcher has written the worktree's vhost.
+// Before it has, the domain falls through to the parent's wildcard and answers
+// with the parent's code. A path lerd cannot place or serve is not held up.
+func worktreeServed(worktreePath string) bool {
+	site, ok := config.ParentSiteForWorktreeDir(worktreePath)
+	if !ok || site.PrimaryDomain() == "" {
+		return true
+	}
+	abs, _ := filepath.Abs(worktreePath)
+	wts, _ := gitpkg.ServableWorktrees(site.Path, site.PrimaryDomain())
+	for _, wt := range wts {
+		if filepath.Clean(wt.Path) == abs {
+			return fileExistsAt(filepath.Join(config.NginxConfD(), wt.Domain+".conf"))
+		}
+	}
+	return true
+}
+
+// parentLacksEnvFile reports a parent with no env file to seed from: the seed is
+// a copy of the parent's, so on a plain PHP site none is ever coming.
+func parentLacksEnvFile(worktreePath, envFile string) bool {
+	site, ok := config.ParentSiteForWorktreeDir(worktreePath)
+	return ok && !fileExistsAt(filepath.Join(site.Path, envFile))
+}
+
 // worktreeArtifactsPresent reports whether the pipeline's outputs are on disk.
 // Necessary but not sufficient on its own: node_modules exists as soon as the
 // first package is extracted, so a live npm ci already satisfies it.
 func worktreeArtifactsPresent(worktreePath, envFile string, hasComposer, hasJS bool) bool {
-	if !fileExistsAt(filepath.Join(worktreePath, envFile)) {
+	if envFile != "" && !fileExistsAt(filepath.Join(worktreePath, envFile)) {
 		return false
 	}
 	if hasComposer && !fileExistsAt(filepath.Join(worktreePath, "vendor", "autoload.php")) {
