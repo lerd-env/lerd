@@ -137,15 +137,10 @@ func nativeUpdatePlan(pinned, installed, publishedAt, installedPublished string)
 }
 
 // nativeBuildDiffers reports whether the published build is not the one on
-// disk: a different patch, or the same patch rebuilt since it was fetched. A
-// rebuild carries a newer collector under the version it already had, so the
-// date is the only thing that separates the two, and an install that predates
-// the date being published has none recorded and takes the rebuild once.
+// disk. The rule lives in the tools package so the dashboard's update badge
+// cannot disagree with what this fetches.
 func nativeBuildDiffers(pinned, installed, publishedAt, installedPublished string) bool {
-	if installed != pinned {
-		return true
-	}
-	return publishedAt != "" && publishedAt != installedPublished
+	return tools.BuildIsStale(pinned, installed, publishedAt, installedPublished)
 }
 
 // ensureNativePHPInstalled downloads a version's native build when it is not

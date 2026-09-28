@@ -458,3 +458,18 @@ func (m *Manifest) URL(name, goos, goarch string) (string, error) {
 	}
 	return url, nil
 }
+
+// BuildIsStale reports whether the published build is not the one on disk: a
+// different version, or the same version rebuilt since it was fetched. A
+// rebuild that replaces what a version ships keeps the version it already had,
+// so the publish date is the only thing separating the two, and an install that
+// predates the date being published has none recorded and takes it once.
+//
+// Shared so the CLI's fetch and the dashboard's update badge cannot disagree
+// about what counts as an update.
+func BuildIsStale(pinned, installed, publishedAt, installedPublished string) bool {
+	if installed != pinned {
+		return true
+	}
+	return publishedAt != "" && publishedAt != installedPublished
+}
