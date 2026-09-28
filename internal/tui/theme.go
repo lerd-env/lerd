@@ -77,11 +77,6 @@ var (
 	tabBarStyle = lipgloss.NewStyle().Padding(1, 1, 0, 1)
 )
 
-// cardStyle is the bordered box every dashboard grid card draws inside. It
-// mirrors unfocusedPane (rounded divider border, single-cell padding) so the
-// grid reads as a set of panels in the same visual language as the lists.
-var cardStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colDivider).Padding(0, 1)
-
 const (
 	glyphRunning     = "●"
 	glyphStopped     = "○"
@@ -132,7 +127,6 @@ func applyBackground(dark bool) {
 	footLabelStyle = lipgloss.NewStyle().Foreground(colDim)
 	tabActiveStyle = lipgloss.NewStyle().Bold(true).Foreground(onAccent).Background(colAccent).Padding(0, 2)
 	tabInactiveStyle = lipgloss.NewStyle().Foreground(colDim).Padding(0, 2)
-	cardStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colDivider).Padding(0, 1)
 	keyChipStyle = lipgloss.NewStyle().Background(colAccent).Foreground(onAccent).Bold(true).Padding(0, 1)
 	keyChipLabelStyle = lipgloss.NewStyle().Foreground(colDim)
 

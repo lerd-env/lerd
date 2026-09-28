@@ -182,7 +182,7 @@ func (m *Model) renderTabs(width int) string {
 // combined layout used, minus the second list pane.
 func (m *Model) renderBody(width, topH int) string {
 	if m.activeTab == tabDashboard {
-		return m.renderDashboardGrid(width, topH)
+		return m.renderDashboard(width, topH)
 	}
 	// Sites and services are picked in the sidebar, so the main area is all detail.
 	if m.activeTab != tabDatabases {

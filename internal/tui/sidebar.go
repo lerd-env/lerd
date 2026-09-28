@@ -192,10 +192,7 @@ func (m *Model) focusMain() {
 	switch m.activeTab {
 	case tabDatabases:
 		m.focus = paneDatabases
-	case tabDashboard:
-		m.focus = paneDetail
-		m.dashFocus = 0
-	case tabSites, tabServices:
+	case tabSites, tabServices, tabDashboard:
 		m.focus = paneDetail
 	}
 }
@@ -472,14 +469,6 @@ func (m *Model) handleSidebarKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	if !m.sideFocus {
 		switch key {
 		case "tab", "shift+tab":
-			// The dashboard grid walks its cards first, then hands back.
-			if m.activeTab == tabDashboard {
-				last := (key == "tab" && m.dashFocus == numDashCards-1) || (key == "shift+tab" && m.dashFocus == 0)
-				if !last {
-					return nil, false
-				}
-				m.dashFocus = 0
-			}
 			// Databases keeps its list and detail side by side in the main area,
 			// so tab visits both before returning to the sidebar.
 			if m.activeTab == tabDatabases && m.focus == paneDatabases {

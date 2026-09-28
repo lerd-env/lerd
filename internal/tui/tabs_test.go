@@ -145,56 +145,39 @@ func TestMouseClick_IgnoresNonLeftPress(t *testing.T) {
 	}
 }
 
-func TestRenderDashboardGrid_HasAllSixCards(t *testing.T) {
+func TestDashboardClick_OpensTheAlertSite(t *testing.T) {
 	m := NewModel("test")
 	m.snap = fakeSnap()
-	out := m.renderDashboardGrid(150, 30)
-	for _, title := range []string{"Sites", "Services", "Workers", "System Health", "Resources", "Lerd"} {
-		if !strings.Contains(out, title) {
-			t.Fatalf("dashboard grid missing %q card:\n%s", title, out)
-		}
-	}
-}
-
-func TestDashboardClick_JumpsToSiteTab(t *testing.T) {
-	m := NewModel("test")
-	m.snap = fakeSnap()
+	m.snap.Sites[1].QueueFailing = true
+	m.snap.Status = StatusRow{DNSOk: true, NginxRunning: true, WatcherRunning: true}
 	m.activeTab = tabDashboard
 	m.width, m.height = 150, 40
-	_ = m.render() // register dashboard row zones
+	_ = m.render() // register the alert card zones
 
-	z := waitZone("dashsite:1")
+	z := waitZone("dashalert:0")
 	if z.IsZero() {
-		t.Fatalf("dashsite row zone not registered after render")
+		t.Fatalf("alert card zone not registered after render")
 	}
 	msg := tea.MouseClickMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft}
 	next, _ := m.Update(msg)
 	m = next.(*Model)
 	if m.activeTab != tabSites {
-		t.Fatalf("clicking a dashboard site should switch to the Sites tab, got %d", m.activeTab)
+		t.Fatalf("clicking an alert should open its site, got tab %d", m.activeTab)
 	}
 	if s := m.currentSite(); s == nil || s.Name != "beta" {
-		t.Fatalf("expected the clicked site (beta) selected, got %+v", s)
+		t.Fatalf("expected the alert's site (beta) selected, got %+v", s)
 	}
 }
 
-func TestDashboardTab_CyclesCardFocus(t *testing.T) {
+func TestDashboardTab_ReturnsToSidebar(t *testing.T) {
 	m := NewModel("test")
 	m.snap = fakeSnap()
 	m.activeTab = tabDashboard
-	m.sideFocus = false
-	m.dashFocus = 0
+	m.focusMain()
 	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = next.(*Model)
-	if m.dashFocus != 1 {
-		t.Fatalf("tab on dashboard should advance card focus, got %d", m.dashFocus)
-	}
-	// Past the last card, tab hands focus back to the sidebar.
-	m.dashFocus = numDashCards - 1
-	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	m = next.(*Model)
 	if !m.sideFocus {
-		t.Fatal("tab on the last card should return to the sidebar")
+		t.Fatal("tab on the dashboard should hand focus back to the sidebar")
 	}
 }
 

@@ -8,48 +8,36 @@ import (
 	"github.com/geodro/lerd/internal/stats"
 )
 
-// TestDashboardGrid_RendersAllCards ensures every promised card title is
-// present so the dashboard never silently loses a widget after a refactor.
-func TestDashboardGrid_RendersAllCards(t *testing.T) {
+// Every section is promised, so a refactor can never silently lose one.
+func TestDashboard_RendersAllSections(t *testing.T) {
 	m := NewModel("test")
-	joined := stripANSI(m.renderDashboardGrid(150, 30))
-	for _, want := range []string{"Sites", "Services", "Workers", "System Health", "Resources", "Lerd"} {
+	m.width, m.height = 150, 45
+	m.snap.Sites = []siteinfo.EnrichedSite{{Name: "a", QueueFailing: true, HasQueueWorker: true}}
+	joined := stripANSI(m.renderDashboard(140, 44))
+	for _, want := range []string{"NEEDS ATTENTION", "RESOURCES", "SYSTEM", "RECENT"} {
 		if !strings.Contains(joined, want) {
-			t.Errorf("missing card %q in dashboard grid:\n%s", want, joined)
+			t.Errorf("missing section %q:\n%s", want, joined)
 		}
 	}
 }
 
-// TestWorkersCard_HealthyWhenNoFailures verifies the workers card reflects the
-// heal state so users see the positive signal at a glance.
-func TestWorkersCard_HealthyWhenNoFailures(t *testing.T) {
+func TestDashSystem_WorkersRowCountsCrashes(t *testing.T) {
 	m := NewModel("test")
-	joined := stripANSI(strings.Join(m.dashWorkersCard(60, -1).lines, "\n"))
-	if !strings.Contains(joined, "all workers healthy") {
-		t.Errorf("expected healthy state with no failing workers:\n%s", joined)
+	joined := stripANSI(strings.Join(m.dashSystem(60), "\n"))
+	if strings.Contains(joined, "crashed") {
+		t.Errorf("no crashes should not mention crashed:\n%s", joined)
 	}
-}
-
-// TestWorkersCard_ShowsFailingCount counts failing workers from the snapshot
-// so the card summary always matches the heal hint in the header.
-func TestWorkersCard_ShowsFailingCount(t *testing.T) {
-	m := NewModel("test")
 	m.snap.Sites = []siteinfo.EnrichedSite{
 		{Name: "a", QueueFailing: true, HasQueueWorker: true},
 		{Name: "b", ScheduleFailing: true, HasScheduleWorker: true},
 	}
-	joined := stripANSI(strings.Join(m.dashWorkersCard(60, -1).lines, "\n"))
-	if !strings.Contains(joined, "2 failing") {
-		t.Errorf("expected '2 failing':\n%s", joined)
-	}
-	if !strings.Contains(joined, "press H") {
-		t.Errorf("workers card should hint at H to heal:\n%s", joined)
+	joined = stripANSI(strings.Join(m.dashSystem(60), "\n"))
+	if !strings.Contains(joined, "2 crashed") {
+		t.Errorf("expected '2 crashed':\n%s", joined)
 	}
 }
 
-// TestResourcesCard_ShowsStatsWhenAvailable verifies the resources card
-// renders concrete numbers from the cached snapshot, not the placeholder.
-func TestResourcesCard_ShowsStatsWhenAvailable(t *testing.T) {
+func TestDashResources_ShowsStatsWhenAvailable(t *testing.T) {
 	m := NewModel("test")
 	m.stats = stats.Snapshot{
 		Available:       true,
@@ -61,29 +49,20 @@ func TestResourcesCard_ShowsStatsWhenAvailable(t *testing.T) {
 			{Name: "lerd-redis", CPUPercent: 1.0, MemBytes: 28 * 1024 * 1024},
 		},
 	}
-	joined := stripANSI(strings.Join(m.dashResourcesCard(60).lines, "\n"))
+	joined := stripANSI(strings.Join(m.dashResources(70), "\n"))
 	// Two decimals on both the total and the rows: CPU reads as a share of the
-	// whole machine now, so a single decimal rounds most rows away to 0.0.
-	if !strings.Contains(joined, "12.50%") {
-		t.Errorf("expected '12.50%%' total CPU:\n%s", joined)
+	// whole machine, so a single decimal rounds most rows away to 0.0.
+	if !strings.Contains(joined, "12.50%") || !strings.Contains(joined, "5.50%") {
+		t.Errorf("expected two-decimal CPU figures:\n%s", joined)
 	}
-	if !strings.Contains(joined, "5.50%") {
-		t.Errorf("expected a row printed to two decimals:\n%s", joined)
-	}
-	if !strings.Contains(joined, "lerd-mysql") {
-		t.Errorf("expected top container 'lerd-mysql':\n%s", joined)
-	}
-	if strings.Contains(joined, "collecting") {
-		t.Errorf("should not show placeholder when Available=true:\n%s", joined)
+	if !strings.Contains(joined, "mysql") || strings.Contains(joined, "collecting") {
+		t.Errorf("expected the top container and no placeholder:\n%s", joined)
 	}
 }
 
-// TestResourcesCard_PlaceholderWhenCollecting renders the polite "collecting…"
-// message during the first window before the poller has run.
-func TestResourcesCard_PlaceholderWhenCollecting(t *testing.T) {
+func TestDashResources_PlaceholderWhenCollecting(t *testing.T) {
 	m := NewModel("test")
-	// stats zero-valued: Available=false
-	joined := stripANSI(strings.Join(m.dashResourcesCard(60).lines, "\n"))
+	joined := stripANSI(strings.Join(m.dashResources(60), "\n"))
 	if !strings.Contains(joined, "collecting") {
 		t.Errorf("expected 'collecting…' placeholder when stats unavailable:\n%s", joined)
 	}
