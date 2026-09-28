@@ -75,7 +75,7 @@ func siteEnvContentLines(m *Model, site *siteinfo.EnrichedSite, innerW int) []st
 		return out
 	}
 
-	envPath := filepath.Join(site.Path, ".env")
+	envPath := filepath.Join(m.sitePath(site), ".env")
 	add(sectionStyle.Render(".env") + "  " + dimStyle.Render(envPath))
 	add("")
 

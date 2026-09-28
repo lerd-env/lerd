@@ -23,18 +23,16 @@ const (
 	sideWorkspace
 	sideSite
 	sideService
-	sideWorktree
 	sideHeader
 	sideBlank
 )
 
 type sideItem struct {
-	kind   sideKind
-	key    string
-	ws     string // workspace name for sideWorkspace
-	idx    int    // index into visibleSites / visibleServices
-	branch string // worktree branch for sideWorktree
-	text   string // header label
+	kind sideKind
+	key  string
+	ws   string // workspace name for sideWorkspace
+	idx  int    // index into visibleSites / visibleServices
+	text string // header label
 }
 
 func (it sideItem) selectable() bool { return it.kind != sideHeader && it.kind != sideBlank }
@@ -64,9 +62,6 @@ func (m *Model) sideItems() []sideItem {
 			continue
 		}
 		items = append(items, sideItem{kind: sideSite, key: "site:" + s.Name, idx: i})
-		for _, wt := range s.Worktrees {
-			items = append(items, sideItem{kind: sideWorktree, key: worktreeKey(s.Name, wt.Branch), idx: i, branch: wt.Branch})
-		}
 	}
 
 	items = append(items, sideItem{kind: sideBlank}, sideItem{kind: sideHeader, key: "h:services", text: "Services"})
@@ -100,18 +95,12 @@ func (m *Model) sideKeyFromState() string {
 	return "dash"
 }
 
-func worktreeKey(site, branch string) string { return "wt:" + site + "/" + branch }
-
-// syncSideKey follows selection made anywhere else. Workspace and worktree
-// rows are selections the model has no other record of, so they survive while
-// they exist, a worktree only while its site is still the one selected.
+// syncSideKey follows selection made anywhere else. A workspace row is the one
+// selection the model has no other record of, so it survives while it exists.
 func (m *Model) syncSideKey() {
-	if strings.HasPrefix(m.sideKey, "ws:") || strings.HasPrefix(m.sideKey, "wt:") {
+	if strings.HasPrefix(m.sideKey, "ws:") {
 		for _, it := range m.sideItems() {
-			if it.key != m.sideKey {
-				continue
-			}
-			if it.kind == sideWorkspace || (m.activeTab == tabSites && m.siteCursor == it.idx) {
+			if it.key == m.sideKey {
 				return
 			}
 		}
@@ -159,15 +148,13 @@ func (m *Model) sideSelect(it sideItem) {
 		m.switchTab(tabDashboard)
 	case sideDatabases:
 		m.switchTab(tabDatabases)
-	case sideSite, sideWorktree:
+	case sideSite:
 		m.switchTab(tabSites)
 		if m.siteCursor != it.idx {
 			m.siteCursor = it.idx
+			m.timingScope = 0 // a new site opens on its own checkout, not a worktree
+			m.detailCursor = 0
 			m.closePicker()
-		}
-		if it.kind == sideWorktree {
-			m.siteTab = tabSiteOverview
-			m.detailCursor = worktreeCursor(m.currentSite(), it.branch)
 		}
 	case sideService:
 		m.switchTab(tabServices)
@@ -210,32 +197,6 @@ func (m *Model) focusMain() {
 	case tabSites, tabServices, tabDashboard:
 		m.focus = paneDetail
 	}
-}
-
-// worktreeGlyph flags a worktree whose own workers crashed; a healthy one
-// draws nothing, so the branch name carries the row.
-func worktreeGlyph(wt siteinfo.WorktreeInfo) seg {
-	for _, w := range wt.FrameworkWorkers {
-		if w.Failing {
-			return bd(glyphFailing+" ", colFailing)
-		}
-	}
-	return sp("", nil)
-}
-
-// worktreeCursor is the Overview cursor position of a worktree's first
-// control, so opening a worktree lands on its rows.
-func worktreeCursor(s *siteinfo.EnrichedSite, branch string) int {
-	if s == nil {
-		return 0
-	}
-	rows := detailRows(s)
-	for pos, i := range navigableRows(rows) {
-		if rows[i].branch == branch {
-			return pos
-		}
-	}
-	return 0
 }
 
 // workspaceRollup counts the sites in a workspace that need attention, so a
@@ -376,21 +337,6 @@ func (m *Model) renderSidebar(w, h int) []string {
 				tag = []seg{sp(shortFramework(s.FrameworkLabel), colDim)}
 			}
 			list = append(list, item(it.key, []seg{sp(indent, nil), siteGlyph(s), sp("  "+name, nil)}, tag))
-		case sideWorktree:
-			// Tree lines rather than a branch symbol: every terminal font has
-			// box drawing, while ⎇ renders as tofu in many of them.
-			wts := m.visibleSites()[it.idx].Worktrees
-			branchLine := "├ "
-			var wt siteinfo.WorktreeInfo
-			for i, w := range wts {
-				if w.Branch == it.branch {
-					wt = w
-					if i == len(wts)-1 {
-						branchLine = "└ "
-					}
-				}
-			}
-			list = append(list, item(it.key, []seg{sp("     ", nil), sp(branchLine, colDivider), worktreeGlyph(wt), sp(it.branch, nil)}, nil))
 		case sideService:
 			s := m.visibleServices()[it.idx]
 			var tag []seg

@@ -381,7 +381,7 @@ func (m *Model) removeFocusedDomain() (handled bool, cmd tea.Cmd) {
 	if s == nil {
 		return false, nil
 	}
-	rows := detailRows(s)
+	rows := m.siteRows(s)
 	nav := navigableRows(rows)
 	if m.detailCursor >= len(nav) {
 		return false, nil
@@ -625,7 +625,7 @@ func settingsContentLines(m *Model, focused bool, innerW int) []string {
 // so Domains sits beside Toggles and Services beside Workers. A narrow pane
 // collapses every section to full width and the grid becomes a single column.
 func detailContentLines(m *Model, site *siteinfo.EnrichedSite, focused bool, innerW int) ([]string, int) {
-	rows := detailRows(site)
+	rows := m.siteRows(site)
 	nav := navigableRows(rows)
 	navPos := func(i int) int {
 		for pos, rowIdx := range nav {
@@ -643,14 +643,20 @@ func detailContentLines(m *Model, site *siteinfo.EnrichedSite, focused bool, inn
 		scheme = "https"
 	}
 
-	// Identity and the tab strip live in the site view's fixed header.
+	// Identity and the tab strip live in the site view's fixed header. A
+	// worktree tab shows only that worktree's controls and its traffic.
 	var secs []ovSection
+	if wt := m.siteWorktree(site); wt != nil {
+		secs = append(secs, overviewWorktree(wt, rows, sel, innerW)...)
+		secs = append(secs, overviewTiming(m, site, innerW)...)
+		body, cursorLine := composeOverview(secs, innerW)
+		return body, max(0, cursorLine)
+	}
 	secs = append(secs, overviewDomains(m, site, rows, sel, scheme, colW)...)
 	secs = append(secs, overviewToggles(m, site, rows, sel, colW)...)
 	secs = append(secs, overviewServices(m, site, colW)...)
 	secs = append(secs, overviewWorkers(site, rows, sel, colW)...)
 	secs = append(secs, overviewSuggested(site, innerW)...)
-	secs = append(secs, overviewWorktrees(site, rows, sel, scheme, innerW)...)
 	secs = append(secs, overviewTiming(m, site, innerW)...)
 
 	body, cursorLine := composeOverview(secs, innerW)
@@ -880,54 +886,29 @@ func overviewWorkers(site *siteinfo.EnrichedSite, rows []detailRow, sel func(int
 	return b.section(ovHalf)
 }
 
-func overviewWorktrees(site *siteinfo.EnrichedSite, rows []detailRow, sel func(int) bool, scheme string, w int) []ovSection {
-	if len(site.Worktrees) == 0 {
-		return nil
-	}
+// overviewWorktree is the Overview of a worktree tab: its own workers,
+// isolated database, LAN share, PHP and Node. The header already names it.
+func overviewWorktree(wt *siteinfo.WorktreeInfo, rows []detailRow, sel func(int) bool, w int) []ovSection {
 	b := newOvBuilder(w)
-	b.plain(sectionStyle.Render("Worktrees"))
-	for _, wt := range site.Worktrees {
-		head := "  " + accentStyle.Render(wt.Branch)
-		if wt.Domain != "" {
-			head += "  " + dimStyle.Render(scheme+"://"+wt.Domain)
+	b.plain(sectionStyle.Render("Worktree"))
+	for i, row := range rows {
+		s := sel(i)
+		switch row.kind {
+		case kindWorktreeWorker:
+			b.add(renderDetailRow(s, worktreeWorkerGlyph(wt, row.workerName),
+				worktreeWorkerLabel(wt, row.workerName), worktreeWorkerStateText(wt, row.workerName)), s)
+		case kindWorktreeDB:
+			b.add(renderDetailRow(s, onOffGlyph(wt.DBIsolated), "Isolated DB", worktreeDBStateText(*wt)), s)
+		case kindWorktreeLAN:
+			b.add(renderDetailRow(s, onOffGlyph(wt.LANPort > 0), "LAN share", lanShareText(wt.LANPort)), s)
+		case kindWorktreePHP:
+			b.add(renderDetailRow(s, accentStyle.Render("λ"), "PHP", worktreeVersionText(wt.PHPVersion, wt.PHPVersionOverride)), s)
+		case kindWorktreeNode:
+			b.add(renderDetailRow(s, accentStyle.Render("⬢"), "Node", worktreeVersionText(wt.NodeVersion, wt.NodeVersionOverride)), s)
 		}
-		if wt.Path != "" {
-			head += "  " + dimStyle.Render(wt.Path)
-		}
-		b.plain(head)
-		renderedAny := false
-		for i, row := range rows {
-			if row.branch != wt.Branch {
-				continue
-			}
-			s := sel(i)
-			switch row.kind {
-			case kindWorktreeWorker:
-				renderedAny = true
-				b.add(renderDetailRow(s, worktreeWorkerGlyph(&wt, row.workerName),
-					"    "+worktreeWorkerLabel(&wt, row.workerName),
-					worktreeWorkerStateText(&wt, row.workerName)), s)
-			case kindWorktreeDB:
-				renderedAny = true
-				b.add(renderDetailRow(s, onOffGlyph(wt.DBIsolated),
-					"    Isolated DB", worktreeDBStateText(wt)), s)
-			case kindWorktreeLAN:
-				renderedAny = true
-				b.add(renderDetailRow(s, onOffGlyph(wt.LANPort > 0),
-					"    LAN share", lanShareText(wt.LANPort)), s)
-			case kindWorktreePHP:
-				renderedAny = true
-				b.add(renderDetailRow(s, accentStyle.Render("λ"),
-					"    PHP", worktreeVersionText(wt.PHPVersion, wt.PHPVersionOverride)), s)
-			case kindWorktreeNode:
-				renderedAny = true
-				b.add(renderDetailRow(s, accentStyle.Render("⬢"),
-					"    Node", worktreeVersionText(wt.NodeVersion, wt.NodeVersionOverride)), s)
-			}
-		}
-		if !renderedAny {
-			b.plain(dimStyle.Render("    (no per-worktree controls)"))
-		}
+	}
+	if b.empty() {
+		b.plain(dimStyle.Render("  this worktree has no controls of its own"))
 	}
 	b.plain("")
 	return b.section(ovFull)

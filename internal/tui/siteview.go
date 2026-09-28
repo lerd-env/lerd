@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/geodro/lerd/internal/siteinfo"
 	zone "github.com/lrstanley/bubblezone/v2"
@@ -92,17 +93,80 @@ func crumbRow(cw int, parts []string, right []seg) string {
 	return rowLR(nil, cw, left, right)
 }
 
-// siteHeader is the fixed top of the site view.
-func (m *Model) siteHeader(site *siteinfo.EnrichedSite, cw int) []string {
-	domain := site.PrimaryDomain()
-	if domain == "" {
-		domain = site.Name
+// siteWorktree is the worktree the site view is scoped to, or nil for the
+// site's own checkout. The branch tabs share their position with the timing
+// panel's scope, so picking a worktree also shows its traffic.
+func (m *Model) siteWorktree(site *siteinfo.EnrichedSite) *siteinfo.WorktreeInfo {
+	if site == nil || m.timingScope <= 0 || m.timingScope > len(site.Worktrees) {
+		return nil
 	}
+	return &site.Worktrees[m.timingScope-1]
+}
+
+// sitePath is the checkout the site view reads from: the worktree's when one
+// is selected.
+func (m *Model) sitePath(site *siteinfo.EnrichedSite) string {
+	if wt := m.siteWorktree(site); wt != nil {
+		return wt.Path
+	}
+	return site.Path
+}
+
+// siteRows are the Overview controls for the selected checkout: the site's
+// own rows, or only the selected worktree's.
+func (m *Model) siteRows(site *siteinfo.EnrichedSite) []detailRow {
+	branch := ""
+	if wt := m.siteWorktree(site); wt != nil {
+		branch = wt.Branch
+	}
+	var out []detailRow
+	for _, r := range detailRows(site) {
+		if r.branch == branch {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// cycleSiteBranch moves between the site's checkout and its worktrees.
+func (m *Model) cycleSiteBranch(delta int) tea.Cmd {
+	m.detailCursor, m.detailScroll = 0, 0
+	return m.cycleTimingScope(delta)
+}
+
+// worktreeView describes a worktree in the site's shape, so the header can
+// draw either the same way.
+func worktreeView(site *siteinfo.EnrichedSite, wt *siteinfo.WorktreeInfo) *siteinfo.EnrichedSite {
+	v := *site
+	v.Domains = []string{wt.Domain}
+	v.Path = wt.Path
+	v.Branch = wt.Branch
+	v.LANPort = wt.LANPort
+	if wt.PHPVersion != "" {
+		v.PHPVersion = wt.PHPVersion
+	}
+	if wt.NodeVersion != "" {
+		v.NodeVersion = wt.NodeVersion
+	}
+	if wt.FrameworkLabel != "" {
+		v.FrameworkLabel = wt.FrameworkLabel
+	}
+	return &v
+}
+
+// siteHeader is the fixed top of the site view.
+func (m *Model) siteHeader(parent *siteinfo.EnrichedSite, cw int) []string {
+	site, crumb := parent, []string{"Sites", siteDomain(parent)}
+	if wt := m.siteWorktree(parent); wt != nil {
+		site = worktreeView(parent, wt)
+		crumb = append(crumb, wt.Branch)
+	}
+	domain := siteDomain(site)
 	var branch []seg
-	if site.Branch != "" {
+	if site.Branch != "" && len(parent.Worktrees) == 0 {
 		branch = []seg{sp("git ", colDim), sp(site.Branch, nil)}
 	}
-	out := []string{row(nil, cw), crumbRow(cw, []string{"Sites", domain}, branch), row(nil, cw)}
+	out := []string{row(nil, cw), crumbRow(cw, crumb, branch), row(nil, cw)}
 
 	// The trailing gap keeps the left facts from butting into the right ones
 	// when the pane is only just wide enough for both.
@@ -122,11 +186,64 @@ func (m *Model) siteHeader(site *siteinfo.EnrichedSite, cw int) []string {
 		where = append(where, sp("    "+shortHome(site.Path, home), colDim))
 	}
 	out = append(out, rowLR(nil, cw, append(where, sp("   ", nil)), siteFlags(site)))
-	if g := siteGroupLine(m, site); g != "" {
+	if g := siteGroupLine(m, parent); g != "" {
 		out = append(out, row(nil, cw, sp(g, colDim)))
 	}
 	out = append(out, row(nil, cw))
-	return append(out, m.siteTabBar(site, cw)...)
+	if tabs := m.siteBranchTabs(parent, cw); len(tabs) > 0 {
+		out = append(append(out, tabs...), row(nil, cw))
+	}
+	return append(out, m.siteTabBar(parent, cw)...)
+}
+
+func siteDomain(s *siteinfo.EnrichedSite) string {
+	if d := s.PrimaryDomain(); d != "" {
+		return d
+	}
+	return s.Name
+}
+
+// siteBranchTabs is one pill per checkout, the site's own first, wrapping onto
+// more rows when the branch names do not fit. A worktree whose own worker
+// crashed carries the failure mark. Each pill is a click zone.
+func (m *Model) siteBranchTabs(site *siteinfo.EnrichedSite, cw int) []string {
+	scopes := timingScopes(site)
+	if len(scopes) < 2 {
+		return nil
+	}
+	lead := []seg{sp("git  ", colDim)}
+	var rows []string
+	var line strings.Builder
+	line.WriteString(row(nil, segsWidth(lead), lead...))
+	used := segsWidth(lead)
+	for i, sc := range scopes {
+		segs := []seg{sp(" "+sc.label+" ", colDim)}
+		if i == m.timingScope {
+			segs = []seg{{t: " " + sc.label + " ", bold: true, bg: surf.s3}}
+		}
+		if i > 0 && worktreeFailing(site.Worktrees[i-1]) {
+			segs = append(segs, bd(glyphFailing+" ", colFailing))
+		}
+		tw := segsWidth(segs) + 1
+		if used+tw > cw && used > 5 {
+			rows = append(rows, line.String()+row(nil, cw-used))
+			line.Reset()
+			line.WriteString(row(nil, 5))
+			used = 5
+		}
+		line.WriteString(zone.Mark(fmt.Sprintf("sitebranch:%d", i), row(nil, tw-1, segs...)) + row(nil, 1))
+		used += tw
+	}
+	return append(rows, line.String()+row(nil, max(0, cw-used)))
+}
+
+func worktreeFailing(wt siteinfo.WorktreeInfo) bool {
+	for _, w := range wt.FrameworkWorkers {
+		if w.Failing {
+			return true
+		}
+	}
+	return false
 }
 
 func siteVersions(site *siteinfo.EnrichedSite) []seg {

@@ -559,7 +559,7 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if m.activeTab != tabSites {
 				return m, nil
 			}
-			return m, m.detailToggleSelected(m.currentSite(), detailRows(m.currentSite()), navigableRows(detailRows(m.currentSite())))
+			return m, m.detailToggleSelected(m.currentSite(), m.siteRows(m.currentSite()), navigableRows(m.siteRows(m.currentSite())))
 		}
 		return m, nil
 
@@ -642,7 +642,7 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// left and right cross between those columns while up and down walk one.
 		if m.timingActive() && m.focus == paneDetail {
 			site := m.currentSite()
-			rows := detailRows(site)
+			rows := m.siteRows(site)
 			m.detailCursor = hopDetailColumn(rows, navigableRows(rows), m.detailCursor, m.detailInnerWidth())
 			m.followCursor = true
 		}
@@ -849,10 +849,10 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.actionServiceUpdate()
 
 	case "b":
-		// On the site Overview b cycles the timing panel's branch scope; on the
-		// Services tab it stays the service rollback.
-		if m.timingActive() {
-			return m, m.cycleTimingScope(1)
+		// On a site b walks its checkout and worktrees, which also scopes the
+		// timing panel; on the Services tab it stays the service rollback.
+		if m.activeTab == tabSites && m.detailMode == detailSite && len(timingScopes(m.currentSite())) > 1 {
+			return m, m.cycleSiteBranch(1)
 		}
 		return m, m.actionServiceRollback()
 
@@ -1015,7 +1015,7 @@ func (m *Model) editFocusedDomain() (handled bool) {
 	if s == nil {
 		return false
 	}
-	rows := detailRows(s)
+	rows := m.siteRows(s)
 	nav := navigableRows(rows)
 	if m.detailCursor >= len(nav) {
 		return false
@@ -1341,8 +1341,13 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				return m, m.afterNav()
 			}
 		}
-		// The site-detail tab strip ([1] Overview · [2] Env · …) is clickable.
+		// The site's branch pills and section tabs are clickable.
 		if m.detailMode == detailSite {
+			for i := range timingScopes(m.currentSite()) {
+				if zone.Get(fmt.Sprintf("sitebranch:%d", i)).InBounds(msg) {
+					return m, m.cycleSiteBranch(i - m.timingScope)
+				}
+			}
 			tabs := availableSiteTabs(m.currentSite())
 			for i := range tabs {
 				if zone.Get(fmt.Sprintf("sitetab:%d", i)).InBounds(msg) {
@@ -1595,7 +1600,7 @@ func (m *Model) moveCursor(delta int) {
 				return
 			}
 			if s := m.currentSite(); s != nil {
-				nav := navigableRows(detailRows(s))
+				nav := navigableRows(m.siteRows(s))
 				m.detailCursor = clamp(m.detailCursor+delta, 0, max(0, len(nav)-1))
 			}
 		}

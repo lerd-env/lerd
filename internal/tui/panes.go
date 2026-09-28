@@ -343,6 +343,10 @@ func (m *Model) footChips() []footChip {
 	case tabDatabases:
 		return []footChip{nav("↑↓", "nav"), nav("tab", "panes"), act("n", "snapshot"), act("R", "refresh"), nav("?", "help")}
 	}
+	if len(timingScopes(m.currentSite())) > 1 {
+		return []footChip{back, nav("1-5", "tabs"), nav("b", "worktree"), nav("↑↓", "nav"), act("space", "toggle"), act("s", "start"), act("x", "stop"), act("r", "restart"), nav("l", "logs"),
+			act("t", "shell"), nav("?", "help")}
+	}
 	return []footChip{back, nav("1-5", "tabs"), nav("↑↓", "nav"), act("space", "toggle"), act("s", "start"), act("x", "stop"), act("r", "restart"), nav("l", "logs"),
 		act("t", "shell"), nav("S", "settings"), nav("Y", "system"), nav("D", "debug"), nav("?", "help")}
 }
