@@ -96,8 +96,9 @@ func TestApplySurfacesRaisesTowardForeground(t *testing.T) {
 	defer applySurfaces(nil)
 	applySurfaces(color.RGBA{0x1a, 0x1b, 0x26, 0xff})
 	lum := func(c color.Color) uint32 { r, g, b, _ := c.RGBA(); return r + g + b }
-	if !(lum(surf.s1) < lum(surf.bg) && lum(surf.bg) < lum(surf.s2) && lum(surf.s2) < lum(surf.s3) && lum(surf.s3) < lum(surf.s4)) {
-		t.Fatalf("dark surfaces not ordered: s1 %v bg %v s2 %v s3 %v s4 %v", surf.s1, surf.bg, surf.s2, surf.s3, surf.s4)
+	// The sidebar sits above the content, and its selection above the sidebar.
+	if !(lum(surf.bg) < lum(surf.s2) && lum(surf.s2) < lum(surf.s1) && lum(surf.s1) < lum(surf.s3) && lum(surf.s3) < lum(surf.s4)) {
+		t.Fatalf("dark surfaces not ordered: bg %v s2 %v s1 %v s3 %v s4 %v", surf.bg, surf.s2, surf.s1, surf.s3, surf.s4)
 	}
 
 	applySurfaces(color.RGBA{0xef, 0xf1, 0xf5, 0xff})

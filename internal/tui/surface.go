@@ -10,8 +10,8 @@ import (
 )
 
 // surfaces are the background tints that separate regions instead of box
-// borders: s1 sits below the terminal background (the sidebar), s2..s4 rise
-// above it (cards, selection, overlays). They are derived from the terminal's
+// borders: s1 is the sidebar, raised above the terminal background the content
+// sits on, as in the web UI; s2..s4 are cards, selection and overlays. They are derived from the terminal's
 // own background, so every theme gets matching tints without configuration.
 type surfaces struct {
 	bg, s1, s2, s3, s4 color.Color
@@ -35,10 +35,10 @@ func applySurfaces(bg color.Color) {
 	r, g, b, _ := bg.RGBA()
 	dark := (r>>8)*299+(g>>8)*587+(b>>8)*114 < 128000
 	if dark {
-		surf = surfaces{bg, mix(bg, color.Black, 0.18), mix(bg, color.White, 0.045), mix(bg, color.White, 0.09), mix(bg, color.White, 0.14)}
+		surf = surfaces{bg, mix(bg, color.White, 0.06), mix(bg, color.White, 0.045), mix(bg, color.White, 0.11), mix(bg, color.White, 0.16)}
 		return
 	}
-	surf = surfaces{bg, mix(bg, color.Black, 0.03), mix(bg, color.Black, 0.04), mix(bg, color.Black, 0.08), mix(bg, color.Black, 0.12)}
+	surf = surfaces{bg, mix(bg, color.White, 0.6), mix(bg, color.Black, 0.04), mix(bg, color.Black, 0.08), mix(bg, color.Black, 0.12)}
 }
 
 func mix(a, b color.Color, t float64) color.Color {
