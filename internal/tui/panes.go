@@ -1027,10 +1027,12 @@ func renderScrollbar(height, total, start, visible int) []string {
 		thumbStart = start * (height - thumbSize) / maxStart
 	}
 	for i := 0; i < height; i++ {
+		// A thin thumb on a faint track: it says where you are without
+		// competing with the content, which a solid accent block did.
 		if i >= thumbStart && i < thumbStart+thumbSize {
-			out[i] = accentStyle.Render("█")
+			out[i] = dimStyle.Render("┃")
 		} else {
-			out[i] = dimStyle.Render("│")
+			out[i] = lipgloss.NewStyle().Foreground(colDivider).Render("│")
 		}
 	}
 	return out
