@@ -38,6 +38,13 @@
     }, 250);
   }
 
+  // Focus that has moved elsewhere is not coming back, so it skips the grace.
+  function onFocusOut(e: FocusEvent) {
+    const root = e.currentTarget as HTMLElement;
+    if (!creating && e.relatedTarget instanceof Node && !root.contains(e.relatedTarget)) close();
+    else scheduleClose();
+  }
+
   function onDocClick(e: MouseEvent) {
     if (rootEl && !rootEl.contains(e.target as Node)) close();
   }
@@ -62,7 +69,7 @@
   onmouseenter={openNow}
   onmouseleave={scheduleClose}
   onfocusin={openNow}
-  onfocusout={scheduleClose}
+  onfocusout={onFocusOut}
 >
   <button
     type="button"

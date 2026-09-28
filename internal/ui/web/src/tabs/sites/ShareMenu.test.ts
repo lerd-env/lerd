@@ -165,9 +165,33 @@ describe('ShareMenu', () => {
     await waitFor(() => expect(fetchCalls.some((u) => u.includes('tunnel:start'))).toBe(true));
 
     const trigger = screen.getByLabelText('Share on LAN');
-    expect(trigger).toBeDisabled();
+    expect(trigger).toHaveAttribute('aria-disabled', 'true');
     await fireEvent.click(trigger);
     expect(fn).not.toHaveBeenCalled();
+  });
+
+  // A disabled button drops keyboard focus to the page, so a busy trigger is
+  // only marked disabled and keeps the focus Enter left it with.
+  it('keeps focus on the trigger while the LAN share switches', async () => {
+    const { rerender } = render(Harness, { props: { site } });
+    const trigger = screen.getByLabelText('Share on LAN');
+    trigger.focus();
+    await rerender({ site, lanBusy: true });
+    expect(trigger).not.toBeDisabled();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  // Tabbing through the header must not leave one menu open over the next.
+  it('closes as soon as keyboard focus leaves it', async () => {
+    const { container } = render(Harness, { props: { site } });
+    const wrapper = container.querySelector('div.relative')!;
+    await fireEvent.focusIn(wrapper);
+    expect(screen.getByTestId('share-menu')).toBeInTheDocument();
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+    await fireEvent.focusOut(wrapper, { relatedTarget: outside });
+    expect(screen.queryByTestId('share-menu')).not.toBeInTheDocument();
+    outside.remove();
   });
 
   it('announces stopping the public share while one is live', async () => {
