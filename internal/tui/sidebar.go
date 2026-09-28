@@ -295,7 +295,7 @@ func (m *Model) renderSidebar(w, h int) []string {
 		}
 		switch it.kind {
 		case sideDash:
-			top = append(top, item(it.key, []seg{sp("⌂  ", colDim), bd("Dashboard", nil)}, nil))
+			top = append(top, item(it.key, []seg{sp("⌂  ", colDim), bd("Dashboard", nil)}, nil), blank)
 		case sideDatabases:
 			top = append(top, item(it.key, []seg{sp("≡  ", colDim), bd("Databases", nil)}, nil), blank)
 		case sideBlank:
