@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/geodro/lerd/internal/siteinfo"
 	"sort"
 	"strings"
 	"time"
@@ -75,86 +76,180 @@ func pressKey(r rune) func(m *Model) tea.Cmd {
 	}
 }
 
-// contextActions act on whatever is selected: the site, service, database or
-// runtime the main area shows.
+// contextActions offer every action on every site, service, database and
+// runtime, the selected one's first. Each entry selects its target before
+// acting, so nothing has to be opened before it can be done.
 func (m *Model) contextActions() []quickAction {
-	var out []quickAction
-	add := func(label, detail string, run func(m *Model) tea.Cmd) {
-		out = append(out, quickAction{label, detail, run})
+	var mine, rest []quickAction
+	cur := m.currentSite()
+	for i := range m.snap.Sites {
+		s := &m.snap.Sites[i]
+		acts := m.siteActions(s)
+		if m.activeTab == tabSites && cur != nil && cur.Name == s.Name {
+			mine = append(mine, acts...)
+		} else {
+			rest = append(rest, acts...)
+		}
 	}
+	curSvc := m.currentService()
+	for i := range m.snap.Services {
+		svc := &m.snap.Services[i]
+		if svc.WorkerKind != "" {
+			continue
+		}
+		acts := m.serviceActions(svc)
+		if m.activeTab == tabServices && curSvc != nil && curSvc.Name == svc.Name {
+			mine = append(mine, acts...)
+		} else {
+			rest = append(rest, acts...)
+		}
+	}
+	dbActs := m.databaseActions()
+	rtActs := m.runtimeActions()
 	switch m.activeTab {
-	case tabSites:
-		s := m.currentSite()
-		if s == nil || m.detailMode != detailSite {
-			break
-		}
-		d := siteDomain(s)
-		pause := "Pause site"
-		if s.Paused {
-			pause = "Resume site"
-		}
-		add("Restart site", d, func(m *Model) tea.Cmd { return m.actionRestart() })
-		add(pause, d, func(m *Model) tea.Cmd { return m.actionPauseToggle() })
-		add("Open shell", d, func(m *Model) tea.Cmd { return m.actionShell() })
-		add("Open in browser", d, func(m *Model) tea.Cmd { return m.openInBrowserCmd() })
-		add("Open in editor", d, pressKey('E'))
-		add("Open folder", d, pressKey('F'))
-		add("New worktree", d, pressKey('W'))
-		for i, t := range availableSiteTabs(s) {
-			n := i + 1
-			add("Show "+siteTabLabel(t), d, func(m *Model) tea.Cmd { return m.selectSiteTab(n) })
-		}
-		for i, sc := range timingScopes(s) {
-			scope := i
-			if len(s.Worktrees) > 0 && scope != m.timingScope {
-				add("Switch to worktree", sc.label+" · "+d, func(m *Model) tea.Cmd { return m.cycleSiteBranch(scope - m.timingScope) })
-			}
-		}
-		for _, r := range m.siteRows(s) {
-			r := r
-			if label := siteToggleLabel(r); label != "" {
-				add(label, d, func(m *Model) tea.Cmd { return m.toggleSiteRow(r) })
-			}
-		}
-	case tabServices:
-		svc := m.currentService()
-		if svc == nil || svc.WorkerKind != "" {
-			break
-		}
-		pin := "Pin service"
-		if svc.Pinned {
-			pin = "Unpin service"
-		}
-		add(pin, svc.Name, pressKey('P'))
-		add("Update service", svc.Name, func(m *Model) tea.Cmd { return m.actionServiceUpdate() })
-		add("Roll back service", svc.Name, func(m *Model) tea.Cmd { return m.actionServiceRollback() })
-		add("Open shell", svc.Name, func(m *Model) tea.Cmd { return m.actionShell() })
-		if svc.Dashboard != "" {
-			add("Open service dashboard", svc.Name, func(m *Model) tea.Cmd { return m.openServiceDashboardCmd() })
-		}
-		add("Show Overview", svc.Name, func(m *Model) tea.Cmd { return m.selectServiceTab(svcTabOverview) })
-		add("Show Logs", svc.Name, func(m *Model) tea.Cmd { return m.selectServiceTab(svcTabLogs) })
 	case tabDatabases:
-		if _, db := m.currentDatabase(); db != nil {
-			add("Snapshot database", db.Name, func(m *Model) tea.Cmd { return m.actionDatabaseSnapshot() })
-			add("Export database", db.Name, pressKey('e'))
-			add("Include or exclude from auto snapshots", db.Name, pressKey('a'))
-		}
-		add("Create a database", "", pressKey('c'))
+		mine = append(mine, dbActs...)
 	case tabRuntimes:
-		if r, ok := m.currentRuntime(); ok {
-			name := map[string]string{"php": "PHP ", "node": "Node "}[r.kind] + r.version
-			add("Make default", name, pressKey('d'))
-			if r.kind == "php" {
-				add("Toggle Xdebug", name, pressKey('x'))
-				add("Rebuild", name, pressKey('R'))
+		mine = append(mine, rtActs...)
+	default:
+		rest = append(append(rest, dbActs...), rtActs...)
+	}
+	if m.activeTab == tabCore {
+		mine = append(mine, quickAction{"Start lerd", m.coreName, pressKey('s')})
+	}
+	return append(mine, rest...)
+}
+
+// onSite wraps an action so it first opens the site, scoped to branch ("" for
+// its own checkout).
+func onSite(name, branch string, f func(m *Model) tea.Cmd) func(m *Model) tea.Cmd {
+	return func(m *Model) tea.Cmd {
+		m.switchTab(tabSites)
+		m.selectSiteByName(name)
+		m.detailMode = detailSite
+		m.timingScope = 0
+		if s := m.currentSite(); s != nil {
+			for i, wt := range s.Worktrees {
+				if wt.Branch == branch {
+					m.timingScope = i + 1
+				}
 			}
 		}
-		add("Install a PHP version", "", func(m *Model) tea.Cmd { m.openPaletteIn("", "use "); return nil })
-		add("Install a Node version", "", func(m *Model) tea.Cmd { m.openPaletteIn("", "node:install "); return nil })
-	case tabCore:
-		add("Start lerd", m.coreName, pressKey('s'))
+		m.focusMain()
+		return tea.Batch(m.afterNav(), f(m))
 	}
+}
+
+func (m *Model) siteActions(s *siteinfo.EnrichedSite) []quickAction {
+	var out []quickAction
+	d, name := siteDomain(s), s.Name
+	add := func(label string, f func(m *Model) tea.Cmd) {
+		out = append(out, quickAction{label, d, onSite(name, "", f)})
+	}
+	pause := "Pause site"
+	if s.Paused {
+		pause = "Resume site"
+	}
+	add("Restart site", func(m *Model) tea.Cmd { return m.actionRestart() })
+	add(pause, func(m *Model) tea.Cmd { return m.actionPauseToggle() })
+	add("Open shell", func(m *Model) tea.Cmd { return m.actionShell() })
+	add("Open in browser", func(m *Model) tea.Cmd { return m.openInBrowserCmd() })
+	add("Open in editor", pressKey('E'))
+	add("Open folder", pressKey('F'))
+	add("New worktree", pressKey('W'))
+	for i, t := range availableSiteTabs(s) {
+		n := i + 1
+		add("Show "+siteTabLabel(t), func(m *Model) tea.Cmd { return m.selectSiteTab(n) })
+	}
+	for _, r := range detailRows(s) {
+		r := r
+		label := siteToggleLabel(r)
+		if label == "" {
+			continue
+		}
+		detail := d
+		if r.branch != "" {
+			detail = r.branch + " · " + d
+		}
+		out = append(out, quickAction{label, detail, onSite(name, r.branch, func(m *Model) tea.Cmd { return m.toggleSiteRow(r) })})
+	}
+	return out
+}
+
+func (m *Model) serviceActions(svc *ServiceRow) []quickAction {
+	var out []quickAction
+	name := svc.Name
+	add := func(label string, f func(m *Model) tea.Cmd) {
+		out = append(out, quickAction{label, name, func(m *Model) tea.Cmd {
+			m.switchTab(tabServices)
+			m.selectServiceByName(name)
+			m.focusMain()
+			return tea.Batch(m.afterNav(), f(m))
+		}})
+	}
+	pin := "Pin service"
+	if svc.Pinned {
+		pin = "Unpin service"
+	}
+	add(pin, pressKey('P'))
+	add("Update service", func(m *Model) tea.Cmd { return m.actionServiceUpdate() })
+	add("Roll back service", func(m *Model) tea.Cmd { return m.actionServiceRollback() })
+	add("Open shell", func(m *Model) tea.Cmd { return m.actionShell() })
+	if svc.Dashboard != "" {
+		add("Open service dashboard", func(m *Model) tea.Cmd { return m.openServiceDashboardCmd() })
+	}
+	add("Show Overview", func(m *Model) tea.Cmd { return m.selectServiceTab(svcTabOverview) })
+	add("Show Logs", func(m *Model) tea.Cmd { return m.selectServiceTab(svcTabLogs) })
+	return out
+}
+
+func (m *Model) databaseActions() []quickAction {
+	var out []quickAction
+	rows := m.dbRows()
+	for pos, i := range navigableDBRows(rows) {
+		pos, r := pos, rows[i]
+		db := m.dbEngines[r.engine].Databases[r.database]
+		add := func(label string, f func(m *Model) tea.Cmd) {
+			out = append(out, quickAction{label, db.Name, func(m *Model) tea.Cmd {
+				m.switchTab(tabDatabases)
+				m.dbCursor = pos
+				m.focusMain()
+				m.focus = paneDatabases
+				return f(m)
+			}})
+		}
+		add("Snapshot database", func(m *Model) tea.Cmd { return m.actionDatabaseSnapshot() })
+		add("Export database", pressKey('e'))
+		add("Include or exclude from auto snapshots", pressKey('a'))
+	}
+	out = append(out, quickAction{"Create a database", "", func(m *Model) tea.Cmd {
+		m.switchTab(tabDatabases)
+		return pressKey('c')(m)
+	}})
+	return out
+}
+
+func (m *Model) runtimeActions() []quickAction {
+	var out []quickAction
+	for i, r := range m.runtimeRows() {
+		i := i
+		name := map[string]string{"php": "PHP ", "node": "Node "}[r.kind] + r.version
+		add := func(label string, key rune) {
+			out = append(out, quickAction{label, name, func(m *Model) tea.Cmd {
+				m.switchTab(tabRuntimes)
+				m.rtCursor = i
+				return pressKey(key)(m)
+			}})
+		}
+		add("Make default", 'd')
+		if r.kind == "php" {
+			add("Toggle Xdebug", 'x')
+			add("Rebuild", 'R')
+		}
+	}
+	out = append(out,
+		quickAction{"Install a PHP version", "", func(m *Model) tea.Cmd { m.openPaletteIn("", "use "); return nil }},
+		quickAction{"Install a Node version", "", func(m *Model) tea.Cmd { m.openPaletteIn("", "node:install "); return nil }})
 	return out
 }
 
@@ -322,8 +417,17 @@ func (m *Model) quickMatches() []quickAction {
 		score int
 	}
 	var hits []scored
-	for _, a := range m.quickActions() {
+	// Built once per opening: the list covers every site, service, database
+	// and setting, which is too much to rebuild on each keystroke and frame.
+	if m.quickCache == nil {
+		m.quickCache = m.quickActions()
+	}
+	for _, a := range m.quickCache {
 		if s, ok := quickScore(m.quickQuery, a.label+" "+a.detail); ok {
+			// Typing a name should reach the thing before everything done to it.
+			if a.label == "Go to" || strings.HasPrefix(a.label, "Open site") || strings.HasPrefix(a.label, "Open worktree") || strings.HasPrefix(a.label, "Open service") {
+				s -= 20
+			}
 			hits = append(hits, scored{a, s})
 		}
 	}
@@ -336,14 +440,14 @@ func (m *Model) quickMatches() []quickAction {
 }
 
 func (m *Model) openQuick() {
-	m.quickActive, m.quickQuery, m.quickCursor = true, "", 0
+	m.quickActive, m.quickQuery, m.quickCursor, m.quickCache = true, "", 0, nil
 }
 
 func (m *Model) handleQuickKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	matches := m.quickMatches()
 	switch msg.String() {
 	case "esc", "ctrl+p":
-		m.quickActive = false
+		m.quickActive, m.quickCache = false, nil
 	case "ctrl+c":
 		m.logTail.Stop()
 		return m, tea.Quit
@@ -352,7 +456,7 @@ func (m *Model) handleQuickKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "down", "ctrl+j":
 		m.quickCursor = clamp(m.quickCursor+1, 0, max(0, len(matches)-1))
 	case "enter":
-		m.quickActive = false
+		m.quickActive, m.quickCache = false, nil
 		if m.quickCursor < len(matches) {
 			return m, matches[m.quickCursor].run(m)
 		}

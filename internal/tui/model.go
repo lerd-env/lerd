@@ -253,6 +253,7 @@ type Model struct {
 	quickActive bool
 	quickQuery  string
 	quickCursor int
+	quickCache  []quickAction
 	// paletteDir is where the next palette command runs; empty means the TUI's
 	// own working directory. Set by shortcuts that open the palette for a site.
 	paletteDir string

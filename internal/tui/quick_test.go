@@ -167,7 +167,7 @@ func TestPaletteOffersTheSelectedSitesActions(t *testing.T) {
 	m.selectSiteByName("shop")
 	all := paletteText(m)
 	for _, want := range []string{"Restart site shop.test", "Pause site shop.test", "Open shell", "New worktree", "Show Logs", "Show Doctor",
-		"Switch to worktree feat", "Toggle keep awake", "Change PHP version", "Start or stop worker queue", "Add a domain"} {
+		"Toggle keep awake", "Change PHP version", "Start or stop worker queue", "Add a domain"} {
 		if !strings.Contains(all, want) {
 			t.Errorf("palette missing site action %q", want)
 		}
@@ -207,4 +207,27 @@ func TestPaletteSiteToggleRunsTheRow(t *testing.T) {
 		}
 	}
 	t.Fatal("no keep awake entry")
+}
+
+// Nothing has to be opened first: another site's controls are in the palette
+// too, and running one selects that site.
+func TestPaletteActsOnSitesThatAreNotSelected(t *testing.T) {
+	m := quickModel()
+	m.switchTab(tabDashboard)
+	all := paletteText(m)
+	for _, want := range []string{"Toggle HTTPS blog.test", "Restart site shop.test", "Start or stop worker queue shop.test", "Pin service redis"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("palette missing %q from the dashboard", want)
+		}
+	}
+	for _, a := range m.quickActions() {
+		if a.label == "Toggle keep awake" && a.detail == "blog.test" {
+			a.run(m)
+			if m.activeTab != tabSites || m.currentSite().Name != "blog" || !strings.Contains(m.status, "blog") {
+				t.Fatalf("running it should select blog and act on it, tab %v status %q", m.activeTab, m.status)
+			}
+			return
+		}
+	}
+	t.Fatal("no keep awake entry for blog")
 }
