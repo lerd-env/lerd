@@ -6,7 +6,7 @@ import (
 )
 
 // SyncEnvIfPrimaryChanged updates APP_URL and the VITE_REVERB_* keys in the
-// site's project .env and rewrites APP_URL in each worktree .env to the new
+// site's project .env and the same keys in each worktree .env for the new
 // <branch>.<newPrimary> subdomain, but only when the primary domain has
 // actually changed since oldPrimary. Returns the first non-nil error so
 // callers can warn; a worktree-detection failure is treated as no worktrees
@@ -19,10 +19,6 @@ func SyncEnvIfPrimaryChanged(site *config.Site, oldPrimary string) error {
 	if err := config.SyncSiteURL(site.Path, newPrimary, site.Secured); err != nil {
 		return err
 	}
-	scheme := "http"
-	if site.Secured {
-		scheme = "https"
-	}
 	worktrees, err := gitpkg.DetectWorktrees(site.Path, oldPrimary)
 	if err != nil {
 		return nil
@@ -30,7 +26,7 @@ func SyncEnvIfPrimaryChanged(site *config.Site, oldPrimary string) error {
 	var firstErr error
 	for _, wt := range worktrees {
 		newWTDomain := wt.Branch + "." + newPrimary
-		if err := config.SetSiteURL(wt.Path, scheme, newWTDomain); err != nil && firstErr == nil {
+		if err := config.SyncSiteURL(wt.Path, newWTDomain, site.Secured); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}

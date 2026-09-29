@@ -250,11 +250,7 @@ func migrateWorktreeVhosts(worktrees []gitpkg.Worktree, newPrimary, phpVersion, 
 			if err := nginx.GenerateWorktreeHostProxyVhostFor(newWTDomain, wt.Path, newPrimary, port, proxy.SSL, secured); err != nil {
 				fmt.Printf("    WARN: worktree %s: regenerate vhost: %v\n", wt.Branch, err)
 			}
-			scheme := "http"
-			if secured {
-				scheme = "https"
-			}
-			if err := config.SetSiteURL(wt.Path, scheme, newWTDomain); err != nil {
+			if err := config.SyncSiteURL(wt.Path, newWTDomain, secured); err != nil {
 				fmt.Printf("    WARN: worktree %s: update .env: %v\n", wt.Branch, err)
 			}
 			continue
@@ -264,11 +260,7 @@ func migrateWorktreeVhosts(worktrees []gitpkg.Worktree, newPrimary, phpVersion, 
 		if err != nil {
 			fmt.Printf("    WARN: worktree %s: regenerate vhost: %v\n", wt.Branch, err)
 		}
-		scheme := "http"
-		if secured {
-			scheme = "https"
-		}
-		if err := config.SetSiteURL(wt.Path, scheme, newWTDomain); err != nil {
+		if err := config.SyncSiteURL(wt.Path, newWTDomain, secured); err != nil {
 			fmt.Printf("    WARN: worktree %s: update .env: %v\n", wt.Branch, err)
 		}
 	}
