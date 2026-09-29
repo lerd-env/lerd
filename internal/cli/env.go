@@ -1438,15 +1438,16 @@ func carriedToWorktrees(before, overrides map[string]string) map[string]string {
 // Scoped to dotenv, the format both the keys and the writer here assume. A
 // worktree without an env file yet is skipped; it is seeded on its next sync.
 func alignWorktreeEnvs(site *config.Site, fw *config.Framework, mainEnvPath, envRelPath, envFormat string, before map[string]string) {
-	// Empty means the caller never resolved a format, which is dotenv.
-	if site == nil || (envFormat != "" && envFormat != "dotenv") {
+	// A format this binary cannot write is refused by the writer below rather
+	// than guessed at, the way every other write of an env file is.
+	if site == nil || !envfile.KnownFormat(envFormat) {
 		return
 	}
 	worktrees, err := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain())
 	if err != nil || len(worktrees) == 0 {
 		return
 	}
-	after := envfile.ReadValues(mainEnvPath)
+	after := envfile.Values(mainEnvPath, envFormat)
 	coords := map[string]string{}
 	for _, k := range worktreeDBConnectionKeys {
 		if v := after[k]; v != "" {
@@ -1458,7 +1459,7 @@ func alignWorktreeEnvs(site *config.Site, fw *config.Framework, mainEnvPath, env
 		if _, statErr := os.Stat(wtEnv); statErr != nil {
 			continue
 		}
-		wtVals := envfile.ReadValues(wtEnv)
+		wtVals := envfile.Values(wtEnv, envFormat)
 		updates := map[string]string{}
 		for k, v := range coords {
 			if wtVals[k] != v {
@@ -1474,7 +1475,7 @@ func alignWorktreeEnvs(site *config.Site, fw *config.Framework, mainEnvPath, env
 		if len(updates) == 0 {
 			continue
 		}
-		if err := envfile.ApplyUpdates(wtEnv, updates); err != nil {
+		if err := envfile.ApplyUpdatesIn(wtEnv, envFormat, updates); err != nil {
 			feedback.Warn("aligning worktree %s .env: %v", wt.Branch, err)
 			continue
 		}

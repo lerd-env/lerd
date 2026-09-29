@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -146,5 +147,47 @@ func TestWorktreeEnvTarget(t *testing.T) {
 	}
 	if db, _ := worktreeEnvTarget(site, "feat-x"); db != "acme_feat_x" {
 		t.Errorf("isolated worktree database = %q, want acme_feat_x", db)
+	}
+}
+
+// A project keeping its configuration in a PHP file has worktrees like any
+// other, and they drifted the same way. The align arm read and wrote dotenv
+// only, so it returned before touching them and their service hosts stayed on
+// a container name for good.
+func TestAlignWorktreeEnvs_alignsAPhpArrayProject(t *testing.T) {
+	main := t.TempDir()
+	checkout := t.TempDir()
+
+	wtMeta := filepath.Join(main, ".git", "worktrees", "feat")
+	if err := os.MkdirAll(wtMeta, 0755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(wtMeta, "HEAD"), []byte("ref: refs/heads/feat\n"), 0644)
+	os.WriteFile(filepath.Join(wtMeta, "gitdir"), []byte(filepath.Join(checkout, ".git")+"\n"), 0644)
+
+	const envRel = "app/etc/env.php"
+	if err := os.MkdirAll(filepath.Join(main, "app", "etc"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(checkout, "app", "etc"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	const phpTmpl = "<?php\nreturn [\n    'db' => [\n        'connection' => [\n            'default' => [\n                'host' => '%s',\n            ],\n        ],\n    ],\n];\n"
+	os.WriteFile(filepath.Join(main, envRel), []byte(fmt.Sprintf(phpTmpl, "127.0.0.1")), 0644)
+	os.WriteFile(filepath.Join(checkout, envRel), []byte(fmt.Sprintf(phpTmpl, "lerd-mysql")), 0644)
+
+	before := map[string]string{"db.connection.default.host": "lerd-mysql"}
+	site := &config.Site{Name: "acme", Path: main, Domains: []string{"acme.test"}}
+	alignWorktreeEnvs(site, nil, filepath.Join(main, envRel), envRel, "php-array", before)
+
+	got, err := os.ReadFile(filepath.Join(checkout, envRel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), "lerd-mysql") {
+		t.Errorf("worktree still names the container:\n%s", got)
+	}
+	if !strings.Contains(string(got), "127.0.0.1") {
+		t.Errorf("worktree did not follow the parent:\n%s", got)
 	}
 }
