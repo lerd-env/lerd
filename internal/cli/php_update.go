@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 
 	"github.com/spf13/cobra"
 
@@ -60,7 +61,8 @@ func runNativePHPUpdate(cmd *cobra.Command, args []string) error {
 
 	updated := 0
 	for _, v := range versions {
-		patch, need := nativeUpdatePlan(pins.m.Tools[nativeTool(v)].Version, tools.InstalledVersion(nativeTool(v)))
+		patch, need := nativeUpdatePlan(pins.m.Tools[nativeTool(v)].Version, tools.InstalledVersion(nativeTool(v)),
+			pins.m.PublishedAt(nativeTool(v), runtime.GOOS, runtime.GOARCH), tools.InstalledPublished(nativeTool(v)))
 		if patch == "" {
 			feedback.Warn("lerd publishes no native build for php %s", v)
 			continue
@@ -120,7 +122,8 @@ func UpdateNativePHPVersion(version string, w io.Writer) error {
 		return fmt.Errorf("php %s has no native build installed", version)
 	}
 	pins := &pinnedTools{m: tools.Refresh(context.Background())}
-	patch, need := nativeUpdatePlan(pins.m.Tools[nativeTool(version)].Version, tools.InstalledVersion(nativeTool(version)))
+	patch, need := nativeUpdatePlan(pins.m.Tools[nativeTool(version)].Version, tools.InstalledVersion(nativeTool(version)),
+		pins.m.PublishedAt(nativeTool(version), runtime.GOOS, runtime.GOARCH), tools.InstalledPublished(nativeTool(version)))
 	if patch == "" {
 		return fmt.Errorf("lerd publishes no native build for php %s", version)
 	}

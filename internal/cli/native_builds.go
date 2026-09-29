@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"runtime"
 
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/nativephp"
@@ -15,6 +16,11 @@ type nativeBuildState struct {
 	present   bool   // the binary is on disk
 	installed string // the patch recorded for it, empty when it predates stamping
 	pinned    string // the patch lerd publishes, empty when none is reachable
+	// When the build on disk was published, and when the published one was. A
+	// patch rebuilt to carry a newer collector keeps its version, so the date is
+	// the only thing that separates the two.
+	installedPublished string
+	publishedAt        string
 }
 
 // nativeBuildsToFetch picks the versions whose host build has to be downloaded:
@@ -35,7 +41,10 @@ func nativeBuildsToFetch(versions []string, state func(string) nativeBuildState)
 			out = append(out, v)
 			continue
 		}
-		if s.installed != "" && s.installed != s.pinned {
+		if s.installed == "" {
+			continue
+		}
+		if nativeBuildDiffers(s.pinned, s.installed, s.publishedAt, s.installedPublished) {
 			out = append(out, v)
 		}
 	}
@@ -46,9 +55,11 @@ func nativeBuildsToFetch(versions []string, state func(string) nativeBuildState)
 func nativeBuildStateFor(m *tools.Manifest, version string) nativeBuildState {
 	_, err := os.Stat(nativephp.BinaryPath(version))
 	return nativeBuildState{
-		present:   err == nil,
-		installed: tools.InstalledVersion(nativeTool(version)),
-		pinned:    m.Tools[nativeTool(version)].Version,
+		present:            err == nil,
+		installed:          tools.InstalledVersion(nativeTool(version)),
+		pinned:             m.Tools[nativeTool(version)].Version,
+		installedPublished: tools.InstalledPublished(nativeTool(version)),
+		publishedAt:        m.PublishedAt(nativeTool(version), runtime.GOOS, runtime.GOARCH),
 	}
 }
 

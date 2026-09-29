@@ -117,6 +117,11 @@ func installNativePHP(pins *pinnedTools, version string, w io.Writer) (string, e
 	if err := unpackNativePHP(stage, version, pin.Version); err != nil {
 		return "", err
 	}
+	// After the version stamp, and only once everything is in place, so an
+	// interrupted install is not recorded as holding the build it was fetching.
+	if err := tools.WritePublished(nativeTool(version), pins.m.PublishedAt(tool, runtime.GOOS, runtime.GOARCH)); err != nil {
+		return "", err
+	}
 	return pin.Version, nil
 }
 
@@ -124,11 +129,23 @@ func installNativePHP(pins *pinnedTools, version string, w io.Writer) (string, e
 // Any difference is worth acting on, not just a higher number: the pin is
 // lerd's statement of what it publishes, and a machine sitting on a build that
 // has been withdrawn should come back to it.
-func nativeUpdatePlan(pinned, installed string) (string, bool) {
+func nativeUpdatePlan(pinned, installed, publishedAt, installedPublished string) (string, bool) {
 	if pinned == "" {
 		return "", false
 	}
-	return pinned, pinned != installed
+	return pinned, nativeBuildDiffers(pinned, installed, publishedAt, installedPublished)
+}
+
+// nativeBuildDiffers reports whether the published build is not the one on
+// disk: a different patch, or the same patch rebuilt since it was fetched. A
+// rebuild carries a newer collector under the version it already had, so the
+// date is the only thing that separates the two, and an install that predates
+// the date being published has none recorded and takes the rebuild once.
+func nativeBuildDiffers(pinned, installed, publishedAt, installedPublished string) bool {
+	if installed != pinned {
+		return true
+	}
+	return publishedAt != "" && publishedAt != installedPublished
 }
 
 // ensureNativePHPInstalled downloads a version's native build when it is not

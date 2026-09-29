@@ -810,11 +810,18 @@ function seams(): array
         return $parsed;
     }
     $parsed = [];
-    // The mounted path is where lerd writes it; the override exists so the
-    // parsing and extraction can be exercised without that mount.
+    // The container mounts the assets at a fixed path; a PHP running on the
+    // host has no such directory, so the location comes from the ini the way
+    // the debug bridge reads it, and only then falls back to the mount. The
+    // env override exists so the parsing and extraction can be exercised
+    // without either.
     $path = getenv('LERD_DEVTOOLS_SEAMS');
     if (!is_string($path) || $path === '') {
-        $path = '/usr/local/etc/lerd/devtools-seams.conf';
+        $assets = \get_cfg_var('lerd.assets_dir');
+        if (!is_string($assets) || $assets === '') {
+            $assets = '/usr/local/etc/lerd';
+        }
+        $path = $assets . '/devtools-seams.conf';
     }
     $lines = @file($path, \FILE_IGNORE_NEW_LINES | \FILE_SKIP_EMPTY_LINES);
     if (!is_array($lines)) {
