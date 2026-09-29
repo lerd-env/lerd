@@ -1465,11 +1465,7 @@ func alignWorktreeEnvs(site *config.Site, mainEnvPath, envRelPath, envFormat str
 				updates[k] = v
 			}
 		}
-		for k, old := range before {
-			if v := after[k]; old != "" && v != "" && v != old && wtVals[k] == old {
-				updates[k] = v
-			}
-		}
+		maps.Copy(updates, envfile.CarriedValues(wtVals, before, after))
 		// A steady state stays silent and leaves the file's mtime alone.
 		if len(updates) == 0 {
 			continue

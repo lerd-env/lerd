@@ -449,3 +449,37 @@ func TestWorktreeLabelTaken(t *testing.T) {
 		t.Errorf("expected free label available, got taken=%v err=%v", taken, err)
 	}
 }
+
+// A worktree of the secondary sharing its database follows it into the
+// group's shared one; a worktree with its own isolated database keeps it.
+func TestSetSecondarySharedDB_worktreesFollow(t *testing.T) {
+	setup(t)
+	mainDir := siteWithEnv(t, "starlane")
+	secDir := siteWithEnv(t, "admin_starlane")
+	shared, isolated := t.TempDir(), t.TempDir()
+	for name, dir := range map[string]string{"feat": shared, "iso": isolated} {
+		meta := filepath.Join(secDir, ".git", "worktrees", name)
+		if err := os.MkdirAll(meta, 0755); err != nil {
+			t.Fatal(err)
+		}
+		os.WriteFile(filepath.Join(meta, "HEAD"), []byte("ref: refs/heads/"+name+"\n"), 0644)
+		os.WriteFile(filepath.Join(meta, "gitdir"), []byte(filepath.Join(dir, ".git")+"\n"), 0644)
+	}
+	os.WriteFile(filepath.Join(shared, ".env"), []byte("DB_DATABASE=admin_starlane\n"), 0644)
+	os.WriteFile(filepath.Join(isolated, ".env"), []byte("DB_DATABASE=admin_starlane_iso\n"), 0644)
+	mustAdd(t, config.Site{Name: "starlane", Domains: []string{"starlane.test"}, Path: mainDir})
+	mustAdd(t, config.Site{Name: "admin-starlane", Domains: []string{"admin-starlane.test"}, Path: secDir})
+	if err := AssignSecondary(reload(t, "starlane"), reload(t, "admin-starlane"), "admin", false); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SetSecondarySharedDB(reload(t, "admin-starlane"), true); err != nil {
+		t.Fatalf("SetSecondarySharedDB on: %v", err)
+	}
+	if got := envDB(t, shared); got != "starlane" {
+		t.Errorf("sharing worktree DB_DATABASE = %q, want starlane", got)
+	}
+	if got := envDB(t, isolated); got != "admin_starlane_iso" {
+		t.Errorf("isolated worktree DB_DATABASE = %q, want admin_starlane_iso", got)
+	}
+}
