@@ -31,4 +31,13 @@ describe('ServiceCardShell', () => {
     expect(root(render(Harness).container).className).toContain('group');
     expect(root(render(Harness, { props: { compact: true } }).container).className).toContain('group');
   });
+
+  // A suggestion is not a service the site has, so it is drawn as an empty
+  // dashed slot rather than a filled card.
+  it('draws a suggestion unfilled and dashed', () => {
+    const cls = root(render(Harness, { props: { compact: true, suggested: true } }).container).className;
+    expect(cls).toContain('border-dashed');
+    expect(cls).toContain('bg-transparent');
+    expect(cls).not.toContain('bg-white');
+  });
 });

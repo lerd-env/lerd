@@ -3,6 +3,8 @@ package ui
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -18,6 +20,9 @@ func handleThemes(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		themes, errs := config.UIThemes()
 		themes = withDesktopTheme(themes)
+		if e := config.OmarchyOverrideError(); e != nil {
+			errs = append(errs, *e)
+		}
 		if themes == nil {
 			themes = []config.UITheme{}
 		}
@@ -41,6 +46,34 @@ func handleThemes(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": true, "id": body.ID})
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleUserCSS serves the stylesheets that belong to the theme the dashboard
+// is on: the Omarchy theme's lerd.css while following Omarchy, then the user's
+// themes/<id>.css, which has the last word. Picking a theme without one, the
+// default included, is picking no custom CSS at all.
+func handleUserCSS(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg == nil || !validThemeName.MatchString(cfg.UI.Theme) {
+		return
+	}
+	var paths []string
+	if cfg.UI.Theme == config.OmarchyThemeID {
+		paths = append(paths, config.OmarchyCSSPath())
+	}
+	paths = append(paths, filepath.Join(config.ThemesDir(), cfg.UI.Theme+".css"))
+	for _, p := range paths {
+		if data, err := os.ReadFile(p); err == nil {
+			_, _ = w.Write(data)
+			_, _ = w.Write([]byte("\n"))
+		}
 	}
 }
 

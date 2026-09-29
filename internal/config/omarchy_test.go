@@ -68,12 +68,13 @@ selection = "#283457"
 // A dashboard palette's surfaces are its dark ones, so a light desktop theme
 // lends its accent and leaves the surfaces alone rather than putting a pale
 // background behind type coloured to sit on a dark card.
-func TestOmarchyThemeTakesOnlyTheAccentFromALightTheme(t *testing.T) {
+func TestOmarchyThemeLendsALightThemeTheLightSurfaces(t *testing.T) {
 	writeOmarchyTheme(t, "catppuccin-latte", `
 mode = "light"
 accent = "#1e66f5"
 muted = "#8c8fa1"
 background = "#eff1f5"
+dark_background = "#e3e4e8"
 lighter_background = "#e6e9ef"
 selection = "#dce0e8"
 `)
@@ -84,12 +85,74 @@ selection = "#dce0e8"
 	if theme.Accent != "#1e66f5" {
 		t.Errorf("Accent = %q, want the desktop accent", theme.Accent)
 	}
-	for label, got := range map[string]string{
-		"Bg": theme.Bg, "Card": theme.Card, "Border": theme.Border, "Muted": theme.Muted,
+	for label, pair := range map[string][2]string{
+		"BgLight": {theme.BgLight, "#e3e4e8"}, "CardLight": {theme.CardLight, "#eff1f5"},
+		"BorderLight": {theme.BorderLight, "#dce0e8"},
+		"Bg":          {theme.Bg, ""}, "Card": {theme.Card, ""}, "Border": {theme.Border, ""}, "Muted": {theme.Muted, ""},
 	} {
-		if got != "" {
-			t.Errorf("%s = %q, want it left to the dashboard's own dark surfaces", label, got)
+		if pair[0] != pair[1] {
+			t.Errorf("%s = %q, want %q", label, pair[0], pair[1])
 		}
+	}
+}
+
+func TestOmarchyThemeTakesTheOverrideTheThemeCarries(t *testing.T) {
+	writeOmarchyTheme(t, "tokyo-night", `
+mode = "dark"
+accent = "#7aa2f7"
+background = "#1a1b26"
+lighter_background = "#24283b"
+`)
+	override := "name: ignored\naccent: \"#ff0000\"\ncard_light: \"#fafafa\"\n"
+	if err := os.WriteFile(OmarchyOverridePath(), []byte(override), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	theme := OmarchyTheme()
+	if theme.Accent != "#ff0000" || theme.CardLight != "#fafafa" {
+		t.Errorf("Accent, CardLight = %q, %q, want the override's", theme.Accent, theme.CardLight)
+	}
+	if theme.Bg != "#1a1b26" {
+		t.Errorf("Bg = %q, want colors.toml's where the override is silent", theme.Bg)
+	}
+	if theme.Name != "Omarchy (tokyo-night)" {
+		t.Errorf("Name = %q, want the desktop theme's", theme.Name)
+	}
+	if e := OmarchyOverrideError(); e != nil {
+		t.Errorf("OmarchyOverrideError() = %v, want nil", e)
+	}
+}
+
+func TestOmarchyThemeOverrideAccentReachesDarkMode(t *testing.T) {
+	writeOmarchyTheme(t, "catppuccin-latte", `
+mode = "light"
+accent = "#1e66f5"
+background = "#eff1f5"
+`)
+	if err := os.WriteFile(OmarchyOverridePath(), []byte("accent: \"#d20f39\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if theme := OmarchyTheme(); theme.AccentDark != "#d20f39" {
+		t.Errorf("AccentDark = %q, want the override's accent in dark mode too", theme.AccentDark)
+	}
+
+	if err := os.WriteFile(OmarchyOverridePath(), []byte("accent: \"#d20f39\"\naccent_dark: \"#ff5577\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if theme := OmarchyTheme(); theme.AccentDark != "#ff5577" {
+		t.Errorf("AccentDark = %q, want the override's own accent_dark", theme.AccentDark)
+	}
+}
+
+func TestOmarchyThemeReportsABadOverride(t *testing.T) {
+	writeOmarchyTheme(t, "tokyo-night", `accent = "#7aa2f7"`)
+	if err := os.WriteFile(OmarchyOverridePath(), []byte("bg: red\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if theme := OmarchyTheme(); theme == nil || theme.Accent != "#7aa2f7" {
+		t.Errorf("OmarchyTheme() = %+v, want colors.toml's theme", theme)
+	}
+	if e := OmarchyOverrideError(); e == nil {
+		t.Error("OmarchyOverrideError() = nil, want the bad colour reported")
 	}
 }
 

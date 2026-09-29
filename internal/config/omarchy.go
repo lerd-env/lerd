@@ -21,6 +21,7 @@ type omarchyColors struct {
 	Muted             string `toml:"muted"`
 	Selection         string `toml:"selection"`
 	Background        string `toml:"background"`
+	DarkBackground    string `toml:"dark_background"`
 	LighterBackground string `toml:"lighter_background"`
 }
 
@@ -75,17 +76,72 @@ func OmarchyTheme() *UITheme {
 		AccentDark: accent,
 		Source:     UIThemeSourceDesktop,
 	}
-	// A dashboard palette's surfaces are its dark ones; there is no light set to
-	// put a light desktop's background into, and dropping one in would paint a
-	// pale card behind type coloured to sit on a dark one. A light theme lends
-	// its accent and nothing else.
-	if !omarchyIsLight(c.Mode) {
+	// A dark desktop theme lends the dark surfaces and a light one the light
+	// surfaces. A light theme's dark_background is the page under its cards, the
+	// way lerd's light mode puts white cards on a grey page.
+	if omarchyIsLight(c.Mode) {
+		theme.BgLight = NormalizeBrandColor(c.DarkBackground)
+		if theme.BgLight == "" {
+			theme.BgLight = NormalizeBrandColor(c.Background)
+		}
+		theme.CardLight = NormalizeBrandColor(c.Background)
+		theme.BorderLight = NormalizeBrandColor(c.Selection)
+	} else {
 		theme.Bg = NormalizeBrandColor(c.Background)
 		theme.Card = NormalizeBrandColor(c.LighterBackground)
 		theme.Border = NormalizeBrandColor(c.Selection)
 		theme.Muted = NormalizeBrandColor(c.Muted)
 	}
+	// A lerd.yaml the theme carries, whether shipped with it or rendered from an
+	// Omarchy template, has the last word on any tone it sets.
+	if override, _ := omarchyOverride(); override != nil {
+		// The desktop's accent fills both modes, so an override's accent must
+		// too, or dark mode keeps the one it replaced.
+		if override.AccentDark == "" {
+			override.AccentDark = override.Accent
+		}
+		dst := theme.colours()
+		for key, v := range override.colours() {
+			if *v != "" {
+				*dst[key] = *v
+			}
+		}
+	}
 	return theme
+}
+
+// omarchyOverride reads the optional lerd.yaml in the active Omarchy theme. A
+// missing file is (nil, nil).
+func omarchyOverride() (*UITheme, error) {
+	data, err := os.ReadFile(OmarchyOverridePath())
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return decodeUITheme(data)
+}
+
+// OmarchyOverridePath is where an Omarchy theme, or a lerd.yaml.tpl template
+// Omarchy renders into it, keeps the colours lerd should use.
+func OmarchyOverridePath() string {
+	return filepath.Join(OmarchyCurrentDir(), "theme", "lerd.yaml")
+}
+
+// OmarchyCSSPath is the stylesheet an Omarchy theme, or a lerd.css.tpl template,
+// adds to the dashboard while it follows that theme.
+func OmarchyCSSPath() string {
+	return filepath.Join(OmarchyCurrentDir(), "theme", "lerd.css")
+}
+
+// OmarchyOverrideError reports a lerd.yaml in the active Omarchy theme that
+// could not be used, so the picker can say why rather than silently ignore it.
+func OmarchyOverrideError() *UIThemeError {
+	if _, err := omarchyOverride(); err != nil {
+		return &UIThemeError{File: OmarchyOverridePath(), Error: err.Error()}
+	}
+	return nil
 }
 
 func omarchyIsLight(mode string) bool {

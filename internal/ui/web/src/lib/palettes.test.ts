@@ -366,3 +366,31 @@ describe('accent text', () => {
     expect(contrast(vars['--lerd-accent-hover'], vars['--lerd-accent'])).toBeGreaterThan(1.2);
   });
 });
+
+describe('light surfaces', () => {
+  const p = resolvePalette({
+    id: 'latte',
+    name: 'Latte',
+    accent: '#1e66f5',
+    bg_light: '#e3e4e8',
+    card_light: '#eff1f5',
+    border_light: '#dce0e8'
+  })!;
+
+  it('moves the light greys a light theme declares', () => {
+    const vars = paletteVars(p, false);
+    expect(vars['--color-gray-50']).toBe('#e3e4e8');
+    expect(vars['--color-white']).toBe('#eff1f5');
+    expect(vars['--color-gray-200']).toBe('#dce0e8');
+    expect(vars['--lerd-chrome-light']).toBe('#eff1f5');
+  });
+
+  it('puts the standard greys back in dark mode and for a theme without them', () => {
+    const plain = resolvePalette({ id: 'ocean', name: 'Ocean', accent: '#3b7ea1' })!;
+    for (const vars of [paletteVars(p, true), paletteVars(plain, false)]) {
+      expect(vars['--color-gray-50']).toBe('');
+      expect(vars['--color-white']).toBe('');
+      expect(vars['--color-gray-200']).toBe('');
+    }
+  });
+});

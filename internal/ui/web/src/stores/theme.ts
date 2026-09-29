@@ -33,7 +33,7 @@ function apply(theme: Theme) {
   for (const [name, value] of Object.entries(vars)) {
     document.documentElement.style.setProperty(name, value);
   }
-  applyAppChrome(dark ? vars['--lerd-header'] : vars['--lerd-header-light'], dark ? p.bg : '#ffffff');
+  applyAppChrome(dark ? vars['--lerd-header'] : vars['--lerd-header-light'], dark ? p.bg : p.bgLight || '#ffffff');
 }
 
 // Installed as an app, the window and the launch splash are painted by the

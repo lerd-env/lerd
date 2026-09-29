@@ -22,6 +22,11 @@ export interface Palette {
   card: string;
   border: string;
   muted: string;
+  // The light mode's page, cards and lines, where a theme wants them off the
+  // standard white and greys.
+  bgLight?: string;
+  cardLight?: string;
+  borderLight?: string;
   // The light mode's rail and sidebar, where a theme wants them off white. Only
   // macOS does, which is the one desktop that tints its own chrome, so the rest
   // leave it unset and keep the white app.css falls back to.
@@ -45,6 +50,9 @@ export interface PaletteFile {
   card?: string;
   border?: string;
   muted?: string;
+  bg_light?: string;
+  card_light?: string;
+  border_light?: string;
   chrome_light?: string;
   chrome_active?: string;
   chrome_light_active?: string;
@@ -326,6 +334,9 @@ export function resolvePalette(file: PaletteFile): Palette | null {
     card: hex(file.card) || DEFAULT_PALETTE.card,
     border: hex(file.border) || DEFAULT_PALETTE.border,
     muted: hex(file.muted) || DEFAULT_PALETTE.muted,
+    bgLight: hex(file.bg_light) || undefined,
+    cardLight: hex(file.card_light) || undefined,
+    borderLight: hex(file.border_light) || undefined,
     chromeLight: hex(file.chrome_light) || undefined,
     chromeActive: hex(file.chrome_active) || undefined,
     chromeLightActive: hex(file.chrome_light_active) || undefined,
@@ -348,11 +359,13 @@ export function paletteVars(palette: Palette, dark: boolean, focused = false): R
   // it: darker on white, lighter on a dark card. A tone that already reads is
   // kept as declared, hover and all.
   const declared = dark ? palette.accentDark : palette.accent;
-  const accent = readableOn(declared, dark ? palette.card : '#ffffff', dark ? 255 : 0);
+  const cardLight = palette.cardLight || '#ffffff';
+  const accent = readableOn(declared, dark ? palette.card : cardLight, dark ? 255 : 0);
   const accentHover =
     accent === declared ? (dark ? palette.accentHoverDark : palette.accentHover) : step(accent, dark ? 255 : 0);
   const header = (focused && palette.chromeActive) || palette.card;
-  const headerLight = (focused && palette.chromeLightActive) || palette.chromeLight || '#ffffff';
+  const chromeLight = palette.chromeLight || cardLight;
+  const headerLight = (focused && palette.chromeLightActive) || chromeLight;
   return {
     '--lerd-accent': accent,
     '--lerd-on-accent': onAccent(accent),
@@ -361,8 +374,8 @@ export function paletteVars(palette: Palette, dark: boolean, focused = false): R
     '--lerd-card': palette.card,
     '--lerd-border': palette.border,
     '--lerd-muted': palette.muted,
-    '--lerd-chrome-light': palette.chromeLight || '#ffffff',
-    '--lerd-chrome-border': chromeBorder(palette.chromeLight || '#ffffff'),
+    '--lerd-chrome-light': chromeLight,
+    '--lerd-chrome-border': chromeBorder(chromeLight),
     // The header is the rail and the page's top strips, the part of the chrome
     // that follows focus; the sidebar between them holds still.
     '--lerd-header': header,
@@ -371,7 +384,20 @@ export function paletteVars(palette: Palette, dark: boolean, focused = false): R
     // Always set, even when unchanged: apply() only writes properties, so a value
     // left over from the previous theme would otherwise stick.
     '--color-gray-400': dark ? readableOn(GRAY_400, liftedCard(palette.card), 255) : GRAY_400,
-    '--color-gray-500': dark ? GRAY_500 : readableOn(GRAY_500, darker(headerLight, GRAY_100), 0)
+    '--color-gray-500': dark ? GRAY_500 : readableOn(GRAY_500, darker(headerLight, GRAY_100), 0),
+    // Light mode paints with Tailwind's white and greys rather than lerd tokens,
+    // so a light theme moves those. An empty value removes the property, which
+    // puts Tailwind's own back, and dark mode always does.
+    ...lightSurfaces(dark ? {} : palette)
+  };
+}
+
+function lightSurfaces(p: Pick<Palette, 'bgLight' | 'cardLight' | 'borderLight'>): Record<string, string> {
+  return {
+    '--color-gray-50': p.bgLight || '',
+    '--color-gray-100': p.bgLight ? toHex(mix(parseHex(p.bgLight)!, 0, 0.03)) : '',
+    '--color-white': p.cardLight || '',
+    '--color-gray-200': p.borderLight || ''
   };
 }
 

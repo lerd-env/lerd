@@ -27,6 +27,11 @@ type UITheme struct {
 	Card            string `yaml:"card,omitempty"               json:"card,omitempty"`
 	Border          string `yaml:"border,omitempty"             json:"border,omitempty"`
 	Muted           string `yaml:"muted,omitempty"              json:"muted,omitempty"`
+	// BgLight, CardLight and BorderLight are the light mode's page, cards and
+	// lines, which otherwise stay the standard white and greys.
+	BgLight     string `yaml:"bg_light,omitempty"     json:"bg_light,omitempty"`
+	CardLight   string `yaml:"card_light,omitempty"   json:"card_light,omitempty"`
+	BorderLight string `yaml:"border_light,omitempty" json:"border_light,omitempty"`
 	// ChromeLight is the tone the rail and the sidebar take in light mode, where
 	// the surfaces above are the dark ones. A theme that declares none leaves
 	// them white.
@@ -128,23 +133,29 @@ func parseUITheme(id string, data []byte) (*UITheme, error) {
 	if !validThemeID.MatchString(id) {
 		return nil, fmt.Errorf("invalid theme name %q: must match [a-z0-9][a-z0-9-]*", id)
 	}
+	t, err := decodeUITheme(data)
+	if err != nil {
+		return nil, err
+	}
+	t.ID = id
+	if t.Name == "" {
+		return nil, fmt.Errorf("missing required field \"name\"")
+	}
+	if t.Accent == "" {
+		return nil, fmt.Errorf("missing required field \"accent\"")
+	}
+	return t, nil
+}
+
+// decodeUITheme reads a theme's YAML and normalises every colour in it, without
+// asking for the fields a theme file must carry to stand on its own.
+func decodeUITheme(data []byte) (*UITheme, error) {
 	var t UITheme
 	if err := yaml.Unmarshal(data, &t); err != nil {
 		return nil, err
 	}
-	t.ID = id
 	t.Name = strings.TrimSpace(t.Name)
-	if t.Name == "" {
-		return nil, fmt.Errorf("missing required field \"name\"")
-	}
-	colours := map[string]*string{
-		"accent": &t.Accent, "accent_hover": &t.AccentHover,
-		"accent_dark": &t.AccentDark, "accent_hover_dark": &t.AccentHoverDark,
-		"bg": &t.Bg, "card": &t.Card, "border": &t.Border, "muted": &t.Muted,
-		"chrome_light": &t.ChromeLight, "chrome_active": &t.ChromeActive,
-		"chrome_light_active": &t.ChromeLightActive,
-	}
-	for label, field := range colours {
+	for label, field := range t.colours() {
 		if *field == "" {
 			continue
 		}
@@ -154,8 +165,17 @@ func parseUITheme(id string, data []byte) (*UITheme, error) {
 		}
 		*field = norm
 	}
-	if t.Accent == "" {
-		return nil, fmt.Errorf("missing required field \"accent\"")
-	}
 	return &t, nil
+}
+
+// colours names every colour field by the key a theme file writes it under.
+func (t *UITheme) colours() map[string]*string {
+	return map[string]*string{
+		"accent": &t.Accent, "accent_hover": &t.AccentHover,
+		"accent_dark": &t.AccentDark, "accent_hover_dark": &t.AccentHoverDark,
+		"bg": &t.Bg, "card": &t.Card, "border": &t.Border, "muted": &t.Muted,
+		"bg_light": &t.BgLight, "card_light": &t.CardLight, "border_light": &t.BorderLight,
+		"chrome_light": &t.ChromeLight, "chrome_active": &t.ChromeActive,
+		"chrome_light_active": &t.ChromeLightActive,
+	}
 }

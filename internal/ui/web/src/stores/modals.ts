@@ -31,6 +31,7 @@ export type ModalKind =
   | "tuningReset"
   | "workspaceDelete"
   | "siteUnlink"
+  | "siteServiceRemove"
   | "serviceInstall"
   | "changelog"
   | "error"
@@ -160,6 +161,11 @@ export interface SiteUnlinkTarget {
   domain: string;
 }
 
+export interface SiteServiceRemoveTarget {
+  domain: string;
+  name: string;
+}
+
 export interface ServiceInstallTarget {
   name: string;
 }
@@ -218,6 +224,7 @@ export interface ModalState {
   tuningReset?: TuningResetTarget;
   workspaceDelete?: WorkspaceDeleteTarget;
   siteUnlink?: SiteUnlinkTarget;
+  siteServiceRemove?: SiteServiceRemoveTarget;
   serviceInstall?: ServiceInstallTarget;
   error?: ErrorTarget;
 }
@@ -236,6 +243,10 @@ export function openWorkspaceDeleteModal(target: WorkspaceDeleteTarget) {
 
 export function openSiteUnlinkModal(target: SiteUnlinkTarget) {
   modal.set({ kind: "siteUnlink", siteUnlink: target });
+}
+
+export function openSiteServiceRemoveModal(target: SiteServiceRemoveTarget) {
+  modal.set({ kind: "siteServiceRemove", siteServiceRemove: target });
 }
 
 export function openChangelogModal() {

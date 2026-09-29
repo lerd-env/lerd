@@ -125,6 +125,9 @@ func Start(currentVersion string) error {
 	if d := config.CurrentDesktop(); d.WatchDir != "" {
 		_ = watchDesktopTheme(context.Background(), d.WatchDir, d.WatchNames, 300*time.Millisecond, broker.broadcastThemeList)
 	}
+	// Theme files and their stylesheets repaint every open dashboard as they are saved.
+	_ = os.MkdirAll(config.ThemesDir(), 0755)
+	_ = watchDesktopTheme(context.Background(), config.ThemesDir(), nil, 300*time.Millisecond, broker.broadcastThemeList)
 
 	// Restart any LAN share proxies that were active before this process started.
 	go cli.RestoreLANShareProxies()
@@ -337,6 +340,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/settings/streaming-enabled", withCORS(publishAfter(handleSettingsStreamingEnabled, eventbus.KindStatus, eventbus.KindSites, eventbus.KindServices)))
 	mux.HandleFunc("/api/settings/beta-updates", withCORS(handleSettingsBetaUpdates))
 	mux.HandleFunc("/api/themes", withCORS(handleThemes))
+	mux.HandleFunc("/api/theme.css", withCORS(handleUserCSS))
 	mux.HandleFunc("/api/themes/", withCORS(handleThemeItem))
 	mux.HandleFunc("/api/workers/health", withCORS(handleWorkersHealth))
 	mux.HandleFunc("/api/workers/heal", withCORS(handleWorkersHeal))
@@ -1008,6 +1012,9 @@ type SiteResponse struct {
 	// project's .lerd.yaml. Used by the dashboard to render service badges
 	// on the site detail panel.
 	Services []string `json:"services,omitempty"`
+	// DeclaredServices are the Services listed in .lerd.yaml, which the site
+	// overview offers to remove.
+	DeclaredServices []string `json:"declared_services,omitempty"`
 	// SuggestedServices are presets the site's packages suggest that it does
 	// not use yet and the user has not dismissed.
 	SuggestedServices []config.ServiceSuggestion `json:"suggested_services,omitempty"`
@@ -1283,6 +1290,7 @@ func buildSites() ([]SiteResponse, error) {
 			Branch:               e.Branch,
 			Worktrees:            worktreeResponses,
 			Services:             e.Services,
+			DeclaredServices:     e.DeclaredServices,
 			SuggestedServices:    e.SuggestedServices,
 			DBDatabase:           envfile.ReadKey(filepath.Join(e.Path, ".env"), "DB_DATABASE"),
 			LANPort:              e.LANPort,
@@ -4226,6 +4234,20 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		return
 	case "service:add":
 		if err := addSiteService(site, r.URL.Query().Get("name")); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "service:remove":
+		if err := removeSiteService(site, r.URL.Query().Get("name")); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "service:declare":
+		if err := declareSiteService(site, r.URL.Query().Get("name")); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}

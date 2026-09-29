@@ -8,6 +8,12 @@ vi.mock('$lib/api', async (orig) => ({
   apiFetch: (...args: unknown[]) => apiFetch(...args)
 }));
 
+const { loadSites } = vi.hoisted(() => ({ loadSites: vi.fn() }));
+vi.mock('$stores/sites', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$stores/sites')>()),
+  loadSites
+}));
+
 function ok() {
   return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } });
 }
@@ -22,6 +28,7 @@ describe('SiteSuggestedServiceCard', () => {
     const { getByLabelText } = render(SiteSuggestedServiceCard, { suggestion: { name: 'solr', reason: 'Search backend', package: 'drupal/search_api_solr' }, domain: 'shop.test' });
     await fireEvent.click(getByLabelText(/add/i));
     expect(apiFetch).toHaveBeenCalledWith('/api/sites/shop.test/service:add?name=solr', { method: 'POST' });
+    await vi.waitFor(() => expect(loadSites).toHaveBeenCalled());
   });
 
   it('says why the service is suggested', () => {
@@ -49,6 +56,8 @@ describe('SiteSuggestedServiceCard', () => {
     const identity = getByTestId('suggested-identity').className;
     expect(identity).toContain('opacity-60');
     expect(identity).toContain('group-hover:opacity-100');
+    expect(identity).toContain('grayscale');
+    expect(identity).toContain('group-hover:grayscale-0');
     expect(getByLabelText('Add Solr to this site').className).not.toContain('opacity-60');
   });
 });

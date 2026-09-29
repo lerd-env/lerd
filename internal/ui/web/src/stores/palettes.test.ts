@@ -52,6 +52,23 @@ describe('palettes store', () => {
     stop();
   });
 
+  it('lays the user stylesheet last and reloads it when the themes change', async () => {
+    globalThis.fetch = vi.fn(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch;
+    const { watchThemeChanges } = await import('./palettes');
+    const { wsMessage } = await import('$lib/ws');
+
+    const stop = watchThemeChanges();
+    const link = document.getElementById('lerd-user-css') as HTMLLinkElement;
+    expect(link.href).toContain('/api/theme.css');
+    expect(document.head.lastElementChild).toBe(link);
+
+    const first = link.href;
+    await new Promise((r) => setTimeout(r, 2));
+    wsMessage.set({ type: 'theme_list' });
+    expect(link.href).not.toBe(first);
+    stop();
+  });
+
   it('lets the desktop entry replace the built-in that imitates it', async () => {
     globalThis.fetch = vi.fn(async () =>
       new Response(
