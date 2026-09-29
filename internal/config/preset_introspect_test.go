@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -49,6 +50,38 @@ func TestMysqlDatabaseActionsAddressTheClientByHost(t *testing.T) {
 		}
 		if !strings.Contains(cmd, "-h 127.0.0.1") {
 			t.Errorf("%s relies on socket resolution: %s", name, cmd)
+		}
+	}
+}
+
+// MySQL 9.7 runs with GTIDs on, so its dumps carry a GTID_PURGED statement that
+// fails against the server they came from, after the restore has already emptied
+// the database. New dumps leave it out, and the import strips it from old ones.
+func TestMysqlDumpsRestoreOntoAGTIDServer(t *testing.T) {
+	p, err := LoadPreset("mysql")
+	if err != nil {
+		t.Fatalf("loading the mysql preset: %v", err)
+	}
+	spec := p.Introspect.DatabasesEntity()
+	for _, name := range []string{"export", "export_all"} {
+		if !strings.Contains(spec.Actions[name].Exec, "--set-gtid-purged=OFF") {
+			t.Errorf("%s writes the GTID_PURGED statement: %s", name, spec.Actions[name].Exec)
+		}
+	}
+	dump := "a\nSET @@GLOBAL.GTID_PURGED=/*!80000 '+'*/ 'u1:1-5,\nu2:1-3';\nb\nSET @@GLOBAL.GTID_PURGED='x';\nc\n"
+	for _, name := range []string{"import", "import_all"} {
+		filter, _, ok := strings.Cut(spec.Actions[name].Exec, " | ")
+		if !ok {
+			t.Fatalf("%s pipes no filter in front of the client: %s", name, spec.Actions[name].Exec)
+		}
+		cmd := exec.Command("sh", "-c", filter)
+		cmd.Stdin = strings.NewReader(dump)
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("%s filter: %v", name, err)
+		}
+		if string(out) != "a\nb\nc\n" {
+			t.Errorf("%s filter left %q", name, out)
 		}
 	}
 }

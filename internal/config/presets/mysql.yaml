@@ -83,13 +83,18 @@ introspect:
           exec: >
             $(command -v mysqldump || command -v mariadb-dump) -h 127.0.0.1 -uroot
             --single-transaction --quick --no-tablespaces --routines --triggers --events
-            {{name}}
+            --set-gtid-purged=OFF {{name}}
           filename: "{{name}}.sql"
+        # A dump taken with GTIDs on (9.7's default) names a purged set that
+        # overlaps the server's own, and the load stops there. Older dumps
+        # still carry it, so it is stripped here as well as left out above.
         import: >
+          sed '/^SET @@GLOBAL.GTID_PURGED/{:a;/;[[:space:]]*$/!{N;ba};d}' |
           $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot {{name}}
         export_all: >
           $(command -v mysqldump || command -v mariadb-dump) -h 127.0.0.1 -uroot
           --single-transaction --quick --no-tablespaces --routines --triggers --events
-          --add-drop-database --all-databases
+          --add-drop-database --all-databases --set-gtid-purged=OFF
         import_all: >
+          sed '/^SET @@GLOBAL.GTID_PURGED/{:a;/;[[:space:]]*$/!{N;ba};d}' |
           $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot

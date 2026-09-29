@@ -253,12 +253,12 @@ func TestSnapshotDumpCommand(t *testing.T) {
 		{
 			"mysql one database",
 			SnapshotTarget{Service: "mysql", Database: "myapp"},
-			`if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi; ( $(command -v mysqldump || command -v mariadb-dump) -h 127.0.0.1 -uroot --single-transaction --quick --no-tablespaces --routines --triggers --events myapp ) | gzip -c`,
+			`if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi; ( $(command -v mysqldump || command -v mariadb-dump) -h 127.0.0.1 -uroot --single-transaction --quick --no-tablespaces --routines --triggers --events --set-gtid-purged=OFF myapp ) | gzip -c`,
 		},
 		{
 			"mysql all databases",
 			SnapshotTarget{Service: "mysql", AllDatabases: true},
-			`if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi; ( $(command -v mysqldump || command -v mariadb-dump) -h 127.0.0.1 -uroot --single-transaction --quick --no-tablespaces --routines --triggers --events --add-drop-database --all-databases ) | gzip -c`,
+			`if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi; ( $(command -v mysqldump || command -v mariadb-dump) -h 127.0.0.1 -uroot --single-transaction --quick --no-tablespaces --routines --triggers --events --add-drop-database --all-databases --set-gtid-purged=OFF ) | gzip -c`,
 		},
 		{
 			"postgres one database",
@@ -299,12 +299,12 @@ func TestSnapshotRestoreCommand(t *testing.T) {
 		{
 			"mysql one database",
 			SnapshotTarget{Service: "mysql", Database: "myapp"},
-			`gunzip -c | ( $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot myapp )`,
+			`gunzip -c | ( sed '/^SET @@GLOBAL.GTID_PURGED/{:a;/;[[:space:]]*$/!{N;ba};d}' | $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot myapp )`,
 		},
 		{
 			"mysql all databases",
 			SnapshotTarget{Service: "mysql", AllDatabases: true},
-			`gunzip -c | ( $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot )`,
+			`gunzip -c | ( sed '/^SET @@GLOBAL.GTID_PURGED/{:a;/;[[:space:]]*$/!{N;ba};d}' | $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot )`,
 		},
 		{
 			"postgres one database",
