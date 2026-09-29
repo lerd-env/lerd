@@ -192,7 +192,7 @@ func (m *Model) renderDatabasesIn(style lipgloss.Style, w, h int) string {
 	if availRows < 1 {
 		availRows = 1
 	}
-	contentW := innerW - 1
+	contentW := innerW - 2 // a gap and the scrollbar
 	if contentW < 10 {
 		contentW = innerW
 	}

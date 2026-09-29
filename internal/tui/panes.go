@@ -210,7 +210,7 @@ func (m *Model) renderDatabasesView(width, topH int) string {
 	} else {
 		// Sized to its rows (marker, name, size, scrollbar), so the scrollbar
 		// sits against the sizes instead of floating in empty space.
-		listW := 2 + dbNameColWidth + 8 + 1
+		listW := 2 + dbNameColWidth + 8 + 2
 		list := strings.Split(zone.Mark("pane:databases", m.renderDatabasesIn(bareFrame, listW, bodyH)), "\n")
 		detail := strings.Split(zone.Mark("pane:detail", m.renderDetailIn(bareFrame, cw-listW-4, bodyH, m.focus == paneDetail)), "\n")
 		for i := 0; i < bodyH; i++ {
@@ -467,7 +467,7 @@ func (m *Model) renderSites(w, h int) string {
 		availRows = 1
 	}
 
-	contentW := innerW - 1
+	contentW := innerW - 2 // a gap and the scrollbar
 	if contentW < 10 {
 		contentW = innerW
 	}
@@ -634,7 +634,7 @@ func (m *Model) renderServices(w, h int) string {
 		availRows = 1
 	}
 
-	contentW := innerW - 1
+	contentW := innerW - 2 // a gap and the scrollbar
 	if contentW < 10 {
 		contentW = innerW
 	}
@@ -947,7 +947,7 @@ func (m *Model) renderLogsIn(style lipgloss.Style, w, h int, header []string) st
 	// contentW; scrollbar gets 1 cell. lipgloss.Width() is skipped here
 	// because it treats horizontal padding as part of the width budget,
 	// which makes our already-innerW-wide lines wrap to an extra row.
-	contentW := innerW - 1
+	contentW := innerW - 2 // a gap and the scrollbar
 	if contentW < 10 {
 		contentW = innerW
 	}
@@ -1042,7 +1042,7 @@ func renderScrollbar(height, total, start, visible int) []string {
 		// Nothing to scroll: leave the column blank rather than drawing a full
 		// track, which otherwise reads as a stray second border inside the box.
 		for i := range out {
-			out[i] = " "
+			out[i] = "  "
 		}
 		return out
 	}
@@ -1062,10 +1062,11 @@ func renderScrollbar(height, total, start, visible int) []string {
 	for i := 0; i < height; i++ {
 		// A thin thumb on a faint track: it says where you are without
 		// competing with the content, which a solid accent block did.
+		// One blank column keeps the bar off the content beside it.
 		if i >= thumbStart && i < thumbStart+thumbSize {
-			out[i] = dimStyle.Render("┃")
+			out[i] = " " + dimStyle.Render("┃")
 		} else {
-			out[i] = lipgloss.NewStyle().Foreground(colDivider).Render("│")
+			out[i] = " " + lipgloss.NewStyle().Foreground(colDivider).Render("│")
 		}
 	}
 	return out

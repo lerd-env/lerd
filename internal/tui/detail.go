@@ -529,7 +529,7 @@ func (m *Model) renderDetailInline(w, h int, focused bool) string {
 func (m *Model) renderDetailIn(style lipgloss.Style, w, h int, focused bool) string {
 	innerW, innerH := innerSize(style, w, h)
 
-	contentW := innerW - 1 // reserve 1 cell for scrollbar
+	contentW := innerW - 2 // a gap and the scrollbar
 
 	var content []string
 	cursorLine := 0
