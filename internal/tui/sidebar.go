@@ -367,7 +367,8 @@ func (m *Model) renderSidebar(w, h int) []string {
 		if !ok {
 			glyph, fg = bd(glyphFailing, colFailing), colFailing
 		}
-		foot = append(foot, item("core:"+c.name, []seg{glyph, sp("  "+c.name, nil)}, []seg{sp(word, fg)}))
+		// Same indent as the site and service rows, so the dots line up.
+		foot = append(foot, item("core:"+c.name, []seg{sp("  ", nil), glyph, sp("  "+c.name, nil)}, []seg{sp(word, fg)}))
 	}
 	foot = append(foot, blank)
 	listH := max(1, h-len(top)-len(foot))

@@ -73,3 +73,20 @@ func TestCoreTabIsNotInTheCtrlArrowCycle(t *testing.T) {
 		}
 	}
 }
+
+// The core rows' dots sit in the same column as the site and service dots.
+func TestCoreRowsAlignWithTheListAbove(t *testing.T) {
+	m := coreModel()
+	lines := strings.Split(ansi.Strip(strings.Join(m.renderSidebar(34, 30), "\n")), "\n")
+	col := func(name string) int {
+		for _, l := range lines {
+			if strings.Contains(l, " "+name) {
+				return strings.IndexAny(l, "●○✖")
+			}
+		}
+		return -1
+	}
+	if a, b := col("mysql"), col("dns"); a < 0 || a != b {
+		t.Fatalf("dns dot at column %d, mysql dot at %d", b, a)
+	}
+}
