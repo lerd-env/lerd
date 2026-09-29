@@ -44,7 +44,7 @@ func databasesModel() *Model {
 
 func TestDatabasesPane_ListsEnginesWithTheirDatabases(t *testing.T) {
 	m := databasesModel()
-	out := stripANSI(m.renderDatabases(60, 20))
+	out := stripANSI(m.renderDatabasesIn(bareFrame, 60, 20))
 	for _, want := range []string{"mysql", "shop", "shop_staging", "5MB", "postgres", "stopped"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("expected %q in the databases pane:\n%s", want, out)
@@ -56,7 +56,7 @@ func TestDatabasesPane_EmptyStatePointsAtThePreset(t *testing.T) {
 	m := NewModel("test")
 	m.activeTab = tabDatabases
 	m.dbLoaded = true
-	out := stripANSI(m.renderDatabases(60, 20))
+	out := stripANSI(m.renderDatabasesIn(bareFrame, 60, 20))
 	if !strings.Contains(out, "no database engine installed") || !strings.Contains(out, "lerd service preset mysql") {
 		t.Errorf("expected an empty state that says what to do:\n%s", out)
 	}
@@ -183,7 +183,7 @@ func TestDatabasesPane_ScrollsToTheSelectedRow(t *testing.T) {
 	}
 	m.dbEngines = []dbview.Engine{{Service: "mysql", Running: true, Databases: many}}
 	m.setCursor(1 << 30)
-	out := stripANSI(m.renderDatabases(60, 12))
+	out := stripANSI(m.renderDatabasesIn(bareFrame, 60, 12))
 	if !strings.Contains(out, "db39") {
 		t.Errorf("expected the pane to scroll to the selected last row:\n%s", out)
 	}

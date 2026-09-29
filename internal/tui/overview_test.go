@@ -161,20 +161,6 @@ func TestHopDetailColumn_ClampsAndNoOps(t *testing.T) {
 	}
 }
 
-func TestJoinInfo_PacksFactsUntilTheyStopFitting(t *testing.T) {
-	got := joinInfo([]string{"aaa", "bbb", "ccc"}, 100)
-	if len(got) != 1 {
-		t.Fatalf("facts that fit should share one line, got %v", got)
-	}
-	got = joinInfo([]string{"aaa", "bbb", "ccc"}, 8)
-	if len(got) < 2 {
-		t.Fatalf("facts that don't fit should wrap, got %v", got)
-	}
-	if len(joinInfo([]string{"", ""}, 40)) != 0 {
-		t.Error("empty facts should produce no lines")
-	}
-}
-
 func TestTimingCols_DropsAColumnRatherThanStarveTheBlocks(t *testing.T) {
 	if got := timingCols(3*timingMinBlockWidth + 2*overviewGutter); got != 3 {
 		t.Errorf("a pane wide enough for three blocks should use three, got %d", got)

@@ -67,19 +67,18 @@ func TestWorkerRows_MarksIdleSuspended(t *testing.T) {
 	}
 }
 
-func TestRenderServiceRow_OmitsSiteCount(t *testing.T) {
-	// The site count moved to the service detail pane, so neither worker nor
-	// plain service rows carry it in the list anymore.
-	worker := stripANSI(renderServiceRow(false, ServiceRow{Name: "queue-acme", WorkerKind: "queue", SiteCount: 1, State: stateRunning}, 80))
-	if strings.Contains(worker, "site") {
-		t.Errorf("worker row should not show a site count, got %q", worker)
+func TestSidebarServiceRow_OmitsSiteCount(t *testing.T) {
+	// The site count lives in the service view; a sidebar row carries the
+	// name and version only.
+	m := NewModel("test")
+	m.width, m.height = 160, 40
+	m.snap.Services = []ServiceRow{{Name: "mysql", SiteCount: 3, State: stateRunning, Version: "8.0"}}
+	out := stripANSI(strings.Join(m.renderSidebar(34, 30), "\n"))
+	if !strings.Contains(out, "mysql") || !strings.Contains(out, "8.0") {
+		t.Errorf("service row should show its name and version:\n%s", out)
 	}
-	svc := stripANSI(renderServiceRow(false, ServiceRow{Name: "mysql", SiteCount: 3, State: stateRunning, Version: "8.0"}, 80))
-	if strings.Contains(svc, "site") {
-		t.Errorf("service row should no longer show a site count, got %q", svc)
-	}
-	if !strings.Contains(svc, "8.0") {
-		t.Errorf("service row should still show its version, got %q", svc)
+	if strings.Contains(out, "3 site") {
+		t.Errorf("service row should not show a site count:\n%s", out)
 	}
 }
 

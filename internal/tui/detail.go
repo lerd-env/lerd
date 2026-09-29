@@ -517,13 +517,6 @@ func workerLabel(s *siteinfo.EnrichedSite, name string) string {
 	return name
 }
 
-// renderDetailInline builds the right-column pane: full-height site detail
-// by default, or the global settings rows when detailMode == detailSettings.
-// Both live in the same pane so `S` is a toggle, not a separate screen.
-func (m *Model) renderDetailInline(w, h int, focused bool) string {
-	return m.renderDetailIn(paneStyle(focused), w, h, focused)
-}
-
 // renderDetailIn draws the detail content inside style, which is a bordered
 // pane for services and databases and a bare frame inside the site view.
 func (m *Model) renderDetailIn(style lipgloss.Style, w, h int, focused bool) string {
@@ -704,32 +697,6 @@ func siteGroupLine(m *Model, site *siteinfo.EnrichedSite) string {
 		noun = "secondary"
 	}
 	return fmt.Sprintf("group: main · %d %s", n, noun)
-}
-
-// siteRuntimeLine is the one-liner of versions: PHP, Node, framework, runtime, branch.
-func siteRuntimeLine(site *siteinfo.EnrichedSite) string {
-	php := site.PHPVersion
-	if php == "" && site.ContainerPort > 0 {
-		php = "custom"
-	}
-	info := dimStyle.Render("php: ") + php
-	if site.NodeVersion != "" {
-		info += dimStyle.Render("  node: ") + site.NodeVersion
-	}
-	if site.FrameworkLabel != "" {
-		info += dimStyle.Render("  fw: ") + site.FrameworkLabel
-	}
-	if site.Runtime == "frankenphp" {
-		rt := "frankenphp"
-		if site.RuntimeWorker {
-			rt = "frankenphp (worker)"
-		}
-		info += dimStyle.Render("  runtime: ") + accentStyle.Render(rt)
-	}
-	if site.Branch != "" {
-		info += dimStyle.Render("  git: ") + site.Branch
-	}
-	return info
 }
 
 func overviewDomains(m *Model, site *siteinfo.EnrichedSite, rows []detailRow, sel func(int) bool, scheme string, w int) []ovSection {

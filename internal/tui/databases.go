@@ -172,12 +172,6 @@ func (m *Model) currentDatabase() (*dbview.Engine, *dbview.Entry) {
 	return eng, &eng.Databases[row.database]
 }
 
-// renderDatabases draws the engines list: a header per engine, then its
-// databases with size, owning site and snapshot count.
-func (m *Model) renderDatabases(w, h int) string {
-	return m.renderDatabasesIn(paneStyle(m.focus == paneDatabases), w, h)
-}
-
 func (m *Model) renderDatabasesIn(style lipgloss.Style, w, h int) string {
 	innerW, innerH := innerSize(style, w, h)
 

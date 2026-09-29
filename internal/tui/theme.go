@@ -56,27 +56,6 @@ var (
 	helpStyle        = lipgloss.NewStyle().Foreground(colDim)
 )
 
-// Footer key-hint styles. Navigation/view keys stay in the main accent colour
-// so movement reads as one family; keys that act on something (start, stop,
-// toggle, heal, …) are amber so destructive/mutating shortcuts stand apart at
-// a glance. Labels stay dim so the coloured key is what the eye catches.
-var (
-	footNavKeyStyle    = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
-	footActionKeyStyle = lipgloss.NewStyle().Foreground(colPaused).Bold(true)
-	footLabelStyle     = lipgloss.NewStyle().Foreground(colDim)
-)
-
-// Top tab bar styles. The active tab reads as a filled accent pill so it
-// stands out as the current screen; inactive tabs sit dim until hovered or
-// clicked. Both keep the same padding so the bar's hit regions line up.
-var (
-	tabActiveStyle   = lipgloss.NewStyle().Bold(true).Foreground(onAccent).Background(colAccent).Padding(0, 2)
-	tabInactiveStyle = lipgloss.NewStyle().Foreground(colDim).Padding(0, 2)
-	// A blank row above the tabs keeps the active pill off the terminal's own
-	// top chrome (tmux/term tab line) instead of butting right against it.
-	tabBarStyle = lipgloss.NewStyle().Padding(1, 1, 0, 1)
-)
-
 const (
 	glyphRunning     = "●"
 	glyphStopped     = "○"
@@ -124,9 +103,6 @@ func applyBackground(dark bool) {
 	unfocusedPane = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colDivider).Padding(0, 1)
 	stoppedStyle = lipgloss.NewStyle().Foreground(colStopped)
 	helpStyle = lipgloss.NewStyle().Foreground(colDim)
-	footLabelStyle = lipgloss.NewStyle().Foreground(colDim)
-	tabActiveStyle = lipgloss.NewStyle().Bold(true).Foreground(onAccent).Background(colAccent).Padding(0, 2)
-	tabInactiveStyle = lipgloss.NewStyle().Foreground(colDim).Padding(0, 2)
 	keyChipStyle = lipgloss.NewStyle().Background(colAccent).Foreground(onAccent).Bold(true).Padding(0, 1)
 	keyChipLabelStyle = lipgloss.NewStyle().Foreground(colDim)
 

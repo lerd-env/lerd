@@ -126,18 +126,6 @@ func (m *Model) enqueueToastForResult(r ActionResult) {
 	m.enqueueToast(toastSuccess, r.Summary, "")
 }
 
-// renderToasts returns the right-aligned stack of toast banners to insert
-// above the footer. Empty string when no toasts are active so the caller
-// can skip the section entirely.
-func (m *Model) renderToasts(width int) string {
-	if len(m.toasts) == 0 {
-		return ""
-	}
-	// Right-align the raw stack within the full width. Used by the modal
-	// path, which stacks toasts as a section rather than compositing them.
-	return lipgloss.PlaceHorizontal(width, lipgloss.Right, m.toastStack())
-}
-
 // toastStack returns the raw toast boxes joined vertically with no horizontal
 // placement, so the overlay compositor can anchor each line to the right edge
 // itself without painting full-width blank rows over the content beneath.

@@ -57,30 +57,6 @@ func TestPadRight_UsesRuneCount(t *testing.T) {
 	}
 }
 
-func TestRenderSiteRow_AlignsPHPColumn(t *testing.T) {
-	// Two sites with different worker load should produce rows where the
-	// PHP column starts at the same visual column — the bug that prompted
-	// siteWorkerColWidth. We can't easily measure visual column directly,
-	// but we can assert that the two rows have the same display width.
-	s1 := siteinfo.EnrichedSite{Name: "a", PHPVersion: "8.3", HasQueueWorker: true, QueueRunning: true}
-	s2 := siteinfo.EnrichedSite{Name: "b", PHPVersion: "8.3"}
-	r1 := renderSiteRow(false, s1, 60)
-	r2 := renderSiteRow(false, s2, 60)
-	if w1, w2 := ansi.StringWidth(r1), ansi.StringWidth(r2); w1 != w2 {
-		t.Fatalf("rows of equal pane width should have equal display width, got %d vs %d", w1, w2)
-	}
-}
-
-func TestRenderServiceRow_AlignsMetaColumn(t *testing.T) {
-	s1 := ServiceRow{Name: "mysql", State: stateRunning, SiteCount: 2, Pinned: true}
-	s2 := ServiceRow{Name: "redis", State: stateStopped, SiteCount: 1}
-	r1 := renderServiceRow(false, s1, 60)
-	r2 := renderServiceRow(false, s2, 60)
-	if w1, w2 := ansi.StringWidth(r1), ansi.StringWidth(r2); w1 != w2 {
-		t.Fatalf("service rows of equal pane width should have equal display width, got %d vs %d", w1, w2)
-	}
-}
-
 func TestFilterBar_ActiveShowsCursor(t *testing.T) {
 	got := filterBar("beta", true)
 	if !strings.HasSuffix(got, "▌") {
@@ -185,16 +161,5 @@ func TestCountFailingWorkers_ZeroWhenAllHealthy(t *testing.T) {
 	}
 	if got := len(failingWorkerNames(snap)); got != 0 {
 		t.Errorf("failingWorkerNames count = %d, want 0", got)
-	}
-}
-
-func TestRenderServiceRow_MarksServicesWithADashboard(t *testing.T) {
-	withDash := stripANSI(renderServiceRow(false, ServiceRow{Name: "mailpit", Dashboard: "http://localhost:8025"}, 60))
-	if !strings.Contains(withDash, "web") {
-		t.Errorf("expected a dashboard marker on the row: %q", withDash)
-	}
-	plain := stripANSI(renderServiceRow(false, ServiceRow{Name: "redis"}, 60))
-	if strings.Contains(plain, "web") {
-		t.Errorf("a service without a dashboard should carry no marker: %q", plain)
 	}
 }

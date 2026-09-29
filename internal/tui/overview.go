@@ -1,7 +1,5 @@
 package tui
 
-import "github.com/charmbracelet/x/ansi"
-
 // The site Overview lays out as a grid. A section either takes the whole pane
 // width or pairs with the next half-width section, so Services sits beside
 // Workers and Domains beside Toggles rather than stacking into a column twice as
@@ -245,31 +243,6 @@ func columnize(blocks [][]string, innerW int) []string {
 			row += padToWidth(clipLine(cell, colW), colW)
 		}
 		out = append(out, padToWidth(row, innerW))
-	}
-	return out
-}
-
-// joinInfo packs the identity facts onto as few lines as the width allows, so a
-// wide pane doesn't spend five rows on one fact each.
-func joinInfo(parts []string, w int) []string {
-	var out []string
-	cur := ""
-	for _, p := range parts {
-		if p == "" {
-			continue
-		}
-		switch {
-		case cur == "":
-			cur = p
-		case ansi.StringWidth(cur)+ansi.StringWidth(p)+3 <= w:
-			cur += "   " + p
-		default:
-			out = append(out, cur)
-			cur = p
-		}
-	}
-	if cur != "" {
-		out = append(out, cur)
 	}
 	return out
 }
