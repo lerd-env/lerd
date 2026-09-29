@@ -111,6 +111,9 @@ func (m *Model) render() string {
 		}
 	}
 
+	if m.quickActive {
+		lines = m.withQuickOverlay(lines)
+	}
 	out := strings.Join(lines, "\n")
 	// Composite toasts over the bottom-right, just above the hint line, without
 	// having reserved any rows for them above.
@@ -350,7 +353,7 @@ func act(key, label string) footChip { return footChip{key, label, true} }
 // narrow hint line can drop from the end.
 func (m *Model) footChips() []footChip {
 	if m.sideFocus {
-		chips := []footChip{nav("↑↓", "move"), nav("enter", "open"), nav("/", "filter"), nav("tab", "main"), nav(":", "commands"), nav("?", "help"), act("q", "quit")}
+		chips := []footChip{nav("↑↓", "move"), nav("enter", "open"), nav("ctrl+p", "go to or do"), nav("/", "filter"), nav("tab", "main"), nav(":", "commands"), nav("?", "help"), act("q", "quit")}
 		if m.sideOverlay {
 			chips = append([]footChip{nav("\\", "close")}, chips...)
 		}

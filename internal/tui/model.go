@@ -244,6 +244,10 @@ type Model struct {
 	// pane; commits as `lerd <args>` via runLerd.
 	paletteActive bool
 	paletteInput  string
+	// ctrl+p palette: fuzzy places and reversible actions over the screen.
+	quickActive bool
+	quickQuery  string
+	quickCursor int
 	// paletteDir is where the next palette command runs; empty means the TUI's
 	// own working directory. Set by shortcuts that open the palette for a site.
 	paletteDir string
@@ -504,6 +508,9 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.paletteActive {
 		return m.handlePaletteKey(msg)
 	}
+	if m.quickActive {
+		return m.handleQuickKey(msg)
+	}
 	if m.helpModalActive {
 		return m.handleHelpModalKey(msg)
 	}
@@ -525,6 +532,10 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.domainInputActive {
 		return m.handleDomainInputKey(msg)
+	}
+	if msg.String() == "ctrl+p" && !m.modalActive() {
+		m.openQuick()
+		return m, nil
 	}
 	if cmd, handled := m.handleSidebarKey(msg); handled {
 		return m, cmd
@@ -1299,7 +1310,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// base frame. Swallow mouse input here (mirroring handleMainKey, which routes
 	// through the modal handlers before any pane action) so a stray click can't
 	// switch tabs, move a cursor, or silently dismiss a half-finished picker.
-	if m.modalActive() {
+	if m.modalActive() || m.quickActive {
 		return m, nil
 	}
 	if _, ok := msg.(tea.MouseWheelMsg); ok {

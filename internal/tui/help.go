@@ -122,6 +122,7 @@ var helpReference = []helpSection{
 			{"S", "swap the detail pane for global Settings (LAN expose, autostart, Xdebug) — Sites tab"},
 			{"Y", "swap the detail pane for the System overview (DNS, Nginx, Watcher, PHP, Node, Lerd) — Sites tab"},
 			{"D", "open the Debug window (dumps, queries with N+1, jobs, mail, …) — Sites tab"},
+			{"ctrl+p", "go to any site, service or worktree, or run a quick action"},
 			{"?", "swap the detail pane for this help reference"},
 			{"esc", "close picker or return to site detail"},
 		},
