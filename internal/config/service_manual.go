@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/geodro/lerd/internal/envfile"
@@ -59,11 +60,11 @@ func CountSitesUsingPHP(version string) int {
 	return count
 }
 
-// SitesUsingService returns the active (non-ignored, non-paused) sites whose
-// .lerd.yaml lists the service or whose env file references lerd-{name}. The
-// env file is the one the framework declares, so a project keeping its
-// configuration in wp-config.php or app/etc/env.php counts the same as one
-// keeping it in .env.
+// SitesUsingService returns the active (non-ignored, non-paused) sites lerd env
+// wired to the service, whose .lerd.yaml lists it, or whose env file references
+// lerd-{name}. The env file is the one the framework declares, so a project
+// keeping its configuration in wp-config.php or app/etc/env.php counts the same
+// as one keeping it in .env.
 func SitesUsingService(name string) []Site {
 	reg, err := LoadSites()
 	if err != nil {
@@ -73,6 +74,12 @@ func SitesUsingService(name string) []Site {
 	var out []Site
 	for _, s := range reg.Sites {
 		if s.Ignored || s.Paused {
+			continue
+		}
+		// A loopback runtime rewrites the host to 127.0.0.1, so a site's env
+		// stops naming the container and only lerd's own record still does.
+		if slices.Contains(s.WiredServices, name) {
+			out = append(out, s)
 			continue
 		}
 		if proj, pErr := LoadProjectConfig(s.Path); pErr == nil {

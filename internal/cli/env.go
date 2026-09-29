@@ -6,9 +6,11 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -922,6 +924,11 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	// The custom services in play for this project: listed in .lerd.yaml (or
 	// externally managed), or matched by their own env_detect. Resolved before the
 	// framework loop, which has to know which of its roles a drop-in has taken over.
+	// The services whose connection this run writes, recorded on the site once
+	// the env is written. Externally managed ones are left out: the site is on
+	// someone else's server, not lerd's container.
+	wired := map[string]bool{}
+
 	customs, _ := config.ListCustomServices()
 	var pickedCustoms []*config.CustomService
 	customFromYAML := make(map[string]bool, len(customs))
@@ -971,6 +978,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			if externalManaged(svc, extServices) {
 				continue
 			}
+			wired[svc] = true
 			if isDB {
 				if err := ensureServiceRunning(svc); err != nil {
 					provisionErrs = append(provisionErrs, fmt.Errorf("%s did not start, so its databases were not created: %w", svc, err))
@@ -1050,6 +1058,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			if externalManaged(svc, extServices) {
 				continue
 			}
+			wired[svc] = true
 
 			if isDB {
 				if err := ensureServiceRunning(svc); err != nil {
@@ -1185,6 +1194,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		if externalManaged(svc.Name, extServices) {
 			continue
 		}
+		wired[svc.Name] = true
 		if err := ensureServiceRunning(svc.Name); err != nil {
 			if isDB {
 				provisionErrs = append(provisionErrs, fmt.Errorf("%s did not start, so its databases were not created: %w", svc.Name, err))
@@ -1308,6 +1318,13 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		writeErr := envfile.ApplyUpdatesIn(envPath, envFormat, updates)
 		if writeErr != nil {
 			return fmt.Errorf("writing %s: %w", envRelPath, writeErr)
+		}
+	}
+	// A worktree resolves to its parent site, whose record this run must not
+	// overwrite with the worktree's own wiring.
+	if config.SamePath(cwd, site.Path) {
+		if err := config.SetSiteWiredServices(site.Name, slices.Sorted(maps.Keys(wired))); err != nil {
+			feedback.Warn("could not record the services wired into %s: %v", site.Name, err)
 		}
 	}
 
