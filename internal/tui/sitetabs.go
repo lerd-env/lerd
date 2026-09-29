@@ -206,6 +206,8 @@ func (m *Model) siteLogsActive() bool {
 // sub-pane beneath the service detail: any time a service or worker row is
 // selected on that tab. The streaming tail is fed by the same logTail the
 // manual `l` pane uses, retargeted by syncLogs as the selection moves.
+func (m *Model) coreLogsActive() bool { return m.activeTab == tabCore }
+
 func (m *Model) serviceLogsActive() bool {
 	return m.activeTab == tabServices && m.currentService() != nil && m.svcTab == svcTabLogs
 }
@@ -215,7 +217,7 @@ func (m *Model) serviceLogsActive() bool {
 // can't be drawn twice, and syncLogs so it keeps retargeting the tail as the
 // selection moves even when that pane is closed.
 func (m *Model) logsInDetail() bool {
-	return m.siteLogsActive() || m.serviceLogsActive()
+	return m.siteLogsActive() || m.serviceLogsActive() || m.coreLogsActive()
 }
 
 // readBoundedFile reads up to max bytes of path. Used for the env reader so

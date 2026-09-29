@@ -190,6 +190,9 @@ func (m *Model) renderBody(width, topH int) string {
 	if m.activeTab == tabServices {
 		return m.renderServiceView(width, topH)
 	}
+	if m.activeTab == tabCore {
+		return m.renderCoreView(width, topH)
+	}
 
 	// Databases keeps its own list beside the detail until it gets its own view.
 	if width < narrowWidth {
@@ -345,6 +348,8 @@ func (m *Model) footChips() []footChip {
 		return append(chips, nav("?", "help"))
 	case tabDatabases:
 		return []footChip{nav("↑↓", "nav"), nav("tab", "panes"), act("n", "snapshot"), act("R", "refresh"), nav("?", "help")}
+	case tabCore:
+		return []footChip{back, nav("↑↓", "scroll"), act("s", "start lerd"), nav("?", "help")}
 	}
 	if len(timingScopes(m.currentSite())) > 1 {
 		return []footChip{back, nav("1-5", "tabs"), nav("b", "worktree"), nav("↑↓", "nav"), act("space", "toggle"), act("s", "start"), act("x", "stop"), act("r", "restart"), nav("l", "logs"),

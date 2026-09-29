@@ -60,6 +60,9 @@ const (
 	tabSites
 	tabServices
 	tabDatabases
+	// tabCore shows one of lerd's own processes (dns, nginx, the watcher). It
+	// is reached from the sidebar footer and stays out of the ctrl+arrow cycle.
+	tabCore
 )
 
 func (t topTab) label() string {
@@ -279,6 +282,7 @@ type Model struct {
 	stats stats.Snapshot
 
 	svcTab     int       // service view tab: svcTabOverview or svcTabLogs
+	coreName   string    // the lerd process shown on tabCore: dns, nginx or watcher
 	dashCursor int       // selected Needs-attention card
 	cpuHist    []float64 // recent total CPU samples for the dashboard sparkline
 
@@ -529,6 +533,9 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	if cmd, handled := m.handleServiceKey(msg); handled {
+		return m, cmd
+	}
+	if cmd, handled := m.handleCoreKey(msg); handled {
 		return m, cmd
 	}
 	switch msg.String() {
@@ -1724,6 +1731,10 @@ func (m *Model) currentLogTargets() []LogTarget {
 			}}
 		}
 		return []LogTarget{{Kind: kindPodman, ID: "lerd-" + svc.Name, Label: svc.Name}}
+	case tabCore:
+		if c, ok := coreByName(m.coreName); ok {
+			return []LogTarget{c.logs}
+		}
 	}
 	return nil
 }

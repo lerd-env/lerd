@@ -48,7 +48,7 @@ func sideKeys(items []sideItem) []string {
 func TestSideItemsGroupSitesByWorkspaceInConfigOrder(t *testing.T) {
 	m := sidebarModel()
 	got := strings.Join(sideKeys(m.sideItems()), " ")
-	want := "dash dbs ws:studio site:blog ws:acme site:api site:shop site:loose svc:mysql svc:redis"
+	want := "dash dbs ws:studio site:blog ws:acme site:api site:shop site:loose svc:mysql svc:redis core:dns core:nginx core:watcher"
 	if got != want {
 		t.Fatalf("sidebar order\n got %s\nwant %s", got, want)
 	}
@@ -86,7 +86,7 @@ func TestSideMoveSelectsSiteAndSwitchesTab(t *testing.T) {
 	if s := m.currentSite(); s == nil || s.Name != "blog" {
 		t.Fatalf("current site = %+v, want blog", s)
 	}
-	m.sideMove(10)
+	m.sideMove(6) // blog -> acme, api, shop, loose, mysql, redis
 	if m.activeTab != tabServices || m.currentService().Name != "redis" {
 		t.Fatalf("moving past the sites should land on the last service, got tab %v", m.activeTab)
 	}

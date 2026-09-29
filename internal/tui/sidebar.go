@@ -23,6 +23,7 @@ const (
 	sideWorkspace
 	sideSite
 	sideService
+	sideCore
 	sideHeader
 	sideBlank
 )
@@ -72,6 +73,9 @@ func (m *Model) sideItems() []sideItem {
 		}
 		items = append(items, sideItem{kind: sideService, key: "svc:" + s.Name, idx: i})
 	}
+	for _, c := range coreProcesses {
+		items = append(items, sideItem{kind: sideCore, key: "core:" + c.name, text: c.name})
+	}
 	return items
 }
 
@@ -80,6 +84,8 @@ func (m *Model) sideKeyFromState() string {
 	switch m.activeTab {
 	case tabDatabases:
 		return "dbs"
+	case tabCore:
+		return "core:" + m.coreName
 	case tabSites:
 		if s := m.currentSite(); s != nil {
 			return "site:" + s.Name
@@ -156,6 +162,9 @@ func (m *Model) sideSelect(it sideItem) {
 			m.detailCursor = 0
 			m.closePicker()
 		}
+	case sideCore:
+		m.switchTab(tabCore)
+		m.coreName = it.text
 	case sideService:
 		m.switchTab(tabServices)
 		if m.svcCursor != it.idx {
@@ -194,7 +203,7 @@ func (m *Model) focusMain() {
 	switch m.activeTab {
 	case tabDatabases:
 		m.focus = paneDatabases
-	case tabSites, tabServices, tabDashboard:
+	case tabSites, tabServices, tabDashboard, tabCore:
 		m.focus = paneDetail
 	}
 }
@@ -346,12 +355,21 @@ func (m *Model) renderSidebar(w, h int) []string {
 			list = append(list, item(it.key, []seg{sp("  ", nil), serviceGlyph(s.State), sp("  "+s.Name, nil)}, tag))
 		}
 	}
-	// Dashboard and Databases sit in the fixed top, outside the scrolling list.
-	if m.sideKey == "dash" || m.sideKey == "dbs" {
+	// Dashboard, Databases and the core rows sit outside the scrolling list.
+	if m.sideKey == "dash" || m.sideKey == "dbs" || strings.HasPrefix(m.sideKey, "core:") {
 		cursorLine = -1
 	}
 
-	foot := []string{blank, m.sideHealthRow(w, slim), blank}
+	foot := []string{blank}
+	for _, c := range coreProcesses {
+		ok, word := c.state(m.snap.Status)
+		glyph, fg := sp(glyphRunning, colRunning), colDim
+		if !ok {
+			glyph, fg = bd(glyphFailing, colFailing), colFailing
+		}
+		foot = append(foot, item("core:"+c.name, []seg{glyph, sp("  "+c.name, nil)}, []seg{sp(word, fg)}))
+	}
+	foot = append(foot, blank)
 	listH := max(1, h-len(top)-len(foot))
 	follow := -1
 	if m.followCursor {
@@ -407,21 +425,6 @@ func (m *Model) sideFilterRow(key string, w int) string {
 		cursor = "▏"
 	}
 	return row(surf.s1, w, sp("  / ", colAccent), sp(text, nil), sp(cursor, colAccent))
-}
-
-func (m *Model) sideHealthRow(w int, slim bool) string {
-	dot := func(ok bool) seg {
-		if ok {
-			return sp(glyphRunning, colRunning)
-		}
-		return bd(glyphFailing, colFailing)
-	}
-	gap := "   "
-	if slim {
-		gap = " "
-	}
-	st := m.snap.Status
-	return row(surf.s1, w, sp("  ", nil), dot(st.DNSOk || st.DNSDisabled), sp(" dns"+gap, colDim), dot(st.NginxRunning), sp(" nginx"+gap, colDim), dot(st.WatcherRunning), sp(" watcher", colDim))
 }
 
 // sideWidth is how many columns the sidebar covers right now, counting the
