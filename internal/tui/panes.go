@@ -194,17 +194,36 @@ func (m *Model) renderBody(width, topH int) string {
 		return m.renderCoreView(width, topH)
 	}
 
-	// Databases keeps its own list beside the detail until it gets its own view.
-	if width < narrowWidth {
-		listH := clamp(topH*2/5, 6, max(6, topH-6))
-		list := zone.Mark("pane:databases", m.renderDatabases(width, listH))
-		detail := m.renderDetailColumn(width, topH-listH, m.focus == paneDetail)
-		return lipgloss.JoinVertical(lipgloss.Left, list, detail)
+	return m.renderDatabasesView(width, topH)
+}
+
+// renderDatabasesView is the databases list beside the selected database's
+// detail, borderless under a breadcrumb; the two stack on a narrow pane.
+func (m *Model) renderDatabasesView(width, topH int) string {
+	cw := m.contentWidth(width)
+	bodyH := max(4, topH-3)
+	var body []string
+	if cw < 90 {
+		listH := clamp(bodyH*2/5, 4, max(4, bodyH-4))
+		body = append(strings.Split(zone.Mark("pane:databases", m.renderDatabasesIn(bareFrame, cw, listH)), "\n"),
+			strings.Split(zone.Mark("pane:detail", m.renderDetailIn(bareFrame, cw, bodyH-listH, m.focus == paneDetail)), "\n")...)
+	} else {
+		listW := clamp(cw*2/5, 56, 64)
+		list := strings.Split(zone.Mark("pane:databases", m.renderDatabasesIn(bareFrame, listW, bodyH)), "\n")
+		detail := strings.Split(zone.Mark("pane:detail", m.renderDetailIn(bareFrame, cw-listW-4, bodyH, m.focus == paneDetail)), "\n")
+		for i := 0; i < bodyH; i++ {
+			l, d := "", ""
+			if i < len(list) {
+				l = list[i]
+			}
+			if i < len(detail) {
+				d = detail[i]
+			}
+			body = append(body, padToWidth(l, listW)+row(nil, 4)+padToWidth(d, cw-listW-4))
+		}
 	}
-	leftW := clamp(width/4, 28, min(46, width-30))
-	left := zone.Mark("pane:databases", m.renderDatabases(leftW, topH))
-	detail := m.renderDetailColumn(width-leftW, topH, m.focus == paneDetail)
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, detail)
+	count := []seg{sp(fmt.Sprintf("%d databases", len(navigableDBRows(m.dbRows()))), colDim)}
+	return m.renderFramed(width, topH, []string{"Databases"}, count, strings.Join(body, "\n"))
 }
 
 // renderDetailColumn renders the right-hand detail surface. The site Logs tab

@@ -1420,6 +1420,11 @@ func (m *Model) handleWheel(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		m.scrollOffset(&m.detailScroll, delta)
 		return m, nil
 	}
+	if zone.Get("pane:databases").InBounds(msg) {
+		m.followCursor = false
+		m.scrollOffset(&m.dbScroll, delta)
+		return m, nil
+	}
 	if zone.Get("pane:sites").InBounds(msg) {
 		m.scrollOffset(&m.siteScroll, delta)
 		return m, nil
@@ -1434,6 +1439,8 @@ func (m *Model) handleWheel(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		m.scrollOffset(&m.siteScroll, delta)
 	case paneServices:
 		m.scrollOffset(&m.svcScroll, delta)
+	case paneDatabases:
+		m.scrollOffset(&m.dbScroll, delta)
 	case paneDetail:
 		m.scrollOffset(&m.detailScroll, delta)
 	}

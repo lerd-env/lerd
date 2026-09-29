@@ -57,7 +57,7 @@ func TestDatabasesPane_EmptyStatePointsAtThePreset(t *testing.T) {
 	m.activeTab = tabDatabases
 	m.dbLoaded = true
 	out := stripANSI(m.renderDatabases(60, 20))
-	if !strings.Contains(out, "no database engine installed") || !strings.Contains(out, "lerd preset install mysql") {
+	if !strings.Contains(out, "no database engine installed") || !strings.Contains(out, "lerd service preset mysql") {
 		t.Errorf("expected an empty state that says what to do:\n%s", out)
 	}
 }

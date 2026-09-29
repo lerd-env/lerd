@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"charm.land/lipgloss/v2"
 	"fmt"
 	"os"
 	"strings"
@@ -98,19 +99,49 @@ func (m *Model) reloadDatabases() tea.Cmd {
 type dbRow struct {
 	engine   int
 	database int
+	testing  int // index of the folded "<name>_testing" sibling, -1 when none
 }
 
 // dbRows flattens the loaded engines into the row order the pane renders, so
-// the cursor and the drawing walk exactly the same list.
+// the cursor and the drawing walk exactly the same list. A "<name>_testing"
+// database folds into the row of "<name>", as the web UI folds it into that
+// card; one whose app database is missing keeps a row of its own.
 func (m *Model) dbRows() []dbRow {
 	var rows []dbRow
 	for ei, eng := range m.dbEngines {
-		rows = append(rows, dbRow{engine: ei, database: -1})
-		for di := range eng.Databases {
-			rows = append(rows, dbRow{engine: ei, database: di})
+		rows = append(rows, dbRow{engine: ei, database: -1, testing: -1})
+		index := make(map[string]int, len(eng.Databases))
+		for di, db := range eng.Databases {
+			index[db.Name] = di
+		}
+		for di, db := range eng.Databases {
+			if base, ok := strings.CutSuffix(db.Name, dbview.TestingSuffix); ok {
+				if _, paired := index[base]; paired {
+					continue
+				}
+			}
+			testing := -1
+			if ti, ok := index[db.Name+dbview.TestingSuffix]; ok {
+				testing = ti
+			}
+			rows = append(rows, dbRow{engine: ei, database: di, testing: testing})
 		}
 	}
 	return rows
+}
+
+// currentTestingDatabase is the testing database folded into the selection.
+func (m *Model) currentTestingDatabase() *dbview.Entry {
+	rows := m.dbRows()
+	nav := navigableDBRows(rows)
+	if len(nav) == 0 {
+		return nil
+	}
+	row := rows[nav[clamp(m.dbCursor, 0, len(nav)-1)]]
+	if row.testing < 0 {
+		return nil
+	}
+	return &m.dbEngines[row.engine].Databases[row.testing]
 }
 
 // navigableDBRows returns the positions of the database rows, the ones the
@@ -142,13 +173,20 @@ func (m *Model) currentDatabase() (*dbview.Engine, *dbview.Entry) {
 // renderDatabases draws the engines list: a header per engine, then its
 // databases with size, owning site and snapshot count.
 func (m *Model) renderDatabases(w, h int) string {
-	style := paneStyle(m.focus == paneDatabases)
+	return m.renderDatabasesIn(paneStyle(m.focus == paneDatabases), w, h)
+}
+
+func (m *Model) renderDatabasesIn(style lipgloss.Style, w, h int) string {
 	innerW, innerH := innerSize(style, w, h)
 
 	rows := m.dbRows()
 	nav := navigableDBRows(rows)
-	title := fmt.Sprintf("Databases (%d)", len(nav))
-	lines := []string{padToWidth(clipLine(sectionStyle.Render(title), innerW), innerW)}
+	// The bordered pane titles itself; inside the view the breadcrumb does.
+	var lines []string
+	if style.GetHorizontalFrameSize() > 0 {
+		title := fmt.Sprintf("Databases (%d)", len(nav))
+		lines = []string{padToWidth(clipLine(sectionStyle.Render(title), innerW), innerW)}
+	}
 
 	availRows := innerH - len(lines)
 	if availRows < 1 {
@@ -168,7 +206,7 @@ func (m *Model) renderDatabases(w, h int) string {
 		rowData = []string{
 			padToWidth(dimStyle.Render("no database engine installed"), contentW),
 			padToWidth("", contentW),
-			padToWidth(dimStyle.Render("  install one with ")+accentStyle.Render("lerd preset install mysql"), contentW),
+			padToWidth(dimStyle.Render("  add one with A in Services, or ")+accentStyle.Render("lerd service preset mysql"), contentW),
 		}
 	default:
 		selected := -1
@@ -180,13 +218,19 @@ func (m *Model) renderDatabases(w, h int) string {
 		for i, r := range rows {
 			eng := m.dbEngines[r.engine]
 			if r.database < 0 {
-				rowData = append(rowData, padToWidth(renderDBEngineRow(eng, contentW), contentW))
+				shown := 0
+				for _, other := range rows {
+					if other.engine == r.engine && other.database >= 0 {
+						shown++
+					}
+				}
+				rowData = append(rowData, padToWidth(renderDBEngineRow(eng, shown, contentW), contentW))
 				continue
 			}
 			if i == selected {
 				cursorLine = len(rowData)
 			}
-			row := padToWidth(renderDBRow(i == selected && m.focus == paneDatabases, eng.Databases[r.database], contentW), contentW)
+			row := padToWidth(renderDBRow(i == selected && m.focus == paneDatabases, eng.Databases[r.database], r.testing >= 0, contentW), contentW)
 			rowData = append(rowData, zone.Mark(fmt.Sprintf("db:%d", navPos), row))
 			navPos++
 		}
@@ -213,12 +257,13 @@ func (m *Model) renderDatabases(w, h int) string {
 
 // renderDBEngineRow draws an engine header: its state dot, name, and the reason
 // it lists nothing when it lists nothing.
-func renderDBEngineRow(eng dbview.Engine, paneW int) string {
+// shown is the number of rows listed under it, after testing databases fold in.
+func renderDBEngineRow(eng dbview.Engine, shown, paneW int) string {
 	glyph := stoppedStyle.Render(glyphStopped)
 	note := strings.TrimSpace(dimStyle.Render("stopped"))
 	if eng.Running {
 		glyph = runningStyle.Render(glyphRunning)
-		note = dimStyle.Render(fmt.Sprintf("%d", len(eng.Databases)))
+		note = dimStyle.Render(fmt.Sprintf("%d", shown))
 	}
 	if eng.Error != "" {
 		glyph = failingStyle.Render(glyphFailing)
@@ -231,7 +276,7 @@ func renderDBEngineRow(eng dbview.Engine, paneW int) string {
 // typical project database name without truncating.
 const dbNameColWidth = 22
 
-func renderDBRow(selected bool, db dbview.Entry, paneW int) string {
+func renderDBRow(selected bool, db dbview.Entry, hasTesting bool, paneW int) string {
 	prefix := "   "
 	if selected {
 		prefix = "  " + accentStyle.Render("▸")
@@ -240,9 +285,15 @@ func renderDBRow(selected bool, db dbview.Entry, paneW int) string {
 	if selected {
 		name = selectedStyle.Render(name)
 	}
-	meta := dimStyle.Render(stats.FormatBytes(db.SizeBytes))
+	// Fixed-width columns so size, snapshots and the testing mark line up.
+	meta := dimStyle.Render(fmt.Sprintf("%7s", stats.FormatBytes(db.SizeBytes)))
+	snaps := ""
 	if n := len(db.Snapshots); n > 0 {
-		meta += dimStyle.Render(fmt.Sprintf("  %d snap", n))
+		snaps = fmt.Sprintf("%d snap", n)
+	}
+	meta += dimStyle.Render("  " + padRight(snaps, 8))
+	if hasTesting {
+		meta += accentStyle.Render("+ testing")
 	}
 	return clipLine(prefix+" "+name+" "+meta, paneW)
 }
@@ -278,6 +329,14 @@ func databaseDetailContentLines(m *Model, innerW int) []string {
 		add(dimStyle.Render("  site:    ") + dimStyle.Render("no linked site uses it"))
 	}
 	add("")
+
+	if t := m.currentTestingDatabase(); t != nil {
+		add(sectionStyle.Render("Testing database"))
+		add(dimStyle.Render("  name:    ") + t.Name)
+		add(dimStyle.Render("  size:    ") + stats.FormatBytes(t.SizeBytes))
+		add(dimStyle.Render("  snaps:   ") + fmt.Sprintf("%d", len(t.Snapshots)))
+		add("")
+	}
 
 	add(sectionStyle.Render("Snapshots"))
 	switch {
