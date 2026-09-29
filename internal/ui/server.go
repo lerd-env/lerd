@@ -66,6 +66,11 @@ import (
 //go:embed icons/icon.svg
 var iconSVG []byte
 
+// The logo's letter alone, which the dashboard masks so the mark wears the theme.
+//
+//go:embed icons/mark.svg
+var markSVG []byte
+
 //go:embed icons/icon-maskable.svg
 var iconMaskableSVG []byte
 
@@ -125,6 +130,9 @@ func Start(currentVersion string) error {
 	if d := config.CurrentDesktop(); d.WatchDir != "" {
 		_ = watchDesktopTheme(context.Background(), d.WatchDir, d.WatchNames, 300*time.Millisecond, broker.broadcastThemeList)
 	}
+	// Theme files and their stylesheets repaint every open dashboard as they are saved.
+	_ = os.MkdirAll(config.ThemesDir(), 0755)
+	_ = watchDesktopTheme(context.Background(), config.ThemesDir(), nil, 300*time.Millisecond, broker.broadcastThemeList)
 
 	// Restart any LAN share proxies that were active before this process started.
 	go cli.RestoreLANShareProxies()
@@ -337,6 +345,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/settings/streaming-enabled", withCORS(publishAfter(handleSettingsStreamingEnabled, eventbus.KindStatus, eventbus.KindSites, eventbus.KindServices)))
 	mux.HandleFunc("/api/settings/beta-updates", withCORS(handleSettingsBetaUpdates))
 	mux.HandleFunc("/api/themes", withCORS(handleThemes))
+	mux.HandleFunc("/api/theme.css", withCORS(handleUserCSS))
 	mux.HandleFunc("/api/themes/", withCORS(handleThemeItem))
 	mux.HandleFunc("/api/workers/health", withCORS(handleWorkersHealth))
 	mux.HandleFunc("/api/workers/heal", withCORS(handleWorkersHeal))
@@ -371,6 +380,10 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/icons/icon.svg", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/svg+xml")
 		w.Write(iconSVG) //nolint:errcheck
+	})
+	mux.HandleFunc("/icons/mark.svg", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Write(markSVG) //nolint:errcheck
 	})
 	mux.HandleFunc("/icons/icon-maskable.svg", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/svg+xml")

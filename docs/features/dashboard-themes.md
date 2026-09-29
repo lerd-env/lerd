@@ -72,18 +72,23 @@ bg: "#0c1114"               # page background, dark mode
 card: "#141b1f"             # card background, dark mode
 border: "#222c32"           # card and divider borders, dark mode
 muted: "#3c4a52"            # dim text and inactive marks, dark mode
+bg_light: "#eef3f5"         # page background, light mode
+card_light: "#f8fbfc"       # card background, light mode
+border_light: "#d5e0e5"     # card and divider borders, light mode
 ```
 
 Every value must be a plain hex colour, `#rgb` or `#rrggbb`. CSS colour names
 (`rebeccapurple`) and functional notations (`rgb()`, `oklch()`) are refused: the
 value is handed to the browser as a custom property, and only a literal colour
-may come out of a file and decide how the page paints. The four surface fields
-apply to dark mode only, where light mode draws on white and the standard greys.
+may come out of a file and decide how the page paints. `bg`, `card`, `border` and
+`muted` apply to dark mode; `bg_light`, `card_light` and `border_light` are their
+light mode counterparts. Leave the light ones out and light mode keeps white cards
+on the standard greys.
 
 A file named after a built-in replaces it rather than appearing twice, so you can
 keep the name and change the colours.
 
-Reload the dashboard and the theme appears in the picker. A file with a mistake
+The theme appears in the picker as soon as the file is saved. A file with a mistake
 in it is listed under the picker with the reason, rather than quietly missing.
 
 ## Importing
@@ -114,11 +119,32 @@ comes back after a theme has been chosen.
 Omarchy is the one desktop lerd switches to on its own: installing or upgrading lerd on Omarchy puts an install that has never had a theme chosen on the Omarchy entry straight away, since that desktop is built around a single theme everything follows. A theme already chosen, the default included, is left alone, and picking another one afterwards sticks.
 
 **Omarchy** publishes everything in the active theme's `colors.toml`, which every
-theme it ships carries. A dark desktop theme lends its accent and its surfaces; a
-light one lends only its accent, because the surface fields are the dark ones and
-a pale background would land behind type coloured to sit on a dark card. The
-watch sits on `~/.local/state/omarchy/current`, which is where
-`omarchy-theme-set` moves the new theme into place.
+theme it ships carries. A dark desktop theme lends its accent and the dark
+surfaces; a light one lends its accent and the light surfaces, its
+`dark_background` as the page and its `background` as the cards. The watch sits
+on `~/.local/state/omarchy/current`, which is where `omarchy-theme-set` moves the
+new theme into place.
+
+To choose the colours yourself, for both modes at once, put a `lerd.yaml` in the
+theme. It takes the same fields as a theme file, none of them required, and any
+tone it sets wins over what lerd reads off `colors.toml`. The easiest way to keep
+one for every theme is an Omarchy template, which lives in your dotfiles and is
+rendered into the active theme on each switch. Save this as
+`~/.config/omarchy/themed/lerd.yaml.tpl`:
+
+```yaml
+accent: "{{ accent }}"
+bg: "{{ background }}"
+card: "{{ lighter_background }}"
+border: "{{ selection }}"
+muted: "{{ muted }}"
+bg_light: "{{ dark_background }}"
+card_light: "{{ background }}"
+border_light: "{{ selection }}"
+```
+
+A theme author can ship a `lerd.yaml` in the theme itself instead. A `lerd.yaml`
+with a mistake in it is listed under the picker like any other theme file.
 
 **Plasma** keeps the accent and a copy of the active colour scheme in
 `~/.config/kdeglobals`, so the entry carries surfaces too: the view background,
@@ -182,6 +208,35 @@ entry gets its surfaces.
 A theme file named `omarchy.yaml`, `breeze.yaml`, `adwaita.yaml` or `macos.yaml`
 is shadowed by the desktop entry rather than replacing it: picking the entry named after a
 desktop has to give you that desktop's colours.
+
+## Custom CSS
+
+For anything colours alone do not reach, such as a font, give a theme a stylesheet
+beside its YAML: `~/.config/lerd/themes/lagoon.css` is loaded after the
+dashboard's own whenever `lagoon` is the theme in use, and every open dashboard
+picks up a change to it without a reload. For the Omarchy entry the file is
+`omarchy.css`, and a `lerd.css` in the active Omarchy theme is loaded before it,
+so a `~/.config/omarchy/themed/lerd.css.tpl` template can style each Omarchy
+theme from your dotfiles.
+
+The stylesheet goes with its theme, so picking **Lerd** in the picker puts the
+dashboard back on its default look, custom CSS and all, without deleting anything.
+
+The dashboard adds `dark` to `<html>` in dark mode, so target the modes with
+`.dark` and `:root:not(.dark)`:
+
+```css
+:root { font-family: "JetBrainsMono Nerd Font", monospace; }
+:root:not(.dark) { --lerd-accent: #1e66f5 !important; }
+.dark { --lerd-accent: #89b4fa !important; }
+```
+
+The theme writes its tones straight onto `<html>`, which beats any stylesheet, so
+a custom property the theme also sets needs `!important` to win.
+
+The `--lerd-*` custom properties and Tailwind's `--color-*` ones are what stays
+put between releases. Class names and markup are not, so a rule aimed at them may
+stop matching after an upgrade.
 
 ## Installed as an app
 

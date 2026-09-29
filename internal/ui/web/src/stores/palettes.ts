@@ -1,4 +1,4 @@
-import { apiFetch, apiJson } from '$lib/api';
+import { apiFetch, apiJson, apiUrl } from '$lib/api';
 import {
   BUILTIN_PALETTES,
   DEFAULT_PALETTE_ID,
@@ -128,13 +128,33 @@ export async function removePalette(id: string): Promise<boolean> {
 // like. adoptTheme rather than palette.set, so the value that arrived is not
 // written straight back to the config it came from.
 export function watchThemeChanges() {
+  reloadUserCSS();
   return wsMessage.subscribe((msg) => {
     if (msg?.theme !== undefined) {
       adoptTheme(msg.theme);
       configTheme.set(msg.theme);
+      reloadUserCSS();
     }
     // The desktop theme keeps its id when its colours change, so the list has to
     // be refetched rather than reapplied from what is already in hand.
-    if (msg?.type === 'theme_list') void loadPalettes();
+    if (msg?.type === 'theme_list') {
+      void loadPalettes();
+      reloadUserCSS();
+    }
   });
+}
+
+// The chosen theme's own stylesheet (themes/<id>.css, after the Omarchy theme's
+// lerd.css while following it) goes last in <head> so it wins over app.css.
+const USER_CSS_ID = 'lerd-user-css';
+
+export function reloadUserCSS() {
+  let link = document.getElementById(USER_CSS_ID) as HTMLLinkElement | null;
+  if (!link) {
+    link = document.createElement('link');
+    link.id = USER_CSS_ID;
+    link.rel = 'stylesheet';
+  }
+  document.head.appendChild(link);
+  link.href = `${apiUrl('/api/theme.css')}?v=${Date.now()}`;
 }
