@@ -66,11 +66,6 @@ import (
 //go:embed icons/icon.svg
 var iconSVG []byte
 
-// The logo's letter alone, which the dashboard masks so the mark wears the theme.
-//
-//go:embed icons/mark.svg
-var markSVG []byte
-
 //go:embed icons/icon-maskable.svg
 var iconMaskableSVG []byte
 
@@ -380,10 +375,6 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/icons/icon.svg", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/svg+xml")
 		w.Write(iconSVG) //nolint:errcheck
-	})
-	mux.HandleFunc("/icons/mark.svg", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "image/svg+xml")
-		w.Write(markSVG) //nolint:errcheck
 	})
 	mux.HandleFunc("/icons/icon-maskable.svg", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/svg+xml")

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import LerdMark from './LerdMark.svelte';
   import { version } from '$stores/version';
   import { goToTab } from '$stores/route';
   import { m } from '../paraglide/messages.js';
@@ -16,7 +15,7 @@
   use:tooltip={{ label, placement: 'right' }}
   onclick={() => goToTab('dashboard')}
 >
-  <LerdMark class="w-7 h-7 rounded-lg" />
+  <img src="/icons/icon.svg" class="w-7 h-7 rounded-lg" alt="Lerd" />
   {#if $version.hasUpdate}
     <span
       class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-yellow-400 ring-2 ring-white dark:ring-lerd-card"
