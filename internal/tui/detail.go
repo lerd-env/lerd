@@ -612,9 +612,14 @@ func settingsContentLines(m *Model, focused bool, innerW int) []string {
 		return out
 	}
 
+	// Pad every label to the longest so the on/off column lines up.
+	labelW := 0
+	for _, row := range rows {
+		labelW = max(labelW, len([]rune(row.label)))
+	}
 	for i, row := range rows {
 		selected := focused && i == m.settingsRow
-		add(renderDetailRow(selected, onOffGlyph(row.on), row.label, onOffText(row.on)))
+		add(renderDetailRow(selected, onOffGlyph(row.on), padRight(row.label, labelW+2), onOffText(row.on)))
 	}
 	return out
 }

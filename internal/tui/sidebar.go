@@ -21,6 +21,7 @@ const (
 	sideDash sideKind = iota
 	sideDatabases
 	sideRuntimes
+	sideSettings
 	sideWorkspace
 	sideSite
 	sideService
@@ -43,7 +44,7 @@ func (it sideItem) selectable() bool { return it.kind != sideHeader && it.kind !
 // which already orders them by workspace, so a workspace row is emitted each
 // time the owning workspace changes.
 func (m *Model) sideItems() []sideItem {
-	items := []sideItem{{kind: sideDash, key: "dash"}, {kind: sideDatabases, key: "dbs"}, {kind: sideRuntimes, key: "rt"}, {kind: sideBlank}}
+	items := []sideItem{{kind: sideDash, key: "dash"}, {kind: sideDatabases, key: "dbs"}, {kind: sideRuntimes, key: "rt"}, {kind: sideSettings, key: "settings"}, {kind: sideBlank}}
 
 	sites := m.visibleSites()
 	items = append(items, sideItem{kind: sideHeader, key: "h:sites", text: "Sites"})
@@ -90,6 +91,9 @@ func (m *Model) sideKeyFromState() string {
 	case tabRuntimes:
 		return "rt"
 	case tabSites:
+		if m.detailMode == detailSettings {
+			return "settings"
+		}
 		if s := m.currentSite(); s != nil {
 			return "site:" + s.Name
 		}
@@ -159,8 +163,13 @@ func (m *Model) sideSelect(it sideItem) {
 		m.switchTab(tabDatabases)
 	case sideRuntimes:
 		m.switchTab(tabRuntimes)
+	case sideSettings:
+		m.switchTab(tabSites)
+		m.detailMode = detailSettings
+		m.settingsRow = 0
 	case sideSite:
 		m.switchTab(tabSites)
+		m.detailMode = detailSite
 		if m.siteCursor != it.idx {
 			m.siteCursor = it.idx
 			m.timingScope = 0 // a new site opens on its own checkout, not a worktree
@@ -313,6 +322,8 @@ func (m *Model) renderSidebar(w, h int) []string {
 			top = append(top, item(it.key, []seg{sp("≡  ", colDim), bd("Databases", nil)}, nil), blank)
 		case sideRuntimes:
 			top = append(top, item(it.key, []seg{sp("λ  ", colDim), bd("PHP & Node", nil)}, nil), blank)
+		case sideSettings:
+			top = append(top, item(it.key, []seg{sp("⚙  ", colDim), bd("Settings", nil)}, nil), blank)
 		case sideBlank:
 			// Short terminals drop the gaps between workspaces, never the one
 			// before a section header.
@@ -363,7 +374,7 @@ func (m *Model) renderSidebar(w, h int) []string {
 		}
 	}
 	// Dashboard, Databases and the core rows sit outside the scrolling list.
-	if m.sideKey == "dash" || m.sideKey == "dbs" || m.sideKey == "rt" || strings.HasPrefix(m.sideKey, "core:") {
+	if m.sideKey == "dash" || m.sideKey == "dbs" || m.sideKey == "rt" || m.sideKey == "settings" || strings.HasPrefix(m.sideKey, "core:") {
 		cursorLine = -1
 	}
 

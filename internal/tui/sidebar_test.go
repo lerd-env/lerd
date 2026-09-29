@@ -48,7 +48,7 @@ func sideKeys(items []sideItem) []string {
 func TestSideItemsGroupSitesByWorkspaceInConfigOrder(t *testing.T) {
 	m := sidebarModel()
 	got := strings.Join(sideKeys(m.sideItems()), " ")
-	want := "dash dbs rt ws:studio site:blog ws:acme site:api site:shop site:loose svc:mysql svc:redis core:dns core:nginx core:watcher"
+	want := "dash dbs rt settings ws:studio site:blog ws:acme site:api site:shop site:loose svc:mysql svc:redis core:dns core:nginx core:watcher"
 	if got != want {
 		t.Fatalf("sidebar order\n got %s\nwant %s", got, want)
 	}
@@ -79,7 +79,7 @@ func TestWorkspaceRollupCountsFailingSites(t *testing.T) {
 
 func TestSideMoveSelectsSiteAndSwitchesTab(t *testing.T) {
 	m := sidebarModel()
-	m.sideMove(4) // dash -> dbs -> rt -> ws:studio -> site:blog
+	moveTo(t, m, "site:blog")
 	if m.activeTab != tabSites {
 		t.Fatalf("activeTab = %v, want sites", m.activeTab)
 	}
@@ -94,15 +94,17 @@ func TestSideMoveSelectsSiteAndSwitchesTab(t *testing.T) {
 
 func TestSideMoveStopsOnWorkspaceWithoutChangingTab(t *testing.T) {
 	m := sidebarModel()
-	m.sideMove(3)
-	if m.sideKey != "ws:studio" || m.activeTab != tabDashboard {
-		t.Fatalf("sideKey = %q tab %v, want ws:studio on the dashboard", m.sideKey, m.activeTab)
+	moveTo(t, m, "settings")
+	before := m.activeTab
+	m.sideMove(1)
+	if m.sideKey != "ws:studio" || m.activeTab != before {
+		t.Fatalf("landing on a workspace should leave the tab alone, got key %q tab %v (was %v)", m.sideKey, m.activeTab, before)
 	}
 }
 
 func TestSideActivateTogglesWorkspaceAndOpensSite(t *testing.T) {
 	m := sidebarModel()
-	m.sideMove(3)
+	moveTo(t, m, "ws:studio")
 	m.sideActivate()
 	if !m.collapsedWS["studio"] {
 		t.Fatal("enter on a workspace should collapse it")
@@ -166,5 +168,17 @@ func TestRenderFullScreenFitsTerminal(t *testing.T) {
 				t.Fatalf("%dx%d: line %d is %d wide", size[0], size[1], i, w)
 			}
 		}
+	}
+}
+
+// moveTo walks the sidebar down to key, so a test names the row it wants
+// instead of counting rows that shift whenever an entry is added.
+func moveTo(t *testing.T, m *Model, key string) {
+	t.Helper()
+	for i := 0; i < 100 && m.sideKey != key; i++ {
+		m.sideMove(1)
+	}
+	if m.sideKey != key {
+		t.Fatalf("sidebar never reached %q", key)
 	}
 }
