@@ -14,7 +14,7 @@ Plain `git worktree add` from any tool (CLI, IDE, GitLens) is enough to get a us
 
 ## `lerd worktree add` and `lerd worktree remove`
 
-The wrapper commands mirror `git worktree`'s subcommand layout, every flag passes straight through to git, and add an interactive setup pipeline on top. `lerd worktree wait` is the non-interactive companion for scripts and tools that use plain git, see [waiting for the pipeline](#waiting-for-the-pipeline).
+The wrapper commands mirror `git worktree`'s subcommand layout, every flag passes straight through to git, and add an interactive setup pipeline on top. `lerd worktree wait` and `lerd worktree setup` are the non-interactive companions for scripts and tools that use plain git, see [waiting for the pipeline](#waiting-for-the-pipeline) and [finishing a worktree another tool created](#finishing-a-worktree-another-tool-created).
 
 ### `lerd worktree add <git args>`
 
@@ -66,7 +66,7 @@ Whether you use `lerd worktree add` or the bare `git` command, the daemon's watc
 6. Run `composer install` (skipped when the marker is at-or-newer than `composer.lock`) and `npm ci` / `pnpm install --frozen-lockfile` / `yarn install --immutable` / `bun install --frozen-lockfile` (skipped under the same marker rule, and when `package.json` declares no packages, since npm writes no `node_modules` for it).
 7. Generate the worktree's nginx vhost. It inherits the parent site's framework, so the document root follows the framework's `public_dir` (`pub` for Magento, `web` for Drupal, `webroot` for CakePHP) rather than assuming `public`, and any [nginx snippet](../usage/framework-definitions.md#framework-nginx-config) the framework declares is spliced in, expanded against the worktree's own checkout.
 
-Frontend build (`npm run build`) is **not** part of the watcher pipeline, it's heavy, project-specific, and can fail silently. `lerd worktree add` runs it interactively after asking; using bare `git worktree add` you run it yourself.
+Frontend build (`npm run build`) is **not** part of the watcher pipeline, it's heavy, project-specific, and can fail silently. `lerd worktree add` runs it interactively after asking; after a bare `git worktree add`, `lerd worktree setup` runs it.
 
 `public/build/` is also intentionally not seeded from main: it's a build artefact of the source tree, and copying it would render main's compiled UI on the worktree until the user noticed.
 
@@ -100,6 +100,16 @@ Without a path it waits on the current directory. Nothing is printed on success,
 | `3` | This path is not a worktree lerd manages, so nothing will ever provision it. |
 
 Do not try to infer this from the tree's contents. Composer's extraction phase fills *existing* `vendor/<org>/` directories, so neither an entry count nor a shallow mtime moves during the longest part of an install, and `node_modules/` exists from the first extracted package. The command watches the pipeline's outputs and its install lock together, which is why it can tell a finished install from one still running. `lerd worktree add` uses the same wait internally.
+
+### Finishing a worktree another tool created
+
+Editors and agent tools such as T3 Code create worktrees with plain git, so they get the install but not the rest of what `lerd worktree add` does. `lerd worktree setup` is that rest: it waits for the install as above, then runs the asset build, picks and migrates the database, and runs the framework's worktree setup commands, taking the same defaults `lerd worktree add` takes without a terminal. One line in the tool's worktree setup script is enough:
+
+```bash
+lerd worktree setup
+```
+
+It takes an optional path, `--timeout`, and the `--build` (`auto`, `skip`, `worker:<name>`, `script:<name>`) and `--db` (`share`, `empty`, `clone-main`, `clone-<branch>`, `reuse`, `reset`) choices the prompts would offer. The exit statuses match `lerd worktree wait`, and nothing is built or migrated when the install does not settle in time.
 
 ---
 
