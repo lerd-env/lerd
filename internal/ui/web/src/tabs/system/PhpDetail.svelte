@@ -203,12 +203,16 @@
     }
   });
 
+  // Always clickable: it reads the pins past their cache and downloads only
+  // when they moved, so it is the way to ask whether there is anything rather
+  // than something that lights up once the answer is already known. A build
+  // replaced without its version changing would otherwise be unreachable here.
   const updateAction = $derived<ButtonMenuAction>({
     id: 'update',
+    tone: baseUpdate ? 'success' : undefined,
     icon: rebuildIcon,
     label: m.system_php_updateBuild(),
     title: m.system_php_updateBuildTitle(),
-    disabled: !baseUpdate,
     onclick: () => openPhpRebuildModal(version)
   });
 
