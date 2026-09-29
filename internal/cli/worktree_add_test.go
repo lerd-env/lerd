@@ -113,6 +113,20 @@ func TestWaitForWorktreeReady_settlesOnTheFrameworksEnvFile(t *testing.T) {
 	}
 }
 
+// npm creates no node_modules for a manifest without packages, so waiting on
+// one timed out on a worktree that was fully set up.
+func TestWaitForWorktreeReady_settlesWithoutNodeModulesWhenNoPackagesAreDeclared(t *testing.T) {
+	wt := registerFrameworkWorktree(t, ".env", "dotenv")
+	writeFileTree(t, wt, ".env")
+	if err := os.WriteFile(filepath.Join(wt, "package.json"), []byte(`{"scripts":{"build":"true"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := WaitForWorktreeReady(wt, 4*time.Second); err != nil {
+		t.Error(err)
+	}
+}
+
 func TestWaitForWorktreeReady_keepsWaitingWhenTheFrameworksEnvFileIsMissing(t *testing.T) {
 	wt := registerFrameworkWorktree(t, "wp-config.php", "php-const")
 	// A stray .env must not pass for the file this framework is seeded with.

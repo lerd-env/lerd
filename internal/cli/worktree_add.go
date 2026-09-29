@@ -330,7 +330,7 @@ func WaitForWorktreeReady(worktreePath string, deadline time.Duration) error {
 		envFile = ""
 	}
 	hasComposer := fileExistsAt(filepath.Join(worktreePath, "composer.json"))
-	hasJS := fileExistsAt(filepath.Join(worktreePath, "package.json"))
+	hasJS := gitpkg.HasJSPackages(worktreePath)
 	for time.Now().Before(end) {
 		if worktreeArtifactsPresent(worktreePath, envFile, hasComposer, hasJS) && worktreeServed(worktreePath) && !installInFlight(worktreePath) {
 			return nil

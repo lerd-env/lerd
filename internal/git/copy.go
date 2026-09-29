@@ -3,6 +3,7 @@ package git
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -198,11 +199,32 @@ func composerNeedsInstall(projectPath string) bool {
 // package manager's install marker under node_modules/ is at-or-newer than
 // the lockfile; true otherwise.
 func jsNeedsInstall(projectPath string) bool {
-	if !hasFile(projectPath, "package.json") {
+	if !HasJSPackages(projectPath) {
 		return false
 	}
 	marker, ref := jsInstallPaths(projectPath)
 	return markerStale(marker, ref)
+}
+
+// HasJSPackages reports whether projectPath has a package.json that installs
+// anything. npm creates no node_modules for a manifest without packages, so
+// waiting for one would never end. A manifest that does not parse counts as
+// having packages, leaving the install to report what is wrong with it.
+func HasJSPackages(projectPath string) bool {
+	data, err := os.ReadFile(filepath.Join(projectPath, "package.json"))
+	if err != nil {
+		return false
+	}
+	var pkg struct {
+		Dependencies         map[string]any `json:"dependencies"`
+		DevDependencies      map[string]any `json:"devDependencies"`
+		OptionalDependencies map[string]any `json:"optionalDependencies"`
+		Workspaces           any            `json:"workspaces"`
+	}
+	if json.Unmarshal(data, &pkg) != nil {
+		return true
+	}
+	return len(pkg.Dependencies)+len(pkg.DevDependencies)+len(pkg.OptionalDependencies) > 0 || pkg.Workspaces != nil
 }
 
 // jsInstallPaths returns the absolute paths to the install marker and the
