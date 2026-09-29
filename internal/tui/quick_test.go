@@ -231,3 +231,15 @@ func TestPaletteActsOnSitesThatAreNotSelected(t *testing.T) {
 	}
 	t.Fatal("no keep awake entry for blog")
 }
+
+func TestPaletteWordsMatchInAnyOrder(t *testing.T) {
+	m := quickModel()
+	m.quickActive = true
+	for _, q := range []string{"https blog", "blog https", "blo htt"} {
+		m.quickQuery, m.quickCache = q, nil
+		got := quickLabels(m)
+		if len(got) == 0 || got[0] != "Toggle HTTPS blog.test" {
+			t.Fatalf("%q should put Toggle HTTPS for blog first, got %v", q, got)
+		}
+	}
+}

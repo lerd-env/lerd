@@ -385,22 +385,29 @@ func (m *Model) quickOpenSite(name string, scope int) tea.Cmd {
 	return m.afterNav()
 }
 
-// quickScore ranks a candidate against the query: a contiguous match scores by
-// where it starts, a scattered one by how far its letters spread. ok is false
-// when the query's letters do not all appear in order.
+// quickScore ranks a candidate against the query. Each word of the query is
+// matched on its own, in any order, so "drupal https" finds what "https drupal"
+// does; every word must match. A word found whole scores by where it starts, one
+// whose letters are only scattered in order scores by how far they spread.
 func quickScore(query, text string) (int, bool) {
-	q, t := strings.ToLower(strings.TrimSpace(query)), strings.ToLower(text)
-	if q == "" {
-		return 0, true
+	t := strings.ToLower(text)
+	total := 0
+	for _, word := range strings.Fields(strings.ToLower(query)) {
+		s, ok := wordScore(word, t)
+		if !ok {
+			return 0, false
+		}
+		total += s
 	}
-	if i := strings.Index(t, q); i >= 0 {
+	return total, true
+}
+
+func wordScore(word, t string) (int, bool) {
+	if i := strings.Index(t, word); i >= 0 {
 		return i, true
 	}
 	score, pos := 1000, 0
-	for _, r := range q {
-		if r == ' ' {
-			continue
-		}
+	for _, r := range word {
 		i := strings.IndexRune(t[pos:], r)
 		if i < 0 {
 			return 0, false
