@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/pelletier/go-toml/v2"
 )
 
 // safeVersionPattern is the shape a version selector may have before it is
@@ -33,8 +34,9 @@ func SafeVersion(v string) string {
 //  1. .lerd.yaml node_version field (explicit lerd override)
 //  2. .nvmrc
 //  3. .node-version
-//  4. package.json engines.node
-//  5. global config default
+//  4. mise.toml / .mise.toml, then .tool-versions
+//  5. package.json engines.node
+//  6. global config default
 func DetectVersion(dir string) (string, error) {
 	// 1. .lerd.yaml — explicit lerd override takes top priority
 	if v := pinnedVersion(dir); v != "" {
@@ -82,6 +84,10 @@ func UnpinnedVersion(dir string) (version, source string) {
 		}
 	}
 
+	if v, source := miseVersion(dir); v != "" {
+		return v, source
+	}
+
 	// 2.5 Worktree inheritance — fall back to the parent's pinned version
 	// before package.json constraints would otherwise let any installed
 	// version satisfying engines.node win.
@@ -110,6 +116,66 @@ func UnpinnedVersion(dir string) (version, source string) {
 		return "22", "the lerd default"
 	}
 	return cfg.Node.DefaultVersion, "the lerd default"
+}
+
+// miseVersion reads the node major a mise or asdf project declares, so a
+// project whose Node is already managed by mise gets the same version from lerd.
+func miseVersion(dir string) (version, source string) {
+	for _, name := range []string{"mise.toml", ".mise.toml"} {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			continue
+		}
+		var cfg struct {
+			Tools map[string]any `toml:"tools"`
+		}
+		if toml.Unmarshal(data, &cfg) != nil {
+			continue
+		}
+		if major := numericMajor(miseToolVersion(cfg.Tools["node"])); major != "" {
+			return major, name
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(dir, ".tool-versions"))
+	if err != nil {
+		return "", ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || (fields[0] != "nodejs" && fields[0] != "node") {
+			continue
+		}
+		if major := numericMajor(fields[1]); major != "" {
+			return major, ".tool-versions"
+		}
+	}
+	return "", ""
+}
+
+// miseToolVersion unwraps the three shapes mise accepts for a tool: "22",
+// ["22", "20"] (first is the default) and { version = "22" }.
+func miseToolVersion(v any) string {
+	switch t := v.(type) {
+	case string:
+		return t
+	case []any:
+		if len(t) > 0 {
+			return miseToolVersion(t[0])
+		}
+	case map[string]any:
+		return miseToolVersion(t["version"])
+	}
+	return ""
+}
+
+// numericMajor returns the major of a version like v22.1.0, or empty for
+// aliases such as lts or latest that have no fixed major.
+func numericMajor(v string) string {
+	major := extractMajor(strings.TrimPrefix(strings.TrimSpace(v), "v"))
+	if !isNumericVersion(major) {
+		return ""
+	}
+	return major
 }
 
 // extractMajor returns the major version number from a semver-like string.

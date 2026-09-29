@@ -155,6 +155,8 @@ worktree_include:
 
 Paths are relative to the project root and can be files or directories. Each one is copied from the main repo into the worktree when the worktree does not already have it, so a file you edit inside a worktree is never overwritten by a later watcher pass, and a path the main repo doesn't have is simply skipped. Missing parent directories are created.
 
+A gitignored `mise.toml` belongs here too: lerd reads the Node version from it, so listing it gives the worktree the same Node the main checkout runs, and lerd's own install uses it.
+
 Paths that resolve outside the project root (`../secrets`, or an absolute path) are ignored. `.lerd.yaml` is committed and travels with the repository, so cloning a project must never be able to pull files from elsewhere on the machine into a checkout.
 
 ---

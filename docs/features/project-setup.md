@@ -36,7 +36,7 @@ The answers are saved to `.lerd.yaml` in the project root and applied immediatel
 
 The HTTPS question starts on yes for a project with nothing committed yet, so a new site ends up served over https without anyone having to answer for it. A project whose `.lerd.yaml` already exists keeps what that file asks for, and a site already registered on http stays there when the file never recorded the field.
 
-The Node version field asks which version, not whether. It is prefilled like the PHP field above it, from `.lerd.yaml` if a version is already saved and otherwise from `.nvmrc`, `.node-version`, `package.json` engines or the global default. Accepting it writes `node_version` to `.lerd.yaml`, which outranks all four from then on. Clear the field and no version is saved, so the project keeps resolving its own.
+The Node version field asks which version, not whether. It is prefilled like the PHP field above it, from `.lerd.yaml` if a version is already saved and otherwise from `.nvmrc`, `.node-version`, `mise.toml` or `.tool-versions`, `package.json` engines or the global default. Accepting it writes `node_version` to `.lerd.yaml`, which outranks all of them from then on. Clear the field and no version is saved, so the project keeps resolving its own.
 
 The services list includes both built-in services and any custom services already registered with `lerd service add`. The workers step pre-selects workers based on the framework and detected packages; Horizon is shown automatically when `laravel/horizon` is in `composer.json`, replacing the generic queue option.
 
@@ -124,7 +124,7 @@ See [Configuration](../configuration.md#per-project-config-lerd-yaml) for the fu
 
 ## Automatic version switching
 
-When the Lerd watcher is running it monitors `.lerd.yaml`, `.php-version`, `.node-version`, and `.nvmrc` in every linked site directory. If any of these files change, for example after a `git checkout` to a branch with a different `.lerd.yaml`, Lerd automatically:
+When the Lerd watcher is running it monitors `.lerd.yaml`, `.php-version`, `.node-version`, `.nvmrc`, `mise.toml`, `.mise.toml` and `.tool-versions` in every linked site directory. If any of these files change, for example after a `git checkout` to a branch with a different `.lerd.yaml`, Lerd automatically:
 
 1. Re-detects the PHP and Node versions for the site.
 2. Updates the site registry.

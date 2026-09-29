@@ -18,6 +18,9 @@ var watchedSiteFiles = map[string]bool{
 	".php-version":     true,
 	".node-version":    true,
 	".nvmrc":           true,
+	"mise.toml":        true,
+	".mise.toml":       true,
+	".tool-versions":   true,
 }
 
 // WatchSiteFiles monitors key config files in each site directory returned by
