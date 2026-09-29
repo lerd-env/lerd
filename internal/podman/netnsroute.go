@@ -30,7 +30,7 @@ var (
 // docker0 at boot for example, and never follows the host afterwards, so every
 // container loses the internet while the host itself is online.
 func RootlessNetnsLacksDefaultRoute() bool {
-	if runtime.GOOS != "linux" || !rootlessNetnsUpFn() || !hostHasDefaultRouteFn() {
+	if !rootlessNetnsUpFn() || !hostHasDefaultRouteFn() {
 		return false
 	}
 	routes, err := netnsDefaultRouteFn()
@@ -66,9 +66,11 @@ func HealRoutelessNetns() (bool, error) {
 	return true, nil
 }
 
+// rootlessNetnsUp is false off Linux, where podman runs inside a VM and the
+// namespace is not the host's to inspect.
 func rootlessNetnsUp() bool {
 	dir := rootlessNetnsDir()
-	if dir == "" {
+	if runtime.GOOS != "linux" || dir == "" {
 		return false
 	}
 	_, err := os.Stat(filepath.Join(dir, "rootless-netns-conn.pid"))
