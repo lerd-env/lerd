@@ -42,8 +42,8 @@ func TestTestingDatabaseFoldsIntoItsAppDatabase(t *testing.T) {
 func TestFoldedRowAndDetailShowTheTestingDatabase(t *testing.T) {
 	m := testingPairModel()
 	list := ansi.Strip(m.renderDatabasesView(140, 30))
-	if strings.Count(list, "shop_testing") != 1 || !strings.Contains(list, "+ testing") {
-		t.Fatalf("the testing database should appear once, in the detail, and tag its row:\n%s", list)
+	if strings.Count(list, "shop_testing") != 1 {
+		t.Fatalf("the testing database should appear once, in the detail:\n%s", list)
 	}
 	if !strings.Contains(list, "Testing database") {
 		t.Fatalf("the detail should describe the testing database:\n%s", list)

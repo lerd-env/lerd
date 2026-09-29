@@ -205,10 +205,10 @@ func (m *Model) renderDatabasesView(width, topH int) string {
 	var body []string
 	if cw < 90 {
 		listH := clamp(bodyH*2/5, 4, max(4, bodyH-4))
-		body = append(strings.Split(zone.Mark("pane:databases", m.renderDatabasesIn(bareFrame, cw, listH)), "\n"),
-			strings.Split(zone.Mark("pane:detail", m.renderDetailIn(bareFrame, cw, bodyH-listH, m.focus == paneDetail)), "\n")...)
+		body = append(strings.Split(zone.Mark("pane:databases", m.renderDatabasesIn(bareFrame, cw, listH)), "\n"), row(nil, cw))
+		body = append(body, strings.Split(zone.Mark("pane:detail", m.renderDetailIn(bareFrame, cw, bodyH-listH-1, m.focus == paneDetail)), "\n")...)
 	} else {
-		listW := clamp(cw*2/5, 56, 64)
+		listW := clamp(cw*2/5, 36, 44)
 		list := strings.Split(zone.Mark("pane:databases", m.renderDatabasesIn(bareFrame, listW, bodyH)), "\n")
 		detail := strings.Split(zone.Mark("pane:detail", m.renderDetailIn(bareFrame, cw-listW-4, bodyH, m.focus == paneDetail)), "\n")
 		for i := 0; i < bodyH; i++ {

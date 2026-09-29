@@ -45,7 +45,7 @@ func databasesModel() *Model {
 func TestDatabasesPane_ListsEnginesWithTheirDatabases(t *testing.T) {
 	m := databasesModel()
 	out := stripANSI(m.renderDatabases(60, 20))
-	for _, want := range []string{"mysql", "shop", "shop_staging", "5MB", "1 snap", "postgres", "stopped"} {
+	for _, want := range []string{"mysql", "shop", "shop_staging", "5MB", "postgres", "stopped"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("expected %q in the databases pane:\n%s", want, out)
 		}

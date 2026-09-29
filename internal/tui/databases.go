@@ -230,7 +230,7 @@ func (m *Model) renderDatabasesIn(style lipgloss.Style, w, h int) string {
 			if i == selected {
 				cursorLine = len(rowData)
 			}
-			row := padToWidth(renderDBRow(i == selected && m.focus == paneDatabases, eng.Databases[r.database], r.testing >= 0, contentW), contentW)
+			row := padToWidth(renderDBRow(i == selected && m.focus == paneDatabases, eng.Databases[r.database], contentW), contentW)
 			rowData = append(rowData, zone.Mark(fmt.Sprintf("db:%d", navPos), row))
 			navPos++
 		}
@@ -276,7 +276,7 @@ func renderDBEngineRow(eng dbview.Engine, shown, paneW int) string {
 // typical project database name without truncating.
 const dbNameColWidth = 22
 
-func renderDBRow(selected bool, db dbview.Entry, hasTesting bool, paneW int) string {
+func renderDBRow(selected bool, db dbview.Entry, paneW int) string {
 	prefix := "   "
 	if selected {
 		prefix = "  " + accentStyle.Render("▸")
@@ -285,17 +285,9 @@ func renderDBRow(selected bool, db dbview.Entry, hasTesting bool, paneW int) str
 	if selected {
 		name = selectedStyle.Render(name)
 	}
-	// Fixed-width columns so size, snapshots and the testing mark line up.
-	meta := dimStyle.Render(fmt.Sprintf("%7s", stats.FormatBytes(db.SizeBytes)))
-	snaps := ""
-	if n := len(db.Snapshots); n > 0 {
-		snaps = fmt.Sprintf("%d snap", n)
-	}
-	meta += dimStyle.Render("  " + padRight(snaps, 8))
-	if hasTesting {
-		meta += accentStyle.Render("+ testing")
-	}
-	return clipLine(prefix+" "+name+" "+meta, paneW)
+	// A row carries the name and size only; snapshots and the folded testing
+	// database belong to the detail pane, where there is room to read them.
+	return clipLine(prefix+" "+name+" "+dimStyle.Render(fmt.Sprintf("%7s", stats.FormatBytes(db.SizeBytes))), paneW)
 }
 
 // databaseDetailContentLines renders the right-hand pane on the Databases tab:
