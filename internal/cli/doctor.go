@@ -649,6 +649,12 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 			"check rootless podman / netavark / pasta routing; run: podman unshare --rootless-netns ip addr (expected: 169.254.1.2 on podman bridge or DNAT for it)")
 	}
 
+	if podman.RootlessNetnsLacksDefaultRoute() {
+		fail("container network route",
+			"podman's rootless network was set up before the host had a route out, so containers have no internet",
+			"lerd start (it rebuilds the network)")
+	}
+
 	if reg, regErr := config.LoadSites(); regErr == nil {
 		for _, site := range reg.Sites {
 			if site.Ignored || site.IsCustomContainer() || site.IsFrankenPHP() || site.IsHostProxy() {

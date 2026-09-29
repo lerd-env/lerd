@@ -533,6 +533,14 @@ func startLerd(emit func(StartEvent), skip []string) error {
 	containerDNS := dns.ReadContainerDNS()
 	_ = healPodmanUpgrade(containerDNS)
 
+	// A boot where the network came up late leaves pasta's namespace without
+	// a default route, cutting every container off the internet (#2047).
+	if healed, err := podman.HealRoutelessNetns(); err != nil {
+		fmt.Printf("  WARN: rebuilding the container network: %v\n", err)
+	} else if healed {
+		fmt.Println("  Rebuilt the container network, it was set up before the host had a route out")
+	}
+
 	// Ensure the lerd bridge network exists. On macOS the network is stored
 	// inside the Podman Machine VM; it may be absent after a fresh machine
 	// init or if it was pruned. All service containers use --network lerd so

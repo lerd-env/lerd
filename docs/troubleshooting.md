@@ -225,6 +225,8 @@ podman network inspect lerd --format '{{.NetworkDNSServers}}'
 ```
 
 An address that is valid on the host but not routable from a rootless network namespace is the usual cause. This is worth checking on WSL2 in particular, where the Windows-side resolver address the WSL VM is given is not always reachable from inside the namespace.
+
+The other cause is a boot where lerd's containers started before the host network was really up. NetworkManager can report the network online while only a link-down bridge such as Docker's `docker0` has an address, and pasta then builds podman's rootless network on that bridge, with no route out, and never revisits it. Doctor reports this as `container network route`, and `lerd start` detects it and rebuilds the network by restarting the lerd containers. If a container outside lerd is still on a podman bridge network, the old network survives the restart and `lerd start` says so; stop that container and run `lerd start` again.
 :::
 
 ::: details "Secure Connection Failed" after the host wakes from suspend or hibernate

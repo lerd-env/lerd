@@ -923,6 +923,15 @@ Other surfaces:
 - [ ] `lerd stop` then `lerd start`: everything comes back, **200 on both sites**
 - [ ] Reboot the guest: with autostart enabled everything comes back on login,
       **200 on both sites without any manual command**
+- [ ] Linux, fedora guest: a boot where the NIC comes up late leaves the
+      container network with no route out, and `lerd start` rebuilds it. Rig it
+      with a oneshot system unit that adds a link-down `docker0` bridge at
+      172.17.0.1/16 before NetworkManager, turn off the NIC connection's
+      autoconnect, and bring it up from a system timer 90s after boot. After
+      the reboot doctor fails `container network route` and `internet DNS from
+      containers`; one `lerd start` prints "Rebuilt the container network" and
+      doctor is clean, **composer resolves packagist inside the container**.
+      Remove the rig and restore autoconnect afterwards
 - [ ] `lerd quit` stops everything including `lerd-dns`, UI, watcher and tray
 
 ---
