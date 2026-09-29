@@ -299,12 +299,12 @@ func TestSnapshotRestoreCommand(t *testing.T) {
 		{
 			"mysql one database",
 			SnapshotTarget{Service: "mysql", Database: "myapp"},
-			`gunzip -c | ( sed '/^SET @@GLOBAL.GTID_PURGED/{:a;/;[[:space:]]*$/!{N;ba};d}' | $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot myapp )`,
+			`gunzip -c | ( sed -e '/^SET @@GLOBAL.GTID_PURGED/{' -e ':a' -e '/;[[:space:]]*$/!{' -e 'N' -e 'ba' -e '}' -e 'd' -e '}' | $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot myapp )`,
 		},
 		{
 			"mysql all databases",
 			SnapshotTarget{Service: "mysql", AllDatabases: true},
-			`gunzip -c | ( sed '/^SET @@GLOBAL.GTID_PURGED/{:a;/;[[:space:]]*$/!{N;ba};d}' | $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot )`,
+			`gunzip -c | ( sed -e '/^SET @@GLOBAL.GTID_PURGED/{' -e ':a' -e '/;[[:space:]]*$/!{' -e 'N' -e 'ba' -e '}' -e 'd' -e '}' | $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot )`,
 		},
 		{
 			"postgres one database",

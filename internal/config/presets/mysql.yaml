@@ -89,12 +89,12 @@ introspect:
         # overlaps the server's own, and the load stops there. Older dumps
         # still carry it, so it is stripped here as well as left out above.
         import: >
-          sed '/^SET @@GLOBAL.GTID_PURGED/{:a;/;[[:space:]]*$/!{N;ba};d}' |
+          sed -e '/^SET @@GLOBAL.GTID_PURGED/{' -e ':a' -e '/;[[:space:]]*$/!{' -e 'N' -e 'ba' -e '}' -e 'd' -e '}' |
           $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot {{name}}
         export_all: >
           $(command -v mysqldump || command -v mariadb-dump) -h 127.0.0.1 -uroot
           --single-transaction --quick --no-tablespaces --routines --triggers --events
           --add-drop-database --all-databases --set-gtid-purged=OFF
         import_all: >
-          sed '/^SET @@GLOBAL.GTID_PURGED/{:a;/;[[:space:]]*$/!{N;ba};d}' |
+          sed -e '/^SET @@GLOBAL.GTID_PURGED/{' -e ':a' -e '/;[[:space:]]*$/!{' -e 'N' -e 'ba' -e '}' -e 'd' -e '}' |
           $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot
