@@ -368,7 +368,7 @@ func (m *Model) footChips() []footChip {
 		}
 		return append(chips, nav("?", "help"))
 	case tabDatabases:
-		return []footChip{nav("↑↓", "nav"), nav("tab", "panes"), act("n", "snapshot"), act("R", "refresh"), nav("?", "help")}
+		return []footChip{nav("↑↓", "nav"), nav("tab", "panes"), act("n", "snapshot"), act("e", "export"), act("c", "create"), act("a", "auto snapshots"), act("K", "keep"), act("R", "refresh"), nav("?", "help")}
 	case tabCore:
 		return []footChip{back, nav("↑↓", "scroll"), act("s", "start lerd"), nav("?", "help")}
 	}

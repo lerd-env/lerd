@@ -101,9 +101,10 @@ func TestDatabaseDetail_NamesTheWorktreeBranch(t *testing.T) {
 
 func TestDatabaseDetail_KeepsDestructiveOpsInTheCLI(t *testing.T) {
 	m := databasesModel()
-	out := stripANSI(strings.Join(databaseDetailContentLines(m, 120), "\n"))
-	if !strings.Contains(out, "n snapshot") {
-		t.Errorf("expected the snapshot quick action:\n%s", out)
+	m.sideFocus = false
+	out := stripANSI(strings.Join(databaseDetailContentLines(m, 160), "\n"))
+	if hints := stripANSI(m.renderHints(200)); !strings.Contains(hints, "n snapshot") {
+		t.Errorf("expected the snapshot quick action in the hints: %s", hints)
 	}
 	if !strings.Contains(out, "lerd db:restore") || !strings.Contains(out, "lerd db:import") {
 		t.Errorf("expected restore and import to be named as CLI-only:\n%s", out)

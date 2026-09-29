@@ -538,6 +538,9 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if cmd, handled := m.handleCoreKey(msg); handled {
 		return m, cmd
 	}
+	if cmd, handled := m.handleDatabaseKey(msg); handled {
+		return m, cmd
+	}
 	switch msg.String() {
 	case "ctrl+c", "q":
 		m.logTail.Stop()

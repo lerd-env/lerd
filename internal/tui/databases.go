@@ -3,7 +3,9 @@ package tui
 import (
 	"charm.land/lipgloss/v2"
 	"fmt"
+	"github.com/geodro/lerd/internal/siteinfo"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -320,6 +322,13 @@ func databaseDetailContentLines(m *Model, innerW int) []string {
 	default:
 		add(dimStyle.Render("  site:    ") + dimStyle.Render("no linked site uses it"))
 	}
+	if site := m.dbOwnerSite(db); site != nil {
+		state := dimStyle.Render("off for " + site.Name)
+		if autoSnapshotCovered(site.AutoSnapshot) {
+			state = runningStyle.Render("on") + dimStyle.Render(" for "+site.Name)
+		}
+		add(dimStyle.Render("  auto:    ") + state)
+	}
 	add("")
 
 	if t := m.currentTestingDatabase(); t != nil {
@@ -361,10 +370,8 @@ func databaseDetailContentLines(m *Model, innerW int) []string {
 	}
 	add("")
 
-	add(sectionStyle.Render("Actions"))
-	add(dimStyle.Render("  n snapshot   K keep an automatic snapshot"))
-	add(dimStyle.Render("  restore, drop, import and export overwrite data and live in the CLI:"))
-	add(dimStyle.Render("  ") + accentStyle.Render("lerd db:restore") + dimStyle.Render(" · ") + accentStyle.Render("lerd db:import") + dimStyle.Render(" · ") + accentStyle.Render("lerd db:export"))
+	add(dimStyle.Render("  restore, drop and import overwrite data, so they stay in the CLI:"))
+	add("  " + accentStyle.Render("lerd db:restore") + dimStyle.Render(" · ") + accentStyle.Render("lerd db:import"))
 	return out
 }
 
@@ -400,4 +407,67 @@ func databaseSnapshotDir(owner dbview.Owner) string {
 		return ""
 	}
 	return home
+}
+
+// dbOwnerSite is the linked site the selected database belongs to, if any.
+func (m *Model) dbOwnerSite(db *dbview.Entry) *siteinfo.EnrichedSite {
+	if db == nil || db.Owner.Domain == "" {
+		return nil
+	}
+	for i := range m.snap.Sites {
+		for _, d := range m.snap.Sites[i].Domains {
+			if d == db.Owner.Domain {
+				return &m.snap.Sites[i]
+			}
+		}
+	}
+	return nil
+}
+
+// handleDatabaseKey owns the Databases view's three actions that add or change
+// nothing destructive: create a database, export one to a file, and put its
+// site on or off the automatic snapshot schedule.
+func (m *Model) handleDatabaseKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
+	if m.activeTab != tabDatabases {
+		return nil, false
+	}
+	eng, db := m.currentDatabase()
+	switch msg.String() {
+	case "c":
+		service := ""
+		if eng != nil {
+			service = "--service " + eng.Service + " "
+		} else if len(m.dbEngines) > 0 {
+			service = "--service " + m.dbEngines[0].Service + " "
+		}
+		m.openPaletteIn("", "db:create "+service)
+		return nil, true
+	case "e":
+		if db == nil {
+			return nil, true
+		}
+		dir := databaseSnapshotDir(db.Owner)
+		if site := m.dbOwnerSite(db); site != nil && site.Path != "" {
+			dir = site.Path
+		}
+		out := filepath.Join(dir, db.Name+".sql")
+		m.setStatus("exporting "+db.Name+" to "+out+"…", 30*time.Second)
+		return runLerd(dir, "db:export", "--service", eng.Service, "--database", db.Name, "--output", out), true
+	case "a":
+		if db == nil {
+			return nil, true
+		}
+		site := m.dbOwnerSite(db)
+		if site == nil {
+			m.setStatus("no site owns "+db.Name+", so it has no snapshot schedule to join", 4*time.Second)
+			return nil, true
+		}
+		if autoSnapshotCovered(site.AutoSnapshot) {
+			m.setStatus("excluding "+site.Name+" from automatic snapshots…", 5*time.Second)
+			return tea.Sequence(runLerd(site.Path, "db:snapshot:auto", "site", site.Name, "off"), loadCmd(), m.reloadDatabases()), true
+		}
+		m.setStatus("including "+site.Name+" in automatic snapshots…", 5*time.Second)
+		return tea.Sequence(runLerd(site.Path, "db:snapshot:auto", "site", site.Name, "on"), loadCmd(), m.reloadDatabases()), true
+	}
+	return nil, false
 }
