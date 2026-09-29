@@ -729,7 +729,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	var provisionErrs []error
 
 	// Determine framework-specific env file path and format
-	site, err := ensureSiteForCwd()
+	site, branch, err := ensureSiteAndBranchForCwd()
 	if err != nil {
 		return err
 	}
@@ -825,7 +825,10 @@ func runEnv(_ *cobra.Command, _ []string) error {
 
 	// 3. Detect services and build the set of key→value updates to apply
 	updates := map[string]string{}
-	dbName := projectDBName(cwd)
+	dbName, domain := projectDBName(cwd), site.PrimaryDomain()
+	if branch != "" {
+		dbName, domain = worktreeEnvTarget(site, branch)
+	}
 
 	scheme := "http"
 	if site.Secured {
@@ -834,7 +837,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	tplCtx := siteTemplateCtx{
 		site:   dbName,
 		bucket: s3BucketName(dbName),
-		domain: site.PrimaryDomain(),
+		domain: domain,
 		scheme: scheme,
 	}
 
@@ -1241,7 +1244,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	if fw.HasWorker("reverb", cwd) &&
 		strings.ToLower(strings.Trim(overrideOr(envOverrides, envMap, "BROADCAST_CONNECTION"), `"'`)) == "reverb" {
 		envApplyLine("reverb", true)
-		for k, v := range reverbEnvUpdates(envMap, site.PrimaryDomain(), site.Secured, cwd) {
+		for k, v := range reverbEnvUpdates(envMap, domain, site.Secured, cwd) {
 			updates[k] = v
 		}
 	}
@@ -1256,7 +1259,11 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	if urlKey == "" {
 		urlKey = "APP_URL"
 	}
-	if url := resolveAppURL(cwd, site); url != "" && !strings.EqualFold(urlKey, "none") {
+	url := resolveAppURL(cwd, site)
+	if branch != "" {
+		url = scheme + "://" + domain
+	}
+	if url != "" && !strings.EqualFold(urlKey, "none") {
 		updates[urlKey] = url
 		envInfo("  Setting %s=%s\n", urlKey, url)
 	}
@@ -1371,13 +1378,12 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	// 7. Worktrees share the parent site's database SERVER (only DB_DATABASE
-	// differs, and only when isolated). Their .env was copied once at creation,
-	// so after this run realigned the parent to the selected services, mirror
-	// the connection coordinates into each worktree .env too — otherwise a
-	// worktree captured before a service switch (e.g. postgres -> postgres-18)
-	// keeps pointing at a host that no longer resolves.
-	alignWorktreeEnvDBConnection(site, envPath, envRelPath, envFormat)
+	// 7. Worktrees keep their own env, copied once at creation, and are not
+	// sites a sweep can reach, so whatever this run moved in the parent has to
+	// be carried into them from here.
+	if branch == "" {
+		alignWorktreeEnvs(site, envPath, envRelPath, envFormat, carriedToWorktrees(envMap, envOverrides))
+	}
 
 	// The connection a JetBrains project points at is rebuilt from the same
 	// resolution, so a database or an engine that changed here reaches the IDE
@@ -1399,17 +1405,39 @@ func runEnv(_ *cobra.Command, _ []string) error {
 // the isolated-DB logic (or the parent value for a non-isolated worktree).
 var worktreeDBConnectionKeys = []string{"DB_CONNECTION", "DB_HOST", "DB_PORT", "DB_USERNAME", "DB_PASSWORD"}
 
-// alignWorktreeEnvDBConnection mirrors the parent's (just-aligned) DB connection
-// coordinates into each existing worktree env file. It is the worktree arm of
-// `lerd env`'s "make the env match the selected services" guarantee. Best
-// effort: a worktree without an env file yet is skipped (it'll be seeded on its
-// next sync), and ApplyUpdates no-ops when nothing changed.
+// worktreeEnvTarget is the database and domain a worktree's env names. A
+// worktree is not a registered site, so deriving them from its folder, as for
+// a site, would rename its database after the checkout: it keeps its isolated
+// database when it has one and the parent's otherwise, on its branch domain.
+func worktreeEnvTarget(site *config.Site, branch string) (dbName, domain string) {
+	dbName = projectDBName(site.Path)
+	if e, ok, err := config.FindWorktreeDB(site.Name, branch); err == nil && ok {
+		dbName = e.DBName
+	}
+	return dbName, branch + "." + site.PrimaryDomain()
+}
+
+// carriedToWorktrees is the parent's env before this run, less the keys its
+// .env.lerd_override sets: an override is personal to the checkout it sits in.
+func carriedToWorktrees(before, overrides map[string]string) map[string]string {
+	carried := maps.Clone(before)
+	for k := range overrides {
+		delete(carried, k)
+	}
+	return carried
+}
+
+// alignWorktreeEnvs is the worktree arm of `lerd env`. The DB connection
+// coordinates are mirrored outright. Any other value this run changed in the
+// parent follows only where the worktree still holds the parent's old value:
+// a service host moved by a runtime switch does, while a worktree's own
+// database, bucket or URL never equalled the parent's and is left alone.
+// Running lerd env in the worktree instead would rename its database after
+// the checkout folder, since a worktree is not a registered site.
 //
-// Scoped to the dotenv format: the connection keys are Laravel-style, and the
-// php-const / php-array formats use a different writer and key set, so they are
-// left to their own env detection. envRelPath is the framework-resolved env file
-// path so a worktree of a framework whose env file isn't ".env" is still targeted.
-func alignWorktreeEnvDBConnection(site *config.Site, mainEnvPath, envRelPath, envFormat string) {
+// Scoped to dotenv, the format both the keys and the writer here assume. A
+// worktree without an env file yet is skipped; it is seeded on its next sync.
+func alignWorktreeEnvs(site *config.Site, mainEnvPath, envRelPath, envFormat string, before map[string]string) {
 	// Empty means the caller never resolved a format, which is dotenv.
 	if site == nil || (envFormat != "" && envFormat != "dotenv") {
 		return
@@ -1418,40 +1446,39 @@ func alignWorktreeEnvDBConnection(site *config.Site, mainEnvPath, envRelPath, en
 	if err != nil || len(worktrees) == 0 {
 		return
 	}
-	mainVals := envfile.ReadValues(mainEnvPath)
+	after := envfile.ReadValues(mainEnvPath)
 	coords := map[string]string{}
 	for _, k := range worktreeDBConnectionKeys {
-		if v := mainVals[k]; v != "" {
+		if v := after[k]; v != "" {
 			coords[k] = v
 		}
-	}
-	if len(coords) == 0 {
-		return
 	}
 	for _, wt := range worktrees {
 		wtEnv := filepath.Join(wt.Path, envRelPath)
 		if _, statErr := os.Stat(wtEnv); statErr != nil {
 			continue
 		}
-		// Only touch worktrees whose coordinates actually drifted, so a steady
-		// state stays silent and the file's mtime is left alone. One read of the
-		// worktree env covers every key compared.
 		wtVals := envfile.ReadValues(wtEnv)
-		drifted := false
+		updates := map[string]string{}
 		for k, v := range coords {
 			if wtVals[k] != v {
-				drifted = true
-				break
+				updates[k] = v
 			}
 		}
-		if !drifted {
+		for k, old := range before {
+			if v := after[k]; old != "" && v != "" && v != old && wtVals[k] == old {
+				updates[k] = v
+			}
+		}
+		// A steady state stays silent and leaves the file's mtime alone.
+		if len(updates) == 0 {
 			continue
 		}
-		if err := envfile.ApplyUpdates(wtEnv, coords); err != nil {
+		if err := envfile.ApplyUpdates(wtEnv, updates); err != nil {
 			feedback.Warn("aligning worktree %s .env: %v", wt.Branch, err)
 			continue
 		}
-		envInfo("  Aligned worktree %s DB connection\n", wt.Branch)
+		envInfo("  Aligned worktree %s env\n", wt.Branch)
 	}
 }
 

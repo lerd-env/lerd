@@ -1353,15 +1353,11 @@ func refreshHostProxySitesForService(service string) {
 	}
 	refreshed := 0
 	for _, s := range sitesToRefreshForPortMove(config.SitesUsingService(service), mode) {
-		// Worktrees too: each keeps its own env naming the same service, and
-		// none of them is a site in the registry this loop walks.
-		for _, path := range siteEnvCheckouts(&s) {
-			if err := runLerdEnv(path); err != nil {
-				fmt.Printf("Warning: could not refresh site %q for the new %s port: %v\n", s.Name, service, err)
-				continue
-			}
-			refreshed++
+		if err := runLerdEnv(s.Path); err != nil {
+			fmt.Printf("Warning: could not refresh site %q for the new %s port: %v\n", s.Name, service, err)
+			continue
 		}
+		refreshed++
 	}
 	if refreshed > 0 {
 		fmt.Printf("Refreshed %d site(s) to follow %s's published port.\n", refreshed, service)

@@ -222,16 +222,12 @@ func ApplyPHPRuntime(mode string) error {
 			feedback.Warn("regenerating the vhost for %s: %v", s.Name, err)
 		}
 		regenerateWorktreeVhosts(s)
-		// The vhost sweep above already covers the worktrees; their envs name
-		// the same services and have to follow the runtime the same way.
-		for _, path := range siteEnvCheckouts(s) {
-			runEnvIfManaged(path, func() error {
-				if out, err := envCommandFor(path).CombinedOutput(); err != nil {
-					return fmt.Errorf("%v: %s", err, strings.TrimSpace(string(out)))
-				}
-				return nil
-			})
-		}
+		runEnvIfManaged(s.Path, func() error {
+			if out, err := envCommandFor(s.Path).CombinedOutput(); err != nil {
+				return fmt.Errorf("%v: %s", err, strings.TrimSpace(string(out)))
+			}
+			return nil
+		})
 		startWorkersForSite(s, stopped[s.Name], s.PHPVersion)
 	}
 	// A refused reload leaves nginx serving the runtime it had before, so every
