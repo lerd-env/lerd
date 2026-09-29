@@ -50,7 +50,7 @@
         <p class="text-xs text-gray-500 dark:text-gray-400">{preset.description}</p>
       {/if}
       {#if preset.image}
-        <div class="text-[11px] text-gray-400 dark:text-gray-500 font-mono truncate">{preset.image}</div>
+        <div class="text-[11px] text-gray-500 dark:text-gray-400 font-mono truncate">{preset.image}</div>
       {/if}
       {#if (preset.versions || []).length > 0}
         <Dropdown
@@ -65,7 +65,7 @@
         </p>
       {/if}
       {#if preset.installing && preset.installingMessage}
-        <p class="text-[11px] text-gray-400 dark:text-gray-500 font-mono truncate">{preset.installingMessage}</p>
+        <p class="text-[11px] text-gray-500 dark:text-gray-400 font-mono truncate">{preset.installingMessage}</p>
       {/if}
       {#if preset.error}
         <p class="text-xs text-red-500">{preset.error}</p>

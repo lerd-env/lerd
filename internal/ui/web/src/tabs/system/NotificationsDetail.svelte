@@ -262,7 +262,7 @@
           <button
             class="px-3 py-1.5 font-medium transition-colors {deliveryTarget === 'browser'
               ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white'
-              : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5'}"
+              : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5'}"
             onclick={() => setDelivery('browser')}
           >
             {m.notify_settings_delivery_browser()}
@@ -270,7 +270,7 @@
           <button
             class="px-3 py-1.5 font-medium transition-colors {deliveryTarget === 'native'
               ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white'
-              : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5'}"
+              : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5'}"
             onclick={() => setDelivery('native')}
           >
             {m.notify_settings_delivery_native()}

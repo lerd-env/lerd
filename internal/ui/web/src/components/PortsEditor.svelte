@@ -111,7 +111,7 @@
 </div>
 
 {#if ports.length === 0 && empty}
-  <p class="text-xs text-gray-400 dark:text-gray-500 italic mt-2">{empty}</p>
+  <p class="text-xs text-gray-500 dark:text-gray-400 italic mt-2">{empty}</p>
 {/if}
 {#if error}
   <p class="text-xs text-red-500 mt-2">{error}</p>

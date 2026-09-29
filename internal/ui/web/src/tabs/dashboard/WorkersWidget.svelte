@@ -217,7 +217,7 @@
             class="group/head w-full flex items-center gap-1.5 px-1 py-0.5 -mx-1 rounded-sm text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/3 transition-colors"
           >
             <svg
-              class="w-3 h-3 shrink-0 text-gray-400 dark:text-gray-500 transition-transform {open ? 'rotate-90' : ''}"
+              class="w-3 h-3 shrink-0 text-gray-500 dark:text-gray-400 transition-transform {open ? 'rotate-90' : ''}"
               fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"
             >
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
@@ -238,7 +238,7 @@
                 <span class="text-emerald-600 dark:text-emerald-500">{m.dashboard_workers_groupUp({ count: counts.up })}</span>
               {/if}
               {#if counts.idle > 0}
-                <span class="text-sky-600 dark:text-sky-400">{m.dashboard_workers_groupIdle({ count: counts.idle })}</span>
+                <span class="text-sky-700 dark:text-sky-400">{m.dashboard_workers_groupIdle({ count: counts.idle })}</span>
               {/if}
             </span>
           </button>
@@ -283,7 +283,7 @@
                   <FrameworkMark name={siteFor(item.label)?.framework} size="sm" />
                 {/if}
                 <span class="flex-1 truncate text-gray-600 dark:text-gray-300 group-hover:text-lerd-red transition-colors">{item.label}</span>
-                <span class="text-[10px] text-sky-600 dark:text-sky-400">{m.sites_idle()}</span>
+                <span class="text-[10px] text-sky-700 dark:text-sky-400">{m.sites_idle()}</span>
               </button>
             {/each}
           </div>
@@ -307,7 +307,7 @@
         {/if}
       </button>
     {:else}
-      <span class="text-xs text-gray-400 dark:text-gray-500">{m.dashboard_workers_allGood()}</span>
+      <span class="text-xs text-gray-500 dark:text-gray-400">{m.dashboard_workers_allGood()}</span>
     {/if}
   {/snippet}
 </DashboardCard>

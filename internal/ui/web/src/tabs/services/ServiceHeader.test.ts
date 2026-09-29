@@ -18,6 +18,13 @@ describe('ServiceHeader site links', () => {
     serviceIcons.set({ mysql: '<svg viewBox="0 0 24 24"><path d="M3 3h18v18H3z"/></svg>' });
   });
 
+  // The title row is the page's top strip, level with the list header beside
+  // it, the way a site's worktree bar is.
+  it('heads the page with the title row as the chrome strip', () => {
+    const { container } = render(ServiceHeader, { props: { svc: service({ preset: 'mysql' }) } });
+    expect((container.firstElementChild as HTMLElement).className).toContain('page-header');
+  });
+
   it('leads with the mark the service store ships', () => {
     const { container } = render(ServiceHeader, { props: { svc: service({ preset: 'mysql' }) } });
     expect(container.querySelector('.mark-glyph path')).not.toBeNull();

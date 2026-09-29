@@ -37,7 +37,7 @@
       />
       <span class="truncate">{item.label}</span>
       {#if item.note}
-        <span class="text-xs text-gray-400 dark:text-gray-500">{item.note}</span>
+        <span class="text-xs text-gray-500 dark:text-gray-400">{item.note}</span>
       {/if}
     </label>
   {/each}

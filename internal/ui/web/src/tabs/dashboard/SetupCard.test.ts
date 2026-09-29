@@ -5,7 +5,7 @@ import { get } from 'svelte/store';
 
 // The setup state lives in the store module, so each test gets fresh modules.
 async function load(
-  done: { site?: boolean; service?: boolean; notify?: boolean; open?: boolean; idle?: boolean } = {},
+  done: { site?: boolean; service?: boolean; notify?: boolean; open?: boolean; idle?: boolean; mcp?: boolean } = {},
   localControl = true,
   configSetup = ''
 ) {
@@ -21,7 +21,7 @@ async function load(
   const { sites, sitesLoaded } = await import('$stores/sites');
   const { services } = await import('$stores/services');
   const { status } = await import('$stores/status');
-  const { startOnDashboardOpen } = await import('$stores/autostart');
+  const { startOnDashboardOpen, mcpGlobal } = await import('$stores/autostart');
   const { idleEnabled } = await import('$stores/idle');
   const { accessMode } = await import('$stores/accessMode');
   const { permissionState, notifyDelivery } = await import('$lib/notify');
@@ -33,6 +33,7 @@ async function load(
   status.set({ streaming_mode: false } as never);
   startOnDashboardOpen.set(!!done.open);
   idleEnabled.set(!!done.idle);
+  mcpGlobal.set(!!done.mcp);
   accessMode.update((a) => ({ ...a, localControl }));
   const { default: SetupCard } = await import('./SetupCard.svelte');
   // render comes from the same fresh module graph, or it drives a second Svelte runtime.
@@ -53,15 +54,16 @@ describe('SetupCard', () => {
   it('lists the steps with their progress', async () => {
     const { SetupCard, render, screen, fireEvent } = await load();
     render(SetupCard);
-    expect(screen.getByText('0/5')).toBeInTheDocument();
+    expect(screen.getByText('0/6')).toBeInTheDocument();
     expect(screen.getByText('Add your first site')).toBeInTheDocument();
     expect(screen.getByText('Suspend idle workers')).toBeInTheDocument();
+    expect(screen.getByText('Connect your AI assistant')).toBeInTheDocument();
   });
 
   it('collapses a finished step to its title', async () => {
     const { SetupCard, render, screen, fireEvent } = await load({ open: true });
     render(SetupCard);
-    expect(screen.getByText('1/5')).toBeInTheDocument();
+    expect(screen.getByText('1/6')).toBeInTheDocument();
     expect(screen.getByText('Start when the dashboard opens')).toBeInTheDocument();
     expect(screen.queryByText('Opening the dashboard brings Lerd up, no terminal needed')).toBeNull();
   });
@@ -77,12 +79,12 @@ describe('SetupCard', () => {
     const { SetupCard, render, screen, fireEvent } = await load({}, false);
     render(SetupCard);
     expect(screen.queryByRole('button', { name: 'Add a site' })).toBeNull();
-    expect(screen.getAllByText('Run lerd locally to use this action.')).toHaveLength(5);
+    expect(screen.getAllByText('Run lerd locally to use this action.')).toHaveLength(6);
   });
 
   it('says so when the last step ticks, then gives the slot back', async () => {
     vi.useFakeTimers();
-    const { SetupCard, setupVisible, idleEnabled, render, screen, fireEvent } = await load({ site: true, service: true, notify: true, open: true });
+    const { SetupCard, setupVisible, idleEnabled, render, screen, fireEvent } = await load({ site: true, service: true, notify: true, open: true, mcp: true });
     render(SetupCard);
 
     idleEnabled.set(true);
@@ -96,10 +98,23 @@ describe('SetupCard', () => {
 
   // Finishing while the dashboard was closed has nobody to celebrate with.
   it('goes straight back to the Lerd card when setup finished elsewhere', async () => {
-    const { SetupCard, render, screen, fetchMock } = await load({ site: true, service: true, notify: true, open: true, idle: true }, true, 'active');
+    const { SetupCard, render, screen, fetchMock } = await load({ site: true, service: true, notify: true, open: true, idle: true, mcp: true }, true, 'active');
     render(SetupCard);
     expect(screen.queryByText("You're all set")).toBeNull();
     const posts = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST');
     expect(posts.map(([, init]) => JSON.parse(String(init!.body)).state)).toEqual(['done']);
+  });
+  it('registers lerd with the AI assistants from its step', async () => {
+    const { SetupCard, render, screen, fireEvent, fetchMock } = await load({ site: true, service: true, notify: true, open: true, idle: true });
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes('/api/settings/mcp')
+        ? new Response(JSON.stringify({ ok: true, mcp_global: true }), { status: 200 })
+        : new Response('{"ok":true}', { status: 200 })
+    );
+    render(SetupCard);
+    await fireEvent.click(screen.getByRole('button', { name: 'Turn on' }));
+    const call = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/settings/mcp'));
+    expect(call).toBeTruthy();
+    expect(JSON.parse(String(call![1]!.body))).toEqual({ enabled: true });
   });
 });

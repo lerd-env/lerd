@@ -26,7 +26,7 @@
           <div class="flex items-center gap-2 px-3 py-1.5 text-xs">
             <span class="flex-1 min-w-0">
               <span class="block truncate text-gray-700 dark:text-gray-200">{img.ref}</span>
-              <span class="block text-[10px] text-gray-400 dark:text-gray-500">
+              <span class="block text-[10px] text-gray-500 dark:text-gray-400">
                 {img.in_use ? m.dashboard_disk_inUse() : m.dashboard_disk_idle()}
               </span>
             </span>

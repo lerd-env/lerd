@@ -188,3 +188,26 @@ func TestRefreshDiscoverFamilyConsumers_rewritesDefaultPresetConsumer(t *testing
 		t.Fatalf("mailpit is a default preset but still a discover consumer:\n%s", got)
 	}
 }
+
+// A default preset the user removed is not a consumer any more: the bulk
+// refresh on `lerd start` must not write its unit back.
+func TestRefreshDiscoverFamilyConsumers_leavesARemovedDefaultRemoved(t *testing.T) {
+	withServiceHome(t)
+	stubDaemonReload(t)
+	prevWait := waitReadyFn
+	waitReadyFn = func(string, time.Duration) error { return nil }
+	t.Cleanup(func() { waitReadyFn = prevWait })
+
+	prevRun := config.ServiceRunning
+	config.ServiceRunning = func(string) bool { return false }
+	t.Cleanup(func() { config.ServiceRunning = prevRun })
+
+	if err := config.SetServiceRemoved("mailpit", true); err != nil {
+		t.Fatal(err)
+	}
+	RefreshDiscoverFamilyConsumers()
+
+	if _, err := os.Stat(filepath.Join(config.QuadletDir(), "lerd-mailpit.container")); err == nil {
+		t.Fatal("lerd start wrote the unit of a removed mailpit back")
+	}
+}

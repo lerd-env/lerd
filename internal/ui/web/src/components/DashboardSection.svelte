@@ -15,7 +15,7 @@
 
   const headingClass = $derived(
     (sub ? 'text-[11px]' : 'text-xs') +
-      ' group flex items-center gap-1.5 font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500'
+      ' group flex items-center gap-1.5 font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400'
   );
 </script>
 

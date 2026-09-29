@@ -614,9 +614,13 @@ func pluralS(n int) string {
 // users who enabled globally without Claude Code (Cursor-only, Junie-only) and
 // users whose `claude` CLI is temporarily unavailable.
 func mcpEnabledGlobally(home string) bool {
-	if IsMCPGloballyRegistered() {
-		return true
-	}
+	return IsMCPGloballyRegistered() || MCPGlobalConfigured(home)
+}
+
+// MCPGlobalConfigured reports whether mcp:enable-global's marker files are in
+// place. It reads files only, never the claude CLI, so the dashboard can ask on
+// every settings load without starting a process.
+func MCPGlobalConfigured(home string) bool {
 	markers := []string{
 		filepath.Join(home, ".claude", "skills", "lerd", "SKILL.md"),
 		filepath.Join(home, ".cursor", "rules", "lerd.mdc"),

@@ -52,6 +52,23 @@ describe('palettes store', () => {
     stop();
   });
 
+  it('lays the user stylesheet last and reloads it when the themes change', async () => {
+    globalThis.fetch = vi.fn(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch;
+    const { watchThemeChanges } = await import('./palettes');
+    const { wsMessage } = await import('$lib/ws');
+
+    const stop = watchThemeChanges();
+    const link = document.getElementById('lerd-user-css') as HTMLLinkElement;
+    expect(link.href).toContain('/api/theme.css');
+    expect(document.head.lastElementChild).toBe(link);
+
+    const first = link.href;
+    await new Promise((r) => setTimeout(r, 2));
+    wsMessage.set({ type: 'theme_list' });
+    expect(link.href).not.toBe(first);
+    stop();
+  });
+
   it('lets the desktop entry replace the built-in that imitates it', async () => {
     globalThis.fetch = vi.fn(async () =>
       new Response(
@@ -79,6 +96,32 @@ describe('palettes store', () => {
     expect(breeze[0].name).toBe('Breeze');
     expect(breeze[0].accent).toBe('#1b6e10');
     expect(get(palettes).some((p) => p.id === 'plasma')).toBe(false);
+  });
+
+  // The desktop's own themes are the likeliest pick after lerd's, so they sit
+  // right under it rather than after every editor scheme, the live desktop
+  // entry included.
+  it('lists the system themes right under lerd', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          themes: [
+            { id: 'lagoon', name: 'Lagoon', accent: '#3b7ea1' },
+            { id: 'plasma', name: 'Plasma', accent: '#1b6e10', source: 'desktop' },
+            { id: 'omarchy', name: 'Omarchy (nord)', accent: '#81a1c1', source: 'desktop' }
+          ]
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    ) as unknown as typeof fetch;
+    const { loadPalettes } = await import('./palettes');
+    const { palettes } = await import('./theme');
+
+    await loadPalettes();
+
+    const ids = get(palettes).map((p) => p.id);
+    expect(ids.slice(0, 5)).toEqual(['lerd', 'breeze', 'adwaita', 'macos', 'omarchy']);
+    expect(ids.at(-1)).toBe('lagoon');
   });
 
   it('lets a file replace the built-in it is named after', async () => {

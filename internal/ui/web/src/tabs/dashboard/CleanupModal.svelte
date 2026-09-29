@@ -36,14 +36,14 @@
     {#if images.length > 0}
       <div class="rounded-lg border border-gray-200 dark:border-lerd-border divide-y divide-gray-100 dark:divide-lerd-border max-h-56 overflow-y-auto">
         {#each groups as group (group.label)}
-          <div class="px-3 py-1 bg-gray-50 dark:bg-lerd-bg text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+          <div class="px-3 py-1 bg-gray-50 dark:bg-lerd-bg text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
             {group.label} ({group.items.length})
           </div>
           {#each group.items as img (img.id)}
             <div class="flex items-center gap-2 px-3 py-1.5 text-xs">
               <span class="flex-1 min-w-0">
                 <span class="block truncate text-gray-700 dark:text-gray-200">{img.id}</span>
-                <span class="block truncate text-[10px] text-gray-400 dark:text-gray-500">{img.desc}</span>
+                <span class="block truncate text-[10px] text-gray-500 dark:text-gray-400">{img.desc}</span>
               </span>
               <span class="shrink-0 font-mono tabular-nums text-gray-500 dark:text-gray-400">{formatBytes(img.bytes)}</span>
             </div>

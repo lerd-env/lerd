@@ -187,6 +187,17 @@ func TestUnpinnedVersion_namesTheSource(t *testing.T) {
 	}{
 		{"nvmrc", map[string]string{".nvmrc": "20\n"}, "20", ".nvmrc"},
 		{"node-version file", map[string]string{".node-version": "v18.5.0\n"}, "18", ".node-version"},
+		{"mise.toml string", map[string]string{"mise.toml": "[tools]\nnode = \"22.11.0\"\n"}, "22", "mise.toml"},
+		{"mise.toml list", map[string]string{"mise.toml": "[tools]\nnode = [\"20\", \"18\"]\n"}, "20", "mise.toml"},
+		{"mise.toml table", map[string]string{"mise.toml": "[tools]\nnode = { version = \"24\" }\n"}, "24", "mise.toml"},
+		{"hidden mise.toml", map[string]string{".mise.toml": "[tools]\nnode = \"21\"\n"}, "21", ".mise.toml"},
+		{"tool-versions asdf name", map[string]string{".tool-versions": "php 8.4.1\nnodejs 20.18.0\n"}, "20", ".tool-versions"},
+		{"tool-versions mise name", map[string]string{".tool-versions": "node 23.1.0 22.0.0\n"}, "23", ".tool-versions"},
+		{"mise lts falls through", map[string]string{"mise.toml": "[tools]\nnode = \"lts\"\n", "package.json": `{"engines":{"node":">=24"}}`}, "24", "package.json"},
+		{"mise without node falls through", map[string]string{"mise.toml": "[tools]\nphp = \"8.4\"\n"}, "22", "the lerd default"},
+		{"broken mise.toml falls through", map[string]string{"mise.toml": "[tools\nnode = 20\n"}, "22", "the lerd default"},
+		{"nvmrc outranks mise.toml", map[string]string{".nvmrc": "18\n", "mise.toml": "[tools]\nnode = \"22\"\n"}, "18", ".nvmrc"},
+		{"mise.toml outranks tool-versions", map[string]string{"mise.toml": "[tools]\nnode = \"22\"\n", ".tool-versions": "nodejs 20\n"}, "22", "mise.toml"},
 		{"package.json engines", map[string]string{"package.json": `{"engines":{"node":">=24"}}`}, "24", "package.json"},
 		{"nothing declared", nil, "22", "the lerd default"},
 	}

@@ -75,3 +75,34 @@ describe('SiteIndicators share badges', () => {
     expect(queryByTitle(/^Shared/)).not.toBeInTheDocument();
   });
 });
+
+describe('SiteIndicators for screen readers', () => {
+  it('names the sharing icons instead of hiding them in a tooltip', () => {
+    const { getByRole } = render(SiteIndicators, {
+      props: { site: site({ tunnel_url: 'https://x.example', lan_share_url: 'http://192.168.1.2:8000' }) }
+    });
+    expect(getByRole('img', { name: /^Shared publicly/ })).toBeInTheDocument();
+    expect(getByRole('img', { name: /^Shared on your network/ })).toBeInTheDocument();
+  });
+
+  it('says a worker is failing', () => {
+    const { getByRole } = render(SiteIndicators, {
+      props: { site: site({ has_queue_worker: true, queue_failing: true } as Partial<Site>) }
+    });
+    expect(getByRole('img', { name: /fail/i })).toBeInTheDocument();
+  });
+
+  it('says how many workers are running', () => {
+    const { getByRole } = render(SiteIndicators, {
+      props: { site: site({ queue_running: true, schedule_running: true }) }
+    });
+    expect(getByRole('img', { name: '2 workers running' })).toBeInTheDocument();
+  });
+
+  it('says the site is asleep', () => {
+    const { getByRole } = render(SiteIndicators, {
+      props: { site: site({ idle_suspended: true, idle_suspended_workers: ['queue'] }) }
+    });
+    expect(getByRole('img', { name: /^Workers suspended/ })).toBeInTheDocument();
+  });
+});

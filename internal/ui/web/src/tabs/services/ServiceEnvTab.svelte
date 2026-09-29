@@ -29,6 +29,6 @@
   {#if svc.env_vars && Object.keys(svc.env_vars).length > 0}
     <EnvBlock vars={svc.env_vars} />
   {:else}
-    <p class="text-sm text-gray-400 dark:text-gray-500">{m.services_env_none()}</p>
+    <p class="text-sm text-gray-500 dark:text-gray-400">{m.services_env_none()}</p>
   {/if}
 </div>

@@ -13,7 +13,7 @@ import (
 // directory and which names inside it say so is the desktop's business; a
 // missing directory is an error the caller is meant to ignore, since most
 // machines have no desktop lerd can follow and that is not a failure of the
-// daemon.
+// daemon. Nil names reports a change to any file in the directory.
 func watchDesktopTheme(ctx context.Context, dir string, names []string, settle time.Duration, onChange func()) error {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -38,7 +38,7 @@ func watchDesktopTheme(ctx context.Context, dir string, names []string, settle t
 				if !ok {
 					return
 				}
-				if !slices.Contains(names, filepath.Base(event.Name)) {
+				if names != nil && !slices.Contains(names, filepath.Base(event.Name)) {
 					continue
 				}
 				if timer == nil {

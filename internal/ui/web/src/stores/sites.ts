@@ -60,6 +60,7 @@ export interface Site {
   idle?: boolean;
   idle_suspended_workers?: string[];
   services?: string[];
+  declared_services?: string[];
   suggested_services?: ServiceSuggestion[];
   db_database?: string;
   custom_container?: boolean;
@@ -647,6 +648,8 @@ export const resumeSite = (d: string) => postAction(site(d, 'unpause'));
 export const pinSite = (d: string) => postAction(site(d, 'pin'));
 export const unpinSite = (d: string) => postAction(site(d, 'unpin'));
 export const unlinkSite = (d: string) => postAction(site(d, 'unlink'));
+export const removeSiteService = (d: string, name: string) =>
+  postAction(site(d, 'service:remove') + `?name=${encodeURIComponent(name)}`);
 export const openTerminal = (d: string, branch: string = '') =>
   postAction(site(d, 'terminal') + (branch ? `?branch=${encodeURIComponent(branch)}` : ''));
 

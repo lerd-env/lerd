@@ -106,18 +106,18 @@
 </script>
 
 {#snippet tabs()}
-  <button class={tabBtn('overview', active === 'overview')} onclick={() => selectTab('overview')}>{m.sites_tabs_overview()}</button>
+  <button role="tab" aria-selected={active === 'overview'} tabindex={active === 'overview' ? 0 : -1} class={tabBtn('overview', active === 'overview')} onclick={() => selectTab('overview')}>{m.sites_tabs_overview()}</button>
   {#if canLogs}
-    <button class={tabBtn('logs', active === 'logs')} onclick={() => selectTab('logs')}>{m.services_tabs_logs()}</button>
+    <button role="tab" aria-selected={active === 'logs'} tabindex={active === 'logs' ? 0 : -1} class={tabBtn('logs', active === 'logs')} onclick={() => selectTab('logs')}>{m.services_tabs_logs()}</button>
   {/if}
   {#if canEnv}
-    <button class={tabBtn('env', active === 'env')} onclick={() => selectTab('env')}>{m.sites_tabs_env()}</button>
+    <button role="tab" aria-selected={active === 'env'} tabindex={active === 'env' ? 0 : -1} class={tabBtn('env', active === 'env')} onclick={() => selectTab('env')}>{m.sites_tabs_env()}</button>
   {/if}
   {#if canTinker}
-    <button class={tabBtn('tinker', active === 'tinker')} onclick={() => selectTab('tinker')}>{m.sites_tabs_tinker()}</button>
+    <button role="tab" aria-selected={active === 'tinker'} tabindex={active === 'tinker' ? 0 : -1} class={tabBtn('tinker', active === 'tinker')} onclick={() => selectTab('tinker')}>{m.sites_tabs_tinker()}</button>
   {/if}
   {#if canDumps}
-    <button class={tabBtn('dumps', active === 'dumps')} onclick={() => selectTab('dumps')}>{m.debug_title()}</button>
+    <button role="tab" aria-selected={active === 'dumps'} tabindex={active === 'dumps' ? 0 : -1} class={tabBtn('dumps', active === 'dumps')} onclick={() => selectTab('dumps')}>{m.debug_title()}</button>
   {/if}
 {/snippet}
 

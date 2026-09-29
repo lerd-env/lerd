@@ -366,7 +366,7 @@
 </script>
 
 <div
-  class="flex flex-wrap items-center justify-between gap-y-2 px-3 pt-2.5 shrink-0"
+  class="flex flex-wrap items-center justify-between gap-y-2 px-3 py-1.5 page-header shrink-0"
 >
   <div class="flex items-center gap-3">
     <!-- A worker has no mark of its own and would draw the generic fallback

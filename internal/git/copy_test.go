@@ -269,6 +269,31 @@ func TestJSNeedsInstall(t *testing.T) {
 			want: true,
 		},
 		{
+			// npm writes no node_modules for a manifest without packages, so
+			// the marker never appears and the rescan reinstalled every minute.
+			name: "manifest declares no packages",
+			set: func(dir string) {
+				writeFile(t, filepath.Join(dir, "package.json"), `{"name":"x","scripts":{"build":"true"}}`)
+				touch(t, filepath.Join(dir, "package-lock.json"))
+			},
+			want: false,
+		},
+		{
+			name: "manifest with only devDependencies",
+			set: func(dir string) {
+				writeFile(t, filepath.Join(dir, "package.json"), `{"devDependencies":{"vite":"^6"}}`)
+				touch(t, filepath.Join(dir, "package-lock.json"))
+			},
+			want: true,
+		},
+		{
+			name: "workspace root without packages of its own",
+			set: func(dir string) {
+				writeFile(t, filepath.Join(dir, "package.json"), `{"workspaces":["packages/*"]}`)
+			},
+			want: true,
+		},
+		{
 			name: "no lockfile but node_modules already populated",
 			set: func(dir string) {
 				touchAt(t, filepath.Join(dir, "package.json"), time.Now().Add(-time.Hour))
@@ -366,7 +391,7 @@ func TestStampInstallMarker_missingMarkerIsLeftAlone(t *testing.T) {
 func jsProject(t *testing.T, lock string) string {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"x"}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"x","dependencies":{"left-pad":"1.3.0"}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte(lock), 0o644); err != nil {

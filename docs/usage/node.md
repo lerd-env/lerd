@@ -62,10 +62,11 @@ Nothing needs configuring. If you want to change the manager, change the project
 1. `.lerd.yaml`: `node_version` field (explicit lerd override, highest priority)
 2. `.nvmrc` in the project root
 3. `.node-version` in the project root
-4. `package.json`: `engines.node` field
-5. Global default in `~/.config/lerd/config.yaml`
+4. `mise.toml` or `.mise.toml` (`node` under `[tools]`), then `.tool-versions` (`nodejs` or `node`), so a project whose Node you already manage with mise or asdf gets the same version from lerd
+5. `package.json`: `engines.node` field
+6. Global default in `~/.config/lerd/config.yaml`
 
-`.nvmrc` and `.node-version` are reduced to their major version, so `20.11.0` in either means Node 20. `.lerd.yaml` is not, so a full pin like `20.11.0` is used as written and reaches the version manager verbatim.
+`.nvmrc`, `.node-version`, `mise.toml` and `.tool-versions` are reduced to their major version, so `20.11.0` in any of them means Node 20. An alias such as `lts` or `latest` in mise or asdf has no fixed major, so resolution moves on to the next source. `.lerd.yaml` is not, so a full pin like `20.11.0` is used as written and reaches the version manager verbatim.
 
 Every source has to be version shaped: letters, digits, dots, dashes, underscores and slashes, so `22`, `20.11.0`, `v18.20.4` and `lts/iron` all work. A value carrying anything else is ignored and resolution falls through to the next source. These values are put on the command line of the worker units lerd generates, and `.lerd.yaml` is committed to the repository, so a checkout can never decide what those units run.
 

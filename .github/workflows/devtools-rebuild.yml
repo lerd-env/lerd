@@ -1,0 +1,26 @@
+name: Rebuild the native PHP collector
+
+# The engine-level collector is compiled into the PHP images from this tree, but
+# the native macOS runtime gets it as a shared object built in lerd-env/php,
+# which only builds when php.net publishes a patch. A change here would sit
+# unbuilt until then, shipping a collector older than the lerd writing the seams
+# for it, so it asks for the rebuild itself.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'internal/podman/devtools/**'
+
+jobs:
+  ask:
+    runs-on: ubuntu-latest
+    steps:
+      # GITHUB_TOKEN is scoped to this repository, so the dispatch travels on a
+      # token that can write to the build repository instead.
+      - name: Dispatch the native PHP build
+        env:
+          GH_TOKEN: ${{ secrets.LERD_PHP_DISPATCH_TOKEN }}
+        run: |
+          gh api repos/lerd-env/php/dispatches \
+            -f event_type=devtools-changed \
+            -F "client_payload[lerd_ref]=${{ github.sha }}"

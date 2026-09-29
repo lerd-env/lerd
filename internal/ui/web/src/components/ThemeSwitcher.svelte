@@ -11,7 +11,7 @@
   let { size = 'sm', align = 'left' }: Props = $props();
 
   const modes: Theme[] = ['light', 'dark', 'auto'];
-  const icons: Record<Theme, IconName> = { light: 'sun', dark: 'moon', auto: 'contrast' };
+  const icons: Record<Theme, IconName> = { light: 'sun', dark: 'moon', auto: 'monitor' };
 
   const labels = $derived<Record<Theme, string>>({
     light: m.theme_light(),

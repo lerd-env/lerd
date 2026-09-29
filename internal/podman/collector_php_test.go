@@ -33,6 +33,19 @@ func runCollectorPHP(t *testing.T, body string) []string {
 // a test that has to put a seam file next to the collector before it runs.
 func runCollectorPHPIn(t *testing.T, dir string, body string) []string {
 	t.Helper()
+	return runCollectorPHPSeams(t, dir, body, false)
+}
+
+// runCollectorPHPViaAssetsIni is runCollectorPHPIn with the seam file found
+// through lerd.assets_dir instead of the env override, which is how the native
+// runtime points at it.
+func runCollectorPHPViaAssetsIni(t *testing.T, dir string, body string) []string {
+	t.Helper()
+	return runCollectorPHPSeams(t, dir, body, true)
+}
+
+func runCollectorPHPSeams(t *testing.T, dir string, body string, viaAssetsIni bool) []string {
+	t.Helper()
 	php, err := exec.LookPath("php")
 	if err != nil {
 		t.Skip("php not installed")
@@ -90,11 +103,15 @@ func runCollectorPHPIn(t *testing.T, dir string, body string) []string {
 		t.Fatalf("write script: %v", err)
 	}
 
-	cmd := exec.Command(php, noBridge(scriptPath)...)
-	cmd.Env = append(os.Environ(),
-		"LERD_DEVTOOLS_HOST=unix://"+sock,
-		"LERD_DEVTOOLS_SEAMS="+filepath.Join(dir, "devtools-seams.conf"),
-	)
+	args := noBridge(scriptPath)
+	env := append(os.Environ(), "LERD_DEVTOOLS_HOST=unix://"+sock)
+	if viaAssetsIni {
+		args = append([]string{"-d", "lerd.assets_dir=" + dir}, args...)
+	} else {
+		env = append(env, "LERD_DEVTOOLS_SEAMS="+filepath.Join(dir, "devtools-seams.conf"))
+	}
+	cmd := exec.Command(php, args...)
+	cmd.Env = env
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("php run failed: %v\n%s", err, out)
 	}
@@ -1030,5 +1047,54 @@ namespace {
 	chat := events[1].Data
 	if chat.Channel != "chat" || chat.Transport != "slack" || chat.Body != "deploy finished" {
 		t.Errorf("chat = %+v, want the chat channel and its transport", chat)
+	}
+}
+
+// TestCollectorPHP_SeamsFoundViaAssetsIni checks the collector locates the seam
+// file through lerd.assets_dir when nothing sets the env override. The native
+// runtime writes that ini and has no /usr/local/etc/lerd, so without it every
+// store-declared lens (App log, Exceptions, Messages, Ray) captures nothing.
+func TestCollectorPHP_SeamsFoundViaAssetsIni(t *testing.T) {
+	dir := t.TempDir()
+	seams := "# header\n" +
+		"log|class|Fixture\\Log\\Logger|addRecord|\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
+		t.Fatalf("write seams: %v", err)
+	}
+	got := runCollectorPHPViaAssetsIni(t, dir, `<?php
+namespace Fixture\Log { class Logger { public function getName() { return 'app'; } public function addRecord() {} } }
+namespace {
+    require COLLECTOR;
+    $logger = new \Fixture\Log\Logger();
+    \Lerd\Collector\seam_begin('Fixture\\Log\\Logger', 'addRecord', $logger, [1 => 200, 2 => 'release test line', 3 => ['ok' => true]]);
+    \Lerd\Collector\seam_end('Fixture\\Log\\Logger', 'addRecord', false);
+}
+`)
+
+	type ev struct {
+		Kind string `json:"kind"`
+		Data struct {
+			Level   string `json:"level"`
+			Message string `json:"message"`
+			Channel string `json:"channel"`
+		} `json:"data"`
+	}
+	var events []ev
+	for _, line := range got {
+		var e ev
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			t.Fatalf("bad JSON line %q: %v", line, err)
+		}
+		events = append(events, e)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want the one the seam reports: %v", len(events), got)
+	}
+	e := events[0]
+	if e.Kind != "log" {
+		t.Errorf("kind = %q, want log", e.Kind)
+	}
+	if e.Data.Message != "release test line" || e.Data.Channel != "app" || e.Data.Level != "info" {
+		t.Errorf("data = %+v, want the record's level, channel and message", e.Data)
 	}
 }

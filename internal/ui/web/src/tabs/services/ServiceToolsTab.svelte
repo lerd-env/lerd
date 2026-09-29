@@ -39,7 +39,7 @@
           <div class="min-w-0">
             <code class="block text-sm font-mono font-semibold text-gray-800 dark:text-gray-100 leading-tight truncate">{shim.tool}</code>
             {#if managedElsewhere}
-              <p class="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{m.services_tools_providedBy({ service: shim.owner ?? '' })}</p>
+              <p class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">{m.services_tools_providedBy({ service: shim.owner ?? '' })}</p>
             {:else if shim.host_has}
               <p class="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">{m.services_tools_shadow()}</p>
             {/if}

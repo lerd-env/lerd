@@ -36,4 +36,14 @@ describe('IconButton', () => {
     // keeps the size prop honest; if someone removes sm/md/lg it fails
     expect(Object.keys(IconButton)).toBeDefined();
   });
+
+  it('tells a screen reader which one is the current page', () => {
+    render(IconButtonHarness, { props: { title: 'Sites', active: true } });
+    expect(screen.getByRole('button', { name: 'Sites' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('leaves aria-current off the inactive ones', () => {
+    render(IconButtonHarness, { props: { title: 'Sites', active: false } });
+    expect(screen.getByRole('button', { name: 'Sites' })).not.toHaveAttribute('aria-current');
+  });
 });

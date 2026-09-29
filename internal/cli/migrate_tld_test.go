@@ -135,7 +135,7 @@ func TestMigrateWorktreeVhosts_RewritesConfsAndEnv(t *testing.T) {
 		t.Fatalf("mkdir wt: %v", err)
 	}
 	envPath := filepath.Join(wtPath, ".env")
-	if err := os.WriteFile(envPath, []byte("APP_URL=http://feat-x.alpha.test\n"), 0644); err != nil {
+	if err := os.WriteFile(envPath, []byte("APP_URL=http://feat-x.alpha.test\nVITE_REVERB_HOST=feat-x.alpha.test\n"), 0644); err != nil {
 		t.Fatalf("write .env: %v", err)
 	}
 
@@ -160,6 +160,11 @@ func TestMigrateWorktreeVhosts_RewritesConfsAndEnv(t *testing.T) {
 	envBytes, _ := os.ReadFile(envPath)
 	if !contains(envBytes, "APP_URL=http://feat-x.alpha.localhost") {
 		t.Errorf(".env not updated; got %q", envBytes)
+	}
+	// Reverb's browser host names the worktree's domain too, and was left on
+	// the old TLD while APP_URL moved.
+	if !contains(envBytes, "VITE_REVERB_HOST=feat-x.alpha.localhost") {
+		t.Errorf("VITE_REVERB_HOST not updated; got %q", envBytes)
 	}
 }
 

@@ -557,3 +557,65 @@ func TestDashProxyCacheFollowsTheTweaks(t *testing.T) {
 		t.Error("two services share one proxy")
 	}
 }
+
+// A dashboard learns its language from Accept-Language, which is the browser's,
+// so a language picked in lerd itself travels in a cookie and the proxy states
+// it upstream instead.
+func TestDashProxyDirector_SpeaksTheLanguageChosenInLerd(t *testing.T) {
+	target, _ := url.Parse("http://localhost:8082")
+	p := newDashProxy("adminer", target, dashProxyTweaks{})
+
+	req := httptest.NewRequest("GET", "http://lerd.localhost/_svc/adminer/", nil)
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.AddCookie(&http.Cookie{Name: dashLocaleCookie, Value: "ro"})
+	p.Director(req)
+	if got := req.Header.Get("Accept-Language"); got != "ro,en;q=0.5" {
+		t.Errorf("Accept-Language = %q, want the lerd choice first", got)
+	}
+
+	// Without a choice the browser's own preference goes through untouched.
+	req = httptest.NewRequest("GET", "http://lerd.localhost/_svc/adminer/", nil)
+	req.Header.Set("Accept-Language", "de-DE,de;q=0.9")
+	p.Director(req)
+	if got := req.Header.Get("Accept-Language"); got != "de-DE,de;q=0.9" {
+		t.Errorf("Accept-Language = %q, want the browser's unchanged", got)
+	}
+
+	// The cookie is client input, so anything that is not a language tag is
+	// ignored rather than written into a header.
+	req = httptest.NewRequest("GET", "http://lerd.localhost/_svc/adminer/", nil)
+	req.Header.Set("Accept-Language", "fr")
+	req.AddCookie(&http.Cookie{Name: dashLocaleCookie, Value: "ro,x;q=9"})
+	p.Director(req)
+	if got := req.Header.Get("Accept-Language"); got != "fr" {
+		t.Errorf("Accept-Language = %q, want a malformed cookie ignored", got)
+	}
+}
+
+// A dashboard that remembers its own language in a cookie (phpMyAdmin's
+// pma_lang) would keep it over Accept-Language, so while lerd names a language
+// the preset's cookie is held back and every other cookie goes through.
+func TestDashProxyDirector_HoldsBackTheDashboardsOwnLanguageCookie(t *testing.T) {
+	target, _ := url.Parse("http://localhost:8080")
+	p := newDashProxy("phpmyadmin", target, dashProxyTweaks{localeCookies: []string{"pma_lang", "pma_lang_https"}})
+
+	req := httptest.NewRequest("GET", "http://lerd.localhost/_svc/phpmyadmin/", nil)
+	req.AddCookie(&http.Cookie{Name: dashLocaleCookie, Value: "de"})
+	req.AddCookie(&http.Cookie{Name: "pma_lang", Value: "en"})
+	req.AddCookie(&http.Cookie{Name: "phpMyAdmin", Value: "sess"})
+	p.Director(req)
+	if _, err := req.Cookie("pma_lang"); err == nil {
+		t.Error("pma_lang forwarded, phpMyAdmin would stay on its old language")
+	}
+	if c, err := req.Cookie("phpMyAdmin"); err != nil || c.Value != "sess" {
+		t.Errorf("session cookie lost: %v", err)
+	}
+
+	// With no language chosen in lerd, the dashboard keeps its own.
+	req = httptest.NewRequest("GET", "http://lerd.localhost/_svc/phpmyadmin/", nil)
+	req.AddCookie(&http.Cookie{Name: "pma_lang", Value: "en"})
+	p.Director(req)
+	if _, err := req.Cookie("pma_lang"); err != nil {
+		t.Error("pma_lang dropped although lerd named no language")
+	}
+}

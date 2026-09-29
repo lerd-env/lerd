@@ -26,6 +26,13 @@ describe('ThemeSwitcher', () => {
     expect(queryByText('light')).not.toBeInTheDocument();
   });
 
+  // A half-filled circle read as a contrast setting; a screen is what every
+  // system settings panel draws for "follow the system".
+  it('draws auto as a monitor', () => {
+    const { container } = render(ThemeSwitcher);
+    expect(container.querySelector('path')?.getAttribute('d')).toMatch(/^M9\.75 17L9 20/);
+  });
+
   it('names the resolved theme on the trigger while on auto', () => {
     const { getByLabelText } = render(ThemeSwitcher);
     expect(getByLabelText(/auto \((light|dark)\)/)).toBeInTheDocument();

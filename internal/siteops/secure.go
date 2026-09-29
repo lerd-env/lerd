@@ -92,6 +92,8 @@ func SetSecuredCascade(site *config.Site, secured bool) ([]string, error) {
 		}
 	}
 	site.Secured = secured
+	// An explicit toggle outranks the scheme remembered across a DNS disable.
+	site.SecuredBeforeDNSOff = false
 	if err := config.AddSite(*site); err != nil {
 		return nil, fmt.Errorf("updating site registry: %w", err)
 	}

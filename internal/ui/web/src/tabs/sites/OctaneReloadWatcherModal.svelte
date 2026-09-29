@@ -50,7 +50,7 @@
     <p class="text-sm text-gray-600 dark:text-gray-400">
       {m.octaneWatcher_body()}
     </p>
-    <p class="text-[11px] text-gray-400 dark:text-gray-500">
+    <p class="text-[11px] text-gray-500 dark:text-gray-400">
       {m.octaneWatcher_command()}
     </p>
     {#if error}

@@ -22,7 +22,9 @@
     startOnDashboardOpen,
     toggleStartOnDashboardOpen,
     betaUpdates,
-    toggleBetaUpdates
+    toggleBetaUpdates,
+    mcpGlobal,
+    toggleMCP
   } from '$stores/autostart';
   import { idleEnabled, idleTimeoutMinutes, loadIdle, saveIdle } from '$stores/idle';
   import { setStreamingEnabled } from '$stores/workspaces';
@@ -118,6 +120,17 @@
       await toggleTray(!$trayEnabled);
     } finally {
       trayBusy = false;
+    }
+  }
+
+  let mcpBusy = $state(false);
+  let mcpFailed = $state(false);
+  async function onToggleMCP() {
+    mcpBusy = true;
+    try {
+      mcpFailed = !(await toggleMCP(!$mcpGlobal));
+    } finally {
+      mcpBusy = false;
     }
   }
 
@@ -383,6 +396,7 @@
             <input
               type="number"
               min="1"
+              aria-label={m.system_idle_timeoutLabel()}
               bind:value={idleMinutesInput}
               onblur={onSaveIdleTimeout}
               onkeydown={(e) => e.key === 'Enter' && onSaveIdleTimeout()}
@@ -481,7 +495,7 @@
       <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_startOnOpen_description()}</p>
     </SettingsCard>
 
-    <SettingsCard class="@3xl:col-span-2">
+    <SettingsCard>
       <div class="flex items-center justify-between gap-3 mb-2">
         <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_tray_title()}</span>
         {#if $accessMode.localControl}
@@ -500,6 +514,30 @@
         {/if}
       </div>
       <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_tray_description()}</p>
+    </SettingsCard>
+
+    <SettingsCard>
+      <div class="flex items-center justify-between gap-3 mb-2">
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_mcp_title()}</span>
+        {#if $accessMode.localControl}
+          <Toggle
+            on={$mcpGlobal}
+            loading={mcpBusy}
+            onclick={onToggleMCP}
+            title={$mcpGlobal ? m.system_mcp_toggleOff() : m.system_mcp_toggleOn()}
+          />
+        {:else}
+          <StatusPill
+            size="sm"
+            tone={$mcpGlobal ? 'ok' : 'muted'}
+            label={$mcpGlobal ? m.common_enabled() : m.common_disabled()}
+          />
+        {/if}
+      </div>
+      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_mcp_description()}</p>
+      {#if mcpFailed}
+        <p class="mt-2 text-xs text-red-600 dark:text-red-400">{m.system_mcp_failed()}</p>
+      {/if}
     </SettingsCard>
     </div>
 
@@ -722,7 +760,7 @@
             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >{m.system_remote_enable()}</button>
           {#if !$lan.exposed}
-            <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">{m.system_remote_exposeFirst()}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">{m.system_remote_exposeFirst()}</p>
           {/if}
         </div>
       {/if}

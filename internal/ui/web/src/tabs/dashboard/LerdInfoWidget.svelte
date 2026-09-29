@@ -37,7 +37,7 @@
   {/snippet}
 
   {#if $version.checked && !$version.hasUpdate}
-    <div class="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-500">
+    <div class="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
       <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
       </svg>
@@ -104,7 +104,7 @@
   </div>
 
   <div class="pt-2 border-t border-gray-100 dark:border-lerd-border space-y-1.5">
-    <div class="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">{m.dashboard_activity_title()}</div>
+    <div class="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{m.dashboard_activity_title()}</div>
     <ActivityList />
   </div>
 

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, type Snippet } from 'svelte';
   import Icon from './Icon.svelte';
+  import { dialog } from '$lib/dialog';
   import { m } from '../paraglide/messages.js';
 
   interface Props {
@@ -12,6 +13,8 @@
     footer?: Snippet;
   }
   let { open, title, onclose, size = 'md', children, footer }: Props = $props();
+  const uid = $props.id();
+  const titleId = `${uid}-title`;
 
   const widthClass = $derived(
     size === 'sm'
@@ -43,14 +46,20 @@
       onclick={onclose}
     ></button>
     <div
-      class="relative bg-white dark:bg-lerd-card border border-gray-200 dark:border-lerd-border rounded-xl shadow-2xl w-full {widthClass} mx-4 lerd-panel-in transition-[max-width] duration-200 ease-out"
+      use:dialog
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      tabindex="-1"
+      class="relative outline-none bg-white dark:bg-lerd-card border border-gray-200 dark:border-lerd-border rounded-xl shadow-2xl w-full {widthClass} mx-4 lerd-panel-in transition-[max-width] duration-200 ease-out"
     >
       <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-lerd-border">
-        <h3 class="min-w-0 break-words font-semibold text-gray-900 dark:text-white">{title}</h3>
+        <h3 id={titleId} class="min-w-0 break-words font-semibold text-gray-900 dark:text-white">{title}</h3>
         <button
           onclick={onclose}
           class="shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
           title={m.common_close()}
+          aria-label={m.common_close()}
         >
           <Icon name="close" class="w-5 h-5" />
         </button>

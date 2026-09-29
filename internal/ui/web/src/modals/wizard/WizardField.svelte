@@ -13,6 +13,6 @@
   <div class="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</div>
   {@render children()}
   {#if hint}
-    <div class="text-xs text-gray-400 dark:text-gray-500">{hint}</div>
+    <div class="text-xs text-gray-500 dark:text-gray-400">{hint}</div>
   {/if}
 </div>

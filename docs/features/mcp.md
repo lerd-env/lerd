@@ -18,6 +18,8 @@ Run once after installing lerd:
 lerd mcp:enable-global
 ```
 
+Or turn on **AI assistants (MCP)** under System in the [web UI](./web-ui.md#system), which does the same and turns it off again with `lerd mcp:disable-global`'s teardown.
+
 This registers the lerd MCP server at **user scope**, available in every session regardless of which directory you open, and writes user-scope context files so the assistant knows what lerd tools are available and how to use them.
 
 MCP server registration:

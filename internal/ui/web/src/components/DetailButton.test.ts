@@ -3,6 +3,15 @@ import { describe, it, expect, vi } from 'vitest';
 import Harness from './DetailButton.test.svelte';
 
 describe('DetailButton', () => {
+  // Squeezed by a paragraph beside it, a label broke onto two lines and the
+  // button turned into a tall block.
+  it('keeps its label on one line and its width', () => {
+    render(Harness, { props: { label: 'Import theme' } });
+    const cls = screen.getByText('Import theme').closest('button')!.className;
+    expect(cls).toContain('whitespace-nowrap');
+    expect(cls).toContain('shrink-0');
+  });
+
   it('renders a button by default', () => {
     render(Harness, { props: { label: 'Click' } });
     const btn = screen.getByText('Click').closest('button');

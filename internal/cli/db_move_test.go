@@ -124,3 +124,16 @@ func TestResolveMoveSites(t *testing.T) {
 		}
 	})
 }
+
+// Only the worktree databases on the service being moved away from go along;
+// one already elsewhere stays where it is.
+func TestWorktreeDBsOn(t *testing.T) {
+	entries := []config.WorktreeDBEntry{
+		{Site: "acme", Branch: "feat-x", Service: "mysql", DBName: "acme_feat_x"},
+		{Site: "acme", Branch: "hotfix", Service: "mariadb-11", DBName: "acme_hotfix"},
+	}
+	got := worktreeDBsOn(entries, "mysql")
+	if len(got) != 1 || got[0].DBName != "acme_feat_x" {
+		t.Errorf("worktreeDBsOn = %v, want acme_feat_x only", got)
+	}
+}

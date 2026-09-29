@@ -158,4 +158,16 @@ describe('PhpDetail', () => {
     await tick();
     expect(screen.queryByText('Ports')).not.toBeNull();
   });
+
+  // The action reads the pins past their cache and downloads only when they
+  // moved, so it is how you ask whether there is anything. Disabled until an
+  // update was already known, a build replaced without its version changing
+  // could never be taken from here.
+  it('leaves the native update action clickable with nothing known to fetch', async () => {
+    phpRuntimeStore.set('native');
+    render(PhpDetail, { props: { version: '8.4' } });
+    await tick();
+    expect(screen.getByText('Update build').closest('button')).not.toBeDisabled();
+    phpRuntimeStore.set('container');
+  });
 });

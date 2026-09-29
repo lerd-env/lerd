@@ -174,6 +174,35 @@ func TestMcpEnabledGlobally_detectsCursorRules(t *testing.T) {
 	}
 }
 
+func TestMCPGlobalConfigured_readsTheMarkersAlone(t *testing.T) {
+	home := t.TempDir()
+	if MCPGlobalConfigured(home) {
+		t.Errorf("expected false when no markers present")
+	}
+	rules := filepath.Join(home, ".cursor", "rules", "lerd.mdc")
+	if err := os.MkdirAll(filepath.Dir(rules), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(rules, []byte("x"), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if !MCPGlobalConfigured(home) {
+		t.Errorf("expected true once enable-global's marker exists")
+	}
+}
+
+func TestMCPGlobalConfigured_neverAsksClaude(t *testing.T) {
+	asked := false
+	prev := claudeMCP
+	claudeMCP = func(args ...string) ([]byte, error) { asked = true; return nil, nil }
+	t.Cleanup(func() { claudeMCP = prev })
+
+	MCPGlobalConfigured(t.TempDir())
+	if asked {
+		t.Error("the dashboard's check ran the claude CLI; it reads files only")
+	}
+}
+
 func TestWriteGlobalAISkills_replacesExistingLerdBlock(t *testing.T) {
 	home := t.TempDir()
 

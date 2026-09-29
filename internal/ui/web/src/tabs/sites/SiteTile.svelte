@@ -74,7 +74,7 @@
         onclick={openBrowser}
         title={m.sites_openInBrowser()}
         aria-label={m.sites_openInBrowser()}
-        class="ml-0.5 inline-flex items-center justify-center w-7 h-7 rounded-lg text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+        class="ml-0.5 inline-flex items-center justify-center w-7 h-7 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
       >
         <Icon name="external" class="w-3.5 h-3.5" />
       </button>

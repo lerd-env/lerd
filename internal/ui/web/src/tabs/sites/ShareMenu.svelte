@@ -126,6 +126,14 @@
     open = false;
   }
 
+  // The hover grace is for a pointer crossing the gap to the menu; focus that
+  // has moved elsewhere is not coming back, so the menu goes at once.
+  function onFocusOut(e: FocusEvent) {
+    const root = e.currentTarget as HTMLElement;
+    if (e.relatedTarget instanceof Node && !root.contains(e.relatedTarget)) closeNow();
+    else scheduleClose();
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') closeNow();
   }
@@ -297,13 +305,13 @@
   onmouseenter={openMenu}
   onmouseleave={scheduleClose}
   onfocusin={openMenu}
-  onfocusout={scheduleClose}
+  onfocusout={onFocusOut}
 >
   <button
     bind:this={btnEl}
     type="button"
     onclick={onButtonClick}
-    disabled={shareBusy}
+    aria-disabled={shareBusy}
     aria-label={tunnelOn
       ? m.share_stopTunnel()
       : publicShared
@@ -338,7 +346,7 @@
       style="position:fixed; left:{menuX}px; top:{menuY}px; width:{MENU_WIDTH}px; z-index:40"
       class="rounded-md border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-bg shadow-lg py-1"
     >
-      <div class="px-3 pt-1.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+      <div class="px-3 pt-1.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
         {m.share_localNetwork()}
       </div>
       {#if lanBusy}
@@ -381,7 +389,7 @@
       {/if}
 
       <div class="my-1 border-t border-gray-100 dark:border-lerd-border"></div>
-      <div class="px-3 pt-0.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+      <div class="px-3 pt-0.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
         {m.publicShare_title()}
       </div>
 
@@ -430,7 +438,7 @@
       {/if}
 
       <div class="my-1 border-t border-gray-100 dark:border-lerd-border"></div>
-      <div class="px-3 pt-0.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+      <div class="px-3 pt-0.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
         {m.share_publicTunnel()}
       </div>
 

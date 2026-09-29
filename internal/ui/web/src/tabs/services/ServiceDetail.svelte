@@ -112,7 +112,7 @@
     <ServiceEntitiesTab {svc} />
   {:else if active === 'logs'}
     {#if logsIdle}
-      <p class="p-3 sm:p-5 text-sm text-gray-400 dark:text-gray-500">{m.services_logsStopped()}</p>
+      <p class="p-3 sm:p-5 text-sm text-gray-500 dark:text-gray-400">{m.services_logsStopped()}</p>
     {:else}
       {#key svc.name + ':' + logPath}
         <LogViewer path={logPath} highlight={logHighlight} />

@@ -38,10 +38,10 @@
   // settling to the real state once the restart completes.
   const iconClass = $derived(
     reloadLoading
-      ? 'text-gray-400 dark:text-gray-500'
+      ? 'text-gray-500 dark:text-gray-400'
       : reload
         ? 'text-emerald-500 drop-shadow-[0_0_4px_rgba(16,185,129,0.9)]'
-        : 'text-gray-400 dark:text-gray-500'
+        : 'text-gray-500 dark:text-gray-400'
   );
 
   // One full turn of the refresh icon as click feedback. Reset on animation end,

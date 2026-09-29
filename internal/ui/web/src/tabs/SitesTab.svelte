@@ -559,16 +559,17 @@
 {#snippet siteRow(s: Site, grouped = false)}
   <button
     onclick={() => select(s)}
+    aria-current={selected === s.domain ? 'page' : undefined}
     class="group relative w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors border-b border-lerd-chromeborder/50 dark:border-lerd-border/50 {selected ===
     s.domain
       ? 'bg-lerd-red/10 text-lerd-red'
       : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/3'}"
   >
     {#if canReorder && !grouped}
+      <!-- Mouse-only affordance: keyboard users reorder through the list item itself (Space, then arrows). -->
       <span
-        role="button"
-        tabindex="-1"
-        aria-label={m.sites_sort_reorder()}
+        aria-hidden="true"
+        title={m.sites_sort_reorder()}
         use:dragHandle
         onclick={(e) => e.stopPropagation()}
         onkeydown={(e) => e.stopPropagation()}
@@ -578,14 +579,14 @@
       </span>
     {/if}
     {#if grouped}
-      <Icon name="group" class="w-3.5 h-3.5 shrink-0 text-gray-400 dark:text-gray-500" />
+      <Icon name="group" class="w-3.5 h-3.5 shrink-0 text-gray-500 dark:text-gray-400" />
     {/if}
     <span class="relative shrink-0 w-4 h-4 flex items-center justify-center">
       <SiteIcon site={s} />
     </span>
     <span class="flex-1 text-sm truncate">{s.domain}</span>
     {#if s.tls}
-      <svg class="w-3 h-3 shrink-0 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg class="w-3 h-3 shrink-0 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" role="img" aria-label={m.sites_tls_on()}>
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
       </svg>
     {/if}
@@ -599,7 +600,9 @@
        always live, and a press that reached it would drag the whole workspace
        instead of the row. The grip's own listener has already run by then, so
        row dragging is unaffected. -->
-  <section
+  <!-- A div, not a section: the drag library gives the zone role="list", which a section may not carry. -->
+  <div
+    data-row-zone
     class="{hasWorkspaces && (zones[key]?.length ?? 0) === 0 ? 'min-h-[1.75rem]' : ''} {key === UNGROUPED &&
     hasWorkspaces
       ? 'border-t border-lerd-chromeborder dark:border-lerd-border'
@@ -617,7 +620,7 @@
         {/each}
       </div>
     {/each}
-  </section>
+  </div>
 {/snippet}
 
 {#snippet workspaceMenu(key: string)}
@@ -745,7 +748,7 @@
             onclick={() => select(s)}
             class="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors border-t border-lerd-chromeborder/50 dark:border-lerd-border/50 {selected === s.domain
               ? 'bg-lerd-red/10 text-lerd-red'
-              : 'text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-white/3'}"
+              : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/3'}"
           >
             <svg class="w-3 h-3 shrink-0 opacity-60" fill="currentColor" viewBox="0 0 24 24">
               <path d="M6 5h4v14H6zM14 5h4v14h-4z"/>

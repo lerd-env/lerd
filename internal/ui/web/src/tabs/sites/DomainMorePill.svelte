@@ -31,7 +31,7 @@
     <span
       class="inline-flex items-center gap-1 text-xs {hasConflicts
         ? 'text-amber-600 dark:text-amber-400'
-        : 'text-gray-400 dark:text-gray-500'}"
+        : 'text-gray-500 dark:text-gray-400'}"
     >
       {#if hasConflicts}
         <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

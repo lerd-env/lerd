@@ -15,6 +15,9 @@ since that follows the room you are sitting in rather than the install.
 | Theme | Accent | Background (dark mode) |
 |---|---|---|
 | `lerd` | the bright brand red | `#0d0d0d` |
+| Breeze | Plasma blue | `#141618` |
+| Adwaita | Adwaita blue | `#1d1d20` |
+| macOS | the system blue | `#1e1e1e` |
 | `muted` | a desaturated brick | `#111113` |
 | Ocean | a calm steel blue | `#0d1418` |
 | Solarized Dark | Solarized blue | `#002b36` |
@@ -23,9 +26,6 @@ since that follows the room you are sitting in rather than the install.
 | Dracula | Dracula purple | `#282a36` |
 | Nord | Nord frost | `#2e3440` |
 | Gruvbox Dark | Gruvbox orange | `#282828` |
-| Breeze | Plasma blue | `#141618` |
-| Adwaita | Adwaita blue | `#1d1d20` |
-| macOS | the system blue | `#1e1e1e` |
 
 `lerd` is the default. `muted` is there for anyone who finds the default red too
 sharp, especially on a bright screen.
@@ -39,6 +39,14 @@ Each theme carries a light tone and a dark tone for its accent, so switching
 between light and dark keeps the colour readable on whichever surface the mode
 paints. The editor and desktop schemes are dark schemes: their backgrounds apply
 in dark mode, and in light mode you get their accent on the usual white.
+
+Whatever a theme declares, the dashboard keeps its text readable. An accent that
+falls short of WCAG AA contrast as link text on the card behind it is nudged
+darker in light mode or lighter in dark mode, just far enough to pass, and its
+hover tone follows. The muted grey used for secondary text gets the same
+treatment against each theme's own surfaces, which is what keeps small print
+legible on tinted schemes like Cobalt and Nord. An accent that already passes
+is used exactly as written.
 
 ## Writing your own
 
@@ -64,18 +72,23 @@ bg: "#0c1114"               # page background, dark mode
 card: "#141b1f"             # card background, dark mode
 border: "#222c32"           # card and divider borders, dark mode
 muted: "#3c4a52"            # dim text and inactive marks, dark mode
+bg_light: "#eef3f5"         # page background, light mode
+card_light: "#f8fbfc"       # card background, light mode
+border_light: "#d5e0e5"     # card and divider borders, light mode
 ```
 
 Every value must be a plain hex colour, `#rgb` or `#rrggbb`. CSS colour names
 (`rebeccapurple`) and functional notations (`rgb()`, `oklch()`) are refused: the
 value is handed to the browser as a custom property, and only a literal colour
-may come out of a file and decide how the page paints. The four surface fields
-apply to dark mode only, where light mode draws on white and the standard greys.
+may come out of a file and decide how the page paints. `bg`, `card`, `border` and
+`muted` apply to dark mode; `bg_light`, `card_light` and `border_light` are their
+light mode counterparts. Leave the light ones out and light mode keeps white cards
+on the standard greys.
 
 A file named after a built-in replaces it rather than appearing twice, so you can
 keep the name and change the colours.
 
-Reload the dashboard and the theme appears in the picker. A file with a mistake
+The theme appears in the picker as soon as the file is saved. A file with a mistake
 in it is listed under the picker with the reason, rather than quietly missing.
 
 ## Importing
@@ -99,16 +112,39 @@ it: the desktop is the source, so the entry goes away when the desktop does.
 On a fresh install the offer is one of the **Get started with Lerd** steps. An
 install that never went through Get started and has never had a theme chosen gets
 a banner offering the desktop's entry instead, with one button to switch to it and
-one to keep the current theme. lerd never switches on its own. Either answer is written to the config like any other
+one to keep the current theme. Either answer is written to the config like any other
 pick, so the banner shows up once per install, not once per browser, and it never
 comes back after a theme has been chosen.
 
+Omarchy is the one desktop lerd switches to on its own: installing or upgrading lerd on Omarchy puts an install that has never had a theme chosen on the Omarchy entry straight away, since that desktop is built around a single theme everything follows. A theme already chosen, the default included, is left alone, and picking another one afterwards sticks.
+
 **Omarchy** publishes everything in the active theme's `colors.toml`, which every
-theme it ships carries. A dark desktop theme lends its accent and its surfaces; a
-light one lends only its accent, because the surface fields are the dark ones and
-a pale background would land behind type coloured to sit on a dark card. The
-watch sits on `~/.local/state/omarchy/current`, which is where
-`omarchy-theme-set` moves the new theme into place.
+theme it ships carries. A dark desktop theme lends its accent and the dark
+surfaces; a light one lends its accent and the light surfaces, its
+`dark_background` as the page and its `background` as the cards. The watch sits
+on `~/.local/state/omarchy/current`, which is where `omarchy-theme-set` moves the
+new theme into place.
+
+To choose the colours yourself, for both modes at once, put a `lerd.yaml` in the
+theme. It takes the same fields as a theme file, none of them required, and any
+tone it sets wins over what lerd reads off `colors.toml`. The easiest way to keep
+one for every theme is an Omarchy template, which lives in your dotfiles and is
+rendered into the active theme on each switch. Save this as
+`~/.config/omarchy/themed/lerd.yaml.tpl`:
+
+```yaml
+accent: "{{ accent }}"
+bg: "{{ background }}"
+card: "{{ lighter_background }}"
+border: "{{ selection }}"
+muted: "{{ muted }}"
+bg_light: "{{ dark_background }}"
+card_light: "{{ background }}"
+border_light: "{{ selection }}"
+```
+
+A theme author can ship a `lerd.yaml` in the theme itself instead. A `lerd.yaml`
+with a mistake in it is listed under the picker like any other theme file.
 
 **Plasma** keeps the accent and a copy of the active colour scheme in
 `~/.config/kdeglobals`, so the entry carries surfaces too: the view background,
@@ -118,6 +154,14 @@ rather than the scheme's name. A light scheme lends one tone instead, the window
 background it tints its own chrome with, which the dashboard puts behind the rail
 and the sidebar in light mode. A stock Plasma that never had an accent picked
 lends the scheme's selection colour instead.
+
+The chrome also follows focus the way Plasma's own windows do. Breeze draws a
+focused window's header in its own tone and an unfocused one in the window
+colour, and the scheme's `[Colors:Header]` group says what that focused tone is.
+While the dashboard window has focus the rail and the page headers take it, in
+dark and light mode alike, and they drop back to the window colour as soon as
+focus moves to another window. The sidebar between them holds still. A scheme
+without a header group, as schemes from before Plasma 6 are, keeps a single tone.
 
 **GNOME** publishes the accent alone, one of the ten libadwaita colours, read
 from `org.gnome.desktop.interface accent-color`. That is all it lends, since the
@@ -164,6 +208,35 @@ entry gets its surfaces.
 A theme file named `omarchy.yaml`, `breeze.yaml`, `adwaita.yaml` or `macos.yaml`
 is shadowed by the desktop entry rather than replacing it: picking the entry named after a
 desktop has to give you that desktop's colours.
+
+## Custom CSS
+
+For anything colours alone do not reach, such as a font, give a theme a stylesheet
+beside its YAML: `~/.config/lerd/themes/lagoon.css` is loaded after the
+dashboard's own whenever `lagoon` is the theme in use, and every open dashboard
+picks up a change to it without a reload. For the Omarchy entry the file is
+`omarchy.css`, and a `lerd.css` in the active Omarchy theme is loaded before it,
+so a `~/.config/omarchy/themed/lerd.css.tpl` template can style each Omarchy
+theme from your dotfiles.
+
+The stylesheet goes with its theme, so picking **Lerd** in the picker puts the
+dashboard back on its default look, custom CSS and all, without deleting anything.
+
+The dashboard adds `dark` to `<html>` in dark mode, so target the modes with
+`.dark` and `:root:not(.dark)`:
+
+```css
+:root { font-family: "JetBrainsMono Nerd Font", monospace; }
+:root:not(.dark) { --lerd-accent: #1e66f5 !important; }
+.dark { --lerd-accent: #89b4fa !important; }
+```
+
+The theme writes its tones straight onto `<html>`, which beats any stylesheet, so
+a custom property the theme also sets needs `!important` to win.
+
+The `--lerd-*` custom properties and Tailwind's `--color-*` ones are what stays
+put between releases. Class names and markup are not, so a rule aimed at them may
+stop matching after an upgrade.
 
 ## Installed as an app
 

@@ -2,6 +2,7 @@
   import { currentRun, closeRun, executeCommand, runToast, lastRunFor, type RunLine } from '$stores/commands';
   import { m } from '../paraglide/messages.js';
   import { ansiToHtml } from '$lib/ansi';
+  import { dialog } from '$lib/dialog';
 
   function relativeTime(ts: number): string {
     const diffMs = Date.now() - ts;
@@ -86,7 +87,7 @@
 {#if $currentRun.kind === 'confirm' && cmd}
   <div class="fixed inset-0 z-50 flex items-center justify-center">
     <button class="absolute inset-0 bg-black/50" aria-label={m.common_cancel()} onclick={closeRun}></button>
-    <div class="relative bg-white dark:bg-lerd-card border border-gray-200 dark:border-lerd-border rounded-xl shadow-2xl w-full max-w-md mx-4 p-5">
+    <div use:dialog role="dialog" aria-modal="true" aria-labelledby="cmdrun-confirm-title" tabindex="-1" class="relative outline-none bg-white dark:bg-lerd-card border border-gray-200 dark:border-lerd-border rounded-xl shadow-2xl w-full max-w-md mx-4 p-5">
       <div class="flex items-start gap-3">
         <span class="shrink-0 w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 flex items-center justify-center">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -94,7 +95,7 @@
           </svg>
         </span>
         <div class="flex-1 min-w-0">
-          <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{m.cmdrun_runTitle({ label: cmd.label || cmd.name })}</h3>
+          <h3 id="cmdrun-confirm-title" class="text-sm font-semibold text-gray-900 dark:text-white">{m.cmdrun_runTitle({ label: cmd.label || cmd.name })}</h3>
           {#if $currentRun.kind === 'confirm'}
             <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">on {$currentRun.domain}</p>
           {/if}
@@ -127,10 +128,10 @@
 {#if ($currentRun.kind === 'running' || $currentRun.kind === 'done') && cmd}
   <div class="fixed inset-0 z-50 flex items-center justify-center">
     <button class="absolute inset-0 bg-black/50" aria-label={m.common_close()} onclick={closeRun}></button>
-    <div class="relative bg-white dark:bg-lerd-card border border-gray-200 dark:border-lerd-border rounded-xl shadow-2xl w-full max-w-2xl mx-4">
+    <div use:dialog role="dialog" aria-modal="true" aria-labelledby="cmdrun-output-title" tabindex="-1" class="relative outline-none bg-white dark:bg-lerd-card border border-gray-200 dark:border-lerd-border rounded-xl shadow-2xl w-full max-w-2xl mx-4">
       <header class="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-lerd-border">
         <div class="min-w-0">
-          <h3 class="text-sm font-semibold text-gray-900 dark:text-white truncate">{cmd.label || cmd.name}</h3>
+          <h3 id="cmdrun-output-title" class="text-sm font-semibold text-gray-900 dark:text-white truncate">{cmd.label || cmd.name}</h3>
           <p class="text-[11px] font-mono text-gray-500 dark:text-gray-400 truncate mt-0.5">{$currentRun.domain} · $ {cmd.command}</p>
         </div>
         <button onclick={closeRun} aria-label={m.common_close()} class="shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 ml-3">

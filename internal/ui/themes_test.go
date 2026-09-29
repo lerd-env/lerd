@@ -351,3 +351,48 @@ func TestHandleThemesKeepsTheDesktopEntryOverAFileOfTheSameName(t *testing.T) {
 		t.Errorf("found %d entries for %q, want exactly one", seen, config.OmarchyThemeID)
 	}
 }
+
+func TestHandleUserCSSServesOnlyTheChosenThemesCSS(t *testing.T) {
+	dir := isolateThemesDir(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	write := func(path, content string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(config.OmarchyCSSPath(), ".omarchy{}")
+	write(filepath.Join(dir, "omarchy.css"), ".mine{}")
+	write(filepath.Join(dir, "ocean.css"), ".ocean{}")
+	pick := func(id string) string {
+		t.Helper()
+		cfg, err := config.LoadGlobal()
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg.UI.Theme = id
+		if err := config.SaveGlobal(cfg); err != nil {
+			t.Fatal(err)
+		}
+		rec := httptest.NewRecorder()
+		handleUserCSS(rec, httptest.NewRequest(http.MethodGet, "/api/theme.css", nil))
+		if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/css") {
+			t.Errorf("Content-Type = %q, want text/css", ct)
+		}
+		return rec.Body.String()
+	}
+
+	if got := pick("lerd"); got != "" {
+		t.Errorf("default theme body = %q, want no custom CSS", got)
+	}
+	if got := pick("ocean"); got != ".ocean{}\n" {
+		t.Errorf("ocean body = %q, want only ocean.css", got)
+	}
+	got := pick(config.OmarchyThemeID)
+	if i, j := strings.Index(got, ".omarchy"), strings.Index(got, ".mine"); i < 0 || j < i {
+		t.Errorf("omarchy body = %q, want the theme's lerd.css before omarchy.css", got)
+	}
+}

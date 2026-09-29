@@ -15,6 +15,6 @@
 <div class="px-3 {padY} text-center space-y-1">
   <p class="{titleSize} text-gray-500 dark:text-gray-400">{title}</p>
   {#if hint}
-    <div class="text-[11px] text-gray-400 dark:text-gray-500">{@render hint()}</div>
+    <div class="text-[11px] text-gray-500 dark:text-gray-400">{@render hint()}</div>
   {/if}
 </div>

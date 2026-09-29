@@ -13,7 +13,7 @@
 </script>
 
 <div
-  class="flex items-center justify-between gap-2 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 {divider
+  class="flex items-center justify-between gap-2 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 {divider
     ? 'border-t border-lerd-chromeborder dark:border-lerd-border'
     : ''}"
 >

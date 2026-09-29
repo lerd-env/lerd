@@ -13,10 +13,10 @@
 </script>
 
 {#if build.channel === 'release'}
-  <span class="{versionText} text-gray-400 dark:text-gray-600 font-mono {size === 'rail' ? 'pb-1' : ''}">v{$version.current}</span>
+  <span class="{versionText} text-gray-500 dark:text-gray-400 font-mono {size === 'rail' ? 'pb-1' : ''}">v{$version.current}</span>
 {:else}
   {#if build.base}
-    <span class="{versionText} text-gray-400 dark:text-gray-600 font-mono">v{build.base}</span>
+    <span class="{versionText} text-gray-500 dark:text-gray-400 font-mono">v{build.base}</span>
   {/if}
   <ChannelBadge placement={size === 'rail' ? 'right' : 'bottom'} class={size === 'rail' ? 'mt-0.5 mb-1' : ''} />
 {/if}

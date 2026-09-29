@@ -31,6 +31,7 @@ var loopbackOnlyRoutes = []string{
 	"/api/logs/terminal",        // spawns a terminal emulator on the host
 	"/api/browse",               // browses host filesystem
 	"/api/push/test",            // fires notifications onto subscribed devices
+	"/api/settings/mcp",         // writes AI assistants' config under the host user's home
 }
 
 // loopbackOnlyRoutePrefixes are endpoint subtrees restricted in full, so a

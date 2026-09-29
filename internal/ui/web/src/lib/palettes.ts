@@ -22,10 +22,19 @@ export interface Palette {
   card: string;
   border: string;
   muted: string;
+  // The light mode's page, cards and lines, where a theme wants them off the
+  // standard white and greys.
+  bgLight?: string;
+  cardLight?: string;
+  borderLight?: string;
   // The light mode's rail and sidebar, where a theme wants them off white. Only
   // macOS does, which is the one desktop that tints its own chrome, so the rest
   // leave it unset and keep the white app.css falls back to.
   chromeLight?: string;
+  // What the chrome turns while the window has focus, the way Breeze lifts a
+  // focused window's header. Only a live Plasma scheme publishes them.
+  chromeActive?: string;
+  chromeLightActive?: string;
   source: 'builtin' | 'user' | 'desktop';
 }
 
@@ -41,7 +50,12 @@ export interface PaletteFile {
   card?: string;
   border?: string;
   muted?: string;
+  bg_light?: string;
+  card_light?: string;
+  border_light?: string;
   chrome_light?: string;
+  chrome_active?: string;
+  chrome_light_active?: string;
   // Set when the theme came from somewhere other than a file the user can edit,
   // which is what keeps a remove button off it.
   source?: string;
@@ -58,9 +72,10 @@ export const DEFAULT_PALETTE_ID = 'lerd';
 // built-in #ff2d20 and its #e02419 hover.
 const HOVER_STEP = 0.12;
 
-// lerd, muted and Ocean are the dashboard's own. The editor schemes are their
-// published palettes. The desktop ones are read
-// from what those desktops actually ship, not from memory of them: Breeze from
+// lerd, muted and Ocean are the dashboard's own, and the desktop ones follow
+// lerd's straight away since they are the likeliest pick after it. The editor
+// schemes are their published palettes. The desktop ones are read from what
+// those desktops actually ship, not from memory of them: Breeze from
 // Plasma 6.7's BreezeDark.colors, Adwaita from libadwaita 1.9's named colours,
 // macOS from Apple's documented system blue and window background. All three
 // have been darkened since the values most write-ups still quote. Their light
@@ -78,6 +93,48 @@ export const BUILTIN_PALETTES: Palette[] = [
     card: '#161616',
     border: '#262626',
     muted: '#404040',
+    source: 'builtin'
+  },
+  {
+    id: 'breeze',
+    name: 'Breeze',
+    accent: '#17698f',
+    accentHover: '#12556f',
+    accentDark: '#3daee9',
+    accentHoverDark: '#5fbdee',
+    chromeLight: '#eff0f1',
+    bg: '#141618',
+    card: '#202326',
+    border: '#292c30',
+    muted: '#3a3f45',
+    source: 'builtin'
+  },
+  {
+    id: 'adwaita',
+    name: 'Adwaita',
+    accent: '#1c71d8',
+    accentHover: '#1a5fb4',
+    accentDark: '#3584e4',
+    accentHoverDark: '#62a0ea',
+    chromeLight: '#ebebed',
+    bg: '#1d1d20',
+    card: '#252529',
+    border: '#2e2e32',
+    muted: '#39393d',
+    source: 'builtin'
+  },
+  {
+    id: 'macos',
+    name: 'macOS',
+    accent: '#0066cc',
+    accentHover: '#0052a3',
+    accentDark: '#0a84ff',
+    accentHoverDark: '#3d9dff',
+    bg: '#1e1e1e',
+    card: '#282828',
+    border: '#3a3a3a',
+    muted: '#4a4a4a',
+    chromeLight: '#f3f4f6',
     source: 'builtin'
   },
   {
@@ -183,48 +240,6 @@ export const BUILTIN_PALETTES: Palette[] = [
     border: '#3c3836',
     muted: '#928374',
     source: 'builtin'
-  },
-  {
-    id: 'breeze',
-    name: 'Breeze',
-    accent: '#17698f',
-    accentHover: '#12556f',
-    accentDark: '#3daee9',
-    accentHoverDark: '#5fbdee',
-    chromeLight: '#eff0f1',
-    bg: '#141618',
-    card: '#202326',
-    border: '#292c30',
-    muted: '#3a3f45',
-    source: 'builtin'
-  },
-  {
-    id: 'adwaita',
-    name: 'Adwaita',
-    accent: '#1c71d8',
-    accentHover: '#1a5fb4',
-    accentDark: '#3584e4',
-    accentHoverDark: '#62a0ea',
-    chromeLight: '#ebebed',
-    bg: '#1d1d20',
-    card: '#252529',
-    border: '#2e2e32',
-    muted: '#39393d',
-    source: 'builtin'
-  },
-  {
-    id: 'macos',
-    name: 'macOS',
-    accent: '#0066cc',
-    accentHover: '#0052a3',
-    accentDark: '#0a84ff',
-    accentHoverDark: '#3d9dff',
-    bg: '#1e1e1e',
-    card: '#282828',
-    border: '#3a3a3a',
-    muted: '#4a4a4a',
-    chromeLight: '#f3f4f6',
-    source: 'builtin'
   }
 ];
 
@@ -241,6 +256,8 @@ const DESKTOP_STANDS_IN_FOR: Record<string, string> = {
   gnome: 'adwaita',
   macos: 'macos'
 };
+
+export const SYSTEM_PALETTE_IDS = Object.values(DESKTOP_STANDS_IN_FOR);
 
 // asDesktopStandIn hands a desktop theme the id and the name of the built-in it
 // replaces, so a dashboard already set to that built-in follows the desktop from
@@ -282,6 +299,14 @@ export function chromeBorder(chrome: string): string {
   return toHex(mix(rgb, 0, CHROME_BORDER_STEP));
 }
 
+// headerBorderDark keeps the frame's lines visible on a lifted header. Breeze's
+// focused header is the very tone its borders are drawn in, so while it shows
+// the line steps off it toward white instead.
+function headerBorderDark(header: string, palette: Palette): string {
+  if (header === palette.card) return palette.border;
+  return toHex(mix(parseHex(header)!, 255, CHROME_BORDER_STEP));
+}
+
 export function onAccent(accent: string): string {
   const rgb = parseHex(accent);
   if (!rgb) return '#ffffff';
@@ -309,7 +334,12 @@ export function resolvePalette(file: PaletteFile): Palette | null {
     card: hex(file.card) || DEFAULT_PALETTE.card,
     border: hex(file.border) || DEFAULT_PALETTE.border,
     muted: hex(file.muted) || DEFAULT_PALETTE.muted,
+    bgLight: hex(file.bg_light) || undefined,
+    cardLight: hex(file.card_light) || undefined,
+    borderLight: hex(file.border_light) || undefined,
     chromeLight: hex(file.chrome_light) || undefined,
+    chromeActive: hex(file.chrome_active) || undefined,
+    chromeLightActive: hex(file.chrome_light_active) || undefined,
     source: file.source === 'desktop' ? 'desktop' : 'user'
   };
 }
@@ -322,20 +352,68 @@ export function paletteById(palettes: Palette[], id: string): Palette {
 }
 
 // paletteVars maps a theme onto the custom properties app.css declares, picking
-// the tone that reads on the surface the current mode paints.
-export function paletteVars(palette: Palette, dark: boolean): Record<string, string> {
-  const accent = dark ? palette.accentDark : palette.accent;
+// the tone that reads on the surface the current mode paints and, for the
+// chrome, whether the window has focus.
+export function paletteVars(palette: Palette, dark: boolean, focused = false): Record<string, string> {
+  // The accent is link and tab text, so it is nudged to AA on the card behind
+  // it: darker on white, lighter on a dark card. A tone that already reads is
+  // kept as declared, hover and all.
+  const declared = dark ? palette.accentDark : palette.accent;
+  const cardLight = palette.cardLight || '#ffffff';
+  const accent = readableOn(declared, dark ? palette.card : cardLight, dark ? 255 : 0);
+  const accentHover =
+    accent === declared ? (dark ? palette.accentHoverDark : palette.accentHover) : step(accent, dark ? 255 : 0);
+  const header = (focused && palette.chromeActive) || palette.card;
+  const chromeLight = palette.chromeLight || cardLight;
+  const headerLight = (focused && palette.chromeLightActive) || chromeLight;
   return {
     '--lerd-accent': accent,
     '--lerd-on-accent': onAccent(accent),
-    '--lerd-accent-hover': dark ? palette.accentHoverDark : palette.accentHover,
+    '--lerd-accent-hover': accentHover,
     '--lerd-bg': palette.bg,
     '--lerd-card': palette.card,
     '--lerd-border': palette.border,
     '--lerd-muted': palette.muted,
-    '--lerd-chrome-light': palette.chromeLight || '#ffffff',
-    '--lerd-chrome-border': chromeBorder(palette.chromeLight || '#ffffff')
+    '--lerd-chrome-light': chromeLight,
+    '--lerd-chrome-border': chromeBorder(chromeLight),
+    // The header is the rail and the page's top strips, the part of the chrome
+    // that follows focus; the sidebar between them holds still.
+    '--lerd-header': header,
+    '--lerd-header-light': headerLight,
+    '--lerd-header-border': dark ? headerBorderDark(header, palette) : chromeBorder(headerLight),
+    // Always set, even when unchanged: apply() only writes properties, so a value
+    // left over from the previous theme would otherwise stick.
+    '--color-gray-400': dark ? readableOn(GRAY_400, liftedCard(palette.card), 255) : GRAY_400,
+    '--color-gray-500': dark ? GRAY_500 : readableOn(GRAY_500, darker(headerLight, GRAY_100), 0),
+    // Light mode paints with Tailwind's white and greys rather than lerd tokens,
+    // so a light theme moves those. An empty value removes the property, which
+    // puts Tailwind's own back, and dark mode always does.
+    ...lightSurfaces(dark ? {} : palette)
   };
+}
+
+function lightSurfaces(p: Pick<Palette, 'bgLight' | 'cardLight' | 'borderLight'>): Record<string, string> {
+  return {
+    '--color-gray-50': p.bgLight || '',
+    '--color-gray-100': p.bgLight ? toHex(mix(parseHex(p.bgLight)!, 0, 0.03)) : '',
+    '--color-white': p.cardLight || '',
+    '--color-gray-200': p.borderLight || ''
+  };
+}
+
+// Tailwind's gray-400, the muted text on dark surfaces, and gray-500 on light ones.
+const GRAY_400 = '#99a1af';
+const GRAY_500 = '#6a7282';
+const GRAY_100 = '#f3f4f6';
+
+// The brightest surface muted text lands on in dark mode: a pill of white/5 or
+// so on the card. Tinted themes lift it enough to sink gray-400 below AA.
+function liftedCard(card: string): string {
+  return toHex(mix(parseHex(card)!, 255, 0.08));
+}
+
+function darker(a: string, b: string): string {
+  return luminance(parseHex(a)!) < luminance(parseHex(b)!) ? a : b;
 }
 
 function hex(v: string | undefined): string | null {
@@ -348,9 +426,22 @@ function hex(v: string | undefined): string | null {
 const TEXT_ON_WHITE_FLOOR = 4.5;
 
 function readableOnWhite(color: string): string {
+  return readableOn(color, '#ffffff', 0);
+}
+
+// readableOn steps color toward target (0 black, 255 white) until it reaches
+// the WCAG AA text contrast against surface. A colour that already passes comes
+// back as it was.
+function readableOn(color: string, surface: string, target: number): string {
   let rgb = parseHex(color)!;
-  for (let i = 0; i < 40 && whiteContrast(rgb) < TEXT_ON_WHITE_FLOOR; i++) {
-    rgb = mix(rgb, 0, 0.05);
+  const bg = luminance(parseHex(surface)!);
+  const ratio = (fg: number) => (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
+
+  // Small steps stop at the first tone that passes, as close to the declared one as AA allows.
+  // Measured on the rounded hex, since that is what the page paints.
+  const passes = () => ratio(luminance(parseHex(toHex(rgb))!)) >= TEXT_ON_WHITE_FLOOR;
+  for (let i = 0; i < 200 && !passes(); i++) {
+    rgb = mix(rgb, target, 0.01);
   }
   return toHex(rgb);
 }

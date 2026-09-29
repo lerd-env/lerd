@@ -6,6 +6,7 @@ import { version } from '$stores/version';
 import { modal } from '$stores/modals';
 import { status } from '$stores/status';
 import { accessMode } from '$stores/accessMode';
+import { mcpGlobal } from '$stores/autostart';
 
 const notes = 'v1.34.3\n- a change worth reading\n- another one';
 
@@ -13,6 +14,7 @@ describe('LerdDetail', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     modal.set({ kind: null });
+    mcpGlobal.set(false);
     version.set({
       current: '1.34.2',
       latest: '1.34.3',
@@ -96,5 +98,38 @@ describe('LerdDetail', () => {
     const call = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/settings/streaming-enabled'));
     expect(call).toBeTruthy();
     expect(JSON.parse(call![1].body)).toEqual({ enabled: true });
+  });
+  it('registers lerd with the AI assistants from its card', async () => {
+    const fetchMock = vi.fn(async (url: string) =>
+      String(url).includes('/api/settings/mcp')
+        ? new Response(JSON.stringify({ ok: true, mcp_global: true }), { status: 200 })
+        : Promise.reject(new Error('offline'))
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    accessMode.update((a) => ({ ...a, localControl: true }));
+    render(LerdDetail);
+
+    await fireEvent.click(screen.getByTitle('Register lerd with your AI assistants'));
+    const call = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/settings/mcp'));
+    expect(call).toBeTruthy();
+    expect(JSON.parse((call![1] as RequestInit).body as string)).toEqual({ enabled: true });
+    expect(await screen.findByTitle('Unregister lerd from your AI assistants')).toBeInTheDocument();
+    expect(screen.queryByText(/Registration failed/)).toBeNull();
+  });
+
+  it('says so when registering with the AI assistants fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        String(url).includes('/api/settings/mcp')
+          ? new Response(JSON.stringify({ ok: false, error: 'no home directory' }), { status: 200 })
+          : Promise.reject(new Error('offline'))
+      )
+    );
+    accessMode.update((a) => ({ ...a, localControl: true }));
+    render(LerdDetail);
+
+    await fireEvent.click(screen.getByTitle('Register lerd with your AI assistants'));
+    expect(await screen.findByText(/Registration failed/)).toBeInTheDocument();
   });
 });

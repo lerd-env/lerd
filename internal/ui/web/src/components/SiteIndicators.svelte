@@ -24,25 +24,25 @@
 </script>
 
 {#if tunnelUrl}
-  <span title={m.sites_sharedPublicly({ url: tunnelUrl })} class="inline-flex shrink-0 text-violet-500 dark:text-violet-400">
+  <span title={m.sites_sharedPublicly({ url: tunnelUrl })} role="img" aria-label={m.sites_sharedPublicly({ url: tunnelUrl })} class="inline-flex shrink-0 text-violet-500 dark:text-violet-400">
     <Icon name="globe" class="w-3 h-3" />
   </span>
 {/if}
 {#if lanUrl}
-  <span title={m.sites_sharedOnLan({ url: lanUrl })} class="inline-flex shrink-0 text-teal-500 dark:text-teal-400">
+  <span title={m.sites_sharedOnLan({ url: lanUrl })} role="img" aria-label={m.sites_sharedOnLan({ url: lanUrl })} class="inline-flex shrink-0 text-teal-500 dark:text-teal-400">
     <Icon name="wifi" class="w-3 h-3" />
   </span>
 {/if}
 
 {#if site.worktrees && site.worktrees.length > 0}
-  <span title={m.sites_gitWorktrees()} class="inline-flex shrink-0">
+  <span title={m.sites_gitWorktrees()} role="img" aria-label={m.sites_gitWorktrees()} class="inline-flex shrink-0">
     <svg class="w-3 h-3 text-violet-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
       <path d="M6 3v12M15 6a3 3 0 1 0 6 0a3 3 0 1 0-6 0M3 18a3 3 0 1 0 6 0a3 3 0 1 0-6 0M18 9a9 9 0 0 1-9 9"/>
     </svg>
   </span>
 {/if}
 {#if siteWorkerFailing(site)}
-  <span title={m.sites_workerFailing()} class="shrink-0"><StatusDot color="red" size="xs" pulse /></span>
+  <span title={m.sites_workerFailing()} class="shrink-0"><StatusDot color="red" size="xs" pulse label={m.sites_workerFailing()} /></span>
 {/if}
 {#if site.idle_suspended && siteHasWorkers(site)}
   <!-- Asleep: keep the worker dots (dimmed) and float a moon above them. A site
@@ -52,7 +52,7 @@
        from the watcher's activity file, only re-saved every tick) so the moon
        drops in real time on resume instead of lingering until the next poll. -->
   {#if idleDots.length > 0}
-    <span class="relative inline-flex items-center shrink-0" title={m.sites_idleHint()}>
+    <span class="relative inline-flex items-center shrink-0" title={m.sites_idleHint()} role="img" aria-label={m.sites_idleHint()}>
       <span class="absolute -top-2.5 left-1/2 -translate-x-1/2 text-sky-500 dark:text-sky-400">
         <svg class="w-3.5 h-3.5 drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]" viewBox="0 0 24 24" fill="currentColor">
           <path d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998z" />
@@ -65,14 +65,16 @@
       </span>
     </span>
   {:else}
-    <span class="inline-flex shrink-0 text-sky-500 dark:text-sky-400" title={m.sites_idleHint()}>
+    <span class="inline-flex shrink-0 text-sky-500 dark:text-sky-400" title={m.sites_idleHint()} role="img" aria-label={m.sites_idleHint()}>
       <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
         <path d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998z" />
       </svg>
     </span>
   {/if}
-{:else}
-  {#each dots as c, i (i + ':' + c)}
-    <StatusDot color={c} size="xs" />
-  {/each}
+{:else if dots.length > 0}
+  <span class="inline-flex items-center gap-1 shrink-0" role="img" aria-label={m.sites_workersRunning({ count: dots.length })}>
+    {#each dots as c, i (i + ':' + c)}
+      <StatusDot color={c} size="xs" />
+    {/each}
+  </span>
 {/if}

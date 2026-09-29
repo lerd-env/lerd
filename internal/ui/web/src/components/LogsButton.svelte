@@ -18,7 +18,7 @@
   {title}
   aria-label={title}
   {onclick}
-  class="inline-flex items-center justify-center h-7 w-8 {rounding} border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-gray-400 dark:text-gray-500"
+  class="inline-flex items-center justify-center h-7 w-8 {rounding} border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-gray-500 dark:text-gray-400"
 >
   <svg
     class="w-3.5 h-3.5"

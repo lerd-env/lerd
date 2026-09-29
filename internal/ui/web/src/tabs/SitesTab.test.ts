@@ -159,12 +159,12 @@ describe('SitesTab workspace sections', () => {
       site({ domain: 'a.test', name: 'a', workspace: 'Client Work' }),
       site({ domain: 'b.test', name: 'b', workspace: 'Side Projects' })
     ]);
-    const { getByText, queryByText, getAllByLabelText } = render(SitesTab);
+    const { getByText, queryByText, getAllByTitle } = render(SitesTab);
 
     await fireEvent.click(getByText('Side Projects'));
     expect(queryByText('b.test')).toBeNull();
 
-    await fireEvent.mouseDown(getAllByLabelText('Drag to reorder')[0]);
+    await fireEvent.mouseDown(getAllByTitle('Drag to reorder')[0]);
     expect(queryByText('b.test')).toBeNull();
     expect(get(workspaceCollapse)).toEqual(['Side Projects']);
   });
@@ -174,9 +174,9 @@ describe('SitesTab workspace sections', () => {
   it('releases the drag state when a grip press never becomes a drag', async () => {
     setWorkspaces(['Client Work']);
     sites.set([site({ domain: 'a.test', name: 'a', workspace: 'Client Work' })]);
-    const { getByText, getAllByLabelText, queryByText } = render(SitesTab);
+    const { getByText, getAllByTitle, queryByText } = render(SitesTab);
 
-    await fireEvent.mouseDown(getAllByLabelText('Drag to reorder')[0]);
+    await fireEvent.mouseDown(getAllByTitle('Drag to reorder')[0]);
     await fireEvent.mouseUp(window);
 
     // The live snapshot still reaches the list: a new site shows up.
@@ -197,7 +197,7 @@ describe('SitesTab workspace sections', () => {
       site({ domain: 'b.test', name: 'b' })
     ]);
     const { container } = render(SitesTab);
-    const [wsZone, ungroupedZone] = Array.from(container.querySelectorAll('section'));
+    const [wsZone, ungroupedZone] = Array.from(container.querySelectorAll('[data-row-zone]'));
 
     const moved = { id: 'b.test', site: { domain: 'b.test', name: 'b' } };
     const detail = (items: unknown[]) => ({ items, info: { source: 'pointer', trigger: 'droppedIntoZone' } });
@@ -256,7 +256,7 @@ describe('SitesTab workspace sections', () => {
       site({ domain: 'admin.astrolov.test', name: 'admin', group: 'astrolov', group_subdomain: 'admin' })
     ]);
     const { container } = render(SitesTab);
-    const [wsZone, ungroupedZone] = Array.from(container.querySelectorAll('section'));
+    const [wsZone, ungroupedZone] = Array.from(container.querySelectorAll('[data-row-zone]'));
 
     const detail = (items: unknown[]) => ({ items, info: { source: 'pointer', trigger: 'droppedIntoZone' } });
     wsZone.dispatchEvent(
@@ -280,7 +280,7 @@ describe('SitesTab workspace sections', () => {
       site({ domain: 'admin.astrolov.test', name: 'admin', group: 'astrolov', group_subdomain: 'admin' })
     ]);
     const { container } = render(SitesTab);
-    const [wsZone, ungroupedZone] = Array.from(container.querySelectorAll('section'));
+    const [wsZone, ungroupedZone] = Array.from(container.querySelectorAll('[data-row-zone]'));
 
     const detail = (items: unknown[]) => ({ items, info: { source: 'pointer', trigger: 'droppedIntoZone' } });
     wsZone.dispatchEvent(

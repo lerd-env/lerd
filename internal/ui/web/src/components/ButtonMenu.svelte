@@ -18,7 +18,7 @@
   // Shared with the other controls that sit in the same action row, so a button
   // beside the menu is the same button.
   export const buttonMenuBaseClass =
-    'inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 transition-colors disabled:opacity-50';
+    'inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 text-xs font-medium px-3 py-1.5 transition-colors disabled:opacity-50';
 
   export const buttonMenuToneClass: Record<DetailButtonTone, string> = {
     primary: 'bg-lerd-red hover:bg-lerd-redhov text-lerd-onred',
@@ -99,7 +99,7 @@
   <button
     type="button"
     onclick={onSettings}
-    class="{baseBtn} border-l border-black/10 dark:border-white/10 px-1.5 {buttonMenuToneClass[tone]}"
+    class="{baseBtn} border-l border-l-black/10 dark:border-l-white/10 px-1.5 {buttonMenuToneClass[tone]}"
     disabled={busy}
     aria-label={settingsTitle ?? m.common_settings()}
     title={settingsTitle ?? m.common_settings()}
@@ -184,7 +184,7 @@
     <button
       type="button"
       onclick={toggle}
-      class="{baseBtn} rounded-r-lg border-l border-black/10 dark:border-white/10 px-1.5 {buttonMenuToneClass[tone]}"
+      class="{baseBtn} rounded-r-lg border-l border-l-black/10 dark:border-l-white/10 px-1.5 {buttonMenuToneClass[tone]}"
       aria-haspopup="menu"
       aria-expanded={open}
       aria-label={menuLabel ?? m.common_moreActions()}

@@ -117,6 +117,10 @@ type Preset struct {
 	// covers the Host header, so rewriting it invalidates every call the page
 	// makes.
 	DashboardProxyKeepHost bool `yaml:"dashboard_proxy_keep_host,omitempty" json:"dashboard_proxy_keep_host,omitempty"`
+	// DashboardLocaleCookies names the cookies a dashboard keeps its own language
+	// in (phpMyAdmin's pma_lang). The proxy holds them back while a language is
+	// chosen in lerd, since the app prefers them over Accept-Language.
+	DashboardLocaleCookies []string `yaml:"dashboard_locale_cookies,omitempty" json:"dashboard_locale_cookies,omitempty"`
 	// DashboardFollowsColorScheme asks the proxy to tell the embedded page which
 	// colour scheme it is in, for an app that reads prefers-color-scheme from
 	// JavaScript rather than from a media query. Flipping the query inside a

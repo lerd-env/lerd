@@ -186,13 +186,28 @@ func SharedDBNameFor(s *config.Site) (string, bool) {
 
 // applySharedDBEnv rewrites DB_DATABASE in the secondary's .env, but only when
 // the file already declares it (a site with no database is left untouched).
+// Its worktrees sharing that database follow; an isolated one keeps its own.
 func applySharedDBEnv(secondary *config.Site, dbName string) {
 	envPath := filepath.Join(secondary.Path, ".env")
-	if envfile.ReadKey(envPath, "DB_DATABASE") == "" {
+	old := envfile.ReadKey(envPath, "DB_DATABASE")
+	if old == "" {
 		return
 	}
-	if err := envfile.ApplyUpdates(envPath, map[string]string{"DB_DATABASE": dbName}); err != nil {
+	change := map[string]string{"DB_DATABASE": dbName}
+	if err := envfile.ApplyUpdates(envPath, change); err != nil {
 		fmt.Fprintf(os.Stderr, "lerd: updating DB_DATABASE for %s: %v\n", secondary.Name, err)
+		return
+	}
+	worktrees, _ := gitpkg.DetectWorktrees(secondary.Path, secondary.PrimaryDomain())
+	for _, wt := range worktrees {
+		wtEnv := filepath.Join(wt.Path, ".env")
+		carried := envfile.CarriedValues(envfile.ReadValues(wtEnv), map[string]string{"DB_DATABASE": old}, change)
+		if len(carried) == 0 {
+			continue
+		}
+		if err := envfile.ApplyUpdates(wtEnv, carried); err != nil {
+			fmt.Fprintf(os.Stderr, "lerd: updating DB_DATABASE for worktree %s of %s: %v\n", wt.Branch, secondary.Name, err)
+		}
 	}
 }
 

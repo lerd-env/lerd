@@ -3,10 +3,11 @@
 
   interface Props {
     compact?: boolean;
+    suggested?: boolean;
   }
-  let { compact = false }: Props = $props();
+  let { compact = false, suggested = false }: Props = $props();
 </script>
 
-<ServiceCardShell {compact}>
+<ServiceCardShell {compact} {suggested}>
   <span>card body</span>
 </ServiceCardShell>

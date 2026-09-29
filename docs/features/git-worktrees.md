@@ -14,7 +14,7 @@ Plain `git worktree add` from any tool (CLI, IDE, GitLens) is enough to get a us
 
 ## `lerd worktree add` and `lerd worktree remove`
 
-The wrapper commands mirror `git worktree`'s subcommand layout, every flag passes straight through to git, and add an interactive setup pipeline on top. `lerd worktree wait` is the non-interactive companion for scripts and tools that use plain git, see [waiting for the pipeline](#waiting-for-the-pipeline).
+The wrapper commands mirror `git worktree`'s subcommand layout, every flag passes straight through to git, and add an interactive setup pipeline on top. `lerd worktree wait` and `lerd worktree setup` are the non-interactive companions for scripts and tools that use plain git, see [waiting for the pipeline](#waiting-for-the-pipeline) and [finishing a worktree another tool created](#finishing-a-worktree-another-tool-created).
 
 ### `lerd worktree add <git args>`
 
@@ -63,10 +63,10 @@ Whether you use `lerd worktree add` or the bare `git` command, the daemon's watc
 3. Seed `vendor/` and `node_modules/` from the main repo when the worktree's `composer.lock` / JS lockfile matches main's, using reflinks where the filesystem supports them (btrfs, xfs-reflink, APFS) and a plain copy elsewhere.
 4. Copy any path the main repo's `.lerd.yaml` lists in `worktree_include`, for gitignored files the app needs that git doesn't check out (see [extra files](#extra-files-in-a-worktree) below).
 5. Sync the framework's env file from main with its base-URL key rewritten to the worktree's vhost domain. The file, its format and the key all come from the framework definition, so Laravel gets `.env` / `APP_URL`, Symfony `.env.local` / `DEFAULT_URI`, CodeIgniter `config/.env` / `app.baseURL`, and the PHP-config frameworks are seeded through their own writers: WordPress's `wp-config.php` (rewriting `WP_HOME`) and Magento's `app/etc/env.php` (carried across for its database credentials). Magento keeps its base URL in the database rather than in a single env key, so it declares `worktree_url_keys` instead, and the seeded `env.php` overrides the database with the worktree's own domain. Writing that base URL changes the config hash Magento keeps in the database, so its definition also declares a [`worktree` block](../usage/framework-definitions.md#yaml-schema): the worktree gets its own database cloned from main, and `app:config:import` runs against it once the file and the database are both in place. When `.lerd.yaml` defines `env_overrides`, those dotenv templates are resolved on top (see [env overrides](#env-overrides) below).
-6. Run `composer install` (skipped when the marker is at-or-newer than `composer.lock`) and `npm ci` / `pnpm install --frozen-lockfile` / `yarn install --immutable` / `bun install --frozen-lockfile` (skipped under the same marker rule).
+6. Run `composer install` (skipped when the marker is at-or-newer than `composer.lock`) and `npm ci` / `pnpm install --frozen-lockfile` / `yarn install --immutable` / `bun install --frozen-lockfile` (skipped under the same marker rule, and when `package.json` declares no packages, since npm writes no `node_modules` for it).
 7. Generate the worktree's nginx vhost. It inherits the parent site's framework, so the document root follows the framework's `public_dir` (`pub` for Magento, `web` for Drupal, `webroot` for CakePHP) rather than assuming `public`, and any [nginx snippet](../usage/framework-definitions.md#framework-nginx-config) the framework declares is spliced in, expanded against the worktree's own checkout.
 
-Frontend build (`npm run build`) is **not** part of the watcher pipeline, it's heavy, project-specific, and can fail silently. `lerd worktree add` runs it interactively after asking; using bare `git worktree add` you run it yourself.
+Frontend build (`npm run build`) is **not** part of the watcher pipeline, it's heavy, project-specific, and can fail silently. `lerd worktree add` runs it interactively after asking; after a bare `git worktree add`, `lerd worktree setup` runs it.
 
 `public/build/` is also intentionally not seeded from main: it's a build artefact of the source tree, and copying it would render main's compiled UI on the worktree until the user noticed.
 
@@ -100,6 +100,16 @@ Without a path it waits on the current directory. Nothing is printed on success,
 | `3` | This path is not a worktree lerd manages, so nothing will ever provision it. |
 
 Do not try to infer this from the tree's contents. Composer's extraction phase fills *existing* `vendor/<org>/` directories, so neither an entry count nor a shallow mtime moves during the longest part of an install, and `node_modules/` exists from the first extracted package. The command watches the pipeline's outputs and its install lock together, which is why it can tell a finished install from one still running. `lerd worktree add` uses the same wait internally.
+
+### Finishing a worktree another tool created
+
+Editors and agent tools such as T3 Code create worktrees with plain git, so they get the install but not the rest of what `lerd worktree add` does. `lerd worktree setup` is that rest: it waits for the install as above, then runs the asset build, picks and migrates the database, and runs the framework's worktree setup commands, taking the same defaults `lerd worktree add` takes without a terminal. One line in the tool's worktree setup script is enough:
+
+```bash
+lerd worktree setup
+```
+
+It takes an optional path, `--timeout`, and the `--build` (`auto`, `skip`, `worker:<name>`, `script:<name>`) and `--db` (`share`, `empty`, `clone-main`, `clone-<branch>`, `reuse`, `reset`) choices the prompts would offer. The exit statuses match `lerd worktree wait`, and nothing is built or migrated when the install does not settle in time.
 
 ---
 
@@ -154,6 +164,8 @@ worktree_include:
 ```
 
 Paths are relative to the project root and can be files or directories. Each one is copied from the main repo into the worktree when the worktree does not already have it, so a file you edit inside a worktree is never overwritten by a later watcher pass, and a path the main repo doesn't have is simply skipped. Missing parent directories are created.
+
+A gitignored `mise.toml` belongs here too: lerd reads the Node version from it, so listing it gives the worktree the same Node the main checkout runs, and lerd's own install uses it.
 
 Paths that resolve outside the project root (`../secrets`, or an absolute path) are ignored. `.lerd.yaml` is committed and travels with the repository, so cloning a project must never be able to pull files from elsewhere on the machine into a checkout.
 

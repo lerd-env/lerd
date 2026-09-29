@@ -70,7 +70,7 @@
     <span class="text-gray-600 dark:text-gray-300">{m.dashboard_health_dumpBridge()}</span>
     <span class="flex items-center gap-1.5">
       {#if dumpsOn && dumpsBuffered > 0}
-        <span class="text-[10px] font-mono text-gray-400 dark:text-gray-500">{dumpsBuffered}</span>
+        <span class="text-[10px] font-mono text-gray-500 dark:text-gray-400">{dumpsBuffered}</span>
       {/if}
       {#if $accessMode.localControl}
         <DumpBridgeToggle />
@@ -106,7 +106,7 @@
 
   {#if $status.php_fpms.length > 0}
     <div class="pt-2 border-t border-gray-100 dark:border-lerd-border">
-      <div class="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">
+      <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
         {$phpRuntime === 'native' ? m.dashboard_health_phpNative() : m.dashboard_health_php()}
       </div>
       <div class="flex flex-wrap gap-2">
@@ -116,7 +116,7 @@
             <StatusDot color={fpm.running ? 'green' : 'gray'} size="xs" />
             {fpm.version}
             {#if count > 0}
-              <span class="text-gray-400 dark:text-gray-500">· {count}</span>
+              <span class="text-gray-500 dark:text-gray-400">· {count}</span>
             {/if}
           </span>
         {/each}
@@ -126,14 +126,14 @@
 
   {#if nodeVersions.length > 0 || $status.bun_available}
     <div class="pt-2 border-t border-gray-100 dark:border-lerd-border">
-      <div class="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">{$status.using_system_bun ? m.dashboard_health_jsRuntime() : m.dashboard_health_node()}</div>
+      <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">{$status.using_system_bun ? m.dashboard_health_jsRuntime() : m.dashboard_health_node()}</div>
       <div class="flex flex-wrap gap-2">
         {#if !$status.using_system_bun}
           {#each nodeVersions as [version, count] (version)}
             <span class="inline-flex items-center gap-1.5 text-xs font-mono px-2 py-0.5 rounded-sm bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300">
               <StatusDot color={version === $status.node_default ? 'emerald' : 'gray'} size="xs" />
               {version}
-              <span class="text-gray-400 dark:text-gray-500">· {count}</span>
+              <span class="text-gray-500 dark:text-gray-400">· {count}</span>
             </span>
           {/each}
         {/if}
@@ -152,7 +152,7 @@
 
   {#if ($status.tools ?? []).some((t) => t.present)}
     <div class="pt-2 border-t border-gray-100 dark:border-lerd-border">
-      <div class="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">{m.system_tools_title()}</div>
+      <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">{m.system_tools_title()}</div>
       <div class="flex flex-wrap gap-2">
         {#each ($status.tools ?? []).filter((t) => t.present) as tool (tool.name)}
           <span
@@ -162,7 +162,7 @@
             <StatusDot color={tool.update_available ? 'yellow' : tool.installed ? 'green' : 'gray'} size="xs" />
             {tool.name}
             {#if tool.installed}
-              <span class="text-gray-400 dark:text-gray-500">{tool.installed}</span>
+              <span class="text-gray-500 dark:text-gray-400">{tool.installed}</span>
             {/if}
           </span>
         {/each}

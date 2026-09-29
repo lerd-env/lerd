@@ -155,7 +155,7 @@
       {#if !$status?.enabled}
         <div class="px-3 py-10 text-center space-y-3">
           <p class="text-sm text-gray-500 dark:text-gray-400">{m.dumps_disabled_title()}</p>
-          <p class="text-[11px] text-gray-400 dark:text-gray-500">
+          <p class="text-[11px] text-gray-500 dark:text-gray-400">
             {m.dumps_disabled_body()}
           </p>
           <button

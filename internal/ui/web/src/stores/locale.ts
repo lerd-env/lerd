@@ -1,5 +1,10 @@
 import { writable } from 'svelte/store';
-import { getLocale, setLocale as paraglideSetLocale, locales as paraglideLocales } from '../paraglide/runtime.js';
+import {
+  getLocale,
+  setLocale as paraglideSetLocale,
+  locales as paraglideLocales,
+  localStorageKey
+} from '../paraglide/runtime.js';
 
 export type Locale = (typeof paraglideLocales)[number];
 
@@ -45,6 +50,16 @@ export const LOCALE_CODES: Record<Locale, string> = {
 // for reactive re-renders when the user picks a new language.
 export const locale = writable<Locale>(getLocale() as Locale);
 
+// syncDashboardLocale hands a language picked here to the /_svc/ proxy, which
+// states it to embedded dashboards in place of the browser's own. With no pick
+// the cookie goes, and they follow the browser just as lerd does.
+export function syncDashboardLocale() {
+  const chosen = localStorage.getItem(localStorageKey);
+  document.cookie = chosen
+    ? `lerd_locale=${encodeURIComponent(chosen)}; path=/; SameSite=Strict`
+    : 'lerd_locale=; path=/; max-age=0';
+}
+
 export function changeLocale(next: Locale) {
   // `reload: false` would ask Paraglide to swap without a page reload, but
   // messages are module-scoped functions compiled per-locale so everything
@@ -52,4 +67,5 @@ export function changeLocale(next: Locale) {
   // reload is the safe path; the whole app boots in < 200 ms.
   paraglideSetLocale(next, { reload: true });
   locale.set(next);
+  syncDashboardLocale();
 }

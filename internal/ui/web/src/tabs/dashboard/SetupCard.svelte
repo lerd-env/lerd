@@ -3,7 +3,7 @@
   import { setupSteps, setupDone, startSetup, finishSetup, type SetupStepId } from '$stores/setup';
   import { openLinkModal, openPresetModal } from '$stores/modals';
   import { openDocs } from '$stores/dashboard';
-  import { toggleStartOnDashboardOpen } from '$stores/autostart';
+  import { toggleStartOnDashboardOpen, toggleMCP } from '$stores/autostart';
   import { saveIdle, idleTimeoutMinutes } from '$stores/idle';
   import { accessMode } from '$stores/accessMode';
   import { enableNotifications } from '$lib/notify';
@@ -20,7 +20,8 @@
     notify: { title: m.setup_notify_title, hint: m.setup_notify_hint, cta: m.notify_banner_enable },
     theme: { title: m.setup_theme_title, hint: m.setup_theme_hint, cta: () => m.setup_theme_cta({ name: $desktopPalette?.name ?? '' }) },
     open: { title: m.setup_open_title, hint: m.setup_open_hint, cta: m.setup_turnOn },
-    idle: { title: m.setup_idle_title, hint: m.setup_idle_hint, cta: m.setup_turnOn }
+    idle: { title: m.setup_idle_title, hint: m.setup_idle_hint, cta: m.setup_turnOn },
+    mcp: { title: m.setup_mcp_title, hint: m.setup_mcp_hint, cta: m.setup_turnOn }
   };
 
   const actions: Record<SetupStepId, () => void> = {
@@ -29,7 +30,8 @@
     notify: () => void enableNotifications(),
     theme: useSuggestedTheme,
     open: () => void toggleStartOnDashboardOpen(true),
-    idle: () => void saveIdle(true, $idleTimeoutMinutes)
+    idle: () => void saveIdle(true, $idleTimeoutMinutes),
+    mcp: () => void toggleMCP(true)
   };
 
   const doneCount = $derived($setupSteps.filter((s) => s.done).length);
@@ -95,7 +97,7 @@
             <span class="w-[18px] h-[18px] rounded-full bg-emerald-500 text-white grid place-items-center">
               <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="3.5" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
             </span>
-            <span class="text-sm text-gray-400 dark:text-gray-500 line-through">{c.title()}</span>
+            <span class="text-sm text-gray-500 dark:text-gray-400 line-through">{c.title()}</span>
           {:else}
             <span class="w-[18px] h-[18px] rounded-full border-[1.5px] border-gray-300 dark:border-gray-600"></span>
             <span class="min-w-0">
@@ -109,7 +111,7 @@
                 class="shrink-0 inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium transition-colors {c.primary ? 'bg-lerd-red hover:bg-lerd-redhov text-lerd-onred' : 'bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/20 text-gray-700 dark:text-gray-200'}"
               >{c.cta()}</button>
             {:else}
-              <span class="text-[11px] text-gray-400 dark:text-gray-500 max-w-[12ch] text-right">{m.onboarding_loopbackOnly()}</span>
+              <span class="text-[11px] text-gray-500 dark:text-gray-400 max-w-[12ch] text-right">{m.onboarding_loopbackOnly()}</span>
             {/if}
           {/if}
         </li>

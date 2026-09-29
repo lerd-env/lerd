@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -12,6 +13,12 @@ import (
 const breezeDark = `
 [Colors:Button]
 BackgroundNormal=41,44,48
+
+[Colors:Header]
+BackgroundNormal=41,44,48
+
+[Colors:Header][Inactive]
+BackgroundNormal=32,35,38
 
 [Colors:Selection]
 BackgroundNormal=61,174,233
@@ -75,12 +82,20 @@ func TestPlasmaThemeReadsTheAccentAndTheSchemeSurfaces(t *testing.T) {
 	if theme.Source != UIThemeSourceDesktop {
 		t.Errorf("Source = %q, want %q", theme.Source, UIThemeSourceDesktop)
 	}
+	// Breeze lifts a focused window's header off the window colour, which is
+	// what an unfocused one wears, and the chrome follows it.
+	if theme.ChromeActive != "#292c30" {
+		t.Errorf("ChromeActive = %q, want the focused header background", theme.ChromeActive)
+	}
 }
 
 // A light scheme lends its accent and nothing else, the same way a light Omarchy
 // theme does: the surface fields are the dark ones.
 func TestPlasmaThemeLendsOnlyItsAccentOnALightScheme(t *testing.T) {
 	writeKdeGlobals(t, "KDE", `
+[Colors:Header]
+BackgroundNormal=222,224,226
+
 [Colors:View]
 BackgroundNormal=255,255,255
 
@@ -106,6 +121,9 @@ AccentColor=61,174,233
 	if theme.ChromeLight != "#eff0f1" {
 		t.Errorf("ChromeLight = %q, want the window background", theme.ChromeLight)
 	}
+	if theme.ChromeLightActive != "#dee0e2" {
+		t.Errorf("ChromeLightActive = %q, want the focused header background", theme.ChromeLightActive)
+	}
 }
 
 // A dark scheme says nothing about what light mode should look like, so the
@@ -116,8 +134,21 @@ func TestPlasmaThemeLendsNoLightChromeOnADarkScheme(t *testing.T) {
 	if theme == nil {
 		t.Fatal("plasmaTheme() = nil")
 	}
-	if theme.ChromeLight != "" {
-		t.Errorf("ChromeLight = %q, want nothing off a dark scheme", theme.ChromeLight)
+	if theme.ChromeLight != "" || theme.ChromeLightActive != "" {
+		t.Errorf("ChromeLight = %q/%q, want nothing off a dark scheme", theme.ChromeLight, theme.ChromeLightActive)
+	}
+}
+
+// A scheme from before Plasma 6 has no header colours, so the chrome keeps one
+// tone whether the window has focus or not.
+func TestPlasmaThemeWithoutHeaderColoursKeepsOneChrome(t *testing.T) {
+	writeKdeGlobals(t, "KDE", strings.Replace(breezeDark, "[Colors:Header]\nBackgroundNormal=41,44,48\n", "", 1))
+	theme := plasmaTheme()
+	if theme == nil {
+		t.Fatal("plasmaTheme() = nil")
+	}
+	if theme.ChromeActive != "" {
+		t.Errorf("ChromeActive = %q, want nothing without a header group", theme.ChromeActive)
 	}
 }
 

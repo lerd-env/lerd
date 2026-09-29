@@ -1,7 +1,8 @@
-import { apiFetch, apiJson } from '$lib/api';
+import { apiFetch, apiJson, apiUrl } from '$lib/api';
 import {
   BUILTIN_PALETTES,
   DEFAULT_PALETTE_ID,
+  SYSTEM_PALETTE_IDS,
   asDesktopStandIn,
   resolvePalette,
   type PaletteError,
@@ -75,9 +76,18 @@ export async function loadPalettes() {
     // and the picker has to stay unambiguous. A desktop entry claims a built-in's
     // id the same way, and the daemon lists it last, so it wins over a file that
     // claimed the same one.
-    const offered = [...new Map(user.map((p) => [p.id, p])).values()];
-    const shadowed = new Set(offered.map((p) => p.id));
-    palettes.set([...BUILTIN_PALETTES.filter((p) => !shadowed.has(p.id)), ...offered]);
+    const offered = new Map(user.map((p) => [p.id, p]));
+    const builtins = BUILTIN_PALETTES.map((p) => offered.get(p.id) ?? p);
+    const extra = [...offered.values()].filter((p) => !BUILTIN_PALETTES.some((b) => b.id === p.id));
+    // A desktop without a built-in of its own, Omarchy, joins the system themes
+    // under lerd's rather than landing after the editor schemes.
+    const systemEnd = Math.max(...SYSTEM_PALETTE_IDS.map((id) => builtins.findIndex((p) => p.id === id))) + 1;
+    palettes.set([
+      ...builtins.slice(0, systemEnd),
+      ...extra.filter((p) => p.source === 'desktop'),
+      ...builtins.slice(systemEnd),
+      ...extra.filter((p) => p.source !== 'desktop')
+    ]);
     paletteErrors.set(res.errors || []);
   } catch {
     /* keep previous */
@@ -118,13 +128,33 @@ export async function removePalette(id: string): Promise<boolean> {
 // like. adoptTheme rather than palette.set, so the value that arrived is not
 // written straight back to the config it came from.
 export function watchThemeChanges() {
+  reloadUserCSS();
   return wsMessage.subscribe((msg) => {
     if (msg?.theme !== undefined) {
       adoptTheme(msg.theme);
       configTheme.set(msg.theme);
+      reloadUserCSS();
     }
     // The desktop theme keeps its id when its colours change, so the list has to
     // be refetched rather than reapplied from what is already in hand.
-    if (msg?.type === 'theme_list') void loadPalettes();
+    if (msg?.type === 'theme_list') {
+      void loadPalettes();
+      reloadUserCSS();
+    }
   });
+}
+
+// The chosen theme's own stylesheet (themes/<id>.css, after the Omarchy theme's
+// lerd.css while following it) goes last in <head> so it wins over app.css.
+const USER_CSS_ID = 'lerd-user-css';
+
+export function reloadUserCSS() {
+  let link = document.getElementById(USER_CSS_ID) as HTMLLinkElement | null;
+  if (!link) {
+    link = document.createElement('link');
+    link.id = USER_CSS_ID;
+    link.rel = 'stylesheet';
+  }
+  document.head.appendChild(link);
+  link.href = `${apiUrl('/api/theme.css')}?v=${Date.now()}`;
 }

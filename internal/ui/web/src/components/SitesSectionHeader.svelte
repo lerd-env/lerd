@@ -22,7 +22,7 @@
     onclick={ontoggle}
     aria-expanded={!collapsed}
     aria-label={collapsed ? m.workspaces_expand() : m.workspaces_collapse()}
-    class="flex-1 min-w-0 flex items-center gap-1.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors {draggable
+    class="flex-1 min-w-0 flex items-center gap-1.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors {draggable
       ? 'cursor-grab active:cursor-grabbing'
       : ''}"
   >

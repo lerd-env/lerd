@@ -1103,11 +1103,7 @@ func restoreSiteInfrastructure() {
 		// Resolve() returns the rendered CustomService for inline + preset
 		// references (e.g. mariadb-11) and (nil, nil) for built-ins. Without
 		// it, preset references slipped through to the built-in template path.
-		for _, svc := range proj.Services {
-			if seenSvc[svc.Name] {
-				continue
-			}
-			seenSvc[svc.Name] = true
+		for _, svc := range servicesToRestore(proj.Services, seenSvc) {
 			cs, err := svc.Resolve()
 			if err != nil {
 				feedback.Warn("resolving service %q for %s: %v", svc.Name, s.Name, err)
@@ -1382,4 +1378,22 @@ func canPromptForPassword() bool { return hasControllingTerminal() }
 func dnsEnabled() bool {
 	cfg, err := config.LoadGlobal()
 	return err == nil && cfg != nil && cfg.DNS.Enabled
+}
+
+// servicesToRestore is the part of a site's service list the restore pass may
+// write units for: each name once across sites, and never one the user removed,
+// which a site still listing it must not undo.
+func servicesToRestore(svcs []config.ProjectService, seen map[string]bool) []config.ProjectService {
+	var out []config.ProjectService
+	for _, svc := range svcs {
+		if seen[svc.Name] {
+			continue
+		}
+		seen[svc.Name] = true
+		if config.ServiceIsRemoved(svc.Name) {
+			continue
+		}
+		out = append(out, svc)
+	}
+	return out
 }

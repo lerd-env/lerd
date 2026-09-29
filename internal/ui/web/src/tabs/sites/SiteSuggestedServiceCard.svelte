@@ -6,7 +6,7 @@
   import { apiFetch, decodeJSONResult } from '$lib/api';
   import { notifyLocalFailure } from '$lib/notify';
   import { serviceLabel } from '$stores/services';
-  import type { ServiceSuggestion } from '$stores/sites';
+  import { loadSites, type ServiceSuggestion } from '$stores/sites';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -24,8 +24,8 @@
 
   let busy = $state(false);
 
-  // Either action changes the site, and the dashboard's site event redraws the
-  // overview without this card, so there is nothing to reset on success.
+  // Either action changes the site; no site event follows a .lerd.yaml or
+  // sites.yaml write, so the list is reloaded to redraw the overview.
   async function act(action: 'service:add' | 'service:dismiss') {
     busy = true;
     try {
@@ -35,6 +35,7 @@
       );
       const out = await decodeJSONResult<{ ok?: boolean; error?: string }>(res);
       if (!out.ok) throw new Error(out.error || m.common_requestFailed());
+      await loadSites();
     } catch (e) {
       notifyLocalFailure(
         'site_service',
@@ -48,10 +49,10 @@
 </script>
 
 <ServiceCardShell compact suggested>
-  <!-- Faded until hovered, so a suggestion never reads as a service the site
-       already has; the actions stay at full strength to read as clickable. -->
+  <!-- Faded and grey until hovered, so a suggestion never reads as a service the
+       site already has; the actions stay at full strength to read as clickable. -->
   <span
-    class="flex min-w-0 flex-1 items-center gap-2.5 opacity-60 group-hover:opacity-100 transition-opacity"
+    class="flex min-w-0 flex-1 items-center gap-2.5 opacity-60 grayscale group-hover:opacity-100 group-hover:grayscale-0 transition"
     data-testid="suggested-identity"
     use:tooltip={why}
   >
@@ -69,7 +70,7 @@
     use:tooltip={m.sites_suggestedService_add({ name: serviceLabel(name) })}
     aria-label={m.sites_suggestedService_add({ name: serviceLabel(name) })}
     onclick={() => act('service:add')}
-    class="shrink-0 flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
+    class="shrink-0 flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
   >
     <Icon name={busy ? 'spinner' : 'plus'} class="w-3.5 h-3.5 {busy ? 'animate-spin' : ''}" />
   </button>
@@ -79,7 +80,7 @@
     use:tooltip={m.sites_suggestedService_dismiss({ name: serviceLabel(name) })}
     aria-label={m.sites_suggestedService_dismiss({ name: serviceLabel(name) })}
     onclick={() => act('service:dismiss')}
-    class="shrink-0 flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
+    class="shrink-0 flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
   >
     <Icon name="close" class="w-3.5 h-3.5" />
   </button>

@@ -42,9 +42,11 @@
 <button
   {title}
   aria-label={title}
+  role="switch"
+  aria-checked={on}
   {onclick}
   disabled={disabled || loading}
-  class="relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-hidden disabled:opacity-50 {bgClass}"
+  class="relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-lerd-red focus-visible:ring-offset-1 dark:focus-visible:ring-offset-lerd-card disabled:opacity-50 {bgClass}"
 >
   <span
     class="inline-block h-3 w-3 rounded-full bg-white shadow-sm transition-transform duration-200 {on || failing

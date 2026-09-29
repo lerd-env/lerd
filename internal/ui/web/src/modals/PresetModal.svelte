@@ -83,13 +83,13 @@
                 <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{p.description}</p>
               {/if}
               {#if p.image}
-                <div class="text-[11px] text-gray-400 dark:text-gray-500 mt-1 font-mono truncate">{p.image}</div>
+                <div class="text-[11px] text-gray-500 dark:text-gray-400 mt-1 font-mono truncate">{p.image}</div>
               {/if}
               {#if p.depends_on && p.depends_on.length > 0}
-                <div class="text-[11px] text-gray-400 dark:text-gray-500 mt-1">{m.services_preset_dependsOn()} {p.depends_on.join(', ')}</div>
+                <div class="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{m.services_preset_dependsOn()} {p.depends_on.join(', ')}</div>
               {/if}
               {#if p.dashboard}
-                <div class="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{m.services_preset_dashboard()} {p.dashboard}</div>
+                <div class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">{m.services_preset_dashboard()} {p.dashboard}</div>
               {/if}
               {#if (p.missing_deps || []).length > 0}
                 <div class="text-[11px] text-amber-600 dark:text-amber-400 mt-1">{m.services_preset_installFirst({ deps: (p.missing_deps || []).join(', ') })}</div>
@@ -114,7 +114,7 @@
             </DetailButton>
           </div>
           {#if p.installing && p.installingMessage}
-            <p class="text-[11px] text-gray-400 dark:text-gray-500 mt-2 font-mono truncate">{p.installingMessage}</p>
+            <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-2 font-mono truncate">{p.installingMessage}</p>
           {/if}
           {#if p.error}
             <p class="text-[11px] text-red-500 mt-2">{p.error}</p>

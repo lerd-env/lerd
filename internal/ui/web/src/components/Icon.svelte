@@ -14,7 +14,7 @@
     | 'plus'
     | 'refresh'
     | 'play'
-    | 'stop'
+    | 'power'
     | 'back'
     | 'globe'
     | 'terminal'
@@ -35,7 +35,7 @@
     | 'camera'
     | 'bell'
     | 'alert'
-    | 'contrast'
+    | 'monitor'
     | 'splitHorizontal'
     | 'splitVertical'
     | 'maximize'
@@ -76,7 +76,7 @@
     plus: 'M12 4v16m8-8H4',
     refresh: 'M4 4v5h5M20 20v-5h-5M20.49 9A9 9 0 005.64 5.64L4 4m16 16l-1.64-1.64A9 9 0 014.51 15',
     play: 'M5 3l14 9-14 9V3z',
-    stop: 'M6 6h12v12H6z',
+    power: 'M12 3v9m5.66-5.66a8 8 0 11-11.32 0',
     back: 'M15 19l-7-7 7-7',
     globe:
       'M21 12a9 9 0 11-18 0 9 9 0 0118 0zM3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18',
@@ -108,7 +108,7 @@
     bell: 'M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0',
     alert:
       'M12 9.5v4m0 3.5h.01M10.3 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.7 3.86a2 2 0 00-3.4 0z',
-    contrast: 'M12 3a9 9 0 100 18 9 9 0 000-18zm0 0v18',
+    monitor: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
     splitHorizontal:
       'M4 5h7v14H4zM13 5h7v14h-7z',
     splitVertical:

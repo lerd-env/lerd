@@ -751,7 +751,7 @@ func newWatchCmd() *cobra.Command {
 								}
 							}
 
-							// Re-detect Node version in case .lerd.yaml, .node-version, or .nvmrc changed.
+							// Re-detect Node version in case .lerd.yaml or a Node version file changed.
 							if detected, detErr := nodeDet.DetectVersion(sitePath); detErr == nil && detected != site.NodeVersion {
 								fmt.Printf("Node version changed for %s: %s -> %s\n", site.Name, site.NodeVersion, detected)
 								site.NodeVersion = detected

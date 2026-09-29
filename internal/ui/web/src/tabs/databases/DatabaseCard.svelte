@@ -201,7 +201,7 @@
     <Icon name="database" class="w-4 h-4 mt-0.5 shrink-0 text-gray-300 dark:text-gray-600" />
     <div class="min-w-0 flex-1">
       <p class="truncate text-sm font-semibold text-gray-800 dark:text-gray-100" title={active.name}>{active.name}</p>
-      <p class="flex flex-wrap items-center gap-x-1.5 text-xs text-gray-400 dark:text-gray-500">
+      <p class="flex flex-wrap items-center gap-x-1.5 text-xs text-gray-500 dark:text-gray-400">
         <span class="shrink-0 tabular-nums">{formatBytes(active.size_bytes)}</span>
         {#if scheduled}
           <button
@@ -253,7 +253,7 @@
         use:tooltip={m.databases_openIn({ name: serviceLabel(admin.name) })}
         aria-label={m.databases_openIn({ name: serviceLabel(admin.name) })}
         onclick={() => openDatabaseAdmin(engine.service, active.name)}
-        class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+        class="flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
       >
         <Icon name="external" class="w-3.5 h-3.5" />
       </button>
@@ -263,7 +263,7 @@
       use:tooltip={copied ? m.databases_copied() : m.databases_copyDsn()}
       aria-label={m.databases_copyDsn()}
       onclick={copyDsn}
-      class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+      class="flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
     >
       <Icon name={copied ? 'check' : 'clipboard'} class="w-3.5 h-3.5" />
     </button>
@@ -273,7 +273,7 @@
         href={exportUrl(engine.service, active.name)}
         use:tooltip={m.databases_export()}
         aria-label={m.databases_export()}
-        class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+        class="flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
       >
         <Icon name="download" class="w-3.5 h-3.5" />
       </a>
@@ -286,7 +286,7 @@
         aria-label={m.databases_import()}
         onclick={() => fileInput?.click()}
         disabled={importBusy}
-        class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+        class="flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
       >
         <Icon name={importBusy ? 'spinner' : 'upload'} class="w-3.5 h-3.5 {importBusy ? 'animate-spin' : ''}" />
       </button>
@@ -299,7 +299,7 @@
         use:tooltip={m.databases_snapshots()}
         aria-label={m.databases_snapshots()}
         onclick={() => (showSnapshots = true)}
-        class="relative flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+        class="relative flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
       >
         <Icon name="camera" class="w-3.5 h-3.5" />
         {#if snapshotCount > 0}
@@ -316,7 +316,7 @@
         use:tooltip={m.databases_drop()}
         aria-label={m.databases_drop()}
         onclick={openDrop}
-        class="ml-auto flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+        class="ml-auto flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
       >
         <Icon name="trash" class="w-3.5 h-3.5" />
       </button>

@@ -661,6 +661,25 @@ func TestEnrichServices(t *testing.T) {
 		t.Errorf("services = %v, want mysql detected from wp-config.php", e.Services)
 	})
 
+	// Only a .lerd.yaml entry is the dashboard's to remove; one the .env
+	// reaches would come straight back on the next read.
+	t.Run("marks the services .lerd.yaml declares", func(t *testing.T) {
+		installQuadlets(t, "mysql")
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte("services:\n  - redis\n"), 0644)
+		os.WriteFile(filepath.Join(dir, ".env"), []byte("DB_HOST=lerd-mysql\n"), 0644)
+
+		e := &EnrichedSite{Path: dir}
+		e.enrichServices()
+
+		if len(e.Services) != 2 {
+			t.Fatalf("services = %v, want redis and mysql", e.Services)
+		}
+		if len(e.DeclaredServices) != 1 || e.DeclaredServices[0] != "redis" {
+			t.Errorf("declared = %v, want only redis", e.DeclaredServices)
+		}
+	})
+
 	t.Run("no .env file returns empty", func(t *testing.T) {
 		dir := t.TempDir()
 		e := &EnrichedSite{Path: dir}

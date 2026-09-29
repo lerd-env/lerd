@@ -48,7 +48,7 @@ describe('theme store', () => {
     localStorage.setItem('lerd-theme', 'light');
     const { initTheme, palette } = await import('./theme');
     initTheme();
-    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#ff2d20');
+    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#e4281d') // #ff2d20 nudged to AA on white;
 
     palette.set('muted');
     expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#b04a42');
@@ -73,7 +73,7 @@ describe('theme store', () => {
     localStorage.setItem('lerd-palette', 'deleted-by-hand');
     const { initTheme } = await import('./theme');
     initTheme();
-    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#ff2d20');
+    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#e4281d');
   });
 
   it('repaints when a theme arrives from the daemon after the first paint', async () => {
@@ -83,13 +83,13 @@ describe('theme store', () => {
     const { initTheme, palettes } = await import('./theme');
     const { BUILTIN_PALETTES, resolvePalette } = await import('$lib/palettes');
     initTheme();
-    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#ff2d20');
+    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#e4281d');
 
     palettes.set([
       ...BUILTIN_PALETTES,
-      resolvePalette({ id: 'lagoon', name: 'Lagoon', accent: '#3b7ea1' })!
+      resolvePalette({ id: 'lagoon', name: 'Lagoon', accent: '#2f6a89' })!
     ]);
-    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#3b7ea1');
+    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#2f6a89');
   });
 
   it('paints the installed app chrome from the theme in effect', async () => {
@@ -140,5 +140,32 @@ describe('theme store', () => {
 
     media.setDark(true);
     expect(document.documentElement.classList.contains('dark')).toBe(true);
+  });
+
+  // Focus handed to an embedded dashboard blurs this window while the app as a
+  // whole still has it, which is why the check is hasFocus and not the event.
+  it('lifts the chrome while the window has focus and drops it on blur', async () => {
+    mockMatchMedia(true);
+    localStorage.setItem('lerd-theme', 'dark');
+    localStorage.setItem('lerd-palette', 'breeze');
+    let focused = true;
+    vi.spyOn(document, 'hasFocus').mockImplementation(() => focused);
+    const { initTheme, palettes } = await import('./theme');
+    const { BUILTIN_PALETTES, resolvePalette } = await import('$lib/palettes');
+    initTheme();
+    palettes.set([
+      ...BUILTIN_PALETTES.filter((p) => p.id !== 'breeze'),
+      resolvePalette({ id: 'breeze', name: 'Breeze', accent: '#3daee9', card: '#202326', chrome_active: '#292c30' })!
+    ]);
+    const chrome = () => document.documentElement.style.getPropertyValue('--lerd-header');
+    expect(chrome()).toBe('#292c30');
+
+    focused = false;
+    window.dispatchEvent(new Event('blur'));
+    expect(chrome()).toBe('#202326');
+
+    focused = true;
+    window.dispatchEvent(new Event('focus'));
+    expect(chrome()).toBe('#292c30');
   });
 });

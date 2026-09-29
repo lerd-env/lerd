@@ -346,6 +346,15 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil && cfg.AdoptOmarchyTheme() {
+		step("Dressing the dashboard in the Omarchy theme")
+		if err := config.SaveGlobal(cfg); err != nil {
+			fmt.Printf("\n    WARN: persist the Omarchy theme: %v\n", err)
+		} else {
+			ok()
+		}
+	}
+
 	// 3. Binaries (composer, fnm, mkcert) — after manager is persisted so an
 	// nvm choice skips the fnm download.
 	step("Downloading binaries")
@@ -1011,16 +1020,17 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 			}
 		}
 
-		// Start installed PHP FPM containers whose images are now available.
-		if len(activeFPM) > 0 {
+		// Start the installed PHP FPM containers whose images are now available,
+		// or take them down where PHP runs on the host and they serve nothing.
+		fpmStart, fpmStop := fpmVersionsToSettle(activeFPM, lifecycle.FPMContainersWanted())
+		if len(fpmStart) > 0 {
 			var fpmJobs []BuildJob
-			for _, v := range activeFPM {
-				ver := v
-				short := strings.ReplaceAll(ver, ".", "")
+			for _, v := range fpmStart {
+				short := strings.ReplaceAll(v, ".", "")
 				if podman.RunSilent("image", "exists", "lerd-php"+short+"-fpm:local") != nil {
 					continue // image still missing, skip
 				}
-				unit := "lerd-php" + short + "-fpm"
+				unit := podman.FPMUnitName(v)
 				fpmJobs = append(fpmJobs, BuildJob{
 					Label: "php" + short + "-fpm",
 					Run:   func(_ io.Writer) error { return podman.StartUnit(unit) },
@@ -1029,6 +1039,17 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 			if len(fpmJobs) > 0 {
 				feedback.Header("Starting PHP-FPM")
 				RunParallel(fpmJobs) //nolint:errcheck
+			}
+		}
+		// Left running by an install that predates this, and revived by the
+		// quadlet's restart policy ever since.
+		for _, v := range fpmStop {
+			unit := podman.FPMUnitName(v)
+			if !podman.ContainerRunningQuiet(unit) {
+				continue
+			}
+			if err := podman.StopUnit(unit); err != nil {
+				feedback.Warn("stopping %s: %v", unit, err)
 			}
 		}
 

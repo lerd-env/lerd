@@ -17,6 +17,8 @@ const nativePin = `tools:
       darwin/arm64: d6fc7f0e595cf3e84479f524c5b7ee95eb31b5acf359b984fc302c01c6e0da66
     sizes:
       darwin/arm64: 67312315
+    published:
+      darwin/arm64: "2026-09-28T12:00:00Z"
 `
 
 // The native builds are published by a different repository on its own
@@ -42,6 +44,13 @@ func TestLoadMergesTheNativePHPManifest(t *testing.T) {
 	}
 	if d := m.Digest("php-native-8.4", "darwin", "arm64"); len(d) != 64 {
 		t.Errorf("digest = %q, want a sha256", d)
+	}
+	// The date a rebuild moves, per platform like the digest above it.
+	if p := m.PublishedAt("php-native-8.4", "darwin", "arm64"); p != "2026-09-28T12:00:00Z" {
+		t.Errorf("published = %q, want the pin's date", p)
+	}
+	if p := m.PublishedAt("php-native-8.4", "darwin", "amd64"); p != "" {
+		t.Errorf("published for an undated platform = %q, want empty", p)
 	}
 	// The embedded pins must survive: this is a merge, not a replacement.
 	if _, ok := m.Tools["composer"]; !ok {

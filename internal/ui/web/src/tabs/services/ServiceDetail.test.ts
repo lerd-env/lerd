@@ -30,26 +30,26 @@ describe('ServiceDetail databases tab', () => {
 
   it('shows the Databases tab with dashboard-control authority', () => {
     const { getByRole } = render(ServiceDetail, { props: { svc: dbService() } });
-    expect(getByRole('button', { name: 'Databases' })).toBeInTheDocument();
+    expect(getByRole('tab', { name: 'Databases' })).toBeInTheDocument();
   });
 
   it('hides the Databases tab without dashboard-control authority', () => {
     accessMode.set({ localControl: false, lanExposed: true, checked: true });
     const { queryByRole } = render(ServiceDetail, { props: { svc: dbService() } });
-    expect(queryByRole('button', { name: 'Databases' })).toBeNull();
+    expect(queryByRole('tab', { name: 'Databases' })).toBeNull();
   });
 
   // Snapshots belong to the databases the engine holds, so the tab follows the
   // same authority and the same is_database guard.
   it('shows the Snapshots tab beside Databases', () => {
     const { getByRole } = render(ServiceDetail, { props: { svc: dbService() } });
-    expect(getByRole('button', { name: 'Snapshots' })).toBeInTheDocument();
+    expect(getByRole('tab', { name: 'Snapshots' })).toBeInTheDocument();
   });
 
   it('hides the Snapshots tab on a service that holds no databases', () => {
     const svc = { ...dbService(), is_database: false };
     const { queryByRole } = render(ServiceDetail, { props: { svc } });
-    expect(queryByRole('button', { name: 'Snapshots' })).toBeNull();
+    expect(queryByRole('tab', { name: 'Snapshots' })).toBeNull();
   });
 });
 
@@ -70,14 +70,14 @@ describe('ServiceDetail entities tab', () => {
   // entity-declaring service lands on its entity tab, not on logs.
   it('opens on the entity tab, named after the declared kind', () => {
     const { getByRole } = render(ServiceDetail, { props: { svc: entityService() } });
-    const tab = getByRole('button', { name: 'Buckets' });
+    const tab = getByRole('tab', { name: 'Buckets' });
     expect(tab.className).toContain('border-lerd-red');
   });
 
   it('hides the entity tab without dashboard-control authority', () => {
     accessMode.set({ localControl: false, lanExposed: true, checked: true });
     const { queryByRole } = render(ServiceDetail, { props: { svc: entityService() } });
-    expect(queryByRole('button', { name: 'Buckets' })).toBeNull();
+    expect(queryByRole('tab', { name: 'Buckets' })).toBeNull();
   });
 });
 

@@ -29,6 +29,7 @@
   import ConfirmTuningRestoreModal from './ConfirmTuningRestoreModal.svelte';
   import ConfirmTuningResetModal from './ConfirmTuningResetModal.svelte';
   import ConfirmSiteUnlinkModal from './ConfirmSiteUnlinkModal.svelte';
+  import ConfirmSiteServiceRemoveModal from './ConfirmSiteServiceRemoveModal.svelte';
   import ConfirmServiceInstallModal from './ConfirmServiceInstallModal.svelte';
   import ChangelogModal from './ChangelogModal.svelte';
   import ErrorModal from './ErrorModal.svelte';
@@ -93,6 +94,8 @@
   <ConfirmWorkspaceDeleteModal />
 {:else if $modal.kind === 'siteUnlink' && $modal.siteUnlink}
   <ConfirmSiteUnlinkModal />
+{:else if $modal.kind === 'siteServiceRemove' && $modal.siteServiceRemove}
+  <ConfirmSiteServiceRemoveModal />
 {:else if $modal.kind === 'serviceInstall' && $modal.serviceInstall}
   <ConfirmServiceInstallModal />
 {:else if $modal.kind === 'changelog'}

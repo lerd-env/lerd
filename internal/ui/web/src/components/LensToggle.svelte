@@ -23,5 +23,5 @@
     onchange={(e) => onchange((e.currentTarget as HTMLInputElement).checked)}
   />
   {label}
-  {#if hint}<span class="text-gray-400 dark:text-gray-500">{hint}</span>{/if}
+  {#if hint}<span class="text-gray-500 dark:text-gray-400">{hint}</span>{/if}
 </label>

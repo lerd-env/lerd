@@ -367,16 +367,16 @@
           autocomplete="off"
           spellcheck="false"
         />
-        <kbd class="hidden sm:inline-flex items-center text-[10px] font-mono text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-lerd-border rounded-sm px-1.5 py-0.5">esc</kbd>
+        <kbd class="hidden sm:inline-flex items-center text-[10px] font-mono text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-lerd-border rounded-sm px-1.5 py-0.5">esc</kbd>
       </div>
 
       <ul bind:this={listEl} class="flex-1 overflow-y-auto py-1">
         {#if filtered.length === 0}
-          <li class="px-4 py-6 text-center text-sm text-gray-400 dark:text-gray-500">{m.palette_empty()}</li>
+          <li class="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">{m.palette_empty()}</li>
         {:else}
           {#each filtered as e, idx (e.id)}
             {#if idx === 0 || filtered[idx - 1].group !== e.group}
-              <li class="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{groupLabel[e.group]()}</li>
+              <li class="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{groupLabel[e.group]()}</li>
             {/if}
             {@const isActive = idx === selected}
             <li>
@@ -391,7 +391,7 @@
               >
                 <span class="flex-1 truncate">{e.label}</span>
                 {#if e.hint}
-                  <span class="flex items-center gap-1 text-[11px] font-mono text-gray-400 dark:text-gray-500 truncate">
+                  <span class="flex items-center gap-1 text-[11px] font-mono text-gray-500 dark:text-gray-400 truncate">
                     {#if e.service}
                       <ServiceIcon name={e.service} bare inline />
                     {:else}
@@ -406,7 +406,7 @@
         {/if}
       </ul>
 
-      <div class="px-4 py-2 border-t border-gray-100 dark:border-lerd-border bg-gray-50/60 dark:bg-white/2 flex items-center gap-3 text-[10px] text-gray-400 dark:text-gray-500">
+      <div class="px-4 py-2 border-t border-gray-100 dark:border-lerd-border bg-gray-50/60 dark:bg-white/2 flex items-center gap-3 text-[10px] text-gray-500 dark:text-gray-400">
         <span class="inline-flex items-center gap-1"><kbd class="font-mono">↑↓</kbd> {m.palette_hint_navigate()}</span>
         <span class="inline-flex items-center gap-1"><kbd class="font-mono">↵</kbd> {m.palette_hint_select()}</span>
         <span class="ml-auto inline-flex items-center gap-1"><kbd class="font-mono">⌘K</kbd> {m.palette_hint_toggle()}</span>

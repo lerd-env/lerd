@@ -23,7 +23,7 @@
         {m.services_download_bodyUnknown({ name: $downloadConfirm.name })}
       {/if}
     </p>
-    <div class="text-[11px] text-gray-400 dark:text-gray-500 font-mono truncate">
+    <div class="text-[11px] text-gray-500 dark:text-gray-400 font-mono truncate">
       {$downloadConfirm.download?.image ?? ''}
     </div>
   </div>
