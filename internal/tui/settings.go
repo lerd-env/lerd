@@ -53,6 +53,7 @@ const (
 	settingsTray
 	settingsNotify
 	settingsDNS
+	settingsProfiler
 )
 
 func (m *Model) settingsRows() []settingsRow {
@@ -90,6 +91,7 @@ func (m *Model) settingsRows() []settingsRow {
 		settingsRow{kind: settingsTray, label: "Tray applet", on: cfg == nil || cfg.IsTrayEnabled()},
 		settingsRow{kind: settingsNotify, label: "Notifications", on: cfg == nil || cfg.IsNotificationsEnabled()},
 		settingsRow{kind: settingsDNS, label: "lerd DNS (resolves ." + currentTLD() + ")", on: !m.snap.Status.DNSDisabled},
+		settingsRow{kind: settingsProfiler, label: "SPX profiler (captures slow requests)", on: cfg != nil && cfg.IsProfilerEnabled()},
 	)
 
 	// Worker runtime mode: macOS only. On Linux workers always run via
@@ -179,6 +181,9 @@ func (m *Model) settingsToggle(rows []settingsRow) tea.Cmd {
 		}
 		m.setStatus("lerd DNS "+onOffVerb(row.on)+"…", 10*time.Second)
 		return tea.Sequence(runLerd("", verb), loadCmd())
+	case settingsProfiler:
+		m.setStatus("profiler "+onOffVerb(row.on)+"…", 5*time.Second)
+		return runLerd("", "profile", onOffVerb(row.on))
 	case settingsWorkerMode:
 		// Toggle between exec (off) and container (on). Mirrors
 		// `lerd workers mode <value>`. Does not stop running workers —

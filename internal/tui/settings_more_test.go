@@ -29,7 +29,7 @@ func TestSettingsOfferTheWebUIToggles(t *testing.T) {
 		on[r.kind] = r.on
 	}
 	all := strings.Join(labels, "\n")
-	for _, want := range []string{"Idle suspend", "Streaming mode", "Tray applet", "Notifications", "lerd DNS"} {
+	for _, want := range []string{"Idle suspend", "Streaming mode", "Tray applet", "Notifications", "lerd DNS", "SPX profiler"} {
 		if !strings.Contains(all, want) {
 			t.Errorf("settings missing %q:\n%s", want, all)
 		}
