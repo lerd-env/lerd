@@ -50,6 +50,7 @@ export interface ProjectQuestions {
   proxy_command_hint?: string;
   proxy_port?: number;
   proxy_vite_pitfall?: boolean;
+  proxy_rails_pitfall?: boolean;
   container_port?: number;
   containerfile?: string;
 }

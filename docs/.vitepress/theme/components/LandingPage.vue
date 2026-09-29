@@ -478,7 +478,6 @@ onBeforeUnmount(() => {
             <span class="feat-more-label">Also includes</span>
             <span class="feat-chip">FrankenPHP &amp; Octane</span>
             <span class="feat-chip">Tabbed mouse-driven TUI &amp; system tray</span>
-            <span class="feat-chip">Polyglot sites · Node, Python, Go &amp; Ruby</span>
           </div>
         </div>
       </section>
@@ -510,6 +509,54 @@ onBeforeUnmount(() => {
               <span class="cmd-text">curl -fsSL https://lerd.sh/install.sh | bash</span>
             </div>
             <a class="btn-ghost" :href="withBase('/getting-started/installation')">macOS install guide →</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ RUNTIMES ============ -->
+      <section id="runtimes">
+        <div class="wrap">
+          <div class="sec-head reveal">
+            <span class="eyebrow"><span class="dot"></span>Beyond PHP</span>
+            <h2 class="h-section" style="margin-top:18px">Your Node, Python and Rails apps,<br/>on the same .test domains.</h2>
+            <p class="lead"><code class="kbd">lerd init</code> recognises the project, picks its dev server command and a free port, and runs it on the host where file watching and hot reload just work. Lerd supervises it, restarts it when it dies, keeps its logs, and puts nginx with trusted TLS in front, with the same MySQL, PostgreSQL, Redis and the rest of the services wired into its <code class="kbd">.env</code>.</p>
+          </div>
+
+          <div class="bento">
+            <div class="feat col-2 reveal" data-tilt>
+              <h3>Node.js</h3>
+              <p>Next, Nuxt, NestJS, Vite, Angular or a plain Express server. The dev script is picked from <code class="kbd">package.json</code>, on the Node version the project pins.</p>
+              <span class="feat-tag">// npm run dev</span>
+            </div>
+            <div class="feat col-2 reveal d1" data-tilt>
+              <h3>Python</h3>
+              <p>Django is started with <code class="kbd">runserver</code> on its own; Flask, FastAPI or anything else runs the command you give it.</p>
+              <span class="feat-tag">// manage.py runserver</span>
+            </div>
+            <div class="feat col-2 reveal d2" data-tilt>
+              <h3>Rails &amp; Rack</h3>
+              <p>A <code class="kbd">config.ru</code> is a Rack app, Rails runs <code class="kbd">bin/rails server</code>, and a Ruby from mise, rbenv or asdf is found.</p>
+              <span class="feat-tag">// bin/rails server</span>
+            </div>
+            <div class="feat col-2 reveal" data-tilt>
+              <h3>Go &amp; Rust</h3>
+              <p><code class="kbd">go run .</code> and <code class="kbd">cargo run</code> out of the box, or your own watcher in their place.</p>
+              <span class="feat-tag">// go.mod · Cargo.toml</span>
+            </div>
+            <div class="feat col-2 reveal d1" data-tilt>
+              <h3>Worktrees included</h3>
+              <p>Every git worktree gets its own dev server on its own port behind <code class="kbd">branch.site.test</code>, with the database shared or cloned.</p>
+              <span class="feat-tag">// feat-x.api.test</span>
+            </div>
+            <div class="feat col-2 reveal d2" data-tilt>
+              <h3>Or keep it in a container</h3>
+              <p>Rather not install the runtime? Lerd writes a starter <code class="kbd">Containerfile.lerd</code> for it and runs the app as a rootless container instead.</p>
+              <span class="feat-tag">// any stack</span>
+            </div>
+          </div>
+
+          <div class="mac-cta reveal d2">
+            <a class="btn-ghost" :href="withBase('/usage/host-proxy')">Non-PHP apps guide →</a>
           </div>
         </div>
       </section>

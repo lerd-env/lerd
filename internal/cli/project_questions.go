@@ -70,10 +70,11 @@ type ProjectQuestions struct {
 	WorkerOptions []string `json:"worker_options,omitempty"`
 	Workers       []string `json:"workers,omitempty"`
 
-	ProxyCommand     string `json:"proxy_command,omitempty"`
-	ProxyCommandHint string `json:"proxy_command_hint,omitempty"`
-	ProxyPort        int    `json:"proxy_port,omitempty"`
-	ProxyVitePitfall bool   `json:"proxy_vite_pitfall,omitempty"`
+	ProxyCommand      string `json:"proxy_command,omitempty"`
+	ProxyCommandHint  string `json:"proxy_command_hint,omitempty"`
+	ProxyPort         int    `json:"proxy_port,omitempty"`
+	ProxyVitePitfall  bool   `json:"proxy_vite_pitfall,omitempty"`
+	ProxyRailsPitfall bool   `json:"proxy_rails_pitfall,omitempty"`
 
 	ContainerPort int    `json:"container_port,omitempty"`
 	Containerfile string `json:"containerfile,omitempty"`
@@ -286,11 +287,7 @@ func fillProxyQuestions(q *ProjectQuestions, cwd string, defaults *config.Projec
 		command = defaults.Proxy.Command
 	}
 	if command == "" {
-		if len(devScripts) > 0 {
-			command = devScripts[0]
-		} else {
-			command = defaultDevCommand(cwd)
-		}
+		command = proxyDefaultCommand(cwd, devScripts)
 	}
 	q.ProxyCommand = command
 	if len(devScripts) > 0 {
@@ -314,6 +311,7 @@ func fillProxyQuestions(q *ProjectQuestions, cwd string, defaults *config.Projec
 	}
 	q.ProxyPort = port
 	q.ProxyVitePitfall = manifest.runsVite(command)
+	q.ProxyRailsPitfall = isRailsApp(cwd)
 }
 
 // fillContainerQuestions fills in what a custom-container project is asked: the

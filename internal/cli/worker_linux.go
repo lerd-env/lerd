@@ -172,6 +172,9 @@ func writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, resta
 			return false, errNoUsableNode()
 		}
 	}
+	if dirs := rubyShimDirs(sitePath, home); len(dirs) > 0 {
+		envPath = strings.Join(dirs, ":") + ":" + envPath
+	}
 	// systemd expands $VAR and %-specifiers in ExecStart before sh runs, so both
 	// are doubled to reach the shell literally.
 	escaped := strings.NewReplacer("'", `'"'"'`, "$", "$$", "%", "%%").Replace(shellCommand)

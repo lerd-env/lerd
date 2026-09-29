@@ -597,11 +597,7 @@ func runHostProxyWizard(cwd string, defaults *config.ProjectConfig, gcfg *config
 		command = defaults.Proxy.Command
 	}
 	if command == "" {
-		if len(devScripts) > 0 {
-			command = devScripts[0]
-		} else {
-			command = defaultDevCommand(cwd)
-		}
+		command = proxyDefaultCommand(cwd, devScripts)
 	}
 	commandDesc := "How lerd starts the app (lerd supervises and restarts it). Blank = run it yourself."
 	if len(devScripts) > 0 {
@@ -684,6 +680,14 @@ func runHostProxyWizard(cwd string, defaults *config.ProjectConfig, gcfg *config
 		fmt.Println("or requests through the lerd proxy fail with \"host not allowed\".")
 		fmt.Println("Vite also ignores the HOST env; add --host to the command so it binds")
 		fmt.Println("all interfaces, otherwise the proxy can't reach it.")
+	}
+
+	// Rails answers unknown Host headers with "Blocked hosts" in development.
+	// Recent versions allow .test and .localhost; other TLDs are blocked.
+	if isRailsApp(cwd) {
+		fmt.Println("\nNote: Rails blocks proxied requests by their Host header. Recent Rails allows")
+		fmt.Println(".test and .localhost; on another TLD, add your site domain to config.hosts in")
+		fmt.Println("config/environments/development.rb, or requests fail with \"Blocked hosts\".")
 	}
 
 	return &config.ProjectConfig{
@@ -892,35 +896,43 @@ type projectRuntime struct {
 // First match wins on detection. Node's manifests mirror isNodeProject so the
 // two agree on what a Node project is.
 var knownRuntimes = []projectRuntime{
+	// Rack leads because a Rails app with jsbundling also has a package.json.
+	// rackup ignores PORT/HOST, so the command reads them through a shell.
+	{
+		label:      "Rack",
+		manifests:  []string{"config.ru"},
+		devCommand: `sh -c 'exec bundle exec rackup --host "$HOST" --port "$PORT"'`,
+		container:  "FROM docker.io/library/ruby:3.3-slim\nRUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*\nCMD [\"sh\", \"-c\", \"bundle install && exec bundle exec rackup --host 0.0.0.0 --port {port}\"]\n",
+	},
 	{
 		label:      "Node",
 		manifests:  []string{"package.json", ".nvmrc", ".node-version"},
 		devCommand: "npm run dev",
-		container:  "FROM node:20-alpine\nRUN npm install -g nodemon\nCMD [\"npm\", \"run\", \"dev\"]\n",
+		container:  "FROM docker.io/library/node:20-alpine\nRUN npm install -g nodemon\nCMD [\"npm\", \"run\", \"dev\"]\n",
 	},
 	{
 		label:      "Go",
 		manifests:  []string{"go.mod"},
 		devCommand: "go run .",
-		container:  "FROM golang:1.23-alpine\n# Optional hot reload: RUN go install github.com/air-verse/air@latest (then CMD [\"air\"])\nCMD [\"go\", \"run\", \".\"]\n",
+		container:  "FROM docker.io/library/golang:1.23-alpine\n# Optional hot reload: RUN go install github.com/air-verse/air@latest (then CMD [\"air\"])\nCMD [\"go\", \"run\", \".\"]\n",
 	},
 	{
 		label:      "Python",
 		manifests:  []string{"pyproject.toml", "requirements.txt", "Pipfile", "manage.py"},
 		devCommand: "python app.py",
-		container:  "FROM python:3.12-slim\n# Install app deps at build time only if they aren't in the mounted project.\nCMD [\"python\", \"app.py\"]\n",
+		container:  "FROM docker.io/library/python:3.12-slim\n# Install app deps at build time only if they aren't in the mounted project.\nCMD [\"python\", \"app.py\"]\n",
 	},
 	{
 		label:      "Ruby",
 		manifests:  []string{"Gemfile"},
 		devCommand: "ruby app.rb",
-		container:  "FROM ruby:3.3-alpine\nCMD [\"ruby\", \"app.rb\"]\n",
+		container:  "FROM docker.io/library/ruby:3.3-alpine\nCMD [\"ruby\", \"app.rb\"]\n",
 	},
 	{
 		label:      "Rust",
 		manifests:  []string{"Cargo.toml"},
 		devCommand: "cargo run",
-		container:  "FROM rust:1-alpine\nCMD [\"cargo\", \"run\"]\n",
+		container:  "FROM docker.io/library/rust:1-alpine\nCMD [\"cargo\", \"run\"]\n",
 	},
 }
 
@@ -938,6 +950,19 @@ func detectProjectRuntime(cwd string) (*projectRuntime, bool) {
 	return nil, false
 }
 
+// proxyDefaultCommand is the dev command offered when none is saved: the first
+// package.json dev script, except for a Rack app, whose scripts only build the
+// assets while the server itself is rackup or rails.
+func proxyDefaultCommand(cwd string, devScripts []string) string {
+	if rt, ok := detectProjectRuntime(cwd); ok && rt.label == "Rack" {
+		return defaultDevCommand(cwd)
+	}
+	if len(devScripts) > 0 {
+		return devScripts[0]
+	}
+	return defaultDevCommand(cwd)
+}
+
 // defaultDevCommand guesses the host-proxy dev command from the detected
 // runtime, refining Python to Django's runserver when manage.py is present
 // (the table default of python app.py is wrong for Django/Flask). Returns "" for
@@ -950,7 +975,15 @@ func defaultDevCommand(cwd string) string {
 	if rt.label == "Python" && fileExists(filepath.Join(cwd, "manage.py")) {
 		return "python manage.py runserver"
 	}
+	// Rails reads PORT itself but binds from BINDING, not HOST.
+	if isRailsApp(cwd) {
+		return `sh -c 'exec bin/rails server --binding "$HOST"'`
+	}
 	return rt.devCommand
+}
+
+func isRailsApp(cwd string) bool {
+	return fileExists(filepath.Join(cwd, "config.ru")) && fileExists(filepath.Join(cwd, "bin", "rails"))
 }
 
 // starterContainerfile returns a commented starter Containerfile.lerd tailored
@@ -962,9 +995,9 @@ func starterContainerfile(cwd string, port int) string {
 		"# Your project is bind-mounted into the container at runtime (no COPY or WORKDIR\n"+
 		"# needed) so your edits are live. Install global dev tools here; app dependencies\n"+
 		"# come from the mounted project. Your app must listen on port %d.\n\n", port)
-	body := "FROM alpine:latest\n# RUN <install the global dev tools your app needs>\n# CMD [\"<command that starts your server>\"]\n"
+	body := "FROM docker.io/library/alpine:latest\n# RUN <install the global dev tools your app needs>\n# CMD [\"<command that starts your server>\"]\n"
 	if rt, ok := detectProjectRuntime(cwd); ok {
-		body = rt.container
+		body = strings.ReplaceAll(rt.container, "{port}", strconv.Itoa(port))
 	}
 	return header + body
 }
