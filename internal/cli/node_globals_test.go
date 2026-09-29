@@ -83,6 +83,10 @@ func TestNpmGlobalPrefixEnvDefaultsToLerdPrefix(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(config.NodeGlobalDir(), "bin")); err != nil {
 		t.Error("the lerd prefix bin dir should be created")
 	}
+	// npm 10.8 (Node 20) lstats <prefix>/lib before npx or npm exec runs.
+	if _, err := os.Stat(filepath.Join(config.NodeGlobalDir(), "lib", "node_modules")); err != nil {
+		t.Error("the lerd prefix lib/node_modules dir should be created")
+	}
 }
 
 func TestUserNPMPrefixIgnoresLerdOwnPrefix(t *testing.T) {

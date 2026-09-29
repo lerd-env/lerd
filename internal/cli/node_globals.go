@@ -76,8 +76,12 @@ func npmGlobalPrefixEnv() (env []string, lerdOwned bool) {
 		return []string{"npm_config_prefix=" + user}, false
 	}
 	prefix := config.NodeGlobalDir()
-	if err := os.MkdirAll(filepath.Join(prefix, "bin"), 0o755); err != nil {
-		return nil, false
+	// npm 10.8, the one Node 20 ships, lstats <prefix>/lib before npx and npm
+	// exec, and fails with ENOENT on a prefix that only has bin.
+	for _, dir := range []string{"bin", filepath.Join("lib", "node_modules")} {
+		if err := os.MkdirAll(filepath.Join(prefix, dir), 0o755); err != nil {
+			return nil, false
+		}
 	}
 	return []string{"npm_config_prefix=" + prefix}, true
 }
