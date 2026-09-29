@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"image/color"
 	"strings"
 	"time"
 
@@ -172,12 +171,10 @@ func renderToastBox(t toast) string {
 		contents = line1 + "\n" + body
 	}
 
-	style := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(toastBorderColor(t.kind)).
-		Padding(0, 1).
-		MaxWidth(maxToastWidth)
-	return style.Render(contents)
+	// A raised surface with padding instead of a border, like the other
+	// overlays; the severity dot carries the colour the border used to.
+	style := lipgloss.NewStyle().Padding(1, 2).MaxWidth(maxToastWidth)
+	return surfaceBox(style.Render(contents), surf.s4)
 }
 
 // toastDot returns the coloured glyph that identifies the toast's
@@ -191,17 +188,6 @@ func toastDot(k toastKind) string {
 		return pausedStyle.Render("●")
 	default:
 		return runningStyle.Render("●")
-	}
-}
-
-func toastBorderColor(k toastKind) color.Color {
-	switch k {
-	case toastFail:
-		return colFailing
-	case toastWarn:
-		return colPaused
-	default:
-		return colRunning
 	}
 }
 

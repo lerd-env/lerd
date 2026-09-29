@@ -33,26 +33,6 @@ func (m *Model) render() string {
 		return "terminal too small (need at least 60×12)\n"
 	}
 
-	// When a modal is open, return a full-screen centered overlay instead
-	// of the base layout. Less ambient context but consistent with the
-	// existing detail-pane swap pattern (S / Y / D / F / ?) which already
-	// replaces the right column wholesale. Toasts still composite on top
-	// so a completing action result isn't silently lost while a modal
-	// (palette / confirm / picker / help) is open.
-	if m.modalActive() {
-		toasts := m.renderToasts(m.width)
-		modalH := m.height - lipgloss.Height(toasts)
-		if modalH < 6 {
-			modalH = m.height
-			toasts = ""
-		}
-		out := m.renderActiveModal(m.width, modalH)
-		if toasts != "" {
-			out = lipgloss.JoinVertical(lipgloss.Left, out, toasts)
-		}
-		return out
-	}
-
 	sideW := layoutFor(m.width, m.height).sideW
 	// One column of air on each side keeps the main area off the sidebar's edge.
 	mainW := m.width - sideW - 2
@@ -111,7 +91,10 @@ func (m *Model) render() string {
 		}
 	}
 
-	if m.quickActive {
+	switch {
+	case m.modalActive():
+		lines = overlayCenter(dimScreen(lines), m.renderActiveModal(m.width, m.height), m.width)
+	case m.quickActive:
 		lines = m.withQuickOverlay(lines)
 	}
 	out := strings.Join(lines, "\n")

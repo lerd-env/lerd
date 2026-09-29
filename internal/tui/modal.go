@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"github.com/charmbracelet/x/ansi"
+	"image/color"
 	"os"
 	"strings"
 
@@ -17,24 +19,56 @@ import (
 // chrome for high-attention surfaces (palette, picker, help, confirm).
 
 var (
-	modalBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colAccent).
-			Padding(0, 2)
+	// Borderless: the box is a raised surface over the dimmed screen, like the
+	// ctrl+p palette, rather than a frame that replaces the screen.
+	modalBoxStyle    = lipgloss.NewStyle().Padding(1, 3)
 	modalTitleStyle  = lipgloss.NewStyle().Bold(true).Foreground(colTitle)
 	modalFooterStyle = lipgloss.NewStyle().Foreground(colDim)
 )
 
-// renderModal centers a titled bordered box inside a w x h area. body may
-// be multi-line; footer is a single hint line (commit / cancel keys).
-// Returns the full w x h frame so callers can hand it back from View().
+// renderModal draws a titled box no wider than w: the title, body (which may be
+// multi-line) and a footer hint line, on the raised surface. render places it
+// over the dimmed screen.
 func renderModal(w, h int, title, body, footer string) string {
 	parts := []string{modalTitleStyle.Render(title), "", body}
 	if footer != "" {
 		parts = append(parts, "", modalFooterStyle.Render(footer))
 	}
-	box := modalBoxStyle.Render(strings.Join(parts, "\n"))
-	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
+	box := modalBoxStyle.MaxWidth(max(20, w-4)).Render(strings.Join(parts, "\n"))
+	return surfaceBox(box, surf.s3)
+}
+
+// surfaceBox pads every line of a block to the block's width and paints it on
+// bg, so it covers what is underneath as one solid rectangle.
+func surfaceBox(block string, bg color.Color) string {
+	lines := strings.Split(block, "\n")
+	bw := lipgloss.Width(block)
+	for i, l := range lines {
+		lines[i] = paintBackground(padToWidth(l, bw), bg)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// dimScreen fades every line to the dim colour, leaving the text readable
+// behind an overlay without competing with it.
+func dimScreen(lines []string) []string {
+	for i, l := range lines {
+		lines[i] = dimStyle.Render(ansi.Strip(l))
+	}
+	return lines
+}
+
+// overlayCenter splices box over lines, centred.
+func overlayCenter(lines []string, box string, w int) []string {
+	rows := strings.Split(box, "\n")
+	bw := lipgloss.Width(box)
+	x, y := max(0, (w-bw)/2), max(1, (len(lines)-len(rows))/2)
+	for i, r := range rows {
+		if y+i < len(lines) {
+			lines[y+i] = splice(padToWidth(lines[y+i], w), r, x)
+		}
+	}
+	return lines
 }
 
 // modalActive reports whether any modal is currently open. View() consults
@@ -255,10 +289,8 @@ func (m *Model) renderPaletteModal(w, h int) string {
 func (m *Model) renderHelpModal(w, h int) string {
 	// Reserve modal padding (~10 cells horizontal) so long lines wrap
 	// cleanly instead of being clipped by the box.
-	innerW := w - 10
-	if innerW < 40 {
-		innerW = 40
-	}
+	// Capped so the screen stays visible around it, as an overlay should.
+	innerW := clamp(w-10, 40, 96)
 	all := helpContentLines(m, innerW)
 	if m.helpScroll > len(all)-1 {
 		m.helpScroll = max(0, len(all)-1)

@@ -13,11 +13,14 @@ var helpReference = []helpSection{
 	{
 		title: "Navigation",
 		rows: [][2]string{
-			{"ctrl+← / ctrl+→", "switch the top tab (Dashboard · Sites · Services · Databases); tabs are also clickable"},
-			{"tab / shift+tab", "cycle focus between the list and the detail pane on the current tab"},
-			{"click", "click a tab to switch screens, or a site / service / worker row to open it"},
-			{"↑ ↓  j k", "move the selection in the focused pane or Dashboard card (info cards scroll)"},
-			{"enter", "on the Dashboard, open the selected row (same as clicking it)"},
+			{"↑ ↓  j k", "move in the sidebar, or in whatever the main area shows"},
+			{"enter", "open the selected sidebar row, or the selected dashboard card"},
+			{"tab / esc", "move focus from the sidebar to the main area, and back"},
+			{"ctrl+p", "go to any site, service or worktree, or run a quick action"},
+			{"click", "click a sidebar row, tab, worktree or card to open it"},
+			{"1-5 · b", "switch a site's tabs · switch between its worktrees"},
+			{"\\", "show the sidebar on a narrow terminal"},
+			{"ctrl+← / ctrl+→", "step between Dashboard, Sites, Services and Databases"},
 			{"pgup / pgdn", "jump by 10 rows"},
 			{"home / end · g G", "jump to first / last row"},
 		},
@@ -144,10 +147,6 @@ var helpReference = []helpSection{
 func helpContentLines(m *Model, innerW int) []string {
 	out := make([]string, 0, 64)
 	add := func(s string) { out = append(out, padToWidth(clipLine(s, innerW), innerW)) }
-
-	add(sectionStyle.Render("Keybindings"))
-	add(dimStyle.Render("  press ? or esc to return to site detail"))
-	add("")
 
 	for i, sec := range helpReference {
 		if i > 0 {
