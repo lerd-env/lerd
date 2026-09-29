@@ -40,7 +40,7 @@ func TestAlignWorktreeEnvs_realignsHostKeepsDatabase(t *testing.T) {
 	}
 
 	site := &config.Site{Name: "acme", Path: main, Domains: []string{"acme.test"}}
-	alignWorktreeEnvs(site, filepath.Join(main, ".env"), ".env", "", nil)
+	alignWorktreeEnvs(site, nil, filepath.Join(main, ".env"), ".env", "", nil)
 
 	got, err := os.ReadFile(filepath.Join(checkout, ".env"))
 	if err != nil {
@@ -73,7 +73,7 @@ func TestAlignWorktreeEnvs_skipsWorktreeWithoutEnv(t *testing.T) {
 
 	site := &config.Site{Name: "acme", Path: main, Domains: []string{"acme.test"}}
 	// No worktree .env: must be a no-op, no panic, no file created.
-	alignWorktreeEnvs(site, filepath.Join(main, ".env"), ".env", "", nil)
+	alignWorktreeEnvs(site, nil, filepath.Join(main, ".env"), ".env", "", nil)
 
 	if _, err := os.Stat(filepath.Join(checkout, ".env")); !os.IsNotExist(err) {
 		t.Error("worktree .env should not have been created")
@@ -104,7 +104,7 @@ func TestAlignWorktreeEnvs_followsWhatTheParentMoved(t *testing.T) {
 	os.WriteFile(filepath.Join(checkout, ".env"), []byte(wtEnv), 0644)
 
 	site := &config.Site{Name: "acme", Path: main, Domains: []string{"acme.test"}}
-	alignWorktreeEnvs(site, filepath.Join(main, ".env"), ".env", "", before)
+	alignWorktreeEnvs(site, nil, filepath.Join(main, ".env"), ".env", "", before)
 
 	got, err := os.ReadFile(filepath.Join(checkout, ".env"))
 	if err != nil {

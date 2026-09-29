@@ -1382,7 +1382,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	// sites a sweep can reach, so whatever this run moved in the parent has to
 	// be carried into them from here.
 	if branch == "" {
-		alignWorktreeEnvs(site, envPath, envRelPath, envFormat, carriedToWorktrees(envMap, envOverrides))
+		alignWorktreeEnvs(site, fw, envPath, envRelPath, envFormat, carriedToWorktrees(envMap, envOverrides))
 	}
 
 	// The connection a JetBrains project points at is rebuilt from the same
@@ -1437,7 +1437,7 @@ func carriedToWorktrees(before, overrides map[string]string) map[string]string {
 //
 // Scoped to dotenv, the format both the keys and the writer here assume. A
 // worktree without an env file yet is skipped; it is seeded on its next sync.
-func alignWorktreeEnvs(site *config.Site, mainEnvPath, envRelPath, envFormat string, before map[string]string) {
+func alignWorktreeEnvs(site *config.Site, fw *config.Framework, mainEnvPath, envRelPath, envFormat string, before map[string]string) {
 	// Empty means the caller never resolved a format, which is dotenv.
 	if site == nil || (envFormat != "" && envFormat != "dotenv") {
 		return
@@ -1466,6 +1466,10 @@ func alignWorktreeEnvs(site *config.Site, mainEnvPath, envRelPath, envFormat str
 			}
 		}
 		maps.Copy(updates, envfile.CarriedValues(wtVals, before, after))
+		// A worktree that predates the runtime switch holds the container names
+		// its parent has since moved off, so it matches neither the parent's old
+		// value nor its new one and the carry above walks past it.
+		maps.Copy(updates, staleServiceCarry(fw, wtVals, after))
 		// A steady state stays silent and leaves the file's mtime alone.
 		if len(updates) == 0 {
 			continue
