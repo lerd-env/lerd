@@ -20,6 +20,7 @@ type sideKind int
 const (
 	sideDash sideKind = iota
 	sideDatabases
+	sideRuntimes
 	sideWorkspace
 	sideSite
 	sideService
@@ -42,7 +43,7 @@ func (it sideItem) selectable() bool { return it.kind != sideHeader && it.kind !
 // which already orders them by workspace, so a workspace row is emitted each
 // time the owning workspace changes.
 func (m *Model) sideItems() []sideItem {
-	items := []sideItem{{kind: sideDash, key: "dash"}, {kind: sideDatabases, key: "dbs"}, {kind: sideBlank}}
+	items := []sideItem{{kind: sideDash, key: "dash"}, {kind: sideDatabases, key: "dbs"}, {kind: sideRuntimes, key: "rt"}, {kind: sideBlank}}
 
 	sites := m.visibleSites()
 	items = append(items, sideItem{kind: sideHeader, key: "h:sites", text: "Sites"})
@@ -86,6 +87,8 @@ func (m *Model) sideKeyFromState() string {
 		return "dbs"
 	case tabCore:
 		return "core:" + m.coreName
+	case tabRuntimes:
+		return "rt"
 	case tabSites:
 		if s := m.currentSite(); s != nil {
 			return "site:" + s.Name
@@ -154,6 +157,8 @@ func (m *Model) sideSelect(it sideItem) {
 		m.switchTab(tabDashboard)
 	case sideDatabases:
 		m.switchTab(tabDatabases)
+	case sideRuntimes:
+		m.switchTab(tabRuntimes)
 	case sideSite:
 		m.switchTab(tabSites)
 		if m.siteCursor != it.idx {
@@ -203,7 +208,7 @@ func (m *Model) focusMain() {
 	switch m.activeTab {
 	case tabDatabases:
 		m.focus = paneDatabases
-	case tabSites, tabServices, tabDashboard, tabCore:
+	case tabSites, tabServices, tabDashboard, tabCore, tabRuntimes:
 		m.focus = paneDetail
 	}
 }
@@ -306,6 +311,8 @@ func (m *Model) renderSidebar(w, h int) []string {
 			top = append(top, item(it.key, []seg{sp("⌂  ", colDim), bd("Dashboard", nil)}, nil), blank)
 		case sideDatabases:
 			top = append(top, item(it.key, []seg{sp("≡  ", colDim), bd("Databases", nil)}, nil), blank)
+		case sideRuntimes:
+			top = append(top, item(it.key, []seg{sp("λ  ", colDim), bd("PHP & Node", nil)}, nil), blank)
 		case sideBlank:
 			// Short terminals drop the gaps between workspaces, never the one
 			// before a section header.
@@ -356,7 +363,7 @@ func (m *Model) renderSidebar(w, h int) []string {
 		}
 	}
 	// Dashboard, Databases and the core rows sit outside the scrolling list.
-	if m.sideKey == "dash" || m.sideKey == "dbs" || strings.HasPrefix(m.sideKey, "core:") {
+	if m.sideKey == "dash" || m.sideKey == "dbs" || m.sideKey == "rt" || strings.HasPrefix(m.sideKey, "core:") {
 		cursorLine = -1
 	}
 

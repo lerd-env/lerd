@@ -196,6 +196,9 @@ func (m *Model) renderBody(width, topH int) string {
 	if m.activeTab == tabCore {
 		return m.renderCoreView(width, topH)
 	}
+	if m.activeTab == tabRuntimes {
+		return m.renderRuntimesView(width, topH)
+	}
 
 	return m.renderDatabasesView(width, topH)
 }
@@ -374,6 +377,8 @@ func (m *Model) footChips() []footChip {
 		return []footChip{nav("↑↓", "nav"), nav("tab", "panes"), act("n", "snapshot"), act("e", "export"), act("c", "create"), act("a", "auto snapshots"), act("K", "keep"), act("R", "refresh"), nav("?", "help")}
 	case tabCore:
 		return []footChip{back, nav("↑↓", "scroll"), act("s", "start lerd"), nav("?", "help")}
+	case tabRuntimes:
+		return []footChip{back, nav("↑↓", "move"), act("d", "default"), act("x", "xdebug"), act("i", "install"), act("R", "rebuild"), nav("?", "help")}
 	}
 	if len(timingScopes(m.currentSite())) > 1 {
 		return []footChip{back, nav("1-5", "tabs"), nav("b", "worktree"), nav("↑↓", "nav"), act("space", "toggle"), act("s", "start"), act("x", "stop"), act("r", "restart"), nav("l", "logs"),

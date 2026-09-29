@@ -48,7 +48,7 @@ func sideKeys(items []sideItem) []string {
 func TestSideItemsGroupSitesByWorkspaceInConfigOrder(t *testing.T) {
 	m := sidebarModel()
 	got := strings.Join(sideKeys(m.sideItems()), " ")
-	want := "dash dbs ws:studio site:blog ws:acme site:api site:shop site:loose svc:mysql svc:redis core:dns core:nginx core:watcher"
+	want := "dash dbs rt ws:studio site:blog ws:acme site:api site:shop site:loose svc:mysql svc:redis core:dns core:nginx core:watcher"
 	if got != want {
 		t.Fatalf("sidebar order\n got %s\nwant %s", got, want)
 	}
@@ -79,7 +79,7 @@ func TestWorkspaceRollupCountsFailingSites(t *testing.T) {
 
 func TestSideMoveSelectsSiteAndSwitchesTab(t *testing.T) {
 	m := sidebarModel()
-	m.sideMove(3) // dash -> dbs -> ws:studio -> site:blog
+	m.sideMove(4) // dash -> dbs -> rt -> ws:studio -> site:blog
 	if m.activeTab != tabSites {
 		t.Fatalf("activeTab = %v, want sites", m.activeTab)
 	}
@@ -94,7 +94,7 @@ func TestSideMoveSelectsSiteAndSwitchesTab(t *testing.T) {
 
 func TestSideMoveStopsOnWorkspaceWithoutChangingTab(t *testing.T) {
 	m := sidebarModel()
-	m.sideMove(2)
+	m.sideMove(3)
 	if m.sideKey != "ws:studio" || m.activeTab != tabDashboard {
 		t.Fatalf("sideKey = %q tab %v, want ws:studio on the dashboard", m.sideKey, m.activeTab)
 	}
@@ -102,7 +102,7 @@ func TestSideMoveStopsOnWorkspaceWithoutChangingTab(t *testing.T) {
 
 func TestSideActivateTogglesWorkspaceAndOpensSite(t *testing.T) {
 	m := sidebarModel()
-	m.sideMove(2)
+	m.sideMove(3)
 	m.sideActivate()
 	if !m.collapsedWS["studio"] {
 		t.Fatal("enter on a workspace should collapse it")

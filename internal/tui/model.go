@@ -63,6 +63,8 @@ const (
 	// tabCore shows one of lerd's own processes (dns, nginx, the watcher). It
 	// is reached from the sidebar footer and stays out of the ctrl+arrow cycle.
 	tabCore
+	// tabRuntimes lists the installed PHP and Node versions; also sidebar-only.
+	tabRuntimes
 )
 
 func (t topTab) label() string {
@@ -287,6 +289,7 @@ type Model struct {
 
 	svcTab     int       // service view tab: svcTabOverview or svcTabLogs
 	coreName   string    // the lerd process shown on tabCore: dns, nginx or watcher
+	rtCursor   int       // selected row in the PHP & Node view
 	dashCursor int       // selected Needs-attention card
 	cpuHist    []float64 // recent total CPU samples for the dashboard sparkline
 
@@ -550,6 +553,9 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	if cmd, handled := m.handleDatabaseKey(msg); handled {
+		return m, cmd
+	}
+	if cmd, handled := m.handleRuntimeKey(msg); handled {
 		return m, cmd
 	}
 	switch msg.String() {
