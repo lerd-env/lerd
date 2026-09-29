@@ -68,6 +68,17 @@ func TestDeriveWorktreeAddArgs_leavesAnExplicitPathAlone(t *testing.T) {
 	}
 }
 
+// git's own shape puts the path first, and a bare folder name there has no path
+// marker, so -b must not add a second path behind it.
+func TestDeriveWorktreeAddArgs_leavesABareFolderBeforeTheBranchFlagAlone(t *testing.T) {
+	site := t.TempDir()
+	in := []string{"demo-feat-x", "-b", "feat-x"}
+
+	if got := DeriveWorktreeAddArgs(site, in); !reflect.DeepEqual(got, in) {
+		t.Errorf("args = %v, want them untouched", got)
+	}
+}
+
 // Two positionals with no -b could be a path and a commit-ish, or a branch and
 // a commit-ish. Guessing is how a wrapper checks out the wrong thing.
 func TestDeriveWorktreeAddArgs_passesThroughWhenAmbiguous(t *testing.T) {

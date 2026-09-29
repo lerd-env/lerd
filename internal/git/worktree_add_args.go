@@ -25,6 +25,10 @@ func DeriveWorktreeAddArgs(sitePath string, args []string) []string {
 	// `worktree add -b <branch> <path> [<start-point>]`
 	for i, a := range args {
 		if (a == "-b" || a == "-B") && i+1 < len(args) {
+			// A positional before -b is git's own path slot, marker or not.
+			if _, before := splitWorktreeArgs(args[:i]); len(before) > 0 {
+				return args
+			}
 			path := WorktreeCheckoutPath(sitePath, args[i+1])
 			out := append([]string{}, args[:i+2]...)
 			out = append(out, path)
