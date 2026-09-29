@@ -17,6 +17,10 @@ func TestWorktreePromptFallbackWithoutATTY(t *testing.T) {
 	if !strings.Contains(msg, "demo_feat_x") {
 		t.Errorf("the message should name the database, got %q", msg)
 	}
+	// There is no db:drop command; the hint once sent readers to one.
+	if !strings.Contains(msg, "lerd db:shell") || strings.Contains(msg, "db:drop") {
+		t.Errorf("the message should point at a command that exists, got %q", msg)
+	}
 	if strings.Contains(strings.ToLower(msg), "tty") || strings.Contains(msg, "bubbletea") {
 		t.Errorf("the message must not leak the library failure, got %q", msg)
 	}

@@ -124,7 +124,7 @@ func missingRequiredServiceMsg(workerName, sitePath string, w config.FrameworkWo
 	if running, _ := podman.ContainerRunning("lerd-" + name); running {
 		return ""
 	}
-	return fmt.Sprintf("worker %q needs the %s service, which is not running\nStart it first: lerd services start %s", workerName, name, name)
+	return fmt.Sprintf("worker %q needs the %s service, which is not running\nStart it first: lerd service start %s", workerName, name, name)
 }
 
 // requiredServiceFor returns the service the worker needs on this site, or ""

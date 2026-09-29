@@ -110,7 +110,7 @@ func worktreeDBPromptPlan(interactive bool, dbName, service string) (string, boo
 	if interactive {
 		return "", true
 	}
-	return fmt.Sprintf("no terminal to ask on, keeping the isolated database %q in %q. Drop it with 'lerd db:drop %s' when you no longer need it", dbName, service, dbName), false
+	return fmt.Sprintf("no terminal to ask on, keeping the isolated database %q in %q. Drop it with DROP DATABASE %s in 'lerd db:shell' when you no longer need it", dbName, service, dbName), false
 }
 
 func promptDeleteIsolatedDB(site *config.Site, branch string) error {
