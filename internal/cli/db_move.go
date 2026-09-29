@@ -205,6 +205,7 @@ func runDbMove(from, to string, siteNames []string, all, force bool) error {
 			continue
 		}
 		feedback.Note(s.Name + " moved · .env updated")
+		moveWorktreeDBs(s.Name, from, to)
 	}
 	if failed > 0 {
 		return fmt.Errorf("%d of %d site(s) failed to move", failed, len(targets))
@@ -313,6 +314,80 @@ func runDbMoveOne(sitePath, siteName, from, to string) error {
 	feedback.Note("restoring " + tgtEnv.database + " into " + to)
 	if err := restore.Run(); err != nil {
 		return rollback(fmt.Errorf("restore failed: %w", err))
+	}
+	return nil
+}
+
+// moveWorktreeDBs carries a site's isolated worktree databases along with it.
+// The move's env run already pointed the worktrees at the target, so a
+// database left on the source is one its worktree no longer reaches. A failed
+// copy is reported and leaves that worktree's source data where it was.
+func moveWorktreeDBs(siteName, from, to string) {
+	entries, err := config.WorktreeDBsForSite(siteName)
+	if err != nil {
+		feedback.Warn("reading %s's worktree databases: %v", siteName, err)
+		return
+	}
+	for _, e := range worktreeDBsOn(entries, from) {
+		if err := copyDatabaseAcross(from, to, e.DBName); err != nil {
+			feedback.Warn("moving worktree database %s: %v", e.DBName, err)
+			continue
+		}
+		e.Service = to
+		if err := config.AddWorktreeDB(e); err != nil {
+			feedback.Warn("recording worktree database %s on %s: %v", e.DBName, to, err)
+			continue
+		}
+		feedback.Note("worktree " + e.Branch + " moved · " + e.DBName)
+	}
+}
+
+// worktreeDBsOn picks the isolated worktree databases living on service.
+func worktreeDBsOn(entries []config.WorktreeDBEntry, service string) []config.WorktreeDBEntry {
+	var on []config.WorktreeDBEntry
+	for _, e := range entries {
+		if e.Service == service {
+			on = append(on, e)
+		}
+	}
+	return on
+}
+
+// copyDatabaseAcross dumps name from one service and restores it under the
+// same name on another, creating it there first.
+func copyDatabaseAcross(from, to, name string) error {
+	tmp, err := os.CreateTemp("", "lerd-dbmove-*.sql")
+	if err != nil {
+		return fmt.Errorf("creating temp dump: %w", err)
+	}
+	defer os.Remove(tmp.Name())
+	defer tmp.Close()
+
+	src := serviceToDBEnv(from)
+	src.database = name
+	dump, err := dbExportCmd(src)
+	if err != nil {
+		return err
+	}
+	dump.Stdout, dump.Stderr = tmp, os.Stderr
+	if err := dump.Run(); err != nil {
+		return fmt.Errorf("dump failed: %w", err)
+	}
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	if _, err := createDatabase(to, name); err != nil {
+		return fmt.Errorf("creating database on %s: %w", to, err)
+	}
+	dst := serviceToDBEnv(to)
+	dst.database = name
+	restore, err := dbImportCmd(dst)
+	if err != nil {
+		return err
+	}
+	restore.Stdin, restore.Stdout, restore.Stderr = tmp, os.Stdout, os.Stderr
+	if err := restore.Run(); err != nil {
+		return fmt.Errorf("restore failed: %w", err)
 	}
 	return nil
 }
