@@ -91,3 +91,13 @@ func TestShortHomePath(t *testing.T) {
 		t.Fatalf("paths outside home stay absolute, got %q", got)
 	}
 }
+
+// The URL names the site; the bare domain above it said the same thing twice.
+func TestSiteHeaderNamesTheSiteOnce(t *testing.T) {
+	m := siteViewModel()
+	head := m.siteHeader(m.currentSite(), 140)
+	identity := ansi.Strip(strings.Join(head[3:], "\n")) // below the breadcrumb
+	if n := strings.Count(identity, "shop.test"); n != 1 {
+		t.Fatalf("the domain should appear once under the breadcrumb, got %d:\n%s", n, identity)
+	}
+}

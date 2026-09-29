@@ -168,22 +168,23 @@ func (m *Model) siteHeader(parent *siteinfo.EnrichedSite, cw int) []string {
 	}
 	out := []string{row(nil, cw), crumbRow(cw, crumb, branch), row(nil, cw)}
 
-	// The trailing gap keeps the left facts from butting into the right ones
-	// when the pane is only just wide enough for both.
-	title := []seg{bd(domain, nil)}
+	// The URL is the site's name here; showing the bare domain above it too
+	// said the same thing twice. The trailing gaps keep the left facts from
+	// butting into the right ones when the pane is only just wide enough.
+	scheme := "http"
+	if site.Secured {
+		scheme = "https"
+	}
+	title := []seg{bd(scheme+"://"+domain, colAccent)}
 	if site.AppName != "" && site.AppName != domain {
 		title = append(title, sp("   "+site.AppName, colDim))
 	}
 	out = append(out, rowLR(nil, cw, append(title, sp("   ", nil)), siteVersions(site)))
 
-	scheme := "http"
-	if site.Secured {
-		scheme = "https"
-	}
-	where := []seg{sp(scheme+"://"+domain, colAccent)}
+	var where []seg
 	if site.Path != "" {
 		home, _ := os.UserHomeDir()
-		where = append(where, sp("    "+shortHome(site.Path, home), colDim))
+		where = []seg{sp(shortHome(site.Path, home), colDim)}
 	}
 	out = append(out, rowLR(nil, cw, append(where, sp("   ", nil)), siteFlags(site)))
 	if g := siteGroupLine(m, parent); g != "" {
