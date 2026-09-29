@@ -30,6 +30,7 @@ func (m *Model) quickActions() []quickAction {
 	for _, a := range m.dashAlerts() {
 		a := a
 		if a.site == "" {
+			add("Start lerd", a.title, func(m *Model) tea.Cmd { return m.dashFix(a) })
 			continue
 		}
 		add("Restart worker", a.site+" · "+a.worker, func(m *Model) tea.Cmd { return m.dashFix(a) })
@@ -38,8 +39,205 @@ func (m *Model) quickActions() []quickAction {
 		add("Heal crashed workers", "", func(m *Model) tea.Cmd { return m.actionHealWorkers() })
 	}
 
-	add("Go to", "Dashboard", func(m *Model) tea.Cmd { m.switchTab(tabDashboard); m.focusMain(); return m.afterNav() })
-	add("Go to", "Databases", func(m *Model) tea.Cmd { m.switchTab(tabDatabases); m.focusMain(); return m.afterNav() })
+	out = append(out, m.contextActions()...)
+	out = append(out, m.placeActions()...)
+	out = append(out, m.settingsActions()...)
+
+	for _, svc := range m.snap.Services {
+		if svc.WorkerKind != "" {
+			continue
+		}
+		name := svc.Name
+		verbs := []string{"start"}
+		if svc.State == stateRunning {
+			verbs = []string{"stop", "restart"}
+		}
+		for _, verb := range verbs {
+			verb := verb
+			add(strings.ToUpper(verb[:1])+verb[1:]+" service", name, func(m *Model) tea.Cmd {
+				m.setStatus(verb+"ing "+name+"…", 10*time.Second)
+				return tea.Sequence(runLerd("", "service", verb, name), loadCmd())
+			})
+		}
+	}
+	add("Add a service preset", "", func(m *Model) tea.Cmd { m.openPaletteIn("", "service preset "); return nil })
+	add("Run a lerd command…", ":", func(m *Model) tea.Cmd { m.openPalette(); return nil })
+	return out
+}
+
+// pressKey runs a view's own key handler, so a palette entry and its shortcut
+// can never drift apart. Focus moves to the main area first, as the key expects.
+func pressKey(r rune) func(m *Model) tea.Cmd {
+	return func(m *Model) tea.Cmd {
+		m.focusMain()
+		_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: r, Text: string(r)})
+		return cmd
+	}
+}
+
+// contextActions act on whatever is selected: the site, service, database or
+// runtime the main area shows.
+func (m *Model) contextActions() []quickAction {
+	var out []quickAction
+	add := func(label, detail string, run func(m *Model) tea.Cmd) {
+		out = append(out, quickAction{label, detail, run})
+	}
+	switch m.activeTab {
+	case tabSites:
+		s := m.currentSite()
+		if s == nil || m.detailMode != detailSite {
+			break
+		}
+		d := siteDomain(s)
+		pause := "Pause site"
+		if s.Paused {
+			pause = "Resume site"
+		}
+		add("Restart site", d, func(m *Model) tea.Cmd { return m.actionRestart() })
+		add(pause, d, func(m *Model) tea.Cmd { return m.actionPauseToggle() })
+		add("Open shell", d, func(m *Model) tea.Cmd { return m.actionShell() })
+		add("Open in browser", d, func(m *Model) tea.Cmd { return m.openInBrowserCmd() })
+		add("Open in editor", d, pressKey('E'))
+		add("Open folder", d, pressKey('F'))
+		add("New worktree", d, pressKey('W'))
+		for i, t := range availableSiteTabs(s) {
+			n := i + 1
+			add("Show "+siteTabLabel(t), d, func(m *Model) tea.Cmd { return m.selectSiteTab(n) })
+		}
+		for i, sc := range timingScopes(s) {
+			scope := i
+			if len(s.Worktrees) > 0 && scope != m.timingScope {
+				add("Switch to worktree", sc.label+" · "+d, func(m *Model) tea.Cmd { return m.cycleSiteBranch(scope - m.timingScope) })
+			}
+		}
+		for _, r := range m.siteRows(s) {
+			r := r
+			if label := siteToggleLabel(r); label != "" {
+				add(label, d, func(m *Model) tea.Cmd { return m.toggleSiteRow(r) })
+			}
+		}
+	case tabServices:
+		svc := m.currentService()
+		if svc == nil || svc.WorkerKind != "" {
+			break
+		}
+		pin := "Pin service"
+		if svc.Pinned {
+			pin = "Unpin service"
+		}
+		add(pin, svc.Name, pressKey('P'))
+		add("Update service", svc.Name, func(m *Model) tea.Cmd { return m.actionServiceUpdate() })
+		add("Roll back service", svc.Name, func(m *Model) tea.Cmd { return m.actionServiceRollback() })
+		add("Open shell", svc.Name, func(m *Model) tea.Cmd { return m.actionShell() })
+		if svc.Dashboard != "" {
+			add("Open service dashboard", svc.Name, func(m *Model) tea.Cmd { return m.openServiceDashboardCmd() })
+		}
+		add("Show Overview", svc.Name, func(m *Model) tea.Cmd { return m.selectServiceTab(svcTabOverview) })
+		add("Show Logs", svc.Name, func(m *Model) tea.Cmd { return m.selectServiceTab(svcTabLogs) })
+	case tabDatabases:
+		if _, db := m.currentDatabase(); db != nil {
+			add("Snapshot database", db.Name, func(m *Model) tea.Cmd { return m.actionDatabaseSnapshot() })
+			add("Export database", db.Name, pressKey('e'))
+			add("Include or exclude from auto snapshots", db.Name, pressKey('a'))
+		}
+		add("Create a database", "", pressKey('c'))
+	case tabRuntimes:
+		if r, ok := m.currentRuntime(); ok {
+			name := map[string]string{"php": "PHP ", "node": "Node "}[r.kind] + r.version
+			add("Make default", name, pressKey('d'))
+			if r.kind == "php" {
+				add("Toggle Xdebug", name, pressKey('x'))
+				add("Rebuild", name, pressKey('R'))
+			}
+		}
+		add("Install a PHP version", "", func(m *Model) tea.Cmd { m.openPaletteIn("", "use "); return nil })
+		add("Install a Node version", "", func(m *Model) tea.Cmd { m.openPaletteIn("", "node:install "); return nil })
+	case tabCore:
+		add("Start lerd", m.coreName, pressKey('s'))
+	}
+	return out
+}
+
+// siteToggleLabel names a site Overview control for the palette, or "" for a
+// row the palette does not offer (a domain, an info line).
+func siteToggleLabel(r detailRow) string {
+	switch r.kind {
+	case kindHTTPS:
+		return "Toggle HTTPS"
+	case kindLANShare:
+		return "Toggle LAN share"
+	case kindPin:
+		return "Toggle keep awake"
+	case kindRuntime:
+		return "Switch runtime (php-fpm / FrankenPHP)"
+	case kindHorizonReload:
+		return "Toggle Horizon reload"
+	case kindStripe:
+		return "Toggle Stripe listener"
+	case kindAutoSnapshot:
+		return "Change auto snapshots"
+	case kindPHP:
+		return "Change PHP version"
+	case kindNode:
+		return "Change Node version"
+	case kindDomainAdd:
+		return "Add a domain"
+	case kindWorker, kindWorktreeWorker:
+		return "Start or stop worker " + r.workerName
+	case kindWorktreeDB:
+		return "Toggle isolated database"
+	case kindWorktreeLAN:
+		return "Toggle worktree LAN share"
+	}
+	return ""
+}
+
+// toggleSiteRow points the Overview cursor at a row and toggles it, the same
+// path space takes on that row.
+func (m *Model) toggleSiteRow(r detailRow) tea.Cmd {
+	s := m.currentSite()
+	rows := m.siteRows(s)
+	nav := navigableRows(rows)
+	for pos, i := range nav {
+		if rows[i] == r {
+			m.detailCursor = pos
+			m.focusMain()
+			return m.detailToggleSelected(s, rows, nav)
+		}
+	}
+	return nil
+}
+
+// placeActions reach every page and every site, worktree and service.
+func (m *Model) placeActions() []quickAction {
+	var out []quickAction
+	add := func(label, detail string, run func(m *Model) tea.Cmd) {
+		out = append(out, quickAction{label, detail, run})
+	}
+	page := func(name string, tab topTab, mode detailMode) {
+		add("Go to", name, func(m *Model) tea.Cmd {
+			m.switchTab(tab)
+			m.detailMode = mode
+			m.focusMain()
+			return m.afterNav()
+		})
+	}
+	page("Dashboard", tabDashboard, detailSite)
+	page("Databases", tabDatabases, detailSite)
+	page("PHP & Node", tabRuntimes, detailSite)
+	page("Settings", tabSites, detailSettings)
+	page("System", tabSites, detailSystem)
+	page("Debug window", tabSites, detailDumps)
+	for _, c := range coreProcesses {
+		name := c.name
+		add("Go to", name, func(m *Model) tea.Cmd {
+			m.switchTab(tabCore)
+			m.coreName = name
+			m.focusMain()
+			return m.afterNav()
+		})
+	}
+	add("Help", "", func(m *Model) tea.Cmd { m.helpModalActive = true; m.helpScroll = 0; return nil })
 	for _, s := range m.snap.Sites {
 		name, domain := s.Name, siteDomain(&s)
 		add("Open site", domain, func(m *Model) tea.Cmd { return m.quickOpenSite(name, 0) })
@@ -59,35 +257,25 @@ func (m *Model) quickActions() []quickAction {
 			m.focusMain()
 			return m.afterNav()
 		})
-		verbs := []string{"start"}
-		if svc.State == stateRunning {
-			verbs = []string{"stop", "restart"}
-		}
-		for _, verb := range verbs {
-			verb := verb
-			add(strings.ToUpper(verb[:1])+verb[1:]+" service", name, func(m *Model) tea.Cmd {
-				m.setStatus(verb+"ing "+name+"…", 10*time.Second)
-				return tea.Sequence(runLerd("", "service", verb, name), loadCmd())
-			})
-		}
 	}
+	return out
+}
 
-	if s := m.currentSite(); s != nil && m.activeTab == tabSites {
-		domain := siteDomain(s)
-		add("Open in browser", domain, func(m *Model) tea.Cmd { return m.openInBrowserCmd() })
-		add("Open in editor", domain, func(m *Model) tea.Cmd { return runLerd(s.Path, "code") })
-		add("Open folder", domain, func(m *Model) tea.Cmd { return m.openURL(s.Path) })
+// settingsActions offer every Settings toggle, named for what it does now.
+func (m *Model) settingsActions() []quickAction {
+	var out []quickAction
+	for i, r := range m.settingsRows() {
+		i := i
+		verb := "Turn on"
+		if r.on {
+			verb = "Turn off"
+		}
+		out = append(out, quickAction{verb, r.label, func(m *Model) tea.Cmd {
+			rows := m.settingsRows()
+			m.settingsRow = i
+			return m.settingsToggle(rows)
+		}})
 	}
-	add("Settings", "", func(m *Model) tea.Cmd {
-		m.switchTab(tabSites)
-		m.detailMode = detailSettings
-		m.focusMain()
-		return nil
-	})
-	add("System", "", func(m *Model) tea.Cmd { m.switchTab(tabSites); m.detailMode = detailSystem; m.focusMain(); return nil })
-	add("Debug window", "", func(m *Model) tea.Cmd { m.switchTab(tabSites); m.detailMode = detailDumps; m.focusMain(); return nil })
-	add("Help", "", func(m *Model) tea.Cmd { m.helpModalActive = true; m.helpScroll = 0; return nil })
-	add("Run a lerd command…", ":", func(m *Model) tea.Cmd { m.openPalette(); return nil })
 	return out
 }
 

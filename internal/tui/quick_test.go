@@ -14,7 +14,7 @@ func quickModel() *Model {
 	m.width, m.height = 160, 45
 	m.snap = Snapshot{
 		Sites: []siteinfo.EnrichedSite{
-			{Name: "shop", Domains: []string{"shop.test"}, Path: "/p/shop", FPMRunning: true, HasQueueWorker: true, QueueFailing: true,
+			{Name: "shop", Domains: []string{"shop.test"}, Path: "/p/shop", PHPVersion: "8.4", FPMRunning: true, HasQueueWorker: true, QueueFailing: true,
 				Worktrees: []siteinfo.WorktreeInfo{{Branch: "feat", Domain: "feat.shop.test", Path: "/p/shop-feat"}}},
 			{Name: "blog", Domains: []string{"blog.test"}, Path: "/p/blog", FPMRunning: true},
 		},
@@ -136,4 +136,75 @@ func TestPaletteOverlayKeepsTheScreenSize(t *testing.T) {
 	if !strings.Contains(screen, "Go to or do") || !strings.Contains(screen, "shop.test") {
 		t.Fatal("the overlay should list the actions")
 	}
+}
+
+func paletteText(m *Model) string {
+	var lines []string
+	for _, a := range m.quickActions() {
+		lines = append(lines, a.label+" "+a.detail)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// Everything is reachable from ctrl+p: every page, and every action on what is
+// selected, the way opencode puts everything under one palette.
+func TestPaletteReachesEveryPage(t *testing.T) {
+	all := paletteText(quickModel())
+	for _, want := range []string{"Go to Dashboard", "Go to Databases", "Go to PHP & Node", "Go to Settings", "Go to System",
+		"Go to Debug window", "Go to dns", "Go to nginx", "Go to watcher", "Help", "Add a service preset"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("palette missing page %q", want)
+		}
+	}
+	if !strings.Contains(all, "Turn on") && !strings.Contains(all, "Turn off") {
+		t.Error("palette should offer the settings toggles")
+	}
+}
+
+func TestPaletteOffersTheSelectedSitesActions(t *testing.T) {
+	m := quickModel()
+	m.switchTab(tabSites)
+	m.selectSiteByName("shop")
+	all := paletteText(m)
+	for _, want := range []string{"Restart site shop.test", "Pause site shop.test", "Open shell", "New worktree", "Show Logs", "Show Doctor",
+		"Switch to worktree feat", "Toggle keep awake", "Change PHP version", "Start or stop worker queue", "Add a domain"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("palette missing site action %q", want)
+		}
+	}
+}
+
+func TestPaletteOffersTheSelectedServiceAndDatabaseActions(t *testing.T) {
+	m := quickModel()
+	m.switchTab(tabServices)
+	m.selectServiceByName("mysql")
+	all := paletteText(m)
+	for _, want := range []string{"Pin service mysql", "Update service mysql", "Roll back service mysql", "Show Logs mysql"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("palette missing service action %q", want)
+		}
+	}
+
+	d := databasesModel()
+	all = paletteText(d)
+	for _, want := range []string{"Snapshot database shop", "Export database shop", "Create a database"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("palette missing database action %q", want)
+		}
+	}
+}
+
+func TestPaletteSiteToggleRunsTheRow(t *testing.T) {
+	m := quickModel()
+	m.switchTab(tabSites)
+	m.selectSiteByName("shop")
+	for _, a := range m.quickActions() {
+		if a.label == "Toggle keep awake" {
+			if a.run(m) == nil || !strings.Contains(m.status, "keeping shop awake") {
+				t.Fatalf("keep awake from the palette should pin the site, status %q", m.status)
+			}
+			return
+		}
+	}
+	t.Fatal("no keep awake entry")
 }
