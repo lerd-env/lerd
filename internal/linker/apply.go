@@ -96,7 +96,7 @@ func Apply(plan *Plan, p Policy, d Deps, r Reporter) (*Result, error) {
 		// proxied site has none, so neither has a version the file should pin.
 		if !site.IsCustomContainer() && !site.IsHostProxy() {
 			_ = config.SyncProjectFrameworkVersion(site.Framework, plan.Dir)
-			_ = siteops.PinPHPVersionFile(plan.Dir, site.PHPVersion)
+			pinProjectPHPVersion(plan.Dir, site.PHPVersion)
 		}
 	}
 
@@ -301,4 +301,14 @@ func gateProxyCommand(plan *Plan, p Policy, r Reporter) error {
 // phpNodeDetail is the result line shared by the two PHP runtimes.
 func phpNodeDetail(site config.Site, r Reporter) string {
 	return "php " + r.Val(site.PHPVersion) + " · node " + r.Val(site.NodeVersion) + " · nginx vhost written"
+}
+
+// pinProjectPHPVersion writes the served version into .php-version unless the
+// untracked .lerd.local.yaml owns it: that pin is this machine's alone, and
+// writing it into a committed file would leak it into the repository.
+func pinProjectPHPVersion(dir, version string) {
+	if owned, _ := config.LocalOverrideOwns(dir, "php_version"); owned {
+		return
+	}
+	_ = siteops.PinPHPVersionFile(dir, version)
 }
