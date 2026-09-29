@@ -11,7 +11,7 @@ Compared to [custom containers](custom-containers.md), host-proxy sites skip the
 
 ## Quick start
 
-For a Node project, `lerd init` sets it up for you. When a `package.json` is present and there's no PHP, the wizard offers proxy mode as the default, picks the dev script (`start:dev`, `dev`, `serve`, `start` in preference order), auto-assigns a free port, and asks about HTTPS and services:
+`lerd init` sets it up for you. With no PHP in the project, the wizard recognises the runtime from its manifest and offers proxy mode as the default: a `package.json` is Node and gets its dev script (`start:dev`, `dev`, `serve`, `start` in preference order), a `config.ru` is Rack or Rails, `manage.py` is Django, and a `Gemfile`, `go.mod`, `Cargo.toml`, `pyproject.toml` or `requirements.txt` gets that language's usual command. It auto-assigns a free port and asks about HTTPS and services:
 
 ```bash
 cd ~/Projects/api.example.com
@@ -19,7 +19,7 @@ lerd init
 lerd link
 ```
 
-For any other language, write the `proxy` block in `.lerd.yaml` by hand and link. The command and port are all lerd needs:
+The command is only a starting point, so edit it in the wizard when your app starts differently (a FastAPI app under uvicorn, say). Or write the `proxy` block in `.lerd.yaml` by hand and link. The command and port are all lerd needs:
 
 ```yaml
 domains:

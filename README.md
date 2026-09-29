@@ -31,7 +31,7 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 - 🔗 **Site groups.** Group related sites so a main site owns a base domain and the rest occupy its subdomains, with a shared or separate database per secondary.
 
-- 🧱 **Host-proxy sites.** Run a Node, Python, Go or any non-PHP dev server on the host and have nginx serve it at a `.test` domain with HTTPS, git worktrees included. A wedged dev server can be bounced from the site header without reaching for a terminal.
+- 🧱 **Node, Python, Rails and more.** `lerd init` recognises a Node, Python, Ruby on Rails or Rack, Go or Rust project, runs its dev server on the host under lerd's supervision and has nginx serve it at a `.test` domain with HTTPS, with the same services wired into its `.env` and git worktrees included. Or run it as a rootless container from a starter `Containerfile.lerd` lerd writes for you. A wedged dev server can be bounced from the site header without reaching for a terminal.
 
 - 🌳 **First-class git worktrees.** Auto-detected branch domains, per-worktree PHP and Node versions, a database shared, copied or started empty depending on the branch's migrations, wildcard cert SANs and a per-branch Vite worker. A bare `git worktree add` from any tool is provisioned automatically, and `lerd worktree wait` blocks until the tree is ready.
 
