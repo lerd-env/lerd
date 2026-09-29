@@ -108,6 +108,18 @@ phases once the next release makes it ordinary.
 | Initialize git on a site without a repository | 10 |
 | Animations paused while the dashboard is unfocused | 10 |
 | A reinstall keeping the preset it reads | 5 |
+| A removed service staying removed, orphaned containers offered for removal | 5 |
+| Removing a service from a site on its Overview, suggested services faded | 2, 10 |
+| LAN share links and form posts on a secured Inertia site | 8 |
+| Worktree envs following their site's port and runtime changes | 7 |
+| The AI assistants switch on the System page | 10 |
+| Keyboard and screen reader use, the installed app's title | 10 |
+| Omarchy light themes, per-theme tones, the embedded frame's background | 10 |
+| Embedded dashboards opening in the dashboard's language | 10 |
+| Dashboard chrome following window focus on Plasma | 10 |
+| A service stop logged once, no log stream for a stopped service | 10 |
+| Composer's own home used for a global auth.json | 11 |
+| Native capture seams, rebuilt native builds, no shared FPM containers on native | 14 |
 | Doctor explaining repeated macOS folder prompts, Xdebug across a runtime switch | 14 |
 
 ---
@@ -225,6 +237,8 @@ lerd setup --all --skip-open
 A `.lerd.yaml` is committed, so the answers that belong to this machine alone
 live beside it and have to win without ever being written back to the repo:
 
+- [ ] A suggested service's card is drawn dashed and faded until hovered, so it
+      does not read as one the site already uses
 - [ ] A key set in `.lerd.local.yaml` overrides the same key in `.lerd.yaml`,
       and a save from any command keeps the local key out of the committed file
 - [ ] A PHP or Node version pinned only in the local file is the one the link
@@ -324,8 +338,9 @@ than flipping it to the canonical default.
 - [ ] `lerd xdebug on 8.3 --mode debug`, `lerd xdebug status` reflects it,
       **https → 200 with Xdebug loaded** (`lerd php -m | grep xdebug`)
 - [ ] `lerd xdebug off 8.3`, **https → 200**
-- [ ] `lerd php:ext add redis` rebuilds and the extension is loaded
-- [ ] `lerd php:ext remove redis` rebuilds cleanly
+- [ ] `lerd php:ext add ds` rebuilds and the extension is loaded (redis already
+      ships in every image, so adding it is refused)
+- [ ] `lerd php:ext remove ds` rebuilds cleanly
 - [ ] `lerd php:ini shared` opens in `$EDITOR` and an edit survives a rebuild
 - [ ] Legacy tier: `lerd isolate 7.4` on a throwaway site pulls the frozen image
       and serves **200**, then put the site back on 8.4
@@ -343,7 +358,7 @@ than flipping it to the canonical default.
       `lerd php:odbc add <name> <driver.so>` registers a vendor driver that
       `php:odbc list` shows loading, **https → 200** after `remove`
 - [ ] A site linked on one version while its `.lerd.yaml` pins a version that
-      is not installed runs `lerd tinker` and `lerd logs` on the version it is
+      is not installed runs tinker (the dashboard's editor) and `lerd logs` on the version it is
       served with, the one the dashboard shows
 - [ ] `lerd php:rebuild` discloses the base image and its size before pulling
 - [ ] `lerd fetch` names the versions whose image is built but that nothing
@@ -382,6 +397,14 @@ Add, use, and remove at least one database and one non-database service.
       data dir and dump are under `~/.local/share/lerd/backups`
 - [ ] `lerd service reinstall redis` comes back at the same version, and a
       reinstall keeps the preset it reads instead of refetching it from the store
+- [ ] A removed service stays removed: `lerd start`, `lerd install` and a link of
+      a site whose `.lerd.yaml` still lists it do not bring it back, and a
+      service container nothing owns shows as orphaned in the resources card
+      with a trash action that removes it
+- [ ] A site's Overview X on a service takes it out of `.lerd.yaml` and puts
+      the env keys it wired back to the project's example values, leaving the
+      service and its data alone; a plus on an env-only service records it in
+      `.lerd.yaml` without rewiring, **200** after each
 - [ ] Start RustFS after `lerd start`, from the CLI and from the dashboard: its
       console opens straight away through lerd's own vhost, already logged in on
       the bucket clicked, and again once its session has run out
@@ -416,7 +439,8 @@ Database operations:
       retention drops the oldest past the window, and `lerd db:snapshot:keep`
       exempts one from it for good
 - [ ] `lerd db:shell` opens an interactive shell
-- [ ] `lerd db:move --from mysql --to mariadb --site demo` moves the schema and
+- [ ] `lerd db:move --from mysql --to mysql-9-7 --site demo` (a move stays
+      within one engine family) moves the schema and
       repoints `.env`, **https → 200**
 - [ ] `lerd db:extension` lists what the engine can create, and adds one
 - [ ] `lerd minio:migrate` moves an existing MinIO volume onto RustFS
@@ -540,6 +564,9 @@ lerd worktree add -b feat-x
 - [ ] `lerd db:isolate --source <branch>` clones from another isolated worktree
 - [ ] `lerd db:share` drops the isolated schema and puts the worktree back on
       the parent's, **200**
+- [ ] `lerd service port mysql <port>` rewrites the worktrees' env as well as the
+      parent's, and a worktree sharing the parent's database stays on it, **200
+      on both**
 - [ ] Paths listed under `worktree_include` are copied into a fresh worktree,
       and one the worktree already carries is left as git checked it out
 - [ ] On a SQLite project a new worktree gets its own copy of the database file,
@@ -563,7 +590,7 @@ lerd worktree add -b feat-x
       page itself answers **200**
 - [ ] `lerd unpause demo` restores the vhost and restarts workers, **200**
 - [ ] `lerd restart demo`, **200**
-- [ ] `lerd link` with a custom `--domain foo.test`, **200 on foo.test**
+- [ ] `lerd domain add foo` on a linked site, **200 on foo.test**
 - [ ] `lerd unlink` stops serving it (connection refused or 404, not a stale 200)
 - [ ] `lerd park ~/Projects` picks up existing projects and a newly created one
 - [ ] `lerd unpark ~/Projects` unlinks them
@@ -577,6 +604,9 @@ lerd worktree add -b feat-x
 - [ ] `lerd lan:share` prints a URL and QR; from a second machine or the host,
       **`curl http://<lan-ip>:<port>` → 200** with assets loading (URL rewriting)
 - [ ] `lerd lan:unshare` releases the port
+- [ ] On a LAN share of a secured Inertia site with Ziggy, clicking a link and
+      posting a form both work over plain http: no `ERR_SSL_PROTOCOL_ERROR`, no
+      419
 - [ ] `lerd lan:expose` / `lan:status` / `lan:services on|off` / `lan:unexpose`
 - [ ] `lerd remote-setup` pairs a device, and `lerd remote-control full-access
       on|off|status` gates host actions
@@ -695,6 +725,16 @@ Dashboard (drive it in a browser, not with curl):
 
 Themes:
 
+- [ ] The System page's AI assistants switch registers lerd with every supported
+      client the way `lerd mcp:enable-global` does, and switching it off
+      removes it again
+- [ ] With the keyboard alone: Skip to content is the first Tab stop, a dialog
+      takes focus, keeps Tab inside, closes on Escape and hands focus back, and
+      toggles announce their state
+- [ ] The installed app window's title reads Lerd once, while a browser tab
+      reads `Dashboard · Lerd`
+- [ ] Stopping a service logs one stop in the activity feed, and its Logs tab
+      says it is not running instead of reconnecting, picking up once it starts
 - [ ] Each of the twelve themes applies, and its accent reads correctly as link
       text on both the light and the dark tone
 - [ ] The choice lives in the config, not in browser storage: it survives a hard
@@ -717,6 +757,14 @@ Themes:
 
 TUI:
 
+- [ ] Switching services from the rail in a dark theme shows no white flash and
+      no light fringe on the frame's corner
+- [ ] With the dashboard in another language than the browser, Adminer,
+      phpMyAdmin and pgAdmin open in the dashboard's language
+- [ ] On Omarchy a light desktop theme paints the dashboard's light mode in its
+      tones, and a theme carrying a `lerd.yaml` overrides them
+- [ ] On Plasma (bazzite) the rail and headers lift to the focused header
+      colour while the window has focus and drop back when it loses it
 - [ ] `lerd tui` renders sites, services, workers with live status
 - [ ] Detail pane, inline domain and version editing, filter, sort all work
 - [ ] Shell drop-in and log tail work
@@ -848,13 +896,15 @@ Other surfaces:
 - [ ] `lerd bug-report -o report.txt` anonymizes names by default and
       `--show-real-names` keeps them
 - [ ] `lerd framework update` finishes in a couple of seconds rather than
-      fourteen, and `--check` still reports a diff per definition
+      fourteen, and `--diff` shows the changes per definition before applying
 - [ ] `sites.bkp` beside the registry holds the last ten versions, a save that
       changes nothing takes no slot, and `lerd sites:restore` lists them and
       puts one back with every site serving **200** afterwards
 - [ ] `lerd tools:update` brings Composer, the Node manager and mkcert to the current pins
 - [ ] `lerd env:check`, `lerd env:override`, `lerd env:restore` round trip
 - [ ] `lerd auth ssh` loads a key and `lerd composer` reaches a private repo
+- [ ] With no `~/.config/composer` and a global `auth.json` in `~/.composer`,
+      `lerd composer` reads it, the way composer itself would
 - [ ] `lerd autostart on|status|off`, and with autostart **off** no worker is
       armed for boot
 - [ ] `lerd stop` then `lerd start`: everything comes back, **200 on both sites**
@@ -978,6 +1028,12 @@ skipped rather than quietly passing it.
       deletes the build, its extensions and the generated pool config, the
       version really leaves `lerd php:list`, and the confirmation names the
       binaries it deletes and the command that fetches them back
+- [ ] The Debug lenses fill on the native runtime from the capture seams under
+      the data directory
+- [ ] A native build republished with the same PHP version is offered as an
+      update by its date, and the action is always pressable
+- [ ] `lerd install` on the native runtime starts no shared FPM container, and
+      one left over from before stays down
 - [ ] The update action downloads the published build and restarts the pool,
       and its modal says update rather than rebuild
 - [ ] At phone width the detail panel loads the runtime itself, so no image
