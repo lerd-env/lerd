@@ -179,3 +179,21 @@ func TestReinstallRemoveOptions_KeepsTheCachedPreset(t *testing.T) {
 		t.Error("ResetData must reach the remove as RemoveData")
 	}
 }
+
+// Reinstall removes before it installs, and the removal marks the service as
+// one the user took away. Left set, every later start and boot skips it.
+func TestReinstallService_ClearsTheRemovedMark(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	stubPodmanRemove(t)
+	stubReinstallSeams(t)
+	saveCustomServiceForReinstall(t, "mariadb", "11.4")
+
+	if err := ReinstallService("mariadb", ReinstallOptions{}, func(PhaseEvent) {}); err != nil {
+		t.Fatalf("ReinstallService: %v", err)
+	}
+	if config.ServiceIsRemoved("mariadb") {
+		t.Error("a reinstalled service is still marked removed")
+	}
+}

@@ -134,6 +134,8 @@ func ReinstallService(name string, opts ReinstallOptions, emit func(PhaseEvent))
 		reinstallFamilyRegenFn(name)
 		return fmt.Errorf("reinstall: install step: %w", err)
 	}
+	// The remove step above marked it as taken away on purpose.
+	_ = config.SetServiceRemoved(name, false)
 
 	// InstallPresetByName regenerates internally for custom services;
 	// default-preset install doesn't, so do it here.
