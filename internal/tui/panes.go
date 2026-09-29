@@ -208,7 +208,9 @@ func (m *Model) renderDatabasesView(width, topH int) string {
 		body = append(strings.Split(zone.Mark("pane:databases", m.renderDatabasesIn(bareFrame, cw, listH)), "\n"), row(nil, cw))
 		body = append(body, strings.Split(zone.Mark("pane:detail", m.renderDetailIn(bareFrame, cw, bodyH-listH-1, m.focus == paneDetail)), "\n")...)
 	} else {
-		listW := clamp(cw*2/5, 36, 44)
+		// Sized to its rows (marker, name, size, scrollbar), so the scrollbar
+		// sits against the sizes instead of floating in empty space.
+		listW := 2 + dbNameColWidth + 8 + 1
 		list := strings.Split(zone.Mark("pane:databases", m.renderDatabasesIn(bareFrame, listW, bodyH)), "\n")
 		detail := strings.Split(zone.Mark("pane:detail", m.renderDetailIn(bareFrame, cw-listW-4, bodyH, m.focus == paneDetail)), "\n")
 		for i := 0; i < bodyH; i++ {
