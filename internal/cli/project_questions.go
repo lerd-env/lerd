@@ -287,11 +287,7 @@ func fillProxyQuestions(q *ProjectQuestions, cwd string, defaults *config.Projec
 		command = defaults.Proxy.Command
 	}
 	if command == "" {
-		if len(devScripts) > 0 {
-			command = devScripts[0]
-		} else {
-			command = defaultDevCommand(cwd)
-		}
+		command = proxyDefaultCommand(cwd, devScripts)
 	}
 	q.ProxyCommand = command
 	if len(devScripts) > 0 {

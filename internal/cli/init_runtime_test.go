@@ -130,7 +130,7 @@ func TestStarterContainerfile(t *testing.T) {
 			t.Fatal(err)
 		}
 		out := starterContainerfile(dir, 8080)
-		if !strings.Contains(out, "FROM golang:") {
+		if !strings.Contains(out, "FROM docker.io/library/golang:") {
 			t.Errorf("expected a Go base image, got:\n%s", out)
 		}
 		if !strings.Contains(out, "port 8080") {
@@ -150,14 +150,14 @@ func TestStarterContainerfile(t *testing.T) {
 		dir := t.TempDir()
 		writeFiles(t, dir, "config.ru")
 		out := starterContainerfile(dir, 9393)
-		if !strings.Contains(out, "FROM ruby:") || !strings.Contains(out, "rackup --host 0.0.0.0 --port 9393") {
+		if !strings.Contains(out, "FROM docker.io/library/ruby:") || !strings.Contains(out, "rackup --host 0.0.0.0 --port 9393") {
 			t.Errorf("expected a ruby image running rackup on 9393, got:\n%s", out)
 		}
 	})
 
 	t.Run("unknown runtime falls back to a generic skeleton", func(t *testing.T) {
 		out := starterContainerfile(t.TempDir(), 3000)
-		if !strings.Contains(out, "FROM alpine:") {
+		if !strings.Contains(out, "FROM docker.io/library/alpine:") {
 			t.Errorf("expected a generic alpine base, got:\n%s", out)
 		}
 		if !strings.Contains(out, "port 3000") {
@@ -178,5 +178,34 @@ func TestRubyShimDirs(t *testing.T) {
 	}
 	if dirs := rubyShimDirs(t.TempDir(), home); dirs != nil {
 		t.Errorf("non-Ruby site got %v, want none", dirs)
+	}
+}
+
+// Fedora's podman enforces short-name resolution and cannot prompt for a
+// registry without a terminal, so a bare "ruby:3.3-slim" never builds there.
+func TestStarterContainerfile_namesTheRegistry(t *testing.T) {
+	for _, rt := range knownRuntimes {
+		from := strings.SplitN(rt.container, "\n", 2)[0]
+		if !strings.HasPrefix(from, "FROM docker.io/") {
+			t.Errorf("%s starter uses a short image name: %s", rt.label, from)
+		}
+	}
+	generic := starterContainerfile(t.TempDir(), 3000)
+	if !strings.Contains(generic, "FROM docker.io/library/alpine:") {
+		t.Errorf("generic starter uses a short image name:\n%s", generic)
+	}
+}
+
+// A Rack app's package.json scripts build its assets; the server is rackup.
+func TestProxyDefaultCommand_rackBeatsPackageScripts(t *testing.T) {
+	dir := t.TempDir()
+	writeFiles(t, dir, "config.ru")
+	if got := proxyDefaultCommand(dir, []string{"npm run dev"}); !strings.Contains(got, "rackup") {
+		t.Errorf("Rack app defaulted to %q, want rackup", got)
+	}
+	node := t.TempDir()
+	writeFiles(t, node, "package.json")
+	if got := proxyDefaultCommand(node, []string{"npm run dev"}); got != "npm run dev" {
+		t.Errorf("Node app defaulted to %q, want its dev script", got)
 	}
 }
