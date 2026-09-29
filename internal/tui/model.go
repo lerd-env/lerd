@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"github.com/geodro/lerd/internal/spxreport"
 	"os"
 	"path/filepath"
 	"sort"
@@ -165,14 +166,16 @@ type Model struct {
 	// watcher fills. timingKey is the site+branch+window the held figures belong
 	// to, so a late read for a scope the user has left is discarded; timingRange
 	// and timingScope are the cycle positions for the window and the branch.
-	timingRange  int
-	timingScope  int
-	timingKey    string
-	timingAt     time.Time
-	timingLoaded bool
-	timingErr    error
-	timing       reqstats.Analytics
-	timingRecent []reqstats.Record
+	timingRange int
+	timingScope int
+	// timingProfiles is the freshest SPX capture per slow route, when one exists.
+	timingProfiles map[string]spxreport.Profile
+	timingKey      string
+	timingAt       time.Time
+	timingLoaded   bool
+	timingErr      error
+	timing         reqstats.Analytics
+	timingRecent   []reqstats.Record
 
 	// Picker state (PHP/Node version). When active, up/down navigates
 	// pickerOptions instead of detail rows and enter applies the pick.
@@ -420,6 +423,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// or window, so the panel never shows one scope's figures under another's.
 		if msg.cacheKey == m.timingKey {
 			m.timing, m.timingRecent, m.timingErr = msg.analytic, msg.recent, msg.err
+			m.timingProfiles = msg.profiles
 			m.timingLoaded = true
 		}
 		return m, nil
