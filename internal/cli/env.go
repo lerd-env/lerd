@@ -1382,7 +1382,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	// sites a sweep can reach, so whatever this run moved in the parent has to
 	// be carried into them from here.
 	if branch == "" {
-		alignWorktreeEnvs(site, fw, envPath, envRelPath, envFormat, carriedToWorktrees(envMap, envOverrides))
+		alignWorktreeEnvs(site, fw, envPath, envRelPath, envFormat, envMap, envOverrides)
 	}
 
 	// The connection a JetBrains project points at is rebuilt from the same
@@ -1417,10 +1417,10 @@ func worktreeEnvTarget(site *config.Site, branch string) (dbName, domain string)
 	return dbName, branch + "." + site.PrimaryDomain()
 }
 
-// carriedToWorktrees is the parent's env before this run, less the keys its
+// carriedToWorktrees is the parent's env values, less the keys its
 // .env.lerd_override sets: an override is personal to the checkout it sits in.
-func carriedToWorktrees(before, overrides map[string]string) map[string]string {
-	carried := maps.Clone(before)
+func carriedToWorktrees(vals, overrides map[string]string) map[string]string {
+	carried := maps.Clone(vals)
 	for k := range overrides {
 		delete(carried, k)
 	}
@@ -1437,7 +1437,7 @@ func carriedToWorktrees(before, overrides map[string]string) map[string]string {
 //
 // Scoped to dotenv, the format both the keys and the writer here assume. A
 // worktree without an env file yet is skipped; it is seeded on its next sync.
-func alignWorktreeEnvs(site *config.Site, fw *config.Framework, mainEnvPath, envRelPath, envFormat string, before map[string]string) {
+func alignWorktreeEnvs(site *config.Site, fw *config.Framework, mainEnvPath, envRelPath, envFormat string, before, overrides map[string]string) {
 	// A format this binary cannot write is refused by the writer below rather
 	// than guessed at, the way every other write of an env file is.
 	if site == nil || !envfile.KnownFormat(envFormat) {
@@ -1447,7 +1447,10 @@ func alignWorktreeEnvs(site *config.Site, fw *config.Framework, mainEnvPath, env
 	if err != nil || len(worktrees) == 0 {
 		return
 	}
-	after := envfile.Values(mainEnvPath, envFormat)
+	// The parent's .env already holds what its override pinned, so both sides
+	// drop those keys before anything is handed on.
+	before = carriedToWorktrees(before, overrides)
+	after := carriedToWorktrees(envfile.Values(mainEnvPath, envFormat), overrides)
 	coords := map[string]string{}
 	for _, k := range worktreeDBConnectionKeys {
 		if v := after[k]; v != "" {

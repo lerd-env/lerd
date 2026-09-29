@@ -41,7 +41,7 @@ func TestAlignWorktreeEnvs_realignsHostKeepsDatabase(t *testing.T) {
 	}
 
 	site := &config.Site{Name: "acme", Path: main, Domains: []string{"acme.test"}}
-	alignWorktreeEnvs(site, nil, filepath.Join(main, ".env"), ".env", "", nil)
+	alignWorktreeEnvs(site, nil, filepath.Join(main, ".env"), ".env", "", nil, nil)
 
 	got, err := os.ReadFile(filepath.Join(checkout, ".env"))
 	if err != nil {
@@ -74,7 +74,7 @@ func TestAlignWorktreeEnvs_skipsWorktreeWithoutEnv(t *testing.T) {
 
 	site := &config.Site{Name: "acme", Path: main, Domains: []string{"acme.test"}}
 	// No worktree .env: must be a no-op, no panic, no file created.
-	alignWorktreeEnvs(site, nil, filepath.Join(main, ".env"), ".env", "", nil)
+	alignWorktreeEnvs(site, nil, filepath.Join(main, ".env"), ".env", "", nil, nil)
 
 	if _, err := os.Stat(filepath.Join(checkout, ".env")); !os.IsNotExist(err) {
 		t.Error("worktree .env should not have been created")
@@ -105,7 +105,7 @@ func TestAlignWorktreeEnvs_followsWhatTheParentMoved(t *testing.T) {
 	os.WriteFile(filepath.Join(checkout, ".env"), []byte(wtEnv), 0644)
 
 	site := &config.Site{Name: "acme", Path: main, Domains: []string{"acme.test"}}
-	alignWorktreeEnvs(site, nil, filepath.Join(main, ".env"), ".env", "", before)
+	alignWorktreeEnvs(site, nil, filepath.Join(main, ".env"), ".env", "", before, nil)
 
 	got, err := os.ReadFile(filepath.Join(checkout, ".env"))
 	if err != nil {
@@ -178,7 +178,7 @@ func TestAlignWorktreeEnvs_alignsAPhpArrayProject(t *testing.T) {
 
 	before := map[string]string{"db.connection.default.host": "lerd-mysql"}
 	site := &config.Site{Name: "acme", Path: main, Domains: []string{"acme.test"}}
-	alignWorktreeEnvs(site, nil, filepath.Join(main, envRel), envRel, "php-array", before)
+	alignWorktreeEnvs(site, nil, filepath.Join(main, envRel), envRel, "php-array", before, nil)
 
 	got, err := os.ReadFile(filepath.Join(checkout, envRel))
 	if err != nil {
@@ -189,5 +189,37 @@ func TestAlignWorktreeEnvs_alignsAPhpArrayProject(t *testing.T) {
 	}
 	if !strings.Contains(string(got), "127.0.0.1") {
 		t.Errorf("worktree did not follow the parent:\n%s", got)
+	}
+}
+
+// A value the parent's .env.lerd_override pins lands in the parent's .env, but
+// it is personal to that checkout: a worktree still naming the container, or
+// holding its own DB host, must not be pointed at it.
+func TestAlignWorktreeEnvs_leavesTheParentsOverridesBehind(t *testing.T) {
+	main := t.TempDir()
+	checkout := t.TempDir()
+
+	wtMeta := filepath.Join(main, ".git", "worktrees", "feat")
+	if err := os.MkdirAll(wtMeta, 0755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(wtMeta, "HEAD"), []byte("ref: refs/heads/feat\n"), 0644)
+	os.WriteFile(filepath.Join(wtMeta, "gitdir"), []byte(filepath.Join(checkout, ".git")+"\n"), 0644)
+
+	overrides := map[string]string{"REDIS_HOST": "redis.example.com", "DB_HOST": "db.example.com"}
+	before := map[string]string{"DB_HOST": "db.example.com", "REDIS_HOST": "redis.example.com", "REDIS_PORT": "6379"}
+	os.WriteFile(filepath.Join(main, ".env"), []byte("DB_HOST=db.example.com\nREDIS_HOST=redis.example.com\nREDIS_PORT=6379\n"), 0644)
+	wtEnv := "DB_HOST=lerd-mysql\nREDIS_HOST=lerd-redis\nREDIS_PORT=6379\n"
+	os.WriteFile(filepath.Join(checkout, ".env"), []byte(wtEnv), 0644)
+
+	site := &config.Site{Name: "acme", Path: main, Domains: []string{"acme.test"}}
+	alignWorktreeEnvs(site, fwWithServices(), filepath.Join(main, ".env"), ".env", "", before, overrides)
+
+	got, err := os.ReadFile(filepath.Join(checkout, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != wtEnv {
+		t.Errorf("worktree .env =\n%s\nwant it untouched:\n%s", got, wtEnv)
 	}
 }
