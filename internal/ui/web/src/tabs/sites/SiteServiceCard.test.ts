@@ -9,8 +9,22 @@ vi.mock('$stores/dashboard', () => ({
 }));
 
 const openServiceInstallModal = vi.fn();
+const openSiteServiceRemoveModal = vi.fn();
 vi.mock('$stores/modals', () => ({
-  openServiceInstallModal: (n: string) => openServiceInstallModal(n)
+  openServiceInstallModal: (n: string) => openServiceInstallModal(n),
+  openSiteServiceRemoveModal: (t: unknown) => openSiteServiceRemoveModal(t)
+}));
+
+const apiFetch = vi.fn();
+vi.mock('$lib/api', async (orig) => ({
+  ...(await orig<typeof import('$lib/api')>()),
+  apiFetch: (...args: unknown[]) => apiFetch(...args)
+}));
+
+const { loadSites } = vi.hoisted(() => ({ loadSites: vi.fn() }));
+vi.mock('$stores/sites', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$stores/sites')>()),
+  loadSites
 }));
 
 const phpmyadmin = {
@@ -23,6 +37,7 @@ const phpmyadmin = {
 describe('SiteServiceCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    apiFetch.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } }));
     services.set([]);
   });
 
@@ -125,5 +140,23 @@ describe('SiteServiceCard', () => {
     expect(btn.querySelector('svg')).toBeTruthy();
     await fireEvent.click(btn);
     expect(openServiceInstallModal).toHaveBeenCalledWith('phpmyadmin');
+  });
+
+  it('asks before removing a service the site declares', async () => {
+    services.set([{ name: 'redis', status: 'active' } as never]);
+    const { getByRole } = render(SiteServiceCard, { props: { name: 'redis', domain: 'acme.test', declared: true } });
+    await fireEvent.click(getByRole('button', { name: 'Remove Redis from this site' }));
+    expect(openSiteServiceRemoveModal).toHaveBeenCalledWith({ domain: 'acme.test', name: 'redis' });
+  });
+
+  // A service the site reaches only through its env file is offered into
+  // .lerd.yaml first; remove is for declared services.
+  it('offers to declare a service the site only reaches through its env file', async () => {
+    services.set([{ name: 'redis', status: 'active' } as never]);
+    const { getByRole, queryByRole } = render(SiteServiceCard, { props: { name: 'redis', domain: 'acme.test' } });
+    expect(queryByRole('button', { name: 'Remove Redis from this site' })).toBeNull();
+    await fireEvent.click(getByRole('button', { name: 'Add Redis to .lerd.yaml' }));
+    expect(apiFetch).toHaveBeenCalledWith('/api/sites/acme.test/service:declare?name=redis', { method: 'POST' });
+    await vi.waitFor(() => expect(loadSites).toHaveBeenCalled());
   });
 });

@@ -1012,6 +1012,9 @@ type SiteResponse struct {
 	// project's .lerd.yaml. Used by the dashboard to render service badges
 	// on the site detail panel.
 	Services []string `json:"services,omitempty"`
+	// DeclaredServices are the Services listed in .lerd.yaml, which the site
+	// overview offers to remove.
+	DeclaredServices []string `json:"declared_services,omitempty"`
 	// SuggestedServices are presets the site's packages suggest that it does
 	// not use yet and the user has not dismissed.
 	SuggestedServices []config.ServiceSuggestion `json:"suggested_services,omitempty"`
@@ -1287,6 +1290,7 @@ func buildSites() ([]SiteResponse, error) {
 			Branch:               e.Branch,
 			Worktrees:            worktreeResponses,
 			Services:             e.Services,
+			DeclaredServices:     e.DeclaredServices,
 			SuggestedServices:    e.SuggestedServices,
 			DBDatabase:           envfile.ReadKey(filepath.Join(e.Path, ".env"), "DB_DATABASE"),
 			LANPort:              e.LANPort,
@@ -4230,6 +4234,20 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		return
 	case "service:add":
 		if err := addSiteService(site, r.URL.Query().Get("name")); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "service:remove":
+		if err := removeSiteService(site, r.URL.Query().Get("name")); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "service:declare":
+		if err := declareSiteService(site, r.URL.Query().Get("name")); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}

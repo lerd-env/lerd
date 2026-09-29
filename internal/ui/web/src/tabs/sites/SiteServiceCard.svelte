@@ -4,17 +4,24 @@
   import ServiceIcon from '$components/ServiceIcon.svelte';
   import Icon from '$components/Icon.svelte';
   import { tooltip } from '$lib/tooltip';
+  import { apiFetch, decodeJSONResult } from '$lib/api';
+  import { loadSites } from '$stores/sites';
+  import { notifyLocalFailure } from '$lib/notify';
   import { services, serviceLabel } from '$stores/services';
   import { databaseAdminFor, openDatabaseAdmin } from '$stores/dashboard';
   import { goToTab } from '$stores/route';
-  import { openServiceInstallModal } from '$stores/modals';
+  import { openServiceInstallModal, openSiteServiceRemoveModal } from '$stores/modals';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
     name: string;
     database?: string;
+    domain?: string;
+    // Listed in .lerd.yaml, so it can be removed. One the site only reaches
+    // through its env file is offered into .lerd.yaml instead.
+    declared?: boolean;
   }
-  let { name, database = '' }: Props = $props();
+  let { name, database = '', domain = '', declared = false }: Props = $props();
 
   const svc = $derived($services.find((s) => s.name === name));
   const installed = $derived(Boolean(svc));
@@ -34,6 +41,31 @@
   function open() {
     if (installed) goToTab('services', name);
     else openServiceInstallModal(name);
+  }
+
+  let declaring = $state(false);
+
+  // No site event follows a .lerd.yaml write, so the list is reloaded to redraw
+  // the card as declared.
+  async function declare() {
+    declaring = true;
+    try {
+      const res = await apiFetch(
+        `/api/sites/${encodeURIComponent(domain)}/service:declare?name=${encodeURIComponent(name)}`,
+        { method: 'POST' }
+      );
+      const out = await decodeJSONResult<{ ok?: boolean; error?: string }>(res);
+      if (!out.ok) throw new Error(out.error || m.common_requestFailed());
+      await loadSites();
+    } catch (e) {
+      notifyLocalFailure(
+        'site_service',
+        m.sites_suggestedService_failed({ name: serviceLabel(name) }),
+        e instanceof Error ? e.message : String(e)
+      );
+    } finally {
+      declaring = false;
+    }
   }
 
   const dot = $derived(
@@ -81,6 +113,29 @@
       class="shrink-0 flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
     >
       <Icon name="plus" class="w-3.5 h-3.5" />
+    </button>
+  {/if}
+  {#if installed && domain && !declared}
+    <button
+      type="button"
+      disabled={declaring}
+      onclick={declare}
+      use:tooltip={m.sites_declareService_tooltip({ name: serviceLabel(name) })}
+      aria-label={m.sites_declareService_tooltip({ name: serviceLabel(name) })}
+      class="shrink-0 flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
+    >
+      <Icon name={declaring ? 'spinner' : 'plus'} class="w-3.5 h-3.5 {declaring ? 'animate-spin' : ''}" />
+    </button>
+  {/if}
+  {#if declared}
+    <button
+      type="button"
+      onclick={() => openSiteServiceRemoveModal({ domain, name })}
+      use:tooltip={m.sites_removeService_tooltip({ name: serviceLabel(name) })}
+      aria-label={m.sites_removeService_tooltip({ name: serviceLabel(name) })}
+      class="shrink-0 flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+    >
+      <Icon name="close" class="w-3.5 h-3.5" />
     </button>
   {/if}
 </ServiceCardShell>

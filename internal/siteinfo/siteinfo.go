@@ -1,6 +1,7 @@
 package siteinfo
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -171,6 +172,9 @@ type EnrichedSite struct {
 
 	// Services
 	Services []string
+	// DeclaredServices is the subset of Services listed in .lerd.yaml, the
+	// only ones the dashboard can remove; the rest come from the .env.
+	DeclaredServices []string
 	// SuggestedServices are presets the site's packages suggest that it neither
 	// uses nor had dismissed, for the dashboard to offer.
 	SuggestedServices []config.ServiceSuggestion
@@ -385,6 +389,14 @@ func Enrich(s config.Site, flags EnrichFlag) EnrichedSite {
 			e.SuggestedServices = suggestedServices(fw.PackageServices, e.Services, s.DismissedServices, func(name string) bool {
 				return podman.QuadletInstalled("lerd-" + name)
 			})
+			answered := slices.Concat(e.Services, s.DismissedServices)
+			for _, sg := range e.SuggestedServices {
+				answered = append(answered, sg.Name)
+			}
+			envFile, envFormat := config.EnvFileFor(s.Path)
+			env := envfile.Values(filepath.Join(s.Path, envFile), envFormat)
+			e.SuggestedServices = append(e.SuggestedServices,
+				envSuggestedServices(fw.Env.Services, env, answered, rolesFilledBy(e.Services))...)
 		}
 	}
 
@@ -783,6 +795,7 @@ func (e *EnrichedSite) enrichServices() {
 			e.Services = append(e.Services, ps.Name)
 			svcSet[ps.Name] = true
 		}
+		e.DeclaredServices = slices.Clone(e.Services)
 	}
 
 	envFile, _ := config.EnvFileFor(e.Path)
@@ -819,6 +832,46 @@ func (e *EnrichedSite) enrichServices() {
 func suggestedServices(suggested []config.ServiceSuggestion, have, dismissed []string, installed func(string) bool) []config.ServiceSuggestion {
 	answered := func(name string) bool { return slices.Contains(have, name) || slices.Contains(dismissed, name) }
 	return config.PickPackageSuggestions(suggested, answered, installed)
+}
+
+// envSuggestedServices offers the framework services whose detect rules match
+// the env file, so a service taken off a site stays one click from coming back.
+// Only rules naming a present key count: an absent-key rule says nothing about
+// what the project wants. skip holds names already used, dismissed or offered.
+func envSuggestedServices(defs map[string]config.FrameworkServiceDef, env map[string]string, skip []string, covered func(string) bool) []config.ServiceSuggestion {
+	var out []config.ServiceSuggestion
+	for _, name := range slices.Sorted(maps.Keys(defs)) {
+		if slices.Contains(skip, name) || covered(name) {
+			continue
+		}
+		for _, rule := range defs[name].Detect {
+			if rule.Absent || rule.Key == "" || !config.DetectRulesMatch([]config.FrameworkServiceDetect{rule}, env) {
+				continue
+			}
+			out = append(out, config.ServiceSuggestion{Name: name, Reason: "The env file sets " + rule.Key})
+			break
+		}
+	}
+	return out
+}
+
+// rolesFilledBy reports whether a framework service role is already served by
+// one of the site's services, directly or as a drop-in: postgres-pgvector
+// fills postgres, mariadb fills mysql.
+func rolesFilledBy(services []string) func(string) bool {
+	filled := map[string]bool{}
+	for _, name := range services {
+		filled[name] = true
+		filled[config.FamilyOfName(name)] = true
+		if svc, err := config.LoadCustomService(name); err == nil && svc != nil {
+			filled[svc.Preset] = true
+			filled[config.EnvRoleOf(svc)] = true
+		}
+		if p, err := config.LoadPreset(name); err == nil {
+			filled[p.EnvRole] = true
+		}
+	}
+	return func(role string) bool { return filled[role] }
 }
 
 func (e *EnrichedSite) enrichDomainConflicts() {

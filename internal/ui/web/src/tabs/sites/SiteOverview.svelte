@@ -15,6 +15,7 @@
 
   const svcNames = $derived(site.services || []);
   const suggested = $derived(site.suggested_services || []);
+  const declared = $derived(site.declared_services || []);
 </script>
 
 {#snippet sectionTitle(title: string)}
@@ -34,7 +35,12 @@
       {@render sectionTitle(m.services_title())}
       <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
         {#each svcNames as name (name)}
-          <SiteServiceCard {name} database={site.db_database} />
+          <SiteServiceCard
+            {name}
+            database={site.db_database}
+            domain={site.domain}
+            declared={declared.includes(name)}
+          />
         {/each}
         {#each suggested as suggestion (suggestion.name)}
           <SiteSuggestedServiceCard {suggestion} domain={site.domain} />

@@ -317,6 +317,24 @@ func AddProjectServices(dir string, svcs []ProjectService) error {
 	return SaveProjectConfig(dir, cfg)
 }
 
+// RemoveProjectService drops a service from .lerd.yaml. It fails when the
+// service is not listed there, including when the file is missing.
+func RemoveProjectService(dir, name string) error {
+	cfg, err := LoadProjectConfig(dir)
+	if err != nil {
+		return err
+	}
+	if cfg == nil {
+		return fmt.Errorf("%s is not listed in .lerd.yaml", name)
+	}
+	i := slices.IndexFunc(cfg.Services, func(s ProjectService) bool { return s.Name == name })
+	if i < 0 {
+		return fmt.Errorf("%s is not listed in .lerd.yaml", name)
+	}
+	cfg.Services = slices.Delete(cfg.Services, i, i+1)
+	return SaveProjectConfig(dir, cfg)
+}
+
 // SetProjectFrameworkDef replaces the embedded framework definition.
 // No-op if .lerd.yaml does not exist.
 func SetProjectFrameworkDef(dir string, def *Framework) error {
