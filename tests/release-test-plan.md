@@ -119,6 +119,7 @@ phases once the next release makes it ordinary.
 | Dashboard chrome following window focus on Plasma | 10 |
 | A service stop logged once, no log stream for a stopped service | 10 |
 | Composer's own home used for a global auth.json | 11 |
+| Node versions read from mise files, `lerd worktree setup`, empty manifests settling | 7, 10 |
 | Native capture seams, rebuilt native builds, no shared FPM containers on native | 14 |
 | Doctor explaining repeated macOS folder prompts, Xdebug across a runtime switch | 14 |
 
@@ -544,6 +545,12 @@ lerd worktree add -b feat-x
 - [ ] Per-worktree asset worker starts as its own unit and Vite picks a free port
 - [ ] `lerd worktree wait ../demo-feat-x --timeout 10m` returns only once the
       pipeline has actually settled
+- [ ] A worktree whose `package.json` declares no packages settles: the watcher
+      does not reinstall it every minute and `lerd worktree wait` returns
+- [ ] A worktree another tool made with plain `git worktree add` is finished by
+      `lerd worktree setup` run inside it: it waits for the install, then runs
+      the asset build, the database pick and migration and the framework's
+      worktree commands, **200 on the new worktree**
 - [ ] Now the bare-git path: `git worktree add ../demo-feat-y -b feat-y`, the
       watcher runs the same pipeline unprompted, **200 on the new site**
 - [ ] Restart the daemon (`lerd stop && lerd start`) and confirm per-worktree
@@ -569,6 +576,8 @@ lerd worktree add -b feat-x
       on both**
 - [ ] Paths listed under `worktree_include` are copied into a fresh worktree,
       and one the worktree already carries is left as git checked it out
+- [ ] A gitignored `mise.toml` listed under `worktree_include` reaches every new
+      worktree, and the parent's `git status` stays clean
 - [ ] On a SQLite project a new worktree gets its own copy of the database file,
       from the wrapper and from bare git alike, `lerd worktree add` skips the
       database prompt, and a write in the worktree leaves the parent's file
@@ -836,6 +845,10 @@ Other surfaces:
       banner and in the dashboard footer
 - [ ] `lerd open demo` opens the browser
 - [ ] Node: `node:install`, `node:use`, `isolate:node`, `lerd npm run build`
+- [ ] The Node version a project pins in `mise.toml`, `.mise.toml` or
+      `.tool-versions` is the one `lerd which`, `lerd npm` and the link use,
+      `.nvmrc` and `.node-version` still win over them, and a site pinning none
+      keeps its version across the upgrade
 - [ ] `lerd node:manage` installs the shims and a default, `node:manager` shows
       and switches the manager, `node:unmanage` and `node:uninstall` undo it
 - [ ] `lerd node:manager mise` carries every installed major across and drops
