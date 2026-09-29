@@ -95,6 +95,11 @@ func OmarchyTheme() *UITheme {
 	// A lerd.yaml the theme carries, whether shipped with it or rendered from an
 	// Omarchy template, has the last word on any tone it sets.
 	if override, _ := omarchyOverride(); override != nil {
+		// The desktop's accent fills both modes, so an override's accent must
+		// too, or dark mode keeps the one it replaced.
+		if override.AccentDark == "" {
+			override.AccentDark = override.Accent
+		}
 		dst := theme.colours()
 		for key, v := range override.colours() {
 			if *v != "" {

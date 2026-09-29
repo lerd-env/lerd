@@ -122,6 +122,27 @@ lighter_background = "#24283b"
 	}
 }
 
+func TestOmarchyThemeOverrideAccentReachesDarkMode(t *testing.T) {
+	writeOmarchyTheme(t, "catppuccin-latte", `
+mode = "light"
+accent = "#1e66f5"
+background = "#eff1f5"
+`)
+	if err := os.WriteFile(OmarchyOverridePath(), []byte("accent: \"#d20f39\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if theme := OmarchyTheme(); theme.AccentDark != "#d20f39" {
+		t.Errorf("AccentDark = %q, want the override's accent in dark mode too", theme.AccentDark)
+	}
+
+	if err := os.WriteFile(OmarchyOverridePath(), []byte("accent: \"#d20f39\"\naccent_dark: \"#ff5577\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if theme := OmarchyTheme(); theme.AccentDark != "#ff5577" {
+		t.Errorf("AccentDark = %q, want the override's own accent_dark", theme.AccentDark)
+	}
+}
+
 func TestOmarchyThemeReportsABadOverride(t *testing.T) {
 	writeOmarchyTheme(t, "tokyo-night", `accent = "#7aa2f7"`)
 	if err := os.WriteFile(OmarchyOverridePath(), []byte("bg: red\n"), 0o644); err != nil {
