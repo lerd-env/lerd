@@ -11,6 +11,38 @@ DNS resolvers, podman networking, and the browser.
 
 ---
 
+## Execution rules
+
+These bind whoever runs the plan, a person or an agent, and whoever writes the
+prompt that hands a lane to an agent. Nobody runs a plan of their own making.
+
+1. **Every checkbox in a lane's phases is executed, in order, as written.** No
+   scoping a phase down ("the basics", "one database", "where practical"), no
+   substituting an easier check, no merging two items into one. A lane prompt
+   names the lane, the guest and the phases, and nothing that narrows them.
+2. **The only allowed skips are the ones this plan names:** a guest that cannot
+   reach the item (the matrix and guest notes say which), a platform the item is
+   not for, and the surfaces listed under "What this matrix cannot reach". Disk,
+   time, turn limits, rate limits and "not driveable over ssh" are blockers, not
+   skips: stop, fix the environment or report the blocker, and finish the item.
+   An image item run in phase 0's images step is recorded in the lane as `SKIP
+   covered in phase 0` with that step's result, not rerun.
+3. **Every checkbox gets a line in the lane's results**, carrying the item's
+   text word for word, then `PASS`, `FAIL` or `SKIP`, then the evidence (the
+   command and the real output or HTTP code) or the named reason for the skip.
+   A lane whose results have fewer lines than its phases have checkboxes is not
+   done, whatever else it reports.
+4. **Findings are reported FAILs first.** A lane summary opens with its FAIL and
+   SKIP counts. "Every site answered 200" is never the headline.
+5. **"Fixed" means the whole lane was rerun on the affected guests**, not only
+   the finding's repro. A fix touching shared code (paths, mounts, unit naming,
+   env wiring) reruns every lane that exercises that code.
+6. **The results are compared with the previous run's**, item by item. An item
+   that ran last time and did not run this time is a FAIL of the run, not a
+   difference to note.
+
+---
+
 ## The 200 rule
 
 **A phase is not done until a real site answers a real HTTP request with 200.**
@@ -135,11 +167,44 @@ virsh -c qemu:///system snapshot-create-as ubuntu26.04 clean-no-lerd
 ```
 
 Then install the **previous stable** release, create a site, and snapshot again
-as `n-minus-1-with-site`. Lane B restores that one; every other lane restores
-`clean-no-lerd`.
+as `n-minus-1-with-site`. Lane B restores that one.
+
+### Images first, once per candidate
+
+Pulling and building images is most of a lane's wall time, and the candidate's
+images do not change between lanes. So they are made and checked once, up
+front, and every lane after that runs against the cache:
+
+1. On each guest, from `clean-no-lerd`, add a `mirror.gcr.io` registry mirror
+   for docker.io (every guest shares the host's NAT address, and Docker Hub
+   rate-limits it mid-run otherwise).
+2. Install the candidate, then pull or build every image the lanes use: each
+   PHP version the plan names (8.3 to 8.6, 7.4), FrankenPHP, and every service
+   preset phase 5 touches. Warm composer's and npm's caches by scaffolding one
+   Laravel and one Symfony project and deleting them.
+3. Run the image checkboxes here, where a download really happens: phase 1's
+   download disclosure, `--no-pull`, `LERD_OFFLINE` and network-down items,
+   phase 4's `php:rebuild`, `fetch`, legacy and prerelease items, and phase 5's
+   pull disclosure items. They are not repeated in the lanes.
+4. `lerd uninstall`, keeping podman's image store, and snapshot the guest as
+   `images-cached`. Every lane except B restores `images-cached`, so its fresh
+   install finds the images already there and spends no time pulling.
+
+Rebuild the `images-cached` snapshots whenever the candidate changes anything
+under `internal/podman/` that affects an image (a Containerfile, a pinned
+tool, an image tag); otherwise a new candidate reuses them.
+
+### Running the lanes
+
+Run lanes in parallel, up to the host's guest limit, one runner per lane.
+Split a lane at a phase boundary when it would outlast one runner (lane A at
+phase 6). Keep every reboot item to the end of its phase so a phase reboots
+once.
 
 - [ ] `clean-no-lerd` snapshot exists on each guest in the matrix
 - [ ] `n-minus-1-with-site` snapshot exists on the lane B guest
+- [ ] `images-cached` snapshot exists on each guest, taken from the current
+      candidate or from one whose images are unchanged
 
 ---
 
