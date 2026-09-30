@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -207,5 +208,32 @@ func TestLoadDBEnvNonLerdHostFallsBackToCanonical(t *testing.T) {
 	}
 	if env.service != "mysql" {
 		t.Errorf("service = %q, want mysql (canonical fallback)", env.service)
+	}
+}
+
+// db:shell picks the client inside the container, since MariaDB 11 images ship
+// only mariadb, and asks for a pty only when stdin is a terminal, so piped SQL
+// runs and exits.
+func TestDbShellArgs(t *testing.T) {
+	env := &dbEnv{service: "mariadb-11-8", connection: "mariadb", database: "app", username: "root", password: "lerd"}
+
+	got := strings.Join(dbShellArgs(env, "mariadb", false), " ")
+	if strings.Contains(got, "--tty") {
+		t.Errorf("piped db:shell asked for a pty: %s", got)
+	}
+	if !strings.Contains(got, "command -v 'mariadb' || command -v 'mysql'") {
+		t.Errorf("mariadb shell should prefer the mariadb client: %s", got)
+	}
+	if !strings.HasSuffix(got, "-uroot -plerd app") {
+		t.Errorf("credentials and database missing: %s", got)
+	}
+
+	if got := dbShellArgs(env, "mariadb", true); !slices.Contains(got, "--tty") {
+		t.Errorf("interactive db:shell should get a pty: %v", got)
+	}
+
+	pg := &dbEnv{service: "postgres", connection: "pgsql", database: "app", username: "postgres"}
+	if got := strings.Join(dbShellArgs(pg, "postgres", false), " "); got != "exec -i lerd-postgres psql -U postgres app" {
+		t.Errorf("postgres shell = %q", got)
 	}
 }

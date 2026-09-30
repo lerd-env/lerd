@@ -461,14 +461,7 @@ func runClientExec(tool string, args []string) error {
 
 	// Resolve the first candidate binary that exists in the image, then exec it
 	// with the shim's args as sh's positional parameters so no quoting is lost.
-	var probe strings.Builder
-	for i, b := range target.Binaries {
-		if i > 0 {
-			probe.WriteString(" || ")
-		}
-		probe.WriteString("command -v " + podman.ShellQuote(b))
-	}
-	shellCmd := "exec $(" + probe.String() + ") \"$@\""
+	shellCmd := execFirstCommand(target.Binaries)
 
 	// Run the tool in a throwaway container from the service image rather than
 	// exec-ing into the long-running service: nothing is mounted into or
@@ -531,6 +524,16 @@ func runClientExec(tool string, args []string) error {
 		return err
 	}
 	return nil
+}
+
+// execFirstCommand is a sh -c script that execs the first of bins the container
+// has, with the script's positional parameters as its arguments.
+func execFirstCommand(bins []string) string {
+	probes := make([]string, len(bins))
+	for i, b := range bins {
+		probes[i] = "command -v " + podman.ShellQuote(b)
+	}
+	return "exec $(" + strings.Join(probes, " || ") + ") \"$@\""
 }
 
 // homeSpellings returns every path that names the home directory: home itself,
