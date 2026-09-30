@@ -245,7 +245,7 @@ func StripeStartForSite(siteName, sitePath, siteBaseURL string) error {
 	if err := stripeStartExplicit(siteName, apiKey, siteBaseURL+config.StripeWebhookPath(sitePath)); err != nil {
 		return err
 	}
-	_ = config.AddProjectWorker(sitePath, "stripe")
+	recordProjectWorker(sitePath, "stripe")
 	ClearIdleSuspendOnStart(siteName, sitePath, "stripe")
 	return nil
 }
