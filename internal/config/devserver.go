@@ -26,9 +26,10 @@ type DevServerTool struct {
 	// Args is appended to the worker command, with {config} and {port} filled in.
 	Args string
 	// Wrapper is the generated config, taking the import path, the URL the
-	// server is reachable at, the base, origin, allowed hosts and the origins
-	// allowed to fetch from the server. Every placeholder is filled with an
-	// encoded JavaScript literal, so none of them carries its own quotes.
+	// server is reachable at, the base, origin, allowed hosts, the paths the
+	// watcher skips and the origins allowed to fetch from the server. Every
+	// placeholder is filled with an encoded JavaScript literal, so none of them
+	// carries its own quotes.
 	Wrapper string
 	// ValuesPath is where the values module goes, relative to the site, and
 	// Values is that module: the addresses and the port, for a project whose
@@ -140,6 +141,9 @@ const lerd = {
         https: false,
         origin: %s,
         allowedHosts: %s,
+        // Worktrees lerd checks out inside the project carry their own vendor
+        // and node_modules, and watching them exhausts the host's inotify watches.
+        watch: { ignored: %s },
         // Naming an origin makes some framework plugins treat it as the whole
         // CORS allowlist, so a page on any other domain of the site would be
         // refused the assets it just asked for. Declare them all, and loopback
