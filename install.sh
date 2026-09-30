@@ -151,9 +151,11 @@ saved_dns_mode() {
 # should_pass_dns_mode reports whether `lerd install` should be told the mode.
 # Only a first install names it: the binary settles the question once and
 # honours the saved choice on every run after that, and --dns is the one input
-# that overrides it. The argument is the version already installed, if any.
+# that overrides it. The arguments are the version already installed and the
+# saved mode, either of which may be empty: an uninstall that kept its data
+# leaves no binary but still has the choice on record.
 should_pass_dns_mode() {
-  [ -z "${1:-}" ]
+  [ -z "${1:-}" ] && [ -z "${2:-}" ]
 }
 
 ask_dns_mode() {
@@ -651,14 +653,15 @@ cmd_install() {
     [ -f "$local_binary" ] || die "File not found: $local_binary"
   fi
 
-  # Only a first install asks. A machine that already has lerd keeps the mode it
-  # settled on, read back here so the prerequisite check knows whether this run
-  # needs certutil, and left to the binary rather than forced with --dns.
-  if [ -z "$was_installed" ]; then
+  # Only a first install asks. A machine that already has lerd, or kept its
+  # config through an uninstall, keeps the mode it settled on, read back here so
+  # the prerequisite check knows whether this run needs certutil, and left to the
+  # binary rather than forced with --dns.
+  local saved_mode; saved_mode="$(saved_dns_mode)"
+  if should_pass_dns_mode "$was_installed" "$saved_mode"; then
     ask_dns_mode
   else
-    DNS_MODE="$(saved_dns_mode)"
-    DNS_MODE="${DNS_MODE:-managed}"
+    DNS_MODE="${saved_mode:-managed}"
   fi
   check_prerequisites
 
@@ -709,7 +712,7 @@ cmd_install() {
   # The +expansion keeps an empty array from tripping set -u on the bash 3.2
   # macOS still ships.
   local dns_args=()
-  if should_pass_dns_mode "$was_installed"; then
+  if should_pass_dns_mode "$was_installed" "$saved_mode"; then
     dns_args=(--dns "$DNS_MODE")
   fi
   if have_tty; then

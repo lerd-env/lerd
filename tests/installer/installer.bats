@@ -1057,3 +1057,8 @@ EOF
   run should_pass_dns_mode "1.33.0"
   [ "$status" -ne 0 ]
 }
+
+@test "should_pass_dns_mode leaves the saved choice alone after an uninstall that kept data" {
+  run should_pass_dns_mode "" "localhost"
+  [ "$status" -ne 0 ]
+}
