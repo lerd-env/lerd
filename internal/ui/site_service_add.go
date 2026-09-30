@@ -26,18 +26,28 @@ func addSiteService(site *config.Site, name string) error {
 	if err := config.AddProjectServices(site.Path, []config.ProjectService{svc}); err != nil {
 		return err
 	}
-	self, err := os.Executable()
-	if err != nil {
+	// Adding it is asking for it: link skips a service marked removed, which
+	// would wire .env to a container that never comes up.
+	if err := config.SetServiceRemoved(name, false); err != nil {
 		return err
 	}
 	for _, args := range [][]string{{"link", "--yes"}, {"env"}} {
-		cmd := exec.Command(self, args...)
-		cmd.Dir = site.Path
-		if out, err := cmd.CombinedOutput(); err != nil {
+		if out, err := runLerdFn(site.Path, args...); err != nil {
 			return fmt.Errorf("lerd %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(lastLines(string(out), 5)))
 		}
 	}
 	return nil
+}
+
+// runLerdFn runs this lerd binary in dir; a seam so tests need no binary.
+var runLerdFn = func(dir string, args ...string) ([]byte, error) {
+	self, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.Command(self, args...)
+	cmd.Dir = dir
+	return cmd.CombinedOutput()
 }
 
 func lastLines(s string, n int) string {
