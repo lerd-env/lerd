@@ -553,7 +553,8 @@ func TestWriteDevServerWrapperIgnoresNestedWorktrees(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `ignored: ["` + filepath.ToSlash(filepath.Join(dir, filepath.Base(dir)+"-*")) + `/**"]`
+	root := config.CanonicalPath(dir)
+	want := `ignored: ["` + filepath.ToSlash(filepath.Join(root, filepath.Base(root)+"-*")) + `/**"]`
 	if !strings.Contains(string(body), want) {
 		t.Errorf("wrapper does not ignore nested worktrees, want %s in:\n%s", want, body)
 	}
