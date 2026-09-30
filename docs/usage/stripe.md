@@ -44,6 +44,8 @@ lerd stripe:listen --secret-env-key STRIPE_SECRET_KEY # pin the .env key (persis
 
 The target URL is auto-detected from the registered site in the current directory. Run `lerd link` first if the project is not yet registered.
 
+The listener forwards every snapshot event, the classic webhook events Stripe sends to a v1 endpoint (`--all-snapshot`), and runs a pinned Stripe CLI release, since the CLI refuses to listen without an event selection from 1.51 on.
+
 ### Secret detection
 
 Lerd resolves the Stripe secret from the project's `.env` automatically, probing these keys in order until one is set:
