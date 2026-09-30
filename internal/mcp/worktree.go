@@ -471,7 +471,7 @@ func branchFromArgs(args map[string]any, site *config.Site) string {
 	abs, _ := filepath.Abs(cwd)
 	wts, _ := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain())
 	for _, wt := range wts {
-		if wt.Path == abs {
+		if config.SamePath(wt.Path, abs) {
 			return wt.Branch
 		}
 	}

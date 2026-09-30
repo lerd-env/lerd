@@ -376,7 +376,7 @@ func worktreeServed(worktreePath string) bool {
 	abs, _ := filepath.Abs(worktreePath)
 	wts, _ := gitpkg.ServableWorktrees(site.Path, site.PrimaryDomain())
 	for _, wt := range wts {
-		if filepath.Clean(wt.Path) == abs {
+		if config.SamePath(wt.Path, abs) {
 			return fileExistsAt(filepath.Join(config.NginxConfD(), wt.Domain+".conf"))
 		}
 	}

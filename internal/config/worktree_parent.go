@@ -45,7 +45,9 @@ func ParentSiteForWorktreeDir(dir string) (*Site, bool) {
 			if !filepath.IsAbs(gitFile) {
 				gitFile = filepath.Join(worktreesDir, e.Name(), gitFile)
 			}
-			if filepath.Dir(filepath.Clean(gitFile)) == abs {
+			// SamePath, since git records the real path and a shell's cwd may
+			// spell it through a symlinked /home.
+			if SamePath(filepath.Dir(filepath.Clean(gitFile)), abs) {
 				return s, true
 			}
 		}

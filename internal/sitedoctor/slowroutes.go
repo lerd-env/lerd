@@ -77,7 +77,7 @@ func storeKeyForPath(path string) (string, bool) {
 		return "", false
 	}
 	for _, wt := range wts {
-		if p, err := filepath.Abs(wt.Path); err == nil && p == abs {
+		if config.SamePath(wt.Path, abs) {
 			return reqstats.Key(parent.Name, wt.Branch), true
 		}
 	}

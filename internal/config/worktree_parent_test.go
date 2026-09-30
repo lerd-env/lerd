@@ -60,3 +60,31 @@ func TestParentSiteForWorktreeDir_unrelatedDir(t *testing.T) {
 		t.Errorf("returned ok=true for unrelated dir")
 	}
 }
+
+// On ostree hosts /home is a symlink to /var/home: git records the checkout
+// under its real path while a shell's cwd spells it through the link.
+func TestParentSiteForWorktreeDir_symlinkedSpelling(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	real := filepath.Join(tmp, "var-home")
+	sitePath := filepath.Join(real, "acme")
+	checkout := filepath.Join(sitePath, "acme-feat-a")
+	if err := os.MkdirAll(checkout, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeWorktreeMeta(t, sitePath, "feat-a", checkout)
+	link := filepath.Join(tmp, "home")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := AddSite(Site{Name: "acme", Path: sitePath, Domains: []string{"acme.test"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, ok := ParentSiteForWorktreeDir(filepath.Join(link, "acme", "acme-feat-a"))
+	if !ok || got.Name != "acme" {
+		t.Fatalf("ParentSiteForWorktreeDir via the symlink = %v, %v; want acme", got, ok)
+	}
+}
