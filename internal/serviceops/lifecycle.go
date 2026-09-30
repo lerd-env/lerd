@@ -2,11 +2,13 @@ package serviceops
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/imagepull"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -17,7 +19,16 @@ import (
 func StartService(name string) error {
 	unit := "lerd-" + name
 	if IsBuiltin(name) {
+		wasInstalled := ServiceInstalled(name)
 		if err := EnsureDefaultPresetQuadlet(name); err != nil {
+			return err
+		}
+		if err := pullStartImage(name); err != nil {
+			// A first start that cannot fetch its image leaves nothing behind.
+			if !wasInstalled {
+				_ = podman.RemoveQuadlet(unit)
+				_ = podman.DaemonReloadFn()
+			}
 			return err
 		}
 	} else {
@@ -32,6 +43,9 @@ func StartService(name string) error {
 			return err
 		}
 		if err := EnsureCustomServiceQuadlet(svc); err != nil {
+			return err
+		}
+		if err := pullStartImage(name); err != nil {
 			return err
 		}
 	}
@@ -111,4 +125,37 @@ func startUnitRetry(unit string) error {
 		time.Sleep(time.Duration(attempt+1) * 300 * time.Millisecond)
 	}
 	return err
+}
+
+// Seams so tests can drive a missing image without podman or a registry.
+var (
+	imageExistsFn = podman.ImageExists
+	imageSizeFn   = imagepull.Size
+	pullImageFn   = func(img string) error { return podman.PullImageTo(img, os.Stdout) }
+)
+
+// StartImage is the image starting name runs: the one its unit or config
+// records, or for a built-in not installed yet, the one installing it writes.
+func StartImage(name string) string {
+	if current, _ := serviceImageRefs(name); current != "" {
+		return current
+	}
+	if IsBuiltin(name) {
+		if svc, err := resolveDefaultPresetService(name, ""); err == nil {
+			return svc.Image
+		}
+	}
+	return ""
+}
+
+// pullStartImage fetches a missing image before the unit starts. Left to the
+// start, podman pulls it silently, with no size and no way to say no.
+func pullStartImage(name string) error {
+	img := StartImage(name)
+	if img == "" || imageExistsFn(img) {
+		return nil
+	}
+	bytes, _ := imageSizeFn(img)
+	fmt.Printf("  Pulling %s%s for %s\n", img, imagepull.Note(bytes), name)
+	return pullImageFn(img)
 }

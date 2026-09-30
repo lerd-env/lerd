@@ -87,8 +87,9 @@ lerd start --dry-run
 
 ### In the dashboard
 
-Installing a service, updating, migrating, rolling back or reinstalling one, and
-installing or rebuilding a PHP version all ask first when the image they need is
+Installing a service, starting a built-in one for the first time, adding a
+suggested service to a site, updating, migrating, rolling back or reinstalling
+one, and installing or rebuilding a PHP version all ask first when the image they need is
 not already on the machine:
 
 > **Download required**
@@ -102,7 +103,8 @@ the usual case for that.
 
 ### From an assistant
 
-The MCP tools that would fetch an image (installing a service preset, updating,
+The MCP tools that would fetch an image (starting a service whose image is not
+here yet, installing a service preset, updating,
 migrating, rolling back or reinstalling a service, and adding a PHP extension,
 which rebuilds the image) report the image and its size back to the assistant
 and download nothing. It takes a second call carrying `confirm: true` to go

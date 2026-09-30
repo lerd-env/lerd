@@ -372,7 +372,7 @@ func serviceTool() mcpTool {
 				"kind":           {Type: "string", Description: "entity_action: entity kind, as `entities` reported it (e.g. buckets)."},
 				"entity":         {Type: "string", Description: "entity_action: the entity to act on."},
 				"entity_action":  {Type: "string", Description: "entity_action: which declared action to run; export/import stream a file and stay on the CLI."},
-				"confirm":        {Type: "boolean", Description: "preset_install/update/migrate/rollback/reinstall: proceed with the disclosed download."},
+				"confirm":        {Type: "boolean", Description: "Proceed with a download an action disclosed."},
 			},
 			Required: []string{"action"},
 		},

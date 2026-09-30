@@ -458,6 +458,10 @@ func execServiceStart(args map[string]any) (any, *rpcError) {
 	if name == "" {
 		return toolErr("name is required"), nil
 	}
+	pending, _ := serviceops.ActionDownload(name, "start", "")
+	if gate := downloadGate(args, pending, "Starting "+name); gate != nil {
+		return gate, nil
+	}
 	if err := serviceops.StartService(name); err != nil {
 		return toolErr("starting " + name + ": " + err.Error()), nil
 	}

@@ -14,6 +14,12 @@ vi.mock('$stores/sites', async (importOriginal) => ({
   loadSites
 }));
 
+const { confirmDownload } = vi.hoisted(() => ({ confirmDownload: vi.fn() }));
+vi.mock('$stores/downloadConfirm', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$stores/downloadConfirm')>()),
+  confirmDownload
+}));
+
 function ok() {
   return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } });
 }
@@ -22,6 +28,20 @@ describe('SiteSuggestedServiceCard', () => {
   beforeEach(() => {
     apiFetch.mockReset();
     apiFetch.mockResolvedValue(ok());
+    confirmDownload.mockReset();
+    confirmDownload.mockResolvedValue(true);
+  });
+
+  // Adding may install the service, so it asks before downloading its image,
+  // and a decline leaves the site as it was.
+  it('asks before downloading and adds nothing on a decline', async () => {
+    confirmDownload.mockResolvedValue(false);
+    const { getByLabelText } = render(SiteSuggestedServiceCard, { suggestion: { name: 'solr', reason: 'Search backend' }, domain: 'shop.test' });
+    await fireEvent.click(getByLabelText(/add/i));
+    await vi.waitFor(() =>
+      expect(confirmDownload).toHaveBeenCalledWith(expect.any(String), { service: 'solr', action: 'add' })
+    );
+    expect(apiFetch).not.toHaveBeenCalled();
   });
 
   it('adds the service to the site it was suggested for', async () => {
