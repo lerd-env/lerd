@@ -474,3 +474,25 @@ func TestRemoveServiceUnits_resetsEveryUnitItRemoved(t *testing.T) {
 		t.Errorf("reset %v, want %v", reset, want)
 	}
 }
+
+// A keep-data uninstall removes every unit, so a built-in service no site lists
+// comes back only because uninstall recorded it. One removed since stays removed.
+func TestDefaultPresetsToRefresh_restoresKeptServices(t *testing.T) {
+	installed := func(unit string) bool { return unit == "lerd-mysql" }
+	removed := func(n string) bool { return n == "mailpit" }
+	kept := map[string]bool{"redis": true, "mailpit": true}
+
+	got := defaultPresetsToRefresh([]string{"mailpit", "mysql", "postgres", "redis"}, installed, kept, removed)
+	want := []string{"mysql", "redis"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("defaultPresetsToRefresh = %v, want %v", got, want)
+	}
+}
+
+func TestInstalledDefaultServices_listsOnlyThoseWithAUnit(t *testing.T) {
+	installed := func(unit string) bool { return unit == "lerd-redis" || unit == "lerd-mysql" }
+	got := installedDefaultServices([]string{"mailpit", "mysql", "redis"}, installed)
+	if strings.Join(got, ",") != "mysql,redis" {
+		t.Fatalf("installedDefaultServices = %v", got)
+	}
+}

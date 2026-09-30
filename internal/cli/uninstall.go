@@ -71,6 +71,10 @@ func runUninstall(force bool) error {
 	dns.Teardown()
 	removePortDropIn()
 
+	if !removeData {
+		_ = config.SetKeptServices(installedDefaultServices(knownServices(), podman.QuadletInstalled))
+	}
+
 	step("Stopping containers and services")
 	{
 		// Use the service manager so this works on both Linux (systemd/quadlet)
@@ -206,6 +210,17 @@ func runUninstall(force bool) error {
 // resetFailedUnit is podman.ResetFailedUnit, indirected so a test can watch the
 // removal reset what it removed without a systemd to reset it on.
 var resetFailedUnit = podman.ResetFailedUnit
+
+// installedDefaultServices lists the built-in services that have a unit.
+func installedDefaultServices(names []string, installed func(unit string) bool) []string {
+	var out []string
+	for _, n := range names {
+		if installed("lerd-" + n) {
+			out = append(out, n)
+		}
+	}
+	return out
+}
 
 // removeServiceUnits deletes every lerd unit file and clears the failed state
 // systemd keeps for it, which the installer script has always done and this path

@@ -656,12 +656,14 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	}
 
 	step("Refreshing service quadlets")
-	for _, svc := range config.DefaultPresetNames() {
-		if !podman.QuadletInstalled("lerd-" + svc) {
-			continue
-		}
+	kept := map[string]bool{}
+	for _, svc := range config.KeptServices() {
+		kept[svc] = true
+	}
+	for _, svc := range defaultPresetsToRefresh(config.DefaultPresetNames(), podman.QuadletInstalled, kept, config.ServiceIsRemoved) {
 		_ = rewriteDefaultPreset(svc)
 	}
+	_ = config.ClearKeptServices()
 	ok()
 
 	// Always ensure the default PHP-FPM is available (needed for lerd new on fresh installs).
@@ -1994,3 +1996,16 @@ func frankenPHPBuildJobs(versions []string) []BuildJob {
 }
 
 var needsFrankenPHPRebuild = podman.NeedsFrankenPHPRebuild
+
+// defaultPresetsToRefresh picks the built-in services whose unit install writes:
+// the installed ones, plus those a keep-data uninstall recorded and nobody has
+// removed since.
+func defaultPresetsToRefresh(names []string, installed func(unit string) bool, kept map[string]bool, removed func(string) bool) []string {
+	var out []string
+	for _, n := range names {
+		if installed("lerd-"+n) || (kept[n] && !removed(n)) {
+			out = append(out, n)
+		}
+	}
+	return out
+}
