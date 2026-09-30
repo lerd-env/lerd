@@ -568,8 +568,10 @@ func planSetupSteps(cwd string, skipOpen bool) []setupStep {
 		}
 	}
 
-	// Only offer the secure step when the site isn't already secured by lerd init.
-	if site == nil || !site.Secured {
+	// Only offer the secure step when the site isn't already secured by lerd init,
+	// and never on a .localhost install, where lerd secure can only refuse.
+	gcfg, _ := config.LoadGlobal()
+	if (site == nil || !site.Secured) && gcfg.DNSManaged() {
 		steps = append(steps, setupStep{
 			label:   "lerd secure",
 			enabled: false,
