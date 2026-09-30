@@ -211,3 +211,23 @@ func TestRefreshDiscoverFamilyConsumers_leavesARemovedDefaultRemoved(t *testing.
 		t.Fatal("lerd start wrote the unit of a removed mailpit back")
 	}
 }
+
+// A fresh install has no mailpit at all. Being a consumer does not make it
+// installed, so the bulk refresh on `lerd start` must not write its unit.
+func TestRefreshDiscoverFamilyConsumers_leavesAnUninstalledDefaultAbsent(t *testing.T) {
+	withServiceHome(t)
+	stubDaemonReload(t)
+	prevWait := waitReadyFn
+	waitReadyFn = func(string, time.Duration) error { return nil }
+	t.Cleanup(func() { waitReadyFn = prevWait })
+
+	prevRun := config.ServiceRunning
+	config.ServiceRunning = func(string) bool { return false }
+	t.Cleanup(func() { config.ServiceRunning = prevRun })
+
+	RefreshDiscoverFamilyConsumers()
+
+	if _, err := os.Stat(filepath.Join(config.QuadletDir(), "lerd-mailpit.container")); err == nil {
+		t.Fatal("lerd start installed a mailpit nobody asked for")
+	}
+}

@@ -1474,8 +1474,9 @@ func dynamicEnvConsumers() []*config.CustomService {
 		installed[c.Name] = true
 	}
 	for _, name := range config.DefaultPresetNames() {
-		// A removed default has no unit to refresh, and writing one brings it back.
-		if installed[name] || config.ServiceIsRemoved(name) {
+		// A removed or never-installed default has no unit to refresh, and
+		// writing one installs it.
+		if installed[name] || config.ServiceIsRemoved(name) || !ServiceInstalled(name) {
 			continue
 		}
 		meta, err := config.DefaultPresetMeta(name)
