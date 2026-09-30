@@ -261,6 +261,15 @@ func StripeRestoreUnit(siteName, sitePath, siteBaseURL string) error {
 	return writeStripeUnit(siteName, apiKey, siteBaseURL+config.StripeWebhookPath(sitePath))
 }
 
+// restoreStripeWorker rewrites the listener unit even when it is already
+// enabled, so an upgrade moves existing listeners onto the pinned image. The
+// write is a no-op when the unit is unchanged.
+func restoreStripeWorker(s config.Site) {
+	if base := siteURL(s.Path); base != "" {
+		StripeRestoreUnit(s.Name, s.Path, base) //nolint:errcheck
+	}
+}
+
 // StripeStopForSite stops and removes the Stripe listener for the named site.
 func StripeStopForSite(siteName string) error {
 	unitName := "lerd-stripe-" + siteName
