@@ -156,6 +156,7 @@ func (e *PHPRangeError) Error() string {
 //  5. Re-link FrankenPHP, or fall back to FPM below its minimum version.
 //  6. Ensure the FPM quadlet and xdebug ini exist for the new version.
 //  7. Regenerate the nginx vhost (SSL or plain) and reload.
+//  8. Move the site's running workers onto the new version.
 //
 // It never builds an image and never prompts: callers own both, because only
 // they know whether a human is waiting.
@@ -235,6 +236,7 @@ func SetSitePHPVersion(site *config.Site, version string, opts PHPVersionOpts) (
 	// request after a switch is served, which matters most the first time a
 	// freshly built version is used and nothing has started it yet.
 	_ = ensureFPMReadyFn(res.Version, fpmReadyTimeout)
+	ResyncSiteWorkers(site)
 
 	// Changing version starts no systemd unit, so the shared hook would not
 	// otherwise fire and every open dashboard would keep showing the old

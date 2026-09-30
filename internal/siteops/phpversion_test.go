@@ -551,3 +551,22 @@ func TestPHPConstraintsFor_ProjectWinsWhenRangeCannotServeIt(t *testing.T) {
 		t.Errorf("constraints = %v, want the project's own >=8.4", got)
 	}
 }
+
+// A worker execs into the FPM container of the version it was started on, so a
+// switch that left it alone would keep running jobs on the old PHP while the
+// site serves the new one.
+func TestSetSitePHPVersion_resyncsTheSiteWorkers(t *testing.T) {
+	site := phpVersionTestSite(t, asFPM)
+	stubPHPVersionDeps(t, "", "")
+	var got []string
+	orig := ResyncSiteWorkers
+	ResyncSiteWorkers = func(s *config.Site) { got = append(got, s.Name+"@"+s.PHPVersion) }
+	t.Cleanup(func() { ResyncSiteWorkers = orig })
+
+	if _, err := SetSitePHPVersion(site, "8.2", PHPVersionOpts{}); err != nil {
+		t.Fatalf("SetSitePHPVersion: %v", err)
+	}
+	if len(got) != 1 || got[0] != "app@8.2" {
+		t.Errorf("workers resynced = %v, want [app@8.2]", got)
+	}
+}

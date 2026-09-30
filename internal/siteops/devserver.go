@@ -17,3 +17,9 @@ var RefreshDevServers = func(*config.Site) {}
 // found again by name and survives until the daemon exits. Wired by the cli
 // package, which owns the proxies.
 var StopSiteShares = func(siteName string) {}
+
+// ResyncSiteWorkers rewrites the site's running workers for its current PHP
+// version and restarts the ones whose unit changed. A worker execs into the FPM
+// container it was started against, so a version switch has to move it too.
+// Wired by the cli package, which owns the worker units.
+var ResyncSiteWorkers = func(*config.Site) {}
