@@ -709,6 +709,11 @@ type FrameworkEnvConf struct {
 	// instead, for the same reason AppFile above is a new field.
 	SQLite *FrameworkServiceDef `yaml:"sqlite,omitempty"`
 
+	// DefaultService names the entry in Services a project is wired to when it
+	// names no database at all, the state a fresh scaffold is in. It never
+	// overrides a detected or picked database. An older binary ignores it.
+	DefaultService string `yaml:"default_service,omitempty"`
+
 	// KeyGeneration describes how to generate an application key if missing.
 	KeyGeneration *EnvKeyGeneration `yaml:"key_generation,omitempty"`
 }

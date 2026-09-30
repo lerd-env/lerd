@@ -646,6 +646,32 @@ func projectUsesSQLite(lerdYAMLServices map[string]bool, envMap map[string]strin
 	return frameworkServiceDetected(*fw.Env.SQLite, envMap)
 }
 
+// defaultServiceFor returns the definition's default_service when the project
+// names no database: none detected in its config, none picked, not on SQLite and
+// not on an external server. A value the definition does not wire is refused by
+// name rather than guessed at.
+func defaultServiceFor(fw *config.Framework, envMap map[string]string, picked, external map[string]bool) (string, error) {
+	def := fw.Env.DefaultService
+	if def == "" {
+		return "", nil
+	}
+	if _, ok := fw.Env.Services[def]; !ok {
+		return "", fmt.Errorf("%s declares default_service %q, which its env.services does not define; this lerd cannot wire it", fw.Label, def)
+	}
+	if userPickedDBFromYAML(picked) || externalDBPicked(external) {
+		return "", nil
+	}
+	if fw.Env.SQLite != nil && frameworkServiceDetected(*fw.Env.SQLite, envMap) {
+		return "", nil
+	}
+	for svc, sd := range fw.Env.Services {
+		if (svc == "mysql" || svc == "postgres" || config.IsDBServiceName(svc)) && len(sd.Detect) > 0 && frameworkServiceDetected(sd, envMap) {
+			return "", nil
+		}
+	}
+	return def, nil
+}
+
 func userPickedDBFromYAML(lerdYAMLServices map[string]bool) bool {
 	if lerdYAMLServices["sqlite"] || lerdYAMLServices["mysql"] || lerdYAMLServices["postgres"] {
 		return true
@@ -919,6 +945,15 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		lerdYAMLServices[dbChoice] = true
 	}
 
+	defaultSvc, err := defaultServiceFor(fw, envMap, lerdYAMLServices, extServices)
+	if err != nil {
+		return err
+	}
+	if defaultSvc != "" {
+		// Wired for this run only, like a pick; the project's own config records
+		// it from here on, so nothing is written to .lerd.yaml.
+		lerdYAMLServices[defaultSvc] = true
+	}
 	userPickedDB := userPickedDBFromYAML(lerdYAMLServices) || externalDBPicked(extServices)
 	valkeyPicked := lerdYAMLServices["valkey"]
 
@@ -972,7 +1007,11 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			if !startableFrameworkService(svc) {
 				continue
 			}
-			envApplyLine(svc, detectedFromEnv)
+			if svc == defaultSvc && envLive == nil {
+				fmt.Printf("  No database configured, using the default %s — applying lerd connection values\n", svc)
+			} else {
+				envApplyLine(svc, detectedFromEnv)
+			}
 			isDB := svc == "mysql" || svc == "postgres"
 			for _, kv := range def.Vars {
 				k, v, _ := strings.Cut(kv, "=")
