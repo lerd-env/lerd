@@ -482,7 +482,7 @@ func runClientExec(tool string, args []string) error {
 		runFlags = append(runFlags, "-v", p+":"+p)
 		mounted[p] = true
 	}
-	for _, p := range homeSpellings(home, "/home") {
+	for _, p := range config.HomeSpellings(home) {
 		addMount(p)
 	}
 	if home == "" || !pathUnder(cwd, home) {
@@ -534,23 +534,6 @@ func execFirstCommand(bins []string) string {
 		probes[i] = "command -v " + podman.ShellQuote(b)
 	}
 	return "exec $(" + strings.Join(probes, " || ") + ") \"$@\""
-}
-
-// homeSpellings returns every path that names the home directory: home itself,
-// its resolved form, and its spelling under homeRoot. On ostree hosts /home links
-// to /var/home, so a path typed through the other spelling would not exist in the
-// container unless both are mounted.
-func homeSpellings(home, homeRoot string) []string {
-	if home == "" {
-		return nil
-	}
-	out := []string{home}
-	for _, p := range []string{config.CanonicalPath(home), filepath.Join(homeRoot, filepath.Base(home))} {
-		if !slices.Contains(out, p) && config.SamePath(p, home) {
-			out = append(out, p)
-		}
-	}
-	return out
 }
 
 // clientExecBaseFlags is where a client tool's throwaway container starts: the

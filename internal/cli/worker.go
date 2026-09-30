@@ -584,7 +584,7 @@ func workerNames(siteName, sitePath, workerName string) (unit, display string) {
 		return unit, display
 	}
 	s, _ := config.FindSite(siteName)
-	if s == nil || s.Path == "" || s.Path == sitePath {
+	if s == nil || s.Path == "" || config.SamePath(s.Path, sitePath) {
 		return unit, display
 	}
 	wtBase := filepath.Base(sitePath)

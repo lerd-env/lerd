@@ -17,7 +17,7 @@ func queueSiteName(cwd string) (string, error) {
 		return "", err
 	}
 	for _, s := range reg.Sites {
-		if s.Path == cwd {
+		if config.SamePath(s.Path, cwd) {
 			return s.Name, nil
 		}
 	}

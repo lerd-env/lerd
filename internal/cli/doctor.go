@@ -622,6 +622,10 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 		}
 	}
 
+	if msg, bad := phpMountsFinding(podman.StaleQuadletMounts()); bad {
+		fail("PHP container mounts", msg, "lerd start")
+	}
+
 	if plan, planErr := cleanup.Inspect(cleanupScope(false)); planErr == nil && plan.ReclaimBytes() > 0 {
 		info("Reclaimable disk", fmt.Sprintf("at least %s (run: lerd cleanup)", humanSize(plan.ReclaimBytes())))
 		rep.fixLast(autoFix(fixCleanup, "", "reclaim disk space (lerd cleanup)"))
@@ -766,4 +770,14 @@ func printNativePHPFindings(versions []string, pins *tools.Manifest,
 		}
 		ok("PHP " + v)
 	}
+}
+
+// phpMountsFinding words the doctor failure for PHP quadlets that bind-mount a
+// folder that has gone: podman refuses to start such a container, so every site
+// on that version answers 502 until lerd start rewrites the quadlet.
+func phpMountsFinding(stale []string) (string, bool) {
+	if len(stale) == 0 {
+		return "", false
+	}
+	return "mounts folders that no longer exist, so PHP-FPM cannot start: " + strings.Join(stale, ", "), true
 }

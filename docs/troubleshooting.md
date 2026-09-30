@@ -15,6 +15,8 @@ It checks the machine, not your projects. A site's own findings, a missing datab
 lerd site:doctor acme.test
 ```
 
+Among the machine checks, `lerd doctor` fails when a PHP container still mounts a folder that no longer exists. Podman refuses to start a container whose mount source is gone, so every site on that PHP version answers 502 until `lerd start` rewrites the container without it.
+
 `lerd site:doctor` also validates the project's `.lerd.yaml`, which is what `lerd check` used to do on its own; `check` still works as a deprecated alias for it.
 
 ## Repairing findings automatically

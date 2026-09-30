@@ -131,7 +131,7 @@ func CleanupRelink(path, newName string) bool {
 		return false
 	}
 	for _, existing := range reg.Sites {
-		if existing.Path != path {
+		if !config.SamePath(existing.Path, path) {
 			continue
 		}
 		secured = secured || existing.Secured

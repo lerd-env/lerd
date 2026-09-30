@@ -70,7 +70,7 @@ func ExtraVolumePaths() []string {
 			present = append(present, p)
 		}
 	}
-	return extraVolumePaths(present, home)
+	return append(homeAliasMounts(home), extraVolumePaths(present, home)...)
 }
 
 // bindMountable reports whether a host path is safe to bind-mount into a
@@ -95,18 +95,13 @@ func bindMountable(path string) bool {
 // other path through the ancestor reduction below. Empty, non-absolute, home,
 // and under-home candidates are dropped too.
 func extraVolumePaths(candidates []string, home string) []string {
-	homePrefix := home
-	if !strings.HasSuffix(homePrefix, "/") {
-		homePrefix += "/"
-	}
-
 	seen := map[string]bool{}
 	for _, p := range candidates {
 		if !bindMountable(p) {
 			continue
 		}
 		p = filepath.Clean(p)
-		if p == home || strings.HasPrefix(p, homePrefix) {
+		if config.PathWithin(p, home) {
 			continue
 		}
 		seen[p] = true
@@ -1089,6 +1084,8 @@ func renderFPMQuadletContent(version string) (string, error) {
 // paths change so that extra volume mounts stay in sync.
 func RewriteFPMQuadlets() error {
 	extraPaths := ExtraVolumePaths()
+	home, _ := os.UserHomeDir()
+	aliases := homeAliasMounts(home)
 	versions, _ := listInstalledPHPVersions()
 
 	var changedUnits []string
@@ -1110,7 +1107,7 @@ func RewriteFPMQuadlets() error {
 		// An unchanged file is not proof the container has the mounts: an
 		// earlier writer in the same run may have written them without ever
 		// restarting the unit (#914).
-		if changed || UnitMissingMounts(unitName, extraPaths) || composerMountDrifted(unitName) {
+		if changed || UnitMissingMounts(unitName, extraPaths) || unitMissingHomeAliases(unitName, aliases) || composerMountDrifted(unitName) {
 			changedUnits = append(changedUnits, unitName)
 		}
 	}
@@ -1121,7 +1118,7 @@ func RewriteFPMQuadlets() error {
 		nginxContent = ApplyNginxPorts(nginxContent, httpPort, httpsPort)
 		nginxContent = InjectExtraVolumes(nginxContent, extraPaths)
 		if changed, err := WriteQuadletDiff("lerd-nginx", nginxContent); err == nil {
-			if changed || UnitMissingMounts("lerd-nginx", extraPaths) {
+			if changed || UnitMissingMounts("lerd-nginx", extraPaths) || unitMissingHomeAliases("lerd-nginx", aliases) {
 				changedUnits = append(changedUnits, "lerd-nginx")
 			}
 		}
@@ -1331,7 +1328,7 @@ func PathVisible(path, phpVersion string) bool {
 	if !bindMountable(path) {
 		return false
 	}
-	if home, _ := os.UserHomeDir(); home != "" && (path == home || strings.HasPrefix(path, strings.TrimSuffix(home, "/")+"/")) {
+	if home, _ := os.UserHomeDir(); home != "" && config.PathWithin(path, home) {
 		return true
 	}
 	short := strings.ReplaceAll(phpVersion, ".", "")
@@ -1339,7 +1336,13 @@ func PathVisible(path, phpVersion string) bool {
 	if err != nil {
 		return false
 	}
-	for _, line := range strings.Split(string(content), "\n") {
+	return volumeCovers(string(content), path)
+}
+
+// volumeCovers reports whether a quadlet already bind-mounts path, through its
+// own Volume line or an ancestor's.
+func volumeCovers(content, path string) bool {
+	for _, line := range strings.Split(content, "\n") {
 		spec, ok := strings.CutPrefix(strings.TrimSpace(line), "Volume=")
 		if !ok {
 			continue
@@ -1372,14 +1375,7 @@ func EnsurePathMounted(path, phpVersion string) {
 		path = root
 	}
 	home, _ := os.UserHomeDir()
-	if home == "" {
-		return
-	}
-	homePrefix := home
-	if !strings.HasSuffix(homePrefix, "/") {
-		homePrefix += "/"
-	}
-	if path == home || strings.HasPrefix(path, homePrefix) {
+	if home == "" || config.PathWithin(path, home) {
 		return
 	}
 
@@ -1437,6 +1433,11 @@ func EnsurePathMounted(path, phpVersion string) {
 			continue
 		}
 
+		// A line of its own under a mounted ancestor, a worktree inside its
+		// project, is left behind when that folder goes and stops the container.
+		if volumeCovers(string(existing), path) {
+			continue
+		}
 		updated := InjectExtraVolumes(string(existing), []string{path})
 		if updated == string(existing) {
 			continue

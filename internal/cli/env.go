@@ -1683,7 +1683,7 @@ func siteURL(path string) string {
 		return ""
 	}
 	for _, s := range reg.Sites {
-		if s.Path == path {
+		if config.SamePath(s.Path, path) {
 			scheme := "http"
 			if s.Secured {
 				scheme = "https"

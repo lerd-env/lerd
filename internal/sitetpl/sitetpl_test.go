@@ -1,8 +1,12 @@
 package sitetpl
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 func TestApplyReplacesSiteHandles(t *testing.T) {
@@ -37,5 +41,29 @@ func TestApplyNoPlaceholdersIsIdentity(t *testing.T) {
 func TestApplyEmptySiteLeavesPlaceholder(t *testing.T) {
 	if got := Apply("--db-name={{site}}", Ctx{}); got != "--db-name={{site}}" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// The database a command template names is the site's own, whichever spelling
+// of a symlinked home the project path arrives in.
+func TestDBNameFromTheOtherHomeSpelling(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	site := filepath.Join(root, "var-home", "u", "app")
+	if err := os.MkdirAll(site, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "var-home"), filepath.Join(root, "home")); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "shop", Path: site}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := DBName(filepath.Join(root, "home", "u", "app")); got != "shop" {
+		t.Errorf("DBName(linked spelling) = %q, want shop", got)
 	}
 }

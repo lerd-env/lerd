@@ -202,7 +202,7 @@ When a directory is parked or linked and another site is already registered with
 - **Same path**: treated as a re-link of the same site. The existing registration is updated and the TLS state is preserved.
 - **Different path**: the new site is registered with a numeric suffix (`myapp-2`, `myapp-3`, etc.) so both sites can coexist.
 
-Paths are compared after resolving symlinks, and the resolved path is what gets stored. On atomic images (Fedora Silverblue, Bazzite, and other ostree systems) `/home` is a symlink to `/var/home`, so linking a project through either spelling maps to the one site instead of registering it twice.
+Paths are compared after resolving symlinks, and the resolved path is what gets stored. On atomic images (Fedora Silverblue, Bazzite, and other ostree systems) `/home` is a symlink to `/var/home`, so linking a project through either spelling maps to the one site instead of registering it twice. Commands, workers and `lerd env` find the site from either spelling too, and the PHP and nginx containers mount both spellings of your home once, so a project under it never needs a mount of its own.
 
 ---
 
