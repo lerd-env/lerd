@@ -217,6 +217,10 @@ func DBTargetsFor(projectDir string) []DBTarget {
 	return out
 }
 
+// IsServerDBDriver reports whether a driver value names a database an engine
+// serves rather than a file, for callers outside this package.
+func IsServerDBDriver(v string) bool { return serverDBDriver(v) }
+
 // serverDBDriver reports whether a driver value names a database served by an
 // engine, the only kind a lerd service can hold. An unset value counts: a
 // project that names no driver is read by its host and database keys as before.

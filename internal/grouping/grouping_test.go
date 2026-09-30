@@ -483,3 +483,72 @@ func TestSetSecondarySharedDB_worktreesFollow(t *testing.T) {
 		t.Errorf("isolated worktree DB_DATABASE = %q, want admin_starlane_iso", got)
 	}
 }
+
+func sqliteSite(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	env := "DB_CONNECTION=sqlite\nDB_DATABASE=database/database.sqlite\n"
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(env), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// A SQLite site's DB_DATABASE is a file path, so writing a schema name into it
+// points the app at a file that does not exist. Sharing is refused on either
+// side, and nothing is written.
+func TestSetSecondarySharedDB_refusesAFileDatabase(t *testing.T) {
+	setup(t)
+	mainDir := siteWithEnv(t, "starlane")
+	secDir := sqliteSite(t)
+	mustAdd(t, config.Site{Name: "starlane", Domains: []string{"starlane.test"}, Path: mainDir})
+	mustAdd(t, config.Site{Name: "sq", Domains: []string{"sq.test"}, Path: secDir})
+	if err := AssignSecondary(reload(t, "starlane"), reload(t, "sq"), "admin", false); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SetSecondarySharedDB(reload(t, "sq"), true); err == nil {
+		t.Error("sharing a database with a SQLite secondary was accepted")
+	}
+	if got := envDB(t, secDir); got != "database/database.sqlite" {
+		t.Errorf("DB_DATABASE = %q, want the SQLite file left alone", got)
+	}
+	if reload(t, "sq").GroupSharedDB {
+		t.Error("GroupSharedDB was recorded for a refused share")
+	}
+}
+
+func TestAssignSecondary_sharedDBRefusesASQLiteMain(t *testing.T) {
+	setup(t)
+	mainDir := sqliteSite(t)
+	secDir := siteWithEnv(t, "admin_sq")
+	mustAdd(t, config.Site{Name: "sq", Domains: []string{"sq.test"}, Path: mainDir})
+	mustAdd(t, config.Site{Name: "admin-sq", Domains: []string{"admin-sq.test"}, Path: secDir})
+
+	if err := AssignSecondary(reload(t, "sq"), reload(t, "admin-sq"), "admin", true); err == nil {
+		t.Error("sharing a SQLite main's database was accepted")
+	}
+	if got := envDB(t, secDir); got != "admin_sq" {
+		t.Errorf("secondary DB_DATABASE = %q, want it untouched", got)
+	}
+	if reload(t, "admin-sq").IsGroupSecondary() {
+		t.Error("the refused share still grouped the site")
+	}
+}
+
+// A secondary recorded as shared by an older binary still has to come back
+// from `separate` with its SQLite file intact.
+func TestSetSecondarySharedDB_separateLeavesAFileDatabaseAlone(t *testing.T) {
+	setup(t)
+	mainDir := siteWithEnv(t, "starlane")
+	secDir := sqliteSite(t)
+	mustAdd(t, config.Site{Name: "starlane", Domains: []string{"starlane.test"}, Group: "starlane", Path: mainDir})
+	mustAdd(t, config.Site{Name: "sq", Domains: []string{"admin.starlane.test"}, Group: "starlane", GroupSubdomain: "admin", GroupSharedDB: true, Path: secDir})
+
+	if err := SetSecondarySharedDB(reload(t, "sq"), false); err != nil {
+		t.Fatalf("separate: %v", err)
+	}
+	if got := envDB(t, secDir); got != "database/database.sqlite" {
+		t.Errorf("DB_DATABASE = %q, want the SQLite file left alone", got)
+	}
+}

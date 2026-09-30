@@ -54,6 +54,8 @@ lerd group list                   # show all groups and their members
 
 `lerd group add` takes the main site (by name or domain) and the subdomain label.
 
+Sharing rewrites the secondary's `DB_DATABASE`, so it only works between sites on a database service. A site that keeps its database in a file (SQLite) cannot share one: `--share-db` and `group db share` refuse when either side is on SQLite and leave its env alone.
+
 `lerd sites`, the `lerd tui` dashboard, and `lerd group list` all show the grouping: a secondary is listed directly under its main, marked with a `↳` and a `group` label. The TUI detail pane also notes whether a site is a group main (with a secondary count) or a secondary of another site, and whether it shares the main's database.
 
 ## How it interacts with other features

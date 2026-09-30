@@ -84,6 +84,12 @@ func AssignSecondary(main, secondary *config.Site, label string, shareDB bool) e
 		return fmt.Errorf("the main site %q has a git worktree using the subdomain %q; pick another label", main.Name, label)
 	}
 
+	if shareDB {
+		if err := sharableDatabases(main, secondary); err != nil {
+			return err
+		}
+	}
+
 	mainPromoted := false
 	if main.Group == "" {
 		main.Group = main.Name
@@ -145,6 +151,11 @@ func SetSecondarySharedDB(secondary *config.Site, shareDB bool) error {
 	if main == nil {
 		return fmt.Errorf("group %q has no main site", secondary.Group)
 	}
+	if shareDB {
+		if err := sharableDatabases(main, secondary); err != nil {
+			return err
+		}
+	}
 	secondary.GroupSharedDB = shareDB
 	if err := config.AddSite(*secondary); err != nil {
 		return fmt.Errorf("updating site registry: %w", err)
@@ -155,6 +166,25 @@ func SetSecondarySharedDB(secondary *config.Site, shareDB bool) error {
 		applySharedDBEnv(secondary, config.SiteSlug(secondary.Name))
 	}
 	return nil
+}
+
+// sharableDatabases refuses a share when either site keeps its database in a
+// file: its DB_DATABASE is a path, so a schema name written there points the
+// app at a file that does not exist.
+func sharableDatabases(main, secondary *config.Site) error {
+	for _, s := range []*config.Site{main, secondary} {
+		if usesFileDatabase(s.Path) {
+			return fmt.Errorf("site %q keeps its database in a file, so the group cannot share one database", s.Name)
+		}
+	}
+	return nil
+}
+
+// usesFileDatabase reports whether the site's .env names a driver no database
+// engine serves, SQLite being the one in practice.
+func usesFileDatabase(path string) bool {
+	v := envfile.ReadKey(filepath.Join(path, ".env"), "DB_CONNECTION")
+	return v != "" && !config.IsServerDBDriver(v)
 }
 
 // MainDBName returns the database name a shared-DB secondary should use: the
@@ -190,7 +220,7 @@ func SharedDBNameFor(s *config.Site) (string, bool) {
 func applySharedDBEnv(secondary *config.Site, dbName string) {
 	envPath := filepath.Join(secondary.Path, ".env")
 	old := envfile.ReadKey(envPath, "DB_DATABASE")
-	if old == "" {
+	if old == "" || usesFileDatabase(secondary.Path) {
 		return
 	}
 	change := map[string]string{"DB_DATABASE": dbName}
