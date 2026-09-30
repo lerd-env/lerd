@@ -258,7 +258,7 @@ func TestSnapshotDumpCommand(t *testing.T) {
 		{
 			"mysql all databases",
 			SnapshotTarget{Service: "mysql", AllDatabases: true},
-			`if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi; ( dbs=$($(command -v mysql || command -v mariadb) -h 127.0.0.1 -uroot -N -e "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('mysql','information_schema','performance_schema','sys')"); [ -n "$dbs" ] || exit 0; $(command -v mysqldump || command -v mariadb-dump) -h 127.0.0.1 -uroot --single-transaction --quick --no-tablespaces --routines --triggers --events --add-drop-database --set-gtid-purged=OFF --databases $dbs ) | gzip -c`,
+			`if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi; ( dbs=$($(command -v mysql || command -v mariadb) -h 127.0.0.1 -uroot -N -e "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('mysql','information_schema','performance_schema','sys')") || exit 1; [ -n "$dbs" ] || exit 0; $(command -v mysqldump || command -v mariadb-dump) -h 127.0.0.1 -uroot --single-transaction --quick --no-tablespaces --routines --triggers --events --add-drop-database --set-gtid-purged=OFF --databases $dbs ) | gzip -c`,
 		},
 		{
 			"postgres one database",
