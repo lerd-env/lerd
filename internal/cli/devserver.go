@@ -106,7 +106,10 @@ func devServerWrapperBody(sitePath string, tool *config.DevServerTool, addr devS
 	// The wrapper is JavaScript the dev server executes and a project's own
 	// .lerd.yaml supplies its domains, so every value is encoded into a literal
 	// rather than quoted by the template.
-	nestedWorktrees := []string{filepath.ToSlash(filepath.Join(sitePath, filepath.Base(sitePath)+"-*")) + "/**"}
+	// Resolved, so the config reads the same whichever spelling of the path
+	// wrote it and a refresh does not see a change that is not there.
+	root := config.CanonicalPath(sitePath)
+	nestedWorktrees := []string{filepath.ToSlash(filepath.Join(root, filepath.Base(root)+"-*")) + "/**"}
 	literals, err := jsLiterals(importPath, devServerPublicURL(tool, addr.Origin), tool.Base, addr.Origin, addr.Hosts, nestedWorktrees, addr.Origins)
 	if err != nil {
 		return "", "", err

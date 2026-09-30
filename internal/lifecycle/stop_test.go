@@ -1,7 +1,6 @@
 package lifecycle
 
 import (
-	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/services"
 )
 
 // recorder captures the teardown as an ordered list of steps, so a test can
@@ -218,15 +218,7 @@ func TestQuit_StopsWorktreeWorkerUnits(t *testing.T) {
 	if err := config.AddSite(config.Site{Name: "app", Domains: []string{"app.test"}, Path: repo}); err != nil {
 		t.Fatal(err)
 	}
-	unitDir := config.SystemdUserDir()
-	if err := os.MkdirAll(unitDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for _, u := range []string{"lerd-vite-app-app-feat", "lerd-vite-other-app-feat"} {
-		if err := os.WriteFile(filepath.Join(unitDir, u+".service"), nil, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	seedServiceUnits(t, "lerd-vite-app-app-feat", "lerd-vite-other-app-feat")
 
 	if err := Quit(SimpleRunner, nil); err != nil {
 		t.Fatalf("Quit: %v", err)
@@ -241,15 +233,7 @@ func TestQuit_StopsWorktreeWorkerUnits(t *testing.T) {
 
 func TestStopWorktreeWorkerUnits_StopsOnlyThatWorktree(t *testing.T) {
 	rec := captureTeardown(t)
-	unitDir := config.SystemdUserDir()
-	if err := os.MkdirAll(unitDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for _, u := range []string{"lerd-vite-app-app-feat", "lerd-queue-app-app-feat", "lerd-vite-app-app-other", "lerd-vite-app"} {
-		if err := os.WriteFile(filepath.Join(unitDir, u+".service"), nil, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	seedServiceUnits(t, "lerd-vite-app-app-feat", "lerd-queue-app-app-feat", "lerd-vite-app-app-other", "lerd-vite-app")
 
 	StopWorktreeWorkerUnits("app", "app-feat")
 
@@ -263,7 +247,18 @@ func TestStopWorktreeWorkerUnits_StopsOnlyThatWorktree(t *testing.T) {
 			t.Errorf("%s belongs to something else but was stopped", other)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(unitDir, "lerd-vite-app-app-feat.service")); err != nil {
+	if !slices.Contains(services.Mgr.ListServiceUnits("lerd-vite-app-app-feat"), "lerd-vite-app-app-feat") {
 		t.Error("the unit file was removed; stopping must leave it for the watcher's cleanup")
+	}
+}
+
+// seedServiceUnits installs worker units through the platform's own manager,
+// systemd files on Linux and launchd plists on macOS, under the test's home.
+func seedServiceUnits(t *testing.T, names ...string) {
+	t.Helper()
+	for _, n := range names {
+		if err := services.Mgr.WriteServiceUnit(n, "[Service]\nExecStart=/bin/true\n"); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

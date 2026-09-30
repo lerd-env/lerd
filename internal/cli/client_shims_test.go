@@ -409,7 +409,11 @@ func TestClientExecBaseFlagsOptOutOfSELinuxLabelling(t *testing.T) {
 // On ostree hosts /home links to /var/home, so a path typed through either
 // spelling has to exist in the client container, not only the one $HOME uses.
 func TestHomeSpellings(t *testing.T) {
-	tmp := t.TempDir()
+	// Resolved first: macOS keeps temp dirs under /var, itself a symlink.
+	tmp, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	realRoot := filepath.Join(tmp, "var-home")
 	if err := os.MkdirAll(filepath.Join(realRoot, "u"), 0755); err != nil {
 		t.Fatal(err)
