@@ -852,6 +852,9 @@ func TestCheckServerDatabase(t *testing.T) {
 		writeEnv(t, dir, ".env", env)
 		restore := stubDatabaseLister(func(string) ([]string, error) { return nil, errors.New("engine down") })
 		defer restore()
+		orig := serviceInstalledFn
+		serviceInstalledFn = func(string) bool { return true }
+		defer func() { serviceInstalledFn = orig }()
 		if _, ok := checkServerDatabase(dir); ok {
 			t.Fatal("an engine that could not be queried should produce no check")
 		}
