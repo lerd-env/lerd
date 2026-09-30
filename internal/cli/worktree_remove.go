@@ -61,13 +61,17 @@ func newWorktreeRemoveCmd() *cobra.Command {
 				wtBase = filepath.Base(last)
 			}
 
+			// A worker still running writes into the tree git is deleting and
+			// makes the removal fail, so stop them first. Their units are
+			// removed below, once git has succeeded.
+			stopWorktreeUnitsFn(site.Name, wtBase)
 			if err := runGitWorktreeRemove(args); err != nil {
 				return err
 			}
 
-			// Stop any per-worktree worker units before they restart-loop
-			// against the now-deleted WorkingDirectory. Best-effort — a
-			// failure here is a warning, not a hard error.
+			// Remove the per-worktree worker units so they cannot restart-loop
+			// against the now-deleted WorkingDirectory. Best-effort, a failure
+			// here is a warning, not a hard error.
 			if wtBase != "" {
 				if err := StopAllWorkersForWorktree(site.Name, wtBase); err != nil {
 					feedback.Warn("stopping worktree workers: %v", err)

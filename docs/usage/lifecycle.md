@@ -164,11 +164,12 @@ lerd quit
 The full off-switch:
 
 1. Runs everything `lerd stop` does.
-2. Stops `lerd-ui` (Web UI).
-3. Stops `lerd-watcher`.
-4. Kills the system tray process.
-5. Stops the `lerd-dns` forwarder. Unlike `lerd stop`, quit is a full teardown, so it takes DNS down too. The watcher is stopped first (step 3) because it is the only thing that would restart `lerd-dns`.
-6. **macOS only:** stops the Podman Machine VM.
+2. Stops the workers of every site's git worktrees, which `lerd stop` leaves running. Their units are kept, so the next `lerd start` brings them back.
+3. Stops `lerd-ui` (Web UI).
+4. Stops `lerd-watcher`.
+5. Kills the system tray process.
+6. Stops the `lerd-dns` forwarder. Unlike `lerd stop`, quit is a full teardown, so it takes DNS down too. The watcher is stopped first (step 4) because it is the only thing that would restart `lerd-dns`.
+7. **macOS only:** stops the Podman Machine VM.
 
 After `lerd quit` there are no lerd processes left running. On macOS the Podman Machine VM is also shut down, so `lerd start` will bring it back up on the next run. This is the right command before a reinstall or before pulling a major update. Before a reboot it is optional on macOS, where the watcher now runs the same teardown for you.
 

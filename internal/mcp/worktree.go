@@ -11,6 +11,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
+	"github.com/geodro/lerd/internal/lifecycle"
 )
 
 // worktreeTool returns the MCP tool descriptor for the worktree dispatcher.
@@ -289,6 +290,9 @@ func execWorktreeRemove(args map[string]any) (any, *rpcError) {
 		gitArgs = append(gitArgs, "--force")
 	}
 	gitArgs = append(gitArgs, wtPath)
+	// A worker still running writes into the tree git is deleting (Vite's
+	// cache) and makes the removal fail; the watcher removes the units after.
+	lifecycle.StopWorktreeWorkerUnits(site.Name, filepath.Base(wtPath))
 	out, err := runIn(site.Path, "git", gitArgs...)
 	if err != nil {
 		return toolErr("git " + strings.Join(gitArgs, " ") + ": " + out), nil

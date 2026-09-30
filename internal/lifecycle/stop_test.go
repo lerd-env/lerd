@@ -1,6 +1,8 @@
 package lifecycle
 
 import (
+	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -194,5 +196,74 @@ func TestQuit_NilHookIsSkipped(t *testing.T) {
 	}
 	if !rec.contains("podman-machine") {
 		t.Error("Quit must still stop the VM with no hook set")
+	}
+}
+
+// A worktree's workers run under their own units (lerd-<worker>-<site>-<slug>),
+// which no registry list names. `lerd quit` is the full teardown, so it has to
+// find them through the site's worktrees or they outlive it.
+func TestQuit_StopsWorktreeWorkerUnits(t *testing.T) {
+	rec := captureTeardown(t)
+
+	repo := filepath.Join(t.TempDir(), "app")
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main", repo},
+		{"-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"},
+		{"-C", repo, "worktree", "add", "-q", filepath.Join(repo, "app-feat"), "-b", "feat"},
+	} {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	if err := config.AddSite(config.Site{Name: "app", Domains: []string{"app.test"}, Path: repo}); err != nil {
+		t.Fatal(err)
+	}
+	unitDir := config.SystemdUserDir()
+	if err := os.MkdirAll(unitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range []string{"lerd-vite-app-app-feat", "lerd-vite-other-app-feat"} {
+		if err := os.WriteFile(filepath.Join(unitDir, u+".service"), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := Quit(SimpleRunner, nil); err != nil {
+		t.Fatalf("Quit: %v", err)
+	}
+	if !rec.contains("lerd-vite-app-app-feat") {
+		t.Errorf("`lerd quit` left the worktree's worker running; stopped %v", rec.steps)
+	}
+	if rec.contains("lerd-vite-other-app-feat") {
+		t.Error("`lerd quit` stopped a unit belonging to another site")
+	}
+}
+
+func TestStopWorktreeWorkerUnits_StopsOnlyThatWorktree(t *testing.T) {
+	rec := captureTeardown(t)
+	unitDir := config.SystemdUserDir()
+	if err := os.MkdirAll(unitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range []string{"lerd-vite-app-app-feat", "lerd-queue-app-app-feat", "lerd-vite-app-app-other", "lerd-vite-app"} {
+		if err := os.WriteFile(filepath.Join(unitDir, u+".service"), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	StopWorktreeWorkerUnits("app", "app-feat")
+
+	for _, want := range []string{"lerd-vite-app-app-feat", "lerd-queue-app-app-feat"} {
+		if !rec.contains(want) {
+			t.Errorf("%s was not stopped; stopped %v", want, rec.steps)
+		}
+	}
+	for _, other := range []string{"lerd-vite-app-app-other", "lerd-vite-app"} {
+		if rec.contains(other) {
+			t.Errorf("%s belongs to something else but was stopped", other)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(unitDir, "lerd-vite-app-app-feat.service")); err != nil {
+		t.Error("the unit file was removed; stopping must leave it for the watcher's cleanup")
 	}
 }

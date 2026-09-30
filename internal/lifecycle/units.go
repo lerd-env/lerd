@@ -1,10 +1,12 @@
 package lifecycle
 
 import (
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	gitpkg "github.com/geodro/lerd/internal/git"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
@@ -184,6 +186,46 @@ func RegisteredFrameworkWorkerUnits() []string {
 		// drifted command, so start can only ever launch the approved one.
 		if s.IsHostProxy() && proj.Proxy != nil && proj.Proxy.Command != "" {
 			out = append(out, config.HostProxyWorkerUnit(s.Name))
+		}
+	}
+	return out
+}
+
+// RegisteredWorktreeWorkerUnits returns the worker units of every registered
+// site's git worktrees, named lerd-<worker>-<site>-<slug>. No registry list
+// names them, so they are found through each site's worktrees.
+func RegisteredWorktreeWorkerUnits() []string {
+	reg, err := config.LoadSites()
+	if err != nil || reg == nil {
+		return nil
+	}
+	var out []string
+	for _, s := range reg.Sites {
+		if s.Ignored {
+			continue
+		}
+		wts, err := gitpkg.ServableWorktrees(s.Path, s.PrimaryDomain())
+		if err != nil {
+			continue
+		}
+		for _, wt := range wts {
+			out = append(out, WorktreeWorkerUnits(s.Name, filepath.Base(wt.Path))...)
+		}
+	}
+	return out
+}
+
+// WorktreeWorkerUnits returns the worker units of one worktree, identified by
+// its site and the base name of its checkout directory.
+func WorktreeWorkerUnits(siteName, wtBase string) []string {
+	if siteName == "" || wtBase == "" {
+		return nil
+	}
+	suffix := "-" + siteName + "-" + config.WorktreeUnitSlug(wtBase)
+	var out []string
+	for _, u := range services.Mgr.ListServiceUnits("lerd-*" + suffix) {
+		if strings.HasSuffix(u, suffix) {
+			out = append(out, u)
 		}
 	}
 	return out
