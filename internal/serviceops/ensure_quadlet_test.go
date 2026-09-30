@@ -510,7 +510,7 @@ func TestEnsureCustomServiceQuadlet_shiftsWhileUnitRestartsOnABindFailure(t *tes
 	ensureUnitStatus = func(string) (string, error) { return "activating", nil }
 	origRunning := ensureContainerRunning
 	t.Cleanup(func() { ensureContainerRunning = origRunning })
-	ensureContainerRunning = func(string) bool { return false }
+	ensureContainerRunning = func(string) (bool, bool) { return false, true }
 
 	squatter, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -532,7 +532,7 @@ func TestEnsureCustomServiceQuadlet_shiftsWhileUnitRestartsOnABindFailure(t *tes
 	}
 
 	// A service whose container is genuinely up owns the port: never move it.
-	ensureContainerRunning = func(string) bool { return true }
+	ensureContainerRunning = func(string) (bool, bool) { return true, true }
 	ensureUnitStatus = func(string) (string, error) { return "active", nil }
 	if err := persistPublishedPort("held", taken); err != nil {
 		t.Fatalf("persistPublishedPort: %v", err)
@@ -547,5 +547,47 @@ func TestEnsureCustomServiceQuadlet_shiftsWhileUnitRestartsOnABindFailure(t *tes
 	}
 	if got := config.ServicePublishedPort("held"); got != taken {
 		t.Errorf("published port = %d, want the running service left on its own %d", got, taken)
+	}
+}
+
+// When podman cannot be asked (the machine VM restarting or stalled), the ports
+// it forwards stay bound on the host, so the service's own port fails the bind
+// test. Not knowing who holds it is not evidence someone else does: moving on
+// that guess shuffled every service up a port each time the VM hiccuped.
+func TestEnsureCustomServiceQuadlet_keepsPortWhilePodmanUnreachable(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(tmp, "data"))
+
+	orig := podman.DaemonReloadFn
+	t.Cleanup(func() { podman.DaemonReloadFn = orig })
+	podman.DaemonReloadFn = func() error { return nil }
+	origStatus := ensureUnitStatus
+	t.Cleanup(func() { ensureUnitStatus = origStatus })
+	ensureUnitStatus = func(string) (string, error) { return "inactive", nil }
+	origRunning := ensureContainerRunning
+	t.Cleanup(func() { ensureContainerRunning = origRunning })
+	ensureContainerRunning = func(string) (bool, bool) { return false, false }
+
+	held, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("cannot bind a loopback port: %v", err)
+	}
+	defer held.Close()
+	port := held.Addr().(*net.TCPAddr).Port
+	if err := persistPublishedPort("db", port); err != nil {
+		t.Fatalf("persistPublishedPort: %v", err)
+	}
+	svc := &config.CustomService{
+		Name:  "db",
+		Image: "example/db:1",
+		Ports: []string{fmt.Sprintf("127.0.0.1:%d:3306", port)},
+	}
+	if err := EnsureCustomServiceQuadlet(svc); err != nil {
+		t.Fatalf("EnsureCustomServiceQuadlet: %v", err)
+	}
+	if got := config.ServicePublishedPort("db"); got != port {
+		t.Errorf("published port = %d, want %d kept while podman cannot say who holds it", got, port)
 	}
 }

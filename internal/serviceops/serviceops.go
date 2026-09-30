@@ -159,7 +159,7 @@ func unitActive(name string) bool {
 
 // ensureContainerRunning is the seam the port guard reads container state
 // through, so tests decide it instead of inheriting the live runtime.
-var ensureContainerRunning = podman.ContainerRunningQuiet
+var ensureContainerRunning = podman.ContainerRunningKnown
 
 // holdsItsPort reports whether a service is itself the owner of the port it
 // publishes, which is what stops the guard from treating its own listener as a
@@ -167,8 +167,16 @@ var ensureContainerRunning = podman.ContainerRunningQuiet
 // a unit that cannot bind is restarted by systemd and reads as "activating"
 // throughout, so the unit state alone would name a service that cannot start as
 // the owner of the port it cannot bind, and the guard would never move it.
+//
+// A podman that cannot be asked (the VM restarting or stalled) still forwards
+// the ports it held, so the bind test fails on the service's own port. Not
+// knowing is no evidence of a foreign owner, and guessing moved every service.
 func holdsItsPort(name string) bool {
-	return unitActive(name) && ensureContainerRunning("lerd-"+name)
+	running, known := ensureContainerRunning("lerd-" + name)
+	if !known {
+		return true
+	}
+	return unitActive(name) && running
 }
 
 // maybeShiftPublishedPort decides whether a service whose primary host port is

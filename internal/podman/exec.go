@@ -305,6 +305,17 @@ func ContainerRunning(name string) (bool, error) {
 	return strings.TrimSpace(out) == "true", nil
 }
 
+// ContainerRunningKnown is ContainerRunning that tells a missing container
+// apart from a podman that could not be asked: known is false when inspect
+// failed for any reason other than the container not existing.
+func ContainerRunningKnown(name string) (running, known bool) {
+	out, err := Run("inspect", "--format={{.State.Running}}", name)
+	if err != nil {
+		return false, strings.Contains(err.Error(), "no such")
+	}
+	return strings.TrimSpace(out) == "true", true
+}
+
 // ContainerStartedAt returns the running container's last start time and whether
 // it is currently running. A stopped or missing container reports (zero, false).
 // Used to tell whether a bind-mounted config file has been rewritten since the
