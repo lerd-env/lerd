@@ -755,12 +755,15 @@ func composerInContainer(dir string, args ...string) error {
 		cfg, _ := config.LoadGlobal()
 		version = cfg.PHP.DefaultVersion
 	}
+	composerPhar := composer.PharPath()
+	if took, err := execOnHostIfNative(dir, append([]string{"php", composerPhar}, args...), "COMPOSER_HOME="+composerHomeDir()); took {
+		return err
+	}
 	container := fpmContainerForDir(dir, version)
 
 	podman.EnsurePathMounted(dir, version)
 
 	home := os.Getenv("HOME")
-	composerPhar := composer.PharPath()
 
 	cmdArgs := []string{"exec", "-i", "-w", dir,
 		"--env", "HOME=" + home,
@@ -810,6 +813,11 @@ func execInContainer(dir, command string) error {
 	if err != nil {
 		cfg, _ := config.LoadGlobal()
 		version = cfg.PHP.DefaultVersion
+	}
+	if parts := strings.Fields(command); len(parts) > 0 {
+		if took, err := execOnHostIfNative(dir, parts); took {
+			return err
+		}
 	}
 	container := fpmContainerForDir(dir, version)
 	podman.EnsurePathMounted(dir, version)

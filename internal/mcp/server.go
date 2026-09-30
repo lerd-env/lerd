@@ -338,15 +338,22 @@ func execArtisan(args map[string]any) (any, *rpcError) {
 		return toolErr(err.Error()), nil
 	}
 
+	consoleCmd, err := config.GetConsoleCommand(projectPath)
+	if err != nil {
+		return toolErr(err.Error()), nil
+	}
+	if nativeRuntime() {
+		var out bytes.Buffer
+		if err := runOnHost(projectPath, append([]string{"php", consoleCmd}, artisanArgs...), &out); err != nil {
+			return toolErr(fmt.Sprintf("artisan failed (%v):\n%s", err, stripANSI(out.String()))), nil
+		}
+		return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
+	}
+
 	short := strings.ReplaceAll(phpVersion, ".", "")
 	container := phpDet.FPMContainerForDir(projectPath, phpVersion)
 	if errBody := ensureFPMStartedMCP(phpVersion, short, container); errBody != nil {
 		return errBody, nil
-	}
-
-	consoleCmd, err := config.GetConsoleCommand(projectPath)
-	if err != nil {
-		return toolErr(err.Error()), nil
 	}
 
 	// No -it flags — non-interactive, output captured to buffer.
@@ -909,6 +916,14 @@ func execComposer(args map[string]any) (any, *rpcError) {
 		return toolErr(err.Error()), nil
 	}
 
+	if nativeRuntime() {
+		var out bytes.Buffer
+		if err := runOnHost(projectPath, append([]string{"php", composer.PharPath()}, composerArgs...), &out, composer.ProcessTimeoutEnv()); err != nil {
+			return toolErr(fmt.Sprintf("composer failed (%v):\n%s", err, stripANSI(out.String()))), nil
+		}
+		return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
+	}
+
 	short := strings.ReplaceAll(phpVersion, ".", "")
 	container := phpDet.FPMContainerForDir(projectPath, phpVersion)
 	if errBody := ensureFPMStartedMCP(phpVersion, short, container); errBody != nil {
@@ -977,6 +992,14 @@ func execVendorRun(args map[string]any) (any, *rpcError) {
 	phpVersion, err := phpDet.VersionForDir(projectPath)
 	if err != nil {
 		return toolErr(err.Error()), nil
+	}
+
+	if nativeRuntime() {
+		var out bytes.Buffer
+		if err := runOnHost(projectPath, append([]string{"php", "vendor/bin/" + bin}, binArgs...), &out); err != nil {
+			return toolErr(fmt.Sprintf("vendor/bin/%s failed (%v):\n%s", bin, err, stripANSI(out.String()))), nil
+		}
+		return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
 	}
 
 	short := strings.ReplaceAll(phpVersion, ".", "")
@@ -3806,9 +3829,11 @@ func runComposerInstallIfNeeded(projectPath string, out *bytes.Buffer) error {
 	if err != nil || phpVersion == "" {
 		return fmt.Errorf("could not determine PHP version: %w", err)
 	}
-	container := phpDet.FPMContainerForDir(projectPath, phpVersion)
-
 	out.WriteString("\n\n--- composer install ---\n")
+	if nativeRuntime() {
+		return runOnHost(projectPath, []string{"php", composer.PharPath(), "install", "--no-interaction"}, out, composer.ProcessTimeoutEnv())
+	}
+	container := phpDet.FPMContainerForDir(projectPath, phpVersion)
 	cmd := podman.Cmd(composerExecArgs(container, projectPath, nil, []string{"install", "--no-interaction"})...)
 	cmd.Stdout = out
 	cmd.Stderr = out
@@ -3845,9 +3870,12 @@ func execSetup(args map[string]any) (any, *rpcError) {
 	if phpErr != nil || phpVersion == "" {
 		return toolErr("could not determine PHP version"), nil
 	}
+	native := nativeRuntime()
 	container := phpDet.FPMContainerForDir(projectPath, phpVersion)
-	if errBody := ensureFPMStartedMCP(phpVersion, strings.ReplaceAll(phpVersion, ".", ""), container); errBody != nil {
-		return errBody, nil
+	if !native {
+		if errBody := ensureFPMStartedMCP(phpVersion, strings.ReplaceAll(phpVersion, ".", ""), container); errBody != nil {
+			return errBody, nil
+		}
 	}
 
 	var out bytes.Buffer
@@ -3866,11 +3894,16 @@ func execSetup(args map[string]any) (any, *rpcError) {
 			continue
 		}
 		fmt.Fprintf(&out, "\n--- %s ---\n", step.Label)
-		cmdArgs := append([]string{"exec", "-i", "-w", projectPath, container}, parts...)
-		cmd := podman.Cmd(cmdArgs...)
-		cmd.Stdout = &out
-		cmd.Stderr = &out
-		if err := cmd.Run(); err != nil {
+		var runErr error
+		if native {
+			runErr = runOnHost(projectPath, parts, &out)
+		} else {
+			cmd := podman.Cmd(append([]string{"exec", "-i", "-w", projectPath, container}, parts...)...)
+			cmd.Stdout = &out
+			cmd.Stderr = &out
+			runErr = cmd.Run()
+		}
+		if err := runErr; err != nil {
 			fmt.Fprintf(&out, "[WARN] %s failed: %v\n", step.Label, err)
 			failed++
 			continue

@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/agentenv"
-	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envpass"
+	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/podman"
 	"golang.org/x/term"
 )
@@ -128,7 +128,7 @@ func runVendorBinDirect(cwd, rel string, args []string) error {
 // composer binaries first, so a wrapper calling a sibling finds it the way it
 // would in the container, then lerd's shim dir, which is where php comes from.
 func hostVendorBinPath(cwd string) string {
-	return filepath.Join(cwd, "vendor", "bin") + string(os.PathListSeparator) + config.PathWithBinDir()
+	return nativephp.HostPath(cwd)
 }
 
 // RunHostVendorBin runs a composer binary on the host rather than in the

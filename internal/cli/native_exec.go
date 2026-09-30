@@ -71,6 +71,24 @@ func runNativePHP(cwd, phpVersion string, args []string, extraEnv []string) (int
 	return 0, nil
 }
 
+// runHostExec runs a command built by execOnHostIfNative; a var so tests can
+// see what would run without a real php.
+var runHostExec = func(c *exec.Cmd) error { return c.Run() }
+
+// execOnHostIfNative runs argv on the host in place of a podman exec when the
+// native runtime serves dir, and reports whether it did.
+func execOnHostIfNative(dir string, argv []string, extraEnv ...string) (bool, error) {
+	if _, ok := nativeRuntimeVersion(dir); !ok {
+		return false, nil
+	}
+	c, err := nativephp.HostCommand(dir, argv, extraEnv...)
+	if err != nil {
+		return true, err
+	}
+	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+	return true, runHostExec(c)
+}
+
 // nativeShellRefusal returns the error `lerd shell` should fail with under the
 // native runtime, or nil when a container shell is available. The shell exists
 // to put you inside the FPM container; under this runtime there is not one, and

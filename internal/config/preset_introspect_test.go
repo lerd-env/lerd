@@ -85,3 +85,38 @@ func TestMysqlDumpsRestoreOntoAGTIDServer(t *testing.T) {
 		}
 	}
 }
+
+// MySQL 9 refuses any statement touching its system schema, and a dump of
+// --all-databases with --add-drop-database opens that schema's section with
+// DROP DATABASE `mysql`, so a service-wide snapshot could not be restored. New
+// dumps name the user databases instead, and the import drops the system
+// schema's section from dumps taken before that.
+func TestMysqlServiceWideSnapshotSkipsTheSystemSchema(t *testing.T) {
+	p, err := LoadPreset("mysql")
+	if err != nil {
+		t.Fatalf("loading the mysql preset: %v", err)
+	}
+	spec := p.Introspect.DatabasesEntity()
+	export := spec.Actions["export_all"].Exec
+	if strings.Contains(export, "--all-databases") {
+		t.Errorf("export_all still dumps the system schemas: %s", export)
+	}
+	for _, schema := range []string{"'mysql'", "'information_schema'", "'performance_schema'", "'sys'"} {
+		if !strings.Contains(export, schema) {
+			t.Errorf("export_all does not leave %s out: %s", schema, export)
+		}
+	}
+
+	dump := "-- Current Database: `app`\nA\n-- Current Database: `mysql`\nDROP DATABASE IF EXISTS `mysql`;\nM\n-- Current Database: `other`\nO\n"
+	filter, _, _ := strings.Cut(spec.Actions["import_all"].Exec, " | ")
+	cmd := exec.Command("sh", "-c", filter)
+	cmd.Stdin = strings.NewReader(dump)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("import_all filter: %v", err)
+	}
+	want := "-- Current Database: `app`\nA\n-- Current Database: `other`\nO\n"
+	if string(out) != want {
+		t.Errorf("import_all filter left %q, want %q", out, want)
+	}
+}
