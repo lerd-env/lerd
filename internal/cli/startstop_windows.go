@@ -5,6 +5,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -15,13 +16,6 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
-)
-
-// machineProviderEnv is how Podman 5+ selects its VM backend. lerd pins Hyper-V
-// so nothing depends on WSL2, the provider Podman picks by default on Windows.
-const (
-	machineProviderEnv = "CONTAINERS_MACHINE_PROVIDER"
-	machineProviderVal = "hyperv"
 )
 
 // migrateExecWorkerPlists is a no-op: Windows never had plist-based workers.
@@ -56,8 +50,8 @@ func hostMemoryGiB() int {
 }
 
 // machineInitArgs builds `podman machine init`. A rootful machine is needed to
-// publish ports 80 and 443. Host drives are not mounted by flag here: Hyper-V
-// machines share them through Podman's own mechanism.
+// publish ports 80 and 443. Host drives are not mounted by flag here: both the
+// Hyper-V and WSL providers already expose C:\ at /mnt/c.
 func machineInitArgs(name string, targetMemoryMiB int64) []string {
 	args := []string{"machine", "init", "--rootful"}
 	if targetMemoryMiB > 0 {
@@ -69,27 +63,55 @@ func machineInitArgs(name string, targetMemoryMiB int64) []string {
 	return args
 }
 
-// ensurePodmanMachineRunning brings the Hyper-V machine up: creates it on first
-// run, makes it rootful and big enough, starts it, then waits for the API.
+// ensurePodmanMachineRunning brings the machine up on the provider the host
+// supports and, on WSL, makes sure containers can actually start in it. Both
+// lerd install and lerd start pass through here, so a machine broken by a WSL
+// update is repaired on the next start too. A host with nothing ready stops
+// here with the steps to enable a backend.
 func ensurePodmanMachineRunning() error {
-	if err := os.Setenv(machineProviderEnv, machineProviderVal); err != nil {
+	if _, err := exec.LookPath("podman"); err != nil {
+		return podmanMissingError()
+	}
+	provider, offerHyperV, err := machineProvider()
+	if err != nil {
 		return err
 	}
+	if err := os.Setenv(machineProviderEnv, provider); err != nil {
+		return err
+	}
+	if err := bringMachineUp(provider, offerHyperV); err != nil {
+		return err
+	}
+	if provider == machineProviderWSL {
+		return ensureWSLContainersRun()
+	}
+	return nil
+}
+
+// bringMachineUp creates the machine on first run, makes it rootful and big
+// enough, starts it, then waits for the API.
+func bringMachineUp(provider string, offerHyperV bool) error {
 	name, running, rootful := selectedMachineState()
 
 	cfg, _ := config.LoadGlobal()
 	execMode := cfg != nil && cfg.WorkerExecMode() != config.WorkerExecModeContainer
-	targetMiB := recommendedVMMemoryMiB(hostMemoryGiB(), execMode)
+	targetMiB := machineMemoryFor(provider, recommendedVMMemoryMiB(hostMemoryGiB(), execMode))
 
 	if name == "" {
-		feedback.Line("Initialising Podman Machine (first run, this may take a minute)…")
+		if offerHyperV && askHyperVOverWSL() {
+			return hyperVSwitchError()
+		}
+		feedback.Line(fmt.Sprintf("Initialising Podman Machine on %s (first run, this may take a minute)…", provider))
 		cmd := podman.Cmd(machineInitArgs("", targetMiB)...)
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("podman machine init (Hyper-V needs an elevated shell and the Hyper-V feature enabled): %w", err)
+			return fmt.Errorf("podman machine init (%s): %w", machineInitHint(provider), err)
+		}
+		if err := rememberMachineProvider(provider); err != nil {
+			feedback.Warn("could not save the machine provider (%v); set %s=%s if lerd loses the machine", err, machineProviderEnv, provider)
 		}
 	} else {
-		needsMemory := machineMemoryMiB(name) > 0 && machineMemoryMiB(name) < targetMiB
+		needsMemory := targetMiB > 0 && machineMemoryMiB(name) > 0 && machineMemoryMiB(name) < targetMiB
 		if rootful && !needsMemory && running {
 			return nil
 		}
