@@ -165,6 +165,7 @@ export default defineConfig({
             { text: 'Winter CMS', link: '/getting-started/winter' },
             { text: 'Bedrock', link: '/getting-started/bedrock' },
             { text: 'Lumen', link: '/getting-started/lumen' },
+            { text: 'Yii', link: '/getting-started/yii' },
             { text: 'Tempest', link: '/getting-started/tempest' },
             { text: 'Magento', link: '/getting-started/magento' },
             { text: 'Containers (Node, Python, Go, …)', link: '/getting-started/containers' },
