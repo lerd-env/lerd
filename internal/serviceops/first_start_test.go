@@ -96,3 +96,29 @@ func TestWaitReadyFirstStart_ReadyClearsThePendingMark(t *testing.T) {
 		t.Error("the pending mark stayed after the first successful start")
 	}
 }
+
+// A service whose image never arrived wrote nothing, so an empty directory is
+// not a half-written one: there is nothing to move aside or retry on.
+func TestWaitReadyFirstStart_LeavesAnEmptyDirectoryAlone(t *testing.T) {
+	dir := firstStartFixture(t, "valkey")
+	if err := os.Remove(filepath.Join(dir, "ibdata1")); err != nil {
+		t.Fatal(err)
+	}
+	config.MarkFirstStartPending("valkey")
+	starts := 0
+	firstStartStart = func(string) error { starts++; return nil }
+	firstStartReady = func(string, time.Duration) error { return errors.New("valkey did not become ready") }
+
+	if err := waitReadyFirstStart("valkey", time.Second); err == nil {
+		t.Fatal("an unready service reported ready")
+	}
+	if got := asideDirs(t, dir); len(got) != 0 {
+		t.Errorf("aside dirs = %v, want none for an empty directory", got)
+	}
+	if starts != 0 {
+		t.Errorf("started %d more times, want no retry", starts)
+	}
+	if !config.FirstStartPending("valkey") {
+		t.Error("first start no longer pending, a later start could not recover")
+	}
+}

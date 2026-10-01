@@ -31,6 +31,11 @@ func waitReadyFirstStart(name string, timeout time.Duration) error {
 		return err
 	}
 	dir := config.DataSubDir(name)
+	// An empty directory was never initialised, as when the image could not be
+	// pulled, so there is nothing half-written to move aside.
+	if entries, rerr := os.ReadDir(dir); rerr == nil && len(entries) == 0 {
+		return err
+	}
 	aside := fmt.Sprintf("%s.incomplete-first-start-%s", dir, time.Now().Format("20060102-150405"))
 	unit := "lerd-" + name
 	_ = firstStartStop(unit)
