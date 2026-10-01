@@ -1,0 +1,83 @@
+---
+title: Windows (native, experimental)
+description: Run lerd natively on Windows, using a Podman machine on Hyper-V or WSL2, a built-in DNS answerer and a Windows service manager.
+---
+
+# Windows (native, experimental)
+
+Lerd builds and runs natively on Windows, with no Linux distro to manage. Containers run in a Podman machine on Hyper-V, or on WSL2 where Hyper-V is unavailable, `.test` names are answered by a small DNS server built into lerd, and lerd's own processes are supervised by a Windows service manager instead of systemd or launchd.
+
+::: warning Experimental
+The native build is under active development and is **not** ready for daily use. Sites, workers and the PHP and Composer shims are not finished yet, see [What is missing](#what-is-missing). If you want something that works today, use [Windows (WSL2)](/getting-started/wsl2).
+:::
+
+## Requirements
+
+- Windows 10 or 11. Lerd creates its Podman machine on **Hyper-V** when the host has it, and falls back to **WSL2** when it does not, which covers Windows Home.
+- For Hyper-V (Pro, Enterprise or Education), enable the feature from an elevated PowerShell, then reboot:
+
+  ```powershell
+  Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
+  ```
+
+- For the WSL2 fallback, install WSL from an elevated PowerShell, then reboot. Podman brings its own distro for the machine, so no Ubuntu is needed:
+
+  ```powershell
+  wsl --install --no-distribution
+  ```
+
+- The **Podman CLI** (not Podman Desktop) on your `PATH`, for example with `winget install RedHat.Podman`. Lerd drives `podman` and `podman machine` directly, and Podman Desktop would create a machine of its own.
+- An elevated PowerShell for the first `lerd install`. Writing the DNS rule needs administrator rights, and so does creating a Hyper-V machine.
+
+You do not have to work out which of these applies. On its first run `lerd install` checks the Windows edition and which backends are installed before it changes anything. If neither is ready it stops and prints the command for the one your edition supports, Hyper-V on Pro, Enterprise and Education with WSL2 as the alternative, WSL2 alone on Home, and asks you to reboot and run `lerd install` again. The same happens when Podman itself is missing, and when WSL is installed but Windows cannot start virtual machines because the Host Compute Service is missing, in which case it prints the commands that repair the Virtual Machine Platform.
+
+### Choosing the provider
+
+When both are ready, Hyper-V is used. When WSL2 is already installed and the edition supports Hyper-V but it is not enabled, `lerd install` lays out both options and asks which to use, recommending Hyper-V:
+
+| | Hyper-V (recommended) | WSL2 |
+| --- | --- | --- |
+| Getting started | enable the feature and reboot first | works right away |
+| Creating the machine | needs an elevated shell | no elevation |
+| Isolation | its own VM, `wsl --shutdown` leaves your sites running | shares the WSL2 VM, `wsl --shutdown` stops your sites |
+| Memory | sized by lerd for the PC | set by your `.wslconfig` |
+
+Choosing Hyper-V stops the install with the command to enable it, then you reboot and run `lerd install` again. Choosing WSL2 carries on and is saved, so you are not asked again. With no terminal to ask on, as in a scripted install, lerd carries on with WSL2.
+
+### WSL 3 and cgroups
+
+WSL 3 places the machine in a cgroup that does not hand the `pids` controller down, so with Podman's default systemd cgroup manager no container can start, failing with `crun: controller 'pids' is not available` ([podman#29749](https://github.com/podman-container-tools/podman/issues/29749)). On a WSL machine, `lerd install` and `lerd start` start a throwaway container first, and when it fails this way they switch the machine to the `cgroupfs` manager with a drop-in at `/etc/containers/containers.conf.d/90-lerd-wsl-cgroupfs.conf`. The drop-in lives on the machine's disk, so it is applied once, and a machine that runs containers fine is left untouched.
+
+Lerd saves the provider it created the machine with as `machine.provider` in the global config, so it keeps using that machine even if Hyper-V is turned on or off later. To pick one yourself before the first install, set `CONTAINERS_MACHINE_PROVIDER` to `hyperv` or `wsl`, or set `machine.provider` in the config. Any other value is refused.
+
+## How it works
+
+| Piece | On Linux | On Windows |
+| --- | --- | --- |
+| Containers | rootless Podman | a rootful Podman machine on Hyper-V, or WSL2 without it |
+| Service supervision | systemd user units | a Windows service manager, unit definitions under the lerd data dir |
+| `.test` DNS | dnsmasq container | `lerd dns-serve`, a built-in answerer on `127.0.0.1:53` |
+| DNS routing | systemd-resolved | a DNS Client NRPT rule for `.test` |
+| Login start | `lerd autostart` | a `Run` registry entry, on by default |
+| Site paths in containers | the same path | `C:\Sites\app` becomes `/mnt/c/Sites/app` inside the machine |
+
+Config lives under `%APPDATA%\lerd` and data under `%LOCALAPPDATA%\lerd`. Setting `XDG_CONFIG_HOME` or `XDG_DATA_HOME` overrides both, which is how the test suite isolates itself.
+
+The DNS server reads the same `lerd.conf` a dnsmasq container would, so anything that rewrites that file keeps working. It answers `A` and `AAAA` for the configured TLD over UDP and TCP and refuses every other name, which is fine because the NRPT rule only sends `.test` queries to it.
+
+## What is missing
+
+- **Workers.** Queue, schedule, Horizon and the other framework workers are disabled on Windows. They bind-mount the site at its own path and run through shell guard scripts, which need the path mapping and a Windows script format.
+- **Shims.** The `php`, `composer` and `node` shims are shell scripts and have no Windows form yet.
+- **Tool downloads.** mise, mkcert and phpantom have no Windows builds wired in yet.
+- **Scheduled workers.** There is no timer equivalent in the service manager.
+- **Unverified path mapping.** The `/mnt/c` mapping matches Podman's own default mount, but it has had little testing on either provider.
+
+## Removing it
+
+```powershell
+lerd uninstall
+podman machine rm -f
+```
+
+`lerd install` also writes `lerd-cleanup.ps1` next to the lerd binary, which removes containers, the login entry and the DNS rule if the binary is already gone.

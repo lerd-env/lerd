@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -73,8 +74,8 @@ func TestEditorCmd_runsInItsOwnSession(t *testing.T) {
 	defer null.Close()
 
 	cmd := editorCmd([]string{"phpstorm", "/home/u/site"}, null)
-	if cmd.SysProcAttr == nil || !cmd.SysProcAttr.Setsid {
-		t.Error("editor must be started with Setsid so a closed terminal cannot kill it")
+	if !reflect.DeepEqual(cmd.SysProcAttr, detachedSysProcAttr()) {
+		t.Error("editor must be started detached so a closed terminal cannot kill it")
 	}
 	if cmd.Stdout != null || cmd.Stderr != null || cmd.Stdin != null {
 		t.Error("editor stdio must go to null, not the shell it was launched from")

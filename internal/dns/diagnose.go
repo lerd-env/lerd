@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -139,7 +140,7 @@ func diagnose(tld string, p probeFns) Diagnostic {
 	switch {
 	case p.containerRunning():
 		d.Steps = append(d.Steps, Step{Name: "lerd-dns container", Status: StepOK, Detail: "running"})
-	case p.portOpen("127.0.0.1", 5300):
+	case p.portOpen("127.0.0.1", dnsPort):
 		// Something is on :5300 but it's not our container. Probe it:
 		//   - answer == 127.0.0.1: legacy resolver matching lerd's mapping
 		//   - any other IP:        legacy resolver pointing elsewhere
@@ -172,7 +173,7 @@ func diagnose(tld string, p probeFns) Diagnostic {
 				Name:   "lerd-dns container",
 				Status: StepFail,
 				Detail: detail,
-				Hint:   "identify the holder: " + findListenerCmd(5300),
+				Hint:   "identify the holder: " + findListenerCmd(dnsPort),
 			})
 		}
 		return finalize(d)
@@ -200,14 +201,14 @@ func diagnose(tld string, p probeFns) Diagnostic {
 	}
 
 	// Rung 3 — port reachable on loopback.
-	if p.portOpen("127.0.0.1", 5300) {
-		d.Steps = append(d.Steps, Step{Name: "port 5300 listening", Status: StepOK, Detail: "127.0.0.1:5300"})
+	if p.portOpen("127.0.0.1", dnsPort) {
+		d.Steps = append(d.Steps, Step{Name: fmt.Sprintf("port %d listening", dnsPort), Status: StepOK, Detail: fmt.Sprintf("127.0.0.1:%d", dnsPort)})
 	} else {
 		d.Steps = append(d.Steps, Step{
 			Name:   "port 5300 listening",
 			Status: StepFail,
-			Detail: "no TCP listener on 127.0.0.1:5300",
-			Hint:   "check whether another process owns the port: " + findListenerCmd(5300),
+			Detail: fmt.Sprintf("no TCP listener on 127.0.0.1:%d", dnsPort),
+			Hint:   "check whether another process owns the port: " + findListenerCmd(dnsPort),
 		})
 		return finalize(d)
 	}
@@ -409,6 +410,9 @@ func finalize(d Diagnostic) Diagnostic {
 // the process bound to a TCP port. macOS lacks ss(8), so we point users at
 // lsof which ships with the OS; everywhere else we assume iproute2 ss.
 func findListenerCmd(port int) string {
+	if runtime.GOOS == "windows" {
+		return fmt.Sprintf("Get-Process -Id (Get-NetTCPConnection -LocalPort %d -State Listen).OwningProcess", port)
+	}
 	if runtime.GOOS == "darwin" {
 		return fmt.Sprintf("lsof -nP -iTCP:%d -sTCP:LISTEN", port)
 	}
@@ -587,7 +591,7 @@ func defaultDnsmasqAnswer(tld string) (string, error) {
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
 			d := net.Dialer{Timeout: 1 * time.Second}
-			return d.DialContext(ctx, network, "127.0.0.1:5300")
+			return d.DialContext(ctx, network, net.JoinHostPort("127.0.0.1", strconv.Itoa(dnsPort)))
 		},
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)

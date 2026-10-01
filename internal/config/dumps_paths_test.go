@@ -14,7 +14,7 @@ import (
 func TestDumpsListenNetwork(t *testing.T) {
 	got := DumpsListenNetwork()
 	switch runtime.GOOS {
-	case "darwin":
+	case "darwin", "windows":
 		if got != "tcp" {
 			t.Errorf("darwin: got %q, want %q", got, "tcp")
 		}
@@ -28,7 +28,7 @@ func TestDumpsListenNetwork(t *testing.T) {
 func TestDumpsListenAddr(t *testing.T) {
 	got := DumpsListenAddr()
 	switch runtime.GOOS {
-	case "darwin":
+	case "darwin", "windows":
 		want := "127.0.0.1:" + DumpsTCPPort
 		if got != want {
 			t.Errorf("darwin: got %q, want %q", got, want)
@@ -49,7 +49,7 @@ func TestDumpsListenAddr(t *testing.T) {
 func TestDumpsBridgeTarget(t *testing.T) {
 	got := DumpsBridgeTarget()
 	switch runtime.GOOS {
-	case "darwin":
+	case "darwin", "windows":
 		want := "tcp://host.containers.internal:" + DumpsTCPPort
 		if got != want {
 			t.Errorf("darwin: got %q, want %q", got, want)

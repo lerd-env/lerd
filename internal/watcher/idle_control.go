@@ -12,7 +12,7 @@ import (
 // it until the process exits. Best-effort: a bind failure just means enable/
 // disable toggles and activity pings won't reach the engine.
 func startControlSocket() {
-	if conn, ok := listenDatagram(config.ControlSocketPath()); ok {
+	if conn, ok := controlConn(); ok {
 		go readDatagrams(conn, func(b []byte) { dispatchControl(string(b)) })
 	}
 }

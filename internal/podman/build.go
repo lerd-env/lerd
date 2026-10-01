@@ -80,6 +80,15 @@ func ExtraVolumePaths() []string {
 // and the container never starts. Empty and relative paths are refused too, as
 // they cannot be resolved to a stable mount source. Shared by every code path
 // that emits a Volume= line for a host path.
+// underDir reports whether path is dir or inside it. The native separator is
+// accepted beside "/", so a Windows home (C:\Users\me) contains its own paths.
+func underDir(path, dir string) bool {
+	dir = strings.TrimRight(dir, "/"+string(filepath.Separator))
+	return path == dir ||
+		strings.HasPrefix(path, dir+"/") ||
+		strings.HasPrefix(path, dir+string(filepath.Separator))
+}
+
 func bindMountable(path string) bool {
 	return path != "" && filepath.IsAbs(path) && filepath.Clean(path) != "/"
 }
@@ -155,7 +164,7 @@ func sortPaths(paths []string) {
 
 // mkcertPath returns the path to the mkcert binary managed by lerd.
 func mkcertPath() string {
-	return filepath.Join(config.BinDir(), "mkcert")
+	return filepath.Join(config.BinDir(), config.ExeName("mkcert"))
 }
 
 // mkcertCABlock copies the mkcert rootCA.pem into tmpDir and returns the
@@ -1331,7 +1340,7 @@ func PathVisible(path, phpVersion string) bool {
 	if !bindMountable(path) {
 		return false
 	}
-	if home, _ := os.UserHomeDir(); home != "" && (path == home || strings.HasPrefix(path, strings.TrimSuffix(home, "/")+"/")) {
+	if home, _ := os.UserHomeDir(); home != "" && underDir(path, home) {
 		return true
 	}
 	short := strings.ReplaceAll(phpVersion, ".", "")

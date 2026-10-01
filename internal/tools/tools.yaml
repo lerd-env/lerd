@@ -17,11 +17,15 @@ tools:
       linux/arm64: mise-{version}-linux-arm64.tar.gz
       darwin/amd64: mise-{version}-macos-x64.tar.gz
       darwin/arm64: mise-{version}-macos-arm64.tar.gz
+      windows/amd64: mise-{version}-windows-x64.exe
+      windows/arm64: mise-{version}-windows-arm64.exe
     digests:
       linux/amd64: b4058dece685259910d3aba5782445996eea79dbdb3cf952a6eb81aadf0373ff
       linux/arm64: e4a0921da0a76ce4666832d5b57b6f0eb9f22d149ba92845ebae4c38638c6775
       darwin/amd64: 22be38ec60632913143bf6a96b0aacfd895fdfe4ce4e8958e942f7bdb5a9185b
       darwin/arm64: 0f1c7f3e74d8c9ae82976e6990058f2bc68821acc6b4c37a68c206c836692419
+      windows/amd64: 8bc3a2c46246bb00fc49f467c678cf9ff321f707c533ad707061d0f8c7b639b2
+      windows/arm64: 6beeb61b829ba60ef3bb1fdda5717a41b8fb91bd400109de8b05b1700a107d8e
   fnm:
     version: v1.39.0
     url: https://github.com/Schniz/fnm/releases/download/{version}/{asset}
@@ -97,3 +101,5 @@ tools:
       linux/arm64: mkcert-{version}-linux-arm64
       darwin/amd64: mkcert-{version}-darwin-amd64
       darwin/arm64: mkcert-{version}-darwin-arm64
+      windows/amd64: mkcert-{version}-windows-amd64.exe
+      windows/arm64: mkcert-{version}-windows-arm64.exe

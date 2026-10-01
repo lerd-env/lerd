@@ -101,7 +101,7 @@ func forgetTunnel(pid int) {
 
 // tunnelKillFn signals a process, a seam so the reap can be tested without one.
 var tunnelKillFn = func(pid int, sig syscall.Signal) error {
-	return syscall.Kill(pid, sig)
+	return killPID(pid, sig)
 }
 
 // ReapOrphanTunnels kills tunnels left behind by a previous lerd-ui, then

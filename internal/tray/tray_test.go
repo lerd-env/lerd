@@ -5,6 +5,7 @@ package tray
 import (
 	"bytes"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -86,5 +87,16 @@ func TestLerdBin_PrefersLookPathHit(t *testing.T) {
 
 	if got := lerdBin(); got != "/opt/from-path/lerd" {
 		t.Errorf("lerdBin() = %q, want LookPath result", got)
+	}
+}
+
+func TestDefaultLerdBinCandidates_StartWithBesideTheTray(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Skip("no executable path")
+	}
+	want := filepath.Join(filepath.Dir(exe), lerdExeName())
+	if got := defaultLerdBinCandidates(); len(got) == 0 || got[0] != want {
+		t.Fatalf("candidates = %v, want first %q", got, want)
 	}
 }

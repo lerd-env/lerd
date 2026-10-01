@@ -373,7 +373,7 @@ Activity-driven worker suspension: lerd gracefully stops each site's suspendable
 
 | Command | Description |
 |---|---|
-| `lerd dashboard` | Open the Lerd dashboard, as a Chromium app window on Linux when one is available, otherwise in the default browser |
+| `lerd dashboard` | Open the Lerd dashboard, as a Chromium app window on Linux and Windows when one is available, otherwise in the default browser |
 
 ## Shell completion
 

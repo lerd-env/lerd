@@ -1316,8 +1316,8 @@ func TestEnsureDefaultVhost_leavesNoTempFilesInConfD(t *testing.T) {
 }
 
 func TestEnsureLerdVhost_linuxProxiesUnixSocket(t *testing.T) {
-	if runtime.GOOS == "darwin" {
-		t.Skip("Linux uses the unix socket vhost; macOS uses TCP via host.containers.internal")
+	if config.UsesMachineVM() {
+		t.Skip("Linux uses the unix socket vhost; macOS and Windows use TCP via host.containers.internal")
 	}
 	confD := setupConfD(t)
 	if err := EnsureLerdVhost(); err != nil {

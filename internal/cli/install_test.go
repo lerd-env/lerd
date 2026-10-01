@@ -548,6 +548,7 @@ func TestAddShellShims_LaravelShimRespectsComposerHome(t *testing.T) {
 func TestAddShellShims_NodeShimChecksDefaultAlias(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "config"))
 	t.Setenv("HOME", tmp)
 	t.Setenv("SHELL", "/bin/sh")
 
