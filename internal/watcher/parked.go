@@ -66,6 +66,11 @@ func Watch(ctx context.Context, dirs func() []string, onNew func(path string), o
 								logger.Error("failed to watch new subdirectory", "path", event.Name, "err", err)
 							} else {
 								logger.Debug("watching new subdirectory", "path", event.Name)
+								// Files written before the watch was added sent
+								// their events to nobody, so look for them now.
+								if hasFrameworkSignal(event.Name) {
+									onNew(event.Name)
+								}
 							}
 						}
 					}
@@ -78,6 +83,15 @@ func Watch(ctx context.Context, dirs func() []string, onNew func(path string), o
 			logger.Error("fsnotify error", "err", err)
 		}
 	}
+}
+
+func hasFrameworkSignal(dir string) bool {
+	for name := range frameworkSignals {
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func expandHome(path string) string {

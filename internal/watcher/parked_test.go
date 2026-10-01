@@ -53,3 +53,40 @@ func TestWatch_PicksUpADirectoryParkedWhileRunning(t *testing.T) {
 		t.Fatal("a project in a directory parked after start was never registered")
 	}
 }
+
+// A project whose files land before the watcher has added its directory (a
+// git clone, a scaffolder, a move) sends no event the watcher can still see,
+// so the new directory is checked for signal files the moment it is watched.
+func TestWatch_PicksUpAProjectWhoseFilesArriveWithTheDirectory(t *testing.T) {
+	parked := t.TempDir()
+	staging := t.TempDir()
+	built := filepath.Join(staging, "cloned")
+	if err := os.Mkdir(built, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(built, "composer.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	found := make(chan string, 4)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		_ = Watch(ctx, func() []string { return []string{parked} }, func(p string) { found <- p }, func(string) {})
+	}()
+	time.Sleep(200 * time.Millisecond)
+
+	project := filepath.Join(parked, "cloned")
+	if err := os.Rename(built, project); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case got := <-found:
+		if got != project {
+			t.Errorf("registered %q, want %q", got, project)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("a project that arrived with its files was never registered")
+	}
+}
