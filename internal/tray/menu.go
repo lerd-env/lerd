@@ -45,13 +45,13 @@ func buildMenu(mono bool) *menuState {
 	m := &menuState{}
 
 	m.mStatus = systray.AddMenuItem("⏳ Checking...", "")
-	m.mStatus.Disable()
+	disableInfoItem(m.mStatus)
 	m.mNginx = systray.AddMenuItem("  🔴 nginx", "")
-	m.mNginx.Disable()
+	disableInfoItem(m.mNginx)
 	m.mDNS = systray.AddMenuItem("  🔴 dns", "")
-	m.mDNS.Disable()
+	disableInfoItem(m.mDNS)
 	m.mWorkers = systray.AddMenuItem("", "")
-	m.mWorkers.Disable()
+	disableInfoItem(m.mWorkers)
 	m.mWorkers.Hide()
 
 	systray.AddSeparator()
@@ -216,29 +216,29 @@ func (m *menuState) apply(snap *Snapshot) {
 	}
 
 	if snap.Running {
-		m.mStatus.SetTitle("🟢 Running")
+		setItemTitle(m.mStatus, "🟢 Running")
 		m.mToggle.SetTitle("Stop Lerd")
 	} else {
-		m.mStatus.SetTitle("🔴 Stopped")
+		setItemTitle(m.mStatus, "🔴 Stopped")
 		m.mToggle.SetTitle("Start Lerd")
 	}
 
-	m.mNginx.SetTitle(fmt.Sprintf("  %s nginx", statusDot(snap.NginxRunning)))
+	setItemTitle(m.mNginx, fmt.Sprintf("  %s nginx", statusDot(snap.NginxRunning)))
 
 	switch {
 	case snap.DNSDisabled:
-		m.mDNS.SetTitle("  ⚪ dns (disabled)")
+		setItemTitle(m.mDNS, "  ⚪ dns (disabled)")
 	case !snap.DNSOK && snap.DNSDegraded:
-		m.mDNS.SetTitle("  🟡 dns")
+		setItemTitle(m.mDNS, "  🟡 dns")
 	default:
-		m.mDNS.SetTitle(fmt.Sprintf("  %s dns", statusDot(snap.DNSOK)))
+		setItemTitle(m.mDNS, fmt.Sprintf("  %s dns", statusDot(snap.DNSOK)))
 	}
 
 	// The worker count comes from the services call too, so both lines wait for
 	// a poll that actually read it rather than redrawing from a blank.
 	if snap.ServicesKnown {
 		if title, show := workersTitle(snap); show {
-			m.mWorkers.SetTitle(title)
+			setItemTitle(m.mWorkers, title)
 			m.mWorkers.Show()
 		} else {
 			m.mWorkers.Hide()
