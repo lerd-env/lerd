@@ -25,6 +25,24 @@ func TestURLReportsAMissingPlatformAsNoAsset(t *testing.T) {
 	}
 }
 
+// Every project can pin its own Node, so Windows needs the version manager too.
+// mise ships a bare .exe there, pinned by digest like the other platforms.
+func TestMiseIsPublishedForWindows(t *testing.T) {
+	m := embeddedManifest()
+	for arch, suffix := range map[string]string{"amd64": "-windows-x64.exe", "arm64": "-windows-arm64.exe"} {
+		url, err := m.URL("mise", "windows", arch)
+		if err != nil {
+			t.Fatalf("mise has no windows/%s asset: %v", arch, err)
+		}
+		if !strings.HasSuffix(url, suffix) {
+			t.Errorf("windows/%s url = %s, want a %s asset", arch, url, suffix)
+		}
+		if m.Digest("mise", "windows", arch) == "" {
+			t.Errorf("windows/%s has no digest to verify the download against", arch)
+		}
+	}
+}
+
 func TestMkcertIsPublishedForWindows(t *testing.T) {
 	m := embeddedManifest()
 	var err error

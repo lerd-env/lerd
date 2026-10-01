@@ -75,11 +75,18 @@ func ensureMiseBinary(w io.Writer) error {
 }
 
 // installMise downloads the pinned mise tarball and extracts the single binary
-// it carries at mise/bin/mise into ~/.local/bin.
+// it carries at mise/bin/mise into ~/.local/bin. Windows releases ship the
+// bare mise.exe, which is verified and saved there as it is.
 func installMise(pins *pinnedTools, home string, w io.Writer) error {
-	dest := filepath.Join(home, ".local", "bin", "mise")
+	dest := filepath.Join(home, ".local", "bin", config.ExeName("mise"))
 	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
 		return fmt.Errorf("mise install: %w", err)
+	}
+	if runtime.GOOS == "windows" {
+		if _, err := pins.download("mise", dest, 0755, w); err != nil {
+			return fmt.Errorf("mise download: %w", err)
+		}
+		return nil
 	}
 	tarball := dest + ".tar.gz"
 	if _, err := pins.download("mise", tarball, 0644, w); err != nil {
