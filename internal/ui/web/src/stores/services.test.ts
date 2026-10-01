@@ -106,6 +106,27 @@ describe('services store', () => {
     expect(calls.some((c) => c[0] === '/api/services')).toBe(true);
   });
 
+  // A first start of a built-in fetches its image, so it asks like every other
+  // path that downloads, and a decline sends no start at all.
+  it('serviceAction start asks before downloading and stops on a decline', async () => {
+    const urls: string[] = [];
+    globalThis.fetch = vi.fn(async (url: unknown) => {
+      urls.push(String(url));
+      return new Response(JSON.stringify({ image: 'axllent/mailpit:latest', bytes: 4096, local: false }), {
+        status: 200
+      });
+    }) as unknown as typeof fetch;
+    const { serviceAction } = await import('./services');
+    const { downloadConfirm, answerDownloadConfirm } = await import('./downloadConfirm');
+
+    const pending = serviceAction('mailpit', 'start');
+    await vi.waitFor(() => expect(get(downloadConfirm).open).toBe(true));
+    answerDownloadConfirm(false);
+
+    expect(await pending).toBe(false);
+    expect(urls).toEqual(['/api/image-estimate?service=mailpit&action=start']);
+  });
+
   it('setServiceShim POSTs the tool decision and reloads', async () => {
     const calls: Array<[string, RequestInit | undefined]> = [];
     globalThis.fetch = vi.fn(async (url: unknown, init?: RequestInit) => {

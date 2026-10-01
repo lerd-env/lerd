@@ -91,10 +91,21 @@ introspect:
         import: >
           sed -e '/^SET @@GLOBAL.GTID_PURGED/{' -e ':a' -e '/;[[:space:]]*$/!{' -e 'N' -e 'ba' -e '}' -e 'd' -e '}' |
           $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot {{name}}
+        # The system schemas stay out: MySQL 9 rejects DROP DATABASE `mysql`,
+        # and grant tables do not belong in a restore across versions anyway.
+        # A server with no databases of its own dumps nothing, one that cannot be
+        # asked fails rather than leave an empty snapshot.
         export_all: >
+          dbs=$($(command -v mysql || command -v mariadb) -h 127.0.0.1 -uroot -N -e
+          "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN
+          ('mysql','information_schema','performance_schema','sys')") || exit 1;
+          [ -n "$dbs" ] || exit 0;
           $(command -v mysqldump || command -v mariadb-dump) -h 127.0.0.1 -uroot
           --single-transaction --quick --no-tablespaces --routines --triggers --events
-          --add-drop-database --all-databases --set-gtid-purged=OFF
+          --add-drop-database --set-gtid-purged=OFF --databases $dbs
+        # Dumps taken with --all-databases carry the mysql schema; its section
+        # runs up to the next database's header, which is kept.
         import_all: >
-          sed -e '/^SET @@GLOBAL.GTID_PURGED/{' -e ':a' -e '/;[[:space:]]*$/!{' -e 'N' -e 'ba' -e '}' -e 'd' -e '}' |
+          sed -e '/^SET @@GLOBAL.GTID_PURGED/{' -e ':a' -e '/;[[:space:]]*$/!{' -e 'N' -e 'ba' -e '}' -e 'd' -e '}'
+          -e '/^-- Current Database: `mysql`/,/^-- Current Database: /{' -e '/^-- Current Database: `mysql`/d' -e '/^-- Current Database: /!d' -e '}' |
           $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot

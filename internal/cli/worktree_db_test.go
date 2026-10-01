@@ -62,6 +62,49 @@ func TestFindParentSiteForWorktree_resolvesParent(t *testing.T) {
 	}
 }
 
+// A checkout reached through a symlinked parent (/home on ostree hosts) is the
+// same worktree git recorded under its real path.
+func TestFindParentSiteForWorktree_symlinkedSpelling(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	sitePath, checkout := makeFakeWorktree(t, "feat-a")
+	if err := config.AddSite(config.Site{Name: "acme", Path: sitePath, Domains: []string{"acme.test"}}); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(tmp, "home")
+	if err := os.Symlink(filepath.Dir(checkout), link); err != nil {
+		t.Fatal(err)
+	}
+
+	site, _, ok := FindParentSiteForWorktree(filepath.Join(link, filepath.Base(checkout)))
+	if !ok || site.Name != "acme" {
+		t.Fatalf("FindParentSiteForWorktree via the symlink = %v, %v; want acme", site, ok)
+	}
+}
+
+// lerd worktree wait holds a worktree reached through a symlinked parent until
+// its vhost exists, the same as one spelled by its real path.
+func TestWorktreeServed_symlinkedSpelling(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	sitePath, checkout := makeFakeWorktree(t, "feat-a")
+	if err := config.AddSite(config.Site{Name: "acme", Path: sitePath, Domains: []string{"acme.test"}}); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(tmp, "home")
+	if err := os.Symlink(filepath.Dir(checkout), link); err != nil {
+		t.Fatal(err)
+	}
+
+	if worktreeServed(filepath.Join(link, filepath.Base(checkout))) {
+		t.Error("worktreeServed = true with no vhost written; want the wait held")
+	}
+}
+
 // A directory that is not a worktree of any registered site returns ok=false.
 func TestFindParentSiteForWorktree_unregisteredDir(t *testing.T) {
 	tmp := t.TempDir()

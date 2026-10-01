@@ -204,7 +204,7 @@ A **site group** (the `site` tool's `group_*` actions) nests a real site under a
 
 ### Downloads are disclosed, not started
 
-An assistant is not the one paying for the bandwidth, so the actions that have to fetch a container image (`service` `preset_install`, `update`, `migrate`, `rollback`, `reinstall`, and `runtime` `ext_add`, which rebuilds a PHP image) answer with what they would download instead of downloading it. The answer names the image and its size, read from the registry manifest without pulling anything, and nothing has been fetched at that point. Repeating the call with `confirm: true` goes ahead. An image already in the local store is never disclosed, so the usual case runs straight through. This is the disclosure half of what `LERD_OFFLINE=1` does for the refusal half; see [Image downloads](../usage/lifecycle.md#image-downloads).
+An assistant is not the one paying for the bandwidth, so the actions that have to fetch a container image (`service` `start`, `preset_install`, `update`, `migrate`, `rollback`, `reinstall`, and `runtime` `ext_add`, which rebuilds a PHP image) answer with what they would download instead of downloading it. The answer names the image and its size, read from the registry manifest without pulling anything, and nothing has been fetched at that point. Repeating the call with `confirm: true` goes ahead. An image already in the local store is never disclosed, so the usual case runs straight through. This is the disclosure half of what `LERD_OFFLINE=1` does for the refusal half; see [Image downloads](../usage/lifecycle.md#image-downloads).
 
 ### Worker tuning comes from the framework definition
 

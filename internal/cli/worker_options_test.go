@@ -98,3 +98,33 @@ func TestApplyWorkerOptions(t *testing.T) {
 		}
 	})
 }
+
+// A start flag equal to the definition's default is not a choice the project
+// made, so it stays out of .lerd.yaml and a later store change to the default
+// still lands. Passing the default also takes back an earlier override.
+func TestPersistWorkerOptions_dropsDefaults(t *testing.T) {
+	dir := siteWithTunableQueue(t)
+	fw, ok := config.GetFrameworkForDir("tinyfw", dir)
+	if !ok {
+		t.Fatal("the test definition did not resolve")
+	}
+	w := fw.Workers["queue"]
+
+	if err := persistWorkerOptions(dir, "queue", w, map[string]string{"queue": "high", "tries": "5"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := persistWorkerOptions(dir, "queue", w, map[string]string{"tries": "3"}); err != nil {
+		t.Fatal(err)
+	}
+	got := config.ProjectWorkerOptions(dir, "queue")
+	if len(got) != 1 || got["queue"] != "high" {
+		t.Errorf("stored options = %v, want only queue=high", got)
+	}
+
+	if err := persistWorkerOptions(dir, "queue", w, map[string]string{"queue": "default"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := config.ProjectWorkerOptions(dir, "queue"); len(got) != 0 {
+		t.Errorf("stored options = %v, want none once every value is the default", got)
+	}
+}

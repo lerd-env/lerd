@@ -3,6 +3,7 @@ package sitedoctor
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -167,5 +168,54 @@ func TestForgetDatabases_EmptyServiceForgetsEveryEngine(t *testing.T) {
 
 	if calls != 4 {
 		t.Errorf("looked up %d times, want 4 (both engines forgotten)", calls)
+	}
+}
+
+// A site pointed at a database service lerd does not have 500s on every
+// request, and there is no engine to ask, so the check used to stay silent.
+// It names the service instead.
+func TestCheckServerDatabase_namesAServiceThatIsNotInstalled(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	dir := t.TempDir()
+	env := "DB_CONNECTION=pgsql\nDB_HOST=lerd-postgres\nDB_DATABASE=shop\n"
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(env), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	orig := serviceInstalledFn
+	serviceInstalledFn = func(string) bool { return false }
+	t.Cleanup(func() { serviceInstalledFn = orig })
+	restore := stubDatabaseLister(func(string) ([]string, error) { return nil, os.ErrNotExist })
+	defer restore()
+
+	c, produced := checkServerDatabase(dir)
+	if !produced || c.Status != StatusFail {
+		t.Fatalf("check = %+v (produced=%v), want a failure naming the missing service", c, produced)
+	}
+	if !strings.Contains(c.Detail, "postgres") {
+		t.Errorf("detail = %q, want it to name postgres", c.Detail)
+	}
+}
+
+// An installed engine that cannot answer right now is not proof of anything,
+// so the check still leaves the site unjudged.
+func TestCheckServerDatabase_unreachableInstalledEngineStaysUnjudged(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	dir := t.TempDir()
+	env := "DB_CONNECTION=mysql\nDB_HOST=lerd-mysql\nDB_DATABASE=shop\n"
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(env), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	orig := serviceInstalledFn
+	serviceInstalledFn = func(string) bool { return true }
+	t.Cleanup(func() { serviceInstalledFn = orig })
+	restore := stubDatabaseLister(func(string) ([]string, error) { return nil, os.ErrDeadlineExceeded })
+	defer restore()
+
+	if _, produced := checkServerDatabase(dir); produced {
+		t.Error("an unreachable installed engine produced a verdict")
 	}
 }

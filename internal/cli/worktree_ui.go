@@ -11,6 +11,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
+	"github.com/geodro/lerd/internal/lifecycle"
 )
 
 // warningCapturingWriter forwards every write to the underlying writer while
@@ -281,6 +282,10 @@ func dbChoiceYieldsEmptySchema(choice string) bool {
 	return choice == "empty" || choice == "reset"
 }
 
+// stopWorktreeUnitsFn stops a worktree's workers ahead of `git worktree
+// remove`; a seam so the ordering can be tested without systemd.
+var stopWorktreeUnitsFn = lifecycle.StopWorktreeWorkerUnits
+
 // RemoveWorktreeAndCleanup runs `git worktree remove [--force]` for branch,
 // stops its per-worktree worker units, and (when dropDB) drops the isolated
 // database and its registry entry. The daemon watcher still handles vhost and
@@ -297,6 +302,7 @@ func RemoveWorktreeAndCleanup(site *config.Site, branch string, force, dropDB bo
 		gitArgs = append(gitArgs, "--force")
 	}
 	gitArgs = append(gitArgs, wtPath)
+	stopWorktreeUnitsFn(site.Name, wtBase)
 	logf(log, "Running: git %s", strings.Join(gitArgs, " "))
 	if err := gitpkg.Run(site.Path, log, gitArgs...); err != nil {
 		return fmt.Errorf("git worktree remove: %w", err)

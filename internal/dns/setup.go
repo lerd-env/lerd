@@ -986,6 +986,12 @@ func Teardown() {
 // runSudoersRemoval is the seam tests override.
 var runSudoersRemoval = defaultRunSudoersRemoval
 
+// tryPasswordlessSudoersRemoval removes path only if sudo allows it without a
+// password, which the drop-in's own rule does; with no drop-in it fails quietly.
+var tryPasswordlessSudoersRemoval = func(path string) bool {
+	return exec.Command("sudo", "-n", "/usr/bin/rm", "-f", path).Run() == nil
+}
+
 func defaultRunSudoersRemoval(path string) {
 	rmCmd := exec.Command("sudo", "rm", "-f", path)
 	rmCmd.Stdin = os.Stdin
@@ -1000,10 +1006,12 @@ func defaultRunSudoersRemoval(path string) {
 // EACCES there and the removal never ran. The marker is the same record
 // InstallSudoers already keeps for exactly this reason, and its absence means
 // lerd never installed a drop-in, so there is nothing to remove and no grant
-// that would make the sudo passwordless.
+// that would make the sudo passwordless. The exception is a drop-in written by
+// `lerd bootstrap --system`, which runs as root and leaves no marker; it grants
+// its own removal, so a non-interactive sudo takes it without ever prompting.
 func removeSudoersGrant() bool {
 	if _, err := os.Stat(sudoersMarkerPath()); err != nil {
-		return false
+		return tryPasswordlessSudoersRemoval(lerdSudoersPath)
 	}
 	runSudoersRemoval(lerdSudoersPath)
 	ForgetSudoersMarker()

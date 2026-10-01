@@ -206,7 +206,7 @@ func FindParentSiteForWorktree(dir string) (*config.Site, string, bool) {
 			continue
 		}
 		for _, wt := range worktrees {
-			if wt.Path == abs {
+			if config.SamePath(wt.Path, abs) {
 				return s, wt.Branch, true
 			}
 		}

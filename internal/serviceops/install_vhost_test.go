@@ -24,12 +24,13 @@ func TestInstallPresetByName_SyncsTheDashboardVhost(t *testing.T) {
 	syncLerdVhostFn = func() (bool, error) { synced++; return false, nil }
 	t.Cleanup(func() { syncLerdVhostFn = prev })
 
-	// Pin redis to a port that is free right now: on a machine already running a
-	// redis the guard would shift the install off 6379 and sync the vhost a second
-	// time, which is correct behaviour and has nothing to do with what this asserts.
-	if err := persistPublishedPort("redis", freeLoopbackPort(t)); err != nil {
-		t.Fatalf("persistPublishedPort: %v", err)
-	}
+	// A port guard shift syncs the vhost a second time, which is correct and has
+	// nothing to do with what this asserts. Pinning a free port raced every other
+	// package's tests for it, so the guard is told redis holds its own port.
+	origRunning, origStatus := ensureContainerRunning, ensureUnitStatus
+	t.Cleanup(func() { ensureContainerRunning, ensureUnitStatus = origRunning, origStatus })
+	ensureContainerRunning = func(string) (bool, bool) { return true, true }
+	ensureUnitStatus = func(string) (string, error) { return "active", nil }
 	if _, err := InstallPresetByName("redis", ""); err != nil {
 		t.Fatalf("InstallPresetByName: %v", err)
 	}

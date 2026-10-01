@@ -6,6 +6,7 @@
   import { apiFetch, decodeJSONResult } from '$lib/api';
   import { notifyLocalFailure } from '$lib/notify';
   import { serviceLabel } from '$stores/services';
+  import { confirmDownload } from '$stores/downloadConfirm';
   import { loadSites, type ServiceSuggestion } from '$stores/sites';
   import { m } from '../../paraglide/messages.js';
 
@@ -27,6 +28,9 @@
   // Either action changes the site; no site event follows a .lerd.yaml or
   // sites.yaml write, so the list is reloaded to redraw the overview.
   async function act(action: 'service:add' | 'service:dismiss') {
+    if (action === 'service:add' && !(await confirmDownload(serviceLabel(name), { service: name, action: 'add' }))) {
+      return;
+    }
     busy = true;
     try {
       const res = await apiFetch(

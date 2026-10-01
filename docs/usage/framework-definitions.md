@@ -225,6 +225,20 @@ It sits beside `services:` rather than among them because SQLite is not a servic
 
 Choosing it records nothing in `.lerd.yaml`, for the same reason: the project's own configuration already says it is on SQLite, which is what lerd reads to answer that question. An entry left by an older lerd is ignored where it is found.
 
+### A default database
+
+A scaffold that names no database until its own installer runs leaves nothing to detect, so `lerd env` would write no connection and the installer would have nothing to install against. `env.default_service` names the `services:` entry such a project is wired to:
+
+```yaml
+env:
+  default_service: mysql
+  services:
+    mysql:
+      # …
+```
+
+It applies only when the project names no database at all: nothing in its configuration matches a database service's detect rules or the `sqlite` block, `.lerd.yaml` picks none, and no external database is set in `.env.lerd_override`. A project already on PostgreSQL or SQLite is never rewired, and nothing is written to `.lerd.yaml`, since from then on the project's own configuration says which engine it uses. The value must be a key of `services:`; a binary that finds one it does not define refuses the run and names it rather than guessing. It is a field an older binary ignores, which is why it is not an `absent` detect rule: a release before `absent` existed would read that rule as matching any project with the key set and rewire a working site.
+
 ### Drop-in services
 
 A service preset publishes its connection under Laravel's key names (`DB_HOST`, `REDIS_HOST`), because that is what most projects read. Your framework may not: Drupal reads `DB_NAME` and `DB_USER`, Symfony and CakePHP read a `DATABASE_URL`, Magento addresses its config by dotted path. Those keys are the ones you declare under `env.services`, and they are what lerd writes.
@@ -295,6 +309,9 @@ env:
     vars:
       - "DB_CONNECTION=sqlite"
       - "DB_DATABASE=database/database.sqlite"
+
+  default_service: mysql          # services: entry wired when the project names no
+                                  # database at all (optional)
 
   # Per-service env detection and variable injection for `lerd env`
   #
@@ -635,7 +652,7 @@ The repeated-query warning is the case that needs it. On a content management sy
 
 The `doctor:` section adds framework-specific health checks to the ones every site gets for free (a valid `.lerd.yaml`, env file present, every picked service wired into it, dependencies installed and locked, audit clean, PHP version in range, nginx vhost current). They run on `lerd site:doctor` and in the dashboard's doctor panel. Keeping them declarative is what stops the doctor from growing a Go branch per framework.
 
-The section also takes a `migrate_command`, naming whichever of the framework's own `commands:` applies the schema. The universal database checks offer it as their fix, so an empty or missing database is reported with the button that fills it. A server database that does not exist at all is the exception: migrations have nowhere to run until the schema is there, so that finding carries a button that creates it and the migrate button returns on the re-check. Every framework spells it differently (Laravel `migrate`, Symfony `doctrine:migrations:migrate`, Drupal `updb`), so nothing but the definition can say; a framework that declares none, or names a command it does not have, gets a finding with no fix rather than a button that maps to nothing.
+The section also takes a `migrate_command`, naming whichever of the framework's own `commands:` applies the schema. The universal database checks offer it as their fix, so an empty or missing database is reported with the button that fills it. A server database that does not exist at all is the exception: migrations have nowhere to run until the schema is there, so that finding carries a button that creates it and the migrate button returns on the re-check. `lerd site:doctor --fix` goes one step further and runs `migrate_command` itself right after creating the database, since the schema it just made is empty; pending migrations on a database that already existed are still left to you. A site whose database sits on a service lerd has not installed fails the same check, naming the service and the `lerd service start` that installs it. Every framework spells it differently (Laravel `migrate`, Symfony `doctrine:migrations:migrate`, Drupal `updb`), so nothing but the definition can say; a framework that declares none, or names a command it does not have, gets a finding with no fix rather than a button that maps to nothing.
 
 Each check carries a `name` (a stable id), a `type` that selects the evaluator, an optional `label` for display, an optional `detail` that overrides the generated message, an optional `severity`, an optional `fix`, and an optional `check`.
 

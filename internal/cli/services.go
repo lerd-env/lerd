@@ -268,16 +268,12 @@ func newServiceStartCmd() *cobra.Command {
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]
 
-			var image string
-			if isKnownService(name) {
-				image = podman.ServiceImage("lerd-" + name)
-			} else {
-				svc, loadErr := config.LoadCustomService(name)
-				if loadErr != nil {
+			if !isKnownService(name) {
+				if _, loadErr := config.LoadCustomService(name); loadErr != nil {
 					return fmt.Errorf("unknown service %q", name)
 				}
-				image = svc.Image
 			}
+			image := serviceops.StartImage(name)
 
 			if image != "" && !podman.ImageExists(image) {
 				imagepull.Plan{

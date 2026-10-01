@@ -395,14 +395,7 @@ func ApplyWorkerOptions(siteName, sitePath, phpVersion, workerName string, value
 	if err != nil {
 		return err
 	}
-	kept := map[string]string{}
-	for _, f := range config.WorkerTuneFlags(w) {
-		v := strings.TrimSpace(values[f.Name])
-		if v == "" || v == f.Default {
-			continue
-		}
-		kept[f.Name] = v
-	}
+	kept := changedWorkerOptions(w, values)
 	if _, err := config.RenderTuneCommand(w, kept); err != nil {
 		return err
 	}
@@ -446,7 +439,22 @@ func persistWorkerOptions(sitePath, workerName string, w config.FrameworkWorker,
 	if _, err := config.RenderTuneCommand(w, merged); err != nil {
 		return err
 	}
-	return config.SetProjectWorkerOptions(sitePath, workerName, merged)
+	return config.SetProjectWorkerOptions(sitePath, workerName, changedWorkerOptions(w, merged))
+}
+
+// changedWorkerOptions keeps the values that differ from the definition's
+// defaults, so .lerd.yaml carries only what the project actually changed and a
+// later store update to a default still lands.
+func changedWorkerOptions(w config.FrameworkWorker, values map[string]string) map[string]string {
+	kept := map[string]string{}
+	for _, f := range config.WorkerTuneFlags(w) {
+		v := strings.TrimSpace(values[f.Name])
+		if v == "" || v == f.Default {
+			continue
+		}
+		kept[f.Name] = v
+	}
+	return kept
 }
 
 // projectTunedCommand renders the worker's command with the options the project

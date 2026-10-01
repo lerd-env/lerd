@@ -227,3 +227,35 @@ func TestRefreshDevServersLeavesAnUnchangedSiteRunning(t *testing.T) {
 		t.Errorf("restarted unit = %q, want no restart", fake.restartedUnit)
 	}
 }
+
+// A config written through a symlinked spelling of the project, the way macOS
+// reaches its temp and home dirs through /var, is the same config a refresh
+// through the resolved path would write, so it is not bounced for nothing.
+func TestRefreshDevServersLeavesASiteWrittenThroughASymlinkRunning(t *testing.T) {
+	dir := devServerSite(t, true)
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(dir, link); err != nil {
+		t.Fatal(err)
+	}
+	tool := config.DevServerToolInstalled(link)
+	if tool == nil {
+		t.Fatal("vite not resolved from node_modules")
+	}
+	if _, err := writeDevServerWrapper(link, tool, securedAddr("myapp.test")); err != nil {
+		t.Fatal(err)
+	}
+	site, err := config.FindSite("myapp")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fake := &fakeUnitLifecycle{}
+	podman.UnitLifecycle = fake
+	defer func() { podman.UnitLifecycle = nil }()
+
+	RefreshDevServers(site)
+
+	if fake.restartedUnit != "" {
+		t.Errorf("restarted unit = %q, want no restart", fake.restartedUnit)
+	}
+}

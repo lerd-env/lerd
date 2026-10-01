@@ -175,3 +175,21 @@ func TestSelectSetupStepsKeepsPlanOrder(t *testing.T) {
 		t.Errorf("selection out of plan order: %q then %q", selected[0].label, selected[1].label)
 	}
 }
+
+// HTTPS needs lerd's own DNS, so on a .localhost install the plan leaves the
+// secure step out rather than offering one that can only fail and stop --all.
+func TestPlanSetupStepsOmitsSecureWithoutManagedDNS(t *testing.T) {
+	isolateSetupPlan(t)
+	dir := t.TempDir()
+
+	if !hasLabel(planLabels(t, dir, true), "lerd secure") {
+		t.Fatal("managed DNS should offer lerd secure")
+	}
+
+	writePlanFixture(t, filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "lerd"), map[string]string{
+		"config.yaml": "dns:\n    enabled: false\n    tld: localhost\n",
+	})
+	if labels := planLabels(t, dir, true); hasLabel(labels, "lerd secure") {
+		t.Errorf("a .localhost install should not offer lerd secure: %v", labels)
+	}
+}

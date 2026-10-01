@@ -35,6 +35,13 @@ func Stop(runner ParallelRunner, skip ...string) error {
 	// requests through the Podman Machine socket (which can take 5s × N).
 	batchStopFn(units)
 
+	_ = runner(stopJobs(units))
+	return nil
+}
+
+// stopJobs turns units into one stop job each, labelled without the lerd-
+// prefix the way the spinner lists them.
+func stopJobs(units []string) []Job {
 	jobs := make([]Job, len(units))
 	for i, u := range units {
 		unit := u
@@ -44,8 +51,7 @@ func Stop(runner ParallelRunner, skip ...string) error {
 			Run:   func(w io.Writer) error { return stopUnitFn(unit) },
 		}
 	}
-	_ = runner(jobs)
-	return nil
+	return jobs
 }
 
 // Quit is the full teardown behind `lerd quit`: everything Stop covers, then
@@ -57,6 +63,9 @@ func Quit(runner ParallelRunner, beforeMachineStop func(), skip ...string) error
 	if err := Stop(runner, skip...); err != nil {
 		return err
 	}
+	// Stop leaves worktree workers to the watcher, which brings them back on
+	// the next start; quit takes the watcher down too, so it stops them here.
+	_ = runner(stopJobs(RegisteredWorktreeWorkerUnits()))
 	stopProcessUnits(QuitProcessUnits(skip...))
 	if beforeMachineStop != nil {
 		beforeMachineStop()
@@ -93,5 +102,14 @@ func stopProcessUnits(units []string) {
 		} else {
 			s.OK("")
 		}
+	}
+}
+
+// StopWorktreeWorkerUnits stops a worktree's worker units without removing
+// them. Removing a worktree calls it before git deletes the tree: a worker
+// still running writes into it (Vite's cache) and makes the removal fail.
+func StopWorktreeWorkerUnits(siteName, wtBase string) {
+	for _, u := range WorktreeWorkerUnits(siteName, wtBase) {
+		_ = stopUnitFn(u)
 	}
 }

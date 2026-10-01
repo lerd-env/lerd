@@ -87,8 +87,9 @@ lerd start --dry-run
 
 ### In the dashboard
 
-Installing a service, updating, migrating, rolling back or reinstalling one, and
-installing or rebuilding a PHP version all ask first when the image they need is
+Installing a service, starting a built-in one for the first time, adding a
+suggested service to a site, updating, migrating, rolling back or reinstalling
+one, and installing or rebuilding a PHP version all ask first when the image they need is
 not already on the machine:
 
 > **Download required**
@@ -102,7 +103,8 @@ the usual case for that.
 
 ### From an assistant
 
-The MCP tools that would fetch an image (installing a service preset, updating,
+The MCP tools that would fetch an image (starting a service whose image is not
+here yet, installing a service preset, updating,
 migrating, rolling back or reinstalling a service, and adding a PHP extension,
 which rebuilds the image) report the image and its size back to the assistant
 and download nothing. It takes a second call carrying `confirm: true` to go
@@ -162,11 +164,12 @@ lerd quit
 The full off-switch:
 
 1. Runs everything `lerd stop` does.
-2. Stops `lerd-ui` (Web UI).
-3. Stops `lerd-watcher`.
-4. Kills the system tray process.
-5. Stops the `lerd-dns` forwarder. Unlike `lerd stop`, quit is a full teardown, so it takes DNS down too. The watcher is stopped first (step 3) because it is the only thing that would restart `lerd-dns`.
-6. **macOS only:** stops the Podman Machine VM.
+2. Stops the workers of every site's git worktrees, which `lerd stop` leaves running. Their units are kept, so the next `lerd start` brings them back.
+3. Stops `lerd-ui` (Web UI).
+4. Stops `lerd-watcher`.
+5. Kills the system tray process.
+6. Stops the `lerd-dns` forwarder. Unlike `lerd stop`, quit is a full teardown, so it takes DNS down too. The watcher is stopped first (step 4) because it is the only thing that would restart `lerd-dns`.
+7. **macOS only:** stops the Podman Machine VM.
 
 After `lerd quit` there are no lerd processes left running. On macOS the Podman Machine VM is also shut down, so `lerd start` will bring it back up on the next run. This is the right command before a reinstall or before pulling a major update. Before a reboot it is optional on macOS, where the watcher now runs the same teardown for you.
 

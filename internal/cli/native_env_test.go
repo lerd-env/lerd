@@ -56,7 +56,7 @@ func TestBareHostKeepsANonDefaultPort(t *testing.T) {
 	serviceContainerPort := map[string]string{"mysql": "3306"}
 
 	updates := map[string]string{"DB_HOST": "lerd-mysql"}
-	applyHostProxyEnvWithPorts(updates, containerToHost, serviceContainerPort)
+	applyHostProxyEnvWithPorts(updates, containerToHost, serviceContainerPort, nil)
 	if got := updates["DB_HOST"]; got != "127.0.0.1:3307" {
 		t.Errorf("DB_HOST = %q, want 127.0.0.1:3307", got)
 	}
@@ -66,7 +66,7 @@ func TestBareHostKeepsANonDefaultPort(t *testing.T) {
 // ends up with the port twice.
 func TestBareHostStaysBareWhenASiblingPortExists(t *testing.T) {
 	updates := map[string]string{"DB_HOST": "lerd-mysql", "DB_PORT": "3306"}
-	applyHostProxyEnvWithPorts(updates, map[string]string{"3306": "3307"}, map[string]string{"mysql": "3306"})
+	applyHostProxyEnvWithPorts(updates, map[string]string{"3306": "3307"}, map[string]string{"mysql": "3306"}, nil)
 	if got := updates["DB_HOST"]; got != "127.0.0.1" {
 		t.Errorf("DB_HOST = %q, want a bare 127.0.0.1", got)
 	}
@@ -78,7 +78,7 @@ func TestBareHostStaysBareWhenASiblingPortExists(t *testing.T) {
 // A service published on its own port needs no suffix.
 func TestBareHostStaysBareWhenPortsMatch(t *testing.T) {
 	updates := map[string]string{"REDIS_HOST": "lerd-redis"}
-	applyHostProxyEnvWithPorts(updates, map[string]string{"6379": "6379"}, map[string]string{"redis": "6379"})
+	applyHostProxyEnvWithPorts(updates, map[string]string{"6379": "6379"}, map[string]string{"redis": "6379"}, nil)
 	if got := updates["REDIS_HOST"]; got != "127.0.0.1" {
 		t.Errorf("REDIS_HOST = %q, want a bare 127.0.0.1", got)
 	}
@@ -116,7 +116,7 @@ func TestDottedHostAndPortAreRewritten(t *testing.T) {
 		"DB.Connections.Default.port":    "3306",
 		"DB.Connections.Default.charset": "utf8mb4",
 	}
-	applyHostProxyEnvWithPorts(updates, map[string]string{"3306": "3307"}, map[string]string{"mysql": "3306"})
+	applyHostProxyEnvWithPorts(updates, map[string]string{"3306": "3307"}, map[string]string{"mysql": "3306"}, nil)
 	if got := updates["DB.Connections.Default.host"]; got != "127.0.0.1" {
 		t.Errorf("host = %q, want 127.0.0.1", got)
 	}
@@ -125,5 +125,36 @@ func TestDottedHostAndPortAreRewritten(t *testing.T) {
 	}
 	if got := updates["DB.Connections.Default.charset"]; got != "utf8mb4" {
 		t.Errorf("charset must be untouched, got %q", got)
+	}
+}
+
+// Two services of one family listen on the same container port. The port a
+// value gets has to come from the service it names, not from whichever of them
+// the shared container-port map happened to keep.
+func TestSameContainerPortResolvesPerService(t *testing.T) {
+	shared := map[string]string{"3306": "3308"} // mysql sorts first and wins the shared map
+	byService := map[string]map[string]string{
+		"mysql":     {"3306": "3308"},
+		"mysql-9-7": {"3306": "3318"},
+	}
+	updates := map[string]string{
+		"DB_HOST":      "lerd-mysql-9-7",
+		"DB_PORT":      "3306",
+		"DATABASE_URL": "mysql://root:lerd@lerd-mysql-9-7:3306/app",
+		"CACHE_HOST":   "lerd-mysql",
+		"CACHE_PORT":   "3306",
+	}
+	applyHostProxyEnvWithPorts(updates, shared, map[string]string{"mysql": "3306", "mysql-9-7": "3306"}, byService)
+	want := map[string]string{
+		"DB_HOST":      "127.0.0.1",
+		"DB_PORT":      "3318",
+		"DATABASE_URL": "mysql://root:lerd@127.0.0.1:3318/app",
+		"CACHE_HOST":   "127.0.0.1",
+		"CACHE_PORT":   "3308",
+	}
+	for k, v := range want {
+		if updates[k] != v {
+			t.Errorf("%s = %q, want %q", k, updates[k], v)
+		}
 	}
 }

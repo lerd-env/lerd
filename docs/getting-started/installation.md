@@ -41,7 +41,7 @@ The installer will:
 ::: info Setup asks for sudo once, up front
 Everything `lerd install` needs root for happens in one step at the very start, before any downloading or container work: the unprivileged-port sysctl so nginx can bind 80 and 443, systemd linger so your containers survive logout, and a passwordless sudoers rule for the DNS resolver operations. It runs as `sudo lerd bootstrap --system`, the same command the apt package runs as root, so both routes apply identical settings. The mkcert CA is trusted in the system store the same way once it has been generated.
 
-Reinstalling for an update or a test reuses what is already in place and does not ask again, and if a step cannot run through `sudo` it falls back to prompting for each one separately. Uninstalling takes the sudoers rule and the CA back out, so both last exactly as long as lerd does.
+Reinstalling for an update or a test reuses what is already in place and does not ask again, and if a step cannot run through `sudo` it falls back to prompting for each one separately. Uninstalling takes the sudoers rule and the CA back out, so both last exactly as long as lerd does, including a rule a package's `lerd bootstrap --system` wrote.
 :::
 
 After install, reload your shell or open a new terminal so `PATH` takes effect.
@@ -206,7 +206,7 @@ Stops all containers, disables and removes Quadlet units, removes the watcher se
 
 Four opt-in prompts before finishing:
 
-1. **Remove all config and data**: deletes `~/.config/lerd` and `~/.local/share/lerd` (takes your `sites.yaml`, bundled binaries, TLS certs, and all service data with it). Global npm packages that the `npm` shim installed into lerd's managed prefix are not silently lost: when a system npm exists you're offered a reinstall into your own prefix first, and otherwise the exact `npm install -g …` line to run afterwards is printed.
+1. **Remove all config and data**: deletes `~/.config/lerd` and `~/.local/share/lerd` (takes your `sites.yaml`, bundled binaries, TLS certs, and all service data with it). Global npm packages that the `npm` shim installed into lerd's managed prefix are not silently lost: when a system npm exists you're offered a reinstall into your own prefix first, and otherwise the exact `npm install -g …` line to run afterwards is printed. Keeping them also keeps a note of the built-in services that were installed, so the next install brings back the ones no site lists as well, unless you have removed one with `lerd service remove` since.
 2. **Remove MCP integration**: unregisters lerd from Claude Code, Cursor, Windsurf, and Junie at user scope, removes `~/.claude/skills/lerd/`, `~/.cursor/rules/lerd.mdc`, and strips the lerd block from `~/.junie/guidelines.md`. Also runs across every registered site to clean the same files per-project.
 3. **Uninstall mkcert CA**: runs `mkcert -uninstall` so browsers and OS trust stores stop trusting the lerd CA that `install` originally added.
 4. **Purge lerd-built container images**: removes `lerd-php*-fpm:local`, `lerd-custom-*:local`, and `lerd-dnsmasq:local`. Upstream pulled images (mysql/redis/postgres/etc.) are deliberately left alone; they're expensive to re-pull and your database/app data lives in host bind mounts, not inside the images, so nothing is lost by keeping them.

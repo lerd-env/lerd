@@ -569,8 +569,10 @@ func planSetupSteps(cwd string, skipOpen bool) []setupStep {
 		}
 	}
 
-	// Only offer the secure step when the site isn't already secured by lerd init.
-	if site == nil || !site.Secured {
+	// Only offer the secure step when the site isn't already secured by lerd init,
+	// and never on a .localhost install, where lerd secure can only refuse.
+	gcfg, _ := config.LoadGlobal()
+	if (site == nil || !site.Secured) && gcfg.DNSManaged() {
 		steps = append(steps, setupStep{
 			label:   "lerd secure",
 			enabled: false,
@@ -756,11 +758,13 @@ func composerInContainer(dir string, args ...string) error {
 		cfg, _ := config.LoadGlobal()
 		version = cfg.PHP.DefaultVersion
 	}
+	composerPhar := composer.PharPath()
+	if took, err := execOnHostIfNative(dir, append([]string{"php", composerPhar}, args...), "COMPOSER_HOME="+composerHomeDir()); took {
+		return err
+	}
 	container := fpmContainerForDir(dir, version)
 
 	podman.EnsurePathMounted(dir, version)
-
-	composerPhar := composer.PharPath()
 
 	cmdArgs := []string{"exec", "-i", "-w", dir,
 		"--env", "HOME=" + containerHome(),
@@ -810,6 +814,11 @@ func execInContainer(dir, command string) error {
 	if err != nil {
 		cfg, _ := config.LoadGlobal()
 		version = cfg.PHP.DefaultVersion
+	}
+	if parts := strings.Fields(command); len(parts) > 0 {
+		if took, err := execOnHostIfNative(dir, parts); took {
+			return err
+		}
 	}
 	container := fpmContainerForDir(dir, version)
 	podman.EnsurePathMounted(dir, version)

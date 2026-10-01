@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/services"
 )
 
 // recorder captures the teardown as an ordered list of steps, so a test can
@@ -194,5 +196,69 @@ func TestQuit_NilHookIsSkipped(t *testing.T) {
 	}
 	if !rec.contains("podman-machine") {
 		t.Error("Quit must still stop the VM with no hook set")
+	}
+}
+
+// A worktree's workers run under their own units (lerd-<worker>-<site>-<slug>),
+// which no registry list names. `lerd quit` is the full teardown, so it has to
+// find them through the site's worktrees or they outlive it.
+func TestQuit_StopsWorktreeWorkerUnits(t *testing.T) {
+	rec := captureTeardown(t)
+
+	repo := filepath.Join(t.TempDir(), "app")
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main", repo},
+		{"-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"},
+		{"-C", repo, "worktree", "add", "-q", filepath.Join(repo, "app-feat"), "-b", "feat"},
+	} {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	if err := config.AddSite(config.Site{Name: "app", Domains: []string{"app.test"}, Path: repo}); err != nil {
+		t.Fatal(err)
+	}
+	seedServiceUnits(t, "lerd-vite-app-app-feat", "lerd-vite-other-app-feat")
+
+	if err := Quit(SimpleRunner, nil); err != nil {
+		t.Fatalf("Quit: %v", err)
+	}
+	if !rec.contains("lerd-vite-app-app-feat") {
+		t.Errorf("`lerd quit` left the worktree's worker running; stopped %v", rec.steps)
+	}
+	if rec.contains("lerd-vite-other-app-feat") {
+		t.Error("`lerd quit` stopped a unit belonging to another site")
+	}
+}
+
+func TestStopWorktreeWorkerUnits_StopsOnlyThatWorktree(t *testing.T) {
+	rec := captureTeardown(t)
+	seedServiceUnits(t, "lerd-vite-app-app-feat", "lerd-queue-app-app-feat", "lerd-vite-app-app-other", "lerd-vite-app")
+
+	StopWorktreeWorkerUnits("app", "app-feat")
+
+	for _, want := range []string{"lerd-vite-app-app-feat", "lerd-queue-app-app-feat"} {
+		if !rec.contains(want) {
+			t.Errorf("%s was not stopped; stopped %v", want, rec.steps)
+		}
+	}
+	for _, other := range []string{"lerd-vite-app-app-other", "lerd-vite-app"} {
+		if rec.contains(other) {
+			t.Errorf("%s belongs to something else but was stopped", other)
+		}
+	}
+	if !slices.Contains(services.Mgr.ListServiceUnits("lerd-vite-app-app-feat"), "lerd-vite-app-app-feat") {
+		t.Error("the unit file was removed; stopping must leave it for the watcher's cleanup")
+	}
+}
+
+// seedServiceUnits installs worker units through the platform's own manager,
+// systemd files on Linux and launchd plists on macOS, under the test's home.
+func seedServiceUnits(t *testing.T, names ...string) {
+	t.Helper()
+	for _, n := range names {
+		if err := services.Mgr.WriteServiceUnit(n, "[Service]\nExecStart=/bin/true\n"); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

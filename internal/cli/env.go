@@ -72,16 +72,23 @@ func rewriteEnvForHostProxy(updates map[string]string, serviceNames []string) {
 	// Which container port each service listens on, so a host-only value can
 	// keep a port that has no sibling key to live in.
 	serviceContainerPort := map[string]string{}
+	serviceHostPorts := map[string]map[string]string{}
 	for _, name := range names {
 		for _, mapping := range servicePortMappings(name) {
-			if _, container, ok := splitHostContainerPort(mapping); ok {
+			if host, container, ok := splitHostContainerPort(mapping); ok {
 				if _, seen := serviceContainerPort[name]; !seen {
 					serviceContainerPort[name] = container
+				}
+				if serviceHostPorts[name] == nil {
+					serviceHostPorts[name] = map[string]string{}
+				}
+				if _, seen := serviceHostPorts[name][container]; !seen {
+					serviceHostPorts[name][container] = host
 				}
 			}
 		}
 	}
-	applyHostProxyEnvWithPorts(updates, containerToHost, serviceContainerPort)
+	applyHostProxyEnvWithPorts(updates, containerToHost, serviceContainerPort, serviceHostPorts)
 }
 
 // loopbackServiceNames lists the services whose container port must be mapped
@@ -223,7 +230,7 @@ var lerdContainerHostRe = regexp.MustCompile(`lerd-[a-z0-9-]+(?::\d+)?`)
 // port, and a discrete *_PORT value with no host alongside is remapped too.
 // Split from rewriteEnvForHostProxy so the logic is testable without services.
 func applyHostProxyEnv(updates, containerToHost map[string]string) {
-	applyHostProxyEnvWithPorts(updates, containerToHost, nil)
+	applyHostProxyEnvWithPorts(updates, containerToHost, nil, nil)
 }
 
 // applyHostProxyEnvWithPorts is applyHostProxyEnv plus the container port each
@@ -232,7 +239,20 @@ func applyHostProxyEnv(updates, containerToHost map[string]string) {
 // DB_PORT, while WordPress writes the port into DB_HOST and has no DB_PORT
 // constant at all, so a bare rewrite there silently retargets the app at
 // whatever owns the container's port on the host.
-func applyHostProxyEnvWithPorts(updates, containerToHost, serviceContainerPort map[string]string) {
+func applyHostProxyEnvWithPorts(updates, containerToHost, serviceContainerPort map[string]string, serviceHostPorts map[string]map[string]string) {
+	// Two services of one family share a container port (mysql and mysql-9-7
+	// both on 3306), so a port is looked up on the service a value names first
+	// and on the shared map only when nothing names one.
+	hostPort := func(svc, container string) (string, bool) {
+		if host, ok := serviceHostPorts[svc][container]; ok {
+			return host, true
+		}
+		host, ok := containerToHost[container]
+		return host, ok
+	}
+	// Sibling hosts are read before anything is rewritten, since a *_HOST
+	// rewritten first no longer says which service its *_PORT belongs to.
+	original := maps.Clone(updates)
 	for k, v := range updates {
 		if !hostProxyConnKey(k) {
 			continue
@@ -240,9 +260,9 @@ func applyHostProxyEnvWithPorts(updates, containerToHost, serviceContainerPort m
 		nv := lerdContainerHostRe.ReplaceAllStringFunc(v, func(m string) string {
 			name, port, found := strings.Cut(m, ":")
 			if !found {
-				return hostProxyLoopback + bareHostPortSuffix(k, name, updates, containerToHost, serviceContainerPort)
+				return hostProxyLoopback + bareHostPortSuffix(k, name, updates, serviceContainerPort, hostPort)
 			}
-			if mapped, ok := containerToHost[port]; ok {
+			if mapped, ok := hostPort(strings.TrimPrefix(name, "lerd-"), port); ok {
 				port = mapped
 			}
 			return hostProxyLoopback + ":" + port
@@ -254,11 +274,29 @@ func applyHostProxyEnvWithPorts(updates, containerToHost, serviceContainerPort m
 		// No host token to anchor on: a standalone port key (DB_PORT=3306, or
 		// TYPO3's DB.Connections.Default.port) still needs remapping.
 		if isPortKey(k) {
-			if mapped, ok := containerToHost[v]; ok {
+			if mapped, ok := hostPort(siblingHostService(k, original), v); ok {
 				updates[k] = mapped
 			}
 		}
 	}
+}
+
+// siblingHostService names the lerd service the host key beside a port key
+// points at (DB_HOST for DB_PORT, the dotted host beside a dotted port), or ""
+// when there is none.
+func siblingHostService(portKey string, env map[string]string) string {
+	hostKey := ""
+	if base, ok := strings.CutSuffix(portKey, "_PORT"); ok {
+		hostKey = base + "_HOST"
+	} else if idx := strings.LastIndex(portKey, "."); idx >= 0 {
+		hostKey = portKey[:idx+1] + "host"
+	}
+	m := lerdContainerHostRe.FindString(env[hostKey])
+	if m == "" || m != strings.TrimSpace(env[hostKey]) {
+		return ""
+	}
+	name, _, _ := strings.Cut(m, ":")
+	return strings.TrimPrefix(name, "lerd-")
 }
 
 // isPortKey reports whether a key holds a bare port number, in either the
@@ -275,13 +313,13 @@ func isPortKey(k string) bool {
 // published port itself, and "" when it must not. It carries the port only if
 // the service is published somewhere other than its container port and no
 // sibling *_PORT key is there to hold it.
-func bareHostPortSuffix(key, token string, updates, containerToHost, serviceContainerPort map[string]string) string {
+func bareHostPortSuffix(key, token string, updates, serviceContainerPort map[string]string, hostPort func(svc, container string) (string, bool)) string {
 	svc := strings.TrimPrefix(token, "lerd-")
 	container, ok := serviceContainerPort[svc]
 	if !ok {
 		return ""
 	}
-	host, ok := containerToHost[container]
+	host, ok := hostPort(svc, container)
 	if !ok || host == container {
 		return ""
 	}
@@ -646,6 +684,32 @@ func projectUsesSQLite(lerdYAMLServices map[string]bool, envMap map[string]strin
 	return frameworkServiceDetected(*fw.Env.SQLite, envMap)
 }
 
+// defaultServiceFor returns the definition's default_service when the project
+// names no database: none detected in its config, none picked, not on SQLite and
+// not on an external server. A value the definition does not wire is refused by
+// name rather than guessed at.
+func defaultServiceFor(fw *config.Framework, envMap map[string]string, picked, external map[string]bool) (string, error) {
+	def := fw.Env.DefaultService
+	if def == "" {
+		return "", nil
+	}
+	if _, ok := fw.Env.Services[def]; !ok {
+		return "", fmt.Errorf("%s declares default_service %q, which its env.services does not define; this lerd cannot wire it", fw.Label, def)
+	}
+	if userPickedDBFromYAML(picked) || externalDBPicked(external) {
+		return "", nil
+	}
+	if fw.Env.SQLite != nil && frameworkServiceDetected(*fw.Env.SQLite, envMap) {
+		return "", nil
+	}
+	for svc, sd := range fw.Env.Services {
+		if (svc == "mysql" || svc == "postgres" || config.IsDBServiceName(svc)) && len(sd.Detect) > 0 && frameworkServiceDetected(sd, envMap) {
+			return "", nil
+		}
+	}
+	return def, nil
+}
+
 func userPickedDBFromYAML(lerdYAMLServices map[string]bool) bool {
 	if lerdYAMLServices["sqlite"] || lerdYAMLServices["mysql"] || lerdYAMLServices["postgres"] {
 		return true
@@ -919,6 +983,15 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		lerdYAMLServices[dbChoice] = true
 	}
 
+	defaultSvc, err := defaultServiceFor(fw, envMap, lerdYAMLServices, extServices)
+	if err != nil {
+		return err
+	}
+	if defaultSvc != "" {
+		// Wired for this run only, like a pick; the project's own config records
+		// it from here on, so nothing is written to .lerd.yaml.
+		lerdYAMLServices[defaultSvc] = true
+	}
 	userPickedDB := userPickedDBFromYAML(lerdYAMLServices) || externalDBPicked(extServices)
 	valkeyPicked := lerdYAMLServices["valkey"]
 
@@ -972,7 +1045,11 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			if !startableFrameworkService(svc) {
 				continue
 			}
-			envApplyLine(svc, detectedFromEnv)
+			if svc == defaultSvc && envLive == nil {
+				fmt.Printf("  No database configured, using the default %s — applying lerd connection values\n", svc)
+			} else {
+				envApplyLine(svc, detectedFromEnv)
+			}
 			isDB := svc == "mysql" || svc == "postgres"
 			for _, kv := range def.Vars {
 				k, v, _ := strings.Cut(kv, "=")
@@ -1684,6 +1761,12 @@ func consoleIn(dir, console string, args ...string) error {
 	if err != nil {
 		cfg, _ := config.LoadGlobal()
 		version = cfg.PHP.DefaultVersion
+	}
+	if console == "" {
+		console = "artisan"
+	}
+	if took, err := execOnHostIfNative(dir, append([]string{"php", console}, args...)); took {
+		return err
 	}
 
 	cmd := podman.Cmd(consoleExecArgs(dir, version, console, args...)...)

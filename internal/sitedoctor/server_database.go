@@ -99,6 +99,15 @@ func ForgetDatabases(service string) {
 // a database the engine does not hold, so the schema has to exist first, and the
 // migrate button returns on the re-check that follows.
 func checkServerDatabase(path string) (Check, bool) {
+	if gone := uninstalledDBServices(path); len(gone) > 0 {
+		hints := make([]string, 0, len(gone))
+		for _, name := range gone {
+			hints = append(hints, "lerd service start "+name)
+		}
+		return Check{Name: "server_database", Status: StatusFail,
+			Detail: fmt.Sprintf("The site's database is on %s, which lerd has not installed. Install it with %s, then run migrations.",
+				strings.Join(gone, " and "), strings.Join(hints, " and "))}, true
+	}
 	missing, checked := missingDatabases(path)
 	if !checked {
 		// Either nothing could be asked of an engine, or the project points at no
@@ -117,6 +126,19 @@ func checkServerDatabase(path string) (Check, bool) {
 		Detail: fmt.Sprintf("%s %s %s not exist. Create %s, then run migrations.",
 			Plural(len(missing), "Database", "Databases"), strings.Join(named, ", "),
 			Plural(len(missing), "does", "do"), Plural(len(missing), "it", "them"))}, true
+}
+
+// uninstalledDBServices returns the lerd services the project's databases sit
+// on that could not be asked for their databases because this machine does not
+// have them. One installed but not answering is not judged.
+func uninstalledDBServices(path string) []string {
+	var gone []string
+	for _, t := range config.DBTargetsFor(path) {
+		if _, err := cachedDatabases(t.Service); err != nil && !serviceInstalledFn(t.Service) {
+			gone = append(gone, t.Service)
+		}
+	}
+	return gone
 }
 
 // MissingDatabases returns the lerd-managed databases a project points at that

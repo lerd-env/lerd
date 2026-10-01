@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -400,5 +403,40 @@ func TestClientExecBaseFlagsOptOutOfSELinuxLabelling(t *testing.T) {
 	}
 	if !strings.Contains(joined, "--network lerd") {
 		t.Errorf("clientExecBaseFlags() = %q, want the lerd network kept", joined)
+	}
+}
+
+// On ostree hosts /home links to /var/home, so a path typed through either
+// spelling has to exist in the client container, not only the one $HOME uses.
+func TestHomeSpellings(t *testing.T) {
+	// Resolved first: macOS keeps temp dirs under /var, itself a symlink.
+	tmp, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	realRoot := filepath.Join(tmp, "var-home")
+	if err := os.MkdirAll(filepath.Join(realRoot, "u"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	linkRoot := filepath.Join(tmp, "home")
+	if err := os.Symlink(realRoot, linkRoot); err != nil {
+		t.Fatal(err)
+	}
+	realHome := filepath.Join(realRoot, "u")
+	linkHome := filepath.Join(linkRoot, "u")
+
+	for _, home := range []string{realHome, linkHome} {
+		got := homeSpellings(home, linkRoot)
+		if !slices.Contains(got, realHome) || !slices.Contains(got, linkHome) {
+			t.Errorf("homeSpellings(%q) = %v, want both %q and %q", home, got, realHome, linkHome)
+		}
+	}
+
+	plain := filepath.Join(tmp, "plain", "u")
+	if err := os.MkdirAll(plain, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if got := homeSpellings(plain, filepath.Join(tmp, "nohome")); !slices.Equal(got, []string{plain}) {
+		t.Errorf("homeSpellings on a plain home = %v, want only %q", got, plain)
 	}
 }

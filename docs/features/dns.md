@@ -19,7 +19,7 @@ When DNS is disabled lerd will:
 - leave NetworkManager / `/etc/resolver` untouched
 - write its config with `dns.tld: localhost` so newly created sites use a TLD that the system resolver libraries hardwire to `127.0.0.1` per RFC 6761
 
-In this mode your sites are reachable at `http://<name>.localhost`. HTTPS is intentionally unavailable, the `lerd init` wizard skips the "Enable HTTPS?" question, the dashboard replaces the per-site HTTPS toggle with a muted lock icon that explains HTTPS needs lerd-managed DNS, `lerd secure` refuses with a clear message, and the API endpoint returns the same. `lerd dns:check` reports `DNS managed externally` instead of probing, the dashboard DNS panel shows a `disabled` pill, the System tab drops the DNS row, and the tray shows a muted dot for DNS so you do not get nagged that the container is missing.
+In this mode your sites are reachable at `http://<name>.localhost`. HTTPS is intentionally unavailable, the `lerd init` wizard skips the "Enable HTTPS?" question, `lerd setup` leaves out its `lerd secure` step, the dashboard replaces the per-site HTTPS toggle with a muted lock icon that explains HTTPS needs lerd-managed DNS, `lerd secure` refuses with a clear message, and the API endpoint returns the same. `lerd dns:check` reports `DNS managed externally` instead of probing, the dashboard DNS panel shows a `disabled` pill, the System tab drops the DNS row, and the tray shows a muted dot for DNS so you do not get nagged that the container is missing.
 
 ## LAN exposure in disabled-DNS mode
 
@@ -43,7 +43,7 @@ dns:
   tld: test
 ```
 
-The DNS question is asked once, at your first `lerd install`, and then remembered in `config.yaml`. Neither a later `lerd install` nor `lerd update` asks again or changes the mode, so a deliberate choice is never undone by a reinstall. To flip an existing install, use the dedicated commands:
+The DNS question is asked once, at your first `lerd install`, and then remembered in `config.yaml`. Neither a later `lerd install`, `lerd update`, nor a reinstall over data an uninstall kept asks again or changes the mode, so a deliberate choice is never undone by a reinstall. To flip an existing install, use the dedicated commands:
 
 - `lerd dns:enable` turns lerd-managed DNS on (dnsmasq, `.test`, HTTPS)
 - `lerd dns:disable` turns it off, tears down `lerd-dns`, and moves sites to `*.localhost`

@@ -115,3 +115,40 @@ func TestFixOutput_keepsTheJSONDocumentAlone(t *testing.T) {
 		t.Errorf("normal mode writes subprocess output to %v, want stdout", got)
 	}
 }
+
+// A database --fix just created is empty, so the site keeps failing on its
+// first query until the schema lands. The framework's own migrate command is
+// what fills it, and it runs only on the database this run made.
+func TestMigrateCreatedDatabases_runsTheFrameworksMigrateCommand(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	storeDir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(storeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	def := "name: fixfw\nlabel: FixFW\ncommands:\n  - name: migrate\n    command: echo ran > migrated\ndoctor:\n  migrate_command: migrate\n"
+	if err := os.WriteFile(filepath.Join(storeDir, "fixfw.yaml"), []byte(def), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte("framework: fixfw\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := migrateCreatedDatabases(dir, "fixfw", true); err != nil {
+		t.Fatalf("migrateCreatedDatabases: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "migrated")); err != nil {
+		t.Errorf("the migrate command did not run: %v", err)
+	}
+}
+
+// A framework that names no migrate command has nothing to run, and that is
+// not an error: the report still says what is left.
+func TestMigrateCreatedDatabases_noMigrateCommandIsANoop(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	if err := migrateCreatedDatabases(t.TempDir(), "", true); err != nil {
+		t.Errorf("migrateCreatedDatabases = %v, want nil", err)
+	}
+}

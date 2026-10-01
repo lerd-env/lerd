@@ -23,7 +23,7 @@ func viteDevServer() *config.DevServerTool {
 		Wrapper: `import { mergeConfig } from 'vite';
 import projectConfig from %s;
 const publicUrl = %s;
-const lerd = { base: %s, server: { origin: %s, allowedHosts: %s, cors: { origin: %s } } };
+const lerd = { base: %s, server: { origin: %s, allowedHosts: %s, watch: { ignored: %s }, cors: { origin: %s } } };
 export default projectConfig;
 `,
 	}
@@ -534,5 +534,28 @@ func TestWriteDevServerWrapperDefersToTheToolsConfigLoader(t *testing.T) {
 	}
 	if strings.Contains(string(body), `import projectConfig from`) {
 		t.Errorf("wrapper still imports the project config:\n%s", body)
+	}
+}
+
+// lerd checks worktrees out inside the project, each with its own vendor and
+// node_modules, so a parent dev server watching them runs the host out of
+// inotify watches and dies. The wrapper keeps the watcher out of them.
+func TestWriteDevServerWrapperIgnoresNestedWorktrees(t *testing.T) {
+	dir := gitRepo(t, "/node_modules\n")
+	if err := os.WriteFile(filepath.Join(dir, "vite.config.js"), []byte("export default {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rel, err := writeDevServerWrapper(dir, viteDevServer(), securedAddr("myapp.test"))
+	if err != nil {
+		t.Fatalf("writeDevServerWrapper() error: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := config.CanonicalPath(dir)
+	want := `ignored: ["` + filepath.ToSlash(filepath.Join(root, filepath.Base(root)+"-*")) + `/**"]`
+	if !strings.Contains(string(body), want) {
+		t.Errorf("wrapper does not ignore nested worktrees, want %s in:\n%s", want, body)
 	}
 }

@@ -236,3 +236,36 @@ func TestLogAutoBuildResolution(t *testing.T) {
 		}
 	})
 }
+
+// A worker left running while git deletes the tree writes back into it (Vite
+// recreates its cache) and the removal fails half done, so the workers stop
+// while the checkout is still there.
+func TestRemoveWorktreeAndCleanup_stopsWorkersBeforeGitRemovesTheTree(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	repo := gitRepo(t, "")
+	if out, err := exec.Command("git", "-C", repo, "commit", "-q", "--allow-empty", "-m", "init").CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v\n%s", err, out)
+	}
+	wt := filepath.Join(repo, filepath.Base(repo)+"-feat")
+	if out, err := exec.Command("git", "-C", repo, "worktree", "add", "-q", wt, "-b", "feat").CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, out)
+	}
+	site := &config.Site{Name: "acme", Path: repo, Domains: []string{"acme.test"}}
+
+	treeThereAtStop := false
+	orig := stopWorktreeUnitsFn
+	stopWorktreeUnitsFn = func(siteName, wtBase string) {
+		_, err := os.Stat(wt)
+		treeThereAtStop = err == nil && siteName == "acme" && wtBase == filepath.Base(wt)
+	}
+	t.Cleanup(func() { stopWorktreeUnitsFn = orig })
+
+	if err := RemoveWorktreeAndCleanup(site, "feat", false, false, nil); err != nil {
+		t.Fatalf("RemoveWorktreeAndCleanup: %v", err)
+	}
+	if !treeThereAtStop {
+		t.Error("the worktree's workers were not stopped while its checkout still existed")
+	}
+}

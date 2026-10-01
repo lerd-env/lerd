@@ -55,17 +55,45 @@ func TestRemoveSudoersGrant_DoesNotDependOnReadingTheRootOnlyPath(t *testing.T) 
 	}
 }
 
-// Without the marker lerd never installed a drop-in, and the grant that would
-// make the removal passwordless is absent, so a blind sudo would prompt.
-func TestRemoveSudoersGrant_SkippedWhenLerdNeverInstalledOne(t *testing.T) {
+func capturePasswordlessRemoval(t *testing.T, succeeds bool) *[]string {
+	t.Helper()
+	orig := tryPasswordlessSudoersRemoval
+	t.Cleanup(func() { tryPasswordlessSudoersRemoval = orig })
+	var got []string
+	tryPasswordlessSudoersRemoval = func(path string) bool {
+		got = append(got, path)
+		return succeeds
+	}
+	return &got
+}
+
+// Without the marker a blind sudo would prompt, so only the non-interactive
+// removal may run, and only the interactive one is kept away.
+func TestRemoveSudoersGrant_NoMarkerNeverPrompts(t *testing.T) {
 	withMarker(t, false)
 	removed := captureRemoval(t)
+	capturePasswordlessRemoval(t, false)
 
 	if removeSudoersGrant() {
-		t.Error("removal must not be attempted when no drop-in was ever recorded")
+		t.Error("nothing was removed, so the removal must not report success")
 	}
 	if len(*removed) != 0 {
-		t.Errorf("expected no removal, got %v", *removed)
+		t.Errorf("expected no prompting removal, got %v", *removed)
+	}
+}
+
+// `lerd bootstrap --system`, the package maintainer path, writes the drop-in as
+// root and leaves no user marker, yet the grant it writes still has to go.
+func TestRemoveSudoersGrant_RemovesABootstrapGrantWithNoMarker(t *testing.T) {
+	withMarker(t, false)
+	captureRemoval(t)
+	tried := capturePasswordlessRemoval(t, true)
+
+	if !removeSudoersGrant() {
+		t.Fatal("a drop-in written without a marker must still be removed")
+	}
+	if len(*tried) != 1 || (*tried)[0] != lerdSudoersPath {
+		t.Fatalf("expected one passwordless removal of %s, got %v", lerdSudoersPath, *tried)
 	}
 }
 

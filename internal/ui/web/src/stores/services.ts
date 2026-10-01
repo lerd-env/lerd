@@ -210,6 +210,10 @@ export async function serviceAction(
   action: ServiceAction,
   opts: { removeData?: boolean } = {}
 ): Promise<boolean> {
+  // A first start fetches the image, so it asks like every other download.
+  if (action === 'start' && !(await confirmDownload(serviceLabel(name), { service: name, action }))) {
+    return false;
+  }
   try {
     const params = new URLSearchParams();
     if (action === 'remove' && opts.removeData) params.set('removeData', 'true');

@@ -61,6 +61,18 @@ func ActionDownload(name, action, tag string) (podman.PendingDownload, error) {
 	case "rollback":
 		_, previous := serviceImageRefs(name)
 		return podman.DescribeDownload(previous), nil
+	case "start":
+		return podman.DescribeDownload(StartImage(name)), nil
+	case "add":
+		// Adding a suggested service to a site may install a store preset
+		// first, one this machine may not even have fetched yet.
+		if img := StartImage(name); img != "" {
+			return podman.DescribeDownload(img), nil
+		}
+		if d, err := PresetDownload(name, ""); err == nil {
+			return d, nil
+		}
+		return podman.PendingDownload{}, nil
 	case "reinstall":
 		current, _ := serviceImageRefs(name)
 		return podman.DescribeDownload(current), nil

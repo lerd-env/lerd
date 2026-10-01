@@ -461,14 +461,7 @@ func runClientExec(tool string, args []string) error {
 
 	// Resolve the first candidate binary that exists in the image, then exec it
 	// with the shim's args as sh's positional parameters so no quoting is lost.
-	var probe strings.Builder
-	for i, b := range target.Binaries {
-		if i > 0 {
-			probe.WriteString(" || ")
-		}
-		probe.WriteString("command -v " + podman.ShellQuote(b))
-	}
-	shellCmd := "exec $(" + probe.String() + ") \"$@\""
+	shellCmd := execFirstCommand(target.Binaries)
 
 	// Run the tool in a throwaway container from the service image rather than
 	// exec-ing into the long-running service: nothing is mounted into or
@@ -489,7 +482,9 @@ func runClientExec(tool string, args []string) error {
 		runFlags = append(runFlags, "-v", p+":"+p)
 		mounted[p] = true
 	}
-	addMount(home)
+	for _, p := range homeSpellings(home, "/home") {
+		addMount(p)
+	}
 	if home == "" || !pathUnder(cwd, home) {
 		addMount(cwd)
 	}
@@ -529,6 +524,33 @@ func runClientExec(tool string, args []string) error {
 		return err
 	}
 	return nil
+}
+
+// execFirstCommand is a sh -c script that execs the first of bins the container
+// has, with the script's positional parameters as its arguments.
+func execFirstCommand(bins []string) string {
+	probes := make([]string, len(bins))
+	for i, b := range bins {
+		probes[i] = "command -v " + podman.ShellQuote(b)
+	}
+	return "exec $(" + strings.Join(probes, " || ") + ") \"$@\""
+}
+
+// homeSpellings returns every path that names the home directory: home itself,
+// its resolved form, and its spelling under homeRoot. On ostree hosts /home links
+// to /var/home, so a path typed through the other spelling would not exist in the
+// container unless both are mounted.
+func homeSpellings(home, homeRoot string) []string {
+	if home == "" {
+		return nil
+	}
+	out := []string{home}
+	for _, p := range []string{config.CanonicalPath(home), filepath.Join(homeRoot, filepath.Base(home))} {
+		if !slices.Contains(out, p) && config.SamePath(p, home) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // clientExecBaseFlags is where a client tool's throwaway container starts: the
