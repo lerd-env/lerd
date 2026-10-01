@@ -28,17 +28,6 @@ func groupNativeRun(cmd *exec.Cmd) bool {
 	return true
 }
 
-// setOwnProcessGroup puts a native run in its own process group so anything it
-// spawns can be reaped with it. Without this a child that outlives the command
-// (pest-plugin-browser's Playwright server is the one that bites) keeps the
-// inherited stdout open, so a pipeline never sees EOF, and every run leaks one.
-func setOwnProcessGroup(cmd *exec.Cmd) {
-	if cmd.SysProcAttr == nil {
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-	}
-	cmd.SysProcAttr.Setpgid = true
-}
-
 // reapProcessGroup signals whatever is left of a finished command's group. The
 // command itself has already exited; this is only for what it left behind.
 func reapProcessGroup(cmd *exec.Cmd) {
@@ -48,8 +37,8 @@ func reapProcessGroup(cmd *exec.Cmd) {
 	// Only a group this package created may be signalled, and Setpgid makes the
 	// group id the child's pid. Looking it up instead would fail here: Wait has
 	// already reaped the process the id would be read from.
-	if cmd.SysProcAttr == nil || !cmd.SysProcAttr.Setpgid {
+	if !leadsOwnProcessGroup(cmd) {
 		return
 	}
-	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+	_ = killProcessGroup(cmd.Process.Pid, syscall.SIGTERM)
 }
