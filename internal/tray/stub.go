@@ -5,7 +5,6 @@ package tray
 import (
 	"os"
 	"os/exec"
-	"syscall"
 )
 
 // Run tries to exec the lerd-tray helper binary installed alongside lerd.
@@ -35,7 +34,7 @@ func Run(mono bool) error {
 	cmd.Stdin = null
 	cmd.Stdout = null
 	cmd.Stderr = null
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	setDetachAttrs(cmd)
 	_ = cmd.Start() // ignore error — missing library, permissions, etc.
 	return nil
 }

@@ -21,7 +21,7 @@ func HelperPath() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(filepath.Dir(exe), "lerd-tray")
+	return filepath.Join(filepath.Dir(exe), helperName())
 }
 
 // Unavailable says why the tray helper cannot run here, or "" when it can: no
