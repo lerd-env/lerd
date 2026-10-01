@@ -142,6 +142,16 @@ func runUninstall(force, keepData bool) error {
 		ok()
 	}
 
+	if found, err := removeOmarchyGlance(); found {
+		step("Removing the Lerd Glance plugin from the Omarchy bar")
+		if err != nil {
+			fmt.Println(feedback.Amber("!"))
+			feedback.Note("remove it with: omarchy-plugin-remove " + glancePluginID + " --yes")
+		} else {
+			ok()
+		}
+	}
+
 	step("Reloading service manager")
 	_ = podman.DaemonReloadFn()
 	ok()

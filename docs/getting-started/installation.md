@@ -227,9 +227,9 @@ Run without a terminal and without either flag, `lerd uninstall` cannot ask, so 
 
 If lerd came from apt, dnf or Homebrew, the teardown is the same but the binary stays where it is: deleting a file the package manager owns would leave it believing lerd is still installed. `lerd uninstall` prints the matching removal command at that step, so finish with `sudo apt remove lerd`, `sudo dnf remove lerd` or `brew uninstall lerd`.
 
-The installer's own `--uninstall` stops the user units and removes the binary, but the DNS setup lives outside your home directory and only lerd can take it back out: the `lerd0` link unit, the NetworkManager rules and dispatcher, the drop-in that empties `FallbackDNS`, and the passwordless sudoers rule the DNS operations run under. So when it finds that configuration it offers to run `lerd dns:disable` first, and prints the root commands to clear it by hand if you decline or the binary has already gone.
+On Omarchy `lerd uninstall` also takes the Lerd Glance plugin off the bar.
 
-On Omarchy the installer's `--uninstall` also removes the Lerd Glance plugin from the bar.
+The installer's `--uninstall` runs `lerd uninstall`, so it does exactly the same teardown.
 
 ---
 
@@ -309,11 +309,10 @@ The install registers the app with LaunchServices, so it appears in Launchpad an
 ### Uninstall
 
 ```bash
-lerd uninstall                                    # tears down launchd agents, DNS resolver, containers
-curl -fsSL https://lerd.sh/install.sh | bash -s -- --uninstall
+lerd uninstall
 ```
 
-Run `lerd uninstall` first (while the binary is still present) so the DNS resolver and Podman state are cleaned up, then the installer's `--uninstall` removes the launchd agents and the binary. If you installed via Homebrew, finish with `brew uninstall lerd` instead of the second command. On macOS the installer detects when the binary is still present and pauses to remind you to run `lerd uninstall` first, since the DNS resolver (`/etc/resolver/test`, removed with sudo) and the Podman machine are unreachable once the binary is gone; if it can't reach a terminal it prints the manual removal commands at the end instead.
+Tears down the launchd agents, the DNS resolver and the containers, then removes the binary. The Podman machine stays, remove it with `podman machine rm` if nothing else uses it. If you installed via Homebrew, finish with `brew uninstall lerd`.
 
 ## Windows (beta)
 
