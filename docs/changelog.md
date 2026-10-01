@@ -66,6 +66,9 @@ The release closes on a pass of the test plan across the distro guests, repeated
 - **New installs drive Node through mise** (#1915). A config that already names a manager is left alone, so nobody's Node versions move under them, and an install that was driving fnm keeps it until `lerd node:manager mise`.
 - **A worktree's database isolation is recorded in `.lerd.local.yaml`** (#1968). It was written into the worktree's committed `.lerd.yaml`, which left the tree dirty and, once the branch merged, carried the flag into main where every later worktree picked it up. The untracked file takes it now and is excluded from git, and sharing again writes `db_isolated: false` so it outranks a flag an older lerd already committed.
 
+- **The dashboard's rail, headers and theme picker were tidied** (#2023). The auto theme draws a monitor and the stop button a power symbol, the rail's bottom actions are ordered by how often they need you, the desktop themes sit right under lerd's own in the picker, service and PHP pages head with the same title row a site page does, and installed PHP versions show as compact chips.
+- **A rebuilt native PHP build reaches the machine** (#2032, #2037). A build republished without PHP changing kept its version, so nothing ever offered it. Each pin carries its build date now, an update is offered when either moves, and the PHP card's update action is always there to ask.
+
 ### Fixed
 
 - **A first start stopped halfway left a service that never started again** (#2060). A database engine killed while it initialised a fresh data directory refused that directory on every later start. A directory lerd created and that has not come up yet is now moved aside and the service started again on a clean one; one that has ever come up is never touched.

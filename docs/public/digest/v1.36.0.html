@@ -297,12 +297,12 @@
   .card:hover { border-color: var(--line-2); transform: translateY(-2px); }
   .card .card-pills { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
   .card h4 { font-size: 15.5px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.4; }
-  .card h4 .pr {
+  .card h4 .pr, .card p .pr, .ch-intro .pr {
     font-family: var(--mono); font-size: 10.5px; font-weight: 500; color: var(--dim);
     text-decoration: none; border: 1px solid var(--line); border-radius: 5px;
     padding: 1px 6px; margin-left: 6px; vertical-align: 2px; transition: 0.2s;
   }
-  .card h4 .pr:hover { color: var(--red); border-color: rgba(255,69,56,0.5); }
+  .card h4 .pr:hover, .card p .pr:hover, .ch-intro .pr:hover { color: var(--red); border-color: rgba(255,69,56,0.5); }
   .card p { color: var(--muted); font-size: 13px; line-height: 1.65; margin-top: 7px; }
   .card p code, .card li code { font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); padding: 0.5px 5px; border-radius: 4px; color: var(--amber); }
   .card p b { color: var(--text); font-weight: 600; }
@@ -534,7 +534,7 @@
     <h2>Desktop</h2>
     <div class="ch-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div>
   </div>
-  <p class="ch-intro">A desktop already says which colours its user wants, so the dashboard reads them rather than asking. The desktop appears in the theme picker as <b>one entry named after what it is wearing</b>, taking the place of the built-in theme that imitated it, and every open window repaints when the desktop changes. A theme chosen on purpose is never overridden.</p>
+  <p class="ch-intro">A desktop already says which colours its user wants, so the dashboard reads them rather than asking. The desktop appears in the theme picker as <b>one entry named after what it is wearing</b>, taking the place of the built-in theme that imitated it, and every open window repaints when the desktop changes. A theme chosen on purpose is never overridden. <a class="pr" href="https://github.com/lerd-env/lerd/pull/1864">#1864</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1924">#1924</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1940">#1940</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/2042">#2042</a></p>
 
   <div class="flow-wrap">
     <div class="flow-title"><span>WHERE EACH DESKTOP KEEPS ITS COLOURS</span><span>read by lerd-ui, watched for changes</span></div>
@@ -551,7 +551,7 @@
 
   <div class="cards three">
     <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>Asked once per install, not once per browser <a class="pr" href="https://github.com/lerd-env/lerd/pull/1978">#1978</a></h4><p>A banner suggests the desktop's theme to an install that never chose one, and the answer, use it or keep, <b>is kept in the config</b>, so the desktop app and every browser agree and nobody is asked twice.</p></div>
-    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>The embedded dashboards wear it too <a class="pr" href="https://github.com/lerd-env/lerd/pull/1875">#1875</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1845">#1845</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1960">#1960</a></h4><p>pgAdmin, Kafbat UI and RedisInsight are asked for their own dark design and then <b>have their greys laid over lerd's</b>. phpMyAdmin, Mongo Express and RabbitMQ have none, so their stylesheets are turned around. Mailpit wears the accent through Bootstrap's own variables.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>The embedded dashboards wear it too <a class="pr" href="https://github.com/lerd-env/lerd/pull/1875">#1875</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1845">#1845</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1960">#1960</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/2025">#2025</a></h4><p>pgAdmin, Kafbat UI and RedisInsight are asked for their own dark design and then <b>have their greys laid over lerd's</b>. phpMyAdmin, Mongo Express and RabbitMQ have none, so their stylesheets are turned around. Mailpit wears the accent through Bootstrap's own variables, and each one is handed the dashboard's language.</p></div>
     <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>Following window focus on Plasma <a class="pr" href="https://github.com/lerd-env/lerd/pull/2021">#2021</a></h4><p>Breeze draws a focused window's header in its own tone, so next to every other KDE window the dashboard looked unfocused. <b>The rail and headers lift to the scheme's header colour while the window has focus</b> and drop back when it moves away.</p></div>
   </div>
 
@@ -562,7 +562,7 @@
   </div>
 
   <div class="cards one">
-    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>Driven without a mouse, or without sight <a class="pr" href="https://github.com/lerd-env/lerd/pull/2027">#2027</a></h4><p>Dialogs take focus, keep Tab inside and hand it back on close, a Skip to content button is the first stop, toggles are switches that say whether they are on, detail tabs move with the arrow keys, and every view has a heading and a title naming what is open. <b>Secondary text and the accent as link text reach WCAG AA on every theme</b>, derived per theme rather than hand tuned. The same pass moved the status banner into the header as a pill, gave each worktree tab its git state the way a shell prompt shows it (#1949), and lets the System page register lerd with AI assistants from a switch (#2016).</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>Driven without a mouse, or without sight <a class="pr" href="https://github.com/lerd-env/lerd/pull/2027">#2027</a></h4><p>Dialogs take focus, keep Tab inside and hand it back on close, a Skip to content button is the first stop, toggles are switches that say whether they are on, detail tabs move with the arrow keys, and every view has a heading and a title naming what is open. <b>Secondary text and the accent as link text reach WCAG AA on every theme</b>, derived per theme rather than hand tuned. The same pass moved the status banner into the header as a pill, gave each worktree tab its git state the way a shell prompt shows it <a class="pr" href="https://github.com/lerd-env/lerd/pull/1949">#1949</a>, offers to initialise git on a site that has no repository <a class="pr" href="https://github.com/lerd-env/lerd/pull/1988">#1988</a>, and lets the System page register lerd with AI assistants from a switch <a class="pr" href="https://github.com/lerd-env/lerd/pull/2016">#2016</a>.</p></div>
   </div>
 </div></section>
 
@@ -606,7 +606,7 @@
     <h2>Worktrees</h2>
     <div class="ch-pills"><span class="pill feat">FEAT</span></div>
   </div>
-  <p class="ch-intro">A worktree's database used to be a question asked every time. A framework can now name its migrations folder, and a new worktree <b>compares it with the parent checkout and decides</b>, then says which and why.</p>
+  <p class="ch-intro">A worktree's database used to be a question asked every time. A framework can now name its migrations folder, and a new worktree <b>compares it with the parent checkout and decides</b>, then says which and why. <a class="pr" href="https://github.com/lerd-env/lerd/pull/1969">#1969</a></p>
 
   <div class="flow-wrap">
     <div class="flow-title"><span>THE BRANCH'S MIGRATIONS AGAINST THE PARENT'S</span><span>with no database chosen</span></div>
@@ -657,6 +657,10 @@
     <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>A framework's own installer <a class="pr" href="https://github.com/lerd-env/lerd/pull/1986">#1986</a></h4><p>A definition declares its installer with the file it writes, so <b>a scaffolded Drupal site is offered its site install at setup</b>, ticked while that file is missing and gone once it exists.</p></div>
     <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Setup brings up what its workers need <a class="pr" href="https://github.com/lerd-env/lerd/pull/2076">#2076</a></h4><p>A worker that needs a service, a Redis queue say, used to fail setup with a hint to start it by hand. <b>Setup starts it first</b>, and asks only when there is a terminal to ask on.</p></div>
   </div>
+
+  <div class="cards one">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Admin consoles that let you straight in <a class="pr" href="https://github.com/lerd-env/lerd/pull/1841">#1841</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1849">#1849</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1873">#1873</a></h4><p>An admin tool can front several engines now, which is how Adminer serves MySQL, MariaDB and PostgreSQL from one preset. The RustFS console opens <b>already logged in, on the bucket you clicked</b>, and logs in again once its session runs out rather than leaving you at its login form.</p></div>
+  </div>
 </div></section>
 
 <!-- ============ 05 PROJECTS ============ -->
@@ -671,11 +675,11 @@
   <div class="cards three">
     <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Node through mise <a class="pr" href="https://github.com/lerd-env/lerd/pull/1915">#1915</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/2051">#2051</a></h4><p>macOS remembers a folder grant against the signature of the binary that asked, and fnm ships unsigned, so a project under Documents was asked for again after every version bump. <b>mise is notarized, so the grant holds</b>. Versions pinned in <code>mise.toml</code> and <code>.tool-versions</code> are read too.</p></div>
     <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>ODBC in every PHP image <a class="pr" href="https://github.com/lerd-env/lerd/pull/1854">#1854</a></h4><p>unixODBC with ext-odbc and pdo_odbc ships in the images, and <code>lerd php:odbc add</code> registers a licensed vendor driver, <b>checking from inside the image that it will load</b> and naming the cause when it will not.</p></div>
-    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Vite+, Rack and Rails <a class="pr" href="https://github.com/lerd-env/lerd/pull/1971">#1971</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/2010">#2010</a></h4><p>The Laravel starter kits start through <code>vp dev</code>, now served on the site's own domain like <code>vite</code>. A <code>config.ru</code> is a Rack app, Rails runs through <code>bin/rails server</code>, <b>bound where nginx can reach it</b>.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Vite+, Mix, Rack and Rails <a class="pr" href="https://github.com/lerd-env/lerd/pull/1971">#1971</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/2012">#2012</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/2010">#2010</a></h4><p>The Laravel starter kits start through <code>vp dev</code>, now served on the site's own domain like <code>vite</code>, and Laravel Mix gets a watcher worker. A <code>config.ru</code> is a Rack app, Rails runs through <code>bin/rails server</code>, <b>bound where nginx can reach it</b>.</p></div>
   </div>
 
   <div class="cards three">
-    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>Streaming mode <a class="pr" href="https://github.com/lerd-env/lerd/pull/1953">#1953</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1973">#1973</a></h4><p>Mark a workspace private and, while the mode is on, its sites leave every snapshot the dashboard and the TUI receive. <b>On Wayland it follows screen shares through PipeWire on its own.</b> It draws nothing until enabled.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>Streaming mode <a class="pr" href="https://github.com/lerd-env/lerd/pull/1950">#1950</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1953">#1953</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1973">#1973</a></h4><p>Mark a workspace private and, while the mode is on, its sites leave every snapshot the dashboard and the TUI receive. <b>On Wayland it follows screen shares through PipeWire on its own.</b> It draws nothing until enabled.</p></div>
     <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>Services on a site's Overview <a class="pr" href="https://github.com/lerd-env/lerd/pull/2044">#2044</a></h4><p>A declared service carries an X that takes it out and points the env back at the example values, and <b>the removal is remembered</b> so the next <code>lerd env</code> does not wire it back.</p></div>
     <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Unattended uninstall that keeps data <a class="pr" href="https://github.com/lerd-env/lerd/pull/2060">#2060</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/2067">#2067</a></h4><p><code>lerd uninstall --keep-data</code> removes lerd without prompts and keeps the config, the databases and the images, and <b><code>install.sh --uninstall</code> now runs it</b>, so there is one uninstall to keep right.</p></div>
   </div>
