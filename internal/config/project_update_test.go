@@ -79,16 +79,6 @@ func TestSetProjectSecured(t *testing.T) {
 	}
 }
 
-func TestSetProjectSecured_NoOpWhenMissing(t *testing.T) {
-	dir := t.TempDir()
-	if err := SetProjectSecured(dir, true); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, ".lerd.yaml")); !os.IsNotExist(err) {
-		t.Error(".lerd.yaml should not be created")
-	}
-}
-
 // ── SetProjectPHPVersion ────────────────────────────────────────────────────
 
 func TestSetProjectPHPVersion(t *testing.T) {

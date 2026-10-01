@@ -379,7 +379,7 @@ The Lerd watcher also monitors `.lerd.yaml` for changes. When you switch branche
 
 `lerd isolate`, the UI PHP version selector, and the MCP `site` tool's `php` action all keep `php_version` in sync when this file exists.
 
-`lerd secure`, `lerd unsecure`, the UI HTTPS toggle, and the MCP `secure`/`unsecure` tools keep `secured` in sync when this file exists.
+`lerd secure`, `lerd unsecure`, the UI HTTPS toggle, and the MCP `secure`/`unsecure` tools keep `secured` in sync. Securing a project that has no `.lerd.yaml` yet creates one to record it, so relinking the project later brings it back on HTTPS; unsecuring never creates the file.
 
 ### Local overrides: `.lerd.local.yaml`
 
