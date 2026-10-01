@@ -1070,7 +1070,7 @@ func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 		svc.Ports = append(svc.Ports, extra...)
 	}
 	if svc.DataDir != "" {
-		if err := os.MkdirAll(config.DataSubDir(svc.Name), 0755); err != nil {
+		if err := config.EnsureServiceDataDir(svc.Name); err != nil {
 			return false, fmt.Errorf("creating data directory for %s: %w", svc.Name, err)
 		}
 	}
@@ -1279,7 +1279,7 @@ func ServiceFamily(name string) string { return config.FamilyOfName(name) }
 
 // waitReadyFn is podman.WaitReady; tests stub it so RefreshDiscoverFamilyConsumers
 // does not need a live engine.
-var waitReadyFn = podman.WaitReady
+var waitReadyFn = waitReadyFirstStart
 
 // RegenerateFamilyConsumersForService wraps RegenerateFamilyConsumers. When
 // name is up it waits until ready first so discover_family includes this

@@ -208,13 +208,15 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		config.NginxDir(), config.NginxConfD(), config.NginxCustomD(), config.CertsDir(),
 		filepath.Join(config.CertsDir(), "sites"),
 		config.DnsmasqDir(), config.QuadletDir(), config.SystemdUserDir(),
-		config.DataSubDir("mysql"), config.DataSubDir("redis"),
-		config.DataSubDir("postgres"), config.DataSubDir("meilisearch"),
-		config.DataSubDir("rustfs"), config.DataSubDir("mailpit"),
 	}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0755); err != nil {
 			return fmt.Errorf("creating %s: %w", d, err)
+		}
+	}
+	for _, svc := range []string{"mysql", "redis", "postgres", "meilisearch", "rustfs", "mailpit"} {
+		if err := config.EnsureServiceDataDir(svc); err != nil {
+			return fmt.Errorf("creating the %s data directory: %w", svc, err)
 		}
 	}
 	ok()

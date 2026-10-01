@@ -42,6 +42,10 @@ Default services are defined as YAML presets with `default: true` in the lerd bi
 
 The Web UI, the TUI, and `lerd status` display the same labels. Services pinned to rolling tags (`latest`, `main`) show the tag verbatim. Services where an update is available show `→ <new-tag>`; cross-strategy upgrades show `⇧ <new-tag>` in amber.
 
+### An interrupted first start
+
+A database engine initialises its data directory the first time it starts, and a start stopped halfway through (a `lerd stop` or a reboot at the wrong moment) leaves files the engine then refuses to open on every later start. lerd remembers which data directories it created and that have not come up since, and when such a service fails to become ready it moves the unfinished directory aside as `<name>.incomplete-first-start-<time>` under `~/.local/share/lerd/data`, then starts the service once more on a clean one. A data directory that has ever come up, or that lerd did not create, is never touched.
+
 ### Exposing extra ports on bundled services
 
 Bundled services publish a fixed set of ports by default. Use `lerd service expose` to bind additional host ports without recompiling or replacing the service. This works for any service lerd ships as a preset, both the default-stack ones (MySQL, PostgreSQL, Redis) and the optional ones you install on demand (Gotenberg, MongoDB, Elasticsearch, and so on). Only genuinely custom services you define yourself are excluded, since those declare their ports in their own YAML.

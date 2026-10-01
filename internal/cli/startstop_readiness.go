@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/serviceops"
 )
 
 // serviceReadyTimeout bounds how long a start waits for an engine to accept
@@ -47,7 +47,7 @@ func waitServicesReady(units []string, timeout time.Duration) {
 		wg.Add(1)
 		go func(service string) {
 			defer wg.Done()
-			_ = podman.WaitReady(service, timeout)
+			_ = serviceops.WaitReady(service, timeout)
 		}(n)
 	}
 	wg.Wait()
