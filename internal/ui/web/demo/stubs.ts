@@ -652,7 +652,8 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   if (appLogsMatch && method === 'GET') {
     const file = appLogsMatch[2];
     if (!file) return jsonResponse({ files: APP_LOG_FILES });
-    if (file !== 'clear') return jsonResponse({ entries: appLogEntries() });
+    // One page holds the whole demo log, so older pages are empty.
+    if (file !== 'clear') return jsonResponse(qs.get('offset') && qs.get('offset') !== '0' ? { entries: [], more: false } : { entries: appLogEntries(), more: false });
   }
 
   // Worktrees
