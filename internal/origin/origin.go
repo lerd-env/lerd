@@ -72,6 +72,9 @@ func ServiceStoreBaseURLs() []string {
 	return schemaBases("https://raw.githubusercontent.com/"+servicesRepo+"/main", StoreSchema, "services")
 }
 
+// RepoURL is the project's home on GitHub, as lerd about shows it.
+func RepoURL() string { return "https://github.com/" + mainRepo }
+
 // ReleaseBaseURLs lists GitHub releases bases.
 func ReleaseBaseURLs() []string {
 	if list := splitList(os.Getenv("LERD_RELEASES_URL")); len(list) > 0 {
