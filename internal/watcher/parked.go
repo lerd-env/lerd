@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -20,7 +21,7 @@ var frameworkSignals = map[string]bool{
 // onNew is called when a framework signal file appears in a direct subdirectory of a parked dir.
 // onRemoved is called when a watched subdirectory is deleted.
 // It returns when ctx is canceled, so a shutdown unblocks it instead of killing the process.
-func Watch(ctx context.Context, dirs []string, onNew func(path string), onRemoved func(path string)) error {
+func Watch(ctx context.Context, dirs func() []string, onNew func(path string), onRemoved func(path string)) error {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
 		return err
@@ -30,32 +31,19 @@ func Watch(ctx context.Context, dirs []string, onNew func(path string), onRemove
 	// parkedDirs tracks the top-level parked directories so we only register
 	// projects that are direct children of them, not deeper nestings.
 	parkedDirs := map[string]bool{}
+	reconcileParked(w, parkedDirs, dirs())
 
-	for _, dir := range dirs {
-		expanded := expandHome(dir)
-		if err := os.MkdirAll(expanded, 0755); err != nil {
-			continue
-		}
-		if err := w.Add(expanded); err != nil {
-			continue
-		}
-		parkedDirs[expanded] = true
-		// Also watch existing direct subdirectories so we catch framework signal files inside them.
-		entries, _ := os.ReadDir(expanded)
-		for _, e := range entries {
-			if e.IsDir() {
-				sub := filepath.Join(expanded, e.Name())
-				if err := w.Add(sub); err != nil {
-					logger.Error("failed to watch subdirectory", "path", sub, "err", err)
-				}
-			}
-		}
-	}
+	// lerd park and unpark only edit the config, so the list is read again
+	// rather than taken once at start.
+	tick := time.NewTicker(parkedReconcileEvery)
+	defer tick.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
+		case <-tick.C:
+			reconcileParked(w, parkedDirs, dirs())
 		case event, ok := <-w.Events:
 			if !ok {
 				return nil
@@ -100,4 +88,44 @@ func expandHome(path string) string {
 		}
 	}
 	return path
+}
+
+// parkedReconcileEvery is how often Watch reads the parked list again.
+var parkedReconcileEvery = 5 * time.Second
+
+// reconcileParked watches every directory in dirs that is not watched yet,
+// with its direct subdirectories, and stops watching the ones no longer parked.
+func reconcileParked(w *fsnotify.Watcher, parkedDirs map[string]bool, dirs []string) {
+	want := map[string]bool{}
+	for _, dir := range dirs {
+		want[expandHome(dir)] = true
+	}
+	for dir := range parkedDirs {
+		if !want[dir] {
+			_ = w.Remove(dir)
+			delete(parkedDirs, dir)
+		}
+	}
+	for expanded := range want {
+		if parkedDirs[expanded] {
+			continue
+		}
+		if err := os.MkdirAll(expanded, 0755); err != nil {
+			continue
+		}
+		if err := w.Add(expanded); err != nil {
+			continue
+		}
+		parkedDirs[expanded] = true
+		// Also watch existing direct subdirectories so we catch framework signal files inside them.
+		entries, _ := os.ReadDir(expanded)
+		for _, e := range entries {
+			if e.IsDir() {
+				sub := filepath.Join(expanded, e.Name())
+				if err := w.Add(sub); err != nil {
+					logger.Error("failed to watch subdirectory", "path", sub, "err", err)
+				}
+			}
+		}
+	}
 }

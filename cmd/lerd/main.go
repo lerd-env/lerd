@@ -778,7 +778,13 @@ func newWatchCmd() *cobra.Command {
 			// (lerd-ui, lerd-tray, test harnesses), then reconcile.
 			notifyReadyThenScan(lerdSystemd.NotifyReady, func() { bootScan(cfg) })
 
-			return watcher.Watch(ctx, cfg.ParkedDirectories, func(projectPath string) {
+			parked := func() []string {
+				if c, err := config.LoadGlobal(); err == nil {
+					return c.ParkedDirectories
+				}
+				return cfg.ParkedDirectories
+			}
+			return watcher.Watch(ctx, parked, func(projectPath string) {
 				fmt.Printf("New project detected: %s\n", projectPath)
 				registered, err := cli.RegisterProject(projectPath, cfg)
 				if err != nil {
