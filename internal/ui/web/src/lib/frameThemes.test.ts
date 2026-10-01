@@ -102,6 +102,22 @@ describe('watchFrameDesign', () => {
     expect((style.sheet!.cssRules[0] as CSSStyleRule).style.getPropertyValue('background-color'))
       .toBe(COBALT.bg);
   });
+
+  // Light is the app's own design: Kafbat draws its light text in the same
+  // greys, so a rule inserted in light mode painted with the scale came out
+  // near white on a white page.
+  it('leaves a rule inserted in light mode in the app own colours', () => {
+    const frame = document.createElement('iframe');
+    document.body.appendChild(frame);
+    const win = frame.contentWindow as Window & typeof globalThis;
+    const doc = frame.contentDocument!;
+    const style = doc.createElement('style');
+    doc.head.appendChild(style);
+    watchFrameDesign(win, 'kafka-ui', () => false);
+    style.sheet!.insertRule('.late { color: #171a1c; }', 0);
+    expect((style.sheet!.cssRules[0] as CSSStyleRule).style.getPropertyValue('color'))
+      .toBe('#171a1c');
+  });
 });
 
 describe('themeFrameDocument', () => {

@@ -174,7 +174,9 @@ If a step fails, you are prompted to continue or abort:
 | `--list-steps` | Print the steps this directory would run as JSON and exit, configuring nothing |
 | `--step "<label>"` | Run only the named step, repeatable, skipping the configure phase |
 
-Run without a terminal and with none of these flags, `lerd setup` asks nothing: the configure phase takes the same auto-detected path `--all` does, and the steps that are selected by default run, so a script gets the same result as pressing Enter at the selector.
+Run without a terminal and with none of these flags, `lerd setup` asks nothing: the configure phase takes the same auto-detected path `--all` does, and the steps that are selected by default run, so a script gets the same result as pressing Enter at the selector. When a step fails, an interactive run asks whether to continue; `--all` and a run without a terminal stop there and exit with an error naming the step.
+
+A worker step whose definition declares `requires_service` needs that service running. Before the steps run, `lerd setup` asks whether to install and start any such service that is not running; answering no skips the workers that need it. With `--all`, without a terminal, or through `--step`, the service is installed from the store and started without asking.
 
 `--list-steps` and `--step` are how a caller with no terminal works through the
 same list the selector shows: the dashboard's site wizard enumerates the steps

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/origin"
 	"github.com/geodro/lerd/internal/version"
 	"github.com/spf13/cobra"
 )
@@ -25,7 +26,7 @@ func runAbout(_ *cobra.Command, _ []string) error {
 		Row("Version", feedback.Val(version.Version)).
 		Row("Commit", version.Commit).
 		Row("Built", version.Date).
-		Row("Repo", feedback.Val("https://github.com/geodro/lerd")).
+		Row("Repo", feedback.Val(origin.RepoURL())).
 		Print()
 	feedback.Begin()
 	fmt.Println("  " + feedback.Dim("© George Dumitrescu"))

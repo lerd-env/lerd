@@ -90,18 +90,24 @@ export function watchPaletteRules(
   win: Window & typeof globalThis,
   pairs: () => PalettePairs
 ): void {
-  const proto = win.CSSStyleSheet?.prototype as (CSSStyleSheet & { lerdPainted?: true }) | undefined;
-  if (!proto || proto.lerdPainted) return;
+  const proto = win.CSSStyleSheet?.prototype as
+    | (CSSStyleSheet & { lerdPairs?: () => PalettePairs })
+    | undefined;
+  if (!proto) return;
+  // The latest caller's palette wins, so watching again never leaves the patch
+  // reading an earlier one.
+  const patched = !!proto.lerdPairs;
+  proto.lerdPairs = pairs;
+  if (patched) return;
   const insert = proto.insertRule;
   proto.insertRule = function (rule: string, index?: number): number {
     const at = insert.call(this, rule, index);
     try {
       const style = (this.cssRules[at] as CSSStyleRule)?.style;
-      if (style) repaintDeclaration(style, pairs());
+      if (style) repaintDeclaration(style, proto.lerdPairs!());
     } catch {
       // A cross-origin sheet, or a rule type that carries no declaration.
     }
     return at;
   };
-  proto.lerdPainted = true;
 }

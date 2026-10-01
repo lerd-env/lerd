@@ -30,7 +30,9 @@ type setupStep struct {
 	// optional marks a non-essential step whose failure is surfaced as a warning
 	// and skipped rather than aborting setup (e.g. the in-container bun install).
 	optional bool
-	run      func() error
+	// service is the one a worker step needs running, resolved before steps run.
+	service string
+	run     func() error
 }
 
 // NewSetupCmd returns the setup command.
@@ -200,6 +202,12 @@ func runNamedSetupSteps(cwd string, labels []string, skipOpen bool) error {
 	for _, label := range skipped {
 		fmt.Printf("→ %s (nothing left to do)\n", label)
 	}
+	// The caller already picked these steps and has no terminal to answer with.
+	chosen := map[string]bool{}
+	for _, s := range selected {
+		chosen[s.label] = true
+	}
+	resolveSetupServices(selected, chosen, true, serviceRunning, nil, ensureSetupService)
 	for _, s := range selected {
 		fmt.Printf("→ %s\n", s.label)
 		if err := s.run(); err != nil {
@@ -318,6 +326,15 @@ func runSetup(allSteps, skipOpen bool) error {
 		selectedSet[s] = true
 	}
 
+	unattended := allSteps || !promptableTTY()
+	resolveSetupServices(steps, selectedSet, unattended, serviceRunning, promptConfirm, ensureSetupService)
+	return runSelectedSteps(steps, selectedSet, promptContinue, unattended)
+}
+
+// runSelectedSteps executes the selected steps in order. An unattended run has
+// nobody to ask whether to go on after a failure, so it stops with an error,
+// the same outcome as the prompt's default answer.
+func runSelectedSteps(steps []setupStep, selectedSet map[string]bool, askContinue func() bool, unattended bool) error {
 	// Execute steps in order. Each step's own output is captured behind a single
 	// feedback line and only surfaced when the step fails, matching the link
 	// flow's "action … ✓" styling. The separating blank line was already printed
@@ -342,7 +359,7 @@ func runSetup(allSteps, skipOpen bool) error {
 			}
 			step.Fail(err)
 			_, _ = os.Stdout.Write(out)
-			if !promptContinue() {
+			if unattended || !askContinue() {
 				return fmt.Errorf("setup aborted after %q failed", s.label)
 			}
 			continue
@@ -635,6 +652,7 @@ func planSetupSteps(cwd string, skipOpen bool) []setupStep {
 				steps = append(steps, setupStep{
 					label:   wn + ":start",
 					enabled: savedWorkers[wn],
+					service: requiredServiceFor(cwd, wd),
 					run: func() error {
 						phpVersion := ownerSite.PHPVersion
 						if phpVersion == "" {
