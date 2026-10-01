@@ -9,6 +9,12 @@ CI and `/lerd-preflight` cover the code. This plan covers the parts only a real
 machine can tell you about: the host installer, sudo bootstrap, systemd units,
 DNS resolvers, podman networking, and the browser.
 
+The phases that run over ssh have scripts in `tests/vm/`: `tests/vm/vm.sh run
+<guest> <phase|all>` runs them on a guest and prints one PASS or FAIL line per
+check, with the full output in `tests/vm/logs/`. Phase 10 (browser, tray) and
+phase 14 (macOS) stay by hand. See `tests/vm/guests.example` to describe your
+own machines; the scripts need no particular VM.
+
 ---
 
 ## Execution rules
@@ -16,7 +22,8 @@ DNS resolvers, podman networking, and the browser.
 These bind whoever runs the plan, a person or an agent, and whoever writes the
 prompt that hands a lane to an agent. Nobody runs a plan of their own making.
 
-1. **Every checkbox in a lane's phases is executed, in order, as written.** No
+1. **Every checkbox in a lane's phases is executed, in order, as written,**
+   unless the tier rules below allow it to be carried. No
    scoping a phase down ("the basics", "one database", "where practical"), no
    substituting an easier check, no merging two items into one. A lane prompt
    names the lane, the guest and the phases, and nothing that narrows them.
@@ -39,7 +46,42 @@ prompt that hands a lane to an agent. Nobody runs a plan of their own making.
    env wiring) reruns every lane that exercises that code.
 6. **The results are compared with the previous run's**, item by item. An item
    that ran last time and did not run this time is a FAIL of the run, not a
-   difference to note.
+   difference to note. A `CARRIED` item (see tiers below) counts as run.
+
+---
+
+## Tiers: what runs every time and what can be carried
+
+Items are ordered by how likely a user is to hit them, and a run spends its time
+where people live. The first install, the upgrade and the first sites are what
+decides whether someone stays with lerd, so they are never carried.
+
+**Tier 1, every run, never carried.** Phase 1 (except the IPv6-off pass, the
+network-down pull and the macOS splash), phase 2, phase 9's detection, console
+and first 200 on the second framework, phase 12, and phase 13's uninstall,
+keep-data reinstall and 200 on a re-linked project. From the phases below them:
+phase 5's first-use start, `lerd env` wiring, `db:create`, migrations and the
+200 on a database route; phase 6's `queue:start`/`schedule:start`, `worker
+list` and self-heal; phase 7's `lerd worktree add`, its 200, bare-git add and
+`lerd worktree remove`.
+
+**Tier 2, run when their code changed.** Everything not named in tier 1 or tier
+3. Before a run, `git diff --stat <last-passing-commit> <candidate>` decides:
+an item whose phase touches a changed package (for example `internal/dns`,
+`internal/nginx` or `internal/certs` for phase 3, `internal/serviceops` for
+phase 5, `internal/ui` for phase 10) runs; when the diff leaves its packages
+alone it may be recorded as `CARRIED <commit>`, naming the candidate it last
+passed on, with that run's evidence. When in doubt it runs. Nothing is carried
+across more than one minor release.
+
+**Tier 3, once per release.** The IPv6-off pass, the network-down pull, the
+legacy 7.4 and prerelease 8.6 items, the late-NIC network rig, the reboot items,
+`lerd uninstall --force` on a second guest, and phase 14. They run on the first
+candidate of a release and are carried to its later candidates unless their
+code changed.
+
+A lane's ledger still carries one line per checkbox: `PASS`, `FAIL`, `SKIP` or
+`CARRIED <commit>`, so a carried item is visible and its age is known.
 
 ---
 
