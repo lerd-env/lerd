@@ -38,9 +38,11 @@ func openBrowser(url string) error {
 
 // openDashboard focuses a browser window already showing the dashboard rather
 // than adding another tab. A window title only names its active tab, so a
-// dashboard sitting in a background tab is not found and a new tab opens.
+// dashboard sitting in a background tab is not found. Otherwise it opens as a
+// Chromium app window (the installed PWA when there is one), or a browser tab
+// when no Chromium browser is installed.
 func openDashboard(url string) error {
-	if focusDashboardWindow() {
+	if focusDashboardWindow() || openAppWindow(url) {
 		return nil
 	}
 	return openBrowser(url)
