@@ -821,8 +821,8 @@ The App Logs tab is the first tab in the site detail view. When the UI opens it 
 Features:
 
 - **File selector**: switch between available log files (e.g. `laravel.log`, `worker.log`), sorted by modification time with the newest file pre-selected
-- **Latest / All toggle**: "Latest" shows the last 100 entries (default), "All" reads the entire file
-- **Search**: filter entries by message, level, date, or stacktrace content
+- **Paged loading**: the newest entries load first and older ones arrive a page at a time as you scroll up, so a log of hundreds of megabytes opens as quickly as a small one
+- **Search**: filter the loaded entries by message, level, date, or stacktrace content
 - **Expandable entries**: click any entry to expand and see the full detail and stacktrace
 - **Auto-refresh**: polls every 5 seconds while the tab is active, keeping the expanded entry open
 - **Color-coded levels**: entries are color-coded by severity (red for ERROR/CRITICAL/EMERGENCY/ALERT, yellow for WARNING, blue for INFO/NOTICE, grey for DEBUG)
