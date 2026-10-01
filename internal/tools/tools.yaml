@@ -97,3 +97,5 @@ tools:
       linux/arm64: mkcert-{version}-linux-arm64
       darwin/amd64: mkcert-{version}-darwin-amd64
       darwin/arm64: mkcert-{version}-darwin-arm64
+      windows/amd64: mkcert-{version}-windows-amd64.exe
+      windows/arm64: mkcert-{version}-windows-arm64.exe

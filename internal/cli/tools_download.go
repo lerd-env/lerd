@@ -52,7 +52,7 @@ func (p *pinnedTools) downloadCtx(ctx context.Context, name, dest string, mode o
 // downloadBinaries on a normal (fnm) install, and on demand when switching
 // back to fnm with `lerd node:manager fnm` after an nvm-only setup.
 func ensureFnmBinary(w io.Writer) error {
-	if _, err := os.Stat(filepath.Join(config.BinDir(), "fnm")); err == nil {
+	if _, err := os.Stat(filepath.Join(config.BinDir(), config.ExeName("fnm"))); err == nil {
 		return nil
 	}
 	var pins pinnedTools
@@ -100,7 +100,7 @@ func installMise(pins *pinnedTools, home string, w io.Writer) error {
 // copy in BinDir is lerd's, so it goes rather than lingering as a tool nothing
 // runs; switching back with `lerd node:manager fnm` downloads it again.
 func removeFnmBinary() {
-	fnm := filepath.Join(config.BinDir(), "fnm")
+	fnm := filepath.Join(config.BinDir(), config.ExeName("fnm"))
 	os.Remove(fnm)              //nolint:errcheck
 	os.Remove(fnm + ".version") //nolint:errcheck
 }
