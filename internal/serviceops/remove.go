@@ -150,8 +150,11 @@ func RemoveService(name string, opts RemoveOptions, emit func(PhaseEvent)) error
 
 	if opts.RemoveData {
 		dir := config.DataSubDir(name)
+		if !config.DataIsHostDir() {
+			dir = config.DataVolumeName(name)
+		}
 		emit(PhaseEvent{Phase: "removing_data", Message: dir})
-		if err := renameDataAside(dir); err != nil {
+		if err := removeServiceData(name, !config.DataIsHostDir()); err != nil {
 			return fmt.Errorf("rename data aside for %s: %w", name, err)
 		}
 		// Tuning overrides survive `service remove` (and reinstall) by design,

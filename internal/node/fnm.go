@@ -17,7 +17,7 @@ type fnmManager struct{}
 func (fnmManager) Name() string { return "fnm" }
 
 // bin is the fnm binary lerd ships in its own bin dir.
-func (fnmManager) bin() string { return filepath.Join(config.BinDir(), "fnm") }
+func (fnmManager) bin() string { return filepath.Join(config.BinDir(), config.ExeName("fnm")) }
 
 func (m fnmManager) Available() bool {
 	_, err := os.Stat(m.bin())

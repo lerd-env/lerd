@@ -20,8 +20,12 @@ import (
 // invocation in this package is built on. Tests override them to fake the
 // shell-out; the no-direct-exec guard keeps callers outside from bypassing it.
 var (
-	execCommand        = exec.Command
-	execCommandContext = exec.CommandContext
+	execCommand = func(name string, args ...string) *exec.Cmd {
+		return exec.Command(name, mapVMArgs(args)...)
+	}
+	execCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, name, mapVMArgs(args)...)
+	}
 )
 
 // ShellQuote single-quotes s so it is safe as one argument inside an

@@ -47,7 +47,7 @@ var tempSuffixSeq atomic.Uint64
 
 // MkcertPath returns the path to the mkcert binary.
 func MkcertPath() string {
-	return filepath.Join(config.BinDir(), "mkcert")
+	return filepath.Join(config.BinDir(), config.ExeName("mkcert"))
 }
 
 // InstallCA installs the mkcert root CA into the system trust store.

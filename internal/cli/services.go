@@ -1013,7 +1013,7 @@ func newServiceRemoveCmd() *cobra.Command {
 
 			feedback.Begin()
 			if purge {
-				feedback.Note("removing service " + name + " and ALL its data at " + config.DataSubDir(name))
+				feedback.Note("removing service " + name + " and ALL its data at " + config.DataVolumeSource(name))
 			}
 
 			emit := func(e serviceops.PhaseEvent) {
@@ -1039,7 +1039,7 @@ func newServiceRemoveCmd() *cobra.Command {
 			}
 
 			if !purge {
-				fmt.Printf("Data at %s was NOT removed. Pass --purge to wipe it.\n", config.DataSubDir(name))
+				fmt.Printf("Data at %s was NOT removed. Pass --purge to wipe it.\n", config.DataVolumeSource(name))
 			}
 			return nil
 		},

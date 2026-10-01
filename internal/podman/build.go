@@ -155,7 +155,7 @@ func sortPaths(paths []string) {
 
 // mkcertPath returns the path to the mkcert binary managed by lerd.
 func mkcertPath() string {
-	return filepath.Join(config.BinDir(), "mkcert")
+	return filepath.Join(config.BinDir(), config.ExeName("mkcert"))
 }
 
 // mkcertCABlock copies the mkcert rootCA.pem into tmpDir and returns the

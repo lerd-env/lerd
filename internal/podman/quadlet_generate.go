@@ -65,7 +65,7 @@ func GenerateCustomQuadlet(svc *config.CustomService) string {
 	}
 
 	if svc.DataDir != "" {
-		hostDir := config.DataSubDir(svc.Name)
+		hostDir := config.DataVolumeSource(svc.Name)
 		flags := "z"
 		if svc.ChownData {
 			flags += ",U"
