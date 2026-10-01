@@ -6314,6 +6314,41 @@ func handleAppLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	format := applog.FormatForFile(fw.Logs, filename)
+
+	// An offset pages through the whole file, newest first; a file of tens of
+	// megabytes sent in one response is more than the dashboard can render.
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		offset, err := strconv.Atoi(offsetStr)
+		if err != nil || offset < 0 || maxEntries == 0 {
+			http.Error(w, "offset needs a non-negative number and a positive limit", http.StatusBadRequest)
+			return
+		}
+		// The newest page is what the tab polls, so it keeps the cheap tail
+		// read; only reaching back into history parses the whole file.
+		if offset == 0 {
+			page, err := applog.ParseFile(fullPath, format, maxEntries)
+			if err != nil {
+				writeJSON(w, map[string]any{"entries": []any{}, "error": err.Error()})
+				return
+			}
+			if page == nil {
+				page = []applog.LogEntry{}
+			}
+			info, statErr := os.Stat(fullPath)
+			more := len(page) == maxEntries || (statErr == nil && info.Size() > applog.MaxReadBytes)
+			writeJSON(w, map[string]any{"entries": page, "more": more})
+			return
+		}
+		all, err := applog.ParseFile(fullPath, format, 0)
+		if err != nil {
+			writeJSON(w, map[string]any{"entries": []any{}, "error": err.Error()})
+			return
+		}
+		page, more := applog.Page(all, offset, maxEntries)
+		writeJSON(w, map[string]any{"entries": page, "more": more})
+		return
+	}
+
 	entries, err := applog.ParseFile(fullPath, format, maxEntries)
 	if err != nil {
 		writeJSON(w, map[string]any{"entries": []any{}, "error": err.Error()})
