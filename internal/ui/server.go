@@ -605,6 +605,7 @@ func terminalDirCandidates(dir string) []terminalCmd {
 	}
 
 	candidates = append(candidates, knownTerminals(dir)...)
+	candidates = append(candidates, platformTerminals(dir)...)
 
 	if runtime.GOOS == "darwin" {
 		// `open -a Terminal dir` opens a new window at dir without echoing any
