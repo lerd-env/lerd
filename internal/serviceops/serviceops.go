@@ -151,6 +151,12 @@ func firePublishedPortShiftForced(service string, newPort int) {
 // can decide it instead of inheriting whatever the developer happens to be running.
 var ensureUnitStatus = podman.UnitStatus
 
+// guardRecordedPorts re-tests a port a service is already recorded on, moving it
+// when something else took it while the service was down. Not on macOS: the VM
+// can hold a service's own port after it stops, so the test moved services off
+// their own ports and left sites behind. There a recorded port sticks.
+var guardRecordedPorts = runtime.GOOS != "darwin"
+
 // unitActive reports whether a service's own systemd unit is currently up.
 func unitActive(name string) bool {
 	status, _ := ensureUnitStatus("lerd-" + name)
@@ -1001,11 +1007,11 @@ func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 		pp = 0
 	}
 	shifted := false
-	// Only a port not yet recorded is guarded; a recorded one sticks until `lerd
-	// service port` changes it. On macOS the VM forwarder keeps a stopped service's
-	// port bound for a moment, so re-testing it moved services off their own ports.
-	if pp == 0 {
-		primary := podman.PrimaryHostPort(svc.Ports)
+	primary := pp
+	if primary == 0 {
+		primary = podman.PrimaryHostPort(svc.Ports)
+	}
+	if pp == 0 || guardRecordedPorts {
 		if free := maybeShiftPublishedPort(svc.Name, primary, holdsItsPort(svc.Name)); free > 0 {
 			if err := persistPublishedPort(svc.Name, free); err != nil {
 				return false, fmt.Errorf("shifting lerd-%s off in-use port %d: %w", svc.Name, primary, err)
@@ -1041,8 +1047,11 @@ func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 		}
 		host := podman.PrimaryHostPort([]string{spec})
 		if hport, ok := overrides[cport]; ok && hport > 0 {
-			svc.Ports = podman.SetHostPortForContainerPort(svc.Ports, cport, hport)
-			continue
+			if !guardRecordedPorts {
+				svc.Ports = podman.SetHostPortForContainerPort(svc.Ports, cport, hport)
+				continue
+			}
+			host = hport
 		}
 		if free := maybeShiftPublishedPort(svc.Name, host, holdsItsPort(svc.Name)); free > 0 && free != host {
 			if err := persistPublishedPortFor(svc.Name, cport, free); err != nil {
