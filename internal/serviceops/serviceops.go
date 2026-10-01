@@ -1001,23 +1001,22 @@ func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 		pp = 0
 	}
 	shifted := false
-	// The guard tests the recorded published port when there is one and the preset
-	// default otherwise: a recorded port something else took while the service was
-	// down is no more bindable than a taken default, and starting on it fails.
-	primary := pp
-	if primary == 0 {
-		primary = podman.PrimaryHostPort(svc.Ports)
-	}
-	if free := maybeShiftPublishedPort(svc.Name, primary, holdsItsPort(svc.Name)); free > 0 {
-		if err := persistPublishedPort(svc.Name, free); err != nil {
-			return false, fmt.Errorf("shifting lerd-%s off in-use port %d: %w", svc.Name, primary, err)
+	// Only a port not yet recorded is guarded; a recorded one sticks until `lerd
+	// service port` changes it. On macOS the VM forwarder keeps a stopped service's
+	// port bound for a moment, so re-testing it moved services off their own ports.
+	if pp == 0 {
+		primary := podman.PrimaryHostPort(svc.Ports)
+		if free := maybeShiftPublishedPort(svc.Name, primary, holdsItsPort(svc.Name)); free > 0 {
+			if err := persistPublishedPort(svc.Name, free); err != nil {
+				return false, fmt.Errorf("shifting lerd-%s off in-use port %d: %w", svc.Name, primary, err)
+			}
+			pp = free // use the just-persisted value directly — no second config read to diverge
+			notePortShift(svc.Name, primary, free)
+			// Host-proxy sites reach this service over the published loopback port,
+			// so their .env must follow the shift. The CLI registers the refresh hook.
+			firePublishedPortShift(svc.Name, free)
+			shifted = true
 		}
-		pp = free // use the just-persisted value directly — no second config read to diverge
-		notePortShift(svc.Name, primary, free)
-		// Host-proxy sites reach this service over the published loopback port,
-		// so their .env must follow the shift. The CLI registers the refresh hook.
-		firePublishedPortShift(svc.Name, free)
-		shifted = true
 	}
 	// Apply the recorded published port (guard-shifted or set via `lerd service
 	// port`) to the primary host mapping and the connection URL, leaving the
@@ -1042,7 +1041,8 @@ func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 		}
 		host := podman.PrimaryHostPort([]string{spec})
 		if hport, ok := overrides[cport]; ok && hport > 0 {
-			host = hport
+			svc.Ports = podman.SetHostPortForContainerPort(svc.Ports, cport, hport)
+			continue
 		}
 		if free := maybeShiftPublishedPort(svc.Name, host, holdsItsPort(svc.Name)); free > 0 && free != host {
 			if err := persistPublishedPortFor(svc.Name, cport, free); err != nil {

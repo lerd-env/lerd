@@ -332,11 +332,10 @@ func TestEnsureCustomServiceQuadlet_portShiftNoticeAvoidsStdout(t *testing.T) {
 	}
 }
 
-// TestEnsureCustomServiceQuadlet_reshiftsRecordedPortTakenByHost pins #1917: a
-// recorded published port is only good while nothing else holds it. Something
-// bound it while the service was down, so starting on it fails at the bind; the
-// guard has to move the service the same way it moves one off a taken default.
-func TestEnsureCustomServiceQuadlet_reshiftsRecordedPortTakenByHost(t *testing.T) {
+// A recorded published port is trusted even when the bind test fails. On macOS the
+// VM forwarder holds a service's port for a moment after it stops, so re-testing
+// it moved services off their own ports and left sites pointing at the old one.
+func TestEnsureCustomServiceQuadlet_keepsRecordedPortTheGuardCannotBind(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "config"))
@@ -370,22 +369,17 @@ func TestEnsureCustomServiceQuadlet_reshiftsRecordedPortTakenByHost(t *testing.T
 		t.Fatalf("EnsureCustomServiceQuadlet: %v", err)
 	}
 
-	moved := config.ServicePublishedPort("objects")
-	if moved == taken {
-		t.Fatalf("published port stayed on %d, the port a host process already binds", taken)
+	if got := config.ServicePublishedPort("objects"); got != taken {
+		t.Fatalf("published port moved to %d, want the recorded %d kept", got, taken)
 	}
-	if moved == 0 {
-		t.Fatal("the shift must be persisted, so the quadlet never publishes a port config does not record")
-	}
-	if got := podman.PrimaryHostPort(svc.Ports); got != moved {
-		t.Errorf("rendered mapping publishes %d, want the shifted %d", got, moved)
+	if got := podman.PrimaryHostPort(svc.Ports); got != taken {
+		t.Errorf("rendered mapping publishes %d, want the recorded %d", got, taken)
 	}
 }
 
-// TestEnsureCustomServiceQuadlet_reshiftsRecordedSecondaryPortTakenByHost: the
-// same for a secondary mapping (an object store's console, a mail catcher's web
+// The same for a secondary mapping (an object store's console, a mail catcher's web
 // UI), whose override is recorded per container port.
-func TestEnsureCustomServiceQuadlet_reshiftsRecordedSecondaryPortTakenByHost(t *testing.T) {
+func TestEnsureCustomServiceQuadlet_keepsRecordedSecondaryPortTheGuardCannotBind(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "config"))
@@ -422,8 +416,8 @@ func TestEnsureCustomServiceQuadlet_reshiftsRecordedSecondaryPortTakenByHost(t *
 	}
 
 	moved := config.ServicePublishedPorts("objects")[9001]
-	if moved == taken || moved == 0 {
-		t.Fatalf("published_ports[9001] = %d, want a free port off the taken %d", moved, taken)
+	if moved != taken {
+		t.Fatalf("published_ports[9001] = %d, want the recorded %d kept", moved, taken)
 	}
 	rendered := 0
 	for _, spec := range svc.Ports {
@@ -432,7 +426,7 @@ func TestEnsureCustomServiceQuadlet_reshiftsRecordedSecondaryPortTakenByHost(t *
 		}
 	}
 	if rendered != moved {
-		t.Errorf("rendered console mapping publishes %d, want the shifted %d", rendered, moved)
+		t.Errorf("rendered console mapping publishes %d, want the recorded %d", rendered, moved)
 	}
 }
 
@@ -479,10 +473,7 @@ func TestEnsureCustomServiceQuadlet_shiftSyncsDashboardVhost(t *testing.T) {
 	}
 	defer squatter.Close()
 	taken := squatter.Addr().(*net.TCPAddr).Port
-	if err := persistPublishedPort("objects", taken); err != nil {
-		t.Fatalf("persistPublishedPort: %v", err)
-	}
-	svc.Ports = []string{fmt.Sprintf("127.0.0.1:%d:9000", free)}
+	svc.Ports = []string{fmt.Sprintf("127.0.0.1:%d:9000", taken)}
 	if err := EnsureCustomServiceQuadlet(svc); err != nil {
 		t.Fatalf("EnsureCustomServiceQuadlet: %v", err)
 	}
