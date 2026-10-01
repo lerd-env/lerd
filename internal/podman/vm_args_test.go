@@ -30,6 +30,36 @@ func TestMapVMArgsTranslatesTheWorkingDirectory(t *testing.T) {
 			[]string{"exec", "-w"},
 			[]string{"exec", "-w"}},
 	}
+	assertMapVMArgs(t, cases)
+}
+
+// A Windows path handed to the command in the container (the composer phar,
+// the directory a scaffold creates) has to be the guest path too. A volume
+// source is the exception: podman resolves it on the host side itself.
+func TestMapVMArgsTranslatesWindowsPathArguments(t *testing.T) {
+	assertMapVMArgs(t, []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{"scaffold through the bundled composer",
+			[]string{"exec", "-i", "-w", `C:\Users\me\Sites`, "lerd-php85-fpm", "php", `C:\Users\me\AppData\Local\lerd\bin\composer.phar`, "create-project", "laravel/laravel", `C:\Users\me\Sites\demo`},
+			[]string{"exec", "-i", "-w", "/mnt/c/Users/me/Sites", "lerd-php85-fpm", "php", "/mnt/c/Users/me/AppData/Local/lerd/bin/composer.phar", "create-project", "laravel/laravel", "/mnt/c/Users/me/Sites/demo"}},
+		{"volume source stays a host path",
+			[]string{"run", "-v", `C:\Sites\app:/var/www`, "--volume", `D:\data:/data`, "img", `C:\Sites\app\run.php`},
+			[]string{"run", "-v", `C:\Sites\app:/var/www`, "--volume", `D:\data:/data`, "img", "/mnt/c/Sites/app/run.php"}},
+		{"values that only contain a path are left alone",
+			[]string{"exec", "--env", `COMPOSER_HOME=C:\x`, "c", "php", "--define=a=C:/y"},
+			[]string{"exec", "--env", `COMPOSER_HOME=C:\x`, "c", "php", "--define=a=C:/y"}},
+	})
+}
+
+func assertMapVMArgs(t *testing.T, cases []struct {
+	name string
+	in   []string
+	want []string
+}) {
+	t.Helper()
 	for _, c := range cases {
 		in := append([]string(nil), c.in...)
 		got := mapVMArgs(in)

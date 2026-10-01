@@ -15,6 +15,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/hostpath"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
@@ -759,12 +760,11 @@ func composerInContainer(dir string, args ...string) error {
 
 	podman.EnsurePathMounted(dir, version)
 
-	home := os.Getenv("HOME")
 	composerPhar := composer.PharPath()
 
 	cmdArgs := []string{"exec", "-i", "-w", dir,
-		"--env", "HOME=" + home,
-		"--env", "COMPOSER_HOME=" + composerHomeDir(),
+		"--env", "HOME=" + containerHome(),
+		"--env", "COMPOSER_HOME=" + hostpath.ToVM(composerHomeDir()),
 		container, "php", composerPhar,
 	}
 	cmdArgs = append(cmdArgs, args...)

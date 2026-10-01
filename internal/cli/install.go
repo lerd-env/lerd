@@ -17,6 +17,7 @@ import (
 	"github.com/geodro/lerd/internal/desktopapp"
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/hostpath"
 	"github.com/geodro/lerd/internal/imagepull"
 	"github.com/geodro/lerd/internal/lifecycle"
 	"github.com/geodro/lerd/internal/nginx"
@@ -1421,16 +1422,13 @@ func installLaravelInstaller() error {
 		}
 	}
 
-	home := os.Getenv("HOME")
-	composerHome := composerHomeDir()
-
 	composerPhar := composer.PharPath()
 	// --no-interaction prevents composer from blocking on plugin trust prompts
 	// (e.g. "Do you trust 'symfony/flex' to execute code?") which would hang
 	// the installer with no visible output.
 	cmd := podman.Cmd("exec", "-i",
-		"--env", "HOME="+home,
-		"--env", "COMPOSER_HOME="+composerHome,
+		"--env", "HOME="+containerHome(),
+		"--env", "COMPOSER_HOME="+hostpath.ToVM(composerHomeDir()),
 		container, "php", composerPhar, "global", "require", "--no-interaction", "laravel/installer",
 	)
 	cmd.Stdout = os.Stdout

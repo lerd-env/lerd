@@ -10,6 +10,7 @@ import (
 	"github.com/geodro/lerd/internal/agentenv"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envpass"
+	"github.com/geodro/lerd/internal/hostpath"
 	"github.com/geodro/lerd/internal/podman"
 	"golang.org/x/term"
 )
@@ -35,21 +36,36 @@ func vendorBinIsPHP(path string) bool {
 	return strings.Contains(line, "php")
 }
 
+// containerHome is the user's home as a container sees it. Windows rarely sets
+// HOME, so the profile dir stands in, and its drive path becomes the VM's.
+func containerHome() string {
+	home := os.Getenv("HOME")
+	if home == "" {
+		home, _ = os.UserHomeDir()
+	}
+	return hostpath.ToVM(home)
+}
+
+// containerExecPATH puts the project's and composer's vendor/bin around the
+// container's own PATH, each as the container sees it. A Windows path has to
+// be translated first, since a ':'-joined list would split C:\ apart.
+func containerExecPATH(projectDir, composerHome string) string {
+	return hostpath.ToVM(filepath.Join(projectDir, "vendor", "bin")) + ":" +
+		podman.ContainerPath + ":" +
+		hostpath.ToVM(filepath.Join(composerHome, "vendor", "bin"))
+}
+
 // containerExecEnvArgs builds the `--env` flags every exec into a project's FPM
 // container needs: the composer identity, a PATH that reaches both the
 // project's and the global composer binaries, the site tag for the debug
 // bridge, terminal colour, and the host variables lerd forwards. Shared with
 // RunPHPVersionCaptureEnv so the two exec routes cannot drift.
 func containerExecEnvArgs(cwd string) []string {
-	home := os.Getenv("HOME")
 	composerHome := composerHomeDir()
-	composerBin := filepath.Join(composerHome, "vendor", "bin")
-	projectVendorBin := filepath.Join(cwd, "vendor", "bin")
-
 	args := []string{
-		"--env", "HOME=" + home,
-		"--env", "COMPOSER_HOME=" + composerHome,
-		"--env", "PATH=" + projectVendorBin + ":" + podman.ContainerPath + ":" + composerBin,
+		"--env", "HOME=" + containerHome(),
+		"--env", "COMPOSER_HOME=" + hostpath.ToVM(composerHome),
+		"--env", "PATH=" + containerExecPATH(cwd, composerHome),
 	}
 	args = append(args, debugSiteEnvArgs(cwd)...)
 	args = append(args, terminalColorEnvArgs()...)
