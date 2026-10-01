@@ -1,5 +1,3 @@
-//go:build darwin || windows
-
 package lifecycle
 
 import (
@@ -46,7 +44,7 @@ func StopPodmanMachine() {
 // BatchStopContainers stops all running lerd-* containers in two podman calls
 // (stop then rm) so the Podman Machine socket isn't flooded by N individual
 // stop requests. After this returns the individual StopUnit calls find no
-// containers and go straight to the service manager.
+// containers and go straight to launchctl bootout.
 func BatchStopContainers(_ []string) {
 	// Query only running containers with name prefix "lerd-" to avoid passing
 	// non-existent names (native services like lerd-dns have no container).

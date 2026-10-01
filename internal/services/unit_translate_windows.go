@@ -1,3 +1,5 @@
+//go:build windows
+
 package services
 
 import (
@@ -348,14 +350,12 @@ func containerToPodmanArgs(c map[string][]string) ([]string, error) {
 // --- Service unit files ---
 
 // parseServiceUnit parses a systemd-format service unit and returns the argv
-// and keepAlive policy for the launchd plist.
+// and keepAlive policy for the Windows service manager.
 //
 // Binary resolution rules for args[0]:
 //   - Absolute path that exists → use as-is.
-//   - Absolute path that doesn't exist → substitute the running lerd binary
-//     (handles Homebrew → ~/.local/bin migration).
-//   - Bare command name (no '/') → resolve via PATH; if not found, substitute
-//     the running lerd binary (should not normally happen).
+//   - Absolute path that doesn't exist → missingBinaryFallback.
+//   - Bare command name → resolve via PATH, else return an error.
 func parseServiceUnit(name, content string) (args []string, keepAlive keepAlivePolicy, err error) {
 	svc := parseSection(content, "Service")
 	execStarts := svc["ExecStart"]
@@ -367,29 +367,15 @@ func parseServiceUnit(name, content string) (args []string, keepAlive keepAliveP
 		return nil, keepAliveNever, fmt.Errorf("empty ExecStart in service unit %s", name)
 	}
 
-	// Resolve args[0] to an absolute path suitable for a launchd plist.
 	if filepath.IsAbs(args[0]) {
-		// Absolute path: substitute if missing (e.g. old Homebrew install).
 		if _, statErr := os.Stat(args[0]); statErr != nil {
 			args[0] = missingBinaryFallback(args[0])
 		}
 	} else {
-		// Bare command (e.g. "podman"): resolve via PATH first, then well-known
-		// Homebrew locations. Never fall back to the lerd binary — if the command
-		// cannot be found, return an error so the caller can surface a clear message.
-		resolved := ""
-		if p, lookErr := exec.LookPath(args[0]); lookErr == nil {
-			resolved = p
-		} else {
-			for _, dir := range fallbackBinDirs {
-				candidate := filepath.Join(dir, args[0])
-				if _, statErr := os.Stat(candidate); statErr == nil {
-					resolved = candidate
-					break
-				}
-			}
-		}
-		if resolved == "" {
+		// Never fall back to the lerd binary for a bare command, so a missing
+		// tool surfaces as a clear error instead of running the wrong program.
+		resolved, lookErr := exec.LookPath(args[0])
+		if lookErr != nil {
 			return nil, keepAliveNever, fmt.Errorf("command %q in ExecStart of %s not found; use an absolute path", args[0], name)
 		}
 		args[0] = resolved
@@ -413,10 +399,24 @@ func parseServiceUnit(name, content string) (args []string, keepAlive keepAliveP
 	return args, keepAlive, nil
 }
 
-// fallbackBinDirs are searched for a bare ExecStart command PATH cannot find.
-// A platform sets it from an init() when its service manager runs with a
-// restricted PATH.
-var fallbackBinDirs []string
+// missingBinaryFallback picks what to run when a unit's absolute ExecStart path
+// does not exist on this host: the helper of that name beside the running
+// binary (lerd-tray.exe next to lerd.exe), else the running binary itself.
+func missingBinaryFallback(missing string) string {
+	self, err := os.Executable()
+	if err != nil {
+		return missing
+	}
+	name := filepath.Base(missing)
+	if !strings.HasSuffix(name, ".exe") {
+		name += ".exe"
+	}
+	sibling := filepath.Join(filepath.Dir(self), name)
+	if _, err := os.Stat(sibling); err == nil {
+		return sibling
+	}
+	return self
+}
 
 // podmanStartSem limits concurrent `podman run` executions to avoid
 // overwhelming the Podman Machine SSH connection with parallel requests.

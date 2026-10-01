@@ -1,9 +1,10 @@
+//go:build windows
+
 package services
 
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 )
 
@@ -12,11 +13,7 @@ func TestMissingBinaryFallback_PrefersSiblingOfRunningBinary(t *testing.T) {
 	if err != nil {
 		t.Skip("no executable path")
 	}
-	name := "lerd-sibling-probe"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
-	}
-	sibling := filepath.Join(filepath.Dir(self), name)
+	sibling := filepath.Join(filepath.Dir(self), "lerd-sibling-probe.exe")
 	if err := os.WriteFile(sibling, []byte("x"), 0o755); err != nil {
 		t.Skipf("cannot write beside test binary: %v", err)
 	}
