@@ -76,6 +76,9 @@ park=$HOME/ParkVM
 mkparked() { mkdir -p "$park/$1/public" && echo '{}' >"$park/$1/composer.json" && echo "<?php echo 'ok';" >"$park/$1/public/index.php"; }
 mkparked parkone
 check "lerd park picks up existing projects" bash -c "lerd park $park && lerd sites | grep -q parkone"
+# lerd park only edits the config; the watcher takes the new directory up on
+# its next pass, every 5 seconds, so a project made sooner raises no event.
+sleep 6
 mkparked parktwo
 check "8.6 [partial] a project created in a parked directory is picked up" wait_for 90 bash -c 'lerd sites | grep -q parktwo'
 check "unlink a site inside the parked directory" bash -c "cd $park/parkone && lerd unlink"
@@ -97,7 +100,9 @@ fi
 sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=mysql/' "$DEMO_DIR/.env"
 (cd "$DEMO_DIR" && lerd env </dev/null >/dev/null 2>&1)
 (cd "$grp" && sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=mysql/' .env && lerd env </dev/null >/dev/null 2>&1)
-# A switch to MySQL needs that database created and migrated, as a user would.
+# A switch to MySQL needs that database created and migrated, as a user would;
+# phase 5 has done it for demo already, a phase 8 run on its own has not.
+(cd "$DEMO_DIR" && lerd db:create "$(grep '^DB_DATABASE=' .env | cut -d= -f2)" </dev/null >/dev/null 2>&1; lerd artisan migrate --force </dev/null >/dev/null 2>&1)
 (cd "$grp" && lerd db:create "$(grep '^DB_DATABASE=' .env | cut -d= -f2)" </dev/null >/dev/null 2>&1 && lerd artisan migrate --force </dev/null >/dev/null 2>&1)
 check "lerd group add $name admin" bash -c "cd $grp && lerd group add '$name' admin"
 expect_200 "$scheme://admin.$(site_host "$DEMO_DIR")"
@@ -129,19 +134,24 @@ check_out "8.12 lan:unshare releases the port" '^000$' code "http://$lan_ip:$lan
 
 # A secured Inertia starter with Ziggy, shared on the LAN over plain http.
 inert=$PROJECTS/inert
+# Each step runs on its own and into the log, so one that fails is named
+# rather than silently skipping the link after it.
 if [ ! -d "$inert" ]; then
-	(cd "$PROJECTS" && lerd composer create-project laravel/react-starter-kit inert --no-interaction </dev/null >/dev/null 2>&1)
-	(cd "$inert" && lerd composer require tightenco/ziggy --no-interaction </dev/null >/dev/null 2>&1 &&
-		sed -i 's|<head>|<head>\n        @routes|' resources/views/app.blade.php &&
-		lerd link </dev/null >/dev/null 2>&1 && lerd setup --all --skip-open </dev/null >/dev/null 2>&1)
+	(cd "$PROJECTS" && lerd composer create-project laravel/react-starter-kit inert --no-interaction </dev/null 2>&1 | tail -5)
+	(cd "$inert" && lerd composer require tightenco/ziggy --no-interaction </dev/null 2>&1 | tail -5)
+	grep -q '@routes' "$inert/resources/views/app.blade.php" || sed -i 's|<head>|<head>\n        @routes|' "$inert/resources/views/app.blade.php"
+	(cd "$inert" && lerd link </dev/null 2>&1 | tail -5)
+	(cd "$inert" && lerd setup --all --skip-open </dev/null 2>&1 | tail -5)
 fi
+(cd "$inert" && lerd link </dev/null >/dev/null 2>&1)
 (cd "$inert" && lerd secure </dev/null >/dev/null 2>&1)
-ishare=$(cd "$inert" && lerd lan:share </dev/null 2>&1 | grep -Eo 'http://[0-9.]+:[0-9]+' | head -1)
+ishare=$(cd "$inert" && lerd lan:share </dev/null 2>&1 | tee /dev/stderr | grep -Eo 'http://[0-9.]+:[0-9]+' | head -1)
+echo "inert share -> ${ishare:-none}"
 iport=${ishare##*:}
 jar=/tmp/lerd-vm-jar
 rm -f "$jar"
 page=$(curl -s -c "$jar" "http://$lan_ip:$iport/login")
-check_not "Ziggy's routes point at the LAN address, not https" '"url":"https://' echo "$page"
+check_not "Ziggy's routes point at the LAN address, not https" '"url":"https://|^no page$' echo "${page:-no page}"
 xsrf=$(awk '$6 == "XSRF-TOKEN" {print $7}' "$jar" | python3 -c 'import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read().strip()))')
 post=$(curl -s -o /dev/null -w '%{http_code}' -b "$jar" -c "$jar" -H "X-XSRF-TOKEN: $xsrf" -H 'X-Inertia: true' -H 'Accept: text/html' \
 	--data 'email=nobody%40example.com&password=wrong' "http://$lan_ip:$iport/login")

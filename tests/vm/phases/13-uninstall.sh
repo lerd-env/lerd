@@ -24,8 +24,7 @@ check_out "13.1 uninstall stops every container and unit" '^0 0$' bash -c "echo 
 check "13.2 [partial] the sudoers rule and the mkcert CA are removed" bash -c '! sudo test -e /etc/sudoers.d/lerd && ! ls /usr/local/share/ca-certificates/ /etc/pki/ca-trust/source/anchors/ 2>/dev/null | grep -qi mkcert'
 check "13.3 the sysctl drop-in is gone" bash -c '! test -e /etc/sysctl.d/99-lerd-ports.conf'
 if [ -d /usr/share/omarchy ]; then
-	# 13.4 is about the installer's own uninstall, run at the end of this phase.
-	omarchy_glance=1
+	check_not "13.4 lerd uninstall takes Lerd Glance off the bar" 'sh\.lerd\.glance' bash -c 'grep -rl "sh.lerd.glance" ~/.config 2>/dev/null'
 else
 	skip "13.4 Omarchy: Glance taken off the bar" "not an Omarchy guest"
 fi
@@ -46,11 +45,6 @@ check "13.8 [partial] the guest's .test resolver setup is gone and general DNS w
 check "13.9 project directories and .env files are untouched" test -f "$DEMO_DIR/.env"
 check "13.10 keep my data keeps the databases, and the run says so" bash -c "test -d '$HOME/.local/share/lerd/data' && grep -qi 'kept' <<<\"\$1\"" _ "$out"
 check_not "13.11 [partial] no unit is left failed behind the uninstall" 'lerd-' bash -c 'systemctl --user list-units --state=failed --no-legend'
-if [ "${FORCE:-}" = 1 ]; then
-	check "13.12 lerd uninstall --force skips prompts" lerd uninstall --force
-else
-	skip "13.12 lerd uninstall --force on a second guest" "run phase 13 with FORCE=1 on the second guest"
-fi
 
 check "reinstall on top" reinstall
 check_out "the DNS mode is kept" "^$mode_before\$" tld
@@ -59,8 +53,11 @@ expect_200 "$scheme://$(site_host "$DEMO_DIR")"
 check_out "13.13 reinstalled: the re-linked project serves with its data intact" '[1-9]' bash -c "cd '$DEMO_DIR' && lerd artisan tinker --execute='echo DB::table(\"migrations\")->count();'"
 echo "database: $db"
 
-if [ "${omarchy_glance:-}" = 1 ]; then
-	check "install.sh --uninstall" bash "$HOME/rc/install.sh" --uninstall
-	check_not "13.4 install.sh --uninstall takes Lerd Glance off the bar" 'sh\.lerd\.glance' bash -c 'grep -rl "sh.lerd.glance" ~/.config 2>/dev/null'
-	check "reinstall after the installer's uninstall" reinstall
+
+# --force wipes the data, so it runs last, after the keep-data checks above.
+if [ "${FORCE:-}" = 1 ]; then
+	check "13.12 lerd uninstall --force skips prompts" lerd uninstall --force
+	check "reinstall after --force" reinstall
+else
+	skip "13.12 lerd uninstall --force on a second guest" "run phase 13 with FORCE=1 on the second guest"
 fi

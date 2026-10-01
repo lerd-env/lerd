@@ -7,12 +7,13 @@
 source "$(dirname "$0")/../lib.sh"
 
 # public_install: the one-line install a user copies from lerd.sh.
+# The plan's one-liner uses wget; a distro without it (Arch) uses curl.
 public_install() {
-	if [ "${LERD_CHANNEL:-}" = beta ]; then
-		wget -qO- https://lerd.sh/install.sh | bash -s -- --beta
-	else
-		wget -qO- https://lerd.sh/install.sh | bash
-	fi
+	local fetch="wget -qO-" args=()
+	have wget || fetch="curl -fsSL"
+	[ "${LERD_CHANNEL:-}" = beta ] && args=(--beta)
+	set -o pipefail
+	$fetch https://lerd.sh/install.sh | bash -s -- "${args[@]}"
 }
 local_install() { bash "$HOME/rc/install.sh" --local "$HOME/rc/lerd"; }
 
@@ -43,7 +44,7 @@ if [ -x "$HOME/rc/lerd" ]; then
 	skip "1.2 the lerd.sh one-liner completes without a traceback" "the one-liner installs published releases; this run tests an unpublished build, rerun after publishing"
 	if [ "$rc" = 0 ] && ! grep -Eq 'Traceback|panic:' <<<"$out"; then _pass "1.9 [partial] --local install completes"; else _fail "1.9 [partial] --local install completes" "rc=$rc"; fi
 else
-	if [ "$rc" = 0 ] && ! grep -Eq 'Traceback|panic:' <<<"$out"; then _pass "1.2 the lerd.sh one-liner completes without a traceback"; else _fail "1.2 the lerd.sh one-liner completes without a traceback" "rc=$rc"; fi
+	if [ "$rc" = 0 ] && [ -x "$HOME/.local/bin/lerd" ] && ! grep -Eq 'Traceback|panic:' <<<"$out"; then _pass "1.2 the lerd.sh one-liner completes without a traceback"; else _fail "1.2 the lerd.sh one-liner completes without a traceback" "rc=$rc, lerd $([ -x "$HOME/.local/bin/lerd" ] && echo installed || echo missing)"; fi
 	skip "1.9 --local install completes" "no build pushed to ~/rc"
 fi
 # sudo caches the password, so the user is asked once as long as the first

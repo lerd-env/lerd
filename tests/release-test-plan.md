@@ -1093,7 +1093,7 @@ Run last on each guest, because it is destructive.
 - [ ] The sudoers rule and the mkcert CA are removed from the system
 - [ ] `/etc/sysctl.d/99-lerd-ports.conf` is gone, and on a dracut host whose
       initramfs still carries it the run prints `sudo dracut -f`
-- [ ] On Omarchy `install.sh --uninstall` takes Lerd Glance off the bar
+- [ ] On Omarchy `lerd uninstall` takes Lerd Glance off the bar
 - [ ] On a host without systemd-resolved (omarchy) no DNS step is drawn failed
 - [ ] `~/.local/bin/lerd` is gone on a script install; on a packaged install the
       binary **stays** and the matching `apt remove` / `dnf remove` /

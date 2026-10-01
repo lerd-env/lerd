@@ -74,6 +74,9 @@ lerd node:manager "${manager_before:-mise}" </dev/null >/dev/null 2>&1
 
 # A package that wants a service gets it suggested, by package, and Add wires it.
 grep -q 'meilisearch/meilisearch-php' composer.json || lerd composer require meilisearch/meilisearch-php --no-interaction </dev/null >/dev/null 2>&1
+# A guest that cannot be reset still has it wired from the last run, and a
+# service the site already uses is never suggested.
+api POST "/api/sites/$host/service:remove?name=meilisearch" >/dev/null 2>&1
 check_out "2.11 [partial] the linked site suggests Meilisearch, naming the package" 'meilisearch.*meilisearch-php' site_json "$host" suggested_services
 check_out "dashboard Add wires the suggestion into .env" '"ok": ?true' api POST "/api/sites/$host/service:add?name=meilisearch"
 check_out "the Meilisearch key is in .env" '^MEILISEARCH_HOST=' grep ^MEILISEARCH_HOST= .env
