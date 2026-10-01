@@ -1,6 +1,6 @@
 # Windows (WSL2)
 
-Lerd runs on Windows through WSL2. There is no native Windows build, the architecture leans on systemd user services and rootless Podman, both of which only exist on Linux. WSL2 with systemd enabled gives you a real Linux user session where the standard Linux build runs unchanged, install script, Quadlets, watcher and all.
+Lerd runs on Windows through WSL2. A [native Windows build](/getting-started/windows) is in development but experimental. The Linux architecture leans on systemd user services and rootless Podman, both of which only exist on Linux. WSL2 with systemd enabled gives you a real Linux user session where the standard Linux build runs unchanged, install script, Quadlets, watcher and all.
 
 This page is the minimum configuration to get a working setup, with the WSL2 specific gotchas called out so you do not lose an afternoon to them.
 
