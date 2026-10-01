@@ -217,6 +217,14 @@ To answer yes to every prompt without interaction:
 lerd uninstall --force
 ```
 
+To uninstall without prompts but keep your config, databases and images for a later reinstall, the unattended form of answering no to prompts 1 and 4 and yes to 2 and 3:
+
+```bash
+lerd uninstall --keep-data
+```
+
+Run without a terminal and without either flag, `lerd uninstall` cannot ask, so it stops before touching anything and exits with an error.
+
 If lerd came from apt, dnf or Homebrew, the teardown is the same but the binary stays where it is: deleting a file the package manager owns would leave it believing lerd is still installed. `lerd uninstall` prints the matching removal command at that step, so finish with `sudo apt remove lerd`, `sudo dnf remove lerd` or `brew uninstall lerd`.
 
 The installer's own `--uninstall` stops the user units and removes the binary, but the DNS setup lives outside your home directory and only lerd can take it back out: the `lerd0` link unit, the NetworkManager rules and dispatcher, the drop-in that empties `FallbackDNS`, and the passwordless sudoers rule the DNS operations run under. So when it finds that configuration it offers to run `lerd dns:disable` first, and prints the root commands to clear it by hand if you decline or the binary has already gone.
