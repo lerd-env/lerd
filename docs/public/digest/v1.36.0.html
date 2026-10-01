@@ -606,10 +606,10 @@
     <h2>Worktrees</h2>
     <div class="ch-pills"><span class="pill feat">FEAT</span></div>
   </div>
-  <p class="ch-intro">A worktree's database used to be a question asked every time. A framework can now name its migrations folder, and a new worktree <b>compares it with the parent checkout and decides</b>, then says which and why. <a class="pr" href="https://github.com/lerd-env/lerd/pull/1969">#1969</a></p>
+  <p class="ch-intro">A worktree's database used to be a question that a script or an assistant could not answer. A framework can now name its migrations folder, and a worktree set up with nobody to ask, from the MCP tool, a script or <code>lerd worktree setup</code>, <b>compares it with the parent checkout and decides</b>, then says which and why. At a terminal and in the dashboard the question is still yours. <a class="pr" href="https://github.com/lerd-env/lerd/pull/1969">#1969</a></p>
 
   <div class="flow-wrap">
-    <div class="flow-title"><span>THE BRANCH'S MIGRATIONS AGAINST THE PARENT'S</span><span>with no database chosen</span></div>
+    <div class="flow-title"><span>THE BRANCH'S MIGRATIONS AGAINST THE PARENT'S</span><span>unattended, with no database chosen</span></div>
     <div class="flow">
       <div class="fnode ok"><div class="t">same set</div><div class="v">share</div><div class="d">the parent's database</div></div>
       <div class="fnode ok"><div class="t">branch adds some</div><div class="v">clone-main</div><div class="d">a copy, then migrate</div></div>
@@ -625,7 +625,7 @@
   </div>
 
   <div class="code">
-    <div class="code-bar"><span>three branches, three answers</span><span class="lang">bash</span></div>
+    <div class="code-bar"><span>three branches, three answers, from a script</span><span class="lang">bash</span></div>
     <pre><span class="k">lerd worktree add</span> <span class="t">../app-same same</span>
 <span class="out">Database: share, since the migrations match the parent checkout's.</span>
 
