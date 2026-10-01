@@ -2,7 +2,10 @@
 package dashboard
 
 import (
+	"context"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -38,11 +41,26 @@ func URL() string {
 // lerd-ui only on some platforms, while the page is what every install serves.
 // The timeout is short: this sits in front of a window opening.
 func serving(base string) bool {
-	c := &http.Client{Timeout: 900 * time.Millisecond}
+	c := &http.Client{Timeout: 900 * time.Millisecond, Transport: loopbackTransport()}
 	resp, err := c.Get(base + "/")
 	if err != nil {
 		return false
 	}
 	resp.Body.Close()
 	return resp.StatusCode < http.StatusInternalServerError
+}
+
+// loopbackTransport dials *.localhost names at 127.0.0.1 itself. Browsers treat
+// them as loopback, but the Windows system resolver does not resolve them, which
+// made a healthy vhost look down.
+func loopbackTransport() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	dial := (&net.Dialer{Timeout: 900 * time.Millisecond}).DialContext
+	t.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if host, port, err := net.SplitHostPort(addr); err == nil && strings.HasSuffix(host, ".localhost") {
+			addr = net.JoinHostPort("127.0.0.1", port)
+		}
+		return dial(ctx, network, addr)
+	}
+	return t
 }
