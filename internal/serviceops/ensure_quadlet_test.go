@@ -699,3 +699,37 @@ func TestEnsureCustomServiceQuadlet_reshiftsRecordedSecondaryPortTakenByHost(t *
 		t.Errorf("rendered console mapping publishes %d, want the shifted %d", rendered, moved)
 	}
 }
+
+// macOS keeps 1.35's rule: a service whose unit is up owns its port, whatever
+// podman says about its container. Asking the container moved services off
+// their own ports while the VM still held them.
+func TestEnsureCustomServiceQuadlet_macOSTrustsAnActiveUnit(t *testing.T) {
+	withRecordedPortGuard(t, false)
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(tmp, "data"))
+	orig := podman.DaemonReloadFn
+	t.Cleanup(func() { podman.DaemonReloadFn = orig })
+	podman.DaemonReloadFn = func() error { return nil }
+	origStatus := ensureUnitStatus
+	t.Cleanup(func() { ensureUnitStatus = origStatus })
+	ensureUnitStatus = func(string) (string, error) { return "active", nil }
+	origRunning := ensureContainerRunning
+	t.Cleanup(func() { ensureContainerRunning = origRunning })
+	ensureContainerRunning = func(string) (bool, bool) { return false, true }
+
+	holder, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("cannot bind a loopback port: %v", err)
+	}
+	defer holder.Close()
+	def := holder.Addr().(*net.TCPAddr).Port
+	svc := &config.CustomService{Name: "cache", Image: "example/cache:1", Ports: []string{fmt.Sprintf("127.0.0.1:%d:6379", def)}}
+	if err := EnsureCustomServiceQuadlet(svc); err != nil {
+		t.Fatalf("EnsureCustomServiceQuadlet: %v", err)
+	}
+	if got := config.ServicePublishedPort("cache"); got != 0 {
+		t.Errorf("an active service was moved to %d off its own port", got)
+	}
+}

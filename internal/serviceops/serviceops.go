@@ -157,6 +157,16 @@ var ensureUnitStatus = podman.UnitStatus
 // their own ports and left sites behind. There a recorded port sticks.
 var guardRecordedPorts = runtime.GOOS != "darwin"
 
+// ownsItsPort is the guard's test for whether the service holds its own port.
+// macOS keeps 1.35's answer, the unit being up: asking podman about the container
+// read the VM still holding a stopped service's port as someone else's.
+func ownsItsPort(name string) bool {
+	if !guardRecordedPorts {
+		return unitActive(name)
+	}
+	return holdsItsPort(name)
+}
+
 // unitActive reports whether a service's own systemd unit is currently up.
 func unitActive(name string) bool {
 	status, _ := ensureUnitStatus("lerd-" + name)
@@ -1012,7 +1022,7 @@ func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 		primary = podman.PrimaryHostPort(svc.Ports)
 	}
 	if pp == 0 || guardRecordedPorts {
-		if free := maybeShiftPublishedPort(svc.Name, primary, holdsItsPort(svc.Name)); free > 0 {
+		if free := maybeShiftPublishedPort(svc.Name, primary, ownsItsPort(svc.Name)); free > 0 {
 			if err := persistPublishedPort(svc.Name, free); err != nil {
 				return false, fmt.Errorf("shifting lerd-%s off in-use port %d: %w", svc.Name, primary, err)
 			}
@@ -1053,7 +1063,7 @@ func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 			}
 			host = hport
 		}
-		if free := maybeShiftPublishedPort(svc.Name, host, holdsItsPort(svc.Name)); free > 0 && free != host {
+		if free := maybeShiftPublishedPort(svc.Name, host, ownsItsPort(svc.Name)); free > 0 && free != host {
 			if err := persistPublishedPortFor(svc.Name, cport, free); err != nil {
 				return false, fmt.Errorf("shifting lerd-%s off in-use port %d: %w", svc.Name, host, err)
 			}
