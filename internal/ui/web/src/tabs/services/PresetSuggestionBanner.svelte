@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Service } from '$stores/services';
-  import { suggestionFor, dismissSuggestion } from '$stores/presetSuggestions';
+  import { suggestionFor, dismissSuggestion, adminKeyFor } from '$stores/presetSuggestions';
   import { loadPresets, installPresetAndOpen, presetAddLabel } from '$stores/presets';
   import { m } from '../../paraglide/messages.js';
 
@@ -11,6 +11,8 @@
   let { svc }: Props = $props();
 
   const suggestion = $derived(suggestionFor(svc));
+  // An admin tool starts with the service it fronts; a companion only works beside it.
+  const administers = $derived(($suggestion?.admin_for ?? []).includes(adminKeyFor(svc) ?? ''));
 
   onMount(() => {
     loadPresets();
@@ -37,7 +39,9 @@
       <div class="flex-1 min-w-0">
         <p class="text-xs font-semibold text-sky-900 dark:text-sky-200">{m.services_banner_addPreset({ name: $suggestion.name })}</p>
         <p class="text-[11px] text-sky-700 dark:text-sky-300/80 mt-0.5">
-          {m.services_banner_description({ description: $suggestion.description ?? '', svcName: svc.name })}
+          {administers
+            ? m.services_banner_description({ description: $suggestion.description ?? '', svcName: svc.name })
+            : m.services_banner_companionDescription({ description: $suggestion.description ?? '', svcName: svc.name })}
         </p>
         {#if $suggestion.error}
           <p class="text-[11px] text-red-500 mt-1">{$suggestion.error}</p>

@@ -606,6 +606,7 @@
   "services_addPreset": "Bir servis ön ayarı ekle",
   "services_ariaPortConflict": "port çakışması",
   "services_banner_addPreset": "{name} eklensin mi?",
+  "services_banner_companionDescription": "{description}. {svcName} ile birlikte çalışan bir özel servis olarak kurulur.",
   "services_banner_description": "{description}. {svcName} servisini otomatik başlatan bir özel servis olarak kurulur.",
   "services_banner_dismiss": "Kapat, bunu Servisler + düğmesinden hâlâ ekleyebilirsiniz",
   "services_banner_installFirst": "önce {deps} kur",

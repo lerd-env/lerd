@@ -606,6 +606,7 @@
   "services_addPreset": "Dodaj preset usługi",
   "services_ariaPortConflict": "konflikt portów",
   "services_banner_addPreset": "Dodać {name}?",
+  "services_banner_companionDescription": "{description}. Instaluje się jako niestandardowa usługa, która współpracuje z {svcName}.",
   "services_banner_description": "{description}. Instaluje się jako niestandardowa usługa, która automatycznie uruchamia {svcName}.",
   "services_banner_dismiss": "Odrzuć, nadal możesz to dodać za pomocą przycisku + w Usługach",
   "services_banner_installFirst": "najpierw zainstaluj {deps}",

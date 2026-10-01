@@ -201,7 +201,17 @@ color: "#00758f"      # brand colour the dashboard tints the mark with
 admin_for:            # the services this preset's UI administers
   - opensearch
 admin_rank: 10        # tie-break when several tools administer the same service
+suggest_for:          # services whose page offers this preset as a companion
+  - mailpit
 ```
+
+`suggest_for` is for a preset that works alongside a service without
+administering it, the way the spamassassin preset scores the mail Mailpit
+catches. The named service's page offers it in the same banner as an admin tool,
+saying it works alongside the service rather than starting it, and only while no
+admin tool is being suggested there. Once it is installed or dismissed the
+banner goes quiet. The key lives in the schema 2 tree of the service store, so a
+binary that predates it never sees it.
 
 `admin_for` is not `depends_on`. `depends_on` orders container startup (and is
 satisfied by the named service or any installed drop-in whose `family` or

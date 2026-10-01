@@ -606,6 +606,7 @@
   "services_addPreset": "Adicionar um preset de serviço",
   "services_ariaPortConflict": "conflito de porta",
   "services_banner_addPreset": "Adicionar {name}?",
+  "services_banner_companionDescription": "{description}. É instalado como serviço personalizado que funciona junto com {svcName}.",
   "services_banner_description": "{description}. Instala como serviço personalizado que inicia automaticamente {svcName}.",
   "services_banner_dismiss": "Dispensar, você ainda pode adicionar pelo botão + de Serviços",
   "services_banner_installFirst": "instale {deps} primeiro",

@@ -235,6 +235,10 @@ type CustomService struct {
 	// was. Without it the winner is whichever the UI happens to iterate first,
 	// so a tool covering many engines would displace a specialist by name alone.
 	AdminRank int `yaml:"admin_rank,omitempty" json:"admin_rank,omitempty"`
+	// SuggestFor names the services whose page offers this preset, for one that
+	// works alongside a service rather than administering it: a spam scoring
+	// backend for the mail catcher.
+	SuggestFor []string `yaml:"suggest_for,omitempty" json:"suggest_for,omitempty"`
 	// Files is deprecated as a YAML user field but kept with its yaml tag so
 	// LoadCustomServiceFromFile can detect legacy on-disk entries and migrate
 	// them away. The authoritative source of file mounts is presetFiles in

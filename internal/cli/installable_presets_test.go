@@ -53,7 +53,7 @@ func TestListInstallablePresets_IndexFallbackCarriesDiscoveryMetadata(t *testing
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	mux := http.NewServeMux()
 	mux.HandleFunc("/index.json", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"services":[{"name":"widget-admin","description":"admin UI","category":"admin","icon":"database","admin_for":["widget"]}]}`))
+		_, _ = w.Write([]byte(`{"services":[{"name":"widget-admin","description":"admin UI","category":"admin","icon":"database","admin_for":["widget"],"suggest_for":["gadget"]}]}`))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -77,6 +77,9 @@ func TestListInstallablePresets_IndexFallbackCarriesDiscoveryMetadata(t *testing
 	}
 	if len(entry.AdminFor) != 1 || entry.AdminFor[0] != "widget" {
 		t.Errorf("index fallback dropped admin_for, got %v", entry.AdminFor)
+	}
+	if len(entry.SuggestFor) != 1 || entry.SuggestFor[0] != "gadget" {
+		t.Errorf("index fallback dropped suggest_for, got %v", entry.SuggestFor)
 	}
 }
 

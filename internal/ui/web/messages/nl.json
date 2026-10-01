@@ -606,6 +606,7 @@
   "services_addPreset": "Een servicepreset toevoegen",
   "services_ariaPortConflict": "poortconflict",
   "services_banner_addPreset": "{name} toevoegen?",
+  "services_banner_companionDescription": "{description}. Wordt geïnstalleerd als aangepaste dienst die samenwerkt met {svcName}.",
   "services_banner_description": "{description}. Wordt geïnstalleerd als aangepaste service die {svcName} automatisch start.",
   "services_banner_dismiss": "Verbergen, je kunt dit nog steeds toevoegen via de Services-+-knop",
   "services_banner_installFirst": "installeer eerst {deps}",

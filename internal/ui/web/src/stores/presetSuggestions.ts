@@ -64,7 +64,7 @@ export function adminServiceFor(svc: Service, services: Service[]): Service | nu
   return bestAdmin(services, key);
 }
 
-function pickSuggestion(
+function pickAdminSuggestion(
   presetList: Preset[],
   dismissed: string[],
   key: string | null,
@@ -84,6 +84,33 @@ function pickSuggestion(
   // drop-ins count), otherwise suggesting the preset would only fail on Add.
   if (p.installed || (p.missing_deps || []).length > 0) return null;
   return p;
+}
+
+// A companion works alongside a service rather than administering it, and is
+// offered only where no admin tool is, so a database page keeps its admin card.
+function pickCompanion(presetList: Preset[], dismissed: string[], key: string | null): Preset | null {
+  if (!key) return null;
+  return (
+    presetList.find(
+      (p) =>
+        (p.suggest_for || []).includes(key) &&
+        !p.installed &&
+        !(p.missing_deps || []).length &&
+        !dismissed.includes(p.name)
+    ) ?? null
+  );
+}
+
+function pickSuggestion(
+  presetList: Preset[],
+  dismissed: string[],
+  key: string | null,
+  installedServices: Service[] = []
+): Preset | null {
+  return (
+    pickAdminSuggestion(presetList, dismissed, key, installedServices) ??
+    pickCompanion(presetList, dismissed, key)
+  );
 }
 
 export function suggestedPresetFor(svc: Service): Preset | null {

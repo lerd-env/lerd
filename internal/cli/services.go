@@ -858,6 +858,7 @@ func ListInstallablePresets() ([]config.PresetMeta, error) {
 				Color:          config.NormalizeBrandColor(e.Color),
 				AdminFor:       e.AdminFor,
 				AdminRank:      e.AdminRank,
+				SuggestFor:     e.SuggestFor,
 			})
 		}
 	}

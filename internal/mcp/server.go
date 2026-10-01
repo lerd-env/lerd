@@ -1750,6 +1750,7 @@ type presetEntry struct {
 	Icon           string               `json:"icon,omitempty"`
 	Dashboard      string               `json:"dashboard,omitempty"`
 	AdminFor       []string             `json:"admin_for,omitempty"`
+	SuggestFor     []string             `json:"suggest_for,omitempty"`
 	DependsOn      []string             `json:"depends_on,omitempty"`
 	Installed      bool                 `json:"installed"`
 	DefaultVersion string               `json:"default_version,omitempty"`
@@ -1765,6 +1766,7 @@ func newPresetEntry(p config.PresetMeta) presetEntry {
 		Icon:           p.Icon,
 		Dashboard:      p.Dashboard,
 		AdminFor:       p.AdminFor,
+		SuggestFor:     p.SuggestFor,
 		DependsOn:      p.DependsOn,
 		DefaultVersion: p.DefaultVersion,
 	}

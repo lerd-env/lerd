@@ -606,6 +606,7 @@
   "services_addPreset": "Adaugă o presetare de serviciu",
   "services_ariaPortConflict": "conflict de port",
   "services_banner_addPreset": "Adaugi {name}?",
+  "services_banner_companionDescription": "{description}. Se instalează ca serviciu personalizat care funcționează alături de {svcName}.",
   "services_banner_description": "{description}. Se instalează ca serviciu personalizat care pornește automat {svcName}.",
   "services_banner_dismiss": "Închide, poți adăuga asta în continuare din butonul + din Servicii",
   "services_banner_installFirst": "instalează mai întâi {deps}",

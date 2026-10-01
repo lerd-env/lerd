@@ -606,6 +606,7 @@
   "services_addPreset": "Thêm một preset dịch vụ",
   "services_ariaPortConflict": "xung đột cổng",
   "services_banner_addPreset": "Thêm {name}?",
+  "services_banner_companionDescription": "{description}. Được cài đặt như một dịch vụ tùy chỉnh hoạt động cùng {svcName}.",
   "services_banner_description": "{description}. Cài đặt như một dịch vụ tùy chỉnh tự khởi động {svcName}.",
   "services_banner_dismiss": "Bỏ qua, bạn vẫn có thể thêm cái này từ nút + trong Dịch vụ",
   "services_banner_installFirst": "cài đặt {deps} trước",
