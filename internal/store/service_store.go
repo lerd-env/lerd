@@ -39,6 +39,7 @@ type ServiceIndexEntry struct {
 	Color          string                 `json:"color,omitempty"`
 	AdminFor       []string               `json:"admin_for,omitempty"`
 	AdminRank      int                    `json:"admin_rank,omitempty"`
+	SuggestFor     []string               `json:"suggest_for,omitempty"`
 }
 
 func init() {

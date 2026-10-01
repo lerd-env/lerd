@@ -606,6 +606,7 @@
   "services_addPreset": "Add a service preset",
   "services_ariaPortConflict": "port conflict",
   "services_banner_addPreset": "Add {name}?",
+  "services_banner_companionDescription": "{description}. Installs as a custom service that works alongside {svcName}.",
   "services_banner_description": "{description}. Installs as a custom service that auto-starts {svcName}.",
   "services_banner_dismiss": "Dismiss, you can still add this from the Services + button",
   "services_banner_installFirst": "install {deps} first",

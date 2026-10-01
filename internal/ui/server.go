@@ -1913,6 +1913,7 @@ type PresetResponse struct {
 	Color          string                 `json:"color,omitempty"`
 	AdminFor       []string               `json:"admin_for,omitempty"`
 	AdminRank      int                    `json:"admin_rank,omitempty"`
+	SuggestFor     []string               `json:"suggest_for,omitempty"`
 }
 
 // handleServicePresets returns the list of bundled presets and whether each is
@@ -1975,6 +1976,7 @@ func handleServicePresets(w http.ResponseWriter, r *http.Request) {
 			Color:          p.Color,
 			AdminFor:       p.AdminFor,
 			AdminRank:      p.AdminRank,
+			SuggestFor:     p.SuggestFor,
 		})
 	}
 	writeJSON(w, out)

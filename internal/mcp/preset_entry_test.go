@@ -18,8 +18,12 @@ func TestPresetEntry_carriesDiscoveryMetadata(t *testing.T) {
 		Category:    "admin",
 		Icon:        "database",
 		AdminFor:    []string{"mysql", "mariadb"},
+		SuggestFor:  []string{"mailpit"},
 		DependsOn:   []string{"mysql"},
 	})
+	if len(got.SuggestFor) != 1 || got.SuggestFor[0] != "mailpit" {
+		t.Errorf("suggest_for = %v, want [mailpit]", got.SuggestFor)
+	}
 
 	if got.Category != "admin" {
 		t.Errorf("category = %q, want admin", got.Category)

@@ -606,6 +606,7 @@
   "services_addPreset": "Tambahkan preset layanan",
   "services_ariaPortConflict": "konflik port",
   "services_banner_addPreset": "Tambahkan {name}?",
+  "services_banner_companionDescription": "{description}. Dipasang sebagai layanan kustom yang bekerja bersama {svcName}.",
   "services_banner_description": "{description}. Dipasang sebagai layanan kustom yang otomatis menjalankan {svcName}.",
   "services_banner_dismiss": "Tutup, Anda masih bisa menambahkan ini dari tombol + Layanan",
   "services_banner_installFirst": "pasang {deps} dulu",

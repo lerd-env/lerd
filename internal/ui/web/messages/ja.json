@@ -606,6 +606,7 @@
   "services_addPreset": "サービスプリセットを追加",
   "services_ariaPortConflict": "ポート競合",
   "services_banner_addPreset": "{name} を追加しますか？",
+  "services_banner_companionDescription": "{description}。{svcName} と連携するカスタムサービスとしてインストールします。",
   "services_banner_description": "{description}。{svcName} を自動起動するカスタムサービスとしてインストールします。",
   "services_banner_dismiss": "閉じる。サービスの ＋ ボタンから後で追加できます",
   "services_banner_installFirst": "先に {deps} をインストール",

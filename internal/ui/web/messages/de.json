@@ -606,6 +606,7 @@
   "services_addPreset": "Dienst-Vorlage hinzufügen",
   "services_ariaPortConflict": "Portkonflikt",
   "services_banner_addPreset": "{name} hinzufügen?",
+  "services_banner_companionDescription": "{description}. Wird als benutzerdefinierter Dienst installiert, der mit {svcName} zusammenarbeitet.",
   "services_banner_description": "{description}. Wird als benutzerdefinierter Dienst installiert, der {svcName} automatisch startet.",
   "services_banner_dismiss": "Ausblenden, du kannst dies weiterhin über den Services-+-Button hinzufügen",
   "services_banner_installFirst": "zuerst {deps} installieren",

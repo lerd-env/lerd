@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -150,4 +152,33 @@ func TestHandleServiceIcons_ServesTheShippedMarksWithAnEmptyCache(t *testing.T) 
 	if !strings.Contains(got["mysql"], "<path") {
 		t.Errorf("mysql should serve its shipped mark, got %q", got["mysql"])
 	}
+}
+
+// suggest_for drives the suggestion card on another service's page, so it has
+// to reach the preset list the dashboard reads.
+func TestHandleServicePresets_CarriesSuggestFor(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dir)
+	presets := filepath.Join(dir, "lerd", "service-presets")
+	if err := os.MkdirAll(presets, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(presets, "spamassassin.yaml"), []byte("name: spamassassin\nimage: x\nsuggest_for:\n  - mailpit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	handleServicePresets(rec, httptest.NewRequest(http.MethodGet, "/api/services/presets", nil))
+	var got []PresetResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	for _, p := range got {
+		if p.Name == "spamassassin" {
+			if len(p.SuggestFor) != 1 || p.SuggestFor[0] != "mailpit" {
+				t.Errorf("suggest_for = %v, want [mailpit]", p.SuggestFor)
+			}
+			return
+		}
+	}
+	t.Fatal("spamassassin missing from the preset list")
 }

@@ -25,6 +25,7 @@ export interface Preset {
   color?: string;
   admin_for?: string[];
   admin_rank?: number;
+  suggest_for?: string[];
   missing_deps?: string[];
   installed?: boolean;
   installed_tags?: string[];

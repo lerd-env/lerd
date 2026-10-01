@@ -606,6 +606,7 @@
   "services_addPreset": "添加服务预设",
   "services_ariaPortConflict": "端口冲突",
   "services_banner_addPreset": "添加 {name}？",
+  "services_banner_companionDescription": "{description}。作为自定义服务安装，与 {svcName} 配合使用。",
   "services_banner_description": "{description}。作为自定义服务安装，会自动启动 {svcName}。",
   "services_banner_dismiss": "关闭，你仍可通过服务面板的 + 按钮添加它",
   "services_banner_installFirst": "请先安装 {deps}",
