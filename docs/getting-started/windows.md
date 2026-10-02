@@ -59,14 +59,23 @@ Lerd saves the provider it created the machine with as `machine.provider` in the
 | `.test` DNS | dnsmasq container | `lerd dns-serve`, a built-in answerer on `127.0.0.1:53` |
 | DNS routing | systemd-resolved | a DNS Client NRPT rule for `.test` |
 | Login start | `lerd autostart` | a `Run` registry entry, on by default and removed by `lerd autostart disable` |
-| Shims on `PATH` | sh scripts, `PATH` set in the shell rc | `php.cmd`, `composer.cmd` and the node shims in `%LOCALAPPDATA%\lerdin`, added to the user `PATH` in the registry |
+| Shims on `PATH` | sh scripts, `PATH` set in the shell rc | `php.cmd`, `composer.cmd` and the node shims in `%LOCALAPPDATA%\lerd\bin`, added to the user `PATH` in the registry |
 | Site paths in containers | the same path | `C:\Sites\app` becomes `/mnt/c/Sites/app` inside the machine |
+| Drive sharing (Hyper-V) | not needed | `lerd p9-serve` in place of Podman's 9p server |
 
 Config lives under `%APPDATA%\lerd` and data under `%LOCALAPPDATA%\lerd`. Setting `XDG_CONFIG_HOME` or `XDG_DATA_HOME` overrides both, which is how the test suite isolates itself.
 
 Open a new terminal after `lerd install` so it picks up the `PATH` change. If `node` still runs a system install, a machine-wide `PATH` entry is ahead of the user one; `lerd doctor` flags it.
 
 S3 signs every request with the current time, and RustFS refuses one more than 15 minutes off its own clock. When the Windows clock has drifted, `lerd env` reports that instead of a bare "Access Denied"; syncing the system time fixes it.
+
+### Drive sharing on Hyper-V
+
+A Hyper-V machine reaches `C:\` and your home folder through 9p, served on the Windows side by `podman machine server9p`. That server is built on hugelgupf/p9 v0.4.1, whose Windows backend keeps a handle open on every file it looks up and cannot replace an existing file, rename a folder that holds one, append to a file, lock one or set its times. In practice `composer install`, `lerd new`, Laravel's caches and log, and any SQLite database in the project fail, and the leaked handles make every request slower until the machine restarts.
+
+`lerd start` swaps that server for its own on a Hyper-V machine. It stops lerd's containers, unmounts the shares inside the VM, stops Podman's server, starts `lerd p9-serve` with the same arguments on the same hvsock services, and mounts the shares again with Podman's own `client9p`. `lerd p9-serve` is built on a fork of hugelgupf/p9 that carries the fixes, which are on their way upstream (hugelgupf/p9#114). If Podman's server takes arguments lerd does not recognise, lerd leaves it running and warns; if its own server does not come up, it puts Podman's back. The server logs to `%LOCALAPPDATA%\lerd\logs\p9-serve.log` and exits with the machine. A machine started with `podman machine start` alone keeps Podman's server until the next `lerd start`.
+
+WSL2 machines share the drives differently and are left alone.
 
 The DNS server reads the same `lerd.conf` a dnsmasq container would, so anything that rewrites that file keeps working. It answers `A` and `AAAA` for the configured TLD over UDP and TCP and refuses every other name, which is fine because the NRPT rule only sends `.test` queries to it.
 

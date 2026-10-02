@@ -260,6 +260,7 @@ func main() {
 	root.AddCommand(cli.NewDNSRepairCmd())
 	root.AddCommand(cli.NewDNSForwarderCmd())
 	root.AddCommand(cli.NewDNSServeCmd())
+	root.AddCommand(cli.NewP9ServeCmd())
 	root.AddCommand(cli.NewLANCmd())
 	root.AddCommand(cli.NewLANExposeCmd())
 	root.AddCommand(cli.NewLANUnexposeCmd())

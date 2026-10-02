@@ -85,6 +85,11 @@ func ensurePodmanMachineRunning() error {
 	if provider == machineProviderWSL {
 		return ensureWSLContainersRun()
 	}
+	// Hyper-V shares the drives through Podman's 9p server, which breaks file
+	// replaces, appends and locks; lerd serves them itself instead.
+	if err := takeOverP9Shares(selectedMachineName()); err != nil {
+		feedback.Warn("%v", err)
+	}
 	return nil
 }
 
