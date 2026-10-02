@@ -63,11 +63,13 @@ Lerd saves the provider it created the machine with as `machine.provider` in the
 | `.test` DNS | dnsmasq container | `lerd dns-serve`, a built-in answerer on `127.0.0.1:53` |
 | DNS routing | systemd-resolved | a DNS Client NRPT rule for `.test` |
 | Login start | `lerd autostart` | a `Run` registry entry, on by default and removed by `lerd autostart disable` |
-| Shims on `PATH` | sh scripts, `PATH` set in the shell rc | `php.cmd`, `composer.cmd` and the node shims in `%LOCALAPPDATA%\lerd\bin`, added to the user `PATH` in the registry |
+| Shims on `PATH` | sh scripts, `PATH` set in the shell rc | `lerd.exe`, `php`, `composer`, `laravel` and the node shims in `%LOCALAPPDATA%\lerd\bin`, as `.cmd` for cmd and PowerShell and as sh scripts for Git Bash, added to the user `PATH` in the registry |
 | Site paths in containers | the same path | `C:\Sites\app` becomes `/mnt/c/Sites/app` inside the machine |
 | Drive sharing (Hyper-V) | not needed | `lerd p9-serve` in place of Podman's 9p server |
 
 Config lives under `%APPDATA%\lerd` and data under `%LOCALAPPDATA%\lerd`. Setting `XDG_CONFIG_HOME` or `XDG_DATA_HOME` overrides both, which is how the test suite isolates itself.
+
+`lerd install` can be run from wherever you downloaded `lerd.exe`. It copies itself, and `lerd-tray.exe` when that sits beside it, into `%LOCALAPPDATA%\lerd\bin` and finishes the install from there, so the services and shims point at a copy that stays put and the download can be deleted. A copy that is running is renamed to `lerd.exe.old-<time>` first, since Windows will not overwrite it, and the next install clears those.
 
 Open a new terminal after `lerd install` so it picks up the `PATH` change. If `node` still runs a system install, a machine-wide `PATH` entry is ahead of the user one; `lerd doctor` flags it.
 
@@ -94,7 +96,7 @@ The DNS server reads the same `lerd.conf` a dnsmasq container would, so anything
 ## What is missing
 
 - **Workers.** Queue, schedule, Horizon and the other framework workers are disabled on Windows. They bind-mount the site at its own path and run through shell guard scripts, which need the path mapping and a Windows script format.
-- **Tool downloads.** mise, mkcert and phpantom have no Windows builds wired in yet.
+- **Tool downloads.** phpantom has no Windows build wired in yet, so tinker autocomplete is unavailable.
 - **Scheduled workers.** There is no timer equivalent in the service manager.
 - **Unverified path mapping.** The `/mnt/c` mapping matches Podman's own default mount, but it has had little testing on either provider.
 

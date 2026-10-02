@@ -60,3 +60,10 @@ func TestPathListEntries(t *testing.T) {
 		}
 	}
 }
+
+func TestLaravelCmdShimKeepsSingleBackslashes(t *testing.T) {
+	got := laravelCmdShimCommand(`C:\Users\me\.composer`)
+	if want := `php "C:\Users\me\.composer\vendor\bin\laravel"`; got != want {
+		t.Errorf("laravel.cmd runs %s, want %s", got, want)
+	}
+}

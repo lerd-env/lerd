@@ -141,6 +141,9 @@ func ensurePortsAvailable() {
 }
 
 func runInstall(cmd *cobra.Command, _ []string) error {
+	if handed, err := installSelf(); handed {
+		return err
+	}
 	markInstallInProgress()
 	feedback.Header("Installing Lerd")
 
@@ -1791,7 +1794,7 @@ func addShellShims(manageNode bool) error {
 
 	// Write laravel shim (laravel/installer global package)
 	composerHome := composerHomeDir()
-	laravelShim := shimPreamble(lerdBin) + fmt.Sprintf("exec \"$LERD\" php %s/vendor/bin/laravel \"$@\"\n", composerHome)
+	laravelShim := shimPreamble(lerdBin) + fmt.Sprintf("exec \"$LERD\" php \"%s/vendor/bin/laravel\" \"$@\"\n", composerHome)
 	if err := os.WriteFile(filepath.Join(binDir, "laravel"), []byte(laravelShim), 0755); err != nil {
 		return fmt.Errorf("writing laravel shim: %w", err)
 	}
@@ -1823,7 +1826,7 @@ func addShellShims(manageNode bool) error {
 	cmdShims := map[string]string{
 		"php":      "php",
 		"composer": "composer",
-		"laravel":  fmt.Sprintf("php %q", filepath.Join(composerHome, "vendor", "bin", "laravel")),
+		"laravel":  laravelCmdShimCommand(composerHome),
 	}
 	for _, bin := range []string{"node", "npm", "npx"} {
 		cmdShims[bin] = ""
@@ -1842,6 +1845,12 @@ func addShellShims(manageNode bool) error {
 	}
 	installShellCompletions(home, lerdBin)
 	return nil
+}
+
+// laravelCmdShimCommand is the lerd command laravel.cmd runs. The path is
+// quoted as cmd quotes it; Go's %q would double every backslash.
+func laravelCmdShimCommand(composerHome string) string {
+	return fmt.Sprintf(`php "%s"`, filepath.Join(composerHome, "vendor", "bin", "laravel"))
 }
 
 // pathShimDisabled reports whether the user opted out of the shell PATH entry

@@ -304,7 +304,8 @@ func TestAddShellShims_LaravelShim(t *testing.T) {
 		t.Errorf("laravel shim missing shebang, got: %q", shim)
 	}
 	expectedComposerHome := filepath.Join(tmp, ".config", "composer")
-	expectedPath := expectedComposerHome + "/vendor/bin/laravel"
+	// Quoted, so a home with spaces or Windows backslashes reaches php intact.
+	expectedPath := `"` + expectedComposerHome + `/vendor/bin/laravel"`
 	if !strings.Contains(shim, expectedPath) {
 		t.Errorf("laravel shim does not reference %q, got:\n%s", expectedPath, shim)
 	}
