@@ -1382,14 +1382,7 @@ func EnsurePathMounted(path, phpVersion string) {
 		path = root
 	}
 	home, _ := os.UserHomeDir()
-	if home == "" {
-		return
-	}
-	homePrefix := home
-	if !strings.HasSuffix(homePrefix, "/") {
-		homePrefix += "/"
-	}
-	if path == home || strings.HasPrefix(path, homePrefix) {
+	if home == "" || underDir(path, home) {
 		return
 	}
 

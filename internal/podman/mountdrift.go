@@ -3,6 +3,8 @@ package podman
 import (
 	"path/filepath"
 	"strings"
+
+	"github.com/geodro/lerd/internal/hostpath"
 )
 
 // containerMounts returns whether the named container is running and the
@@ -57,9 +59,10 @@ func UnitMissingMounts(unit string, paths []string) bool {
 // mountCovers reports whether one of the mount sources is the path itself or
 // one of its ancestors. Podman may report a source in resolved form, so a
 // symlinked path is compared both ways rather than being reported missing
-// forever, which would restart the containers on every call.
+// forever, which would restart the containers on every call. On Windows it
+// reports the machine path (/mnt/c/...), so the host path is compared as that.
 func mountCovers(sources []string, path string) bool {
-	candidates := []string{path}
+	candidates := []string{hostpath.ToVM(path)}
 	if resolved, err := filepath.EvalSymlinks(path); err == nil && resolved != path {
 		candidates = append(candidates, resolved)
 	}
