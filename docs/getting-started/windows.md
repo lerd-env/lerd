@@ -8,7 +8,7 @@ description: Run lerd natively on Windows, using a Podman machine on Hyper-V or 
 Lerd builds and runs natively on Windows, with no Linux distro to manage. Containers run in a Podman machine on Hyper-V, or on WSL2 where Hyper-V is unavailable, `.test` names are answered by a small DNS server built into lerd, and lerd's own processes are supervised by a Windows service manager instead of systemd or launchd.
 
 ::: warning Experimental
-The native build is under active development and is **not** ready for daily use. Sites, workers and the PHP and Composer shims are not finished yet, see [What is missing](#what-is-missing). If you want something that works today, use [Windows (WSL2)](/getting-started/wsl2).
+The native build is under active development and is **not** ready for daily use. Sites and workers are not finished yet, see [What is missing](#what-is-missing). If you want something that works today, use [Windows (WSL2)](/getting-started/wsl2).
 :::
 
 ## Requirements
@@ -58,17 +58,21 @@ Lerd saves the provider it created the machine with as `machine.provider` in the
 | Service supervision | systemd user units | a Windows service manager, unit definitions under the lerd data dir |
 | `.test` DNS | dnsmasq container | `lerd dns-serve`, a built-in answerer on `127.0.0.1:53` |
 | DNS routing | systemd-resolved | a DNS Client NRPT rule for `.test` |
-| Login start | `lerd autostart` | a `Run` registry entry, on by default |
+| Login start | `lerd autostart` | a `Run` registry entry, on by default and removed by `lerd autostart disable` |
+| Shims on `PATH` | sh scripts, `PATH` set in the shell rc | `php.cmd`, `composer.cmd` and the node shims in `%LOCALAPPDATA%\lerdin`, added to the user `PATH` in the registry |
 | Site paths in containers | the same path | `C:\Sites\app` becomes `/mnt/c/Sites/app` inside the machine |
 
 Config lives under `%APPDATA%\lerd` and data under `%LOCALAPPDATA%\lerd`. Setting `XDG_CONFIG_HOME` or `XDG_DATA_HOME` overrides both, which is how the test suite isolates itself.
+
+Open a new terminal after `lerd install` so it picks up the `PATH` change. If `node` still runs a system install, a machine-wide `PATH` entry is ahead of the user one; `lerd doctor` flags it.
+
+S3 signs every request with the current time, and RustFS refuses one more than 15 minutes off its own clock. When the Windows clock has drifted, `lerd env` reports that instead of a bare "Access Denied"; syncing the system time fixes it.
 
 The DNS server reads the same `lerd.conf` a dnsmasq container would, so anything that rewrites that file keeps working. It answers `A` and `AAAA` for the configured TLD over UDP and TCP and refuses every other name, which is fine because the NRPT rule only sends `.test` queries to it.
 
 ## What is missing
 
 - **Workers.** Queue, schedule, Horizon and the other framework workers are disabled on Windows. They bind-mount the site at its own path and run through shell guard scripts, which need the path mapping and a Windows script format.
-- **Shims.** The `php`, `composer` and `node` shims are shell scripts and have no Windows form yet.
 - **Tool downloads.** mise, mkcert and phpantom have no Windows builds wired in yet.
 - **Scheduled workers.** There is no timer equivalent in the service manager.
 - **Unverified path mapping.** The `/mnt/c` mapping matches Podman's own default mount, but it has had little testing on either provider.
@@ -79,5 +83,7 @@ The DNS server reads the same `lerd.conf` a dnsmasq container would, so anything
 lerd uninstall
 podman machine rm -f
 ```
+
+`lerd uninstall` removes the login entry and the `PATH` entry too. Windows will not delete the running `lerd.exe`, so the binary and the data directory that holds it are removed a few seconds after the command exits.
 
 `lerd install` also writes `lerd-cleanup.ps1` next to the lerd binary, which removes containers, the login entry and the DNS rule if the binary is already gone.

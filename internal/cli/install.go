@@ -1820,6 +1820,21 @@ func addShellShims(manageNode bool) error {
 		}
 	}
 
+	cmdShims := map[string]string{
+		"php":      "php",
+		"composer": "composer",
+		"laravel":  fmt.Sprintf("php %q", filepath.Join(composerHome, "vendor", "bin", "laravel")),
+	}
+	for _, bin := range []string{"node", "npm", "npx"} {
+		cmdShims[bin] = ""
+		if manageNode && nodeDet.WritesPathShims(nodeDet.Active()) {
+			cmdShims[bin] = bin
+		}
+	}
+	if err := writeCmdShims(binDir, lerdBin, cmdShims); err != nil {
+		return err
+	}
+
 	if pathShimDisabled() {
 		removeShellPathEntry(home)
 	} else if err := writeShellPathEntry(home, binDir); err != nil {
@@ -1839,6 +1854,9 @@ func pathShimDisabled() bool {
 // writeShellPathEntry puts lerd's bin dir on the PATH of the user's shell:
 // an rc export for bash/zsh, a dedicated conf.d file for fish.
 func writeShellPathEntry(home, binDir string) error {
+	if handled, err := writeUserPathEntry(binDir); handled {
+		return err
+	}
 	shell := os.Getenv("SHELL")
 	switch {
 	case isShell(shell, "fish"):
@@ -1862,6 +1880,9 @@ func writeShellPathEntry(home, binDir string) error {
 // Lerd installer" block is left alone — it puts the lerd binary itself on
 // PATH, not the shims.
 func removeShellPathEntry(home string) {
+	if removeUserPathEntry(config.BinDir()) {
+		return
+	}
 	for _, rc := range []string{
 		filepath.Join(home, ".bashrc"),
 		filepath.Join(home, ".bash_profile"),

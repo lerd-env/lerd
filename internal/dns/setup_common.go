@@ -486,3 +486,6 @@ func WriteDnsmasqConfigDual(dir, v4Target, v6Target string) error {
 // dnsPort is the port lerd-dns listens on. A platform whose resolver cannot
 // name a port (Windows NRPT) overrides it from an init().
 var dnsPort = 5300
+
+// Port is the port lerd-dns listens on for this host.
+func Port() int { return dnsPort }

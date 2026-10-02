@@ -153,5 +153,5 @@ func EnsureS3Bucket(name string) (bool, error) {
 		}
 		lastErr = err
 	}
-	return false, lastErr
+	return false, explainClockSkew(lastErr, func() (time.Time, error) { return s3ServerTime(c) }, time.Now())
 }

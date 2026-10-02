@@ -93,6 +93,21 @@ func TestMapContainerPathsTranslatesOnlyTheContainerSide(t *testing.T) {
 	}
 }
 
+// The FrankenPHP unit sets its working directory through PodmanArgs rather than
+// WorkingDir, so a Windows path there leaves the container with no cwd.
+func TestMapContainerPathsTranslatesWorkdirInPodmanArgs(t *testing.T) {
+	c := map[string][]string{
+		"PodmanArgs": {`--security-opt=label=disable --workdir=C:\Sites\app`, `-w=D:\x --pull=never`},
+	}
+	mapContainerPaths(c)
+	if got, want := c["PodmanArgs"][0], "--security-opt=label=disable --workdir=/mnt/c/Sites/app"; got != want {
+		t.Errorf("PodmanArgs[0] = %q, want %q", got, want)
+	}
+	if got, want := c["PodmanArgs"][1], "-w=/mnt/d/x --pull=never"; got != want {
+		t.Errorf("PodmanArgs[1] = %q, want %q", got, want)
+	}
+}
+
 // A quadlet writes host paths as %h/..., expanded to the home directory only
 // when the unit is translated. The container side has to be mapped after that
 // expansion, or a destination of %h/x stays a Windows path once it is expanded.

@@ -96,4 +96,17 @@ func RepairPossible() bool {
 }
 
 // NRPT names servers, not ports, so lerd-dns has to sit on the standard one.
-func init() { dnsPort = 53 }
+func init() {
+	dnsPort = 53
+	platformResolverHookup = func() (string, bool, string) {
+		ns := nrptNamespace()
+		return windowsNRPTKind, nrptRuleExists(ns), ns
+	}
+}
+
+// nrptRuleExists reports whether an NRPT rule covers namespace. Reading the
+// rules needs no elevation. A seam for tests.
+var nrptRuleExists = func(namespace string) bool {
+	out, err := powershell(fmt.Sprintf(`if (Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '%s' }) { 'yes' }`, namespace))
+	return err == nil && strings.TrimSpace(string(out)) == "yes"
+}

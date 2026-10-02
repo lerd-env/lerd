@@ -111,6 +111,7 @@ func runUninstall(force bool) error {
 
 	step("Removing service units")
 	removeServiceUnits()
+	syncLoginAutostart(true)
 	ok()
 
 	if desktopapp.Path() != "" {
@@ -192,7 +193,10 @@ func runUninstall(force bool) error {
 		step("Removing config and data directories")
 		os.RemoveAll(config.ConfigDir())
 		os.RemoveAll(config.CacheDir())
-		if kept := removeDataDir(config.DataDir()); kept != "" {
+		if kept := removeDataDir(config.DataDir()); kept != "" && removeAfterExit(kept) {
+			ok()
+			feedback.Note(kept + " is in use by lerd itself and will be removed once it exits")
+		} else if kept != "" {
 			fmt.Println(feedback.Amber("!"))
 			feedback.Note("could not remove " + kept + ", remove it with: podman unshare rm -rf " + kept)
 		} else {
@@ -347,8 +351,12 @@ var shellRCMarkers = []struct {
 // installer puts beside it. The tray can be launched from a desktop entry
 // without a unit, so leaving it behind outlives the uninstall that removed lerd.
 func removeInstalledBinaries(self string) {
-	os.Remove(self)                                           //nolint:errcheck
-	os.Remove(filepath.Join(filepath.Dir(self), "lerd-tray")) //nolint:errcheck
+	tray := filepath.Join(filepath.Dir(self), "lerd-tray"+filepath.Ext(self))
+	for _, p := range []string{self, tray} {
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			removeAfterExit(p)
+		}
+	}
 }
 
 // removeScriptInstalledBinaries clears the pair lerd's own installers write to
@@ -380,6 +388,8 @@ func removeShellEntry() {
 		filepath.Join(home, ".zshrc"),
 		filepath.Join(home, ".config", "fish", "conf.d", "lerd.fish"),
 	}
+
+	removeUserPathEntry(config.BinDir())
 
 	for _, rc := range candidates {
 		for _, m := range shellRCMarkers {

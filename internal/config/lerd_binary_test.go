@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -142,6 +143,9 @@ func TestLerdBinaryRefusesAScratchBuildPath(t *testing.T) {
 
 	home, _ := os.UserHomeDir()
 	want := filepath.Join(home, ".local", "bin", "lerd")
+	if runtime.GOOS == "windows" {
+		want = filepath.Join(BinDir(), "lerd.exe")
+	}
 	if got := LerdBinary(); got != want {
 		t.Errorf("LerdBinary() = %q; want the installed %q, not a path that disappears", got, want)
 	}

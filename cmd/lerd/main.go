@@ -81,7 +81,7 @@ func main() {
 
 	root := &cobra.Command{
 		Use:     "lerd",
-		Short:   "Lerd — Podman-powered local PHP dev environment for Linux and macOS",
+		Short:   "Lerd — Podman-powered local PHP dev environment for Linux, macOS and Windows",
 		Version: version.String(),
 		// Errors are printed once below: a command that already surfaced its
 		// failure through the feedback UI (a red ✗ line) is suppressed here so

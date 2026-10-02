@@ -8,12 +8,13 @@ import (
 	"golang.org/x/sys/windows/registry"
 
 	"github.com/geodro/lerd/internal/feedback"
+	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 )
 
-const (
-	runKeyPath   = `Software\Microsoft\Windows\CurrentVersion\Run`
-	runValueName = "lerd-autostart"
-)
+// runKeyPath is a variable so tests can point it at a throwaway key.
+var runKeyPath = `Software\Microsoft\Windows\CurrentVersion\Run`
+
+const runValueName = "lerd-autostart"
 
 // autostartCommand is the Run-key value: quoted so an exe path with spaces
 // survives, followed by the subcommand that brings the environment up.
@@ -25,6 +26,10 @@ func autostartCommand(exe string) string {
 // lerd comes up at every login, on by default as on macOS. Nothing needs
 // elevation: HKCU is the user's own hive.
 func installAutostart() {
+	if !lerdSystemd.IsAutostartEnabled() {
+		_ = removeAutostart()
+		return
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		feedback.WarnOn(os.Stderr, "autostart: %v", err)
@@ -52,4 +57,16 @@ func removeAutostart() error {
 		return err
 	}
 	return nil
+}
+
+// syncLoginAutostart makes the Run entry follow the autostart preference: a
+// Windows login starts lerd from the registry, not from a service unit.
+func syncLoginAutostart(disabled bool) {
+	if disabled {
+		if err := removeAutostart(); err != nil {
+			feedback.WarnOn(os.Stderr, "disabling autostart: %v", err)
+		}
+		return
+	}
+	installAutostart()
 }

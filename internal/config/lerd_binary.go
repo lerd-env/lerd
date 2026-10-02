@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -39,6 +40,9 @@ func LerdBinary() string {
 // is not one anything may record: lerd's own install location, which the shims'
 // `[ -x "$LERD" ] || LERD=lerd` line covers if it turns out to be elsewhere.
 func installedLerdBinary() string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(BinDir(), "lerd.exe")
+	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".local", "bin", "lerd")
 }

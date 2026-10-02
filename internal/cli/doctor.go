@@ -446,8 +446,8 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 				dnsRunning = true
 			}
 		}
-		if !dnsRunning && PortInUse("5300") {
-			warn("DNS port 5300", "port in use by another process, lerd-dns may fail to start (find: "+FindListenerCmd("5300")+")")
+		if port := strconv.Itoa(dns.Port()); !dnsRunning && PortInUse(port) {
+			warn("DNS port "+port, "port in use by another process, lerd-dns may fail to start (find: "+FindListenerCmd(port)+")")
 		}
 	}
 

@@ -114,7 +114,12 @@ const (
 	resolvedDropinKind = "systemd-resolved drop-in"
 	nmDnsmasqKind      = "NetworkManager dnsmasq"
 	macOSKind          = "macOS native dnsmasq"
+	windowsNRPTKind    = "Windows NRPT rule"
 )
+
+// platformResolverHookup replaces the file probes on a host that wires .test
+// in some other way (Windows' NRPT). Nil everywhere else.
+var platformResolverHookup func() (kind string, exists bool, path string)
 
 // usesDummyLink reports whether a resolver hookup relies on lerd0 for offline
 // .test resolution.
@@ -205,7 +210,7 @@ func diagnose(tld string, p probeFns) Diagnostic {
 		d.Steps = append(d.Steps, Step{Name: fmt.Sprintf("port %d listening", dnsPort), Status: StepOK, Detail: fmt.Sprintf("127.0.0.1:%d", dnsPort)})
 	} else {
 		d.Steps = append(d.Steps, Step{
-			Name:   "port 5300 listening",
+			Name:   fmt.Sprintf("port %d listening", dnsPort),
 			Status: StepFail,
 			Detail: fmt.Sprintf("no TCP listener on 127.0.0.1:%d", dnsPort),
 			Hint:   "check whether another process owns the port: " + findListenerCmd(dnsPort),
@@ -225,7 +230,7 @@ func diagnose(tld string, p probeFns) Diagnostic {
 	switch {
 	case err != nil:
 		d.Steps = append(d.Steps, Step{
-			Name:   "dig @127.0.0.1 -p 5300",
+			Name:   digStepName(),
 			Status: StepFail,
 			Detail: err.Error(),
 			Hint:   "lerd-dns config probably stale, repair with: lerd dns:repair",
@@ -233,14 +238,14 @@ func diagnose(tld string, p probeFns) Diagnostic {
 		return finalize(d)
 	case !answerAccepted(answer, lanIP):
 		d.Steps = append(d.Steps, Step{
-			Name:   "dig @127.0.0.1 -p 5300",
+			Name:   digStepName(),
 			Status: StepFail,
 			Detail: fmt.Sprintf("got %q, want %s", answer, want),
 			Hint:   "lerd-dns address rule missing, repair with: lerd dns:repair",
 		})
 		return finalize(d)
 	default:
-		d.Steps = append(d.Steps, Step{Name: "dig @127.0.0.1 -p 5300", Status: StepOK, Detail: answer})
+		d.Steps = append(d.Steps, Step{Name: digStepName(), Status: StepOK, Detail: answer})
 	}
 
 	// Rung 5 — resolver hookup file.
@@ -392,6 +397,8 @@ func systemLookupFailStep(detail string, vpn, hostOwned bool) Step {
 		Hint:   "lerd-dns is reachable directly but the system resolver isn't using it; check cloud-init or other tools that may overwrite resolved.conf",
 	}
 }
+
+func digStepName() string { return fmt.Sprintf("dig @127.0.0.1 -p %d", dnsPort) }
 
 // finalize walks the steps once to find the first failure, marking every
 // later step Skip when the orchestrator returned early. Used by both the
@@ -553,14 +560,21 @@ func defaultDnsmasqConfigOK(tld string) (bool, string) {
 	if err != nil {
 		return false, "missing " + path
 	}
-	if !strings.Contains(string(data), "port=5300") {
-		return false, "config missing port=5300 directive"
+	return dnsmasqConfigCheck(string(data), tld, dnsPort)
+}
+
+// dnsmasqConfigCheck reports whether a lerd.conf carries the port lerd listens
+// on and the address rule for tld.
+func dnsmasqConfigCheck(data, tld string, port int) (bool, string) {
+	portLine := fmt.Sprintf("port=%d", port)
+	if !strings.Contains(data, portLine) {
+		return false, "config missing " + portLine + " directive"
 	}
 	want := "address=/." + tld + "/"
-	if !strings.Contains(string(data), want) {
+	if !strings.Contains(data, want) {
 		return false, fmt.Sprintf("config missing %q rule", want)
 	}
-	return true, "address=/." + tld + "/127.0.0.1, port=5300"
+	return true, "address=/." + tld + "/127.0.0.1, " + portLine
 }
 
 func defaultPortOpen(host string, port int) bool {
@@ -612,6 +626,9 @@ func defaultDnsmasqAnswer(tld string) (string, error) {
 // the lerd0 link unit, so a map's random iteration would report either one at
 // random from run to run. First match wins, most specific first.
 func defaultResolverHookup() (string, bool, string) {
+	if platformResolverHookup != nil {
+		return platformResolverHookup()
+	}
 	if runtime.GOOS != "linux" {
 		return macOSKind, true, "/usr/local/etc/dnsmasq.d/lerd.conf"
 	}

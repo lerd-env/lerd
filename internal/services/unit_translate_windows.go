@@ -462,6 +462,18 @@ func mapContainerPaths(c map[string][]string) {
 	for i, dir := range c["WorkingDir"] {
 		c["WorkingDir"][i] = hostpath.ToVM(expandSpecifiers(dir))
 	}
+	// A unit may set the working directory as a podman flag instead (FrankenPHP).
+	for i, line := range c["PodmanArgs"] {
+		args := strings.Split(line, " ")
+		for j, a := range args {
+			for _, flag := range []string{"--workdir=", "-w="} {
+				if strings.HasPrefix(a, flag) {
+					args[j] = flag + hostpath.ToVM(expandSpecifiers(a[len(flag):]))
+				}
+			}
+		}
+		c["PodmanArgs"][i] = strings.Join(args, " ")
+	}
 }
 
 // rebaseLerdDirs points the Linux spelling of lerd's directories that embedded
