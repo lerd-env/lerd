@@ -6,6 +6,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envpass"
+	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -95,7 +96,10 @@ func runConsole(_ *cobra.Command, args []string) error {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	err = cmd.Run()
+	// A console command can generate code (make:*, cache rebuilds) FPM must see.
+	phpDet.FlushOPcacheForDir(cwd, podman.OPcacheApp)
+	if err != nil {
 		if exit, ok := err.(*exec.ExitError); ok {
 			os.Exit(exit.ExitCode())
 		}

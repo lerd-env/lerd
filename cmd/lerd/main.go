@@ -664,37 +664,15 @@ func newWatchCmd() *cobra.Command {
 			watcher.StartIdle(
 				func() { notifyLerdUI("idle") },
 				func(stop <-chan struct{}) error {
-					return watcher.WatchSourceFiles(
-						func() []watcher.SourceTarget {
-							reg, err := config.LoadSites()
-							if err != nil {
-								return nil
-							}
-							var targets []watcher.SourceTarget
-							for _, s := range reg.Sites {
-								if s.Ignored || s.Paused {
-									continue
-								}
-								fw, _ := config.GetFrameworkForDir(s.Framework, s.Path)
-								if dirs := config.SourceWatchRoots(fw, s.Path); len(dirs) > 0 {
-									targets = append(targets, watcher.SourceTarget{Key: s.Name, Dirs: dirs})
-								}
-								wts, _ := gitpkg.DetectWorktrees(s.Path, s.PrimaryDomain())
-								for _, wt := range wts {
-									key := s.Name + "/" + config.WorktreeUnitSlug(filepath.Base(wt.Path))
-									if dirs := config.SourceWatchRoots(fw, wt.Path); len(dirs) > 0 {
-										targets = append(targets, watcher.SourceTarget{Key: key, Dirs: dirs})
-									}
-								}
-							}
-							return targets
-						},
-						5*time.Second,
-						activityping.Site,
-						stop,
-					)
+					return watcher.WatchSourceFiles(siteSourceTargets, 5*time.Second, activityping.Site, stop)
 				},
 			)
+
+			// Where FPM keeps compiled files until told otherwise (Windows, see
+			// podman.FPMSkipsRevalidation), a save under a site's source flushes them.
+			if podman.FPMSkipsRevalidation() {
+				go watcher.WatchSourceFiles(siteSourceTargets, 300*time.Millisecond, flushSiteOPcache, nil) //nolint:errcheck
+			}
 
 			// Watch key site config files and signal queue:restart on change.
 			go func() {
@@ -1350,4 +1328,40 @@ var notifyUI = notifyLerdUI
 func announceSiteFilesChanged() {
 	eventbus.Default.Publish(eventbus.KindSites)
 	notifyUI("sites")
+}
+
+// siteSourceTargets lists the source trees of every active site and worktree,
+// keyed by site name or site/worktree.
+func siteSourceTargets() []watcher.SourceTarget {
+	reg, err := config.LoadSites()
+	if err != nil {
+		return nil
+	}
+	var targets []watcher.SourceTarget
+	for _, s := range reg.Sites {
+		if s.Ignored || s.Paused {
+			continue
+		}
+		fw, _ := config.GetFrameworkForDir(s.Framework, s.Path)
+		if dirs := config.SourceWatchRoots(fw, s.Path); len(dirs) > 0 {
+			targets = append(targets, watcher.SourceTarget{Key: s.Name, Dirs: dirs})
+		}
+		wts, _ := gitpkg.DetectWorktrees(s.Path, s.PrimaryDomain())
+		for _, wt := range wts {
+			key := s.Name + "/" + config.WorktreeUnitSlug(filepath.Base(wt.Path))
+			if dirs := config.SourceWatchRoots(fw, wt.Path); len(dirs) > 0 {
+				targets = append(targets, watcher.SourceTarget{Key: key, Dirs: dirs})
+			}
+		}
+	}
+	return targets
+}
+
+// flushSiteOPcache flushes the FPM serving the site a source key names. A
+// worktree is served by its parent's container, so the site part is enough.
+func flushSiteOPcache(key string) {
+	name, _, _ := strings.Cut(key, "/")
+	if site, err := config.FindSite(name); err == nil && site != nil {
+		phpDet.FlushOPcacheForDir(site.Path, podman.OPcacheApp)
+	}
 }

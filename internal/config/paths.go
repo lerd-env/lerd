@@ -316,6 +316,12 @@ func DevtoolsCollectorFile() string {
 	return filepath.Join(DumpsAssetsDir(), "devtools-collector.php")
 }
 
+// OPcacheInvalidateFile is the host path for the script that drops OPcache
+// entries in a php-fpm pool, mounted at /usr/local/etc/lerd with the others.
+func OPcacheInvalidateFile() string {
+	return filepath.Join(DumpsAssetsDir(), "opcache-invalidate.php")
+}
+
 // DevtoolsSeamsFile is the host path for the store-declared capture seams the
 // extension reads at startup, one line per observed method. Lives beside the
 // collector in the dumps assets dir, mounted at /usr/local/etc/lerd.

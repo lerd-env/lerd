@@ -1088,6 +1088,7 @@ func renderFPMQuadletContent(version string) (string, error) {
 	content = strings.ReplaceAll(content, "{{.HostNameLine}}", hostNameLine())
 	content = strings.ReplaceAll(content, "{{.ComposerMountLine}}", composerMountLine())
 	content = strings.ReplaceAll(content, "{{.ContainerPath}}", ContainerPath)
+	content = strings.ReplaceAll(content, "{{.FPMArgs}}", fpmArgs(goosForFPM))
 	content = applyShellMounts(content, short)
 	content = InjectExtraVolumes(content, ExtraVolumePaths())
 	return content, nil
