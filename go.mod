@@ -109,4 +109,4 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace github.com/hugelgupf/p9 => github.com/millancore/p9 v0.0.0-20261002140208-4dc8b374c9b4
+replace github.com/hugelgupf/p9 => github.com/millancore/p9 v0.0.0-20261002183920-527d994b8d14

@@ -182,8 +182,8 @@ github.com/microcosm-cc/bluemonday v1.0.27 h1:MpEUotklkwCSLeH+Qdx1VJgNqLlpY2KXwX
 github.com/microcosm-cc/bluemonday v1.0.27/go.mod h1:jFi9vgW+H7c3V0lb6nR74Ib/DIB5OBs92Dimizgw2cA=
 github.com/miekg/dns v1.1.73 h1:uhT8nJxmTrPJYClxVxTCX+CVn6qnzSiybRk72Z6DgrE=
 github.com/miekg/dns v1.1.73/go.mod h1:RW2Obtfd5NZHvOFe3zYG0W8koWOQtAzyHaLo8vASBuQ=
-github.com/millancore/p9 v0.0.0-20261002140208-4dc8b374c9b4 h1:6lJnN68EGIYqDCe6cEoCBUbtLDkM0Z0FnLmTrrYnWvY=
-github.com/millancore/p9 v0.0.0-20261002140208-4dc8b374c9b4/go.mod h1:LoNwfBWP+QlCkjS1GFNylCthRIk/TkMZd6ICTbC+hrI=
+github.com/millancore/p9 v0.0.0-20261002183920-527d994b8d14 h1:xKognl7ttARPVX5oPAIU8QW7o++cmM1+W1D7eQX9pJA=
+github.com/millancore/p9 v0.0.0-20261002183920-527d994b8d14/go.mod h1:LoNwfBWP+QlCkjS1GFNylCthRIk/TkMZd6ICTbC+hrI=
 github.com/minio/crc64nvme v1.1.1 h1:8dwx/Pz49suywbO+auHCBpCtlW1OfpcLN7wYgVR6wAI=
 github.com/minio/crc64nvme v1.1.1/go.mod h1:eVfm2fAzLlxMdUGc0EEBGSMmPwmXD5XiNRpnu9J3bvg=
 github.com/minio/md5-simd v1.1.2 h1:Gdi1DZK69+ZVMoNHRXJyNcxrMA4dSxoYHZSQbirFg34=

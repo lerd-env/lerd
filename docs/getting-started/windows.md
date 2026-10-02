@@ -75,6 +75,8 @@ A Hyper-V machine reaches `C:\` and your home folder through 9p, served on the W
 
 `lerd start` swaps that server for its own on a Hyper-V machine. It stops lerd's containers, unmounts the shares inside the VM, stops Podman's server, starts `lerd p9-serve` with the same arguments on the same hvsock services, and mounts the shares again with Podman's own `client9p`. `lerd p9-serve` is built on a fork of hugelgupf/p9 that carries the fixes, which are on their way upstream (hugelgupf/p9#114). If Podman's server takes arguments lerd does not recognise, lerd leaves it running and warns; if its own server does not come up, it puts Podman's back. The server logs to `%LOCALAPPDATA%\lerd\logs\p9-serve.log` and exits with the machine. A machine started with `podman machine start` alone keeps Podman's server until the next `lerd start`.
 
+NTFS has no POSIX owners or group and other bits, so the server reports files as `0644` and folders as `0755`, the way a Linux system with umask 022 creates them. Programs that refuse world-writable files, like MySQL with its config, accept them, and containers write as root, as they do on Linux.
+
 WSL2 machines share the drives differently and are left alone.
 
 ### OPcache
