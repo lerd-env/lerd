@@ -11,13 +11,13 @@
 package shims
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/services"
@@ -436,13 +436,17 @@ func pruneOrphans(targets map[string]Target) {
 }
 
 // isShimFile reports whether path is a lerd-managed client shim, matched by the
-// marker comment its generator writes.
+// marker comment in its header. Only the header is read: lerd's own binary holds
+// the marker as a constant and, on Windows, lives in the same bin dir.
 func isShimFile(path string) bool {
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return false
 	}
-	return strings.Contains(string(data), marker)
+	defer f.Close()
+	head := make([]byte, 256)
+	n, _ := f.Read(head)
+	return bytes.HasPrefix(head[:n], []byte("#!")) && bytes.Contains(head[:n], []byte(marker))
 }
 
 // ── decision storage ────────────────────────────────────────────────────────
