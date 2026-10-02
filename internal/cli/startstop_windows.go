@@ -82,6 +82,7 @@ func ensurePodmanMachineRunning() error {
 	if err := bringMachineUp(provider, offerHyperV); err != nil {
 		return err
 	}
+	warnOnClockSkew(selectedMachineName())
 	if provider == machineProviderWSL {
 		return ensureWSLContainersRun()
 	}

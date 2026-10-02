@@ -81,7 +81,7 @@ WSL2 machines share the drives differently and are left alone.
 
 Every file a request touches lives on that 9p share, and OPcache's default revalidation stats each one again once two seconds have passed, which is nearly every request while you code. On a Laravel app that is thousands of round trips to Windows and about 1.7 seconds a page. On Windows lerd starts PHP-FPM with `opcache.validate_timestamps=0` and drops cached files itself instead: when the watcher sees a save under a site's source directories, and after `lerd artisan`, it invalidates every cached script outside `vendor/`, which also covers templates and caches the framework compiles from your code; after `lerd composer` it clears the whole cache. A change shows up within about a second and a page takes around 0.15 seconds. FrankenPHP sites keep revalidating, since lerd has no way to reach their cache.
 
-Template engines decide whether to recompile by comparing file times, so the Windows clock and the machine's have to agree; if edits to a view stop showing up, check that Windows syncs its time.
+Template engines decide whether to recompile by comparing file times, so the Windows clock and the machine's have to agree. `lerd start` compares the two and warns when they are more than a minute apart; sync the Windows time when it does.
 
 The DNS server reads the same `lerd.conf` a dnsmasq container would, so anything that rewrites that file keeps working. It answers `A` and `AAAA` for the configured TLD over UDP and TCP and refuses every other name, which is fine because the NRPT rule only sends `.test` queries to it.
 
