@@ -181,9 +181,10 @@ func machineMemoryFor(provider string, targetMiB int64) int64 {
 	return targetMiB
 }
 
-// podmanMissingError says how to get the Podman CLI lerd drives.
-func podmanMissingError() error {
-	return errors.New("lerd drives the Podman CLI, which is not on your PATH. Install it, open a new terminal, then run lerd install again:\n\n    " + installPodman)
+// podmanMissingError says why lerd could not install the Podman CLI it drives,
+// and how to install it by hand.
+func podmanMissingError(cause error) error {
+	return fmt.Errorf("lerd drives the Podman CLI and could not install it: %w\n\nInstall it yourself, open a new terminal, then run lerd install again:\n\n    %s", cause, installPodman)
 }
 
 // rememberMachineProvider saves the provider a new machine was created with,

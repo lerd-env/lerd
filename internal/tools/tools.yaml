@@ -103,3 +103,17 @@ tools:
       darwin/arm64: mkcert-{version}-darwin-arm64
       windows/amd64: mkcert-{version}-windows-amd64.exe
       windows/arm64: mkcert-{version}-windows-arm64.exe
+  # Installed by lerd install on Windows when the host has no Podman. The MSI
+  # installs per user, so it needs no elevation, and puts podman on the PATH.
+  podman:
+    version: v6.1.3
+    url: https://github.com/containers/podman/releases/download/{version}/{asset}
+    assets:
+      windows/amd64: podman-installer-windows-amd64.msi
+      windows/arm64: podman-installer-windows-arm64.msi
+    digests:
+      windows/amd64: 8eb4b84b9130f915a83d2b659caa430270f0de4fe566f97c32fc1c919d28e22b
+      windows/arm64: b5096f603b5bf6b98823ebe10768afce5a925837edbbd9e99174aba2a5fc1e9c
+    sizes:
+      windows/amd64: 28884992
+      windows/arm64: 26574848

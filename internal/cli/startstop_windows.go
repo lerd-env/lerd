@@ -5,7 +5,6 @@ package cli
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -69,8 +68,8 @@ func machineInitArgs(name string, targetMemoryMiB int64) []string {
 // update is repaired on the next start too. A host with nothing ready stops
 // here with the steps to enable a backend.
 func ensurePodmanMachineRunning() error {
-	if _, err := exec.LookPath("podman"); err != nil {
-		return podmanMissingError()
+	if err := ensurePodmanCLI(os.Stdout); err != nil {
+		return podmanMissingError(err)
 	}
 	provider, offerHyperV, err := machineProvider()
 	if err != nil {

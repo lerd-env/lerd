@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -208,8 +209,8 @@ func TestMachineProviderReadsTheSavedChoice(t *testing.T) {
 }
 
 func TestPodmanMissingErrorSaysHowToInstallIt(t *testing.T) {
-	msg := podmanMissingError().Error()
-	if !strings.Contains(msg, "winget install RedHat.Podman") || !strings.Contains(msg, "lerd install") {
+	msg := podmanMissingError(errors.New("HTTP 404")).Error()
+	if !strings.Contains(msg, "HTTP 404") || !strings.Contains(msg, "winget install RedHat.Podman") || !strings.Contains(msg, "lerd install") {
 		t.Errorf("podman guidance: %q", msg)
 	}
 }

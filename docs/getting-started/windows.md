@@ -26,10 +26,14 @@ The native build is under active development and is **not** ready for daily use.
   wsl --install --no-distribution
   ```
 
-- The **Podman CLI** (not Podman Desktop) on your `PATH`, for example with `winget install RedHat.Podman`. Lerd drives `podman` and `podman machine` directly, and Podman Desktop would create a machine of its own.
+- The **Podman CLI** (not Podman Desktop). `lerd install` installs it for you when it is missing, see [Podman](#podman). Lerd drives `podman` and `podman machine` directly, and Podman Desktop would create a machine of its own.
 - An elevated PowerShell for the first `lerd install`. Writing the DNS rule needs administrator rights, and so does creating a Hyper-V machine.
 
-You do not have to work out which of these applies. On its first run `lerd install` checks the Windows edition and which backends are installed before it changes anything. If neither is ready it stops and prints the command for the one your edition supports, Hyper-V on Pro, Enterprise and Education with WSL2 as the alternative, WSL2 alone on Home, and asks you to reboot and run `lerd install` again. The same happens when Podman itself is missing, and when WSL is installed but Windows cannot start virtual machines because the Host Compute Service is missing, in which case it prints the commands that repair the Virtual Machine Platform.
+You do not have to work out which of these applies. On its first run `lerd install` checks the Windows edition and which backends are installed before it changes anything. If neither is ready it stops and prints the command for the one your edition supports, Hyper-V on Pro, Enterprise and Education with WSL2 as the alternative, WSL2 alone on Home, and asks you to reboot and run `lerd install` again. The same happens when WSL is installed but Windows cannot start virtual machines because the Host Compute Service is missing, in which case it prints the commands that repair the Virtual Machine Platform.
+
+### Podman
+
+When `podman` is not on the `PATH`, lerd first looks in the folders Podman's installers use, `%LOCALAPPDATA%\Programs\Podman` and `%ProgramFiles%\RedHat\Podman`, so a terminal opened before Podman was installed still finds it. When there is none, `lerd install` downloads the Podman MSI it pins, checks its sha256 and installs it silently with `msiexec`. The MSI installs for the current user, needs no elevation and adds Podman to your user `PATH` for new terminals. The installer's log is written to `%LOCALAPPDATA%\lerd\logs\podman-install.log`. If the install fails, lerd stops with the reason and the `winget install RedHat.Podman` command to install it yourself.
 
 ### Choosing the provider
 
