@@ -156,3 +156,34 @@ func TestWinContainerUnitStoresPodmanArgs(t *testing.T) {
 		t.Error("still installed after removal")
 	}
 }
+
+// Starting a container unit that is already running must leave it alone, the
+// way systemctl start does on Linux. podman run --replace recreated every
+// container, databases included, on each lerd start.
+func TestWinStartLeavesARunningContainerAlone(t *testing.T) {
+	isolateWinData(t)
+	m := &windowsServiceManager{}
+	if err := m.WriteContainerUnit("lerd-redis", "[Container]\nImage=docker.io/library/redis:7\nContainerName=lerd-redis\n"); err != nil {
+		t.Fatal(err)
+	}
+	prevRunning, prevRun := containerRunning, runContainer
+	t.Cleanup(func() { containerRunning, runContainer = prevRunning, prevRun })
+	runs := 0
+	runContainer = func([]string) error { runs++; return nil }
+
+	containerRunning = func(string) (bool, error) { return true, nil }
+	if err := m.Start("lerd-redis"); err != nil {
+		t.Fatal(err)
+	}
+	if runs != 0 {
+		t.Errorf("a running container was run again")
+	}
+
+	containerRunning = func(string) (bool, error) { return false, nil }
+	if err := m.Start("lerd-redis"); err != nil {
+		t.Fatal(err)
+	}
+	if runs != 1 {
+		t.Errorf("a stopped container was not started, runs = %d", runs)
+	}
+}

@@ -418,6 +418,12 @@ func missingBinaryFallback(missing string) string {
 	return self
 }
 
+// Seams so container starts can be tested without podman.
+var (
+	containerRunning = podman.ContainerRunning
+	runContainer     = runPodmanWithError
+)
+
 // podmanStartSem limits concurrent `podman run` executions to avoid
 // overwhelming the Podman Machine SSH connection with parallel requests.
 var podmanStartSem = make(chan struct{}, 4)

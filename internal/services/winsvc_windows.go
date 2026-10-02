@@ -249,8 +249,13 @@ func (m *windowsServiceManager) Start(name string) error {
 		return fmt.Errorf("unit %s has no command", name)
 	}
 	if d.Kind == kindContainer {
+		// Like systemctl start on an active unit: nothing to do. A changed
+		// definition reaches the container through Restart, which stops it first.
+		if running, _ := containerRunning(name); running {
+			return nil
+		}
 		podmanStartSem <- struct{}{}
-		rerr := runPodmanWithError(d.Args)
+		rerr := runContainer(d.Args)
 		<-podmanStartSem
 		if rerr != nil {
 			return fmt.Errorf("podman run %s: %w", name, rerr)
