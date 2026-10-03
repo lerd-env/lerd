@@ -51,6 +51,17 @@ export interface MonacoTextEdit {
   text: string;
 }
 
+// Turns the absolute host path lerd sends as the workspace root into a file
+// URI. A Windows root (C:\Sites\app) gets forward slashes and the third slash
+// before the drive, file:///C:/Sites/app, with the drive's colon left as is;
+// encoding the whole path would make the drive the URI's host.
+export function fileUriFromPath(root: string): string {
+  const path = root.replace(/\\/g, '/');
+  const drive = /^[A-Za-z]:/.test(path) ? path.slice(0, 2) : '';
+  const rest = path.slice(drive.length).split('/').map(encodeURIComponent).join('/');
+  return drive ? `file:///${drive}${rest}` : `file://${rest}`;
+}
+
 // Flattens an LSP WorkspaceEdit down to the plain text edits that touch our
 // tinker document, mapped into Monaco coordinates. The server's edits are
 // keyed by the synthetic `.lerd-tinker.php` URI (not the Monaco model's URI)
@@ -589,7 +600,7 @@ export function attachPhpLsp(opts: {
   void (async () => {
     const root = await rootReady;
     if (disposed) return;
-    const rootUri = 'file://' + root.split('/').map(encodeURIComponent).join('/');
+    const rootUri = fileUriFromPath(root);
     documentUri = `${rootUri}/.lerd-tinker.php`;
     let initResult: any;
     try {

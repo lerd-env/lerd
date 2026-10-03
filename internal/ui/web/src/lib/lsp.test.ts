@@ -4,7 +4,8 @@ import {
   isBlankCompletionPrefix,
   stripSyntheticHeader,
   withImportBlankLine,
-  lspSemanticTokensToMonaco
+  lspSemanticTokensToMonaco,
+  fileUriFromPath
 } from '$lib/lsp';
 
 // Mirrors the production fromLspRange: LSP 0-based -> Monaco 1-based, line 0
@@ -172,5 +173,19 @@ describe('lspSemanticTokensToMonaco', () => {
       [0, 8, 4, 8, 0],
       [2, 2, 5, 8, 0]
     ]);
+  });
+});
+
+describe('fileUriFromPath', () => {
+  it('builds a file URI from a POSIX root', () => {
+    expect(fileUriFromPath('/home/me/my proj')).toBe('file:///home/me/my%20proj');
+  });
+
+  it('keeps the drive of a Windows root out of the URI host', () => {
+    expect(fileUriFromPath('C:\\Sites\\my app')).toBe('file:///C:/Sites/my%20app');
+  });
+
+  it('accepts a Windows root that already uses forward slashes', () => {
+    expect(fileUriFromPath('D:/work/app')).toBe('file:///D:/work/app');
   });
 });
