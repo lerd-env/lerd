@@ -271,3 +271,13 @@ func parseRaw(content string, maxEntries int) []LogEntry {
 	}
 	return entries
 }
+
+// Page returns limit entries starting at offset, and whether any follow, so a
+// file too large to send in one response can be read a page at a time.
+func Page(entries []LogEntry, offset, limit int) ([]LogEntry, bool) {
+	if offset >= len(entries) {
+		return []LogEntry{}, false
+	}
+	end := min(offset+limit, len(entries))
+	return entries[offset:end], end < len(entries)
+}

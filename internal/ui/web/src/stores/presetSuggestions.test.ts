@@ -200,3 +200,32 @@ describe('suggestion when an admin is already installed', () => {
     expect(suggestedPresetFor({ name: 'mysql', preset: 'mysql' } as never)?.name).toBe('adminer');
   });
 });
+
+// A preset that works alongside a service rather than administering it names the
+// service in suggest_for: spamassassin scores the mail Mailpit catches.
+describe('suggest_for', () => {
+  const spamassassin: Preset = {
+    name: 'spamassassin',
+    description: 'Spam scoring for the mail catcher',
+    installed: false,
+    suggest_for: ['mailpit']
+  };
+
+  it('suggests a companion on the service it names', () => {
+    presets.set([pgadmin, spamassassin]);
+    expect(suggestedPresetFor(svc({ name: 'mailpit' }))?.name).toBe('spamassassin');
+  });
+
+  it('suggests nothing once the companion is installed or dismissed', () => {
+    presets.set([{ ...spamassassin, installed: true }]);
+    expect(suggestedPresetFor(svc({ name: 'mailpit' }))).toBeNull();
+    presets.set([spamassassin]);
+    dismissedSuggestions.set(['spamassassin']);
+    expect(suggestedPresetFor(svc({ name: 'mailpit' }))).toBeNull();
+  });
+
+  it('leaves the admin tool first where both apply', () => {
+    presets.set([{ ...spamassassin, suggest_for: ['postgres'] }, pgadmin]);
+    expect(suggestedPresetFor(svc({ name: 'postgres' }))?.name).toBe('pgadmin');
+  });
+});

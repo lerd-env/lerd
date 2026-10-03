@@ -2,7 +2,6 @@ package cli
 
 import (
 	"path/filepath"
-	"strings"
 
 	"github.com/geodro/lerd/internal/activityping"
 	"github.com/geodro/lerd/internal/config"
@@ -51,10 +50,8 @@ func worktreeActivityKey(site *config.Site, dir string) string {
 
 // matchWorktreeKey returns site/wtBase when dir falls inside one of wts, else "".
 func matchWorktreeKey(siteName, dir string, wts []gitpkg.Worktree) string {
-	dir = filepath.Clean(dir)
 	for _, wt := range wts {
-		wtPath := filepath.Clean(wt.Path)
-		if dir == wtPath || strings.HasPrefix(dir, wtPath+string(filepath.Separator)) {
+		if config.PathWithin(dir, wt.Path) {
 			return siteName + "/" + config.WorktreeUnitSlug(filepath.Base(wt.Path))
 		}
 	}

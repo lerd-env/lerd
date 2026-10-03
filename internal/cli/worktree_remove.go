@@ -180,6 +180,9 @@ func runGitWorktreeRemove(args []string) error {
 		return fmt.Errorf("git worktree remove: %w", err)
 	}
 
+	if !isInteractive() {
+		return fmt.Errorf("the worktree has modified or untracked files; rerun with --force to discard them")
+	}
 	var picked string
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewSelect[string]().

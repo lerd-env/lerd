@@ -151,6 +151,12 @@ func firePublishedPortShiftForced(service string, newPort int) {
 // can decide it instead of inheriting whatever the developer happens to be running.
 var ensureUnitStatus = podman.UnitStatus
 
+// guardRecordedPorts re-tests a port a service is already recorded on, moving it
+// when something else took it while the service was down. Not on macOS: the VM
+// can hold a service's own port after it stops, so the test moved services off
+// their own ports and left sites behind. There a recorded port sticks.
+var guardRecordedPorts = runtime.GOOS != "darwin"
+
 // unitActive reports whether a service's own systemd unit is currently up.
 func unitActive(name string) bool {
 	status, _ := ensureUnitStatus("lerd-" + name)
@@ -1001,23 +1007,22 @@ func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 		pp = 0
 	}
 	shifted := false
-	// The guard tests the recorded published port when there is one and the preset
-	// default otherwise: a recorded port something else took while the service was
-	// down is no more bindable than a taken default, and starting on it fails.
 	primary := pp
 	if primary == 0 {
 		primary = podman.PrimaryHostPort(svc.Ports)
 	}
-	if free := maybeShiftPublishedPort(svc.Name, primary, holdsItsPort(svc.Name)); free > 0 {
-		if err := persistPublishedPort(svc.Name, free); err != nil {
-			return false, fmt.Errorf("shifting lerd-%s off in-use port %d: %w", svc.Name, primary, err)
+	if pp == 0 || guardRecordedPorts {
+		if free := maybeShiftPublishedPort(svc.Name, primary, holdsItsPort(svc.Name)); free > 0 {
+			if err := persistPublishedPort(svc.Name, free); err != nil {
+				return false, fmt.Errorf("shifting lerd-%s off in-use port %d: %w", svc.Name, primary, err)
+			}
+			pp = free // use the just-persisted value directly — no second config read to diverge
+			notePortShift(svc.Name, primary, free)
+			// Host-proxy sites reach this service over the published loopback port,
+			// so their .env must follow the shift. The CLI registers the refresh hook.
+			firePublishedPortShift(svc.Name, free)
+			shifted = true
 		}
-		pp = free // use the just-persisted value directly — no second config read to diverge
-		notePortShift(svc.Name, primary, free)
-		// Host-proxy sites reach this service over the published loopback port,
-		// so their .env must follow the shift. The CLI registers the refresh hook.
-		firePublishedPortShift(svc.Name, free)
-		shifted = true
 	}
 	// Apply the recorded published port (guard-shifted or set via `lerd service
 	// port`) to the primary host mapping and the connection URL, leaving the
@@ -1042,6 +1047,10 @@ func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 		}
 		host := podman.PrimaryHostPort([]string{spec})
 		if hport, ok := overrides[cport]; ok && hport > 0 {
+			if !guardRecordedPorts {
+				svc.Ports = podman.SetHostPortForContainerPort(svc.Ports, cport, hport)
+				continue
+			}
 			host = hport
 		}
 		if free := maybeShiftPublishedPort(svc.Name, host, holdsItsPort(svc.Name)); free > 0 && free != host {
@@ -1070,7 +1079,7 @@ func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 		svc.Ports = append(svc.Ports, extra...)
 	}
 	if svc.DataDir != "" {
-		if err := os.MkdirAll(config.DataSubDir(svc.Name), 0755); err != nil {
+		if err := config.EnsureServiceDataDir(svc.Name); err != nil {
 			return false, fmt.Errorf("creating data directory for %s: %w", svc.Name, err)
 		}
 	}
@@ -1279,7 +1288,7 @@ func ServiceFamily(name string) string { return config.FamilyOfName(name) }
 
 // waitReadyFn is podman.WaitReady; tests stub it so RefreshDiscoverFamilyConsumers
 // does not need a live engine.
-var waitReadyFn = podman.WaitReady
+var waitReadyFn = waitReadyFirstStart
 
 // RegenerateFamilyConsumersForService wraps RegenerateFamilyConsumers. When
 // name is up it waits until ready first so discover_family includes this

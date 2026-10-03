@@ -1,0 +1,11 @@
+# Copy to guests.local (gitignored) and describe your own test machines.
+# name        ssh target        libvirt domain   flags        baseline snapshot
+# The ssh target can be user@host, or user@dhcp to read the address from the
+# libvirt lease. Use - for the domain on a machine libvirt does not own (a
+# cloud VM, a spare laptop): run, push and ssh still work, up/down/reset don't.
+# noreboot marks a guest that cannot boot unattended (disk encryption), so
+# down and reset refuse it.
+deb         dev@dhcp          debian-test        -            clean-no-lerd
+fed         dev@dhcp          fedora-test        -            clean-no-lerd
+arch        dev@dhcp          arch-test          noreboot     -
+spare       dev@192.0.2.10    -                  -            -

@@ -23,11 +23,21 @@ func updateProjectConfig(dir string, fn func(*ProjectConfig)) error {
 	return SaveProjectConfig(dir, cfg)
 }
 
-// SetProjectSecured updates the secured field. No-op if .lerd.yaml does not exist.
+// SetProjectSecured records HTTPS in .lerd.yaml. Securing creates the file when
+// the project has none, since a later link reads HTTPS only from here once the
+// registry entry is gone; unsecuring is the default and creates nothing.
 func SetProjectSecured(dir string, secured bool) error {
-	return updateProjectConfig(dir, func(cfg *ProjectConfig) {
-		cfg.Secured = secured
-	})
+	if !secured {
+		return updateProjectConfig(dir, func(cfg *ProjectConfig) {
+			cfg.Secured = false
+		})
+	}
+	cfg, err := LoadProjectConfig(dir)
+	if err != nil {
+		return err
+	}
+	cfg.Secured = true
+	return SaveProjectConfig(dir, cfg)
 }
 
 // SetProjectPHPVersion updates php_version. No-op if .lerd.yaml does not exist.

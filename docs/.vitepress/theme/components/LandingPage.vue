@@ -25,6 +25,23 @@ function later(fn, ms) {
   return id
 }
 
+// The demo is drawn as the desktop app, whose title bar is the dashboard's own
+// header colour, so the bar follows whatever theme the demo is wearing.
+const demoHeader = ref('')
+function onDemoLoad(e) {
+  const doc = e.target.contentDocument
+  if (!doc) return
+  const sync = () => {
+    const rail = doc.querySelector('aside')
+    if (rail) demoHeader.value = getComputedStyle(rail).backgroundColor
+  }
+  sync()
+  const mo = new MutationObserver(sync)
+  mo.observe(doc.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] })
+  mo.observe(doc.body, { childList: true })
+  observers.push(mo)
+}
+
 const stars = ref(starData.stars)
 const starLabel = (n) => (n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(n))
 
@@ -417,6 +434,7 @@ onBeforeUnmount(() => {
             <a class="strip-item" :href="withBase('/getting-started/winter')"><span class="gl" data-bare data-logo="winter"></span> Winter CMS</a>
             <a class="strip-item" :href="withBase('/getting-started/bedrock')"><span class="gl" data-bare data-logo="bedrock"></span> Bedrock</a>
             <a class="strip-item" :href="withBase('/getting-started/lumen')"><span class="gl" data-bare data-logo="lumen"></span> Lumen</a>
+            <a class="strip-item" :href="withBase('/getting-started/yii')"><span class="gl" data-bare data-logo="yii"></span> Yii</a>
           </div>
         </div>
       </div>
@@ -571,14 +589,10 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="win reveal d1">
-            <div class="win-bar">
+            <div class="win-bar app-bar" :style="{ background: demoHeader }">
               <span class="win-dots"><i></i><i></i><i></i></span>
-              <span class="win-title">
-                <img class="win-favicon" :src="withBase('/assets/logo.svg')" alt="" width="14" height="14" />
-                lerd.localhost
-              </span>
             </div>
-            <iframe class="app-frame" :src="withBase('/demo/index.html')" title="Lerd dashboard live demo" loading="lazy"></iframe>
+            <iframe class="app-frame" :src="withBase('/demo/index.html')" title="Lerd dashboard live demo" loading="lazy" @load="onDemoLoad"></iframe>
           </div>
         </div>
       </section>
@@ -680,11 +694,11 @@ onBeforeUnmount(() => {
 
       <!-- ============ DEV DIGEST BANNER ============ -->
       <div class="wrap">
-        <a class="digest" :href="withBase('/digest/v1.35.0.html')" target="_blank" rel="noopener">
+        <a class="digest" :href="withBase('/digest/v1.36.0.html')" target="_blank" rel="noopener">
           <span class="digest-pill">NEW</span>
           <span class="digest-body">
-            <span class="digest-title">v1.35.0 dev digest</span>
-            <span class="digest-sub">PHP on the host instead of across a bind mount, twelve dashboard themes kept in the config, and disk figures that stopped counting a shared layer once per image.</span>
+            <span class="digest-title">v1.36.0 dev digest</span>
+            <span class="digest-sub">A dashboard that wears the desktop it runs on, a Debug window that hears logs, exceptions and messages, and worktrees that pick their own database.</span>
           </span>
           <span class="digest-cta">Read the digest&nbsp;→</span>
         </a>

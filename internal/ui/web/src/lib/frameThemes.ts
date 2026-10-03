@@ -102,7 +102,8 @@ export function watchFrameDesign(
   dark: () => boolean
 ): void {
   if (!DESIGNS[name]) return;
-  watchPaletteRules(win, () => pairsFor(name, dark()));
+  // Light is the app's own design, as in repaintFrameDesign.
+  watchPaletteRules(win, () => (dark() ? pairsFor(name, true) : []));
 }
 
 // themeFrameDocument paints what the sweep cannot reach: the page behind the

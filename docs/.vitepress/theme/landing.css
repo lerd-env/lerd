@@ -189,6 +189,7 @@
   display: flex; align-items: center; gap: 8px;
 }
 .lerd-landing .win-favicon { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+.lerd-landing .win-bar.app-bar { padding: 14px 16px 6px; border-bottom: 0; }
 
 /* ---------- Reveal-on-scroll (enhancement only; safe when paused) ---------- */
 .lerd-landing .reveal { opacity: 1; }

@@ -382,7 +382,7 @@ func regenerateWorktreeHostWorkers(site *config.Site, fw *config.Framework, phpV
 		return
 	}
 	for _, wt := range wts {
-		if wt.Path == site.Path {
+		if config.SamePath(wt.Path, site.Path) {
 			continue // the main checkout, handled by the caller
 		}
 		wtBase := config.WorktreeUnitSlug(filepath.Base(wt.Path))

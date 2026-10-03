@@ -24,8 +24,6 @@ OMARCHY_PLUGINS_DIR="$HOME/.config/omarchy/plugins"
 OMARCHY_SYSTEM_PATH="/usr/share/omarchy"
 INSTALL_DIR="${LERD_INSTALL_DIR:-$HOME/.local/bin}"
 LERD_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/lerd"
-LERD_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/lerd"
-LERD_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/lerd"
 # Set by --beta: install and update from the newest release including
 # prereleases, rather than from the stable line alone.
 BETA=0
@@ -619,26 +617,6 @@ add_to_path() {
   warn "Reload your shell or run: source $rc"
 }
 
-remove_from_path() {
-  local rc; rc="$(detect_shell_rc)"
-  if [ ! -f "$rc" ]; then return; fi
-
-  # Remove the block: marker line + the next line. {N;d;} is POSIX and works on
-  # both GNU and BSD/macOS sed, unlike the GNU-only `,+1` relative address.
-  if grep -q "$SHELL_MARKER" "$rc" 2>/dev/null; then
-    sed -i.bak -e "/^${SHELL_MARKER}/{N;d;}" "$rc" && rm -f "${rc}.bak"
-    info "Removed PATH entry from $rc"
-  fi
-
-  # lerd puts its own bin dir on PATH from inside the binary, unmarked, and only
-  # `lerd uninstall` ever took that line out. Removing the binary here leaves it
-  # pointing at a directory that is about to be deleted, so it goes too.
-  if grep -q "${LERD_DATA_DIR}/bin" "$rc" 2>/dev/null; then
-    sed -i.bak -e "\#^export PATH=\"${LERD_DATA_DIR}/bin:\$PATH\"\$#d" "$rc" && rm -f "${rc}.bak"
-    info "Removed the lerd bin entry from $rc"
-  fi
-}
-
 # ── Install ──────────────────────────────────────────────────────────────────
 cmd_install() {
   local local_binary="${1:-}"
@@ -764,19 +742,6 @@ setup_omarchy() {
   fi
 }
 
-# remove_omarchy_plugin takes the Glance plugin off the bar with lerd, and
-# leaves the command behind if Omarchy refuses, rather than a silent leftover.
-remove_omarchy_plugin() {
-  [ -d "$OMARCHY_PLUGINS_DIR/${OMARCHY_PLUGIN_ID}" ] || return 0
-  omarchy_path_default
-  if omarchy-plugin-remove "$OMARCHY_PLUGIN_ID" --yes >/dev/null 2>&1; then
-    success "Removed the Lerd Glance plugin"
-  else
-    warn "Could not remove the Lerd Glance plugin. Remove it with:"
-    echo -e "     ${CYAN}omarchy-plugin-remove ${OMARCHY_PLUGIN_ID} --yes${RESET}"
-  fi
-}
-
 # offer_desktop_app asks whether to use the Lerd desktop app (which delivers
 # native desktop notifications) or stay on the browser, records the choice via
 # `lerd notify target`, and always prints the command to install the app.
@@ -826,232 +791,16 @@ cmd_update() {
 
 # ── Uninstall ────────────────────────────────────────────────────────────────
 
-# Containers write their files as a subuid inside the rootless user namespace,
-# so a plain rm cannot remove them and set -e would abort the uninstall there.
-# podman unshare enters that namespace, where they are removable.
-remove_lerd_dir() {
-  local dir="$1"
-  [ -e "$dir" ] || return 0
-  rm -rf "$dir" 2>/dev/null || true
-  [ -e "$dir" ] || return 0
-  podman unshare rm -rf "$dir" >/dev/null 2>&1 || true
-  [ -e "$dir" ] || return 0
-  warn "Could not remove $dir"
-  info "Remove it with: podman unshare rm -rf $dir"
-  return 1
-}
-
+# lerd uninstall owns the whole teardown (DNS, units, the Omarchy plugin, PATH,
+# data), so the installer hands over to it rather than keeping a second copy.
 cmd_uninstall() {
-  if [ "$(detect_os)" = "darwin" ]; then
-    cmd_uninstall_macos
-  else
-    cmd_uninstall_linux
+  local bin="${INSTALL_DIR}/${BINARY}"
+  [ -x "$bin" ] || bin="$(command -v lerd || true)"
+  [ -n "$bin" ] || die "Lerd is not installed, nothing to uninstall."
+  if have_tty; then
+    exec "$bin" uninstall </dev/tty
   fi
-}
-
-# macOS teardown: boot out and remove the user LaunchAgents, stop any detached
-# lerd-* podman containers, then drop the binary. The DNS resolver file in
-# /etc/resolver and the Podman machine are left to `lerd uninstall` (run before
-# the binary is removed) since removing the resolver needs sudo.
-cmd_uninstall_macos() {
-  header "Uninstalling Lerd"
-
-  # Only `lerd uninstall` drops the DNS resolver (/etc/resolver/test, sudo) and
-  # the Podman machine, and it's gone once we delete the binary below. Surface
-  # the two-step order while the binary is here so the resolver isn't orphaned.
-  if command -v lerd &>/dev/null; then
-    warn "This script does not remove the DNS resolver (/etc/resolver/test) or the Podman machine."
-    info "Those are torn down by 'lerd uninstall' (needs sudo), which is unavailable once the binary is gone."
-    if have_tty && ! ask "Continue and remove the lerd binary now?"; then
-      info "Aborted. Run 'lerd uninstall' first, then re-run this uninstaller."
-      exit 0
-    fi
-  fi
-
-  local domain="gui/$(id -u)"
-  local agents_dir="$HOME/Library/LaunchAgents"
-
-  # lerd's launch agents are named lerd-*.plist on disk and their launchctl
-  # label is com.lerd.<filename-without-.plist> (see plistLabel in
-  # launchd_darwin.go), so derive it from the name rather than `defaults read`,
-  # which mis-resolves a .plist-suffixed path and would skip the bootout.
-  if [ -d "$agents_dir" ]; then
-    for f in "$agents_dir"/lerd-*.plist; do
-      [ -f "$f" ] || continue
-      local label; label="com.lerd.$(basename "$f" .plist)"
-      launchctl bootout "$domain/$label" 2>/dev/null || true
-      rm -f "$f"
-    done
-    info "Removed launchd agents from $agents_dir"
-  fi
-
-  # Detached `podman run -d` containers outlive their plists, so remove them
-  # too. Capture with `|| true` first: under `set -o pipefail` a no-match grep
-  # would otherwise abort the whole uninstall before the binary is removed.
-  if command -v podman &>/dev/null; then
-    local containers
-    containers="$(podman ps -a --format '{{.Names}}' 2>/dev/null | grep '^lerd-' || true)"
-    for c in $containers; do
-      podman rm -f "$c" 2>/dev/null || true
-    done
-  fi
-
-  rm -rf "$HOME/Library/Logs/lerd"
-
-  # Remove binaries
-  for b in "$BINARY" lerd-tray; do
-    if [ -f "${INSTALL_DIR}/${b}" ]; then
-      rm -f "${INSTALL_DIR}/${b}"
-      success "Removed ${INSTALL_DIR}/${b}"
-    fi
-  done
-
-  remove_from_path
-
-  if ask "Remove all Lerd data and config? (~/.config/lerd, ~/.local/share/lerd)"; then
-    local kept=0
-    remove_lerd_dir "$LERD_CONFIG_DIR" || kept=1
-    remove_lerd_dir "$LERD_DATA_DIR" || kept=1
-    remove_lerd_dir "$LERD_CACHE_DIR" || kept=1
-    [ "$kept" -eq 1 ] || success "Removed config and data directories"
-  else
-    info "Config kept at $LERD_CONFIG_DIR"
-    info "Data kept at $LERD_DATA_DIR"
-  fi
-
-  if [ -f /etc/resolver/test ]; then
-    warn "DNS resolver /etc/resolver/test is still present (not removed here)."
-    info "Remove it with: sudo rm -f /etc/resolver/test"
-    info "Remove the Podman machine with: podman machine rm <name>  (see 'podman machine ls')"
-  fi
-
-  success "Lerd uninstalled"
-}
-
-# The root-owned files lerd's managed DNS writes. None of them live under $HOME
-# and only the binary can take them back out, so the uninstaller uses this list
-# both to detect the setup and to tell the user how to clear it by hand.
-LERD_DNS_FILES=(
-  /etc/sudoers.d/lerd
-  /etc/systemd/system/lerd-dns-link.service
-  /etc/systemd/resolved.conf.d/lerd-fallback.conf
-  /etc/systemd/resolved.conf.d/lerd.conf
-  /etc/NetworkManager/conf.d/lerd-dns-link.conf
-  /etc/NetworkManager/conf.d/lerd.conf
-  /etc/NetworkManager/dnsmasq.d/lerd.conf
-  /etc/NetworkManager/dispatcher.d/99-lerd-dns
-)
-
-lerd_dns_config_present() {
-  local f
-  for f in "${LERD_DNS_FILES[@]}"; do
-    [ -e "$f" ] && return 0
-  done
-  return 1
-}
-
-lerd_dns_cleanup_hint() {
-  warn "Lerd's DNS configuration is still on this system and only root can remove it:"
-  info "sudo systemctl disable --now lerd-dns-link.service"
-  info "sudo rm -f ${LERD_DNS_FILES[*]}"
-  info "sudo systemctl daemon-reload && sudo systemctl restart systemd-resolved"
-  info "If the interface is still up: sudo ip link del lerd0"
-}
-
-# Left in place, the link unit recreates lerd0 at every boot pointing .test at a
-# dnsmasq that no longer exists, and the fallback drop-in keeps systemd-resolved's
-# fallback servers switched off for good. The binary is removed further down and
-# it is the only thing that can undo any of it, so offer the teardown here.
-uninstall_linux_dns() {
-  lerd_dns_config_present || return 0
-
-  if ! command -v lerd &>/dev/null; then
-    lerd_dns_cleanup_hint
-    return 0
-  fi
-
-  warn "The system DNS setup (the lerd0 link, its root unit, the NetworkManager rules and systemd-resolved's fallback servers) is removed only by lerd itself."
-  info "Nothing on this machine can undo it once the binary is gone."
-  if ask "Remove the DNS setup now? (runs 'lerd dns:disable', needs sudo)"; then
-    if lerd dns:disable; then
-      success "Removed lerd DNS configuration"
-      return 0
-    fi
-    warn "'lerd dns:disable' did not complete."
-  fi
-  lerd_dns_cleanup_hint
-}
-
-# Stops and removes every lerd user unit: the daemons, the tray, and the host
-# workers (vite and friends), which would otherwise keep running a dev server
-# for a site nothing serves any more.
-remove_lerd_user_units() {
-  local dir="$1" f unit
-  for f in "$dir"/lerd-*.service "$dir"/lerd-*.timer; do
-    [ -f "$f" ] || continue
-    unit="$(basename "$f")"
-    systemctl --user disable --now "$unit" 2>/dev/null || true
-    rm -f "$f"
-  done
-}
-
-cmd_uninstall_linux() {
-  header "Uninstalling Lerd"
-
-  uninstall_linux_dns
-  remove_omarchy_plugin
-
-  # Stop and remove systemd units — discover from quadlet files on disk
-  local quadlet_dir="${XDG_CONFIG_HOME:-$HOME/.config}/containers/systemd"
-  local systemd_user_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-
-  if [ -d "$quadlet_dir" ]; then
-    for f in "$quadlet_dir"/lerd-*.container; do
-      [ -f "$f" ] || continue
-      local unit; unit="$(basename "$f" .container)"
-      if systemctl --user is-active --quiet "$unit" 2>/dev/null; then
-        info "Stopping $unit ..."
-        systemctl --user stop "$unit" 2>/dev/null || true
-      fi
-      systemctl --user disable "$unit" 2>/dev/null || true
-    done
-    rm -f "$quadlet_dir"/lerd-*.container
-    info "Removed Quadlet units from $quadlet_dir"
-  fi
-
-  remove_lerd_user_units "$systemd_user_dir"
-
-  systemctl --user daemon-reload 2>/dev/null || true
-  # A unit stopped by removing its file underneath it is left behind as failed
-  # and not-found, which is how an uninstalled lerd went on showing up in
-  # systemctl --user for good.
-  systemctl --user reset-failed 'lerd-*' 2>/dev/null || true
-
-  # Remove binaries. The tray ships beside lerd, so an uninstall that took only
-  # one of them left the other on PATH with nothing to talk to.
-  for b in "$BINARY" lerd-tray; do
-    if [ -f "${INSTALL_DIR}/${b}" ]; then
-      rm -f "${INSTALL_DIR}/${b}"
-      success "Removed ${INSTALL_DIR}/${b}"
-    fi
-  done
-
-  # Remove PATH entry from shell rc
-  remove_from_path
-
-  # Optionally remove data
-  if ask "Remove all Lerd data and config? (~/.config/lerd, ~/.local/share/lerd)"; then
-    local kept=0
-    remove_lerd_dir "$LERD_CONFIG_DIR" || kept=1
-    remove_lerd_dir "$LERD_DATA_DIR" || kept=1
-    remove_lerd_dir "$LERD_CACHE_DIR" || kept=1
-    [ "$kept" -eq 1 ] || success "Removed config and data directories"
-  else
-    info "Config kept at $LERD_CONFIG_DIR"
-    info "Data kept at $LERD_DATA_DIR"
-  fi
-
-  success "Lerd uninstalled"
+  exec "$bin" uninstall
 }
 
 # ── Entry point ──────────────────────────────────────────────────────────────
@@ -1100,7 +849,7 @@ main() {
       echo "  (no args)       Install Lerd from latest GitHub release"
       echo "  --local <path>  Install from a locally built binary"
       echo "  --update        Update to the latest release"
-      echo "  --uninstall     Remove Lerd and optionally its data"
+      echo "  --uninstall     Run lerd uninstall"
       echo "  --check         Check prerequisites only"
       echo "  --beta          Install or update from the newest prerelease"
       ;;

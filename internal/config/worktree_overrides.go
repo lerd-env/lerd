@@ -1,6 +1,7 @@
 package config
 
 import (
+	"slices"
 	"strconv"
 
 	"gopkg.in/yaml.v3"
@@ -70,4 +71,22 @@ func WorktreeDBIsolated(worktreePath string) bool {
 // since sharing has to win over a db_isolated: true an older lerd committed.
 func SetWorktreeDBIsolated(worktreePath string, isolated bool) error {
 	return setLocalOverride(worktreePath, "db_isolated", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: strconv.FormatBool(isolated)})
+}
+
+// AddWorktreeWorker records a started worker in the worktree's untracked
+// override rather than its committed .lerd.yaml, which the branch shares and
+// which git would then refuse to remove the tree over.
+func AddWorktreeWorker(worktreePath, name string) error {
+	cfg, err := LoadProjectConfig(worktreePath)
+	if err != nil {
+		return err
+	}
+	if slices.Contains(cfg.Workers, name) {
+		return nil
+	}
+	seq := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+	for _, w := range append(cfg.Workers, name) {
+		seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: w})
+	}
+	return setLocalOverride(worktreePath, "workers", seq)
 }

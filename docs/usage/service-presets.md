@@ -148,7 +148,7 @@ mysql/mariadb, `5432` for postgres). The first service to claim the port keeps
 it; when you install a second same-family service, the port-ownership guard
 shifts it once to the next free port and records that choice, so it stays put
 afterwards, unless something else takes that port while the service is down, in
-which case it moves once more rather than fail to start. A single database of any family therefore lands on the familiar
+which case it moves once more rather than fail to start (on Linux; on macOS a recorded port stays put). A single database of any family therefore lands on the familiar
 canonical port. `lerd service port <service> <port>` overrides the assignment,
 and `lerd service expose <service> <other:3306>` adds an extra mapping.
 
@@ -201,7 +201,17 @@ color: "#00758f"      # brand colour the dashboard tints the mark with
 admin_for:            # the services this preset's UI administers
   - opensearch
 admin_rank: 10        # tie-break when several tools administer the same service
+suggest_for:          # services whose page offers this preset as a companion
+  - mailpit
 ```
+
+`suggest_for` is for a preset that works alongside a service without
+administering it, the way the spamassassin preset scores the mail Mailpit
+catches. The named service's page offers it in the same banner as an admin tool,
+saying it works alongside the service rather than starting it, and only while no
+admin tool is being suggested there. Once it is installed or dismissed the
+banner goes quiet. The key lives in the schema 2 tree of the service store, so a
+binary that predates it never sees it.
 
 `admin_for` is not `depends_on`. `depends_on` orders container startup (and is
 satisfied by the named service or any installed drop-in whose `family` or

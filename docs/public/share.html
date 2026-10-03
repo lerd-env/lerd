@@ -165,23 +165,13 @@
         gap: 10px;
         height: 30px;
         padding: 0 11px;
-        background: linear-gradient(180deg, #15151a, #111114);
-        border-bottom: 1px solid var(--line);
+        background: #161616;
       }
       .dots { display: flex; gap: 5px; }
       .dots i { width: 7px; height: 7px; border-radius: 50%; display: block; }
       .dots i:nth-child(1) { background: #ff5f57; }
       .dots i:nth-child(2) { background: #febc2e; }
       .dots i:nth-child(3) { background: #28c840; }
-      .shot-title {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-family: var(--mono);
-        font-size: 10px;
-        color: var(--muted);
-      }
-      .shot-title img { width: 10px; height: 10px; border-radius: 2px; }
       .shot-body { position: relative; height: calc(100% - 30px); overflow: hidden; }
       /* Render the demo at a wide logical viewport, then scale it down so the
          full desktop dashboard fits inside the window chrome. */
@@ -221,13 +211,9 @@
       <div class="shot">
         <div class="shot-bar">
           <span class="dots"><i></i><i></i><i></i></span>
-          <span class="shot-title">
-            <img src="/assets/logo.svg" alt="" />
-            lerd.localhost
-          </span>
         </div>
         <div class="shot-body">
-          <iframe src="/demo/index.html" title="Lerd dashboard" loading="eager"></iframe>
+          <iframe id="demo" src="/demo/index.html" title="Lerd dashboard" loading="eager"></iframe>
           <div class="fade"></div>
         </div>
       </div>
@@ -247,6 +233,11 @@
       </div>
     </div>
     <script>
+      // The window is drawn as the desktop app, whose title bar is the dashboard's header colour.
+      document.getElementById('demo').addEventListener('load', (e) => {
+        const rail = e.target.contentDocument.querySelector('aside');
+        if (rail) document.querySelector('.shot-bar').style.background = getComputedStyle(rail).backgroundColor;
+      });
       if (location.search.includes('featured')) {
         document.querySelector('.frame').classList.add('featured');
       }

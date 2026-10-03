@@ -5,10 +5,13 @@
     listAppLogFiles,
     loadAppLogEntries,
     clearAppLogs,
+    mergeNewest,
     type AppLogFile,
     type AppLogEntry
   } from '$stores/appLogs';
   import Dropdown from '$components/Dropdown.svelte';
+  import ActionButton from '$components/ActionButton.svelte';
+  import LoadingRow from '$components/LoadingRow.svelte';
   import ClearAppLogsModal from './ClearAppLogsModal.svelte';
   import { openErrorModal } from '$stores/modals';
   import { m } from '../../paraglide/messages.js';
@@ -29,7 +32,10 @@
   let selectedFile = $state('');
   let entries = $state<AppLogEntry[]>([]);
   let loading = $state(false);
-  let showAll = $state(false);
+  // Older pages load as the reader scrolls up, so a large log never arrives
+  // in one piece; more says whether the file has any left.
+  let more = $state(false);
+  let loadingOlder = $state(false);
   let search = $state('');
   let expandedIdx = $state(-1);
   let scrollEl: HTMLDivElement | null = $state(null);
@@ -87,12 +93,32 @@
     if (!selectedFile) return;
     loading = true;
     try {
-      entries = await loadAppLogEntries(siteDomain, selectedFile, showAll, branch);
+      ({ entries, more } = await loadAppLogEntries(siteDomain, selectedFile, 0, branch));
     } finally {
       loading = false;
     }
     await tick();
     if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+  }
+
+  // The older page lands above what the reader is looking at, so the scroll
+  // moves down by its height to keep the same lines in view.
+  async function loadOlder() {
+    if (!more || loadingOlder || loading || !selectedFile) return;
+    loadingOlder = true;
+    // loadAppLogEntries never throws; a failed page comes back empty.
+    const page = await loadAppLogEntries(siteDomain, selectedFile, entries.length, branch);
+    const before = scrollEl?.scrollHeight ?? 0;
+    entries = [...entries, ...page.entries];
+    more = page.more;
+    if (expandedIdx >= 0) expandedIdx += page.entries.length;
+    loadingOlder = false;
+    await tick();
+    if (scrollEl) scrollEl.scrollTop += scrollEl.scrollHeight - before;
+  }
+
+  function onScroll() {
+    if (scrollEl && scrollEl.scrollTop < 200) loadOlder();
   }
 
   // The tab has no log stream of its own, so without a timer it only ever showed
@@ -108,8 +134,14 @@
   // The poll must not flicker the spinner or move the reader's scroll, so it
   // swaps the entries in and leaves the view exactly where it was.
   async function refreshEntries() {
-    if (!selectedFile || loading) return;
-    entries = await loadAppLogEntries(siteDomain, selectedFile, showAll, branch);
+    if (!selectedFile || loading || loadingOlder) return;
+    const page = await loadAppLogEntries(siteDomain, selectedFile, 0, branch);
+    const merged = mergeNewest(entries, page.entries);
+    entries = merged.entries;
+    if (merged.replaced) {
+      more = page.more;
+      expandedIdx = -1;
+    }
   }
 
   // Re-fetch the file list whenever the active site or branch changes.
@@ -162,27 +194,6 @@
       />
     {/if}
 
-    <div class="flex items-center rounded-sm border border-gray-200 dark:border-lerd-border overflow-hidden shrink-0">
-      <button
-        onclick={() => {
-          showAll = false;
-          loadEntries();
-        }}
-        class="text-[11px] px-2 py-1 transition-colors {!showAll
-          ? 'bg-orange-500 text-white'
-          : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'}"
-      >{m.sites_appLogs_latest()}</button>
-      <button
-        onclick={() => {
-          showAll = true;
-          loadEntries();
-        }}
-        class="text-[11px] px-2 py-1 transition-colors border-l border-gray-200 dark:border-lerd-border {showAll
-          ? 'bg-orange-500 text-white'
-          : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'}"
-      >{m.sites_appLogs_all()}</button>
-    </div>
-
     {#if loading}
       <svg class="animate-spin w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
@@ -198,42 +209,40 @@
         type="text"
         bind:value={search}
         placeholder={m.sites_appLogs_search()}
-        class="w-full text-xs bg-transparent border border-gray-200 dark:border-lerd-border rounded-sm pl-7 pr-2 py-1 text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-600 hover:border-gray-300 dark:hover:border-lerd-muted focus:outline-hidden focus:border-orange-500/50 transition-colors"
+        class="w-full text-xs bg-transparent border border-gray-200 dark:border-lerd-border rounded-sm pl-7 pr-2 py-1 text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-600 hover:border-gray-300 dark:hover:border-lerd-muted focus:outline-hidden focus:border-lerd-red/50 transition-colors"
       />
     </div>
 
-    <button
-      onclick={loadEntries}
-      class="shrink-0 flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 border border-gray-200 dark:border-lerd-border hover:border-gray-300 dark:hover:border-lerd-muted rounded-sm px-2 py-1 transition-colors"
-    >
-      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <ActionButton title={m.common_refresh()} onclick={loadEntries}>
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
       </svg>
-      {m.common_refresh()}
-    </button>
+    </ActionButton>
 
     {#if files.length > 0}
-      <button
-        onclick={() => (confirmOpen = true)}
+      <ActionButton
+        title={`${m.sites_appLogs_clear()} · ${fmtBytes(totalBytes)}`}
+        loading={clearing}
         disabled={clearing}
-        title={m.sites_appLogs_clearTitle()}
-        class="shrink-0 flex items-center gap-1 text-xs rounded-sm px-2 py-1 border transition-colors disabled:opacity-50 border-gray-200 dark:border-lerd-border text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:border-red-300"
+        onclick={() => (confirmOpen = true)}
       >
-        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
         </svg>
-        {clearing ? m.sites_appLogs_clearing() : `${m.sites_appLogs_clear()} · ${fmtBytes(totalBytes)}`}
-      </button>
+      </ActionButton>
     {/if}
   </div>
 
-  <div bind:this={scrollEl} class="flex-1 overflow-y-auto">
+  <div bind:this={scrollEl} onscroll={onScroll} class="flex-1 overflow-y-auto">
     {#if files.length === 0 && !loading}
       <div class="text-gray-400 dark:text-gray-600 italic text-xs p-4">
         {branch ? m.sites_appLogs_noFilesWorktree() : m.sites_appLogs_noFiles()}
       </div>
     {:else if reversed.length === 0 && !loading}
       <div class="text-gray-400 dark:text-gray-600 italic text-xs p-4">{m.sites_appLogs_empty()}</div>
+    {/if}
+    {#if loadingOlder}
+      <LoadingRow />
     {/if}
     {#each reversed as entry, i (i + ':' + (entry.date ?? '') + ':' + (entry.message ?? '').slice(0, 40))}
       <div class="border-b border-gray-100 dark:border-lerd-border/50">

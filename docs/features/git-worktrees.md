@@ -220,6 +220,8 @@ On a site running its own per-site image (`runtime: fpm-custom` or a port-bearin
 
 By default every worktree shares the parent site's database. The dashboard's **Isolated DB** toggle and the `lerd worktree add` prompt opt the worktree into its own schema, named `<parent_db>_<sanitized_branch>` in the same service the parent uses (mysql, mariadb, or postgres). The worktree's env file is rewritten so its database-name key points at the new schema, and `db_isolated: true` is recorded in the worktree's untracked `.lerd.local.yaml`, which lerd adds to the site's `.git/info/exclude`, so the choice stays with this checkout instead of dirtying the branch and following it into main when it merges. The env file, its format and the host/name keys are resolved from the framework definition, so Laravel's `DB_DATABASE` in `.env` and Magento's `db.connection.default.dbname` in `app/etc/env.php` are rewritten the same way.
 
+A worker you start by hand inside a worktree (`lerd worker start`, `lerd queue:start`, `lerd stripe:listen`) is recorded the same way, in the worktree's `.lerd.local.yaml` rather than its committed `.lerd.yaml`, so starting one never leaves the tree modified and `lerd worktree remove` is not refused over it.
+
 A `db_isolated: true` an older lerd committed to a branch's `.lerd.yaml` still isolates that worktree, and sharing it again writes `db_isolated: false` to the local file, which wins over the committed value. See [Local overrides](../configuration.md#local-overrides-lerdlocalyaml).
 
 When isolation is enabled lerd asks where the new schema should start from:

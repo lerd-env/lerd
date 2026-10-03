@@ -386,7 +386,7 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 	// when persist is false (auto-start path) so worktree workers don't
 	// appear as user-opted entries.
 	if persist {
-		_ = config.AddProjectWorker(sitePath, workerName)
+		recordProjectWorker(sitePath, workerName)
 	}
 
 	return nil
@@ -584,7 +584,7 @@ func workerNames(siteName, sitePath, workerName string) (unit, display string) {
 		return unit, display
 	}
 	s, _ := config.FindSite(siteName)
-	if s == nil || s.Path == "" || s.Path == sitePath {
+	if s == nil || s.Path == "" || config.SamePath(s.Path, sitePath) {
 		return unit, display
 	}
 	wtBase := filepath.Base(sitePath)
@@ -875,4 +875,17 @@ func findOrphanedWorkers(siteName string, known map[string]bool) []string {
 		}
 	}
 	return orphans
+}
+
+// recordProjectWorker keeps a started worker so lerd install can restore it. A
+// worktree records it in its git-excluded local override: the committed
+// .lerd.yaml is the branch's, and git refuses to remove a tree it modified.
+func recordProjectWorker(dir, name string) {
+	if parent, ok := config.ParentSiteForWorktreeDir(dir); ok {
+		if err := ensureLocalOverrideExcluded(parent.Path); err == nil {
+			_ = config.AddWorktreeWorker(dir, name)
+		}
+		return
+	}
+	_ = config.AddProjectWorker(dir, name)
 }

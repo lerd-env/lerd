@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lerd v1.36.0 — dev digest</title>
+<meta name="description" content="Engineering digest for lerd v1.36.0: a dashboard that wears the desktop it runs on, a Debug window that hears logs, exceptions and messages, and worktrees that pick their own database.">
+<meta name="theme-color" content="#ff4538">
+<link rel="canonical" href="https://lerd.sh/digest/v1.36.0.html">
+<meta property="og:type" content="article">
+<meta property="article:published_time" content="2026-10-01T00:00:00Z">
+<meta property="article:section" content="Release notes">
+<meta property="og:site_name" content="Lerd">
+<meta property="og:locale" content="en_US">
+<meta property="og:title" content="lerd v1.36.0 — dev digest">
+<meta property="og:description" content="Engineering digest for lerd v1.36.0: a dashboard that wears the desktop it runs on, a Debug window that hears logs, exceptions and messages, and worktrees that pick their own database.">
+<meta property="og:url" content="https://lerd.sh/digest/v1.36.0.html">
+<meta property="og:image" content="https://lerd.sh/assets/digest/v1.36.0.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="Lerd v1.36.0 dev digest">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="lerd v1.36.0 — dev digest">
+<meta name="twitter:description" content="A dashboard that wears the desktop it runs on, a Debug window that hears logs, exceptions and messages, and worktrees that pick their own database.">
+<meta name="twitter:image" content="https://lerd.sh/assets/digest/v1.36.0.png">
+<meta name="twitter:image:alt" content="Lerd v1.36.0 dev digest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0b;
+    --bg-2: #0f0f11;
+    --panel: #131316;
+    --panel-2: #18181c;
+    --line: #232329;
+    --line-2: #2e2e36;
+    --text: #ece9e2;
+    --muted: #9b978e;
+    --dim: #67645c;
+    --red: #ff4538;
+    --red-soft: rgba(255,69,56,0.12);
+    --amber: #eda33b;
+    --amber-soft: rgba(237,163,59,0.12);
+    --green: #3dd68c;
+    --green-soft: rgba(61,214,140,0.11);
+    --blue: #6cb2ff;
+    --blue-soft: rgba(108,178,255,0.11);
+    --violet: #b394ff;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+    --sans: "Archivo", system-ui, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--red); color: #0a0a0b; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  body::after {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 999;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2a2a30; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a3a42; }
+
+  code, .mono { font-family: var(--mono); }
+  a { color: inherit; }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 clamp(20px, 4vw, 48px); }
+
+  /* ---------- brand bar ---------- */
+  .brandbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px clamp(20px, 4vw, 48px);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+  .brand-mark {
+    width: 30px; height: 30px;
+    background: var(--red); border-radius: 7px;
+    display: grid; place-items: center;
+    font-family: var(--mono); font-weight: 800; font-size: 17px; color: #fff;
+    box-shadow: 0 0 22px rgba(255,69,56,0.35);
+  }
+  .brand-name { font-weight: 700; font-size: 16px; }
+  .brand-path { font-family: var(--mono); font-size: 13px; color: var(--dim); }
+  .brand-path b { color: var(--red); font-weight: 400; }
+  .gh-link {
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 13px; transition: 0.2s;
+  }
+  .gh-link:hover { border-color: var(--red); color: var(--text); }
+
+  /* ---------- hero ---------- */
+  .hero {
+    padding: clamp(48px, 7vw, 88px) 0 clamp(36px, 5vw, 56px);
+    border-bottom: 1px solid var(--line);
+    background:
+      radial-gradient(ellipse 55% 60% at 12% 0%, rgba(255,69,56,0.09), transparent 60%),
+      radial-gradient(ellipse 40% 40% at 95% 90%, rgba(237,163,59,0.04), transparent 60%);
+  }
+  .hero-kicker {
+    font-family: var(--mono); font-size: 13px; color: var(--muted);
+    display: flex; align-items: center; gap: 10px; margin-bottom: 22px;
+  }
+  .hero-kicker .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); box-shadow: 0 0 12px var(--red); animation: blink 1.6s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0.25; } }
+  .hero-kicker em { color: var(--amber); font-style: normal; }
+
+  .hero h1 {
+    font-stretch: 125%; font-weight: 900;
+    font-size: clamp(56px, 10vw, 118px);
+    line-height: 0.95; letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+  .hero h1 em { font-style: normal; color: var(--red); text-shadow: 0 0 38px rgba(255,69,56,0.45); }
+  .hero .sub {
+    font-stretch: 115%; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.06em; font-size: clamp(14px, 1.8vw, 19px);
+    color: var(--dim); margin-top: 8px;
+  }
+  .hero .sub b { color: var(--text); }
+  .hero .lede {
+    margin-top: 24px; max-width: 700px;
+    color: var(--muted); font-size: 16px; line-height: 1.7;
+  }
+  .hero .lede b { color: var(--text); font-weight: 600; }
+
+  .stats {
+    margin-top: 32px;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    border: 1px solid var(--line); border-radius: 12px;
+    overflow: hidden; background: var(--bg-2);
+  }
+  .stat { padding: 16px 18px; border-right: 1px solid var(--line); }
+  .stat:last-child { border-right: 0; }
+  .stat .n { font-stretch: 120%; font-weight: 900; font-size: clamp(20px, 2.4vw, 28px); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .stat .l { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin-top: 2px; }
+  .stat.red .n { color: var(--red); }
+  .stat.green .n { color: var(--green); }
+  .stat.amber .n { color: var(--amber); }
+
+  .diffbar { margin-top: 18px; }
+  .diffbar .bar { display: flex; height: 10px; border-radius: 99px; overflow: hidden; border: 1px solid var(--line); }
+  .diffbar .bar i { display: block; height: 100%; }
+  .diffbar .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .diffbar .legend s { text-decoration: none; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+  /* ---------- pill nav ---------- */
+  .pillnav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(10,10,11,0.85);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+    padding: 12px clamp(20px, 4vw, 48px);
+    display: flex; gap: 8px; overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .pillnav::-webkit-scrollbar { display: none; }
+  .pillnav a {
+    font-family: var(--mono); font-size: 12px; white-space: nowrap;
+    color: var(--muted); text-decoration: none;
+    border: 1px solid var(--line); border-radius: 99px;
+    padding: 6px 15px; transition: 0.2s;
+  }
+  .pillnav a i { font-style: normal; color: var(--dim); margin-right: 6px; }
+  .pillnav a:hover { color: var(--text); border-color: var(--line-2); }
+  .pillnav a.active { color: var(--red); border-color: rgba(255,69,56,0.5); background: var(--red-soft); }
+  .pillnav a.active i { color: var(--red); }
+
+  /* ---------- breaking ---------- */
+  .breaking {
+    margin: 36px 0 0;
+    border: 1px solid rgba(255,69,56,0.35); border-radius: 12px;
+    overflow: hidden;
+    background: linear-gradient(180deg, rgba(255,69,56,0.06), rgba(255,69,56,0.01) 60%);
+  }
+  .breaking-head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 13px 20px; border-bottom: 1px solid rgba(255,69,56,0.25);
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.16em; font-weight: 700; color: var(--red);
+  }
+  .breaking-head .sig { animation: blink 1.4s steps(1) infinite; }
+  .breaking-body { padding: 18px 20px 20px; color: var(--muted); font-size: 14px; }
+  .breaking-body b { color: var(--text); }
+  .breaking-body code { font-size: 12.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); padding: 1px 7px; border-radius: 5px; color: var(--amber); }
+
+  /* ---------- sections ---------- */
+  section.chapter { padding: clamp(48px, 6vw, 76px) 0 0; }
+  .ch-head { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+  .ch-num {
+    font-family: var(--mono); font-size: 13px; color: var(--red);
+    border: 1px solid rgba(255,69,56,0.4); border-radius: 6px; padding: 3px 9px;
+  }
+  .ch-head h2 {
+    font-stretch: 122%; font-weight: 900; text-transform: uppercase;
+    letter-spacing: -0.015em; font-size: clamp(26px, 4vw, 40px); line-height: 1.05;
+  }
+  .ch-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em;
+    padding: 3px 10px; border-radius: 99px;
+  }
+  .pill.feat { color: var(--green); background: var(--green-soft); border: 1px solid rgba(61,214,140,0.35); }
+  .pill.fix { color: var(--blue); background: var(--blue-soft); border: 1px solid rgba(108,178,255,0.35); }
+  .pill.brk { color: var(--red); background: var(--red-soft); border: 1px solid rgba(255,69,56,0.4); }
+  .pill.sec { color: var(--red); background: var(--red-soft); border: 1px solid rgba(255,69,56,0.4); }
+  .pill.ref { color: var(--amber); background: var(--amber-soft); border: 1px solid rgba(237,163,59,0.35); }
+  .pill.ui { color: var(--violet); background: rgba(179,148,255,0.1); border: 1px solid rgba(179,148,255,0.3); }
+
+  .ch-intro { margin-top: 18px; max-width: 760px; color: var(--muted); font-size: 15px; line-height: 1.7; }
+  .ch-intro b { color: var(--text); font-weight: 600; }
+  .ch-intro code { font-family: var(--mono); font-size: 12.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); padding: 1px 6px; border-radius: 4px; color: var(--amber); }
+
+  /* ---------- flow diagrams ---------- */
+  .flow-wrap { margin-top: 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-2); overflow: hidden; }
+  .flow-title {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--dim); padding: 12px 18px; border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; gap: 12px;
+  }
+  .flow { display: flex; align-items: stretch; padding: 24px 18px; overflow-x: auto; }
+  .fnode {
+    flex: 0 0 auto;
+    border: 1px solid var(--line-2); border-radius: 10px;
+    background: var(--panel); padding: 12px 16px;
+    min-width: 132px; max-width: 200px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .fnode .t { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); margin-bottom: 4px; }
+  .fnode .v { font-weight: 700; font-size: 13.5px; line-height: 1.35; }
+  .fnode .d { font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+  .fnode.hot { border-color: rgba(255,69,56,0.55); box-shadow: 0 0 22px rgba(255,69,56,0.12); }
+  .fnode.hot .t { color: var(--red); }
+  .fnode.ok { border-color: rgba(61,214,140,0.45); }
+  .fnode.ok .t { color: var(--green); }
+  .fnode.warn { border-color: rgba(237,163,59,0.45); }
+  .fnode.warn .t { color: var(--amber); }
+  .farr {
+    flex: 0 0 auto; display: flex; align-items: center;
+    font-family: var(--mono); font-size: 12px; color: var(--dim);
+    padding: 0 10px; white-space: nowrap;
+  }
+  .flow-note {
+    padding: 12px 18px; border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 11.5px; color: var(--dim); line-height: 1.7;
+  }
+  .flow-note em { color: var(--amber); font-style: normal; }
+  .flow-note b { color: var(--green); font-weight: 600; }
+  .flow-note s { color: var(--red); text-decoration: none; }
+
+  /* vertical pipeline */
+  .pipe { padding: 20px 18px; }
+  .pipe-step { display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 0 16px; position: relative; padding-bottom: 18px; }
+  .pipe-step:last-child { padding-bottom: 4px; }
+  .pipe-step::before { content: ""; position: absolute; left: 16px; top: 30px; bottom: 0; width: 1px; background: var(--line-2); }
+  .pipe-step:last-child::before { display: none; }
+  .pipe-n {
+    width: 33px; height: 33px; border-radius: 50%;
+    border: 1px solid var(--line-2); background: var(--panel);
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--muted);
+    position: relative; z-index: 1;
+  }
+  .pipe-step.hot .pipe-n { border-color: var(--red); color: var(--red); }
+  .pipe-b { padding-top: 4px; }
+  .pipe-b h5 { font-size: 14px; font-weight: 700; }
+  .pipe-b p { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.6; }
+  .pipe-b p code { color: var(--amber); }
+
+  /* ---------- cards ---------- */
+  .cards { margin-top: 26px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .cards.three { grid-template-columns: repeat(3, 1fr); }
+  .cards.one { grid-template-columns: 1fr; }
+  .card {
+    border: 1px solid var(--line); border-radius: 12px;
+    background: var(--panel); padding: 20px;
+    transition: border-color 0.25s, transform 0.25s;
+    min-width: 0;
+  }
+  .card:hover { border-color: var(--line-2); transform: translateY(-2px); }
+  .card .card-pills { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .card h4 { font-size: 15.5px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.4; }
+  .card h4 .pr, .card p .pr, .ch-intro .pr {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500; color: var(--dim);
+    text-decoration: none; border: 1px solid var(--line); border-radius: 5px;
+    padding: 1px 6px; margin-left: 6px; vertical-align: 2px; transition: 0.2s;
+  }
+  .card h4 .pr:hover, .card p .pr:hover, .ch-intro .pr:hover { color: var(--red); border-color: rgba(255,69,56,0.5); }
+  .card p { color: var(--muted); font-size: 13px; line-height: 1.65; margin-top: 7px; }
+  .card p code, .card li code { font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); padding: 0.5px 5px; border-radius: 4px; color: var(--amber); }
+  .card p b { color: var(--text); font-weight: 600; }
+  .card ul { margin-top: 8px; padding-left: 0; list-style: none; }
+  .card li { color: var(--muted); font-size: 12.5px; line-height: 1.6; padding-left: 16px; position: relative; margin-top: 4px; }
+  .card li::before { content: "▸"; position: absolute; left: 0; color: var(--red); font-size: 10px; top: 3px; }
+  .card .file { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--dim); margin-top: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .file::before { content: "◇ "; color: var(--line-2); }
+
+  /* ---------- code blocks ---------- */
+  .code {
+    margin-top: 16px;
+    background: #0c0c0e; border: 1px solid var(--line); border-radius: 10px;
+    overflow: hidden;
+  }
+  .code-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 14px; border-bottom: 1px solid var(--line);
+    font-family: var(--mono); font-size: 11px; color: var(--dim);
+    background: var(--panel);
+  }
+  .code-bar .lang { color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 7px; font-size: 10px; }
+  .code pre {
+    padding: 14px 16px; overflow-x: auto;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.75;
+    color: #c9c5bd;
+  }
+  .code pre .k { color: var(--red); }
+  .code pre .s { color: var(--green); }
+  .code pre .c { color: var(--dim); font-style: italic; }
+  .code pre .f { color: var(--amber); }
+  .code pre .t { color: var(--blue); }
+  .code pre .del { color: #e2766c; background: rgba(255,69,56,0.08); display: inline-block; width: 100%; }
+  .code pre .add { color: #6fdca6; background: rgba(61,214,140,0.08); display: inline-block; width: 100%; }
+
+  /* ---------- tables ---------- */
+  .tbl-wrap { margin-top: 16px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 560px; }
+  thead th {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--dim); text-align: left; padding: 11px 16px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+    font-weight: 600;
+  }
+  tbody td { padding: 11px 16px; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--muted); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: rgba(255,255,255,0.015); }
+  tbody td b { color: var(--text); font-weight: 600; }
+  tbody td code { font-family: var(--mono); font-size: 11.5px; color: var(--amber); }
+  td .mini { font-family: var(--mono); font-size: 10.5px; color: var(--dim); }
+
+  /* group chips for MCP */
+  .groups { margin-top: 22px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .group-chip {
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+    padding: 13px 14px; transition: border-color 0.2s;
+  }
+  .group-chip:hover { border-color: rgba(255,69,56,0.45); }
+  .group-chip .g { font-family: var(--mono); font-weight: 700; font-size: 13.5px; color: var(--red); }
+  .group-chip .a { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-top: 5px; line-height: 1.6; word-break: break-word; }
+
+  /* before/after MCP visual */
+  .ba { display: grid; grid-template-columns: 1fr auto 1.2fr; gap: 0; align-items: center; padding: 26px 18px; }
+  .ba-col { min-width: 0; }
+  .ba-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); margin-bottom: 12px; }
+  .ba-flat { position: relative; display: flex; flex-wrap: wrap; gap: 4px; max-height: 150px; overflow: hidden; }
+  .ba-flat i {
+    font-family: var(--mono); font-size: 9px; color: var(--dim);
+    border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; font-style: normal;
+  }
+  .ba-flat::after {
+    content: "× ~80 flat tools · manifest ~32 KB · reshapes mid-session";
+    position: absolute; inset: auto 0 0 0;
+    padding: 38px 0 2px;
+    background: linear-gradient(transparent, var(--bg-2) 70%);
+    font-family: var(--mono); font-size: 10.5px; color: var(--red);
+  }
+  .ba-arrow { font-family: var(--mono); color: var(--dim); padding: 0 22px; font-size: 14px; white-space: nowrap; }
+  .ba-after { display: flex; flex-direction: column; gap: 8px; }
+  .ba-after .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ba-after .gten {
+    font-family: var(--mono); font-size: 10.5px; color: var(--text);
+    border: 1px solid rgba(255,69,56,0.4); background: var(--red-soft);
+    border-radius: 5px; padding: 2px 8px;
+  }
+  .ba-after .dis {
+    font-family: var(--mono); font-size: 11px; color: var(--amber);
+    border: 1px dashed rgba(237,163,59,0.5); border-radius: 8px; padding: 8px 14px;
+  }
+  .ba-after .han { font-family: var(--mono); font-size: 11px; color: var(--green); }
+
+  .footnote { margin-top: 14px; font-family: var(--mono); font-size: 11.5px; color: var(--dim); line-height: 1.7; }
+  .footnote em { color: var(--amber); font-style: normal; }
+
+  /* ---------- footer ---------- */
+  footer {
+    margin-top: clamp(56px, 8vw, 96px);
+    border-top: 1px solid var(--line);
+    padding: clamp(44px, 6vw, 72px) clamp(20px, 4vw, 48px);
+    background: radial-gradient(ellipse 50% 60% at 88% 100%, rgba(255,69,56,0.07), transparent 60%);
+  }
+  .foot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; max-width: 1180px; margin: 0 auto; align-items: start; }
+  footer h2 { font-stretch: 125%; font-weight: 900; font-size: clamp(26px, 3.4vw, 40px); text-transform: uppercase; line-height: 1; letter-spacing: -0.02em; }
+  footer h2 span { color: var(--red); }
+  footer .fn { margin-top: 14px; color: var(--muted); font-size: 14px; max-width: 430px; }
+  footer .fn code { font-family: var(--mono); font-size: 12px; color: var(--amber); background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+  .term { background: #0c0c0e; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
+  .term-bar { display: flex; align-items: center; gap: 7px; padding: 11px 15px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .term-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line-2); }
+  .term-bar i:first-child { background: var(--red); }
+  .term-bar span { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .term-body { padding: 18px 20px; font-family: var(--mono); font-size: 12.5px; line-height: 2.05; overflow-x: auto; }
+  .term-body div { white-space: pre; }
+  .term-body .c { color: var(--dim); }
+  .term-body .p { color: var(--red); }
+  .term-body .out { color: var(--green); }
+  .foot-end { max-width: 1180px; margin: 48px auto 0; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+  .foot-end a { color: var(--muted); text-decoration: none; }
+  .foot-end a:hover { color: var(--red); }
+
+  /* reveal */
+  .fx { opacity: 0; transform: translateY(18px); transition: opacity 0.7s cubic-bezier(0.2,0.7,0.2,1), transform 0.7s cubic-bezier(0.2,0.7,0.2,1); }
+  .fx.in { opacity: 1; transform: none; }
+  .rise { opacity: 0; transform: translateY(14px); animation: rise 0.8s cubic-bezier(0.2,0.7,0.2,1) forwards; }
+  .d1 { animation-delay: 0.05s; } .d2 { animation-delay: 0.16s; } .d3 { animation-delay: 0.28s; } .d4 { animation-delay: 0.4s; } .d5 { animation-delay: 0.52s; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+
+  @media (max-width: 880px) {
+    .stats { grid-template-columns: repeat(3, 1fr); }
+    .stat:nth-child(3) { border-right: 0; }
+    .stat:nth-child(n+4) { border-top: 1px solid var(--line); }
+    .cards, .cards.three { grid-template-columns: 1fr; }
+    .groups { grid-template-columns: repeat(2, 1fr); }
+    .ba { grid-template-columns: 1fr; gap: 18px; }
+    .ba-arrow { padding: 0; transform: rotate(90deg); width: fit-content; }
+    .foot-grid { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    .fx, .rise { opacity: 1; transform: none; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "lerd v1.36.0 \u2014 dev digest",
+  "description": "Engineering digest for lerd v1.36.0: a dashboard that wears the desktop it runs on, a Debug window that hears logs, exceptions and messages, and worktrees that pick their own database.",
+  "image": "https://lerd.sh/assets/digest/v1.36.0.png",
+  "datePublished": "2026-10-01",
+  "dateModified": "2026-10-01",
+  "inLanguage": "en-US",
+  "author": { "@type": "Organization", "name": "Lerd", "url": "https://github.com/lerd-env" },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Lerd",
+    "url": "https://lerd.sh",
+    "logo": { "@type": "ImageObject", "url": "https://lerd.sh/assets/logo.svg" }
+  },
+  "mainEntityOfPage": { "@type": "WebPage", "@id": "https://lerd.sh/digest/v1.36.0.html" },
+  "about": {
+    "@type": "SoftwareApplication",
+    "name": "Lerd",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Linux, macOS",
+    "softwareVersion": "1.36.0"
+  }
+}
+</script>
+</head>
+<body>
+<header class="brandbar">
+  <a class="brand" href="https://github.com/lerd-env/lerd">
+    <span class="brand-mark">L</span>
+    <span><span class="brand-name">lerd</span> <span class="brand-path">lerd-env/<b>lerd</b></span></span>
+  </a>
+  <a class="gh-link" href="https://github.com/lerd-env/lerd/compare/v1.35.0...v1.36.0">v1.35.0…v1.36.0 ↗</a>
+</header>
+
+<nav class="pillnav">
+  <a href="#desktop"><i>01</i> Desktop</a>
+  <a href="#debug"><i>02</i> Debug</a>
+  <a href="#worktrees"><i>03</i> Worktrees</a>
+  <a href="#store"><i>04</i> Store</a>
+  <a href="#projects"><i>05</i> Projects</a>
+  <a href="#fixes"><i>06</i> Fixes</a>
+</nav>
+
+<section class="hero"><div class="wrap">
+  <div class="hero-kicker rise d1"><span class="dot"></span> ENGINEERING DIGEST <em>· 2026-09-16 → 2026-10-01</em></div>
+  <h1 class="rise d2">v1.<em>36</em>.0</h1>
+  <div class="sub rise d2">A DASHBOARD THAT LIVES ON YOUR DESKTOP · <b>and a Debug window that hears the rest of the app</b></div>
+  <p class="lede rise d3">Omarchy, Plasma, GNOME and macOS all publish colours the user picked on purpose, so the dashboard <b>offers the desktop as a theme of its own</b> and repaints every window when it changes, and the admin dashboards it embeds stop wearing their own greys inside lerd's frame. The Debug window learned <b>logs, exceptions and the messages a site sends that are not mail</b>, each declared in the store against the package that owns it. Worktrees <b>pick their own database</b> from their migrations, and the store learned to change shape without breaking a binary already installed.</p>
+
+  <div class="stats rise d4">
+    <div class="stat"><div class="n">114</div><div class="l">commits</div></div>
+    <div class="stat"><div class="n">114</div><div class="l">merged PRs</div></div>
+    <div class="stat"><div class="n">843</div><div class="l">files</div></div>
+    <div class="stat green"><div class="n">+35,838</div><div class="l">insertions</div></div>
+    <div class="stat red"><div class="n">−3,701</div><div class="l">deletions</div></div>
+    <div class="stat amber"><div class="n">4</div><div class="l">contributors</div></div>
+  </div>
+
+  <div class="diffbar rise d5">
+    <div class="bar">
+      <i style="width:27%;background:var(--amber)"></i>
+      <i style="width:17%;background:var(--red)"></i>
+      <i style="width:10%;background:var(--green)"></i>
+      <i style="width:9%;background:var(--violet)"></i>
+      <i style="width:7%;background:var(--blue)"></i>
+      <i style="width:30%;background:var(--line-2)"></i>
+    </div>
+    <div class="legend">
+      <span><s style="background:var(--amber)"></s>web UI 27%</span>
+      <span><s style="background:var(--red)"></s>cli 17%</span>
+      <span><s style="background:var(--green)"></s>config 10%</span>
+      <span><s style="background:var(--violet)"></s>podman 9%</span>
+      <span><s style="background:var(--blue)"></s>tests 7%</span>
+      <span><s style="background:var(--line-2)"></s>rest 30%</span>
+    </div>
+  </div>
+</div></section>
+
+<!-- ============ 01 DESKTOP ============ -->
+<section id="desktop" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">01</span>
+    <h2>Desktop</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div>
+  </div>
+  <p class="ch-intro">A desktop already says which colours its user wants, so the dashboard reads them rather than asking. The desktop appears in the theme picker as <b>one entry named after what it is wearing</b>, taking the place of the built-in theme that imitated it, and every open window repaints when the desktop changes. A theme chosen on purpose is never overridden. <a class="pr" href="https://github.com/lerd-env/lerd/pull/1864">#1864</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1924">#1924</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1940">#1940</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/2042">#2042</a></p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>WHERE EACH DESKTOP KEEPS ITS COLOURS</span><span>read by lerd-ui, watched for changes</span></div>
+    <div class="flow">
+      <div class="fnode ok"><div class="t">Omarchy</div><div class="v">colors.toml</div><div class="d">the active theme</div></div>
+      <div class="fnode ok"><div class="t">Plasma</div><div class="v">kdeglobals</div><div class="d">accent and scheme</div></div>
+      <div class="fnode ok"><div class="t">GNOME</div><div class="v">accent-color</div><div class="d">Yaru tones on Ubuntu</div></div>
+      <div class="fnode ok"><div class="t">macOS</div><div class="v">AppleAccentColor</div><div class="d">the system swatch</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode hot"><div class="t">dashboard</div><div class="v">one theme</div><div class="d">every open window</div></div>
+    </div>
+    <div class="flow-note"><b>A desktop publishes one accent tuned for its own surfaces</b>, so in light mode it is stepped toward black until it reads at 4.5:1 on white, and the label on every filled accent button is measured against the accent in use rather than always written in white.</div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>Asked once per install, not once per browser <a class="pr" href="https://github.com/lerd-env/lerd/pull/1978">#1978</a></h4><p>A banner suggests the desktop's theme to an install that never chose one, and the answer, use it or keep, <b>is kept in the config</b>, so the desktop app and every browser agree and nobody is asked twice.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>The embedded dashboards wear it too <a class="pr" href="https://github.com/lerd-env/lerd/pull/1875">#1875</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1845">#1845</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1960">#1960</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/2025">#2025</a></h4><p>pgAdmin, Kafbat UI and RedisInsight are asked for their own dark design and then <b>have their greys laid over lerd's</b>. phpMyAdmin, Mongo Express and RabbitMQ have none, so their stylesheets are turned around. Mailpit wears the accent through Bootstrap's own variables, and each one is handed the dashboard's language.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>Following window focus on Plasma <a class="pr" href="https://github.com/lerd-env/lerd/pull/2021">#2021</a></h4><p>Breeze draws a focused window's header in its own tone, so next to every other KDE window the dashboard looked unfocused. <b>The rail and headers lift to the scheme's header colour while the window has focus</b> and drop back when it moves away.</p></div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>A chromeless app window on Linux <a class="pr" href="https://github.com/lerd-env/lerd/pull/1938">#1938</a></h4><p><code>lerd dashboard</code>, the launcher and the tray open it as a Chromium <code>--app</code> window when the desktop app is not installed, and on Hyprland and Plasma <b>an open window is focused rather than a second one opened</b>.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Glance in place of the tray on Omarchy <a class="pr" href="https://github.com/lerd-env/lerd/pull/1944">#1944</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/2067">#2067</a></h4><p>The bar already shows lerd's state through the Lerd Glance plugin, so a fresh install on Omarchy turns the tray off and adds the plugin. <b><code>lerd uninstall</code> takes it off the bar again.</b></p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>Get started, then out of the way <a class="pr" href="https://github.com/lerd-env/lerd/pull/1982">#1982</a></h4><p>A fresh install opens on a card whose steps <b>tick themselves off from state the dashboard already reads</b>: a first site, a running service, notifications, the desktop's theme, starting with the dashboard and idle-suspend. It hands its slot back when the last one ticks.</p></div>
+  </div>
+
+  <div class="cards one">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>Driven without a mouse, or without sight <a class="pr" href="https://github.com/lerd-env/lerd/pull/2027">#2027</a></h4><p>Dialogs take focus, keep Tab inside and hand it back on close, a Skip to content button is the first stop, toggles are switches that say whether they are on, detail tabs move with the arrow keys, and every view has a heading and a title naming what is open. <b>Secondary text and the accent as link text reach WCAG AA on every theme</b>, derived per theme rather than hand tuned. The same pass moved the status banner into the header as a pill, gave each worktree tab its git state the way a shell prompt shows it <a class="pr" href="https://github.com/lerd-env/lerd/pull/1949">#1949</a>, offers to initialise git on a site that has no repository <a class="pr" href="https://github.com/lerd-env/lerd/pull/1988">#1988</a>, and lets the System page register lerd with AI assistants from a switch <a class="pr" href="https://github.com/lerd-env/lerd/pull/2016">#2016</a>.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ 02 DEBUG ============ -->
+<section id="debug" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">02</span>
+    <h2>Debug</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span></div>
+  </div>
+  <p class="ch-intro">The Debug window's wire format has carried log, exception and message kinds since it was built, <b>with nothing ever emitting them</b>. Each now has a source declared in the store against the composer package that owns it, so the Go side knows no framework by name and a new reporter is a YAML file away.</p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>WHAT AN APP SAYS, AND WHERE IT LANDS</span><span>observed on the way out, never intercepted</span></div>
+    <div class="flow">
+      <div class="fnode ok"><div class="t">ray()</div><div class="v">Dumps</div><div class="d">no Ray app, no licence</div></div>
+      <div class="fnode ok"><div class="t">Monolog</div><div class="v">App log</div><div class="d">grouped by request</div></div>
+      <div class="fnode ok"><div class="t">Sentry · Inspector</div><div class="v">Exceptions</div><div class="d">the line that threw</div></div>
+      <div class="fnode hot"><div class="t">SMS · Slack · notify</div><div class="v">Messages</div><div class="d">nothing catches these</div></div>
+    </div>
+    <div class="flow-note"><b>A message really leaves the machine and is really billed</b>, unlike mail, which Mailpit answers for. That is why a message raises a desktop notification even while a dashboard window has focus.</div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4><code>ray()</code> without Ray <a class="pr" href="https://github.com/lerd-env/lerd/pull/1887">#1887</a></h4><p>Inside a container <code>ray()</code> reaches no desktop app, so the value was simply lost. The payload is taken on its way out and shown <b>as the dump it wraps</b>, labelled by the kind of call.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>An App log lens <a class="pr" href="https://github.com/lerd-env/lerd/pull/1889">#1889</a></h4><p>Records come from Monolog with level, channel and context, grouped by the request that wrote them, and are taken where they are written, so <b>a line the app's handlers drop still shows</b>.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Exceptions, from either reporter <a class="pr" href="https://github.com/lerd-env/lerd/pull/1891">#1891</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1893">#1893</a></h4><p>Locally Sentry and Inspector catch everything and send it nowhere anyone looks. The report is observed, so a configured DSN still sends, and the row names <b>the line the exception was thrown from</b>, not the one that reported it.</p></div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Messages, and the lens a click opens <a class="pr" href="https://github.com/lerd-env/lerd/pull/1900">#1900</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1903">#1903</a></h4><p>Symfony Notifier covers Twilio, Vonage and Slack with one declaration, and Laravel notifications are reported on every channel but mail. <b>Clicking a notification opens the lens it is about</b> rather than whichever one the tab last showed.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Caught mail, scored <a class="pr" href="https://github.com/lerd-env/lerd/pull/1839">#1839</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/2078">#2078</a></h4><p>The SpamAssassin backend is a store preset Mailpit finds on its own, and the templates a request rendered travel on the message as <code>X-Lerd-View</code>. <b>Mailpit's page offers the preset</b> until it is installed or dismissed.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Large logs, a page at a time <a class="pr" href="https://github.com/lerd-env/lerd/pull/2064">#2064</a></h4><p>The App logs tab opens on the newest entries and fetches older ones as you scroll up, keeping your place, so <b>a log of hundreds of megabytes no longer takes the browser tab down</b>.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ 03 WORKTREES ============ -->
+<section id="worktrees" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">03</span>
+    <h2>Worktrees</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span></div>
+  </div>
+  <p class="ch-intro">A worktree's database used to be a question that a script or an assistant could not answer. A framework can now name its migrations folder, and a worktree set up with nobody to ask, from the MCP tool, a script or <code>lerd worktree setup</code>, <b>compares it with the parent checkout and decides</b>, then says which and why. At a terminal and in the dashboard the question is still yours. <a class="pr" href="https://github.com/lerd-env/lerd/pull/1969">#1969</a></p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>THE BRANCH'S MIGRATIONS AGAINST THE PARENT'S</span><span>unattended, with no database chosen</span></div>
+    <div class="flow">
+      <div class="fnode ok"><div class="t">same set</div><div class="v">share</div><div class="d">the parent's database</div></div>
+      <div class="fnode ok"><div class="t">branch adds some</div><div class="v">clone-main</div><div class="d">a copy, then migrate</div></div>
+      <div class="fnode hot"><div class="t">branch lacks some</div><div class="v">empty</div><div class="d">a new one, migrated</div></div>
+    </div>
+    <div class="flow-note"><b>A branch missing the parent's migrations is behind it</b>, and pointing it at the parent's schema would run code against tables it does not know. An explicit choice, or a required isolation, still wins.</div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>SQLite gets its own copy <a class="pr" href="https://github.com/lerd-env/lerd/pull/1936">#1936</a></h4><p>The file is gitignored, so a worktree had none while its env pointed at the same relative path. <b>The parent's file and its write-ahead log are copied in</b> before dependencies install.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Ready when the tool says so <a class="pr" href="https://github.com/lerd-env/lerd/pull/1965">#1965</a></h4><p>The MCP server points worktree work at its tool rather than plain git, and <code>add</code> finishes setup the way the dashboard does: <b>assets built, database wired, the definition's commands run</b>.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Worktrees other tools made <a class="pr" href="https://github.com/lerd-env/lerd/pull/2051">#2051</a></h4><p>A worktree created with plain <code>git worktree add</code> is finished by <code>lerd worktree setup</code> run inside it, and <b>the flag that isolates its database stays in the untracked <code>.lerd.local.yaml</code></b> rather than the committed config (#1968).</p></div>
+  </div>
+
+  <div class="code">
+    <div class="code-bar"><span>three branches, three answers, from a script</span><span class="lang">bash</span></div>
+    <pre><span class="k">lerd worktree add</span> <span class="t">../app-same same</span>
+<span class="out">Database: share, since the migrations match the parent checkout's.</span>
+
+<span class="k">lerd worktree add</span> <span class="t">../app-extra extra</span>
+<span class="out">Database: clone-main, since this branch adds migrations the parent checkout lacks (1), so it gets a copy of the parent's database to run them on.</span>
+
+<span class="k">lerd worktree add</span> <span class="t">../app-fewer fewer</span>
+<span class="out">Database: empty, since the parent checkout has migrations this branch lacks (1), so its database is ahead of this code.</span></pre>
+  </div>
+</div></section>
+
+<!-- ============ 04 STORE ============ -->
+<section id="store" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">04</span>
+    <h2>Store</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span></div>
+  </div>
+  <p class="ch-intro">Definitions reach every install within a day with no version gate, so <b>the store may only grow</b>. This cycle gave it a way to change shape anyway: a tree per definition schema, read newest first by the binaries that understand it, and left alone by those that do not.</p>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Fetched at the schema it reads <a class="pr" href="https://github.com/lerd-env/lerd/pull/1912">#1912</a></h4><p>This binary asks for its own schema's tree first and falls back to the path every older binary reads, so <b>a definition can be introduced to new binaries only</b>, the way SpamAssassin was.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>A value it cannot honour is refused <a class="pr" href="https://github.com/lerd-env/lerd/pull/1911">#1911</a></h4><p>A restart policy systemd cannot parse is silently dropped, and a schedule it cannot parse stops the timer loading. Both are checked before the unit is written, <b>naming the value and asking for an update</b>.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>An installed service sees its definition change <a class="pr" href="https://github.com/lerd-env/lerd/pull/1913">#1913</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1919">#1919</a></h4><p>A service kept what its preset said on the day it was installed. The definitions behind installed services are refreshed, so <b>a dashboard a preset gained later actually reaches it</b>.</p></div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Services suggested from what a project requires <a class="pr" href="https://github.com/lerd-env/lerd/pull/1986">#1986</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/2006">#2006</a></h4><p>A package names the services it points at, so a Drupal site requiring search_api_solr gets Solr ticked at setup and suggested on its Overview, <b>with the reason</b>. A dismissal stays with that site.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>A framework's own installer <a class="pr" href="https://github.com/lerd-env/lerd/pull/1986">#1986</a></h4><p>A definition declares its installer with the file it writes, so <b>a scaffolded Drupal site is offered its site install at setup</b>, ticked while that file is missing and gone once it exists.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Setup brings up what its workers need <a class="pr" href="https://github.com/lerd-env/lerd/pull/2076">#2076</a></h4><p>A worker that needs a service, a Redis queue say, used to fail setup with a hint to start it by hand. <b>Setup starts it first</b>, and asks only when there is a terminal to ask on.</p></div>
+  </div>
+
+  <div class="cards one">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Admin consoles that let you straight in <a class="pr" href="https://github.com/lerd-env/lerd/pull/1841">#1841</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1849">#1849</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1873">#1873</a></h4><p>An admin tool can front several engines now, which is how Adminer serves MySQL, MariaDB and PostgreSQL from one preset. The RustFS console opens <b>already logged in, on the bucket you clicked</b>, and logs in again once its session runs out rather than leaving you at its login form.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ 05 PROJECTS ============ -->
+<section id="projects" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">05</span>
+    <h2>Projects</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span></div>
+  </div>
+  <p class="ch-intro">The rest of the cycle widened what a project can be and what it can run on, <b>each one declared in the store or detected from the project</b> rather than taught to the binary by name.</p>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Node through mise <a class="pr" href="https://github.com/lerd-env/lerd/pull/1915">#1915</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/2051">#2051</a></h4><p>macOS remembers a folder grant against the signature of the binary that asked, and fnm ships unsigned, so a project under Documents was asked for again after every version bump. <b>mise is notarized, so the grant holds</b>. Versions pinned in <code>mise.toml</code> and <code>.tool-versions</code> are read too.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>ODBC in every PHP image <a class="pr" href="https://github.com/lerd-env/lerd/pull/1854">#1854</a></h4><p>unixODBC with ext-odbc and pdo_odbc ships in the images, and <code>lerd php:odbc add</code> registers a licensed vendor driver, <b>checking from inside the image that it will load</b> and naming the cause when it will not.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Vite+, Mix, Rack and Rails <a class="pr" href="https://github.com/lerd-env/lerd/pull/1971">#1971</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/2012">#2012</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/2010">#2010</a></h4><p>The Laravel starter kits start through <code>vp dev</code>, now served on the site's own domain like <code>vite</code>, and Laravel Mix gets a watcher worker. A <code>config.ru</code> is a Rack app, Rails runs through <code>bin/rails server</code>, <b>bound where nginx can reach it</b>.</p></div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>Streaming mode <a class="pr" href="https://github.com/lerd-env/lerd/pull/1950">#1950</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1953">#1953</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1973">#1973</a></h4><p>Mark a workspace private and, while the mode is on, its sites leave every snapshot the dashboard and the TUI receive. <b>On Wayland it follows screen shares through PipeWire on its own.</b> It draws nothing until enabled.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>Services on a site's Overview <a class="pr" href="https://github.com/lerd-env/lerd/pull/2044">#2044</a></h4><p>A declared service carries an X that takes it out and points the env back at the example values, and <b>the removal is remembered</b> so the next <code>lerd env</code> does not wire it back.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Unattended uninstall that keeps data <a class="pr" href="https://github.com/lerd-env/lerd/pull/2060">#2060</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/2067">#2067</a></h4><p><code>lerd uninstall --keep-data</code> removes lerd without prompts and keeps the config, the databases and the images, and <b><code>install.sh --uninstall</code> now runs it</b>, so there is one uninstall to keep right.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ 06 FIXES ============ -->
+<section id="fixes" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">06</span>
+    <h2>Fixes</h2>
+    <div class="ch-pills"><span class="pill fix">FIX</span></div>
+  </div>
+  <p class="ch-intro">The fixed list covers bugs that shipped in 1.35.0 or earlier. Regressions introduced and fixed inside this cycle never reached anyone, so they are left out. The release closed on scripted passes of the test plan across the distro guests and a Mac, <b>and the ones that cost a new user the most all sat on a first run</b>: the first link, the first start, the first download.</p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>WHAT A FIRST RUN MET</span><span>ordered by how early it bit</span></div>
+    <div class="pipe">
+      <div class="pipe-step hot"><div class="pipe-n">1</div><div class="pipe-b"><h5><code>lerd link</code> reported done before the site was served <a class="pr" href="https://github.com/lerd-env/lerd/pull/1989">#1989</a></h5><p>Linking reloads nginx and returns, and the previous generation of workers goes on serving while it drains, so <b>the request made straight after linking answered Site Not Found</b>. Every site change now waits for the old workers to retire, the way a domain change already did.</p></div></div>
+      <div class="pipe-step hot"><div class="pipe-n">2</div><div class="pipe-b"><h5>A first start stopped halfway failed every start after it <a class="pr" href="https://github.com/lerd-env/lerd/pull/2060">#2060</a></h5><p>A database initialises its data directory on the very first start, and an interrupted one left a half written directory that <b>every later start read as an existing database</b>. A first start that does not finish now moves its directory aside, so the next one initialises cleanly.</p></div></div>
+      <div class="pipe-step"><div class="pipe-n">3</div><div class="pipe-b"><h5>A service's first download said nothing <a class="pr" href="https://github.com/lerd-env/lerd/pull/2058">#2058</a></h5><p>The first start of a built-in service pulled its image silently, which on a slow line looks exactly like a hang. <b>It names the image and its size first</b>, on the CLI, the dashboard and over MCP, and fails cleanly offline.</p></div></div>
+      <div class="pipe-step"><div class="pipe-n">4</div><div class="pipe-b"><h5>A service whose port was taken while it was down could not start <a class="pr" href="https://github.com/lerd-env/lerd/pull/1920">#1920</a></h5><p>The guard that moves a service off a contested port trusted a port already in the config, so the service failed at the bind and sat in a restart loop, <b>which then read as the port's owner</b>. It probes the port it would actually publish now and moves it the way it always moved a busy default.</p></div></div>
+    </div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4><code>lerd stripe:listen</code> restart looped <a class="pr" href="https://github.com/lerd-env/lerd/pull/2060">#2060</a></h4><p>The Stripe CLI release of September 29 started refusing a bare <code>listen</code>, and lerd ran the unpinned latest image, so <b>every listener on every install went into a restart loop overnight</b>.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>A MySQL 9.7 snapshot restore emptied the database <a class="pr" href="https://github.com/lerd-env/lerd/pull/2053">#2053</a></h4><p>The dump carried GTID state and the server's own schema, which 9.7 refuses on the way back in, so <b>a restore reported success over an empty database</b>.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>A LAN share broke links and form posts <a class="pr" href="https://github.com/lerd-env/lerd/pull/2014">#2014</a></h4><p>The rewrite missed URLs escaped inside JSON and passed Secure cookies over plain http, so <b>a shared site rendered and then fell apart</b> at its first client-side link or login.</p></div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>Containers had no route out after a late network <a class="pr" href="https://github.com/lerd-env/lerd/pull/2054">#2054</a></h4><p>A network created before the host had a route left every container offline until it was rebuilt by hand. lerd notices and <b>rebuilds the container network itself</b>.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>A private package's auth was never read <a class="pr" href="https://github.com/lerd-env/lerd/pull/1993">#1993</a></h4><p><code>lerd composer</code> pointed composer at its own home, so <b>the <code>auth.json</code> a private repository needs was not where it looked</b>.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>A removed service came back <a class="pr" href="https://github.com/lerd-env/lerd/pull/2000">#2000</a></h4><p>Install restored service units from every site's <code>.lerd.yaml</code>, so <b>a service removed on purpose was back after the next start</b>. A removal is remembered now.</p></div>
+  </div>
+</div></section>
+
+<footer>
+  <div class="foot-grid">
+    <div>
+      <h2>SHIP <span>IT</span></h2>
+      <p class="fn">Install on Linux or macOS, or <code>lerd update</code> if you're already on board. Full
+      story in the <a href="https://lerd.sh/changelog" style="color:var(--amber)">changelog</a>.</p>
+    </div>
+    <div class="term">
+      <div class="term-bar"><i></i><i></i><i></i><span>bash</span></div>
+      <div class="term-body">
+        <div class="c"># Linux &amp; macOS</div>
+        <div><span class="p">$</span> curl -fsSL https://lerd.sh/install.sh | bash</div>
+        <div class="c"># macOS via Homebrew</div>
+        <div><span class="p">$</span> brew install lerd-env/lerd/lerd &amp;&amp; lerd install</div>
+        <div class="c"># already installed</div>
+        <div><span class="p">$</span> lerd update <span class="out"># → v1.36.0</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot-end">
+    <span>lerd v1.36.0 · 2026-10-01 · <a href="/digest/v1.35.0.html">← v1.35.0 digest</a></span>
+    <span><a href="https://github.com/lerd-env/lerd/compare/v1.35.0...v1.36.0">v1.35.0…v1.36.0</a> · <a href="https://lerd.sh/">docs</a> · <a href="https://github.com/lerd-env/lerd">github</a></span>
+  </div>
+</footer>
+
+<script>
+  const reveal = new IntersectionObserver((es) => {
+    es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); reveal.unobserve(e.target); } });
+  }, { threshold: 0.08 });
+  document.querySelectorAll('.fx').forEach(el => reveal.observe(el));
+  addEventListener('load', () => document.querySelectorAll('.fx').forEach(el => el.classList.add('in')));
+
+  const links = [...document.querySelectorAll('.pillnav a')];
+  const spy = new IntersectionObserver((es) => {
+    es.forEach(e => { if (e.isIntersecting) links.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#' + e.target.id)); });
+  }, { rootMargin: '-40% 0px -55% 0px' });
+  document.querySelectorAll('section.chapter').forEach(s => spy.observe(s));
+</script>
+</body>
+</html>

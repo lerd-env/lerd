@@ -115,3 +115,25 @@ func TestFPMContainerForDir_CustomContainerWithoutPHP(t *testing.T) {
 		t.Errorf("FPMContainerForDir = %q, want %q", got, want)
 	}
 }
+
+// A shell under /home on an ostree host is inside the project registered under
+// /var/home, so a command run from one of its folders finds the site root.
+func TestSiteRootForFromTheOtherHomeSpelling(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	root := tempRoot(t)
+	site := filepath.Join(root, "var-home", "u", "app")
+	if err := os.MkdirAll(filepath.Join(site, "database"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "var-home"), filepath.Join(root, "home")); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "app", Path: site, PHPVersion: "8.4"}); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := filepath.Join(root, "home", "u", "app", "database")
+	if got := SiteRootFor(dir); got != site {
+		t.Errorf("SiteRootFor(%q) = %q, want the registered %q", dir, got, site)
+	}
+}

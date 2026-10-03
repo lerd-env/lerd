@@ -178,3 +178,11 @@ func TestSchemaBases_SchemaOneIsTheLegacyPathAlone(t *testing.T) {
 		t.Errorf("got %v, want just the unprefixed path", got)
 	}
 }
+
+// The project moved to the lerd-env organisation; lerd about must not send
+// anyone to the old personal repository.
+func TestRepoURL_IsTheOrganisationRepo(t *testing.T) {
+	if got := RepoURL(); got != "https://github.com/lerd-env/lerd" {
+		t.Errorf("RepoURL() = %q, want https://github.com/lerd-env/lerd", got)
+	}
+}

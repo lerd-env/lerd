@@ -57,7 +57,7 @@ func DBName(path string) string {
 	name := filepath.Base(path)
 	if reg, err := config.LoadSites(); err == nil {
 		for _, s := range reg.Sites {
-			if s.Path == path {
+			if config.SamePath(s.Path, path) {
 				if shared, ok := grouping.SharedDBNameFor(&s); ok {
 					return shared
 				}
@@ -92,7 +92,7 @@ func ForSite(site *config.Site) Ctx {
 func ForPath(path string) Ctx {
 	if reg, err := config.LoadSites(); err == nil {
 		for i := range reg.Sites {
-			if reg.Sites[i].Path == path {
+			if config.SamePath(reg.Sites[i].Path, path) {
 				return ForSite(&reg.Sites[i])
 			}
 		}

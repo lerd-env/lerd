@@ -214,16 +214,12 @@ func ODBCDriverDirs() []string {
 // /opt inside it is an ordinary directory, so the resolved paths overlapping
 // says nothing about whether the driver can be opened.
 func odbcDriverMountDirs() []string {
-	home := filepath.Clean(homeDir())
-	homePrefix := home
-	if homePrefix != "" && !strings.HasSuffix(homePrefix, "/") {
-		homePrefix += "/"
-	}
+	home := homeDir()
 	extra := ExtraVolumePaths()
 	var dirs []string
 	for _, raw := range ODBCDriverDirs() {
 		dir := filepath.Clean(raw)
-		if home != "" && home != "." && (dir == home || strings.HasPrefix(dir, homePrefix)) {
+		if config.PathWithin(dir, home) {
 			continue
 		}
 		if withinAnyPath(dir, extra) {

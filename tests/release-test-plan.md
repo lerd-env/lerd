@@ -9,6 +9,80 @@ CI and `/lerd-preflight` cover the code. This plan covers the parts only a real
 machine can tell you about: the host installer, sudo bootstrap, systemd units,
 DNS resolvers, podman networking, and the browser.
 
+The phases that run over ssh have scripts in `tests/vm/`: `tests/vm/vm.sh run
+<guest> <phase|all>` runs them on a guest and prints one PASS or FAIL line per
+check, with the full output in `tests/vm/logs/`. Phase 10 (browser, tray) and
+phase 14 (macOS) stay by hand. See `tests/vm/guests.example` to describe your
+own machines; the scripts need no particular VM.
+
+---
+
+## Execution rules
+
+These bind whoever runs the plan, a person or an agent, and whoever writes the
+prompt that hands a lane to an agent. Nobody runs a plan of their own making.
+
+1. **Every checkbox in a lane's phases is executed, in order, as written,**
+   unless the tier rules below allow it to be carried. No
+   scoping a phase down ("the basics", "one database", "where practical"), no
+   substituting an easier check, no merging two items into one. A lane prompt
+   names the lane, the guest and the phases, and nothing that narrows them.
+2. **The only allowed skips are the ones this plan names:** a guest that cannot
+   reach the item (the matrix and guest notes say which), a platform the item is
+   not for, and the surfaces listed under "What this matrix cannot reach". Disk,
+   time, turn limits, rate limits and "not driveable over ssh" are blockers, not
+   skips: stop, fix the environment or report the blocker, and finish the item.
+   An image item run in phase 0's images step is recorded in the lane as `SKIP
+   covered in phase 0` with that step's result, not rerun.
+3. **Every checkbox gets a line in the lane's results**, carrying the item's
+   text word for word, then `PASS`, `FAIL` or `SKIP`, then the evidence (the
+   command and the real output or HTTP code) or the named reason for the skip.
+   A lane whose results have fewer lines than its phases have checkboxes is not
+   done, whatever else it reports.
+4. **Findings are reported FAILs first.** A lane summary opens with its FAIL and
+   SKIP counts. "Every site answered 200" is never the headline.
+5. **"Fixed" means the whole lane was rerun on the affected guests**, not only
+   the finding's repro. A fix touching shared code (paths, mounts, unit naming,
+   env wiring) reruns every lane that exercises that code.
+6. **The results are compared with the previous run's**, item by item. An item
+   that ran last time and did not run this time is a FAIL of the run, not a
+   difference to note. A `CARRIED` item (see tiers below) counts as run.
+
+---
+
+## Tiers: what runs every time and what can be carried
+
+Items are ordered by how likely a user is to hit them, and a run spends its time
+where people live. The first install, the upgrade and the first sites are what
+decides whether someone stays with lerd, so they are never carried.
+
+**Tier 1, every run, never carried.** Phase 1 (except the IPv6-off pass, the
+network-down pull and the macOS splash), phase 2, phase 9's detection, console
+and first 200 on the second framework, phase 12, and phase 13's uninstall,
+keep-data reinstall and 200 on a re-linked project. From the phases below them:
+phase 5's first-use start, `lerd env` wiring, `db:create`, migrations and the
+200 on a database route; phase 6's `queue:start`/`schedule:start`, `worker
+list` and self-heal; phase 7's `lerd worktree add`, its 200, bare-git add and
+`lerd worktree remove`.
+
+**Tier 2, run when their code changed.** Everything not named in tier 1 or tier
+3. Before a run, `git diff --stat <last-passing-commit> <candidate>` decides:
+an item whose phase touches a changed package (for example `internal/dns`,
+`internal/nginx` or `internal/certs` for phase 3, `internal/serviceops` for
+phase 5, `internal/ui` for phase 10) runs; when the diff leaves its packages
+alone it may be recorded as `CARRIED <commit>`, naming the candidate it last
+passed on, with that run's evidence. When in doubt it runs. Nothing is carried
+across more than one minor release.
+
+**Tier 3, once per release.** The IPv6-off pass, the network-down pull, the
+legacy 7.4 and prerelease 8.6 items, the late-NIC network rig, the reboot items,
+`lerd uninstall --force` on a second guest, and phase 14. They run on the first
+candidate of a release and are carried to its later candidates unless their
+code changed.
+
+A lane's ledger still carries one line per checkbox: `PASS`, `FAIL`, `SKIP` or
+`CARRIED <commit>`, so a carried item is visible and its age is known.
+
 ---
 
 ## The 200 rule
@@ -135,11 +209,44 @@ virsh -c qemu:///system snapshot-create-as ubuntu26.04 clean-no-lerd
 ```
 
 Then install the **previous stable** release, create a site, and snapshot again
-as `n-minus-1-with-site`. Lane B restores that one; every other lane restores
-`clean-no-lerd`.
+as `n-minus-1-with-site`. Lane B restores that one.
+
+### Images first, once per candidate
+
+Pulling and building images is most of a lane's wall time, and the candidate's
+images do not change between lanes. So they are made and checked once, up
+front, and every lane after that runs against the cache:
+
+1. On each guest, from `clean-no-lerd`, add a `mirror.gcr.io` registry mirror
+   for docker.io (every guest shares the host's NAT address, and Docker Hub
+   rate-limits it mid-run otherwise).
+2. Install the candidate, then pull or build every image the lanes use: each
+   PHP version the plan names (8.3 to 8.6, 7.4), FrankenPHP, and every service
+   preset phase 5 touches. Warm composer's and npm's caches by scaffolding one
+   Laravel and one Symfony project and deleting them.
+3. Run the image checkboxes here, where a download really happens: phase 1's
+   download disclosure, `--no-pull`, `LERD_OFFLINE` and network-down items,
+   phase 4's `php:rebuild`, `fetch`, legacy and prerelease items, and phase 5's
+   pull disclosure items. They are not repeated in the lanes.
+4. `lerd uninstall`, keeping podman's image store, and snapshot the guest as
+   `images-cached`. Every lane except B restores `images-cached`, so its fresh
+   install finds the images already there and spends no time pulling.
+
+Rebuild the `images-cached` snapshots whenever the candidate changes anything
+under `internal/podman/` that affects an image (a Containerfile, a pinned
+tool, an image tag); otherwise a new candidate reuses them.
+
+### Running the lanes
+
+Run lanes in parallel, up to the host's guest limit, one runner per lane.
+Split a lane at a phase boundary when it would outlast one runner (lane A at
+phase 6). Keep every reboot item to the end of its phase so a phase reboots
+once.
 
 - [ ] `clean-no-lerd` snapshot exists on each guest in the matrix
 - [ ] `n-minus-1-with-site` snapshot exists on the lane B guest
+- [ ] `images-cached` snapshot exists on each guest, taken from the current
+      candidate or from one whose images are unchanged
 
 ---
 
@@ -986,7 +1093,7 @@ Run last on each guest, because it is destructive.
 - [ ] The sudoers rule and the mkcert CA are removed from the system
 - [ ] `/etc/sysctl.d/99-lerd-ports.conf` is gone, and on a dracut host whose
       initramfs still carries it the run prints `sudo dracut -f`
-- [ ] On Omarchy `install.sh --uninstall` takes Lerd Glance off the bar
+- [ ] On Omarchy `lerd uninstall` takes Lerd Glance off the bar
 - [ ] On a host without systemd-resolved (omarchy) no DNS step is drawn failed
 - [ ] `~/.local/bin/lerd` is gone on a script install; on a packaged install the
       binary **stays** and the matching `apt remove` / `dnf remove` /

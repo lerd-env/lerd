@@ -196,6 +196,7 @@ type PresetMeta struct {
 	Color          string          `json:"color,omitempty"`
 	AdminFor       []string        `json:"admin_for,omitempty"`
 	AdminRank      int             `json:"admin_rank,omitempty"`
+	SuggestFor     []string        `json:"suggest_for,omitempty"`
 }
 
 // ListPresets returns the metadata for all bundled service presets, sorted by
@@ -228,6 +229,7 @@ func ListPresets() ([]PresetMeta, error) {
 			Color:          NormalizeBrandColor(p.Color),
 			AdminFor:       p.AdminFor,
 			AdminRank:      p.AdminRank,
+			SuggestFor:     p.SuggestFor,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })

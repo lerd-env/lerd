@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
@@ -74,7 +73,7 @@ func SiteRootFor(dir string) string {
 	best := ""
 	for _, s := range reg.Sites {
 		sitePath := filepath.Clean(s.Path)
-		if dir == sitePath || strings.HasPrefix(dir, sitePath+string(filepath.Separator)) {
+		if config.PathWithin(dir, sitePath) {
 			// Prefer the longest (most-specific) match.
 			if len(sitePath) > len(best) {
 				best = sitePath

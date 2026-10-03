@@ -1137,13 +1137,7 @@ func restoreSiteInfrastructure() {
 				phpVersion = cfg.PHP.DefaultVersion
 			}
 			if w == "stripe" {
-				if parentEnabled {
-					continue
-				}
-				base := siteURL(s.Path)
-				if base != "" {
-					StripeRestoreUnit(s.Name, s.Path, base) //nolint:errcheck
-				}
+				restoreStripeWorker(s)
 				continue
 			}
 			fwName := s.Framework

@@ -14,7 +14,10 @@ func removeSiteService(site *config.Site, name string) error {
 	if err := config.RemoveProjectService(site.Path, name); err != nil {
 		return err
 	}
-	return config.UnwireProjectService(site.Path, name)
+	if err := config.UnwireProjectService(site.Path, name); err != nil {
+		return err
+	}
+	return config.SetSiteServiceDeclined(site.Name, name, true)
 }
 
 // declareSiteService records in .lerd.yaml a service the site reaches only
@@ -28,5 +31,8 @@ func declareSiteService(site *config.Site, name string) error {
 	if !config.IsDefaultPreset(name) {
 		svc.Preset = name
 	}
-	return config.AddProjectServices(site.Path, []config.ProjectService{svc})
+	if err := config.AddProjectServices(site.Path, []config.ProjectService{svc}); err != nil {
+		return err
+	}
+	return config.SetSiteServiceDeclined(site.Name, name, false)
 }

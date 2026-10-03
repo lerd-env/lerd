@@ -1010,7 +1010,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	customFromYAML := make(map[string]bool, len(customs))
 	for _, svc := range customs {
 		fromYAML := lerdYAMLServices[svc.Name] || extServices[svc.Name]
-		if !fromYAML && !customServiceDetected(svc, cwd, envMap) {
+		if !fromYAML && (site.DeclinesService(svc.Name) || !customServiceDetected(svc, cwd, envMap)) {
 			continue
 		}
 		customFromYAML[svc.Name] = fromYAML
@@ -1026,7 +1026,9 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		// the env file still says DB_CONNECTION=sqlite, so detection misses,
 		// but the user picked mysql in the wizard.
 		for svc, def := range fw.Env.Services {
-			detectedFromEnv := frameworkServiceDetected(def, envMap)
+			// A service taken off the site keeps its keys at the example values,
+			// which still match detection; only .lerd.yaml brings it back.
+			detectedFromEnv := frameworkServiceDetected(def, envMap) && !site.DeclinesService(svc)
 			pickedFromYAML := lerdYAMLServices[svc] || extServices[svc]
 
 			// A drop-in has taken this role over. The custom-service loop below wires
@@ -1113,7 +1115,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		// credentials.
 		for _, svc := range knownServices() {
 			detector, ok := serviceDetectors[svc]
-			detectedFromEnv := ok && detector(envMap)
+			detectedFromEnv := ok && detector(envMap) && !site.DeclinesService(svc)
 			pickedFromYAML := lerdYAMLServices[svc] || extServices[svc]
 
 			if !shouldApplyService(svc, detectedFromEnv, pickedFromYAML, userPickedDB, valkeyPicked) {
@@ -1683,7 +1685,7 @@ func siteURL(path string) string {
 		return ""
 	}
 	for _, s := range reg.Sites {
-		if s.Path == path {
+		if config.SamePath(s.Path, path) {
 			scheme := "http"
 			if s.Secured {
 				scheme = "https"

@@ -187,11 +187,11 @@ After=network.target
 Type=simple
 Restart=on-failure
 RestartSec=5
-ExecStart=%s run --rm --replace --name %s --network host %s listen --api-key %s --forward-to %s --skip-verify
+ExecStart=%s
 
 [Install]
 WantedBy=default.target
-`, siteName, podman.PodmanBin(), containerName, podman.StripeCLIImage, apiKey, forwardTo)
+`, siteName, podman.StripeListenExecStart(containerName, apiKey, forwardTo))
 
 	changed, err := services.Mgr.WriteServiceUnitIfChanged(unitName, unit)
 	if err != nil {
@@ -245,7 +245,7 @@ func StripeStartForSite(siteName, sitePath, siteBaseURL string) error {
 	if err := stripeStartExplicit(siteName, apiKey, siteBaseURL+config.StripeWebhookPath(sitePath)); err != nil {
 		return err
 	}
-	_ = config.AddProjectWorker(sitePath, "stripe")
+	recordProjectWorker(sitePath, "stripe")
 	ClearIdleSuspendOnStart(siteName, sitePath, "stripe")
 	return nil
 }
@@ -259,6 +259,15 @@ func StripeRestoreUnit(siteName, sitePath, siteBaseURL string) error {
 		return err
 	}
 	return writeStripeUnit(siteName, apiKey, siteBaseURL+config.StripeWebhookPath(sitePath))
+}
+
+// restoreStripeWorker rewrites the listener unit even when it is already
+// enabled, so an upgrade moves existing listeners onto the pinned image. The
+// write is a no-op when the unit is unchanged.
+func restoreStripeWorker(s config.Site) {
+	if base := siteURL(s.Path); base != "" {
+		StripeRestoreUnit(s.Name, s.Path, base) //nolint:errcheck
+	}
 }
 
 // StripeStopForSite stops and removes the Stripe listener for the named site.

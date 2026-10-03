@@ -822,11 +822,11 @@ After=network.target
 Type=simple
 Restart=on-failure
 RestartSec=5
-ExecStart=%s run --rm --replace --name %s --network host %s listen --api-key %s --forward-to %s --skip-verify
+ExecStart=%s
 
 [Install]
 WantedBy=default.target
-`, siteName, podman.PodmanBin(), containerName, podman.StripeCLIImage, apiKey, forwardTo)
+`, siteName, podman.StripeListenExecStart(containerName, apiKey, forwardTo))
 
 	if err := lerdSystemd.WriteService(unitName, unit); err != nil {
 		return toolErr("writing service unit: " + err.Error()), nil
@@ -1750,6 +1750,7 @@ type presetEntry struct {
 	Icon           string               `json:"icon,omitempty"`
 	Dashboard      string               `json:"dashboard,omitempty"`
 	AdminFor       []string             `json:"admin_for,omitempty"`
+	SuggestFor     []string             `json:"suggest_for,omitempty"`
 	DependsOn      []string             `json:"depends_on,omitempty"`
 	Installed      bool                 `json:"installed"`
 	DefaultVersion string               `json:"default_version,omitempty"`
@@ -1765,6 +1766,7 @@ func newPresetEntry(p config.PresetMeta) presetEntry {
 		Icon:           p.Icon,
 		Dashboard:      p.Dashboard,
 		AdminFor:       p.AdminFor,
+		SuggestFor:     p.SuggestFor,
 		DependsOn:      p.DependsOn,
 		DefaultVersion: p.DefaultVersion,
 	}

@@ -31,6 +31,9 @@ func addSiteService(site *config.Site, name string) error {
 	if err := config.SetServiceRemoved(name, false); err != nil {
 		return err
 	}
+	if err := config.SetSiteServiceDeclined(site.Name, name, false); err != nil {
+		return err
+	}
 	for _, args := range [][]string{{"link", "--yes"}, {"env"}} {
 		if out, err := runLerdFn(site.Path, args...); err != nil {
 			return fmt.Errorf("lerd %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(lastLines(string(out), 5)))

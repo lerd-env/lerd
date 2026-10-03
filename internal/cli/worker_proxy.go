@@ -77,7 +77,7 @@ func assignWorkerProxyPort(sitePath, envKey string, defaultPort int) int {
 
 	// Scan all sites for all proxy port values to build the used set.
 	for _, s := range reg.Sites {
-		if filepath.Clean(s.Path) == filepath.Clean(sitePath) {
+		if config.SamePath(s.Path, sitePath) {
 			continue
 		}
 		for key := range proxyPortKeys {

@@ -417,7 +417,7 @@ func ClearIdleSuspendOnStart(siteName, sitePath, workerName string) {
 	if err != nil {
 		return
 	}
-	if sitePath != "" && sitePath != site.Path {
+	if sitePath != "" && !config.SamePath(sitePath, site.Path) {
 		wtBase := config.WorktreeUnitSlug(filepath.Base(sitePath))
 		if next, changed := removeWorker(site.WorktreeIdleSuspended[wtBase], workerName); changed {
 			_ = config.SetWorktreeIdleSuspendedWorkers(siteName, wtBase, next)
