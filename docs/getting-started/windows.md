@@ -11,6 +11,29 @@ Lerd builds and runs natively on Windows, with no Linux distro to manage. Contai
 The native build is under active development and is **not** ready for daily use. Sites and workers are not finished yet, see [What is missing](#what-is-missing). If you want something that works today, use [Windows (WSL2)](/getting-started/wsl2).
 :::
 
+## Install
+
+One line, from an elevated PowerShell or Command Prompt:
+
+```powershell
+powershell -c "irm https://lerd.sh/install.ps1 | iex"
+```
+
+Already in PowerShell, `irm https://lerd.sh/install.ps1 | iex` does the same. The script runs on the Windows PowerShell 5.1 every Windows ships, downloads the release zip for your architecture (amd64 or arm64), checks it against the release's `checksums.txt`, and runs `lerd install` from it, which copies lerd into `%LOCALAPPDATA%\lerd\bin` and sets up the rest.
+
+To update, run `lerd update`, or the same line again. `lerd update` downloads the same zip, moves the running `lerd.exe` and `lerd-tray.exe` aside to `.old-<time>`, since Windows will not overwrite a running exe, puts the new ones in their place and reruns `lerd install`. The copies moved aside are deleted on the next update or install. `lerd update --rollback` puts back the version you had before. The dashboard's update button runs the same `lerd update` in Windows Terminal, or in a PowerShell window when Windows Terminal is not installed, and leaves the window open until you press Enter.
+
+To install the newest beta, or a given version:
+
+```powershell
+& ([scriptblock]::Create((irm https://lerd.sh/install.ps1))) -Beta
+& ([scriptblock]::Create((irm https://lerd.sh/install.ps1))) -Version 1.36.0
+```
+
+`-Local` takes a `lerd.exe` or a release zip you built yourself, as in `.\install.ps1 -Local .\build\lerd.exe`, and `LERD_REPO` points the script at a fork's releases.
+
+If `lerd install` stops before it is done, for example to have you restart Windows, the script prints the full path to run it again from, since lerd is not on the `PATH` yet at that point.
+
 ## Requirements
 
 - Windows 10 or 11. Lerd creates its Podman machine on **Hyper-V** when the host has it, and falls back to **WSL2** when it does not, which covers Windows Home.

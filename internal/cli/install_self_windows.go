@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
@@ -46,8 +45,7 @@ func installSelf() (bool, error) {
 }
 
 // placeBinary copies lerd.exe, and lerd-tray.exe when it sits beside it, into
-// binDir. A running copy can be renamed but not overwritten, so the one there
-// is moved aside, and the ones earlier runs moved aside go once nothing runs them.
+// binDir, moving aside a copy that is running there.
 func placeBinary(exe, binDir string) (string, error) {
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		return "", err
@@ -59,17 +57,7 @@ func placeBinary(exe, binDir string) (string, error) {
 		} else if _, err := os.Stat(src); err != nil {
 			continue
 		}
-		dest := filepath.Join(binDir, name)
-		stale, _ := filepath.Glob(dest + ".old-*")
-		for _, old := range stale {
-			os.Remove(old) //nolint:errcheck
-		}
-		if _, err := os.Stat(dest); err == nil {
-			if err := os.Rename(dest, fmt.Sprintf("%s.old-%d", dest, time.Now().Unix())); err != nil {
-				return "", err
-			}
-		}
-		if err := copyFile(src, dest, 0o755); err != nil {
+		if err := swapBinary(src, filepath.Join(binDir, name)); err != nil {
 			return "", err
 		}
 	}
