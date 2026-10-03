@@ -4,6 +4,7 @@ package services
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -25,6 +26,9 @@ const (
 )
 
 func TestMain(m *testing.M) {
+	// Set before the role switch: a detaching supervisor starts the real one
+	// through this too.
+	supervisorCommand = func() []string { return []string{os.Args[0], asSupervisor} }
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case asSupervisor:
@@ -33,7 +37,6 @@ func TestMain(m *testing.M) {
 			os.Exit(runFlakyChild(os.Args[2:]))
 		}
 	}
-	supervisorCommand = func() []string { return []string{os.Args[0], asSupervisor} }
 	os.Exit(m.Run())
 }
 
@@ -41,17 +44,21 @@ func TestMain(m *testing.M) {
 // command does for lerd.exe.
 func runTestSupervisor(args []string) int {
 	var unit, restart string
+	var detach bool
 	for len(args) > 0 && args[0] != "--" {
 		switch args[0] {
 		case "--unit":
 			unit, args = args[1], args[2:]
 		case "--restart":
 			restart, args = args[1], args[2:]
+		case "--detach":
+			detach, args = true, args[1:]
 		default:
 			return 2
 		}
 	}
-	if err := Supervise(unit, restart, args[1:]); err != nil {
+	if err := Supervise(unit, restart, args[1:], detach); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	return 0
@@ -137,7 +144,7 @@ func TestSupervisedArgs(t *testing.T) {
 		t.Errorf("a unit with no restart policy should run as is, got %v", got)
 	}
 	got := supervisedArgs("lerd-dns", keepAliveAlways, cmd)
-	want := append(supervisorCommand(), "--unit", "lerd-dns", "--restart", "always", "--", `C:\lerd\lerd.exe`, "dns-serve")
+	want := append(supervisorCommand(), "--unit", "lerd-dns", "--restart", "always", "--detach", "--", `C:\lerd\lerd.exe`, "dns-serve")
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("supervisedArgs = %v, want %v", got, want)
 	}
@@ -286,5 +293,49 @@ func TestWinSupervisedUnitComesBackAfterACrash(t *testing.T) {
 	time.Sleep(1500 * time.Millisecond)
 	if kids := childPIDs(t, supervisor); len(kids) != 0 {
 		t.Errorf("a stopped unit came back: %v", kids)
+	}
+}
+
+// parentPID returns pid's recorded parent, or 0 when pid is not running.
+func parentPID(t *testing.T, pid int) int {
+	t.Helper()
+	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer windows.CloseHandle(snap) //nolint:errcheck
+	var e windows.ProcessEntry32
+	e.Size = uint32(unsafe.Sizeof(e))
+	for err = windows.Process32First(snap, &e); err == nil; err = windows.Process32Next(snap, &e) {
+		if int(e.ProcessID) == pid {
+			return int(e.ParentProcessID)
+		}
+	}
+	return 0
+}
+
+// A unit must not sit in the process tree of whatever started it: the
+// dashboard starts workers from serve-ui, and stopping serve-ui is a tree kill.
+func TestWinSupervisedUnitHasNoLiveParent(t *testing.T) {
+	isolateWinData(t)
+	m := &windowsServiceManager{}
+	name := "lerd-test-detached"
+	if err := m.WriteServiceUnit(name, sleeperUnit(t)); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Start(name); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = m.Stop(name) })
+
+	supervisor := readPID(name)
+	if !pidAlive(supervisor) {
+		t.Fatal("the recorded pid is not a running supervisor")
+	}
+	if parent := parentPID(t, supervisor); parent == os.Getpid() || pidAlive(parent) {
+		t.Errorf("supervisor %d has live parent %d, so a tree kill of its starter would end it", supervisor, parent)
+	}
+	if !m.IsActive(name) {
+		t.Error("a detached unit should still read as active")
 	}
 }

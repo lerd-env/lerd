@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
@@ -81,8 +83,32 @@ func supervisedArgs(name string, p keepAlivePolicy, args []string) []string {
 	if p == keepAliveNever {
 		return args
 	}
-	out := append(supervisorCommand(), "--unit", name, "--restart", p.String(), "--")
+	out := append(supervisorCommand(), "--unit", name, "--restart", p.String(), "--detach", "--")
 	return append(out, args...)
+}
+
+// launchDetached is `lerd supervise --detach`: it starts the real supervisor,
+// records its pid as the unit's and returns, so the supervisor outlives this
+// process with no live parent. taskkill /T follows parent pids, so without the
+// hop a unit started from the dashboard sat in serve-ui's tree, and restarting
+// the dashboard (every `lerd install` and `lerd update` does) killed it.
+func launchDetached(unit, restart string, args []string) error {
+	argv := append(supervisorCommand(), "--unit", unit, "--restart", restart, "--")
+	argv = append(argv, args...)
+	cmd := exec.Command(argv[0], argv[1:]...)
+	// The unit's log, which spawn handed this process as its output.
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: createNewProcessGroup | createNoWindow,
+		HideWindow:    true,
+	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("starting the supervisor of %s: %w", unit, err)
+	}
+	pid := cmd.Process.Pid
+	_ = cmd.Process.Release()
+	config.GuardRealWrite(pidPath(unit))
+	return os.WriteFile(pidPath(unit), []byte(strconv.Itoa(pid)), 0644)
 }
 
 // supervisorCommand is the argv prefix that starts a supervisor. Tests point it
@@ -104,8 +130,15 @@ func supervisorBinary() string {
 
 // Supervise runs args for the named unit until the restart policy says to stop.
 // The command inherits the supervisor's output, which spawn points at the
-// unit's log, and the supervisor notes there every exit and restart.
-func Supervise(unit, restart string, args []string) error {
+// unit's log, and the supervisor notes there every exit and restart. With
+// detach it only starts that supervisor, see launchDetached.
+func Supervise(unit, restart string, args []string, detach bool) error {
+	if detach {
+		if len(args) == 0 {
+			return errors.New("lerd supervise: no command to run")
+		}
+		return launchDetached(unit, restart, args)
+	}
 	return supervise(unit, restart, args, os.Stderr, time.Sleep)
 }
 
