@@ -29,7 +29,7 @@ func (m *Model) View() tea.View {
 
 func (m *Model) render() string {
 	if m.width < 60 || m.height < 12 {
-		return "terminal too small (need at least 60×12)\n"
+		return fmt.Sprintf("terminal too small: %d×%d, need at least 60×12\n", m.width, m.height)
 	}
 
 	sideW := layoutFor(m.width, m.height).sideW

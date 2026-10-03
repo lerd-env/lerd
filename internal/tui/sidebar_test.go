@@ -222,3 +222,11 @@ func TestEscClosesTheNarrowSidebarIntoTheMainArea(t *testing.T) {
 		t.Fatalf("after esc: sideFocus=%v sideOverlay=%v, want focus back in the main area", m.sideFocus, m.sideOverlay)
 	}
 }
+
+func TestTooSmallNamesTheCurrentSize(t *testing.T) {
+	m := sidebarModel()
+	m.width, m.height = 52, 10
+	if got := m.render(); got != "terminal too small: 52×10, need at least 60×12\n" {
+		t.Fatalf("render = %q", got)
+	}
+}
