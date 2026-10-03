@@ -118,7 +118,6 @@ The DNS server reads the same `lerd.conf` a dnsmasq container would, so anything
 ## What is missing
 
 - **Workers.** Queue, schedule, Horizon and the other framework workers are disabled on Windows. They bind-mount the site at its own path and run through shell guard scripts, which need the path mapping and a Windows script format.
-- **Tool downloads.** phpantom has no Windows build wired in yet, so tinker autocomplete is unavailable.
 - **Scheduled workers.** There is no timer equivalent in the service manager.
 - **Unverified path mapping.** The `/mnt/c` mapping matches Podman's own default mount, but it has had little testing on either provider.
 
