@@ -373,7 +373,21 @@ func resolveHostToSite(host string) (string, bool) {
 	if wt, ok := wtIndex.lookup(host); ok {
 		return wtKey(wt.Site, wt.Base), true
 	}
-	return siteNameForHost(host)
+	if name, ok := siteNameForHost(host); ok {
+		return name, true
+	}
+	return serviceKeyForHost(host)
+}
+
+// serviceKeyForHost maps a service's own domain to its idle key, so traffic to
+// it keeps the service awake and wakes it when asleep.
+func serviceKeyForHost(host string) (string, bool) {
+	for name, domain := range config.ServiceDomains() {
+		if domain == host {
+			return svcKey(name), true
+		}
+	}
+	return "", false
 }
 
 // resolveHostToStatsKey maps a request host to its request-store key. It is the
@@ -416,12 +430,11 @@ func seedActiveSites(t *idle.Tracker) {
 			t.TouchSite(s.Name, now)
 		}
 	}
-	// Restore persisted worktree countdowns too (their keys carry a "/"), so a
-	// restart doesn't hand every worktree a fresh grace window. A stale key for a
-	// removed worktree is harmless: the engine only ever acts on worktrees it
-	// re-detects from disk.
+	// Restore persisted worktree and service countdowns too, so a restart doesn't
+	// hand each a fresh grace window (which would also wake a sleeping service).
+	// A stale key is harmless: the engine only acts on what it re-detects.
 	for key, ts := range saved {
-		if ts > 0 && strings.IndexByte(key, '/') >= 0 {
+		if ts > 0 && (strings.IndexByte(key, '/') >= 0 || strings.HasPrefix(key, svcKeyPrefix)) {
 			t.TouchSite(key, time.Unix(ts, 0))
 		}
 	}

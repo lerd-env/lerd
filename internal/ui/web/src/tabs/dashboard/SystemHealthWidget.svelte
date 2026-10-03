@@ -39,7 +39,7 @@
 
 <DashboardCard title={m.dashboard_health_title()} tone={cardTone}>
   {#snippet badge()}
-    <StatusPill tone={headerTone.tone} label={headerTone.label} />
+    <StatusPill size="sm" tone={headerTone.tone} label={headerTone.label} />
   {/snippet}
 
   {#if $status.dns?.enabled !== false}

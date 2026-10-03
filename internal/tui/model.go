@@ -2035,8 +2035,19 @@ func (m *Model) actionShell() tea.Cmd {
 		}
 		container := "lerd-" + svc.Name
 		if running, _ := podman.ContainerRunning(container); !running {
-			m.setStatus(container+" is not running", 4*time.Second)
-			return nil
+			if svc.State != stateSuspended {
+				m.setStatus(container+" is not running", 4*time.Second)
+				return nil
+			}
+			// A sleeping service wakes for the shell, as it does for its dashboard.
+			m.setStatus("waking "+svc.Name+"…", 30*time.Second)
+			name := svc.Name
+			return tea.Sequence(func() tea.Msg {
+				if err := tuiWakeService(name); err != nil {
+					return ActionResult{Summary: "wake " + name, Err: err}
+				}
+				return nil
+			}, runShellIn(container, ""))
 		}
 		return runShellIn(container, "")
 	}

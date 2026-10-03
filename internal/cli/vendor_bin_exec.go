@@ -105,6 +105,8 @@ func runVendorBinDirect(cwd, rel string, args []string) error {
 	}
 	recordCwdActivity(cwd)
 
+	// Before any branch: the host and native paths reach the same services.
+	ensureServicesForCwd(cwd)
 	// Under the native runtime there is no container, and the wrapper resolves
 	// php off the host PATH lerd's shim dir already provides.
 	if _, native := nativeRuntimeVersion(cwd); native {
@@ -117,7 +119,6 @@ func runVendorBinDirect(cwd, rel string, args []string) error {
 		return err
 	}
 	podman.EnsurePathMounted(cwd, version)
-	ensureServicesForCwd(cwd)
 
 	cmd := podman.Cmd(vendorBinExecArgs(cwd, container, rel, args, term.IsTerminal(int(os.Stdin.Fd())))...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr

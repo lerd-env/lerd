@@ -247,7 +247,7 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 | `lerd service port <name> <port>` | Move a service's primary published host port without touching its container-internal port; persisted and auto-restarts if running |
 | `lerd service port <name> <port> --container <cport>` | Move a specific mapping of a multi-port service (e.g. Mailpit's `8025` web UI behind the `1025` SMTP primary), named by its container-internal port |
 | `lerd service port <name> --reset` | Reset a service to its preset default published port (same as `port <name> 0`); combine with `--container` to reset one mapping |
-| `lerd service pin <name>` | Pin a service so it is never auto-stopped when no sites use it |
+| `lerd service pin <name>` | Pin a service so it is never auto-stopped, whether no site uses it or every site using it is idle |
 | `lerd service unpin <name>` | Unpin a service so it can be auto-stopped when unused |
 | `lerd service add [file.yaml]` | Register a new custom service (from a YAML file or flags) |
 | `lerd service preset [name]` | List presets, or install one (use `--version` for multi-version presets); a store-only preset is fetched on demand |
@@ -319,6 +319,7 @@ Activity-driven worker suspension: lerd gracefully stops each site's suspendable
 | `lerd idle off` | Disable idle-suspend and resume every suspended worker |
 | `lerd idle status` | Show each site's idle-suspend policy and last-active time |
 | `lerd idle timeout <duration>` | Set the idle timeout (e.g. `30m`, `2h`) |
+| `lerd idle services <on\|off>` | Also stop services once every site using them is idle, and wake them on the next request |
 | `lerd idle pin <site>` | Pin a site so idle-suspend never sleeps it |
 | `lerd idle unpin <site>` | Unpin a site so idle-suspend can sleep it again |
 

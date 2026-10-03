@@ -664,7 +664,7 @@ func WaitReady(service string, timeout time.Duration) error {
 		if probe() {
 			return nil
 		}
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 	return fmt.Errorf("%s did not become ready within %s", service, timeout)
 }

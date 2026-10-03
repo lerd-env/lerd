@@ -3,6 +3,7 @@
   import StatusPill from '$components/StatusPill.svelte';
   import Icon from '$components/Icon.svelte';
   import ButtonMenu, { type ButtonMenuAction } from '$components/ButtonMenu.svelte';
+  import { idleEnabled, idleServices } from '$stores/idle';
   import ServiceIcon from '$components/ServiceIcon.svelte';
   import SitesPopover from '$components/SitesPopover.svelte';
   import ParentSiteBadge from './ParentSiteBadge.svelte';
@@ -13,6 +14,7 @@
     type Service,
     services as allServices,
     serviceLabel,
+    serviceOpenable,
     detailLabel,
     isServiceWorker,
     parentSiteDomain,
@@ -71,12 +73,26 @@
   }
 
   const isWorker = $derived(isServiceWorker(svc));
+  // With services sleeping when idle, pinning is what keeps one awake, so it
+  // earns a place in the button group instead of the dropdown.
+  const pinInGroup = $derived(!isWorker && $idleEnabled && $idleServices);
+  function pinAction(icon: Snippet): ButtonMenuAction {
+    return {
+      id: 'pin',
+      tone: svc.pinned ? 'warn' : undefined,
+      icon,
+      label: svc.pinned ? m.services_pinned() : m.services_pin(),
+      title: svc.pinned ? m.services_unpinTitle() : m.services_pinTitle(),
+      onclick: () => run(svc.pinned ? 'unpin' : 'pin')
+    };
+  }
   // A worker answers to one site, which reads better stated inline than folded
   // behind a dropdown of one; a service is used by however many, so those
   // collapse into the count control.
   const parent = $derived(isWorker ? parentSiteDomain(svc) : null);
   const siteDomains = $derived(!isWorker && svc.site_domains ? svc.site_domains : []);
   const active = $derived(svc.status === 'active');
+  const openable = $derived(serviceOpenable(svc));
   // When active and a host port is exposed, the status pill shows the port (a
   // moved port reads at a glance) and copies 127.0.0.1:<port> on click; otherwise
   // it falls back to the status word.
@@ -95,7 +111,7 @@
       /* clipboard unavailable; nothing to recover */
     }
   }
-  const pillLabel = $derived(exposedPort ? String(exposedPort) : svc.status);
+  const pillLabel = $derived(exposedPort ? String(exposedPort) : svc.idle_suspended ? m.services_sleeping() : svc.status);
   const pillTitle = $derived(
     exposedPort
       ? portCopied
@@ -247,7 +263,7 @@
         ? { id: a.id, tone: a.tone, icon: a.icon, disabled: true, label: `${a.label} · ${m.services_hostOnly()}`, title: m.services_hostOnly() }
         : a;
 
-    if (active && admin) {
+    if (openable && admin) {
       const adminLabel = m.services_openAdmin({ name: serviceLabel(admin.name) });
       rest.push(openAct({
         id: 'admin',
@@ -257,7 +273,7 @@
         title: adminLabel,
         onclick: openAdmin
       }));
-    } else if (active && svc.dashboard) {
+    } else if (openable && svc.dashboard) {
       rest.push(openAct({
         id: 'dashboard',
         icon: icons.external,
@@ -304,15 +320,8 @@
       });
     }
 
-    if (!isWorker) {
-      rest.push({
-        id: 'pin',
-        tone: svc.pinned ? 'warn' : 'secondary',
-        icon: icons.pin,
-        label: svc.pinned ? m.services_pinned() : m.services_pin(),
-        title: svc.pinned ? m.services_unpinTitle() : m.services_pinTitle(),
-        onclick: () => run(svc.pinned ? 'unpin' : 'pin')
-      });
+    if (!isWorker && !pinInGroup) {
+      rest.push({ ...pinAction(icons.pin), tone: svc.pinned ? 'warn' : 'secondary' });
     }
 
     if (!isWorker && !updating) {
@@ -388,7 +397,7 @@
           <span class="text-xs font-normal tabular-nums text-gray-500 dark:text-gray-400">{svc.version}</span>
         {/if}
         <StatusPill
-          tone={active ? 'ok' : 'muted'}
+          tone={active ? 'ok' : svc.idle_suspended ? 'asleep' : 'muted'}
           label={pillLabel}
           title={pillTitle}
           onclick={exposedPort ? copyExposedAddr : undefined}
@@ -523,6 +532,7 @@
           trash: trashIcon,
           checkUpdates: checkUpdatesIcon
         })}
+        inline={pinInGroup ? pinAction(pinIcon) : undefined}
         {busy}
       />
     </div>

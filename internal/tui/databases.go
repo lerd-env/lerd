@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -21,7 +22,28 @@ type databasesMsg struct{ engines []dbview.Engine }
 // databases execs a query inside each container, far too slow to run inline in
 // a refresh tick.
 func databasesCmd() tea.Cmd {
-	return func() tea.Msg { return databasesMsg{engines: withoutStreamingHidden(dbview.LoadAll())} }
+	return func() tea.Msg {
+		wakeSleepingEngines()
+		return databasesMsg{engines: withoutStreamingHidden(dbview.LoadAll())}
+	}
+}
+
+// wakeSleepingEngines brings back the database engines idle-suspend put to
+// sleep, together, before the tab lists them: looking at databases is using
+// the engines, and a sleeping one would otherwise read as stopped.
+func wakeSleepingEngines() {
+	var wg sync.WaitGroup
+	for _, name := range config.IdleSuspendedServices() {
+		if !serviceops.DeclaresDatabases(name) {
+			continue
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = tuiWakeService(name)
+		}()
+	}
+	wg.Wait()
 }
 
 // withoutStreamingHidden drops the databases a site streaming mode hides owns.

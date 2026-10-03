@@ -386,7 +386,8 @@ func (m *Model) ensureServiceEntities() tea.Cmd {
 		return nil
 	}
 	svc := m.currentService()
-	if svc == nil || svc.WorkerKind != "" || svc.State != stateRunning {
+	// A sleeping service is asked too: listing what it holds wakes it.
+	if svc == nil || svc.WorkerKind != "" || (svc.State != stateRunning && svc.State != stateSuspended) {
 		return nil
 	}
 	if _, ok := m.svcEntities[svc.Name]; ok {

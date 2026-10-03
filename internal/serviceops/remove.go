@@ -203,6 +203,7 @@ func RemoveService(name string, opts RemoveOptions, emit func(PhaseEvent)) error
 	// Remembered so a site whose .lerd.yaml still lists it cannot bring it back:
 	// install, link and every auto-start skip it until it is installed again.
 	_ = config.SetServiceRemoved(name, true)
+	_ = config.SetServiceIdleSuspended(name, false)
 
 	emit(PhaseEvent{Phase: "regenerating_consumers"})
 	if family != "" && !opts.SkipFamilyRegen {

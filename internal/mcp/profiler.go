@@ -86,6 +86,9 @@ func execProfilerReport(args map[string]any) (any, *rpcError) {
 	if errBody := ensureFPMStartedMCP(phpVersion, short, container); errBody != nil {
 		return errBody, nil
 	}
+	if err := wakeSiteServicesMCP(projectPath); err != nil {
+		return toolErr(err.Error()), nil
+	}
 
 	// SPX_REPORT=fp prints a flat profile to the run's output instead of storing it
 	// for the web UI, which is the machine-readable form an agent can act on.
