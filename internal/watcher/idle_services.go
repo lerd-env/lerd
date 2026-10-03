@@ -28,6 +28,9 @@ var (
 	serviceStopRaw  = serviceops.StopWithDependents
 	servicePinned   = config.ServiceIsPinned
 	serviceAsleep   = config.ServiceIsIdleSuspended
+	// restoreServiceSites gives the sites of a service the user stopped while
+	// it slept their real vhost back, since nothing will wake it for them.
+	restoreServiceSites = cli.RestoreSitesAfterServiceWake
 )
 
 // tickServices puts a service to sleep once every key that keeps it awake (the
@@ -158,10 +161,23 @@ func (e *idleEngine) sleepingFor(key string) []string {
 func (e *idleEngine) syncSleeping() {
 	names := config.IdleSuspendedServices()
 	e.mu.Lock()
-	defer e.mu.Unlock()
+	was := e.sleeping
 	e.sleeping = make(map[string]bool, len(names))
 	for _, n := range names {
 		e.sleeping[n] = true
+	}
+	var released []string
+	for n, asleep := range was {
+		if asleep && !e.sleeping[n] && !e.inFlight[svcKey(n)] {
+			released = append(released, n)
+		}
+	}
+	e.mu.Unlock()
+	// Flags cleared behind the engine's back are `lerd service stop`; a wake
+	// clears them too, and restoring its sites again is harmless.
+	if len(released) > 0 {
+		sort.Strings(released)
+		e.spawn("release-svc", func() { restoreServiceSites(released) })
 	}
 }
 
@@ -248,12 +264,23 @@ func (e *idleEngine) wakeServicesNow(names []string) {
 
 func (e *idleEngine) asleepOf(names []string) []string {
 	e.mu.Lock()
-	defer e.mu.Unlock()
-	var out []string
+	var out, released []string
 	for _, n := range names {
-		if e.asleepLocked(n) {
-			out = append(out, n)
+		if !e.asleepLocked(n) {
+			continue
 		}
+		// `lerd service stop` cleared the flag since the last tick: the user
+		// owns the service now, so it stays stopped.
+		if !e.inFlight[svcKey(n)] && !serviceAsleep(n) {
+			delete(e.sleeping, n)
+			released = append(released, n)
+			continue
+		}
+		out = append(out, n)
+	}
+	e.mu.Unlock()
+	if len(released) > 0 {
+		e.spawn("release-svc", func() { restoreServiceSites(released) })
 	}
 	return out
 }

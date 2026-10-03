@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/geodro/lerd/internal/activityping"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/lifecycle"
 	"github.com/geodro/lerd/internal/nginx"
@@ -28,7 +29,26 @@ var (
 	idleAdminToolsFor        = serviceops.AdminToolsFor
 	idleDiscoveringConsumers = serviceops.DiscoveringConsumers
 	idleServiceFlagged       = config.ServiceIsIdleSuspended
+	idleWakePing             = func(name string) { activityping.Site("svc:" + name) }
+	idleWatcherUp            = func() bool { s, _ := podman.UnitStatus("lerd-watcher"); return s == "active" }
+	idleWakeMax              = 60 * time.Second
 )
+
+// awaitIdleWake hands a service idle-suspend has asleep, or is putting to sleep,
+// to the watcher and waits until it is up. Starting it here instead races the
+// watcher's stop job, which cancels the start. False means start it yourself.
+func awaitIdleWake(name string) bool {
+	if !idleServiceFlagged(name) || !idleWatcherUp() {
+		return false
+	}
+	idleWakePing(name)
+	for deadline := time.Now().Add(idleWakeMax); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
+		if !idleServiceFlagged(name) && idleServiceUp(name) {
+			return true
+		}
+	}
+	return false
+}
 
 // RunningServicesForIdle lists the installed, unpaused services whose unit is
 // up, the only ones idle-suspend can put to sleep.
@@ -123,14 +143,14 @@ func WakeServicesForIdle(names []string) error {
 		}
 		_ = config.SetServiceIdleSuspended(name, false)
 	}
-	restoreSitesAfterServiceWake(names)
+	RestoreSitesAfterServiceWake(names)
 	return firstErr
 }
 
-// restoreSitesAfterServiceWake regenerates the vhost of every site using one of
+// RestoreSitesAfterServiceWake regenerates the vhost of every site using one of
 // the woken services, unless the site still waits on another sleeping service
 // or on its own sleeping dev server, whose resume restores it instead.
-func restoreSitesAfterServiceWake(names []string) {
+func RestoreSitesAfterServiceWake(names []string) {
 	seen := map[string]bool{}
 	restored := false
 	for _, name := range names {

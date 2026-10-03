@@ -43,11 +43,11 @@ func installFakeServices(t *testing.T) *fakeServices {
 
 	prevRunning, prevUsers, prevSuspend, prevWake := runningServices, serviceUsers, suspendService, wakeServices
 	prevStale, prevPinned, prevIndex, prevDetect := serviceStale, servicePinned, wtIndex, detectWorktrees
-	prevResume := resumeWorkers
+	prevResume, prevRestore := resumeWorkers, restoreServiceSites
 	t.Cleanup(func() {
 		runningServices, serviceUsers, suspendService, wakeServices = prevRunning, prevUsers, prevSuspend, prevWake
 		serviceStale, servicePinned, wtIndex, detectWorktrees = prevStale, prevPinned, prevIndex, prevDetect
-		resumeWorkers = prevResume
+		resumeWorkers, restoreServiceSites = prevResume, prevRestore
 	})
 	wtIndex = newWorktreeIndex()
 	detectWorktrees = func(string, string) ([]gitpkg.Worktree, error) { return nil, nil }
@@ -94,6 +94,11 @@ func installFakeServices(t *testing.T) *fakeServices {
 		return config.ServiceIsIdleSuspended(name) && f.running[name]
 	}
 	resumeWorkers = func(s *config.Site, _ []string) { f.log("resume workers " + s.Name) }
+	restoreServiceSites = func(names []string) {
+		for _, n := range names {
+			f.log("restore sites of " + n)
+		}
+	}
 	return f
 }
 
@@ -277,8 +282,28 @@ func TestTickServices_leavesAServiceTheUserStoppedAlone(t *testing.T) {
 	_ = config.SetServiceIdleSuspended("mysql", false) // `lerd service stop mysql` while it slept
 	e.tickServices(true, svcTimeout, now)
 	e.wait()
-	if len(f.callLog()) != 0 {
-		t.Fatalf("woke a service the user stopped: %v", f.callLog())
+	if !reflect.DeepEqual(f.callLog(), []string{"restore sites of mysql"}) {
+		t.Fatalf("calls = %v, want mysql left stopped and its sites given their vhost back", f.callLog())
+	}
+}
+
+func TestOnActivity_leavesAServiceTheUserStoppedSinceTheTickAlone(t *testing.T) {
+	now := time.Now()
+	f := installFakeServices(t)
+	f.users["mysql"] = []config.Site{{Name: "shop"}}
+	_ = config.SetServiceIdleSuspended("mysql", true)
+	e := newIdleEngine(idleTracker(now, map[string]time.Duration{"shop": time.Hour, "svc:mysql": time.Hour}))
+	e.tickServices(true, svcTimeout, now)
+	e.wait()
+
+	_ = config.SetServiceIdleSuspended("mysql", false) // `lerd service stop mysql` before the next tick
+	e.OnActivity("shop")
+	e.wait()
+	if !reflect.DeepEqual(f.callLog(), []string{"restore sites of mysql"}) {
+		t.Fatalf("calls = %v, want mysql left stopped and its sites given their vhost back", f.callLog())
+	}
+	if e.sleeping["mysql"] {
+		t.Fatal("mysql still counted asleep")
 	}
 }
 
