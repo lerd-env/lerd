@@ -56,34 +56,8 @@ func serviceDetailContentLinesWithCursor(m *Model, svc *ServiceRow, innerW int) 
 		return workerDetailContentLines(svc, innerW), cursorLine
 	}
 
-	// Header: name, version, state.
-	add(sectionStyle.Render(svc.Name))
-	stateText := serviceStateText(svc.State)
-	if svc.Version != "" {
-		add(dimStyle.Render("  version: ") + svc.Version)
-	}
-	add(dimStyle.Render("  state:   ") + stateText)
-	add(dimStyle.Render("  unit:    ") + "lerd-" + svc.Name)
-	// Published host port and any extra mappings, read-only. Editing lives in
-	// the CLI/UI/MCP (a multi-field edit is out of the TUI's quick-action scope).
-	if host, def, extras := servicePortsInfo(svc.Name); host > 0 {
-		portLine := strconv.Itoa(host)
-		if def > 0 && host != def {
-			portLine += dimStyle.Render(" (default " + strconv.Itoa(def) + ")")
-		}
-		add(dimStyle.Render("  ports:   ") + portLine)
-		for _, e := range extras {
-			add(dimStyle.Render("  +extra:  ") + e)
-		}
-	}
-	if svc.Pinned {
-		add(dimStyle.Render("  pinned:  ") + accentStyle.Render("yes (preset will not auto-update)"))
-	}
-	if svc.Dashboard != "" {
-		add(dimStyle.Render("  dashbd:  ") + svc.Dashboard + dimStyle.Render("  (") + accentStyle.Render("O") + dimStyle.Render(" to open)"))
-	}
-	add("")
-
+	// Name, version, state, ports, pin and dashboard live in the service
+	// view's fixed header.
 	// Dependencies.
 	if len(svc.DependsOn) > 0 {
 		add(sectionStyle.Render("Depends on"))
@@ -140,6 +114,7 @@ func serviceDetailContentLinesWithCursor(m *Model, svc *ServiceRow, innerW int) 
 			}
 			add(renderShimRow(info, svc.Name, i == selected))
 		}
+		add(dimStyle.Render("  space toggles the selected tool"))
 		add("")
 	}
 
@@ -166,26 +141,12 @@ func serviceDetailContentLinesWithCursor(m *Model, svc *ServiceRow, innerW int) 
 	// stays with the CLI.
 	out = append(out, serviceEntityLines(m, svc, innerW)...)
 
-	// Preset suggestion banner: if the focused service has an associated
-	// admin dashboard preset that isn't installed yet, hint at it. We don't
-	// install from the TUI (Preset install is destructive-ish per the TUI
-	// scope rule); the banner just points the user at the CLI verb.
+	// Preset suggestion: an admin dashboard preset that goes with this
+	// service and is not installed yet. A is the way to add it.
 	if hint := presetSuggestionFor(svc); hint != "" {
-		add(accentStyle.Render("  💡 ") + hint)
+		add("  " + accentStyle.Render("+") + " " + hint)
 		add("")
 	}
-
-	// Quick-action hint so the user discovers what's reversible from the
-	// services pane: matches what the help reference says.
-	add(sectionStyle.Render("Actions"))
-	actions := "  s start · x stop · r restart · t shell · u update · b rollback · l logs"
-	if svc.Dashboard != "" {
-		actions += " · O dashboard"
-	}
-	if len(tools) > 0 {
-		actions += " · space toggle client tool"
-	}
-	add(dimStyle.Render(actions))
 	return out, cursorLine
 }
 
@@ -509,7 +470,7 @@ func presetSuggestionFor(svc *ServiceRow) string {
 	if serviceops.ServiceInstalled(target) {
 		return ""
 	}
-	return "install " + target + " for a browser dashboard (run `lerd preset install " + target + "`)"
+	return target + " adds a browser dashboard for it: press A, or run lerd service preset " + target
 }
 
 // servicePortsInfo returns the host (published) port a built-in service is

@@ -8,9 +8,28 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/geodro/lerd/internal/config"
-	phpPkg "github.com/geodro/lerd/internal/php"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 )
+
+// shortDuration drops the zero units Go's formatting keeps, so 30m0s reads 30m.
+func shortDuration(d time.Duration) string {
+	s := d.String()
+	if strings.HasSuffix(s, "m0s") {
+		s = strings.TrimSuffix(s, "0s")
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = strings.TrimSuffix(s, "0m")
+	}
+	return s
+}
+
+// onOffVerb is the verb that flips a toggle that is currently on or off.
+func onOffVerb(on bool) string {
+	if on {
+		return "off"
+	}
+	return "on"
+}
 
 // settingsRow describes one focusable line in the settings view.
 type settingsRow struct {
@@ -29,6 +48,12 @@ const (
 	settingsXdebug
 	settingsWorkerMode
 	settingsAutoSnapshot
+	settingsIdle
+	settingsStreaming
+	settingsTray
+	settingsNotify
+	settingsDNS
+	settingsProfiler
 )
 
 func (m *Model) settingsRows() []settingsRow {
@@ -56,6 +81,18 @@ func (m *Model) settingsRows() []settingsRow {
 		label: autoSnapshotSettingLabel(cfg),
 		on:    cfg.AutoSnapshotEnabled(),
 	})
+	idle := "Idle suspend (stop workers of sites nobody is using)"
+	if cfg != nil && cfg.IdleSuspend.Enabled {
+		idle = fmt.Sprintf("Idle suspend (after %s without requests)", shortDuration(cfg.IdleSuspendTimeout()))
+	}
+	rows = append(rows,
+		settingsRow{kind: settingsIdle, label: idle, on: cfg != nil && cfg.IdleSuspend.Enabled},
+		settingsRow{kind: settingsStreaming, label: "Streaming mode (hide private workspaces)", on: cfg != nil && cfg.Streaming()},
+		settingsRow{kind: settingsTray, label: "Tray applet", on: cfg == nil || cfg.IsTrayEnabled()},
+		settingsRow{kind: settingsNotify, label: "Notifications", on: cfg == nil || cfg.IsNotificationsEnabled()},
+		settingsRow{kind: settingsDNS, label: "lerd DNS (resolves ." + currentTLD() + ")", on: !m.snap.Status.DNSDisabled},
+		settingsRow{kind: settingsProfiler, label: "SPX profiler (captures slow requests)", on: cfg != nil && cfg.IsProfilerEnabled()},
+	)
 
 	// Worker runtime mode: macOS only. On Linux workers always run via
 	// podman exec under systemd so the setting is meaningless there and
@@ -73,16 +110,7 @@ func (m *Model) settingsRows() []settingsRow {
 		})
 	}
 
-	if versions, err := phpPkg.ListInstalled(); err == nil {
-		for _, v := range versions {
-			rows = append(rows, settingsRow{
-				kind:       settingsXdebug,
-				label:      "Xdebug · PHP " + v,
-				on:         cfg != nil && cfg.IsXdebugEnabled(v),
-				phpVersion: v,
-			})
-		}
-	}
+	// Xdebug lives in the PHP & Node view, beside the version it belongs to.
 	return rows
 }
 
@@ -134,6 +162,28 @@ func (m *Model) settingsToggle(rows []settingsRow) tea.Cmd {
 		}
 		m.setStatus("automatic snapshots "+verb+"…", 5*time.Second)
 		return runLerd("", "db:snapshot:auto", verb)
+	case settingsIdle:
+		m.setStatus("idle suspend "+onOffVerb(row.on)+"…", 5*time.Second)
+		return runLerd("", "idle", onOffVerb(row.on))
+	case settingsStreaming:
+		m.setStatus("streaming mode "+onOffVerb(row.on)+"…", 5*time.Second)
+		return tea.Sequence(runLerd("", "streaming", onOffVerb(row.on)), loadCmd())
+	case settingsTray:
+		m.setStatus("tray applet "+onOffVerb(row.on)+"…", 5*time.Second)
+		return runLerd("", "tray", onOffVerb(row.on))
+	case settingsNotify:
+		m.setStatus("notifications "+onOffVerb(row.on)+"…", 5*time.Second)
+		return runLerd("", "notify", onOffVerb(row.on))
+	case settingsDNS:
+		verb := "dns:disable"
+		if !row.on {
+			verb = "dns:enable"
+		}
+		m.setStatus("lerd DNS "+onOffVerb(row.on)+"…", 10*time.Second)
+		return tea.Sequence(runLerd("", verb), loadCmd())
+	case settingsProfiler:
+		m.setStatus("profiler "+onOffVerb(row.on)+"…", 5*time.Second)
+		return runLerd("", "profile", onOffVerb(row.on))
 	case settingsWorkerMode:
 		// Toggle between exec (off) and container (on). Mirrors
 		// `lerd workers mode <value>`. Does not stop running workers —

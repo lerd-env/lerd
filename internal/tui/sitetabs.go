@@ -13,7 +13,6 @@ import (
 	lerddumps "github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/siteinfo"
-	zone "github.com/lrstanley/bubblezone/v2"
 )
 
 // siteTab identifies which sub-view of Site detail is showing. Tabs let the
@@ -51,36 +50,6 @@ func siteTabLabel(t siteTab) string {
 	}
 }
 
-// siteTabsHeader renders the tab strip across the top of the site detail
-// pane, e.g. "[1] Overview  [2] Logs  [3] Env". The active tab is highlighted
-// in the accent colour; the others are dimmed. Lives at the head of every site
-// detail variant so the user always sees the shortcuts and which tab is active
-// without scrolling.
-func siteTabsHeader(active siteTab, tabs []siteTab) string {
-	parts := make([]string, 0, len(tabs))
-	for i, t := range tabs {
-		label := fmt.Sprintf("[%d] %s", i+1, siteTabLabel(t))
-		if t == active {
-			label = selectedStyle.Render(label)
-		} else {
-			label = dimStyle.Render(label)
-		}
-		// Each tab label is clickable; handleMouse maps the zone to selectSiteTab.
-		parts = append(parts, zone.Mark(fmt.Sprintf("sitetab:%d", i), label))
-	}
-	return "  " + strings.Join(parts, "  ")
-}
-
-// renderSiteTabHeader returns the two-line block that precedes every site
-// tab's content: the tab strip and a divider. Centralised so each tab
-// renderer pads to the same width and the user sees a consistent header.
-func renderSiteTabHeader(active siteTab, innerW int, tabs []siteTab) []string {
-	return []string{
-		padToWidth(clipLine(siteTabsHeader(active, tabs), innerW), innerW),
-		"",
-	}
-}
-
 // availableSiteTabs returns the tabs a site offers, in display order. The doctor
 // runs framework-agnostic checks, so every site gets the tab. This is the single
 // source the strip numbering, the number-key shortcuts, and the render dispatch
@@ -99,7 +68,6 @@ func availableSiteTabs(s *siteinfo.EnrichedSite) []siteTab {
 // state so users understand the file isn't on disk yet.
 func siteEnvContentLines(m *Model, site *siteinfo.EnrichedSite, innerW int) []string {
 	out := make([]string, 0, 32)
-	out = append(out, renderSiteTabHeader(tabSiteEnv, innerW, availableSiteTabs(site))...)
 	add := func(s string) { out = append(out, padToWidth(clipLine(s, innerW), innerW)) }
 
 	if site == nil {
@@ -107,7 +75,7 @@ func siteEnvContentLines(m *Model, site *siteinfo.EnrichedSite, innerW int) []st
 		return out
 	}
 
-	envPath := filepath.Join(site.Path, ".env")
+	envPath := filepath.Join(m.sitePath(site), ".env")
 	add(sectionStyle.Render(".env") + "  " + dimStyle.Render(envPath))
 	add("")
 
@@ -138,7 +106,6 @@ func siteEnvContentLines(m *Model, site *siteinfo.EnrichedSite, innerW int) []st
 // is a per-site debug feed, not just dumps.
 func siteDebugContentLines(m *Model, site *siteinfo.EnrichedSite, innerW int) []string {
 	out := make([]string, 0, 32)
-	out = append(out, renderSiteTabHeader(tabSiteDebug, innerW, availableSiteTabs(site))...)
 	add := func(s string) { out = append(out, padToWidth(clipLine(s, innerW), innerW)) }
 
 	if site == nil {
@@ -239,8 +206,10 @@ func (m *Model) siteLogsActive() bool {
 // sub-pane beneath the service detail: any time a service or worker row is
 // selected on that tab. The streaming tail is fed by the same logTail the
 // manual `l` pane uses, retargeted by syncLogs as the selection moves.
+func (m *Model) coreLogsActive() bool { return m.activeTab == tabCore }
+
 func (m *Model) serviceLogsActive() bool {
-	return m.activeTab == tabServices && m.currentService() != nil
+	return m.activeTab == tabServices && m.currentService() != nil && m.svcTab == svcTabLogs
 }
 
 // logsInDetail reports whether the tail is already showing inside the detail
@@ -248,7 +217,7 @@ func (m *Model) serviceLogsActive() bool {
 // can't be drawn twice, and syncLogs so it keeps retargeting the tail as the
 // selection moves even when that pane is closed.
 func (m *Model) logsInDetail() bool {
-	return m.siteLogsActive() || m.serviceLogsActive()
+	return m.siteLogsActive() || m.serviceLogsActive() || m.coreLogsActive()
 }
 
 // readBoundedFile reads up to max bytes of path. Used for the env reader so

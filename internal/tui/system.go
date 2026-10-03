@@ -309,10 +309,6 @@ func systemContentLinesWithCursor(m *Model, focused bool, innerW int) ([]string,
 	cursorLine := 0
 	add := func(s string) { out = append(out, padToWidth(clipLine(s, innerW), innerW)) }
 
-	add(sectionStyle.Render("System"))
-	add(dimStyle.Render("  press Y or esc to return to site detail"))
-	add("")
-
 	for i, row := range rows {
 		switch row.kind {
 		case sysHeader:

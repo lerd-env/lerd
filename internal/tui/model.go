@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"github.com/geodro/lerd/internal/spxreport"
 	"os"
 	"path/filepath"
 	"sort"
@@ -60,6 +61,11 @@ const (
 	tabSites
 	tabServices
 	tabDatabases
+	// tabCore shows one of lerd's own processes (dns, nginx, the watcher). It
+	// is reached from the sidebar footer and stays out of the ctrl+arrow cycle.
+	tabCore
+	// tabRuntimes lists the installed PHP and Node versions; also sidebar-only.
+	tabRuntimes
 )
 
 func (t topTab) label() string {
@@ -87,7 +93,16 @@ type Model struct {
 
 	snap Snapshot
 
-	activeTab  topTab
+	activeTab topTab
+
+	// Sidebar state. sideFocus says the sidebar owns the arrow keys; sideKey is
+	// its selected row, kept in step with activeTab and the list cursors.
+	sideFocus   bool
+	sideKey     string
+	sideScroll  int
+	sideOverlay bool // narrow terminals show the sidebar only on demand
+	collapsedWS map[string]bool
+
 	detailMode detailMode
 	focus      focusPane
 
@@ -151,14 +166,16 @@ type Model struct {
 	// watcher fills. timingKey is the site+branch+window the held figures belong
 	// to, so a late read for a scope the user has left is discarded; timingRange
 	// and timingScope are the cycle positions for the window and the branch.
-	timingRange  int
-	timingScope  int
-	timingKey    string
-	timingAt     time.Time
-	timingLoaded bool
-	timingErr    error
-	timing       reqstats.Analytics
-	timingRecent []reqstats.Record
+	timingRange int
+	timingScope int
+	// timingProfiles is the freshest SPX capture per slow route, when one exists.
+	timingProfiles map[string]spxreport.Profile
+	timingKey      string
+	timingAt       time.Time
+	timingLoaded   bool
+	timingErr      error
+	timing         reqstats.Analytics
+	timingRecent   []reqstats.Record
 
 	// Picker state (PHP/Node version). When active, up/down navigates
 	// pickerOptions instead of detail rows and enter applies the pick.
@@ -232,6 +249,14 @@ type Model struct {
 	// pane; commits as `lerd <args>` via runLerd.
 	paletteActive bool
 	paletteInput  string
+	// ctrl+p palette: fuzzy places and reversible actions over the screen.
+	quickActive bool
+	quickQuery  string
+	quickCursor int
+	quickCache  []quickAction
+	// paletteDir is where the next palette command runs; empty means the TUI's
+	// own working directory. Set by shortcuts that open the palette for a site.
+	paletteDir string
 
 	// Help modal: replaces the prior detailHelp pane-swap. `?` toggles it
 	// on; renders as a centered overlay so the user keeps their current
@@ -266,18 +291,11 @@ type Model struct {
 	// dashboard renders a "collecting…" placeholder.
 	stats stats.Snapshot
 
-	// Dashboard grid state: which of the numDashCards cards has focus (so
-	// j/k and the mouse wheel know what to scroll) and the per-card vertical
-	// scroll offset. Cards show their whole list and clip to a scroll window.
-	dashFocus  int
-	dashScroll [numDashCards]int
-	// dashRowCursor is the selected row within each card (an index into
-	// dashZones[card]); ↑↓ moves it on the Sites/Services/Workers cards and
-	// enter activates it like a click. dashZones caches, per card, the ordered
-	// clickable zone ids laid down at the last render so the cursor and enter
-	// resolve against exactly what's on screen.
-	dashRowCursor [numDashCards]int
-	dashZones     [numDashCards][]string
+	svcTab     int       // service view tab: svcTabOverview or svcTabLogs
+	coreName   string    // the lerd process shown on tabCore: dns, nginx or watcher
+	rtCursor   int       // selected row in the PHP & Node view
+	dashCursor int       // selected Needs-attention card
+	cpuHist    []float64 // recent total CPU samples for the dashboard sparkline
 
 	// Activity feed: a capped ring of recent state-change events derived by
 	// diffing successive snapshots, mirroring the web UI's Recent Activity.
@@ -315,6 +333,8 @@ func NewModel(version string) *Model {
 		height:      30,
 		activeTab:   tabDashboard,
 		focus:       paneDetail,
+		sideFocus:   true,
+		sideKey:     "dash",
 		logTail:     newLogTail(),
 		timingRange: defaultTimingRange,
 		sub:         eventbus.Default.Subscribe(),
@@ -376,6 +396,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.BackgroundColorMsg:
 		applyBackground(msg.IsDark())
+		applySurfaces(msg.Color)
 		return m, nil
 
 	case tea.KeyPressMsg:
@@ -403,6 +424,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// or window, so the panel never shows one scope's figures under another's.
 		if msg.cacheKey == m.timingKey {
 			m.timing, m.timingRecent, m.timingErr = msg.analytic, msg.recent, msg.err
+			m.timingProfiles = msg.profiles
 			m.timingLoaded = true
 		}
 		return m, nil
@@ -435,6 +457,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case statsMsg:
 		m.stats = msg.snap
+		m.recordCPU(msg.snap)
 		return m, nil
 
 	case doctorResultMsg:
@@ -493,6 +516,9 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.paletteActive {
 		return m.handlePaletteKey(msg)
 	}
+	if m.quickActive {
+		return m.handleQuickKey(msg)
+	}
 	if m.helpModalActive {
 		return m.handleHelpModalKey(msg)
 	}
@@ -515,6 +541,28 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.domainInputActive {
 		return m.handleDomainInputKey(msg)
 	}
+	if msg.String() == "ctrl+p" && !m.modalActive() {
+		m.openQuick()
+		return m, nil
+	}
+	if cmd, handled := m.handleSidebarKey(msg); handled {
+		return m, cmd
+	}
+	if cmd, handled := m.handleDashKey(msg); handled {
+		return m, cmd
+	}
+	if cmd, handled := m.handleServiceKey(msg); handled {
+		return m, cmd
+	}
+	if cmd, handled := m.handleCoreKey(msg); handled {
+		return m, cmd
+	}
+	if cmd, handled := m.handleDatabaseKey(msg); handled {
+		return m, cmd
+	}
+	if cmd, handled := m.handleRuntimeKey(msg); handled {
+		return m, cmd
+	}
 	switch msg.String() {
 	case "ctrl+c", "q":
 		m.logTail.Stop()
@@ -522,11 +570,6 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case "enter", "space":
-		// On the Dashboard, enter (or space) acts like a click on the selected
-		// row: it jumps to that site / service / worker on its own tab.
-		if m.activeTab == tabDashboard {
-			return m, m.activateDashSelection()
-		}
 		if m.focus == paneDetail {
 			if m.pickerKind != kindInfo {
 				return m, m.applyPicker()
@@ -552,7 +595,7 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if m.activeTab != tabSites {
 				return m, nil
 			}
-			return m, m.detailToggleSelected(m.currentSite(), detailRows(m.currentSite()), navigableRows(detailRows(m.currentSite())))
+			return m, m.detailToggleSelected(m.currentSite(), m.siteRows(m.currentSite()), navigableRows(m.siteRows(m.currentSite())))
 		}
 		return m, nil
 
@@ -635,27 +678,17 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// left and right cross between those columns while up and down walk one.
 		if m.timingActive() && m.focus == paneDetail {
 			site := m.currentSite()
-			rows := detailRows(site)
+			rows := m.siteRows(site)
 			m.detailCursor = hopDetailColumn(rows, navigableRows(rows), m.detailCursor, m.detailInnerWidth())
 			m.followCursor = true
 		}
 		return m, nil
 
 	case "tab":
-		// On the Dashboard tab there are no list panes; tab moves focus
-		// between the grid cards so j/k and the wheel scroll the right one.
-		if m.activeTab == tabDashboard {
-			m.dashFocus = (m.dashFocus + 1) % numDashCards
-			return m, nil
-		}
 		m.focus = m.nextFocus(+1)
 		return m, m.afterNav()
 
 	case "shift+tab":
-		if m.activeTab == tabDashboard {
-			m.dashFocus = (m.dashFocus - 1 + numDashCards) % numDashCards
-			return m, nil
-		}
 		m.focus = m.nextFocus(-1)
 		return m, m.afterNav()
 
@@ -694,6 +727,25 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "t":
 		return m, m.actionShell()
+
+	case "W":
+		if s := m.currentSite(); s != nil && m.activeTab == tabSites {
+			m.openPaletteIn(s.Path, "worktree add ")
+		}
+		return m, nil
+
+	case "E":
+		if s := m.currentSite(); s != nil && m.activeTab == tabSites {
+			m.setStatus("opening "+s.Name+" in your editor…", 5*time.Second)
+			return m, runLerd(s.Path, "code")
+		}
+		return m, nil
+
+	case "F":
+		if s := m.currentSite(); s != nil && m.activeTab == tabSites && s.Path != "" {
+			return m, m.openURL(s.Path)
+		}
+		return m, nil
 
 	case "/":
 		if m.detailMode == detailDumps {
@@ -833,10 +885,10 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.actionServiceUpdate()
 
 	case "b":
-		// On the site Overview b cycles the timing panel's branch scope; on the
-		// Services tab it stays the service rollback.
-		if m.timingActive() {
-			return m, m.cycleTimingScope(1)
+		// On a site b walks its checkout and worktrees, which also scopes the
+		// timing panel; on the Services tab it stays the service rollback.
+		if m.activeTab == tabSites && m.detailMode == detailSite && len(timingScopes(m.currentSite())) > 1 {
+			return m, m.cycleSiteBranch(1)
 		}
 		return m, m.actionServiceRollback()
 
@@ -999,7 +1051,7 @@ func (m *Model) editFocusedDomain() (handled bool) {
 	if s == nil {
 		return false
 	}
-	rows := detailRows(s)
+	rows := m.siteRows(s)
 	nav := navigableRows(rows)
 	if m.detailCursor >= len(nav) {
 		return false
@@ -1269,16 +1321,32 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// base frame. Swallow mouse input here (mirroring handleMainKey, which routes
 	// through the modal handlers before any pane action) so a stray click can't
 	// switch tabs, move a cursor, or silently dismiss a half-finished picker.
-	if m.modalActive() {
+	if m.modalActive() || m.quickActive {
 		return m, nil
 	}
 	if _, ok := msg.(tea.MouseWheelMsg); ok {
+		if msg.Mouse().X < m.sideWidth() {
+			m.followCursor = false
+			delta := 3
+			if msg.Mouse().Button == tea.MouseWheelUp {
+				delta = -3
+			}
+			m.scrollOffset(&m.sideScroll, delta)
+			return m, nil
+		}
 		return m.handleWheel(msg)
 	}
 	// bubbletea v2 delivers a press as its own MouseClickMsg; only left clicks
 	// drive the hit-testing below.
 	if _, ok := msg.(tea.MouseClickMsg); !ok || msg.Mouse().Button != tea.MouseLeft {
 		return m, nil
+	}
+	for _, it := range m.sideItems() {
+		if it.selectable() && zone.Get("side:"+it.key).InBounds(msg) {
+			m.sideFocus = true
+			m.sideActivateItem(it)
+			return m, m.afterNav()
+		}
 	}
 	for _, t := range orderedTabs {
 		if zone.Get("tab:" + t.label()).InBounds(msg) {
@@ -1309,8 +1377,13 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				return m, m.afterNav()
 			}
 		}
-		// The site-detail tab strip ([1] Overview · [2] Env · …) is clickable.
+		// The site's branch pills and section tabs are clickable.
 		if m.detailMode == detailSite {
+			for i := range timingScopes(m.currentSite()) {
+				if zone.Get(fmt.Sprintf("sitebranch:%d", i)).InBounds(msg) {
+					return m, m.cycleSiteBranch(i - m.timingScope)
+				}
+			}
 			tabs := availableSiteTabs(m.currentSite())
 			for i := range tabs {
 				if zone.Get(fmt.Sprintf("sitetab:%d", i)).InBounds(msg) {
@@ -1336,25 +1409,11 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tabDashboard:
-		// A click on any clickable row jumps to that item via the same path as
-		// the keyboard enter. Each card's selectable zone ids are cached at
-		// render time, so we just hit-test those rather than rebuilding them.
-		for ci := 0; ci < numDashCards; ci++ {
-			for ri, id := range m.dashZones[ci] {
-				if zone.Get(id).InBounds(msg) {
-					// Keep the keyboard cursor in sync so returning to the
-					// dashboard lands on the row the user last clicked.
-					m.dashFocus = ci
-					m.dashRowCursor[ci] = ri
-					return m, m.activateDashZone(id)
-				}
-			}
-		}
-		// A click elsewhere on a card just focuses it for keyboard navigation.
-		for i := 0; i < numDashCards; i++ {
-			if zone.Get(fmt.Sprintf("card:%d", i)).InBounds(msg) {
-				m.dashFocus = i
-				return m, nil
+		for i := range m.dashAlerts() {
+			if zone.Get(fmt.Sprintf("dashalert:%d", i)).InBounds(msg) {
+				m.dashCursor = i
+				m.focusMain()
+				return m, m.dashOpen(m.dashAlerts()[i])
 			}
 		}
 	}
@@ -1372,20 +1431,6 @@ func (m *Model) handleWheel(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		delta = -3
 	}
 
-	if m.activeTab == tabDashboard {
-		for i := 0; i < numDashCards; i++ {
-			if zone.Get(fmt.Sprintf("card:%d", i)).InBounds(msg) {
-				m.dashFocus = i
-				m.dashScroll[i] += delta
-				if m.dashScroll[i] < 0 {
-					m.dashScroll[i] = 0
-				}
-				return m, nil
-			}
-		}
-		return m, nil
-	}
-
 	// The logs pane takes priority, whether it's the full-width `l` overlay or the
 	// tail standing in for the detail column.
 	if (m.showLogs || m.logsInDetail()) && zone.Get("pane:logs").InBounds(msg) {
@@ -1398,6 +1443,11 @@ func (m *Model) handleWheel(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 	if zone.Get("pane:detail").InBounds(msg) {
 		m.scrollOffset(&m.detailScroll, delta)
+		return m, nil
+	}
+	if zone.Get("pane:databases").InBounds(msg) {
+		m.followCursor = false
+		m.scrollOffset(&m.dbScroll, delta)
 		return m, nil
 	}
 	if zone.Get("pane:sites").InBounds(msg) {
@@ -1414,6 +1464,8 @@ func (m *Model) handleWheel(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		m.scrollOffset(&m.siteScroll, delta)
 	case paneServices:
 		m.scrollOffset(&m.svcScroll, delta)
+	case paneDatabases:
+		m.scrollOffset(&m.dbScroll, delta)
 	case paneDetail:
 		m.scrollOffset(&m.detailScroll, delta)
 	}
@@ -1429,60 +1481,6 @@ func (m *Model) scrollOffset(off *int, delta int) {
 	if *off < 0 {
 		*off = 0
 	}
-}
-
-// activateDashSelection activates the focused dashboard card's selected row,
-// the keyboard equivalent of clicking it. No-op on info-only cards.
-func (m *Model) activateDashSelection() tea.Cmd {
-	zones := m.dashZones[m.dashFocus]
-	cur := m.dashRowCursor[m.dashFocus]
-	if cur < 0 || cur >= len(zones) {
-		return nil
-	}
-	return m.activateDashZone(zones[cur])
-}
-
-// activateDashZone performs the jump for a dashboard row zone id, shared by the
-// mouse click handler and keyboard enter so both behave identically. A site /
-// service / worker jumps to its own tab with that item selected; a failing
-// worker jumps to its owning site's detail.
-func (m *Model) activateDashZone(id string) tea.Cmd {
-	idx := func(prefix string) (int, bool) {
-		if !strings.HasPrefix(id, prefix) {
-			return 0, false
-		}
-		var n int
-		if _, err := fmt.Sscanf(id[len(prefix):], "%d", &n); err != nil {
-			return 0, false
-		}
-		return n, true
-	}
-	if i, ok := idx("dashsite:"); ok && i >= 0 && i < len(m.snap.Sites) {
-		m.switchTab(tabSites)
-		m.selectSiteByName(m.snap.Sites[i].Name)
-		return m.afterNav()
-	}
-	if i, ok := idx("dashsvc:"); ok && i >= 0 && i < len(m.snap.Services) {
-		m.switchTab(tabServices)
-		m.selectServiceByName(m.snap.Services[i].Name)
-		return m.afterNav()
-	}
-	if i, ok := idx("dashworker:"); ok && i >= 0 && i < len(m.snap.Services) {
-		m.switchTab(tabServices)
-		m.selectServiceByName(m.snap.Services[i].Name)
-		return m.afterNav()
-	}
-	if fi, ok := idx("dashfailsite:"); ok {
-		failing := failingWorkers(m.snap)
-		if fi >= 0 && fi < len(failing) {
-			m.switchTab(tabSites)
-			if si := failing[fi].siteIdx; si >= 0 && si < len(m.snap.Sites) {
-				m.selectSiteByName(m.snap.Sites[si].Name)
-			}
-			return m.afterNav()
-		}
-	}
-	return nil
 }
 
 // selectSiteByName focuses the Sites list on the site with the given name,
@@ -1580,20 +1578,6 @@ func (m *Model) nextFocus(dir int) focusPane {
 }
 
 func (m *Model) moveCursor(delta int) {
-	// On the Dashboard, a card with selectable rows (Sites, Services, Workers)
-	// moves its row cursor; the render follows it. Info-only cards (System
-	// Health, Resources, Lerd) have nothing to select, so j/k scrolls them.
-	if m.activeTab == tabDashboard {
-		if zones := m.dashZones[m.dashFocus]; len(zones) > 0 {
-			m.dashRowCursor[m.dashFocus] = clamp(m.dashRowCursor[m.dashFocus]+delta, 0, len(zones)-1)
-			return
-		}
-		m.dashScroll[m.dashFocus] += delta
-		if m.dashScroll[m.dashFocus] < 0 {
-			m.dashScroll[m.dashFocus] = 0
-		}
-		return
-	}
 	// Keyboard navigation should keep the moved selection on screen; the next
 	// render follows the cursor for the focused pane.
 	m.followCursor = true
@@ -1659,7 +1643,7 @@ func (m *Model) moveCursor(delta int) {
 				return
 			}
 			if s := m.currentSite(); s != nil {
-				nav := navigableRows(detailRows(s))
+				nav := navigableRows(m.siteRows(s))
 				m.detailCursor = clamp(m.detailCursor+delta, 0, max(0, len(nav)-1))
 			}
 		}
@@ -1681,11 +1665,6 @@ func (m *Model) setCursor(pos int) {
 func (m *Model) clampCursors() {
 	m.siteCursor = clamp(m.siteCursor, 0, max(0, len(m.visibleSites())-1))
 	m.svcCursor = clamp(m.svcCursor, 0, max(0, len(m.visibleServices())-1))
-	// Keep each dashboard card's row cursor within the rows it had at the last
-	// render; the next render rebuilds dashZones and re-clamps as needed.
-	for i := range m.dashRowCursor {
-		m.dashRowCursor[i] = clamp(m.dashRowCursor[i], 0, max(0, len(m.dashZones[i])-1))
-	}
 }
 
 // visibleSites is the view-ready sites list: m.snap.Sites with the active
@@ -1693,7 +1672,11 @@ func (m *Model) clampCursors() {
 // this so filtered-out rows are invisible to navigation, not just hidden
 // visually.
 func (m *Model) visibleSites() []siteinfo.EnrichedSite {
-	return filteredSortedSites(m.snap.Sites, m.siteFilter, m.siteSort, m.snap.Workspaces)
+	sites := filteredSortedSites(m.snap.Sites, m.siteFilter, m.siteSort, m.snap.Workspaces)
+	if len(m.snap.Workspaces) == 0 {
+		return sites
+	}
+	return orderByWorkspace(sites, siteWorkspaces(sites, m.snap.Workspaces), workspaceRanks(m.snap.Workspaces))
 }
 
 func (m *Model) visibleServices() []ServiceRow {
@@ -1780,6 +1763,10 @@ func (m *Model) currentLogTargets() []LogTarget {
 			}}
 		}
 		return []LogTarget{{Kind: kindPodman, ID: "lerd-" + svc.Name, Label: svc.Name}}
+	case tabCore:
+		if c, ok := coreByName(m.coreName); ok {
+			return []LogTarget{c.logs}
+		}
 	}
 	return nil
 }

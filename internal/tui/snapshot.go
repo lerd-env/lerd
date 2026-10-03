@@ -25,6 +25,10 @@ type Snapshot struct {
 	// Private names the sites streaming mode hides whenever it is on, so the
 	// activity diff can tell one leaving or returning from an unlink or a link.
 	Private map[string]bool
+	// Pinned names the sites excluded from idle-suspend.
+	Pinned map[string]bool
+	// HorizonReload names the sites whose horizon restarts on code changes.
+	HorizonReload map[string]bool
 }
 
 // ServiceRow is a flat row for the services pane. Sourced from podman unit
@@ -81,6 +85,12 @@ func loadSnapshot() Snapshot {
 	if reg, err := config.LoadSites(); err == nil {
 		hidden = cfg.StreamingHidden(reg)
 		snap.Private = cfg.PrivateSites(reg)
+		snap.Pinned = map[string]bool{}
+		for _, s := range reg.Sites {
+			if s.Pinned {
+				snap.Pinned[s.Name] = true
+			}
+		}
 	}
 
 	enriched, err := siteinfo.LoadAll(siteinfo.EnrichUI)
@@ -88,8 +98,15 @@ func loadSnapshot() Snapshot {
 		_ = siteinfo.PersistVersionChanges(enriched)
 		sort.Slice(enriched, func(i, j int) bool { return enriched[i].Name < enriched[j].Name })
 		for _, e := range enriched {
-			if !hidden[e.Name] {
-				snap.Sites = append(snap.Sites, e)
+			if hidden[e.Name] {
+				continue
+			}
+			snap.Sites = append(snap.Sites, e)
+			if e.HasHorizon && config.ProjectReloadsWorker(e.Path, "horizon") {
+				if snap.HorizonReload == nil {
+					snap.HorizonReload = map[string]bool{}
+				}
+				snap.HorizonReload[e.Name] = true
 			}
 		}
 	}

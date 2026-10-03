@@ -87,15 +87,14 @@ func TestWorktreeWorkerStateText_Suspended(t *testing.T) {
 	}
 }
 
-func TestDetailContent_ShowsAppName(t *testing.T) {
-	m := &Model{}
+func TestSiteHeader_ShowsAppName(t *testing.T) {
+	m := NewModel("test")
 	s := &siteinfo.EnrichedSite{
 		Name:    "shop",
 		Domains: []string{"shop.test"},
 		AppName: "My Shop",
 	}
-	lines, _ := detailContentLines(m, s, true, 80)
-	joined := strings.Join(lines, "\n")
+	joined := stripANSI(strings.Join(m.siteHeader(s, 80), "\n"))
 	if !strings.Contains(joined, "My Shop") {
 		t.Errorf("detail header should surface the app name, got:\n%s", joined)
 	}

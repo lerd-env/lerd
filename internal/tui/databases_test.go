@@ -44,8 +44,8 @@ func databasesModel() *Model {
 
 func TestDatabasesPane_ListsEnginesWithTheirDatabases(t *testing.T) {
 	m := databasesModel()
-	out := stripANSI(m.renderDatabases(60, 20))
-	for _, want := range []string{"mysql", "shop", "shop_staging", "5MB", "1 snap", "postgres", "stopped"} {
+	out := stripANSI(m.renderDatabasesIn(bareFrame, 60, 20))
+	for _, want := range []string{"mysql", "shop", "shop_staging", "5MB", "postgres", "stopped"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("expected %q in the databases pane:\n%s", want, out)
 		}
@@ -56,8 +56,8 @@ func TestDatabasesPane_EmptyStatePointsAtThePreset(t *testing.T) {
 	m := NewModel("test")
 	m.activeTab = tabDatabases
 	m.dbLoaded = true
-	out := stripANSI(m.renderDatabases(60, 20))
-	if !strings.Contains(out, "no database engine installed") || !strings.Contains(out, "lerd preset install mysql") {
+	out := stripANSI(m.renderDatabasesIn(bareFrame, 60, 20))
+	if !strings.Contains(out, "no database engine installed") || !strings.Contains(out, "lerd service preset mysql") {
 		t.Errorf("expected an empty state that says what to do:\n%s", out)
 	}
 }
@@ -101,9 +101,10 @@ func TestDatabaseDetail_NamesTheWorktreeBranch(t *testing.T) {
 
 func TestDatabaseDetail_KeepsDestructiveOpsInTheCLI(t *testing.T) {
 	m := databasesModel()
-	out := stripANSI(strings.Join(databaseDetailContentLines(m, 120), "\n"))
-	if !strings.Contains(out, "n snapshot") {
-		t.Errorf("expected the snapshot quick action:\n%s", out)
+	m.sideFocus = false
+	out := stripANSI(strings.Join(databaseDetailContentLines(m, 160), "\n"))
+	if hints := stripANSI(m.renderHints(200)); !strings.Contains(hints, "n snapshot") {
+		t.Errorf("expected the snapshot quick action in the hints: %s", hints)
 	}
 	if !strings.Contains(out, "lerd db:restore") || !strings.Contains(out, "lerd db:import") {
 		t.Errorf("expected restore and import to be named as CLI-only:\n%s", out)
@@ -182,7 +183,7 @@ func TestDatabasesPane_ScrollsToTheSelectedRow(t *testing.T) {
 	}
 	m.dbEngines = []dbview.Engine{{Service: "mysql", Running: true, Databases: many}}
 	m.setCursor(1 << 30)
-	out := stripANSI(m.renderDatabases(60, 12))
+	out := stripANSI(m.renderDatabasesIn(bareFrame, 60, 12))
 	if !strings.Contains(out, "db39") {
 		t.Errorf("expected the pane to scroll to the selected last row:\n%s", out)
 	}

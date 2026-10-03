@@ -79,7 +79,6 @@ func doctorStatusVisual(status string) (style lipgloss.Style, glyph, label strin
 // migrate a database from a status view.
 func siteDoctorContentLines(m *Model, site *siteinfo.EnrichedSite, innerW int) []string {
 	out := make([]string, 0, 32)
-	out = append(out, renderSiteTabHeader(tabSiteDoctor, innerW, availableSiteTabs(site))...)
 	add := func(s string) { out = append(out, padToWidth(clipLine(s, innerW), innerW)) }
 
 	if site == nil {
