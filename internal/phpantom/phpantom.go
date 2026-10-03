@@ -11,6 +11,7 @@ package phpantom
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"compress/gzip"
 	"context"
 	"fmt"
@@ -28,11 +29,18 @@ import (
 // tested upgrade; the binary is re-fetched when the on-disk copy is missing.
 const Version = "0.10.0"
 
-const binName = "phpantom_lsp"
+// binName is the executable's name, both inside the release archive and in
+// BinDir: the Windows build ships phpantom_lsp.exe.
+func binName() string {
+	if runtime.GOOS == "windows" {
+		return "phpantom_lsp.exe"
+	}
+	return "phpantom_lsp"
+}
 
 // BinPath is the managed location of the phpantom_lsp executable.
 func BinPath() string {
-	return filepath.Join(config.BinDir(), binName)
+	return filepath.Join(config.BinDir(), binName())
 }
 
 // stampPath is the sidecar that records which Version the on-disk binary is, so
@@ -53,9 +61,15 @@ func Installed() bool {
 	return err == nil && strings.TrimSpace(string(stamp)) == Version
 }
 
-// assetName returns the release tarball name for the host platform.
+// assetName returns the release archive name for the host platform.
 func assetName() (string, error) {
-	switch runtime.GOOS + "/" + runtime.GOARCH {
+	return assetFor(runtime.GOOS, runtime.GOARCH)
+}
+
+// assetFor maps a platform to its release archive: a tarball on Linux and
+// macOS, a zip on Windows.
+func assetFor(goos, goarch string) (string, error) {
+	switch goos + "/" + goarch {
 	case "linux/amd64":
 		return "phpantom_lsp-x86_64-unknown-linux-gnu.tar.gz", nil
 	case "linux/arm64":
@@ -64,8 +78,12 @@ func assetName() (string, error) {
 		return "phpantom_lsp-x86_64-apple-darwin.tar.gz", nil
 	case "darwin/arm64":
 		return "phpantom_lsp-aarch64-apple-darwin.tar.gz", nil
+	case "windows/amd64":
+		return "phpantom_lsp-x86_64-pc-windows-msvc.zip", nil
+	case "windows/arm64":
+		return "phpantom_lsp-aarch64-pc-windows-msvc.zip", nil
 	default:
-		return "", fmt.Errorf("phpantom_lsp: unsupported platform %s/%s", runtime.GOOS, runtime.GOARCH)
+		return "", fmt.Errorf("phpantom_lsp: unsupported platform %s/%s", goos, goarch)
 	}
 }
 
@@ -74,7 +92,11 @@ func downloadURL() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("https://github.com/PHPantom-dev/phpantom_lsp/releases/download/%s/%s", Version, asset), nil
+	return assetURL(asset), nil
+}
+
+func assetURL(asset string) string {
+	return fmt.Sprintf("https://github.com/PHPantom-dev/phpantom_lsp/releases/download/%s/%s", Version, asset)
 }
 
 // EnsureBinary downloads and extracts phpantom_lsp into BinDir when it is not
@@ -85,16 +107,17 @@ func EnsureBinary(ctx context.Context, w io.Writer) error {
 	if Installed() {
 		return nil
 	}
-	url, err := downloadURL()
+	asset, err := assetName()
 	if err != nil {
 		return err
 	}
+	url := assetURL(asset)
 	if err := os.MkdirAll(config.BinDir(), 0o755); err != nil {
 		return err
 	}
 	fmt.Fprintf(w, "Downloading phpantom_lsp %s\n", Version)
 
-	tmp, err := os.CreateTemp("", "phpantom_lsp-*.tar.gz")
+	tmp, err := os.CreateTemp("", "phpantom_lsp-*-"+asset)
 	if err != nil {
 		return err
 	}
@@ -105,12 +128,17 @@ func EnsureBinary(ctx context.Context, w io.Writer) error {
 	if err := download.File(ctx, url, tmpName, 0o644, io.Discard); err != nil {
 		return fmt.Errorf("phpantom_lsp download: %w", err)
 	}
-	f, err := os.Open(tmpName)
-	if err != nil {
-		return err
+	if strings.HasSuffix(asset, ".zip") {
+		err = extractZipBinary(tmpName, BinPath())
+	} else {
+		var f *os.File
+		if f, err = os.Open(tmpName); err != nil {
+			return err
+		}
+		err = extractBinary(f, BinPath())
+		f.Close()
 	}
-	defer f.Close()
-	if err := extractBinary(f, BinPath()); err != nil {
+	if err != nil {
 		return err
 	}
 	// Stamp the version last, so a binary is only ever considered up to date
@@ -120,10 +148,7 @@ func EnsureBinary(ctx context.Context, w io.Writer) error {
 }
 
 // extractBinary pulls the phpantom_lsp executable out of the gzipped tar
-// stream and installs it at dest via an atomic rename. It extracts to a
-// per-call unique temp file in the same directory so two concurrent installs
-// can never interleave writes into a shared scratch path and rename a
-// corrupted binary into place; the temp is always cleaned up.
+// stream and installs it at dest via installBinary.
 func extractBinary(r io.Reader, dest string) error {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
@@ -135,31 +160,61 @@ func extractBinary(r io.Reader, dest string) error {
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
-			return fmt.Errorf("phpantom_lsp: %q not found in archive", binName)
+			return fmt.Errorf("phpantom_lsp: %q not found in archive", binName())
 		}
 		if err != nil {
 			return err
 		}
-		if hdr.Typeflag != tar.TypeReg || filepath.Base(hdr.Name) != binName {
+		if hdr.Typeflag != tar.TypeReg || filepath.Base(hdr.Name) != binName() {
 			continue
 		}
-		tmp, err := os.CreateTemp(filepath.Dir(dest), binName+"-*.tmp")
+		return installBinary(tr, dest)
+	}
+}
+
+// extractZipBinary is extractBinary for the zip the Windows release ships.
+func extractZipBinary(archive, dest string) error {
+	zr, err := zip.OpenReader(archive)
+	if err != nil {
+		return err
+	}
+	defer zr.Close()
+
+	for _, f := range zr.File {
+		if f.FileInfo().IsDir() || filepath.Base(f.Name) != binName() {
+			continue
+		}
+		rc, err := f.Open()
 		if err != nil {
 			return err
 		}
-		tmpName := tmp.Name()
-		defer os.Remove(tmpName) // no-op once renamed; cleans up on any failure
-
-		if _, err := io.Copy(tmp, tr); err != nil { //nolint:gosec // trusted release archive
-			tmp.Close()
-			return err
-		}
-		if err := tmp.Close(); err != nil {
-			return err
-		}
-		if err := os.Chmod(tmpName, 0o755); err != nil {
-			return err
-		}
-		return os.Rename(tmpName, dest)
+		defer rc.Close()
+		return installBinary(rc, dest)
 	}
+	return fmt.Errorf("phpantom_lsp: %q not found in archive", binName())
+}
+
+// installBinary copies r to dest via an atomic rename. It writes to a per-call
+// unique temp file in the same directory so two concurrent installs can never
+// interleave writes into a shared scratch path and rename a corrupted binary
+// into place; the temp is always cleaned up.
+func installBinary(r io.Reader, dest string) error {
+	tmp, err := os.CreateTemp(filepath.Dir(dest), binName()+"-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName) // no-op once renamed; cleans up on any failure
+
+	if _, err := io.Copy(tmp, r); err != nil { //nolint:gosec // trusted release archive
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpName, 0o755); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, dest)
 }
