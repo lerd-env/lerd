@@ -138,13 +138,15 @@ func killTree(pid int) {
 // spawn starts args in a hidden console of their own, not DETACHED_PROCESS: a
 // console program such as PowerShell or node exits at once with no console to
 // attach to. Output is appended to the
-// unit's log, and records the pid.
-func spawn(name string, args []string) error {
+// unit's log, and records the pid. A unit with a restart policy runs under
+// `lerd supervise`, whose pid is the one recorded.
+func spawn(name string, args []string, restart keepAlivePolicy) error {
 	logf, err := os.OpenFile(filepath.Join(logsDir(), name+".log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
 	defer logf.Close() //nolint:errcheck
+	args = supervisedArgs(name, restart, args)
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdout, cmd.Stderr = logf, logf
 	cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -265,7 +267,7 @@ func (m *windowsServiceManager) Start(name string) error {
 	if pidAlive(readPID(name)) {
 		return nil
 	}
-	return spawn(name, d.Args)
+	return spawn(name, d.Args, d.Restart)
 }
 
 func (m *windowsServiceManager) Stop(name string) error {
