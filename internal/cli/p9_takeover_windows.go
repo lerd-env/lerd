@@ -59,7 +59,11 @@ func takeOverP9Shares(machine string) error {
 	}
 	_ = killPID(podmanSrv.PID, syscall.SIGKILL)
 
-	ours, err := startDetachedLogged("p9-serve", config.LerdBinary(), append([]string{"p9-serve"}, p9share.ServerArgs(shares, pid)...))
+	// The guard runs the server and, should it die while the machine is up,
+	// starts it again and remounts; killPID below is a tree kill, so a failed
+	// swap ends both.
+	guardArgs := append([]string{"p9-guard", "--machine", machine, "--"}, p9share.ServerArgs(shares, pid)...)
+	ours, err := startDetachedLogged("p9-serve", installedLerdExe(), guardArgs)
 	if err == nil {
 		err = remount(machine, plan)
 	}
@@ -161,10 +165,11 @@ func server9pArgs(line string) ([]string, bool) {
 	return args[3:], true
 }
 
-// isLerdP9Serve reports whether line is a running `lerd p9-serve`.
+// isLerdP9Serve reports whether line is a running `lerd p9-serve`, or the
+// `lerd p9-guard` that keeps one up.
 func isLerdP9Serve(line string) bool {
 	args, err := windows.DecomposeCommandLine(line)
-	return err == nil && len(args) >= 2 && strings.EqualFold(filepath.Base(args[0]), "lerd.exe") && args[1] == "p9-serve"
+	return err == nil && len(args) >= 2 && strings.EqualFold(filepath.Base(args[0]), "lerd.exe") && (args[1] == "p9-serve" || args[1] == "p9-guard")
 }
 
 type winProcess struct {
