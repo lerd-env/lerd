@@ -1606,6 +1606,9 @@ var ensureServiceRunning = func(name string) error {
 		// owns stdout, and a progress line there corrupts its protocol stream.
 		envInterrupt(func() { fmt.Fprintf(os.Stderr, "  Starting %s...\n", name) })
 	}
+	if awaitIdleWake(name) {
+		return nil
+	}
 	return serviceops.EnsureServiceRunning(name)
 }
 

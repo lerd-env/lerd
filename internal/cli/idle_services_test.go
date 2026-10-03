@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -236,5 +237,61 @@ func TestSuspendServiceForIdle_flagsBeforeStopping(t *testing.T) {
 	}
 	if !flaggedAtStop {
 		t.Fatal("redis stopped before it was flagged asleep, so the dashboard would log it as stopped")
+	}
+}
+
+// installFakeIdleWake stands in for the watcher: a ping wakes the service the
+// way the engine does, flag cleared once it is up, unless the watcher is down.
+func installFakeIdleWake(t *testing.T, f *fakeIdleServices, watcherUp bool) *[]string {
+	t.Helper()
+	var pings []string
+	ping, watcher, max := idleWakePing, idleWatcherUp, idleWakeMax
+	t.Cleanup(func() { idleWakePing, idleWatcherUp, idleWakeMax = ping, watcher, max })
+	idleWakeMax = 2 * time.Second
+	idleWatcherUp = func() bool { return watcherUp }
+	idleWakePing = func(name string) {
+		pings = append(pings, name)
+		if !watcherUp {
+			return
+		}
+		_ = idleEnsureService(name)
+		_ = config.SetServiceIdleSuspended(name, false)
+	}
+	return &pings
+}
+
+func TestAwaitIdleWake_leavesTheWakeToTheWatcher(t *testing.T) {
+	f := installFakeIdleServices(t)
+	pings := installFakeIdleWake(t, f, true)
+	_ = config.SetServiceIdleSuspended("mysql", true)
+
+	if !awaitIdleWake("mysql") {
+		t.Fatal("did not see the watcher's wake")
+	}
+	if !reflect.DeepEqual(*pings, []string{"mysql"}) {
+		t.Fatalf("pings = %v, want one for mysql", *pings)
+	}
+}
+
+func TestAwaitIdleWake_skipsAServiceNotAsleep(t *testing.T) {
+	f := installFakeIdleServices(t)
+	pings := installFakeIdleWake(t, f, true)
+
+	if awaitIdleWake("mysql") || len(*pings) != 0 {
+		t.Fatalf("handled a service idle-suspend never slept: pings %v", *pings)
+	}
+}
+
+func TestAwaitIdleWake_startsItselfWithoutAWatcher(t *testing.T) {
+	f := installFakeIdleServices(t)
+	pings := installFakeIdleWake(t, f, false)
+	_ = config.SetServiceIdleSuspended("mysql", true)
+
+	start := time.Now()
+	if awaitIdleWake("mysql") {
+		t.Fatal("claimed a wake with no watcher running")
+	}
+	if len(*pings) != 0 || time.Since(start) > time.Second {
+		t.Fatalf("waited on a watcher that is not running: pings %v after %v", *pings, time.Since(start))
 	}
 }
