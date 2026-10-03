@@ -920,8 +920,6 @@ Themes:
       Express, RabbitMQ, Kafbat, RedisInsight, the profiler) wears the theme's
       accent inside the frame and flips with the dashboard's mode
 
-TUI:
-
 - [ ] Switching services from the rail in a dark theme shows no white flash and
       no light fringe on the frame's corner
 - [ ] With the dashboard in another language than the browser, Adminer,
@@ -930,14 +928,43 @@ TUI:
       tones, and a theme carrying a `lerd.yaml` overrides them
 - [ ] On Plasma (bazzite) the rail and headers lift to the focused header
       colour while the window has focus and drop back when it loses it
-- [ ] `lerd tui` renders sites, services, workers with live status
-- [ ] Detail pane, inline domain and version editing, filter, sort all work
-- [ ] Shell drop-in and log tail work
-- [ ] The databases pane lists the databases and opens one
-- [ ] A service's client tools, tuning and entities are reachable, matching what
-      the web UI offers
-- [ ] Services with a web dashboard are marked, and opening one works
-- [ ] Destructive commands are **absent** (scope guard)
+
+TUI:
+
+- [ ] `lerd tui` opens on the dashboard beside a sidebar: Dashboard, Databases,
+      PHP & Node, Settings, then SITES and SERVICES with running/total counts,
+      and dns, nginx and the watcher at its foot with their state
+- [ ] Sites are grouped by workspace, and a folded workspace still shows a
+      crashed worker as ✖ with its count
+- [ ] Stopping the watcher puts "The watcher is stopped" under NEEDS ATTENTION;
+      `tab` then `r` runs `lerd start` and the dashboard returns to "Everything
+      is running"
+- [ ] A crashed worker shows as a card and on its site row; `r` restarts it and
+      `H` heals every crashed worker
+- [ ] Opening a site shows its URL, PHP and Node versions and https/lan flags
+      over the Overview, Logs, Env, Debug and Doctor tabs; `1`–`5` switch tabs
+      and Logs tails live
+- [ ] The Overview's reversible controls work: keep awake, the php-fpm and
+      FrankenPHP runtime, Horizon reload, the Stripe listener, open in editor or
+      folder, new worktree; suggested services are listed read-only
+- [ ] Databases lists each engine's databases with the `_testing` twin folded
+      into its row, creates and exports one; Services pins and adds presets; PHP
+      & Node sets the defaults and toggles Xdebug; Settings flips what the CLI can
+- [ ] `ctrl+p` lists pages, sites, worktrees, services, their actions and the
+      settings; words match in any order (`logs demo`), `enter` runs the entry,
+      and "Run a lerd command…" hands over to the `:` prompt
+- [ ] Destructive actions are **absent** from the keys and from `ctrl+p`:
+      nothing removes, drops, unlinks, restores, uninstalls, purges or resets
+      (scope guard)
+- [ ] Below 96 columns the sidebar folds away and `\` opens it over the main
+      area; below 60×12 only "terminal too small" is drawn
+- [ ] Colours come from the terminal's own palette: a light and a dark profile
+      (and an Omarchy theme switch) each read cleanly, with no fixed background
+- [ ] Dialogs and toasts draw over the dimmed screen; the debug window's Logs,
+      Exceptions and Messages lenses fill from a request; a slow route shows its
+      hottest SPX function in the timing panel
+- [ ] Shell drop-in works, and a service with a web dashboard is marked and
+      opens it
 
 Tray:
 

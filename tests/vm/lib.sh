@@ -161,6 +161,71 @@ sys.stdout.write(out.decode(errors="replace"))
 PY
 }
 
+# need_pyte: true once python3 can import pyte, installing the distro package
+# when it is missing; tui_screen replays the TUI through it.
+need_pyte() {
+	python3 -c 'import pyte' 2>/dev/null && return 0
+	if have apt-get; then sudo -n apt-get install -y -q python3-pyte >/dev/null 2>&1; fi
+	if have dnf; then sudo -n dnf install -y -q python3-pyte >/dev/null 2>&1; fi
+	if have pacman; then sudo -n pacman -S --noconfirm --needed python-pyte >/dev/null 2>&1; fi
+	python3 -c 'import pyte' 2>/dev/null
+}
+
+# tui_screen <cols> <rows> <step...>: runs lerd tui in a pty of that size and
+# prints the screen as a terminal would show it after the steps. The TUI only
+# redraws what changed, so the raw stream is replayed through pyte rather than
+# grepped. Steps: wait:<regex> (up to 30s, fails the run), keys:<text> with
+# escapes (\x10 is ctrl+p, \t tab, \r enter, \x1b esc), sleep:<seconds>.
+tui_screen() {
+	python3 - "$@" <<'PY'
+import codecs, fcntl, os, pty, re, select, struct, sys, termios, time
+import pyte
+cols, rows, steps = int(sys.argv[1]), int(sys.argv[2]), sys.argv[3:]
+pid, fd = pty.fork()
+if pid == 0:
+    fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+    # An unknown TERM keeps the renderer to cursor moves and plain text, which
+    # pyte replays exactly; xterm's scroll and repeat shortcuts it gets wrong.
+    os.environ["TERM"] = "vt220"
+    os.execvp("lerd", ["lerd", "tui"])
+screen = pyte.Screen(cols, rows)
+stream = pyte.ByteStream(screen)
+def pump(secs):
+    end = time.time() + secs
+    while time.time() < end:
+        r, _, _ = select.select([fd], [], [], 0.1)
+        if r:
+            try: stream.feed(os.read(fd, 65536))
+            except OSError: return
+def text(): return "\n".join(line.rstrip() for line in screen.display)
+ok = True
+pump(1)
+for step in steps:
+    kind, _, arg = step.partition(":")
+    if kind == "keys":
+        for ch in codecs.decode(arg, "unicode_escape"):
+            os.write(fd, ch.encode())
+            pump(0.15)
+    elif kind == "sleep":
+        pump(float(arg))
+    elif kind == "wait":
+        end = time.time() + 30
+        while not re.search(arg, text()) and time.time() < end:
+            pump(0.3)
+        if not re.search(arg, text()):
+            print("TUI-TIMEOUT waiting for /%s/" % arg)
+            ok = False
+            break
+pump(0.5)
+print(text())
+os.write(fd, b"\x03")
+pump(0.5)
+try: os.kill(pid, 9)
+except OSError: pass
+sys.exit(0 if ok else 1)
+PY
+}
+
 # reclaim: frees images no container uses, so the PHP versions and services a
 # phase tried out do not fill a small guest's disk before the phases after it.
 reclaim() {
