@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/siteinfo"
@@ -180,5 +181,44 @@ func moveTo(t *testing.T, m *Model, key string) {
 	}
 	if m.sideKey != key {
 		t.Fatalf("sidebar never reached %q", key)
+	}
+}
+
+// On a terminal too narrow for the sidebar, it has focus only while its
+// overlay is drawn, so tab and j/k never drive a selection nobody can see.
+func narrowSidebarModel() *Model {
+	m := sidebarModel()
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 40})
+	return m
+}
+
+func TestNarrowTerminalStartsWithTheMainAreaFocused(t *testing.T) {
+	m := narrowSidebarModel()
+	if m.sideFocus || m.sideOverlay {
+		t.Fatalf("sideFocus=%v sideOverlay=%v, want the hidden sidebar out of focus", m.sideFocus, m.sideOverlay)
+	}
+}
+
+func TestTabOnANarrowTerminalShowsTheSidebar(t *testing.T) {
+	m := narrowSidebarModel()
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if !m.sideFocus || !m.sideOverlay {
+		t.Fatalf("after tab: sideFocus=%v sideOverlay=%v, want the overlay shown and focused", m.sideFocus, m.sideOverlay)
+	}
+	if !strings.Contains(ansi.Strip(m.View().Content), "PHP & Node") {
+		t.Fatal("the sidebar is not drawn after tab")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if m.sideFocus || m.sideOverlay {
+		t.Fatalf("second tab: sideFocus=%v sideOverlay=%v, want it hidden again", m.sideFocus, m.sideOverlay)
+	}
+}
+
+func TestEscClosesTheNarrowSidebarIntoTheMainArea(t *testing.T) {
+	m := narrowSidebarModel()
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.sideFocus || m.sideOverlay {
+		t.Fatalf("after esc: sideFocus=%v sideOverlay=%v, want focus back in the main area", m.sideFocus, m.sideOverlay)
 	}
 }

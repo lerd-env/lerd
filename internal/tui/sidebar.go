@@ -464,6 +464,10 @@ func overlaySideW(width int) int { return min(34, width-8) }
 // focus at the selected section, so s / x / r act on the highlighted row.
 func (m *Model) focusSidebar() {
 	m.sideFocus = true
+	// Too narrow for a sidebar column: it can only take focus while drawn.
+	if layoutFor(m.width, m.height).sideW == 0 {
+		m.sideOverlay = true
+	}
 	switch m.activeTab {
 	case tabSites:
 		m.focus = paneSites
@@ -534,7 +538,7 @@ func (m *Model) handleSidebarKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		if !m.sideOverlay {
 			return nil, false
 		}
-		m.sideOverlay = false
+		m.focusMain()
 	case "/":
 		// Filter the section the selection is in; from the dashboard it filters sites.
 		if m.activeTab != tabServices && m.activeTab != tabSites {

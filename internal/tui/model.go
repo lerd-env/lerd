@@ -392,6 +392,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		// A sidebar hidden by the new width must not keep the keys.
+		if layoutFor(m.width, m.height).sideW > 0 {
+			m.sideOverlay = false
+		} else if m.sideFocus && !m.sideOverlay {
+			m.focusMain()
+		}
 		return m, nil
 
 	case tea.BackgroundColorMsg:
