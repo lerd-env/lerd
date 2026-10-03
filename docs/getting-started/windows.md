@@ -68,7 +68,7 @@ Lerd saves the provider it created the machine with as `machine.provider` in the
 | DNS routing | systemd-resolved | a DNS Client NRPT rule for `.test` |
 | Login start | `lerd autostart` | a `Run` registry entry, on by default and removed by `lerd autostart disable` |
 | Shims on `PATH` | sh scripts, `PATH` set in the shell rc | `lerd.exe`, `php`, `composer`, `laravel` and the node shims in `%LOCALAPPDATA%\lerd\bin`, as `.cmd` for cmd and PowerShell and as sh scripts for Git Bash, added to the user `PATH` in the registry |
-| Site paths in containers | the same path | `C:\Sites\app` becomes `/mnt/c/Sites/app` inside the machine |
+| Site paths in containers | the same path | `C:\Sites\app` becomes `/mnt/c/Sites/app` inside the machine, and a relative `.\artisan` or an existing `tests\Unit\FooTest.php` becomes `./artisan` and `tests/Unit/FooTest.php`, while an argument like `Admin\User` keeps its backslashes |
 | Drive sharing (Hyper-V) | not needed | `lerd p9-serve` in place of Podman's 9p server |
 
 Config lives under `%APPDATA%\lerd` and data under `%LOCALAPPDATA%\lerd`. Setting `XDG_CONFIG_HOME` or `XDG_DATA_HOME` overrides both, which is how the test suite isolates itself.

@@ -4,7 +4,11 @@
 // exist inside a Linux VM, so the container side needs a translated twin.
 package hostpath
 
-import "strings"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+)
 
 // DriveRoot is where the VM exposes the host's drives: /mnt/c for C:. It is a
 // variable so the mount layout of a given machine provider can be set in one
@@ -54,4 +58,20 @@ func FromVM(p string) string {
 	drive := strings.ToUpper(rest[:1])
 	tail := strings.TrimPrefix(rest[1:], "/")
 	return drive + `:\` + strings.ReplaceAll(tail, "/", `\`)
+}
+
+// RelToVM returns a relative Windows path with forward slashes, so `php
+// .\artisan` finds the file inside the VM. Only a path that starts with .\ or
+// ..\, or names a file that exists, is rewritten: a backslash is also PHP's
+// namespace separator (make:model Admin\User). Identity off Windows.
+func RelToVM(p string) string {
+	if filepath.Separator != '\\' || !strings.Contains(p, `\`) || IsWindowsPath(p) {
+		return p
+	}
+	if !strings.HasPrefix(p, `.\`) && !strings.HasPrefix(p, `..\`) {
+		if _, err := os.Stat(p); err != nil {
+			return p
+		}
+	}
+	return strings.ReplaceAll(p, `\`, "/")
 }

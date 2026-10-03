@@ -18,7 +18,7 @@ func mapVMArgs(args []string) []string {
 			i++
 			continue
 		}
-		mapped := hostpath.ToVM(args[i])
+		mapped := hostpath.RelToVM(hostpath.ToVM(args[i]))
 		if mapped == args[i] {
 			continue
 		}
