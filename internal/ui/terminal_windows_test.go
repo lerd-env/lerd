@@ -70,3 +70,18 @@ func TestUpdateTerminalsRunLerdUpdateInPowerShell(t *testing.T) {
 		}
 	}
 }
+
+// Terminal-mode commands open PowerShell at the project directory and hold the
+// window until Enter, in place of the sh script no Windows terminal runs.
+func TestCommandTerminalsRunTheCommandInPowerShell(t *testing.T) {
+	got := commandTerminals(`C:\Sites\o'brien`, "php artisan native:jump")
+	if len(got) != 2 || got[0].bin != "wt.exe" || got[1].bin != "cmd.exe" {
+		t.Fatalf("candidates = %+v, want wt.exe then cmd.exe", got)
+	}
+	want := "Set-Location -LiteralPath 'C:\\Sites\\o''brien'\nphp artisan native:jump\nWrite-Host; Read-Host '[press Enter to close]'"
+	for _, c := range got {
+		if script := decodePowerShell(t, c.args[len(c.args)-1]); script != want {
+			t.Errorf("%s script = %q, want %q", c.bin, script, want)
+		}
+	}
+}
