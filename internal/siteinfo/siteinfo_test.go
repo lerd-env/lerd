@@ -691,6 +691,24 @@ func TestEnrichServices(t *testing.T) {
 	})
 }
 
+// A native env reaches the service at 127.0.0.1, so the container name is
+// only in the registry record the last `lerd env` wrote.
+func TestEnrich_RecognisesWiredServices(t *testing.T) {
+	installQuadlets(t, "mailpit")
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".env"), []byte("MAIL_HOST=127.0.0.1\n"), 0644)
+
+	e := Enrich(config.Site{
+		Name:          "shop",
+		Path:          dir,
+		WiredServices: []string{"mailpit"},
+	}, EnrichServices)
+
+	if len(e.Services) != 1 || e.Services[0] != "mailpit" {
+		t.Fatalf("services = %v, want mailpit", e.Services)
+	}
+}
+
 // ── Node version filtering ──────────────────────────────────────────────────
 
 func TestNodeVersionFiltering(t *testing.T) {

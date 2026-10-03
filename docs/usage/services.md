@@ -113,6 +113,12 @@ Every published port can also be moved from the dashboard: a service's **Ports**
 The shift is decided at quadlet-write time, from whether the port can be bound right then. A host server that is installed but stopped at that moment leaves its port looking free, so lerd may take it and clash when that server next starts (for example at boot). This is the deliberate trade for not inspecting the host: a host database is usually running, and the failure is loud. Recover by moving lerd onto a free port with `lerd service port <name> <port>`.
 :::
 
+### Which services the Overview shows
+
+The site Overview treats a service as in use when the project lists it in `.lerd.yaml`, when the env file names its container (`lerd-redis`), or when the site registry records that `lerd env` last wired it. Native sites and [host-proxy sites](host-proxy.md) reach services at `127.0.0.1`, so their env files name the loopback address; the registry record is what keeps those services on the Overview and out of the suggestion row. Container sites are read from the same record.
+
+A recorded service stays listed while its quadlet is installed, whether the container is running or stopped, and a custom service is included the same way. Removing a service from the Overview is remembered, so the registry entry left behind does not put it back, and a service whose quadlet is gone leaves no badge behind. A site last wired by an older lerd has no record yet: run `lerd env` in the project once and the Overview lists the services that command wired.
+
 ---
 
 ## Using a service you run on the host
