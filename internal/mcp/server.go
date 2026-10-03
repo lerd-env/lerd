@@ -370,6 +370,7 @@ func execArtisan(args map[string]any) (any, *rpcError) {
 		cmdArgs = append(cmdArgs, "--env", e)
 	}
 	cmdArgs = append(cmdArgs, envpass.Args(projectPath, os.Environ())...)
+	cmdArgs = append(cmdArgs, phpDet.SiteEnvArgs(projectPath)...)
 	cmdArgs = append(cmdArgs, container, "php", consoleCmd)
 	cmdArgs = append(cmdArgs, artisanArgs...)
 
@@ -909,6 +910,7 @@ func composerExecArgs(container, workdir string, env, composerArgs []string) []s
 		args = append(args, "--env", e)
 	}
 	args = append(args, envpass.Args(workdir, os.Environ())...)
+	args = append(args, phpDet.SiteEnvArgs(workdir)...)
 	args = append(args, container, "php", composer.PharPath())
 	return append(args, composerArgs...)
 }
@@ -1031,6 +1033,7 @@ func execVendorRun(args map[string]any) (any, *rpcError) {
 		cmdArgs = append(cmdArgs, "--env", e)
 	}
 	cmdArgs = append(cmdArgs, envpass.Args(projectPath, os.Environ())...)
+	cmdArgs = append(cmdArgs, phpDet.SiteEnvArgs(projectPath)...)
 	cmdArgs = append(cmdArgs, container, "php", "vendor/bin/"+bin)
 	cmdArgs = append(cmdArgs, binArgs...)
 

@@ -989,41 +989,48 @@ func EnsureXdebugIni(version string) error {
 // WriteFPMQuadlet writes the systemd quadlet for a PHP-FPM version and reloads the
 // systemd daemon if the content changed. It also ensures the xdebug and user ini files exist.
 func WriteFPMQuadlet(version string) error {
+	_, err := WriteFPMQuadletDiff(version)
+	return err
+}
+
+// WriteFPMQuadletDiff is WriteFPMQuadlet, also reporting whether the unit
+// changed, so a caller can move a running container onto the new one.
+func WriteFPMQuadletDiff(version string) (bool, error) {
 	short := strings.ReplaceAll(version, ".", "")
 	unitName := "lerd-php" + short + "-fpm"
 
 	if err := EnsureUserIni(version); err != nil {
-		return fmt.Errorf("creating user ini: %w", err)
+		return false, fmt.Errorf("creating user ini: %w", err)
 	}
 	if err := EnsureSharedIni(); err != nil {
-		return fmt.Errorf("creating shared ini: %w", err)
+		return false, fmt.Errorf("creating shared ini: %w", err)
 	}
 	if err := EnsureOdbcInst(); err != nil {
-		return fmt.Errorf("creating odbcinst registry: %w", err)
+		return false, fmt.Errorf("creating odbcinst registry: %w", err)
 	}
 	if err := EnsureXdebugIni(version); err != nil {
-		return fmt.Errorf("creating xdebug ini: %w", err)
+		return false, fmt.Errorf("creating xdebug ini: %w", err)
 	}
 	if err := EnsureDumpAssets(); err != nil {
-		return fmt.Errorf("ensuring dump assets: %w", err)
+		return false, fmt.Errorf("ensuring dump assets: %w", err)
 	}
 	if err := EnsureProfilerAssets(); err != nil {
-		return fmt.Errorf("ensuring profiler assets: %w", err)
+		return false, fmt.Errorf("ensuring profiler assets: %w", err)
 	}
 	if err := EnsureDevtoolsAssets(); err != nil {
-		return fmt.Errorf("ensuring devtools assets: %w", err)
+		return false, fmt.Errorf("ensuring devtools assets: %w", err)
 	}
 	if err := EnsureMailAssets(); err != nil {
-		return fmt.Errorf("ensuring mail assets: %w", err)
+		return false, fmt.Errorf("ensuring mail assets: %w", err)
 	}
 
 	if err := ensureFPMHostsFile(); err != nil {
-		return err
+		return false, err
 	}
 
 	content, err := renderFPMQuadletContent(version)
 	if err != nil {
-		return err
+		return false, err
 	}
 	// Publish this version's extra shell ports on the SHARED FPM container only.
 	// generateCustomFPMQuadlet reuses renderFPMQuadletContent without these lines,
@@ -1038,14 +1045,15 @@ func WriteFPMQuadlet(version string) error {
 	if !SkipQuadletUpToDateCheck {
 		existingPath := filepath.Join(config.QuadletDir(), unitName+".container")
 		if existing, err := os.ReadFile(existingPath); err == nil && string(existing) == content {
-			return nil
+			return false, nil
 		}
 	}
 
-	if _, err := WriteQuadletDiff(unitName, content); err != nil {
-		return err
+	changed, err := WriteQuadletDiff(unitName, content)
+	if err != nil {
+		return false, err
 	}
-	return DaemonReloadFn()
+	return changed, DaemonReloadFn()
 }
 
 // renderFPMQuadletContent renders the PHP-FPM container template for a version
@@ -1066,6 +1074,9 @@ func renderFPMQuadletContent(version string) (string, error) {
 	content = strings.ReplaceAll(content, "{{.SharedIniPath}}", config.SharedIniFile())
 	content = strings.ReplaceAll(content, "{{.OdbcInstMountLine}}", odbcFPMMountLines())
 	content = strings.ReplaceAll(content, "{{.DumpsDir}}", config.DumpsAssetsDir())
+	mount, pre := providedEnvLines()
+	content = strings.ReplaceAll(content, "{{.ProvidedEnvMountLine}}", mount)
+	content = strings.ReplaceAll(content, "{{.ProvidedEnvExecStartPre}}", pre)
 	content = strings.ReplaceAll(content, "{{.DumpsIniPath}}", config.DumpsIniFile())
 	content = strings.ReplaceAll(content, "{{.DevtoolsIniPath}}", config.DevtoolsIniFile())
 	content = strings.ReplaceAll(content, "{{.MailIniPath}}", config.MailIniFile())

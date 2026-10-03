@@ -17,6 +17,7 @@ import (
 // MCP, parked-directory watcher) stops the site's workers — including a
 // host-proxy site's always-restart dev server.
 func init() {
+	siteops.RemoveProvidedEnv = dropProvidedEnv
 	siteops.StopSiteWorkers = func(site *config.Site) {
 		for _, w := range collectRunningWorkers(site) {
 			stopWorkerByName(site, w)
