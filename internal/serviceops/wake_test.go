@@ -183,7 +183,12 @@ func TestWakeSiteServices_wakesWhatTheSiteUses(t *testing.T) {
 	dataWake = func(n string) error { woke = append(woke, n); return nil }
 	config.ServiceRunning = func(string) bool { return false }
 
-	if err := WakeSiteServices(shop); err != nil {
+	// Through a symlink, as /var is on macOS and /home on Silverblue.
+	link := filepath.Join(t.TempDir(), "shop")
+	if err := os.Symlink(shop, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := WakeSiteServices(link); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(woke, []string{"mysql"}) {

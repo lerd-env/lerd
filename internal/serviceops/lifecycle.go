@@ -279,7 +279,7 @@ func WakeSiteServices(path string) error {
 	var firstErr error
 	for _, svc := range config.IdleSuspendedServices() {
 		for _, site := range config.SitesUsingService(svc) {
-			if site.Path != path {
+			if !config.SamePath(site.Path, path) {
 				continue
 			}
 			if err := wakeForData(svc); err != nil && firstErr == nil {
