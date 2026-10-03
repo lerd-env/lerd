@@ -615,7 +615,6 @@ func handleUpdate(item *systray.MenuItem) {
 	}
 }
 
-
 func handleQuit(item *systray.MenuItem, cancel context.CancelFunc) {
 	<-item.ClickedCh
 	cancel()

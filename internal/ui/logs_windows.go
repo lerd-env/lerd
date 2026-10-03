@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -97,7 +96,7 @@ func streamUnitLogs(w http.ResponseWriter, r *http.Request, unit string) {
 			defer logStreams.Register(unit, streamCancel)()
 		}
 		waitForContainer(streamCtx, unit)
-		cmd := exec.CommandContext(streamCtx, podman.PodmanBin(), "logs", "-f", "--tail", tail, unit)
+		cmd := podman.CmdContext(streamCtx, "logs", "-f", "--tail", tail, unit)
 		cmd.Stdout, cmd.Stderr = pw, pw
 		if err := cmd.Start(); err != nil {
 			fmt.Fprintf(w, "data: error starting logs: %s\n\n", err.Error())
