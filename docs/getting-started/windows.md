@@ -117,8 +117,8 @@ The DNS server reads the same `lerd.conf` a dnsmasq container would, so anything
 
 ## What is missing
 
-- **Workers.** Queue, schedule, Horizon and the other framework workers are disabled on Windows. They bind-mount the site at its own path and run through shell guard scripts, which need the path mapping and a Windows script format.
-- **Scheduled workers.** There is no timer equivalent in the service manager.
+- **Host workers.** Workers that run on the host rather than in a container, such as Vite and Laravel Mix, are disabled on Windows: they need Node on the Windows side. Container workers (queue, `schedule:work`, Horizon, Reverb and the rest) run at the site's `/mnt/c` path in the machine.
+- **Scheduled workers.** A worker with a `schedule:`, such as Laravel 10's `schedule:run` every minute, is skipped: there is no timer equivalent in the service manager.
 - **Unverified path mapping.** The `/mnt/c` mapping matches Podman's own default mount, but it has had little testing on either provider.
 
 ## Removing it
