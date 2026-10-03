@@ -1,0 +1,82 @@
+name: Windows alpha
+
+# Publishes a Windows alpha to lerd-env/lerd-windows from a win-v* tag, for
+# example win-v1.37.0-alpha.1. The main repo's channels never see it: release.yml
+# and the installers only match v* tags, and lerd update lists releases, not tags.
+on:
+  push:
+    tags:
+      - "win-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the version from the tag
+        run: |
+          version="${GITHUB_REF_NAME#win-v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$ ]]; then
+            echo "::error::tag $GITHUB_REF_NAME is not win-v<x.y.z>-alpha.<n>"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: internal/ui/web/package-lock.json
+
+      - name: Build UI
+        run: make build-ui
+
+      # The same zips goreleaser makes for the main release, built with the
+      # release repo pointed at lerd-windows so lerd update stays on this line.
+      - name: Build the zips
+        run: |
+          pkg=github.com/geodro/lerd/internal
+          flags="-s -w -X $pkg/version.Version=$VERSION -X $pkg/version.Commit=$GITHUB_SHA -X $pkg/version.Date=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X $pkg/origin.releaseRepo=lerd-env/lerd-windows"
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            out="$RUNNER_TEMP/lerd_${VERSION}_windows_${arch}"
+            mkdir -p "$out"
+            GOOS=windows GOARCH=$arch CGO_ENABLED=0 go build -tags nogui -ldflags "$flags" -o "$out/lerd.exe" ./cmd/lerd
+            GOOS=windows GOARCH=$arch CGO_ENABLED=0 go build -ldflags "$flags -H=windowsgui" -o "$out/lerd-tray.exe" ./cmd/lerd-tray
+            cp README.md LICENSE internal/licenses/THIRD-PARTY-LICENSES.md "$out/"
+            (cd "$out" && zip -q -r "$GITHUB_WORKSPACE/dist/lerd_${VERSION}_windows_${arch}.zip" .)
+          done
+          sed "s|} else { 'lerd-env/lerd' }|} else { 'lerd-env/lerd-windows' }|" install.ps1 > dist/install.ps1
+          grep -q "'lerd-env/lerd-windows'" dist/install.ps1 || { echo "::error::install.ps1 default repo was not rewritten"; exit 1; }
+          (cd dist && sha256sum lerd_*.zip > checksums.txt)
+
+      - name: Publish to lerd-env/lerd-windows
+        env:
+          GH_TOKEN: ${{ secrets.WINDOWS_RELEASE_TOKEN }}
+        run: |
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          Alpha build of Lerd for native Windows, from lerd-env/lerd@${GITHUB_SHA::8} on feat/native-windows-integration.
+
+          Install or update from an elevated PowerShell:
+
+          \`\`\`powershell
+          irm https://github.com/lerd-env/lerd-windows/releases/latest/download/install.ps1 | iex
+          \`\`\`
+
+          Not ready for daily work yet, see the README for what is missing. Report problems on https://github.com/lerd-env/lerd/issues and mention the version.
+          EOF
+          gh release create "v$VERSION" dist/* \
+            --repo lerd-env/lerd-windows \
+            --target main \
+            --latest \
+            --title "Lerd for Windows $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md"
