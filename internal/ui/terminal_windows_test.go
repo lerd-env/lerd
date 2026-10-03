@@ -5,6 +5,7 @@ package ui
 import (
 	"encoding/base64"
 	"slices"
+	"strings"
 	"testing"
 	"unicode/utf16"
 )
@@ -82,6 +83,26 @@ func TestCommandTerminalsRunTheCommandInPowerShell(t *testing.T) {
 	for _, c := range got {
 		if script := decodePowerShell(t, c.args[len(c.args)-1]); script != want {
 			t.Errorf("%s script = %q, want %q", c.bin, script, want)
+		}
+	}
+}
+
+// The logs' "follow in terminal" button only tried the Linux emulators, so on
+// Windows it always answered that none was found. It now runs the follow
+// script in PowerShell, in Windows Terminal or a console of its own, with the
+// Podman path quoted so one under Program Files still runs.
+func TestLogTerminalFollowsInPowerShell(t *testing.T) {
+	script := logFollowScript("lerd-nginx")
+	if !strings.HasPrefix(script, "& '") || !strings.HasSuffix(script, "' logs -f --tail 100 lerd-nginx") {
+		t.Errorf("logFollowScript = %q, want the quoted podman path invoked with &", script)
+	}
+	got := powerShellTerminals(script)
+	if len(got) != 2 || got[0].bin != "wt.exe" || got[1].bin != "cmd.exe" {
+		t.Fatalf("candidates = %+v, want wt.exe then cmd.exe", got)
+	}
+	for _, c := range got {
+		if decoded := decodePowerShell(t, c.args[len(c.args)-1]); decoded != script {
+			t.Errorf("%s script = %q, want %q", c.bin, decoded, script)
 		}
 	}
 }

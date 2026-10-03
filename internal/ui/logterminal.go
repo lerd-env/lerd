@@ -58,7 +58,7 @@ func handleUnitLogStream(w http.ResponseWriter, r *http.Request) {
 
 // openTerminal is the seam tests replace so the handler can be exercised
 // without launching a real emulator.
-var openTerminal = openTerminalCommand
+var openTerminal = openLogTerminal
 
 // handleLogTerminal opens the host's terminal emulator tailing the same unit
 // the given log stream path shows, so a long-running tail can outlive the tab.
