@@ -9,9 +9,11 @@ import (
 // NewSuperviseCmd returns the hidden `lerd supervise` command, which the
 // Windows service manager runs a unit under so the unit's restart policy is
 // honoured: it runs the command after --, waits for it, and starts it again on
-// exit as --restart says.
+// exit as --restart says. The service manager starts it with --detach, which
+// launches the supervisor and returns so the unit is in no caller's process tree.
 func NewSuperviseCmd() *cobra.Command {
 	var unit, restart string
+	var detach bool
 	cmd := &cobra.Command{
 		Use:          "supervise --unit NAME --restart always|on-failure -- COMMAND [ARGS...]",
 		Short:        "Run a service unit and restart it by its policy (internal)",
@@ -19,10 +21,11 @@ func NewSuperviseCmd() *cobra.Command {
 		SilenceUsage: true,
 		Args:         cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return services.Supervise(unit, restart, args)
+			return services.Supervise(unit, restart, args, detach)
 		},
 	}
 	cmd.Flags().StringVar(&unit, "unit", "", "unit name, for the log")
 	cmd.Flags().StringVar(&restart, "restart", "on-failure", "restart policy: always, on-failure or no")
+	cmd.Flags().BoolVar(&detach, "detach", false, "start the supervisor with no live parent, record its pid and return")
 	return cmd
 }

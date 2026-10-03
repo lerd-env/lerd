@@ -139,19 +139,27 @@ func killTree(pid int) {
 // console program such as PowerShell or node exits at once with no console to
 // attach to. Output is appended to the
 // unit's log, and records the pid. A unit with a restart policy runs under
-// `lerd supervise`, whose pid is the one recorded.
+// `lerd supervise`, whose pid is the one recorded: spawn runs the detaching
+// launcher to completion and the launcher records the supervisor's pid.
 func spawn(name string, args []string, restart keepAlivePolicy) error {
 	logf, err := os.OpenFile(filepath.Join(logsDir(), name+".log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
 	defer logf.Close() //nolint:errcheck
+	supervised := restart != keepAliveNever
 	args = supervisedArgs(name, restart, args)
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdout, cmd.Stderr = logf, logf
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		CreationFlags: createNewProcessGroup | createNoWindow,
 		HideWindow:    true,
+	}
+	if supervised {
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("starting %s: %w", name, err)
+		}
+		return nil
 	}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("starting %s: %w", name, err)
