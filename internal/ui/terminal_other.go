@@ -10,3 +10,8 @@ func platformTerminals(string) []terminalCmd { return nil }
 func openUpdateTerminal(self string) error {
 	return openTerminalCommand(buildUpdateScript(self))
 }
+
+// openCommandTerminal runs a site command in a new terminal window at cwd.
+func openCommandTerminal(cwd, command string) error {
+	return openTerminalCommand(terminalCommandScript(cwd, command))
+}

@@ -3,10 +3,9 @@
 package ui
 
 import (
-	"encoding/base64"
 	"fmt"
-	"strings"
-	"unicode/utf16"
+
+	"github.com/geodro/lerd/internal/hostshell"
 )
 
 // platformTerminals offers Windows Terminal at dir, then a PowerShell console
@@ -32,20 +31,33 @@ func openUpdateTerminal(self string) error {
 // updateTerminals passes the script encoded, so neither wt.exe, which splits
 // its command line on ';', nor cmd.exe gets to reinterpret it.
 func updateTerminals(self string) []terminalCmd {
-	script := "& '" + strings.ReplaceAll(self, "'", "''") + "' update; Write-Host; Read-Host 'Press Enter to close'"
-	ps := []string{"powershell", "-NoLogo", "-NoProfile", "-EncodedCommand", encodePowerShell(script)}
+	script := "& " + hostshell.Quote(self) + " update; Write-Host; Read-Host 'Press Enter to close'"
+	ps := []string{"powershell", "-NoLogo", "-NoProfile", "-EncodedCommand", hostshell.Encode(script)}
 	return []terminalCmd{
 		{"wt.exe", ps},
 		{"cmd.exe", append([]string{"/c", "start", ""}, ps...)},
 	}
 }
 
-// encodePowerShell is the base64 of the UTF-16LE text -EncodedCommand expects.
-func encodePowerShell(script string) string {
-	u := utf16.Encode([]rune(script))
-	b := make([]byte, 2*len(u))
-	for i, c := range u {
-		b[2*i], b[2*i+1] = byte(c), byte(c>>8)
+// openCommandTerminal runs a site command in PowerShell at cwd, in Windows
+// Terminal or a console of its own, and keeps the window open until Enter is
+// pressed. No Windows terminal runs the sh script the other platforms use.
+func openCommandTerminal(cwd, command string) error {
+	started, err := startFirstTerminal(commandTerminals(cwd, command))
+	if !started && err == nil {
+		return fmt.Errorf("no terminal found; run %s from a terminal", command)
 	}
-	return base64.StdEncoding.EncodeToString(b)
+	return err
+}
+
+// commandTerminals passes the script encoded for the same reason
+// updateTerminals does.
+func commandTerminals(cwd, command string) []terminalCmd {
+	script := "Set-Location -LiteralPath " + hostshell.Quote(cwd) + "\n" + command +
+		"\nWrite-Host; Read-Host '[press Enter to close]'"
+	ps := []string{hostshell.Bin(), "-NoLogo", "-NoProfile", "-EncodedCommand", hostshell.Encode(script)}
+	return []terminalCmd{
+		{"wt.exe", ps},
+		{"cmd.exe", append([]string{"/c", "start", ""}, ps...)},
+	}
 }

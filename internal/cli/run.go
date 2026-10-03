@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/hostshell"
 	"github.com/geodro/lerd/internal/sitetpl"
 	"github.com/spf13/cobra"
 )
@@ -178,7 +180,7 @@ func runNamedCommand(cwd string, cmds []config.FrameworkCommand, name string, as
 // do it too, or every command that starts with `php` dies with "command not
 // found" for anyone running `lerd path:disable`.
 func newCommandExec(dir, command string) *exec.Cmd {
-	c := exec.Command("sh", "-c", command)
+	c := hostshell.Command(context.Background(), command)
 	c.Dir = dir
 	c.Env = append(os.Environ(), "PATH="+config.PathWithBinDir())
 	return c
