@@ -333,3 +333,31 @@ func TestRunAutoSnapshots_leavesAStoppedEngineAlone(t *testing.T) {
 		t.Fatalf("snapshotted a stopped engine: %v", *taken)
 	}
 }
+
+// Stopping the woken engine takes seconds; a watcher restarted meanwhile must
+// already find the stamps on disk, or it takes the same snapshot again.
+func TestRunAutoSnapshots_stampsBeforeTheEngineSleepsAgain(t *testing.T) {
+	autoSnapshotEnv(t)
+	writeAutoSnapshotConfig(t, "auto_snapshot:\n  enabled: true\n  every: 24h\n")
+	site := seedAutoSnapshotSite(t, "shop", "mysql", "shop_db", config.AutoSnapshotOn)
+	if err := config.SaveSites(&config.SiteRegistry{Sites: []config.Site{site}}); err != nil {
+		t.Fatal(err)
+	}
+	autoSnapshotRunning = func(string) bool { return false }
+	_ = config.SetServiceIdleSuspended("mysql", true)
+	now := time.Unix(2_000_000_000, 0)
+	_ = config.SetServiceSleptAt("mysql", now.Add(-time.Hour))
+
+	stampedBeforeStop := false
+	prevWake := autoSnapshotWhileAsleep
+	t.Cleanup(func() { autoSnapshotWhileAsleep = prevWake })
+	autoSnapshotWhileAsleep = func(_ string, fn func() error) error {
+		err := fn()
+		stampedBeforeStop = len(loadAutoSnapshotStamps()) == 1
+		return err
+	}
+	runAutoSnapshots(now)
+	if !stampedBeforeStop {
+		t.Fatal("stamps were not on disk when the engine went back to sleep")
+	}
+}

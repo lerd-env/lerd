@@ -127,6 +127,11 @@ func runAutoSnapshots(now time.Time) {
 			for _, t := range asleep[service] {
 				snapshot(t)
 			}
+			// Saved before the engine stops again, which takes seconds: a
+			// watcher restarted meanwhile would otherwise dump it twice.
+			if changed {
+				saveAutoSnapshotStamps(stamps)
+			}
 			return nil
 		})
 		if err != nil {
