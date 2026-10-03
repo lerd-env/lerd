@@ -43,6 +43,9 @@ func wakeRequest(host, uri string) *httptest.ResponseRecorder {
 }
 
 func wakeRequestWith(r *http.Request, host, uri string) *httptest.ResponseRecorder {
+	if r.RemoteAddr == "192.0.2.1:1234" { // httptest's default peer, not a host address
+		r.RemoteAddr = "127.0.0.1:40000"
+	}
 	r.Header.Set("X-Lerd-Wake-Host", host)
 	r.Header.Set("X-Lerd-Wake-Uri", uri)
 	r.Header.Set("X-Lerd-Wake-Scheme", "http")
@@ -138,6 +141,20 @@ func TestWakeHold_refusesAnythingButARelativePathOnAKnownSite(t *testing.T) {
 	}
 	if len(*pinged) != 0 {
 		t.Fatalf("woke %v for a refused request", *pinged)
+	}
+}
+
+// lerd-ui listens on every interface, so a LAN client calling the hold directly
+// must not reach a site that LAN access keeps private; only nginx may hand over.
+func TestWakeHold_refusesAPeerThatIsNotTheHost(t *testing.T) {
+	pinged := stubWakeHold(t, 0)
+	r := httptest.NewRequest(http.MethodGet, nginx.WakeHoldPath, nil)
+	r.RemoteAddr = "203.0.113.7:51000"
+	if w := wakeRequestWith(r, "shop.test", "/"); w.Code != http.StatusForbidden {
+		t.Fatalf("got %d, want %d", w.Code, http.StatusForbidden)
+	}
+	if len(*pinged) != 0 {
+		t.Fatalf("woke %v for a LAN peer", *pinged)
 	}
 }
 
