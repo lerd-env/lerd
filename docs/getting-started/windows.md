@@ -52,6 +52,10 @@ Choosing Hyper-V stops the install with the command to enable it, then you reboo
 
 WSL 3 places the machine in a cgroup that does not hand the `pids` controller down, so with Podman's default systemd cgroup manager no container can start, failing with `crun: controller 'pids' is not available` ([podman#29749](https://github.com/podman-container-tools/podman/issues/29749)). On a WSL machine, `lerd install` and `lerd start` start a throwaway container first, and when it fails this way they switch the machine to the `cgroupfs` manager with a drop-in at `/etc/containers/containers.conf.d/90-lerd-wsl-cgroupfs.conf`. The drop-in lives on the machine's disk, so it is applied once, and a machine that runs containers fine is left untouched.
 
+### Older WSL kernels
+
+Podman 6 sets up container networks with netavark 2, whose nftables rules need the kernel's `NFT_FIB_INET` support. WSL kernels before 6.18 (WSL 2.x) are built without it, so every container fails with `netavark (exit code 1): nftables error: "nft" did not return successfully while applying ruleset`, image builds included. netavark 2 has no iptables backend to fall back on. The same throwaway container catches this, and `lerd install` and `lerd start` stop with the fix: run `wsl --update`, then `wsl --shutdown`, then `lerd install` again. WSL 3 ships a 6.18 kernel that works.
+
 Lerd saves the provider it created the machine with as `machine.provider` in the global config, so it keeps using that machine even if Hyper-V is turned on or off later. To pick one yourself before the first install, set `CONTAINERS_MACHINE_PROVIDER` to `hyperv` or `wsl`, or set `machine.provider` in the config. Any other value is refused.
 
 ## How it works

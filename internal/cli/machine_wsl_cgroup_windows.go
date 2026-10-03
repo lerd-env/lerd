@@ -4,6 +4,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -23,20 +24,47 @@ const (
 
 // ensureWSLContainersRun checks that the WSL machine can start a container and
 // applies the cgroupfs workaround when it fails on a missing cgroup controller.
-// Other probe failures are left for the real container start to report.
+// A WSL kernel too old for netavark's nftables rules stops with the update to
+// run; other probe failures are left for the real container start to report.
 func ensureWSLContainersRun() error {
 	out, err := probeMachineContainer()
-	if err == nil || !isMissingCgroupController(out) {
+	if err == nil {
+		return nil
+	}
+	if isOldWSLKernelNetworkFailure(out) {
+		return oldWSLKernelError()
+	}
+	if !isMissingCgroupController(out) {
 		return nil
 	}
 	feedback.Line("Switching the WSL machine to the cgroupfs manager (WSL 3 cgroup layout, podman#29749)…")
 	if err := applyCgroupfsDropIn(); err != nil {
 		return fmt.Errorf("applying the WSL cgroup workaround: %w", err)
 	}
-	if out, err := probeMachineContainer(); err != nil && isMissingCgroupController(out) {
+	out, err = probeMachineContainer()
+	switch {
+	case err == nil:
+	case isOldWSLKernelNetworkFailure(out):
+		return oldWSLKernelError()
+	case isMissingCgroupController(out):
 		return fmt.Errorf("containers still cannot start in the WSL machine after switching to cgroupfs (see podman#29749): %s", strings.TrimSpace(out))
 	}
 	return nil
+}
+
+// isOldWSLKernelNetworkFailure recognises netavark failing to load its
+// nftables ruleset. WSL kernels before 6.18 lack NFT_FIB_INET, which the
+// ruleset of netavark 2 needs, so no container on the machine gets a network.
+func isOldWSLKernelNetworkFailure(out string) bool {
+	return strings.Contains(out, "netavark") && strings.Contains(out, "nftables error")
+}
+
+func oldWSLKernelError() error {
+	return errors.New("containers cannot get a network in the WSL machine: this WSL kernel is too old for Podman's nftables rules (it lacks NFT_FIB_INET). " +
+		"Update WSL, restart it, then run lerd install again:\n\n" +
+		"    wsl --update\n" +
+		"    wsl --shutdown\n" +
+		"    lerd install")
 }
 
 // isMissingCgroupController recognises crun refusing a container because a

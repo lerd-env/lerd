@@ -86,3 +86,38 @@ func TestEnsureWSLContainersRunReportsAFailedSwitch(t *testing.T) {
 		t.Errorf("err = %v, want the apply failure", err)
 	}
 }
+
+const nftErr = `Error: preparing container c91d for attach: netavark (exit code 1): nftables error: "nft" did not return successfully while applying ruleset:`
+
+// An older WSL kernel lacks NFT_FIB_INET, which netavark 2 needs for every
+// container network; no config change helps, only a newer WSL kernel.
+func TestEnsureWSLContainersRunAsksForAWSLUpdateOnTheNftablesError(t *testing.T) {
+	applied := stubWSLCgroup(t, []string{nftErr}, nil)
+	err := ensureWSLContainersRun()
+	if err == nil || *applied != 0 {
+		t.Fatalf("err=%v applied=%d, want an error and no config change", err, *applied)
+	}
+	for _, want := range []string{"wsl --update", "wsl --shutdown", "lerd install"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not say %q", err, want)
+		}
+	}
+}
+
+func TestEnsureWSLContainersRunAsksForAWSLUpdateWhenNftablesFailsAfterTheSwitch(t *testing.T) {
+	stubWSLCgroup(t, []string{pidsErr, nftErr}, nil)
+	if err := ensureWSLContainersRun(); err == nil || !strings.Contains(err.Error(), "wsl --update") {
+		t.Errorf("err=%v, want the WSL update guidance", err)
+	}
+}
+
+func TestIsOldWSLKernelNetworkFailure(t *testing.T) {
+	if !isOldWSLKernelNetworkFailure(nftErr) {
+		t.Error("the netavark nftables error was not recognised")
+	}
+	for _, out := range []string{"", pidsErr, "netavark (exit code 1): Must provide a valid firewall backend, got iptables"} {
+		if isOldWSLKernelNetworkFailure(out) {
+			t.Errorf("%q is not the old kernel failure", out)
+		}
+	}
+}
