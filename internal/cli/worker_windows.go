@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
@@ -20,20 +21,18 @@ import (
 	"github.com/geodro/lerd/internal/unitlog"
 )
 
-// errHostWorkersWindows is why host workers (Vite, Mix) stay off on Windows: they
-// run Node on the host, which has no Windows path yet.
-var errHostWorkersWindows = errors.New("host workers are not available on Windows yet")
-
 // writeWorkerUnitFile writes a framework worker's unit on Windows. The site is
 // mounted at its /mnt/<drive> path inside the machine, so the worker runs there:
 //
 //   - exec mode (the default): a service unit whose ExecStart is `podman exec`
 //     into the site's FPM container, as on Linux. The service manager runs it
 //     under `lerd supervise`, which restarts it by its policy, and a stop clears
-//     what is left in the container through killWorkerInContainer.
+//     what is left in the container from the worker's sidecar.
 //   - container mode: one detached container per worker, from the FPM image.
+//   - host: true (Vite and other Node tooling): the command runs on Windows in
+//     the site's folder, see writeWindowsHostWorkerUnit.
 //
-// Scheduled and host workers are refused earlier by workerSupportedOnPlatform.
+// Scheduled workers are refused earlier by workerSupportedOnPlatform.
 func writeWorkerUnitFile(unitName, label, siteName, sitePath, phpVersion, command, restart, schedule, fpmUnit, requiresUnit string, host bool) (bool, error) {
 	_ = requiresUnit
 	// Generation-boundary guard so every caller is covered (incl. the boot
@@ -52,7 +51,7 @@ func writeWorkerUnitFile(unitName, label, siteName, sitePath, phpVersion, comman
 		return false, err
 	}
 	if host {
-		return false, errHostWorkersWindows
+		return writeWindowsHostWorkerUnit(unitName, label, siteName, sitePath, command, restart)
 	}
 	if schedule != "" {
 		feedback.Warn("worker %s has schedule=%q which is not yet supported on Windows — skipping", unitName, schedule)
@@ -78,6 +77,51 @@ func writeWorkerUnitFile(unitName, label, siteName, sitePath, phpVersion, comman
 	return services.Mgr.WriteServiceUnitIfChanged(unitName, unit)
 }
 
+// writeWindowsHostWorkerUnit writes a host worker's unit: the command runs
+// through cmd.exe in the site's folder with lerd's bin first on PATH, so `npm`
+// and `node` are lerd's shims and pick the project's Node version, as they do
+// from a terminal. Stopping it is a tree kill, which gives the dev server no
+// chance to remove the URL file it wrote on boot (Vite's public/hot), so the
+// sidecar records that file for the stop to remove; left behind, the site would
+// keep asking a dead server for its assets.
+func writeWindowsHostWorkerUnit(unitName, label, siteName, sitePath, command, restart string) (bool, error) {
+	unit := buildWindowsHostWorkerUnit(unitName, label, siteName, sitePath, installedLerdExe(), command, restart)
+	saveWorkerReap(unitName, workerReap{Host: true, Dir: sitePath, URLFile: hostWorkerURLFile(sitePath, command)})
+	return services.Mgr.WriteServiceUnitIfChanged(unitName, unit)
+}
+
+// buildWindowsHostWorkerUnit renders the host worker unit. The command is one
+// quoted argument, handed to cmd.exe whole so &&, pipes and redirects work.
+func buildWindowsHostWorkerUnit(unitName, label, siteName, sitePath, lerdBin, command, restart string) string {
+	return fmt.Sprintf(`[Unit]
+Description=Lerd %s (%s)
+
+[Service]
+Type=simple
+Restart=%s
+ExecStart=%s worker-exec --unit %s --dir %s --shell -- %s
+`, label, siteName, restart, podman.ShellQuote(lerdBin), unitName, podman.ShellQuote(sitePath), podman.ShellQuote(command))
+}
+
+// hostWorkerURLFile is the absolute path of the URL file the site's host worker
+// running command declares in its health block, or "" when it declares none.
+var hostWorkerURLFile = func(sitePath, command string) string {
+	site, err := config.FindSiteByPath(sitePath)
+	if err != nil || site == nil {
+		return ""
+	}
+	fw, ok := config.GetFrameworkForDir(site.Framework, sitePath)
+	if !ok || fw == nil {
+		return ""
+	}
+	for _, w := range fw.Workers {
+		if w.Host && w.Health != nil && w.Health.URLFile != "" && w.Command != "" && strings.HasPrefix(command, w.Command) {
+			return filepath.Join(sitePath, w.Health.URLFile)
+		}
+	}
+	return ""
+}
+
 // installedLerdExe is the lerd.exe a unit should run: the installed copy, not a
 // build folder's that happened to write the unit during `lerd install`.
 func installedLerdExe() string {
@@ -92,15 +136,23 @@ func installedLerdExe() string {
 // the container, then runs args with this process's output and returns the
 // exit code. Without the clearing, a restart (which ends only the host side
 // podman exec) or a dropped machine connection would leave the old worker
-// running beside the new one.
-func runWorkerExec(unitName string, args []string) (int, error) {
+// running beside the new one. With shell, args is one command line run by
+// cmd.exe in dir with lerd's bin first on PATH, for a host worker.
+func runWorkerExec(unitName, dir string, shell bool, args []string) (int, error) {
 	if data, err := os.ReadFile(workerReapPath(unitName)); err == nil {
 		var r workerReap
-		if json.Unmarshal(data, &r) == nil && r.Container != "" && r.Command != "" && r.Dir != "" {
+		if json.Unmarshal(data, &r) == nil && !r.Host && r.Container != "" && r.Command != "" && r.Dir != "" {
 			reapWorkerInContainer(r)
 		}
 	}
-	cmd := exec.Command(args[0], args[1:]...)
+	var cmd *exec.Cmd
+	if shell {
+		cmd = shellCommand(strings.Join(args, " "))
+		cmd.Env = withBinDirFirst(os.Environ())
+	} else {
+		cmd = exec.Command(args[0], args[1:]...)
+	}
+	cmd.Dir = dir
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	err := cmd.Run()
 	var exitErr *exec.ExitError
@@ -114,15 +166,48 @@ func runWorkerExec(unitName string, args []string) (int, error) {
 	}
 }
 
-// workerReap is what a stop needs to end an exec worker inside its container.
-// Ending the unit only ends the host side `podman exec`: podman reaches the
+// shellCommand runs line through cmd.exe. The command line is passed raw:
+// cmd.exe does not unquote the way Go's argument escaping assumes, and /s with
+// one outer pair of quotes keeps the line exactly as written.
+func shellCommand(line string) *exec.Cmd {
+	comspec := os.Getenv("ComSpec")
+	if comspec == "" {
+		comspec = "cmd.exe"
+	}
+	cmd := exec.Command(comspec)
+	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: `"` + comspec + `" /d /s /c "` + line + `"`}
+	return cmd
+}
+
+// withBinDirFirst puts lerd's bin folder at the front of PATH in env.
+func withBinDirFirst(env []string) []string {
+	out := make([]string, 0, len(env)+1)
+	path := ""
+	for _, kv := range env {
+		if k, v, ok := strings.Cut(kv, "="); ok && strings.EqualFold(k, "PATH") {
+			path = v
+			continue
+		}
+		out = append(out, kv)
+	}
+	if path == "" {
+		return append(out, "PATH="+config.BinDir())
+	}
+	return append(out, "PATH="+config.BinDir()+string(os.PathListSeparator)+path)
+}
+
+// workerReap is the sidecar a stop reads, as the stop path knows only the unit.
+// For an exec worker it is what ends the worker inside its container: ending
+// the unit only ends the host side `podman exec`, since podman reaches the
 // machine over a connection that carries no signal to the process it started,
-// so the worker would go on running in the container. Kept as a sidecar for
-// the same reason the macOS .reap file is: the stop path knows only the unit.
+// so the worker would go on running there. For a host worker it is the URL file
+// to remove (Host, URLFile).
 type workerReap struct {
-	Container string `json:"container"`
-	Command   string `json:"command"`
+	Container string `json:"container,omitempty"`
+	Command   string `json:"command,omitempty"`
 	Dir       string `json:"dir"`
+	Host      bool   `json:"host,omitempty"`
+	URLFile   string `json:"url_file,omitempty"`
 }
 
 func workerReapPath(unitName string) string {
@@ -197,7 +282,8 @@ func workerLogHint(unitName string, host bool) string {
 }
 
 // removeWorkerExecArtifacts runs on every worker stop, after the unit is down:
-// it ends what the exec worker left in its container and drops the sidecar.
+// it ends what an exec worker left in its container, or removes the URL file a
+// host worker's dev server left behind, and drops the sidecar.
 func removeWorkerExecArtifacts(unitName string) {
 	path := workerReapPath(unitName)
 	data, err := os.ReadFile(path)
@@ -205,8 +291,13 @@ func removeWorkerExecArtifacts(unitName string) {
 		return
 	}
 	var r workerReap
-	if json.Unmarshal(data, &r) == nil && r.Container != "" && r.Command != "" && r.Dir != "" {
-		reapWorkerInContainer(r)
+	if json.Unmarshal(data, &r) == nil {
+		switch {
+		case r.Host && r.URLFile != "":
+			_ = os.Remove(r.URLFile)
+		case !r.Host && r.Container != "" && r.Command != "" && r.Dir != "":
+			reapWorkerInContainer(r)
+		}
 	}
 	_ = os.Remove(path)
 }
@@ -220,6 +311,14 @@ func restoreWorker(siteName, sitePath, phpVersion, workerName string, w config.F
 	// Resolve the same way WorkerStartForSite does so a project opted into
 	// auto-reload keeps its reload command across lerd start and reboots.
 	command := resolveWorkerCommand(sitePath, workerName, w)
+	// A project-supplied host worker only restores on boot if the user already
+	// approved the command it will run, so a cloned repo's host worker cannot
+	// run unattended after a reboot.
+	if w.Host && w.ProjectOrigin {
+		if allowed, _ := config.HostCommandAllowed(siteName, command); !allowed {
+			return
+		}
+	}
 	command = withWorkerProxyPort(siteName, sitePath, workerName, w, command)
 	command = devServerCommand(siteName, sitePath, workerName, command, w)
 

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/hostpath"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 )
@@ -83,5 +84,7 @@ func killWorkerInContainer(siteName, sitePath, workerName string) {
 	if container == "" || !podman.ContainerRunningQuiet(container) {
 		return
 	}
-	containerKillFn(container, containerKillScript(command, sitePath))
+	// Inside the container the site sits at its machine path (/mnt/<drive> on
+	// Windows), which is what /proc/<pid>/cwd reports.
+	containerKillFn(container, containerKillScript(command, hostpath.ToVM(sitePath)))
 }
