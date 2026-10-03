@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -72,6 +73,10 @@ func ensurePodmanMachineRunning() error {
 		return podmanMissingError(err)
 	}
 	provider, offerHyperV, err := machineProvider()
+	var setup *backendSetup
+	if errors.As(err, &setup) {
+		return enableBackend(setup)
+	}
 	if err != nil {
 		return err
 	}
@@ -104,7 +109,7 @@ func bringMachineUp(provider string, offerHyperV bool) error {
 
 	if name == "" {
 		if offerHyperV && askHyperVOverWSL() {
-			return hyperVSwitchError()
+			return enableBackend(hyperVSwitch())
 		}
 		feedback.Line(fmt.Sprintf("Initialising Podman Machine on %s (first run, this may take a minute)…", provider))
 		cmd := podman.Cmd(machineInitArgs("", targetMiB)...)

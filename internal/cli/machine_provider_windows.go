@@ -3,10 +3,14 @@
 package cli
 
 import (
+	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
+	"unicode/utf16"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
@@ -96,28 +100,28 @@ func planMachineProvider(env, saved string, h hostBackends) (provider string, of
 	case h.wslInstalled:
 		return "", false, vmPlatformError()
 	case h.hyperVEdition():
-		return "", false, fmt.Errorf("no Podman machine backend is ready on this PC.\n\n"+
+		return "", false, &backendSetup{provider: machineProviderHyperV, orWSL: true, guidance: fmt.Sprintf("no Podman machine backend is ready on this PC.\n\n"+
 			"Your Windows edition%s supports Hyper-V, which runs lerd natively. Enable it from an elevated PowerShell, reboot, then run lerd install again:\n\n    %s\n\n"+
 			"Or use WSL2 instead: install it, reboot, then run lerd install again:\n\n    %s",
-			h.editionLabel(), enableHyperVCmd, installWSLCmd)
+			h.editionLabel(), enableHyperVCmd, installWSLCmd)}
 	}
-	return "", false, fmt.Errorf("no Podman machine backend is ready on this PC.\n\n"+
+	return "", false, &backendSetup{provider: machineProviderWSL, guidance: fmt.Sprintf("no Podman machine backend is ready on this PC.\n\n"+
 		"Your Windows edition%s does not include Hyper-V, so lerd runs its containers on WSL2. Install it from an elevated PowerShell, reboot, then run lerd install again:\n\n    %s",
-		h.editionLabel(), installWSLCmd)
+		h.editionLabel(), installWSLCmd)}
 }
 
 // explicitProviderReady checks a provider the user or a previous install chose.
 func explicitProviderReady(source, p string, h hostBackends) error {
 	switch {
 	case p == machineProviderWSL && !h.wslInstalled:
-		return fmt.Errorf("%s is %q, but WSL is not installed. Install it from an elevated PowerShell, reboot, then run lerd install again:\n\n    %s", source, p, installWSLCmd)
+		return &backendSetup{provider: p, guidance: fmt.Sprintf("%s is %q, but WSL is not installed. Install it from an elevated PowerShell, reboot, then run lerd install again:\n\n    %s", source, p, installWSLCmd)}
 	case p == machineProviderWSL && !h.vmPlatform:
 		return vmPlatformError()
 	case p == machineProviderHyperV && !h.hyperVEdition():
 		return fmt.Errorf("%s is %q, but this Windows edition%s does not include Hyper-V. Choose %q instead, then install WSL from an elevated PowerShell, reboot and run lerd install again:\n\n    %s",
 			source, p, h.editionLabel(), machineProviderWSL, installWSLCmd)
 	case p == machineProviderHyperV && !h.hyperVEnabled:
-		return fmt.Errorf("%s is %q, but Hyper-V is not enabled. Enable it from an elevated PowerShell, reboot, then run lerd install again:\n\n    %s", source, p, enableHyperVCmd)
+		return &backendSetup{provider: p, guidance: fmt.Sprintf("%s is %q, but Hyper-V is not enabled. Enable it from an elevated PowerShell, reboot, then run lerd install again:\n\n    %s", source, p, enableHyperVCmd)}
 	}
 	return nil
 }
@@ -140,7 +144,7 @@ func providerComparison() string {
   Hyper-V (recommended)
     + its own VM, separate from your WSL distros, so 'wsl --shutdown' or a WSL update leaves your sites running
     + lerd sizes the VM's memory for this PC
-    - needs Hyper-V enabled from an elevated PowerShell and a reboot first
+    - lerd enables it for you, then Windows needs a reboot first
     - creating the machine needs an elevated shell
 
   WSL2
@@ -166,10 +170,88 @@ func askHyperVOverWSL() bool {
 // stdinIsTerminal is a var so tests can stand in for a console.
 var stdinIsTerminal = func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
 
-// hyperVSwitchError ends the install when the user picks Hyper-V on a host
-// that does not have it enabled yet.
-func hyperVSwitchError() error {
-	return errors.New("enable Hyper-V from an elevated PowerShell, reboot, then run lerd install again:\n\n    " + enableHyperVCmd)
+// hyperVSwitch is the setup run when the user picks Hyper-V on a host that
+// does not have it enabled yet.
+func hyperVSwitch() *backendSetup {
+	return &backendSetup{provider: machineProviderHyperV, guidance: "enable Hyper-V from an elevated PowerShell, reboot, then run lerd install again:\n\n    " + enableHyperVCmd}
+}
+
+// backendSetup is a backend lerd can turn on itself. Its error text is the
+// manual route, shown when lerd cannot enable it.
+type backendSetup struct {
+	provider string
+	orWSL    bool // Hyper-V is recommended, the user may take WSL2 instead
+	guidance string
+}
+
+func (b *backendSetup) Error() string { return b.guidance }
+
+// enableScripts run elevated. -NoRestart keeps DISM from rebooting or asking
+// to; 3010 is Windows' "succeeded, reboot required".
+var enableScripts = map[string]string{
+	machineProviderHyperV: enableHyperVCmd + " -NoRestart -ErrorAction Stop | Out-Null",
+	machineProviderWSL:    installWSLCmd + "; if ($LASTEXITCODE -ne 3010) { exit $LASTEXITCODE }",
+}
+
+// enableBackend turns the backend on through a UAC prompt, saves it as the
+// provider so the next run does not ask again, and ends the run with the
+// reboot Windows needs before it can start the VM.
+func enableBackend(s *backendSetup) error {
+	p := s.provider
+	if s.orWSL && !askEnableHyperV() {
+		p = machineProviderWSL
+	}
+	name := providerLabel(p)
+	feedback.Line(fmt.Sprintf("Enabling %s, Windows will ask for administrator permission…", name))
+	if err := runElevated(enableScripts[p]); err != nil {
+		return fmt.Errorf("could not enable %s: %w\n\n%s", name, err, s.guidance)
+	}
+	if err := rememberMachineProvider(p); err != nil {
+		feedback.Warn("could not save the machine provider (%v); set %s=%s after the restart", err, machineProviderEnv, p)
+	}
+	return fmt.Errorf("%s is enabled. Restart Windows to finish, then run lerd install again", name)
+}
+
+func providerLabel(p string) string {
+	if p == machineProviderHyperV {
+		return "Hyper-V"
+	}
+	return "WSL2"
+}
+
+// askEnableHyperV asks a host with neither backend which one to enable. With
+// no terminal it takes the recommended Hyper-V.
+func askEnableHyperV() bool {
+	if !stdinIsTerminal() {
+		return true
+	}
+	return readConfirmAnswer(os.Stdin, "Enable Hyper-V and run lerd natively (recommended)? Answer no to install WSL2 instead", true)
+}
+
+// runElevated runs a PowerShell script as administrator and waits for it,
+// asking through UAC when lerd is not elevated. A var so tests stay off the host.
+var runElevated = func(script string) error {
+	enc := encodePowerShell(script)
+	var cmd *exec.Cmd
+	if windows.GetCurrentProcessToken().IsElevated() {
+		cmd = exec.Command("powershell.exe", "-NoProfile", "-EncodedCommand", enc)
+	} else {
+		cmd = exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+			"$p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList '-NoProfile','-EncodedCommand','"+enc+"'; exit $p.ExitCode")
+	}
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	return cmd.Run()
+}
+
+// encodePowerShell is the base64 UTF-16LE form -EncodedCommand takes, so the
+// script needs no quoting through Start-Process.
+func encodePowerShell(script string) string {
+	u := utf16.Encode([]rune(script))
+	b := make([]byte, 2*len(u))
+	for i, c := range u {
+		binary.LittleEndian.PutUint16(b[2*i:], c)
+	}
+	return base64.StdEncoding.EncodeToString(b)
 }
 
 // machineMemoryFor returns the memory to request for a provider. WSL machines

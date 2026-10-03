@@ -94,10 +94,109 @@ func TestAskHyperVOverWSLKeepsWSLWithoutATerminal(t *testing.T) {
 	}
 }
 
-func TestHyperVSwitchErrorSaysHowAndToRerun(t *testing.T) {
-	msg := hyperVSwitchError().Error()
-	if !strings.Contains(msg, enableHyperV) || !strings.Contains(msg, "lerd install") {
-		t.Errorf("switch guidance: %q", msg)
+func TestHyperVSwitchGuidanceSaysHowAndToRerun(t *testing.T) {
+	s := hyperVSwitch()
+	if s.provider != "hyperv" || !strings.Contains(s.Error(), enableHyperV) || !strings.Contains(s.Error(), "lerd install") {
+		t.Errorf("switch setup: %+v", s)
+	}
+}
+
+// Every missing backend lerd can turn on itself comes back as a setup for it.
+func TestPlanMachineProviderHandsBackABackendToEnable(t *testing.T) {
+	cases := []struct {
+		name, env string
+		host      hostBackends
+		provider  string
+		orWSL     bool
+	}{
+		{"pro with nothing ready", "", proBare, "hyperv", true},
+		{"home with nothing ready", "", homeBare, "wsl", false},
+		{"hyperv chosen but off", "hyperv", proWSL, "hyperv", false},
+		{"wsl chosen but missing", "wsl", proHyperV, "wsl", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, _, err := planMachineProvider(c.env, "", c.host)
+			var s *backendSetup
+			if !errors.As(err, &s) || s.provider != c.provider || s.orWSL != c.orWSL {
+				t.Errorf("got %#v; want a %s setup, orWSL=%v", err, c.provider, c.orWSL)
+			}
+		})
+	}
+	var s *backendSetup
+	if _, _, err := planMachineProvider("", "", homeWSLNoVM); errors.As(err, &s) {
+		t.Error("a missing VM platform is repaired by hand, got a setup for it")
+	}
+	if _, _, err := planMachineProvider("hyperv", "", homeWSL); errors.As(err, &s) {
+		t.Error("home cannot enable Hyper-V, got a setup for it")
+	}
+}
+
+func stubElevated(t *testing.T, fail error) *[]string {
+	t.Helper()
+	var ran []string
+	old := runElevated
+	runElevated = func(script string) error { ran = append(ran, script); return fail }
+	t.Cleanup(func() { runElevated = old })
+	return &ran
+}
+
+func TestEnableBackendRunsTheInstallAndAsksOnlyForARestart(t *testing.T) {
+	cases := []struct {
+		name     string
+		setup    *backendSetup
+		terminal bool
+		script   string
+		saved    string
+	}{
+		{"home installs wsl", &backendSetup{provider: "wsl"}, false, installWSLCmd, "wsl"},
+		{"switch enables hyper-v", hyperVSwitch(), true, enableHyperVCmd, "hyperv"},
+		{"pro unattended takes the recommended hyper-v", &backendSetup{provider: "hyperv", orWSL: true}, false, enableHyperVCmd, "hyperv"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			old := stdinIsTerminal
+			stdinIsTerminal = func() bool { return c.terminal }
+			t.Cleanup(func() { stdinIsTerminal = old })
+			ran := stubElevated(t, nil)
+
+			err := enableBackend(c.setup)
+			if err == nil || !strings.Contains(err.Error(), "Restart Windows") || !strings.Contains(err.Error(), "lerd install") {
+				t.Errorf("want the restart request, got %v", err)
+			}
+			if len(*ran) != 1 || !strings.Contains((*ran)[0], c.script) {
+				t.Errorf("ran %q, want %q", *ran, c.script)
+			}
+			if cfg, _ := config.LoadGlobal(); cfg.Machine.Provider != c.saved {
+				t.Errorf("saved provider %q, want %q", cfg.Machine.Provider, c.saved)
+			}
+		})
+	}
+}
+
+// Declining UAC or a failed DISM leaves the user with the manual steps.
+func TestEnableBackendFallsBackToTheManualSteps(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	stubElevated(t, errors.New("exit status 1"))
+	err := enableBackend(&backendSetup{provider: "wsl", guidance: "install it by hand"})
+	if err == nil || !strings.Contains(err.Error(), "install it by hand") || strings.Contains(err.Error(), "Restart Windows") {
+		t.Errorf("got %v", err)
+	}
+	if cfg, _ := config.LoadGlobal(); cfg.Machine.Provider != "" {
+		t.Errorf("saved %q after a failed enable", cfg.Machine.Provider)
+	}
+}
+
+func TestEnablingHyperVDoesNotRebootOnItsOwn(t *testing.T) {
+	if !strings.Contains(enableScripts["hyperv"], "-NoRestart") {
+		t.Errorf("hyper-v script %q would let DISM reboot", enableScripts["hyperv"])
+	}
+}
+
+func TestEncodePowerShellIsUTF16LEBase64(t *testing.T) {
+	if got := encodePowerShell("ok"); got != "bwBrAA==" {
+		t.Errorf("got %q", got)
 	}
 }
 

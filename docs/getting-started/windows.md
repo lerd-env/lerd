@@ -14,22 +14,17 @@ The native build is under active development and is **not** ready for daily use.
 ## Requirements
 
 - Windows 10 or 11. Lerd creates its Podman machine on **Hyper-V** when the host has it, and falls back to **WSL2** when it does not, which covers Windows Home.
-- For Hyper-V (Pro, Enterprise or Education), enable the feature from an elevated PowerShell, then reboot:
+- Hyper-V (Pro, Enterprise or Education) or WSL2. When neither is ready, `lerd install` turns one on for you and you only have to reboot, see below. To do it yourself instead, run one of these from an elevated PowerShell, then reboot. Podman brings its own distro for a WSL machine, so no Ubuntu is needed:
 
   ```powershell
   Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
-  ```
-
-- For the WSL2 fallback, install WSL from an elevated PowerShell, then reboot. Podman brings its own distro for the machine, so no Ubuntu is needed:
-
-  ```powershell
   wsl --install --no-distribution
   ```
 
 - The **Podman CLI** (not Podman Desktop). `lerd install` installs it for you when it is missing, see [Podman](#podman). Lerd drives `podman` and `podman machine` directly, and Podman Desktop would create a machine of its own.
 - An elevated PowerShell for the first `lerd install`. Writing the DNS rule needs administrator rights, and so does creating a Hyper-V machine.
 
-You do not have to work out which of these applies. On its first run `lerd install` checks the Windows edition and which backends are installed before it changes anything. If neither is ready it stops and prints the command for the one your edition supports, Hyper-V on Pro, Enterprise and Education with WSL2 as the alternative, WSL2 alone on Home, and asks you to reboot and run `lerd install` again. The same happens when WSL is installed but Windows cannot start virtual machines because the Host Compute Service is missing, in which case it prints the commands that repair the Virtual Machine Platform.
+You do not have to work out which of these applies. On its first run `lerd install` checks the Windows edition and which backends are installed before it changes anything. If neither is ready it enables the one your edition supports: on Pro, Enterprise and Education it asks whether to enable Hyper-V (recommended) or install WSL2, and on Home it installs WSL2. Windows shows a UAC prompt for it, lerd runs `Enable-WindowsOptionalFeature … -NoRestart` or `wsl --install --no-distribution` in that elevated window, saves the choice, and stops asking you only to restart Windows and run `lerd install` again. With no terminal to ask on it enables Hyper-V. The same applies when `machine.provider` names a backend that is not on yet. If you decline the prompt or the install fails, lerd prints the commands to run yourself. When WSL is installed but Windows cannot start virtual machines because the Host Compute Service is missing, it prints the commands that repair the Virtual Machine Platform.
 
 ### Podman
 
@@ -41,12 +36,12 @@ When both are ready, Hyper-V is used. When WSL2 is already installed and the edi
 
 | | Hyper-V (recommended) | WSL2 |
 | --- | --- | --- |
-| Getting started | enable the feature and reboot first | works right away |
+| Getting started | lerd enables it, then reboot | works right away |
 | Creating the machine | needs an elevated shell | no elevation |
 | Isolation | its own VM, `wsl --shutdown` leaves your sites running | shares the WSL2 VM, `wsl --shutdown` stops your sites |
 | Memory | sized by lerd for the PC | set by your `.wslconfig` |
 
-Choosing Hyper-V stops the install with the command to enable it, then you reboot and run `lerd install` again. Choosing WSL2 carries on and is saved, so you are not asked again. With no terminal to ask on, as in a scripted install, lerd carries on with WSL2.
+Choosing Hyper-V enables it through a UAC prompt and stops the install, then you reboot and run `lerd install` again. Choosing WSL2 carries on and is saved, so you are not asked again. With no terminal to ask on, as in a scripted install, lerd carries on with WSL2.
 
 ### WSL 3 and cgroups
 
