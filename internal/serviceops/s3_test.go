@@ -2,6 +2,7 @@ package serviceops
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/minio/minio-go/v7"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -274,5 +278,32 @@ func TestEnsureS3BucketCreatesOnceAndReportsExisting(t *testing.T) {
 	}
 	if _, err := EnsureS3Bucket("../escape"); err == nil {
 		t.Error("an invalid bucket name must be refused")
+	}
+}
+
+// S3 refuses a request signed with a clock far off its own, and rustfs says so
+// only as "Access Denied". The error has to name the clock, or the user goes
+// hunting for a credentials problem that is not there.
+func TestExplainClockSkew(t *testing.T) {
+	denied := minio.ErrorResponse{Code: "AccessDenied", Message: "Access Denied."}
+	now := time.Date(2026, 10, 2, 6, 23, 0, 0, time.UTC)
+	server := func(at time.Time) func() (time.Time, error) {
+		return func() (time.Time, error) { return at, nil }
+	}
+
+	err := explainClockSkew(denied, server(now.Add(2*time.Hour)), now)
+	if !strings.Contains(err.Error(), "2h0m0s behind") || !strings.Contains(err.Error(), "system time") {
+		t.Errorf("a 2h skew should be explained, got %q", err)
+	}
+	if err := explainClockSkew(denied, server(now.Add(time.Minute)), now); err != error(denied) {
+		t.Errorf("a small skew is not the cause, got %q", err)
+	}
+	other := errors.New("connection refused")
+	if err := explainClockSkew(other, server(now.Add(2*time.Hour)), now); err != other {
+		t.Errorf("only a denied request is explained, got %q", err)
+	}
+	failing := func() (time.Time, error) { return time.Time{}, errors.New("no date") }
+	if err := explainClockSkew(denied, failing, now); err != error(denied) {
+		t.Errorf("without a server time the error stays as it was, got %q", err)
 	}
 }

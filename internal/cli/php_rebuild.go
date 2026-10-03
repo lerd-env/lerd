@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
@@ -237,11 +238,21 @@ func runPhpRebuild(cmd *cobra.Command, args []string) error {
 
 	feedback.Begin()
 	jobs := make([]BuildJob, 0, len(versions))
+	var failedMu sync.Mutex
+	failed := map[string]error{}
 	for _, v := range versions {
 		ver := v
 		jobs = append(jobs, BuildJob{
 			Label: "PHP " + ver,
-			Run:   func(w io.Writer) error { return podman.RebuildFPMImageTo(ver, local, w) },
+			Run: func(w io.Writer) error {
+				err := podman.RebuildFPMImageTo(ver, local, w)
+				if err != nil {
+					failedMu.Lock()
+					failed[ver] = err
+					failedMu.Unlock()
+				}
+				return err
+			},
 		})
 	}
 	// Rebuild the derived FrankenPHP image for any requested version a FrankenPHP
@@ -266,9 +277,14 @@ func runPhpRebuild(cmd *cobra.Command, args []string) error {
 
 	restartFrankenPHPUnits(fpUnits)
 
+	restart, buildErr := rebuildOutcome(versions, failed)
+
 	// Store the new Containerfile hash so future updates know images are current.
-	if err := podman.StoreFPMHash(); err != nil {
-		feedback.Warn("could not store image hash: %v", err)
+	// A failed build leaves an image behind it, so the hash waits for a retry.
+	if buildErr == nil {
+		if err := podman.StoreFPMHash(); err != nil {
+			feedback.Warn("could not store image hash: %v", err)
+		}
 	}
 
 	// The image carries the extension; the files it reads at startup (the debug
@@ -286,7 +302,7 @@ func runPhpRebuild(cmd *cobra.Command, args []string) error {
 	}
 	feedback.Line("restarting containers")
 	running := runningInContainerWorkers()
-	for _, v := range versions {
+	for _, v := range restart {
 		unit := "lerd-php" + strings.ReplaceAll(v, ".", "") + "-fpm"
 		if err := podman.RestartUnit(unit); err != nil {
 			feedback.Warn("restart %s: %v", unit, err)
@@ -297,6 +313,27 @@ func runPhpRebuild(cmd *cobra.Command, args []string) error {
 
 	restartInContainerWorkers(running)
 
+	if buildErr != nil {
+		return buildErr
+	}
 	feedback.Done(label + " rebuilt")
 	return nil
+}
+
+// rebuildOutcome splits the requested versions into those whose image was
+// rebuilt, which are restarted onto it, and an error naming the ones that were
+// not, whose containers keep running the image they had.
+func rebuildOutcome(versions []string, failed map[string]error) ([]string, error) {
+	var restart, broken []string
+	for _, v := range versions {
+		if failed[v] != nil {
+			broken = append(broken, "PHP "+v)
+			continue
+		}
+		restart = append(restart, v)
+	}
+	if len(broken) > 0 {
+		return restart, fmt.Errorf("%s not rebuilt; the build output above says why", strings.Join(broken, ", "))
+	}
+	return restart, nil
 }

@@ -139,6 +139,7 @@ export default defineConfig({
             { text: 'Omarchy', link: '/getting-started/omarchy' },
             { text: 'NixOS', link: '/getting-started/nixos' },
             { text: 'Windows (WSL2, beta)', link: '/getting-started/wsl2' },
+            { text: 'Windows (native, experimental)', link: '/getting-started/windows' },
           ],
         },
         {

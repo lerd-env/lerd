@@ -21,7 +21,7 @@ func NewAboutCmd() *cobra.Command {
 func runAbout(_ *cobra.Command, _ []string) error {
 	feedback.Begin()
 	fmt.Println("  " + feedback.Title("lerd"))
-	fmt.Println("  " + feedback.Dim("Podman-powered local PHP development for Linux & macOS"))
+	fmt.Println("  " + feedback.Dim("Podman-powered local PHP development for Linux, macOS & Windows"))
 	feedback.NewSummary().
 		Row("Version", feedback.Val(version.Version)).
 		Row("Commit", version.Commit).

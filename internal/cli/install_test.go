@@ -304,7 +304,8 @@ func TestAddShellShims_LaravelShim(t *testing.T) {
 		t.Errorf("laravel shim missing shebang, got: %q", shim)
 	}
 	expectedComposerHome := filepath.Join(tmp, ".config", "composer")
-	expectedPath := expectedComposerHome + "/vendor/bin/laravel"
+	// Quoted, so a home with spaces or Windows backslashes reaches php intact.
+	expectedPath := `"` + expectedComposerHome + `/vendor/bin/laravel"`
 	if !strings.Contains(shim, expectedPath) {
 		t.Errorf("laravel shim does not reference %q, got:\n%s", expectedPath, shim)
 	}
@@ -548,6 +549,7 @@ func TestAddShellShims_LaravelShimRespectsComposerHome(t *testing.T) {
 func TestAddShellShims_NodeShimChecksDefaultAlias(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "config"))
 	t.Setenv("HOME", tmp)
 	t.Setenv("SHELL", "/bin/sh")
 

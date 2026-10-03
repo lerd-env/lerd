@@ -93,7 +93,53 @@ builds:
       - -X github.com/geodro/lerd/internal/version.Commit={{.Commit}}
       - -X github.com/geodro/lerd/internal/version.Date={{.Date}}
 
+  - id: lerd-windows
+    main: ./cmd/lerd
+    binary: lerd
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -tags=nogui
+    goos:
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/geodro/lerd/internal/version.Version={{.Version}}
+      - -X github.com/geodro/lerd/internal/version.Commit={{.Commit}}
+      - -X github.com/geodro/lerd/internal/version.Date={{.Date}}
+
+  # The Windows tray needs no CGO, and the GUI subsystem keeps a console window
+  # from flashing when lerd starts it.
+  - id: lerd-tray-windows
+    main: ./cmd/lerd-tray
+    binary: lerd-tray
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -H=windowsgui
+      - -X github.com/geodro/lerd/internal/version.Version={{.Version}}
+      - -X github.com/geodro/lerd/internal/version.Commit={{.Commit}}
+      - -X github.com/geodro/lerd/internal/version.Date={{.Date}}
+
 archives:
+  - id: lerd-windows
+    ids: [lerd-windows, lerd-tray-windows]
+    name_template: "lerd_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: zip
+    files:
+      - README.md
+      - LICENSE
+      - src: internal/licenses/THIRD-PARTY-LICENSES.md
+        strip_parent: true
+
   - id: lerd-amd64
     ids: [lerd-amd64, lerd-tray-amd64]
     name_template: "lerd_{{ .Version }}_{{ .Os }}_{{ .Arch }}"

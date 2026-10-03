@@ -17,6 +17,7 @@ import (
 	"github.com/geodro/lerd/internal/desktopapp"
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/hostpath"
 	"github.com/geodro/lerd/internal/imagepull"
 	"github.com/geodro/lerd/internal/lifecycle"
 	"github.com/geodro/lerd/internal/nginx"
@@ -140,6 +141,9 @@ func ensurePortsAvailable() {
 }
 
 func runInstall(cmd *cobra.Command, _ []string) error {
+	if handed, err := installSelf(); handed {
+		return err
+	}
 	markInstallInProgress()
 	feedback.Header("Installing Lerd")
 
@@ -1425,16 +1429,13 @@ func installLaravelInstaller() error {
 		}
 	}
 
-	home := os.Getenv("HOME")
-	composerHome := composerHomeDir()
-
 	composerPhar := composer.PharPath()
 	// --no-interaction prevents composer from blocking on plugin trust prompts
 	// (e.g. "Do you trust 'symfony/flex' to execute code?") which would hang
 	// the installer with no visible output.
 	cmd := podman.Cmd("exec", "-i",
-		"--env", "HOME="+home,
-		"--env", "COMPOSER_HOME="+composerHome,
+		"--env", "HOME="+containerHome(),
+		"--env", "COMPOSER_HOME="+hostpath.ToVM(composerHomeDir()),
 		container, "php", composerPhar, "global", "require", "--no-interaction", "laravel/installer",
 	)
 	cmd.Stdout = os.Stdout
@@ -1795,7 +1796,7 @@ func addShellShims(manageNode bool) error {
 
 	// Write laravel shim (laravel/installer global package)
 	composerHome := composerHomeDir()
-	laravelShim := shimPreamble(lerdBin) + fmt.Sprintf("exec \"$LERD\" php %s/vendor/bin/laravel \"$@\"\n", composerHome)
+	laravelShim := shimPreamble(lerdBin) + fmt.Sprintf("exec \"$LERD\" php \"%s/vendor/bin/laravel\" \"$@\"\n", composerHome)
 	if err := os.WriteFile(filepath.Join(binDir, "laravel"), []byte(laravelShim), 0755); err != nil {
 		return fmt.Errorf("writing laravel shim: %w", err)
 	}
@@ -1824,6 +1825,21 @@ func addShellShims(manageNode bool) error {
 		}
 	}
 
+	cmdShims := map[string]string{
+		"php":      "php",
+		"composer": "composer",
+		"laravel":  laravelCmdShimCommand(composerHome),
+	}
+	for _, bin := range []string{"node", "npm", "npx"} {
+		cmdShims[bin] = ""
+		if manageNode && nodeDet.WritesPathShims(nodeDet.Active()) {
+			cmdShims[bin] = bin
+		}
+	}
+	if err := writeCmdShims(binDir, lerdBin, cmdShims); err != nil {
+		return err
+	}
+
 	if pathShimDisabled() {
 		removeShellPathEntry(home)
 	} else if err := writeShellPathEntry(home, binDir); err != nil {
@@ -1831,6 +1847,12 @@ func addShellShims(manageNode bool) error {
 	}
 	installShellCompletions(home, lerdBin)
 	return nil
+}
+
+// laravelCmdShimCommand is the lerd command laravel.cmd runs. The path is
+// quoted as cmd quotes it; Go's %q would double every backslash.
+func laravelCmdShimCommand(composerHome string) string {
+	return fmt.Sprintf(`php "%s"`, filepath.Join(composerHome, "vendor", "bin", "laravel"))
 }
 
 // pathShimDisabled reports whether the user opted out of the shell PATH entry
@@ -1843,6 +1865,9 @@ func pathShimDisabled() bool {
 // writeShellPathEntry puts lerd's bin dir on the PATH of the user's shell:
 // an rc export for bash/zsh, a dedicated conf.d file for fish.
 func writeShellPathEntry(home, binDir string) error {
+	if handled, err := writeUserPathEntry(binDir); handled {
+		return err
+	}
 	shell := os.Getenv("SHELL")
 	switch {
 	case isShell(shell, "fish"):
@@ -1866,6 +1891,9 @@ func writeShellPathEntry(home, binDir string) error {
 // Lerd installer" block is left alone — it puts the lerd binary itself on
 // PATH, not the shims.
 func removeShellPathEntry(home string) {
+	if removeUserPathEntry(config.BinDir()) {
+		return
+	}
 	for _, rc := range []string{
 		filepath.Join(home, ".bashrc"),
 		filepath.Join(home, ".bash_profile"),

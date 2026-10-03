@@ -40,3 +40,7 @@ Every PR runs the following checks automatically. All must pass before merging.
 | Vet | `go vet ./...` |
 | Format | `gofmt -l .` |
 | Installer tests | `bats tests/installer/installer.bats` |
+| Windows build and vet | `go build` and `go vet` for `GOOS=windows`, amd64 and arm64 |
+| Windows tests | `.github/scripts/windows-tests.sh`, every test in a `*_windows_test.go` file |
+| Windows installer tests | `tests/installer/run-tests.ps1` under Windows PowerShell 5.1 and PowerShell 7 |
+| Windows installer lint | `Invoke-ScriptAnalyzer -Path install.ps1 -Settings tests/installer/PSScriptAnalyzerSettings.psd1` |

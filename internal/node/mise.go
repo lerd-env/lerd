@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 // miseManager drives jdx/mise. Unlike fnm, mise is a tool users commonly
@@ -51,20 +53,28 @@ func findMise(home string, lookPath func(string) (string, error)) string {
 // when the user has none. Deliberately not lerd's bin dir: a second mise there
 // would be invisible to the user's shell and would drift from the one they run.
 func miseInstallPath(home string) string {
-	return filepath.Join(home, ".local", "bin", "mise")
+	return filepath.Join(home, ".local", "bin", config.ExeName("mise"))
 }
 
 // misePrefixes are the package-manager dirs a daemon's restricted PATH misses.
 func misePrefixes() []string {
-	if runtime.GOOS == "darwin" {
+	switch runtime.GOOS {
+	case "darwin":
 		return []string{"/opt/homebrew/bin", "/usr/local/bin"}
+	case "windows":
+		return nil
 	}
 	return []string{"/usr/local/bin", "/usr/bin"}
 }
 
+// isExecutableFile reports whether path is a file that can be run. Windows has
+// no execute bits, so there a regular file is enough.
 func isExecutableFile(path string) bool {
 	info, err := os.Stat(path)
-	return err == nil && !info.IsDir() && info.Mode()&0o111 != 0
+	if err != nil || info.IsDir() {
+		return false
+	}
+	return runtime.GOOS == "windows" || info.Mode()&0o111 != 0
 }
 
 func (m miseManager) Available() bool { return m.bin != "" }
@@ -113,8 +123,10 @@ func (m miseManager) SetDefault(version string) error {
 	return nil
 }
 
+// HasDefault asks node itself for its version rather than running `true`, which
+// Windows does not have.
 func (m miseManager) HasDefault() bool {
-	return exec.Command(m.bin, "exec", "node", "--", "true").Run() == nil
+	return exec.Command(m.bin, "exec", "node", "--", "node", "--version").Run() == nil
 }
 
 func (m miseManager) Command(version, bin string, args []string) *exec.Cmd {

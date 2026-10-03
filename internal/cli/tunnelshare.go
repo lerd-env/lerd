@@ -626,14 +626,14 @@ func killTunnel(p *tunnelProc) {
 	if p.cmd.Process == nil {
 		return
 	}
-	pgid := -p.cmd.Process.Pid
-	_ = syscall.Kill(pgid, syscall.SIGTERM)
+	pid := p.cmd.Process.Pid
+	_ = killProcessGroup(pid, syscall.SIGTERM)
 	select {
 	case <-p.done:
 		return
 	case <-time.After(3 * time.Second):
 	}
-	_ = syscall.Kill(pgid, syscall.SIGKILL)
+	_ = killProcessGroup(pid, syscall.SIGKILL)
 	select {
 	case <-p.done:
 	case <-time.After(3 * time.Second):

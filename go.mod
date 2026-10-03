@@ -7,6 +7,7 @@ require (
 	charm.land/glamour/v2 v2.0.1
 	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.0.5
+	github.com/Microsoft/go-winio v0.6.2
 	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/coreos/go-systemd/v22 v22.7.0
@@ -15,6 +16,7 @@ require (
 	github.com/getlantern/systray v1.2.2
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/lrstanley/bubblezone/v2 v2.0.0
+	github.com/miekg/dns v1.1.73
 	github.com/minio/minio-go/v7 v7.3.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
@@ -28,6 +30,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.54.0
 )
+
+require github.com/u-root/uio v0.0.0-20230305220412-3e8cd9d6bf63 // indirect
 
 require (
 	charm.land/bubbles/v2 v2.0.0 // indirect
@@ -61,6 +65,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
+	github.com/hugelgupf/p9 v0.4.1
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
@@ -103,3 +108,5 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace github.com/hugelgupf/p9 => github.com/millancore/p9 v0.0.0-20261002183920-527d994b8d14

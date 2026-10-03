@@ -7,10 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/filelock"
 )
 
 // inProcessLocks layers a per-path mutex above flock because flock is
@@ -64,11 +64,11 @@ func LockInstall(worktreePath string, timeout time.Duration) (func(), error) {
 		return nil, err
 	}
 	for {
-		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err == nil {
+		if err := filelock.TryExclusive(f); err == nil {
 			_ = f.Truncate(0)
 			_, _ = fmt.Fprintf(f, "%d\n", os.Getpid())
 			return func() {
-				_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+				_ = filelock.Unlock(f)
 				_ = f.Close()
 				mu.Unlock()
 			}, nil
@@ -100,7 +100,7 @@ func TryLockInstall(worktreePath string) (func(), bool, error) {
 		mu.Unlock()
 		return nil, false, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err := filelock.TryExclusive(f); err != nil {
 		_ = f.Close()
 		mu.Unlock()
 		return nil, false, nil
@@ -108,7 +108,7 @@ func TryLockInstall(worktreePath string) (func(), bool, error) {
 	_ = f.Truncate(0)
 	_, _ = fmt.Fprintf(f, "%d\n", os.Getpid())
 	return func() {
-		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		_ = filelock.Unlock(f)
 		_ = f.Close()
 		mu.Unlock()
 	}, true, nil
@@ -136,10 +136,10 @@ func InstallInFlight(worktreePath string) (bool, error) {
 		return false, err
 	}
 	defer f.Close() //nolint:errcheck
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
+	if err := filelock.TryShared(f); err != nil {
 		return true, nil
 	}
-	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	_ = filelock.Unlock(f)
 	return false, nil
 }
 

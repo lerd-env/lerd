@@ -967,13 +967,6 @@ func launchTray() error {
 // words, and an unanchored match takes out the command and its shell with it.
 var trayProcessPatterns = []string{`lerd tray( --mono)?$`, `lerd-tray$`}
 
-// killTray kills any running lerd tray process.
-func killTray() {
-	for _, pattern := range trayProcessPatterns {
-		exec.Command("pkill", "-f", pattern).Run() //nolint:errcheck
-	}
-}
-
 // reconcileCustomServices heals custom-service drift on start (issue #678).
 // Failures are non-fatal so one bad service can't block the start sequence.
 func reconcileCustomServices() {

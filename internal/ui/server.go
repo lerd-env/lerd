@@ -420,7 +420,7 @@ func Start(currentVersion string) error {
 	// vhost falls back to TCP via host.containers.internal there.
 	// Errors are non-fatal — direct http://localhost:7073 access still
 	// works even if the socket can't be created.
-	if runtime.GOOS != "darwin" {
+	if !config.UsesMachineVM() {
 		if err := os.MkdirAll(config.RunDir(), 0755); err != nil {
 			fmt.Printf("[WARN] creating %s: %v — lerd.localhost vhost will not work\n", config.RunDir(), err)
 		} else {
@@ -605,6 +605,7 @@ func terminalDirCandidates(dir string) []terminalCmd {
 	}
 
 	candidates = append(candidates, knownTerminals(dir)...)
+	candidates = append(candidates, platformTerminals(dir)...)
 
 	if runtime.GOOS == "darwin" {
 		// `open -a Terminal dir` opens a new window at dir without echoing any
@@ -680,6 +681,25 @@ func openTerminalAt(dir string) error {
 		return nil
 	}
 	return fmt.Errorf("no terminal emulator found; set $TERMINAL or install kitty, foot, alacritty, wezterm, ghostty, ptyxis, konsole, or gnome-terminal")
+}
+
+// startFirstTerminal starts the first candidate found on PATH, reporting false
+// when there is none.
+func startFirstTerminal(candidates []terminalCmd) (bool, error) {
+	for _, t := range candidates {
+		bin, err := exec.LookPath(t.bin)
+		if err != nil {
+			continue
+		}
+		cmd := exec.Command(bin, t.args...)
+		cmd.Env = terminalEnv()
+		if err := cmd.Start(); err != nil {
+			return true, err
+		}
+		go func() { _ = cmd.Wait() }()
+		return true, nil
+	}
+	return false, nil
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
@@ -5936,7 +5956,7 @@ func handleLerdUpdateTerminal(w http.ResponseWriter, r *http.Request) {
 	if err != nil || self == "" {
 		self = "lerd"
 	}
-	if err := openTerminalCommand(buildUpdateScript(self)); err != nil {
+	if err := openUpdateTerminal(self); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -6030,18 +6050,8 @@ func terminalEnv() []string {
 }
 
 func openTerminalCommand(script string) error {
-	for _, t := range terminalScriptCandidates(script) {
-		bin, err := exec.LookPath(t.bin)
-		if err != nil {
-			continue
-		}
-		cmd := exec.Command(bin, t.args...)
-		cmd.Env = terminalEnv()
-		if err := cmd.Start(); err != nil {
-			return err
-		}
-		go func() { _ = cmd.Wait() }()
-		return nil
+	if started, err := startFirstTerminal(terminalScriptCandidates(script)); started || err != nil {
+		return err
 	}
 	return fmt.Errorf("no terminal emulator found; set $TERMINAL or install kitty, foot, alacritty, wezterm, ghostty, ptyxis, konsole, or gnome-terminal")
 }

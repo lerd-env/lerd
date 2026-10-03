@@ -15,29 +15,49 @@ import (
 // default :9912 — see internal/dumps.DefaultAddr.
 const DumpsTCPPort = "9913"
 
-func xdgConfigHome() string {
-	if v := os.Getenv("XDG_CONFIG_HOME"); v != "" {
-		return v
+// windowsBase is the Windows default for one kind of base directory: config
+// under %APPDATA%, the rest under %LOCALAPPDATA%. ok is false when the variable
+// is unset, so the caller falls back to the home layout. The XDG_* variables
+// still win over this everywhere; tests and CI rely on that.
+func windowsBase(kind string, getenv func(string) string) (string, bool) {
+	local := getenv("LOCALAPPDATA")
+	switch kind {
+	case "config":
+		if v := getenv("APPDATA"); v != "" {
+			return v, true
+		}
+	case "data":
+		if local != "" {
+			return local, true
+		}
+	case "state", "cache":
+		if local != "" {
+			return filepath.Join(local, kind), true
+		}
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config")
+	return "", false
 }
 
-func xdgDataHome() string {
-	if v := os.Getenv("XDG_DATA_HOME"); v != "" {
+// baseDir resolves one XDG-style base: the XDG variable, then the Windows
+// default when running there, then the home-relative layout.
+func baseDir(kind, xdgEnv string, homeRel ...string) string {
+	if v := os.Getenv(xdgEnv); v != "" {
 		return v
 	}
+	if runtime.GOOS == "windows" {
+		if v, ok := windowsBase(kind, os.Getenv); ok {
+			return v
+		}
+	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "share")
+	return filepath.Join(append([]string{home}, homeRel...)...)
 }
 
-func xdgStateHome() string {
-	if v := os.Getenv("XDG_STATE_HOME"); v != "" {
-		return v
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "state")
-}
+func xdgConfigHome() string { return baseDir("config", "XDG_CONFIG_HOME", ".config") }
+
+func xdgDataHome() string { return baseDir("data", "XDG_DATA_HOME", ".local", "share") }
+
+func xdgStateHome() string { return baseDir("state", "XDG_STATE_HOME", ".local", "state") }
 
 // ConfigDir returns ~/.config/lerd/ (or $XDG_CONFIG_HOME/lerd/).
 func ConfigDir() string {
@@ -53,11 +73,7 @@ func DataDir() string {
 // is state a user would miss, which is why it is written without ceremony and
 // why the uninstall takes it along with the rest.
 func CacheDir() string {
-	if v := os.Getenv("XDG_CACHE_HOME"); v != "" {
-		return filepath.Join(v, "lerd")
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".cache", "lerd")
+	return filepath.Join(baseDir("cache", "XDG_CACHE_HOME", ".cache"), "lerd")
 }
 
 // BinDir returns the lerd bin directory.
@@ -300,6 +316,12 @@ func DevtoolsCollectorFile() string {
 	return filepath.Join(DumpsAssetsDir(), "devtools-collector.php")
 }
 
+// OPcacheInvalidateFile is the host path for the script that drops OPcache
+// entries in a php-fpm pool, mounted at /usr/local/etc/lerd with the others.
+func OPcacheInvalidateFile() string {
+	return filepath.Join(DumpsAssetsDir(), "opcache-invalidate.php")
+}
+
 // DevtoolsSeamsFile is the host path for the store-declared capture seams the
 // extension reads at startup, one line per observed method. Lives beside the
 // collector in the dumps assets dir, mounted at /usr/local/etc/lerd.
@@ -368,7 +390,7 @@ func SpxWebUIDir() string {
 // host.containers.internal:7073 fallback). On Linux the unix socket is
 // reachable inside FPM via the %h:%h bind mount.
 func DumpsListenNetwork() string {
-	if runtime.GOOS == "darwin" {
+	if UsesMachineVM() {
 		return "tcp"
 	}
 	return "unix"
@@ -376,7 +398,7 @@ func DumpsListenNetwork() string {
 
 // DumpsListenAddr is the address paired with DumpsListenNetwork.
 func DumpsListenAddr() string {
-	if runtime.GOOS == "darwin" {
+	if UsesMachineVM() {
 		return "127.0.0.1:" + DumpsTCPPort
 	}
 	return DumpsSocketPath()
@@ -388,7 +410,7 @@ func DumpsListenAddr() string {
 // the lerd-ui process on the host; on Linux the FPM container hits the
 // host unix socket directly via the %h:%h bind mount.
 func DumpsBridgeTarget() string {
-	if runtime.GOOS == "darwin" {
+	if UsesMachineVM() {
 		return "tcp://host.containers.internal:" + DumpsTCPPort
 	}
 	return "unix://" + DumpsSocketPath()
@@ -568,7 +590,7 @@ func UISocketPath() string {
 // Mirrors the DumpsListenNetwork/Addr split. The port matches lerd-ui's fixed
 // listen port (internal/ui/server.go listenAddr).
 func UIClientNetwork() string {
-	if runtime.GOOS == "darwin" {
+	if UsesMachineVM() {
 		return "tcp"
 	}
 	return "unix"
@@ -576,7 +598,7 @@ func UIClientNetwork() string {
 
 // UIClientAddr is the address paired with UIClientNetwork.
 func UIClientAddr() string {
-	if runtime.GOOS == "darwin" {
+	if UsesMachineVM() {
 		return "127.0.0.1:7073"
 	}
 	return UISocketPath()
@@ -628,7 +650,7 @@ func AccessFeedListenAddr() string {
 // bind-mounted unix socket on Linux, or host.containers.internal over gvproxy
 // UDP on macOS where nginx lives in the VM and the host socket isn't reachable.
 func AccessLogTarget() string {
-	if runtime.GOOS == "darwin" {
+	if UsesMachineVM() {
 		return "host.containers.internal:" + AccessFeedUDPPort
 	}
 	return "unix:" + AccessSocketPath()
@@ -774,3 +796,64 @@ func BrowserHostsFile() string {
 func ThemesDir() string {
 	return filepath.Join(ConfigDir(), "themes")
 }
+
+// ExeName returns name as an executable file name: with .exe on Windows, where
+// a binary without it cannot be run, unchanged elsewhere.
+func ExeName(name string) string { return exeName(name, runtime.GOOS) }
+
+func exeName(name, goos string) string {
+	if goos == "windows" && !strings.HasSuffix(name, ".exe") {
+		return name + ".exe"
+	}
+	return name
+}
+
+// UsesMachineVM reports whether containers run inside a Podman machine VM
+// (macOS, Windows) rather than natively on the host. It decides every transport
+// choice a VM boundary forces: a unix socket does not cross it, so loopback TCP
+// or UDP through gvproxy is used instead.
+func UsesMachineVM() bool { return usesMachineVM(runtime.GOOS) }
+
+func usesMachineVM(goos string) bool { return goos == "darwin" || goos == "windows" }
+
+// ControlUDPPort is the loopback UDP port the watcher binds for idle-suspend
+// control messages where unix datagram sockets do not exist (Windows).
+const ControlUDPPort = "9915"
+
+// ControlNetwork and ControlAddr are the transport the CLI and the watcher use
+// for control messages: the unix datagram socket, or loopback UDP on Windows.
+func ControlNetwork() string { n, _ := controlEndpoint(runtime.GOOS, ControlSocketPath()); return n }
+
+func ControlAddr() string { _, a := controlEndpoint(runtime.GOOS, ControlSocketPath()); return a }
+
+func controlEndpoint(goos, socketPath string) (network, addr string) {
+	if goos == "windows" {
+		return "udp", "127.0.0.1:" + ControlUDPPort
+	}
+	return "unixgram", socketPath
+}
+
+// DataVolumeName is the podman volume that holds a service's data on hosts
+// where a host directory cannot (see DataVolumeSource).
+func DataVolumeName(name string) string { return "lerd-data-" + name }
+
+func usesNamedDataVolume(goos string) bool { return goos == "windows" }
+
+func dataVolumeSource(goos, name, hostDir string) string {
+	if usesNamedDataVolume(goos) {
+		return DataVolumeName(name)
+	}
+	return hostDir
+}
+
+// DataVolumeSource is what a service's data_dir is mounted from. Windows shares
+// reach the VM over 9p, where SQLite and database engines fail with disk I/O
+// errors, so there the data lives in a named volume on the VM's own disk. Every
+// other host mounts the host directory as before.
+func DataVolumeSource(name string) string {
+	return dataVolumeSource(runtime.GOOS, name, DataSubDir(name))
+}
+
+// DataIsHostDir reports whether service data lives in a host directory, which
+// decides whether backups and purges can work on it directly.
+func DataIsHostDir() bool { return !usesNamedDataVolume(runtime.GOOS) }

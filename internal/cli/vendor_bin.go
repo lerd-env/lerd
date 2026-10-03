@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 
@@ -42,9 +43,15 @@ func NewVendorBinCmd() *cobra.Command {
 			name := args[0]
 			rest := args[1:]
 			rest = applyVendorBinDefaults(vendorBinDefaultArgs(cwd, name), rest)
-			return RunVendorBin(cwd, filepath.Join("vendor", "bin", name), rest)
+			return RunVendorBin(cwd, vendorBinRel(name), rest)
 		},
 	}
+}
+
+// vendorBinRel is the project-relative path of a composer binary. It is passed
+// into the container, so it is joined with / rather than the host separator.
+func vendorBinRel(name string) string {
+	return path.Join("vendor", "bin", name)
 }
 
 // VendorBinExists reports whether the project rooted at cwd has an executable

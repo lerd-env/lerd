@@ -69,7 +69,7 @@ func pidAlive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-	return syscall.Kill(pid, 0) == nil
+	return processExists(pid)
 }
 
 // A status build asks about every site in turn and the answer is one directory
@@ -152,7 +152,7 @@ func stopCLITunnel(key string) bool {
 	if !ok {
 		return false
 	}
-	_ = syscall.Kill(st.PID, syscall.SIGTERM)
+	_ = killPID(st.PID, syscall.SIGTERM)
 	removeTunnelState(key)
 	return true
 }

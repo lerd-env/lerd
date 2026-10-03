@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -26,11 +27,10 @@ func TestWritesPathShims_Mise(t *testing.T) {
 // manage themselves is not shadowed by a second copy.
 func TestFindMise_PrefersUserInstall(t *testing.T) {
 	home := t.TempDir()
-	userBin := filepath.Join(home, ".local", "bin")
-	if err := os.MkdirAll(userBin, 0o755); err != nil {
+	userMise := miseInstallPath(home)
+	if err := os.MkdirAll(filepath.Dir(userMise), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	userMise := filepath.Join(userBin, "mise")
 	if err := os.WriteFile(userMise, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -64,6 +64,9 @@ func TestFindMise_FallsBackToPath(t *testing.T) {
 // mise's own canonical location, not lerd's private bin dir, or the user ends
 // up with a second mise their shell never sees.
 func TestMiseInstallPath_IsCanonical(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows installs mise.exe; mise_windows_test.go covers it")
+	}
 	home := t.TempDir()
 	want := filepath.Join(home, ".local", "bin", "mise")
 	if got := miseInstallPath(home); got != want {

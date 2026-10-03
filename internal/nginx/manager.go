@@ -10,9 +10,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,6 +22,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
+	"github.com/geodro/lerd/internal/hostpath"
 	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/podman"
 )
@@ -232,7 +233,7 @@ func resolveFrameworkNginx(site config.Site, publicDir, fpmContainer string) str
 		return ""
 	}
 	var warn bytes.Buffer
-	block := frameworkNginxBlock(&warn, site.Framework, site.PrimaryDomain(), fw.Nginx.Snippet, site.Path, publicDir, fpmContainer)
+	block := frameworkNginxBlock(&warn, site.Framework, site.PrimaryDomain(), fw.Nginx.Snippet, hostpath.ToVM(site.Path), publicDir, fpmContainer)
 	emitOnce(os.Stdout, warn.String())
 	return block
 }
@@ -373,7 +374,7 @@ func nginxPathVars(sitePath, docRoot string) string {
 func expandNginxSnippet(snippet, sitePath, publicDir, fpmContainer string) (string, error) {
 	docRoot := sitePath
 	if publicDir != "" && publicDir != "." {
-		docRoot = filepath.Join(sitePath, publicDir)
+		docRoot = path.Join(sitePath, publicDir)
 	}
 	for _, v := range []string{sitePath, docRoot, fpmContainer} {
 		if i := strings.IndexAny(v, nginxValueForbidden); i >= 0 {
@@ -510,7 +511,7 @@ func renderFPMVhost(site config.Site, phpVersion string, ssl bool) ([]byte, erro
 	data := VhostData{
 		Domain:          site.PrimaryDomain(),
 		ServerNames:     serverNamesWithWildcards(site.Domains),
-		Path:            site.Path,
+		Path:            hostpath.ToVM(site.Path),
 		PHPVersion:      phpVersion,
 		PHPVersionShort: phpShort(phpVersion),
 		FPMContainer:    fpmContainer,
@@ -639,10 +640,10 @@ func GenerateCustomSSLVhost(site config.Site) error {
 }
 
 // hostProxyUpstream returns the host address nginx proxies a host-proxy site to.
-// macOS resolves host.containers.internal via gvproxy; on Linux we reuse the
+// macOS and Windows resolve host.containers.internal via gvproxy; on Linux we reuse the
 // routable gateway IP the probe cached in the hosts file (pure read, no podman).
 func hostProxyUpstream() string {
-	if runtime.GOOS == "darwin" {
+	if config.UsesMachineVM() {
 		return "host.containers.internal"
 	}
 	if ip := podman.ReadHostGatewayFromFile(); ip != "" {
@@ -1698,7 +1699,7 @@ func EnsureLerdVhost() error {
 // it with what is on disk before touching the file.
 func renderLerdVhost() (string, error) {
 	var content string
-	if runtime.GOOS == "darwin" {
+	if config.UsesMachineVM() {
 		token, err := LoadOrGenerateTrustToken()
 		if err != nil {
 			return "", fmt.Errorf("loading trust token: %w", err)

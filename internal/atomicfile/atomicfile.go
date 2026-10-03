@@ -60,20 +60,9 @@ func writeAtomic(path string, data []byte, perm os.FileMode) error {
 		os.Remove(tmp)
 		return err
 	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := replaceFile(tmp, path); err != nil {
 		os.Remove(tmp)
 		return err
 	}
 	return syncDir(dir)
-}
-
-// syncDir flushes the directory entry so a crash right after the rename can't
-// lose the published file even though its bytes were already fsynced.
-func syncDir(dir string) error {
-	d, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer d.Close()
-	return d.Sync()
 }

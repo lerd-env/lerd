@@ -4,7 +4,6 @@ import (
 	"context"
 	"net"
 	"os"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -320,7 +319,7 @@ func startAccessFeed() {
 // datagram socket on Linux (bind-mounted into the rootless nginx container), or
 // UDP on macOS where nginx is in the VM and the host socket isn't reachable.
 func accessFeedConn() (net.PacketConn, bool) {
-	if runtime.GOOS == "darwin" {
+	if config.UsesMachineVM() {
 		return listenUDP(config.AccessFeedListenAddr())
 	}
 	return listenDatagram(config.AccessSocketPath())
@@ -425,4 +424,13 @@ func seedActiveSites(t *idle.Tracker) {
 			t.TouchSite(key, time.Unix(ts, 0))
 		}
 	}
+}
+
+// controlConn binds the idle-suspend control listener: the unix datagram socket
+// where those exist, loopback UDP on Windows.
+func controlConn() (net.PacketConn, bool) {
+	if config.ControlNetwork() == "udp" {
+		return listenUDP(config.ControlAddr())
+	}
+	return listenDatagram(config.ControlSocketPath())
 }

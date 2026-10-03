@@ -33,6 +33,27 @@ func TestAllEndpointsServeLerdEnv(t *testing.T) {
 	}
 }
 
+// A build can publish its releases elsewhere, as the Windows alphas do, while
+// the stores and the changelog stay with the main repo.
+func TestReleaseRepoMovesOnlyTheReleases(t *testing.T) {
+	prev := releaseRepo
+	t.Cleanup(func() { releaseRepo = prev })
+	releaseRepo = "lerd-env/lerd-windows"
+
+	if got := ReleaseBaseURLs()[0]; got != "https://github.com/lerd-env/lerd-windows/releases" {
+		t.Errorf("releases = %q", got)
+	}
+	if got := ReleaseDownloadBases()[0]; got != "https://github.com/lerd-env/lerd-windows/releases/download" {
+		t.Errorf("downloads = %q", got)
+	}
+	if got := ReleaseAPIBaseURLs()[0]; got != "https://api.github.com/repos/lerd-env/lerd-windows" {
+		t.Errorf("api = %q", got)
+	}
+	if got := ChangelogURLs("")[0]; strings.Contains(got, "lerd-windows") {
+		t.Errorf("changelog moved with the releases: %q", got)
+	}
+}
+
 func TestBaseImageRefFormat(t *testing.T) {
 	refs := BaseImageRefs("84", "abc")
 	if len(refs) != 1 || refs[0] != "ghcr.io/lerd-env/lerd-php84-fpm-base:abc" {
