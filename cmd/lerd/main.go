@@ -261,6 +261,7 @@ func main() {
 	root.AddCommand(cli.NewDNSForwarderCmd())
 	root.AddCommand(cli.NewDNSServeCmd())
 	root.AddCommand(cli.NewP9ServeCmd())
+	root.AddCommand(cli.NewP9GuardCmd())
 	root.AddCommand(cli.NewSuperviseCmd())
 	root.AddCommand(cli.NewWorkerExecCmd())
 	root.AddCommand(cli.NewLANCmd())
