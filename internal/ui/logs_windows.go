@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/geodro/lerd/internal/hostshell"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/unitlog"
 )
@@ -40,12 +41,13 @@ func serviceRecentLogs(unit string) string {
 
 // logFollowScript is the command a spawned terminal runs to follow a unit's
 // logs: `podman logs -f` for container units, PowerShell's Get-Content -Wait for
-// host ones.
+// host ones. Both paths are quoted, so Podman under Program Files and a profile
+// with a quote in its name still resolve.
 func logFollowScript(unit string) string {
 	if isContainerUnit(unit) {
-		return podman.PodmanBin() + " logs -f --tail 100 " + unit
+		return "& " + hostshell.Quote(podman.PodmanBin()) + " logs -f --tail 100 " + unit
 	}
-	return "Get-Content -Wait -Tail 100 -LiteralPath '" + lerdLogPath(unit) + "'"
+	return "Get-Content -Wait -Tail 100 -LiteralPath " + hostshell.Quote(lerdLogPath(unit))
 }
 
 // waitForContainer polls until the named container exists, up to about ten

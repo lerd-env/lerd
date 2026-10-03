@@ -50,11 +50,25 @@ func openCommandTerminal(cwd, command string) error {
 	return err
 }
 
-// commandTerminals passes the script encoded for the same reason
-// updateTerminals does.
 func commandTerminals(cwd, command string) []terminalCmd {
-	script := "Set-Location -LiteralPath " + hostshell.Quote(cwd) + "\n" + command +
-		"\nWrite-Host; Read-Host '[press Enter to close]'"
+	return powerShellTerminals("Set-Location -LiteralPath " + hostshell.Quote(cwd) + "\n" + command +
+		"\nWrite-Host; Read-Host '[press Enter to close]'")
+}
+
+// openLogTerminal follows a unit's logs in Windows Terminal, or a PowerShell
+// console of its own. The follow scripts are PowerShell already; what the
+// button lacked was a window, since only Linux emulators were tried.
+func openLogTerminal(script string) error {
+	started, err := startFirstTerminal(powerShellTerminals(script))
+	if !started && err == nil {
+		return fmt.Errorf("no terminal found; follow the logs from a terminal")
+	}
+	return err
+}
+
+// powerShellTerminals runs script in Windows Terminal, then in a console that
+// `start` opens, passing it encoded for the same reason updateTerminals does.
+func powerShellTerminals(script string) []terminalCmd {
 	ps := []string{hostshell.Bin(), "-NoLogo", "-NoProfile", "-EncodedCommand", hostshell.Encode(script)}
 	return []terminalCmd{
 		{"wt.exe", ps},
