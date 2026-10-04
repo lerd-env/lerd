@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -260,5 +261,58 @@ func seedServiceUnits(t *testing.T, names ...string) {
 		if err := services.Mgr.WriteServiceUnit(n, "[Service]\nExecStart=/bin/true\n"); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// seedSSHAgentQuadlet installs the agent's unit the way `lerd auth ssh` does.
+func seedSSHAgentQuadlet(t *testing.T) {
+	t.Helper()
+	if err := os.MkdirAll(config.QuadletDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(config.QuadletDir(), podman.SSHAgentUnit+".container")
+	if err := os.WriteFile(path, []byte(podman.GenerateSSHAgentQuadlet("lerd-php85-fpm:local")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// `lerd quit` is the full teardown, so the agent `lerd auth ssh` started goes
+// down with everything else.
+func TestQuit_StopsTheSSHAgent(t *testing.T) {
+	rec := captureTeardown(t)
+	seedSSHAgentQuadlet(t)
+
+	if err := Quit(SimpleRunner, nil); err != nil {
+		t.Fatalf("Quit: %v", err)
+	}
+	if !rec.contains(podman.SSHAgentUnit) {
+		t.Errorf("`lerd quit` left %s running; stopped %v", podman.SSHAgentUnit, rec.steps)
+	}
+}
+
+// A user who never ran `lerd auth ssh` has no agent unit, so quit must not
+// report a stop for it.
+func TestQuit_SkipsTheSSHAgentNeverInstalled(t *testing.T) {
+	rec := captureTeardown(t)
+
+	if err := Quit(SimpleRunner, nil); err != nil {
+		t.Fatalf("Quit: %v", err)
+	}
+	if rec.contains(podman.SSHAgentUnit) {
+		t.Errorf("`lerd quit` stopped %s although it was never installed", podman.SSHAgentUnit)
+	}
+}
+
+// `lerd stop` keeps the agent: it holds the unlocked keys, and a stop and start
+// cycle should not make the user type their passphrases again.
+func TestStop_LeavesTheSSHAgentAlone(t *testing.T) {
+	rec := captureTeardown(t)
+	seedSSHAgentQuadlet(t)
+
+	if err := Stop(SimpleRunner); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	if rec.contains(podman.SSHAgentUnit) {
+		t.Errorf("`lerd stop` must leave %s and its unlocked keys up", podman.SSHAgentUnit)
 	}
 }

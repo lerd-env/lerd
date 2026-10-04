@@ -156,6 +156,7 @@ A few important details:
 - **Manually paused services are remembered.** If you stopped Mailpit earlier with `lerd service stop mailpit`, then `lerd stop` + `lerd start` will not bring Mailpit back. The pause flag survives the cycle.
 - **Pinned services start anyway.** A `lerd service pin <name>` overrides auto-stop logic; pinned services are always started by `lerd start` regardless of which sites are active.
 - **Worker state is preserved.** Workers running before `lerd stop` are restarted by the next `lerd start`; workers you manually stopped stay stopped.
+- **Loaded SSH keys stay loaded.** The `lerd-ssh-agent` from `lerd auth ssh` keeps running, so a stop and start does not ask for your key passphrases again.
 
 ---
 
@@ -168,7 +169,7 @@ lerd quit
 The full off-switch:
 
 1. Runs everything `lerd stop` does.
-2. Stops the workers of every site's git worktrees, which `lerd stop` leaves running. Their units are kept, so the next `lerd start` brings them back.
+2. Stops the workers of every site's git worktrees, which `lerd stop` leaves running. Their units are kept, so the next `lerd start` brings them back. It also stops the `lerd-ssh-agent` started by [`lerd auth ssh`](../reference/commands.md), clearing the keys it held; run `lerd auth ssh` again to load them.
 3. Stops `lerd-ui` (Web UI).
 4. Stops `lerd-watcher`.
 5. Kills the system tray process.
