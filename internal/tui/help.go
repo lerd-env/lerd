@@ -19,7 +19,7 @@ var helpReference = []helpSection{
 			{"ctrl+p", "go to any site, service or worktree, or run a quick action"},
 			{"click", "click a sidebar row, tab, worktree or card to open it"},
 			{"1-5 · b", "switch a site's tabs · switch between its worktrees"},
-			{"\\", "show the sidebar on a narrow terminal"},
+			{"tab · \\", "show the sidebar over the main area on a narrow terminal"},
 			{"ctrl+← / ctrl+→", "step between Dashboard, Sites, Services and Databases"},
 			{"pgup / pgdn", "jump by 10 rows"},
 			{"home / end · g G", "jump to first / last row"},
@@ -49,8 +49,8 @@ var helpReference = []helpSection{
 			{"F", "open the selected site's folder"},
 			{"W", "create a worktree for the selected site"},
 			{"O", "open in the browser: the focused site's primary domain, or the focused service's dashboard URL"},
-			{"u", "service update — pull a newer image and restart (services pane)"},
-			{"b", "service rollback — revert to the previously-running image (services pane)"},
+			{"u", "service update — pull a newer image and restart (an opened service)"},
+			{"b", "service rollback — revert to the previously-running image (an opened service)"},
 		},
 	},
 	{
@@ -79,7 +79,7 @@ var helpReference = []helpSection{
 	{
 		title: "Debug view",
 		rows: [][2]string{
-			{"[ / ]", "switch lens (Dumps · Queries · Jobs · Views · Mail · Cache · Events · HTTP)"},
+			{"[ / ]", "switch lens (Dumps · Queries · Jobs · Views · Mail · Cache · Events · HTTP · Logs · Exceptions · Messages)"},
 			{"/", "search the active lens (site, request, worker, file, text, payload)"},
 			{"1 / 2", "toggle the `fpm` / `cli` context-filter chips"},
 			{"enter / space", "expand the selected row (bindings, caller, exception, …)"},
@@ -120,7 +120,7 @@ var helpReference = []helpSection{
 	{
 		title: "Panes & overlays",
 		rows: [][2]string{
-			{"Dashboard tab", "six-card overview (Sites · Services · Workers · System Health · Resources · Lerd)"},
+			{"Dashboard", "what needs attention first, with its fix one key away, then resources, system health and recent activity"},
 			{"Databases tab", "every engine with its databases, sizes, owning sites and snapshots"},
 			{"S", "swap the detail pane for global Settings (LAN expose, autostart, Xdebug) — Sites tab"},
 			{"Y", "swap the detail pane for the System overview (DNS, Nginx, Watcher, PHP, Node, Lerd) — Sites tab"},
