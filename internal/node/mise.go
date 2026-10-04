@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -52,14 +51,6 @@ func findMise(home string, lookPath func(string) (string, error)) string {
 // would be invisible to the user's shell and would drift from the one they run.
 func miseInstallPath(home string) string {
 	return filepath.Join(home, ".local", "bin", "mise")
-}
-
-// misePrefixes are the package-manager dirs a daemon's restricted PATH misses.
-func misePrefixes() []string {
-	if runtime.GOOS == "darwin" {
-		return []string{"/opt/homebrew/bin", "/usr/local/bin"}
-	}
-	return []string{"/usr/local/bin", "/usr/bin"}
 }
 
 func isExecutableFile(path string) bool {

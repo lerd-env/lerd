@@ -22,11 +22,6 @@ var osBranchAllowlist = map[string]int{
 	"internal/cli/hostproxy.go":  2,
 	"internal/cli/install.go":    2,
 	"internal/cli/update.go":     2,
-	"internal/git/copy.go":       2,
-	"internal/node/bun.go":       1,
-	"internal/node/mise.go":      1,
-	"internal/node/nvm.go":       1,
-	"internal/node/system.go":    1,
 }
 
 // TestSharedCodeDoesNotBranchOnGOOS fails when a file compiled for more than
