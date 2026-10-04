@@ -153,12 +153,9 @@ func TestForSiteEditor(t *testing.T) {
 	}
 }
 
-// TestInstalledByDesktopEntry checks an editor whose binary is not on PATH is
-// still found through a desktop entry claiming its URL scheme.
-func TestInstalledByDesktopEntry(t *testing.T) {
-	if runtime.GOOS == "darwin" {
-		t.Skip("desktop entries are how Linux registers URL schemes; macOS looks for the app bundle")
-	}
+// TestInstalledWithoutItsBinary checks an editor whose binary is not on PATH is
+// still found the way the platform installs it.
+func TestInstalledWithoutItsBinary(t *testing.T) {
 	isolate(t)
 	t.Setenv("PATH", t.TempDir())
 	dir := filepath.Join(os.Getenv("HOME"), ".local/share/applications")
@@ -168,15 +165,23 @@ func TestInstalledByDesktopEntry(t *testing.T) {
 	if e.Installed() {
 		t.Fatal("phpstorm found with nothing installed")
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	entry := "[Desktop Entry]\nName=PhpStorm\nMimeType=x-scheme-handler/phpstorm;\n"
-	if err := os.WriteFile(filepath.Join(dir, "jetbrains-phpstorm.desktop"), []byte(entry), 0o644); err != nil {
-		t.Fatal(err)
+	// macOS knows an editor by its app bundle, Linux by a desktop entry
+	// claiming its URL scheme, which is how Toolbox and Flatpak install them.
+	if runtime.GOOS == "darwin" {
+		if err := os.MkdirAll(filepath.Join(os.Getenv("HOME"), "Applications", "PhpStorm.app"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		entry := "[Desktop Entry]\nName=PhpStorm\nMimeType=x-scheme-handler/phpstorm;\n"
+		if err := os.WriteFile(filepath.Join(dir, "jetbrains-phpstorm.desktop"), []byte(entry), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if !e.Installed() {
-		t.Fatal("phpstorm not found through its desktop entry")
+		t.Fatal("phpstorm not found without its binary")
 	}
 }
 
