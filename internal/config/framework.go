@@ -70,6 +70,9 @@ type Framework struct {
 	// SuggestServices are service presets the setup wizard offers for this
 	// framework, unticked, whether or not they are installed yet.
 	SuggestServices []ServiceSuggestion `yaml:"suggest_services,omitempty"`
+	// SuggestPackages are composer packages the Debug tab offers to install
+	// for a project on this framework, with the reason it shows beside them.
+	SuggestPackages []PackageSuggestion `yaml:"suggest_packages,omitempty"`
 	// PackageServices are the suggest_services of the composer packages merged
 	// onto this definition. The wizard ticks these: the project requiring the
 	// package is evidence it uses them.
@@ -419,6 +422,31 @@ type ServiceSuggestion struct {
 	Reason string `yaml:"reason,omitempty" json:"reason,omitempty"`
 	// Package is the composer package that made the suggestion, set on merge.
 	Package string `yaml:"-" json:"package,omitempty"`
+}
+
+// PackageSuggestion is a composer package a definition offers to install, as
+// a dev dependency when Dev is set, with the reason and docs the dashboard
+// shows beside it.
+type PackageSuggestion struct {
+	Name   string `yaml:"name" json:"name"`
+	Dev    bool   `yaml:"dev,omitempty" json:"dev,omitempty"`
+	Reason string `yaml:"reason,omitempty" json:"reason,omitempty"`
+	Docs   string `yaml:"docs,omitempty" json:"docs,omitempty"`
+}
+
+// composerName is what composer accepts as a package name. The name is put on
+// a shell command line, so anything else from the store is refused.
+var composerName = regexp.MustCompile(`^[a-z0-9]([_.-]?[a-z0-9]+)*/[a-z0-9](([_.]|-{1,2})?[a-z0-9]+)*$`)
+
+// Valid reports whether the suggestion names a package composer would accept.
+func (s PackageSuggestion) Valid() bool { return composerName.MatchString(s.Name) }
+
+// InstallCommand is the composer command that adds the package to a project.
+func (s PackageSuggestion) InstallCommand() string {
+	if s.Dev {
+		return "composer require --dev " + s.Name
+	}
+	return "composer require " + s.Name
 }
 
 // PickPackageSuggestions narrows each package's suggestions, listed most

@@ -1782,5 +1782,9 @@
   "requests_signedInAs": "Accesso come",
   "requests_middleware": "Middleware",
   "requests_middlewareGlobal": "Globale",
-  "requests_middlewareRoute": "Rotta"
+  "requests_middlewareRoute": "Rotta",
+  "packages_install": "Installa",
+  "packages_installing": "Installazione…",
+  "packages_dismiss": "Non suggerire più",
+  "packages_docs": "Docs"
 }

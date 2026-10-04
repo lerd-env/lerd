@@ -1782,5 +1782,9 @@
   "requests_signedInAs": "登录身份",
   "requests_middleware": "中间件",
   "requests_middlewareGlobal": "全局",
-  "requests_middlewareRoute": "路由"
+  "requests_middlewareRoute": "路由",
+  "packages_install": "安装",
+  "packages_installing": "正在安装…",
+  "packages_dismiss": "不再建议",
+  "packages_docs": "文档"
 }

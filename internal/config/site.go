@@ -102,6 +102,9 @@ type Site struct {
 	// DismissedServices are service suggestions this user turned down for the
 	// site, kept here rather than in .lerd.yaml since the choice is personal.
 	DismissedServices []string `yaml:"dismissed_services,omitempty"`
+	// DismissedPackages are composer package suggestions this user turned down
+	// for the site, so the Debug tab stops offering them.
+	DismissedPackages []string `yaml:"dismissed_packages,omitempty"`
 	// DeclinedServices were taken off the site from its Overview. Their env keys
 	// stay behind at the project's example values, so `lerd env` would detect
 	// and rewire them without this record; adding one back clears it.
@@ -286,6 +289,7 @@ type siteYAML struct {
 	ApprovedCommands      []string            `yaml:"approved_commands,omitempty"`
 	PinnedCommands        map[string]bool     `yaml:"pinned_commands,omitempty"`
 	DismissedServices     []string            `yaml:"dismissed_services,omitempty"`
+	DismissedPackages     []string            `yaml:"dismissed_packages,omitempty"`
 	DeclinedServices      []string            `yaml:"declined_services,omitempty"`
 	WiredServices         []string            `yaml:"wired_services,omitempty"`
 	BrowserCapture        *BrowserCapture     `yaml:"browser_capture,omitempty"`
@@ -330,6 +334,7 @@ func (s Site) toYAML() siteYAML {
 		ApprovedCommands:      s.ApprovedCommands,
 		PinnedCommands:        s.PinnedCommands,
 		DismissedServices:     s.DismissedServices,
+		DismissedPackages:     s.DismissedPackages,
 		DeclinedServices:      s.DeclinedServices,
 		WiredServices:         s.WiredServices,
 		BrowserCapture:        s.BrowserCapture,
@@ -379,6 +384,7 @@ func (sy siteYAML) toSite() Site {
 		ApprovedCommands:      sy.ApprovedCommands,
 		PinnedCommands:        sy.PinnedCommands,
 		DismissedServices:     sy.DismissedServices,
+		DismissedPackages:     sy.DismissedPackages,
 		DeclinedServices:      sy.DeclinedServices,
 		WiredServices:         sy.WiredServices,
 		BrowserCapture:        sy.BrowserCapture,
@@ -495,6 +501,9 @@ func cloneSiteRegistry(in *SiteRegistry) *SiteRegistry {
 		}
 		if s.DismissedServices != nil {
 			cp.DismissedServices = append([]string(nil), s.DismissedServices...)
+		}
+		if s.DismissedPackages != nil {
+			cp.DismissedPackages = append([]string(nil), s.DismissedPackages...)
 		}
 		if s.DeclinedServices != nil {
 			cp.DeclinedServices = append([]string(nil), s.DeclinedServices...)
@@ -854,6 +863,28 @@ func DismissSiteService(name, service string) error {
 			return nil
 		}
 		reg.Sites[i].DismissedServices = append(reg.Sites[i].DismissedServices, service)
+		return SaveSites(reg)
+	}
+	return fmt.Errorf("site %q not found", name)
+}
+
+// DismissSitePackage records that the user turned down the suggestion of a
+// composer package for the site.
+func DismissSitePackage(name, pkg string) error {
+	siteWriteMu.Lock()
+	defer siteWriteMu.Unlock()
+	reg, err := LoadSites()
+	if err != nil {
+		return err
+	}
+	for i := range reg.Sites {
+		if reg.Sites[i].Name != name {
+			continue
+		}
+		if slices.Contains(reg.Sites[i].DismissedPackages, pkg) {
+			return nil
+		}
+		reg.Sites[i].DismissedPackages = append(reg.Sites[i].DismissedPackages, pkg)
 		return SaveSites(reg)
 	}
 	return fmt.Errorf("site %q not found", name)

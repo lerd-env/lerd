@@ -1782,5 +1782,9 @@
   "requests_signedInAs": "Conectado como",
   "requests_middleware": "Middleware",
   "requests_middlewareGlobal": "Global",
-  "requests_middlewareRoute": "Rota"
+  "requests_middlewareRoute": "Rota",
+  "packages_install": "Instalar",
+  "packages_installing": "Instalando…",
+  "packages_dismiss": "Não sugerir novamente",
+  "packages_docs": "Docs"
 }

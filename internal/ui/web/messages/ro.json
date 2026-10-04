@@ -1782,5 +1782,9 @@
   "requests_signedInAs": "Conectat ca",
   "requests_middleware": "Middleware",
   "requests_middlewareGlobal": "Global",
-  "requests_middlewareRoute": "Rută"
+  "requests_middlewareRoute": "Rută",
+  "packages_install": "Instalează",
+  "packages_installing": "Se instalează…",
+  "packages_dismiss": "Nu mai sugera",
+  "packages_docs": "Documentație"
 }

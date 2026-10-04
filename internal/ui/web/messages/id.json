@@ -1782,5 +1782,9 @@
   "requests_signedInAs": "Masuk sebagai",
   "requests_middleware": "Middleware",
   "requests_middlewareGlobal": "Global",
-  "requests_middlewareRoute": "Rute"
+  "requests_middlewareRoute": "Rute",
+  "packages_install": "Pasang",
+  "packages_installing": "Memasang…",
+  "packages_dismiss": "Jangan sarankan lagi",
+  "packages_docs": "Dokumentasi"
 }

@@ -6,7 +6,7 @@ lerd already records most of what a request does without any code in your app: i
 composer require lerd/debug --dev
 ```
 
-Outside lerd, in production or on a machine without it, every call returns at once and nothing is kept, not even in memory, so the package is safe to leave in.
+Outside lerd, in production or on a machine without it, every call returns at once and nothing is kept, not even in memory, so the package is safe to leave in. On a site of a supported framework that does not have it installed, the site's Debug tab offers it with an **Install** button above the Requests lens.
 
 ## What lerd records on its own
 

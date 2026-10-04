@@ -460,3 +460,34 @@ func TestFrameworkPackage_suggestServicesYAML(t *testing.T) {
 		t.Errorf("suggest_services not bound: %v", pkg.SuggestServices)
 	}
 }
+
+func TestGetFrameworkForDir_packageSuggestionsMergeOnce(t *testing.T) {
+	_, project := packageSandbox(t, []string{`{"name":"acme/core"}`, `{"name":"acme/http"}`}, "acme/core", "acme/http")
+	suggest := "suggest_packages:\n  - name: lerd/debug\n    dev: true\n    reason: Your own timeline rows\n"
+	writePackage(t, "acme-core", "package: acme/core\n"+suggest)
+	writePackage(t, "acme-http", "package: acme/http\n"+suggest)
+
+	fw, _ := GetFrameworkForDir("acme", project)
+	if len(fw.SuggestPackages) != 1 || fw.SuggestPackages[0].Name != "lerd/debug" || !fw.SuggestPackages[0].Dev {
+		t.Fatalf("suggestions = %+v, want lerd/debug once, as a dev dependency", fw.SuggestPackages)
+	}
+}
+
+func TestPackageSuggestion_refusesNamesComposerWouldNot(t *testing.T) {
+	for name, want := range map[string]bool{
+		"lerd/debug":          true,
+		"spatie/laravel-ray":  true,
+		"lerd/debug; rm -rf":  false,
+		"lerd/debug --dev":    false,
+		"Lerd/Debug":          false,
+		"debug":               false,
+		"lerd/debug$(whoami)": false,
+	} {
+		if got := (PackageSuggestion{Name: name}).Valid(); got != want {
+			t.Errorf("Valid(%q) = %v, want %v", name, got, want)
+		}
+	}
+	if got := (PackageSuggestion{Name: "lerd/debug", Dev: true}).InstallCommand(); got != "composer require --dev lerd/debug" {
+		t.Errorf("InstallCommand = %q", got)
+	}
+}

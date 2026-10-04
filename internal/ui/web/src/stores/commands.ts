@@ -130,6 +130,24 @@ export async function runDoctorFix(
   await readSSE(res, cb);
 }
 
+// runPackageInstall POSTs to the site's package install endpoint, which runs
+// composer require for a package the site's framework suggests and streams the
+// same SSE contract as runCommand.
+export async function runPackageInstall(domain: string, name: string, cb: RunCallbacks = {}): Promise<void> {
+  const path = `/api/sites/${encodeURIComponent(domain)}/packages/install?name=${encodeURIComponent(name)}`;
+  const res = await apiFetch(path, { method: 'POST', signal: cb.signal });
+  if (!res.ok || !(res.headers.get('Content-Type') || '').startsWith('text/event-stream')) {
+    try {
+      const payload = await res.json();
+      cb.onError?.(String(payload?.error ?? `${res.status} ${res.statusText}`));
+    } catch {
+      cb.onError?.(`${res.status} ${res.statusText}`);
+    }
+    return;
+  }
+  await readSSE(res, cb);
+}
+
 // readSSE consumes a fetch Response body as the SSE event stream both runners
 // emit, dispatching each frame to the callbacks.
 async function readSSE(res: Response, cb: RunCallbacks): Promise<void> {
@@ -260,6 +278,17 @@ export async function executeDoctorFix(domain: string, key: string, label: strin
   }
   const cmd: Command = { name: key, label, command: '' };
   return runInModal(domain, cmd, branch, (cb) => runDoctorFix(domain, key, cb, branch));
+}
+
+// executePackageInstall installs a suggested package in the run modal, so the
+// user watches composer work. Awaitable so the caller can refresh afterwards.
+export async function executePackageInstall(domain: string, name: string, command: string) {
+  if (get(currentRun).kind === 'running') {
+    setToast('Another command is running. Wait for it to finish.', 2400);
+    return;
+  }
+  const cmd: Command = { name: 'install ' + name, label: command, command };
+  return runInModal(domain, cmd, '', (cb) => runPackageInstall(domain, name, cb));
 }
 
 // runInModal drives the shared CommandRunModal state for any streaming runner,

@@ -1782,5 +1782,9 @@
   "requests_signedInAs": "Giriş yapan",
   "requests_middleware": "Middleware",
   "requests_middlewareGlobal": "Genel",
-  "requests_middlewareRoute": "Rota"
+  "requests_middlewareRoute": "Rota",
+  "packages_install": "Yükle",
+  "packages_installing": "Yükleniyor…",
+  "packages_dismiss": "Bir daha önerme",
+  "packages_docs": "Belgeler"
 }

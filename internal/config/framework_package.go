@@ -62,6 +62,9 @@ type FrameworkPackage struct {
 	// SuggestServices are service presets a project requiring this package
 	// uses, ticked in the setup wizard.
 	SuggestServices []ServiceSuggestion `yaml:"suggest_services,omitempty"`
+	// SuggestPackages are composer packages a project requiring this package
+	// is offered on its Debug tab.
+	SuggestPackages []PackageSuggestion `yaml:"suggest_packages,omitempty"`
 	// Devtools declares the capture seams this package brings. They belong to
 	// the package rather than to any framework: the class a seam names ships
 	// with the package, so a project on any framework that requires it gets the
@@ -262,6 +265,11 @@ func applyPackage(fw *Framework, pkg *FrameworkPackage) {
 		}
 		sg.Package = pkg.Package
 		fw.PackageServices = append(fw.PackageServices, sg)
+	}
+	for _, sg := range pkg.SuggestPackages {
+		if !slices.ContainsFunc(fw.SuggestPackages, func(have PackageSuggestion) bool { return have.Name == sg.Name }) {
+			fw.SuggestPackages = append(fw.SuggestPackages, sg)
+		}
 	}
 	applyPackageRemovals(fw, pkg.Removes)
 }

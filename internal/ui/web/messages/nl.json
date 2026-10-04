@@ -1782,5 +1782,9 @@
   "requests_signedInAs": "Ingelogd als",
   "requests_middleware": "Middleware",
   "requests_middlewareGlobal": "Globaal",
-  "requests_middlewareRoute": "Route"
+  "requests_middlewareRoute": "Route",
+  "packages_install": "Installeren",
+  "packages_installing": "Bezig met installeren…",
+  "packages_dismiss": "Niet meer voorstellen",
+  "packages_docs": "Docs"
 }

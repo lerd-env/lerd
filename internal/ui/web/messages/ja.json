@@ -1782,5 +1782,9 @@
   "requests_signedInAs": "ログイン中:",
   "requests_middleware": "ミドルウェア",
   "requests_middlewareGlobal": "グローバル",
-  "requests_middlewareRoute": "ルート"
+  "requests_middlewareRoute": "ルート",
+  "packages_install": "インストール",
+  "packages_installing": "インストール中…",
+  "packages_dismiss": "今後表示しない",
+  "packages_docs": "ドキュメント"
 }

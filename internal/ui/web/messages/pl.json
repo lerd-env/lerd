@@ -1782,5 +1782,9 @@
   "requests_signedInAs": "Zalogowano jako",
   "requests_middleware": "Middleware",
   "requests_middlewareGlobal": "Globalne",
-  "requests_middlewareRoute": "Trasa"
+  "requests_middlewareRoute": "Trasa",
+  "packages_install": "Zainstaluj",
+  "packages_installing": "Instalowanie…",
+  "packages_dismiss": "Nie proponuj ponownie",
+  "packages_docs": "Dokumentacja"
 }

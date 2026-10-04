@@ -484,6 +484,16 @@ suggest_services:
   - name: solr
     reason: Search API's usual search backend
 
+# Composer packages the site's Debug tab offers to install, with an Install
+# button that runs composer require for it, while the project does not have
+# the package installed (optional). A package declares the same key; a name offered
+# twice is listed once, and one composer would not accept is never offered.
+suggest_packages:
+  - name: lerd/debug
+    dev: true                         # composer require --dev
+    reason: puts your own timeline rows, log lines and tabs in lerd's Requests lens
+    docs: https://lerd.sh/features/debug-package/   # a lerd.sh page opens in the built-in docs
+
 # Application log files shown in the UI "App Logs" tab
 logs:
   - path: "var/log/*.log"             # glob relative to project root
