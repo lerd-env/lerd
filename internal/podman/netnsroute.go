@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
+
+	"github.com/geodro/lerd/internal/platform"
 )
 
 // ErrNetnsHeld means the rootless network namespace survived stopping every
@@ -70,7 +71,7 @@ func HealRoutelessNetns() (bool, error) {
 // namespace is not the host's to inspect.
 func rootlessNetnsUp() bool {
 	dir := rootlessNetnsDir()
-	if runtime.GOOS != "linux" || dir == "" {
+	if platform.Current.UsesMachineVM || dir == "" {
 		return false
 	}
 	_, err := os.Stat(filepath.Join(dir, "rootless-netns-conn.pid"))
