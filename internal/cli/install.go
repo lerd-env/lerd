@@ -761,7 +761,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		pullJobs = append(pullJobs, pullDNSImages()...)
 		plan = append(plan, dnsImagePlan()...)
 	}
-	plan.Fill().Report(os.Stdout)
+	withoutKeptImages(plan, podman.OfflineKeeps).Fill().Report(os.Stdout)
 	for _, job := range pullJobs {
 		step(job.Label)
 		if err := job.Run(io.Discard); err != nil {
@@ -1008,19 +1008,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		// every install into a full rebuild of the ones just built.
 		if lifecycle.FPMContainersWanted() &&
 			(podman.NeedsFPMRebuild(ensuredFPMVersions()) || podman.NeedsFrankenPHPRebuild(activeFrankenPHPVersions())) {
-			feedback.Header("Rebuilding PHP images")
-			self, err := os.Executable()
-			if err != nil {
-				fmt.Printf("  WARN: locating lerd binary for php:rebuild: %v\n", err)
-			} else {
-				rebuildCmd := exec.Command(self, "php:rebuild")
-				rebuildCmd.Stdout = os.Stdout
-				rebuildCmd.Stderr = os.Stderr
-				rebuildCmd.Stdin = os.Stdin
-				if err := rebuildCmd.Run(); err != nil {
-					fmt.Printf("  WARN: php:rebuild failed: %v\n", err)
-				}
-			}
+			rebuildStalePHPImages(runPHPRebuild)
 		}
 
 		// Start the installed PHP FPM containers whose images are now available,
@@ -1143,6 +1131,47 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	feedback.Note("Terminal:  " + feedback.Val("lerd tui"))
 	feedback.Begin()
 	return nil
+}
+
+// rebuildStalePHPImages force-rebuilds the PHP images after the ensure pass.
+// Offline it only says how to: the ensure pass already built any image that was
+// missing, and a forced rebuild skips the offline gate and re-downloads each base.
+func rebuildStalePHPImages(rebuild func() error) {
+	if imagepull.Offline() {
+		feedback.Note("offline: keeping the current PHP images, run `lerd php:rebuild` to refresh them")
+		return
+	}
+	feedback.Header("Rebuilding PHP images")
+	if err := rebuild(); err != nil {
+		fmt.Printf("  WARN: php:rebuild failed: %v\n", err)
+	}
+}
+
+// runPHPRebuild runs `lerd php:rebuild` in a child, so the rebuild happens with
+// the binary install just put in place.
+func runPHPRebuild() error {
+	self, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("locating lerd binary for php:rebuild: %w", err)
+	}
+	rebuildCmd := exec.Command(self, "php:rebuild")
+	rebuildCmd.Stdout = os.Stdout
+	rebuildCmd.Stderr = os.Stderr
+	rebuildCmd.Stdin = os.Stdin
+	return rebuildCmd.Run()
+}
+
+// withoutKeptImages drops the pulls offline mode will skip, so the disclosure
+// names only the downloads that really happen.
+func withoutKeptImages(plan imagepull.Plan, kept func(string) bool) imagepull.Plan {
+	var out imagepull.Plan
+	for _, it := range plan {
+		if !it.Build && kept(it.Ref) {
+			continue
+		}
+		out = append(out, it)
+	}
+	return out
 }
 
 // shouldRestartDaemon reports whether install has to bounce one of the

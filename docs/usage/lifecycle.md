@@ -133,6 +133,10 @@ ask for them yourself:
 lerd php:rebuild
 ```
 
+That includes `lerd install` and the reinstall a `lerd update` runs: offline,
+they keep the PHP images you have and say so instead of rebuilding them, and
+the download list they print leaves out every pull offline mode skips.
+
 `lerd php:rebuild` and `lerd fetch` always run, offline or not: they exist
 because you asked for the download.
 
