@@ -26,7 +26,9 @@ func TestGenerateVhost_BrowserCaptureOnInjectsScriptAndEndpoint(t *testing.T) {
 	for _, name := range []string{"myapp.test.conf", "myapp.test-ssl.conf"} {
 		content := readConf(t, filepath.Join(confD, name))
 		for _, want := range []string{
-			`sub_filter '</head>' '<script src="/_lerd/browser.js"></script></head>';`,
+			`sub_filter '</head>' '<script src="/_lerd/browser.js" data-rid="$upstream_http_x_lerd_rid"></script></head>';`,
+			"add_header Access-Control-Expose-Headers X-Lerd-Rid always;",
+			"add_header Timing-Allow-Origin * always;",
 			"location = /_lerd/browser {",
 			"location = /_lerd/browser.js {",
 			"proxy_pass " + lerdUIUpstream() + "/_lerd/browser;",
@@ -59,7 +61,7 @@ func TestGenerateVhost_BrowserCaptureUsesTheSiteRoute(t *testing.T) {
 	}
 	content := readConf(t, filepath.Join(confD, "myapp.test.conf"))
 	for _, want := range []string{
-		`<script src="/__dev/capture.js"></script>`,
+		`<script src="/__dev/capture.js" data-rid="$upstream_http_x_lerd_rid"></script>`,
 		"location = /__dev/capture {",
 		"location = /__dev/capture.js {",
 		"proxy_pass " + lerdUIUpstream() + "/_lerd/browser.js;",
@@ -103,7 +105,7 @@ func TestGenerateHostProxyVhost_BrowserCaptureAsksForPlainBody(t *testing.T) {
 	}
 	content := readConf(t, filepath.Join(confD, "spa.test.conf"))
 	for _, want := range []string{
-		`<script src="/_lerd/browser.js"></script>`,
+		`<script src="/_lerd/browser.js" data-rid="$upstream_http_x_lerd_rid"></script>`,
 		"location = /_lerd/browser {",
 		`proxy_set_header X-Lerd-Site "spa";`,
 		`proxy_set_header Accept-Encoding "";`,

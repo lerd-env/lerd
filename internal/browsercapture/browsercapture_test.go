@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dumps"
@@ -223,5 +224,18 @@ func TestSummarize_GroupsPerPageViewAndFiltersByType(t *testing.T) {
 	errs := Summarize(events, []string{"error", "network"})
 	if len(errs.PageViews) != 2 || len(errs.PageViews[0].Events) != 1 || errs.PageViews[0].Events[0].Status != 500 {
 		t.Fatalf("filtered = %+v", errs.PageViews)
+	}
+}
+
+func TestEventTime_UsesTheBrowserClockWhenItIsClose(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	if got := eventTime("2026-10-04T09:59:59.700Z", now); got != "2026-10-04T09:59:59.700Z" {
+		t.Fatalf("close clock = %q", got)
+	}
+	if got := eventTime("2020-01-01T00:00:00Z", now); got != "2026-10-04T10:00:00.000Z" {
+		t.Fatalf("far clock = %q", got)
+	}
+	if got := eventTime("", now); got != "2026-10-04T10:00:00.000Z" {
+		t.Fatalf("no clock = %q", got)
 	}
 }

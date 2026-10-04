@@ -161,13 +161,24 @@ type Report struct {
 	Name    string `json:"name,omitempty"`
 	Label   string `json:"label,omitempty"`
 	Cross   bool   `json:"cross,omitempty"`
-	URL     string `json:"url,omitempty"`
-	Page    string `json:"page,omitempty"`
-	UA      string `json:"ua,omitempty"`
-	At      string `json:"at,omitempty"`
+	// RID is the PHP request a fetch or XHR reached, read off its X-Lerd-Rid
+	// response header; Via says which of the two sent it.
+	RID      string  `json:"rid,omitempty"`
+	Via      string  `json:"via,omitempty"`
+	Duration float64 `json:"duration_ms,omitempty"`
+	// Timing is a page load's or a linked request's phases, in milliseconds
+	// from its own start, as the browser's Navigation and Resource Timing say.
+	Timing map[string]float64 `json:"timing,omitempty"`
+	// Origin is the page's performance.timeOrigin in Unix milliseconds, which
+	// places its other events on the same clock as its timing.
+	Origin float64 `json:"origin,omitempty"`
+	URL    string  `json:"url,omitempty"`
+	Page   string  `json:"page,omitempty"`
+	UA     string  `json:"ua,omitempty"`
+	At     string  `json:"at,omitempty"`
 }
 
-var reportTypes = map[string]bool{"error": true, "rejection": true, "console": true, "network": true, "navigation": true, "resource": true, "event": true}
+var reportTypes = map[string]bool{"error": true, "rejection": true, "console": true, "network": true, "navigation": true, "resource": true, "event": true, "request": true, "timing": true}
 
 // MaxReports caps how many entries one post may carry; the script itself
 // stops after 50 per page.
@@ -183,7 +194,7 @@ func Events(body []byte, site, branch, host string) ([]dumps.Event, error) {
 	if len(reports) > MaxReports {
 		reports = reports[:MaxReports]
 	}
-	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	received := time.Now().UTC()
 	out := make([]dumps.Event, 0, len(reports))
 	for _, r := range reports {
 		if !reportTypes[r.Type] || r.Message == "" {
@@ -193,7 +204,7 @@ func Events(body []byte, site, branch, host string) ([]dumps.Event, error) {
 		out = append(out, dumps.Event{
 			V:     dumps.ProtocolVersion,
 			ID:    newID(),
-			TS:    now,
+			TS:    eventTime(r.At, received),
 			Kind:  dumps.KindBrowser,
 			Ctx:   dumps.Context{Type: "browser", Site: site, Branch: branch, Domain: host, Request: r.URL, RID: r.Page},
 			Src:   dumps.Source{File: r.File, Line: r.Line},
@@ -202,6 +213,17 @@ func Events(body []byte, site, branch, host string) ([]dumps.Event, error) {
 		})
 	}
 	return out, nil
+}
+
+// eventTime is when the browser saw the event, which puts a page's events in
+// order on a request's waterfall; a batch arrives together, up to a few hundred
+// milliseconds later. A clock far from lerd's falls back to the arrival time.
+func eventTime(at string, received time.Time) string {
+	t, err := time.Parse(time.RFC3339Nano, at)
+	if err != nil || t.Sub(received).Abs() > time.Minute {
+		t = received
+	}
+	return t.UTC().Format("2006-01-02T15:04:05.000Z")
 }
 
 func newID() string {
@@ -245,7 +267,7 @@ func ApplyPreset(site config.Site, name string, add bool) error {
 
 // EventTypes are the types a browser event is filtered and counted by, with
 // console messages split by level the way the dashboard filters them.
-var EventTypes = []string{"error", "rejection", "console.error", "console.warn", "network", "resource", "event", "navigation"}
+var EventTypes = []string{"error", "rejection", "console.error", "console.warn", "network", "resource", "event", "navigation", "request", "timing"}
 
 // EventType returns a browser event's type in EventTypes terms.
 func EventType(r Report) string {
@@ -266,6 +288,7 @@ type Entry struct {
 	Request string `json:"request,omitempty"`
 	Status  int    `json:"status,omitempty"`
 	Cross   bool   `json:"cross_origin,omitempty"`
+	RID     string `json:"rid,omitempty"`
 	Time    string `json:"time"`
 }
 
@@ -313,7 +336,7 @@ func Summarize(events []dumps.Event, types []string) Summary {
 			index[key] = i
 			out.PageViews = append(out.PageViews, PageView{URL: e.Ctx.Request, Branch: e.Ctx.Branch, Start: e.TS})
 		}
-		entry := Entry{Type: typ, Message: r.Message, Stack: r.Stack, Method: r.Method, Request: r.Request, Status: r.Status, Cross: r.Cross, Time: e.TS}
+		entry := Entry{Type: typ, Message: r.Message, Stack: r.Stack, Method: r.Method, Request: r.Request, Status: r.Status, Cross: r.Cross, RID: r.RID, Time: e.TS}
 		if r.File != "" {
 			entry.At = fmt.Sprintf("%s:%d:%d", r.File, r.Line, r.Col)
 		}

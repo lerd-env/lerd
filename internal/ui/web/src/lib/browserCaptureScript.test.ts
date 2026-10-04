@@ -36,6 +36,7 @@ function settle() {
 
 describe('browser capture script', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     history.replaceState(null, '', '/');
     vi.spyOn(console, 'info').mockImplementation(() => {});
@@ -153,5 +154,59 @@ describe('browser capture script', () => {
     const list = JSON.parse(sent[0].message.slice('List: '.length));
     expect(list).toHaveLength(21);
     expect(list[20]).toBe('… 5 more');
+  });
+
+  it('names the first page view after the request that served it', () => {
+    const tag = document.createElement('script');
+    tag.setAttribute('data-rid', 'php-rid-1');
+    Object.defineProperty(document, 'currentScript', { configurable: true, value: tag });
+    const sent = load({});
+    Object.defineProperty(document, 'currentScript', { configurable: true, value: null });
+    history.pushState(null, '', '/next');
+    settle();
+    const views = sent.filter((r) => r.type === 'navigation');
+    expect(views[0].page).toBe('php-rid-1');
+    expect(views[1].page).not.toBe('php-rid-1');
+  });
+
+  it('reports a fetch whose response names its PHP request, whatever the status', async () => {
+    const realFetch = window.fetch;
+    window.fetch = (() => Promise.resolve({ status: 200, headers: { get: (h: string) => (h === 'X-Lerd-Rid' ? 'api-rid-9' : null) } })) as unknown as typeof fetch;
+    const sent = load({ navigation: false });
+    await fetch('https://api.other.test/orders');
+    settle();
+    const req = sent.find((r) => r.type === 'request') as unknown as { rid: string; status: number; cross: boolean; via: string };
+    expect(req).toMatchObject({ rid: 'api-rid-9', status: 200, cross: true, via: 'fetch' });
+    expect(sent.filter((r) => r.type === 'network')).toEqual([]);
+    window.fetch = realFetch;
+  });
+
+  it('reports how the served page loaded, as phases from its own start', () => {
+    const nav = { startTime: 0, domainLookupStart: 2, domainLookupEnd: 4, connectStart: 4, connectEnd: 9, requestStart: 10, responseStart: 110, responseEnd: 120, domContentLoadedEventEnd: 300, loadEventEnd: 450 };
+    vi.spyOn(performance, 'getEntriesByType').mockReturnValue([nav] as unknown as PerformanceEntryList);
+    const tag = document.createElement('script');
+    tag.setAttribute('data-rid', 'php-rid-2');
+    Object.defineProperty(document, 'currentScript', { configurable: true, value: tag });
+    const sent = load({ navigation: false });
+    Object.defineProperty(document, 'currentScript', { configurable: true, value: null });
+    settle();
+    const t = sent.find((r) => r.type === 'timing') as unknown as { page: string; timing: Record<string, number> };
+    expect(t.page).toBe('php-rid-2');
+    expect(t.timing).toMatchObject({ requestStart: 10, responseStart: 110, loadEventEnd: 450 });
+    expect(t.timing.secureConnectionStart).toBeUndefined();
+  });
+
+  it('gives a linked request the phases of its resource entry', async () => {
+    const realFetch = window.fetch;
+    window.fetch = (() => Promise.resolve({ status: 200, headers: { get: (h: string) => (h === 'X-Lerd-Rid' ? 'api-rid-3' : null) } })) as unknown as typeof fetch;
+    vi.spyOn(performance, 'now').mockReturnValue(1000);
+    vi.spyOn(performance, 'getEntriesByName').mockReturnValue([{ startTime: 1000, requestStart: 1002, responseStart: 1030, responseEnd: 1034 }] as unknown as PerformanceEntryList);
+    const sent = load({ navigation: false });
+    await fetch('/api/orders');
+    settle();
+    const req = sent.find((r) => r.type === 'request') as unknown as { timing: Record<string, number>; lookup?: unknown };
+    expect(req.timing).toEqual({ requestStart: 2, responseStart: 30, responseEnd: 34 });
+    expect(req.lookup).toBeUndefined();
+    window.fetch = realFetch;
   });
 });

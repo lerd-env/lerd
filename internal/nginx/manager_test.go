@@ -1405,6 +1405,8 @@ func TestGenerateVhost_includesForwardedFastcgiParams(t *testing.T) {
 		"fastcgi_param HTTP_X_FORWARDED_PORT $real_forwarded_port",
 		"fastcgi_param HTTP_X_REAL_IP $remote_addr",
 		"fastcgi_param HTTP_X_FORWARDED_FOR $remote_addr",
+		"fastcgi_param LERD_NGINX_ELAPSED $request_time",
+		"fastcgi_param LERD_NGINX_SENT $msec",
 	}
 	for _, w := range wants {
 		if !strings.Contains(content, w) {
@@ -1425,6 +1427,9 @@ func TestGenerateSSLVhost_includesForwardedFastcgiParams(t *testing.T) {
 	}
 	if !strings.Contains(content, "fastcgi_param HTTPS on") {
 		t.Errorf("SSL vhost must keep HTTPS flag in:\n%s", content)
+	}
+	if !strings.Contains(content, "fastcgi_param LERD_NGINX_SENT $msec") {
+		t.Errorf("SSL vhost missing the nginx timing params in:\n%s", content)
 	}
 }
 

@@ -488,9 +488,15 @@ func browserCaptureConf(siteName, branch string) string {
     }
 `, route, suffix, lerdUIUpstream(), siteName, branch)
 	}
+	// The script tag carries the id of the request that served the page, and
+	// responses expose it to a page on another origin, so the browser's events
+	// and requests link to the PHP request behind them. Timing-Allow-Origin lets
+	// such a page read the phases of a request it sent here.
 	return fmt.Sprintf(`
-    sub_filter '</head>' '<script src="%s.js"></script></head>';
+    sub_filter '</head>' '<script src="%s.js" data-rid="$upstream_http_x_lerd_rid"></script></head>';
     sub_filter_once on;
+    add_header Access-Control-Expose-Headers X-Lerd-Rid always;
+    add_header Timing-Allow-Origin * always;
 `, route) + location("") + location(".js")
 }
 
