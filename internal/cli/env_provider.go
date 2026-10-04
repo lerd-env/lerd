@@ -18,7 +18,10 @@ import (
 // file removed so secrets do not outlive the setting. approve records consent
 // up front, for `lerd env --yes` where there is no terminal to prompt on.
 func refreshProvidedEnv(site config.Site, approve bool) error {
-	proj, _ := config.LoadProjectConfig(site.Path)
+	proj, err := config.LoadProjectConfig(site.Path)
+	if err != nil {
+		return fmt.Errorf("env_provider: reading .lerd.yaml: %w", err)
+	}
 	if proj == nil || proj.EnvProvider == "" {
 		dropProvidedEnv(site.Name)
 		return nil

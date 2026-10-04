@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -71,5 +72,19 @@ func TestProvidedEnvVMScripts(t *testing.T) {
 	}
 	if got := providedEnvMkdirScript(); got != "sudo sh -c 'umask 077; mkdir -p /run/lerd/env'" {
 		t.Errorf("mkdir script = %q", got)
+	}
+}
+
+// A .lerd.yaml that does not parse must stop the refresh with its error, not
+// read as "no provider" and silently drop the site's secrets.
+func TestRefreshProvidedEnv_BrokenProjectConfigFailsLoudly(t *testing.T) {
+	site := config.Site{Name: "app", Path: t.TempDir()}
+	broken := "env_provider: printf 'A=1\n\tB=2\n'\n"
+	if err := os.WriteFile(filepath.Join(site.Path, ".lerd.yaml"), []byte(broken), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := refreshProvidedEnv(site, false)
+	if err == nil || !strings.Contains(err.Error(), ".lerd.yaml") {
+		t.Errorf("err = %v, want a .lerd.yaml parse error", err)
 	}
 }
