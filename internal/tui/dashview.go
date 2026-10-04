@@ -13,7 +13,7 @@ import (
 )
 
 // The dashboard leads with what needs the user, then the machine's resources
-// and core health side by side, then recent activity filling what is left.
+// in one column beside core health and recent activity in the other.
 
 // cpuHistoryLen is how many stats samples the CPU sparkline keeps; at the
 // poller's 3s interval that is the last three minutes.
@@ -188,20 +188,32 @@ func (m *Model) renderDashboard(w, h int) string {
 
 	section := func(rows []string) {
 		L = append(L, blank)
-		if !lay.compact {
-			L = append(L, blank)
-		}
 		L = append(L, rows...)
 	}
 	if cw >= 90 {
-		gap := 6
-		lw := (cw - gap) / 2
-		section(joinColumns(m.dashResources(lw), lw, m.dashSystem(cw-gap-lw), cw-gap-lw, gap))
+		// Resources gets the first column to itself; System is always short, so
+		// Recent stacks under it. The shorter column's last panel stretches so
+		// both columns end on the same row.
+		gap := 2
+		lw, rw := (cw-gap)/2, cw-gap-(cw-gap)/2
+		res := m.dashResources(lw - dashPanelPadX*2)
+		sys, rec := m.dashSystem(rw-dashPanelPadX*2), m.dashRecent(rw-dashPanelPadX*2)
+		left := m.dashPanel("Resources", lw, len(res), res)
+		top := append(m.dashPanel("System", rw, len(sys), sys), row(nil, rw))
+		right := append(top, m.dashPanel("Recent", rw, len(rec), rec)...)
+		if d := len(left) - len(right); d > 0 {
+			right = append(top, m.dashPanel("Recent", rw, len(rec)+d, rec)...)
+		} else if d < 0 {
+			left = m.dashPanel("Resources", lw, len(res)-d, res)
+		}
+		section(joinColumns(left, lw, right, rw, gap))
 	} else {
-		section(m.dashSystem(cw))
-		section(m.dashResources(cw))
+		res, sys := m.dashResources(cw-dashPanelPadX*2), m.dashSystem(cw-dashPanelPadX*2)
+		rec := m.dashRecent(cw - dashPanelPadX*2)
+		section(m.dashPanel("System", cw, len(sys), sys))
+		section(m.dashPanel("Resources", cw, len(res), res))
+		section(m.dashPanel("Recent", cw, len(rec), rec))
 	}
-	section(append([]string{row(nil, cw, sideLabel("Recent")), blank}, m.dashRecent(cw)...))
 
 	// Everything is kept and the page scrolls, so nothing goes missing on a
 	// short terminal; the last line says when more sits below.
@@ -247,6 +259,33 @@ func (m *Model) dashCard(cw int, id string, sel bool, title, detail []seg, hint 
 	return out
 }
 
+// dashPanelPadX is the tinted margin each side of a panel's content.
+const dashPanelPadX = 2
+
+// dashPanel wraps content rows in a tinted block under its title, padded to h
+// content rows. Content is drawn dashPanelPadX narrower than w on surf.s2.
+func (m *Model) dashPanel(title string, w, h int, content []string) []string {
+	edge := row(surf.s2, dashPanelPadX)
+	inner := w - dashPanelPadX*2
+	var out []string
+	padRow := func() {
+		if !layoutFor(m.width, m.height).compact {
+			out = append(out, row(surf.s2, w))
+		}
+	}
+	padRow()
+	out = append(out, edge+row(surf.s2, inner, sideLabel(title))+edge, row(surf.s2, w))
+	for i := 0; i < h; i++ {
+		r := row(surf.s2, inner)
+		if i < len(content) {
+			r = content[i]
+		}
+		out = append(out, edge+r+edge)
+	}
+	padRow()
+	return out
+}
+
 func (m *Model) alertCard(cw, i int, a dashAlert, sel bool) []string {
 	glyph := bd(glyphFailing+"  ", colFailing)
 	var hint []seg
@@ -264,20 +303,22 @@ func (m *Model) alertCard(cw, i int, a dashAlert, sel bool) []string {
 }
 
 func (m *Model) dashResources(w int) []string {
-	out := []string{row(nil, w, sideLabel("Resources")), row(nil, w)}
+	bg := surf.s2
 	if !m.stats.Available {
-		return append(out, row(nil, w, sp("collecting…", colDim)))
+		return []string{row(bg, w, sp("collecting…", colDim))}
 	}
-	barW := max(10, min(32, w-24))
-	out = append(out,
-		row(nil, w, sp(padRight("cpu", 9), colDim), sp(sparkline(m.cpuHist, barW), colRunning), sp(fmt.Sprintf("  %.2f%%", m.stats.TotalCPUPercent), nil)),
-		row(nil, w, append([]seg{sp(padRight("memory", 9), colDim)}, memBar(m.stats, barW)...)...),
-		row(nil, w))
+	// Room for the label column and "  1.0GB / 32.0GB" after the bar.
+	barW := clamp(w-9-18, 10, 40)
+	out := []string{
+		row(bg, w, sp(padRight("cpu", 9), colDim), sp(sparkline(m.cpuHist, barW), colRunning), sp(fmt.Sprintf("  %.2f%%", m.stats.TotalCPUPercent), nil)),
+		row(bg, w, append([]seg{sp(padRight("memory", 9), colDim)}, memBar(m.stats, barW)...)...),
+		row(bg, w),
+	}
 	top := append([]stats.ContainerStat(nil), m.stats.Containers...)
 	sort.SliceStable(top, func(i, j int) bool { return top[i].MemBytes > top[j].MemBytes })
 	for _, c := range top {
 		name := strings.TrimPrefix(c.Name, "lerd-")
-		out = append(out, row(nil, w, sp(padRight("", 9), nil), sp(padRight(truncatePlain(name, 16), 17), nil),
+		out = append(out, row(bg, w, sp(padRight("", 9), nil), sp(padRight(truncatePlain(name, 16), 17), nil),
 			sp(fmt.Sprintf("%7s", stats.FormatBytes(c.MemBytes)), nil), sp(fmt.Sprintf("   %.2f%%", c.CPUPercent), colDim)))
 	}
 	return out
@@ -314,8 +355,8 @@ func memBar(s stats.Snapshot, w int) []seg {
 
 func (m *Model) dashSystem(w int) []string {
 	st := m.snap.Status
-	kv := func(k string, v ...seg) string {
-		return row(nil, w, append([]seg{sp(padRight(k, 12), colDim)}, v...)...)
+	kv := func(k string, v ...seg) []seg {
+		return append([]seg{sp(padRight(k, 11), colDim)}, v...)
 	}
 	state := func(ok bool, on string) []seg {
 		if ok {
@@ -357,8 +398,7 @@ func (m *Model) dashSystem(w int) []string {
 		}
 		return sp("off", colDim)
 	}
-	return []string{
-		row(nil, w, sideLabel("System")), row(nil, w),
+	facts := [][]seg{
 		kv("dns", dns...),
 		kv("nginx", state(st.NginxRunning, "running")...),
 		kv("watcher", state(st.WatcherRunning, "running")...),
@@ -368,11 +408,42 @@ func (m *Model) dashSystem(w int) []string {
 		kv("lerd", version...),
 		kv("platform", sp(runtime.GOOS+"/"+runtime.GOARCH, colDim)),
 	}
+	return systemRows(facts, w)
+}
+
+// systemRows pairs the facts into two columns when both halves fit whole, so a
+// wide panel is not mostly empty; otherwise it keeps one fact per row.
+func systemRows(facts [][]seg, w int) []string {
+	const gap = 3
+	half := (len(facts) + 1) / 2
+	lw, rw := 0, 0
+	for i, f := range facts {
+		if i < half {
+			lw = max(lw, segsWidth(f))
+		} else {
+			rw = max(rw, segsWidth(f))
+		}
+	}
+	var out []string
+	if lw+gap+rw > w {
+		for _, f := range facts {
+			out = append(out, row(surf.s2, w, f...))
+		}
+		return out
+	}
+	for i := 0; i < half; i++ {
+		var r []seg
+		if half+i < len(facts) {
+			r = facts[half+i]
+		}
+		out = append(out, row(surf.s2, lw+gap, facts[i]...)+row(surf.s2, w-lw-gap, r...))
+	}
+	return out
 }
 
 func (m *Model) dashRecent(w int) []string {
 	if len(m.activity) == 0 {
-		return []string{row(nil, w, sp("Nothing has changed since the TUI opened", colDim))}
+		return []string{row(surf.s2, w, sp("Nothing has changed since the TUI opened", colDim))}
 	}
 	var out []string
 	for _, e := range m.activity {
@@ -383,7 +454,7 @@ func (m *Model) dashRecent(w int) []string {
 		case toneWarn:
 			dot = sp(glyphPaused, colPaused)
 		}
-		out = append(out, row(nil, w, sp(padRight(humanAgo(time.Since(e.at)), 7), colDim), dot, text))
+		out = append(out, row(surf.s2, w, sp(padRight(humanAgo(time.Since(e.at)), 7), colDim), dot, text))
 	}
 	return out
 }

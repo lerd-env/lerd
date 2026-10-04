@@ -157,3 +157,56 @@ func TestDashSystemCountsSleepingWorkers(t *testing.T) {
 		t.Fatalf("idle-suspended workers should read as asleep:\n%s", out)
 	}
 }
+
+func TestDashPanelPadsToTheRowHeight(t *testing.T) {
+	m := dashModel()
+	// 8 content rows plus padding, title and the blank under it.
+	rows := m.dashPanel("System", 40, 8, []string{row(surf.s2, 36, sp("dns", nil))})
+	if len(rows) != 12 {
+		t.Fatalf("panel has %d rows, want 12 so it lines up with its neighbour", len(rows))
+	}
+	for i, r := range rows {
+		if w := ansi.StringWidth(r); w != 40 {
+			t.Fatalf("row %d is %d wide, want 40", i, w)
+		}
+	}
+	if !strings.Contains(ansi.Strip(strings.Join(rows, "\n")), "SYSTEM") {
+		t.Fatal("panel should carry its title")
+	}
+}
+
+func TestDashWideStacksRecentUnderSystem(t *testing.T) {
+	m := dashModel()
+	m.snap.Sites[1].QueueFailing = false
+	lines := strings.Split(ansi.Strip(m.renderDashboard(140, 60)), "\n")
+	res, rec := -1, -1
+	for i, l := range lines {
+		if strings.Contains(l, "RESOURCES") {
+			res = i
+			if !strings.Contains(l, "SYSTEM") {
+				t.Fatalf("system should open on the same row as resources:\n%s", l)
+			}
+		}
+		if c := strings.Index(l, "RECENT"); c >= 0 {
+			rec = i
+			if c < 70 {
+				t.Fatalf("recent should sit in the second column, found at column %d:\n%s", c, l)
+			}
+		}
+	}
+	if res < 0 || rec <= res {
+		t.Fatalf("recent should sit below system:\n%s", strings.Join(lines, "\n"))
+	}
+}
+
+func TestDashSystemSplitsIntoTwoColumnsWhenItFits(t *testing.T) {
+	m := dashModel()
+	wide := strings.Split(ansi.Strip(strings.Join(m.dashSystem(90), "\n")), "\n")
+	if len(wide) != 4 || !strings.Contains(wide[0], "dns") || !strings.Contains(wide[0], "autostart") {
+		t.Fatalf("a wide panel should pair the rows into two columns:\n%s", strings.Join(wide, "\n"))
+	}
+	narrow := m.dashSystem(40)
+	if len(narrow) != 8 {
+		t.Fatalf("a narrow panel keeps one row per fact, got %d rows", len(narrow))
+	}
+}

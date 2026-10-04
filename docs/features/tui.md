@@ -46,12 +46,12 @@ With the sidebar focused, `↑` `↓` move, `enter` opens the row and hands focu
 
 The dashboard leads with **Needs attention**: a stopped DNS, nginx or watcher, and every crashed worker, one card each. `tab` moves onto the cards, `enter` opens the site behind one, and `r` applies its fix, restarting that worker on its own unit or bringing a stopped core process back with `lerd start`. With nothing wrong it says so in one line.
 
-Under it, **Resources** and **System** sit side by side (stacked, System first, on a narrow pane):
+Under it, **Resources** fills the first column and **System** sits in the second with **Recent** below it, both columns ending on the same row. System pairs its facts into two columns when the panel is wide enough. On a narrow pane the three stack, System first:
 
 - **Resources**: a CPU sparkline over the last few minutes, memory against the host total, and the three largest containers. Memory excludes reclaimable page cache and CPU is a share of the whole machine, the same figures the web dashboard shows, polled every 3 seconds.
 - **System**: DNS, nginx and the watcher, workers running, asleep and crashed, autostart, LAN, the lerd version with any available update, and the platform.
 
-**Recent** takes whatever height is left: site link, pause, resume, start and stop, service add, remove, start and stop, worker fail and heal, and DNS transitions, derived live from successive snapshots since the TUI opened.
+**Recent** lists site link, pause, resume, start and stop, service add, remove, start and stop, worker fail and heal, and DNS transitions, derived live from successive snapshots since the TUI opened.
 
 ## Sites
 
