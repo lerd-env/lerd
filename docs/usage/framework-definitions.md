@@ -477,7 +477,7 @@ install:
 # not they are installed yet (optional). The reason is shown beside the suggestion.
 # A package declares the same key, and its services are ticked in the wizard and
 # suggested on the site's Overview, since requiring the package means the project
-# uses them. A package's entries are alternatives, most important first: lerd puts
+# uses them, with the package named beside the service. A package's entries are alternatives, most important first: lerd puts
 # forward the first one this machine already runs, else the first, and none at all
 # when the project already uses one of them.
 suggest_services:

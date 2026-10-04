@@ -7,7 +7,7 @@
   import { notifyLocalFailure } from '$lib/notify';
   import { serviceLabel } from '$stores/services';
   import { confirmDownload } from '$stores/downloadConfirm';
-  import { loadSites, type ServiceSuggestion } from '$stores/sites';
+  import { loadSites, suggestionWhy, type ServiceSuggestion } from '$stores/sites';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -17,11 +17,7 @@
   let { suggestion, domain }: Props = $props();
 
   const name = $derived(suggestion.name);
-  const why = $derived(
-    suggestion.package
-      ? m.sites_suggestedService_why({ package: suggestion.package, reason: suggestion.reason || '' })
-      : suggestion.reason || ''
-  );
+  const why = $derived(suggestionWhy(suggestion));
 
   let busy = $state(false);
 
