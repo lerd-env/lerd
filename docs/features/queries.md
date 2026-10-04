@@ -54,7 +54,7 @@ For Laravel apps, the extension loads a small in-app adapter at `Application::bo
 
 - **Real bindings**: Laravel binds via `bindValue()`, invisible to the PDO observer; the adapter reads them from the event (formatted with `prepareBindings()`).
 - **Connection name**: e.g. `pgsql`, `mysql`.
-- **Per-job grouping**: the adapter resets the request id on every `JobProcessing`, so each queued job is its own group instead of a worker's jobs lumping together.
+- **Per-job grouping**: every job runs under a request id of its own, whatever connection runs it, so it shows up in the Requests lens as a process of its own with its class, how it ended and how long it took. The id it interrupted comes back when the job ends, and a `sync` job is listed as a child request of the request it ran in. A job that threw with attempts to spare is reported as `errored`, one with none left as `failed`.
 
 Non-Laravel apps (and queries that run before the framework boots) still fall back to the engine-level PDO capture. The adapter respects the same on/off policy as the engine path, never throws, and emits to the same socket.
 
@@ -63,7 +63,7 @@ Beyond queries, the same adapter feeds additional Debug sub-tabs:
 - **Jobs** *(Laravel)*: the whole life of a queued job, `queued` where it was dispatched, then `processing`, then `processed` or `failed` in the worker, with the queue, the connection, the attempt count, how long the job took, and the exception on failure. The `queued` row also carries what the job was handed, see [job payloads](#job-payloads).
 - **Views**: every template rendered, with its source path and the top-level data keys passed in. Each variable is labelled with what it holds, `page array(4)`, `user User`, `title "Dashboard"`, so the shape is visible without opening anything, with a string kept whole up to 160 characters and truncated past that. The values are not shipped: a view's data is the whole page payload on an Inertia app and routinely holds the authenticated user, so a label is both the useful part and the safe one. A render Blade compiled for itself is left out: an inline or anonymous component has no source file, so it appears under a hashed `__components::` name pointing into the compiled cache, and a template a developer wrote never lives there. The cache location comes from the app's own `view.compiled` config, so a project that moves it is still understood.
 - **Mail**: outgoing messages captured before send, with subject, recipients, and a sandboxed HTML preview.
-- **Cache** *(Laravel)*: hit / miss / write / forget events with the key and store. Framework-internal keys (the queue restart/pause signals, scheduler overlap mutexes, and reverb/horizon/pulse/telescope pub-sub) are filtered out so the tab shows the application's own cache use rather than background machinery, this matters most with worker capture on, where those keys are polled constantly.
+- **Cache** *(Laravel)*: hit / miss / write / forget events with the key and store, timed from the event the store fires before it goes to its backend, with the file a file store keeps the key in or the Redis connection a Redis store went through. On a request's timeline a timed call takes in the queries, Redis commands and filesystem operations that ran inside it, a database store's own `select from cache`, so they show in its popover instead of as rows of their own. Framework-internal keys (the queue restart/pause signals, scheduler overlap mutexes, and reverb/horizon/pulse/telescope pub-sub) are filtered out so the tab shows the application's own cache use rather than background machinery, this matters most with worker capture on, where those keys are polled constantly.
 - **Events** *(Laravel)*: application and package events dispatched (framework-internal `Illuminate\*` events are filtered out).
 - **HTTP** *(Laravel)*: outgoing requests made via Laravel's HTTP client (method, URL, status), so third-party API calls are visible the way queries are.
 
@@ -91,6 +91,15 @@ Queries, Mail and Views are captured **agnostically** at the shared library ever
   A message also raises a notification, on by default, for the same reason: nothing catches it, so without one the only sign it went out is a tab you were not looking at.
 
   Worth knowing: this reports, it does not catch. A caught mail never leaves, because a local catcher answers for it; an SMS has no such catcher here, so it is really sent, and really billed, while you watch it go.
+
+- **Spans**: the framework's own phases, timed and drawn as the Framework layer on a request's timeline in the Requests lens. The store declares them as `span` seams with a label: `laravel/framework` times Bootstrap, Routing, the Middleware stack, the Controller (named by its action), each View and Terminate, `symfony/http-kernel` times Bootstrap, Routing, Handle and Terminate, `twig/twig` each template, and `symfony/http-foundation` sending the response, which Laravel shares. Every other supported framework declares its own the same way: Yii 2, CakePHP, CodeIgniter 4, Drupal, TYPO3, Magento, Tempest, and WordPress and Bedrock, which have fewer classes to time, so their main query and REST requests. Each also names the matched route and, where the framework keeps one, who the request runs as.
+
+    ![A Drupal request in the Requests lens, with the kernel's phases, routing and the controller on the timeline](/assets/screenshots/request-drupal.png)
+
+- **Session**: what the session held when the request finished, one row per top-level key with nested values as JSON. A framework's session store is read as it saves, declared in the store for `laravel/framework` and `symfony/http-foundation`, and a plain PHP session is read from `$_SESSION` at the end of the request. A key naming a password or a secret is masked.
+- **Redis**: every command, timed, with its arguments and the connection it ran on, declared by `laravel/framework` at the connection's `command` method, which both the phpredis and the Predis driver go through.
+- **Filesystem**: storage operations through Flysystem, declared by `league/flysystem` at its `Filesystem` methods (read, write, delete, fileExists, listContents and the rest), timed with the path they touched and, on Laravel, the name of the Storage disk. Laravel's `Storage` facade and its S3 disks go through it, and so does Symfony's Flysystem bundle.
+- **Components**: a UI component's lifecycle, declared by `livewire/livewire` in the store at Livewire 3 and 4's `HandleComponents` mechanism: `mount` on the first render, then `updateProperty` and `callMethods` for each round trip, each followed by `render`. Every phase is a span with its time, the component's own name and what it was handed, a property's path and value or the methods called with their parameters, so a slow component and the update that made it slow show up in the request they ran in. The kind is generic: a store entry naming another library's lifecycle methods and where its component name comes from gets the same capture.
 
 Cache still comes solely from the Laravel adapter. Symfony spreads cache across many adapter classes with the read path living in a trait, so there's no single canonical seam to observe; the only single-class option is the dev-only `TraceableAdapter`, which is also extremely noisy (the framework hammers its system pools every request). It's deferred rather than captured half-complete. The Debug sub-tabs reflect this: a Symfony site shows Dumps, Queries, Mail, Views, Events, Jobs, HTTP, App log, Exceptions and Messages; a Laravel site shows all of them.
 
@@ -142,6 +151,23 @@ Jobs are the exception, and are shown whatever this toggle says. A worker's jobs
 
 Show them with the **Show worker queries** checkbox in the Debug window toolbar (present on every lens but Jobs: Queries, Views, Mail, Cache, Events, HTTP). Each worker invocation is grouped on its own, labelled by the worker command, and a per-command filter dropdown appears so you can narrow to one worker. The Laravel adapter resets the request id on every `JobProcessing`, so each queued job is its own group rather than a worker's jobs lumping together. Unchecking it hides the worker rows again. The setting is saved in `devtools.workers`, is shared with the TUI's `w` key, and is independent of the main Debug on/off switch.
 
+## Your own timeline rows and tabs
+
+An app or a package can put its own work on a request's timeline, write log lines, and add tabs of its own with tables, figures and charts through the `lerd/debug` Composer package, which does nothing outside lerd. See [Debug package](debug-package.md).
+
+## Commands left out
+
+A console command that only loops, a queue worker, Horizon or a websocket server, is left out of the Debug window entirely, while each job it runs is reported as a process of its own. The store lists them under `devtools.exclude_commands` (`laravel/framework`: `queue:work`, `queue:listen`, `schedule:work`; `laravel/horizon`: its processes; `laravel/reverb`: `reverb:start`), and a project adds its own in `.lerd.yaml`, as typed or by class:
+
+```yaml
+debug:
+  exclude_commands:
+    - inventory:watch
+    - App\Console\Commands\PollFeeds
+```
+
+A command named as typed is recognised from its arguments before the framework boots, so even its boot is left out; one named by class is recognised as it starts to run, through the `command` seam `symfony/console` declares on `Command::run`, which Laravel's commands run through as well. The list reaches the collector through `devtools-exclude.conf` next to it, rewritten when `.lerd.yaml` changes.
+
 ## Test runs (not recorded by default)
 
 A test suite is the other kind of flood: it is CLI, high volume, and a feature suite fires hundreds of simulated requests, so one run can clear the buffer of everything you were looking at. Every event captured inside a PHPUnit or Pest run therefore carries `ctx.test`, and lerd does not record those events by default.
@@ -158,11 +184,33 @@ Every warning names the run the queries came from: the worker command if the cap
 
 ## Debugging over MCP
 
-The same capture is available to an AI assistant through lerd's MCP server, so an agent can debug and fix performance issues end to end. The loop: `dumps_toggle` to arm capture, `dumps_clear` for a clean slate, trigger the page or job, then `analyze_queries` for a per-request N+1 and slow-query report, each finding carries the originating `file:line`, so the agent can open the offending code and add a `with()` eager-load, an index, or a cache, then re-run to confirm the count dropped. `dumps_recent` with a `kind` filter (`query`, `mail`, `view`, `log`, `exception`, `message`, …) pulls the raw events for anything the report doesn't cover. The analysis is server-side, so it uses the same fingerprinting as the dashboard badge and the N+1 notification.
+The same capture is available to an AI assistant through lerd's MCP server, so an agent can debug and fix performance issues end to end. The loop: `dumps_toggle` to arm capture, `dumps_clear` for a clean slate, trigger the page or job, then `analyze_queries` for a per-request N+1 and slow-query report, each finding carries the originating `file:line`, so the agent can open the offending code and add a `with()` eager-load, an index, or a cache, then re-run to confirm the count dropped. Each N+1 and slow-query finding also carries `example_sql`, the query with its bindings in place, ready to run or `EXPLAIN` locally. `request` gives the whole of one request in one call, see [Request linking](#request-linking). `dumps_recent` with a `kind` filter (`query`, `mail`, `view`, `log`, `exception`, `message`, …) pulls the raw events for anything the report doesn't cover. The analysis is server-side, so it uses the same fingerprinting as the dashboard badge and the N+1 notification.
+
+## Request linking
+
+Every PHP request gets an id from the devtools extension, and every event it emits carries it. lerd sends that id with the response as `X-Lerd-Rid`, whether capture is on or not, and at the end of each web request the bridge reports how it ended: its method, URI, the route name when the app gave the matched route one (declared in the store, for `laravel/framework` at `Route::bind`), status, how long PHP spent on it and its peak memory. Together they make a request a thing of its own rather than a group of events that happen to share a URL.
+
+With [browser capture](browser-capture.md) on, the id reaches the page too. nginx puts it on the injected script tag, so the page view takes the id of the request that served it, and the script reads the header off every `fetch` and XHR response and reports the call as a linked request, whatever its status. Responses expose the header to other origins, so a single-page app on one site calling an API on another links to the request it reached there: the API request names the page view that sent it, and the page lists every request it made. CORS preflights are not linked, since the browser does not hand them to scripts.
+
+The **Requests** lens, first in the Debug window and on each site's Debug tab, lists every request lerd saw, newest first, with the child requests a page sent indented under it. Each row shows the method, status, time and what went wrong (an exception, an error log, a failed call, an N+1 or a slow query), and the list narrows to pages, API calls or CLI runs, or to requests with problems. Opening one shows it in a dialog filling the window, its header naming who the request ran as when the app or its framework said (Laravel's guards and Symfony's security token are read on their own), with a tab per kind of work, a tab only when the request has something for it. Performance leads with the headline numbers, response time, memory, app and database time, the FPM queue and the page load, above a timeline that puts everything on one chronological list: the browser's DNS, connect, wait, download and DOM phases, nginx and the FPM queue, the request itself, the framework's phases, queries, components, views, logs and the page's own events up to its load. Each layer has a colour and an icon to filter on, a run of close events folds into one row, and hovering a bar shows its duration and when it started. Request has the route, controller, request and response headers, query string, body, cookies and session, with anything that reads as a credential masked. Database, Views, Components, Cache, Redis, Filesystem, Events, Log, Dumps, Mail & messages, HTTP, Jobs, Exceptions and Browser each list their own, file paths open in the editor, and Child requests lists the calls a page made later, which stay off the timeline since minutes can pass before one.
+
+![The Requests lens on a site's Debug tab, with jobs indented under the request that queued them](/assets/screenshots/requests-lens.png)
+
+![A request's Performance tab: headline numbers above one timeline of nginx, the FPM queue, the framework's phases, queries, cache calls and the app's own events](/assets/screenshots/request-performance.png)
+
+![A request's Request tab with its route, controller and middleware](/assets/screenshots/request-detail.png)
+
+Every PHP response also carries a `Server-Timing` header with the FPM queue and the framework phases that finished before the headers went out, so the browser's own network panel shows them under the request's timing.
+
+Over MCP, `diag` with `action: "request"` lists a site's recent requests with what went wrong in each, and with a `rid` returns one request and everything that carried its id: its queries with runnable examples, exceptions, logs, dumps, components, spans, the session, mail, events, the browser events of its page view, the page view that sent it and the requests it sent. The same comes from `/api/requests` and `/api/requests/{rid}`.
 
 ## Open in editor
 
-Every query's caller path in the Queries lens is a link. Expand a row to see the originating application frame (`Class::method — file:line`) and a **Details** button for the full stack trace; click any `file:line` to open it in the host's editor. lerd autodetects a known GUI editor (VS Code, Cursor, PhpStorm, Sublime, Zed, …); override it with an `editor` command in `~/.config/lerd/config.yaml`, e.g. `editor: "phpstorm --line {line} {file}"` ({file} and {line} are substituted). The endpoint requires dashboard-control authority, which authenticated remote sessions receive.
+Every file path the Debug window shows is a link: a query's caller, a view's template, a cached file, a log line's origin, and on a request's timeline the controller (by its method, or a closure by the file and line it was written on) and every row's source. Expand a Queries row to see the originating application frame (`Class::method — file:line`) and a **Details** button for the full stack trace; click any `file:line` to open it.
+
+The editor comes from a curated list, VS Code, Cursor, VSCodium, Windsurf, Sublime Text, Zed, PhpStorm, IntelliJ IDEA and WebStorm, with the ones found on this machine (on PATH, through a desktop entry claiming the editor's URL scheme, which is how JetBrains Toolbox and Flatpak install them, or as an app bundle on macOS) listed first. Choose it globally on the System page, and per site in the site's controls, where the default follows the global choice; a site's choice is kept in lerd's own site registry rather than in `.lerd.yaml`, since it is personal. An editor whose binary is on PATH is started directly, and one that is not is opened through its URL scheme (`phpstorm://open?file=…&line=…`, `vscode://file/…:…`), which the browser hands to the desktop. An editor not on the list is set as **Custom…** with a template naming where the path and line go, `myeditor --line {line} {file}` to run a command or `myeditor://open?file={file}&line={line}` to open a URL. The global choice is the `editor` key in `~/.config/lerd/config.yaml`, which also still takes a command template written by hand. Once an editor is chosen, globally or for the site, the site header also gets a button that opens the site's folder, or the selected worktree's, as a project in it; with only an editor found by probing there is no button, since a project should open where you said. The site's editor picker shows the global choice by name while it is following it. The endpoint requires dashboard-control authority, which authenticated remote sessions receive.
+
+![A site's controls with its editor picker](/assets/screenshots/site-editor-picker.png)
 
 ## Caveats
 

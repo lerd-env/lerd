@@ -81,7 +81,7 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd sites` | Table view of all registered sites |
 | `lerd sites:restore [backup]` | Put the site registry back from one of its automatic backups, showing what it would change and confirming first; `--list` shows what is kept, `--force` skips the prompt |
 | `lerd open [name]` | Open the site in the default browser |
-| `lerd code [name]` | Open the site's directory in your editor: the `editor` command from `~/.config/lerd/config.yaml` if set, otherwise the first known GUI editor found on PATH. Run from inside a git worktree it opens the worktree itself |
+| `lerd code [name]` | Open the site's directory in your editor: the editor the site chose in its controls, else the global `editor` from `~/.config/lerd/config.yaml` (a listed editor or a command template), otherwise the first known GUI editor found on PATH. Run from inside a git worktree it opens the worktree itself |
 | `lerd share [name]` | Expose the site publicly via ngrok, cloudflared, or Expose (auto-detected); `--serveo`, `--localhost-run` and `--pinggy` pick the SSH tunnels that need no signup |
 | `lerd share --domain <hostname>` | Expose the site on your own Cloudflare-managed hostname via a named tunnel (implies Cloudflare Tunnel); with `--ngrok` it pins the tunnel to a domain reserved on your ngrok account instead |
 | `lerd share --ngrok-args "<flags>"` | Pass flags straight to ngrok for this run, overriding the stored ones |

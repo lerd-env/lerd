@@ -532,6 +532,12 @@ devtools:
     - kind: ray                     # what the collector makes of the call
       class: Spatie\Ray\Ray         # or implements: / extends:
       method: sendRequest
+    - kind: span                    # a timed phase on the Requests timeline
+      class: Illuminate\Routing\Route
+      method: run
+      name: this.prop:action.uses   # what varies per call (optional)
+      label: Controller             # the fixed text the phase is shown as
+  exclude_commands: [queue:work]    # commands that only loop; their jobs still report
 
 # Extra nginx config spliced into the site's server block (optional)
 nginx:
@@ -552,6 +558,14 @@ worktree:
 An app that keeps deployment state in its database cannot share the parent's. Magento hashes its file config and stores the hash in the database, so seeding a worktree's own base URL into `env.php` makes the store refuse to serve until `app:config:import` re-syncs it, and running that import against a shared database would rewrite the hash out from under the parent site. `db_isolation: required` therefore skips the prompt and isolates, `db_source: main` clones the parent's data (an empty schema is useless to a store that cannot bootstrap itself), and `commands` run afterwards, in the worktree, through the framework's own `console` binary.
 
 `migrations` names the folder holding the schema migrations. When a worktree is added with no database choice, from the MCP tool or a `lerd worktree add` with no terminal, lerd compares the files in that folder between the new worktree and the parent checkout, the branch the site's own folder has checked out. The same set shares the parent's database. Migrations only the branch has get a copy of the parent's database, and migrations only the parent has mean the branch's code is older than the parent's schema, so it gets an empty database. Either way the definition's `doctor.migrate_command` then runs on the new database. A required isolation or an explicit choice always wins over the comparison.
+
+## Capture kinds
+
+A capture seam's `kind` says what the collector makes of the call. `ray`, `log`, `exception` and `message` report the call itself; `span` times it as a framework phase, with `label` as the text it is shown as; `component` times a UI component's lifecycle phase and reads the component's public state; `redis` and `filesystem` time a Redis command or a storage operation; `session` reads `all()` on a session store as it saves; `route` takes the matched route's name; `auth` records who the request runs as, from a security token's user when the first argument is one and otherwise from `name`, which then resolves the user's id; `command` tells the collector which console command a process runs, so one listed under `exclude_commands` by class is recognised. A kind an older lerd does not know is ignored.
+
+A `name` expression starts at `this` or `arg:N` and may go on with `.method:getName` or `.prop:action.uses`, where a dotted property walks into arrays and objects. Several expressions separated by commas are tried in turn and the first that yields something wins, `this.prop:action.livewire_component,this.prop:action.uses` naming a Livewire page by its component and any other route by its action. A closure resolves to `Closure file:line`, and a callable of a method, `[$controller, 'show']` or `$controller->show(...)`, to `Controller@show`.
+
+A command under `exclude_commands` is matched against its name as typed, which may run over its first words, `queue worker` for `bin/cake queue worker`, or against the class a `command` seam reports.
 
 ## Queued job seams
 
