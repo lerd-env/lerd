@@ -306,9 +306,12 @@ func Inspect(scope Scope) (Plan, error) {
 		}
 	}
 
-	if reapUnused {
-		if repoErr == nil && protErr == nil {
-			p.Targets = append(p.Targets, deepTargets(imgs, repos, prot, canonPulled(), scope)...)
+	if reapUnused && repoErr == nil && protErr == nil {
+		// An image a tagged image is built on frees nothing when untagged and
+		// costs the next build a re-pull, so it is never "unused"; without the
+		// layers to tell, the unused reap is skipped rather than guessed.
+		if unbuilt, ok := withoutBuildBases(imgs); ok {
+			p.Targets = append(p.Targets, deepTargets(unbuilt, repos, prot, canonPulled(), scope)...)
 		}
 	}
 	p.UsedTotal = usedTotal(imgs, repos, prot)
@@ -413,6 +416,36 @@ func liveLayers(imgs []image) (map[string]bool, bool) {
 		}
 	}
 	return set, true
+}
+
+// withoutBuildBases drops every image another tagged image is built on: one
+// whose top layer sits below the top of a longer tagged chain. The bool is
+// false when the layers could not be read.
+func withoutBuildBases(imgs []image) ([]image, bool) {
+	var tagged []image
+	for _, img := range imgs {
+		if !isOrphaned(img) {
+			tagged = append(tagged, img)
+		}
+	}
+	byID, err := imageLayers(imageIDs(tagged))
+	if err != nil {
+		return nil, false
+	}
+	below := map[string]bool{}
+	for _, layers := range byID {
+		for _, l := range layers[:max(len(layers)-1, 0)] {
+			below[l] = true
+		}
+	}
+	out := make([]image, 0, len(imgs))
+	for _, img := range imgs {
+		if layers := byID[img.ID]; len(layers) > 0 && below[layers[len(layers)-1]] {
+			continue
+		}
+		out = append(out, img)
+	}
+	return out, true
 }
 
 // builtUpon reports whether a live image is built on a base, given the base's

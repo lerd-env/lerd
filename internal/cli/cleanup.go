@@ -126,7 +126,7 @@ func runCleanup(dryRun, yes, safe bool) error {
 	// A floor, not an estimate: each row is the disk only that image holds, so a
 	// chain of superseded builds that goes when its last tag does is credited to
 	// nobody here and turns up in the measured total afterwards.
-	feedback.Note(fmt.Sprintf("At least %s across %d item(s).", humanSize(plan.ReclaimBytes()), len(plan.Targets)))
+	feedback.Note(fmt.Sprintf("At least %s of image store across %d item(s).", humanSize(plan.ReclaimBytes()), len(plan.Targets)))
 
 	if dryRun {
 		showHeldHint(plan)
@@ -137,7 +137,9 @@ func runCleanup(dryRun, yes, safe bool) error {
 	}
 
 	_, freed := cleanup.Apply(plan)
-	feedback.Done(fmt.Sprintf("Freed about %s.", humanSize(freed)))
+	// The image store's own size, not the filesystem's: on a compressed one
+	// (btrfs zstd) the disk gets back less, and df would count other writers.
+	feedback.Done(fmt.Sprintf("Image store shrank by about %s.", humanSize(freed)))
 	if hint := reclaimedHostHint(); hint != "" && freed > 0 {
 		feedback.Note(hint)
 	}
