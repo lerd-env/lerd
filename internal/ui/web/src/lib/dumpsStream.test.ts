@@ -112,6 +112,21 @@ describe('createDumpsStream', () => {
     expect(get(s.events)).toEqual([]);
   });
 
+  it('clear with a kind drops only that kind, and lets its ids arrive again', async () => {
+    const { createDumpsStream } = await import('./dumpsStream');
+    const s = createDumpsStream();
+    s.connect();
+    const es = MockEventSource.instances[0];
+    es.fire('message', { data: payload('a') });
+    es.fire('message', { data: JSON.stringify({ ...JSON.parse(payload('b')), kind: 'browser' }) });
+    s.flush();
+    s.clear('browser');
+    expect(get(s.events).map((e) => e.id)).toEqual(['a']);
+    es.fire('message', { data: JSON.stringify({ ...JSON.parse(payload('b')), kind: 'browser' }) });
+    s.flush();
+    expect(get(s.events).map((e) => e.id)).toEqual(['a', 'b']);
+  });
+
   it('close tears down the EventSource', async () => {
     const { createDumpsStream } = await import('./dumpsStream');
     const s = createDumpsStream();

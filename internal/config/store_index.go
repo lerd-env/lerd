@@ -29,8 +29,9 @@ type StorePackageEntry struct {
 
 // cachedStoreIndex mirrors the store index fields the config package reads.
 type cachedStoreIndex struct {
-	Frameworks []cachedStoreEntry  `json:"frameworks"`
-	Packages   []StorePackageEntry `json:"packages"`
+	Frameworks     []cachedStoreEntry        `json:"frameworks"`
+	Packages       []StorePackageEntry       `json:"packages"`
+	BrowserPresets []StoreBrowserPresetEntry `json:"browser_presets"`
 }
 
 // loadCachedStoreIndex reads the locally cached framework store index. Returns

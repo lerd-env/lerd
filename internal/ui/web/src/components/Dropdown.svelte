@@ -4,6 +4,7 @@
     label?: string;       // display text; falls back to value
     description?: string; // dim secondary line under label
     disabled?: boolean;
+    group?: string;       // heading drawn above the first option of each run
   }
 </script>
 
@@ -272,6 +273,9 @@
       class="z-50 rounded-lg border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-xl ring-1 ring-black/5 py-1 max-h-72 overflow-y-auto"
     >
       {#each normalized as opt, i (opt.value + ':' + i)}
+        {#if opt.group && opt.group !== normalized[i - 1]?.group}
+          <div role="presentation" class="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">{opt.group}</div>
+        {/if}
         {@const selected = opt.value === value}
         {@const isHighlighted = i === highlighted}
         <button

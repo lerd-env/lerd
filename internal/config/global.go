@@ -350,6 +350,12 @@ type GlobalConfig struct {
 		// Toggled via `lerd profile on/off` and the dashboard Profiler view.
 		Enabled bool `yaml:"enabled,omitempty" mapstructure:"enabled"`
 	} `yaml:"profiler,omitempty" mapstructure:"profiler"`
+	BrowserCapture struct {
+		// Enabled injects lerd's browser capture script into every PHP-FPM
+		// site's HTML so JavaScript errors reach the dashboard. Off by default
+		// since it rewrites every page. Toggled via `lerd browser-capture on/off`.
+		Enabled bool `yaml:"enabled,omitempty" mapstructure:"enabled"`
+	} `yaml:"browser_capture,omitempty" mapstructure:"browser_capture"`
 	Notifications struct {
 		// Disabled globally mutes the notifier (WebSocket banners + Web
 		// Push fanout). Inverted form so the zero value keeps existing
@@ -1260,6 +1266,12 @@ func (c *GlobalConfig) IsDevtoolsTests() bool {
 // SetDevtoolsTests flips test-run recording. Persist via SaveGlobal.
 func (c *GlobalConfig) SetDevtoolsTests(enabled bool) {
 	c.Devtools.Tests = enabled
+}
+
+// IsBrowserCaptureEnabled reports whether the browser capture script is
+// injected into site pages.
+func (c *GlobalConfig) IsBrowserCaptureEnabled() bool {
+	return c.BrowserCapture.Enabled
 }
 
 // IsProfilerEnabled reports whether the SPX profiler is globally armed.

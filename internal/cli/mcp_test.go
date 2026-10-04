@@ -659,7 +659,11 @@ func TestLerdReference_underSizeCeiling(t *testing.T) {
 	// by what composer.json declares; and a key .lerd.local.yaml owns cannot be
 	// set from here at all. Each one looks like a broken tool if it arrives
 	// unexplained. The site_doctor entry was compressed first.
-	const ceiling = 36500
+	//
+	// 36500 → 36850 for browser capture: the loop that reads a page's own
+	// JavaScript errors, and that an empty result means nothing while it is off,
+	// then 36850 → 37000 for the presets that add a frontend library's events.
+	const ceiling = 37000
 	if got := len(lerdReference); got > ceiling {
 		t.Errorf("lerd-reference.md is %d bytes, ceiling is %d — trim before raising", got, ceiling)
 	}

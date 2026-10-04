@@ -232,6 +232,9 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"dumps_status":    execDumpsStatus,
 		"dumps_clear":     execDumpsClear,
 		"dumps_toggle":    execDumpsToggle,
+		"browser_events":  execBrowserEvents,
+		"browser_toggle":  execBrowserCaptureToggle,
+		"browser_presets": execBrowserPresets,
 		"profiler_toggle": execProfilerToggle,
 		"profiler_status": execProfilerStatus,
 		"profiler_clear":  execProfilerClear,
@@ -552,11 +555,11 @@ func frameworkTool() mcpTool {
 func diagTool() mcpTool {
 	return mcpTool{
 		Name:        "diag",
-		Description: "Diagnostics & observability. action: status, doctor (lerd environment, ending with a sweep of every linked site), doctor_fix, site_doctor (app-level checks for a site: env, dependencies, audits, framework specifics), which, check, dns_diagnose, bug_report, analyze_queries (N+1/slow queries), route_timing (response-time table + slow routes), optimize_route (slow routes joined with their N+1/slow queries, plus CPU hotspots when profiling was on), dumps_recent, dumps_status, dumps_clear, dumps_toggle, profiler_toggle, profiler_status, profiler_clear, profiler_report (flat CPU profile of a command), xdebug_on, xdebug_off, xdebug_status. (Reading logs moved to the `logs` tool.)",
+		Description: "Diagnostics & observability. action: status, doctor (lerd environment, ending with a sweep of every linked site), doctor_fix, site_doctor (app-level checks for a site: env, dependencies, audits, framework specifics), which, check, dns_diagnose, bug_report, analyze_queries (N+1/slow queries), route_timing (response-time table + slow routes), optimize_route (slow routes joined with their N+1/slow queries, plus CPU hotspots when profiling was on), dumps_recent, dumps_status, dumps_clear, dumps_toggle, browser_events (page views and what broke on them), browser_toggle, browser_presets, profiler_toggle, profiler_status, profiler_clear, profiler_report (flat CPU profile of a command), xdebug_on, xdebug_off, xdebug_status. (Reading logs moved to the `logs` tool.)",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":          {Type: "string", Enum: []string{"status", "doctor", "doctor_fix", "site_doctor", "which", "check", "dns_diagnose", "bug_report", "analyze_queries", "route_timing", "optimize_route", "dumps_recent", "dumps_status", "dumps_clear", "dumps_toggle", "profiler_toggle", "profiler_status", "profiler_clear", "profiler_report", "xdebug_on", "xdebug_off", "xdebug_status"}},
+				"action":          {Type: "string", Enum: []string{"status", "doctor", "doctor_fix", "site_doctor", "which", "check", "dns_diagnose", "bug_report", "analyze_queries", "route_timing", "optimize_route", "dumps_recent", "dumps_status", "dumps_clear", "dumps_toggle", "browser_events", "browser_toggle", "browser_presets", "profiler_toggle", "profiler_status", "profiler_clear", "profiler_report", "xdebug_on", "xdebug_off", "xdebug_status"}},
 				"path":            {Type: "string", Description: "Project root (which/check/site_doctor/profiler_report). Defaults to cwd."},
 				"site":            {Type: "string", Description: "dumps/analyze_queries/route_timing/optimize_route/site_doctor/profiler_report: site filter (site name or domain)."},
 				"args":            {Type: "array", Items: stringItems, Description: `profiler_report: argv to run under php and profile, e.g. ["artisan","app:import"].`},
@@ -565,9 +568,11 @@ func diagTool() mcpTool {
 				"kind":            {Type: "string", Enum: []string{"dump", "query", "job", "view", "mail", "cache", "event", "http", "log", "exception", "message"}, Description: "dumps_recent: event kind."},
 				"since":           {Type: "string", Description: "dumps_recent: time filter."},
 				"limit":           {Type: "integer", Description: "dumps_recent: max events."},
+				"preset":          {Type: "string", Description: "browser_presets: add/remove (with enable)."},
+				"types":           {Type: "array", Items: stringItems, Description: "browser_events: error, rejection, console.error, console.warn, network, resource, event, navigation."},
 				"min_repeat":      {Type: "integer", Description: "analyze_queries/optimize_route: N+1 repeat threshold."},
 				"slow_ms":         {Type: "number", Description: "analyze_queries/optimize_route: slow-query threshold."},
-				"enable":          {Type: "boolean", Description: "dumps_toggle/profiler_toggle: on/off."},
+				"enable":          {Type: "boolean", Description: "*_toggle: on/off."},
 				"output":          {Type: "string", Description: "bug_report: output file path."},
 				"log_lines":       {Type: "integer", Description: "bug_report: lines per log (default 200)."},
 				"show_real_names": {Type: "boolean", Description: "bug_report: skip anonymisation."},

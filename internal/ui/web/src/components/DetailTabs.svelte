@@ -19,18 +19,21 @@
     active: T;
     onchange: (id: T) => void;
     actions?: Snippet;
+    // keepSingle draws the bar for a lone tab, where it says what the view is.
+    keepSingle?: boolean;
   }
-  let { tabs, active, onchange, actions }: Props = $props();
+  let { tabs, active, onchange, actions, keepSingle = false }: Props = $props();
 
   // A lone tab can't be switched to anything, so the bar is just noise. Hide it
   // (and the empty 0-tab case) and let the content fill the space instead.
   const visible = $derived(tabs.filter((t) => !t.hidden));
+  const showTabs = $derived(visible.length > 1 || (keepSingle && visible.length === 1));
 </script>
 
-{#if visible.length > 1 || actions}
+{#if showTabs || actions}
   <div class="flex items-end justify-between gap-3 border-b border-gray-100 dark:border-lerd-border pt-3 px-3 shrink-0">
-    <div use:tablist role={visible.length > 1 ? 'tablist' : undefined} class="flex items-end gap-4 min-w-0 overflow-x-auto">
-      {#if visible.length > 1}
+    <div use:tablist role={showTabs ? 'tablist' : undefined} class="flex items-end gap-4 min-w-0 overflow-x-auto">
+      {#if showTabs}
         {#each visible as t (t.id)}
           <button
             role="tab"

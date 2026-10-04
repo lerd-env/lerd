@@ -10,6 +10,7 @@
   import { resumeSite, loadSites, activeWorktreeDomain, siteHasLogSources, type Site } from '$stores/sites';
   import { routeRest, goToTab } from '$stores/route';
   import { debugLens, isDebugLens, type DebugLens } from '$stores/debugLens';
+  import { browserCaptureEnabled, browserCaptureKnown, loadBrowserCaptureStatus } from '$stores/browserCapture';
   import { m } from '../../paraglide/messages.js';
 
   let resumeBusy = $state(false);
@@ -42,7 +43,10 @@
   let activeWorktreeBranch = $state<string>('');
   let nginxOpen = $state(false);
   const canTinker = $derived(Boolean(site.uses_php));
-  const canDumps = $derived(Boolean(site.uses_php));
+  // A site without PHP has only browser events to show, so its Debug tab
+  // appears once browser capture is on.
+  const canDumps = $derived(Boolean(site.uses_php) || $browserCaptureEnabled);
+  void loadBrowserCaptureStatus();
   const canEnv = $derived(Boolean(site.has_env));
   // Logs get their own tab in the resource layout rather than living under the
   // overview. Offer it whenever the site exposes any log source, including a
@@ -72,7 +76,7 @@
     if (active === 'logs' && !canLogs) active = 'overview';
     if (active === 'tinker' && !canTinker) active = 'overview';
     if (active === 'env' && !canEnv) active = 'overview';
-    if (active === 'dumps' && !canDumps) active = 'overview';
+    if (active === 'dumps' && !canDumps && (site.uses_php || $browserCaptureKnown)) active = 'overview';
   });
 
   $effect(() => {
@@ -163,7 +167,7 @@
       <SiteTinkerTab {site} branch={activeWorktreeBranch} />
     {/key}
   {:else if active === 'dumps'}
-    <SiteDebugTab siteName={site.name} framework={site.framework} domain={site.domain} branch={activeWorktreeBranch} />
+    <SiteDebugTab siteName={site.name} framework={site.framework} domain={site.domain} branch={activeWorktreeBranch} phpLenses={Boolean(site.uses_php)} />
   {/if}
 </DetailPanel>
 

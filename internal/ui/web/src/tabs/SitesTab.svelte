@@ -2,6 +2,7 @@
   import ListPanel from '$components/ListPanel.svelte';
   import ActionButton from '$components/ActionButton.svelte';
   import DumpBridgeToggle from '$components/DumpBridgeToggle.svelte';
+  import BrowserCaptureToggle from '$components/BrowserCaptureToggle.svelte';
   import ProfilerToggle from '$components/ProfilerToggle.svelte';
   import SitesEmptyState from '$components/SitesEmptyState.svelte';
   import Icon from '$components/Icon.svelte';
@@ -457,6 +458,7 @@
 {#snippet actions()}
   {#if $accessMode.localControl}
     <DumpBridgeToggle />
+    <BrowserCaptureToggle />
     <ProfilerToggle />
     <ActionButton
       title={$activeRun ? m.siteWizard_backgroundRunning() : m.sites_linkNew()}

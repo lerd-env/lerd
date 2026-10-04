@@ -5,6 +5,8 @@
   import QueriesLens from '$components/QueriesLens.svelte';
   import KindLens from '$components/KindLens.svelte';
   import DebugDisabled from '$components/DebugDisabled.svelte';
+  import BrowserLens from '$components/BrowserLens.svelte';
+  import { browserCaptureEnabled, loadBrowserCaptureStatus } from '$stores/browserCapture';
   import { debugLens, type DebugLens } from '$stores/debugLens';
   import { refreshStatus } from '$stores/dumps';
   import { refreshDevtoolsStatus, debugCaptureEnabled } from '$stores/queries';
@@ -14,6 +16,7 @@
   onMount(() => {
     void refreshStatus();
     void refreshDevtoolsStatus();
+    void loadBrowserCaptureStatus();
   });
 
   interface Props {
@@ -21,8 +24,10 @@
     framework?: string;
     domain?: string;
     branch?: string;
+    // phpLenses is false for a site without PHP, which only has browser events.
+    phpLenses?: boolean;
   }
-  let { siteName = '', framework = '', domain = '', branch = '' }: Props = $props();
+  let { siteName = '', framework = '', domain = '', branch = '', phpLenses = true }: Props = $props();
 
   // Cache comes solely from the Laravel adapter, so it only applies to Laravel
   // sites; everything else is framework-agnostic (PDO and the Symfony
@@ -43,8 +48,12 @@
     { id: 'http', label: m.debug_tab_http(), count: counts['http'] },
     { id: 'logs', label: m.debug_tab_logs(), count: counts['log'] },
     { id: 'exceptions', label: m.debug_tab_exceptions(), count: counts['exception'] },
-    { id: 'messages', label: m.debug_tab_messages(), count: counts['message'] }
+    { id: 'messages', label: m.debug_tab_messages(), count: counts['message'] },
+    { id: 'browser', label: m.debug_tab_browser(), count: counts['browser'] }
   ]);
+
+  // A site without PHP keeps the lens bar, with Browser as its only lens.
+  const browserOnly = $derived(tabs.filter((t) => t.id === 'browser'));
 
   // If the remembered lens isn't available for this framework, fall back.
   $effect(() => {
@@ -53,12 +62,22 @@
 </script>
 
 <div class="flex flex-col h-full overflow-hidden">
-  {#if !$debugCaptureEnabled}
+  {#if !phpLenses}
+    <DetailTabs tabs={browserOnly} active="browser" onchange={() => {}} keepSingle />
+    <div class="flex-1 min-h-0 overflow-hidden">
+      <BrowserLens siteScope={siteName} />
+    </div>
+  {:else if !$debugCaptureEnabled && !$browserCaptureEnabled}
     <DebugDisabled />
   {:else}
     <DetailTabs {tabs} active={$debugLens} onchange={(id) => debugLens.set(id)} />
     <div class="flex-1 min-h-0 overflow-hidden">
-      {#if $debugLens === 'dumps'}
+      <!-- Browser capture has its own switch, so its lens shows while debug capture is off. -->
+      {#if $debugLens === 'browser'}
+        <BrowserLens siteScope={siteName} />
+      {:else if !$debugCaptureEnabled}
+        <DebugDisabled />
+      {:else if $debugLens === 'dumps'}
         <DumpsTab siteScope={siteName} />
       {:else if $debugLens === 'queries'}
         <QueriesLens siteScope={siteName} />

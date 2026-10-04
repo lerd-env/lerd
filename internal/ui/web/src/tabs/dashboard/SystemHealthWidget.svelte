@@ -5,6 +5,8 @@
   import StatusPill from '$components/StatusPill.svelte';
   import StatusDot from '$components/StatusDot.svelte';
   import DumpBridgeToggle from '$components/DumpBridgeToggle.svelte';
+  import BrowserCaptureToggle from '$components/BrowserCaptureToggle.svelte';
+  import { browserCaptureEnabled } from '$stores/browserCapture';
   import ProfilerToggle from '$components/ProfilerToggle.svelte';
   import NotificationsToggle from '$components/NotificationsToggle.svelte';
   import { accessMode } from '$stores/accessMode';
@@ -80,6 +82,17 @@
         </span>
       {/if}
     </span>
+  </div>
+
+  <div class="flex items-center justify-between text-sm">
+    <span class="text-gray-600 dark:text-gray-300">{m.dashboard_health_browserCapture()}</span>
+    {#if $accessMode.localControl}
+      <BrowserCaptureToggle />
+    {:else}
+      <span class="inline-flex w-6 h-6 items-center justify-center shrink-0">
+        <StatusDot color={$browserCaptureEnabled ? 'green' : 'gray'} />
+      </span>
+    {/if}
   </div>
 
   <div class="flex items-center justify-between text-sm">

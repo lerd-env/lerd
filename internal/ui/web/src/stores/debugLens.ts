@@ -14,7 +14,8 @@ export type DebugLens =
   | 'http'
   | 'logs'
   | 'exceptions'
-  | 'messages';
+  | 'messages'
+  | 'browser';
 
 const KEY = 'lerd:debugLens';
 
@@ -29,7 +30,8 @@ const VALID: DebugLens[] = [
   'http',
   'logs',
   'exceptions',
-  'messages'
+  'messages',
+  'browser'
 ];
 
 // isDebugLens reports whether a route segment names a lens, so a deep link can

@@ -51,8 +51,9 @@ type Client struct {
 // Index is the top-level store index listing all available frameworks, and the
 // composer packages that ship declarations of their own.
 type Index struct {
-	Frameworks []IndexEntry               `json:"frameworks"`
-	Packages   []config.StorePackageEntry `json:"packages,omitempty"`
+	Frameworks     []IndexEntry                     `json:"frameworks"`
+	Packages       []config.StorePackageEntry       `json:"packages,omitempty"`
+	BrowserPresets []config.StoreBrowserPresetEntry `json:"browser_presets,omitempty"`
 }
 
 // IndexEntry describes a single framework available in the store.

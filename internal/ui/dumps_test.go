@@ -139,6 +139,18 @@ func TestHandleDumpsClear_Loopback(t *testing.T) {
 	}
 }
 
+func TestHandleDumpsClear_OneKindKeepsTheRest(t *testing.T) {
+	srv := withDumpsServer(t)
+	srv.Push(dumps.Event{V: 1, ID: "a", Kind: "dump"})
+	srv.Push(dumps.Event{V: 1, ID: "b", Kind: dumps.KindBrowser})
+	req := httptest.NewRequest("POST", "/api/dumps/clear?kind=browser", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
+	handleDumpsClear(httptest.NewRecorder(), req)
+	if got := srv.Snapshot(); len(got) != 1 || got[0].ID != "a" {
+		t.Fatalf("ring = %+v, want only the dump", got)
+	}
+}
+
 func TestHandleDumpsClear_RejectsNonLoopback(t *testing.T) {
 	withDumpsServer(t)
 	req := httptest.NewRequest("POST", "/api/dumps/clear", nil)

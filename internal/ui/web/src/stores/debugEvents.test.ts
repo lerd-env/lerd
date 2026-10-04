@@ -90,3 +90,28 @@ describe('buildKindGroups', () => {
     expect(groups[0].events[0].id).toBe('7');
   });
 });
+
+describe('browser type filter', () => {
+  const browser = (id: string, data: Record<string, unknown>): DumpEvent => ({
+    v: 1,
+    id,
+    ts: '2026-07-21T10:00:00.000Z',
+    kind: 'browser',
+    ctx: { type: 'browser', site: 'acme', rid: 'p1' },
+    src: { file: '', line: 0 },
+    data
+  });
+  const events = [
+    browser('a', { type: 'navigation', nav: 'load' }),
+    browser('b', { type: 'console', level: 'error' }),
+    browser('c', { type: 'console', level: 'warn' }),
+    browser('d', { type: 'error' })
+  ];
+
+  it('splits console messages by level', () => {
+    const ids = (facet: string) => buildKindGroups(events, 'browser', '', '', false, '', true, facet).flatMap((g) => g.events.map((e) => e.id));
+    expect(ids('console.warn')).toEqual(['c']);
+    expect(ids('error')).toEqual(['d']);
+    expect(ids('navigation')).toEqual(['a']);
+  });
+});

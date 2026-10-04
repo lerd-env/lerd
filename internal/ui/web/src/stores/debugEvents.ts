@@ -57,9 +57,11 @@ export function buildKindGroups(
 }
 
 // facetOf is the value a kind is narrowed by. A job carries a status and a log
-// a level; no kind carries both, so one accessor serves the filter.
-function facetOf(ev: DumpEvent): string {
-  const d = ev.data as { status?: string; level?: string } | undefined;
+// a level; no kind carries both, so one accessor serves the filter. A browser
+// event narrows by its type, with console messages split by level.
+export function facetOf(ev: DumpEvent): string {
+  const d = ev.data as { status?: string; level?: string; type?: string } | undefined;
+  if (ev.kind === 'browser') return d?.type === 'console' ? `console.${d.level}` : (d?.type ?? '');
   return d?.status ?? d?.level ?? '';
 }
 
