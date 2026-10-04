@@ -594,24 +594,41 @@ func TestStatusAll_FlagsALerdInstalledMiseThatSelfUpdated(t *testing.T) {
 	if err := WriteStamp("mise", pin); err != nil {
 		t.Fatal(err)
 	}
-	if s, _ := statusOf("mise"); !s.Present || s.UpdateAvailable || s.Installed != pin {
-		t.Fatalf("mise at its pin = %+v, want present with no update", s)
-	}
-
-	old := time.Now().Add(-2 * time.Hour)
-	if err := os.Chtimes(filepath.Join(config.BinDir(), "mise.version"), old, old); err != nil {
-		t.Fatal(err)
-	}
+	reported := strings.TrimPrefix(pin, "v")
 	orig := probeOutput
 	t.Cleanup(func() { probeOutput = orig })
 	probeOutput = func(path string, args ...string) ([]byte, error) {
 		if path != bin || len(args) != 1 || args[0] != "--version" {
 			t.Errorf("probed %s %v, want %s --version", path, args, bin)
 		}
-		return []byte("2026.10.2 linux-x64 (2026-10-01)\n"), nil
+		return []byte(reported + " linux-x64 (2026-09-20)\n"), nil
 	}
+	if s, _ := statusOf("mise"); !s.Present || s.UpdateAvailable {
+		t.Fatalf("mise at its pin = %+v, want present with no update", s)
+	}
+
+	reported = "2026.10.2"
 	if s, _ := statusOf("mise"); !s.Present || !s.UpdateAvailable || s.Installed != "2026.10.2" {
 		t.Fatalf("self-updated mise = %+v, want present at 2026.10.2 with an update", s)
+	}
+}
+
+// `mise self-update` run right after lerd installed mise leaves the binary
+// barely newer than the stamp; the version still has to come from the binary.
+func TestInstalledVersion_SeesAMiseThatSelfUpdatedRightAway(t *testing.T) {
+	offline(t)
+	writeHostMise(t)
+	if err := WriteStamp("mise", embeddedManifest().Tools["mise"].Version); err != nil {
+		t.Fatal(err)
+	}
+	orig := probeOutput
+	t.Cleanup(func() { probeOutput = orig })
+	probeOutput = func(string, ...string) ([]byte, error) {
+		return []byte("2026.10.2 linux-x64 (2026-10-04)\n"), nil
+	}
+
+	if v := InstalledVersion("mise"); v != "2026.10.2" {
+		t.Fatalf("InstalledVersion(mise) = %q, want the self-updated 2026.10.2", v)
 	}
 }
 

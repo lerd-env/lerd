@@ -363,7 +363,9 @@ func InstalledVersion(name string) string {
 		return ""
 	}
 	stamp := stampPath(name)
-	if stampInfo, err := os.Stat(stamp); err == nil &&
+	// mise updates itself in place, often right after lerd installs it, so its
+	// stamp says nothing about the binary; asking it costs one quick exec.
+	if stampInfo, err := os.Stat(stamp); err == nil && name != "mise" &&
 		!binInfo.ModTime().After(stampInfo.ModTime().Add(time.Minute)) {
 		if b, err := os.ReadFile(stamp); err == nil {
 			if v := strings.TrimSpace(string(b)); versionRe.MatchString(v) {

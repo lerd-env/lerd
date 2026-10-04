@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/tools"
@@ -54,8 +55,8 @@ func TestInstallMise_stampsItAsLerds(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(home, ".local", "bin", "mise")); err != nil {
 		t.Fatalf("mise not extracted: %v", err)
 	}
-	if v := tools.InstalledVersion("mise"); v != "v2026.9.12" {
-		t.Fatalf("InstalledVersion(mise) = %q, want the stamped v2026.9.12", v)
+	if v := tools.InstalledVersion("mise"); strings.TrimPrefix(v, "v") != "2026.9.12" {
+		t.Fatalf("InstalledVersion(mise) = %q, want 2026.9.12 from lerd's own mise", v)
 	}
 }
 
@@ -95,7 +96,7 @@ func TestUpdateTool_bringsMiseBackToThePin(t *testing.T) {
 	if err != nil || !bytes.Contains(out, []byte("2026.9.12")) {
 		t.Fatalf("mise on disk after the update:\n%s", out)
 	}
-	if v := tools.InstalledVersion("mise"); v != "v2026.9.12" {
-		t.Fatalf("InstalledVersion(mise) = %q, want v2026.9.12", v)
+	if v := tools.InstalledVersion("mise"); strings.TrimPrefix(v, "v") != "2026.9.12" {
+		t.Fatalf("InstalledVersion(mise) = %q, want 2026.9.12", v)
 	}
 }
