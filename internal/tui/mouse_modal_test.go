@@ -15,7 +15,7 @@ func TestMouseClick_IgnoredWhileModalOpen(t *testing.T) {
 	m.snap = fakeSnap()
 	m.activeTab = tabDashboard
 	m.width, m.height = 150, 40
-	_ = m.render() // register the base-frame zones, including the sidebar rows
+	renderZones(m) // register the base-frame zones, including the sidebar rows
 
 	z := waitZone("side:svc:redis")
 	if z.IsZero() {
@@ -44,7 +44,7 @@ func TestMouseClick_DoesNotDismissOpenPicker(t *testing.T) {
 	m.activeTab = tabSites
 	m.focus = paneSites
 	m.width, m.height = 150, 40
-	_ = m.render()
+	renderZones(m)
 
 	z := waitZone("side:svc:redis")
 	if z.IsZero() {

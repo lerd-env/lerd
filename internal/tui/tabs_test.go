@@ -47,6 +47,15 @@ func waitZone(id string) *zone.ZoneInfo {
 	return zone.Get(id)
 }
 
+// renderZones renders m into a fresh zone manager. The global one keeps every
+// earlier render's zones until its worker catches up, so waitZone could return
+// those instead of this frame's.
+func renderZones(m *Model) {
+	zone.Close()
+	zone.DefaultManager = zone.New()
+	_ = m.render()
+}
+
 func TestNextTab_CyclesBothDirections(t *testing.T) {
 	m := NewModel("test")
 	m.activeTab = tabDashboard
@@ -93,7 +102,7 @@ func TestMouseClick_SidebarServiceOpensIt(t *testing.T) {
 	m := NewModel("test")
 	m.snap = fakeSnap()
 	m.width, m.height = 150, 40
-	_ = m.render() // register zones
+	renderZones(m) // register zones
 
 	z := waitZone("side:svc:redis")
 	if z.IsZero() {
@@ -116,7 +125,7 @@ func TestMouseClick_SelectsSiteRow(t *testing.T) {
 	m.activeTab = tabSites
 	m.focus = paneSites
 	m.width, m.height = 150, 40
-	_ = m.render()
+	renderZones(m)
 
 	z := waitZone("side:site:beta")
 	if z.IsZero() {
@@ -134,7 +143,7 @@ func TestMouseClick_IgnoresNonLeftPress(t *testing.T) {
 	m := NewModel("test")
 	m.snap = fakeSnap()
 	m.width, m.height = 150, 40
-	_ = m.render()
+	renderZones(m)
 	z := waitZone("side:svc:redis")
 	// Motion (not a press) must not switch tabs.
 	msg := tea.MouseMotionMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft}
@@ -152,7 +161,7 @@ func TestDashboardClick_OpensTheAlertSite(t *testing.T) {
 	m.snap.Status = StatusRow{DNSOk: true, NginxRunning: true, WatcherRunning: true}
 	m.activeTab = tabDashboard
 	m.width, m.height = 150, 40
-	_ = m.render() // register the alert card zones
+	renderZones(m) // register the alert card zones
 
 	z := waitZone("dashalert:0")
 	if z.IsZero() {
@@ -438,7 +447,7 @@ func TestMouseClick_ServiceTabSwitchesIt(t *testing.T) {
 	m.width, m.height = 150, 40
 	m.switchTab(tabServices)
 	m.selectServiceByName("redis")
-	_ = m.render()
+	renderZones(m)
 
 	z := waitZone("svctab:1")
 	if z.IsZero() {
@@ -447,5 +456,24 @@ func TestMouseClick_ServiceTabSwitchesIt(t *testing.T) {
 	next, _ := m.Update(tea.MouseClickMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft})
 	if next.(*Model).svcTab != 1 {
 		t.Fatalf("clicking the service's Logs tab left svcTab at %d", next.(*Model).svcTab)
+	}
+}
+
+// A zone left over from an earlier render must not satisfy waitZone, or a
+// click lands on the old coordinates and the test flakes.
+func TestRenderZones_DropsPreviousRender(t *testing.T) {
+	shifted := NewModel("test")
+	shifted.snap = fakeSnap()
+	shifted.snap.Services = append([]ServiceRow{{Name: "a"}, {Name: "b"}, {Name: "c"}}, shifted.snap.Services...)
+	shifted.width, shifted.height = 150, 40
+	renderZones(shifted)
+	old := waitZone("side:svc:redis")
+
+	m := NewModel("test")
+	m.snap = fakeSnap()
+	m.width, m.height = 150, 40
+	renderZones(m)
+	if z := waitZone("side:svc:redis"); z.IsZero() || z.StartY == old.StartY {
+		t.Fatalf("redis zone still points at the previous render (y=%d)", old.StartY)
 	}
 }
