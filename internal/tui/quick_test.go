@@ -243,3 +243,31 @@ func TestPaletteWordsMatchInAnyOrder(t *testing.T) {
 		}
 	}
 }
+
+// Running a service entry moves focus to the main area, which is also where an
+// opened service's u and b are pressed, so neither may depend on list focus.
+func TestPaletteServiceUpdateAndRollbackRun(t *testing.T) {
+	for label, status := range map[string]string{"Update service": "updating mysql", "Roll back service": "rolling back mysql"} {
+		m := quickModel()
+		m.switchTab(tabDashboard)
+		ran := false
+		for _, a := range m.quickActions() {
+			if a.label == label && a.detail == "mysql" {
+				ran = a.run(m) != nil && strings.Contains(m.status, status)
+			}
+		}
+		if !ran {
+			t.Errorf("%s from the palette did nothing, status %q", label, m.status)
+		}
+	}
+}
+
+func TestServiceUpdateKeyWorksInTheOpenedService(t *testing.T) {
+	m := quickModel()
+	m.switchTab(tabServices)
+	m.selectServiceByName("mysql")
+	m.focusMain()
+	if m.actionServiceUpdate() == nil || m.actionServiceRollback() == nil {
+		t.Fatal("u / b do nothing with the service open in the main area")
+	}
+}

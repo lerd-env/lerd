@@ -986,11 +986,11 @@ func (m *Model) selectSiteTabByID(tab siteTab) tea.Cmd {
 	return nil
 }
 
-// actionServiceUpdate runs `lerd service update <name>` for the focused
-// service row (no tag — applies the safe in-strategy update). Worker rows
+// actionServiceUpdate runs `lerd service update <name>` for the selected
+// service (no tag — applies the safe in-strategy update). Worker rows
 // have no upstream image so we no-op there.
 func (m *Model) actionServiceUpdate() tea.Cmd {
-	if m.focus != paneServices {
+	if m.activeTab != tabServices {
 		return nil
 	}
 	svc := m.currentService()
@@ -1001,10 +1001,10 @@ func (m *Model) actionServiceUpdate() tea.Cmd {
 	return runLerd("", "service", "update", svc.Name)
 }
 
-// actionServiceRollback runs `lerd service rollback <name>` for the focused
-// service row, reverting to the previously-running image.
+// actionServiceRollback runs `lerd service rollback <name>` for the selected
+// service, reverting to the previously-running image.
 func (m *Model) actionServiceRollback() tea.Cmd {
-	if m.focus != paneServices {
+	if m.activeTab != tabServices {
 		return nil
 	}
 	svc := m.currentService()
