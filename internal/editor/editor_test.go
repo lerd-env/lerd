@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -155,6 +156,9 @@ func TestForSiteEditor(t *testing.T) {
 // TestInstalledByDesktopEntry checks an editor whose binary is not on PATH is
 // still found through a desktop entry claiming its URL scheme.
 func TestInstalledByDesktopEntry(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("desktop entries are how Linux registers URL schemes; macOS looks for the app bundle")
+	}
 	isolate(t)
 	t.Setenv("PATH", t.TempDir())
 	dir := filepath.Join(os.Getenv("HOME"), ".local/share/applications")
