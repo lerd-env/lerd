@@ -22,7 +22,6 @@ var osBranchAllowlist = map[string]int{
 	"internal/cli/hostproxy.go":       2,
 	"internal/cli/install.go":         2,
 	"internal/cli/update.go":          2,
-	"internal/config/paths.go":        8,
 	"internal/dns/diagnose.go":        4,
 	"internal/editor/editor.go":       1,
 	"internal/git/copy.go":            2,
