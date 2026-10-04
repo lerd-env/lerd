@@ -43,8 +43,9 @@ func (m *Model) serviceHeader(svc *ServiceRow, cw int) []string {
 
 	var version []seg
 	if svc.Version != "" {
-		version = []seg{sp("version ", colDim), sp(svc.Version, nil)}
+		version = []seg{sp("version ", colDim), sp(svc.Version, nil), sp("    ", nil)}
 	}
+	version = append(version, sp("unit ", colDim), sp("lerd-"+svc.Name, nil))
 	out = append(out, rowLR(nil, cw, []seg{bd(svc.Name, nil), sp("   ", nil)}, version))
 
 	state := []seg{serviceGlyph(svc.State), sp(" "+serviceStateWord(svc.State), colDim)}

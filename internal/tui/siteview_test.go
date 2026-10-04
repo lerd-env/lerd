@@ -101,3 +101,25 @@ func TestSiteHeaderNamesTheSiteOnce(t *testing.T) {
 		t.Fatalf("the domain should appear once under the breadcrumb, got %d:\n%s", n, identity)
 	}
 }
+
+func TestSiteOverviewNamesEachWorkersUnit(t *testing.T) {
+	m := siteViewModel()
+	m.snap.Sites[0].HasQueueWorker = true
+	m.snap.Sites[0].QueueRunning = true
+	if out := ansi.Strip(m.renderSiteView(160, 45)); !strings.Contains(out, "lerd-queue-shop") {
+		t.Fatalf("the Overview's queue row leaves out its unit:\n%s", out)
+	}
+}
+
+func TestSiteOverviewShowsLongWorkerUnitsWhole(t *testing.T) {
+	m := siteViewModel()
+	s := &m.snap.Sites[0]
+	s.Name, s.Domains = "customer-portal-backend", []string{"customer-portal-backend.test"}
+	s.HasQueueWorker, s.HasScheduleWorker = true, true
+	out := ansi.Strip(m.renderSiteView(140, 60))
+	for _, unit := range []string{"lerd-queue-customer-portal-backend", "lerd-schedule-customer-portal-backend"} {
+		if !strings.Contains(out, unit) {
+			t.Errorf("the Overview cuts %s short:\n%s", unit, out)
+		}
+	}
+}

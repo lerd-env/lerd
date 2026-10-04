@@ -103,3 +103,10 @@ func TestAddKeyOpensThePresetPalette(t *testing.T) {
 		t.Fatalf("A should open the palette on service preset, got %v %q", m.paletteActive, m.paletteInput)
 	}
 }
+
+func TestServiceHeaderNamesItsUnit(t *testing.T) {
+	m := serviceModel()
+	if out := ansi.Strip(m.renderServiceView(140, 40)); !strings.Contains(out, "unit lerd-mysql") {
+		t.Fatalf("service header leaves out its systemd unit:\n%s", out)
+	}
+}

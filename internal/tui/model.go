@@ -1823,7 +1823,7 @@ func logTargetsForSite(s *siteinfo.EnrichedSite) []LogTarget {
 		}
 		out = append(out, LogTarget{
 			Kind:  kindJournal,
-			ID:    "lerd-" + unitSuffix + "-" + s.Name,
+			ID:    siteWorkerUnit(s, unitSuffix),
 			Label: s.Name + " · " + label,
 		})
 	}
@@ -1838,7 +1838,7 @@ func logTargetsForSite(s *siteinfo.EnrichedSite) []LogTarget {
 		}
 		out = append(out, LogTarget{
 			Kind:  kindJournal,
-			ID:    "lerd-" + fw.Name + "-" + s.Name,
+			ID:    siteWorkerUnit(s, fw.Name),
 			Label: s.Name + " · " + label,
 		})
 	}

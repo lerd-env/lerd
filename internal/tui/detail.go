@@ -653,7 +653,7 @@ func detailContentLines(m *Model, site *siteinfo.EnrichedSite, focused bool, inn
 	secs = append(secs, overviewDomains(m, site, rows, sel, scheme, colW)...)
 	secs = append(secs, overviewToggles(m, site, rows, sel, colW)...)
 	secs = append(secs, overviewServices(m, site, colW)...)
-	secs = append(secs, overviewWorkers(site, rows, sel, colW)...)
+	secs = append(secs, overviewWorkers(site, rows, sel, innerW)...)
 	secs = append(secs, overviewSuggested(site, innerW)...)
 	secs = append(secs, overviewTiming(m, site, innerW)...)
 
@@ -836,6 +836,11 @@ func overviewSuggested(site *siteinfo.EnrichedSite, w int) []ovSection {
 	return b.section(ovFull)
 }
 
+// siteWorkerUnit is the systemd unit a site's worker runs as.
+func siteWorkerUnit(site *siteinfo.EnrichedSite, worker string) string {
+	return "lerd-" + worker + "-" + site.Name
+}
+
 func overviewWorkers(site *siteinfo.EnrichedSite, rows []detailRow, sel func(int) bool, w int) []ovSection {
 	b := newOvBuilder(w)
 	for i, row := range rows {
@@ -849,13 +854,14 @@ func overviewWorkers(site *siteinfo.EnrichedSite, rows []detailRow, sel func(int
 		b.add(renderDetailRow(s,
 			workerGlyphFor(site, row.workerName),
 			workerLabel(site, row.workerName),
-			workerStateText(site, row.workerName)), s)
+			workerStateText(site, row.workerName)+dimStyle.Render("  "+siteWorkerUnit(site, row.workerName))), s)
 	}
 	if b.empty() {
 		return nil
 	}
 	b.plain("")
-	return b.section(ovHalf)
+	// Full width: each row names its unit, which a half column would cut short.
+	return b.section(ovFull)
 }
 
 // overviewWorktree is the Overview of a worktree tab: its own workers,
