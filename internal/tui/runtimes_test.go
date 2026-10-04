@@ -85,3 +85,21 @@ func stubRuntimes(f runtimeFacts) func() {
 	loadRuntimeFacts = func() runtimeFacts { return f }
 	return func() { loadRuntimeFacts = old }
 }
+
+func TestMouseClick_RuntimeRowSelectsIt(t *testing.T) {
+	m := runtimesModel(t)
+	m.width, m.height = 150, 40
+	if len(m.runtimeRows()) < 2 {
+		t.Fatal("fixture needs two runtime rows")
+	}
+	_ = m.render()
+
+	z := waitZone("rt:1")
+	if z.IsZero() {
+		t.Fatalf("second runtime row not registered after render")
+	}
+	next, _ := m.Update(tea.MouseClickMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft})
+	if next.(*Model).rtCursor != 1 {
+		t.Fatalf("clicking the second runtime row left the cursor at %d", next.(*Model).rtCursor)
+	}
+}

@@ -1406,6 +1406,19 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				return m, m.afterNav()
 			}
 		}
+		for i := range svcTabLabels {
+			if zone.Get(fmt.Sprintf("svctab:%d", i)).InBounds(msg) {
+				return m, m.selectServiceTab(i)
+			}
+		}
+	case tabRuntimes:
+		for i := range m.runtimeRows() {
+			if zone.Get(fmt.Sprintf("rt:%d", i)).InBounds(msg) {
+				m.focusMain()
+				m.rtCursor = i
+				return m, nil
+			}
+		}
 	case tabDatabases:
 		for i := range navigableDBRows(m.dbRows()) {
 			if zone.Get(fmt.Sprintf("db:%d", i)).InBounds(msg) {

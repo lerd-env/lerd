@@ -431,3 +431,21 @@ func TestDiffSnapshots_IgnoresAPrivateSiteHiddenOrShownByStreaming(t *testing.T)
 		}
 	}
 }
+
+func TestMouseClick_ServiceTabSwitchesIt(t *testing.T) {
+	m := NewModel("test")
+	m.snap = fakeSnap()
+	m.width, m.height = 150, 40
+	m.switchTab(tabServices)
+	m.selectServiceByName("redis")
+	_ = m.render()
+
+	z := waitZone("svctab:1")
+	if z.IsZero() {
+		t.Fatalf("service Logs tab not registered after render")
+	}
+	next, _ := m.Update(tea.MouseClickMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft})
+	if next.(*Model).svcTab != 1 {
+		t.Fatalf("clicking the service's Logs tab left svcTab at %d", next.(*Model).svcTab)
+	}
+}
