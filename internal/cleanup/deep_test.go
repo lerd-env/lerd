@@ -347,6 +347,46 @@ func TestInspect_DeepKeepsImagesATaggedImageIsBuiltOn(t *testing.T) {
 	}
 }
 
+// A Containerfile that only sets FROM and CMD adds no layer, so the custom image
+// tops out on its base's own top layer; the base is still what it is built on.
+// An unheld copy with the same layers protects nothing.
+func TestInspect_DeepKeepsTheBaseOfAnImageThatAddsNoLayer(t *testing.T) {
+	withImages(t, []image{
+		{ID: "custom", Names: []string{"localhost/lerd-custom-app:local"}, Size: 50, Containers: 1},
+		{ID: "py312", Names: []string{"docker.io/library/python:3.12-alpine"}, Size: 50},
+		{ID: "py313", Names: []string{"docker.io/library/python:3.13-alpine"}, Size: 45},
+		{ID: "py313copy", Names: []string{"localhost/python313-copy:latest"}, Size: 45},
+	}, map[string][]string{
+		"custom":    {"P1", "P2"},
+		"py312":     {"P1", "P2"},
+		"py313":     {"Q1", "Q2"},
+		"py313copy": {"Q1", "Q2"},
+	})
+	serviceRepos = func() (map[string]bool, error) { return map[string]bool{}, nil }
+	protectedImages = func() (map[string]bool, error) {
+		return map[string]bool{"localhost/lerd-custom-app:local": true}, nil
+	}
+	t.Cleanup(func() {
+		serviceRepos = realServiceRepos
+		protectedImages = realProtectedImages
+	})
+
+	p, err := Inspect(ScopeDeep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reaped := map[string]bool{}
+	for _, tg := range p.Targets {
+		reaped[tg.ID] = true
+	}
+	if reaped["docker.io/library/python:3.12-alpine"] {
+		t.Fatalf("python:3.12-alpine is the base of a held image, got %+v", p.Targets)
+	}
+	if !reaped["docker.io/library/python:3.13-alpine"] || !reaped["localhost/python313-copy:latest"] {
+		t.Fatalf("two unheld copies must not protect each other, got %+v", p.Targets)
+	}
+}
+
 // Without the layers there is no telling a build base from an unused image,
 // so the unused reap is skipped rather than guessed.
 func TestInspect_DeepSkipsUnusedReapWhenLayersUnreadable(t *testing.T) {
