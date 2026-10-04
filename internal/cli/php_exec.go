@@ -79,13 +79,7 @@ func fpmContainerForDir(dir, version string) string {
 // extension emits no site at all, which strands the notification (#1005). A
 // worktree checkout reports its parent site, like tinker and the worktree vhost.
 func debugSiteEnvArgs(dir string) []string {
-	if _, parent, ok := phpDet.WorktreeRootFor(dir); ok && parent != nil && parent.Name != "" {
-		return []string{"--env", "LERD_SITE=" + parent.Name}
-	}
-	if site, _ := config.FindSiteByPath(phpDet.SiteRootFor(dir)); site != nil && site.Name != "" {
-		return []string{"--env", "LERD_SITE=" + site.Name}
-	}
-	return nil
+	return phpDet.SiteEnvArgs(dir)
 }
 
 // terminalColorEnvArgs carries the attached terminal's colour capability into

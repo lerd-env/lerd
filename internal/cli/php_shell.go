@@ -45,6 +45,7 @@ func phpShellExecArgs(container, workDir string) []string {
 	if workDir != "" {
 		args = append(args, "-w", workDir)
 		args = append(args, envpass.Args(workDir, os.Environ())...)
+		args = append(args, debugSiteEnvArgs(workDir)...)
 	}
 	return append(args, container, "sh", "-c", podman.InteractiveShellScript())
 }

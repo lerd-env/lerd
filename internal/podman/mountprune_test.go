@@ -168,3 +168,15 @@ func TestRepairMissingMounts_noopWhenNothingStale(t *testing.T) {
 		t.Errorf("daemon reloads = %d, want 0", reloads)
 	}
 }
+
+// On macOS the provided-env mount's source is in the Podman Machine VM, so it
+// is never on the host's disk; pruning it would strip env_provider on every start.
+func TestPruneMissingVolumes_keepsTheProvidedEnvVMMount(t *testing.T) {
+	content := "[Container]\nVolume=" + ProvidedEnvVMDir + ":" + ProvidedEnvVMDir + ":ro\n"
+
+	got, removed := PruneMissingVolumes(content)
+
+	if got != content || removed != nil {
+		t.Errorf("pruned the provided-env VM mount: removed=%v\n%s", removed, got)
+	}
+}

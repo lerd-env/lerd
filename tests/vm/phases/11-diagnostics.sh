@@ -222,12 +222,25 @@ check "lerd stop then lerd start" bash -c 'lerd stop && lerd start'
 expect_200 11.28 "$url"
 expect_code "$(site_url "$SHOP_DIR")" 200 404
 
+# phpsite's env_provider is set before the reboot; tmpfs comes back empty, and
+# 11.28's lerd start above has to have written the file again.
+phpsite=$PROJECTS/phpsite
 if [ "${AFTER_REBOOT:-}" = 1 ]; then
 	expect_200 11.29 "$url"
+	check_out "11.33 env_provider values are served again after lerd start" '^after-reboot$' curl -sk "$(site_url "$phpsite")/env.php"
+	sed -i '/^env_provider:/d' "$phpsite/.lerd.yaml"
+	(cd "$phpsite" && lerd env) </dev/null >/dev/null 2>&1
+	rm -f "$phpsite/public/env.php"
 elif [ "${RUN_TIER3:-}" = 1 ]; then
+	echo '<?php echo getenv("LERD_VM_SHARED");' >"$phpsite/public/env.php"
+	sed -i '/^env_provider:/d' "$phpsite/.lerd.yaml"
+	echo "env_provider: printf 'LERD_VM_SHARED=after-reboot\\n'" >>"$phpsite/.lerd.yaml"
+	(cd "$phpsite" && lerd env --yes) </dev/null >/dev/null 2>&1
 	skip "11.29 reboot with autostart" "reboot the guest, then run phase 11 again with AFTER_REBOOT=1"
+	skip "11.33 env_provider after a reboot" "reboot the guest, then run phase 11 again with AFTER_REBOOT=1"
 else
 	skip "11.29 reboot with autostart" "tier 3, set RUN_TIER3=1"
+	skip "11.33 env_provider after a reboot" "tier 3, set RUN_TIER3=1"
 fi
 if [ "${RUN_TIER3:-}" = 1 ] && grep -q '^ID=fedora' /etc/os-release; then
 	todo "11.30 late-NIC network rig" "not scripted yet: the rig, the reboot and the fake docker0 link up"

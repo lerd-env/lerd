@@ -17,6 +17,63 @@
 // `mixed`/`never` hints, no `match`, no arrow functions, no nullsafe.
 
 namespace {
+    // env_provider output for this site (see `env_provider` in .lerd.yaml),
+    // kept on tmpfs by lerd so secrets never touch disk. Loaded before any
+    // framework boots; a variable the process already has is left alone.
+    // $_SERVER first: under FPM it is the per-request fastcgi param nginx sets
+    // for the vhost, never state a reused worker carries over.
+    $lerdSite = isset($_SERVER['LERD_SITE']) ? $_SERVER['LERD_SITE'] : \getenv('LERD_SITE');
+    if (\is_string($lerdSite) && $lerdSite !== '' && \preg_replace('/[A-Za-z0-9._-]/', '', $lerdSite) === '' && \strpos($lerdSite, '..') === false) {
+        $lerdEnvDir = \get_cfg_var('lerd.provided_env_dir');
+        if (!\is_string($lerdEnvDir) || $lerdEnvDir === '') {
+            $lerdEnvDir = '/run/lerd/env';
+        }
+        $lerdEnv = @\file_get_contents($lerdEnvDir.'/'.$lerdSite.'.env');
+        if (\is_string($lerdEnv)) {
+            // The file names the directories it belongs to; a script outside
+            // them gets nothing, so a wrong LERD_SITE cannot leak another site's.
+            $lerdScript = isset($_SERVER['SCRIPT_FILENAME']) ? @\realpath($_SERVER['SCRIPT_FILENAME']) : false;
+            $lerdAllowed = false;
+            // The header lerd writes comes first; root lines further down are
+            // provider output and widen nothing.
+            \preg_match('/\A(?:#lerd-root=[^\r\n]*\r?\n)*/', $lerdEnv, $lerdHead);
+            foreach (\preg_split('/\r?\n/', $lerdHead[0]) as $lerdLine) {
+                $root = \rtrim((string) \substr($lerdLine, 11), '/');
+                if ($root !== '' && \is_string($lerdScript) && \strpos($lerdScript, $root.'/') === 0) {
+                    $lerdAllowed = true;
+                }
+            }
+            // Quoted values may span lines (PEM keys); unquoted ones end at
+            // the line and drop a ` # comment`.
+            $lerdPairs = array();
+            \preg_match_all('/^[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*("(?:[^"\\\\]|\\\\.)*"|\'[^\']*\'|[^\r\n]*)/m', $lerdEnv, $lerdMatches, \PREG_SET_ORDER);
+            foreach ($lerdMatches as $lerdMatch) {
+                $v = $lerdMatch[2];
+                $q = $v === '' ? '' : $v[0];
+                if ($q === '"' && \strlen($v) > 1 && \substr($v, -1) === '"') {
+                    $v = \strtr(\substr($v, 1, -1), array('\\n' => "\n", '\\"' => '"', '\\\\' => '\\'));
+                } elseif ($q === "'" && \strlen($v) > 1 && \substr($v, -1) === "'") {
+                    $v = \substr($v, 1, -1);
+                } else {
+                    $v = \trim(\preg_replace('/(?:^|[ \t]+)#.*$/', '', $v));
+                }
+                $lerdPairs[$lerdMatch[1]] = $v;
+            }
+            if ($lerdAllowed) {
+                foreach ($lerdPairs as $k => $v) {
+                    if (\getenv($k) !== false || isset($_SERVER[$k])) {
+                        continue;
+                    }
+                    \putenv($k.'='.$v);
+                    $_ENV[$k] = $v;
+                    $_SERVER[$k] = $v;
+                }
+            }
+        }
+        unset($lerdEnvDir, $lerdEnv, $lerdScript, $lerdAllowed, $lerdHead, $lerdPairs, $lerdMatches, $lerdMatch, $lerdLine, $root, $k, $v, $q);
+    }
+    unset($lerdSite);
+
     // Where the bridge's own assets live. The container mounts them at a fixed
     // path; a PHP running on the host has no such directory, so the location is
     // read from the ini and only falls back to the container path. get_cfg_var

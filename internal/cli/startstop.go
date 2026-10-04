@@ -1022,6 +1022,10 @@ func restoreSiteInfrastructure() {
 		return
 	}
 
+	// FPM mounts the provided-env dir, so it has to exist before FPM starts.
+	ensureProvidedEnvDir()
+	defer beginProvidedEnvPass()()
+
 	seenPHP := map[string]bool{}
 	seenSvc := map[string]bool{}
 	dirty := false
@@ -1057,6 +1061,11 @@ func restoreSiteInfrastructure() {
 					}
 				}
 			}
+		}
+
+		// The provided-env file lives on tmpfs and is gone after a reboot.
+		if err := refreshProvidedEnv(s, false); err != nil {
+			feedback.Warn("%s: %v", s.Name, err)
 		}
 
 		// Restore the per-site quadlet (and image, if missing) for custom-FPM

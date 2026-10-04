@@ -37,6 +37,7 @@ Volume={{.XdebugIniPath}}:/usr/local/etc/php/conf.d/99-xdebug.ini:ro
 Volume={{.UserIniPath}}:/usr/local/etc/php/conf.d/98-lerd-user.ini:ro
 Volume={{.SharedIniPath}}:/usr/local/etc/php/conf.d/95-lerd-shared.ini:ro
 Volume={{.DumpsDir}}:/usr/local/etc/lerd:ro
+{{.ProvidedEnvMountLine}}
 Volume={{.DumpsIniPath}}:/usr/local/etc/php/conf.d/97-lerd-dump.ini:ro
 Volume={{.DevtoolsIniPath}}:/usr/local/etc/php/conf.d/96-lerd-devtools.ini:ro
 Volume={{.MailIniPath}}:/usr/local/etc/php/conf.d/94-lerd-mail.ini:ro
@@ -61,6 +62,7 @@ Exec=php-fpm -F -R
 
 [Service]
 Restart=always
+{{.ProvidedEnvExecStartPre}}
 # 2-second backoff between restarts so a tight crash loop can't burn CPU.
 RestartSec=2
 

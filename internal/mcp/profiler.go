@@ -97,6 +97,7 @@ func execProfilerReport(args map[string]any) (any, *rpcError) {
 		cmdArgs = append(cmdArgs, "--env", e)
 	}
 	cmdArgs = append(cmdArgs, envpass.Args(projectPath, os.Environ())...)
+	cmdArgs = append(cmdArgs, phpDet.SiteEnvArgs(projectPath)...)
 	cmdArgs = append(cmdArgs, container, "php")
 	cmdArgs = append(cmdArgs, argv...)
 

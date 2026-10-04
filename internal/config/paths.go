@@ -292,6 +292,33 @@ func DumpsIniFile() string {
 	return filepath.Join(DumpsAssetsDir(), "97-lerd-dump.ini")
 }
 
+// ProvidedEnvDir is where env_provider output is kept: under XDG_RUNTIME_DIR,
+// which is tmpfs, so secrets never reach disk. Empty when there is no runtime
+// dir (macOS, or a session without one); the feature is off there.
+func ProvidedEnvDir() string {
+	if runtime.GOOS != "linux" {
+		return ""
+	}
+	dir := os.Getenv("XDG_RUNTIME_DIR")
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, "lerd", "env")
+}
+
+// ProvidedEnvContainerDir is where ProvidedEnvDir is mounted in FPM containers.
+const ProvidedEnvContainerDir = "/run/lerd/env"
+
+// ProvidedEnvFile is the provided-env file for a site, named after the site
+// because that is the LERD_SITE value nginx and the exec paths hand PHP.
+func ProvidedEnvFile(siteName string) string {
+	dir := ProvidedEnvDir()
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, siteName+".env")
+}
+
 // DevtoolsCollectorFile is the host path for the framework-neutral collector
 // (agnostic mail and other shared-library capture), loaded lazily by the
 // lerd_devtools extension. Lives in the dumps assets dir (mounted at

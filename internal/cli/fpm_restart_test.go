@@ -23,7 +23,7 @@ func stubEnsurePath(t *testing.T) {
 		writeFPMQuadlet, buildFPMImageTo = origWrite, origBuild
 		ensureXdebugIni, startUnitFn, restartUnitFn = origXdebug, origStart, origRestart
 	})
-	writeFPMQuadlet = func(string) error { return nil }
+	writeFPMQuadlet = func(string) (bool, error) { return false, nil }
 	ensureXdebugIni = func(string) error { return nil }
 }
 
@@ -117,5 +117,24 @@ func TestRestartRebuiltFPMUnits_nothingRebuiltBouncesNothing(t *testing.T) {
 
 	if restarted != 0 {
 		t.Errorf("restarted %d units for a fetch that rebuilt nothing", restarted)
+	}
+}
+
+// A unit rewritten under a running container (a new mount after an upgrade)
+// must bounce it too, or FPM keeps running on the old unit until a restart.
+func TestEnsureFPMQuadletTo_restartsWhenTheUnitChanged(t *testing.T) {
+	stubEnsurePath(t)
+
+	var restarted []string
+	startUnitFn = func(string) error { return nil }
+	restartUnitFn = func(name string) error { restarted = append(restarted, name); return nil }
+	writeFPMQuadlet = func(string) (bool, error) { return true, nil }
+	buildFPMImageTo = func(_ string, _ bool, _ io.Writer) (bool, error) { return false, nil }
+
+	if err := ensureFPMQuadletTo("8.3", io.Discard); err != nil {
+		t.Fatalf("ensureFPMQuadletTo: %v", err)
+	}
+	if !reflect.DeepEqual(restarted, []string{"lerd-php83-fpm"}) {
+		t.Errorf("restarted = %v, want [lerd-php83-fpm]", restarted)
 	}
 }
