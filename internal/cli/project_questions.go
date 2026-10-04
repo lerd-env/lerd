@@ -212,7 +212,15 @@ func addSuggestedServices(options, selected []string, fw *config.Framework, dbNa
 	}
 	var offered []config.ServiceSuggestion
 	picked := config.PickPackageSuggestions(fw.PackageServices, func(name string) bool { return slices.Contains(selected, name) }, installed)
-	for _, sg := range append(append([]config.ServiceSuggestion(nil), fw.SuggestServices...), picked...) {
+	// The pick skips a service the project's env already selected, but the
+	// package is still why that service is there, so it keeps the reason.
+	reasons := append([]config.ServiceSuggestion(nil), picked...)
+	for _, sg := range fw.PackageServices {
+		if slices.Contains(selected, sg.Name) {
+			reasons = append(reasons, sg)
+		}
+	}
+	for _, sg := range append(append([]config.ServiceSuggestion(nil), fw.SuggestServices...), reasons...) {
 		name := sg.Name
 		if name == "" || dbNameSet[name] || !available(name) {
 			continue

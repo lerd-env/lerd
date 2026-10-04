@@ -91,6 +91,24 @@ func TestAddSuggestedServicesNamesThePackage(t *testing.T) {
 	}
 }
 
+// A service the project's env already selected, Redis from a stock Laravel
+// .env.example, still names the package that wants it.
+func TestAddSuggestedServicesNamesThePackageOfAPreselectedService(t *testing.T) {
+	fw := &config.Framework{
+		PackageServices: []config.ServiceSuggestion{{Name: "redis", Reason: "Redis server for predis", Package: "predis/predis"}},
+	}
+
+	_, selected, offered := addSuggestedServices([]string{"redis"}, []string{"redis"}, fw, nil, false, allPresetsAvailable, nothingInstalled)
+
+	want := []config.ServiceSuggestion{{Name: "redis", Reason: "Redis server for predis", Package: "predis/predis"}}
+	if !slices.Equal(offered, want) {
+		t.Errorf("offered = %v, want %v", offered, want)
+	}
+	if !slices.Equal(selected, []string{"redis"}) {
+		t.Errorf("selected = %v, want redis once", selected)
+	}
+}
+
 // The terminal form names the package beside a suggested service, falls back
 // to the reason, and leaves every other service bare.
 func TestServiceOptions(t *testing.T) {
