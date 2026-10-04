@@ -22,7 +22,6 @@ var osBranchAllowlist = map[string]int{
 	"internal/cli/hostproxy.go":       2,
 	"internal/cli/install.go":         2,
 	"internal/cli/update.go":          2,
-	"internal/dns/diagnose.go":        4,
 	"internal/git/copy.go":            2,
 	"internal/node/bun.go":            1,
 	"internal/node/mise.go":           1,
@@ -32,7 +31,6 @@ var osBranchAllowlist = map[string]int{
 	"internal/podman/network.go":      1,
 	"internal/podman/upgradeheal.go":  1,
 	"internal/systemd/networkwait.go": 1,
-	"internal/watcher/dns.go":         2,
 }
 
 // TestSharedCodeDoesNotBranchOnGOOS fails when a file compiled for more than

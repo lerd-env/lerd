@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -384,30 +383,7 @@ func WatchDNS(interval time.Duration, tld string) {
 		},
 	}
 
-	// Container DNS re-sync recovers from aardvark-dns forwarder staleness,
-	// which is specific to Linux rootless podman. macOS containers get DNS
-	// from the podman machine VM (ReadContainerDNS is nil there), so there
-	// is nothing to re-sync and the detection stays off.
-	if runtime.GOOS == "linux" {
-		deps.dnsEnvFingerprint = defaultDNSEnvFingerprint
-		deps.resyncContainerDNS = defaultResyncContainerDNS
-		// Restart nginx after a host resume leaves rootless networking in a bad
-		// state so .test sites return "Secure Connection Failed" until a manual
-		// lerd restart (issue #665). DNS resolution is already repaired below.
-		deps.nginxHealthy = defaultNginxHealthy
-		deps.repairNginx = defaultRepairNginx
-		deps.dnsDaemonAnswering = func() bool { return dns.DaemonAnswering(tld) }
-		deps.repairDNS = defaultRepairDNS
-		deps.isStopped = config.IsStopped
-	}
-
-	// A host suspend can stall the shared podman machine VM (issue #715); the
-	// resume tick restarts it so the MCP/exec path is healed before the next
-	// agent call. isStopped keeps a deliberate `lerd stop` from resurrecting it.
-	if runtime.GOOS == "darwin" {
-		deps.healMachine = defaultHealMachine
-		deps.isStopped = config.IsStopped
-	}
+	wireOSDNSDeps(&deps, tld)
 
 	// Cross-platform: heal a stale lan:expose .tld mapping after the host LAN
 	// IP changes. Bind the configured TLD so the tick body stays no-arg.
