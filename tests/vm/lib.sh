@@ -174,8 +174,10 @@ need_pyte() {
 # tui_screen <cols> <rows> <step...>: runs lerd tui in a pty of that size and
 # prints the screen as a terminal would show it after the steps. The TUI only
 # redraws what changed, so the raw stream is replayed through pyte rather than
-# grepped. Steps: wait:<regex> (up to 30s, fails the run), keys:<text> with
-# escapes (\x10 is ctrl+p, \t tab, \r enter, \x1b esc), sleep:<seconds>.
+# grepped. Steps: wait:<regex> (up to TUI_WAIT seconds, 30 by default, fails
+# the run), keys:<text> with
+# escapes (\x10 is ctrl+p, \t tab, \r enter, \x1b esc), sleep:<seconds>,
+# until:<regex>:<keys> (sends the keys, up to 30 times, until the regex shows).
 tui_screen() {
 	python3 - "$@" <<'PY'
 import codecs, fcntl, os, pty, re, select, struct, sys, termios, time
@@ -208,8 +210,20 @@ for step in steps:
             pump(0.15)
     elif kind == "sleep":
         pump(float(arg))
+    elif kind == "until":
+        regex, _, keys = arg.rpartition(":")
+        for _ in range(30):
+            if re.search(regex, text()):
+                break
+            for ch in codecs.decode(keys, "unicode_escape"):
+                os.write(fd, ch.encode())
+            pump(0.4)
+        if not re.search(regex, text()):
+            print("TUI-TIMEOUT pressing %r for /%s/" % (keys, regex))
+            ok = False
+            break
     elif kind == "wait":
-        end = time.time() + 30
+        end = time.time() + int(os.environ.get("TUI_WAIT", "30"))
         while not re.search(arg, text()) and time.time() < end:
             pump(0.3)
         if not re.search(arg, text()):

@@ -956,8 +956,9 @@ TUI:
 - [ ] Destructive actions are **absent** from the keys and from `ctrl+p`:
       nothing removes, drops, unlinks, restores, uninstalls, purges or resets
       (scope guard)
-- [ ] Below 96 columns the sidebar folds away and `\` opens it over the main
-      area; below 60×12 only "terminal too small" is drawn
+- [ ] Below 96 columns the sidebar folds away, and `tab` or `\` opens it over
+      the main area while `tab` or `esc` closes it again; below 60×12 only
+      "terminal too small" is drawn
 - [ ] Colours come from the terminal's own palette: a light and a dark profile
       (and an Omarchy theme switch) each read cleanly, with no fixed background
 - [ ] Dialogs and toasts draw over the dimmed screen; the debug window's Logs,
