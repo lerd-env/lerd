@@ -1,57 +1,157 @@
 # Debug package (lerd/debug)
 
-`lerd/debug` is a small Composer package for writing your own data into lerd's [Requests lens](queries.md#request-linking): rows on a request's timeline, log lines, and tabs of your own built from tables, figures and charts. It has no dependency on lerd and does nothing outside it, so it can stay in an app's dependencies everywhere.
+lerd already records most of what a request does without any code in your app: its queries, logs, cache calls, views, jobs, the framework's own phases and more, all shown in the [Requests lens](queries.md#request-linking). `lerd/debug` is a small Composer package for the rest: rows of your own on a request's timeline, log lines, and tabs with tables, figures and charts.
 
 ```bash
 composer require lerd/debug --dev
 ```
 
+Outside lerd, in production or on a machine without it, every call returns at once and nothing is kept, not even in memory, so the package is safe to leave in.
+
+## What lerd records on its own
+
+None of this needs the package. lerd reads it through its PHP extension and the [framework definitions](../usage/framework-definitions.md), so it works the moment a site is linked.
+
+**On every PHP site**
+
+- Queries through PDO, with bindings, the line that ran them, slow queries and N+1 warnings
+- `dump()` and `dd()` output
+- Log records written through Monolog
+- Mail sent through Symfony Mailer
+- Twig templates, Symfony events, HttpClient calls and Messenger messages
+- Exceptions reported to Sentry or Inspector, and messages sent through Symfony Notifier
+- Storage operations through Flysystem
+- The request and response: headers, query string, body, cookies and session, with credentials masked
+- Time spent in nginx and the FPM queue, and, with [browser capture](browser-capture.md) on, the page's own loading phases and the requests it sends afterwards
+
+**Per framework**
+
+Each framework adds its phases to the timeline, names the route that matched and, where it keeps one, who the request runs as. Console commands that only loop, like queue workers, are left out, while the jobs they run are each listed on their own.
+
+=== "Laravel"
+
+    - **Timeline:** Bootstrap, Routing, Middleware, Controller (by its action, or a closure by file and line), each View, Terminate
+    - **Route:** the route's name, and the middleware it ran through
+    - **User:** the first user a guard resolves, with the guard's name
+    - **Also:** cache calls with the store behind them, Redis commands, Eloquent models loaded, events, mail, notifications on every channel, HTTP client calls, jobs (a sync job listed under the request that ran it), the Storage disk an operation used
+    - **Livewire:** each component's mount, property update, method call and render, with what it was handed
+    - **Left out:** `queue:work`, `queue:listen`, `schedule:work`, Horizon and Reverb
+
+=== "Symfony"
+
+    - **Timeline:** Bootstrap, Routing, Handle, sending the response, Terminate, each Twig template
+    - **User:** the user in the security token the firewall stores
+    - **Also:** the session as it is saved, Messenger messages from dispatch to handled or failed, mail, notifier messages, HTTP client calls, events
+    - **Workers:** `messenger:consume` is hidden by default, while each message it handles is listed on its own
+
+=== "Yii 2"
+
+    - **Timeline:** Bootstrap, Routing, the controller's filters, the action (as `controller/action`), each view file, sending the response
+    - **Route:** the `controller/action` id, recorded even when a filter stops the action
+    - **User:** the identity `yii\web\User` takes on login, cookie login or session restore
+    - **Also:** the session, yii2-queue jobs
+    - **Left out:** `queue/listen`
+
+=== "CakePHP"
+
+    - **Timeline:** Bootstrap, the middleware queue, the controller action (as `Controller@action`), each view, sending the response
+    - **User:** the identity cakephp/authentication builds
+    - **Also:** the session, cakephp/queue jobs
+    - **Left out:** `queue worker`
+
+=== "CodeIgniter 4"
+
+    - **Timeline:** Bootstrap, Routing, the required and route filters, the controller, each view, sending the response
+    - **Route:** the route pattern that matched
+    - **User:** who logged in through Shield
+    - **Also:** the session, codeigniter4/queue jobs
+    - **Left out:** `queue:work`
+
+=== "Drupal"
+
+    - **Timeline:** kernel boot, routing, the controller (as `Class@method`), rendering the page, each Twig template, sending the response, terminate, cron
+    - **Route:** the route name, such as `user.login`
+    - **User:** the account Drupal sets for the request
+    - **Also:** the session, events, queue workers' items as jobs
+    - **Left out:** `drush watchdog:tail` and `drush runserver`
+
+    Drupal caches rendered pages and blocks, so a cached page shows fewer phases than one rendered from scratch.
+
+=== "TYPO3"
+
+    - **Timeline:** Bootstrap, matching the site and the page, the frontend or backend middleware stack, the page handler, each Extbase controller, each Fluid view, sending the response
+    - **Route:** the page uid on the frontend, the route identifier in the backend
+    - **User:** the frontend or backend user
+    - **Also:** the session, scheduler tasks as jobs
+    - **Left out:** `messenger:consume`
+
+=== "Magento"
+
+    - **Timeline:** Bootstrap, launching the app, each router asked, the controller (as the full action name), rendering the layout, each `.phtml` template, sending the response
+    - **Route:** the full action name, such as `catalog_product_view`
+    - **User:** the logged-in customer, or the admin user
+    - **Also:** the session, message queue consumers' messages as jobs
+    - **Left out:** `queue:consumers:start`
+
+=== "Tempest"
+
+    - **Timeline:** Bootstrap with discovery, Routing, the route's middleware, Handle, each view, sending the response
+    - **Route:** the route's URI pattern
+    - **User:** the user on login and as the session resolves it
+    - **Also:** the session, async commands as jobs
+    - **Left out:** `command:monitor` and the log tails
+
+=== "WordPress"
+
+    WordPress and Bedrock are mostly plain functions, so less of them can be timed.
+
+    - **Timeline:** the main query, and on the REST API the whole request and the endpoint
+    - **Route:** the rewrite rule that matched, or the REST path
+    - **User:** the logged-in user
+    - **Also:** Action Scheduler jobs, by the hook they run
+
+    WordPress talks to the database through mysqli, which lerd does not capture yet, so its queries do not show.
+
+## What the package adds
+
 Everything goes through the `Lerd\Debug\Lerd` class.
 
-## When it does anything
-
-`Lerd::enabled()` reports whether lerd is capturing the current process, read once from the constants lerd's PHP extension defines (`LERD_DEVTOOLS_ON`, or `LERD_DEVTOOLS_JOBS` in a worker). When it is not, in production, on a machine without lerd, or with the Debug window switched off, every call returns at once and nothing is kept, not even in memory. `Lerd::enable(true)` forces capture on, which is what a test suite wants; `Lerd::enable(false)` switches it off by hand, and `Lerd::enable(null)` goes back to asking lerd.
-
-## Timeline
+### Your own timeline rows
 
 ![A request's timeline in the Requests lens, where an app's own rows such as Price calculation sit among the framework's phases](/assets/screenshots/request-performance.png)
 
 ```php
 use Lerd\Debug\{Lerd, Color};
 
+// Time a callback; you get its return value back.
 $pdf = Lerd::timeline()->measure('Render invoice PDF', fn () => $invoice->render(), 'billing', Color::Amber, ['order' => $order->id]);
 
+// Mark a moment.
 Lerd::timeline()->event('Payment authorised', 'billing', Color::Emerald)->stop();
 ```
 
-`measure()` runs a callback, returns what it returns, and puts a span on the timeline even when the callback throws. `event()` hands back an event to time by hand, below; stopped without being started, it is a moment. Each row has a label, a category, a colour and details:
+Each row has a label, a **category** (free text such as `billing`, which becomes a filter), a **colour** from the `Color` enum (Blue, Indigo, Violet, Pink, Rose, Orange, Amber, Lime, Emerald, Teal, Cyan, Slate) and **details** shown when you hover it. A measured callback is still drawn when it throws.
 
-- **Category** is free text, `billing` or `imports`, and becomes a filter beside lerd's own layers.
-- **Colour** comes from the `Color` enum: Blue, Indigo, Violet, Pink, Rose, Orange, Amber, Lime, Emerald, Teal, Cyan, Slate.
-- **Details** show in the row's popover, nested values as a tree.
-
-### Events timed by hand
-
-`Lerd::timeline()->event()` hands back an event to time yourself. Nothing reaches lerd until it is stopped.
+For work you start and stop yourself:
 
 ```php
 $sync = Lerd::timeline()->event('Stock sync', 'inventory', Color::Violet)->start();
 // ... the work ...
 $sync->with(['skus' => count($skus)])->stop();
 
-// The same running event, by name, from somewhere else:
+// The same running event, by name, from another part of the app:
 Lerd::timeline()->event('Stock sync')->stop();
 
-// Or around a callback:
+// Around a callback:
 $rows = Lerd::timeline()->event('Import feed')->run(fn () => $importer->run());
 
-// Or for work that already happened:
+// For work that already happened:
 Lerd::timeline()->event('Queue wait')->startAt($job->queuedAt)->duration($waitedMs)->stop();
 ```
 
-An event stopped after `start()` is a span, one stopped without it a moment. Stopping twice does nothing, and `color()`, `category()` and `with()` can be set at any point before it stops. `event()` gives back the same event for the same name until it is stopped, so one part of an app can start it and another stop it.
+Nothing reaches lerd until an event stops. Started first, it is a span; stopped without starting, a moment. Stopping twice does nothing.
 
-## Logging
+### Log lines
 
 ```php
 Lerd::info('Cache warmed', ['keys' => 120]);
@@ -60,17 +160,17 @@ Lerd::notice('Hit the fast path', ['performance' => true]);
 Lerd::log('error', 'Import failed', ['file' => $path]);
 ```
 
-A line written this way lands in the request's Log tab and on its timeline like any other log line, on the `lerd` channel, at one of the PSR-3 levels (`emergency`, `alert`, `critical`, `error`, `warning`, `notice`, `info`, `debug`). Two context keys are flags rather than context: `trace` keeps the call's stack trace with the line, and `performance` also shows the line at the top of the Performance tab.
+Lines land in the request's Log tab and on its timeline, on the `lerd` channel, at any PSR-3 level. Two context keys are switches: `trace` keeps the stack trace with the line, and `performance` also pins it to the top of the Performance tab.
 
-## Who the request runs as
+### Who the request runs as
 
 ```php
 Lerd::auth($user->id, $user->email, $user->name, 'api');
 ```
 
-The request's header shows who it ran as, below the controller. On Laravel the adapter sets this itself from the first user a guard resolves, with the guard's name, and on Symfony the store declares the security token storage, so `Lerd::auth()` is for an app that authenticates its own way. Only the first user a request reports is shown.
+Most frameworks report this on their own (see above). Use it when your app authenticates its own way. Only the first user a request reports is shown.
 
-## Tabs of your own
+### Tabs of your own
 
 ![The Cart tab from the example below, with counters, a key-value block, a table and a bar chart](/assets/screenshots/request-custom-tab.png)
 
@@ -87,73 +187,86 @@ Lerd::tab('Cart')->columns(2)
 Lerd::tab('Cart')->text('Coupon WELCOME applied');
 ```
 
-`Lerd::tab()` gives back the same tab for the same name, and each block reaches lerd as it is added, so several parts of an app can write to one tab. The blocks:
-
-| Method | Block |
+| Method | Shows |
 |---|---|
-| `table($columns, $rows)` | Rows under named columns; a row is a list in column order or keyed by column. |
-| `keyValue($values)` | Names and values; nested values render as a tree to fold open. |
-| `counters($counters)` | Headline numbers in a row, a name above each value. |
-| `code($code, $language)` | Code or other preformatted text. |
-| `text($text)` | A paragraph. |
-| `chart($chart)` | A line, bar or pie chart. |
+| `table($columns, $rows)` | Rows under named columns |
+| `keyValue($values)` | Names and values, nested values as a tree |
+| `counters($counters)` | Headline numbers side by side |
+| `code($code, $language)` | Code or other preformatted text |
+| `text($text)` | A paragraph |
+| `chart($chart)` | A line, bar, pie or exploded pie chart |
 
-Every block takes an optional heading and a `span`. `columns(n)` lays the tab out in up to four columns on a wide screen, a block spanning one unless told otherwise; a narrow screen shows one column.
+Every block takes an optional heading and a `span`. `columns(n)` lays the tab out in up to four columns on a wide screen. `before('database')` and `after('performance')` place the tab among lerd's own.
 
-### Charts
-
-`Chart::line()`, `Chart::bar()` and `Chart::pie()` take `Series`, each a name, a value per label and an optional colour; a series without one takes the next colour in the palette. The chart draws over every series' labels in the order first seen, and a label a series has no value for draws as nothing. A pie shows its one series' labels as slices.
+Charts take one or more `Series`, each a name, a value per label and an optional colour:
 
 ```php
 Chart::line(
     new Series('p50', ['10:00' => 120, '10:05' => 135]),
     Series::make('p95', Color::Rose)->point('10:00', 310)->point('10:05', 420),
-)->add(new Series('p99', ['10:05' => 980]));
+);
 ```
 
-## Laravel
+## Setup per framework
 
-The package's `Lerd\Debug\Frameworks\Laravel\DebugServiceProvider` is discovered on its own. `php artisan vendor:publish --tag=lerd-config` publishes `config/lerd.php`, whose `enabled` (`LERD_ENABLED`) switches the package off. It forgets the entries `Lerd` keeps once a queued job or an Octane request, task or tick is done, so a long-running worker does not carry one job's entries into the next. Nothing else needs registering: `Lerd` is a plain class with static methods.
+The package works without any setup. A framework integration adds a switch to turn it off from the app's config, and clears what the package keeps between the jobs of a long-running worker.
 
-## Symfony
+=== "Laravel"
 
-Register `Lerd\Debug\Frameworks\Symfony\LerdDebugBundle` in `config/bundles.php`. It forgets the entries `Lerd` keeps when Symfony resets its services between requests in a worker runtime (FrankenPHP, RoadRunner, through `kernel.reset`) and after each Messenger message, handled or failed. `lerd.enabled: false` in `config/packages/lerd.yaml` switches the package off.
+    Discovered on its own. Publish the config to get the switch:
 
-## Yii
+    ```bash
+    php artisan vendor:publish --tag=lerd-config
+    ```
 
-List `Lerd\Debug\Frameworks\Yii\Bootstrap` under `bootstrap` in the app's config. It forgets the entries `Lerd` keeps after each yii2-queue job, run or failed, and a `lerd.enabled` param set to `false` switches the package off.
+    `enabled` in `config/lerd.php` (`LERD_ENABLED`) turns the package off. Kept entries are cleared after each queued job and each Octane request, task or tick.
 
-```php
-// config/web.php and config/console.php
-'bootstrap' => ['log', Lerd\Debug\Frameworks\Yii\Bootstrap::class],
-```
+=== "Symfony"
 
-## Other frameworks
+    Register the bundle:
 
-`Lerd` needs nothing registered, so it works the same in CakePHP, CodeIgniter, Drupal, TYPO3, Magento, Tempest, WordPress or plain PHP. What an integration adds is a switch in the app's own config and forgetting kept entries between the jobs of a long-running worker; without one, `Lerd::flush()` at the end of each job does the second. The framework's own phases, route and user come from lerd's framework definitions either way, not from this package.
+    ```php
+    // config/bundles.php
+    Lerd\Debug\Frameworks\Symfony\LerdDebugBundle::class => ['dev' => true],
+    ```
 
-## Kept entries
+    `lerd.enabled: false` in `config/packages/lerd.yaml` turns the package off. Kept entries are cleared between requests in a worker runtime (FrankenPHP, RoadRunner) and after each Messenger message.
 
-Every entry passes `Lerd::track()`, which keeps the last 500 for `Lerd::entries()`, handy in a test that asserts what an app wrote. `Lerd::flush()` forgets them, along with any named events not yet stopped.
+=== "Yii 2"
 
-## Objects of your own
+    Add the bootstrap class to the app's config:
 
-What `Lerd` takes is described by contracts in `Lerd\Debug\Contracts`, and no class in the package is final, so an app can hand over its own objects:
+    ```php
+    // config/web.php and config/console.php
+    'bootstrap' => ['log', Lerd\Debug\Frameworks\Yii\Bootstrap::class],
+    ```
+
+    A `lerd.enabled` param set to `false` turns the package off. Kept entries are cleared after each yii2-queue job.
+
+=== "Any other"
+
+    Nothing to register. In a long-running worker, call `Lerd::flush()` after each job.
+
+## In tests
+
+`Lerd::enable(true)` turns capture on in a test suite, `Lerd::enable(false)` off, and `Lerd::enable(null)` goes back to asking lerd. The package keeps the last 500 entries for `Lerd::entries()`, so a test can assert what the app wrote; `Lerd::flush()` clears them.
+
+## Bringing your own objects
+
+What `Lerd` accepts is described by interfaces in `Lerd\Debug\Contracts`, and no class is final, so a report object of your own can implement `Chart` and be passed to `chart()`, or a `Block` of your own be added to a tab with `Tab::add()`.
 
 | Contract | Describes |
 |---|---|
-| `Trackable` | Anything `Lerd::track()` accepts. |
-| `TimelineEntry` | A row on the timeline. |
-| `LogEntry` | A log line. |
-| `TabEntry` | A block added to a tab, with the tab it belongs to. |
-| `Tab` | A tab: its id, title, columns, and adding a block. |
-| `Block` | A block of a tab. |
-| `Chart`, `Series` | A chart block and its series. |
+| `Trackable` | Anything `Lerd::track()` accepts |
+| `TimelineEntry` | A row on the timeline |
+| `LogEntry` | A log line |
+| `TabEntry` | A block added to a tab |
+| `Tab` | A tab |
+| `Block` | A block of a tab |
+| `Chart`, `Series` | A chart and its series |
 
-A report object can implement `Chart` and be passed to `chart()` as it is, or a `Block` of your own be passed to `Tab::add()`.
+??? note "How lerd reads it"
 
-## How lerd reads it
+    Every entry passes `Lerd::track()`, which lerd's framework store declares as a seam. lerd's extension observes the call and its collector reads the entry, so the package calls no lerd function and editors and static analysis know every method.
 
-lerd's framework store declares a `lerd` seam on `Lerd::track()` for the `lerd/debug` package. lerd's extension observes the call and its collector reads the entry, so the package needs no lerd function and editors and static analysis know every call.
-
-What the collector reads is produced by a renderer in `Lerd\Debug\Rendering`, one per version of lerd's schema. The collector names the version it reads (`DEBUG_SCHEMA`, 1 today) and gets the newest renderer the package has that is no newer, so either side can move to a new schema without breaking the other. A block or entry of a type the renderer does not know describes itself through its own `jsonSerialize()`.
+    The collector reads the entry through a renderer in `Lerd\Debug\Rendering`, one per version of lerd's schema. lerd names the version it reads (1 today) and gets the newest renderer the package has that is no newer, so either side can upgrade without breaking the other.
