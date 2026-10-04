@@ -105,7 +105,7 @@ check_not "10.41 [partial] and back to php-fpm" 'runtime frankenphp' site_view "
 expect_200 "10.41 [partial]" "https://$host"
 # xdg-open stand-in: records what the TUI asked to open.
 fake=$HOME/lerd-vm-fakebin
-mkdir -p "$fake" && printf '#!/bin/sh\necho "$@" >>%s/opened\n' "$fake" >"$fake/xdg-open" && chmod +x "$fake/xdg-open" && rm -f "$fake/opened"
+mkdir -p "$fake" && printf '#!/bin/sh\necho "$@" >>%s/opened\n' "$fake" >"$fake/xdg-open" && chmod +x "$fake/xdg-open" && rm -f "$HOME/lerd-vm-fakebin/opened"
 PATH=$fake:$PATH tui_screen 140 45 "wait:Dashboard" "keys:\\x10" "wait:Go to or do" "keys:open folder $host" "sleep:1" "keys:\\r" "sleep:2" >/dev/null
 check_out "10.41 [partial] open folder hands the site's path to the desktop" "$DEMO_DIR" cat "$fake/opened"
 check_out "10.41 [partial] new worktree opens the command prompt prefilled" 'lerd worktree add' \
@@ -160,7 +160,7 @@ check_out "10.48 the shell drop-in runs in the site's container and comes back" 
 	tui_screen 140 45 "wait:Dashboard" "keys:\\x10" "wait:Go to or do" "keys:open shell $host" "sleep:1" "keys:\\r" "sleep:4" "keys:echo VMSHELL\$((40+2))\\r" "wait:VMSHELL42" "keys:exit\\r" "wait:exited"
 check_out "10.48 a service with a dashboard shows its URL" 'http://localhost:8025' \
 	tui_screen 140 45 "wait:Dashboard" "keys:\\x10" "wait:Go to or do" "keys:open service mailpit" "sleep:1" "keys:\\r" "wait:localhost:8025"
-rm -f "$fake/opened"
+rm -f "$HOME/lerd-vm-fakebin/opened"
 PATH=$fake:$PATH tui_screen 140 45 "wait:Dashboard" "keys:\\x10" "wait:Go to or do" "keys:open service dashboard mailpit" "sleep:1" "keys:\\r" "sleep:3" >/dev/null
 check_out "10.48 opening it hands the dashboard URL to the browser" 'http://localhost:8025' cat "$fake/opened"
-rm -rf "$fake"
+rm -rf "$HOME/lerd-vm-fakebin"
