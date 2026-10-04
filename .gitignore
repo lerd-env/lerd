@@ -20,3 +20,6 @@ docs/public/icons/icon.svg
 
 # Tooling run from the repo root leaves this behind; the UI has its own copy.
 node_modules/
+
+# Left behind when a Windows shell redirects to NUL through a POSIX shell.
+/NUL
