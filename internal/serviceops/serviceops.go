@@ -1138,6 +1138,9 @@ func EnsureServiceRunning(name string) error {
 	}
 	status, _ := podman.UnitStatus(unit)
 	if status == "active" {
+		// A running service is not paused, whatever started it; a stale pause
+		// would make the next lerd start skip it while a site still needs it.
+		_ = config.SetServicePaused(name, false)
 		if err := waitReadyFn(name, 30*time.Second); err != nil {
 			return fmt.Errorf("%s is active but not yet ready: %w", name, err)
 		}
@@ -1168,6 +1171,7 @@ func EnsureServiceRunning(name string) error {
 	if err := startUnitRetry(unit); err != nil {
 		return err
 	}
+	_ = config.SetServicePaused(name, false)
 	return waitReadyFn(name, 60*time.Second)
 }
 

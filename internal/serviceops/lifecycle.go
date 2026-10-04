@@ -114,6 +114,9 @@ func wakeService(name string, seen map[string]bool) error {
 	if err := wakeStartUnit(unit); err != nil {
 		return err
 	}
+	// A dependency the user had stopped is running again now, so it is no
+	// longer paused.
+	_ = config.SetServicePaused(name, false)
 	return waitReadyFn(name, 60*time.Second)
 }
 
