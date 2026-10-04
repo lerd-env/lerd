@@ -45,42 +45,84 @@ func storeProvidedEnv(siteName string, data []byte) error {
 	if err := providedEnvSSH(providedEnvWriteScript(siteName), data, nil); err != nil {
 		return err
 	}
-	if files := providedEnvVMFiles(); files != nil {
-		files[siteName+".env"] = true
-	}
+	providedEnvListing.add(siteName + ".env")
 	return nil
 }
 
-// dropProvidedEnv only reaches into the VM for a file that is there, so sites
-// without a provider cost no ssh round-trip each on lerd start and lerd env.
 func dropProvidedEnv(siteName string) {
 	if !validProvidedEnvSite(siteName) || providedEnvSupported() != nil {
 		return
 	}
-	files := providedEnvVMFiles()
-	if files != nil && !files[siteName+".env"] {
+	dropProvidedEnvVM(siteName)
+}
+
+// dropProvidedEnvVM skips the ssh only when the current pass listed the dir and
+// the file is not there. Outside a pass it always removes: lerd-ui and the
+// watcher live for days, and another process may have written it since.
+func dropProvidedEnvVM(siteName string) {
+	file := siteName + ".env"
+	if listed, has := providedEnvListing.has(file); listed && !has {
 		return
 	}
-	if providedEnvSSH(providedEnvRemoveScript(siteName), nil, nil) == nil && files != nil {
-		delete(files, siteName+".env")
+	if providedEnvSSH(providedEnvRemoveScript(siteName), nil, nil) == nil {
+		providedEnvListing.remove(file)
 	}
 }
 
-// providedEnvVMFiles lists the VM's provided-env dir once per process. nil when
-// the listing failed, so callers fall back to trying the removal anyway.
-var providedEnvVMFiles = sync.OnceValue(func() map[string]bool {
+// beginProvidedEnvPass lists the VM dir once for a pass over every site, so
+// sites without a provider cost no ssh each. Call the returned func to end it.
+func beginProvidedEnvPass() func() {
+	if providedEnvSupported() != nil {
+		return func() {}
+	}
 	var out bytes.Buffer
 	if err := providedEnvSSH(providedEnvListScript(), nil, &out); err != nil {
-		return nil
+		return func() {}
 	}
 	files := map[string]bool{}
 	for _, f := range strings.Fields(out.String()) {
 		files[f] = true
 	}
-	return files
-})
+	providedEnvListing.set(files)
+	return func() { providedEnvListing.set(nil) }
+}
 
-func providedEnvSSH(script string, stdin []byte, stdout *bytes.Buffer) error {
+// providedEnvListing is locked because lerd-ui can unlink while a start runs.
+var providedEnvListing vmListing
+
+type vmListing struct {
+	mu    sync.Mutex
+	files map[string]bool
+}
+
+func (l *vmListing) set(files map[string]bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.files = files
+}
+
+func (l *vmListing) has(file string) (listed, has bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.files != nil, l.files[file]
+}
+
+func (l *vmListing) add(file string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.files != nil {
+		l.files[file] = true
+	}
+}
+
+func (l *vmListing) remove(file string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.files, file)
+}
+
+// providedEnvSSH is a var so tests can stand in for the Podman Machine.
+var providedEnvSSH = func(script string, stdin []byte, stdout *bytes.Buffer) error {
 	cmd := podman.Cmd(providedEnvSSHArgs(selectedMachineName(), script)...)
 	if stdin != nil {
 		cmd.Stdin = bytes.NewReader(stdin)

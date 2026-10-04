@@ -21,6 +21,9 @@ func providedEnvSupported() error {
 // the dir, since systemd starts FPM on boot without lerd.
 func ensureProvidedEnvDir() {}
 
+// beginProvidedEnvPass is a no-op here: dropping a local file costs no ssh.
+func beginProvidedEnvPass() func() { return func() {} }
+
 func storeProvidedEnv(siteName string, data []byte) error {
 	return writeProvidedEnv(config.ProvidedEnvFile(siteName), data)
 }
