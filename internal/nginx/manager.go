@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,6 +22,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/nativephp"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -656,7 +656,7 @@ func GenerateCustomSSLVhost(site config.Site) error {
 // macOS resolves host.containers.internal via gvproxy; on Linux we reuse the
 // routable gateway IP the probe cached in the hosts file (pure read, no podman).
 func hostProxyUpstream() string {
-	if runtime.GOOS == "darwin" {
+	if platform.Current.UsesMachineVM {
 		return "host.containers.internal"
 	}
 	if ip := podman.ReadHostGatewayFromFile(); ip != "" {
@@ -936,7 +936,7 @@ const WakeHoldPath = "/_lerd/wake"
 // static waking page, so the app's own errors reach the client untouched.
 func wakeHoldLocations() string {
 	upstream := "http://host.containers.internal:7073" + WakeHoldPath
-	if runtime.GOOS != "darwin" {
+	if !platform.Current.UsesMachineVM {
 		upstream = "http://unix:" + config.UISocketPath() + ":" + WakeHoldPath
 	}
 	return fmt.Sprintf(`    location / {
@@ -1763,7 +1763,7 @@ func EnsureLerdVhost() error {
 // it with what is on disk before touching the file.
 func renderLerdVhost() (string, error) {
 	var content string
-	if runtime.GOOS == "darwin" {
+	if platform.Current.UsesMachineVM {
 		token, err := LoadOrGenerateTrustToken()
 		if err != nil {
 			return "", fmt.Errorf("loading trust token: %w", err)

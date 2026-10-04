@@ -2,11 +2,11 @@ package cli
 
 import (
 	"fmt"
-	"runtime"
 	"sync/atomic"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/spf13/cobra"
 )
 
@@ -77,7 +77,7 @@ No manual 'lerd stop && lerd start' needed.`,
 				return nil
 			}
 			feedback.Done("worker mode set to " + feedback.Val(mode) + " (was " + prev + ")")
-			if runtime.GOOS == "darwin" {
+			if platform.Current.WorkerModes {
 				feedback.Note("active workers have been restarted in the new shape")
 			} else {
 				feedback.Note("Linux always uses the exec runtime; this setting only applies on macOS")
@@ -166,7 +166,7 @@ func applyWorkersMode(newMode string, emit func(WorkerModePhaseEvent)) error {
 
 func printWorkersMode(cfg *config.GlobalConfig) error {
 	fmt.Printf("Worker mode: %s\n", cfg.WorkerExecMode())
-	if runtime.GOOS != "darwin" {
+	if !platform.Current.WorkerModes {
 		fmt.Println("  (Linux runs workers via podman exec under systemd; setting is informational.)")
 	}
 	return nil

@@ -46,6 +46,7 @@ import (
 	lerdNode "github.com/geodro/lerd/internal/node"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/phpsets"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/profiler"
 	"github.com/geodro/lerd/internal/reqstats"
@@ -421,7 +422,7 @@ func Start(currentVersion string) error {
 	// vhost falls back to TCP via host.containers.internal there.
 	// Errors are non-fatal — direct http://localhost:7073 access still
 	// works even if the socket can't be created.
-	if runtime.GOOS != "darwin" {
+	if !platform.Current.UsesMachineVM {
 		if err := os.MkdirAll(config.RunDir(), 0755); err != nil {
 			fmt.Printf("[WARN] creating %s: %v — lerd.localhost vhost will not work\n", config.RunDir(), err)
 		} else {
@@ -5615,7 +5616,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		PHPRuntime:                cfg.PHPRuntimeMode(),
 		PHPRuntimeSwitching:       config.RuntimeSwitchInProgress(),
 		PHPRuntimeApplies:         nativeRuntimeApplies(runtime.GOOS, runtime.GOARCH),
-		WorkerModeApplies:         runtime.GOOS == "darwin",
+		WorkerModeApplies:         platform.Current.WorkerModes,
 		IdleSuspendEnabled:        idleEnabled,
 		IdleSuspendTimeoutMinutes: idleMinutes,
 		IdleSuspendServices:       idleServices,
@@ -6795,7 +6796,7 @@ func handleSettingsPHPRuntime(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": false, "error": "unknown runtime"})
 		return
 	}
-	if body.Mode == config.PHPRuntimeNative && runtime.GOOS != "darwin" {
+	if body.Mode == config.PHPRuntimeNative && !platform.Current.NativePHPRuntime {
 		writeJSON(w, map[string]any{"ok": false, "error": "the native runtime is macOS only"})
 		return
 	}
