@@ -97,7 +97,7 @@ nav:
       - Framework Commands: usage/framework-commands.md
       - Tinker tab: features/tinker.md
       - Dump viewer: features/dumps.md
-      - Query viewer: features/queries.md
+      - Debug window: features/queries.md
       - Debug package: features/debug-package.md
       - Browser capture: features/browser-capture.md
       - System Tray: features/system-tray.md

@@ -146,5 +146,5 @@ browser_capture:
 - A page without `</head>` gets no script.
 - A strict nonce-based Content Security Policy blocks the injected script. A policy that allows `script-src 'self'` is fine.
 - Production bundles without source maps give stacks that point into minified files. Vite's dev server serves modules unbundled and reads fine.
-- The script wraps `window.fetch` and `XMLHttpRequest` to link each call to the PHP request it reached (see [request linking](queries.md#request-linking)); only failed calls of a class the site turned on are reported as failures.
+- The script wraps `window.fetch` and `XMLHttpRequest` to link each call to the PHP request it reached (see [request linking](queries.md#how-requests-are-linked)); only failed calls of a class the site turned on are reported as failures.
 - The reason a request got no response stays in the browser's own console; a page cannot read it.

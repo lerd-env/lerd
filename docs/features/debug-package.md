@@ -1,6 +1,6 @@
 # Debug package (lerd/debug)
 
-lerd already records most of what a request does without any code in your app: its queries, logs, cache calls, views, jobs, the framework's own phases and more, all shown in the [Requests lens](queries.md#request-linking). `lerd/debug` is a small Composer package for the rest: rows of your own on a request's timeline, log lines, and tabs with tables, figures and charts.
+lerd already records most of what a request does without any code in your app: its queries, logs, cache calls, views, jobs, the framework's own phases and more, all shown in the [Requests lens](queries.md#requests). `lerd/debug` is a small Composer package for the rest: rows of your own on a request's timeline, log lines, and tabs with tables, figures and charts.
 
 ```bash
 composer require lerd/debug --dev
