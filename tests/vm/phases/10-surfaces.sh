@@ -111,6 +111,7 @@ check_out "10.41 [partial] open folder hands the site's path to the desktop" "$D
 check_out "10.41 [partial] new worktree opens the command prompt prefilled" 'lerd worktree add' \
 	tui_screen 140 45 "wait:Dashboard" "keys:\\x10" "wait:Go to or do" "keys:new worktree $host" "sleep:1" "keys:\\r" "wait:worktree add"
 unit_file "after 10.41"
+check_out "10.41 [partial] each worker on the Overview names its unit" "lerd-queue-$name" site_view "$host"
 todo "10.41 the Stripe listener toggle" "needs a Stripe secret, which the test guests do not have"
 
 db=$(grep -m1 '^DB_DATABASE=' .env | cut -d= -f2)
@@ -120,6 +121,8 @@ check_out "10.42 [partial] Databases lists the site's database" "$db" echo "$dbs
 # A list row carries a size; the twin may only appear in the detail panel.
 check_not "10.42 [partial] its _testing twin is folded into the same row" "(▸ |  )${db}_testing +[0-9.]+ ?[KMG]?B" echo "$dbs"
 
+check_out "10.42 [partial] a service names its systemd unit" 'unit lerd-mysql' \
+	tui_screen 140 45 "wait:Dashboard" "keys:\\x10" "wait:Go to or do" "keys:open service mysql" "sleep:1" "keys:\\r" "wait:unit lerd-mysql"
 check_out "10.42 [partial] Update service from ctrl+p runs" 'lerd service update redis' \
 	tui_screen 140 45 "wait:Dashboard" "keys:\\x10" "wait:Go to or do" "keys:update service redis" "sleep:1" "keys:\\r" "wait:lerd service update redis"
 check_out "10.43 [partial] words match in any order" "Show Logs.*$host" bash -c "palette 'logs $host' | tr '\n' ' '"
