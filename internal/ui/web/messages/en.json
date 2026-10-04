@@ -1620,5 +1620,17 @@
   "setup_notify_hint": "Captured mail, failed workers, finished jobs",
   "setup_theme_title": "Match your desktop",
   "setup_theme_hint": "Wear your desktop's colours and follow them",
-  "setup_theme_cta": "Use {name}"
+  "setup_theme_cta": "Use {name}",
+  "sites_openInEditor": "Open in editor",
+  "editor_label": "Editor",
+  "editor_auto": "Find installed editor",
+  "editor_custom": "Custom command",
+  "editor_settingsTitle": "Editor",
+  "editor_settingsDescription": "The editor file paths in the Debug window open in. A site can pick its own in its controls.",
+  "editor_groupFound": "Found on this system",
+  "editor_groupOther": "Choose",
+  "editor_customOption": "Custom…",
+  "editor_customTitle": "Custom editor",
+  "editor_customHint": "Use {file} and {line} where the path and line go. A URL (scheme://…) opens through your desktop, anything else runs as a command.",
+  "editor_default": "Default editor"
 }

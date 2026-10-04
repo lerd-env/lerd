@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -135,5 +136,67 @@ func TestDirCommandDetectedEditorTakesBarePath(t *testing.T) {
 	want := []string{filepath.Join(bin, "zed"), "/home/u/site"}
 	if got := DirCommand("/home/u/site"); !reflect.DeepEqual(got, want) {
 		t.Fatalf("DirCommand() = %v, want %v", got, want)
+	}
+}
+
+// TestForSiteEditor checks a site's chosen editor opens through its URL when
+// its binary is not on PATH, and that an editor lerd does not know is refused.
+func TestForSiteEditor(t *testing.T) {
+	isolate(t)
+	t.Setenv("PATH", t.TempDir())
+	argv, url, err := For("phpstorm", "/home/u/app/routes/web.php", 12)
+	if err != nil || argv != nil || url != "phpstorm://open?file=/home/u/app/routes/web.php&line=12" {
+		t.Fatalf("For(phpstorm) = %v, %q, %v", argv, url, err)
+	}
+	if _, _, err := For("notepad", "/x", 1); err == nil || err.Error() != `unknown editor "notepad"` {
+		t.Fatalf("unknown editor err = %v", err)
+	}
+}
+
+// TestInstalledWithoutItsBinary checks an editor whose binary is not on PATH is
+// still found the way the platform installs it.
+func TestInstalledWithoutItsBinary(t *testing.T) {
+	isolate(t)
+	t.Setenv("PATH", t.TempDir())
+	dir := filepath.Join(os.Getenv("HOME"), ".local/share/applications")
+	applicationDirs = func() []string { return []string{dir} }
+	t.Cleanup(func() { applicationDirs = defaultApplicationDirs })
+	e, _ := Known("phpstorm")
+	if e.Installed() {
+		t.Fatal("phpstorm found with nothing installed")
+	}
+	// macOS knows an editor by its app bundle, Linux by a desktop entry
+	// claiming its URL scheme, which is how Toolbox and Flatpak install them.
+	if runtime.GOOS == "darwin" {
+		if err := os.MkdirAll(filepath.Join(os.Getenv("HOME"), "Applications", "PhpStorm.app"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		entry := "[Desktop Entry]\nName=PhpStorm\nMimeType=x-scheme-handler/phpstorm;\n"
+		if err := os.WriteFile(filepath.Join(dir, "jetbrains-phpstorm.desktop"), []byte(entry), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !e.Installed() {
+		t.Fatal("phpstorm not found without its binary")
+	}
+}
+
+// TestForCustomEditor checks a custom template opens through its command or its
+// URL, and only a template or a listed editor is a valid choice.
+func TestForCustomEditor(t *testing.T) {
+	isolate(t)
+	argv, url, err := For("myeditor --line {line} {file}", "/a/b.php", 3)
+	if err != nil || url != "" || !reflect.DeepEqual(argv, []string{"myeditor", "--line", "3", "/a/b.php"}) {
+		t.Fatalf("command template = %v, %q, %v", argv, url, err)
+	}
+	if _, url, _ := For("nova://open?file={file}&line={line}", "/a/b.php", 3); url != "nova://open?file=/a/b.php&line=3" {
+		t.Fatalf("url template = %q", url)
+	}
+	if !Valid("phpstorm") || !Valid("") || !Valid("x {file}") || Valid("notepad") {
+		t.Fatal("Valid misjudged a choice")
 	}
 }

@@ -62,7 +62,11 @@ func runCode(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	argv := editor.DirCommand(dir)
+	choice := ""
+	if site, err := config.FindSiteByPath(dir); err == nil && site != nil {
+		choice = site.Editor
+	}
+	argv := editor.DirFor(choice, dir)
 	if len(argv) == 0 {
 		return fmt.Errorf("no editor found; set `editor` in ~/.config/lerd/config.yaml")
 	}

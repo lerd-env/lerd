@@ -35,8 +35,12 @@ type Site struct {
 	// "on" always snapshots it, "off" never does, and the empty default follows
 	// the global config. See AutoSnapshotCovers.
 	AutoSnapshot string `yaml:"auto_snapshot,omitempty"`
-	Framework    string `yaml:"framework,omitempty"`
-	PublicDir    string `yaml:"public_dir,omitempty"`
+	// Editor is the editor this machine opens the site's files in, an ID from
+	// the curated list, kept here rather than in .lerd.yaml since it is a
+	// personal choice. Empty follows the global `editor` setting.
+	Editor    string `yaml:"editor,omitempty"`
+	Framework string `yaml:"framework,omitempty"`
+	PublicDir string `yaml:"public_dir,omitempty"`
 	// AppURL, when set, is the per-machine override for APP_URL in the
 	// project's env file. Lower priority than ProjectConfig.AppURL (which is
 	// committed to the repo) and higher priority than the default generator
@@ -259,6 +263,7 @@ type siteYAML struct {
 	PausedWorkers         []string            `yaml:"paused_workers,omitempty"`
 	Pinned                bool                `yaml:"pinned,omitempty"`
 	AutoSnapshot          string              `yaml:"auto_snapshot,omitempty"`
+	Editor                string              `yaml:"editor,omitempty"`
 	Framework             string              `yaml:"framework,omitempty"`
 	PublicDir             string              `yaml:"public_dir,omitempty"`
 	AppURL                string              `yaml:"app_url,omitempty"`
@@ -301,6 +306,7 @@ func (s Site) toYAML() siteYAML {
 		PausedWorkers:         s.PausedWorkers,
 		Pinned:                s.Pinned,
 		AutoSnapshot:          s.AutoSnapshot,
+		Editor:                s.Editor,
 		Framework:             s.Framework,
 		PublicDir:             s.PublicDir,
 		AppURL:                s.AppURL,
@@ -348,6 +354,7 @@ func (sy siteYAML) toSite() Site {
 		PausedWorkers:         sy.PausedWorkers,
 		Pinned:                sy.Pinned,
 		AutoSnapshot:          sy.AutoSnapshot,
+		Editor:                sy.Editor,
 		Framework:             sy.Framework,
 		PublicDir:             sy.PublicDir,
 		AppURL:                sy.AppURL,
@@ -774,6 +781,24 @@ func SetSitePinned(name string, pinned bool) error {
 	for i := range reg.Sites {
 		if reg.Sites[i].Name == name {
 			reg.Sites[i].Pinned = pinned
+			return SaveSites(reg)
+		}
+	}
+	return fmt.Errorf("site %q not found", name)
+}
+
+// SetSiteEditor atomically records the editor a site's files open in, the same
+// single-field rewrite under the write lock the other registry mutators do.
+func SetSiteEditor(name, editor string) error {
+	siteWriteMu.Lock()
+	defer siteWriteMu.Unlock()
+	reg, err := LoadSites()
+	if err != nil {
+		return err
+	}
+	for i := range reg.Sites {
+		if reg.Sites[i].Name == name {
+			reg.Sites[i].Editor = editor
 			return SaveSites(reg)
 		}
 	}

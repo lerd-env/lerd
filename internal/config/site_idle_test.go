@@ -210,3 +210,22 @@ func TestCloneSiteRegistry_idleSuspendedWorkersDeepCopy(t *testing.T) {
 		t.Error("clone shares IdleSuspendedWorkers slice with original")
 	}
 }
+
+// TestSetSiteEditor_preservesOtherFields pins that choosing a site's editor
+// rewrites only that field.
+func TestSetSiteEditor_preservesOtherFields(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	if err := SaveSites(&SiteRegistry{Sites: []Site{{Name: "a", Path: "/x", PHPVersion: "8.4", Pinned: true}}}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := SetSiteEditor("a", "phpstorm"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	reg, err := LoadSites()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if s := reg.Sites[0]; s.Editor != "phpstorm" || !s.Pinned || s.PHPVersion != "8.4" {
+		t.Errorf("site = %+v, want the editor set and the rest kept", s)
+	}
+}

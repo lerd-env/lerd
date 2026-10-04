@@ -1620,5 +1620,17 @@
   "setup_notify_hint": "Opgevangen mail, mislukte workers, afgeronde taken",
   "setup_theme_title": "Laat aansluiten op je desktop",
   "setup_theme_hint": "Neem de kleuren van je desktop over en volg ze",
-  "setup_theme_cta": "{name} gebruiken"
+  "setup_theme_cta": "{name} gebruiken",
+  "sites_openInEditor": "Openen in editor",
+  "editor_label": "Editor",
+  "editor_auto": "Geïnstalleerde editor zoeken",
+  "editor_custom": "Eigen commando",
+  "editor_settingsTitle": "Editor",
+  "editor_settingsDescription": "De editor waarin bestandspaden uit het Debug-venster openen. Een site kan in zijn bediening een eigen kiezen.",
+  "editor_groupFound": "Gevonden op dit systeem",
+  "editor_groupOther": "Kiezen",
+  "editor_customOption": "Eigen…",
+  "editor_customTitle": "Eigen editor",
+  "editor_customHint": "Gebruik {file} en {line} waar pad en regel horen. Een URL (scheme://…) opent via je bureaublad, al het andere draait als commando.",
+  "editor_default": "Standaardeditor"
 }

@@ -1620,5 +1620,17 @@
   "setup_notify_hint": "Email capturado, workers com falha, operações concluídas",
   "setup_theme_title": "Combinar com o ambiente de trabalho",
   "setup_theme_hint": "Use as cores do seu ambiente de trabalho e acompanhe-as",
-  "setup_theme_cta": "Usar {name}"
+  "setup_theme_cta": "Usar {name}",
+  "sites_openInEditor": "Abrir no editor",
+  "editor_label": "Editor",
+  "editor_auto": "Detectar editor instalado",
+  "editor_custom": "Comando personalizado",
+  "editor_settingsTitle": "Editor",
+  "editor_settingsDescription": "O editor em que os caminhos de arquivo da janela Debug abrem. Um site pode escolher o seu nos controles dele.",
+  "editor_groupFound": "Encontrados neste sistema",
+  "editor_groupOther": "Escolher",
+  "editor_customOption": "Personalizado…",
+  "editor_customTitle": "Editor personalizado",
+  "editor_customHint": "Use {file} e {line} onde entram o caminho e a linha. Uma URL (scheme://…) abre pelo desktop, qualquer outra coisa roda como comando.",
+  "editor_default": "Editor padrão"
 }

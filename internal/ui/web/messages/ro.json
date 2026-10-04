@@ -1620,5 +1620,17 @@
   "setup_notify_hint": "Mailuri capturate, workeri eșuați, operații terminate",
   "setup_theme_title": "Potrivește cu desktopul",
   "setup_theme_hint": "Preia culorile desktopului și urmează-le",
-  "setup_theme_cta": "Folosește {name}"
+  "setup_theme_cta": "Folosește {name}",
+  "sites_openInEditor": "Deschide în editor",
+  "editor_label": "Editor",
+  "editor_auto": "Detectează editorul instalat",
+  "editor_custom": "Comandă proprie",
+  "editor_settingsTitle": "Editor",
+  "editor_settingsDescription": "Editorul în care se deschid căile de fișiere din fereastra Debug. Un site își poate alege propriul editor din controalele sale.",
+  "editor_groupFound": "Găsite pe acest sistem",
+  "editor_groupOther": "Alege",
+  "editor_customOption": "Personalizat…",
+  "editor_customTitle": "Editor personalizat",
+  "editor_customHint": "Folosește {file} și {line} unde intră calea și linia. Un URL (scheme://…) se deschide prin desktop, orice altceva rulează ca o comandă.",
+  "editor_default": "Editor implicit"
 }

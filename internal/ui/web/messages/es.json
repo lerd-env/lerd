@@ -1620,5 +1620,17 @@
   "setup_notify_hint": "Correo capturado, workers fallidos, tareas terminadas",
   "setup_theme_title": "Combina con tu escritorio",
   "setup_theme_hint": "Usa los colores de tu escritorio y síguelos",
-  "setup_theme_cta": "Usar {name}"
+  "setup_theme_cta": "Usar {name}",
+  "sites_openInEditor": "Abrir en el editor",
+  "editor_label": "Editor",
+  "editor_auto": "Detectar editor instalado",
+  "editor_custom": "Comando propio",
+  "editor_settingsTitle": "Editor",
+  "editor_settingsDescription": "El editor en el que se abren las rutas de archivo de la ventana Debug. Cada sitio puede elegir el suyo en sus controles.",
+  "editor_groupFound": "Encontrados en este sistema",
+  "editor_groupOther": "Elegir",
+  "editor_customOption": "Personalizado…",
+  "editor_customTitle": "Editor personalizado",
+  "editor_customHint": "Usa {file} y {line} donde van la ruta y la línea. Una URL (scheme://…) se abre a través del escritorio; cualquier otra cosa se ejecuta como comando.",
+  "editor_default": "Editor predeterminado"
 }

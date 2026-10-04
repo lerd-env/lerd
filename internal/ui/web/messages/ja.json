@@ -1620,5 +1620,17 @@
   "setup_notify_hint": "キャプチャしたメール、失敗したワーカー、完了した処理",
   "setup_theme_title": "デスクトップに合わせる",
   "setup_theme_hint": "デスクトップの配色をまとい、変更にも追従",
-  "setup_theme_cta": "{name} を使う"
+  "setup_theme_cta": "{name} を使う",
+  "sites_openInEditor": "エディタで開く",
+  "editor_label": "エディタ",
+  "editor_auto": "インストール済みを検出",
+  "editor_custom": "カスタムコマンド",
+  "editor_settingsTitle": "エディタ",
+  "editor_settingsDescription": "Debug ウィンドウのファイルパスを開くエディタ。サイトごとにコントロールで選べます。",
+  "editor_groupFound": "このシステムで検出",
+  "editor_groupOther": "選択",
+  "editor_customOption": "カスタム…",
+  "editor_customTitle": "カスタムエディタ",
+  "editor_customHint": "パスと行の位置に {file} と {line} を使います。URL (scheme://…) はデスクトップ経由で開き、それ以外はコマンドとして実行されます。",
+  "editor_default": "既定のエディタ"
 }

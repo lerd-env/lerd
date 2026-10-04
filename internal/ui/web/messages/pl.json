@@ -1620,5 +1620,17 @@
   "setup_notify_hint": "Przechwycona poczta, nieudane workery, zakończone zadania",
   "setup_theme_title": "Dopasuj do pulpitu",
   "setup_theme_hint": "Używaj kolorów pulpitu i podążaj za nimi",
-  "setup_theme_cta": "Użyj {name}"
+  "setup_theme_cta": "Użyj {name}",
+  "sites_openInEditor": "Otwórz w edytorze",
+  "editor_label": "Edytor",
+  "editor_auto": "Wykryj zainstalowany edytor",
+  "editor_custom": "Własne polecenie",
+  "editor_settingsTitle": "Edytor",
+  "editor_settingsDescription": "Edytor, w którym otwierają się ścieżki plików z okna Debug. Strona może wybrać własny w swoich ustawieniach.",
+  "editor_groupFound": "Znalezione w systemie",
+  "editor_groupOther": "Wybierz",
+  "editor_customOption": "Własny…",
+  "editor_customTitle": "Własny edytor",
+  "editor_customHint": "Użyj {file} i {line} tam, gdzie mają trafić ścieżka i wiersz. URL (scheme://…) otwiera się przez pulpit, wszystko inne uruchamia się jako polecenie.",
+  "editor_default": "Domyślny edytor"
 }

@@ -1620,5 +1620,17 @@
   "setup_notify_hint": "Mail catturate, worker falliti, operazioni completate",
   "setup_theme_title": "Abbina al tuo desktop",
   "setup_theme_hint": "Usa i colori del tuo desktop e seguili",
-  "setup_theme_cta": "Usa {name}"
+  "setup_theme_cta": "Usa {name}",
+  "sites_openInEditor": "Apri nell’editor",
+  "editor_label": "Editor",
+  "editor_auto": "Trova editor installato",
+  "editor_custom": "Comando personalizzato",
+  "editor_settingsTitle": "Editor",
+  "editor_settingsDescription": "L’editor in cui si aprono i percorsi dei file della finestra Debug. Un sito può sceglierne uno proprio nei suoi controlli.",
+  "editor_groupFound": "Trovati su questo sistema",
+  "editor_groupOther": "Scegli",
+  "editor_customOption": "Personalizzato…",
+  "editor_customTitle": "Editor personalizzato",
+  "editor_customHint": "Usa {file} e {line} dove vanno percorso e riga. Un URL (scheme://…) si apre tramite il desktop, il resto viene eseguito come comando.",
+  "editor_default": "Editor predefinito"
 }

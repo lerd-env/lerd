@@ -1,4 +1,6 @@
 <script lang="ts">
+  import EditorPicker from '$components/EditorPicker.svelte';
+  import { editors, setGlobalEditor } from '$stores/editors';
   import { onMount } from 'svelte';
   import CheckUpdatesButton from '$components/CheckUpdatesButton.svelte';
   import { version, loadVersion } from '$stores/version';
@@ -523,6 +525,14 @@
         {/if}
       </div>
       <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_startOnOpen_description()}</p>
+    </SettingsCard>
+
+    <SettingsCard>
+      <div class="flex items-center justify-between gap-3 mb-2">
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.editor_settingsTitle()}</span>
+        <EditorPicker scope="global" value={$editors.global === 'custom' ? ($editors.template ?? '') : $editors.global} disabled={!$accessMode.localControl} onchange={setGlobalEditor} />
+      </div>
+      <p class="text-xs text-gray-500 dark:text-gray-400">{m.editor_settingsDescription()}</p>
     </SettingsCard>
 
     <SettingsCard>
