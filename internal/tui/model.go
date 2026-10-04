@@ -294,6 +294,7 @@ type Model struct {
 	svcTab     int       // service view tab: svcTabOverview or svcTabLogs
 	coreName   string    // the lerd process shown on tabCore: dns, nginx or watcher
 	rtCursor   int       // selected row in the PHP & Node view
+	dashScroll int       // first dashboard line on screen
 	dashCursor int       // selected Needs-attention card
 	cpuHist    []float64 // recent total CPU samples for the dashboard sparkline
 
@@ -1458,6 +1459,10 @@ func (m *Model) handleWheel(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		} else if m.logScroll -= 3; m.logScroll < 0 {
 			m.logScroll = 0
 		}
+		return m, nil
+	}
+	if m.activeTab == tabDashboard && zone.Get("pane:dash").InBounds(msg) {
+		m.scrollOffset(&m.dashScroll, delta)
 		return m, nil
 	}
 	if zone.Get("pane:detail").InBounds(msg) {

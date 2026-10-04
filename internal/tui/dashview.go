@@ -107,11 +107,27 @@ func (m *Model) handleDashKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	}
 	alerts := m.dashAlerts()
 	m.dashCursor = clamp(m.dashCursor, 0, max(0, len(alerts)-1))
-	switch msg.String() {
-	case "up", "k":
-		m.dashCursor = max(0, m.dashCursor-1)
-	case "down", "j":
-		m.dashCursor = clamp(m.dashCursor+1, 0, max(0, len(alerts)-1))
+	page := max(1, m.height/2)
+	switch key := msg.String(); key {
+	case "pgdown":
+		m.dashScroll += page
+	case "pgup":
+		m.dashScroll = max(0, m.dashScroll-page)
+	case "home", "g":
+		m.dashScroll = 0
+	case "end", "G":
+		m.dashScroll = 1 << 20
+	case "up", "k", "down", "j":
+		// With no cards to pick, the arrows scroll the page instead.
+		step := 1
+		if key == "up" || key == "k" {
+			step = -1
+		}
+		if len(alerts) == 0 {
+			m.dashScroll = max(0, m.dashScroll+step)
+		} else {
+			m.dashCursor = clamp(m.dashCursor+step, 0, len(alerts)-1)
+		}
 	case "enter", "space":
 		if len(alerts) > 0 {
 			return m.dashOpen(alerts[m.dashCursor]), true
@@ -170,16 +186,12 @@ func (m *Model) renderDashboard(w, h int) string {
 		}
 	}
 
-	section := func(rows []string) bool {
-		gap := []string{blank}
+	section := func(rows []string) {
+		L = append(L, blank)
 		if !lay.compact {
-			gap = append(gap, blank)
+			L = append(L, blank)
 		}
-		if len(L)+len(gap)+len(rows) > h {
-			return false
-		}
-		L = append(append(L, gap...), rows...)
-		return true
+		L = append(L, rows...)
 	}
 	if cw >= 90 {
 		gap := 6
@@ -189,18 +201,23 @@ func (m *Model) renderDashboard(w, h int) string {
 		section(m.dashSystem(cw))
 		section(m.dashResources(cw))
 	}
-	if len(L)+4 <= h && section([]string{row(nil, cw, sideLabel("Recent")), blank}) {
-		L = append(L, m.dashRecent(cw, h-len(L))...)
-	}
+	section(append([]string{row(nil, cw, sideLabel("Recent")), blank}, m.dashRecent(cw)...))
 
+	// Everything is kept and the page scrolls, so nothing goes missing on a
+	// short terminal; the last line says when more sits below.
+	m.dashScroll = clamp(m.dashScroll, 0, max(0, len(L)-h))
+	L = L[m.dashScroll:]
 	for len(L) < h {
 		L = append(L, blank)
+	}
+	if len(L) > h {
+		L = append(L[:h-1], row(nil, cw, sp(fmt.Sprintf("↓ %d more below · pgdn", len(L)-h+1), colDim)))
 	}
 	edge := row(nil, pad)
 	for i := range L {
 		L[i] = edge + L[i] + edge
 	}
-	return strings.Join(L[:h], "\n")
+	return zone.Mark("pane:dash", strings.Join(L, "\n"))
 }
 
 // dashCard is a tinted block with a padding row above and below, dropped on
@@ -258,8 +275,7 @@ func (m *Model) dashResources(w int) []string {
 		row(nil, w))
 	top := append([]stats.ContainerStat(nil), m.stats.Containers...)
 	sort.SliceStable(top, func(i, j int) bool { return top[i].MemBytes > top[j].MemBytes })
-	for i := 0; i < len(top) && i < 3; i++ {
-		c := top[i]
+	for _, c := range top {
 		name := strings.TrimPrefix(c.Name, "lerd-")
 		out = append(out, row(nil, w, sp(padRight("", 9), nil), sp(padRight(truncatePlain(name, 16), 17), nil),
 			sp(fmt.Sprintf("%7s", stats.FormatBytes(c.MemBytes)), nil), sp(fmt.Sprintf("   %.2f%%", c.CPUPercent), colDim)))
@@ -354,13 +370,12 @@ func (m *Model) dashSystem(w int) []string {
 	}
 }
 
-func (m *Model) dashRecent(w, n int) []string {
+func (m *Model) dashRecent(w int) []string {
 	if len(m.activity) == 0 {
 		return []string{row(nil, w, sp("Nothing has changed since the TUI opened", colDim))}
 	}
 	var out []string
-	for i := 0; i < len(m.activity) && i < n; i++ {
-		e := m.activity[i]
+	for _, e := range m.activity {
 		dot, text := sp(glyphRunning, colRunning), sp("  "+e.text, nil)
 		switch e.tone {
 		case toneBad:

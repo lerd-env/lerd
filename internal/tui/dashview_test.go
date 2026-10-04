@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -96,7 +97,7 @@ func TestDashFixRestartsTheCrashedWorker(t *testing.T) {
 	}
 }
 
-func TestDashRecentFillsRemainingHeight(t *testing.T) {
+func TestDashMarksContentBelowTheFold(t *testing.T) {
 	m := dashModel()
 	now := time.Now()
 	for i := 0; i < 30; i++ {
@@ -106,20 +107,43 @@ func TestDashRecentFillsRemainingHeight(t *testing.T) {
 	if len(lines) != 40 {
 		t.Fatalf("dashboard has %d lines, want 40", len(lines))
 	}
-	if !strings.Contains(ansi.Strip(lines[len(lines)-1]), "event") {
-		t.Fatalf("recent should fill down to the last line:\n%s", ansi.Strip(strings.Join(lines, "\n")))
+	if !strings.Contains(ansi.Strip(lines[len(lines)-1]), "more below") {
+		t.Fatalf("the last line should say more is below:\n%s", ansi.Strip(strings.Join(lines, "\n")))
 	}
 }
 
-func TestDashDropsSectionsThatDoNotFitWhole(t *testing.T) {
+// Nothing is dropped for lack of room any more: the dashboard scrolls instead.
+func TestDashScrollsToTheOldestRecentEntry(t *testing.T) {
 	m := dashModel()
-	out := ansi.Strip(m.renderDashboard(70, 14))
-	if strings.Contains(out, "RESOURCES") && !strings.Contains(out, "memory") {
-		t.Fatalf("resources header shown without its rows:\n%s", out)
+	m.focusMain()
+	now := time.Now()
+	for i := 0; i < activityCap; i++ {
+		m.activity = append(m.activity, activityEvent{text: fmt.Sprintf("event-%02d", i), at: now})
 	}
-	for i, l := range strings.Split(m.renderDashboard(70, 14), "\n") {
+	m.renderDashboard(70, 20)
+	for i := 0; i < 20; i++ {
+		m.handleDashKey(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	}
+	out := ansi.Strip(m.renderDashboard(70, 20))
+	if !strings.Contains(out, fmt.Sprintf("event-%02d", activityCap-1)) || strings.Contains(out, "more below") {
+		t.Fatalf("pgdn should reach the oldest entry with nothing left below:\n%s", out)
+	}
+	for i, l := range strings.Split(m.renderDashboard(70, 20), "\n") {
 		if w := ansi.StringWidth(l); w != 70 {
 			t.Fatalf("line %d is %d wide, want 70", i, w)
+		}
+	}
+}
+
+func TestDashResourcesListsEveryContainer(t *testing.T) {
+	m := dashModel()
+	for _, n := range []string{"nginx", "mysql", "redis", "mailpit", "meilisearch", "php85-fpm"} {
+		m.stats.Containers = append(m.stats.Containers, stats.ContainerStat{Name: "lerd-" + n, MemBytes: 10 << 20})
+	}
+	out := ansi.Strip(m.renderDashboard(160, 120))
+	for _, n := range []string{"nginx", "mysql", "redis", "mailpit", "meilisearch", "php85-fpm"} {
+		if !strings.Contains(out, n) {
+			t.Errorf("resources leaves out %s", n)
 		}
 	}
 }
