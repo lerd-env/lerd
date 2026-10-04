@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -1285,19 +1284,6 @@ func ensureSystemdLinger() error {
 	return nil
 }
 
-// checkUnattendedSupported refuses --unattended where the other half of the
-// arrangement does not exist. The flag skips the sudo-gated steps because
-// `lerd bootstrap --system` and `--trust-ca` do them as root around it, and
-// bootstrap is Linux-only; anywhere else the flag would silently leave the
-// resolver grant unwritten and the CA untrusted, which reads as broken HTTPS
-// and a watcher asking for a password rather than as a missing feature.
-func checkUnattendedSupported(unattended bool) error {
-	if !unattended || runtime.GOOS == "linux" {
-		return nil
-	}
-	return fmt.Errorf("--unattended is for package installs on Linux, where `lerd bootstrap` applies the root-level setup around it; run `lerd install` without it")
-}
-
 // currentUserName resolves the login name the per-user setup steps apply to.
 func currentUserName() string {
 	if u := os.Getenv("USER"); u != "" {
@@ -1916,16 +1902,6 @@ func installShellCompletions(home, lerdBin string) {
 			installCompletion(lerdBin, "bash", bashCompDir, "lerd")
 		}
 	}
-}
-
-// bashRCPath picks the bash startup file lerd should write its PATH line to.
-// macOS Terminal launches bash as a login shell that reads .bash_profile (not
-// .bashrc); Linux interactive bash reads .bashrc.
-func bashRCPath(home string) string {
-	if runtime.GOOS == "darwin" {
-		return filepath.Join(home, ".bash_profile")
-	}
-	return filepath.Join(home, ".bashrc")
 }
 
 func appendShellRC(rcFile, binDir string) error {

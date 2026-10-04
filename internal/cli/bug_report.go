@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
 	"github.com/geodro/lerd/internal/version"
@@ -148,19 +149,7 @@ func writeBugReportHeader(w io.Writer, anon *anonymizer) {
 	fmt.Fprintf(w, "lerd:       %s\n", version.String())
 	fmt.Fprintf(w, "OS:         %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	fmt.Fprintf(w, "Go runtime: %s\n", runtime.Version())
-	if runtime.GOOS == "linux" {
-		if name := readOSRelease(); name != "" {
-			fmt.Fprintf(w, "Distro:     %s\n", name)
-		}
-		if out, err := exec.Command("uname", "-r").Output(); err == nil {
-			fmt.Fprintf(w, "Kernel:     %s\n", strings.TrimSpace(string(out)))
-		}
-	}
-	if runtime.GOOS == "darwin" {
-		if out, err := exec.Command("sw_vers", "-productVersion").Output(); err == nil {
-			fmt.Fprintf(w, "macOS:      %s\n", strings.TrimSpace(string(out)))
-		}
-	}
+	writeHostDetails(w)
 }
 
 func section(w io.Writer, title string) {
@@ -409,7 +398,7 @@ func dumpContainers(w io.Writer) {
 }
 
 func dumpServiceLogs(w io.Writer, n int, filter *logFilter) {
-	if runtime.GOOS != "linux" {
+	if platform.Current.UsesMachineVM {
 		fmt.Fprintln(w, "(skipped: journalctl is Linux-only)")
 		return
 	}

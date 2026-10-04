@@ -13,21 +13,10 @@ import (
 	"testing"
 )
 
-// osBranchAllowlist counts the runtime.GOOS branches each shared file still
-// carries. Entries only ever shrink: moving a branch behind a per-OS file means
-// lowering its count here, and a file with none left drops off the list.
-var osBranchAllowlist = map[string]int{
-	"internal/cli/bug_report.go": 3,
-	"internal/cli/doctor.go":     1,
-	"internal/cli/hostproxy.go":  2,
-	"internal/cli/install.go":    2,
-	"internal/cli/update.go":     2,
-}
-
 // TestSharedCodeDoesNotBranchOnGOOS fails when a file compiled for more than
-// one OS compares or switches on runtime.GOOS beyond its allowlisted count.
+// one OS compares or switches on runtime.GOOS.
 func TestSharedCodeDoesNotBranchOnGOOS(t *testing.T) {
-	found := map[string]int{}
+	var problems []string
 	for _, dir := range []string{"../../cmd", "../../internal"} {
 		if err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -44,23 +33,11 @@ func TestSharedCodeDoesNotBranchOnGOOS(t *testing.T) {
 			}
 			if n := countOSBranches(t, path, nil); n > 0 {
 				rel, _ := filepath.Rel("../..", path)
-				found[filepath.ToSlash(rel)] = n
+				problems = append(problems, fmt.Sprintf("%s: %d runtime.GOOS branches; move them into a per-OS file or platform.Current", filepath.ToSlash(rel), n))
 			}
 			return nil
 		}); err != nil {
 			t.Fatal(err)
-		}
-	}
-
-	var problems []string
-	for file, n := range found {
-		if allowed := osBranchAllowlist[file]; n > allowed {
-			problems = append(problems, fmt.Sprintf("%s: %d runtime.GOOS branches, %d allowed; move the new one into a per-OS file", file, n, allowed))
-		}
-	}
-	for file, allowed := range osBranchAllowlist {
-		if n := found[file]; n < allowed {
-			problems = append(problems, fmt.Sprintf("%s: %d runtime.GOOS branches, allowlist still says %d; lower it", file, n, allowed))
 		}
 	}
 	sort.Strings(problems)
