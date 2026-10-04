@@ -1387,7 +1387,7 @@
   "system_tools_checkTitle": "Daha yeni sürümlerin sabitlenip sabitlenmediğini GitHub'a sor",
   "system_tools_checkUpToDate": "Tüm araçlar sabitlenen sürümde",
   "system_tools_current": "güncel",
-  "system_tools_description": "lerd'in kurup yönettiği bağımsız ikili dosyalar: Composer, fnm ve mkcert.",
+  "system_tools_description": "lerd'in kurup yönettiği bağımsız ikili dosyalar: Composer, mise, fnm ve mkcert.",
   "system_tools_notInstalled": "kurulu değil",
   "system_tools_title": "Araçlar",
   "system_tools_updateAvailable": "{version} mevcut",

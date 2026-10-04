@@ -556,3 +556,81 @@ func TestPublishedStampRoundTrip(t *testing.T) {
 		t.Fatalf("clearing an absent stamp: %v", err)
 	}
 }
+
+// writeHostMise puts a mise binary where both lerd and mise's own installer put
+// it, and returns its path.
+func writeHostMise(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	bin := filepath.Join(home, ".local", "bin", "mise")
+	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bin, []byte("bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(config.BinDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return bin
+}
+
+func statusOf(name string) (ToolStatus, bool) {
+	for _, s := range StatusAll(context.Background()) {
+		if s.Name == name {
+			return s, true
+		}
+	}
+	return ToolStatus{}, false
+}
+
+// A mise lerd installed and mise then moved off the pin, the way
+// `mise self-update` does, is reported against the pin like the other tools.
+func TestStatusAll_FlagsALerdInstalledMiseThatSelfUpdated(t *testing.T) {
+	offline(t)
+	bin := writeHostMise(t)
+	pin := embeddedManifest().Tools["mise"].Version
+	if err := WriteStamp("mise", pin); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := statusOf("mise"); !s.Present || s.UpdateAvailable || s.Installed != pin {
+		t.Fatalf("mise at its pin = %+v, want present with no update", s)
+	}
+
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(filepath.Join(config.BinDir(), "mise.version"), old, old); err != nil {
+		t.Fatal(err)
+	}
+	orig := probeOutput
+	t.Cleanup(func() { probeOutput = orig })
+	probeOutput = func(path string, args ...string) ([]byte, error) {
+		if path != bin || len(args) != 1 || args[0] != "--version" {
+			t.Errorf("probed %s %v, want %s --version", path, args, bin)
+		}
+		return []byte("2026.10.2 linux-x64 (2026-10-01)\n"), nil
+	}
+	if s, _ := statusOf("mise"); !s.Present || !s.UpdateAvailable || s.Installed != "2026.10.2" {
+		t.Fatalf("self-updated mise = %+v, want present at 2026.10.2 with an update", s)
+	}
+}
+
+// A mise the user installed themselves sits in the same place, and lerd must
+// neither list it as its own nor claim it by stamping what it probed.
+func TestStatusAll_LeavesOutAMiseLerdDidNotInstall(t *testing.T) {
+	offline(t)
+	writeHostMise(t)
+	orig := probeOutput
+	t.Cleanup(func() { probeOutput = orig })
+	probeOutput = func(string, ...string) ([]byte, error) { return []byte("2026.10.2\n"), nil }
+
+	if s, ok := statusOf("mise"); ok {
+		t.Fatalf("the user's own mise is listed as managed: %+v", s)
+	}
+	if v := InstalledVersion("mise"); v != "" {
+		t.Errorf("InstalledVersion(mise) = %q for a mise lerd did not install", v)
+	}
+	if _, err := os.Stat(filepath.Join(config.BinDir(), "mise.version")); err == nil {
+		t.Error("probing the user's mise stamped it as lerd's")
+	}
+}

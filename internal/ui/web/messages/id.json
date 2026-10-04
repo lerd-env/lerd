@@ -1387,7 +1387,7 @@
   "system_tools_checkTitle": "Tanya GitHub apakah versi lebih baru sudah dipatok",
   "system_tools_checkUpToDate": "Semua alat berada di versi yang dipatok",
   "system_tools_current": "terkini",
-  "system_tools_description": "Binari mandiri yang dipasang dan dikelola lerd: Composer, fnm, dan mkcert.",
+  "system_tools_description": "Binari mandiri yang dipasang dan dikelola lerd: Composer, mise, fnm, dan mkcert.",
   "system_tools_notInstalled": "belum terpasang",
   "system_tools_title": "Alat",
   "system_tools_updateAvailable": "{version} tersedia",

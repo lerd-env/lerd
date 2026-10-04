@@ -1387,7 +1387,7 @@
   "system_tools_checkTitle": "Hỏi GitHub xem đã ghim phiên bản mới hơn chưa",
   "system_tools_checkUpToDate": "Mọi công cụ đều ở phiên bản đã ghim",
   "system_tools_current": "hiện tại",
-  "system_tools_description": "Các tệp nhị phân độc lập mà lerd cài đặt và quản lý: Composer, fnm và mkcert.",
+  "system_tools_description": "Các tệp nhị phân độc lập mà lerd cài đặt và quản lý: Composer, mise, fnm và mkcert.",
   "system_tools_notInstalled": "chưa cài đặt",
   "system_tools_title": "Công cụ",
   "system_tools_updateAvailable": "{version} khả dụng",

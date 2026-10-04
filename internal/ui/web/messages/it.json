@@ -1387,7 +1387,7 @@
   "system_tools_checkTitle": "Chiedi a GitHub se sono state fissate versioni più recenti",
   "system_tools_checkUpToDate": "Ogni strumento è alla versione fissata",
   "system_tools_current": "aggiornato",
-  "system_tools_description": "Binari autonomi che lerd installa e gestisce: Composer, fnm e mkcert.",
+  "system_tools_description": "Binari autonomi che lerd installa e gestisce: Composer, mise, fnm e mkcert.",
   "system_tools_notInstalled": "non installato",
   "system_tools_title": "Strumenti",
   "system_tools_updateAvailable": "{version} disponibile",

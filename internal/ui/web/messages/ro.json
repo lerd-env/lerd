@@ -1387,7 +1387,7 @@
   "system_tools_checkTitle": "Întreabă GitHub dacă au fost fixate versiuni mai noi",
   "system_tools_checkUpToDate": "Fiecare unealtă este la versiunea fixată",
   "system_tools_current": "actual",
-  "system_tools_description": "Binare de sine stătătoare pe care lerd le instalează și le administrează: Composer, fnm și mkcert.",
+  "system_tools_description": "Binare de sine stătătoare pe care lerd le instalează și le administrează: Composer, mise, fnm și mkcert.",
   "system_tools_notInstalled": "neinstalat",
   "system_tools_title": "Unelte",
   "system_tools_updateAvailable": "{version} disponibil",

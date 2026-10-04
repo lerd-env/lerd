@@ -1387,7 +1387,7 @@
   "system_tools_checkTitle": "Aan GitHub vragen of er nieuwere versies zijn vastgezet",
   "system_tools_checkUpToDate": "Elke tool staat op de vastgezette versie",
   "system_tools_current": "actueel",
-  "system_tools_description": "Zelfstandige binaries die lerd installeert en beheert: Composer, fnm en mkcert.",
+  "system_tools_description": "Zelfstandige binaries die lerd installeert en beheert: Composer, mise, fnm en mkcert.",
   "system_tools_notInstalled": "niet geïnstalleerd",
   "system_tools_title": "Tools",
   "system_tools_updateAvailable": "{version} beschikbaar",

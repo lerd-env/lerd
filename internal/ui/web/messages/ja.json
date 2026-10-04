@@ -1387,7 +1387,7 @@
   "system_tools_checkTitle": "新しいバージョンが固定されたか GitHub に問い合わせます",
   "system_tools_checkUpToDate": "すべてのツールが固定バージョンです",
   "system_tools_current": "最新",
-  "system_tools_description": "lerd がインストールして管理するスタンドアロンバイナリ: Composer、fnm、mkcert。",
+  "system_tools_description": "lerd がインストールして管理するスタンドアロンバイナリ: Composer、mise、fnm、mkcert。",
   "system_tools_notInstalled": "未インストール",
   "system_tools_title": "ツール",
   "system_tools_updateAvailable": "{version} が利用可能",

@@ -1387,7 +1387,7 @@
   "system_tools_checkTitle": "Demander à GitHub si des versions plus récentes ont été épinglées",
   "system_tools_checkUpToDate": "Chaque outil est à sa version épinglée",
   "system_tools_current": "à jour",
-  "system_tools_description": "Binaires autonomes que lerd installe et gère : Composer, fnm et mkcert.",
+  "system_tools_description": "Binaires autonomes que lerd installe et gère : Composer, mise, fnm et mkcert.",
   "system_tools_notInstalled": "non installé",
   "system_tools_title": "Outils",
   "system_tools_updateAvailable": "{version} disponible",

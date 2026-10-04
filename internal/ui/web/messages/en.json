@@ -1387,7 +1387,7 @@
   "system_tools_checkTitle": "Ask GitHub whether newer versions have been pinned",
   "system_tools_checkUpToDate": "Every tool is at its pinned version",
   "system_tools_current": "current",
-  "system_tools_description": "Standalone binaries lerd installs and manages: Composer, fnm and mkcert.",
+  "system_tools_description": "Standalone binaries lerd installs and manages: Composer, mise, fnm and mkcert.",
   "system_tools_notInstalled": "not installed",
   "system_tools_title": "Tools",
   "system_tools_updateAvailable": "{version} available",

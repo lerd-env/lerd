@@ -1387,7 +1387,7 @@
   "system_tools_checkTitle": "向 GitHub 查询是否固定了更新的版本",
   "system_tools_checkUpToDate": "所有工具均为固定版本",
   "system_tools_current": "最新",
-  "system_tools_description": "lerd 安装并管理的独立二进制文件:Composer、fnm 和 mkcert。",
+  "system_tools_description": "lerd 安装并管理的独立二进制文件:Composer、mise、fnm 和 mkcert。",
   "system_tools_notInstalled": "未安装",
   "system_tools_title": "工具",
   "system_tools_updateAvailable": "{version} 可用",
