@@ -124,4 +124,97 @@ check_out "4.20 php:rebuild names the base image and its size before pulling" 'w
 check_out "4.21 [partial] lerd fetch names built versions nothing serves and points at php:rebuild" 'php:rebuild|runtime|up to date|already' lerd fetch
 lerd isolate 8.4 </dev/null >/dev/null 2>&1
 expect_200 "$url"
+
+# env_provider. phpsite and envsite, both on 8.4 so one FPM container serves
+# them, give LERD_VM_SHARED different values; demo's queue worker covers the
+# worker channel. The provider is a script, so rotating it needs no re-approval.
+provided() { printf '%s/lerd/env/%s.env' "$XDG_RUNTIME_DIR" "$1"; }
+env_probe='<?php echo getenv("LERD_VM_SHARED"), "|", getenv("LERD_VM_ONLY_ENVSITE"), "|", substr_count((string) getenv("LERD_VM_PEM"), "\n");'
+cat >"$site/lerd-vm-provider.sh" <<'SH'
+cat <<'EOF'
+LERD_VM_SHARED=from-phpsite
+LERD_VM_PEM="-----BEGIN KEY-----
+abc
+-----END KEY-----"
+EOF
+SH
+echo "$env_probe" >"$site/public/env.php"
+echo 'env_provider: sh lerd-vm-provider.sh' >>"$site/.lerd.yaml"
+envsite="$PROJECTS/envsite"
+mkdir -p "$envsite/public"
+printf '%s\n' 'printf "LERD_VM_SHARED=from-envsite\nLERD_VM_ONLY_ENVSITE=yes\n"' >"$envsite/lerd-vm-provider.sh"
+# index.php makes lerd serve public/, where the probe is.
+echo "$env_probe" >"$envsite/public/env.php"
+cp "$envsite/public/env.php" "$envsite/public/index.php"
+echo 'env_provider: sh lerd-vm-provider.sh' >"$envsite/.lerd.yaml"
+(cd "$envsite" && lerd link && lerd isolate 8.4) </dev/null >/dev/null 2>&1
+ename=$(site_name "$envsite")
+lerd secure "$ename" </dev/null >/dev/null 2>&1
+eurl="$scheme://$(site_host "$envsite")"
+
+# A plain PHP site has no framework, so lerd env ends in an error after the
+# provider has run; the checks read the file, not the exit status. The refusal
+# is checked on envsite, linked fresh each run, since approvals are remembered.
+check_out "4.22 lerd env with no terminal refuses the provider and names --yes" 'lerd env --yes' bash -c "cd '$envsite' && lerd env"
+(cd "$envsite" && lerd env --yes) </dev/null >/dev/null 2>&1
+lerd env --yes </dev/null >/dev/null 2>&1
+check_out "4.22 lerd env --yes writes the provided file 0600 and nothing reaches .env" '^600 .*clean' bash -c "stat -c '%a %n' '$(provided "$name")' && ! grep -rqs from-phpsite '$site/.env' && echo clean"
+check_out "4.23 https serves the provided values and a multi-line value whole" '^from-phpsite\|\|2$' curl -sk "$url/env.php"
+check_out "4.23 lerd php in the site sees them" '^from-phpsite\|\|2$' lerd php public/env.php
+check_out "4.23 an exec naming another site loads nothing" '^\|\|0$' podman exec -w "$site" --env "LERD_SITE=$ename" lerd-php84-fpm php public/env.php
+
+# One echo per response naming the site nginx routed it to: concurrent curls
+# share the output file, so a body written in pieces would interleave.
+bleed_probe='<?php echo $_SERVER["LERD_SITE"], "|", getenv("LERD_VM_SHARED"), "|", getenv("LERD_VM_ONLY_ENVSITE"), "\n";'
+echo "$bleed_probe" >"$site/public/bleed.php"
+echo "$bleed_probe" >"$envsite/public/bleed.php"
+for _ in $(seq 200); do echo "$url/bleed.php"; echo "$eurl/bleed.php"; done | xargs -P 16 -n 1 curl -sk >/tmp/lerd-vm-bleed.txt
+check_out "4.24 400 alternating requests across two sites never cross" '^crossed=0 total=400$' bash -c "echo crossed=\$(grep -Evxc '$name\|from-phpsite\||$ename\|from-envsite\|yes' /tmp/lerd-vm-bleed.txt) total=\$(wc -l </tmp/lerd-vm-bleed.txt)"
+rm -f /tmp/lerd-vm-bleed.txt "$site/public/bleed.php"
+
+sed -i 's/^LERD_VM_SHARED=from-phpsite$/LERD_VM_SHARED=rotated/' "$site/lerd-vm-provider.sh"
+lerd env --yes </dev/null >/dev/null 2>&1
+check_out "4.25 a rotated value reaches the next request" '^rotated\|' curl -sk "$url/env.php"
+
+# A command of its own for the worker to run, since a queued closure cannot be
+# serialised from tinker's eval'd code. The worker loads the provided env when
+# it boots, so it is restarted after lerd env.
+dname=$(site_name "$DEMO_DIR")
+queue_was=$(systemctl --user is-active "lerd-queue-$dname" 2>/dev/null)
+cp -f "$DEMO_DIR/.lerd.yaml" /tmp/lerd-vm-demo-lerd.yaml
+echo "env_provider: printf 'LERD_VM_DEMO=from-demo\\n'" >>"$DEMO_DIR/.lerd.yaml"
+mkdir -p "$DEMO_DIR/app/Console/Commands"
+cat >"$DEMO_DIR/app/Console/Commands/LerdVmEnv.php" <<'PHP'
+<?php
+
+namespace App\Console\Commands;
+
+use Illuminate\Console\Command;
+
+class LerdVmEnv extends Command
+{
+    protected $signature = 'lerd-vm:env';
+
+    public function handle(): void
+    {
+        file_put_contents(storage_path('lerd-vm-env'), (string) getenv('LERD_VM_DEMO'));
+    }
+}
+PHP
+rm -f "$DEMO_DIR/storage/lerd-vm-env"
+(cd "$DEMO_DIR" && lerd env --yes; lerd queue:stop; lerd queue:start) </dev/null >/dev/null 2>&1
+(cd "$DEMO_DIR" && lerd artisan tinker --execute='Illuminate\Support\Facades\Artisan::queue("lerd-vm:env");') </dev/null >/dev/null 2>&1
+wait_for 60 test -s "$DEMO_DIR/storage/lerd-vm-env"
+check_out "4.26 the queue worker's job sees the demo's provided value" '^from-demo$' cat "$DEMO_DIR/storage/lerd-vm-env"
+rm -f "$DEMO_DIR/storage/lerd-vm-env" "$DEMO_DIR/app/Console/Commands/LerdVmEnv.php"
+cp /tmp/lerd-vm-demo-lerd.yaml "$DEMO_DIR/.lerd.yaml"
+(cd "$DEMO_DIR" && lerd env; lerd queue:stop; [ "$queue_was" = active ] && lerd queue:start) </dev/null >/dev/null 2>&1
+
+(cd "$envsite" && lerd unlink) </dev/null >/dev/null 2>&1
+check "4.27 unlinking a site removes its provided file" test ! -e "$(provided "$ename")"
+rm -rf "$envsite"
+sed -i '/^env_provider:/d' "$site/.lerd.yaml"
+lerd env </dev/null >/dev/null 2>&1
+rm -f "$site/lerd-vm-provider.sh" "$site/public/env.php"
+expect_200 "$url"
 reclaim

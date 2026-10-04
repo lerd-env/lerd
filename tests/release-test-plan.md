@@ -473,6 +473,19 @@ than flipping it to the canonical default.
 - [ ] `lerd fetch` names the versions whose image is built but that nothing
       serves from yet, and points at `lerd php:rebuild`, so `lerd php:list` and
       `lerd new` no longer contradict the command before them
+- [ ] A site whose `.lerd.yaml` declares `env_provider`: `lerd env` with no
+      terminal refuses it and names `lerd env --yes`; `lerd env --yes` runs it
+      and writes `$XDG_RUNTIME_DIR/lerd/env/<site>.env` with mode 0600, and
+      none of its values lands in the site's `.env`
+- [ ] **https → 200** with the provided values on the page, a quoted
+      multi-line value (a PEM key) whole, and `lerd php` in the site sees them
+      too, while an exec whose `LERD_SITE` names another site loads nothing
+- [ ] Two sites on the same FPM container giving one key different values
+      never see each other's across 400 alternating concurrent requests
+- [ ] A changed provider value reaches the next request after
+      `lerd env --yes`, with no restart
+- [ ] The demo's queue worker runs a job that sees the demo's provided value
+- [ ] Unlinking a site removes its provided-env file
 
 ---
 
@@ -1099,6 +1112,8 @@ Other surfaces:
 
 - [ ] With a site's stripe listener asleep under idle-suspend, `lerd cleanup`
       does not offer `docker.io/stripe/stripe-cli` for removal
+- [ ] After the reboot a site's `env_provider` values are served again once
+      `lerd start` has run, though tmpfs came back empty
 
 ---
 
