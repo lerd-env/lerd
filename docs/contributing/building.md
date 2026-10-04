@@ -31,7 +31,7 @@ Isolating `HOME` moves the plist file but not the launchd domain it is bootstrap
 
 ## Platform-specific code
 
-Code that behaves differently per OS lives in `_linux.go`, `_darwin.go` or `_windows.go` files behind a function the shared code calls. A file that builds for more than one OS may read `runtime.GOOS` as data, passing it to a lookup or showing it to the user, but may not compare or switch on it. A yes/no fact about the host, like whether containers run inside a VM, goes in `platform.Current`, which each OS sets in its own `caps_<os>.go`. `internal/platform/seams_test.go` fails on a new branch like that, and its allowlist of older ones only shrinks: moving one out means lowering that file's count. CI also cross-builds for macOS on the Linux job, so a per-OS function missing from the darwin side fails there first.
+Code that behaves differently per OS lives in `_linux.go`, `_darwin.go` or `_windows.go` files behind a function the shared code calls. A file that builds for more than one OS may read `runtime.GOOS` as data, passing it to a lookup or showing it to the user, but may not compare or switch on it. A plain fact about the host, like whether containers run inside a VM or which command opens a URL, goes in `platform.Current`, which each OS sets in its own `caps_<os>.go`. `internal/platform/seams_test.go` fails on a new branch like that, and its allowlist of older ones only shrinks: moving one out means lowering that file's count. CI also cross-builds for macOS on the Linux job, so a per-OS function missing from the darwin side fails there first.
 
 ## Cross-compile for arm64
 

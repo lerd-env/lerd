@@ -1,3 +1,5 @@
 package platform
 
-var Current = Caps{}
+var Current = Caps{
+	Opener: "xdg-open",
+}

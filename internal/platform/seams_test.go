@@ -23,9 +23,7 @@ var osBranchAllowlist = map[string]int{
 	"internal/cli/install.go":         2,
 	"internal/cli/update.go":          2,
 	"internal/dns/diagnose.go":        4,
-	"internal/editor/editor.go":       1,
 	"internal/git/copy.go":            2,
-	"internal/hostbin/hostbin.go":     1,
 	"internal/node/bun.go":            1,
 	"internal/node/mise.go":           1,
 	"internal/node/nvm.go":            1,
@@ -34,11 +32,6 @@ var osBranchAllowlist = map[string]int{
 	"internal/podman/network.go":      1,
 	"internal/podman/upgradeheal.go":  1,
 	"internal/systemd/networkwait.go": 1,
-	"internal/tray/menu.go":           1,
-	"internal/tui/sitetabs.go":        1,
-	"internal/ui/openfolder.go":       1,
-	"internal/ui/server.go":           4,
-	"internal/ui/terminal_default.go": 2,
 	"internal/watcher/dns.go":         2,
 }
 
