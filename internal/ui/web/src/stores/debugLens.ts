@@ -4,6 +4,7 @@ import { writable } from 'svelte/store';
 // refresh keeps them where they were. Shared between the System Debug panel
 // and the per-site Debug tab so the choice is consistent across both.
 export type DebugLens =
+  | 'requests'
   | 'dumps'
   | 'queries'
   | 'jobs'
@@ -20,6 +21,7 @@ export type DebugLens =
 const KEY = 'lerd:debugLens';
 
 const VALID: DebugLens[] = [
+  'requests',
   'dumps',
   'queries',
   'jobs',

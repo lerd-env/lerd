@@ -14,6 +14,8 @@
   import LoadingRow from '$components/LoadingRow.svelte';
   import ClearAppLogsModal from './ClearAppLogsModal.svelte';
   import { openErrorModal } from '$stores/modals';
+  import StructuredValue from '$components/StructuredValue.svelte';
+  import { splitLogContext } from '$lib/structured';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -38,6 +40,11 @@
   let loadingOlder = $state(false);
   let search = $state('');
   let expandedIdx = $state(-1);
+  // What an expanded entry shows below its context: the lines after the
+  // message (a stack trace), or the whole entry when no context was split off.
+  function restOf(entry: { message?: string; detail?: string }, split: boolean): string {
+    return split ? (entry.detail ?? '').slice((entry.message ?? '').length).trim() : entry.detail || entry.message || '';
+  }
   let scrollEl: HTMLDivElement | null = $state(null);
   // Clearing deletes real log files, so it goes through a confirmation modal
   // rather than an inline button: a deliberate confirm matches how lerd's other
@@ -265,7 +272,16 @@
           </svg>
         </button>
         {#if expandedIdx === i}
-          <div class="px-3 py-3 bg-gray-50 dark:bg-lerd-bg border-t border-gray-100 dark:border-lerd-border/30 font-mono text-[11px] text-gray-600 dark:text-gray-400 whitespace-pre-wrap break-all max-h-80 overflow-y-auto leading-relaxed">{entry.detail || entry.message || ''}</div>
+          {@const split = splitLogContext(entry.message ?? '')}
+          <div class="px-3 py-3 bg-gray-50 dark:bg-lerd-bg border-t border-gray-100 dark:border-lerd-border/30 max-h-80 overflow-y-auto space-y-2">
+            {#if split.context}
+              <div class="font-mono text-[11px] text-gray-700 dark:text-gray-300 break-all">{split.text}</div>
+              <StructuredValue value={split.context} open class="text-gray-600 dark:text-gray-400" />
+            {/if}
+            {#if restOf(entry, !!split.context)}
+              <div class="font-mono text-[11px] text-gray-600 dark:text-gray-400 whitespace-pre-wrap break-all leading-relaxed">{restOf(entry, !!split.context)}</div>
+            {/if}
+          </div>
         {/if}
       </div>
     {/each}

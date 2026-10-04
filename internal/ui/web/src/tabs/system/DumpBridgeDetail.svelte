@@ -10,6 +10,7 @@
   import KindLens from '$components/KindLens.svelte';
   import DebugDisabled from '$components/DebugDisabled.svelte';
   import BrowserLens from '$components/BrowserLens.svelte';
+  import RequestsLens from '$components/RequestsLens.svelte';
   import { browserCaptureEnabled, loadBrowserCaptureStatus } from '$stores/browserCapture';
   import { status as dumpsStatusValue, refreshStatus, togglePassthrough } from '$stores/dumps';
   import { refreshDevtoolsStatus, debugCaptureEnabled, setDebugCapture } from '$stores/queries';
@@ -28,6 +29,7 @@
 
   type Lens = DebugLens;
   const tabs = $derived<TabItem<Lens>[]>([
+    { id: 'requests', label: m.debug_tab_requests(), count: counts['request'] },
     { id: 'dumps', label: m.debug_tab_dumps(), count: counts['dump'] },
     { id: 'queries', label: m.debug_tab_queries(), count: counts['query'] },
     { id: 'jobs', label: m.debug_tab_jobs(), count: counts['job'] },
@@ -107,6 +109,10 @@
     </div>
     {:else if !$debugCaptureEnabled}
     <DebugDisabled />
+    {:else if $debugLens === 'requests'}
+    <div class="flex-1 min-h-0 overflow-hidden">
+      <RequestsLens />
+    </div>
     {:else if $debugLens === 'dumps'}
     <div class="px-3 sm:px-5 py-2 space-y-2 shrink-0 text-xs text-gray-500 dark:text-gray-400">
       <p>

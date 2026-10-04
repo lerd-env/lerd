@@ -1,4 +1,5 @@
 <script lang="ts">
+  import StructuredValue from './StructuredValue.svelte';
   import { onMount, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
   import { debugSearch } from '$stores/debugLens';
@@ -350,7 +351,7 @@
                     <div class="text-gray-400">caused by {d.previous}</div>
                   {/if}
                   {#if wireKind === 'log' && d.context}
-                    <pre class="whitespace-pre-wrap break-all text-gray-700 dark:text-gray-300">{d.context}</pre>
+                    <StructuredValue value={d.context} open class="text-gray-700 dark:text-gray-300" />
                   {/if}
                   {#if wireKind === 'mail'}
                     <div class="text-gray-400 break-all">

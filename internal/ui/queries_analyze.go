@@ -22,18 +22,22 @@ type AnalyzedCaller struct {
 // single request — the classic N+1. Fingerprint is the literal-collapsed SQL
 // shared by every repeat; SampleSQL is one concrete instance.
 type NPlusOneFinding struct {
-	Fingerprint string         `json:"fingerprint"`
-	Count       int            `json:"count"`
-	TotalTimeMS float64        `json:"total_time_ms"`
-	SampleSQL   string         `json:"sample_sql"`
-	Caller      AnalyzedCaller `json:"caller"`
+	Fingerprint string  `json:"fingerprint"`
+	Count       int     `json:"count"`
+	TotalTimeMS float64 `json:"total_time_ms"`
+	SampleSQL   string  `json:"sample_sql"`
+	// ExampleSQL is the sample with its bindings in place, ready to run or
+	// EXPLAIN locally.
+	ExampleSQL string         `json:"example_sql,omitempty"`
+	Caller     AnalyzedCaller `json:"caller"`
 }
 
 // SlowFinding is a single query at or over the slow threshold.
 type SlowFinding struct {
-	SQL    string         `json:"sql"`
-	TimeMS float64        `json:"time_ms"`
-	Caller AnalyzedCaller `json:"caller"`
+	SQL        string         `json:"sql"`
+	ExampleSQL string         `json:"example_sql,omitempty"`
+	TimeMS     float64        `json:"time_ms"`
+	Caller     AnalyzedCaller `json:"caller"`
 }
 
 // RequestAnalysis groups findings for one request (or worker invocation).
@@ -68,6 +72,7 @@ type reqAcc struct {
 	count                      map[string]int            // fingerprint -> count
 	timeMS                     map[string]float64        // fingerprint -> summed time
 	sample                     map[string]string         // fingerprint -> a concrete SQL
+	example                    map[string]string         // fingerprint -> that SQL with its bindings
 	caller                     map[string]AnalyzedCaller // fingerprint -> originating frame
 	slow                       []SlowFinding
 }
@@ -101,7 +106,7 @@ func analyzeQueries(events []dumps.Event, minRepeat int, slowMS float64) QueryAn
 			a = &reqAcc{
 				site: ev.Ctx.Site, request: ev.Ctx.Request, worker: ev.Ctx.Worker, rid: ev.Ctx.RID,
 				count: map[string]int{}, timeMS: map[string]float64{},
-				sample: map[string]string{}, caller: map[string]AnalyzedCaller{},
+				sample: map[string]string{}, example: map[string]string{}, caller: map[string]AnalyzedCaller{},
 			}
 			accs[key] = a
 			keyOrder = append(keyOrder, key)
@@ -112,13 +117,14 @@ func analyzeQueries(events []dumps.Event, minRepeat int, slowMS float64) QueryAn
 		if _, seen := a.count[fp]; !seen {
 			a.order = append(a.order, fp)
 			a.sample[fp] = q.SQL
+			a.example[fp] = inlineBindings(q.SQL, q.Bindings)
 			a.caller[fp] = AnalyzedCaller{File: ev.Src.File, Line: ev.Src.Line}
 		}
 		a.count[fp]++
 		a.timeMS[fp] += q.TimeMS
 		if q.TimeMS >= slowMS {
 			a.slow = append(a.slow, SlowFinding{
-				SQL: q.SQL, TimeMS: q.TimeMS,
+				SQL: q.SQL, ExampleSQL: inlineBindings(q.SQL, q.Bindings), TimeMS: q.TimeMS,
 				Caller: AnalyzedCaller{File: ev.Src.File, Line: ev.Src.Line},
 			})
 		}
@@ -137,6 +143,7 @@ func analyzeQueries(events []dumps.Event, minRepeat int, slowMS float64) QueryAn
 				Count:       a.count[fp],
 				TotalTimeMS: a.timeMS[fp],
 				SampleSQL:   a.sample[fp],
+				ExampleSQL:  a.example[fp],
 				Caller:      a.caller[fp],
 			})
 		}
