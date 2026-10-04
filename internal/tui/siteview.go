@@ -179,6 +179,10 @@ func (m *Model) siteHeader(parent *siteinfo.EnrichedSite, cw int) []string {
 	if site.AppName != "" && site.AppName != domain {
 		title = append(title, sp("   "+site.AppName, colDim))
 	}
+	// Commands take the registered name, so say it when the domain does not.
+	if site == parent && site.Name != "" && !strings.HasPrefix(domain, site.Name+".") {
+		title = append(title, sp("   site ", colDim), sp(site.Name, nil))
+	}
 	out = append(out, rowLR(nil, cw, append(title, sp("   ", nil)), siteVersions(site)))
 
 	var where []seg

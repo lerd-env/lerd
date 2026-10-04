@@ -123,3 +123,14 @@ func TestSiteOverviewShowsLongWorkerUnitsWhole(t *testing.T) {
 		}
 	}
 }
+
+func TestSiteHeaderNamesASiteWhoseNameIsNotItsDomain(t *testing.T) {
+	m := siteViewModel()
+	if out := ansi.Strip(strings.Join(m.siteHeader(m.currentSite(), 140), "\n")); strings.Contains(out, "site shop") {
+		t.Fatalf("a site named after its domain should not repeat the name:\n%s", out)
+	}
+	m.snap.Sites[0].Name = "crm"
+	if out := ansi.Strip(strings.Join(m.siteHeader(m.currentSite(), 140), "\n")); !strings.Contains(out, "site crm") {
+		t.Fatalf("the header should name a site registered as crm on shop.test:\n%s", out)
+	}
+}
