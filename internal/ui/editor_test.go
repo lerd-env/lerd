@@ -127,3 +127,41 @@ func TestHandleOpenEditorLaunches(t *testing.T) {
 		t.Fatalf("status = %d, want 204 (body: %s)", rr.Code, rr.Body.String())
 	}
 }
+
+// TestSiteEditorFor checks a file takes the editor of the deepest site whose
+// folder holds it.
+func TestSiteEditorFor(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := config.SaveSites(&config.SiteRegistry{Sites: []config.Site{
+		{Name: "outer", Path: "/home/u/work", Editor: "vscode"},
+		{Name: "app", Path: "/home/u/work/app", Editor: "phpstorm"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := siteEditorFor("/home/u/work/app/routes/web.php"); got != "phpstorm" {
+		t.Fatalf("app file editor = %q", got)
+	}
+	if got := siteEditorFor("/home/u/other/x.php"); got != "" {
+		t.Fatalf("file outside sites editor = %q", got)
+	}
+}
+
+// TestOpenProjectInEditor checks a site opens as a project only in an editor
+// someone chose, its own or the global one, never one found by probing.
+func TestOpenProjectInEditor(t *testing.T) {
+	home := isolateEditorEnv(t)
+	site := config.Site{Name: "shop", Path: home}
+	if err := openProjectInEditor(site, home); err == nil {
+		t.Fatal("want an error when no editor is set")
+	}
+	writeEditorConfig(t, "true")
+	if err := openProjectInEditor(site, home); err != nil {
+		t.Fatalf("global editor: %v", err)
+	}
+	writeEditorConfig(t, "")
+	site.Editor = "true"
+	if err := openProjectInEditor(site, home); err != nil {
+		t.Fatalf("site editor: %v", err)
+	}
+}

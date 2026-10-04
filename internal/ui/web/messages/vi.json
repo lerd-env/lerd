@@ -1020,6 +1020,7 @@
   "sites_reqstats_typical": "Thông thường {ms} ms",
   "sites_reqstats_watching": "Đang chờ yêu cầu",
   "sites_restartContainer": "Khởi động lại container",
+  "sites_openInEditor": "Mở trong trình soạn thảo",
   "sites_restartDevServer": "Khởi động lại máy chủ dev",
   "sites_restartFailed": "Khởi động lại thất bại: {error}",
   "sites_resume": "Tiếp tục",
@@ -1669,5 +1670,16 @@
   "browser_settings_resourcesLong": "Tài nguyên không tải được",
   "browser_settings_navigationLong": "Lượt xem trang, gồm cả điều hướng SPA",
   "browser_presets_showMore": "Hiện thêm {count}",
-  "browser_presets_showLess": "Thu gọn"
+  "browser_presets_showLess": "Thu gọn",
+  "editor_label": "Trình soạn thảo",
+  "editor_auto": "Tìm trình soạn thảo đã cài",
+  "editor_custom": "Lệnh tùy chỉnh",
+  "editor_settingsTitle": "Trình soạn thảo",
+  "editor_settingsDescription": "Trình soạn thảo mở các đường dẫn tệp trong cửa sổ Debug. Mỗi site có thể chọn riêng trong phần điều khiển.",
+  "editor_groupFound": "Tìm thấy trên hệ thống",
+  "editor_groupOther": "Chọn",
+  "editor_customOption": "Tùy chỉnh…",
+  "editor_customTitle": "Trình soạn thảo tùy chỉnh",
+  "editor_customHint": "Dùng {file} và {line} ở chỗ đường dẫn và dòng. URL (scheme://…) mở qua desktop, còn lại chạy như một lệnh.",
+  "editor_default": "Trình soạn thảo mặc định"
 }

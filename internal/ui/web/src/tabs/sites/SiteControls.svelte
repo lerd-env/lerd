@@ -16,8 +16,10 @@
     saveWorkerOptions,
     setWorktreeDBIsolated,
     siteHasLogSources,
+    setSiteEditor,
     loadSites
   } from '$stores/sites';
+  import EditorPicker from '$components/EditorPicker.svelte';
   import { goToTab } from '$stores/route';
   import { loadServices } from '$stores/services';
   import { phpVersions, phpOptionsForSite } from '$stores/phpVersions';
@@ -44,6 +46,12 @@
     activeWorktreeBranch?: string;
   }
   let { site, activeWorktreeBranch = '' }: Props = $props();
+
+  async function onEditorChange(id: string) {
+    const res = await setSiteEditor(site.domain, id);
+    if (!res.ok) openErrorModal(res.error ?? '');
+    await loadSites();
+  }
 
   const activeWorktree = $derived.by(() => {
     if (!activeWorktreeBranch) return undefined;
@@ -360,6 +368,11 @@
         placeholder={$status.node_default ? m.sites_controls_nodeDefaultVersion({ version: $status.node_default }) : m.sites_controls_nodeDefault()}
         onchange={(v) => onNodeChange({ target: { value: v } } as unknown as Event)}
       />
+    {/if}
+
+    <!-- Only a PHP site produces file paths the Debug window can open. -->
+    {#if !activeWorktreeBranch && !site.custom_container && !site.host_proxy && (site.uses_php || site.runtime === 'fpm-custom')}
+      <EditorPicker scope="site" value={site.editor ?? ''} onchange={onEditorChange} />
     {/if}
 
     {#if site.runtime === 'frankenphp' && site.runtime_worker && site.is_laravel}

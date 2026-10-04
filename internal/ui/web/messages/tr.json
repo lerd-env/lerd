@@ -1020,6 +1020,7 @@
   "sites_reqstats_typical": "Tipik {ms} ms",
   "sites_reqstats_watching": "İstekler bekleniyor",
   "sites_restartContainer": "Konteyneri yeniden başlat",
+  "sites_openInEditor": "Düzenleyicide aç",
   "sites_restartDevServer": "Dev sunucusunu yeniden başlat",
   "sites_restartFailed": "Yeniden başlatma başarısız: {error}",
   "sites_resume": "Devam ettir",
@@ -1669,5 +1670,16 @@
   "browser_settings_resourcesLong": "Yüklenemeyen kaynaklar",
   "browser_settings_navigationLong": "Sayfa görüntülemeleri, SPA gezinmesi dahil",
   "browser_presets_showMore": "{count} tane daha göster",
-  "browser_presets_showLess": "Daha az göster"
+  "browser_presets_showLess": "Daha az göster",
+  "editor_label": "Editör",
+  "editor_auto": "Kurulu editörü bul",
+  "editor_custom": "Özel komut",
+  "editor_settingsTitle": "Editör",
+  "editor_settingsDescription": "Debug penceresindeki dosya yollarının açıldığı editör. Her site kendi denetimlerinden ayrı bir editör seçebilir.",
+  "editor_groupFound": "Bu sistemde bulunanlar",
+  "editor_groupOther": "Seç",
+  "editor_customOption": "Özel…",
+  "editor_customTitle": "Özel editör",
+  "editor_customHint": "Yol ve satırın geleceği yerlere {file} ve {line} yaz. URL (scheme://…) masaüstü üzerinden açılır, diğer her şey komut olarak çalışır.",
+  "editor_default": "Varsayılan editör"
 }

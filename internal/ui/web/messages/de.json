@@ -1020,6 +1020,7 @@
   "sites_reqstats_typical": "Typisch {ms} ms",
   "sites_reqstats_watching": "Warte auf Anfragen",
   "sites_restartContainer": "Container neu starten",
+  "sites_openInEditor": "Im Editor öffnen",
   "sites_restartDevServer": "Dev-Server neu starten",
   "sites_restartFailed": "Neustart fehlgeschlagen: {error}",
   "sites_resume": "Fortsetzen",
@@ -1669,5 +1670,16 @@
   "browser_settings_resourcesLong": "Ressourcen, die nicht geladen wurden",
   "browser_settings_navigationLong": "Seitenaufrufe, SPA-Navigation inklusive",
   "browser_presets_showMore": "{count} weitere anzeigen",
-  "browser_presets_showLess": "Weniger anzeigen"
+  "browser_presets_showLess": "Weniger anzeigen",
+  "editor_label": "Editor",
+  "editor_auto": "Installierten Editor finden",
+  "editor_custom": "Eigener Befehl",
+  "editor_settingsTitle": "Editor",
+  "editor_settingsDescription": "Der Editor, in dem Dateipfade aus dem Debug-Fenster geöffnet werden. Eine Site kann in ihren Einstellungen einen eigenen wählen.",
+  "editor_groupFound": "Auf diesem System gefunden",
+  "editor_groupOther": "Auswählen",
+  "editor_customOption": "Eigener…",
+  "editor_customTitle": "Eigener Editor",
+  "editor_customHint": "Setze {file} und {line} dort ein, wo Pfad und Zeile hingehören. Eine URL (scheme://…) öffnet über den Desktop, alles andere läuft als Befehl.",
+  "editor_default": "Standard-Editor"
 }

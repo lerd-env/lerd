@@ -4,7 +4,9 @@ package editor
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -12,21 +14,149 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
-// knownEditors are the GUI editors probed on PATH when nothing is configured,
-// with the arguments each needs to jump to file:line. They open a directory as a
-// bare argument, which is what DirCommand uses.
-var knownEditors = []struct {
+// Editor is one editor lerd knows how to open a file in: the binary that
+// jumps to file:line, and the URL scheme the editor registers with the desktop,
+// which is how it is reached when its binary is not on PATH (a JetBrains IDE
+// installed through Toolbox, say). The ID is what a site's `editor` names.
+type Editor struct {
+	ID       string `json:"id"`
+	Label    string `json:"label"`
 	bin      string
 	lineArgs func(file string, line int) []string
-}{
-	{"code", func(f string, l int) []string { return []string{"-g", loc(f, l)} }},
-	{"cursor", func(f string, l int) []string { return []string{"-g", loc(f, l)} }},
-	{"codium", func(f string, l int) []string { return []string{"-g", loc(f, l)} }},
-	{"windsurf", func(f string, l int) []string { return []string{"-g", loc(f, l)} }},
-	{"subl", func(f string, l int) []string { return []string{loc(f, l)} }},
-	{"zed", func(f string, l int) []string { return []string{loc(f, l)} }},
-	{"phpstorm", func(f string, l int) []string { return []string{"--line", strconv.Itoa(l), f} }},
-	{"idea", func(f string, l int) []string { return []string{"--line", strconv.Itoa(l), f} }},
+	url      string
+	// apps are the macOS bundle names the editor installs as.
+	apps []string
+}
+
+func gotoArgs(f string, l int) []string { return []string{"-g", loc(f, l)} }
+func locArgs(f string, l int) []string  { return []string{loc(f, l)} }
+func jetbrainsArgs(f string, l int) []string {
+	return []string{"--line", strconv.Itoa(l), f}
+}
+
+// Editors is the curated list, probed on PATH in this order when nothing is
+// configured. They open a directory as a bare argument, which DirCommand uses.
+var Editors = []Editor{
+	{"vscode", "Visual Studio Code", "code", gotoArgs, "vscode://file/{file}:{line}", []string{"Visual Studio Code.app"}},
+	{"cursor", "Cursor", "cursor", gotoArgs, "cursor://file/{file}:{line}", []string{"Cursor.app"}},
+	{"vscodium", "VSCodium", "codium", gotoArgs, "vscodium://file/{file}:{line}", []string{"VSCodium.app"}},
+	{"windsurf", "Windsurf", "windsurf", gotoArgs, "windsurf://file/{file}:{line}", []string{"Windsurf.app"}},
+	{"sublime", "Sublime Text", "subl", locArgs, "subl://open?url=file://{file}&line={line}", []string{"Sublime Text.app"}},
+	{"zed", "Zed", "zed", locArgs, "zed://file/{file}:{line}", []string{"Zed.app"}},
+	{"phpstorm", "PhpStorm", "phpstorm", jetbrainsArgs, "phpstorm://open?file={file}&line={line}", []string{"PhpStorm.app"}},
+	{"idea", "IntelliJ IDEA", "idea", jetbrainsArgs, "idea://open?file={file}&line={line}", []string{"IntelliJ IDEA.app", "IntelliJ IDEA Ultimate.app", "IntelliJ IDEA CE.app"}},
+	{"webstorm", "WebStorm", "webstorm", jetbrainsArgs, "webstorm://open?file={file}&line={line}", []string{"WebStorm.app"}},
+}
+
+// Installed reports whether the editor is on this machine: its binary on PATH,
+// a desktop entry claiming its URL scheme (how JetBrains Toolbox and Flatpak
+// install them on Linux), or its app bundle on macOS.
+func (e Editor) Installed() bool {
+	if _, err := exec.LookPath(e.bin); err == nil {
+		return true
+	}
+	if runtime.GOOS == "darwin" {
+		home, _ := os.UserHomeDir()
+		for _, app := range e.apps {
+			for _, dir := range []string{"/Applications", filepath.Join(home, "Applications")} {
+				if _, err := os.Stat(filepath.Join(dir, app)); err == nil {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	scheme := e.url[:strings.Index(e.url, ":")]
+	return schemeHandled(scheme)
+}
+
+// applicationDirs are where desktop entries live; a variable so a test can keep
+// the machine's own out.
+var applicationDirs = defaultApplicationDirs
+
+func defaultApplicationDirs() []string {
+	home, _ := os.UserHomeDir()
+	return []string{
+		filepath.Join(home, ".local/share/applications"),
+		"/usr/share/applications",
+		"/usr/local/share/applications",
+		filepath.Join(home, ".local/share/flatpak/exports/share/applications"),
+		"/var/lib/flatpak/exports/share/applications",
+	}
+}
+
+// schemeHandled reports whether a desktop entry in the usual application dirs
+// declares itself the handler of a URL scheme.
+func schemeHandled(scheme string) bool {
+	want := "x-scheme-handler/" + scheme
+	for _, dir := range applicationDirs() {
+		entries, _ := filepath.Glob(filepath.Join(dir, "*.desktop"))
+		for _, f := range entries {
+			if b, err := os.ReadFile(f); err == nil && strings.Contains(string(b), want) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Known returns the curated editor with this ID.
+func Known(id string) (Editor, bool) {
+	for _, e := range Editors {
+		if e.ID == id {
+			return e, true
+		}
+	}
+	return Editor{}, false
+}
+
+// For resolves how to open file at line for a site that chose an editor: its
+// binary when that is on PATH, otherwise its URL, for the dashboard to hand to
+// the desktop. Without a site choice the global `editor` is used, as one of the
+// listed editors when it names one and as a command template otherwise. An ID
+// lerd does not know is refused by name rather than guessed at.
+func For(id, file string, line int) (argv []string, url string, err error) {
+	if id == "" {
+		if _, ok := Known(configuredTemplate()); !ok {
+			if tmpl := configuredTemplate(); IsURLTemplate(tmpl) {
+				return nil, fillTemplate(tmpl, file, line), nil
+			}
+			return Command(file, line), "", nil
+		}
+		id = configuredTemplate()
+	}
+	e, ok := Known(id)
+	if !ok {
+		if !IsTemplate(id) {
+			return nil, "", fmt.Errorf("unknown editor %q", id)
+		}
+		if IsURLTemplate(id) {
+			return nil, fillTemplate(id, file, line), nil
+		}
+		return strings.Fields(fillTemplate(id, file, line)), "", nil
+	}
+	if p, err := exec.LookPath(e.bin); err == nil {
+		return append([]string{p}, e.lineArgs(file, line)...), "", nil
+	}
+	return nil, fillTemplate(e.url, file, line), nil
+}
+
+// IsTemplate reports whether a choice is a custom editor rather than a listed
+// one: a command or a URL naming where the file goes with {file}.
+func IsTemplate(choice string) bool { return strings.Contains(choice, "{file}") }
+
+// IsURLTemplate reports whether a custom editor is reached by its URL scheme.
+func IsURLTemplate(choice string) bool { return IsTemplate(choice) && strings.Contains(choice, "://") }
+
+// Valid reports whether a site or the global setting may choose this editor:
+// a listed one, a custom template, or none.
+func Valid(choice string) bool {
+	_, ok := Known(choice)
+	return choice == "" || ok || IsTemplate(choice)
+}
+
+func fillTemplate(tmpl, file string, line int) string {
+	return strings.NewReplacer("{file}", file, "{line}", strconv.Itoa(line)).Replace(tmpl)
 }
 
 func loc(file string, line int) string { return fmt.Sprintf("%s:%d", file, line) }
@@ -55,7 +185,7 @@ func Command(file string, line int) []string {
 		return append(strings.Fields(tmpl), file)
 	}
 
-	for _, e := range knownEditors {
+	for _, e := range Editors {
 		if p, err := exec.LookPath(e.bin); err == nil {
 			return append([]string{p}, e.lineArgs(file, line)...)
 		}
@@ -78,13 +208,31 @@ func Command(file string, line int) []string {
 // manager rather than an editor, so nil means "no editor found" and the caller
 // should say so.
 func DirCommand(dir string) []string {
-	if tmpl := configuredTemplate(); tmpl != "" {
+	return DirFor("", dir)
+}
+
+// DirFor is DirCommand for a site that may have chosen its own editor, which
+// wins over the global one; a listed editor opens the directory with its binary.
+func DirFor(id, dir string) []string {
+	if id == "" {
+		id = configuredTemplate()
+	}
+	if e, ok := Known(id); ok {
+		if p, err := exec.LookPath(e.bin); err == nil {
+			return []string{p, dir}
+		}
+		return nil
+	}
+	if IsURLTemplate(id) {
+		return nil
+	}
+	if tmpl := id; tmpl != "" {
 		if strings.Contains(tmpl, "{file}") || strings.Contains(tmpl, "{line}") {
 			return dropLinePlaceholder(strings.Fields(tmpl), dir)
 		}
 		return append(strings.Fields(tmpl), dir)
 	}
-	for _, e := range knownEditors {
+	for _, e := range Editors {
 		if p, err := exec.LookPath(e.bin); err == nil {
 			return []string{p, dir}
 		}

@@ -1020,6 +1020,7 @@
   "sites_reqstats_typical": "通常 {ms} ms",
   "sites_reqstats_watching": "リクエストを待機中",
   "sites_restartContainer": "コンテナを再起動",
+  "sites_openInEditor": "エディタで開く",
   "sites_restartDevServer": "開発サーバーを再起動",
   "sites_restartFailed": "再起動に失敗しました: {error}",
   "sites_resume": "再開",
@@ -1669,5 +1670,16 @@
   "browser_settings_resourcesLong": "読み込みに失敗したリソース",
   "browser_settings_navigationLong": "ページビュー（SPA の遷移を含む）",
   "browser_presets_showMore": "さらに {count} 件表示",
-  "browser_presets_showLess": "表示を減らす"
+  "browser_presets_showLess": "表示を減らす",
+  "editor_label": "エディタ",
+  "editor_auto": "インストール済みを検出",
+  "editor_custom": "カスタムコマンド",
+  "editor_settingsTitle": "エディタ",
+  "editor_settingsDescription": "Debug ウィンドウのファイルパスを開くエディタ。サイトごとにコントロールで選べます。",
+  "editor_groupFound": "このシステムで検出",
+  "editor_groupOther": "選択",
+  "editor_customOption": "カスタム…",
+  "editor_customTitle": "カスタムエディタ",
+  "editor_customHint": "パスと行の位置に {file} と {line} を使います。URL (scheme://…) はデスクトップ経由で開き、それ以外はコマンドとして実行されます。",
+  "editor_default": "既定のエディタ"
 }

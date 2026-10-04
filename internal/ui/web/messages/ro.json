@@ -1020,6 +1020,7 @@
   "sites_reqstats_typical": "Tipic {ms} ms",
   "sites_reqstats_watching": "În așteptarea cererilor",
   "sites_restartContainer": "Repornește containerul",
+  "sites_openInEditor": "Deschide în editor",
   "sites_restartDevServer": "Repornește serverul de dev",
   "sites_restartFailed": "Repornire eșuată: {error}",
   "sites_resume": "Reia",
@@ -1669,5 +1670,16 @@
   "browser_settings_resourcesLong": "Resurse care nu s-au încărcat",
   "browser_settings_navigationLong": "Vizualizări de pagină, inclusiv navigarea SPA",
   "browser_presets_showMore": "Arată încă {count}",
-  "browser_presets_showLess": "Arată mai puține"
+  "browser_presets_showLess": "Arată mai puține",
+  "editor_label": "Editor",
+  "editor_auto": "Detectează editorul instalat",
+  "editor_custom": "Comandă proprie",
+  "editor_settingsTitle": "Editor",
+  "editor_settingsDescription": "Editorul în care se deschid căile de fișiere din fereastra Debug. Un site își poate alege propriul editor din controalele sale.",
+  "editor_groupFound": "Găsite pe acest sistem",
+  "editor_groupOther": "Alege",
+  "editor_customOption": "Personalizat…",
+  "editor_customTitle": "Editor personalizat",
+  "editor_customHint": "Folosește {file} și {line} unde intră calea și linia. Un URL (scheme://…) se deschide prin desktop, orice altceva rulează ca o comandă.",
+  "editor_default": "Editor implicit"
 }

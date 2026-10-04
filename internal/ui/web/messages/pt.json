@@ -1020,6 +1020,7 @@
   "sites_reqstats_typical": "Típico {ms} ms",
   "sites_reqstats_watching": "Aguardando requisições",
   "sites_restartContainer": "Reiniciar contêiner",
+  "sites_openInEditor": "Abrir no editor",
   "sites_restartDevServer": "Reiniciar servidor de dev",
   "sites_restartFailed": "Reinicialização falhou: {error}",
   "sites_resume": "Retomar",
@@ -1669,5 +1670,16 @@
   "browser_settings_resourcesLong": "Recursos que não carregaram",
   "browser_settings_navigationLong": "Visualizações de página, incluindo navegação SPA",
   "browser_presets_showMore": "Mostrar mais {count}",
-  "browser_presets_showLess": "Mostrar menos"
+  "browser_presets_showLess": "Mostrar menos",
+  "editor_label": "Editor",
+  "editor_auto": "Detectar editor instalado",
+  "editor_custom": "Comando personalizado",
+  "editor_settingsTitle": "Editor",
+  "editor_settingsDescription": "O editor em que os caminhos de arquivo da janela Debug abrem. Um site pode escolher o seu nos controles dele.",
+  "editor_groupFound": "Encontrados neste sistema",
+  "editor_groupOther": "Escolher",
+  "editor_customOption": "Personalizado…",
+  "editor_customTitle": "Editor personalizado",
+  "editor_customHint": "Use {file} e {line} onde entram o caminho e a linha. Uma URL (scheme://…) abre pelo desktop, qualquer outra coisa roda como comando.",
+  "editor_default": "Editor padrão"
 }

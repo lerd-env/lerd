@@ -1020,6 +1020,7 @@
   "sites_reqstats_typical": "Gewoonlijk {ms} ms",
   "sites_reqstats_watching": "Wachten op verzoeken",
   "sites_restartContainer": "Container herstarten",
+  "sites_openInEditor": "Openen in editor",
   "sites_restartDevServer": "Dev-server herstarten",
   "sites_restartFailed": "Herstarten mislukt: {error}",
   "sites_resume": "Hervatten",
@@ -1669,5 +1670,16 @@
   "browser_settings_resourcesLong": "Bronnen die niet laadden",
   "browser_settings_navigationLong": "Paginaweergaven, SPA-navigatie inbegrepen",
   "browser_presets_showMore": "Nog {count} tonen",
-  "browser_presets_showLess": "Minder tonen"
+  "browser_presets_showLess": "Minder tonen",
+  "editor_label": "Editor",
+  "editor_auto": "Geïnstalleerde editor zoeken",
+  "editor_custom": "Eigen commando",
+  "editor_settingsTitle": "Editor",
+  "editor_settingsDescription": "De editor waarin bestandspaden uit het Debug-venster openen. Een site kan in zijn bediening een eigen kiezen.",
+  "editor_groupFound": "Gevonden op dit systeem",
+  "editor_groupOther": "Kiezen",
+  "editor_customOption": "Eigen…",
+  "editor_customTitle": "Eigen editor",
+  "editor_customHint": "Gebruik {file} en {line} waar pad en regel horen. Een URL (scheme://…) opent via je bureaublad, al het andere draait als commando.",
+  "editor_default": "Standaardeditor"
 }

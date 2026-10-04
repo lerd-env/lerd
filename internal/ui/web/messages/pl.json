@@ -1020,6 +1020,7 @@
   "sites_reqstats_typical": "Typowo {ms} ms",
   "sites_reqstats_watching": "Oczekiwanie na żądania",
   "sites_restartContainer": "Uruchom ponownie kontener",
+  "sites_openInEditor": "Otwórz w edytorze",
   "sites_restartDevServer": "Uruchom ponownie serwer dev",
   "sites_restartFailed": "Ponowne uruchomienie nie powiodło się: {error}",
   "sites_resume": "Wznów",
@@ -1669,5 +1670,16 @@
   "browser_settings_resourcesLong": "Zasoby, których nie udało się wczytać",
   "browser_settings_navigationLong": "Wyświetlenia stron, w tym nawigacja SPA",
   "browser_presets_showMore": "Pokaż jeszcze {count}",
-  "browser_presets_showLess": "Pokaż mniej"
+  "browser_presets_showLess": "Pokaż mniej",
+  "editor_label": "Edytor",
+  "editor_auto": "Wykryj zainstalowany edytor",
+  "editor_custom": "Własne polecenie",
+  "editor_settingsTitle": "Edytor",
+  "editor_settingsDescription": "Edytor, w którym otwierają się ścieżki plików z okna Debug. Strona może wybrać własny w swoich ustawieniach.",
+  "editor_groupFound": "Znalezione w systemie",
+  "editor_groupOther": "Wybierz",
+  "editor_customOption": "Własny…",
+  "editor_customTitle": "Własny edytor",
+  "editor_customHint": "Użyj {file} i {line} tam, gdzie mają trafić ścieżka i wiersz. URL (scheme://…) otwiera się przez pulpit, wszystko inne uruchamia się jako polecenie.",
+  "editor_default": "Domyślny edytor"
 }

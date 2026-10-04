@@ -1020,6 +1020,7 @@
   "sites_reqstats_typical": "Typique {ms} ms",
   "sites_reqstats_watching": "En attente de requêtes",
   "sites_restartContainer": "Redémarrer le conteneur",
+  "sites_openInEditor": "Ouvrir dans l’éditeur",
   "sites_restartDevServer": "Redémarrer le serveur de dev",
   "sites_restartFailed": "Échec du redémarrage : {error}",
   "sites_resume": "Reprendre",
@@ -1669,5 +1670,16 @@
   "browser_settings_resourcesLong": "Ressources qui n'ont pas pu être chargées",
   "browser_settings_navigationLong": "Pages vues, navigation SPA comprise",
   "browser_presets_showMore": "Afficher {count} de plus",
-  "browser_presets_showLess": "Afficher moins"
+  "browser_presets_showLess": "Afficher moins",
+  "editor_label": "Éditeur",
+  "editor_auto": "Détecter l’éditeur installé",
+  "editor_custom": "Commande personnalisée",
+  "editor_settingsTitle": "Éditeur",
+  "editor_settingsDescription": "L’éditeur dans lequel s’ouvrent les chemins de fichiers de la fenêtre Debug. Un site peut choisir le sien dans ses contrôles.",
+  "editor_groupFound": "Trouvés sur ce système",
+  "editor_groupOther": "Choisir",
+  "editor_customOption": "Personnalisé…",
+  "editor_customTitle": "Éditeur personnalisé",
+  "editor_customHint": "Mets {file} et {line} là où vont le chemin et la ligne. Une URL (scheme://…) s’ouvre via le bureau, le reste s’exécute comme commande.",
+  "editor_default": "Éditeur par défaut"
 }
