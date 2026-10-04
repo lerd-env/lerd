@@ -58,7 +58,7 @@ func DumpBridgeIni() (string, error) {
 }
 
 // DevtoolsSeamsConf renders every seam the store declares, one per line as
-// kind|match|target|method|name. Job seams come from the framework layer, where
+// kind|match|target|method|name[|label]. Job seams come from the framework layer, where
 // a queue belongs; capture seams name their own kind and come from both layers,
 // since a library a package brings is the same library on every framework.
 //
@@ -74,16 +74,23 @@ func DevtoolsSeamsConf() string {
 		if kind == "" || target == "" || seam.Method == "" {
 			return
 		}
-		line := strings.Join([]string{kind, match, target, seam.Method, seam.Name}, "|")
+		fields := []string{kind, match, target, seam.Method, seam.Name}
+		if seam.Label != "" {
+			fields = append(fields, seam.Label)
+		}
+		line := strings.Join(fields, "|")
 		// A field carrying the separator or a newline would shift every field
 		// after it, so drop the seam rather than write a broken line.
-		if strings.ContainsAny(kind+target+seam.Method+seam.Name, "|\n\r") || seen[line] {
+		if strings.ContainsAny(kind+target+seam.Method+seam.Name+seam.Label, "|\n\r") || seen[line] {
 			return
 		}
 		seen[line] = true
 		lines = append(lines, line)
 	}
-	for _, fw := range config.ListFrameworks() {
+	// Every major, not only the one a site resolves to: each declares the
+	// classes of its own release, and the file serves all sites at once.
+	for _, info := range config.ListFrameworksDetailed() {
+		fw := info.Framework
 		if fw == nil || fw.Devtools == nil {
 			continue
 		}
@@ -104,7 +111,51 @@ func DevtoolsSeamsConf() string {
 	}
 	sort.Strings(lines)
 	out := "# lerd devtools capture seams, generated from the framework store.\n" +
-		"# kind|match|target|method|name, read once per PHP process.\n"
+		"# kind|match|target|method|name[|label], read once per PHP process.\n"
+	for _, l := range lines {
+		out += l + "\n"
+	}
+	return out
+}
+
+// DevtoolsExcludeConf renders the console commands whose own work the collector
+// leaves out, one site|command per line: "*" for what the store declares, which
+// holds on every site, and the site's name for what its .lerd.yaml adds.
+func DevtoolsExcludeConf() string {
+	var lines []string
+	seen := map[string]bool{}
+	add := func(site, cmd string) {
+		line := site + "|" + strings.TrimSpace(cmd)
+		if strings.TrimSpace(cmd) == "" || strings.ContainsAny(cmd, "|\n\r") || seen[line] {
+			return
+		}
+		seen[line] = true
+		lines = append(lines, line)
+	}
+	for _, info := range config.ListFrameworksDetailed() {
+		if fw := info.Framework; fw != nil && fw.Devtools != nil {
+			for _, c := range fw.Devtools.ExcludeCommands {
+				add("*", c)
+			}
+		}
+	}
+	for _, dt := range config.PackageDevtools() {
+		for _, c := range dt.ExcludeCommands {
+			add("*", c)
+		}
+	}
+	if reg, err := config.LoadSites(); err == nil {
+		for _, s := range reg.Sites {
+			if proj, err := config.LoadProjectConfig(s.Path); err == nil && proj.Debug != nil {
+				for _, c := range proj.Debug.ExcludeCommands {
+					add(s.Name, c)
+				}
+			}
+		}
+	}
+	sort.Strings(lines)
+	out := "# lerd devtools excluded commands, from the framework store and .lerd.yaml.\n" +
+		"# site|command, where * is every site and command is a name or a class.\n"
 	for _, l := range lines {
 		out += l + "\n"
 	}
@@ -147,6 +198,7 @@ func WriteDumpBridgeAssets() error {
 		{config.LaravelAdapterFile(), string(adapterContent)},
 		{config.DevtoolsCollectorFile(), string(collectorContent)},
 		{config.DevtoolsSeamsFile(), DevtoolsSeamsConf()},
+		{config.DevtoolsExcludeFile(), DevtoolsExcludeConf()},
 	} {
 		if info, err := os.Stat(asset.path); err == nil {
 			if info.IsDir() {
@@ -175,6 +227,7 @@ func RemoveDumpAssets() error {
 		config.LaravelAdapterFile(),
 		config.DevtoolsCollectorFile(),
 		config.DevtoolsSeamsFile(),
+		config.DevtoolsExcludeFile(),
 		config.DumpsEnabledFlagFile(),
 		config.DevtoolsWorkersFlagFile(),
 		// Legacy: the devtools collector used to have its own enable sentinel

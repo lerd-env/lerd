@@ -1098,3 +1098,92 @@ namespace {
 		t.Errorf("data = %+v, want the record's level, channel and message", e.Data)
 	}
 }
+
+// TestCollectorPHP_SpanSeamsTimeAppPhases checks a span seam reports one timed
+// event per call, labelled by the store, named by its expression, and nested
+// spans close in order.
+func TestCollectorPHP_SpanSeamsTimeAppPhases(t *testing.T) {
+	dir := t.TempDir()
+	seams := "# header\n" +
+		"span|class|Fixture\\Kernel|bootstrap||Bootstrap\n" +
+		"span|class|Fixture\\Route|run|this.method:getActionName|Controller\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
+		t.Fatalf("write seams: %v", err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace Fixture {
+    class Kernel { public function bootstrap() {} }
+    class Route { public function getActionName() { return 'CartController@show'; } public function run() {} }
+}
+namespace {
+    require COLLECTOR;
+    \Lerd\Collector\seam_begin('Fixture\\Kernel', 'bootstrap', new \Fixture\Kernel(), []);
+    \Lerd\Collector\seam_begin('Fixture\\Route', 'run', new \Fixture\Route(), []);
+    \Lerd\Collector\seam_end('Fixture\\Route', 'run', true, 'boom');
+    \Lerd\Collector\seam_end('Fixture\\Kernel', 'bootstrap', false);
+}
+`)
+
+	type ev struct {
+		Kind string `json:"kind"`
+		Data struct {
+			Label     string   `json:"label"`
+			Name      string   `json:"name"`
+			Status    string   `json:"status"`
+			Exception string   `json:"exception"`
+			TimeMS    *float64 `json:"time_ms"`
+		} `json:"data"`
+	}
+	var events []ev
+	for _, line := range got {
+		var e ev
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			t.Fatalf("bad JSON line %q: %v", line, err)
+		}
+		events = append(events, e)
+	}
+	if len(events) != 2 {
+		t.Fatalf("got %d events, want one per span: %v", len(events), got)
+	}
+	inner, outer := events[0], events[1]
+	if inner.Kind != "span" || inner.Data.Label != "Controller" || inner.Data.Name != "CartController@show" || inner.Data.Status != "failed" || inner.Data.Exception != "boom" {
+		t.Errorf("inner span = %+v, want the failed controller with its action", inner)
+	}
+	if outer.Kind != "span" || outer.Data.Label != "Bootstrap" || outer.Data.Name != "" || outer.Data.Status != "ok" || outer.Data.TimeMS == nil {
+		t.Errorf("outer span = %+v, want an unnamed bootstrap that finished", outer)
+	}
+}
+
+func TestCollectorPHP_AuthSeamNamesTheUserID(t *testing.T) {
+	dir := t.TempDir()
+	seams := "auth|class|Fixture\\Users|setIdentity|arg:1.method:getId\n" +
+		"span|class|Fixture\\Wrapper|run|arg:1|Controller\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
+		t.Fatalf("write seams: %v", err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace Fixture {
+    class Identity { public function getId() { return 42; } }
+    class Users { public function setIdentity($identity) {} }
+    class PagesController { public function display() {} }
+    class Wrapper { public function run($callable) {} }
+}
+namespace {
+    require COLLECTOR;
+    \Lerd\Collector\seam_begin('Fixture\\Users', 'setIdentity', new \Fixture\Users(), [1 => null]);
+    \Lerd\Collector\seam_begin('Fixture\\Users', 'setIdentity', new \Fixture\Users(), [1 => new \Fixture\Identity()]);
+    $controller = new \Fixture\PagesController();
+    \Lerd\Collector\seam_begin('Fixture\\Wrapper', 'run', new \Fixture\Wrapper(), [1 => [$controller, 'display']]);
+    \Lerd\Collector\seam_end('Fixture\\Wrapper', 'run', false);
+    \Lerd\Collector\seam_begin('Fixture\\Wrapper', 'run', new \Fixture\Wrapper(), [1 => $controller->display(...)]);
+    \Lerd\Collector\seam_end('Fixture\\Wrapper', 'run', false);
+}
+`)
+	joined := strings.Join(got, "\n")
+	if strings.Count(joined, `"kind":"auth"`) != 1 || !strings.Contains(joined, `"id":"42"`) {
+		t.Errorf("want one auth event for user 42, a guest skipped: %v", got)
+	}
+	if strings.Count(joined, `"name":"Fixture\\PagesController@display"`) != 2 {
+		t.Errorf("want both callables named by their method: %v", got)
+	}
+}

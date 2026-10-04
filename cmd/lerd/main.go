@@ -719,6 +719,11 @@ func newWatchCmd() *cobra.Command {
 						if err != nil {
 							return
 						}
+						// The commands a .lerd.yaml leaves out of the Debug window
+						// reach the collector through a file next to it.
+						if err := podman.WriteDumpBridgeAssets(); err != nil {
+							fmt.Fprintf(os.Stderr, "[WARN] refreshing debug assets: %v\n", err)
+						}
 						siteChanged := false
 
 						// Custom container and host-proxy sites don't use PHP/Node

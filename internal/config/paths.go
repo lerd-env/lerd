@@ -334,6 +334,12 @@ func DevtoolsSeamsFile() string {
 	return filepath.Join(DumpsAssetsDir(), "devtools-seams.conf")
 }
 
+// DevtoolsExcludeFile is the host path for the console commands the collector
+// reports only the jobs of, one site|command per line.
+func DevtoolsExcludeFile() string {
+	return filepath.Join(DumpsAssetsDir(), "devtools-exclude.conf")
+}
+
 // LaravelAdapterFile is the host path for the Laravel devtools adapter, loaded
 // by the lerd_devtools extension at Application::boot. It lives in the dumps
 // assets dir because that directory is bind-mounted into FPM at

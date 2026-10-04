@@ -18,6 +18,10 @@ const LOADED = 1;
 // PAYLOAD_KEYS caps a whole payload; PAYLOAD_NESTED caps how much of one
 // object inside it is described.
 const PAYLOAD_KEYS = 60;
+
+// DEBUG_SCHEMA is the version of lerd/debug's entry format this collector
+// reads; the package renders its entries for it.
+const DEBUG_SCHEMA = 1;
 const PAYLOAD_NESTED = 20;
 
 // host resolves the capture socket. Both the devtools ini (lerd.devtools_host)
@@ -301,6 +305,11 @@ function emit(string $kind, array $data): void
 // that handed it to Sentry instead would name the reporting, not the fault.
 function emit_with(string $kind, array $data, array $src, array $trace): void
 {
+    // An excluded command's own loop is left out; a job it runs has switched
+    // to an id of its own and comes through.
+    if (!empty($GLOBALS['__lerd_excluded']) && defined('LERD_DEVTOOLS_RID') && rid() === (string) \LERD_DEVTOOLS_RID) {
+        return;
+    }
     try {
         $data['trace'] = $trace;
         send([
@@ -619,7 +628,11 @@ function own_properties($subject): array
             if (method_exists($prop, 'isInitialized') && !$prop->isInitialized($subject)) {
                 continue;
             }
-            $prop->setAccessible(true);
+            // Reflection reads private properties on its own since PHP 8.1, and 8.5
+            // deprecates asking it to.
+            if (\PHP_VERSION_ID < 80100) {
+                $prop->setAccessible(true);
+            }
             $out[$prop->getName()] = $prop->getValue($subject);
         }
     } catch (\Throwable $_) {
@@ -798,9 +811,53 @@ function job($message): void
     emit('job', $data);
 }
 
+// asset_path locates a file lerd writes next to this collector: the container
+// mounts the assets at a fixed path, while a PHP on the host finds them through
+// the ini the debug bridge reads.
+function asset_path(string $name): string
+{
+    $assets = \get_cfg_var('lerd.assets_dir');
+    if (!is_string($assets) || $assets === '') {
+        $assets = '/usr/local/etc/lerd';
+    }
+    return $assets . '/' . $name;
+}
+
+// excluded_commands are the console commands, by name or class, whose own work
+// this site leaves out: the store's for every site and the site's .lerd.yaml.
+function excluded_commands(): array
+{
+    static $list = null;
+    if ($list !== null) {
+        return $list;
+    }
+    $list = [];
+    $path = getenv('LERD_DEVTOOLS_EXCLUDE');
+    $lines = @file(is_string($path) && $path !== '' ? $path : asset_path('devtools-exclude.conf'), \FILE_IGNORE_NEW_LINES | \FILE_SKIP_EMPTY_LINES);
+    $site = detect_site();
+    foreach (is_array($lines) ? $lines : [] as $line) {
+        $f = explode('|', $line, 2);
+        if (count($f) === 2 && $line[0] !== '#' && ($f[0] === '*' || $f[0] === $site)) {
+            $list[strtolower(ltrim($f[1], '\\'))] = true;
+        }
+    }
+    return $list;
+}
+
+// exclude_command marks this process as one whose own work is left out when
+// the command it runs, by name or by class, is on the list. The jobs it runs
+// carry ids of their own and are still reported.
+function exclude_command(string $name, string $class = ''): void
+{
+    $list = excluded_commands();
+    if (($name !== '' && isset($list[strtolower($name)])) || ($class !== '' && isset($list[strtolower(ltrim($class, '\\'))]))) {
+        $GLOBALS['__lerd_excluded'] = true;
+    }
+}
+
 // seams returns the capture seams the store declared, parsed once per process
 // from the file lerd writes next to this collector. One line each:
-// kind|match|target|method|name. Keyed by method, since that is what the
+// kind|match|target|method|name[|label]. Keyed by method, since that is what the
 // extension matched on; the target settles which one applies and the kind says
 // what the call means.
 function seams(): array
@@ -817,11 +874,7 @@ function seams(): array
     // without either.
     $path = getenv('LERD_DEVTOOLS_SEAMS');
     if (!is_string($path) || $path === '') {
-        $assets = \get_cfg_var('lerd.assets_dir');
-        if (!is_string($assets) || $assets === '') {
-            $assets = '/usr/local/etc/lerd';
-        }
-        $path = $assets . '/devtools-seams.conf';
+        $path = asset_path('devtools-seams.conf');
     }
     $lines = @file($path, \FILE_IGNORE_NEW_LINES | \FILE_SKIP_EMPTY_LINES);
     if (!is_array($lines)) {
@@ -835,7 +888,7 @@ function seams(): array
         if (count($f) < 5 || $f[0] === '') {
             continue;
         }
-        $parsed[strtolower($f[3])][] = ['kind' => $f[0], 'target' => $f[2], 'name' => $f[4]];
+        $parsed[strtolower($f[3])][] = ['kind' => $f[0], 'target' => $f[2], 'name' => $f[4], 'label' => isset($f[5]) ? $f[5] : ''];
     }
     return $parsed;
 }
@@ -873,6 +926,29 @@ function scalar_string($v): string
     if (is_bool($v)) {
         return $v ? 'true' : 'false';
     }
+    // A closure is named by where it was written, which is what a reader
+    // looks for, relative to the project when it lives inside it.
+    if (is_array($v) && count($v) === 2 && is_string($v[1] ?? null) && (is_object($v[0] ?? null) || is_string($v[0] ?? null))) {
+        return (is_object($v[0]) ? get_class($v[0]) : $v[0]) . '@' . $v[1];
+    }
+    if ($v instanceof \Closure) {
+        try {
+            $fn = new \ReflectionFunction($v);
+            // A first-class callable of a method names that method.
+            $bound = $fn->getClosureThis();
+            if ($bound !== null && strpos($fn->getName(), '{closure') === false) {
+                return get_class($bound) . '@' . $fn->getName();
+            }
+            $root = !empty($_SERVER['DOCUMENT_ROOT']) ? dirname((string) $_SERVER['DOCUMENT_ROOT']) . '/' : '';
+            $file = (string) $fn->getFileName();
+            if ($root !== '' && $root !== '/' && strncmp($file, $root, strlen($root)) === 0) {
+                $file = substr($file, strlen($root));
+            }
+            return 'Closure ' . $file . ':' . $fn->getStartLine();
+        } catch (\Throwable $_) {
+            return 'Closure';
+        }
+    }
     return is_object($v) ? get_class($v) : '';
 }
 
@@ -883,6 +959,16 @@ function scalar_string($v): string
 function seam_value(string $expr, $self, array $args): string
 {
     if ($expr === '') {
+        return '';
+    }
+    // Alternatives separated by commas, the first that yields something wins.
+    if (strpos($expr, ',') !== false) {
+        foreach (explode(',', $expr) as $alt) {
+            $v = seam_value(trim($alt), $self, $args);
+            if ($v !== '') {
+                return $v;
+            }
+        }
         return '';
     }
     $accessor = '';
@@ -900,7 +986,7 @@ function seam_value(string $expr, $self, array $args): string
         return '';
     }
     if ($accessor === '') {
-        return is_object($subject) ? get_class($subject) : scalar_string($subject);
+        return is_object($subject) && !$subject instanceof \Closure ? get_class($subject) : scalar_string($subject);
     }
     if (!is_object($subject)) {
         return '';
@@ -910,9 +996,19 @@ function seam_value(string $expr, $self, array $args): string
             $m = substr($accessor, 7);
             return method_exists($subject, $m) ? scalar_string($subject->$m()) : '';
         }
+        // A dotted property walks on into arrays and objects: prop:action.uses.
         if (strncmp($accessor, 'prop:', 5) === 0) {
-            $prop = substr($accessor, 5);
-            return isset($subject->$prop) ? scalar_string($subject->$prop) : '';
+            $value = $subject;
+            foreach (explode('.', substr($accessor, 5)) as $key) {
+                if (is_array($value) && array_key_exists($key, $value)) {
+                    $value = $value[$key];
+                } elseif (is_object($value) && isset($value->$key)) {
+                    $value = $value->$key;
+                } else {
+                    return '';
+                }
+            }
+            return $value === null || is_array($value) ? '' : scalar_string($value);
         }
     } catch (\Throwable $_) {
     }
@@ -929,6 +1025,75 @@ function seam_begin($class, $method, $self, $args): void
     // A frame is pushed for a capture seam too: the extension observes the way
     // out of every seam it claimed, and an unbalanced stack would let that end
     // close a job that is still running.
+    if ($seam && $seam['kind'] === 'component') {
+        $args = is_array($args) ? $args : [];
+        $name = seam_value($seam['name'], $self, $args);
+        $stack[] = [
+            'timed'   => 'component',
+            'subject' => seam_subject($seam['name'], $self, $args),
+            'data'    => [
+                'name'  => $name !== '' ? $name : (is_object($self) ? get_class($self) : (string) $class),
+                'phase' => (string) $method,
+            ],
+            'start'   => microtime(true),
+            'details' => component_details($args),
+        ];
+        $GLOBALS['__lerd_seam_stack'] = $stack;
+        return;
+    }
+    // A Redis command or a filesystem operation, timed. A call into the same
+    // kind from inside one (a driver handing to its parent) is the same call.
+    if ($seam && ($seam['kind'] === 'redis' || $seam['kind'] === 'filesystem')) {
+        $top = end($stack);
+        if (is_array($top) && ($top['timed'] ?? '') === $seam['kind']) {
+            $stack[] = ['skip' => true];
+            $GLOBALS['__lerd_seam_stack'] = $stack;
+            return;
+        }
+        $args = is_array($args) ? $args : [];
+        $name = seam_value($seam['name'], $self, $args);
+        if ($seam['kind'] === 'redis') {
+            $data = ['command' => strtoupper(scalar_string($args[1] ?? ''))];
+            if (isset($args[2]) && is_array($args[2]) && $args[2]) {
+                $json = json_encode(array_values($args[2]), \JSON_PARTIAL_OUTPUT_ON_ERROR | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
+                $data['args'] = is_string($json) ? (strlen($json) > 300 ? substr($json, 0, 297) . '...' : $json) : '';
+            }
+            if ($name !== '') {
+                $data['connection'] = $name;
+            }
+        } else {
+            $data = ['op' => (string) $method, 'path' => scalar_string($args[1] ?? '')];
+            // A framework adapter that knows its storage disks names the one
+            // this instance is; Flysystem itself has no name for it.
+            if ($name === '' && \function_exists('Lerd\\LaravelAdapter\\disk_for')) {
+                $name = \Lerd\LaravelAdapter\disk_for($self);
+            }
+            if ($name !== '') {
+                $data['disk'] = $name;
+            }
+        }
+        $stack[] = ['timed' => $seam['kind'], 'data' => $data, 'start' => microtime(true)];
+        $GLOBALS['__lerd_seam_stack'] = $stack;
+        return;
+    }
+    // A span is one phase of the app's own work, Bootstrap or Controller, shown
+    // by the store's label with the name expression saying which one it was.
+    if ($seam && $seam['kind'] === 'span') {
+        $data = ['label' => $seam['label'] !== '' ? $seam['label'] : (string) $method];
+        $name = seam_value($seam['name'], $self, is_array($args) ? $args : []);
+        // A template named by its file reads better from the project root.
+        $root = !empty($_SERVER['DOCUMENT_ROOT']) ? dirname((string) $_SERVER['DOCUMENT_ROOT']) . '/' : '';
+        if ($root !== '/' && $root !== '' && strncmp($name, $root, strlen($root)) === 0) {
+            $name = substr($name, strlen($root));
+        }
+        if ($name !== '') {
+            $data['name'] = $name;
+            $data += code_location($name);
+        }
+        $stack[] = ['timed' => 'span', 'data' => $data, 'start' => microtime(true)];
+        $GLOBALS['__lerd_seam_stack'] = $stack;
+        return;
+    }
     if (!$seam || $seam['kind'] !== 'job') {
         $stack[] = ['skip' => true];
         $GLOBALS['__lerd_seam_stack'] = $stack;
@@ -970,6 +1135,26 @@ function seam_end($class, $method, $failed, $error = ''): void
     if (!is_array($frame) || !empty($frame['skip'])) {
         return;
     }
+    if (isset($frame['timed'])) {
+        $data = $frame['data'] + [
+            'status'  => $failed ? 'failed' : 'ok',
+            'time_ms' => round((microtime(true) - $frame['start']) * 1000, 3),
+        ];
+        if (!empty($frame['details'])) {
+            $data['details'] = $frame['details'];
+        }
+        if ($failed && is_string($error) && $error !== '') {
+            $data['exception'] = $error;
+        }
+        if ($frame['timed'] === 'component') {
+            $data = component_identity($data, $frame['subject'] ?? null);
+        }
+        if ($frame['timed'] === 'span') {
+            $GLOBALS['__lerd_spans'][$data['label']] = ($GLOBALS['__lerd_spans'][$data['label']] ?? 0) + $data['time_ms'];
+        }
+        emit($frame['timed'], $data);
+        return;
+    }
     $data = [
         'class'   => $frame['class'],
         'status'  => $failed ? 'failed' : 'processed',
@@ -985,6 +1170,212 @@ function seam_end($class, $method, $failed, $error = ''): void
     if ($frame['previous'] !== '') {
         $GLOBALS['__lerd_rid'] = $frame['previous'];
     }
+}
+
+// component_details previews what a component seam was handed, leaving out the
+// objects (the component itself, the framework's context), so a property
+// update shows its path and value and a method call shows which methods ran.
+// code_location finds where a resolved name is written, so the lens can open
+// it: Class@method by the method, a class by its declaration, and a closure by
+// the file and line its name already carries.
+function code_location(string $name): array
+{
+    try {
+        if (preg_match('/^Closure (.+):(\d+)$/', $name, $m)) {
+            $file = $m[1];
+            if ($file !== '' && $file[0] !== '/' && !empty($_SERVER['DOCUMENT_ROOT'])) {
+                $file = dirname((string) $_SERVER['DOCUMENT_ROOT']) . '/' . $file;
+            }
+            return ['file' => $file, 'line' => (int) $m[2]];
+        }
+        if (strpos($name, '@') !== false) {
+            [$class, $method] = explode('@', $name, 2);
+            if (class_exists($class, false) && method_exists($class, $method)) {
+                $ref = new \ReflectionMethod($class, $method);
+                return ['file' => (string) $ref->getFileName(), 'line' => (int) $ref->getStartLine()];
+            }
+            return [];
+        }
+        if (class_exists($name, false)) {
+            $ref = new \ReflectionClass($name);
+            return $ref->getFileName() ? ['file' => (string) $ref->getFileName(), 'line' => (int) $ref->getStartLine()] : [];
+        }
+    } catch (\Throwable $_) {
+    }
+    return [];
+}
+
+// seam_subject is the object a name expression starts from, "this" or "arg:N",
+// which for a component seam is the component itself once it exists.
+function seam_subject(string $expr, $self, array $args)
+{
+    $base = explode('.', explode(',', $expr)[0])[0];
+    if ($base === 'this') {
+        return is_object($self) ? $self : null;
+    }
+    if (strncmp($base, 'arg:', 4) === 0) {
+        $v = $args[(int) substr($base, 4)] ?? null;
+        return is_object($v) ? $v : null;
+    }
+    return null;
+}
+
+// component_identity names a component by its class when it has one of its
+// own, remembering the name it goes by so a phase seen before the instance
+// existed (a mount) is named the same, and adds its public state.
+function component_identity(array $data, $subject): array
+{
+    $known = $GLOBALS['__lerd_component_class'] ?? [];
+    if (!is_object($subject)) {
+        if (isset($known[$data['name']])) {
+            $data['name'] = $known[$data['name']];
+        }
+        return $data;
+    }
+    $ref = new \ReflectionObject($subject);
+    if ($ref->getFileName()) {
+        $data['file'] = (string) $ref->getFileName();
+        $data['line'] = (int) $ref->getStartLine();
+    }
+    if (!$ref->isAnonymous()) {
+        $GLOBALS['__lerd_component_class'][$data['name']] = $ref->getName();
+        $data['name'] = $ref->getName();
+    }
+    $state = input_map(get_object_vars($subject));
+    if ($state) {
+        $data['state'] = $state;
+    }
+    return $data;
+}
+
+function component_details(array $args): array
+{
+    $plain = [];
+    $lists = [];
+    foreach ($args as $i => $v) {
+        if (is_array($v)) {
+            // A list of calls or updates says more as JSON than as its size.
+            $json = json_encode($v, JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR);
+            if (is_string($json)) {
+                $lists['arg'.$i] = strlen($json) > 300 ? substr($json, 0, 300).'…' : $json;
+            }
+        } elseif (!is_object($v) && $v !== null) {
+            $plain['arg'.$i] = $v;
+        }
+    }
+    return preview_payload($plain) + $lists;
+}
+
+// request_end reports how a web request ended: its method and URI, the status
+// it answered with, how long PHP spent on it and its peak memory. It runs at
+// shutdown, after the response, so it costs the request nothing.
+function request_end(): void
+{
+    try {
+        $start = isset($_SERVER['REQUEST_TIME_FLOAT']) ? (float) $_SERVER['REQUEST_TIME_FLOAT'] : 0.0;
+        $code = http_response_code();
+        $data = [
+            'method'      => isset($_SERVER['REQUEST_METHOD']) ? (string) $_SERVER['REQUEST_METHOD'] : '',
+            'uri'         => isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '',
+            'status'      => is_int($code) ? $code : 0,
+            'time_ms'     => $start > 0 ? round((microtime(true) - $start) * 1000, 3) : 0,
+            'memory_peak' => memory_get_peak_usage(true),
+        ];
+        if (!empty($_SERVER['HTTP_ORIGIN'])) {
+            $data['origin'] = (string) $_SERVER['HTTP_ORIGIN'];
+        }
+        $data += request_input();
+        // nginx says how long it held the request and when it handed it on, so
+        // the time it waited for a free FPM worker is the gap to PHP's start.
+        if (isset($_SERVER['LERD_NGINX_SENT']) && $start > 0) {
+            $data['nginx_ms'] = round((float) ($_SERVER['LERD_NGINX_ELAPSED'] ?? 0) * 1000, 3);
+            $data['queue_ms'] = max(0.0, round(($start - (float) $_SERVER['LERD_NGINX_SENT']) * 1000, 3));
+        }
+        if (!empty($GLOBALS['__lerd_route'])) {
+            $data['route'] = (string) $GLOBALS['__lerd_route'];
+        }
+        // A framework's own session store reported itself on save; a plain PHP
+        // session has no such call, so it is read here on the way out.
+        if (empty($GLOBALS['__lerd_session_sent']) && isset($_SESSION) && is_array($_SESSION) && $_SESSION) {
+            session_report($_SESSION, (string) session_name());
+        }
+        emit('request', $data);
+    } catch (\Throwable $_) {
+    }
+}
+
+// server_timing adds a Server-Timing header with what was measured before the
+// headers went out: the FPM queue and each framework phase that had finished,
+// a phase seen more than once (every view) summed under its label.
+function server_timing(): void
+{
+    try {
+        $parts = [];
+        if (isset($_SERVER['LERD_NGINX_SENT'], $_SERVER['REQUEST_TIME_FLOAT'])) {
+            $queue = max(0.0, ((float) $_SERVER['REQUEST_TIME_FLOAT'] - (float) $_SERVER['LERD_NGINX_SENT']) * 1000);
+            $parts[] = sprintf('queue;dur=%.2f;desc="FPM queue"', $queue);
+        }
+        foreach ($GLOBALS['__lerd_spans'] ?? [] as $label => $ms) {
+            $token = trim((string) preg_replace('/[^a-z0-9]+/', '-', strtolower((string) $label)), '-');
+            if ($token !== '') {
+                $parts[] = sprintf('%s;dur=%.2f;desc="%s"', $token, $ms, str_replace('"', '', (string) $label));
+            }
+        }
+        if ($parts && !headers_sent()) {
+            header('Server-Timing: ' . implode(', ', $parts), false);
+        }
+    } catch (\Throwable $_) {
+    }
+}
+
+// request_input is what the request carried and what the response sent back,
+// for the Requests lens: headers, query, body, cookies and response headers,
+// each value cut short and anything that reads as a credential masked.
+function request_input(): array
+{
+    $headers = [];
+    foreach ($_SERVER as $k => $v) {
+        if (strncmp($k, 'HTTP_', 5) === 0 && is_string($v)) {
+            $headers[ucwords(strtolower(str_replace('_', '-', substr($k, 5))), '-')] = $v;
+        }
+    }
+    unset($headers['Cookie']);
+    if (isset($_SERVER['CONTENT_TYPE'])) {
+        $headers['Content-Type'] = (string) $_SERVER['CONTENT_TYPE'];
+    }
+    $response = [];
+    foreach (headers_list() as $line) {
+        $parts = explode(':', $line, 2);
+        if (count($parts) === 2 && strcasecmp($parts[0], 'Set-Cookie') !== 0) {
+            $response[trim($parts[0])] = trim($parts[1]);
+        }
+    }
+    $out = [];
+    foreach (['headers' => $headers, 'query' => $_GET, 'body' => $_POST, 'cookies' => $_COOKIE, 'response_headers' => $response] as $name => $values) {
+        $map = input_map(is_array($values) ? $values : []);
+        if ($map) {
+            $out[$name] = $map;
+        }
+    }
+    return $out;
+}
+
+function input_map(array $values): array
+{
+    $out = [];
+    foreach ($values as $k => $v) {
+        if (count($out) >= PAYLOAD_KEYS) {
+            break;
+        }
+        $k = (string) $k;
+        if (preg_match('/pass|secret|token|sess|authorization|api[-_]?key/i', $k)) {
+            $out[$k] = '[redacted]';
+            continue;
+        }
+        $v = is_scalar($v) || $v === null ? (string) $v : (string) json_encode($v, \JSON_PARTIAL_OUTPUT_ON_ERROR | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
+        $out[$k] = strlen($v) > 500 ? substr($v, 0, 497) . '...' : $v;
+    }
+    return $out;
 }
 
 // capture reports a call a store-declared capture seam claimed, where the whole
@@ -1006,7 +1397,194 @@ function capture(string $kind, string $method, $self, array $args, string $name 
     }
     if ($kind === 'message') {
         notifier_message(isset($args[1]) ? $args[1] : null);
+        return;
     }
+    // The name the app gave the route it matched, kept for the request's own
+    // event at shutdown. Only the first route bound counts: a framework may bind
+    // another one later, the page a component update came from, say.
+    if ($kind === 'route') {
+        if (!array_key_exists('__lerd_route', $GLOBALS)) {
+            $GLOBALS['__lerd_route'] = seam_value($name, $self, $args);
+        }
+        return;
+    }
+    // Everything an app writes through lerd/debug passes one method, and the
+    // entry says which it is: a timeline row or a block of a tab.
+    // lerd/debug renders its entries for the schema version this collector
+    // reads, so a change on either side is a new renderer, not a break. A
+    // package without renderers describes its entries as JSON in the same form.
+    if ($kind === 'lerd') {
+        $entry = $args[1] ?? null;
+        if (!$entry instanceof \JsonSerializable) {
+            return;
+        }
+        try {
+            $data = \class_exists('Lerd\\Debug\\Rendering\\Renderers')
+                ? \Lerd\Debug\Rendering\Renderers::for(DEBUG_SCHEMA)->render($entry)
+                : json_decode((string) json_encode($entry, \JSON_PARTIAL_OUTPUT_ON_ERROR), true);
+            $data = json_decode((string) json_encode($data, \JSON_PARTIAL_OUTPUT_ON_ERROR), true);
+        } catch (\Throwable $_) {
+            return;
+        }
+        $type = is_array($data) ? ($data['type'] ?? '') : '';
+        if ($type === 'timeline') {
+            timeline_entry($data);
+        } elseif ($type === 'log') {
+            lerd_log_line($data);
+        } elseif ($type === 'auth') {
+            auth_user(['id' => $data['id'] ?? '', 'email' => $data['email'] ?? null, 'name' => $data['name'] ?? null, 'guard' => $data['guard'] ?? null]);
+        } elseif ($type === 'tab') {
+            custom_tab_block([1 => $data['tab'] ?? '', 2 => $data['title'] ?? '', 3 => $data['block'] ?? null, 4 => $data['columns'] ?? 1, 5 => $data['placement'] ?? null]);
+        }
+        return;
+    }
+    // A security token being stored is who the request runs as, on a
+    // framework whose store declares where that happens. Without a token the
+    // name expression resolves the user's id itself.
+    if ($kind === 'auth') {
+        $token = $args[1] ?? null;
+        $user = is_object($token) && method_exists($token, 'getUser') ? $token->getUser() : null;
+        if (is_object($user)) {
+            $id = method_exists($user, 'getUserIdentifier') ? (string) $user->getUserIdentifier() : (method_exists($user, 'getId') ? scalar_string($user->getId()) : '');
+            auth_user(['id' => $id, 'email' => method_exists($user, 'getEmail') ? scalar_string($user->getEmail()) : null, 'name' => null, 'guard' => null]);
+        } elseif ($name !== '') {
+            auth_user(['id' => seam_value($name, $self, $args), 'email' => null, 'name' => null, 'guard' => null]);
+        }
+        return;
+    }
+    if ($kind === 'command') {
+        if (is_object($self)) {
+            exclude_command(method_exists($self, 'getName') ? (string) $self->getName() : '', get_class($self));
+        }
+        return;
+    }
+    if ($kind === 'session' && is_object($self) && method_exists($self, 'all')) {
+        try {
+            $all = $self->all();
+        } catch (\Throwable $_) {
+            return;
+        }
+        if (is_array($all)) {
+            session_report($all, seam_value($name, $self, $args));
+        }
+    }
+}
+
+// timeline_entry reports a row an app put on its own timeline: a label, the
+// category it filters under and the colour it is drawn in, when it started and
+// how long it took, and what to show in its popover.
+function timeline_entry(array $entry): void
+{
+    if (!isset($entry['label'])) {
+        return;
+    }
+    $data = [
+        'label'    => scalar_string($entry['label']),
+        'category' => scalar_string($entry['category'] ?? 'app'),
+        'color'    => scalar_string($entry['color'] ?? ''),
+        'start'    => (float) ($entry['start'] ?? 0),
+    ];
+    if (isset($entry['duration_ms'])) {
+        $data['duration_ms'] = round((float) $entry['duration_ms'], 3);
+    }
+    $details = isset($entry['details']) && is_array($entry['details']) ? input_map($entry['details']) : [];
+    if ($details) {
+        $data['details'] = $details;
+    }
+    emit('timeline', $data);
+}
+
+// auth_user reports who the request runs as, once per request: the first
+// user resolved is the one shown, so a guard checked twice does not repeat.
+function auth_user(array $user): void
+{
+    $id = scalar_string($user['id'] ?? '');
+    $rid = rid();
+    if ($id === '' || isset($GLOBALS['__lerd_auth'][$rid])) {
+        return;
+    }
+    $GLOBALS['__lerd_auth'][$rid] = true;
+    $data = ['id' => $id];
+    foreach (['email', 'name', 'guard'] as $key) {
+        if (!empty($user[$key])) {
+            $data[$key] = scalar_string($user[$key]);
+        }
+    }
+    emit('auth', $data);
+}
+
+// lerd_log_line reports a line an app wrote through lerd/debug as a log entry
+// like any other, on the "lerd" channel, carrying whether to show its stack
+// trace and whether it belongs on the Performance tab.
+function lerd_log_line(array $line): void
+{
+    $message = scalar_string($line['message'] ?? '');
+    if ($message === '') {
+        return;
+    }
+    $data = ['level' => strtolower(scalar_string($line['level'] ?? 'info')), 'message' => $message, 'channel' => 'lerd'];
+    if (!empty($line['context']) && is_array($line['context'])) {
+        $data['context'] = rtrim(render_var($line['context']));
+    }
+    if (!empty($line['trace'])) {
+        $data['show_trace'] = true;
+    }
+    if (!empty($line['performance'])) {
+        $data['performance'] = true;
+    }
+    emit('log', $data);
+}
+
+// custom_tab_block reports one block an app added to a tab of its own: the
+// tab's id and title, which put its blocks together in the lens, and the block
+// as plain data, cut off once it grows past what a lens can show.
+function custom_tab_block(array $args): void
+{
+    $id = scalar_string($args[1] ?? '');
+    $block = $args[3] ?? null;
+    if ($id === '' || !is_array($block)) {
+        return;
+    }
+    $json = json_encode($block, \JSON_PARTIAL_OUTPUT_ON_ERROR | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
+    if (!is_string($json) || strlen($json) > 65536) {
+        $json = '{"type":"text","text":"This block is larger than 64 KB and was left out."}';
+    }
+    // Blocks added in the same millisecond keep their order by this sequence.
+    static $seq = 0;
+    $data = ['id' => $id, 'title' => scalar_string($args[2] ?? $id), 'columns' => max(1, min(4, (int) ($args[4] ?? 1))), 'seq' => ++$seq, 'block' => json_decode($json, true) ?: []];
+    $placement = $args[5] ?? null;
+    if (is_array($placement) && in_array($placement['position'] ?? '', ['before', 'after'], true) && is_string($placement['tab'] ?? null)) {
+        $data['placement'] = ['position' => $placement['position'], 'tab' => $placement['tab']];
+    }
+    emit('tab', $data);
+}
+
+// session_report sends what the session held when the request finished, one
+// entry per top-level key with nested values as JSON. A key naming a password
+// or a secret is masked, since a login stores the password hash there.
+function session_report(array $all, string $name): void
+{
+    $GLOBALS['__lerd_session_sent'] = true;
+    $out = [];
+    foreach ($all as $k => $v) {
+        if (count($out) >= PAYLOAD_KEYS) {
+            break;
+        }
+        $k = (string) $k;
+        if (preg_match('/password|secret|token|authkey|csrf/i', $k)) {
+            $out[$k] = '[redacted]';
+        } elseif (is_array($v) || (is_object($v) && !$v instanceof \Closure && !$v instanceof \UnitEnum)) {
+            $json = json_encode($v, \JSON_PARTIAL_OUTPUT_ON_ERROR | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
+            $out[$k] = is_string($json) ? (strlen($json) > 500 ? substr($json, 0, 497) . '...' : $json) : preview_value($v);
+        } else {
+            $out[$k] = preview_value($v);
+        }
+    }
+    $data = ['keys' => count($all), 'data' => $out];
+    if ($name !== '') {
+        $data['name'] = $name;
+    }
+    emit('session', $data);
 }
 
 // notifier_message reports one message an app sent to somebody: an SMS, a chat
@@ -1350,4 +1928,18 @@ function http($method, $url): void
         return;
     }
     emit('http', ['method' => is_string($method) ? $method : '', 'url' => $u]);
+}
+
+// A console command named as typed (artisan queue:work, bin/cake queue
+// worker) is known from argv before the framework boots, so even the boot of
+// an excluded command is left out. A name may span its first few words.
+if (\PHP_SAPI === 'cli' && !empty($_SERVER['argv']) && is_array($_SERVER['argv'])) {
+    $typed = '';
+    foreach (array_slice($_SERVER['argv'], 1, 3) as $arg) {
+        if (!is_string($arg) || $arg === '' || $arg[0] === '-') {
+            break;
+        }
+        $typed = ltrim($typed . ' ' . $arg);
+        exclude_command($typed);
+    }
 }

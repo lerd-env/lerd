@@ -374,8 +374,30 @@ static void append_event_id(smart_str *buf)
 	smart_str_appends(buf, out);
 }
 
+/* valid_utf8 reports whether s is UTF-8 text, which a compressed or binary
+ * blob bound to a query is not and JSON cannot carry. */
+static int valid_utf8(const unsigned char *s, size_t len)
+{
+	size_t i = 0;
+	while (i < len) {
+		unsigned char c = s[i];
+		size_t n = c < 0x80 ? 0 : (c >> 5) == 0x6 ? 1 : (c >> 4) == 0xe ? 2 : (c >> 3) == 0x1e ? 3 : 4;
+		if (n == 4 || i + n >= len) {
+			return 0;
+		}
+		for (size_t k = 1; k <= n; k++) {
+			if ((s[i + k] & 0xc0) != 0x80) {
+				return 0;
+			}
+		}
+		i += n + 1;
+	}
+	return 1;
+}
+
 /* append_bindings serialises a flat array of scalars (PDOStatement::execute's
- * input-parameter array) as a JSON array. Non-scalars become null. */
+ * input-parameter array) as a JSON array. Non-scalars become null, and binary
+ * strings a placeholder naming their size. */
 static void append_bindings(smart_str *buf, zval *arr)
 {
 	smart_str_appendl(buf, "\"bindings\":[", 12);
@@ -389,7 +411,13 @@ static void append_bindings(smart_str *buf, zval *arr)
 		ZVAL_DEREF(v);
 		switch (Z_TYPE_P(v)) {
 			case IS_STRING:
-				append_json_string(buf, Z_STRVAL_P(v), Z_STRLEN_P(v));
+				if (valid_utf8((const unsigned char *)Z_STRVAL_P(v), Z_STRLEN_P(v))) {
+					append_json_string(buf, Z_STRVAL_P(v), Z_STRLEN_P(v));
+				} else {
+					char nb[48];
+					snprintf(nb, sizeof(nb), "\"[binary %zu bytes]\"", (size_t)Z_STRLEN_P(v));
+					smart_str_appends(buf, nb);
+				}
 				break;
 			case IS_LONG: {
 				char nb[32];
@@ -968,7 +996,7 @@ static void lerd_job_end(zend_execute_data *execute_data, zval *retval)
  * or extends. The kind is not read here: every seam is observed the same way
  * and the collector decides what the call means, which is also where the name
  * expression is resolved and where the extraction vocabulary lives. */
-#define LERD_MAX_SEAMS 64
+#define LERD_MAX_SEAMS 256
 #define LERD_SEAMS_NAME "devtools-seams.conf"
 
 typedef struct {
@@ -1149,6 +1177,22 @@ static void lerd_http_begin(zend_execute_data *execute_data)
 	LERD_CALL_COLLECTOR("Lerd\\Collector\\http", args, 2);
 }
 
+static int store_seam_matches(const char *fname, zend_class_entry *scope)
+{
+	for (int i = 0; i < lerd_nseams; i++) {
+		if (strcasecmp(fname, lerd_seams[i].method) == 0 && seam_matches(&lerd_seams[i], scope)) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static void lerd_view_seam_end(zend_execute_data *execute_data, zval *retval)
+{
+	lerd_view_end(execute_data, retval);
+	lerd_seam_end(execute_data, retval);
+}
+
 static zend_observer_fcall_handlers lerd_observer_init(zend_execute_data *execute_data)
 {
 	zend_observer_fcall_handlers h = {NULL, NULL};
@@ -1180,7 +1224,13 @@ static zend_observer_fcall_handlers lerd_observer_init(zend_execute_data *execut
 	 * both public entry points captures each render exactly once. */
 	if (strcasecmp(ZSTR_VAL(scope->name), "Twig\\Environment") == 0 &&
 		(strcasecmp(fname, "render") == 0 || strcasecmp(fname, "display") == 0)) {
-		h.end = lerd_view_end;
+		/* A store seam on the same method still times it, next to the view. */
+		if (store_seam_matches(fname, scope)) {
+			h.begin = lerd_seam_begin;
+			h.end = lerd_view_seam_end;
+		} else {
+			h.end = lerd_view_end;
+		}
 		return h;
 	}
 	/* Agnostic events: the Symfony EventDispatcher is the de-facto event bus.
@@ -1219,12 +1269,9 @@ static zend_observer_fcall_handlers lerd_observer_init(zend_execute_data *execut
 	}
 	/* Store-declared seams come last, so a built-in one always wins and store
 	 * data can never claim a method this file already knows what to do with. */
-	for (int i = 0; i < lerd_nseams; i++) {
-		if (strcasecmp(fname, lerd_seams[i].method) == 0 && seam_matches(&lerd_seams[i], scope)) {
-			h.begin = lerd_seam_begin;
-			h.end = lerd_seam_end;
-			return h;
-		}
+	if (store_seam_matches(fname, scope)) {
+		h.begin = lerd_seam_begin;
+		h.end = lerd_seam_end;
 	}
 	return h;
 }

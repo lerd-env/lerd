@@ -93,7 +93,11 @@ function new_id(): string
 
 // One request id per HTTP request / per job. Reset on JobProcessing so a
 // queue worker's jobs each form their own group instead of lumping together.
-$GLOBALS['__lerd_rid'] = new_id();
+// A request takes the extension's id, the one sent to the browser, so what
+// this adapter reports links to the page and the fetch that made the request.
+if (empty($GLOBALS['__lerd_rid'])) {
+    $GLOBALS['__lerd_rid'] = \defined('LERD_DEVTOOLS_RID') ? (string) \LERD_DEVTOOLS_RID : new_id();
+}
 function rid(): string
 {
     return $GLOBALS['__lerd_rid'] ?? '';
@@ -219,6 +223,11 @@ function backtrace(): array
 // own origin rather than the log call site).
 function emit_with(string $kind, array $data, array $src, array $trace): void
 {
+    // The collector marks an excluded command; its own loop is left out and
+    // the jobs it runs, each under an id of its own, come through.
+    if (!empty($GLOBALS['__lerd_excluded']) && defined('LERD_DEVTOOLS_RID') && rid() === (string) \LERD_DEVTOOLS_RID) {
+        return;
+    }
     try {
         $data['trace'] = $trace;
         send([
@@ -509,7 +518,11 @@ function own_properties($subject): array
             if (method_exists($prop, 'isInitialized') && !$prop->isInitialized($subject)) {
                 continue;
             }
-            $prop->setAccessible(true);
+            // Reflection reads private properties on its own since PHP 8.1, and 8.5
+            // deprecates asking it to.
+            if (\PHP_VERSION_ID < 80100) {
+                $prop->setAccessible(true);
+            }
             $out[$prop->getName()] = $prop->getValue($subject);
         }
     } catch (\Throwable $_) {
@@ -621,6 +634,96 @@ function queued_name($e): string
 
 // job_fields is what every worker-side queue event says about the job it names:
 // what ran, where it ran, and how many times it has been tried.
+// flush_models reports the model counts the current request or job built up
+// and forgets them, so a worker's next job starts from nothing.
+function flush_models(): void
+{
+    $rid = rid();
+    $counts = $GLOBALS['__lerd_models'][$rid] ?? [];
+    unset($GLOBALS['__lerd_models'][$rid]);
+    if ($counts) {
+        ksort($counts);
+        emit('models', ['models' => $counts]);
+    }
+}
+
+// middleware_names names each middleware the way a developer wrote it: by
+// its alias when the router has one (auth, throttle:60,1), by its class when
+// not, and a closure by where it was defined.
+function middleware_names(array $list): array
+{
+    $aliases = [];
+    try {
+        foreach (\app('router')->getMiddleware() as $alias => $class) {
+            if (is_string($class)) {
+                $aliases[ltrim($class, '\\')] ??= (string) $alias;
+            }
+        }
+    } catch (\Throwable $_) {
+    }
+    $names = [];
+    foreach ($list as $middleware) {
+        if ($middleware instanceof \Closure) {
+            $where = '';
+            try {
+                $fn = new \ReflectionFunction($middleware);
+                $file = (string) $fn->getFileName();
+                $base = \function_exists('base_path') ? rtrim((string) \base_path(), '/') . '/' : '';
+                if ($base !== '/' && $base !== '' && strncmp($file, $base, strlen($base)) === 0) {
+                    $file = substr($file, strlen($base));
+                }
+                $where = $file . ':' . $fn->getStartLine();
+            } catch (\Throwable $_) {
+            }
+            $names[] = 'Closure(' . $where . ')';
+            continue;
+        }
+        if (!is_string($middleware)) {
+            $names[] = is_object($middleware) ? get_class($middleware) : '';
+            continue;
+        }
+        [$class, $parameters] = array_pad(explode(':', $middleware, 2), 2, null);
+        $name = $aliases[ltrim($class, '\\')] ?? $class;
+        $names[] = $parameters === null ? $name : $name . ':' . $parameters;
+    }
+    return $names;
+}
+
+// disk_for names the Storage disk a Flysystem instance belongs to, from the
+// disks the filesystem manager has resolved, which the collector's filesystem
+// capture asks for since Flysystem itself never knew the name.
+function disk_for($flysystem): string
+{
+    try {
+        $disks = (fn () => $this->disks)->call(\app('filesystem'));
+        foreach ($disks as $name => $adapter) {
+            if (method_exists($adapter, 'getDriver') && $adapter->getDriver() === $flysystem) {
+                return (string) $name;
+            }
+        }
+    } catch (\Throwable $_) {
+    }
+    return '';
+}
+
+// cache_backend says where a cache call landed: the file a file store keeps
+// the key in, or the Redis connection a Redis store went through.
+function cache_backend(string $store, string $key): array
+{
+    try {
+        $repo = \app('cache')->store($store !== '' ? $store : null);
+        $backend = method_exists($repo, 'getStore') ? $repo->getStore() : null;
+        if ($backend instanceof \Illuminate\Cache\FileStore) {
+            return ['file' => $backend->path($key)];
+        }
+        if ($backend instanceof \Illuminate\Cache\RedisStore) {
+            return ['connection' => (string) $backend->connection()->getName()];
+        }
+    } catch (\Throwable $_) {
+    }
+    return [];
+}
+
 function job_fields($e): array
 {
     $job = $e->job ?? null;
@@ -690,21 +793,54 @@ try {
             }
             emit('job', $data);
         });
+        // Each job runs under an id of its own, so it is a process of its own in
+        // the Requests lens whatever connection ran it. The id it interrupted
+        // comes back when it ends, and a sync job names the request it ran in.
         $events->listen(\Illuminate\Queue\Events\JobProcessing::class, static function ($e) {
-            // Reset the request id per job so each one is its own group.
+            $previous = (string) ($GLOBALS['__lerd_rid'] ?? '');
+            $GLOBALS['__lerd_job_stack'][] = [$previous, $GLOBALS['__lerd_job_start'] ?? null];
             $GLOBALS['__lerd_rid'] = new_id();
             $GLOBALS['__lerd_job_start'] = microtime(true);
-            emit('job', ['status' => 'processing'] + job_fields($e));
+            $data = ['status' => 'processing'] + job_fields($e);
+            if ($previous !== '' && ($e->connectionName ?? '') === 'sync') {
+                $data['parent'] = $previous;
+            }
+            emit('job', $data);
         });
-        $events->listen(\Illuminate\Queue\Events\JobProcessed::class, static function ($e) {
+        $jobEnd = static function () {
+            flush_models();
+            $GLOBALS['__lerd_job_stack'] = $GLOBALS['__lerd_job_stack'] ?? [];
+            [$previous, $start] = array_pop($GLOBALS['__lerd_job_stack']) ?? ['', null];
+            if ($previous !== '') {
+                $GLOBALS['__lerd_rid'] = $previous;
+            }
+            $GLOBALS['__lerd_job_start'] = $start;
+        };
+        $events->listen(\Illuminate\Queue\Events\JobProcessed::class, static function ($e) use ($jobEnd) {
             emit('job', ['status' => 'processed', 'time_ms' => job_elapsed()] + job_fields($e));
+            $jobEnd();
         });
+        // A job that threw ends on JobExceptionOccurred, after JobFailed when it
+        // has no attempts left, so that is where its id is given back; one with
+        // attempts to spare is reported as errored.
         $events->listen(\Illuminate\Queue\Events\JobFailed::class, static function ($e) {
+            $GLOBALS['__lerd_job_failed'] = true;
             emit('job', [
                 'status'    => 'failed',
                 'time_ms'   => job_elapsed(),
                 'exception' => isset($e->exception) ? $e->exception->getMessage() : '',
             ] + job_fields($e));
+        });
+        $events->listen(\Illuminate\Queue\Events\JobExceptionOccurred::class, static function ($e) use ($jobEnd) {
+            if (empty($GLOBALS['__lerd_job_failed'])) {
+                emit('job', [
+                    'status'    => 'errored',
+                    'time_ms'   => job_elapsed(),
+                    'exception' => isset($e->exception) ? $e->exception->getMessage() : '',
+                ] + job_fields($e));
+            }
+            $GLOBALS['__lerd_job_failed'] = false;
+            $jobEnd();
         });
     }
 
@@ -795,12 +931,75 @@ try {
                     return;
                 }
             }
-            emit('cache', ['op' => $op, 'key' => $key, 'store' => (string) ($e->storeName ?? '')]);
+            $data = ['op' => $op, 'key' => $key, 'store' => (string) ($e->storeName ?? '')] + cache_backend((string) ($e->storeName ?? ''), $key);
+            $mark = $data['store'] . '|' . $key;
+            if (isset($GLOBALS['__lerd_cache_start'][$mark])) {
+                $data['time_ms'] = round((microtime(true) - $GLOBALS['__lerd_cache_start'][$mark]) * 1000, 3);
+                unset($GLOBALS['__lerd_cache_start'][$mark]);
+            }
+            emit('cache', $data);
         };
+        // The events a store fires before it goes to its backend give each call
+        // a duration, which is also what lets the lens fold the queries a
+        // database store ran into the call that ran them.
+        $cacheStart = static function ($e) {
+            $GLOBALS['__lerd_cache_start'][(string) ($e->storeName ?? '') . '|' . (string) $e->key] = microtime(true);
+        };
+        foreach (['RetrievingKey', 'WritingKey', 'ForgettingKey'] as $before) {
+            $class = 'Illuminate\\Cache\\Events\\' . $before;
+            if (class_exists($class)) {
+                $events->listen($class, $cacheStart);
+            }
+        }
         $events->listen(\Illuminate\Cache\Events\CacheHit::class, static fn ($e) => $cacheEmit('hit', $e));
         $events->listen(\Illuminate\Cache\Events\CacheMissed::class, static fn ($e) => $cacheEmit('miss', $e));
         $events->listen(\Illuminate\Cache\Events\KeyWritten::class, static fn ($e) => $cacheEmit('write', $e));
         $events->listen(\Illuminate\Cache\Events\KeyForgotten::class, static fn ($e) => $cacheEmit('forget', $e));
+
+        // The middleware a request passed through: the HTTP kernel's global
+        // stack and the matched route's own, resolved to classes with their
+        // parameters the way the router runs them.
+        $events->listen(\Illuminate\Routing\Events\RouteMatched::class, static function ($e) {
+            if (!empty($GLOBALS['__lerd_middleware'][rid()])) {
+                return;
+            }
+            $GLOBALS['__lerd_middleware'][rid()] = true;
+            try {
+                $kernel = \app(\Illuminate\Contracts\Http\Kernel::class);
+                $global = method_exists($kernel, 'getGlobalMiddleware') ? $kernel->getGlobalMiddleware() : [];
+                $route = \app('router')->gatherRouteMiddleware($e->route);
+            } catch (\Throwable $_) {
+                return;
+            }
+            emit('middleware', ['global' => middleware_names($global), 'route' => middleware_names($route)]);
+        });
+
+        // Who the request runs as: the first user a guard resolves, with the
+        // guard's name, through the collector so it is reported once.
+        $events->listen(\Illuminate\Auth\Events\Authenticated::class, static function ($e) {
+            $user = $e->user ?? null;
+            if (!is_object($user) || !\function_exists('Lerd\\Collector\\auth_user')) {
+                return;
+            }
+            \Lerd\Collector\auth_user([
+                'id'    => method_exists($user, 'getAuthIdentifier') ? (string) $user->getAuthIdentifier() : '',
+                'email' => isset($user->email) ? (string) $user->email : null,
+                'name'  => isset($user->name) ? (string) $user->name : null,
+                'guard' => (string) ($e->guard ?? ''),
+            ]);
+        });
+
+        // Models: how many of each Eloquent model the request or job retrieved,
+        // created, updated, deleted and restored, counted here and reported once
+        // when it ends rather than as a row per model.
+        $events->listen('eloquent.*', static function ($name) {
+            if (!preg_match('/^eloquent\.(retrieved|created|updated|deleted|restored): (.+)$/', (string) $name, $m)) {
+                return;
+            }
+            $rid = rid();
+            $GLOBALS['__lerd_models'][$rid][$m[2]][$m[1]] = ($GLOBALS['__lerd_models'][$rid][$m[2]][$m[1]] ?? 0) + 1;
+        });
+        register_shutdown_function(__NAMESPACE__ . '\\flush_models');
 
         // Dispatched events — application/package class events only. Skip
         // framework internals (Illuminate\*), and the noisy string-keyed

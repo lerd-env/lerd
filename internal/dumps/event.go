@@ -30,6 +30,33 @@ const (
 	// KindBrowser is a JavaScript error, console message or failed request
 	// posted by the browser capture script rather than sent by PHP.
 	KindBrowser = "browser"
+	// KindRequest is how a web request ended: method, URI, status and time,
+	// sent once at shutdown so the request has a row of its own.
+	KindRequest = "request"
+	// KindComponent is one phase of a UI component's lifecycle (mount, render,
+	// a property update, a method call), from a store-declared seam.
+	KindComponent = "component"
+	// KindSpan is one timed phase of the app's own work (bootstrap, routing, a
+	// controller, a view), from a store-declared seam.
+	KindSpan = "span"
+	// KindSession is what the session held when a request finished.
+	KindSession = "session"
+	// KindRedis is one Redis command and KindFilesystem one storage operation,
+	// timed, from store-declared seams.
+	KindRedis      = "redis"
+	KindFilesystem = "filesystem"
+	// KindTimeline is a row an app put on its own timeline and KindTab a tab
+	// it built, both through the lerd/debug package's seams.
+	KindTimeline = "timeline"
+	KindTab      = "tab"
+	// KindModels is how many of each model a request or job retrieved,
+	// created, updated, deleted and restored, sent once as it ends.
+	KindModels = "models"
+	// KindAuth is who a request runs as, reported once per request.
+	KindAuth = "auth"
+	// KindMiddleware is the middleware a request passed through, the global
+	// stack and the matched route's own.
+	KindMiddleware = "middleware"
 )
 
 // Source identifies the file:line that produced a dump.

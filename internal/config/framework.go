@@ -143,6 +143,10 @@ type Framework struct {
 type FrameworkDevtools struct {
 	Jobs     []DevtoolsSeam `yaml:"jobs,omitempty"`
 	Captures []DevtoolsSeam `yaml:"captures,omitempty"`
+	// ExcludeCommands are console commands that only loop, a queue worker or a
+	// websocket server, named as typed (queue:work) or by class: the Debug
+	// window reports only the jobs they run, never the loop itself.
+	ExcludeCommands []string `yaml:"exclude_commands,omitempty"`
 }
 
 // DevtoolsSeam is one observed method. Exactly one of Class, Implements or
@@ -158,6 +162,9 @@ type DevtoolsSeam struct {
 	Extends    string `yaml:"extends,omitempty"`
 	Method     string `yaml:"method"`
 	Name       string `yaml:"name,omitempty"`
+	// Label is the fixed text a span seam is shown as, such as "Bootstrap",
+	// with Name adding what varies from call to call.
+	Label string `yaml:"label,omitempty"`
 }
 
 // Target is the class, interface or parent this seam matches on, with the kind

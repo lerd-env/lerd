@@ -83,6 +83,13 @@ namespace {
     if (!\is_string($lerdAssets) || $lerdAssets === '') {
         $lerdAssets = '/usr/local/etc/lerd';
     }
+    // The request id the devtools extension stamps on every event goes out with
+    // the response, so the browser can name the request behind a page or a
+    // fetch and lerd can join the two. It costs one header and is sent whether
+    // capture is on or not.
+    if (\PHP_SAPI !== 'cli' && \defined('LERD_DEVTOOLS_RID') && !\headers_sent()) {
+        \header('X-Lerd-Rid: '.\LERD_DEVTOOLS_RID);
+    }
     // Fast no-op when the toggle file is absent. One stat() per request in the
     // disabled case; the return stops the whole prepend so nothing below loads.
     if (!@file_exists($lerdAssets.'/enabled.flag')) {
@@ -96,6 +103,14 @@ namespace {
     }
     if (!\function_exists('Lerd\\Collector\\send')) {
         return;
+    }
+    // A web request reports how it ended, its status and how long it took, so
+    // the request it grouped events under has a row of its own.
+    if (\PHP_SAPI !== 'cli' && \function_exists('Lerd\\Collector\\request_end')) {
+        \register_shutdown_function('Lerd\\Collector\\request_end');
+        // The phases measured before the response goes out travel with it as
+        // Server-Timing, which the browser's own network panel shows.
+        \header_register_callback('Lerd\\Collector\\server_timing');
     }
 }
 

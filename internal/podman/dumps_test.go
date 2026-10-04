@@ -226,6 +226,11 @@ devtools:
       name: this.method:get_hook
     - class: Fixture\Broken|Pipe
       method: run
+  captures:
+    - kind: span
+      class: Fixture\Kernel
+      method: boot
+      label: Bootstrap
 `
 	if err := os.WriteFile(filepath.Join(dir, "fixturefw@1.yaml"), []byte(yaml), 0o644); err != nil {
 		t.Fatalf("write framework: %v", err)
@@ -235,6 +240,7 @@ devtools:
 	for _, want := range []string{
 		"job|implements|Fixture\\Queue\\JobInterface|process|this",
 		"job|class|Fixture_Action|execute|this.method:get_hook",
+		"span|class|Fixture\\Kernel|boot||Bootstrap\n",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("seam file missing %q:\n%s", want, got)
@@ -307,5 +313,65 @@ devtools:
 	}
 	if strings.Contains(got, "Acme\\Broken") {
 		t.Errorf("a seam whose target holds the separator must be dropped:\n%s", got)
+	}
+}
+
+// TestDevtoolsExcludeConf_StoreAndProject checks the commands a package leaves
+// out hold on every site and a project's .lerd.yaml adds its own for itself.
+func TestDevtoolsExcludeConf_StoreAndProject(t *testing.T) {
+	withTempXDG(t)
+	if err := os.MkdirAll(config.StoreFrameworksDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config.StoreIndexFile(), []byte(`{"frameworks":[],"packages":[{"name":"acme/queue","latest":""}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path := config.StorePackageFile("acme/queue", "")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("package: acme/queue\ndevtools:\n  exclude_commands: [queue:work]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+	if err := os.WriteFile(filepath.Join(project, ".lerd.yaml"), []byte("debug:\n  exclude_commands: [App\\Console\\Commands\\Poll]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SaveSites(&config.SiteRegistry{Sites: []config.Site{{Name: "shop", Path: project}}}); err != nil {
+		t.Fatal(err)
+	}
+	got := DevtoolsExcludeConf()
+	for _, want := range []string{"*|queue:work\n", "shop|App\\Console\\Commands\\Poll\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("exclude file missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestDevtoolsSeamsConf_ReadsEveryMajor(t *testing.T) {
+	withTempXDG(t)
+	dir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir store frameworks: %v", err)
+	}
+	// A seam only the newer major declares must survive "fixturefw@9" sorting
+	// after "fixturefw@11", and the older major's own seams must stay too.
+	for version, seam := range map[string]string{"9": "Fixture\\Old", "11": "Fixture\\New"} {
+		yaml := "name: fixturefw\nversion: \"" + version + "\"\nlabel: FixtureFW\npublic_dir: public\n" +
+			"devtools:\n  exclude_commands: [watch" + version + "]\n  captures:\n    - kind: span\n      class: " + seam + "\n      method: boot\n      label: Bootstrap\n"
+		if err := os.WriteFile(filepath.Join(dir, "fixturefw@"+version+".yaml"), []byte(yaml), 0o644); err != nil {
+			t.Fatalf("write framework: %v", err)
+		}
+	}
+	seams, excludes := DevtoolsSeamsConf(), DevtoolsExcludeConf()
+	for _, want := range []string{"Fixture\\Old|boot", "Fixture\\New|boot"} {
+		if !strings.Contains(seams, want) {
+			t.Errorf("seam file missing %q:\n%s", want, seams)
+		}
+	}
+	for _, want := range []string{"*|watch9", "*|watch11"} {
+		if !strings.Contains(excludes, want) {
+			t.Errorf("exclude file missing %q:\n%s", want, excludes)
+		}
 	}
 }
