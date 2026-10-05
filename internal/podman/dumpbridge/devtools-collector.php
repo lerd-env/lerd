@@ -190,7 +190,7 @@ function context(): array
     if (\PHP_SAPI !== 'cli') {
         $ctx['domain']  = isset($_SERVER['HTTP_HOST']) ? (string) $_SERVER['HTTP_HOST'] : '';
         $ctx['request'] = isset($_SERVER['REQUEST_METHOD'])
-            ? $_SERVER['REQUEST_METHOD'] . ' ' . ($_SERVER['REQUEST_URI'] ?? '')
+            ? $_SERVER['REQUEST_METHOD'] . ' ' . mask_url((string) ($_SERVER['REQUEST_URI'] ?? ''), 'input')
             : '';
     } else {
         // The CLI counterpart of request: what a console event points at.
@@ -1287,7 +1287,7 @@ function request_end(): void
         $code = http_response_code();
         $data = [
             'method'      => isset($_SERVER['REQUEST_METHOD']) ? (string) $_SERVER['REQUEST_METHOD'] : '',
-            'uri'         => isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '',
+            'uri'         => isset($_SERVER['REQUEST_URI']) ? mask_url((string) $_SERVER['REQUEST_URI'], 'input') : '',
             'status'      => is_int($code) ? $code : 0,
             'time_ms'     => $start > 0 ? round((microtime(true) - $start) * 1000, 3) : 0,
             'memory_peak' => memory_get_peak_usage(true),
@@ -1362,8 +1362,9 @@ function request_input(): array
         }
     }
     $out = [];
+    $scopes = ['headers' => 'in_request', 'query' => 'input', 'body' => 'input', 'cookies' => 'input', 'response_headers' => 'in_response'];
     foreach (['headers' => $headers, 'query' => $_GET, 'body' => $_POST, 'cookies' => $_COOKIE, 'response_headers' => $response] as $name => $values) {
-        $map = input_map(is_array($values) ? $values : []);
+        $map = input_map(is_array($values) ? $values : [], $scopes[$name]);
         if ($map) {
             $out[$name] = $map;
         }
@@ -1381,13 +1382,7 @@ function input_map(array $values, string $scope = ''): array
         }
         $k = (string) $k;
         $v = is_scalar($v) || $v === null ? (string) $v : (string) json_encode($v, \JSON_PARTIAL_OUTPUT_ON_ERROR | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
-        $mask = preg_match('/pass|secret|token|sess|cookie|authorization|api[-_]?key/i', $k) ? $rules['mask'] : null;
-        foreach ($scope !== '' ? ($rules[$scope] ?? []) : [] as $pattern => $patternMask) {
-            if (preg_match('/^' . str_replace('\\*', '.*', preg_quote((string) $pattern, '/')) . '$/i', $k)) {
-                $mask = $patternMask;
-                break;
-            }
-        }
+        $mask = redact_rule($scope, $k) ?? (preg_match('/pass|secret|token|sess|cookie|authorization|api[-_]?key/i', $k) ? $rules['mask'] : null);
         if ($mask !== null) {
             $out[$k] = mask_value($v, $mask);
             continue;
@@ -1395,6 +1390,73 @@ function input_map(array $values, string $scope = ''): array
         $out[$k] = strlen($v) > 500 ? substr($v, 0, 497) . '...' : $v;
     }
     return $out;
+}
+
+// mask_url masks the query values of a URL the way input_map masks a name,
+// so a secret in a query string never reaches the list or a request's header.
+function mask_url(string $url, string $scope = ''): string
+{
+    // A route parameter the rules mask is masked where it sits in the path.
+    if ($scope === 'input' && !empty($GLOBALS['__lerd_route_params'])) {
+        $q = strpos($url, '?');
+        $path = $q === false ? $url : substr($url, 0, $q);
+        $segments = explode('/', $path);
+        foreach ($GLOBALS['__lerd_route_params'] as $name => $value) {
+            if (!is_scalar($value) || (string) $value === '') {
+                continue;
+            }
+            $mask = input_map([(string) $name => (string) $value], 'input');
+            $masked = (string) reset($mask);
+            if ($masked === (string) $value) {
+                continue;
+            }
+            foreach ($segments as $i => $segment) {
+                if (rawurldecode($segment) === (string) $value) {
+                    $segments[$i] = $masked;
+                }
+            }
+        }
+        $url = implode('/', $segments) . ($q === false ? '' : substr($url, $q));
+    }
+    $q = strpos($url, '?');
+    if ($q === false) {
+        return $url;
+    }
+    $parts = [];
+    foreach (explode('&', substr($url, $q + 1)) as $pair) {
+        $kv = explode('=', $pair, 2);
+        if (count($kv) === 2) {
+            $masked = input_map([urldecode($kv[0]) => urldecode($kv[1])], $scope);
+            $value = (string) reset($masked);
+            if ($value !== urldecode($kv[1])) {
+                $pair = $kv[0] . '=' . $value;
+            }
+        }
+        $parts[] = $pair;
+    }
+    return substr($url, 0, $q + 1) . implode('&', $parts);
+}
+
+// route_params keeps the matched route's raw parameters, as the request
+// asked for them before any binding, so its path can be masked by name.
+function route_params(array $params): void
+{
+    $GLOBALS['__lerd_route_params'] = $params;
+}
+
+// redact_rule is how the site's .lerd.yaml masks a name in a scope, or null
+// when it says nothing about it. Names match case-insensitively, * as a glob.
+function redact_rule(string $scope, string $name): ?array
+{
+    if ($scope === '') {
+        return null;
+    }
+    foreach (redaction()[$scope] ?? [] as $pattern => $mask) {
+        if (preg_match('/^' . str_replace('\\*', '.*', preg_quote((string) $pattern, '/')) . '$/i', $name)) {
+            return $mask;
+        }
+    }
+    return null;
 }
 
 // mask_value hides a value as [redacted], or as its first few characters and
@@ -1423,7 +1485,7 @@ function redaction(): array
     if ($rules !== null) {
         return $rules;
     }
-    $rules = ['mask' => ['style' => 'redacted', 'visible' => 4, 'crop' => false, 'char' => '*'], 'http_request' => [], 'http_response' => []];
+    $rules = ['mask' => ['style' => 'redacted', 'visible' => 4, 'crop' => false, 'char' => '*'], 'http_request' => [], 'http_response' => [], 'in_request' => [], 'in_response' => [], 'input' => []];
     $read = static function (array $f): array {
         return ['style' => $f[0], 'visible' => (int) ($f[1] ?? 4), 'crop' => ($f[2] ?? '0') === '1', 'char' => isset($f[3]) && $f[3] !== '' ? $f[3] : '*'];
     };
@@ -1437,7 +1499,7 @@ function redaction(): array
         }
         if ($f[1] === 'style' && in_array($f[2], ['redacted', 'masked'], true)) {
             $rules['mask'] = $read(array_slice($f, 2));
-        } elseif (($f[1] === 'http_request' || $f[1] === 'http_response') && count($f) >= 4 && in_array($f[3], ['redacted', 'masked'], true)) {
+        } elseif (in_array($f[1], ['http_request', 'http_response', 'in_request', 'in_response', 'input'], true) && count($f) >= 4 && in_array($f[3], ['redacted', 'masked'], true)) {
             $rules[$f[1]][$f[2]] = $read(array_slice($f, 3));
         }
     }
@@ -1637,8 +1699,9 @@ function session_report(array $all, string $name): void
             break;
         }
         $k = (string) $k;
-        if (preg_match('/password|secret|token|authkey|csrf/i', $k)) {
-            $out[$k] = mask_value(is_scalar($v) ? (string) $v : '', redaction()['mask']);
+        $rule = redact_rule('input', $k);
+        if ($rule !== null || preg_match('/password|secret|token|authkey|csrf/i', $k)) {
+            $out[$k] = mask_value(is_scalar($v) ? (string) $v : '', $rule ?? redaction()['mask']);
         } elseif (is_array($v) || (is_object($v) && !$v instanceof \Closure && !$v instanceof \UnitEnum)) {
             $json = json_encode($v, \JSON_PARTIAL_OUTPUT_ON_ERROR | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
             $out[$k] = is_string($json) ? (strlen($json) > 500 ? substr($json, 0, 497) . '...' : $json) : preview_value($v);
@@ -2065,7 +2128,7 @@ function http_done($response, bool $failed): void
 // each phase took, from the cumulative seconds curl and the clients report.
 function http_report(array $sent, int $status, array $responseHeaders, array $stats, bool $failed, string $reason = ''): void
 {
-    $data = ['method' => $sent['method'], 'url' => $sent['url'], 'status' => $status];
+    $data = ['method' => $sent['method'], 'url' => mask_url((string) $sent['url']), 'status' => $status];
     if ($reason !== '') {
         $data['reason'] = $reason;
     }

@@ -150,19 +150,34 @@ func DevtoolsRedactConf() string {
 				return []string{m.Style, strconv.Itoa(m.Visible), crop, m.Char}
 			}
 			add(append([]string{"style"}, tail(base)...)...)
-			headers, headerErrs := r.HTTPHeaders()
-			for _, e := range append(errs, headerErrs...) {
+			outgoing, outErrs := r.HTTPHeaders()
+			inbound, inErrs := r.InboundHeaders()
+			input, inputErrs := r.InboundInput()
+			for _, e := range slices.Concat(errs, outErrs, inErrs, inputErrs) {
 				fmt.Fprintf(os.Stderr, "[WARN] %s: %v\n", s.Name, e)
 			}
-			for _, dir := range []string{"request", "response"} {
-				names := slices.Sorted(maps.Keys(headers[dir]))
-				for _, name := range names {
-					add(append([]string{"http_" + dir, strings.TrimSpace(name)}, tail(headers[dir][name])...)...)
-				}
+			lines = append(lines, redactLines(s.Name, "http_", outgoing, tail)...)
+			lines = append(lines, redactLines(s.Name, "in_", inbound, tail)...)
+			for _, name := range slices.Sorted(maps.Keys(input)) {
+				add(append([]string{"input", strings.TrimSpace(name)}, tail(input[name])...)...)
 			}
 		}
 	}
-	return "# lerd devtools redaction, from .lerd.yaml.\n# site|style|<mask>, site|http_request|header|<mask>, site|http_response|header|<mask>, where <mask> is style|visible|crop|char.\n" + strings.Join(lines, "\n") + "\n"
+	return "# lerd devtools redaction, from .lerd.yaml.\n# site|style|<mask>, site|{http,in}_{request,response}|header|<mask>, site|input|name|<mask>, where <mask> is style|visible|crop|char.\n" + strings.Join(lines, "\n") + "\n"
+}
+
+// redactLines renders header masks per direction as site|<prefix><dir>|name|mask.
+func redactLines(site, prefix string, headers map[string]map[string]config.RedactMask, tail func(config.RedactMask) []string) []string {
+	var out []string
+	for _, dir := range []string{"request", "response"} {
+		for _, name := range slices.Sorted(maps.Keys(headers[dir])) {
+			fields := append([]string{site, prefix + dir, strings.TrimSpace(name)}, tail(headers[dir][name])...)
+			if !slices.ContainsFunc(fields, func(f string) bool { return strings.TrimSpace(f) == "" || strings.ContainsAny(f, "|\n\r") }) {
+				out = append(out, strings.Join(fields, "|"))
+			}
+		}
+	}
+	return out
 }
 
 // DevtoolsExcludeConf renders the console commands whose own work the collector

@@ -397,6 +397,14 @@ func TestDevtoolsRedactConf_PerHeaderStyleAndDirection(t *testing.T) {
           X-Trace-*: masked
         sideways:
           X-Lost: masked
+    inbound_http:
+      headers:
+        request:
+          X-Signature: masked
+        "*":
+          X-Internal-*: redacted
+      input:
+        customer_ssn: { style: masked, visible: 0 }
 `
 	if err := os.WriteFile(filepath.Join(project, ".lerd.yaml"), []byte(yaml), 0o644); err != nil {
 		t.Fatal(err)
@@ -413,6 +421,10 @@ func TestDevtoolsRedactConf_PerHeaderStyleAndDirection(t *testing.T) {
 		"shop|http_response|X-Upstream-Token|redacted|2|0|*\n",
 		"shop|http_request|X-Trace-*|masked|2|0|*\n",
 		"shop|http_response|X-Trace-*|masked|2|0|*\n",
+		"shop|in_request|X-Signature|masked|2|0|*\n",
+		"shop|in_request|X-Internal-*|redacted|2|0|*\n",
+		"shop|in_response|X-Internal-*|redacted|2|0|*\n",
+		"shop|input|customer_ssn|masked|0|0|*\n",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("redact file missing %q:\n%s", want, got)

@@ -172,7 +172,7 @@ function context(): array
     if (\PHP_SAPI !== 'cli') {
         $ctx['domain']  = isset($_SERVER['HTTP_HOST']) ? (string) $_SERVER['HTTP_HOST'] : '';
         $ctx['request'] = isset($_SERVER['REQUEST_METHOD'])
-            ? $_SERVER['REQUEST_METHOD'] . ' ' . ($_SERVER['REQUEST_URI'] ?? '')
+            ? $_SERVER['REQUEST_METHOD'] . ' ' . (\function_exists('Lerd\\Collector\\mask_url') ? \Lerd\Collector\mask_url((string) ($_SERVER['REQUEST_URI'] ?? ''), 'input') : ($_SERVER['REQUEST_URI'] ?? ''))
             : '';
     } else {
         // The CLI counterpart of request: what a console event points at.
@@ -650,8 +650,14 @@ function flush_models(): void
 // middleware_names names each middleware the way a developer wrote it: by
 // its alias when the router has one (auth, throttle:60,1), by its class when
 // not, and a closure by where it was defined.
-function middleware_names(array $list): array
+function middleware_names(array $list, array &$sources = []): array
 {
+    $base = \function_exists('base_path') ? rtrim((string) \base_path(), '/') . '/' : '';
+    // A middleware the app wrote opens in the editor; the framework's and its
+    // packages' stay plain names.
+    $own = static function (string $file) use ($base): bool {
+        return $base !== '/' && $base !== '' && strncmp($file, $base, strlen($base)) === 0 && strpos($file, '/vendor/') === false;
+    };
     $aliases = [];
     try {
         foreach (\app('router')->getMiddleware() as $alias => $class) {
@@ -665,17 +671,23 @@ function middleware_names(array $list): array
     foreach ($list as $middleware) {
         if ($middleware instanceof \Closure) {
             $where = '';
+            $source = null;
             try {
                 $fn = new \ReflectionFunction($middleware);
                 $file = (string) $fn->getFileName();
-                $base = \function_exists('base_path') ? rtrim((string) \base_path(), '/') . '/' : '';
+                if ($own($file)) {
+                    $source = ['file' => $file, 'line' => $fn->getStartLine()];
+                }
                 if ($base !== '/' && $base !== '' && strncmp($file, $base, strlen($base)) === 0) {
                     $file = substr($file, strlen($base));
                 }
                 $where = $file . ':' . $fn->getStartLine();
             } catch (\Throwable $_) {
             }
-            $names[] = 'Closure(' . $where . ')';
+            $names[] = $name = 'Closure(' . $where . ')';
+            if ($source) {
+                $sources[$name] = $source;
+            }
             continue;
         }
         if (!is_string($middleware)) {
@@ -684,7 +696,16 @@ function middleware_names(array $list): array
         }
         [$class, $parameters] = array_pad(explode(':', $middleware, 2), 2, null);
         $name = $aliases[ltrim($class, '\\')] ?? $class;
-        $names[] = $parameters === null ? $name : $name . ':' . $parameters;
+        $names[] = $label = $parameters === null ? $name : $name . ':' . $parameters;
+        try {
+            if (class_exists($class)) {
+                $ref = new \ReflectionClass($class);
+                if ($own((string) $ref->getFileName())) {
+                    $sources[$label] = ['file' => (string) $ref->getFileName(), 'line' => $ref->getStartLine()];
+                }
+            }
+        } catch (\Throwable $_) {
+        }
     }
     return $names;
 }
@@ -963,6 +984,10 @@ try {
             if (!empty($GLOBALS['__lerd_middleware'][rid()])) {
                 return;
             }
+            // The raw route parameters, before binding, so the path can be masked by name.
+            if (\function_exists('Lerd\\Collector\\route_params') && method_exists($e->route, 'originalParameters')) {
+                \Lerd\Collector\route_params((array) $e->route->originalParameters());
+            }
             $GLOBALS['__lerd_middleware'][rid()] = true;
             try {
                 $kernel = \app(\Illuminate\Contracts\Http\Kernel::class);
@@ -971,7 +996,12 @@ try {
             } catch (\Throwable $_) {
                 return;
             }
-            emit('middleware', ['global' => middleware_names($global), 'route' => middleware_names($route)]);
+            $sources = [];
+            $data = ['global' => middleware_names($global, $sources), 'route' => middleware_names($route, $sources)];
+            if ($sources) {
+                $data['sources'] = $sources;
+            }
+            emit('middleware', $data);
         });
 
         // Who the request runs as: the first user a guard resolves, with the

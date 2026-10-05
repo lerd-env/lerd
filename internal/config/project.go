@@ -174,10 +174,19 @@ type ProjectRedact struct {
 	// Visible is how many leading characters a masked value keeps, 4 unless
 	// set; Crop shortens the rest to a fixed run instead of one per character,
 	// and Char is the character it is masked with, * unless set.
-	Visible      *int               `yaml:"visible,omitempty"`
-	Crop         *bool              `yaml:"crop,omitempty"`
-	Char         string             `yaml:"char,omitempty"`
-	OutgoingHTTP *ProjectRedactHTTP `yaml:"outgoing_http,omitempty"`
+	Visible      *int                  `yaml:"visible,omitempty"`
+	Crop         *bool                 `yaml:"crop,omitempty"`
+	Char         string                `yaml:"char,omitempty"`
+	OutgoingHTTP *ProjectRedactHTTP    `yaml:"outgoing_http,omitempty"`
+	InboundHTTP  *ProjectRedactInbound `yaml:"inbound_http,omitempty"`
+}
+
+// ProjectRedactInbound names what to mask on the site's own requests: headers
+// per direction like outgoing requests, and input names, which cover the
+// query string, the body, cookies and the session.
+type ProjectRedactInbound struct {
+	Headers map[string]map[string]RedactRule `yaml:"headers,omitempty"`
+	Input   map[string]RedactRule            `yaml:"input,omitempty"`
 }
 
 // RedactRule is how one header is masked: a style alone, `masked`, or a
@@ -230,23 +239,54 @@ func (r *ProjectRedact) ResolvedMask() (RedactMask, []error) {
 	return resolveMask(RedactRule{Style: r.Style, Visible: r.Visible, Crop: r.Crop, Char: r.Char}, defaults, "devtools.redact")
 }
 
-// HTTPHeaders lists each header to mask per direction and how, with * spread
-// over both directions. A direction, style or visible count lerd does not
-// accept is refused, naming it, rather than guessed at.
+// HTTPHeaders lists each header to mask per direction on outgoing requests.
 func (r *ProjectRedact) HTTPHeaders() (map[string]map[string]RedactMask, []error) {
-	out := map[string]map[string]RedactMask{}
-	var errs []error
 	if r == nil || r.OutgoingHTTP == nil {
+		return map[string]map[string]RedactMask{}, nil
+	}
+	return r.headerMasks(r.OutgoingHTTP.Headers, "outgoing_http")
+}
+
+// InboundHeaders lists each header to mask per direction on the site's own
+// requests and responses.
+func (r *ProjectRedact) InboundHeaders() (map[string]map[string]RedactMask, []error) {
+	if r == nil || r.InboundHTTP == nil {
+		return map[string]map[string]RedactMask{}, nil
+	}
+	return r.headerMasks(r.InboundHTTP.Headers, "inbound_http")
+}
+
+// InboundInput lists each input name to mask, in the query string, the body,
+// cookies and the session.
+func (r *ProjectRedact) InboundInput() (map[string]RedactMask, []error) {
+	out := map[string]RedactMask{}
+	var errs []error
+	if r == nil || r.InboundHTTP == nil {
 		return out, nil
 	}
 	base, _ := r.ResolvedMask()
-	for dir, headers := range r.OutgoingHTTP.Headers {
+	for name, rule := range r.InboundHTTP.Input {
+		mask, ruleErrs := resolveMask(rule, base, "input "+name)
+		errs = append(errs, ruleErrs...)
+		out[name] = mask
+	}
+	return out, errs
+}
+
+// headerMasks resolves header rules per direction, with * spread over both.
+// A direction, style or visible count lerd does not accept is refused, naming
+// it, rather than guessed at.
+func (r *ProjectRedact) headerMasks(headers map[string]map[string]RedactRule, key string) (map[string]map[string]RedactMask, []error) {
+	out := map[string]map[string]RedactMask{}
+	var errs []error
+	base, _ := r.ResolvedMask()
+	for dir, names := range headers {
 		targets, ok := redactDirections[dir]
 		if !ok {
-			errs = append(errs, fmt.Errorf("unknown devtools.redact.outgoing_http.headers direction %q, want request, response or *", dir))
+			errs = append(errs, fmt.Errorf("unknown devtools.redact.%s.headers direction %q, want request, response or *", key, dir))
 			continue
 		}
-		for name, rule := range headers {
+		for name, rule := range names {
 			mask, ruleErrs := resolveMask(rule, base, "header "+name)
 			errs = append(errs, ruleErrs...)
 			for _, t := range targets {
@@ -718,10 +758,10 @@ func cloneProjectConfig(in *ProjectConfig) *ProjectConfig {
 			}
 			d.Redact.Char = r.Char
 			if h := r.OutgoingHTTP; h != nil {
-				d.Redact.OutgoingHTTP = &ProjectRedactHTTP{Headers: map[string]map[string]RedactRule{}}
-				for dir, headers := range h.Headers {
-					d.Redact.OutgoingHTTP.Headers[dir] = maps.Clone(headers)
-				}
+				d.Redact.OutgoingHTTP = &ProjectRedactHTTP{Headers: cloneRuleSets(h.Headers)}
+			}
+			if h := r.InboundHTTP; h != nil {
+				d.Redact.InboundHTTP = &ProjectRedactInbound{Headers: cloneRuleSets(h.Headers), Input: maps.Clone(h.Input)}
 			}
 		}
 		out.Devtools = d
@@ -772,4 +812,12 @@ func normalizeProjectConfig(cfg *ProjectConfig) {
 	sort.Slice(cfg.Services, func(i, j int) bool { return cfg.Services[i].Name < cfg.Services[j].Name })
 	sort.Strings(cfg.Workers)
 	sort.Strings(cfg.ReloadWorkers)
+}
+
+func cloneRuleSets(in map[string]map[string]RedactRule) map[string]map[string]RedactRule {
+	out := make(map[string]map[string]RedactRule, len(in))
+	for k, v := range in {
+		out[k] = maps.Clone(v)
+	}
+	return out
 }

@@ -1270,3 +1270,40 @@ namespace {
 		}
 	}
 }
+
+func TestCollectorPHP_InboundRedactionCoversHeadersInputAndSession(t *testing.T) {
+	dir := t.TempDir()
+	conf := "probe|style|redacted|4|0|*\nprobe|in_request|X-Signature|masked|2|0|*\nprobe|input|customer_ssn|masked|0|1|#\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-redact.conf"), []byte(conf), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace {
+    putenv('LERD_DEVTOOLS_REDACT=' . __DIR__ . '/devtools-redact.conf');
+    putenv('LERD_SITE=probe');
+    $_SERVER['HTTP_X_SIGNATURE'] = 'sig_abcdefgh';
+    $_SERVER['HTTP_ACCEPT'] = 'text/html';
+    $_GET = ['customer_ssn' => '0101901234', 'page' => '2'];
+    require COLLECTOR;
+    \Lerd\Collector\route_params(['customer_ssn' => '0101901234', 'token' => 'abcdefghijkl', 'page' => 'details']);
+    \Lerd\Collector\emit('probe', \Lerd\Collector\request_input() + ['uri' => \Lerd\Collector\mask_url('/cart?customer_ssn=0101901234&api_key=sk_123456789&page=2', 'input'), 'path' => \Lerd\Collector\mask_url('/api/0101901234/abcdefghijkl/details', 'input')]);
+    \Lerd\Collector\session_report(['customer_ssn' => '0101901234', 'cart' => 3], 'PHPSESSID');
+}
+`)
+	joined := strings.Join(got, "\n")
+	for _, want := range []string{
+		`"X-Signature":"si**********"`,
+		`"Accept":"text/html"`,
+		`"customer_ssn":"########"`,
+		`"page":"2"`,
+		`"uri":"/cart?customer_ssn=########&api_key=[redacted]&page=2"`,
+		`"path":"/api/########/[redacted]/details"`,
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %s in %v", want, got)
+		}
+	}
+	if strings.Count(joined, `"customer_ssn":"########"`) != 2 { // the query and the session
+		t.Errorf("want customer_ssn masked in the query and the session: %v", got)
+	}
+}
