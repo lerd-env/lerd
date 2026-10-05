@@ -593,6 +593,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 				}
 			}
 		}
+		rewakeSleepingSites(reg.Sites)
 	}
 	ok()
 
