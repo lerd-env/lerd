@@ -3,7 +3,9 @@
 package cli
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -27,4 +29,27 @@ func PortInUse(port string) bool {
 // Linux-only and lsof is the macOS equivalent.
 func FindListenerCmd(port string) string {
 	return "ss -tlnp sport = :" + port
+}
+
+// enforcedMysqldProfiles lists the host's enforced AppArmor profiles for a
+// native MySQL or MariaDB server. Rootless podman applies no profile of its
+// own, so the host's attaches by path to the mysqld in lerd's container and
+// stops it reading its config. root is "/" outside tests.
+func enforcedMysqldProfiles(root string) []string {
+	enabled, err := os.ReadFile(filepath.Join(root, "sys/module/apparmor/parameters/enabled"))
+	if err != nil || strings.TrimSpace(string(enabled)) != "Y" {
+		return nil
+	}
+	var out []string
+	for _, name := range []string{"usr.sbin.mysqld", "usr.sbin.mariadbd"} {
+		body, err := os.ReadFile(filepath.Join(root, "etc/apparmor.d", name))
+		if err != nil || strings.Contains(string(body), "complain") {
+			continue
+		}
+		if _, err := os.Lstat(filepath.Join(root, "etc/apparmor.d/disable", name)); err == nil {
+			continue
+		}
+		out = append(out, "/etc/apparmor.d/"+name)
+	}
+	return out
 }

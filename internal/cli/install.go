@@ -138,6 +138,14 @@ func ensurePortsAvailable() {
 	feedback.Note("another local stack such as Laravel Herd may be hosting sites; stop it to free these ports, then re-run lerd install")
 }
 
+// warnHostMysqldProfiles flags a native server's AppArmor profile, which also
+// confines the database in lerd's container; lerd doctor names the fix.
+func warnHostMysqldProfiles() {
+	for _, p := range enforcedMysqldProfiles("/") {
+		feedback.Warn("%s also confines lerd's MySQL/MariaDB container, which then ignores its config; run lerd doctor for the fix", p)
+	}
+}
+
 func runInstall(cmd *cobra.Command, _ []string) error {
 	markInstallInProgress()
 	feedback.Header("Installing Lerd")
@@ -181,6 +189,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	healMachineRestartIfNeeded(preEnsureLastUp)
 
 	ensurePortsAvailable()
+	warnHostMysqldProfiles()
 
 	// Resolved before the root pass below, which needs to know whether to
 	// install the resolver sudoers grant. The side effects of a changed answer
