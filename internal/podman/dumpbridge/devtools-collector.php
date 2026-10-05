@@ -1568,6 +1568,9 @@ function route_params_report(): array
         $bound = $GLOBALS['__lerd_route_bindings'][$name] ?? null;
         if (is_array($bound) && isset($bound['model'])) {
             $entry['model'] = (string) $bound['model'];
+            if (!empty($bound['field']) && is_string($bound['field'])) {
+                $entry['field'] = $bound['field'];
+            }
             if (!empty($bound['file'])) {
                 $entry['file'] = (string) $bound['file'];
                 $entry['line'] = (int) ($bound['line'] ?? 1);

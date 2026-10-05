@@ -52,7 +52,7 @@
   const http = $derived(data(ev('request')[0] ?? ({} as DumpEvent)));
   // Each route parameter as the request asked for it, masked where the rules
   // say, and the model it resolved to where one did.
-  const routeParams = $derived(Object.entries((http.route_params ?? {}) as Record<string, { value?: string; model?: string; key?: string; file?: string; line?: number }>));
+  const routeParams = $derived(Object.entries((http.route_params ?? {}) as Record<string, { value?: string; model?: string; field?: string; key?: string; file?: string; line?: number }>));
   const spans = $derived(ev('span').map(data));
   const controller = $derived(spans.find((s) => s.label === 'Controller')?.name ?? '');
   // Who the request ran as, when the app or its framework said.
@@ -296,7 +296,7 @@
             <h4 class="px-3 py-2 font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 dark:border-lerd-border/60">{m.requests_routeParams()} <span class="font-normal text-gray-400">{routeParams.length}</span></h4>
             {#each routeParams as [name, p] (name)}
               <div class="{ROW} grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_minmax(0,1fr)] gap-3">
-                <span class="font-mono text-[11px] text-gray-500 dark:text-gray-400 truncate" title={name}>{name}</span>
+                <span class="font-mono text-[11px] text-gray-500 dark:text-gray-400 truncate" title={p.field ? `${name}:${p.field}` : name}>{name}{#if p.field}<span class="text-gray-400 dark:text-gray-500">:{p.field}</span>{/if}</span>
                 <span class="font-mono text-[11px] text-gray-800 dark:text-gray-200 break-all">{p.value}</span>
                 <span class="font-mono text-[11px] text-gray-500 dark:text-gray-400 break-all">{#if p.model}{#if p.file}<SourcePath file={p.file} line={p.line} label={p.model} bare dotted />{:else}{p.model}{/if}{#if p.key !== undefined} <span class="text-gray-800 dark:text-gray-200">#{p.key}</span>{/if}{/if}</span>
               </div>

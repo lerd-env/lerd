@@ -1333,11 +1333,11 @@ namespace {
     $request->attributes->set('_route_params', ['customer' => '0101901234', 'tab' => 'details', 'filters' => ['a']]);
     \Lerd\Collector\seam_end('Fixture\\Resolver', 'getController', false);
     \Lerd\Collector\route_params(['customer' => '0101901234', 'tab' => 'details', 'user' => '42']);
-    \Lerd\Collector\route_bindings(['customer' => ['model' => 'App\\Models\\Customer', 'key' => 7], 'user' => ['model' => 'App\\Models\\User', 'key' => 42]]);
+    \Lerd\Collector\route_bindings(['customer' => ['model' => 'App\\Models\\Customer', 'field' => 'ssn', 'key' => 7], 'user' => ['model' => 'App\\Models\\User', 'key' => 42]]);
     \Lerd\Collector\emit('probe', ['path' => \Lerd\Collector\mask_url('/customers/0101901234/details', 'input'), 'params' => \Lerd\Collector\route_params_report()]);
 }
 `)
-	if joined := strings.Join(got, "\n"); !strings.Contains(joined, `"customer":{"value":"01********","model":"App\\Models\\Customer","key":"7"}`) {
+	if joined := strings.Join(got, "\n"); !strings.Contains(joined, `"customer":{"value":"01********","model":"App\\Models\\Customer","field":"ssn","key":"7"}`) {
 		t.Errorf("want the raw customer masked beside its model and key: %v", got)
 	}
 	if joined := strings.Join(got, "\n"); !strings.Contains(joined, `"user":{"value":"**","model":"App\\Models\\User","key":"**"}`) {

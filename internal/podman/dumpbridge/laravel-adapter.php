@@ -1014,7 +1014,9 @@ try {
             $bindings = [];
             foreach ((array) $route->parameters() as $name => $value) {
                 if (is_object($value) && method_exists($value, 'getKey')) {
-                    $bindings[(string) $name] = ['model' => get_class($value), 'key' => $value->getKey()] + (app_source(get_class($value)) ?? []);
+                    // The column a {name:column} parameter binds by, such as ssn.
+                    $field = method_exists($route, 'bindingFieldFor') ? $route->bindingFieldFor($name) : null;
+                    $bindings[(string) $name] = ['model' => get_class($value), 'field' => $field, 'key' => $value->getKey()] + (app_source(get_class($value)) ?? []);
                 }
             }
             if ($bindings) {
