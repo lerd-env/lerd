@@ -58,6 +58,7 @@ func toolList() []mcpTool {
 		frameworkTool(),
 		diagTool(),
 		logsTool(),
+		requestTool(),
 		worktreeTool(),
 		workspaceTool(),
 	}
@@ -235,7 +236,6 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"browser_events":  execBrowserEvents,
 		"browser_toggle":  execBrowserCaptureToggle,
 		"browser_presets": execBrowserPresets,
-		"request":         execRequest,
 		"profiler_toggle": execProfilerToggle,
 		"profiler_status": execProfilerStatus,
 		"profiler_clear":  execProfilerClear,
@@ -243,6 +243,13 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"xdebug_on":       func(a map[string]any) (any, *rpcError) { return execXdebugToggle(a, true) },
 		"xdebug_off":      func(a map[string]any) (any, *rpcError) { return execXdebugToggle(a, false) },
 		"xdebug_status":   func(a map[string]any) (any, *rpcError) { return execXdebugStatus() },
+	},
+	"request": {
+		"list":    execRequestTool,
+		"tabs":    execRequestTool,
+		"summary": execRequestTool,
+		"tab":     execRequestTool,
+		"trace":   execRequestTool,
 	},
 	"logs": {
 		"sources": execLogsSources,
@@ -556,11 +563,11 @@ func frameworkTool() mcpTool {
 func diagTool() mcpTool {
 	return mcpTool{
 		Name:        "diag",
-		Description: "Diagnostics & observability. action: status, doctor (lerd environment, ending with a sweep of every linked site), doctor_fix, site_doctor (app-level checks for a site: env, dependencies, audits, framework specifics), which, check, dns_diagnose, bug_report, analyze_queries (N+1/slow queries), route_timing (response-time table + slow routes), optimize_route (slow routes joined with their N+1/slow queries, plus CPU hotspots when profiling was on), dumps_recent, dumps_status, dumps_clear, dumps_toggle, browser_events (page views and what broke on them), browser_toggle, browser_presets, request (everything in one request by rid, else recent ones), profiler_toggle, profiler_status, profiler_clear, profiler_report (flat CPU profile of a command), xdebug_on, xdebug_off, xdebug_status. (Reading logs moved to the `logs` tool.)",
+		Description: "Diagnostics & observability. action: status, doctor (lerd environment, ending with a sweep of every linked site), doctor_fix, site_doctor (app-level checks for a site: env, dependencies, audits, framework specifics), which, check, dns_diagnose, bug_report, analyze_queries (N+1/slow queries), route_timing (response-time table + slow routes), optimize_route (slow routes joined with their N+1/slow queries, plus CPU hotspots when profiling was on), dumps_recent, dumps_status, dumps_clear, dumps_toggle, browser_events (page views and what broke on them), browser_toggle, browser_presets, profiler_toggle, profiler_status, profiler_clear, profiler_report (flat CPU profile of a command), xdebug_on, xdebug_off, xdebug_status. (Reading logs moved to the `logs` tool.)",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":          {Type: "string", Enum: []string{"status", "doctor", "doctor_fix", "site_doctor", "which", "check", "dns_diagnose", "bug_report", "analyze_queries", "route_timing", "optimize_route", "dumps_recent", "dumps_status", "dumps_clear", "dumps_toggle", "browser_events", "browser_toggle", "browser_presets", "request", "profiler_toggle", "profiler_status", "profiler_clear", "profiler_report", "xdebug_on", "xdebug_off", "xdebug_status"}},
+				"action":          {Type: "string", Enum: []string{"status", "doctor", "doctor_fix", "site_doctor", "which", "check", "dns_diagnose", "bug_report", "analyze_queries", "route_timing", "optimize_route", "dumps_recent", "dumps_status", "dumps_clear", "dumps_toggle", "browser_events", "browser_toggle", "browser_presets", "profiler_toggle", "profiler_status", "profiler_clear", "profiler_report", "xdebug_on", "xdebug_off", "xdebug_status"}},
 				"path":            {Type: "string", Description: "Project root (which/check/site_doctor/profiler_report). Defaults to cwd."},
 				"site":            {Type: "string", Description: "dumps/analyze_queries/route_timing/optimize_route/site_doctor/profiler_report: site filter (site name or domain)."},
 				"args":            {Type: "array", Items: stringItems, Description: `profiler_report: argv to run under php and profile, e.g. ["artisan","app:import"].`},
@@ -570,7 +577,6 @@ func diagTool() mcpTool {
 				"since":           {Type: "string", Description: "dumps_recent: time filter."},
 				"limit":           {Type: "integer", Description: "dumps_recent: max events."},
 				"preset":          {Type: "string", Description: "browser_presets: add/remove (with enable)."},
-				"rid":             {Type: "string", Description: "request: id from X-Lerd-Rid."},
 				"types":           {Type: "array", Items: stringItems, Description: "browser_events: error, rejection, console.error, console.warn, network, resource, event, navigation, request."},
 				"min_repeat":      {Type: "integer", Description: "analyze_queries/optimize_route: N+1 repeat threshold."},
 				"slow_ms":         {Type: "number", Description: "analyze_queries/optimize_route: slow-query threshold."},

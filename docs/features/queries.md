@@ -243,7 +243,7 @@ The line that triggered a query, a cache call, a Redis command or a storage oper
 
 An assistant gets the same data through lerd's MCP server:
 
-- `diag` with `action: "request"` lists a site's recent requests with their problems, and with a `rid`, the id a response sends back as `X-Lerd-Rid`, returns one request with everything the Debug window and the debug bar show. Each distinct stack trace is listed once in `traces`, and an event's `data.trace_ref` points at it.
+- The `request` tool reads one request by the id a response sends back as `X-Lerd-Rid`, everything the Debug window and the debug bar show. `summary` gives the timing, the phases, the N+1 and slow findings with runnable examples, exceptions, GraphQL operations and the requests it sent; `tabs` lists the tabs it has, the app's own included; `tab` reads one of them a page at a time; and `trace` reads a stack trace a row points at by its `trace_ref`. `list` gives a site's recent requests with their problems.
 - `analyze_queries` reports N+1 and slow queries per request, each with the line that ran it and a runnable example.
 - `dumps_recent` with a `kind` pulls raw events of any kind.
 

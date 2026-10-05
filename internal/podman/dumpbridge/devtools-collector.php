@@ -343,7 +343,23 @@ function backtrace(): array
             $src = ['file' => $file, 'line' => $line];
         }
     }
-    return ['src' => $src ?? $fallback ?? ['file' => '', 'line' => 0], 'trace' => $trace];
+    return ['src' => $src ?? asking_frame($trace) ?? $fallback ?? ['file' => '', 'line' => 0], 'trace' => $trace];
+}
+
+// asking_frame finds, on a stack with no app line, the first line written in
+// a class that is neither an event dispatcher nor the database layer: the
+// framework code that asked for the query, not the plumbing that carried it.
+function asking_frame(array $trace): ?array
+{
+    foreach ($trace as $i => $frame) {
+        // A frame's line sits in the class whose method the next frame names.
+        $caller = $trace[$i + 1]['func'] ?? '';
+        $class = (string) preg_replace('/(->|::).*$/', '', $caller);
+        if ($class !== '' && !preg_match('/\\\\(Events?|EventDispatcher|Database|DBAL|Pdo|PDO)(\\\\|$)/', $class)) {
+            return ['file' => $frame['file'], 'line' => $frame['line']];
+        }
+    }
+    return null;
 }
 
 function emit(string $kind, array $data): void

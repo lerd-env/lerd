@@ -290,8 +290,11 @@ func TestToolList_underSizeCeiling(t *testing.T) {
 	// 24650 → 24850 for browser_events' types argument, which names every type so
 	// an assistant can ask for only what broke instead of every page view, then
 	// 24850 → 25000 for request and its rid argument, which hand an assistant
-	// everything one request did, linked across sites, in a single call.
-	const ceiling = 25000
+	// everything one request did, linked across sites, in a single call, then
+	// 25000 → 25700 for the request tool that replaces it, which reads a request
+	// a tab and a page at a time, the app's own tabs included, so a request of
+	// thousands of queries fits an assistant's context.
+	const ceiling = 25700
 	got, err := json.Marshal(toolList())
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)

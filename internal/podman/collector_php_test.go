@@ -1638,3 +1638,37 @@ namespace {
 		}
 	}
 }
+
+// A query the framework ran on its own, with no app line on the stack, is
+// placed at the framework class that asked for it, not at the event
+// dispatcher or the database layer that only carried it.
+func TestCollectorPHP_FrameworkQueryIsPlacedAtTheClassThatAskedForIt(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"vendor/fw/Events/Dispatcher.php":       `<?php namespace Fw\Events; class Dispatcher { public function dispatch() { \Lerd\Collector\emit('query', ['sql' => 'select 1']); } }`,
+		"vendor/fw/Database/Connection.php":     `<?php namespace Fw\Database; class Connection { public function select() { (new \Fw\Events\Dispatcher())->dispatch(); } }`,
+		"vendor/fw/Session/DatabaseHandler.php": "<?php namespace Fw\\Session; class DatabaseHandler { public function read() {\n (new \\Fw\\Database\\Connection())->select();\n } }",
+		// A deep middleware stack keeps the app's entry point beyond the trace.
+		"vendor/fw/Http/Kernel.php": `<?php namespace Fw\Http; class Kernel { public function handle($n) { return $n ? $this->handle($n - 1) : (new \Fw\Session\DatabaseHandler())->read(); } }`,
+	}
+	for name, src := range files {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace {
+    require COLLECTOR;
+    foreach (['Events/Dispatcher', 'Database/Connection', 'Session/DatabaseHandler', 'Http/Kernel'] as $f) { require __DIR__ . '/vendor/fw/' . $f . '.php'; }
+    (new \Fw\Http\Kernel())->handle(60);
+}
+`)
+	joined := strings.Join(got, "\n")
+	if !strings.Contains(joined, `"src":{"file":"`+dir+`/vendor/fw/Session/DatabaseHandler.php","line":2}`) {
+		t.Errorf("want the session handler's line as src: %v", got)
+	}
+}
