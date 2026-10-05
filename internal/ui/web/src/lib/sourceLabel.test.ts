@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { relativeTo, callerClass, fromCaller } from './sourceLabel';
+import { relativeTo, callerClass, callerIndex } from './sourceLabel';
 
 describe('source labels', () => {
   it('shows a path from the deepest project root that holds it', () => {
@@ -23,17 +23,17 @@ describe('source labels', () => {
   });
 });
 
-describe('fromCaller', () => {
+describe('callerIndex', () => {
   const trace = [
     { file: '/app/vendor/acme/lib/Client.php', line: 10 },
     { file: '/app/app/Jobs/Sync.php', line: 22 },
     { file: '/app/vendor/acme/lib/Runner.php', line: 5 }
   ];
-  it('starts at the calling line, or at the first frame outside vendor/', () => {
-    expect(fromCaller(trace, '/app/app/Jobs/Sync.php', 22)).toEqual(trace.slice(1));
-    expect(fromCaller(trace, '/elsewhere.php', 1)).toEqual(trace.slice(1));
+  it('opens on the calling line, or on the first frame outside vendor/', () => {
+    expect(callerIndex(trace, '/app/app/Jobs/Sync.php', 22)).toBe(1);
+    expect(callerIndex(trace, '/elsewhere.php', 1)).toBe(1);
   });
-  it('keeps a trace with no app frame whole', () => {
-    expect(fromCaller([trace[0], trace[2]], trace[0].file, 10)).toEqual([trace[0], trace[2]]);
+  it('opens on the innermost frame of a trace with no app frame', () => {
+    expect(callerIndex([trace[0], trace[2]], '/elsewhere.php', 1)).toBe(0);
   });
 });

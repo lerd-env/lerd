@@ -3,6 +3,7 @@
   import { tooltip } from '$lib/tooltip';
   import CopyButton from './CopyButton.svelte';
   import { sites } from '$stores/sites';
+  import { editorTitle } from '$stores/editors';
   import { relativeTo } from '$lib/sourceLabel';
   import { m } from '../paraglide/messages.js';
 
@@ -45,7 +46,7 @@
         ? 'hover:underline hover:text-gray-600 dark:hover:text-gray-300'
         : 'hover:underline text-lerd-red'} {short ? 'min-w-0 truncate' : 'break-all'}"
     onclick={() => openInEditor(file, line ?? 1)}
-    use:tooltip={`${m.queries_openInEditor()} — ${reference}`}
+    use:tooltip={$editorTitle(file)}
   >{shown}{#if line && !bare}:{line}{/if}</button>
   <CopyButton
     text={reference}

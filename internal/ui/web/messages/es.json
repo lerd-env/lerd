@@ -1801,5 +1801,11 @@
   "http_failed": "conexión fallida",
   "requests_routeParams": "Parámetros de ruta",
   "trace_show": "Mostrar traza de pila",
-  "trace_title": "Traza de pila · {count} marcos"
+  "trace_title": "Traza de pila · {count} marcos",
+  "trace_vendorFrame": "1 frame de vendor",
+  "trace_vendorFrames": "{count} frames de vendor",
+  "trace_code": "Código",
+  "trace_noSource": "Código fuente no disponible",
+  "trace_codeHint": "Mostrar el código alrededor de cada línea",
+  "editor_openIn": "Abrir en {editor}"
 }

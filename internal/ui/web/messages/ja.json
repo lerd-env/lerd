@@ -1801,5 +1801,11 @@
   "http_failed": "接続失敗",
   "requests_routeParams": "ルートパラメーター",
   "trace_show": "スタックトレースを表示",
-  "trace_title": "スタックトレース · {count} フレーム"
+  "trace_title": "スタックトレース · {count} フレーム",
+  "trace_vendorFrame": "vendor フレーム 1 件",
+  "trace_vendorFrames": "vendor フレーム {count} 件",
+  "trace_code": "コード",
+  "trace_noSource": "ソースを表示できません",
+  "trace_codeHint": "各行の前後のコードを表示",
+  "editor_openIn": "{editor} で開く"
 }

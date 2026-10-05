@@ -1801,5 +1801,11 @@
   "http_failed": "falha na conexão",
   "requests_routeParams": "Parâmetros da rota",
   "trace_show": "Mostrar stack trace",
-  "trace_title": "Stack trace · {count} frames"
+  "trace_title": "Stack trace · {count} frames",
+  "trace_vendorFrame": "1 frame de vendor",
+  "trace_vendorFrames": "{count} frames de vendor",
+  "trace_code": "Código",
+  "trace_noSource": "Código-fonte indisponível",
+  "trace_codeHint": "Mostrar o código em volta de cada linha",
+  "editor_openIn": "Abrir no {editor}"
 }

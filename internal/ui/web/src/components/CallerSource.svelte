@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { Frame } from '$lib/sourceLabel';
-  import { callerClass, fromCaller } from '$lib/sourceLabel';
+  import { callerClass, callerIndex } from '$lib/sourceLabel';
   import Popover from './Popover.svelte';
   import SourcePath from './SourcePath.svelte';
-  import TraceFrames from './TraceFrames.svelte';
+  import TraceView from './TraceView.svelte';
+  import { traceCodePref } from '$lib/traceFrames';
   import Icon from './Icon.svelte';
   import { tooltip } from '$lib/tooltip';
   import { m } from '../paraglide/messages.js';
@@ -18,7 +19,7 @@
     nested?: boolean;
   }
   let { file, line, trace = [], muted = true, nested = false }: Props = $props();
-  const frames = $derived(fromCaller(trace, file, line));
+  let showCode = $state(traceCodePref());
 </script>
 
 {#snippet button(toggle: () => void, open: boolean)}
@@ -29,14 +30,11 @@
 
 <span class="inline-flex items-center gap-1 min-w-0 max-w-full">
   <span class="min-w-0"><SourcePath {file} {line} label={callerClass(file, line, trace)} {muted} short /></span>
-  {#if frames.length > 1}
-    <Popover label={m.trace_show()} width={760} align="auto" {nested}>
+  {#if trace.length > 1}
+    <Popover label={m.trace_show()} width={showCode ? 860 : 520} align="auto" {nested}>
       {#snippet triggerButton(toggle, open)}{@render button(toggle, open)}{/snippet}
       {#snippet children()}
-        <div class="px-3 pb-2 text-[11px]">
-          <div class="sticky top-0 -mx-3 px-3 py-2 bg-white dark:bg-lerd-card text-[10px] uppercase tracking-wide text-gray-400">{m.trace_title({ count: frames.length })}</div>
-          <TraceFrames trace={frames} />
-        </div>
+        <div class="flex flex-col h-[min(480px,var(--popover-room,70vh))]"><TraceView {trace} start={callerIndex(trace, file, line)} bind:showCode /></div>
       {/snippet}
     </Popover>
   {/if}

@@ -1801,5 +1801,11 @@
   "http_failed": "koneksi gagal",
   "requests_routeParams": "Parameter rute",
   "trace_show": "Tampilkan stack trace",
-  "trace_title": "Stack trace · {count} frame"
+  "trace_title": "Stack trace · {count} frame",
+  "trace_vendorFrame": "1 frame vendor",
+  "trace_vendorFrames": "{count} frame vendor",
+  "trace_code": "Kode",
+  "trace_noSource": "Sumber tidak tersedia",
+  "trace_codeHint": "Tampilkan kode di sekitar setiap baris",
+  "editor_openIn": "Buka di {editor}"
 }

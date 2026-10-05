@@ -208,8 +208,8 @@ function context(): array
     });
 }
 
-// installed_dirs returns every directory Composer put a package in, read once
-// per process from the project's installed map. The root package is excluded:
+// installed_dirs maps every directory Composer put a package in to the package's
+// name, read once per process from the project's installed map. The root package is excluded:
 // it is the project itself, and everything sits under it.
 function installed_dirs(): array
 {
@@ -227,10 +227,10 @@ function installed_dirs(): array
         if (is_file($map)) {
             $installed = @include $map;
             $root = isset($installed['root']['install_path']) ? realpath($installed['root']['install_path']) : false;
-            foreach ($installed['versions'] ?? [] as $pkg) {
+            foreach ($installed['versions'] ?? [] as $name => $pkg) {
                 $path = isset($pkg['install_path']) ? realpath($pkg['install_path']) : false;
                 if ($path !== false && $path !== $root) {
-                    $dirs[] = $path . DIRECTORY_SEPARATOR;
+                    $dirs[$path . DIRECTORY_SEPARATOR] = (string) $name;
                 }
             }
             break;
@@ -252,12 +252,22 @@ function is_dependency(string $file): bool
     if (strpos($file, '/vendor/') !== false) {
         return true;
     }
-    foreach (installed_dirs() as $dir) {
-        if (strpos($file, $dir) === 0) {
-            return true;
+    return package_of($file) !== '';
+}
+
+// package_of names the Composer package a file belongs to, by the install
+// paths Composer recorded, so one placed outside vendor/ is named too.
+function package_of(string $file): string
+{
+    $best = '';
+    $name = '';
+    foreach (installed_dirs() as $dir => $pkg) {
+        if (strpos($file, $dir) === 0 && strlen($dir) > strlen($best)) {
+            $best = $dir;
+            $name = $pkg;
         }
     }
-    return false;
+    return $name;
 }
 
 function backtrace(): array
@@ -287,11 +297,16 @@ function backtrace(): array
         if (strpos($func, 'laravel-adapter.php') !== false) {
             continue;
         }
-        $trace[] = ['file' => $file, 'line' => $line, 'func' => $func];
+        $frame = ['file' => $file, 'line' => $line, 'func' => $func];
+        $pkg = package_of($file);
+        if ($pkg !== '') {
+            $frame['pkg'] = $pkg;
+        }
+        $trace[] = $frame;
         if ($fallback === null) {
             $fallback = ['file' => $file, 'line' => $line];
         }
-        if ($src === null && !is_dependency($file)) {
+        if ($src === null && $pkg === '' && strpos($file, '/vendor/') === false) {
             $src = ['file' => $file, 'line' => $line];
         }
     }

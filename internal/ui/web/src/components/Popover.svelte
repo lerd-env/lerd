@@ -71,6 +71,12 @@
   }
 
   const close = () => (open = false);
+  // A panel that changes its width while open, such as a trace hiding its
+  // code, is placed again so it stays on screen.
+  $effect(() => {
+    void width;
+    if (open) place();
+  });
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && close()} onresize={() => open && place()} />
@@ -88,12 +94,15 @@
     <!-- Click-away backdrop; the panel sits above it. -->
     <button use:portal type="button" tabindex="-1" aria-hidden="true" class="fixed inset-0 cursor-default {nested ? 'z-[10000]' : 'z-70'}" onclick={(e) => { if (nested) e.stopPropagation(); close(); }}
     ></button>
+    <!-- A nested panel keeps its clicks from the layer below, which closes on any click outside itself. -->
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
     <div
       use:portal
+      onclick={(e) => nested && e.stopPropagation()}
       class="{nested ? 'z-[10001]' : 'z-80'} rounded-xl border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-2xl"
       style="position: fixed; left: {pos.left}px; width: {pos.width}px; {pos.below
         ? `top: ${pos.top}px`
-        : `bottom: ${Math.max(8, window.innerHeight - pos.top)}px`}{pos.room ? `; max-height: ${pos.room}px; overflow-y: auto; overscroll-behavior: contain` : ''}"
+        : `bottom: ${Math.max(8, window.innerHeight - pos.top)}px`}{pos.room ? `; max-height: ${pos.room}px; overflow-y: auto; overscroll-behavior: contain; --popover-room: ${pos.room - 2}px` : ''}"
     >
       {@render children(close)}
     </div>

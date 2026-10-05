@@ -31,11 +31,10 @@ export function callerClass(file: string, line: number | undefined, trace: Frame
   return m ? m[1] : '';
 }
 
-// fromCaller drops the frames inside the libraries a call went through before
-// it reached the app's own code: the trace starts at file:line, the first app
-// frame, or else the first frame outside vendor/, and stays whole without one.
-export function fromCaller(trace: Frame[], file: string, line: number | undefined): Frame[] {
+// callerIndex is the frame a trace opens on: file:line, the first app frame,
+// or else the first frame outside vendor/, and the innermost without one.
+export function callerIndex(trace: Frame[], file: string, line: number | undefined): number {
   let i = trace.findIndex((f) => f.file === file && f.line === line);
   if (i < 0) i = trace.findIndex((f) => f.file && !f.file.includes('/vendor/'));
-  return i > 0 ? trace.slice(i) : trace;
+  return Math.max(i, 0);
 }

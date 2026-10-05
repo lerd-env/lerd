@@ -1801,5 +1801,11 @@
   "http_failed": "Verbindung fehlgeschlagen",
   "requests_routeParams": "Routenparameter",
   "trace_show": "Stacktrace anzeigen",
-  "trace_title": "Stacktrace · {count} Frames"
+  "trace_title": "Stacktrace · {count} Frames",
+  "trace_vendorFrame": "1 Vendor-Frame",
+  "trace_vendorFrames": "{count} Vendor-Frames",
+  "trace_code": "Code",
+  "trace_noSource": "Quelle nicht verfügbar",
+  "trace_codeHint": "Code um jede Zeile anzeigen",
+  "editor_openIn": "In {editor} öffnen"
 }

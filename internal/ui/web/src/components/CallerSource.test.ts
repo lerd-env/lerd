@@ -1,6 +1,8 @@
 import { render, screen, fireEvent } from '@testing-library/svelte';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import CallerSource from './CallerSource.svelte';
+
+vi.mock('$lib/sourceCode', () => ({ loadSource: () => Promise.reject(new Error('none')) }));
 
 const trace = [
   { file: '/srv/app/vendor/laravel/framework/src/Cache/Repository.php', line: 120, func: 'Illuminate\\Cache\\Repository->get' },
@@ -9,13 +11,11 @@ const trace = [
 ];
 
 describe('CallerSource', () => {
-  it('unfolds the stack from the app line down, leaving the library frames above it out', async () => {
+  it('opens the call path with the app line named by the method it sits in', async () => {
     render(CallerSource, { props: { file: trace[1].file, line: 31, trace } });
-    expect(screen.queryByText(trace[2].func)).not.toBeInTheDocument();
     await fireEvent.click(screen.getByRole('button', { name: 'Show stack trace' }));
-    expect(screen.getByText(trace[1].func)).toBeInTheDocument();
-    expect(screen.getByText(trace[2].func)).toBeInTheDocument();
-    expect(screen.queryByText(trace[0].func)).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { selected: true })).toHaveTextContent('CartController->show()');
+    expect(screen.getAllByText('1 vendor frame')).toHaveLength(2);
   });
 
   it('offers no trace for a line with nothing behind it', () => {

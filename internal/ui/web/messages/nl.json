@@ -1801,5 +1801,11 @@
   "http_failed": "verbinding mislukt",
   "requests_routeParams": "Routeparameters",
   "trace_show": "Stacktrace tonen",
-  "trace_title": "Stacktrace · {count} frames"
+  "trace_title": "Stacktrace · {count} frames",
+  "trace_vendorFrame": "1 vendor-frame",
+  "trace_vendorFrames": "{count} vendor-frames",
+  "trace_code": "Code",
+  "trace_noSource": "Bron niet beschikbaar",
+  "trace_codeHint": "Code rond elke regel tonen",
+  "editor_openIn": "Openen in {editor}"
 }

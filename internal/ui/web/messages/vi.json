@@ -1801,5 +1801,11 @@
   "http_failed": "kết nối thất bại",
   "requests_routeParams": "Tham số route",
   "trace_show": "Hiện stack trace",
-  "trace_title": "Stack trace · {count} khung"
+  "trace_title": "Stack trace · {count} khung",
+  "trace_vendorFrame": "1 khung vendor",
+  "trace_vendorFrames": "{count} khung vendor",
+  "trace_code": "Mã",
+  "trace_noSource": "Không có mã nguồn",
+  "trace_codeHint": "Hiện mã quanh mỗi dòng",
+  "editor_openIn": "Mở trong {editor}"
 }

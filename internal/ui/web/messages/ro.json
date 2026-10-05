@@ -1801,5 +1801,11 @@
   "http_failed": "conexiune eșuată",
   "requests_routeParams": "Parametrii rutei",
   "trace_show": "Arată stiva de apeluri",
-  "trace_title": "Stiva de apeluri · {count} cadre"
+  "trace_title": "Stiva de apeluri · {count} cadre",
+  "trace_vendorFrame": "1 cadru vendor",
+  "trace_vendorFrames": "{count} cadre vendor",
+  "trace_code": "Cod",
+  "trace_noSource": "Sursa nu este disponibilă",
+  "trace_codeHint": "Arată codul din jurul fiecărei linii",
+  "editor_openIn": "Deschide în {editor}"
 }

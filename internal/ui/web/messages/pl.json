@@ -1801,5 +1801,11 @@
   "http_failed": "błąd połączenia",
   "requests_routeParams": "Parametry trasy",
   "trace_show": "Pokaż stos wywołań",
-  "trace_title": "Stos wywołań · {count} ramek"
+  "trace_title": "Stos wywołań · {count} ramek",
+  "trace_vendorFrame": "1 ramka vendor",
+  "trace_vendorFrames": "Ramki vendor: {count}",
+  "trace_code": "Kod",
+  "trace_noSource": "Źródło niedostępne",
+  "trace_codeHint": "Pokaż kod wokół każdej linii",
+  "editor_openIn": "Otwórz w {editor}"
 }

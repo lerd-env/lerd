@@ -1801,5 +1801,11 @@
   "http_failed": "bağlantı başarısız",
   "requests_routeParams": "Rota parametreleri",
   "trace_show": "Yığın izini göster",
-  "trace_title": "Yığın izi · {count} çerçeve"
+  "trace_title": "Yığın izi · {count} çerçeve",
+  "trace_vendorFrame": "1 vendor çerçevesi",
+  "trace_vendorFrames": "{count} vendor çerçevesi",
+  "trace_code": "Kod",
+  "trace_noSource": "Kaynak kullanılamıyor",
+  "trace_codeHint": "Her satırın çevresindeki kodu göster",
+  "editor_openIn": "{editor} ile aç"
 }

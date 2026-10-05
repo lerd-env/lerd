@@ -1801,5 +1801,11 @@
   "http_failed": "échec de connexion",
   "requests_routeParams": "Paramètres de route",
   "trace_show": "Afficher la pile d’appels",
-  "trace_title": "Pile d’appels · {count} cadres"
+  "trace_title": "Pile d’appels · {count} cadres",
+  "trace_vendorFrame": "1 frame vendor",
+  "trace_vendorFrames": "{count} frames vendor",
+  "trace_code": "Code",
+  "trace_noSource": "Source indisponible",
+  "trace_codeHint": "Afficher le code autour de chaque ligne",
+  "editor_openIn": "Ouvrir dans {editor}"
 }

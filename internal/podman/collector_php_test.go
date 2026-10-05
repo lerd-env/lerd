@@ -311,6 +311,9 @@ acme_listing();
 	if !strings.HasSuffix(e.Src.File, "/modules/custom/Listing.php") {
 		t.Errorf("src.file = %q, want the project's own module, not the installed framework package", e.Src.File)
 	}
+	if !strings.Contains(lines[0], `/core/lib/Db.php","line":1,"func":"Lerd\\Collector\\http","pkg":"acme/core"`) {
+		t.Errorf("want the framework frame named by its package: %s", lines[0])
+	}
 }
 
 // noBridge runs a script with the host's own lerd instrumentation kept out of

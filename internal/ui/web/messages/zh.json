@@ -1801,5 +1801,11 @@
   "http_failed": "连接失败",
   "requests_routeParams": "路由参数",
   "trace_show": "显示堆栈跟踪",
-  "trace_title": "堆栈跟踪 · {count} 帧"
+  "trace_title": "堆栈跟踪 · {count} 帧",
+  "trace_vendorFrame": "1 个 vendor 帧",
+  "trace_vendorFrames": "{count} 个 vendor 帧",
+  "trace_code": "代码",
+  "trace_noSource": "无法获取源码",
+  "trace_codeHint": "显示每行附近的代码",
+  "editor_openIn": "在 {editor} 中打开"
 }
