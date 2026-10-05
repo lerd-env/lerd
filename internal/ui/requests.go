@@ -289,6 +289,18 @@ func requestDetail(events []dumps.Event, rid string) (RequestDetail, bool) {
 	return d, true
 }
 
+// withTraces puts back the stack traces the ring keeps apart, for the one
+// request being shown; listing requests never needs them.
+func withTraces(srv *dumps.Server, d RequestDetail) RequestDetail {
+	if srv == nil {
+		return d
+	}
+	for kind, evs := range d.Events {
+		d.Events[kind] = srv.Expand(evs)
+	}
+	return d
+}
+
 // analyzeQueriesAll is the query analysis of one request, kept even when it
 // found nothing, so the detail view always has the totals.
 func analyzeQueriesAll(queries []dumps.Event) RequestAnalysis {
@@ -314,7 +326,7 @@ func handleRequests(w http.ResponseWriter, r *http.Request) {
 	srv := dumpsServer.Load()
 	var events []dumps.Event
 	if srv != nil {
-		events = srv.Snapshot()
+		events = srv.Lite()
 	}
 	if rid := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/api/requests"), "/"); rid != "" {
 		d, ok := requestDetail(events, rid)
@@ -322,7 +334,7 @@ func handleRequests(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		writeJSON(w, d)
+		writeJSON(w, withTraces(srv, d))
 		return
 	}
 	q := r.URL.Query()

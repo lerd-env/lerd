@@ -136,6 +136,13 @@ func (s *Server) Addr() string { return s.addr }
 // Snapshot returns a copy of the ring in insertion order.
 func (s *Server) Snapshot() []Event { return s.ring.Snapshot() }
 
+// Lite returns the ring without traces; Expand puts them back on the events a
+// reader shows. Listing requests reads thousands of events and needs none.
+func (s *Server) Lite() []Event { return s.ring.Lite() }
+
+// Expand puts back the traces of events Lite returned.
+func (s *Server) Expand(evs []Event) []Event { return s.ring.Expand(evs) }
+
 // Filter returns a filtered Snapshot.
 func (s *Server) Filter(opts FilterOpts) []Event { return s.ring.Filter(opts) }
 

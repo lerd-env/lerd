@@ -6,20 +6,22 @@ import "sync"
 // overwrites the oldest entry. A single N+1 request can emit well over a
 // thousand query events, so the old 500-line cap could not even retain one
 // request's worth for analyze_queries to read; sized up so a fresh capture of
-// one pathological request survives long enough to be analyzed. With a stack
-// trace on every query, cache call and log line an event averages about 4 KB
-// and a page some 60 of them, so 3000 held fewer than fifty requests; this
-// keeps a few hundred in about 80 MB.
-const DefaultCapacity = 20000
+// one pathological request survives long enough to be analyzed. A page sends
+// some 60 events, and with their traces kept as frame numbers (see frames.go)
+// an event is under 1 KB, so this keeps around a thousand requests.
+const DefaultCapacity = 60000
 
 // Ring is a fixed-size ring buffer of Events safe for concurrent use.
 // Snapshots are taken under a read lock and returned in insertion order.
 type Ring struct {
-	mu   sync.RWMutex
-	buf  []Event
-	head int // next write index
-	size int // populated entries, 0..cap
-	cap  int
+	mu  sync.RWMutex
+	buf []Event
+	// traces holds each slot's trace as frame numbers, nil for none.
+	traces [][]uint32
+	frames *frameTable
+	head   int // next write index
+	size   int // populated entries, 0..cap
+	cap    int
 }
 
 // NewRing returns a ring with the given capacity. Non-positive capacity is
@@ -28,14 +30,14 @@ func NewRing(capacity int) *Ring {
 	if capacity <= 0 {
 		capacity = DefaultCapacity
 	}
-	return &Ring{buf: make([]Event, capacity), cap: capacity}
+	return &Ring{buf: make([]Event, capacity), traces: make([][]uint32, capacity), frames: newFrameTable(), cap: capacity}
 }
 
 // Append stores e, evicting the oldest entry once the ring is full.
 func (r *Ring) Append(e Event) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.buf[r.head] = e
+	r.buf[r.head], r.traces[r.head] = r.frames.strip(e)
 	r.head = (r.head + 1) % r.cap
 	if r.size < r.cap {
 		r.size++
@@ -43,17 +45,65 @@ func (r *Ring) Append(e Event) {
 }
 
 // Snapshot returns a copy of the ring contents in insertion order (oldest
-// first). The returned slice is independent of the ring's backing array.
+// first), traces included. The returned slice is independent of the ring's
+// backing array.
 func (r *Ring) Snapshot() []Event {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := make([]Event, 0, r.size)
+	slots := r.slots()
+	out := make([]Event, len(slots))
+	for i, s := range slots {
+		out[i] = r.frames.restore(s.event, s.trace)
+	}
+	return out
+}
+
+// Lite is Snapshot without the traces, for a reader that lists or groups
+// events and puts the traces back with Expand on the few it shows.
+func (r *Ring) Lite() []Event {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	slots := r.slots()
+	out := make([]Event, len(slots))
+	for i, s := range slots {
+		out[i] = s.event
+		out[i].lite = s.trace
+	}
+	return out
+}
+
+// Expand puts back the traces of events Lite returned.
+func (r *Ring) Expand(evs []Event) []Event {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]Event, len(evs))
+	for i, e := range evs {
+		ids := e.lite
+		e.lite = nil
+		out[i] = r.frames.restore(e, ids)
+	}
+	return out
+}
+
+type slot struct {
+	event Event
+	trace []uint32
+}
+
+// slots copies the populated slots in insertion order; the caller holds the lock.
+func (r *Ring) slots() []slot {
+	out := make([]slot, 0, r.size)
+	add := func(from, to int) {
+		for i := from; i < to; i++ {
+			out = append(out, slot{r.buf[i], r.traces[i]})
+		}
+	}
 	if r.size < r.cap {
-		out = append(out, r.buf[:r.size]...)
+		add(0, r.size)
 		return out
 	}
-	out = append(out, r.buf[r.head:]...)
-	out = append(out, r.buf[:r.head]...)
+	add(r.head, r.cap)
+	add(0, r.head)
 	return out
 }
 
@@ -75,24 +125,27 @@ func (r *Ring) Clear() {
 	defer r.mu.Unlock()
 	r.head = 0
 	r.size = 0
-	for i := range r.buf {
-		r.buf[i] = Event{}
-	}
+	clear(r.buf)
+	clear(r.traces)
+	r.frames = newFrameTable()
 }
 
 // Remove drops every entry drop matches, keeping the rest in order and freeing
 // their slots for new events.
 func (r *Ring) Remove(drop func(Event) bool) {
-	kept := make([]Event, 0, r.Len())
-	for _, e := range r.Snapshot() {
-		if !drop(e) {
-			kept = append(kept, e)
-		}
-	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	kept := make([]slot, 0, r.size)
+	for _, s := range r.slots() {
+		if !drop(s.event) {
+			kept = append(kept, s)
+		}
+	}
 	clear(r.buf)
-	copy(r.buf, kept)
+	clear(r.traces)
+	for i, s := range kept {
+		r.buf[i], r.traces[i] = s.event, s.trace
+	}
 	r.size = len(kept)
 	r.head = len(kept) % r.cap
 }
@@ -117,7 +170,7 @@ type FilterOpts struct {
 
 // Filter returns a Snapshot filtered by opts, preserving insertion order.
 func (r *Ring) Filter(opts FilterOpts) []Event {
-	snap := r.Snapshot()
+	snap := r.Lite()
 	out := make([]Event, 0, len(snap))
 	for _, e := range snap {
 		if opts.Site != "" && e.Ctx.Site != opts.Site {
@@ -140,5 +193,5 @@ func (r *Ring) Filter(opts FilterOpts) []Event {
 	if opts.Limit > 0 && len(out) > opts.Limit {
 		out = out[len(out)-opts.Limit:]
 	}
-	return out
+	return r.Expand(out)
 }

@@ -11,7 +11,7 @@ The **Requests** lens comes first, in the Debug window and on each site's Debug 
 - A job is listed under the request that queued it, and the calls a page made later are listed under the page.
 - Each row shows the method, status and time, plus what went wrong: an exception, an error log, a failed call, an N+1 or a slow query.
 - Filter to pages, API calls or CLI runs, or to requests with problems.
-- lerd keeps the last 20,000 events in memory, every query, log line and cache call counting as one, which is a few hundred requests across all sites. The oldest go first, and nothing is kept once lerd-ui restarts.
+- lerd keeps the last 60,000 events in memory, every query, log line and cache call counting as one, which is around a thousand requests across all sites. The oldest go first, and nothing is kept once lerd-ui restarts.
 
 ![The Requests lens on a site's Debug tab, with jobs indented under the request that queued them](/assets/screenshots/requests-lens.png)
 

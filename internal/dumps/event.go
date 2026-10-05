@@ -116,6 +116,9 @@ type Event struct {
 	Tree  json.RawMessage `json:"tree,omitempty"`
 	Data  json.RawMessage `json:"data,omitempty"`
 	Trunc bool            `json:"trunc,omitempty"`
+	// lite is the trace a Ring.Lite event left out, as frame numbers, until
+	// Ring.Expand puts it back.
+	lite []uint32
 }
 
 // QueryData is the Data payload for KindQuery events. The lerd_devtools

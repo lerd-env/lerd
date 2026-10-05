@@ -127,7 +127,7 @@ func buildDumpsStatusJSON() []byte {
 		resp.Listening = true
 		resp.Count = srv.Len()
 		resp.Subscribers = srv.Subscribers()
-		if snap := srv.Snapshot(); len(snap) > 0 {
+		if snap := srv.Lite(); len(snap) > 0 {
 			resp.LastTS = snap[len(snap)-1].TS
 		}
 	}
