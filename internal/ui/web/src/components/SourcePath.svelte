@@ -15,8 +15,14 @@
     short?: boolean;
     // label replaces the path, the class a call was made in, say.
     label?: string;
+    // bare leaves the line out of the text, where a colon means something
+    // else, a middleware's parameters; the editor still opens at it.
+    bare?: boolean;
+    // dotted reads as the surrounding text with a dotted underline, for a link
+    // among names that mostly are not.
+    dotted?: boolean;
   }
-  let { file, line, muted = false, short = false, label = '' }: Props = $props();
+  let { file, line, muted = false, short = false, label = '', bare = false, dotted = false }: Props = $props();
 
   const reference = $derived(line ? `${file}:${line}` : file);
   // A path inside a site reads from the project's root; one outside keeps its
@@ -33,12 +39,14 @@
 <span class="group/path inline-flex items-center gap-1 max-w-full align-middle">
   <button
     type="button"
-    class="font-mono text-left hover:underline {muted
-      ? 'hover:text-gray-600 dark:hover:text-gray-300'
-      : 'text-lerd-red'} {short ? 'min-w-0 truncate' : 'break-all'}"
+    class="font-mono text-left {dotted
+      ? 'underline decoration-dotted decoration-lerd-red underline-offset-2 hover:decoration-solid'
+      : muted
+        ? 'hover:underline hover:text-gray-600 dark:hover:text-gray-300'
+        : 'hover:underline text-lerd-red'} {short ? 'min-w-0 truncate' : 'break-all'}"
     onclick={() => openInEditor(file, line ?? 1)}
     use:tooltip={`${m.queries_openInEditor()} — ${reference}`}
-  >{shown}{#if line}:{line}{/if}</button>
+  >{shown}{#if line && !bare}:{line}{/if}</button>
   <CopyButton
     text={reference}
     label={m.queries_copyPath()}

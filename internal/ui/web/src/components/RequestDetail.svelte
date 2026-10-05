@@ -54,7 +54,7 @@
   const controller = $derived(spans.find((s) => s.label === 'Controller')?.name ?? '');
   // Who the request ran as, when the app or its framework said.
   const authUser = $derived(ev('auth').map(data)[0]);
-  const middleware = $derived(ev('middleware').map(data)[0] as { global?: string[]; route?: string[] } | undefined);
+  const middleware = $derived(ev('middleware').map(data)[0] as { global?: string[]; route?: string[]; sources?: Record<string, { file: string; line?: number }> } | undefined);
   const queries = $derived(ev('query'));
   const dbTime = $derived(queries.reduce((n, e) => n + Number(data(e).time_ms ?? 0), 0));
   const pageTiming = $derived(ev('browser').map(data).find((b) => b.type === 'timing')?.timing as Record<string, number> | undefined);
@@ -276,7 +276,10 @@
                 <div class="{ROW} grid grid-cols-[8rem_minmax(0,1fr)] gap-3">
                   <span class="text-gray-500 dark:text-gray-400">{heading}</span>
                   <ol class="space-y-0.5">
-                    {#each list as name, i (i)}<li class="font-mono text-[11px] break-all">{name}</li>{/each}
+                    {#each list as name, i (i)}
+                      {@const source = middleware.sources?.[name]}
+                      <li class="font-mono text-[11px] break-all">{#if source}<SourcePath file={source.file} line={source.line} label={name} bare dotted />{:else}{name}{/if}</li>
+                    {/each}
                   </ol>
                 </div>
               {/if}
