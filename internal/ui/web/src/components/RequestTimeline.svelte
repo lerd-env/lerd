@@ -80,10 +80,15 @@
 
   const total = $derived(waterfall.total);
   const present = $derived(LAYERS.filter((l) => waterfall.rows.some((r) => r.layer === l.id)));
+  // A folded row opens in place into the rows it stands for, each clickable
+  // like any other, and a second click on it folds them back.
+  let expanded = $state<Record<string, boolean>>({});
+  const groupKey = (r: WaterfallRow) => `${r.layer}:${r.start}:${r.items?.length ?? 0}`;
   const rows = $derived.by(() => {
     const needle = search.toLowerCase();
     const keep = waterfall.rows.filter((r) => !hidden[filterKey(r)] && (!needle || r.label.toLowerCase().includes(needle)));
-    return condensed ? condense(keep, total) : keep;
+    if (!condensed) return keep;
+    return condense(keep, total).flatMap((r) => (r.items && expanded[groupKey(r)] ? [r, ...r.items.map((it) => ({ ...it, nested: true }))] : [r]));
   });
 
   const pct = (n: number) => (n / total) * 100;
@@ -94,6 +99,11 @@
   // elsewhere or Escape closes them.
   function toggle(e: MouseEvent, r: WaterfallRow, i: number) {
     e.stopPropagation();
+    if (r.items) {
+      hover = null;
+      expanded = { ...expanded, [groupKey(r)]: !expanded[groupKey(r)] };
+      return;
+    }
     if (hover?.i === i) {
       hover = null;
       return;
@@ -141,7 +151,7 @@
       {@const width = r.end > r.start ? Math.max(pct(r.end - r.start), 0.4) : 0}
       {@const edge = r.items ? Math.max(...r.items.map((it) => pct(it.end))) : left + width}
       {@const place = edge < 68 ? 'after' : left > 32 ? 'before' : 'inside'}
-      <button type="button" aria-expanded={hover?.i === i} class="relative block w-full h-6 rounded-sm text-left cursor-pointer {hover?.i === i ? 'ring-1 ring-gray-400 dark:ring-white/30' : ''} {i % 2 ? 'bg-gray-50 dark:bg-white/[0.03]' : ''}" onclick={(e) => toggle(e, r, i)}>
+      <button type="button" aria-expanded={r.items ? Boolean(expanded[groupKey(r)]) : hover?.i === i} class="relative block w-full h-6 rounded-sm text-left cursor-pointer {hover?.i === i ? 'ring-1 ring-gray-400 dark:ring-white/30' : ''} {'nested' in r ? 'bg-gray-100/70 dark:bg-white/[0.06]' : i % 2 ? 'bg-gray-50 dark:bg-white/[0.03]' : ''}" onclick={(e) => toggle(e, r, i)}>
         {#if r.items}
           {#each r.items as it, j (j)}
             {@const w = it.end > it.start ? Math.max(pct(it.end - it.start), 0.4) : 0}
@@ -152,6 +162,7 @@
         {/if}
         <span class="absolute inset-y-0 flex items-center gap-1 whitespace-nowrap {place === 'inside' ? 'text-white px-1.5' : `max-w-[60%] ${s.text}`}" style={place === 'after' ? `left: calc(${edge}% + 8px)` : place === 'before' ? `right: calc(${100 - left}% + 8px)` : `left: ${left}%; max-width: ${width}%`}>
           <Icon name={s.icon} class="w-3 h-3 shrink-0" />
+          {#if r.items}<Icon name="chevron" class="w-3 h-3 shrink-0 transition-transform {expanded[groupKey(r)] ? '' : '-rotate-90'}" />{/if}
           <span class="truncate {r.layer === 'query' ? 'font-mono' : ''}">{r.items ? m.requests_events({ count: r.items.length }) : r.label}</span>
           {#if !r.items && took(r)}<span class="shrink-0 opacity-70">{took(r)}</span>{/if}
         </span>
@@ -164,14 +175,6 @@
   {@const s = styleOf(hover.r)}
   <div use:portal bind:this={pop} role="dialog" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={close} class="fixed z-[9999] w-96 max-h-[calc(100vh-16px)] overflow-y-auto rounded-lg border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-xl text-xs overflow-hidden" style="left: {hover.x}px; top: {hover.y}px">
     <div class="flex items-center gap-1.5 px-3 py-2 font-semibold border-b border-gray-100 dark:border-lerd-border/60 {s.text}"><Icon name={s.icon} class="w-3.5 h-3.5" />{s.label()}</div>
-    {#if hover.r.items}
-      <ul class="px-3 py-2 space-y-1">
-        {#each hover.r.items.slice(0, 8) as it, j (j)}
-          <li class="flex gap-2"><span class="font-mono text-gray-400 shrink-0">{pos(it.start)}</span><span class="truncate text-gray-700 dark:text-gray-200 {it.layer === 'query' ? 'font-mono' : ''}">{it.label}</span>{#if took(it)}<span class="ml-auto shrink-0 text-gray-400">{took(it)}</span>{/if}</li>
-        {/each}
-        {#if hover.r.items.length > 8}<li class="text-gray-400">+{hover.r.items.length - 8}</li>{/if}
-      </ul>
-    {:else}
       {#if hover.r.code}
         <pre class="px-3 py-2 font-mono text-[11px] whitespace-pre-wrap break-words text-gray-700 dark:text-gray-200 max-h-40 overflow-y-auto">{hover.r.code}</pre>
       {:else}
@@ -200,7 +203,6 @@
         <div class="py-1.5 border-l border-gray-100 dark:border-lerd-border/60"><div class="font-semibold text-gray-800 dark:text-gray-100">{pos(hover.r.start)}</div><div class="text-[10px] text-gray-400">{m.requests_stat_start()}</div></div>
         <div class="py-1.5 border-l border-gray-100 dark:border-lerd-border/60"><div class="font-semibold text-gray-800 dark:text-gray-100">{hover.r.note && !took(hover.r) ? hover.r.note : pos(hover.r.end)}</div><div class="text-[10px] text-gray-400">{hover.r.note && !took(hover.r) ? m.requests_stat_kind() : m.requests_stat_end()}</div></div>
       </div>
-    {/if}
   </div>
 {/if}
 
