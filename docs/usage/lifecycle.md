@@ -39,7 +39,7 @@ Walks the install in dependency order:
 A live spinner shows the per-unit progress. If a single SSL vhost references a missing certificate file, lerd switches that site back to HTTP automatically and continues; one broken cert no longer blocks the whole nginx start.
 
 ::: info After a reinstall
-If you ran `lerd uninstall` and then reinstalled, worker units and service quadlets are recreated by `lerd start` from each site's `.lerd.yaml`. Sites with a committed `.lerd.yaml` come back fully wired up. Sites without one need their workers restarted manually.
+If you ran `lerd uninstall` and then reinstalled, worker units and service quadlets are recreated by `lerd start` from each site's `.lerd.yaml`, and so is the container of a site on the FrankenPHP runtime, also after a `lerd sites:restore`. Sites with a committed `.lerd.yaml` come back fully wired up. Sites without one need their workers restarted manually.
 :::
 
 ::: info After the binary moves
