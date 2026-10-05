@@ -586,6 +586,9 @@ Removing a service and what it leaves behind:
       Orphaned list, and its trash button stops and removes it
 - [ ] RustFS's console opened straight after the service starts loads, rather
       than answering "server context is not ready"
+- [ ] Mailpit embedded in the dashboard on lerd.localhost answers its API with
+      the browser's Origin and opens its live websocket, with no cors warning
+      in its log
 
 ---
 
