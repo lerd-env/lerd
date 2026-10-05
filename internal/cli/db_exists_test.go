@@ -38,7 +38,8 @@ func TestDatabaseExists_FallsBackWhenTheClientIsMissing(t *testing.T) {
 	dir := t.TempDir()
 	script := `#!/bin/sh
 case "$3" in
-  mariadb) echo 1 ;;
+  mariadb) [ "$4 $5" = "-h 127.0.0.1" ] || { echo "not over TCP: $*" >&2; exit 1; }
+           echo 1 ;;
   *) exit 127 ;;
 esac
 `
