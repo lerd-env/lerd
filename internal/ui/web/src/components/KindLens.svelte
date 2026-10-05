@@ -20,6 +20,7 @@
   import LensToggle from '$components/LensToggle.svelte';
   import TestEventsToggle from '$components/TestEventsToggle.svelte';
   import TraceBlock from '$components/TraceBlock.svelte';
+  import ClassName from '$components/ClassName.svelte';
   import SourcePath from '$components/SourcePath.svelte';
   import LensLoadMore from '$components/LensLoadMore.svelte';
   import LensGroupLabel from '$components/LensGroupLabel.svelte';
@@ -269,7 +270,7 @@
             <div class="rounded-sm border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card mb-1.5 overflow-hidden">
               <button type="button" class="w-full text-left px-2.5 py-1.5 flex items-start gap-2 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => toggleRow(ev.id)}>
                 <span class="flex-1 break-all text-xs text-gray-800 dark:text-gray-200">
-                  {#if wireKind === 'job'}{d.class}
+                  {#if wireKind === 'job'}<ClassName value={String(d.class ?? '')} />
                   {:else if wireKind === 'view'}{d.name}
                   {:else if wireKind === 'mail'}{d.subject || '(no subject)'}
                   {:else if wireKind === 'cache'}<code>{d.key}</code>

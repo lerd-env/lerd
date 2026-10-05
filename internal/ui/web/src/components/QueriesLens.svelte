@@ -22,6 +22,7 @@
   import LensToggle from '$components/LensToggle.svelte';
   import TestEventsToggle from '$components/TestEventsToggle.svelte';
   import TraceBlock from '$components/TraceBlock.svelte';
+  import { highlight } from '$lib/highlight';
   import CopyButton from '$components/CopyButton.svelte';
   import LensLoadMore from '$components/LensLoadMore.svelte';
   import LensGroupLabel from '$components/LensGroupLabel.svelte';
@@ -223,7 +224,7 @@
                   class="flex-1 min-w-0 text-left px-2.5 py-1.5 flex items-start gap-2 hover:bg-gray-50 dark:hover:bg-white/5"
                   onclick={() => toggleRow(row.event.id)}
                 >
-                  <code class="text-xs flex-1 break-all text-gray-800 dark:text-gray-200">{row.data.sql}</code>
+                  <code class="text-xs flex-1 break-all text-gray-800 dark:text-gray-200">{@html highlight(row.data.sql, 'sql')}</code>
                   <span class="flex items-center gap-1 shrink-0">
                     {#if row.duplicate}
                       <span class="text-[10px] rounded-sm px-1 py-0.5 bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300" title={m.queries_dup_title()}>{m.queries_dup_badge({ count: row.dupCount })}</span>

@@ -30,7 +30,7 @@
   let row = $state<HTMLElement | null>(null);
   $effect(() => {
     void active;
-    if (snap) row?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (snap) row?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   });
 
   // A lone tab can't be switched to anything, so the bar is just noise. Hide it

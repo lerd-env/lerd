@@ -7,6 +7,8 @@
   import CallerSource from './CallerSource.svelte';
   import { customColor } from '$lib/customColors';
   import { portal } from '$lib/portal';
+  import { highlight } from '$lib/highlight';
+  import { formatSql } from '$lib/sqlFormat';
   import { m } from '../paraglide/messages.js';
 
   // A request's timeline: every span and moment on one chronological list, the
@@ -196,7 +198,7 @@
   <div use:portal bind:this={pop} role="dialog" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={close} class="fixed z-[9999] w-96 max-h-[calc(100vh-16px)] overflow-y-auto rounded-lg border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-xl text-xs overflow-hidden" style="left: {hover.x}px; top: {hover.y}px">
     <div class="flex items-center gap-1.5 px-3 py-2 font-semibold border-b border-gray-100 dark:border-lerd-border/60 {s.text}"><Icon name={s.icon} class="w-3.5 h-3.5" />{s.label()}</div>
       {#if hover.r.code}
-        <pre class="px-3 py-2 font-mono text-[11px] whitespace-pre-wrap break-words text-gray-700 dark:text-gray-200 max-h-40 overflow-y-auto">{hover.r.code}</pre>
+        <pre class="px-3 py-2 font-mono text-[11px] whitespace-pre-wrap break-words text-gray-700 dark:text-gray-200 max-h-40 overflow-y-auto">{@html highlight(formatSql(hover.r.code), 'sql')}</pre>
       {:else}
         <p class="px-3 py-2 break-words text-gray-700 dark:text-gray-200">{hover.r.label.slice(0, 600)}</p>
       {/if}

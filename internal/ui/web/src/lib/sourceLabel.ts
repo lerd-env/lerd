@@ -38,3 +38,10 @@ export function callerIndex(trace: Frame[], file: string, line: number | undefin
   if (i < 0) i = trace.findIndex((f) => f.file && !f.file.includes('/vendor/'));
   return Math.max(i, 0);
 }
+
+// shortClass shows each namespaced class in s by its own name, so
+// "App\Http\Controllers\CartController@show" reads "CartController@show"; the
+// full name goes in a title beside it.
+export function shortClass(s: string): string {
+  return s.replace(/\\?(?:[A-Za-z_]\w*\\)+([A-Za-z_]\w*)/g, '$1');
+}

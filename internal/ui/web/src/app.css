@@ -411,3 +411,22 @@ button {
     scroll-behavior: auto !important;
   }
 }
+
+/* Syntax colours for the SQL and PHP the Debug window shows (see
+   $lib/highlight), in both themes. */
+.hl-kw { color: #a626a4; }
+.hl-str { color: #3c8a2e; }
+.hl-num { color: #a85b00; }
+.hl-com { color: #9ca3af; font-style: italic; }
+.hl-var { color: #b5470f; }
+.hl-fn { color: #2a62c9; }
+.hl-cls { color: #a35200; }
+.hl-id { color: #0e7490; }
+.dark .hl-kw { color: #c792ea; }
+.dark .hl-str { color: #a5d6a7; }
+.dark .hl-num { color: #f7c76b; }
+.dark .hl-com { color: #6b7280; }
+.dark .hl-var { color: #f6a87c; }
+.dark .hl-fn { color: #82aaff; }
+.dark .hl-cls { color: #ffcb6b; }
+.dark .hl-id { color: #7dd3fc; }

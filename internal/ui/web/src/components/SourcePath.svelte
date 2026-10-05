@@ -4,7 +4,7 @@
   import CopyButton from './CopyButton.svelte';
   import { sites } from '$stores/sites';
   import { editorTitle } from '$stores/editors';
-  import { relativeTo } from '$lib/sourceLabel';
+  import { relativeTo, shortClass } from '$lib/sourceLabel';
   import { m } from '../paraglide/messages.js';
 
   interface Props {
@@ -29,7 +29,8 @@
   // A path inside a site reads from the project's root; one outside keeps its
   // full form, shortened where the row is narrow.
   const relative = $derived(relativeTo(file, $sites.map((s) => s.path).filter((p): p is string => !!p)));
-  const shown = $derived(label || (relative !== file ? relative : short ? shorten(file) : file));
+  // A class label reads by the class's own name; the full name is in the tooltip.
+  const shown = $derived(label ? shortClass(label) : relative !== file ? relative : short ? shorten(file) : file);
 
   function shorten(path: string): string {
     const parts = path.split('/');

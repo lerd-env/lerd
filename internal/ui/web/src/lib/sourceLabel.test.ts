@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { relativeTo, callerClass, callerIndex } from './sourceLabel';
+import { relativeTo, callerClass, callerIndex, shortClass } from './sourceLabel';
 
 describe('source labels', () => {
   it('shows a path from the deepest project root that holds it', () => {
@@ -35,5 +35,14 @@ describe('callerIndex', () => {
   });
   it('opens on the innermost frame of a trace with no app frame', () => {
     expect(callerIndex([trace[0], trace[2]], '/elsewhere.php', 1)).toBe(0);
+  });
+});
+
+describe('shortClass', () => {
+  it('reads namespaced classes by their own name and leaves the rest alone', () => {
+    expect(shortClass('Rebing\\GraphQL\\GraphQLController@query')).toBe('GraphQLController@query');
+    expect(shortClass('\\App\\Models\\User')).toBe('User');
+    expect(shortClass('Closure routes/web.php:19')).toBe('Closure routes/web.php:19');
+    expect(shortClass('App\\Jobs\\SendInvoice, App\\Jobs\\Sync')).toBe('SendInvoice, Sync');
   });
 });
