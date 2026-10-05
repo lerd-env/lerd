@@ -971,48 +971,54 @@ function seam_value(string $expr, $self, array $args): string
         }
         return '';
     }
-    $accessor = '';
-    $dot = strpos($expr, '.');
-    if ($dot !== false) {
-        $accessor = substr($expr, $dot + 1);
-        $expr = substr($expr, 0, $dot);
-    }
-    if ($expr === 'this') {
-        $subject = $self;
-    } elseif (strncmp($expr, 'arg:', 4) === 0) {
-        $n = (int) substr($expr, 4);
-        $subject = isset($args[$n]) ? $args[$n] : null;
-    } else {
-        return '';
-    }
-    if ($accessor === '') {
+    if (strpos($expr, '.') === false) {
+        $subject = seam_raw($expr, $self, $args);
         return is_object($subject) && !$subject instanceof \Closure ? get_class($subject) : scalar_string($subject);
     }
-    if (!is_object($subject)) {
-        return '';
+    $value = seam_raw($expr, $self, $args);
+    return $value === null || is_array($value) ? '' : scalar_string($value);
+}
+
+// seam_raw resolves an expression to the value itself: "this" or "arg:N",
+// then steps separated by dots, each a method:name to call, a prop:name to
+// read, or a bare name that reads on into an array or object, so
+// prop:action.uses and method:getRequest.prop:attributes.method:all._route
+// both walk. Null when a step finds nothing.
+function seam_raw(string $expr, $self, array $args)
+{
+    $steps = explode('.', $expr);
+    $head = array_shift($steps);
+    if ($head === 'this') {
+        $value = $self;
+    } elseif (strncmp($head, 'arg:', 4) === 0) {
+        $n = (int) substr($head, 4);
+        $value = isset($args[$n]) ? $args[$n] : null;
+    } else {
+        return null;
     }
     try {
-        if (strncmp($accessor, 'method:', 7) === 0) {
-            $m = substr($accessor, 7);
-            return method_exists($subject, $m) ? scalar_string($subject->$m()) : '';
-        }
-        // A dotted property walks on into arrays and objects: prop:action.uses.
-        if (strncmp($accessor, 'prop:', 5) === 0) {
-            $value = $subject;
-            foreach (explode('.', substr($accessor, 5)) as $key) {
-                if (is_array($value) && array_key_exists($key, $value)) {
-                    $value = $value[$key];
-                } elseif (is_object($value) && isset($value->$key)) {
-                    $value = $value->$key;
-                } else {
-                    return '';
+        foreach ($steps as $step) {
+            if (strncmp($step, 'method:', 7) === 0) {
+                $m = substr($step, 7);
+                if (!is_object($value) || !method_exists($value, $m)) {
+                    return null;
                 }
+                $value = $value->$m();
+                continue;
             }
-            return $value === null || is_array($value) ? '' : scalar_string($value);
+            $key = strncmp($step, 'prop:', 5) === 0 ? substr($step, 5) : $step;
+            if (is_array($value) && array_key_exists($key, $value)) {
+                $value = $value[$key];
+            } elseif (is_object($value) && isset($value->$key)) {
+                $value = $value->$key;
+            } else {
+                return null;
+            }
         }
     } catch (\Throwable $_) {
+        return null;
     }
-    return '';
+    return $value;
 }
 
 // seam_begin reports a store-declared job starting, and remembers it so the end
@@ -1045,6 +1051,13 @@ function seam_begin($class, $method, $self, $args): void
     // kind from inside one (a driver handing to its parent) is the same call.
     // A response read as it ends, so a lazy one is complete and the client's
     // own status check has already run, never moved later by holding it.
+    // A route's parameters are read once the call returns, when the framework
+    // has put them where the expression looks; the first route wins.
+    if ($seam && $seam['kind'] === 'route_params') {
+        $stack[] = ['timed' => 'route_params', 'subject' => $self, 'args' => is_array($args) ? $args : [], 'expr' => $seam['name']];
+        $GLOBALS['__lerd_seam_stack'] = $stack;
+        return;
+    }
     if ($seam && $seam['kind'] === 'http_response') {
         $stack[] = ['timed' => 'http_response', 'subject' => $self];
         $GLOBALS['__lerd_seam_stack'] = $stack;
@@ -1140,6 +1153,15 @@ function seam_end($class, $method, $failed, $error = ''): void
     $frame = array_pop($stack);
     $GLOBALS['__lerd_seam_stack'] = $stack;
     if (!is_array($frame) || !empty($frame['skip'])) {
+        return;
+    }
+    if (($frame['timed'] ?? '') === 'route_params') {
+        if (empty($GLOBALS['__lerd_route_params'])) {
+            $params = seam_raw((string) $frame['expr'], $frame['subject'], $frame['args']);
+            if (is_array($params)) {
+                route_params(array_filter($params, 'is_scalar'));
+            }
+        }
         return;
     }
     if (($frame['timed'] ?? '') === 'http_response') {

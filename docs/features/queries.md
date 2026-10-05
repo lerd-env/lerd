@@ -173,7 +173,7 @@ devtools:
         customer: masked       # also /customers/{customer:ssn}/details, masked in the path
 ```
 
-Query values and route parameters are masked in the request's URL too, so a secret in `/customers/0101901234/details` or `?api_key=…` never shows in the list or a request's header. Route parameters are read before binding, by their name in the route, on Laravel.
+Query values and route parameters are masked in the request's URL too, so a secret in `/customers/0101901234/details` or `?api_key=…` never shows in the list or a request's header. Route parameters are read before binding, by their name in the route, on Laravel, Symfony, Drupal, Yii, CakePHP and WordPress.
 
 | Style | Shows |
 |---|---|

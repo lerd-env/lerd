@@ -1307,3 +1307,35 @@ namespace {
 		t.Errorf("want customer_ssn masked in the query and the session: %v", got)
 	}
 }
+
+func TestCollectorPHP_RouteParamsSeamMasksThePath(t *testing.T) {
+	dir := t.TempDir()
+	seams := "route_params|class|Fixture\\Resolver|getController|arg:1.prop:attributes.method:all._route_params\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "devtools-redact.conf"), []byte("probe|input|customer|masked|2|0|*\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace Fixture {
+    class Bag { private $p = []; public function set($k, $v) { $this->p[$k] = $v; } public function all() { return $this->p; } }
+    class Request { public $attributes; public function __construct() { $this->attributes = new Bag(); } }
+    class Resolver { public function getController($request) {} }
+}
+namespace {
+    putenv('LERD_DEVTOOLS_REDACT=' . __DIR__ . '/devtools-redact.conf');
+    putenv('LERD_SITE=probe');
+    require COLLECTOR;
+    $request = new \Fixture\Request();
+    \Lerd\Collector\seam_begin('Fixture\\Resolver', 'getController', new \Fixture\Resolver(), [1 => $request]);
+    // The framework fills the route in before the call returns.
+    $request->attributes->set('_route_params', ['customer' => '0101901234', 'tab' => 'details', 'filters' => ['a']]);
+    \Lerd\Collector\seam_end('Fixture\\Resolver', 'getController', false);
+    \Lerd\Collector\emit('probe', ['path' => \Lerd\Collector\mask_url('/customers/0101901234/details', 'input')]);
+}
+`)
+	if joined := strings.Join(got, "\n"); !strings.Contains(joined, `"path":"/customers/01********/details"`) {
+		t.Errorf("want the customer masked in the path: %v", got)
+	}
+}
