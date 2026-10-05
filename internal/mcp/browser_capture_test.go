@@ -50,3 +50,28 @@ func TestBrowserEvents_RefusesAnUnknownType(t *testing.T) {
 		t.Fatalf("got %v", got)
 	}
 }
+
+// The debug bar is shown or hidden per site, and reported when enable is left out.
+func TestDebugbarToggle_ShowsHidesAndReports(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	// A paused site is saved without rewriting its vhost, which a test cannot reload.
+	if err := config.AddSite(config.Site{Name: "shop", Domains: []string{"shop.test"}, Path: t.TempDir(), Paused: true}); err != nil {
+		t.Fatal(err)
+	}
+	state := func(args map[string]any) string {
+		res, _ := execDebugbarToggle(args)
+		b, _ := json.Marshal(res)
+		return string(b)
+	}
+	if got := state(map[string]any{"site": "shop"}); !strings.Contains(got, `\"enabled\":false`) {
+		t.Fatalf("status = %s", got)
+	}
+	state(map[string]any{"site": "shop", "enable": true})
+	if site, _ := config.FindSite("shop"); site == nil || !config.DebugbarFor(*site) {
+		t.Fatal("debug bar not switched on")
+	}
+	if got := state(map[string]any{"site": "nope"}); !strings.Contains(got, "isError") {
+		t.Errorf("unknown site accepted: %s", got)
+	}
+}

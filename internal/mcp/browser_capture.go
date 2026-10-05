@@ -101,6 +101,30 @@ func execBrowserCaptureToggle(args map[string]any) (any, *rpcError) {
 	return toolOK(string(b)), nil
 }
 
+// execDebugbarToggle shows (enable true) or hides the debug bar on a site's
+// pages, or reports whether it is on when enable is left out.
+func execDebugbarToggle(args map[string]any) (any, *rpcError) {
+	ref := strArg(args, "site")
+	if ref == "" {
+		ref = siteForToolArgs(args)
+	}
+	site, err := config.FindSiteByRef(ref)
+	if err != nil || site == nil {
+		return toolErr(`"site" must name a linked site`), nil
+	}
+	enable, ok := args["enable"].(bool)
+	if !ok {
+		b, _ := json.Marshal(map[string]any{"site": site.Name, "enabled": config.DebugbarFor(*site)})
+		return toolOK(string(b)), nil
+	}
+	res, err := browsercapture.SetDebugbar(*site, enable)
+	if err != nil {
+		return toolErr("toggle failed: " + err.Error()), nil
+	}
+	b, _ := json.Marshal(res)
+	return toolOK(string(b)), nil
+}
+
 // execBrowserPresets lists the store's event presets for a site with what was
 // detected and added, or adds (enable true) or removes the one named by preset.
 func execBrowserPresets(args map[string]any) (any, *rpcError) {
