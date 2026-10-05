@@ -7,11 +7,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/platform"
 )
 
 // Editor is one editor lerd knows how to open a file in: the binary that
@@ -55,19 +55,7 @@ func (e Editor) Installed() bool {
 	if _, err := exec.LookPath(e.bin); err == nil {
 		return true
 	}
-	if runtime.GOOS == "darwin" {
-		home, _ := os.UserHomeDir()
-		for _, app := range e.apps {
-			for _, dir := range []string{"/Applications", filepath.Join(home, "Applications")} {
-				if _, err := os.Stat(filepath.Join(dir, app)); err == nil {
-					return true
-				}
-			}
-		}
-		return false
-	}
-	scheme := e.url[:strings.Index(e.url, ":")]
-	return schemeHandled(scheme)
+	return e.installedOffPath()
 }
 
 // applicationDirs are where desktop entries live; a variable so a test can keep
@@ -191,11 +179,7 @@ func Command(file string, line int) []string {
 		}
 	}
 	// Last resort: hand the file to the platform opener (uses the default app).
-	opener := "xdg-open"
-	if runtime.GOOS == "darwin" {
-		opener = "open"
-	}
-	if p, err := exec.LookPath(opener); err == nil {
+	if p, err := exec.LookPath(platform.Current.Opener); err == nil {
 		return []string{p, file}
 	}
 	return nil

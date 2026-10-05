@@ -15,7 +15,6 @@ import (
 
 	"github.com/geodro/lerd/internal/composer"
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/imagepull"
 	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/origin"
 )
@@ -260,6 +259,13 @@ func FPMImageCurrent(version string) bool {
 	}
 	return fpmImageCurrent(FPMImageName(version), hash,
 		customSetHash(version, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages()))
+}
+
+// FPMImageWouldBuild reports whether a non-forced build of version's image
+// would really build, so a disclosure names only that work: the image is stale
+// or missing, and offline mode is not keeping the one that exists.
+func FPMImageWouldBuild(version string) bool {
+	return !FPMImageCurrent(version) && !OfflineKeeps(FPMImageName(version))
 }
 
 // imageLabel reads a single label from a local image. Returns "" on any
@@ -507,7 +513,7 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 	// Offline defers a refresh of an image that still runs: the rebuild would
 	// re-download the whole base. A missing image is built anyway, and
 	// `lerd php:rebuild` forces its way through.
-	if !force && imagepull.Offline() && ImageExists(imageName) {
+	if !force && OfflineKeeps(imageName) {
 		fmt.Fprintf(w, "  Offline: keeping the current PHP %s image, run `lerd php:rebuild` to refresh it\n", version)
 		return false, nil
 	}

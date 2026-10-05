@@ -118,7 +118,10 @@ rm -f /tmp/lerd-vm-lerd.yaml
 
 in_use() { podman ps --format '{{.Image}}' | sort -u; }
 before_use=$(in_use)
-podman tag docker.io/library/busybox:latest localhost/lerd-vm-orphan:1 2>/dev/null
+# hello-world, not busybox: phase 8's custom container is built FROM busybox,
+# and cleanup rightly keeps an image another image is built on.
+podman pull -q docker.io/library/hello-world:latest >/dev/null 2>&1
+podman tag docker.io/library/hello-world:latest localhost/lerd-vm-orphan:1 2>/dev/null
 dry=$(lerd cleanup --dry-run 2>&1)
 echo "$dry"
 check_out "11.17 [partial] the preview says at least rather than about" 'At least|Nothing to reclaim' echo "$dry"

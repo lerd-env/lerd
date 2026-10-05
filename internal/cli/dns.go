@@ -12,6 +12,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
 )
@@ -275,7 +276,7 @@ var (
 	// platforms LAN exposure must NOT install the forwarder: it would
 	// double-bind lanIP:5300 and crash lerd-dns. Seam so both models are
 	// testable from any build host.
-	lerdDNSBindsLANPort = runtime.GOOS == "darwin"
+	lerdDNSBindsLANPort = platform.Current.UsesMachineVM
 	// installLANForwarderFn installs and starts the host-side LAN DNS
 	// forwarder. Seam so the macOS skip can be asserted without touching real
 	// units.

@@ -195,3 +195,31 @@ func TestWakeSiteServices_wakesWhatTheSiteUses(t *testing.T) {
 		t.Fatalf("woke %v, want only shop's sleeping mysql", woke)
 	}
 }
+
+// Waking an admin tool starts the engine it depends on even when the user had
+// stopped that engine, so the engine's pause has to clear with it.
+func TestWakeService_clearsThePauseOfADependencyItStarts(t *testing.T) {
+	withServiceHome(t)
+	stubLifecycle(t)
+	for _, n := range []string{"mysql", "phpmyadmin"} {
+		svc := &config.CustomService{Name: n, Image: "docker.io/library/alpine:latest"}
+		if n == "phpmyadmin" {
+			svc.DependsOn = []string{"mysql"}
+		}
+		if err := config.SaveCustomService(svc); err != nil {
+			t.Fatal(err)
+		}
+		writeDepQuadlet(t, "lerd-"+n)
+	}
+	_ = config.SetServicePaused("mysql", true)
+	prevStart := wakeStartUnit
+	t.Cleanup(func() { wakeStartUnit = prevStart })
+	wakeStartUnit = func(string) error { return nil }
+
+	if err := WakeService("phpmyadmin"); err != nil {
+		t.Fatal(err)
+	}
+	if config.ServiceIsPaused("mysql") {
+		t.Fatal("the dependency woken for phpmyadmin is still recorded as paused")
+	}
+}

@@ -124,13 +124,18 @@ func pullArgs(image string) []string {
 	return append(args, image)
 }
 
+// OfflineKeeps reports whether offline mode leaves image as it is instead of
+// pulling or rebuilding it. Only an image that is missing outright is worth the
+// bytes on a metered connection, so whatever already works is kept.
+func OfflineKeeps(image string) bool {
+	return imagepull.Offline() && ImageExists(image)
+}
+
 // runPull builds and runs `podman pull image`, sending podman's stdout and
 // stderr to the given writers so the three entry points share one error-wrap
 // and one platform-aware argv (pullArgs).
 func runPull(image string, stdout, stderr io.Writer) error {
-	// Offline keeps whatever already works: only an image that is missing
-	// outright is worth the bytes on a metered connection.
-	if imagepull.Offline() && ImageExists(image) {
+	if OfflineKeeps(image) {
 		fmt.Fprintf(stdout, "Offline: keeping the local %s\n", PlatformImage(image))
 		return nil
 	}

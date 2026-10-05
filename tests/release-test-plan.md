@@ -1103,8 +1103,9 @@ Other surfaces:
 - [ ] Every installed quadlet's image counts as protected: a cleanup run while a
       site is stopped does not cost that site a rebuild
 - [ ] What a run reports freed is measured against the image store on both
-      sides and matches roughly what the disk gave back, and the preview says
-      at least rather than about
+      sides and matches the `podman system df` Images delta, says image store
+      rather than disk, and the preview says at least rather than about (on a
+      compressed filesystem the disk gives back less, as the docs explain)
 - [ ] The resources widget's disk figure is what lerd's images occupy whether or
       not any of it is reclaimable, and clicking it opens the breakdown heaviest
       first

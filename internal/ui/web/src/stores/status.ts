@@ -45,7 +45,7 @@ export interface StatusResponse {
   // Identifier of the lerd-ui process that answered. A change means the server
   // restarted, so the page is reloaded onto the assets it now serves.
   instance?: string;
-  // Managed host binaries (composer, fnm, mkcert) against their pinned versions.
+  // Managed host binaries (composer, mise, fnm, mkcert) against their pinned versions.
   tools?: ToolStatus[];
 }
 

@@ -7,8 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
+
+	"github.com/geodro/lerd/internal/platform"
 )
 
 // handleOpenFolder opens a directory in the host's file manager (xdg-open on
@@ -58,11 +59,7 @@ func handleOpenFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	opener := "xdg-open"
-	if runtime.GOOS == "darwin" {
-		opener = "open"
-	}
-	bin, err := exec.LookPath(opener)
+	bin, err := exec.LookPath(platform.Current.Opener)
 	if err != nil {
 		http.Error(w, "no file manager opener found", http.StatusInternalServerError)
 		return

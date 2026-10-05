@@ -58,6 +58,14 @@ func GenerateSSHAgentQuadlet(image string) string {
 	return b.String()
 }
 
+// GitSSHCommandEnv returns the `podman exec` --env arguments that point ssh at
+// the user's known_hosts. ssh in the container runs as root and finds ~/.ssh
+// through root's passwd entry, never HOME, so it would otherwise only read
+// /root/.ssh/known_hosts and no SSH repository host could ever be verified.
+func GitSSHCommandEnv(home string) []string {
+	return []string{"--env", "GIT_SSH_COMMAND=ssh -o UserKnownHostsFile='" + home + "/.ssh/known_hosts'"}
+}
+
 // SSHAuthSockEnv returns the `podman exec` --env arguments that point
 // composer/php at the shared ssh-agent, but only when the agent container is
 // running. When it is not, it returns nil so ssh falls back to the on-disk keys

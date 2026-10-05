@@ -2,10 +2,13 @@ package linker
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
+	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
@@ -91,7 +94,8 @@ func Apply(plan *Plan, p Policy, d Deps, r Reporter) (*Result, error) {
 	}
 	if p.ProjectWrites {
 		cfg, _ := config.LoadGlobal()
-		_ = config.SyncProjectDomains(plan.Dir, site.Domains, cfg.DNS.TLD)
+		syncDomains(plan, site, p, cfg.DNS.TLD)
+		excludeLocalOverride(plan.Dir)
 		// A custom-FPM site takes its version from the Containerfile and a
 		// proxied site has none, so neither has a version the file should pin.
 		if !site.IsCustomContainer() && !site.IsHostProxy() {
@@ -301,6 +305,30 @@ func gateProxyCommand(plan *Plan, p Policy, r Reporter) error {
 // phpNodeDetail is the result line shared by the two PHP runtimes.
 func phpNodeDetail(site config.Site, r Reporter) string {
 	return "php " + r.Val(site.PHPVersion) + " · node " + r.Val(site.NodeVersion) + " · nginx vhost written"
+}
+
+// syncDomains writes the site's domains back into .lerd.yaml when the project
+// declares its own or the user asked for a name. The domain a link derives from
+// the directory needs no record, and writing it only dirtied the committed file.
+func syncDomains(plan *Plan, site config.Site, p Policy, tld string) {
+	declared := plan.Project != nil && len(plan.Project.Domains) > 0
+	if !declared && p.Name == "" {
+		return
+	}
+	_ = config.SyncProjectDomains(plan.Dir, site.Domains, tld)
+}
+
+// excludeLocalOverride keeps a hand-written .lerd.local.yaml out of git status,
+// as lerd's own writes of it already do. A missing file or a directory outside
+// a repository is left alone.
+func excludeLocalOverride(dir string) {
+	if _, err := os.Stat(filepath.Join(dir, config.LocalOverrideFile)); err != nil {
+		return
+	}
+	if info, err := os.Stat(filepath.Join(dir, ".git")); err != nil || !info.IsDir() {
+		return
+	}
+	_ = gitpkg.AppendExclude(dir, "/"+config.LocalOverrideFile)
 }
 
 // pinProjectPHPVersion writes the served version into .php-version unless the

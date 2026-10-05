@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/platform"
 )
 
 // A sleeping service's dashboard is a bare localhost port nothing else wakes, so
 // the key must start the service first, and a failed start opens no browser.
 func TestOpenServiceDashboard_wakesASleepingServiceFirst(t *testing.T) {
-	if browserOpener() == "" {
+	if platform.Current.Opener == "" {
 		t.Skip("no browser opener on " + runtime.GOOS)
 	}
 	prev := tuiWakeService

@@ -4,7 +4,6 @@ import (
 	"context"
 	"net"
 	"os"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/idle"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/push"
 	"github.com/geodro/lerd/internal/reqstats"
 )
@@ -320,7 +320,7 @@ func startAccessFeed() {
 // datagram socket on Linux (bind-mounted into the rootless nginx container), or
 // UDP on macOS where nginx is in the VM and the host socket isn't reachable.
 func accessFeedConn() (net.PacketConn, bool) {
-	if runtime.GOOS == "darwin" {
+	if platform.Current.UsesMachineVM {
 		return listenUDP(config.AccessFeedListenAddr())
 	}
 	return listenDatagram(config.AccessSocketPath())

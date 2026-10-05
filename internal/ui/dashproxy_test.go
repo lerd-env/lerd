@@ -619,3 +619,28 @@ func TestDashProxyDirector_HoldsBackTheDashboardsOwnLanguageCookie(t *testing.T)
 		t.Error("pma_lang dropped although lerd named no language")
 	}
 }
+
+// Mailpit refuses an API call or websocket whose Origin host differs from the
+// Host it receives, so the dashboard's own origin has to reach it unchanged.
+func TestMailpitProxyPassesSameOriginCheck(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, err := url.Parse(r.Header.Get("Origin"))
+		if err != nil || u.Host != r.Host {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+	target, _ := url.Parse(upstream.URL)
+
+	svc := config.DefaultPresetService("mailpit")
+	p := newDashProxy("mailpit", target, dashProxyTweaksFor(svc))
+	req := httptest.NewRequest("DELETE", "https://lerd.localhost/_svc/mailpit/api/v1/messages", nil)
+	req.Header.Set("Origin", "https://lerd.localhost")
+	rec := httptest.NewRecorder()
+	p.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("mailpit saw a cross-origin request, status %d", rec.Code)
+	}
+}

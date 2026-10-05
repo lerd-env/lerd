@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,6 +22,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/nativephp"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -713,7 +713,7 @@ func GenerateCustomSSLVhost(site config.Site) error {
 // macOS resolves host.containers.internal via gvproxy; on Linux we reuse the
 // routable gateway IP the probe cached in the hosts file (pure read, no podman).
 func hostProxyUpstream() string {
-	if runtime.GOOS == "darwin" {
+	if platform.Current.UsesMachineVM {
 		return "host.containers.internal"
 	}
 	if ip := podman.ReadHostGatewayFromFile(); ip != "" {
@@ -989,7 +989,7 @@ server {
 // on macOS host.containers.internal, since the VM cannot reach a host socket.
 // Without a path, proxy_pass hands lerd-ui the request URI unchanged.
 func lerdUIUpstream() string {
-	if runtime.GOOS == "darwin" {
+	if platform.Current.UsesMachineVM {
 		return "http://host.containers.internal:7073"
 	}
 	return "http://unix:" + config.UISocketPath() + ":"
@@ -1830,7 +1830,7 @@ func EnsureLerdVhost() error {
 // it with what is on disk before touching the file.
 func renderLerdVhost() (string, error) {
 	var content string
-	if runtime.GOOS == "darwin" {
+	if platform.Current.UsesMachineVM {
 		token, err := LoadOrGenerateTrustToken()
 		if err != nil {
 			return "", fmt.Errorf("loading trust token: %w", err)
@@ -1846,6 +1846,8 @@ func renderLerdVhost() (string, error) {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Lerd-Trust %s;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
 
     location = / {
         proxy_pass http://host.containers.internal:7073;
@@ -1900,6 +1902,8 @@ func renderLerdVhost() (string, error) {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
 
     location = / {
         proxy_pass http://unix:%[1]s:;

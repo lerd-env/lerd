@@ -1016,6 +1016,26 @@ func reconcileCustomServices() {
 // units exist for all registered (non-paused) sites. This repairs state after
 // an uninstall/reinstall cycle where unit files were deleted but site configs
 // (sites.yaml, .lerd.yaml) were preserved.
+// Seams for restoreFrankenPHPQuadlet, so tests need no unit files.
+var (
+	frankenPHPUnitInstalled = func(name string) bool { return services.Mgr.ContainerUnitInstalled(name) }
+	writeFrankenPHPQuadlet  = podman.WriteFrankenPHPQuadlet
+)
+
+// restoreFrankenPHPQuadlet writes a FrankenPHP site's unit when it is missing,
+// as after a reinstall or a sites:restore. Only lerd install wrote it before,
+// so lerd start left the site proxying to a container that did not exist.
+func restoreFrankenPHPQuadlet(s config.Site) {
+	if !s.IsFrankenPHP() || !config.IsFrankenPHPVersion(s.PHPVersion) ||
+		frankenPHPUnitInstalled(podman.FrankenPHPContainerName(s.Name)) {
+		return
+	}
+	entrypoint, env := s.FrankenPHPQuadletSpec()
+	if err := writeFrankenPHPQuadlet(s.Name, s.Path, s.PHPVersion, entrypoint, env); err != nil {
+		feedback.Warn("restoring %s unit: %v", podman.FrankenPHPContainerName(s.Name), err)
+	}
+}
+
 func restoreSiteInfrastructure() {
 	reg, err := config.LoadSites()
 	if err != nil {
@@ -1084,6 +1104,8 @@ func restoreSiteInfrastructure() {
 				}
 			}
 		}
+
+		restoreFrankenPHPQuadlet(s)
 
 		// Restore FPM quadlet for this site's PHP version (shared-FPM PHP sites
 		// only; custom-FPM sites use their per-site container handled above).

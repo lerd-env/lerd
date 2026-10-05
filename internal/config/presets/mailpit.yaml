@@ -15,6 +15,9 @@ dashboard: http://localhost:8025
 dashboard_proxy_strip: true
 dashboard_proxy_rebase:
   - data-webroot
+# Mailpit refuses a request whose Origin host is not the Host it receives, so
+# the browser's Host is forwarded or every write and the websocket are blocked.
+dashboard_proxy_keep_host: true
 environment:
   MP_DATA_FILE: /data/mailpit.db
   MP_WEBHOOK_URL: http://host.containers.internal:7073/api/webhooks/mailpit

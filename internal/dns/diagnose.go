@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -283,7 +282,7 @@ func diagnose(tld string, p probeFns) Diagnostic {
 	// own dnsmasq answers .test without systemd-resolved, which is typically
 	// masked on those hosts, so resolvectl has nothing to report and probing it
 	// would warn about a healthy install.
-	if runtime.GOOS == "linux" && kind != nmDnsmasqKind && !hostOwned {
+	if routesThroughResolved && kind != nmDnsmasqKind && !hostOwned {
 		iface, has5300, hasTLD, err := p.interfaceRouting(tld)
 		switch {
 		case err != nil:
@@ -320,7 +319,7 @@ func diagnose(tld string, p probeFns) Diagnostic {
 	// way, and the damage only shows once the user goes offline, which is exactly
 	// why it's worth saying out loud here rather than leaving them to find it on a
 	// train.
-	if runtime.GOOS == "linux" && usesDummyLink(kind) && p.dummyLinkRouting != nil && !hostOwned {
+	if routesThroughResolved && usesDummyLink(kind) && p.dummyLinkRouting != nil && !hostOwned {
 		switch present, routed := p.dummyLinkRouting(tld); {
 		case !present:
 			d.Steps = append(d.Steps, Step{
@@ -403,16 +402,6 @@ func finalize(d Diagnostic) Diagnostic {
 		}
 	}
 	return d
-}
-
-// findListenerCmd returns the shell command the user can run to identify
-// the process bound to a TCP port. macOS lacks ss(8), so we point users at
-// lsof which ships with the OS; everywhere else we assume iproute2 ss.
-func findListenerCmd(port int) string {
-	if runtime.GOOS == "darwin" {
-		return fmt.Sprintf("lsof -nP -iTCP:%d -sTCP:LISTEN", port)
-	}
-	return fmt.Sprintf("ss -tlnp sport = :%d", port)
 }
 
 // defaultProbes wires the production implementations for each rung.
@@ -600,31 +589,6 @@ func defaultDnsmasqAnswer(tld string) (string, error) {
 		return "", fmt.Errorf("no A record")
 	}
 	return ips[0].String(), nil
-}
-
-// defaultResolverHookup reports how .test is wired into the system resolver.
-//
-// Ordered, not a map: the NetworkManager path installs both the dispatcher and
-// the lerd0 link unit, so a map's random iteration would report either one at
-// random from run to run. First match wins, most specific first.
-func defaultResolverHookup() (string, bool, string) {
-	if runtime.GOOS != "linux" {
-		return macOSKind, true, "/usr/local/etc/dnsmasq.d/lerd.conf"
-	}
-	for _, h := range []struct{ kind, path string }{
-		{nmDispatcherKind, "/etc/NetworkManager/dispatcher.d/99-lerd-dns"},
-		{nmDnsmasqKind, "/etc/NetworkManager/dnsmasq.d/lerd.conf"},
-		// No NetworkManager: lerd0 alone carries .tld, so its unit is the hookup.
-		{resolvedLinkKind, lerdLinkUnit},
-		// Last: a host that has not re-run setup since the link landed still
-		// resolves through this, and reporting "no hookup" at it would be a lie.
-		{resolvedDropinKind, "/etc/systemd/resolved.conf.d/lerd.conf"},
-	} {
-		if _, err := os.Stat(h.path); err == nil {
-			return h.kind, true, h.path
-		}
-	}
-	return "", false, ""
 }
 
 func defaultInterfaceRouting(tld string) (string, bool, bool, error) {

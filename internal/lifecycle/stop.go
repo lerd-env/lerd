@@ -65,7 +65,13 @@ func Quit(runner ParallelRunner, beforeMachineStop func(), skip ...string) error
 	}
 	// Stop leaves worktree workers to the watcher, which brings them back on
 	// the next start; quit takes the watcher down too, so it stops them here.
-	_ = runner(stopJobs(RegisteredWorktreeWorkerUnits()))
+	// The ssh-agent is left up by Stop so its unlocked keys survive a restart;
+	// quit is the full teardown, so it goes too.
+	quitOnly := RegisteredWorktreeWorkerUnits()
+	if podman.QuadletInstalled(podman.SSHAgentUnit) {
+		quitOnly = append(quitOnly, podman.SSHAgentUnit)
+	}
+	_ = runner(stopJobs(quitOnly))
 	stopProcessUnits(QuitProcessUnits(skip...))
 	if beforeMachineStop != nil {
 		beforeMachineStop()
