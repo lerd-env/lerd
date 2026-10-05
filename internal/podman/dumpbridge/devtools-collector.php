@@ -1427,8 +1427,14 @@ function mask_url(string $url, string $scope = ''): string
             if (!is_scalar($value) || (string) $value === '') {
                 continue;
             }
-            $mask = input_map([(string) $name => (string) $value], 'input');
-            $masked = (string) reset($mask);
+            // A route_params rule wins; input names and the defaults apply otherwise.
+            $rule = redact_rule('route', (string) $name);
+            if ($rule !== null) {
+                $masked = mask_value((string) $value, $rule);
+            } else {
+                $mask = input_map([(string) $name => (string) $value], 'input');
+                $masked = (string) reset($mask);
+            }
             if ($masked === (string) $value) {
                 continue;
             }
@@ -1507,7 +1513,7 @@ function redaction(): array
     if ($rules !== null) {
         return $rules;
     }
-    $rules = ['mask' => ['style' => 'redacted', 'visible' => 4, 'crop' => false, 'char' => '*'], 'http_request' => [], 'http_response' => [], 'in_request' => [], 'in_response' => [], 'input' => []];
+    $rules = ['mask' => ['style' => 'redacted', 'visible' => 4, 'crop' => false, 'char' => '*'], 'http_request' => [], 'http_response' => [], 'in_request' => [], 'in_response' => [], 'input' => [], 'route' => []];
     $read = static function (array $f): array {
         return ['style' => $f[0], 'visible' => (int) ($f[1] ?? 4), 'crop' => ($f[2] ?? '0') === '1', 'char' => isset($f[3]) && $f[3] !== '' ? $f[3] : '*'];
     };
@@ -1521,7 +1527,7 @@ function redaction(): array
         }
         if ($f[1] === 'style' && in_array($f[2], ['redacted', 'masked'], true)) {
             $rules['mask'] = $read(array_slice($f, 2));
-        } elseif (in_array($f[1], ['http_request', 'http_response', 'in_request', 'in_response', 'input'], true) && count($f) >= 4 && in_array($f[3], ['redacted', 'masked'], true)) {
+        } elseif (in_array($f[1], ['http_request', 'http_response', 'in_request', 'in_response', 'input', 'route'], true) && count($f) >= 4 && in_array($f[3], ['redacted', 'masked'], true)) {
             $rules[$f[1]][$f[2]] = $read(array_slice($f, 3));
         }
     }

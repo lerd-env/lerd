@@ -1314,7 +1314,7 @@ func TestCollectorPHP_RouteParamsSeamMasksThePath(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "devtools-redact.conf"), []byte("probe|input|customer|masked|2|0|*\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "devtools-redact.conf"), []byte("probe|route|customer|masked|2|0|*\nprobe|input|tab|redacted|4|0|*\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	got := runCollectorPHPIn(t, dir, `<?php
@@ -1335,7 +1335,7 @@ namespace {
     \Lerd\Collector\emit('probe', ['path' => \Lerd\Collector\mask_url('/customers/0101901234/details', 'input')]);
 }
 `)
-	if joined := strings.Join(got, "\n"); !strings.Contains(joined, `"path":"/customers/01********/details"`) {
-		t.Errorf("want the customer masked in the path: %v", got)
+	if joined := strings.Join(got, "\n"); !strings.Contains(joined, `"path":"/customers/01********/[redacted]"`) {
+		t.Errorf("want the customer masked by its route rule and the tab by its input rule: %v", got)
 	}
 }

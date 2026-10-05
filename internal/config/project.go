@@ -187,6 +187,9 @@ type ProjectRedact struct {
 type ProjectRedactInbound struct {
 	Headers map[string]map[string]RedactRule `yaml:"headers,omitempty"`
 	Input   map[string]RedactRule            `yaml:"input,omitempty"`
+	// RouteParams names route parameters to mask in the request's path, by
+	// their name in the route; input names apply there too when it says nothing.
+	RouteParams map[string]RedactRule `yaml:"route_params,omitempty"`
 }
 
 // RedactRule is how one header is masked: a style alone, `masked`, or a
@@ -259,14 +262,26 @@ func (r *ProjectRedact) InboundHeaders() (map[string]map[string]RedactMask, []er
 // InboundInput lists each input name to mask, in the query string, the body,
 // cookies and the session.
 func (r *ProjectRedact) InboundInput() (map[string]RedactMask, []error) {
+	if r == nil || r.InboundHTTP == nil {
+		return map[string]RedactMask{}, nil
+	}
+	return r.nameMasks(r.InboundHTTP.Input, "input")
+}
+
+// InboundRouteParams lists each route parameter to mask in the request's path.
+func (r *ProjectRedact) InboundRouteParams() (map[string]RedactMask, []error) {
+	if r == nil || r.InboundHTTP == nil {
+		return map[string]RedactMask{}, nil
+	}
+	return r.nameMasks(r.InboundHTTP.RouteParams, "route parameter")
+}
+
+func (r *ProjectRedact) nameMasks(rules map[string]RedactRule, what string) (map[string]RedactMask, []error) {
 	out := map[string]RedactMask{}
 	var errs []error
-	if r == nil || r.InboundHTTP == nil {
-		return out, nil
-	}
 	base, _ := r.ResolvedMask()
-	for name, rule := range r.InboundHTTP.Input {
-		mask, ruleErrs := resolveMask(rule, base, "input "+name)
+	for name, rule := range rules {
+		mask, ruleErrs := resolveMask(rule, base, what+" "+name)
 		errs = append(errs, ruleErrs...)
 		out[name] = mask
 	}
@@ -761,7 +776,7 @@ func cloneProjectConfig(in *ProjectConfig) *ProjectConfig {
 				d.Redact.OutgoingHTTP = &ProjectRedactHTTP{Headers: cloneRuleSets(h.Headers)}
 			}
 			if h := r.InboundHTTP; h != nil {
-				d.Redact.InboundHTTP = &ProjectRedactInbound{Headers: cloneRuleSets(h.Headers), Input: maps.Clone(h.Input)}
+				d.Redact.InboundHTTP = &ProjectRedactInbound{Headers: cloneRuleSets(h.Headers), Input: maps.Clone(h.Input), RouteParams: maps.Clone(h.RouteParams)}
 			}
 		}
 		out.Devtools = d

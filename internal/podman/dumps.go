@@ -153,7 +153,8 @@ func DevtoolsRedactConf() string {
 			outgoing, outErrs := r.HTTPHeaders()
 			inbound, inErrs := r.InboundHeaders()
 			input, inputErrs := r.InboundInput()
-			for _, e := range slices.Concat(errs, outErrs, inErrs, inputErrs) {
+			route, routeErrs := r.InboundRouteParams()
+			for _, e := range slices.Concat(errs, outErrs, inErrs, inputErrs, routeErrs) {
 				fmt.Fprintf(os.Stderr, "[WARN] %s: %v\n", s.Name, e)
 			}
 			lines = append(lines, redactLines(s.Name, "http_", outgoing, tail)...)
@@ -161,9 +162,12 @@ func DevtoolsRedactConf() string {
 			for _, name := range slices.Sorted(maps.Keys(input)) {
 				add(append([]string{"input", strings.TrimSpace(name)}, tail(input[name])...)...)
 			}
+			for _, name := range slices.Sorted(maps.Keys(route)) {
+				add(append([]string{"route", strings.TrimSpace(name)}, tail(route[name])...)...)
+			}
 		}
 	}
-	return "# lerd devtools redaction, from .lerd.yaml.\n# site|style|<mask>, site|{http,in}_{request,response}|header|<mask>, site|input|name|<mask>, where <mask> is style|visible|crop|char.\n" + strings.Join(lines, "\n") + "\n"
+	return "# lerd devtools redaction, from .lerd.yaml.\n# site|style|<mask>, site|{http,in}_{request,response}|header|<mask>, site|input|name|<mask>, site|route|name|<mask>, where <mask> is style|visible|crop|char.\n" + strings.Join(lines, "\n") + "\n"
 }
 
 // redactLines renders header masks per direction as site|<prefix><dir>|name|mask.

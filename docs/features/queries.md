@@ -168,12 +168,13 @@ devtools:
           X-Signature: masked
         response:
           X-Internal-Id: redacted
-      input:                   # names in the query string, body, cookies, session and route
+      input:                   # names in the query string, body, cookies and session
         customer_ssn: { style: masked, visible: 0 }
-        customer: masked       # also /customers/{customer:ssn}/details, masked in the path
+      route_params:            # route parameters by their name in the route, masked in the path
+        customer: { style: masked, visible: 2 }   # /customers/{customer:ssn}/details
 ```
 
-Query values and route parameters are masked in the request's URL too, so a secret in `/customers/0101901234/details` or `?api_key=…` never shows in the list or a request's header. Route parameters are read before binding, by their name in the route, on Laravel, Symfony, Drupal, Yii, CakePHP and WordPress.
+Query values and route parameters are masked in the request's URL too, a route parameter by its `route_params` rule or else by an `input` rule of the same name, so a secret in `/customers/0101901234/details` or `?api_key=…` never shows in the list or a request's header. Route parameters are read before binding, by their name in the route, on Laravel, Symfony, Drupal, Yii, CakePHP and WordPress.
 
 | Style | Shows |
 |---|---|
