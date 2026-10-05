@@ -19,7 +19,7 @@ dashboard_proxy_rebase:
 # the browser's Host is forwarded or every write and the websocket are blocked.
 dashboard_proxy_keep_host: true
 environment:
-  MP_DATA_FILE: /data/mailpit.db
+  MP_DATABASE: /data/mailpit.db
   MP_WEBHOOK_URL: http://host.containers.internal:7073/api/webhooks/mailpit
 dynamic_env:
   # Scores every caught message once the spamassassin preset is installed, and

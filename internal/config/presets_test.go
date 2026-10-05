@@ -207,6 +207,21 @@ func TestLoadPreset_Typesense(t *testing.T) {
 	}
 }
 
+// Mailpit warns on every start about MP_DATA_FILE; MP_DATABASE replaces it and
+// has to keep the same file, or existing mail is left behind.
+func TestLoadPreset_MailpitDatabaseEnv(t *testing.T) {
+	p, err := LoadPreset("mailpit")
+	if err != nil {
+		t.Fatalf("LoadPreset(mailpit) error = %v", err)
+	}
+	if _, ok := p.Environment["MP_DATA_FILE"]; ok {
+		t.Error("mailpit still sets the deprecated MP_DATA_FILE")
+	}
+	if got := p.Environment["MP_DATABASE"]; got != "/data/mailpit.db" {
+		t.Errorf("MP_DATABASE = %q, want /data/mailpit.db", got)
+	}
+}
+
 func TestLoadPreset_TypesenseDashboard(t *testing.T) {
 	p, err := LoadPreset("typesense-dashboard")
 	if err != nil {
