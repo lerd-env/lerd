@@ -15,6 +15,8 @@ It checks the machine, not your projects. A site's own findings, a missing datab
 lerd site:doctor acme.test
 ```
 
+On Ubuntu or Debian with a native MySQL or MariaDB server installed, `lerd doctor` fails while that server's AppArmor profile is enforced. Rootless podman applies no profile of its own, so the host's attaches to the server in lerd's database container too: it stops reading its config, listens on a socket its own client does not look at, so `lerd db:shell` cannot connect, and refuses the signal that stops it. Disabling that profile, or purging the native server if lerd's replaces it, and restarting the service clears it. `lerd install` warns about the same profile.
+
 Among the machine checks, `lerd doctor` fails when a PHP container still mounts a folder that no longer exists. Podman refuses to start a container whose mount source is gone, so every site on that PHP version answers 502 until `lerd start` rewrites the container without it.
 
 `lerd site:doctor` also validates the project's `.lerd.yaml`, which is what `lerd check` used to do on its own; `check` still works as a deprecated alias for it.

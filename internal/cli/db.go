@@ -541,8 +541,10 @@ func dbShellArgs(env *dbEnv, family string, tty bool) []string {
 	case "pgsql", "postgres":
 		args = append(args, "psql", "-U", env.username)
 	default:
+		// Over TCP, like the preset's own commands: a server confined by a host
+		// AppArmor profile listens on a socket its client does not look at.
 		args = append(args, "sh", "-c", execFirstCommand(mysqlClientBinaries(family)), "sh",
-			"-u"+env.username, "-p"+env.password)
+			"-h", "127.0.0.1", "-u"+env.username, "-p"+env.password)
 	}
 	if env.database != "" {
 		args = append(args, env.database)
@@ -561,6 +563,20 @@ func serviceFamily(svc string) string {
 
 // mysqlClientBinaries orders the MySQL-family clients with the family's own
 // first: MariaDB 11 images ship only mariadb, MySQL images only mysql.
+// mysqlClientError names what the client printed last, which is the reason it
+// failed; the password warning it always prints comes before it.
+func mysqlClientError(err error) error {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return err
+	}
+	lines := strings.Split(strings.TrimSpace(string(exitErr.Stderr)), "\n")
+	if last := strings.TrimSpace(lines[len(lines)-1]); last != "" {
+		return fmt.Errorf("%s: %w", last, err)
+	}
+	return err
+}
+
 func mysqlClientBinaries(family string) []string {
 	if family == "mariadb" {
 		return []string{"mariadb", "mysql"}
@@ -602,12 +618,18 @@ func databaseExists(svc, name string) (bool, error) {
 	case "mysql", "mariadb":
 		var lastErr error
 		for _, bin := range mysqlClientBinaries(family) {
-			check := podman.Cmd("exec", container, bin, "-uroot", "-plerd",
+			check := podman.Cmd("exec", container, bin, "-h", "127.0.0.1", "-uroot", "-plerd",
 				"-sNe", mysqlDatabaseExistsQuery(name))
 			out, err := check.Output()
-			if err != nil {
+			// 127 is a client the image does not ship; any other failure is the
+			// client's own, and the next binary's 127 would only hide it.
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) && exitErr.ExitCode() == 127 {
 				lastErr = err
 				continue
+			}
+			if err != nil {
+				return false, mysqlClientError(err)
 			}
 			return strings.TrimSpace(string(out)) != "0", nil
 		}

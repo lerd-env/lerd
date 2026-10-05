@@ -266,6 +266,13 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 		}
 	}
 
+	for _, p := range enforcedMysqldProfiles("/") {
+		fail("host AppArmor profile "+filepath.Base(p),
+			"a native MySQL/MariaDB profile also confines the server in lerd's database container, which then ignores its config, listens on the wrong socket and cannot be stopped cleanly",
+			"sudo ln -s "+p+" /etc/apparmor.d/disable/ && sudo apparmor_parser -R "+p+", then restart lerd's database service (or purge the native server if lerd's replaces it)")
+		rep.fixLast(manualFix)
+	}
+
 	quadletDir := config.QuadletDir()
 	if dirErr := checkDirWritable(quadletDir); dirErr != nil {
 		fail("service config dir writable", dirErr.Error(), "mkdir -p "+quadletDir)
