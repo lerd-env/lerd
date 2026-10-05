@@ -1853,5 +1853,7 @@
   "debugbar_site_title": "Mostrar la barra en las páginas de este sitio",
   "debugbar_site_inProject": "Mostrar la barra en las páginas de este sitio, guardado en su .lerd.yaml",
   "debugbar_waiting": "Esperando las peticiones de esta página",
-  "debugbar_loading": "Cargando la petición…"
+  "debugbar_loading": "Cargando la petición…",
+  "requests_showMore": "Mostrar {count} más de {total} restantes",
+  "requests_nPlusOneShow": "Mostrar consultas"
 }

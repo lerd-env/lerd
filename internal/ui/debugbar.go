@@ -174,7 +174,27 @@ func serveDebugbarRequest(w http.ResponseWriter, r *http.Request, site, rid stri
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
+	if r.URL.Query().Get("summary") != "" {
+		writeJSON(w, barSummary(d))
+		return
+	}
 	writeJSON(w, withTraces(srv, d))
+}
+
+// barSummary trims a detail to what the bar's chips read, which it polls; the
+// counts stand in for the events, and the full detail waits for the panel.
+func barSummary(d RequestDetail) RequestDetail {
+	events := map[string][]dumps.Event{}
+	for _, kind := range []string{"request", "auth", "tab"} {
+		if evs, ok := d.Events[kind]; ok {
+			events[kind] = evs
+		}
+	}
+	d.Events = events
+	if d.Queries != nil {
+		d.Queries = &RequestAnalysis{QueryCount: d.Queries.QueryCount, TotalTimeMS: d.Queries.TotalTimeMS}
+	}
+	return d
 }
 
 // handleDebugbarSite reads (GET) or sets (POST {enable}) whether one site

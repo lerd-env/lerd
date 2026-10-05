@@ -38,7 +38,7 @@
     if (!rid) rid = document.documentElement.getAttribute('data-lerd-page') ?? '';
     if (!rid || (!always && d && document.visibilityState !== 'visible')) return;
     try {
-      d = await loadRequest(rid);
+      d = await loadRequest(rid, true);
     } catch {
       /* not reported yet, or it has left the ring: keep what was shown */
     }

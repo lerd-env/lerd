@@ -1853,5 +1853,7 @@
   "debugbar_site_title": "Show the debug bar on this site's pages",
   "debugbar_site_inProject": "Show the debug bar on this site's pages, saved in its .lerd.yaml",
   "debugbar_waiting": "Waiting for this page's requests",
-  "debugbar_loading": "Loading request…"
+  "debugbar_loading": "Loading request…",
+  "requests_showMore": "Show {count} more of {total} remaining",
+  "requests_nPlusOneShow": "Show queries"
 }

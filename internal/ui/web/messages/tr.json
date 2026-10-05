@@ -1853,5 +1853,7 @@
   "debugbar_site_title": "Bu sitenin sayfalarında çubuğu göster",
   "debugbar_site_inProject": "Bu sitenin sayfalarında çubuğu göster, .lerd.yaml dosyasına kaydedilir",
   "debugbar_waiting": "Bu sayfanın istekleri bekleniyor",
-  "debugbar_loading": "İstek yükleniyor…"
+  "debugbar_loading": "İstek yükleniyor…",
+  "requests_showMore": "Kalan {total} içinden {count} tane daha göster",
+  "requests_nPlusOneShow": "Sorguları göster"
 }

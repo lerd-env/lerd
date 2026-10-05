@@ -34,6 +34,9 @@
 .chip .k { color: var(--muted); }
 .chip svg { width: 14px; height: 14px; flex: none; color: var(--muted); }
 .chip.req { background: var(--chip); gap: 8px; }
+/* Mono and sans glyphs sit at different heights in their line boxes; trimming
+   each label to its cap height centres them on the chip, whatever the fonts. */
+.chip > span:not(.dot):not(.pill) { text-box: trim-both cap alphabetic; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 22%, transparent); flex: none; }
 .dot.err { background: var(--rose); box-shadow: 0 0 0 3px color-mix(in srgb, var(--rose) 22%, transparent); }
 .method { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }

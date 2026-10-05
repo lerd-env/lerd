@@ -1853,5 +1853,7 @@
   "debugbar_site_title": "在此站点的页面上显示调试栏",
   "debugbar_site_inProject": "在此站点的页面上显示调试栏，保存在其 .lerd.yaml 中",
   "debugbar_waiting": "正在等待此页面的请求",
-  "debugbar_loading": "正在加载请求…"
+  "debugbar_loading": "正在加载请求…",
+  "requests_showMore": "再显示 {count} 条，剩余 {total} 条",
+  "requests_nPlusOneShow": "显示查询"
 }

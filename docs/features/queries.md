@@ -9,13 +9,15 @@ It is **off by default**. Turn it on from **System → Debug** or with `lerd dum
 The **Requests** lens comes first, in the Debug window and on each site's Debug tab. It lists every request, job and CLI run, newest first:
 
 - A job is listed under the request that queued it, and the calls a page made later are listed under the page.
-- Each row shows the method, status and time, plus what went wrong: an exception, an error log, a failed call, an N+1 or a slow query.
+- Each row shows the method, status, time and the clock time it ran, plus what went wrong: an exception, an error log, a failed call, an N+1 or a slow query. A GraphQL request carries a GraphQL icon and is named by the operations it ran, the first one and `+N` for the rest.
 - Filter to pages, API calls or CLI runs, or to requests with problems.
 - lerd keeps the last 60,000 events in memory, every query, log line and cache call counting as one, which is around a thousand requests across all sites. The oldest go first, and nothing is kept once lerd-ui restarts.
 
 ![The Requests lens on a site's Debug tab, with jobs indented under the request that queued them](/assets/screenshots/requests-lens.png)
 
-Open a request to see it in full. The header names the route, the controller and who the request ran as. Below it, one tab per kind of work, shown only when the request has something for it.
+Open a request to see it in full. The header names the route, the controller and who the request ran as. Below it, one tab per kind of work, shown only when the request has something for it. The same view opens from the [debug bar](debug-bar.md) on the site's own pages.
+
+A class is shown by its own name, with the full name on hover, and the app's own classes open in the editor.
 
 **Performance** leads with response time, memory, app and database time, the FPM queue and the page load. Under them, one timeline puts everything in order:
 
@@ -24,15 +26,17 @@ Open a request to see it in full. The header names the route, the controller and
 - the framework's phases: bootstrap, routing, middleware, controller, views
 - queries, cache calls, Redis, storage, components, logs and your own rows
 
-Each layer has a colour and a filter, and hovering a bar shows its duration. **Condense** folds rows of one kind that follow each other, such as queries, cache calls, logs or the browser's phases, into one row; the framework phases and your own rows always keep theirs.
+Each layer has a colour and a filter, and hovering a bar shows its duration. Views have a layer of their own. **Condense** folds rows of one kind that follow each other, such as queries, cache calls, logs or the browser's phases, into one row; the framework phases and your own rows always keep theirs.
 
 ![A request's Performance tab: headline numbers above one timeline of nginx, the FPM queue, the framework's phases, queries, cache calls and the app's own events](/assets/screenshots/request-performance.png)
 
-**Request** holds the route, controller, middleware, route parameters, request and response headers, query string, body, cookies and session. Each route parameter shows its raw value and, where it resolved to a model, the model's class and key; the app's own middleware and models open in the editor. Anything that reads as a credential is masked.
+**Request** holds the route, controller, middleware, route parameters, request and response headers, query string, body, cookies and session. A JSON request body is shown as a tree, and so is a JSON response body. Each route parameter is named as the route wrote it, `user:id` for one bound by a field, and shows its raw value and, where it resolved to a model, the model's class and key, which is never masked; the app's own middleware and models open in the editor. Anything that reads as a credential is masked.
 
 ![A request's Request tab with its route, controller and middleware](/assets/screenshots/request-detail.png)
 
-The other tabs are Database, Models, Views, Components, Cache, Redis, Filesystem, Events, Log, Dumps, Mail & messages, HTTP, Jobs, Exceptions, Browser and Child requests, plus any tabs the app adds through the [lerd/debug package](debug-package.md).
+The other tabs are GraphQL, Database, Models, Views, Components, Cache, Redis, Filesystem, Events, Log, Dumps, Mail & messages, HTTP, Jobs, Exceptions, Browser and Child requests, plus any tabs the app adds through the [lerd/debug package](debug-package.md).
+
+Nothing a request recorded is dropped, however much it did. A long list shows 200 rows at a time with a button for the next 200, and on the timeline an opened group does the same, so a page that runs two thousand queries or renders two thousand views opens as quickly as a small one.
 
 ### How requests are linked
 
@@ -62,6 +66,8 @@ Most of it is captured at the library every framework shares, so it is not tied 
 | Redis | Laravel's Redis connection | Laravel |
 | Filesystem | Flysystem | Laravel, Symfony |
 | Components | Livewire | Laravel |
+| Models | Eloquent's model events | Laravel |
+| GraphQL | the request body, and the schema where a framework definition hands it over | every PHP app |
 
 The [debug package page](debug-package.md#what-lerd-records-on-its-own) lists what lerd records on each framework.
 
@@ -70,14 +76,29 @@ The [debug package page](debug-package.md#what-lerd-records-on-its-own) lists wh
 - Grouped per request, with the count and total time.
 - **N+1:** queries with the same shape (literals collapsed) three or more times in one request.
 - **Slow:** any single query at 100 ms or more.
+- Each query is numbered by its place in the run, and keeps that number while the list is filtered.
+- **Show queries** on an N+1 finding narrows the list to the queries it repeats.
+- **Format** lays each query out over several lines; the SQL is highlighted either way.
 - Expand a row for the line that ran it, the bindings, and on Laravel the connection and read/write type.
 - **Copy SQL** copies the query with its bindings filled in, ready to paste into a SQL editor.
 
+![A request's Database tab: its counts by kind, two N+1 findings with a runnable example each, and the numbered, highlighted queries with the line that ran each one](/assets/screenshots/request-database.png)
+
 Bindings are captured whether they are passed to `execute([...])` or bound one by one with `bindValue()` and `bindParam()`.
+
+### Models
+
+How many of each model the request retrieved, created, updated, deleted and restored. A model the app defines opens in the editor.
 
 ### Views
 
-Every template rendered, with its file and the data keys it was given. Each value is labelled by what it holds (`user User`, `page array(4)`, `title "Dashboard"`) rather than shipped whole, since a view's data often holds the logged-in user. Blade's own compiled components are left out.
+Every template rendered, numbered in the order it rendered, with its file and the data keys it was given. Each value is labelled by what it holds (`user User`, `page array(4)`, `title "Dashboard"`) rather than shipped whole, since a view's data often holds the logged-in user. A value whose name reads as a credential is masked, and so are such fields inside a JSON string, so an error page that renders the request body shows it masked. Blade's own compiled components are left out.
+
+### GraphQL
+
+A request to a GraphQL endpoint, whatever server answers it, gets a GraphQL tab next to Request and a GraphQL icon in the list. Each operation shows its type and name, the query, the variables, and for each root field it called the arguments, the response it got and any errors. Where a framework definition hands over the server's schema, each field is named by the type it returns, both open in the editor, and the schema is browsable up to eight levels deep. Arguments, variables and the response are masked like the request body; see [the limit on secrets written into the query itself](#masking-values).
+
+![A GraphQL request batching a query and a mutation: each root field with the type it returns, its schema unfolded, the input and the response, and the mutation's password masked](/assets/screenshots/request-graphql.png)
 
 ### Mail and messages
 
@@ -120,9 +141,15 @@ items          array(12)
 - **Session:** what it held when the request finished. Keys that look like credentials are masked.
 - **Redis:** every command, timed, with its connection.
 - **Filesystem:** every Flysystem operation, timed, with its path and, on Laravel, the Storage disk.
-- **Components:** each Livewire component's mount, update, method call and render, with what it was given.
+- **Components:** each Livewire component's mount, update, method call and render, with what it was given and its state after rendering. The component's name opens its class, or the source file of a single-file component.
 
-![A Drupal request in the Requests lens, with the kernel's phases, routing and the controller on the timeline](/assets/screenshots/request-drupal.png)
+### Dumps, browser and child requests
+
+- **Dumps:** each `dump()` the request made, in order.
+- **Browser:** with [browser capture](browser-capture.md) on, the page's console lines, errors and network calls, each at the time it happened.
+- **Child requests:** the calls the page sent after it loaded and the jobs it queued, each with its status, how it was sent, its time and the clock time it went out. A click opens it in the same view.
+
+![A Drupal request in the Requests lens, with the kernel's bootstrap, handle and routing phases, its queries and its views on the timeline](/assets/screenshots/request-drupal.png)
 
 ## Keeping the noise down
 
@@ -139,7 +166,7 @@ items          array(12)
 
 ## Masking values
 
-Anything that reads as a credential is masked wherever it is shown: headers, query string, body, cookies, session and outgoing requests. Names with password, secret, token, session, cookie, authorization or an API key in them are always masked, and a project cannot turn that off.
+Anything that reads as a credential is masked wherever it is shown: headers, query string, body, cookies, session, outgoing requests, GraphQL variables, arguments and responses, and the values views, jobs and events are given. Names with password, secret, token, session, cookie, authorization or an API key in them are always masked, and a project cannot turn that off.
 
 A project can mask more, and choose how a masked value looks, in `.lerd.yaml`:
 
@@ -184,15 +211,26 @@ Query values and route parameters are masked in the request's URL too, a route p
 
 A header's settings fall back to the ones set directly under `redact`. A direction, style, `visible` outside 0 to 32 or a `char` longer than one character is refused with a warning naming it. The rules apply as soon as the file is saved.
 
+A secret written straight into a GraphQL query or mutation, `login(password: "…")` rather than passed as a variable, is masked in the query text only when the argument's name is one of the always-masked ones above: password, secret, token, session, cookie, authorization or an API key. The project's own `input` rules apply to the field's arguments and to variables, but not to the query text, so pass anything sensitive as a variable.
+
 ## N+1 warnings
 
 When a query shape repeats three times in one request, lerd sends one desktop notification, once per route or command per session. The warning names the route or command, and the request gets an **N+1** badge. It follows the global `lerd notify` setting.
 
 ## Open in editor
 
-Every file path in the Debug window opens in your editor: a query's caller, a template, a log line, and on the timeline the controller and each row's source.
+Every file path and every class the app defines opens in your editor with a click:
 
-The line that triggered a query, a cache call, a Redis command or a storage operation has a stack button beside it that opens the stack trace as a path from that line back to where the request began. The app's own lines are stops on the path, each named by the function it sits in, and runs of vendor frames fold into one that opens on a click. The code around the picked line shows beside the path; **Code** hides it, and the choice is remembered. The trace opens on the app's own line, leaves out lerd's own frames and those of the lerd/debug package, and **Copy** puts it on the clipboard in PHP's own `#0 file(line): function()` form.
+- the line that ran a query, a cache call, a Redis command or a storage operation, and each line of its stack trace
+- the controller, the app's middleware, and the model a route parameter resolved to
+- models on the Models tab, templates on the Views tab, Livewire components, single-file ones at their source
+- a GraphQL field's resolver and the type it returns, in the operation and in the schema
+- a log line's source and an exception's frames
+- on the timeline, the controller and each row's source
+
+A clickable name is underlined with dots; the copy button beside a path puts it on the clipboard instead. In the [debug bar](debug-bar.md) the same links work from a page on this machine.
+
+The line that triggered a query, a cache call, a Redis command or a storage operation has a stack button beside it that opens the stack trace as a path from that line back to where the request began. The app's own lines are stops on the path, each named by the function it sits in, and runs of vendor frames fold into one that opens on a click. The code around the picked line shows beside the path, highlighted, and a click on any of its line numbers opens the editor at that line; **Code** hides it, and the choice is remembered. The trace opens on the app's own line, leaves out lerd's own frames and those of the lerd/debug package, and **Copy** puts it on the clipboard in PHP's own `#0 file(line): function()` form.
 
 - Pick the editor on the System page, or per site in its controls. VS Code, Cursor, VSCodium, Windsurf, Sublime Text, Zed, PhpStorm, IntelliJ IDEA and WebStorm are listed, the installed ones first.
 - An editor not on the PATH opens through its URL scheme, so a JetBrains IDE from Toolbox works too.
@@ -221,7 +259,7 @@ The same data is at `/api/requests` and `/api/requests/{rid}`.
 
     lerd compiles a small PHP extension, `lerd_devtools`, into every PHP image. It uses PHP's observer API (PHP 8.0 and later) to watch PDO, the shared libraries above and the methods the framework definitions name, and hands each call to a small collector written in PHP. On Laravel, an adapter loaded at boot listens to the framework's own events instead.
 
-    Capture follows the same runtime switch as the dump viewer, so turning it on or off never restarts PHP. Events travel over the same socket to `lerd-ui`, which keeps the last 500 and streams them to the dashboard.
+    Capture follows the same runtime switch as the dump viewer, so turning it on or off never restarts PHP. Events travel over the same socket to `lerd-ui`, which keeps the last 60,000 in memory and streams them to the dashboard. A stack trace is sent once per request, however many events share it, and stored once.
 
     An event looks like this:
 

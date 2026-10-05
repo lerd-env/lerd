@@ -54,6 +54,11 @@ function target(): string
 
 function send(array $payload): void
 {
+    // The collector keeps one connection for the whole process.
+    if (\function_exists('Lerd\\Collector\\send')) {
+        \Lerd\Collector\send($payload);
+        return;
+    }
     $t = target();
     if ($t === '') {
         return;
@@ -236,7 +241,7 @@ function emit_with(string $kind, array $data, array $src, array $trace): void
         if (\function_exists('Lerd\\Collector\\timing_note')) {
             \Lerd\Collector\timing_note($kind, $data);
         }
-        $data['trace'] = $trace;
+        $data = (\function_exists('Lerd\\Collector\\trace_field') ? \Lerd\Collector\trace_field($trace) : ['trace' => $trace]) + $data;
         send([
             'v'    => 1,
             'id'   => new_id(),
@@ -322,6 +327,13 @@ function is_synthetic_view(string $path, string $compiledDir): bool
         return false;
     }
     return strncmp($path, $compiledDir, strlen($compiledDir)) === 0;
+}
+
+// masked runs a previewed value through the collector's redaction when the
+// collector is loaded, as it is whenever lerd captures a request.
+function masked(string $key, $v)
+{
+    return \function_exists('Lerd\\Collector\\preview_masked') ? \Lerd\Collector\preview_masked($key, $v) : $v;
 }
 
 // preview_value renders one view variable as a short label, enough to tell a
@@ -414,7 +426,7 @@ function preview_data($data, array $shared = []): array
             continue;
         }
         try {
-            $out[$key] = preview_value($v);
+            $out[$key] = preview_value(masked($key, $v));
         } catch (\Throwable $_) {
             $out[$key] = '?';
         }
@@ -589,7 +601,7 @@ function append_preview(array &$out, string $name, $value): void
         return;
     }
     try {
-        $out[$name] = preview_value($value);
+        $out[$name] = preview_value(masked($name, $value));
     } catch (\Throwable $_) {
         $out[$name] = '?';
         return;

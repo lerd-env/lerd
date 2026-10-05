@@ -1853,5 +1853,7 @@
   "debugbar_site_title": "Pokazuj pasek na stronach tej witryny",
   "debugbar_site_inProject": "Pokazuj pasek na stronach tej witryny, zapisane w jej .lerd.yaml",
   "debugbar_waiting": "Czekam na żądania tej strony",
-  "debugbar_loading": "Wczytywanie żądania…"
+  "debugbar_loading": "Wczytywanie żądania…",
+  "requests_showMore": "Pokaż {count} więcej z {total} pozostałych",
+  "requests_nPlusOneShow": "Pokaż zapytania"
 }

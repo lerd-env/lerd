@@ -69,6 +69,9 @@ type RequestDetail struct {
 	RequestSummary
 	Events  map[string][]dumps.Event `json:"events"`
 	Queries *RequestAnalysis         `json:"queries,omitempty"`
+	// Traces holds each distinct stack trace the events carry once; an
+	// event's data names its entry as trace_ref.
+	Traces []json.RawMessage `json:"traces,omitempty"`
 }
 
 // jobData is what a job event says about the job it reports.
@@ -315,20 +318,55 @@ func requestDetail(events []dumps.Event, rid string) (RequestDetail, bool) {
 	}
 	if len(queries) > 0 {
 		ra := analyzeQueriesAll(queries)
+		markNPlusOne(ra.NPlusOne, queries)
 		d.Queries = &ra
 	}
 	return d, true
 }
 
+// markNPlusOne lists on each N+1 finding the queries it repeats, so the
+// request's query list can flag them.
+func markNPlusOne(findings []NPlusOneFinding, queries []dumps.Event) {
+	if len(findings) == 0 {
+		return
+	}
+	at := make(map[string]int, len(findings))
+	for i, f := range findings {
+		at[f.Fingerprint] = i
+	}
+	for _, e := range queries {
+		if q, ok := e.Query(); ok {
+			if i, ok := at[normalizeSQL(q.SQL)]; ok {
+				findings[i].IDs = append(findings[i].IDs, e.ID)
+			}
+		}
+	}
+}
+
 // withTraces puts back the stack traces the ring keeps apart, for the one
-// request being shown; listing requests never needs them.
+// request being shown, as a table each trace appears in once; listing
+// requests never needs them.
 func withTraces(srv *dumps.Server, d RequestDetail) RequestDetail {
 	if srv == nil {
 		return d
 	}
-	for kind, evs := range d.Events {
-		d.Events[kind] = srv.Expand(evs)
+	kinds := make([]string, 0, len(d.Events))
+	for kind := range d.Events {
+		kinds = append(kinds, kind)
 	}
+	sort.Strings(kinds)
+	var all []dumps.Event
+	for _, kind := range kinds {
+		all = append(all, d.Events[kind]...)
+	}
+	shared, traces := srv.Shared(all)
+	at := 0
+	for _, kind := range kinds {
+		n := len(d.Events[kind])
+		d.Events[kind] = shared[at : at+n]
+		at += n
+	}
+	d.Traces = traces
 	return d
 }
 

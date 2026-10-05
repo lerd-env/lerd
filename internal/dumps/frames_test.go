@@ -81,3 +81,50 @@ func TestRing_FullFrameTableKeepsTracesAsTheyCame(t *testing.T) {
 		t.Fatalf("full table rewrote the event: %s", r.Snapshot()[0].Data)
 	}
 }
+
+// A trace a request sent once under a key comes back on the later events of
+// that request that only repeat the key.
+func TestRing_PutsAKeyedTraceBackOnItsRepeats(t *testing.T) {
+	r := NewRing(10)
+	first := traced("a", "/app/Loop.php", "/app/vendor/Kernel.php")
+	var d map[string]any
+	_ = json.Unmarshal(first.Data, &d)
+	d["trace_key"] = "k1"
+	first.Data, _ = json.Marshal(d)
+	first.Ctx.RID = "r1"
+	repeat := Event{V: 1, ID: "b", Kind: KindQuery, Ctx: Context{RID: "r1"}, Data: json.RawMessage(`{"sql":"select b","trace_key":"k1"}`)}
+	other := Event{V: 1, ID: "c", Kind: KindQuery, Ctx: Context{RID: "r2"}, Data: json.RawMessage(`{"sql":"select c","trace_key":"k1"}`)}
+	r.Append(first)
+	r.Append(repeat)
+	r.Append(other)
+	got := r.Snapshot()
+	if trace := dataOf(t, got[1])["trace"].([]any); len(trace) != 2 {
+		t.Fatalf("repeat came back with trace %v", trace)
+	}
+	if _, ok := dataOf(t, got[0])["trace_key"]; ok {
+		t.Errorf("the key was kept on the event: %s", got[0].Data)
+	}
+	if _, ok := dataOf(t, got[2])["trace"]; ok {
+		t.Errorf("another request's key matched: %s", got[2].Data)
+	}
+}
+
+// A request's events refer to one table entry per distinct trace.
+func TestRing_SharedListsEachTraceOnce(t *testing.T) {
+	r := NewRing(10)
+	r.Append(traced("a", "/app/Loop.php"))
+	r.Append(traced("b", "/app/Loop.php"))
+	r.Append(traced("c", "/app/Other.php"))
+	r.Append(Event{V: 1, ID: "d", Kind: "dump"})
+	evs, traces := r.Shared(r.Lite())
+	if len(traces) != 2 {
+		t.Fatalf("%d traces, want 2", len(traces))
+	}
+	refs := []any{dataOf(t, evs[0])["trace_ref"], dataOf(t, evs[1])["trace_ref"], dataOf(t, evs[2])["trace_ref"]}
+	if refs[0] != refs[1] || refs[0] == refs[2] {
+		t.Fatalf("refs = %v", refs)
+	}
+	if _, ok := dataOf(t, evs[0])["trace"]; ok {
+		t.Errorf("the trace stayed inline: %s", evs[0].Data)
+	}
+}

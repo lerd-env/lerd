@@ -1853,5 +1853,7 @@
   "debugbar_site_title": "Toon de debugbalk op de pagina's van deze site",
   "debugbar_site_inProject": "Toon de debugbalk op de pagina's van deze site, opgeslagen in diens .lerd.yaml",
   "debugbar_waiting": "Wachten op de verzoeken van deze pagina",
-  "debugbar_loading": "Verzoek laden…"
+  "debugbar_loading": "Verzoek laden…",
+  "requests_showMore": "Toon {count} meer van {total} resterend",
+  "requests_nPlusOneShow": "Toon queries"
 }

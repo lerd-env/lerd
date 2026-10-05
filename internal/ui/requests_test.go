@@ -2,6 +2,8 @@ package ui
 
 import (
 	"encoding/json"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -87,5 +89,21 @@ func TestRequests_NameAGraphQLRequestByItsOperations(t *testing.T) {
 	got := listRequests(events)[0]
 	if got.Operation != "mutation Login +1" || strings.Join(got.Operations, " | ") != "mutation Login | query { me, cases }" {
 		t.Fatalf("operation = %q, operations = %q", got.Operation, got.Operations)
+	}
+}
+
+// Each N+1 finding names the queries it repeats, and only those.
+func TestRequestDetail_NamesTheQueriesAnNPlusOneRepeats(t *testing.T) {
+	var events []dumps.Event
+	for i := 0; i < nPlusOneThreshold; i++ {
+		events = append(events, ev(fmt.Sprintf("q%d", i), "2026-10-04T10:00:01.000Z", dumps.KindQuery, "r1", "shop", "fpm", map[string]any{"sql": fmt.Sprintf("select * from users where id = %d", i)}))
+	}
+	events = append(events, ev("once", "2026-10-04T10:00:01.000Z", dumps.KindQuery, "r1", "shop", "fpm", map[string]any{"sql": "select * from sessions"}))
+	d, ok := requestDetail(events, "r1")
+	if !ok || d.Queries == nil || len(d.Queries.NPlusOne) != 1 {
+		t.Fatalf("findings %+v", d.Queries)
+	}
+	if ids := d.Queries.NPlusOne[0].IDs; len(ids) != nPlusOneThreshold || slices.Contains(ids, "once") {
+		t.Errorf("ids %v", ids)
 	}
 }

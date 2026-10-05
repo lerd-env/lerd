@@ -87,12 +87,15 @@ func runCollectorPHPSeams(t *testing.T, dir string, body string, viaAssetsIni bo
 			if err != nil {
 				return
 			}
+			// The collector keeps one connection for every event it sends.
 			b, _ := io.ReadAll(conn)
 			conn.Close()
-			if s := strings.TrimSpace(string(b)); s != "" {
-				mu.Lock()
-				lines = append(lines, s)
-				mu.Unlock()
+			for _, s := range strings.Split(string(b), "\n") {
+				if s = strings.TrimSpace(s); s != "" {
+					mu.Lock()
+					lines = append(lines, s)
+					mu.Unlock()
+				}
 			}
 		}
 	}()
@@ -1478,6 +1481,45 @@ namespace {
 	}
 }
 
+// A secret passed inline in a GraphQL query is masked in the query text and
+// in the field's arguments, as one passed in the variables is.
+func TestCollectorPHP_GraphQLMasksInlineSecrets(t *testing.T) {
+	got := runCollectorPHP(t, `<?php
+namespace {
+    require COLLECTOR;
+    $body = ['query' => 'mutation { login(email: "a@b.test", password: "hunter22") { token } }'];
+    \Lerd\Collector\emit('probe', ['ops' => \Lerd\Collector\graphql_operations($body)]);
+}
+`)
+	joined := strings.Join(got, "\n")
+	if strings.Contains(joined, "hunter22") || !strings.Contains(joined, "a@b.test") {
+		t.Errorf("inline password not masked, or email masked: %v", got)
+	}
+}
+
+// A view, job or event preview masks a value the rules name and the fields of
+// a JSON string, so a page rendering the request body leaks nothing.
+func TestCollectorPHP_PreviewsMaskSecrets(t *testing.T) {
+	got := runCollectorPHP(t, `<?php
+namespace {
+    require COLLECTOR;
+    \Lerd\Collector\emit('probe', [
+        'view' => \Lerd\Collector\preview_data(['password' => 'hunter22', 'body' => "{\n  \"name\": \"Ada\", \"password\": \"hunter33\"\n}"]),
+        'job' => \Lerd\Collector\preview_payload(['api_key' => 'hunter44', 'name' => 'Ada']),
+    ]);
+}
+`)
+	joined := strings.Join(got, "\n")
+	for _, secret := range []string{"hunter22", "hunter33", "hunter44"} {
+		if strings.Contains(joined, secret) {
+			t.Errorf("%s left in a preview: %v", secret, got)
+		}
+	}
+	if !strings.Contains(joined, "Ada") {
+		t.Errorf("unmasked values lost: %v", got)
+	}
+}
+
 // The queries and mutations a GraphQL request called are read from its query,
 // aliases, literal and variable arguments and nested input objects included.
 func TestCollectorPHP_GraphQLRootFields(t *testing.T) {
@@ -1569,5 +1611,29 @@ namespace {
 `)
 	if joined := strings.Join(got, "\n"); !strings.Contains(joined, `"types":{"Case":{"kind":"object","fields":[{"name":"parent","type":"Case"},{"name":"child","type":"Case"}]}}`) {
 		t.Errorf("want Case once: %v", got)
+	}
+}
+
+// A loop that emits from the same place sends its trace once; the repeats
+// carry only the key, which lerd-ui uses to put the trace back.
+func TestCollectorPHP_SendsEachTraceOncePerRequest(t *testing.T) {
+	got := runCollectorPHP(t, `<?php
+namespace {
+    require COLLECTOR;
+    $GLOBALS['__lerd_rid'] = 'r1';
+    function work() { \Lerd\Collector\emit('probe', ['n' => 1]); }
+    for ($i = 0; $i < 3; $i++) { work(); }
+}
+`)
+	if len(got) != 3 {
+		t.Fatalf("got %d events, want 3: %v", len(got), got)
+	}
+	if !strings.Contains(got[0], `"trace":[`) || !strings.Contains(got[0], `"trace_key":"`) {
+		t.Errorf("first event should carry its trace and key: %s", got[0])
+	}
+	for _, line := range got[1:] {
+		if strings.Contains(line, `"trace":`) || !strings.Contains(line, `"trace_key":"`) {
+			t.Errorf("a repeat should carry the key alone: %s", line)
+		}
 	}
 }

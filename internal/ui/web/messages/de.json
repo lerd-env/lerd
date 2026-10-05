@@ -1853,5 +1853,7 @@
   "debugbar_site_title": "Debugbar auf den Seiten dieser Site zeigen",
   "debugbar_site_inProject": "Debugbar auf den Seiten dieser Site zeigen, in ihrer .lerd.yaml gespeichert",
   "debugbar_waiting": "Warte auf die Anfragen dieser Seite",
-  "debugbar_loading": "Anfrage wird geladen…"
+  "debugbar_loading": "Anfrage wird geladen…",
+  "requests_showMore": "{count} weitere von {total} verbleibenden anzeigen",
+  "requests_nPlusOneShow": "Queries anzeigen"
 }

@@ -1853,5 +1853,7 @@
   "debugbar_site_title": "Hiện thanh gỡ lỗi trên các trang của site này",
   "debugbar_site_inProject": "Hiện thanh gỡ lỗi trên các trang của site này, lưu trong .lerd.yaml",
   "debugbar_waiting": "Đang chờ các yêu cầu của trang này",
-  "debugbar_loading": "Đang tải yêu cầu…"
+  "debugbar_loading": "Đang tải yêu cầu…",
+  "requests_showMore": "Hiện thêm {count} trong {total} còn lại",
+  "requests_nPlusOneShow": "Hiện truy vấn"
 }

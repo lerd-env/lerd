@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -67,6 +68,26 @@ func TestDebugbar_RequestDetailIsScopedToTheSite(t *testing.T) {
 		if w := barRequest(c.path, c.site, true); w.Code != c.want {
 			t.Errorf("%s as %s: status %d, want %d", c.path, c.site, w.Code, c.want)
 		}
+	}
+}
+
+// The bar polls a summary: counts for every kind, events only for its chips.
+func TestDebugbar_SummaryKeepsCountsAndDropsTheEvents(t *testing.T) {
+	srv := setupDebugbar(t)
+	srv.Push(ev("5", "2026-10-04T10:00:01.050Z", dumps.KindQuery, "page1", "shop", "fpm", map[string]any{"sql": "select 1", "time_ms": 2}))
+	w := barRequest("/_lerd/bar/requests/page1?summary=1", "shop", true)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d", w.Code)
+	}
+	var d RequestDetail
+	if err := json.Unmarshal(w.Body.Bytes(), &d); err != nil {
+		t.Fatal(err)
+	}
+	if d.Counts["query"] != 1 || len(d.Events["query"]) != 0 || len(d.Events["request"]) != 1 {
+		t.Errorf("counts %v, events %v", d.Counts, d.Events)
+	}
+	if d.Queries == nil || d.Queries.TotalTimeMS != 2 {
+		t.Errorf("queries %+v", d.Queries)
 	}
 }
 

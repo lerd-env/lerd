@@ -58,16 +58,38 @@ function send(array $payload): void
     if (strpos($t, '://') === false) {
         $t = 'tcp://' . $t;
     }
-    $sock = @\stream_socket_client($t, $errno, $errstr, 0.05, \STREAM_CLIENT_CONNECT);
-    if (!$sock) {
+    $line = \json_encode($payload, \JSON_UNESCAPED_SLASHES | \JSON_PARTIAL_OUTPUT_ON_ERROR);
+    if ($line === false) {
         return;
     }
-    @\stream_set_blocking($sock, false);
-    $line = \json_encode($payload, \JSON_UNESCAPED_SLASHES | \JSON_PARTIAL_OUTPUT_ON_ERROR);
-    if ($line !== false) {
-        @\fwrite($sock, $line . "\n");
+    // One connection per process, kept for every event it sends: a request
+    // that runs a thousand queries would otherwise open a thousand. A write
+    // that fails, lerd-ui having restarted, reconnects and tries once more.
+    // One idle for long is opened again, so it is never one lerd-ui closed.
+    static $sock = null, $to = '', $used = 0.0;
+    if (\is_resource($sock) && \microtime(true) - $used > 30) {
+        @\fclose($sock);
+        $sock = null;
     }
-    @\fclose($sock);
+    $used = \microtime(true);
+    for ($try = 0; $try < 2; $try++) {
+        if (!\is_resource($sock) || $to !== $t) {
+            $sock = @\stream_socket_client($t, $errno, $errstr, 0.05, \STREAM_CLIENT_CONNECT);
+            $to = $t;
+            if (!$sock) {
+                $sock = null;
+                return;
+            }
+            // Blocking, with a short timeout, so a long line is never cut off.
+            @\stream_set_timeout($sock, 1);
+        }
+        $n = @\fwrite($sock, $line . "\n");
+        if ($n === \strlen($line) + 1) {
+            return;
+        }
+        @\fclose($sock);
+        $sock = null;
+    }
 }
 
 function lerd_var(string $key): string
@@ -261,6 +283,15 @@ function is_dependency(string $file): bool
 // paths Composer recorded, so one placed outside vendor/ is named too.
 function package_of(string $file): string
 {
+    // Remembered per file: a trace asks about the same few files thousands of
+    // times in a request, and the install paths are many.
+    static $known = [];
+    if (isset($known[$file])) {
+        return $known[$file];
+    }
+    if (count($known) > 20000) {
+        $known = [];
+    }
     $best = '';
     $name = '';
     foreach (installed_dirs() as $dir => $pkg) {
@@ -269,7 +300,7 @@ function package_of(string $file): string
             $name = $pkg;
         }
     }
-    return $name;
+    return $known[$file] = $name;
 }
 
 function backtrace(): array
@@ -336,7 +367,7 @@ function emit_with(string $kind, array $data, array $src, array $trace): void
     }
     try {
         timing_note($kind, $data);
-        $data['trace'] = $trace;
+        $data = trace_field($trace) + $data;
         send([
             'v'    => 1,
             'id'   => new_id(),
@@ -348,6 +379,30 @@ function emit_with(string $kind, array $data, array $src, array $trace): void
         ]);
     } catch (\Throwable $_) {
     }
+}
+
+// trace_field is how an event carries its stack trace. A loop that queries or
+// renders the same way a thousand times has the same trace each time, so a
+// request sends each distinct trace once, with a key later events repeat in
+// its place; lerd-ui puts the trace back on them.
+function trace_field(array $trace): array
+{
+    if (!$trace) {
+        return ['trace' => $trace];
+    }
+    $print = '';
+    foreach ($trace as $f) {
+        $print .= ($f['file'] ?? '') . ':' . ($f['line'] ?? 0) . '|' . ($f['func'] ?? '') . "\n";
+    }
+    $key = hash('crc32b', $print) . dechex(strlen($print));
+    $seen = &$GLOBALS['__lerd_traces'][rid()];
+    if (isset($seen[$key])) {
+        return ['trace_key' => $key];
+    }
+    if (count($seen ?? []) < 2000) {
+        $seen[$key] = true;
+    }
+    return ['trace' => $trace, 'trace_key' => $key];
 }
 
 // timing_note keeps each timed event of this request, in the order it ended,
@@ -520,7 +575,7 @@ function preview_data($data, array $globals = []): array
             continue;
         }
         try {
-            $out[$key] = preview_value($v);
+            $out[$key] = preview_value(preview_masked($key, $v));
         } catch (\Throwable $_) {
             $out[$key] = '?';
         }
@@ -756,7 +811,7 @@ function append_preview(array &$out, string $name, $value): void
         return;
     }
     try {
-        $out[$name] = preview_value($value);
+        $out[$name] = preview_value(preview_masked($name, $value));
     } catch (\Throwable $_) {
         $out[$name] = '?';
         return;
@@ -1688,7 +1743,7 @@ function graphql_origin($closure): ?array
 function request_body(?string $raw = null): array
 {
     if ($_POST) {
-        return $_POST;
+        return mask_tree($_POST, 'input');
     }
     if (stripos((string) ($_SERVER['CONTENT_TYPE'] ?? ''), 'json') === false) {
         return [];
@@ -1696,6 +1751,31 @@ function request_body(?string $raw = null): array
     $raw = $raw ?? @file_get_contents('php://input', false, null, 0, BODY_BYTES);
     $data = is_string($raw) && $raw !== '' ? json_decode($raw, true) : null;
     return is_array($data) ? mask_tree($data, 'input') : [];
+}
+
+// preview_masked masks a previewed value the rules name, and the fields of a
+// JSON string, so a view, job or event preview never shows what the request
+// tab masks.
+function preview_masked(string $key, $v)
+{
+    $v = mask_tree([$key => $v], 'input')[$key];
+    if (is_string($v) && strpbrk(substr(ltrim($v), 0, 1), '{[') !== false) {
+        $data = json_decode($v, true);
+        if (is_array($data)) {
+            return (string) json_encode(mask_tree($data, 'input'), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        }
+    }
+    return $v;
+}
+
+// graphql_masked_query masks the string literals a query passes inline to an
+// argument whose name looks secret, the way variables are masked.
+function graphql_masked_query(string $query): string
+{
+    $mask = redaction()['mask'];
+    return (string) preg_replace_callback('/(\b\w*(?:pass|secret|token|sess|cookie|authorization|api[-_]?key)\w*\s*:\s*)"((?:[^"\\\\]|\\\\.)*)"/i', function ($m) use ($mask) {
+        return $m[1] . '"' . mask_value($m[2], $mask) . '"';
+    }, $query);
 }
 
 // mask_tree masks the values whose names the rules name at any depth of a
@@ -1732,7 +1812,8 @@ function graphql_operations(array $body): array
             $type = $m[1];
             $name = $name !== '' ? $name : ($m[2] ?? '');
         }
-        $entry = ['type' => $type, 'query' => strlen($query) > 10000 ? substr($query, 0, 10000) . '…' : $query];
+        $shown = graphql_masked_query($query);
+        $entry = ['type' => $type, 'query' => strlen($shown) > 10000 ? substr($shown, 0, 10000) . '…' : $shown];
         if ($name !== '') {
             $entry['name'] = $name;
         }
@@ -1805,7 +1886,7 @@ function graphql_fields(string $query, array $variables, string $name): array
                 $i += 2;
                 $args[$arg] = graphql_value($t, $i, $variables);
             }
-            $field['args'] = $args;
+            $field['args'] = mask_tree($args, 'input');
         }
         $fields[] = $field;
         $i = graphql_skip_selection($t, $i + 1) - 1;

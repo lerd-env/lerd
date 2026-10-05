@@ -1,6 +1,12 @@
 package dumps
 
-import "sync"
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"sync"
+)
 
 // DefaultCapacity is the maximum number of events the ring keeps before it
 // overwrites the oldest entry. A single N+1 request can emit well over a
@@ -34,14 +40,26 @@ func NewRing(capacity int) *Ring {
 }
 
 // Append stores e, evicting the oldest entry once the ring is full.
-func (r *Ring) Append(e Event) {
+// It returns the event as a reader gets it, a trace the event only named by
+// key put back, for whoever passes it on live.
+func (r *Ring) Append(e Event) Event {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.buf[r.head], r.traces[r.head] = r.frames.strip(e)
+	stored, ids := r.frames.strip(e)
+	r.buf[r.head], r.traces[r.head] = stored, ids
 	r.head = (r.head + 1) % r.cap
 	if r.size < r.cap {
 		r.size++
 	}
+	if ids == nil || !keyedOnly(e) {
+		return e
+	}
+	return r.frames.restore(stored, ids)
+}
+
+// keyedOnly reports whether e named its trace by key alone.
+func keyedOnly(e Event) bool {
+	return bytes.Contains(e.Data, []byte(`"trace_key"`)) && !bytes.Contains(e.Data, []byte(`"trace":`))
 }
 
 // Snapshot returns a copy of the ring contents in insertion order (oldest
@@ -83,6 +101,42 @@ func (r *Ring) Expand(evs []Event) []Event {
 		out[i] = r.frames.restore(e, ids)
 	}
 	return out
+}
+
+// Shared puts back the traces of events Lite returned as a table instead:
+// each distinct trace once in traces, and an event's data naming its entry as
+// trace_ref. A request that ran the same query a thousand times then carries
+// its trace once, not a thousand times.
+func (r *Ring) Shared(evs []Event) ([]Event, []json.RawMessage) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]Event, len(evs))
+	var traces []json.RawMessage
+	index := map[string]int{}
+	for i, e := range evs {
+		ids := e.lite
+		e.lite = nil
+		out[i] = e
+		if ids == nil {
+			continue
+		}
+		key := fmt.Sprint(ids)
+		ref, ok := index[key]
+		if !ok {
+			ref = len(traces)
+			index[key] = ref
+			traces = append(traces, r.frames.frames(ids))
+		}
+		var data map[string]json.RawMessage
+		if json.Unmarshal(e.Data, &data) != nil {
+			continue
+		}
+		data["trace_ref"] = json.RawMessage(strconv.Itoa(ref))
+		if full, err := json.Marshal(data); err == nil {
+			out[i].Data = full
+		}
+	}
+	return out, traces
 }
 
 type slot struct {

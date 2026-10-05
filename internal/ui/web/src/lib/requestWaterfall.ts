@@ -58,7 +58,6 @@ const PHASES: Array<[keyof Phases, string, string]> = [
   ['load', 'domContentLoadedEventEnd', 'loadEventEnd']
 ];
 
-const MAX_QUERIES = 25;
 const at = (ts: string) => Date.parse(ts);
 const ms = (n: number) => `${n < 10 ? n.toFixed(1) : Math.round(n)} ms`;
 export const bytes = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
@@ -111,10 +110,12 @@ export function buildWaterfall(d: RequestDetail, phases: Phases): Waterfall {
     const s = e.data as { label?: string; name?: string; time_ms?: number; status?: string; file?: string; line?: number };
     if (s.name) timed.add(s.name);
     const view = s.label === 'View' ? viewPaths.get(s.name ?? '') : undefined;
-    span(`${s.label ?? ''} ${s.name ?? ''}`.trim(), s.status === 'failed' ? 'error' : 'framework', e.ts, s.time_ms ?? 0, at2(s.file ?? view, s.line));
+    // Views have a layer of their own, so a page that renders thousands of
+    // them folds them into one row like any other run of events.
+    span(`${s.label ?? ''} ${s.name ?? ''}`.trim(), s.status === 'failed' ? 'error' : s.label === 'View' ? 'view' : 'framework', e.ts, s.time_ms ?? 0, at2(s.file ?? view, s.line));
   }
   const queries = d.events.query ?? [];
-  for (const e of queries.slice(0, MAX_QUERIES)) {
+  for (const e of queries) {
     const q = e.data as { sql?: string; time_ms?: number; bindings?: unknown[]; connection?: string };
     const bindings = Object.fromEntries((q.bindings ?? []).map((b, i) => [`#${i + 1}`, b]));
     span(q.sql ?? '', 'query', e.ts, q.time_ms ?? 0, {
@@ -122,9 +123,6 @@ export function buildWaterfall(d: RequestDetail, phases: Phases): Waterfall {
       sections: [...section(phases.bindings, bindings), ...section(phases.details, q.connection ? { connection: q.connection } : undefined)],
       ...src(e)
     });
-  }
-  if (queries.length > MAX_QUERIES) {
-    moment(`+${queries.length - MAX_QUERIES} more queries`, 'query', Math.max(at(queries[queries.length - 1].ts) - t0, 0));
   }
   for (const e of d.events.component ?? []) {
     const c = e.data as { name?: string; phase?: string; time_ms?: number; status?: string; details?: Record<string, unknown>; state?: Record<string, unknown>; file?: string; line?: number; exception?: string };

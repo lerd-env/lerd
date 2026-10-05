@@ -14,10 +14,16 @@ const maxFrames = 200000
 type frameTable struct {
 	ids  map[string]uint32
 	list []json.RawMessage
+	// keyed holds the traces a request sent once under a key, by request id
+	// and key, for the later events that repeat only the key.
+	keyed map[string][]uint32
 }
 
+// maxKeyed caps the keyed traces kept; past it a repeat goes without one.
+const maxKeyed = 200000
+
 func newFrameTable() *frameTable {
-	return &frameTable{ids: map[string]uint32{}}
+	return &frameTable{ids: map[string]uint32{}, keyed: map[string][]uint32{}}
 }
 
 // strip takes the trace out of e's data and returns the event without it and
@@ -31,9 +37,23 @@ func (t *frameTable) strip(e Event) (Event, []uint32) {
 	if json.Unmarshal(e.Data, &data) != nil {
 		return e, nil
 	}
+	var key string
+	if k, ok := data["trace_key"]; ok {
+		_ = json.Unmarshal(k, &key)
+		delete(data, "trace_key")
+		key = e.Ctx.RID + "|" + key
+	}
 	raw, ok := data["trace"]
 	if !ok {
-		return e, nil
+		// A repeat of a trace its request sent before: the key says which.
+		ids, known := t.keyed[key]
+		if key == "" || !known {
+			return e, nil
+		}
+		if stripped, err := json.Marshal(data); err == nil {
+			e.Data = stripped
+		}
+		return e, ids
 	}
 	var frames []json.RawMessage
 	if json.Unmarshal(raw, &frames) != nil || len(t.list)+len(frames) > maxFrames {
@@ -55,8 +75,23 @@ func (t *frameTable) strip(e Event) (Event, []uint32) {
 	if err != nil {
 		return e, nil
 	}
+	if key != "" && len(t.keyed) < maxKeyed {
+		t.keyed[key] = ids
+	}
 	e.Data = stripped
 	return e, ids
+}
+
+// frames is the trace ids name, as JSON.
+func (t *frameTable) frames(ids []uint32) json.RawMessage {
+	list := make([]json.RawMessage, 0, len(ids))
+	for _, id := range ids {
+		if int(id) < len(t.list) {
+			list = append(list, t.list[id])
+		}
+	}
+	out, _ := json.Marshal(list)
+	return out
 }
 
 // restore puts the trace given by ids back into e's data.

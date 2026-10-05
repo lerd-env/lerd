@@ -29,6 +29,8 @@ const data = (e: Ev | undefined) => (e?.data ?? {}) as Record<string, any>;
 
 export function summarize(d: RequestDetail): BarSummary {
   const ev = (kind: string): Ev[] => (d.events?.[kind] as Ev[] | undefined) ?? [];
+  // A polled summary carries counts in place of most events.
+  const count = (kind: string) => d.counts?.[kind] ?? ev(kind).length;
   const req = data(ev('request')[0]);
   const timeMs = Number(d.time_ms ?? req.time_ms ?? 0);
   const server = Number(d.nginx_ms ?? 0) + Number(d.queue_ms ?? 0);
@@ -50,11 +52,11 @@ export function summarize(d: RequestDetail): BarSummary {
     timeMs,
     phases: { server: server / total, app: Math.max(timeMs - db, 0) / total, db: db / total },
     memory: req.memory_peak ? bytes(Number(req.memory_peak)) : '',
-    queries: ev('query').length,
+    queries: count('query'),
     nPlusOne: d.problems.includes('N+1'),
-    views: ev('view').length,
-    cache: ev('cache').length,
-    logs: ev('log').length,
+    views: count('view'),
+    cache: count('cache'),
+    logs: count('log'),
     appTabs: [...tabs].map(([id, title]) => ({ id: `custom:${id}`, title })),
     user: String(auth.name || auth.email || auth.id || ''),
     children,

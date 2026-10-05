@@ -88,12 +88,20 @@
   // like any other, and a second click on it folds them back.
   let expanded = $state<Record<string, boolean>>({});
   const groupKey = (r: WaterfallRow) => `${r.layer}:${r.start}:${r.items?.length ?? 0}`;
-  const rows = $derived.by(() => {
+  const rows = $derived.by((): (WaterfallRow & { nested?: boolean; more?: number; group?: string })[] => {
     const needle = search.toLowerCase();
     const keep = waterfall.rows.filter((r) => !hidden[filterKey(r)] && (!needle || r.label.toLowerCase().includes(needle)));
     if (!condensed) return keep;
-    return condense(keep, total).flatMap((r) => (r.items && expanded[groupKey(r)] ? [r, ...r.items.map((it) => ({ ...it, nested: true }))] : [r]));
+    return condense(keep, total).flatMap((r) => {
+      if (!r.items || !expanded[groupKey(r)]) return [r];
+      // An opened group shows its rows a few hundred at a time.
+      const limit = shown[groupKey(r)] ?? PAGE;
+      const rest = r.items.length - limit;
+      return [r, ...r.items.slice(0, limit).map((it) => ({ ...it, nested: true })), ...(rest > 0 ? [{ ...r, items: undefined, more: rest, group: groupKey(r) }] : [])];
+    });
   });
+  const PAGE = 200;
+  let shown = $state<Record<string, number>>({});
 
   const pct = (n: number) => (n / total) * 100;
   // lanes puts each folded item on the first lane it does not overlap, so
@@ -162,13 +170,16 @@
   <div class="px-3 py-2 space-y-px">
     <div class="relative h-5 rounded-sm bg-gray-300 dark:bg-white/15 text-[10px] text-gray-700 dark:text-gray-200 flex items-center justify-center font-medium">{m.requests_totalTime({ time: fmt(total) })}</div>
     {#each rows as r, i (i)}
+      {#if r.more && r.group}
+        <button type="button" class="block w-full h-6 rounded-sm text-left pl-4 text-[11px] text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 bg-gray-100/70 dark:bg-white/[0.06]" onclick={(e) => { e.stopPropagation(); shown = { ...shown, [r.group!]: (shown[r.group!] ?? PAGE) + PAGE }; }}>{m.requests_showMore({ count: Math.min(r.more, PAGE), total: r.more })}</button>
+      {:else}
       {@const s = styleOf(r)}
       {@const left = pct(r.start)}
       {@const width = r.end > r.start ? Math.max(pct(r.end - r.start), 0.4) : 0}
       {@const edge = r.items ? Math.max(...r.items.map((it) => pct(it.end))) : left + width}
       {@const place = edge < 68 ? 'after' : left > 32 ? 'before' : 'inside'}
       {@const stack = r.items ? lanes(r.items) : null}
-      <button type="button" aria-expanded={r.items ? Boolean(expanded[groupKey(r)]) : hover?.i === i} style={stack && stack.count > 1 ? `height: ${8 + stack.count * 5}px` : ''} class="relative block w-full h-6 rounded-sm text-left cursor-pointer {hover?.i === i ? 'ring-1 ring-gray-400 dark:ring-white/30' : ''} {'nested' in r ? 'bg-gray-100/70 dark:bg-white/[0.06]' : i % 2 ? 'bg-gray-50 dark:bg-white/[0.03]' : ''}" onclick={(e) => toggle(e, r, i)}>
+      <button type="button" aria-expanded={r.items ? Boolean(expanded[groupKey(r)]) : hover?.i === i} style={stack && stack.count > 1 ? `height: ${8 + stack.count * 5}px` : ''} class="relative block w-full h-6 rounded-sm text-left cursor-pointer {hover?.i === i ? 'ring-1 ring-gray-400 dark:ring-white/30' : ''} {r.nested ? 'bg-gray-100/70 dark:bg-white/[0.06]' : i % 2 ? 'bg-gray-50 dark:bg-white/[0.03]' : ''}" onclick={(e) => toggle(e, r, i)}>
         {#if r.items}
           {@const lane = stack ?? lanes(r.items)}
           {#each r.items as it, j (j)}
@@ -189,6 +200,7 @@
           {#if !r.items && took(r)}<span class="shrink-0 opacity-70">{took(r)}</span>{/if}
         </span>
       </button>
+      {/if}
     {/each}
   </div>
 </div>

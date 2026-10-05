@@ -108,7 +108,16 @@
     }
     return c;
   });
-  const shownQueries = $derived(querySearch ? queries.filter((e) => String(data(e).sql ?? '').toLowerCase().includes(querySearch.toLowerCase())) : queries);
+  // Long lists render a page at a time; nothing is dropped, the rest is a click away.
+  const PAGE = 200;
+  let limits = $state<Record<string, number>>({});
+  const cap = <T,>(key: string, list: T[]): T[] => list.slice(0, limits[key] ?? PAGE);
+  // A query keeps the number of its place in the run when the list is filtered.
+  const queryNo = $derived(new Map(queries.map((e, i) => [e.id, i + 1])));
+  // An N+1 finding, once picked, narrows the list to the queries it repeats.
+  let only = $state<QueryFinding | null>(null);
+  const onlyIds = $derived(new Set(only?.ids ?? []));
+  const shownQueries = $derived(queries.filter((e) => (!only || onlyIds.has(e.id)) && (!querySearch || String(data(e).sql ?? '').toLowerCase().includes(querySearch.toLowerCase()))));
 
   const logs = $derived(ev('log'));
   // Lines an app marked for the Performance tab through lerd/debug.
@@ -373,6 +382,7 @@
                   <span class="{BADGE} bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">{f.count ? `N+1 ×${f.count}` : ms(f.time_ms ?? 0)}</span>
                   <span class="font-mono truncate flex-1">{f.fingerprint ?? f.sql}</span>
                   <span class="text-[11px] min-w-0 max-w-[45%]"><SourcePath file={f.caller.file} line={f.caller.line} short /></span>
+                  {#if f.ids?.length}<button type="button" aria-pressed={only === f} onclick={() => (only = only === f ? null : f)} class="text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-lerd-border whitespace-nowrap {only === f ? 'bg-gray-100 dark:bg-white/10 text-gray-800 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'}">{m.requests_nPlusOneShow()}</button>{/if}
                 </div>
                 {#if f.example_sql}
                   <div class="flex items-center gap-2">
@@ -392,34 +402,36 @@
             <button type="button" aria-pressed={sqlFormatted} onclick={toggleSqlFormat} class="normal-case tracking-normal text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-lerd-border {sqlFormatted ? 'bg-gray-100 dark:bg-white/10 text-gray-800 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'}">{m.requests_sql_format()}</button>
             <input class="normal-case tracking-normal text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-lerd-border bg-gray-50 dark:bg-white/5 w-48" placeholder={m.requests_filter()} bind:value={querySearch} />
           </div>
-          {#each shownQueries.slice(0, 200) as e (e.id)}
+          {#each cap('queries', shownQueries) as e (e.id)}
             {@const q = data(e)}
-            <div class="{ROW} grid grid-cols-[5rem_minmax(0,1fr)_auto_4rem_auto] gap-3 items-start {slowSql.has(q.sql) ? 'bg-amber-50 dark:bg-amber-900/15' : ''}">
+            <div class="{ROW} grid grid-cols-[2.5rem_5rem_minmax(0,1fr)_auto_4rem_auto] gap-3 items-start {slowSql.has(q.sql) ? 'bg-amber-50 dark:bg-amber-900/15' : ''}">
+              <span class="font-mono tabular-nums text-right text-gray-400 dark:text-gray-500">{queryNo.get(e.id)}</span>
               <span class="text-gray-500 dark:text-gray-400 truncate">{q.connection ?? ''}</span>
               <code class="font-mono break-words {sqlFormatted ? 'whitespace-pre-wrap' : ''} {slowSql.has(q.sql) ? 'text-amber-700 dark:text-amber-300' : ''}">{@html highlight(sqlFormatted ? formatSql(inlineBindings(q.sql, q.bindings)) : inlineBindings(q.sql, q.bindings), 'sql')}</code>
               <span class="text-[11px] min-w-0">{#if e.src?.file}<CallerSource file={e.src.file} line={e.src.line} trace={data(e).trace} />{/if}</span>
               <span class="font-mono text-right tabular-nums">{ms(Number(q.time_ms ?? 0))}</span>
               <CopyButton text={() => inlineBindings(q.sql, q.bindings)} label={m.queries_copySql()} />
             </div>
-          {/each}
+          {/each}{@render more('queries', (shownQueries).length)}
         </div>
       {:else if tab === 'models'}
         <RequestStats stats={MODEL_ACTIONS.map((a) => ({ label: a, value: models.reduce((n, [, c]) => n + (c[a] ?? 0), 0) }))} />
         <div class={BOX}>
           <div class="{HEAD} grid grid-cols-[minmax(0,1fr)_repeat(5,5rem)] gap-3"><span>{m.requests_col_model()}</span>{#each MODEL_ACTIONS as a (a)}<span class="text-right">{a}</span>{/each}</div>
-          {#each models as [model, counts] (model)}
+          {#each cap('models', models) as [model, counts] (model)}
             <div class="{ROW} grid grid-cols-[minmax(0,1fr)_repeat(5,5rem)] gap-3 items-center">
               <span class="font-mono break-all">{#if modelSources[model]}<SourcePath file={modelSources[model].file} line={modelSources[model].line} label={model} bare dotted />{:else}<ClassName value={model} />{/if}</span>
               {#each MODEL_ACTIONS as a (a)}<span class="font-mono text-right tabular-nums {counts[a] ? '' : 'text-gray-300 dark:text-gray-600'}">{counts[a] ?? 0}</span>{/each}
             </div>
-          {/each}
+          {/each}{@render more('models', (models).length)}
         </div>
       {:else if tab === 'views'}
         <RequestStats stats={[{ label: m.requests_tab_views(), value: ev('view').length }, { label: m.requests_stat_duration(), value: ms(spans.filter((s) => s.label === 'View').reduce((n, s) => n + Number(s.time_ms ?? 0), 0)), dot: 'bg-violet-400' }]} />
-        {#each ev('view') as e (e.id)}
+        {#each cap('views', ev('view')) as e, i (e.id)}
           {@const v = data(e)}
           <div class={BOX}>
             <div class="flex items-center gap-2 px-3 py-2">
+              <span class="font-mono tabular-nums text-gray-400 dark:text-gray-500">{i + 1}</span>
               <span class="font-mono font-medium text-violet-700 dark:text-violet-300">{v.name}</span>
               <span class="text-[11px] min-w-0 flex-1">{#if v.path}<SourcePath file={v.path} muted short />{/if}</span>
               {#if viewTime(v.name) !== undefined}<span class="font-mono tabular-nums">{ms(viewTime(v.name))}</span>{/if}
@@ -430,9 +442,9 @@
               </div>
             {/if}
           </div>
-        {/each}
+        {/each}{@render more('views', (ev('view')).length)}
       {:else if tab === 'components'}
-        {#each components as [name, phases] (name)}
+        {#each cap('components', components) as [name, phases] (name)}
           {@const at = phases.find((c) => c.file)}
           <div class={BOX}>
             <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-lerd-border/60">
@@ -451,11 +463,11 @@
               </div>
             {/each}
           </div>
-        {/each}
+        {/each}{@render more('components', (components).length)}
       {:else if tab === 'cache'}
         <RequestStats stats={Object.entries(cacheOps).map(([k, v]) => ({ label: k, value: v, dot: k === 'miss' ? 'bg-amber-400' : k === 'hit' ? 'bg-emerald-500' : undefined }))} />
         <div class={BOX}>
-          {#each ev('cache') as e (e.id)}
+          {#each cap('cache', ev('cache')) as e (e.id)}
             {@const c = data(e)}
             <div class="{ROW} grid grid-cols-[4rem_minmax(0,1fr)_auto_6rem_4.5rem] gap-3 items-center">
               <span class="justify-self-start {BADGE} {c.op === 'miss' ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' : c.op === 'hit' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : 'bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300'}">{c.op}</span>
@@ -464,12 +476,12 @@
               <span class="text-gray-500 dark:text-gray-400 truncate">{c.store}{c.connection ? ` · ${c.connection}` : ''}</span>
               <span class="font-mono text-[11px] text-gray-400 text-right">{offset(e.ts)}</span>
             </div>
-          {/each}
+          {/each}{@render more('cache', (ev('cache')).length)}
         </div>
       {:else if tab === 'redis'}
         <RequestStats stats={[{ label: m.requests_stat_count(), value: ev('redis').length }, { label: m.requests_stat_duration(), value: ms(ev('redis').reduce((n, e) => n + Number(data(e).time_ms ?? 0), 0)), dot: 'bg-red-500' }]} />
         <div class={BOX}>
-          {#each ev('redis') as e (e.id)}
+          {#each cap('redis', ev('redis')) as e (e.id)}
             {@const r = data(e)}
             <div class="{ROW} grid grid-cols-[6rem_minmax(0,1fr)_auto_6rem_4rem] gap-3 items-start">
               <span class="font-mono font-medium text-red-700 dark:text-red-300">{r.command}</span>
@@ -478,12 +490,12 @@
               <span class="text-gray-500 dark:text-gray-400 truncate">{r.connection ?? ''}</span>
               <span class="font-mono text-right tabular-nums">{ms(Number(r.time_ms ?? 0))}</span>
             </div>
-          {/each}
+          {/each}{@render more('redis', (ev('redis')).length)}
         </div>
       {:else if tab === 'filesystem'}
         <RequestStats stats={[{ label: m.requests_stat_count(), value: ev('filesystem').length }, { label: m.requests_stat_duration(), value: ms(ev('filesystem').reduce((n, e) => n + Number(data(e).time_ms ?? 0), 0)), dot: 'bg-stone-400' }]} />
         <div class={BOX}>
-          {#each ev('filesystem') as e (e.id)}
+          {#each cap('filesystem', ev('filesystem')) as e (e.id)}
             {@const f = data(e)}
             <div class="{ROW} grid grid-cols-[7rem_6rem_minmax(0,1fr)_auto_4rem] gap-3 items-start">
               <span class="justify-self-start {BADGE} {f.status === 'failed' ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300' : 'bg-stone-100 dark:bg-white/10 text-stone-700 dark:text-stone-300'}">{f.op}</span>
@@ -492,16 +504,16 @@
               <span class="text-[11px] min-w-0">{#if e.src?.file}<CallerSource file={e.src.file} line={e.src.line} trace={data(e).trace} />{/if}</span>
               <span class="font-mono text-right tabular-nums">{ms(Number(f.time_ms ?? 0))}</span>
             </div>
-          {/each}
+          {/each}{@render more('filesystem', (ev('filesystem')).length)}
         </div>
       {:else if tab === 'events'}
         <div class={BOX}>
-          {#each ev('event') as e (e.id)}
+          {#each cap('events', ev('event')) as e (e.id)}
             <div class="{ROW} grid grid-cols-[minmax(0,1fr)_4.5rem] gap-3">
               <span class="font-mono break-all">{data(e).name}</span>
               <span class="font-mono text-[11px] text-gray-400 text-right">{offset(e.ts)}</span>
             </div>
-          {/each}
+          {/each}{@render more('events', (ev('event')).length)}
         </div>
       {:else if tab === 'log'}
         <div class="flex gap-1 flex-wrap" role="group" aria-label={m.requests_section_logs()}>
@@ -511,7 +523,7 @@
           {/each}
         </div>
         <div class={BOX}>
-          {#each shownLogs as e (e.id)}
+          {#each cap('logs', shownLogs) as e (e.id)}
             {@const l = data(e)}
             <div class="{ROW} grid grid-cols-[4rem_4.5rem_5rem_minmax(0,1fr)] gap-2 items-baseline">
               <span class="font-mono text-[11px] text-gray-400">{offset(e.ts)}</span>
@@ -523,20 +535,20 @@
                 {#if l.show_trace}<TraceBlock src={e.src} trace={l.trace} />{/if}
               </span>
             </div>
-          {/each}
+          {/each}{@render more('logs', (shownLogs).length)}
           {#if shownLogs.length < logs.length}
             <div class="{ROW} text-[11px] text-gray-400">{m.requests_hiddenLevels({ count: logs.length - shownLogs.length })}</div>
           {/if}
         </div>
       {:else if tab === 'dumps'}
         <div class={BOX}>
-          {#each ev('dump') as e (e.id)}
+          {#each cap('dumps', ev('dump')) as e (e.id)}
             <pre class="{ROW} font-mono text-[11px] whitespace-pre-wrap break-all">{e.label ? `${e.label}: ` : ''}{e.text}</pre>
-          {/each}
+          {/each}{@render more('dumps', (ev('dump')).length)}
         </div>
       {:else if tab === 'mail'}
         <div class={BOX}>
-          {#each mails as e (e.id)}
+          {#each cap('mails', mails) as e (e.id)}
             {@const x = data(e)}
             <div class="{ROW} space-y-0.5">
               <div class="flex items-center gap-2">
@@ -546,37 +558,37 @@
               </div>
               {#if x.to}<div class="text-[11px] text-gray-500 dark:text-gray-400 break-all">→ {Array.isArray(x.to) ? x.to.join(', ') : x.to}</div>{/if}
             </div>
-          {/each}
+          {/each}{@render more('mails', (mails).length)}
         </div>
       {:else if tab === 'http'}
         <div class={BOX}>
-          {#each ev('http') as e (e.id)}
+          {#each cap('http', ev('http')) as e (e.id)}
             {@const x = data(e)}
             {@const span = httpSpan(e.ts, Number(x.time_ms ?? 0))}
             <HttpCall call={x} tone={statusTone(x.status)} from={span?.[0]} to={span?.[1]} />
-          {/each}
+          {/each}{@render more('http', (ev('http')).length)}
         </div>
       {:else if tab === 'jobs'}
         <div class={BOX}>
-          {#each ev('job') as e (e.id)}
+          {#each cap('jobs', ev('job')) as e (e.id)}
             {@const x = data(e)}
             <div class="{ROW} grid grid-cols-[minmax(0,1fr)_6rem_4rem] gap-3">
               <ClassName value={String(x.class ?? '')} class="font-mono break-all" />
               <span class="{x.status === 'failed' ? 'text-rose-600 dark:text-rose-300' : 'text-gray-500 dark:text-gray-400'}">{x.status}</span>
               <span class="font-mono text-right tabular-nums">{x.time_ms ? ms(x.time_ms) : ''}</span>
             </div>
-          {/each}
+          {/each}{@render more('jobs', (ev('job')).length)}
         </div>
       {:else if tab === 'browser'}
         <div class={BOX}>
-          {#each browserEvents as e (e.id)}
+          {#each cap('browser', browserEvents) as e (e.id)}
             {@const b = data(e)}
             <div class="{ROW} flex items-start gap-2">
               <span class="shrink-0 {BADGE} bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300">{b.type === 'console' ? `console.${b.level}` : b.type}</span>
               <span class="font-mono break-all flex-1">{b.message}</span>
               <span class="shrink-0 font-mono text-[11px] text-gray-400">{offset(e.ts)}</span>
             </div>
-          {/each}
+          {/each}{@render more('browser', (browserEvents).length)}
         </div>
       {:else if tab.startsWith('custom:')}
         {@const custom = customTabs.find((t) => t.id === tab)}
@@ -615,16 +627,22 @@
         {/each}
       {:else if tab === 'sent'}
         <div class={BOX}>
-          {#each d.children ?? [] as c (c.rid)}
+          {#each cap('sent', d.children ?? []) as c (c.rid)}
             <button type="button" onclick={() => onopen(c.rid)} class="{ROW} w-full text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white/5">
               <span class="font-mono text-[11px] {statusTone(c.status)}">{c.status}</span>
               <span class="font-mono truncate flex-1">{c.url}</span>
               <span class="text-[11px] text-gray-400">{c.via}{c.duration_ms ? ` · ${Math.round(c.duration_ms)} ms` : ''}</span>
               <span class="text-[11px] font-mono tabular-nums whitespace-nowrap text-gray-500 dark:text-gray-400 text-right">{clock(c.at)}</span>
             </button>
-          {/each}
+          {/each}{@render more('sent', (d.children ?? []).length)}
         </div>
       {/if}
     </div>
   {/if}
 </div>
+
+{#snippet more(key: string, total: number)}
+  {#if total > (limits[key] ?? PAGE)}
+    <button type="button" class="w-full py-2 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => (limits = { ...limits, [key]: (limits[key] ?? PAGE) + PAGE })}>{m.requests_showMore({ count: Math.min(total - (limits[key] ?? PAGE), PAGE), total: total - (limits[key] ?? PAGE) })}</button>
+  {/if}
+{/snippet}

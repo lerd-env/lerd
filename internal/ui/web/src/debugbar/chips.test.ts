@@ -30,6 +30,13 @@ describe('summarize', () => {
   });
 });
 
+describe('summarize, a polled summary', () => {
+  it('reads the counts where the events were left out', () => {
+    const s = summarize({ ...detail, counts: { query: 1200, view: 40, cache: 9, log: 3 }, events: { request: detail.events.request } } as unknown as RequestDetail);
+    expect([s.queries, s.views, s.cache, s.logs]).toEqual([1200, 40, 9, 3]);
+  });
+});
+
 describe('summarize, a page no PHP request served', () => {
   it('reads as the path the browser showed, with no status or time', () => {
     const s = summarize({ rid: 'p1', type: 'page', uri: 'https://spa.test/orders?x=1', started: '', counts: {}, problems: [], events: {} } as unknown as RequestDetail);

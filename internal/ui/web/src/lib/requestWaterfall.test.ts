@@ -6,6 +6,11 @@ const phases = { dns: 'DNS', connect: 'Connect', wait: 'Wait', download: 'Downlo
 const e = (kind: string, ts: string, data: unknown) => ({ v: 1, id: ts, ts, kind, ctx: { type: 'fpm' }, src: { file: '', line: 0 }, data });
 
 describe('buildWaterfall', () => {
+  it('keeps every query, however many the request ran', () => {
+    const query = Array.from({ length: 1200 }, (_, i) => e('query', `2026-10-04T10:00:00.${String(i % 1000).padStart(3, '0')}Z`, { sql: `select ${i}`, time_ms: 0.1 }));
+    const d = { rid: 'r1', type: 'page', started: '2026-10-04T10:00:00.000Z', time_ms: 1000, counts: {}, problems: [], events: { query } } as unknown as RequestDetail;
+    expect(buildWaterfall(d, phases).rows.filter((r) => r.layer === 'query')).toHaveLength(1200);
+  });
   it('lays spans and moments on the request clock and leaves the sent requests out', () => {
     const d: RequestDetail = {
       rid: 'r1', type: 'page', started: '2026-10-04T10:00:00.000Z', method: 'GET', uri: '/cart', time_ms: 100,
@@ -27,7 +32,7 @@ describe('buildWaterfall', () => {
       ['app', 0, 100],
       ['query', 30, 50],
       ['error', 60, 60],
-      ['framework', 80, 90],
+      ['view', 80, 90],
       ['browser', 300, 300]
     ]);
     expect(w.total).toBe(300);

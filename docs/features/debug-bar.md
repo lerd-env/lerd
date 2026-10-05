@@ -22,7 +22,7 @@ Each chip opens the request view on its own tab:
 - who the request ran as
 - **child requests**: the calls the page sent after it loaded, each with its status, time and when it went out, failed ones counted in red
 
-A chip only shows when there is something behind it, so a quiet request makes a short bar. While the request is still running the bar shows that it is loading, and it keeps up with the calls the page sends, checking every few seconds while the page is visible.
+A chip only shows when there is something behind it, so a quiet request makes a short bar. While the request is still running the bar shows that it is loading, and it keeps up with the calls the page sends, checking every few seconds while the page is visible. It checks for the counts alone and loads the full request only when a chip opens it, so a page that runs thousands of queries costs no more to keep up with.
 
 The request view is the dashboard's own: the timeline, the request and response, stack traces, GraphQL, the database and everything else, and a child request or the page that sent one is a click away inside it.
 
@@ -38,6 +38,10 @@ The **×** minimises the bar to lerd's mark in a corner, and clicking the mark b
 - **Edge**: the edge a compact strip sits on.
 - **Minimised in**: the corner the bar minimises to, until someone drags it elsewhere.
 - **Theme**: **System** follows the operating system, **Light** and **Dark** are fixed. The colours follow the dashboard's theme, imported and desktop themes included.
+
+![The debug bar as a floating dock at the bottom of a page: the request, its time split, memory, queries flagged N+1, views, cache calls, log lines, two app tabs and the user](/assets/screenshots/debug-bar-dock.png)
+
+![The debug bar as a compact strip along the bottom edge, each chip labelled](/assets/screenshots/debug-bar-compact.png)
 
 The settings are kept under `debugbar` in `~/.config/lerd/config.yaml`.
 

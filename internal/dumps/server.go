@@ -143,6 +143,10 @@ func (s *Server) Lite() []Event { return s.ring.Lite() }
 // Expand puts back the traces of events Lite returned.
 func (s *Server) Expand(evs []Event) []Event { return s.ring.Expand(evs) }
 
+// Shared puts back the traces of events Lite returned as a table of distinct
+// traces the events refer to; see Ring.Shared.
+func (s *Server) Shared(evs []Event) ([]Event, []json.RawMessage) { return s.ring.Shared(evs) }
+
 // Filter returns a filtered Snapshot.
 func (s *Server) Filter(opts FilterOpts) []Event { return s.ring.Filter(opts) }
 
@@ -178,8 +182,7 @@ func (s *Server) record(e Event) {
 	if !e.Valid() || (e.Ctx.Test && !s.keepTests.Load()) {
 		return
 	}
-	s.ring.Append(e)
-	s.hub.Publish(e)
+	s.hub.Publish(s.ring.Append(e))
 }
 
 func (s *Server) acceptLoop() {
@@ -204,15 +207,20 @@ func (s *Server) acceptLoop() {
 	}
 }
 
+// connIdle is how long a collector's connection may sit without a line.
+const connIdle = 5 * time.Minute
+
 func (s *Server) handle(conn net.Conn) {
 	defer s.wg.Done()
 	defer conn.Close()
-	// Bound the read so a stuck bridge can't tie up a goroutine forever.
-	// The bridge writes one event per connection and disconnects.
-	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	// A collector keeps one connection for every event its process sends, so
+	// the read is bounded by how long the connection sits idle rather than by
+	// its age. The collector reconnects well before this runs out.
+	_ = conn.SetReadDeadline(time.Now().Add(connIdle))
 	scanner := bufio.NewScanner(conn)
 	scanner.Buffer(make([]byte, initialLineBuf), MaxLineBytes)
 	for scanner.Scan() {
+		_ = conn.SetReadDeadline(time.Now().Add(connIdle))
 		line := scanner.Bytes()
 		if len(line) == 0 {
 			continue

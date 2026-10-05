@@ -49,6 +49,7 @@ export interface QueryFinding {
   example_sql?: string;
   time_ms?: number;
   caller: { file: string; line: number };
+  ids?: string[];
 }
 
 export interface RequestDetail extends RequestSummary {
@@ -61,8 +62,27 @@ export function loadRequests(site: string): Promise<RequestSummary[]> {
   return apiJson<RequestSummary[]>(`/api/requests${q}`);
 }
 
-export function loadRequest(rid: string): Promise<RequestDetail> {
-  return apiJson<RequestDetail>(`/api/requests/${encodeURIComponent(rid)}`);
+// summary asks for the counts and only the events the debug bar's chips read.
+export function loadRequest(rid: string, summary = false): Promise<RequestDetail> {
+  return apiJson<RequestDetail>(`/api/requests/${encodeURIComponent(rid)}${summary ? '?summary=1' : ''}`).then(withTraces);
+}
+
+// withTraces puts each event's stack trace back from the table the detail
+// sends every distinct trace in once, so a query run a thousand times carries
+// its trace once over the wire and the views read it where they always did.
+export function withTraces(d: RequestDetail): RequestDetail {
+  const traces = (d as RequestDetail & { traces?: unknown[] }).traces;
+  if (!traces?.length) return d;
+  for (const list of Object.values(d.events ?? {})) {
+    for (const e of list as { data?: Record<string, unknown> }[]) {
+      const ref = e.data?.trace_ref;
+      if (typeof ref === 'number' && traces[ref]) {
+        e.data!.trace = traces[ref];
+        delete e.data!.trace_ref;
+      }
+    }
+  }
+  return d;
 }
 
 // nestRequests puts each request a page sent right under that page, keeping

@@ -15,3 +15,16 @@ describe('nestRequests', () => {
     expect(nestRequests(list).map((x) => `${x.depth}:${x.rid}`)).toEqual(['0:other', '0:page', '1:api1', '1:api2', '0:orphan']);
   });
 });
+
+describe('withTraces', () => {
+  it('puts each event its trace back from the shared table', async () => {
+    const { withTraces } = await import('./requests');
+    const frames = [{ file: '/app/Loop.php', line: 3, func: 'run' }];
+    const d = withTraces({ rid: 'r', type: 'page', started: '', counts: {}, problems: [], traces: [frames], events: { query: [{ data: { sql: 'a', trace_ref: 0 } }, { data: { sql: 'b', trace_ref: 0 } }, { data: { sql: 'c' } }] } } as never);
+    const qs = (d.events as Record<string, { data: Record<string, unknown> }[]>).query;
+    expect(qs[0].data.trace).toBe(frames);
+    expect(qs[1].data.trace).toBe(frames);
+    expect(qs[0].data.trace_ref).toBeUndefined();
+    expect(qs[2].data.trace).toBeUndefined();
+  });
+});

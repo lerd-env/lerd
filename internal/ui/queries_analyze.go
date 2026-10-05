@@ -30,6 +30,8 @@ type NPlusOneFinding struct {
 	// EXPLAIN locally.
 	ExampleSQL string         `json:"example_sql,omitempty"`
 	Caller     AnalyzedCaller `json:"caller"`
+	// IDs are the repeated queries' event ids, filled for one request's detail.
+	IDs []string `json:"ids,omitempty"`
 }
 
 // SlowFinding is a single query at or over the slow threshold.
