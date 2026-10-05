@@ -6,8 +6,9 @@
     busy?: boolean;
     onSettings?: () => void;
     settingsTitle?: string;
+    inline?: ButtonMenuAction;
   }
-  let { actions, busy = false, onSettings, settingsTitle }: Props = $props();
+  let { actions, busy = false, onSettings, settingsTitle, inline }: Props = $props();
 </script>
 
-<ButtonMenu {actions} {busy} {onSettings} {settingsTitle} />
+<ButtonMenu {actions} {busy} {onSettings} {settingsTitle} {inline} />
