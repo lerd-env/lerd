@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"time"
 
@@ -32,16 +31,7 @@ func CopyTree(src, dst string) error {
 }
 
 func copyTreeCP(src, dst string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "linux":
-		cmd = exec.Command("cp", "-a", "--reflink=auto", src, dst)
-	case "darwin":
-		cmd = exec.Command("cp", "-Rc", src, dst)
-	default:
-		return errors.New("reflink path unsupported on " + runtime.GOOS)
-	}
-	return cmd.Run()
+	return reflinkCopyCmd(src, dst).Run()
 }
 
 func copyTreeNative(src, dst string) error {
@@ -427,10 +417,7 @@ func lookJSBin(name string) (string, bool) {
 	if p, err := exec.LookPath(name); err == nil {
 		return p, true
 	}
-	if runtime.GOOS != "darwin" {
-		return "", false
-	}
-	for _, dir := range []string{"/opt/homebrew/bin", "/usr/local/bin"} {
+	for _, dir := range osToolDirs() {
 		candidate := filepath.Join(dir, name)
 		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
 			return candidate, true

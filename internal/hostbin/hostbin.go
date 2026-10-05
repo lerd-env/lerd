@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -22,11 +21,7 @@ import (
 var ExtraDirs = func() []string {
 	// lerd's own bin dir comes first: a tool dropped in there is on the user's
 	// PATH only through `lerd path:enable`, which a daemon never inherits.
-	dirs := []string{config.BinDir()}
-	if runtime.GOOS == "darwin" {
-		return append(dirs, "/opt/homebrew/bin", "/usr/local/bin")
-	}
-	return append(dirs, "/usr/local/bin", "/snap/bin", "/home/linuxbrew/.linuxbrew/bin")
+	return append([]string{config.BinDir()}, osDirs...)
 }
 
 // Look resolves name to an absolute path: PATH first, then the extra dirs.

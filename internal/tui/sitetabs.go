@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	lerddumps "github.com/geodro/lerd/internal/dumps"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/siteinfo"
 )
@@ -306,7 +307,7 @@ var (
 // surfaces a status message when no opener exists. The browser detaches, so the
 // command returns as soon as the opener is spawned.
 func (m *Model) openURL(url string) tea.Cmd {
-	opener := browserOpener()
+	opener := platform.Current.Opener
 	if opener == "" {
 		m.setStatus("no browser opener available on "+runtime.GOOS, 3*time.Second)
 		return nil
@@ -316,20 +317,5 @@ func (m *Model) openURL(url string) tea.Cmd {
 		cmd := exec.Command(opener, url)
 		runErr := cmd.Start()
 		return ActionResult{Summary: "open " + url, Err: runErr}
-	}
-}
-
-// browserOpener picks the platform command that launches the default
-// browser. Linux uses xdg-open, macOS uses open. Returns "" on platforms
-// where neither is appropriate so the caller surfaces a status message
-// instead of erroring.
-func browserOpener() string {
-	switch runtime.GOOS {
-	case "darwin":
-		return "open"
-	case "linux":
-		return "xdg-open"
-	default:
-		return ""
 	}
 }

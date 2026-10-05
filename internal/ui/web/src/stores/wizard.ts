@@ -4,6 +4,7 @@ import { readSSE } from '$lib/sse';
 import { notifyLocalInfo } from '$lib/notify';
 import { wizardState } from '$lib/wizardState';
 import { modal } from '$stores/modals';
+import type { ServiceSuggestion } from '$stores/sites';
 import { m } from '../paraglide/messages.js';
 
 export interface FrameworkChoice {
@@ -40,6 +41,7 @@ export interface ProjectQuestions {
   database?: string;
   service_options?: string[];
   services?: string[];
+  service_suggestions?: ServiceSuggestion[];
   frankenphp_offered: boolean;
   frankenphp_reason?: string;
   frankenphp: boolean;

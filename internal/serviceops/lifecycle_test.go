@@ -205,3 +205,45 @@ func TestStartImage_namesABuiltinsImageBeforeItIsInstalled(t *testing.T) {
 		t.Fatalf("StartImage(mailpit) = %q", img)
 	}
 }
+
+// A service the user stopped and a site then needs is running again, so the
+// pause must go with it; left behind, the next lerd start skips the service
+// while the site's .env still points at it.
+func TestEnsureServiceRunning_clearsThePauseOfAServiceItStarts(t *testing.T) {
+	withServiceHome(t)
+	stubLifecycle(t)
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "mailhog-test", Image: "docker.io/library/alpine:latest",
+		Ports: []string{"127.0.0.1:1025:1025"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := StopService("mailhog-test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureServiceRunning("mailhog-test"); err != nil {
+		t.Fatalf("EnsureServiceRunning: %v", err)
+	}
+	if config.ServiceIsPaused("mailhog-test") {
+		t.Fatal("a service started for a site is still recorded as paused")
+	}
+}
+
+type activeLifecycle struct{ noopLifecycle }
+
+func (activeLifecycle) UnitStatus(string) (string, error) { return "active", nil }
+
+// An install that already ran a paused service, from before the pause was
+// cleared on start, heals the next time a site asks for it.
+func TestEnsureServiceRunning_clearsThePauseOfAServiceAlreadyRunning(t *testing.T) {
+	withServiceHome(t)
+	stubLifecycle(t)
+	podman.UnitLifecycle = activeLifecycle{}
+	_ = config.SetServicePaused("mailhog-test", true)
+	if err := EnsureServiceRunning("mailhog-test"); err != nil {
+		t.Fatalf("EnsureServiceRunning: %v", err)
+	}
+	if config.ServiceIsPaused("mailhog-test") {
+		t.Fatal("a running service is still recorded as paused")
+	}
+}

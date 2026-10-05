@@ -46,6 +46,7 @@ import (
 	lerdNode "github.com/geodro/lerd/internal/node"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/phpsets"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/profiler"
 	"github.com/geodro/lerd/internal/reqstats"
@@ -421,7 +422,7 @@ func Start(currentVersion string) error {
 	// vhost falls back to TCP via host.containers.internal there.
 	// Errors are non-fatal — direct http://localhost:7073 access still
 	// works even if the socket can't be created.
-	if runtime.GOOS != "darwin" {
+	if !platform.Current.UsesMachineVM {
 		if err := os.MkdirAll(config.RunDir(), 0755); err != nil {
 			fmt.Printf("[WARN] creating %s: %v — lerd.localhost vhost will not work\n", config.RunDir(), err)
 		} else {
@@ -594,35 +595,11 @@ func terminalDirCandidates(dir string) []terminalCmd {
 		candidates = append(candidates, namedTerminal(t, dir))
 	}
 
-	// A terminal the user picked in System Settings outranks one that merely
-	// happens to be on PATH, so it goes ahead of the list rather than after it.
-	if bundle := macDefaultTerminal(); bundle != "" {
-		candidates = append(candidates, terminalCmd{"open", []string{"-b", bundle, dir}})
-	}
-	// The same on Linux, where the choice lives in the freedesktop launcher, the
-	// distribution's alternatives link, or the desktop's own setting.
-	if t := linuxDefaultTerminal(); t != "" {
-		candidates = append(candidates, namedTerminal(t, dir))
-	}
-
+	// A terminal the user picked in the desktop's settings outranks one that
+	// merely happens to be on PATH, so it goes ahead of the list.
+	candidates = append(candidates, osDefaultDirTerminal(dir)...)
 	candidates = append(candidates, knownTerminals(dir)...)
-
-	if runtime.GOOS == "darwin" {
-		// `open -a Terminal dir` opens a new window at dir without echoing any
-		// command — cleaner than `do script "cd ... && exec $SHELL"` which types
-		// the command visibly into the shell. iTerm2 supports the same via open.
-		// Warp registers public.folder, so it takes the directory the same way
-		// the other two do and needs none of its warp:// URI scheme.
-		if _, err := os.Stat("/Applications/Warp.app"); err == nil {
-			candidates = append(candidates, terminalCmd{"open", []string{"-a", "Warp", dir}})
-		}
-		if _, err := os.Stat("/Applications/iTerm.app"); err == nil {
-			candidates = append(candidates, terminalCmd{"open", []string{"-a", "iTerm", dir}})
-		}
-		candidates = append(candidates, terminalCmd{"open", []string{"-a", "Terminal", dir}})
-	}
-
-	return candidates
+	return append(candidates, osFallbackDirTerminals(dir)...)
 }
 
 // namedTerminal builds the invocation for a terminal named by the user or the
@@ -670,9 +647,7 @@ func openTerminalAt(dir string) error {
 		}
 		cmd := exec.Command(bin, t.args...)
 		cmd.Dir = dir
-		if runtime.GOOS != "darwin" {
-			cmd.Env = graphicalEnv()
-		}
+		cmd.Env = terminalBaseEnv()
 		if err := cmd.Start(); err != nil {
 			return err
 		}
@@ -738,7 +713,7 @@ type StatusResponse struct {
 	// Instance identifies this lerd-ui process. An open dashboard reloads when
 	// it changes, so a restarted server never leaves a stale page behind.
 	Instance string `json:"instance"`
-	// Tools reports the managed host binaries (composer, fnm, mkcert) against
+	// Tools reports the managed host binaries (composer, mise, fnm, mkcert) against
 	// their pinned versions; fnm is omitted on nvm-managed setups where its
 	// absence is deliberate.
 	Tools []tools.ToolStatus `json:"tools"`
@@ -5615,7 +5590,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		PHPRuntime:                cfg.PHPRuntimeMode(),
 		PHPRuntimeSwitching:       config.RuntimeSwitchInProgress(),
 		PHPRuntimeApplies:         nativeRuntimeApplies(runtime.GOOS, runtime.GOARCH),
-		WorkerModeApplies:         runtime.GOOS == "darwin",
+		WorkerModeApplies:         platform.Current.WorkerModes,
 		IdleSuspendEnabled:        idleEnabled,
 		IdleSuspendTimeoutMinutes: idleMinutes,
 		IdleSuspendServices:       idleServices,
@@ -5995,10 +5970,6 @@ func namedTerminalCommand(name, script string) terminalCmd {
 	return terminalCmd{name, []string{"-e", "sh", "-c", script}}
 }
 
-// defaultTerminal is the seam tests replace to stand in for the desktop's own
-// setting, which is read off the host.
-var defaultTerminal = linuxDefaultTerminal
-
 // terminalScriptCandidates returns the ordered emulator candidates for running
 // a script. Same precedence as terminalDirCandidates: $TERMINAL, then the
 // terminal the desktop is set to use, then the fixed list. macOS is absent from
@@ -6013,16 +5984,7 @@ func terminalScriptCandidates(script string) []terminalCmd {
 		candidates = append(candidates, namedTerminalCommand(t, script))
 	}
 	candidates = append(candidates, knownTerminalCommands(script)...)
-
-	if runtime.GOOS == "darwin" {
-		if _, err := os.Stat("/Applications/iTerm.app"); err == nil {
-			as := "tell application \"iTerm2\"\n\tcreate window with default profile\n\ttell current session of current window\n\t\twrite text " + appleScriptStr(script) + "\n\tend tell\nend tell"
-			candidates = append(candidates, terminalCmd{"osascript", []string{"-e", as}})
-		}
-		as := "tell application \"Terminal\"\n\tdo script " + appleScriptStr(script) + "\n\tactivate\nend tell"
-		candidates = append(candidates, terminalCmd{"osascript", []string{"-e", as}})
-	}
-	return candidates
+	return append(candidates, osFallbackScriptTerminals(script)...)
 }
 
 // openTerminalCommand opens the user's terminal emulator and runs the given
@@ -6034,11 +5996,7 @@ func terminalScriptCandidates(script string) []terminalCmd {
 // PATH; without it the emulator inherits whatever the user's service manager
 // happened to import and a declared command can fail as not found.
 func terminalEnv() []string {
-	env := os.Environ()
-	if runtime.GOOS != "darwin" {
-		env = graphicalEnv()
-	}
-	return append(env, "PATH="+config.PathWithBinDir())
+	return append(terminalBaseEnv(), "PATH="+config.PathWithBinDir())
 }
 
 func openTerminalCommand(script string) error {
@@ -6795,7 +6753,7 @@ func handleSettingsPHPRuntime(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": false, "error": "unknown runtime"})
 		return
 	}
-	if body.Mode == config.PHPRuntimeNative && runtime.GOOS != "darwin" {
+	if body.Mode == config.PHPRuntimeNative && !platform.Current.NativePHPRuntime {
 		writeJSON(w, map[string]any{"ok": false, "error": "the native runtime is macOS only"})
 		return
 	}

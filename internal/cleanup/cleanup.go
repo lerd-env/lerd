@@ -306,9 +306,12 @@ func Inspect(scope Scope) (Plan, error) {
 		}
 	}
 
-	if reapUnused {
-		if repoErr == nil && protErr == nil {
-			p.Targets = append(p.Targets, deepTargets(imgs, repos, prot, canonPulled(), scope)...)
+	if reapUnused && repoErr == nil && protErr == nil {
+		// An image a tagged image is built on frees nothing when untagged and
+		// costs the next build a re-pull, so it is never "unused"; without the
+		// layers to tell, the unused reap is skipped rather than guessed.
+		if unbuilt, ok := withoutBuildBases(imgs, prot); ok {
+			p.Targets = append(p.Targets, deepTargets(unbuilt, repos, prot, canonPulled(), scope)...)
 		}
 	}
 	p.UsedTotal = usedTotal(imgs, repos, prot)
@@ -413,6 +416,61 @@ func liveLayers(imgs []image) (map[string]bool, bool) {
 		}
 	}
 	return set, true
+}
+
+// withoutBuildBases drops every image another tagged image is built on: one
+// whose top layer sits below the top of a longer tagged chain, or is the top of
+// a held image that adds no layer of its own (a FROM-and-CMD Containerfile).
+// The bool is false when the layers could not be read.
+func withoutBuildBases(imgs []image, prot map[string]bool) ([]image, bool) {
+	var tagged []image
+	for _, img := range imgs {
+		if !isOrphaned(img) {
+			tagged = append(tagged, img)
+		}
+	}
+	byID, err := imageLayers(imageIDs(tagged))
+	if err != nil {
+		return nil, false
+	}
+	below := map[string]bool{}
+	heldTop := map[string]string{} // top layer -> the held image's ID
+	for _, img := range tagged {
+		layers := byID[img.ID]
+		if len(layers) == 0 {
+			continue
+		}
+		for _, l := range layers[:len(layers)-1] {
+			below[l] = true
+		}
+		if held(img, prot) {
+			heldTop[layers[len(layers)-1]] = img.ID
+		}
+	}
+	out := make([]image, 0, len(imgs))
+	for _, img := range imgs {
+		if layers := byID[img.ID]; len(layers) > 0 {
+			top := layers[len(layers)-1]
+			if id, ok := heldTop[top]; below[top] || (ok && id != img.ID) {
+				continue
+			}
+		}
+		out = append(out, img)
+	}
+	return out, true
+}
+
+// held reports whether a container or lerd itself keeps an image.
+func held(img image, prot map[string]bool) bool {
+	if inUse(img) {
+		return true
+	}
+	for _, n := range img.Names {
+		if prot[n] {
+			return true
+		}
+	}
+	return false
 }
 
 // builtUpon reports whether a live image is built on a base, given the base's

@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"runtime"
 	"strings"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/geodro/lerd/internal/dns"
 	lerdNode "github.com/geodro/lerd/internal/node"
 	phpPkg "github.com/geodro/lerd/internal/php"
+	"github.com/geodro/lerd/internal/platform"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	lerdUpdate "github.com/geodro/lerd/internal/update"
 )
@@ -161,7 +161,7 @@ func (m *Model) systemRows() []systemRow {
 	}
 
 	// Worker mode (macOS only — on Linux every worker is exec-mode under systemd)
-	if runtime.GOOS == "darwin" {
+	if platform.Current.WorkerModes {
 		header("Worker mode")
 		containerMode := cfg != nil && cfg.WorkerExecMode() == config.WorkerExecModeContainer
 		label := "Container mode (one container per worker)"

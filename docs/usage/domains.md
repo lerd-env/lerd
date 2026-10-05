@@ -52,6 +52,8 @@ domains:
   - admin
 ```
 
+`lerd link` keeps this list in step with the site's registered domains only when the project already declares one, or when you name the site explicitly with `lerd link <name>`. A project that relies on the domain lerd derives from its directory name gets no `domains:` key written, so linking it leaves the committed file untouched.
+
 Entries you write yourself may carry the TLD; `myapp.test` and `myapp` register the same domain. Note that the key is a mapping, not a list item, a `.lerd.yaml` whose top level is a sequence does not parse and `lerd link` refuses it with the YAML error rather than registering a site with none of the file applied.
 
 You can also manage domains from the web UI: click the pencil icon next to the domain in the site header to open the domain management modal. Changing the primary domain there also rewrites `APP_URL` in the project's `.env` to match the new primary, unless you have pinned a custom `app_url` (see [Custom `APP_URL`](#custom-app-url) below).

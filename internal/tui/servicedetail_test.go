@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/shims"
 )
@@ -120,9 +121,9 @@ func TestOpenInBrowser_ServiceDashboard(t *testing.T) {
 	m.focus = paneServices
 	m.snap.Services = []ServiceRow{{Name: "rabbitmq", State: stateRunning, Dashboard: "http://localhost:15672"}}
 	m.svcCursor = 0
-	// browserOpener exists on this platform, so a real dashboard yields a cmd
-	// (the test never runs it, so no browser actually launches).
-	if browserOpener() != "" && m.openInBrowserCmd() == nil {
+	// The platform has an opener, so a real dashboard yields a cmd (the test
+	// never runs it, so no browser actually launches).
+	if platform.Current.Opener != "" && m.openInBrowserCmd() == nil {
 		t.Error("expected a command to open the service dashboard")
 	}
 

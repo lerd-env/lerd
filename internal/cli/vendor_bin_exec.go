@@ -51,6 +51,8 @@ func containerExecEnvArgs(cwd string) []string {
 		"--env", "COMPOSER_HOME=" + composerHome,
 		"--env", "PATH=" + projectVendorBin + ":" + podman.ContainerPath + ":" + composerBin,
 	}
+	// Early, so a GIT_SSH_COMMAND the user forwards below still wins.
+	args = append(args, podman.GitSSHCommandEnv(home)...)
 	args = append(args, debugSiteEnvArgs(cwd)...)
 	args = append(args, terminalColorEnvArgs()...)
 	// Forward SPX_* profiler vars from the host so `SPX_ENABLED=1 php ...` (or

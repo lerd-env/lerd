@@ -335,7 +335,7 @@ Pinned services are shown with a `[pinned]` note in `lerd service list` and the 
 
 ## Manually stopped services
 
-If you stop a service with `lerd service stop` (or via the web UI), lerd records it as **manually paused**. `lerd start` and autostart on login will skip it; the service stays stopped until you explicitly start it again.
+If you stop a service with `lerd service stop` (or via the web UI), lerd records it as **manually paused**. `lerd start` and autostart on login will skip it; the service stays stopped until you explicitly start it again. Anything else that starts it on purpose ends the pause too: `lerd env` or `lerd link` on a site that needs it, a `lerd db` command against it, or a service that depends on it. Once it is running again it is no longer paused, so the next `lerd start` brings it back like any other.
 
 `lerd stop` + `lerd start` restores the previous state: services that were running before `lerd stop` start again; services you had manually stopped remain stopped.
 

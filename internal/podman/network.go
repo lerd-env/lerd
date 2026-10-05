@@ -7,10 +7,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/geodro/lerd/internal/platform"
 )
 
 // LerdULAv6Subnet is the deterministic IPv6 ULA prefix for the lerd network.
@@ -464,7 +465,7 @@ func friendlyNetworkCreateError(err error) error {
 // weaker predicate than HostHasUsableIPv6 on purpose: a loopback publish only
 // needs ::1, and rootlessport takes the whole unit down when it cannot bind it.
 func HostHasIPv6Loopback() bool {
-	if runtime.GOOS != "linux" {
+	if platform.Current.UsesMachineVM {
 		return true
 	}
 	data, err := os.ReadFile(ipv6IfInet6Path)

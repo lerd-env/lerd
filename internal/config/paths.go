@@ -3,9 +3,10 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
+
+	"github.com/geodro/lerd/internal/platform"
 )
 
 // DumpsTCPPort is the loopback port the dump receiver binds on darwin
@@ -194,20 +195,6 @@ func SystemdUserDir() string {
 	return filepath.Join(xdgConfigHome(), "systemd", "user")
 }
 
-// LaunchAgentsDir returns the directory macOS keeps lerd's launchd units in,
-// empty on Linux, whose unit dirs follow the XDG vars instead. This one follows
-// HOME, which is why isolating only the XDG vars leaves it exposed.
-func LaunchAgentsDir() string {
-	if runtime.GOOS != "darwin" {
-		return ""
-	}
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return ""
-	}
-	return filepath.Join(home, "Library", "LaunchAgents")
-}
-
 // PHPImageHashFile returns the path to the stored PHP-FPM Containerfile hash.
 // InstalledVersionFile records the lerd version whose `lerd install` last ran,
 // so a binary replaced by a package manager can be told from one this install
@@ -290,20 +277,6 @@ func DumpsBridgeFile() string {
 // DumpsIniFile is the host path for the conf.d ini that turns the bridge on.
 func DumpsIniFile() string {
 	return filepath.Join(DumpsAssetsDir(), "97-lerd-dump.ini")
-}
-
-// ProvidedEnvDir is where env_provider output is kept: under XDG_RUNTIME_DIR,
-// which is tmpfs, so secrets never reach disk. Empty when there is no runtime
-// dir (macOS, or a session without one); the feature is off there.
-func ProvidedEnvDir() string {
-	if runtime.GOOS != "linux" {
-		return ""
-	}
-	dir := os.Getenv("XDG_RUNTIME_DIR")
-	if dir == "" {
-		return ""
-	}
-	return filepath.Join(dir, "lerd", "env")
 }
 
 // ProvidedEnvContainerDir is where ProvidedEnvDir is mounted in FPM containers.
@@ -395,7 +368,7 @@ func SpxWebUIDir() string {
 // host.containers.internal:7073 fallback). On Linux the unix socket is
 // reachable inside FPM via the %h:%h bind mount.
 func DumpsListenNetwork() string {
-	if runtime.GOOS == "darwin" {
+	if platform.Current.UsesMachineVM {
 		return "tcp"
 	}
 	return "unix"
@@ -403,7 +376,7 @@ func DumpsListenNetwork() string {
 
 // DumpsListenAddr is the address paired with DumpsListenNetwork.
 func DumpsListenAddr() string {
-	if runtime.GOOS == "darwin" {
+	if platform.Current.UsesMachineVM {
 		return "127.0.0.1:" + DumpsTCPPort
 	}
 	return DumpsSocketPath()
@@ -415,7 +388,7 @@ func DumpsListenAddr() string {
 // the lerd-ui process on the host; on Linux the FPM container hits the
 // host unix socket directly via the %h:%h bind mount.
 func DumpsBridgeTarget() string {
-	if runtime.GOOS == "darwin" {
+	if platform.Current.UsesMachineVM {
 		return "tcp://host.containers.internal:" + DumpsTCPPort
 	}
 	return "unix://" + DumpsSocketPath()
@@ -595,7 +568,7 @@ func UISocketPath() string {
 // Mirrors the DumpsListenNetwork/Addr split. The port matches lerd-ui's fixed
 // listen port (internal/ui/server.go listenAddr).
 func UIClientNetwork() string {
-	if runtime.GOOS == "darwin" {
+	if platform.Current.UsesMachineVM {
 		return "tcp"
 	}
 	return "unix"
@@ -603,7 +576,7 @@ func UIClientNetwork() string {
 
 // UIClientAddr is the address paired with UIClientNetwork.
 func UIClientAddr() string {
-	if runtime.GOOS == "darwin" {
+	if platform.Current.UsesMachineVM {
 		return "127.0.0.1:7073"
 	}
 	return UISocketPath()
@@ -655,7 +628,7 @@ func AccessFeedListenAddr() string {
 // bind-mounted unix socket on Linux, or host.containers.internal over gvproxy
 // UDP on macOS where nginx lives in the VM and the host socket isn't reachable.
 func AccessLogTarget() string {
-	if runtime.GOOS == "darwin" {
+	if platform.Current.UsesMachineVM {
 		return "host.containers.internal:" + AccessFeedUDPPort
 	}
 	return "unix:" + AccessSocketPath()

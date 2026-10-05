@@ -4,10 +4,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/platform"
 )
 
 // podmanNetworkWaitUnit is the unit podman's quadlet generator makes every
@@ -51,7 +51,7 @@ func networkWaitStalls(loadState string, dropInPresent bool, targetState string)
 // NetworkWaitStalls reports whether podman's network-online wait unit stalls
 // container starts on this host.
 func NetworkWaitStalls() bool {
-	if runtime.GOOS != "linux" {
+	if platform.Current.UsesMachineVM {
 		return false
 	}
 	_, err := os.Stat(NetworkWaitDropInPath())
