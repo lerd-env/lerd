@@ -92,7 +92,7 @@ func TestMouseClick_RuntimeRowSelectsIt(t *testing.T) {
 	if len(m.runtimeRows()) < 2 {
 		t.Fatal("fixture needs two runtime rows")
 	}
-	_ = m.render()
+	renderZones(m)
 
 	z := waitZone("rt:1")
 	if z.IsZero() {

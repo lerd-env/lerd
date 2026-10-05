@@ -69,7 +69,7 @@ func TestWheelScrollsTheDatabasesList(t *testing.T) {
 		m.dbEngines[0].Databases = append(m.dbEngines[0].Databases, dbview.Entry{Name: "db" + string(rune('a'+i%26)) + string(rune('a'+i/26))})
 	}
 	m.width, m.height = 150, 20
-	_ = m.render()
+	renderZones(m)
 	z := waitZone("pane:databases")
 	if z.IsZero() {
 		t.Fatal("databases list zone not registered")
