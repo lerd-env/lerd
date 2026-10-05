@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -302,5 +303,35 @@ func TestHandleDumpsStream_DeliversLiveEvent(t *testing.T) {
 	body := rec.bodyString()
 	if !strings.Contains(body, "live1") {
 		t.Errorf("live event missing\n--- body ---\n%s", body)
+	}
+}
+
+// A stream opens on the newest events only; the ring keeps more for the
+// Requests lens, which reads it from the server.
+func TestHandleDumpsStream_ReplaysOnlyTheNewestEvents(t *testing.T) {
+	srv := withDumpsServer(t)
+	for i := 0; i < streamReplayLimit+5; i++ {
+		srv.Push(dumps.Event{V: 1, ID: fmt.Sprintf("e%d", i), Kind: "dump"})
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest("GET", "/api/dumps/stream", nil).WithContext(ctx)
+	rec := &flusherRecorder{ResponseRecorder: httptest.NewRecorder()}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handleDumpsStream(rec, req)
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && bytes.Count(rec.bodyBytes(), []byte("data:")) < streamReplayLimit {
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	body := rec.bodyString()
+	if n := strings.Count(body, "data:"); n != streamReplayLimit {
+		t.Fatalf("replayed %d events, want %d", n, streamReplayLimit)
+	}
+	if strings.Contains(body, `"id":"e4"`) || !strings.Contains(body, fmt.Sprintf(`"id":"e%d"`, streamReplayLimit+4)) {
+		t.Errorf("want the newest events replayed and the oldest left out")
 	}
 }

@@ -135,6 +135,9 @@ func buildDumpsStatusJSON() []byte {
 	return b
 }
 
+// streamReplayLimit is how many of the newest events a stream replays.
+const streamReplayLimit = 3000
+
 // handleDumpsStream is a Server-Sent Events stream of new events. The client
 // reconnects on its own when the connection drops, mirroring the existing
 // log SSE pattern. Snapshot of buffered events is replayed up front so the
@@ -178,6 +181,9 @@ func handleDumpsStream(w http.ResponseWriter, r *http.Request) {
 		since = q.Get("since")
 	}
 	filt.SinceID = since
+	// The ring keeps far more than a tab needs to open on; the Requests lens
+	// reads the rest from the server, so the replay stays the size it was.
+	filt.Limit = streamReplayLimit
 	for _, ev := range srv.Filter(filt) {
 		writeSSEEvent(w, flusher, ev)
 	}

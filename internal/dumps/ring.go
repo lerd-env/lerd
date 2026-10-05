@@ -6,8 +6,11 @@ import "sync"
 // overwrites the oldest entry. A single N+1 request can emit well over a
 // thousand query events, so the old 500-line cap could not even retain one
 // request's worth for analyze_queries to read; sized up so a fresh capture of
-// one pathological request survives long enough to be analyzed.
-const DefaultCapacity = 3000
+// one pathological request survives long enough to be analyzed. With a stack
+// trace on every query, cache call and log line an event averages about 4 KB
+// and a page some 60 of them, so 3000 held fewer than fifty requests; this
+// keeps a few hundred in about 80 MB.
+const DefaultCapacity = 20000
 
 // Ring is a fixed-size ring buffer of Events safe for concurrent use.
 // Snapshots are taken under a read lock and returned in insertion order.
