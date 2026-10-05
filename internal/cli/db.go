@@ -561,6 +561,20 @@ func serviceFamily(svc string) string {
 
 // mysqlClientBinaries orders the MySQL-family clients with the family's own
 // first: MariaDB 11 images ship only mariadb, MySQL images only mysql.
+// mysqlClientError names what the client printed last, which is the reason it
+// failed; the password warning it always prints comes before it.
+func mysqlClientError(err error) error {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return err
+	}
+	lines := strings.Split(strings.TrimSpace(string(exitErr.Stderr)), "\n")
+	if last := strings.TrimSpace(lines[len(lines)-1]); last != "" {
+		return fmt.Errorf("%s: %w", last, err)
+	}
+	return err
+}
+
 func mysqlClientBinaries(family string) []string {
 	if family == "mariadb" {
 		return []string{"mariadb", "mysql"}
@@ -605,9 +619,15 @@ func databaseExists(svc, name string) (bool, error) {
 			check := podman.Cmd("exec", container, bin, "-uroot", "-plerd",
 				"-sNe", mysqlDatabaseExistsQuery(name))
 			out, err := check.Output()
-			if err != nil {
+			// 127 is a client the image does not ship; any other failure is the
+			// client's own, and the next binary's 127 would only hide it.
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) && exitErr.ExitCode() == 127 {
 				lastErr = err
 				continue
+			}
+			if err != nil {
+				return false, mysqlClientError(err)
 			}
 			return strings.TrimSpace(string(out)) != "0", nil
 		}
