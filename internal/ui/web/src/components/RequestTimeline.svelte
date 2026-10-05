@@ -139,12 +139,13 @@
       {@const s = styleOf(r)}
       {@const left = pct(r.start)}
       {@const width = r.end > r.start ? Math.max(pct(r.end - r.start), 0.4) : 0}
-      {@const edge = r.items ? pct(r.items[r.items.length - 1].start) : left + width}
+      {@const edge = r.items ? Math.max(...r.items.map((it) => pct(it.end))) : left + width}
       {@const place = edge < 68 ? 'after' : left > 32 ? 'before' : 'inside'}
       <button type="button" aria-expanded={hover?.i === i} class="relative block w-full h-6 rounded-sm text-left cursor-pointer {hover?.i === i ? 'ring-1 ring-gray-400 dark:ring-white/30' : ''} {i % 2 ? 'bg-gray-50 dark:bg-white/[0.03]' : ''}" onclick={(e) => toggle(e, r, i)}>
         {#if r.items}
           {#each r.items as it, j (j)}
-            <span class="absolute top-1.5 bottom-1.5 w-[3px] rounded-sm {s.bar}" style="left: {pct(it.start)}%"></span>
+            {@const w = it.end > it.start ? Math.max(pct(it.end - it.start), 0.4) : 0}
+            <span class="absolute top-1.5 bottom-1.5 rounded-sm {s.bar} {w ? '' : 'w-[3px]'}" style="left: {pct(it.start)}%; {w ? `width: ${w}%` : ''}"></span>
           {/each}
         {:else}
           <span class="absolute top-1 bottom-1 rounded-sm {s.bar} {width ? '' : 'w-[3px]'}" style="left: {left}%; {width ? `width: ${width}%` : ''}"></span>
@@ -152,7 +153,7 @@
         <span class="absolute inset-y-0 flex items-center gap-1 whitespace-nowrap {place === 'inside' ? 'text-white px-1.5' : `max-w-[60%] ${s.text}`}" style={place === 'after' ? `left: calc(${edge}% + 8px)` : place === 'before' ? `right: calc(${100 - left}% + 8px)` : `left: ${left}%; max-width: ${width}%`}>
           <Icon name={s.icon} class="w-3 h-3 shrink-0" />
           <span class="truncate {r.layer === 'query' ? 'font-mono' : ''}">{r.items ? m.requests_events({ count: r.items.length }) : r.label}</span>
-          {#if took(r)}<span class="shrink-0 opacity-70">{took(r)}</span>{/if}
+          {#if !r.items && took(r)}<span class="shrink-0 opacity-70">{took(r)}</span>{/if}
         </span>
       </button>
     {/each}
@@ -166,7 +167,7 @@
     {#if hover.r.items}
       <ul class="px-3 py-2 space-y-1">
         {#each hover.r.items.slice(0, 8) as it, j (j)}
-          <li class="flex gap-2"><span class="font-mono text-gray-400 shrink-0">{pos(it.start)}</span><span class="truncate text-gray-700 dark:text-gray-200">{it.label}</span></li>
+          <li class="flex gap-2"><span class="font-mono text-gray-400 shrink-0">{pos(it.start)}</span><span class="truncate text-gray-700 dark:text-gray-200 {it.layer === 'query' ? 'font-mono' : ''}">{it.label}</span>{#if took(it)}<span class="ml-auto shrink-0 text-gray-400">{took(it)}</span>{/if}</li>
         {/each}
         {#if hover.r.items.length > 8}<li class="text-gray-400">+{hover.r.items.length - 8}</li>{/if}
       </ul>

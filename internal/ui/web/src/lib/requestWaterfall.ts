@@ -218,18 +218,21 @@ export function buildWaterfall(d: RequestDetail, phases: Phases): Waterfall {
   return { total, rows };
 }
 
-// condense folds runs of moments of one layer that fall within 1% of the chart
-// of each other into a single "N events" row, the way a busy request's logs or
-// events would otherwise take a row each.
+// Groupable are lerd's own layers whose rows come in runs; the request's
+// backbone, errors and the categories an app writes itself always keep a row.
+const groupable = new Set<Layer>(['browser', 'query', 'component', 'view', 'cache', 'redis', 'filesystem', 'log', 'dump']);
+
+// condense folds rows of one groupable layer that follow each other into a
+// single "N events" row spanning them all, the way a busy request's queries or
+// logs would otherwise take a row each.
 export function condense(rows: WaterfallRow[], total: number): WaterfallRow[] {
-  const gap = total * 0.01;
+  void total;
   const out: WaterfallRow[] = [];
   for (const r of rows) {
     const last = out[out.length - 1];
-    const lastEnd = last?.items ? last.items[last.items.length - 1].start : last?.start;
-    if (last && r.start === r.end && last.start === last.end && last.layer === r.layer && r.start - (lastEnd ?? 0) <= gap) {
+    if (last && last.layer === r.layer && groupable.has(r.layer)) {
       const items = last.items ?? [last];
-      out[out.length - 1] = { label: '', layer: r.layer, start: last.start, end: last.end, note: '', items: [...items, r] };
+      out[out.length - 1] = { label: '', layer: r.layer, start: Math.min(last.start, r.start), end: Math.max(last.end, r.end), note: '', items: [...items, r] };
       continue;
     }
     out.push(r);

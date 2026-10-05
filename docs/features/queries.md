@@ -23,7 +23,7 @@ Open a request to see it in full. The header names the route, the controller and
 - the framework's phases: bootstrap, routing, middleware, controller, views
 - queries, cache calls, Redis, storage, components, logs and your own rows
 
-Each layer has a colour and a filter, close events fold into one row, and hovering a bar shows its duration.
+Each layer has a colour and a filter, and hovering a bar shows its duration. **Condense** folds rows of one kind that follow each other, such as queries, cache calls, logs or the browser's phases, into one row; the framework phases and your own rows always keep theirs.
 
 ![A request's Performance tab: headline numbers above one timeline of nginx, the FPM queue, the framework's phases, queries, cache calls and the app's own events](/assets/screenshots/request-performance.png)
 

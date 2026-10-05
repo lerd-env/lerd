@@ -62,10 +62,21 @@ describe('buildWaterfall', () => {
     ]);
   });
 
-  it('condenses a run of close moments of one layer into one row', () => {
-    const m = (label: string, layer: 'log' | 'query', start: number, end = start) => ({ label, layer, start, end, note: '' });
-    const out = condense([m('a', 'log', 10), m('b', 'log', 11), m('c', 'log', 12), m('q', 'query', 12, 30), m('d', 'log', 500)], 1000);
-    expect(out.map((r) => [r.label, r.items?.length ?? 0])).toEqual([['', 3], ['q', 0], ['d', 0]]);
+  it('condenses rows of one lerd layer that follow each other, never the app own categories', () => {
+    const m = (label: string, layer: 'log' | 'query' | 'custom' | 'framework', start: number, end = start) => ({ label, layer, start, end, note: '' });
+    const out = condense(
+      [m('a', 'log', 10), m('b', 'log', 11), m('q1', 'query', 12, 30), m('q2', 'query', 400, 420), m('c1', 'custom', 500, 510), m('c2', 'custom', 520, 530), m('f1', 'framework', 0, 5), m('f2', 'framework', 5, 9), m('d', 'log', 900)],
+      1000
+    );
+    expect(out.map((r) => [r.label, r.items?.length ?? 0, r.start, r.end])).toEqual([
+      ['', 2, 10, 11],
+      ['', 2, 12, 420],
+      ['c1', 0, 500, 510],
+      ['c2', 0, 520, 530],
+      ['f1', 0, 0, 5],
+      ['f2', 0, 5, 9],
+      ['d', 0, 900, 900]
+    ]);
   });
 
   it('gives a query its bindings and a component its state for the popover', () => {
