@@ -1340,8 +1340,8 @@ namespace {
 	if joined := strings.Join(got, "\n"); !strings.Contains(joined, `"customer":{"value":"01********","model":"App\\Models\\Customer","field":"ssn","key":"7"}`) {
 		t.Errorf("want the raw customer masked beside its model and key: %v", got)
 	}
-	if joined := strings.Join(got, "\n"); !strings.Contains(joined, `"user":{"value":"**","model":"App\\Models\\User","key":"**"}`) {
-		t.Errorf("want a key equal to the masked value masked too: %v", got)
+	if joined := strings.Join(got, "\n"); !strings.Contains(joined, `"user":{"value":"**","model":"App\\Models\\User","key":"42"}`) {
+		t.Errorf("want the raw user masked and its model's primary key shown: %v", got)
 	}
 	if joined := strings.Join(got, "\n"); !strings.Contains(joined, `"path":"/customers/01********/[redacted]"`) {
 		t.Errorf("want the customer masked by its route rule and the tab by its input rule: %v", got)

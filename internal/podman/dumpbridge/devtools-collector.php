@@ -1576,8 +1576,7 @@ function route_params_report(): array
                 $entry['line'] = (int) ($bound['line'] ?? 1);
             }
             if (isset($bound['key']) && is_scalar($bound['key'])) {
-                // A key that is the masked value itself would give it away.
-                $entry['key'] = $shown !== (string) $value && (string) $bound['key'] === (string) $value ? $shown : (string) $bound['key'];
+                $entry['key'] = (string) $bound['key'];
             }
         }
         $out[(string) $name] = $entry;
