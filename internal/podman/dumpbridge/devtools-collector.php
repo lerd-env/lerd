@@ -1120,6 +1120,14 @@ function seam_begin($class, $method, $self, $args): void
         $GLOBALS['__lerd_seam_stack'] = $stack;
         return;
     }
+    // A compiler loading what it built from a source file: whatever the call
+    // includes came from the file its name names, so code defined in a compiled
+    // copy is shown at its source instead.
+    if ($seam && $seam['kind'] === 'source') {
+        $stack[] = ['timed' => 'source', 'path' => seam_value($seam['name'], $self, is_array($args) ? $args : []), 'loaded' => count(get_included_files())];
+        $GLOBALS['__lerd_seam_stack'] = $stack;
+        return;
+    }
     if ($seam && $seam['kind'] === 'http_response') {
         $stack[] = ['timed' => 'http_response', 'subject' => $self];
         $GLOBALS['__lerd_seam_stack'] = $stack;
@@ -1230,6 +1238,14 @@ function seam_end($class, $method, $failed, $error = ''): void
         http_done($frame['subject'] ?? null, (bool) $failed);
         return;
     }
+    if (($frame['timed'] ?? '') === 'source') {
+        if (is_file((string) $frame['path'])) {
+            foreach (array_slice(get_included_files(), (int) $frame['loaded']) as $file) {
+                $GLOBALS['__lerd_sources'][$file] = (string) $frame['path'];
+            }
+        }
+        return;
+    }
     if (isset($frame['timed'])) {
         $data = $frame['data'] + [
             'status'  => $failed ? 'failed' : 'ok',
@@ -1329,7 +1345,8 @@ function component_identity(array $data, $subject): array
     }
     $ref = new \ReflectionObject($subject);
     if ($ref->getFileName()) {
-        $data['file'] = (string) $ref->getFileName();
+        $file = (string) $ref->getFileName();
+        $data['file'] = $GLOBALS['__lerd_sources'][$file] ?? $file;
         $data['line'] = (int) $ref->getStartLine();
     }
     if (!$ref->isAnonymous()) {

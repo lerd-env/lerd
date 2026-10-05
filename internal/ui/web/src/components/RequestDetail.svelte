@@ -395,9 +395,10 @@
         {/each}
       {:else if tab === 'components'}
         {#each components as [name, phases] (name)}
+          {@const at = phases.find((c) => c.file)}
           <div class={BOX}>
             <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-lerd-border/60">
-              <span class="font-mono font-medium text-orange-700 dark:text-orange-300">{name}</span>
+              <span class="font-mono font-medium text-orange-700 dark:text-orange-300 min-w-0">{#if at}<SourcePath file={at.file} line={at.line} label={name} bare dotted />{:else}{name}{/if}</span>
               <span class="ml-auto font-mono tabular-nums text-gray-500">{ms(phases.reduce((n, c) => n + Number(c.time_ms ?? 0), 0))}</span>
             </div>
             {#each phases as c, i (i)}

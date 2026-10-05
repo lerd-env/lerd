@@ -1411,3 +1411,38 @@ namespace {
 		t.Errorf("want the caller's frame left in the trace: %v", got)
 	}
 }
+
+// A component compiled from a single source file names that file, not the
+// compiled copy the class was defined in.
+func TestCollectorPHP_SourceSeamMapsACompiledComponentToItsSource(t *testing.T) {
+	dir := t.TempDir()
+	seams := "source|class|Fixture\\Cache|getClassName|arg:1\ncomponent|class|Fixture\\Handle|render|arg:1.method:getName\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(filepath.Join(dir, "compiled"), 0o755)                                                                                   //nolint:errcheck
+	os.MkdirAll(filepath.Join(dir, "resources"), 0o755)                                                                                  //nolint:errcheck
+	os.WriteFile(filepath.Join(dir, "resources", "counter.blade.php"), []byte("<?php\nnew class extends Component {};\n"), 0o644)        //nolint:errcheck
+	os.WriteFile(filepath.Join(dir, "compiled", "375e6f5e.php"), []byte("<?php\nreturn new class extends \\Fixture\\Comp {};\n"), 0o644) //nolint:errcheck
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace Fixture {
+    class Comp { public $count = 0; public function getName() { return 'counter'; } }
+    class Cache { public function getClassName($source) { return require __DIR__ . '/compiled/375e6f5e.php'; } }
+    class Handle { public function render($component) {} }
+}
+namespace {
+    require COLLECTOR;
+    $source = __DIR__ . '/resources/counter.blade.php';
+    $cache = new \Fixture\Cache();
+    \Lerd\Collector\seam_begin('Fixture\\Cache', 'getClassName', $cache, [1 => $source]);
+    $component = $cache->getClassName($source);
+    \Lerd\Collector\seam_end('Fixture\\Cache', 'getClassName', false);
+    \Lerd\Collector\seam_begin('Fixture\\Handle', 'render', new \Fixture\Handle(), [1 => $component]);
+    \Lerd\Collector\seam_end('Fixture\\Handle', 'render', false);
+}
+`)
+	joined := strings.Join(got, "\n")
+	if !strings.Contains(joined, `resources/counter.blade.php","line":2`) {
+		t.Errorf("want the component at its source file: %v", got)
+	}
+}
