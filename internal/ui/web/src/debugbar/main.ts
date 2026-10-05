@@ -1,8 +1,6 @@
 import { mount } from 'svelte';
 import appCss from '../app.css?inline';
 import barCss from './bar.css?inline';
-import latin from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url';
-import latinExt from '@fontsource-variable/inter/files/inter-latin-ext-wght-normal.woff2?url';
 import Bar from './Bar.svelte';
 import { barConfig } from './config';
 import { setLayerRoot } from '$lib/portal';
@@ -29,18 +27,6 @@ function shadowSafe(css: string): string {
   return `${rest}\n:host, *, ::before, ::after, ::backdrop { ${initial.join(';')} }`;
 }
 
-// The fonts come with the bar, under a family of its own so a page's own
-// Inter is never swapped. @font-face only works in the document, not in a
-// shadow root.
-function addFonts() {
-  if (document.getElementById('lerd-debugbar-fonts')) return;
-  const style = document.createElement('style');
-  style.id = 'lerd-debugbar-fonts';
-  const face = (src: string, range: string) => `@font-face{font-family:'lerd Inter';font-style:normal;font-display:swap;font-weight:100 900;src:url(${src}) format('woff2-variations');unicode-range:${range}}`;
-  style.textContent = face(latin, 'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD') + face(latinExt, 'U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF');
-  document.head.appendChild(style);
-}
-
 // lerd's theme, not the site's: System follows the OS, Light and Dark are fixed.
 // The tones go on the host element, where app.css's theme reads them; set any
 // deeper and its colours would already have resolved to the defaults.
@@ -56,11 +42,10 @@ function applyTheme(host: HTMLElement, root: HTMLElement) {
 // high, a chat widget say, can cover the bar.
 function start() {
   if (document.querySelector('lerd-debugbar')) return;
-  addFonts();
   const host = document.createElement('lerd-debugbar');
   const shadow = host.attachShadow({ mode: 'open' });
   const sheet = new CSSStyleSheet();
-  sheet.replaceSync(`:host { all: initial !important; position: fixed !important; inset: 0 !important; z-index: 2147483647 !important; pointer-events: none !important; }\n.lerd-root > * { pointer-events: auto; }\n${shadowSafe(appCss)}\n${barCss}\n.lerd-root { --font-sans: 'lerd Inter', ui-sans-serif, system-ui, sans-serif; }`);
+  sheet.replaceSync(`:host { all: initial !important; position: fixed !important; inset: 0 !important; z-index: 2147483647 !important; pointer-events: none !important; }\n.lerd-root > * { pointer-events: auto; }\n${shadowSafe(appCss)}\n${barCss}`);
   shadow.adoptedStyleSheets = [sheet];
   const root = document.createElement('div');
   root.className = 'lerd-root';

@@ -14,7 +14,6 @@
     "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy localStorage preferredLanguage baseLocale --silent"
   },
   "devDependencies": {
-    "@fontsource-variable/inter": "^5.3.0",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@tailwindcss/postcss": "^4.3.0",
     "@testing-library/jest-dom": "^6.5.0",

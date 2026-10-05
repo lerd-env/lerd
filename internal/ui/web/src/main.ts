@@ -1,7 +1,5 @@
 import { mount } from 'svelte';
 import App from './App.svelte';
-// lerd serves its own fonts, so the dashboard works offline and sends nothing to a font host.
-import '@fontsource-variable/inter';
 import './app.css';
 import { initTheme } from '$stores/theme';
 import { syncDashboardLocale } from '$stores/locale';

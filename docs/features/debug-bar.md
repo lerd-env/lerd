@@ -77,4 +77,4 @@ With the LAN exposed, the bar still shows everything else, and paths are there t
 
 When the bar is on for a site, its vhost inserts a script before `</head>`, next to browser capture's when that is on, and proxies one route under the capture route, `/_lerd/browser/bar/` by default, to lerd-ui. nginx names the site in a header it sets itself, and lerd-ui only answers for requests that site served or its pages sent, so one site's page cannot read another site's requests.
 
-The bar lives in a shadow root on an element of its own, a layer over the whole page that lets clicks through: the page's styles cannot reach it, its styles cannot reach the page, and nothing the page stacks high, a chat widget say, covers it. lerd serves its fonts itself; nothing is fetched from a font host.
+The bar lives in a shadow root on an element of its own, a layer over the whole page that lets clicks through: the page's styles cannot reach it, its styles cannot reach the page, and nothing the page stacks high, a chat widget say, covers it. It uses the system's own fonts, the same as the dashboard, and fetches none.
