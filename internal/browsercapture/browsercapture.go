@@ -244,7 +244,7 @@ type PresetStatus struct {
 func Presets(site config.Site) []PresetStatus {
 	settings := config.BrowserCaptureFor(site)
 	var out []PresetStatus
-	for _, p := range config.BrowserPresets() {
+	for _, p := range config.BrowserPresets(site.Path) {
 		out = append(out, PresetStatus{BrowserPreset: p, Detected: p.Detected(site.Path), Applied: p.Applied(settings)})
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -258,11 +258,11 @@ func Presets(site config.Site) []PresetStatus {
 
 // ApplyPreset adds a store preset's events to a site, or removes them.
 func ApplyPreset(site config.Site, name string, add bool) error {
-	p := config.LoadBrowserPreset(name)
-	if p == nil {
+	p, ok := config.FindBrowserPreset(site.Path, name)
+	if !ok {
 		return fmt.Errorf("unknown browser capture preset %q", name)
 	}
-	return SaveSite(site, config.WithBrowserPreset(config.BrowserCaptureFor(site), *p, add, config.BrowserPresets()))
+	return SaveSite(site, config.WithBrowserPreset(config.BrowserCaptureFor(site), p, add, config.BrowserPresets(site.Path)))
 }
 
 // EventTypes are the types a browser event is filtered and counted by, with

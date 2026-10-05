@@ -159,13 +159,10 @@ func TestPresets_DetectedFirstThenByLabel(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(config.StoreIndexFile()), 0755); err != nil {
 		t.Fatal(err)
 	}
-	os.WriteFile(config.StoreIndexFile(), []byte(`{"frameworks":[],"browser_presets":[{"name":"vue"},{"name":"htmx"},{"name":"alpine"},{"name":"inertia"}]}`), 0644) //nolint:errcheck
-	for name, label := range map[string]string{"vue": "Vue", "htmx": "htmx", "alpine": "Alpine.js", "inertia": "Inertia"} {
-		p := &config.BrowserPreset{Name: name, Label: label, Events: []config.BrowserCaptureEvent{{Event: name + ":error"}}}
-		if name == "vue" || name == "htmx" {
-			p.Detect.NPM = []string{name}
-		}
-		if err := config.SaveStoreBrowserPreset(p); err != nil {
+	os.WriteFile(config.StoreIndexFile(), []byte(`{"frameworks":[],"npm_packages":[{"name":"vue"},{"name":"htmx"},{"name":"alpinejs"},{"name":"@inertiajs/vue3"}]}`), 0644) //nolint:errcheck
+	for pkg, preset := range map[string][2]string{"vue": {"vue", "Vue"}, "htmx": {"htmx", "htmx"}, "alpinejs": {"alpine", "Alpine.js"}, "@inertiajs/vue3": {"inertia", "Inertia"}} {
+		p := &config.FrameworkPackage{Package: pkg, Type: config.PackageNPM, Browser: &config.PackageBrowser{Preset: preset[0], Label: preset[1], Events: []config.BrowserCaptureEvent{{Event: preset[0] + ":error"}}}}
+		if err := config.SaveStorePackage(p); err != nil {
 			t.Fatal(err)
 		}
 	}

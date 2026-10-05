@@ -6,116 +6,95 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-
-	"gopkg.in/yaml.v3"
 )
 
-// BrowserPreset is a store-published set of browser capture events for a
-// frontend library, with the composer and npm packages that show a project
-// uses it. Applying one copies its events into the site's own settings.
+// PackageBrowser is what a package definition declares for browser capture:
+// the DOM events its frontend library fires when something fails, under the
+// preset they are offered as, which packages of one library share.
+type PackageBrowser struct {
+	Preset string                `yaml:"preset"`
+	Label  string                `yaml:"label"`
+	Events []BrowserCaptureEvent `yaml:"events"`
+}
+
+// BrowserPreset is a set of browser capture events for a frontend library,
+// gathered from the store packages that declare it, with the composer and npm
+// packages that show a project uses it. Applying one copies its events into
+// the site's own settings.
 type BrowserPreset struct {
-	Name   string `yaml:"name" json:"name"`
-	Label  string `yaml:"label" json:"label"`
+	Name   string `json:"name"`
+	Label  string `json:"label"`
 	Detect struct {
-		Composer []string `yaml:"composer,omitempty" json:"composer,omitempty"`
-		NPM      []string `yaml:"npm,omitempty" json:"npm,omitempty"`
-	} `yaml:"detect" json:"detect"`
-	Events []BrowserCaptureEvent `yaml:"events" json:"events"`
+		Composer []string `json:"composer,omitempty"`
+		NPM      []string `json:"npm,omitempty"`
+	} `json:"detect"`
+	Events []BrowserCaptureEvent `json:"events"`
 }
 
-// StoreBrowserPresetEntry is one preset the store index lists.
-type StoreBrowserPresetEntry struct {
-	Name string `json:"name"`
-}
-
-// BrowserPresetFetchFunc downloads a preset from the store and caches it.
-type BrowserPresetFetchFunc func(name string) (*BrowserPreset, error)
-
-var browserPresetFetchHook BrowserPresetFetchFunc
-
-// RegisterBrowserPresetFetchHook sets the callback used to fetch presets.
-func RegisterBrowserPresetFetchHook(fn BrowserPresetFetchFunc) {
-	browserPresetFetchHook = fn
-}
-
-var browserPresetNameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
-
-// StoreBrowserPresetsDir holds the cached presets, a sibling of the packages.
-func StoreBrowserPresetsDir() string {
-	return filepath.Join(DataDir(), "browser")
-}
-
-// StoreBrowserPresetFile is the cache path for one preset, or "" for a name
-// that is not a plain slug.
-func StoreBrowserPresetFile(name string) string {
-	if !browserPresetNameRE.MatchString(name) {
-		return ""
-	}
-	return filepath.Join(StoreBrowserPresetsDir(), name+".yaml")
-}
-
-// SaveStoreBrowserPreset caches a fetched preset.
-func SaveStoreBrowserPreset(p *BrowserPreset) error {
-	path := StoreBrowserPresetFile(p.Name)
-	if path == "" {
-		return nil
-	}
-	if err := os.MkdirAll(StoreBrowserPresetsDir(), 0755); err != nil {
-		return err
-	}
-	data, err := yaml.Marshal(p)
-	if err != nil {
-		return err
-	}
-	return publishStoreFile(path, data, 0644)
-}
-
-// LoadBrowserPreset returns a preset from the cache, fetching it when missing
-// or a day old. Events lerd would refuse from a site are dropped from it too.
-func LoadBrowserPreset(name string) *BrowserPreset {
-	path := StoreBrowserPresetFile(name)
-	if path == "" {
-		return nil
-	}
-	p := readBrowserPreset(path)
-	if browserPresetFetchHook != nil && (p == nil || olderThan(path, storeRefreshWindow)) {
-		if fetched, err := browserPresetFetchHook(name); err == nil && fetched != nil {
-			p = fetched
+// BrowserPresets returns the presets the store's packages declare for the
+// project at dir: every npm package's, since there are few and a site may add
+// one it does not use yet, and those of the composer packages it has installed,
+// so a listing never fetches every package file. Events lerd would refuse from
+// a site are dropped.
+func BrowserPresets(dir string) []BrowserPreset {
+	byName := map[string]*BrowserPreset{}
+	var order []string
+	add := func(entry StorePackageEntry, npm bool) {
+		want := PackageComposer
+		if npm {
+			want = PackageNPM
+		}
+		pkg := loadStorePackage(entry.Name, pickPackageVersion(dir, entry))
+		if pkg == nil || pkg.Browser == nil || !packageTypeIs(pkg, want) || !browserPresetNameRE.MatchString(pkg.Browser.Preset) {
+			return
+		}
+		b := pkg.Browser
+		p := byName[b.Preset]
+		if p == nil {
+			p = &BrowserPreset{Name: b.Preset, Label: b.Label, Events: []BrowserCaptureEvent{}}
+			byName[b.Preset] = p
+			order = append(order, b.Preset)
+		}
+		if npm {
+			p.Detect.NPM = append(p.Detect.NPM, pkg.Package)
+		} else {
+			p.Detect.Composer = append(p.Detect.Composer, pkg.Package)
+		}
+		for _, e := range b.Events {
+			if e.valid() && !slices.ContainsFunc(p.Events, func(o BrowserCaptureEvent) bool { return o.Event == e.Event }) {
+				p.Events = append(p.Events, e)
+			}
 		}
 	}
-	if p == nil || p.Name != name {
-		return nil
+	for _, e := range cachedStoreNPMPackages() {
+		add(e, true)
 	}
-	p.Events = slices.DeleteFunc(append([]BrowserCaptureEvent{}, p.Events...), func(e BrowserCaptureEvent) bool { return !e.valid() })
-	return p
-}
-
-func readBrowserPreset(path string) *BrowserPreset {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	var p BrowserPreset
-	if yaml.Unmarshal(data, &p) != nil || p.Name == "" {
-		return nil
-	}
-	return &p
-}
-
-// BrowserPresets returns every preset the cached store index lists.
-func BrowserPresets() []BrowserPreset {
-	idx := loadCachedStoreIndex()
-	if idx == nil {
-		return nil
-	}
-	var out []BrowserPreset
-	for _, e := range idx.BrowserPresets {
-		if p := LoadBrowserPreset(e.Name); p != nil {
-			out = append(out, *p)
+	if dir != "" {
+		for _, e := range cachedStorePackages() {
+			if ComposerHasInstalled(dir, e.Name) {
+				add(e, false)
+			}
 		}
+	}
+	slices.Sort(order)
+	out := make([]BrowserPreset, 0, len(order))
+	for _, name := range order {
+		out = append(out, *byName[name])
 	}
 	return out
 }
+
+// FindBrowserPreset returns one of the presets offered for the project at dir.
+func FindBrowserPreset(dir, name string) (BrowserPreset, bool) {
+	for _, p := range BrowserPresets(dir) {
+		if p.Name == name {
+			return p, true
+		}
+	}
+	return BrowserPreset{}, false
+}
+
+var browserPresetNameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 
 // Contents lists the events the preset adds, for a one-line summary.
 func (p BrowserPreset) Contents() []string {

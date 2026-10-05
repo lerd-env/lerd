@@ -62,7 +62,7 @@ Some libraries report a failure as a DOM event of their own instead. List those 
 
 ### Presets
 
-The framework store publishes ready-made presets for libraries that report failures as DOM events of their own, each with the composer and npm packages that show a project uses the library:
+The framework store's package definitions declare the DOM events a library reports failures through, on the composer and npm packages that ship it, so the packages a project requires are what detect a preset:
 
 | Preset | Adds the events |
 |---|---|
@@ -73,7 +73,7 @@ The framework store publishes ready-made presets for libraries that report failu
 
 A library that reports through the browser's own channels needs no preset, only the right box under **What to report**: Vue and Alpine.js log their warnings with `console.warn`, and a failed Livewire update arrives as a 4xx or 5xx response. React, Svelte, Angular and Stimulus need nothing at all, since their errors escape as uncaught errors or go to `console.error`, which are captured by default.
 
-The site's Browser settings show the presets that are added or detected in the project, and **Show n more** lists the rest. Adding a preset copies its events into the site's own list, where they can be edited like any other, and records the preset's name under `presets`. Removing it takes out its events again, except one another added preset also declares. Nothing is turned on behind your back: a preset only applies once you add it.
+The site's Browser settings show the presets that are added or detected in the project, and **Show n more** lists the rest: every preset an npm package declares, and those of the composer packages the project has installed. Adding a preset copies its events into the site's own list, where they can be edited like any other, and records the preset's name under `presets`. Removing it takes out its events again, except one another added preset also declares. Nothing is turned on behind your back: a preset only applies once you add it.
 
 The CLI and MCP see the same presets and detection results:
 
