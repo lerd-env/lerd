@@ -5,6 +5,7 @@
   import { inlineBindings } from '$lib/sqlInline';
   import { highlight } from '$lib/highlight';
   import { formatSql } from '$lib/sqlFormat';
+  import { sinceStart, clock } from '$lib/requestTime';
   import type { DumpEvent } from '$lib/dumpsStream';
   import DetailTabs, { type TabItem } from './DetailTabs.svelte';
   import RequestTimeline from './RequestTimeline.svelte';
@@ -27,12 +28,15 @@
   interface Props {
     rid: string;
     onopen: (rid: string) => void;
+    // initialTab is the tab it opens on, the one a debug bar chip names.
+    initialTab?: string;
   }
-  let { rid, onopen }: Props = $props();
+  let { rid, onopen, initialTab = 'performance' }: Props = $props();
 
   let d = $state<RequestDetail | null>(null);
   let missing = $state(false);
-  let tab = $state('performance');
+  // svelte-ignore state_referenced_locally
+  let tab = $state(initialTab);
   let hiddenLevels = $state<Record<string, boolean>>({ debug: true });
   let querySearch = $state('');
   // Queries read on one line by default; formatted, each clause gets its own,
@@ -200,11 +204,7 @@
     if (level === 'debug') return 'bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400';
     return 'bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300';
   }
-  function offset(ts: string): string {
-    if (!d) return '';
-    const n = Date.parse(ts) - Date.parse(d.started);
-    return isNaN(n) ? '' : `+${Math.max(n, 0)} ms`;
-  }
+  const offset = (ts: string) => (d ? sinceStart(ts, d.started) : '');
   // Where an outgoing call ran within the request, as fractions of its time:
   // it was reported as it finished, so it started its own time before that.
   function httpSpan(ts: string, took: number): [number, number] | undefined {
@@ -620,6 +620,7 @@
               <span class="font-mono text-[11px] {statusTone(c.status)}">{c.status}</span>
               <span class="font-mono truncate flex-1">{c.url}</span>
               <span class="text-[11px] text-gray-400">{c.via}{c.duration_ms ? ` · ${Math.round(c.duration_ms)} ms` : ''}</span>
+              <span class="text-[11px] font-mono tabular-nums whitespace-nowrap text-gray-500 dark:text-gray-400 text-right">{clock(c.at)}</span>
             </button>
           {/each}
         </div>

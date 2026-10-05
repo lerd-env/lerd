@@ -224,6 +224,7 @@ func main() {
 	root.AddCommand(cli.NewWSLSetupCmd())
 	root.AddCommand(cli.NewProfileCmd())
 	root.AddCommand(cli.NewBrowserCaptureCmd())
+	root.AddCommand(cli.NewDebugbarCmd())
 	root.AddCommand(cli.NewNotifyCmd())
 	root.AddCommand(cli.NewPhpExtCmd())
 	root.AddCommand(cli.NewPhpBunCmd())
@@ -769,6 +770,16 @@ func newWatchCmd() *cobra.Command {
 
 						if siteChanged {
 							_ = config.AddSite(*site)
+						}
+						// A .lerd.yaml edited by hand can change what the vhost
+						// carries, the debug bar for one, so a vhost left saying
+						// something else is written again.
+						if site, err := config.FindSiteByPath(sitePath); err == nil {
+							if drift, err := nginx.VhostDrift(*site); err == nil && drift.Drifted {
+								if err := nginx.RegenerateVhost(*site); err == nil {
+									_ = nginx.Reload()
+								}
+							}
 						}
 						if err := cli.QueueRestartForSite(site.Name, sitePath, site.PHPVersion); err != nil {
 							fmt.Printf("[WARN] queue restart for %s: %v\n", site.Name, err)

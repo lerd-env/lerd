@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import SourcePath from './SourcePath.svelte';
 
 const openInEditor = vi.fn(async (_path: string, _line: number) => {});
-vi.mock('$lib/editor', () => ({ openInEditor: (p: string, l: number) => openInEditor(p, l) }));
+vi.mock('$lib/editor', async (orig) => ({ ...(await orig<object>()), openInEditor: (p: string, l: number) => openInEditor(p, l) }));
 
 describe('SourcePath', () => {
   beforeEach(() => {

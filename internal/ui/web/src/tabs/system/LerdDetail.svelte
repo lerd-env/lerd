@@ -1,5 +1,6 @@
 <script lang="ts">
   import EditorPicker from '$components/EditorPicker.svelte';
+  import DebugbarSettings from '$components/DebugbarSettings.svelte';
   import { editors, setGlobalEditor } from '$stores/editors';
   import { onMount } from 'svelte';
   import CheckUpdatesButton from '$components/CheckUpdatesButton.svelte';
@@ -533,6 +534,12 @@
         <EditorPicker scope="global" value={$editors.global === 'custom' ? ($editors.template ?? '') : $editors.global} disabled={!$accessMode.localControl} onchange={setGlobalEditor} />
       </div>
       <p class="text-xs text-gray-500 dark:text-gray-400">{m.editor_settingsDescription()}</p>
+    </SettingsCard>
+
+    <SettingsCard>
+      <span class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{m.debugbar_settings_title()}</span>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">{m.debugbar_settings_description()}</p>
+      <DebugbarSettings disabled={!$accessMode.localControl} />
     </SettingsCard>
 
     <SettingsCard>

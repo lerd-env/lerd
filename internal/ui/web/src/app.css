@@ -24,7 +24,7 @@
   --color-lerd-chrome-light: var(--lerd-chrome-light, #ffffff);
   --color-lerd-chromeborder: var(--lerd-chrome-border, #e5e7eb);
 
-  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
 /*

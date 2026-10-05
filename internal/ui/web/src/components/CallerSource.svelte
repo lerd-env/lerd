@@ -5,6 +5,7 @@
   import SourcePath from './SourcePath.svelte';
   import TraceView from './TraceView.svelte';
   import { traceCodePref } from '$lib/traceFrames';
+  import { sourceAvailable } from '$lib/sourceCode';
   import Icon from './Icon.svelte';
   import { tooltip } from '$lib/tooltip';
   import { m } from '../paraglide/messages.js';
@@ -31,7 +32,7 @@
 <span class="inline-flex items-center gap-1 min-w-0 max-w-full">
   <span class="min-w-0"><SourcePath {file} {line} label={callerClass(file, line, trace)} {muted} short /></span>
   {#if trace.length > 1}
-    <Popover label={m.trace_show()} width={showCode ? 860 : 520} align="auto" {nested}>
+    <Popover label={m.trace_show()} width={showCode && $sourceAvailable ? 860 : 520} align="auto" {nested}>
       {#snippet triggerButton(toggle, open)}{@render button(toggle, open)}{/snippet}
       {#snippet children()}
         <div class="flex flex-col h-[min(480px,var(--popover-room,70vh))]"><TraceView {trace} start={callerIndex(trace, file, line)} bind:showCode /></div>

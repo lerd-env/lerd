@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { openInEditor } from '$lib/editor';
+  import { openInEditor, editorAvailable } from '$lib/editor';
   import { tooltip } from '$lib/tooltip';
   import CopyButton from './CopyButton.svelte';
   import { sites } from '$stores/sites';
@@ -39,16 +39,20 @@
 </script>
 
 <span class="inline-flex items-center gap-1 max-w-full align-middle">
-  <button
-    type="button"
-    class="font-mono text-left {dotted
-      ? 'underline decoration-dotted decoration-lerd-red underline-offset-2 hover:decoration-solid'
-      : muted
-        ? 'hover:underline hover:text-gray-600 dark:hover:text-gray-300'
-        : 'hover:underline text-lerd-red'} {short ? 'min-w-0 truncate' : 'break-all'}"
-    onclick={() => openInEditor(file, line ?? 1)}
-    use:tooltip={$editorTitle(file)}
-  >{shown}{#if line && !bare}:{line}{/if}</button>
+  {#if $editorAvailable}
+    <button
+      type="button"
+      class="font-mono text-left {dotted
+        ? 'underline decoration-dotted decoration-lerd-red underline-offset-2 hover:decoration-solid'
+        : muted
+          ? 'hover:underline hover:text-gray-600 dark:hover:text-gray-300'
+          : 'hover:underline text-lerd-red'} {short ? 'min-w-0 truncate' : 'break-all'}"
+      onclick={() => openInEditor(file, line ?? 1)}
+      use:tooltip={$editorTitle(file)}
+    >{shown}{#if line && !bare}:{line}{/if}</button>
+  {:else}
+    <span class="font-mono {short ? 'min-w-0 truncate' : 'break-all'}" title={reference}>{shown}{#if line && !bare}:{line}{/if}</span>
+  {/if}
   <CopyButton
     text={reference}
     label={m.queries_copyPath()}

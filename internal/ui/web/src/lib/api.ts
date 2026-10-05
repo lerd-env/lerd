@@ -3,9 +3,16 @@ export const apiBase =
     ? 'http://localhost:7073'
     : '';
 
+// The debug bar reaches lerd-ui through the site it sits on, so it sends the
+// few API paths it uses to the site's own route instead.
+let rewrite: ((path: string) => string) | null = null;
+export function setApiRewrite(fn: ((path: string) => string) | null) {
+  rewrite = fn;
+}
+
 export function apiUrl(path: string): string {
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
-  return apiBase + path;
+  return rewrite ? rewrite(path) : apiBase + path;
 }
 
 // State-changing requests carry X-Lerd-CSRF so the daemon's cross-origin gate

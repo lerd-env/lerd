@@ -1,4 +1,9 @@
+import { writable } from 'svelte/store';
 import { apiFetch } from './api';
+
+// editorAvailable is false where nothing can open the host's editor, the debug
+// bar on a site's page, so paths show as text to copy instead of links.
+export const editorAvailable = writable(true);
 
 // openInEditor asks lerd-ui to open a file at a line in the host's editor.
 // The backend requires dashboard-control authority and confines paths to the

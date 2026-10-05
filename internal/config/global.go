@@ -356,6 +356,9 @@ type GlobalConfig struct {
 		// since it rewrites every page. Toggled via `lerd browser-capture on/off`.
 		Enabled bool `yaml:"enabled,omitempty" mapstructure:"enabled"`
 	} `yaml:"browser_capture,omitempty" mapstructure:"browser_capture"`
+	// Debugbar is how the debug bar looks on the sites that show it; which
+	// sites do is a per-site setting. See DebugbarSettings.
+	Debugbar      Debugbar `yaml:"debugbar,omitempty" mapstructure:"debugbar"`
 	Notifications struct {
 		// Disabled globally mutes the notifier (WebSocket banners + Web
 		// Push fanout). Inverted form so the zero value keeps existing

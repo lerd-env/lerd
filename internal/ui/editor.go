@@ -47,10 +47,15 @@ func handleOpenEditor(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "file not found", http.StatusNotFound)
 		return
 	}
+	openEditorAt(w, path, req.Line)
+}
 
+// openEditorAt opens path at line in the editor its site chose, once the
+// caller has checked who asked and that the path may be opened.
+func openEditorAt(w http.ResponseWriter, path string, line int) {
 	// The site the file belongs to may have chosen its own editor; one only
 	// reachable by its URL is handed back for the dashboard to open.
-	argv, url, err := editor.For(siteEditorFor(path), path, req.Line)
+	argv, url, err := editor.For(siteEditorFor(path), path, line)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

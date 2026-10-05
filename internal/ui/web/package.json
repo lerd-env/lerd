@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "npm run i18n && vite",
-    "build": "npm run i18n && vite build",
+    "build": "npm run i18n && vite build && vite build --config vite.debugbar.config.ts",
     "build:demo": "npm run i18n && vite build --config vite.demo.config.ts",
     "preview": "vite preview",
     "check": "npm run i18n && svelte-check --tsconfig ./tsconfig.json",
@@ -14,6 +14,7 @@
     "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy localStorage preferredLanguage baseLocale --silent"
   },
   "devDependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@tailwindcss/postcss": "^4.3.0",
     "@testing-library/jest-dom": "^6.5.0",

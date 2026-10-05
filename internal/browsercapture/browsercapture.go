@@ -97,14 +97,14 @@ func SetEnabled(on bool) (Result, error) {
 }
 
 // SaveSite stores a site's settings. Only a new route touches nginx: the
-// vhost names it, while everything else is read when the script is served.
+// vhost names it for the capture script and the debug bar alike, while everything else is read when the script is served.
 func SaveSite(site config.Site, s config.BrowserCaptureSettings) error {
 	before := config.BrowserCaptureFor(site).Route
 	if err := config.SaveBrowserCapture(site, s); err != nil {
 		return err
 	}
 	cfg, err := config.LoadGlobal()
-	if err != nil || !cfg.IsBrowserCaptureEnabled() || !Capturable(site) {
+	if err != nil || !(cfg.IsBrowserCaptureEnabled() || config.DebugbarFor(site)) || !Capturable(site) {
 		return err
 	}
 	updated, err := config.FindSite(site.Name)

@@ -100,6 +100,7 @@ nav:
       - Debug window: features/queries.md
       - Debug package: features/debug-package.md
       - Browser capture: features/browser-capture.md
+      - Debug bar: features/debug-bar.md
       - System Tray: features/system-tray.md
       - HTTPS / TLS: features/https.md
       - DNS: features/dns.md

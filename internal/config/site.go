@@ -116,6 +116,9 @@ type Site struct {
 	// BrowserCapture holds the site's browser capture settings when the project
 	// has no .lerd.yaml to carry them.
 	BrowserCapture *BrowserCapture `yaml:"browser_capture,omitempty"`
+	// Debugbar injects the debug bar into the site's pages when the project
+	// has no .lerd.yaml to carry the setting.
+	Debugbar bool `yaml:"debugbar,omitempty"`
 	// Group is the group key shared by a main site and its secondaries. It is
 	// set to the main site's name. Empty when the site is not grouped.
 	Group string `yaml:"group,omitempty"`
@@ -293,6 +296,7 @@ type siteYAML struct {
 	DeclinedServices      []string            `yaml:"declined_services,omitempty"`
 	WiredServices         []string            `yaml:"wired_services,omitempty"`
 	BrowserCapture        *BrowserCapture     `yaml:"browser_capture,omitempty"`
+	Debugbar              bool                `yaml:"debugbar,omitempty"`
 	Group                 string              `yaml:"group,omitempty"`
 	GroupSubdomain        string              `yaml:"group_subdomain,omitempty"`
 	GroupSharedDB         bool                `yaml:"group_shared_db,omitempty"`
@@ -338,6 +342,7 @@ func (s Site) toYAML() siteYAML {
 		DeclinedServices:      s.DeclinedServices,
 		WiredServices:         s.WiredServices,
 		BrowserCapture:        s.BrowserCapture,
+		Debugbar:              s.Debugbar,
 		Group:                 s.Group,
 		GroupSubdomain:        s.GroupSubdomain,
 		GroupSharedDB:         s.GroupSharedDB,
@@ -388,6 +393,7 @@ func (sy siteYAML) toSite() Site {
 		DeclinedServices:      sy.DeclinedServices,
 		WiredServices:         sy.WiredServices,
 		BrowserCapture:        sy.BrowserCapture,
+		Debugbar:              sy.Debugbar,
 		Group:                 sy.Group,
 		GroupSubdomain:        sy.GroupSubdomain,
 		GroupSharedDB:         sy.GroupSharedDB,

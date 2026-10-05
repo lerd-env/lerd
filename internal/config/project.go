@@ -159,6 +159,9 @@ type ProjectConfig struct {
 type ProjectDevtools struct {
 	ExcludeCommands []string       `yaml:"exclude_commands,omitempty"`
 	Redact          *ProjectRedact `yaml:"redact,omitempty"`
+	// Debugbar injects the debug bar into the site's pages. Absent keeps what
+	// the site registry says.
+	Debugbar *bool `yaml:"debugbar,omitempty"`
 }
 
 // Redaction styles: a fixed marker, or the value's first characters.
@@ -761,6 +764,10 @@ func cloneProjectConfig(in *ProjectConfig) *ProjectConfig {
 	}
 	if in.Devtools != nil {
 		d := &ProjectDevtools{ExcludeCommands: append([]string(nil), in.Devtools.ExcludeCommands...)}
+		if in.Devtools.Debugbar != nil {
+			v := *in.Devtools.Debugbar
+			d.Debugbar = &v
+		}
 		if r := in.Devtools.Redact; r != nil {
 			d.Redact = &ProjectRedact{Style: r.Style}
 			if r.Visible != nil {

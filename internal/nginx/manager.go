@@ -462,42 +462,55 @@ func profilerEnabled() bool {
 	return err == nil && cfg.IsProfilerEnabled()
 }
 
-// browserCaptureConf renders a site's browser capture block for its vhost:
-// the script injection before </head> and the two locations that hand the
-// script and the reports to lerd-ui, naming the site in headers nginx sets
-// itself. Empty when the global toggle is off.
+// browserCaptureConf renders what a site's vhost injects into its pages: the
+// browser capture script while capture is on globally, and the debug bar while
+// the site shows it. Both reach lerd-ui under the site's capture route through
+// locations that name the site in headers nginx sets itself. Empty when
+// neither is on.
 func browserCaptureConf(siteName, branch string) string {
 	cfg, err := config.LoadGlobal()
-	if err != nil || !cfg.IsBrowserCaptureEnabled() {
-		return ""
-	}
-	route := config.DefaultBrowserCaptureRoute
+	capture := err == nil && cfg.IsBrowserCaptureEnabled()
+	route, bar := config.DefaultBrowserCaptureRoute, false
 	if site, err := config.FindSite(siteName); err == nil && site != nil {
 		route = config.BrowserCaptureFor(*site).Route
+		bar = config.DebugbarFor(*site)
 	}
-	location := func(suffix string) string {
+	if !capture && !bar {
+		return ""
+	}
+	location := func(match, path, upstream string) string {
 		return fmt.Sprintf(`
-    location = %[1]s%[2]s {
+    location %[1]s%[2]s {
         access_log off;
         client_max_body_size 64k;
-        proxy_pass %[3]s/_lerd/browser%[2]s;
+        proxy_pass %[3]s%[4]s;
         proxy_http_version 1.1;
-        proxy_set_header X-Lerd-Site "%[4]s";
-        proxy_set_header X-Lerd-Branch "%[5]s";
+        proxy_set_header X-Lerd-Site "%[5]s";
+        proxy_set_header X-Lerd-Branch "%[6]s";
         proxy_set_header X-Lerd-Host $host;
+        proxy_set_header X-Lerd-Client $remote_addr;
     }
-`, route, suffix, lerdUIUpstream(), siteName, branch)
+`, match, path, lerdUIUpstream(), upstream, siteName, branch)
 	}
-	// The script tag carries the id of the request that served the page, and
+	// Each script tag carries the id of the request that served the page, and
 	// responses expose it to a page on another origin, so the browser's events
 	// and requests link to the PHP request behind them. Timing-Allow-Origin lets
 	// such a page read the phases of a request it sent here.
+	var tags, locations string
+	if capture {
+		tags += fmt.Sprintf(`<script src="%s.js" data-rid="$upstream_http_x_lerd_rid"></script>`, route)
+		locations += location("= ", route, "/_lerd/browser") + location("= ", route+".js", "/_lerd/browser.js")
+	}
+	if bar {
+		tags += fmt.Sprintf(`<script src="%s/bar/bar.js" data-rid="$upstream_http_x_lerd_rid" async></script>`, route)
+		locations += location("^~ ", route+"/bar/", "/_lerd/bar/")
+	}
 	return fmt.Sprintf(`
-    sub_filter '</head>' '<script src="%s.js" data-rid="$upstream_http_x_lerd_rid"></script></head>';
+    sub_filter '</head>' '%s</head>';
     sub_filter_once on;
     add_header Access-Control-Expose-Headers X-Lerd-Rid always;
     add_header Timing-Allow-Origin * always;
-`, route) + location("") + location(".js")
+`, tags) + locations
 }
 
 // resolvePublicDir returns the document root subdirectory for a site, resolved

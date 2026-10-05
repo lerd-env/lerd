@@ -115,3 +115,59 @@ func TestGenerateHostProxyVhost_BrowserCaptureAsksForPlainBody(t *testing.T) {
 		}
 	}
 }
+
+// The debug bar is injected on its own, browser capture off, and reaches
+// lerd-ui under the capture route, telling it who asked.
+func TestGenerateVhost_DebugbarInjectsBarWithoutCapture(t *testing.T) {
+	confD := setupConfD(t)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	site := config.Site{Name: "myapp", Domains: []string{"myapp.test"}, Path: t.TempDir(), Debugbar: true}
+	if err := config.AddSite(site); err != nil {
+		t.Fatal(err)
+	}
+	if err := GenerateVhost(site, "8.3"); err != nil {
+		t.Fatal(err)
+	}
+	content := readConf(t, filepath.Join(confD, "myapp.test.conf"))
+	for _, want := range []string{
+		`sub_filter '</head>' '<script src="/_lerd/browser/bar/bar.js" data-rid="$upstream_http_x_lerd_rid" async></script></head>';`,
+		"location ^~ /_lerd/browser/bar/ {",
+		"proxy_pass " + lerdUIUpstream() + "/_lerd/bar/;",
+		"proxy_set_header X-Lerd-Client $remote_addr;",
+		`proxy_set_header X-Lerd-Site "myapp";`,
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("missing %q in:\n%s", want, content)
+		}
+	}
+	if strings.Contains(content, "location = /_lerd/browser {") {
+		t.Errorf("capture endpoint added while capture is off:\n%s", content)
+	}
+}
+
+// With both on, one sub_filter carries both scripts, since nginx applies only
+// one replacement per search string.
+func TestGenerateVhost_DebugbarAndCaptureShareOneSubFilter(t *testing.T) {
+	confD := setupConfD(t)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfg, _ := config.LoadGlobal()
+	cfg.BrowserCapture.Enabled = true
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatal(err)
+	}
+	site := config.Site{Name: "myapp", Domains: []string{"myapp.test"}, Path: t.TempDir(), Debugbar: true}
+	if err := config.AddSite(site); err != nil {
+		t.Fatal(err)
+	}
+	if err := GenerateVhost(site, "8.3"); err != nil {
+		t.Fatal(err)
+	}
+	content := readConf(t, filepath.Join(confD, "myapp.test.conf"))
+	if n := strings.Count(content, "sub_filter '</head>'"); n != 1 {
+		t.Fatalf("%d sub_filter lines, want 1:\n%s", n, content)
+	}
+	want := `<script src="/_lerd/browser.js" data-rid="$upstream_http_x_lerd_rid"></script><script src="/_lerd/browser/bar/bar.js" data-rid="$upstream_http_x_lerd_rid" async></script></head>`
+	if !strings.Contains(content, want) {
+		t.Errorf("missing %q in:\n%s", want, content)
+	}
+}

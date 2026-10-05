@@ -37,6 +37,12 @@ func handleSource(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	writeSource(w, r)
+}
+
+// writeSource answers the lines around ?file=&line= once the caller has
+// checked who asked.
+func writeSource(w http.ResponseWriter, r *http.Request) {
 	line, _ := strconv.Atoi(r.URL.Query().Get("line"))
 	path, ok := siteSourcePath(r.URL.Query().Get("file"))
 	if !ok || line < 1 {

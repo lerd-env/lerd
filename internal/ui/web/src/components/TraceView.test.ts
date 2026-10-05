@@ -3,8 +3,8 @@ import { describe, it, expect, vi } from 'vitest';
 import TraceView from './TraceView.svelte';
 
 const openInEditor = vi.fn();
-vi.mock('$lib/editor', () => ({ openInEditor: (...a: unknown[]) => openInEditor(...a) }));
-vi.mock('$lib/sourceCode', () => ({ loadSource: () => Promise.resolve([{ n: 31, text: '$x = Cache::get($key);' }]) }));
+vi.mock('$lib/editor', async (orig) => ({ ...(await orig<object>()), openInEditor: (...a: unknown[]) => openInEditor(...a) }));
+vi.mock('$lib/sourceCode', async (orig) => ({ ...(await orig<object>()), loadSource: () => Promise.resolve([{ n: 31, text: '$x = Cache::get($key);' }]) }));
 
 const trace = [
   { file: '/srv/app/vendor/acme/cache/src/Repo.php', line: 120, func: 'Acme\\Repo->get' },
@@ -30,7 +30,9 @@ describe('TraceView', () => {
 
   it('shows the code around the picked line', async () => {
     render(TraceView, { props: { trace, start: 2, showCode: true } });
-    expect(await screen.findByText('$x = Cache::get($key);')).toBeInTheDocument();
+    const n = await screen.findByRole('button', { name: '31' });
+    expect(n.parentElement).toHaveTextContent('$x = Cache::get($key);');
+    expect(n.parentElement!.querySelector('.hl-var')).toHaveTextContent('$x');
     await fireEvent.click(screen.getByRole('button', { name: '31' }));
     expect(openInEditor).toHaveBeenCalledWith('/srv/app/app/Cart.php', 31);
   });

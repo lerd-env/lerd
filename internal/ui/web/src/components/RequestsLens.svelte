@@ -9,6 +9,7 @@
   import { tooltip } from '$lib/tooltip';
   import Icon from '$components/Icon.svelte';
   import ClassName from '$components/ClassName.svelte';
+  import DebugbarSiteToggle from '$components/DebugbarSiteToggle.svelte';
   import { m } from '../paraglide/messages.js';
 
   // Every request lerd saw, one row each, with the requests a page sent listed
@@ -137,6 +138,7 @@
         <input type="checkbox" class="rounded-sm border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-card text-lerd-red focus:ring-lerd-red" bind:checked={onlyProblems} />
         {m.requests_onlyProblems()}
       </label>
+      {#if siteScope}<DebugbarSiteToggle site={siteScope} />{/if}
       <button type="button" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={async () => { await clearDumps(); list = []; }}>{m.common_clear()}</button>
     </div>
 

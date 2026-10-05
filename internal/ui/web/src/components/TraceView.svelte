@@ -1,6 +1,7 @@
 <script lang="ts">
   import { traceRows, traceRuns, funcLabel, traceText, traceCodePref, saveTraceCodePref, type TraceFrame } from '$lib/traceFrames';
-  import { loadSource, type SourceLine } from '$lib/sourceCode';
+  import { loadSource, sourceAvailable, type SourceLine } from '$lib/sourceCode';
+  import { highlight } from '$lib/highlight';
   import SourcePath from './SourcePath.svelte';
   import CopyButton from './CopyButton.svelte';
   import Icon from './Icon.svelte';
@@ -25,6 +26,7 @@
     saveTraceCodePref(showCode);
   }
 
+  const codeShown = $derived(showCode && $sourceAvailable);
   const rows = $derived(traceRows(trace));
   const runs = $derived(traceRuns(rows));
   // svelte-ignore state_referenced_locally
@@ -36,10 +38,11 @@
   let pathEl: HTMLElement | null = $state(null);
 
   const row = $derived(rows[picked]);
+  const php = $derived(/\.(php|phtml|inc)$/.test(row?.file ?? ''));
   let code = $state<SourceLine[] | null>(null);
   let missing = $state(false);
   $effect(() => {
-    if (!showCode || !row?.file) return;
+    if (!codeShown || !row?.file) return;
     const want = row;
     code = null;
     missing = false;
@@ -80,13 +83,13 @@
 <div class="flex flex-col min-h-0 max-h-[inherit] text-[11px]">
   <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-lerd-border/60 text-[10px] uppercase tracking-wide text-gray-400">
     <span class="flex-1">{m.trace_title({ count: trace.length })}</span>
-    <button type="button" aria-pressed={showCode} title={m.trace_codeHint()} onclick={toggleCode} class="normal-case tracking-normal inline-flex items-center gap-1 rounded-md border border-gray-200 dark:border-lerd-border px-1.5 py-0.5 text-[11px] {showCode ? 'text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-white/10' : 'text-gray-500 dark:text-gray-400'}">
+    {#if $sourceAvailable}<button type="button" aria-pressed={showCode} title={m.trace_codeHint()} onclick={toggleCode} class="normal-case tracking-normal inline-flex items-center gap-1 rounded-md border border-gray-200 dark:border-lerd-border px-1.5 py-0.5 text-[11px] {showCode ? 'text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-white/10' : 'text-gray-500 dark:text-gray-400'}">
       <Icon name="code" class="w-3 h-3" />{m.trace_code()}
-    </button>
+    </button>{/if}
     <CopyButton text={() => traceText(trace)} label={m.common_copy()} tone="faint" />
   </div>
-  <div class="grid min-h-0 flex-1 {showCode ? 'grid-cols-[minmax(0,44%)_minmax(0,1fr)]' : 'grid-cols-1'}">
-    <div bind:this={pathEl} role="listbox" tabindex="0" aria-label={m.trace_show()} onkeydown={step} class="min-h-0 overflow-y-auto overscroll-contain py-2 pr-2 focus:outline-none {showCode ? 'border-r border-gray-100 dark:border-lerd-border/60' : ''}">
+  <div class="grid min-h-0 flex-1 {codeShown ? 'grid-cols-[minmax(0,44%)_minmax(0,1fr)]' : 'grid-cols-1'}">
+    <div bind:this={pathEl} role="listbox" tabindex="0" aria-label={m.trace_show()} onkeydown={step} class="min-h-0 overflow-y-auto overscroll-contain py-2 pr-2 focus:outline-none {codeShown ? 'border-r border-gray-100 dark:border-lerd-border/60' : ''}">
       {#each runs as run, k (k)}
         <div class="relative grid grid-cols-[18px_minmax(0,1fr)] gap-1 pl-2">
           <span class="relative" aria-hidden="true">
@@ -115,7 +118,7 @@
         </div>
       {/each}
     </div>
-    {#if showCode && row}
+    {#if codeShown && row}
       <div class="min-w-0 min-h-0 flex flex-col bg-gray-50 dark:bg-white/[0.03]">
         <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-0.5 items-center px-3 py-2 border-b border-gray-100 dark:border-lerd-border/60">
           <span class="truncate font-mono font-semibold text-gray-800 dark:text-gray-100" title={row.inside}>{funcLabel(row.inside)}</span>
@@ -124,7 +127,7 @@
         </div>
         <div class="min-h-0 flex-1 overflow-auto">
           {#if code}
-            <pre class="w-max min-w-full py-2 font-mono text-[12px] leading-[1.7] [font-variant-ligatures:none]">{#each code as l (l.n)}<div class="px-3 {l.n === row.line ? 'bg-lerd-red/10 shadow-[inset_3px_0_0_var(--color-lerd-red)]' : ''}"><button type="button" onclick={() => openInEditor(row.file, l.n)} use:tooltip={$editorTitle(row.file)} class="inline-block w-[3ch] mr-3.5 text-right text-gray-400 select-none hover:text-lerd-red hover:underline">{l.n}</button>{#if l.html}{@html l.html}{:else}{l.text}{/if}</div>{/each}</pre>
+            <pre class="w-max min-w-full py-2 font-mono text-[12px] leading-[1.7] [font-variant-ligatures:none]">{#each code as l (l.n)}<div class="px-3 {l.n === row.line ? 'bg-lerd-red/10 shadow-[inset_3px_0_0_var(--color-lerd-red)]' : ''}"><button type="button" onclick={() => openInEditor(row.file, l.n)} use:tooltip={$editorTitle(row.file)} class="inline-block w-[3ch] mr-3.5 text-right text-gray-400 select-none hover:text-lerd-red hover:underline">{l.n}</button>{#if php}{@html highlight(l.text, 'php')}{:else}{l.text}{/if}</div>{/each}</pre>
           {:else if missing}
             <p class="px-3 py-4 text-gray-500 dark:text-gray-400">{m.trace_noSource()}</p>
           {:else}

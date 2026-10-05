@@ -239,6 +239,9 @@
     if (location.href === lastHref) return;
     lastHref = location.href;
     page = how === 'load' && docRid ? docRid : Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    // The debug bar follows the page view on a page no PHP request served.
+    document.documentElement.setAttribute('data-lerd-page', page);
+    try { document.dispatchEvent(new CustomEvent('lerd:page', { detail: page })); } catch (e) {}
     seen = {};
     sent = 0;
     linked = 0;

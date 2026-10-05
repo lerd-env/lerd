@@ -1,0 +1,98 @@
+/* The debug bar's own look. It sits in a shadow root on top of app.css, so
+   nothing here can reach the page and nothing on the page can reach it. */
+.lerd-root {
+  --red: var(--color-lerd-red);
+  --red-soft: color-mix(in srgb, var(--color-lerd-red) 10%, transparent);
+  --bar: #ffffff; --bar-fg: #27272a; --chip: #f4f4f5; --chip-hover: #e9e9ec; --border: #e4e4e7; --muted: #71717a;
+  --amber: #d97706; --amber-soft: rgba(217, 119, 6, .12); --green: #059669; --rose: #e11d48;
+  --slate: #94a3b8; --blue: #2563eb; --yellow: #f2b200;
+  font-family: var(--font-sans); font-size: 14px; line-height: 1.45; color: #18181b; text-align: left;
+  -webkit-font-smoothing: antialiased; letter-spacing: normal; text-transform: none;
+}
+.lerd-root.dark {
+  --bar: var(--color-lerd-card); --bar-fg: #e4e4e7; --chip: #1f1f1f; --chip-hover: #2a2a2a; --border: var(--color-lerd-border); --muted: #a1a1aa;
+  --amber-soft: rgba(217, 119, 6, .18); --red-soft: color-mix(in srgb, var(--color-lerd-red) 16%, transparent);
+  color: #f4f4f5; color-scheme: dark;
+}
+/* Every scrolling area gets the same hairline scrollbar, taking the accent while used. */
+.lerd-root * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.lerd-root *:hover { scrollbar-color: color-mix(in srgb, var(--red) 55%, transparent) transparent; }
+.lerd-root ::-webkit-scrollbar { width: 6px; height: 3px; }
+.lerd-root ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.lbar { position: fixed; z-index: 40; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); translate: -50% 0; max-width: calc(100vw - 24px);
+  background: color-mix(in srgb, var(--bar) 94%, transparent); color: var(--bar-fg); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent); border-radius: 16px; font-size: 12px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .06) inset, 0 12px 40px rgba(0, 0, 0, .18), 0 2px 6px rgba(0, 0, 0, .06); }
+.lbar-in { display: flex; align-items: center; gap: 4px; padding: 5px; overflow-x: auto; scrollbar-width: none; }
+.lbar-in::-webkit-scrollbar { display: none; }
+/* The mark is lerd's own, brand red whatever theme the bar is drawn in. */
+.mark { width: 30px; height: 30px; border-radius: 11px; background: linear-gradient(145deg, #ff5a4f, #ff2d20); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: none; box-shadow: 0 2px 8px rgba(255, 45, 32, .35); }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 10px; white-space: nowrap; flex: none; transition: background .15s, transform .15s; }
+.chip:hover { background: var(--chip-hover); }
+.chip:active { transform: scale(.97); }
+.chip .k { color: var(--muted); }
+.chip svg { width: 14px; height: 14px; flex: none; color: var(--muted); }
+.chip.req { background: var(--chip); gap: 8px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 22%, transparent); flex: none; }
+.dot.err { background: var(--rose); box-shadow: 0 0 0 3px color-mix(in srgb, var(--rose) 22%, transparent); }
+.method { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+.ok { color: var(--green); font-family: var(--font-mono); }
+.err { color: var(--rose); font-family: var(--font-mono); }
+.pill { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 999px; }
+.pill-amber { background: var(--amber-soft); color: var(--amber); }
+.pill-red { background: var(--red-soft); color: var(--red); }
+.phase { display: inline-flex; width: 48px; height: 4px; border-radius: 2px; overflow: hidden; background: var(--border); gap: 1px; }
+.phase i { display: block; height: 100%; }
+.sep { width: 1px; height: 16px; background: var(--border); flex: none; margin: 0 3px; }
+.icon-btn { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; color: var(--muted); flex: none; }
+.icon-btn:hover { background: var(--chip-hover); color: var(--bar-fg); }
+.lbar button:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+.lbar:not(.compact) .lbl { display: none; }
+@media (max-width: 640px) { .chip .k { display: none; } }
+
+/* Minimised: only the mark, in a corner, and it can be dragged to another. */
+.lbar.min { translate: none; border-radius: 11px; touch-action: none; background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.lbar.min .lbar-in { padding: 0; overflow: visible; }
+.lbar.min .mark { cursor: grab; }
+.lbar.dragging { cursor: grabbing; }
+.lbar.min .lbar-in > :not(.mark) { display: none; }
+.lbar.min.c-bottom-right { left: auto; right: 16px; }
+.lbar.min.c-bottom-left { left: 16px; right: auto; }
+.lbar.min.c-top-right { left: auto; right: 16px; bottom: auto; top: calc(16px + env(safe-area-inset-top, 0px)); }
+.lbar.min.c-top-left { left: 16px; right: auto; bottom: auto; top: calc(16px + env(safe-area-inset-top, 0px)); }
+
+/* Compact: a slim strip flush with the top or bottom edge, labels written out. */
+.lbar.compact { left: 0; right: 0; bottom: 0; translate: none; max-width: none; border-radius: 0; border-width: 1px 0 0; background: var(--bar); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: 0 -4px 16px rgba(0, 0, 0, .06); }
+.lbar.compact.edge-top { top: 0; bottom: auto; border-width: 0 0 1px; box-shadow: 0 4px 16px rgba(0, 0, 0, .06); }
+.lbar.compact .lbar-in { padding: 3px 6px; }
+.lbar.compact .mark { width: 22px; height: 22px; border-radius: 6px; box-shadow: none; font-size: 12px; }
+.lbar.compact .chip { height: 24px; padding: 0 8px; border-radius: 5px; background: var(--chip); }
+.lbar.compact .chip:hover { background: var(--chip-hover); }
+.lbar.compact .icon-btn { width: 24px; height: 24px; border-radius: 5px; margin-left: auto; }
+.lbar.compact .sep { display: none; }
+/* A minimised compact strip leaves the mark flush in the corner, no gap. */
+.lbar.compact.min { border-width: 0; box-shadow: 0 2px 10px rgba(0, 0, 0, .15); background: #ff2d20; overflow: hidden; }
+.lbar.compact.min .lbar-in { padding: 0; }
+.lbar.compact.min .mark { width: 34px; height: 34px; border-radius: 0; }
+.lbar.compact.min.c-bottom-right { left: auto; right: 0; top: auto; bottom: 0; border-radius: 12px 0 0 0; }
+.lbar.compact.min.c-bottom-left { left: 0; right: auto; top: auto; bottom: 0; border-radius: 0 12px 0 0; }
+.lbar.compact.min.c-top-right { left: auto; right: 0; top: 0; bottom: auto; border-radius: 0 0 0 12px; }
+.lbar.compact.min.c-top-left { left: 0; right: auto; top: 0; bottom: auto; border-radius: 0 0 12px 0; }
+
+/* Lists opened from a chip: the app's tabs past the first two, the child requests. */
+.bar-pop { position: fixed; z-index: 45; width: min(480px, calc(100vw - 24px)); background: var(--bar); color: var(--bar-fg); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 16px 40px rgba(0, 0, 0, .2); overflow: hidden; font-size: 12px; }
+.bar-pop h4 { margin: 0; padding: 10px 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-bottom: 1px solid var(--border); }
+.bar-pop .rows { max-height: min(320px, 50vh); overflow-y: auto; }
+.bar-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) 40px 56px; gap: 8px; align-items: center; width: 100%; text-align: left; padding: 9px 12px; border-top: 1px solid var(--border); }
+.bar-row:first-child { border-top: 0; }
+.bar-row:hover { background: var(--chip); }
+.bar-row .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
+/* Loading: the request is on its way or still running. */
+.chip.loading { color: var(--muted); cursor: default; }
+.chip.loading:hover { background: none; }
+.spin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border); border-top-color: #ff2d20; animation: lerd-spin .8s linear infinite; flex: none; }
+.mark.loading { animation: lerd-pulse 1.4s ease-in-out infinite; }
+@keyframes lerd-spin { to { transform: rotate(360deg); } }
+@keyframes lerd-pulse { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .lerd-root * { transition: none !important; } .spin, .mark.loading { animation: none; } }

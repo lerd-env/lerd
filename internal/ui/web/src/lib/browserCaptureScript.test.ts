@@ -52,6 +52,18 @@ describe('browser capture script', () => {
     expect(views[0].page).not.toBe(views[1].page);
   });
 
+  it('tells the debug bar which page view is current', () => {
+    const seen: string[] = [];
+    document.addEventListener('lerd:page', (e) => seen.push((e as CustomEvent<string>).detail));
+    const sent = load({});
+    history.pushState(null, '', '/orders');
+    settle();
+    const views = sent.filter((r) => r.type === 'navigation').map((r) => r.page);
+    // Earlier instances keep their history hooks, so other ids may come too.
+    expect(seen).toEqual(expect.arrayContaining(views));
+    expect(document.documentElement.getAttribute('data-lerd-page')).toBe(views[1]);
+  });
+
   it('files an error under the view it happened in', () => {
     const sent = load({});
     history.pushState(null, '', '/checkout');

@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/svelte';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import TraceBlock from './TraceBlock.svelte';
 
-vi.mock('$lib/editor', () => ({ openInEditor: vi.fn(async () => {}) }));
+vi.mock('$lib/editor', async (orig) => ({ ...(await orig<object>()), openInEditor: vi.fn(async () => {}) }));
 
 describe('TraceBlock', () => {
   beforeEach(() => {

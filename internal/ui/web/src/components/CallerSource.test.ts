@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/svelte';
 import { describe, it, expect, vi } from 'vitest';
 import CallerSource from './CallerSource.svelte';
 
-vi.mock('$lib/sourceCode', () => ({ loadSource: () => Promise.reject(new Error('none')) }));
+vi.mock('$lib/sourceCode', async (orig) => ({ ...(await orig<object>()), loadSource: () => Promise.reject(new Error('none')) }));
 
 const trace = [
   { file: '/srv/app/vendor/laravel/framework/src/Cache/Repository.php', line: 120, func: 'Illuminate\\Cache\\Repository->get' },

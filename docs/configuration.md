@@ -161,6 +161,12 @@ php:
       packages: []      # 8.1+; the 7.4/8.0 images are Alpine 3.16), so lerd records
       extensions: []    # the truth per version and never advertises what an image
                         # does not have.
+debugbar:                 # optional. How the debug bar looks on the sites that
+  style: dock             # show it (which sites do is per site, see
+  edge: bottom            # devtools.debugbar): dock or compact, the edge a
+  corner: bottom-right    # compact strip sits on, the corner it minimises to
+  theme: auto             # and auto, light or dark. Set from System → Debug bar.
+                          # See [Debug bar](./features/debug-bar.md)
 ```
 
 ---
@@ -195,6 +201,7 @@ A portable, self-contained description of a project's local environment. Created
 | `stripe` | Optional Stripe webhook listener config: `path` (forward route, defaults to `/stripe/webhook`) and `secret_env_key` (which `.env` key holds the secret, defaults to auto-detection). See [Stripe](./usage/stripe.md) |
 | `mcp_inject` | Set `false` to opt the project out of automatic AI/MCP config refresh. `lerd update`/`install` then never rewrites this project's committed MCP config or skill files. An explicit `lerd mcp:inject` still writes. See [MCP](./features/mcp.md#project-scoped-registration) |
 | `devtools.exclude_commands` | Console commands left out of the Debug window on top of the ones the framework store lists, as typed (`inventory:watch`) or by class. Each job such a command runs is still reported. See [Commands left out](./features/queries.md#keeping-the-noise-down) |
+| `devtools.debugbar` | `true` injects the debug bar into the site's pages, `false` keeps it out. Absent keeps what the site registry says. Set with `lerd debugbar on` or the site's Debug tab, which write here when the project has a `.lerd.yaml`. See [Debug bar](./features/debug-bar.md) |
 | `devtools.redact` | What the Debug window masks on top of what it always masks: `style` (`redacted` or `masked`), `visible` (characters a masked value keeps), `crop` (shorten to a fixed run instead of keeping the length) and `char` (the mask character) for the built-in masks, and under `outgoing_http.headers` and `inbound_http.headers` a direction (`request`, `response`, or `*` for both) mapping header names, globs allowed, to a style or to `{style, visible, crop, char}`; `inbound_http.input` does the same for names in the query string, body, cookies and session, and `inbound_http.route_params` for route parameters by their name in the route, masked in the URL; an `input` rule applies to a route parameter of the same name that has no rule of its own. See [Masking values](./features/queries.md#masking-values) |
 
 ### Basic example

@@ -1,4 +1,5 @@
 import type { Action } from 'svelte/action';
+import { layerRoot } from './portal';
 
 export type TooltipPlacement = 'bottom' | 'right';
 
@@ -23,7 +24,7 @@ let owner: HTMLElement | null = null;
 
 function ensure(): HTMLDivElement {
   if (box) {
-    if (!box.isConnected) document.body.appendChild(box);
+    if (!box.isConnected || box.parentNode !== layerRoot()) layerRoot().appendChild(box);
     return box;
   }
   box = document.createElement('div');
@@ -39,7 +40,7 @@ function ensure(): HTMLDivElement {
   box.appendChild(arrowEl);
   textEl = document.createElement('span');
   box.appendChild(textEl);
-  document.body.appendChild(box);
+  layerRoot().appendChild(box);
   return box;
 }
 
@@ -71,10 +72,14 @@ function place(node: HTMLElement, label: string, placement: TooltipPlacement) {
     arrowEl!.style.left = -ARROW / 2 + 'px';
     arrowEl!.style.top = r.top + r.height / 2 - top - ARROW / 2 + 'px';
   } else {
+    // Below the trigger, or above it where the viewport ends first, a debug
+    // bar along the bottom edge say.
+    const above = r.bottom + GAP + bh > vh - MARGIN && r.top - GAP - bh >= MARGIN;
     const left = Math.max(MARGIN, Math.min(r.left + r.width / 2 - bw / 2, vw - bw - MARGIN));
     b.style.left = left + 'px';
-    b.style.top = r.bottom + GAP + 'px';
-    arrowEl!.style.top = -ARROW / 2 + 'px';
+    b.style.top = (above ? r.top - GAP - bh : r.bottom + GAP) + 'px';
+    if (above) arrowEl!.className = arrowEl!.className.replace('border-t border-l', 'border-b border-r');
+    arrowEl!.style.top = (above ? bh - ARROW / 2 - 1 : -ARROW / 2) + 'px';
     arrowEl!.style.left = r.left + r.width / 2 - left - ARROW / 2 + 'px';
   }
   b.style.opacity = '1';
