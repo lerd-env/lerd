@@ -28,7 +28,7 @@ The request view is the dashboard's own: the timeline, the request and response,
 
 ## Minimising and moving it
 
-The **×** minimises the bar to lerd's mark in a corner, and clicking the mark brings it back. Dragging the mark moves it to another corner, which the browser remembers and which then wins over lerd's setting. The bar starts minimised until someone opens it, and remembers that too.
+The **×** minimises the bar to lerd's mark in a corner, and clicking the mark brings it back. Dragging the mark moves it to another corner, which the browser remembers and which then wins over lerd's setting. The bar starts minimised until someone opens it, and remembers that too. A minimised compact strip leaves the mark flush in its corner, against both edges.
 
 ## How it looks
 

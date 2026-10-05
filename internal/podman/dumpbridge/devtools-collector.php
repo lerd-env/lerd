@@ -1177,7 +1177,7 @@ function seam_begin($class, $method, $self, $args): void
                 'phase' => (string) $method,
             ],
             'start'   => microtime(true),
-            'details' => component_details($args),
+            'details' => component_details($args, (string) $class, (string) $method),
         ];
         $GLOBALS['__lerd_seam_stack'] = $stack;
         return;
@@ -1433,19 +1433,31 @@ function component_identity(array $data, $subject): array
     return $data;
 }
 
-function component_details(array $args): array
+function component_details(array $args, string $class = '', string $method = ''): array
 {
+    // Each argument is named by the method's own parameter where it can be read.
+    $names = [];
+    try {
+        if ($class !== '' && $method !== '' && method_exists($class, $method)) {
+            foreach ((new \ReflectionMethod($class, $method))->getParameters() as $p) {
+                $names[] = $p->getName();
+            }
+        }
+    } catch (\Throwable $_) {
+    }
     $plain = [];
     $lists = [];
-    foreach ($args as $i => $v) {
+    $pos = 0;
+    foreach ($args as $n => $v) {
+        $i = $names[$pos++] ?? 'arg' . $n;
         if (is_array($v)) {
             // A list of calls or updates says more as JSON than as its size.
             $json = json_encode($v, JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR);
             if (is_string($json)) {
-                $lists['arg'.$i] = strlen($json) > 300 ? substr($json, 0, 300).'…' : $json;
+                $lists[$i] = strlen($json) > 300 ? substr($json, 0, 300).'…' : $json;
             }
         } elseif (!is_object($v) && $v !== null) {
-            $plain['arg'.$i] = $v;
+            $plain[$i] = $v;
         }
     }
     return preview_payload($plain) + $lists;
@@ -2013,8 +2025,16 @@ function input_map(array $values, string $scope = ''): array
             break;
         }
         $k = (string) $k;
-        $v = is_scalar($v) || $v === null ? (string) $v : (string) json_encode($v, \JSON_PARTIAL_OUTPUT_ON_ERROR | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
         $mask = redact_rule($scope, $k) ?? (preg_match('/pass|secret|token|sess|cookie|authorization|api[-_]?key/i', $k) ? $rules['mask'] : null);
+        // A nested value keeps its shape, masked inside, so it reads as a tree;
+        // one too large to ship whole is cut down as text.
+        if (is_array($v) && $mask === null) {
+            $v = mask_tree($v, $scope);
+            $json = (string) json_encode($v, \JSON_PARTIAL_OUTPUT_ON_ERROR | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
+            $out[$k] = strlen($json) > BODY_BYTES ? substr($json, 0, 497) . '...' : $v;
+            continue;
+        }
+        $v = is_scalar($v) || $v === null ? (string) $v : (string) json_encode($v, \JSON_PARTIAL_OUTPUT_ON_ERROR | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
         if ($mask !== null) {
             $out[$k] = mask_value($v, $mask);
             continue;

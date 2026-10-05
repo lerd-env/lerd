@@ -10,6 +10,8 @@ vi.mock('$stores/requests', async (orig) => ({
       queries: { query_count: 4, total_time_ms: 4, n_plus_one: [{ fingerprint: 'select * from users where id = ?', count: 3, sample_sql: 'select * from users where id = ?', caller: { file: '', line: 0 }, ids: ['q0', 'q1', 'q2'] }] },
       events: {
         query: ['select * from users where id = ?', 'select * from users where id = ?', 'select * from users where id = ?', 'select * from sessions'].map((sql, i) => ({ id: `q${i}`, ts: '', kind: 'query', ctx: {}, src: {}, data: { sql, time_ms: 1 } })),
+        view: [0, 1].map((i) => ({ id: `v${i}`, ts: '', kind: 'view', ctx: {}, src: {}, data: { name: 'item' } })),
+        span: [5, 70].map((ms, i) => ({ id: `s${i}`, ts: '', kind: 'span', ctx: {}, src: {}, data: { label: 'View', name: 'item', time_ms: ms, status: 'ok' } })),
         cache: Array.from({ length: 450 }, (_, i) => ({ id: `c${i}`, ts: '', kind: 'cache', ctx: {}, src: {}, data: { op: 'hit', key: `key-${i}` } })),
         request: [{ id: 'e1', ts: '', kind: 'request', ctx: {}, src: {}, data: { graphql: [{ type: 'query', name: 'Feed', query: '{ latest: notifications(first: 5) { id } }', fields: [{ alias: 'latest', name: 'notifications', type: '[Notification!]!', file: '/srv/app/app/GraphQL/Queries/NotificationsQuery.php', line: 9, type_file: '/srv/app/app/GraphQL/Types/NotificationType.php', type_line: 7, args: { first: 5 }, data: [{ id: 1 }] }], errors: [{ message: 'Unauthenticated', path: ['me'] }] }], graphql_types: { Notification: { kind: 'object', fields: [{ name: 'id', type: 'ID!' }], file: '/srv/app/app/GraphQL/Types/NotificationType.php', line: 7 } } } }]
       }
@@ -48,5 +50,12 @@ describe('RequestDetail', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Show queries' }));
     expect(sql().some((t) => t?.includes('sessions'))).toBe(false);
     expect(sql().filter((t) => t?.includes('users'))).toHaveLength(3);
+  });
+
+  it('gives each rendered view the time of its own render', async () => {
+    render(RequestDetail, { props: { rid: 'g1', onopen: () => {} } });
+    await fireEvent.click(await screen.findByRole('tab', { name: /Views/ }));
+    expect(screen.getByText('5.0 ms')).toBeInTheDocument();
+    expect(screen.getByText('70 ms')).toBeInTheDocument();
   });
 });

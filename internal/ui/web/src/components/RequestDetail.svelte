@@ -141,7 +141,13 @@
   // page sent, and the load timing is on the timeline, so neither repeats here.
   const browserEvents = $derived(ev('browser').filter((e) => data(e).type !== 'request' && data(e).type !== 'timing' && !(data(e).type === 'network' && data(e).rid)));
   const session = $derived(ev('session').at(-1));
-  const viewTime = (name: string) => spans.find((s) => s.label === 'View' && s.name === name)?.time_ms;
+  // The nth view of a name takes the time of the nth View span of that name.
+  const viewTimes = $derived.by(() => {
+    const by: Record<string, number[]> = {};
+    for (const s of spans) if (s.label === 'View') (by[s.name] ??= []).push(Number(s.time_ms ?? 0));
+    const seen: Record<string, number> = {};
+    return new Map(ev('view').map((e) => { const n = String(data(e).name); const t = by[n]?.[(seen[n] = (seen[n] ?? -1) + 1)]; return [e.id, t] as const; }));
+  });
   const components = $derived.by(() => {
     const by = new Map<string, Record<string, any>[]>();
     for (const e of ev('component')) {
@@ -434,7 +440,7 @@
               <span class="font-mono tabular-nums text-gray-400 dark:text-gray-500">{i + 1}</span>
               <span class="font-mono font-medium text-violet-700 dark:text-violet-300">{v.name}</span>
               <span class="text-[11px] min-w-0 flex-1">{#if v.path}<SourcePath file={v.path} muted short />{/if}</span>
-              {#if viewTime(v.name) !== undefined}<span class="font-mono tabular-nums">{ms(viewTime(v.name))}</span>{/if}
+              {#if viewTimes.get(e.id) !== undefined}<span class="font-mono tabular-nums">{ms(viewTimes.get(e.id) ?? 0)}</span>{/if}
             </div>
             {#if v.data_preview && Object.keys(v.data_preview).length}
               <div class="flex flex-wrap gap-1.5 px-3 pb-2">
@@ -455,7 +461,7 @@
               <div class="{ROW} grid grid-cols-[7rem_minmax(0,1fr)_4rem] gap-3 items-start">
                 <span class="justify-self-start {BADGE} {c.status === 'failed' ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'}">{c.phase}</span>
                 <span class="min-w-0 space-y-1 text-gray-600 dark:text-gray-300">
-                  {#each Object.entries(c.details ?? {}) as [k, v] (k)}<StructuredValue value={v} />{/each}
+                  {#each Object.entries(c.details ?? {}) as [k, v] (k)}<span class="flex gap-2 min-w-0"><span class="font-mono text-[11px] text-gray-400 shrink-0">{k}</span><StructuredValue value={v} class="min-w-0" /></span>{/each}
                   {#if c.state}<KeyValueTable title={m.requests_popover_state()} values={c.state} />{/if}
                   {#if c.exception}<span class="block text-rose-600 dark:text-rose-300">{c.exception}</span>{/if}
                 </span>

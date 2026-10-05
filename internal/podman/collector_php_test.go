@@ -1672,3 +1672,32 @@ namespace {
 		t.Errorf("want the session handler's line as src: %v", got)
 	}
 }
+
+// A nested body value keeps its shape, masked inside, so the Request tab shows it as a tree.
+func TestCollectorPHP_InputKeepsNestedValuesAsTrees(t *testing.T) {
+	got := runCollectorPHP(t, `<?php
+namespace {
+    require COLLECTOR;
+    \Lerd\Collector\emit('probe', ['body' => \Lerd\Collector\input_map(['items' => [['id' => 1, 'token' => 'hunter22']], 'name' => 'Ada'], 'input')]);
+}
+`)
+	joined := strings.Join(got, "\n")
+	if !strings.Contains(joined, `"items":[{"id":1,"token":`) || strings.Contains(joined, "hunter22") {
+		t.Errorf("nested value flattened or unmasked: %v", got)
+	}
+}
+
+// A component phase's arguments are named by the method's own parameters.
+func TestCollectorPHP_ComponentArgumentsAreNamed(t *testing.T) {
+	got := runCollectorPHP(t, `<?php
+namespace {
+    require COLLECTOR;
+    class Mounter { public function mount($name, $params, $key) {} }
+    \Lerd\Collector\emit('probe', ['details' => \Lerd\Collector\component_details(['counter', [], 'lw-1'], 'Mounter', 'mount')]);
+}
+`)
+	joined := strings.Join(got, "\n")
+	if !strings.Contains(joined, `"name":"\"counter\""`) || !strings.Contains(joined, `"key":"\"lw-1\""`) || !strings.Contains(joined, `"params":"[]"`) {
+		t.Errorf("arguments not named: %v", got)
+	}
+}
