@@ -119,7 +119,7 @@
   <button
     type="button"
     onclick={a.onclick}
-    class="{baseBtn} border-l border-black/10 dark:border-white/10 px-1.5 {buttonMenuToneClass[a.tone ?? groupTone]}"
+    class="{baseBtn} border-l border-l-black/10 dark:border-l-white/10 px-1.5 {buttonMenuToneClass[a.tone ?? groupTone]}"
     disabled={a.disabled || busy}
     aria-label={a.title ?? a.label}
     title={a.title ?? a.label}
