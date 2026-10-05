@@ -552,6 +552,12 @@
             </Badge>
           </span>
         {/if}
+        {#if site.runtime === 'frankenphp'}
+          <Badge tone="frankenphp" title={m.sites_badges_frankenphpTip()}>
+            {m.sites_badges_frankenphp()}{#if site.runtime_worker}
+              · {m.sites_badges_frankenphpWorker()}{/if}
+          </Badge>
+        {/if}
         {#if lanOn && lanURL}
           <span class="hidden @md:inline-flex items-center gap-1 text-[10px] text-teal-600 dark:text-teal-400">
             <Icon name="wifi" class="w-3 h-3 shrink-0" />
