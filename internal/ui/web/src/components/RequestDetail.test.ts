@@ -7,9 +7,9 @@ vi.mock('$stores/requests', async (orig) => ({
   loadRequest: () =>
     Promise.resolve({
       rid: 'g1', type: 'fetch', method: 'POST', uri: '/graphql', status: 200, started: '', counts: {}, problems: [], operation: 'query Feed',
-      queries: { query_count: 4, total_time_ms: 4, n_plus_one: [{ fingerprint: 'select * from users where id = ?', count: 3, sample_sql: 'select * from users where id = ?', caller: { file: '', line: 0 }, ids: ['q0', 'q1', 'q2'] }] },
+      queries: { query_count: 4, total_time_ms: 4, n_plus_one: [{ fingerprint: 'select * from users where id = ?', count: 3, sample_sql: 'select * from users where id = ?', ids: ['q0', 'q1', 'q2'], caller: { file: '/srv/app/vendor/acme/Store.php', line: 9 } }] },
       events: {
-        query: ['select * from users where id = ?', 'select * from users where id = ?', 'select * from users where id = ?', 'select * from sessions'].map((sql, i) => ({ id: `q${i}`, ts: '', kind: 'query', ctx: {}, src: {}, data: { sql, time_ms: 1 } })),
+        query: ['select * from users where id = ?', 'select * from users where id = ?', 'select * from users where id = ?', 'select * from sessions'].map((sql, i) => ({ id: `q${i}`, ts: '', kind: 'query', ctx: {}, src: { file: '/srv/app/vendor/acme/Store.php', line: 9 }, data: { sql, time_ms: 1, trace: [{ file: '/srv/app/vendor/acme/Store.php', line: 9, func: 'Acme\\Db->select' }, { file: '/srv/app/vendor/acme/Store.php', line: 4, func: 'Acme\\Cache\\Store->get' }] } })),
         view: [0, 1].map((i) => ({ id: `v${i}`, ts: '', kind: 'view', ctx: {}, src: {}, data: { name: 'item' } })),
         span: [5, 70].map((ms, i) => ({ id: `s${i}`, ts: '', kind: 'span', ctx: {}, src: {}, data: { label: 'View', name: 'item', time_ms: ms, status: 'ok' } })),
         cache: Array.from({ length: 450 }, (_, i) => ({ id: `c${i}`, ts: '', kind: 'cache', ctx: {}, src: {}, data: { op: 'hit', key: `key-${i}` } })),
@@ -57,5 +57,12 @@ describe('RequestDetail', () => {
     await fireEvent.click(await screen.findByRole('tab', { name: /Views/ }));
     expect(screen.getByText('5.0 ms')).toBeInTheDocument();
     expect(screen.getByText('70 ms')).toBeInTheDocument();
+  });
+
+  it('names an N+1 finding by the class that ran its queries', async () => {
+    render(RequestDetail, { props: { rid: 'g1', onopen: () => {} } });
+    await fireEvent.click(await screen.findByRole('tab', { name: /Database/ }));
+    expect(screen.getAllByText(/^Store(:9)?$/).length).toBeGreaterThan(1);
+    expect(screen.queryByText(/vendor\/acme\/Store\.php/)).toBeNull();
   });
 });

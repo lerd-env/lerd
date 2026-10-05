@@ -27,6 +27,10 @@ export function callerClass(file: string, line: number | undefined, trace: Frame
   if (!trace) return '';
   const i = trace.findIndex((f) => f.file === file && f.line === line);
   const func = i >= 0 ? (trace[i + 1]?.func ?? '') : '';
+  // A closure written in a class names that class in its own label; one in a
+  // plain file, a route closure, runs bound to whatever class called it.
+  const closure = /\{closure:([A-Za-z_\\][\w\\]*)::/.exec(func);
+  if (closure) return closure[1];
   const m = /^([A-Za-z_\\][\w\\]*)(?:->|::)(?!\{closure)/.exec(func);
   return m ? m[1] : '';
 }

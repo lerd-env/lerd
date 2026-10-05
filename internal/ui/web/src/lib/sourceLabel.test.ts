@@ -20,6 +20,11 @@ describe('source labels', () => {
       { file: '/app/vendor/Router.php', line: 9, func: 'Illuminate\\Routing\\RouteFileRegistrar->{closure:/app/routes/web.php:9}' }
     ];
     expect(callerClass('/app/routes/web.php', 22, route)).toBe('');
+    const store = [
+      { file: '/app/vendor/Cache/DatabaseStore.php', line: 279, func: 'Illuminate\\Database\\Query\\Builder->first' },
+      { file: '/app/vendor/Cache/DatabaseStore.php', line: 270, func: 'Illuminate\\Cache\\DatabaseStore->{closure:Illuminate\\Cache\\DatabaseStore::incrementOrDecrement():275}' }
+    ];
+    expect(callerClass('/app/vendor/Cache/DatabaseStore.php', 279, store)).toBe('Illuminate\\Cache\\DatabaseStore');
   });
 });
 

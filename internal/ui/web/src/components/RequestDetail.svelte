@@ -114,6 +114,8 @@
   const cap = <T,>(key: string, list: T[]): T[] => list.slice(0, limits[key] ?? PAGE);
   // A query keeps the number of its place in the run when the list is filtered.
   const queryNo = $derived(new Map(queries.map((e, i) => [e.id, i + 1])));
+  // An N+1 finding is named like its queries, by the class that ran them, with their stack a click away.
+  const queryById = $derived(new Map(queries.map((e) => [e.id, e])));
   // An N+1 finding, once picked, narrows the list to the queries it repeats.
   let only = $state<QueryFinding | null>(null);
   const onlyIds = $derived(new Set(only?.ids ?? []));
@@ -387,7 +389,7 @@
                 <div class="flex items-center gap-2">
                   <span class="{BADGE} bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">{f.count ? `N+1 ×${f.count}` : ms(f.time_ms ?? 0)}</span>
                   <span class="font-mono truncate flex-1">{f.fingerprint ?? f.sql}</span>
-                  <span class="text-[11px] min-w-0 max-w-[45%]"><SourcePath file={f.caller.file} line={f.caller.line} short /></span>
+                  <span class="text-[11px] min-w-0 max-w-[45%]">{#if queryById.get(f.ids?.[0] ?? '')}{@const q = queryById.get(f.ids?.[0] ?? '')!}<CallerSource file={f.caller.file} line={f.caller.line} trace={data(q).trace} />{:else}<SourcePath file={f.caller.file} line={f.caller.line} short />{/if}</span>
                   {#if f.ids?.length}<button type="button" aria-pressed={only === f} onclick={() => (only = only === f ? null : f)} class="text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-lerd-border whitespace-nowrap {only === f ? 'bg-gray-100 dark:bg-white/10 text-gray-800 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'}">{m.requests_nPlusOneShow()}</button>{/if}
                 </div>
                 {#if f.example_sql}

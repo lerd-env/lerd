@@ -42,7 +42,7 @@
 .method { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
 .ok { color: var(--green); font-family: var(--font-mono); }
 .err { color: var(--rose); font-family: var(--font-mono); }
-.pill { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 999px; }
+.pill { font-size: 10px; font-weight: 600; padding: 4px 6px; border-radius: 999px; text-box: trim-both cap alphabetic; }
 .pill-amber { background: var(--amber-soft); color: var(--amber); }
 .pill-red { background: var(--red-soft); color: var(--red); }
 .phase { display: inline-flex; width: 48px; height: 4px; border-radius: 2px; overflow: hidden; background: var(--border); gap: 1px; }
