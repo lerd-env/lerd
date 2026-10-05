@@ -1481,14 +1481,15 @@ namespace {
 	}
 }
 
-// A secret passed inline in a GraphQL query is masked in the query text and
-// in the field's arguments, as one passed in the variables is.
+// A secret passed inline in a GraphQL query is masked in the body, the query
+// text and the field's arguments, as one passed in the variables is.
 func TestCollectorPHP_GraphQLMasksInlineSecrets(t *testing.T) {
 	got := runCollectorPHP(t, `<?php
 namespace {
     require COLLECTOR;
-    $body = ['query' => 'mutation { login(email: "a@b.test", password: "hunter22") { token } }'];
-    \Lerd\Collector\emit('probe', ['ops' => \Lerd\Collector\graphql_operations($body)]);
+    $_SERVER['CONTENT_TYPE'] = 'application/json';
+    $body = \Lerd\Collector\request_body(json_encode([['query' => 'mutation { login(email: "a@b.test", password: "hunter22") { token } }']]));
+    \Lerd\Collector\emit('probe', ['body' => $body, 'ops' => \Lerd\Collector\graphql_operations($body)]);
 }
 `)
 	joined := strings.Join(got, "\n")

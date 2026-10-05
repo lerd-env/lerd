@@ -1750,7 +1750,23 @@ function request_body(?string $raw = null): array
     }
     $raw = $raw ?? @file_get_contents('php://input', false, null, 0, BODY_BYTES);
     $data = is_string($raw) && $raw !== '' ? json_decode($raw, true) : null;
-    return is_array($data) ? mask_tree($data, 'input') : [];
+    if (!is_array($data)) {
+        return [];
+    }
+    // A GraphQL body's query text can carry a secret inline, so it is masked
+    // before the body or its operations are shown anywhere.
+    foreach (isset($data['query']) ? [null] : array_keys($data) as $k) {
+        $op = $k === null ? $data : $data[$k];
+        if (is_array($op) && isset($op['query']) && is_string($op['query'])) {
+            $op['query'] = graphql_masked_query($op['query']);
+            if ($k === null) {
+                $data = $op;
+            } else {
+                $data[$k] = $op;
+            }
+        }
+    }
+    return mask_tree($data, 'input');
 }
 
 // preview_masked masks a previewed value the rules name, and the fields of a
