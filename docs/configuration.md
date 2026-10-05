@@ -194,7 +194,8 @@ A portable, self-contained description of a project's local environment. Created
 | `db` | Database targeting for non-PHP projects: `service` (e.g. `mysql`, `postgres`) and `database` name |
 | `stripe` | Optional Stripe webhook listener config: `path` (forward route, defaults to `/stripe/webhook`) and `secret_env_key` (which `.env` key holds the secret, defaults to auto-detection). See [Stripe](./usage/stripe.md) |
 | `mcp_inject` | Set `false` to opt the project out of automatic AI/MCP config refresh. `lerd update`/`install` then never rewrites this project's committed MCP config or skill files. An explicit `lerd mcp:inject` still writes. See [MCP](./features/mcp.md#project-scoped-registration) |
-| `debug.exclude_commands` | Console commands left out of the Debug window on top of the ones the framework store lists, as typed (`inventory:watch`) or by class. Each job such a command runs is still reported. See [Commands left out](./features/queries.md#keeping-the-noise-down) |
+| `devtools.exclude_commands` | Console commands left out of the Debug window on top of the ones the framework store lists, as typed (`inventory:watch`) or by class. Each job such a command runs is still reported. See [Commands left out](./features/queries.md#keeping-the-noise-down) |
+| `devtools.redact` | What the Debug window masks on top of what it always masks: `style` (`redacted` or `masked`), `visible` (characters a masked value keeps), `crop` (shorten to a fixed run instead of keeping the length) and `char` (the mask character) for the built-in masks, and under `outgoing_http.headers` a direction (`request`, `response`, or `*` for both) mapping header names, globs allowed, to a style or to `{style, visible, crop, char}`. See [Masking values](./features/queries.md#masking-values) |
 
 ### Basic example
 

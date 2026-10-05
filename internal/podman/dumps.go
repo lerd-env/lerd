@@ -3,9 +3,12 @@ package podman
 import (
 	"embed"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -118,6 +121,50 @@ func DevtoolsSeamsConf() string {
 	return out
 }
 
+// DevtoolsRedactConf renders what each site's .lerd.yaml asks the collector to
+// mask on top of what it always masks: the style to show a masked value in,
+// and header names for outgoing requests and their responses.
+func DevtoolsRedactConf() string {
+	var lines []string
+	if reg, err := config.LoadSites(); err == nil {
+		for _, s := range reg.Sites {
+			proj, err := config.LoadProjectConfig(s.Path)
+			if err != nil || proj.Devtools == nil || proj.Devtools.Redact == nil {
+				continue
+			}
+			r := proj.Devtools.Redact
+			base, errs := r.ResolvedMask()
+			add := func(fields ...string) {
+				for _, f := range fields {
+					if strings.TrimSpace(f) == "" || strings.ContainsAny(f, "|\n\r") {
+						return
+					}
+				}
+				lines = append(lines, s.Name+"|"+strings.Join(fields, "|"))
+			}
+			tail := func(m config.RedactMask) []string {
+				crop := "0"
+				if m.Crop {
+					crop = "1"
+				}
+				return []string{m.Style, strconv.Itoa(m.Visible), crop, m.Char}
+			}
+			add(append([]string{"style"}, tail(base)...)...)
+			headers, headerErrs := r.HTTPHeaders()
+			for _, e := range append(errs, headerErrs...) {
+				fmt.Fprintf(os.Stderr, "[WARN] %s: %v\n", s.Name, e)
+			}
+			for _, dir := range []string{"request", "response"} {
+				names := slices.Sorted(maps.Keys(headers[dir]))
+				for _, name := range names {
+					add(append([]string{"http_" + dir, strings.TrimSpace(name)}, tail(headers[dir][name])...)...)
+				}
+			}
+		}
+	}
+	return "# lerd devtools redaction, from .lerd.yaml.\n# site|style|<mask>, site|http_request|header|<mask>, site|http_response|header|<mask>, where <mask> is style|visible|crop|char.\n" + strings.Join(lines, "\n") + "\n"
+}
+
 // DevtoolsExcludeConf renders the console commands whose own work the collector
 // leaves out, one site|command per line: "*" for what the store declares, which
 // holds on every site, and the site's name for what its .lerd.yaml adds.
@@ -146,8 +193,8 @@ func DevtoolsExcludeConf() string {
 	}
 	if reg, err := config.LoadSites(); err == nil {
 		for _, s := range reg.Sites {
-			if proj, err := config.LoadProjectConfig(s.Path); err == nil && proj.Debug != nil {
-				for _, c := range proj.Debug.ExcludeCommands {
+			if proj, err := config.LoadProjectConfig(s.Path); err == nil && proj.Devtools != nil {
+				for _, c := range proj.Devtools.ExcludeCommands {
 					add(s.Name, c)
 				}
 			}
@@ -199,6 +246,7 @@ func WriteDumpBridgeAssets() error {
 		{config.DevtoolsCollectorFile(), string(collectorContent)},
 		{config.DevtoolsSeamsFile(), DevtoolsSeamsConf()},
 		{config.DevtoolsExcludeFile(), DevtoolsExcludeConf()},
+		{config.DevtoolsRedactFile(), DevtoolsRedactConf()},
 	} {
 		if info, err := os.Stat(asset.path); err == nil {
 			if info.IsDir() {
@@ -228,6 +276,7 @@ func RemoveDumpAssets() error {
 		config.DevtoolsCollectorFile(),
 		config.DevtoolsSeamsFile(),
 		config.DevtoolsExcludeFile(),
+		config.DevtoolsRedactFile(),
 		config.DumpsEnabledFlagFile(),
 		config.DevtoolsWorkersFlagFile(),
 		// Legacy: the devtools collector used to have its own enable sentinel

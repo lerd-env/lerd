@@ -334,7 +334,7 @@ func TestDevtoolsExcludeConf_StoreAndProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	project := t.TempDir()
-	if err := os.WriteFile(filepath.Join(project, ".lerd.yaml"), []byte("debug:\n  exclude_commands: [App\\Console\\Commands\\Poll]\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(project, ".lerd.yaml"), []byte("devtools:\n  exclude_commands: [App\\Console\\Commands\\Poll]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := config.SaveSites(&config.SiteRegistry{Sites: []config.Site{{Name: "shop", Path: project}}}); err != nil {
@@ -373,5 +373,52 @@ func TestDevtoolsSeamsConf_ReadsEveryMajor(t *testing.T) {
 		if !strings.Contains(excludes, want) {
 			t.Errorf("exclude file missing %q:\n%s", want, excludes)
 		}
+	}
+}
+
+func TestDevtoolsRedactConf_PerHeaderStyleAndDirection(t *testing.T) {
+	withTempXDG(t)
+	project := t.TempDir()
+	yaml := `devtools:
+  redact:
+    style: masked
+    visible: 2
+    outgoing_http:
+      headers:
+        request:
+          X-Shop-Signature:
+            style: masked
+            visible: 6
+          X-Big: { style: masked, visible: 99 }
+          X-Short: { style: masked, crop: true, char: "•" }
+        response:
+          X-Upstream-Token: redacted
+        "*":
+          X-Trace-*: masked
+        sideways:
+          X-Lost: masked
+`
+	if err := os.WriteFile(filepath.Join(project, ".lerd.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SaveSites(&config.SiteRegistry{Sites: []config.Site{{Name: "shop", Path: project}}}); err != nil {
+		t.Fatal(err)
+	}
+	got := DevtoolsRedactConf()
+	for _, want := range []string{
+		"shop|style|masked|2|0|*\n",
+		"shop|http_request|X-Shop-Signature|masked|6|0|*\n",
+		"shop|http_request|X-Big|masked|2|0|*\n",
+		"shop|http_request|X-Short|masked|2|1|•\n",
+		"shop|http_response|X-Upstream-Token|redacted|2|0|*\n",
+		"shop|http_request|X-Trace-*|masked|2|0|*\n",
+		"shop|http_response|X-Trace-*|masked|2|0|*\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("redact file missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "X-Lost") {
+		t.Errorf("a direction lerd does not know must be refused:\n%s", got)
 	}
 }

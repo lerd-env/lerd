@@ -51,7 +51,7 @@ Most of it is captured at the library every framework shares, so it is not tied 
 | Mail | Symfony Mailer | Laravel, Symfony, anything using it |
 | Cache | Laravel's cache events | Laravel |
 | Events | Laravel's dispatcher, Symfony EventDispatcher | Laravel, Symfony, Drupal |
-| HTTP | Laravel's HTTP client, Symfony HttpClient | Laravel, Symfony |
+| HTTP, with headers and timing | Laravel's HTTP client, Symfony HttpClient | Laravel, Symfony |
 | Jobs | Laravel queue, Symfony Messenger, each framework's queue | every supported framework |
 | App log | Monolog | every app using it |
 | Exceptions | Sentry, Inspector | every app using them |
@@ -85,11 +85,11 @@ Every template rendered, with its file and the data keys it was given. Each valu
 
 Messages are reported, not caught: an SMS is really sent, and billed.
 
-### Cache, events and HTTP (Laravel)
+### Cache, events and HTTP
 
 - **Cache:** hits, misses, writes and forgets with the key, the store, and the file or Redis connection behind it. Framework-internal keys (queue signals, scheduler mutexes, Horizon and Reverb) are left out.
 - **Events:** your app's and packages' events; Laravel's own `Illuminate\*` events are left out.
-- **HTTP:** outgoing calls with method, URL and status. On Symfony the status is unknown when the call is made, so the row shows `sent`.
+- **HTTP:** outgoing calls with method, URL, status and time. Expand one for how long each phase took (DNS, connect, TLS, waiting for the first byte, download) and both ends' headers, with credentials and cookies masked. On Symfony the response is read as it ends, so a lazy response is complete and the client's own status check runs where the app expects it.
 
 ### Jobs
 
@@ -130,11 +130,46 @@ items          array(12)
 - **Commands that only loop** are left out entirely, while the jobs they run still show. The framework definitions list them, and a project adds its own in `.lerd.yaml`, by name or by class:
 
     ```yaml
-    debug:
+    devtools:
       exclude_commands:
         - inventory:watch
         - App\Console\Commands\PollFeeds
     ```
+
+## Masking values
+
+Anything that reads as a credential is masked wherever it is shown: headers, query string, body, cookies, session and outgoing requests. Names with password, secret, token, session, cookie, authorization or an API key in them are always masked, and a project cannot turn that off.
+
+A project can mask more, and choose how a masked value looks, in `.lerd.yaml`:
+
+```yaml
+devtools:
+  redact:
+    style: masked              # how the built-in masks show: redacted (default) or masked
+    visible: 4                 # characters a masked value keeps, 0 to 32
+    crop: false                # true shortens the rest to a fixed run of 8
+    char: "*"                  # the character it is masked with
+    outgoing_http:
+      headers:
+        request:               # headers sent on outgoing requests
+          X-Shop-Signature: masked
+          X-Api-Secret:        # a style alone, or any of the masked settings too
+            style: masked
+            visible: 8
+            crop: true
+            char: "•"
+        response:              # headers on the responses they get back
+          X-Upstream-Token: redacted
+        "*":                   # both directions
+          X-Trace-*: masked    # globs work, case does not matter
+```
+
+| Style | Shows |
+|---|---|
+| `redacted` | `[redacted]` |
+| `masked` | The first characters, then the mask character for each one hidden, `sk_l************` for a 16-character value, so it keeps its length; with `crop: true` the hidden part is a fixed run of 8, `sk_l********`, so the length is not given away. `visible` sets how many characters show (4 by default), and a value no longer than twice that shows only the mask character. `char` picks that character, `*` by default. |
+
+A header's settings fall back to the ones set directly under `redact`. A direction, style, `visible` outside 0 to 32 or a `char` longer than one character is refused with a warning naming it. The rules apply as soon as the file is saved.
 
 ## N+1 warnings
 

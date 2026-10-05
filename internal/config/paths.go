@@ -340,6 +340,12 @@ func DevtoolsExcludeFile() string {
 	return filepath.Join(DumpsAssetsDir(), "devtools-exclude.conf")
 }
 
+// DevtoolsRedactFile is the host path for what the collector masks per site,
+// one site|scope|value per line.
+func DevtoolsRedactFile() string {
+	return filepath.Join(DumpsAssetsDir(), "devtools-redact.conf")
+}
+
 // LaravelAdapterFile is the host path for the Laravel devtools adapter, loaded
 // by the lerd_devtools extension at Application::boot. It lives in the dumps
 // assets dir because that directory is bind-mounted into FPM at

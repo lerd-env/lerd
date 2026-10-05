@@ -249,7 +249,7 @@ The package works without any setup. A framework integration adds a switch to tu
 
 ## In tests
 
-`Lerd::enable(true)` turns capture on in a test suite, `Lerd::enable(false)` off, and `Lerd::enable(null)` goes back to asking lerd. The package keeps the last 500 entries for `Lerd::entries()`, so a test can assert what the app wrote; `Lerd::flush()` clears them.
+`Lerd::enable(true)` turns capture on in a test suite, `Lerd::enable(false)` off, and `Lerd::enable(null)` goes back to asking lerd. The package keeps the last 500 entries for `Lerd::entries()`, so a test can assert what the app wrote; `Lerd::flush()` clears them. `Lerd::keep(100)` changes how many, and `Lerd::keep(0)` keeps none, which costs lerd nothing since it reads each entry as it is written. The framework integrations set it from their config: `keep` in `config/lerd.php` (`LERD_KEEP`) on Laravel, `lerd: keep:` on Symfony and the `lerd.keep` param on Yii.
 
 ## Bringing your own objects
 

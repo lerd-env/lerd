@@ -3,11 +3,14 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 )
@@ -145,15 +148,157 @@ type ProjectConfig struct {
 	// BrowserCapture sets which browser events the injected capture script
 	// reports for this site. Absent keeps the defaults; see BrowserCapture.
 	BrowserCapture *BrowserCapture `yaml:"browser_capture,omitempty"`
-	// Debug tunes what the Debug window captures for this project.
-	Debug *ProjectDebug `yaml:"debug,omitempty"`
+	// Devtools tunes what the Debug window captures for this project, under the
+	// same key a framework definition uses for its capture.
+	Devtools *ProjectDevtools `yaml:"devtools,omitempty"`
 }
 
-// ProjectDebug is the project's part of the Debug window's capture.
+// ProjectDevtools is the project's part of the Debug window's capture.
 // ExcludeCommands adds console commands to the ones the framework store already
-// leaves out, as typed (queue:work) or by class.
-type ProjectDebug struct {
-	ExcludeCommands []string `yaml:"exclude_commands,omitempty"`
+// leaves out, as typed (queue:work) or by class, and Redact masks more values.
+type ProjectDevtools struct {
+	ExcludeCommands []string       `yaml:"exclude_commands,omitempty"`
+	Redact          *ProjectRedact `yaml:"redact,omitempty"`
+}
+
+// Redaction styles: a fixed marker, or the value's first characters.
+const (
+	RedactStyleRedacted = "redacted"
+	RedactStyleMasked   = "masked"
+)
+
+// ProjectRedact names values to mask on top of the ones lerd always masks,
+// and how a masked value is shown.
+type ProjectRedact struct {
+	Style string `yaml:"style,omitempty"`
+	// Visible is how many leading characters a masked value keeps, 4 unless
+	// set; Crop shortens the rest to a fixed run instead of one per character,
+	// and Char is the character it is masked with, * unless set.
+	Visible      *int               `yaml:"visible,omitempty"`
+	Crop         *bool              `yaml:"crop,omitempty"`
+	Char         string             `yaml:"char,omitempty"`
+	OutgoingHTTP *ProjectRedactHTTP `yaml:"outgoing_http,omitempty"`
+}
+
+// RedactRule is how one header is masked: a style alone, `masked`, or a
+// mapping that also says how many characters stay visible.
+type RedactRule struct {
+	Style   string `yaml:"style,omitempty"`
+	Visible *int   `yaml:"visible,omitempty"`
+	Crop    *bool  `yaml:"crop,omitempty"`
+	Char    string `yaml:"char,omitempty"`
+}
+
+// UnmarshalYAML takes either the style as a plain value or the full mapping.
+func (r *RedactRule) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		r.Style = value.Value
+		return nil
+	}
+	type plain RedactRule
+	return value.Decode((*plain)(r))
+}
+
+// RedactMask is a resolved way to mask: the style and, for masked, how many
+// leading characters stay visible.
+type RedactMask struct {
+	Style   string
+	Visible int
+	Crop    bool
+	Char    string
+}
+
+// DefaultRedactVisible is how many characters a masked value keeps unless set.
+const DefaultRedactVisible = 4
+
+// ProjectRedactHTTP names headers to mask on outgoing requests: under
+// headers, a direction (request, response, or * for both) maps header names,
+// globs allowed, to the style each is masked in.
+type ProjectRedactHTTP struct {
+	Headers map[string]map[string]RedactRule `yaml:"headers,omitempty"`
+}
+
+// Directions a header can be masked in on an outgoing request.
+var redactDirections = map[string][]string{"request": {"request"}, "response": {"response"}, "*": {"request", "response"}}
+
+// ResolvedMask is how what lerd always masks is shown, the defaults when unset.
+func (r *ProjectRedact) ResolvedMask() (RedactMask, []error) {
+	defaults := RedactMask{Style: RedactStyleRedacted, Visible: DefaultRedactVisible, Char: "*"}
+	if r == nil {
+		return defaults, nil
+	}
+	return resolveMask(RedactRule{Style: r.Style, Visible: r.Visible, Crop: r.Crop, Char: r.Char}, defaults, "devtools.redact")
+}
+
+// HTTPHeaders lists each header to mask per direction and how, with * spread
+// over both directions. A direction, style or visible count lerd does not
+// accept is refused, naming it, rather than guessed at.
+func (r *ProjectRedact) HTTPHeaders() (map[string]map[string]RedactMask, []error) {
+	out := map[string]map[string]RedactMask{}
+	var errs []error
+	if r == nil || r.OutgoingHTTP == nil {
+		return out, nil
+	}
+	base, _ := r.ResolvedMask()
+	for dir, headers := range r.OutgoingHTTP.Headers {
+		targets, ok := redactDirections[dir]
+		if !ok {
+			errs = append(errs, fmt.Errorf("unknown devtools.redact.outgoing_http.headers direction %q, want request, response or *", dir))
+			continue
+		}
+		for name, rule := range headers {
+			mask, ruleErrs := resolveMask(rule, base, "header "+name)
+			errs = append(errs, ruleErrs...)
+			for _, t := range targets {
+				if out[t] == nil {
+					out[t] = map[string]RedactMask{}
+				}
+				out[t][name] = mask
+			}
+		}
+	}
+	return out, errs
+}
+
+// resolveMask fills a rule in from base, the defaults it does not set.
+func resolveMask(rule RedactRule, base RedactMask, what string) (RedactMask, []error) {
+	var errs []error
+	mask := base
+	if rule.Style != "" || what == "devtools.redact" {
+		style, err := redactStyle(rule.Style, "style for "+what)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		mask.Style = style
+	}
+	if rule.Visible != nil {
+		if *rule.Visible < 0 || *rule.Visible > 32 {
+			errs = append(errs, fmt.Errorf("visible for %s is %d, want 0 to 32", what, *rule.Visible))
+		} else {
+			mask.Visible = *rule.Visible
+		}
+	}
+	if rule.Crop != nil {
+		mask.Crop = *rule.Crop
+	}
+	if rule.Char != "" {
+		if utf8.RuneCountInString(rule.Char) != 1 || strings.ContainsAny(rule.Char, "|\n\r") {
+			errs = append(errs, fmt.Errorf("char for %s is %q, want a single character", what, rule.Char))
+		} else {
+			mask.Char = rule.Char
+		}
+	}
+	return mask, errs
+}
+
+func redactStyle(style, what string) (string, error) {
+	switch style {
+	case "", RedactStyleRedacted:
+		return RedactStyleRedacted, nil
+	case RedactStyleMasked:
+		return RedactStyleMasked, nil
+	}
+	return RedactStyleRedacted, fmt.Errorf("unknown %s %q, want %q or %q", what, style, RedactStyleRedacted, RedactStyleMasked)
 }
 
 // MCPInjectDisabled reports whether the project opted out of automatic MCP
@@ -176,7 +321,7 @@ func (c *ProjectConfig) IsEmpty() bool {
 		!c.DBIsolated && len(c.EnvOverrides) == 0 && len(c.WorktreeInclude) == 0 &&
 		len(c.EnvPassthrough) == 0 && c.EnvProvider == "" &&
 		c.RequestTimeout == 0 && c.Stripe == nil &&
-		c.MCPInject == nil && c.BrowserCapture == nil && c.Debug == nil
+		c.MCPInject == nil && c.BrowserCapture == nil && c.Devtools == nil
 }
 
 // Validate reports configuration that can't be honoured. A site is either a
@@ -559,8 +704,27 @@ func cloneProjectConfig(in *ProjectConfig) *ProjectConfig {
 	if in.BrowserCapture != nil {
 		out.BrowserCapture = in.BrowserCapture.clone()
 	}
-	if in.Debug != nil {
-		out.Debug = &ProjectDebug{ExcludeCommands: append([]string(nil), in.Debug.ExcludeCommands...)}
+	if in.Devtools != nil {
+		d := &ProjectDevtools{ExcludeCommands: append([]string(nil), in.Devtools.ExcludeCommands...)}
+		if r := in.Devtools.Redact; r != nil {
+			d.Redact = &ProjectRedact{Style: r.Style}
+			if r.Visible != nil {
+				v := *r.Visible
+				d.Redact.Visible = &v
+			}
+			if r.Crop != nil {
+				c := *r.Crop
+				d.Redact.Crop = &c
+			}
+			d.Redact.Char = r.Char
+			if h := r.OutgoingHTTP; h != nil {
+				d.Redact.OutgoingHTTP = &ProjectRedactHTTP{Headers: map[string]map[string]RedactRule{}}
+				for dir, headers := range h.Headers {
+					d.Redact.OutgoingHTTP.Headers[dir] = maps.Clone(headers)
+				}
+			}
+		}
+		out.Devtools = d
 	}
 	if in.FrameworkDef != nil {
 		out.FrameworkDef = cloneFrameworkMutable(in.FrameworkDef)
