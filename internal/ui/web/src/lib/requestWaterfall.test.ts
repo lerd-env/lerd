@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildWaterfall, condense } from './requestWaterfall';
 import type { RequestDetail } from '$stores/requests';
 
-const phases = { dns: 'DNS', connect: 'Connect', wait: 'Wait', download: 'Download', dom: 'DOM', load: 'Load', bindings: 'Bindings', queries: 'Queries', details: 'Details', state: 'State', source: 'Source' };
+const phases = { dns: 'DNS', connect: 'Connect', wait: 'Wait', download: 'Download', dom: 'DOM', load: 'Load', bindings: 'Bindings', queries: 'Queries', details: 'Details', state: 'State', source: 'Source', timing: 'Timing', requestHeaders: 'Request headers', responseHeaders: 'Response headers' };
 const e = (kind: string, ts: string, data: unknown) => ({ v: 1, id: ts, ts, kind, ctx: { type: 'fpm' }, src: { file: '', line: 0 }, data });
 
 describe('buildWaterfall', () => {
@@ -60,6 +60,27 @@ describe('buildWaterfall', () => {
       ['oops', 64, 64],
       ['DOM', 69, 119]
     ]);
+  });
+
+  it('draws outgoing requests back from when they finished, so concurrent calls overlap', () => {
+    const d: RequestDetail = {
+      rid: 'r4', type: 'request', started: '2026-10-04T10:00:00.000Z', time_ms: 1600, counts: {}, problems: [],
+      events: {
+        http: [
+          e('http', '2026-10-04T10:00:00.600Z', { method: 'GET', url: 'https://api.test/a', status: 200, reason: 'OK', time_ms: 500, timing: { dns: 2 }, request_headers: { Accept: 'application/json' } }),
+          e('http', '2026-10-04T10:00:01.580Z', { method: 'GET', url: 'https://api.test/slow', status: 500, time_ms: 1480 })
+        ]
+      }
+    };
+    const rows = buildWaterfall(d, phases).rows.filter((r) => r.label.startsWith('GET'));
+    expect(rows.map((r) => [r.label, r.layer, r.start, r.end])).toEqual([
+      ['GET https://api.test/slow', 'http', 100, 1580],
+      ['GET https://api.test/a', 'http', 100, 600]
+    ]);
+    expect(rows.map((r) => Boolean(r.warn))).toEqual([true, false]);
+    expect(rows[1].note).toBe('200 · 500 ms');
+    expect(rows[1].sections?.map((s) => s.title)).toEqual(['Details', 'Timing', 'Request headers']);
+    expect(rows[1].sections?.[0].values.status).toBe('200 OK');
   });
 
   it('condenses rows of one lerd layer that follow each other, never the app own categories', () => {

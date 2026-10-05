@@ -1786,5 +1786,17 @@
   "packages_install": "Instalar",
   "packages_installing": "Instalando…",
   "packages_dismiss": "No volver a sugerir",
-  "packages_docs": "Docs"
+  "packages_docs": "Docs",
+  "http_phase_dns": "DNS",
+  "http_phase_connect": "Conexión",
+  "http_phase_tls": "TLS",
+  "http_phase_wait": "Espera",
+  "http_phase_download": "Descarga",
+  "http_requestHeaders": "Cabeceras de la petición",
+  "http_responseHeaders": "Cabeceras de la respuesta",
+  "requests_popover_timing": "Tiempos",
+  "http_received": "Recibido",
+  "http_sentSize": "Enviado",
+  "http_status": "Estado",
+  "http_failed": "conexión fallida"
 }

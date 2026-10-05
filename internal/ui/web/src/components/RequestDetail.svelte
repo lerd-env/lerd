@@ -1,4 +1,5 @@
 <script lang="ts">
+  import HttpCall from './HttpCall.svelte';
   import { loadRequest, type RequestDetail, type QueryFinding } from '$stores/requests';
   import { buildWaterfall } from '$lib/requestWaterfall';
   import { inlineBindings } from '$lib/sqlInline';
@@ -47,7 +48,7 @@
   const data = (e: DumpEvent) => (e.data ?? {}) as Record<string, any>;
   const ms = (n: number) => `${n < 1 ? '<1' : n < 10 ? n.toFixed(1) : Math.round(n)} ms`;
 
-  const waterfall = $derived(d ? buildWaterfall(d, { dns: m.requests_phase_dns(), connect: m.requests_phase_connect(), wait: m.requests_phase_wait(), download: m.requests_phase_download(), dom: m.requests_phase_dom(), load: m.requests_phase_load(), bindings: m.requests_popover_bindings(), queries: m.requests_section_queries(), details: m.requests_popover_details(), state: m.requests_popover_state(), source: m.requests_popover_source() }) : null);
+  const waterfall = $derived(d ? buildWaterfall(d, { dns: m.requests_phase_dns(), connect: m.requests_phase_connect(), wait: m.requests_phase_wait(), download: m.requests_phase_download(), dom: m.requests_phase_dom(), load: m.requests_phase_load(), bindings: m.requests_popover_bindings(), queries: m.requests_section_queries(), details: m.requests_popover_details(), state: m.requests_popover_state(), source: m.requests_popover_source(), timing: m.requests_popover_timing(), requestHeaders: m.http_requestHeaders(), responseHeaders: m.http_responseHeaders() }) : null);
   const http = $derived(data(ev('request')[0] ?? ({} as DumpEvent)));
   const spans = $derived(ev('span').map(data));
   const controller = $derived(spans.find((s) => s.label === 'Controller')?.name ?? '');
@@ -165,6 +166,15 @@
     const n = Date.parse(ts) - Date.parse(d.started);
     return isNaN(n) ? '' : `+${Math.max(n, 0)} ms`;
   }
+  // Where an outgoing call ran within the request, as fractions of its time:
+  // it was reported as it finished, so it started its own time before that.
+  function httpSpan(ts: string, took: number): [number, number] | undefined {
+    const total = d?.time_ms ?? 0;
+    if (!d || !total || !took) return undefined;
+    const end = Date.parse(ts) - Date.parse(d.started);
+    const clamp = (n: number) => Math.min(Math.max(n / total, 0), 1);
+    return [clamp(end - took), clamp(end)];
+  }
   function statusTone(s?: number): string {
     if (!s) return 'text-gray-400';
     if (s >= 500) return 'text-rose-600 dark:text-rose-300';
@@ -219,7 +229,7 @@
   {#if missing}
     <p class="px-5 py-4 text-xs text-gray-500 dark:text-gray-400">{m.requests_notFound()}</p>
   {:else if d && waterfall}
-    <DetailTabs tabs={allTabs} active={tab} onchange={(id) => (tab = id)} />
+    <DetailTabs tabs={allTabs} active={tab} onchange={(id) => (tab = id)} snap />
     <div class="flex-1 overflow-y-auto px-5 py-4 space-y-4 bg-gray-50/50 dark:bg-transparent">
       {#if tab === 'performance'}
         <RequestStats
@@ -482,11 +492,8 @@
         <div class={BOX}>
           {#each ev('http') as e (e.id)}
             {@const x = data(e)}
-            <div class="{ROW} grid grid-cols-[4rem_minmax(0,1fr)_3rem] gap-3">
-              <span class="font-mono">{x.method}</span>
-              <span class="font-mono break-all">{x.url}</span>
-              <span class="font-mono text-right {statusTone(x.status)}">{x.failed ? '✕' : x.status}</span>
-            </div>
+            {@const span = httpSpan(e.ts, Number(x.time_ms ?? 0))}
+            <HttpCall call={x} tone={statusTone(x.status)} from={span?.[0]} to={span?.[1]} />
           {/each}
         </div>
       {:else if tab === 'jobs'}

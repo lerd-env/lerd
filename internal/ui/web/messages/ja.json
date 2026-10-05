@@ -1786,5 +1786,17 @@
   "packages_install": "インストール",
   "packages_installing": "インストール中…",
   "packages_dismiss": "今後表示しない",
-  "packages_docs": "ドキュメント"
+  "packages_docs": "ドキュメント",
+  "http_phase_dns": "DNS",
+  "http_phase_connect": "接続",
+  "http_phase_tls": "TLS",
+  "http_phase_wait": "待機",
+  "http_phase_download": "ダウンロード",
+  "http_requestHeaders": "リクエストヘッダー",
+  "http_responseHeaders": "レスポンスヘッダー",
+  "requests_popover_timing": "タイミング",
+  "http_received": "受信",
+  "http_sentSize": "送信",
+  "http_status": "ステータス",
+  "http_failed": "接続失敗"
 }

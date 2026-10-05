@@ -1187,3 +1187,86 @@ namespace {
 		t.Errorf("want both callables named by their method: %v", got)
 	}
 }
+
+func TestCollectorPHP_OutgoingHTTPCarriesHeadersAndTiming(t *testing.T) {
+	dir := t.TempDir()
+	seams := "http_response|class|Fixture\\Response|__destruct||\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
+		t.Fatalf("write seams: %v", err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace Fixture {
+    class Response {
+        public function getInfo() {
+            return ['http_method' => 'GET', 'original_url' => 'https://api.test/stock', 'http_code' => 200,
+                'response_headers' => ['HTTP/1.1 200 OK', 'Content-Type: application/json', 'Content-Length: 363', 'Set-Cookie: s=1'],
+                'total_time' => 0.042, 'namelookup_time' => 0.002, 'connect_time' => 0.005, 'starttransfer_time' => 0.04];
+        }
+        public function __destruct() {}
+    }
+}
+namespace {
+    require COLLECTOR;
+    \Lerd\Collector\http('GET', 'https://api.test/stock', ['headers' => ['Accept' => 'application/json', 'Authorization' => 'Bearer x']]);
+    \Lerd\Collector\http('POST', 'https://api.test/never', []);
+    $r = new \Fixture\Response();
+    \Lerd\Collector\seam_begin('Fixture\\Response', '__destruct', $r, []);
+    \Lerd\Collector\seam_end('Fixture\\Response', '__destruct', false);
+    \Lerd\Collector\http_flush();
+}
+`)
+	joined := strings.Join(got, "\n")
+	for _, want := range []string{
+		`"url":"https://api.test/stock","status":200`,
+		`"time_ms":42`,
+		`"first_byte":40`,
+		`"response_size":363`,
+		`"reason":"OK"`,
+		`"Accept":"application/json"`,
+		`"Authorization":"[redacted]"`,
+		`"Set-Cookie":"[redacted]"`,
+		`"Content-Type":"application/json"`,
+		`"url":"https://api.test/never","status":0`,
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %s in %v", want, got)
+		}
+	}
+	if strings.Count(joined, `"kind":"http"`) != 2 {
+		t.Errorf("want one event per request: %v", got)
+	}
+}
+
+func TestCollectorPHP_RedactionFollowsTheSitesRules(t *testing.T) {
+	dir := t.TempDir()
+	conf := "probe|style|masked|4|0|*\nprobe|http_request|X-Shop-*|masked|6|0|*\nprobe|http_request|X-Short|masked|4|0|*\nprobe|http_request|X-Plain|redacted|4|0|*\nprobe|http_request|X-Crop|masked|2|1|•\nprobe|http_response|X-Upstream-Token|redacted\nother|http_request|Accept|masked\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-redact.conf"), []byte(conf), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace {
+    putenv('LERD_DEVTOOLS_REDACT=' . __DIR__ . '/devtools-redact.conf');
+    putenv('LERD_SITE=probe');
+    require COLLECTOR;
+    \Lerd\Collector\http_report(
+        ['method' => 'GET', 'url' => 'https://api.test/', 'request_headers' => \Lerd\Collector\input_map(['X-Shop-Signature' => 'sig_1234567890', 'X-Plain' => 'abc', 'X-Short' => 'abc', 'X-Crop' => 'abcdefghijklmnop', 'Authorization' => 'Bearer abcdefghij', 'Accept' => 'json'], 'http_request'), 'src' => [], 'trace' => []],
+        200, ['X-Upstream-Token' => 'tok_secret', 'Content-Type' => 'text/plain'], [], false
+    );
+}
+`)
+	joined := strings.Join(got, "\n")
+	for _, want := range []string{
+		`"X-Shop-Signature":"sig_12********"`,
+		`"X-Short":"***"`,
+		`"X-Crop":"ab` + strings.Repeat(`\u2022`, 8) + `"`,
+		`"X-Plain":"[redacted]"`,
+		`"Authorization":"Bear*************"`,
+		`"Accept":"json"`,
+		`"X-Upstream-Token":"[redacted]"`,
+		`"Content-Type":"text/plain"`,
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %s in %v", want, got)
+		}
+	}
+}

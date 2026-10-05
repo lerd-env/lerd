@@ -4,7 +4,7 @@ import { callerClass, type Frame } from '$lib/sourceLabel';
 
 // One row of a request's waterfall: a span (end > start) or a moment (end ===
 // start), in milliseconds from the first row.
-export type Layer = 'browser' | 'server' | 'app' | 'framework' | 'query' | 'component' | 'view' | 'cache' | 'redis' | 'filesystem' | 'log' | 'dump' | 'error' | 'custom';
+export type Layer = 'browser' | 'server' | 'app' | 'framework' | 'query' | 'component' | 'view' | 'cache' | 'redis' | 'filesystem' | 'http' | 'log' | 'dump' | 'error' | 'custom';
 export interface WaterfallRow {
   label: string;
   layer: Layer;
@@ -22,6 +22,8 @@ export interface WaterfallRow {
   // category and color are what an app gave a row it wrote itself.
   category?: string;
   color?: string;
+  // warn marks a row that went wrong without leaving its layer, a failed call.
+  warn?: boolean;
 }
 export interface Waterfall {
   total: number;
@@ -42,6 +44,9 @@ export interface Phases {
   details: string;
   state: string;
   source: string;
+  timing: string;
+  requestHeaders: string;
+  responseHeaders: string;
 }
 type Timing = Record<string, number>;
 const PHASES: Array<[keyof Phases, string, string]> = [
@@ -56,6 +61,7 @@ const PHASES: Array<[keyof Phases, string, string]> = [
 const MAX_QUERIES = 25;
 const at = (ts: string) => Date.parse(ts);
 const ms = (n: number) => `${n < 10 ? n.toFixed(1) : Math.round(n)} ms`;
+export const bytes = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 
 // buildWaterfall lays out what a request did in one chronological list: how the
 // browser and nginx got it to PHP, the app's work as spans and moments, and the
@@ -144,6 +150,24 @@ export function buildWaterfall(d: RequestDetail, phases: Phases): Waterfall {
       ...src(e)
     });
   }
+  // Outgoing requests end when they are reported, so each is drawn back from
+  // there by its time; calls a pool made at once overlap.
+  for (const e of d.events.http ?? []) {
+    const h = e.data as { method?: string; url?: string; status?: number; reason?: string; failed?: boolean; time_ms?: number; timing?: Record<string, number>; request_size?: number; response_size?: number; request_headers?: Record<string, string>; response_headers?: Record<string, string> };
+    const timing: Record<string, string> = Object.fromEntries(Object.entries(h.timing ?? {}).map(([k, v]) => [k, ms(v)]));
+    const details: Record<string, string> = { status: h.status ? `${h.status}${h.reason ? ` ${h.reason}` : ''}` : h.failed ? 'failed' : '' };
+    if (!details.status) delete details.status;
+    if (h.request_size !== undefined) details.sent = bytes(h.request_size);
+    if (h.response_size !== undefined) details.received = bytes(h.response_size);
+    // A failed call stays an HTTP row, so it folds in with its siblings, and
+    // carries a warning instead of a colour of its own.
+    span(`${h.method ?? ''} ${h.url ?? ''}`.trim(), 'http', e.ts, h.time_ms ?? 0, {
+      warn: Boolean(h.failed) || (h.status ?? 0) >= 400,
+      note: `${h.status || (h.failed ? 'failed' : '')}${h.time_ms ? ` · ${ms(h.time_ms)}` : ''}`,
+      sections: [...section(phases.details, details), ...section(phases.timing, timing), ...section(phases.requestHeaders, h.request_headers), ...section(phases.responseHeaders, h.response_headers)],
+      ...src(e)
+    });
+  }
   // Rows the app wrote itself through lerd/debug, placed by the start it gave.
   for (const e of d.events.timeline ?? []) {
     const c = e.data as { label?: string; category?: string; color?: string; start?: number; duration_ms?: number; details?: Record<string, unknown> };
@@ -220,7 +244,7 @@ export function buildWaterfall(d: RequestDetail, phases: Phases): Waterfall {
 
 // Groupable are lerd's own layers whose rows come in runs; the request's
 // backbone, errors and the categories an app writes itself always keep a row.
-const groupable = new Set<Layer>(['browser', 'query', 'component', 'view', 'cache', 'redis', 'filesystem', 'log', 'dump']);
+const groupable = new Set<Layer>(['browser', 'query', 'component', 'view', 'cache', 'redis', 'filesystem', 'http', 'log', 'dump']);
 
 // condense folds rows of one groupable layer that follow each other into a
 // single "N events" row spanning them all, the way a busy request's queries or

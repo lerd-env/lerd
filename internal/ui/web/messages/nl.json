@@ -1786,5 +1786,17 @@
   "packages_install": "Installeren",
   "packages_installing": "Bezig met installeren…",
   "packages_dismiss": "Niet meer voorstellen",
-  "packages_docs": "Docs"
+  "packages_docs": "Docs",
+  "http_phase_dns": "DNS",
+  "http_phase_connect": "Verbinden",
+  "http_phase_tls": "TLS",
+  "http_phase_wait": "Wachten",
+  "http_phase_download": "Download",
+  "http_requestHeaders": "Request-headers",
+  "http_responseHeaders": "Response-headers",
+  "requests_popover_timing": "Timing",
+  "http_received": "Ontvangen",
+  "http_sentSize": "Verzonden",
+  "http_status": "Status",
+  "http_failed": "verbinding mislukt"
 }

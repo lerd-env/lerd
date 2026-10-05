@@ -1171,10 +1171,17 @@ static void lerd_http_begin(zend_execute_data *execute_data)
 	if (!url || Z_TYPE_P(url) != IS_STRING) {
 		return;
 	}
-	zval args[2];
+	/* The options carry the request headers, read before the client rewrites them. */
+	zval args[3];
 	ZVAL_COPY(&args[0], method);
 	ZVAL_COPY(&args[1], url);
-	LERD_CALL_COLLECTOR("Lerd\\Collector\\http", args, 2);
+	zval *options = ZEND_CALL_NUM_ARGS(execute_data) >= 3 ? ZEND_CALL_ARG(execute_data, 3) : NULL;
+	if (options && Z_TYPE_P(options) == IS_ARRAY) {
+		ZVAL_COPY(&args[2], options);
+	} else {
+		ZVAL_NULL(&args[2]);
+	}
+	LERD_CALL_COLLECTOR("Lerd\\Collector\\http", args, 3);
 }
 
 static int store_seam_matches(const char *fname, zend_class_entry *scope)

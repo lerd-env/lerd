@@ -1786,5 +1786,17 @@
   "packages_install": "安装",
   "packages_installing": "正在安装…",
   "packages_dismiss": "不再建议",
-  "packages_docs": "文档"
+  "packages_docs": "文档",
+  "http_phase_dns": "DNS",
+  "http_phase_connect": "连接",
+  "http_phase_tls": "TLS",
+  "http_phase_wait": "等待",
+  "http_phase_download": "下载",
+  "http_requestHeaders": "请求头",
+  "http_responseHeaders": "响应头",
+  "requests_popover_timing": "耗时",
+  "http_received": "已接收",
+  "http_sentSize": "已发送",
+  "http_status": "状态",
+  "http_failed": "连接失败"
 }

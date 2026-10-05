@@ -1786,5 +1786,17 @@
   "packages_install": "Installieren",
   "packages_installing": "Wird installiert…",
   "packages_dismiss": "Nicht mehr vorschlagen",
-  "packages_docs": "Doku"
+  "packages_docs": "Doku",
+  "http_phase_dns": "DNS",
+  "http_phase_connect": "Verbinden",
+  "http_phase_tls": "TLS",
+  "http_phase_wait": "Warten",
+  "http_phase_download": "Download",
+  "http_requestHeaders": "Request-Header",
+  "http_responseHeaders": "Response-Header",
+  "requests_popover_timing": "Zeiten",
+  "http_received": "Empfangen",
+  "http_sentSize": "Gesendet",
+  "http_status": "Status",
+  "http_failed": "Verbindung fehlgeschlagen"
 }

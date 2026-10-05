@@ -1043,6 +1043,13 @@ function seam_begin($class, $method, $self, $args): void
     }
     // A Redis command or a filesystem operation, timed. A call into the same
     // kind from inside one (a driver handing to its parent) is the same call.
+    // A response read as it ends, so a lazy one is complete and the client's
+    // own status check has already run, never moved later by holding it.
+    if ($seam && $seam['kind'] === 'http_response') {
+        $stack[] = ['timed' => 'http_response', 'subject' => $self];
+        $GLOBALS['__lerd_seam_stack'] = $stack;
+        return;
+    }
     if ($seam && ($seam['kind'] === 'redis' || $seam['kind'] === 'filesystem')) {
         $top = end($stack);
         if (is_array($top) && ($top['timed'] ?? '') === $seam['kind']) {
@@ -1133,6 +1140,10 @@ function seam_end($class, $method, $failed, $error = ''): void
     $frame = array_pop($stack);
     $GLOBALS['__lerd_seam_stack'] = $stack;
     if (!is_array($frame) || !empty($frame['skip'])) {
+        return;
+    }
+    if (($frame['timed'] ?? '') === 'http_response') {
+        http_done($frame['subject'] ?? null, (bool) $failed);
         return;
     }
     if (isset($frame['timed'])) {
@@ -1360,22 +1371,77 @@ function request_input(): array
     return $out;
 }
 
-function input_map(array $values): array
+function input_map(array $values, string $scope = ''): array
 {
+    $rules = redaction();
     $out = [];
     foreach ($values as $k => $v) {
         if (count($out) >= PAYLOAD_KEYS) {
             break;
         }
         $k = (string) $k;
-        if (preg_match('/pass|secret|token|sess|authorization|api[-_]?key/i', $k)) {
-            $out[$k] = '[redacted]';
+        $v = is_scalar($v) || $v === null ? (string) $v : (string) json_encode($v, \JSON_PARTIAL_OUTPUT_ON_ERROR | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
+        $mask = preg_match('/pass|secret|token|sess|cookie|authorization|api[-_]?key/i', $k) ? $rules['mask'] : null;
+        foreach ($scope !== '' ? ($rules[$scope] ?? []) : [] as $pattern => $patternMask) {
+            if (preg_match('/^' . str_replace('\\*', '.*', preg_quote((string) $pattern, '/')) . '$/i', $k)) {
+                $mask = $patternMask;
+                break;
+            }
+        }
+        if ($mask !== null) {
+            $out[$k] = mask_value($v, $mask);
             continue;
         }
-        $v = is_scalar($v) || $v === null ? (string) $v : (string) json_encode($v, \JSON_PARTIAL_OUTPUT_ON_ERROR | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
         $out[$k] = strlen($v) > 500 ? substr($v, 0, 497) . '...' : $v;
     }
     return $out;
+}
+
+// mask_value hides a value as [redacted], or as its first few characters and
+// then the mask character, one per hidden character or a fixed run when cropped.
+function mask_value(string $v, array $mask): string
+{
+    if (($mask['style'] ?? '') !== 'masked') {
+        return '[redacted]';
+    }
+    $visible = (int) ($mask['visible'] ?? 4);
+    $char = (string) ($mask['char'] ?? '*');
+    $len = function_exists('mb_strlen') ? mb_strlen($v) : strlen($v);
+    // A value no longer than twice what would show keeps nothing, so most of a
+    // short secret is never on screen.
+    $keep = $visible > 0 && $len > $visible * 2 ? $visible : 0;
+    $head = function_exists('mb_substr') ? mb_substr($v, 0, $keep) : substr($v, 0, $keep);
+    return $head . str_repeat($char, !empty($mask['crop']) ? 8 : $len - $keep);
+}
+
+// redaction reads what this site's .lerd.yaml masks on top of the defaults,
+// once per process: the style the defaults are shown in, and header names
+// per direction of an outgoing request with the style each is shown in.
+function redaction(): array
+{
+    static $rules = null;
+    if ($rules !== null) {
+        return $rules;
+    }
+    $rules = ['mask' => ['style' => 'redacted', 'visible' => 4, 'crop' => false, 'char' => '*'], 'http_request' => [], 'http_response' => []];
+    $read = static function (array $f): array {
+        return ['style' => $f[0], 'visible' => (int) ($f[1] ?? 4), 'crop' => ($f[2] ?? '0') === '1', 'char' => isset($f[3]) && $f[3] !== '' ? $f[3] : '*'];
+    };
+    $path = getenv('LERD_DEVTOOLS_REDACT');
+    $lines = @file(is_string($path) && $path !== '' ? $path : asset_path('devtools-redact.conf'), \FILE_IGNORE_NEW_LINES | \FILE_SKIP_EMPTY_LINES);
+    $site = detect_site();
+    foreach (is_array($lines) ? $lines : [] as $line) {
+        $f = explode('|', $line);
+        if ($line[0] === '#' || $f[0] !== $site || count($f) < 3) {
+            continue;
+        }
+        if ($f[1] === 'style' && in_array($f[2], ['redacted', 'masked'], true)) {
+            $rules['mask'] = $read(array_slice($f, 2));
+        } elseif (($f[1] === 'http_request' || $f[1] === 'http_response') && count($f) >= 4 && in_array($f[3], ['redacted', 'masked'], true)) {
+            $rules[$f[1]][$f[2]] = $read(array_slice($f, 3));
+        }
+    }
+    return $rules;
 }
 
 // capture reports a call a store-declared capture seam claimed, where the whole
@@ -1572,7 +1638,7 @@ function session_report(array $all, string $name): void
         }
         $k = (string) $k;
         if (preg_match('/password|secret|token|authkey|csrf/i', $k)) {
-            $out[$k] = '[redacted]';
+            $out[$k] = mask_value(is_scalar($v) ? (string) $v : '', redaction()['mask']);
         } elseif (is_array($v) || (is_object($v) && !$v instanceof \Closure && !$v instanceof \UnitEnum)) {
             $json = json_encode($v, \JSON_PARTIAL_OUTPUT_ON_ERROR | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
             $out[$k] = is_string($json) ? (strlen($json) > 500 ? substr($json, 0, 497) . '...' : $json) : preview_value($v);
@@ -1921,13 +1987,137 @@ function sentry_exception_bag($event): array
 // response is lazy (not sent until read), so no status code is available here;
 // the UI shows the request as "sent". Method and url are read at the begin
 // observer because request() rewrites its $url argument internally.
-function http($method, $url): void
+function http($method, $url, $options = null): void
 {
     $u = is_string($url) ? $url : '';
     if ($u === '') {
         return;
     }
-    emit('http', ['method' => is_string($method) ? $method : '', 'url' => $u]);
+    $headers = [];
+    $options = is_array($options) ? $options : [];
+    foreach ((array) ($options['headers'] ?? []) as $k => $v) {
+        if (is_int($k) && is_string($v) && strpos($v, ':') !== false) {
+            [$k, $v] = array_map('trim', explode(':', $v, 2));
+        }
+        $headers[(string) $k] = is_array($v) ? implode(', ', array_map('strval', $v)) : (string) $v;
+    }
+    if (!empty($options['auth_bearer']) || !empty($options['auth_basic'])) {
+        $headers['Authorization'] = '[redacted]';
+    }
+    if (empty($GLOBALS['__lerd_http_flush'])) {
+        $GLOBALS['__lerd_http_flush'] = true;
+        register_shutdown_function(__NAMESPACE__ . '\\http_flush');
+    }
+    $bt = backtrace();
+    $GLOBALS['__lerd_http_open'][] = [
+        'method' => strtoupper(is_string($method) ? $method : ''),
+        'url' => $u,
+        'request_headers' => input_map($headers, 'http_request'),
+        'src' => $bt['src'],
+        'trace' => $bt['trace'],
+    ];
+}
+
+// http_done reports an outgoing request once its response has ended, read off
+// the response the way the client recorded it, and paired with the request it
+// answers by method and the URL it was sent to.
+function http_done($response, bool $failed): void
+{
+    if (!is_object($response) || !method_exists($response, 'getInfo')) {
+        return;
+    }
+    try {
+        $info = $response->getInfo();
+    } catch (\Throwable $_) {
+        return;
+    }
+    $method = strtoupper((string) ($info['http_method'] ?? ''));
+    $url = (string) ($info['original_url'] ?? $info['url'] ?? '');
+    $open = $GLOBALS['__lerd_http_open'] ?? [];
+    $sent = null;
+    foreach ($open as $i => $o) {
+        if ($o['url'] === $url && ($method === '' || $o['method'] === $method)) {
+            $sent = $o;
+            unset($open[$i]);
+            break;
+        }
+    }
+    $GLOBALS['__lerd_http_open'] = array_values($open);
+    $sent = $sent ?? ['method' => $method, 'url' => $url, 'request_headers' => [], 'src' => [], 'trace' => []];
+    $headers = [];
+    $reason = '';
+    foreach ((array) ($info['response_headers'] ?? []) as $line) {
+        // The status line names the reason; after a redirect the last one counts.
+        if (preg_match('#^HTTP/\S+\s+\d{3}\s*(.*)$#', (string) $line, $m)) {
+            $reason = trim($m[1]);
+            continue;
+        }
+        $parts = explode(':', (string) $line, 2);
+        if (count($parts) === 2) {
+            $headers[trim($parts[0])] = trim($parts[1]);
+        }
+    }
+    $status = (int) ($info['http_code'] ?? 0);
+    http_report($sent, $status, $headers, $info, $failed || $status === 0 || !empty($info['error']), $reason);
+}
+
+// http_report emits one outgoing request with what both ends said and how long
+// each phase took, from the cumulative seconds curl and the clients report.
+function http_report(array $sent, int $status, array $responseHeaders, array $stats, bool $failed, string $reason = ''): void
+{
+    $data = ['method' => $sent['method'], 'url' => $sent['url'], 'status' => $status];
+    if ($reason !== '') {
+        $data['reason'] = $reason;
+    }
+    if ($failed) {
+        $data['failed'] = true;
+    }
+    if (isset($stats['total_time']) && is_numeric($stats['total_time'])) {
+        $data['time_ms'] = round((float) $stats['total_time'] * 1000, 2);
+    }
+    $timing = [];
+    foreach (['dns' => 'namelookup_time', 'connect' => 'connect_time', 'tls' => 'appconnect_time', 'sent' => 'pretransfer_time', 'first_byte' => 'starttransfer_time'] as $label => $key) {
+        if (isset($stats[$key]) && is_numeric($stats[$key]) && (float) $stats[$key] > 0) {
+            $timing[$label] = round((float) $stats[$key] * 1000, 2);
+        }
+    }
+    if ($timing) {
+        $data['timing'] = $timing;
+    }
+    // Body sizes as the client counted them, else as the response declared.
+    $len = null;
+    foreach ($responseHeaders as $k => $v) {
+        if (strcasecmp((string) $k, 'Content-Length') === 0 && is_numeric($v)) {
+            $len = (int) $v;
+        }
+    }
+    foreach (['request_size' => ['size_upload', null], 'response_size' => ['size_download', $len]] as $key => [$stat, $fallback]) {
+        $size = isset($stats[$stat]) && is_numeric($stats[$stat]) && (float) $stats[$stat] > 0 ? (int) $stats[$stat] : $fallback;
+        if ($size !== null) {
+            $data[$key] = $size;
+        }
+    }
+    if (!empty($sent['request_headers'])) {
+        $data['request_headers'] = $sent['request_headers'];
+    }
+    if ($responseHeaders) {
+        $data['response_headers'] = input_map($responseHeaders, 'http_response');
+    }
+    if ($sent['src']) {
+        emit_with('http', $data, $sent['src'], $sent['trace']);
+    } else {
+        emit('http', $data);
+    }
+}
+
+// http_flush reports the requests whose response never ended in the process,
+// so a request is never lost when the response seam is not declared.
+function http_flush(): void
+{
+    foreach ($GLOBALS['__lerd_http_open'] ?? [] as $o) {
+        http_report($o, 0, [], [], false);
+    }
+    $GLOBALS['__lerd_http_open'] = [];
 }
 
 // A console command named as typed (artisan queue:work, bin/cake queue

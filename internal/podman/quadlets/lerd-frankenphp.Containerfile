@@ -45,7 +45,7 @@ RUN apk add --no-cache nodejs npm git openssh-client unixodbc gcompat libstdc++ 
 # can't build it. The marker hashes the extension source so any change rebuilds
 # the image; the || true degrades a compile failure to "Debug window unavailable"
 # rather than bricking the image.
-# lerd_devtools-src-sha256: f5e8eec7f95b{{.DevtoolsHash}}
+# lerd_devtools-src-sha256: dc701f1b8c04{{.DevtoolsHash}}
 COPY internal/podman/devtools /tmp/lerd-devtools
 RUN apk add --no-cache --virtual .lerd-devtools-build autoconf make g++ \
     && { cd /tmp/lerd-devtools && phpize && ./configure --enable-lerd-devtools \

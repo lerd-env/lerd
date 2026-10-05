@@ -1786,5 +1786,17 @@
   "packages_install": "Pasang",
   "packages_installing": "Memasang…",
   "packages_dismiss": "Jangan sarankan lagi",
-  "packages_docs": "Dokumentasi"
+  "packages_docs": "Dokumentasi",
+  "http_phase_dns": "DNS",
+  "http_phase_connect": "Koneksi",
+  "http_phase_tls": "TLS",
+  "http_phase_wait": "Menunggu",
+  "http_phase_download": "Unduh",
+  "http_requestHeaders": "Header permintaan",
+  "http_responseHeaders": "Header respons",
+  "requests_popover_timing": "Waktu",
+  "http_received": "Diterima",
+  "http_sentSize": "Dikirim",
+  "http_status": "Status",
+  "http_failed": "koneksi gagal"
 }

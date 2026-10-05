@@ -1786,5 +1786,17 @@
   "packages_install": "Yükle",
   "packages_installing": "Yükleniyor…",
   "packages_dismiss": "Bir daha önerme",
-  "packages_docs": "Belgeler"
+  "packages_docs": "Belgeler",
+  "http_phase_dns": "DNS",
+  "http_phase_connect": "Bağlantı",
+  "http_phase_tls": "TLS",
+  "http_phase_wait": "Bekleme",
+  "http_phase_download": "İndirme",
+  "http_requestHeaders": "İstek başlıkları",
+  "http_responseHeaders": "Yanıt başlıkları",
+  "requests_popover_timing": "Zamanlama",
+  "http_received": "Alındı",
+  "http_sentSize": "Gönderildi",
+  "http_status": "Durum",
+  "http_failed": "bağlantı başarısız"
 }

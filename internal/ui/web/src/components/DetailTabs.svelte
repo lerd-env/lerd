@@ -21,8 +21,17 @@
     actions?: Snippet;
     // keepSingle draws the bar for a lone tab, where it says what the view is.
     keepSingle?: boolean;
+    // snap makes a row that overflows scroll a whole tab at a time, keeping
+    // the active one in view.
+    snap?: boolean;
   }
-  let { tabs, active, onchange, actions, keepSingle = false }: Props = $props();
+  let { tabs, active, onchange, actions, keepSingle = false, snap = false }: Props = $props();
+
+  let row = $state<HTMLElement | null>(null);
+  $effect(() => {
+    void active;
+    if (snap) row?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  });
 
   // A lone tab can't be switched to anything, so the bar is just noise. Hide it
   // (and the empty 0-tab case) and let the content fill the space instead.
@@ -32,7 +41,7 @@
 
 {#if showTabs || actions}
   <div class="flex items-end justify-between gap-3 border-b border-gray-100 dark:border-lerd-border pt-3 px-3 shrink-0">
-    <div use:tablist role={showTabs ? 'tablist' : undefined} class="flex items-end gap-4 min-w-0 overflow-x-auto">
+    <div bind:this={row} use:tablist role={showTabs ? 'tablist' : undefined} class="flex items-end gap-4 min-w-0 overflow-x-auto {snap ? 'snap-x snap-mandatory overscroll-x-contain' : ''}">
       {#if showTabs}
         {#each visible as t (t.id)}
           <button
@@ -40,7 +49,7 @@
             aria-selected={active === t.id}
             tabindex={active === t.id ? 0 : -1}
             onclick={() => onchange(t.id)}
-            class="shrink-0 pb-1 text-xs font-medium transition-colors border-b-2 flex items-center gap-1 {active === t.id
+            class="shrink-0 pb-1 text-xs font-medium transition-colors border-b-2 flex items-center gap-1 {snap ? 'snap-start' : ''} {active === t.id
               ? 'border-lerd-red text-lerd-red'
               : t.muted
                 ? 'border-transparent text-gray-400 dark:text-gray-600 hover:text-gray-600 dark:hover:text-gray-400'

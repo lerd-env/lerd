@@ -1786,5 +1786,17 @@
   "packages_install": "Instalează",
   "packages_installing": "Se instalează…",
   "packages_dismiss": "Nu mai sugera",
-  "packages_docs": "Documentație"
+  "packages_docs": "Documentație",
+  "http_phase_dns": "DNS",
+  "http_phase_connect": "Conectare",
+  "http_phase_tls": "TLS",
+  "http_phase_wait": "Așteptare",
+  "http_phase_download": "Descărcare",
+  "http_requestHeaders": "Antetele cererii",
+  "http_responseHeaders": "Antetele răspunsului",
+  "requests_popover_timing": "Timpi",
+  "http_received": "Primit",
+  "http_sentSize": "Trimis",
+  "http_status": "Stare",
+  "http_failed": "conexiune eșuată"
 }

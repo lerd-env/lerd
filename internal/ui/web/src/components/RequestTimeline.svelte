@@ -26,6 +26,7 @@
     { id: 'view', label: m.requests_layer_view, bar: 'bg-violet-400', text: 'text-violet-700 dark:text-violet-300', icon: 'eye' },
     { id: 'cache', label: m.requests_tab_cache, bar: 'bg-teal-400', text: 'text-teal-700 dark:text-teal-300', icon: 'bookmark' },
     { id: 'redis', label: m.requests_layer_redis, bar: 'bg-red-500', text: 'text-red-700 dark:text-red-300', icon: 'database' },
+    { id: 'http', label: m.requests_tab_http, bar: 'bg-purple-500', text: 'text-purple-700 dark:text-purple-300', icon: 'globe' },
     { id: 'filesystem', label: m.requests_layer_filesystem, bar: 'bg-stone-400', text: 'text-stone-700 dark:text-stone-300', icon: 'download' },
     { id: 'log', label: m.requests_layer_log, bar: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-300', icon: 'docs' },
     { id: 'dump', label: m.requests_layer_dump, bar: 'bg-fuchsia-400', text: 'text-fuchsia-700 dark:text-fuchsia-300', icon: 'clipboard' },
@@ -92,6 +93,18 @@
   });
 
   const pct = (n: number) => (n / total) * 100;
+  // lanes puts each folded item on the first lane it does not overlap, so
+  // calls that ran at once stack instead of hiding behind one another.
+  function lanes(items: WaterfallRow[]): { of: number[]; count: number } {
+    const ends: number[] = [];
+    const of = items.map((it) => {
+      let l = ends.findIndex((end) => end <= it.start);
+      if (l < 0) l = ends.push(0) - 1;
+      ends[l] = Math.max(it.end, it.start + 0.001);
+      return l;
+    });
+    return { of, count: Math.max(ends.length, 1) };
+  }
   const fmt = (n: number) => `${n < 1 ? '<1' : n < 10 ? n.toFixed(1) : Math.round(n)} ms`;
   const pos = (n: number) => `${n < 10 ? n.toFixed(1) : Math.round(n)} ms`;
   const took = (r: WaterfallRow) => (r.end > r.start ? fmt(r.end - r.start) : '');
@@ -151,19 +164,25 @@
       {@const width = r.end > r.start ? Math.max(pct(r.end - r.start), 0.4) : 0}
       {@const edge = r.items ? Math.max(...r.items.map((it) => pct(it.end))) : left + width}
       {@const place = edge < 68 ? 'after' : left > 32 ? 'before' : 'inside'}
-      <button type="button" aria-expanded={r.items ? Boolean(expanded[groupKey(r)]) : hover?.i === i} class="relative block w-full h-6 rounded-sm text-left cursor-pointer {hover?.i === i ? 'ring-1 ring-gray-400 dark:ring-white/30' : ''} {'nested' in r ? 'bg-gray-100/70 dark:bg-white/[0.06]' : i % 2 ? 'bg-gray-50 dark:bg-white/[0.03]' : ''}" onclick={(e) => toggle(e, r, i)}>
+      {@const stack = r.items ? lanes(r.items) : null}
+      <button type="button" aria-expanded={r.items ? Boolean(expanded[groupKey(r)]) : hover?.i === i} style={stack && stack.count > 1 ? `height: ${8 + stack.count * 5}px` : ''} class="relative block w-full h-6 rounded-sm text-left cursor-pointer {hover?.i === i ? 'ring-1 ring-gray-400 dark:ring-white/30' : ''} {'nested' in r ? 'bg-gray-100/70 dark:bg-white/[0.06]' : i % 2 ? 'bg-gray-50 dark:bg-white/[0.03]' : ''}" onclick={(e) => toggle(e, r, i)}>
         {#if r.items}
+          {@const lane = stack ?? lanes(r.items)}
           {#each r.items as it, j (j)}
             {@const w = it.end > it.start ? Math.max(pct(it.end - it.start), 0.4) : 0}
-            <span class="absolute top-1.5 bottom-1.5 rounded-sm {s.bar} {w ? '' : 'w-[3px]'}" style="left: {pct(it.start)}%; {w ? `width: ${w}%` : ''}"></span>
+            <span
+              class="absolute rounded-sm {s.bar} {w ? '' : 'w-[3px]'} {lane.count > 1 ? 'opacity-55' : ''}"
+              style="left: {pct(it.start)}%; {w ? `width: ${w}%;` : ''} {lane.count > 1 ? `top: ${4 + lane.of[j] * 5}px; height: 4px` : 'top: 6px; bottom: 6px'}"
+            ></span>
           {/each}
         {:else}
           <span class="absolute top-1 bottom-1 rounded-sm {s.bar} {width ? '' : 'w-[3px]'}" style="left: {left}%; {width ? `width: ${width}%` : ''}"></span>
         {/if}
-        <span class="absolute inset-y-0 flex items-center gap-1 whitespace-nowrap {place === 'inside' ? 'text-white px-1.5' : `max-w-[60%] ${s.text}`}" style={place === 'after' ? `left: calc(${edge}% + 8px)` : place === 'before' ? `right: calc(${100 - left}% + 8px)` : `left: ${left}%; max-width: ${width}%`}>
+        <span class="absolute inset-y-0 flex items-center gap-1 whitespace-nowrap {place === 'inside' && r.items ? `px-1.5 rounded-sm bg-white/90 dark:bg-lerd-card/90 ${s.text}` : place === 'inside' ? 'text-white px-1.5' : `max-w-[60%] ${s.text}`}" style={place === 'after' ? `left: calc(${edge}% + 8px)` : place === 'before' ? `right: calc(${100 - left}% + 8px)` : `left: ${left}%; max-width: ${width}%;${r.items ? ' top: 50%; bottom: auto; transform: translateY(-50%); height: 20px;' : ''}`}>
           <Icon name={s.icon} class="w-3 h-3 shrink-0" />
+          {#if r.warn || r.items?.some((it) => it.warn)}<Icon name="alert" class="w-3 h-3 shrink-0 text-rose-500" />{/if}
           {#if r.items}<Icon name="chevron" class="w-3 h-3 shrink-0 transition-transform {expanded[groupKey(r)] ? '' : '-rotate-90'}" />{/if}
-          <span class="truncate {r.layer === 'query' ? 'font-mono' : ''}">{r.items ? m.requests_events({ count: r.items.length }) : r.label}</span>
+          <span class="truncate {r.layer === 'query' && !r.items ? 'font-mono' : ''}">{r.items ? `${s.label()} · ${m.requests_events({ count: r.items.length })}` : r.label}</span>
           {#if !r.items && took(r)}<span class="shrink-0 opacity-70">{took(r)}</span>{/if}
         </span>
       </button>

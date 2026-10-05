@@ -1786,5 +1786,17 @@
   "packages_install": "Cài đặt",
   "packages_installing": "Đang cài đặt…",
   "packages_dismiss": "Không gợi ý nữa",
-  "packages_docs": "Tài liệu"
+  "packages_docs": "Tài liệu",
+  "http_phase_dns": "DNS",
+  "http_phase_connect": "Kết nối",
+  "http_phase_tls": "TLS",
+  "http_phase_wait": "Chờ",
+  "http_phase_download": "Tải xuống",
+  "http_requestHeaders": "Header yêu cầu",
+  "http_responseHeaders": "Header phản hồi",
+  "requests_popover_timing": "Thời gian",
+  "http_received": "Đã nhận",
+  "http_sentSize": "Đã gửi",
+  "http_status": "Trạng thái",
+  "http_failed": "kết nối thất bại"
 }

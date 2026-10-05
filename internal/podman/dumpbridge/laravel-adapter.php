@@ -1018,21 +1018,50 @@ try {
             emit('event', ['name' => $name]);
         });
 
-        // Outgoing HTTP client requests.
-        $events->listen(\Illuminate\Http\Client\Events\ResponseReceived::class, static function ($e) {
-            emit('http', [
-                'method' => method_exists($e->request, 'method') ? $e->request->method() : '',
-                'url'    => method_exists($e->request, 'url') ? $e->request->url() : '',
-                'status' => method_exists($e->response, 'status') ? $e->response->status() : 0,
-            ]);
+        // Outgoing HTTP client requests, with both ends' headers and curl's
+        // phase times when the handler reported them.
+        $sent = static function ($request): array {
+            $headers = [];
+            foreach (method_exists($request, 'headers') ? (array) $request->headers() : [] as $k => $v) {
+                $headers[(string) $k] = is_array($v) ? implode(', ', array_map('strval', $v)) : (string) $v;
+            }
+            $bt = backtrace();
+            return [
+                'method' => method_exists($request, 'method') ? $request->method() : '',
+                'url' => method_exists($request, 'url') ? $request->url() : '',
+                'request_headers' => \function_exists('Lerd\\Collector\\input_map') ? \Lerd\Collector\input_map($headers, 'http_request') : [],
+                'src' => $bt['src'],
+                'trace' => $bt['trace'],
+            ];
+        };
+        // Reported through the collector, which pairs headers and timing the
+        // same way for every client; without it, the request alone.
+        $http = static function (array $req, int $status, array $headers, array $stats, bool $failed, string $reason = ''): void {
+            if (\function_exists('Lerd\\Collector\\http_report')) {
+                \Lerd\Collector\http_report($req, $status, $headers, $stats, $failed, $reason);
+                return;
+            }
+            emit('http', ['method' => $req['method'], 'url' => $req['url'], 'status' => $status] + ($failed ? ['failed' => true] : []));
+        };
+        $events->listen(\Illuminate\Http\Client\Events\ResponseReceived::class, static function ($e) use ($sent, $http) {
+            $headers = [];
+            foreach (method_exists($e->response, 'headers') ? (array) $e->response->headers() : [] as $k => $v) {
+                $headers[(string) $k] = is_array($v) ? implode(', ', array_map('strval', $v)) : (string) $v;
+            }
+            $stats = [];
+            $transfer = $e->response->transferStats ?? null;
+            if (is_object($transfer) && method_exists($transfer, 'getHandlerStats')) {
+                $stats = (array) $transfer->getHandlerStats();
+                if (!isset($stats['total_time']) && method_exists($transfer, 'getTransferTime')) {
+                    $stats['total_time'] = $transfer->getTransferTime();
+                }
+            }
+            $status = method_exists($e->response, 'status') ? (int) $e->response->status() : 0;
+            $reason = method_exists($e->response, 'reason') ? (string) $e->response->reason() : '';
+            $http($sent($e->request), $status, $headers, $stats, false, $reason);
         });
-        $events->listen(\Illuminate\Http\Client\Events\ConnectionFailed::class, static function ($e) {
-            emit('http', [
-                'method' => method_exists($e->request, 'method') ? $e->request->method() : '',
-                'url'    => method_exists($e->request, 'url') ? $e->request->url() : '',
-                'status' => 0,
-                'failed' => true,
-            ]);
+        $events->listen(\Illuminate\Http\Client\Events\ConnectionFailed::class, static function ($e) use ($sent, $http) {
+            $http($sent($e->request), 0, [], [], true);
         });
     }
 
