@@ -1798,5 +1798,6 @@
   "http_received": "Alındı",
   "http_sentSize": "Gönderildi",
   "http_status": "Durum",
-  "http_failed": "bağlantı başarısız"
+  "http_failed": "bağlantı başarısız",
+  "requests_routeParams": "Rota parametreleri"
 }

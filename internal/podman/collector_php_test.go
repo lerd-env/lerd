@@ -1314,7 +1314,7 @@ func TestCollectorPHP_RouteParamsSeamMasksThePath(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "devtools-redact.conf"), []byte("probe|route|customer|masked|2|0|*\nprobe|input|tab|redacted|4|0|*\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "devtools-redact.conf"), []byte("probe|route|customer|masked|2|0|*\nprobe|route|user|masked|0|0|*\nprobe|input|tab|redacted|4|0|*\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	got := runCollectorPHPIn(t, dir, `<?php
@@ -1332,10 +1332,46 @@ namespace {
     // The framework fills the route in before the call returns.
     $request->attributes->set('_route_params', ['customer' => '0101901234', 'tab' => 'details', 'filters' => ['a']]);
     \Lerd\Collector\seam_end('Fixture\\Resolver', 'getController', false);
-    \Lerd\Collector\emit('probe', ['path' => \Lerd\Collector\mask_url('/customers/0101901234/details', 'input')]);
+    \Lerd\Collector\route_params(['customer' => '0101901234', 'tab' => 'details', 'user' => '42']);
+    \Lerd\Collector\route_bindings(['customer' => ['model' => 'App\\Models\\Customer', 'key' => 7], 'user' => ['model' => 'App\\Models\\User', 'key' => 42]]);
+    \Lerd\Collector\emit('probe', ['path' => \Lerd\Collector\mask_url('/customers/0101901234/details', 'input'), 'params' => \Lerd\Collector\route_params_report()]);
 }
 `)
+	if joined := strings.Join(got, "\n"); !strings.Contains(joined, `"customer":{"value":"01********","model":"App\\Models\\Customer","key":"7"}`) {
+		t.Errorf("want the raw customer masked beside its model and key: %v", got)
+	}
+	if joined := strings.Join(got, "\n"); !strings.Contains(joined, `"user":{"value":"**","model":"App\\Models\\User","key":"**"}`) {
+		t.Errorf("want a key equal to the masked value masked too: %v", got)
+	}
 	if joined := strings.Join(got, "\n"); !strings.Contains(joined, `"path":"/customers/01********/[redacted]"`) {
 		t.Errorf("want the customer masked by its route rule and the tab by its input rule: %v", got)
+	}
+}
+
+func TestCollectorPHP_ServerTimingCarriesEveryTimedEvent(t *testing.T) {
+	got := runCollectorPHP(t, `<?php
+namespace {
+    require COLLECTOR;
+    \Lerd\Collector\timing_note('span', ['label' => 'Bootstrap', 'time_ms' => 5.2]);
+    \Lerd\Collector\timing_note('query', ['sql' => "select *\n  from \"users\" where id = ?", 'time_ms' => 1.25]);
+    \Lerd\Collector\timing_note('query', ['sql' => 'select 2', 'time_ms' => 0.5]);
+    \Lerd\Collector\timing_note('http', ['method' => 'GET', 'url' => 'https://api.test/ø', 'time_ms' => 42]);
+    \Lerd\Collector\timing_note('log', ['message' => 'not timed']);
+    \Lerd\Collector\emit('probe', ['header' => \Lerd\Collector\server_timing_header()]);
+}
+`)
+	joined := strings.Join(got, "\n")
+	for _, want := range []string{
+		`span-1;dur=5.20;desc=\"Bootstrap\"`,
+		`query-1;dur=1.25;desc=\"select * from users where id = ?\"`,
+		`query-2;dur=0.50;desc=\"select 2\"`,
+		`http-1;dur=42.00;desc=\"GET https://api.test/\"`,
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %s in %v", want, got)
+		}
+	}
+	if strings.Contains(joined, "not timed") {
+		t.Errorf("an event without a time has no place in Server-Timing: %v", got)
 	}
 }

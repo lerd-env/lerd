@@ -1798,5 +1798,6 @@
   "http_received": "受信",
   "http_sentSize": "送信",
   "http_status": "ステータス",
-  "http_failed": "接続失敗"
+  "http_failed": "接続失敗",
+  "requests_routeParams": "ルートパラメーター"
 }

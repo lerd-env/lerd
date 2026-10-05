@@ -1798,5 +1798,6 @@
   "http_received": "Recibido",
   "http_sentSize": "Enviado",
   "http_status": "Estado",
-  "http_failed": "conexión fallida"
+  "http_failed": "conexión fallida",
+  "requests_routeParams": "Parámetros de ruta"
 }

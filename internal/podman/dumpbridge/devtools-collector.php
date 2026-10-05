@@ -311,6 +311,7 @@ function emit_with(string $kind, array $data, array $src, array $trace): void
         return;
     }
     try {
+        timing_note($kind, $data);
         $data['trace'] = $trace;
         send([
             'v'    => 1,
@@ -323,6 +324,45 @@ function emit_with(string $kind, array $data, array $src, array $trace): void
         ]);
     } catch (\Throwable $_) {
     }
+}
+
+// timing_note keeps each timed event of this request, in the order it ended,
+// for the Server-Timing header: what it was and how long it took.
+function timing_note(string $kind, array $data): void
+{
+    $ms = $data['time_ms'] ?? $data['duration_ms'] ?? null;
+    if (!is_numeric($ms) || count($GLOBALS['__lerd_timings'] ?? []) >= 500) {
+        return;
+    }
+    switch ($kind) {
+        case 'span':
+            $what = trim(($data['label'] ?? '') . ' ' . ($data['name'] ?? ''));
+            break;
+        case 'query':
+            $what = (string) ($data['sql'] ?? '');
+            break;
+        case 'cache':
+            $what = trim(($data['op'] ?? '') . ' ' . ($data['key'] ?? ''));
+            break;
+        case 'redis':
+            $what = trim(($data['command'] ?? '') . ' ' . ($data['args'] ?? ''));
+            break;
+        case 'filesystem':
+            $what = trim(($data['op'] ?? '') . ' ' . ($data['path'] ?? ''));
+            break;
+        case 'http':
+            $what = trim(($data['method'] ?? '') . ' ' . ($data['url'] ?? ''));
+            break;
+        case 'component':
+            $what = trim(($data['name'] ?? '') . ' ' . ($data['phase'] ?? ''));
+            break;
+        case 'timeline':
+            $what = (string) ($data['label'] ?? '');
+            break;
+        default:
+            return;
+    }
+    $GLOBALS['__lerd_timings'][] = [$kind, $what, (float) $ms];
 }
 
 // render_var renders one variable to the text a dump shows, through Symfony's
@@ -1324,6 +1364,9 @@ function request_end(): void
             $data['nginx_ms'] = round((float) ($_SERVER['LERD_NGINX_ELAPSED'] ?? 0) * 1000, 3);
             $data['queue_ms'] = max(0.0, round(($start - (float) $_SERVER['LERD_NGINX_SENT']) * 1000, 3));
         }
+        if ($params = route_params_report()) {
+            $data['route_params'] = $params;
+        }
         if (!empty($GLOBALS['__lerd_route'])) {
             $data['route'] = (string) $GLOBALS['__lerd_route'];
         }
@@ -1343,22 +1386,46 @@ function request_end(): void
 function server_timing(): void
 {
     try {
-        $parts = [];
-        if (isset($_SERVER['LERD_NGINX_SENT'], $_SERVER['REQUEST_TIME_FLOAT'])) {
-            $queue = max(0.0, ((float) $_SERVER['REQUEST_TIME_FLOAT'] - (float) $_SERVER['LERD_NGINX_SENT']) * 1000);
-            $parts[] = sprintf('queue;dur=%.2f;desc="FPM queue"', $queue);
-        }
-        foreach ($GLOBALS['__lerd_spans'] ?? [] as $label => $ms) {
-            $token = trim((string) preg_replace('/[^a-z0-9]+/', '-', strtolower((string) $label)), '-');
-            if ($token !== '') {
-                $parts[] = sprintf('%s;dur=%.2f;desc="%s"', $token, $ms, str_replace('"', '', (string) $label));
-            }
-        }
-        if ($parts && !headers_sent()) {
-            header('Server-Timing: ' . implode(', ', $parts), false);
+        $header = server_timing_header();
+        if ($header !== '' && !headers_sent()) {
+            header('Server-Timing: ' . $header, false);
         }
     } catch (\Throwable $_) {
     }
+}
+
+// server_timing_header builds the Server-Timing value: the FPM queue, each
+// phase's total, then every timed event that ended so far, each on its own.
+function server_timing_header(): string
+{
+    $parts = [];
+    if (isset($_SERVER['LERD_NGINX_SENT'], $_SERVER['REQUEST_TIME_FLOAT'])) {
+        $queue = max(0.0, ((float) $_SERVER['REQUEST_TIME_FLOAT'] - (float) $_SERVER['LERD_NGINX_SENT']) * 1000);
+        $parts[] = sprintf('queue;dur=%.2f;desc="FPM queue"', $queue);
+    }
+    foreach ($GLOBALS['__lerd_spans'] ?? [] as $label => $ms) {
+        $token = trim((string) preg_replace('/[^a-z0-9]+/', '-', strtolower((string) $label)), '-');
+        if ($token !== '') {
+            $parts[] = sprintf('%s;dur=%.2f;desc="%s"', $token, $ms, str_replace('"', '', (string) $label));
+        }
+    }
+    // Then every timed event that ended before the headers went out, each
+    // under its own name, kept within what nginx buffers for headers.
+    $length = strlen(implode(', ', $parts));
+    $count = [];
+    $timings = $GLOBALS['__lerd_timings'] ?? [];
+    foreach ($timings as $i => [$kind, $what, $ms]) {
+        $count[$kind] = ($count[$kind] ?? 0) + 1;
+        $desc = substr(trim((string) preg_replace('/[^\x20-\x7e]|["\\\\]/', '', preg_replace('/\s+/', ' ', (string) $what))), 0, 120);
+        $part = sprintf('%s-%d;dur=%.2f;desc="%s"', $kind, $count[$kind], $ms, $desc);
+        if ($length + strlen($part) + 2 > 16000) {
+            $parts[] = sprintf('more;desc="%d more"', count($timings) - $i);
+            break;
+        }
+        $parts[] = $part;
+        $length += strlen($part) + 2;
+    }
+    return implode(', ', $parts);
 }
 
 // request_input is what the request carried and what the response sent back,
@@ -1379,7 +1446,8 @@ function request_input(): array
     $response = [];
     foreach (headers_list() as $line) {
         $parts = explode(':', $line, 2);
-        if (count($parts) === 2 && strcasecmp($parts[0], 'Set-Cookie') !== 0) {
+        // Server-Timing is lerd's own, and the timeline already shows it in full.
+        if (count($parts) === 2 && strcasecmp($parts[0], 'Set-Cookie') !== 0 && strcasecmp(trim($parts[0]), 'Server-Timing') !== 0) {
             $response[trim($parts[0])] = trim($parts[1]);
         }
     }
@@ -1470,6 +1538,48 @@ function mask_url(string $url, string $scope = ''): string
 function route_params(array $params): void
 {
     $GLOBALS['__lerd_route_params'] = $params;
+}
+
+// route_bindings records the model a route parameter resolved to, its class
+// and primary key, beside the raw value the request asked for.
+function route_bindings(array $bindings): void
+{
+    $GLOBALS['__lerd_route_bindings'] = $bindings;
+}
+
+// route_params_report lists the matched route's parameters for the request's
+// own event: each raw value, masked the way the path is, and the model it
+// resolved to where one did.
+function route_params_report(): array
+{
+    $out = [];
+    foreach ($GLOBALS['__lerd_route_params'] ?? [] as $name => $value) {
+        if (count($out) >= PAYLOAD_KEYS || !is_scalar($value)) {
+            continue;
+        }
+        $rule = redact_rule('route', (string) $name);
+        if ($rule !== null) {
+            $shown = mask_value((string) $value, $rule);
+        } else {
+            $mask = input_map([(string) $name => (string) $value], 'input');
+            $shown = (string) reset($mask);
+        }
+        $entry = ['value' => $shown];
+        $bound = $GLOBALS['__lerd_route_bindings'][$name] ?? null;
+        if (is_array($bound) && isset($bound['model'])) {
+            $entry['model'] = (string) $bound['model'];
+            if (!empty($bound['file'])) {
+                $entry['file'] = (string) $bound['file'];
+                $entry['line'] = (int) ($bound['line'] ?? 1);
+            }
+            if (isset($bound['key']) && is_scalar($bound['key'])) {
+                // A key that is the masked value itself would give it away.
+                $entry['key'] = $shown !== (string) $value && (string) $bound['key'] === (string) $value ? $shown : (string) $bound['key'];
+            }
+        }
+        $out[(string) $name] = $entry;
+    }
+    return $out;
 }
 
 // redact_rule is how the site's .lerd.yaml masks a name in a scope, or null

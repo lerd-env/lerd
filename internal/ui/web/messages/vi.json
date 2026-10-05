@@ -1798,5 +1798,6 @@
   "http_received": "Đã nhận",
   "http_sentSize": "Đã gửi",
   "http_status": "Trạng thái",
-  "http_failed": "kết nối thất bại"
+  "http_failed": "kết nối thất bại",
+  "requests_routeParams": "Tham số route"
 }

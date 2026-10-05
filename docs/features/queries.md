@@ -27,7 +27,7 @@ Each layer has a colour and a filter, and hovering a bar shows its duration. **C
 
 ![A request's Performance tab: headline numbers above one timeline of nginx, the FPM queue, the framework's phases, queries, cache calls and the app's own events](/assets/screenshots/request-performance.png)
 
-**Request** holds the route, controller, middleware, request and response headers, query string, body, cookies and session. Anything that reads as a credential is masked.
+**Request** holds the route, controller, middleware, route parameters, request and response headers, query string, body, cookies and session. Each route parameter shows its raw value and, where it resolved to a model, the model's class and key; the app's own middleware and models open in the editor. Anything that reads as a credential is masked.
 
 ![A request's Request tab with its route, controller and middleware](/assets/screenshots/request-detail.png)
 
@@ -37,7 +37,7 @@ The other tabs are Database, Models, Views, Components, Cache, Redis, Filesystem
 
 - Every PHP request gets an id, and every event it emits carries it. The response sends it back as `X-Lerd-Rid`.
 - With [browser capture](browser-capture.md) on, the page view takes the id of the request that served it, and every `fetch` and XHR the page makes is linked to the request it reached, even on another site.
-- Every PHP response carries a `Server-Timing` header with the FPM queue and the framework phases, so the browser's network panel shows them too.
+- Every PHP response carries a `Server-Timing` header with the FPM queue, each framework phase's total and then every timed event that ended before the headers went out, each query, cache call, Redis command, storage operation, outgoing request, component phase and row of your own on its own entry, so the browser's network panel shows the whole picture too. It is kept within what nginx buffers for headers, the rest summed up as one entry, and it is left out of the Request tab's response headers.
 - CORS preflights and static files served without PHP are not linked.
 
 ## What each lens shows

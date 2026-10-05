@@ -1798,5 +1798,6 @@
   "http_received": "Odebrano",
   "http_sentSize": "Wysłano",
   "http_status": "Status",
-  "http_failed": "błąd połączenia"
+  "http_failed": "błąd połączenia",
+  "requests_routeParams": "Parametry trasy"
 }

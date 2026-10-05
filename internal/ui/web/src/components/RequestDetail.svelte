@@ -50,6 +50,9 @@
 
   const waterfall = $derived(d ? buildWaterfall(d, { dns: m.requests_phase_dns(), connect: m.requests_phase_connect(), wait: m.requests_phase_wait(), download: m.requests_phase_download(), dom: m.requests_phase_dom(), load: m.requests_phase_load(), bindings: m.requests_popover_bindings(), queries: m.requests_section_queries(), details: m.requests_popover_details(), state: m.requests_popover_state(), source: m.requests_popover_source(), timing: m.requests_popover_timing(), requestHeaders: m.http_requestHeaders(), responseHeaders: m.http_responseHeaders() }) : null);
   const http = $derived(data(ev('request')[0] ?? ({} as DumpEvent)));
+  // Each route parameter as the request asked for it, masked where the rules
+  // say, and the model it resolved to where one did.
+  const routeParams = $derived(Object.entries((http.route_params ?? {}) as Record<string, { value?: string; model?: string; key?: string; file?: string; line?: number }>));
   const spans = $derived(ev('span').map(data));
   const controller = $derived(spans.find((s) => s.label === 'Controller')?.name ?? '');
   // Who the request ran as, when the app or its framework said.
@@ -84,6 +87,8 @@
     return Object.entries(total);
   });
   const MODEL_ACTIONS = ['retrieved', 'created', 'updated', 'deleted', 'restored'];
+  // Where each model the app wrote is declared, so its name opens in the editor.
+  const modelSources = $derived(Object.assign({}, ...ev('models').map((e) => (data(e).sources ?? {}) as Record<string, { file: string; line?: number }>)));
   const levels = $derived(Array.from(new Set(logs.map((e) => String(data(e).level ?? '')))));
   const shownLogs = $derived(logs.filter((e) => !hiddenLevels[String(data(e).level ?? '')]));
   // A failed call that reached a PHP request is listed with the requests the
@@ -286,6 +291,18 @@
             {/each}
           </section>
         {/if}
+        {#if routeParams.length}
+          <section class={BOX}>
+            <h4 class="px-3 py-2 font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 dark:border-lerd-border/60">{m.requests_routeParams()} <span class="font-normal text-gray-400">{routeParams.length}</span></h4>
+            {#each routeParams as [name, p] (name)}
+              <div class="{ROW} grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_minmax(0,1fr)] gap-3">
+                <span class="font-mono text-[11px] text-gray-500 dark:text-gray-400 truncate" title={name}>{name}</span>
+                <span class="font-mono text-[11px] text-gray-800 dark:text-gray-200 break-all">{p.value}</span>
+                <span class="font-mono text-[11px] text-gray-500 dark:text-gray-400 break-all">{#if p.model}{#if p.file}<SourcePath file={p.file} line={p.line} label={p.model} bare dotted />{:else}{p.model}{/if}{#if p.key !== undefined} <span class="text-gray-800 dark:text-gray-200">#{p.key}</span>{/if}{/if}</span>
+              </div>
+            {/each}
+          </section>
+        {/if}
         <KeyValueTable title={m.requests_kv_headers()} values={http.headers} />
         <KeyValueTable title={m.requests_kv_query()} values={http.query} />
         <KeyValueTable title={m.requests_kv_body()} values={http.body} />
@@ -354,7 +371,7 @@
           <div class="{HEAD} grid grid-cols-[minmax(0,1fr)_repeat(5,5rem)] gap-3"><span>{m.requests_col_model()}</span>{#each MODEL_ACTIONS as a (a)}<span class="text-right">{a}</span>{/each}</div>
           {#each models as [model, counts] (model)}
             <div class="{ROW} grid grid-cols-[minmax(0,1fr)_repeat(5,5rem)] gap-3 items-center">
-              <span class="font-mono break-all">{model}</span>
+              <span class="font-mono break-all">{#if modelSources[model]}<SourcePath file={modelSources[model].file} line={modelSources[model].line} label={model} bare dotted />{:else}{model}{/if}</span>
               {#each MODEL_ACTIONS as a (a)}<span class="font-mono text-right tabular-nums {counts[a] ? '' : 'text-gray-300 dark:text-gray-600'}">{counts[a] ?? 0}</span>{/each}
             </div>
           {/each}

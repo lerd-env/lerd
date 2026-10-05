@@ -229,6 +229,9 @@ function emit_with(string $kind, array $data, array $src, array $trace): void
         return;
     }
     try {
+        if (\function_exists('Lerd\\Collector\\timing_note')) {
+            \Lerd\Collector\timing_note($kind, $data);
+        }
         $data['trace'] = $trace;
         send([
             'v'    => 1,
@@ -643,7 +646,37 @@ function flush_models(): void
     unset($GLOBALS['__lerd_models'][$rid]);
     if ($counts) {
         ksort($counts);
-        emit('models', ['models' => $counts]);
+        $data = ['models' => $counts];
+        foreach (array_keys($counts) as $class) {
+            if ($source = app_source((string) $class)) {
+                $data['sources'][$class] = $source;
+            }
+        }
+        emit('models', $data);
+    }
+}
+
+// app_file reports whether a file is the app's own code rather than the
+// framework's or a package's, which is what opens in the editor.
+function app_file(string $file): bool
+{
+    $base = \function_exists('base_path') ? rtrim((string) \base_path(), '/') . '/' : '';
+    return $base !== '/' && $base !== '' && strncmp($file, $base, strlen($base)) === 0 && strpos($file, '/vendor/') === false;
+}
+
+// app_source is where a class the app wrote is declared, or null for the
+// framework's and packages' classes.
+function app_source(string $class): ?array
+{
+    try {
+        if (!class_exists($class)) {
+            return null;
+        }
+        $ref = new \ReflectionClass($class);
+        $file = (string) $ref->getFileName();
+        return app_file($file) ? ['file' => $file, 'line' => $ref->getStartLine()] : null;
+    } catch (\Throwable $_) {
+        return null;
     }
 }
 
@@ -653,11 +686,6 @@ function flush_models(): void
 function middleware_names(array $list, array &$sources = []): array
 {
     $base = \function_exists('base_path') ? rtrim((string) \base_path(), '/') . '/' : '';
-    // A middleware the app wrote opens in the editor; the framework's and its
-    // packages' stay plain names.
-    $own = static function (string $file) use ($base): bool {
-        return $base !== '/' && $base !== '' && strncmp($file, $base, strlen($base)) === 0 && strpos($file, '/vendor/') === false;
-    };
     $aliases = [];
     try {
         foreach (\app('router')->getMiddleware() as $alias => $class) {
@@ -675,7 +703,9 @@ function middleware_names(array $list, array &$sources = []): array
             try {
                 $fn = new \ReflectionFunction($middleware);
                 $file = (string) $fn->getFileName();
-                if ($own($file)) {
+                // A middleware the app wrote opens in the editor; the
+                // framework's and its packages' stay plain names.
+                if (app_file($file)) {
                     $source = ['file' => $file, 'line' => $fn->getStartLine()];
                 }
                 if ($base !== '/' && $base !== '' && strncmp($file, $base, strlen($base)) === 0) {
@@ -697,14 +727,8 @@ function middleware_names(array $list, array &$sources = []): array
         [$class, $parameters] = array_pad(explode(':', $middleware, 2), 2, null);
         $name = $aliases[ltrim($class, '\\')] ?? $class;
         $names[] = $label = $parameters === null ? $name : $name . ':' . $parameters;
-        try {
-            if (class_exists($class)) {
-                $ref = new \ReflectionClass($class);
-                if ($own((string) $ref->getFileName())) {
-                    $sources[$label] = ['file' => (string) $ref->getFileName(), 'line' => $ref->getStartLine()];
-                }
-            }
-        } catch (\Throwable $_) {
+        if ($source = app_source((string) $class)) {
+            $sources[$label] = $source;
         }
     }
     return $names;
@@ -980,6 +1004,23 @@ try {
         // The middleware a request passed through: the HTTP kernel's global
         // stack and the matched route's own, resolved to classes with their
         // parameters the way the router runs them.
+        // The models route parameters bound to, read once the request was
+        // handled, so the Request tab names each one beside its raw value.
+        $events->listen(\Illuminate\Foundation\Http\Events\RequestHandled::class, static function ($e) {
+            $route = method_exists($e->request, 'route') ? $e->request->route() : null;
+            if (!is_object($route) || !method_exists($route, 'parameters') || !\function_exists('Lerd\\Collector\\route_bindings')) {
+                return;
+            }
+            $bindings = [];
+            foreach ((array) $route->parameters() as $name => $value) {
+                if (is_object($value) && method_exists($value, 'getKey')) {
+                    $bindings[(string) $name] = ['model' => get_class($value), 'key' => $value->getKey()] + (app_source(get_class($value)) ?? []);
+                }
+            }
+            if ($bindings) {
+                \Lerd\Collector\route_bindings($bindings);
+            }
+        });
         $events->listen(\Illuminate\Routing\Events\RouteMatched::class, static function ($e) {
             if (!empty($GLOBALS['__lerd_middleware'][rid()])) {
                 return;
