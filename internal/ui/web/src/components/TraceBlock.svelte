@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { QueryFrame } from '$lib/dumpsStream';
   import SourcePath from './SourcePath.svelte';
+  import TraceFrames from './TraceFrames.svelte';
   import { m } from '../paraglide/messages.js';
 
   interface Props {
@@ -32,15 +33,7 @@
       onclick={() => (open = !open)}
     >{open ? m.queries_hideTrace() : m.queries_details()}</button>
     {#if open}
-      <ol class="font-mono space-y-0.5 mt-1">
-        {#each trace as frame}
-          {@const app = !frame.file.includes('/vendor/')}
-          <li class={app ? 'text-gray-700 dark:text-gray-200' : 'text-gray-500 dark:text-gray-400'}>
-            <span class={app ? 'font-semibold' : ''}>{frame.func}</span> ·
-            <SourcePath file={frame.file} line={frame.line} muted={!app} />
-          </li>
-        {/each}
-      </ol>
+      <div class="mt-1"><TraceFrames {trace} /></div>
     {/if}
   </div>
 {/if}

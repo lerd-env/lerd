@@ -1799,5 +1799,7 @@
   "http_sentSize": "Trimis",
   "http_status": "Stare",
   "http_failed": "conexiune eșuată",
-  "requests_routeParams": "Parametrii rutei"
+  "requests_routeParams": "Parametrii rutei",
+  "trace_show": "Arată stiva de apeluri",
+  "trace_title": "Stiva de apeluri · {count} cadre"
 }

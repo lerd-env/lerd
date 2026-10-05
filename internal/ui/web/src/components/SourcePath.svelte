@@ -36,7 +36,7 @@
   }
 </script>
 
-<span class="group/path inline-flex items-center gap-1 max-w-full align-middle">
+<span class="inline-flex items-center gap-1 max-w-full align-middle">
   <button
     type="button"
     class="font-mono text-left {dotted
@@ -52,6 +52,5 @@
     label={m.queries_copyPath()}
     tone="faint"
     size="w-3.5 h-3.5"
-    class="opacity-0 group-hover/path:opacity-100 focus-visible:opacity-100 transition-opacity"
   />
 </span>

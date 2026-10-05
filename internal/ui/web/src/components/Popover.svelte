@@ -6,11 +6,15 @@
   interface Props {
     label: string;
     // 'left' opens beside the trigger (the icon rail), 'right' below and
-    // right-aligned (the mobile header).
-    align?: 'left' | 'right';
+    // right-aligned (the mobile header), 'auto' right-aligned on whichever
+    // side of the trigger has more room, scrolling within it.
+    align?: 'left' | 'right' | 'auto';
     size?: 'sm' | 'md';
     width?: number;
     onopen?: () => void;
+    // nested opens over another floating layer, the timeline's row details,
+    // and a click away closes only this one.
+    nested?: boolean;
     trigger?: Snippet;
     // Replaces the default IconButton wholesale so the trigger can match its
     // surroundings (e.g. the Tinker toolbar's bare icon buttons). Receives
@@ -24,6 +28,7 @@
     size = 'sm',
     width = 320,
     onopen,
+    nested = false,
     trigger,
     triggerButton,
     children
@@ -33,7 +38,7 @@
   let triggerEl: HTMLElement | null = $state(null);
   // The panel is a fixed layer measured off the trigger, so an ancestor with
   // overflow hidden (the app shell's main column) cannot clip it.
-  let pos = $state({ top: 0, left: 0, width: 0 });
+  let pos = $state({ top: 0, left: 0, width: 0, below: false, room: 0 });
 
   function place() {
     if (!triggerEl) return;
@@ -44,11 +49,18 @@
       align === 'right'
         ? Math.max(margin, r.right - w)
         : Math.min(r.right + margin, window.innerWidth - w - margin);
+    if (align === 'auto') {
+      const below = r.top < window.innerHeight / 2;
+      const top = below ? r.bottom + margin : r.top - margin;
+      const room = below ? window.innerHeight - top - margin : top - margin;
+      pos = { top, left: Math.max(margin, r.right - w), width: w, below, room };
+      return;
+    }
     const top =
       align === 'right'
         ? r.bottom + margin
         : Math.max(margin, Math.min(r.bottom, window.innerHeight - margin));
-    pos = { top, left, width: w };
+    pos = { top, left, width: w, below: align === 'right', room: 0 };
   }
 
   function toggle() {
@@ -74,14 +86,14 @@
 
   {#if open}
     <!-- Click-away backdrop; the panel sits above it. -->
-    <button use:portal type="button" tabindex="-1" aria-hidden="true" class="fixed inset-0 z-70 cursor-default" onclick={close}
+    <button use:portal type="button" tabindex="-1" aria-hidden="true" class="fixed inset-0 cursor-default {nested ? 'z-[10000]' : 'z-70'}" onclick={(e) => { if (nested) e.stopPropagation(); close(); }}
     ></button>
     <div
       use:portal
-      class="z-80 rounded-xl border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-2xl"
-      style="position: fixed; left: {pos.left}px; width: {pos.width}px; {align === 'right'
+      class="{nested ? 'z-[10001]' : 'z-80'} rounded-xl border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-2xl"
+      style="position: fixed; left: {pos.left}px; width: {pos.width}px; {pos.below
         ? `top: ${pos.top}px`
-        : `bottom: ${Math.max(8, window.innerHeight - pos.top)}px`}"
+        : `bottom: ${Math.max(8, window.innerHeight - pos.top)}px`}{pos.room ? `; max-height: ${pos.room}px; overflow-y: auto; overscroll-behavior: contain` : ''}"
     >
       {@render children(close)}
     </div>

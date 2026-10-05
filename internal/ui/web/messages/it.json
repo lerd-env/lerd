@@ -1799,5 +1799,7 @@
   "http_sentSize": "Inviato",
   "http_status": "Stato",
   "http_failed": "connessione non riuscita",
-  "requests_routeParams": "Parametri della rotta"
+  "requests_routeParams": "Parametri della rotta",
+  "trace_show": "Mostra stack trace",
+  "trace_title": "Stack trace · {count} frame"
 }

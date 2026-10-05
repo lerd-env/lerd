@@ -191,6 +191,8 @@ When a query shape repeats three times in one request, lerd sends one desktop no
 
 Every file path in the Debug window opens in your editor: a query's caller, a template, a log line, and on the timeline the controller and each row's source.
 
+The line that triggered a query, a cache call, a Redis command or a storage operation has a stack button beside it that opens the whole stack trace. It starts at the app's own line when there is one, and leaves out lerd's own frames and those of the lerd/debug package.
+
 - Pick the editor on the System page, or per site in its controls. VS Code, Cursor, VSCodium, Windsurf, Sublime Text, Zed, PhpStorm, IntelliJ IDEA and WebStorm are listed, the installed ones first.
 - An editor not on the PATH opens through its URL scheme, so a JetBrains IDE from Toolbox works too.
 - **Custom…** takes a template: `myeditor --line {line} {file}` or `myeditor://open?file={file}&line={line}`.

@@ -1799,5 +1799,7 @@
   "http_sentSize": "Envoyé",
   "http_status": "Statut",
   "http_failed": "échec de connexion",
-  "requests_routeParams": "Paramètres de route"
+  "requests_routeParams": "Paramètres de route",
+  "trace_show": "Afficher la pile d’appels",
+  "trace_title": "Pile d’appels · {count} cadres"
 }

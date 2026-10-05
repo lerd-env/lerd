@@ -271,15 +271,22 @@ function backtrace(): array
             continue;
         }
         $file = $f['file'];
-        // Skip our own plumbing and the dumper internals so the resolved
-        // src/trace points at the caller's code, not the capture machinery.
+        // Skip our own plumbing, the lerd/debug package and the dumper internals
+        // so the resolved src/trace points at the caller's code, not the capture
+        // machinery.
         if (strpos($file, 'devtools-collector.php') !== false
             || strpos($file, 'dump-bridge.php') !== false
+            || strpos($file, 'laravel-adapter.php') !== false
+            || strpos($file, '/vendor/lerd/debug/') !== false
             || strpos($file, 'symfony/var-dumper') !== false) {
             continue;
         }
         $line = $f['line'] ?? 0;
         $func = (isset($f['class']) ? $f['class'] . ($f['type'] ?? '::') : '') . ($f['function'] ?? '');
+        // The framework calling one of the adapter's listeners is plumbing too.
+        if (strpos($func, 'laravel-adapter.php') !== false) {
+            continue;
+        }
         $trace[] = ['file' => $file, 'line' => $line, 'func' => $func];
         if ($fallback === null) {
             $fallback = ['file' => $file, 'line' => $line];

@@ -1799,5 +1799,7 @@
   "http_sentSize": "Gönderildi",
   "http_status": "Durum",
   "http_failed": "bağlantı başarısız",
-  "requests_routeParams": "Rota parametreleri"
+  "requests_routeParams": "Rota parametreleri",
+  "trace_show": "Yığın izini göster",
+  "trace_title": "Yığın izi · {count} çerçeve"
 }

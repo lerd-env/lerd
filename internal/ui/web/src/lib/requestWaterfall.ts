@@ -18,7 +18,7 @@ export interface WaterfallRow {
   code?: string;
   sections?: Array<{ title: string; values: Record<string, string> }>;
   // source is where in the code the row came from, opened in the editor.
-  source?: { file: string; line?: number; label?: string };
+  source?: { file: string; line?: number; label?: string; trace?: Frame[] };
   // category and color are what an app gave a row it wrote itself.
   category?: string;
   color?: string;
@@ -78,7 +78,7 @@ export function buildWaterfall(d: RequestDetail, phases: Phases): Waterfall {
     values && Object.keys(values).length ? [{ title, values: Object.fromEntries(Object.entries(values).map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)])) }] : [];
   const moment = (label: string, layer: Layer, t: number, note = '', extra: Partial<WaterfallRow> = {}) => rows.push({ label, layer, start: t, end: t, note, ...extra });
   const src = (e: { src?: { file: string; line: number }; data?: unknown }) =>
-    e.src?.file ? { source: { file: e.src.file, line: e.src.line, label: callerClass(e.src.file, e.src.line, (e.data as { trace?: Frame[] })?.trace) } } : {};
+    e.src?.file ? { source: { file: e.src.file, line: e.src.line, label: callerClass(e.src.file, e.src.line, (e.data as { trace?: Frame[] })?.trace), trace: (e.data as { trace?: Frame[] })?.trace } } : {};
   const at2 = (file?: string, line?: number) => (file ? { source: { file, line } } : {});
 
   // nginx and the FPM queue come before PHP's own clock starts.

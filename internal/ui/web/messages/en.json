@@ -1799,5 +1799,7 @@
   "http_sentSize": "Sent",
   "http_status": "Status",
   "http_failed": "connection failed",
-  "requests_routeParams": "Route parameters"
+  "requests_routeParams": "Route parameters",
+  "trace_show": "Show stack trace",
+  "trace_title": "Stack trace · {count} frames"
 }

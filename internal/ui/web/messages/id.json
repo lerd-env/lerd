@@ -1799,5 +1799,7 @@
   "http_sentSize": "Dikirim",
   "http_status": "Status",
   "http_failed": "koneksi gagal",
-  "requests_routeParams": "Parameter rute"
+  "requests_routeParams": "Parameter rute",
+  "trace_show": "Tampilkan stack trace",
+  "trace_title": "Stack trace · {count} frame"
 }

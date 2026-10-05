@@ -1799,5 +1799,7 @@
   "http_sentSize": "Gesendet",
   "http_status": "Status",
   "http_failed": "Verbindung fehlgeschlagen",
-  "requests_routeParams": "Routenparameter"
+  "requests_routeParams": "Routenparameter",
+  "trace_show": "Stacktrace anzeigen",
+  "trace_title": "Stacktrace · {count} Frames"
 }

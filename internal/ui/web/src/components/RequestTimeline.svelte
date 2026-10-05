@@ -4,6 +4,7 @@
   import { tooltip } from '$lib/tooltip';
   import StructuredValue from './StructuredValue.svelte';
   import SourcePath from './SourcePath.svelte';
+  import CallerSource from './CallerSource.svelte';
   import { customColor } from '$lib/customColors';
   import { portal } from '$lib/portal';
   import { m } from '../paraglide/messages.js';
@@ -200,7 +201,7 @@
         <p class="px-3 py-2 break-words text-gray-700 dark:text-gray-200">{hover.r.label.slice(0, 600)}</p>
       {/if}
       {#if hover.r.source}
-        <div class="border-t border-gray-100 dark:border-lerd-border/60 px-3 py-2 text-[11px]"><SourcePath file={hover.r.source.file} line={hover.r.source.line} label={hover.r.source.label} short /></div>
+        <div class="border-t border-gray-100 dark:border-lerd-border/60 px-3 py-2 text-[11px]"><CallerSource file={hover.r.source.file} line={hover.r.source.line} trace={hover.r.source.trace} muted={false} nested /></div>
       {/if}
       {#each hover.r.sections ?? [] as sec (sec.title)}
         <div class="border-t border-gray-100 dark:border-lerd-border/60 px-3 py-2">

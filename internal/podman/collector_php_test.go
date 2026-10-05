@@ -1375,3 +1375,36 @@ namespace {
 		t.Errorf("an event without a time has no place in Server-Timing: %v", got)
 	}
 }
+
+// The lerd/debug package and lerd's adapter are how an event is reported, not
+// where it comes from, so their frames stay out of the trace and the source.
+func TestCollectorPHP_TraceSkipsTheDebugPackage(t *testing.T) {
+	dir := t.TempDir()
+	lib := filepath.Join(dir, "vendor", "lerd", "debug", "src")
+	if err := os.MkdirAll(lib, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(lib, "Lerd.php"), []byte("<?php\nfunction lerd_debug_track() { \\Lerd\\Collector\\emit('probe', ['m' => 1]); }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	adapter := filepath.Join(dir, "laravel-adapter.php")
+	if err := os.WriteFile(adapter, []byte("<?php\nreturn static function () { lerd_debug_track(); };\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace {
+    require COLLECTOR;
+    require __DIR__ . '/vendor/lerd/debug/src/Lerd.php';
+    // The app hands the event to the framework, which calls the listener.
+    function dispatch_event() { $listener = require __DIR__ . '/laravel-adapter.php'; $listener(); }
+    dispatch_event();
+}
+`)
+	joined := strings.Join(got, "\n")
+	if strings.Contains(joined, "vendor/lerd/debug") || strings.Contains(joined, "laravel-adapter") {
+		t.Errorf("plumbing frame kept: %v", got)
+	}
+	if !strings.Contains(joined, `"trace":[{`) {
+		t.Errorf("want the caller's frame left in the trace: %v", got)
+	}
+}

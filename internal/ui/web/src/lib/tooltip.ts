@@ -31,7 +31,8 @@ function ensure(): HTMLDivElement {
   box.className =
     'pointer-events-none whitespace-nowrap rounded-md border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card px-2 py-1 text-xs text-gray-800 dark:text-gray-100 shadow-lg transition-opacity duration-100';
   box.style.position = 'fixed';
-  box.style.zIndex = '9999';
+  // Above every layer it can sit on, nested popovers included.
+  box.style.zIndex = '10002';
   box.style.opacity = '0';
   arrowEl = document.createElement('span');
   arrowEl.style.position = 'absolute';

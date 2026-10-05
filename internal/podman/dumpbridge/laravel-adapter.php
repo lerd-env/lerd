@@ -194,6 +194,10 @@ function context(): array
 // stack still contains the controller/model that issued the query.
 function backtrace(): array
 {
+    // The collector's leaves lerd's own frames out the same way everywhere.
+    if (\function_exists('Lerd\\Collector\\backtrace')) {
+        return \Lerd\Collector\backtrace();
+    }
     $bt = debug_backtrace(\DEBUG_BACKTRACE_IGNORE_ARGS, 50);
     $trace = [];
     $src = null;

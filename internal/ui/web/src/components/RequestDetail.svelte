@@ -11,7 +11,7 @@
   import CopyButton from './CopyButton.svelte';
   import TraceBlock from './TraceBlock.svelte';
   import SourcePath from './SourcePath.svelte';
-  import { callerClass } from '$lib/sourceLabel';
+  import CallerSource from './CallerSource.svelte';
   import StructuredValue from './StructuredValue.svelte';
   import CustomBlocks from './CustomBlocks.svelte';
   import { m } from '../paraglide/messages.js';
@@ -359,7 +359,7 @@
             <div class="{ROW} grid grid-cols-[5rem_minmax(0,1fr)_auto_4rem_auto] gap-3 items-start {slowSql.has(q.sql) ? 'bg-amber-50 dark:bg-amber-900/15' : ''}">
               <span class="text-gray-500 dark:text-gray-400 truncate">{q.connection ?? ''}</span>
               <code class="font-mono break-words {slowSql.has(q.sql) ? 'text-amber-700 dark:text-amber-300' : ''}">{inlineBindings(q.sql, q.bindings)}</code>
-              <span class="text-[11px] min-w-0">{#if e.src?.file}<SourcePath file={e.src.file} line={e.src.line} label={callerClass(e.src.file, e.src.line, data(e).trace)} muted short />{/if}</span>
+              <span class="text-[11px] min-w-0">{#if e.src?.file}<CallerSource file={e.src.file} line={e.src.line} trace={data(e).trace} />{/if}</span>
               <span class="font-mono text-right tabular-nums">{ms(Number(q.time_ms ?? 0))}</span>
               <CopyButton text={() => inlineBindings(q.sql, q.bindings)} label={m.queries_copySql()} />
             </div>
@@ -418,9 +418,10 @@
         <div class={BOX}>
           {#each ev('cache') as e (e.id)}
             {@const c = data(e)}
-            <div class="{ROW} grid grid-cols-[4rem_minmax(0,1fr)_6rem_4.5rem] gap-3 items-center">
+            <div class="{ROW} grid grid-cols-[4rem_minmax(0,1fr)_auto_6rem_4.5rem] gap-3 items-center">
               <span class="justify-self-start {BADGE} {c.op === 'miss' ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' : c.op === 'hit' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : 'bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300'}">{c.op}</span>
               <span class="min-w-0 space-y-0.5"><span class="block font-mono break-all">{c.key}</span>{#if c.file}<span class="block text-[11px]"><SourcePath file={c.file} muted short /></span>{/if}</span>
+              <span class="text-[11px] min-w-0">{#if e.src?.file}<CallerSource file={e.src.file} line={e.src.line} trace={c.trace} />{/if}</span>
               <span class="text-gray-500 dark:text-gray-400 truncate">{c.store}{c.connection ? ` · ${c.connection}` : ''}</span>
               <span class="font-mono text-[11px] text-gray-400 text-right">{offset(e.ts)}</span>
             </div>
@@ -434,7 +435,7 @@
             <div class="{ROW} grid grid-cols-[6rem_minmax(0,1fr)_auto_6rem_4rem] gap-3 items-start">
               <span class="font-mono font-medium text-red-700 dark:text-red-300">{r.command}</span>
               <span class="min-w-0"><StructuredValue value={r.args ?? ''} /></span>
-              <span class="text-[11px] min-w-0">{#if e.src?.file}<SourcePath file={e.src.file} line={e.src.line} label={callerClass(e.src.file, e.src.line, data(e).trace)} muted short />{/if}</span>
+              <span class="text-[11px] min-w-0">{#if e.src?.file}<CallerSource file={e.src.file} line={e.src.line} trace={data(e).trace} />{/if}</span>
               <span class="text-gray-500 dark:text-gray-400 truncate">{r.connection ?? ''}</span>
               <span class="font-mono text-right tabular-nums">{ms(Number(r.time_ms ?? 0))}</span>
             </div>
@@ -449,7 +450,7 @@
               <span class="justify-self-start {BADGE} {f.status === 'failed' ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300' : 'bg-stone-100 dark:bg-white/10 text-stone-700 dark:text-stone-300'}">{f.op}</span>
               <span class="text-gray-500 dark:text-gray-400 truncate">{f.disk ?? ''}</span>
               <span class="font-mono break-all">{f.path}{f.exception ? ` · ${f.exception}` : ''}</span>
-              <span class="text-[11px] min-w-0">{#if e.src?.file}<SourcePath file={e.src.file} line={e.src.line} label={callerClass(e.src.file, e.src.line, data(e).trace)} muted short />{/if}</span>
+              <span class="text-[11px] min-w-0">{#if e.src?.file}<CallerSource file={e.src.file} line={e.src.line} trace={data(e).trace} />{/if}</span>
               <span class="font-mono text-right tabular-nums">{ms(Number(f.time_ms ?? 0))}</span>
             </div>
           {/each}

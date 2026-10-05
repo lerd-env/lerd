@@ -30,3 +30,12 @@ export function callerClass(file: string, line: number | undefined, trace: Frame
   const m = /^([A-Za-z_\\][\w\\]*)(?:->|::)(?!\{closure)/.exec(func);
   return m ? m[1] : '';
 }
+
+// fromCaller drops the frames inside the libraries a call went through before
+// it reached the app's own code: the trace starts at file:line, the first app
+// frame, or else the first frame outside vendor/, and stays whole without one.
+export function fromCaller(trace: Frame[], file: string, line: number | undefined): Frame[] {
+  let i = trace.findIndex((f) => f.file === file && f.line === line);
+  if (i < 0) i = trace.findIndex((f) => f.file && !f.file.includes('/vendor/'));
+  return i > 0 ? trace.slice(i) : trace;
+}

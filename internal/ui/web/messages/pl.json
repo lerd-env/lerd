@@ -1799,5 +1799,7 @@
   "http_sentSize": "Wysłano",
   "http_status": "Status",
   "http_failed": "błąd połączenia",
-  "requests_routeParams": "Parametry trasy"
+  "requests_routeParams": "Parametry trasy",
+  "trace_show": "Pokaż stos wywołań",
+  "trace_title": "Stos wywołań · {count} ramek"
 }

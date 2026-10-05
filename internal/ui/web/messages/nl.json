@@ -1799,5 +1799,7 @@
   "http_sentSize": "Verzonden",
   "http_status": "Status",
   "http_failed": "verbinding mislukt",
-  "requests_routeParams": "Routeparameters"
+  "requests_routeParams": "Routeparameters",
+  "trace_show": "Stacktrace tonen",
+  "trace_title": "Stacktrace · {count} frames"
 }

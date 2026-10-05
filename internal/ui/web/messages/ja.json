@@ -1799,5 +1799,7 @@
   "http_sentSize": "送信",
   "http_status": "ステータス",
   "http_failed": "接続失敗",
-  "requests_routeParams": "ルートパラメーター"
+  "requests_routeParams": "ルートパラメーター",
+  "trace_show": "スタックトレースを表示",
+  "trace_title": "スタックトレース · {count} フレーム"
 }

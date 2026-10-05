@@ -1799,5 +1799,7 @@
   "http_sentSize": "Đã gửi",
   "http_status": "Trạng thái",
   "http_failed": "kết nối thất bại",
-  "requests_routeParams": "Tham số route"
+  "requests_routeParams": "Tham số route",
+  "trace_show": "Hiện stack trace",
+  "trace_title": "Stack trace · {count} khung"
 }

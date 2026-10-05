@@ -1799,5 +1799,7 @@
   "http_sentSize": "Enviado",
   "http_status": "Estado",
   "http_failed": "conexión fallida",
-  "requests_routeParams": "Parámetros de ruta"
+  "requests_routeParams": "Parámetros de ruta",
+  "trace_show": "Mostrar traza de pila",
+  "trace_title": "Traza de pila · {count} marcos"
 }
