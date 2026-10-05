@@ -129,6 +129,38 @@ PROJECTS=$HOME/Projects
 DEMO_DIR=$PROJECTS/demo
 SHOP_DIR=$PROJECTS/shop
 
+# need_lerd, need_demo, need_shop: the state the earlier phases leave, built
+# quietly when missing, so `vm.sh run <guest> 5` works on a freshly reset guest
+# without paying for phases 1 to 4. A setup that fails ends the phase.
+need_lerd() {
+	have lerd && return
+	echo "--- setup: installing the build in ~/rc"
+	bash "$HOME/rc/install.sh" --local "$HOME/rc/lerd" </dev/null >/dev/null 2>&1 || {
+		_fail "setup: install from ~/rc (vm.sh push first)"
+		exit 1
+	}
+}
+# demo as phase 2 leaves it: scaffolded, set up, and on https.
+need_demo() {
+	need_lerd
+	[ -d "$DEMO_DIR" ] && return
+	echo "--- setup: creating demo"
+	mkdir -p "$PROJECTS"
+	(cd "$PROJECTS" && lerd new demo && cd "$DEMO_DIR" && lerd setup --all --skip-open && lerd secure "$(site_name "$DEMO_DIR")") </dev/null >/dev/null 2>&1 || {
+		_fail "setup: create demo"
+		exit 1
+	}
+}
+need_shop() {
+	need_lerd
+	[ -d "$SHOP_DIR" ] && return
+	echo "--- setup: creating shop"
+	(mkdir -p "$PROJECTS" && cd "$PROJECTS" && lerd new shop --framework=symfony) </dev/null >/dev/null 2>&1 || {
+		_fail "setup: create shop"
+		exit 1
+	}
+}
+
 # pty_output <seconds> <cmd...>: what a command prints to a terminal, for
 # wizards that only ask on one; stops early once PTY_UNTIL (a regex) shows up.
 # The terminal gets a real size, or the prompt library draws nothing.

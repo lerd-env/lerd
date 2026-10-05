@@ -7,6 +7,7 @@
 #   vm.sh reset <guest> [snapshot]   revert to the phase 0 baseline (default clean-no-lerd)
 #   vm.sh push <guest> [repo-dir]    copy build/lerd, build/lerd-tray and install.sh to ~/rc
 #   vm.sh run <guest> <phase|all>    run phases/NN-*.sh there; PASS/FAIL lines here, the rest in logs/
+#                                    (a phase run alone builds the lerd and sites it needs first)
 #   vm.sh ssh <guest> <cmd...>       run one command there
 #   vm.sh status <guest>             where a run is now (phase, checks done, failures) and the finished phases
 #   vm.sh coverage <guest>           plan checkboxes that guest's logs cover, and the ones they don't

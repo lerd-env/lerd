@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Phase 6, workers.
 source "$(dirname "$0")/../lib.sh"
+need_demo
 cd "$DEMO_DIR" || exit 1
 name=$(site_name "$DEMO_DIR")
 scheme=https

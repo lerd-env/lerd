@@ -4,6 +4,7 @@
 # signed off by hand. Runs after phase 6, whose queue worker and Horizon
 # project it uses.
 source "$(dirname "$0")/../lib.sh"
+need_demo
 cd "$DEMO_DIR" || exit 1
 host=$(site_host "$DEMO_DIR")
 name=$(site_name "$DEMO_DIR")

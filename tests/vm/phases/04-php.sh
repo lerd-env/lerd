@@ -3,6 +3,7 @@
 # site, so a framework's composer platform constraints do not decide which
 # PHP versions it can be isolated to. Legacy 7.4 and prerelease 8.6 are tier 3.
 source "$(dirname "$0")/../lib.sh"
+need_demo
 
 # pty_run <seconds> <input> <cmd...>: runs a command on a terminal, types the
 # input after a second, and prints what the terminal showed.

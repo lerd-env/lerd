@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Phase 2, a real framework on a real site, and the HTTP/HTTPS toggle.
 source "$(dirname "$0")/../lib.sh"
+need_lerd
 
 api() { curl -s -X "$1" -H 'X-Lerd-CSRF: 1' "http://127.0.0.1:7073$2"; }
 # site_json <domain> <field>: one field of the site from the dashboard's API.

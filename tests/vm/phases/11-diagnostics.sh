@@ -2,6 +2,8 @@
 # Phase 11, diagnostics and housekeeping. The reboot and the late-NIC rig are
 # tier 3 and need a guest that can reboot unattended.
 source "$(dirname "$0")/../lib.sh"
+need_demo
+need_shop
 cd "$DEMO_DIR" || exit 1
 api=http://127.0.0.1:7073/api
 

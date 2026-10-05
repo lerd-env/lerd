@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Phase 5, services and database operations, on demo from phase 2.
 source "$(dirname "$0")/../lib.sh"
+need_demo
 cd "$DEMO_DIR" || exit 1
 name=$(site_name "$DEMO_DIR")
 host=$(site_host "$DEMO_DIR")
