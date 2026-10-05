@@ -1858,5 +1858,20 @@
   "debugbar_waiting": "Menunggu permintaan halaman ini",
   "debugbar_loading": "Memuat permintaan…",
   "requests_showMore": "Tampilkan {count} lagi dari {total} tersisa",
-  "requests_nPlusOneShow": "Tampilkan kueri"
+  "requests_nPlusOneShow": "Tampilkan kueri",
+  "debugbar_annotate": "Catatan baru",
+  "debugbar_annotateStop": "Berhenti memilih",
+  "debugbar_notes": "catatan",
+  "debugbar_noteOpen": "Catatan {n}",
+  "debugbar_noteNew": "Catatan baru",
+  "debugbar_noteTitle": "Catatan",
+  "debugbar_notePlaceholder": "Apa yang salah dengan elemen ini?",
+  "debugbar_noteHint": "Enter menyimpan",
+  "debugbar_noteCancel": "Batal",
+  "debugbar_noteSave": "Simpan",
+  "debugbar_noteSaving": "Menyimpan…",
+  "debugbar_noteDelete": "Hapus",
+  "debugbar_noteResolve": "Selesaikan",
+  "debugbar_notesTitle": "Catatan di halaman ini",
+  "debugbar_notesEmpty": "Tidak ada catatan terbuka di halaman ini."
 }

@@ -1858,5 +1858,20 @@
   "debugbar_waiting": "このページのリクエストを待っています",
   "debugbar_loading": "リクエストを読み込み中…",
   "requests_showMore": "残り {total} 件のうち {count} 件を表示",
-  "requests_nPlusOneShow": "クエリを表示"
+  "requests_nPlusOneShow": "クエリを表示",
+  "debugbar_annotate": "新しいメモ",
+  "debugbar_annotateStop": "選択をやめる",
+  "debugbar_notes": "メモ",
+  "debugbar_noteOpen": "メモ {n}",
+  "debugbar_noteNew": "新しいメモ",
+  "debugbar_noteTitle": "メモ",
+  "debugbar_notePlaceholder": "この要素の何が問題ですか？",
+  "debugbar_noteHint": "Enter で保存",
+  "debugbar_noteCancel": "キャンセル",
+  "debugbar_noteSave": "保存",
+  "debugbar_noteSaving": "保存中…",
+  "debugbar_noteDelete": "削除",
+  "debugbar_noteResolve": "解決",
+  "debugbar_notesTitle": "このページのメモ",
+  "debugbar_notesEmpty": "このページに未解決のメモはありません。"
 }

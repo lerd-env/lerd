@@ -1858,5 +1858,20 @@
   "debugbar_waiting": "Wachten op de verzoeken van deze pagina",
   "debugbar_loading": "Verzoek laden…",
   "requests_showMore": "Toon {count} meer van {total} resterend",
-  "requests_nPlusOneShow": "Toon queries"
+  "requests_nPlusOneShow": "Toon queries",
+  "debugbar_annotate": "Nieuwe notitie",
+  "debugbar_annotateStop": "Stoppen met kiezen",
+  "debugbar_notes": "notities",
+  "debugbar_noteOpen": "Notitie {n}",
+  "debugbar_noteNew": "Nieuwe notitie",
+  "debugbar_noteTitle": "Notitie",
+  "debugbar_notePlaceholder": "Wat is er mis met dit element?",
+  "debugbar_noteHint": "Enter slaat op",
+  "debugbar_noteCancel": "Annuleren",
+  "debugbar_noteSave": "Opslaan",
+  "debugbar_noteSaving": "Opslaan…",
+  "debugbar_noteDelete": "Verwijderen",
+  "debugbar_noteResolve": "Oplossen",
+  "debugbar_notesTitle": "Notities op deze pagina",
+  "debugbar_notesEmpty": "Geen open notities op deze pagina."
 }

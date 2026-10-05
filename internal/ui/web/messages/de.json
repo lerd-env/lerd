@@ -1858,5 +1858,20 @@
   "debugbar_waiting": "Warte auf die Anfragen dieser Seite",
   "debugbar_loading": "Anfrage wird geladen…",
   "requests_showMore": "{count} weitere von {total} verbleibenden anzeigen",
-  "requests_nPlusOneShow": "Queries anzeigen"
+  "requests_nPlusOneShow": "Queries anzeigen",
+  "debugbar_annotate": "Neue Notiz",
+  "debugbar_annotateStop": "Auswahl beenden",
+  "debugbar_notes": "Notizen",
+  "debugbar_noteOpen": "Notiz {n}",
+  "debugbar_noteNew": "Neue Notiz",
+  "debugbar_noteTitle": "Notiz",
+  "debugbar_notePlaceholder": "Was stimmt mit diesem Element nicht?",
+  "debugbar_noteHint": "Enter speichert",
+  "debugbar_noteCancel": "Abbrechen",
+  "debugbar_noteSave": "Speichern",
+  "debugbar_noteSaving": "Speichert…",
+  "debugbar_noteDelete": "Löschen",
+  "debugbar_noteResolve": "Erledigt",
+  "debugbar_notesTitle": "Notizen auf dieser Seite",
+  "debugbar_notesEmpty": "Keine offenen Notizen auf dieser Seite."
 }

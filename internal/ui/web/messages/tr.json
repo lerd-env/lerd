@@ -1858,5 +1858,20 @@
   "debugbar_waiting": "Bu sayfanın istekleri bekleniyor",
   "debugbar_loading": "İstek yükleniyor…",
   "requests_showMore": "Kalan {total} içinden {count} tane daha göster",
-  "requests_nPlusOneShow": "Sorguları göster"
+  "requests_nPlusOneShow": "Sorguları göster",
+  "debugbar_annotate": "Yeni not",
+  "debugbar_annotateStop": "Seçmeyi bırak",
+  "debugbar_notes": "not",
+  "debugbar_noteOpen": "Not {n}",
+  "debugbar_noteNew": "Yeni not",
+  "debugbar_noteTitle": "Not",
+  "debugbar_notePlaceholder": "Bu öğede sorun ne?",
+  "debugbar_noteHint": "Enter kaydeder",
+  "debugbar_noteCancel": "İptal",
+  "debugbar_noteSave": "Kaydet",
+  "debugbar_noteSaving": "Kaydediliyor…",
+  "debugbar_noteDelete": "Sil",
+  "debugbar_noteResolve": "Çözüldü",
+  "debugbar_notesTitle": "Bu sayfadaki notlar",
+  "debugbar_notesEmpty": "Bu sayfada açık not yok."
 }

@@ -1858,5 +1858,20 @@
   "debugbar_waiting": "Esperando las peticiones de esta página",
   "debugbar_loading": "Cargando la petición…",
   "requests_showMore": "Mostrar {count} más de {total} restantes",
-  "requests_nPlusOneShow": "Mostrar consultas"
+  "requests_nPlusOneShow": "Mostrar consultas",
+  "debugbar_annotate": "Nueva nota",
+  "debugbar_annotateStop": "Dejar de elegir",
+  "debugbar_notes": "notas",
+  "debugbar_noteOpen": "Nota {n}",
+  "debugbar_noteNew": "Nueva nota",
+  "debugbar_noteTitle": "Nota",
+  "debugbar_notePlaceholder": "¿Qué falla en este elemento?",
+  "debugbar_noteHint": "Intro guarda",
+  "debugbar_noteCancel": "Cancelar",
+  "debugbar_noteSave": "Guardar",
+  "debugbar_noteSaving": "Guardando…",
+  "debugbar_noteDelete": "Eliminar",
+  "debugbar_noteResolve": "Resolver",
+  "debugbar_notesTitle": "Notas en esta página",
+  "debugbar_notesEmpty": "No hay notas abiertas en esta página."
 }

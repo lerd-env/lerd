@@ -75,6 +75,7 @@ function start() {
     if (p.startsWith('/api/requests/')) return barConfig.base + 'requests/' + p.slice('/api/requests/'.length);
     if (p.startsWith('/api/source?')) return barConfig.base + 'source' + p.slice('/api/source'.length);
     if (p === '/api/open-editor') return barConfig.base + 'open-editor';
+    if (p.startsWith('/api/annotations')) return barConfig.base + 'annotations' + p.slice('/api/annotations'.length);
     return barConfig.base + 'none';
   });
   editorAvailable.set(barConfig.local);

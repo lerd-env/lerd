@@ -1858,5 +1858,20 @@
   "debugbar_waiting": "Đang chờ các yêu cầu của trang này",
   "debugbar_loading": "Đang tải yêu cầu…",
   "requests_showMore": "Hiện thêm {count} trong {total} còn lại",
-  "requests_nPlusOneShow": "Hiện truy vấn"
+  "requests_nPlusOneShow": "Hiện truy vấn",
+  "debugbar_annotate": "Ghi chú mới",
+  "debugbar_annotateStop": "Dừng chọn",
+  "debugbar_notes": "ghi chú",
+  "debugbar_noteOpen": "Ghi chú {n}",
+  "debugbar_noteNew": "Ghi chú mới",
+  "debugbar_noteTitle": "Ghi chú",
+  "debugbar_notePlaceholder": "Phần tử này có vấn đề gì?",
+  "debugbar_noteHint": "Enter để lưu",
+  "debugbar_noteCancel": "Hủy",
+  "debugbar_noteSave": "Lưu",
+  "debugbar_noteSaving": "Đang lưu…",
+  "debugbar_noteDelete": "Xóa",
+  "debugbar_noteResolve": "Đã xử lý",
+  "debugbar_notesTitle": "Ghi chú trên trang này",
+  "debugbar_notesEmpty": "Không có ghi chú mở trên trang này."
 }

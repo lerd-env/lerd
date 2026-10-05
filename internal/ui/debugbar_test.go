@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/geodro/lerd/internal/annotations"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dumps"
 )
@@ -190,5 +191,114 @@ func TestDebugbar_SourceOnlyForTheLocalPage(t *testing.T) {
 	}
 	if w := barLocalRequest(path, nil); w.Code != http.StatusForbidden {
 		t.Errorf("LAN exposed: status %d, want 403", w.Code)
+	}
+}
+
+func barCall(method, path, body string, local bool) *httptest.ResponseRecorder {
+	r := httptest.NewRequest(method, path, strings.NewReader(body))
+	r.Header.Set("X-Lerd-Site", "shop")
+	if local {
+		r.Header.Set("Sec-Fetch-Site", "same-origin")
+	}
+	r = r.WithContext(context.WithValue(r.Context(), ctxKeyUnixSocket{}, true))
+	w := httptest.NewRecorder()
+	withDebugbar(http.NotFoundHandler()).ServeHTTP(w, r)
+	return w
+}
+
+// A note made from the bar is kept, listed for its page,
+// and drops off the page once resolved; only a page on this machine reaches it.
+func TestDebugbar_AnnotationsRoundTrip(t *testing.T) {
+	setupDebugbar(t)
+	body := `{"url":"https://shop.test/cart?x=1","rid":"page1","selector":"#checkout","tag":"button","comment":"Misaligned"}`
+	if w := barCall("POST", "/_lerd/bar/annotations", body, false); w.Code != http.StatusForbidden {
+		t.Fatalf("a request not from this machine got %d", w.Code)
+	}
+	w := barCall("POST", "/_lerd/bar/annotations", body, true)
+	if w.Code != http.StatusOK {
+		t.Fatalf("create %d: %s", w.Code, w.Body)
+	}
+	var a struct {
+		ID   string `json:"id"`
+		Site string `json:"site"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &a)
+	if a.ID == "" || a.Site != "shop" {
+		t.Fatalf("created %s", w.Body)
+	}
+	list := barCall("GET", "/_lerd/bar/annotations", "", true).Body.String()
+	if !strings.Contains(list, `"comment":"Misaligned"`) {
+		t.Errorf("list %s", list)
+	}
+	if w := barCall("POST", "/_lerd/bar/annotations/"+a.ID, `{"status":"resolved"}`, true); w.Code != http.StatusOK {
+		t.Fatalf("resolve %d: %s", w.Code, w.Body)
+	}
+	if list := barCall("GET", "/_lerd/bar/annotations", "", true).Body.String(); strings.Contains(list, a.ID) {
+		t.Errorf("resolved note still listed: %s", list)
+	}
+	if w := barCall("DELETE", "/_lerd/bar/annotations/"+a.ID, "", true); w.Code != http.StatusOK {
+		t.Errorf("delete %d", w.Code)
+	}
+}
+
+// The dashboard API lists a site's notes and resolves one with what was done, which takes it off the page.
+func TestAnnotationsAPI_ListsAndResolves(t *testing.T) {
+	setupDebugbar(t)
+	a, err := annotations.Add(annotations.Annotation{Site: "shop", Selector: "h1", Comment: "typo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := func(method, path, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		r.RemoteAddr = "127.0.0.1:4000"
+		w := httptest.NewRecorder()
+		handleAnnotations(w, r)
+		return w
+	}
+	list := call("GET", "/api/annotations?site=shop", "").Body.String()
+	if !strings.Contains(list, a.ID) {
+		t.Fatalf("list %s", list)
+	}
+	if w := call("POST", "/api/annotations/shop/"+a.ID, `{"status":"resolved","resolution":"Fixed the spelling"}`); w.Code != http.StatusOK {
+		t.Fatalf("resolve %d: %s", w.Code, w.Body)
+	}
+	got, _ := annotations.Get("shop", a.ID)
+	if got.Status != annotations.StatusResolved || got.Resolution != "Fixed the spelling" {
+		t.Errorf("after resolve %+v", got)
+	}
+	if list := call("GET", "/api/annotations?site=shop", "").Body.String(); strings.Contains(list, a.ID) {
+		t.Errorf("resolved note listed as open: %s", list)
+	}
+}
+
+// A plain-http page sends no Sec-Fetch headers; its own origin or referrer
+// stands in, and another site's never does.
+func TestDebugbarLocal_ReadsTheOriginWhenSecFetchIsMissing(t *testing.T) {
+	setupDebugbar(t)
+	for _, c := range []struct {
+		headers map[string]string
+		want    bool
+	}{
+		{map[string]string{"Sec-Fetch-Site": "same-origin"}, true},
+		{map[string]string{"Sec-Fetch-Site": "cross-site", "Origin": "http://shop.test"}, false},
+		{map[string]string{"Origin": "http://shop.test"}, true},
+		{map[string]string{"Referer": "http://shop.test/cart"}, true},
+		{map[string]string{"Origin": "http://evil.test"}, false},
+		{map[string]string{}, false},
+		// Through nginx the host lerd-ui sees is its own; the site's comes in X-Lerd-Host.
+		{map[string]string{"Origin": "http://shop.test", "X-Lerd-Host": "shop.test", "Host": "lerd"}, true},
+		{map[string]string{"Origin": "http://evil.test", "X-Lerd-Host": "shop.test"}, false},
+	} {
+		r := httptest.NewRequest("POST", "http://shop.test/_lerd/bar/annotations", nil)
+		for k, v := range c.headers {
+			if k == "Host" {
+				r.Host = v
+				continue
+			}
+			r.Header.Set(k, v)
+		}
+		if got := debugbarLocal(r); got != c.want {
+			t.Errorf("%v: got %v, want %v", c.headers, got, c.want)
+		}
 	}
 }

@@ -1858,5 +1858,20 @@
   "debugbar_waiting": "Waiting for this page's requests",
   "debugbar_loading": "Loading request…",
   "requests_showMore": "Show {count} more of {total} remaining",
-  "requests_nPlusOneShow": "Show queries"
+  "requests_nPlusOneShow": "Show queries",
+  "debugbar_annotate": "New note",
+  "debugbar_annotateStop": "Stop picking",
+  "debugbar_notes": "notes",
+  "debugbar_noteOpen": "Note {n}",
+  "debugbar_noteNew": "New note",
+  "debugbar_noteTitle": "Note",
+  "debugbar_notePlaceholder": "What is wrong with this element?",
+  "debugbar_noteHint": "Enter saves",
+  "debugbar_noteCancel": "Cancel",
+  "debugbar_noteSave": "Save",
+  "debugbar_noteSaving": "Saving…",
+  "debugbar_noteDelete": "Delete",
+  "debugbar_noteResolve": "Resolve",
+  "debugbar_notesTitle": "Notes on this page",
+  "debugbar_notesEmpty": "No open notes on this page."
 }

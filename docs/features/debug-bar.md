@@ -45,17 +45,31 @@ The **×** minimises the bar to lerd's mark in a corner, and clicking the mark b
 
 The settings are kept under `debugbar` in `~/.config/lerd/config.yaml`.
 
+## Annotations
+
+The note chip on the bar lists the open notes on the page, each numbered like its pin, and **New note** turns on a picker: the element under the pointer is outlined and named, and a click picks it without the page seeing the click, so a link or a router stays where it is. A box opens beside the element for what is wrong with it; Enter saves, Shift+Enter starts a new line and Esc cancels.
+
+![Picking the Call API button and writing a note about it](/assets/screenshots/debug-bar-annotate.png)
+
+lerd keeps the note with a selector that finds the element again, its tag and the start of its text, where it sat, the page's address and the request that served the page. A numbered pin then marks the element whenever the page is open. Clicking a pin, or a note in the list, brings the element into view and opens the note to edit, resolve or delete.
+
+![The notes on a page listed from the bar](/assets/screenshots/debug-bar-notes.png)
+
+An assistant reads the notes over MCP with the `annotation` tool: `list` gives a site's open notes, `get` one of them with the request behind its page, which the `request` tool reads in full, and `resolve` marks it done with what was changed, which takes the pin off the page within a few seconds. lerd takes no screenshot; an assistant that wants to see the element opens the page itself. Notes are kept under `~/.local/share/lerd/annotations/`, one folder per site, and survive restarts.
+
+Annotating needs the same conditions as [opening the editor](#code-and-the-editor): with the LAN exposed or through a tunnel the chip is not shown.
+
 ## Sites lerd proxies
 
 On a host-proxy or custom-container site, a dev server lerd proxies to, no PHP request serves the page, so the bar follows the page view [browser capture](browser-capture.md) names instead, including every navigation of a single-page app. The bar needs browser capture on for such a site; until it has a page view to show it sits as the minimised mark.
 
 ## Code and the editor
 
-From a page on this machine, the bar's paths open in your editor and its stack traces show the code around each line, just like the dashboard. Reading a site's code and opening the editor need three things to be true, since nginx cannot tell one local browser from another:
+From a page on this machine, the bar's paths open in your editor and its stack traces show the code around each line, just like the dashboard. Reading a site's code, opening the editor and annotating need three things to be true, since nginx cannot tell one local browser from another:
 
 - the LAN is not exposed (`lerd lan:expose` off), so nginx only listens on this machine
 - the request did not come through a tunnel, which marks what it forwards
-- it is the page's own script asking, a same-origin request
+- it is the page's own script asking, a same-origin request, which on a site served over plain http is told by its origin since the browser sends no Sec-Fetch headers there
 
 With the LAN exposed, the bar still shows everything else, and paths are there to copy.
 

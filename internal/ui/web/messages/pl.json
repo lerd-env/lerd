@@ -1858,5 +1858,20 @@
   "debugbar_waiting": "Czekam na żądania tej strony",
   "debugbar_loading": "Wczytywanie żądania…",
   "requests_showMore": "Pokaż {count} więcej z {total} pozostałych",
-  "requests_nPlusOneShow": "Pokaż zapytania"
+  "requests_nPlusOneShow": "Pokaż zapytania",
+  "debugbar_annotate": "Nowa notatka",
+  "debugbar_annotateStop": "Zakończ wybieranie",
+  "debugbar_notes": "notatki",
+  "debugbar_noteOpen": "Notatka {n}",
+  "debugbar_noteNew": "Nowa notatka",
+  "debugbar_noteTitle": "Notatka",
+  "debugbar_notePlaceholder": "Co jest nie tak z tym elementem?",
+  "debugbar_noteHint": "Enter zapisuje",
+  "debugbar_noteCancel": "Anuluj",
+  "debugbar_noteSave": "Zapisz",
+  "debugbar_noteSaving": "Zapisywanie…",
+  "debugbar_noteDelete": "Usuń",
+  "debugbar_noteResolve": "Rozwiąż",
+  "debugbar_notesTitle": "Notatki na tej stronie",
+  "debugbar_notesEmpty": "Brak otwartych notatek na tej stronie."
 }

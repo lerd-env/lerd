@@ -99,3 +99,32 @@
 @keyframes lerd-spin { to { transform: rotate(360deg); } }
 @keyframes lerd-pulse { 50% { opacity: .55; } }
 @media (prefers-reduced-motion: reduce) { .lerd-root * { transition: none !important; } .spin, .mark.loading { animation: none; } }
+
+/* Annotations: the picker's outline, the pins on noted elements, the note box. */
+.pick-box { position: fixed; pointer-events: none !important; border: 2px solid var(--red); background: var(--red-soft); border-radius: 3px; z-index: 41; transition: all .06s linear; }
+.pick-box.locked { border-style: solid; box-shadow: 0 0 0 4px color-mix(in srgb, var(--red) 20%, transparent); }
+.pick-tag { position: absolute; left: -2px; top: -20px; background: var(--red); color: #fff; font: 600 10px/1 var(--font-mono); padding: 4px 5px; border-radius: 3px 3px 0 0; white-space: nowrap; }
+.pin { position: fixed; z-index: 42; translate: -50% -50%; width: 22px; height: 22px; border-radius: 50% 50% 50% 4px; background: var(--red); color: #fff; font: 700 11px/22px var(--font-sans); text-align: center; box-shadow: 0 2px 8px rgba(0, 0, 0, .3); border: 2px solid #fff; }
+.pin:hover { scale: 1.12; }
+.note-box { position: fixed; z-index: 46; width: min(320px, calc(100vw - 16px)); background: var(--bar); color: var(--bar-fg); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 16px 40px rgba(0, 0, 0, .22); padding: 10px; font-size: 12px; display: grid; gap: 8px; }
+.note-box h4 { margin: 0; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note-text { font-weight: 400; color: var(--muted); }
+.note-box textarea { width: 100%; resize: vertical; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: var(--chip); color: inherit; font: inherit; line-height: 1.4; }
+.note-box textarea:focus { outline: 2px solid var(--red); outline-offset: -1px; }
+.note-actions { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.note-hint { margin-right: auto; color: var(--muted); font-size: 11px; }
+.note-btn { height: 26px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--border); }
+.note-btn:hover { background: var(--chip-hover); }
+.note-btn.primary { background: var(--red); border-color: var(--red); color: #fff; }
+.note-btn.primary:disabled { opacity: .5; }
+.note-btn.danger { color: var(--rose); margin-right: auto; }
+.note-err { margin: 0; color: var(--rose); font-size: 11px; }
+.chip.active { background: var(--red-soft); color: var(--red); }
+.chip.active svg { color: var(--red); }
+.pop-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-transform: none !important; letter-spacing: normal !important; }
+.pop-head > span { text-transform: uppercase; letter-spacing: .06em; }
+.pin-n { width: 20px; height: 20px; border-radius: 50% 50% 50% 4px; background: var(--red); color: #fff; font-size: 10px; font-weight: 700; display: grid; place-items: center; }
+.note-row { display: grid; gap: 2px; min-width: 0; }
+.note-comment { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note-el { color: var(--muted); font-family: var(--font-mono); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pop-empty { margin: 0; padding: 14px 12px; color: var(--muted); }

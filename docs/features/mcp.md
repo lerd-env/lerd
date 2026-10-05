@@ -173,6 +173,7 @@ The server also sends short instructions when a client connects, telling the ass
 | `framework` | `list`, `add`, `remove`, `prune`, `search`, `update`, `project_new`, `setup` |
 | `diag` | `status`, `doctor`, `doctor_fix`, `site_doctor`, `which`, `check`, `dns_diagnose`, `bug_report`, `analyze_queries`, `route_timing`, `optimize_route`, `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle`, `browser_events`, `browser_toggle`, `browser_presets`, `profiler_toggle`, `profiler_status`, `profiler_clear`, `profiler_report`, `xdebug_on`, `xdebug_off`, `xdebug_status` |
 | `request` | `list`, `tabs`, `summary`, `tab`, `trace` |
+| `annotation` | `list`, `get`, `resolve` |
 | `logs` | `sources`, `fetch` |
 | `worktree` | `list`, `add`, `remove`, `wait`, `db_isolate`, `db_share` |
 | `workspace` | `list`, `create`, `rename`, `delete`, `assign`, `move` |

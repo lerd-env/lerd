@@ -1858,5 +1858,20 @@
   "debugbar_waiting": "Se așteaptă cererile acestei pagini",
   "debugbar_loading": "Se încarcă cererea…",
   "requests_showMore": "Arată încă {count} din {total} rămase",
-  "requests_nPlusOneShow": "Arată interogările"
+  "requests_nPlusOneShow": "Arată interogările",
+  "debugbar_annotate": "Notă nouă",
+  "debugbar_annotateStop": "Oprește alegerea",
+  "debugbar_notes": "note",
+  "debugbar_noteOpen": "Nota {n}",
+  "debugbar_noteNew": "Notă nouă",
+  "debugbar_noteTitle": "Notă",
+  "debugbar_notePlaceholder": "Ce nu este în regulă cu acest element?",
+  "debugbar_noteHint": "Enter salvează",
+  "debugbar_noteCancel": "Anulează",
+  "debugbar_noteSave": "Salvează",
+  "debugbar_noteSaving": "Se salvează…",
+  "debugbar_noteDelete": "Șterge",
+  "debugbar_noteResolve": "Rezolvă",
+  "debugbar_notesTitle": "Note pe această pagină",
+  "debugbar_notesEmpty": "Nicio notă deschisă pe această pagină."
 }

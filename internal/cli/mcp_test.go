@@ -664,8 +664,9 @@ func TestLerdReference_underSizeCeiling(t *testing.T) {
 	// JavaScript errors, and that an empty result means nothing while it is off,
 	// then 36850 → 37000 for the presets that add a frontend library's events,
 	// then 37000 → 37200 for request, the call that returns one whole request,
-	// then 37200 → 37300 for the request tool that reads it a tab at a time.
-	const ceiling = 37300
+	// then 37200 → 37300 for the request tool that reads it a tab at a time,
+	// then 37300 → 37450 for annotation, the notes a developer pins to a page.
+	const ceiling = 37450
 	if got := len(lerdReference); got > ceiling {
 		t.Errorf("lerd-reference.md is %d bytes, ceiling is %d — trim before raising", got, ceiling)
 	}

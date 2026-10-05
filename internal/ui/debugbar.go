@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -47,6 +48,12 @@ func withDebugbar(next http.Handler) http.Handler {
 			serveDebugbarScript(w, r, *site)
 		case strings.HasPrefix(p, "requests/"):
 			serveDebugbarRequest(w, r, site.Name, strings.TrimPrefix(p, "requests/"))
+		case p == "annotations" || strings.HasPrefix(p, "annotations/"):
+			if !debugbarLocal(r) {
+				http.Error(w, "Forbidden", http.StatusForbidden)
+				return
+			}
+			serveDebugbarAnnotations(w, r, site.Name, strings.TrimPrefix(strings.TrimPrefix(p, "annotations"), "/"))
 		case p == "source" || p == "open-editor":
 			if !debugbarLocal(r) {
 				http.Error(w, "Forbidden", http.StatusForbidden)
@@ -91,7 +98,21 @@ func debugbarLocal(r *http.Request) bool {
 			return false
 		}
 	}
-	return r.Header.Get("Sec-Fetch-Site") == "same-origin"
+	if site := r.Header.Get("Sec-Fetch-Site"); site != "" {
+		return site == "same-origin"
+	}
+	// A page served over plain http gets no Sec-Fetch headers, so its own
+	// origin, or the page it came from, has to be the site itself.
+	host := r.Header.Get("X-Lerd-Host")
+	if host == "" {
+		host = r.Host
+	}
+	for _, h := range []string{"Origin", "Referer"} {
+		if u, err := url.Parse(r.Header.Get(h)); err == nil && u.Host != "" {
+			return u.Hostname() == strings.Split(host, ":")[0]
+		}
+	}
+	return false
 }
 
 // serveDebugbarOpenEditor opens a file of a linked site in the editor, for a

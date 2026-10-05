@@ -1,10 +1,15 @@
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, fireEvent } from '@testing-library/svelte';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import Bar from './Bar.svelte';
 
 vi.mock('$stores/requests', async (orig) => ({
   ...(await orig<object>()),
   loadRequest: () => Promise.resolve({ rid: 'r1', type: 'page', method: 'GET', uri: '/demo', status: 200, time_ms: 90, started: '', counts: {}, problems: [], events: { request: [{ data: {} }], query: [{}, {}] } })
+}));
+
+vi.mock('$lib/api', async (orig) => ({
+  ...(await orig<object>()),
+  apiJson: (path: string) => Promise.resolve(path === '/api/annotations' ? [{ id: 'a1', url: location.href, selector: '#nope', comment: 'Heading is wrong', tag: 'h1', text: 'Demo' }] : [])
 }));
 
 const config = { style: 'dock', edge: 'bottom', corner: 'bottom-right', theme: 'auto', palette: '', base: '/_lerd/browser/bar/', site: 'shop', path: '/srv/shop', roots: ['/srv/shop'], local: true, themes: [] };
@@ -30,5 +35,15 @@ describe('Bar', () => {
     localStorage.setItem('lerd:debugbar:open', '1');
     render(Bar, { props: { rid: 'r1', config: { ...config, style: 'dock' as const, edge: 'bottom' as const, corner: 'bottom-right' as const, theme: 'auto' as const } } });
     expect(await screen.findByText('/demo')).toBeInTheDocument();
+  });
+
+  it('lists the notes on the page and opens one from the list', async () => {
+    localStorage.setItem('lerd:debugbar:open', '1');
+    render(Bar, { props: { rid: 'r1', config: { ...config, style: 'dock' as const, edge: 'bottom' as const, corner: 'bottom-right' as const, theme: 'auto' as const } } });
+    await screen.findByText('/demo');
+    await fireEvent.click(await screen.findByRole('button', { name: /notes/ }));
+    expect(screen.getByRole('button', { name: 'New note' })).toBeInTheDocument();
+    await fireEvent.click(screen.getByText('Heading is wrong'));
+    expect(await screen.findByDisplayValue('Heading is wrong')).toBeInTheDocument();
   });
 });

@@ -293,8 +293,10 @@ func TestToolList_underSizeCeiling(t *testing.T) {
 	// everything one request did, linked across sites, in a single call, then
 	// 25000 → 25700 for the request tool that replaces it, which reads a request
 	// a tab and a page at a time, the app's own tabs included, so a request of
-	// thousands of queries fits an assistant's context.
-	const ceiling = 25700
+	// thousands of queries fits an assistant's context, then 25700 → 26300 for
+	// the annotation tool, which hands an assistant the notes a developer pins
+	// to a page and lets it resolve them once fixed.
+	const ceiling = 26300
 	got, err := json.Marshal(toolList())
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)

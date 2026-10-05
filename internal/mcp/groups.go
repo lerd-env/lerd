@@ -59,6 +59,7 @@ func toolList() []mcpTool {
 		diagTool(),
 		logsTool(),
 		requestTool(),
+		annotationTool(),
 		worktreeTool(),
 		workspaceTool(),
 	}
@@ -243,6 +244,11 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"xdebug_on":       func(a map[string]any) (any, *rpcError) { return execXdebugToggle(a, true) },
 		"xdebug_off":      func(a map[string]any) (any, *rpcError) { return execXdebugToggle(a, false) },
 		"xdebug_status":   func(a map[string]any) (any, *rpcError) { return execXdebugStatus() },
+	},
+	"annotation": {
+		"list":    execAnnotationTool,
+		"get":     execAnnotationTool,
+		"resolve": execAnnotationTool,
 	},
 	"request": {
 		"list":    execRequestTool,

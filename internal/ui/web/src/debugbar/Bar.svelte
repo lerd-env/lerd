@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { loadRequest, type RequestDetail as Detail } from '$stores/requests';
   import RequestDetail from '$components/RequestDetail.svelte';
+  import Annotator, { type Note } from './Annotator.svelte';
   import Modal from '$components/Modal.svelte';
   import { tooltip } from '$lib/tooltip';
   import { summarize, path, popoverPlace } from './chips';
@@ -159,14 +160,19 @@
   }
 
   // The two lists a chip opens, placed away from the edge the bar sits on.
-  let pop = $state<'' | 'tabs' | 'children'>('');
+  let pop = $state<'' | 'tabs' | 'children' | 'notes'>('');
   let popPos = $state('');
-  function toggle(e: Event, which: 'tabs' | 'children') {
+  function toggle(e: Event, which: 'tabs' | 'children' | 'notes') {
     if (pop === which) return void (pop = '');
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     popPos = popoverPlace(r, innerWidth, innerHeight);
     pop = which;
   }
+
+  // Annotating: the picker is on, and the notes this page has open.
+  let picking = $state(false);
+  let notes = $state<Note[]>([]);
+  let annotator: ReturnType<typeof Annotator> | undefined = $state();
 
   const INLINE = 2;
   const shownTabs = $derived(s ? s.appTabs.slice(0, s.appTabs.length > INLINE + 1 ? INLINE : INLINE + 1) : []);
@@ -237,6 +243,10 @@
       {#if s.children.length}
         <button class="chip" type="button" data-pop="children" aria-expanded={pop === 'children'} onclick={(e) => { e.stopPropagation(); toggle(e, 'children'); }} use:tooltip={pop === 'children' ? '' : m.debugbar_children()}>{@render icon('M7 7h11l-3-3M17 17H6l3 3')}<span class="tabular-nums">{s.children.length}</span><span class="k lbl">{m.debugbar_childrenLabel()}</span>{#if s.childFailures}<span class="pill pill-red">{m.debugbar_failed({ count: s.childFailures })}</span>{/if}</button>
       {/if}
+      {#if config.local}
+        <span class="sep"></span>
+        <button class="chip" class:active={picking || pop === 'notes'} type="button" data-pop="notes" aria-expanded={pop === 'notes'} onclick={(e) => { e.stopPropagation(); if (picking) picking = false; else toggle(e, 'notes'); }} use:tooltip={picking ? m.debugbar_annotateStop() : pop === 'notes' ? '' : m.debugbar_notesTitle()}>{@render icon('M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2zM12 7v6M9 10h6')}{#if notes.length}<span class="tabular-nums">{notes.length}</span>{/if}<span class="k lbl">{m.debugbar_notes()}</span></button>
+      {/if}
       <button class="icon-btn" type="button" onclick={(e) => { e.stopPropagation(); setMin(true); }} aria-label={m.debugbar_minimise()} use:tooltip={m.debugbar_minimise()}>{@render icon('M6 6l12 12M18 6L6 18')}</button>
       {/if}
     </div>
@@ -253,6 +263,17 @@
             <button class="bar-row" style="grid-template-columns:18px minmax(0,1fr)" type="button" onclick={(e) => open(e, t.id)}>{@render icon('M12 2l9 5v10l-9 5-9-5V7z')}<span>{t.title}</span></button>
           {/each}
         </div>
+      {:else if pop === 'notes'}
+        <h4 class="pop-head"><span>{m.debugbar_notesTitle()}</span><button class="note-btn primary" type="button" onclick={() => { pop = ''; picking = true; }}>{m.debugbar_annotate()}</button></h4>
+        <div class="rows">
+          {#each notes as n, i (n.id)}
+            <button class="bar-row" style="grid-template-columns:22px minmax(0,1fr)" type="button" onclick={() => { pop = ''; annotator?.reveal(n); }}>
+              <span class="pin-n">{i + 1}</span><span class="note-row"><span class="note-comment">{n.comment}</span>{#if n.tag}<span class="note-el">{n.tag}{n.text ? ` · ${n.text}` : ''}</span>{/if}</span>
+            </button>
+          {:else}
+            <p class="pop-empty">{m.debugbar_notesEmpty()}</p>
+          {/each}
+        </div>
       {:else}
         <h4>{m.debugbar_childrenLabel()}</h4>
         <div class="rows">
@@ -266,6 +287,8 @@
     </div>
   {/if}
 {/if}
+
+{#if config.local}<Annotator bind:this={annotator} {rid} bind:picking bind:list={notes} />{/if}
 
 <Modal open={!!view} title={m.requests_detail_title()} size="full" {origin} onclose={() => (view = null)}>
   {#if view}

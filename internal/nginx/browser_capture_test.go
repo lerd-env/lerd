@@ -131,7 +131,7 @@ func TestGenerateVhost_DebugbarInjectsBarWithoutCapture(t *testing.T) {
 	content := readConf(t, filepath.Join(confD, "myapp.test.conf"))
 	for _, want := range []string{
 		`sub_filter '</head>' '<script src="/_lerd/browser/bar/bar.js" data-rid="$upstream_http_x_lerd_rid" async></script></head>';`,
-		"location ^~ /_lerd/browser/bar/ {",
+		"location ^~ /_lerd/browser/bar/ {\n        access_log off;\n        client_max_body_size 64k;",
 		"proxy_pass " + lerdUIUpstream() + "/_lerd/bar/;",
 		"proxy_set_header X-Lerd-Client $remote_addr;",
 		`proxy_set_header X-Lerd-Site "myapp";`,

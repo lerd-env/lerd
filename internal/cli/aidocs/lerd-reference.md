@@ -135,6 +135,9 @@ Actions: `status`, `doctor`, `doctor_fix`, `site_doctor`, `which`, `check`, `dns
 Actions: `list`, `tabs`, `summary`, `tab`, `trace`; `rid` is a response's `X-Lerd-Rid`.
 - start with `summary` (timing, findings with `example_sql`, exceptions, GraphQL); `tabs` lists the rest, `custom:<id>` too; `tab` pages one; `trace` reads a `trace_ref`
 
+#### `annotation` — notes pinned to elements
+Actions: `list`, `get`, `resolve`. Each has a selector, text and its page's `rid`; resolve once fixed
+
 #### `logs` — read logs from any source, filtered
 Actions: `sources`, `fetch`. Debug without opening files by hand.
 - `sources` lists every queryable source for the site plus shared infra: `app:<file>` (framework log files), `fpm`, `worker:<name>` (queue/horizon/schedule/custom), and the globals `nginx`, `dns`, `watcher`, `ui`, services, `php<ver>`. Call it first to learn the names

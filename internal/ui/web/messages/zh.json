@@ -1858,5 +1858,20 @@
   "debugbar_waiting": "正在等待此页面的请求",
   "debugbar_loading": "正在加载请求…",
   "requests_showMore": "再显示 {count} 条，剩余 {total} 条",
-  "requests_nPlusOneShow": "显示查询"
+  "requests_nPlusOneShow": "显示查询",
+  "debugbar_annotate": "新备注",
+  "debugbar_annotateStop": "停止选择",
+  "debugbar_notes": "备注",
+  "debugbar_noteOpen": "备注 {n}",
+  "debugbar_noteNew": "新备注",
+  "debugbar_noteTitle": "备注",
+  "debugbar_notePlaceholder": "这个元素有什么问题？",
+  "debugbar_noteHint": "回车保存",
+  "debugbar_noteCancel": "取消",
+  "debugbar_noteSave": "保存",
+  "debugbar_noteSaving": "保存中…",
+  "debugbar_noteDelete": "删除",
+  "debugbar_noteResolve": "解决",
+  "debugbar_notesTitle": "此页面的备注",
+  "debugbar_notesEmpty": "此页面没有未解决的备注。"
 }
