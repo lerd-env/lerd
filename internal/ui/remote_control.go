@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
-	"runtime"
 	"strings"
 	"time"
 
 	lerdcli "github.com/geodro/lerd/internal/cli"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/platform"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -393,7 +393,7 @@ func handleLANStatus(w http.ResponseWriter, r *http.Request) {
 			"services_enabled":   servicesEnabled,
 			"services_reachable": exposed && servicesEnabled,
 			"lan_ip":             lanIP,
-			"macos":              runtime.GOOS == "darwin",
+			"macos":              platform.Current.UsesMachineVM,
 		})
 		return
 

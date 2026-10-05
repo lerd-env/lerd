@@ -22,6 +22,7 @@ import (
 	"github.com/geodro/lerd/internal/freeport"
 	"github.com/geodro/lerd/internal/imagepull"
 	"github.com/geodro/lerd/internal/imgledger"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/registry"
 )
@@ -155,7 +156,7 @@ var ensureUnitStatus = podman.UnitStatus
 // when something else took it while the service was down. Not on macOS: the VM
 // can hold a service's own port after it stops, so the test moved services off
 // their own ports and left sites behind. There a recorded port sticks.
-var guardRecordedPorts = runtime.GOOS != "darwin"
+var guardRecordedPorts = !platform.Current.UsesMachineVM
 
 // unitActive reports whether a service's own systemd unit is currently up.
 func unitActive(name string) bool {
@@ -1137,6 +1138,9 @@ func EnsureServiceRunning(name string) error {
 	}
 	status, _ := podman.UnitStatus(unit)
 	if status == "active" {
+		// A running service is not paused, whatever started it; a stale pause
+		// would make the next lerd start skip it while a site still needs it.
+		_ = config.SetServicePaused(name, false)
 		if err := waitReadyFn(name, 30*time.Second); err != nil {
 			return fmt.Errorf("%s is active but not yet ready: %w", name, err)
 		}
@@ -1167,6 +1171,7 @@ func EnsureServiceRunning(name string) error {
 	if err := startUnitRetry(unit); err != nil {
 		return err
 	}
+	_ = config.SetServicePaused(name, false)
 	return waitReadyFn(name, 60*time.Second)
 }
 

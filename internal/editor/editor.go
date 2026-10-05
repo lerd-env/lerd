@@ -5,11 +5,11 @@ package editor
 import (
 	"fmt"
 	"os/exec"
-	"runtime"
 	"strconv"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/platform"
 )
 
 // knownEditors are the GUI editors probed on PATH when nothing is configured,
@@ -61,11 +61,7 @@ func Command(file string, line int) []string {
 		}
 	}
 	// Last resort: hand the file to the platform opener (uses the default app).
-	opener := "xdg-open"
-	if runtime.GOOS == "darwin" {
-		opener = "open"
-	}
-	if p, err := exec.LookPath(opener); err == nil {
+	if p, err := exec.LookPath(platform.Current.Opener); err == nil {
 		return []string{p, file}
 	}
 	return nil

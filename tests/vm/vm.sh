@@ -146,6 +146,12 @@ cmd_run() {
 		mapfile -t phases < <(ls "$HERE"/phases/"$(printf '%02d' "$((10#$which))")"-*.sh 2>/dev/null)
 	fi
 	[ ${#phases[@]} -gt 0 ] || die "no phase script for $which"
+	# Phase 1 is a fresh install: a leftover lerd or demo project turns every
+	# later phase into noise, so refuse to start rather than report it.
+	if [[ $(basename "${phases[0]}") == 01-* ]]; then
+		ssh "${SSH_OPTS[@]}" "$t" 'test ! -e ~/.local/bin/lerd && test ! -e ~/Projects/demo' ||
+			die "$guest is not clean (lerd installed or ~/Projects/demo exists); vm.sh reset it first"
+	fi
 	mkdir -p "$LOGS"
 	ssh "${SSH_OPTS[@]}" "$t" 'mkdir -p ~/lerd-vm/phases'
 	scp -q "$HERE/lib.sh" "$t:lerd-vm/"

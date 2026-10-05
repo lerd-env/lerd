@@ -515,27 +515,9 @@
     </svg>
   {/snippet}
 
-  <div class="flex flex-col items-end gap-1.5">
-    <div class="flex items-center gap-2">
-      <SitesPopover domains={siteDomains} />
-      <ButtonMenu
-        actions={buildActions({
-          external: externalIcon,
-          start: startIcon,
-          stop: stopIcon,
-          restart: restartIcon,
-          update: updateIcon,
-          upgrade: upgradeIcon,
-          migrate: migrateIcon,
-          rollback: rollbackIcon,
-          pin: pinIcon,
-          trash: trashIcon,
-          checkUpdates: checkUpdatesIcon
-        })}
-        inline={pinInGroup ? pinAction(pinIcon) : undefined}
-        {busy}
-      />
-    </div>
+  <!-- The notice shares the button row: on a line of its own it made the
+       header taller whenever an update was out. -->
+  <div class="flex items-center gap-2 min-w-0">
     {#if updating}
       <span
         class="text-[11px] text-gray-500 dark:text-gray-400 truncate max-w-[32ch]"
@@ -557,6 +539,24 @@
         {m.system_lerd_available({ version: svc.latest_version })}
       </span>
     {/if}
+    <SitesPopover domains={siteDomains} />
+    <ButtonMenu
+      actions={buildActions({
+        external: externalIcon,
+        start: startIcon,
+        stop: stopIcon,
+        restart: restartIcon,
+        update: updateIcon,
+        upgrade: upgradeIcon,
+        migrate: migrateIcon,
+        rollback: rollbackIcon,
+        pin: pinIcon,
+        trash: trashIcon,
+        checkUpdates: checkUpdatesIcon
+      })}
+      inline={pinInGroup ? pinAction(pinIcon) : undefined}
+      {busy}
+    />
   </div>
 </div>
 

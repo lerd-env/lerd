@@ -29,6 +29,10 @@ On macOS the launchd units in `~/Library/LaunchAgents` follow `HOME` instead, so
 
 Isolating `HOME` moves the plist file but not the launchd domain it is bootstrapped into, which has no per-test equivalent. Starting, stopping or restarting a unit is therefore refused outright under test unless the test installs its own stub in `podman.UnitLifecycle`; the platform manager macOS registers at init counts as the real system, not a stub. A test that needs the lifecycle to run should assign a fake and assert against what it recorded.
 
+## Platform-specific code
+
+Code that behaves differently per OS lives in `_linux.go`, `_darwin.go` or `_windows.go` files behind a function the shared code calls. A file that builds for more than one OS may read `runtime.GOOS` as data, passing it to a lookup or showing it to the user, but may not compare or switch on it. A plain fact about the host, like whether containers run inside a VM or which command opens a URL, goes in `platform.Current`, which each OS sets in its own `caps_<os>.go`. `internal/platform/seams_test.go` fails on any branch like that. CI also cross-builds for macOS on the Linux job, so a per-OS function missing from the darwin side fails there first.
+
 ## Cross-compile for arm64
 
 Without tray (no CGO required):

@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -19,6 +18,7 @@ import (
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/linker"
 	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
 )
@@ -43,7 +43,7 @@ func init() {
 // main. No-op on macOS, where the upstream is the gvproxy-resolved
 // host.containers.internal hostname rather than a literal IP.
 func RegenerateHostProxyVhostsOnGatewayChange() {
-	if runtime.GOOS == "darwin" {
+	if platform.Current.UsesMachineVM {
 		return
 	}
 	reg, err := config.LoadSites()
@@ -175,7 +175,7 @@ var hostIPIsLocal = isLocalInterfaceIP
 // fallback), an unknown gateway, or macOS (gvproxy) all fall back to 0.0.0.0,
 // which always binds. Env-only: pure Vite reads --host, not this var.
 func hostProxyBindAddr() string {
-	if runtime.GOOS == "darwin" {
+	if platform.Current.UsesMachineVM {
 		return "0.0.0.0"
 	}
 	if ip := hostGatewayBindIP(); ip != "" && hostIPIsLocal(ip) {

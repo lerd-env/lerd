@@ -61,6 +61,20 @@ describe('ServiceHeader site links', () => {
   });
 });
 
+describe('ServiceHeader update notice', () => {
+  // On a line of its own under the buttons the notice made the header taller
+  // whenever an update was out; it sits beside them instead.
+  it('keeps the update notice on the button row', () => {
+    const { getByText, getByTestId } = render(ServiceHeader, {
+      props: { svc: service({ update_available: true, latest_version: '9.1' }) }
+    });
+    const notice = getByText(/9\.1/, { selector: 'span' });
+    const row = getByTestId('button-menu-toggle').closest('.flex.items-center');
+    expect(row).not.toBeNull();
+    expect(row!.contains(notice)).toBe(true);
+  });
+});
+
 describe('ServiceHeader pin', () => {
   afterEach(() => {
     idleEnabled.set(false);

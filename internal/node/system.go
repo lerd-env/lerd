@@ -3,13 +3,11 @@ package node
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/hostbin"
 )
 
 // SystemNodeBinDirs resolves the directories where an unmanaged node and npm
@@ -62,12 +60,7 @@ func SystemNodeBinDirsFor(version string) []string {
 // them and a unit written by the dashboard resolved a different Node than the
 // same unit written by the CLI. Walking them with PATH keeps the answer equal on
 // both routes, and equal to what the unit runs. A var so tests can drive it.
-var unitPathDirs = func() []string {
-	if runtime.GOOS != "darwin" {
-		return nil
-	}
-	return hostbin.ExtraDirs()
-}
+var unitPathDirs = osUnitPathDirs
 
 // pathNodeBinDirs walks PATH for the first dirs holding node and npm, skipping
 // lerd's own bin dir so a stale managed-node shim never counts as a system

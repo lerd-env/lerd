@@ -425,9 +425,9 @@ func ensureFPMQuadletTo(phpVersion string, w io.Writer) error {
 	return startUnitFn(unitName)
 }
 
-// fpmImageCurrentFn is a seam for the check that decides whether a version has
-// anything to build, and so whether it needs the loader.
-var fpmImageCurrentFn = podman.FPMImageCurrent
+// fpmWouldBuildFn is a seam for the check that decides whether a version has
+// anything to build, and so whether it needs the loader and a disclosure.
+var fpmWouldBuildFn = podman.FPMImageWouldBuild
 
 // fpmVersionsToEnsure lists the PHP versions install has to bring up: the
 // global default first, then the version of every site that is actually
@@ -542,7 +542,7 @@ func parkedFPMVersions(cfg *config.GlobalConfig) []string {
 // ones already current, which have nothing to show.
 func fpmEnsurePlan(versions []string) (build, quiet []string) {
 	for _, v := range versions {
-		if fpmImageCurrentFn(v) {
+		if !fpmWouldBuildFn(v) {
 			quiet = append(quiet, v)
 			continue
 		}

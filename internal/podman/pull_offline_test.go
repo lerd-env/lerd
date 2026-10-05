@@ -91,3 +91,34 @@ func TestBuildFPMImageOfflineDefersARefreshOfAWorkingImage(t *testing.T) {
 		t.Errorf("deferral did not point at the escape hatch: %q", out.String())
 	}
 }
+
+// A stale image that exists is kept offline, so it must not be disclosed as a
+// rebuild; online the same image is rebuilt and has to be.
+func TestFPMImageWouldBuildFollowsTheOfflineDeferral(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var calls [][]string
+	offlineExec(t, &calls, true)
+
+	if !FPMImageWouldBuild("8.4") {
+		t.Error("online, a stale image was not reported as a rebuild")
+	}
+	imagepull.SetOffline(true)
+	t.Cleanup(func() { imagepull.SetOffline(false) })
+	if FPMImageWouldBuild("8.4") {
+		t.Error("offline, a stale image that is kept was reported as a rebuild")
+	}
+}
+
+func TestFPMImageWouldBuildOfflineStillBuildsAMissingImage(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var calls [][]string
+	offlineExec(t, &calls, false)
+	imagepull.SetOffline(true)
+	t.Cleanup(func() { imagepull.SetOffline(false) })
+
+	if !FPMImageWouldBuild("8.4") {
+		t.Error("offline, a missing image was not reported as a build")
+	}
+}

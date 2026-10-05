@@ -178,6 +178,26 @@ func RestoreSitesAfterServiceWake(names []string) {
 	}
 }
 
+// rewakeSleepingSites puts the waking vhost back on every site whose services
+// idle-suspend holds asleep. A vhost refresh writes the real vhost, which would
+// send the next request to a stopped service instead of waking it.
+func rewakeSleepingSites(sites []config.Site) {
+	swapped := false
+	for i := range sites {
+		if sites[i].Paused || sites[i].Ignored || !siteWaitsOnSleepingService(sites[i].Name) {
+			continue
+		}
+		if err := idleSwapToWaking(&sites[i]); err != nil {
+			fmt.Printf("[WARN] waking vhost %s: %v\n", sites[i].Name, err)
+			continue
+		}
+		swapped = true
+	}
+	if swapped {
+		idleReloadNginx()
+	}
+}
+
 // siteWaitsOnSleepingService reports whether any service the site uses is
 // still held asleep by idle-suspend.
 func siteWaitsOnSleepingService(siteName string) bool {

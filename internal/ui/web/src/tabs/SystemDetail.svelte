@@ -1,6 +1,5 @@
 <script lang="ts">
   import { routeRest } from '$stores/route';
-  import { status } from '$stores/status';
   import DnsDetail from './system/DnsDetail.svelte';
   import NginxDetail from './system/NginxDetail.svelte';
   import WatcherDetail from './system/WatcherDetail.svelte';
@@ -16,10 +15,11 @@
   const selected = $derived($routeRest || 'lerd');
   const phpVersion = $derived(selected.startsWith('php-') ? selected.slice(4) : '');
   const showPhp = $derived(selected === 'php' || selected.startsWith('php-'));
-  const dnsHidden = $derived($status.dns?.enabled === false);
 </script>
 
-{#if selected === 'dns' && !dnsHidden}
+<!-- DNS keeps its panel while off: the list drops the row, but #system/dns still
+     shows the disabled pill and how to turn it back on. -->
+{#if selected === 'dns'}
   <DnsDetail />
 {:else if selected === 'nginx'}
   <NginxDetail />

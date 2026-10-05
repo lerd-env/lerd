@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -46,53 +45,6 @@ func macDefaultTerminalBundle(plistJSON []byte) string {
 		return h.RoleShell
 	}
 	return ""
-}
-
-// macDefaultTerminal returns the user's chosen default terminal, or "" when
-// there is none to honour. plutil is what turns the binary plist into something
-// readable without a cgo dependency on LaunchServices itself.
-func macDefaultTerminal() string {
-	if runtime.GOOS != "darwin" {
-		return ""
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	out, err := exec.Command("plutil", "-convert", "json", "-o", "-", filepath.Join(home, launchServicesPlist)).Output()
-	if err != nil {
-		return ""
-	}
-	return macDefaultTerminalBundle(out)
-}
-
-// kdeGlobals is where KDE records the terminal the user picked in System
-// Settings. An absent file or key means they never changed it.
-const kdeGlobals = ".config/kdeglobals"
-
-// linuxDefaultTerminal returns the terminal the desktop is configured to use, or
-// "" when nothing was ever chosen. The signals are asked in order of how
-// deliberate they are: the freedesktop launcher, the distribution's own
-// alternative, then the two desktops that keep a setting of their own.
-func linuxDefaultTerminal() string {
-	if runtime.GOOS != "linux" {
-		return ""
-	}
-	// xdg-terminal-exec is the freedesktop entry point: it resolves the user's
-	// choice itself and runs a command in it, so where it exists it is the
-	// answer rather than a hint towards one.
-	if _, err := exec.LookPath("xdg-terminal-exec"); err == nil {
-		return "xdg-terminal-exec"
-	}
-	// Debian and its derivatives keep the choice as an alternatives symlink,
-	// which is exactly "the default terminal emulator" on those systems.
-	if _, err := exec.LookPath("x-terminal-emulator"); err == nil {
-		return "x-terminal-emulator"
-	}
-	if t := kdeDefaultTerminal(readHomeFile(kdeGlobals)); t != "" {
-		return t
-	}
-	return gnomeDefaultTerminal()
 }
 
 // kdeDefaultTerminal reads TerminalApplication out of a kdeglobals body. The
