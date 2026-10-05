@@ -1807,5 +1807,13 @@
   "trace_code": "Cod",
   "trace_noSource": "Sursa nu este disponibilă",
   "trace_codeHint": "Arată codul din jurul fiecărei linii",
-  "editor_openIn": "Deschide în {editor}"
+  "editor_openIn": "Deschide în {editor}",
+  "requests_graphql_variables": "Variabile",
+  "requests_graphql_errors": "{count} erori",
+  "requests_graphql_input": "Intrare",
+  "requests_graphql_response": "Răspuns",
+  "requests_graphql_query": "Interogare și variabile",
+  "requests_kv_responseBody": "Corpul răspunsului",
+  "requests_graphql_circular": "Deja deschis mai sus",
+  "requests_sql_format": "Formatează"
 }

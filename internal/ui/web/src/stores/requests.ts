@@ -23,6 +23,8 @@ export interface RequestSummary {
   method?: string;
   uri?: string;
   route?: string;
+  operation?: string;
+  operations?: string[];
   nginx_ms?: number;
   queue_ms?: number;
   job?: string;

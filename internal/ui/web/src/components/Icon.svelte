@@ -27,6 +27,7 @@
     | 'database'
     | 'wifi'
     | 'chevron'
+    | 'graphql'
     | 'code'
     | 'more'
     | 'workspace'
@@ -96,6 +97,8 @@
       'M4 7c0 1.657 3.582 3 8 3s8-1.343 8-3-3.582-3-8-3-8 1.343-8 3zm16 0v10c0 1.657-3.582 3-8 3s-8-1.343-8-3V7m16 5c0 1.657-3.582 3-8 3s-8-1.343-8-3',
     wifi: 'M5 12.55a11 11 0 0114 0M8.5 16.5a5 5 0 017 0M2 8.82a15 15 0 0120 0M12 20h.01',
     chevron: 'M6 9l6 6 6-6',
+    // GraphQL's mark: a hexagon round a triangle.
+    graphql: 'M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9zM12 3l7.8 13.5H4.2z',
     code: 'M8 6l-6 6 6 6M16 6l6 6-6 6',
     more: 'M12 5h.01M12 12h.01M12 19h.01',
     workspace: 'M3 7a2 2 0 012-2h4l2 2h7a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z',

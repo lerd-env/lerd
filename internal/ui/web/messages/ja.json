@@ -1807,5 +1807,13 @@
   "trace_code": "コード",
   "trace_noSource": "ソースを表示できません",
   "trace_codeHint": "各行の前後のコードを表示",
-  "editor_openIn": "{editor} で開く"
+  "editor_openIn": "{editor} で開く",
+  "requests_graphql_variables": "変数",
+  "requests_graphql_errors": "エラー {count} 件",
+  "requests_graphql_input": "入力",
+  "requests_graphql_response": "レスポンス",
+  "requests_graphql_query": "クエリと変数",
+  "requests_kv_responseBody": "レスポンス本文",
+  "requests_graphql_circular": "上で展開済み",
+  "requests_sql_format": "整形"
 }

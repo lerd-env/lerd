@@ -6,6 +6,9 @@
   import EmptyState from '$components/EmptyState.svelte';
   import RequestDetail from '$components/RequestDetail.svelte';
   import Modal from '$components/Modal.svelte';
+  import { tooltip } from '$lib/tooltip';
+  import Icon from '$components/Icon.svelte';
+  import ClassName from '$components/ClassName.svelte';
   import { m } from '../paraglide/messages.js';
 
   // Every request lerd saw, one row each, with the requests a page sent listed
@@ -150,8 +153,10 @@
                 <span class="font-mono text-[11px] {METHOD[r.method ?? ''] ?? 'text-violet-600 dark:text-violet-300'}">{r.type === 'job' ? 'JOB' : r.type === 'cli' || r.type === 'worker' ? 'CLI' : (r.method ?? '·')}</span>
                 <span class="flex items-center gap-2 min-w-0 {r.depth ? 'pl-5' : ''}">
                   {#if r.depth}<span aria-hidden="true" class="text-gray-300 dark:text-gray-600">└</span>{/if}
-                  <span class="font-mono truncate text-gray-800 dark:text-gray-100">{label(r)}</span>
+                  <ClassName value={label(r)} class="font-mono truncate text-gray-800 dark:text-gray-100" />
+                  {#if r.operation}<span class="font-mono truncate text-[11px] text-pink-700 dark:text-pink-300" title={(r.operations ?? []).join('\n')}>{r.operation}</span>{/if}
                   <span class="{CHIP} {PLAIN}">{r.type}</span>
+                  {#if r.operation}<span class="shrink-0 text-pink-600 dark:text-pink-300" use:tooltip={'GraphQL'} aria-label="GraphQL"><Icon name="graphql" class="w-3.5 h-3.5" /></span>{/if}
                   {#if r.parent?.cross_origin && r.parent.site}<span class="{CHIP} bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300">{m.requests_from({ site: r.parent.site })}</span>{/if}
                 </span>
                 {#if r.type === 'job'}

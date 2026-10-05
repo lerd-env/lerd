@@ -1807,5 +1807,13 @@
   "trace_code": "Code",
   "trace_noSource": "Bron niet beschikbaar",
   "trace_codeHint": "Code rond elke regel tonen",
-  "editor_openIn": "Openen in {editor}"
+  "editor_openIn": "Openen in {editor}",
+  "requests_graphql_variables": "Variabelen",
+  "requests_graphql_errors": "{count} fouten",
+  "requests_graphql_input": "Invoer",
+  "requests_graphql_response": "Antwoord",
+  "requests_graphql_query": "Query en variabelen",
+  "requests_kv_responseBody": "Antwoord-body",
+  "requests_graphql_circular": "Hierboven al open",
+  "requests_sql_format": "Opmaken"
 }

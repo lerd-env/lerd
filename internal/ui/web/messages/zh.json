@@ -1807,5 +1807,13 @@
   "trace_code": "代码",
   "trace_noSource": "无法获取源码",
   "trace_codeHint": "显示每行附近的代码",
-  "editor_openIn": "在 {editor} 中打开"
+  "editor_openIn": "在 {editor} 中打开",
+  "requests_graphql_variables": "变量",
+  "requests_graphql_errors": "{count} 个错误",
+  "requests_graphql_input": "输入",
+  "requests_graphql_response": "响应",
+  "requests_graphql_query": "查询和变量",
+  "requests_kv_responseBody": "响应正文",
+  "requests_graphql_circular": "已在上方展开",
+  "requests_sql_format": "格式化"
 }

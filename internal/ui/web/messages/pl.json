@@ -1807,5 +1807,13 @@
   "trace_code": "Kod",
   "trace_noSource": "Źródło niedostępne",
   "trace_codeHint": "Pokaż kod wokół każdej linii",
-  "editor_openIn": "Otwórz w {editor}"
+  "editor_openIn": "Otwórz w {editor}",
+  "requests_graphql_variables": "Zmienne",
+  "requests_graphql_errors": "Błędy: {count}",
+  "requests_graphql_input": "Wejście",
+  "requests_graphql_response": "Odpowiedź",
+  "requests_graphql_query": "Zapytanie i zmienne",
+  "requests_kv_responseBody": "Treść odpowiedzi",
+  "requests_graphql_circular": "Już otwarte wyżej",
+  "requests_sql_format": "Formatuj"
 }

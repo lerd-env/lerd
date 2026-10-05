@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/dumps"
@@ -75,5 +76,16 @@ func TestRequests_JobsAreProcessesOfTheirOwn(t *testing.T) {
 	}
 	if len(web.Children) != 1 || web.Children[0].RID != "job1" || web.Children[0].Via != "job" {
 		t.Fatalf("web children = %+v", web.Children)
+	}
+}
+
+// Every GraphQL call shares one URI, so a request is named by its operations.
+func TestRequests_NameAGraphQLRequestByItsOperations(t *testing.T) {
+	events := []dumps.Event{
+		ev("1", "2026-10-04T10:00:01.000Z", dumps.KindRequest, "g1", "api", "fpm", map[string]any{"method": "POST", "uri": "/graphql", "status": 200, "graphql": []map[string]any{{"type": "mutation", "name": "Login", "query": "mutation Login { x }"}, {"type": "query", "query": "{ me { id } cases { id } }", "fields": []map[string]any{{"name": "me"}, {"name": "cases"}}}}}),
+	}
+	got := listRequests(events)[0]
+	if got.Operation != "mutation Login +1" || strings.Join(got.Operations, " | ") != "mutation Login | query { me, cases }" {
+		t.Fatalf("operation = %q, operations = %q", got.Operation, got.Operations)
 	}
 }

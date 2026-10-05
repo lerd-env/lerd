@@ -1807,5 +1807,13 @@
   "trace_code": "Kod",
   "trace_noSource": "Kaynak kullanılamıyor",
   "trace_codeHint": "Her satırın çevresindeki kodu göster",
-  "editor_openIn": "{editor} ile aç"
+  "editor_openIn": "{editor} ile aç",
+  "requests_graphql_variables": "Değişkenler",
+  "requests_graphql_errors": "{count} hata",
+  "requests_graphql_input": "Girdi",
+  "requests_graphql_response": "Yanıt",
+  "requests_graphql_query": "Sorgu ve değişkenler",
+  "requests_kv_responseBody": "Yanıt gövdesi",
+  "requests_graphql_circular": "Yukarıda zaten açık",
+  "requests_sql_format": "Biçimlendir"
 }

@@ -1446,3 +1446,128 @@ namespace {
 		t.Errorf("want the component at its source file: %v", got)
 	}
 }
+
+// A JSON body PHP leaves unparsed is read and masked at any depth, and a
+// GraphQL request in it is named by its operations.
+func TestCollectorPHP_JSONBodyAndGraphQLOperations(t *testing.T) {
+	got := runCollectorPHP(t, `<?php
+namespace {
+    require COLLECTOR;
+    $_SERVER['CONTENT_TYPE'] = 'application/json';
+    $raw = json_encode([
+        ['operationName' => 'Login', 'query' => "mutation Login(\$e: String!) { login(email: \$e) { token } }", 'variables' => ['input' => ['email' => 'a@b.test', 'password' => 'hunter22']]],
+        ['query' => "# me\n{ me { id } }"],
+    ]);
+    $body = \Lerd\Collector\request_body($raw);
+    \Lerd\Collector\emit('probe', ['ops' => \Lerd\Collector\graphql_operations($body)]);
+}
+`)
+	joined := strings.Join(got, "\n")
+	for _, want := range []string{
+		`{"type":"mutation","query":"mutation Login`,
+		`"name":"Login"`,
+		`"email":"a@b.test"`,
+		`{"type":"query","query":"# me\n{ me { id } }","fields":[{"name":"me"}]}`,
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %s in %v", want, got)
+		}
+	}
+	if strings.Contains(joined, "hunter22") {
+		t.Errorf("nested password left unmasked: %v", got)
+	}
+}
+
+// The queries and mutations a GraphQL request called are read from its query,
+// aliases, literal and variable arguments and nested input objects included.
+func TestCollectorPHP_GraphQLRootFields(t *testing.T) {
+	got := runCollectorPHP(t, `<?php
+namespace {
+    require COLLECTOR;
+    $q = "query Feed(\$n: Int) {\n  me { id }\n  latest: notifications(first: \$n, filter: {unread: true, kinds: [MENTION]}) @include(if: true) { id ...N }\n  ... on Query { other }\n}\nfragment N on Notification { id }";
+    \Lerd\Collector\emit('probe', ['fields' => \Lerd\Collector\graphql_fields($q, ['n' => 5], 'Feed')]);
+}
+`)
+	want := `"fields":[{"name":"me"},{"alias":"latest","name":"notifications","args":{"first":5,"filter":{"unread":true,"kinds":["MENTION"]}}}]`
+	if joined := strings.Join(got, "\n"); !strings.Contains(joined, want) {
+		t.Errorf("want %s in %v", want, got)
+	}
+}
+
+// Each field a GraphQL request called gets its data from the response and,
+// with the server's schema seen, the type it returns; errors go on the operation.
+func TestCollectorPHP_GraphQLAnswer(t *testing.T) {
+	got := runCollectorPHP(t, `<?php
+namespace Fixture {
+    class Type { public function __construct(private string $n) {} public function __toString(): string { return $this->n; } }
+    class Field { public $resolveFn; public function __construct(private string $t) { $this->resolveFn = (new Resolver())->closure(); } public function getType() { return new Type($this->t); } }
+    class Resolver { public function closure() { return function () {}; } }
+    class Root { public function hasField($n) { return $n === 'notifications'; } public function getField($n) { return new Field('[Notification!]!'); } }
+    class Schema { public function getQueryType() { return new Root(); } }
+}
+namespace {
+    require COLLECTOR;
+    $GLOBALS['__lerd_graphql_schema'] = new \Fixture\Schema();
+    $ops = [['type' => 'query', 'query' => '{ latest: notifications { id } me { id } }', 'fields' => [['alias' => 'latest', 'name' => 'notifications'], ['name' => 'me']]]];
+    $response = ['data' => ['latest' => [['id' => 1]], 'me' => null], 'errors' => [['message' => 'Unauthenticated', 'path' => ['me']]]];
+    \Lerd\Collector\emit('probe', ['ops' => \Lerd\Collector\graphql_answer($ops, $response)]);
+}
+`)
+	joined := strings.Join(got, "\n")
+	for _, want := range []string{
+		`{"alias":"latest","name":"notifications","data":[{"id":1}],"type":"[Notification!]!","file":"`,
+		`{"name":"me","data":null}`,
+		`"errors":[{"message":"Unauthenticated","path":["me"]}]`,
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %s in %v", want, got)
+		}
+	}
+}
+
+// The part of the schema a request's fields lead to comes with it: object
+// types with their fields and arguments, enums with their values, unwrapped
+// from lists and non-nulls and followed a few levels down.
+func TestCollectorPHP_GraphQLTypes(t *testing.T) {
+	got := runCollectorPHP(t, `<?php
+namespace Fixture {
+    class Named { public function __construct(public string $n) {} public function __toString(): string { return $this->n; } }
+    class Wrap { public function __construct(private $inner, private string $s) {} public function getWrappedType() { return $this->inner; } public function __toString(): string { return $this->s; } }
+    class Arg { public function __construct(public string $name, private $t) {} public function getType() { return $this->t; } }
+    class F { public array $args; public function __construct(public string $name, private $t, array $args = []) { $this->args = $args; } public function getType() { return $this->t; } }
+    class Status extends Named { public function getValues() { return [(object) ['name' => 'OPEN'], (object) ['name' => 'CLOSED']]; } }
+    class Notification extends Named { public function getInterfaces() { return []; } public function getFields() { return [new F('id', new Named('ID!')), new F('status', new Status('Status'), [new Arg('as', new Named('String'))])]; } }
+}
+namespace {
+    require COLLECTOR;
+    $list = new \Fixture\Wrap(new \Fixture\Wrap(new \Fixture\Notification('Notification'), 'Notification!'), '[Notification!]!');
+    \Lerd\Collector\emit('probe', ['types' => \Lerd\Collector\graphql_types([\Lerd\Collector\graphql_named($list)])]);
+}
+`)
+	joined := strings.Join(got, "\n")
+	for _, want := range []string{
+		`"Notification":{"kind":"object","fields":[{"name":"id","type":"ID!"},{"name":"status","type":"Status","args":[{"name":"as","type":"String"}]}]}`,
+		`"Status":{"kind":"enum","values":["OPEN","CLOSED"]}`,
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %s in %v", want, got)
+		}
+	}
+}
+
+// A schema that circles back on itself lists each type once and stops.
+func TestCollectorPHP_GraphQLTypesStopAtCycles(t *testing.T) {
+	got := runCollectorPHP(t, `<?php
+namespace Fixture {
+    class F { public array $args = []; public function __construct(public string $name, private $t) {} public function getType() { return $this->t; } }
+    class Node { public function __construct(private string $n) {} public function __toString(): string { return $this->n; } public function getInterfaces() { return []; } public function getFields() { return [new F('parent', $this), new F('child', $this)]; } }
+}
+namespace {
+    require COLLECTOR;
+    \Lerd\Collector\emit('probe', ['types' => \Lerd\Collector\graphql_types([new \Fixture\Node('Case')])]);
+}
+`)
+	if joined := strings.Join(got, "\n"); !strings.Contains(joined, `"types":{"Case":{"kind":"object","fields":[{"name":"parent","type":"Case"},{"name":"child","type":"Case"}]}}`) {
+		t.Errorf("want Case once: %v", got)
+	}
+}

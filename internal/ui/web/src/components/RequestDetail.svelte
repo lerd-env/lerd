@@ -3,6 +3,8 @@
   import { loadRequest, type RequestDetail, type QueryFinding } from '$stores/requests';
   import { buildWaterfall } from '$lib/requestWaterfall';
   import { inlineBindings } from '$lib/sqlInline';
+  import { highlight } from '$lib/highlight';
+  import { formatSql } from '$lib/sqlFormat';
   import type { DumpEvent } from '$lib/dumpsStream';
   import DetailTabs, { type TabItem } from './DetailTabs.svelte';
   import RequestTimeline from './RequestTimeline.svelte';
@@ -11,6 +13,9 @@
   import CopyButton from './CopyButton.svelte';
   import TraceBlock from './TraceBlock.svelte';
   import SourcePath from './SourcePath.svelte';
+  import Icon from './Icon.svelte';
+  import ClassName from './ClassName.svelte';
+  import GraphQLType, { type GraphQLTypeInfo } from './GraphQLType.svelte';
   import CallerSource from './CallerSource.svelte';
   import StructuredValue from './StructuredValue.svelte';
   import CustomBlocks from './CustomBlocks.svelte';
@@ -30,6 +35,22 @@
   let tab = $state('performance');
   let hiddenLevels = $state<Record<string, boolean>>({ debug: true });
   let querySearch = $state('');
+  // Queries read on one line by default; formatted, each clause gets its own,
+  // and the choice is remembered.
+  let sqlFormatted = $state(readSqlFormat());
+  function readSqlFormat(): boolean {
+    try {
+      return localStorage.getItem('lerd:sql-format') === 'on';
+    } catch {
+      return false;
+    }
+  }
+  function toggleSqlFormat() {
+    sqlFormatted = !sqlFormatted;
+    try {
+      localStorage.setItem('lerd:sql-format', sqlFormatted ? 'on' : 'off');
+    } catch {}
+  }
 
   async function load(id: string) {
     d = null;
@@ -53,6 +74,18 @@
   // Each route parameter as the request asked for it, masked where the rules
   // say, and the model it resolved to where one did.
   const routeParams = $derived(Object.entries((http.route_params ?? {}) as Record<string, { value?: string; model?: string; field?: string; key?: string; file?: string; line?: number }>));
+  // The GraphQL operations the request body held, one per entry of a batch.
+  const graphql = $derived(
+    (http.graphql ?? []) as {
+      type: string;
+      name?: string;
+      query: string;
+      variables?: Record<string, unknown>;
+      fields?: { alias?: string; name: string; type?: string; file?: string; line?: number; type_file?: string; type_line?: number; args?: Record<string, unknown>; data?: unknown }[];
+      errors?: { message?: string; path?: (string | number)[] }[];
+    }[]
+  );
+  const graphqlTypes = $derived((http.graphql_types ?? {}) as Record<string, GraphQLTypeInfo>);
   const spans = $derived(ev('span').map(data));
   const controller = $derived(spans.find((s) => s.label === 'Controller')?.name ?? '');
   // Who the request ran as, when the app or its framework said.
@@ -127,6 +160,7 @@
   const tabs = $derived<TabItem[]>([
     { id: 'performance', label: m.requests_tab_performance() },
     { id: 'request', label: m.requests_tab_request() },
+    { id: 'graphql', label: 'GraphQL', count: graphql.length, hidden: !graphql.length },
     { id: 'exceptions', label: m.requests_section_exceptions(), count: ev('exception').length, hidden: !ev('exception').length },
     { id: 'database', label: m.requests_tab_database(), count: queries.length, hidden: !queries.length },
     { id: 'models', label: m.requests_tab_models(), count: models.length, hidden: !models.length },
@@ -202,12 +236,14 @@
         <span class="font-mono text-xs px-2 py-0.5 rounded-sm bg-gray-100 dark:bg-white/10">{d.type === 'job' ? 'JOB' : d.type === 'cli' || d.type === 'worker' ? 'CLI' : (d.method ?? '·')}</span>
         <h2 class="font-mono text-sm font-medium break-all text-gray-900 dark:text-white">{d.type === 'job' ? d.job : d.type === 'cli' || d.type === 'worker' ? (d.worker || d.command) : (d.uri || d.rid)}</h2>
         {#if d.job_status}<span class="font-mono text-xs {d.job_status === 'failed' || d.job_status === 'errored' ? 'text-rose-600 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'}">{d.job_status}</span>{/if}
-        {#if d.route}<span class="font-mono text-xs text-gray-500 dark:text-gray-400" title={m.requests_route()}>{d.route}</span>{/if}
+        <!-- A GraphQL operation names the request better than the one route every operation shares. -->
+        {#if d.route && !d.operation}<span class="font-mono text-xs text-gray-500 dark:text-gray-400" title={m.requests_route()}>{d.route}</span>{/if}
+        {#if d.operation}<span class="inline-flex items-center gap-1 font-mono text-xs text-pink-700 dark:text-pink-300" title={(d.operations ?? []).join('\n')}><Icon name="graphql" class="w-3.5 h-3.5" />{d.operation}</span>{/if}
         {#if d.status}<span class="font-mono text-xs {statusTone(d.status)}">{d.status}</span>{/if}
         <span class="text-xs text-gray-500 dark:text-gray-400">{d.type} · {d.site}{d.branch ? `@${d.branch}` : ''}</span>
         <span class="ml-auto inline-flex items-center gap-1 text-[11px] text-gray-400 font-mono">rid {d.rid}<CopyButton text={d.rid} label="rid" tone="faint" /></span>
       </div>
-      {#if controller}<div class="font-mono text-[11px] text-gray-500 dark:text-gray-400 truncate">{controller}</div>{/if}
+      {#if controller}<div class="font-mono text-[11px] text-gray-500 dark:text-gray-400 truncate"><ClassName value={controller} /></div>{/if}
       {#if authUser}
         <div class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 flex-wrap">
           <span class="text-gray-400">{m.requests_signedInAs()}</span>
@@ -283,7 +319,7 @@
                   <ol class="space-y-0.5">
                     {#each list as name, i (i)}
                       {@const source = middleware.sources?.[name]}
-                      <li class="font-mono text-[11px] break-all">{#if source}<SourcePath file={source.file} line={source.line} label={name} bare dotted />{:else}{name}{/if}</li>
+                      <li class="font-mono text-[11px] break-all">{#if source}<SourcePath file={source.file} line={source.line} label={name} bare dotted />{:else}<ClassName value={name} />{/if}</li>
                     {/each}
                   </ol>
                 </div>
@@ -309,11 +345,12 @@
         <KeyValueTable title={m.requests_kv_cookies()} values={http.cookies} />
         {#if session}<KeyValueTable title={`${m.requests_section_session()}${data(session).name ? ` · ${data(session).name}` : ''}`} values={data(session).data} />{/if}
         <KeyValueTable title={m.requests_kv_response()} values={http.response_headers} />
+        {#if http.response_body}<KeyValueTable title={m.requests_kv_responseBody()} values={http.response_body} />{/if}
       {:else if tab === 'exceptions'}
         <div class="{BOX} border-rose-500/30">
           {#each ev('exception') as e (e.id)}
             <div class="{ROW} space-y-1">
-              <div><span class="font-mono text-rose-600 dark:text-rose-300">{data(e).type}</span> {data(e).message}</div>
+              <div><ClassName value={String(data(e).type ?? '')} class="font-mono text-rose-600 dark:text-rose-300" /> {data(e).message}</div>
               <TraceBlock src={e.src} trace={data(e).frames ?? data(e).trace} />
             </div>
           {/each}
@@ -352,13 +389,14 @@
         <div class={BOX}>
           <div class="flex items-center gap-2 {HEAD}">
             <span class="flex-1">{m.requests_section_queries()}</span>
+            <button type="button" aria-pressed={sqlFormatted} onclick={toggleSqlFormat} class="normal-case tracking-normal text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-lerd-border {sqlFormatted ? 'bg-gray-100 dark:bg-white/10 text-gray-800 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'}">{m.requests_sql_format()}</button>
             <input class="normal-case tracking-normal text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-lerd-border bg-gray-50 dark:bg-white/5 w-48" placeholder={m.requests_filter()} bind:value={querySearch} />
           </div>
           {#each shownQueries.slice(0, 200) as e (e.id)}
             {@const q = data(e)}
             <div class="{ROW} grid grid-cols-[5rem_minmax(0,1fr)_auto_4rem_auto] gap-3 items-start {slowSql.has(q.sql) ? 'bg-amber-50 dark:bg-amber-900/15' : ''}">
               <span class="text-gray-500 dark:text-gray-400 truncate">{q.connection ?? ''}</span>
-              <code class="font-mono break-words {slowSql.has(q.sql) ? 'text-amber-700 dark:text-amber-300' : ''}">{inlineBindings(q.sql, q.bindings)}</code>
+              <code class="font-mono break-words {sqlFormatted ? 'whitespace-pre-wrap' : ''} {slowSql.has(q.sql) ? 'text-amber-700 dark:text-amber-300' : ''}">{@html highlight(sqlFormatted ? formatSql(inlineBindings(q.sql, q.bindings)) : inlineBindings(q.sql, q.bindings), 'sql')}</code>
               <span class="text-[11px] min-w-0">{#if e.src?.file}<CallerSource file={e.src.file} line={e.src.line} trace={data(e).trace} />{/if}</span>
               <span class="font-mono text-right tabular-nums">{ms(Number(q.time_ms ?? 0))}</span>
               <CopyButton text={() => inlineBindings(q.sql, q.bindings)} label={m.queries_copySql()} />
@@ -371,7 +409,7 @@
           <div class="{HEAD} grid grid-cols-[minmax(0,1fr)_repeat(5,5rem)] gap-3"><span>{m.requests_col_model()}</span>{#each MODEL_ACTIONS as a (a)}<span class="text-right">{a}</span>{/each}</div>
           {#each models as [model, counts] (model)}
             <div class="{ROW} grid grid-cols-[minmax(0,1fr)_repeat(5,5rem)] gap-3 items-center">
-              <span class="font-mono break-all">{#if modelSources[model]}<SourcePath file={modelSources[model].file} line={modelSources[model].line} label={model} bare dotted />{:else}{model}{/if}</span>
+              <span class="font-mono break-all">{#if modelSources[model]}<SourcePath file={modelSources[model].file} line={modelSources[model].line} label={model} bare dotted />{:else}<ClassName value={model} />{/if}</span>
               {#each MODEL_ACTIONS as a (a)}<span class="font-mono text-right tabular-nums {counts[a] ? '' : 'text-gray-300 dark:text-gray-600'}">{counts[a] ?? 0}</span>{/each}
             </div>
           {/each}
@@ -398,7 +436,7 @@
           {@const at = phases.find((c) => c.file)}
           <div class={BOX}>
             <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-lerd-border/60">
-              <span class="font-mono font-medium text-orange-700 dark:text-orange-300 min-w-0">{#if at}<SourcePath file={at.file} line={at.line} label={name} bare dotted />{:else}{name}{/if}</span>
+              <span class="font-mono font-medium text-orange-700 dark:text-orange-300 min-w-0">{#if at}<SourcePath file={at.file} line={at.line} label={name} bare dotted />{:else}<ClassName value={name} />{/if}</span>
               <span class="ml-auto font-mono tabular-nums text-gray-500">{ms(phases.reduce((n, c) => n + Number(c.time_ms ?? 0), 0))}</span>
             </div>
             {#each phases as c, i (i)}
@@ -523,7 +561,7 @@
           {#each ev('job') as e (e.id)}
             {@const x = data(e)}
             <div class="{ROW} grid grid-cols-[minmax(0,1fr)_6rem_4rem] gap-3">
-              <span class="font-mono break-all">{x.class}</span>
+              <ClassName value={String(x.class ?? '')} class="font-mono break-all" />
               <span class="{x.status === 'failed' ? 'text-rose-600 dark:text-rose-300' : 'text-gray-500 dark:text-gray-400'}">{x.status}</span>
               <span class="font-mono text-right tabular-nums">{x.time_ms ? ms(x.time_ms) : ''}</span>
             </div>
@@ -543,6 +581,38 @@
       {:else if tab.startsWith('custom:')}
         {@const custom = customTabs.find((t) => t.id === tab)}
         <CustomBlocks blocks={custom?.blocks ?? []} columns={custom?.columns ?? 1} />
+      {:else if tab === 'graphql'}
+        {#each graphql as op, i (i)}
+          <section class={BOX}>
+            <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-lerd-border/60">
+              <span class="{BADGE} bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300">{op.type}</span>
+              <span class="font-mono font-semibold text-gray-800 dark:text-gray-100">{op.name ?? ''}</span>
+              {#if op.errors?.length}<span class="{BADGE} bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300">{m.requests_graphql_errors({ count: op.errors.length })}</span>{/if}
+            </div>
+            {#each op.fields ?? [] as f, j (j)}
+              <div class="{ROW} space-y-1.5">
+                <div class="flex items-baseline gap-2 flex-wrap">
+                  <span class="font-mono font-semibold text-gray-800 dark:text-gray-100">{#if f.alias}<span class="font-normal text-gray-400">{f.alias}: </span>{/if}{#if f.file}<SourcePath file={f.file} line={f.line} label={f.name} bare dotted />{:else}{f.name}{/if}</span>
+                  {#if f.type}<GraphQLType type={f.type} types={graphqlTypes} />{/if}
+                </div>
+                {#if f.args && Object.keys(f.args).length}
+                  <div class="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-3 text-[11px]"><span class="text-gray-400">{m.requests_graphql_input()}</span><StructuredValue value={f.args} open /></div>
+                {/if}
+                {#if 'data' in f}
+                  <div class="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-3 text-[11px]"><span class="text-gray-400">{m.requests_graphql_response()}</span><StructuredValue value={f.data} /></div>
+                {/if}
+              </div>
+            {/each}
+            {#each op.errors ?? [] as err, k (k)}
+              <div class="{ROW} text-rose-600 dark:text-rose-300 text-[11px]"><span class="font-mono">{(err.path ?? []).join('.')}</span> {err.message}</div>
+            {/each}
+            <details class="border-t border-gray-100 dark:border-lerd-border/60">
+              <summary class="px-3 py-2 cursor-pointer text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-2">{m.requests_graphql_query()}<span class="ml-auto"><CopyButton text={op.query} label={m.common_copy()} /></span></summary>
+              <pre class="px-3 pb-2 font-mono text-[12px] leading-[1.6] whitespace-pre-wrap break-words [font-variant-ligatures:none]">{@html highlight(op.query, 'graphql')}</pre>
+              {#if op.variables}<KeyValueTable title={m.requests_graphql_variables()} values={op.variables} />{/if}
+            </details>
+          </section>
+        {/each}
       {:else if tab === 'sent'}
         <div class={BOX}>
           {#each d.children ?? [] as c (c.rid)}

@@ -1807,5 +1807,13 @@
   "trace_code": "Kode",
   "trace_noSource": "Sumber tidak tersedia",
   "trace_codeHint": "Tampilkan kode di sekitar setiap baris",
-  "editor_openIn": "Buka di {editor}"
+  "editor_openIn": "Buka di {editor}",
+  "requests_graphql_variables": "Variabel",
+  "requests_graphql_errors": "{count} error",
+  "requests_graphql_input": "Input",
+  "requests_graphql_response": "Respons",
+  "requests_graphql_query": "Query dan variabel",
+  "requests_kv_responseBody": "Body respons",
+  "requests_graphql_circular": "Sudah dibuka di atas",
+  "requests_sql_format": "Format"
 }

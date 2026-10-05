@@ -1807,5 +1807,13 @@
   "trace_code": "Mã",
   "trace_noSource": "Không có mã nguồn",
   "trace_codeHint": "Hiện mã quanh mỗi dòng",
-  "editor_openIn": "Mở trong {editor}"
+  "editor_openIn": "Mở trong {editor}",
+  "requests_graphql_variables": "Biến",
+  "requests_graphql_errors": "{count} lỗi",
+  "requests_graphql_input": "Đầu vào",
+  "requests_graphql_response": "Phản hồi",
+  "requests_graphql_query": "Truy vấn và biến",
+  "requests_kv_responseBody": "Nội dung phản hồi",
+  "requests_graphql_circular": "Đã mở ở trên",
+  "requests_sql_format": "Định dạng"
 }

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
@@ -38,6 +39,12 @@ type RequestSummary struct {
 	Method string `json:"method,omitempty"`
 	URI    string `json:"uri,omitempty"`
 	Route  string `json:"route,omitempty"`
+	// Operation names the GraphQL operation a request ran, since every one of
+	// them shares the same URI: "mutation Login", or "query { me, cases }" for
+	// one with no name, with "+2" after the first of a batch. Operations lists
+	// them all.
+	Operation  string   `json:"operation,omitempty"`
+	Operations []string `json:"operations,omitempty"`
 	// NginxMS is how long nginx held the request before handing it to PHP and
 	// QueueMS how long it then waited for a free FPM worker.
 	NginxMS float64 `json:"nginx_ms,omitempty"`
@@ -149,16 +156,40 @@ func summarize(a *requestAcc, parent *RequestLink, kids []RequestLink) RequestSu
 		switch e.Kind {
 		case dumps.KindRequest:
 			var d struct {
-				Method string  `json:"method"`
-				URI    string  `json:"uri"`
-				Status int     `json:"status"`
-				TimeMS float64 `json:"time_ms"`
-				Route  string  `json:"route"`
-				Nginx  float64 `json:"nginx_ms"`
-				Queue  float64 `json:"queue_ms"`
+				Method  string  `json:"method"`
+				URI     string  `json:"uri"`
+				Status  int     `json:"status"`
+				TimeMS  float64 `json:"time_ms"`
+				Route   string  `json:"route"`
+				Nginx   float64 `json:"nginx_ms"`
+				Queue   float64 `json:"queue_ms"`
+				GraphQL []struct {
+					Type   string `json:"type"`
+					Name   string `json:"name"`
+					Fields []struct {
+						Name string `json:"name"`
+					} `json:"fields"`
+				} `json:"graphql"`
 			}
 			if json.Unmarshal(e.Data, &d) == nil {
 				s.Method, s.URI, s.Status, s.TimeMS, s.Route = d.Method, d.URI, d.Status, d.TimeMS, d.Route
+				for _, op := range d.GraphQL {
+					label := op.Type + " " + op.Name
+					if op.Name == "" {
+						names := make([]string, 0, len(op.Fields))
+						for _, f := range op.Fields {
+							names = append(names, f.Name)
+						}
+						label = op.Type + " { " + strings.Join(names, ", ") + " }"
+					}
+					s.Operations = append(s.Operations, label)
+				}
+				if len(s.Operations) > 0 {
+					s.Operation = s.Operations[0]
+					if more := len(s.Operations) - 1; more > 0 {
+						s.Operation += fmt.Sprintf(" +%d", more)
+					}
+				}
 				s.NginxMS, s.QueueMS = d.Nginx, d.Queue
 				// The event is sent when the request ends, so its start is that
 				// moment less the time it took.

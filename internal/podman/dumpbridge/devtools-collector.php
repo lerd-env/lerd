@@ -18,6 +18,8 @@ const LOADED = 1;
 // PAYLOAD_KEYS caps a whole payload; PAYLOAD_NESTED caps how much of one
 // object inside it is described.
 const PAYLOAD_KEYS = 60;
+// BODY_BYTES caps how much of a JSON request body is read.
+const BODY_BYTES = 65536;
 
 // DEBUG_SCHEMA is the version of lerd/debug's entry format this collector
 // reads; the package renders its entries for it.
@@ -1492,13 +1494,401 @@ function request_input(): array
     }
     $out = [];
     $scopes = ['headers' => 'in_request', 'query' => 'input', 'body' => 'input', 'cookies' => 'input', 'response_headers' => 'in_response'];
-    foreach (['headers' => $headers, 'query' => $_GET, 'body' => $_POST, 'cookies' => $_COOKIE, 'response_headers' => $response] as $name => $values) {
+    $body = request_body();
+    foreach (['headers' => $headers, 'query' => $_GET, 'body' => $body, 'cookies' => $_COOKIE, 'response_headers' => $response] as $name => $values) {
         $map = input_map(is_array($values) ? $values : [], $scopes[$name]);
         if ($map) {
             $out[$name] = $map;
         }
     }
+    $response = response_json();
+    if ($ops = graphql_operations($body)) {
+        $out['graphql'] = graphql_answer($ops, $response);
+        if ($types = graphql_types($GLOBALS['__lerd_graphql_roots'] ?? [])) {
+            $out['graphql_types'] = $types;
+        }
+    } elseif ($response !== null) {
+        $out['response_body'] = $response;
+    }
     return $out;
+}
+// response_capture keeps a copy of what a request sent with a JSON body
+// answers, an API or GraphQL call, as it goes out: the buffer flushes on every
+// write, so nothing is held back, streamed responses included.
+function response_capture(): void
+{
+    if (stripos((string) ($_SERVER['CONTENT_TYPE'] ?? ''), 'json') === false) {
+        return;
+    }
+    $GLOBALS['__lerd_response'] = '';
+    ob_start(static function ($buf) {
+        $have = strlen($GLOBALS['__lerd_response']);
+        if ($have < BODY_BYTES && is_string($buf)) {
+            $GLOBALS['__lerd_response'] .= substr($buf, 0, BODY_BYTES - $have);
+        }
+        return $buf;
+    }, 1);
+}
+
+// response_json is the JSON a request answered with, decoded and masked, or
+// null when it answered something else or more than lerd keeps.
+function response_json(): ?array
+{
+    $raw = $GLOBALS['__lerd_response'] ?? '';
+    if ($raw === '' || strlen($raw) >= BODY_BYTES) {
+        return null;
+    }
+    $json = false;
+    foreach (headers_list() as $line) {
+        if (stripos($line, 'content-type:') === 0 && stripos($line, 'json') !== false) {
+            $json = true;
+        }
+    }
+    $data = $json ? json_decode($raw, true) : null;
+    return is_array($data) ? mask_tree($data, 'input') : null;
+}
+
+// graphql_answer puts each operation's part of the response beside it: its
+// errors, and for each field it called the data that came back and, where the
+// server's schema was seen, the type the field returns and where both are
+// defined.
+function graphql_answer(array $ops, ?array $response): array
+{
+    $batch = $response !== null && array_is_list_compat($response) && count($ops) > 1;
+    foreach ($ops as $i => $op) {
+        $answer = $batch ? ($response[$i] ?? null) : ($i === 0 ? $response : null);
+        if (is_array($answer) && !empty($answer['errors']) && is_array($answer['errors'])) {
+            $ops[$i]['errors'] = array_slice($answer['errors'], 0, 20);
+        }
+        foreach ($op['fields'] ?? [] as $j => $field) {
+            $key = $field['alias'] ?? $field['name'];
+            if (is_array($answer) && isset($answer['data']) && is_array($answer['data']) && array_key_exists($key, $answer['data'])) {
+                $ops[$i]['fields'][$j]['data'] = $answer['data'][$key];
+            }
+            $ops[$i]['fields'][$j] += graphql_field_info($op['type'], $field['name']);
+        }
+    }
+    return $ops;
+}
+
+// graphql_field_info describes a root field from the schema a store seam
+// handed over (a graphql_schema capture), in the shape the PHP GraphQL servers
+// share: the type it returns, and where the app defines the field and that
+// type, read from the app class behind the closures the schema holds.
+function graphql_field_info(string $op, string $field): array
+{
+    $schema = $GLOBALS['__lerd_graphql_schema'] ?? null;
+    $root = ['query' => 'getQueryType', 'mutation' => 'getMutationType', 'subscription' => 'getSubscriptionType'][$op] ?? '';
+    try {
+        $type = is_object($schema) && method_exists($schema, $root) ? $schema->$root() : null;
+        $def = is_object($type) && method_exists($type, 'hasField') && $type->hasField($field) && method_exists($type, 'getField') ? $type->getField($field) : null;
+        $ret = is_object($def) && method_exists($def, 'getType') ? $def->getType() : null;
+        if (!is_object($ret) || !method_exists($ret, '__toString')) {
+            return [];
+        }
+        $info = ['type' => (string) $ret];
+        if ($src = graphql_origin($def->resolveFn ?? null)) {
+            $info['file'] = $src['file'];
+            $info['line'] = $src['line'];
+        }
+        $named = graphql_named($ret);
+        $GLOBALS['__lerd_graphql_roots'][] = $named;
+        $fields = is_object($named) && isset($named->config) && is_array($named->config) ? ($named->config['fields'] ?? null) : null;
+        if ($src = graphql_origin($fields)) {
+            $info['type_file'] = $src['file'];
+            $info['type_line'] = $src['line'];
+        }
+        return $info;
+    } catch (\Throwable $_) {
+        return [];
+    }
+}
+
+// graphql_types describes the schema types a request's fields lead to, up to
+// eight levels down, each type once however often the schema circles back to
+// it: each type's kind, its fields with their types and arguments or
+// its enum values, and where the app defines it. Read in the shape the PHP
+// GraphQL servers share, so a request carries the part of the schema it used.
+function graphql_types(array $roots): array
+{
+    $out = [];
+    $queue = [];
+    foreach ($roots as $t) {
+        $queue[] = [$t, 0];
+    }
+    while ($queue && count($out) < 150) {
+        [$type, $depth] = array_shift($queue);
+        $name = is_object($type) && method_exists($type, '__toString') ? (string) $type : '';
+        if ($name === '' || isset($out[$name])) {
+            continue;
+        }
+        $entry = ['kind' => 'scalar'];
+        try {
+            if (method_exists($type, 'getValues')) {
+                $entry = ['kind' => 'enum', 'values' => array_slice(array_map(static function ($v) { return (string) ($v->name ?? ''); }, $type->getValues()), 0, 60)];
+            } elseif (method_exists($type, 'getTypes')) {
+                $entry = ['kind' => 'union', 'types' => []];
+                foreach (array_slice($type->getTypes(), 0, 30) as $member) {
+                    $entry['types'][] = (string) $member;
+                    $queue[] = [$member, $depth + 1];
+                }
+            } elseif (method_exists($type, 'getFields')) {
+                $entry = ['kind' => method_exists($type, 'getInterfaces') ? 'object' : 'input', 'fields' => []];
+                foreach (array_slice($type->getFields(), 0, 60) as $f) {
+                    $ft = method_exists($f, 'getType') ? $f->getType() : null;
+                    $field = ['name' => (string) ($f->name ?? ''), 'type' => is_object($ft) ? (string) $ft : ''];
+                    foreach (array_slice((array) ($f->args ?? []), 0, 20) as $arg) {
+                        $at = is_object($arg) && method_exists($arg, 'getType') ? $arg->getType() : null;
+                        $field['args'][] = ['name' => (string) ($arg->name ?? ''), 'type' => is_object($at) ? (string) $at : ''];
+                    }
+                    $entry['fields'][] = $field;
+                    if ($depth < 7 && is_object($ft)) {
+                        $queue[] = [graphql_named($ft), $depth + 1];
+                    }
+                }
+            }
+            if ($src = graphql_origin(isset($type->config) && is_array($type->config) ? ($type->config['fields'] ?? null) : null)) {
+                $entry['file'] = $src['file'];
+                $entry['line'] = $src['line'];
+            }
+        } catch (\Throwable $_) {
+        }
+        $out[$name] = $entry;
+    }
+    return $out;
+}
+
+// graphql_named unwraps a list or non-null type to the named type inside it.
+function graphql_named($type)
+{
+    for ($i = 0; $i < 4 && is_object($type) && method_exists($type, 'getWrappedType'); $i++) {
+        $type = $type->getWrappedType();
+    }
+    return $type;
+}
+
+// graphql_origin is the app class a schema closure was made by, as its file
+// and line, or null when it is the server's own.
+function graphql_origin($closure): ?array
+{
+    if (!$closure instanceof \Closure) {
+        return null;
+    }
+    $owner = (new \ReflectionFunction($closure))->getClosureThis();
+    if (!is_object($owner)) {
+        return null;
+    }
+    $ref = new \ReflectionObject($owner);
+    $file = (string) $ref->getFileName();
+    return $file !== '' && !is_dependency($file) ? ['file' => $file, 'line' => (int) $ref->getStartLine()] : null;
+}
+
+// request_body is what a request was sent with: the form PHP parsed, or a JSON
+// body, which PHP leaves alone, decoded and masked all the way down.
+function request_body(?string $raw = null): array
+{
+    if ($_POST) {
+        return $_POST;
+    }
+    if (stripos((string) ($_SERVER['CONTENT_TYPE'] ?? ''), 'json') === false) {
+        return [];
+    }
+    $raw = $raw ?? @file_get_contents('php://input', false, null, 0, BODY_BYTES);
+    $data = is_string($raw) && $raw !== '' ? json_decode($raw, true) : null;
+    return is_array($data) ? mask_tree($data, 'input') : [];
+}
+
+// mask_tree masks the values whose names the rules name at any depth of a
+// decoded body, so a password nested in a GraphQL mutation's variables is
+// masked like one sent as a form field.
+function mask_tree(array $values, string $scope, int $depth = 0): array
+{
+    $rules = redaction();
+    foreach ($values as $k => $v) {
+        $mask = is_string($k) ? (redact_rule($scope, $k) ?? (preg_match('/pass|secret|token|sess|cookie|authorization|api[-_]?key/i', $k) ? $rules['mask'] : null)) : null;
+        if ($mask !== null) {
+            $values[$k] = mask_value(is_scalar($v) || $v === null ? (string) $v : (string) json_encode($v), $mask);
+        } elseif (is_array($v) && $depth < 8) {
+            $values[$k] = mask_tree($v, $scope, $depth + 1);
+        }
+    }
+    return $values;
+}
+
+// graphql_operations reads a GraphQL request from its body, whatever server
+// answers it: one operation or a batch, each with its type, its name, the
+// query and the variables, already masked.
+function graphql_operations(array $body): array
+{
+    $ops = [];
+    foreach (isset($body['query']) ? [$body] : (array_is_list_compat($body) ? $body : []) as $op) {
+        if (!is_array($op) || !isset($op['query']) || !is_string($op['query']) || count($ops) >= 20) {
+            continue;
+        }
+        $query = $op['query'];
+        $type = 'query';
+        $name = isset($op['operationName']) && is_string($op['operationName']) ? $op['operationName'] : '';
+        if (preg_match('/^\s*(query|mutation|subscription)\b\s*([A-Za-z_]\w*)?/', preg_replace('/^\s*#[^\n]*\n/m', '', $query), $m)) {
+            $type = $m[1];
+            $name = $name !== '' ? $name : ($m[2] ?? '');
+        }
+        $entry = ['type' => $type, 'query' => strlen($query) > 10000 ? substr($query, 0, 10000) . '…' : $query];
+        if ($name !== '') {
+            $entry['name'] = $name;
+        }
+        $variables = isset($op['variables']) && is_array($op['variables']) ? $op['variables'] : [];
+        if ($variables) {
+            $entry['variables'] = $variables;
+        }
+        if ($fields = graphql_fields($query, $variables, $name)) {
+            $entry['fields'] = $fields;
+        }
+        $ops[] = $entry;
+    }
+    return $ops;
+}
+
+// graphql_fields reads the top-level fields of the operation a query runs,
+// each with its alias and its arguments, variables filled in: the queries and
+// mutations a request called and what it called them with. It reads GraphQL's
+// own syntax, so it knows nothing of the server that answers it.
+function graphql_fields(string $query, array $variables, string $name): array
+{
+    if (!preg_match_all('/"""[\s\S]*?"""|"(?:[^"\\\\]|\\\\.)*"|#[^\n]*|\.\.\.|\$?[A-Za-z_]\w*|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[{}()\[\]:!=@|&]/', $query, $m)) {
+        return [];
+    }
+    $t = array_values(array_filter($m[0], static function ($x) { return $x[0] !== '#'; }));
+    $n = count($t);
+    $i = 0;
+    // The operation to read: the one named, or the first.
+    while ($i < $n) {
+        if ($t[$i] === 'fragment') {
+            $i = graphql_skip_block($t, $i);
+            continue;
+        }
+        $start = $i;
+        if (in_array($t[$i], ['query', 'mutation', 'subscription'], true)) {
+            $i++;
+        }
+        $opName = $i < $n && $i > $start && preg_match('/^[A-Za-z_]/', $t[$i]) ? $t[$i] : '';
+        while ($i < $n && $t[$i] !== '{') {
+            $i++;
+        }
+        if ($name === '' || $opName === $name) {
+            break;
+        }
+        $i = graphql_skip_block($t, $i);
+    }
+    $fields = [];
+    for ($i++; $i < $n && count($fields) < 30; $i++) {
+        $tok = $t[$i];
+        if ($tok === '}') {
+            break;
+        }
+        if ($tok === '...') {
+            $i = graphql_skip_selection($t, $i + 1) - 1;
+            continue;
+        }
+        if (!preg_match('/^[A-Za-z_]/', $tok)) {
+            continue;
+        }
+        $field = ['name' => $tok];
+        if (($t[$i + 1] ?? '') === ':') {
+            $field = ['alias' => $tok, 'name' => $t[$i + 2] ?? ''];
+            $i += 2;
+        }
+        if (($t[$i + 1] ?? '') === '(') {
+            $i += 2;
+            $args = [];
+            while ($i < $n && $t[$i] !== ')') {
+                $arg = $t[$i];
+                $i += 2;
+                $args[$arg] = graphql_value($t, $i, $variables);
+            }
+            $field['args'] = $args;
+        }
+        $fields[] = $field;
+        $i = graphql_skip_selection($t, $i + 1) - 1;
+    }
+    return $fields;
+}
+
+// graphql_value reads one argument value at $i, leaving $i past it.
+function graphql_value(array $t, int &$i, array $variables)
+{
+    $tok = $t[$i] ?? '';
+    $i++;
+    if ($tok === '[' || $tok === '{') {
+        $close = $tok === '[' ? ']' : '}';
+        $out = [];
+        while (isset($t[$i]) && $t[$i] !== $close) {
+            if ($tok === '{') {
+                $key = $t[$i];
+                $i += 2;
+                $out[$key] = graphql_value($t, $i, $variables);
+            } else {
+                $out[] = graphql_value($t, $i, $variables);
+            }
+        }
+        $i++;
+        return $out;
+    }
+    if ($tok !== '' && $tok[0] === '$') {
+        return $variables[substr($tok, 1)] ?? null;
+    }
+    if ($tok !== '' && $tok[0] === '"') {
+        $s = json_decode($tok);
+        return is_string($s) ? $s : trim($tok, '"');
+    }
+    if (is_numeric($tok)) {
+        return $tok + 0;
+    }
+    $words = ['true' => true, 'false' => false, 'null' => null];
+    return array_key_exists($tok, $words) ? $words[$tok] : $tok;
+}
+
+// graphql_skip_selection steps past a field's directives and selection set, or
+// a fragment spread, returning the index of the next selection.
+function graphql_skip_selection(array $t, int $i): int
+{
+    $n = count($t);
+    if (($t[$i] ?? '') === 'on') {
+        $i += 2;
+    } elseif (($t[$i - 1] ?? '') === '...' && isset($t[$i]) && $t[$i] !== '{' && $t[$i] !== '@') {
+        $i++;
+    }
+    while ($i < $n && $t[$i] === '@') {
+        $i += 2;
+        if (($t[$i] ?? '') === '(') {
+            while ($i < $n && $t[$i] !== ')') {
+                $i++;
+            }
+            $i++;
+        }
+    }
+    return ($t[$i] ?? '') === '{' ? graphql_skip_block($t, $i) : $i;
+}
+
+// graphql_skip_block steps past the brace block starting at or after $i.
+function graphql_skip_block(array $t, int $i): int
+{
+    $n = count($t);
+    while ($i < $n && $t[$i] !== '{') {
+        $i++;
+    }
+    for ($depth = 0; $i < $n; $i++) {
+        $depth += $t[$i] === '{' ? 1 : ($t[$i] === '}' ? -1 : 0);
+        if ($depth === 0) {
+            return $i + 1;
+        }
+    }
+    return $n;
+}
+
+// array_is_list_compat is array_is_list for the PHP versions before 8.1.
+function array_is_list_compat(array $a): bool
+{
+    return $a === [] || array_keys($a) === range(0, count($a) - 1);
 }
 
 function input_map(array $values, string $scope = ''): array
@@ -1692,6 +2082,15 @@ function capture(string $kind, string $method, $self, array $args, string $name 
 {
     if ($kind === 'ray') {
         ray($args);
+        return;
+    }
+    // A GraphQL server's schema, kept so the fields a request called can be
+    // named by the type they return.
+    if ($kind === 'graphql_schema') {
+        $schema = seam_raw($name, $self, $args);
+        if (is_object($schema)) {
+            $GLOBALS['__lerd_graphql_schema'] = $schema;
+        }
         return;
     }
     if ($kind === 'log') {

@@ -111,6 +111,9 @@ namespace {
         // The phases measured before the response goes out travel with it as
         // Server-Timing, which the browser's own network panel shows.
         \header_register_callback('Lerd\\Collector\\server_timing');
+        if (\function_exists('Lerd\\Collector\\response_capture')) {
+            \Lerd\Collector\response_capture();
+        }
     }
 }
 
