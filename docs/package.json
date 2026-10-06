@@ -19,7 +19,9 @@
   "overrides": {
     "vite": "^6.4.2",
     "esbuild": "^0.25.0",
-    "postcss": "^8.5.10"
+    "postcss": "^8.5.10",
+    "seroval": "^1.6.3",
+    "seroval-plugins": "^1.6.3"
   },
   "dependencies": {
     "asciinema-player": "^3.16.0"
