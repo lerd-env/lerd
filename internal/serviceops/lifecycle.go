@@ -307,7 +307,7 @@ func StopService(name string) error {
 	_ = config.SetServicePaused(name, true)
 	_ = config.SetServiceManuallyStarted(name, false)
 	// A user stop outranks idle-suspend, which would otherwise wake it again.
-	_ = config.SetServiceIdleSuspended(name, false)
+	SetIdleSuspended([]string{name}, false)
 	RegenerateDynamicEnvConsumersForService(name)
 	return nil
 }

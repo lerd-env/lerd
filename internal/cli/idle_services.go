@@ -29,6 +29,7 @@ var (
 	idleAdminToolsFor        = serviceops.AdminToolsFor
 	idleDiscoveringConsumers = serviceops.DiscoveringConsumers
 	idleServiceFlagged       = config.ServiceIsIdleSuspended
+	idleSetSuspended         = serviceops.SetIdleSuspended
 	idleWakePing             = func(name string) { activityping.Site("svc:" + name) }
 	idleWatcherUp            = func() bool { s, _ := podman.UnitStatus("lerd-watcher"); return s == "active" }
 	idleWakeMax              = 60 * time.Second
@@ -101,13 +102,9 @@ func SuspendServiceForIdle(name string) ([]string, error) {
 	}
 	// Flag first, so nothing watching sees the service stopped but not asleep
 	// and reports it as stopped.
-	for _, s := range stopped {
-		_ = config.SetServiceIdleSuspended(s, true)
-	}
+	idleSetSuspended(stopped, true)
 	if err := idleStopService(name); err != nil {
-		for _, s := range stopped {
-			_ = config.SetServiceIdleSuspended(s, false)
-		}
+		idleSetSuspended(stopped, false)
 		return nil, err
 	}
 	now := time.Now()
@@ -134,6 +131,7 @@ func WakeServicesForIdle(names []string) error {
 	}
 	wg.Wait()
 	var firstErr error
+	var woken []string
 	for i, name := range names {
 		if errs[i] != nil {
 			if firstErr == nil {
@@ -141,8 +139,9 @@ func WakeServicesForIdle(names []string) error {
 			}
 			continue
 		}
-		_ = config.SetServiceIdleSuspended(name, false)
+		woken = append(woken, name)
 	}
+	idleSetSuspended(woken, false)
 	RestoreSitesAfterServiceWake(names)
 	return firstErr
 }

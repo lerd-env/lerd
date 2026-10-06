@@ -112,7 +112,7 @@ func newAutostartDisableCmd() *cobra.Command {
 // quadlet when autostart is enabled. Identical to what every embedded quadlet
 // ships with, so a strip-then-restore round-trip yields the same on-disk file
 // the install pass would have written.
-const quadletInstallBlock = "[Install]\nWantedBy=default.target\n"
+const quadletInstallBlock = podman.QuadletInstallBlock
 
 // ApplyAutostart writes the new flag to config.yaml, rewrites every
 // lerd-*.container quadlet on disk so its [Install] section is present
