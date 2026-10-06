@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CardCloseButton from '$components/CardCloseButton.svelte';
   import ServiceCardShell from '$components/ServiceCardShell.svelte';
   import ServiceDashboardButton from '$components/ServiceDashboardButton.svelte';
   import ServiceIcon from '$components/ServiceIcon.svelte';
@@ -136,14 +137,9 @@
     </button>
   {/if}
   {#if declared}
-    <button
-      type="button"
+    <CardCloseButton
+      label={m.sites_removeService_tooltip({ name: serviceLabel(name) })}
       onclick={() => openSiteServiceRemoveModal({ domain, name })}
-      use:tooltip={m.sites_removeService_tooltip({ name: serviceLabel(name) })}
-      aria-label={m.sites_removeService_tooltip({ name: serviceLabel(name) })}
-      class="shrink-0 flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
-    >
-      <Icon name="close" class="w-3.5 h-3.5" />
-    </button>
+    />
   {/if}
 </ServiceCardShell>

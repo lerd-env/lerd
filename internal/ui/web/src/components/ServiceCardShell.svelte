@@ -13,7 +13,7 @@
   // Full static class strings for Tailwind. The compact variant is the site
   // overview's tighter card; the default is the services dashboard grid.
   const BASE =
-    'group flex items-center border transition duration-150 hover:border-gray-300 dark:hover:border-white/15';
+    'group relative flex items-center border transition duration-150 hover:border-gray-300 dark:hover:border-white/15';
   // A suggestion is an empty slot, not a card: no fill, and a dashed edge a
   // shade stronger so it still reads as a slot without the fill behind it.
   const FILL = {
