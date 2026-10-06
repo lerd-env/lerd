@@ -5,19 +5,19 @@ import (
 	"os"
 	"strings"
 
-	"github.com/geodro/lerd/internal/browsercapture"
+	"github.com/geodro/lerd/internal/browserlogs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/spf13/cobra"
 )
 
-// NewBrowserCaptureCmd returns `lerd browser-capture`, which turns the
+// NewBrowserLogsCmd returns `lerd browser-logs`, which turns the
 // reporting of JavaScript errors from site pages on and off.
-func NewBrowserCaptureCmd() *cobra.Command {
+func NewBrowserLogsCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "browser-capture",
+		Use:   "browser-logs",
 		Short: "Capture JavaScript errors from your sites' pages",
-		Long: `Turn browser capture on or off for a site, the one in this directory unless
+		Long: `Turn browser logs on or off for a site, the one in this directory unless
 one is named. While debug capture is on (lerd dump on), nginx injects a small
 script into the HTML of every site that opted in, which reports uncaught errors,
 unhandled promise rejections and, per site, console messages and failed
@@ -25,15 +25,15 @@ requests to the dashboard's Debug view and the MCP diag tool. Settings are
 kept in lerd's site registry, never in the project.`,
 	}
 	toggle := func(on bool) func(*cobra.Command, []string) error {
-		return func(_ *cobra.Command, args []string) error { return runBrowserCaptureToggle(args, on) }
+		return func(_ *cobra.Command, args []string) error { return runBrowserLogsToggle(args, on) }
 	}
-	cmd.AddCommand(&cobra.Command{Use: "on [site]", Short: "Turn browser capture on for a site", Args: cobra.MaximumNArgs(1), RunE: toggle(true)})
-	cmd.AddCommand(&cobra.Command{Use: "off [site]", Short: "Turn browser capture off for a site", Args: cobra.MaximumNArgs(1), RunE: toggle(false)})
-	cmd.AddCommand(&cobra.Command{Use: "status", Short: "Show whether browser capture is on for the site in this directory", Args: cobra.NoArgs, RunE: runBrowserCaptureStatus})
-	cmd.AddCommand(&cobra.Command{Use: "presets", Short: "List the store's event presets for the site in this directory", Args: cobra.NoArgs, RunE: runBrowserCapturePresets})
+	cmd.AddCommand(&cobra.Command{Use: "on [site]", Short: "Turn browser logs on for a site", Args: cobra.MaximumNArgs(1), RunE: toggle(true)})
+	cmd.AddCommand(&cobra.Command{Use: "off [site]", Short: "Turn browser logs off for a site", Args: cobra.MaximumNArgs(1), RunE: toggle(false)})
+	cmd.AddCommand(&cobra.Command{Use: "status", Short: "Show whether browser logs are on for the site in this directory", Args: cobra.NoArgs, RunE: runBrowserLogsStatus})
+	cmd.AddCommand(&cobra.Command{Use: "presets", Short: "List the store's event presets for the site in this directory", Args: cobra.NoArgs, RunE: runBrowserLogsPresets})
 	preset := &cobra.Command{Use: "preset", Short: "Switch an event preset on or off for the site in this directory"}
 	apply := func(add bool) func(*cobra.Command, []string) error {
-		return func(_ *cobra.Command, args []string) error { return runBrowserCapturePreset(args[0], add) }
+		return func(_ *cobra.Command, args []string) error { return runBrowserLogsPreset(args[0], add) }
 	}
 	preset.AddCommand(&cobra.Command{Use: "on <preset>", Short: "Report a preset's events", Args: cobra.ExactArgs(1), RunE: apply(true)})
 	preset.AddCommand(&cobra.Command{Use: "off <preset>", Short: "Stop reporting a preset's events", Args: cobra.ExactArgs(1), RunE: apply(false)})
@@ -50,14 +50,14 @@ func siteInCwd() (*config.Site, error) {
 	return site, nil
 }
 
-func runBrowserCapturePresets(_ *cobra.Command, _ []string) error {
+func runBrowserLogsPresets(_ *cobra.Command, _ []string) error {
 	site, err := siteInCwd()
 	if err != nil {
 		return err
 	}
-	presets := browsercapture.Presets(*site)
+	presets := browserlogs.Presets(*site)
 	if len(presets) == 0 {
-		fmt.Println("The store lists no browser capture presets yet.")
+		fmt.Println("The store lists no browser logs presets yet.")
 		return nil
 	}
 	for _, p := range presets {
@@ -73,12 +73,12 @@ func runBrowserCapturePresets(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func runBrowserCapturePreset(name string, add bool) error {
+func runBrowserLogsPreset(name string, add bool) error {
 	site, err := siteInCwd()
 	if err != nil {
 		return err
 	}
-	if err := browsercapture.SetPreset(*site, name, add); err != nil {
+	if err := browserlogs.SetPreset(*site, name, add); err != nil {
 		return err
 	}
 	if add {
@@ -101,24 +101,24 @@ func siteFromArgs(args []string) (*config.Site, error) {
 	return site, nil
 }
 
-func runBrowserCaptureToggle(args []string, on bool) error {
+func runBrowserLogsToggle(args []string, on bool) error {
 	site, err := siteFromArgs(args)
 	if err != nil {
 		return err
 	}
-	res, err := browsercapture.SetSite(*site, on)
+	res, err := browserlogs.SetSite(*site, on)
 	if err != nil {
 		return err
 	}
 	switch {
 	case res.NoChange && on:
-		fmt.Printf("Browser capture already on for %s.\n", site.Name)
+		fmt.Printf("Browser logs already on for %s.\n", site.Name)
 	case res.NoChange:
-		fmt.Printf("Browser capture already off for %s.\n", site.Name)
+		fmt.Printf("Browser logs already off for %s.\n", site.Name)
 	case on:
-		fmt.Printf("Browser capture on for %s.\n", site.Name)
+		fmt.Printf("Browser logs on for %s.\n", site.Name)
 	default:
-		fmt.Printf("Browser capture off for %s.\n", site.Name)
+		fmt.Printf("Browser logs off for %s.\n", site.Name)
 	}
 	if cfg, err := config.LoadGlobal(); on && err == nil && !cfg.IsDumpsEnabled() {
 		fmt.Println("Debug capture is off, so its pages get the script once you run `lerd dump on`.")
@@ -126,7 +126,7 @@ func runBrowserCaptureToggle(args []string, on bool) error {
 	return nil
 }
 
-func runBrowserCaptureStatus(_ *cobra.Command, _ []string) error {
+func runBrowserLogsStatus(_ *cobra.Command, _ []string) error {
 	cfg, err := config.LoadGlobal()
 	if err != nil {
 		return err
@@ -140,7 +140,7 @@ func runBrowserCaptureStatus(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return nil
 	}
-	s := config.BrowserCaptureFor(*site)
+	s := config.BrowserLogsFor(*site)
 	none := func(v []string) string {
 		if len(v) == 0 {
 			return "none"

@@ -31,9 +31,9 @@ export default defineConfig(() => ({
   },
   server: {
     port: 5173,
-    // The browser capture script lives with the Go package that embeds it;
+    // The browser logs script lives with the Go package that embeds it;
     // its tests import it from there.
-    fs: { allow: ['.', resolve(__dirname, '../../browsercapture')] },
+    fs: { allow: ['.', resolve(__dirname, '../../browserlogs')] },
     proxy: {
       '/api': { target: 'http://localhost:7073', changeOrigin: true, ws: true },
       '/icons': 'http://localhost:7073',

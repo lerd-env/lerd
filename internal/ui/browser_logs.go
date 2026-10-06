@@ -8,20 +8,20 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/geodro/lerd/internal/browsercapture"
+	"github.com/geodro/lerd/internal/browserlogs"
 	"github.com/geodro/lerd/internal/config"
 )
 
-// Paths the site vhosts proxy to lerd-ui while browser capture is on.
+// Paths the site vhosts proxy to lerd-ui while browser logs are on.
 const (
-	browserScriptPath = config.BrowserCapturePath + ".js"
-	browserReportPath = config.BrowserCapturePath
+	browserScriptPath = config.BrowserLogsPath + ".js"
+	browserReportPath = config.BrowserLogsPath
 )
 
-// withBrowserCapture serves the capture script and endpoint ahead of the
+// withBrowserLogs serves the capture script and endpoint ahead of the
 // remote-control gate: they are reached from a site's own pages, a phone on
 // the LAN included, and only through nginx, which names the site.
-func withBrowserCapture(next http.Handler) http.Handler {
+func withBrowserLogs(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != browserScriptPath && r.URL.Path != browserReportPath {
 			next.ServeHTTP(w, r)
@@ -36,11 +36,11 @@ func withBrowserCapture(next http.Handler) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		settings := config.BrowserCaptureFor(*site)
+		settings := config.BrowserLogsFor(*site)
 		if r.URL.Path == browserScriptPath {
 			w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-store")
-			_, _ = io.WriteString(w, browsercapture.Script(browsercapture.PageSettings(*site), browsercapture.LensURL(*site)))
+			_, _ = io.WriteString(w, browserlogs.Script(browserlogs.PageSettings(*site), browserlogs.LensURL(*site)))
 			return
 		}
 		if r.Method != http.MethodPost {
@@ -62,7 +62,7 @@ func withBrowserCapture(next http.Handler) http.Handler {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
-		events, err := browsercapture.Events(body, site.Name, r.Header.Get("X-Lerd-Branch"), r.Header.Get("X-Lerd-Host"))
+		events, err := browserlogs.Events(body, site.Name, r.Header.Get("X-Lerd-Branch"), r.Header.Get("X-Lerd-Host"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -74,10 +74,10 @@ func withBrowserCapture(next http.Handler) http.Handler {
 	})
 }
 
-// handleBrowserCaptureSite reads (GET) or replaces (POST) one site's
-// settings at /api/browser-capture/sites/{site}.
-func handleBrowserCaptureSite(w http.ResponseWriter, r *http.Request) {
-	name := resolveSiteName(strings.TrimPrefix(r.URL.Path, "/api/browser-capture/sites/"))
+// handleBrowserLogsSite reads (GET) or replaces (POST) one site's
+// settings at /api/browser-logs/sites/{site}.
+func handleBrowserLogsSite(w http.ResponseWriter, r *http.Request) {
+	name := resolveSiteName(strings.TrimPrefix(r.URL.Path, "/api/browser-logs/sites/"))
 	site, err := config.FindSite(name)
 	if err != nil {
 		http.NotFound(w, r)
@@ -90,7 +90,7 @@ func handleBrowserCaptureSite(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
-		var s config.BrowserCaptureSettings
+		var s config.BrowserLogsSettings
 		if err := json.NewDecoder(r.Body).Decode(&s); err != nil {
 			http.Error(w, "invalid body", http.StatusBadRequest)
 			return
@@ -101,7 +101,7 @@ func handleBrowserCaptureSite(w http.ResponseWriter, r *http.Request) {
 		if s.Network == nil {
 			s.Network = []string{}
 		}
-		if err := browsercapture.SaveSite(*site, s); err != nil {
+		if err := browserlogs.SaveSite(*site, s); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -113,12 +113,12 @@ func handleBrowserCaptureSite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	writeJSON(w, config.BrowserCaptureFor(*site))
+	writeJSON(w, config.BrowserLogsFor(*site))
 }
 
-// handleBrowserCapturePresets lists the store presets for ?site= (GET) or adds
+// handleBrowserLogsPresets lists the store presets for ?site= (GET) or adds
 // switches one on or off (POST {site, name, on}).
-func handleBrowserCapturePresets(w http.ResponseWriter, r *http.Request) {
+func handleBrowserLogsPresets(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Site string `json:"site"`
 		Name string `json:"name"`
@@ -146,7 +146,7 @@ func handleBrowserCapturePresets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodPost {
-		if err := browsercapture.SetPreset(*site, req.Name, req.On); err != nil {
+		if err := browserlogs.SetPreset(*site, req.Name, req.On); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -155,9 +155,9 @@ func handleBrowserCapturePresets(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	presets := browsercapture.Presets(*site)
+	presets := browserlogs.Presets(*site)
 	if presets == nil {
-		presets = []browsercapture.PresetStatus{}
+		presets = []browserlogs.PresetStatus{}
 	}
 	writeJSON(w, presets)
 }

@@ -1,8 +1,8 @@
-# Browser capture
+# Browser logs
 
-A JavaScript error thrown on a page lerd serves normally only ever reaches that browser's own console. Browser capture collects those errors in the dashboard, next to what the PHP side of the same site captured, and hands them to AI assistants over MCP, so an assistant debugging a page can read why it broke in the browser instead of asking you to copy the console.
+A JavaScript error thrown on a page lerd serves normally only ever reaches that browser's own console. Browser logs collect those errors in the dashboard, next to what the PHP side of the same site captured, and hands them to AI assistants over MCP, so an assistant debugging a page can read why it broke in the browser instead of asking you to copy the console.
 
-Each site **opts in**, because capture changes the HTML of the site's pages, and a site's pages carry the script only while [debug capture](dumps.md) is on, so the debug switch is the only global one. It covers PHP-FPM sites, host-proxy sites (a dev server lerd proxies to, such as Vite, Next.js or Rails) and custom-container sites. Turn it on for a site with `lerd browser-capture on` in its directory or `lerd browser-capture on <site>`, the browser icon in the site's header, or `browser_toggle` with a `site` via MCP. `lerd browser-capture off` takes it back out.
+Each site **opts in**, because capture changes the HTML of the site's pages, and a site's pages carry the script only while [debug capture](dumps.md) is on, so the debug switch is the only global one. It covers PHP-FPM sites, host-proxy sites (a dev server lerd proxies to, such as Vite, Next.js or Rails) and custom-container sites. Turn it on for a site with `lerd browser-logs on` in its directory or `lerd browser-logs on <site>`, the browser icon in the site's header, or `browser_toggle` with a `site` via MCP. `lerd browser-logs off` takes it back out.
 
 ## What is captured
 
@@ -35,10 +35,10 @@ Because `console.error` and `console.warn` are wrapped, the script carries an in
 
 ## Per-site settings
 
-Each site's settings are kept under `browser_capture` in lerd's site registry (`~/.local/share/lerd/sites.yaml`), never in the project, since turning capture on is one developer's choice, like the debug switch it works under. Change them from the site's Browser settings, `lerd browser-capture`, or MCP. The fields are:
+Each site's settings are kept under `browser_logs` in lerd's site registry (`~/.local/share/lerd/sites.yaml`), never in the project, since turning capture on is one developer's choice, like the debug switch it works under. Change them from the site's Browser settings, `lerd browser-logs`, or MCP. The fields are:
 
 ```yaml
-browser_capture:
+browser_logs:
   enabled: true          # opts the site in, off by default
   console: [error, warn] # console levels to report
   network: [5xx, failed] # failed requests to report: 4xx, 5xx, failed (no response)
@@ -52,7 +52,7 @@ browser_capture:
 
 Most frontend frameworks need nothing extra. React, Vue, Svelte, Angular, Alpine and Stimulus either let an error escape as an uncaught error or log it with `console.error`, and both are captured already. Vue and Alpine.js log their warnings with `console.warn`, which is reported by default too.
 
-Some libraries report a failure as a DOM event of their own instead. List those under `browser_capture.events` and each one is reported as an `event` in the Browser lens. `event` is the DOM event name, `label` names it in the dashboard, and `message` is an optional dot path into the event whose value becomes the message. A path that ends on an object or a list is shown as JSON, with an error as its name and message, a response as its status and URL (an axios response, which Inertia's events carry, as its status, method and URL), a DOM element as its tag and id, a Map or Set by its contents and a cycle as `[Circular]`, kept to three levels and twenty entries; point at a scalar such as `detail.response.status` when one value says it all. Only names and paths can be set, never code, because the script runs on every page of the site. Events are caught whether they are dispatched on `window`, `document` or an element, and whether or not they bubble. The same list can be edited from the site's Browser settings.
+Some libraries report a failure as a DOM event of their own instead. List those under `browser_logs.events` and each one is reported as an `event` in the Browser lens. `event` is the DOM event name, `label` names it in the dashboard, and `message` is an optional dot path into the event whose value becomes the message. A path that ends on an object or a list is shown as JSON, with an error as its name and message, a response as its status and URL (an axios response, which Inertia's events carry, as its status, method and URL), a DOM element as its tag and id, a Map or Set by its contents and a cycle as `[Circular]`, kept to three levels and twenty entries; point at a scalar such as `detail.response.status` when one value says it all. Only names and paths can be set, never code, because the script runs on every page of the site. Events are caught whether they are dispatched on `window`, `document` or an element, and whether or not they bubble. The same list can be edited from the site's Browser settings.
 
 ### Presets
 
@@ -67,14 +67,14 @@ The framework store's package definitions declare the DOM events a library repor
 
 A library that reports through the browser's own channels needs no preset, only the right box under **What to report**: Vue and Alpine.js log their warnings with `console.warn`, on by default, and a failed Livewire update arrives as a 4xx or 5xx response. React, Svelte, Angular and Stimulus need nothing at all, since their errors escape as uncaught errors or go to `console.error`, which are captured by default.
 
-A preset is **on by default when the project uses its library**: detected from its composer and npm packages, its events are reported without any setup. Every other preset is off. The site's Browser settings list the presets the project uses, each with a checkbox to switch it off, and `lerd browser-capture preset on <name>` or MCP switches on one lerd did not detect, such as a library loaded from a CDN; and the choice is recorded under `presets` as the preset's name and `true` or `false`. A preset's events are added when the script is served rather than copied into the site's own `events`, which hold only the ones you write yourself; when both name the same event, yours wins.
+A preset is **on by default when the project uses its library**: detected from its composer and npm packages, its events are reported without any setup. Every other preset is off. The site's Browser settings list the presets the project uses, each with a checkbox to switch it off, and `lerd browser-logs preset on <name>` or MCP switches on one lerd did not detect, such as a library loaded from a CDN; and the choice is recorded under `presets` as the preset's name and `true` or `false`. A preset's events are added when the script is served rather than copied into the site's own `events`, which hold only the ones you write yourself; when both name the same event, yours wins.
 
 The CLI and MCP see the same presets and detection results:
 
 ```bash
-lerd browser-capture presets             # presets for the site in this directory, marking detected and active ones
-lerd browser-capture preset off inertia  # stop reporting a detected preset's events
-lerd browser-capture preset on htmx      # report a preset the project was not detected using
+lerd browser-logs presets             # presets for the site in this directory, marking detected and active ones
+lerd browser-logs preset off inertia  # stop reporting a detected preset's events
+lerd browser-logs preset on htmx      # report a preset the project was not detected using
 ```
 
 Over MCP, `diag` with `action: "browser_presets"` and a `site` lists the presets with `detected` and `active`, and adding `preset` with `enable: true` or `false` switches one on or off.
@@ -86,7 +86,7 @@ The presets are the same entries the examples below show, so a library without a
 Inertia, for a response that was not an Inertia response (usually an error page) and for an unexpected failure:
 
 ```yaml
-browser_capture:
+browser_logs:
   events:
     - event: inertia:invalid
       label: Inertia invalid response
@@ -99,7 +99,7 @@ browser_capture:
 Turbo (Hotwire, Symfony UX Turbo), for a request that failed and for a frame response without the frame it should replace:
 
 ```yaml
-browser_capture:
+browser_logs:
   events:
     - event: turbo:fetch-request-error
       label: Turbo request failed
@@ -112,7 +112,7 @@ browser_capture:
 htmx, for an error response, a request that could not be sent and a swap that failed:
 
 ```yaml
-browser_capture:
+browser_logs:
   events:
     - event: htmx:responseError
       label: htmx error response
@@ -126,7 +126,7 @@ browser_capture:
 Vite, for a lazily loaded chunk that failed to load, typically after a deploy or a restarted dev server:
 
 ```yaml
-browser_capture:
+browser_logs:
   events:
     - event: vite:preloadError
       label: Vite chunk failed to load

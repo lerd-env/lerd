@@ -233,7 +233,7 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"dumps_clear":     execDumpsClear,
 		"dumps_toggle":    execDumpsToggle,
 		"browser_events":  execBrowserEvents,
-		"browser_toggle":  execBrowserCaptureToggle,
+		"browser_toggle":  execBrowserLogsToggle,
 		"browser_presets": execBrowserPresets,
 		"profiler_toggle": execProfilerToggle,
 		"profiler_status": execProfilerStatus,

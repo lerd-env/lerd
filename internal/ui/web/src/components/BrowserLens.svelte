@@ -4,13 +4,13 @@
   import { debugSearch } from '$stores/debugLens';
   import { startDumpsStream, stopDumpsStream, clearDumps } from '$stores/dumps';
   import { queryFilterSite } from '$stores/queries';
-  import { siteCaptureOn, loadSiteBrowserCapture } from '$stores/browserCapture';
+  import { siteCaptureOn, loadSiteBrowserLogs } from '$stores/browserLogs';
   import { buildKindGroups, knownDebugSites, debugEvents, facetOf, isPageView } from '$stores/debugEvents';
   import EmptyState from '$components/EmptyState.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import LensLoadMore from '$components/LensLoadMore.svelte';
   import LensGroupLabel from '$components/LensGroupLabel.svelte';
-  import { openBrowserCaptureModal } from '$stores/modals';
+  import { openBrowserLogsModal } from '$stores/modals';
   import { windowGroups, LENS_PAGE } from '$lib/lensWindow';
   import { m } from '../paraglide/messages.js';
 
@@ -32,7 +32,7 @@
     startDumpsStream();
     if (scoped) {
       textInput = get(debugSearch);
-      loadSiteBrowserCapture(siteScope).catch(() => {});
+      loadSiteBrowserLogs(siteScope).catch(() => {});
     }
   });
   onDestroy(() => stopDumpsStream());
@@ -116,7 +116,7 @@
       />
     {/if}
     {#if scoped}
-      <button type="button" aria-haspopup="dialog" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => openBrowserCaptureModal(siteScope)}>{m.common_settings()}</button>
+      <button type="button" aria-haspopup="dialog" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => openBrowserLogsModal(siteScope)}>{m.common_settings()}</button>
     {/if}
     <button type="button" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => clearDumps('browser')}>{m.common_clear()}</button>
   </div>

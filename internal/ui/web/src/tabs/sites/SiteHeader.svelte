@@ -46,7 +46,7 @@
   import WorkspacePicker from './WorkspacePicker.svelte';
   import WorkspaceMenuItems from './WorkspaceMenuItems.svelte';
   import GitStatusBadge from '$components/GitStatusBadge.svelte';
-  import BrowserCaptureSiteToggle from '$components/BrowserCaptureSiteToggle.svelte';
+  import BrowserLogsSiteToggle from '$components/BrowserLogsSiteToggle.svelte';
   import { debugCaptureEnabled } from '$stores/queries';
   import { loadGitStatus, checkoutFor, type GitCheckout } from '$lib/gitStatus';
   import { m } from '../../paraglide/messages.js';
@@ -721,7 +721,7 @@
       <!-- Pages carry the script only while debug capture is on, and FrankenPHP
            sites are not covered yet. -->
       {#if $accessMode.localControl && $debugCaptureEnabled && !site.paused && site.runtime !== 'frankenphp'}
-        <BrowserCaptureSiteToggle site={site.name ?? site.domain} class="hidden @md:flex" />
+        <BrowserLogsSiteToggle site={site.name ?? site.domain} class="hidden @md:flex" />
       {/if}
 
       {#if $accessMode.local && $editors.global}

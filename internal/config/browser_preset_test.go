@@ -25,13 +25,13 @@ func seedBrowserPackages(t *testing.T) {
 		t.Fatal(err)
 	}
 	inertia := func(pkg, typ string) *FrameworkPackage {
-		return &FrameworkPackage{Package: pkg, Type: typ, Browser: &PackageBrowser{Preset: "inertia", Label: "Inertia.js", Events: []BrowserCaptureEvent{{Event: "inertia:invalid", Message: "detail.response.status"}, {Event: "bad event()"}}}}
+		return &FrameworkPackage{Package: pkg, Type: typ, Browser: &PackageBrowser{Preset: "inertia", Label: "Inertia.js", Events: []BrowserLogsEvent{{Event: "inertia:invalid", Message: "detail.response.status"}, {Event: "bad event()"}}}}
 	}
 	for _, p := range []*FrameworkPackage{
 		inertia("inertiajs/inertia-laravel", ""),
 		inertia("@inertiajs/vue3", PackageNPM),
-		{Package: "htmx.org", Type: PackageNPM, Browser: &PackageBrowser{Preset: "htmx", Label: "htmx", Events: []BrowserCaptureEvent{{Event: "htmx:responseError"}}}},
-		{Package: "left-pad", Type: "pip", Browser: &PackageBrowser{Preset: "pad", Label: "pad", Events: []BrowserCaptureEvent{{Event: "pad:error"}}}},
+		{Package: "htmx.org", Type: PackageNPM, Browser: &PackageBrowser{Preset: "htmx", Label: "htmx", Events: []BrowserLogsEvent{{Event: "htmx:responseError"}}}},
+		{Package: "left-pad", Type: "pip", Browser: &PackageBrowser{Preset: "pad", Label: "pad", Events: []BrowserLogsEvent{{Event: "pad:error"}}}},
 	} {
 		if err := SaveStorePackage(p); err != nil {
 			t.Fatal(err)
@@ -139,7 +139,7 @@ func TestBrowserPreset_ActiveIsDetectedUnlessOverridden(t *testing.T) {
 		{"not detected, switched on", map[string]bool{"inertia": true}, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := p.Active(BrowserCaptureSettings{Presets: tc.presets}, tc.detected); got != tc.want {
+			if got := p.Active(BrowserLogsSettings{Presets: tc.presets}, tc.detected); got != tc.want {
 				t.Fatalf("Active = %v, want %v", got, tc.want)
 			}
 		})
@@ -149,11 +149,11 @@ func TestBrowserPreset_ActiveIsDetectedUnlessOverridden(t *testing.T) {
 // The script reports the site's own events plus every active preset's, once
 // each, with the site's own wording kept when both name the same event.
 func TestPageEvents_SiteEventsThenActivePresets(t *testing.T) {
-	inertia := BrowserPreset{Name: "inertia", Events: []BrowserCaptureEvent{{Event: "inertia:invalid", Label: "store"}, {Event: "inertia:exception"}}}
-	turbo := BrowserPreset{Name: "turbo", Events: []BrowserCaptureEvent{{Event: "turbo:frame-missing"}}}
-	s := BrowserCaptureSettings{Events: []BrowserCaptureEvent{{Event: "inertia:invalid", Label: "mine"}}}
+	inertia := BrowserPreset{Name: "inertia", Events: []BrowserLogsEvent{{Event: "inertia:invalid", Label: "store"}, {Event: "inertia:exception"}}}
+	turbo := BrowserPreset{Name: "turbo", Events: []BrowserLogsEvent{{Event: "turbo:frame-missing"}}}
+	s := BrowserLogsSettings{Events: []BrowserLogsEvent{{Event: "inertia:invalid", Label: "mine"}}}
 	got := PageEvents(s, []BrowserPreset{inertia, turbo}, func(p BrowserPreset) bool { return p.Name == "inertia" })
-	want := []BrowserCaptureEvent{{Event: "inertia:invalid", Label: "mine"}, {Event: "inertia:exception"}}
+	want := []BrowserLogsEvent{{Event: "inertia:invalid", Label: "mine"}, {Event: "inertia:exception"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("PageEvents = %+v, want %+v", got, want)
 	}

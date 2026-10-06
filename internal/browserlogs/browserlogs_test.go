@@ -1,4 +1,4 @@
-package browsercapture
+package browserlogs
 
 import (
 	"encoding/base64"
@@ -13,7 +13,7 @@ import (
 )
 
 func TestScript_BakesInTheSiteSettings(t *testing.T) {
-	js := Script(config.BrowserCaptureSettings{Enabled: true, Console: []string{"error", "warn"}, Network: []string{"5xx"}}, "")
+	js := Script(config.BrowserLogsSettings{Enabled: true, Console: []string{"error", "warn"}, Network: []string{"5xx"}}, "")
 	if strings.Contains(js, "__LERD_CONFIG__") {
 		t.Fatal("config placeholder left in the script")
 	}
@@ -29,13 +29,13 @@ func TestScript_LinksTheSiteBrowserLens(t *testing.T) {
 	if url != "http://lerd.localhost/#sites/shop.test/dumps/browser" {
 		t.Fatalf("LensURL = %q", url)
 	}
-	if js := Script(config.BrowserCaptureSettings{Enabled: true}, url); !strings.Contains(js, `"lens":"http://lerd.localhost/#sites/shop.test/dumps/browser"`) {
+	if js := Script(config.BrowserLogsSettings{Enabled: true}, url); !strings.Contains(js, `"lens":"http://lerd.localhost/#sites/shop.test/dumps/browser"`) {
 		t.Fatal("lens link missing from the script settings")
 	}
 }
 
 func TestScript_IsIgnoreListedForDevTools(t *testing.T) {
-	js := Script(config.BrowserCaptureSettings{Enabled: true}, "")
+	js := Script(config.BrowserLogsSettings{Enabled: true}, "")
 	i := strings.LastIndex(js, "base64,")
 	if i < 0 {
 		t.Fatal("no inline source map")
@@ -57,7 +57,7 @@ func TestScript_IsIgnoreListedForDevTools(t *testing.T) {
 }
 
 func TestScript_OffForTheSiteIsEmpty(t *testing.T) {
-	js := Script(config.BrowserCaptureSettings{Enabled: false, Console: []string{"error"}}, "")
+	js := Script(config.BrowserLogsSettings{Enabled: false, Console: []string{"error"}}, "")
 	if strings.Contains(js, "addEventListener") {
 		t.Fatalf("a site with capture off must get no capture code:\n%s", js)
 	}
@@ -124,7 +124,7 @@ func captureEnv(t *testing.T, debug bool) (rewritten *[]string, reloaded *int) {
 
 func addCaptureSite(t *testing.T, name string, on bool) config.Site {
 	t.Helper()
-	site := config.Site{Name: name, Domains: []string{name + ".test"}, Path: t.TempDir(), BrowserCapture: &config.BrowserCapture{Enabled: &on}}
+	site := config.Site{Name: name, Domains: []string{name + ".test"}, Path: t.TempDir(), BrowserLogs: &config.BrowserLogs{Enabled: &on}}
 	if err := config.AddSite(site); err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +141,7 @@ func TestSetSite_RewritesThatSiteOnlyAndSaves(t *testing.T) {
 		t.Fatalf("SetSite(true) = %+v, %v", res, err)
 	}
 	updated, _ := config.FindSite("shop")
-	if !config.BrowserCaptureFor(*updated).Enabled {
+	if !config.BrowserLogsFor(*updated).Enabled {
 		t.Fatal("opt-in not saved")
 	}
 	if res, _ := SetSite(*updated, true); !res.NoChange {
@@ -168,7 +168,7 @@ func TestSaveSite_OnlyTurningItOnOrOffRewritesTheVhost(t *testing.T) {
 	rewritten, _ := captureEnv(t, true)
 	site := addCaptureSite(t, "shop", true)
 
-	s := config.BrowserCaptureSettings{Enabled: true, Console: []string{"warn"}, Network: []string{"5xx"}}
+	s := config.BrowserLogsSettings{Enabled: true, Console: []string{"warn"}, Network: []string{"5xx"}}
 	if err := SaveSite(site, s); err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func seedPresets(t *testing.T) string {
 	}
 	os.WriteFile(config.StoreIndexFile(), []byte(`{"frameworks":[],"npm_packages":[{"name":"vue"},{"name":"htmx"},{"name":"alpinejs"},{"name":"@inertiajs/vue3"}]}`), 0644) //nolint:errcheck
 	for pkg, preset := range map[string][2]string{"vue": {"vue", "Vue"}, "htmx": {"htmx", "htmx"}, "alpinejs": {"alpine", "Alpine.js"}, "@inertiajs/vue3": {"inertia", "Inertia"}} {
-		p := &config.FrameworkPackage{Package: pkg, Type: config.PackageNPM, Browser: &config.PackageBrowser{Preset: preset[0], Label: preset[1], Events: []config.BrowserCaptureEvent{{Event: preset[0] + ":error"}}}}
+		p := &config.FrameworkPackage{Package: pkg, Type: config.PackageNPM, Browser: &config.PackageBrowser{Preset: preset[0], Label: preset[1], Events: []config.BrowserLogsEvent{{Event: preset[0] + ":error"}}}}
 		if err := config.SaveStorePackage(p); err != nil {
 			t.Fatal(err)
 		}
@@ -273,7 +273,7 @@ func TestSetPreset_DetectedOnByDefaultAndSwitchable(t *testing.T) {
 func TestPageSettings_AddActivePresetEvents(t *testing.T) {
 	captureEnv(t, true)
 	dir := seedPresets(t)
-	site := config.Site{Name: "shop", Path: dir, BrowserCapture: &config.BrowserCapture{Events: []config.BrowserCaptureEvent{{Event: "my:error"}}}}
+	site := config.Site{Name: "shop", Path: dir, BrowserLogs: &config.BrowserLogs{Events: []config.BrowserLogsEvent{{Event: "my:error"}}}}
 	var got []string
 	for _, e := range PageSettings(site).Events {
 		got = append(got, e.Event)

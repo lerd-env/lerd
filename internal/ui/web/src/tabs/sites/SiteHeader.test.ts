@@ -194,7 +194,7 @@ describe('SiteHeader', () => {
     });
   });
 
-  describe('browser capture toggle', () => {
+  describe('browser logs toggle', () => {
     afterEach(() => dumpsStatus.set(null));
     const debug = (enabled: boolean) =>
       dumpsStatus.set({ enabled, passthrough: false, listening: true, addr: '', count: 0, subscribers: 0, last_ts: '' });

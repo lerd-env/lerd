@@ -223,7 +223,7 @@ func main() {
 	root.AddCommand(cli.NewStreamingCmd())
 	root.AddCommand(cli.NewWSLSetupCmd())
 	root.AddCommand(cli.NewProfileCmd())
-	root.AddCommand(cli.NewBrowserCaptureCmd())
+	root.AddCommand(cli.NewBrowserLogsCmd())
 	root.AddCommand(cli.NewNotifyCmd())
 	root.AddCommand(cli.NewPhpExtCmd())
 	root.AddCommand(cli.NewPhpBunCmd())

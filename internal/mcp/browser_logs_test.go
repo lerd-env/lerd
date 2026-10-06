@@ -28,7 +28,7 @@ func TestBrowserEvents_ExplainsAnEmptyAnswer(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	stubRoundTrip(t, "[]")
 	off := false
-	if err := config.AddSite(config.Site{Name: "shop", Domains: []string{"shop.test"}, Path: t.TempDir(), BrowserCapture: &config.BrowserCapture{Enabled: &off}}); err != nil {
+	if err := config.AddSite(config.Site{Name: "shop", Domains: []string{"shop.test"}, Path: t.TempDir(), BrowserLogs: &config.BrowserLogs{Enabled: &off}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -54,7 +54,7 @@ func TestBrowserEvents_ExplainsAnEmptyAnswer(t *testing.T) {
 func TestBrowserToggle_NeedsASite(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	res, _ := execBrowserCaptureToggle(map[string]any{"enable": true})
+	res, _ := execBrowserLogsToggle(map[string]any{"enable": true})
 	m := res.(map[string]any)
 	if m["isError"] != true || !strings.Contains(m["content"].([]map[string]any)[0]["text"].(string), `"site"`) {
 		t.Fatalf("got %v", m)

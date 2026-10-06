@@ -12,14 +12,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/geodro/lerd/internal/browsercapture"
+	"github.com/geodro/lerd/internal/browserlogs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
 )
 
-// refreshBrowserCaptureFn rewrites the vhosts of sites that opted into browser
+// refreshBrowserLogsFn rewrites the vhosts of sites that opted into browser
 // capture, which carry its script only while debug is on. Swapped out in tests.
-var refreshBrowserCaptureFn = browsercapture.RefreshVhosts
+var refreshBrowserLogsFn = browserlogs.RefreshVhosts
 
 // Result describes the outcome of Apply so callers can render their own
 // user-facing message without inspecting state again.
@@ -76,7 +76,7 @@ func Apply(enabled bool) (Result, error) {
 			_ = podman.SetDumpsBridgeFlag(false)
 			return Result{Enabled: false}, fmt.Errorf("saving config: %w", err)
 		}
-		return refreshBrowserCapture(Result{Enabled: true})
+		return refreshBrowserLogs(Result{Enabled: true})
 	}
 
 	cfg.SetDumpsEnabled(false)
@@ -86,14 +86,14 @@ func Apply(enabled bool) (Result, error) {
 	if err := podman.SetDumpsBridgeFlag(false); err != nil {
 		return Result{Enabled: false}, err
 	}
-	return refreshBrowserCapture(Result{Enabled: false})
+	return refreshBrowserLogs(Result{Enabled: false})
 }
 
-// refreshBrowserCapture follows a debug flip into the vhosts of the sites that
-// opted into browser capture. The flip itself already stands when this fails.
-func refreshBrowserCapture(res Result) (Result, error) {
-	if err := refreshBrowserCaptureFn(); err != nil {
-		return res, fmt.Errorf("updating browser capture vhosts: %w", err)
+// refreshBrowserLogs follows a debug flip into the vhosts of the sites that
+// opted into browser logs. The flip itself already stands when this fails.
+func refreshBrowserLogs(res Result) (Result, error) {
+	if err := refreshBrowserLogsFn(); err != nil {
+		return res, fmt.Errorf("updating browser logs vhosts: %w", err)
 	}
 	return res, nil
 }

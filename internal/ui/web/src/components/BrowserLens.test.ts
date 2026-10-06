@@ -85,7 +85,7 @@ describe('BrowserLens per-site opt-in', () => {
     render(BrowserLens, { props: { siteScope: 'shop' } });
 
     await fireEvent.click(await screen.findByRole('button', { name: m.common_settings() }));
-    expect(get(modal)).toMatchObject({ kind: 'browserCapture', browserCaptureSite: 'shop' });
+    expect(get(modal)).toMatchObject({ kind: 'browserLogs', browserLogsSite: 'shop' });
   });
 });
 

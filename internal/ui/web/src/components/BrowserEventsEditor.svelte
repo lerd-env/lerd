@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { BrowserCaptureEvent } from '$stores/browserCapture';
+  import type { BrowserLogsEvent } from '$stores/browserLogs';
   import DetailButton from '$components/DetailButton.svelte';
   import Icon from '$components/Icon.svelte';
   import { closeModal } from '$stores/modals';
@@ -10,21 +10,21 @@
   // saves at once, checked against the rules lerd applies on save.
 
   interface Props {
-    saved: BrowserCaptureEvent[];
+    saved: BrowserLogsEvent[];
     saving: boolean;
-    onsave: (events: BrowserCaptureEvent[]) => void;
+    onsave: (events: BrowserLogsEvent[]) => void;
   }
   let { saved, saving, onsave }: Props = $props();
 
   const EVENT_RE = /^[A-Za-z][A-Za-z0-9:._-]{0,99}$/;
   const PATH_RE = /^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*$/;
-  const valid = (e: BrowserCaptureEvent) => EVENT_RE.test(e.event) && (e.message === '' || PATH_RE.test(e.message));
-  const typedBad = (e: BrowserCaptureEvent) =>
+  const valid = (e: BrowserLogsEvent) => EVENT_RE.test(e.event) && (e.message === '' || PATH_RE.test(e.message));
+  const typedBad = (e: BrowserLogsEvent) =>
     (e.event !== '' && !EVENT_RE.test(e.event)) || (e.message !== '' && !PATH_RE.test(e.message));
 
-  let added = $state<BrowserCaptureEvent>({ event: '', label: '', message: '' });
+  let added = $state<BrowserLogsEvent>({ event: '', label: '', message: '' });
   let editIndex = $state(-1);
-  let draft = $state<BrowserCaptureEvent>({ event: '', label: '', message: '' });
+  let draft = $state<BrowserLogsEvent>({ event: '', label: '', message: '' });
   $effect(() => {
     void saved;
     editIndex = -1;
@@ -57,7 +57,7 @@
 <section class="space-y-2">
   <div class="flex flex-wrap items-baseline gap-x-2">
     <h3 class="text-xs font-semibold text-gray-800 dark:text-gray-100">{m.browser_settings_events()}</h3>
-    <a href="#docs/features/browser-capture" onclick={closeModal} class="ml-auto text-xs underline text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100">{m.browser_events_examples()}</a>
+    <a href="#docs/features/browser-logs" onclick={closeModal} class="ml-auto text-xs underline text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100">{m.browser_events_examples()}</a>
   </div>
   <p class="text-xs text-gray-500 dark:text-gray-400">{m.browser_events_help()}</p>
 

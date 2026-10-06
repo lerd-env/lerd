@@ -8,16 +8,16 @@ import (
 	"slices"
 )
 
-// PackageBrowser is what a package definition declares for browser capture:
+// PackageBrowser is what a package definition declares for browser logs:
 // the DOM events its frontend library fires when something fails, under the
 // preset they are offered as, which packages of one library share.
 type PackageBrowser struct {
-	Preset string                `yaml:"preset"`
-	Label  string                `yaml:"label"`
-	Events []BrowserCaptureEvent `yaml:"events"`
+	Preset string             `yaml:"preset"`
+	Label  string             `yaml:"label"`
+	Events []BrowserLogsEvent `yaml:"events"`
 }
 
-// BrowserPreset is a set of browser capture events for a frontend library,
+// BrowserPreset is a set of browser logs events for a frontend library,
 // gathered from the store packages that declare it, with the composer and npm
 // packages that show a project uses it.
 type BrowserPreset struct {
@@ -27,7 +27,7 @@ type BrowserPreset struct {
 		Composer []string `json:"composer,omitempty"`
 		NPM      []string `json:"npm,omitempty"`
 	} `json:"detect"`
-	Events []BrowserCaptureEvent `json:"events"`
+	Events []BrowserLogsEvent `json:"events"`
 }
 
 // BrowserPresets returns the presets the store's packages declare for the
@@ -50,7 +50,7 @@ func BrowserPresets(dir string) []BrowserPreset {
 		b := pkg.Browser
 		p := byName[b.Preset]
 		if p == nil {
-			p = &BrowserPreset{Name: b.Preset, Label: b.Label, Events: []BrowserCaptureEvent{}}
+			p = &BrowserPreset{Name: b.Preset, Label: b.Label, Events: []BrowserLogsEvent{}}
 			byName[b.Preset] = p
 			order = append(order, b.Preset)
 		}
@@ -60,7 +60,7 @@ func BrowserPresets(dir string) []BrowserPreset {
 			p.Detect.Composer = append(p.Detect.Composer, pkg.Package)
 		}
 		for _, e := range b.Events {
-			if e.valid() && !slices.ContainsFunc(p.Events, func(o BrowserCaptureEvent) bool { return o.Event == e.Event }) {
+			if e.valid() && !slices.ContainsFunc(p.Events, func(o BrowserLogsEvent) bool { return o.Event == e.Event }) {
 				p.Events = append(p.Events, e)
 			}
 		}
@@ -123,7 +123,7 @@ func (p BrowserPreset) Detected(dir string) bool {
 
 // Active reports whether the preset's events are reported for a site: as the
 // site switched it, or, when it did not, whether the project uses the library.
-func (p BrowserPreset) Active(s BrowserCaptureSettings, detected bool) bool {
+func (p BrowserPreset) Active(s BrowserLogsSettings, detected bool) bool {
 	if on, ok := s.Presets[p.Name]; ok {
 		return on
 	}
@@ -132,14 +132,14 @@ func (p BrowserPreset) Active(s BrowserCaptureSettings, detected bool) bool {
 
 // PageEvents is what the script reports: the site's own events, then those of
 // every active preset it does not list itself.
-func PageEvents(s BrowserCaptureSettings, presets []BrowserPreset, active func(BrowserPreset) bool) []BrowserCaptureEvent {
+func PageEvents(s BrowserLogsSettings, presets []BrowserPreset, active func(BrowserPreset) bool) []BrowserLogsEvent {
 	out := slices.Clone(s.Events)
 	for _, p := range presets {
 		if !active(p) {
 			continue
 		}
 		for _, e := range p.Events {
-			if !slices.ContainsFunc(out, func(o BrowserCaptureEvent) bool { return o.Event == e.Event }) {
+			if !slices.ContainsFunc(out, func(o BrowserLogsEvent) bool { return o.Event == e.Event }) {
 				out = append(out, e)
 			}
 		}

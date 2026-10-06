@@ -11,12 +11,12 @@ import (
 	"github.com/geodro/lerd/internal/dumps"
 )
 
-// setupBrowserCapture sets the debug switch and the shop site's own opt-in.
-func setupBrowserCapture(t *testing.T, debug, siteOn bool) *dumps.Server {
+// setupBrowserLogs sets the debug switch and the shop site's own opt-in.
+func setupBrowserLogs(t *testing.T, debug, siteOn bool) *dumps.Server {
 	t.Helper()
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	site := config.Site{Name: "shop", Domains: []string{"shop.test"}, Path: t.TempDir(), BrowserCapture: &config.BrowserCapture{Enabled: &siteOn, Console: []string{"error"}}}
+	site := config.Site{Name: "shop", Domains: []string{"shop.test"}, Path: t.TempDir(), BrowserLogs: &config.BrowserLogs{Enabled: &siteOn, Console: []string{"error"}}}
 	if err := config.AddSite(site); err != nil {
 		t.Fatal(err)
 	}
@@ -41,12 +41,12 @@ func browserRequest(method, path, body string, viaNginx bool, headers ...string)
 		r.RemoteAddr = "192.0.2.50:4000"
 	}
 	w := httptest.NewRecorder()
-	withBrowserCapture(http.NotFoundHandler()).ServeHTTP(w, r)
+	withBrowserLogs(http.NotFoundHandler()).ServeHTTP(w, r)
 	return w
 }
 
-func TestBrowserCapture_ReportLandsInTheRing(t *testing.T) {
-	srv := setupBrowserCapture(t, true, true)
+func TestBrowserLogs_ReportLandsInTheRing(t *testing.T) {
+	srv := setupBrowserLogs(t, true, true)
 	w := browserRequest("POST", browserReportPath, `[{"type":"error","message":"boom","url":"https://shop.test/"}]`, true)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("status %d: %s", w.Code, w.Body)
@@ -57,8 +57,8 @@ func TestBrowserCapture_ReportLandsInTheRing(t *testing.T) {
 	}
 }
 
-func TestBrowserCapture_RefusesAClientThatBypassesNginx(t *testing.T) {
-	srv := setupBrowserCapture(t, true, true)
+func TestBrowserLogs_RefusesAClientThatBypassesNginx(t *testing.T) {
+	srv := setupBrowserLogs(t, true, true)
 	if w := browserRequest("POST", browserReportPath, `[{"type":"error","message":"forged"}]`, false); w.Code != http.StatusForbidden {
 		t.Fatalf("status %d, want 403", w.Code)
 	}
@@ -68,7 +68,7 @@ func TestBrowserCapture_RefusesAClientThatBypassesNginx(t *testing.T) {
 }
 
 // A page cached from before capture was turned off may still post.
-func TestBrowserCapture_DropsReportsWhileOff(t *testing.T) {
+func TestBrowserLogs_DropsReportsWhileOff(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		debug, siteOn bool
@@ -77,17 +77,17 @@ func TestBrowserCapture_DropsReportsWhileOff(t *testing.T) {
 		{"site not opted in", true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			srv := setupBrowserCapture(t, tc.debug, tc.siteOn)
+			srv := setupBrowserLogs(t, tc.debug, tc.siteOn)
 			browserRequest("POST", browserReportPath, `[{"type":"error","message":"boom"}]`, true)
 			if srv.Len() != 0 {
-				t.Fatal("report recorded while browser capture is off")
+				t.Fatal("report recorded while browser logs are off")
 			}
 		})
 	}
 }
 
-func TestBrowserCapture_ServesTheSiteScript(t *testing.T) {
-	setupBrowserCapture(t, true, true)
+func TestBrowserLogs_ServesTheSiteScript(t *testing.T) {
+	setupBrowserLogs(t, true, true)
 	w := browserRequest("GET", browserScriptPath, "", true)
 	if w.Code != http.StatusOK || !strings.Contains(w.Header().Get("Content-Type"), "javascript") {
 		t.Fatalf("status %d, type %q", w.Code, w.Header().Get("Content-Type"))
@@ -97,8 +97,8 @@ func TestBrowserCapture_ServesTheSiteScript(t *testing.T) {
 	}
 }
 
-func TestBrowserCapture_LeavesOtherPathsToTheMux(t *testing.T) {
-	setupBrowserCapture(t, true, true)
+func TestBrowserLogs_LeavesOtherPathsToTheMux(t *testing.T) {
+	setupBrowserLogs(t, true, true)
 	if w := browserRequest("GET", "/api/status", "", false); w.Code != http.StatusNotFound {
 		t.Fatalf("status %d, want the wrapped handler's 404", w.Code)
 	}
@@ -106,7 +106,7 @@ func TestBrowserCapture_LeavesOtherPathsToTheMux(t *testing.T) {
 
 // A page on another site can fire a simple POST at the endpoint; the browser's
 // own provenance headers, which a page cannot set, are what turn it away.
-func TestBrowserCapture_RefusesAReportFromAnotherSite(t *testing.T) {
+func TestBrowserLogs_RefusesAReportFromAnotherSite(t *testing.T) {
 	report := `[{"type":"error","message":"planted"}]`
 	for _, tc := range []struct {
 		name    string
@@ -121,7 +121,7 @@ func TestBrowserCapture_RefusesAReportFromAnotherSite(t *testing.T) {
 		{"no browser headers", nil, http.StatusNoContent},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			srv := setupBrowserCapture(t, true, true)
+			srv := setupBrowserLogs(t, true, true)
 			w := browserRequest("POST", browserReportPath, report, true, tc.headers...)
 			if w.Code != tc.want {
 				t.Fatalf("status %d, want %d", w.Code, tc.want)

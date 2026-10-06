@@ -4,7 +4,7 @@ server {
     server_name {{.ServerNames}};
     root {{.Root}};
     index index.php index.html;
-{{.BrowserCaptureConf}}{{if .FrameworkNginx}}
+{{.BrowserLogsConf}}{{if .FrameworkNginx}}
 {{.FrameworkNginx}}
 {{end}}{{range .Proxies}}{{$proxy := .}}{{range .Paths}}
     location ~ ^{{.}}(/|$) {

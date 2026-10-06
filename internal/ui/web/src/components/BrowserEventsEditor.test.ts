@@ -37,7 +37,7 @@ describe('BrowserEventsEditor', () => {
   });
 
   it('closes the settings modal when following the examples link to the docs', async () => {
-    modal.set({ kind: 'browserCapture', browserCaptureSite: 'shop' });
+    modal.set({ kind: 'browserLogs', browserLogsSite: 'shop' });
     render(BrowserEventsEditor, { props: { saved, saving: false, onsave: () => {} } });
     await fireEvent.click(screen.getByRole('link', { name: 'Examples' }));
     expect(get(modal).kind).toBeNull();

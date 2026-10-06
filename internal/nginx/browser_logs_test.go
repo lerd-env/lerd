@@ -8,7 +8,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
-func TestGenerateVhost_BrowserCaptureOnInjectsScriptAndEndpoint(t *testing.T) {
+func TestGenerateVhost_BrowserLogsOnInjectsScriptAndEndpoint(t *testing.T) {
 	confD := setupConfD(t)
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	site := captureSite(t, config.Site{Name: "myapp", Domains: []string{"myapp.test"}, Path: t.TempDir(), Secured: true}, true, true)
@@ -35,7 +35,7 @@ func TestGenerateVhost_BrowserCaptureOnInjectsScriptAndEndpoint(t *testing.T) {
 }
 
 // The script goes in only while debug capture is on and the site opted in.
-func TestGenerateVhost_BrowserCaptureNeedsDebugAndTheSite(t *testing.T) {
+func TestGenerateVhost_BrowserLogsNeedsDebugAndTheSite(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		debug, siteOn bool
@@ -67,8 +67,8 @@ func captureSite(t *testing.T, site config.Site, debug, siteOn bool) config.Site
 	if err := config.SaveGlobal(cfg); err != nil {
 		t.Fatalf("SaveGlobal: %v", err)
 	}
-	if site.BrowserCapture == nil {
-		site.BrowserCapture = &config.BrowserCapture{Enabled: &siteOn}
+	if site.BrowserLogs == nil {
+		site.BrowserLogs = &config.BrowserLogs{Enabled: &siteOn}
 	}
 	if err := config.AddSite(site); err != nil {
 		t.Fatal(err)
@@ -78,7 +78,7 @@ func captureSite(t *testing.T, site config.Site, debug, siteOn bool) config.Site
 
 // A host-proxy site gets the same block, and asks its dev server for an
 // uncompressed body, since sub_filter cannot rewrite a compressed one.
-func TestGenerateHostProxyVhost_BrowserCaptureAsksForPlainBody(t *testing.T) {
+func TestGenerateHostProxyVhost_BrowserLogsAsksForPlainBody(t *testing.T) {
 	confD := setupConfD(t)
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	site := captureSite(t, config.Site{Name: "spa", Domains: []string{"spa.test"}, Path: t.TempDir(), HostPort: 5173}, true, true)

@@ -10,11 +10,11 @@ vi.mock('$lib/api', async (orig) => ({
   apiFetch: (...args: unknown[]) => apiFetch(...args)
 }));
 
-import BrowserCaptureSiteToggle from './BrowserCaptureSiteToggle.svelte';
+import BrowserLogsSiteToggle from './BrowserLogsSiteToggle.svelte';
 
 const settings = (enabled: boolean) => ({ enabled, console: ['error', 'warn'], network: [], navigation: true, resources: false, events: [], presets: {} });
 
-describe('BrowserCaptureSiteToggle', () => {
+describe('BrowserLogsSiteToggle', () => {
   beforeEach(() => {
     apiJson.mockReset();
     apiFetch.mockReset();
@@ -23,7 +23,7 @@ describe('BrowserCaptureSiteToggle', () => {
   it('shows the site is on and turns it off', async () => {
     apiJson.mockResolvedValue(settings(true));
     apiFetch.mockResolvedValue({ ok: true, json: async () => settings(false) });
-    render(BrowserCaptureSiteToggle, { props: { site: 'shop' } });
+    render(BrowserLogsSiteToggle, { props: { site: 'shop' } });
 
     const button = await screen.findByRole('button', { name: m.debug_tab_browser() });
     await waitFor(() => expect(button.getAttribute('aria-pressed')).toBe('true'));
@@ -31,7 +31,7 @@ describe('BrowserCaptureSiteToggle', () => {
 
     await waitFor(() => expect(apiFetch).toHaveBeenCalled());
     const [path, init] = apiFetch.mock.calls[0];
-    expect(path).toBe('/api/browser-capture/sites/shop');
+    expect(path).toBe('/api/browser-logs/sites/shop');
     expect(JSON.parse(init.body).enabled).toBe(false);
     await waitFor(() => expect(button.getAttribute('aria-pressed')).toBe('false'));
   });

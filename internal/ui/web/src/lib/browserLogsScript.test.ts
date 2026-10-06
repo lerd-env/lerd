@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 // The script lives with the Go package that embeds it.
-import script from '../../../../browsercapture/browser.js?raw';
+import script from '../../../../browserlogs/browser.js?raw';
 
 // Runs the capture script lerd injects into site pages against jsdom and reads
 // what it would have posted.
@@ -12,7 +12,7 @@ let instance = 0;
 function load(cfg: Record<string, unknown>): Report[] {
   const sent: Report[] = [];
   const endpoint = `/_lerd/browser-${++instance}`;
-  delete (window as unknown as Record<string, unknown>).__lerdBrowserCapture;
+  delete (window as unknown as Record<string, unknown>).__lerdBrowserLogs;
   (globalThis as unknown as { Blob: unknown }).Blob = class {
     constructor(public parts: string[]) {}
   };
@@ -34,7 +34,7 @@ function settle() {
   vi.advanceTimersByTime(400);
 }
 
-describe('browser capture script', () => {
+describe('browser logs script', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     history.replaceState(null, '', '/');

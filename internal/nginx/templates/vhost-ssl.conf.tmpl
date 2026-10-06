@@ -14,7 +14,7 @@ server {
 
     ssl_certificate /etc/nginx/certs/{{.CertDomain}}.crt;
     ssl_certificate_key /etc/nginx/certs/{{.CertDomain}}.key;
-{{.BrowserCaptureConf}}{{if .FrameworkNginx}}
+{{.BrowserLogsConf}}{{if .FrameworkNginx}}
 {{.FrameworkNginx}}
 {{end}}{{range .Proxies}}{{$proxy := .}}{{range .Paths}}
     location ~ ^{{.}}(/|$) {

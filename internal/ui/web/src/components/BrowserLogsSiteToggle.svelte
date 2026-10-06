@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { siteCaptureOn, loadSiteBrowserCapture, saveSiteBrowserCapture } from '$stores/browserCapture';
+  import { siteCaptureOn, loadSiteBrowserLogs, saveSiteBrowserLogs } from '$stores/browserLogs';
   import { tooltip } from '$lib/tooltip';
   import { m } from '../paraglide/messages.js';
 
-  // Turns browser capture on or off for one site from its header; what it
+  // Turns browser logs on or off for one site from its header; what it
   // reports is set in the site's Debug → Browser settings.
 
   interface Props {
@@ -17,15 +17,15 @@
   const on = $derived($siteCaptureOn[site] === true);
 
   onMount(() => {
-    loadSiteBrowserCapture(site).catch(() => {});
+    loadSiteBrowserLogs(site).catch(() => {});
   });
 
   async function onclick() {
     if (busy) return;
     busy = true;
     try {
-      const s = await loadSiteBrowserCapture(site);
-      await saveSiteBrowserCapture(site, { ...s, enabled: !s.enabled });
+      const s = await loadSiteBrowserLogs(site);
+      await saveSiteBrowserLogs(site, { ...s, enabled: !s.enabled });
     } finally {
       busy = false;
     }

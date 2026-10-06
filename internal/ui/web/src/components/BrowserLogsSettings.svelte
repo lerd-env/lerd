@@ -4,16 +4,16 @@
   import Toggle from './Toggle.svelte';
   import BrowserEventsEditor from './BrowserEventsEditor.svelte';
   import {
-    loadSiteBrowserCapture,
-    saveSiteBrowserCapture,
-    loadBrowserCapturePresets,
-    setBrowserCapturePreset,
-    type BrowserCaptureSettings,
-    type BrowserCapturePreset
-  } from '$stores/browserCapture';
+    loadSiteBrowserLogs,
+    saveSiteBrowserLogs,
+    loadBrowserLogsPresets,
+    setBrowserLogsPreset,
+    type BrowserLogsSettings,
+    type BrowserLogsPreset
+  } from '$stores/browserLogs';
   import { m } from '../paraglide/messages.js';
 
-  // One site's browser capture settings. A switch or checkbox saves at once;
+  // One site's browser logs settings. A switch or checkbox saves at once;
   // events save on their own button, since a half-typed value is not one to
   // apply. Options stay editable while the site is off, so they can be
   // picked before turning it on.
@@ -23,8 +23,8 @@
   }
   let { site }: Props = $props();
 
-  let s = $state<BrowserCaptureSettings | null>(null);
-  let presets = $state<BrowserCapturePreset[]>([]);
+  let s = $state<BrowserLogsSettings | null>(null);
+  let presets = $state<BrowserLogsPreset[]>([]);
   // Only the presets of libraries the project uses, plus any the site switched
   // on by hand; the CLI and MCP still list every preset.
   const shown = $derived(presets.filter((p) => p.detected || p.active));
@@ -40,18 +40,18 @@
 
   onMount(async () => {
     try {
-      s = await loadSiteBrowserCapture(site);
-      presets = await loadBrowserCapturePresets(site);
+      s = await loadSiteBrowserLogs(site);
+      presets = await loadBrowserLogsPresets(site);
     } catch (e) {
       error = String(e);
     }
   });
 
-  async function save(next: BrowserCaptureSettings) {
+  async function save(next: BrowserLogsSettings) {
     saving = true;
     error = '';
     try {
-      s = await saveSiteBrowserCapture(site, next);
+      s = await saveSiteBrowserLogs(site, next);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -63,8 +63,8 @@
     saving = true;
     error = '';
     try {
-      presets = await setBrowserCapturePreset(site, name, on);
-      s = await loadSiteBrowserCapture(site);
+      presets = await setBrowserLogsPreset(site, name, on);
+      s = await loadSiteBrowserLogs(site);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -73,7 +73,7 @@
   }
 
   // The events a preset adds, for its card.
-  function contents(p: BrowserCapturePreset): string {
+  function contents(p: BrowserLogsPreset): string {
     return (p.events ?? []).map((e) => e.event).join(', ');
   }
 

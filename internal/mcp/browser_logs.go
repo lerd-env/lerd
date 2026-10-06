@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/geodro/lerd/internal/browsercapture"
+	"github.com/geodro/lerd/internal/browserlogs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dumps"
 )
 
-// execBrowserEvents returns what the browser capture script reported for a
+// execBrowserEvents returns what the browser logs script reported for a
 // site, grouped per page view: JavaScript errors, unhandled rejections,
 // console messages, failed requests and resources, configured DOM events and
 // the page views themselves. types narrows it, and hint says why it is empty.
@@ -20,8 +20,8 @@ func execBrowserEvents(args map[string]any) (any, *rpcError) {
 	if raw, ok := args["types"].([]any); ok {
 		for _, v := range raw {
 			t, _ := v.(string)
-			if !slices.Contains(browsercapture.EventTypes, t) {
-				return toolErr(fmt.Sprintf("unknown type %q (want any of %v)", t, browsercapture.EventTypes)), nil
+			if !slices.Contains(browserlogs.EventTypes, t) {
+				return toolErr(fmt.Sprintf("unknown type %q (want any of %v)", t, browserlogs.EventTypes)), nil
 			}
 			types = append(types, t)
 		}
@@ -48,7 +48,7 @@ func execBrowserEvents(args map[string]any) (any, *rpcError) {
 	if err := json.Unmarshal(body, &events); err != nil {
 		return toolErr("decoding events: " + err.Error()), nil
 	}
-	summary := browsercapture.Summarize(events, types)
+	summary := browserlogs.Summarize(events, types)
 	cfg, _ := config.LoadGlobal()
 	out := map[string]any{
 		"debug_enabled": cfg != nil && cfg.IsDumpsEnabled(),
@@ -58,7 +58,7 @@ func execBrowserEvents(args map[string]any) (any, *rpcError) {
 	var site *config.Site
 	if ref := strArg(args, "site"); ref != "" {
 		if site, _ = config.FindSiteByRef(ref); site != nil {
-			settings := config.BrowserCaptureFor(*site)
+			settings := config.BrowserLogsFor(*site)
 			out["site_enabled"] = settings.Enabled
 			out["site_settings"] = settings
 		}
@@ -74,10 +74,10 @@ func execBrowserEvents(args map[string]any) (any, *rpcError) {
 // page that threw nothing while capture was not even running.
 func browserEventsHint(debug bool, site *config.Site, views int, filtered bool) string {
 	switch {
-	case site != nil && !browsercapture.Capturable(*site):
-		return "This site's pages are not covered by browser capture (FrankenPHP, paused or a sleeping host-proxy site)."
-	case site != nil && !config.BrowserCaptureFor(*site).Enabled:
-		return "Browser capture is off for this site. Turn it on with browser_toggle (site, enable: true), then load a page of the site."
+	case site != nil && !browserlogs.Capturable(*site):
+		return "This site's pages are not covered by browser logs (FrankenPHP, paused or a sleeping host-proxy site)."
+	case site != nil && !config.BrowserLogsFor(*site).Enabled:
+		return "Browser logs are off for this site. Turn them on with browser_toggle (site, enable: true), then load a page of the site."
 	case !debug:
 		return "Debug capture is off, so nothing is recorded. Turn it on with dumps_toggle (enable: true), then load a page of the site."
 	case views == 0 && filtered:
@@ -88,9 +88,9 @@ func browserEventsHint(debug bool, site *config.Site, views int, filtered bool) 
 	return ""
 }
 
-// execBrowserCaptureToggle turns capture on or off for one site, and says
+// execBrowserLogsToggle turns capture on or off for one site, and says
 // when debug capture is off too, since the script needs both.
-func execBrowserCaptureToggle(args map[string]any) (any, *rpcError) {
+func execBrowserLogsToggle(args map[string]any) (any, *rpcError) {
 	site, err := config.FindSiteByRef(strArg(args, "site"))
 	if err != nil || site == nil {
 		return toolErr(`"site" must name a linked site`), nil
@@ -99,7 +99,7 @@ func execBrowserCaptureToggle(args map[string]any) (any, *rpcError) {
 	if !ok {
 		return toolErr(`"enable" is required (true or false)`), nil
 	}
-	res, err := browsercapture.SetSite(*site, enable)
+	res, err := browserlogs.SetSite(*site, enable)
 	if err != nil {
 		return toolErr("toggle failed: " + err.Error()), nil
 	}
@@ -125,11 +125,11 @@ func execBrowserPresets(args map[string]any) (any, *rpcError) {
 		if !ok {
 			return toolErr(`"enable" is required with "preset" (true adds, false removes)`), nil
 		}
-		if err := browsercapture.SetPreset(*site, name, add); err != nil {
+		if err := browserlogs.SetPreset(*site, name, add); err != nil {
 			return toolErr(err.Error()), nil
 		}
 		site, _ = config.FindSite(site.Name)
 	}
-	b, _ := json.Marshal(browsercapture.Presets(*site))
+	b, _ := json.Marshal(browserlogs.Presets(*site))
 	return toolOK(string(b)), nil
 }

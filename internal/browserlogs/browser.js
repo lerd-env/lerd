@@ -1,7 +1,7 @@
 (function () {
   // Injected by lerd. Reports this page's JavaScript errors to the lerd dashboard.
-  if (window.__lerdBrowserCapture) return;
-  window.__lerdBrowserCapture = true;
+  if (window.__lerdBrowserLogs) return;
+  window.__lerdBrowserLogs = true;
   var cfg = __LERD_CONFIG__;
   var endpoint = cfg.endpoint;
   var queue = [], seen = {}, sent = 0, timer = null, MAX = 50;
@@ -230,5 +230,5 @@
     .concat(cfg.resources ? ['failed resources'] : [])
     .concat((cfg.events || []).map(function (d) { return d.event; }))
     .concat(cfg.navigation ? ['page views'] : []);
-  say('browser capture active, reporting ' + watching.join(', ') + ' to the lerd dashboard' + (cfg.lens ? ': ' + cfg.lens : ''));
+  say('browser logs active, reporting ' + watching.join(', ') + ' to the lerd dashboard' + (cfg.lens ? ': ' + cfg.lens : ''));
 })();

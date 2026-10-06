@@ -9,7 +9,7 @@ import (
 )
 
 // ServedByFPM reports whether a site's requests go through an FPM vhost, the
-// one place the SPX cookie and the browser capture script are injected.
+// one place the SPX cookie and the browser logs script are injected.
 func ServedByFPM(s config.Site) bool {
 	return !s.IsCustomContainer() && !s.IsFrankenPHP() && !s.IsHostProxy()
 }

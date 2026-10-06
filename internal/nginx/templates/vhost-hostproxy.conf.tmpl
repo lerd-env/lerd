@@ -2,11 +2,11 @@ server {
     listen 80;
     listen [::]:80;
     server_name {{.ServerNames}};
-{{.BrowserCaptureConf}}
+{{.BrowserLogsConf}}
     location / {
         proxy_pass {{if .BackendSSL}}https{{else}}http{{end}}://{{.UpstreamHost}}:{{.UpstreamPort}};
         proxy_http_version 1.1;
-        {{- if .BrowserCaptureConf}}
+        {{- if .BrowserLogsConf}}
         # sub_filter cannot rewrite a compressed body.
         proxy_set_header Accept-Encoding "";
         {{- end}}

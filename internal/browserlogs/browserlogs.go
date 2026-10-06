@@ -1,8 +1,8 @@
-// Package browsercapture reports JavaScript errors from the pages lerd serves
+// Package browserlogs reports JavaScript errors from the pages lerd serves
 // into the dashboard. A site that opts in gets a script injected into its HTML
 // through nginx while debug capture is on; the script posts what it catches to
 // a same-origin endpoint nginx proxies to lerd-ui, which records it.
-package browsercapture
+package browserlogs
 
 import (
 	"crypto/rand"
@@ -62,7 +62,7 @@ func RefreshVhosts() error {
 	}
 	rewritten := 0
 	for _, s := range reg.Sites {
-		if !Capturable(s) || !config.BrowserCaptureFor(s).Enabled {
+		if !Capturable(s) || !config.BrowserLogsFor(s).Enabled {
 			continue
 		}
 		if err := regenerateSiteVhostFn(s); err != nil {
@@ -82,10 +82,10 @@ type Result struct {
 	NoChange bool `json:"no_change"`
 }
 
-// SetSite turns browser capture on or off for one site. Its pages carry the
+// SetSite turns browser logs on or off for one site. Its pages carry the
 // script only while debug capture is on as well.
 func SetSite(site config.Site, on bool) (Result, error) {
-	s := config.BrowserCaptureFor(site)
+	s := config.BrowserLogsFor(site)
 	if s.Enabled == on {
 		return Result{Enabled: on, NoChange: true}, nil
 	}
@@ -99,9 +99,9 @@ func SetSite(site config.Site, on bool) (Result, error) {
 // SaveSite stores a site's settings. Only turning the site on or off touches
 // nginx, since the vhost carries that; everything else is read when the
 // script is served.
-func SaveSite(site config.Site, s config.BrowserCaptureSettings) error {
-	before := config.BrowserCaptureFor(site)
-	if err := config.SaveBrowserCapture(site, s); err != nil {
+func SaveSite(site config.Site, s config.BrowserLogsSettings) error {
+	before := config.BrowserLogsFor(site)
+	if err := config.SaveBrowserLogs(site, s); err != nil {
 		return err
 	}
 	cfg, err := config.LoadGlobal()
@@ -112,7 +112,7 @@ func SaveSite(site config.Site, s config.BrowserCaptureSettings) error {
 	if err != nil {
 		return err
 	}
-	after := config.BrowserCaptureFor(*updated)
+	after := config.BrowserLogsFor(*updated)
 	if after.Enabled == before.Enabled {
 		return nil
 	}
@@ -125,11 +125,11 @@ func SaveSite(site config.Site, s config.BrowserCaptureSettings) error {
 // Script returns the capture script for a site's settings. A site with
 // capture turned off gets a script that only says so, for a page cached from
 // before it was turned off.
-func Script(s config.BrowserCaptureSettings, lensURL string) string {
+func Script(s config.BrowserLogsSettings, lensURL string) string {
 	if !s.Enabled {
-		return "console.info('lerd browser capture is off for this site');\n"
+		return "console.info('lerd browser logs are off for this site');\n"
 	}
-	cfg, _ := json.Marshal(map[string]any{"console": s.Console, "network": s.Network, "navigation": s.Navigation, "resources": s.Resources, "events": s.Events, "endpoint": config.BrowserCapturePath, "lens": lensURL})
+	cfg, _ := json.Marshal(map[string]any{"console": s.Console, "network": s.Network, "navigation": s.Navigation, "resources": s.Resources, "events": s.Events, "endpoint": config.BrowserLogsPath, "lens": lensURL})
 	js := strings.Replace(scriptTemplate, "__LERD_CONFIG__", string(cfg), 1)
 	return js + ignoreListMap(strings.Count(js, "\n"))
 }
@@ -146,7 +146,7 @@ func LensURL(site config.Site) string {
 func ignoreListMap(lines int) string {
 	m, _ := json.Marshal(map[string]any{
 		"version":             3,
-		"sources":             []string{"lerd-browser-capture.js"},
+		"sources":             []string{"lerd-browser-logs.js"},
 		"names":               []string{},
 		"mappings":            "AAAA" + strings.Repeat(";AACA", max(lines-1, 0)),
 		"ignoreList":          []int{0},
@@ -232,7 +232,7 @@ type PresetStatus struct {
 // Presets lists the store presets for a site, the detected ones first and
 // each group by label.
 func Presets(site config.Site) []PresetStatus {
-	settings := config.BrowserCaptureFor(site)
+	settings := config.BrowserLogsFor(site)
 	var out []PresetStatus
 	for _, p := range config.BrowserPresets(site.Path) {
 		detected := p.Detected(site.Path)
@@ -250,9 +250,9 @@ func Presets(site config.Site) []PresetStatus {
 // SetPreset switches a store preset on or off for a site.
 func SetPreset(site config.Site, name string, on bool) error {
 	if _, ok := config.FindBrowserPreset(site.Path, name); !ok {
-		return fmt.Errorf("unknown browser capture preset %q", name)
+		return fmt.Errorf("unknown browser logs preset %q", name)
 	}
-	s := config.BrowserCaptureFor(site)
+	s := config.BrowserLogsFor(site)
 	s.Presets = maps.Clone(s.Presets)
 	if s.Presets == nil {
 		s.Presets = map[string]bool{}
@@ -263,8 +263,8 @@ func SetPreset(site config.Site, name string, on bool) error {
 
 // PageSettings are the settings the script is served with: the site's own,
 // with the events of its active presets added.
-func PageSettings(site config.Site) config.BrowserCaptureSettings {
-	s := config.BrowserCaptureFor(site)
+func PageSettings(site config.Site) config.BrowserLogsSettings {
+	s := config.BrowserLogsFor(site)
 	presets := config.BrowserPresets(site.Path)
 	s.Events = config.PageEvents(s, presets, func(p config.BrowserPreset) bool { return p.Active(s, p.Detected(site.Path)) })
 	return s

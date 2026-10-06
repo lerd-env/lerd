@@ -28,7 +28,7 @@ const (
 	KindException = "exception"
 	KindMessage   = "message"
 	// KindBrowser is a JavaScript error, console message or failed request
-	// posted by the browser capture script rather than sent by PHP.
+	// posted by the browser logs script rather than sent by PHP.
 	KindBrowser = "browser"
 )
 

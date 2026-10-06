@@ -194,10 +194,10 @@ type VhostData struct {
 	// profiled. SPX_KEY is injected regardless (gated by the $spx_key map)
 	// so the profiler UI is reachable.
 	Profiling bool
-	// BrowserCaptureConf is the server-level browser capture block (the script
+	// BrowserLogsConf is the server-level browser logs block (the script
 	// injection and the locations proxied to lerd-ui), or "" when capture is
 	// off, which leaves the page untouched.
-	BrowserCaptureConf string
+	BrowserLogsConf string
 	// RequestTimeout is the nginx request timeout in seconds rendered into the
 	// fastcgi_*_timeout / proxy_*_timeout directives. Resolved per site by
 	// resolveRequestTimeout (project .lerd.yaml, then global config, then 60s).
@@ -475,11 +475,11 @@ func profilerEnabled() bool {
 	return err == nil && cfg.IsProfilerEnabled()
 }
 
-// browserCaptureConf renders a site's browser capture block for its vhost:
+// browserLogsConf renders a site's browser logs block for its vhost:
 // the script injection before </head> and the two locations that hand the
 // script and the reports to lerd-ui, naming the site in headers nginx sets
 // itself. Empty unless debug capture is on and the site opted in.
-func browserCaptureConf(siteName, branch string) string {
+func browserLogsConf(siteName, branch string) string {
 	cfg, err := config.LoadGlobal()
 	if err != nil || !cfg.IsDumpsEnabled() {
 		return ""
@@ -488,11 +488,11 @@ func browserCaptureConf(siteName, branch string) string {
 	if err != nil || site == nil {
 		return ""
 	}
-	settings := config.BrowserCaptureFor(*site)
+	settings := config.BrowserLogsFor(*site)
 	if !settings.Enabled {
 		return ""
 	}
-	path := config.BrowserCapturePath
+	path := config.BrowserLogsPath
 	location := func(suffix string) string {
 		return fmt.Sprintf(`
     location = %[1]s%[2]s {
@@ -580,7 +580,7 @@ func renderFPMVhost(site config.Site, phpVersion string, ssl bool) ([]byte, erro
 		FrameworkNginx:  resolveFrameworkNginx(site, publicDir, fpmContainer),
 		FrontController: resolveFrontController(site),
 	}
-	data.BrowserCaptureConf = browserCaptureConf(site.Name, "")
+	data.BrowserLogsConf = browserLogsConf(site.Name, "")
 	if ssl {
 		data.CertDomain = site.PrimaryDomain()
 	}
@@ -661,7 +661,7 @@ func renderContainerVhost(site config.Site, container string, port int, backendS
 		BackendSSL:      backendSSL,
 		RequestTimeout:  resolveRequestTimeout(site.Path, site.PHPVersion),
 	}
-	data.BrowserCaptureConf = browserCaptureConf(site.Name, "")
+	data.BrowserLogsConf = browserLogsConf(site.Name, "")
 	if ssl {
 		data.CertDomain = site.PrimaryDomain()
 	}
@@ -763,7 +763,7 @@ func renderHostProxyVhost(site config.Site, tmplName string, ssl bool) ([]byte, 
 		BackendSSL:     site.HostSSL,
 		RequestTimeout: resolveRequestTimeout(site.Path, ""),
 	}
-	data.BrowserCaptureConf = browserCaptureConf(site.Name, "")
+	data.BrowserLogsConf = browserLogsConf(site.Name, "")
 	if ssl {
 		data.CertDomain = site.PrimaryDomain()
 	}
@@ -841,7 +841,7 @@ func GenerateWorktreeVhost(domain, path, phpVersion, siteName, branch string) er
 		FrameworkNginx:  frameworkNginx,
 		FrontController: resolveFrontController(worktreeSite(domain, path, siteName)),
 	}
-	data.BrowserCaptureConf = browserCaptureConf(siteName, branch)
+	data.BrowserLogsConf = browserLogsConf(siteName, branch)
 
 	rendered, err := renderVhost(tmpl, data)
 	if err != nil {
@@ -891,7 +891,7 @@ func GenerateWorktreeSSLVhost(domain, path, phpVersion, parentDomain, siteName, 
 		FrameworkNginx:  frameworkNginx,
 		FrontController: resolveFrontController(worktreeSite(domain, path, siteName)),
 	}
-	data.BrowserCaptureConf = browserCaptureConf(siteName, branch)
+	data.BrowserLogsConf = browserLogsConf(siteName, branch)
 
 	rendered, err := renderVhost(tmpl, data)
 	if err != nil {

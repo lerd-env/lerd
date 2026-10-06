@@ -660,7 +660,7 @@ func TestLerdReference_underSizeCeiling(t *testing.T) {
 	// set from here at all. Each one looks like a broken tool if it arrives
 	// unexplained. The site_doctor entry was compressed first.
 	//
-	// 36500 → 36850 for browser capture: the loop that reads a page's own
+	// 36500 → 36850 for browser logs: the loop that reads a page's own
 	// JavaScript errors, and that an empty result means nothing while it is off,
 	// then 36850 → 37000 for the presets that add a frontend library's events.
 	const ceiling = 37000

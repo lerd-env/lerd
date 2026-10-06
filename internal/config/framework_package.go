@@ -38,7 +38,7 @@ type FrameworkPackage struct {
 	// Type is composer, the default, or npm.
 	Type string `yaml:"type,omitempty"`
 	// Browser is what the package's frontend library reports through DOM
-	// events, for browser capture.
+	// events, for browser logs.
 	Browser *PackageBrowser `yaml:"browser,omitempty"`
 	// Version is the package's own major this file targets. A package whose
 	// declarations have not changed across its majors publishes one unversioned
