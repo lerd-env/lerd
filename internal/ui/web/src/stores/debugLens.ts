@@ -1,4 +1,6 @@
 import { writable } from 'svelte/store';
+import type { TabItem } from '$components/DetailTabs.svelte';
+import { m } from '../paraglide/messages.js';
 
 // Remembers which Debug sub-lens (Dumps vs Queries) the user last viewed, so a
 // refresh keeps them where they were. Shared between the System Debug panel
@@ -65,3 +67,23 @@ debugLens.subscribe((v) => {
     // private mode / storage disabled — fall back to in-memory only.
   }
 });
+
+// debugLensTabs is the lens bar shared by the System Debug panel and the site
+// Debug tab, grouped so related lenses sit together. counts is keyed by event
+// kind; showCache is false when no Laravel site can feed the cache lens.
+export function debugLensTabs(counts: Record<string, number>, showCache: boolean): TabItem<DebugLens>[] {
+  return [
+    { id: 'dumps', label: m.debug_tab_dumps(), count: counts['dump'], group: 'dumps' },
+    { id: 'exceptions', label: m.debug_tab_exceptions(), count: counts['exception'], group: 'errors' },
+    { id: 'logs', label: m.debug_tab_logs(), count: counts['log'], group: 'errors' },
+    { id: 'browser', label: m.debug_tab_browser(), count: counts['browser'], group: 'errors' },
+    { id: 'queries', label: m.debug_tab_queries(), count: counts['query'], group: 'request' },
+    { id: 'views', label: m.debug_tab_views(), count: counts['view'], group: 'request' },
+    { id: 'cache', label: m.debug_tab_cache(), hidden: !showCache, count: counts['cache'], group: 'request' },
+    { id: 'http', label: m.debug_tab_http(), count: counts['http'], group: 'request' },
+    { id: 'jobs', label: m.debug_tab_jobs(), count: counts['job'], group: 'background' },
+    { id: 'messages', label: m.debug_tab_messages(), count: counts['message'], group: 'background' },
+    { id: 'events', label: m.debug_tab_events(), count: counts['event'], group: 'background' },
+    { id: 'mail', label: m.debug_tab_mail(), count: counts['mail'], group: 'background' }
+  ];
+}

@@ -254,6 +254,8 @@
   "debug_tab_messages": "Nachrichten",
   "debug_tab_queries": "Abfragen",
   "debug_tab_views": "Views",
+  "debug_fullscreenTitle": "Vollbild aktivieren",
+  "debug_exitFullscreenTitle": "Vollbild verlassen (Esc)",
   "debug_tests_hidden": "({count} ausgeblendet)",
   "debug_title": "Debug",
   "debug_waiting_body": "Löse etwas Aktivität in deiner App aus, und sie erscheint hier.",

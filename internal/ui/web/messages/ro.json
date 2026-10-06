@@ -254,6 +254,8 @@
   "debug_tab_messages": "Mesaje",
   "debug_tab_queries": "Interogări",
   "debug_tab_views": "Vizualizări",
+  "debug_fullscreenTitle": "Ecran complet",
+  "debug_exitFullscreenTitle": "Ieși din ecran complet (Esc)",
   "debug_tests_hidden": "({count} ascunse)",
   "debug_title": "Depanare",
   "debug_waiting_body": "Declanșează ceva activitate în aplicația ta și va apărea aici.",

@@ -254,6 +254,8 @@
   "debug_tab_messages": "Wiadomości",
   "debug_tab_queries": "Zapytania",
   "debug_tab_views": "Widoki",
+  "debug_fullscreenTitle": "Pełny ekran",
+  "debug_exitFullscreenTitle": "Wyjdź z pełnego ekranu (Esc)",
   "debug_tests_hidden": "(ukryto {count})",
   "debug_title": "Debug",
   "debug_waiting_body": "Wywołaj jakąś aktywność w swojej aplikacji, a pojawi się tutaj.",

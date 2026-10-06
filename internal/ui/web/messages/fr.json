@@ -254,6 +254,8 @@
   "debug_tab_messages": "Messages",
   "debug_tab_queries": "Requêtes",
   "debug_tab_views": "Vues",
+  "debug_fullscreenTitle": "Plein écran",
+  "debug_exitFullscreenTitle": "Quitter le plein écran (Échap)",
   "debug_tests_hidden": "({count} masqués)",
   "debug_title": "Débogage",
   "debug_waiting_body": "Déclenchez de l'activité dans votre application et elle apparaîtra ici.",

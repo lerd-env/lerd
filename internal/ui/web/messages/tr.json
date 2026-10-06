@@ -254,6 +254,8 @@
   "debug_tab_messages": "Mesajlar",
   "debug_tab_queries": "Sorgular",
   "debug_tab_views": "Görünümler",
+  "debug_fullscreenTitle": "Tam ekran",
+  "debug_exitFullscreenTitle": "Tam ekrandan çık (Esc)",
   "debug_tests_hidden": "({count} gizli)",
   "debug_title": "Debug",
   "debug_waiting_body": "Uygulamanızda biraz etkinlik tetikleyin, burada görünecek.",

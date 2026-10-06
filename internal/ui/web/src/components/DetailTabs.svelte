@@ -7,6 +7,8 @@
     // Drawn dimmer than its siblings: the tab is worth keeping but what it
     // shows is no longer live, like a stopped worker's journal.
     muted?: boolean;
+    // Tabs sharing a group sit together; a divider marks where the next starts.
+    group?: string;
   }
 </script>
 
@@ -34,7 +36,10 @@
   <div class="flex items-end justify-between gap-3 border-b border-gray-100 dark:border-lerd-border pt-3 px-3 shrink-0">
     <div use:tablist role={showTabs ? 'tablist' : undefined} class="flex items-end gap-4 min-w-0 overflow-x-auto">
       {#if showTabs}
-        {#each visible as t (t.id)}
+        {#each visible as t, i (t.id)}
+          {#if i > 0 && t.group !== visible[i - 1].group}
+            <span data-tab-divider aria-hidden="true" class="shrink-0 self-center mb-1 h-3 w-px bg-gray-300 dark:bg-lerd-border"></span>
+          {/if}
           <button
             role="tab"
             aria-selected={active === t.id}

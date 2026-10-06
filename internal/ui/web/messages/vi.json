@@ -254,6 +254,8 @@
   "debug_tab_messages": "Tin nhắn",
   "debug_tab_queries": "Queries",
   "debug_tab_views": "Views",
+  "debug_fullscreenTitle": "Toàn màn hình",
+  "debug_exitFullscreenTitle": "Thoát toàn màn hình (Esc)",
   "debug_tests_hidden": "(ẩn {count})",
   "debug_title": "Gỡ lỗi",
   "debug_waiting_body": "Kích hoạt một số hoạt động trong ứng dụng của bạn và nó sẽ xuất hiện ở đây.",

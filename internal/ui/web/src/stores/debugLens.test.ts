@@ -39,4 +39,17 @@ describe('isDebugLens', () => {
     expect(isDebugLens('')).toBe(false);
     expect(isDebugLens(undefined)).toBe(false);
   });
+
+  it('orders the lens tabs by category, dumps first, then errors, the request, and background work', async () => {
+    const { debugLensTabs } = await import('./debugLens');
+    const tabs = debugLensTabs({ exception: 2 }, true);
+    expect(tabs.map((t) => t.id)).toEqual(['dumps', 'exceptions', 'logs', 'browser', 'queries', 'views', 'cache', 'http', 'jobs', 'messages', 'events', 'mail']);
+    expect(new Set(tabs.map((t) => t.group)).size).toBe(4);
+    expect(tabs.find((t) => t.id === 'exceptions')?.count).toBe(2);
+  });
+
+  it('hides cache when no Laravel site feeds it', async () => {
+    const { debugLensTabs } = await import('./debugLens');
+    expect(debugLensTabs({}, false).find((t) => t.id === 'cache')?.hidden).toBe(true);
+  });
 });

@@ -254,6 +254,8 @@
   "debug_tab_messages": "消息",
   "debug_tab_queries": "查询",
   "debug_tab_views": "视图",
+  "debug_fullscreenTitle": "全屏",
+  "debug_exitFullscreenTitle": "退出全屏 (Esc)",
   "debug_tests_hidden": "(已隐藏 {count})",
   "debug_title": "调试",
   "debug_waiting_body": "在你的应用中触发一些活动，它就会显示在这里。",

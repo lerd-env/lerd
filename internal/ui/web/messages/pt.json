@@ -254,6 +254,8 @@
   "debug_tab_messages": "Mensagens",
   "debug_tab_queries": "Consultas",
   "debug_tab_views": "Views",
+  "debug_fullscreenTitle": "Tela cheia",
+  "debug_exitFullscreenTitle": "Sair da tela cheia (Esc)",
   "debug_tests_hidden": "({count} ocultos)",
   "debug_title": "Depuração",
   "debug_waiting_body": "Dispare alguma atividade no seu app e ela aparecerá aqui.",

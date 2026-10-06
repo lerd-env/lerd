@@ -254,6 +254,8 @@
   "debug_tab_messages": "Pesan",
   "debug_tab_queries": "Kueri",
   "debug_tab_views": "View",
+  "debug_fullscreenTitle": "Layar penuh",
+  "debug_exitFullscreenTitle": "Keluar dari layar penuh (Esc)",
   "debug_tests_hidden": "({count} disembunyikan)",
   "debug_title": "Debug",
   "debug_waiting_body": "Picu aktivitas di aplikasi Anda dan akan muncul di sini.",

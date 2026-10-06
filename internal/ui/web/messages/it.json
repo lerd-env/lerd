@@ -254,6 +254,8 @@
   "debug_tab_messages": "Messaggi",
   "debug_tab_queries": "Query",
   "debug_tab_views": "View",
+  "debug_fullscreenTitle": "Schermo intero",
+  "debug_exitFullscreenTitle": "Esci da schermo intero (Esc)",
   "debug_tests_hidden": "({count} nascosti)",
   "debug_title": "Debug",
   "debug_waiting_body": "Attiva qualche attività nella tua app e comparirà qui.",

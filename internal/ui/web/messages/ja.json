@@ -254,6 +254,8 @@
   "debug_tab_messages": "メッセージ",
   "debug_tab_queries": "クエリ",
   "debug_tab_views": "ビュー",
+  "debug_fullscreenTitle": "全画面表示",
+  "debug_exitFullscreenTitle": "全画面を終了 (Esc)",
   "debug_tests_hidden": "({count} 件非表示)",
   "debug_title": "デバッグ",
   "debug_waiting_body": "アプリで何らかのアクティビティを発生させるとここに表示されます。",

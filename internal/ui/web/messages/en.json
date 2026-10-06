@@ -254,6 +254,8 @@
   "debug_tab_messages": "Messages",
   "debug_tab_queries": "Queries",
   "debug_tab_views": "Views",
+  "debug_fullscreenTitle": "Enter full screen",
+  "debug_exitFullscreenTitle": "Exit full screen (Esc)",
   "debug_tests_hidden": "({count} hidden)",
   "debug_title": "Debug",
   "debug_waiting_body": "Trigger some activity in your app and it will appear here.",

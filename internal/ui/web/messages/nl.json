@@ -254,6 +254,8 @@
   "debug_tab_messages": "Berichten",
   "debug_tab_queries": "Query's",
   "debug_tab_views": "Views",
+  "debug_fullscreenTitle": "Volledig scherm",
+  "debug_exitFullscreenTitle": "Volledig scherm sluiten (Esc)",
   "debug_tests_hidden": "({count} verborgen)",
   "debug_title": "Debug",
   "debug_waiting_body": "Zorg voor wat activiteit in je app en het verschijnt hier.",

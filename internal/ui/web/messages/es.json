@@ -254,6 +254,8 @@
   "debug_tab_messages": "Mensajes",
   "debug_tab_queries": "Consultas",
   "debug_tab_views": "Vistas",
+  "debug_fullscreenTitle": "Pantalla completa",
+  "debug_exitFullscreenTitle": "Salir de pantalla completa (Esc)",
   "debug_tests_hidden": "({count} ocultos)",
   "debug_title": "Depuración",
   "debug_waiting_body": "Genera algo de actividad en tu aplicación y aparecerá aquí.",
