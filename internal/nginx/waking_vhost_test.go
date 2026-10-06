@@ -9,18 +9,27 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
-func TestGenerateWakingVhost_servesWakingPageNotProxy(t *testing.T) {
+func TestGenerateWakingVhost_holdsInLerdUIWithWakingPageFallback(t *testing.T) {
 	confD := setupConfD(t)
-	site := config.Site{Name: "rr", Domains: []string{"rr.test"}, Path: "/srv/rr"}
+	site := config.Site{Name: "rr", Domains: []string{"rr.test"}, Path: "/srv/rr", HostPort: 5173}
 	if err := GenerateWakingVhost(site); err != nil {
 		t.Fatalf("GenerateWakingVhost: %v", err)
 	}
 	conf := readConf(t, filepath.Join(confD, "rr.test.conf"))
-	if !strings.Contains(conf, "try_files /waking.html =503") {
-		t.Errorf("waking vhost should serve waking.html, got:\n%s", conf)
+	for _, want := range []string{
+		WakeHoldPath + ";",
+		"access_log off;",
+		"proxy_set_header X-Lerd-Wake-Uri $request_uri;",
+		"proxy_set_header X-Lerd-Wake-Scheme $scheme;",
+		"error_page 502 504 599 = @waking;",
+		"try_files /waking.html =503",
+	} {
+		if !strings.Contains(conf, want) {
+			t.Errorf("waking vhost lacks %q:\n%s", want, conf)
+		}
 	}
-	if strings.Contains(conf, "proxy_pass") {
-		t.Errorf("waking vhost must not proxy to the stopped dev server, got:\n%s", conf)
+	if strings.Count(conf, "proxy_pass ") != 1 || strings.Contains(conf, ":5173") {
+		t.Errorf("waking vhost must proxy only to the wake hold, never the stopped app:\n%s", conf)
 	}
 }
 
@@ -59,5 +68,49 @@ func TestGeneratePausedVhost_stillServesPausedPage(t *testing.T) {
 	conf := readConf(t, filepath.Join(confD, "app.test.conf"))
 	if !strings.Contains(conf, "try_files /paused.html =503") {
 		t.Errorf("paused vhost should serve paused.html, got:\n%s", conf)
+	}
+}
+
+// The held request must reach lerd-ui whole, method and body, since lerd-ui
+// replays it to the app once the site is back.
+func TestGenerateWakingVhost_forwardsTheRequestWhole(t *testing.T) {
+	confD := setupConfD(t)
+	if err := GenerateWakingVhost(config.Site{Name: "rr", Domains: []string{"rr.test"}, Path: "/srv/rr"}); err != nil {
+		t.Fatal(err)
+	}
+	conf := readConf(t, filepath.Join(confD, "rr.test.conf"))
+	for _, banned := range []string{"proxy_method", "proxy_pass_request_body off", "error_page 404", "error_page 500"} {
+		if strings.Contains(conf, banned) {
+			t.Errorf("waking vhost still has %q:\n%s", banned, conf)
+		}
+	}
+}
+
+// Whatever rewrites a site's vhost while a service it needs sleeps (install,
+// secure, a PHP switch) must keep it on the waking vhost, or the next request
+// reaches an app whose database is down.
+func TestGenerateVhost_keepsTheWakingVhostWhileAServiceSleeps(t *testing.T) {
+	confD := setupConfD(t)
+	prev := siteWaitsOnSleepingService
+	t.Cleanup(func() { siteWaitsOnSleepingService = prev })
+	siteWaitsOnSleepingService = func(name string) bool { return name == "shop" }
+
+	shop := config.Site{Name: "shop", Domains: []string{"shop.test"}, Path: "/srv/shop", Secured: true}
+	if err := GenerateSSLVhost(shop, "8.4"); err != nil {
+		t.Fatal(err)
+	}
+	if err := InstallSSLVhost("shop.test"); err != nil {
+		t.Fatal(err)
+	}
+	if conf := readConf(t, filepath.Join(confD, "shop.test.conf")); !strings.Contains(conf, WakeHoldPath) {
+		t.Fatalf("a sleeping site's vhost was rewritten to the real one:\n%s", conf)
+	}
+
+	blog := config.Site{Name: "blog", Domains: []string{"blog.test"}, Path: "/srv/blog"}
+	if err := GenerateVhost(blog, "8.4"); err != nil {
+		t.Fatal(err)
+	}
+	if conf := readConf(t, filepath.Join(confD, "blog.test.conf")); strings.Contains(conf, WakeHoldPath) {
+		t.Fatal("a site with nothing asleep got the waking vhost")
 	}
 }

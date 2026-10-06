@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -56,25 +55,12 @@ func miseInstallPath(home string) string {
 	return filepath.Join(home, ".local", "bin", config.ExeName("mise"))
 }
 
-// misePrefixes are the package-manager dirs a daemon's restricted PATH misses.
-func misePrefixes() []string {
-	switch runtime.GOOS {
-	case "darwin":
-		return []string{"/opt/homebrew/bin", "/usr/local/bin"}
-	case "windows":
-		return nil
-	}
-	return []string{"/usr/local/bin", "/usr/bin"}
-}
-
-// isExecutableFile reports whether path is a file that can be run. Windows has
-// no execute bits, so there a regular file is enough.
 func isExecutableFile(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil || info.IsDir() {
 		return false
 	}
-	return runtime.GOOS == "windows" || info.Mode()&0o111 != 0
+	return !needsExecBit || info.Mode()&0o111 != 0
 }
 
 func (m miseManager) Available() bool { return m.bin != "" }

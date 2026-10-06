@@ -46,3 +46,17 @@ func TestFPMTemplateMountsAgentVolume(t *testing.T) {
 		t.Errorf("FPM template must mount %s:%s", SSHAgentVolume, SSHAgentMountDir)
 	}
 }
+
+// ssh in the FPM container runs as root and resolves ~/.ssh from root's passwd
+// entry, never from HOME, so without this it only reads /root/.ssh/known_hosts
+// and no host the user trusts can be verified.
+func TestGitSSHCommandEnv_ReadsTheUserKnownHosts(t *testing.T) {
+	got := GitSSHCommandEnv("/home/u")
+	want := []string{"--env", "GIT_SSH_COMMAND=ssh -o UserKnownHostsFile='/home/u/.ssh/known_hosts'"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("GitSSHCommandEnv = %v, want %v", got, want)
+	}
+	if strings.Contains(got[1], "StrictHostKeyChecking") {
+		t.Errorf("GitSSHCommandEnv must not weaken host key checking: %q", got[1])
+	}
+}

@@ -787,8 +787,9 @@ func composerInContainer(dir string, args ...string) error {
 	cmdArgs := []string{"exec", "-i", "-w", dir,
 		"--env", "HOME=" + containerHome(),
 		"--env", "COMPOSER_HOME=" + hostpath.ToVM(composerHomeDir()),
-		container, "php", composerPhar,
 	}
+	cmdArgs = append(cmdArgs, debugSiteEnvArgs(dir)...)
+	cmdArgs = append(cmdArgs, container, "php", composerPhar)
 	cmdArgs = append(cmdArgs, args...)
 
 	cmd := podman.Cmd(cmdArgs...)
@@ -847,7 +848,9 @@ func execInContainer(dir, command string) error {
 	if len(parts) == 0 {
 		return fmt.Errorf("empty setup command")
 	}
-	cmdArgs := append([]string{"exec", "-i", "-w", dir, container}, parts...)
+	cmdArgs := append([]string{"exec", "-i", "-w", dir}, debugSiteEnvArgs(dir)...)
+	cmdArgs = append(cmdArgs, container)
+	cmdArgs = append(cmdArgs, parts...)
 	cmd := podman.Cmd(cmdArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

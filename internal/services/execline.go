@@ -1,14 +1,14 @@
 package services
 
 import (
-	"runtime"
+	"path/filepath"
 	"strings"
 )
 
 // literalBackslashes makes SplitExecStart keep a backslash as a path separator
 // unless it precedes a quote. Windows paths (C:\Users\me) would otherwise lose
 // every separator to the escape rule. A var so tests can exercise it anywhere.
-var literalBackslashes = runtime.GOOS == "windows"
+var literalBackslashes = filepath.Separator == '\\'
 
 // SplitExecStart splits a systemd ExecStart= line into argv the way systemd
 // does, honouring single and double quotes so an argument may contain spaces.

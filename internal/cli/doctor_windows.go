@@ -58,3 +58,6 @@ func listeningOnPort(out, port string) bool {
 func FindListenerCmd(port string) string {
 	return "Get-Process -Id (Get-NetTCPConnection -LocalPort " + port + " -State Listen).OwningProcess"
 }
+
+// enforcedMysqldProfiles is AppArmor's, which Windows does not have.
+func enforcedMysqldProfiles(string) []string { return nil }

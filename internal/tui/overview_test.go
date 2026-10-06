@@ -33,7 +33,7 @@ func TestDetailRows_NavOrderMatchesRenderOrder(t *testing.T) {
 	}
 	want := []detailKind{
 		kindDomain, kindDomain, kindDomainAdd, // Domains
-		kindPHP, kindNode, kindHTTPS, kindLANShare, kindAutoSnapshot, // Toggles
+		kindPHP, kindNode, kindHTTPS, kindLANShare, kindAutoSnapshot, kindPin, kindRuntime, // Toggles
 		kindWorker,                      // Workers
 		kindWorktreeDB, kindWorktreeLAN, // Worktrees
 		kindWorktreePHP, kindWorktreeNode, //
@@ -158,20 +158,6 @@ func TestHopDetailColumn_ClampsAndNoOps(t *testing.T) {
 	// A one-column grid has no second column to reach.
 	if got := hopDetailColumn(rows, nav, 0, 50); got != 0 {
 		t.Errorf("a collapsed grid should not hop, got %d", got)
-	}
-}
-
-func TestJoinInfo_PacksFactsUntilTheyStopFitting(t *testing.T) {
-	got := joinInfo([]string{"aaa", "bbb", "ccc"}, 100)
-	if len(got) != 1 {
-		t.Fatalf("facts that fit should share one line, got %v", got)
-	}
-	got = joinInfo([]string{"aaa", "bbb", "ccc"}, 8)
-	if len(got) < 2 {
-		t.Fatalf("facts that don't fit should wrap, got %v", got)
-	}
-	if len(joinInfo([]string{"", ""}, 40)) != 0 {
-		t.Error("empty facts should produce no lines")
 	}
 }
 

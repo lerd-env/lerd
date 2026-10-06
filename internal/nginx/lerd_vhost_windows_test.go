@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/platform"
 )
 
 // The Podman machine cannot reach a host unix socket, so on Windows the
@@ -14,7 +14,7 @@ import (
 func TestLerdVhostProxiesOverTCPOnWindows(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	if !config.UsesMachineVM() {
+	if !platform.Current.UsesMachineVM {
 		t.Skip("not a machine VM host")
 	}
 	got, err := renderLerdVhost()

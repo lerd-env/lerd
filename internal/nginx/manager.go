@@ -24,6 +24,7 @@ import (
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/hostpath"
 	"github.com/geodro/lerd/internal/nativephp"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -203,6 +204,9 @@ type VhostData struct {
 	// placeholder-expanded and indented. Rendered ahead of the generic
 	// locations so a framework can claim paths they would otherwise swallow.
 	FrameworkNginx string
+	// FrontController narrows the php location to index.php and rewrites every
+	// other .php URL onto it. Resolved by resolveFrontController.
+	FrontController bool
 }
 
 // HTTPSRedirectHost is $host with the configured HTTPS port appended when nginx
@@ -430,6 +434,16 @@ func resolveRequestTimeout(sitePath, phpVersion string) int {
 	return config.DefaultRequestTimeout
 }
 
+// resolveFrontController reports whether the site routes all php through
+// index.php, set by the project's .lerd.yaml or by its framework definition.
+func resolveFrontController(site config.Site) bool {
+	if pc, err := config.LoadProjectConfig(site.Path); err == nil && pc.FrontController {
+		return true
+	}
+	fw, ok := config.GetFrameworkForDir(site.Framework, site.Path)
+	return ok && fw.FrontController
+}
+
 // xdebugDebugRequestTimeout is what a site gets while its PHP version runs
 // Xdebug in debug mode. A request stopped at a breakpoint sends nginx nothing,
 // so the 60s default answers 504 over a session that is still perfectly alive,
@@ -525,6 +539,7 @@ func renderFPMVhost(site config.Site, phpVersion string, ssl bool) ([]byte, erro
 		Profiling:       profilerEnabled(),
 		RequestTimeout:  resolveRequestTimeout(site.Path, phpVersion),
 		FrameworkNginx:  resolveFrameworkNginx(site, publicDir, fpmContainer),
+		FrontController: resolveFrontController(site),
 	}
 	if ssl {
 		data.CertDomain = site.PrimaryDomain()
@@ -538,7 +553,7 @@ func GenerateVhost(site config.Site, phpVersion string) error {
 	if err != nil {
 		return err
 	}
-	return writeSiteConf(site.PrimaryDomain()+".conf", rendered)
+	return writeSiteConf(site.PrimaryDomain()+".conf", keepWaking(site, rendered))
 }
 
 // GenerateSSLVhost renders the SSL vhost template and writes it to conf.d.
@@ -547,7 +562,21 @@ func GenerateSSLVhost(site config.Site, phpVersion string) error {
 	if err != nil {
 		return err
 	}
-	return writeSiteConf(site.PrimaryDomain()+"-ssl.conf", rendered)
+	return writeSiteConf(site.PrimaryDomain()+"-ssl.conf", keepWaking(site, rendered))
+}
+
+// siteWaitsOnSleepingService is the seam keepWaking asks through.
+var siteWaitsOnSleepingService = config.SiteWaitsOnSleepingService
+
+// keepWaking returns the waking vhost instead of the real one while a service
+// the site needs is asleep. Every path that rewrites a site's vhost (install,
+// secure, a PHP switch) goes through here, and handing back the real vhost
+// then would send the next request to an app whose database is down.
+func keepWaking(site config.Site, rendered []byte) []byte {
+	if !siteWaitsOnSleepingService(site.Name) {
+		return rendered
+	}
+	return []byte(landingVhostConf(site, config.PausedDir(), "waking.html"))
 }
 
 // InstallSSLVhost moves the SSL vhost every Generate*SSLVhost writes onto the
@@ -643,7 +672,7 @@ func GenerateCustomSSLVhost(site config.Site) error {
 // macOS and Windows resolve host.containers.internal via gvproxy; on Linux we reuse the
 // routable gateway IP the probe cached in the hosts file (pure read, no podman).
 func hostProxyUpstream() string {
-	if config.UsesMachineVM() {
+	if platform.Current.UsesMachineVM {
 		return "host.containers.internal"
 	}
 	if ip := podman.ReadHostGatewayFromFile(); ip != "" {
@@ -768,6 +797,7 @@ func GenerateWorktreeVhost(domain, path, phpVersion, siteName, branch string) er
 		Profiling:       profilerEnabled(),
 		RequestTimeout:  resolveRequestTimeout(path, phpVersion),
 		FrameworkNginx:  frameworkNginx,
+		FrontController: resolveFrontController(worktreeSite(domain, path, siteName)),
 	}
 
 	rendered, err := renderVhost(tmpl, data)
@@ -816,6 +846,7 @@ func GenerateWorktreeSSLVhost(domain, path, phpVersion, parentDomain, siteName, 
 		Profiling:       profilerEnabled(),
 		RequestTimeout:  resolveRequestTimeout(path, phpVersion),
 		FrameworkNginx:  frameworkNginx,
+		FrontController: resolveFrontController(worktreeSite(domain, path, siteName)),
 	}
 
 	rendered, err := renderVhost(tmpl, data)
@@ -876,6 +907,13 @@ func GenerateWorktreeHostProxyVhostFor(domain, path, parentDomain string, upstre
 // plain sites a single 80 server.
 func landingVhostConf(site config.Site, pausedDir, htmlFile string) string {
 	serverNames := serverNamesWithWildcards(site.Domains)
+	location := fmt.Sprintf(`    location / {
+        try_files /%s =503;
+        default_type text/html;
+    }`, htmlFile)
+	if htmlFile == "waking.html" {
+		location = wakeHoldLocations()
+	}
 	if site.Secured {
 		return fmt.Sprintf(`server {
     listen 80;
@@ -891,24 +929,50 @@ server {
     ssl_certificate /etc/nginx/certs/%s.crt;
     ssl_certificate_key /etc/nginx/certs/%s.key;
     root %s;
-    location / {
-        try_files /%s =503;
-        default_type text/html;
-    }
+%s
 }
-`, serverNames, serverNames, site.PrimaryDomain(), site.PrimaryDomain(), nginxQuote(pausedDir), htmlFile)
+`, serverNames, serverNames, site.PrimaryDomain(), site.PrimaryDomain(), nginxQuote(pausedDir), location)
 	}
 	return fmt.Sprintf(`server {
     listen 80;
     listen [::]:80;
     server_name %s;
     root %s;
-    location / {
-        try_files /%s =503;
-        default_type text/html;
-    }
+%s
 }
-`, serverNames, nginxQuote(pausedDir), htmlFile)
+`, serverNames, nginxQuote(pausedDir), location)
+}
+
+// WakeHoldPath is the lerd-ui endpoint a waking vhost hands each request to.
+const WakeHoldPath = "/_lerd/wake"
+
+// wakeHoldLocations holds a request to a sleeping site in lerd-ui until the
+// site is back, then lerd-ui sends it on to the app and returns the app's own
+// response, so any client, a webhook or an API call as much as a browser, gets
+// its answer in the time the wake takes. The method and body travel with it.
+// Only a failure of the hold itself answers 599, the one code turned into the
+// static waking page, so the app's own errors reach the client untouched.
+func wakeHoldLocations() string {
+	upstream := "http://host.containers.internal:7073" + WakeHoldPath
+	if !platform.Current.UsesMachineVM {
+		upstream = "http://unix:" + config.UISocketPath() + ":" + WakeHoldPath
+	}
+	return fmt.Sprintf(`    location / {
+        # Held requests are not the app's; the hold reports the activity itself.
+        access_log off;
+        proxy_pass %s;
+        proxy_http_version 1.1;
+        proxy_set_header X-Lerd-Wake-Host $host;
+        proxy_set_header X-Lerd-Wake-Uri $request_uri;
+        proxy_set_header X-Lerd-Wake-Scheme $scheme;
+        proxy_read_timeout 90s;
+        proxy_intercept_errors on;
+        error_page 502 504 599 = @waking;
+    }
+    location @waking {
+        try_files /waking.html =503;
+        default_type text/html;
+    }`, upstream)
 }
 
 // writeLandingVhost writes site's static-page vhost (serving htmlFile) to
@@ -1135,6 +1199,23 @@ var (
 // classified after the fact rather than pre-checked, so the common path costs
 // no extra inspect and a genuine podman failure is never mistaken for a
 // stopped container.
+// reloadedMarker is touched after every successful reload, so another process
+// can tell whether nginx has picked up a vhost written before it.
+func reloadedMarker() string { return filepath.Join(config.RunDir(), "nginx-reloaded") }
+
+func markReloaded() {
+	if err := os.MkdirAll(config.RunDir(), 0755); err == nil {
+		_ = os.WriteFile(reloadedMarker(), nil, 0644)
+	}
+}
+
+// ServesVhostWrittenAt reports whether nginx has reloaded since a vhost file
+// was last written at mod, i.e. whether it is serving that file yet.
+func ServesVhostWrittenAt(mod time.Time) bool {
+	st, err := os.Stat(reloadedMarker())
+	return err == nil && !st.ModTime().Before(mod)
+}
+
 func Reload() error {
 	return withConfigDiagnostics(reloadOnce())
 }
@@ -1142,6 +1223,7 @@ func Reload() error {
 func reloadOnce() error {
 	err := reloadExecFn()
 	if err == nil {
+		markReloaded()
 		return nil
 	}
 	if running, rerr := containerRunningFn("lerd-nginx"); rerr == nil && !running {
@@ -1699,7 +1781,7 @@ func EnsureLerdVhost() error {
 // it with what is on disk before touching the file.
 func renderLerdVhost() (string, error) {
 	var content string
-	if config.UsesMachineVM() {
+	if platform.Current.UsesMachineVM {
 		token, err := LoadOrGenerateTrustToken()
 		if err != nil {
 			return "", fmt.Errorf("loading trust token: %w", err)
@@ -1715,6 +1797,8 @@ func renderLerdVhost() (string, error) {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Lerd-Trust %s;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
 
     location = / {
         proxy_pass http://host.containers.internal:7073;
@@ -1769,6 +1853,8 @@ func renderLerdVhost() (string, error) {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
 
     location = / {
         proxy_pass http://unix:%[1]s:;

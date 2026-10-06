@@ -2,9 +2,7 @@ package config
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 )
 
 // MacosThemeID is the id the macOS desktop theme takes in the picker. It is
@@ -69,21 +67,4 @@ func macosTheme(index string) *UITheme {
 		AccentDark: accent.hex,
 		Source:     UIThemeSourceDesktop,
 	}
-}
-
-// macosAccentIndex returns the accent macOS is on. An account that never opened
-// the accent picker records no key at all, and that is multicolor; a machine
-// where defaults cannot be run is no macOS to follow. The key is missing in both
-// cases, so whether the reader is there at all is what tells them apart.
-func macosAccentIndex() string {
-	if runtime.GOOS != "darwin" {
-		return ""
-	}
-	if _, err := exec.LookPath("defaults"); err != nil {
-		return ""
-	}
-	if v := desktopToolOutput("defaults", "read", "-g", "AppleAccentColor"); v != "" {
-		return v
-	}
-	return macosMulticolor
 }

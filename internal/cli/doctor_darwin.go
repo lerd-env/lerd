@@ -31,3 +31,6 @@ func PortInUse(port string) bool {
 func FindListenerCmd(port string) string {
 	return "lsof -nP -iTCP:" + port + " -sTCP:LISTEN"
 }
+
+// enforcedMysqldProfiles is AppArmor's, which macOS does not have.
+func enforcedMysqldProfiles(string) []string { return nil }

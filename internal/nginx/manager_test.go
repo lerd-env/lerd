@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/platform"
 )
 
 // setupConfD points NginxConfD() at a temp dir via XDG_DATA_HOME and returns the
@@ -1316,7 +1317,7 @@ func TestEnsureDefaultVhost_leavesNoTempFilesInConfD(t *testing.T) {
 }
 
 func TestEnsureLerdVhost_linuxProxiesUnixSocket(t *testing.T) {
-	if config.UsesMachineVM() {
+	if platform.Current.UsesMachineVM {
 		t.Skip("Linux uses the unix socket vhost; macOS and Windows use TCP via host.containers.internal")
 	}
 	confD := setupConfD(t)

@@ -11,13 +11,16 @@ import (
 	"github.com/geodro/lerd/internal/siteinfo"
 )
 
-func TestSiteTabsHeader_HighlightsActive(t *testing.T) {
-	base := []siteTab{tabSiteOverview, tabSiteEnv, tabSiteDebug}
-	for _, tab := range base {
-		got := stripANSI(siteTabsHeader(tab, base))
-		want := siteTabLabel(tab)
-		if !strings.Contains(got, want) {
-			t.Errorf("active=%v: expected label %q in %q", tab, want, got)
+func TestSiteTabBar_LabelsEveryTab(t *testing.T) {
+	m := NewModel("test")
+	site := &siteinfo.EnrichedSite{Name: "app"}
+	for _, tab := range availableSiteTabs(site) {
+		m.siteTab = tab
+		got := stripANSI(strings.Join(m.siteTabBar(site, 80), "\n"))
+		for _, t2 := range availableSiteTabs(site) {
+			if !strings.Contains(got, siteTabLabel(t2)) {
+				t.Errorf("active=%v: expected label %q in %q", tab, siteTabLabel(t2), got)
+			}
 		}
 	}
 }
@@ -31,9 +34,9 @@ func TestAvailableSiteTabs_DoctorForEveryFramework(t *testing.T) {
 	if !slices.Contains(laravel, tabSiteDoctor) {
 		t.Errorf("Laravel site should offer the Doctor tab, got %v", laravel)
 	}
-	// Doctor is the fifth tab, so the strip numbers it [5].
-	if got := stripANSI(siteTabsHeader(tabSiteOverview, laravel)); !strings.Contains(got, "[5] Doctor") {
-		t.Errorf("strip should carry [5] Doctor, got %q", got)
+	// Doctor is the fifth tab, so the 5 key reaches it.
+	if len(laravel) != 5 || laravel[4] != tabSiteDoctor {
+		t.Errorf("Doctor should be the fifth tab, got %v", laravel)
 	}
 }
 

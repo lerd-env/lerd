@@ -15,7 +15,7 @@ import (
 // console that `start` opens in its own window at the site's directory.
 func TestPlatformTerminalsOnWindows(t *testing.T) {
 	dir := `C:\Users\me\Sites\app`
-	got := platformTerminals(dir)
+	got := osFallbackDirTerminals(dir)
 	if len(got) != 2 {
 		t.Fatalf("got %d candidates, want 2: %+v", len(got), got)
 	}

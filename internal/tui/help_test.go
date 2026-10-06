@@ -41,3 +41,19 @@ func TestHelpRowsFitTheKeyColumn(t *testing.T) {
 		}
 	}
 }
+
+func TestHelpNamesEveryDebugLens(t *testing.T) {
+	out := strings.Join(helpContentLines(NewModel("test"), 200), "\n")
+	for _, l := range debugLenses {
+		if !strings.Contains(out, l.label) {
+			t.Errorf("help never mentions the %q lens", l.label)
+		}
+	}
+}
+
+func TestHelpDescribesTheCurrentDashboard(t *testing.T) {
+	out := strings.Join(helpContentLines(NewModel("test"), 200), "\n")
+	if strings.Contains(out, "six-card") || !strings.Contains(out, "needs attention") {
+		t.Errorf("help still describes the old dashboard:\n%s", out)
+	}
+}

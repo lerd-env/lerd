@@ -8,10 +8,13 @@ import (
 	"github.com/geodro/lerd/internal/hostshell"
 )
 
-// platformTerminals offers Windows Terminal at dir, then a PowerShell console
-// that `start` opens in its own window there. lerd-ui runs with no console of
-// its own, so a console program has to be given a new window explicitly.
-func platformTerminals(dir string) []terminalCmd {
+// osDefaultDirTerminal has no desktop-wide terminal setting to read on Windows.
+func osDefaultDirTerminal(string) []terminalCmd { return nil }
+
+// osFallbackDirTerminals offers Windows Terminal at dir, then a PowerShell
+// console that `start` opens in its own window there. lerd-ui runs with no
+// console of its own, so a console program has to be given a new window.
+func osFallbackDirTerminals(dir string) []terminalCmd {
 	return []terminalCmd{
 		{"wt.exe", []string{"-d", dir}},
 		{"cmd.exe", []string{"/c", "start", "", "/D", dir, "powershell", "-NoLogo"}},
@@ -75,3 +78,11 @@ func powerShellTerminals(script string) []terminalCmd {
 		{"cmd.exe", append([]string{"/c", "start", ""}, ps...)},
 	}
 }
+
+// defaultTerminal is empty on Windows, which has no desktop terminal setting.
+var defaultTerminal = func() string { return "" }
+
+func osFallbackScriptTerminals(string) []terminalCmd { return nil }
+
+// terminalBaseEnv carries lerd's environment into a spawned terminal.
+func terminalBaseEnv() []string { return graphicalEnv() }

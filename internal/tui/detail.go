@@ -67,6 +67,10 @@ const (
 	kindWorktreeNode
 	kindSnapshotKeep
 	kindAutoSnapshot
+	kindPin
+	kindRuntime
+	kindHorizonReload
+	kindStripe
 )
 
 // detailRows returns the rows the detail view draws, in the order the Overview
@@ -92,6 +96,16 @@ func detailRows(s *siteinfo.EnrichedSite) []detailRow {
 	}
 	rows = append(rows, detailRow{kind: kindLANShare})
 	rows = append(rows, detailRow{kind: kindAutoSnapshot})
+	rows = append(rows, detailRow{kind: kindPin})
+	if s.ContainerPort == 0 && s.PHPVersion != "" {
+		rows = append(rows, detailRow{kind: kindRuntime})
+	}
+	if s.HasHorizon {
+		rows = append(rows, detailRow{kind: kindHorizonReload})
+	}
+	if s.StripeSecretSet {
+		rows = append(rows, detailRow{kind: kindStripe})
+	}
 	if s.HasQueueWorker {
 		rows = append(rows, detailRow{kind: kindWorker, workerName: "queue"})
 	}
@@ -202,6 +216,36 @@ func (m *Model) detailToggleSelected(s *siteinfo.EnrichedSite, rows []detailRow,
 		mode, label := nextAutoSnapshotMode(s.AutoSnapshot)
 		m.setStatus("automatic snapshots for "+s.Name+": "+label+"…", 5*time.Second)
 		return runLerd(s.Path, "db:snapshot:auto", "site", s.Name, mode)
+	case kindPin:
+		if m.snap.Pinned[s.Name] {
+			m.setStatus("letting "+s.Name+" idle again…", 5*time.Second)
+			return tea.Sequence(runLerd("", "idle", "unpin", s.Name), loadCmd())
+		}
+		m.setStatus("keeping "+s.Name+" awake…", 5*time.Second)
+		return tea.Sequence(runLerd("", "idle", "pin", s.Name), loadCmd())
+	case kindRuntime:
+		// Switching restarts the site's workers, so it runs as its own action
+		// the user asked for, never as a side effect of anything else.
+		if s.Runtime == "frankenphp" {
+			m.setStatus("switching "+s.Name+" to php-fpm…", 30*time.Second)
+			return tea.Sequence(runLerd(s.Path, "runtime", "fpm"), loadCmd())
+		}
+		m.setStatus("switching "+s.Name+" to frankenphp…", 30*time.Second)
+		return tea.Sequence(runLerd(s.Path, "runtime", "frankenphp"), loadCmd())
+	case kindHorizonReload:
+		state := "on"
+		if m.snap.HorizonReload[s.Name] {
+			state = "off"
+		}
+		m.setStatus("turning reload horizon on code change "+state+" for "+s.Name+"…", 10*time.Second)
+		return tea.Sequence(runLerd(s.Path, "horizon:reload", state), loadCmd())
+	case kindStripe:
+		if s.StripeRunning {
+			m.setStatus("stopping the stripe listener for "+s.Name+"…", 10*time.Second)
+			return tea.Sequence(runLerd(s.Path, "stripe:listen", "stop"), loadCmd())
+		}
+		m.setStatus("starting the stripe listener for "+s.Name+"…", 10*time.Second)
+		return tea.Sequence(runLerd(s.Path, "stripe:listen"), loadCmd())
 	case kindPHP:
 		m.openPHPPicker(s)
 		return nil
@@ -337,7 +381,7 @@ func (m *Model) removeFocusedDomain() (handled bool, cmd tea.Cmd) {
 	if s == nil {
 		return false, nil
 	}
-	rows := detailRows(s)
+	rows := m.siteRows(s)
 	nav := navigableRows(rows)
 	if m.detailCursor >= len(nav) {
 		return false, nil
@@ -473,14 +517,12 @@ func workerLabel(s *siteinfo.EnrichedSite, name string) string {
 	return name
 }
 
-// renderDetailInline builds the right-column pane: full-height site detail
-// by default, or the global settings rows when detailMode == detailSettings.
-// Both live in the same pane so `S` is a toggle, not a separate screen.
-func (m *Model) renderDetailInline(w, h int, focused bool) string {
-	style := paneStyle(focused)
+// renderDetailIn draws the detail content inside style, which is a bordered
+// pane for services and databases and a bare frame inside the site view.
+func (m *Model) renderDetailIn(style lipgloss.Style, w, h int, focused bool) string {
 	innerW, innerH := innerSize(style, w, h)
 
-	contentW := innerW - 1 // reserve 1 cell for scrollbar
+	contentW := innerW - 2 // a gap and the scrollbar
 
 	var content []string
 	cursorLine := 0
@@ -558,18 +600,19 @@ func settingsContentLines(m *Model, focused bool, innerW int) []string {
 	out := make([]string, 0, len(rows)+4)
 	add := func(s string) { out = append(out, padToWidth(clipLine(s, innerW), innerW)) }
 
-	add(sectionStyle.Render("Settings"))
-	add(dimStyle.Render("  press S again to return to site detail"))
-	add("")
-
 	if len(rows) == 0 {
 		add(dimStyle.Render("  no settings available"))
 		return out
 	}
 
+	// Pad every label to the longest so the on/off column lines up.
+	labelW := 0
+	for _, row := range rows {
+		labelW = max(labelW, len([]rune(row.label)))
+	}
 	for i, row := range rows {
 		selected := focused && i == m.settingsRow
-		add(renderDetailRow(selected, onOffGlyph(row.on), row.label, onOffText(row.on)))
+		add(renderDetailRow(selected, onOffGlyph(row.on), padRight(row.label, labelW+2), onOffText(row.on)))
 	}
 	return out
 }
@@ -580,7 +623,7 @@ func settingsContentLines(m *Model, focused bool, innerW int) []string {
 // so Domains sits beside Toggles and Services beside Workers. A narrow pane
 // collapses every section to full width and the grid becomes a single column.
 func detailContentLines(m *Model, site *siteinfo.EnrichedSite, focused bool, innerW int) ([]string, int) {
-	rows := detailRows(site)
+	rows := m.siteRows(site)
 	nav := navigableRows(rows)
 	navPos := func(i int) int {
 		for pos, rowIdx := range nav {
@@ -598,57 +641,24 @@ func detailContentLines(m *Model, site *siteinfo.EnrichedSite, focused bool, inn
 		scheme = "https"
 	}
 
+	// Identity and the tab strip live in the site view's fixed header. A
+	// worktree tab shows only that worktree's controls and its traffic.
 	var secs []ovSection
-	secs = append(secs, overviewIdentity(m, site, innerW)...)
+	if wt := m.siteWorktree(site); wt != nil {
+		secs = append(secs, overviewWorktree(wt, rows, sel, innerW)...)
+		secs = append(secs, overviewTiming(m, site, innerW)...)
+		body, cursorLine := composeOverview(secs, innerW)
+		return body, max(0, cursorLine)
+	}
 	secs = append(secs, overviewDomains(m, site, rows, sel, scheme, colW)...)
-	secs = append(secs, overviewToggles(site, rows, sel, colW)...)
+	secs = append(secs, overviewToggles(m, site, rows, sel, colW)...)
 	secs = append(secs, overviewServices(m, site, colW)...)
-	secs = append(secs, overviewWorkers(site, rows, sel, colW)...)
-	secs = append(secs, overviewWorktrees(site, rows, sel, scheme, innerW)...)
+	secs = append(secs, overviewWorkers(site, rows, sel, innerW)...)
+	secs = append(secs, overviewSuggested(site, innerW)...)
 	secs = append(secs, overviewTiming(m, site, innerW)...)
 
 	body, cursorLine := composeOverview(secs, innerW)
-	out := renderSiteTabHeader(tabSiteOverview, innerW, availableSiteTabs(site))
-	if cursorLine >= 0 {
-		cursorLine += len(out)
-	} else {
-		cursorLine = 0
-	}
-	return append(out, body...), cursorLine
-}
-
-// overviewIdentity is the header: primary domain, then the facts about the site
-// packed onto as few lines as the pane allows.
-func overviewIdentity(m *Model, site *siteinfo.EnrichedSite, innerW int) []ovSection {
-	b := newOvBuilder(innerW)
-
-	// Lead with the primary domain (what users see in the browser). The internal
-	// registry name is still surfaced below, since commands and filters take it.
-	header := site.PrimaryDomain()
-	if header == "" {
-		header = site.Name
-	}
-	b.plain(sectionStyle.Render(header))
-
-	var facts []string
-	if site.AppName != "" {
-		facts = append(facts, dimStyle.Render("app: ")+site.AppName)
-	}
-	if site.Name != header {
-		facts = append(facts, dimStyle.Render("name: ")+site.Name)
-	}
-	if g := siteGroupLine(m, site); g != "" {
-		facts = append(facts, dimStyle.Render(g))
-	}
-	for _, ln := range joinInfo(facts, innerW-2) {
-		b.plain("  " + ln)
-	}
-	if site.Path != "" {
-		b.plain(dimStyle.Render("  path: ") + site.Path)
-	}
-	b.plain("  " + siteRuntimeLine(site))
-	b.plain("")
-	return b.section(ovFull)
+	return body, max(0, cursorLine)
 }
 
 // siteGroupLine describes the site's place in a group, or "" when it isn't in one.
@@ -689,32 +699,6 @@ func siteGroupLine(m *Model, site *siteinfo.EnrichedSite) string {
 	return fmt.Sprintf("group: main · %d %s", n, noun)
 }
 
-// siteRuntimeLine is the one-liner of versions: PHP, Node, framework, runtime, branch.
-func siteRuntimeLine(site *siteinfo.EnrichedSite) string {
-	php := site.PHPVersion
-	if php == "" && site.ContainerPort > 0 {
-		php = "custom"
-	}
-	info := dimStyle.Render("php: ") + php
-	if site.NodeVersion != "" {
-		info += dimStyle.Render("  node: ") + site.NodeVersion
-	}
-	if site.FrameworkLabel != "" {
-		info += dimStyle.Render("  fw: ") + site.FrameworkLabel
-	}
-	if site.Runtime == "frankenphp" {
-		rt := "frankenphp"
-		if site.RuntimeWorker {
-			rt = "frankenphp (worker)"
-		}
-		info += dimStyle.Render("  runtime: ") + accentStyle.Render(rt)
-	}
-	if site.Branch != "" {
-		info += dimStyle.Render("  git: ") + site.Branch
-	}
-	return info
-}
-
 func overviewDomains(m *Model, site *siteinfo.EnrichedSite, rows []detailRow, sel func(int) bool, scheme string, w int) []ovSection {
 	b := newOvBuilder(w)
 	b.plain(sectionStyle.Render("Domains"))
@@ -748,7 +732,7 @@ func overviewDomains(m *Model, site *siteinfo.EnrichedSite, rows []detailRow, se
 	return b.section(ovHalf)
 }
 
-func overviewToggles(site *siteinfo.EnrichedSite, rows []detailRow, sel func(int) bool, w int) []ovSection {
+func overviewToggles(m *Model, site *siteinfo.EnrichedSite, rows []detailRow, sel func(int) bool, w int) []ovSection {
 	b := newOvBuilder(w)
 	b.plain(sectionStyle.Render("Toggles"))
 	for i, row := range rows {
@@ -765,6 +749,24 @@ func overviewToggles(site *siteinfo.EnrichedSite, rows []detailRow, sel func(int
 		case kindAutoSnapshot:
 			covered := autoSnapshotCovered(site.AutoSnapshot)
 			b.add(renderDetailRow(s, onOffGlyph(covered), "Auto snapshots", autoSnapshotModeText(site.AutoSnapshot)), s)
+		case kindPin:
+			pinned := m.snap.Pinned[site.Name]
+			state := dimStyle.Render("idles when unused")
+			if pinned {
+				state = runningStyle.Render("always awake")
+			}
+			b.add(renderDetailRow(s, onOffGlyph(pinned), "Keep awake", state), s)
+		case kindRuntime:
+			rt := "php-fpm"
+			if site.Runtime == "frankenphp" {
+				rt = "frankenphp"
+			}
+			b.add(renderDetailRow(s, accentStyle.Render("⇄"), "Runtime", dimStyle.Render(rt)), s)
+		case kindHorizonReload:
+			on := m.snap.HorizonReload[site.Name]
+			b.add(renderDetailRow(s, onOffGlyph(on), "Reload horizon", onOffText(on)), s)
+		case kindStripe:
+			b.add(renderDetailRow(s, onOffGlyph(site.StripeRunning), "Stripe listener", onOffText(site.StripeRunning)), s)
 		}
 	}
 	b.plain("")
@@ -814,6 +816,31 @@ func overviewServices(m *Model, site *siteinfo.EnrichedSite, w int) []ovSection 
 	return b.section(ovHalf)
 }
 
+// overviewSuggested lists the services the site's packages ask for and it does
+// not have yet. Read only: adding one rewrites .lerd.yaml and .env, so it stays
+// in the CLI and the web UI.
+func overviewSuggested(site *siteinfo.EnrichedSite, w int) []ovSection {
+	if len(site.SuggestedServices) == 0 {
+		return nil
+	}
+	b := newOvBuilder(w)
+	b.plain(sectionStyle.Render("Suggested services"))
+	for _, sug := range site.SuggestedServices {
+		why := sug.Reason
+		if sug.Package != "" {
+			why = strings.TrimSpace(sug.Package + "  " + why)
+		}
+		b.plain("   " + accentStyle.Render("+") + " " + padRight(sug.Name, 18) + dimStyle.Render(why))
+	}
+	b.plain("")
+	return b.section(ovFull)
+}
+
+// siteWorkerUnit is the systemd unit a site's worker runs as.
+func siteWorkerUnit(site *siteinfo.EnrichedSite, worker string) string {
+	return "lerd-" + worker + "-" + site.Name
+}
+
 func overviewWorkers(site *siteinfo.EnrichedSite, rows []detailRow, sel func(int) bool, w int) []ovSection {
 	b := newOvBuilder(w)
 	for i, row := range rows {
@@ -827,63 +854,39 @@ func overviewWorkers(site *siteinfo.EnrichedSite, rows []detailRow, sel func(int
 		b.add(renderDetailRow(s,
 			workerGlyphFor(site, row.workerName),
 			workerLabel(site, row.workerName),
-			workerStateText(site, row.workerName)), s)
+			workerStateText(site, row.workerName)+dimStyle.Render("  "+siteWorkerUnit(site, row.workerName))), s)
 	}
 	if b.empty() {
 		return nil
 	}
 	b.plain("")
-	return b.section(ovHalf)
+	// Full width: each row names its unit, which a half column would cut short.
+	return b.section(ovFull)
 }
 
-func overviewWorktrees(site *siteinfo.EnrichedSite, rows []detailRow, sel func(int) bool, scheme string, w int) []ovSection {
-	if len(site.Worktrees) == 0 {
-		return nil
-	}
+// overviewWorktree is the Overview of a worktree tab: its own workers,
+// isolated database, LAN share, PHP and Node. The header already names it.
+func overviewWorktree(wt *siteinfo.WorktreeInfo, rows []detailRow, sel func(int) bool, w int) []ovSection {
 	b := newOvBuilder(w)
-	b.plain(sectionStyle.Render("Worktrees"))
-	for _, wt := range site.Worktrees {
-		head := "  " + accentStyle.Render(wt.Branch)
-		if wt.Domain != "" {
-			head += "  " + dimStyle.Render(scheme+"://"+wt.Domain)
+	b.plain(sectionStyle.Render("Worktree"))
+	for i, row := range rows {
+		s := sel(i)
+		switch row.kind {
+		case kindWorktreeWorker:
+			b.add(renderDetailRow(s, worktreeWorkerGlyph(wt, row.workerName),
+				worktreeWorkerLabel(wt, row.workerName), worktreeWorkerStateText(wt, row.workerName)), s)
+		case kindWorktreeDB:
+			b.add(renderDetailRow(s, onOffGlyph(wt.DBIsolated), "Isolated DB", worktreeDBStateText(*wt)), s)
+		case kindWorktreeLAN:
+			b.add(renderDetailRow(s, onOffGlyph(wt.LANPort > 0), "LAN share", lanShareText(wt.LANPort)), s)
+		case kindWorktreePHP:
+			b.add(renderDetailRow(s, accentStyle.Render("λ"), "PHP", worktreeVersionText(wt.PHPVersion, wt.PHPVersionOverride)), s)
+		case kindWorktreeNode:
+			b.add(renderDetailRow(s, accentStyle.Render("⬢"), "Node", worktreeVersionText(wt.NodeVersion, wt.NodeVersionOverride)), s)
 		}
-		if wt.Path != "" {
-			head += "  " + dimStyle.Render(wt.Path)
-		}
-		b.plain(head)
-		renderedAny := false
-		for i, row := range rows {
-			if row.branch != wt.Branch {
-				continue
-			}
-			s := sel(i)
-			switch row.kind {
-			case kindWorktreeWorker:
-				renderedAny = true
-				b.add(renderDetailRow(s, worktreeWorkerGlyph(&wt, row.workerName),
-					"    "+worktreeWorkerLabel(&wt, row.workerName),
-					worktreeWorkerStateText(&wt, row.workerName)), s)
-			case kindWorktreeDB:
-				renderedAny = true
-				b.add(renderDetailRow(s, onOffGlyph(wt.DBIsolated),
-					"    Isolated DB", worktreeDBStateText(wt)), s)
-			case kindWorktreeLAN:
-				renderedAny = true
-				b.add(renderDetailRow(s, onOffGlyph(wt.LANPort > 0),
-					"    LAN share", lanShareText(wt.LANPort)), s)
-			case kindWorktreePHP:
-				renderedAny = true
-				b.add(renderDetailRow(s, accentStyle.Render("λ"),
-					"    PHP", worktreeVersionText(wt.PHPVersion, wt.PHPVersionOverride)), s)
-			case kindWorktreeNode:
-				renderedAny = true
-				b.add(renderDetailRow(s, accentStyle.Render("⬢"),
-					"    Node", worktreeVersionText(wt.NodeVersion, wt.NodeVersionOverride)), s)
-			}
-		}
-		if !renderedAny {
-			b.plain(dimStyle.Render("    (no per-worktree controls)"))
-		}
+	}
+	if b.empty() {
+		b.plain(dimStyle.Render("  this worktree has no controls of its own"))
 	}
 	b.plain("")
 	return b.section(ovFull)

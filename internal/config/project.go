@@ -124,10 +124,17 @@ type ProjectConfig struct {
 	// direnv or sops exports into the shell, where there is no wrapper command
 	// to carry LERD_PASSTHROUGH_ENV. Names only, never values.
 	EnvPassthrough []string `yaml:"env_passthrough,omitempty"`
+	// EnvProvider is a host command whose stdout is dotenv lines, e.g.
+	// `infisical export --format=dotenv`. lerd keeps its output in a tmpfs file
+	// the PHP prepend loads, so provided secrets never land on disk.
+	EnvProvider string `yaml:"env_provider,omitempty"`
 	// RequestTimeout overrides the nginx request timeout for this project, in
 	// seconds. Zero inherits the global nginx.request_timeout (default 60s).
 	// Raise it for apps with deliberately long-running requests.
 	RequestTimeout int `yaml:"request_timeout,omitempty"`
+	// FrontController routes every .php request through index.php instead of
+	// running the file it names. See Framework.FrontController.
+	FrontController bool `yaml:"front_controller,omitempty"`
 	// Stripe holds optional per-project Stripe webhook listener settings: the
 	// route events forward to and which .env key holds the secret. Absent for
 	// projects on the Laravel defaults, which are auto-detected.
@@ -158,8 +165,8 @@ func (c *ProjectConfig) IsEmpty() bool {
 		c.AppURL == "" && c.DB.Service == "" && c.DB.Database == "" &&
 		c.Container == nil && c.Proxy == nil && c.Runtime == "" && !c.RuntimeWorker &&
 		!c.DBIsolated && len(c.EnvOverrides) == 0 && len(c.WorktreeInclude) == 0 &&
-		len(c.EnvPassthrough) == 0 &&
-		c.RequestTimeout == 0 && c.Stripe == nil &&
+		len(c.EnvPassthrough) == 0 && c.EnvProvider == "" &&
+		c.RequestTimeout == 0 && !c.FrontController && c.Stripe == nil &&
 		c.MCPInject == nil
 }
 

@@ -98,10 +98,6 @@ func RepairPossible() bool {
 // NRPT names servers, not ports, so lerd-dns has to sit on the standard one.
 func init() {
 	dnsPort = 53
-	platformResolverHookup = func() (string, bool, string) {
-		ns := nrptNamespace()
-		return windowsNRPTKind, nrptRuleExists(ns), ns
-	}
 }
 
 // nrptRuleExists reports whether an NRPT rule covers namespace. Reading the

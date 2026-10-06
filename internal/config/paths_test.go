@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/platform"
 )
 
 // UIClient{Network,Addr} must give the CLI a transport that actually exists on
@@ -13,7 +15,7 @@ import (
 // the client dials the TCP loopback; Linux stays on the unix socket.
 func TestUIClientTransport_matchesOS(t *testing.T) {
 	net, addr := UIClientNetwork(), UIClientAddr()
-	if usesMachineVM(runtime.GOOS) {
+	if platform.Current.UsesMachineVM {
 		if net != "tcp" {
 			t.Errorf("UIClientNetwork() = %q on darwin, want tcp", net)
 		}
@@ -35,7 +37,7 @@ func TestUIClientTransport_matchesOS(t *testing.T) {
 // stays on the bind-mounted unix socket. The watcher's listen addr must pair.
 func TestAccessLogTarget_matchesOS(t *testing.T) {
 	target := AccessLogTarget()
-	if usesMachineVM(runtime.GOOS) {
+	if platform.Current.UsesMachineVM {
 		want := "host.containers.internal:" + AccessFeedUDPPort
 		if target != want {
 			t.Errorf("AccessLogTarget() = %q on darwin, want %q", target, want)

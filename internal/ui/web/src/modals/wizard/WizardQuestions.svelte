@@ -4,6 +4,7 @@
   import WizardField from './WizardField.svelte';
   import WizardCheckList from './WizardCheckList.svelte';
   import type { ProjectAnswers, ProjectQuestions } from '$stores/wizard';
+  import { suggestionWhy } from '$stores/sites';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -35,8 +36,14 @@
     ];
   });
 
+  // A suggested service names the package behind it, as its Overview card does.
   const serviceItems = $derived(
-    (questions.service_options ?? []).map((s) => ({ value: s, label: s }))
+    (questions.service_options ?? []).map((s) => {
+      const sg = (questions.service_suggestions ?? []).find((x) => x.name === s);
+      return sg
+        ? { value: s, label: s, note: sg.package || sg.reason, hint: suggestionWhy(sg) }
+        : { value: s, label: s };
+    })
   );
   const workerItems = $derived((questions.worker_options ?? []).map((w) => ({ value: w, label: w })));
 

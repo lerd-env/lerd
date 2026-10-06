@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/platform"
 )
 
 // PodmanEnv fingerprints the host podman that lerd last installed against.
@@ -150,7 +150,7 @@ func systemMigrate() error {
 // steps on every subsequent invocation. Linux-only: on macOS the runtime lives
 // in a VM and the rootless-netns failure mode does not exist.
 func HealPodmanUpgrade(dns []string, emit func(string)) (healed bool, restart []string, err error) {
-	if runtime.GOOS != "linux" {
+	if platform.Current.UsesMachineVM {
 		return false, nil, nil
 	}
 	cur, perr := CurrentPodmanEnv()

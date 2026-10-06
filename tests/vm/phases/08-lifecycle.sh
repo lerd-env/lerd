@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Phase 8, site lifecycle and sharing.
 source "$(dirname "$0")/../lib.sh"
+need_demo
 cd "$DEMO_DIR" || exit 1
 # site_url <dir>: the site's URL on the scheme it is actually served on.
 site_url() {

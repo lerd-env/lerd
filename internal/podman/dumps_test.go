@@ -198,8 +198,10 @@ func TestDumpBridgeIsLegacyPHPCompatible(t *testing.T) {
 		{"devtools-collector.php", collector},
 		{"opcache-invalidate.php", string(invalidate)},
 	} {
+		// preg_match() is PHP 4 and would otherwise trip the match( token.
+		src := strings.ReplaceAll(f.src, "preg_match", "")
 		for tok, desc := range forbidden {
-			if strings.Contains(f.src, tok) {
+			if strings.Contains(src, tok) {
 				t.Errorf("%s contains %q — %s; it must parse on PHP 7.2", f.name, tok, desc)
 			}
 		}

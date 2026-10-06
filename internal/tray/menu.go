@@ -4,9 +4,10 @@ package tray
 
 import (
 	"fmt"
-	"runtime"
 
 	"github.com/getlantern/systray"
+
+	"github.com/geodro/lerd/internal/platform"
 )
 
 const (
@@ -72,7 +73,7 @@ func buildMenu(mono bool) *menuState {
 	m.mAutostart = m.mSettings.AddSubMenuItem("Autostart at login: Off", "Toggle lerd autostart on login")
 	// LAN exposure toggle is not shown on macOS — ports 80/443 are always
 	// reachable on the LAN via gvproxy; only non-privileged ports support IP binding.
-	if runtime.GOOS != "darwin" {
+	if !platform.Current.UsesMachineVM {
 		m.mLAN = m.mSettings.AddSubMenuItem("Expose to LAN: Off", "Toggle whether lerd is reachable from other devices on the local network")
 	}
 	m.mLANServices = m.mSettings.AddSubMenuItem("Managed service LAN access: Off", "Allow remote access to managed service ports on trusted networks")

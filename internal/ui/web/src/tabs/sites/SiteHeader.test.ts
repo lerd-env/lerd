@@ -112,6 +112,29 @@ describe('SiteHeader', () => {
     expect(getByRole('img', { name: 'Laravel 12' })).toBeInTheDocument();
   });
 
+  // Nothing else on the page said a site was served by FrankenPHP rather than
+  // the shared PHP-FPM, so the header carries it.
+  it('shows the FrankenPHP runtime', () => {
+    const { getByText } = render(Harness, {
+      props: { site: { ...site, runtime: 'frankenphp' } as unknown as Site }
+    });
+    const badge = getByText(/FrankenPHP/).closest('span[class*="rounded-full"]') as HTMLElement;
+    expect(badge.className).toContain('text-orange-700');
+    expect(badge.textContent).not.toContain('worker');
+  });
+
+  it('names worker mode on the FrankenPHP badge', () => {
+    const { getByText } = render(Harness, {
+      props: { site: { ...site, runtime: 'frankenphp', runtime_worker: true } as unknown as Site }
+    });
+    expect(getByText(/FrankenPHP/).textContent).toContain('worker');
+  });
+
+  it('shows no runtime badge for a PHP-FPM site', () => {
+    const { queryByText } = render(Harness, { props: { site } });
+    expect(queryByText(/FrankenPHP/)).not.toBeInTheDocument();
+  });
+
   // Group and workspace leave the bar on a narrow header, so the overflow menu carries them.
   it('offers group and workspace in the overflow menu', async () => {
     accessMode.set({ localControl: true, lanExposed: false, checked: true });

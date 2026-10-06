@@ -1,5 +1,5 @@
 <script lang="ts">
-  import StatusDot from '$components/StatusDot.svelte';
+  import ServiceStatusDot from '$components/ServiceStatusDot.svelte';
   import { services } from '$stores/services';
   import { m } from '../../paraglide/messages.js';
 
@@ -14,7 +14,7 @@
   const entries = $derived(
     names.map((n) => {
       const svc = $services.find((s) => s.name === n || s.preset === n);
-      return { name: n, active: svc?.status === 'active' };
+      return { name: n, svc };
     })
   );
 </script>
@@ -25,7 +25,7 @@
     <span
       class="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-sm bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-lerd-border"
     >
-      <StatusDot color={dep.active ? 'green' : 'gray'} size="xs" />
+      <ServiceStatusDot svc={dep.svc} size="xs" />
       {dep.name}
     </span>
   {/each}

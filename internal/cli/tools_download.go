@@ -82,24 +82,12 @@ func installMise(pins *pinnedTools, home string, w io.Writer) error {
 	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
 		return fmt.Errorf("mise install: %w", err)
 	}
-	if runtime.GOOS == "windows" {
-		if _, err := pins.download("mise", dest, 0755, w); err != nil {
-			return fmt.Errorf("mise download: %w", err)
-		}
-		return nil
+	v, err := fetchMise(pins, dest, w)
+	if err != nil {
+		return err
 	}
-	tarball := dest + ".tar.gz"
-	if _, err := pins.download("mise", tarball, 0644, w); err != nil {
-		return fmt.Errorf("mise download: %w", err)
-	}
-	defer os.Remove(tarball)
-	extract := exec.Command("tar", "xzf", tarball, "-C", filepath.Dir(dest), "--strip-components=2", "mise/bin/mise")
-	extract.Stdout = w
-	extract.Stderr = w
-	if err := extract.Run(); err != nil {
-		return fmt.Errorf("mise extract: %w", err)
-	}
-	os.Chmod(dest, 0755) //nolint:errcheck
+	// The stamp is also what marks this mise as lerd's to update later.
+	_ = tools.WriteStamp("mise", v)
 	return nil
 }
 

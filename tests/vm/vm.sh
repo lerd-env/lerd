@@ -7,6 +7,7 @@
 #   vm.sh reset <guest> [snapshot]   revert to the phase 0 baseline (default clean-no-lerd)
 #   vm.sh push <guest> [repo-dir]    copy build/lerd, build/lerd-tray and install.sh to ~/rc
 #   vm.sh run <guest> <phase|all>    run phases/NN-*.sh there; PASS/FAIL lines here, the rest in logs/
+#                                    (a phase run alone builds the lerd and sites it needs first)
 #   vm.sh ssh <guest> <cmd...>       run one command there
 #   vm.sh status <guest>             where a run is now (phase, checks done, failures) and the finished phases
 #   vm.sh coverage <guest>           plan checkboxes that guest's logs cover, and the ones they don't
@@ -146,6 +147,12 @@ cmd_run() {
 		mapfile -t phases < <(ls "$HERE"/phases/"$(printf '%02d' "$((10#$which))")"-*.sh 2>/dev/null)
 	fi
 	[ ${#phases[@]} -gt 0 ] || die "no phase script for $which"
+	# Phase 1 is a fresh install: a leftover lerd or demo project turns every
+	# later phase into noise, so refuse to start rather than report it.
+	if [[ $(basename "${phases[0]}") == 01-* ]]; then
+		ssh "${SSH_OPTS[@]}" "$t" 'test ! -e ~/.local/bin/lerd && test ! -e ~/Projects/demo' ||
+			die "$guest is not clean (lerd installed or ~/Projects/demo exists); vm.sh reset it first"
+	fi
 	mkdir -p "$LOGS"
 	ssh "${SSH_OPTS[@]}" "$t" 'mkdir -p ~/lerd-vm/phases'
 	scp -q "$HERE/lib.sh" "$t:lerd-vm/"

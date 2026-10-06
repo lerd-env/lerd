@@ -694,6 +694,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 	serviceUnits = append(serviceUnits, lifecycle.InstalledCustomContainerUnits()...)
 	serviceUnits = append(serviceUnits, "lerd-ui", "lerd-watcher")
 	serviceUnits = dropSkipped(serviceUnits, skip)
+	serviceUnits = dropIdleSuspendedServiceUnits(serviceUnits)
 
 	// Phase 2: worker units that depend on running containers.
 	workerUnits := append(lifecycle.RegisteredQueueUnits(), lifecycle.RegisteredStripeUnits()...)
@@ -743,7 +744,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 		return jobs
 	}
 
-	startedServiceUnits := lifecycle.InstalledServiceUnits()
+	startedServiceUnits := dropIdleSuspendedServiceUnits(lifecycle.InstalledServiceUnits())
 	serviceErr := RunParallel(makeJobs(serviceUnits))
 	// When the Podman Machine's container storage is left corrupt after an
 	// unclean host shutdown, every container start fails. Remount storage and
@@ -860,7 +861,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 // installed but are not yet running. Called from lerd install to bring back services
 // (mysql, redis, etc.) that were restored from .lerd.yaml.
 func startRestoredServices() {
-	units := lifecycle.InstalledServiceUnits()
+	units := dropIdleSuspendedServiceUnits(lifecycle.InstalledServiceUnits())
 	if len(units) == 0 {
 		return
 	}
@@ -1008,11 +1009,35 @@ func reconcileCustomServices() {
 // units exist for all registered (non-paused) sites. This repairs state after
 // an uninstall/reinstall cycle where unit files were deleted but site configs
 // (sites.yaml, .lerd.yaml) were preserved.
+// Seams for restoreFrankenPHPQuadlet, so tests need no unit files.
+var (
+	frankenPHPUnitInstalled = func(name string) bool { return services.Mgr.ContainerUnitInstalled(name) }
+	writeFrankenPHPQuadlet  = podman.WriteFrankenPHPQuadlet
+)
+
+// restoreFrankenPHPQuadlet writes a FrankenPHP site's unit when it is missing,
+// as after a reinstall or a sites:restore. Only lerd install wrote it before,
+// so lerd start left the site proxying to a container that did not exist.
+func restoreFrankenPHPQuadlet(s config.Site) {
+	if !s.IsFrankenPHP() || !config.IsFrankenPHPVersion(s.PHPVersion) ||
+		frankenPHPUnitInstalled(podman.FrankenPHPContainerName(s.Name)) {
+		return
+	}
+	entrypoint, env := s.FrankenPHPQuadletSpec()
+	if err := writeFrankenPHPQuadlet(s.Name, s.Path, s.PHPVersion, entrypoint, env); err != nil {
+		feedback.Warn("restoring %s unit: %v", podman.FrankenPHPContainerName(s.Name), err)
+	}
+}
+
 func restoreSiteInfrastructure() {
 	reg, err := config.LoadSites()
 	if err != nil {
 		return
 	}
+
+	// FPM mounts the provided-env dir, so it has to exist before FPM starts.
+	ensureProvidedEnvDir()
+	defer beginProvidedEnvPass()()
 
 	seenPHP := map[string]bool{}
 	seenSvc := map[string]bool{}
@@ -1051,6 +1076,11 @@ func restoreSiteInfrastructure() {
 			}
 		}
 
+		// The provided-env file lives on tmpfs and is gone after a reboot.
+		if err := refreshProvidedEnv(s, false); err != nil {
+			feedback.Warn("%s: %v", s.Name, err)
+		}
+
 		// Restore the per-site quadlet (and image, if missing) for custom-FPM
 		// PHP sites, so they come back up on `lerd start` after a reinstall.
 		if s.IsCustomFPM() {
@@ -1067,6 +1097,8 @@ func restoreSiteInfrastructure() {
 				}
 			}
 		}
+
+		restoreFrankenPHPQuadlet(s)
 
 		// Restore FPM quadlet for this site's PHP version (shared-FPM PHP sites
 		// only; custom-FPM sites use their per-site container handled above).
@@ -1248,6 +1280,16 @@ func suspendedWorkerUnitSet() map[string]bool {
 // scheduled worker's timer is dropped too.
 func dropIdleSuspendedUnits(units []string) []string {
 	return filterSuspendedUnits(units, suspendedWorkerUnitSet())
+}
+
+// dropIdleSuspendedServiceUnits leaves the services idle-suspend put to sleep
+// out of a start list; the next request to a site using one wakes it.
+func dropIdleSuspendedServiceUnits(units []string) []string {
+	asleep := map[string]bool{}
+	for _, name := range config.IdleSuspendedServices() {
+		asleep["lerd-"+name] = true
+	}
+	return filterSuspendedUnits(units, asleep)
 }
 
 // filterSuspendedUnits is the pure filter behind dropIdleSuspendedUnits: it

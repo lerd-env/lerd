@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { dashboardOpen, closeDashboard } from '$stores/dashboard';
+  import { dashboardOpen, closeDashboard, keepServiceAwake } from '$stores/dashboard';
+  import { services } from '$stores/services';
   import ServiceIcon from './ServiceIcon.svelte';
   import {
     profilerEnabled,
@@ -48,6 +49,15 @@
   // The SPX Configuration form is collapsed by default so the report list
   // gets the whole view; the header button restores it on demand.
   let configHidden = $state(true);
+
+  // While a service's dashboard is open it counts as in use, so idle-suspend
+  // leaves it (and what it needs) awake until the overlay closes.
+  const openName = $derived($dashboardOpen?.name);
+  const openIsService = $derived(!!openName && $services.some((s) => s.name === openName));
+  $effect(() => {
+    if (!openName || !openIsService) return;
+    return keepServiceAwake(openName);
+  });
 
   const isProfiler = $derived($dashboardOpen?.name === 'profiler');
   // The documentation is served by the daemon out of the embedded pages, so it

@@ -88,10 +88,10 @@ func TestTabSkipsDetailWhenNoSite(t *testing.T) {
 	m := NewModel("test")
 	m.snap = Snapshot{} // no sites
 	m.switchTab(tabSites)
-	// With no site selected there is no detail pane, so tab stays on the list.
+	// With no site selected there is no detail pane, so tab stays on the sidebar.
 	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = next.(*Model)
-	if m.focus != paneSites {
+	if !m.sideFocus || m.focus != paneSites {
 		t.Fatalf("tab with no sites should stay on the sites pane, got %d", m.focus)
 	}
 }
@@ -118,9 +118,9 @@ func TestViewRendersCoreContent(t *testing.T) {
 	m.width, m.height = 120, 30
 	m.switchTab(tabSites)
 
-	// Sites tab: tab-bar labels plus the sites list and detail.
+	// Sites tab: the sidebar sections plus the sites and the detail.
 	out := m.render()
-	for _, want := range []string{"Dashboard", "Sites", "Services", "alpha", "beta"} {
+	for _, want := range []string{"Dashboard", "SITES", "SERVICES", "alpha", "beta"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("sites view missing %q\n---\n%s", want, out)
 		}

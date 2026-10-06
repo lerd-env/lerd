@@ -2,6 +2,7 @@
 # Phase 13, uninstall keeping data, then reinstall on top and serve again.
 # Destructive; runs last.
 source "$(dirname "$0")/../lib.sh"
+need_demo
 mode_before=$(tld)
 scheme=https
 [ "$mode_before" = localhost ] && scheme=http

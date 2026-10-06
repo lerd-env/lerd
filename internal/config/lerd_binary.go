@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -34,17 +33,6 @@ func LerdBinary() string {
 		return opt
 	}
 	return exe
-}
-
-// installedLerdBinary is the path to fall back on when the running executable
-// is not one anything may record: lerd's own install location, which the shims'
-// `[ -x "$LERD" ] || LERD=lerd` line covers if it turns out to be elsewhere.
-func installedLerdBinary() string {
-	if runtime.GOOS == "windows" {
-		return filepath.Join(BinDir(), "lerd.exe")
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "bin", "lerd")
 }
 
 // scratchRoots are the throwaway directories a lerd binary gets built and run

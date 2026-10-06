@@ -52,6 +52,11 @@ jobs:
       - name: Vet
         run: CGO_ENABLED=1 go vet ./...
 
+      - name: Cross-build for macOS
+        run: |
+          GOOS=darwin CGO_ENABLED=0 go build -tags nogui ./...
+          GOOS=darwin CGO_ENABLED=0 go vet -tags nogui ./...
+
       - name: Format
         run: test -z "$(gofmt -l .)"
 

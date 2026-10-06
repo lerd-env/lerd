@@ -35,6 +35,7 @@ func consoleCmdArgs(cwd, container, consoleCmd string, tty bool, args []string) 
 	}
 	cmdArgs := append(execFlags, terminalColorEnvArgs()...)
 	cmdArgs = append(cmdArgs, envpass.Args(cwd, os.Environ())...)
+	cmdArgs = append(cmdArgs, debugSiteEnvArgs(cwd)...)
 	cmdArgs = append(cmdArgs, "-w", cwd, container, "php", consoleCmd)
 	return append(cmdArgs, args...)
 }
@@ -50,6 +51,9 @@ func runConsole(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	// Before any branch: the host and native paths reach the same services.
+	ensureServicesForCwd(cwd)
 
 	// `lerd artisan native:run` has to reach the same host binary `lerd php
 	// artisan native:run` does, so the console name is put back in front of the
@@ -90,7 +94,6 @@ func runConsole(_ *cobra.Command, args []string) error {
 	}
 
 	podman.EnsurePathMounted(cwd, version)
-	ensureServicesForCwd(cwd)
 
 	cmd := podman.Cmd(consoleCmdArgs(cwd, container, consoleCmd, term.IsTerminal(int(os.Stdin.Fd())), args)...)
 	cmd.Stdin = os.Stdin

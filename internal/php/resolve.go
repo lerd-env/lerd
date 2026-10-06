@@ -61,6 +61,19 @@ func WorktreeRootFor(dir string) (string, *config.Site, bool) {
 	}
 }
 
+// SiteEnvArgs returns the LERD_SITE exec flag for a run in dir: the debug
+// bridge tags events with it and loads the site's env_provider values by it. A
+// worktree checkout reports its parent site, like tinker and the worktree vhost.
+func SiteEnvArgs(dir string) []string {
+	if _, parent, ok := WorktreeRootFor(dir); ok && parent != nil && parent.Name != "" {
+		return []string{"--env", "LERD_SITE=" + parent.Name}
+	}
+	if site, _ := config.FindSiteByPath(SiteRootFor(dir)); site != nil && site.Name != "" {
+		return []string{"--env", "LERD_SITE=" + site.Name}
+	}
+	return nil
+}
+
 // SiteRootFor returns the registered site path that contains dir, or dir itself
 // if no registered site matches. Commands run from anywhere in a project, so
 // this walks up to the project root the site was registered at.

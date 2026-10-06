@@ -28,7 +28,7 @@ func ok2(label string) {
 	fmt.Printf("  %s %s\n", feedback.Green(feedback.GlyphOK), label)
 }
 
-// paused2 reports an idle-suspended worker: stopped on purpose, resumes on the
+// paused2 reports an idle-suspended worker or service: stopped on purpose, resumes on the
 // next request, so it's shown green (healthy) as paused rather than missing.
 func paused2(label string) {
 	fmt.Printf("  %s %s %s\n", feedback.Green(feedback.GlyphOK), label, feedback.Dim("(paused, idle)"))
@@ -265,6 +265,10 @@ func runStatus(_ *cobra.Command, _ []string) error {
 		if ver := podman.ServiceVersionLabel(podman.InstalledImage(unit)); ver != "" {
 			label = svc + " " + ver
 		}
+		if status == "inactive" && config.ServiceIsIdleSuspended(svc) {
+			paused2(label)
+			continue
+		}
 		switch status {
 		case "active":
 			ok2(label)
@@ -295,6 +299,10 @@ func runStatus(_ *cobra.Command, _ []string) error {
 			label = svc.Name + " " + ver
 		}
 		label = label + " " + tag
+		if status == "inactive" && config.ServiceIsIdleSuspended(svc.Name) {
+			paused2(label)
+			continue
+		}
 		switch status {
 		case "active":
 			ok2(label)

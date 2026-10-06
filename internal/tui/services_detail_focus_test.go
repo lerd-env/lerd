@@ -28,7 +28,7 @@ func TestDetailPane_ServicesTabShowsServiceEvenWhenDetailFocused(t *testing.T) {
 	m.siteCursor = 0
 	m.svcCursor = 0
 
-	out := stripANSI(m.renderDetailInline(80, 24, true))
+	out := stripANSI(m.renderServiceView(80, 24))
 	if strings.Contains(out, "alpha.test") {
 		t.Fatalf("Services tab detail pane should not render the hidden site:\n%s", out)
 	}

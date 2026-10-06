@@ -127,8 +127,15 @@ var paletteCommands = []string{
 // particular pane — the prompt sits above the footer and is dismissed by
 // esc, so the user returns to whatever they were doing.
 func (m *Model) openPalette() {
+	m.openPaletteIn("", "")
+}
+
+// openPaletteIn opens the palette with input already typed, to run in dir.
+// Interactive commands like worktree add prompt in the terminal as usual.
+func (m *Model) openPaletteIn(dir, prefill string) {
 	m.paletteActive = true
-	m.paletteInput = ""
+	m.paletteInput = prefill
+	m.paletteDir = dir
 }
 
 // handlePaletteKey collects characters for the palette input, commits on
@@ -141,11 +148,14 @@ func (m *Model) handlePaletteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.paletteActive = false
 		m.paletteInput = ""
+		m.paletteDir = ""
 		return m, nil
 	case "enter":
 		raw := strings.TrimSpace(m.paletteInput)
+		dir := m.paletteDir
 		m.paletteActive = false
 		m.paletteInput = ""
+		m.paletteDir = ""
 		if raw == "" {
 			return m, nil
 		}
@@ -153,7 +163,7 @@ func (m *Model) handlePaletteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if len(args) == 0 {
 			return m, nil
 		}
-		return m, runPaletteCommand(raw, args)
+		return m, runPaletteCommand(raw, args, dir)
 	case "tab":
 		m.paletteInput = completePaletteInput(m.paletteInput, paletteCommands)
 		return m, nil
@@ -244,7 +254,7 @@ func longestCommonPrefix(in []string) string {
 // enter (or any line) returns to the dashboard. The status bar then
 // records a one-line summary so the user has lasting feedback even if
 // they want to refer back to the most recent action.
-func runPaletteCommand(raw string, args []string) tea.Cmd {
+func runPaletteCommand(raw string, args []string, dir string) tea.Cmd {
 	if !subprocessesAllowed {
 		return func() tea.Msg { return ActionResult{Summary: raw, Err: errNoSubprocess} }
 	}
@@ -259,6 +269,7 @@ func runPaletteCommand(raw string, args []string) tea.Cmd {
 	script := shQuote(self) + " " + shQuoteAll(args) +
 		`; status=$?; printf '\n[press enter to return to lerd tui] '; read _; exit $status`
 	cmd := exec.Command("sh", "-c", script)
+	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

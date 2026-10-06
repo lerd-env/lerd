@@ -129,6 +129,38 @@ PROJECTS=$HOME/Projects
 DEMO_DIR=$PROJECTS/demo
 SHOP_DIR=$PROJECTS/shop
 
+# need_lerd, need_demo, need_shop: the state the earlier phases leave, built
+# quietly when missing, so `vm.sh run <guest> 5` works on a freshly reset guest
+# without paying for phases 1 to 4. A setup that fails ends the phase.
+need_lerd() {
+	have lerd && return
+	echo "--- setup: installing the build in ~/rc"
+	bash "$HOME/rc/install.sh" --local "$HOME/rc/lerd" </dev/null >/dev/null 2>&1 || {
+		_fail "setup: install from ~/rc (vm.sh push first)"
+		exit 1
+	}
+}
+# demo as phase 2 leaves it: scaffolded, set up, and on https.
+need_demo() {
+	need_lerd
+	[ -d "$DEMO_DIR" ] && return
+	echo "--- setup: creating demo"
+	mkdir -p "$PROJECTS"
+	(cd "$PROJECTS" && lerd new demo && cd "$DEMO_DIR" && lerd setup --all --skip-open && lerd secure "$(site_name "$DEMO_DIR")") </dev/null >/dev/null 2>&1 || {
+		_fail "setup: create demo"
+		exit 1
+	}
+}
+need_shop() {
+	need_lerd
+	[ -d "$SHOP_DIR" ] && return
+	echo "--- setup: creating shop"
+	(mkdir -p "$PROJECTS" && cd "$PROJECTS" && lerd new shop --framework=symfony) </dev/null >/dev/null 2>&1 || {
+		_fail "setup: create shop"
+		exit 1
+	}
+}
+
 # pty_output <seconds> <cmd...>: what a command prints to a terminal, for
 # wizards that only ask on one; stops early once PTY_UNTIL (a regex) shows up.
 # The terminal gets a real size, or the prompt library draws nothing.
@@ -158,6 +190,85 @@ while time.time() < end:
         except OSError: break
 os.kill(pid, 9)
 sys.stdout.write(out.decode(errors="replace"))
+PY
+}
+
+# need_pyte: true once python3 can import pyte, installing the distro package
+# when it is missing; tui_screen replays the TUI through it.
+need_pyte() {
+	python3 -c 'import pyte' 2>/dev/null && return 0
+	if have apt-get; then sudo -n apt-get install -y -q python3-pyte >/dev/null 2>&1; fi
+	if have dnf; then sudo -n dnf install -y -q python3-pyte >/dev/null 2>&1; fi
+	if have pacman; then sudo -n pacman -S --noconfirm --needed python-pyte >/dev/null 2>&1; fi
+	python3 -c 'import pyte' 2>/dev/null
+}
+
+# tui_screen <cols> <rows> <step...>: runs lerd tui in a pty of that size and
+# prints the screen as a terminal would show it after the steps. The TUI only
+# redraws what changed, so the raw stream is replayed through pyte rather than
+# grepped. Steps: wait:<regex> (up to TUI_WAIT seconds, 30 by default, fails
+# the run), keys:<text> with
+# escapes (\x10 is ctrl+p, \t tab, \r enter, \x1b esc), sleep:<seconds>,
+# until:<regex>:<keys> (sends the keys, up to 30 times, until the regex shows).
+tui_screen() {
+	python3 - "$@" <<'PY'
+import codecs, fcntl, os, pty, re, select, struct, sys, termios, time
+import pyte
+cols, rows, steps = int(sys.argv[1]), int(sys.argv[2]), sys.argv[3:]
+pid, fd = pty.fork()
+if pid == 0:
+    fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+    # An unknown TERM keeps the renderer to cursor moves and plain text, which
+    # pyte replays exactly; xterm's scroll and repeat shortcuts it gets wrong.
+    os.environ["TERM"] = "vt220"
+    os.execvp("lerd", ["lerd", "tui"])
+screen = pyte.Screen(cols, rows)
+stream = pyte.ByteStream(screen)
+def pump(secs):
+    end = time.time() + secs
+    while time.time() < end:
+        r, _, _ = select.select([fd], [], [], 0.1)
+        if r:
+            try: stream.feed(os.read(fd, 65536))
+            except OSError: return
+def text(): return "\n".join(line.rstrip() for line in screen.display)
+ok = True
+pump(1)
+for step in steps:
+    kind, _, arg = step.partition(":")
+    if kind == "keys":
+        for ch in codecs.decode(arg, "unicode_escape"):
+            os.write(fd, ch.encode())
+            pump(0.15)
+    elif kind == "sleep":
+        pump(float(arg))
+    elif kind == "until":
+        regex, _, keys = arg.rpartition(":")
+        for _ in range(30):
+            if re.search(regex, text()):
+                break
+            for ch in codecs.decode(keys, "unicode_escape"):
+                os.write(fd, ch.encode())
+            pump(0.4)
+        if not re.search(regex, text()):
+            print("TUI-TIMEOUT pressing %r for /%s/" % (keys, regex))
+            ok = False
+            break
+    elif kind == "wait":
+        end = time.time() + int(os.environ.get("TUI_WAIT", "30"))
+        while not re.search(arg, text()) and time.time() < end:
+            pump(0.3)
+        if not re.search(arg, text()):
+            print("TUI-TIMEOUT waiting for /%s/" % arg)
+            ok = False
+            break
+pump(0.5)
+print(text())
+os.write(fd, b"\x03")
+pump(0.5)
+try: os.kill(pid, 9)
+except OSError: pass
+sys.exit(0 if ok else 1)
 PY
 }
 

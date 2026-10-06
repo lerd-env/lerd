@@ -47,7 +47,9 @@ func staleSelfMount(line string) (string, bool) {
 		return "", false
 	}
 	src, rest, found := strings.Cut(spec, ":")
-	if !found || !bindMountable(src) || strings.Contains(src, "%") {
+	// The provided-env dir is a self-mount only on macOS, where its source lives
+	// in the Podman Machine VM and so is never on the host's disk.
+	if !found || !bindMountable(src) || strings.Contains(src, "%") || src == ProvidedEnvVMDir {
 		return "", false
 	}
 	dst, _, _ := strings.Cut(rest, ":")

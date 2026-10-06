@@ -79,13 +79,7 @@ func fpmContainerForDir(dir, version string) string {
 // extension emits no site at all, which strands the notification (#1005). A
 // worktree checkout reports its parent site, like tinker and the worktree vhost.
 func debugSiteEnvArgs(dir string) []string {
-	if _, parent, ok := phpDet.WorktreeRootFor(dir); ok && parent != nil && parent.Name != "" {
-		return []string{"--env", "LERD_SITE=" + parent.Name}
-	}
-	if site, _ := config.FindSiteByPath(phpDet.SiteRootFor(dir)); site != nil && site.Name != "" {
-		return []string{"--env", "LERD_SITE=" + site.Name}
-	}
-	return nil
+	return phpDet.SiteEnvArgs(dir)
 }
 
 // terminalColorEnvArgs carries the attached terminal's colour capability into
@@ -112,6 +106,9 @@ func RunPHPCaptureEnv(cwd string, args []string, extraEnv []string) (int, error)
 // framework supports, since the empty parent directory would otherwise resolve
 // to the machine default and break composer's platform check.
 func RunPHPVersionCaptureEnv(cwd, version string, args []string, extraEnv []string) (int, error) {
+	// Before any branch: the host and native paths reach the same services.
+	ensureServicesForCwd(cwd)
+
 	// Some console commands cannot work in the container at all, and the
 	// framework says which. Checked before anything starts a container for them.
 	if code, took, err := runDeclaredHostCommand(cwd, args, extraEnv); took {
@@ -153,7 +150,6 @@ func RunPHPVersionCaptureEnv(cwd, version string, args []string, extraEnv []stri
 	}
 
 	podman.EnsurePathMounted(cwd, version)
-	ensureServicesForCwd(cwd)
 
 	// PHP runs the first non-option operand as its script. When that script is an
 	// absolute path the container can't read (e.g. /tmp/ide-phpinfo.php written by

@@ -195,6 +195,7 @@ phases once the next release makes it ordinary.
 | Composer's own home used for a global auth.json | 11 |
 | Node versions read from mise files, `lerd worktree setup`, empty manifests settling | 7, 10 |
 | Native capture seams, rebuilt native builds, no shared FPM containers on native | 14 |
+| Idle-suspend putting services to sleep, waking them per request | 6 |
 | Doctor explaining repeated macOS folder prompts, Xdebug across a runtime switch | 14 |
 
 ---
@@ -472,6 +473,19 @@ than flipping it to the canonical default.
 - [ ] `lerd fetch` names the versions whose image is built but that nothing
       serves from yet, and points at `lerd php:rebuild`, so `lerd php:list` and
       `lerd new` no longer contradict the command before them
+- [ ] A site whose `.lerd.yaml` declares `env_provider`: `lerd env` with no
+      terminal refuses it and names `lerd env --yes`; `lerd env --yes` runs it
+      and writes `$XDG_RUNTIME_DIR/lerd/env/<site>.env` with mode 0600, and
+      none of its values lands in the site's `.env`
+- [ ] **https → 200** with the provided values on the page, a quoted
+      multi-line value (a PEM key) whole, and `lerd php` in the site sees them
+      too, while an exec whose `LERD_SITE` names another site loads nothing
+- [ ] Two sites on the same FPM container giving one key different values
+      never see each other's across 400 alternating concurrent requests
+- [ ] A changed provider value reaches the next request after
+      `lerd env --yes`, with no restart
+- [ ] The demo's queue worker runs a job that sees the demo's provided value
+- [ ] Unlinking a site removes its provided-env file
 
 ---
 
@@ -562,6 +576,20 @@ Every service path that can pull says what it will fetch first:
 - [ ] The MCP server answers with the image and its size instead of starting a
       download on behalf of someone who never typed the command
 
+
+Removing a service and what it leaves behind:
+
+- [ ] `lerd service remove <svc>` on a service a site's `.lerd.yaml` still
+      lists: `lerd install` and `lerd link` skip it and it stays gone; the
+      site's card shows it "Not installed" with a + action that installs it
+- [ ] A service container nothing installed owns shows in the Resources card's
+      Orphaned list, and its trash button stops and removes it
+- [ ] RustFS's console opened straight after the service starts loads, rather
+      than answering "server context is not ready"
+- [ ] Mailpit embedded in the dashboard on lerd.localhost answers its API with
+      the browser's Origin and opens its live websocket, with no cors warning
+      in its log
+
 ---
 
 ## Phase 6 — workers
@@ -578,6 +606,43 @@ Every service path that can pull says what it will fetch first:
       hit the site and confirm they resume, **https → 200**
 - [ ] `lerd idle pin demo` keeps it awake; `lerd idle status` reports both states
 - [ ] `lerd idle off` resumes everything
+
+Idle-suspend can put services to sleep too (`idle_suspend.services`, off by
+default). Run this on at least two distros, with one mysql site on **https**,
+and `lerd idle timeout 1m` so each round takes a couple of minutes:
+
+- [ ] `lerd idle services on`: once every site using a service has been idle a
+      minute, `lerd idle status` lists it sleeping, `podman ps` shows only nginx,
+      dns and php-fpm, and the dashboard shows the moon and "N/M suspended"
+- [ ] A cold request to a sleeping site answers the app's own response in the
+      wake time, **https → 200**, with no redirect: `curl -sk` without `-L`.
+      Record the time; mysql lands around 1.3–1.6s, redis around 0.5s
+- [ ] A cold `curl -X POST -d a=1` reaches the app with its body and gets the
+      app's own answer (a 405 or 419 is fine), not a 307 and not the waking page
+- [ ] Fire a request the instant `lerd idle status` lists mysql, while its stop
+      is still running: it still answers **200**, and the watcher log shows mysql
+      waking straight away, not on the next tick
+- [ ] `lerd stop && lerd start` while asleep leaves the services asleep and the
+      next cold request still answers **200**
+- [ ] `lerd install` while asleep keeps the sites on their waking vhost
+      (`grep _lerd/wake` on the vhost) and the next cold request answers **200**
+- [ ] A site's `php artisan` (or the framework console) wakes its database, and
+      the next page load is warm with no redirect
+- [ ] Opening a sleeping service's dashboard shows the waking page, then the
+      dashboard; adminer wakes its databases with it, mailpit wakes spamassassin
+- [ ] A dashboard left open keeps its service awake past the timeout, and the
+      service sleeps once the overlay is closed
+- [ ] A sleeping engine's Databases tab wakes it and lists the databases, with
+      no "start the engine" hint and no connection error
+- [ ] Automatic snapshots on (`lerd db snapshot:auto on --every 1m`) with mysql
+      asleep since a change: restarting the watcher starts mysql once for every
+      due database, dumps them, and stops it again (a few seconds); a second
+      pass with nothing changed takes no snapshot
+- [ ] `lerd service pin <svc>` keeps it awake; the pin button sits in the
+      service's button group while services sleep
+- [ ] `lerd service stop <svc>` on a sleeping service keeps it stopped
+- [ ] `lerd idle services off` wakes everything, puts the real vhosts back, and
+      the sites answer **200**
 
 The named start commands are generated from the framework definition now, so
 what they accept has to come from the definition rather than from a fixed set:
@@ -871,8 +936,6 @@ Themes:
       Express, RabbitMQ, Kafbat, RedisInsight, the profiler) wears the theme's
       accent inside the frame and flips with the dashboard's mode
 
-TUI:
-
 - [ ] Switching services from the rail in a dark theme shows no white flash and
       no light fringe on the frame's corner
 - [ ] With the dashboard in another language than the browser, Adminer,
@@ -881,14 +944,44 @@ TUI:
       tones, and a theme carrying a `lerd.yaml` overrides them
 - [ ] On Plasma (bazzite) the rail and headers lift to the focused header
       colour while the window has focus and drop back when it loses it
-- [ ] `lerd tui` renders sites, services, workers with live status
-- [ ] Detail pane, inline domain and version editing, filter, sort all work
-- [ ] Shell drop-in and log tail work
-- [ ] The databases pane lists the databases and opens one
-- [ ] A service's client tools, tuning and entities are reachable, matching what
-      the web UI offers
-- [ ] Services with a web dashboard are marked, and opening one works
-- [ ] Destructive commands are **absent** (scope guard)
+
+TUI:
+
+- [ ] `lerd tui` opens on the dashboard beside a sidebar: Dashboard, Databases,
+      PHP & Node, Settings, then SITES and SERVICES with running/total counts,
+      and dns, nginx and the watcher at its foot with their state
+- [ ] Sites are grouped by workspace, and a folded workspace still shows a
+      crashed worker as ✖ with its count
+- [ ] Stopping the watcher puts "The watcher is stopped" under NEEDS ATTENTION;
+      `tab` then `r` runs `lerd start` and the dashboard returns to "Everything
+      is running"
+- [ ] A crashed worker shows as a card and on its site row; `r` restarts it and
+      `H` heals every crashed worker
+- [ ] Opening a site shows its URL, PHP and Node versions and https/lan flags
+      over the Overview, Logs, Env, Debug and Doctor tabs; `1`–`5` switch tabs
+      and Logs tails live
+- [ ] The Overview's reversible controls work: keep awake, the php-fpm and
+      FrankenPHP runtime, Horizon reload, the Stripe listener, open in editor or
+      folder, new worktree; suggested services are listed read-only
+- [ ] Databases lists each engine's databases with the `_testing` twin folded
+      into its row, creates and exports one; Services pins and adds presets; PHP
+      & Node sets the defaults and toggles Xdebug; Settings flips what the CLI can
+- [ ] `ctrl+p` lists pages, sites, worktrees, services, their actions and the
+      settings; words match in any order (`logs demo`), `enter` runs the entry,
+      and "Run a lerd command…" hands over to the `:` prompt
+- [ ] Destructive actions are **absent** from the keys and from `ctrl+p`:
+      nothing removes, drops, unlinks, restores, uninstalls, purges or resets
+      (scope guard)
+- [ ] Below 96 columns the sidebar folds away, and `tab` or `\` opens it over
+      the main area while `tab` or `esc` closes it again; below 60×12 only
+      "terminal too small" is drawn
+- [ ] Colours come from the terminal's own palette: a light and a dark profile
+      (and an Omarchy theme switch) each read cleanly, with no fixed background
+- [ ] Dialogs and toasts draw over the dimmed screen; the debug window's Logs,
+      Exceptions and Messages lenses fill from a request; a slow route shows its
+      hottest SPX function in the timing panel
+- [ ] Shell drop-in works, and a service with a web dashboard is marked and
+      opens it
 
 Tray:
 
@@ -968,6 +1061,12 @@ Other surfaces:
 - [ ] Runtime: `lerd runtime frankenphp` → **200**, `--worker` → **200**,
       `lerd octane:reload on`, then `lerd runtime fpm` → **200**
 
+- [ ] Stopping a service logs one "stopped" in the activity feed, not two
+- [ ] A stopped service's Logs tab says it is not running instead of retrying a
+      stream; a stopped worker still shows its journal
+- [ ] A site's suggested services sit faded with a dashed border and come back
+      to full on hover, while their + and × stay fully visible
+
 ---
 
 ## Phase 11 — diagnostics and housekeeping
@@ -1007,8 +1106,9 @@ Other surfaces:
 - [ ] Every installed quadlet's image counts as protected: a cleanup run while a
       site is stopped does not cost that site a rebuild
 - [ ] What a run reports freed is measured against the image store on both
-      sides and matches roughly what the disk gave back, and the preview says
-      at least rather than about
+      sides and matches the `podman system df` Images delta, says image store
+      rather than disk, and the preview says at least rather than about (on a
+      compressed filesystem the disk gives back less, as the docs explain)
 - [ ] The resources widget's disk figure is what lerd's images occupy whether or
       not any of it is reclaimable, and clicking it opens the breakdown heaviest
       first
@@ -1040,6 +1140,12 @@ Other surfaces:
       doctor is clean, **composer resolves packagist inside the container**.
       Remove the rig and restore autoconnect afterwards
 - [ ] `lerd quit` stops everything including `lerd-dns`, UI, watcher and tray
+
+
+- [ ] With a site's stripe listener asleep under idle-suspend, `lerd cleanup`
+      does not offer `docker.io/stripe/stripe-cli` for removal
+- [ ] After the reboot a site's `env_provider` values are served again once
+      `lerd start` has run, though tmpfs came back empty
 
 ---
 

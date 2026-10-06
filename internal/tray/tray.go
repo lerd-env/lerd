@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"time"
 
@@ -100,9 +99,7 @@ func defaultLerdBinCandidates() []string {
 	if exe, err := os.Executable(); err == nil {
 		cands = append(cands, filepath.Join(filepath.Dir(exe), lerdExeName()))
 	}
-	if runtime.GOOS != "windows" {
-		cands = append(cands, "/opt/homebrew/bin/lerd", "/usr/local/bin/lerd")
-	}
+	cands = append(cands, packagedLerdBins...)
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		cands = append(cands, filepath.Join(home, ".local", "bin", lerdExeName()))
 	}

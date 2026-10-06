@@ -2,6 +2,7 @@
 # Phase 3, the .localhost path and the DNS round trip. Leaves the guest in the
 # mode it started in.
 source "$(dirname "$0")/../lib.sh"
+need_demo
 cd "$DEMO_DIR" || exit 1
 start_mode=$(tld)
 name=$(site_name "$DEMO_DIR")

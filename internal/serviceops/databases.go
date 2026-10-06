@@ -473,6 +473,9 @@ func ImportDatabase(service, database string, r io.Reader, opt ImportOptions) (I
 			return ImportReport{}, err
 		}
 	}
+	if err := wakeForData(service); err != nil {
+		return ImportReport{}, err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), dumpRestoreTimeout)
 	defer cancel()
 	// Same runtime resolution the export side uses: an engine whose own image

@@ -31,12 +31,7 @@ const Version = "0.10.0"
 
 // binName is the executable's name, both inside the release archive and in
 // BinDir: the Windows build ships phpantom_lsp.exe.
-func binName() string {
-	if runtime.GOOS == "windows" {
-		return "phpantom_lsp.exe"
-	}
-	return "phpantom_lsp"
-}
+func binName() string { return config.ExeName("phpantom_lsp") }
 
 // BinPath is the managed location of the phpantom_lsp executable.
 func BinPath() string {
