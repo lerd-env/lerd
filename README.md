@@ -328,7 +328,7 @@ Lerd is free and open source, kept going by the people and companies who sponsor
 
 ### Backers
 
-[Edward van Tonder](https://github.com/EA-Wardie) · [rolaca11](https://github.com/rolaca11) · [rais](https://github.com/raisilhamn) · [Anca Emcken](https://github.com/ancaemcken)
+[Edward van Tonder](https://github.com/EA-Wardie) · [rolaca11](https://github.com/rolaca11) · [rais](https://github.com/raisilhamn) · [Anca Emcken](https://github.com/ancaemcken) · [Allen](https://github.com/yilanboy)
 
 ## Built on
 
