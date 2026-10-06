@@ -71,6 +71,10 @@ func WriteQuadletDiff(name, content string) (changed bool, err error) {
 	}
 	content = BindQuadletForLAN(name, content, lanExposed, servicesExposed)
 	content = applyIPv6BindPolicy(content)
+	// A service idle-suspend holds asleep stays off the boot target until it wakes.
+	if svc := strings.TrimPrefix(name, "lerd-"); svc != name && config.ServiceIsIdleSuspended(svc) {
+		autostartDisabled = true
+	}
 	content = StripInstallSection(content, autostartDisabled)
 	// Centralised platform image rewrite + podman-run flags so every quadlet
 	// writer emits identical units. On Apple Silicon PlatformImage swaps

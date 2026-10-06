@@ -57,7 +57,7 @@ server {
         try_files $uri $uri/ /index.php?$query_string;
     }
 
-    location ~ \.php$ {
+    location ~ {{if .FrontController}}^/index\.php(/|$){{else}}\.php${{end}} {
         set $fpm "{{.FPMContainer}}";
         fastcgi_pass $fpm:{{.FPMPort}};
         fastcgi_index index.php;
@@ -69,7 +69,9 @@ server {
         fastcgi_buffers 16 16k;
         fastcgi_buffer_size 32k;
         include fastcgi_params;
-        fastcgi_param HTTP_HOST $real_forwarded_host;
+{{if .FrontController}}        fastcgi_split_path_info ^(.+\.php)(/.*)$;
+        fastcgi_param PATH_INFO $fastcgi_path_info;
+{{end}}        fastcgi_param HTTP_HOST $real_forwarded_host;
         fastcgi_param SERVER_NAME $real_forwarded_host;
         fastcgi_param HTTP_X_FORWARDED_HOST $real_forwarded_host;
         fastcgi_param HTTP_X_FORWARDED_PROTO $real_forwarded_proto;
@@ -82,7 +84,11 @@ server {
 {{end}}        include /etc/nginx/custom.d/{{.Domain}}.location.conf*;
     }
 
-    location ~ /\.ht {
+{{if .FrontController}}    location ~ \.php$ {
+        rewrite ^ /index.php last;
+    }
+
+{{end}}    location ~ /\.ht {
         deny all;
     }
 

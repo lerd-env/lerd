@@ -540,6 +540,9 @@ nginx:
       try_files $uri $uri/ /static.php?$args;
     }
 
+# Hand every .php URL to index.php instead of the file it names (optional)
+front_controller: true
+
 # What a new worktree needs once its env file is seeded (optional)
 worktree:
   db_isolation: required              # required | (unset, which prompts as usual)
@@ -776,6 +779,8 @@ A git worktree of the site gets the same block, expanded against its own checkou
 The snippet must have balanced braces, since an unbalanced one would close the enclosing `server` block and start declaring its own. Balance alone is not enough, because a `}` followed by a `server {` still balances, so the values substituted into the placeholders are rejected too if they contain `{`, `}`, `;`, `#`, or a newline. A snippet failing either check is dropped and the site renders without it, rather than risking an nginx config that fails to load for every site.
 
 Snippets are only honoured from the framework store and from user-defined definitions: an embedded `framework_def` in a project's `.lerd.yaml` is untrusted input, so its `nginx` block is stripped, the same way its host workers and command-type doctor checks are.
+
+An app whose router owns its `.php` URLs needs no snippet at all. `front_controller: true` makes `index.php` the only script nginx runs: a request for any other `.php` file is rewritten onto it, with the original URL still in `REQUEST_URI`, and `PATH_INFO` is split off for URLs like `/index.php/api/status`. GLPI 11 is the case it exists for, where `/front/central.php` is a route rather than a file on disk. It is plain routing rather than raw config, so unlike the snippet it is kept in an embedded `framework_def`, and a project can also set it on its own in `.lerd.yaml` (see [nginx overrides](nginx-overrides.md#a-single-front-controller)).
 
 This is distinct from the per-site [nginx override](nginx-overrides.md) in `custom.d/`, which you author yourself and which is included at the *end* of the server block. Use the framework snippet for what every site of that framework needs; use the override for what one site needs.
 

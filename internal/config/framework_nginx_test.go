@@ -76,3 +76,12 @@ func TestSanitizeProjectFrameworkDefStripsNginx(t *testing.T) {
 		t.Fatal("sanitize mutated the caller's definition")
 	}
 }
+
+// front_controller is a routing switch, not raw config, so the one nginx
+// behaviour a project's embedded framework_def keeps.
+func TestSanitizeProjectFrameworkDefKeepsFrontController(t *testing.T) {
+	safe := SanitizeProjectFrameworkDef(&Framework{Name: "glpi", FrontController: true})
+	if !safe.FrontController {
+		t.Fatal("front_controller was stripped from the project definition")
+	}
+}

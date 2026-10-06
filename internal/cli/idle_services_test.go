@@ -26,6 +26,7 @@ type fakeIdleServices struct {
 func installFakeIdleServices(t *testing.T) *fakeIdleServices {
 	t.Helper()
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	f := &fakeIdleServices{up: map[string]bool{}, users: map[string][]config.Site{}, deps: map[string][]string{}}
 	stop, ensure, up, using, swap, restore, reload, deps := idleStopService, idleEnsureService, idleServiceUp, idleSitesUsing, idleSwapToWaking, idleRestoreVhost, idleReloadNginx, idleDependentsOf
 	t.Cleanup(func() {
