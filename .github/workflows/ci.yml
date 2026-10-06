@@ -13,18 +13,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      # Hashes every input of the steps below, so an unchanged UI reuses the last
+      # dist and skips the build, its tests and the license check that reads node_modules.
+      - id: ui-cache
+        uses: actions/cache@v4
+        with:
+          path: internal/ui/web/dist
+          key: ui-${{ hashFiles('internal/ui/web/**', 'go.mod', 'go.sum', 'tools/licensegen/**', 'internal/licenses/**', 'Makefile') }}
+
+      - if: steps.ui-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
 
-      - uses: actions/setup-node@v4
+      - if: steps.ui-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: internal/ui/web/package-lock.json
 
       - name: Build UI
+        if: steps.ui-cache.outputs.cache-hit != 'true'
         run: make build-ui
 
       # Every Go job embeds web/dist, so it is built once here and shared.
@@ -37,9 +48,11 @@ jobs:
           retention-days: 1
 
       - name: Test UI
+        if: steps.ui-cache.outputs.cache-hit != 'true'
         run: make test-ui
 
       - name: Third-party licenses
+        if: steps.ui-cache.outputs.cache-hit != 'true'
         run: |
           make licenses
           git diff --exit-code internal/licenses/THIRD-PARTY-LICENSES.md
@@ -51,23 +64,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - id: go
+        uses: ./.github/actions/go-job
         with:
-          go-version-file: go.mod
-          cache: true
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: ui-dist
-          path: internal/ui/web/dist
-
-      - name: Install tray build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --fix-missing libayatana-appindicator3-dev
+          tray-deps: "true"
 
       - name: Test
         run: CGO_ENABLED=1 go test ./...
+
+      # Saved on pushes only: PR runs restore it, and keeping them out leaves
+      # the repo's 10 GB cache budget to the builds every branch starts from.
+      - if: ${{ !cancelled() && github.event_name == 'push' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+          key: ${{ steps.go.outputs.cache-key }}
 
   race:
     name: Test (race)
@@ -76,23 +89,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - id: go
+        uses: ./.github/actions/go-job
         with:
-          go-version-file: go.mod
-          cache: true
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: ui-dist
-          path: internal/ui/web/dist
-
-      - name: Install tray build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --fix-missing libayatana-appindicator3-dev
+          tray-deps: "true"
 
       - name: Test with the race detector
         run: CGO_ENABLED=1 go test -race ./...
+
+      - if: ${{ !cancelled() && github.event_name == 'push' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+          key: ${{ steps.go.outputs.cache-key }}
 
   lint:
     name: Build, Vet & Format
@@ -101,20 +112,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - id: go
+        uses: ./.github/actions/go-job
         with:
-          go-version-file: go.mod
-          cache: true
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: ui-dist
-          path: internal/ui/web/dist
-
-      - name: Install tray build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --fix-missing libayatana-appindicator3-dev
+          tray-deps: "true"
 
       - name: Build
         run: CGO_ENABLED=1 go build -o /dev/null ./cmd/lerd
@@ -133,6 +134,14 @@ jobs:
       - name: Vulnerabilities
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
+      - if: ${{ !cancelled() && github.event_name == 'push' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+          key: ${{ steps.go.outputs.cache-key }}
+
   test-macos:
     name: Test (macOS)
     needs: ui
@@ -140,18 +149,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: ui-dist
-          path: internal/ui/web/dist
+      - id: go
+        uses: ./.github/actions/go-job
 
       - name: Test
         run: CGO_ENABLED=0 go test -tags nogui ./...
+
+      - if: ${{ !cancelled() && github.event_name == 'push' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+          key: ${{ steps.go.outputs.cache-key }}
 
   lint-macos:
     name: Build & Vet (macOS)
@@ -160,21 +170,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: ui-dist
-          path: internal/ui/web/dist
+      - id: go
+        uses: ./.github/actions/go-job
 
       - name: Build (nogui)
         run: CGO_ENABLED=0 go build -tags nogui -o /dev/null ./cmd/lerd
 
       - name: Vet
         run: CGO_ENABLED=0 go vet -tags nogui ./...
+
+      - if: ${{ !cancelled() && github.event_name == 'push' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+          key: ${{ steps.go.outputs.cache-key }}
 
   docs:
     name: Docs
