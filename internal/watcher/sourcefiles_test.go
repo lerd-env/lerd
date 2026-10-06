@@ -23,18 +23,13 @@ func TestWatchSourceFiles_savesFireActivity(t *testing.T) {
 	}
 
 	activity := make(chan string, 8)
-	stop := make(chan struct{})
-	defer close(stop)
-	go func() {
-		_ = WatchSourceFiles(
-			func() []SourceTarget {
-				return []SourceTarget{{Key: "mysite", Dirs: []string{root}}}
-			},
-			40*time.Millisecond,
-			func(key string) { activity <- key },
-			stop,
-		)
-	}()
+	watchInBackground(t,
+		func() []SourceTarget {
+			return []SourceTarget{{Key: "mysite", Dirs: []string{root}}}
+		},
+		40*time.Millisecond,
+		func(key string) { activity <- key },
+	)
 	// Let the initial scan register the directory watches.
 	time.Sleep(300 * time.Millisecond)
 
@@ -82,16 +77,11 @@ func TestWatchSourceFiles_skipsOversizedDir(t *testing.T) {
 	}
 
 	activity := make(chan string, 8)
-	stop := make(chan struct{})
-	defer close(stop)
-	go func() {
-		_ = WatchSourceFiles(
-			func() []SourceTarget { return []SourceTarget{{Key: "mysite", Dirs: []string{root}}} },
-			40*time.Millisecond,
-			func(key string) { activity <- key },
-			stop,
-		)
-	}()
+	watchInBackground(t,
+		func() []SourceTarget { return []SourceTarget{{Key: "mysite", Dirs: []string{root}}} },
+		40*time.Millisecond,
+		func(key string) { activity <- key },
+	)
 	time.Sleep(300 * time.Millisecond)
 
 	// A write in the oversized dir must not report activity: it was skipped.
@@ -191,20 +181,15 @@ func TestWatchSourceFiles_picksUpATargetAddedLater(t *testing.T) {
 	targets := []SourceTarget{{Key: "first", Dirs: []string{first}}}
 
 	activity := make(chan string, 8)
-	stop := make(chan struct{})
-	defer close(stop)
-	go func() {
-		_ = WatchSourceFiles(
-			func() []SourceTarget {
-				mu.Lock()
-				defer mu.Unlock()
-				return append([]SourceTarget(nil), targets...)
-			},
-			30*time.Millisecond,
-			func(key string) { activity <- key },
-			stop,
-		)
-	}()
+	watchInBackground(t,
+		func() []SourceTarget {
+			mu.Lock()
+			defer mu.Unlock()
+			return append([]SourceTarget(nil), targets...)
+		},
+		30*time.Millisecond,
+		func(key string) { activity <- key },
+	)
 	time.Sleep(300 * time.Millisecond)
 
 	// Register the second site the way linking one would.
@@ -240,16 +225,11 @@ func TestWatchSourceFiles_newSubdirWatchedWithoutAResync(t *testing.T) {
 	}
 
 	activity := make(chan string, 8)
-	stop := make(chan struct{})
-	defer close(stop)
-	go func() {
-		_ = WatchSourceFiles(
-			func() []SourceTarget { return []SourceTarget{{Key: "mysite", Dirs: []string{root}}} },
-			30*time.Millisecond,
-			func(key string) { activity <- key },
-			stop,
-		)
-	}()
+	watchInBackground(t,
+		func() []SourceTarget { return []SourceTarget{{Key: "mysite", Dirs: []string{root}}} },
+		30*time.Millisecond,
+		func(key string) { activity <- key },
+	)
 	time.Sleep(300 * time.Millisecond)
 
 	nested := filepath.Join(root, "src", "Http", "Controllers")
@@ -271,4 +251,20 @@ func TestWatchSourceFiles_newSubdirWatchedWithoutAResync(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("a subdirectory created under a watched tree never got watched")
 	}
+}
+
+// watchInBackground runs WatchSourceFiles until the test ends and waits for it
+// to return, so its next tick cannot read the rescan knobs a later test sets.
+func watchInBackground(t *testing.T, targets func() []SourceTarget, debounce time.Duration, onActivity func(string)) {
+	t.Helper()
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = WatchSourceFiles(targets, debounce, onActivity, stop)
+	}()
+	t.Cleanup(func() {
+		close(stop)
+		<-done
+	})
 }
