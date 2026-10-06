@@ -94,7 +94,7 @@ container images are a separate distribution with their own notices.
 | go.uber.org/multierr | v1.11.0 | MIT |
 | go.uber.org/zap | v1.28.0 | MIT |
 | go.yaml.in/yaml/v3 | v3.0.5 | Apache-2.0 |
-| golang.org/x/crypto | v0.55.0 | BSD-3-Clause |
+| golang.org/x/crypto | v0.56.0 | BSD-3-Clause |
 | golang.org/x/net | v0.58.0 | BSD-3-Clause |
 | golang.org/x/sync | v0.22.0 | BSD-3-Clause |
 | golang.org/x/sys | v0.47.0 | BSD-3-Clause |
@@ -4523,7 +4523,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ```
 
-### golang.org/x/crypto v0.55.0, golang.org/x/net v0.58.0, golang.org/x/sync v0.22.0, golang.org/x/sys v0.47.0, golang.org/x/term v0.45.0, golang.org/x/text v0.41.0
+### golang.org/x/crypto v0.56.0, golang.org/x/net v0.58.0, golang.org/x/sync v0.22.0, golang.org/x/sys v0.47.0, golang.org/x/term v0.45.0, golang.org/x/text v0.41.0
 
 BSD-3-Clause
 
@@ -5340,7 +5340,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 | devalue | 5.9.4 | MIT |
 | dom-accessibility-api | 0.5.16 | MIT |
 | dom-accessibility-api | 0.6.3 | MIT |
-| dompurify | 3.4.14 | (MPL-2.0 OR Apache-2.0) |
+| dompurify | 3.4.16 | (MPL-2.0 OR Apache-2.0) |
 | dunder-proto | 1.0.1 | MIT |
 | enhanced-resolve | 5.21.3 | MIT |
 | entities | 6.0.1 | BSD-2-Clause |
@@ -5414,7 +5414,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 | safer-buffer | 2.1.2 | MIT |
 | saxes | 6.0.0 | ISC |
 | siginfo | 2.0.0 | ISC |
-| source-map-js | 1.2.1 | BSD-3-Clause |
+| source-map-js | 1.2.2 | BSD-3-Clause |
 | sqlite-wasm-kysely | 0.3.0 | MIT |
 | stackback | 0.0.2 | MIT |
 | std-env | 4.1.0 | MIT |
@@ -7098,7 +7098,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### dompurify 3.4.14
+### dompurify 3.4.16
 
 (MPL-2.0 OR Apache-2.0)
 
@@ -10333,7 +10333,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
 
-### source-map-js 1.2.1
+### source-map-js 1.2.2
 
 BSD-3-Clause
 
