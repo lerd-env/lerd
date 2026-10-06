@@ -202,6 +202,9 @@ type VhostData struct {
 	// placeholder-expanded and indented. Rendered ahead of the generic
 	// locations so a framework can claim paths they would otherwise swallow.
 	FrameworkNginx string
+	// FrontController narrows the php location to index.php and rewrites every
+	// other .php URL onto it. Resolved by resolveFrontController.
+	FrontController bool
 }
 
 // HTTPSRedirectHost is $host with the configured HTTPS port appended when nginx
@@ -429,6 +432,16 @@ func resolveRequestTimeout(sitePath, phpVersion string) int {
 	return config.DefaultRequestTimeout
 }
 
+// resolveFrontController reports whether the site routes all php through
+// index.php, set by the project's .lerd.yaml or by its framework definition.
+func resolveFrontController(site config.Site) bool {
+	if pc, err := config.LoadProjectConfig(site.Path); err == nil && pc.FrontController {
+		return true
+	}
+	fw, ok := config.GetFrameworkForDir(site.Framework, site.Path)
+	return ok && fw.FrontController
+}
+
 // xdebugDebugRequestTimeout is what a site gets while its PHP version runs
 // Xdebug in debug mode. A request stopped at a breakpoint sends nginx nothing,
 // so the 60s default answers 504 over a session that is still perfectly alive,
@@ -524,6 +537,7 @@ func renderFPMVhost(site config.Site, phpVersion string, ssl bool) ([]byte, erro
 		Profiling:       profilerEnabled(),
 		RequestTimeout:  resolveRequestTimeout(site.Path, phpVersion),
 		FrameworkNginx:  resolveFrameworkNginx(site, publicDir, fpmContainer),
+		FrontController: resolveFrontController(site),
 	}
 	if ssl {
 		data.CertDomain = site.PrimaryDomain()
@@ -781,6 +795,7 @@ func GenerateWorktreeVhost(domain, path, phpVersion, siteName, branch string) er
 		Profiling:       profilerEnabled(),
 		RequestTimeout:  resolveRequestTimeout(path, phpVersion),
 		FrameworkNginx:  frameworkNginx,
+		FrontController: resolveFrontController(worktreeSite(domain, path, siteName)),
 	}
 
 	rendered, err := renderVhost(tmpl, data)
@@ -829,6 +844,7 @@ func GenerateWorktreeSSLVhost(domain, path, phpVersion, parentDomain, siteName, 
 		Profiling:       profilerEnabled(),
 		RequestTimeout:  resolveRequestTimeout(path, phpVersion),
 		FrameworkNginx:  frameworkNginx,
+		FrontController: resolveFrontController(worktreeSite(domain, path, siteName)),
 	}
 
 	rendered, err := renderVhost(tmpl, data)
