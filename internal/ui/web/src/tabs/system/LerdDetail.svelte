@@ -225,13 +225,13 @@
   }
 </script>
 
-<div class="flex-1 overflow-y-auto">
-  <div class="flex flex-wrap items-center justify-between gap-y-2 px-3 py-1.5 page-header">
+<div class="flex-1 flex flex-col min-h-0">
+  <div class="shrink-0 flex flex-wrap items-center justify-between gap-y-2 px-3 py-1.5 page-header">
     <span class="font-semibold text-gray-900 dark:text-white text-base">{m.system_lerd()}</span>
     <VersionPill />
   </div>
 
-  <div class="p-3 space-y-3 @container">
+  <div class="flex-1 min-h-0 overflow-y-auto p-3 space-y-3 @container">
     <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-3">
     <!-- One grid, with each row pairing cards of about the same height, so a
          card never stretches around empty space and a row never ends with a
