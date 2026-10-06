@@ -4,6 +4,7 @@ import Harness from './SiteHeader.test.svelte';
 import type { Site } from '$stores/sites';
 import { frameworkMarks } from '$stores/frameworkMarks';
 import { accessMode } from '$stores/accessMode';
+import { editors } from '$stores/editors';
 import { status } from '$stores/status';
 
 const site = {
@@ -137,7 +138,7 @@ describe('SiteHeader', () => {
 
   // Group and workspace leave the bar on a narrow header, so the overflow menu carries them.
   it('offers group and workspace in the overflow menu', async () => {
-    accessMode.set({ localControl: true, lanExposed: false, checked: true });
+    accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
     status.update((s) => ({ ...s, workspaces: ['client-a'] }));
     const { getByLabelText, getByRole } = render(Harness, { props: { site: { ...site, name: 'app' } as unknown as Site } });
 
@@ -145,6 +146,20 @@ describe('SiteHeader', () => {
     const menu = getByRole('menu');
     expect(menu).toHaveTextContent('Group with another site');
     expect(menu).toHaveTextContent('client-a');
+  });
+
+  // The editor opens on the host's desktop, so a remote session never sees it,
+  // even one with full access.
+  it('offers the editor only on the lerd host itself', () => {
+    editors.set({ editors: [], global: 'phpstorm' });
+    accessMode.set({ localControl: true, local: false, lanExposed: true, checked: true });
+    const remote = render(Harness, { props: { site } });
+    expect(remote.queryByLabelText('Open in editor')).not.toBeInTheDocument();
+    remote.unmount();
+
+    accessMode.set({ localControl: true, local: true, lanExposed: true, checked: true });
+    const { getByLabelText } = render(Harness, { props: { site } });
+    expect(getByLabelText('Open in editor')).toBeInTheDocument();
   });
 
   describe('without git', () => {

@@ -1623,14 +1623,13 @@
   "setup_theme_cta": "{name} を使う",
   "sites_openInEditor": "エディタで開く",
   "editor_label": "エディタ",
-  "editor_auto": "インストール済みを検出",
   "editor_custom": "カスタムコマンド",
   "editor_settingsTitle": "エディタ",
-  "editor_settingsDescription": "Debug ウィンドウのファイルパスを開くエディタ。サイトごとにコントロールで選べます。",
+  "editor_settingsDescription": "サイトヘッダーがプロジェクトを、Debug ウィンドウがファイルパスを開くエディタ。無効の場合も、ファイルパスはインストール済みのエディタで開きます。",
   "editor_groupFound": "このシステムで検出",
   "editor_groupOther": "選択",
   "editor_customOption": "カスタム…",
   "editor_customTitle": "カスタムエディタ",
   "editor_customHint": "パスと行の位置に {file} と {line} を使います。URL (scheme://…) はデスクトップ経由で開き、それ以外はコマンドとして実行されます。",
-  "editor_default": "既定のエディタ"
+  "editor_disabled": "無効"
 }

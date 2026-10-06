@@ -303,12 +303,15 @@
       ev.stopPropagation();
     }
   }
+  // Only the host may read the editor choice; a remote session would get a 403.
+  $effect(() => {
+    if ($accessMode.local) loadEditors();
+  });
   async function openEditor() {
     const res = await openInEditor(site.domain, activeWorktreeBranch);
     if (!res.ok) openErrorModal(res.error ?? '');
   }
   onMount(() => {
-    loadEditors();
     document.addEventListener('click', onDocClick, true);
     document.addEventListener('keydown', onDocKey);
   });
@@ -713,7 +716,7 @@
         </button>
       {/if}
 
-      {#if $accessMode.localControl && (site.editor || $editors.global)}
+      {#if $accessMode.local && $editors.global}
         <button
           type="button"
           onclick={() => openEditor()}

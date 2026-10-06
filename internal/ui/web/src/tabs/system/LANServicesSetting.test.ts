@@ -20,7 +20,7 @@ function setLAN(over: Partial<{ exposed: boolean; servicesEnabled: boolean; serv
 
 describe('LANServicesSetting', () => {
   beforeEach(() => {
-    accessMode.set({ localControl: true, lanExposed: false, checked: true });
+    accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
     setLAN({});
   });
 
@@ -46,7 +46,7 @@ describe('LANServicesSetting', () => {
   });
 
   it('shows read-only state instead of a toggle without dashboard-control authority', () => {
-    accessMode.set({ localControl: false, lanExposed: true, checked: true });
+    accessMode.set({ localControl: false, local: false, lanExposed: true, checked: true });
     setLAN({ exposed: true });
     const { queryByTitle, container } = render(LANServicesSetting);
     expect(queryByTitle('Managed service LAN access')).toBeNull();
@@ -55,7 +55,7 @@ describe('LANServicesSetting', () => {
 
   // Read-only state is a three-way pill: reachable, armed but inert, off.
   it('reads the three service states without dashboard-control authority', () => {
-    accessMode.set({ localControl: false, lanExposed: true, checked: true });
+    accessMode.set({ localControl: false, local: false, lanExposed: true, checked: true });
     setLAN({ exposed: true, servicesEnabled: true, servicesReachable: true });
     expect(render(LANServicesSetting).container.textContent).toContain('enabled');
 
@@ -72,7 +72,7 @@ describe('LANServicesSetting', () => {
 
 describe('LANServicesSetting while lerd is loopback only', () => {
   beforeEach(() => {
-    accessMode.set({ localControl: true, lanExposed: false, checked: true });
+    accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
     setLAN({ exposed: false, servicesEnabled: false });
   });
 

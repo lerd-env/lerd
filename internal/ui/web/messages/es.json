@@ -1623,14 +1623,13 @@
   "setup_theme_cta": "Usar {name}",
   "sites_openInEditor": "Abrir en el editor",
   "editor_label": "Editor",
-  "editor_auto": "Detectar editor instalado",
   "editor_custom": "Comando propio",
   "editor_settingsTitle": "Editor",
-  "editor_settingsDescription": "El editor en el que se abren las rutas de archivo de la ventana Debug. Cada sitio puede elegir el suyo en sus controles.",
+  "editor_settingsDescription": "El editor en el que la cabecera del sitio abre el proyecto y la ventana Debug abre las rutas de archivo. Desactivado, las rutas se siguen abriendo en un editor instalado.",
   "editor_groupFound": "Encontrados en este sistema",
   "editor_groupOther": "Elegir",
   "editor_customOption": "Personalizado…",
   "editor_customTitle": "Editor personalizado",
   "editor_customHint": "Usa {file} y {line} donde van la ruta y la línea. Una URL (scheme://…) se abre a través del escritorio; cualquier otra cosa se ejecuta como comando.",
-  "editor_default": "Editor predeterminado"
+  "editor_disabled": "Desactivado"
 }

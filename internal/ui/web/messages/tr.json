@@ -1623,14 +1623,13 @@
   "setup_theme_cta": "{name} kullan",
   "sites_openInEditor": "Düzenleyicide aç",
   "editor_label": "Editör",
-  "editor_auto": "Kurulu editörü bul",
   "editor_custom": "Özel komut",
   "editor_settingsTitle": "Editör",
-  "editor_settingsDescription": "Debug penceresindeki dosya yollarının açıldığı editör. Her site kendi denetimlerinden ayrı bir editör seçebilir.",
+  "editor_settingsDescription": "Site başlığının projeyi, Debug penceresinin dosya yollarını açtığı editör. Devre dışıyken dosya yolları yine kurulu bir editörde açılır.",
   "editor_groupFound": "Bu sistemde bulunanlar",
   "editor_groupOther": "Seç",
   "editor_customOption": "Özel…",
   "editor_customTitle": "Özel editör",
   "editor_customHint": "Yol ve satırın geleceği yerlere {file} ve {line} yaz. URL (scheme://…) masaüstü üzerinden açılır, diğer her şey komut olarak çalışır.",
-  "editor_default": "Varsayılan editör"
+  "editor_disabled": "Devre dışı"
 }

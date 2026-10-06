@@ -1623,14 +1623,13 @@
   "setup_theme_cta": "Usar {name}",
   "sites_openInEditor": "Abrir no editor",
   "editor_label": "Editor",
-  "editor_auto": "Detectar editor instalado",
   "editor_custom": "Comando personalizado",
   "editor_settingsTitle": "Editor",
-  "editor_settingsDescription": "O editor em que os caminhos de arquivo da janela Debug abrem. Um site pode escolher o seu nos controles dele.",
+  "editor_settingsDescription": "O editor em que o cabeçalho do site abre o projeto e a janela Debug abre os caminhos de arquivo. Desativado, os caminhos continuam abrindo em um editor instalado.",
   "editor_groupFound": "Encontrados neste sistema",
   "editor_groupOther": "Escolher",
   "editor_customOption": "Personalizado…",
   "editor_customTitle": "Editor personalizado",
   "editor_customHint": "Use {file} e {line} onde entram o caminho e a linha. Uma URL (scheme://…) abre pelo desktop, qualquer outra coisa roda como comando.",
-  "editor_default": "Editor padrão"
+  "editor_disabled": "Desativado"
 }

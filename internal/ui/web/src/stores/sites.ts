@@ -62,8 +62,6 @@ export interface Site {
   has_env?: boolean;
   paused?: boolean;
   pinned?: boolean;
-  // editor is the editor the site's files open in, unset for the global one.
-  editor?: string;
   hidden_while_streaming?: boolean;
   idle_suspended?: boolean;
   idle?: boolean;
@@ -656,7 +654,6 @@ export const pauseSite = (d: string) => postAction(site(d, 'pause'));
 export const resumeSite = (d: string) => postAction(site(d, 'unpause'));
 export const pinSite = (d: string) => postAction(site(d, 'pin'));
 export const unpinSite = (d: string) => postAction(site(d, 'unpin'));
-export const setSiteEditor = (d: string, id: string) => postAction(site(d, 'editor') + '?id=' + encodeURIComponent(id));
 export const unlinkSite = (d: string) => postAction(site(d, 'unlink'));
 export const removeSiteService = (d: string, name: string) =>
   postAction(site(d, 'service:remove') + `?name=${encodeURIComponent(name)}`);

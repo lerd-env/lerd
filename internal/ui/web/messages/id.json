@@ -1623,14 +1623,13 @@
   "setup_theme_cta": "Pakai {name}",
   "sites_openInEditor": "Buka di editor",
   "editor_label": "Editor",
-  "editor_auto": "Cari editor terpasang",
   "editor_custom": "Perintah kustom",
   "editor_settingsTitle": "Editor",
-  "editor_settingsDescription": "Editor tempat jalur file dari jendela Debug dibuka. Situs dapat memilih editornya sendiri di kontrolnya.",
+  "editor_settingsDescription": "Editor tempat header situs membuka proyek dan jendela Debug membuka jalur file. Saat nonaktif, jalur file tetap dibuka di editor yang terpasang.",
   "editor_groupFound": "Ditemukan di sistem ini",
   "editor_groupOther": "Pilih",
   "editor_customOption": "Kustom…",
   "editor_customTitle": "Editor kustom",
   "editor_customHint": "Gunakan {file} dan {line} di tempat jalur dan baris. URL (scheme://…) dibuka lewat desktop, selain itu dijalankan sebagai perintah.",
-  "editor_default": "Editor bawaan"
+  "editor_disabled": "Nonaktif"
 }

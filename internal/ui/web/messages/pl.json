@@ -1623,14 +1623,13 @@
   "setup_theme_cta": "Użyj {name}",
   "sites_openInEditor": "Otwórz w edytorze",
   "editor_label": "Edytor",
-  "editor_auto": "Wykryj zainstalowany edytor",
   "editor_custom": "Własne polecenie",
   "editor_settingsTitle": "Edytor",
-  "editor_settingsDescription": "Edytor, w którym otwierają się ścieżki plików z okna Debug. Strona może wybrać własny w swoich ustawieniach.",
+  "editor_settingsDescription": "Edytor, w którym nagłówek strony otwiera projekt, a okno Debug ścieżki plików. Gdy jest wyłączony, ścieżki plików nadal otwierają się w zainstalowanym edytorze.",
   "editor_groupFound": "Znalezione w systemie",
   "editor_groupOther": "Wybierz",
   "editor_customOption": "Własny…",
   "editor_customTitle": "Własny edytor",
   "editor_customHint": "Użyj {file} i {line} tam, gdzie mają trafić ścieżka i wiersz. URL (scheme://…) otwiera się przez pulpit, wszystko inne uruchamia się jako polecenie.",
-  "editor_default": "Domyślny edytor"
+  "editor_disabled": "Wyłączony"
 }

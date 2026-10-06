@@ -1623,14 +1623,13 @@
   "setup_theme_cta": "Folosește {name}",
   "sites_openInEditor": "Deschide în editor",
   "editor_label": "Editor",
-  "editor_auto": "Detectează editorul instalat",
   "editor_custom": "Comandă proprie",
   "editor_settingsTitle": "Editor",
-  "editor_settingsDescription": "Editorul în care se deschid căile de fișiere din fereastra Debug. Un site își poate alege propriul editor din controalele sale.",
+  "editor_settingsDescription": "Editorul în care antetul site-ului deschide proiectul și fereastra Debug deschide căile de fișiere. Dezactivat, căile se deschid în continuare într-un editor instalat.",
   "editor_groupFound": "Găsite pe acest sistem",
   "editor_groupOther": "Alege",
   "editor_customOption": "Personalizat…",
   "editor_customTitle": "Editor personalizat",
   "editor_customHint": "Folosește {file} și {line} unde intră calea și linia. Un URL (scheme://…) se deschide prin desktop, orice altceva rulează ca o comandă.",
-  "editor_default": "Editor implicit"
+  "editor_disabled": "Dezactivat"
 }

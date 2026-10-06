@@ -139,17 +139,15 @@ func TestDirCommandDetectedEditorTakesBarePath(t *testing.T) {
 	}
 }
 
-// TestForSiteEditor checks a site's chosen editor opens through its URL when
-// its binary is not on PATH, and that an editor lerd does not know is refused.
-func TestForSiteEditor(t *testing.T) {
+// TestForListedEditor checks the chosen editor opens through its URL when its
+// binary is not on PATH.
+func TestForListedEditor(t *testing.T) {
 	isolate(t)
 	t.Setenv("PATH", t.TempDir())
-	argv, url, err := For("phpstorm", "/home/u/app/routes/web.php", 12)
+	writeEditorConfig(t, "phpstorm")
+	argv, url, err := For("/home/u/app/routes/web.php", 12)
 	if err != nil || argv != nil || url != "phpstorm://open?file=/home/u/app/routes/web.php&line=12" {
 		t.Fatalf("For(phpstorm) = %v, %q, %v", argv, url, err)
-	}
-	if _, _, err := For("notepad", "/x", 1); err == nil || err.Error() != `unknown editor "notepad"` {
-		t.Fatalf("unknown editor err = %v", err)
 	}
 }
 
@@ -189,14 +187,36 @@ func TestInstalledWithoutItsBinary(t *testing.T) {
 // URL, and only a template or a listed editor is a valid choice.
 func TestForCustomEditor(t *testing.T) {
 	isolate(t)
-	argv, url, err := For("myeditor --line {line} {file}", "/a/b.php", 3)
+	writeEditorConfig(t, "myeditor --line {line} {file}")
+	argv, url, err := For("/a/b.php", 3)
 	if err != nil || url != "" || !reflect.DeepEqual(argv, []string{"myeditor", "--line", "3", "/a/b.php"}) {
 		t.Fatalf("command template = %v, %q, %v", argv, url, err)
 	}
-	if _, url, _ := For("nova://open?file={file}&line={line}", "/a/b.php", 3); url != "nova://open?file=/a/b.php&line=3" {
+	writeEditorConfig(t, "nova://open?file={file}&line={line}")
+	if _, url, _ := For("/a/b.php", 3); url != "nova://open?file=/a/b.php&line=3" {
 		t.Fatalf("url template = %q", url)
 	}
 	if !Valid("phpstorm") || !Valid("") || !Valid("x {file}") || Valid("notepad") {
 		t.Fatal("Valid misjudged a choice")
+	}
+}
+
+// TestFlatpakEditorOpensByItsAppID checks an editor installed from Flathub,
+// which puts only its app ID on PATH, still opens files and folders by binary.
+func TestFlatpakEditorOpensByItsAppID(t *testing.T) {
+	isolate(t)
+	bin := t.TempDir()
+	t.Setenv("PATH", bin)
+	exe := filepath.Join(bin, "com.visualstudio.code")
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeEditorConfig(t, "vscode")
+	argv, url, err := For("/a/b.php", 3)
+	if err != nil || url != "" || !reflect.DeepEqual(argv, []string{exe, "-g", "/a/b.php:3"}) {
+		t.Fatalf("For(vscode) = %v, %q, %v", argv, url, err)
+	}
+	if got := DirCommand("/a"); !reflect.DeepEqual(got, []string{exe, "/a"}) {
+		t.Fatalf("DirCommand(vscode) = %v", got)
 	}
 }

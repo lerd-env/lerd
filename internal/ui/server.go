@@ -36,7 +36,6 @@ import (
 	"github.com/geodro/lerd/internal/cli"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
-	"github.com/geodro/lerd/internal/editor"
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/eventbus"
 	"github.com/geodro/lerd/internal/feedback"
@@ -960,8 +959,6 @@ type SiteResponse struct {
 	Paused        bool                                 `json:"paused"`
 	// Pinned excludes the site from idle-suspend (kept always-warm).
 	Pinned bool `json:"pinned,omitempty"`
-	// Editor is the editor the site's files open in, "" for the global choice.
-	Editor string `json:"editor,omitempty"`
 	// HiddenWhileStreaming marks a site hidden through its workspace or group
 	// main, so the dashboard can hide it the instant streaming turns on
 	// and not report its disappearance as an unlink.
@@ -1095,7 +1092,6 @@ func buildSites() ([]SiteResponse, error) {
 	suspendedWorkers := map[string][]string{}
 	wtSuspendedWorkers := map[string][]string{}
 	pinnedSites := map[string]bool{}
-	siteEditors := map[string]string{}
 	streamingHidden := map[string]bool{}
 	hiddenWhileStreaming := map[string]bool{}
 	if reg, err := config.LoadSites(); err == nil {
@@ -1113,7 +1109,6 @@ func buildSites() ([]SiteResponse, error) {
 			if s.Pinned {
 				pinnedSites[s.Name] = true
 			}
-			siteEditors[s.Name] = s.Editor
 		}
 	}
 
@@ -1268,7 +1263,6 @@ func buildSites() ([]SiteResponse, error) {
 			Idle:                 idleSiteIsIdle(idleActivity, e.Name, e.Paused, idleExempt, idleOn, idleTimeout, idleNow),
 			IdleSuspendedWorkers: suspendedWorkers[e.Name],
 			Pinned:               pinnedSites[e.Name],
-			Editor:               siteEditors[e.Name],
 			HiddenWhileStreaming: hiddenWhileStreaming[e.Name],
 			Branch:               e.Branch,
 			Worktrees:            worktreeResponses,
@@ -4059,6 +4053,10 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	action := parts[1]
+	if action == "editor:open" && !isLocalControlRequest(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 
 	// Favicon is a GET endpoint served separately.
 	if action == "favicon" {
@@ -4206,23 +4204,7 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
-	case "editor":
-		id := r.URL.Query().Get("id")
-		if !editor.Valid(id) {
-			writeJSON(w, SiteActionResponse{Error: fmt.Sprintf("unknown editor %q", id)})
-			return
-		}
-		if err := config.SetSiteEditor(site.Name, id); err != nil {
-			writeJSON(w, SiteActionResponse{Error: err.Error()})
-			return
-		}
-		writeJSON(w, SiteActionResponse{OK: true})
-		return
 	case "editor:open":
-		if !hasHostActionAuthority(r) {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
 		path := resolveSitePath(site, r.URL.Query().Get("branch"))
 		if path == "" {
 			writeJSON(w, SiteActionResponse{Error: "unknown worktree branch"})

@@ -1623,14 +1623,13 @@
   "setup_theme_cta": "使用 {name}",
   "sites_openInEditor": "在编辑器中打开",
   "editor_label": "编辑器",
-  "editor_auto": "自动检测已安装的编辑器",
   "editor_custom": "自定义命令",
   "editor_settingsTitle": "编辑器",
-  "editor_settingsDescription": "Debug 窗口中的文件路径用哪个编辑器打开。每个站点可以在其控制项中单独选择。",
+  "editor_settingsDescription": "站点标题栏打开项目、Debug 窗口打开文件路径所用的编辑器。禁用时，文件路径仍会在已安装的编辑器中打开。",
   "editor_groupFound": "已在本机找到",
   "editor_groupOther": "选择",
   "editor_customOption": "自定义…",
   "editor_customTitle": "自定义编辑器",
   "editor_customHint": "在路径和行号的位置使用 {file} 和 {line}。URL（scheme://…）通过桌面打开，其余作为命令运行。",
-  "editor_default": "默认编辑器"
+  "editor_disabled": "已禁用"
 }

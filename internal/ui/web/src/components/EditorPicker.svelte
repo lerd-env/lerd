@@ -5,17 +5,16 @@
   import { editors, loadEditors } from '$stores/editors';
   import { m } from '../paraglide/messages.js';
 
-  // Which editor files open in: for one site, where empty follows the global
-  // choice, or globally, where empty finds an installed editor by itself. An
-  // editor not on the list is set as a command or URL template.
+  // Which editor sites open in. Empty is Disabled: the site header offers no
+  // editor, while file links still find an installed one as they always have.
+  // An editor not on the list is set as a command or URL template.
 
   interface Props {
     value: string;
     onchange: (choice: string) => void;
-    scope: 'site' | 'global';
     disabled?: boolean;
   }
-  let { value, onchange, scope, disabled = false }: Props = $props();
+  let { value, onchange, disabled = false }: Props = $props();
   onMount(loadEditors);
 
   const CUSTOM = '__custom';
@@ -23,24 +22,22 @@
   let template = $state('');
 
   const known = $derived(new Set($editors.editors.map((e) => e.id)));
-  const shown = $derived(value && !known.has(value) ? CUSTOM : value);
-  const globalLabel = $derived(
-    $editors.global === 'custom' ? m.editor_custom() : ($editors.editors.find((e) => e.id === $editors.global)?.label ?? m.editor_auto())
-  );
+  // A saved template is an option of its own, so picking Custom… always opens
+  // the dialog to edit it rather than reselecting what is already chosen.
+  const saved = $derived(value && !known.has(value) ? value : '');
   const options = $derived([
-    // A site following a global choice names it, still drawn as inherited.
-    scope === 'site' && $editors.global
-      ? { value: '', label: globalLabel, description: m.editor_default(), group: m.editor_label() }
-      : { value: '', label: m.editor_default(), description: scope === 'site' ? globalLabel : m.editor_auto(), group: m.editor_label() },
-    // What was found on this machine first, the rest after it still pickable.
-    ...$editors.editors.filter((e) => e.installed).map((e) => ({ value: e.id, label: e.label, group: m.editor_groupFound() })),
-    ...$editors.editors.filter((e) => !e.installed).map((e) => ({ value: e.id, label: e.label, group: m.editor_groupOther() })),
+    { value: '', label: m.editor_disabled(), group: m.editor_label() },
+    // Only what this machine can open, plus a past choice since uninstalled so
+    // it still reads as chosen; anything else goes in as a template.
+    ...$editors.editors.filter((e) => e.installed || e.id === value).map((e) => ({ value: e.id, label: e.label, group: m.editor_groupFound() })),
+    // The template itself is the label, so the button shows what was entered.
+    ...(saved ? [{ value: saved, label: saved, description: m.editor_custom(), group: m.editor_groupOther() }] : []),
     { value: CUSTOM, label: m.editor_customOption(), group: m.editor_groupOther() }
   ]);
 
   function pick(choice: string) {
     if (choice !== CUSTOM) return onchange(choice);
-    template = value && !known.has(value) ? value : '';
+    template = saved;
     editing = true;
   }
   function save() {
@@ -50,7 +47,10 @@
   }
 </script>
 
-<Dropdown title={m.editor_label()} value={shown} {options} {disabled} inherited={scope === 'site' && !value} onchange={pick} minMenuWidth={220} />
+<!-- Capped so a long custom template truncates instead of crowding the row. -->
+<div class="max-w-64 min-w-0">
+  <Dropdown title={m.editor_label()} {value} {options} {disabled} onchange={pick} width="full" minMenuWidth={220} />
+</div>
 
 <Modal open={editing} title={m.editor_customTitle()} onclose={() => (editing = false)}>
   <div class="px-5 py-4 space-y-2 text-sm">

@@ -30,7 +30,7 @@ describe('ServicesWidget', () => {
   beforeEach(() => {
     services.set([]);
     servicesLoaded.set(true);
-    accessMode.set({ localControl: true, lanExposed: false, checked: true });
+    accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
   });
 
   it('shows the empty hint when nothing is installed', () => {
@@ -130,7 +130,7 @@ describe('ServicesWidget', () => {
   });
 
   it('hides the add button without local control', () => {
-    accessMode.set({ localControl: false, lanExposed: false, checked: true });
+    accessMode.set({ localControl: false, local: false, lanExposed: false, checked: true });
     services.set([svc()]);
     const { queryByText, getByText } = render(ServicesWidget);
     expect(queryByText('Add')).toBeNull();

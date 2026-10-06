@@ -26,6 +26,19 @@ type Editor struct {
 	url      string
 	// apps are the macOS bundle names the editor installs as.
 	apps []string
+	// flatpaks are the Flathub app IDs, which is all a Flatpak install puts on
+	// PATH; run with arguments they behave as the editor's own binary.
+	flatpaks []string
+}
+
+// binary finds the editor's command on PATH, under its own name or a Flatpak ID.
+func (e Editor) binary() (string, bool) {
+	for _, name := range append([]string{e.bin}, e.flatpaks...) {
+		if p, err := exec.LookPath(name); err == nil {
+			return p, true
+		}
+	}
+	return "", false
 }
 
 func gotoArgs(f string, l int) []string { return []string{"-g", loc(f, l)} }
@@ -37,22 +50,22 @@ func jetbrainsArgs(f string, l int) []string {
 // Editors is the curated list, probed on PATH in this order when nothing is
 // configured. They open a directory as a bare argument, which DirCommand uses.
 var Editors = []Editor{
-	{"vscode", "Visual Studio Code", "code", gotoArgs, "vscode://file/{file}:{line}", []string{"Visual Studio Code.app"}},
-	{"cursor", "Cursor", "cursor", gotoArgs, "cursor://file/{file}:{line}", []string{"Cursor.app"}},
-	{"vscodium", "VSCodium", "codium", gotoArgs, "vscodium://file/{file}:{line}", []string{"VSCodium.app"}},
-	{"windsurf", "Windsurf", "windsurf", gotoArgs, "windsurf://file/{file}:{line}", []string{"Windsurf.app"}},
-	{"sublime", "Sublime Text", "subl", locArgs, "subl://open?url=file://{file}&line={line}", []string{"Sublime Text.app"}},
-	{"zed", "Zed", "zed", locArgs, "zed://file/{file}:{line}", []string{"Zed.app"}},
-	{"phpstorm", "PhpStorm", "phpstorm", jetbrainsArgs, "phpstorm://open?file={file}&line={line}", []string{"PhpStorm.app"}},
-	{"idea", "IntelliJ IDEA", "idea", jetbrainsArgs, "idea://open?file={file}&line={line}", []string{"IntelliJ IDEA.app", "IntelliJ IDEA Ultimate.app", "IntelliJ IDEA CE.app"}},
-	{"webstorm", "WebStorm", "webstorm", jetbrainsArgs, "webstorm://open?file={file}&line={line}", []string{"WebStorm.app"}},
+	{"vscode", "Visual Studio Code", "code", gotoArgs, "vscode://file/{file}:{line}", []string{"Visual Studio Code.app"}, []string{"com.visualstudio.code"}},
+	{"cursor", "Cursor", "cursor", gotoArgs, "cursor://file/{file}:{line}", []string{"Cursor.app"}, nil},
+	{"vscodium", "VSCodium", "codium", gotoArgs, "vscodium://file/{file}:{line}", []string{"VSCodium.app"}, []string{"com.vscodium.codium"}},
+	{"windsurf", "Windsurf", "windsurf", gotoArgs, "windsurf://file/{file}:{line}", []string{"Windsurf.app"}, nil},
+	{"sublime", "Sublime Text", "subl", locArgs, "subl://open?url=file://{file}&line={line}", []string{"Sublime Text.app"}, []string{"com.sublimetext.three"}},
+	{"zed", "Zed", "zed", locArgs, "zed://file/{file}:{line}", []string{"Zed.app"}, []string{"dev.zed.Zed"}},
+	{"phpstorm", "PhpStorm", "phpstorm", jetbrainsArgs, "phpstorm://open?file={file}&line={line}", []string{"PhpStorm.app"}, []string{"com.jetbrains.PhpStorm"}},
+	{"idea", "IntelliJ IDEA", "idea", jetbrainsArgs, "idea://open?file={file}&line={line}", []string{"IntelliJ IDEA.app", "IntelliJ IDEA Ultimate.app", "IntelliJ IDEA CE.app"}, []string{"com.jetbrains.IntelliJ-IDEA-Ultimate", "com.jetbrains.IntelliJ-IDEA-Community"}},
+	{"webstorm", "WebStorm", "webstorm", jetbrainsArgs, "webstorm://open?file={file}&line={line}", []string{"WebStorm.app"}, []string{"com.jetbrains.WebStorm"}},
 }
 
 // Installed reports whether the editor is on this machine: its binary on PATH,
 // a desktop entry claiming its URL scheme (how JetBrains Toolbox and Flatpak
 // install them on Linux), or its app bundle on macOS.
 func (e Editor) Installed() bool {
-	if _, err := exec.LookPath(e.bin); err == nil {
+	if _, ok := e.binary(); ok {
 		return true
 	}
 	return e.installedOffPath()
@@ -98,32 +111,20 @@ func Known(id string) (Editor, bool) {
 	return Editor{}, false
 }
 
-// For resolves how to open file at line for a site that chose an editor: its
-// binary when that is on PATH, otherwise its URL, for the dashboard to hand to
-// the desktop. Without a site choice the global `editor` is used, as one of the
-// listed editors when it names one and as a command template otherwise. An ID
-// lerd does not know is refused by name rather than guessed at.
-func For(id, file string, line int) (argv []string, url string, err error) {
-	if id == "" {
-		if _, ok := Known(configuredTemplate()); !ok {
-			if tmpl := configuredTemplate(); IsURLTemplate(tmpl) {
-				return nil, fillTemplate(tmpl, file, line), nil
-			}
-			return Command(file, line), "", nil
-		}
-		id = configuredTemplate()
-	}
-	e, ok := Known(id)
+// For resolves how to open file at line in the chosen editor: a listed one by
+// its binary when that is on PATH, otherwise by its URL, for the dashboard to
+// hand to the desktop. A URL template is filled in the same way; anything else,
+// including no choice at all, resolves as Command does.
+func For(file string, line int) (argv []string, url string, err error) {
+	choice := configuredTemplate()
+	e, ok := Known(choice)
 	if !ok {
-		if !IsTemplate(id) {
-			return nil, "", fmt.Errorf("unknown editor %q", id)
+		if IsURLTemplate(choice) {
+			return nil, fillTemplate(choice, file, line), nil
 		}
-		if IsURLTemplate(id) {
-			return nil, fillTemplate(id, file, line), nil
-		}
-		return strings.Fields(fillTemplate(id, file, line)), "", nil
+		return Command(file, line), "", nil
 	}
-	if p, err := exec.LookPath(e.bin); err == nil {
+	if p, ok := e.binary(); ok {
 		return append([]string{p}, e.lineArgs(file, line)...), "", nil
 	}
 	return nil, fillTemplate(e.url, file, line), nil
@@ -136,8 +137,8 @@ func IsTemplate(choice string) bool { return strings.Contains(choice, "{file}") 
 // IsURLTemplate reports whether a custom editor is reached by its URL scheme.
 func IsURLTemplate(choice string) bool { return IsTemplate(choice) && strings.Contains(choice, "://") }
 
-// Valid reports whether a site or the global setting may choose this editor:
-// a listed one, a custom template, or none.
+// Valid reports whether the setting may choose this editor: a listed one, a
+// custom template, or none.
 func Valid(choice string) bool {
 	_, ok := Known(choice)
 	return choice == "" || ok || IsTemplate(choice)
@@ -174,7 +175,7 @@ func Command(file string, line int) []string {
 	}
 
 	for _, e := range Editors {
-		if p, err := exec.LookPath(e.bin); err == nil {
+		if p, ok := e.binary(); ok {
 			return append([]string{p}, e.lineArgs(file, line)...)
 		}
 	}
@@ -192,17 +193,11 @@ func Command(file string, line int) []string {
 // manager rather than an editor, so nil means "no editor found" and the caller
 // should say so.
 func DirCommand(dir string) []string {
-	return DirFor("", dir)
-}
-
-// DirFor is DirCommand for a site that may have chosen its own editor, which
-// wins over the global one; a listed editor opens the directory with its binary.
-func DirFor(id, dir string) []string {
-	if id == "" {
-		id = configuredTemplate()
-	}
+	id := configuredTemplate()
+	// A listed editor opens the directory with its binary; one reachable only
+	// by its URL cannot open a folder.
 	if e, ok := Known(id); ok {
-		if p, err := exec.LookPath(e.bin); err == nil {
+		if p, ok := e.binary(); ok {
 			return []string{p, dir}
 		}
 		return nil
@@ -217,7 +212,7 @@ func DirFor(id, dir string) []string {
 		return append(strings.Fields(tmpl), dir)
 	}
 	for _, e := range Editors {
-		if p, err := exec.LookPath(e.bin); err == nil {
+		if p, ok := e.binary(); ok {
 			return []string{p, dir}
 		}
 	}

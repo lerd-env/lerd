@@ -1623,14 +1623,13 @@
   "setup_theme_cta": "Dùng {name}",
   "sites_openInEditor": "Mở trong trình soạn thảo",
   "editor_label": "Trình soạn thảo",
-  "editor_auto": "Tìm trình soạn thảo đã cài",
   "editor_custom": "Lệnh tùy chỉnh",
   "editor_settingsTitle": "Trình soạn thảo",
-  "editor_settingsDescription": "Trình soạn thảo mở các đường dẫn tệp trong cửa sổ Debug. Mỗi site có thể chọn riêng trong phần điều khiển.",
+  "editor_settingsDescription": "Trình soạn thảo mà đầu trang site mở dự án và cửa sổ Debug mở đường dẫn tệp. Khi tắt, đường dẫn tệp vẫn mở trong trình soạn thảo đã cài.",
   "editor_groupFound": "Tìm thấy trên hệ thống",
   "editor_groupOther": "Chọn",
   "editor_customOption": "Tùy chỉnh…",
   "editor_customTitle": "Trình soạn thảo tùy chỉnh",
   "editor_customHint": "Dùng {file} và {line} ở chỗ đường dẫn và dòng. URL (scheme://…) mở qua desktop, còn lại chạy như một lệnh.",
-  "editor_default": "Trình soạn thảo mặc định"
+  "editor_disabled": "Đã tắt"
 }

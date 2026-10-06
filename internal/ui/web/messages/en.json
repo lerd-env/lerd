@@ -1623,14 +1623,13 @@
   "setup_theme_cta": "Use {name}",
   "sites_openInEditor": "Open in editor",
   "editor_label": "Editor",
-  "editor_auto": "Find installed editor",
   "editor_custom": "Custom command",
   "editor_settingsTitle": "Editor",
-  "editor_settingsDescription": "The editor file paths in the Debug window open in. A site can pick its own in its controls.",
+  "editor_settingsDescription": "The editor the site header opens a project in, and file paths from the Debug window. When disabled, file paths still open in an installed editor.",
   "editor_groupFound": "Found on this system",
   "editor_groupOther": "Choose",
   "editor_customOption": "Custom…",
   "editor_customTitle": "Custom editor",
   "editor_customHint": "Use {file} and {line} where the path and line go. A URL (scheme://…) opens through your desktop, anything else runs as a command.",
-  "editor_default": "Default editor"
+  "editor_disabled": "Disabled"
 }

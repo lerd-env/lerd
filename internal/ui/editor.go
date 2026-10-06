@@ -48,9 +48,8 @@ func handleOpenEditor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The site the file belongs to may have chosen its own editor; one only
-	// reachable by its URL is handed back for the dashboard to open.
-	argv, url, err := editor.For(siteEditorFor(path), path, req.Line)
+	// An editor only reachable by its URL is handed back for the dashboard to open.
+	argv, url, err := editor.For(path, req.Line)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -72,27 +71,15 @@ func handleOpenEditor(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// siteEditorFor returns the editor chosen by the site whose folder holds path,
-// the deepest one when sites nest, or "" when none chose one.
-func siteEditorFor(path string) string {
-	reg, err := config.LoadSites()
-	if err != nil {
-		return ""
-	}
-	best, choice := "", ""
-	for _, s := range reg.Sites {
-		root := filepath.Clean(s.Path) + string(os.PathSeparator)
-		if strings.HasPrefix(path, root) && len(root) > len(best) {
-			best, choice = root, s.Editor
-		}
-	}
-	return choice
-}
-
 // handleEditors lists the editors to choose from with the global choice (GET),
 // or saves the global choice (POST {"id"}), a listed editor or a custom
-// template, which a read reports as "custom" with the template beside it.
+// template, which a read reports as "custom" with the template beside it. Only
+// the host itself may: the choice is a command the host runs on a later click.
 func handleEditors(w http.ResponseWriter, r *http.Request) {
+	if !isLocalControlRequest(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	if r.Method == http.MethodPost {
 		var body struct {
 			ID string `json:"id"`
@@ -138,20 +125,17 @@ func handleEditors(w http.ResponseWriter, r *http.Request) {
 }
 
 // openProjectInEditor opens a site's folder, or one of its worktrees, as a
-// project in the editor the site chose or the global one. Unlike file links it
-// never falls back to an editor found by probing, so the action only exists
-// once one is set.
+// project in the chosen editor. Unlike file links it never falls back to an
+// editor found by probing, so the action only exists once one is set.
 func openProjectInEditor(site config.Site, dir string) error {
-	choice := site.Editor
-	if choice == "" {
-		if cfg, _ := config.LoadGlobal(); cfg != nil {
-			choice = strings.TrimSpace(cfg.Editor)
-		}
+	choice := ""
+	if cfg, _ := config.LoadGlobal(); cfg != nil {
+		choice = strings.TrimSpace(cfg.Editor)
 	}
 	if choice == "" {
 		return fmt.Errorf("no editor set for %s", site.Name)
 	}
-	argv := editor.DirFor(choice, dir)
+	argv := editor.DirCommand(dir)
 	if len(argv) == 0 {
 		return fmt.Errorf("%s cannot open a folder from here", choice)
 	}
