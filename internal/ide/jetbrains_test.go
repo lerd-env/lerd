@@ -127,7 +127,7 @@ func TestSyncUpdatesItsOwnEntryInPlace(t *testing.T) {
 	if strings.Count(out, "<data-source ") != 1 {
 		t.Errorf("entry duplicated:\n%s", out)
 	}
-	if strings.Contains(out, "5433") || !strings.Contains(out, "5544") {
+	if strings.Contains(out, ":5433/") || !strings.Contains(out, ":5544/") {
 		t.Errorf("the moved port was not picked up:\n%s", out)
 	}
 }

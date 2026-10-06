@@ -150,19 +150,7 @@ func setSiteContainerAutostart(site *config.Site, on bool) bool {
 	if unit == "" {
 		return false
 	}
-	path := filepath.Join(config.QuadletDir(), unit+".container")
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return false
-	}
-	out := podman.StripInstallSection(string(raw), true)
-	if on && lerdSystemd.IsAutostartEnabled() {
-		out = strings.TrimRight(out, "\n") + "\n\n" + quadletInstallBlock
-	}
-	if out == string(raw) {
-		return false
-	}
-	return os.WriteFile(path, []byte(out), 0644) == nil
+	return podman.SetQuadletAutostart(unit, on)
 }
 
 // hostProxyEnvRefresh regenerates a site's .env by re-running `lerd env`. A
