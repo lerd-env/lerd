@@ -106,6 +106,9 @@ type Site struct {
 	// env. A loopback runtime rewrites the host to 127.0.0.1, so the env alone
 	// no longer says which service the site is on.
 	WiredServices []string `yaml:"wired_services,omitempty"`
+	// BrowserCapture holds the site's browser capture settings when the project
+	// has no .lerd.yaml to carry them.
+	BrowserCapture *BrowserCapture `yaml:"browser_capture,omitempty"`
 	// Group is the group key shared by a main site and its secondaries. It is
 	// set to the main site's name. Empty when the site is not grouped.
 	Group string `yaml:"group,omitempty"`
@@ -280,6 +283,7 @@ type siteYAML struct {
 	DismissedServices     []string            `yaml:"dismissed_services,omitempty"`
 	DeclinedServices      []string            `yaml:"declined_services,omitempty"`
 	WiredServices         []string            `yaml:"wired_services,omitempty"`
+	BrowserCapture        *BrowserCapture     `yaml:"browser_capture,omitempty"`
 	Group                 string              `yaml:"group,omitempty"`
 	GroupSubdomain        string              `yaml:"group_subdomain,omitempty"`
 	GroupSharedDB         bool                `yaml:"group_shared_db,omitempty"`
@@ -322,6 +326,7 @@ func (s Site) toYAML() siteYAML {
 		DismissedServices:     s.DismissedServices,
 		DeclinedServices:      s.DeclinedServices,
 		WiredServices:         s.WiredServices,
+		BrowserCapture:        s.BrowserCapture,
 		Group:                 s.Group,
 		GroupSubdomain:        s.GroupSubdomain,
 		GroupSharedDB:         s.GroupSharedDB,
@@ -369,6 +374,7 @@ func (sy siteYAML) toSite() Site {
 		DismissedServices:     sy.DismissedServices,
 		DeclinedServices:      sy.DeclinedServices,
 		WiredServices:         sy.WiredServices,
+		BrowserCapture:        sy.BrowserCapture,
 		Group:                 sy.Group,
 		GroupSubdomain:        sy.GroupSubdomain,
 		GroupSharedDB:         sy.GroupSharedDB,
@@ -488,6 +494,9 @@ func cloneSiteRegistry(in *SiteRegistry) *SiteRegistry {
 		}
 		if s.WiredServices != nil {
 			cp.WiredServices = append([]string(nil), s.WiredServices...)
+		}
+		if s.BrowserCapture != nil {
+			cp.BrowserCapture = s.BrowserCapture.clone()
 		}
 		if s.WorktreeIdleSuspended != nil {
 			cp.WorktreeIdleSuspended = make(map[string][]string, len(s.WorktreeIdleSuspended))

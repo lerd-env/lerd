@@ -27,6 +27,9 @@ const (
 	KindLog       = "log"
 	KindException = "exception"
 	KindMessage   = "message"
+	// KindBrowser is a JavaScript error, console message or failed request
+	// posted by the browser capture script rather than sent by PHP.
+	KindBrowser = "browser"
 )
 
 // Source identifies the file:line that produced a dump.

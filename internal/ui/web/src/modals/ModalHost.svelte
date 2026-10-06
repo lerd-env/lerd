@@ -1,6 +1,7 @@
 <script lang="ts">
   import { modal } from '$stores/modals';
   import DomainModal from './DomainModal.svelte';
+  import BrowserCaptureModal from './BrowserCaptureModal.svelte';
   import GroupModal from './GroupModal.svelte';
   import SiteWizardModal from './SiteWizardModal.svelte';
   import PresetModal from './PresetModal.svelte';
@@ -38,6 +39,8 @@
 
 {#if $modal.kind === 'domain' && $modal.site}
   <DomainModal site={$modal.site} />
+{:else if $modal.kind === 'browserCapture' && $modal.browserCaptureSite}
+  <BrowserCaptureModal site={$modal.browserCaptureSite} />
 {:else if $modal.kind === 'group' && $modal.site}
   <GroupModal site={$modal.site} />
 {:else if $modal.kind === 'link'}

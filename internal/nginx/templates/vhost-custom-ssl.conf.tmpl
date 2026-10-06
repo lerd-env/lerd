@@ -12,11 +12,15 @@ server {
 
     ssl_certificate /etc/nginx/certs/{{.CertDomain}}.crt;
     ssl_certificate_key /etc/nginx/certs/{{.CertDomain}}.key;
-
+{{.BrowserCaptureConf}}
     location / {
         set $backend "{{.CustomContainer}}";
         proxy_pass {{if .BackendSSL}}https{{else}}http{{end}}://$backend:{{.CustomPort}};
         proxy_http_version 1.1;
+        {{- if .BrowserCaptureConf}}
+        # sub_filter cannot rewrite a compressed body.
+        proxy_set_header Accept-Encoding "";
+        {{- end}}
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $real_forwarded_host;

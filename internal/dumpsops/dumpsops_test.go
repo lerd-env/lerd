@@ -93,3 +93,22 @@ func TestApply_IsIdempotent(t *testing.T) {
 		t.Errorf("second Apply(true) = %+v, want NoChange", res)
 	}
 }
+
+// Opted-in sites carry the browser capture script only while debug is on, so
+// each real flip refreshes their vhosts and a no-op does not.
+func TestApply_RefreshesBrowserCaptureVhostsOnEachFlip(t *testing.T) {
+	withTempXDG(t)
+	refreshed := 0
+	orig := refreshBrowserCaptureFn
+	refreshBrowserCaptureFn = func() error { refreshed++; return nil }
+	t.Cleanup(func() { refreshBrowserCaptureFn = orig })
+
+	for _, on := range []bool{true, true, false, false} {
+		if _, err := Apply(on); err != nil {
+			t.Fatalf("Apply(%v): %v", on, err)
+		}
+	}
+	if refreshed != 2 {
+		t.Fatalf("refreshed %d times, want 2", refreshed)
+	}
+}

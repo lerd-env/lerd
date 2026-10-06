@@ -38,6 +38,27 @@ describe('Dropdown', () => {
     expect(screen.getByRole('button', { name: /main \(current\)/ })).toBeInTheDocument();
   });
 
+  it('heads each run of grouped options once, outside the selectable options', async () => {
+    render(Harness, {
+      props: {
+        value: '',
+        options: [
+          { value: '', label: 'All' },
+          { value: 'a', label: 'A', group: 'Errors' },
+          { value: 'b', label: 'B', group: 'Errors' },
+          { value: 'c', label: 'C', group: 'Network' }
+        ],
+        onchange: () => {}
+      }
+    });
+    screen.getByRole('button', { name: /All/ }).click();
+    await tick();
+    const menu = openMenu();
+    const headings = Array.from(menu.querySelectorAll('[role="presentation"]')).map((h) => h.textContent?.trim());
+    expect(headings).toEqual(['Errors', 'Network']);
+    expect(menu.querySelectorAll('[role="option"]')).toHaveLength(4);
+  });
+
   it('opens menu on click and lists options', async () => {
     render(Harness, { props: { value: '8.3', options: ['8.2', '8.3', '8.4'], label: 'PHP', onchange: () => {} } });
     screen.getByRole('button', { name: /PHP 8\.3/ }).click();

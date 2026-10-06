@@ -6,6 +6,7 @@ import { frameworkMarks } from '$stores/frameworkMarks';
 import { accessMode } from '$stores/accessMode';
 import { editors } from '$stores/editors';
 import { status } from '$stores/status';
+import { status as dumpsStatus } from '$stores/dumps';
 
 const site = {
   domain: 'app.test',
@@ -192,4 +193,25 @@ describe('SiteHeader', () => {
       expect(queryByText('Initialize git')).not.toBeInTheDocument();
     });
   });
+
+  describe('browser capture toggle', () => {
+    afterEach(() => dumpsStatus.set(null));
+    const debug = (enabled: boolean) =>
+      dumpsStatus.set({ enabled, passthrough: false, listening: true, addr: '', count: 0, subscribers: 0, last_ts: '' });
+
+    it('shows while debug capture is on', () => {
+      accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
+      debug(true);
+      const { getByRole } = render(Harness, { props: { site } });
+      expect(getByRole('button', { name: 'Browser' })).toBeInTheDocument();
+    });
+
+    it('hides while debug capture is off, since no page carries the script then', () => {
+      accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
+      debug(false);
+      const { queryByRole } = render(Harness, { props: { site } });
+      expect(queryByRole('button', { name: 'Browser' })).not.toBeInTheDocument();
+    });
+  });
 });
+

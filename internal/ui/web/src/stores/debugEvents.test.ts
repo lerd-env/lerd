@@ -3,7 +3,7 @@ import { get } from 'svelte/store';
 import type { DumpEvent } from '$lib/dumpsStream';
 import { dumps } from './dumps';
 import { showTests } from './debugLens';
-import { debugEvents, hiddenTestCount, countKinds, buildKindGroups } from './debugEvents';
+import { debugEvents, hiddenTestCount, countKinds, buildKindGroups, isPageView } from './debugEvents';
 
 function ev(id: string, test = false): DumpEvent {
   return {
@@ -88,5 +88,44 @@ describe('buildKindGroups', () => {
     const groups = buildKindGroups(events, 'log', '', '', false, '', true, 'error');
     expect(groups).toHaveLength(1);
     expect(groups[0].events[0].id).toBe('7');
+  });
+});
+
+describe('browser type filter', () => {
+  const browser = (id: string, data: Record<string, unknown>): DumpEvent => ({
+    v: 1,
+    id,
+    ts: '2026-07-21T10:00:00.000Z',
+    kind: 'browser',
+    ctx: { type: 'browser', site: 'acme', rid: 'p1' },
+    src: { file: '', line: 0 },
+    data
+  });
+  const events = [
+    browser('a', { type: 'navigation', nav: 'load' }),
+    browser('b', { type: 'console', level: 'error' }),
+    browser('c', { type: 'console', level: 'warn' }),
+    browser('d', { type: 'error' })
+  ];
+
+  it('splits console messages by level', () => {
+    const ids = (facet: string) => buildKindGroups(events, 'browser', '', '', false, '', true, facet).flatMap((g) => g.events.map((e) => e.id));
+    expect(ids('console.warn')).toEqual(['c']);
+    expect(ids('error')).toEqual(['d']);
+    expect(ids('navigation')).toEqual(['a']);
+  });
+});
+
+describe('browser page views', () => {
+  const browser = (id: string, type: string): DumpEvent =>
+    ({ v: 1, id, ts: '2026-07-21T10:00:00.000Z', kind: 'browser', ctx: { type: 'browser', site: 'acme', rid: 'p1' }, src: {}, data: { type, message: id } }) as unknown as DumpEvent;
+
+  it('counts what happened on a page, not the page loads', () => {
+    expect(countKinds([browser('load', 'navigation'), browser('boom', 'error')], 'acme')['browser']).toBe(1);
+  });
+
+  it('recognises a page view', () => {
+    expect(isPageView(browser('load', 'navigation'))).toBe(true);
+    expect(isPageView(browser('boom', 'error'))).toBe(false);
   });
 });

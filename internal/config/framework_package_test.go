@@ -265,10 +265,14 @@ func TestGetFrameworkForDir_packageMergeDoesNotAccumulate(t *testing.T) {
 
 func TestStorePackageFile_rejectsNamesThatEscapeTheStore(t *testing.T) {
 	storeSandbox(t)
-	for _, name := range []string{"../../etc/passwd", "acme/../../x", "acme", "acme/sub/dir", "/abs/path", "Acme/Electron", ""} {
+	for _, name := range []string{"../../etc/passwd", "acme/../../x", "acme/sub/dir", "/abs/path", "Acme/Electron", "@acme/../x", ""} {
 		if got := StorePackageFile(name, ""); got != "" {
 			t.Errorf("%q must be refused, got %q", name, got)
 		}
+	}
+	// A bare name is an npm package's, kept apart by its prefix.
+	if got := StorePackageFile("acme", ""); filepath.Base(got) != "npm-acme.yaml" {
+		t.Errorf("npm path = %q, want the npm- slug file", got)
 	}
 	if got := StorePackageFile("acme/electron", ""); filepath.Base(got) != "acme-electron.yaml" {
 		t.Errorf("unversioned path = %q, want the slug file", got)

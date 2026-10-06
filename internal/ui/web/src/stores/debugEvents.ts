@@ -57,18 +57,28 @@ export function buildKindGroups(
 }
 
 // facetOf is the value a kind is narrowed by. A job carries a status and a log
-// a level; no kind carries both, so one accessor serves the filter.
-function facetOf(ev: DumpEvent): string {
-  const d = ev.data as { status?: string; level?: string } | undefined;
+// a level; no kind carries both, so one accessor serves the filter. A browser
+// event narrows by its type, with console messages split by level.
+export function facetOf(ev: DumpEvent): string {
+  const d = ev.data as { status?: string; level?: string; type?: string } | undefined;
+  if (ev.kind === 'browser') return d?.type === 'console' ? `console.${d.level}` : (d?.type ?? '');
   return d?.status ?? d?.level ?? '';
 }
 
 // countKinds tallies buffered events per wire-kind (optionally scoped to a
 // site), for the per-tab item counters.
+// isPageView marks a browser page load or SPA navigation. It groups the
+// events of one page and tells MCP a page loaded, but the lens header already
+// names the page, so it is not a row or a count of its own.
+export function isPageView(ev: DumpEvent): boolean {
+  return ev.kind === 'browser' && (ev.data as { type?: string } | undefined)?.type === 'navigation';
+}
+
 export function countKinds(events: DumpEvent[], site = ''): Record<string, number> {
   const c: Record<string, number> = {};
   for (const ev of events) {
     if (site && ev.ctx.site !== site) continue;
+    if (isPageView(ev)) continue;
     c[ev.kind] = (c[ev.kind] ?? 0) + 1;
   }
   return c;

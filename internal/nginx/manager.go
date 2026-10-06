@@ -194,6 +194,10 @@ type VhostData struct {
 	// profiled. SPX_KEY is injected regardless (gated by the $spx_key map)
 	// so the profiler UI is reachable.
 	Profiling bool
+	// BrowserCaptureConf is the server-level browser capture block (the script
+	// injection and the locations proxied to lerd-ui), or "" when capture is
+	// off, which leaves the page untouched.
+	BrowserCaptureConf string
 	// RequestTimeout is the nginx request timeout in seconds rendered into the
 	// fastcgi_*_timeout / proxy_*_timeout directives. Resolved per site by
 	// resolveRequestTimeout (project .lerd.yaml, then global config, then 60s).
@@ -471,6 +475,43 @@ func profilerEnabled() bool {
 	return err == nil && cfg.IsProfilerEnabled()
 }
 
+// browserCaptureConf renders a site's browser capture block for its vhost:
+// the script injection before </head> and the two locations that hand the
+// script and the reports to lerd-ui, naming the site in headers nginx sets
+// itself. Empty unless debug capture is on and the site opted in.
+func browserCaptureConf(siteName, branch string) string {
+	cfg, err := config.LoadGlobal()
+	if err != nil || !cfg.IsDumpsEnabled() {
+		return ""
+	}
+	site, err := config.FindSite(siteName)
+	if err != nil || site == nil {
+		return ""
+	}
+	settings := config.BrowserCaptureFor(*site)
+	if !settings.Enabled {
+		return ""
+	}
+	path := config.BrowserCapturePath
+	location := func(suffix string) string {
+		return fmt.Sprintf(`
+    location = %[1]s%[2]s {
+        access_log off;
+        client_max_body_size 64k;
+        proxy_pass %[3]s%[1]s%[2]s;
+        proxy_http_version 1.1;
+        proxy_set_header X-Lerd-Site "%[4]s";
+        proxy_set_header X-Lerd-Branch "%[5]s";
+        proxy_set_header X-Lerd-Host $host;
+    }
+`, path, suffix, lerdUIUpstream(), siteName, branch)
+	}
+	return fmt.Sprintf(`
+    sub_filter '</head>' '<script src="%s.js"></script></head>';
+    sub_filter_once on;
+`, path) + location("") + location(".js")
+}
+
 // resolvePublicDir returns the document root subdirectory for a site, resolved
 // from the project, the registry and the framework definition alike.
 func resolvePublicDir(site config.Site) string {
@@ -539,6 +580,7 @@ func renderFPMVhost(site config.Site, phpVersion string, ssl bool) ([]byte, erro
 		FrameworkNginx:  resolveFrameworkNginx(site, publicDir, fpmContainer),
 		FrontController: resolveFrontController(site),
 	}
+	data.BrowserCaptureConf = browserCaptureConf(site.Name, "")
 	if ssl {
 		data.CertDomain = site.PrimaryDomain()
 	}
@@ -619,6 +661,7 @@ func renderContainerVhost(site config.Site, container string, port int, backendS
 		BackendSSL:      backendSSL,
 		RequestTimeout:  resolveRequestTimeout(site.Path, site.PHPVersion),
 	}
+	data.BrowserCaptureConf = browserCaptureConf(site.Name, "")
 	if ssl {
 		data.CertDomain = site.PrimaryDomain()
 	}
@@ -720,6 +763,7 @@ func renderHostProxyVhost(site config.Site, tmplName string, ssl bool) ([]byte, 
 		BackendSSL:     site.HostSSL,
 		RequestTimeout: resolveRequestTimeout(site.Path, ""),
 	}
+	data.BrowserCaptureConf = browserCaptureConf(site.Name, "")
 	if ssl {
 		data.CertDomain = site.PrimaryDomain()
 	}
@@ -797,6 +841,7 @@ func GenerateWorktreeVhost(domain, path, phpVersion, siteName, branch string) er
 		FrameworkNginx:  frameworkNginx,
 		FrontController: resolveFrontController(worktreeSite(domain, path, siteName)),
 	}
+	data.BrowserCaptureConf = browserCaptureConf(siteName, branch)
 
 	rendered, err := renderVhost(tmpl, data)
 	if err != nil {
@@ -846,6 +891,7 @@ func GenerateWorktreeSSLVhost(domain, path, phpVersion, parentDomain, siteName, 
 		FrameworkNginx:  frameworkNginx,
 		FrontController: resolveFrontController(worktreeSite(domain, path, siteName)),
 	}
+	data.BrowserCaptureConf = browserCaptureConf(siteName, branch)
 
 	rendered, err := renderVhost(tmpl, data)
 	if err != nil {
@@ -941,6 +987,16 @@ server {
 `, serverNames, nginxQuote(pausedDir), location)
 }
 
+// lerdUIUpstream is lerd-ui as nginx reaches it: its unix socket on Linux, and
+// on macOS host.containers.internal, since the VM cannot reach a host socket.
+// Without a path, proxy_pass hands lerd-ui the request URI unchanged.
+func lerdUIUpstream() string {
+	if platform.Current.UsesMachineVM {
+		return "http://host.containers.internal:7073"
+	}
+	return "http://unix:" + config.UISocketPath() + ":"
+}
+
 // WakeHoldPath is the lerd-ui endpoint a waking vhost hands each request to.
 const WakeHoldPath = "/_lerd/wake"
 
@@ -951,10 +1007,7 @@ const WakeHoldPath = "/_lerd/wake"
 // Only a failure of the hold itself answers 599, the one code turned into the
 // static waking page, so the app's own errors reach the client untouched.
 func wakeHoldLocations() string {
-	upstream := "http://host.containers.internal:7073" + WakeHoldPath
-	if !platform.Current.UsesMachineVM {
-		upstream = "http://unix:" + config.UISocketPath() + ":" + WakeHoldPath
-	}
+	upstream := lerdUIUpstream() + WakeHoldPath
 	return fmt.Sprintf(`    location / {
         # Held requests are not the app's; the hold reports the activity itself.
         access_log off;

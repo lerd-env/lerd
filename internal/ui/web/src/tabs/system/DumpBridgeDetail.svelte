@@ -9,6 +9,7 @@
   import QueriesLens from '$components/QueriesLens.svelte';
   import KindLens from '$components/KindLens.svelte';
   import DebugDisabled from '$components/DebugDisabled.svelte';
+  import BrowserLens from '$components/BrowserLens.svelte';
   import { status as dumpsStatusValue, refreshStatus, togglePassthrough } from '$stores/dumps';
   import { refreshDevtoolsStatus, debugCaptureEnabled, setDebugCapture } from '$stores/queries';
   import { debugLens, type DebugLens } from '$stores/debugLens';
@@ -36,7 +37,8 @@
     { id: 'http', label: m.debug_tab_http(), count: counts['http'] },
     { id: 'logs', label: m.debug_tab_logs(), count: counts['log'] },
     { id: 'exceptions', label: m.debug_tab_exceptions(), count: counts['exception'] },
-    { id: 'messages', label: m.debug_tab_messages(), count: counts['message'] }
+    { id: 'messages', label: m.debug_tab_messages(), count: counts['message'] },
+    { id: 'browser', label: m.debug_tab_browser(), count: counts['browser'] }
   ]);
 
   $effect(() => {
@@ -97,7 +99,11 @@
     <DebugDisabled />
   {:else}
     <DetailTabs {tabs} active={$debugLens} onchange={(id) => debugLens.set(id)} />
-    {#if $debugLens === 'dumps'}
+    {#if $debugLens === 'browser'}
+    <div class="flex-1 min-h-0 overflow-hidden">
+      <BrowserLens />
+    </div>
+    {:else if $debugLens === 'dumps'}
     <div class="px-3 sm:px-5 py-2 space-y-2 shrink-0 text-xs text-gray-500 dark:text-gray-400">
       <p>
         {m.dumps_bridge_description()}

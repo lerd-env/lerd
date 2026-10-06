@@ -70,7 +70,8 @@ export interface DumpsStream {
   connected: Writable<boolean>;
   connect: () => void;
   close: () => void;
-  clear: () => void;
+  // clear drops every held event, or only those of one kind.
+  clear: (kind?: string) => void;
   // flush applies any events buffered since the last frame right now. The
   // stream flushes itself once per frame; callers only need this to observe
   // an arrival synchronously.
@@ -146,7 +147,18 @@ export function createDumpsStream(query: Record<string, string> = {}, maxEvents 
     connected.set(false);
   }
 
-  function clear() {
+  function clear(kind?: string) {
+    if (kind) {
+      flush();
+      events.update((list) =>
+        list.filter((ev) => {
+          if (ev.kind !== kind) return true;
+          seen.delete(ev.id);
+          return false;
+        })
+      );
+      return;
+    }
     unschedule();
     pending = [];
     events.set([]);

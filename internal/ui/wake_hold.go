@@ -36,9 +36,7 @@ var (
 func withWakeHold(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == nginx.WakeHoldPath {
-			// Only nginx hands requests over: the unix socket on Linux, or on macOS
-			// host.containers.internal, which gvproxy source-NATs to a host address.
-			if !wakeHoldFromNginx(r) {
+			if !fromNginx(r) {
 				http.Error(w, "Forbidden", http.StatusForbidden)
 				return
 			}
@@ -49,7 +47,10 @@ func withWakeHold(next http.Handler) http.Handler {
 	})
 }
 
-func wakeHoldFromNginx(r *http.Request) bool {
+// fromNginx reports whether nginx handed the request over: the unix socket on
+// Linux, or on macOS host.containers.internal, which gvproxy source-NATs to a
+// host address. A LAN client reaching :7073 directly fails both.
+func fromNginx(r *http.Request) bool {
 	if v, _ := r.Context().Value(ctxKeyUnixSocket{}).(bool); v {
 		return true
 	}

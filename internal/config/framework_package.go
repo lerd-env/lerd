@@ -32,8 +32,14 @@ func RegisterPackageFetchHook(fn PackageFetchFunc) {
 // exist sixteen times over. A project that requires the package gets these
 // merged onto whatever framework definition it resolved.
 type FrameworkPackage struct {
-	// Package is the composer package this file speaks for (vendor/name).
+	// Package is the package this file speaks for: vendor/name for composer,
+	// [@scope/]name for npm.
 	Package string `yaml:"package"`
+	// Type is composer, the default, or npm.
+	Type string `yaml:"type,omitempty"`
+	// Browser is what the package's frontend library reports through DOM
+	// events, for browser capture.
+	Browser *PackageBrowser `yaml:"browser,omitempty"`
 	// Version is the package's own major this file targets. A package whose
 	// declarations have not changed across its majors publishes one unversioned
 	// file and leaves this empty; one whose command moved in a major publishes a
@@ -325,15 +331,23 @@ func upsertDoctorCheck(checks []DoctorCheck, check DoctorCheck) []DoctorCheck {
 // refused rather than written outside the packages directory.
 var composerPackageName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$`)
 
-// PackageSlug is a composer package as one file name, vendor and package joined
-// by the dash they are already made of. Empty when the name is not one composer
-// could publish, which is what keeps a name read out of the remote index from
-// naming a path of its own.
+// npmPackageName is the npm counterpart: an optional @scope/ and a name, so it
+// never holds the slash a composer name always does outside a scope.
+var npmPackageName = regexp.MustCompile(`^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$`)
+
+// PackageSlug is a package as one file name: a composer package's vendor and
+// name joined by a dash, an npm package's behind npm- with its scope's @
+// dropped, so the two can never name the same file. Empty when the name is
+// neither, which keeps a name read out of the remote index from naming a path
+// of its own.
 func PackageSlug(name string) string {
-	if !composerPackageName.MatchString(name) {
-		return ""
+	switch {
+	case composerPackageName.MatchString(name):
+		return strings.ReplaceAll(name, "/", "-")
+	case npmPackageName.MatchString(name):
+		return "npm-" + strings.ReplaceAll(strings.TrimPrefix(name, "@"), "/", "-")
 	}
-	return strings.ReplaceAll(name, "/", "-")
+	return ""
 }
 
 // StorePackageFile returns the local cache path for a package definition, or
