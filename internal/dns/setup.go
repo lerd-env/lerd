@@ -331,12 +331,9 @@ var nmcliDNSFunc = func() []string {
 	return parseNmcliLines(string(out))
 }
 
-// defaultUpstreamFallback returns the last-resort dnsmasq upstream when no
-// system-detected nameservers are usable. On Linux, pasta's 169.254.1.1
-// bridges into the host resolver and preserves .test routing.
-func defaultUpstreamFallback() []string {
-	return []string{pastaDefaultForwarder}
-}
+// defaultUpstreamFallback is nil: lerd-dns runs on the host, where pasta's
+// 169.254.1.1 does not exist, so with no usable nameserver it forwards nothing.
+func defaultUpstreamFallback() []string { return nil }
 
 // ReadContainerDNS returns DNS servers for aardvark-dns on the lerd network,
 // preferring pasta's info.json (typically 169.254.1.1) and falling back to

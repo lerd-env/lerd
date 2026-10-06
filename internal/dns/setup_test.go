@@ -137,7 +137,7 @@ func TestWriteDnsmasqConfig_withUpstreams(t *testing.T) {
 	assertContains(t, content, "address=/.test/127.0.0.1")
 }
 
-func TestWriteDnsmasqConfig_noUpstreamsFallsBackToPasta(t *testing.T) {
+func TestWriteDnsmasqConfig_noUpstreamsForwardsNothing(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	dir := t.TempDir()
@@ -159,8 +159,9 @@ func TestWriteDnsmasqConfig_noUpstreamsFallsBackToPasta(t *testing.T) {
 	assertContains(t, content, "port=5300")
 	assertContains(t, content, "address=/.test/127.0.0.1")
 	assertContains(t, content, "address=/.test/::1")
-	assertContains(t, content, "no-resolv")
-	assertContains(t, content, "server="+pastaDefaultForwarder)
+	if strings.Contains(content, "server=") {
+		t.Errorf("with no usable nameserver lerd-dns must not forward to pasta's address, which only exists inside a container:\n%s", content)
+	}
 	if strings.Contains(content, "listen-address") {
 		t.Errorf("dnsmasq must not restrict listen-address (rootlessport forwards via container netif, not loopback), got:\n%s", content)
 	}
@@ -352,8 +353,6 @@ func TestWriteDnsmasqConfigFor_customTarget(t *testing.T) {
 	}
 	content := readFile(t, filepath.Join(dir, "lerd.conf"))
 	assertContains(t, content, "address=/.test/10.0.0.5")
-	assertContains(t, content, "no-resolv")
-	assertContains(t, content, "server="+pastaDefaultForwarder)
 }
 
 func TestWriteDnsmasqConfigFor_emptyTargetDefaults(t *testing.T) {

@@ -47,7 +47,7 @@ cd myapp
 lerd link
 ```
 
-`lerd link` registers `myapp` and assigns it `http://myapp.test` automatically. No `/etc/hosts` edits, DNS is handled by the lerd dnsmasq container.
+`lerd link` registers `myapp` and assigns it `http://myapp.test` automatically. No `/etc/hosts` edits, DNS is handled by lerd's built-in DNS server.
 
 ::: info Already parked?
 If `~/Lerd` was registered with `lerd park ~/Lerd` earlier, every subdirectory under it is auto-linked. You can skip `lerd link` entirely.

@@ -122,37 +122,43 @@ func TestEnsurePortForwarding(t *testing.T) {
 	}
 }
 
-func TestNeedsDNSServiceInstall(t *testing.T) {
-	if runtime.GOOS == "linux" {
-		if needsDNSServiceInstall() {
-			t.Error("needsDNSServiceInstall should return false on linux")
-		}
-	}
-	// On macOS the result depends on whether plists exist — skip assertion
-}
-
-func TestIsDNSContainerUnit(t *testing.T) {
-	if runtime.GOOS == "linux" {
-		if !isDNSContainerUnit() {
-			t.Error("isDNSContainerUnit should return true on linux")
-		}
-	} else {
-		if isDNSContainerUnit() {
-			t.Error("isDNSContainerUnit should return false on macOS")
-		}
+// The NetworkManager dispatcher restarts lerd-dns on every interface event, so
+// a resume that brings several links back at once can fire more restarts than
+// systemd's default allows and park the unit in failed for good (#1087). The
+// directive only works in [Unit], which is how #1087 shipped broken.
+func TestDNSServiceHasNoStartRateLimit(t *testing.T) {
+	unit, _, _ := strings.Cut(dnsServiceContent("/bin/lerd", "127.0.0.1"), "[Service]")
+	if !strings.Contains(unit, "StartLimitIntervalSec=0") {
+		t.Errorf("StartLimitIntervalSec=0 must sit in [Unit]:\n%s", unit)
 	}
 }
 
-func TestPullDNSImages(t *testing.T) {
-	jobs := pullDNSImages()
-	if runtime.GOOS == "linux" {
-		if len(jobs) == 0 {
-			t.Error("pullDNSImages should return build jobs on linux")
+func TestDNSServiceRunsTheBuiltInServer(t *testing.T) {
+	got := dnsServiceContent("/home/u/.local/bin/lerd", "127.0.0.1")
+	for _, want := range []string{
+		"ExecStart=/home/u/.local/bin/lerd dns-serve --listen 127.0.0.1\n",
+		"Restart=always",
+		"WantedBy=default.target",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("unit is missing %q:\n%s", want, got)
 		}
-	} else {
-		if len(jobs) != 0 {
-			t.Error("pullDNSImages should return nil on macOS")
-		}
+	}
+}
+
+// Where lerd-dns answers the LAN itself it has to take every interface, or
+// lan:expose would leave remote machines with nothing on lanIP:5300.
+func TestDNSListenHostFollowsWhoBindsTheLAN(t *testing.T) {
+	prev := lerdDNSBindsLANPort
+	t.Cleanup(func() { lerdDNSBindsLANPort = prev })
+
+	lerdDNSBindsLANPort = false
+	if got := dnsListenHost(); got != "127.0.0.1" {
+		t.Errorf("behind the forwarder lerd-dns must stay on loopback, got %s", got)
+	}
+	lerdDNSBindsLANPort = true
+	if got := dnsListenHost(); got != "0.0.0.0" {
+		t.Errorf("answering the LAN itself needs every interface, got %s", got)
 	}
 }
 

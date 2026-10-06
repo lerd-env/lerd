@@ -655,10 +655,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 	if wantDNS {
 		step("Writing DNS service unit")
-		dnsUnitPath := filepath.Join(config.QuadletDir(), "lerd-dns.container")
-		unitChanged, err := fileChangedBy(dnsUnitPath, func() error {
-			return writeDNSUnit(os.Stdout)
-		})
+		unitChanged, err := installDNSService()
 		if err != nil {
 			return err
 		}
@@ -767,10 +764,6 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		},
 	}
 	plan := imagepull.Plan{imagepull.Pull(nginxImage, "the lerd web server image")}
-	if wantDNS {
-		pullJobs = append(pullJobs, pullDNSImages()...)
-		plan = append(plan, dnsImagePlan()...)
-	}
 	withoutKeptImages(plan, podman.OfflineKeeps).Fill().Report(os.Stdout)
 	for _, job := range pullJobs {
 		step(job.Label)
@@ -787,28 +780,6 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// forward non-.test queries correctly on a fresh install.
 	if lerdSystemd.IsAutostartEnabled() {
 		ensureImages()
-	}
-
-	// On macOS, DNS runs natively (no container image needed) and DaemonReload
-	// is a no-op, so we can start lerd-dns and configure the resolver here.
-	if wantDNS && !isDNSContainerUnit() {
-		step("Starting lerd-dns")
-		if err := services.Mgr.Restart("lerd-dns"); err != nil {
-			fmt.Printf("    WARN: %v\n", err)
-		}
-		ok()
-
-		step("Waiting for lerd-dns to be ready")
-		if err := dns.WaitReady(15 * time.Second); err != nil {
-			fmt.Printf("    WARN: %v\n", err)
-		}
-		ok()
-
-		feedback.Line("configuring DNS resolver")
-		dns.NoteNixOSOwnsResolver()
-		if err := dns.ConfigureResolver(); err != nil {
-			fmt.Printf("    WARN: %v\n", err)
-		}
 	}
 
 	// 8. Systemd / services
@@ -849,14 +820,11 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	// On Linux, DNS is a container — start it after images are pulled.
-	// On macOS it was already started before RunParallel above.
-	if wantDNS && isDNSContainerUnit() {
-		// Only bounce the running container when its config or quadlet
-		// actually changed. Otherwise Start is a no-op against the live
-		// unit, so a routine reinstall doesn't drop .test resolution.
-		dnsRunning, _ := podman.ContainerRunning("lerd-dns")
-		if dnsChanged || !dnsRunning {
+	if wantDNS {
+		// Only bounce lerd-dns when its config or unit actually changed.
+		// Otherwise Start is a no-op against the live unit, so a routine
+		// reinstall doesn't drop .test resolution.
+		if dnsChanged || !services.Mgr.IsActive("lerd-dns") {
 			step("Starting lerd-dns")
 			if err := services.Mgr.Restart("lerd-dns"); err != nil {
 				fmt.Printf("    WARN: %v\n", err)
@@ -1125,14 +1093,6 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// Record which version this environment is set up for, so a binary a
 	// package manager swaps underneath it is recognised on the next command.
 	writeInstalledVersion(version.Version)
-
-	// Every other step still reports success when this one build fails, so the
-	// install reads as complete while lerd-dns crash-loops on a missing image
-	// and no .test name ever resolves (#1537). Say so instead.
-	if wantDNS && isDNSContainerUnit() && !podman.ImageExists(podman.DNSMasqImage) {
-		feedback.Begin()
-		feedback.Warn("the dnsmasq image did not build, so lerd-dns cannot start and .test names will not resolve. Check the container's network access with `lerd doctor`, then run `lerd install` again")
-	}
 
 	feedback.Begin()
 	feedback.Done("lerd installation complete")

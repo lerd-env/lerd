@@ -2,7 +2,13 @@
 
 package cli
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/geodro/lerd/internal/config"
+)
 
 // isolateState points the lerd state dirs at temp dirs for the duration of a
 // test. teardownDNS deletes the lerd-dns quadlet, which without this lands on the
@@ -51,5 +57,25 @@ func TestTeardownDNS_skipsWhenLerdNeverConfiguredTheResolver(t *testing.T) {
 
 	if called {
 		t.Error("teardownDNS must not revert interfaces and restart NetworkManager on a host where lerd never wrote resolver config")
+	}
+}
+
+// A lerd-dns.service in the user unit dir outranks the generator output of the
+// quadlet an older lerd writes, so a rollback that left it behind would run
+// `lerd dns-serve` on a binary that has no such command, and DNS would die.
+func TestPrepDNSForRollback_removesTheServiceUnit(t *testing.T) {
+	isolateState(t)
+	path := filepath.Join(config.SystemdUserDir(), "lerd-dns.service")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(dnsServiceContent("/bin/lerd", "127.0.0.1")), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	prepDNSForRollback()
+
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("lerd-dns.service must be gone before the older binary installs, stat err = %v", err)
 	}
 }

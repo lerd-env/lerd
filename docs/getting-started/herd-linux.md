@@ -78,7 +78,7 @@ Unlike Herd, lerd also ships as real distro packages: install it through an [apt
 |---|---|
 | `herd park ~/Herd`, every folder inside becomes a site | `lerd park ~/code`, same model, every project inside is served |
 | `herd link`, serve the current directory | `lerd link`, plus framework detection and PHP version picked from `composer.json` |
-| Automatic `.test` domains through the native resolver | Automatic `.test` domains through a dnsmasq container wired into your system resolver, no `/etc/hosts` edits |
+| Automatic `.test` domains through the native resolver | Automatic `.test` domains through lerd's built-in DNS server wired into your system resolver, no `/etc/hosts` edits |
 | The Secure Site toggle | `lerd secure`, a real mkcert certificate trusted by your system and browsers |
 | `herd isolate php@8.4`, PHP version per site | `lerd isolate 8.4`, or auto-detected, PHP 7.4 and 8.0 to 8.5, plus the 8.6 prerelease |
 | `herd php`, `herd composer`, always the site's version | `lerd php`, `lerd composer`, `lerd shell`, on the version that site is registered on |
@@ -100,7 +100,7 @@ Unlike Herd, lerd also ships as real distro packages: install it through an [apt
 | Cost | Free, no paid tier | Free tier plus paid Pro subscription |
 | Stack | Nginx, PHP-FPM and services as rootless Podman containers | Native binaries on macOS and Windows |
 | PHP versions | 7.4, 8.0 to 8.5, shared FPM containers | 7.4 through 8.5, native |
-| `.test` domains | Automatic, through a dnsmasq container | Automatic, through the native dnsmasq resolver |
+| `.test` domains | Automatic, through lerd's built-in DNS server | Automatic, through the native dnsmasq resolver |
 | HTTPS | `lerd secure` and mkcert, trusted system-wide | Built-in Secure Site toggle |
 | FrankenPHP / Octane | Built in, `lerd runtime frankenphp [--worker]` per site, free | Not built in, Octane runs manually alongside Herd |
 | Xdebug | `lerd xdebug:on`, tray toggle | Per-site toggle in Herd Pro |

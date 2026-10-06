@@ -11,7 +11,7 @@
 | PHP runtime | Rootless Podman containers | Native binaries on macOS and Windows |
 | PHP versions | 8.1, 8.2, 8.3, 8.4, 8.5, the 8.6 prerelease, plus legacy 7.4 and 8.0 (shared FPM containers) | 7.4 through 8.5 (native) |
 | FrankenPHP / Octane | Built in: `lerd runtime frankenphp [--worker]` per site, free | Not built in; Octane runs manually alongside Herd |
-| `.test` domains | Automatic via dnsmasq container | Automatic via native dnsmasq resolver |
+| `.test` domains | Automatic via lerd's built-in DNS server | Automatic via native dnsmasq resolver |
 | HTTPS | `lerd secure` + mkcert, trusted system-wide | Built-in "Secure Site" toggle |
 | Xdebug | `lerd xdebug:on`, tray toggle | Per-site toggle (Herd Pro) |
 | Services | Built-in and free: MySQL, Postgres, Redis, Meilisearch, RustFS (S3), Mailpit; custom services via YAML presets | Some in the free tier; most advanced services and UIs (database inspector, log viewer, dumps) gated behind Herd Pro |
@@ -41,7 +41,7 @@ See [Laravel Herd for Linux](/getting-started/herd-linux) for the command-by-com
 | Cost | Free | Free unlicenced tier with a reminder popup and no auto-updates; paid non-commercial and commercial licences |
 | Stack | Nginx, PHP-FPM and services as rootless Podman containers | Apache or Nginx and services as native Windows binaries in a portable folder |
 | PHP versions | 7.4, 8.0 to 8.5 (shared FPM containers) | Multiple versions downloaded into the Laragon folder |
-| `.test` domains | Automatic via dnsmasq container, no hosts file edits | Automatic via hosts file entries written by the tray app |
+| `.test` domains | Automatic via lerd's built-in DNS server, no hosts file edits | Automatic via hosts file entries written by the tray app |
 | HTTPS | `lerd secure` + mkcert, trusted system-wide | One-click self-signed certificate, trusted manually |
 | Scaffolding | `lerd new` runs the framework's own installer | Quick app, one-click Laravel, WordPress, Symfony |
 | Services | MySQL, Postgres, Redis, Meilisearch, MongoDB, RustFS (S3), Mailpit, shared across sites | MySQL, PostgreSQL, Redis, Memcached, per-install |

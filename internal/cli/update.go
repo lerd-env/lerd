@@ -872,6 +872,7 @@ func runRollback() error {
 	// on sd_notify(READY=1) which the old binary never sends. Strip it so
 	// the cache picks up Type=simple immediately.
 	prepUserUnitsForRollback("lerd-ui.service", "lerd-watcher.service")
+	prepDNSForRollback()
 
 	feedback.Note(fmt.Sprintf("Rolled back to v%s, applying infrastructure changes...", prevVersion))
 

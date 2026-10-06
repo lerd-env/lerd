@@ -76,7 +76,7 @@ Prefer your package manager? Lerd is also available through an [apt PPA, a Fedor
 
 | What you used in Laragon | The same thing in Lerd |
 |---|---|
-| Pretty URLs, `app.test` with no hosts file edits | Automatic `.test` domains, resolved by a dnsmasq container wired into your system resolver, no `/etc/hosts` edits |
+| Pretty URLs, `app.test` with no hosts file edits | Automatic `.test` domains, resolved by lerd's built-in DNS server wired into your system resolver, no `/etc/hosts` edits |
 | Auto virtual hosts, a vhost file generated per project | An nginx vhost generated on `lerd link`, with [overrides](/usage/nginx-overrides) when you need them |
 | One-click SSL, self-signed certificates | `lerd secure`, a real mkcert certificate trusted by your system and browsers, no warning page |
 | Quick app, create Laravel, WordPress or Symfony in one click | `lerd new myapp`, scaffolds through the framework's own installer, then links and serves it |
@@ -95,7 +95,7 @@ Prefer your package manager? Lerd is also available through an [apt PPA, a Fedor
 | License | Open source (MIT), free for commercial use | Proprietary, a licence is required from Laragon 7 onwards |
 | Cost | Free | Free unlicenced tier with a reminder popup and no auto-updates; paid non-commercial and commercial licences |
 | Stack | Nginx, PHP-FPM and services as rootless Podman containers | Apache or Nginx and services as native Windows binaries in a portable folder |
-| `.test` domains | Automatic, through a dnsmasq container | Automatic, through hosts file entries written by the tray app |
+| `.test` domains | Automatic, through lerd's built-in DNS server | Automatic, through hosts file entries written by the tray app |
 | HTTPS | `lerd secure`, mkcert certificate trusted system-wide | One-click self-signed certificate, trusted after you install it manually |
 | PHP versions | 7.4, 8.0 to 8.5, per project | Multiple versions, downloaded into the Laragon folder |
 | Per-project config | [`.lerd.yaml`](/configuration#per-project-config-lerd-yaml) committed to the repo, covering PHP, Node, services and workers | None, configuration lives in the Laragon install |

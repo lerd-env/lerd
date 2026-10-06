@@ -74,7 +74,7 @@ Your project is live at `https://myapp.test`. That is the whole setup.
 | Arch with a curated package set, Hyprland launched through `uwsm` | nginx, PHP-FPM and services as rootless Podman containers, managed by systemd user units |
 | A terminal, an editor, and language toolchains you install yourself | PHP 7.4 and 8.0 to 8.5, picked per project by `lerd isolate 8.4` or read from `composer.json` |
 | No local web server, no vhost management | An nginx vhost generated on `lerd link`, with [overrides](/usage/nginx-overrides) when a project needs them |
-| No local domain routing | Automatic `.test` domains through a dnsmasq container wired into systemd-resolved, no `/etc/hosts` edits |
+| No local domain routing | Automatic `.test` domains through lerd's built-in DNS server wired into systemd-resolved, no `/etc/hosts` edits |
 | No local TLS | `lerd secure`, a real mkcert certificate trusted by your system and browsers |
 | Docker available if you install it | Rootless Podman, no daemon, no root, no `docker-compose.yml` per project |
 | A themed bar with a plugin system | A [native bar widget](/features/omarchy-glance) showing sites, services, workers, DNS and container memory |
