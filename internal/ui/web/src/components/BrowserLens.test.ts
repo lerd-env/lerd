@@ -51,7 +51,20 @@ describe('BrowserLens per-site opt-in', () => {
     render(BrowserLens, { props: { siteScope: 'shop' } });
 
     expect(await screen.findByText(m.browser_disabled_body())).toBeTruthy();
+    expect(screen.queryByPlaceholderText(m.debug_searchPlaceholder())).toBeNull();
     expect(apiFetch).not.toHaveBeenCalled();
+  });
+
+  it('turns capture on from the off notice', async () => {
+    apiJson.mockResolvedValue(settings(false));
+    apiFetch.mockResolvedValue({ ok: true, json: async () => settings(true) });
+    render(BrowserLens, { props: { siteScope: 'shop' } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: m.debug_enable() }));
+    const [path, init] = apiFetch.mock.calls[0];
+    expect(path).toBe('/api/browser-logs/sites/shop');
+    expect(JSON.parse(init.body)).toMatchObject({ enabled: true, console: ['error'] });
+    await screen.findByText(m.browser_waiting_body());
   });
 
   it('still lists events captured before the site was turned off', async () => {
@@ -60,6 +73,7 @@ describe('BrowserLens per-site opt-in', () => {
     render(BrowserLens, { props: { siteScope: 'shop' } });
 
     expect(await screen.findByText('old-boom')).toBeTruthy();
+    expect(screen.getByPlaceholderText(m.debug_searchPlaceholder())).toBeTruthy();
   });
 
   it('waits for a page load once the site is on', async () => {

@@ -2,7 +2,7 @@
 
 A JavaScript error thrown on a page lerd serves normally only ever reaches that browser's own console. Browser logs collect those errors in the dashboard, next to what the PHP side of the same site captured, and hands them to AI assistants over MCP, so an assistant debugging a page can read why it broke in the browser instead of asking you to copy the console.
 
-Each site **opts in**, because capture changes the HTML of the site's pages, and a site's pages carry the script only while [debug capture](dumps.md) is on, so the debug switch is the only global one. It covers PHP-FPM sites, host-proxy sites (a dev server lerd proxies to, such as Vite, Next.js or Rails) and custom-container sites. Turn it on for a site with `lerd browser-logs on` in its directory or `lerd browser-logs on <site>`, the browser icon in the site's header, or `browser_toggle` with a `site` via MCP. `lerd browser-logs off` takes it back out.
+Each site **opts in**, because capture changes the HTML of the site's pages, and a site's pages carry the script only while [debug capture](dumps.md) is on, so the debug switch is the only global one. It covers PHP-FPM sites, host-proxy sites (a dev server lerd proxies to, such as Vite, Next.js or Rails) and custom-container sites. Turn it on for a site with `lerd browser-logs on` in its directory or `lerd browser-logs on <site>`, the browser icon in the site's header, the button on its empty Debug → Browser tab, or `browser_toggle` with a `site` via MCP. `lerd browser-logs off` takes it back out.
 
 ## What is captured
 

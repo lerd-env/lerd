@@ -4,9 +4,10 @@
   import { debugSearch } from '$stores/debugLens';
   import { startDumpsStream, stopDumpsStream, clearDumps } from '$stores/dumps';
   import { queryFilterSite } from '$stores/queries';
-  import { siteCaptureOn, loadSiteBrowserLogs } from '$stores/browserLogs';
+  import { siteCaptureOn, loadSiteBrowserLogs, saveSiteBrowserLogs } from '$stores/browserLogs';
   import { buildKindGroups, knownDebugSites, debugEvents, facetOf, isPageView } from '$stores/debugEvents';
   import EmptyState from '$components/EmptyState.svelte';
+  import CaptureOffNotice from '$components/CaptureOffNotice.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import LensLoadMore from '$components/LensLoadMore.svelte';
   import LensGroupLabel from '$components/LensGroupLabel.svelte';
@@ -23,6 +24,11 @@
   let { siteScope = '' }: Props = $props();
   const scoped = $derived(siteScope !== '');
   const siteOff = $derived(scoped && $siteCaptureOn[siteScope] === false);
+
+  async function enableCapture() {
+    const s = await loadSiteBrowserLogs(siteScope);
+    await saveSiteBrowserLogs(siteScope, { ...s, enabled: true });
+  }
 
   let localText = $state('');
   let textInput = $state('');
@@ -91,43 +97,42 @@
 </script>
 
 <div class="flex flex-col h-full overflow-hidden">
-  <div class="flex items-center gap-2 px-3 py-3 border-b border-gray-200 dark:border-lerd-border flex-wrap">
-    <input
-      class="text-xs px-2 py-1 rounded-sm border border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-card flex-1 min-w-[140px]"
-      placeholder={m.debug_searchPlaceholder()}
-      bind:value={textInput}
-    />
-    {#if !scoped}
-      <Dropdown
-        value={$queryFilterSite}
-        options={[
-          { value: '', label: m.dumps_filter_allSites() },
-          ...$knownDebugSites.map((s) => ({ value: s, label: s || m.dumps_unknownSite() }))
-        ]}
-        onchange={(v) => queryFilterSite.set(v)}
+  {#if !(siteOff && groups.length === 0)}
+    <div class="flex items-center gap-2 px-3 py-3 border-b border-gray-200 dark:border-lerd-border flex-wrap">
+      <input
+        class="text-xs px-2 py-1 rounded-sm border border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-card flex-1 min-w-[140px]"
+        placeholder={m.debug_searchPlaceholder()}
+        bind:value={textInput}
       />
-    {/if}
-    {#if typeOptions.length > 1}
-      <Dropdown
-        value={typeFilter}
-        options={[{ value: '', label: m.browser_filter_allTypes() }, ...typeOptions]}
-        minMenuWidth={200}
-        onchange={(v) => (typeFilter = v)}
-      />
-    {/if}
-    {#if scoped}
-      <button type="button" aria-haspopup="dialog" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => openBrowserLogsModal(siteScope)}>{m.common_settings()}</button>
-    {/if}
-    <button type="button" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => clearDumps('browser')}>{m.common_clear()}</button>
-  </div>
+      {#if !scoped}
+        <Dropdown
+          value={$queryFilterSite}
+          options={[
+            { value: '', label: m.dumps_filter_allSites() },
+            ...$knownDebugSites.map((s) => ({ value: s, label: s || m.dumps_unknownSite() }))
+          ]}
+          onchange={(v) => queryFilterSite.set(v)}
+        />
+      {/if}
+      {#if typeOptions.length > 1}
+        <Dropdown
+          value={typeFilter}
+          options={[{ value: '', label: m.browser_filter_allTypes() }, ...typeOptions]}
+          minMenuWidth={200}
+          onchange={(v) => (typeFilter = v)}
+        />
+      {/if}
+      {#if scoped}
+        <button type="button" aria-haspopup="dialog" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => openBrowserLogsModal(siteScope)}>{m.common_settings()}</button>
+      {/if}
+      <button type="button" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => clearDumps('browser')}>{m.common_clear()}</button>
+    </div>
+  {/if}
 
   <div class="flex-1 overflow-y-auto px-3 pb-3">
     {#if groups.length === 0}
       {#if siteOff}
-        <div class="px-3 py-10 text-center space-y-3">
-          <p class="text-sm text-gray-500 dark:text-gray-400">{m.browser_disabled_title()}</p>
-          <p class="text-[11px] text-gray-500 dark:text-gray-400">{m.browser_disabled_body()}</p>
-        </div>
+        <CaptureOffNotice title={m.browser_disabled_title()} body={m.browser_disabled_body()} onenable={enableCapture} />
       {:else}
         <EmptyState title={m.debug_waiting_title()}>
           {#snippet hint()}{scoped ? m.browser_waiting_body() : m.browser_waiting_global()}{/snippet}
