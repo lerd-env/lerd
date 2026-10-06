@@ -51,6 +51,16 @@ lerd renders this into `fastcgi_read_timeout` and `fastcgi_send_timeout` for PHP
 
 A long nginx timeout only helps if PHP is allowed to run that long too. For requests that are CPU-bound rather than waiting on I/O, also raise `max_execution_time` in the per-version php.ini via `lerd php:ini <version>`.
 
+## A single front controller
+
+lerd's generic vhost runs whichever `.php` file a URL names. Some apps route everything through `index.php` instead, including URLs that still end in `.php`: GLPI 11 serves `/front/central.php` from its router, and there is no such file under `public/`, so the generic rules answer 404. Set `front_controller` in the project's `.lerd.yaml`:
+
+```yaml
+front_controller: true
+```
+
+and the vhost hands only `index.php` to PHP, splits `PATH_INFO` off for URLs like `/index.php/api/status`, and rewrites every other `.php` request onto `index.php` with the original URL still in `REQUEST_URI`. Static files are served as before. It travels with the repo, so everyone who clones the project gets the same routing without writing nginx config, and a framework definition can set the same key for every site of that framework. Run `lerd link` afterwards to regenerate the vhost.
+
 ## Example: raise the upload limit for one site
 
 Create `~/.local/share/lerd/nginx/custom.d/bigapp.test.conf`:

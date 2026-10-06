@@ -132,6 +132,9 @@ type ProjectConfig struct {
 	// seconds. Zero inherits the global nginx.request_timeout (default 60s).
 	// Raise it for apps with deliberately long-running requests.
 	RequestTimeout int `yaml:"request_timeout,omitempty"`
+	// FrontController routes every .php request through index.php instead of
+	// running the file it names. See Framework.FrontController.
+	FrontController bool `yaml:"front_controller,omitempty"`
 	// Stripe holds optional per-project Stripe webhook listener settings: the
 	// route events forward to and which .env key holds the secret. Absent for
 	// projects on the Laravel defaults, which are auto-detected.
@@ -163,7 +166,7 @@ func (c *ProjectConfig) IsEmpty() bool {
 		c.Container == nil && c.Proxy == nil && c.Runtime == "" && !c.RuntimeWorker &&
 		!c.DBIsolated && len(c.EnvOverrides) == 0 && len(c.WorktreeInclude) == 0 &&
 		len(c.EnvPassthrough) == 0 && c.EnvProvider == "" &&
-		c.RequestTimeout == 0 && c.Stripe == nil &&
+		c.RequestTimeout == 0 && !c.FrontController && c.Stripe == nil &&
 		c.MCPInject == nil
 }
 
