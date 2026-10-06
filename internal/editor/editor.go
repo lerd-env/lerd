@@ -194,13 +194,13 @@ func Command(file string, line int) []string {
 // should say so.
 func DirCommand(dir string) []string {
 	id := configuredTemplate()
-	// A listed editor opens the directory with its binary; one reachable only
-	// by its URL cannot open a folder.
+	// A listed editor opens the directory with its binary, or failing that
+	// however its platform installs it off PATH.
 	if e, ok := Known(id); ok {
 		if p, ok := e.binary(); ok {
 			return []string{p, dir}
 		}
-		return nil
+		return e.dirCommandOffPath(dir)
 	}
 	if IsURLTemplate(id) {
 		return nil

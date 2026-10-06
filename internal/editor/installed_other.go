@@ -9,3 +9,7 @@ import "strings"
 func (e Editor) installedOffPath() bool {
 	return schemeHandled(e.url[:strings.Index(e.url, ":")])
 }
+
+// dirCommandOffPath has nothing to run: a desktop entry only claims the URL
+// scheme, which addresses a file and cannot open a folder.
+func (e Editor) dirCommandOffPath(string) []string { return nil }
