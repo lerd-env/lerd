@@ -43,7 +43,11 @@ Every PR runs the following checks automatically. All must pass before merging.
 |-------|---------|
 | Build | `go build ./cmd/lerd` |
 | Tests | `go test ./...` |
+| Race detector | `go test -race ./...` |
 | Vet | `go vet ./...` |
 | Format | `gofmt -l .` |
+| Vulnerabilities | `go run golang.org/x/vuln/cmd/govulncheck@latest ./...` |
+| UI tests | `make test-ui` |
+| Docs build | `npm run build` in `docs/` |
 | Installer tests | `bats tests/installer/installer.bats` |
 | UI screenshots | PR description has an image when UI files change |

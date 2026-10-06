@@ -7,8 +7,8 @@ on:
     branches: ["main", "release/**"]
 
 jobs:
-  build:
-    name: Build & Test
+  ui:
+    name: UI
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,27 +27,97 @@ jobs:
       - name: Build UI
         run: make build-ui
 
+      # Every Go job embeds web/dist, so it is built once here and shared.
+      # dist holds a .vite folder, which upload-artifact skips by default.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-dist
+          path: internal/ui/web/dist
+          include-hidden-files: true
+          retention-days: 1
+
       - name: Test UI
         run: make test-ui
-
-      - name: Install tray build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --fix-missing libayatana-appindicator3-dev
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Build
-        run: CGO_ENABLED=1 go build -o /dev/null ./cmd/lerd
 
       - name: Third-party licenses
         run: |
           make licenses
           git diff --exit-code internal/licenses/THIRD-PARTY-LICENSES.md
 
+  test:
+    name: Test
+    needs: ui
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: internal/ui/web/dist
+
+      - name: Install tray build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --fix-missing libayatana-appindicator3-dev
+
       - name: Test
         run: CGO_ENABLED=1 go test ./...
+
+  race:
+    name: Test (race)
+    needs: ui
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: internal/ui/web/dist
+
+      - name: Install tray build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --fix-missing libayatana-appindicator3-dev
+
+      - name: Test with the race detector
+        run: CGO_ENABLED=1 go test -race ./...
+
+  lint:
+    name: Build, Vet & Format
+    needs: ui
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: internal/ui/web/dist
+
+      - name: Install tray build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --fix-missing libayatana-appindicator3-dev
+
+      - name: Build
+        run: CGO_ENABLED=1 go build -o /dev/null ./cmd/lerd
 
       - name: Vet
         run: CGO_ENABLED=1 go vet ./...
@@ -60,8 +130,12 @@ jobs:
       - name: Format
         run: test -z "$(gofmt -l .)"
 
-  build-macos:
-    name: Build & Test (macOS)
+      - name: Vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  test-macos:
+    name: Test (macOS)
+    needs: ui
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -71,29 +145,91 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - uses: actions/setup-node@v4
+      - uses: actions/download-artifact@v4
         with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: internal/ui/web/package-lock.json
-
-      - name: Build UI
-        run: make build-ui
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Build (nogui)
-        run: CGO_ENABLED=0 go build -tags nogui -o /dev/null ./cmd/lerd
+          name: ui-dist
+          path: internal/ui/web/dist
 
       - name: Test
         run: CGO_ENABLED=0 go test -tags nogui ./...
 
+  lint-macos:
+    name: Build & Vet (macOS)
+    needs: ui
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: internal/ui/web/dist
+
+      - name: Build (nogui)
+        run: CGO_ENABLED=0 go build -tags nogui -o /dev/null ./cmd/lerd
+
       - name: Vet
         run: CGO_ENABLED=0 go vet -tags nogui ./...
 
-      - name: Format
-        run: test -z "$(gofmt -l .)"
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            docs/package-lock.json
+            internal/ui/web/package-lock.json
+
+      # Same inputs as the Pages build in docs.yml, so a broken docs build fails here and not at release.
+      - name: Copy static assets into public
+        run: |
+          mkdir -p docs/public/assets/screenshots
+          cp screenshots/app-*.png docs/public/assets/screenshots/
+          cp install.sh docs/public/install.sh
+          mkdir -p docs/public/icons
+          cp docs/public/assets/logo.svg docs/public/icons/icon.svg
+
+      - name: Build the embedded UI demo
+        working-directory: internal/ui/web
+        run: |
+          npm ci
+          npm run build:demo
+
+      - name: Install dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: Build
+        working-directory: docs
+        run: npm run build
+
+  # The main ruleset requires these two check names. Each gate waits on its
+  # split jobs; always() stops a failed dependency from leaving it skipped, which would count as passing.
+  gate-linux:
+    name: Build & Test
+    needs: [ui, test, race, lint, docs]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && !contains(needs.*.result, 'skipped') }}" = true
+
+  gate-macos:
+    name: Build & Test (macOS)
+    needs: [ui, test-macos, lint-macos]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && !contains(needs.*.result, 'skipped') }}" = true
 
   installer:
     name: Installer Tests
