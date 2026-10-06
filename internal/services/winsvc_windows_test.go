@@ -122,6 +122,58 @@ func TestWinWriteServiceUnitIfChanged(t *testing.T) {
 	}
 }
 
+// lerd-tray reads LERD_TRAY_DAEMON=1 from its unit to stay in the foreground;
+// dropped, it detached and the unit read inactive while the tray ran on.
+func TestWinServiceUnitKeepsItsEnvironment(t *testing.T) {
+	isolateWinData(t)
+	m := &windowsServiceManager{}
+	unit := sleeperUnit(t) + "Environment=LERD_TRAY_DAEMON=1\nEnvironment=\"GREETING=hello world\"\n"
+	if err := m.WriteServiceUnit("lerd-test-env", unit); err != nil {
+		t.Fatal(err)
+	}
+	d, err := loadDef("lerd-test-env")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"LERD_TRAY_DAEMON=1", "GREETING=hello world"}; strings.Join(d.Env, "|") != strings.Join(want, "|") {
+		t.Errorf("Env = %q, want %q", d.Env, want)
+	}
+
+	if err := m.WriteServiceUnit("lerd-test-noenv", sleeperUnit(t)); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(defPath("lerd-test-noenv")); strings.Contains(string(data), `"env"`) {
+		t.Errorf("a unit with no Environment= should not grow an env key:\n%s", data)
+	}
+}
+
+func TestWinSupervisedUnitRunsWithItsEnvironment(t *testing.T) {
+	isolateWinData(t)
+	ps, err := findPowerShell()
+	if err != nil {
+		t.Skip("powershell not found")
+	}
+	out := filepath.Join(t.TempDir(), "env.txt")
+	m := &windowsServiceManager{}
+	name := "lerd-test-envrun"
+	unit := "[Service]\nExecStart=" + ps + " -NoProfile -Command \"Set-Content -Path '" + out + "' -Value $env:LERD_TEST_ENV; Start-Sleep 60\"\n" +
+		"Restart=on-failure\nEnvironment=LERD_TEST_ENV=from-the-unit\n"
+	if err := m.WriteServiceUnit(name, unit); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Start(name); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = m.Stop(name) })
+	waitFor(t, "the unit to write its environment", func() bool {
+		data, err := os.ReadFile(out)
+		return err == nil && strings.TrimSpace(string(data)) != ""
+	})
+	if data, _ := os.ReadFile(out); strings.TrimSpace(string(data)) != "from-the-unit" {
+		t.Errorf("unit saw LERD_TEST_ENV=%q, want from-the-unit", strings.TrimSpace(string(data)))
+	}
+}
+
 func TestWinContainerUnitStoresPodmanArgs(t *testing.T) {
 	isolateWinData(t)
 	m := &windowsServiceManager{}

@@ -399,6 +399,15 @@ func parseServiceUnit(name, content string) (args []string, keepAlive keepAliveP
 	return args, keepAlive, nil
 }
 
+// parseServiceEnv returns a service unit's Environment= assignments, unquoted.
+func parseServiceEnv(content string) []string {
+	var env []string
+	for _, e := range parseSection(content, "Service")["Environment"] {
+		env = append(env, unquoteSystemdValue(e))
+	}
+	return env
+}
+
 // missingBinaryFallback picks what to run when a unit's absolute ExecStart path
 // does not exist on this host: the helper of that name beside the running
 // binary (lerd-tray.exe next to lerd.exe), else the running binary itself.

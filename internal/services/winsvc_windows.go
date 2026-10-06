@@ -40,6 +40,8 @@ type unitDef struct {
 	Kind    string          `json:"kind"`
 	Args    []string        `json:"args"`
 	Restart keepAlivePolicy `json:"restart"`
+	// Env is a service unit's Environment= lines, set on top of lerd's own.
+	Env []string `json:"env,omitempty"`
 }
 
 func init() {
@@ -141,7 +143,8 @@ func killTree(pid int) {
 // unit's log, and records the pid. A unit with a restart policy runs under
 // `lerd supervise`, whose pid is the one recorded: spawn runs the detaching
 // launcher to completion and the launcher records the supervisor's pid.
-func spawn(name string, args []string, restart keepAlivePolicy) error {
+// env reaches the command through the supervisor, which passes its own on.
+func spawn(name string, args []string, restart keepAlivePolicy, env []string) error {
 	logf, err := os.OpenFile(filepath.Join(logsDir(), name+".log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
@@ -151,6 +154,9 @@ func spawn(name string, args []string, restart keepAlivePolicy) error {
 	args = supervisedArgs(name, restart, args)
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdout, cmd.Stderr = logf, logf
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		CreationFlags: createNewProcessGroup | createNoWindow,
 		HideWindow:    true,
@@ -182,7 +188,7 @@ func (m *windowsServiceManager) WriteServiceUnitIfChanged(name, content string) 
 	if err != nil {
 		return false, err
 	}
-	return writeDef(name, unitDef{Kind: kindService, Args: args, Restart: keepAlive})
+	return writeDef(name, unitDef{Kind: kindService, Args: args, Restart: keepAlive, Env: parseServiceEnv(content)})
 }
 
 // Timers have no Windows counterpart yet, the same gap macOS has: scheduled
@@ -275,7 +281,7 @@ func (m *windowsServiceManager) Start(name string) error {
 	if pidAlive(readPID(name)) {
 		return nil
 	}
-	return spawn(name, d.Args, d.Restart)
+	return spawn(name, d.Args, d.Restart, d.Env)
 }
 
 func (m *windowsServiceManager) Stop(name string) error {
