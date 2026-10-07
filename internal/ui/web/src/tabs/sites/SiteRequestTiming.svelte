@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import {
     loadSiteAnalytics,
     removeRecorded,
@@ -22,6 +22,7 @@
   import { goToTab } from '$stores/route';
   import { activeWorktreeDomain, type Site } from '$stores/sites';
   import { tooltip } from '$lib/tooltip';
+  import { watchRequests, wsConnected, wsMessage } from '$lib/ws';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -71,16 +72,34 @@
     }
   }
 
+  // The sites snapshot hands over a fresh site object whenever its traffic counts
+  // move, so the effects key on its domain and branch to rerun only on a real change.
+  const domain = $derived(site.domain);
+  const branch = $derived(activeWorktreeBranch);
   $effect(() => {
-    site.domain;
-    activeWorktreeBranch;
+    domain;
+    branch;
     range;
-    load();
+    untrack(load);
   });
 
+  // The server nudges this page over the dashboard socket when the site it shows
+  // gets a new request, so nothing polls while the site is quiet.
+  $effect(() => watchRequests(domain, branch));
   onMount(() => {
-    const poll = setInterval(load, 10000);
-    return () => clearInterval(poll);
+    const offMessage = wsMessage.subscribe((msg) => {
+      if (msg?.type === 'requests' && msg.domain === site.domain && (msg.branch ?? '') === activeWorktreeBranch) void load();
+    });
+    // Requests that landed while the socket was down never sent a nudge.
+    let wasConnected = true;
+    const offConnected = wsConnected.subscribe((up) => {
+      if (up && !wasConnected) void load();
+      wasConnected = up;
+    });
+    return () => {
+      offMessage();
+      offConnected();
+    };
   });
 
   // A pending removal, held until the modal is confirmed. A route removal drops

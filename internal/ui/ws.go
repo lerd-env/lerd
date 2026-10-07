@@ -204,6 +204,12 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 	connID := focusSeq.Add(1)
 	defer dropFocus(connID)
 
+	// The site whose request list this page shows, owned by the main loop; the
+	// reader hands it over through watchReq.
+	var requests requestsWatch
+	defer requests.stop()
+	watchReq := make(chan [2]string, 1)
+
 	// Reader goroutine: handle ping/pong/close/visibility frames. The read
 	// deadline is reset before every frame; if the client falls silent
 	// (suspended tab, half-open TCP), ReadFrame returns a timeout error and
@@ -235,6 +241,8 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 					Type    string `json:"type"`
 					Visible bool   `json:"visible"`
 					Focused bool   `json:"focused"`
+					Domain  string `json:"domain"`
+					Branch  string `json:"branch"`
 				}
 				if json.Unmarshal(payload, &msg) != nil {
 					continue
@@ -249,6 +257,14 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				case msg.Type == "focus":
 					noteFocus(connID, msg.Focused)
 					connFocused = msg.Focused
+				// Only the latest site counts, so an older one still queued
+				// is replaced rather than waited on.
+				case msg.Type == "requests":
+					select {
+					case <-watchReq:
+					default:
+					}
+					watchReq <- [2]string{msg.Domain, msg.Branch}
 				}
 			}
 		}
@@ -299,6 +315,14 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			frame := assembleSnapshot(msg.Sites, msg.Services, msg.Status, msg.UnhealthyWorkers, msg.DumpsStatus, msg.DevtoolsStatus, msg.ProfilerStatus, msg.Notification, msg.Theme, msg.Kinds)
 			if err := sendText(frame); err != nil {
 				return
+			}
+		case want := <-watchReq:
+			requests.watch(want[0], want[1])
+		case <-requests.events():
+			if frame, ok := requests.changed(); ok {
+				if err := sendText(frame); err != nil {
+					return
+				}
 			}
 		case <-pingTicker.C:
 			if err := sendPing(); err != nil {
