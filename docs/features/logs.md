@@ -9,7 +9,7 @@ Call `logs` with `action: "sources"` to enumerate what you can query for the cur
 | Name | Backend | What it is |
 |---|---|---|
 | `app:<file>` | file | Framework application logs (e.g. `app:laravel.log` from `storage/logs/*.log`), parsed with real timestamps and levels |
-| `fpm` | container | The site's PHP-FPM container stdout |
+| `fpm` | container | The site's PHP-FPM container output: PHP errors and FPM notices. The pool access log is off; individual requests are listed in the site's request timing view |
 | `worker:<name>` | journal | A declared worker unit: `worker:queue`, `worker:horizon`, `worker:schedule`, custom workers |
 | `nginx` | container | nginx access/error output |
 | `dns` | container | dnsmasq |
