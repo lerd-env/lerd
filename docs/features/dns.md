@@ -4,6 +4,8 @@ By default lerd runs `lerd-dns`, a small DNS server built into the lerd binary t
 
 Earlier versions ran `lerd-dns` as a dnsmasq container on Linux and a Homebrew dnsmasq on macOS. `lerd install` replaces either on upgrade, removing the old container and its image, and keeps your resolver setup and `lerd.conf` as they are. `lerd update --rollback` puts the container back. If you downgrade by hand on Linux instead, delete `~/.config/systemd/user/lerd-dns.service` before running the older `lerd install`, or the old version keeps starting a unit it cannot run.
 
+The built-in server reads only `lerd.conf` and only the directives lerd writes there: `port=`, `address=`, plain `server=` upstreams and `log-queries`. Anything else, such as a hand-added per-domain `server=/corp/10.0.0.1` or a `cname=`, is ignored and named in the lerd-dns log when the file is loaded, so check that log if you had customised the old dnsmasq setup.
+
 ## Disabling lerd-managed DNS
 
 Some users would rather not have lerd touch the system resolver, particularly on hosts where another local DNS pipeline (corporate VPN resolver, custom split-horizon setup, strict `systemd-resolved` config) gets confused by the dnsmasq tweak. Answering `n` to the install prompt picks the disabled mode:

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,16 +36,21 @@ type Conf struct {
 	Upstreams []string
 	// LogQueries prints every query to stderr, as dnsmasq's log-queries did.
 	LogQueries bool
+	// Unsupported holds the lines this server does not act on, so a directive
+	// someone added by hand for dnsmasq is reported rather than lost.
+	Unsupported []string
 }
 
 // ParseConf reads a lerd.conf. Directives it does not serve, and lines it
-// cannot parse, are skipped so a newer config never stops an older server.
+// cannot parse, are skipped so a newer config never stops an older server;
+// the ones it does not recognise are listed in Unsupported.
 func ParseConf(data []byte) (Conf, error) {
 	c := Conf{Domains: map[string]Addrs{}}
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		switch {
+		case line == "" || strings.HasPrefix(line, "#") || line == "no-resolv":
 		case strings.HasPrefix(line, "port="):
 			if n, err := strconv.Atoi(strings.TrimPrefix(line, "port=")); err == nil {
 				c.Port = n
@@ -54,6 +60,8 @@ func ParseConf(data []byte) (Conf, error) {
 		case strings.HasPrefix(line, "server="):
 			if up, ok := parseUpstream(strings.TrimPrefix(line, "server=")); ok {
 				c.Upstreams = append(c.Upstreams, up)
+			} else {
+				c.Unsupported = append(c.Unsupported, line)
 			}
 		case strings.HasPrefix(line, "address=/"):
 			parts := strings.Split(strings.TrimPrefix(line, "address=/"), "/")
@@ -72,6 +80,8 @@ func ParseConf(data []byte) (Conf, error) {
 				a.V6 = append(a.V6, ip)
 			}
 			c.Domains[domain] = a
+		default:
+			c.Unsupported = append(c.Unsupported, line)
 		}
 	}
 	return c, sc.Err()
@@ -100,6 +110,9 @@ type Server struct {
 	mu      sync.Mutex
 	conf    Conf
 	modTime time.Time
+	// lastGood is the upstream that answered last, asked first next time so a
+	// dead server ahead of it in the list costs one timeout, not one per query.
+	lastGood string
 
 	srvs []*dns.Server
 }
@@ -114,6 +127,9 @@ func (s *Server) config() Conf {
 		if data, err := os.ReadFile(s.path); err == nil {
 			if c, err := ParseConf(data); err == nil {
 				s.conf, s.modTime = c, st.ModTime()
+				for _, line := range c.Unsupported {
+					fmt.Fprintf(os.Stderr, "lerd dns-serve: ignoring unsupported line in %s: %s\n", s.path, line)
+				}
 			}
 		}
 	}
@@ -139,7 +155,7 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 	}
 	addrs, ok := lookupDomain(conf, q.Name)
 	if !ok {
-		_ = w.WriteMsg(forward(req, conf.Upstreams, w.LocalAddr().Network()))
+		_ = w.WriteMsg(s.forward(req, conf.Upstreams, w.LocalAddr().Network()))
 		return
 	}
 	hdr := dns.RR_Header{Name: q.Name, Class: dns.ClassINET, Ttl: ttl}
@@ -158,23 +174,48 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 	_ = w.WriteMsg(resp)
 }
 
-// forward relays req to the upstreams in order and returns the first answer,
-// SERVFAIL when none replies, or REFUSED when there are none to ask.
-func forward(req *dns.Msg, upstreams []string, network string) *dns.Msg {
+// forwardTimeout is how long one upstream gets to answer. A seam for tests.
+var forwardTimeout = 2 * time.Second
+
+// forward relays req to the upstreams, the last one that answered first, and
+// returns the first answer, SERVFAIL when none replies, or REFUSED when there
+// are none to ask.
+func (s *Server) forward(req *dns.Msg, upstreams []string, network string) *dns.Msg {
 	fail := new(dns.Msg)
 	fail.SetReply(req)
 	if len(upstreams) == 0 {
 		fail.Rcode = dns.RcodeRefused
 		return fail
 	}
-	c := &dns.Client{Net: network, Timeout: 2 * time.Second}
-	for _, up := range upstreams {
+	c := &dns.Client{Net: network, Timeout: forwardTimeout}
+	for _, up := range s.upstreamOrder(upstreams) {
 		if r, _, err := c.Exchange(req, up); err == nil {
+			s.mu.Lock()
+			s.lastGood = up
+			s.mu.Unlock()
 			return r
 		}
 	}
 	fail.Rcode = dns.RcodeServerFailure
 	return fail
+}
+
+// upstreamOrder moves the upstream that answered last to the front, provided
+// it is still in the config.
+func (s *Server) upstreamOrder(upstreams []string) []string {
+	s.mu.Lock()
+	last := s.lastGood
+	s.mu.Unlock()
+	if last == "" || upstreams[0] == last || !slices.Contains(upstreams, last) {
+		return upstreams
+	}
+	ordered := []string{last}
+	for _, up := range upstreams {
+		if up != last {
+			ordered = append(ordered, up)
+		}
+	}
+	return ordered
 }
 
 // lookupDomain finds the configured domain name falls under. address=/.d/ip

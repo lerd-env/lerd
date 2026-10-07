@@ -60,6 +60,19 @@ func TestParseConfReadsLogQueries(t *testing.T) {
 	}
 }
 
+// dnsmasq read anything in its conf dir; this server reads only what lerd
+// writes, so a hand-added directive has to be named, not dropped in silence.
+func TestParseConfCollectsUnsupportedLines(t *testing.T) {
+	c, err := ParseConf([]byte("# comment\n\nport=5300\nno-resolv\nlog-queries\nserver=1.1.1.1\nserver=/corp/10.0.0.9\ncname=a.test,b.test\naddress=/.test/127.0.0.1\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"server=/corp/10.0.0.9", "cname=a.test,b.test"}
+	if len(c.Unsupported) != len(want) || c.Unsupported[0] != want[0] || c.Unsupported[1] != want[1] {
+		t.Errorf("unsupported = %q, want %q", c.Unsupported, want)
+	}
+}
+
 func TestParseConfIgnoresUnknownAndBadLines(t *testing.T) {
 	c, err := ParseConf([]byte("cache-size=0\naddress=/.x/not-an-ip\naddress=/.ok/10.0.0.5\nport=abc\n"))
 	if err != nil {
@@ -261,5 +274,39 @@ func TestServfailWhenNoUpstreamAnswers(t *testing.T) {
 
 	if r := query(t, addr, "example.com", dns.TypeA); r.Rcode != dns.RcodeServerFailure {
 		t.Errorf("rcode = %d, want SERVFAIL", r.Rcode)
+	}
+}
+
+// silentUpstream accepts queries and never answers, the way an unreachable
+// resolver behind a firewall looks.
+func silentUpstream(t *testing.T) string {
+	t.Helper()
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = pc.Close() })
+	return pc.LocalAddr().String()
+}
+
+func TestAsksTheUpstreamThatLastAnsweredFirst(t *testing.T) {
+	prev := forwardTimeout
+	forwardTimeout = 300 * time.Millisecond
+	t.Cleanup(func() { forwardTimeout = prev })
+
+	dh, dp, _ := net.SplitHostPort(silentUpstream(t))
+	uh, up, _ := net.SplitHostPort(startUpstream(t))
+	addr, _, stop := startTestServer(t, "port=5300\nserver="+dh+"#"+dp+"\nserver="+uh+"#"+up+"\n")
+	defer stop()
+
+	if r := query(t, addr, "example.com", dns.TypeA); len(r.Answer) != 1 {
+		t.Fatalf("first query should fall through to the live upstream, got %v", r.Answer)
+	}
+	start := time.Now()
+	if r := query(t, addr, "example.org", dns.TypeA); len(r.Answer) != 1 {
+		t.Fatalf("second query: %v", r.Answer)
+	}
+	if took := time.Since(start); took >= forwardTimeout {
+		t.Errorf("second query took %v, so it waited on the dead upstream again", took)
 	}
 }
