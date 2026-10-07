@@ -52,4 +52,15 @@ describe('isDebugLens', () => {
     const { debugLensTabs } = await import('./debugLens');
     expect(debugLensTabs({}, false).find((t) => t.id === 'cache')?.hidden).toBe(true);
   });
+
+  it('hides every lens without events when asked, as a single request shows', async () => {
+    const { debugLensTabs } = await import('./debugLens');
+    const shown = debugLensTabs({ query: 3, view: 1, cache: 2 }, true, true).filter((t) => !t.hidden);
+    expect(shown.map((t) => t.id)).toEqual(['queries', 'views', 'cache']);
+  });
+
+  it('keeps empty lenses by default, so the Debug tab bar stays put', async () => {
+    const { debugLensTabs } = await import('./debugLens');
+    expect(debugLensTabs({}, true).filter((t) => t.hidden)).toEqual([]);
+  });
 });

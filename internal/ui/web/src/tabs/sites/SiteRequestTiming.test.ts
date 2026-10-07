@@ -26,7 +26,8 @@ const analytics: Analytics = {
       p95_millis: 500,
       recent_p95_millis: 500,
       multiplier: 10,
-      samples: 10
+      samples: 10,
+      slowest: { at_millis: 1783501663000, uri: '/reports/9', status: 200, millis: 900 }
     }
   ],
   recent: [
@@ -56,11 +57,11 @@ vi.mock('$stores/profiler', async () => {
     waitForCapture: vi.fn(async () => true)
   };
 });
-vi.mock('$stores/dashboard', () => ({ openProfiler: vi.fn() }));
+vi.mock('$stores/dashboard', () => ({ openProfiler: vi.fn(), openProfilerReport: vi.fn() }));
 
 import SiteRequestTiming from './SiteRequestTiming.svelte';
 import { profilerEnabled, setProfiler, captureCount, waitForCapture } from '$stores/profiler';
-import { openProfiler } from '$stores/dashboard';
+import { openProfiler, openProfilerReport } from '$stores/dashboard';
 import { m } from '../../paraglide/messages.js';
 
 // The profiler starts armed for the tests that are only about the navigation.
@@ -89,6 +90,72 @@ describe('SiteRequestTiming Recent list', () => {
   });
 });
 
+// A request SPX profiled stays inspectable after its debug events are gone, and
+// its dialog opens on the flame graph.
+describe('SiteRequestTiming profiled request', () => {
+  it('opens the flame graph of a profiled request from its dialog', async () => {
+    loadSiteAnalytics.mockResolvedValueOnce({
+      ...analytics,
+      recent: [{ at_millis: 1783501663287, method: 'GET', route: 'GET /', uri: '/', status: 200, millis: 30, cold: false, profile_key: 'spx-full-9' }]
+    } as Analytics);
+    const { findByText, getByRole, findByRole } = render(SiteRequestTiming, { props: { site: { domain: 'whitewaters', can_profile: true } } });
+    await findByText(m.sites_timing_recent());
+    await fireEvent.click(getByRole('button', { name: m.sites_timing_recent() }));
+
+    await fireEvent.click(await findByRole('button', { name: m.sites_timing_inspectRequest() }));
+    await fireEvent.click(await findByRole('button', { name: m.timeline_flameGraph() }));
+    expect(openProfilerReport).toHaveBeenCalledWith('spx-full-9');
+  });
+});
+
+// Recent requests page 20 at a time while the server says there are more.
+describe('SiteRequestTiming recent paging', () => {
+  it('asks for 20 more when Show more is clicked', async () => {
+    loadSiteAnalytics.mockClear();
+    loadSiteAnalytics.mockResolvedValueOnce({ ...analytics, recent_more: true } as Analytics);
+    const { findByText, getByRole, findByRole } = render(SiteRequestTiming, { props: { site: { domain: 'whitewaters', can_profile: true } } });
+    await findByText(m.sites_timing_recent());
+    await fireEvent.click(getByRole('button', { name: m.sites_timing_recent() }));
+
+    await fireEvent.click(await findByRole('button', { name: m.sites_timing_showMore() }));
+    await waitFor(() => expect((loadSiteAnalytics.mock.calls as unknown[][]).at(-1)?.[3]).toBe(40));
+  });
+});
+
+// A slower read of a smaller page must not land on top of a bigger one asked after it.
+describe('SiteRequestTiming recent paging out of order', () => {
+  it('keeps the newest page when an older read finishes last', async () => {
+    const row = (uri: string) => ({ at_millis: 1783501663287, method: 'GET', route: 'GET ' + uri, uri, status: 200, millis: 5, cold: false });
+    let finishOlder: (a: Analytics) => void = () => {};
+    const older = new Promise<Analytics>((r) => (finishOlder = r));
+    loadSiteAnalytics.mockImplementation(((_d: string, _r: string, _b: string, recent = 20) => {
+      if (recent === 40) return older;
+      return Promise.resolve({ ...analytics, recent: [row(recent === 60 ? '/newest' : '/first')], recent_more: true } as Analytics);
+    }) as unknown as () => Promise<Analytics>);
+    const { findByText, getByRole, findByRole, queryByText } = render(SiteRequestTiming, { props: { site: { domain: 'whitewaters', can_profile: true } } });
+    await findByText(m.sites_timing_recent());
+    await fireEvent.click(getByRole('button', { name: m.sites_timing_recent() }));
+
+    await fireEvent.click(await findByRole('button', { name: m.sites_timing_showMore() }));
+    await fireEvent.click(await findByRole('button', { name: m.sites_timing_showMore() }));
+    await findByText('/newest');
+    finishOlder({ ...analytics, recent: [row('/older')], recent_more: true } as Analytics);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(queryByText('/older')).toBeNull();
+    loadSiteAnalytics.mockImplementation(async () => analytics);
+  });
+});
+
+// A route's time bar opens the slowest request recorded for it.
+describe('SiteRequestTiming slowest request', () => {
+  it('opens the route slowest request from its time bar', async () => {
+    const { findByRole, findByText } = render(SiteRequestTiming, { props: { site: { domain: 'whitewaters', can_profile: true } } });
+    await fireEvent.click(await findByRole('button', { name: m.sites_timing_openSlowest({ ms: '900 ms' }) }));
+    expect(await findByText('GET /reports/9')).toBeTruthy();
+    expect(await findByText(m.sites_timing_nothingCaptured())).toBeTruthy();
+  });
+});
+
 // A worktree is served from its own subdomain, so the panel must both ask for the
 // branch's timing and send its route links there. It used to open the parent's
 // domain, profiling a route on the wrong checkout.
@@ -114,12 +181,12 @@ describe('SiteRequestTiming on a worktree', () => {
     });
 
     await waitFor(() => {
-      expect(loadSiteAnalytics).toHaveBeenCalledWith('whitewaters.test', '1h', 'feature-x');
+      expect(loadSiteAnalytics).toHaveBeenCalledWith('whitewaters.test', '1h', 'feature-x', 20);
     });
 
     // The slow route's own row is the profile trigger; its accessible name is the
     // method and path it renders.
-    await fireEvent.click(await findByRole('button', { name: /GET.*\/reports\/:id/ }));
+    await fireEvent.click(await findByRole('button', { name: m.sites_reqstats_profile() }));
     await waitFor(() => {
       expect(open).toHaveBeenCalledWith('https://feature-x.whitewaters.test/reports/7', '_blank');
     });
@@ -139,7 +206,7 @@ describe('SiteRequestTiming on a localhost site', () => {
 
     const { findByRole } = render(SiteRequestTiming, { props: { site } });
 
-    await fireEvent.click(await findByRole('button', { name: /GET.*\/reports\/:id/ }));
+    await fireEvent.click(await findByRole('button', { name: m.sites_reqstats_profile() }));
     await waitFor(() => {
       expect(open).toHaveBeenCalledWith('http://whitewaters.localhost/reports/7', '_blank');
     });
@@ -161,7 +228,7 @@ describe('SiteRequestTiming profiling a slow route', () => {
     vi.stubGlobal('open', open);
 
     const { findByRole, findByText } = render(SiteRequestTiming, { props: { site } });
-    await fireEvent.click(await findByRole('button', { name: /GET.*\/reports\/:id/ }));
+    await fireEvent.click(await findByRole('button', { name: m.sites_reqstats_profile() }));
 
     // The request is out and the wait is on, but SPX has nothing to show yet.
     await findByText(m.sites_reqstats_profileWaiting());
@@ -182,7 +249,7 @@ describe('SiteRequestTiming profiling a slow route', () => {
     vi.stubGlobal('open', vi.fn(() => ({ location: { href: '' } })));
 
     const { findByRole, findByText } = render(SiteRequestTiming, { props: { site } });
-    await fireEvent.click(await findByRole('button', { name: /GET.*\/reports\/:id/ }));
+    await fireEvent.click(await findByRole('button', { name: m.sites_reqstats_profile() }));
 
     await findByText(m.sites_reqstats_profileMissed());
     expect(openProfiler).not.toHaveBeenCalled();
@@ -195,7 +262,7 @@ describe('SiteRequestTiming profiling a slow route', () => {
     vi.stubGlobal('open', vi.fn(() => ({ location: { href: '' } })));
 
     const { findByRole } = render(SiteRequestTiming, { props: { site } });
-    await fireEvent.click(await findByRole('button', { name: /GET.*\/reports\/:id/ }));
+    await fireEvent.click(await findByRole('button', { name: m.sites_reqstats_profile() }));
 
     await waitFor(() => expect(vi.mocked(setProfiler).mock.calls).toEqual([[true], [false]]));
   });
@@ -205,7 +272,7 @@ describe('SiteRequestTiming profiling a slow route', () => {
     vi.stubGlobal('open', vi.fn(() => ({ location: { href: '' } })));
 
     const { findByRole } = render(SiteRequestTiming, { props: { site } });
-    await fireEvent.click(await findByRole('button', { name: /GET.*\/reports\/:id/ }));
+    await fireEvent.click(await findByRole('button', { name: m.sites_reqstats_profile() }));
 
     await waitFor(() => expect(openProfiler).toHaveBeenCalled());
     expect(setProfiler).not.toHaveBeenCalled();
@@ -228,12 +295,12 @@ describe('SiteRequestTiming on a route it cannot open', () => {
     const open = vi.fn();
     vi.stubGlobal('open', open);
 
-    const { findAllByText, queryByRole } = render(SiteRequestTiming, {
+    const { findAllByText, getByRole } = render(SiteRequestTiming, {
       props: { site: { domain: 'whitewaters.test', can_profile: true } }
     });
 
     await findAllByText('/checkout');
-    expect(queryByRole('button', { name: /POST.*\/checkout/ })).toBeNull();
+    expect((getByRole('button', { name: m.sites_reqstats_profileOnly() }) as HTMLButtonElement).disabled).toBe(true);
     expect(setProfiler).not.toHaveBeenCalled();
     expect(open).not.toHaveBeenCalled();
   });
@@ -338,6 +405,6 @@ describe('SiteRequestTiming on a site SPX cannot profile', () => {
     });
 
     await findAllByText('/reports/:id');
-    expect(queryByRole('button', { name: /GET.*\/reports\/:id/ })).toBeNull();
+    expect(queryByRole('button', { name: m.sites_reqstats_profile() })).toBeNull();
   });
 });

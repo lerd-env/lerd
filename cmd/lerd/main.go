@@ -514,6 +514,11 @@ func newWatchCmd() *cobra.Command {
 				}
 			}
 
+			// The provided-env files live on tmpfs, and nothing else refills
+			// them after a reboot: systemd brings the sites back up without
+			// lerd start. A provider can hang, so it must not hold up readiness.
+			go cli.RestoreProvidedEnv()
+
 			// Periodically catch deletions that happen while the watcher is busy.
 			go func() {
 				for range time.Tick(30 * time.Second) {

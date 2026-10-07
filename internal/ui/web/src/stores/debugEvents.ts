@@ -1,7 +1,9 @@
-import { derived, type Readable } from 'svelte/store';
+import { derived, readable, type Readable } from 'svelte/store';
+import { getContext, setContext } from 'svelte';
 import type { DumpEvent } from '$lib/dumpsStream';
 import { groupKey, groupLabel, type GroupLabel } from '$lib/eventGroup';
 import { kindHaystack } from '$lib/eventSearch';
+import { routeOf } from '$lib/route';
 import { dumps } from '$stores/dumps';
 import { showTests } from '$stores/debugLens';
 
@@ -104,3 +106,56 @@ export const debugEvents: Readable<DumpEvent[]> = derived(
 export const hiddenTestCount: Readable<number> = derived([dumps, showTests], ([$dumps, $showTests]) =>
   $showTests ? 0 : $dumps.reduce((n, ev) => (ev.ctx.test ? n + 1 : n), 0)
 );
+
+// ofRequest reports whether an event belongs to one request: it ran in it, or
+// it is a browser event naming it as the request a fetch reached. It mirrors
+// dumps.Event.OfRequest on the Go side.
+export function ofRequest(ev: DumpEvent, rid: string): boolean {
+  return ev.ctx.rid === rid || (ev.kind === 'browser' && (ev.data as { rid?: string } | undefined)?.rid === rid);
+}
+
+// requestEvents is one request's events: what the server returned for it, then
+// whatever the stream brought since that the server's answer did not hold.
+export function requestEvents(events: DumpEvent[], rid: string, fetched: DumpEvent[], showTests: boolean): DumpEvent[] {
+  const live = events.filter((ev) => ofRequest(ev, rid));
+  if (fetched.length === 0) return live;
+  const seen = new Set(fetched.map((ev) => ev.id));
+  return [...fetched.filter((ev) => showTests || !ev.ctx.test), ...live.filter((ev) => !seen.has(ev.id))];
+}
+
+const SCOPE = Symbol('lensEvents');
+
+// scopeLensEvents narrows every lens rendered below the calling component to
+// the request rid names, or leaves them on every event while it is empty.
+// fetched is what the server's ring holds for the request, which reaches back
+// further than the stream a tab opened on.
+export function scopeLensEvents(rid: Readable<string>, fetched: Readable<DumpEvent[]> = readable([]), route: Readable<string> = readable('')): Readable<DumpEvent[]> {
+  const scoped = derived([debugEvents, rid, fetched, showTests, route], ([$events, $rid, $fetched, $showTests, $route]) =>
+    $rid ? requestEvents($events, $rid, $fetched, $showTests) : lensRouteFilter($events, $route)
+  );
+  setContext(SCOPE, scoped);
+  return scoped;
+}
+
+// lensRouteFilter keeps the events of one route, matched whole rather than as
+// text, since "GET /" is a prefix of every other GET.
+export function lensRouteFilter(events: DumpEvent[], route: string): DumpEvent[] {
+  return route ? events.filter((ev) => routeOf(ev) === route) : events;
+}
+
+const PICK = Symbol('pickRequest');
+
+// providePickRequest lets a request id shown in a lens below the caller narrow
+// the view to that request; pickRequest is undefined where nothing can.
+export function providePickRequest(pick: (rid: string) => void): void {
+  setContext(PICK, pick);
+}
+
+export function pickRequest(): ((rid: string) => void) | undefined {
+  return getContext<((rid: string) => void) | undefined>(PICK);
+}
+
+// lensEvents is the stream a lens renders: its scope's, or every event.
+export function lensEvents(): Readable<DumpEvent[]> {
+  return getContext<Readable<DumpEvent[]> | undefined>(SCOPE) ?? debugEvents;
+}

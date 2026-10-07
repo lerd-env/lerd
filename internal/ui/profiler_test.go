@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -137,5 +138,26 @@ func TestHandleProfilerClear_LoopbackReturnsRemovedCount(t *testing.T) {
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v; body=%s", err, rec.Body.String())
+	}
+}
+
+// A request's inspector links to its flame graph through the SPX key the
+// request id was written onto.
+func TestHandleProfilerReport_FindsTheRequestsCapture(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(dir, "data"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+	data := config.SpxDataDir()
+	if err := os.MkdirAll(data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(data, "spx-full-7.json"), []byte(`{"custom_metadata_str":"lerd-rid:abc123"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	handleProfilerReport(rec, httptest.NewRequest("GET", "/api/profiler/report?rid=abc123", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"key":"spx-full-7"`) {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 }

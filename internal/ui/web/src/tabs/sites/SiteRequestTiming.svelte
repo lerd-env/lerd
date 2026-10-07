@@ -12,8 +12,10 @@
   } from '$stores/analytics';
   import ConfirmModal from '$components/ConfirmModal.svelte';
   import Modal from '$components/Modal.svelte';
+  import RequestInspectModal from '$components/RequestInspectModal.svelte';
   import Icon from '$components/Icon.svelte';
-  import { profilerEnabled, setProfiler, captureCount, waitForCapture } from '$stores/profiler';
+  import ProfilerIcon from '$components/ProfilerIcon.svelte';
+  import { profileRoute as profileRouteRequest } from '$lib/profileRoute';
   import { openProfiler } from '$stores/dashboard';
   import { debugCaptureEnabled } from '$stores/queries';
   import { debugLens, debugSearch } from '$stores/debugLens';
@@ -32,31 +34,39 @@
   // profiling a route has to target that, not the parent site.
   let targetDomain = $derived(activeWorktreeDomain(site, activeWorktreeBranch));
 
-  // Inspect a route's queries in the Debug tab's Queries lens, the one place that
-  // renders captured queries. Seed the lens filter with the route's path prefix
-  // (up to the first :id/:slug placeholder) so it scopes to that route, then
-  // switch the lens on and navigate to the Debug tab.
+  // The Debug tab reads a search shaped like "GET /path" as that whole route.
   function inspectRoute(route: string) {
-    const path = route.replace(/^[A-Z]+\s+/, '');
-    debugSearch.set(path.split('/:')[0]);
+    debugSearch.set(route);
     debugLens.set('queries');
     goToTab('sites', `${site.domain}/dumps`);
   }
+
+  // The recent request whose lenses are open, by the id it was logged with.
+  let inspecting = $state<RecentRequest | null>(null);
 
   let range = $state<TimeRange>('1h');
   let data = $state<Analytics | null>(null);
   let tab = $state<'routes' | 'recent'>('routes');
 
+  // Recent requests page 20 at a time; the server says whether there is more.
+  let recentLimit = $state(20);
+  function showMoreRecent() {
+    recentLimit += 20;
+    void load();
+  }
+
   async function load() {
     const d = site.domain;
     const b = activeWorktreeBranch;
     const rg = range;
+    const lim = recentLimit;
+    const stale = () => d !== site.domain || b !== activeWorktreeBranch || rg !== range || lim !== recentLimit;
     try {
-      const a = await loadSiteAnalytics(d, rg, b);
-      if (d !== site.domain || b !== activeWorktreeBranch || rg !== range) return;
+      const a = await loadSiteAnalytics(d, rg, b, lim);
+      if (stale()) return;
       data = a;
     } catch {
-      if (d !== site.domain || b !== activeWorktreeBranch || rg !== range) return;
+      if (stale()) return;
       data = null;
     }
   }
@@ -206,50 +216,21 @@
     if (r.method !== 'GET' || !r.example) return '';
     return `${site.tls ? 'https' : 'http'}://${targetDomain}${r.example}`;
   }
-  // Profiling a route arms the profiler, opens the route, and hands over to SPX.
-  // Each step waits for the one before it: arming only returns once nginx serves
-  // the profiling config, so the request cannot be answered by the configuration
-  // that has no profiler attached, and SPX only opens once the capture is on disk,
-  // so the report the user lands on is the request they just triggered. A route
-  // with no URL to open arms nothing, and a profiler this armed is put back after,
-  // rather than leaving every FPM site profiled.
+  // Profiling a route hands over to SPX once the capture is on disk, so the
+  // report the user lands on is the request they just triggered. A route with
+  // no URL to open arms nothing.
   async function profileRoute(r: RouteStat) {
     const url = routeUrl(r);
     if (arming || !url) return;
     arming = true;
     profileFailed = false;
-    const armedHere = !$profilerEnabled;
-    try {
-      const before = await captureCount(targetDomain, r.route);
-      if (armedHere) {
-        profileStatus = m.sites_reqstats_profileArming();
-        await setProfiler(true);
-      }
-      // Opened once, here, with the real URL. Holding a blank tab open across the
-      // arming wait leaves an about:blank the desktop is asked to find an
-      // application for when the dashboard runs as an app window.
-      window.open(url, '_blank');
-      profileStatus = m.sites_reqstats_profileWaiting();
-      if (await waitForCapture(targetDomain, r.route, before)) {
-        profileStatus = '';
-        openProfiler();
-      } else {
-        profileStatus = m.sites_reqstats_profileMissed();
-        profileFailed = true;
-      }
-    } catch {
-      profileStatus = m.sites_reqstats_profileMissed();
-      profileFailed = true;
-    } finally {
-      if (armedHere) {
-        try {
-          await setProfiler(false);
-        } catch {
-          /* it stays armed; the toggle is one click away */
-        }
-      }
-      arming = false;
-    }
+    const caught = await profileRouteRequest(targetDomain, r.route, url, (p) => {
+      profileStatus = p === 'arming' ? m.sites_reqstats_profileArming() : m.sites_reqstats_profileWaiting();
+    });
+    profileStatus = caught ? '' : m.sites_reqstats_profileMissed();
+    profileFailed = !caught;
+    arming = false;
+    if (caught) openProfiler();
   }
 </script>
 
@@ -291,14 +272,11 @@
     <button
       type="button"
       onclick={(e) => { e.stopPropagation(); inspectRoute(routeKey); }}
-      use:tooltip={m.sites_timing_inspectQueries()}
-      aria-label={m.sites_timing_inspectQueries()}
+      use:tooltip={m.sites_timing_inspectRoute()}
+      aria-label={m.sites_timing_inspectRoute()}
       class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
     >
-      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <ellipse cx="12" cy="5" rx="8" ry="3" />
-        <path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" />
-      </svg>
+      <Icon name="eye" class="w-3.5 h-3.5" />
     </button>
   {/if}
 {/snippet}
@@ -404,18 +382,32 @@
       <div class="flex flex-col gap-2">
         {#each slowest as r (r.method + r.route)}
           <div class="flex items-center gap-2">
-            {#if canProfile && routeUrl(r)}
-              <button type="button" onclick={() => profileRoute(r)} disabled={arming} use:tooltip={m.sites_reqstats_profile()}
-                class="{slowRowClass} text-left group disabled:opacity-60">
+            {#if r.slowest}
+              {@const slow = r.slowest}
+              <button type="button" onclick={() => (inspecting = { ...slow, method: r.method, route: r.route, cold: false })}
+                use:tooltip={m.sites_timing_openSlowest({ ms: fmtMs(slow.millis) })} aria-label={m.sites_timing_openSlowest({ ms: fmtMs(slow.millis) })}
+                class="{slowRowClass} text-left group">
                 {@render slowRow(r, true)}
               </button>
-            {:else if canProfile}
-              <div class={slowRowClass} use:tooltip={m.sites_reqstats_profileOnly()}>{@render slowRow(r, false)}</div>
             {:else}
               <div class={slowRowClass}>{@render slowRow(r, false)}</div>
             {/if}
-            {@render inspectBtn(r.route)}
-            {@render removeBtn(() => askRemoveRoute(r))}
+            <span class="shrink-0 flex items-center gap-2">
+              {#if canProfile}
+                <button
+                  type="button"
+                  onclick={() => profileRoute(r)}
+                  disabled={arming || !routeUrl(r)}
+                  use:tooltip={routeUrl(r) ? m.sites_reqstats_profile() : m.sites_reqstats_profileOnly()}
+                  aria-label={routeUrl(r) ? m.sites_reqstats_profile() : m.sites_reqstats_profileOnly()}
+                  class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-40 disabled:hover:text-gray-500 disabled:hover:bg-transparent"
+                >
+                  <ProfilerIcon />
+                </button>
+              {/if}
+              {@render inspectBtn(r.route)}
+              {@render removeBtn(() => askRemoveRoute(r))}
+            </span>
           </div>
         {/each}
       </div>
@@ -445,8 +437,7 @@
                 <th class="text-right font-semibold px-3 py-2">p95</th>
                 <th class="text-left font-semibold px-3 py-2 w-24">{m.sites_timing_latency()}</th>
                 <th class="text-right font-semibold px-3 py-2">{m.sites_timing_requests()}</th>
-                {#if $debugCaptureEnabled}<th class="px-2 py-2 w-8"></th>{/if}
-                <th class="px-2 py-2 w-8"></th>
+                <th class="px-2 py-2"></th>
               </tr>
             </thead>
             <tbody>
@@ -466,8 +457,10 @@
                     </span>
                   </td>
                   <td class="px-3 py-2 text-right tabular-nums text-gray-600 dark:text-gray-300">{r.samples.toLocaleString()}</td>
-                  {#if $debugCaptureEnabled}<td class="px-2 py-2 text-right">{@render inspectBtn(r.route)}</td>{/if}
-                  <td class="px-2 py-2 text-right">{@render removeBtn(() => askRemoveRoute(r))}</td>
+                  <td class="px-2 py-2">
+                    <!-- Same 8px between the actions as the slowest-routes and recent rows. -->
+                    <span class="flex items-center justify-end gap-2">{@render inspectBtn(r.route)}{@render removeBtn(() => askRemoveRoute(r))}</span>
+                  </td>
                 </tr>
               {/each}
             </tbody>
@@ -485,10 +478,30 @@
               {/if}
               <span class="shrink-0 font-mono text-[11px] font-semibold {statusClass(r.status)}">{r.status}</span>
               <span class="shrink-0 tabular-nums font-medium text-right w-16 {r.cold ? 'text-gray-500 dark:text-gray-400' : SEV_TEXT[sev(r.millis)]}">{fmtMs(r.millis)}</span>
+              <span class="shrink-0 flex items-center gap-2">
+              {#if r.rid || r.profile_key}
+                <button
+                  type="button"
+                  onclick={() => (inspecting = r)}
+                  use:tooltip={m.sites_timing_inspectRequest()}
+                  aria-label={m.sites_timing_inspectRequest()}
+                  class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+                >
+                  <Icon name="eye" class="w-3.5 h-3.5" />
+                </button>
+              {:else}
+                <span class="shrink-0 w-6" aria-hidden="true"></span>
+              {/if}
               {@render removeBtn(() => askRemoveRequest(r))}
+              </span>
             </div>
           {/each}
         </div>
+        {#if data.recent_more}
+          <div class="py-3 flex justify-center border-t border-gray-100 dark:border-lerd-border">
+            <button type="button" onclick={showMoreRecent} class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-3 py-1 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5">{m.sites_timing_showMore()}</button>
+          </div>
+        {/if}
       {/if}
     </div>
   {/if}
@@ -497,6 +510,8 @@
     <div class="mt-2 text-[11px] text-amber-600 dark:text-amber-400">{removeError}</div>
   {/if}
 </section>
+
+<RequestInspectModal {site} request={inspecting} origin={canProfile ? `${site.tls ? 'https' : 'http'}://${targetDomain}` : ''} onclose={() => (inspecting = null)} />
 
 <Modal open={excludesOpen} title={m.sites_timing_excluded()} onclose={() => (excludesOpen = false)}>
   <div class="px-5 py-4">

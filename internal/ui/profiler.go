@@ -77,6 +77,16 @@ func handleProfilerCaptures(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleProfilerReport names the SPX capture of one request, found by the id
+// lerd wrote onto it, so the dashboard can open that request's flame graph.
+func handleProfilerReport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, map[string]string{"key": spxreport.KeyForRID(config.SpxDataDir(), r.URL.Query().Get("rid"))})
+}
+
 // handleProfilerClear deletes every captured SPX report. It requires
 // dashboard-control authority because it removes files from the host.
 func handleProfilerClear(w http.ResponseWriter, r *http.Request) {

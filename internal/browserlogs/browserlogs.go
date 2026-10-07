@@ -172,10 +172,13 @@ type Report struct {
 	Name    string `json:"name,omitempty"`
 	Label   string `json:"label,omitempty"`
 	Cross   bool   `json:"cross,omitempty"`
-	URL     string `json:"url,omitempty"`
-	Page    string `json:"page,omitempty"`
-	UA      string `json:"ua,omitempty"`
-	At      string `json:"at,omitempty"`
+	// RID is the PHP request a failed fetch or XHR reached, read off its
+	// X-Lerd-Rid response header.
+	RID  string `json:"rid,omitempty"`
+	URL  string `json:"url,omitempty"`
+	Page string `json:"page,omitempty"`
+	UA   string `json:"ua,omitempty"`
+	At   string `json:"at,omitempty"`
 }
 
 var reportTypes = map[string]bool{"error": true, "rejection": true, "console": true, "network": true, "navigation": true, "resource": true, "event": true}
@@ -293,6 +296,7 @@ type Entry struct {
 	Request string `json:"request,omitempty"`
 	Status  int    `json:"status,omitempty"`
 	Cross   bool   `json:"cross_origin,omitempty"`
+	RID     string `json:"rid,omitempty"`
 	Time    string `json:"time"`
 }
 
@@ -340,7 +344,7 @@ func Summarize(events []dumps.Event, types []string) Summary {
 			index[key] = i
 			out.PageViews = append(out.PageViews, PageView{URL: e.Ctx.Request, Branch: e.Ctx.Branch, Start: e.TS})
 		}
-		entry := Entry{Type: typ, Message: r.Message, Stack: r.Stack, Method: r.Method, Request: r.Request, Status: r.Status, Cross: r.Cross, Time: e.TS}
+		entry := Entry{Type: typ, Message: r.Message, Stack: r.Stack, Method: r.Method, Request: r.Request, Status: r.Status, Cross: r.Cross, RID: r.RID, Time: e.TS}
 		if r.File != "" {
 			entry.At = fmt.Sprintf("%s:%d:%d", r.File, r.Line, r.Col)
 		}

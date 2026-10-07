@@ -70,9 +70,10 @@ debugLens.subscribe((v) => {
 
 // debugLensTabs is the lens bar shared by the System Debug panel and the site
 // Debug tab, grouped so related lenses sit together. counts is keyed by event
-// kind; showCache is false when no Laravel site can feed the cache lens.
-export function debugLensTabs(counts: Record<string, number>, showCache: boolean): TabItem<DebugLens>[] {
-  return [
+// kind; showCache is false when no Laravel site can feed the cache lens, and
+// onlyFilled hides every lens without events, for a single request's view.
+export function debugLensTabs(counts: Record<string, number>, showCache: boolean, onlyFilled = false): TabItem<DebugLens>[] {
+  const tabs: TabItem<DebugLens>[] = [
     { id: 'dumps', label: m.debug_tab_dumps(), count: counts['dump'], group: 'dumps' },
     { id: 'exceptions', label: m.debug_tab_exceptions(), count: counts['exception'], group: 'errors' },
     { id: 'logs', label: m.debug_tab_logs(), count: counts['log'], group: 'errors' },
@@ -86,4 +87,5 @@ export function debugLensTabs(counts: Record<string, number>, showCache: boolean
     { id: 'events', label: m.debug_tab_events(), count: counts['event'], group: 'background' },
     { id: 'mail', label: m.debug_tab_mail(), count: counts['mail'], group: 'background' }
   ];
+  return onlyFilled ? tabs.map((t) => (t.count ? t : { ...t, hidden: true })) : tabs;
 }

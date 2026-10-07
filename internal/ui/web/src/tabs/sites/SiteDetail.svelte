@@ -168,7 +168,7 @@
       <SiteTinkerTab {site} branch={activeWorktreeBranch} />
     {/key}
   {:else if active === 'dumps'}
-    <SiteDebugTab siteName={site.name} framework={site.framework} domain={site.domain} branch={activeWorktreeBranch} phpLenses={Boolean(site.uses_php)} />
+    <SiteDebugTab siteName={site.name} framework={site.framework} domain={site.domain} branch={activeWorktreeBranch} phpLenses={Boolean(site.uses_php)} origin={site.can_profile ? `${site.tls ? 'https' : 'http'}://${activeWorktreeDomain(site, activeWorktreeBranch)}` : ''} />
   {/if}
 </DetailPanel>
 

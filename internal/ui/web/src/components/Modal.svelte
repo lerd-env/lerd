@@ -8,7 +8,7 @@
     open: boolean;
     title: string;
     onclose: () => void;
-    size?: 'sm' | 'md' | 'lg' | 'xl';
+    size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
     children: Snippet;
     footer?: Snippet;
   }
@@ -23,7 +23,9 @@
         ? 'max-w-2xl'
         : size === 'xl'
           ? 'max-w-5xl'
-          : 'max-w-lg'
+          : size === '2xl'
+            ? 'max-w-7xl'
+            : 'max-w-lg'
   );
 
   // An open modal owns Escape. Marking the event handled lets layers

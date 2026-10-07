@@ -177,6 +177,30 @@ func execDumpsToggle(args map[string]any) (any, *rpcError) {
 	return toolOK(string(b)), nil
 }
 
+// execDumpsBuffer reads or sets how many events lerd-ui keeps for the Debug
+// window. A running lerd-ui is told and resizes in place, keeping the newest
+// events that fit.
+func execDumpsBuffer(args map[string]any) (any, *rpcError) {
+	out := map[string]any{"min": config.MinDumpsBuffer, "max": config.MaxDumpsBuffer, "event_kb": 4.5}
+	if _, ok := args["size"]; !ok {
+		cfg, err := config.LoadGlobal()
+		if err != nil {
+			return toolErr("loading config: " + err.Error()), nil
+		}
+		out["buffer"] = cfg.DumpsBuffer()
+		b, _ := json.Marshal(out)
+		return toolOK(string(b)), nil
+	}
+	size, err := dumpsops.SetBuffer(intArg(args, "size", 0))
+	if err != nil {
+		return toolErr(err.Error()), nil
+	}
+	_, _, _ = uiPOST("/api/dumps/notify-changed", nil)
+	out["buffer"] = size
+	b, _ := json.Marshal(out)
+	return toolOK(string(b)), nil
+}
+
 // queryPath joins base with the non-empty params as an escaped, key-sorted query
 // string. Escaping matters because a value like a git branch name can carry &,
 // =, # or +, which raw concatenation would splice into the query.

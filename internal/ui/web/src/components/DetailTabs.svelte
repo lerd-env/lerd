@@ -33,7 +33,7 @@
 </script>
 
 {#if showTabs || actions}
-  <div class="flex items-end justify-between gap-3 border-b border-gray-100 dark:border-lerd-border pt-3 px-3 shrink-0">
+  <div data-tab-bar class="flex items-end justify-between gap-3 border-b border-gray-100 dark:border-lerd-border pt-3 px-3 shrink-0">
     <div use:tablist role={showTabs ? 'tablist' : undefined} class="flex items-end gap-4 min-w-0 overflow-x-auto">
       {#if showTabs}
         {#each visible as t, i (t.id)}

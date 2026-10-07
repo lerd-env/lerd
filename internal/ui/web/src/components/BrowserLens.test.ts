@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/svelte';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { writable, get, type Writable } from 'svelte/store';
 import { modal } from '$stores/modals';
+import { debugSearch } from '$stores/debugLens';
 import { m } from '../paraglide/messages.js';
 
 // The real stream opens an EventSource; the lens only needs the event list.
@@ -101,5 +102,31 @@ describe('BrowserLens per-site opt-in', () => {
     await fireEvent.click(await screen.findByRole('button', { name: m.common_settings() }));
     expect(get(modal)).toMatchObject({ kind: 'browserLogs', browserLogsSite: 'shop' });
   });
+
+  it('drops the toolbar inside one request, so a search left on the Debug tab hides nothing', async () => {
+    apiJson.mockResolvedValue(settings(true));
+    debugSearch.set('no-such-text');
+    dumps.set([browserEvent]);
+    render(BrowserLens, { props: { siteScope: 'shop', pinned: true } });
+
+    expect(await screen.findByText('old-boom')).toBeTruthy();
+    expect(screen.queryByPlaceholderText(m.debug_searchPlaceholder())).toBeNull();
+    expect(screen.queryByRole('button', { name: m.common_clear() })).toBeNull();
+    // The dialog's title already names the request, so the group header does not.
+    expect(screen.queryByText('p1')).toBeNull();
+    debugSearch.set('');
+  });
 });
 
+// The system Debug window has no request timeline, so an id clicked there
+// becomes the lens search.
+describe('BrowserLens across every site', () => {
+  it('searches for a request id when it is clicked', async () => {
+    apiJson.mockResolvedValue(settings(true));
+    dumps.set([browserEvent]);
+    render(BrowserLens, { props: {} });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'p1' }));
+    expect((screen.getByPlaceholderText(m.debug_searchPlaceholder()) as HTMLInputElement).value).toBe('p1');
+  });
+});

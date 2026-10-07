@@ -97,6 +97,26 @@ namespace {
     if (!\function_exists('Lerd\\Collector\\send')) {
         return;
     }
+    // While capture is on, the response names the request its events were
+    // grouped under, so nginx's access log and the browser can link to it.
+    if (\PHP_SAPI !== 'cli' && \defined('LERD_DEVTOOLS_RID')) {
+        if (!\headers_sent()) {
+            \header('X-Lerd-Rid: '.\LERD_DEVTOOLS_RID);
+        }
+        // The id goes on the SPX profile too, linking the request to its flame
+        // graph. SPX segfaults FPM when this is called on a request it is not
+        // profiling, so only when its cookie and key say it is.
+        $lerdSpxKey = \ini_get('spx.http_key');
+        if (\function_exists('spx_profiler_full_report_set_custom_metadata_str')
+            && isset($_COOKIE['SPX_ENABLED'], $_COOKIE['SPX_KEY'])
+            && $_COOKIE['SPX_ENABLED'] === '1'
+            && \is_string($lerdSpxKey) && $lerdSpxKey !== '' && $_COOKIE['SPX_KEY'] === $lerdSpxKey
+            && (!isset($_COOKIE['SPX_REPORT']) || $_COOKIE['SPX_REPORT'] === 'full')
+            && (!isset($_COOKIE['SPX_AUTO_START']) || $_COOKIE['SPX_AUTO_START'] !== '0')) {
+            \spx_profiler_full_report_set_custom_metadata_str('lerd-rid:'.\LERD_DEVTOOLS_RID);
+        }
+        unset($lerdSpxKey);
+    }
 }
 
 namespace Lerd\DumpBridge {

@@ -22,6 +22,7 @@ func RecordFrom(r AccessRecord, site string, at time.Time) Record {
 		Status: r.Status,
 		Millis: r.SecondsToMillis(),
 		URI:    StripQueryFragment(r.URI),
+		RID:    r.RID,
 	}
 }
 
@@ -72,6 +73,8 @@ type Record struct {
 	// (suspended workers waking, cold caches) whose inflated time would skew the
 	// timing view, so it's kept out of the percentiles but still counted.
 	Cold bool
+	// RID is the request id debug capture grouped the request's events under.
+	RID string
 }
 
 // LatencyBucket is one bar of the response-time histogram. UpperMillis is the
@@ -128,6 +131,11 @@ func OpenStore(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate cold column: %w", err)
 	}
+	if _, err := db.Exec(`ALTER TABLE requests ADD COLUMN rid TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
+		db.Close()
+		return nil, fmt.Errorf("migrate rid column: %w", err)
+	}
 	return &Store{db: db}, nil
 }
 
@@ -140,7 +148,8 @@ CREATE TABLE IF NOT EXISTS requests (
   status INTEGER NOT NULL,
   ms     REAL    NOT NULL,
   uri    TEXT    NOT NULL,
-  cold   INTEGER NOT NULL DEFAULT 0
+  cold   INTEGER NOT NULL DEFAULT 0,
+  rid    TEXT    NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_requests_site_at ON requests(site, at_ms);
 -- The site-first index cannot serve a bare at_ms range, which is what every
@@ -160,14 +169,14 @@ func (s *Store) Insert(recs []Record) error {
 	if err != nil {
 		return err
 	}
-	stmt, err := tx.Prepare(`INSERT INTO requests(at_ms, site, route, method, status, ms, uri, cold) VALUES(?,?,?,?,?,?,?,?)`)
+	stmt, err := tx.Prepare(`INSERT INTO requests(at_ms, site, route, method, status, ms, uri, cold, rid) VALUES(?,?,?,?,?,?,?,?,?)`)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
 	defer stmt.Close()
 	for _, r := range recs {
-		if _, err := stmt.Exec(r.At.UnixMilli(), r.Site, r.Route, r.Method, r.Status, r.Millis, r.URI, boolToInt(r.Cold)); err != nil {
+		if _, err := stmt.Exec(r.At.UnixMilli(), r.Site, r.Route, r.Method, r.Status, r.Millis, r.URI, boolToInt(r.Cold), r.RID); err != nil {
 			tx.Rollback()
 			return err
 		}
@@ -273,7 +282,7 @@ func (s *Store) Recent(site string, limit int) ([]Record, error) {
 	// Over-fetch and drop static assets in Go, so a burst of asset requests can't
 	// crowd real requests out of the list; the scan is capped so it stays cheap.
 	rows, err := s.db.Query(
-		`SELECT at_ms, route, method, status, ms, uri, cold FROM requests WHERE site = ? ORDER BY at_ms DESC LIMIT ?`,
+		`SELECT at_ms, route, method, status, ms, uri, cold, rid FROM requests WHERE site = ? ORDER BY at_ms DESC LIMIT ?`,
 		site, limit*20+100)
 	if err != nil {
 		return nil, err
@@ -288,7 +297,7 @@ func (s *Store) Recent(site string, limit int) ([]Record, error) {
 		var atMs int64
 		var cold int
 		var r = Record{Site: site}
-		if err := rows.Scan(&atMs, &r.Route, &r.Method, &r.Status, &r.Millis, &r.URI, &cold); err != nil {
+		if err := rows.Scan(&atMs, &r.Route, &r.Method, &r.Status, &r.Millis, &r.URI, &cold, &r.RID); err != nil {
 			return nil, err
 		}
 		if !IsAppRequest(r.Status, r.URI, r.Millis) || excluded[r.Route] {
@@ -307,7 +316,7 @@ func (s *Store) Recent(site string, limit int) ([]Record, error) {
 // percentile and local request volumes are small.
 func (s *Store) SiteAnalytics(site string, since, until time.Time) (Analytics, error) {
 	rows, err := s.db.Query(
-		`SELECT at_ms, route, method, status, ms, uri, cold FROM requests
+		`SELECT at_ms, route, method, status, ms, uri, cold, rid FROM requests
 		 WHERE site = ? AND at_ms >= ? AND at_ms < ? ORDER BY at_ms ASC`,
 		site, since.UnixMilli(), until.UnixMilli())
 	if err != nil {
@@ -322,16 +331,17 @@ func (s *Store) SiteAnalytics(site string, since, until time.Time) (Analytics, e
 		method, example string
 		warm            []float64
 		total           int
+		slowest         *Sample
 	}
 	routes := map[string]*agg{}
 	minutes := map[int64]int{}
 
 	for rows.Next() {
 		var atMs int64
-		var route, method, uri string
+		var route, method, uri, rid string
 		var status, cold int
 		var ms float64
-		if err := rows.Scan(&atMs, &route, &method, &status, &ms, &uri, &cold); err != nil {
+		if err := rows.Scan(&atMs, &route, &method, &status, &ms, &uri, &cold, &rid); err != nil {
 			return Analytics{}, err
 		}
 		// New ones aren't recorded; filtering on read also drops any already stored
@@ -360,6 +370,9 @@ func (s *Store) SiteAnalytics(site string, since, until time.Time) (Analytics, e
 		warm = append(warm, ms)
 		a.Distribution[bucketIndex(ms)].Count++
 		r.warm = append(r.warm, ms)
+		if r.slowest == nil || ms > r.slowest.Millis {
+			r.slowest = &Sample{AtMillis: atMs, URI: uri, Status: status, Millis: ms, RID: rid}
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return Analytics{}, err
@@ -383,6 +396,7 @@ func (s *Store) SiteAnalytics(site string, since, until time.Time) (Analytics, e
 			P95Millis:       round1(percentile(r.warm, 95)),
 			RecentP95Millis: round1(percentile(recent, 95)),
 			Samples:         r.total,
+			Slowest:         r.slowest,
 		})
 	}
 	sort.Slice(a.Routes, func(i, j int) bool {

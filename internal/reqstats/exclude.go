@@ -116,3 +116,33 @@ func (s *Store) DeleteRequest(siteKey string, atMillis int64, uri string) (int64
 	}
 	return res.RowsAffected()
 }
+
+// RouteRIDs returns the request ids DeleteRoute would take with the route, so
+// what debug capture and SPX hold for them can go too.
+func (s *Store) RouteRIDs(siteKey, route string) ([]string, error) {
+	site, _ := SplitKey(siteKey)
+	return s.rids(`SELECT DISTINCT rid FROM requests WHERE route = ? AND (site = ? OR instr(site, ?) = 1) AND rid != '' ORDER BY at_ms`,
+		route, site, site+"/")
+}
+
+// RequestRIDs returns the request ids DeleteRequest would take.
+func (s *Store) RequestRIDs(siteKey string, atMillis int64, uri string) ([]string, error) {
+	return s.rids(`SELECT DISTINCT rid FROM requests WHERE site = ? AND at_ms = ? AND uri = ? AND rid != ''`, siteKey, atMillis, uri)
+}
+
+func (s *Store) rids(query string, args ...any) ([]string, error) {
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var rid string
+		if err := rows.Scan(&rid); err != nil {
+			return nil, err
+		}
+		out = append(out, rid)
+	}
+	return out, rows.Err()
+}

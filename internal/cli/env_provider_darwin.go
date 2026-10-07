@@ -41,6 +41,10 @@ func ensureProvidedEnvDir() {
 	}
 }
 
+// RestoreProvidedEnv is a no-op here: the files live in the VM's tmpfs, which
+// the watcher may come up before, so lerd start stays the point that refills them.
+func RestoreProvidedEnv() {}
+
 func storeProvidedEnv(siteName string, data []byte) error {
 	if err := providedEnvSSH(providedEnvWriteScript(siteName), data, nil); err != nil {
 		return err

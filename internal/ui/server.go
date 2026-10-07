@@ -142,7 +142,7 @@ func Start(currentVersion string) error {
 	// reparented out of the client's tree, so a killed lerd-ui leaves it
 	// running and there is no pid left to recognise it by.
 	go cli.ReapOrphanNgrokContainers()
-	stopTunnelsOnShutdown()
+	cleanUpOnShutdown()
 
 	// Single coalescer for the two event sources that need to refresh the
 	// container cache and broadcast a snapshot: in-process mutations
@@ -305,6 +305,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/dumps/clear", withCORS(handleDumpsClear))
 	mux.HandleFunc("/api/dumps/toggle", withCORS(publishAfter(handleDumpsToggle, eventbus.KindDumpsStatus)))
 	mux.HandleFunc("/api/dumps/passthrough", withCORS(publishAfter(handleDumpsPassthrough, eventbus.KindDumpsStatus)))
+	mux.HandleFunc("/api/dumps/buffer", withCORS(publishAfter(handleDumpsBuffer, eventbus.KindDumpsStatus)))
 	mux.HandleFunc("/api/dumps/notify-changed", withCORS(handleDumpsNotifyChanged))
 	mux.HandleFunc("/api/devtools/status", withCORS(handleDevtoolsStatus))
 	mux.HandleFunc("/api/devtools/workers", withCORS(publishAfter(handleDevtoolsWorkers, eventbus.KindDevtoolsStatus)))
@@ -315,6 +316,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/profiler/toggle", withCORS(publishAfter(handleProfilerToggle, eventbus.KindProfilerStatus)))
 	mux.HandleFunc("/api/profiler/status", withCORS(handleProfilerStatus))
 	mux.HandleFunc("/api/profiler/captures", withCORS(handleProfilerCaptures))
+	mux.HandleFunc("/api/profiler/report", withCORS(handleProfilerReport))
 	mux.HandleFunc("/api/profiler/clear", withCORS(handleProfilerClear))
 	mux.HandleFunc("/api/browser-logs/sites/", withCORS(handleBrowserLogsSite))
 	mux.HandleFunc("/api/browser-logs/presets", withCORS(handleBrowserLogsPresets))

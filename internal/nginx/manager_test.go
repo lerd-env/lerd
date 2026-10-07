@@ -1819,3 +1819,16 @@ func TestLerdVhostCarriesDashboardMounts(t *testing.T) {
 		t.Error("the generated vhost does not forward the rustfs console")
 	}
 }
+
+// The access feed carries the id PHP sent as X-Lerd-Rid just before the URI,
+// where reqstats.ParseAccessRecord reads it.
+func TestEnsureNginxConfig_logsTheRequestID(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if err := EnsureNginxConfig(); err != nil {
+		t.Fatalf("EnsureNginxConfig: %v", err)
+	}
+	if body := readRenderedConf(t, tmp); !strings.Contains(body, "|$request_method|$upstream_http_x_lerd_rid|$request_uri';") {
+		t.Errorf("log_format must carry the request id before the URI, got:\n%s", body)
+	}
+}

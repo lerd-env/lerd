@@ -93,7 +93,11 @@ function new_id(): string
 
 // One request id per HTTP request / per job. Reset on JobProcessing so a
 // queue worker's jobs each form their own group instead of lumping together.
-$GLOBALS['__lerd_rid'] = new_id();
+// A request takes the extension's id, the one sent as X-Lerd-Rid, so what this
+// adapter reports links to the request the header names.
+if (empty($GLOBALS['__lerd_rid'])) {
+    $GLOBALS['__lerd_rid'] = \defined('LERD_DEVTOOLS_RID') ? (string) \LERD_DEVTOOLS_RID : new_id();
+}
 function rid(): string
 {
     return $GLOBALS['__lerd_rid'] ?? '';
