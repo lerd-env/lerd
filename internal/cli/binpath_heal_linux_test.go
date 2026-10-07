@@ -77,3 +77,18 @@ func writeInstalledUnit(t *testing.T, name, execStart string) {
 		t.Fatal(err)
 	}
 }
+
+// lerd-dns runs the lerd binary too, and when it cannot start the resolver
+// has nothing to send .test to, or every query on a host routing ~. through
+// it. Its unit is built in code, so the heal has to know how to rebuild it.
+func TestHealDaemonUnitsRewritesLerdDNS(t *testing.T) {
+	writeInstalledUnit(t, "lerd-dns", "/home/linuxbrew/.linuxbrew/Cellar/lerd/1.31.0/bin/lerd dns-serve --listen 127.0.0.1")
+	fake := &fakeServiceMgr{writeChanged: true}
+	swapMgr(t, fake)
+
+	healed := healDaemonUnits(binaryGone)
+
+	if !equalStrings(healed, []string{"lerd-dns"}) {
+		t.Errorf("healDaemonUnits() = %v; want lerd-dns repointed", healed)
+	}
+}

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -159,48 +158,6 @@ func TestDNSListenHostFollowsWhoBindsTheLAN(t *testing.T) {
 	lerdDNSBindsLANPort = true
 	if got := dnsListenHost(); got != "0.0.0.0" {
 		t.Errorf("answering the LAN itself needs every interface, got %s", got)
-	}
-}
-
-func TestFileChangedBy(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "f")
-
-	// Missing before, written after -> changed.
-	changed, err := fileChangedBy(path, func() error { return os.WriteFile(path, []byte("a"), 0644) })
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if !changed {
-		t.Error("creating the file should count as a change")
-	}
-
-	// Same content rewritten -> not changed.
-	changed, err = fileChangedBy(path, func() error { return os.WriteFile(path, []byte("a"), 0644) })
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if changed {
-		t.Error("rewriting identical content should not count as a change")
-	}
-
-	// Different content -> changed.
-	changed, err = fileChangedBy(path, func() error { return os.WriteFile(path, []byte("b"), 0644) })
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if !changed {
-		t.Error("new content should count as a change")
-	}
-
-	// mutate error is propagated and reported as no change.
-	wantErr := errors.New("boom")
-	changed, err = fileChangedBy(path, func() error { return wantErr })
-	if !errors.Is(err, wantErr) {
-		t.Errorf("expected mutate error to propagate, got %v", err)
-	}
-	if changed {
-		t.Error("a failed mutate should report no change")
 	}
 }
 

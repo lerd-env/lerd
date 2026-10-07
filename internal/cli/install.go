@@ -84,20 +84,6 @@ func NewInstallCmd() *cobra.Command {
 func step(label string) { fmt.Printf(" %s %s ", feedback.Dim("→"), feedback.Dim(label+"…")) }
 func ok()               { fmt.Println(feedback.Green("✓")) }
 
-// fileChangedBy runs mutate and reports whether the file at path differs
-// before vs after. A read error on either side is treated as empty content,
-// so a file that didn't exist before and does after counts as a change. Used
-// by the install pass to bounce a unit only when its on-disk config actually
-// moved, rather than on every reinstall.
-func fileChangedBy(path string, mutate func() error) (bool, error) {
-	before, _ := os.ReadFile(path)
-	if err := mutate(); err != nil {
-		return false, err
-	}
-	after, _ := os.ReadFile(path)
-	return string(after) != string(before), nil
-}
-
 // portPreflightConflicts returns the core host ports lerd needs to bind first
 // (nginx HTTP/HTTPS and DNS) that are already held by a foreign process.
 // portList is the host listener dump from PortListOutput; the seams mirror
@@ -464,12 +450,6 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		teardownDNS()
 	}
 
-	// Tracks whether the dnsmasq config or the lerd-dns quadlet actually
-	// changed this run. A no-op reinstall (the common case after a version
-	// bump) then leaves the running container alone instead of bouncing it,
-	// which used to drop .test resolution for a few seconds.
-	dnsChanged := false
-
 	if wantDNS {
 		// 4. mkcert CA.
 		ensureMkcertCA(unattended)
@@ -484,14 +464,9 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 		// 5. DNS config
 		step("Writing DNS configuration")
-		dnsConfPath := filepath.Join(config.DnsmasqDir(), "lerd.conf")
-		confChanged, err := fileChangedBy(dnsConfPath, func() error {
-			return dns.WriteDnsmasqConfig(config.DnsmasqDir())
-		})
-		if err != nil {
+		if err := dns.WriteDnsmasqConfig(config.DnsmasqDir()); err != nil {
 			return err
 		}
-		dnsChanged = dnsChanged || confChanged
 		ok()
 
 		// Platform-dependent: on Linux the root pass already installed the grant
@@ -655,11 +630,9 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 	if wantDNS {
 		step("Writing DNS service unit")
-		unitChanged, err := installDNSService()
-		if err != nil {
+		if err := installDNSService(); err != nil {
 			return err
 		}
-		dnsChanged = dnsChanged || unitChanged
 		ok()
 	}
 
@@ -821,19 +794,11 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	}
 
 	if wantDNS {
-		// Only bounce lerd-dns when its config or unit actually changed.
-		// Otherwise Start is a no-op against the live unit, so a routine
-		// reinstall doesn't drop .test resolution.
-		if dnsChanged || !services.Mgr.IsActive("lerd-dns") {
-			step("Starting lerd-dns")
-			if err := services.Mgr.Restart("lerd-dns"); err != nil {
-				fmt.Printf("    WARN: %v\n", err)
-			}
-		} else {
-			step("Checking lerd-dns")
-			if err := services.Mgr.Start("lerd-dns"); err != nil {
-				fmt.Printf("    WARN: %v\n", err)
-			}
+		// Always restart: lerd-dns runs the lerd binary, so this is what moves it
+		// onto the version just installed, and a native restart takes milliseconds.
+		step("Starting lerd-dns")
+		if err := services.Mgr.Restart("lerd-dns"); err != nil {
+			fmt.Printf("    WARN: %v\n", err)
 		}
 		ok()
 

@@ -31,15 +31,14 @@ func dnsListenHost() string {
 }
 
 // installDNSService writes the lerd-dns unit, replacing whatever ran DNS
-// before it, and reports whether the unit changed.
-func installDNSService() (bool, error) {
+// before it.
+func installDNSService() error {
 	replaced := removeLegacyDNSService()
-	changed, err := services.Mgr.WriteServiceUnitIfChanged(dnsUnit, dnsServiceContent(config.LerdBinary(), dnsListenHost()))
-	if err != nil {
-		return false, err
+	if _, err := services.Mgr.WriteServiceUnitIfChanged(dnsUnit, dnsServiceContent(config.LerdBinary(), dnsListenHost())); err != nil {
+		return err
 	}
 	if err := services.Mgr.DaemonReload(); err != nil {
-		return changed, err
+		return err
 	}
 	if lerdSystemd.IsAutostartEnabled() {
 		_ = services.Mgr.Enable(dnsUnit)
@@ -49,7 +48,7 @@ func installDNSService() (bool, error) {
 	if replaced {
 		_ = services.Mgr.Start(dnsUnit)
 	}
-	return changed, nil
+	return nil
 }
 
 // teardownDNS stops lerd-dns and removes its unit, then the resolver config

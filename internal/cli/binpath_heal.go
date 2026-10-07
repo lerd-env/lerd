@@ -15,7 +15,7 @@ import (
 // daemonUnits are the lerd services whose ExecStart names the lerd binary, so
 // they are the ones a moved binary takes down. lerd-autostart is macOS-only and
 // reads as absent elsewhere.
-var daemonUnits = []string{"lerd-ui", "lerd-watcher", "lerd-tray", "lerd-autostart"}
+var daemonUnits = []string{"lerd-ui", "lerd-watcher", "lerd-tray", "lerd-autostart", dnsUnit}
 
 // healLerdBinaryMove repairs what a lerd binary that moved leaves behind, and
 // reports what it rewrote. A package manager can replace lerd underneath a
@@ -74,7 +74,7 @@ func healDaemonUnits(superseded func(string) bool) []string {
 		if installed == "" || !superseded(installed) {
 			continue
 		}
-		content, err := lerdSystemd.GetUnit(name)
+		content, err := daemonUnitContent(name)
 		if err != nil {
 			continue
 		}
@@ -152,4 +152,13 @@ func shimTokens(content string) []string {
 	return strings.FieldsFunc(content, func(r rune) bool {
 		return unicode.IsSpace(r) || r == '"' || r == '\''
 	})
+}
+
+// daemonUnitContent is the unit a daemon is rewritten with. lerd-dns is built
+// in code rather than embedded, since its listen address depends on the platform.
+func daemonUnitContent(name string) (string, error) {
+	if name == dnsUnit {
+		return dnsServiceContent(config.LerdBinary(), dnsListenHost()), nil
+	}
+	return lerdSystemd.GetUnit(name)
 }
