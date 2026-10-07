@@ -23,7 +23,7 @@ The one real difference is the web server. MAMP serves through Apache, which rea
 | MAMP Pro SSL | `lerd secure`, an mkcert certificate trusted by your system and browsers |
 | PHP version per host | `lerd isolate 8.4`, or picked up from `composer.json` |
 | MySQL on port 8889, user `root`, password `root` | `lerd service start mysql`, shared by every site, wired into `.env` by `lerd env` |
-| phpMyAdmin | `lerd service start phpmyadmin`, or any database client on the published port |
+| phpMyAdmin | `lerd service preset phpmyadmin` once, then `lerd service start phpmyadmin`, or any database client on the published port |
 | `.htaccess` rules | An [nginx override](/usage/nginx-overrides) per site, see below |
 | `php.ini` from the MAMP menu | `lerd php:ini <version>`, or System → PHP in the web dashboard |
 
@@ -43,18 +43,23 @@ lerd start
 ```bash
 cd ~/code/myapp
 lerd link
+lerd secure
 ```
 
-Lerd detects the framework, sets the document root, writes the nginx vhost and registers `myapp.test`. A project whose entry point is not in the framework's usual folder can set [`public_dir`](/configuration#per-project-config-lerd-yaml) in `.lerd.yaml`.
+Lerd detects the framework, sets the document root, writes the nginx vhost and registers `myapp.test`, and `lerd secure` issues the certificate that serves it over HTTPS. A project whose entry point is not in the framework's usual folder can set [`public_dir`](/configuration#per-project-config-lerd-yaml) in `.lerd.yaml`.
 
-**4. Restore the database.**
+**4. Point the app at Lerd's services.** Start MySQL and let `lerd env` rewrite the database, cache and mail entries in `.env`, so the MAMP host, port 8889 and `root` password are replaced with Lerd's. On WordPress it writes the same values into `wp-config.php`.
 
 ```bash
 lerd service start mysql
-lerd db:import myapp.sql
+lerd env
 ```
 
-**5. Point the app at Lerd's services.** `lerd env` rewrites the database, cache and mail entries in `.env`, so the MAMP host, port 8889 and `root` password are replaced with Lerd's. On WordPress it writes the same values into `wp-config.php`.
+**5. Restore the database.** Now that the project points at Lerd's MySQL, import the dump into it:
+
+```bash
+lerd db:import myapp.sql
+```
 
 ## Do you need to translate your .htaccess?
 
@@ -92,11 +97,13 @@ A few things to keep in mind while translating:
 - **`[L]` becomes `last`, `[R=301]` becomes `permanent`, `[R=302]` becomes `redirect`.**
 - **Don't redefine `location /`.** The vhost already has one, and nginx refuses a duplicate. Use a more specific `location`, or a `rewrite` at the top level of the override, which runs before nginx picks a location.
 - **`RewriteCond` has no direct equivalent.** Most conditions become an `if` on a variable, for example `if ($http_user_agent ~* badbot) { return 403; }`, or a `map`. Keep these small, nginx's `if` is not a general purpose branch.
-- **Rules from a `.htaccess` in a subfolder** apply only under that folder in Apache. Wrap them in a `location ^~ /subfolder/ { ... }` block.
+- **Rules from a `.htaccess` in a subfolder** apply only under that folder in Apache. Put the folder into the pattern instead, `rewrite ^/subfolder/(.*)$ ...`, rather than wrapping the rules in a `location ^~ /subfolder/` block: `^~` stops nginx from checking the PHP location, so `.php` files under it would be sent as plain text instead of run.
 
 ## WordPress
 
-WordPress's own `# BEGIN WordPress` block is the front controller rule above, so permalinks work as soon as the site is linked. Two things are worth checking:
+WordPress's own `# BEGIN WordPress` block is the front controller rule above, so permalinks work as soon as the site is linked. Three things are worth checking:
+
+- **The site address.** The imported database still holds the MAMP address, such as `http://localhost:8888/myblog`, and WordPress redirects to it. `lerd secure` sets `WP_HOME` in `wp-config.php` to the new address, set `WP_SITEURL` next to it yourself (see [Finish the HTTPS wiring](/getting-started/wordpress#_5-finish-the-https-wiring)). Links to the old address inside posts and pages stay as they are, so run a search and replace over the database, for example with the Better Search Replace plugin.
 
 - **Anything outside that block.** Redirects you added by hand or through a plugin like Redirection's Apache mode, and hardening rules from security plugins, sit above or below it. Translate them with the table above.
 - **Plugins that write `.htaccess` for you.** Caching plugins (W3 Total Cache, WP Super Cache, WP Rocket) and security plugins (Wordfence, iThemes / Solid Security, All In One WP Security) keep writing those rules, and nginx keeps ignoring them. The site still works, but the rule the plugin thinks is active is not. Most of these plugins have an nginx mode or print the nginx equivalent in their settings, paste that into the override instead.
