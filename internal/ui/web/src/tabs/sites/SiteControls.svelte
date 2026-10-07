@@ -35,7 +35,6 @@
   import SiteDoctorModal from './SiteDoctorModal.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import ToggleButton from '$components/ToggleButton.svelte';
-  import { tooltip } from '$lib/tooltip';
   import { openErrorModal } from '$stores/modals';
   import { m } from '../../paraglide/messages.js';
 
@@ -508,7 +507,6 @@
               type="button"
               onclick={() => (doctorOpen = true)}
               class="shrink-0 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card hover:border-lerd-red hover:text-lerd-red transition-colors text-xs font-medium text-gray-700 dark:text-gray-200"
-              use:tooltip={m.sites_doctor_title()}
               aria-label={m.sites_doctor_button()}
       >
         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
