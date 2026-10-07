@@ -1,6 +1,6 @@
 # Terminal Dashboard (TUI)
 
-`lerd tui` opens a btop-inspired full-screen dashboard in your terminal. It shows sites, services, workers, and logs in one glance, updates live, and lets you drive most of the same operations the web UI exposes without ever leaving the terminal.
+`lerd tui` opens a full-screen dashboard in your terminal. It shows your sites, services, databases and runtimes, updates live, and drives the same reversible operations the web UI exposes without leaving the terminal.
 
 ```bash
 lerd tui
@@ -8,269 +8,176 @@ lerd tui
 
 This is the terminal-native counterpart to the [Web UI](/features/web-ui) and the [System Tray](/features/system-tray). Use it when you prefer to keep everything in a tmux or terminal pane, or when you're on a remote machine over SSH.
 
-## Tabs
-
-A clickable tab strip sits at the top and switches the whole screen between four views: **Dashboard**, **Sites**, **Services**, and **Databases**. The TUI opens on the **Dashboard**. Click a tab to switch, or cycle with `ctrl+←` / `ctrl+→` from the keyboard. The active tab reads as a filled accent pill in the lerd palette; the others sit dim.
-
-- **Dashboard**: a six-card overview that mirrors the web UI's home page (see [Dashboard tab](#dashboard-tab)).
-- **Sites**: the sites list plus the full-height site detail pane.
-- **Services**: the services list plus the service detail pane.
-- **Databases**: every installed engine with the databases it holds, plus the detail pane for the selected one (see [Databases tab](#databases-tab)).
-
-The version (and an `update <ver>` note when a newer release is available) sits on the far right of the tab row; there is no separate status line. The at-a-glance health that used to live in a header now lives on the Dashboard tab's cards instead.
-
-Mouse support is on: clicking a tab switches screens, clicking a site or service row selects it, clicking a site/service on the Dashboard jumps to its tab, and the wheel scrolls whichever scrollable pane it's over (any dashboard card, the lists, the detail pane, or the log panes). The keyboard keeps working exactly as before, so nothing in the rest of this page requires a mouse. (Enabling mouse tracking means your terminal's native click-drag text selection is intercepted while the TUI runs; hold `Shift`, or your terminal's selection modifier, to select text the usual way.)
-
 ## Layout
 
-- **Sites pane (Sites tab, left column)** lists every linked site by its primary domain, with an FPM running dot and worker glyphs (`q` queue, `s` schedule, `v` reverb, `h` horizon, plus a dot per custom framework worker). Paused sites are dimmed and marked. Columns line up across rows regardless of how many workers each site runs. The column is intentionally slim; the Services tab keeps a wider list since its rows carry version and usage metadata.
-- **Services pane (Services tab, left column)** is a compact list of built-in services (mysql, redis, postgres, meilisearch, rustfs, mailpit), custom services, and every site-owned worker (`queue-<site>`, `schedule-<site>`, `horizon-<site>`, `reverb-<site>`, and custom framework workers). Each row shows a running dot, how many sites use it, and `pinned` / `custom` tags where applicable. A service that exposes a browser dashboard (phpMyAdmin, Mailpit, RedisInsight, …) carries a `web` marker, so the list itself answers what there is to open; `O` opens the marked row without stepping into its detail pane.
-- **Databases pane (Databases tab, left column)** lists every installed engine with the databases inside it, each with its size and how many snapshots it holds.
-- **Site detail (Sites tab, right column, full height)** always mirrors the focused site and shows primary domain, the Laravel `APP_NAME` when the site sets a custom one, internal name, disk path, all domains, services used (with live state), workers, git worktrees, HTTPS / LAN share toggles, PHP / Node version pickers, and the [request-timing panel](#request-timing). On the Sites tab, `S` swaps it for global Settings, `?` swaps it for the Keybindings reference. Logs live on their own [tab](#site-detail-tabs) rather than in a pane beneath the detail.
-- **Logs pane** (toggle with `l`) tails the container, worker-journal, or app log file behind the focused item. On the Sites tab `l` opens the Logs tab instead, since the detail column already has room for the tail; on the Dashboard it opens a full-width pane taking at least half the window. Either way it renders a right-edge scrollbar showing position in the buffer.
-- **Status bar** briefly shows the most recent action (e.g. `✓ lerd service stop redis` or `✖ …exit 1`).
-- **Footer** summarises active keybindings for the current mode.
+The screen is a **sidebar** on the left and a **main area** beside it, with a single hint line at the bottom of the main area.
 
-Dots follow the same convention everywhere: green `●` running, grey `○` stopped, amber `◐` paused, red `✖` failing. A worker the idle engine has put to sleep reads `suspended` with an amber `◔` glyph, so a deliberately stopped-for-idle worker isn't mistaken for one that crashed or never started; it wakes on the next request.
+- The **sidebar** is the navigation: Dashboard, Databases, PHP & Node and Settings at the top, then your sites grouped by workspace, then your services, and at the foot lerd's own processes (dns, nginx and the watcher) with their state.
+- The **main area** shows whatever the sidebar has selected: the dashboard, a site, a service, the databases, the runtimes, settings, or one of lerd's processes.
+- The **hint line** shows site health counts on the left and the keys for whatever has focus on the right, dropping the least useful keys when space runs out.
 
-## Keybindings
+Regions are separated by shade rather than box borders: the content sits a shade darker than the sidebar, and cards and selections rise from there. Every colour comes from your terminal's own palette and the shades are derived from its background, so the TUI follows your terminal theme, including Omarchy's, with no configuration.
 
-### Navigation
+The layout adapts to the terminal. A wide terminal gets the full sidebar with framework and version tags, a medium one a slimmer sidebar without them, and below about 96 columns the sidebar folds away and `\` brings it back over the content. A short terminal drops optional spacing, and a section that does not fit whole is left out rather than cut in half.
 
-| Key | Action |
-| --- | --- |
-| `ctrl+←` / `ctrl+→` | Switch the top tab (Dashboard · Sites · Services · Databases). Tabs are also clickable |
-| click | Click a tab to switch screens, or a site / service row to select it |
-| `tab` / `shift+tab` | Cycle focus between the list and the detail pane on the current tab |
-| `↑` `↓` / `j` `k` | Move selection in the focused pane (scrolls the grid on the Dashboard tab) |
-| `←` `→` | Cross between the two columns of the site Overview grid (Domains and Toggles) when the pane is wide enough to pair them |
-| `pgup` `pgdn` | Jump by 10 rows |
-| `home` `g` | Jump to first row |
-| `end` `G` | Jump to last row |
+Dots follow the same convention everywhere: green `●` running, grey `○` stopped, amber `◐` paused, red `✖` failing. A worker the idle engine has put to sleep reads `suspended` (or asleep) with an amber `◔`, so a worker stopped for idleness isn't mistaken for one that crashed; it wakes on the next request.
 
-### Filter and sort
+Mouse support is on: clicking a sidebar row opens it, clicking a tab, worktree tab or dashboard card selects it, and the wheel scrolls whatever it's over. Hold `Shift` (or your terminal's selection modifier) to select text the usual way while the TUI runs.
 
-| Key | Action |
-| --- | --- |
-| `/` | Type to filter the focused list (matches name, domains, framework label) |
-| `enter` | Commit filter and leave input mode |
-| `esc` | Clear filter and leave input mode |
-| `o` | Cycle sort order · **sites**: name → status → framework · **services**: name → status → usage (site count) |
+## Command palette
 
-### Actions
+`ctrl+p` opens a fuzzy palette over the dimmed screen, from anywhere. Everything the TUI can do is in it; the keys described below are shortcuts on top.
 
-| Key | Action |
-| --- | --- |
-| `space` / `enter` | Toggle the focused detail row (worker, HTTPS, LAN share, PHP, Node), or the focused client-tool shim on the Services tab |
-| `s` | Start / resume the focused site or start the focused service / worker |
-| `x` | Stop / pause the focused site or stop the focused service / worker · on a domain row, remove that domain |
-| `r` | Restart the focused site / service / worker |
-| `p` | Pause / unpause toggle for a site |
-| `t` | Open an interactive shell inside the focused container (FPM or custom for sites, the service container for services, the owning site's FPM for worker rows) |
-| `O` | Open in the default browser (uses `xdg-open` on Linux, `open` on macOS): the focused site's primary domain, or, when the Services pane is focused, the focused service's dashboard URL (phpMyAdmin, Mailpit, RabbitMQ, RedisInsight, …). A service with no dashboard says so in the status bar |
-| `u` | Run `lerd service update <name>` for the focused service so a presets bump or version pin lands without leaving the TUI. The action is in-strategy and reversible. |
-| `b` | Run `lerd service rollback <name>` to swap the focused service back to its previous version; pairs with `u` as the symmetric undo |
-| `H` | Run `lerd worker heal` to restart every failing framework worker in one pass. The header pill shows the count and the keybind is most relevant when it's lit |
-| `n` | Take a snapshot of the focused database (Databases tab). Adding a snapshot takes nothing away, which is why it is the one database action the TUI runs |
-| `K` | Keep an automatic snapshot of the focused database, or put it back under retention (Databases tab) |
+- **Fixes first**: restart a crashed worker, heal every crashed worker, or start lerd when a core process is down.
+- **Actions**: every action on every site (including each worktree's controls), service, database and PHP or Node version. An action selects its target before it runs, so nothing has to be opened first, and the selected item's actions are listed before the rest.
+- **Places**: every page (Dashboard, Databases, PHP & Node, Settings, System, the debug window, dns, nginx, the watcher, help) and every site, worktree and service.
+- **Settings**: every Settings toggle, named for what it will do (`Turn on Streaming mode`).
+- **Run a lerd command…**: hands over to the `:` prompt for anything else.
 
-### Logs
+Type to filter; each word matches on its own and in any order, so `drupal https` and `https drupal` find the same entry, and typing a name puts the place before the things done to it. `↑` `↓` select, `enter` runs, `esc` closes. Destructive actions are never offered, as with the keys.
 
-| Key | Action |
-| --- | --- |
-| `l` | Open a site's Logs tab, or toggle the logs pane for the focused item elsewhere |
-| `[` / `]` | Cycle the log target through the site's log sources |
-| `{` / `}` | Scroll back through buffered output / return to live tail |
-| `f` | Find within the tailed buffer. Matches are highlighted, non-matching lines dim. Severity colouring (red for `ERROR / FATAL / PANIC / EXCEPTION / CRITICAL`, amber for `WARN / WARNING / DEPRECATED`) is always on |
+## Sidebar
 
-### Domains
+The sites section groups sites by workspace, in the order the workspaces are configured, with sites in no workspace after them. A workspace folds with `enter`, and a crashed worker inside it rolls up to the workspace row as a count, so a failure stays visible when the workspace is folded. A group's secondary sites sit under their main with a `↳`.
 
-Available when focus is on the Detail pane with the cursor on a domain row.
+With the sidebar focused, `↑` `↓` move, `enter` opens the row and hands focus to the main area, `/` filters the section the selection is in, and `tab` moves to the main area. `tab` or `esc` from the main area comes back.
 
-| Key | Action |
-| --- | --- |
-| `a` | Add a new domain to the focused site (opens inline input) |
-| `e` | Edit / rename the focused domain (opens inline input prefilled with the short name; commit runs `lerd domain add <new>` then `lerd domain remove <old>` as a sequence) |
-| `x` | Remove the focused domain |
+## Dashboard
 
-### Panes and overlays
+The dashboard leads with **Needs attention**: a stopped DNS, nginx or watcher, and every crashed worker, one card each. `tab` moves onto the cards, `enter` opens the site behind one, and `r` applies its fix, restarting that worker on its own unit or bringing a stopped core process back with `lerd start`. With nothing wrong it says so in one line.
 
-`S`, `Y`, and `D` swap the **Sites tab** detail pane; they no-op on the Dashboard and Services tabs. The Dashboard is now its own top tab (see [Dashboard tab](#dashboard-tab)).
+Under it, **Resources** fills the first column and **System** sits in the second with **Recent** below it, both columns ending on the same row. System pairs its facts into two columns when the panel is wide enough. On a narrow pane the three stack, System first:
 
-| Key | Action |
-| --- | --- |
-| `S` | Swap the Detail pane for global Settings (LAN expose, autostart, Xdebug) and focus it, Sites tab |
-| `Y` | Swap the Detail pane for the System overview (DNS, Nginx, Watcher, Notifications, Debug bridge, PHP per-version, Node, Lerd) and focus it, Sites tab |
-| `D` | Open the Debug window, the same capture the web dashboard shows. `[` / `]` switch lens across `Dumps · Queries · Jobs · Views · Mail · Cache · Events · HTTP`; the Queries lens groups by request with N+1 and slow-query (≥100ms) flags, and the other lenses group by request too. Use `/` to search the active lens (site, request, worker, file, text, payload) · `1`/`2` toggle the FPM / CLI context-filter chips · `enter` expands the selected row (query bindings and caller, job exception, view template, mail recipients, …) · `w` shows or hides worker events (queue / scheduler, hidden by default) · `c` clears the buffer (and runs `lerd dump clear`) · `T` toggles the bridge globally. The buffer is independent of the lerd-ui ring because the TUI runs in its own process and only sees what the SSE connection delivers |
-| `?` | Open the Keybindings reference as a centered modal overlay; `?` again or `esc` closes it |
-| `esc` | Dismiss the active modal (palette / picker / help / confirm), return to the pane underneath |
+- **Resources**: a CPU sparkline over the last few minutes, memory against the host total, and the three largest containers. Memory excludes reclaimable page cache and CPU is a share of the whole machine, the same figures the web dashboard shows, polled every 3 seconds.
+- **System**: DNS, nginx and the watcher, workers running, asleep and crashed, autostart, LAN, the lerd version with any available update, and the platform.
 
-### General
+**Recent** lists site link, pause, resume, start and stop, service add, remove, start and stop, worker fail and heal, and DNS transitions, derived live from successive snapshots since the TUI opened.
 
-| Key | Action |
-| --- | --- |
-| `:` | Open the command palette, type any `lerd <args>` (e.g. `service restart redis`) and press enter to shell out exactly as if you'd typed it in a regular terminal |
-| `R` | Force a state refresh |
-| `q` / `ctrl+c` | Quit |
+## Sites
 
-## Log sources
+A selected site opens with a fixed header over its tabs. The header carries the breadcrumb, the site's URL and app name, its framework, PHP, Node and runtime, its path, and its HTTPS, LAN and paused flags. It never scrolls, so the site and its tabs stay in view however long the content gets.
 
-Wherever logs are showing (a site's Logs tab, the service detail, or the full-width pane), `[` and `]` cycle through every tail-able source for whatever's focused:
+### Worktrees
 
-- **FPM / custom container**: `podman logs -f lerd-php<ver>-fpm` for PHP sites, or `lerd-custom-<name>` for custom container sites.
-- **Workers**: `journalctl --user -u lerd-queue-<site>` (and the same for schedule, reverb, horizon, custom framework workers). Workers are systemd user units, not containers, so their output lives in the user journal.
-- **App logs**: any file matching the framework's declared log globs (Laravel: `storage/logs/*.log`). Tailed with `tail -F` so rotated Laravel-style logs keep following.
+A site with git worktrees shows a row of branch tabs under its header, its own checkout first. `b` or a click moves between them, and a worktree whose own worker crashed carries the failure mark on its tab. Picking a worktree scopes the whole view to it: the breadcrumb names the branch, the header shows the worktree's domain, path and versions, the Overview shows only that worktree's controls (its workers, isolated database, LAN share, PHP and Node), the Env tab reads the worktree's `.env`, and the request-timing panel shows its traffic. `W` opens the command palette on `worktree add` in the site's directory, so lerd's own setup prompts appear as they do from the CLI.
 
-The pane title shows which source is active and the index, e.g. `Logs · astrolov · laravel.log [3/5 · [ ] to switch]`.
-
-## Service detail
-
-When focus is on the Services pane, the right column swaps to a service-focused detail mirroring the web UI's `ServiceDetail`. Sections, top to bottom:
-
-- **Header**: service name, version, state, systemd unit, pinned flag, and the dashboard URL (when the preset declares one); press `O` to open that URL in the browser.
-- **Depends on**: services in `depends_on`, each with its live state so you can confirm a stack is fully up before debugging.
-- **Sites using**: every active site (excluding paused/ignored) whose `.lerd.yaml` references this service.
-- **Env vars**: the preset's `env_vars` template list for default presets, or the merged `env_vars` + `environment` map for custom services. Read-only.
-- **Client tools**: the host shims the service exposes (`mysqldump`, `pg_dump`, `psql`, …) with each one on or off, and a note when turning one on would shadow a tool you already have on `PATH`. `space` toggles the focused row, which writes or removes a file in the bin dir and so is exactly reversible. A tool a different installed service owns is listed for context and says which service manages it.
-- **Tuning**: the in-container path the service's config override is mounted at and the settings actually in effect, comments and blank lines dropped. A whole-file edit is out of quick-action scope, so the section points at `lerd service config <name>`.
-- **Entities**: whatever the preset declares the service holds, buckets, indexes, collections, listed with their declared columns. The listing runs inside the container, so it arrives a moment after you select the service and is then cached until `R`. Creating or dropping one stays in the CLI.
-- **Preset suggestion**: a one-line nudge for the matching admin dashboard preset (e.g. `mysql` → install `phpmyadmin`) when it isn't already on disk. Install is destructive enough to stay CLI-only per the TUI scope rule, so the banner points at `lerd preset install <name>` rather than wiring an in-TUI installer.
-- **Actions**: quick reminder of the reversible verbs the services pane already handles: `s start`, `x stop`, `r restart`, `t shell`, `u update`, `b rollback`, `l logs`, and `space` on a client-tool row.
-
-For worker rows (queue-X, schedule-X, custom framework workers) the detail variant skips the env / dependency / sites-using sections and just shows the worker kind, the parent site, the systemd user unit, and the project path, workers run inside the owning site's FPM container, so they have no env or image of their own.
-
-## Site detail tabs
-
-The site detail pane is split into read-side tabs the user can jump between with the number keys, mirroring the web UI's `Overview / Logs / Env / Debug` strip (Tinker is CLI-only since it needs an interactive REPL).
+### Tabs
 
 | Key | Tab | Contents |
 | --- | --- | --- |
-| `1` | Overview | The default: domains, toggles (HTTPS / LAN / PHP / Node), services used, workers, worktrees, and the [request-timing panel](#request-timing), laid out as a [responsive grid](#overview-layout) |
-| `2` | Logs | A live tail of any of the site's log sources: the FPM or custom container, every worker unit, and each of the framework's app-log files. `[` / `]` cycle the source, `{` / `}` scroll back through the buffer, `f` finds within it. `l` is a shortcut to this tab from anywhere on the Sites tab |
-| `3` | Env | Read-only display of the site's `.env` file (read up to 256 KB so a runaway file can't wedge the render loop) |
-| `4` | Debug | This site's slice of the Debug window: the active lens (Dumps · Queries · Jobs · Views · Mail · Cache · Events · HTTP) scoped to the focused site, with `[` / `]` to switch lens and `w` to toggle worker capture. Rows show their detail inline; press `D` for the full cross-site window |
-| `5` | Doctor | The same framework-agnostic app-level health checks the web dashboard runs: a universal baseline (env file present, env drift warning only on keys the code reads without a default, application key set, composer and node dependencies installed with lockfiles in step, `composer audit` and `npm audit` clean, PHP version in range) plus each framework's own checks from its store definition (for Laravel, the `APP_DEBUG`-in-production footgun, the `public/storage` symlink, and pending migrations). Some checks exec in the container, so the run is on-demand: press `5` to run and again to re-run. The panel is read-only and names the suggested fix (e.g. `key:generate`, `migrate`) rather than running it, so a status view can never migrate a database |
+| `1` | Overview | Domains, toggles, services used, workers, suggested services and the [request-timing panel](#request-timing) |
+| `2` | Logs | A live tail of any of the site's log sources (see [Log sources](#log-sources)). `l` jumps here from anywhere on a site |
+| `3` | Env | The site's (or worktree's) `.env`, read-only, up to 256 KB |
+| `4` | Debug | This site's slice of the [debug window](#debug-window) |
+| `5` | Doctor | The framework-agnostic health checks the web dashboard runs, plus the framework's own. The run is on demand and read-only: it names the suggested fix rather than running it |
 
-Switching tabs resets the detail-pane scroll so the user lands at the top of the new tab. Picker overlays (PHP / Node version) only show in Overview; selecting a different tab dismisses them.
+### Overview
 
-## Overview layout
+The Overview lays sections out as a grid: **Domains** beside **Toggles**, **Services used** beside **Workers**, full width below the breakpoint. `↑` `↓` walk the controls, `←` `→` cross between paired columns, and `space` or `enter` toggles the focused row:
 
-The Overview is a grid, not a column. Each section says whether it wants the whole pane or half of it, and half-width sections pair up: **Domains** sits beside **Toggles**, and **Services used** beside **Workers**. The identity header, worktrees and request timing take the full width, and the timing panel subdivides internally into its distribution, slowest-routes and recent columns.
+- **Domains**: each domain with its role, `e` to edit, `x` to remove (confirmed), and `+ add domain`.
+- **PHP / Node**: a picker of installed versions (`lerd isolate` / `lerd isolate:node`); a FrankenPHP site only lists versions FrankenPHP publishes an image for, and a host bun appears as a Node option.
+- **HTTPS** (`lerd secure` / `unsecure`), **LAN share** (`lerd lan share` / `unshare`), and **Auto snapshots** (cycles following the global policy, always and never).
+- **Keep awake**: pins the site so idle suspend leaves it alone (`lerd idle pin` / `unpin`).
+- **Runtime**: switches between php-fpm and FrankenPHP (`lerd runtime`); the switch pulls and starts the image, so it can take a moment.
+- **Reload horizon** (sites with Horizon) and **Stripe listener** (sites with a Stripe secret).
+- **Workers**: each with its state; `space` starts or stops it.
 
-A column has a floor of 44 characters. When the pane can't give two columns that much, every section goes full width and the grid collapses to the single column it has always been, so a narrow terminal loses nothing. The same rule applies inside the timing panel, which drops from three blocks to two to one rather than truncating every row to a stub.
+**Suggested services** lists the services the site's packages ask for and why, read-only, since adding one rewrites `.lerd.yaml` and `.env`.
 
-Because sections sit side by side, `left` and `right` cross between the two columns of a grid row (Domains and Toggles), keeping the cursor's offset within the section, while `up` and `down` walk a single column as before.
+Other site keys: `s` / `x` start and stop, `r` restart, `p` pause, `t` a shell in the site's container, `O` the browser, `E` your editor, `F` the folder.
 
 ## Request timing
 
-The bottom of the Overview tab carries the same request-timing view the web dashboard shows, read straight from the durable request store the watcher fills from the nginx access feed. Because it reads the store directly rather than calling `lerd-ui`, the panel works whether or not the dashboard daemon is up.
+The bottom of the Overview carries the same request-timing view the web dashboard shows, read straight from the durable request store the watcher fills from the nginx access feed, so it works whether or not `lerd-ui` is up. It shows the median and p95, the request count and cold starts (kept out of every figure), the status mix, a response-time distribution, the slowest routes by recent p95, and the latest requests.
 
-It shows the median and p95 response time, the request count, how many of those were cold starts (kept out of every timing figure, since a suspended worker waking would otherwise make a route look slow), the status-class mix, a response-time distribution, the slowest routes ranked by recent p95, and the tail of recent requests.
+When the [SPX profiler](/features/profiler) has caught one of the slow routes, the route's hottest function and its share of the time appear on a line under it, read from its freshest capture.
 
-Two keys scope it:
+`[` / `]` cycle the window through `15m · 1h · 24h · 7d`. The worktree tabs set the branch, since a worktree records its traffic under its own key. Static assets, nginx-served files and WebSocket upgrades are filtered out.
 
-| Key | Effect |
+## Services
+
+A selected service opens with a header (name, version, state, the published port with the default it moved from and any extra mappings, its dashboard URL, and whether it is pinned or custom) over an **Overview** and a **Logs** tab (`1` / `2`, or `l` for logs). The tail only runs while the Logs tab is open.
+
+The Overview lists what the service depends on, the sites using it, its env vars, its client tools (`space` toggles the focused tool's host shim), its tuning overrides (edit with `lerd service config`), and the entities it holds. A matching admin dashboard preset that is not installed yet is suggested.
+
+Keys: `s` / `x` / `r` start, stop and restart, `P` pins or unpins it (a pinned service keeps running when no site uses it), `A` opens the palette on `service preset` to add a preset through lerd's own picker, `u` / `b` update and roll back, `O` opens its dashboard, `t` a shell.
+
+## Databases
+
+The Databases page lists every installed engine with the databases it holds, beside the selected database's detail. A database's `<name>_testing` twin folds into its row, as the web UI folds it into the same card; one whose app database is gone keeps a row of its own. Rows carry the name and size; the detail shows the engine, the owning site (and branch, for a worktree's isolated database), whether that site is on the automatic snapshot schedule, the folded testing database, and every snapshot with when the schedule will drop it.
+
+| Key | Action |
 | --- | --- |
-| `[` / `]` | Cycle the window through `15m · 1h · 24h · 7d` |
-| `b` | Cycle the branch across the site and each of its git worktrees |
+| `n` | Take a snapshot |
+| `K` | Keep an automatic snapshot for good, or put it back under retention |
+| `e` | Export to `<name>.sql` in the owning site's folder (or your home folder) |
+| `c` | Create a database on the engine (the palette opens on `db:create`) |
+| `a` | Put the owning site on or off the automatic snapshot schedule |
+| `R` | Re-list |
 
-A worktree records its traffic under its own key, so `b` reads the work done on that branch rather than folding it into the parent's numbers. Sites without worktrees show no branch label and `b` does nothing.
+Restore, drop and import overwrite or destroy data, so they stay in the CLI.
 
-Static assets, nginx-served files and WebSocket upgrades are filtered out, so an asset pipeline can't make a site look busy.
+## PHP & Node
 
-## Site detail
+Lists every installed PHP and Node version beside the selected one's detail: for PHP whether its FPM runs, whether it is the default, its Xdebug state and mode and any custom extensions, and for both the sites that use it. `d` makes it the default, `x` toggles Xdebug, `R` opens the palette on `php:rebuild`, and `i` on `use` or `node:install` to install another version.
 
-The detail pane is the main control surface for a site. With focus on the Sites pane, moving the cursor updates the detail live. Press `tab` until focus lands on the Detail pane to navigate its rows and toggle them with `space`.
+## Settings
 
-Sections, top to bottom:
+Settings is in the sidebar (and on `S`). `↑` `↓` walk the toggles and `space` flips one: LAN expose, managed service LAN access, autostart, automatic database snapshots, idle suspend (with its timeout), streaming mode, the tray applet, notifications, lerd's DNS and the SPX profiler. Each runs the matching `lerd` verb.
 
-- **Header**: primary domain (the URL users visit), internal name, disk path.
-- **Domains**: every domain on one row, each tagged `primary · e edit · x remove` or `alias · e edit · x remove`. Ends with `+ add domain (space or a)` to insert new ones.
-- **PHP / Node / framework / git branch**: one-line summary.
-- **Services used**: every service referenced in `.lerd.yaml` with its live state, so you can see at a glance whether redis / mysql / etc. are up for this site.
-- **Workers**: queue, schedule, horizon, reverb, and any custom framework workers, each with a running / failing indicator. `space` on a worker row toggles it (calls `lerd queue start/stop`, etc.).
-- **Worktrees**: every git worktree with its branch, domain, and path when the site uses them. Each worktree row carries its own controls, PHP / Node version pickers, LAN-share toggle, isolated-DB toggle, and per-worktree framework worker toggles (e.g. vite), so a branch's runtime can be tuned without affecting the parent. `space` on a worktree-scoped row toggles the matching state via the same CLI commands the parent rows use, just with the worktree's path threaded through.
-- **Toggles**: automatic snapshots (cycles the site between following the global policy, always and never, via `lerd db:snapshot:auto site`), HTTPS (runs `lerd secure` / `lerd unsecure`), LAN share (runs `lerd lan share` / `unshare`, shows the full `http://<lan-ip>:<port>` URL when enabled), PHP version (opens an inline picker from installed versions → `lerd isolate <ver>`; a FrankenPHP site only lists the versions FrankenPHP publishes an image for, so the picker never offers one that would silently downgrade), Node version (picker backed by `fnm list` → `lerd isolate:node <ver>`; when a host bun is installed the list also carries a `bun` entry that pins the site's JS runtime via `lerd js:runtime bun`, and picking a Node version while pinned to bun clears the pin first so the dev worker actually switches back).
+## Core processes
 
-## Databases tab
+dns, nginx and the watcher sit at the foot of the sidebar with a state word each. Opening one shows what it does, whether it is up, and its live log: the dns and nginx containers' output, or the watcher's journal. `s` brings lerd back up with `lerd start`.
 
-The **Databases** tab is the terminal counterpart to the web UI's Databases page. The left column lists every installed engine (mysql, mariadb, postgres, mongo, and any store-published engine that declares databases of its own) and, under each, the databases it holds with their size and snapshot count. A stopped engine says so instead of listing; an engine whose listing query failed reads `unreadable`.
+## Debug window
 
-The detail pane shows the selected database: the engine it lives in, its size, the site that owns it (with the branch, when it is a worktree's isolated database), and every snapshot with its timestamp, size and the git branch it was taken on. A snapshot the schedule took is marked `auto` and carries when retention will drop it.
+`D` (or the Debug tab of a site) shows the same capture the web dashboard does. `[` / `]` switch lens across `Dumps · Queries · Jobs · Views · Mail · Cache · Events · HTTP · Logs · Exceptions · Messages`; queries group by request with N+1 and slow-query flags, and every other lens groups by request too. `/` searches the lens, `1` / `2` toggle the FPM and CLI context chips, `enter` expands a row, `w` shows or hides worker events, `c` clears the buffer and `T` toggles the bridge. The buffer is the TUI's own, fed by the same stream.
 
-Listing a database queries inside the engine's container, so the tab loads once on arrival and is then cached; `R` re-lists.
+`Y` opens the **System** window: DNS, nginx, the watcher, notifications, the debug bridge, the profiler, PHP and Node, worker mode on macOS, and lerd itself.
 
-Two actions run from here, both of which only ever add or preserve. `n` takes a snapshot of the focused database, the same shape as starting a service. `K` opens a picker of that database's [automatic snapshots](../usage/database.md#automatic-snapshots) and keeps the highlighted one for good, or puts a kept one back under retention. Restore, drop, import and export overwrite or destroy data, so per the TUI scope rule they stay in the CLI as `lerd db:restore`, `lerd db:import` and `lerd db:export`.
+## Log sources
 
-## Dashboard tab
+Wherever logs are showing, `[` and `]` cycle through every source for what's selected:
 
-The **Dashboard** tab is the terminal counterpart to the web UI's home page: a responsive grid of the same six cards. It reflows from three columns (wide) to two (medium) to one (narrow). Each card shows its whole list and scrolls within its own box, the **focused** card (accent border) scrolls with `↑` `↓` / `j` `k`; `tab` / `shift+tab` moves focus between cards; the mouse wheel scrolls whichever card it's over.
+- **FPM / custom container**: `podman logs -f` of the site's FPM or custom container, or the service's container.
+- **Workers**: the user journal of `lerd-queue-<site>` and the other worker units.
+- **App logs**: any file matching the framework's declared log globs, tailed so rotated logs keep following.
 
-- **Sites**: total · running · paused counts, then every linked site with its FPM running dot. Clicking a site jumps to the Sites tab on that site.
-- **Services**: total · running counts, then every core / custom service with state dot and version. Clicking a service jumps to the Services tab on that service.
-- **Workers**: active · asleep · failing counts, then every worker (site · kind) with its state, and the failing units with a `press H to heal` hint.
-- **System Health**: DNS (ok / degraded / down / disabled), Nginx, Watcher, and the running PHP FPM versions.
-- **Resources**: total CPU% and memory across lerd's footprint, then every container by load. Memory excludes reclaimable page cache and CPU is a share of the whole machine, the same figures the [web dashboard](/features/web-ui) shows. Polled in the background every 3 s, matching the cache TTL the web UI uses; a `collecting…` placeholder shows until the first sample lands.
-- **Lerd**: version, an `update:` banner when a newer release is available, autostart, LAN expose, platform, and a **Recent activity** feed (site link/pause/resume/start/stop, service add/remove/start/stop, worker fail/heal, DNS transitions) derived live, mirroring the web UI's activity list.
+`{` / `}` scroll back through the buffer and return to the live tail, and `f` finds within it (matches highlighted, other lines dim). Error and warning lines are always coloured.
 
-## Settings view
+## Overlays and toasts
 
-Press `S` (on the Sites tab) to swap the detail pane for global settings. Navigate with `↑` `↓`, toggle with `space`:
+Help (`?`), the `:` command prompt, the version pickers and confirmations open on a raised surface over the dimmed screen, like the palette, and own every key while open; `esc` closes them. Action results land as toasts in the bottom-right corner, drawn over the content so they never move it; up to three stack, they fade after 30 seconds, `d` dismisses the newest, and identical ones coalesce. While an action runs, the status line shows a spinner.
 
-- **LAN expose**: flip every container to 0.0.0.0 binds (`lerd lan expose on/off`).
-- **Autostart on login**: `lerd autostart enable/disable`.
-- **Automatic database snapshots**: `lerd db:snapshot:auto on/off`. The row names the schedule and how many snapshots are kept per database while it is on.
-- **Xdebug**: one toggle per installed PHP version; rebuilds the FPM container.
+## Keybindings
 
-`S` again (or `esc`) returns to Site detail.
+| Key | Action |
+| --- | --- |
+| `ctrl+p` | Command palette: everything |
+| `↑` `↓` / `j` `k` | Move in the sidebar or the main area |
+| `enter` | Open the sidebar row, or act on the focused row |
+| `tab` / `esc` | Between the sidebar and the main area |
+| `\` | Show the sidebar on a narrow terminal |
+| `/` | Filter the sidebar section · `o` cycle its sort order |
+| `1`-`5` · `b` | Site tabs · worktree tabs |
+| `s` `x` `r` `p` | Start, stop, restart, pause |
+| `t` `O` `E` `F` | Shell, browser, editor, folder |
+| `W` | New worktree |
+| `H` | Heal every crashed worker |
+| `:` | Run any `lerd` command |
+| `?` | Help |
+| `R` | Refresh |
+| `q` / `ctrl+c` | Quit |
 
-## System view
-
-Press `Y` (on the Sites tab) to swap the detail pane for the System overview, the terminal-side counterpart to the web UI's System tab. Sections cover every shared subject lerd manages outside of an individual site, with informational rows for status and reversible toggles for safe operations:
-
-- **DNS**: TLD, live status (ok · degraded · down · disabled) computed by `dns.CheckStatus`, plus a VPN-active hint when an interface that typically rewrites the system resolver is up.
-- **Nginx**: running / stopped.
-- **Watcher**: running / stopped.
-- **Notifications**: `Enabled` toggle (runs `lerd notify on/off`).
-- **Debug bridge**: `Enabled` toggle (runs `lerd dump on/off`), passthrough indicator (web-UI managed), listen socket address, and the current TUI buffered count.
-- **PHP versions**: default version plus one row per installed PHP showing FPM running state and an Xdebug toggle that reflects the configured mode (`debug`, `profile`, or `trace`).
-- **Node**: default version (from the global config) and the installed major versions reported by `fnm list`.
-- **Worker mode**: macOS only; toggles `lerd workers mode exec|container`. Hidden on Linux where workers always run under systemd.
-- **Lerd**: current version, cached update check result, autostart toggle, LAN-expose toggle.
-
-Navigate the rows with `↑` `↓` (the cursor skips section headers and info-only rows), `space` / `enter` to toggle. `Y` again or `esc` returns to Site detail. Every toggle shells out to the public CLI verb so the TUI shares the same code path as a manual `lerd …` invocation.
-
-## Keybindings reference
-
-Press `?` to open the full keybinding reference as a centered modal overlay. Scroll with `↑` `↓`, `pgup` / `pgdn`, or `g` / `home` to jump to the top. `?` again or `esc` closes it. `q` still quits even while the overlay is open.
-
-## Toasts
-
-Action results (a service restart, a worker heal, a toggle) land as **toast notifications** in the bottom-right corner: a coloured severity dot (green / amber / red), bold title (the CLI invocation), and a dim subtext for any error message. They composite **over** the content as an overlay rather than reflowing the panes, so a transient notification never shifts what you're looking at. Up to three toasts stack vertically; older ones drop after 30 s. Press `d` to dismiss the newest manually. Identical back-to-back toasts coalesce so a busy moment doesn't bury the screen.
-
-During an in-flight action the status line (just above the toasts) shows an animated Braille spinner (`⠋⠙⠹…`) so the user feels the action is alive even when the underlying CLI takes a few seconds.
-
-## Modal overlays
-
-A handful of focused surfaces render as centered modal overlays (rounded border, accent colour) rather than swapping the detail pane:
-
-- **Command palette** (`:`), `lerd <args>` prompt with tab-completion suggestions; runs the command in a suspended shell so the output is visible, then pauses for `enter` before returning to the dashboard.
-- **PHP / Node version picker**: opens when `space` / `enter` lands on the PHP or Node row (site- or worktree-scoped). Pick with `↑` / `↓`, apply with `enter`, dismiss with `esc`.
-- **Keybindings reference** (`?`), described above.
-- **Confirmation prompt**: guards destructive single-key actions (e.g. `x` on a domain row). `y` confirms, `n` / `esc` cancels.
-
-While any modal is open it owns every keystroke; `esc` returns to whatever pane was focused underneath.
+The keys specific to a page (services, databases, PHP & Node, settings) are listed in its section above, in the hint line while it has focus, and in `?`.
 
 ## Live updates
 
-The TUI draws state from the same sources `lerd-ui` uses, in-process:
-
-- Subscribes to the shared eventbus so any mutation the TUI itself triggers shows up immediately (150 ms debounce).
-- Re-queries every 2 seconds as a safety net, so changes made from another terminal (`lerd service stop redis` in a different shell) surface within a couple of seconds.
-- Services and site state are built from the same `siteinfo` + `podman.Cache` path the web UI uses, so the two surfaces can't disagree.
+The TUI draws state from the same sources `lerd-ui` uses, in-process. It subscribes to the shared event bus, so a change it makes shows up immediately, and re-reads every 2 seconds, so a change made from another terminal surfaces within a couple of seconds. Sites and services are built from the same `siteinfo` and podman state the web UI uses, so the two surfaces can't disagree.
 
 ## Troubleshooting
 
-- **Terminal too small**: if the window is under 60 columns by 12 rows the dashboard refuses to render and asks you to resize. It picks up the new size on the next frame.
-- **Non-interactive shells**: `lerd tui` exits with an error when stdout isn't a TTY (piped output, CI). Run it inside a real terminal.
-- **Worker log says nothing**: check the worker is actually running (`lerd status` or the Workers section of the detail pane). Journal logs only exist while the unit has run at least once.
+- **Terminal too small**: under 60 columns by 12 rows the dashboard asks you to resize, and redraws on the next frame.
+- **Non-interactive shells**: `lerd tui` exits with an error when stdout isn't a TTY. Run it inside a real terminal.
+- **Worker log says nothing**: check the worker is running (its state in the site Overview). Journal logs only exist once the unit has run.

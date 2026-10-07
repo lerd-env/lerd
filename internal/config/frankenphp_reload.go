@@ -3,10 +3,10 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/power"
 	"github.com/geodro/lerd/internal/wsl"
 )
@@ -18,7 +18,7 @@ import (
 // home for the predicate; cli.watcherNeedsPolling delegates here so the Horizon
 // and Octane reload paths agree.
 func WatcherNeedsPolling(sitePath string) bool {
-	if runtime.GOOS == "darwin" {
+	if platform.Current.UsesMachineVM {
 		return true
 	}
 	return wsl.IsWSL() && strings.HasPrefix(sitePath, "/mnt/")
@@ -30,7 +30,7 @@ func WatcherNeedsPolling(sitePath string) bool {
 // work that exists only to maintain the poll cadence can stand down entirely
 // rather than waking to find nothing to do.
 func HostCanPollWatchers() bool {
-	return runtime.GOOS == "darwin" || wsl.IsWSL()
+	return platform.Current.UsesMachineVM || wsl.IsWSL()
 }
 
 // watcherPollIntervalMS is how often a polling reload watcher re-stats each

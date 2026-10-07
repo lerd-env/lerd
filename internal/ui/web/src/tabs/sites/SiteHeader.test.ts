@@ -4,7 +4,9 @@ import Harness from './SiteHeader.test.svelte';
 import type { Site } from '$stores/sites';
 import { frameworkMarks } from '$stores/frameworkMarks';
 import { accessMode } from '$stores/accessMode';
+import { editors } from '$stores/editors';
 import { status } from '$stores/status';
+import { status as dumpsStatus } from '$stores/dumps';
 
 const site = {
   domain: 'app.test',
@@ -112,9 +114,32 @@ describe('SiteHeader', () => {
     expect(getByRole('img', { name: 'Laravel 12' })).toBeInTheDocument();
   });
 
+  // Nothing else on the page said a site was served by FrankenPHP rather than
+  // the shared PHP-FPM, so the header carries it.
+  it('shows the FrankenPHP runtime', () => {
+    const { getByText } = render(Harness, {
+      props: { site: { ...site, runtime: 'frankenphp' } as unknown as Site }
+    });
+    const badge = getByText(/FrankenPHP/).closest('span[class*="rounded-full"]') as HTMLElement;
+    expect(badge.className).toContain('text-orange-700');
+    expect(badge.textContent).not.toContain('worker');
+  });
+
+  it('names worker mode on the FrankenPHP badge', () => {
+    const { getByText } = render(Harness, {
+      props: { site: { ...site, runtime: 'frankenphp', runtime_worker: true } as unknown as Site }
+    });
+    expect(getByText(/FrankenPHP/).textContent).toContain('worker');
+  });
+
+  it('shows no runtime badge for a PHP-FPM site', () => {
+    const { queryByText } = render(Harness, { props: { site } });
+    expect(queryByText(/FrankenPHP/)).not.toBeInTheDocument();
+  });
+
   // Group and workspace leave the bar on a narrow header, so the overflow menu carries them.
   it('offers group and workspace in the overflow menu', async () => {
-    accessMode.set({ localControl: true, lanExposed: false, checked: true });
+    accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
     status.update((s) => ({ ...s, workspaces: ['client-a'] }));
     const { getByLabelText, getByRole } = render(Harness, { props: { site: { ...site, name: 'app' } as unknown as Site } });
 
@@ -122,6 +147,20 @@ describe('SiteHeader', () => {
     const menu = getByRole('menu');
     expect(menu).toHaveTextContent('Group with another site');
     expect(menu).toHaveTextContent('client-a');
+  });
+
+  // The editor opens on the host's desktop, so a remote session never sees it,
+  // even one with full access.
+  it('offers the editor only on the lerd host itself', () => {
+    editors.set({ editors: [], global: 'phpstorm' });
+    accessMode.set({ localControl: true, local: false, lanExposed: true, checked: true });
+    const remote = render(Harness, { props: { site } });
+    expect(remote.queryByLabelText('Open in editor')).not.toBeInTheDocument();
+    remote.unmount();
+
+    accessMode.set({ localControl: true, local: true, lanExposed: true, checked: true });
+    const { getByLabelText } = render(Harness, { props: { site } });
+    expect(getByLabelText('Open in editor')).toBeInTheDocument();
   });
 
   describe('without git', () => {
@@ -154,4 +193,25 @@ describe('SiteHeader', () => {
       expect(queryByText('Initialize git')).not.toBeInTheDocument();
     });
   });
+
+  describe('browser logs toggle', () => {
+    afterEach(() => dumpsStatus.set(null));
+    const debug = (enabled: boolean) =>
+      dumpsStatus.set({ enabled, passthrough: false, listening: true, addr: '', count: 0, subscribers: 0, last_ts: '' });
+
+    it('shows while debug capture is on', () => {
+      accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
+      debug(true);
+      const { getByRole } = render(Harness, { props: { site } });
+      expect(getByRole('button', { name: 'Browser' })).toBeInTheDocument();
+    });
+
+    it('hides while debug capture is off, since no page carries the script then', () => {
+      accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
+      debug(false);
+      const { queryByRole } = render(Harness, { props: { site } });
+      expect(queryByRole('button', { name: 'Browser' })).not.toBeInTheDocument();
+    });
+  });
 });
+

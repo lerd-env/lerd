@@ -11,7 +11,7 @@ const MARK = '<svg viewBox="0 0 24 24"><path d="M3 3h18v18H3z"/></svg>';
 beforeEach(() => {
   globalThis.fetch = (async () =>
     new Response(JSON.stringify({}), { status: 200 })) as unknown as typeof fetch;
-  accessMode.set({ localControl: true, lanExposed: false, checked: true });
+  accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
   dashboardOpen.set(null);
   serviceIcons.set({ mailpit: MARK });
   services.set([

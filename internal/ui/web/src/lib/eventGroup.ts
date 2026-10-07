@@ -51,7 +51,7 @@ export function groupLabel(ev: DumpEvent, hideSitePrefix: boolean): GroupLabel {
 
 function labelText(ev: DumpEvent): string {
   if (ev.ctx.worker) return ev.ctx.worker;
-  if (ev.ctx.type === 'fpm') return ev.ctx.request || '(request)';
+  if (ev.ctx.type === 'fpm' || ev.ctx.type === 'browser') return ev.ctx.request || '(request)';
   return `cli (pid ${ev.ctx.pid ?? '?'})`;
 }
 

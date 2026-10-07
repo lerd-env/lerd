@@ -19,6 +19,14 @@ describe('SitesDashboard', () => {
     setWorkspaces([]);
   });
 
+  it('keeps the header out of the scrolling area', () => {
+    sites.set([site({ domain: 'shop.test' })]);
+    const { container } = render(SitesDashboard);
+    const header = container.querySelector('.page-header')!;
+    expect(header.closest('.overflow-y-auto')).toBeNull();
+    expect(container.querySelector('.overflow-y-auto')).toHaveTextContent('shop.test');
+  });
+
   it('groups active sites under their workspace', () => {
     setWorkspaces(['Client Work', 'Side Projects']);
     sites.set([

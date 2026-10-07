@@ -14,6 +14,7 @@
     initGit,
     openSiteInBrowser,
     openTerminal,
+    openInEditor,
     openFolder,
     loadSites,
     activeWorktreeDomain,
@@ -33,6 +34,7 @@
   import Icon from '$components/Icon.svelte';
   import { tooltip } from '$lib/tooltip';
   import { accessMode } from '$stores/accessMode';
+  import { editors, loadEditors } from '$stores/editors';
   import { idleEnabled } from '$stores/idle';
   import { status, loadStatus } from '$stores/status';
   import { xdebugOn, xdebugOff, type XdebugMode } from '$stores/xdebug';
@@ -44,6 +46,8 @@
   import WorkspacePicker from './WorkspacePicker.svelte';
   import WorkspaceMenuItems from './WorkspaceMenuItems.svelte';
   import GitStatusBadge from '$components/GitStatusBadge.svelte';
+  import BrowserLogsSiteToggle from '$components/BrowserLogsSiteToggle.svelte';
+  import { debugCaptureEnabled } from '$stores/queries';
   import { loadGitStatus, checkoutFor, type GitCheckout } from '$lib/gitStatus';
   import { m } from '../../paraglide/messages.js';
 
@@ -301,6 +305,14 @@
       ev.stopPropagation();
     }
   }
+  // Only the host may read the editor choice; a remote session would get a 403.
+  $effect(() => {
+    if ($accessMode.local) loadEditors();
+  });
+  async function openEditor() {
+    const res = await openInEditor(site.domain, activeWorktreeBranch);
+    if (!res.ok) openErrorModal(res.error ?? '');
+  }
   onMount(() => {
     document.addEventListener('click', onDocClick, true);
     document.addEventListener('keydown', onDocKey);
@@ -552,6 +564,12 @@
             </Badge>
           </span>
         {/if}
+        {#if site.runtime === 'frankenphp'}
+          <Badge tone="frankenphp" title={m.sites_badges_frankenphpTip()}>
+            {m.sites_badges_frankenphp()}{#if site.runtime_worker}
+              · {m.sites_badges_frankenphpWorker()}{/if}
+          </Badge>
+        {/if}
         {#if lanOn && lanURL}
           <span class="hidden @md:inline-flex items-center gap-1 text-[10px] text-teal-600 dark:text-teal-400">
             <Icon name="wifi" class="w-3 h-3 shrink-0" />
@@ -697,6 +715,26 @@
               <path d="M6.53 9C4.6 8.8 3 7.1 3 5M6 13H2M3 21c0-2.1 1.7-3.9 3.8-4M20.97 5c0 2.1-1.6 3.8-3.5 4M22 13h-4M17.2 17c2.1.1 3.8 1.9 3.8 4" />
             </svg>
           {/if}
+        </button>
+      {/if}
+
+      <!-- Pages carry the script only while debug capture is on, and FrankenPHP
+           sites are not covered yet. -->
+      {#if $accessMode.localControl && $debugCaptureEnabled && !site.paused && site.runtime !== 'frankenphp'}
+        <BrowserLogsSiteToggle site={site.name ?? site.domain} class="hidden @md:flex" />
+      {/if}
+
+      {#if $accessMode.local && $editors.global}
+        <button
+          type="button"
+          onclick={() => openEditor()}
+          aria-label={m.sites_openInEditor()}
+          use:tooltip={m.sites_openInEditor()}
+          class="hidden @md:flex w-8 h-8 items-center justify-center rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
         </button>
       {/if}
 

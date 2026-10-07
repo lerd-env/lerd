@@ -1,7 +1,9 @@
 <script lang="ts">
+  import CardCloseButton from '$components/CardCloseButton.svelte';
   import ServiceCardShell from '$components/ServiceCardShell.svelte';
   import ServiceDashboardButton from '$components/ServiceDashboardButton.svelte';
   import ServiceIcon from '$components/ServiceIcon.svelte';
+  import ServiceStatusDot from '$components/ServiceStatusDot.svelte';
   import Icon from '$components/Icon.svelte';
   import { tooltip } from '$lib/tooltip';
   import { apiFetch, decodeJSONResult } from '$lib/api';
@@ -68,11 +70,14 @@
     }
   }
 
-  const dot = $derived(
-    !installed ? 'bg-amber-500' : active ? 'bg-emerald-500' : 'bg-gray-400 dark:bg-gray-600'
-  );
   const status = $derived(
-    !installed ? m.services_notInstalled() : active ? m.common_running() : m.common_stopped()
+    !installed
+      ? m.services_notInstalled()
+      : active
+        ? m.common_running()
+        : svc?.idle_suspended
+          ? m.services_sleeping()
+          : m.common_stopped()
   );
 </script>
 
@@ -87,7 +92,11 @@
     <span class="min-w-0 flex-1">
       <span class="block text-xs font-semibold text-gray-800 dark:text-gray-100 truncate">{serviceLabel(name)}</span>
       <span class="flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400">
-        <span class="w-1.5 h-1.5 rounded-full {dot}"></span>
+        {#if installed}
+          <ServiceStatusDot {svc} size="xs" />
+        {:else}
+          <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+        {/if}
         {status}
       </span>
     </span>
@@ -128,14 +137,9 @@
     </button>
   {/if}
   {#if declared}
-    <button
-      type="button"
+    <CardCloseButton
+      label={m.sites_removeService_tooltip({ name: serviceLabel(name) })}
       onclick={() => openSiteServiceRemoveModal({ domain, name })}
-      use:tooltip={m.sites_removeService_tooltip({ name: serviceLabel(name) })}
-      aria-label={m.sites_removeService_tooltip({ name: serviceLabel(name) })}
-      class="shrink-0 flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
-    >
-      <Icon name="close" class="w-3.5 h-3.5" />
-    </button>
+    />
   {/if}
 </ServiceCardShell>

@@ -260,7 +260,7 @@ func handleEntityAction(w http.ResponseWriter, r *http.Request, service, kind, a
 		writeDBError(w, "a name is required")
 		return
 	}
-	if status, _ := podman.UnitStatus("lerd-" + service); status != "active" {
+	if !serviceUsable(service) {
 		writeDBError(w, "start the service before running entity actions")
 		return
 	}
@@ -278,7 +278,7 @@ func handleEntityExport(w http.ResponseWriter, r *http.Request, service, kind st
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if status, _ := podman.UnitStatus("lerd-" + service); status != "active" {
+	if !serviceUsable(service) {
 		http.Error(w, "start the service before exporting", http.StatusConflict)
 		return
 	}
@@ -295,7 +295,7 @@ func handleEntityExport(w http.ResponseWriter, r *http.Request, service, kind st
 // form, streaming the body straight into the declared import the same way
 // database imports do.
 func handleEntityImport(w http.ResponseWriter, r *http.Request, service, kind string) {
-	if status, _ := podman.UnitStatus("lerd-" + service); status != "active" {
+	if !serviceUsable(service) {
 		writeDBError(w, "start the service before importing")
 		return
 	}
@@ -342,4 +342,14 @@ func handleEntityImport(w http.ResponseWriter, r *http.Request, service, kind st
 		writeDBOK(w)
 		return
 	}
+}
+
+// serviceUsable reports whether an action may reach into the service: it is
+// running, or idle-suspend has it asleep and the action wakes it on the way in.
+// A service the user stopped still has to be started first.
+func serviceUsable(service string) bool {
+	if status, _ := podman.UnitStatus("lerd-" + service); status == "active" {
+		return true
+	}
+	return config.ServiceIsIdleSuspended(service)
 }

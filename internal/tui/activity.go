@@ -28,17 +28,6 @@ type activityEvent struct {
 	at   time.Time
 }
 
-func (e activityEvent) render() string {
-	dot := runningStyle.Render(glyphRunning)
-	switch e.tone {
-	case toneBad:
-		dot = failingStyle.Render(glyphFailing)
-	case toneWarn:
-		dot = pausedStyle.Render(glyphPaused)
-	}
-	return dot + " " + e.text + "  " + dimStyle.Render(humanAgo(time.Since(e.at)))
-}
-
 // humanAgo renders a coarse relative duration ("now", "5m", "2h", "3d").
 func humanAgo(d time.Duration) string {
 	switch {

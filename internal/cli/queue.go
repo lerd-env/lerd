@@ -62,7 +62,7 @@ func QueueRestartForSite(siteName, sitePath, phpVersion string) error {
 	if running, _ := podman.ContainerRunning(container); !running {
 		return nil
 	}
-	args := append([]string{"exec", "-w", sitePath, container}, strings.Fields(worker.RestartCommand)...)
+	args := append([]string{"exec", "-w", sitePath, "--env", "LERD_SITE=" + siteName, container}, strings.Fields(worker.RestartCommand)...)
 	if _, err := podman.Run(args...); err != nil {
 		return fmt.Errorf("queue restart for %s: %w", siteName, err)
 	}

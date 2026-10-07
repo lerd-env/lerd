@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -26,6 +25,10 @@ func newMiseManager() miseManager {
 	return miseManager{bin: findMise(home, exec.LookPath)}
 }
 
+// miseDirs are the package-manager prefixes findMise falls back to; a seam so a
+// test is not answered by the machine's own mise.
+var miseDirs = misePrefixes
+
 // findMise locates a usable mise: the user's own install first, then PATH, then
 // the package-manager prefixes a daemon's minimal PATH would miss. Returns ""
 // when there is none. lookPath is a seam so the probe is testable.
@@ -38,7 +41,7 @@ func findMise(home string, lookPath func(string) (string, error)) string {
 	if p, err := lookPath("mise"); err == nil {
 		return p
 	}
-	for _, dir := range misePrefixes() {
+	for _, dir := range miseDirs() {
 		p := filepath.Join(dir, "mise")
 		if isExecutableFile(p) {
 			return p
@@ -52,14 +55,6 @@ func findMise(home string, lookPath func(string) (string, error)) string {
 // would be invisible to the user's shell and would drift from the one they run.
 func miseInstallPath(home string) string {
 	return filepath.Join(home, ".local", "bin", "mise")
-}
-
-// misePrefixes are the package-manager dirs a daemon's restricted PATH misses.
-func misePrefixes() []string {
-	if runtime.GOOS == "darwin" {
-		return []string{"/opt/homebrew/bin", "/usr/local/bin"}
-	}
-	return []string{"/usr/local/bin", "/usr/bin"}
 }
 
 func isExecutableFile(path string) bool {

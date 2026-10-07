@@ -77,17 +77,19 @@ func TestNavigableSystemRows_SkipsHeadersAndInfo(t *testing.T) {
 	}
 }
 
-// TestSystemContentLines_RendersHeader checks the rendered output contains
-// the System title and the return-key hint so users discover how to leave.
-func TestSystemContentLines_RendersHeader(t *testing.T) {
+// The System window names itself and says how to leave, now in the frame's
+// breadcrumb rather than inside the content.
+func TestSystemWindow_RendersTitleAndWayBack(t *testing.T) {
 	m := NewModel("test")
-	lines, _ := systemContentLinesWithCursor(m, false, 100)
-	joined := strings.Join(lines, "\n")
+	m.width, m.height = 120, 40
+	m.switchTab(tabSites)
+	m.detailMode = detailSystem
+	joined := stripANSI(m.renderSitesMain(110, 38))
 	if !strings.Contains(joined, "System") {
-		t.Errorf("system page should render title:\n%s", joined)
+		t.Errorf("system window should render its title:\n%s", joined)
 	}
-	if !strings.Contains(joined, "Y or esc") {
-		t.Errorf("system page should hint at the return key:\n%s", joined)
+	if !strings.Contains(joined, "esc back to the site") {
+		t.Errorf("system window should say how to return:\n%s", joined)
 	}
 }
 

@@ -1,38 +1,21 @@
 package tui
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/siteinfo"
 )
 
-// Two failing workers on the same site must get distinct zone ids, otherwise
-// bubblezone keeps a single region per id and the second row is unclickable.
-func TestDashWorkersCard_DistinctZonesPerFailingWorker(t *testing.T) {
+// Two crashed workers on one site are two cards, each restartable on its own.
+func TestDashAlerts_OneCardPerCrashedWorker(t *testing.T) {
 	m := NewModel("test")
 	m.snap = Snapshot{
-		Sites: []siteinfo.EnrichedSite{
-			{Name: "alpha", QueueFailing: true, ScheduleFailing: true},
-		},
+		Sites:  []siteinfo.EnrichedSite{{Name: "alpha", QueueFailing: true, ScheduleFailing: true}},
+		Status: StatusRow{DNSOk: true, NginxRunning: true, WatcherRunning: true},
 	}
-	c := m.dashWorkersCard(80, -1)
-
-	var failZones []string
-	for _, id := range c.rowZones {
-		if strings.HasPrefix(id, "dashfailsite:") {
-			failZones = append(failZones, id)
-		}
-	}
-	if len(failZones) != 2 {
-		t.Fatalf("expected 2 failing-worker zones, got %d (%v)", len(failZones), failZones)
-	}
-	seen := map[string]bool{}
-	for _, id := range failZones {
-		if seen[id] {
-			t.Fatalf("duplicate failing-worker zone id %q; second row would be a dead click", id)
-		}
-		seen[id] = true
+	alerts := m.dashAlerts()
+	if len(alerts) != 2 || alerts[0].worker != "queue" || alerts[1].worker != "schedule" {
+		t.Fatalf("expected queue and schedule cards, got %+v", alerts)
 	}
 }
 

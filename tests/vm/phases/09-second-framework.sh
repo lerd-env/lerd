@@ -2,6 +2,7 @@
 # Phase 9, a second framework from a different family, and the frameworks and
 # packages that only a real scaffold exercises.
 source "$(dirname "$0")/../lib.sh"
+need_demo
 mkdir -p "$PROJECTS"
 cd "$PROJECTS" || exit 1
 api=http://127.0.0.1:7073/api

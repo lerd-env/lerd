@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/origin"
 	phpPkg "github.com/geodro/lerd/internal/php"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
@@ -135,7 +135,7 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 		}
 	}
 
-	if runtime.GOOS == "linux" {
+	if !platform.Current.UsesMachineVM {
 		if _, lookErr := exec.LookPath("crun"); lookErr != nil {
 			warn("OCI runtime", "crun not found — recommended for rootless podman (install: sudo pacman -S crun / sudo apt install crun / sudo dnf install crun)")
 			rep.fixLast(manualFix)
@@ -264,6 +264,13 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 		} else {
 			ok("rootless network (pasta)")
 		}
+	}
+
+	for _, p := range enforcedMysqldProfiles("/") {
+		fail("host AppArmor profile "+filepath.Base(p),
+			"a native MySQL/MariaDB profile also confines the server in lerd's database container, which then ignores its config, listens on the wrong socket and cannot be stopped cleanly",
+			"sudo ln -s "+p+" /etc/apparmor.d/disable/ && sudo apparmor_parser -R "+p+", then restart lerd's database service (or purge the native server if lerd's replaces it)")
+		rep.fixLast(manualFix)
 	}
 
 	quadletDir := config.QuadletDir()

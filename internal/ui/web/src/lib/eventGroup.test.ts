@@ -73,3 +73,13 @@ describe('groupLabel', () => {
     expect(labelString(groupLabel(ev({ branch: '', site: '' }), false))).toBe('GET /checkout');
   });
 });
+
+describe('browser events', () => {
+  const page = (rid: string) => ({ ...ev({ type: 'browser', request: 'https://acme.test/cart', rid, pid: undefined }), kind: 'browser' });
+
+  it('group per page load and are labelled with the page URL', () => {
+    expect(groupKey(page('p1'))).toBe('rid:p1');
+    expect(groupKey(page('p1'))).not.toBe(groupKey(page('p2')));
+    expect(groupLabel(page('p1'), true).text).toBe('https://acme.test/cart');
+  });
+});

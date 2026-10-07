@@ -158,6 +158,11 @@ func timestamped() string { return time.Now().UTC().Format("20060102-150405") }
 // envPairs are passed via the exec env (not argv) so secrets don't leak into
 // /proc/<pid>/cmdline. Captured output includes stderr.
 func containerExec(container, shellCmd string, envPairs []string, stdin *os.File, timeout time.Duration) ([]byte, error) {
+	if svc, ok := strings.CutPrefix(container, "lerd-"); ok {
+		if err := wakeForData(svc); err != nil {
+			return nil, err
+		}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	args := []string{"exec", "-i"}

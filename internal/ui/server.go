@@ -46,6 +46,7 @@ import (
 	lerdNode "github.com/geodro/lerd/internal/node"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/phpsets"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/profiler"
 	"github.com/geodro/lerd/internal/reqstats"
@@ -309,13 +310,17 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/devtools/workers", withCORS(publishAfter(handleDevtoolsWorkers, eventbus.KindDevtoolsStatus)))
 	mux.HandleFunc("/api/devtools/tests", withCORS(publishAfter(handleDevtoolsTests, eventbus.KindDevtoolsStatus)))
 	mux.HandleFunc("/api/open-editor", withCORS(handleOpenEditor))
+	mux.HandleFunc("/api/editors", withCORS(handleEditors))
 	mux.HandleFunc("/api/open-folder", withCORS(handleOpenFolder))
 	mux.HandleFunc("/api/profiler/toggle", withCORS(publishAfter(handleProfilerToggle, eventbus.KindProfilerStatus)))
 	mux.HandleFunc("/api/profiler/status", withCORS(handleProfilerStatus))
 	mux.HandleFunc("/api/profiler/captures", withCORS(handleProfilerCaptures))
 	mux.HandleFunc("/api/profiler/clear", withCORS(handleProfilerClear))
+	mux.HandleFunc("/api/browser-logs/sites/", withCORS(handleBrowserLogsSite))
+	mux.HandleFunc("/api/browser-logs/presets", withCORS(handleBrowserLogsPresets))
 	mux.HandleFunc("/_spx/", handleSpxProxy)
 	mux.HandleFunc("/_svc/", handleDashProxy)
+	mux.HandleFunc("/api/dashboard/keepalive", withCORS(handleDashboardKeepAlive))
 	mux.HandleFunc("/api/queue/", withCORS(handleUnitLogStream))
 	mux.HandleFunc("/api/horizon/", withCORS(handleUnitLogStream))
 	mux.HandleFunc("/api/stripe/", withCORS(handleUnitLogStream))
@@ -412,7 +417,7 @@ func Start(currentVersion string) error {
 	})
 	mux.Handle("/", serveSvelte())
 
-	handler := withDashboardMounts(withRemoteControlGate(mux))
+	handler := withWakeHold(withBrowserLogs(withDashboardMounts(withRemoteControlGate(mux))))
 
 	// Unix socket listener for the lerd.localhost nginx vhost. Linux only:
 	// on macOS, lerd-nginx runs inside the podman-machine VM and unix
@@ -420,7 +425,7 @@ func Start(currentVersion string) error {
 	// vhost falls back to TCP via host.containers.internal there.
 	// Errors are non-fatal — direct http://localhost:7073 access still
 	// works even if the socket can't be created.
-	if runtime.GOOS != "darwin" {
+	if !platform.Current.UsesMachineVM {
 		if err := os.MkdirAll(config.RunDir(), 0755); err != nil {
 			fmt.Printf("[WARN] creating %s: %v — lerd.localhost vhost will not work\n", config.RunDir(), err)
 		} else {
@@ -593,35 +598,11 @@ func terminalDirCandidates(dir string) []terminalCmd {
 		candidates = append(candidates, namedTerminal(t, dir))
 	}
 
-	// A terminal the user picked in System Settings outranks one that merely
-	// happens to be on PATH, so it goes ahead of the list rather than after it.
-	if bundle := macDefaultTerminal(); bundle != "" {
-		candidates = append(candidates, terminalCmd{"open", []string{"-b", bundle, dir}})
-	}
-	// The same on Linux, where the choice lives in the freedesktop launcher, the
-	// distribution's alternatives link, or the desktop's own setting.
-	if t := linuxDefaultTerminal(); t != "" {
-		candidates = append(candidates, namedTerminal(t, dir))
-	}
-
+	// A terminal the user picked in the desktop's settings outranks one that
+	// merely happens to be on PATH, so it goes ahead of the list.
+	candidates = append(candidates, osDefaultDirTerminal(dir)...)
 	candidates = append(candidates, knownTerminals(dir)...)
-
-	if runtime.GOOS == "darwin" {
-		// `open -a Terminal dir` opens a new window at dir without echoing any
-		// command — cleaner than `do script "cd ... && exec $SHELL"` which types
-		// the command visibly into the shell. iTerm2 supports the same via open.
-		// Warp registers public.folder, so it takes the directory the same way
-		// the other two do and needs none of its warp:// URI scheme.
-		if _, err := os.Stat("/Applications/Warp.app"); err == nil {
-			candidates = append(candidates, terminalCmd{"open", []string{"-a", "Warp", dir}})
-		}
-		if _, err := os.Stat("/Applications/iTerm.app"); err == nil {
-			candidates = append(candidates, terminalCmd{"open", []string{"-a", "iTerm", dir}})
-		}
-		candidates = append(candidates, terminalCmd{"open", []string{"-a", "Terminal", dir}})
-	}
-
-	return candidates
+	return append(candidates, osFallbackDirTerminals(dir)...)
 }
 
 // namedTerminal builds the invocation for a terminal named by the user or the
@@ -669,9 +650,7 @@ func openTerminalAt(dir string) error {
 		}
 		cmd := exec.Command(bin, t.args...)
 		cmd.Dir = dir
-		if runtime.GOOS != "darwin" {
-			cmd.Env = graphicalEnv()
-		}
+		cmd.Env = terminalBaseEnv()
 		if err := cmd.Start(); err != nil {
 			return err
 		}
@@ -737,7 +716,7 @@ type StatusResponse struct {
 	// Instance identifies this lerd-ui process. An open dashboard reloads when
 	// it changes, so a restarted server never leaves a stale page behind.
 	Instance string `json:"instance"`
-	// Tools reports the managed host binaries (composer, fnm, mkcert) against
+	// Tools reports the managed host binaries (composer, mise, fnm, mkcert) against
 	// their pinned versions; fnm is omitted on nvm-managed setups where its
 	// absence is deliberate.
 	Tools []tools.ToolStatus `json:"tools"`
@@ -1409,10 +1388,12 @@ type ServiceResponse struct {
 	IsDatabase bool `json:"is_database,omitempty"`
 	// EntityKinds are the non-database entity kinds this service declares
 	// (buckets, keyspaces…), so the detail view can show a generic overview tab.
-	EntityKinds        []string `json:"entity_kinds,omitempty"`
-	SiteCount          int      `json:"site_count"`
-	SiteDomains        []string `json:"site_domains,omitempty"`
-	Pinned             bool     `json:"pinned"`
+	EntityKinds []string `json:"entity_kinds,omitempty"`
+	SiteCount   int      `json:"site_count"`
+	SiteDomains []string `json:"site_domains,omitempty"`
+	Pinned      bool     `json:"pinned"`
+	// IdleSuspended marks a service idle-suspend stopped; it wakes on its own.
+	IdleSuspended      bool     `json:"idle_suspended,omitempty"`
 	Paused             bool     `json:"paused,omitempty"`
 	DependsOn          []string `json:"depends_on,omitempty"`
 	QueueSite          string   `json:"queue_site,omitempty"`
@@ -1647,6 +1628,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		SiteDomains:       sitesUsingService(name),
 		Pinned:            config.ServiceIsPinned(name),
 		Paused:            config.ServiceIsPaused(name),
+		IdleSuspended:     config.ServiceIsIdleSuspended(name),
 		IsDefault:         isDefault,
 		IsDatabase:        name != "sqlite" && isDatabaseEngine(name),
 		EntityKinds:       serviceops.EntityKinds(name),
@@ -4073,6 +4055,10 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	action := parts[1]
+	if action == "editor:open" && !isLocalControlRequest(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 
 	// Favicon is a GET endpoint served separately.
 	if action == "favicon" {
@@ -4215,6 +4201,18 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		return
 	case "unpin":
 		if err := cli.SetSitePinned(site.Name, false); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "editor:open":
+		path := resolveSitePath(site, r.URL.Query().Get("branch"))
+		if path == "" {
+			writeJSON(w, SiteActionResponse{Error: "unknown worktree branch"})
+			return
+		}
+		if err := openProjectInEditor(*site, path); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}
@@ -5567,6 +5565,7 @@ type SettingsResponse struct {
 	PHPRuntimeSwitching       bool     `json:"php_runtime_switching"` // a switch is running; every red row below is transient
 	IdleSuspendEnabled        bool     `json:"idle_suspend_enabled"`
 	IdleSuspendTimeoutMinutes int      `json:"idle_suspend_timeout_minutes"`
+	IdleSuspendServices       bool     `json:"idle_suspend_services"`
 	DNSEnabled                bool     `json:"dns_enabled"`
 	DNSUpstream               []string `json:"dns_upstream"`          // pinned upstreams, empty = auto-detect
 	DNSUpstreamDetected       []string `json:"dns_upstream_detected"` // what auto-detection currently sees
@@ -5582,6 +5581,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 	mode := config.WorkerExecModeExec
 	idleEnabled := false
 	idleMinutes := int(config.DefaultIdleSuspendTimeout / time.Minute)
+	idleServices := false
 	dnsEnabled := true
 	startOnOpen := false
 	trayEnabled := true
@@ -5593,6 +5593,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		mode = cfg.WorkerExecMode()
 		idleEnabled = cfg.IdleSuspend.Enabled
 		idleMinutes = int(cfg.IdleSuspendTimeout() / time.Minute)
+		idleServices = cfg.IdleSuspend.Services
 		dnsEnabled = cfg.DNSManaged()
 		dnsUpstream = cfg.DNS.Upstream
 		startOnOpen = cfg.Autostart.OnDashboardOpen
@@ -5608,9 +5609,10 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		PHPRuntime:                cfg.PHPRuntimeMode(),
 		PHPRuntimeSwitching:       config.RuntimeSwitchInProgress(),
 		PHPRuntimeApplies:         nativeRuntimeApplies(runtime.GOOS, runtime.GOARCH),
-		WorkerModeApplies:         runtime.GOOS == "darwin",
+		WorkerModeApplies:         platform.Current.WorkerModes,
 		IdleSuspendEnabled:        idleEnabled,
 		IdleSuspendTimeoutMinutes: idleMinutes,
+		IdleSuspendServices:       idleServices,
 		DNSEnabled:                dnsEnabled,
 		DNSUpstream:               dnsUpstream,
 		DNSUpstreamDetected:       dns.ReadUpstreamDNS(),
@@ -5631,8 +5633,9 @@ func handleSettingsIdleSuspend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Enabled        bool `json:"enabled"`
-		TimeoutMinutes int  `json:"timeout_minutes"`
+		Enabled        bool  `json:"enabled"`
+		TimeoutMinutes int   `json:"timeout_minutes"`
+		Services       *bool `json:"services"` // omitted leaves it as it is
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)
@@ -5649,6 +5652,9 @@ func handleSettingsIdleSuspend(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg.IdleSuspend.Enabled = body.Enabled
 	cfg.IdleSuspend.Timeout = (time.Duration(body.TimeoutMinutes) * time.Minute).String()
+	if body.Services != nil {
+		cfg.IdleSuspend.Services = *body.Services
+	}
 	if err := config.SaveGlobal(cfg); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -5983,10 +5989,6 @@ func namedTerminalCommand(name, script string) terminalCmd {
 	return terminalCmd{name, []string{"-e", "sh", "-c", script}}
 }
 
-// defaultTerminal is the seam tests replace to stand in for the desktop's own
-// setting, which is read off the host.
-var defaultTerminal = linuxDefaultTerminal
-
 // terminalScriptCandidates returns the ordered emulator candidates for running
 // a script. Same precedence as terminalDirCandidates: $TERMINAL, then the
 // terminal the desktop is set to use, then the fixed list. macOS is absent from
@@ -6001,16 +6003,7 @@ func terminalScriptCandidates(script string) []terminalCmd {
 		candidates = append(candidates, namedTerminalCommand(t, script))
 	}
 	candidates = append(candidates, knownTerminalCommands(script)...)
-
-	if runtime.GOOS == "darwin" {
-		if _, err := os.Stat("/Applications/iTerm.app"); err == nil {
-			as := "tell application \"iTerm2\"\n\tcreate window with default profile\n\ttell current session of current window\n\t\twrite text " + appleScriptStr(script) + "\n\tend tell\nend tell"
-			candidates = append(candidates, terminalCmd{"osascript", []string{"-e", as}})
-		}
-		as := "tell application \"Terminal\"\n\tdo script " + appleScriptStr(script) + "\n\tactivate\nend tell"
-		candidates = append(candidates, terminalCmd{"osascript", []string{"-e", as}})
-	}
-	return candidates
+	return append(candidates, osFallbackScriptTerminals(script)...)
 }
 
 // openTerminalCommand opens the user's terminal emulator and runs the given
@@ -6022,11 +6015,7 @@ func terminalScriptCandidates(script string) []terminalCmd {
 // PATH; without it the emulator inherits whatever the user's service manager
 // happened to import and a declared command can fail as not found.
 func terminalEnv() []string {
-	env := os.Environ()
-	if runtime.GOOS != "darwin" {
-		env = graphicalEnv()
-	}
-	return append(env, "PATH="+config.PathWithBinDir())
+	return append(terminalBaseEnv(), "PATH="+config.PathWithBinDir())
 }
 
 func openTerminalCommand(script string) error {
@@ -6783,7 +6772,7 @@ func handleSettingsPHPRuntime(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": false, "error": "unknown runtime"})
 		return
 	}
-	if body.Mode == config.PHPRuntimeNative && runtime.GOOS != "darwin" {
+	if body.Mode == config.PHPRuntimeNative && !platform.Current.NativePHPRuntime {
 		writeJSON(w, map[string]any{"ok": false, "error": "the native runtime is macOS only"})
 		return
 	}

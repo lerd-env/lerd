@@ -61,6 +61,8 @@ type ProjectQuestions struct {
 	Database        string         `json:"database,omitempty"`
 	ServiceOptions  []string       `json:"service_options,omitempty"`
 	Services        []string       `json:"services,omitempty"`
+	// ServiceSuggestions says why each suggested service is offered.
+	ServiceSuggestions []config.ServiceSuggestion `json:"service_suggestions,omitempty"`
 
 	FrankenPHPOffered bool   `json:"frankenphp_offered"`
 	FrankenPHPReason  string `json:"frankenphp_reason,omitempty"`
@@ -196,19 +198,29 @@ func fillServiceQuestions(q *ProjectQuestions, cwd string, defaults *config.Proj
 	}
 	q.ServiceOptions = nonDatabaseServiceNames(dbNameSet)
 	q.Database, q.Services = wizardServiceDefaults(cwd, defaults, dbNameSet)
-	q.ServiceOptions, q.Services = addSuggestedServices(q.ServiceOptions, q.Services, fw, dbNameSet, len(defaults.Services) > 0, presetAvailable, serviceInstalled)
+	q.ServiceOptions, q.Services, q.ServiceSuggestions = addSuggestedServices(q.ServiceOptions, q.Services, fw, dbNameSet, len(defaults.Services) > 0, presetAvailable, serviceInstalled)
 }
 
 // addSuggestedServices offers the presets the framework and its packages
 // suggest. Each package puts one of its alternatives forward, the first
 // installed here or else its first, ticked on a project that has not saved its
 // services yet, since requiring the package is evidence the project uses it.
-func addSuggestedServices(options, selected []string, fw *config.Framework, dbNameSet map[string]bool, saved bool, available, installed func(string) bool) ([]string, []string) {
+// offered is one suggestion per service offered, so the wizards can say why.
+func addSuggestedServices(options, selected []string, fw *config.Framework, dbNameSet map[string]bool, saved bool, available, installed func(string) bool) ([]string, []string, []config.ServiceSuggestion) {
 	if fw == nil {
-		return options, selected
+		return options, selected, nil
 	}
+	var offered []config.ServiceSuggestion
 	picked := config.PickPackageSuggestions(fw.PackageServices, func(name string) bool { return slices.Contains(selected, name) }, installed)
-	for _, sg := range append(append([]config.ServiceSuggestion(nil), fw.SuggestServices...), picked...) {
+	// The pick skips a service the project's env already selected, but the
+	// package is still why that service is there, so it keeps the reason.
+	reasons := append([]config.ServiceSuggestion(nil), picked...)
+	for _, sg := range fw.PackageServices {
+		if slices.Contains(selected, sg.Name) {
+			reasons = append(reasons, sg)
+		}
+	}
+	for _, sg := range append(append([]config.ServiceSuggestion(nil), fw.SuggestServices...), reasons...) {
 		name := sg.Name
 		if name == "" || dbNameSet[name] || !available(name) {
 			continue
@@ -216,13 +228,19 @@ func addSuggestedServices(options, selected []string, fw *config.Framework, dbNa
 		if !slices.Contains(options, name) {
 			options = append(options, name)
 		}
+		// A package names a concrete reason, so it explains the service over the framework.
+		if i := slices.IndexFunc(offered, func(o config.ServiceSuggestion) bool { return o.Name == name }); i < 0 {
+			offered = append(offered, sg)
+		} else if offered[i].Package == "" && sg.Package != "" {
+			offered[i] = sg
+		}
 	}
 	for _, sg := range picked {
 		if !saved && slices.Contains(options, sg.Name) && !slices.Contains(selected, sg.Name) {
 			selected = append(selected, sg.Name)
 		}
 	}
-	return options, selected
+	return options, selected, offered
 }
 
 // serviceInstalled reports whether this machine already runs the service.

@@ -40,4 +40,12 @@ describe('StatusPill', () => {
     const { container } = render(StatusPill, { props: { tone: 'warn', label: 'Stale' } });
     expect(container.querySelector('span')!.className).toMatch(/text-yellow-700|bg-yellow-100/);
   });
+
+  it('leads an asleep pill with the moon instead of a dot', () => {
+    const { container, getByText } = render(StatusPill, { props: { tone: 'asleep', label: 'Sleeping' } });
+    expect(getByText('Sleeping')).toBeTruthy();
+    expect(container.querySelector('svg')).toBeTruthy();
+    expect(container.querySelector('.rounded-full.w-1\\.5')).toBeNull();
+    expect(container.querySelector('span')!.className).toMatch(/text-sky-700/);
+  });
 });

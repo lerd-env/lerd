@@ -237,11 +237,11 @@ func TestWorkerActionCmd_BuiltinWorker(t *testing.T) {
 func TestActionServiceUpdate_focusGuards(t *testing.T) {
 	m := NewModel("test")
 	m.snap = Snapshot{Services: []ServiceRow{{Name: "mysql"}}}
-	m.focus = paneSites
+	m.activeTab = tabSites
 	if cmd := m.actionServiceUpdate(); cmd != nil {
-		t.Errorf("update from sites pane should be nil")
+		t.Errorf("update outside the Services view should be nil")
 	}
-	m.focus = paneServices
+	m.activeTab = tabServices
 	if cmd := m.actionServiceUpdate(); cmd == nil {
 		t.Errorf("update on plain service should return a cmd")
 	}
@@ -251,16 +251,16 @@ func TestActionServiceUpdate_focusGuards(t *testing.T) {
 	}
 }
 
-// TestActionServiceRollback_focusGuards mirrors update — same paneServices
-// + non-worker constraint.
+// TestActionServiceRollback_focusGuards mirrors update: the Services view
+// and the non-worker constraint.
 func TestActionServiceRollback_focusGuards(t *testing.T) {
 	m := NewModel("test")
 	m.snap = Snapshot{Services: []ServiceRow{{Name: "mysql"}}}
-	m.focus = paneSites
+	m.activeTab = tabSites
 	if cmd := m.actionServiceRollback(); cmd != nil {
-		t.Errorf("rollback from sites pane should be nil")
+		t.Errorf("rollback outside the Services view should be nil")
 	}
-	m.focus = paneServices
+	m.activeTab = tabServices
 	if cmd := m.actionServiceRollback(); cmd == nil {
 		t.Errorf("rollback on plain service should return a cmd")
 	}
@@ -291,6 +291,7 @@ func TestSpaceKey_TogglesTheFocusedRow(t *testing.T) {
 	m := NewModel("test")
 	m.activeTab = tabSites
 	m.focus = paneDetail
+	m.sideFocus = false
 	m.detailMode = detailDumps
 	setLens(m, dumps.KindQuery)
 	m.appendDebug(qEv("1", "r1", "select 1", 1))

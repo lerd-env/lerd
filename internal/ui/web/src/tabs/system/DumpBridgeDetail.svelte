@@ -2,16 +2,17 @@
   import { onMount } from 'svelte';
   import DetailPanel from '$components/DetailPanel.svelte';
   import DetailHeader from '$components/DetailHeader.svelte';
-  import DetailTabs, { type TabItem } from '$components/DetailTabs.svelte';
+  import DetailTabs from '$components/DetailTabs.svelte';
   import StatusPill from '$components/StatusPill.svelte';
   import DetailButton from '$components/DetailButton.svelte';
   import DumpsTab from '$tabs/DumpsTab.svelte';
   import QueriesLens from '$components/QueriesLens.svelte';
   import KindLens from '$components/KindLens.svelte';
   import DebugDisabled from '$components/DebugDisabled.svelte';
+  import BrowserLens from '$components/BrowserLens.svelte';
   import { status as dumpsStatusValue, refreshStatus, togglePassthrough } from '$stores/dumps';
   import { refreshDevtoolsStatus, debugCaptureEnabled, setDebugCapture } from '$stores/queries';
-  import { debugLens, type DebugLens } from '$stores/debugLens';
+  import { debugLens, debugLensTabs, type DebugLens } from '$stores/debugLens';
   import { sites } from '$stores/sites';
   import { countKinds, debugEvents } from '$stores/debugEvents';
   import { m } from '../../paraglide/messages.js';
@@ -24,20 +25,7 @@
   const laravelOnly: DebugLens[] = ['cache'];
   const counts = $derived(countKinds($debugEvents));
 
-  type Lens = DebugLens;
-  const tabs = $derived<TabItem<Lens>[]>([
-    { id: 'dumps', label: m.debug_tab_dumps(), count: counts['dump'] },
-    { id: 'queries', label: m.debug_tab_queries(), count: counts['query'] },
-    { id: 'jobs', label: m.debug_tab_jobs(), count: counts['job'] },
-    { id: 'views', label: m.debug_tab_views(), count: counts['view'] },
-    { id: 'mail', label: m.debug_tab_mail(), count: counts['mail'] },
-    { id: 'cache', label: m.debug_tab_cache(), hidden: !anyLaravel, count: counts['cache'] },
-    { id: 'events', label: m.debug_tab_events(), count: counts['event'] },
-    { id: 'http', label: m.debug_tab_http(), count: counts['http'] },
-    { id: 'logs', label: m.debug_tab_logs(), count: counts['log'] },
-    { id: 'exceptions', label: m.debug_tab_exceptions(), count: counts['exception'] },
-    { id: 'messages', label: m.debug_tab_messages(), count: counts['message'] }
-  ]);
+  const tabs = $derived(debugLensTabs(counts, anyLaravel));
 
   $effect(() => {
     if (!anyLaravel && laravelOnly.includes($debugLens)) debugLens.set('queries');
@@ -97,7 +85,11 @@
     <DebugDisabled />
   {:else}
     <DetailTabs {tabs} active={$debugLens} onchange={(id) => debugLens.set(id)} />
-    {#if $debugLens === 'dumps'}
+    {#if $debugLens === 'browser'}
+    <div class="flex-1 min-h-0 overflow-hidden">
+      <BrowserLens />
+    </div>
+    {:else if $debugLens === 'dumps'}
     <div class="px-3 sm:px-5 py-2 space-y-2 shrink-0 text-xs text-gray-500 dark:text-gray-400">
       <p>
         {m.dumps_bridge_description()}

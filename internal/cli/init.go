@@ -219,7 +219,7 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 	dbOptions, dbNameSet := buildDatabaseOptions(dbFramework)
 	nonDBServiceOptions := nonDatabaseServiceNames(dbNameSet)
 	dbChoice, nonDBSelected := wizardServiceDefaults(cwd, defaults, dbNameSet)
-	nonDBServiceOptions, nonDBSelected = addSuggestedServices(nonDBServiceOptions, nonDBSelected, dbFramework, dbNameSet, len(defaults.Services) > 0, presetAvailable, serviceInstalled)
+	nonDBServiceOptions, nonDBSelected, suggested := addSuggestedServices(nonDBServiceOptions, nonDBSelected, dbFramework, dbNameSet, len(defaults.Services) > 0, presetAvailable, serviceInstalled)
 
 	phpVersion := phpDefault
 	nodeVersion := defaults.NodeVersion
@@ -275,7 +275,7 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 			Title("Database").
 			Options(dbOptions...).
 			Value(&dbChoice),
-		newMultiSelect("Services", "", nonDBServiceOptions, &nonDBSelected),
+		newMultiSelectOptions("Services", "", serviceOptions(nonDBServiceOptions, suggested), &nonDBSelected),
 	)
 
 	formGroups := []*huh.Group{huh.NewGroup(firstGroupFields...)}

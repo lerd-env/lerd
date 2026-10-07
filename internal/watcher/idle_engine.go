@@ -96,6 +96,13 @@ type idleEngine struct {
 	// (a suspend may run a slow one-time `npm run build`), so the tick and other
 	// sites' wakes never block on it and the same site isn't worked twice at once.
 	inFlight map[string]bool
+	// sleeping mirrors the services idle-suspend holds asleep, and svcKeys the
+	// activity keys that keep each one awake, refreshed every tick.
+	sleeping map[string]bool
+	svcKeys  map[string][]string
+	// svcMu runs one service suspend or wake at a time, so a site's workers
+	// resume only after the services they need are up.
+	svcMu sync.Mutex
 	// wg counts every goroutine the engine has started, so wait() can block on them.
 	wg sync.WaitGroup
 }
@@ -129,6 +136,11 @@ func newIdleEngine(t *idle.Tracker) *idleEngine {
 		tracker:   t,
 		suspended: map[string]bool{},
 		inFlight:  map[string]bool{},
+		sleeping:  map[string]bool{},
+		svcKeys:   map[string][]string{},
+	}
+	for _, name := range config.IdleSuspendedServices() {
+		e.sleeping[name] = true
 	}
 	// Seed from persisted state so a lerd-ui restart remembers which sites and
 	// worktrees are suspended and resumes them on the next request rather than
@@ -274,6 +286,7 @@ func (e *idleEngine) tick() {
 		// Each git worktree idles on its own timer, independent of the main site.
 		e.tickWorktrees(&s, enabled, timeout, now)
 	}
+	e.tickServices(enabled && cfg.IdleSuspend.Services, timeout, now)
 }
 
 // tickWorktrees evaluates each of the site's worktrees for suspend/resume, read
@@ -373,6 +386,11 @@ func (e *idleEngine) OnActivity(key string) {
 	if e == nil {
 		return
 	}
+	if name, ok := strings.CutPrefix(key, svcKeyPrefix); ok {
+		e.wakeServicesAsync([]string{name})
+		return
+	}
+	e.wakeServicesAsync(e.sleepingFor(key))
 	e.mu.Lock()
 	suspended := e.suspended[key]
 	e.mu.Unlock()
@@ -430,6 +448,9 @@ func (e *idleEngine) anyInFlight() bool {
 // non-empty idle-suspended worker list on disk. A read error returns true so the
 // drain keeps retrying rather than giving up and stranding a worker.
 func persistedIdleSuspendExists() bool {
+	if len(config.IdleSuspendedServices()) > 0 {
+		return true
+	}
 	reg, err := config.LoadSites()
 	if err != nil {
 		return true
@@ -503,6 +524,7 @@ func (e *idleEngine) ResumeAllSuspended() {
 	if changed {
 		publishSitesChanged()
 	}
+	e.wakeServicesNow(e.sleepingNames())
 }
 
 // worktreePathForBase resolves a worktree's checkout dir from its unit-slug base
@@ -573,6 +595,7 @@ func (e *idleEngine) resume(siteName string) {
 		if err != nil {
 			return
 		}
+		e.wakeServicesNow(e.sleepingFor(siteName)) // workers need their services up
 		workers := site.IdleSuspendedWorkers
 		resumeWorkers(site, workers)
 		if err := config.SetSiteIdleSuspendedWorkers(siteName, nil); err != nil {
@@ -637,6 +660,7 @@ func (e *idleEngine) resumeWorktree(siteName, wtBase, wtPath string) {
 		if err != nil {
 			return
 		}
+		e.wakeServicesNow(e.sleepingFor(key))
 		var workers []string
 		if site.WorktreeIdleSuspended != nil {
 			workers = site.WorktreeIdleSuspended[wtBase]

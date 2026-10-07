@@ -78,25 +78,25 @@ func TestEnqueueToastForResult_MapsToKind(t *testing.T) {
 	}
 }
 
-func TestRenderToasts_RightAlignsWhenActive(t *testing.T) {
+func TestToasts_DrawBottomRightOverTheScreen(t *testing.T) {
 	m := NewModel("test")
+	m.width, m.height = 120, 30
 	m.enqueueToast(toastSuccess, "all healthy", "")
-	got := stripANSI(m.renderToasts(120))
-	if !strings.Contains(got, "all healthy") {
-		t.Errorf("expected toast title in output:\n%s", got)
+	lines := strings.Split(stripANSI(m.render()), "\n")
+	for _, l := range lines {
+		if i := strings.Index(l, "all healthy"); i >= 0 {
+			if i < 60 {
+				t.Fatalf("toast should sit on the right, found at column %d: %q", i, l)
+			}
+			return
+		}
 	}
-	// PlaceHorizontal pads the left with spaces so the toast sits on
-	// the right — first non-whitespace char should be far from column 0.
-	firstLine := strings.SplitN(got, "\n", 2)[0]
-	leadSpaces := len(firstLine) - len(strings.TrimLeft(firstLine, " "))
-	if leadSpaces < 20 {
-		t.Errorf("expected toast to be right-aligned (leading spaces ~half of width), got %d leading spaces in %q", leadSpaces, firstLine)
-	}
+	t.Fatal("toast title not drawn")
 }
 
-func TestRenderToasts_EmptyWhenNoToasts(t *testing.T) {
+func TestToastStack_EmptyWhenNoToasts(t *testing.T) {
 	m := NewModel("test")
-	if got := m.renderToasts(120); got != "" {
+	if got := m.toastStack(); got != "" {
 		t.Errorf("expected empty output with no toasts, got %q", got)
 	}
 }

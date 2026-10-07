@@ -13,11 +13,14 @@ var helpReference = []helpSection{
 	{
 		title: "Navigation",
 		rows: [][2]string{
-			{"ctrl+← / ctrl+→", "switch the top tab (Dashboard · Sites · Services · Databases); tabs are also clickable"},
-			{"tab / shift+tab", "cycle focus between the list and the detail pane on the current tab"},
-			{"click", "click a tab to switch screens, or a site / service / worker row to open it"},
-			{"↑ ↓  j k", "move the selection in the focused pane or Dashboard card (info cards scroll)"},
-			{"enter", "on the Dashboard, open the selected row (same as clicking it)"},
+			{"↑ ↓  j k", "move in the sidebar, or in whatever the main area shows"},
+			{"enter", "open the selected sidebar row, or the selected dashboard card"},
+			{"tab / esc", "move focus from the sidebar to the main area, and back"},
+			{"ctrl+p", "go to any site, service or worktree, or run a quick action"},
+			{"click", "click a sidebar row, tab, worktree or card to open it"},
+			{"1-5 · b", "switch a site's tabs · switch between its worktrees"},
+			{"tab · \\", "show the sidebar over the main area on a narrow terminal"},
+			{"ctrl+← / ctrl+→", "step between Dashboard, Sites, Services and Databases"},
 			{"pgup / pgdn", "jump by 10 rows"},
 			{"home / end · g G", "jump to first / last row"},
 		},
@@ -42,9 +45,12 @@ var helpReference = []helpSection{
 			{"r", "restart the focused site or service"},
 			{"p", "pause / unpause toggle for a site"},
 			{"t", "open an interactive shell inside the focused container"},
+			{"E", "open the selected site in your editor"},
+			{"F", "open the selected site's folder"},
+			{"W", "create a worktree for the selected site"},
 			{"O", "open in the browser: the focused site's primary domain, or the focused service's dashboard URL"},
-			{"u", "service update — pull a newer image and restart (services pane)"},
-			{"b", "service rollback — revert to the previously-running image (services pane)"},
+			{"u", "service update — pull a newer image and restart (an opened service)"},
+			{"b", "service rollback — revert to the previously-running image (an opened service)"},
 		},
 	},
 	{
@@ -53,6 +59,9 @@ var helpReference = []helpSection{
 			{"↑ ↓", "move between the databases of every installed engine"},
 			{"n", "take a snapshot of the focused database"},
 			{"K", "keep an automatic snapshot, or put it back under retention"},
+			{"e", "export the focused database to a .sql file in its site's folder"},
+			{"c", "create a database (and its testing twin) on the focused engine"},
+			{"a", "include or exclude the database's site from automatic snapshots"},
 			{"R", "re-list the engines (each listing queries inside its container)"},
 			{"", "restore, drop, import and export overwrite data and stay in the CLI"},
 		},
@@ -70,7 +79,7 @@ var helpReference = []helpSection{
 	{
 		title: "Debug view",
 		rows: [][2]string{
-			{"[ / ]", "switch lens (Dumps · Queries · Jobs · Views · Mail · Cache · Events · HTTP)"},
+			{"[ / ]", "switch lens (Dumps · Queries · Jobs · Views · Mail · Cache · Events · HTTP · Logs · Exceptions · Messages)"},
 			{"/", "search the active lens (site, request, worker, file, text, payload)"},
 			{"1 / 2", "toggle the `fpm` / `cli` context-filter chips"},
 			{"enter / space", "expand the selected row (bindings, caller, exception, …)"},
@@ -111,11 +120,12 @@ var helpReference = []helpSection{
 	{
 		title: "Panes & overlays",
 		rows: [][2]string{
-			{"Dashboard tab", "six-card overview (Sites · Services · Workers · System Health · Resources · Lerd)"},
+			{"Dashboard", "what needs attention first, with its fix one key away, then resources, system health and recent activity"},
 			{"Databases tab", "every engine with its databases, sizes, owning sites and snapshots"},
 			{"S", "swap the detail pane for global Settings (LAN expose, autostart, Xdebug) — Sites tab"},
 			{"Y", "swap the detail pane for the System overview (DNS, Nginx, Watcher, PHP, Node, Lerd) — Sites tab"},
 			{"D", "open the Debug window (dumps, queries with N+1, jobs, mail, …) — Sites tab"},
+			{"ctrl+p", "go to any site, service or worktree, or run a quick action"},
 			{"?", "swap the detail pane for this help reference"},
 			{"esc", "close picker or return to site detail"},
 		},
@@ -137,10 +147,6 @@ var helpReference = []helpSection{
 func helpContentLines(m *Model, innerW int) []string {
 	out := make([]string, 0, 64)
 	add := func(s string) { out = append(out, padToWidth(clipLine(s, innerW), innerW)) }
-
-	add(sectionStyle.Render("Keybindings"))
-	add(dimStyle.Render("  press ? or esc to return to site detail"))
-	add("")
 
 	for i, sec := range helpReference {
 		if i > 0 {

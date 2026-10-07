@@ -17,6 +17,7 @@ import (
 	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -58,7 +59,7 @@ never used the shared FPM container.`,
 			}
 			if show {
 				fmt.Printf("PHP runtime: %s\n", cfg.PHPRuntimeMode())
-				if runtime.GOOS != "darwin" {
+				if !platform.Current.NativePHPRuntime {
 					fmt.Println("  (Linux runs PHP in containers; the native runtime is macOS only.)")
 				}
 				return nil
@@ -230,6 +231,7 @@ func ApplyPHPRuntime(mode string) error {
 		})
 		startWorkersForSite(s, stopped[s.Name], s.PHPVersion)
 	}
+	regenerateProfilerVhost()
 	// A refused reload leaves nginx serving the runtime it had before, so every
 	// site answers 502 while the switch reports success. One unloadable
 	// certificate anywhere is enough to cause it, so say so rather than
@@ -302,6 +304,14 @@ func regenerateWorktreeVhosts(s *config.Site) {
 		if err := switchWriteWorktreeVhost(wt.Domain, wt.Path, s.PHPVersion, s.PrimaryDomain(), s.Name, wt.Branch, s.Secured); err != nil {
 			feedback.Warn("regenerating the vhost for %s: %v", wt.Domain, err)
 		}
+	}
+}
+
+// regenerateProfilerVhost rewrites the SPX dashboard's vhost, which belongs to
+// no site, so the sweep over sites never reaches it.
+func regenerateProfilerVhost() {
+	if err := nginx.EnsureProfilerVhost(); err != nil {
+		feedback.Warn("regenerating the profiler vhost: %v (the SPX dashboard may answer 502)", err)
 	}
 }
 

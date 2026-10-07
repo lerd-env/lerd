@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"slices"
 
 	"github.com/geodro/lerd/internal/certs"
@@ -17,8 +18,8 @@ import (
 func NewToolsUpdateCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "tools:update",
-		Short: "Update composer, fnm and mkcert to their pinned versions",
-		Long:  "Re-downloads any managed host tool whose installed version differs from the pinned one. Tools that are not installed (e.g. fnm on an nvm-managed setup) are left alone.",
+		Short: "Update composer, mise, fnm and mkcert to their pinned versions",
+		Long:  "Re-downloads any managed host tool whose installed version differs from the pinned one. Tools that are not installed (e.g. fnm on an nvm-managed setup) are left alone, and so is a mise lerd did not install itself.",
 		RunE:  runToolsUpdate,
 	}
 }
@@ -69,12 +70,18 @@ func runToolsUpdate(_ *cobra.Command, _ []string) error {
 // can be tested without a network.
 var updateToolFn = updateTool
 
-// updateTool reinstalls one tool at its pinned version. fnm goes through the
-// zip extract; composer and mkcert are plain binary swaps.
+// updateTool reinstalls one tool at its pinned version. fnm and mise go through
+// their archive extract; composer and mkcert are plain binary swaps.
 func updateTool(pins *pinnedTools, name string) error {
 	switch name {
 	case "fnm":
 		return installFnm(pins, io.Discard)
+	case "mise":
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("mise update: %w", err)
+		}
+		return installMise(pins, home, io.Discard)
 	case "mkcert":
 		return replaceTool(pins, name, certs.MkcertPath(), io.Discard)
 	default:
@@ -92,6 +99,9 @@ func updateTool(pins *pinnedTools, name string) error {
 func UpdateOneTool(name string) error {
 	if !slices.Contains(tools.Names(), name) {
 		return fmt.Errorf("unknown tool %q", name)
+	}
+	if !tools.LerdOwned(name) {
+		return fmt.Errorf("%s was not installed by lerd, so lerd leaves it alone", name)
 	}
 	var pins pinnedTools
 	return updateToolFn(&pins, name)

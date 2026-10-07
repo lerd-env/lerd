@@ -242,7 +242,9 @@ func handleDumpsClear(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	srv := dumpsServer.Load()
-	if srv != nil {
+	if kind := r.URL.Query().Get("kind"); srv != nil && kind != "" {
+		srv.ClearKind(kind)
+	} else if srv != nil {
 		srv.Clear()
 	}
 	w.WriteHeader(http.StatusNoContent)

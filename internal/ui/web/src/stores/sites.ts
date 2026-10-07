@@ -28,6 +28,13 @@ export interface ServiceSuggestion {
   package?: string;
 }
 
+// suggestionWhy is the sentence explaining a suggestion, naming its package.
+export function suggestionWhy(s: ServiceSuggestion): string {
+  return s.package
+    ? m.sites_suggestedService_why({ package: s.package, reason: s.reason || '' })
+    : s.reason || '';
+}
+
 export interface Site {
   name?: string;
   // Display-only grouping; a group secondary reports its main's workspace.
@@ -650,6 +657,8 @@ export const unpinSite = (d: string) => postAction(site(d, 'unpin'));
 export const unlinkSite = (d: string) => postAction(site(d, 'unlink'));
 export const removeSiteService = (d: string, name: string) =>
   postAction(site(d, 'service:remove') + `?name=${encodeURIComponent(name)}`);
+export const openInEditor = (d: string, branch: string = '') =>
+  postAction(site(d, 'editor:open') + (branch ? `?branch=${encodeURIComponent(branch)}` : ''));
 export const openTerminal = (d: string, branch: string = '') =>
   postAction(site(d, 'terminal') + (branch ? `?branch=${encodeURIComponent(branch)}` : ''));
 

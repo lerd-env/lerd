@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Phase 5, services and database operations, on demo from phase 2.
 source "$(dirname "$0")/../lib.sh"
+need_demo
 cd "$DEMO_DIR" || exit 1
 name=$(site_name "$DEMO_DIR")
 host=$(site_host "$DEMO_DIR")
@@ -75,6 +76,17 @@ kill "$squatter" 2>/dev/null
 check_out "mailpit moved off the taken port and runs" "moved=yes active=active" bash -c "echo moved=$([ -n "$new_web" ] && echo yes) active=\$(systemctl --user is-active lerd-mailpit)"
 # The dashboard reaches Mailpit through its own proxy, not by port.
 expect_200 5.9 "http://127.0.0.1:7073/_svc/mailpit/"
+# Through nginx with the browser's Origin, the way the embedded dashboard calls
+# it: Mailpit refuses an Origin that is not the Host it receives.
+dash_mailpit() {
+	curl -s -o /dev/null -w '%{http_code}' --max-time 3 --resolve lerd.localhost:80:127.0.0.1 -H 'Origin: http://lerd.localhost' "$@"
+}
+check_out "5.45 mailpit embedded on lerd.localhost answers its API and opens its websocket" '^api=200 ws=101 cors=0$' bash -c "
+	$(declare -f dash_mailpit)
+	since=\$(date +%s)
+	api=\$(dash_mailpit http://lerd.localhost/_svc/mailpit/api/v1/info)
+	ws=\$(dash_mailpit -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' http://lerd.localhost/_svc/mailpit/api/events)
+	echo api=\$api ws=\$ws cors=\$(podman logs --since \$since lerd-mailpit 2>&1 | grep -c '\[cors\]')"
 
 check_out "lerd service preset spamassassin" "Installed preset|already" lerd service preset spamassassin
 check "lerd service start spamassassin" lerd service start spamassassin

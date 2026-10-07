@@ -145,6 +145,9 @@ func (s *Server) Subscribe() (<-chan Event, func()) { return s.hub.Subscribe() }
 // Clear empties the ring. Active subscribers continue to receive events.
 func (s *Server) Clear() { s.ring.Clear() }
 
+// ClearKind drops the buffered events of one kind and keeps the rest.
+func (s *Server) ClearKind(kind string) { s.ring.Remove(func(e Event) bool { return e.Kind == kind }) }
+
 // Len returns the number of buffered events.
 func (s *Server) Len() int { return s.ring.Len() }
 

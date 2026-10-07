@@ -2,6 +2,8 @@
 # Phase 11, diagnostics and housekeeping. The reboot and the late-NIC rig are
 # tier 3 and need a guest that can reboot unattended.
 source "$(dirname "$0")/../lib.sh"
+need_demo
+need_shop
 cd "$DEMO_DIR" || exit 1
 api=http://127.0.0.1:7073/api
 
@@ -118,7 +120,10 @@ rm -f /tmp/lerd-vm-lerd.yaml
 
 in_use() { podman ps --format '{{.Image}}' | sort -u; }
 before_use=$(in_use)
-podman tag docker.io/library/busybox:latest localhost/lerd-vm-orphan:1 2>/dev/null
+# hello-world, not busybox: phase 8's custom container is built FROM busybox,
+# and cleanup rightly keeps an image another image is built on.
+podman pull -q docker.io/library/hello-world:latest >/dev/null 2>&1
+podman tag docker.io/library/hello-world:latest localhost/lerd-vm-orphan:1 2>/dev/null
 dry=$(lerd cleanup --dry-run 2>&1)
 echo "$dry"
 check_out "11.17 [partial] the preview says at least rather than about" 'At least|Nothing to reclaim' echo "$dry"
@@ -222,12 +227,25 @@ check "lerd stop then lerd start" bash -c 'lerd stop && lerd start'
 expect_200 11.28 "$url"
 expect_code "$(site_url "$SHOP_DIR")" 200 404
 
+# phpsite's env_provider is set before the reboot; tmpfs comes back empty, and
+# 11.28's lerd start above has to have written the file again.
+phpsite=$PROJECTS/phpsite
 if [ "${AFTER_REBOOT:-}" = 1 ]; then
 	expect_200 11.29 "$url"
+	check_out "11.33 env_provider values are served again after lerd start" '^after-reboot$' curl -sk "$(site_url "$phpsite")/env.php"
+	sed -i '/^env_provider:/d' "$phpsite/.lerd.yaml"
+	(cd "$phpsite" && lerd env) </dev/null >/dev/null 2>&1
+	rm -f "$phpsite/public/env.php"
 elif [ "${RUN_TIER3:-}" = 1 ]; then
+	echo '<?php echo getenv("LERD_VM_SHARED");' >"$phpsite/public/env.php"
+	sed -i '/^env_provider:/d' "$phpsite/.lerd.yaml"
+	echo "env_provider: printf 'LERD_VM_SHARED=after-reboot\\n'" >>"$phpsite/.lerd.yaml"
+	(cd "$phpsite" && lerd env --yes) </dev/null >/dev/null 2>&1
 	skip "11.29 reboot with autostart" "reboot the guest, then run phase 11 again with AFTER_REBOOT=1"
+	skip "11.33 env_provider after a reboot" "reboot the guest, then run phase 11 again with AFTER_REBOOT=1"
 else
 	skip "11.29 reboot with autostart" "tier 3, set RUN_TIER3=1"
+	skip "11.33 env_provider after a reboot" "tier 3, set RUN_TIER3=1"
 fi
 if [ "${RUN_TIER3:-}" = 1 ] && grep -q '^ID=fedora' /etc/os-release; then
 	todo "11.30 late-NIC network rig" "not scripted yet: the rig, the reboot and the fake docker0 link up"

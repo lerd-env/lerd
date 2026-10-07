@@ -47,6 +47,15 @@ func waitZone(id string) *zone.ZoneInfo {
 	return zone.Get(id)
 }
 
+// renderZones renders m into a fresh zone manager. The global one keeps every
+// earlier render's zones until its worker catches up, so waitZone could return
+// those instead of this frame's.
+func renderZones(m *Model) {
+	zone.Close()
+	zone.DefaultManager = zone.New()
+	_ = m.render()
+}
+
 func TestNextTab_CyclesBothDirections(t *testing.T) {
 	m := NewModel("test")
 	m.activeTab = tabDashboard
@@ -89,21 +98,24 @@ func TestNextFocus_DashboardStaysOnDetail(t *testing.T) {
 	}
 }
 
-func TestMouseClick_SwitchesTab(t *testing.T) {
+func TestMouseClick_SidebarServiceOpensIt(t *testing.T) {
 	m := NewModel("test")
 	m.snap = fakeSnap()
 	m.width, m.height = 150, 40
-	_ = m.render() // register zones
+	renderZones(m) // register zones
 
-	z := waitZone("tab:" + tabServices.label())
+	z := waitZone("side:svc:redis")
 	if z.IsZero() {
-		t.Fatalf("services tab zone not registered after render")
+		t.Fatalf("redis sidebar row not registered after render")
 	}
 	msg := tea.MouseClickMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft}
 	next, _ := m.Update(msg)
 	m = next.(*Model)
-	if m.activeTab != tabServices {
-		t.Fatalf("clicking the Services tab should switch to it, got %d", m.activeTab)
+	if m.activeTab != tabServices || m.currentService().Name != "redis" {
+		t.Fatalf("clicking redis in the sidebar should open it, got tab %d", m.activeTab)
+	}
+	if m.sideFocus || m.focus != paneDetail {
+		t.Fatalf("a click opens the row, so focus moves to the detail")
 	}
 }
 
@@ -113,11 +125,11 @@ func TestMouseClick_SelectsSiteRow(t *testing.T) {
 	m.activeTab = tabSites
 	m.focus = paneSites
 	m.width, m.height = 150, 40
-	_ = m.render()
+	renderZones(m)
 
-	z := waitZone("site:1")
+	z := waitZone("side:site:beta")
 	if z.IsZero() {
-		t.Fatalf("second site row zone not registered after render")
+		t.Fatalf("beta sidebar row not registered after render")
 	}
 	msg := tea.MouseClickMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft}
 	next, _ := m.Update(msg)
@@ -131,8 +143,8 @@ func TestMouseClick_IgnoresNonLeftPress(t *testing.T) {
 	m := NewModel("test")
 	m.snap = fakeSnap()
 	m.width, m.height = 150, 40
-	_ = m.render()
-	z := zone.Get("tab:" + tabServices.label())
+	renderZones(m)
+	z := waitZone("side:svc:redis")
 	// Motion (not a press) must not switch tabs.
 	msg := tea.MouseMotionMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft}
 	next, _ := m.Update(msg)
@@ -142,48 +154,39 @@ func TestMouseClick_IgnoresNonLeftPress(t *testing.T) {
 	}
 }
 
-func TestRenderDashboardGrid_HasAllSixCards(t *testing.T) {
+func TestDashboardClick_OpensTheAlertSite(t *testing.T) {
 	m := NewModel("test")
 	m.snap = fakeSnap()
-	out := m.renderDashboardGrid(150, 30)
-	for _, title := range []string{"Sites", "Services", "Workers", "System Health", "Resources", "Lerd"} {
-		if !strings.Contains(out, title) {
-			t.Fatalf("dashboard grid missing %q card:\n%s", title, out)
-		}
-	}
-}
-
-func TestDashboardClick_JumpsToSiteTab(t *testing.T) {
-	m := NewModel("test")
-	m.snap = fakeSnap()
+	m.snap.Sites[1].QueueFailing = true
+	m.snap.Status = StatusRow{DNSOk: true, NginxRunning: true, WatcherRunning: true}
 	m.activeTab = tabDashboard
 	m.width, m.height = 150, 40
-	_ = m.render() // register dashboard row zones
+	renderZones(m) // register the alert card zones
 
-	z := waitZone("dashsite:1")
+	z := waitZone("dashalert:0")
 	if z.IsZero() {
-		t.Fatalf("dashsite row zone not registered after render")
+		t.Fatalf("alert card zone not registered after render")
 	}
 	msg := tea.MouseClickMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft}
 	next, _ := m.Update(msg)
 	m = next.(*Model)
 	if m.activeTab != tabSites {
-		t.Fatalf("clicking a dashboard site should switch to the Sites tab, got %d", m.activeTab)
+		t.Fatalf("clicking an alert should open its site, got tab %d", m.activeTab)
 	}
 	if s := m.currentSite(); s == nil || s.Name != "beta" {
-		t.Fatalf("expected the clicked site (beta) selected, got %+v", s)
+		t.Fatalf("expected the alert's site (beta) selected, got %+v", s)
 	}
 }
 
-func TestDashboardTab_CyclesCardFocus(t *testing.T) {
+func TestDashboardTab_ReturnsToSidebar(t *testing.T) {
 	m := NewModel("test")
 	m.snap = fakeSnap()
 	m.activeTab = tabDashboard
-	m.dashFocus = 0
+	m.focusMain()
 	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = next.(*Model)
-	if m.dashFocus != 1 {
-		t.Fatalf("tab on dashboard should advance card focus, got %d", m.dashFocus)
+	if !m.sideFocus {
+		t.Fatal("tab on the dashboard should hand focus back to the sidebar")
 	}
 }
 
@@ -283,6 +286,7 @@ func TestLKey_SelectsLogsTabOnSites(t *testing.T) {
 	m := NewModel("test")
 	m.snap = fakeSnap()
 	m.activeTab = tabSites
+	m.sideFocus = false
 
 	m.handleMainKey(tea.KeyPressMsg{Code: 'l', Text: "l"})
 	if m.siteTab != tabSiteLogs {
@@ -299,14 +303,16 @@ func TestLKey_SelectsLogsTabOnSites(t *testing.T) {
 func TestLKey_ClosesAnOverlayCarriedInFromAnotherTab(t *testing.T) {
 	m := NewModel("test")
 	m.snap = fakeSnap()
-	// `l` on the Services tab sets showLogs, though the pane stays hidden behind
-	// the service detail's own tail. Walking onto the Sites tab then reveals it.
-	m.activeTab = tabServices
+	// `l` in the Settings window opens the full-width log overlay, since the
+	// window has no Logs tab of its own. Leaving the window keeps the overlay.
+	m.activeTab = tabSites
+	m.detailMode = detailSettings
+	m.sideFocus = false
 	m.handleMainKey(tea.KeyPressMsg{Code: 'l', Text: "l"})
 	if !m.showLogs {
-		t.Fatal("l on the Services tab should set showLogs")
+		t.Fatal("l in the Settings window should set showLogs")
 	}
-	m.activeTab = tabSites
+	m.detailMode = detailSite
 
 	// l must close the pane rather than select the tab underneath it, or the
 	// overlay would be stuck open with no key that dismisses it.
@@ -351,7 +357,7 @@ func TestRenderLogs_NoSourceEmptyState(t *testing.T) {
 	m.activeTab = tabSites
 	m.siteTab = tabSiteLogs
 
-	out := stripANSI(m.renderDetailColumn(80, 16, true))
+	out := stripANSI(m.renderSiteView(80, 16))
 	if strings.Contains(out, "Logs ·") {
 		t.Fatalf("no-source header should not dangle a separator:\n%s", out)
 	}
@@ -369,16 +375,16 @@ func TestRenderLogs_LogsTabKeepsTabStrip(t *testing.T) {
 	m.activeTab = tabSites
 	m.siteTab = tabSiteLogs
 
-	out := stripANSI(m.renderDetailColumn(80, 20, true))
-	if !strings.Contains(out, "[2] Logs") {
-		t.Fatalf("Logs tab should keep the site tab strip on top:\n%s", out)
+	out := stripANSI(m.renderSiteView(80, 20))
+	if !strings.Contains(out, "Overview") || !strings.Contains(out, "Doctor") {
+		t.Fatalf("Logs tab should keep the site tab bar on top:\n%s", out)
 	}
 	if !strings.Contains(out, "Logs ·") {
 		t.Fatalf("Logs tab should render the tail header:\n%s", out)
 	}
 }
 
-func TestWheel_ScrollsSitesPaneNotSelection(t *testing.T) {
+func TestWheel_ScrollsSidebarNotSelection(t *testing.T) {
 	m := NewModel("test")
 	sites := make([]siteinfo.EnrichedSite, 40)
 	for i := range sites {
@@ -389,15 +395,11 @@ func TestWheel_ScrollsSitesPaneNotSelection(t *testing.T) {
 	m.width, m.height = 150, 20
 	_ = m.render()
 
-	z := waitZone("pane:sites")
-	if z.IsZero() {
-		t.Fatalf("sites pane zone not registered after render")
-	}
-	msg := tea.MouseWheelMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseWheelDown}
+	msg := tea.MouseWheelMsg{X: 2, Y: 10, Button: tea.MouseWheelDown}
 	next, _ := m.Update(msg)
 	m = next.(*Model)
-	if m.siteScroll == 0 {
-		t.Fatalf("wheel down over the sites pane should scroll the viewport, siteScroll still 0")
+	if m.sideScroll == 0 {
+		t.Fatalf("wheel down over the sidebar should scroll it, sideScroll still 0")
 	}
 	if m.siteCursor != 0 {
 		t.Fatalf("wheel must not move the selection, got cursor %d", m.siteCursor)
@@ -411,8 +413,8 @@ func TestView_RendersEachTab(t *testing.T) {
 		m.width, m.height = 150, 40
 		m.activeTab = tab
 		out := m.render()
-		// The tab bar labels are always present regardless of the active tab.
-		for _, label := range []string{"Dashboard", "Sites", "Services"} {
+		// The sidebar sections are always present regardless of the active tab.
+		for _, label := range []string{"Dashboard", "SITES", "SERVICES"} {
 			if !strings.Contains(out, label) {
 				t.Fatalf("tab %d view missing tab label %q", tab, label)
 			}
@@ -436,5 +438,42 @@ func TestDiffSnapshots_IgnoresAPrivateSiteHiddenOrShownByStreaming(t *testing.T)
 				t.Errorf("%s: unexpected event %q", label, e.text)
 			}
 		}
+	}
+}
+
+func TestMouseClick_ServiceTabSwitchesIt(t *testing.T) {
+	m := NewModel("test")
+	m.snap = fakeSnap()
+	m.width, m.height = 150, 40
+	m.switchTab(tabServices)
+	m.selectServiceByName("redis")
+	renderZones(m)
+
+	z := waitZone("svctab:1")
+	if z.IsZero() {
+		t.Fatalf("service Logs tab not registered after render")
+	}
+	next, _ := m.Update(tea.MouseClickMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft})
+	if next.(*Model).svcTab != 1 {
+		t.Fatalf("clicking the service's Logs tab left svcTab at %d", next.(*Model).svcTab)
+	}
+}
+
+// A zone left over from an earlier render must not satisfy waitZone, or a
+// click lands on the old coordinates and the test flakes.
+func TestRenderZones_DropsPreviousRender(t *testing.T) {
+	shifted := NewModel("test")
+	shifted.snap = fakeSnap()
+	shifted.snap.Services = append([]ServiceRow{{Name: "a"}, {Name: "b"}, {Name: "c"}}, shifted.snap.Services...)
+	shifted.width, shifted.height = 150, 40
+	renderZones(shifted)
+	old := waitZone("side:svc:redis")
+
+	m := NewModel("test")
+	m.snap = fakeSnap()
+	m.width, m.height = 150, 40
+	renderZones(m)
+	if z := waitZone("side:svc:redis"); z.IsZero() || z.StartY == old.StartY {
+		t.Fatalf("redis zone still points at the previous render (y=%d)", old.StartY)
 	}
 }

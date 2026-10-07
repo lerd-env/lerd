@@ -382,7 +382,7 @@ func ensureFPMQuadlet(phpVersion string) error {
 // podman or writes real state, so a test of the start/restart decision alone
 // would otherwise build a container storage tree to reach it.
 var (
-	writeFPMQuadlet = podman.WriteFPMQuadlet
+	writeFPMQuadlet = podman.WriteFPMQuadletDiff
 	buildFPMImageTo = podman.BuildFPMImageTo
 	ensureXdebugIni = podman.EnsureXdebugIni
 	startUnitFn     = podman.StartUnit
@@ -403,7 +403,8 @@ func ensureFPMQuadletTo(phpVersion string, w io.Writer) error {
 
 	// Write the unit file first so the version is registered in lerd status even
 	// if the image build fails — lerd start will rebuild the image on the next run.
-	if err := writeFPMQuadlet(phpVersion); err != nil {
+	unitChanged, err := writeFPMQuadlet(phpVersion)
+	if err != nil {
 		return err
 	}
 
@@ -417,15 +418,16 @@ func ensureFPMQuadletTo(phpVersion string, w io.Writer) error {
 	// A start is a no-op on an already-active unit, so a version whose image was
 	// just rebuilt here (the deferred half of a php:ext / php:pkg change) would
 	// keep serving the old image while every status surface reported the new set.
-	if rebuilt {
+	// A rewritten unit (a new mount after an upgrade) needs the same bounce.
+	if rebuilt || unitChanged {
 		return restartUnitFn(unitName)
 	}
 	return startUnitFn(unitName)
 }
 
-// fpmImageCurrentFn is a seam for the check that decides whether a version has
-// anything to build, and so whether it needs the loader.
-var fpmImageCurrentFn = podman.FPMImageCurrent
+// fpmWouldBuildFn is a seam for the check that decides whether a version has
+// anything to build, and so whether it needs the loader and a disclosure.
+var fpmWouldBuildFn = podman.FPMImageWouldBuild
 
 // fpmVersionsToEnsure lists the PHP versions install has to bring up: the
 // global default first, then the version of every site that is actually
@@ -540,7 +542,7 @@ func parkedFPMVersions(cfg *config.GlobalConfig) []string {
 // ones already current, which have nothing to show.
 func fpmEnsurePlan(versions []string) (build, quiet []string) {
 	for _, v := range versions {
-		if fpmImageCurrentFn(v) {
+		if !fpmWouldBuildFn(v) {
 			quiet = append(quiet, v)
 			continue
 		}

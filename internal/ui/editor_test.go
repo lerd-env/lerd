@@ -127,3 +127,17 @@ func TestHandleOpenEditorLaunches(t *testing.T) {
 		t.Fatalf("status = %d, want 204 (body: %s)", rr.Code, rr.Body.String())
 	}
 }
+
+// TestOpenProjectInEditor checks a site opens as a project only in an editor
+// someone chose, never one found by probing.
+func TestOpenProjectInEditor(t *testing.T) {
+	home := isolateEditorEnv(t)
+	site := config.Site{Name: "shop", Path: home}
+	if err := openProjectInEditor(site, home); err == nil {
+		t.Fatal("want an error when no editor is set")
+	}
+	writeEditorConfig(t, "true")
+	if err := openProjectInEditor(site, home); err != nil {
+		t.Fatalf("global editor: %v", err)
+	}
+}

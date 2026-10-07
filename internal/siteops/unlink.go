@@ -38,6 +38,11 @@ func IsParkedSite(sitePath string, parkedDirs []string) bool {
 // framework workers) running after the site is gone.
 var StopSiteWorkers func(site *config.Site)
 
+// RemoveProvidedEnv, when set, drops a site's env_provider output on unlink.
+// The CLI wires it, since where that lives (host tmpfs or the macOS VM) is a
+// platform detail siteops does not know.
+var RemoveProvidedEnv func(siteName string)
+
 // UnlinkSiteCore performs the shared unlink steps: stop workers, remove vhost,
 // remove certs, update registry (ignore if parked, remove otherwise), update
 // container hosts, and reload nginx.
@@ -64,6 +69,10 @@ func TeardownSite(site *config.Site, parkedDirs []string) {
 		StopSiteWorkers(site)
 	}
 	StopSiteShares(site.Name)
+	// The site's env_provider secrets have nothing left to serve.
+	if RemoveProvidedEnv != nil {
+		RemoveProvidedEnv(site.Name)
+	}
 
 	_ = nginx.RemoveVhost(site.PrimaryDomain())
 	// The site's worktrees are served by subdomain vhosts of their own, and

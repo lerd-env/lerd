@@ -54,9 +54,9 @@ func TestFPMVersionsToEnsure_dropsEmptyVersions(t *testing.T) {
 // Only a version with something to build gets the progress loader. The rest are
 // no-ops whose podman output would otherwise land raw in the install log.
 func TestFPMEnsurePlan_splitsOnWhatActuallyBuilds(t *testing.T) {
-	orig := fpmImageCurrentFn
-	t.Cleanup(func() { fpmImageCurrentFn = orig })
-	fpmImageCurrentFn = func(v string) bool { return v == "8.3" }
+	orig := fpmWouldBuildFn
+	t.Cleanup(func() { fpmWouldBuildFn = orig })
+	fpmWouldBuildFn = func(v string) bool { return v != "8.3" }
 
 	build, quiet := fpmEnsurePlan([]string{"8.3", "8.4", "8.5"})
 

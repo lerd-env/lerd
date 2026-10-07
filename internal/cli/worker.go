@@ -825,7 +825,11 @@ func approveHostCommand(siteName, command, what string) error {
 		return nil
 	}
 	if !isInteractive() {
-		return fmt.Errorf("%s: not approved; run it once interactively to confirm, or set host_commands.skip_confirmation: true", what)
+		hint := "run it once interactively to confirm"
+		if what == "env_provider" {
+			hint += ", run `lerd env --yes`"
+		}
+		return fmt.Errorf("%s: not approved; %s, or set host_commands.skip_confirmation: true", what, hint)
 	}
 	fmt.Printf("\nlerd will run this on your host, outside any container:\n\n  %s\n", command)
 	if !promptConfirm(fmt.Sprintf("Run it for %s?", siteName)) {

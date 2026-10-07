@@ -282,8 +282,14 @@ func TestToolList_underSizeCeiling(t *testing.T) {
 	// the rise to what the three actions actually cost, then 24350 → 24500 for
 	// the schedule's `selection`: without it an assistant cannot tell an opt-in
 	// policy that covers nothing from an opt-out one that covers every site, and
-	// would read an empty covered list as a broken schedule.
-	const ceiling = 24500
+	// would read an empty covered list as a broken schedule. 24500 → 24550 for
+	// diag's browser_events and browser_toggle, so an assistant can read the
+	// JavaScript errors a page threw and tell whether capture is on at all, then
+	// 24550 → 24650 for browser_presets and its preset argument, which let it
+	// see which frontend library a site uses and add that library's events, then
+	// 24650 → 24850 for browser_events' types argument, which names every type so
+	// an assistant can ask for only what broke instead of every page view.
+	const ceiling = 24850
 	got, err := json.Marshal(toolList())
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)

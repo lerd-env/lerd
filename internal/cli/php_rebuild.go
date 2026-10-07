@@ -184,7 +184,7 @@ func registerPHPVersionForRebuild(version string) error {
 	if phpPkg.IsInstalled(version) {
 		return nil
 	}
-	if err := writeFPMQuadlet(version); err != nil {
+	if _, err := writeFPMQuadlet(version); err != nil {
 		return fmt.Errorf("registering PHP %s: %w", version, err)
 	}
 	feedback.Note("registered PHP " + version + ", which was not installed")

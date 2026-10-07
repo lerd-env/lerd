@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Phase 2, a real framework on a real site, and the HTTP/HTTPS toggle.
 source "$(dirname "$0")/../lib.sh"
+need_lerd
 
 api() { curl -s -X "$1" -H 'X-Lerd-CSRF: 1' "http://127.0.0.1:7073$2"; }
 # site_json <domain> <field>: one field of the site from the dashboard's API.
@@ -129,7 +130,16 @@ check_out "dashboard HTTPS off" '"ok": ?true' api POST "/api/sites/$host/unsecur
 expect_200 "http://$host"
 check_out "dashboard HTTPS on" '"ok": ?true' api POST "/api/sites/$host/secure"
 expect_200 "2.33 [partial]" "https://$host"
-skip "2.34 the TUI inline toggle" "the TUI is phase 10's surface, signed off by hand"
+# The TUI's toggle is the "Toggle HTTPS" entry under ctrl+p.
+tui_https() { tui_screen 140 45 "wait:Dashboard" "keys:\\x10" "wait:Go to or do" "keys:toggle https $host" "sleep:1" "keys:\\r" "sleep:3" >/dev/null; }
+if need_pyte; then
+	tui_https
+	expect_200 "2.34 [partial]" "http://$host"
+	tui_https
+	expect_200 "2.34" "https://$host"
+else
+	todo "2.34 the TUI inline toggle" "python3 pyte is not installable here"
+fi
 
 ok=1
 for flip in unsecure secure unsecure; do

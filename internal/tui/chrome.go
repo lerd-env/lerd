@@ -5,6 +5,7 @@
 package tui
 
 import (
+	"charm.land/lipgloss/v2"
 	"strings"
 	"time"
 )
@@ -14,7 +15,7 @@ import (
 // reads the shortcut as an inline button instead of as prose. Caller is
 // responsible for adding spacing between chips.
 func keyChip(key, label string) string {
-	return keyChipStyle.Render(" "+key+" ") + " " + keyChipLabelStyle.Render(label)
+	return lipgloss.NewStyle().Bold(true).Render(key) + " " + keyChipLabelStyle.Render(label)
 }
 
 // renderKeyChips joins multiple key-chip pairs with two spaces between
@@ -28,7 +29,7 @@ func renderKeyChips(pairs ...string) string {
 	for i := 0; i < len(pairs); i += 2 {
 		parts = append(parts, keyChip(pairs[i], pairs[i+1]))
 	}
-	return strings.Join(parts, "  ")
+	return strings.Join(parts, "    ")
 }
 
 // spinnerFrame returns the spinner glyph for the current moment. Wall-clock

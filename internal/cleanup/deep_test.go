@@ -1,6 +1,7 @@
 package cleanup
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -304,5 +305,107 @@ func TestRealProtectedImages_IncludesWorkerContainerImages(t *testing.T) {
 	}
 	if !prot[canonRef("docker.io/stripe/stripe-cli:latest")] {
 		t.Errorf("a worker container's image must be protected, got %v", prot)
+	}
+}
+
+// An image another tagged image is built on frees nothing when untagged, its
+// layers stay with the child, and the next build has to pull it again. The deep
+// tier keeps it: the PHP base under the live FPM image, and the base a custom
+// container's current Containerfile builds from. The base it moved off goes.
+func TestInspect_DeepKeepsImagesATaggedImageIsBuiltOn(t *testing.T) {
+	withImages(t, []image{
+		{ID: "fpm", Names: []string{"localhost/lerd-php85-fpm:local"}, Size: 700, Containers: 1, Labels: map[string]string{"dev.lerd.fpm.containerfile-hash": "h"}},
+		{ID: "base", Names: []string{"ghcr.io/lerd-env/lerd-php85-fpm-base:cur"}, Size: 600},
+		{ID: "custom", Names: []string{"localhost/lerd-custom-app:local"}, Size: 90, Containers: 1},
+		{ID: "py312", Names: []string{"docker.io/library/python:3.12-alpine"}, Size: 50},
+		{ID: "py313", Names: []string{"docker.io/library/python:3.13-alpine"}, Size: 45},
+	}, map[string][]string{
+		"fpm":    {"B1", "B2", "F1"},
+		"base":   {"B1", "B2"},
+		"custom": {"P1", "P2", "C1"},
+		"py312":  {"P1", "P2"},
+		"py313":  {"Q1", "Q2"},
+	})
+	serviceRepos = func() (map[string]bool, error) { return map[string]bool{}, nil }
+	protectedImages = func() (map[string]bool, error) {
+		return map[string]bool{
+			"localhost/lerd-php85-fpm:local":  true,
+			"localhost/lerd-custom-app:local": true,
+		}, nil
+	}
+	t.Cleanup(func() {
+		serviceRepos = realServiceRepos
+		protectedImages = realProtectedImages
+	})
+
+	p, err := Inspect(ScopeDeep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Targets) != 1 || p.Targets[0].ID != "docker.io/library/python:3.13-alpine" {
+		t.Fatalf("want only the abandoned python:3.13-alpine reaped, got %+v", p.Targets)
+	}
+}
+
+// A Containerfile that only sets FROM and CMD adds no layer, so the custom image
+// tops out on its base's own top layer; the base is still what it is built on.
+// An unheld copy with the same layers protects nothing.
+func TestInspect_DeepKeepsTheBaseOfAnImageThatAddsNoLayer(t *testing.T) {
+	withImages(t, []image{
+		{ID: "custom", Names: []string{"localhost/lerd-custom-app:local"}, Size: 50, Containers: 1},
+		{ID: "py312", Names: []string{"docker.io/library/python:3.12-alpine"}, Size: 50},
+		{ID: "py313", Names: []string{"docker.io/library/python:3.13-alpine"}, Size: 45},
+		{ID: "py313copy", Names: []string{"localhost/python313-copy:latest"}, Size: 45},
+	}, map[string][]string{
+		"custom":    {"P1", "P2"},
+		"py312":     {"P1", "P2"},
+		"py313":     {"Q1", "Q2"},
+		"py313copy": {"Q1", "Q2"},
+	})
+	serviceRepos = func() (map[string]bool, error) { return map[string]bool{}, nil }
+	protectedImages = func() (map[string]bool, error) {
+		return map[string]bool{"localhost/lerd-custom-app:local": true}, nil
+	}
+	t.Cleanup(func() {
+		serviceRepos = realServiceRepos
+		protectedImages = realProtectedImages
+	})
+
+	p, err := Inspect(ScopeDeep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reaped := map[string]bool{}
+	for _, tg := range p.Targets {
+		reaped[tg.ID] = true
+	}
+	if reaped["docker.io/library/python:3.12-alpine"] {
+		t.Fatalf("python:3.12-alpine is the base of a held image, got %+v", p.Targets)
+	}
+	if !reaped["docker.io/library/python:3.13-alpine"] || !reaped["localhost/python313-copy:latest"] {
+		t.Fatalf("two unheld copies must not protect each other, got %+v", p.Targets)
+	}
+}
+
+// Without the layers there is no telling a build base from an unused image,
+// so the unused reap is skipped rather than guessed.
+func TestInspect_DeepSkipsUnusedReapWhenLayersUnreadable(t *testing.T) {
+	withImages(t, []image{
+		{ID: "py313", Names: []string{"docker.io/library/python:3.13-alpine"}, Size: 45},
+	}, nil)
+	imageLayers = func([]string) (map[string][]string, error) { return nil, errors.New("inspect failed") }
+	serviceRepos = func() (map[string]bool, error) { return map[string]bool{}, nil }
+	protectedImages = func() (map[string]bool, error) { return map[string]bool{}, nil }
+	t.Cleanup(func() {
+		serviceRepos = realServiceRepos
+		protectedImages = realProtectedImages
+	})
+
+	p, err := Inspect(ScopeDeep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Targets) != 0 {
+		t.Fatalf("an unreadable layer set must reap nothing unused, got %+v", p.Targets)
 	}
 }

@@ -39,7 +39,7 @@ Walks the install in dependency order:
 A live spinner shows the per-unit progress. If a single SSL vhost references a missing certificate file, lerd switches that site back to HTTP automatically and continues; one broken cert no longer blocks the whole nginx start.
 
 ::: info After a reinstall
-If you ran `lerd uninstall` and then reinstalled, worker units and service quadlets are recreated by `lerd start` from each site's `.lerd.yaml`. Sites with a committed `.lerd.yaml` come back fully wired up. Sites without one need their workers restarted manually.
+If you ran `lerd uninstall` and then reinstalled, worker units and service quadlets are recreated by `lerd start` from each site's `.lerd.yaml`, and so is the container of a site on the FrankenPHP runtime, also after a `lerd sites:restore`. Sites with a committed `.lerd.yaml` come back fully wired up. Sites without one need their workers restarted manually.
 :::
 
 ::: info After the binary moves
@@ -133,6 +133,10 @@ ask for them yourself:
 lerd php:rebuild
 ```
 
+That includes `lerd install` and the reinstall a `lerd update` runs: offline,
+they keep the PHP images you have and say so instead of rebuilding them, and
+the download list they print leaves out every pull offline mode skips.
+
 `lerd php:rebuild` and `lerd fetch` always run, offline or not: they exist
 because you asked for the download.
 
@@ -149,9 +153,10 @@ Stops everything `lerd start` started **except** the Web UI, watcher, tray, and 
 A few important details:
 
 - **The DNS forwarder stays up.** `lerd-dns` is treated as install-level plumbing: the system resolver keeps pointing `.test` at it until `lerd uninstall`, so stopping it would leave the resolver aimed at a dead port and make `.test` lookups stall. It is only torn down by `lerd quit` or `lerd uninstall`.
-- **Manually paused services are remembered.** If you stopped Mailpit earlier with `lerd service stop mailpit`, then `lerd stop` + `lerd start` will not bring Mailpit back. The pause flag survives the cycle.
+- **Manually paused services are remembered.** If you stopped Mailpit earlier with `lerd service stop mailpit`, then `lerd stop` + `lerd start` will not bring Mailpit back. The pause flag survives the cycle. Starting it again on purpose clears the flag, whether with `lerd service start` or because `lerd env` or `lerd link` brought it up for a site that needs it.
 - **Pinned services start anyway.** A `lerd service pin <name>` overrides auto-stop logic; pinned services are always started by `lerd start` regardless of which sites are active.
 - **Worker state is preserved.** Workers running before `lerd stop` are restarted by the next `lerd start`; workers you manually stopped stay stopped.
+- **Loaded SSH keys stay loaded.** The `lerd-ssh-agent` from `lerd auth ssh` keeps running, so a stop and start does not ask for your key passphrases again.
 
 ---
 
@@ -164,7 +169,7 @@ lerd quit
 The full off-switch:
 
 1. Runs everything `lerd stop` does.
-2. Stops the workers of every site's git worktrees, which `lerd stop` leaves running. Their units are kept, so the next `lerd start` brings them back.
+2. Stops the workers of every site's git worktrees, which `lerd stop` leaves running. Their units are kept, so the next `lerd start` brings them back. It also stops the `lerd-ssh-agent` started by [`lerd auth ssh`](../reference/commands.md), clearing the keys it held; run `lerd auth ssh` again to load them.
 3. Stops `lerd-ui` (Web UI).
 4. Stops `lerd-watcher`.
 5. Kills the system tray process.
@@ -298,7 +303,7 @@ lerd status
 
 Shows a live snapshot: DNS reachability, nginx, PHP-FPM containers, watcher, host tools, services, certificate expiry, and LAN exposure. Run it after every `lerd start` to confirm everything is healthy. See [Troubleshooting](../troubleshooting.md) if anything is reported as down.
 
-The `[Tools]` section lists the host binaries lerd manages (Composer, fnm, mkcert) with their installed versions, and flags any that differ from the versions lerd currently pins. The same information appears in the web UI under System > Tools, where the pending version on a tool's card is a button that updates that one tool. Apply pending updates from the terminal with:
+The `[Tools]` section lists the host binaries lerd manages (Composer, mise, fnm, mkcert) with their installed versions, and flags any that differ from the versions lerd currently pins. The same information appears in the web UI under System > Tools, where the pending version on a tool's card is a button that updates that one tool. Apply pending updates from the terminal with:
 
 ```bash
 lerd tools:update
@@ -346,7 +351,7 @@ Where a digest is given the download is checked against it and rejected on a mis
 | `lerd start` fails with an overlay / graph-driver storage error (macOS) | `lerd machine reset` |
 | lerd's VM is holding more host disk than it uses (macOS) | `lerd machine reclaim` |
 | Verify everything's healthy | `lerd status` |
-| Update Composer / fnm / mkcert to their pinned versions | `lerd tools:update` |
+| Update Composer / mise / fnm / mkcert to their pinned versions | `lerd tools:update` |
 | Uninstall a service entirely (data preserved) | `lerd service remove <name>` |
 | Uninstall and wipe data (snapshots the databases first) | `lerd service remove <name> --purge` |
 | Reinstall a service in place | `lerd service reinstall <name>` |

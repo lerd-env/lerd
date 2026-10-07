@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/platform"
 )
 
 func lerdVhostPath() string {
@@ -99,5 +100,30 @@ func TestSyncLerdVhost_RestoresAStaleVhost(t *testing.T) {
 	// write now, with its own allowlist back in place.
 	if !strings.Contains(string(got), "/_svc/") {
 		t.Error("the regenerated vhost does not serve the dashboard prefix")
+	}
+}
+
+// A dashboard embedded under /_svc/ pushes live updates over a websocket, as
+// Mailpit does, so the handshake headers have to reach lerd-ui on both shapes.
+func TestLerdVhost_SvcForwardsWebsocketUpgrade(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	saved := platform.Current
+	t.Cleanup(func() { platform.Current = saved })
+
+	for _, vm := range []bool{false, true} {
+		platform.Current.UsesMachineVM = vm
+		content, err := renderLerdVhost()
+		if err != nil {
+			t.Fatalf("vm=%v: %v", vm, err)
+		}
+		// Server level, since a proxy_set_header inside a location would drop
+		// the inherited Host and forwarding headers.
+		server := content[:strings.Index(content, "location")]
+		for _, want := range []string{"proxy_set_header Upgrade $http_upgrade;", `proxy_set_header Connection "upgrade";`} {
+			if !strings.Contains(server, want) {
+				t.Errorf("vm=%v: vhost is missing %q:\n%s", vm, want, server)
+			}
+		}
 	}
 }

@@ -1,14 +1,18 @@
 <script lang="ts">
-  import DetailTabs, { type TabItem } from '$components/DetailTabs.svelte';
+  import DetailTabs from '$components/DetailTabs.svelte';
   import { onMount } from 'svelte';
   import DumpsTab from '$tabs/DumpsTab.svelte';
   import QueriesLens from '$components/QueriesLens.svelte';
   import KindLens from '$components/KindLens.svelte';
   import DebugDisabled from '$components/DebugDisabled.svelte';
-  import { debugLens, type DebugLens } from '$stores/debugLens';
+  import BrowserLens from '$components/BrowserLens.svelte';
+  import { debugLens, debugLensTabs, type DebugLens } from '$stores/debugLens';
   import { refreshStatus } from '$stores/dumps';
   import { refreshDevtoolsStatus, debugCaptureEnabled } from '$stores/queries';
   import { countKinds, debugEvents } from '$stores/debugEvents';
+  import Icon from '$components/Icon.svelte';
+  import { modal } from '$stores/modals';
+  import { tooltip } from '$lib/tooltip';
   import { m } from '../../paraglide/messages.js';
 
   onMount(() => {
@@ -21,8 +25,10 @@
     framework?: string;
     domain?: string;
     branch?: string;
+    // phpLenses is false for a site without PHP, which only has browser events.
+    phpLenses?: boolean;
   }
-  let { siteName = '', framework = '', domain = '', branch = '' }: Props = $props();
+  let { siteName = '', framework = '', domain = '', branch = '', phpLenses = true }: Props = $props();
 
   // Cache comes solely from the Laravel adapter, so it only applies to Laravel
   // sites; everything else is framework-agnostic (PDO and the Symfony
@@ -31,20 +37,20 @@
   const laravelOnly: DebugLens[] = ['cache'];
   const counts = $derived(countKinds($debugEvents, siteName));
 
-  type Lens = DebugLens;
-  const tabs = $derived<TabItem<Lens>[]>([
-    { id: 'dumps', label: m.debug_tab_dumps(), count: counts['dump'] },
-    { id: 'queries', label: m.debug_tab_queries(), count: counts['query'] },
-    { id: 'jobs', label: m.debug_tab_jobs(), count: counts['job'] },
-    { id: 'views', label: m.debug_tab_views(), count: counts['view'] },
-    { id: 'mail', label: m.debug_tab_mail(), count: counts['mail'] },
-    { id: 'cache', label: m.debug_tab_cache(), hidden: !isLaravel, count: counts['cache'] },
-    { id: 'events', label: m.debug_tab_events(), count: counts['event'] },
-    { id: 'http', label: m.debug_tab_http(), count: counts['http'] },
-    { id: 'logs', label: m.debug_tab_logs(), count: counts['log'] },
-    { id: 'exceptions', label: m.debug_tab_exceptions(), count: counts['exception'] },
-    { id: 'messages', label: m.debug_tab_messages(), count: counts['message'] }
-  ]);
+  const tabs = $derived(debugLensTabs(counts, isLaravel));
+
+  // A site without PHP keeps the lens bar, with Browser as its only lens.
+  const browserOnly = $derived(tabs.filter((t) => t.id === 'browser'));
+
+  // Full screen works like Tinker's: transient, and Escape leaves it only once
+  // no modal is stacked on top, since the modal owns Escape first.
+  let fullscreen = $state(false);
+  function onKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && fullscreen && $modal.kind === null && !e.defaultPrevented) {
+      e.preventDefault();
+      fullscreen = false;
+    }
+  }
 
   // If the remembered lens isn't available for this framework, fall back.
   $effect(() => {
@@ -52,13 +58,36 @@
   });
 </script>
 
-<div class="flex flex-col h-full overflow-hidden">
+<svelte:window onkeydown={onKeydown} />
+
+{#snippet fullscreenAction()}
+  <!-- Full screen hides the site header, so name the site here. -->
+  {#if fullscreen && domain}<span class="text-xs font-mono text-gray-600 dark:text-gray-300">{domain}</span>{/if}
+  <button
+    type="button"
+    onclick={() => (fullscreen = !fullscreen)}
+    class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+    use:tooltip={fullscreen ? m.debug_exitFullscreenTitle() : m.debug_fullscreenTitle()}
+    aria-label={fullscreen ? m.debug_exitFullscreenTitle() : m.debug_fullscreenTitle()}
+  >
+    <Icon name={fullscreen ? 'minimize' : 'maximize'} class="w-4 h-4" />
+  </button>
+{/snippet}
+
+<div class="flex flex-col overflow-hidden {fullscreen ? 'fixed inset-0 z-50 bg-white dark:bg-lerd-bg' : 'h-full'}">
   {#if !$debugCaptureEnabled}
     <DebugDisabled />
-  {:else}
-    <DetailTabs {tabs} active={$debugLens} onchange={(id) => debugLens.set(id)} />
+  {:else if !phpLenses}
+    <DetailTabs tabs={browserOnly} active="browser" onchange={() => {}} keepSingle actions={fullscreenAction} />
     <div class="flex-1 min-h-0 overflow-hidden">
-      {#if $debugLens === 'dumps'}
+      <BrowserLens siteScope={siteName} />
+    </div>
+  {:else}
+    <DetailTabs {tabs} active={$debugLens} onchange={(id) => debugLens.set(id)} actions={fullscreenAction} />
+    <div class="flex-1 min-h-0 overflow-hidden">
+      {#if $debugLens === 'browser'}
+        <BrowserLens siteScope={siteName} />
+      {:else if $debugLens === 'dumps'}
         <DumpsTab siteScope={siteName} />
       {:else if $debugLens === 'queries'}
         <QueriesLens siteScope={siteName} />

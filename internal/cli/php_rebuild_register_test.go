@@ -39,9 +39,9 @@ func TestRegisterPHPVersionForRebuild_writesAMissingQuadlet(t *testing.T) {
 
 	var wrote []string
 	orig := writeFPMQuadlet
-	writeFPMQuadlet = func(version string) error {
+	writeFPMQuadlet = func(version string) (bool, error) {
 		wrote = append(wrote, version)
-		return nil
+		return true, nil
 	}
 	t.Cleanup(func() { writeFPMQuadlet = orig })
 
@@ -61,9 +61,9 @@ func TestRegisterPHPVersionForRebuild_leavesAnInstalledVersionAlone(t *testing.T
 
 	var wrote []string
 	orig := writeFPMQuadlet
-	writeFPMQuadlet = func(version string) error {
+	writeFPMQuadlet = func(version string) (bool, error) {
 		wrote = append(wrote, version)
-		return nil
+		return true, nil
 	}
 	t.Cleanup(func() { writeFPMQuadlet = orig })
 

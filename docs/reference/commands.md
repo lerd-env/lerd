@@ -9,7 +9,7 @@
 | `lerd start --dry-run` | Report the images a start would pull or rebuild, with their sizes, and exit without downloading or starting anything |
 | `lerd --no-pull <command>` | Global flag: skip image pulls and rebuilds unless the image is missing outright, so a metered connection is never spent refreshing something that already works. `LERD_OFFLINE=1` does the same for the dashboard, the watcher and the MCP server. Deferred PHP image rebuilds are picked up by the next `lerd php:rebuild` |
 | `lerd stop` | Stop nginx, PHP-FPM containers, and all running services; leaves the `lerd-dns` forwarder running as install-level plumbing so `.test` keeps resolving |
-| `lerd quit` | Stop all Lerd processes and containers including the UI, watcher, tray, and the `lerd-dns` forwarder; on macOS also stops the Podman Machine VM |
+| `lerd quit` | Stop all Lerd processes and containers including the UI, watcher, tray, the `lerd-ssh-agent` and the `lerd-dns` forwarder; on macOS also stops the Podman Machine VM |
 | `lerd update` | Check for updates and update after confirmation; a package-managed install (apt, dnf, Homebrew) is deferred to that package manager. On a beta it follows the beta line until the stable release of that cycle overtakes it |
 | `lerd update --beta` | Update to the latest pre-release build, from a stable version |
 | `lerd update:beta on\|off` | Offer beta releases to a stable install; with no argument it reports where the install sits |
@@ -75,8 +75,8 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 |---|---|
 | `lerd park [dir]` | Register every PHP project inside `dir` as a site, and keep doing so as new ones appear (defaults to cwd) |
 | `lerd unpark [dir]` | Remove a parked directory and unlink all its sites |
-| `lerd link [name]` | Register the current directory as a site. On a fresh project with no `.lerd.yaml`, an interactive terminal routes through the `lerd init` wizard first (PHP version, HTTPS, services) before linking; prompts to import data when `laravel/sail` is detected in `composer.json`. **Non-PHP projects** (Node.js, Python, Go, etc.) must have `Containerfile.lerd` and `.lerd.yaml` with `container: {port: N}` already written before calling this, see [Custom Containers](../usage/custom-containers.md) |
-| `lerd link [name] --domain foo.test` | Register with a custom domain |
+| `lerd link [name]` | Register the current directory as a site at `name.test`, the directory name when `name` is left out. On a fresh project with no `.lerd.yaml`, an interactive terminal routes through the `lerd init` wizard first (PHP version, HTTPS, services) before linking; prompts to import data when `laravel/sail` is detected in `composer.json`. **Non-PHP projects** (Node.js, Python, Go, etc.) must have `Containerfile.lerd` and `.lerd.yaml` with `container: {port: N}` already written before calling this, see [Custom Containers](../usage/custom-containers.md) |
+| `lerd domain add <name>` | Serve the current site on another domain as well, see [Domains](../usage/domains.md) |
 | `lerd unlink [name]` | Stop serving the site; defaults to the site in the current directory, and naming one is the way to unlink a site whose directory has moved or been deleted |
 | `lerd sites` | Table view of all registered sites |
 | `lerd sites:restore [backup]` | Put the site registry back from one of its automatic backups, showing what it would change and confirming first; `--list` shows what is kept, `--force` skips the prompt |
@@ -247,7 +247,7 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 | `lerd service port <name> <port>` | Move a service's primary published host port without touching its container-internal port; persisted and auto-restarts if running |
 | `lerd service port <name> <port> --container <cport>` | Move a specific mapping of a multi-port service (e.g. Mailpit's `8025` web UI behind the `1025` SMTP primary), named by its container-internal port |
 | `lerd service port <name> --reset` | Reset a service to its preset default published port (same as `port <name> 0`); combine with `--container` to reset one mapping |
-| `lerd service pin <name>` | Pin a service so it is never auto-stopped when no sites use it |
+| `lerd service pin <name>` | Pin a service so it is never auto-stopped, whether no site uses it or every site using it is idle |
 | `lerd service unpin <name>` | Unpin a service so it can be auto-stopped when unused |
 | `lerd service add [file.yaml]` | Register a new custom service (from a YAML file or flags) |
 | `lerd service preset [name]` | List presets, or install one (use `--version` for multi-version presets); a store-only preset is fetched on demand |
@@ -319,6 +319,7 @@ Activity-driven worker suspension: lerd gracefully stops each site's suspendable
 | `lerd idle off` | Disable idle-suspend and resume every suspended worker |
 | `lerd idle status` | Show each site's idle-suspend policy and last-active time |
 | `lerd idle timeout <duration>` | Set the idle timeout (e.g. `30m`, `2h`) |
+| `lerd idle services <on\|off>` | Also stop services once every site using them is idle, and wake them on the next request |
 | `lerd idle pin <site>` | Pin a site so idle-suspend never sleeps it |
 | `lerd idle unpin <site>` | Unpin a site so idle-suspend can sleep it again |
 
@@ -343,7 +344,7 @@ Activity-driven worker suspension: lerd gracefully stops each site's suspendable
 
 | Command | Description |
 |---|---|
-| `lerd auth ssh [key...]` | Load SSH keys into a shared `lerd-ssh-agent` sidecar so `lerd composer` can reach private git repositories, including passphrase-protected keys. Defaults to `~/.ssh/id_*`. The agent socket lives on a named volume shared into the FPM containers, so it works on macOS where the host agent can't cross the podman-machine boundary. Unlocked keys stay in the agent's memory and clear when it stops |
+| `lerd auth ssh [key...]` | Load SSH keys into a shared `lerd-ssh-agent` sidecar so `lerd composer` can reach private git repositories, including passphrase-protected keys. Defaults to `~/.ssh/id_*`. The agent socket lives on a named volume shared into the FPM containers, so it works on macOS where the host agent can't cross the podman-machine boundary. Unlocked keys stay in the agent's memory and clear when it stops. The agent survives `lerd stop` and stops on `lerd quit`. Host keys are checked against your own `~/.ssh/known_hosts`, so add a git host there (for example by connecting to it once with `ssh` on the host) before `lerd composer` can reach it |
 | `lerd auth ssh --list` | List the keys currently loaded into the agent |
 | `lerd auth ssh --remove` | Remove all keys and stop the agent |
 

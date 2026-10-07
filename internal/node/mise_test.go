@@ -44,6 +44,9 @@ func TestFindMise_PrefersUserInstall(t *testing.T) {
 // rather than handing back a path that cannot run.
 func TestFindMise_EmptyWhenAbsent(t *testing.T) {
 	home := t.TempDir()
+	orig := miseDirs
+	miseDirs = func() []string { return []string{t.TempDir()} }
+	t.Cleanup(func() { miseDirs = orig })
 	noLookPath := func(string) (string, error) { return "", os.ErrNotExist }
 	if got := findMise(home, noLookPath); got != "" {
 		t.Errorf("findMise = %q, want empty when mise is not installed", got)

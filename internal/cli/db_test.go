@@ -224,8 +224,10 @@ func TestDbShellArgs(t *testing.T) {
 	if !strings.Contains(got, "command -v 'mariadb' || command -v 'mysql'") {
 		t.Errorf("mariadb shell should prefer the mariadb client: %s", got)
 	}
-	if !strings.HasSuffix(got, "-uroot -plerd app") {
-		t.Errorf("credentials and database missing: %s", got)
+	// Over TCP: a server confined by a host AppArmor profile listens on a socket
+	// its own client does not look at.
+	if !strings.HasSuffix(got, "-h 127.0.0.1 -uroot -plerd app") {
+		t.Errorf("TCP host, credentials and database missing: %s", got)
 	}
 
 	if got := dbShellArgs(env, "mariadb", true); !slices.Contains(got, "--tty") {

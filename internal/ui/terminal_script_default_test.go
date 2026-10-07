@@ -46,8 +46,9 @@ func TestNamedTerminalCommand_fallsBackToTheGenericForm(t *testing.T) {
 // way it does when opening a directory.
 func TestTerminalScriptCandidates_honoursTheSystemDefault(t *testing.T) {
 	t.Setenv("TERMINAL", "")
+	prev := defaultTerminal
 	defaultTerminal = func() string { return "foot" }
-	t.Cleanup(func() { defaultTerminal = linuxDefaultTerminal })
+	t.Cleanup(func() { defaultTerminal = prev })
 
 	got := terminalScriptCandidates("echo hi")
 	if len(got) == 0 || got[0].bin != "foot" {

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"github.com/geodro/lerd/internal/spxreport"
 	"sort"
 	"strings"
 	"time"
@@ -70,13 +71,14 @@ type timingResultMsg struct {
 	cacheKey string
 	analytic reqstats.Analytics
 	recent   []reqstats.Record
+	profiles map[string]spxreport.Profile // freshest SPX capture per slow route
 	err      error
 }
 
 // timingCmd reads the durable request store off the main loop. The store is
 // SQLite on the watcher's WAL file, so this is a cheap read, but it's still I/O
 // and must never run inline in Update.
-func timingCmd(cacheKey, key string, dur time.Duration) tea.Cmd {
+func timingCmd(cacheKey, key string, dur time.Duration, hosts []string) tea.Cmd {
 	return func() tea.Msg {
 		store, err := reqstats.OpenShared(config.RequestStatsDB())
 		if err != nil {
@@ -88,8 +90,27 @@ func timingCmd(cacheKey, key string, dur time.Duration) tea.Cmd {
 			return timingResultMsg{cacheKey: cacheKey, err: err}
 		}
 		recent, _ := store.Recent(key, timingRecentLimit)
-		return timingResultMsg{cacheKey: cacheKey, analytic: a, recent: recent}
+		// The slow routes' SPX captures are parsed here too, off the render
+		// loop, since each is a file read and a JSON decode.
+		var routes []string
+		for _, r := range topRoutes(a.Routes) {
+			routes = append(routes, r.Route)
+		}
+		profiles := spxreport.ProfilesForRoutes(config.SpxDataDir(), hosts, routes, 1, 1.0)
+		return timingResultMsg{cacheKey: cacheKey, analytic: a, recent: recent, profiles: profiles}
 	}
+}
+
+// timingHosts are the domains whose SPX captures belong to the timing scope:
+// the site's own, or the selected worktree's.
+func (m *Model) timingHosts(s *siteinfo.EnrichedSite) []string {
+	if s == nil {
+		return nil
+	}
+	if m.timingScope > 0 && m.timingScope <= len(s.Worktrees) {
+		return []string{s.Worktrees[m.timingScope-1].Domain}
+	}
+	return s.Domains
 }
 
 // timingActive reports whether the request-timing panel is on screen: the site
@@ -144,7 +165,7 @@ func (m *Model) ensureTiming() tea.Cmd {
 	scope, _ := m.currentTimingScope()
 	m.timingKey = want
 	m.timingAt = time.Now()
-	return timingCmd(want, scope.key, timingRanges[m.timingRange].dur)
+	return timingCmd(want, scope.key, timingRanges[m.timingRange].dur, m.timingHosts(m.currentSite()))
 }
 
 // cycleTimingRange steps the window, and cycleTimingScope the branch. Both drop
@@ -214,7 +235,7 @@ func timingSectionLines(m *Model, site *siteinfo.EnrichedSite, innerW int) []str
 	blockW := (innerW - overviewGutter*(cols-1)) / cols
 
 	blocks = append(blocks, distributionBlock(a.Distribution, blockW))
-	if r := routesBlock(a.Routes, blockW); len(r) > 0 {
+	if r := routesBlock(a.Routes, blockW, m.timingProfiles); len(r) > 0 {
 		blocks = append(blocks, r)
 	}
 	if r := recentBlock(m.timingRecent, blockW); len(r) > 0 {
@@ -293,7 +314,7 @@ func distributionBlock(buckets []reqstats.LatencyBucket, w int) []string {
 
 // routesBlock ranks by recent p95, the same recency-aware figure the web UI sorts
 // on, so a route that's been fixed drops off as newer, faster samples arrive.
-func routesBlock(routes []reqstats.RouteStat, w int) []string {
+func routesBlock(routes []reqstats.RouteStat, w int, profiles map[string]spxreport.Profile) []string {
 	top := topRoutes(routes)
 	if len(top) == 0 {
 		return nil
@@ -309,6 +330,12 @@ func routesBlock(routes []reqstats.RouteStat, w int) []string {
 	for _, r := range top {
 		out = append(out, fmt.Sprintf("    %-*s %8s %4d×",
 			nameW, clipLine(r.Route, nameW), ms(r.RecentP95Millis), r.Samples))
+		// The route's hottest function from its freshest SPX capture, when the
+		// profiler caught one; the full breakdown stays in the web UI.
+		if p, ok := profiles[r.Route]; ok && len(p.Hotspots) > 0 {
+			h := p.Hotspots[0]
+			out = append(out, "      "+dimStyle.Render("↳ ")+clipLine(h.Function, max(10, w-16))+dimStyle.Render(fmt.Sprintf("  %.0f%%", h.Pct)))
+		}
 	}
 	return out
 }

@@ -118,6 +118,9 @@ func entityCommandArgs(service, image string, env []string, shellCmd string, int
 // runEntityCommand runs one non-streaming declared command and returns its
 // combined output.
 func runEntityCommand(service string, spec *config.EntitySpec, image string, env []string, shellCmd string, timeout time.Duration) ([]byte, error) {
+	if err := wakeForData(service); err != nil {
+		return nil, err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	return podman.CmdContext(ctx, entityCommandArgs(service, image, env, shellCmd, false)...).CombinedOutput()
@@ -204,6 +207,9 @@ func streamEntityAction(service string, spec *config.EntitySpec, action, name st
 		return err
 	}
 	image, env := actionRuntime(spec, act)
+	if err := wakeForData(service); err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), dumpRestoreTimeout)
 	defer cancel()
 	cmd := podman.CmdContext(ctx, entityCommandArgs(service, image, env, shellCmd, stdin != nil)...)

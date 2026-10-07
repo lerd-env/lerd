@@ -1,5 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
-import { services, serviceAction, type Service } from './services';
+import { apiFetch } from '$lib/api';
+import { services, serviceAction, serviceOpenable, type Service } from './services';
 import { adminServiceFor } from './presetSuggestions';
 import { entities } from './entities';
 import { DEFAULT_DOCS_ROUTE, parseDocsHash } from './docs';
@@ -214,14 +215,30 @@ export function openProfiler() {
   location.hash = 'profiler';
 }
 
+// KEEP_AWAKE_MS stays well under the shortest idle timeout (one minute) even
+// when a background tab has its timers slowed to once a minute.
+export const KEEP_AWAKE_MS = 30_000;
+
+// keepServiceAwake is an open dashboard's heartbeat: it tells lerd the service
+// is in use now and every KEEP_AWAKE_MS until the returned stop is called, so
+// idle-suspend never sleeps it under someone still looking at it.
+export function keepServiceAwake(name: string): () => void {
+  const ping = () => {
+    apiFetch('/api/dashboard/keepalive?name=' + encodeURIComponent(name), { method: 'POST' }).catch(() => {});
+  };
+  ping();
+  const timer = setInterval(ping, KEEP_AWAKE_MS);
+  return () => clearInterval(timer);
+}
+
 export function closeDashboard() {
   dashboardOpen.set(null);
   location.hash = fallbackHash();
 }
 
-// Services eligible for an iframe dashboard entry (active + has dashboard + not external-only).
+// Services eligible for an iframe dashboard entry (running or asleep + has dashboard + not external-only).
 export const dashboardServices = derived(services, ($s) =>
-  $s.filter((x) => x.status === 'active' && x.dashboard && !x.dashboard_external)
+  $s.filter((x) => serviceOpenable(x) && x.dashboard && !x.dashboard_external)
 );
 
 function refFromHash(): DashboardRef | null {

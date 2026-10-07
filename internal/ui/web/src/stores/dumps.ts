@@ -171,9 +171,10 @@ wsMessage.subscribe((msg) => {
   if (fresh) status.set(fresh);
 });
 
-export async function clearDumps(): Promise<void> {
-  await apiFetch('/api/dumps/clear', { method: 'POST' });
-  stream.clear();
+// clearDumps empties the buffer, or with a kind only that kind's events.
+export async function clearDumps(kind?: string): Promise<void> {
+  await apiFetch(kind ? `/api/dumps/clear?kind=${encodeURIComponent(kind)}` : '/api/dumps/clear', { method: 'POST' });
+  stream.clear(kind);
   void refreshStatus();
 }
 
