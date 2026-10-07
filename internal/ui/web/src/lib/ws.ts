@@ -32,6 +32,9 @@ export interface WsMessage {
   // message typed theme_list carries nothing and means the themes on offer
   // changed, which is what a desktop theme swap looks like from here.
   theme?: string;
+  // A requests frame names the site whose request list has something new.
+  domain?: string;
+  branch?: string;
 }
 
 export const wsConnected = writable<boolean>(false);
@@ -87,6 +90,35 @@ function watchFocus() {
 
 let focusWatched = false;
 
+// The request lists on screen, newest last. Each names the site it shows, and
+// the socket follows the newest, so one list going away leaves the others
+// watched. Kept so a reconnect asks again.
+const requestWatchers: { domain: string; branch: string }[] = [];
+
+function sendRequestsWatch() {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  const want = requestWatchers.at(-1) ?? { domain: '', branch: '' };
+  try {
+    socket.send(JSON.stringify({ type: 'requests', ...want }));
+  } catch {
+    /* non-fatal */
+  }
+}
+
+// watchRequests asks the server to say when a site gets a new request, until
+// the returned function is called. The server follows one site per socket.
+export function watchRequests(domain: string, branch: string): () => void {
+  const w = { domain, branch };
+  requestWatchers.push(w);
+  sendRequestsWatch();
+  return () => {
+    const i = requestWatchers.indexOf(w);
+    if (i < 0) return;
+    requestWatchers.splice(i, 1);
+    sendRequestsWatch();
+  };
+}
+
 export function connectWs() {
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
     return;
@@ -105,6 +137,7 @@ export function connectWs() {
       watchFocus();
       lastFocus = null;
       sendFocus(windowFocused());
+      if (requestWatchers.length) sendRequestsWatch();
     });
     ws.addEventListener('message', (e) => {
       try {

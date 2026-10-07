@@ -142,7 +142,7 @@ Actions: `sources`, `fetch`. Debug without opening files by hand.
 #### `request` — one request, through the Debug lenses
 Actions: `list`, `lenses`, `lens`.
 - `list` (site, branch, limit): last hour's requests, newest first, each with its `rid` (none: debug capture was off)
-- `lenses` (rid): the request and its event count per lens; `browser` holds its page and failed fetches that reached it
+- `lenses` (rid): events per lens and `php` (time, memory, FPM wait); `browser`: its page and failed fetches
 - `lens` (rid, lens, offset, limit 50): one lens's events, oldest first, with `offset_ms` and `at`
 
 #### `worktree` — git worktrees

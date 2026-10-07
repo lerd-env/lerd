@@ -124,11 +124,11 @@ func Start(currentVersion string) error {
 	// answer on a machine with no desktop to read, so it is dropped rather than
 	// logged.
 	if d := config.CurrentDesktop(); d.WatchDir != "" {
-		_ = watchDesktopTheme(context.Background(), d.WatchDir, d.WatchNames, 300*time.Millisecond, broker.broadcastThemeList)
+		_ = watchDir(context.Background(), d.WatchDir, d.WatchNames, 300*time.Millisecond, broker.broadcastThemeList)
 	}
 	// Theme files and their stylesheets repaint every open dashboard as they are saved.
 	_ = os.MkdirAll(config.ThemesDir(), 0755)
-	_ = watchDesktopTheme(context.Background(), config.ThemesDir(), nil, 300*time.Millisecond, broker.broadcastThemeList)
+	_ = watchDir(context.Background(), config.ThemesDir(), nil, 300*time.Millisecond, broker.broadcastThemeList)
 
 	// Restart any LAN share proxies that were active before this process started.
 	go cli.RestoreLANShareProxies()

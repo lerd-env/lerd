@@ -2244,10 +2244,6 @@ func profilerVhost(mode, defaultVersion, statePath, state string) string {
         %s
         include fastcgi_params;
         fastcgi_param SCRIPT_FILENAME %s;
-        # The bridge is auto-prepended into every request, and it is also the
-        # script named above, so without this it is loaded twice and the second
-        # load fatals on redeclaring its own functions.
-        fastcgi_param PHP_VALUE "auto_prepend_file=";
         fastcgi_param HTTP_COOKIE "SPX_KEY=$spx_key";
     }
 }

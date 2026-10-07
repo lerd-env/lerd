@@ -58,11 +58,14 @@ vi.mock('$stores/profiler', async () => {
   };
 });
 vi.mock('$stores/dashboard', () => ({ openProfiler: vi.fn(), openProfilerReport: vi.fn() }));
+vi.mock('$lib/ws', async (actual) => ({ ...(await actual<typeof import('$lib/ws')>()), watchRequests: vi.fn(() => unwatchRequests) }));
+const unwatchRequests = vi.fn();
 
 import SiteRequestTiming from './SiteRequestTiming.svelte';
 import { profilerEnabled, setProfiler, captureCount, waitForCapture } from '$stores/profiler';
 import { openProfiler, openProfilerReport } from '$stores/dashboard';
 import { m } from '../../paraglide/messages.js';
+import { watchRequests, wsMessage } from '$lib/ws';
 
 // The profiler starts armed for the tests that are only about the navigation.
 function resetProfilerMocks(enabled = true) {
@@ -406,5 +409,45 @@ describe('SiteRequestTiming on a site SPX cannot profile', () => {
 
     await findAllByText('/reports/:id');
     expect(queryByRole('button', { name: m.sites_reqstats_profile() })).toBeNull();
+  });
+});
+
+// The list follows the site live: the page names its site on the dashboard
+// socket, reloads when the server says that site has a new request, and lets go
+// of it when it leaves.
+describe('SiteRequestTiming live updates', () => {
+  it('reloads on a nudge for its own site only and stops watching on unmount', async () => {
+    vi.mocked(watchRequests).mockClear();
+    unwatchRequests.mockClear();
+    const { findByText, unmount } = render(SiteRequestTiming, {
+      props: { site: { domain: 'whitewaters', can_profile: true }, activeWorktreeBranch: 'feature' }
+    });
+    await findByText(m.sites_timing_recent());
+    expect(watchRequests).toHaveBeenLastCalledWith('whitewaters', 'feature');
+
+    loadSiteAnalytics.mockClear();
+    wsMessage.set({ type: 'requests', domain: 'other', branch: 'feature' });
+    wsMessage.set({ type: 'requests', domain: 'whitewaters', branch: '' });
+    expect(loadSiteAnalytics).not.toHaveBeenCalled();
+    wsMessage.set({ type: 'requests', domain: 'whitewaters', branch: 'feature' });
+    expect(loadSiteAnalytics).toHaveBeenCalledTimes(1);
+
+    unmount();
+    expect(unwatchRequests).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reload when the sites snapshot hands over the same site again', async () => {
+    vi.mocked(watchRequests).mockClear();
+    const { findByText, rerender } = render(SiteRequestTiming, {
+      props: { site: { domain: 'whitewaters', can_profile: true } }
+    });
+    await findByText(m.sites_timing_recent());
+    loadSiteAnalytics.mockClear();
+    vi.mocked(watchRequests).mockClear();
+
+    await rerender({ site: { domain: 'whitewaters', can_profile: true }, activeWorktreeBranch: '' });
+
+    expect(loadSiteAnalytics).not.toHaveBeenCalled();
+    expect(watchRequests).not.toHaveBeenCalled();
   });
 });

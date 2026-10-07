@@ -11,7 +11,7 @@ import (
 func requestTool() mcpTool {
 	return mcpTool{
 		Name:        "request",
-		Description: "A recorded request's Debug lenses, by its rid. list: recent requests with rids; lenses: count per lens; lens: one lens's events, paged.",
+		Description: "A recorded request's Debug lenses, by its rid. list: recent requests with rids; lenses: counts, PHP cost; lens: one lens's events, paged.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
@@ -161,6 +161,11 @@ func requestLensCounts(evs []reqEvent) map[string]any {
 			out["site"], out["request"] = e.Ctx["site"], e.Ctx["request"]
 		}
 		if e.Kind == "browser" && e.Data["type"] == "navigation" {
+			continue
+		}
+		if e.Kind == "request" {
+			delete(e.Data, "trace")
+			out["php"] = e.Data
 			continue
 		}
 		for _, l := range requestLenses {

@@ -69,13 +69,14 @@ function row(ev: DumpEvent): Omit<WaterfallRow, 'start' | 'end'> & { took: numbe
 
 // buildWaterfall lays a request's captured events on one chronological list,
 // under the request itself when nginx timed it. Browser events happen on the
-// page after the response, so they stay in the Browser lens.
+// page after the response, so they stay in the Browser lens, and the summary
+// PHP reports as it ends is the request's stats, not a row of its own.
 export function buildWaterfall(events: DumpEvent[], served?: ServedRequest): Waterfall {
   const rows: WaterfallRow[] = [];
   const t0 = served?.start ?? Math.min(...events.map((ev) => Date.parse(ev.ts)));
   if (served) rows.push({ label: served.label, layer: 'request', start: 0, end: served.millis, note: ms(served.millis) });
   for (const ev of events) {
-    if (ev.kind === 'browser') continue;
+    if (ev.kind === 'browser' || ev.kind === 'request') continue;
     const { took, ...r } = row(ev);
     const end = Date.parse(ev.ts) - t0;
     rows.push({ ...r, start: end - took, end });

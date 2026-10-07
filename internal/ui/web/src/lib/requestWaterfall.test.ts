@@ -26,6 +26,11 @@ describe('buildWaterfall', () => {
     expect(w.total).toBe(100);
   });
 
+  it('leaves out the summary PHP reports as the request ends', () => {
+    const w = buildWaterfall([e('view', '2026-10-07T10:00:00.010Z', { name: 'home' }), e('request', '2026-10-07T10:00:00.090Z', { time_ms: 90, memory_peak: 1024 })]);
+    expect(w.rows.map((r) => r.layer)).toEqual(['view']);
+  });
+
   it('starts at the first event when nginx has not timed the request', () => {
     const w = buildWaterfall([
       e('cache', '2026-10-07T10:00:00.010Z', { op: 'hit', key: 'k' }),

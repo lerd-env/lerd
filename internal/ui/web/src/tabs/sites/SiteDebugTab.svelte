@@ -7,6 +7,8 @@
   import DebugDisabled from '$components/DebugDisabled.svelte';
   import BrowserLens from '$components/BrowserLens.svelte';
   import RequestTimeline from '$components/RequestTimeline.svelte';
+  import RequestStatsStrip from '$components/RequestStatsStrip.svelte';
+  import { requestStats } from '$lib/requestStats';
   import ProfilePrompt from '$components/ProfilePrompt.svelte';
   import { profileKeyFor } from '$stores/profiler';
   import { writable } from 'svelte/store';
@@ -88,6 +90,7 @@
     profileKey = '';
     if (want) void profileKeyFor(want).then((k) => (want === (rid || picked) ? (profileKey = k) : undefined));
   });
+  const stats = $derived(rid && served ? requestStats($events, served.millis) : null);
   const requestLine = $derived(served?.label ?? $events.find((ev) => ev.ctx.type === 'fpm' && ev.ctx.request)?.ctx.request ?? '');
 
   // Cache comes solely from the Laravel adapter, so it only applies to Laravel
@@ -151,6 +154,7 @@
       <BrowserLens siteScope={siteName} pinned={Boolean(rid)} />
     </div>
   {:else}
+    {#if stats}<div class="px-3 pt-3"><RequestStatsStrip {stats} /></div>{/if}
     <!-- One request has no filter or full screen, so its bar carries only tabs. -->
     <DetailTabs {tabs} {active} onchange={pick} actions={rid ? undefined : fullscreenAction} />
     <div class="flex-1 min-h-0 overflow-hidden">

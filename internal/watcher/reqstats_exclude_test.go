@@ -177,3 +177,21 @@ func TestIngestAccessRecord_ExclusionMatchesNormalizedRoute(t *testing.T) {
 		t.Errorf("stored %v, want none: the concrete id is the excluded route", stored)
 	}
 }
+
+// The fast flush writes buffered requests to the store between save ticks, so
+// the dashboard's live list sees them within a second, and it still judges them
+// by an exclusion made since the last save.
+func TestFlushPendingRequests_WritesBetweenSaves(t *testing.T) {
+	store := newExcludeEnv(t, func(h string) (string, bool) { return "app", h == "app.test" })
+	ingestAccessRecord(reqstats.AccessRecord{Host: "app.test", Method: "GET", URI: "/dash", RequestTime: 0.04, Status: 200})
+	ingestAccessRecord(reqstats.AccessRecord{Host: "app.test", Method: "GET", URI: "/health", RequestTime: 0.04, Status: 200})
+	if err := store.ExcludeRoute("app", "GET /health"); err != nil {
+		t.Fatalf("ExcludeRoute: %v", err)
+	}
+
+	flushPendingRequests()
+
+	if stored := storedRoutes(t, store, "app"); len(stored) != 1 || stored[0] != "GET /dash" {
+		t.Errorf("stored %v, want only the unexcluded route", stored)
+	}
+}

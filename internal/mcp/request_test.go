@@ -32,6 +32,22 @@ func TestRequestTool_LensesCountsEachLens(t *testing.T) {
 	}
 }
 
+// What PHP reported as the request ended rides along with the counts, the way
+// the dashboard shows it above the lenses, and is not a lens of its own.
+func TestRequestTool_LensesCarryWhatPHPSpent(t *testing.T) {
+	stubRoundTrip(t, `[
+	{"ts":"2026-10-07T10:00:00.010Z","kind":"query","ctx":{"type":"fpm","site":"acme","rid":"r1"},"data":{"sql":"select 1","time_ms":2}},
+	{"ts":"2026-10-07T10:00:00.090Z","kind":"request","ctx":{"type":"fpm","site":"acme","rid":"r1"},"data":{"time_ms":85.5,"memory_peak":4194304,"queue_ms":1.2,"trace":[{"file":"x"}]}}
+]`)
+	text := toolText(func() any { got, _ := execRequestTool(map[string]any{"action": "lenses", "rid": "r1"}); return got }())
+	if !strings.Contains(text, `"php":{"memory_peak":4194304,"queue_ms":1.2,"time_ms":85.5}`) {
+		t.Errorf("missing what PHP spent in %s", text)
+	}
+	if strings.Contains(text, "trace") || strings.Contains(text, `"request":1`) {
+		t.Errorf("the summary must drop its trace and not count as a lens: %s", text)
+	}
+}
+
 // One lens reads a page at a time, on the request's clock and without traces.
 func TestRequestTool_LensPagesItsRows(t *testing.T) {
 	path := stubRoundTrip(t, requestEventsBody)
