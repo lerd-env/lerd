@@ -1098,3 +1098,46 @@ namespace {
 		t.Errorf("data = %+v, want the record's level, channel and message", e.Data)
 	}
 }
+
+func TestCollectorPHP_RequestEndReportsTimingAndMemory(t *testing.T) {
+	got := runCollectorPHP(t, `<?php
+require COLLECTOR;
+$_SERVER['REQUEST_TIME_FLOAT'] = microtime(true) - 0.05;
+// nginx handed the request on 2 ms before PHP started it.
+$_SERVER['LERD_NGINX_SENT'] = (string) ($_SERVER['REQUEST_TIME_FLOAT'] - 0.002);
+\Lerd\Collector\request_end();
+unset($_SERVER['LERD_NGINX_SENT']);
+\Lerd\Collector\request_end();
+`)
+
+	type ev struct {
+		Kind string         `json:"kind"`
+		Data map[string]any `json:"data"`
+	}
+	var reqs []ev
+	for _, line := range got {
+		var e ev
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			t.Fatalf("bad JSON line %q: %v", line, err)
+		}
+		if e.Kind == "request" {
+			reqs = append(reqs, e)
+		}
+	}
+	if len(reqs) != 2 {
+		t.Fatalf("request events = %d, want 2: %v", len(reqs), got)
+	}
+	d := reqs[0].Data
+	if ms, _ := d["time_ms"].(float64); ms < 50 || ms > 5000 {
+		t.Errorf("time_ms = %v, want at least the 50 ms since REQUEST_TIME_FLOAT", d["time_ms"])
+	}
+	if mem, _ := d["memory_peak"].(float64); mem <= 0 {
+		t.Errorf("memory_peak = %v, want PHP's peak usage", d["memory_peak"])
+	}
+	if q, _ := d["queue_ms"].(float64); q < 1.9 || q > 2.1 {
+		t.Errorf("queue_ms = %v, want the 2 ms nginx held the request", d["queue_ms"])
+	}
+	if _, ok := reqs[1].Data["queue_ms"]; ok {
+		t.Errorf("queue_ms reported without LERD_NGINX_SENT: %v", reqs[1].Data)
+	}
+}
