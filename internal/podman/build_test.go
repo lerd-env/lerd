@@ -318,9 +318,19 @@ func TestPhpFpmContainerfile_DisablesPoolAccessLog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read containerfile: %v", err)
 	}
-	if !strings.Contains(tmpl, `access.log=/dev/null\n`) {
-		t.Error("zz-lerd.conf must set access.log=/dev/null to override docker.conf's stderr access log")
+	_, runtime, ok := strings.Cut(tmpl, "# ── Runtime stage")
+	if !ok {
+		t.Fatal("runtime stage marker missing from Containerfile")
 	}
+	for _, line := range strings.Split(runtime, "\n") {
+		if strings.HasPrefix(line, "RUN printf") && strings.HasSuffix(line, "> /usr/local/etc/php-fpm.d/zz-lerd.conf") {
+			if !strings.Contains(line, `\naccess.log=/dev/null\n`) {
+				t.Errorf("zz-lerd.conf must set access.log=/dev/null to override docker.conf's stderr access log:\n%s", line)
+			}
+			return
+		}
+	}
+	t.Fatal("runtime stage no longer writes zz-lerd.conf")
 }
 
 // ext/ftp compiles FTPS in only when OpenSSL was configured; a phpize build
