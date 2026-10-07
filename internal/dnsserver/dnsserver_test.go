@@ -276,16 +276,20 @@ func TestForwardsOtherNamesToUpstream(t *testing.T) {
 	}
 }
 
+// shortForwardTimeout keeps tests that wait on a silent upstream quick.
+func shortForwardTimeout(t *testing.T) {
+	t.Helper()
+	prev := forwardTimeout
+	forwardTimeout = 300 * time.Millisecond
+	t.Cleanup(func() { forwardTimeout = prev })
+}
+
+// The dead upstreams below hold their port and never answer. A closed port
+// would do in isolation, but under parallel packages another test's server
+// can pick it up and answer.
 func TestFallsThroughToTheNextUpstream(t *testing.T) {
-	dead, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	deadAddr := dead.LocalAddr().String()
-	_ = dead.Close()
-	dh, dp, _ := net.SplitHostPort(deadAddr)
-	uh, upPort, _ := net.SplitHostPort(startUpstream(t))
-	addr, _, stop := startTestServer(t, "port=5300\nserver="+dh+"#"+dp+"\nserver="+uh+"#"+upPort+"\n")
+	shortForwardTimeout(t)
+	addr, _, stop := startTestServer(t, "port=5300\nserver="+hostPort(silentUpstream(t))+"\nserver="+hostPort(startUpstream(t))+"\n")
 	defer stop()
 
 	if r := query(t, addr, "example.com", dns.TypeA); r.Rcode != dns.RcodeSuccess || len(r.Answer) != 1 {
@@ -294,13 +298,8 @@ func TestFallsThroughToTheNextUpstream(t *testing.T) {
 }
 
 func TestServfailWhenNoUpstreamAnswers(t *testing.T) {
-	dead, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, p, _ := net.SplitHostPort(dead.LocalAddr().String())
-	_ = dead.Close()
-	addr, _, stop := startTestServer(t, "port=5300\nserver="+h+"#"+p+"\n")
+	shortForwardTimeout(t)
+	addr, _, stop := startTestServer(t, "port=5300\nserver="+hostPort(silentUpstream(t))+"\n")
 	defer stop()
 
 	if r := query(t, addr, "example.com", dns.TypeA); r.Rcode != dns.RcodeServerFailure {
@@ -321,9 +320,7 @@ func silentUpstream(t *testing.T) string {
 }
 
 func TestAsksTheUpstreamThatLastAnsweredFirst(t *testing.T) {
-	prev := forwardTimeout
-	forwardTimeout = 300 * time.Millisecond
-	t.Cleanup(func() { forwardTimeout = prev })
+	shortForwardTimeout(t)
 
 	dh, dp, _ := net.SplitHostPort(silentUpstream(t))
 	uh, up, _ := net.SplitHostPort(startUpstream(t))
