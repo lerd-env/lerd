@@ -147,6 +147,7 @@ export default defineConfig({
             { text: 'Comparison', link: '/getting-started/comparison' },
             { text: 'Laravel Herd for Linux', link: '/getting-started/herd-linux' },
             { text: 'Laragon for Linux', link: '/getting-started/laragon-linux' },
+            { text: 'Moving from MAMP', link: '/getting-started/mamp' },
             { text: 'Laradock alternative', link: '/getting-started/laradock' },
             { text: 'Laravel Sail alternative', link: '/getting-started/sail' },
           ],
