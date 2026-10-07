@@ -194,6 +194,55 @@ describe('SiteHeader', () => {
     });
   });
 
+  // The sites store hands the header a fresh site object on every refresh, which
+  // reruns the git poll; the marker must survive the gap until the answer lands.
+  describe('git marker', () => {
+    afterEach(() => vi.unstubAllGlobals());
+    const dirtyMain = [{ branch: 'main', path: '/home/u/Code/app', main: true, staged: 0, modified: 1, untracked: 0, conflicted: 0, ahead: 0, behind: 0 }];
+
+    it('keeps the last state while the next one is loading', async () => {
+      let first = true;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => {
+          if (!first) return new Promise(() => {});
+          first = false;
+          return Promise.resolve(new Response(JSON.stringify({ checkouts: dirtyMain })));
+        })
+      );
+      const { findByText, getByText, rerender } = render(Harness, { props: { site: worktreeSite } });
+      await findByText('*');
+
+      await rerender({ site: { ...worktreeSite } as Site });
+      expect(getByText('*')).toBeInTheDocument();
+    });
+
+    // The marquee is motion; the tooltip is how a clipped name reads without it.
+    it('names the full branch in the tab tooltip', async () => {
+      vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
+      const { getByText } = render(Harness, { props: { site: worktreeSite } });
+      await fireEvent.mouseEnter(getByText('feat').closest('button')!);
+      expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('feat · feat.app.test');
+    });
+
+    it("never shows another site's state", async () => {
+      let first = true;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => {
+          if (!first) return new Promise(() => {});
+          first = false;
+          return Promise.resolve(new Response(JSON.stringify({ checkouts: dirtyMain })));
+        })
+      );
+      const { findByText, queryByText, rerender } = render(Harness, { props: { site: worktreeSite } });
+      await findByText('*');
+
+      await rerender({ site: { ...worktreeSite, domain: 'other.test' } as Site });
+      expect(queryByText('*')).not.toBeInTheDocument();
+    });
+  });
+
   describe('browser logs toggle', () => {
     afterEach(() => dumpsStatus.set(null));
     const debug = (enabled: boolean) =>

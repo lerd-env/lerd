@@ -49,6 +49,7 @@
   import BrowserLogsSiteToggle from '$components/BrowserLogsSiteToggle.svelte';
   import { debugCaptureEnabled } from '$stores/queries';
   import { loadGitStatus, checkoutFor, type GitCheckout } from '$lib/gitStatus';
+  import { marquee } from '$lib/marquee';
   import { m } from '../../paraglide/messages.js';
 
   import type { Snippet } from 'svelte';
@@ -140,13 +141,18 @@
 
   // Git state changes outside lerd (an editor, a terminal), so it is polled while
   // the site is open and re-read when the window regains focus.
-  let gitCheckouts = $state<GitCheckout[]>([]);
+  // The last answer stays up until the next one lands: clearing it on every rerun
+  // made the marker blink. Keyed by domain so another site's state never shows.
+  let gitLast = $state<{ domain: string; checkouts: GitCheckout[] }>({ domain: '', checkouts: [] });
+  const gitCheckouts = $derived(gitLast.domain === site.domain ? gitLast.checkouts : []);
   $effect(() => {
     const domain = site.domain;
     if (!showWorktreeTabs) return;
     const refresh = () => {
       if (document.hidden) return;
-      loadGitStatus(domain).then((c) => (gitCheckouts = c)).catch(() => (gitCheckouts = []));
+      loadGitStatus(domain)
+        .then((checkouts) => (gitLast = { domain, checkouts }))
+        .catch(() => {});
     };
     refresh();
     const timer = setInterval(refresh, 10_000);
@@ -154,7 +160,6 @@
     return () => {
       clearInterval(timer);
       window.removeEventListener('focus', refresh);
-      gitCheckouts = [];
     };
   });
   // No branch can also mean a subfolder of a bigger repo, where a nested init
@@ -338,7 +343,7 @@
           <button
             type="button"
             onclick={() => pickWorktree(e)}
-            use:tooltip={e.domain}
+            use:tooltip={`${e.branch} · ${e.domain}`}
             class="flex items-center gap-1.5 pl-3 pr-3 py-2 text-xs min-w-0 {isActive
               ? 'text-gray-800 dark:text-gray-100 font-medium'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}"
@@ -369,7 +374,7 @@
                 <path d="M6 3v12M15 6a3 3 0 1 0 6 0a3 3 0 1 0-6 0M3 18a3 3 0 1 0 6 0a3 3 0 1 0-6 0M18 9a9 9 0 0 1-9 9" />
               </svg>
             {/if}
-            <span class="font-mono truncate leading-none">{e.branch}</span>
+            <span class="font-mono truncate leading-none" use:marquee><span>{e.branch}</span></span>
             {#if git}<GitStatusBadge status={git} />{/if}
           </button>
           {#if !e.isMain}
