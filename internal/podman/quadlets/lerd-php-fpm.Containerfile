@@ -255,7 +255,9 @@ RUN apk add --no-cache zsh fzf \
     && printf 'export EDITOR=vi\nexport PAGER=less\nexport HISTFILE=/root/.zsh_state/history\nexport HISTSIZE=10000\nexport SAVEHIST=10000\nsetopt INC_APPEND_HISTORY SHARE_HISTORY\nautoload -Uz compinit && compinit -u\nif command -v starship >/dev/null 2>&1; then\n  eval "$(starship init zsh)"\nfi\n' \
         > /etc/zsh/zshrc
 
-# Override pool: run workers as root, log errors to stderr
-RUN printf '[www]\nuser=root\ngroup=root\ncatch_workers_output=yes\nphp_flag[display_errors]=off\nphp_admin_value[error_log]=/proc/self/fd/2\nphp_admin_flag[log_errors]=on\n' > /usr/local/etc/php-fpm.d/zz-lerd.conf
+# Override pool: run workers as root, log errors to stderr. The access log goes
+# nowhere: docker.conf puts it on stderr, which journald stamps priority err, and
+# nginx's lerd_access feed already records every request.
+RUN printf '[www]\nuser=root\ngroup=root\ncatch_workers_output=yes\naccess.log=/dev/null\nphp_flag[display_errors]=off\nphp_admin_value[error_log]=/proc/self/fd/2\nphp_admin_flag[log_errors]=on\n' > /usr/local/etc/php-fpm.d/zz-lerd.conf
 
 {{.MkcertCA}}
