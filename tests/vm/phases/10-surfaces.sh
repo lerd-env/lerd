@@ -160,6 +160,62 @@ cp /tmp/lerd-vm-web.php routes/web.php
 lerd dump off </dev/null >/dev/null 2>&1
 todo "10.47 the Messages lens and the SPX hot function" "needs a notification channel and a slow profiled route"
 
+# --- request linking: 10.91-10.93
+# Each request names the id its debug events carry, nginx logs it beside the
+# request, SPX writes it on the capture, and lerd-ui keeps it over a restart.
+ui() { curl -s --max-time 10 -H 'X-Lerd-CSRF: 1' "$@"; }
+rid_of() { curl -ks -D - -o /dev/null --max-time 30 "https://$host/" "$@" | tr -d '\r' | awk 'tolower($1)=="x-lerd-rid:" {print $2}'; }
+# recent_since <ms> <python test on r>: a recent row newer than ms passes the test.
+recent_since() { ui "http://127.0.0.1:7073/api/sites/$host/analytics?range=1h" | python3 -c "import json,sys; rows=[r for r in json.load(sys.stdin)['recent'] if r['at_millis']>$1]; sys.exit(0 if rows and $2 else 1)"; }
+fpms() { podman ps --format '{{.Names}}' | grep -E '^lerd-php[0-9]+-fpm$'; }
+spx_dir=$HOME/.local/share/lerd/spx
+started=$(($(date +%s) * 1000))
+
+lerd dump on </dev/null >/dev/null 2>&1
+rid=$(rid_of)
+check_out "10.91 a PHP response names its request in X-Lerd-Rid" '^[0-9a-f]{8,64}$' echo "$rid"
+check "10.91 the request's captured events carry that id" wait_for 15 bash -c "curl -s 'http://127.0.0.1:7073/api/dumps?rid=$rid' | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin) else 1)'"
+check "10.91 its Recent requests row carries the id and a clean path" wait_for 30 recent_since "$started" "any(r.get('rid')=='$rid' and r['uri']=='/' for r in rows)"
+lerd dump off </dev/null >/dev/null 2>&1
+off=$(($(date +%s) * 1000))
+curl -ks -o /dev/null --max-time 30 "https://$host/"
+check "10.91 with capture off the path stays clean" wait_for 30 recent_since "$off" "all('|' not in r['uri'] and not r.get('rid') for r in rows)"
+
+lerd dump on </dev/null >/dev/null 2>&1
+# SPX ships in the FPM image only, so the site has to be served by FPM here.
+lerd runtime fpm </dev/null >/dev/null 2>&1
+key=$(for c in $(fpms); do podman exec "$c" php -r 'echo ini_get("spx.http_key");' 2>/dev/null && break; done)
+since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+lerd profile on </dev/null >/dev/null 2>&1
+# Arming reloads nginx, which drains the old workers rather than swapping in
+# place, so the first requests can still miss the profiler: ask until one lands.
+profiled_rid() {
+	local r
+	for _ in $(seq 10); do
+		r=$(rid_of)
+		wait_for 5 bash -c "grep -lq 'lerd-rid:$r' $spx_dir/*.json" && { echo "$r"; return 0; }
+	done
+	return 1
+}
+rid2=$(profiled_rid)
+check_out "10.92 its SPX capture carries lerd-rid:<id>" '^[0-9a-f]{8,64}$' echo "$rid2"
+check_out "10.92 a wrong SPX key still answers 200" '^200$' curl -ks -o /dev/null -w '%{http_code}' --max-time 30 -H 'Cookie: SPX_ENABLED=1; SPX_KEY=wrong' "https://$host/"
+lerd profile off </dev/null >/dev/null 2>&1
+check_out "10.92 SPX cookies with the profiler off still answer 200" '^200$' curl -ks -o /dev/null -w '%{http_code}' --max-time 30 -H "Cookie: SPX_ENABLED=1; SPX_KEY=$key; SPX_REPORT=full" "https://$host/"
+check_not "10.92 the FPM log shows no segfault" 'signal 11|SIGSEGV|segfault' bash -c "for c in \$(podman ps --format '{{.Names}}' | grep -E '^lerd-php[0-9]+-fpm$'); do podman logs --since '$since' \"\$c\" 2>&1; done"
+
+systemctl --user restart lerd-ui
+wait_for 30 curl -sf -o /dev/null http://127.0.0.1:7073/api/dumps/status
+check_out "10.93 the debug buffer is saved owner-only" '^600$' stat -c %a "$HOME/.local/share/lerd/dumps-buffer.json"
+check "10.93 a request's debug events survive a lerd-ui restart" bash -c "curl -s 'http://127.0.0.1:7073/api/dumps?rid=$rid2' | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin) else 1)'"
+# The watcher writes in batches, so the row has to be on disk before removing it can find it.
+wait_for 30 recent_since "$started" "any(r.get('rid')=='$rid2' for r in rows)"
+ui -X POST -H 'Content-Type: application/json' -d '{"route":"GET /"}' "http://127.0.0.1:7073/api/sites/$host/analytics/remove" >/dev/null
+check "10.93 removing the route drops its debug events" bash -c "curl -s 'http://127.0.0.1:7073/api/dumps?rid=$rid2' | python3 -c 'import json,sys; sys.exit(1 if json.load(sys.stdin) else 0)'"
+check "10.93 removing the route drops its SPX capture" bash -c "! grep -lq 'lerd-rid:$rid2' $spx_dir/*.json"
+lerd dump off </dev/null >/dev/null 2>&1
+# --- end request linking
+
 check_out "10.48 the shell drop-in runs in the site's container and comes back" 'shell .* exited' \
 	tui_screen 140 45 "wait:Dashboard" "keys:\\x10" "wait:Go to or do" "keys:open shell $host" "sleep:1" "keys:\\r" "sleep:4" "keys:echo VMSHELL\$((40+2))\\r" "wait:VMSHELL42" "keys:exit\\r" "wait:exited"
 check_out "10.48 a service with a dashboard shows its URL" 'http://localhost:8025' \

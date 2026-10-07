@@ -2,7 +2,7 @@
 
 This project runs on **lerd**, a Podman-based PHP development environment. It is framework-agnostic: Laravel, Symfony, WordPress, Drupal, Magento, CakePHP and any custom framework are all driven by a framework definition (YAML), never by lerd hardcoding a framework's name. Use the `lerd` MCP server to manage it from the chat.
 
-The MCP surface is **twelve grouped tools**, each driven by an `action` argument: `site`, `service`, `db`, `env`, `runtime`, `worker`, `exec`, `framework`, `diag`, `logs`, `worktree`, `workspace`. Always pass `action`. Most actions also accept an optional `path` that defaults to the directory the assistant was opened in (then `LERD_SITE_PATH` if set), so you can usually omit it. Start by calling `site` with `action: "list"` to discover sites.
+The MCP surface is **thirteen grouped tools**, each driven by an `action` argument: `site`, `service`, `db`, `env`, `runtime`, `worker`, `exec`, `framework`, `diag`, `logs`, `request`, `worktree`, `workspace`. Always pass `action`. Most actions also accept an optional `path` that defaults to the directory the assistant was opened in (then `LERD_SITE_PATH` if set), so you can usually omit it. Start by calling `site` with `action: "list"` to discover sites.
 
 ### Architecture
 
@@ -114,7 +114,7 @@ Actions: `list`, `add`, `remove`, `prune`, `search`, `update`, `project_new`, `s
 - `setup` runs the framework's post-install steps (migrations, storage:link…) — MANDATORY after `env setup` on new/cloned projects; idempotent. A framework's own installer (Drupal's site install) is not among them: hand the user `lerd setup`
 
 #### `diag` — diagnostics & observability
-Actions: `status`, `doctor`, `doctor_fix`, `site_doctor`, `which`, `check`, `dns_diagnose`, `bug_report`, `analyze_queries`, `route_timing`, `optimize_route`, `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle`, `browser_events`, `browser_toggle`, `browser_presets`, `profiler_toggle`, `profiler_status`, `profiler_clear`, `profiler_report`, `xdebug_on`, `xdebug_off`, `xdebug_status`.
+Actions: `status`, `doctor`, `doctor_fix`, `site_doctor`, `which`, `check`, `dns_diagnose`, `bug_report`, `analyze_queries`, `route_timing`, `optimize_route`, `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle`, `dumps_buffer`, `browser_events`, `browser_toggle`, `browser_presets`, `profiler_toggle`, `profiler_status`, `profiler_clear`, `profiler_report`, `xdebug_on`, `xdebug_off`, `xdebug_status`.
 - `status` (DNS/nginx/FPM/watcher/tools health) and `doctor` (JSON findings, each tagged with a fix tier) are the first stops when something is broken; `dns_diagnose` walks the DNS chain
 - `doctor_fix` applies the safe (non-heavy, non-sudo) repairs for environment findings; package installs, `lerd install` and `lerd cleanup` stay manual
 - `site_doctor` runs framework-agnostic app checks for one site (env file and drift, app key, composer/node install and lock, `composer audit`/`npm audit`, PHP range, a `slow_routes` warning for routes whose p95 runs well above the site's typical time, plus the framework's own); pass `site` or `path`, defaults to cwd. It is read-only: a failing check carries a `severity` and often a `fix` naming the command to run yourself. Host-side fixes (starting a declared service, rewriting a drifted vhost, repointing or creating a database, deleting undeclared worker units) belong to `lerd site:doctor --fix`, which the user runs. `slow_routes` is the exception, read from the watcher's timing snapshot with no command fix: profile the route instead (`profiler_toggle`)
@@ -122,6 +122,7 @@ Actions: `status`, `doctor`, `doctor_fix`, `site_doctor`, `which`, `check`, `dns
 - **site registry backups**: every rewrite of `sites.yaml` copies it aside, last ten in `sites.bkp`; if sites go missing, `lerd sites:restore` puts one back instead of relinking by hand.
 - `which` shows resolved PHP/Node/docroot/nginx for a site; `check` validates `.lerd.yaml`
 - debug bridge loop: `dumps_toggle` (enable) → `dumps_clear` → hit the page → `analyze_queries` (N+1 / slow-query report with file:line) or `dumps_recent` (filter by site/branch/ctx/kind/since/limit; test runs need Show test runs). Kinds `log` (app log), `exception` (Sentry/Inspector) and `message` (notifier/notifications) need the package installed; `ray()` arrives as `dump`
+- `dumps_buffer` reads or sets (`size`, 3000-20000) how many events lerd-ui keeps; raise it when a request left the buffer before you read it
 - browser loop: `browser_toggle` (site, enable; needs `dumps_toggle` on too) → ask the user to load the page → `browser_events` (site, `types` e.g. ["error","network"]): page views newest first, each with its errors (stack, file:line), rejections, console and failed requests, plus `counts` and a `hint` when empty. `browser_presets` (site) lists frontend-library event presets with `detected`/`applied`; `preset` + `enable` adds or removes one
 - `route_timing` returns the per-site response-time table: the typical (median) time and the routes whose p95 runs well above it (method, example path, p95, multiplier, samples), read from the watcher's snapshot of real traffic, no capture needed. `site` accepts either the site name or its domain, as do `analyze_queries`, `optimize_route`, and `dumps_recent`
 - `optimize_route` is the join: each slow route paired with the N+1 and slow-query findings captured against that same route (with the caller file:line), so you get the symptom and its cause in one call. Needs the query capture on (`dumps_toggle` enable) plus a few real hits. When the SPX profiler was on for the route's traffic, each slow route also carries a `profile` block, the top functions by exclusive wall time from the freshest capture, distilled to a few outliers (not the raw trace), so a CPU-bound route shows where its time went next to its queries
@@ -137,6 +138,12 @@ Actions: `sources`, `fetch`. Debug without opening files by hand.
 - `fetch source=<name>` reads one source. Filter with `grep` (regex, falls back to literal substring), `since`/`until` (relative like `15m`/`1h`/`2h30m`, or a timestamp), `level` (app logs only: error/warning/info/debug), and `lines` (default 50)
 - streaming is polling: every `fetch` returns an opaque `cursor`; call again with `since=<cursor>` (or `cursor=<cursor>`) to get only the new lines. The cursor format differs per backend, so treat it as opaque and echo it back
 - entries come back chronological (oldest first). Raw logs with no timestamps ignore `since`/`level` and just return the last N; a not-running container returns partial output, not an error
+
+#### `request` — one request, through the Debug lenses
+Actions: `list`, `lenses`, `lens`.
+- `list` (site, branch, limit): last hour's requests, newest first, each with its `rid` (none: debug capture was off)
+- `lenses` (rid): the request and its event count per lens; `browser` holds its page and failed fetches that reached it
+- `lens` (rid, lens, offset, limit 50): one lens's events, oldest first, with `offset_ms` and `at`
 
 #### `worktree` — git worktrees
 Actions: `list`, `add`, `remove`, `wait`, `db_isolate`, `db_share`.

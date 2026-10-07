@@ -215,6 +215,16 @@ export function openProfiler() {
   location.hash = 'profiler';
 }
 
+// openProfilerReport opens SPX on one capture's flame graph rather than the
+// report list.
+export function openProfilerReport(key: string) {
+  location.hash = `profiler/${encodeURIComponent(key)}`;
+}
+
+function profilerReportRef(key: string): DashboardRef {
+  return { ...PROFILER_REF, dashboard: `/_spx/?SPX_UI_URI=/report.html&key=${encodeURIComponent(key)}` };
+}
+
 // KEEP_AWAKE_MS stays well under the shortest idle timeout (one minute) even
 // when a background tab has its timers slowed to once a minute.
 export const KEEP_AWAKE_MS = 30_000;
@@ -245,6 +255,7 @@ function refFromHash(): DashboardRef | null {
   const h = location.hash.slice(1);
   if (parseDocsHash(h)) return DOCS_REF;
   if (h === 'profiler') return PROFILER_REF;
+  if (h.startsWith('profiler/')) return profilerReportRef(decodeURIComponent(h.slice('profiler/'.length)));
   if (h.startsWith('service/')) {
     const rest = h.slice('service/'.length);
     // service/mailpit/view/<id> deep-links into a specific captured email.

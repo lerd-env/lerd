@@ -181,3 +181,20 @@ func toolText(v any) string {
 	t, _ := c[0]["text"].(string)
 	return t
 }
+
+// An assistant raising the buffer stores the size in range and tells lerd-ui,
+// which resizes in place.
+func TestExecDumpsBuffer_StoresAndNotifies(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("XDG_CONFIG_HOME", dir+"/config")
+	t.Setenv("XDG_DATA_HOME", dir+"/data")
+	path := stubRoundTrip(t, ``)
+	got, _ := execDumpsBuffer(map[string]any{"size": float64(12000)})
+	if !strings.Contains(toolText(got), `"buffer":12000`) || *path != "/api/dumps/notify-changed" {
+		t.Fatalf("got %s, path %q", toolText(got), *path)
+	}
+	if got, _ := execDumpsBuffer(map[string]any{}); !strings.Contains(toolText(got), `"buffer":12000`) {
+		t.Errorf("reading the size back = %s", toolText(got))
+	}
+}

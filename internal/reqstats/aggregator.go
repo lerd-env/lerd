@@ -54,6 +54,20 @@ type RouteStat struct {
 	RecentP95Millis float64 `json:"recent_p95_millis"`
 	Multiplier      float64 `json:"multiplier"`
 	Samples         int     `json:"samples"`
+	// Slowest is the route's slowest warm request in the window, which its time
+	// bar opens; the live aggregator leaves it unset.
+	Slowest *Sample `json:"slowest,omitempty"`
+}
+
+// Sample is one recorded request, enough to open it in the Inspect dialog.
+type Sample struct {
+	AtMillis int64   `json:"at_millis"`
+	URI      string  `json:"uri"`
+	Status   int     `json:"status"`
+	Millis   float64 `json:"millis"`
+	RID      string  `json:"rid,omitempty"`
+	// ProfileKey names the SPX capture of this request, set by the UI server.
+	ProfileKey string `json:"profile_key,omitempty"`
 }
 
 // SiteStats is the per-site view the UI renders: the typical response time and

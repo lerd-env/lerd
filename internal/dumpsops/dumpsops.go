@@ -157,3 +157,18 @@ func installedFPMUnits() []string {
 	}
 	return out
 }
+
+// SetBuffer stores how many events lerd-ui keeps for the Debug window and
+// returns the size it was pulled into. A running lerd-ui resizes once it is
+// told the config changed, keeping the newest events that fit.
+func SetBuffer(n int) (int, error) {
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return 0, fmt.Errorf("loading config: %w", err)
+	}
+	cfg.SetDumpsBuffer(n)
+	if err := config.SaveGlobal(cfg); err != nil {
+		return 0, fmt.Errorf("saving config: %w", err)
+	}
+	return cfg.DumpsBuffer(), nil
+}

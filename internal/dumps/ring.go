@@ -1,13 +1,18 @@
 package dumps
 
-import "sync"
+import (
+	"encoding/json"
+	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"sync"
+)
 
-// DefaultCapacity is the maximum number of events the ring keeps before it
-// overwrites the oldest entry. A single N+1 request can emit well over a
-// thousand query events, so the old 500-line cap could not even retain one
-// request's worth for analyze_queries to read; sized up so a fresh capture of
-// one pathological request survives long enough to be analyzed.
-const DefaultCapacity = 3000
+// DefaultCapacity is how many events the ring keeps when dumps.buffer is unset,
+// matching config.DefaultDumpsBuffer. An event-heavy request emits thousands, so
+// 3000 let one push the requests before it out within seconds.
+const DefaultCapacity = 5000
 
 // Ring is a fixed-size ring buffer of Events safe for concurrent use.
 // Snapshots are taken under a read lock and returned in insertion order.
@@ -28,6 +33,23 @@ func NewRing(capacity int) *Ring {
 	return &Ring{buf: make([]Event, capacity), cap: capacity}
 }
 
+// Resize changes how many events the ring keeps, carrying over the newest
+// ones that fit, so the size can change without restarting lerd-ui.
+func (r *Ring) Resize(capacity int) {
+	if capacity <= 0 {
+		capacity = DefaultCapacity
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	kept := r.snapshot()
+	if len(kept) > capacity {
+		kept = kept[len(kept)-capacity:]
+	}
+	buf := make([]Event, capacity)
+	copy(buf, kept)
+	r.buf, r.cap, r.size, r.head = buf, capacity, len(kept), len(kept)%capacity
+}
+
 // Append stores e, evicting the oldest entry once the ring is full.
 func (r *Ring) Append(e Event) {
 	r.mu.Lock()
@@ -44,6 +66,10 @@ func (r *Ring) Append(e Event) {
 func (r *Ring) Snapshot() []Event {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	return r.snapshot()
+}
+
+func (r *Ring) snapshot() []Event {
 	out := make([]Event, 0, r.size)
 	if r.size < r.cap {
 		out = append(out, r.buf[:r.size]...)
@@ -63,6 +89,8 @@ func (r *Ring) Len() int {
 
 // Cap returns the maximum number of entries the ring can hold.
 func (r *Ring) Cap() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.cap
 }
 
@@ -80,18 +108,72 @@ func (r *Ring) Clear() {
 // Remove drops every entry drop matches, keeping the rest in order and freeing
 // their slots for new events.
 func (r *Ring) Remove(drop func(Event) bool) {
-	kept := make([]Event, 0, r.Len())
-	for _, e := range r.Snapshot() {
+	// One lock across the read and the rewrite, or an event appended between
+	// them would be overwritten by the older copy.
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	kept := make([]Event, 0, r.size)
+	for _, e := range r.snapshot() {
 		if !drop(e) {
 			kept = append(kept, e)
 		}
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	clear(r.buf)
 	copy(r.buf, kept)
 	r.size = len(kept)
 	r.head = len(kept) % r.cap
+}
+
+// Save writes the ring to path, so a restarted lerd-ui can pick up where this
+// one stopped. Owner-only: events carry SQL bindings and request payloads.
+func (r *Ring) Save(path string) error {
+	b, err := json.Marshal(r.Snapshot())
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// Load appends the events Save wrote to path, oldest first, so the newest that
+// fit survive a smaller ring. A missing file is an empty buffer, not an error.
+func (r *Ring) Load(path string) error {
+	b, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var events []Event
+	if err := json.Unmarshal(b, &events); err != nil {
+		return err
+	}
+	for _, e := range events {
+		r.Append(e)
+	}
+	return nil
+}
+
+// RequestIDs is the set of requests with at least one event in the ring: the
+// ones a recent request's Inspect can open on something.
+func (r *Ring) RequestIDs() map[string]bool {
+	out := map[string]bool{}
+	for _, e := range r.Snapshot() {
+		if e.Ctx.RID != "" {
+			out[e.Ctx.RID] = true
+		}
+		if rid := e.reachedRID(); rid != "" {
+			out[rid] = true
+		}
+	}
+	return out
 }
 
 // FilterOpts narrows a Snapshot. Zero-value fields are ignored.
@@ -105,6 +187,9 @@ type FilterOpts struct {
 	Ctx string
 	// Kind exact-matches Event.Kind when non-empty (e.g. "query", "dump").
 	Kind string
+	// RID keeps one request's events: those it ran, and a browser event that
+	// names it as the request a fetch reached.
+	RID string
 	// SinceID drops events whose ID is lexicographically <= SinceID.
 	SinceID string
 	// Limit caps the returned slice to the most recent N entries.
@@ -127,6 +212,9 @@ func (r *Ring) Filter(opts FilterOpts) []Event {
 			continue
 		}
 		if opts.Kind != "" && e.Kind != opts.Kind {
+			continue
+		}
+		if opts.RID != "" && !e.OfRequest(opts.RID) {
 			continue
 		}
 		if opts.SinceID != "" && e.ID <= opts.SinceID {

@@ -48,6 +48,16 @@ Query events reuse the dump event envelope; the kind-specific fields live under 
 
 `connection` and `rw_type` are filled by the Laravel adapter; the engine-level capture always provides `sql`, `bindings`, and `time_ms`. Bindings are captured whether the app passes them to `execute([...])` or binds them one at a time with `bindValue()` / `bindParam()` (the extension buffers per-statement bound values and attaches them on execute), so Doctrine and other libraries that bind individually still show their parameters.
 
+## Following one request
+
+Every event the extension captures carries the id of the request (or CLI run) it came from, and the Laravel adapter reports under the same id. While capture is on, PHP also sends that id back as an `X-Lerd-Rid` response header, so nginx can log it and the browser can name the request behind a page or a fetch. Each request group in the site's Debug tab shows its id; clicking it puts the id in the search, which narrows every lens to what that request did and adds a **Timeline** tab that lays it out in time. Typing or pasting an id into the search does the same. In the Debug window across every site, which has no timeline, clicking an id fills that lens's search instead. Under a request's timeline, **Profile** arms SPX, opens the route in a new tab and lands on its flame graph once the capture is on disk. The same view opens from a row of [Recent requests](request-timing.md#inspecting-one-request). An assistant reads it over MCP with the `request` tool: `list` gives the site's recent requests and their ids, `lenses` the count per lens for one id, and `lens` one lens's events a page at a time.
+
+lerd keeps the last 5,000 events in memory by default, every query, view, log line and cache call counting as one at about 4.5 KB each, so some 22 MB. A request that renders a view per row or runs a query per item can push the requests before it out, so the size can be raised to as many as 20,000 (about 90 MB) or lowered to 3,000: on the **Settings** tab of **System → Debug**, with `lerd dump buffer 20000`, or over MCP with `diag dumps_buffer`. The change applies straight away, keeping the newest events that fit, and is stored as `dumps.buffer` in `config.yaml`. The oldest go first, and nothing is kept once lerd-ui restarts. A dashboard tab opens on the newest 3,000 events, and a request's inspector reads the rest of that request from lerd-ui.
+
+![The Debug window's Settings tab](/assets/screenshots/debug-settings.png)
+
+![A request id clicked into the Debug tab's search](/assets/screenshots/request-link-search.png)
+
 ## Laravel adapter (richer capture)
 
 For Laravel apps, the extension loads a small in-app adapter at `Application::boot` (observed at the engine level) that listens to `QueryExecuted`. While it's active the engine-level PDO capture stands down, so Laravel queries come through with data the raw PDO hook can't see:

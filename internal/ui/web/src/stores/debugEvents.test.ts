@@ -3,7 +3,7 @@ import { get } from 'svelte/store';
 import type { DumpEvent } from '$lib/dumpsStream';
 import { dumps } from './dumps';
 import { showTests } from './debugLens';
-import { debugEvents, hiddenTestCount, countKinds, buildKindGroups, isPageView } from './debugEvents';
+import { debugEvents, hiddenTestCount, countKinds, buildKindGroups, isPageView, ofRequest, requestEvents } from './debugEvents';
 
 function ev(id: string, test = false): DumpEvent {
   return {
@@ -127,5 +127,37 @@ describe('browser page views', () => {
   it('recognises a page view', () => {
     expect(isPageView(browser('load', 'navigation'))).toBe(true);
     expect(isPageView(browser('boom', 'error'))).toBe(false);
+  });
+});
+
+describe('one request', () => {
+  const at = (id: string, kind: string, ctx: Record<string, unknown>, data: unknown = {}) =>
+    ({ v: 1, id, ts: `2026-10-07T10:00:0${id}.000Z`, kind, ctx: { site: 'acme', ...ctx }, src: {}, data }) as unknown as DumpEvent;
+
+  it('holds what it ran and the browser failures that reached it', () => {
+    expect(ofRequest(at('1', 'query', { type: 'fpm', rid: 'r1' }), 'r1')).toBe(true);
+    expect(ofRequest(at('2', 'browser', { type: 'browser', rid: 'page' }, { type: 'network', rid: 'r1' }), 'r1')).toBe(true);
+    expect(ofRequest(at('3', 'query', { type: 'fpm', rid: 'r2' }), 'r1')).toBe(false);
+  });
+
+});
+
+describe('a pinned request', () => {
+  const at = (id: string, test = false) =>
+    ({ v: 1, id, ts: `2026-10-07T10:00:0${id}.000Z`, kind: 'query', ctx: { type: 'fpm', site: 'acme', rid: 'r1', test }, src: {}, data: {} }) as unknown as DumpEvent;
+
+  it('starts from what the server kept and adds what the stream brought since', () => {
+    const got = requestEvents([at('2'), at('3')], 'r1', [at('1'), at('2'), at('4', true)], false);
+    expect(got.map((e) => e.id)).toEqual(['1', '2', '3']);
+  });
+});
+
+describe('route scope', () => {
+  it('keeps only the route asked for, so the home page does not match every path', async () => {
+    const { lensRouteFilter } = await import('./debugEvents');
+    const q = (id: string, request: string) => ({ v: 1, id, ts: '2026-10-07T10:00:00Z', kind: 'query', ctx: { type: 'fpm', site: 'acme', request }, src: {} }) as DumpEvent;
+    const events = [q('a', 'GET /'), q('b', 'GET /users/5'), q('c', 'GET /?page=2'), q('d', 'POST /')];
+    expect(lensRouteFilter(events, 'GET /').map((e) => e.id)).toEqual(['a', 'c']);
+    expect(lensRouteFilter(events, '').map((e) => e.id)).toEqual(['a', 'b', 'c', 'd']);
   });
 });

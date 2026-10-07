@@ -46,3 +46,25 @@ func TestParseAccessRecordIgnoresHostOnly(t *testing.T) {
 		t.Error("host-only line must not parse as a timing record")
 	}
 }
+
+// The request id PHP sent as X-Lerd-Rid sits before the URI; nginx writes "-"
+// when the response carried none.
+func TestParseAccessRecordReadsTheRequestID(t *testing.T) {
+	r, ok := ParseAccessRecord([]byte("<190>Jul  2 10:00:00 lerdaccess: myapp.test|200|0.042|GET|19a2b3c4d5e6f7a1234|/a|b"))
+	if !ok || r.RID != "19a2b3c4d5e6f7a1234" || r.URI != "/a|b" {
+		t.Fatalf("got %+v ok=%v", r, ok)
+	}
+	r, ok = ParseAccessRecord([]byte("myapp.test|200|0.042|GET|-|/x"))
+	if !ok || r.RID != "" || r.URI != "/x" {
+		t.Fatalf("no id: got %+v ok=%v", r, ok)
+	}
+}
+
+// A line from an nginx still on the old format keeps parsing, a pipe in its URI
+// included, until nginx.conf is rewritten.
+func TestParseAccessRecordReadsTheOldFormat(t *testing.T) {
+	r, ok := ParseAccessRecord([]byte("myapp.test|200|0.042|GET|/a|b"))
+	if !ok || r.RID != "" || r.URI != "/a|b" {
+		t.Fatalf("got %+v ok=%v", r, ok)
+	}
+}

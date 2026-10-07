@@ -1,4 +1,5 @@
 <script lang="ts">
+  import LensSearch from '$components/LensSearch.svelte';
   import { onMount, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
   import { debugSearch } from '$stores/debugLens';
@@ -13,7 +14,7 @@
     setDebugCapture,
     toggleDevtoolsWorkers
   } from '$stores/queries';
-  import { buildKindGroups, knownDebugSites, debugEvents } from '$stores/debugEvents';
+  import { buildKindGroups, knownDebugSites, lensEvents, providePickRequest } from '$stores/debugEvents';
   import EmptyState from '$components/EmptyState.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import LensToggle from '$components/LensToggle.svelte';
@@ -28,8 +29,12 @@
   interface Props {
     kind: 'jobs' | 'views' | 'mail' | 'cache' | 'events' | 'http' | 'logs' | 'exceptions' | 'messages';
     siteScope?: string;
+    // pinned is one request's view: no toolbar, and no filter left from the Debug tab.
+    pinned?: boolean;
   }
-  let { kind, siteScope = '' }: Props = $props();
+  let { kind, siteScope = '', pinned = false }: Props = $props();
+  // The request filter over the lenses narrows this to one request.
+  const debugEvents = lensEvents();
   const scoped = $derived(siteScope !== '');
   // Event `kind` on the wire is singular.
   const wireKind = $derived(
@@ -40,6 +45,9 @@
 
   let localText = $state('');
   let textInput = $state('');
+  // Across every site there is no request timeline, so a clicked id becomes this
+  // lens's search; inside a site the Debug tab takes the click instead.
+  if (!siteScope) providePickRequest((id) => (textInput = id));
   // Jobs report a whole lifecycle (queued, processing, then the outcome) and a
   // request logs at a handful of levels, so both lenses get a filter that cuts
   // the list down to the rows being looked for.
@@ -61,16 +69,17 @@
 
   // Scoped lenses share one search (debugSearch) so it carries across the site's
   // Debug tabs; unscoped keeps a local search.
-  const effectiveText = $derived(scoped ? $debugSearch : localText);
+  const worker = $derived(pinned ? '' : $queryFilterWorker);
+  const effectiveText = $derived(pinned ? '' : scoped ? $debugSearch : localText);
   const groups = $derived(
-    buildKindGroups($debugEvents, wireKind, scoped ? siteScope : $queryFilterSite, effectiveText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers), facetFilter)
+    buildKindGroups($debugEvents, wireKind, scoped ? siteScope : $queryFilterSite, effectiveText, scoped, worker, Boolean($devtoolsStatus?.workers), facetFilter)
   );
 
   // Only the newest LENS_PAGE rows render; the rest arrive as the user
   // reaches the end. Changing a filter or tab starts the window over.
   let limit = $state(LENS_PAGE);
   const win = $derived(windowGroups(groups, (g) => g.events, limit));
-  const filterKey = $derived(`${wireKind}|${scoped ? siteScope : $queryFilterSite}|${effectiveText}|${$queryFilterWorker}|${facetFilter}`);
+  const filterKey = $derived(`${wireKind}|${scoped ? siteScope : $queryFilterSite}|${effectiveText}|${worker}|${facetFilter}`);
   $effect(() => {
     filterKey;
     limit = LENS_PAGE;
@@ -182,12 +191,9 @@
 </script>
 
 <div class="flex flex-col h-full overflow-hidden">
+  {#if !pinned}
   <div class="flex items-center gap-2 px-3 py-3 border-b border-gray-200 dark:border-lerd-border flex-wrap">
-    <input
-      class="text-xs px-2 py-1 rounded-sm border border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-card flex-1 min-w-[140px]"
-      placeholder={m.debug_searchPlaceholder()}
-      bind:value={textInput}
-    />
+    <LensSearch bind:value={textInput} placeholder={m.debug_searchPlaceholder()} />
     {#if !scoped}
       <Dropdown
         value={$queryFilterSite}
@@ -237,6 +243,7 @@
     <TestEventsToggle />
     <button type="button" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => clearDumps()}>{m.common_clear()}</button>
   </div>
+  {/if}
 
   <div class="flex-1 overflow-y-auto px-3 pb-3">
     {#if groups.length === 0}
@@ -259,7 +266,7 @@
         <section class="mb-4">
           <header class="flex items-center gap-2 mb-1 sticky top-0 bg-gray-50 dark:bg-lerd-bg py-1 -mx-3 px-3 z-1">
             {#if group.worker}<span class="text-[10px] font-semibold uppercase tracking-wide rounded-sm px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 shrink-0">{m.queries_worker_badge()}</span>{/if}
-            <LensGroupLabel label={group.label} />
+            {#if !pinned}<LensGroupLabel label={group.label} />{/if}
             <span class="text-xs text-gray-400 ml-auto whitespace-nowrap font-mono">{localTime(group.ts)}</span>
             <span class="text-xs text-gray-400 whitespace-nowrap">{page.total}</span>
           </header>

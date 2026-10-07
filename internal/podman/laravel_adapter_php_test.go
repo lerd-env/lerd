@@ -623,3 +623,29 @@ $events->fire('Illuminate\\Notifications\\Events\\NotificationSending', $e4);
 		t.Errorf("refusing notifiable = %+v, want the row without a recipient", msgs[2].Data)
 	}
 }
+
+// TestLaravelAdapterPHP_KeepsTheExtensionsRequestID pins that a request's
+// adapter events carry the extension's id, the one sent as X-Lerd-Rid, so the
+// header and the events name the same request.
+func TestLaravelAdapterPHP_KeepsTheExtensionsRequestID(t *testing.T) {
+	lines := runLaravelAdapterPHP(t, `<?php
+define('LERD_DEVTOOLS_ON', true);
+define('LERD_DEVTOOLS_RID', 'ext-rid-1');
+require ADAPTER;
+\Lerd\LaravelAdapter\emit('query', ['sql' => 'select 1']);
+`)
+	if len(lines) != 1 {
+		t.Fatalf("got %d events, want 1: %v", len(lines), lines)
+	}
+	var e struct {
+		Ctx struct {
+			RID string `json:"rid"`
+		} `json:"ctx"`
+	}
+	if err := json.Unmarshal([]byte(lines[0]), &e); err != nil {
+		t.Fatalf("bad JSON line %q: %v", lines[0], err)
+	}
+	if e.Ctx.RID != "ext-rid-1" {
+		t.Errorf("ctx.rid = %q, want the extension's id", e.Ctx.RID)
+	}
+}

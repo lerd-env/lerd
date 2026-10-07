@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dumps"
 )
 
@@ -302,5 +305,89 @@ func TestHandleDumpsStream_DeliversLiveEvent(t *testing.T) {
 	body := rec.bodyString()
 	if !strings.Contains(body, "live1") {
 		t.Errorf("live event missing\n--- body ---\n%s", body)
+	}
+}
+
+// A stream opens on the newest events only; the ring keeps more for a
+// request's inspector, which reads it from the server.
+func TestHandleDumpsStream_ReplaysOnlyTheNewestEvents(t *testing.T) {
+	srv := withDumpsServer(t)
+	for i := 0; i < streamReplayLimit+5; i++ {
+		srv.Push(dumps.Event{V: 1, ID: fmt.Sprintf("e%d", i), Kind: "dump"})
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest("GET", "/api/dumps/stream", nil).WithContext(ctx)
+	rec := &flusherRecorder{ResponseRecorder: httptest.NewRecorder()}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handleDumpsStream(rec, req)
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && bytes.Count(rec.bodyBytes(), []byte("data:")) < streamReplayLimit {
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	body := rec.bodyString()
+	if n := strings.Count(body, "data:"); n != streamReplayLimit {
+		t.Fatalf("replayed %d events, want %d", n, streamReplayLimit)
+	}
+	if strings.Contains(body, `"id":"e4"`) || !strings.Contains(body, fmt.Sprintf(`"id":"e%d"`, streamReplayLimit+4)) {
+		t.Errorf("want the newest events replayed and the oldest left out")
+	}
+}
+
+// The buffer resizes in place: the config keeps the new size and the ring
+// holds the newest events that fit, with no restart.
+func TestHandleDumpsBuffer_ResizesTheRingLive(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(dir, "data"))
+	srv := withDumpsServer(t)
+	for i := 0; i < 3500; i++ {
+		srv.Push(dumps.Event{V: 1, ID: fmt.Sprintf("e%04d", i), Kind: "dump"})
+	}
+	req := httptest.NewRequest("POST", "/api/dumps/buffer", strings.NewReader(`{"size":3000}`))
+	req = req.WithContext(context.WithValue(req.Context(), ctxKeyUnixSocket{}, true))
+	rec := httptest.NewRecorder()
+	handleDumpsBuffer(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"capacity":3000`) {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+	}
+	if srv.Cap() != 3000 || srv.Len() != 3000 {
+		t.Errorf("ring cap %d len %d", srv.Cap(), srv.Len())
+	}
+	if cfg, _ := config.LoadGlobal(); cfg.DumpsBuffer() != 3000 {
+		t.Errorf("config buffer = %d", cfg.DumpsBuffer())
+	}
+}
+
+// A reconnect replays every event it missed, however many, so a tab that lost
+// its connection under a burst does not skip any of them.
+func TestHandleDumpsStream_ReconnectReplaysEverythingMissed(t *testing.T) {
+	srv := withDumpsServer(t)
+	for i := 0; i < streamReplayLimit+10; i++ {
+		srv.Push(dumps.Event{V: 1, ID: fmt.Sprintf("e%05d", i), Kind: "dump"})
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest("GET", "/api/dumps/stream", nil).WithContext(ctx)
+	req.Header.Set("Last-Event-ID", "e00004")
+	rec := &flusherRecorder{ResponseRecorder: httptest.NewRecorder()}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handleDumpsStream(rec, req)
+	}()
+	want := streamReplayLimit + 5
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && bytes.Count(rec.bodyBytes(), []byte("data:")) < want {
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	if n := strings.Count(rec.bodyString(), "data:"); n != want {
+		t.Fatalf("replayed %d events after a reconnect, want %d", n, want)
 	}
 }
