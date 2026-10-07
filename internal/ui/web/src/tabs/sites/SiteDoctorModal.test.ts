@@ -58,6 +58,21 @@ describe('SiteDoctorModal', () => {
     expect(screen.getByRole('button', { name: 'Fix' })).toBeTruthy();
   });
 
+  // The slow container execs must not hold back the findings that are already in.
+  it('shows each check as it streams in while the rest are still running', async () => {
+    loadDoctor.mockImplementation((_d: string, _b: string, onCheck: (c: unknown) => void) => {
+      onCheck({ name: 'app_key', status: 'fail', detail: 'APP_KEY is empty' });
+      return new Promise(() => {});
+    });
+    loadCommands.mockResolvedValue([]);
+
+    render(SiteDoctorModal, { props: { open: true, site: site(), branch: '', onclose: () => {} } });
+
+    expect(await screen.findByText('APP_KEY is empty')).toBeTruthy();
+    expect(screen.getByTestId('doctor-pending')).toBeTruthy();
+    expect(screen.queryByText('All checks passed')).toBeNull();
+  });
+
   // A fix naming a destructive command (migrate:fresh drops every table) must
   // still go through the confirm gate, so Fix launches rather than executing.
   it('launches the fix command so a confirm: true fix still prompts', async () => {
