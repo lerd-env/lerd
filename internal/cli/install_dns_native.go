@@ -30,13 +30,17 @@ func dnsListenHost() string {
 	return "127.0.0.1"
 }
 
-// installDNSService writes the lerd-dns unit, replacing whatever ran DNS
-// before it.
+// removeLegacyDNS is removeLegacyDNSService behind a seam, so tests never run
+// podman against the developer's own lerd-dns container.
+var removeLegacyDNS = removeLegacyDNSService
+
+// installDNSService writes the lerd-dns unit, then replaces whatever ran DNS
+// before it. The unit goes first so a failed write leaves the old server up.
 func installDNSService() error {
-	replaced := removeLegacyDNSService()
 	if _, err := services.Mgr.WriteServiceUnitIfChanged(dnsUnit, dnsServiceContent(config.LerdBinary(), dnsListenHost())); err != nil {
 		return err
 	}
+	replaced := removeLegacyDNS()
 	if err := services.Mgr.DaemonReload(); err != nil {
 		return err
 	}
@@ -57,7 +61,7 @@ func installDNSService() error {
 func teardownDNS() {
 	_ = services.Mgr.Stop(dnsUnit)
 	_ = services.Mgr.RemoveServiceUnit(dnsUnit)
-	_ = removeLegacyDNSService()
+	_ = removeLegacyDNS()
 	_ = services.Mgr.DaemonReload()
 	teardownDNSResolver()
 }

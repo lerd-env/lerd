@@ -63,13 +63,39 @@ func TestParseConfReadsLogQueries(t *testing.T) {
 // dnsmasq read anything in its conf dir; this server reads only what lerd
 // writes, so a hand-added directive has to be named, not dropped in silence.
 func TestParseConfCollectsUnsupportedLines(t *testing.T) {
-	c, err := ParseConf([]byte("# comment\n\nport=5300\nno-resolv\nlog-queries\nserver=1.1.1.1\nserver=/corp/10.0.0.9\ncname=a.test,b.test\naddress=/.test/127.0.0.1\n"))
+	c, err := ParseConf([]byte("# comment\n\nport=5300\nno-resolv\nlog-queries\nserver=1.1.1.1\nserver=/corp/10.0.0.9\nserver=/odd/#\ncname=a.test,b.test\naddress=/.test/127.0.0.1\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"server=/corp/10.0.0.9", "cname=a.test,b.test"}
+	want := []string{"server=/odd/#", "cname=a.test,b.test"}
 	if len(c.Unsupported) != len(want) || c.Unsupported[0] != want[0] || c.Unsupported[1] != want[1] {
 		t.Errorf("unsupported = %q, want %q", c.Unsupported, want)
+	}
+}
+
+func TestParseConfReadsPerDomainServers(t *testing.T) {
+	c, err := ParseConf([]byte("server=/corp/10.0.0.9\nserver=/a.lan/b.lan/10.0.0.8#5353\nserver=/blocked/\nserver=/odd/#\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for domain, want := range map[string][]string{
+		"corp":  {"10.0.0.9:53"},
+		"a.lan": {"10.0.0.8:5353"},
+		"b.lan": {"10.0.0.8:5353"},
+	} {
+		if got := c.Routes[domain]; len(got) != 1 || got[0] != want[0] {
+			t.Errorf("route for %s = %v, want %v", domain, got, want)
+		}
+	}
+	// A domain with no usable server must still be routed, to nowhere, so its
+	// names are refused rather than leaked to the default upstream.
+	for _, domain := range []string{"blocked", "odd"} {
+		if got, ok := c.Routes[domain]; !ok || len(got) != 0 {
+			t.Errorf("route for %s = %v (present %v), want an empty route", domain, got, ok)
+		}
+	}
+	if len(c.Upstreams) != 0 {
+		t.Errorf("per-domain servers must not become default upstreams: %v", c.Upstreams)
 	}
 }
 
@@ -99,7 +125,7 @@ func startTestServer(t *testing.T, conf string) (addr string, path string, stop 
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := New(path)
+	srv := New(filepath.Dir(path))
 	done := make(chan struct{})
 	started := make(chan struct{})
 	go func() {
@@ -184,7 +210,7 @@ func TestAnswersOverTCPToo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := New(path)
+	srv := New(filepath.Dir(path))
 	done := make(chan struct{})
 	started := make(chan struct{})
 	go func() {
@@ -210,6 +236,11 @@ func TestAnswersOverTCPToo(t *testing.T) {
 // every A query with 203.0.113.7.
 func startUpstream(t *testing.T) string {
 	t.Helper()
+	return startUpstreamAnswering(t, "203.0.113.7")
+}
+
+func startUpstreamAnswering(t *testing.T, answer string) string {
+	t.Helper()
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -220,7 +251,7 @@ func startUpstream(t *testing.T) string {
 		resp.SetReply(req)
 		resp.Answer = append(resp.Answer, &dns.A{
 			Hdr: dns.RR_Header{Name: req.Question[0].Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 30},
-			A:   net.ParseIP("203.0.113.7").To4(),
+			A:   net.ParseIP(answer).To4(),
 		})
 		_ = w.WriteMsg(resp)
 	})}
@@ -308,5 +339,56 @@ func TestAsksTheUpstreamThatLastAnsweredFirst(t *testing.T) {
 	}
 	if took := time.Since(start); took >= forwardTimeout {
 		t.Errorf("second query took %v, so it waited on the dead upstream again", took)
+	}
+}
+
+func hostPort(addr string) string {
+	h, p, _ := net.SplitHostPort(addr)
+	return h + "#" + p
+}
+
+func TestRoutesADomainToItsOwnServer(t *testing.T) {
+	public := startUpstreamAnswering(t, "203.0.113.7")
+	corp := startUpstreamAnswering(t, "10.0.0.9")
+	addr, _, stop := startTestServer(t, "port=5300\nserver="+hostPort(public)+"\nserver=/corp/"+hostPort(corp)+"\n")
+	defer stop()
+
+	if r := query(t, addr, "intranet.corp", dns.TypeA); len(r.Answer) != 1 || r.Answer[0].(*dns.A).A.String() != "10.0.0.9" {
+		t.Errorf("a corp name must go to the corp server, got %v", r.Answer)
+	}
+	if r := query(t, addr, "example.com", dns.TypeA); len(r.Answer) != 1 || r.Answer[0].(*dns.A).A.String() != "203.0.113.7" {
+		t.Errorf("other names keep the default upstream, got %v", r.Answer)
+	}
+}
+
+// A private domain whose server lerd cannot use must not leak to the public
+// default upstream.
+func TestRefusesADomainRoutedNowhere(t *testing.T) {
+	public := startUpstreamAnswering(t, "203.0.113.7")
+	addr, _, stop := startTestServer(t, "port=5300\nserver="+hostPort(public)+"\nserver=/corp/#\n")
+	defer stop()
+
+	if r := query(t, addr, "intranet.corp", dns.TypeA); r.Rcode != dns.RcodeRefused {
+		t.Errorf("rcode = %d, want REFUSED", r.Rcode)
+	}
+}
+
+// dnsmasq read every file in its conf dir, so a rule someone dropped next to
+// lerd.conf has to keep working, while editor backups stay ignored.
+func TestReadsEveryFileInTheDirectory(t *testing.T) {
+	public := startUpstreamAnswering(t, "203.0.113.7")
+	corp := startUpstreamAnswering(t, "10.0.0.9")
+	addr, path, stop := startTestServer(t, "port=5300\nserver="+hostPort(public)+"\n")
+	defer stop()
+	dir := filepath.Dir(path)
+	if err := os.WriteFile(filepath.Join(dir, "corp.conf"), []byte("server=/corp/"+hostPort(corp)+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "corp.conf~"), []byte("server=/corp/#\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if r := query(t, addr, "intranet.corp", dns.TypeA); len(r.Answer) != 1 || r.Answer[0].(*dns.A).A.String() != "10.0.0.9" {
+		t.Errorf("a rule in another file must apply, got rcode=%d %v", r.Rcode, r.Answer)
 	}
 }

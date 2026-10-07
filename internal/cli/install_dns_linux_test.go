@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -77,5 +78,23 @@ func TestPrepDNSForRollback_removesTheServiceUnit(t *testing.T) {
 
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("lerd-dns.service must be gone before the older binary installs, stat err = %v", err)
+	}
+}
+
+// The old container keeps .test resolving until its replacement is on disk:
+// when writing the new unit fails, the install stops with DNS still working.
+func TestInstallDNSService_keepsTheOldServerWhenTheNewUnitFails(t *testing.T) {
+	isolateState(t)
+	swapMgr(t, &fakeServiceMgr{writeErr: errors.New("disk full")})
+	removed := false
+	prev := removeLegacyDNS
+	removeLegacyDNS = func() bool { removed = true; return true }
+	t.Cleanup(func() { removeLegacyDNS = prev })
+
+	if err := installDNSService(); err == nil {
+		t.Fatal("installDNSService() = nil, want the write error")
+	}
+	if removed {
+		t.Error("the working dnsmasq container was removed before its replacement was written")
 	}
 }

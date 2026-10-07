@@ -5,7 +5,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"syscall"
 
@@ -16,8 +15,8 @@ import (
 )
 
 // NewDNSServeCmd returns the hidden `lerd dns-serve` command that the lerd-dns
-// service runs. It serves lerd.conf, reloading it whenever the watcher or
-// lan:expose rewrites it.
+// service runs. It serves the lerd.conf directory, reloading it whenever the
+// watcher or lan:expose rewrites it.
 func NewDNSServeCmd() *cobra.Command {
 	var listen string
 	cmd := &cobra.Command{
@@ -25,18 +24,18 @@ func NewDNSServeCmd() *cobra.Command {
 		Short:  "Built-in DNS server for the lerd TLD (internal)",
 		Hidden: true,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runDNSServe(filepath.Join(config.DnsmasqDir(), "lerd.conf"), listen)
+			return runDNSServe(config.DnsmasqDir(), listen)
 		},
 	}
 	cmd.Flags().StringVar(&listen, "listen", "127.0.0.1", "address to listen on; the port comes from lerd.conf")
 	return cmd
 }
 
-func runDNSServe(confPath, host string) error {
-	srv := dnsserver.New(confPath)
+func runDNSServe(confDir, host string) error {
+	srv := dnsserver.New(confDir)
 	port := srv.Port()
 	if port == 0 {
-		return fmt.Errorf("no port= in %s; run `lerd install` first", confPath)
+		return fmt.Errorf("no port= in %s; run `lerd install` first", confDir)
 	}
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	pc, err := net.ListenPacket("udp", addr)

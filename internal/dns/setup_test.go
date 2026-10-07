@@ -1062,3 +1062,18 @@ func TestTeardown_pushesDNSOnlyWhereResolvedRuns(t *testing.T) {
 		t.Error("the revert loop must go through the resolved-gated lister")
 	}
 }
+
+// lerd-dns runs on the host, so a local resolver on loopback is a usable
+// upstream for it, unlike for the container network. systemd-resolved's stubs
+// are not: resolved routes queries back to lerd-dns, so forwarding there loops.
+func TestHostUpstreamDNS_keepsLocalResolversButNotResolvedStubs(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	resolv := writeTempFile(t, "nameserver 127.0.0.1\nnameserver 127.0.0.53\nnameserver 127.0.0.54\nnameserver 192.168.1.1\n")
+	origPaths, origNmcli := resolvPaths, nmcliDNSFunc
+	resolvPaths = []string{resolv}
+	nmcliDNSFunc = func() []string { return nil }
+	defer func() { resolvPaths = origPaths; nmcliDNSFunc = origNmcli }()
+
+	assertSliceEqual(t, hostUpstreamDNS(), []string{"127.0.0.1", "192.168.1.1"})
+	assertSliceEqual(t, readUpstreamDNS(), []string{"192.168.1.1"})
+}

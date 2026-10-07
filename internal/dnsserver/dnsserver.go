@@ -1,6 +1,6 @@
 // Package dnsserver is lerd's built-in DNS server. It reads the dnsmasq-style
-// lerd.conf lerd has always written, so the config format and every tool that
-// rewrites it stay the same.
+// config directory lerd has always written, so the format and every tool that
+// rewrites lerd.conf stay the same.
 package dnsserver
 
 import (
@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -26,14 +27,17 @@ type Addrs struct {
 	V6 []net.IP
 }
 
-// Conf is the subset of dnsmasq's syntax lerd writes: port=, server= and
-// address=/.d/ip.
+// Conf is the subset of dnsmasq's syntax this server acts on: port=, address=,
+// server= (plain and per-domain) and log-queries.
 type Conf struct {
 	Port    int
 	Domains map[string]Addrs
 	// Upstreams answer every other name, as host:port. A resolver that routes
 	// all queries here (systemd-resolved with ~.) relies on it.
 	Upstreams []string
+	// Routes sends names under a domain to that domain's own servers, from
+	// server=/d/ip. An empty route refuses the names instead of forwarding.
+	Routes map[string][]string
 	// LogQueries prints every query to stderr, as dnsmasq's log-queries did.
 	LogQueries bool
 	// Unsupported holds the lines this server does not act on, so a directive
@@ -45,7 +49,7 @@ type Conf struct {
 // cannot parse, are skipped so a newer config never stops an older server;
 // the ones it does not recognise are listed in Unsupported.
 func ParseConf(data []byte) (Conf, error) {
-	c := Conf{Domains: map[string]Addrs{}}
+	c := Conf{Domains: map[string]Addrs{}, Routes: map[string][]string{}}
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
@@ -57,6 +61,10 @@ func ParseConf(data []byte) (Conf, error) {
 			}
 		case line == "log-queries":
 			c.LogQueries = true
+		case strings.HasPrefix(line, "server=/"):
+			if !addRoute(c.Routes, strings.TrimPrefix(line, "server=/")) {
+				c.Unsupported = append(c.Unsupported, line)
+			}
 		case strings.HasPrefix(line, "server="):
 			if up, ok := parseUpstream(strings.TrimPrefix(line, "server=")); ok {
 				c.Upstreams = append(c.Upstreams, up)
@@ -87,8 +95,29 @@ func ParseConf(data []byte) (Conf, error) {
 	return c, sc.Err()
 }
 
-// parseUpstream reads a plain server=ip or server=ip#port. The per-domain
-// server=/d/ip form is not something lerd writes, so it is skipped.
+// addRoute records server=/d1/d2/ip#port, given without its server=/ prefix,
+// and reports whether it understood the target. Its domains are routed even
+// when it did not, to nowhere, so a private name a hand-written rule kept off
+// the default upstream is refused rather than leaked to it.
+func addRoute(routes map[string][]string, v string) bool {
+	parts := strings.Split(v, "/")
+	target := parts[len(parts)-1]
+	up, ok := parseUpstream(target)
+	for _, d := range parts[:len(parts)-1] {
+		d = strings.ToLower(strings.Trim(d, "."))
+		if d == "" {
+			continue
+		}
+		if ok {
+			routes[d] = append(routes[d], up)
+		} else if _, seen := routes[d]; !seen {
+			routes[d] = nil
+		}
+	}
+	return ok || target == ""
+}
+
+// parseUpstream reads ip or ip#port.
 func parseUpstream(v string) (string, bool) {
 	host, port, hasPort := strings.Cut(v, "#")
 	if net.ParseIP(host) == nil {
@@ -102,14 +131,14 @@ func parseUpstream(v string) (string, bool) {
 	return net.JoinHostPort(host, port), true
 }
 
-// Server answers A and AAAA queries for the domains in a config file, reloading
-// it whenever its modification time changes.
+// Server answers A and AAAA queries for the domains in a config directory,
+// reloading it whenever a file in it changes.
 type Server struct {
-	path string
+	dir string
 
-	mu      sync.Mutex
-	conf    Conf
-	modTime time.Time
+	mu    sync.Mutex
+	conf  Conf
+	state string
 	// lastGood is the upstream that answered last, asked first next time so a
 	// dead server ahead of it in the list costs one timeout, not one per query.
 	lastGood string
@@ -117,23 +146,57 @@ type Server struct {
 	srvs []*dns.Server
 }
 
-// New returns a Server backed by the config file at path.
-func New(path string) *Server { return &Server{path: path} }
+// New returns a Server backed by the config directory dir.
+func New(dir string) *Server { return &Server{dir: dir} }
 
 func (s *Server) config() Conf {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if st, err := os.Stat(s.path); err == nil && !st.ModTime().Equal(s.modTime) {
-		if data, err := os.ReadFile(s.path); err == nil {
-			if c, err := ParseConf(data); err == nil {
-				s.conf, s.modTime = c, st.ModTime()
-				for _, line := range c.Unsupported {
-					fmt.Fprintf(os.Stderr, "lerd dns-serve: ignoring unsupported line in %s: %s\n", s.path, line)
-				}
-			}
+	files, state := confFiles(s.dir)
+	if state == s.state {
+		return s.conf
+	}
+	var data []byte
+	for _, f := range files {
+		b, err := os.ReadFile(filepath.Join(s.dir, f))
+		if err != nil {
+			return s.conf
 		}
+		data = append(append(data, b...), '\n')
+	}
+	c, err := ParseConf(data)
+	if err != nil {
+		return s.conf
+	}
+	s.conf, s.state = c, state
+	for _, line := range c.Unsupported {
+		fmt.Fprintf(os.Stderr, "lerd dns-serve: ignoring unsupported line in %s: %s\n", s.dir, line)
 	}
 	return s.conf
+}
+
+// confFiles lists the files dnsmasq's conf-dir would read, skipping dotfiles
+// and editor backups, along with a fingerprint that changes when any of them do.
+func confFiles(dir string) ([]string, string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, ""
+	}
+	var files []string
+	var state strings.Builder
+	for _, e := range entries {
+		n := e.Name()
+		if e.IsDir() || strings.HasPrefix(n, ".") || strings.HasSuffix(n, "~") || (strings.HasPrefix(n, "#") && strings.HasSuffix(n, "#")) {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		files = append(files, n)
+		fmt.Fprintf(&state, "%s %d %d\n", n, info.ModTime().UnixNano(), info.Size())
+	}
+	return files, state.String()
 }
 
 // Port is the port the config asks for, or 0 when it names none.
@@ -155,7 +218,11 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 	}
 	addrs, ok := lookupDomain(conf, q.Name)
 	if !ok {
-		_ = w.WriteMsg(s.forward(req, conf.Upstreams, w.LocalAddr().Network()))
+		upstreams := conf.Upstreams
+		if route, routed := routeFor(conf, q.Name); routed {
+			upstreams = route
+		}
+		_ = w.WriteMsg(s.forward(req, upstreams, w.LocalAddr().Network()))
 		return
 	}
 	hdr := dns.RR_Header{Name: q.Name, Class: dns.ClassINET, Ttl: ttl}
@@ -216,6 +283,19 @@ func (s *Server) upstreamOrder(upstreams []string) []string {
 		}
 	}
 	return ordered
+}
+
+// routeFor finds the most specific server=/d/ route covering name, d itself
+// included, as dnsmasq matches it.
+func routeFor(c Conf, name string) ([]string, bool) {
+	name = strings.ToLower(strings.TrimSuffix(name, "."))
+	for name != "" {
+		if r, ok := c.Routes[name]; ok {
+			return r, true
+		}
+		_, name, _ = strings.Cut(name, ".")
+	}
+	return nil, false
 }
 
 // lookupDomain finds the configured domain name falls under. address=/.d/ip

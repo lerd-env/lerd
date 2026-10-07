@@ -460,7 +460,7 @@ func WriteDnsmasqConfigDual(dir, v4Target, v6Target string) error {
 		v4Target = "127.0.0.1"
 	}
 
-	upstreams := readUpstreamDNS()
+	upstreams := hostUpstreamDNS()
 	if len(upstreams) == 0 {
 		upstreams = defaultUpstreamFallback()
 	}

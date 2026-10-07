@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -393,6 +394,45 @@ func readUpstreamDNS() []string {
 		}
 	}
 	return nmcliDNSFunc()
+}
+
+// hostUpstreamDNS is what lerd-dns forwards to. It runs on the host, so unlike
+// the container network it can reach a local resolver on loopback; only
+// systemd-resolved's stubs are dropped, since resolved routes queries back here.
+func hostUpstreamDNS() []string {
+	if servers := configuredUpstreamDNS(); len(servers) > 0 {
+		return servers
+	}
+	for _, path := range resolvPaths {
+		if servers := parseHostNameservers(path); len(servers) > 0 {
+			return servers
+		}
+	}
+	return nmcliDNSFunc()
+}
+
+func parseHostNameservers(path string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var servers []string
+	for _, line := range strings.Split(string(data), "\n") {
+		ip, ok := strings.CutPrefix(strings.TrimSpace(line), "nameserver ")
+		if !ok {
+			continue
+		}
+		ip = strings.TrimSpace(ip)
+		if ip == "127.0.0.53" || ip == "127.0.0.54" {
+			continue
+		}
+		if parsed := net.ParseIP(ip); parsed != nil && parsed.IsLoopback() {
+			servers = append(servers, ip)
+		} else if clean := sanitizeDNSIP(ip); clean != "" {
+			servers = append(servers, clean)
+		}
+	}
+	return servers
 }
 
 // nmcliDNS reads DHCP-assigned DNS servers from NetworkManager via nmcli.
