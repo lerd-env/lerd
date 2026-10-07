@@ -96,13 +96,17 @@
   // Name of the check whose fix command is currently running, so only its
   // button shows a spinner and the rest stay disabled (one run at a time).
   let fixing = $state('');
+  let runId = 0;
 
   async function reload() {
     loading = true;
     error = '';
     const domain = site.domain;
     const b = branch;
-    const current = () => site.domain === domain && branch === b;
+    // A run superseded by a newer one (the modal reopened mid-run) must not write
+    // into the newer one's report, even for the same site and branch.
+    const id = ++runId;
+    const current = () => id === runId && site.domain === domain && branch === b;
     // Rows are drawn as each check lands; the final report then replaces them
     // with the backend's own order and counts.
     report = { checks: [], failures: 0, warnings: 0 };
@@ -355,7 +359,7 @@
               <button
                 type="button"
                 onclick={() => runFix(check)}
-                disabled={Boolean(fixing)}
+                disabled={loading || Boolean(fixing)}
                 class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm disabled:opacity-50 transition-colors {check.status === 'fail' ? 'bg-lerd-red hover:bg-lerd-redhov text-lerd-onred' : 'bg-amber-500 hover:bg-amber-600 text-white'}"
               >
                 {#if fixing === check.name}

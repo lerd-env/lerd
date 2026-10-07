@@ -1099,10 +1099,9 @@ func checkCommand(ctx context.Context, path string, spec config.DoctorCheck) Che
 // an unbounded number of concurrent podman execs.
 const maxDoctorConcurrency = 6
 
-// startChecks runs each task in its own goroutine, bounded by
-// maxDoctorConcurrency, so independent container-exec checks no longer add up
-// their timeouts. Each fired check goes to notify as it lands; the returned func
-// waits for the rest and hands them back in the original task order.
+// startChecks runs the tasks concurrently, bounded by maxDoctorConcurrency, and
+// hands each fired check to notify as it lands. The returned func waits for the
+// rest and returns them in task order.
 func startChecks(tasks []func() (Check, bool), notify func(Check)) func() []Check {
 	results := make([]struct {
 		c  Check
