@@ -22,7 +22,7 @@
   import { goToTab } from '$stores/route';
   import { activeWorktreeDomain, type Site } from '$stores/sites';
   import { tooltip } from '$lib/tooltip';
-  import { watchRequests, wsConnected, wsMessage } from '$lib/ws';
+  import { watchRequests, wsMessage } from '$lib/ws';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -86,21 +86,12 @@
   // The server nudges this page over the dashboard socket when the site it shows
   // gets a new request, so nothing polls while the site is quiet.
   $effect(() => watchRequests(domain, branch));
-  onMount(() => {
-    const offMessage = wsMessage.subscribe((msg) => {
+  onMount(() =>
+    // The server also nudges as a watch begins, which covers a reconnect.
+    wsMessage.subscribe((msg) => {
       if (msg?.type === 'requests' && msg.domain === site.domain && (msg.branch ?? '') === activeWorktreeBranch) void load();
-    });
-    // Requests that landed while the socket was down never sent a nudge.
-    let wasConnected = true;
-    const offConnected = wsConnected.subscribe((up) => {
-      if (up && !wasConnected) void load();
-      wasConnected = up;
-    });
-    return () => {
-      offMessage();
-      offConnected();
-    };
-  });
+    })
+  );
 
   // A pending removal, held until the modal is confirmed. A route removal drops
   // the route's whole history; a request removal drops the single recent row it

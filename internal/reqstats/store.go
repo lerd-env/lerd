@@ -75,6 +75,9 @@ type Record struct {
 	Cold bool
 	// RID is the request id debug capture grouped the request's events under.
 	RID string
+	// ID is the row's rowid, set on read: two requests can share a millisecond,
+	// so it is what tells the newer apart.
+	ID int64
 }
 
 // LatencyBucket is one bar of the response-time histogram. UpperMillis is the
@@ -282,7 +285,7 @@ func (s *Store) Recent(site string, limit int) ([]Record, error) {
 	// Over-fetch and drop static assets in Go, so a burst of asset requests can't
 	// crowd real requests out of the list; the scan is capped so it stays cheap.
 	rows, err := s.db.Query(
-		`SELECT at_ms, route, method, status, ms, uri, cold, rid FROM requests WHERE site = ? ORDER BY at_ms DESC LIMIT ?`,
+		`SELECT rowid, at_ms, route, method, status, ms, uri, cold, rid FROM requests WHERE site = ? ORDER BY at_ms DESC, rowid DESC LIMIT ?`,
 		site, limit*20+100)
 	if err != nil {
 		return nil, err
@@ -297,7 +300,7 @@ func (s *Store) Recent(site string, limit int) ([]Record, error) {
 		var atMs int64
 		var cold int
 		var r = Record{Site: site}
-		if err := rows.Scan(&atMs, &r.Route, &r.Method, &r.Status, &r.Millis, &r.URI, &cold, &r.RID); err != nil {
+		if err := rows.Scan(&r.ID, &atMs, &r.Route, &r.Method, &r.Status, &r.Millis, &r.URI, &cold, &r.RID); err != nil {
 			return nil, err
 		}
 		if !IsAppRequest(r.Status, r.URI, r.Millis) || excluded[r.Route] {

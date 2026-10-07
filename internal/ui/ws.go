@@ -317,7 +317,11 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case want := <-watchReq:
-			requests.watch(want[0], want[1])
+			if frame := requests.watch(want[0], want[1]); frame != nil {
+				if err := sendText(frame); err != nil {
+					return
+				}
+			}
 		case <-requests.events():
 			if frame, ok := requests.changed(); ok {
 				if err := sendText(frame); err != nil {
