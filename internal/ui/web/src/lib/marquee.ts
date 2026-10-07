@@ -1,6 +1,6 @@
-// Scrolls a truncated text to its end and back while its parent is hovered, so
-// a long name in a narrow tab can be read without widening the tab. The parent
-// is the hover target because the text itself is often only part of the button.
+// Scrolls a truncated text to its end and back while its parent is hovered or
+// focused, so a long name in a narrow tab can be read without widening the tab.
+// The parent is the trigger because the text itself is often only part of the button.
 export function marquee(node: HTMLElement) {
   const host = node.parentElement ?? node;
   const start = () => {
@@ -12,12 +12,16 @@ export function marquee(node: HTMLElement) {
     node.classList.add('lerd-marquee');
   };
   const stop = () => node.classList.remove('lerd-marquee');
-  host.addEventListener('mouseenter', start);
-  host.addEventListener('mouseleave', stop);
+  const events: [string, () => void][] = [
+    ['mouseenter', start],
+    ['mouseleave', stop],
+    ['focusin', start],
+    ['focusout', stop]
+  ];
+  for (const [type, fn] of events) host.addEventListener(type, fn);
   return {
     destroy() {
-      host.removeEventListener('mouseenter', start);
-      host.removeEventListener('mouseleave', stop);
+      for (const [type, fn] of events) host.removeEventListener(type, fn);
     }
   };
 }

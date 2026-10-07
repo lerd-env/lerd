@@ -32,6 +32,14 @@ describe('marquee action', () => {
     expect(text.classList.contains('lerd-marquee')).toBe(false);
   });
 
+  it('scrolls while keyboard focus is inside the parent too', () => {
+    const { host, text } = mount(300, 180);
+    host.dispatchEvent(new FocusEvent('focusin'));
+    expect(text.classList.contains('lerd-marquee')).toBe(true);
+    host.dispatchEvent(new FocusEvent('focusout'));
+    expect(text.classList.contains('lerd-marquee')).toBe(false);
+  });
+
   it('leaves a text that fits alone', () => {
     const { host, text } = mount(120, 180);
     host.dispatchEvent(new MouseEvent('mouseenter'));

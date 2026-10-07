@@ -343,7 +343,7 @@
           <button
             type="button"
             onclick={() => pickWorktree(e)}
-            use:tooltip={e.domain}
+            use:tooltip={`${e.branch} · ${e.domain}`}
             class="flex items-center gap-1.5 pl-3 pr-3 py-2 text-xs min-w-0 {isActive
               ? 'text-gray-800 dark:text-gray-100 font-medium'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}"

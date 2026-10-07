@@ -412,7 +412,7 @@ button {
 /* The looping animations stop while the window is blurred or hidden (see
    $lib/windowIdle): an unfocused window still repaints them every frame.
    Transitions go too, so a background poll repaints once instead of animating. */
-:root[data-window-idle] :is(.animate-ping, .animate-pulse, .animate-spin, .lerd-pulse-ping) {
+:root[data-window-idle] :is(.animate-ping, .animate-pulse, .animate-spin, .lerd-pulse-ping, .lerd-marquee > *) {
   animation-play-state: paused;
 }
 :root[data-window-idle] * {
