@@ -98,3 +98,21 @@ func TestInstallDNSService_keepsTheOldServerWhenTheNewUnitFails(t *testing.T) {
 		t.Error("the working dnsmasq container was removed before its replacement was written")
 	}
 }
+
+// systemd has to have the new unit loaded before the old container goes, or
+// a failed reload leaves nothing serving the lerd TLD.
+func TestInstallDNSService_keepsTheOldServerWhenTheReloadFails(t *testing.T) {
+	isolateState(t)
+	swapMgr(t, &fakeServiceMgr{reloadErr: errors.New("bus unavailable")})
+	removed := false
+	prev := removeLegacyDNS
+	removeLegacyDNS = func() bool { removed = true; return true }
+	t.Cleanup(func() { removeLegacyDNS = prev })
+
+	if err := installDNSService(); err == nil {
+		t.Fatal("installDNSService() = nil, want the reload error")
+	}
+	if removed {
+		t.Error("the working dnsmasq container was removed before systemd loaded its replacement")
+	}
+}

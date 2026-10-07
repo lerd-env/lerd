@@ -63,18 +63,18 @@ func TestParseConfReadsLogQueries(t *testing.T) {
 // dnsmasq read anything in its conf dir; this server reads only what lerd
 // writes, so a hand-added directive has to be named, not dropped in silence.
 func TestParseConfCollectsUnsupportedLines(t *testing.T) {
-	c, err := ParseConf([]byte("# comment\n\nport=5300\nno-resolv\nlog-queries\nserver=1.1.1.1\nserver=/corp/10.0.0.9\nserver=/odd/#\ncname=a.test,b.test\naddress=/.test/127.0.0.1\n"))
+	c, err := ParseConf([]byte("# comment\n\nport=5300\nno-resolv\nlog-queries\nserver=1.1.1.1\nserver=/corp/10.0.0.9\nserver=/odd/10.0.0.9@eth0\ncname=a.test,b.test\naddress=/.test/127.0.0.1\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"server=/odd/#", "cname=a.test,b.test"}
+	want := []string{"server=/odd/10.0.0.9@eth0", "cname=a.test,b.test"}
 	if len(c.Unsupported) != len(want) || c.Unsupported[0] != want[0] || c.Unsupported[1] != want[1] {
 		t.Errorf("unsupported = %q, want %q", c.Unsupported, want)
 	}
 }
 
 func TestParseConfReadsPerDomainServers(t *testing.T) {
-	c, err := ParseConf([]byte("server=/corp/10.0.0.9\nserver=/a.lan/b.lan/10.0.0.8#5353\nserver=/blocked/\nserver=/odd/#\n"))
+	c, err := ParseConf([]byte("server=/corp/10.0.0.9\nserver=/a.lan/b.lan/10.0.0.8#5353\nserver=/blocked/\nserver=/odd/10.0.0.9@eth0\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -365,7 +365,7 @@ func TestRoutesADomainToItsOwnServer(t *testing.T) {
 // default upstream.
 func TestRefusesADomainRoutedNowhere(t *testing.T) {
 	public := startUpstreamAnswering(t, "203.0.113.7")
-	addr, _, stop := startTestServer(t, "port=5300\nserver="+hostPort(public)+"\nserver=/corp/#\n")
+	addr, _, stop := startTestServer(t, "port=5300\nserver="+hostPort(public)+"\nserver=/corp/10.0.0.9@eth0\n")
 	defer stop()
 
 	if r := query(t, addr, "intranet.corp", dns.TypeA); r.Rcode != dns.RcodeRefused {
@@ -390,5 +390,36 @@ func TestReadsEveryFileInTheDirectory(t *testing.T) {
 
 	if r := query(t, addr, "intranet.corp", dns.TypeA); len(r.Answer) != 1 || r.Answer[0].(*dns.A).A.String() != "10.0.0.9" {
 		t.Errorf("a rule in another file must apply, got rcode=%d %v", r.Rcode, r.Answer)
+	}
+}
+
+// dnsmasq reads server=/#/ip as a default upstream for every domain, so it
+// must not end up as a route for a domain literally called "#".
+func TestHashDomainIsADefaultUpstream(t *testing.T) {
+	c, err := ParseConf([]byte("server=/#/10.0.0.9\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Upstreams) != 1 || c.Upstreams[0] != "10.0.0.9:53" {
+		t.Errorf("upstreams = %v, want 10.0.0.9:53", c.Upstreams)
+	}
+	if _, ok := c.Routes["#"]; ok {
+		t.Error("# must not become a route")
+	}
+}
+
+// server=/d/# hands d back to the default upstreams, which is how dnsmasq
+// exempts a subdomain from a broader per-domain rule.
+func TestHashTargetUsesTheDefaultUpstreams(t *testing.T) {
+	public := startUpstreamAnswering(t, "203.0.113.7")
+	corp := startUpstreamAnswering(t, "10.0.0.9")
+	addr, _, stop := startTestServer(t, "port=5300\nserver="+hostPort(public)+"\nserver=/corp/"+hostPort(corp)+"\nserver=/public.corp/#\n")
+	defer stop()
+
+	if r := query(t, addr, "www.public.corp", dns.TypeA); len(r.Answer) != 1 || r.Answer[0].(*dns.A).A.String() != "203.0.113.7" {
+		t.Errorf("public.corp must use the default upstream, got rcode=%d %v", r.Rcode, r.Answer)
+	}
+	if r := query(t, addr, "intranet.corp", dns.TypeA); len(r.Answer) != 1 || r.Answer[0].(*dns.A).A.String() != "10.0.0.9" {
+		t.Errorf("the rest of corp keeps its own server, got %v", r.Answer)
 	}
 }

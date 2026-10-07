@@ -34,16 +34,19 @@ func dnsListenHost() string {
 // podman against the developer's own lerd-dns container.
 var removeLegacyDNS = removeLegacyDNSService
 
-// installDNSService writes the lerd-dns unit, then replaces whatever ran DNS
-// before it. The unit goes first so a failed write leaves the old server up.
+// installDNSService writes and loads the lerd-dns unit, then replaces whatever
+// ran DNS before it, so a failed write or reload leaves the old server up.
 func installDNSService() error {
 	if _, err := services.Mgr.WriteServiceUnitIfChanged(dnsUnit, dnsServiceContent(config.LerdBinary(), dnsListenHost())); err != nil {
 		return err
 	}
-	replaced := removeLegacyDNS()
 	if err := services.Mgr.DaemonReload(); err != nil {
 		return err
 	}
+	// The unit file outranks the quadlet's generated one, so after the reload
+	// above systemd already runs lerd-dns from it, whatever the reload below does.
+	replaced := removeLegacyDNS()
+	_ = services.Mgr.DaemonReload()
 	if lerdSystemd.IsAutostartEnabled() {
 		_ = services.Mgr.Enable(dnsUnit)
 	}

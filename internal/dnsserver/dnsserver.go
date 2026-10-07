@@ -36,7 +36,8 @@ type Conf struct {
 	// all queries here (systemd-resolved with ~.) relies on it.
 	Upstreams []string
 	// Routes sends names under a domain to that domain's own servers, from
-	// server=/d/ip. An empty route refuses the names instead of forwarding.
+	// server=/d/ip. An empty route refuses the names instead of forwarding, and
+	// a defaultUpstreams entry stands for the default upstreams (server=/d/#).
 	Routes map[string][]string
 	// LogQueries prints every query to stderr, as dnsmasq's log-queries did.
 	LogQueries bool
@@ -62,7 +63,7 @@ func ParseConf(data []byte) (Conf, error) {
 		case line == "log-queries":
 			c.LogQueries = true
 		case strings.HasPrefix(line, "server=/"):
-			if !addRoute(c.Routes, strings.TrimPrefix(line, "server=/")) {
+			if !c.addRoute(strings.TrimPrefix(line, "server=/")) {
 				c.Unsupported = append(c.Unsupported, line)
 			}
 		case strings.HasPrefix(line, "server="):
@@ -95,23 +96,36 @@ func ParseConf(data []byte) (Conf, error) {
 	return c, sc.Err()
 }
 
+// defaultUpstreams marks a route that uses the default upstreams, dnsmasq's
+// server=/d/# form.
+const defaultUpstreams = "#"
+
 // addRoute records server=/d1/d2/ip#port, given without its server=/ prefix,
 // and reports whether it understood the target. Its domains are routed even
 // when it did not, to nowhere, so a private name a hand-written rule kept off
-// the default upstream is refused rather than leaked to it.
-func addRoute(routes map[string][]string, v string) bool {
+// the default upstream is refused rather than leaked to it. The domain # is
+// dnsmasq's "every domain", so it adds a default upstream instead.
+func (c *Conf) addRoute(v string) bool {
 	parts := strings.Split(v, "/")
 	target := parts[len(parts)-1]
 	up, ok := parseUpstream(target)
+	if target == defaultUpstreams {
+		up, ok = defaultUpstreams, true
+	}
 	for _, d := range parts[:len(parts)-1] {
 		d = strings.ToLower(strings.Trim(d, "."))
-		if d == "" {
-			continue
-		}
-		if ok {
-			routes[d] = append(routes[d], up)
-		} else if _, seen := routes[d]; !seen {
-			routes[d] = nil
+		switch {
+		case d == "":
+		case d == "#":
+			if ok && up != defaultUpstreams {
+				c.Upstreams = append(c.Upstreams, up)
+			}
+		case ok:
+			c.Routes[d] = append(c.Routes[d], up)
+		default:
+			if _, seen := c.Routes[d]; !seen {
+				c.Routes[d] = nil
+			}
 		}
 	}
 	return ok || target == ""
@@ -220,7 +234,7 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 	if !ok {
 		upstreams := conf.Upstreams
 		if route, routed := routeFor(conf, q.Name); routed {
-			upstreams = route
+			upstreams = expandRoute(route, conf.Upstreams)
 		}
 		_ = w.WriteMsg(s.forward(req, upstreams, w.LocalAddr().Network()))
 		return
@@ -283,6 +297,19 @@ func (s *Server) upstreamOrder(upstreams []string) []string {
 		}
 	}
 	return ordered
+}
+
+// expandRoute replaces a route's defaultUpstreams entries with the defaults.
+func expandRoute(route, defaults []string) []string {
+	var out []string
+	for _, up := range route {
+		if up == defaultUpstreams {
+			out = append(out, defaults...)
+		} else {
+			out = append(out, up)
+		}
+	}
+	return out
 }
 
 // routeFor finds the most specific server=/d/ route covering name, d itself
