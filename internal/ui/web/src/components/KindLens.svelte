@@ -1,6 +1,6 @@
 <script lang="ts">
   import LensSearch from '$components/LensSearch.svelte';
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, untrack } from 'svelte';
   import { get } from 'svelte/store';
   import { debugSearch } from '$stores/debugLens';
   import { startDumpsStream, stopDumpsStream, clearDumps } from '$stores/dumps';
@@ -47,7 +47,7 @@
   let textInput = $state('');
   // Across every site there is no request timeline, so a clicked id becomes this
   // lens's search; inside a site the Debug tab takes the click instead.
-  if (!siteScope) providePickRequest((id) => (textInput = id));
+  if (!untrack(() => siteScope)) providePickRequest((id) => (textInput = id));
   // Jobs report a whole lifecycle (queued, processing, then the outcome) and a
   // request logs at a handful of levels, so both lenses get a filter that cuts
   // the list down to the rows being looked for.

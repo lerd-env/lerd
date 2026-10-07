@@ -1,6 +1,6 @@
 <script lang="ts">
   import DetailTabs from '$components/DetailTabs.svelte';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import DumpsTab from '$tabs/DumpsTab.svelte';
   import QueriesLens from '$components/QueriesLens.svelte';
   import KindLens from '$components/KindLens.svelte';
@@ -72,7 +72,7 @@
   const route = writable('');
   $effect(() => route.set(rid ? '' : routeQuery($debugSearch)));
   const events = scopeLensEvents(scope, fetched, route);
-  let timeline = $state(Boolean(rid));
+  let timeline = $state(untrack(() => Boolean(rid)));
   // A request id clicked in a lens becomes the search and opens its timeline.
   providePickRequest((id) => {
     debugSearch.set(id);
