@@ -457,3 +457,47 @@ func classify(s *StatusCounts, status int) {
 		s.C5xx++
 	}
 }
+
+// SlowestRIDs names every request since the given time that leads, or can
+// still come to lead, its route's slowest in a window ending now: one no later
+// request outran. As a window slides, its leader ages out and the slowest of
+// what follows takes over, so keeping only today's leaders would lose the next.
+// Rows are filtered as SiteAnalytics filters them, so the two never disagree.
+func (s *Store) SlowestRIDs(since time.Time) (map[string]bool, error) {
+	excluded, err := s.AllExcludedRoutes()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(
+		`SELECT site, route, status, ms, uri, rid FROM requests
+		 WHERE at_ms >= ? AND cold = 0 ORDER BY at_ms DESC, rowid DESC`,
+		since.UnixMilli())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]bool{}
+	slowestLater := map[[2]string]float64{}
+	for rows.Next() {
+		var key, route, uri, rid string
+		var status int
+		var ms float64
+		if err := rows.Scan(&key, &route, &status, &ms, &uri, &rid); err != nil {
+			return nil, err
+		}
+		site, _ := SplitKey(key)
+		if !IsAppRequest(status, uri, ms) || excluded[site][route] {
+			continue
+		}
+		k := [2]string{key, route}
+		if later, seen := slowestLater[k]; seen && ms < later {
+			continue
+		}
+		slowestLater[k] = ms
+		if rid != "" {
+			out[rid] = true
+		}
+	}
+	return out, rows.Err()
+}

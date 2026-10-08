@@ -175,6 +175,9 @@ func (s *Server) ForgetRequests(rids []string) {
 	})
 }
 
+// SetKeep names the requests whose events outlive the buffer.
+func (s *Server) SetKeep(keep map[string]bool) { s.ring.SetKeep(keep) }
+
 // RequestIDs is the set of requests with captured events still buffered.
 func (s *Server) RequestIDs() map[string]bool { return s.ring.RequestIDs() }
 

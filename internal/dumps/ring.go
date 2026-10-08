@@ -22,6 +22,11 @@ type Ring struct {
 	head int // next write index
 	size int // populated entries, 0..cap
 	cap  int
+	// keep names the requests whose events move to pinned, oldest first,
+	// instead of being dropped when the buffer evicts them: each route's
+	// slowest, which the dashboard links to for days after the buffer turns over.
+	keep   map[string]bool
+	pinned []Event
 }
 
 // NewRing returns a ring with the given capacity. Non-positive capacity is
@@ -43,6 +48,9 @@ func (r *Ring) Resize(capacity int) {
 	defer r.mu.Unlock()
 	kept := r.snapshot()
 	if len(kept) > capacity {
+		for _, e := range kept[:len(kept)-capacity] {
+			r.pin(e)
+		}
 		kept = kept[len(kept)-capacity:]
 	}
 	buf := make([]Event, capacity)
@@ -54,11 +62,47 @@ func (r *Ring) Resize(capacity int) {
 func (r *Ring) Append(e Event) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.size == r.cap {
+		r.pin(r.buf[r.head])
+	}
 	r.buf[r.head] = e
 	r.head = (r.head + 1) % r.cap
 	if r.size < r.cap {
 		r.size++
 	}
+}
+
+// SetKeep replaces the set of requests whose events outlive the buffer, and
+// drops the pinned events of any request no longer in it.
+func (r *Ring) SetKeep(keep map[string]bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.keep = keep
+	r.pinned = r.removePinned(func(e Event) bool { return !r.kept(e) })
+}
+
+// pin sets an evicted event aside when it belongs to a kept request.
+func (r *Ring) pin(e Event) {
+	if r.kept(e) {
+		r.pinned = append(r.pinned, e)
+	}
+}
+
+// kept reports whether e ran in a kept request or is a browser event naming
+// one as the request it reached.
+func (r *Ring) kept(e Event) bool {
+	return r.keep[e.Ctx.RID] || r.keep[e.reachedRID()]
+}
+
+// removePinned returns the pinned events drop does not match, in order.
+func (r *Ring) removePinned(drop func(Event) bool) []Event {
+	var left []Event
+	for _, e := range r.pinned {
+		if !drop(e) {
+			left = append(left, e)
+		}
+	}
+	return left
 }
 
 // Snapshot returns a copy of the ring contents in insertion order (oldest
@@ -100,6 +144,7 @@ func (r *Ring) Clear() {
 	defer r.mu.Unlock()
 	r.head = 0
 	r.size = 0
+	r.pinned = nil
 	for i := range r.buf {
 		r.buf[i] = Event{}
 	}
@@ -118,6 +163,7 @@ func (r *Ring) Remove(drop func(Event) bool) {
 			kept = append(kept, e)
 		}
 	}
+	r.pinned = r.removePinned(drop)
 	clear(r.buf)
 	copy(r.buf, kept)
 	r.size = len(kept)
@@ -126,8 +172,13 @@ func (r *Ring) Remove(drop func(Event) bool) {
 
 // Save writes the ring to path, so a restarted lerd-ui can pick up where this
 // one stopped. Owner-only: events carry SQL bindings and request payloads.
+// Pinned events go first, as the oldest, so a Load with the same keep set
+// evicts them straight back into pinned.
 func (r *Ring) Save(path string) error {
-	b, err := json.Marshal(r.Snapshot())
+	r.mu.RLock()
+	events := append(append([]Event(nil), r.pinned...), r.snapshot()...)
+	r.mu.RUnlock()
+	b, err := json.Marshal(events)
 	if err != nil {
 		return err
 	}
@@ -164,8 +215,10 @@ func (r *Ring) Load(path string) error {
 // RequestIDs is the set of requests with at least one event in the ring: the
 // ones a recent request's Inspect can open on something.
 func (r *Ring) RequestIDs() map[string]bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	out := map[string]bool{}
-	for _, e := range r.Snapshot() {
+	for _, e := range append(append([]Event(nil), r.pinned...), r.snapshot()...) {
 		if e.Ctx.RID != "" {
 			out[e.Ctx.RID] = true
 		}
@@ -199,7 +252,12 @@ type FilterOpts struct {
 
 // Filter returns a Snapshot filtered by opts, preserving insertion order.
 func (r *Ring) Filter(opts FilterOpts) []Event {
-	snap := r.Snapshot()
+	r.mu.RLock()
+	snap := r.snapshot()
+	if opts.RID != "" {
+		snap = append(append([]Event(nil), r.pinned...), snap...)
+	}
+	r.mu.RUnlock()
 	out := make([]Event, 0, len(snap))
 	for _, e := range snap {
 		if opts.Site != "" && e.Ctx.Site != opts.Site {
