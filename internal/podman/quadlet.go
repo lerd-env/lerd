@@ -359,6 +359,11 @@ func UsePlatformUnitLifecycle(m UnitLifecycleManager) {
 // a sentinel and we fall through to the historical shell-out so launchd
 // users still get the legacy path (a no-op for non-systemd systems).
 func DaemonReload() error {
+	// A test's quadlets live in a temp dir the real manager never reads, so a
+	// reload from a test has nothing to pick up and only disturbs the host.
+	if config.UnderTest() {
+		return nil
+	}
 	if err := systemd.DBusDaemonReload(); err == nil {
 		return nil
 	}
