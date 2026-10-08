@@ -28,6 +28,7 @@ func fakeExecContextExit(exitFn func() int) func(context.Context, string, ...str
 // each other through lastHealAt / MachineHeal / execCommandContext.
 func resetHealState(t *testing.T) {
 	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	prevCtx := execCommandContext
 	prevHeal := MachineHeal
 	t.Cleanup(func() {
@@ -117,5 +118,44 @@ func TestEnsureMachineResponsiveNoHealHookIsNoop(t *testing.T) {
 	}
 	if probed != 0 {
 		t.Errorf("no heal hook must skip the probe, probed %d times", probed)
+	}
+}
+
+func TestEnsureMachineResponsiveLeavesMachineAloneDuringLifecycle(t *testing.T) {
+	resetHealState(t)
+	probed := 0
+	execCommandContext = fakeExecContextExit(func() int { probed++; return 1 })
+	healed := 0
+	MachineHeal = func() { healed++ }
+
+	release, err := LockLifecycle()
+	if err != nil {
+		t.Fatalf("LockLifecycle: %v", err)
+	}
+	defer release()
+
+	if err := EnsureMachineResponsive(); err != nil {
+		t.Fatalf("during lerd start: want nil, got %v", err)
+	}
+	if probed != 0 || healed != 0 {
+		t.Errorf("during lerd start: probed %d, healed %d, want 0 and 0", probed, healed)
+	}
+}
+
+func TestLifecycleInFlightFollowsTheLock(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	if LifecycleInFlight() {
+		t.Fatal("no lock file yet: want idle")
+	}
+	release, err := LockLifecycle()
+	if err != nil {
+		t.Fatalf("LockLifecycle: %v", err)
+	}
+	if !LifecycleInFlight() {
+		t.Error("lock held: want in flight")
+	}
+	release()
+	if LifecycleInFlight() {
+		t.Error("lock released: want idle")
 	}
 }

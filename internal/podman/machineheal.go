@@ -32,6 +32,11 @@ func EnsureMachineResponsive() error {
 	if MachineHeal == nil {
 		return nil // no machine VM to stall or heal (Linux, tests): skip the probe
 	}
+	// A start or stop owns the machine and keeps podman busy enough to fail the
+	// probe; healing then restarts the VM under it and kills its containers.
+	if LifecycleInFlight() {
+		return nil
+	}
 	if machineResponds() {
 		return nil
 	}
