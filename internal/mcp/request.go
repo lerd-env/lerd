@@ -243,14 +243,19 @@ func lensIssue(e reqEvent) string {
 		switch str("level") {
 		case "emergency", "alert", "critical", "error":
 			return "error"
-		case "warning":
+		case "warning", "notice":
 			return "warning"
 		}
 	case "browser":
-		if t := str("type"); t == "error" || t == "rejection" || (t == "console" && str("level") == "error") {
+		t := str("type")
+		if t == "error" || t == "rejection" || (t == "console" && str("level") == "error") {
 			return "error"
 		}
-		if code, ok := e.Data["status"].(float64); str("type") == "network" && ok && (code == 0 || code >= 400) {
+		if t == "console" && str("level") == "warn" {
+			return "warning"
+		}
+		// A fetch that got no response is stored without a status at all.
+		if code, _ := e.Data["status"].(float64); t == "network" && (code == 0 || code >= 400) {
 			return "failed"
 		}
 	case "http":
@@ -300,13 +305,20 @@ func issueText(e reqEvent) string {
 	case e.Kind == "job":
 		return str("class")
 	case e.Kind == "http":
-		return strings.TrimSpace(fmt.Sprintf("%s %s %v", str("method"), str("url"), e.Data["status"]))
+		return withStatus(str("method")+" "+str("url"), e.Data["status"])
 	case e.Kind == "browser" && str("type") == "network":
-		return strings.TrimSpace(fmt.Sprintf("%s %s %v", str("method"), str("request"), e.Data["status"]))
+		return withStatus(str("method")+" "+str("request"), e.Data["status"])
 	case e.Kind == "exception" && str("type") != "" && str("type") != "message":
 		return str("type") + " " + str("message")
 	}
 	return str("message")
+}
+
+func withStatus(call string, status any) string {
+	if status == nil {
+		return strings.TrimSpace(call)
+	}
+	return strings.TrimSpace(fmt.Sprintf("%s %v", call, status))
 }
 
 func lensOfKind(kind string) string {

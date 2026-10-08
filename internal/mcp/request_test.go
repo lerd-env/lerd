@@ -151,3 +151,35 @@ func TestRequestTool_LensesWithoutIssues(t *testing.T) {
 		t.Errorf("want an empty issues list: %s", text)
 	}
 }
+
+// Repeats fold into one row that keeps its first occurrence, and the amber the
+// dashboard paints (notice, console.warn) reads as a warning. A fetch that never
+// got a response is stored with no status at all and is still a failure.
+func TestRequestTool_LensIssuesFoldRepeats(t *testing.T) {
+	stubRoutes(t, map[string]string{
+		"/api/dumps?rid=r1": `[
+	{"ts":"2026-10-07T10:00:00.010Z","kind":"log","ctx":{"rid":"r1"},"src":{"file":"/app/A.php","line":1},"data":{"message":"first","level":"error"}},
+	{"ts":"2026-10-07T10:00:00.020Z","kind":"log","ctx":{"rid":"r1"},"src":{"file":"/app/B.php","line":2},"data":{"message":"second","level":"critical"}},
+	{"ts":"2026-10-07T10:00:00.030Z","kind":"log","ctx":{"rid":"r1"},"data":{"message":"deprecated","level":"notice"}},
+	{"ts":"2026-10-07T10:00:00.040Z","kind":"browser","ctx":{"rid":"r1"},"data":{"type":"console","level":"warn","message":"slow paint"}},
+	{"ts":"2026-10-07T10:00:00.050Z","kind":"browser","ctx":{"rid":"r1"},"data":{"type":"network","method":"GET","request":"/api/cart"}},
+	{"ts":"2026-10-07T10:00:00.060Z","kind":"browser","ctx":{"rid":"r1"},"data":{"type":"network","method":"GET","request":"/api/ok","status":200}}
+]`,
+		"/api/queries/analyze?rid=r1": `{"requests":[]}`,
+	})
+	got, _ := execRequestTool(map[string]any{"action": "lenses", "rid": "r1"})
+	text := toolText(got)
+	for _, want := range []string{
+		`{"at":"/app/A.php:1","count":2,"first":"first","issue":"error","lens":"logs"}`,
+		`{"count":1,"first":"deprecated","issue":"warning","lens":"logs"}`,
+		`{"count":1,"first":"slow paint","issue":"warning","lens":"browser"}`,
+		`{"count":1,"first":"GET /api/cart","issue":"failed","lens":"browser"}`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %s in %s", want, text)
+		}
+	}
+	if strings.Contains(text, "second") || strings.Contains(text, "/api/ok") {
+		t.Errorf("a repeat must not replace the first, and a 200 is no issue: %s", text)
+	}
+}
