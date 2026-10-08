@@ -354,3 +354,22 @@ func TestStoreAnalyticsNamesEachRoutesSlowestRequest(t *testing.T) {
 		t.Fatalf("slowest = %+v, want the 90 ms warm request; a cold start is not the route being slow", got)
 	}
 }
+
+// Each range names its own slowest, so a request that leads only the short
+// range is kept alongside the one leading the week.
+func TestStoreSlowestRIDsCoversEveryRange(t *testing.T) {
+	s := tempStore(t)
+	seed(t, s, []Record{
+		{At: base.Add(-2 * time.Hour), Site: "acme", Method: "GET", Route: "GET /a", URI: "/a", Status: 200, Millis: 900, RID: "week"},
+		{At: base.Add(-time.Minute), Site: "acme", Method: "GET", Route: "GET /a", URI: "/a", Status: 200, Millis: 50, RID: "recent"},
+		{At: base.Add(-time.Minute), Site: "acme", Method: "GET", Route: "GET /a", URI: "/a", Status: 200, Millis: 10, RID: "fast"},
+		{At: base.Add(-time.Minute), Site: "other", Method: "GET", Route: "GET /b", URI: "/b", Status: 200, Millis: 30, RID: "b"},
+	})
+	got, err := s.SlowestRIDs(base, []time.Duration{time.Hour, 7 * 24 * time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 || !got["week"] || !got["recent"] || !got["b"] {
+		t.Fatalf("slowest rids = %v", got)
+	}
+}

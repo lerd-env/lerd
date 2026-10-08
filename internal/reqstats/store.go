@@ -457,3 +457,28 @@ func classify(s *StatusCounts, status int) {
 		s.C5xx++
 	}
 }
+
+// SlowestRIDs names every route's slowest request in each window ending at
+// until, across all sites: the requests the dashboard links to from its
+// slowest-routes list, read through SiteAnalytics so the two never disagree.
+func (s *Store) SlowestRIDs(until time.Time, windows []time.Duration) (map[string]bool, error) {
+	sites, err := s.LastSeenBySite()
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for site := range sites {
+		for _, w := range windows {
+			a, err := s.SiteAnalytics(site, until.Add(-w), until)
+			if err != nil {
+				return nil, err
+			}
+			for _, r := range a.Routes {
+				if r.Slowest != nil && r.Slowest.RID != "" {
+					out[r.Slowest.RID] = true
+				}
+			}
+		}
+	}
+	return out, nil
+}
