@@ -34,6 +34,11 @@ describe('Modal', () => {
     expect(screen.getByTestId('footer')).toBeInTheDocument();
   });
 
+  it('renders header actions beside the title when provided', () => {
+    render(Harness, { props: { open: true, title: 'X', onclose: () => {}, withActions: true } });
+    expect(screen.getByText('X').parentElement?.contains(screen.getByTestId('actions'))).toBe(true);
+  });
+
   it('applies the xl width class for the large editor modal', () => {
     const { container } = render(Harness, {
       props: { open: true, title: 'X', onclose: () => {}, size: 'xl' }

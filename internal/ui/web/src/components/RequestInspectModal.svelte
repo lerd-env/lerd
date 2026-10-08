@@ -2,6 +2,8 @@
   import Modal from './Modal.svelte';
   import SiteDebugTab from '$tabs/sites/SiteDebugTab.svelte';
   import ProfilePrompt from './ProfilePrompt.svelte';
+  import CopyButton from './CopyButton.svelte';
+  import { requestAgentPrompt } from '$lib/agentPrompt';
   import type { RecentRequest } from '$stores/analytics';
   import type { Site } from '$stores/sites';
   import { m } from '../paraglide/messages.js';
@@ -20,9 +22,16 @@
 
   // The access log records a request as it ends, so it started that long before.
   const served = $derived(request ? { label: `${request.method} ${request.uri}`, start: request.at_millis - request.millis, millis: request.millis } : undefined);
+  const agentPrompt = $derived(request?.rid ? requestAgentPrompt(site.domain, request, request.rid) : '');
 </script>
 
-<Modal open={request !== null} title={served?.label ?? ''} size="2xl" {onclose}>
+{#snippet copyForAgent()}
+  {#if agentPrompt}
+    <CopyButton text={agentPrompt} label={m.sites_timing_copyForAgentHint()} caption={m.sites_timing_copyForAgent()} />
+  {/if}
+{/snippet}
+
+<Modal open={request !== null} title={served?.label ?? ''} size="2xl" {onclose} actions={copyForAgent}>
   {#if request?.rid}
     <div class="h-[75vh] flex flex-col">
       <div class="flex-1 min-h-0">

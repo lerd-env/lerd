@@ -1069,6 +1069,8 @@
   "sites_timing_showMore": "Tampilkan lebih banyak",
   "sites_timing_openSlowest": "Buka permintaan paling lambat, {ms}",
   "sites_timing_nothingCaptured": "Tangkapan debug tidak menyimpan apa pun untuk permintaan ini, karena tangkapan mati atau peristiwa yang lebih baru menggesernya dari buffer.",
+  "sites_timing_copyForAgent": "Salin untuk agen",
+  "sites_timing_copyForAgentHint": "Salin prompt agar asisten AI membaca permintaan ini lewat lerd dan memperbaiki masalahnya",
   "sites_timing_inspectRoute": "Periksa permintaan rute ini",
   "sites_timing_latency": "latensi",
   "sites_timing_perMin": "req/mnt",

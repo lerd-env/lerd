@@ -1069,6 +1069,8 @@
   "sites_timing_showMore": "Mostrar mais",
   "sites_timing_openSlowest": "Abrir a requisição mais lenta, {ms}",
   "sites_timing_nothingCaptured": "A captura de depuração não guarda nada desta requisição: estava desligada ou eventos mais novos a tiraram do buffer.",
+  "sites_timing_copyForAgent": "Copiar para o agente",
+  "sites_timing_copyForAgentHint": "Copia um prompt para que um assistente de IA leia esta requisição pelo lerd e corrija os problemas",
   "sites_timing_inspectRoute": "Inspecionar as requisições desta rota",
   "sites_timing_latency": "latência",
   "sites_timing_perMin": "req/min",

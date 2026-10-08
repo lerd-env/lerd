@@ -1069,6 +1069,8 @@
   "sites_timing_showMore": "Mostra altri",
   "sites_timing_openSlowest": "Apri la richiesta più lenta, {ms}",
   "sites_timing_nothingCaptured": "La cattura di debug non ha nulla per questa richiesta: era spenta oppure eventi più recenti l'hanno spinta fuori dal buffer.",
+  "sites_timing_copyForAgent": "Copia per l’agente",
+  "sites_timing_copyForAgentHint": "Copia un prompt con cui un assistente IA legge questa richiesta tramite lerd e ne corregge i problemi",
   "sites_timing_inspectRoute": "Ispeziona le richieste di questa rotta",
   "sites_timing_latency": "latenza",
   "sites_timing_perMin": "ric./min",

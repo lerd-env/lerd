@@ -1069,6 +1069,8 @@
   "sites_timing_showMore": "Mehr anzeigen",
   "sites_timing_openSlowest": "Langsamste Anfrage öffnen, {ms}",
   "sites_timing_nothingCaptured": "Die Debug-Erfassung hat nichts zu dieser Anfrage, weil sie aus war oder neuere Ereignisse sie aus dem Puffer verdrängt haben.",
+  "sites_timing_copyForAgent": "Für Agent kopieren",
+  "sites_timing_copyForAgentHint": "Kopiert einen Prompt, mit dem ein KI-Assistent diese Anfrage über lerd liest und ihre Probleme behebt",
   "sites_timing_inspectRoute": "Anfragen dieser Route untersuchen",
   "sites_timing_latency": "Latenz",
   "sites_timing_perMin": "Anf./min",

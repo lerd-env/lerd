@@ -1069,6 +1069,8 @@
   "sites_timing_showMore": "Hiển thị thêm",
   "sites_timing_openSlowest": "Mở yêu cầu chậm nhất, {ms}",
   "sites_timing_nothingCaptured": "Bộ ghi gỡ lỗi không còn gì cho yêu cầu này: việc ghi đã tắt hoặc các sự kiện mới hơn đã đẩy nó ra khỏi bộ đệm.",
+  "sites_timing_copyForAgent": "Sao chép cho agent",
+  "sites_timing_copyForAgentHint": "Sao chép một prompt để trợ lý AI đọc yêu cầu này qua lerd và sửa các vấn đề của nó",
   "sites_timing_inspectRoute": "Kiểm tra các yêu cầu của tuyến này",
   "sites_timing_latency": "độ trễ",
   "sites_timing_perMin": "yc/phút",

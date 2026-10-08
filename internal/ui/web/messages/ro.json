@@ -1069,6 +1069,8 @@
   "sites_timing_showMore": "Arată mai multe",
   "sites_timing_openSlowest": "Deschide cea mai lentă cerere, {ms}",
   "sites_timing_nothingCaptured": "Captura de depanare nu are nimic pentru această cerere: era oprită sau evenimente mai noi au împins-o afară din buffer.",
+  "sites_timing_copyForAgent": "Copiază pentru agent",
+  "sites_timing_copyForAgentHint": "Copiază un prompt cu care un asistent AI citește cererea prin lerd și îi rezolvă problemele",
   "sites_timing_inspectRoute": "Inspectează cererile acestei rute",
   "sites_timing_latency": "latență",
   "sites_timing_perMin": "cereri/min",

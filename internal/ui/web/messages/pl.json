@@ -1069,6 +1069,8 @@
   "sites_timing_showMore": "Pokaż więcej",
   "sites_timing_openSlowest": "Otwórz najwolniejsze żądanie, {ms}",
   "sites_timing_nothingCaptured": "Przechwytywanie debugowania nie ma nic dla tego żądania: było wyłączone albo nowsze zdarzenia wypchnęły je z bufora.",
+  "sites_timing_copyForAgent": "Kopiuj dla agenta",
+  "sites_timing_copyForAgentHint": "Kopiuje prompt, dzięki któremu asystent AI odczyta to żądanie przez lerd i naprawi jego problemy",
   "sites_timing_inspectRoute": "Zbadaj żądania tej trasy",
   "sites_timing_latency": "opóźnienie",
   "sites_timing_perMin": "żąd./min",

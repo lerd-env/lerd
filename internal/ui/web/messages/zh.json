@@ -1069,6 +1069,8 @@
   "sites_timing_showMore": "显示更多",
   "sites_timing_openSlowest": "打开最慢的请求，{ms}",
   "sites_timing_nothingCaptured": "调试捕获中没有此请求的内容：捕获当时已关闭，或较新的事件已将其挤出缓冲区。",
+  "sites_timing_copyForAgent": "复制给智能体",
+  "sites_timing_copyForAgentHint": "复制一段提示词，让 AI 助手通过 lerd 读取此请求并修复其中的问题",
   "sites_timing_inspectRoute": "检查此路由的请求",
   "sites_timing_latency": "延迟",
   "sites_timing_perMin": "请求/分",
