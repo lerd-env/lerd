@@ -252,18 +252,15 @@ func fpmSource(site *config.Site, container string) Source {
 	return Source{Name: "fpm", Kind: KindPodman, Locator: container, Scope: ScopeSite, Label: "PHP-FPM (" + site.Name + ")"}
 }
 
-// workerUnit names the unit a site's worker runs as. A worktree shares its
-// parent's units except for workers the framework runs per worktree.
+// workerUnit names the unit a site's worker runs as. A worker started from a
+// worktree carries the checkout's slug, the same rule cli.workerNames applies.
 func workerUnit(site *config.Site, worker string) string {
 	unit := "lerd-" + worker + "-" + site.Name
 	reg, err := config.FindSite(site.Name)
 	if err != nil || config.SamePath(reg.Path, site.Path) {
 		return unit
 	}
-	if fw, ok := config.GetFrameworkForDir(site.Framework, site.Path); ok && fw.Workers[worker].IsPerWorktree() {
-		return unit + "-" + config.WorktreeUnitSlug(filepath.Base(site.Path))
-	}
-	return unit
+	return unit + "-" + config.WorktreeUnitSlug(filepath.Base(site.Path))
 }
 
 func workerSource(site *config.Site, worker string) Source {

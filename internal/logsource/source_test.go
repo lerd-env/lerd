@@ -219,38 +219,20 @@ func TestResolveSite_WorktreePathMapsToParentSite(t *testing.T) {
 	}
 }
 
-// A worktree shares its parent's workers except those its framework runs per
-// worktree, which are separate units named after the checkout.
-func TestResolve_WorktreeWorkerUnitFollowsPerWorktree(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+// A worker started from a worktree runs as its own unit named after the
+// checkout, whatever the framework says, as cli.workerNames builds it.
+func TestResolve_WorktreeWorkerReadsItsOwnUnit(t *testing.T) {
 	_, sitePath := seedSite(t)
-	perWT := true
-	if err := config.SaveFramework(&config.Framework{Name: "wtfw", Label: "wtfw", Workers: map[string]config.FrameworkWorker{
-		"queue": {Command: "x"},
-		"vite":  {Command: "npm run dev", PerWorktree: &perWT},
-	}}); err != nil {
-		t.Fatalf("SaveFramework: %v", err)
-	}
-	site, _ := config.FindSite("myapp")
-	site.Framework = "wtfw"
-	if err := config.AddSite(*site); err != nil {
-		t.Fatalf("AddSite: %v", err)
-	}
 	wtPath := seedWorktree(t, sitePath)
-	if err := os.WriteFile(filepath.Join(wtPath, ".lerd.yaml"), []byte("workers:\n  - queue\n  - vite\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(wtPath, ".lerd.yaml"), []byte("workers:\n  - queue\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	for worker, want := range map[string]string{
-		"queue": "lerd-queue-myapp",
-		"vite":  "lerd-vite-myapp-" + config.WorktreeUnitSlug("feature"),
-	} {
-		src, err := Resolve("", wtPath, "worker:"+worker)
-		if err != nil {
-			t.Fatalf("Resolve %s: %v", worker, err)
-		}
-		if src.Locator != want {
-			t.Errorf("%s locator = %q, want %q", worker, src.Locator, want)
-		}
+	src, err := Resolve("", wtPath, "worker:queue")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if want := "lerd-queue-myapp-" + config.WorktreeUnitSlug("feature"); src.Locator != want {
+		t.Errorf("locator = %q, want %q", src.Locator, want)
 	}
 }
