@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
 func requestTool() mcpTool {
 	return mcpTool{
 		Name:        "request",
-		Description: "A recorded request's Debug lenses, by its rid. list: recent requests with rids; lenses: counts, PHP cost; lens: one lens's events, paged.",
+		Description: "One request's Debug lenses, by rid. list: recent requests; lenses: counts, PHP cost, issues (N+1, errors); lens: one lens, paged.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
@@ -73,7 +74,13 @@ func execRequestTool(args map[string]any) (any, *rpcError) {
 		if errOut != nil {
 			return errOut, nil
 		}
-		return jsonOK(requestLensCounts(evs)), nil
+		issues, errOut := requestQueryIssues(strArg(args, "rid"))
+		if errOut != nil {
+			return errOut, nil
+		}
+		out := requestLensCounts(evs)
+		out["issues"] = append(issues, requestLensIssues(evs)...)
+		return jsonOK(out), nil
 	case "lens":
 		kind := lensKind(strArg(args, "lens"))
 		if kind == "" {
@@ -178,6 +185,149 @@ func requestLensCounts(evs []reqEvent) map[string]any {
 		out["hint"] = "Nothing captured for this id; it may have left the buffer."
 	}
 	return out
+}
+
+// requestQueryIssues reads the request's N+1 and slow queries from the same
+// analyzer diag analyze_queries runs over all traffic, so the two never disagree.
+func requestQueryIssues(rid string) ([]map[string]any, map[string]any) {
+	body, status, err := uiGET(queryPath("/api/queries/analyze", [][2]string{{"rid", rid}}))
+	if err != nil {
+		return nil, toolErr("lerd-ui not reachable: " + err.Error())
+	}
+	if status != http.StatusOK {
+		return nil, toolErr(fmt.Sprintf("lerd-ui returned %d: %s", status, body))
+	}
+	type caller struct {
+		File string `json:"file"`
+		Line int    `json:"line"`
+	}
+	var a struct {
+		Requests []struct {
+			NPlusOne []struct {
+				Count     int     `json:"count"`
+				TotalMS   float64 `json:"total_time_ms"`
+				SampleSQL string  `json:"sample_sql"`
+				Caller    caller  `json:"caller"`
+			} `json:"n_plus_one"`
+			Slow []struct {
+				SQL    string  `json:"sql"`
+				TimeMS float64 `json:"time_ms"`
+				Caller caller  `json:"caller"`
+			} `json:"slow"`
+		} `json:"requests"`
+	}
+	if err := json.Unmarshal(body, &a); err != nil {
+		return nil, toolErr("decoding query analysis: " + err.Error())
+	}
+	at := func(c caller) string { return fmt.Sprintf("%s:%d", c.File, c.Line) }
+	issues := []map[string]any{}
+	for _, r := range a.Requests {
+		for _, n := range r.NPlusOne {
+			issues = append(issues, map[string]any{"lens": "queries", "issue": "n_plus_one", "count": n.Count, "total_ms": n.TotalMS, "sql": n.SampleSQL, "at": at(n.Caller)})
+		}
+		for _, q := range r.Slow {
+			issues = append(issues, map[string]any{"lens": "queries", "issue": "slow", "time_ms": q.TimeMS, "sql": q.SQL, "at": at(q.Caller)})
+		}
+	}
+	return issues, nil
+}
+
+// lensIssue names what is wrong with one event, using the dashboard's rose and
+// amber tones as the bar: anything it paints neutral is not an issue.
+func lensIssue(e reqEvent) string {
+	str := func(k string) string { v, _ := e.Data[k].(string); return v }
+	switch e.Kind {
+	case "exception":
+		return "error"
+	case "log":
+		switch str("level") {
+		case "emergency", "alert", "critical", "error":
+			return "error"
+		case "warning", "notice":
+			return "warning"
+		}
+	case "browser":
+		t := str("type")
+		if t == "error" || t == "rejection" || (t == "console" && str("level") == "error") {
+			return "error"
+		}
+		if t == "console" && str("level") == "warn" {
+			return "warning"
+		}
+		// A fetch that got no response is stored without a status at all.
+		if code, _ := e.Data["status"].(float64); t == "network" && (code == 0 || code >= 400) {
+			return "failed"
+		}
+	case "http":
+		if code, _ := e.Data["status"].(float64); e.Data["failed"] == true || code >= 400 {
+			return "failed"
+		}
+	case "job":
+		if str("status") == "failed" {
+			return "failed"
+		}
+	}
+	return ""
+}
+
+// requestLensIssues folds every flagged event into one row per lens and issue,
+// counted, with the first occurrence to start reading from.
+func requestLensIssues(evs []reqEvent) []map[string]any {
+	var out []map[string]any
+	seen := map[string]map[string]any{}
+	for _, e := range evs {
+		issue := lensIssue(e)
+		if issue == "" {
+			continue
+		}
+		key := e.Kind + "/" + issue
+		if row := seen[key]; row != nil {
+			row["count"] = row["count"].(int) + 1
+			continue
+		}
+		row := map[string]any{"lens": lensOfKind(e.Kind), "issue": issue, "count": 1}
+		if first := issueText(e); first != "" {
+			row["first"] = first
+		}
+		if f, ok := e.Src["file"].(string); ok && f != "" {
+			row["at"] = fmt.Sprintf("%s:%v", f, e.Src["line"])
+		}
+		seen[key] = row
+		out = append(out, row)
+	}
+	return out
+}
+
+// issueText is the line the dashboard's lens row shows for the event.
+func issueText(e reqEvent) string {
+	str := func(k string) string { v, _ := e.Data[k].(string); return v }
+	switch {
+	case e.Kind == "job":
+		return str("class")
+	case e.Kind == "http":
+		return withStatus(str("method")+" "+str("url"), e.Data["status"])
+	case e.Kind == "browser" && str("type") == "network":
+		return withStatus(str("method")+" "+str("request"), e.Data["status"])
+	case e.Kind == "exception" && str("type") != "" && str("type") != "message":
+		return str("type") + " " + str("message")
+	}
+	return str("message")
+}
+
+func withStatus(call string, status any) string {
+	if status == nil {
+		return strings.TrimSpace(call)
+	}
+	return strings.TrimSpace(fmt.Sprintf("%s %v", call, status))
+}
+
+func lensOfKind(kind string) string {
+	for _, l := range requestLenses {
+		if l.kind == kind {
+			return l.lens
+		}
+	}
+	return kind
 }
 
 // requestLensPage is one page of a lens's rows, oldest first, each placed on

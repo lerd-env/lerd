@@ -168,7 +168,7 @@ func analyzeQueries(events []dumps.Event, minRepeat int, slowMS float64) QueryAn
 
 // handleQueriesAnalyze serves the N+1 / slow-query report over the captured
 // query ring. Read-only GET; available to the dashboard, CLI, and MCP. Query
-// params: site (filter), min_repeat (N+1 threshold), slow_ms (slow cutoff).
+// params: site and rid (filters), min_repeat (N+1 threshold), slow_ms (slow cutoff).
 func handleQueriesAnalyze(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -182,6 +182,6 @@ func handleQueriesAnalyze(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	minRepeat, _ := strconv.Atoi(q.Get("min_repeat"))
 	slowMS, _ := strconv.ParseFloat(q.Get("slow_ms"), 64)
-	events := srv.Filter(dumps.FilterOpts{Site: resolveSiteName(q.Get("site")), Kind: dumps.KindQuery})
+	events := srv.Filter(dumps.FilterOpts{Site: resolveSiteName(q.Get("site")), RID: q.Get("rid"), Kind: dumps.KindQuery})
 	writeJSON(w, analyzeQueries(events, minRepeat, slowMS))
 }
