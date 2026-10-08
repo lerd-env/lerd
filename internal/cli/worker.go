@@ -266,7 +266,7 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 	if err != nil || l == nil {
 		return err
 	}
-	if l.changed {
+	if l.reload {
 		// A rewritten unit (e.g. a runtime switch re-pointed the worker at a
 		// different container) only takes effect once systemd re-reads it;
 		// without this, Enable/Start act on the stale cached unit.
@@ -282,7 +282,8 @@ type workerLaunch struct {
 	siteName, sitePath, workerName   string
 	unitName, label, lifecycleTarget string
 	w                                config.FrameworkWorker
-	changed                          bool
+	// changed is the worker's own unit; reload also covers a conflict torn down.
+	changed, reload bool
 }
 
 // prepareWorkerStart writes a worker's unit without reloading or starting it,
@@ -320,8 +321,9 @@ func prepareWorkerStart(siteName, sitePath, phpVersion, workerName string, w con
 	// Stop conflicting workers before starting. Match the new worker's
 	// path so a per-worktree start tears down only the same worktree's
 	// conflicting unit and doesn't touch the parent's.
+	conflictRemoved := false
 	for _, conflict := range w.ConflictsWith {
-		WorkerStopForSite(siteName, sitePath, conflict) //nolint:errcheck
+		conflictRemoved = tearDownWorker(siteName, sitePath, conflict) || conflictRemoved
 	}
 
 	// Handle proxy port assignment and command augmentation.
@@ -365,7 +367,7 @@ func prepareWorkerStart(siteName, sitePath, phpVersion, workerName string, w con
 	return &workerLaunch{
 		siteName: siteName, sitePath: sitePath, workerName: workerName,
 		unitName: unitName, label: label, lifecycleTarget: lifecycleTarget,
-		w: w, changed: changed,
+		w: w, changed: changed, reload: changed || conflictRemoved,
 	}, nil
 }
 
@@ -723,6 +725,18 @@ func removeWorkerUnit(unitName, label string) (*feedback.Step, error) {
 	// a normal stop and confuse later mode-migration discovery.
 	removeWorkerExecArtifacts(unitName)
 	return step, nil
+}
+
+// tearDownWorker stops and removes a site's worker unit without the
+// daemon-reload, which the caller owes systemd. Reports whether it went.
+func tearDownWorker(siteName, sitePath, workerName string) bool {
+	unitName, _ := workerNames(siteName, sitePath, workerName)
+	step, err := removeWorkerUnit(unitName, workerName)
+	if err == nil {
+		step.OK("")
+	}
+	killWorkerInContainer(siteName, sitePath, workerName)
+	return err == nil
 }
 
 // finalizeStopStep closes the worker-stop step and only then surfaces a

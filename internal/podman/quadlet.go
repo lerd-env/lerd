@@ -19,11 +19,9 @@ import (
 	"github.com/geodro/lerd/internal/systemd"
 )
 
-// quadletReloadPending records that systemd is owed a reload: a previous
-// DaemonReloadIfNeeded call failed without being retried, or a change was
-// deferred with DeferDaemonReload. The next caller forces a reload even when
-// nothing else changed so systemd's cache does not stay stale until an
-// external trigger heals it.
+// quadletReloadPending records that systemd is owed a reload, after a failed
+// one or a DeferDaemonReload. The next DaemonReloadIfNeeded call forces it
+// even when nothing else changed, so systemd's cache does not stay stale.
 var quadletReloadPending atomic.Bool
 
 // DeferDaemonReload owes systemd a reload for a unit change nothing needs to

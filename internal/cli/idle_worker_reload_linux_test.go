@@ -55,6 +55,8 @@ func (u *unitTimeline) count(e string) int {
 func installUnitTimeline(t *testing.T) (*unitTimeline, *config.Site) {
 	t.Helper()
 	tmp := t.TempDir()
+	// macOS writes worker units under ~/Library/LaunchAgents.
+	t.Setenv("HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	dir := filepath.Join(tmp, "site")
@@ -155,5 +157,25 @@ func TestResumeWorkersForIdle_carriesADeferredReload(t *testing.T) {
 	}
 	if n := u.count("reload"); n != 1 {
 		t.Fatalf("the batch reload must settle what was owed: %v", u.events)
+	}
+}
+
+// Waking a worker that conflicts with another tears the other down inside the
+// same batch, so the conflict does not cost a reload of its own.
+func TestResumeWorkersForIdle_conflictSharesTheBatchReload(t *testing.T) {
+	u, site := installUnitTimeline(t)
+	u.active = map[string]bool{}
+	proj, err := config.LoadProjectConfig(site.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proj.CustomWorkers["horizon"] = config.FrameworkWorker{Command: "php artisan horizon", ConflictsWith: []string{"queue"}}
+	if err := config.SaveProjectConfig(site.Path, proj); err != nil {
+		t.Fatal(err)
+	}
+
+	ResumeWorkersForIdle(site, []string{"horizon"})
+	if n := u.count("reload"); n != 1 {
+		t.Fatalf("%d reloads, want the conflict's teardown folded into the batch: %v", n, u.events)
 	}
 }

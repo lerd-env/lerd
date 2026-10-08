@@ -80,11 +80,9 @@ func IdleServiceUsers(name string) (sites []config.Site, consumers []string) {
 	return idleSitesUsing(name), consumers
 }
 
-// SuspendServicesForIdle puts services to sleep one after another: the sites
-// using each get the waking page first, so a request never reaches the app
-// while its service is down, then the service and its running dependents
-// stop. Returns every service it stopped, for the caller to hold asleep, and
-// the first stop error; a failed one does not keep the rest awake.
+// SuspendServicesForIdle puts services to sleep one after another and returns
+// every service it stopped, for the caller to hold asleep. A failed stop is
+// reported but does not keep the rest awake.
 func SuspendServicesForIdle(names []string) ([]string, error) {
 	var stopped []string
 	var firstErr error
@@ -101,9 +99,9 @@ func SuspendServicesForIdle(names []string) ([]string, error) {
 	return stopped, firstErr
 }
 
-// suspendServiceForIdle flags one service and its running dependents asleep and
-// stops them right away. Flagging a whole batch up front instead would leave
-// the later ones asleep on paper but running if the watcher restarts midway.
+// suspendServiceForIdle gives the service's sites the waking page, then flags it
+// and its running dependents asleep and stops them at once: flagging a whole
+// batch first left the rest flagged but running if the watcher restarted.
 func suspendServiceForIdle(name string) ([]string, error) {
 	stopped := []string{name}
 	for _, dep := range idleDependentsOf(name) {

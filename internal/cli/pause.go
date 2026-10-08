@@ -528,29 +528,23 @@ func unitIsActiveOrActivating(unit string) bool {
 func stopWorkersByName(site *config.Site, workers []string) {
 	removed := false
 	for _, w := range workers {
-		unitName, label := "lerd-stripe-"+site.Name, "stripe listener"
 		if w != "stripe" {
-			unitName, _ = workerNames(site.Name, site.Path, w)
-			label = w
+			removed = tearDownWorker(site.Name, site.Path, w) || removed
+			continue
 		}
-		if step, err := removeWorkerUnit(unitName, label); err == nil {
+		if step, err := removeWorkerUnit("lerd-stripe-"+site.Name, "stripe listener"); err == nil {
 			step.OK("")
 			removed = true
 		}
-		killWorkerInContainer(site.Name, site.Path, w)
 	}
 	if err := podman.DaemonReloadIfNeeded(removed); err != nil {
 		feedback.Warn("daemon-reload: %v", err)
 	}
 }
 
-// resumeWorkersByName restarts the named workers of a site. It gates on
-// idleWorkerResumable so the set of workers it can bring back is identical to the
-// set idle-suspend is allowed to stop — keeping the two in lockstep means a
-// worker can never be suspended-but-unresumable (stranded). A new resumable
-// worker kind must be taught to idleWorkerResumable or this gate blocks it.
-// Framework workers and the Stripe listener get every unit written, then one
-// daemon-reload, then their starts, so a batch costs a single reload.
+// resumeWorkersByName writes every unit, reloads once, then starts them. It
+// gates on idleWorkerResumable, the set idle-suspend may stop, so a worker can
+// never be suspended but unresumable; a new resumable kind must be taught there.
 func resumeWorkersByName(site *config.Site, workers []string, phpVersion string) {
 	var batch []func() error
 	reload := false
@@ -582,7 +576,7 @@ func resumeWorkersByName(site *config.Site, workers []string, phpVersion string)
 		if err != nil || l == nil {
 			continue
 		}
-		reload = reload || l.changed
+		reload = reload || l.reload
 		batch = append(batch, func() error { return launchWorker(l, true) })
 	}
 	if err := podman.DaemonReloadIfNeeded(reload); err != nil {
