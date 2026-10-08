@@ -331,6 +331,10 @@ type GlobalConfig struct {
 		// false — without the bridge, dump() behaves exactly as Symfony
 		// ships it.
 		Passthrough bool `yaml:"passthrough,omitempty" mapstructure:"passthrough"`
+		// Buffer is how many events lerd-ui keeps in memory for the Debug
+		// window, at about 4.5 KB each. Zero means DefaultDumpsBuffer; read it
+		// through DumpsBuffer().
+		Buffer int `yaml:"buffer,omitempty" mapstructure:"buffer"`
 	} `yaml:"dumps,omitempty" mapstructure:"dumps"`
 	Devtools struct {
 		// Workers shows long-running queue/scheduler worker events in the
@@ -1279,6 +1283,28 @@ func (c *GlobalConfig) IsDumpsPassthrough() bool {
 // effect (PHP reads ini directives at FPM startup, not per request).
 func (c *GlobalConfig) SetDumpsPassthrough(enabled bool) {
 	c.Dumps.Passthrough = enabled
+}
+
+// The Debug window's event buffer at about 4.5 KB an event: 5,000 is some
+// 22 MB, and the bounds run from 3,000 (13 MB) to 20,000 (90 MB).
+const (
+	DefaultDumpsBuffer = 5000
+	MinDumpsBuffer     = 3000
+	MaxDumpsBuffer     = 20000
+)
+
+// DumpsBuffer is how many events lerd-ui keeps for the Debug window.
+func (c *GlobalConfig) DumpsBuffer() int {
+	if c.Dumps.Buffer <= 0 {
+		return DefaultDumpsBuffer
+	}
+	return min(max(c.Dumps.Buffer, MinDumpsBuffer), MaxDumpsBuffer)
+}
+
+// SetDumpsBuffer stores the buffer size, pulled into range. Persist via
+// SaveGlobal; a running lerd-ui resizes when told to.
+func (c *GlobalConfig) SetDumpsBuffer(n int) {
+	c.Dumps.Buffer = min(max(n, MinDumpsBuffer), MaxDumpsBuffer)
 }
 
 // IsNotificationsEnabled reports whether the global notifier is allowed

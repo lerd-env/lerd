@@ -98,7 +98,7 @@ Lerd keeps the part that was worth having, every service one command away, and d
 | RAM with 5 projects running | ~200 MB | Several GB, five full stacks |
 | First run | Pulls prebuilt images, minutes | Builds images from source, often much longer |
 | PHP versions | 7.4, 8.0 to 8.5, per project, no rebuild | Set in `laradock/.env`, rebuild the image to change |
-| `.test` domains | Automatic, through a dnsmasq container | Manual `/etc/hosts` entries plus a site conf per project |
+| `.test` domains | Automatic, through lerd's built-in DNS server | Manual `/etc/hosts` entries plus a site conf per project |
 | HTTPS | `lerd secure`, trusted mkcert certificate | Bring your own certificate and wire it into the nginx conf |
 | Running tooling | `lerd artisan`, `lerd composer`, `lerd node` from your own shell | `docker compose exec workspace` first |
 | Files in the repo | None required, `.lerd.yaml` optional | `laradock/` submodule, `docker-compose.yml`, its own `.env` |

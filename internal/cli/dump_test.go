@@ -193,3 +193,32 @@ func TestNewDumpCmd_HasExpectedSubcommands(t *testing.T) {
 		t.Errorf("missing subcommand(s) %s", strings.Join(missing, ", "))
 	}
 }
+
+// Setting the buffer stores it in range and tells a running lerd-ui, which
+// resizes in place.
+func TestRunDumpBuffer_StoresTheSizeAndPingsUI(t *testing.T) {
+	withTempXDG(t)
+	withShortDataDir(t)
+	seen := fakeUISocket(t)
+	if err := runDumpBuffer([]string{"50000"}); err != nil {
+		t.Fatalf("runDumpBuffer: %v", err)
+	}
+	if cfg, _ := config.LoadGlobal(); cfg.DumpsBuffer() != config.MaxDumpsBuffer {
+		t.Errorf("stored = %d, want the ceiling", cfg.DumpsBuffer())
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if p := seen.Load(); p != nil && *p == "/api/dumps/notify-changed" {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("did not ping lerd-ui")
+}
+
+func TestRunDumpBuffer_RefusesWhatIsNotANumber(t *testing.T) {
+	withTempXDG(t)
+	if err := runDumpBuffer([]string{"lots"}); err == nil {
+		t.Fatal("want an error for a size that is not a number")
+	}
+}

@@ -241,7 +241,7 @@ func configuredUpstreamDNS() []string {
 // Returns nil when ready, error on timeout.
 func WaitReady(timeout time.Duration) error {
 	// Nothing to wait for when lerd does not own resolution: there is no
-	// lerd-dns container in that mode, so waiting would spend the whole timeout
+	// lerd-dns in that mode, so waiting would spend the whole timeout
 	// and warn about its absence on every start.
 	if cfg, err := config.LoadGlobal(); err == nil && !cfg.DNSManaged() {
 		return nil
@@ -460,7 +460,7 @@ func WriteDnsmasqConfigDual(dir, v4Target, v6Target string) error {
 		v4Target = "127.0.0.1"
 	}
 
-	upstreams := readUpstreamDNS()
+	upstreams := hostUpstreamDNS()
 	if len(upstreams) == 0 {
 		upstreams = defaultUpstreamFallback()
 	}

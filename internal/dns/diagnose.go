@@ -132,12 +132,11 @@ func diagnose(tld string, p probeFns) Diagnostic {
 	}
 	d := Diagnostic{TLD: tld, FirstFailure: -1}
 
-	// Rung 1, lerd-dns container, with a fallback check so a host-side
-	// dnsmasq owning :5300 (Homebrew, system package) doesn't get
-	// misreported as "container not running".
+	// Rung 1, lerd-dns, with a fallback check so a host-side dnsmasq owning
+	// :5300 (Homebrew, system package) doesn't get misreported as lerd's.
 	switch {
 	case p.containerRunning():
-		d.Steps = append(d.Steps, Step{Name: "lerd-dns container", Status: StepOK, Detail: "running"})
+		d.Steps = append(d.Steps, Step{Name: "lerd-dns", Status: StepOK, Detail: "running"})
 	case p.portOpen("127.0.0.1", 5300):
 		// Something is on :5300 but it's not our container. Probe it:
 		//   - answer == 127.0.0.1: legacy resolver matching lerd's mapping
@@ -148,14 +147,14 @@ func diagnose(tld string, p probeFns) Diagnostic {
 		switch {
 		case err == nil && answer == "127.0.0.1":
 			d.Steps = append(d.Steps, Step{
-				Name:   "lerd-dns container",
+				Name:   "lerd-dns",
 				Status: StepWarn,
 				Detail: "not running; a host-side resolver on :5300 is answering ." + tld + " with 127.0.0.1",
 				Hint:   "lerd is not managing DNS here. Either keep your host resolver (no action), or stop it (e.g. `brew services stop dnsmasq`) and run `lerd start` to switch to lerd-managed DNS.",
 			})
 		case err == nil && answer != "":
 			d.Steps = append(d.Steps, Step{
-				Name:   "lerd-dns container",
+				Name:   "lerd-dns",
 				Status: StepWarn,
 				Detail: fmt.Sprintf("not running; a host-side resolver on :5300 is answering .%s with %s (lerd's default is 127.0.0.1)", tld, answer),
 				Hint:   "lerd is not managing DNS here. Your host resolver is mapping ." + tld + " to a different address. Keep using it, or stop it and run `lerd start` to switch to lerd-managed DNS pointing at 127.0.0.1.",
@@ -168,7 +167,7 @@ func diagnose(tld string, p probeFns) Diagnostic {
 				detail += " (empty answer)"
 			}
 			d.Steps = append(d.Steps, Step{
-				Name:   "lerd-dns container",
+				Name:   "lerd-dns",
 				Status: StepFail,
 				Detail: detail,
 				Hint:   "identify the holder: " + findListenerCmd(5300),
@@ -177,10 +176,10 @@ func diagnose(tld string, p probeFns) Diagnostic {
 		return finalize(d)
 	default:
 		d.Steps = append(d.Steps, Step{
-			Name:   "lerd-dns container",
+			Name:   "lerd-dns",
 			Status: StepFail,
 			Detail: "not running",
-			Hint:   "lerd start  (or check podman logs lerd-dns)",
+			Hint:   "lerd start",
 		})
 		return finalize(d)
 	}

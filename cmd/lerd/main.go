@@ -260,6 +260,7 @@ func main() {
 	root.AddCommand(cli.NewDNSDisableCmd())
 	root.AddCommand(cli.NewDNSRepairCmd())
 	root.AddCommand(cli.NewDNSForwarderCmd())
+	root.AddCommand(cli.NewDNSServeCmd())
 	root.AddCommand(cli.NewLANCmd())
 	root.AddCommand(cli.NewLANExposeCmd())
 	root.AddCommand(cli.NewLANUnexposeCmd())
@@ -512,6 +513,11 @@ func newWatchCmd() *cobra.Command {
 					fmt.Printf("[WARN] rewriting quadlets: %v\n", err)
 				}
 			}
+
+			// The provided-env files live on tmpfs, and nothing else refills
+			// them after a reboot: systemd brings the sites back up without
+			// lerd start. A provider can hang, so it must not hold up readiness.
+			go cli.RestoreProvidedEnv()
 
 			// Periodically catch deletions that happen while the watcher is busy.
 			go func() {

@@ -6,7 +6,9 @@
   var endpoint = cfg.endpoint;
   var queue = [], seen = {}, sent = 0, timer = null, MAX = 50;
   // One id per page view, a SPA navigation included, so the dashboard groups
-  // each view's events together.
+  // each view's events together. The first view takes the id of the request
+  // that served the page, which nginx put on this script's tag.
+  var docRid = (document.currentScript && document.currentScript.getAttribute('data-rid')) || '';
   var page = '', lastHref = '';
   // Kept before console is wrapped, so lerd's own lines are never captured.
   var info = console.info.bind(console);
@@ -132,13 +134,14 @@
   }
   // Status 0 means no response at all. The browser hides why (CORS, refused,
   // DNS, offline all look the same to a script), so only the facts are reported.
-  function network(method, url, status) {
+  // rid names the PHP request that answered, read off its X-Lerd-Rid header.
+  function network(method, url, status, rid) {
     if (!failed(status)) return;
     method = String(method || 'GET').toUpperCase();
     url = String(url);
     var cross = crossOrigin(url);
     report({
-      type: 'network', method: method, request: url, status: status, cross: cross,
+      type: 'network', method: method, request: url, status: status, cross: cross, rid: rid || undefined,
       message: (status === 0 ? 'no response ' + (cross ? '(cross-origin) ' : '') : status + ' ') + method + ' ' + url
     });
   }
@@ -149,7 +152,7 @@
       var method = (init && init.method) || (input && input.method) || 'GET';
       var url = typeof input === 'string' ? input : (input && input.url) || String(input);
       return origFetch.apply(this, arguments).then(function (res) {
-        network(method, url, res.status);
+        network(method, url, res.status, res.headers && res.headers.get('X-Lerd-Rid'));
         return res;
       }, function (err) {
         if (!err || err.name !== 'AbortError') network(method, url, 0);
@@ -167,7 +170,12 @@
       var xhr = this, aborted = false;
       if (xhr.__lerd) {
         xhr.addEventListener('abort', function () { aborted = true; });
-        xhr.addEventListener('loadend', function () { if (!aborted) network(xhr.__lerd[0], xhr.__lerd[1], xhr.status); });
+        xhr.addEventListener('loadend', function () {
+          if (aborted) return;
+          var rid = '';
+          try { rid = xhr.getResponseHeader('X-Lerd-Rid'); } catch (e) {}
+          network(xhr.__lerd[0], xhr.__lerd[1], xhr.status, rid);
+        });
       }
       return send.apply(this, arguments);
     };
@@ -207,7 +215,7 @@
   function view(how) {
     if (location.href === lastHref) return;
     lastHref = location.href;
-    page = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    page = how === 'load' && docRid ? docRid : Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
     seen = {};
     sent = 0;
     if (cfg.navigation) report({ type: 'navigation', nav: how, message: location.href });

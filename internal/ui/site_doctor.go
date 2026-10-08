@@ -54,7 +54,28 @@ func handleDoctorRun(w http.ResponseWriter, r *http.Request, site *config.Site) 
 	// it first — otherwise every file check reads a missing .env and reports a
 	// healthy worktree as broken. No-op for the parent and idempotent.
 	ensureWorktreeEnvIfBranch(site, branch)
-	writeJSON(w, sitedoctor.RunForPath(r.Context(), path, site.Framework))
+	if r.URL.Query().Get("stream") != "1" {
+		writeJSON(w, sitedoctor.RunForPath(r.Context(), path, site.Framework))
+		return
+	}
+	streamDoctor(w, func(onCheck func(sitedoctor.Check)) sitedoctor.Response {
+		return sitedoctor.RunForPathWith(r.Context(), path, site.Framework, sitedoctor.Options{OnCheck: onCheck})
+	})
+}
+
+// streamDoctor sends each check as a "check" event the moment run reports it,
+// then the full report as "done", whose counts and order the panel settles on.
+func streamDoctor(w http.ResponseWriter, run func(onCheck func(sitedoctor.Check)) sitedoctor.Response) {
+	send, ok := sseSender(w)
+	if !ok {
+		return
+	}
+	resp := run(func(c sitedoctor.Check) {
+		body, _ := json.Marshal(c)
+		send("check", string(body))
+	})
+	body, _ := json.Marshal(resp)
+	send("done", string(body))
 }
 
 // handleDoctorFixRun runs an allowlisted package-manager fix (composer

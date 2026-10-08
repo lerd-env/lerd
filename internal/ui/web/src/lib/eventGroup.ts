@@ -35,6 +35,8 @@ export interface GroupLabel {
   site: string;
   branch: string;
   text: string;
+  // rid is the request the group's events were captured under, when they were.
+  rid?: string;
 }
 
 // groupLabel describes the header of one request group. The bracketed chunk
@@ -45,7 +47,9 @@ export function groupLabel(ev: DumpEvent, hideSitePrefix: boolean): GroupLabel {
   return {
     site: hideSitePrefix ? '' : (ev.ctx.site ?? ''),
     branch: ev.ctx.branch ?? '',
-    text: labelText(ev)
+    text: labelText(ev),
+    // Only a group keyed by its request id names one; dumps group without it.
+    ...(ev.ctx.rid && ev.kind !== 'dump' ? { rid: ev.ctx.rid } : {})
   };
 }
 

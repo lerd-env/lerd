@@ -185,4 +185,26 @@ describe('browser logs script', () => {
     expect(list).toHaveLength(21);
     expect(list[20]).toBe('… 5 more');
   });
+  it('names the first page view after the request that served it', () => {
+    const tag = document.createElement('script');
+    tag.setAttribute('data-rid', 'php-rid-1');
+    Object.defineProperty(document, 'currentScript', { configurable: true, value: tag });
+    const sent = load({});
+    Object.defineProperty(document, 'currentScript', { configurable: true, value: null });
+    history.pushState(null, '', '/next');
+    settle();
+    const views = sent.filter((r) => r.type === 'navigation');
+    expect(views[0].page).toBe('php-rid-1');
+    expect(views[1].page).not.toBe('php-rid-1');
+  });
+
+  it('names the PHP request a failed fetch reached', async () => {
+    const realFetch = window.fetch;
+    window.fetch = (() => Promise.resolve({ status: 500, headers: { get: (h: string) => (h === 'X-Lerd-Rid' ? 'api-rid-9' : null) } })) as unknown as typeof fetch;
+    const sent = load({ navigation: false, network: ['5xx'] });
+    await fetch('/api/orders');
+    settle();
+    expect(sent.find((r) => r.type === 'network')).toMatchObject({ rid: 'api-rid-9', status: 500 });
+    window.fetch = realFetch;
+  });
 });

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,6 +37,7 @@ with ` + "`lerd dump off`" + `.`,
 	cmd.AddCommand(newDumpStatusCmd())
 	cmd.AddCommand(newDumpTailCmd())
 	cmd.AddCommand(newDumpClearCmd())
+	cmd.AddCommand(newDumpBufferCmd())
 	return cmd
 }
 
@@ -78,6 +80,52 @@ func newDumpClearCmd() *cobra.Command {
 			return runDumpClear()
 		},
 	}
+}
+
+func newDumpBufferCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "buffer [size]",
+		Short: "Show or set how many events the Debug window keeps in memory",
+		Long: fmt.Sprintf(`Show or set how many events lerd-ui keeps for the Debug window, every query,
+view, log line and cache call counting as one at about 4.5 KB each. The
+default is %d; the size is kept between %d and %d. A running lerd-ui resizes
+straight away, keeping the newest events that fit.`, config.DefaultDumpsBuffer, config.MinDumpsBuffer, config.MaxDumpsBuffer),
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runDumpBuffer(args)
+		},
+	}
+}
+
+func runDumpBuffer(args []string) error {
+	feedback.Begin()
+	if len(args) == 0 {
+		cfg, err := config.LoadGlobal()
+		if err != nil {
+			return err
+		}
+		feedback.Line(bufferSummary(cfg.DumpsBuffer()))
+		return nil
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(args[0]))
+	if err != nil {
+		return fmt.Errorf("size must be a number of events, got %q", args[0])
+	}
+	size, err := dumpsops.SetBuffer(n)
+	if err != nil {
+		return err
+	}
+	feedback.Done(bufferSummary(size))
+	if size != n {
+		feedback.Note(fmt.Sprintf("kept between %d and %d", config.MinDumpsBuffer, config.MaxDumpsBuffer))
+	}
+	nudgeUIDumpsChanged()
+	return nil
+}
+
+// bufferSummary names the buffer size and roughly what it costs in memory.
+func bufferSummary(size int) string {
+	return fmt.Sprintf("debug buffer keeps %d events (about %d MB)", size, size*45/10000)
 }
 
 func newDumpTailCmd() *cobra.Command {

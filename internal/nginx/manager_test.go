@@ -1413,6 +1413,22 @@ func TestGenerateVhost_includesForwardedFastcgiParams(t *testing.T) {
 	}
 }
 
+func TestGenerateVhosts_passWhenNginxSentTheRequest(t *testing.T) {
+	confD := setupConfD(t)
+	site := config.Site{Name: "q", Domains: []string{"q.test"}, Path: "/srv/q"}
+	if err := GenerateVhost(site, "8.3"); err != nil {
+		t.Fatalf("GenerateVhost: %v", err)
+	}
+	if err := GenerateSSLVhost(site, "8.3"); err != nil {
+		t.Fatalf("GenerateSSLVhost: %v", err)
+	}
+	for _, f := range []string{"q.test.conf", "q.test-ssl.conf"} {
+		if content := readConf(t, filepath.Join(confD, f)); !strings.Contains(content, "fastcgi_param LERD_NGINX_SENT $msec;") {
+			t.Errorf("%s missing LERD_NGINX_SENT in:\n%s", f, content)
+		}
+	}
+}
+
 func TestGenerateSSLVhost_includesForwardedFastcgiParams(t *testing.T) {
 	confD := setupConfD(t)
 	site := config.Site{Name: "fwd", Domains: []string{"fwd.test"}, Path: "/srv/fwd"}
@@ -1817,5 +1833,18 @@ func TestLerdVhostCarriesDashboardMounts(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "/rustfs/console/") {
 		t.Error("the generated vhost does not forward the rustfs console")
+	}
+}
+
+// The access feed carries the id PHP sent as X-Lerd-Rid just before the URI,
+// where reqstats.ParseAccessRecord reads it.
+func TestEnsureNginxConfig_logsTheRequestID(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if err := EnsureNginxConfig(); err != nil {
+		t.Fatalf("EnsureNginxConfig: %v", err)
+	}
+	if body := readRenderedConf(t, tmp); !strings.Contains(body, "|$request_method|$upstream_http_x_lerd_rid|$request_uri';") {
+		t.Errorf("log_format must carry the request id before the URI, got:\n%s", body)
 	}
 }

@@ -4,7 +4,10 @@
 // socket; tests bind TCP loopback. See docs/features/dumps.md.
 package dumps
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+)
 
 // ProtocolVersion is the wire-format version this package understands.
 // Events with a different `v` are dropped.
@@ -120,4 +123,28 @@ func (e Event) Query() (QueryData, bool) {
 // the listener before it is appended to the ring.
 func (e Event) Valid() bool {
 	return e.V == ProtocolVersion && e.ID != "" && e.Kind != ""
+}
+
+// OfRequest reports whether an event belongs to the request rid names: it ran
+// in that request, or it is a browser event naming it as the request a fetch
+// or XHR reached.
+func (e Event) OfRequest(rid string) bool {
+	if e.Ctx.RID == rid {
+		return true
+	}
+	return bytes.Contains(e.Data, []byte(rid)) && e.reachedRID() == rid
+}
+
+// reachedRID is the request a browser fetch or XHR reached, or "".
+func (e Event) reachedRID() string {
+	if e.Kind != KindBrowser {
+		return ""
+	}
+	var d struct {
+		RID string `json:"rid"`
+	}
+	if json.Unmarshal(e.Data, &d) != nil {
+		return ""
+	}
+	return d.RID
 }

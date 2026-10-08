@@ -112,3 +112,18 @@ func TestApply_RefreshesBrowserLogsVhostsOnEachFlip(t *testing.T) {
 		t.Fatalf("refreshed %d times, want 2", refreshed)
 	}
 }
+
+func TestSetBuffer_PersistsTheSizeInRange(t *testing.T) {
+	withTempXDG(t)
+	got, err := SetBuffer(20000)
+	if err != nil || got != 20000 {
+		t.Fatalf("SetBuffer = %d, %v", got, err)
+	}
+	cfg, _ := config.LoadGlobal()
+	if cfg.DumpsBuffer() != 20000 {
+		t.Errorf("stored = %d", cfg.DumpsBuffer())
+	}
+	if got, _ := SetBuffer(1); got != config.MinDumpsBuffer {
+		t.Errorf("below the floor = %d", got)
+	}
+}

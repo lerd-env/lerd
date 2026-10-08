@@ -1,6 +1,7 @@
 package reqstats
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -203,5 +204,25 @@ func TestAggregatorExcludedWorktreeKeys(t *testing.T) {
 		if r.Route == "GET /health" {
 			t.Error("a site exclusion must cover its worktree keys")
 		}
+	}
+}
+
+// Removing history also drops what debug capture and SPX hold for it, found by
+// the request ids the rows about to go carry.
+func TestRIDsOfWhatAnRemovalTakes(t *testing.T) {
+	s := tempStore(t)
+	seed(t, s, []Record{
+		{At: base, Site: "acme", Method: "GET", Route: "GET /a", URI: "/a", Status: 200, Millis: 5, RID: "r1"},
+		{At: base.Add(time.Second), Site: "acme/feature-x", Method: "GET", Route: "GET /a", URI: "/a", Status: 200, Millis: 5, RID: "r2"},
+		{At: base.Add(2 * time.Second), Site: "acme", Method: "GET", Route: "GET /a", URI: "/a", Status: 200, Millis: 5},
+		{At: base.Add(3 * time.Second), Site: "acme", Method: "GET", Route: "GET /b", URI: "/b", Status: 200, Millis: 5, RID: "r3"},
+	})
+	got, err := s.RouteRIDs("acme", "GET /a")
+	if err != nil || fmt.Sprint(got) != "[r1 r2]" {
+		t.Fatalf("route rids = %v, %v; every branch of the site goes, as DeleteRoute takes them", got, err)
+	}
+	got, err = s.RequestRIDs("acme", base.Add(3*time.Second).UnixMilli(), "/b")
+	if err != nil || fmt.Sprint(got) != "[r3]" {
+		t.Fatalf("request rids = %v, %v", got, err)
 	}
 }

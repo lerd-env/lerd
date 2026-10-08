@@ -3,10 +3,12 @@ package ui
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/reqstats"
+	"github.com/geodro/lerd/internal/spxreport"
 )
 
 // getAnalyticsStore is the read handle onto the durable request store the
@@ -61,6 +63,10 @@ type recentRequest struct {
 	Status   int     `json:"status"`
 	Millis   float64 `json:"millis"`
 	Cold     bool    `json:"cold"`
+	// RID links the row to what debug capture recorded for the request.
+	RID string `json:"rid,omitempty"`
+	// ProfileKey names the request's SPX capture, so its flame graph opens.
+	ProfileKey string `json:"profile_key,omitempty"`
 }
 
 // analyticsResponse is the request-timing analytics view for one site over a
@@ -69,6 +75,8 @@ type analyticsResponse struct {
 	reqstats.Analytics
 	Range  string          `json:"range"`
 	Recent []recentRequest `json:"recent"`
+	// RecentMore says older requests exist past the page.
+	RecentMore bool `json:"recent_more,omitempty"`
 	// Excluded are the routes the user has silenced for this site. They carry in
 	// the same payload as the data they are missing from, so the dashboard never
 	// renders a view whose exclusions it hasn't caught up with.
@@ -94,7 +102,7 @@ func analyticsRange(s string) (time.Duration, string) {
 // window, read from the durable store the watcher fills from the nginx access
 // feed. Returns true when it owns the request.
 //
-//	GET /api/sites/{domain}/analytics[?range=15m|1h|24h|7d][&branch=<sanitized>]
+//	GET /api/sites/{domain}/analytics[?range=15m|1h|24h|7d][&branch=<sanitized>][&recent=N]
 func analyticsRoute(w http.ResponseWriter, r *http.Request, domain string, rest []string) bool {
 	if len(rest) == 2 && rest[0] == "analytics" {
 		return analyticsMutateRoute(w, r, domain, rest[1])
@@ -121,14 +129,76 @@ func analyticsRoute(w http.ResponseWriter, r *http.Request, domain string, rest 
 		writeJSON(w, emptyAnalytics(key, rangeLabel))
 		return true
 	}
-	recent, _ := store.Recent(key, 20)
+	// One past the page says whether there is more without counting the rest.
+	limit := recentLimit(r.URL.Query().Get("recent"))
+	recent, _ := store.Recent(key, limit+1)
+	more := pageHasMore(len(recent), limit)
+	if len(recent) > limit {
+		recent = recent[:limit]
+	}
 	excluded, _ := store.ExcludedRoutes(key)
 	if excluded == nil {
 		excluded = []string{}
 	}
-	out := analyticsResponse{Analytics: a, Range: rangeLabel, Recent: make([]recentRequest, 0, len(recent)), Excluded: excluded}
+	var captured map[string]bool
+	if srv := dumpsServer.Load(); srv != nil {
+		captured = srv.RequestIDs()
+	}
+	profiles := spxreport.KeysByRID(config.SpxDataDir())
+	linkSlowest(a.Routes, captured, profiles)
+	writeJSON(w, analyticsResponse{Analytics: a, Range: rangeLabel, Recent: recentRows(recent, captured, profiles), RecentMore: more, Excluded: excluded})
+	return true
+}
+
+// forgetRequests drops the captured debug events and SPX profiles of requests
+// whose history was just removed.
+func forgetRequests(rids []string) {
+	if srv := dumpsServer.Load(); srv != nil {
+		srv.ForgetRequests(rids)
+	}
+	spxreport.RemoveForRIDs(config.SpxDataDir(), rids)
+}
+
+// linkSlowest links each route's slowest request to what is left of it, as
+// recentRows does for the recent list.
+func linkSlowest(routes []reqstats.RouteStat, captured map[string]bool, profiles map[string]string) {
+	for _, r := range routes {
+		if r.Slowest == nil {
+			continue
+		}
+		r.Slowest.ProfileKey = profiles[r.Slowest.RID]
+		if !captured[r.Slowest.RID] {
+			r.Slowest.RID = ""
+		}
+	}
+}
+
+// recentLimitCap bounds one page of recent requests, so a single read stays cheap.
+const recentLimitCap = 500
+
+// recentLimit is how many recent requests a page asks for: 20 unless it says,
+// and never more than the cap.
+func recentLimit(q string) int {
+	n, err := strconv.Atoi(q)
+	if err != nil || n <= 0 {
+		return 20
+	}
+	return min(n, recentLimitCap)
+}
+
+// pageHasMore reports whether a page fetched one row past its limit can offer
+// another, which it cannot once it is at the cap.
+func pageHasMore(fetched, limit int) bool {
+	return fetched > limit && limit < recentLimitCap
+}
+
+// recentRows renders the recent-requests list. A row keeps its request id only
+// while captured events for it are buffered, so Inspect never opens on nothing,
+// and names its SPX capture whenever the request was profiled.
+func recentRows(recent []reqstats.Record, captured map[string]bool, profiles map[string]string) []recentRequest {
+	out := make([]recentRequest, 0, len(recent))
 	for _, rec := range recent {
-		out.Recent = append(out.Recent, recentRequest{
+		row := recentRequest{
 			AtMillis: rec.At.UnixMilli(),
 			Method:   rec.Method,
 			Route:    rec.Route,
@@ -136,10 +206,16 @@ func analyticsRoute(w http.ResponseWriter, r *http.Request, domain string, rest 
 			Status:   rec.Status,
 			Millis:   rec.Millis,
 			Cold:     rec.Cold,
-		})
+		}
+		if rec.RID != "" {
+			row.ProfileKey = profiles[rec.RID]
+		}
+		if captured[rec.RID] {
+			row.RID = rec.RID
+		}
+		out = append(out, row)
 	}
-	writeJSON(w, out)
-	return true
+	return out
 }
 
 // emptyAnalytics is a well-formed but empty view, so the UI renders its "watching
@@ -223,16 +299,22 @@ func analyticsMutateRoute(w http.ResponseWriter, r *http.Request, domain, action
 	// A recent row names one request, so only that row goes; the route lists name
 	// the whole route, so its history goes. Excluding is independent of either, and
 	// applies from here on rather than reaching back over what is left.
+	// The ids are read before the rows go, so what debug capture and SPX hold for
+	// those requests can go with them.
 	var removed int64
+	var rids []string
 	if req.AtMillis > 0 {
+		rids, _ = store.RequestRIDs(key, req.AtMillis, req.URI)
 		removed, err = store.DeleteRequest(key, req.AtMillis, req.URI)
 	} else {
+		rids, _ = store.RouteRIDs(key, req.Route)
 		removed, err = store.DeleteRoute(key, req.Route)
 	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return true
 	}
+	forgetRequests(rids)
 	if req.Exclude {
 		if err := store.ExcludeRoute(key, req.Route); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

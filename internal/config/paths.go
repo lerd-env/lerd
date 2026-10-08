@@ -322,6 +322,12 @@ func DumpsSocketPath() string {
 	return filepath.Join(RunDir(), "lerd-dumps.sock")
 }
 
+// DumpsBufferFile holds the debug events lerd-ui had buffered when it last
+// stopped, read back at start so a restart keeps what Inspect can open.
+func DumpsBufferFile() string {
+	return filepath.Join(DataDir(), "dumps-buffer.json")
+}
+
 // DumpsEnabledFlagFile is the sentinel the debug bridge checks on every
 // request. Present file = bridge captures dump()/dd() calls; absent file
 // = bridge is a fast no-op. Toggling is a single touch/rm on this file

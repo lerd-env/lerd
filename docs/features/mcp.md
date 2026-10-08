@@ -157,7 +157,7 @@ Either form leaves stdout to the server: anything lerd needs to say while starti
 
 ## Available MCP tools
 
-The MCP surface is **twelve grouped tools**, each driven by an `action` argument. Always pass `action`; start by calling `site` with `action: "list"` to discover sites.
+The MCP surface is **thirteen grouped tools**, each driven by an `action` argument. Always pass `action`; start by calling `site` with `action: "list"` to discover sites.
 
 The server also sends short instructions when a client connects, telling the assistant to use these tools rather than the raw commands they wrap. Clients such as Claude Code load tool schemas only when needed, so without those instructions an assistant would see just a tool named `worktree` and run `git worktree add` itself, skipping the dependency install, branch domain and database isolation that `add` handles.
 
@@ -171,8 +171,9 @@ The server also sends short instructions when a client connects, telling the ass
 | `worker` | `list` (call first), `start`, `stop`, `add`, `remove`, `health`, `heal`, `mode_get`, `mode_set`, `queue_start`, `queue_stop`, `horizon_start`, `horizon_stop`, `reverb_start`, `reverb_stop`, `schedule_start`, `schedule_stop`, `stripe_start`, `stripe_stop`, `stripe_config` |
 | `exec` | `artisan`, `console`, `composer`, `vendor_bins`, `vendor_run`, `commands_list`, `commands_run`, `command_add`, `command_remove` |
 | `framework` | `list`, `add`, `remove`, `prune`, `search`, `update`, `project_new`, `setup` |
-| `diag` | `status`, `doctor`, `doctor_fix`, `site_doctor`, `which`, `check`, `dns_diagnose`, `bug_report`, `analyze_queries`, `route_timing`, `optimize_route`, `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle`, `browser_events`, `browser_toggle`, `profiler_toggle`, `profiler_status`, `profiler_clear`, `profiler_report`, `xdebug_on`, `xdebug_off`, `xdebug_status` |
+| `diag` | `status`, `doctor`, `doctor_fix`, `site_doctor`, `which`, `check`, `dns_diagnose`, `bug_report`, `analyze_queries`, `route_timing`, `optimize_route`, `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle`, `dumps_buffer`, `browser_events`, `browser_toggle`, `profiler_toggle`, `profiler_status`, `profiler_clear`, `profiler_report`, `xdebug_on`, `xdebug_off`, `xdebug_status` |
 | `logs` | `sources`, `fetch` |
+| `request` | `list` (a site's recent requests and their ids), `lenses` (events per lens for one request), `lens` (one lens's events, paged) |
 | `worktree` | `list`, `add`, `remove`, `wait`, `db_isolate`, `db_share` |
 | `workspace` | `list`, `create`, `rename`, `delete`, `assign`, `move` |
 

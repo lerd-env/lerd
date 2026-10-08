@@ -11,6 +11,8 @@ export interface DumpsStatus {
   listening: boolean;
   addr: string;
   count: number;
+  // capacity is how many events the buffer keeps before the oldest go.
+  capacity?: number;
   subscribers: number;
   last_ts: string;
 }
@@ -206,6 +208,18 @@ export async function togglePassthrough(enable: boolean): Promise<PassthroughRes
   const out = (await res.json()) as PassthroughResult;
   void refreshStatus();
   return out;
+}
+
+// setDumpsBuffer resizes the buffer lerd-ui keeps for the Debug window, in
+// place: the newest events that fit stay.
+export async function setDumpsBuffer(size: number): Promise<void> {
+  const res = await apiFetch('/api/dumps/buffer', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ size })
+  });
+  if (!res.ok) throw new Error((await res.text()) || `buffer resize failed (${res.status})`);
+  status.set((await res.json()) as DumpsStatus);
 }
 
 // Derived list of unique site names seen in the buffered events, for the

@@ -62,11 +62,13 @@ install: build build-tray
 	@if [ "$$(uname)" = "Darwin" ]; then \
 		launchctl kickstart -k gui/$$(id -u)/com.lerd.lerd-ui 2>/dev/null && echo "Restarted lerd-ui" || true; \
 		launchctl kickstart -k gui/$$(id -u)/com.lerd.lerd-watcher 2>/dev/null && echo "Restarted lerd-watcher" || true; \
+		launchctl kickstart -k gui/$$(id -u)/com.lerd.lerd-dns 2>/dev/null && echo "Restarted lerd-dns" || true; \
 		launchctl kickstart -k gui/$$(id -u)/com.lerd.lerd-tray 2>/dev/null || true; \
 	else \
 		systemctl --user daemon-reload 2>/dev/null || true; \
 		systemctl --user is-active --quiet lerd-ui 2>/dev/null && systemctl --user restart lerd-ui && echo "Restarted lerd-ui" || true; \
 		systemctl --user is-active --quiet lerd-watcher 2>/dev/null && systemctl --user restart lerd-watcher && echo "Restarted lerd-watcher" || true; \
+		systemctl --user is-active --quiet lerd-dns 2>/dev/null && systemctl --user restart lerd-dns && echo "Restarted lerd-dns" || true; \
 		systemctl --user is-active --quiet lerd-tray 2>/dev/null && systemctl --user restart lerd-tray || true; \
 	fi
 

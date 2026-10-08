@@ -67,7 +67,7 @@ func TestEvents_TagsTheSiteNginxNamedAndDropsUnknownTypes(t *testing.T) {
 	body := `[
 		{"type":"error","message":"Uncaught TypeError: x is undefined","file":"https://shop.test/app.js","line":12,"url":"https://shop.test/cart","page":"p1"},
 		{"type":"telemetry","message":"not ours"},
-		{"type":"network","message":"500 POST /api/cart","status":500}
+		{"type":"network","message":"500 POST /api/cart","status":500,"rid":"api-rid-1"}
 	]`
 	evs, err := Events([]byte(body), "shop", "feature-x", "feature-x.shop.test")
 	if err != nil {
@@ -87,7 +87,7 @@ func TestEvents_TagsTheSiteNginxNamedAndDropsUnknownTypes(t *testing.T) {
 		t.Fatalf("bad source: %+v", e.Src)
 	}
 	var r Report
-	if err := json.Unmarshal(evs[1].Data, &r); err != nil || r.Status != 500 {
+	if err := json.Unmarshal(evs[1].Data, &r); err != nil || r.Status != 500 || r.RID != "api-rid-1" {
 		t.Fatalf("network data = %s (%v)", evs[1].Data, err)
 	}
 }

@@ -3,82 +3,32 @@
 package cli
 
 import (
-	"io"
-
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/feedback"
-	"github.com/geodro/lerd/internal/imagepull"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
 )
 
-// writeDNSUnit writes the container quadlet for the dnsmasq DNS service on Linux.
-func writeDNSUnit(_ io.Writer) error {
-	content, err := podman.GetQuadletTemplate("lerd-dns.container")
-	if err != nil {
-		return err
+// removeLegacyDNSService retires the dnsmasq container that ran lerd-dns
+// before the built-in server, so it stops holding port 5300. Its image goes
+// too, since nothing else uses it. Reports whether there was one.
+func removeLegacyDNSService() bool {
+	if !podman.QuadletInstalled(dnsUnit) {
+		return false
 	}
-	return services.Mgr.WriteContainerUnit("lerd-dns", content)
+	_ = services.Mgr.Stop(dnsUnit)
+	_ = services.Mgr.RemoveContainerUnit(dnsUnit)
+	podman.Cmd("rm", "-f", dnsUnit).Run()               //nolint:errcheck
+	podman.Cmd("rmi", "-f", "lerd-dnsmasq:local").Run() //nolint:errcheck
+	return true
 }
 
-// ensureDNSImageForStart ensures the lerd-dnsmasq container image exists on Linux.
-func ensureDNSImageForStart() {
-	// Ignore errors — the image will be built again during RunParallel if missing.
-	if !podman.ImageExists(podman.DNSMasqImage) {
-		_ = podman.BuildDNSMasqImage(io.Discard, dns.ReadUpstreamDNS())
-	}
-}
+// prepDNSForRollback deletes the lerd-dns service unit, which would otherwise
+// outrank the quadlet an older lerd writes for its dnsmasq container and run a
+// dns-serve command that binary does not have.
+func prepDNSForRollback() { _ = services.Mgr.RemoveServiceUnit(dnsUnit) }
 
-// dnsImagePlan discloses what pullDNSImages downloads. The dnsmasq build adds
-// only apk packages on top of the base, so the base pull is the whole of it.
-func dnsImagePlan() imagepull.Plan {
-	return imagepull.Plan{
-		imagepull.Pull(podman.DNSMasqBaseImage, "base for the lerd-dns image"),
-	}
-}
-
-// pullDNSImages returns build jobs to pull alpine and build the dnsmasq container image.
-func pullDNSImages() []BuildJob {
-	return []BuildJob{
-		{
-			Label: "Pulling alpine:latest",
-			Run: func(w io.Writer) error {
-				return podman.PullImageTo(podman.DNSMasqBaseImage, w)
-			},
-		},
-		{
-			Label: "Building dnsmasq image",
-			Run: func(w io.Writer) error {
-				return podman.BuildDNSMasqImage(w, dns.ReadUpstreamDNS())
-			},
-		},
-	}
-}
-
-// isDNSContainerUnit returns true on Linux since DNS uses a Podman container.
-func isDNSContainerUnit() bool { return true }
-
-// ensureDNSServiceUpdated is a no-op on Linux — DNS always uses a container.
-func ensureDNSServiceUpdated(_ io.Writer) error { return nil }
-
-// removeDNSContainerIfRunning is a no-op on Linux.
-func removeDNSContainerIfRunning() {}
-
-// nativeDNSRestart is a no-op on Linux — DNS is a container unit managed by systemd.
-func nativeDNSRestart() error { return nil }
-
-// needsDNSServiceInstall always returns false on Linux (container quadlet handles it).
-func needsDNSServiceInstall() bool { return false }
-
-// teardownDNS stops the lerd-dns container, removes its quadlet, and reloads
-// the user manager so a subsequent `lerd install` does not silently restart
-// the unit. Called from runInstall when the user flips dns.enabled from true
-// to false; safe to call when nothing is installed.
-func teardownDNS() {
-	_ = services.Mgr.Stop("lerd-dns")
-	_ = services.Mgr.RemoveContainerUnit("lerd-dns")
-	_ = services.Mgr.DaemonReload()
-
+func teardownDNSResolver() {
 	// Only when lerd actually wrote resolver config. install.go calls this on
 	// every run where DNS is off, not just on a true->false flip, so an
 	// unconditional teardown would revert interfaces and restart NetworkManager on

@@ -137,7 +137,7 @@ func TestWriteDnsmasqConfig_withUpstreams(t *testing.T) {
 	assertContains(t, content, "address=/.test/127.0.0.1")
 }
 
-func TestWriteDnsmasqConfig_noUpstreamsFallsBackToPasta(t *testing.T) {
+func TestWriteDnsmasqConfig_noUpstreamsForwardsNothing(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	dir := t.TempDir()
@@ -159,8 +159,9 @@ func TestWriteDnsmasqConfig_noUpstreamsFallsBackToPasta(t *testing.T) {
 	assertContains(t, content, "port=5300")
 	assertContains(t, content, "address=/.test/127.0.0.1")
 	assertContains(t, content, "address=/.test/::1")
-	assertContains(t, content, "no-resolv")
-	assertContains(t, content, "server="+pastaDefaultForwarder)
+	if strings.Contains(content, "server=") {
+		t.Errorf("with no usable nameserver lerd-dns must not forward to pasta's address, which only exists inside a container:\n%s", content)
+	}
 	if strings.Contains(content, "listen-address") {
 		t.Errorf("dnsmasq must not restrict listen-address (rootlessport forwards via container netif, not loopback), got:\n%s", content)
 	}
@@ -352,8 +353,6 @@ func TestWriteDnsmasqConfigFor_customTarget(t *testing.T) {
 	}
 	content := readFile(t, filepath.Join(dir, "lerd.conf"))
 	assertContains(t, content, "address=/.test/10.0.0.5")
-	assertContains(t, content, "no-resolv")
-	assertContains(t, content, "server="+pastaDefaultForwarder)
 }
 
 func TestWriteDnsmasqConfigFor_emptyTargetDefaults(t *testing.T) {
@@ -1062,4 +1061,19 @@ func TestTeardown_pushesDNSOnlyWhereResolvedRuns(t *testing.T) {
 	if !strings.Contains(teardown, "resolvedInterfacesToRevert()") {
 		t.Error("the revert loop must go through the resolved-gated lister")
 	}
+}
+
+// lerd-dns runs on the host, so a local resolver on loopback is a usable
+// upstream for it, unlike for the container network. systemd-resolved's stubs
+// are not: resolved routes queries back to lerd-dns, so forwarding there loops.
+func TestHostUpstreamDNS_keepsLocalResolversButNotResolvedStubs(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	resolv := writeTempFile(t, "nameserver 127.0.0.1\nnameserver 127.0.0.53\nnameserver 127.0.0.54\nnameserver 192.168.1.1\n")
+	origPaths, origNmcli := resolvPaths, nmcliDNSFunc
+	resolvPaths = []string{resolv}
+	nmcliDNSFunc = func() []string { return nil }
+	defer func() { resolvPaths = origPaths; nmcliDNSFunc = origNmcli }()
+
+	assertSliceEqual(t, hostUpstreamDNS(), []string{"127.0.0.1", "192.168.1.1"})
+	assertSliceEqual(t, readUpstreamDNS(), []string{"192.168.1.1"})
 }

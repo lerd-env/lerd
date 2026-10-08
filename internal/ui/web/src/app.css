@@ -389,10 +389,30 @@ button {
   animation: lerd-panel-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* $lib/marquee: the clipped text drops its ellipsis and its content slides by
+   the measured overflow, pausing at each end. */
+@keyframes lerd-marquee {
+  0%,
+  15% {
+    transform: translateX(0);
+  }
+  85%,
+  100% {
+    transform: translateX(var(--marquee-shift));
+  }
+}
+.lerd-marquee {
+  text-overflow: clip;
+}
+.lerd-marquee > * {
+  display: inline-block;
+  animation: lerd-marquee var(--marquee-duration) ease-in-out infinite alternate;
+}
+
 /* The looping animations stop while the window is blurred or hidden (see
    $lib/windowIdle): an unfocused window still repaints them every frame.
    Transitions go too, so a background poll repaints once instead of animating. */
-:root[data-window-idle] :is(.animate-ping, .animate-pulse, .animate-spin, .lerd-pulse-ping) {
+:root[data-window-idle] :is(.animate-ping, .animate-pulse, .animate-spin, .lerd-pulse-ping, .lerd-marquee > *) {
   animation-play-state: paused;
 }
 :root[data-window-idle] * {

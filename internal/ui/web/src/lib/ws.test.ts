@@ -156,4 +156,30 @@ describe('ws focus reporting', () => {
     expect(sock.sent).toContain(JSON.stringify({ type: 'focus', focused: false }));
     hasFocus.mockRestore();
   });
+
+  it('tells the server which site the request list shows, again after a reconnect', async () => {
+    const { connectWs, watchRequests, disconnectWs } = await import('./ws');
+    connectWs();
+    const first = MockWebSocket.instances[0];
+    first.readyState = MockWebSocket.OPEN;
+    first.fire('open', {});
+    const other = watchRequests('acme.test', 'feature');
+    const unwatch = watchRequests('acme.test', 'feature');
+    const watching = JSON.stringify({ type: 'requests', domain: 'acme.test', branch: 'feature' });
+    expect(first.sent).toContain(watching);
+
+    first.fire('close', {});
+    vi.advanceTimersByTime(1000);
+    const second = MockWebSocket.instances[1];
+    second.readyState = MockWebSocket.OPEN;
+    second.fire('open', {});
+    expect(second.sent).toContain(watching);
+
+    // A second list on the same site going away leaves the first one watched.
+    unwatch();
+    expect(second.sent.at(-1)).toBe(watching);
+    other();
+    expect(second.sent.at(-1)).toBe(JSON.stringify({ type: 'requests', domain: '', branch: '' }));
+    disconnectWs();
+  });
 });

@@ -87,7 +87,7 @@ The bill arrives when the projects multiply. Each repo is a full stack, so five 
 | `sail up -d` per project before you can work | `lerd start` once, then every project is served |
 | `sail artisan`, `sail composer`, `sail npm` | `lerd artisan`, `lerd composer`, `lerd node`, from your own shell |
 | `localhost:${APP_PORT}`, a different port per project | `https://myapp.test`, automatic, no ports |
-| `/etc/hosts` edits when you wanted a real hostname | Automatic `.test` domains through a dnsmasq container |
+| `/etc/hosts` edits when you wanted a real hostname | Automatic `.test` domains through lerd's built-in DNS server |
 | No TLS, or mkcert wired in by hand | `lerd secure`, a real mkcert certificate trusted by your system and browsers |
 | Change the PHP version by switching the Sail image and rebuilding | `lerd isolate 8.4`, or let it read `composer.json`, no rebuild |
 | Add a service by editing `docker-compose.yml` | `lerd service start meilisearch`, shared across every site |

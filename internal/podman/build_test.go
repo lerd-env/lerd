@@ -311,6 +311,28 @@ func TestPhpFpmContainerfile_RuntimeIncludesGit(t *testing.T) {
 	}
 }
 
+// The base image's docker.conf sends the pool access log to stderr, which
+// journald records at priority err, so every 200 reads as an error (#2151).
+func TestPhpFpmContainerfile_DisablesPoolAccessLog(t *testing.T) {
+	tmpl, err := GetQuadletTemplate("lerd-php-fpm.Containerfile")
+	if err != nil {
+		t.Fatalf("read containerfile: %v", err)
+	}
+	_, runtime, ok := strings.Cut(tmpl, "# ── Runtime stage")
+	if !ok {
+		t.Fatal("runtime stage marker missing from Containerfile")
+	}
+	for _, line := range strings.Split(runtime, "\n") {
+		if strings.HasPrefix(line, "RUN printf") && strings.HasSuffix(line, "> /usr/local/etc/php-fpm.d/zz-lerd.conf") {
+			if !strings.Contains(line, `\naccess.log=/dev/null\n`) {
+				t.Errorf("zz-lerd.conf must set access.log=/dev/null to override docker.conf's stderr access log:\n%s", line)
+			}
+			return
+		}
+	}
+	t.Fatal("runtime stage no longer writes zz-lerd.conf")
+}
+
 // ext/ftp compiles FTPS in only when OpenSSL was configured; a phpize build
 // leaves PHP_OPENSSL unset and silently ships an ftp without ftp_ssl_connect
 // (#1576). The configure flag was renamed in 8.4, so both branches matter.

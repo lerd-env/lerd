@@ -47,4 +47,10 @@ describe('LensGroupLabel', () => {
     });
     expect(container.textContent?.trim()).toBe('cli (pid 7)');
   });
+
+  it('names the request a group belongs to by its id', () => {
+    const { container } = render(LensGroupLabel, { props: { label: { site: '', branch: '', text: 'GET /', rid: '0065d3ba3290d4825' } } });
+    expect(container.textContent).toContain('GET /');
+    expect(screen.getByText('0065d3ba3290d4825')).toBeTruthy();
+  });
 });

@@ -57,7 +57,7 @@ func TestSources_EnumeratesSiteAndGlobals(t *testing.T) {
 		"worker:queue":   {KindJournal, ScopeSite},
 		"worker:horizon": {KindJournal, ScopeSite},
 		"nginx":          {KindPodman, ScopeGlobal},
-		"dns":            {KindPodman, ScopeGlobal},
+		"dns":            {KindJournal, ScopeGlobal},
 		"watcher":        {KindJournal, ScopeGlobal},
 		"ui":             {KindJournal, ScopeGlobal},
 	}

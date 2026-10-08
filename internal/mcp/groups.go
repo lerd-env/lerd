@@ -58,6 +58,7 @@ func toolList() []mcpTool {
 		frameworkTool(),
 		diagTool(),
 		logsTool(),
+		requestTool(),
 		worktreeTool(),
 		workspaceTool(),
 	}
@@ -232,6 +233,7 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"dumps_status":    execDumpsStatus,
 		"dumps_clear":     execDumpsClear,
 		"dumps_toggle":    execDumpsToggle,
+		"dumps_buffer":    execDumpsBuffer,
 		"browser_events":  execBrowserEvents,
 		"browser_toggle":  execBrowserLogsToggle,
 		"browser_presets": execBrowserPresets,
@@ -242,6 +244,11 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"xdebug_on":       func(a map[string]any) (any, *rpcError) { return execXdebugToggle(a, true) },
 		"xdebug_off":      func(a map[string]any) (any, *rpcError) { return execXdebugToggle(a, false) },
 		"xdebug_status":   func(a map[string]any) (any, *rpcError) { return execXdebugStatus() },
+	},
+	"request": {
+		"list":   execRequestTool,
+		"lenses": execRequestTool,
+		"lens":   execRequestTool,
 	},
 	"logs": {
 		"sources": execLogsSources,
@@ -559,7 +566,7 @@ func diagTool() mcpTool {
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":          {Type: "string", Enum: []string{"status", "doctor", "doctor_fix", "site_doctor", "which", "check", "dns_diagnose", "bug_report", "analyze_queries", "route_timing", "optimize_route", "dumps_recent", "dumps_status", "dumps_clear", "dumps_toggle", "browser_events", "browser_toggle", "browser_presets", "profiler_toggle", "profiler_status", "profiler_clear", "profiler_report", "xdebug_on", "xdebug_off", "xdebug_status"}},
+				"action":          {Type: "string", Enum: []string{"status", "doctor", "doctor_fix", "site_doctor", "which", "check", "dns_diagnose", "bug_report", "analyze_queries", "route_timing", "optimize_route", "dumps_recent", "dumps_status", "dumps_clear", "dumps_toggle", "dumps_buffer", "browser_events", "browser_toggle", "browser_presets", "profiler_toggle", "profiler_status", "profiler_clear", "profiler_report", "xdebug_on", "xdebug_off", "xdebug_status"}},
 				"path":            {Type: "string", Description: "Project root (which/check/site_doctor/profiler_report). Defaults to cwd."},
 				"site":            {Type: "string", Description: "dumps/analyze_queries/route_timing/optimize_route/site_doctor/profiler_report/browser_*: site (name or domain)."},
 				"args":            {Type: "array", Items: stringItems, Description: `profiler_report: argv to run under php and profile, e.g. ["artisan","app:import"].`},
@@ -573,6 +580,7 @@ func diagTool() mcpTool {
 				"min_repeat":      {Type: "integer", Description: "analyze_queries/optimize_route: N+1 repeat threshold."},
 				"slow_ms":         {Type: "number", Description: "analyze_queries/optimize_route: slow-query threshold."},
 				"enable":          {Type: "boolean", Description: "*_toggle: on/off."},
+				"size":            {Type: "integer", Description: "dumps_buffer: events kept (3000-20000)."},
 				"output":          {Type: "string", Description: "bug_report: output file path."},
 				"log_lines":       {Type: "integer", Description: "bug_report: lines per log (default 200)."},
 				"show_real_names": {Type: "boolean", Description: "bug_report: skip anonymisation."},

@@ -107,7 +107,7 @@ Otherwise, the fastest way to find the broken rung is `lerd doctor`. The DNS sec
 ```
 [DNS]
   DNS TLD (.test)                     OK
-    lerd-dns container                running
+    lerd-dns                          running
     dnsmasq config                    address=/.test/127.0.0.1, port=5300
     port 5300 listening               127.0.0.1:5300
     dig @127.0.0.1 -p 5300            127.0.0.1
@@ -120,7 +120,7 @@ The chain in order:
 
 | Rung | What it checks | If it fails |
 |---|---|---|
-| `lerd-dns container` | The dnsmasq container is running. | `lerd start` (or `podman logs lerd-dns` to see why it crashed). |
+| `lerd-dns` | The lerd-dns service is running. | `lerd start` (or `journalctl --user -u lerd-dns` on Linux, `~/Library/Logs/lerd/lerd-dns.log` on macOS, to see why it stopped). |
 | `dnsmasq config` | `~/.local/share/lerd/dnsmasq/lerd.conf` exists with `port=5300` and `address=/.<tld>/`. | `lerd start` regenerates the config from your registered TLD. |
 | `port 5300 listening` | TCP/UDP 5300 is reachable on 127.0.0.1. | Another process owns the port. Find it with `ss -tlnp sport = :5300` on Linux, or `lsof -nP -iTCP:5300 -sTCP:LISTEN` on macOS. |
 | `dig @127.0.0.1 -p 5300` | A direct query at port 5300 returns 127.0.0.1 for `lerd-probe.<tld>`, or the host's LAN IP when [`lan:expose`](usage/lan-sharing.md) is on. | dnsmasq is up but its config drifted. `lerd dns:repair`. |
@@ -173,14 +173,6 @@ hosts: mymachines mdns_minimal [NOTFOUND=return] files myhostname dns resolve
 ```
 
 This makes glibc consult the plain `dns` module before systemd-resolved's `nss-resolve`, which the VPN client no longer shadows.
-:::
-
-::: details `lerd install` fails at "Building dnsmasq" with "unable to select packages"
-The dnsmasq image is the one thing lerd builds rather than pulls, and the `apk add` inside that build resolves names from the build's own network namespace, not through the host resolver that just pulled the base image. When that namespace has no working resolver, the build fails with `WARNING: fetching https://dl-cdn.alpinelinux.org/...: DNS: transient error` followed by `ERROR: unable to select packages`, even though every pull before it succeeded.
-
-lerd retries the build with your host's real upstream nameservers pinned, which covers the common case of a stub resolver (`127.0.0.53`) that podman's default handling does not translate correctly on your setup. When that still resolves nothing, it builds once more on the host network, which is the namespace that pulled the base image a moment earlier and so is known to work. A rootless build cannot join the lerd network, so those two are the levers available.
-
-If every attempt fails, lerd says so at the end of the install rather than reporting a clean finish: without the image, lerd-dns cannot start and no `.test` name resolves. Check what the container network can reach with `lerd doctor`, in particular the `internet DNS from containers` line, fix it, then run `lerd install` again.
 :::
 
 ::: details `php artisan` fails with "could not translate host name lerd-postgres" while the site works in the browser

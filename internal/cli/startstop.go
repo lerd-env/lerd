@@ -129,17 +129,6 @@ func pendingImageWork() []imageWork {
 		img := image
 		reason := "missing, needed by " + strings.TrimPrefix(unit, "lerd-")
 		switch {
-		case img == podman.DNSMasqImage:
-			work = append(work, imageWork{
-				job: BuildJob{
-					Label: "Building dnsmasq",
-					Run: func(w io.Writer) error {
-						return podman.BuildDNSMasqImage(w, dns.ReadUpstreamDNS())
-					},
-				},
-				item: imagepull.Build("dnsmasq image", podman.DNSMasqBaseImage, reason),
-			})
-
 		case strings.HasPrefix(img, "lerd-php") && strings.HasSuffix(img, "-fpm:local"):
 			// Extract version from image name, e.g. lerd-php84-fpm:local → 8.4
 			short := strings.TrimSuffix(strings.TrimPrefix(img, "lerd-php"), "-fpm:local")
@@ -489,6 +478,12 @@ type StartEvent struct {
 // the same SIGTERM a stop is, so lerd-ui asking for its own unit killed the
 // start half way and left the dashboard unreachable behind a 502.
 func startLerd(emit func(StartEvent), skip []string) error {
+	release, err := podman.LockLifecycle()
+	if err != nil {
+		return fmt.Errorf("lifecycle lock: %w", err)
+	}
+	defer release()
+
 	var emitMu sync.Mutex
 	report := func(e StartEvent) {
 		if emit == nil {
@@ -1387,6 +1382,11 @@ func spinnerRunner(jobs []lifecycle.Job) error {
 }
 
 func runStop(_ *cobra.Command, _ []string) error {
+	release, err := podman.LockLifecycle()
+	if err != nil {
+		return fmt.Errorf("lifecycle lock: %w", err)
+	}
+	defer release()
 	return lifecycle.Stop(spinnerRunner)
 }
 
@@ -1394,6 +1394,11 @@ func runQuit(_ *cobra.Command, _ []string) error {
 	// killTray runs before the VM stop: it clears any directly-launched tray
 	// instance launchd and systemd know nothing about, and leaving the icon on
 	// screen for the seconds `podman machine stop` takes reads as a hung quit.
+	release, err := podman.LockLifecycle()
+	if err != nil {
+		return fmt.Errorf("lifecycle lock: %w", err)
+	}
+	defer release()
 	return lifecycle.Quit(spinnerRunner, killTray)
 }
 

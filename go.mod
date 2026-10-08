@@ -17,6 +17,7 @@ require (
 	github.com/getlantern/systray v1.2.2
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/lrstanley/bubblezone/v2 v2.0.0
+	github.com/miekg/dns v1.1.73
 	github.com/minio/minio-go/v7 v7.3.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2

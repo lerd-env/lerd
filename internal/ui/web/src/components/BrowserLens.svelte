@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import LensSearch from '$components/LensSearch.svelte';
+  import { onMount, onDestroy, untrack } from 'svelte';
   import { get } from 'svelte/store';
   import { debugSearch } from '$stores/debugLens';
   import { startDumpsStream, stopDumpsStream, clearDumps } from '$stores/dumps';
   import { queryFilterSite } from '$stores/queries';
   import { siteCaptureOn, loadSiteBrowserLogs, saveSiteBrowserLogs } from '$stores/browserLogs';
-  import { buildKindGroups, knownDebugSites, debugEvents, facetOf, isPageView } from '$stores/debugEvents';
+  import { buildKindGroups, knownDebugSites, lensEvents, facetOf, isPageView, providePickRequest } from '$stores/debugEvents';
   import EmptyState from '$components/EmptyState.svelte';
   import CaptureOffNotice from '$components/CaptureOffNotice.svelte';
   import Dropdown from '$components/Dropdown.svelte';
@@ -20,8 +21,12 @@
 
   interface Props {
     siteScope?: string;
+    // pinned is one request's view: no toolbar, and no filter left from the Debug tab.
+    pinned?: boolean;
   }
-  let { siteScope = '' }: Props = $props();
+  let { siteScope = '', pinned = false }: Props = $props();
+  // The request filter over the lenses narrows this to one request.
+  const debugEvents = lensEvents();
   const scoped = $derived(siteScope !== '');
   const siteOff = $derived(scoped && $siteCaptureOn[siteScope] === false);
 
@@ -32,6 +37,9 @@
 
   let localText = $state('');
   let textInput = $state('');
+  // Across every site there is no request timeline, so a clicked id becomes this
+  // lens's search; inside a site the Debug tab takes the click instead.
+  if (!untrack(() => siteScope)) providePickRequest((id) => (textInput = id));
   let typeFilter = $state('');
 
   onMount(() => {
@@ -50,7 +58,7 @@
     textTimer = setTimeout(() => (scoped ? debugSearch.set(v) : (localText = v)), 100);
   });
 
-  const effectiveText = $derived(scoped ? $debugSearch : localText);
+  const effectiveText = $derived(pinned ? '' : scoped ? $debugSearch : localText);
   const happened = $derived($debugEvents.filter((ev) => !isPageView(ev)));
   const groups = $derived(buildKindGroups(happened, 'browser', scoped ? siteScope : $queryFilterSite, effectiveText, scoped, '', true, typeFilter));
   // Only the types that were actually reported, grouped and ordered the way a
@@ -97,13 +105,9 @@
 </script>
 
 <div class="flex flex-col h-full overflow-hidden">
-  {#if !(siteOff && groups.length === 0)}
+  {#if !pinned && !(siteOff && groups.length === 0)}
     <div class="flex items-center gap-2 px-3 py-3 border-b border-gray-200 dark:border-lerd-border flex-wrap">
-      <input
-        class="text-xs px-2 py-1 rounded-sm border border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-card flex-1 min-w-[140px]"
-        placeholder={m.debug_searchPlaceholder()}
-        bind:value={textInput}
-      />
+      <LensSearch bind:value={textInput} placeholder={m.debug_searchPlaceholder()} />
       {#if !scoped}
         <Dropdown
           value={$queryFilterSite}
@@ -143,7 +147,7 @@
         {@const group = page.group}
         <section class="mb-4">
           <header class="flex items-center gap-2 mb-1 sticky top-0 bg-gray-50 dark:bg-lerd-bg py-1 -mx-3 px-3 z-1">
-            <LensGroupLabel label={group.label} />
+            {#if !pinned}<LensGroupLabel label={group.label} />{/if}
             <span class="text-xs text-gray-400 ml-auto whitespace-nowrap font-mono">{localTime(group.ts)}</span>
             <span class="text-xs text-gray-400 whitespace-nowrap">{page.total}</span>
           </header>

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import LensSearch from '$components/LensSearch.svelte';
+  import { onMount, onDestroy, untrack } from 'svelte';
   import { get } from 'svelte/store';
   import { debugSearch } from '$stores/debugLens';
   import { startDumpsStream, stopDumpsStream, clearDumps } from '$stores/dumps';
@@ -16,7 +17,7 @@
     setDebugCapture,
     toggleDevtoolsWorkers
   } from '$stores/queries';
-  import { debugEvents } from '$stores/debugEvents';
+  import { lensEvents, providePickRequest } from '$stores/debugEvents';
   import EmptyState from '$components/EmptyState.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import LensToggle from '$components/LensToggle.svelte';
@@ -34,13 +35,22 @@
     // Empty = the global System view. When scoped, the search box stays
     // local so it doesn't bleed into the global lens, mirroring DumpsTab.
     siteScope?: string;
+    // pinned is one request's view: no toolbar, and no filter left from the Debug tab.
+    pinned?: boolean;
   }
-  let { siteScope = '' }: Props = $props();
+  let { siteScope = '', pinned = false }: Props = $props();
+  // The request filter over the lenses narrows this to one request.
+  const debugEvents = lensEvents();
   const scoped = $derived(siteScope !== '');
+  const text = $derived(pinned ? '' : scoped ? $debugSearch : $queryFilterText);
+  const worker = $derived(pinned ? '' : $queryFilterWorker);
 
   // Queries ride the dumps SSE stream (shared receiver), so mounting this lens
   // opens the same reference-counted connection a DumpsTab would.
   let textInput = $state('');
+  // Across every site there is no request timeline, so a clicked id becomes this
+  // lens's search; inside a site the Debug tab takes the click instead.
+  if (!untrack(() => siteScope)) providePickRequest((id) => (textInput = id));
 
   onMount(() => {
     startDumpsStream();
@@ -54,7 +64,7 @@
   });
 
   const groups = $derived(
-    buildQueryGroups($debugEvents, scoped ? siteScope : $queryFilterSite, scoped ? $debugSearch : $queryFilterText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers))
+    buildQueryGroups($debugEvents, scoped ? siteScope : $queryFilterSite, text, scoped, worker, Boolean($devtoolsStatus?.workers))
   );
 
   // Only the newest LENS_PAGE rows render; the rest arrive as the user
@@ -62,7 +72,7 @@
   let limit = $state(LENS_PAGE);
   const win = $derived(windowGroups(groups, (g) => g.rows, limit));
   const filterKey = $derived(
-    `${scoped ? siteScope : $queryFilterSite}|${scoped ? $debugSearch : $queryFilterText}|${$queryFilterWorker}`
+    `${scoped ? siteScope : $queryFilterSite}|${text}|${worker}`
   );
   $effect(() => {
     filterKey;
@@ -116,25 +126,9 @@
 </script>
 
 <div class="flex flex-col h-full overflow-hidden">
+  {#if !pinned}
   <div class="flex items-center gap-2 px-3 py-3 border-b border-gray-200 dark:border-lerd-border flex-wrap">
-    <div class="relative flex-1 min-w-[140px]">
-      <input
-        class="w-full text-xs pl-2 pr-6 py-1 rounded-sm border border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-card"
-        placeholder={m.queries_searchPlaceholder()}
-        bind:value={textInput}
-      />
-      {#if textInput}
-        <button
-          type="button"
-          onclick={() => (textInput = '')}
-          title={m.queries_clearFilter()}
-          aria-label={m.queries_clearFilter()}
-          class="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center rounded-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10"
-        >
-          <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
-        </button>
-      {/if}
-    </div>
+    <LensSearch bind:value={textInput} placeholder={m.queries_searchPlaceholder()} />
     {#if !scoped}
       <Dropdown
         value={$queryFilterSite}
@@ -171,6 +165,7 @@
       {m.common_clear()}
     </button>
   </div>
+  {/if}
 
   <div class="flex-1 overflow-y-auto px-3 pb-3">
     {#if groups.length === 0}
@@ -202,7 +197,7 @@
             {#if group.worker}
               <span class="text-[10px] font-semibold uppercase tracking-wide rounded-sm px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 shrink-0">{m.queries_worker_badge()}</span>
             {/if}
-            <LensGroupLabel label={group.label} />
+            {#if !pinned}<LensGroupLabel label={group.label} />{/if}
             {#if group.nPlusOne}
               <span class="text-[10px] font-semibold uppercase tracking-wide rounded-sm px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">{m.queries_nplusone_badge()}</span>
             {/if}

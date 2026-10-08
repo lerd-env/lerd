@@ -662,8 +662,11 @@ func TestLerdReference_underSizeCeiling(t *testing.T) {
 	//
 	// 36500 → 36850 for browser logs: the loop that reads a page's own
 	// JavaScript errors, and that an empty result means nothing while it is off,
-	// then 36850 → 37000 for the presets that add a frontend library's events.
-	const ceiling = 37000
+	// then 36850 → 37000 for the presets that add a frontend library's events,
+	// then 37000 → 37450 for the request tool, which reads one request's lenses
+	// by the id its recent row carries, then 37450 → 37600 for dumps_buffer,
+	// which makes room when a request left the buffer before it was read.
+	const ceiling = 37600
 	if got := len(lerdReference); got > ceiling {
 		t.Errorf("lerd-reference.md is %d bytes, ceiling is %d — trim before raising", got, ceiling)
 	}

@@ -270,3 +270,59 @@ func parseFlat(r io.Reader, topN int, minPct float64) (Profile, error) {
 }
 
 func round1(f float64) float64 { return math.Round(f*10) / 10 }
+
+// KeyForRID returns the key of the capture lerd stamped with a request id, the
+// one SPX's report page opens, or "" when that request was not profiled.
+func KeyForRID(dataDir, rid string) string {
+	if rid == "" {
+		return ""
+	}
+	return KeysByRID(dataDir)[rid]
+}
+
+// KeysByRID maps every request id lerd stamped on a capture to that capture's
+// key, read in one pass so a list of requests can each name its flame graph.
+func KeysByRID(dataDir string) map[string]string {
+	out := map[string]string{}
+	entries, err := os.ReadDir(dataDir)
+	if err != nil {
+		return out
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(dataDir, name))
+		if err != nil || !strings.Contains(string(b), "lerd-rid:") {
+			continue
+		}
+		var m struct {
+			Custom string `json:"custom_metadata_str"`
+		}
+		if json.Unmarshal(b, &m) == nil {
+			if rid, ok := strings.CutPrefix(m.Custom, "lerd-rid:"); ok && rid != "" {
+				out[rid] = strings.TrimSuffix(name, ".json")
+			}
+		}
+	}
+	return out
+}
+
+// RemoveForRIDs deletes the captures of the given requests, metadata and trace
+// both, and returns how many it removed.
+func RemoveForRIDs(dataDir string, rids []string) int {
+	keys := KeysByRID(dataDir)
+	removed := 0
+	for _, rid := range rids {
+		key := keys[rid]
+		if key == "" {
+			continue
+		}
+		_ = os.Remove(filepath.Join(dataDir, key+".txt.gz"))
+		if os.Remove(filepath.Join(dataDir, key+".json")) == nil {
+			removed++
+		}
+	}
+	return removed
+}

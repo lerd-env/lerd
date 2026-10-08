@@ -21,7 +21,7 @@ var coreProcesses = []coreProcess{
 	{
 		name:  "dns",
 		about: "resolves the site domains to this machine",
-		logs:  LogTarget{Kind: kindPodman, ID: "lerd-dns", Label: "dns"},
+		logs:  LogTarget{Kind: kindJournal, ID: "lerd-dns", Label: "dns"},
 		state: func(s StatusRow) (bool, string) {
 			switch {
 			case s.DNSDisabled:

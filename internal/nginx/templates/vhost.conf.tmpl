@@ -67,6 +67,7 @@ server {
         fastcgi_param HTTP_X_FORWARDED_PORT $real_forwarded_port;
         fastcgi_param HTTP_X_REAL_IP $remote_addr;
         fastcgi_param HTTP_X_FORWARDED_FOR $remote_addr;
+        fastcgi_param LERD_NGINX_SENT $msec;
         fastcgi_param HTTP_COOKIE "$http_cookie; SPX_KEY=$spx_key{{if .Profiling}}; SPX_ENABLED=1{{end}}";
 {{if .LerdSite}}        fastcgi_param LERD_SITE {{.LerdSite}};
 {{end}}{{if .LerdBranch}}        fastcgi_param LERD_BRANCH {{.LerdBranch}};

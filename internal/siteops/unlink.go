@@ -69,10 +69,6 @@ func TeardownSite(site *config.Site, parkedDirs []string) {
 		StopSiteWorkers(site)
 	}
 	StopSiteShares(site.Name)
-	// The site's env_provider secrets have nothing left to serve.
-	if RemoveProvidedEnv != nil {
-		RemoveProvidedEnv(site.Name)
-	}
 
 	_ = nginx.RemoveVhost(site.PrimaryDomain())
 	// The site's worktrees are served by subdomain vhosts of their own, and
@@ -113,6 +109,12 @@ func TeardownSite(site *config.Site, parkedDirs []string) {
 	} else {
 		_ = config.RemoveSite(site.Name)
 		_ = config.RemoveSiteFromWorkspaces(site.Name)
+	}
+
+	// The site's env_provider secrets have nothing left to serve. Dropped
+	// after the registry update, so a restore still running sees the site gone.
+	if RemoveProvidedEnv != nil {
+		RemoveProvidedEnv(site.Name)
 	}
 
 	forgetSiteState(site.Name)

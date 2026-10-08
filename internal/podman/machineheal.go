@@ -32,9 +32,24 @@ func EnsureMachineResponsive() error {
 	if MachineHeal == nil {
 		return nil // no machine VM to stall or heal (Linux, tests): skip the probe
 	}
+	// A start or stop owns the machine and keeps podman busy enough to fail the
+	// probe; healing then restarts the VM under it and kills its containers.
+	if LifecycleInFlight() {
+		return nil
+	}
 	if machineResponds() {
 		return nil
 	}
+	// The probe can take machineProbeTimeout, long enough for a start to take
+	// the machine meanwhile; holding the lock through the heal closes that gap.
+	release, ok, err := TryLockLifecycle()
+	if err != nil {
+		return fmt.Errorf("lifecycle lock: %w", err)
+	}
+	if !ok {
+		return nil
+	}
+	defer release()
 	if !healOnceWithinCooldown() {
 		return fmt.Errorf("podman machine is not responding (try: lerd start)")
 	}

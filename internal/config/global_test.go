@@ -964,3 +964,18 @@ func TestReservedHostPorts_ReservesTheXdebugPort(t *testing.T) {
 		t.Errorf("port %d is not reserved, so a service shift can land on it", XdebugClientPort)
 	}
 }
+
+// The Debug window's buffer keeps 5,000 events unless the config says
+// otherwise, and a size outside what lerd-ui can hold is pulled into range.
+func TestDumpsBuffer(t *testing.T) {
+	var c GlobalConfig
+	if got := c.DumpsBuffer(); got != DefaultDumpsBuffer {
+		t.Errorf("default = %d", got)
+	}
+	for set, want := range map[int]int{20000: 20000, 10: MinDumpsBuffer, 10_000_000: MaxDumpsBuffer} {
+		c.SetDumpsBuffer(set)
+		if got := c.DumpsBuffer(); got != want {
+			t.Errorf("set %d = %d, want %d", set, got, want)
+		}
+	}
+}

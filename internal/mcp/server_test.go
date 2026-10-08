@@ -288,8 +288,13 @@ func TestToolList_underSizeCeiling(t *testing.T) {
 	// 24550 → 24650 for browser_presets and its preset argument, which let it
 	// see which frontend library a site uses and add that library's events, then
 	// 24650 → 24850 for browser_events' types argument, which names every type so
-	// an assistant can ask for only what broke instead of every page view.
-	const ceiling = 24850
+	// an assistant can ask for only what broke instead of every page view, then
+	// 24850 → 25400 for the request tool, which reads one request's lenses by
+	// its id, so an assistant can follow a slow or failing request the user
+	// points at instead of sifting every captured event, then 25400 → 25500 for
+	// dumps_buffer and its size, so an assistant whose request left the buffer
+	// can make room for the next one.
+	const ceiling = 25500
 	got, err := json.Marshal(toolList())
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)

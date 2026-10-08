@@ -1,7 +1,10 @@
 package sitedoctor
 
 import (
+	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -88,5 +91,60 @@ func TestSiteRootURL_followsSchemeAndPort(t *testing.T) {
 	plain := config.Site{Name: "b", Domains: []string{"b.test"}}
 	if got := siteRootURL(plain); got != "http://b.test" {
 		t.Errorf("plain url = %q, want http://b.test", got)
+	}
+}
+
+// A cold app can take seconds to answer its root, so the probe must overlap the
+// container-exec checks instead of queueing behind them. The command check here
+// only passes if the probe has already run while it is still waiting.
+func TestRun_probesTheSiteAlongsideTheCommandChecks(t *testing.T) {
+	site := registerSite(t, config.Site{Name: "myapp", Domains: []string{"myapp.test"}})
+	marker := filepath.Join(site.Path, "probed")
+	realProbe, realNginx := httpProbe, nginxUp
+	httpProbe = func(string) (int, error) { return 200, os.WriteFile(marker, nil, 0o644) }
+	nginxUp = func() bool { return true }
+	t.Cleanup(func() { httpProbe, nginxUp = realProbe, realNginx })
+
+	fw := &config.Framework{
+		Name: "app",
+		Doctor: &config.FrameworkDoctor{Checks: []config.DoctorCheck{{
+			Name: "waits_for_probe", Type: "command", TimeoutSeconds: 5,
+			Command: "for i in $(seq 50); do [ -f probed ] && exit 0; sleep 0.1; done; exit 1",
+		}}},
+	}
+	statuses := map[string]string{}
+	for _, c := range Run(context.Background(), site.Path, fw).Checks {
+		statuses[c.Name] = c.Status
+	}
+	if statuses["waits_for_probe"] != StatusOK {
+		t.Errorf("command check = %q, want %q: the http probe did not run alongside it", statuses["waits_for_probe"], StatusOK)
+	}
+	if statuses["http response"] != StatusOK {
+		t.Errorf("http response = %q, want %q", statuses["http response"], StatusOK)
+	}
+}
+
+// The web panel draws each finding as it lands, so every check in the report
+// must also reach OnCheck, already labelled the way the report labels it.
+func TestRunWith_streamsEveryCheckThroughOnCheck(t *testing.T) {
+	site := registerSite(t, config.Site{Name: "myapp", Domains: []string{"myapp.test"}})
+	stubProbe(t, 200, nil)
+	fw := &config.Framework{
+		Name: "app",
+		Doctor: &config.FrameworkDoctor{Checks: []config.DoctorCheck{
+			{Name: "first_cmd", Type: "command", Command: "true"},
+			{Name: "second_cmd", Type: "command", Command: "false"},
+		}},
+	}
+	streamed := map[string]Check{}
+	resp := RunWith(context.Background(), site.Path, fw, Options{OnCheck: func(c Check) { streamed[c.Name] = c }})
+
+	if len(streamed) != len(resp.Checks) {
+		t.Fatalf("streamed %d checks, report has %d", len(streamed), len(resp.Checks))
+	}
+	for _, c := range resp.Checks {
+		if streamed[c.Name] != c {
+			t.Errorf("streamed %+v, report has %+v", streamed[c.Name], c)
+		}
 	}
 }
