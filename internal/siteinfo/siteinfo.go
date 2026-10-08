@@ -389,12 +389,6 @@ func Enrich(s config.Site, flags EnrichFlag) EnrichedSite {
 		// The registry record has to land before either suggestion pass, or a
 		// service the env reaches only as 127.0.0.1 stays on offer.
 		e.addWiredServices(s)
-		// Suggestions need the definition. The dashboard loads it under
-		// EnrichFramework; a services-only call still gets them when the site
-		// already names one, without a second detection pass.
-		if !hasFw && e.FrameworkName != "" {
-			fw, hasFw = config.GetFrameworkForDir(e.FrameworkName, s.Path)
-		}
 		if hasFw {
 			e.SuggestedServices = suggestedServices(fw.PackageServices, e.Services, s.DismissedServices, func(name string) bool {
 				return podman.QuadletInstalled("lerd-" + name)
@@ -836,10 +830,9 @@ func (e *EnrichedSite) enrichServices() {
 	}
 }
 
-// addWiredServices reports services the last `lerd env` recorded. A loopback
-// env names 127.0.0.1 rather than the container, so the registry is the record
-// of use. It is usage, not a .lerd.yaml declaration: a declined name or one
-// whose quadlet is gone stays off, so removal does not come back as a badge.
+// addWiredServices adds installed services the last `lerd env` recorded, since a
+// loopback env cannot name them. This is usage, not a .lerd.yaml declaration,
+// and a declined service stays off.
 func (e *EnrichedSite) addWiredServices(s config.Site) {
 	if len(s.WiredServices) == 0 {
 		return
