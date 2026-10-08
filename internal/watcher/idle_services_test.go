@@ -3,6 +3,7 @@ package watcher
 import (
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -41,11 +42,11 @@ func installFakeServices(t *testing.T) *fakeServices {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	f := &fakeServices{running: map[string]bool{}, users: map[string][]config.Site{}, deps: map[string][]string{}, pinned: map[string]bool{}}
 
-	prevRunning, prevUsers, prevSuspend, prevWake := runningServices, serviceUsers, suspendService, wakeServices
+	prevRunning, prevUsers, prevSuspend, prevWake := runningServices, serviceUsers, suspendServices, wakeServices
 	prevStale, prevPinned, prevIndex, prevDetect := serviceStale, servicePinned, wtIndex, detectWorktrees
 	prevResume, prevRestore := resumeWorkers, restoreServiceSites
 	t.Cleanup(func() {
-		runningServices, serviceUsers, suspendService, wakeServices = prevRunning, prevUsers, prevSuspend, prevWake
+		runningServices, serviceUsers, suspendServices, wakeServices = prevRunning, prevUsers, prevSuspend, prevWake
 		serviceStale, servicePinned, wtIndex, detectWorktrees = prevStale, prevPinned, prevIndex, prevDetect
 		resumeWorkers, restoreServiceSites = prevResume, prevRestore
 	})
@@ -65,9 +66,13 @@ func installFakeServices(t *testing.T) *fakeServices {
 	}
 	serviceUsers = func(name string) ([]config.Site, []string) { return f.users[name], f.deps[name] }
 	servicePinned = func(name string) bool { return f.pinned[name] }
-	suspendService = func(name string) ([]string, error) {
-		f.log("suspend " + name)
-		stopped := append([]string{name}, f.deps[name]...)
+	suspendServices = func(names []string) ([]string, error) {
+		f.log("suspend " + strings.Join(names, ","))
+		var stopped []string
+		for _, name := range names {
+			stopped = append(stopped, name)
+			stopped = append(stopped, f.deps[name]...)
+		}
 		f.mu.Lock()
 		for _, s := range stopped {
 			f.running[s] = false
@@ -396,8 +401,8 @@ func TestServiceKeys_followConsumersDownTheChain(t *testing.T) {
 	e2.wait()
 	got := f.callLog()
 	sort.Strings(got)
-	if !reflect.DeepEqual(got, []string{"suspend mailpit", "suspend spamassassin"}) {
-		t.Fatalf("calls = %v, want both asleep once the site is idle", got)
+	if !reflect.DeepEqual(got, []string{"suspend mailpit,spamassassin"}) {
+		t.Fatalf("calls = %v, want both asleep together once the site is idle", got)
 	}
 
 	f.calls = nil
@@ -424,11 +429,13 @@ func TestOnActivity_wakesAServiceCaughtMidSuspend(t *testing.T) {
 	f.users["mysql"] = []config.Site{{Name: "shop"}}
 
 	release := make(chan struct{})
-	suspendService = func(name string) ([]string, error) {
-		f.log("suspend " + name)
+	suspendServices = func(names []string) ([]string, error) {
+		f.log("suspend " + strings.Join(names, ","))
 		<-release // the stop is still running when the request arrives
-		_ = config.SetServiceIdleSuspended(name, true)
-		return []string{name}, nil
+		for _, name := range names {
+			_ = config.SetServiceIdleSuspended(name, true)
+		}
+		return names, nil
 	}
 
 	e := newIdleEngine(idleTracker(now, map[string]time.Duration{"shop": time.Hour, "svc:mysql": time.Hour}))

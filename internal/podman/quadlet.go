@@ -19,11 +19,17 @@ import (
 	"github.com/geodro/lerd/internal/systemd"
 )
 
-// quadletReloadPending records that a previous DaemonReloadIfNeeded call
-// failed without being retried. The next caller forces a reload even when
-// nothing else changed so a transient DBus failure does not leave
-// systemd's cache stale until an external trigger heals it.
+// quadletReloadPending records that systemd is owed a reload: a previous
+// DaemonReloadIfNeeded call failed without being retried, or a change was
+// deferred with DeferDaemonReload. The next caller forces a reload even when
+// nothing else changed so systemd's cache does not stay stale until an
+// external trigger heals it.
 var quadletReloadPending atomic.Bool
+
+// DeferDaemonReload owes systemd a reload for a unit change nothing needs to
+// see before the next one, such as a quadlet's boot arming, which the
+// generator rereads at boot anyway. The next DaemonReloadIfNeeded settles it.
+func DeferDaemonReload() { quadletReloadPending.Store(true) }
 
 // DaemonReloadIfNeeded reloads systemd when the caller wrote new quadlet
 // content (changed=true) or when a previous reload failed and was never

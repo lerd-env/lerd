@@ -27,7 +27,7 @@ func (s stubUnitStatus) UnitStatus(name string) (string, error) {
 }
 func (s stubUnitStatus) AllUnitStates() map[string]string { return nil }
 
-// idleWorkerResumable must mirror resumeWorkerByName exactly: a worker the resume
+// idleWorkerResumable must mirror resumeWorkersByName exactly: a worker the resume
 // path can't bring back (an orphaned unit with no framework definition) must be
 // reported non-resumable so idle-suspend never strands it stopped.
 func TestIdleWorkerResumable(t *testing.T) {
@@ -56,7 +56,7 @@ func TestIdleWorkerResumable(t *testing.T) {
 	site := &config.Site{Name: "site", Framework: "laravel", Path: dir}
 	cases := map[string]bool{
 		"queue":             true,  // framework worker
-		"stripe":            true,  // handled explicitly by resumeWorkerByName
+		"stripe":            true,  // handled explicitly by resumeWorkersByName
 		hostProxyWorkerName: true,  // resumable while the project declares a proxy
 		"some-orphan-unit":  false, // no framework definition -> not resumable
 	}
@@ -67,7 +67,7 @@ func TestIdleWorkerResumable(t *testing.T) {
 	}
 
 	// With the proxy block removed, the host-proxy worker is no longer resumable
-	// (resumeWorkerByName would no-op), so idle-suspend must not stop it.
+	// (resumeWorkersByName would no-op), so idle-suspend must not stop it.
 	proj.Proxy = nil
 	if err := config.SaveProjectConfig(dir, proj); err != nil {
 		t.Fatal(err)

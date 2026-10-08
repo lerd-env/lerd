@@ -44,8 +44,16 @@ func TestSetIdleSuspended_togglesBootStart(t *testing.T) {
 			t.Errorf("%s still starts at boot while asleep", n)
 		}
 	}
+	// Boot arming is only read at boot, so the reload rides along with the
+	// next one instead of costing its own.
+	if reloads != 0 {
+		t.Errorf("reloads = %d, want the reload deferred", reloads)
+	}
+	if err := podman.DaemonReloadIfNeeded(false); err != nil {
+		t.Fatal(err)
+	}
 	if reloads != 1 {
-		t.Errorf("reloads = %d, want 1 for the batch", reloads)
+		t.Errorf("reloads = %d, want the deferred one picked up by the next reload", reloads)
 	}
 
 	SetIdleSuspended([]string{"mysql", "phpmyadmin"}, false)
@@ -56,6 +64,9 @@ func TestSetIdleSuspended_togglesBootStart(t *testing.T) {
 		if !hasInstall(n) {
 			t.Errorf("%s does not start at boot after waking", n)
 		}
+	}
+	if err := podman.DaemonReloadIfNeeded(false); err != nil {
+		t.Fatal(err)
 	}
 	if reloads != 2 {
 		t.Errorf("reloads = %d, want 2", reloads)

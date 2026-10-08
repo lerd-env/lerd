@@ -262,8 +262,35 @@ func InstallChokidar(sitePath string) error {
 // When persist is false the worker is not added to .lerd.yaml, used by the
 // auto-start path so worktree vite workers don't appear as user-opted entries.
 func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w config.FrameworkWorker, persist bool) error {
-	if err := workerStartPreflight(sitePath, workerName, w); err != nil {
+	l, err := prepareWorkerStart(siteName, sitePath, phpVersion, workerName, w)
+	if err != nil || l == nil {
 		return err
+	}
+	if l.changed {
+		// A rewritten unit (e.g. a runtime switch re-pointed the worker at a
+		// different container) only takes effect once systemd re-reads it;
+		// without this, Enable/Start act on the stale cached unit.
+		if err := podman.DaemonReloadFn(); err != nil {
+			feedback.Warn("daemon-reload: %v", err)
+		}
+	}
+	return launchWorker(l, persist)
+}
+
+// workerLaunch is a worker whose unit is written and that waits to be started.
+type workerLaunch struct {
+	siteName, sitePath, workerName   string
+	unitName, label, lifecycleTarget string
+	w                                config.FrameworkWorker
+	changed                          bool
+}
+
+// prepareWorkerStart writes a worker's unit without reloading or starting it,
+// so a batch of workers can share one daemon-reload. Nil means the platform
+// cannot run this worker and there is nothing to start.
+func prepareWorkerStart(siteName, sitePath, phpVersion, workerName string, w config.FrameworkWorker) (*workerLaunch, error) {
+	if err := workerStartPreflight(sitePath, workerName, w); err != nil {
+		return nil, err
 	}
 
 	// Skip lifecycle for worker shapes the current platform can't run.
@@ -273,7 +300,7 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 	// behind the original WARN.
 	if ok, reason := workerSupportedOnPlatform(w); !ok {
 		feedback.Warn("worker %s skipped: %s", workerName, reason)
-		return nil
+		return nil, nil
 	}
 
 	command := resolveWorkerCommand(sitePath, workerName, w)
@@ -286,7 +313,7 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 	// in-container workers are unaffected.
 	if w.Host && w.ProjectOrigin {
 		if err := approveHostCommand(siteName, command, fmt.Sprintf("worker %q", workerName)); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -322,7 +349,7 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 
 	changed, err := writeWorkerUnitFile(unitName, label, unitSiteName, sitePath, phpVersion, command, restart, w.Schedule, fpmUnit, requiredServiceUnit(sitePath, w), w.Host)
 	if err != nil {
-		return fmt.Errorf("writing worker unit: %w", err)
+		return nil, fmt.Errorf("writing worker unit: %w", err)
 	}
 
 	// Scheduled workers run via a sibling .timer that systemd starts on
@@ -335,13 +362,18 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 		lifecycleTarget = unitName + ".timer"
 	}
 
+	return &workerLaunch{
+		siteName: siteName, sitePath: sitePath, workerName: workerName,
+		unitName: unitName, label: label, lifecycleTarget: lifecycleTarget,
+		w: w, changed: changed,
+	}, nil
+}
+
+// launchWorker starts a worker prepareWorkerStart wrote, once the caller has
+// reloaded systemd for a changed unit.
+func launchWorker(l *workerLaunch, persist bool) error {
+	siteName, sitePath, workerName, unitName, label, lifecycleTarget, w, changed := l.siteName, l.sitePath, l.workerName, l.unitName, l.label, l.lifecycleTarget, l.w, l.changed
 	if changed {
-		// A rewritten unit (e.g. a runtime switch re-pointed the worker at a
-		// different container) only takes effect once systemd re-reads it;
-		// without this, Enable/Start act on the stale cached unit.
-		if err := podman.DaemonReloadFn(); err != nil {
-			feedback.Warn("daemon-reload: %v", err)
-		}
 		if err := syncWorkerBootArming(lifecycleTarget); err != nil {
 			feedback.Warn("enable: %v", err)
 		}
@@ -657,6 +689,18 @@ func StopWorkerUnit(unit, label string) error {
 // oneshot .service) or a long-running daemon (.service alone). Missing
 // units are no-ops at this layer.
 func stopWorkerUnit(unitName, label, _ string) error {
+	step, err := removeWorkerUnit(unitName, label)
+	if err != nil {
+		return err
+	}
+	finalizeStopStep(step, podman.DaemonReloadFn())
+	return nil
+}
+
+// removeWorkerUnit is stopWorkerUnit without the daemon-reload, so a caller
+// tearing down several workers can reload once for all of them. The returned
+// step is still open on success.
+func removeWorkerUnit(unitName, label string) (*feedback.Step, error) {
 	if label == "" {
 		label = unitName
 	}
@@ -668,18 +712,17 @@ func stopWorkerUnit(unitName, label, _ string) error {
 
 	if err := services.Mgr.RemoveTimerUnit(unitName); err != nil {
 		step.Fail(err)
-		return fmt.Errorf("removing timer unit file: %w", err)
+		return nil, fmt.Errorf("removing timer unit file: %w", err)
 	}
 	if err := services.Mgr.RemoveServiceUnit(unitName); err != nil {
 		step.Fail(err)
-		return fmt.Errorf("removing unit file: %w", err)
+		return nil, fmt.Errorf("removing unit file: %w", err)
 	}
 	// Drop the macOS exec-mode guard script + pid file (no-op on Linux).
 	// Without this they linger in ~/.local/share/lerd/run/workers after
 	// a normal stop and confuse later mode-migration discovery.
 	removeWorkerExecArtifacts(unitName)
-	finalizeStopStep(step, podman.DaemonReloadFn())
-	return nil
+	return step, nil
 }
 
 // finalizeStopStep closes the worker-stop step and only then surfaces a

@@ -7,7 +7,8 @@ import (
 
 // SetIdleSuspended marks or clears the idle-suspend flag for each service and
 // keeps its boot start in step: a sleeping service's quadlet loses [Install],
-// so a reboot leaves it down for the next request to wake.
+// so a reboot leaves it down for the next request to wake. Only a boot reads
+// that, so the reload is deferred to the next one rather than paid here.
 func SetIdleSuspended(names []string, asleep bool) {
 	changed := false
 	for _, name := range names {
@@ -17,6 +18,6 @@ func SetIdleSuspended(names []string, asleep bool) {
 		}
 	}
 	if changed {
-		_ = podman.DaemonReloadFn()
+		podman.DeferDaemonReload()
 	}
 }
