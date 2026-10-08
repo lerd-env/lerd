@@ -159,3 +159,31 @@ func TestLifecycleInFlightFollowsTheLock(t *testing.T) {
 		t.Error("lock released: want idle")
 	}
 }
+
+func TestEnsureMachineResponsiveSkipsHealWhenStartBeginsMidProbe(t *testing.T) {
+	resetHealState(t)
+	var release func()
+	t.Cleanup(func() {
+		if release != nil {
+			release()
+		}
+	})
+	execCommandContext = fakeExecContextExit(func() int {
+		if release == nil {
+			var err error
+			if release, err = LockLifecycle(); err != nil {
+				t.Fatalf("LockLifecycle: %v", err)
+			}
+		}
+		return 1
+	})
+	healed := 0
+	MachineHeal = func() { healed++ }
+
+	if err := EnsureMachineResponsive(); err != nil {
+		t.Fatalf("start took the machine mid-probe: want nil, got %v", err)
+	}
+	if healed != 0 {
+		t.Errorf("start took the machine mid-probe: healed %d times, want 0", healed)
+	}
+}

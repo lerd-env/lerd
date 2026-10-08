@@ -1,6 +1,7 @@
 package podman
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -16,21 +17,35 @@ func lifecycleLockFile() string {
 // for any start or stop already holding it. A shim run meanwhile (a worker's
 // `lerd php`) sees it through LifecycleInFlight and leaves the machine alone.
 func LockLifecycle() (func(), error) {
+	release, _, err := lockLifecycle(syscall.LOCK_EX)
+	return release, err
+}
+
+// TryLockLifecycle takes the lifecycle lock only if no start or stop holds it,
+// reporting false instead of waiting when one does.
+func TryLockLifecycle() (func(), bool, error) {
+	return lockLifecycle(syscall.LOCK_EX | syscall.LOCK_NB)
+}
+
+func lockLifecycle(how int) (func(), bool, error) {
 	if err := os.MkdirAll(config.DataDir(), 0755); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	f, err := os.OpenFile(lifecycleLockFile(), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := syscall.Flock(int(f.Fd()), how); err != nil {
 		_ = f.Close()
-		return nil, err
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, false, nil
+		}
+		return nil, false, err
 	}
 	return func() {
 		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 		_ = f.Close()
-	}, nil
+	}, true, nil
 }
 
 // LifecycleInFlight reports whether a lerd start or stop holds the lifecycle

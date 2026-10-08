@@ -18,6 +18,8 @@ Day-to-day lifecycle commands for the entire lerd stack: DNS, nginx, PHP-FPM con
 
 `lerd stop` is the everyday "give my laptop back its CPU" command. `lerd quit` is a full shutdown: use it before a reinstall, a system reboot without autostart, or when you really want lerd out of the way.
 
+Only one of `lerd start`, `lerd stop` and `lerd quit` runs at a time, whether it comes from the CLI, the Web UI or the tray. A second one waits for the first to finish. While one is running, the `php`, `composer` and other shims leave the Podman Machine alone, so a worker that calls `lerd php` during a start (a Vite dev server running Wayfinder, for example) cannot restart the VM under it.
+
 ---
 
 ## `lerd start`

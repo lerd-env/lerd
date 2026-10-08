@@ -40,6 +40,16 @@ func EnsureMachineResponsive() error {
 	if machineResponds() {
 		return nil
 	}
+	// The probe can take machineProbeTimeout, long enough for a start to take
+	// the machine meanwhile; holding the lock through the heal closes that gap.
+	release, ok, err := TryLockLifecycle()
+	if err != nil {
+		return fmt.Errorf("lifecycle lock: %w", err)
+	}
+	if !ok {
+		return nil
+	}
+	defer release()
 	if !healOnceWithinCooldown() {
 		return fmt.Errorf("podman machine is not responding (try: lerd start)")
 	}
