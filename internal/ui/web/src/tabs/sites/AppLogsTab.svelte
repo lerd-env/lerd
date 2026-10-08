@@ -14,7 +14,7 @@
   import LoadingRow from '$components/LoadingRow.svelte';
   import ClearAppLogsModal from './ClearAppLogsModal.svelte';
   import CopyButton from '$components/CopyButton.svelte';
-  import { logAgentPrompt } from '$lib/agentPrompt';
+  import { logAgentPrompt, logEntryReachable } from '$lib/agentPrompt';
   import { openErrorModal } from '$stores/modals';
   import { m } from '../../paraglide/messages.js';
 
@@ -275,7 +275,7 @@
         </button>
         {#if expandedIdx === i}
           <div class="relative bg-gray-50 dark:bg-lerd-bg border-t border-gray-100 dark:border-lerd-border/30">
-            <CopyButton text={() => agentPrompt(entry)} label={m.sites_appLogs_copyForAgentHint()} caption={m.common_copyForAgent()} class="absolute top-2 right-3" />
+            {#if logEntryReachable(entry)}<CopyButton text={() => agentPrompt(entry)} label={m.sites_appLogs_copyForAgentHint()} caption={m.common_copyForAgent()} class="absolute top-2 right-3" />{/if}
             <div class="px-3 py-3 font-mono text-[11px] text-gray-600 dark:text-gray-400 whitespace-pre-wrap break-all max-h-80 overflow-y-auto leading-relaxed">{entry.detail || entry.message || ''}</div>
           </div>
         {/if}

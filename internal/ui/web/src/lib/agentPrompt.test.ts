@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { requestAgentPrompt, doctorAgentPrompt, logAgentPrompt } from './agentPrompt';
+import { requestAgentPrompt, doctorAgentPrompt, logAgentPrompt, logEntryReachable } from './agentPrompt';
 
 describe('requestAgentPrompt', () => {
   it('names the site, the request and the rid the request tool reads it by', () => {
@@ -37,5 +37,13 @@ describe('logAgentPrompt', () => {
     const prompt = logAgentPrompt('shop.test', 'site "shop.test"', 'laravel.log', { message: 'x'.repeat(500) });
     expect(prompt).toContain('x'.repeat(200) + '…');
     expect(prompt).not.toContain('x'.repeat(201));
+  });
+});
+
+describe('logEntryReachable', () => {
+  it('only offers a dated entry inside the tail the logs tool reads', () => {
+    expect(logEntryReachable({ date: '2026-10-08 12:00:01', message: 'boom' })).toBe(true);
+    expect(logEntryReachable({ message: 'raw line' })).toBe(false);
+    expect(logEntryReachable({ date: '2026-01-02 09:00:00', message: 'old', past_tail: true })).toBe(false);
   });
 });

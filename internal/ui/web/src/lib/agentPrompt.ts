@@ -21,6 +21,12 @@ export function doctorAgentPrompt(domain: string, target: string, checks: string
   );
 }
 
+// The logs tool reads only the file's tail and anchors on the entry's date,
+// so an undated entry or one older than that tail would not come back.
+export function logEntryReachable(entry: AppLogEntry): boolean {
+  return Boolean(entry.date) && !entry.past_tail;
+}
+
 // Only the entry's first line, cut short: it is there so the assistant can
 // find the entry in the file. until ends the fetch at it, so it arrives last with what
 // led up to it; since is exclusive and would drop the entry's own second.
