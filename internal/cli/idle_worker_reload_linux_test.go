@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -177,5 +178,32 @@ func TestResumeWorkersForIdle_conflictSharesTheBatchReload(t *testing.T) {
 	ResumeWorkersForIdle(site, []string{"horizon"})
 	if n := u.count("reload"); n != 1 {
 		t.Fatalf("%d reloads, want the conflict's teardown folded into the batch: %v", n, u.events)
+	}
+}
+
+// A host-proxy dev server wakes in the same batch as the site's other workers
+// rather than reloading for its own unit.
+func TestResumeWorkersForIdle_hostProxySharesTheBatchReload(t *testing.T) {
+	u, site := installUnitTimeline(t)
+	u.active = map[string]bool{}
+	proj, err := config.LoadProjectConfig(site.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proj.Proxy = &config.ProxyConfig{Command: "npm run dev", Port: 3000}
+	if err := config.SaveProjectConfig(site.Path, proj); err != nil {
+		t.Fatal(err)
+	}
+	site.HostCommand = "npm run dev"
+
+	ResumeWorkersForIdle(site, []string{"queue", hostProxyWorkerName})
+	if n := u.count("reload"); n != 1 {
+		t.Fatalf("%d reloads, want the dev server folded into the batch: %v", n, u.events)
+	}
+	if u.count("start "+hostProxyWorkerUnit(site.Name)) != 1 {
+		t.Fatalf("the dev server must still start: %v", u.events)
+	}
+	if proj, _ := config.LoadProjectConfig(site.Path); slices.Contains(proj.Workers, hostProxyWorkerName) {
+		t.Fatalf("the dev server must not be written into the project's workers: %v", proj.Workers)
 	}
 }

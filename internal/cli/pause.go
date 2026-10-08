@@ -552,8 +552,7 @@ func resumeWorkersByName(site *config.Site, workers []string, phpVersion string)
 		if !idleWorkerResumable(site, name) {
 			continue
 		}
-		switch name {
-		case "stripe":
+		if name == "stripe" {
 			scheme := "http"
 			if site.Secured {
 				scheme = "https"
@@ -565,19 +564,23 @@ func resumeWorkersByName(site *config.Site, workers []string, phpVersion string)
 			reload = reload || changed
 			batch = append(batch, start)
 			continue
-		case hostProxyWorkerName:
-			if proj, _ := config.LoadProjectConfig(site.Path); proj != nil && proj.Proxy != nil {
-				startHostProxyWorker(*site, proj.Proxy)
-			}
-			continue
 		}
-		fw, _ := config.GetFrameworkForDir(site.Framework, site.Path)
-		l, err := prepareWorkerStart(site.Name, site.Path, phpVersion, name, fw.Workers[name])
-		if err != nil || l == nil {
+		var l *workerLaunch
+		if name == hostProxyWorkerName {
+			if proj, _ := config.LoadProjectConfig(site.Path); proj != nil && proj.Proxy != nil {
+				l = prepareHostProxyStart(*site, proj.Proxy)
+			}
+		} else {
+			fw, _ := config.GetFrameworkForDir(site.Framework, site.Path)
+			l, _ = prepareWorkerStart(site.Name, site.Path, phpVersion, name, fw.Workers[name])
+		}
+		if l == nil {
 			continue
 		}
 		reload = reload || l.reload
-		batch = append(batch, func() error { return launchWorker(l, true) })
+		// The dev server comes from the proxy block, not the project's worker list.
+		persist := name != hostProxyWorkerName
+		batch = append(batch, func() error { return launchWorker(l, persist) })
 	}
 	if err := podman.DaemonReloadIfNeeded(reload); err != nil {
 		feedback.Warn("daemon-reload: %v", err)
