@@ -876,6 +876,7 @@
   "sites_appLogs_clearModalTitle": "Xóa các tệp nhật ký?",
   "sites_appLogs_clearing": "Đang xóa…",
   "sites_appLogs_empty": "Không tìm thấy mục nhật ký nào.",
+  "sites_appLogs_copyForAgentHint": "Sao chép một prompt để trợ lý AI đọc mục này qua lerd và sửa nguyên nhân của nó",
   "sites_appLogs_noFiles": "Chưa có tệp nhật ký nào trong storage/logs. Chúng sẽ xuất hiện ở đây ngay khi ứng dụng ghi một tệp.",
   "sites_appLogs_noFilesWorktree": "Chưa có tệp nhật ký nào trong storage/logs của worktree này. Chúng sẽ xuất hiện ở đây ngay khi ứng dụng ghi một tệp.",
   "sites_appLogs_search": "Tìm trong nhật ký...",

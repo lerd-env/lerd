@@ -876,6 +876,7 @@
   "sites_appLogs_clearModalTitle": "Günlük dosyaları temizlensin mi?",
   "sites_appLogs_clearing": "Temizleniyor…",
   "sites_appLogs_empty": "Log kaydı bulunamadı.",
+  "sites_appLogs_copyForAgentHint": "Bir yapay zekâ asistanının bu kaydı lerd üzerinden okuyup nedenini düzeltmesi için bir istem kopyalar",
   "sites_appLogs_noFiles": "storage/logs'da henüz log dosyası yok. Uygulama bir log yazar yazmaz burada görünecek.",
   "sites_appLogs_noFilesWorktree": "Bu worktree'in storage/logs dizininde henüz log dosyası yok. Uygulama bir log yazar yazmaz burada görünecek.",
   "sites_appLogs_search": "Logları ara...",

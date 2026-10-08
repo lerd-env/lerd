@@ -876,6 +876,7 @@
   "sites_appLogs_clearModalTitle": "¿Borrar archivos de registro?",
   "sites_appLogs_clearing": "Borrando…",
   "sites_appLogs_empty": "No se encontraron entradas de log.",
+  "sites_appLogs_copyForAgentHint": "Copia un prompt para que un asistente de IA lea esta entrada con lerd y corrija su causa",
   "sites_appLogs_noFiles": "Aún no hay archivos de log en storage/logs. Aparecerán aquí en cuanto la app escriba alguno.",
   "sites_appLogs_noFilesWorktree": "Aún no hay archivos de log en storage/logs de este worktree. Aparecerán aquí en cuanto la app escriba alguno.",
   "sites_appLogs_search": "Buscar en logs...",

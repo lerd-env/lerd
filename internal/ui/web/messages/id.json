@@ -876,6 +876,7 @@
   "sites_appLogs_clearModalTitle": "Bersihkan file log?",
   "sites_appLogs_clearing": "Membersihkan…",
   "sites_appLogs_empty": "Tidak ada entri log ditemukan.",
+  "sites_appLogs_copyForAgentHint": "Salin prompt agar asisten AI membaca entri ini lewat lerd dan memperbaiki penyebabnya",
   "sites_appLogs_noFiles": "Belum ada berkas log di storage/logs. Akan muncul di sini begitu aplikasi menulis satu.",
   "sites_appLogs_noFilesWorktree": "Belum ada berkas log di storage/logs worktree ini. Akan muncul di sini begitu aplikasi menulis satu.",
   "sites_appLogs_search": "Cari log...",

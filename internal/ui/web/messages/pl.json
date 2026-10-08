@@ -876,6 +876,7 @@
   "sites_appLogs_clearModalTitle": "Wyczyścić pliki logów?",
   "sites_appLogs_clearing": "Czyszczenie…",
   "sites_appLogs_empty": "Nie znaleziono wpisów w logach.",
+  "sites_appLogs_copyForAgentHint": "Kopiuje prompt, dzięki któremu asystent AI odczyta ten wpis przez lerd i naprawi jego przyczynę",
   "sites_appLogs_noFiles": "Brak plików logów w storage/logs. Pojawią się tutaj, gdy tylko aplikacja je zapisze.",
   "sites_appLogs_noFilesWorktree": "Brak plików logów w storage/logs tego worktree. Pojawią się tutaj, gdy tylko aplikacja je zapisze.",
   "sites_appLogs_search": "Szukaj w logach...",

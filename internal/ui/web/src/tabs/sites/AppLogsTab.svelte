@@ -13,6 +13,8 @@
   import ActionButton from '$components/ActionButton.svelte';
   import LoadingRow from '$components/LoadingRow.svelte';
   import ClearAppLogsModal from './ClearAppLogsModal.svelte';
+  import CopyButton from '$components/CopyButton.svelte';
+  import { logAgentPrompt } from '$lib/agentPrompt';
   import { openErrorModal } from '$stores/modals';
   import { m } from '../../paraglide/messages.js';
 
@@ -174,6 +176,13 @@
 
   const reversed = $derived(filtered.slice().reverse());
 
+  // site resolves the main checkout only, so a worktree's log is reached by its path.
+  function agentPrompt(entry: AppLogEntry): string {
+    const wt = branch ? (site.worktrees || []).find((w) => w.branch === branch) : undefined;
+    const target = wt?.path ? `path "${wt.path}"` : `site "${siteDomain}"`;
+    return logAgentPrompt(wt?.domain || siteDomain, target, selectedFile, entry);
+  }
+
   function levelClass(level: string | undefined): string {
     const l = (level || '').toUpperCase();
     if (['ERROR', 'CRITICAL', 'EMERGENCY', 'ALERT'].includes(l))
@@ -265,7 +274,10 @@
           </svg>
         </button>
         {#if expandedIdx === i}
-          <div class="px-3 py-3 bg-gray-50 dark:bg-lerd-bg border-t border-gray-100 dark:border-lerd-border/30 font-mono text-[11px] text-gray-600 dark:text-gray-400 whitespace-pre-wrap break-all max-h-80 overflow-y-auto leading-relaxed">{entry.detail || entry.message || ''}</div>
+          <div class="relative bg-gray-50 dark:bg-lerd-bg border-t border-gray-100 dark:border-lerd-border/30">
+            <CopyButton text={() => agentPrompt(entry)} label={m.sites_appLogs_copyForAgentHint()} caption={m.common_copyForAgent()} class="absolute top-2 right-3" />
+            <div class="px-3 py-3 font-mono text-[11px] text-gray-600 dark:text-gray-400 whitespace-pre-wrap break-all max-h-80 overflow-y-auto leading-relaxed">{entry.detail || entry.message || ''}</div>
+          </div>
         {/if}
       </div>
     {/each}

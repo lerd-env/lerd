@@ -876,6 +876,7 @@
   "sites_appLogs_clearModalTitle": "ログファイルを削除しますか？",
   "sites_appLogs_clearing": "削除中…",
   "sites_appLogs_empty": "ログエントリが見つかりません。",
+  "sites_appLogs_copyForAgentHint": "AI アシスタントが lerd 経由でこのエントリを読み、原因を修正するためのプロンプトをコピーします",
   "sites_appLogs_noFiles": "storage/logs にまだログファイルがありません。アプリが書き込むとすぐにここに表示されます。",
   "sites_appLogs_noFilesWorktree": "このワークツリーの storage/logs にまだログファイルがありません。アプリが書き込むとすぐにここに表示されます。",
   "sites_appLogs_search": "ログを検索...",

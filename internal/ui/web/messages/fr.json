@@ -876,6 +876,7 @@
   "sites_appLogs_clearModalTitle": "Vider les fichiers journaux ?",
   "sites_appLogs_clearing": "Suppression…",
   "sites_appLogs_empty": "Aucune entrée de log trouvée.",
+  "sites_appLogs_copyForAgentHint": "Copie un prompt pour qu’un assistant IA lise cette entrée via lerd et en corrige la cause",
   "sites_appLogs_noFiles": "Aucun fichier de log dans storage/logs pour l'instant. Ils apparaîtront ici dès que l'application en écrit un.",
   "sites_appLogs_noFilesWorktree": "Aucun fichier de log dans storage/logs de ce worktree pour l'instant. Ils apparaîtront ici dès que l'application en écrit un.",
   "sites_appLogs_search": "Rechercher dans les logs...",

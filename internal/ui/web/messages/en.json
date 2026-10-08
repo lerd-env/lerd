@@ -876,6 +876,7 @@
   "sites_appLogs_clearModalTitle": "Clear log files?",
   "sites_appLogs_clearing": "Clearing…",
   "sites_appLogs_empty": "No log entries found.",
+  "sites_appLogs_copyForAgentHint": "Copy a prompt that has an AI assistant read this entry through lerd and fix its cause",
   "sites_appLogs_noFiles": "No log files in storage/logs yet. They'll appear here as soon as the app writes one.",
   "sites_appLogs_noFilesWorktree": "No log files in this worktree's storage/logs yet. They'll appear here as soon as the app writes one.",
   "sites_appLogs_search": "Search logs...",

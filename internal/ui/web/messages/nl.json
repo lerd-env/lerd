@@ -876,6 +876,7 @@
   "sites_appLogs_clearModalTitle": "Logbestanden wissen?",
   "sites_appLogs_clearing": "Wissen…",
   "sites_appLogs_empty": "Geen logregels gevonden.",
+  "sites_appLogs_copyForAgentHint": "Kopieert een prompt waarmee een AI-assistent deze regel via lerd leest en de oorzaak oplost",
   "sites_appLogs_noFiles": "Nog geen logbestanden in storage/logs. Ze verschijnen hier zodra de app er een schrijft.",
   "sites_appLogs_noFilesWorktree": "Nog geen logbestanden in storage/logs van deze worktree. Ze verschijnen hier zodra de app er een schrijft.",
   "sites_appLogs_search": "Logs doorzoeken...",
