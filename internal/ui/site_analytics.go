@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/reqstats"
 	"github.com/geodro/lerd/internal/spxreport"
 )
@@ -81,6 +82,25 @@ type analyticsResponse struct {
 	// the same payload as the data they are missing from, so the dashboard never
 	// renders a view whose exclusions it hasn't caught up with.
 	Excluded []string `json:"excluded"`
+}
+
+// keepSlowestEvery is how often the kept set follows the stats. A slowest
+// request evicted before its first refresh is lost, and a busy site turns the
+// buffer over in seconds, so it stays short.
+const keepSlowestEvery = 15 * time.Second
+
+// keepSlowestRequests keeps every request that is, or can still become, a
+// route's slowest past the debug buffer, so its time bar stays clickable.
+func keepSlowestRequests(srv *dumps.Server) {
+	store, err := getAnalyticsStore()
+	if err != nil {
+		return
+	}
+	keep, err := store.SlowestRIDs(time.Now().Add(-reqstats.Retention))
+	if err != nil {
+		return
+	}
+	srv.SetKeep(keep)
 }
 
 // analyticsRange maps a range label to its window, defaulting to the last hour

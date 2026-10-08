@@ -306,3 +306,106 @@ func TestRing_RemoveKeepsEventsAppendedMeanwhile(t *testing.T) {
 		t.Fatalf("len = %d, want 2500: events appended during Remove were lost", got)
 	}
 }
+
+func ridEvent(id, rid string) Event {
+	e := mkEvent(id)
+	e.Ctx.RID = rid
+	return e
+}
+
+// A kept request's events outlive the buffer, so a slowest-route bar days old
+// still opens on something.
+func TestRing_KeptRequestSurvivesEviction(t *testing.T) {
+	r := NewRing(2)
+	r.SetKeep(map[string]bool{"r1": true})
+	r.Append(ridEvent("a", "r1"))
+	r.Append(ridEvent("b", "r2"))
+	r.Append(mkEvent("c"))
+	r.Append(mkEvent("d"))
+	if got := ids(r.Snapshot()); fmt.Sprint(got) != "[c d]" {
+		t.Fatalf("snapshot = %v, pinned events stay out of the buffer", got)
+	}
+	if got := ids(r.Filter(FilterOpts{RID: "r1"})); fmt.Sprint(got) != "[a]" {
+		t.Fatalf("filter r1 = %v", got)
+	}
+	if got := r.RequestIDs(); !got["r1"] || got["r2"] {
+		t.Fatalf("request ids = %v", got)
+	}
+}
+
+func TestRing_KeptBrowserEventPinsUnderTheRequestItReached(t *testing.T) {
+	r := NewRing(1)
+	r.SetKeep(map[string]bool{"r1": true})
+	r.Append(Event{V: 1, ID: "a", Kind: KindBrowser, Ctx: Context{RID: "page"}, Data: []byte(`{"type":"fetch","rid":"r1"}`)})
+	r.Append(mkEvent("b"))
+	if got := ids(r.Filter(FilterOpts{RID: "r1"})); fmt.Sprint(got) != "[a]" {
+		t.Fatalf("filter r1 = %v", got)
+	}
+}
+
+func TestRing_SetKeepDropsRequestsNoLongerKept(t *testing.T) {
+	r := NewRing(1)
+	r.SetKeep(map[string]bool{"r1": true})
+	r.Append(ridEvent("a", "r1"))
+	r.Append(mkEvent("b"))
+	r.SetKeep(map[string]bool{"r2": true})
+	if got := r.Filter(FilterOpts{RID: "r1"}); len(got) != 0 {
+		t.Fatalf("filter r1 = %v, want it gone once no longer kept", ids(got))
+	}
+	if r.RequestIDs()["r1"] {
+		t.Fatal("r1 still listed as openable")
+	}
+}
+
+func TestRing_RemoveAndClearReachPinnedEvents(t *testing.T) {
+	r := NewRing(1)
+	r.SetKeep(map[string]bool{"r1": true, "r2": true})
+	r.Append(ridEvent("a", "r1"))
+	r.Append(ridEvent("b", "r2"))
+	r.Append(mkEvent("c"))
+	r.Remove(func(e Event) bool { return e.OfRequest("r1") })
+	if got := r.RequestIDs(); got["r1"] || !got["r2"] {
+		t.Fatalf("after remove = %v", got)
+	}
+	r.Clear()
+	if got := r.RequestIDs(); len(got) != 0 {
+		t.Fatalf("after clear = %v", got)
+	}
+}
+
+func TestRing_ShrinkingPinsKeptEvents(t *testing.T) {
+	r := NewRing(3)
+	r.SetKeep(map[string]bool{"r1": true})
+	r.Append(ridEvent("a", "r1"))
+	r.Append(mkEvent("b"))
+	r.Append(mkEvent("c"))
+	r.Resize(1)
+	if got := ids(r.Filter(FilterOpts{RID: "r1"})); fmt.Sprint(got) != "[a]" {
+		t.Fatalf("filter r1 = %v", got)
+	}
+}
+
+func TestRing_SaveLoadKeepsPinnedEvents(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "dumps-buffer.json")
+	keep := map[string]bool{"r1": true}
+	r := NewRing(2)
+	r.SetKeep(keep)
+	r.Append(ridEvent("a", "r1"))
+	r.Append(mkEvent("b"))
+	r.Append(mkEvent("c"))
+	if err := r.Save(path); err != nil {
+		t.Fatal(err)
+	}
+
+	next := NewRing(2)
+	next.SetKeep(keep)
+	if err := next.Load(path); err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(next.Snapshot()); fmt.Sprint(got) != "[b c]" {
+		t.Fatalf("buffer = %v", got)
+	}
+	if got := ids(next.Filter(FilterOpts{RID: "r1"})); fmt.Sprint(got) != "[a]" {
+		t.Fatalf("filter r1 = %v", got)
+	}
+}
