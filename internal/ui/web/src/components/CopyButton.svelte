@@ -15,8 +15,11 @@
     // faint keeps the button quiet where it sits beside a control of its own,
     // so it doesn't read as part of that control.
     tone?: 'default' | 'faint';
+    // caption is visible text after the icon, for a copy that is the point of
+    // its view rather than a helper beside a value.
+    caption?: string;
   }
-  let { text, label, class: cls = '', size = 'w-3.5 h-3.5', tone = 'default' }: Props = $props();
+  let { text, label, class: cls = '', size = 'w-3.5 h-3.5', tone = 'default', caption }: Props = $props();
 
   const idle = $derived(
     tone === 'faint'
@@ -47,7 +50,7 @@
 
 <button
   type="button"
-  class="shrink-0 flex items-center {copied
+  class="shrink-0 flex items-center {caption ? 'gap-1.5 text-xs font-medium' : ''} {copied
     ? 'text-emerald-600 dark:text-emerald-500'
     : failed
       ? 'text-red-500 dark:text-red-400'
@@ -57,4 +60,5 @@
   aria-label={label}
 >
   <Icon name={copied ? 'check' : failed ? 'alert' : 'clipboard'} class={size} />
+  {#if caption}{caption}{/if}
 </button>

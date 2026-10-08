@@ -8,12 +8,14 @@ package logsource
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/geodro/lerd/internal/applog"
 	"github.com/geodro/lerd/internal/config"
+	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nativephp"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
@@ -114,7 +116,7 @@ func resolveSiteDirect(site *config.Site, name string) (Source, bool) {
 	}
 	if worker, ok := strings.CutPrefix(name, "worker:"); ok {
 		if proj, err := config.LoadProjectConfig(site.Path); err == nil && projectHasWorker(proj, worker) {
-			return workerSource(site.Name, worker), true
+			return workerSource(site, worker), true
 		}
 	}
 	return Source{}, false
@@ -139,6 +141,27 @@ func resolveSite(siteName, sitePath string) *config.Site {
 	if sitePath != "" {
 		if s, err := config.FindSiteByPath(sitePath); err == nil {
 			return s
+		}
+		return worktreeSite(sitePath)
+	}
+	return nil
+}
+
+// worktreeSite returns the parent site of the worktree checked out at path,
+// pointed at that checkout, since worktrees are not registered as sites.
+func worktreeSite(path string) *config.Site {
+	reg, err := config.LoadSites()
+	if err != nil {
+		return nil
+	}
+	for _, s := range reg.Sites {
+		wts, _ := gitpkg.DetectWorktrees(s.Path, s.PrimaryDomain())
+		for _, wt := range wts {
+			if config.SamePath(wt.Path, path) {
+				s := s
+				s.Path = wt.Path
+				return &s
+			}
 		}
 	}
 	return nil
@@ -176,7 +199,7 @@ func siteSources(site *config.Site) []Source {
 	// 3. Worker units declared by the project.
 	if proj, err := config.LoadProjectConfig(site.Path); err == nil {
 		for _, w := range proj.Workers {
-			out = append(out, workerSource(site.Name, w))
+			out = append(out, workerSource(site, w))
 		}
 		names := make([]string, 0, len(proj.CustomWorkers))
 		for w := range proj.CustomWorkers {
@@ -184,7 +207,7 @@ func siteSources(site *config.Site) []Source {
 		}
 		sort.Strings(names)
 		for _, w := range names {
-			out = append(out, workerSource(site.Name, w))
+			out = append(out, workerSource(site, w))
 		}
 	}
 
@@ -229,13 +252,24 @@ func fpmSource(site *config.Site, container string) Source {
 	return Source{Name: "fpm", Kind: KindPodman, Locator: container, Scope: ScopeSite, Label: "PHP-FPM (" + site.Name + ")"}
 }
 
-func workerSource(siteName, worker string) Source {
+// workerUnit names the unit a site's worker runs as. A worker started from a
+// worktree carries the checkout's slug, the same rule cli.workerNames applies.
+func workerUnit(site *config.Site, worker string) string {
+	unit := "lerd-" + worker + "-" + site.Name
+	reg, err := config.FindSite(site.Name)
+	if err != nil || config.SamePath(reg.Path, site.Path) {
+		return unit
+	}
+	return unit + "-" + config.WorktreeUnitSlug(filepath.Base(site.Path))
+}
+
+func workerSource(site *config.Site, worker string) Source {
 	return Source{
 		Name:    "worker:" + worker,
 		Kind:    KindJournal,
-		Locator: "lerd-" + worker + "-" + siteName,
+		Locator: workerUnit(site, worker),
 		Scope:   ScopeSite,
-		Label:   worker + " worker (" + siteName + ")",
+		Label:   worker + " worker (" + site.Name + ")",
 	}
 }
 

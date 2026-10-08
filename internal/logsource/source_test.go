@@ -2,6 +2,7 @@ package logsource
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -184,5 +185,54 @@ func TestResolve_UndeclaredWorkerIsUnknown(t *testing.T) {
 	name, path := seedSite(t)
 	if _, err := Resolve(name, path, "worker:bogus"); err == nil {
 		t.Error("expected undeclared worker to be unknown")
+	}
+}
+
+// seedWorktree makes sitePath a git repo with a "feature" worktree beside it.
+func seedWorktree(t *testing.T, sitePath string) string {
+	t.Helper()
+	wtPath := filepath.Join(t.TempDir(), "feature")
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main"},
+		{"-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"},
+		{"worktree", "add", "-q", "-b", "feature", wtPath},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", sitePath}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	return wtPath
+}
+
+// A worktree is not registered as its own site, so a fetch by its checkout path
+// has to land on the parent site with the worktree's files.
+func TestResolveSite_WorktreePathMapsToParentSite(t *testing.T) {
+	name, sitePath := seedSite(t)
+	wtPath := seedWorktree(t, sitePath)
+
+	site := resolveSite("", wtPath)
+	if site == nil {
+		t.Fatal("resolveSite returned nil for a worktree path")
+	}
+	if site.Name != name || !config.SamePath(site.Path, wtPath) {
+		t.Errorf("site = %s at %s, want %s at %s", site.Name, site.Path, name, wtPath)
+	}
+}
+
+// A worker started from a worktree runs as its own unit named after the
+// checkout, whatever the framework says, as cli.workerNames builds it.
+func TestResolve_WorktreeWorkerReadsItsOwnUnit(t *testing.T) {
+	_, sitePath := seedSite(t)
+	wtPath := seedWorktree(t, sitePath)
+	if err := os.WriteFile(filepath.Join(wtPath, ".lerd.yaml"), []byte("workers:\n  - queue\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	src, err := Resolve("", wtPath, "worker:queue")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if want := "lerd-queue-myapp-" + config.WorktreeUnitSlug("feature"); src.Locator != want {
+		t.Errorf("locator = %q, want %q", src.Locator, want)
 	}
 }

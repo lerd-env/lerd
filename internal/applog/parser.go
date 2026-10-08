@@ -18,6 +18,9 @@ type LogEntry struct {
 	Channel string `json:"channel"`
 	Message string `json:"message"`
 	Detail  string `json:"detail,omitempty"`
+	// PastTail marks an entry older than the tail ParseFile reads, which a
+	// capped reader such as the MCP logs tool cannot reach.
+	PastTail bool `json:"past_tail,omitempty"`
 }
 
 // LogFile represents an available log file on disk.
@@ -280,4 +283,12 @@ func Page(entries []LogEntry, offset, limit int) ([]LogEntry, bool) {
 	}
 	end := min(offset+limit, len(entries))
 	return entries[offset:end], end < len(entries)
+}
+
+// MarkPastTail flags the entries of a page taken at offset that fall outside
+// the newest tailLen entries, the ones a capped tail read returns.
+func MarkPastTail(page []LogEntry, offset, tailLen int) {
+	for i := range page {
+		page[i].PastTail = offset+i >= tailLen
+	}
 }

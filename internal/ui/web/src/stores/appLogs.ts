@@ -12,6 +12,8 @@ export interface AppLogEntry {
   date?: string;
   message?: string;
   detail?: string;
+  // past_tail: older than the tail the MCP logs tool reads.
+  past_tail?: boolean;
 }
 
 function branchQuery(branch?: string): string {
