@@ -2,6 +2,7 @@ package logsource
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -184,5 +185,72 @@ func TestResolve_UndeclaredWorkerIsUnknown(t *testing.T) {
 	name, path := seedSite(t)
 	if _, err := Resolve(name, path, "worker:bogus"); err == nil {
 		t.Error("expected undeclared worker to be unknown")
+	}
+}
+
+// seedWorktree makes sitePath a git repo with a "feature" worktree beside it.
+func seedWorktree(t *testing.T, sitePath string) string {
+	t.Helper()
+	wtPath := filepath.Join(t.TempDir(), "feature")
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main"},
+		{"-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"},
+		{"worktree", "add", "-q", "-b", "feature", wtPath},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", sitePath}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	return wtPath
+}
+
+// A worktree is not registered as its own site, so a fetch by its checkout path
+// has to land on the parent site with the worktree's files.
+func TestResolveSite_WorktreePathMapsToParentSite(t *testing.T) {
+	name, sitePath := seedSite(t)
+	wtPath := seedWorktree(t, sitePath)
+
+	site := resolveSite("", wtPath)
+	if site == nil {
+		t.Fatal("resolveSite returned nil for a worktree path")
+	}
+	if site.Name != name || !config.SamePath(site.Path, wtPath) {
+		t.Errorf("site = %s at %s, want %s at %s", site.Name, site.Path, name, wtPath)
+	}
+}
+
+// A worktree shares its parent's workers except those its framework runs per
+// worktree, which are separate units named after the checkout.
+func TestResolve_WorktreeWorkerUnitFollowsPerWorktree(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	_, sitePath := seedSite(t)
+	perWT := true
+	if err := config.SaveFramework(&config.Framework{Name: "wtfw", Label: "wtfw", Workers: map[string]config.FrameworkWorker{
+		"queue": {Command: "x"},
+		"vite":  {Command: "npm run dev", PerWorktree: &perWT},
+	}}); err != nil {
+		t.Fatalf("SaveFramework: %v", err)
+	}
+	site, _ := config.FindSite("myapp")
+	site.Framework = "wtfw"
+	if err := config.AddSite(*site); err != nil {
+		t.Fatalf("AddSite: %v", err)
+	}
+	wtPath := seedWorktree(t, sitePath)
+	if err := os.WriteFile(filepath.Join(wtPath, ".lerd.yaml"), []byte("workers:\n  - queue\n  - vite\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	for worker, want := range map[string]string{
+		"queue": "lerd-queue-myapp",
+		"vite":  "lerd-vite-myapp-" + config.WorktreeUnitSlug("feature"),
+	} {
+		src, err := Resolve("", wtPath, "worker:"+worker)
+		if err != nil {
+			t.Fatalf("Resolve %s: %v", worker, err)
+		}
+		if src.Locator != want {
+			t.Errorf("%s locator = %q, want %q", worker, src.Locator, want)
+		}
 	}
 }
