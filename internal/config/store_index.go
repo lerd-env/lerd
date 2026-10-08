@@ -2,7 +2,9 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"sync"
 )
 
 // cachedStoreEntry mirrors the framework store index fields that offline
@@ -27,10 +29,20 @@ type StorePackageEntry struct {
 	Latest   string   `json:"latest,omitempty"`
 }
 
+// Package types a package definition may declare: composer, the default a
+// file without a type has, and npm.
+const (
+	PackageComposer = "composer"
+	PackageNPM      = "npm"
+)
+
 // cachedStoreIndex mirrors the store index fields the config package reads.
 type cachedStoreIndex struct {
 	Frameworks []cachedStoreEntry  `json:"frameworks"`
 	Packages   []StorePackageEntry `json:"packages"`
+	// NPMPackages are listed apart from Packages, which a lerd that predates
+	// them fetches whole on update and would refuse an npm name from.
+	NPMPackages []StorePackageEntry `json:"npm_packages"`
 }
 
 // loadCachedStoreIndex reads the locally cached framework store index. Returns
@@ -66,6 +78,34 @@ func cachedStorePackages() []StorePackageEntry {
 		return nil
 	}
 	return idx.Packages
+}
+
+// cachedStoreNPMPackages returns the npm packages the store publishes a
+// definition for.
+func cachedStoreNPMPackages() []StorePackageEntry {
+	idx := loadCachedStoreIndex()
+	if idx == nil {
+		return nil
+	}
+	return idx.NPMPackages
+}
+
+var warnedPackageTypes sync.Map
+
+// packageTypeIs reports whether a package definition is of the type its index
+// list says; a type lerd does not know is reported once and never read as one.
+func packageTypeIs(pkg *FrameworkPackage, want string) bool {
+	got := pkg.Type
+	if got == "" {
+		got = PackageComposer
+	}
+	if got != PackageComposer && got != PackageNPM {
+		if _, seen := warnedPackageTypes.LoadOrStore(pkg.Package, true); !seen {
+			fmt.Fprintf(os.Stderr, "lerd: store package %s has type %q, which this lerd does not know; update lerd to use it\n", pkg.Package, pkg.Type)
+		}
+		return false
+	}
+	return got == want
 }
 
 // projectOwnsFramework reports whether a framework name belongs to the projects

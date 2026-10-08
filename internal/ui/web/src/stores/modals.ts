@@ -3,6 +3,7 @@ import type { Site, EnvProposeEntry, NginxScope } from "./sites";
 
 export type ModalKind =
   | "domain"
+  | "browserLogs"
   | "group"
   | "link"
   | "preset"
@@ -201,6 +202,7 @@ export interface ErrorTarget {
 export interface ModalState {
   kind: ModalKind;
   site?: Site;
+  browserLogsSite?: string;
   lanAction?: LANAction;
   onSuccess?: () => void;
   branch?: string;
@@ -259,6 +261,10 @@ export function openServiceInstallModal(name: string) {
 
 export function openDomainModal(site: Site) {
   modal.set({ kind: "domain", site });
+}
+
+export function openBrowserLogsModal(site: string) {
+  modal.set({ kind: "browserLogs", browserLogsSite: site });
 }
 
 export function openGroupModal(site: Site) {

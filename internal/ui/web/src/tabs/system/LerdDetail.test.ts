@@ -25,6 +25,13 @@ describe('LerdDetail', () => {
     });
   });
 
+  it('keeps the header out of the scrolling area', () => {
+    const { container } = render(LerdDetail);
+    const header = container.querySelector('.page-header')!;
+    expect(header.closest('.overflow-y-auto')).toBeNull();
+    expect(container.querySelector('.overflow-y-auto')).not.toBeNull();
+  });
+
   // Release notes run long enough to push the rest of the settings off screen,
   // so the card only offers a way in and the text lives in the modal.
   it('marks a dev build next to its version', () => {

@@ -657,6 +657,8 @@ export const unpinSite = (d: string) => postAction(site(d, 'unpin'));
 export const unlinkSite = (d: string) => postAction(site(d, 'unlink'));
 export const removeSiteService = (d: string, name: string) =>
   postAction(site(d, 'service:remove') + `?name=${encodeURIComponent(name)}`);
+export const openInEditor = (d: string, branch: string = '') =>
+  postAction(site(d, 'editor:open') + (branch ? `?branch=${encodeURIComponent(branch)}` : ''));
 export const openTerminal = (d: string, branch: string = '') =>
   postAction(site(d, 'terminal') + (branch ? `?branch=${encodeURIComponent(branch)}` : ''));
 

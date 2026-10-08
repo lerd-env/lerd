@@ -193,6 +193,7 @@ Supported PHP versions: **8.5**, **8.4**, **8.3**, **8.2**, **8.1**, the prerele
 | `lerd dump status` | Show whether the bridge is enabled and how many events are buffered |
 | `lerd dump tail [--site X] [--branch Y] [--ctx fpm\|cli]` | Stream captured dumps to the terminal until Ctrl-C |
 | `lerd dump clear` | Clear the in-memory dump ring without disabling the bridge |
+| `lerd dump buffer [size]` | Show or set how many events the Debug window keeps in memory (5,000 by default, 3,000 to 20,000); a running dashboard resizes straight away |
 | `lerd profile on` | Turn the SPX profiler on so every PHP-FPM site's requests are profiled into flame graphs |
 | `lerd profile off` | Turn the SPX profiler off |
 | `lerd profile status` | Show whether the profiler is on and the SPX web UI URL |

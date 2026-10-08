@@ -86,11 +86,10 @@ func EnableLANExposure(progress LANProgressFunc) (lanIP string, err error) {
 }
 
 // ensureLANForwarder installs the host-side LAN DNS forwarder when the platform
-// needs it. The forwarder is the Linux rootless-pasta workaround: there the
-// lerd-dns container cannot bind the host LAN address, so a forwarder bridges
-// lanIP:5300 → 127.0.0.1:5300. On macOS lerd-dns is a host dnsmasq that already
-// binds all interfaces (including lanIP), so installing a forwarder would
-// double-bind lanIP:5300 and crash lerd-dns; there this is a no-op.
+// needs it. On Linux lerd-dns listens on loopback only, so a forwarder bridges
+// lanIP:5300 → 127.0.0.1:5300. On macOS lerd-dns already binds all interfaces
+// (including lanIP), so installing a forwarder would double-bind lanIP:5300
+// and crash lerd-dns; there this is a no-op.
 func ensureLANForwarder(lanIP string, emit func(string)) error {
 	if lerdDNSBindsLANPort {
 		if emit != nil {

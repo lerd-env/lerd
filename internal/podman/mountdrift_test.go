@@ -163,6 +163,7 @@ func TestEnsurePathMountedCoversCustomFPMSites(t *testing.T) {
 	cfgHome := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", cfgHome)
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	resetPathMountAttempts()
 
 	quadlets := filepath.Join(cfgHome, "containers", "systemd")

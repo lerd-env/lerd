@@ -138,6 +138,11 @@ func RunQuickForPath(ctx context.Context, path, fwName string) Response {
 	return runForPath(ctx, path, fwName, Options{Quick: true})
 }
 
+// RunForPathWith is RunForPath honouring opts.
+func RunForPathWith(ctx context.Context, path, fwName string, opts Options) Response {
+	return runForPath(ctx, path, fwName, opts)
+}
+
 func runForPath(ctx context.Context, path, fwName string, opts Options) Response {
 	if fwName == "" {
 		fwName, _ = config.DetectFrameworkForDir(path)
@@ -197,6 +202,24 @@ type Options struct {
 	// command checks, composer validate, the composer and npm audits) and the
 	// request-timing lookup, leaving the file-and-config ones.
 	Quick bool
+	// OnCheck, when set, receives each check as soon as it finishes, labelled,
+	// so a caller can show findings before the slowest container exec returns.
+	OnCheck func(Check)
+}
+
+// notifier wraps OnCheck so it sees each check labelled and is never called
+// from two check goroutines at once, and is a no-op when nobody asked.
+func (o Options) notifier() func(Check) {
+	if o.OnCheck == nil {
+		return func(Check) {}
+	}
+	var mu sync.Mutex
+	return func(c Check) {
+		labelCheck(&c)
+		mu.Lock()
+		defer mu.Unlock()
+		o.OnCheck(c)
+	}
 }
 
 // Run builds the doctor report for the project at path using fw to drive both
@@ -209,14 +232,19 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 // RunWith is Run honouring opts, so a caller can ask for the cheap checks only.
 func RunWith(ctx context.Context, path string, fw *config.Framework, opts Options) Response {
 	resp := Response{Checks: []Check{}}
-	if c, ok := checkProjectConfig(path, fw); ok {
+	notify := opts.notifier()
+	add := func(c Check) {
 		resp.add(c)
+		notify(c)
+	}
+	if c, ok := checkProjectConfig(path, fw); ok {
+		add(c)
 	}
 	envFile, envFormat, exampleFile := envSetup(fw, path)
 	envPath := filepath.Join(path, envFile)
 
 	if c, ok := checkRequiredServices(path, fw); ok {
-		resp.add(c)
+		add(c)
 	}
 	if hasEnvConfig(fw) {
 		// The file that has to exist is the one lerd writes, not whichever one it
@@ -225,10 +253,10 @@ func RunWith(ctx context.Context, path string, fw *config.Framework, opts Option
 		// present would hide the missing one lerd and drush both need.
 		writeFile, _ := fw.Env.ResolveWrite(path)
 		if c, ok := checkEnvPresent(path, writeFile, fwExampleFile(fw), writeFile == fw.Env.AppFile); ok {
-			resp.add(c)
+			add(c)
 		}
 		if c, ok := checkServiceWiring(path, envFile, fw); ok {
-			resp.add(c)
+			add(c)
 		}
 	}
 	// The env drift and app-key checks parse the file as dotenv, so skip them for
@@ -238,33 +266,44 @@ func RunWith(ctx context.Context, path string, fw *config.Framework, opts Option
 	// format it declares them, so a project configured through a PHP settings
 	// file is checked like any other.
 	if c, ok := checkSQLiteDatabase(path, envPath, envFormat, fw); ok {
-		resp.add(c)
+		add(c)
 		dbBroken = c.Status == StatusFail
 	}
 	// The app-key and drift checks parse the file as dotenv (one diffs it against
 	// a committed example), so they stay for the frameworks that keep one.
 	if c, ok := checkEnvDuplicates(path, envFile, envFormat); ok {
-		resp.add(c)
+		add(c)
 	}
 	// Whether the site's database exists is answered through the framework
 	// declaration, so it is asked of every format, not only dotenv.
 	if c, ok := checkServerDatabase(path); ok {
-		resp.add(c)
+		add(c)
 		dbBroken = dbBroken || c.Status == StatusFail
 	}
 	// Same shape one layer over: the service preset names the env key holding
 	// the entity a site owns, so this is asked of every format too.
 	if c, ok := checkServerBucket(path); ok {
-		resp.add(c)
+		add(c)
 	}
 	if envFormat == "dotenv" {
 		if c, ok := checkAppKey(envPath, fw); ok {
-			resp.add(c)
+			add(c)
 		}
 		if c, ok := checkEnvDrift(path, envPath, filepath.Join(path, exampleFile)); ok {
-			resp.add(c)
+			add(c)
 		}
 	}
+
+	// The root request can take seconds on a cold app, so it starts now and
+	// overlaps the container-exec checks below rather than queueing behind them.
+	var webTasks []func() (Check, bool)
+	if !opts.Quick {
+		webTasks = []func() (Check, bool){
+			func() (Check, bool) { return checkHTTPResponse(path) },
+			func() (Check, bool) { return checkSlowRoutes(path) },
+		}
+	}
+	webChecks := startChecks(webTasks, notify)
 
 	// The framework command checks and the composer/node dependency + audit checks
 	// each block on an independent container-exec timeout. Run them concurrently
@@ -287,33 +326,28 @@ func RunWith(ctx context.Context, path string, fw *config.Framework, opts Option
 		tasks = append(tasks, func() (Check, bool) { return runDeclaredCheck(ctx, path, envPath, envFormat, spec) })
 	}
 	tasks = append(tasks, dependencyCheckTasks(ctx, path, fw, opts)...)
-	for _, c := range runChecksConcurrently(tasks) {
+	for _, c := range startChecks(tasks, notify)() {
 		resp.add(c)
 	}
 	if c, ok := checkPHPVersion(path, fw); ok {
-		resp.add(c)
+		add(c)
 	}
 	if cs, ok := checkNativeRuntime(path); ok {
 		for _, c := range cs {
-			resp.add(c)
+			add(c)
 		}
 	}
 	if c, ok := checkVhost(path); ok {
-		resp.add(c)
+		add(c)
 	}
 	if c, ok := checkStaleWorkers(path, fw); ok {
-		resp.add(c)
+		add(c)
 	}
 	if c, ok := checkProtectedPath(path); ok {
-		resp.add(c)
+		add(c)
 	}
-	if !opts.Quick {
-		if c, ok := checkHTTPResponse(path); ok {
-			resp.add(c)
-		}
-		if c, ok := checkSlowRoutes(path); ok {
-			resp.add(c)
-		}
+	for _, c := range webChecks() {
+		resp.add(c)
 	}
 	applyLabels(&resp)
 	return resp
@@ -583,14 +617,18 @@ func humanize(name string) string {
 // universal label table and falling back to a humanized name.
 func applyLabels(resp *Response) {
 	for i := range resp.Checks {
-		if resp.Checks[i].Label != "" {
-			continue
-		}
-		if l, ok := universalLabels[resp.Checks[i].Name]; ok {
-			resp.Checks[i].Label = l
-		} else {
-			resp.Checks[i].Label = humanize(resp.Checks[i].Name)
-		}
+		labelCheck(&resp.Checks[i])
+	}
+}
+
+func labelCheck(c *Check) {
+	if c.Label != "" {
+		return
+	}
+	if l, ok := universalLabels[c.Name]; ok {
+		c.Label = l
+	} else {
+		c.Label = humanize(c.Name)
 	}
 }
 
@@ -1061,10 +1099,10 @@ func checkCommand(ctx context.Context, path string, spec config.DoctorCheck) Che
 // an unbounded number of concurrent podman execs.
 const maxDoctorConcurrency = 6
 
-// runChecksConcurrently runs each task in its own goroutine, bounded by
-// maxDoctorConcurrency, and returns the checks that fired in the original task
-// order, so independent container-exec checks no longer add up their timeouts.
-func runChecksConcurrently(tasks []func() (Check, bool)) []Check {
+// startChecks runs the tasks concurrently, bounded by maxDoctorConcurrency, and
+// hands each fired check to notify as it lands. The returned func waits for the
+// rest and returns them in task order.
+func startChecks(tasks []func() (Check, bool), notify func(Check)) func() []Check {
 	results := make([]struct {
 		c  Check
 		ok bool
@@ -1078,16 +1116,21 @@ func runChecksConcurrently(tasks []func() (Check, bool)) []Check {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			results[i].c, results[i].ok = t()
+			if results[i].ok {
+				notify(results[i].c)
+			}
 		}(i, t)
 	}
-	wg.Wait()
-	var out []Check
-	for _, r := range results {
-		if r.ok {
-			out = append(out, r.c)
+	return func() []Check {
+		wg.Wait()
+		var out []Check
+		for _, r := range results {
+			if r.ok {
+				out = append(out, r.c)
+			}
 		}
+		return out
 	}
-	return out
 }
 
 // dependencyCheckTasks builds the universal package-manager checks (composer and

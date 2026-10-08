@@ -25,6 +25,10 @@ var resolverContent = []byte("nameserver 127.0.0.1\nport 5300\n")
 // readUpstreamDNS reads upstream DNS servers from /etc/resolv.conf.
 // On macOS the OS keeps /etc/resolv.conf up-to-date with DHCP-assigned DNS servers,
 // so parsing it gives the real upstreams without needing nmcli or resolvectl.
+// hostUpstreamDNS is the same as readUpstreamDNS on macOS, where lerd-dns only
+// ever receives the lerd TLD and never forwards.
+func hostUpstreamDNS() []string { return readUpstreamDNS() }
+
 func readUpstreamDNS() []string {
 	if servers := configuredUpstreamDNS(); len(servers) > 0 {
 		return servers

@@ -73,3 +73,19 @@ describe('groupLabel', () => {
     expect(labelString(groupLabel(ev({ branch: '', site: '' }), false))).toBe('GET /checkout');
   });
 });
+
+describe('browser events', () => {
+  const page = (rid: string) => ({ ...ev({ type: 'browser', request: 'https://acme.test/cart', rid, pid: undefined }), kind: 'browser' });
+
+  it('group per page load and are labelled with the page URL', () => {
+    expect(groupKey(page('p1'))).toBe('rid:p1');
+    expect(groupKey(page('p1'))).not.toBe(groupKey(page('p2')));
+    expect(groupLabel(page('p1'), true).text).toBe('https://acme.test/cart');
+  });
+
+  it('names the request in the label of a group keyed by it, never a dump group', () => {
+    const q = { kind: 'query', ts: '2026-10-07T10:00:00Z', ctx: { type: 'fpm', site: 'shop', request: 'GET /', rid: 'r1' } } as DumpEvent;
+    expect(groupLabel(q, true).rid).toBe('r1');
+    expect(groupLabel({ ...q, kind: 'dump' } as DumpEvent, true).rid).toBeUndefined();
+  });
+});

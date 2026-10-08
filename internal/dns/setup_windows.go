@@ -26,6 +26,10 @@ func readUpstreamDNS() []string {
 	return adapterDNSServers()
 }
 
+// hostUpstreamDNS is readUpstreamDNS: NRPT only routes the lerd TLD to
+// lerd-dns, so it never forwards anything else.
+func hostUpstreamDNS() []string { return readUpstreamDNS() }
+
 // defaultUpstreamFallback is nil: the Podman machine seeds the container's
 // resolv.conf from the host, as on macOS.
 func defaultUpstreamFallback() []string { return nil }

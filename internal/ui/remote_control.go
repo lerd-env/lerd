@@ -360,6 +360,7 @@ func handleAccessMode(w http.ResponseWriter, r *http.Request) {
 	lanExposed := cfg != nil && cfg.LAN.Exposed
 	writeJSON(w, map[string]any{
 		"local_control": hasHostActionAuthority(r),
+		"local":         isLocalControlRequest(r),
 		"lan_exposed":   lanExposed,
 	})
 }

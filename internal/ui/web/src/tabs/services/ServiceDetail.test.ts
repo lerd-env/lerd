@@ -26,7 +26,7 @@ function dbService(): Service {
 }
 
 describe('ServiceDetail databases tab', () => {
-  beforeEach(() => accessMode.set({ localControl: true, lanExposed: false, checked: true }));
+  beforeEach(() => accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true }));
 
   it('shows the Databases tab with dashboard-control authority', () => {
     const { getByRole } = render(ServiceDetail, { props: { svc: dbService() } });
@@ -34,7 +34,7 @@ describe('ServiceDetail databases tab', () => {
   });
 
   it('hides the Databases tab without dashboard-control authority', () => {
-    accessMode.set({ localControl: false, lanExposed: true, checked: true });
+    accessMode.set({ localControl: false, local: false, lanExposed: true, checked: true });
     const { queryByRole } = render(ServiceDetail, { props: { svc: dbService() } });
     expect(queryByRole('tab', { name: 'Databases' })).toBeNull();
   });
@@ -54,7 +54,7 @@ describe('ServiceDetail databases tab', () => {
 });
 
 describe('ServiceDetail entities tab', () => {
-  beforeEach(() => accessMode.set({ localControl: true, lanExposed: false, checked: true }));
+  beforeEach(() => accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true }));
 
   function entityService(): Service {
     return {
@@ -75,14 +75,14 @@ describe('ServiceDetail entities tab', () => {
   });
 
   it('hides the entity tab without dashboard-control authority', () => {
-    accessMode.set({ localControl: false, lanExposed: true, checked: true });
+    accessMode.set({ localControl: false, local: false, lanExposed: true, checked: true });
     const { queryByRole } = render(ServiceDetail, { props: { svc: entityService() } });
     expect(queryByRole('tab', { name: 'Buckets' })).toBeNull();
   });
 });
 
 describe('ServiceDetail logs tab', () => {
-  beforeEach(() => accessMode.set({ localControl: true, lanExposed: false, checked: true }));
+  beforeEach(() => accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true }));
   const redis = (over: Partial<Service> = {}) =>
     ({ name: 'redis', status: 'active', site_count: 0, ...over }) as Service;
 

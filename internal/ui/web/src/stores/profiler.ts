@@ -78,3 +78,14 @@ wsMessage.subscribe((msg) => {
   const fresh = msg?.profiler_status as { enabled: boolean } | undefined;
   if (fresh) profilerEnabled.set(Boolean(fresh.enabled));
 });
+
+// profileKeyFor names the SPX capture of one request, by the id lerd wrote onto
+// it, or '' when that request was not profiled.
+export async function profileKeyFor(rid: string): Promise<string> {
+  try {
+    const d = await apiJson<{ key: string }>(`/api/profiler/report?${new URLSearchParams({ rid })}`);
+    return d.key ?? '';
+  } catch {
+    return '';
+  }
+}

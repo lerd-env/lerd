@@ -149,3 +149,48 @@ func TestProfilesForRoutes(t *testing.T) {
 		t.Error("captures for a host we did not ask for must be ignored")
 	}
 }
+
+// The dashboard opens a request's flame graph through the id lerd wrote onto
+// its profile.
+func TestKeyForRID(t *testing.T) {
+	dir := t.TempDir()
+	writeReport(t, dir, "spx-full-1", `{"key":"spx-full-1","custom_metadata_str":"lerd-rid:abc123"}`)
+	writeReport(t, dir, "spx-full-2", `{"key":"spx-full-2"}`)
+	if got := KeyForRID(dir, "abc123"); got != "spx-full-1" {
+		t.Errorf("key = %q", got)
+	}
+	if got := KeyForRID(dir, "other"); got != "" {
+		t.Errorf("unknown id = %q, want none", got)
+	}
+}
+
+func TestKeysByRIDMapsEveryStampedCapture(t *testing.T) {
+	dir := t.TempDir()
+	writeReport(t, dir, "spx-full-1", `{"key":"spx-full-1","custom_metadata_str":"lerd-rid:abc123"}`)
+	writeReport(t, dir, "spx-full-2", `{"key":"spx-full-2"}`)
+	writeReport(t, dir, "spx-full-3", `{"key":"spx-full-3","custom_metadata_str":"lerd-rid:def456"}`)
+	got := KeysByRID(dir)
+	if len(got) != 2 || got["abc123"] != "spx-full-1" || got["def456"] != "spx-full-3" {
+		t.Fatalf("keys = %v", got)
+	}
+	if len(KeysByRID(filepath.Join(dir, "missing"))) != 0 {
+		t.Fatal("a missing data dir has no captures")
+	}
+}
+
+func TestRemoveForRIDsDeletesOnlyThoseCaptures(t *testing.T) {
+	dir := t.TempDir()
+	writeReport(t, dir, "spx-full-1", `{"key":"spx-full-1","custom_metadata_str":"lerd-rid:abc123"}`)
+	writeReport(t, dir, "spx-full-2", `{"key":"spx-full-2","custom_metadata_str":"lerd-rid:keep"}`)
+	if n := RemoveForRIDs(dir, []string{"abc123", "unprofiled"}); n != 1 {
+		t.Fatalf("removed = %d, want 1", n)
+	}
+	for _, f := range []string{"spx-full-1.json", "spx-full-1.txt.gz"} {
+		if _, err := os.Stat(filepath.Join(dir, f)); !os.IsNotExist(err) {
+			t.Fatalf("%s still there", f)
+		}
+	}
+	if KeysByRID(dir)["keep"] != "spx-full-2" {
+		t.Fatal("another request's capture went too")
+	}
+}

@@ -7,47 +7,118 @@ on:
     branches: ["main", "release/**"]
 
 jobs:
-  build:
-    name: Build & Test
+  ui:
+    name: UI
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      # Hashes every input of the steps below, so an unchanged UI reuses the last
+      # dist and skips the build, its tests and the license check that reads node_modules.
+      - id: ui-cache
+        uses: actions/cache@v4
+        with:
+          path: internal/ui/web/dist
+          key: ui-${{ hashFiles('internal/ui/web/**', 'go.mod', 'go.sum', 'tools/licensegen/**', 'internal/licenses/**', 'Makefile') }}
+
+      - if: steps.ui-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
 
-      - uses: actions/setup-node@v4
+      - if: steps.ui-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: internal/ui/web/package-lock.json
 
       - name: Build UI
+        if: steps.ui-cache.outputs.cache-hit != 'true'
         run: make build-ui
 
+      # Every Go job embeds web/dist, so it is built once here and shared.
+      # dist holds a .vite folder, which upload-artifact skips by default.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-dist
+          path: internal/ui/web/dist
+          include-hidden-files: true
+          retention-days: 1
+
       - name: Test UI
+        if: steps.ui-cache.outputs.cache-hit != 'true'
         run: make test-ui
 
-      - name: Install tray build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --fix-missing libayatana-appindicator3-dev
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Build
-        run: CGO_ENABLED=1 go build -o /dev/null ./cmd/lerd
-
       - name: Third-party licenses
+        if: steps.ui-cache.outputs.cache-hit != 'true'
         run: |
           make licenses
           git diff --exit-code internal/licenses/THIRD-PARTY-LICENSES.md
 
+  test:
+    name: Test
+    needs: ui
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: go
+        uses: ./.github/actions/go-job
+        with:
+          tray-deps: "true"
+
       - name: Test
         run: CGO_ENABLED=1 go test ./...
+
+      # Saved on pushes only: PR runs restore it, and keeping them out leaves
+      # the repo's 10 GB cache budget to the builds every branch starts from.
+      - if: ${{ !cancelled() && github.event_name == 'push' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+          key: ${{ steps.go.outputs.cache-key }}
+
+  race:
+    name: Test (race)
+    needs: ui
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: go
+        uses: ./.github/actions/go-job
+        with:
+          tray-deps: "true"
+
+      - name: Test with the race detector
+        run: CGO_ENABLED=1 go test -race ./...
+
+      - if: ${{ !cancelled() && github.event_name == 'push' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+          key: ${{ steps.go.outputs.cache-key }}
+
+  lint:
+    name: Build, Vet & Format
+    needs: ui
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: go
+        uses: ./.github/actions/go-job
+        with:
+          tray-deps: "true"
+
+      - name: Build
+        run: CGO_ENABLED=1 go build -o /dev/null ./cmd/lerd
 
       - name: Vet
         run: CGO_ENABLED=1 go vet ./...
@@ -60,40 +131,116 @@ jobs:
       - name: Format
         run: test -z "$(gofmt -l .)"
 
-  build-macos:
-    name: Build & Test (macOS)
+      - name: Vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+      - if: ${{ !cancelled() && github.event_name == 'push' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+          key: ${{ steps.go.outputs.cache-key }}
+
+  test-macos:
+    name: Test (macOS)
+    needs: ui
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: internal/ui/web/package-lock.json
-
-      - name: Build UI
-        run: make build-ui
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Build (nogui)
-        run: CGO_ENABLED=0 go build -tags nogui -o /dev/null ./cmd/lerd
+      - id: go
+        uses: ./.github/actions/go-job
 
       - name: Test
         run: CGO_ENABLED=0 go test -tags nogui ./...
 
+      - if: ${{ !cancelled() && github.event_name == 'push' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+          key: ${{ steps.go.outputs.cache-key }}
+
+  lint-macos:
+    name: Build & Vet (macOS)
+    needs: ui
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: go
+        uses: ./.github/actions/go-job
+
+      - name: Build (nogui)
+        run: CGO_ENABLED=0 go build -tags nogui -o /dev/null ./cmd/lerd
+
       - name: Vet
         run: CGO_ENABLED=0 go vet -tags nogui ./...
 
-      - name: Format
-        run: test -z "$(gofmt -l .)"
+      - if: ${{ !cancelled() && github.event_name == 'push' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+          key: ${{ steps.go.outputs.cache-key }}
+
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            docs/package-lock.json
+            internal/ui/web/package-lock.json
+
+      # Same inputs as the Pages build in docs.yml, so a broken docs build fails here and not at release.
+      - name: Copy static assets into public
+        run: |
+          mkdir -p docs/public/assets/screenshots
+          cp screenshots/app-*.png docs/public/assets/screenshots/
+          cp install.sh docs/public/install.sh
+          mkdir -p docs/public/icons
+          cp docs/public/assets/logo.svg docs/public/icons/icon.svg
+
+      - name: Build the embedded UI demo
+        working-directory: internal/ui/web
+        run: |
+          npm ci
+          npm run build:demo
+
+      - name: Install dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: Build
+        working-directory: docs
+        run: npm run build
+
+  # The main ruleset requires these two check names. Each gate waits on its
+  # split jobs; always() stops a failed dependency from leaving it skipped, which would count as passing.
+  gate-linux:
+    name: Build & Test
+    needs: [ui, test, race, lint, docs]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && !contains(needs.*.result, 'skipped') }}" = true
+
+  gate-macos:
+    name: Build & Test (macOS)
+    needs: [ui, test-macos, lint-macos]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && !contains(needs.*.result, 'skipped') }}" = true
 
   # Builds and vets the Windows binaries, runs the tests written for Windows,
   # and checks install.ps1 under the Windows PowerShell every Windows ships.

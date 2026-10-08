@@ -12,9 +12,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/geodro/lerd/internal/browserlogs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
 )
+
+// refreshBrowserLogsFn rewrites the vhosts of sites that opted into browser
+// capture, which carry its script only while debug is on. Swapped out in tests.
+var refreshBrowserLogsFn = browserlogs.RefreshVhosts
 
 // Result describes the outcome of Apply so callers can render their own
 // user-facing message without inspecting state again.
@@ -71,7 +76,7 @@ func Apply(enabled bool) (Result, error) {
 			_ = podman.SetDumpsBridgeFlag(false)
 			return Result{Enabled: false}, fmt.Errorf("saving config: %w", err)
 		}
-		return Result{Enabled: true}, nil
+		return refreshBrowserLogs(Result{Enabled: true})
 	}
 
 	cfg.SetDumpsEnabled(false)
@@ -81,7 +86,16 @@ func Apply(enabled bool) (Result, error) {
 	if err := podman.SetDumpsBridgeFlag(false); err != nil {
 		return Result{Enabled: false}, err
 	}
-	return Result{Enabled: false}, nil
+	return refreshBrowserLogs(Result{Enabled: false})
+}
+
+// refreshBrowserLogs follows a debug flip into the vhosts of the sites that
+// opted into browser logs. The flip itself already stands when this fails.
+func refreshBrowserLogs(res Result) (Result, error) {
+	if err := refreshBrowserLogsFn(); err != nil {
+		return res, fmt.Errorf("updating browser logs vhosts: %w", err)
+	}
+	return res, nil
 }
 
 // PassthroughResult describes the outcome of SetPassthrough so callers
@@ -142,4 +156,19 @@ func installedFPMUnits() []string {
 		out = append(out, strings.TrimSuffix(name, ".container"))
 	}
 	return out
+}
+
+// SetBuffer stores how many events lerd-ui keeps for the Debug window and
+// returns the size it was pulled into. A running lerd-ui resizes once it is
+// told the config changed, keeping the newest events that fit.
+func SetBuffer(n int) (int, error) {
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return 0, fmt.Errorf("loading config: %w", err)
+	}
+	cfg.SetDumpsBuffer(n)
+	if err := config.SaveGlobal(cfg); err != nil {
+		return 0, fmt.Errorf("saving config: %w", err)
+	}
+	return cfg.DumpsBuffer(), nil
 }

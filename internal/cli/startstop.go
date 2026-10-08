@@ -129,17 +129,6 @@ func pendingImageWork() []imageWork {
 		img := image
 		reason := "missing, needed by " + strings.TrimPrefix(unit, "lerd-")
 		switch {
-		case img == podman.DNSMasqImage:
-			work = append(work, imageWork{
-				job: BuildJob{
-					Label: "Building dnsmasq",
-					Run: func(w io.Writer) error {
-						return podman.BuildDNSMasqImage(w, dns.ReadUpstreamDNS())
-					},
-				},
-				item: imagepull.Build("dnsmasq image", podman.DNSMasqBaseImage, reason),
-			})
-
 		case strings.HasPrefix(img, "lerd-php") && strings.HasSuffix(img, "-fpm:local"):
 			// Extract version from image name, e.g. lerd-php84-fpm:local → 8.4
 			short := strings.TrimSuffix(strings.TrimPrefix(img, "lerd-php"), "-fpm:local")

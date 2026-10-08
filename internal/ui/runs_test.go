@@ -121,7 +121,7 @@ func TestRunRegistryListsByDirectory(t *testing.T) {
 	waitForStatus(t, first, runDone)
 	second := reg.Start(runKindSetup, mine, "", []string{"lerd", "setup"})
 	waitForStatus(t, second, runDone)
-	reg.Start(runKindLink, other, "", []string{"lerd", "link"})
+	waitForStatus(t, reg.Start(runKindLink, other, "", []string{"lerd", "link"}), runDone)
 
 	found := reg.ForDir(mine)
 	if len(found) != 2 {

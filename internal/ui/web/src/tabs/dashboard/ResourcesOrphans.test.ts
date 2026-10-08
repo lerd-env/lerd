@@ -31,7 +31,7 @@ describe('ResourcesWidget orphaned containers', () => {
   beforeEach(() => {
     serviceAction.mockClear();
     statsLoaded.set(true);
-    accessMode.set({ localControl: true, lanExposed: false, checked: true });
+    accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
     stats.set({
       containers: [row('lerd-phpmyadmin', true), row('lerd-mysql')],
       total_cpu_percent: 0.2,
@@ -59,7 +59,7 @@ describe('ResourcesWidget orphaned containers', () => {
   });
 
   it('offers no remove without local control', () => {
-    accessMode.set({ localControl: false, lanExposed: true, checked: true });
+    accessMode.set({ localControl: false, local: false, lanExposed: true, checked: true });
     const { getByText, queryByRole } = render(ResourcesWidget);
     expect(getByText('orphaned')).toBeTruthy();
     expect(queryByRole('button', { name: 'Remove phpmyadmin' })).toBeNull();

@@ -2,7 +2,14 @@
 
 package cli
 
-import "testing"
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/geodro/lerd/internal/config"
+)
 
 // isolateState points the lerd state dirs at temp dirs for the duration of a
 // test. teardownDNS deletes the lerd-dns quadlet, which without this lands on the
@@ -51,5 +58,61 @@ func TestTeardownDNS_skipsWhenLerdNeverConfiguredTheResolver(t *testing.T) {
 
 	if called {
 		t.Error("teardownDNS must not revert interfaces and restart NetworkManager on a host where lerd never wrote resolver config")
+	}
+}
+
+// A lerd-dns.service in the user unit dir outranks the generator output of the
+// quadlet an older lerd writes, so a rollback that left it behind would run
+// `lerd dns-serve` on a binary that has no such command, and DNS would die.
+func TestPrepDNSForRollback_removesTheServiceUnit(t *testing.T) {
+	isolateState(t)
+	path := filepath.Join(config.SystemdUserDir(), "lerd-dns.service")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(dnsServiceContent("/bin/lerd", "127.0.0.1")), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	prepDNSForRollback()
+
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("lerd-dns.service must be gone before the older binary installs, stat err = %v", err)
+	}
+}
+
+// The old container keeps .test resolving until its replacement is on disk:
+// when writing the new unit fails, the install stops with DNS still working.
+func TestInstallDNSService_keepsTheOldServerWhenTheNewUnitFails(t *testing.T) {
+	isolateState(t)
+	swapMgr(t, &fakeServiceMgr{writeErr: errors.New("disk full")})
+	removed := false
+	prev := removeLegacyDNS
+	removeLegacyDNS = func() bool { removed = true; return true }
+	t.Cleanup(func() { removeLegacyDNS = prev })
+
+	if err := installDNSService(); err == nil {
+		t.Fatal("installDNSService() = nil, want the write error")
+	}
+	if removed {
+		t.Error("the working dnsmasq container was removed before its replacement was written")
+	}
+}
+
+// systemd has to have the new unit loaded before the old container goes, or
+// a failed reload leaves nothing serving the lerd TLD.
+func TestInstallDNSService_keepsTheOldServerWhenTheReloadFails(t *testing.T) {
+	isolateState(t)
+	swapMgr(t, &fakeServiceMgr{reloadErr: errors.New("bus unavailable")})
+	removed := false
+	prev := removeLegacyDNS
+	removeLegacyDNS = func() bool { removed = true; return true }
+	t.Cleanup(func() { removeLegacyDNS = prev })
+
+	if err := installDNSService(); err == nil {
+		t.Fatal("installDNSService() = nil, want the reload error")
+	}
+	if removed {
+		t.Error("the working dnsmasq container was removed before systemd loaded its replacement")
 	}
 }

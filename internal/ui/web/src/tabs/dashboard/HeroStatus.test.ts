@@ -45,7 +45,7 @@ describe('HeroStatus', () => {
     sites.set([]);
     unhealthyWorkers.set([]);
     version.set({ current: '1.0.0', latest: '1.0.0', hasUpdate: false } as never);
-    accessMode.set({ localControl: true, lanExposed: false, checked: true });
+    accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
     lerdStarting.set(false);
     lerdStartStep.set('');
     lerdStartUnit.set('');
@@ -83,7 +83,7 @@ describe('HeroStatus', () => {
 
   // A LAN viewer cannot run host commands, so it gets the link only.
   it('hides the start button without local control', () => {
-    accessMode.set({ localControl: false, lanExposed: true, checked: true });
+    accessMode.set({ localControl: false, local: false, lanExposed: true, checked: true });
     setStatus({ nginx: { running: false } });
     const { queryByText, getByText } = render(HeroStatus);
     expect(queryByText('Start Lerd')).toBeNull();

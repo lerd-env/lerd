@@ -1,0 +1,40 @@
+name: UI Screenshots
+
+on:
+  pull_request:
+    branches: ["main", "release/**"]
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  screenshots:
+    name: Screenshots for UI changes
+    runs-on: ubuntu-latest
+    # A refactor that touches UI files without changing what anyone sees opts out with this label.
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-ui-change') }}
+    steps:
+      - name: Require an image or video when the UI changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          ui_files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename' \
+            | grep -E '^(internal/ui/web/src/|internal/tui/|cmd/lerd-tray/)' \
+            | grep -vE '(_test\.go|\.test\.[jt]s|/__tests__/)' || true)
+          if [ -z "$ui_files" ]; then
+            echo "No UI files changed."
+            exit 0
+          fi
+          # Drag-and-drop uploads land on user-attachments; the rest covers linked images and videos.
+          if printf '%s' "$BODY" | grep -qiE 'user-attachments/assets/|!\[[^]]*\]\(|<img |<video |\.(png|jpe?g|gif|webp|mp4|mov|webm)\b'; then
+            echo "Screenshot found."
+            exit 0
+          fi
+          echo "::error::This PR changes the UI but its description has no screenshot or recording."
+          echo "Changed UI files:"
+          echo "$ui_files"
+          echo "Add before and after screenshots to the PR description (see docs/contributing/pull-requests.md)."
+          exit 1

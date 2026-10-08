@@ -2,6 +2,8 @@ package dumps
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -183,5 +185,124 @@ func TestRing_RemoveKeepsOrderAndFreesSpace(t *testing.T) {
 	r.Append(Event{ID: "e"})
 	if got := r.Snapshot(); len(got) != 3 || got[2].ID != "e" {
 		t.Errorf("after append = %v, want b d e", got)
+	}
+}
+
+// One request's events are the ones it ran, plus a browser failure that names
+// it as the request a fetch reached.
+func TestRing_FilterByRID(t *testing.T) {
+	r := NewRing(8)
+	r.Append(Event{V: 1, ID: "a", Kind: KindQuery, Ctx: Context{Type: "fpm", RID: "r1"}})
+	r.Append(Event{V: 1, ID: "b", Kind: KindQuery, Ctx: Context{Type: "fpm", RID: "r2"}})
+	r.Append(Event{V: 1, ID: "c", Kind: KindBrowser, Ctx: Context{Type: "browser", RID: "page"}, Data: []byte(`{"type":"network","rid":"r1"}`)})
+	r.Append(Event{V: 1, ID: "d", Kind: KindBrowser, Ctx: Context{Type: "browser", RID: "r1"}})
+	if got := r.Filter(FilterOpts{RID: "r1"}); !equalIDs(got, []string{"a", "c", "d"}) {
+		t.Errorf("filter rid r1 = %v", ids(got))
+	}
+}
+
+// A ring resized while lerd-ui runs keeps the newest events that fit.
+func TestRing_ResizeKeepsTheNewest(t *testing.T) {
+	r := NewRing(4)
+	for _, id := range []string{"a", "b", "c", "d", "e"} {
+		r.Append(mkEvent(id))
+	}
+	r.Resize(2)
+	if got := r.Snapshot(); !equalIDs(got, []string{"d", "e"}) || r.Cap() != 2 {
+		t.Fatalf("shrunk = %v cap %d", ids(got), r.Cap())
+	}
+	r.Resize(3)
+	r.Append(mkEvent("f"))
+	r.Append(mkEvent("g"))
+	if got := r.Snapshot(); !equalIDs(got, []string{"e", "f", "g"}) {
+		t.Fatalf("grown = %v", ids(got))
+	}
+}
+
+func TestRing_SaveLoadKeepsEventsAcrossARestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "dumps-buffer.json")
+	r := NewRing(4)
+	for _, id := range []string{"a", "b", "c"} {
+		r.Append(mkEvent(id))
+	}
+	if err := r.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("saved file mode = %v, %v; captured SQL and payloads stay private", fi.Mode().Perm(), err)
+	}
+
+	next := NewRing(2)
+	if err := next.Load(path); err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(next.Snapshot()); fmt.Sprint(got) != "[b c]" {
+		t.Fatalf("loaded = %v, want the newest that fit", got)
+	}
+}
+
+func TestRing_LoadWithoutASavedFileStartsEmpty(t *testing.T) {
+	r := NewRing(4)
+	if err := r.Load(filepath.Join(t.TempDir(), "missing.json")); err != nil {
+		t.Fatal(err)
+	}
+	if r.Len() != 0 {
+		t.Fatalf("len = %d", r.Len())
+	}
+}
+
+func TestRing_RequestIDsNamesEveryRequestWithEvents(t *testing.T) {
+	r := NewRing(4)
+	q := mkEvent("a")
+	q.Ctx.RID = "r1"
+	b := Event{V: 1, ID: "b", Kind: KindBrowser, Data: []byte(`{"type":"fetch","rid":"r2"}`)}
+	r.Append(q)
+	r.Append(b)
+	r.Append(mkEvent("c"))
+	got := r.RequestIDs()
+	if len(got) != 2 || !got["r1"] || !got["r2"] {
+		t.Fatalf("request ids = %v", got)
+	}
+}
+
+func TestServer_ForgetRequestsDropsTheirEventsOnly(t *testing.T) {
+	s, err := Listen(nil, "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	for _, e := range []Event{
+		{V: ProtocolVersion, ID: "a", Kind: KindQuery, Ctx: Context{RID: "r1"}},
+		{V: ProtocolVersion, ID: "b", Kind: KindBrowser, Data: []byte(`{"rid":"r1"}`)},
+		{V: ProtocolVersion, ID: "c", Kind: KindQuery, Ctx: Context{RID: "r2"}},
+	} {
+		s.Push(e)
+	}
+	s.ForgetRequests([]string{"r1"})
+	if got := ids(s.Snapshot()); fmt.Sprint(got) != "[c]" {
+		t.Fatalf("left = %v", got)
+	}
+}
+
+// Remove filters and rewrites under one lock, so an event appended while it runs
+// is never overwritten by an older copy of the buffer.
+func TestRing_RemoveKeepsEventsAppendedMeanwhile(t *testing.T) {
+	r := NewRing(10000)
+	for i := 0; i < 2000; i++ {
+		r.Append(mkEvent(fmt.Sprintf("old%d", i)))
+	}
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 500; i++ {
+			r.Append(mkEvent(fmt.Sprintf("new%d", i)))
+		}
+		close(done)
+	}()
+	for i := 0; i < 50; i++ {
+		r.Remove(func(e Event) bool { return e.ID == "never" })
+	}
+	<-done
+	if got := r.Len(); got != 2500 {
+		t.Fatalf("len = %d, want 2500: events appended during Remove were lost", got)
 	}
 }

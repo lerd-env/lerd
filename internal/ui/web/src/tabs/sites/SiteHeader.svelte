@@ -14,6 +14,7 @@
     initGit,
     openSiteInBrowser,
     openTerminal,
+    openInEditor,
     openFolder,
     loadSites,
     activeWorktreeDomain,
@@ -33,6 +34,7 @@
   import Icon from '$components/Icon.svelte';
   import { tooltip } from '$lib/tooltip';
   import { accessMode } from '$stores/accessMode';
+  import { editors, loadEditors } from '$stores/editors';
   import { idleEnabled } from '$stores/idle';
   import { status, loadStatus } from '$stores/status';
   import { xdebugOn, xdebugOff, type XdebugMode } from '$stores/xdebug';
@@ -44,7 +46,10 @@
   import WorkspacePicker from './WorkspacePicker.svelte';
   import WorkspaceMenuItems from './WorkspaceMenuItems.svelte';
   import GitStatusBadge from '$components/GitStatusBadge.svelte';
+  import BrowserLogsSiteToggle from '$components/BrowserLogsSiteToggle.svelte';
+  import { debugCaptureEnabled } from '$stores/queries';
   import { loadGitStatus, checkoutFor, type GitCheckout } from '$lib/gitStatus';
+  import { marquee } from '$lib/marquee';
   import { m } from '../../paraglide/messages.js';
 
   import type { Snippet } from 'svelte';
@@ -136,13 +141,18 @@
 
   // Git state changes outside lerd (an editor, a terminal), so it is polled while
   // the site is open and re-read when the window regains focus.
-  let gitCheckouts = $state<GitCheckout[]>([]);
+  // The last answer stays up until the next one lands: clearing it on every rerun
+  // made the marker blink. Keyed by domain so another site's state never shows.
+  let gitLast = $state<{ domain: string; checkouts: GitCheckout[] }>({ domain: '', checkouts: [] });
+  const gitCheckouts = $derived(gitLast.domain === site.domain ? gitLast.checkouts : []);
   $effect(() => {
     const domain = site.domain;
     if (!showWorktreeTabs) return;
     const refresh = () => {
       if (document.hidden) return;
-      loadGitStatus(domain).then((c) => (gitCheckouts = c)).catch(() => (gitCheckouts = []));
+      loadGitStatus(domain)
+        .then((checkouts) => (gitLast = { domain, checkouts }))
+        .catch(() => {});
     };
     refresh();
     const timer = setInterval(refresh, 10_000);
@@ -150,7 +160,6 @@
     return () => {
       clearInterval(timer);
       window.removeEventListener('focus', refresh);
-      gitCheckouts = [];
     };
   });
   // No branch can also mean a subfolder of a bigger repo, where a nested init
@@ -301,6 +310,14 @@
       ev.stopPropagation();
     }
   }
+  // Only the host may read the editor choice; a remote session would get a 403.
+  $effect(() => {
+    if ($accessMode.local) loadEditors();
+  });
+  async function openEditor() {
+    const res = await openInEditor(site.domain, activeWorktreeBranch);
+    if (!res.ok) openErrorModal(res.error ?? '');
+  }
   onMount(() => {
     document.addEventListener('click', onDocClick, true);
     document.addEventListener('keydown', onDocKey);
@@ -326,7 +343,7 @@
           <button
             type="button"
             onclick={() => pickWorktree(e)}
-            use:tooltip={e.domain}
+            use:tooltip={`${e.branch} · ${e.domain}`}
             class="flex items-center gap-1.5 pl-3 pr-3 py-2 text-xs min-w-0 {isActive
               ? 'text-gray-800 dark:text-gray-100 font-medium'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}"
@@ -357,7 +374,7 @@
                 <path d="M6 3v12M15 6a3 3 0 1 0 6 0a3 3 0 1 0-6 0M3 18a3 3 0 1 0 6 0a3 3 0 1 0-6 0M18 9a9 9 0 0 1-9 9" />
               </svg>
             {/if}
-            <span class="font-mono truncate leading-none">{e.branch}</span>
+            <span class="font-mono truncate leading-none" use:marquee><span>{e.branch}</span></span>
             {#if git}<GitStatusBadge status={git} />{/if}
           </button>
           {#if !e.isMain}
@@ -703,6 +720,26 @@
               <path d="M6.53 9C4.6 8.8 3 7.1 3 5M6 13H2M3 21c0-2.1 1.7-3.9 3.8-4M20.97 5c0 2.1-1.6 3.8-3.5 4M22 13h-4M17.2 17c2.1.1 3.8 1.9 3.8 4" />
             </svg>
           {/if}
+        </button>
+      {/if}
+
+      <!-- Pages carry the script only while debug capture is on, and FrankenPHP
+           sites are not covered yet. -->
+      {#if $accessMode.localControl && $debugCaptureEnabled && !site.paused && site.runtime !== 'frankenphp'}
+        <BrowserLogsSiteToggle site={site.name ?? site.domain} class="hidden @md:flex" />
+      {/if}
+
+      {#if $accessMode.local && $editors.global}
+        <button
+          type="button"
+          onclick={() => openEditor()}
+          aria-label={m.sites_openInEditor()}
+          use:tooltip={m.sites_openInEditor()}
+          class="hidden @md:flex w-8 h-8 items-center justify-center rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
         </button>
       {/if}
 

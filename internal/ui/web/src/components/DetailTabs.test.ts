@@ -20,6 +20,23 @@ describe('DetailTabs', () => {
     expect(screen.queryByText('B')).not.toBeInTheDocument();
   });
 
+  it('draws a divider only where the group changes', () => {
+    const { container } = render(Harness, {
+      props: {
+        active: 'a',
+        tabs: [
+          { id: 'a', label: 'A', group: 'one' },
+          { id: 'b', label: 'B', group: 'two' },
+          { id: 'h', label: 'H', group: 'three', hidden: true },
+          { id: 'c', label: 'C', group: 'two' },
+          { id: 'd', label: 'D', group: 'four' }
+        ],
+        onchange: () => {}
+      }
+    });
+    expect(container.querySelectorAll('[data-tab-divider]').length).toBe(2);
+  });
+
   it('hides the bar when only one tab is visible', () => {
     render(Harness, {
       props: {

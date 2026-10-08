@@ -21,6 +21,8 @@ export default defineConfig(() => ({
     manifest: true,
     sourcemap: false,
     target: 'es2022',
+    // Embedded in the binary and served from localhost, so chunk size costs nothing.
+    chunkSizeWarningLimit: 3000,
     rollupOptions: {
       output: {
         entryFileNames: 'assets/[name]-[hash].js',
@@ -31,6 +33,9 @@ export default defineConfig(() => ({
   },
   server: {
     port: 5173,
+    // The browser logs script lives with the Go package that embeds it;
+    // its tests import it from there.
+    fs: { allow: ['.', resolve(__dirname, '../../browserlogs')] },
     proxy: {
       '/api': { target: 'http://localhost:7073', changeOrigin: true, ws: true },
       '/icons': 'http://localhost:7073',

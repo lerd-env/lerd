@@ -16,6 +16,7 @@ describe('accessMode store', () => {
     const { accessMode } = await import('./accessMode');
     expect(get(accessMode)).toEqual({
       localControl: false,
+      local: false,
       lanExposed: false,
       checked: false
     });
@@ -23,7 +24,7 @@ describe('accessMode store', () => {
 
   it('maps API response', async () => {
     globalThis.fetch = vi.fn(async () =>
-      new Response(JSON.stringify({ local_control: true, lan_exposed: true }), {
+      new Response(JSON.stringify({ local_control: true, local: true, lan_exposed: true }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       })
@@ -32,6 +33,7 @@ describe('accessMode store', () => {
     await loadAccessMode();
     expect(get(accessMode)).toEqual({
       localControl: true,
+      local: true,
       lanExposed: true,
       checked: true
     });
@@ -51,6 +53,7 @@ describe('accessMode store', () => {
     await loadAccessMode();
     expect(get(accessMode)).toEqual({
       localControl: true,
+      local: false,
       lanExposed: false,
       checked: true
     });

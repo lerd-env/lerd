@@ -145,8 +145,38 @@ func (s *Server) Subscribe() (<-chan Event, func()) { return s.hub.Subscribe() }
 // Clear empties the ring. Active subscribers continue to receive events.
 func (s *Server) Clear() { s.ring.Clear() }
 
+// ClearKind drops the buffered events of one kind and keeps the rest.
+func (s *Server) ClearKind(kind string) { s.ring.Remove(func(e Event) bool { return e.Kind == kind }) }
+
 // Len returns the number of buffered events.
 func (s *Server) Len() int { return s.ring.Len() }
+
+// Cap returns how many events the server keeps, and Resize changes it.
+func (s *Server) Cap() int            { return s.ring.Cap() }
+func (s *Server) Resize(capacity int) { s.ring.Resize(capacity) }
+
+// Save and Load carry the buffered events across a lerd-ui restart.
+func (s *Server) Save(path string) error { return s.ring.Save(path) }
+func (s *Server) Load(path string) error { return s.ring.Load(path) }
+
+// ForgetRequests drops every buffered event of the given requests, as their
+// history is removed from request timing.
+func (s *Server) ForgetRequests(rids []string) {
+	if len(rids) == 0 {
+		return
+	}
+	s.ring.Remove(func(e Event) bool {
+		for _, rid := range rids {
+			if e.OfRequest(rid) {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+// RequestIDs is the set of requests with captured events still buffered.
+func (s *Server) RequestIDs() map[string]bool { return s.ring.RequestIDs() }
 
 // Subscribers returns the current subscriber count.
 func (s *Server) Subscribers() int { return s.hub.Count() }

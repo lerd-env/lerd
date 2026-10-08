@@ -93,3 +93,37 @@ func TestApply_IsIdempotent(t *testing.T) {
 		t.Errorf("second Apply(true) = %+v, want NoChange", res)
 	}
 }
+
+// Opted-in sites carry the browser logs script only while debug is on, so
+// each real flip refreshes their vhosts and a no-op does not.
+func TestApply_RefreshesBrowserLogsVhostsOnEachFlip(t *testing.T) {
+	withTempXDG(t)
+	refreshed := 0
+	orig := refreshBrowserLogsFn
+	refreshBrowserLogsFn = func() error { refreshed++; return nil }
+	t.Cleanup(func() { refreshBrowserLogsFn = orig })
+
+	for _, on := range []bool{true, true, false, false} {
+		if _, err := Apply(on); err != nil {
+			t.Fatalf("Apply(%v): %v", on, err)
+		}
+	}
+	if refreshed != 2 {
+		t.Fatalf("refreshed %d times, want 2", refreshed)
+	}
+}
+
+func TestSetBuffer_PersistsTheSizeInRange(t *testing.T) {
+	withTempXDG(t)
+	got, err := SetBuffer(20000)
+	if err != nil || got != 20000 {
+		t.Fatalf("SetBuffer = %d, %v", got, err)
+	}
+	cfg, _ := config.LoadGlobal()
+	if cfg.DumpsBuffer() != 20000 {
+		t.Errorf("stored = %d", cfg.DumpsBuffer())
+	}
+	if got, _ := SetBuffer(1); got != config.MinDumpsBuffer {
+		t.Errorf("below the floor = %d", got)
+	}
+}

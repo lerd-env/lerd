@@ -48,6 +48,10 @@ var (
 // disk for lerd-ui. Shorter than the idle tick so the panel feels live.
 const reqStatsSaveInterval = 10 * time.Second
 
+// reqStoreFlushInterval is how soon a request reaches the durable store, which
+// the dashboard watches to update a site's recent requests as they happen.
+const reqStoreFlushInterval = time.Second
+
 // reqStatsPruneInterval throttles how often rows past reqstats.Retention are
 // pruned, which is what keeps the DB small.
 const reqStatsPruneInterval = time.Hour
@@ -216,9 +220,17 @@ func ingestAccessRecord(rec reqstats.AccessRecord) {
 // slow. Runs for the daemon's life, independent of idle. push.Send is a no-op
 // when no subscription has opted into the slow_route kind.
 func runReqStatsSaver() {
-	t := time.NewTicker(reqStatsSaveInterval)
-	defer t.Stop()
-	for range t.C {
+	save := time.NewTicker(reqStatsSaveInterval)
+	defer save.Stop()
+	flush := time.NewTicker(reqStoreFlushInterval)
+	defer flush.Stop()
+	for {
+		select {
+		case <-flush.C:
+			flushPendingRequests()
+			continue
+		case <-save.C:
+		}
 		if reqAggregator == nil {
 			continue
 		}
@@ -231,6 +243,19 @@ func runReqStatsSaver() {
 			_ = push.Send(n)
 		}
 	}
+}
+
+// flushPendingRequests writes buffered requests between save ticks. A quiet
+// second costs nothing; only a non-empty buffer reads the exclusions and writes.
+func flushPendingRequests() {
+	reqBufMu.Lock()
+	pending := len(reqBuf)
+	reqBufMu.Unlock()
+	if pending == 0 || reqAggregator == nil {
+		return
+	}
+	refreshReqExcludes()
+	flushReqStore()
 }
 
 // flushReqStore writes the buffered access records to the durable store in one

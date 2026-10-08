@@ -9,14 +9,26 @@ import (
 	"github.com/geodro/lerd/internal/push"
 )
 
-// stubRunNotifier records what a finished run would raise.
-func stubRunNotifier(t *testing.T) *[]push.Notification {
+// stubRunNotifier hands over what a finished run would raise. The run's own
+// goroutine sends, so a channel rather than a slice keeps the test race-free.
+func stubRunNotifier(t *testing.T) chan push.Notification {
 	t.Helper()
-	var sent []push.Notification
+	sent := make(chan push.Notification, 4)
 	original := dispatchRunNotification
-	dispatchRunNotification = func(n push.Notification) { sent = append(sent, n) }
+	dispatchRunNotification = func(n push.Notification) { sent <- n }
 	t.Cleanup(func() { dispatchRunNotification = original })
-	return &sent
+	return sent
+}
+
+func receiveNotification(t *testing.T, sent chan push.Notification) push.Notification {
+	t.Helper()
+	select {
+	case n := <-sent:
+		return n
+	case <-time.After(time.Second):
+		t.Fatal("the run raised no notification")
+		return push.Notification{}
+	}
 }
 
 // Scaffolding is the run the wizard exists to send to the background, so its
@@ -83,15 +95,11 @@ func TestRunRegistryNotifiesOnFailure(t *testing.T) {
 	r := reg.Start(runKindScaffold, t.TempDir(), "/tmp/shop", []string{"lerd", "new"})
 	waitForStatus(t, r, runFailed)
 
-	deadline := time.Now().Add(time.Second)
-	for len(*sent) == 0 && time.Now().Before(deadline) {
-		time.Sleep(5 * time.Millisecond)
+	if n := receiveNotification(t, sent); n.Kind != "op_failed" {
+		t.Errorf("kind = %q, want op_failed", n.Kind)
 	}
-	if len(*sent) != 1 {
-		t.Fatalf("raised %d notifications, want 1", len(*sent))
-	}
-	if (*sent)[0].Kind != "op_failed" {
-		t.Errorf("kind = %q, want op_failed", (*sent)[0].Kind)
+	if len(sent) != 0 {
+		t.Errorf("raised %d extra notifications, want 1 in all", len(sent))
 	}
 }
 
@@ -105,11 +113,7 @@ func TestRunRegistryNotifiesOnScaffoldSuccess(t *testing.T) {
 	r := reg.Start(runKindScaffold, t.TempDir(), "/tmp/shop", []string{"lerd", "new"})
 	waitForStatus(t, r, runDone)
 
-	deadline := time.Now().Add(time.Second)
-	for len(*sent) == 0 && time.Now().Before(deadline) {
-		time.Sleep(5 * time.Millisecond)
-	}
-	if len(*sent) != 1 || (*sent)[0].Kind != "op_done" {
-		t.Fatalf("raised %+v, want one op_done", *sent)
+	if n := receiveNotification(t, sent); n.Kind != "op_done" {
+		t.Errorf("kind = %q, want op_done", n.Kind)
 	}
 }

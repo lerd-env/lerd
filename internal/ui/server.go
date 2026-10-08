@@ -124,11 +124,11 @@ func Start(currentVersion string) error {
 	// answer on a machine with no desktop to read, so it is dropped rather than
 	// logged.
 	if d := config.CurrentDesktop(); d.WatchDir != "" {
-		_ = watchDesktopTheme(context.Background(), d.WatchDir, d.WatchNames, 300*time.Millisecond, broker.broadcastThemeList)
+		_ = watchDir(context.Background(), d.WatchDir, d.WatchNames, 300*time.Millisecond, broker.broadcastThemeList)
 	}
 	// Theme files and their stylesheets repaint every open dashboard as they are saved.
 	_ = os.MkdirAll(config.ThemesDir(), 0755)
-	_ = watchDesktopTheme(context.Background(), config.ThemesDir(), nil, 300*time.Millisecond, broker.broadcastThemeList)
+	_ = watchDir(context.Background(), config.ThemesDir(), nil, 300*time.Millisecond, broker.broadcastThemeList)
 
 	// Restart any LAN share proxies that were active before this process started.
 	go cli.RestoreLANShareProxies()
@@ -142,7 +142,7 @@ func Start(currentVersion string) error {
 	// reparented out of the client's tree, so a killed lerd-ui leaves it
 	// running and there is no pid left to recognise it by.
 	go cli.ReapOrphanNgrokContainers()
-	stopTunnelsOnShutdown()
+	cleanUpOnShutdown()
 
 	// Single coalescer for the two event sources that need to refresh the
 	// container cache and broadcast a snapshot: in-process mutations
@@ -305,16 +305,21 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/dumps/clear", withCORS(handleDumpsClear))
 	mux.HandleFunc("/api/dumps/toggle", withCORS(publishAfter(handleDumpsToggle, eventbus.KindDumpsStatus)))
 	mux.HandleFunc("/api/dumps/passthrough", withCORS(publishAfter(handleDumpsPassthrough, eventbus.KindDumpsStatus)))
+	mux.HandleFunc("/api/dumps/buffer", withCORS(publishAfter(handleDumpsBuffer, eventbus.KindDumpsStatus)))
 	mux.HandleFunc("/api/dumps/notify-changed", withCORS(handleDumpsNotifyChanged))
 	mux.HandleFunc("/api/devtools/status", withCORS(handleDevtoolsStatus))
 	mux.HandleFunc("/api/devtools/workers", withCORS(publishAfter(handleDevtoolsWorkers, eventbus.KindDevtoolsStatus)))
 	mux.HandleFunc("/api/devtools/tests", withCORS(publishAfter(handleDevtoolsTests, eventbus.KindDevtoolsStatus)))
 	mux.HandleFunc("/api/open-editor", withCORS(handleOpenEditor))
+	mux.HandleFunc("/api/editors", withCORS(handleEditors))
 	mux.HandleFunc("/api/open-folder", withCORS(handleOpenFolder))
 	mux.HandleFunc("/api/profiler/toggle", withCORS(publishAfter(handleProfilerToggle, eventbus.KindProfilerStatus)))
 	mux.HandleFunc("/api/profiler/status", withCORS(handleProfilerStatus))
 	mux.HandleFunc("/api/profiler/captures", withCORS(handleProfilerCaptures))
+	mux.HandleFunc("/api/profiler/report", withCORS(handleProfilerReport))
 	mux.HandleFunc("/api/profiler/clear", withCORS(handleProfilerClear))
+	mux.HandleFunc("/api/browser-logs/sites/", withCORS(handleBrowserLogsSite))
+	mux.HandleFunc("/api/browser-logs/presets", withCORS(handleBrowserLogsPresets))
 	mux.HandleFunc("/_spx/", handleSpxProxy)
 	mux.HandleFunc("/_svc/", handleDashProxy)
 	mux.HandleFunc("/api/dashboard/keepalive", withCORS(handleDashboardKeepAlive))
@@ -414,7 +419,7 @@ func Start(currentVersion string) error {
 	})
 	mux.Handle("/", serveSvelte())
 
-	handler := withWakeHold(withDashboardMounts(withRemoteControlGate(mux)))
+	handler := withWakeHold(withBrowserLogs(withDashboardMounts(withRemoteControlGate(mux))))
 
 	// Unix socket listener for the lerd.localhost nginx vhost. Linux only:
 	// on macOS, lerd-nginx runs inside the podman-machine VM and unix
@@ -4071,6 +4076,10 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	action := parts[1]
+	if action == "editor:open" && !isLocalControlRequest(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 
 	// Favicon is a GET endpoint served separately.
 	if action == "favicon" {
@@ -4213,6 +4222,18 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		return
 	case "unpin":
 		if err := cli.SetSitePinned(site.Name, false); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "editor:open":
+		path := resolveSitePath(site, r.URL.Query().Get("branch"))
+		if path == "" {
+			writeJSON(w, SiteActionResponse{Error: "unknown worktree branch"})
+			return
+		}
+		if err := openProjectInEditor(*site, path); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}

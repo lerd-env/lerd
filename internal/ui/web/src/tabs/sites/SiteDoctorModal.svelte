@@ -96,21 +96,37 @@
   // Name of the check whose fix command is currently running, so only its
   // button shows a spinner and the rest stay disabled (one run at a time).
   let fixing = $state('');
+  let runId = 0;
 
   async function reload() {
     loading = true;
     error = '';
     const domain = site.domain;
     const b = branch;
+    // A run superseded by a newer one (the modal reopened mid-run) must not write
+    // into the newer one's report, even for the same site and branch.
+    const id = ++runId;
+    const current = () => id === runId && site.domain === domain && branch === b;
+    // Rows are drawn as each check lands; the final report then replaces them
+    // with the backend's own order and counts.
+    report = { checks: [], failures: 0, warnings: 0 };
+    const onCheck = (c: DoctorCheck) => {
+      if (!current() || !report) return;
+      report = {
+        checks: [...report.checks, c],
+        failures: report.failures + (c.status === 'fail' ? 1 : 0),
+        warnings: report.warnings + (c.status === 'warn' ? 1 : 0)
+      };
+    };
     try {
-      const [r, cmds] = await Promise.all([loadDoctor(domain, b), loadCommands(domain, b)]);
-      if (site.domain !== domain || branch !== b) return;
+      const [r, cmds] = await Promise.all([loadDoctor(domain, b, onCheck), loadCommands(domain, b)]);
+      if (!current()) return;
       report = r;
       commands = cmds;
     } catch (e) {
-      if (site.domain === domain && branch === b) error = e instanceof Error ? e.message : m.common_loadFailed();
+      if (current()) error = e instanceof Error ? e.message : m.common_loadFailed();
     } finally {
-      if (site.domain === domain && branch === b) loading = false;
+      if (current()) loading = false;
     }
   }
 
@@ -213,7 +229,7 @@
     report ? [...report.checks].sort((a, b) => st(a.status).rank - st(b.status).rank) : []
   );
 
-  const allClear = $derived(Boolean(report) && report!.failures === 0 && report!.warnings === 0);
+  const allClear = $derived(!loading && Boolean(report) && report!.failures === 0 && report!.warnings === 0);
   const okCount = $derived(report ? report.checks.filter((c) => c.status === 'ok').length : 0);
 
   // A fix lerd carries out itself, versus one the user resolves in the editor.
@@ -253,7 +269,7 @@
             ? 'bg-red-500/15 text-red-500'
             : 'bg-amber-500/15 text-amber-500'}"
       >
-        {#if loading && !report}
+        {#if loading}
           <svg class="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" />
             <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z" />
@@ -270,7 +286,7 @@
       </span>
       <div class="min-w-0 flex-1">
         <p class="text-sm font-semibold text-gray-900 dark:text-white">
-          {loading && !report ? m.sites_doctor_running() : allClear ? m.sites_doctor_allClear() : m.sites_doctor_summary({ failures: report?.failures ?? 0, warnings: report?.warnings ?? 0 })}
+          {loading ? m.sites_doctor_running() : allClear ? m.sites_doctor_allClear() : m.sites_doctor_summary({ failures: report?.failures ?? 0, warnings: report?.warnings ?? 0 })}
         </p>
         <p class="text-[11px] text-gray-500 dark:text-gray-400 truncate">{activeDomain}</p>
       </div>
@@ -302,21 +318,14 @@
         </svg>
         <span>{error}</span>
       </div>
-    {:else if loading && !report}
+    {:else if loading && !report?.checks.length}
       <!-- Skeleton rows while the first run (incl. migrate:status) is in flight. -->
       <div class="rounded-xl border border-gray-200/80 dark:border-lerd-border divide-y divide-gray-100 dark:divide-lerd-border overflow-hidden">
         {#each Array(5) as _, i (i)}
-          <div class="flex items-center gap-3 px-3.5 py-2.5 animate-pulse">
-            <span class="w-8 h-8 rounded-lg bg-gray-200 dark:bg-white/5 shrink-0"></span>
-            <div class="flex-1 space-y-1.5">
-              <div class="h-3 w-32 rounded bg-gray-200 dark:bg-white/5"></div>
-              <div class="h-2.5 w-48 rounded bg-gray-100 dark:bg-white/[0.03]"></div>
-            </div>
-            <span class="w-5 h-5 rounded-full bg-gray-200 dark:bg-white/5 shrink-0"></span>
-          </div>
+          {@render skeletonRow()}
         {/each}
       </div>
-    {:else if report && report.checks.length === 0}
+    {:else if report && report.checks.length === 0 && !loading}
       <div class="flex flex-col items-center justify-center gap-2 py-10 text-center">
         <svg class="w-8 h-8 text-gray-300 dark:text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d={FALLBACK_ICON} />
@@ -350,7 +359,7 @@
               <button
                 type="button"
                 onclick={() => runFix(check)}
-                disabled={Boolean(fixing)}
+                disabled={loading || Boolean(fixing)}
                 class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm disabled:opacity-50 transition-colors {check.status === 'fail' ? 'bg-lerd-red hover:bg-lerd-redhov text-lerd-onred' : 'bg-amber-500 hover:bg-amber-600 text-white'}"
               >
                 {#if fixing === check.name}
@@ -387,6 +396,10 @@
             </span>
           </div>
         {/each}
+        {#if loading}
+          <!-- The checks still in flight, typically the container execs. -->
+          {@render skeletonRow()}
+        {/if}
       </div>
     {/if}
   </div>
@@ -405,3 +418,14 @@
     </button>
   {/snippet}
 </Modal>
+
+{#snippet skeletonRow()}
+  <div class="flex items-center gap-3 px-3.5 py-2.5 animate-pulse" data-testid="doctor-pending">
+    <span class="w-8 h-8 rounded-lg bg-gray-200 dark:bg-white/5 shrink-0"></span>
+    <div class="flex-1 space-y-1.5">
+      <div class="h-3 w-32 rounded bg-gray-200 dark:bg-white/5"></div>
+      <div class="h-2.5 w-48 rounded bg-gray-100 dark:bg-white/[0.03]"></div>
+    </div>
+    <span class="w-5 h-5 rounded-full bg-gray-200 dark:bg-white/5 shrink-0"></span>
+  </div>
+{/snippet}

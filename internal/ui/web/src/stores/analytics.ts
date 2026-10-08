@@ -9,6 +9,9 @@ export interface RouteStat {
   recent_p95_millis?: number;
   multiplier: number;
   samples: number;
+  // slowest is the route's slowest warm request in the window, which its time
+  // bar opens; rid is set while that request's captured events are buffered.
+  slowest?: { at_millis: number; uri: string; status: number; millis: number; rid?: string; profile_key?: string };
 }
 
 export interface LatencyBucket {
@@ -36,6 +39,11 @@ export interface RecentRequest {
   status: number;
   millis: number;
   cold: boolean;
+  // rid is the id debug capture grouped the request's events under, set when
+  // capture was on while it ran.
+  rid?: string;
+  // profile_key names the request's SPX capture, when it was profiled.
+  profile_key?: string;
 }
 
 export interface Analytics {
@@ -53,6 +61,8 @@ export interface Analytics {
   // Routes the user has silenced: nothing new is recorded on them and nothing
   // already stored for them appears above.
   excluded: string[];
+  // recent_more says older requests exist past the page the request asked for.
+  recent_more?: boolean;
 }
 
 export type TimeRange = '15m' | '1h' | '24h' | '7d';
@@ -63,10 +73,12 @@ export const TIME_RANGES: TimeRange[] = ['15m', '1h', '24h', '7d'];
 export async function loadSiteAnalytics(
   domain: string,
   range: TimeRange,
-  branch = ''
+  branch = '',
+  recent = 20
 ): Promise<Analytics> {
   const params = new URLSearchParams({ range });
   if (branch) params.set('branch', branch);
+  if (recent !== 20) params.set('recent', String(recent));
   return apiJson<Analytics>(`/api/sites/${encodeURIComponent(domain)}/analytics?${params.toString()}`);
 }
 

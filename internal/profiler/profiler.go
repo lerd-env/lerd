@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
-	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/siteops"
@@ -58,7 +57,7 @@ func SetProfiling(on bool) (Result, error) {
 	if err := config.SaveGlobal(cfg); err != nil {
 		return Result{}, fmt.Errorf("saving config: %w", err)
 	}
-	if err := regenerateVhosts(); err != nil {
+	if err := siteops.RegenerateFPMVhosts(); err != nil {
 		return Result{}, err
 	}
 	// The state marker rides along on the profiler vhost, so it has to be written
@@ -127,41 +126,5 @@ func Profilable(s config.Site) bool {
 // ProfilableSite is Profilable for callers that already know whether the site
 // is a PHP project, so the detection isn't repeated against the disk.
 func ProfilableSite(s config.Site, usesPHP bool) bool {
-	return servedByFPM(s) && usesPHP
-}
-
-// servedByFPM reports whether a site's requests go through an FPM vhost, the
-// one place the SPX cookie can be injected.
-func servedByFPM(s config.Site) bool {
-	return !s.IsCustomContainer() && !s.IsFrankenPHP() && !s.IsHostProxy()
-}
-
-// regenerateVhosts rewrites the vhost of every active PHP-FPM site so the
-// SPX_ENABLED injection reflects the current toggle. Paused, ignored,
-// custom-container and FrankenPHP sites are skipped: they have no FPM vhost
-// to profile, and regenerating a paused site would revive it.
-func regenerateVhosts() error {
-	reg, err := config.LoadSites()
-	if err != nil {
-		return err
-	}
-	for i := range reg.Sites {
-		s := reg.Sites[i]
-		if s.Ignored || s.Paused || !servedByFPM(s) {
-			continue
-		}
-		if err := siteops.RegenerateSiteVhost(&s, s.PrimaryDomain()); err != nil {
-			return fmt.Errorf("regenerating vhost for %s: %w", s.Name, err)
-		}
-		// Worktree vhosts share the site template, so they need the toggle too.
-		worktrees, err := gitpkg.DetectWorktrees(s.Path, s.PrimaryDomain())
-		if err != nil {
-			continue
-		}
-		for _, wt := range worktrees {
-			php := config.WorktreePHPVersion(wt.Path, s.PHPVersion)
-			_ = nginx.GenerateWorktreeVhostFor(wt.Domain, wt.Path, php, s.PrimaryDomain(), s.Name, wt.Branch, s.Secured)
-		}
-	}
-	return nil
+	return siteops.ServedByFPM(s) && usesPHP
 }

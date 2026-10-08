@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"net/http/httptest"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -24,16 +23,10 @@ func TestIsContainerUnit_nginx(t *testing.T) {
 }
 
 func TestIsContainerUnit_dns(t *testing.T) {
-	if runtime.GOOS == "darwin" {
-		// On macOS, lerd-dns runs natively via Homebrew
-		if isContainerUnit("lerd-dns") {
-			t.Error("expected isContainerUnit to return false for lerd-dns on macOS")
-		}
-	} else {
-		// On Linux, lerd-dns is a container
-		if !isContainerUnit("lerd-dns") {
-			t.Error("expected isContainerUnit to return true for lerd-dns on linux")
-		}
+	// lerd-dns runs as a host service everywhere, so its logs come from the
+	// journal or launchd log file, never podman.
+	if isContainerUnit("lerd-dns") {
+		t.Error("expected isContainerUnit to return false for lerd-dns")
 	}
 }
 

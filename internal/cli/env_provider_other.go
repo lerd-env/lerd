@@ -6,8 +6,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 )
 
 func providedEnvSupported() error {
@@ -23,6 +25,34 @@ func ensureProvidedEnvDir() {}
 
 // beginProvidedEnvPass is a no-op here: dropping a local file costs no ssh.
 func beginProvidedEnvPass() func() { return func() {} }
+
+// RestoreProvidedEnv runs every active site's env_provider. systemd starts FPM
+// and the workers on boot without lerd start, so the watcher calls this on its
+// own start to refill the files a reboot emptied from tmpfs.
+func RestoreProvidedEnv() {
+	reg, err := config.LoadSites()
+	if err != nil {
+		feedback.Warn("env_provider restore: %v", err)
+		return
+	}
+	for _, s := range reg.Sites {
+		if s.Paused || s.Ignored {
+			continue
+		}
+		if err := refreshProvidedEnv(s, false); err != nil {
+			feedback.Warn("%s: %v", s.Name, err)
+		}
+		// An unlink during the provider run dropped the file before we wrote
+		// it; teardown updates the registry first, so this catches it. A
+		// registry that cannot be read proves nothing, so the file stays.
+		cur, err := config.LoadSites()
+		if err == nil && !slices.ContainsFunc(cur.Sites, func(c config.Site) bool {
+			return c.Name == s.Name && !c.Ignored
+		}) {
+			dropProvidedEnv(s.Name)
+		}
+	}
+}
 
 func storeProvidedEnv(siteName string, data []byte) error {
 	return writeProvidedEnv(config.ProvidedEnvFile(siteName), data)

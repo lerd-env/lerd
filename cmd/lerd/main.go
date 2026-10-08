@@ -223,6 +223,7 @@ func main() {
 	root.AddCommand(cli.NewStreamingCmd())
 	root.AddCommand(cli.NewWSLSetupCmd())
 	root.AddCommand(cli.NewProfileCmd())
+	root.AddCommand(cli.NewBrowserLogsCmd())
 	root.AddCommand(cli.NewNotifyCmd())
 	root.AddCommand(cli.NewPhpExtCmd())
 	root.AddCommand(cli.NewPhpBunCmd())
@@ -516,6 +517,11 @@ func newWatchCmd() *cobra.Command {
 					fmt.Printf("[WARN] rewriting quadlets: %v\n", err)
 				}
 			}
+
+			// The provided-env files live on tmpfs, and nothing else refills
+			// them after a reboot: systemd brings the sites back up without
+			// lerd start. A provider can hang, so it must not hold up readiness.
+			go cli.RestoreProvidedEnv()
 
 			// Periodically catch deletions that happen while the watcher is busy.
 			go func() {

@@ -125,3 +125,69 @@ func TestTeardownSite_RemovesProvidedEnv(t *testing.T) {
 		t.Errorf("provided env should be removed on unlink: %v", err)
 	}
 }
+
+// A reboot empties tmpfs and systemd starts the sites without lerd start, so
+// the watcher's RestoreProvidedEnv is what writes the files again.
+func TestRestoreProvidedEnv_RefillsActiveSitesOnly(t *testing.T) {
+	provider := "printf 'SECRET=x\\n'"
+	site := providerSite(t, provider)
+	paused := config.Site{Name: "paused", Path: t.TempDir(), Paused: true}
+	if err := config.SaveProjectConfig(paused.Path, &config.ProjectConfig{EnvProvider: provider}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SaveSites(&config.SiteRegistry{Sites: []config.Site{site, paused}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []config.Site{site, paused} {
+		if err := config.ApproveSiteCommand(s.Name, provider); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	RestoreProvidedEnv()
+
+	if _, err := os.Stat(config.ProvidedEnvFile(site.Name)); err != nil {
+		t.Errorf("active site's provided env not restored: %v", err)
+	}
+	if _, err := os.Stat(config.ProvidedEnvFile(paused.Name)); !os.IsNotExist(err) {
+		t.Errorf("a paused site's provider must not run: %v", err)
+	}
+}
+
+// An unlink while the provider runs drops the file before the provider's output
+// lands, so the restore must not leave the removed site's secrets behind.
+func TestRestoreProvidedEnv_SiteRemovedDuringProviderRun(t *testing.T) {
+	site := providerSite(t, "")
+	provider := "rm -f '" + config.SitesFile() + "'; printf 'SECRET=x\\n'"
+	if err := config.SaveProjectConfig(site.Path, &config.ProjectConfig{EnvProvider: provider}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.ApproveSiteCommand(site.Name, provider); err != nil {
+		t.Fatal(err)
+	}
+
+	RestoreProvidedEnv()
+
+	if _, err := os.Stat(config.ProvidedEnvFile(site.Name)); !os.IsNotExist(err) {
+		t.Errorf("a site removed mid-run kept its provided env: %v", err)
+	}
+}
+
+// A registry that cannot be read says nothing about the site, so the file the
+// provider just wrote must not be taken for an unlinked site's and dropped.
+func TestRestoreProvidedEnv_UnreadableRegistryKeepsFile(t *testing.T) {
+	site := providerSite(t, "")
+	provider := "printf 'sites: [' > '" + config.SitesFile() + "'; printf 'SECRET=x\\n'"
+	if err := config.SaveProjectConfig(site.Path, &config.ProjectConfig{EnvProvider: provider}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.ApproveSiteCommand(site.Name, provider); err != nil {
+		t.Fatal(err)
+	}
+
+	RestoreProvidedEnv()
+
+	if _, err := os.Stat(config.ProvidedEnvFile(site.Name)); err != nil {
+		t.Errorf("an unreadable registry dropped the restored file: %v", err)
+	}
+}

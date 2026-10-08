@@ -20,7 +20,7 @@ describe('SitesWidget', () => {
   beforeEach(() => {
     sites.set([]);
     sitesLoaded.set(true);
-    accessMode.set({ localControl: true, lanExposed: false, checked: true });
+    accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
     sitesSort.set('manual');
   });
 
@@ -102,7 +102,7 @@ describe('SitesWidget', () => {
   });
 
   it('hides the link button without local control', () => {
-    accessMode.set({ localControl: false, lanExposed: false, checked: true });
+    accessMode.set({ localControl: false, local: false, lanExposed: false, checked: true });
     sites.set([site()]);
     const { queryByText, getByText } = render(SitesWidget);
     expect(queryByText('Link site')).toBeNull();

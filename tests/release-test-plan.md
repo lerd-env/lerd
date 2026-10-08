@@ -1066,6 +1066,16 @@ Other surfaces:
       stream; a stopped worker still shows its journal
 - [ ] A site's suggested services sit faded with a dashed border and come back
       to full on hover, while their + and × stay fully visible
+- [ ] With debug capture on, a PHP response carries `X-Lerd-Rid`, its captured
+      events carry that id, and its row in Recent requests carries it with a
+      clean path; with capture off the path stays clean (no `-|` glued on)
+- [ ] With the profiler on, a request answers **200** and its SPX capture
+      carries `lerd-rid:<id>`; a request whose SPX cookie names the wrong key,
+      and one sending SPX cookies while the profiler is off, answer **200**, and
+      the FPM log shows no segfault
+- [ ] Restarting lerd-ui keeps a request's debug events (`dumps-buffer.json`,
+      mode 600), and removing its route from history drops those events and its
+      SPX capture
 
 ---
 

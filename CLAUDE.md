@@ -194,6 +194,10 @@ with no binary release and no Go code. That is the point — resist the urge to
 - PR body is human prose. **Do not** add: a Test plan, a Verified/Tested section,
   a checklist (`- [ ]` / `- [x]`), a "Notes for reviewers" section, or file:line
   citations. We own the project; there is no external reviewer to address.
+- A PR that changes the web UI, TUI or tray needs before/after screenshots in
+  its description; the `UI Screenshots` check fails without one. Capture them
+  from the installed build and hand them to the human to attach, since `gh`
+  cannot upload images. Use the `no-ui-change` label only for invisible refactors.
 - Issue linking: feature PRs use `Closes #N` (auto-close on merge). Bug-report
   issues use `Refs #N` and stay open until the stable release ships — **except**
   security issues, which close once the fix merges to main.

@@ -57,6 +57,10 @@ func startDumpsServer() {
 	}
 	if cfg, err := config.LoadGlobal(); err == nil {
 		srv.SetKeepTests(cfg.IsDevtoolsTests())
+		srv.Resize(cfg.DumpsBuffer())
+	}
+	if err := srv.Load(config.DumpsBufferFile()); err != nil {
+		fmt.Printf("[WARN] restoring debug events: %v\n", err)
 	}
 	// Worker capture is always on now; an install from before that has no flag.
 	if err := podman.EnsureDevtoolsAssets(); err != nil {
@@ -68,8 +72,8 @@ func startDumpsServer() {
 }
 
 // handleDumpsList returns a JSON array of buffered events. Supports
-// ?site=<name>, ?branch=<name>, ?ctx=fpm|cli, ?since=<id>, ?limit=N. Empty
-// filters return the full ring in insertion order.
+// ?site=<name>, ?branch=<name>, ?ctx=fpm|cli, ?kind=<kind>, ?rid=<id>,
+// ?since=<id>, ?limit=N. Empty filters return the full ring in insertion order.
 func handleDumpsList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -87,6 +91,7 @@ func handleDumpsList(w http.ResponseWriter, r *http.Request) {
 		Branch:  q.Get("branch"),
 		Ctx:     q.Get("ctx"),
 		Kind:    q.Get("kind"),
+		RID:     q.Get("rid"),
 		SinceID: q.Get("since"),
 		Limit:   limit,
 	})
@@ -116,6 +121,7 @@ func buildDumpsStatusJSON() []byte {
 		Listening   bool   `json:"listening"`
 		Addr        string `json:"addr"`
 		Count       int    `json:"count"`
+		Capacity    int    `json:"capacity"`
 		Subscribers int    `json:"subscribers"`
 		LastTS      string `json:"last_ts"`
 	}{
@@ -126,6 +132,7 @@ func buildDumpsStatusJSON() []byte {
 	if srv != nil {
 		resp.Listening = true
 		resp.Count = srv.Len()
+		resp.Capacity = srv.Cap()
 		resp.Subscribers = srv.Subscribers()
 		if snap := srv.Snapshot(); len(snap) > 0 {
 			resp.LastTS = snap[len(snap)-1].TS
@@ -134,6 +141,9 @@ func buildDumpsStatusJSON() []byte {
 	b, _ := json.Marshal(resp)
 	return b
 }
+
+// streamReplayLimit is how many of the newest events a stream replays.
+const streamReplayLimit = 3000
 
 // handleDumpsStream is a Server-Sent Events stream of new events. The client
 // reconnects on its own when the connection drops, mirroring the existing
@@ -178,6 +188,12 @@ func handleDumpsStream(w http.ResponseWriter, r *http.Request) {
 		since = q.Get("since")
 	}
 	filt.SinceID = since
+	// The ring keeps far more than a tab needs to open on; a request's
+	// inspector reads the rest from the server, so the first replay stays this
+	// size. A reconnect replays everything it missed.
+	if since == "" {
+		filt.Limit = streamReplayLimit
+	}
 	for _, ev := range srv.Filter(filt) {
 		writeSSEEvent(w, flusher, ev)
 	}
@@ -242,7 +258,9 @@ func handleDumpsClear(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	srv := dumpsServer.Load()
-	if srv != nil {
+	if kind := r.URL.Query().Get("kind"); srv != nil && kind != "" {
+		srv.ClearKind(kind)
+	} else if srv != nil {
 		srv.Clear()
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -288,8 +306,46 @@ func handleDumpsNotifyChanged(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	// The CLI may have changed the buffer size; resizing to what the config
+	// already says is cheap enough to do on every ping.
+	if srv := dumpsServer.Load(); srv != nil {
+		if cfg, err := config.LoadGlobal(); err == nil && cfg.DumpsBuffer() != srv.Cap() {
+			srv.Resize(cfg.DumpsBuffer())
+		}
+	}
 	eventbus.Default.Publish(eventbus.KindDumpsStatus)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDumpsBuffer sets how many events lerd-ui keeps for the Debug window
+// and resizes the buffer in place, keeping the newest events that fit. It
+// requires dashboard-control authority.
+func handleDumpsBuffer(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !hasHostActionAuthority(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	var req struct {
+		Size int `json:"size"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Size <= 0 {
+		http.Error(w, "invalid body: size is required", http.StatusBadRequest)
+		return
+	}
+	size, err := dumpsops.SetBuffer(req.Size)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if srv := dumpsServer.Load(); srv != nil {
+		srv.Resize(size)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(buildDumpsStatusJSON())
 }
 
 // handleDumpsToggle flips Dumps.Enabled by delegating to dumpsops.Apply,

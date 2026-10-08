@@ -1,0 +1,59 @@
+name: Go job setup
+description: Go toolchain, a build and test cache of the job's own, the built UI, and on Linux the tray headers.
+
+inputs:
+  tray-deps:
+    description: Install the libayatana headers the CGO tray build needs.
+    default: "false"
+
+outputs:
+  cache-key:
+    description: Key to save the Go cache under at the end of the job.
+    value: ${{ steps.key.outputs.key }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+        cache: false
+
+    - name: Point the Go caches at a known path
+      shell: bash
+      run: |
+        echo "GOCACHE=$RUNNER_TEMP/go-build" >> "$GITHUB_ENV"
+        echo "GOMODCACHE=$RUNNER_TEMP/go-mod" >> "$GITHUB_ENV"
+
+    # One cache per job: race builds differ from plain ones, and a shared key
+    # lets only the first job to finish save. The sha keeps it fresh per commit.
+    - id: key
+      shell: bash
+      run: echo "key=go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('go.sum') }}-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+    - uses: actions/cache/restore@v4
+      with:
+        path: |
+          ${{ env.GOCACHE }}
+          ${{ env.GOMODCACHE }}
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: |
+          go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('go.sum') }}-
+          go-${{ runner.os }}-${{ github.job }}-
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: ui-dist
+        path: internal/ui/web/dist
+
+    - if: inputs.tray-deps == 'true'
+      uses: awalsh128/cache-apt-pkgs-action@v1.6.3
+      with:
+        packages: libayatana-appindicator3-dev
+        version: "1.0"
+
+    # A cache hit untars the libraries without refreshing ld.so.cache, and the
+    # tray's dependency check resolves through ldconfig -p.
+    - if: inputs.tray-deps == 'true'
+      shell: bash
+      run: sudo ldconfig

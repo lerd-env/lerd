@@ -9,12 +9,11 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-// watchDesktopTheme calls onChange when the desktop repaints itself. Which
-// directory and which names inside it say so is the desktop's business; a
-// missing directory is an error the caller is meant to ignore, since most
-// machines have no desktop lerd can follow and that is not a failure of the
-// daemon. Nil names reports a change to any file in the directory.
-func watchDesktopTheme(ctx context.Context, dir string, names []string, settle time.Duration, onChange func()) error {
+// watchDir calls onChange once a burst of writes to the named files in dir
+// settles, such as a desktop repainting itself or the request store taking a
+// batch. A missing directory is an error the theme caller ignores, since most
+// machines have no desktop lerd can follow. Nil names reports any file.
+func watchDir(ctx context.Context, dir string, names []string, settle time.Duration, onChange func()) error {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
 		return err

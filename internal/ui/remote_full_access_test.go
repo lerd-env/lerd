@@ -249,3 +249,56 @@ func TestIsLoopbackOnlyPath(t *testing.T) {
 		})
 	}
 }
+
+// Choosing an editor saves a command the host runs later, so even a remote
+// session opted into full access must not reach it.
+func TestEditorRoutesRefuseRemoteEvenWithFullAccess(t *testing.T) {
+	setupConfigDirFullAccess(t, "alice", "s3cret", true)
+	for _, tc := range []struct {
+		method, path string
+		h            http.HandlerFunc
+	}{
+		{http.MethodGet, "/api/editors", handleEditors},
+		{http.MethodPost, "/api/editors", handleEditors},
+		{http.MethodPost, "/api/sites/shop.test/editor:open", handleSiteAction},
+	} {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			withRemoteControlGate(tc.h).ServeHTTP(rec, remoteRequest(tc.method, tc.path))
+			if rec.Code != http.StatusForbidden {
+				t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
+			}
+		})
+	}
+}
+
+// The dashboard hides the editor controls on a remote session, full access or
+// not, since they act on the host's desktop.
+func TestAccessModeReportsLocal(t *testing.T) {
+	setupConfigDirFullAccess(t, "alice", "s3cret", true)
+	for _, tc := range []struct {
+		name string
+		req  *http.Request
+		want bool
+	}{
+		{"remote", remoteRequest(http.MethodGet, "/api/access-mode"), false},
+		{"loopback", httptest.NewRequest(http.MethodGet, "/api/access-mode", nil), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.want {
+				tc.req.RemoteAddr = "127.0.0.1:54321"
+			}
+			rec := httptest.NewRecorder()
+			withRemoteControlGate(http.HandlerFunc(handleAccessMode)).ServeHTTP(rec, tc.req)
+			var body struct {
+				Local bool `json:"local"`
+			}
+			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if body.Local != tc.want {
+				t.Errorf("local = %v, want %v", body.Local, tc.want)
+			}
+		})
+	}
+}

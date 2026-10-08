@@ -16,13 +16,13 @@ func TestDNSServiceContentRoundTripsAWindowsExePath(t *testing.T) {
 		`C:\Users\me\AppData\Local\lerd\bin\lerd.exe`,
 		`C:\Users\me\My Tools\lerd.exe`,
 	} {
-		content := dnsServiceContent(exe)
+		content := dnsServiceContent(exe, "127.0.0.1")
 		if got := services.UnitExecBinary(content); got != exe {
 			t.Errorf("ExecStart path = %q, want %q\n%s", got, exe, content)
 		}
 		args := services.SplitExecStart(execStartLine(content))
-		if len(args) != 2 || args[1] != "dns-serve" {
-			t.Errorf("args = %q, want [exe dns-serve]", args)
+		if len(args) != 4 || args[1] != "dns-serve" || args[3] != "127.0.0.1" {
+			t.Errorf("args = %q, want [exe dns-serve --listen 127.0.0.1]", args)
 		}
 	}
 }

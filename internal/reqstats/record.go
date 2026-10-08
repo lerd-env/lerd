@@ -12,7 +12,7 @@ import (
 )
 
 // AccessRecord is one parsed nginx access datagram. The feed emits a
-// pipe-delimited message "$host|$status|$request_time|$request_method|$request_uri"
+// pipe-delimited message "$host|$status|$request_time|$request_method|$rid|$request_uri"
 // as the final whitespace token, so it survives syslog framing the same way the
 // idle host-only format does.
 type AccessRecord struct {
@@ -21,6 +21,9 @@ type AccessRecord struct {
 	RequestTime float64 // seconds, as nginx $request_time
 	Method      string
 	URI         string // raw $request_uri, query string included
+	// RID is the request id PHP sent as X-Lerd-Rid while debug capture is on,
+	// the id its captured events are grouped under; empty otherwise.
+	RID string
 }
 
 // SecondsToMillis returns the request time in milliseconds.
@@ -28,7 +31,7 @@ func (r AccessRecord) SecondsToMillis() float64 { return r.RequestTime * 1000 }
 
 // fieldCount is the number of pipe-delimited fields in a timing message. URI is
 // last so a literal pipe inside it (rare, usually %7C-encoded) stays intact.
-const fieldCount = 5
+const fieldCount = 6
 
 // ParseAccessRecord extracts a timing record from one access datagram. It takes
 // the final whitespace token (skipping syslog framing, as the idle parser does)
@@ -40,8 +43,17 @@ func ParseAccessRecord(datagram []byte) (AccessRecord, bool) {
 	if len(fields) == 0 {
 		return AccessRecord{}, false
 	}
-	parts := strings.SplitN(fields[len(fields)-1], "|", fieldCount)
-	if len(parts) != fieldCount {
+	token := fields[len(fields)-1]
+	parts := strings.SplitN(token, "|", fieldCount)
+	rid := ""
+	if len(parts) == fieldCount && isRID(parts[4]) {
+		rid = strings.TrimPrefix(parts[4], "-")
+		parts = append(parts[:4], parts[5])
+	} else {
+		// An nginx still on the format without the id, until it is rewritten.
+		parts = strings.SplitN(token, "|", fieldCount-1)
+	}
+	if len(parts) != fieldCount-1 {
 		return AccessRecord{}, false
 	}
 	host := parts[0]
@@ -62,5 +74,23 @@ func ParseAccessRecord(datagram []byte) (AccessRecord, bool) {
 		RequestTime: secs,
 		Method:      parts[3],
 		URI:         parts[4],
+		RID:         rid,
 	}, true
+}
+
+// isRID reports whether a field is a request id, or nginx's "-" for none. A URI
+// always starts with a slash, so it never reads as one.
+func isRID(s string) bool {
+	if s == "-" {
+		return true
+	}
+	if len(s) < 8 || len(s) > 64 {
+		return false
+	}
+	for _, c := range s {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }

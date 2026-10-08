@@ -25,10 +25,10 @@ func TestProfilerVhostFollowsTheRuntime(t *testing.T) {
 		t.Errorf("native vhost must not use the image's asset path:\n%s", native)
 	}
 
-	// The bridge is auto-prepended and is also the script, so the prepend has
-	// to be switched off or the second load fatals on redeclaring it.
-	if !strings.Contains(native, `PHP_VALUE "auto_prepend_file="`) {
-		t.Errorf("the vhost must switch the prepend off:\n%s", native)
+	// FPM keeps a PHP_VALUE in the worker for every later request, so switching
+	// the prepend off here switched debug capture off for every site after it.
+	if strings.Contains(native, "PHP_VALUE") {
+		t.Errorf("the vhost must not set PHP_VALUE:\n%s", native)
 	}
 
 	container := profilerVhost(config.PHPRuntimeContainer, "8.4", "/state", "on")

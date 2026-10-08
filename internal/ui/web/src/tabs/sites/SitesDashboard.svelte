@@ -67,10 +67,10 @@
   );
 </script>
 
-<div class="flex-1 overflow-y-auto">
+<div class="flex-1 flex flex-col min-h-0">
   <DashboardHeader title={m.sites_dash_overview()} stats={$sitesLoaded && total > 0 ? summary : undefined} />
 
-  <div class="p-4 space-y-6">
+  <div class="flex-1 min-h-0 overflow-y-auto p-4 space-y-6">
     {#if !$sitesLoaded}
       <LoadingRow />
     {:else if total === 0}

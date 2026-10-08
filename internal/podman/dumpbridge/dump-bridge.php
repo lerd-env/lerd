@@ -17,6 +17,10 @@
 // `mixed`/`never` hints, no `match`, no arrow functions, no nullsafe.
 
 namespace {
+    // Already ran as the prepend, as on the profiler's own requests.
+    if (\function_exists('Lerd\\DumpBridge\\emit')) {
+        return;
+    }
     // env_provider output for this site (see `env_provider` in .lerd.yaml),
     // kept on tmpfs by lerd so secrets never touch disk. Loaded before any
     // framework boots; a variable the process already has is left alone.
@@ -97,14 +101,34 @@ namespace {
     if (!\function_exists('Lerd\\Collector\\send')) {
         return;
     }
+    // While capture is on, the response names the request its events were
+    // grouped under, so nginx's access log and the browser can link to it.
+    if (\PHP_SAPI !== 'cli' && \defined('LERD_DEVTOOLS_RID')) {
+        if (!\headers_sent()) {
+            \header('X-Lerd-Rid: '.\LERD_DEVTOOLS_RID);
+        }
+        \register_shutdown_function('Lerd\\Collector\\request_end');
+        // The id goes on the SPX profile too, linking the request to its flame
+        // graph. SPX segfaults FPM when this is called on a request it is not
+        // profiling, so only when its cookie and key say it is.
+        $lerdSpxKey = \ini_get('spx.http_key');
+        if (\function_exists('spx_profiler_full_report_set_custom_metadata_str')
+            && isset($_COOKIE['SPX_ENABLED'], $_COOKIE['SPX_KEY'])
+            && $_COOKIE['SPX_ENABLED'] === '1'
+            && \is_string($lerdSpxKey) && $lerdSpxKey !== '' && $_COOKIE['SPX_KEY'] === $lerdSpxKey
+            && (!isset($_COOKIE['SPX_REPORT']) || $_COOKIE['SPX_REPORT'] === 'full')
+            && (!isset($_COOKIE['SPX_AUTO_START']) || $_COOKIE['SPX_AUTO_START'] !== '0')) {
+            \spx_profiler_full_report_set_custom_metadata_str('lerd-rid:'.\LERD_DEVTOOLS_RID);
+        }
+        unset($lerdSpxKey);
+    }
 }
 
 namespace Lerd\DumpBridge {
-    if (defined(__NAMESPACE__.'\\LOADED')) {
-        return;
-    }
-    const LOADED = 1;
-
+    // Declared inside a block so PHP binds them at runtime: the profiler names
+    // this file as its script on top of the prepend, and a second compile-time
+    // declaration fatals before any guard could return.
+    if (!\function_exists(__NAMESPACE__.'\\emit')) {
     // passthrough_enabled reports whether the dashboard capture should ALSO
     // emit the dump to the response via Symfony's stock VarDumper handler.
     // Default false (capture-only) — same behaviour as Herd's dumps window;
@@ -126,6 +150,7 @@ namespace Lerd\DumpBridge {
     function emit($var, ?string $label = null): void
     {
         \Lerd\Collector\send_dump($var, $label);
+    }
     }
 }
 

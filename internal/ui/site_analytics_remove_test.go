@@ -1,16 +1,21 @@
 package ui
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/reqstats"
+	"github.com/geodro/lerd/internal/spxreport"
 )
 
 // seedAnalytics fills the durable store the analytics endpoints read, using the
@@ -152,5 +157,72 @@ func TestAnalyticsRemoveRejectsMissingRoute(t *testing.T) {
 	seedAnalytics(t, nil)
 	if rec := postRemove(t, "acme.test", `{}`); rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", rec.Code)
+	}
+}
+
+// Removing history takes what debug capture and SPX hold for those requests
+// with it, so the Debug tab and the Profiler agree with the timing view.
+func TestAnalyticsRemoveRouteForgetsItsDebugEventsAndProfiles(t *testing.T) {
+	registerSite(t, "acme", "acme.test")
+	now := time.Now()
+	gone := analyticsRecord("acme", "GET /noisy", "/noisy", now.Add(-time.Minute))
+	gone.RID = "r1"
+	kept := analyticsRecord("acme", "GET /keep", "/keep", now.Add(-time.Minute))
+	kept.RID = "r2"
+	seedAnalytics(t, []reqstats.Record{gone, kept})
+
+	srv, err := dumps.Listen(context.Background(), "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = srv.Close() })
+	srv.Push(dumps.Event{V: dumps.ProtocolVersion, ID: "e1", Kind: dumps.KindQuery, Ctx: dumps.Context{RID: "r1"}})
+	srv.Push(dumps.Event{V: dumps.ProtocolVersion, ID: "e2", Kind: dumps.KindQuery, Ctx: dumps.Context{RID: "r2"}})
+	prev := dumpsServer.Load()
+	dumpsServer.Store(srv)
+	t.Cleanup(func() { dumpsServer.Store(prev) })
+
+	spx := config.SpxDataDir()
+	if err := os.MkdirAll(spx, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for key, rid := range map[string]string{"spx-full-1": "r1", "spx-full-2": "r2"} {
+		if err := os.WriteFile(filepath.Join(spx, key+".json"), []byte(`{"custom_metadata_str":"lerd-rid:`+rid+`"}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if rec := postRemove(t, "acme.test", `{"route":"GET /noisy"}`); rec.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+	}
+	if got := srv.RequestIDs(); got["r1"] || !got["r2"] {
+		t.Errorf("buffered requests = %v, want only r2", got)
+	}
+	if got := spxreport.KeysByRID(spx); got["r1"] != "" || got["r2"] == "" {
+		t.Errorf("profiles = %v, want only r2's", got)
+	}
+}
+
+func TestAnalyticsRecentPagesAndSaysWhenThereIsMore(t *testing.T) {
+	registerSite(t, "acme", "acme.test")
+	now := time.Now()
+	var recs []reqstats.Record
+	for i := 0; i < 25; i++ {
+		recs = append(recs, analyticsRecord("acme", "GET /a", "/a", now.Add(-time.Duration(i+1)*time.Second)))
+	}
+	seedAnalytics(t, recs)
+
+	if got := getAnalytics(t, "acme.test"); len(got.Recent) != 20 || !got.RecentMore {
+		t.Fatalf("first page = %d rows, more %v", len(got.Recent), got.RecentMore)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/sites/acme.test/analytics?range=24h&recent=40", nil)
+	rec := httptest.NewRecorder()
+	analyticsRoute(rec, req, "acme.test", []string{"analytics"})
+	var got analyticsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Recent) != 25 || got.RecentMore {
+		t.Fatalf("second page = %d rows, more %v", len(got.Recent), got.RecentMore)
 	}
 }
