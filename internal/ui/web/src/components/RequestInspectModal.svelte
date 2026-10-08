@@ -27,7 +27,7 @@
 
 {#snippet copyForAgent()}
   {#if agentPrompt}
-    <CopyButton text={agentPrompt} label={m.sites_timing_copyForAgentHint()} caption={m.sites_timing_copyForAgent()} />
+    <CopyButton text={agentPrompt} label={m.sites_timing_copyForAgentHint()} caption={m.common_copyForAgent()} />
   {/if}
 {/snippet}
 

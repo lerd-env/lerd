@@ -9,3 +9,13 @@ export function requestAgentPrompt(domain: string, req: Pick<RecentRequest, 'met
     `then find and fix the root cause of the issues it reports.`
   );
 }
+
+// target is how site_doctor finds the checkout: `site "<domain>"`, or
+// `path "<dir>"` for a worktree, which the site lookup would not reach.
+export function doctorAgentPrompt(domain: string, target: string, checks: string[]): string {
+  return (
+    `On my lerd site ${domain}, the site doctor reports these checks not passing: ${checks.join(', ')}. ` +
+    `Read them with lerd's \`diag\` tool (action "site_doctor", ${target}), ` +
+    `fix their root causes, then run it again to confirm they pass.`
+  );
+}

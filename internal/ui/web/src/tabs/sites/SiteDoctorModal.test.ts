@@ -58,6 +58,50 @@ describe('SiteDoctorModal', () => {
     expect(screen.getByRole('button', { name: 'Fix' })).toBeTruthy();
   });
 
+  it('copies a prompt for an agent naming the checks that did not pass', async () => {
+    const writeText = vi.fn(async (_text: string) => {});
+    Object.assign(navigator, { clipboard: { writeText } });
+    loadDoctor.mockResolvedValue({
+      checks: [
+        { name: 'app_key', status: 'fail' },
+        { name: 'app_debug', status: 'warn' },
+        { name: 'migrations', status: 'ok' }
+      ],
+      failures: 1,
+      warnings: 1
+    });
+    loadCommands.mockResolvedValue([]);
+    render(SiteDoctorModal, { props: { open: true, site: site(), branch: '', onclose: () => {} } });
+
+    (await screen.findByText('Copy for agent')).click();
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalled());
+    const prompt = writeText.mock.calls[0][0];
+    expect(prompt).toContain('app_key, app_debug');
+    expect(prompt).not.toContain('migrations');
+    expect(prompt).toContain('site "acme.test"');
+  });
+
+  it('targets a worktree by its path, since site_doctor reads the checkout it is pointed at', async () => {
+    const writeText = vi.fn(async (_text: string) => {});
+    Object.assign(navigator, { clipboard: { writeText } });
+    loadDoctor.mockResolvedValue({ checks: [{ name: 'app_key', status: 'fail' }], failures: 1, warnings: 0 });
+    loadCommands.mockResolvedValue([]);
+    const s = site({ worktrees: [{ branch: 'feat-x', domain: 'feat-x.acme.test', path: '/code/acme-feat-x' }] });
+    render(SiteDoctorModal, { props: { open: true, site: s, branch: 'feat-x', onclose: () => {} } });
+
+    (await screen.findByText('Copy for agent')).click();
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalled());
+    expect(writeText.mock.calls[0][0]).toContain('path "/code/acme-feat-x"');
+  });
+
+  it('offers no agent prompt when every check passed', async () => {
+    loadDoctor.mockResolvedValue({ checks: [{ name: 'app_key', status: 'ok' }], failures: 0, warnings: 0 });
+    loadCommands.mockResolvedValue([]);
+    render(SiteDoctorModal, { props: { open: true, site: site(), branch: '', onclose: () => {} } });
+    expect(await screen.findByText('All checks passed')).toBeTruthy();
+    expect(screen.queryByText('Copy for agent')).toBeNull();
+  });
+
   // The slow container execs must not hold back the findings that are already in.
   it('shows each check as it streams in while the rest are still running', async () => {
     loadDoctor.mockImplementation((_d: string, _b: string, onCheck: (c: unknown) => void) => {

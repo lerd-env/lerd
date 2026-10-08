@@ -72,6 +72,8 @@
 
 <script lang="ts">
   import Modal from '$components/Modal.svelte';
+  import CopyButton from '$components/CopyButton.svelte';
+  import { doctorAgentPrompt } from '$lib/agentPrompt';
   import { loadDoctor, type DoctorCheck, type DoctorReport } from '$stores/doctor';
   import { loadCommands, launchCommand, runSettled, executeDoctorFix, type Command } from '$stores/commands';
   import { goToTab } from '$stores/route';
@@ -246,13 +248,26 @@
   const canEditEnv = (check: DoctorCheck): boolean =>
     check.name === 'env_drift' && check.status !== 'ok';
 
+  const agentPrompt = $derived.by(() => {
+    const failing = sorted.filter((c) => c.status === 'fail' || c.status === 'warn').map((c) => c.name);
+    if (loading || !failing.length) return '';
+    const wt = branch ? (site.worktrees || []).find((w) => w.branch === branch) : undefined;
+    return doctorAgentPrompt(activeDomain, wt?.path ? `path "${wt.path}"` : `site "${site.domain}"`, failing);
+  });
+
   function openEnv() {
     onclose();
     goToTab('sites', `${site.domain}/env`);
   }
 </script>
 
-<Modal {open} title={m.sites_doctor_title()} size="lg" {onclose}>
+{#snippet copyForAgent()}
+  {#if agentPrompt}
+    <CopyButton text={agentPrompt} label={m.sites_doctor_copyForAgentHint()} caption={m.common_copyForAgent()} />
+  {/if}
+{/snippet}
+
+<Modal {open} title={m.sites_doctor_title()} size="lg" {onclose} actions={copyForAgent}>
   <div class="max-h-[64vh] overflow-y-auto px-5 py-4 space-y-4">
     <!-- Summary hero: overall verdict plus counts, so the headline reads before any scrolling. -->
     <div
