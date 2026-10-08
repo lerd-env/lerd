@@ -95,6 +95,11 @@ wait_for() {
 	return 1
 }
 
+# reloads_since <time> [unit]: daemon-reloads the user manager logged since
+# then, only those a process of that unit asked for when one is given. A site's
+# workers or services going down or up together should cost one.
+reloads_since() { journalctl --user --since "$1" --no-pager -o cat 2>/dev/null | grep '^Reload requested' | grep -c "${2:-}"; }
+
 # tld: the suffix sites are served under right now, test or localhost.
 tld() {
 	awk '/^dns:/{d=1;next} d&&/^[^ ]/{d=0} d&&/enabled:/{e=$2} d&&/tld:/{t=$2} END{if(e=="false")print "localhost"; else print (t?t:"test")}' \

@@ -176,6 +176,22 @@ func newStripeListenStopCmd() *cobra.Command {
 // service unit without starting it. Shared by the CLI path (starts right
 // after) and the install restore path (defers start to the worker phase).
 func writeStripeUnit(siteName, apiKey, forwardTo string) error {
+	changed, err := writeStripeUnitFile(siteName, apiKey, forwardTo)
+	if err != nil || !changed {
+		return err
+	}
+	if err := podman.DaemonReloadFn(); err != nil {
+		return fmt.Errorf("daemon-reload: %w", err)
+	}
+	if err := syncWorkerBootArming("lerd-stripe-" + siteName); err != nil {
+		feedback.Warn("enable: %v", err)
+	}
+	return nil
+}
+
+// writeStripeUnitFile writes the listener unit without reloading systemd, for
+// a caller that reloads once for a batch. Reports whether the file changed.
+func writeStripeUnitFile(siteName, apiKey, forwardTo string) (bool, error) {
 	unitName := "lerd-stripe-" + siteName
 	containerName := unitName
 
@@ -195,23 +211,20 @@ WantedBy=default.target
 
 	changed, err := services.Mgr.WriteServiceUnitIfChanged(unitName, unit)
 	if err != nil {
-		return fmt.Errorf("writing service unit: %w", err)
+		return false, fmt.Errorf("writing service unit: %w", err)
 	}
-	if changed {
-		if err := podman.DaemonReloadFn(); err != nil {
-			return fmt.Errorf("daemon-reload: %w", err)
-		}
-		if err := syncWorkerBootArming(unitName); err != nil {
-			feedback.Warn("enable: %v", err)
-		}
-	}
-	return nil
+	return changed, nil
 }
 
 func stripeStartExplicit(siteName, apiKey, forwardTo string) error {
 	if err := writeStripeUnit(siteName, apiKey, forwardTo); err != nil {
 		return err
 	}
+	return launchStripeUnit(siteName, forwardTo)
+}
+
+// launchStripeUnit starts a listener whose unit is already written and loaded.
+func launchStripeUnit(siteName, forwardTo string) error {
 	unitName := "lerd-stripe-" + siteName
 	// podman.StartUnit (not services.Mgr.Start) so AfterUnitChange fires
 	// and the dashboard reflects the new state without a manual refresh.
@@ -238,16 +251,45 @@ func stripeKeyForSite(sitePath string) (string, error) {
 // StripeStartForSite starts a Stripe listener for the given site, reading the
 // key and webhook path from the project's .env and .lerd.yaml.
 func StripeStartForSite(siteName, sitePath, siteBaseURL string) error {
-	apiKey, err := stripeKeyForSite(sitePath)
+	changed, start, err := prepareStripeStart(siteName, sitePath, siteBaseURL)
 	if err != nil {
 		return err
 	}
-	if err := stripeStartExplicit(siteName, apiKey, siteBaseURL+config.StripeWebhookPath(sitePath)); err != nil {
-		return err
+	if changed {
+		if err := podman.DaemonReloadFn(); err != nil {
+			return fmt.Errorf("daemon-reload: %w", err)
+		}
 	}
-	recordProjectWorker(sitePath, "stripe")
-	ClearIdleSuspendOnStart(siteName, sitePath, "stripe")
-	return nil
+	return start()
+}
+
+// prepareStripeStart writes a site's listener unit without reloading systemd,
+// so a batch of workers can share one reload. Reports whether the unit
+// changed and returns the start to run once the reload is done.
+func prepareStripeStart(siteName, sitePath, siteBaseURL string) (bool, func() error, error) {
+	apiKey, err := stripeKeyForSite(sitePath)
+	if err != nil {
+		return false, nil, err
+	}
+	forwardTo := siteBaseURL + config.StripeWebhookPath(sitePath)
+	changed, err := writeStripeUnitFile(siteName, apiKey, forwardTo)
+	if err != nil {
+		return false, nil, err
+	}
+	start := func() error {
+		if changed {
+			if err := syncWorkerBootArming("lerd-stripe-" + siteName); err != nil {
+				feedback.Warn("enable: %v", err)
+			}
+		}
+		if err := launchStripeUnit(siteName, forwardTo); err != nil {
+			return err
+		}
+		recordProjectWorker(sitePath, "stripe")
+		ClearIdleSuspendOnStart(siteName, sitePath, "stripe")
+		return nil
+	}
+	return changed, start, nil
 }
 
 // StripeRestoreUnit writes the stripe listener unit without starting it.
@@ -272,21 +314,7 @@ func restoreStripeWorker(s config.Site) {
 
 // StripeStopForSite stops and removes the Stripe listener for the named site.
 func StripeStopForSite(siteName string) error {
-	unitName := "lerd-stripe-" + siteName
-
-	_ = services.Mgr.Disable(unitName)
-	podman.StopUnit(unitName) //nolint:errcheck
-
-	if err := services.Mgr.RemoveServiceUnit(unitName); err != nil {
-		return fmt.Errorf("removing unit file: %w", err)
-	}
-
-	if err := podman.DaemonReloadFn(); err != nil {
-		feedback.Warn("daemon-reload: %v", err)
-	}
-
-	feedback.Start("stopping stripe listener").OK("")
-	return nil
+	return stopWorkerUnit("lerd-stripe-"+siteName, "stripe listener", "")
 }
 
 // StripeSecretSet returns true if a Stripe secret is present in the site's .env
