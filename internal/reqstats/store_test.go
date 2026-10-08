@@ -1,6 +1,7 @@
 package reqstats
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -355,21 +356,37 @@ func TestStoreAnalyticsNamesEachRoutesSlowestRequest(t *testing.T) {
 	}
 }
 
-// Each range names its own slowest, so a request that leads only the short
-// range is kept alongside the one leading the week.
-func TestStoreSlowestRIDsCoversEveryRange(t *testing.T) {
+// A request no later one outran can still come to lead a window as older ones
+// age out of it, so it is kept before it leads; one a later request beat never can.
+func TestStoreSlowestRIDsKeepsEveryPotentialWinner(t *testing.T) {
 	s := tempStore(t)
+	at := func(m int) time.Time { return base.Add(time.Duration(m) * time.Minute) }
+	req := func(m int, site, route string, ms float64, rid string) Record {
+		return Record{At: at(m), Site: site, Method: "GET", Route: "GET " + route, URI: route, Status: 200, Millis: ms, RID: rid}
+	}
+	cold := req(-1, "acme", "/a", 5000, "cold")
+	cold.Cold = true
 	seed(t, s, []Record{
-		{At: base.Add(-2 * time.Hour), Site: "acme", Method: "GET", Route: "GET /a", URI: "/a", Status: 200, Millis: 900, RID: "week"},
-		{At: base.Add(-time.Minute), Site: "acme", Method: "GET", Route: "GET /a", URI: "/a", Status: 200, Millis: 50, RID: "recent"},
-		{At: base.Add(-time.Minute), Site: "acme", Method: "GET", Route: "GET /a", URI: "/a", Status: 200, Millis: 10, RID: "fast"},
-		{At: base.Add(-time.Minute), Site: "other", Method: "GET", Route: "GET /b", URI: "/b", Status: 200, Millis: 30, RID: "b"},
+		req(-20, "acme", "/a", 300, "beaten"),
+		req(-10, "acme", "/a", 900, "leader"),
+		req(-9, "acme", "/a", 800, "next"),
+		req(-8, "acme", "/a", 100, "newest"),
+		cold,
+		req(-5, "acme", "/a.css", 9000, "asset"),
+		req(-5, "acme", "/silenced", 700, "silenced"),
+		req(-5, "acme/feature", "/a", 50, "branch"),
+		req(-5, "acme/feature", "/silenced", 700, "branch-silenced"),
+		req(-5, "other", "/b", 30, "other"),
 	})
-	got, err := s.SlowestRIDs(base, []time.Duration{time.Hour, 7 * 24 * time.Hour})
+	if err := s.ExcludeRoute("acme", "GET /silenced"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.SlowestRIDs(at(-60))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 3 || !got["week"] || !got["recent"] || !got["b"] {
-		t.Fatalf("slowest rids = %v", got)
+	want := map[string]bool{"leader": true, "next": true, "newest": true, "branch": true, "other": true}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("slowest rids = %v, want %v", got, want)
 	}
 }

@@ -89,19 +89,14 @@ type analyticsResponse struct {
 // buffer over in seconds, so it stays short.
 const keepSlowestEvery = 15 * time.Second
 
-// keepSlowestRequests keeps every route's slowest request in each range the
-// dashboard offers past the debug buffer, so its time bar stays clickable.
+// keepSlowestRequests keeps every request that is, or can still become, a
+// route's slowest past the debug buffer, so its time bar stays clickable.
 func keepSlowestRequests(srv *dumps.Server) {
 	store, err := getAnalyticsStore()
 	if err != nil {
 		return
 	}
-	var windows []time.Duration
-	for _, label := range []string{"15m", "1h", "24h", "7d"} {
-		d, _ := analyticsRange(label)
-		windows = append(windows, d)
-	}
-	keep, err := store.SlowestRIDs(time.Now(), windows)
+	keep, err := store.SlowestRIDs(time.Now().Add(-reqstats.Retention))
 	if err != nil {
 		return
 	}

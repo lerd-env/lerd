@@ -458,27 +458,46 @@ func classify(s *StatusCounts, status int) {
 	}
 }
 
-// SlowestRIDs names every route's slowest request in each window ending at
-// until, across all sites: the requests the dashboard links to from its
-// slowest-routes list, read through SiteAnalytics so the two never disagree.
-func (s *Store) SlowestRIDs(until time.Time, windows []time.Duration) (map[string]bool, error) {
-	sites, err := s.LastSeenBySite()
+// SlowestRIDs names every request since the given time that leads, or can
+// still come to lead, its route's slowest in a window ending now: one no later
+// request outran. As a window slides, its leader ages out and the slowest of
+// what follows takes over, so keeping only today's leaders would lose the next.
+// Rows are filtered as SiteAnalytics filters them, so the two never disagree.
+func (s *Store) SlowestRIDs(since time.Time) (map[string]bool, error) {
+	excluded, err := s.AllExcludedRoutes()
 	if err != nil {
 		return nil, err
 	}
+	rows, err := s.db.Query(
+		`SELECT site, route, status, ms, uri, rid FROM requests
+		 WHERE at_ms >= ? AND cold = 0 ORDER BY at_ms DESC, rowid DESC`,
+		since.UnixMilli())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
 	out := map[string]bool{}
-	for site := range sites {
-		for _, w := range windows {
-			a, err := s.SiteAnalytics(site, until.Add(-w), until)
-			if err != nil {
-				return nil, err
-			}
-			for _, r := range a.Routes {
-				if r.Slowest != nil && r.Slowest.RID != "" {
-					out[r.Slowest.RID] = true
-				}
-			}
+	slowestLater := map[[2]string]float64{}
+	for rows.Next() {
+		var key, route, uri, rid string
+		var status int
+		var ms float64
+		if err := rows.Scan(&key, &route, &status, &ms, &uri, &rid); err != nil {
+			return nil, err
+		}
+		site, _ := SplitKey(key)
+		if !IsAppRequest(status, uri, ms) || excluded[site][route] {
+			continue
+		}
+		k := [2]string{key, route}
+		if later, seen := slowestLater[k]; seen && ms < later {
+			continue
+		}
+		slowestLater[k] = ms
+		if rid != "" {
+			out[rid] = true
 		}
 	}
-	return out, nil
+	return out, rows.Err()
 }
