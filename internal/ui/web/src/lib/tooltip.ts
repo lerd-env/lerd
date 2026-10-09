@@ -29,10 +29,13 @@ function ensure(): HTMLDivElement {
   box = document.createElement('div');
   box.setAttribute('role', 'tooltip');
   box.className =
-    'pointer-events-none whitespace-nowrap rounded-md border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card px-2 py-1 text-xs text-gray-800 dark:text-gray-100 shadow-lg transition-opacity duration-100';
+    'pointer-events-none rounded-md border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card px-2 py-1 text-xs text-gray-800 dark:text-gray-100 shadow-lg transition-opacity duration-100';
   box.style.position = 'fixed';
   box.style.zIndex = '9999';
   box.style.opacity = '0';
+  // Short labels stay on one line, since the box is measured at the left edge;
+  // only a label wider than the window wraps, anywhere, as a branch has no spaces.
+  box.style.overflowWrap = 'anywhere';
   arrowEl = document.createElement('span');
   arrowEl.style.position = 'absolute';
   box.appendChild(arrowEl);
@@ -57,6 +60,7 @@ function place(node: HTMLElement, label: string, placement: TooltipPlacement) {
   b.style.opacity = '0';
   b.style.left = '0px';
   b.style.top = '0px';
+  b.style.maxWidth = window.innerWidth - 2 * MARGIN + 'px';
   const r = node.getBoundingClientRect();
   const bw = b.offsetWidth;
   const bh = b.offsetHeight;

@@ -27,6 +27,16 @@ describe('tooltip action', () => {
     expect(t?.style.opacity).toBe('1');
   });
 
+  // A label wider than the window, such as a long branch name, wraps instead of running off it.
+  it('never grows wider than the window', () => {
+    const { btn } = mount('feature/' + 'x'.repeat(400));
+    btn.dispatchEvent(new MouseEvent('mouseenter'));
+    const t = tip()!;
+    expect(t.style.maxWidth).toBe(window.innerWidth - 12 + 'px');
+    expect(t.style.overflowWrap).toBe('anywhere');
+    expect(t.className).not.toContain('whitespace-nowrap');
+  });
+
   it('hides on mouseleave', () => {
     const { btn } = mount('Reload');
     btn.dispatchEvent(new MouseEvent('mouseenter'));
