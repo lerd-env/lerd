@@ -41,15 +41,16 @@ func AheadBehind(dir, from, to string) (ahead, behind int) {
 // BranchDates maps local and remote branches to their last commit time, unix seconds.
 func BranchDates(dir string) map[string]int64 {
 	dates := map[string]int64{}
-	out, err := Output(dir, "for-each-ref", "--format=%(refname)%09%(committerdate:unix)", "refs/heads", "refs/remotes")
+	out, err := Output(dir, "for-each-ref", "--format=%(refname)%09%(symref)%09%(committerdate:unix)", "refs/heads", "refs/remotes")
 	if err != nil {
 		return dates
 	}
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		ref, ts, ok := strings.Cut(line, "\t")
-		if !ok || strings.HasSuffix(ref, "/HEAD") {
-			continue
+		f := strings.Split(line, "\t")
+		if len(f) != 3 || f[1] != "" {
+			continue // a symbolic ref such as origin/HEAD only points at a branch
 		}
+		ref, ts := f[0], f[2]
 		name := strings.TrimPrefix(strings.TrimPrefix(ref, "refs/heads/"), "refs/remotes/")
 		var n int64
 		fmt.Sscanf(ts, "%d", &n)
@@ -87,15 +88,16 @@ func RepoPrefix(dir string) string {
 	return strings.TrimSpace(out)
 }
 
-// Branches lists every local and remote-tracking branch, the symbolic HEADs aside.
+// Branches lists every local and remote-tracking branch, symbolic refs aside.
 func Branches(dir string) (local, remote []string) {
-	out, err := Output(dir, "for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes")
+	out, err := Output(dir, "for-each-ref", "--format=%(refname)%09%(symref)", "refs/heads", "refs/remotes")
 	if err != nil {
 		return nil, nil
 	}
-	for _, ref := range strings.Split(strings.TrimSpace(out), "\n") {
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		ref, symref, _ := strings.Cut(line, "\t")
 		switch {
-		case strings.HasSuffix(ref, "/HEAD"):
+		case symref != "":
 		case strings.HasPrefix(ref, "refs/heads/"):
 			local = append(local, strings.TrimPrefix(ref, "refs/heads/"))
 		case strings.HasPrefix(ref, "refs/remotes/"):

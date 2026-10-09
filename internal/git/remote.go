@@ -29,7 +29,8 @@ func Push(dir string) (string, error) {
 	if strings.TrimSpace(remote) == "" || strings.TrimSpace(merge) == "" {
 		return "", fmt.Errorf("%s has no upstream to push to", branch)
 	}
-	return runQuiet(dir, "push", strings.TrimSpace(remote), "HEAD:"+strings.TrimSpace(merge))
+	// The branch by name, not HEAD: a switch between these calls must not redirect the push.
+	return runQuiet(dir, "push", strings.TrimSpace(remote), "refs/heads/"+branch+":"+strings.TrimSpace(merge))
 }
 
 // Switch checks out branch in the checkout at dir, never forced: changes the

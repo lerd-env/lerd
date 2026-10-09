@@ -145,3 +145,21 @@ func TestBranches(t *testing.T) {
 		t.Errorf("remote = %v", remote)
 	}
 }
+
+// Only the remotes' symbolic HEADs are dropped; a branch may itself end in HEAD.
+func TestBranches_keepsABranchNamedHEAD(t *testing.T) {
+	dir, _ := pullFixture(t)
+	gitRun(t, dir, "branch", "feature/HEAD")
+	gitRun(t, dir, "remote", "set-head", "origin", "main")
+
+	local, remote := Branches(dir)
+	if !strings.Contains(strings.Join(local, ","), "feature/HEAD") {
+		t.Errorf("local = %v, want feature/HEAD kept", local)
+	}
+	if strings.Contains(strings.Join(remote, ","), "origin/HEAD") {
+		t.Errorf("remote = %v, symbolic origin/HEAD should go", remote)
+	}
+	if _, ok := BranchDates(dir)["feature/HEAD"]; !ok {
+		t.Error("BranchDates dropped feature/HEAD")
+	}
+}
