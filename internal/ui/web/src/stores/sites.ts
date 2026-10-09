@@ -89,6 +89,7 @@ export interface Site {
   multi_tenant?: boolean;
   worktrees?: Array<{
     branch?: string;
+    git_branch?: string;
     domain?: string;
     path?: string;
     php_version?: string;

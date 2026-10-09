@@ -260,6 +260,15 @@ describe('SiteHeader', () => {
       expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('feat · feat.app.test');
     });
 
+    // Branch is the subdomain-safe name; the tooltip promises the branch as git has it.
+    it('names the git branch, not its subdomain form, in the tab tooltip', async () => {
+      vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
+      const wt = { ...worktreeSite.worktrees![0], branch: 'feature-x', git_branch: 'feature/x', domain: 'feature-x.app.test' };
+      const { getByText } = render(Harness, { props: { site: { ...worktreeSite, worktrees: [wt] } as Site } });
+      await fireEvent.mouseEnter(getByText('feature-x').closest('button')!);
+      expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('feature/x · feature-x.app.test');
+    });
+
     it("never shows another site's state", async () => {
       let first = true;
       vi.stubGlobal(
