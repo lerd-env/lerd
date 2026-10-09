@@ -538,12 +538,12 @@ func TestJSNeedsInstall_lerdMarkerOlderThanLockfileStillAsks(t *testing.T) {
 // the failure is reported instead of passing as a clean install.
 func TestInstallDependencies_unwritableLerdMarkerIsReported(t *testing.T) {
 	stubJSInstall(t, func(projectPath string) {
-		nm := filepath.Join(projectPath, "node_modules")
-		touch(t, filepath.Join(nm, "left-pad", "index.js"))
-		if err := os.Chmod(nm, 0o555); err != nil {
+		touch(t, filepath.Join(projectPath, "node_modules", "left-pad", "index.js"))
+		// A directory in the marker's place fails the write even for root,
+		// which a read-only node_modules would not.
+		if err := os.Mkdir(filepath.Join(projectPath, "node_modules", lerdJSInstallMarker), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { _ = os.Chmod(nm, 0o755) })
 	})
 	dir := jsProject(t, `{"lockfileVersion":1}`)
 
