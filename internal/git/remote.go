@@ -11,9 +11,10 @@ import (
 // Fetch updates the checkout's remote-tracking refs so ahead/behind is current.
 func Fetch(dir string) (string, error) { return runQuiet(dir, "fetch") }
 
-// Pull fast-forwards the checkout to its upstream. Anything that would need a
-// merge is refused by git, so the tree is never left mid-merge.
-func Pull(dir string) (string, error) { return runQuiet(dir, "pull", "--ff-only") }
+// FastForward moves the checkout to commit to, which the caller fetched and
+// reviewed. Anything that would need a merge is refused by git, so the tree is
+// never left mid-merge.
+func FastForward(dir, to string) (string, error) { return runQuiet(dir, "merge", "--ff-only", to) }
 
 // Push sends the branch to its upstream, never forced: a remote that moved on
 // makes git reject it. The explicit refspec keeps push.default and configured

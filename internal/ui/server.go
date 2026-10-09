@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -290,6 +291,8 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/sites/worktree-add", withCORS(publishAfter(handleSiteWorktreeAdd, eventbus.KindSites)))
 	mux.HandleFunc("/api/sites/branch-plan", withCORS(handleSiteBranchPlan))
 	mux.HandleFunc("/api/sites/branch-switch", withCORS(publishAfter(handleSiteBranchSwitch, eventbus.KindSites)))
+	mux.HandleFunc("/api/sites/pull-plan", withCORS(handleSitePullPlan))
+	mux.HandleFunc("/api/sites/pull", withCORS(publishAfter(handleSitePull, eventbus.KindSites)))
 	mux.HandleFunc("/api/browse", withCORS(handleBrowse))
 	mux.HandleFunc("/api/runs", withCORS(publishAfter(handleRuns, eventbus.KindSites)))
 	mux.HandleFunc("/api/runs/", withCORS(handleRunStream))
@@ -4231,23 +4234,14 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
-	case "git:fetch", "git:pull", "git:push":
+	case "git:fetch", "git:push":
 		dir := resolveSitePath(site, r.URL.Query().Get("branch"))
 		if dir == "" {
 			writeJSON(w, SiteActionResponse{Error: "unknown worktree branch"})
 			return
 		}
-		// A pull rewrites files, so it must not land in the middle of a branch switch.
-		if action == "git:pull" {
-			release := cli.CheckoutLock(dir)
-			if release == nil {
-				writeJSON(w, SiteActionResponse{Error: "a branch switch is running on this checkout"})
-				return
-			}
-			defer release()
-		}
 		op := map[string]func(string) (string, error){
-			"git:fetch": gitpkg.Fetch, "git:pull": gitpkg.Pull, "git:push": gitpkg.Push,
+			"git:fetch": gitpkg.Fetch, "git:push": gitpkg.Push,
 		}[action]
 		out, err := op(dir)
 		if err != nil {
@@ -6821,6 +6815,76 @@ func handleSiteBranchSwitch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, SiteActionResponse{Error: "branch is required"})
 		return
 	}
+	steps := branchStepsFrom(q)
+	steps.Restore = q.Get("restore")
+	steps.Create = q.Get("create") == "1"
+	steps.Base = strings.TrimSpace(q.Get("base"))
+	streamSteps(w, func(out io.Writer) (string, error) { return cli.SwitchSiteBranch(site, branch, steps, out) })
+}
+
+// handleSitePullPlan answers GET /api/sites/pull-plan?domain=&branch= with what
+// pulling the checkout (the main one, or the worktree on branch) would call for.
+func handleSitePullPlan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	site, err := config.FindSiteByDomain(r.URL.Query().Get("domain"))
+	if err != nil {
+		http.Error(w, "site not found", http.StatusNotFound)
+		return
+	}
+	dir := resolveSitePath(site, r.URL.Query().Get("branch"))
+	if dir == "" {
+		writeJSON(w, map[string]any{"error": "unknown worktree branch"})
+		return
+	}
+	plan, err := cli.PlanSitePull(site, dir)
+	if err != nil {
+		writeJSON(w, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, plan)
+}
+
+// handleSitePull answers POST /api/sites/pull?domain=&branch=&from=&head=&target=
+// plus the chosen steps (composer, js, migrate, snapshot, isolate), streaming
+// their output like a switch. from and head are what the plan saw checked out,
+// target the upstream commit it reviewed.
+func handleSitePull(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.NotFound(w, r)
+		return
+	}
+	q := r.URL.Query()
+	site, err := config.FindSiteByDomain(q.Get("domain"))
+	if err != nil {
+		writeJSON(w, SiteActionResponse{Error: "site not found"})
+		return
+	}
+	dir := resolveSitePath(site, q.Get("branch"))
+	if dir == "" {
+		writeJSON(w, SiteActionResponse{Error: "unknown worktree branch"})
+		return
+	}
+	steps := branchStepsFrom(q)
+	reviewed := cli.Reviewed{Branch: strings.TrimSpace(q.Get("from")), Head: strings.TrimSpace(q.Get("head")), Commit: strings.TrimSpace(q.Get("target"))}
+	streamSteps(w, func(out io.Writer) (string, error) { return cli.PullSite(site, dir, reviewed, steps, out) })
+}
+
+func branchStepsFrom(q url.Values) cli.BranchSteps {
+	return cli.BranchSteps{
+		Composer: q.Get("composer") == "1",
+		JS:       q.Get("js") == "1",
+		Migrate:  q.Get("migrate") == "1",
+		Snapshot: q.Get("snapshot") == "1",
+		Isolate:  q.Get("isolate") == "1",
+	}
+}
+
+// streamSteps streams run's output as server-sent events; the done event
+// names any snapshot taken first, so a failure can offer it back.
+func streamSteps(w http.ResponseWriter, run func(io.Writer) (string, error)) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming not supported", http.StatusInternalServerError)
@@ -6831,21 +6895,12 @@ func handleSiteBranchSwitch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	steps := cli.BranchSteps{
-		Composer: q.Get("composer") == "1",
-		JS:       q.Get("js") == "1",
-		Migrate:  q.Get("migrate") == "1",
-		Snapshot: q.Get("snapshot") == "1",
-		Restore:  q.Get("restore"),
-		Create:   q.Get("create") == "1",
-		Base:     strings.TrimSpace(q.Get("base")),
-	}
 	sw := &sseLineWriter{w: w, f: flusher}
-	snap, switchErr := cli.SwitchSiteBranch(site, branch, steps, sw)
+	snap, runErr := run(sw)
 	sw.flushTail()
-	payload := map[string]any{"ok": switchErr == nil, "snapshot": snap}
-	if switchErr != nil {
-		payload["error"] = switchErr.Error()
+	payload := map[string]any{"ok": runErr == nil, "snapshot": snap}
+	if runErr != nil {
+		payload["error"] = runErr.Error()
 	}
 	fmt.Fprintf(w, "event: done\ndata: %s\n\n", mustJSON(payload))
 	flusher.Flush()

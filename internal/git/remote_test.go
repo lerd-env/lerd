@@ -31,22 +31,40 @@ func head(t *testing.T, dir string) string {
 	return strings.TrimSpace(out)
 }
 
-func TestPull_fastForwards(t *testing.T) {
+func TestFastForward(t *testing.T) {
 	dir, other := pullFixture(t)
 	write(t, filepath.Join(other, "a"), "theirs")
 	gitRun(t, other, "commit", "-q", "-am", "theirs")
 	gitRun(t, other, "push", "-q")
+	gitRun(t, dir, "fetch", "-q")
 
-	if _, err := Pull(dir); err != nil {
-		t.Fatalf("Pull: %v", err)
+	if _, err := FastForward(dir, head(t, other)); err != nil {
+		t.Fatalf("FastForward: %v", err)
 	}
 	if head(t, dir) != head(t, other) {
 		t.Fatal("checkout did not reach the remote's commit")
 	}
 }
 
+// It stops at the commit it is given, even when the remote has moved on since.
+func TestFastForward_stopsAtTheGivenCommit(t *testing.T) {
+	dir, other := pullFixture(t)
+	gitRun(t, other, "commit", "-q", "--allow-empty", "-m", "reviewed")
+	reviewed := head(t, other)
+	gitRun(t, other, "commit", "-q", "--allow-empty", "-m", "later")
+	gitRun(t, other, "push", "-q")
+	gitRun(t, dir, "fetch", "-q")
+
+	if _, err := FastForward(dir, reviewed); err != nil {
+		t.Fatalf("FastForward: %v", err)
+	}
+	if head(t, dir) != reviewed {
+		t.Fatal("checkout went past the reviewed commit")
+	}
+}
+
 // A diverged branch needs a merge or rebase, which is the user's call, not ours.
-func TestPull_refusesDivergedBranch(t *testing.T) {
+func TestFastForward_refusesDivergedBranch(t *testing.T) {
 	dir, other := pullFixture(t)
 	write(t, filepath.Join(other, "a"), "theirs")
 	gitRun(t, other, "commit", "-q", "-am", "theirs")
@@ -54,9 +72,10 @@ func TestPull_refusesDivergedBranch(t *testing.T) {
 	write(t, filepath.Join(dir, "b"), "ours")
 	gitRun(t, dir, "add", "b")
 	gitRun(t, dir, "commit", "-q", "-m", "ours")
+	gitRun(t, dir, "fetch", "-q")
 	before := head(t, dir)
 
-	_, err := Pull(dir)
+	_, err := FastForward(dir, head(t, other))
 	if err == nil {
 		t.Fatal("want refusal on a diverged branch")
 	}
@@ -68,20 +87,6 @@ func TestPull_refusesDivergedBranch(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "hint:") || !strings.Contains(err.Error(), "fast-forward") {
 		t.Errorf("want only git's reason, got %q", err)
-	}
-}
-
-// The error carries git's own words so the UI can say why.
-func TestPull_errorNamesGitsReason(t *testing.T) {
-	dir := t.TempDir()
-	gitRun(t, dir, "init", "-q")
-	write(t, filepath.Join(dir, "a"), "x")
-	gitRun(t, dir, "add", ".")
-	gitRun(t, dir, "commit", "-q", "-m", "x")
-
-	_, err := Pull(dir)
-	if err == nil || !strings.Contains(err.Error(), "no tracking information") {
-		t.Fatalf("want git's no-upstream message, got %v", err)
 	}
 }
 

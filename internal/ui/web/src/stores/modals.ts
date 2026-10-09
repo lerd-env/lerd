@@ -11,6 +11,7 @@ export type ModalKind =
   | "lanProgress"
   | "worktreeAdd"
   | "branchSwitch"
+  | "gitPull"
   | "worktreeRemove"
   | "phpAdd"
   | "phpRebuild"
@@ -207,6 +208,8 @@ export interface ModalState {
   lanAction?: LANAction;
   onSuccess?: () => void;
   branch?: string;
+  // The checkout to pull: '' for the site's main one, else a worktree's branch.
+  pull?: { domain: string; branch: string; label: string };
   envSave?: EnvSaveTarget;
   envRestore?: EnvRestoreTarget;
   envPropose?: EnvProposeTarget;
@@ -294,6 +297,10 @@ export function openWorktreeAddModal(site: Site) {
 
 export function openBranchSwitchModal(site: Site) {
   modal.set({ kind: "branchSwitch", site });
+}
+
+export function openPullModal(domain: string, branch: string, label: string, onDone: () => void) {
+  modal.set({ kind: "gitPull", pull: { domain, branch, label }, onSuccess: onDone });
 }
 
 export function openWorktreeRemoveModal(site: Site, branch: string) {

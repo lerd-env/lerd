@@ -35,6 +35,14 @@ type BranchPlan struct {
 	Migrate           *PlanStep `json:"migrate,omitempty"`
 	MigrationsAdded   int       `json:"migrations_added"`
 	MigrationsMissing int       `json:"migrations_missing"`
+	// Target is the commit a pull plan reviewed, which the pull then stops at;
+	// Branch and Head are what was checked out then, which must still be.
+	Target string `json:"target,omitempty"`
+	Branch string `json:"branch,omitempty"`
+	Head   string `json:"head,omitempty"`
+	// SharedWorktrees are the site's worktrees on the main checkout's database,
+	// which a migration here would change under them.
+	SharedWorktrees []string `json:"shared_worktrees,omitempty"`
 	// Conflicts are files with uncommitted work that the target branch also
 	// changes; git refuses the switch until they are committed or stashed.
 	Conflicts []string `json:"conflicts"`
@@ -52,16 +60,19 @@ type BranchDB struct {
 
 // BranchSteps are what the user chose to run around the switch. Restore loads a
 // snapshot after checkout and before migrations; Create starts the branch at
-// Base, the current commit when empty.
+// Base, the current commit when empty. Isolate gives the shared worktrees a copy
+// of the database before anything moves.
 type BranchSteps struct {
-	Composer, JS, Migrate, Snapshot, Create bool
-	Restore, Base                           string
+	Composer, JS, Migrate, Snapshot, Create, Isolate bool
+	Restore, Base                                    string
 }
 
-// branchDB snapshots and restores the site's database; a seam for tests.
+// branchDB snapshots and restores the site's database and isolates the
+// worktrees sharing it; a seam for tests.
 type branchDB struct {
 	snapshot func() (string, error)
 	restore  func(name string) error
+	isolate  func(out io.Writer) error
 }
 
 var (
@@ -79,8 +90,22 @@ func PlanSiteBranch(site *config.Site, branch string) (BranchPlan, error) {
 	if t, ok := snapshotTargetFor(site.Path); ok {
 		snaps, _ := serviceops.ListSnapshots(t.Service, t.Database, false)
 		p.DB = &BranchDB{Service: t.Service, Database: t.Database, Restore: newestSnapshotFor(snaps, localBranchName(site.Path, branch))}
+		p.SharedWorktrees = sharedWorktrees(site.Path, site.PrimaryDomain())
 	}
 	return p, nil
+}
+
+// sharedWorktrees lists the branches of the site's worktrees that have not
+// been given a database of their own.
+func sharedWorktrees(sitePath, domain string) []string {
+	worktrees, _ := gitpkg.DetectWorktrees(sitePath, domain)
+	var shared []string
+	for _, wt := range worktrees {
+		if !config.WorktreeDBIsolated(wt.Path) {
+			shared = append(shared, wt.Branch)
+		}
+	}
+	return shared
 }
 
 // switching holds the checkouts with a switch in flight, keyed by path.
@@ -113,17 +138,18 @@ func SwitchSiteBranch(site *config.Site, branch string, steps BranchSteps, out i
 		return fw
 	}
 	var db *branchDB
-	if steps.Snapshot || steps.Restore != "" {
+	if steps.Snapshot || steps.Restore != "" || steps.Isolate {
 		t, ok := snapshotTargetFor(site.Path)
 		if !ok {
 			return "", fmt.Errorf("the site's database does not take snapshots")
 		}
-		db = siteBranchDB(site, t, out)
+		db = siteBranchDB(site, site.Path, t, out)
 	}
 	return switchBranch(fwAfter, site.Path, branch, steps, db, out)
 }
 
-func siteBranchDB(site *config.Site, t serviceops.SnapshotTarget, out io.Writer) *branchDB {
+// siteBranchDB snapshots and restores the database of the checkout at path.
+func siteBranchDB(site *config.Site, path string, t serviceops.SnapshotTarget, out io.Writer) *branchDB {
 	emit := func(e serviceops.PhaseEvent) {
 		if e.Message != "" {
 			fmt.Fprintln(out, e.Message)
@@ -134,7 +160,7 @@ func siteBranchDB(site *config.Site, t serviceops.SnapshotTarget, out io.Writer)
 			if err := ensureServiceRunning(t.Service); err != nil {
 				return "", err
 			}
-			meta := serviceops.SnapshotMeta{Site: site.Name, GitBranch: snapshotGitBranch(site.Path)}
+			meta := serviceops.SnapshotMeta{Site: site.Name, GitBranch: snapshotGitBranch(path)}
 			s, err := serviceops.CreateSnapshot(t, branchSnapshotName(meta.GitBranch), meta, emit)
 			if err != nil {
 				return "", err
@@ -146,8 +172,19 @@ func siteBranchDB(site *config.Site, t serviceops.SnapshotTarget, out io.Writer)
 			}
 			return s.Name, nil
 		},
+		// Each worktree gets a copy of the database as it is now, so the
+		// migrations about to run here leave its schema alone.
+		isolate: func(out io.Writer) error {
+			for _, b := range sharedWorktrees(site.Path, site.PrimaryDomain()) {
+				if err := SetWorktreeDBIsolated(site, b, true, "main"); err != nil {
+					return fmt.Errorf("%s: %w", b, err)
+				}
+				fmt.Fprintln(out, "Worktree "+b+" now has its own copy of the database")
+			}
+			return nil
+		},
 		restore: func(name string) error {
-			now, err := restoreTarget(t, func() (serviceops.SnapshotTarget, bool) { return snapshotTargetFor(site.Path) })
+			now, err := restoreTarget(t, func() (serviceops.SnapshotTarget, bool) { return snapshotTargetFor(path) })
 			if err != nil {
 				return err
 			}
@@ -282,22 +319,35 @@ func installStep(label string, diff map[string]byte, prefix string, manifests []
 }
 
 func switchBranch(fwAfter func() *config.Framework, path, branch string, steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
+	return runAround(fwAfter, path, func() (string, error) {
+		if steps.Create {
+			return gitpkg.SwitchNew(path, branch, steps.Base)
+		}
+		return gitpkg.Switch(path, branch)
+	}, steps, db, out)
+}
+
+// runAround moves the checkout's code with move and runs the chosen steps
+// around it: the snapshot before, then restore, installs and migrate after.
+func runAround(fwAfter func() *config.Framework, path string, move func() (string, error), steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
 	snap := ""
 	if steps.Snapshot && db != nil {
 		name, err := db.snapshot()
 		if err != nil {
-			return "", fmt.Errorf("snapshot before switching: %w", err)
+			return "", fmt.Errorf("snapshot before the code moves: %w", err)
 		}
 		snap = name
 		fmt.Fprintln(out, "Database saved as snapshot "+name)
 	}
-	var msg string
-	var err error
-	if steps.Create {
-		msg, err = gitpkg.SwitchNew(path, branch, steps.Base)
-	} else {
-		msg, err = gitpkg.Switch(path, branch)
+	if steps.Isolate {
+		if db == nil || db.isolate == nil {
+			return snap, fmt.Errorf("the site's database cannot be copied for its worktrees")
+		}
+		if err := db.isolate(out); err != nil {
+			return snap, fmt.Errorf("isolating worktrees: %w", err)
+		}
 	}
+	msg, err := move()
 	if err != nil {
 		return snap, err
 	}
