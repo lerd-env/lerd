@@ -1,6 +1,6 @@
 <script lang="ts">
   import { gitRemote, type GitRemoteOp } from '$stores/sites';
-  import { openErrorModal } from '$stores/modals';
+  import { openErrorModal, openPullModal } from '$stores/modals';
   import type { GitStatus } from '$lib/gitStatus';
   import { tooltip } from '$lib/tooltip';
   import ConfirmModal from './ConfirmModal.svelte';
@@ -42,11 +42,13 @@
   }
 
   // Pull and push change the branch or the remote, so they ask first; fetch
-  // only refreshes what is known about the remote.
+  // only refreshes what is known about the remote. Pull asks with what the
+  // incoming commits call for, the way a branch switch does.
   let confirming = $state<(typeof allOps)[number] | null>(null);
   function ask(o: (typeof allOps)[number]) {
     if (o.op !== 'fetch' && diverged) return;
     if (o.op === 'fetch') void run(o.op, o.failed());
+    else if (o.op === 'pull') openPullModal(domain, branch, branchLabel, onDone);
     else confirming = o;
   }
   function confirmed() {
@@ -119,17 +121,11 @@
 
 <ConfirmModal
   open={confirming !== null}
-  title={confirming?.op !== 'push'
-    ? m.gitSync_pullTitle({ branch: branchLabel })
-    : publishing
-      ? m.gitSync_publishTitle({ branch: branchLabel })
-      : m.gitSync_pushTitle({ branch: branchLabel })}
-  body={confirming?.op !== 'push'
-    ? m.gitSync_pullBody({ branch: branchLabel })
-    : publishing
-      ? m.gitSync_publishBody({ branch: branchLabel })
-      : m.gitSync_pushBody({ branch: branchLabel, count: status.ahead })}
-  confirmLabel={confirming?.op !== 'push' ? m.gitSync_pull() : publishing ? m.gitSync_publish() : m.gitSync_push()}
+  title={publishing ? m.gitSync_publishTitle({ branch: branchLabel }) : m.gitSync_pushTitle({ branch: branchLabel })}
+  body={publishing
+    ? m.gitSync_publishBody({ branch: branchLabel })
+    : m.gitSync_pushBody({ branch: branchLabel, count: status.ahead })}
+  confirmLabel={publishing ? m.gitSync_publish() : m.gitSync_push()}
   onconfirm={confirmed}
   onclose={() => (confirming = null)}
 />

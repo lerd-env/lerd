@@ -34,6 +34,8 @@ var loopbackOnlyRoutes = []string{
 	"/api/settings/mcp",         // writes AI assistants' config under the host user's home
 	"/api/sites/branch-switch",  // runs composer, npm and migrations; restores database snapshots
 	"/api/sites/branch-plan",    // reads the site's database and its snapshots
+	"/api/sites/pull",           // pulls with the host user's git credentials, then runs composer, npm and migrations
+	"/api/sites/pull-plan",      // fetches with the host user's git credentials
 }
 
 // loopbackOnlyRoutePrefixes are endpoint subtrees restricted in full, so a
@@ -60,8 +62,7 @@ var loopbackOnlyRoutePrefixes = []string{
 var loopbackOnlySiteSubactions = []string{
 	"/terminal",  // opens an interactive shell on the host
 	"/env",       // raw .env content + backups + restore (APP_KEY, DB creds, tokens)
-	"/git:fetch", // the three talk to the remote with the host user's git credentials
-	"/git:pull",
+	"/git:fetch", // both talk to the remote with the host user's git credentials
 	"/git:push",
 }
 

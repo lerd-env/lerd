@@ -128,7 +128,7 @@ func TestHandleSiteGitStatus_ignoredByParent(t *testing.T) {
 }
 
 // Pull targets the checkout the tab shows: a worktree's branch moves, main's does not.
-func TestHandleSiteAction_gitPullWorktree(t *testing.T) {
+func TestHandleSitePull_worktree(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	remote, sitePath, other := t.TempDir(), t.TempDir(), t.TempDir()
@@ -149,37 +149,16 @@ func TestHandleSiteAction_gitPullWorktree(t *testing.T) {
 	mainBefore := runGitOutput(sitePath, "rev-parse", "HEAD")
 
 	rec := httptest.NewRecorder()
-	handleSiteAction(rec, httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/git:pull?branch=feature", nil))
+	handleSitePull(rec, httptest.NewRequest(http.MethodPost, "/api/sites/pull?domain=acme.test&branch=feature", nil))
 
 	if !strings.Contains(rec.Body.String(), `"ok":true`) {
 		t.Fatalf("want ok, got %s", rec.Body.String())
-	}
-	// A pull that changed nothing must still say so, or the click looks dead.
-	if !strings.Contains(rec.Body.String(), `"message":"`) {
-		t.Errorf("want git's summary in the response, got %s", rec.Body.String())
 	}
 	if got, want := runGitOutput(wtPath, "rev-parse", "HEAD"), runGitOutput(other, "rev-parse", "HEAD"); got != want {
 		t.Errorf("worktree not fast-forwarded: %s want %s", got, want)
 	}
 	if runGitOutput(sitePath, "rev-parse", "HEAD") != mainBefore {
 		t.Error("main checkout moved")
-	}
-}
-
-func TestHandleSiteAction_gitPullUnknownWorktree(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	sitePath := t.TempDir()
-	gitIn(t, sitePath, "init", "-q", "-b", "main")
-	if err := config.AddSite(config.Site{Name: "acme", Path: sitePath, Domains: []string{"acme.test"}}); err != nil {
-		t.Fatal(err)
-	}
-
-	rec := httptest.NewRecorder()
-	handleSiteAction(rec, httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/git:pull?branch=nope", nil))
-
-	if !strings.Contains(rec.Body.String(), "unknown worktree branch") {
-		t.Fatalf("want refusal naming the branch problem, got %s", rec.Body.String())
 	}
 }
 
@@ -300,7 +279,7 @@ func TestHandleSiteBranchSwitch_createsBranch(t *testing.T) {
 }
 
 // A pull fast-forwards files, so it waits out a switch on the same checkout.
-func TestHandleSiteAction_gitPullWaitsForASwitch(t *testing.T) {
+func TestHandleSitePull_waitsForASwitch(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	sitePath := t.TempDir()
@@ -312,9 +291,75 @@ func TestHandleSiteAction_gitPullWaitsForASwitch(t *testing.T) {
 	defer release()
 
 	rec := httptest.NewRecorder()
-	handleSiteAction(rec, httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/git:pull", nil))
+	handleSitePull(rec, httptest.NewRequest(http.MethodPost, "/api/sites/pull?domain=acme.test", nil))
 
 	if !strings.Contains(rec.Body.String(), "branch switch is running") {
 		t.Fatalf("want a refusal while a switch runs, got %s", rec.Body.String())
+	}
+}
+
+// pullSite links acme.test at a checkout whose remote has one commit adding
+// composer.lock that the checkout has not fetched yet.
+func pullSite(t *testing.T) (sitePath, other string) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	remote, sitePath, other := t.TempDir(), t.TempDir(), t.TempDir()
+	gitIn(t, remote, "init", "-q", "--bare", "-b", "main")
+	gitIn(t, sitePath, "init", "-q", "-b", "main")
+	if err := os.WriteFile(filepath.Join(sitePath, "composer.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, sitePath, "add", ".")
+	gitIn(t, sitePath, "commit", "-q", "-m", "init")
+	gitIn(t, sitePath, "remote", "add", "origin", remote)
+	gitIn(t, sitePath, "push", "-q", "-u", "origin", "main")
+	gitIn(t, other, "clone", "-q", remote, ".")
+	if err := os.WriteFile(filepath.Join(other, "composer.lock"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, other, "add", ".")
+	gitIn(t, other, "commit", "-q", "-m", "lock")
+	gitIn(t, other, "push", "-q")
+	if err := config.AddSite(config.Site{Name: "acme", Path: sitePath, Domains: []string{"acme.test"}}); err != nil {
+		t.Fatal(err)
+	}
+	return sitePath, other
+}
+
+func TestHandleSitePullPlan(t *testing.T) {
+	pullSite(t)
+
+	rec := httptest.NewRecorder()
+	handleSitePullPlan(rec, httptest.NewRequest(http.MethodGet, "/api/sites/pull-plan?domain=acme.test", nil))
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `"changed":"composer.lock"`) || !strings.Contains(body, `"behind":1`) {
+		t.Fatalf("want composer due for the incoming lockfile, got %s", body)
+	}
+}
+
+func TestHandleSitePull(t *testing.T) {
+	sitePath, other := pullSite(t)
+
+	rec := httptest.NewRecorder()
+	handleSitePull(rec, httptest.NewRequest(http.MethodPost, "/api/sites/pull?domain=acme.test", nil))
+
+	if !strings.Contains(rec.Body.String(), "event: done") || !strings.Contains(rec.Body.String(), `"ok":true`) {
+		t.Fatalf("want a done event with ok, got %s", rec.Body.String())
+	}
+	if runGitOutput(sitePath, "rev-parse", "HEAD") != runGitOutput(other, "rev-parse", "HEAD") {
+		t.Error("checkout not fast-forwarded")
+	}
+}
+
+func TestHandleSitePull_unknownWorktree(t *testing.T) {
+	pullSite(t)
+
+	rec := httptest.NewRecorder()
+	handleSitePull(rec, httptest.NewRequest(http.MethodPost, "/api/sites/pull?domain=acme.test&branch=nope", nil))
+
+	if !strings.Contains(rec.Body.String(), "unknown worktree branch") {
+		t.Fatalf("want the worktree refusal, got %s", rec.Body.String())
 	}
 }

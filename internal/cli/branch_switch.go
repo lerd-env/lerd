@@ -118,12 +118,13 @@ func SwitchSiteBranch(site *config.Site, branch string, steps BranchSteps, out i
 		if !ok {
 			return "", fmt.Errorf("the site's database does not take snapshots")
 		}
-		db = siteBranchDB(site, t, out)
+		db = siteBranchDB(site, site.Path, t, out)
 	}
 	return switchBranch(fwAfter, site.Path, branch, steps, db, out)
 }
 
-func siteBranchDB(site *config.Site, t serviceops.SnapshotTarget, out io.Writer) *branchDB {
+// siteBranchDB snapshots and restores the database of the checkout at path.
+func siteBranchDB(site *config.Site, path string, t serviceops.SnapshotTarget, out io.Writer) *branchDB {
 	emit := func(e serviceops.PhaseEvent) {
 		if e.Message != "" {
 			fmt.Fprintln(out, e.Message)
@@ -134,7 +135,7 @@ func siteBranchDB(site *config.Site, t serviceops.SnapshotTarget, out io.Writer)
 			if err := ensureServiceRunning(t.Service); err != nil {
 				return "", err
 			}
-			meta := serviceops.SnapshotMeta{Site: site.Name, GitBranch: snapshotGitBranch(site.Path)}
+			meta := serviceops.SnapshotMeta{Site: site.Name, GitBranch: snapshotGitBranch(path)}
 			s, err := serviceops.CreateSnapshot(t, branchSnapshotName(meta.GitBranch), meta, emit)
 			if err != nil {
 				return "", err
@@ -147,7 +148,7 @@ func siteBranchDB(site *config.Site, t serviceops.SnapshotTarget, out io.Writer)
 			return s.Name, nil
 		},
 		restore: func(name string) error {
-			now, err := restoreTarget(t, func() (serviceops.SnapshotTarget, bool) { return snapshotTargetFor(site.Path) })
+			now, err := restoreTarget(t, func() (serviceops.SnapshotTarget, bool) { return snapshotTargetFor(path) })
 			if err != nil {
 				return err
 			}
@@ -282,22 +283,27 @@ func installStep(label string, diff map[string]byte, prefix string, manifests []
 }
 
 func switchBranch(fwAfter func() *config.Framework, path, branch string, steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
+	return runAround(fwAfter, path, func() (string, error) {
+		if steps.Create {
+			return gitpkg.SwitchNew(path, branch, steps.Base)
+		}
+		return gitpkg.Switch(path, branch)
+	}, steps, db, out)
+}
+
+// runAround moves the checkout's code with move and runs the chosen steps
+// around it: the snapshot before, then restore, installs and migrate after.
+func runAround(fwAfter func() *config.Framework, path string, move func() (string, error), steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
 	snap := ""
 	if steps.Snapshot && db != nil {
 		name, err := db.snapshot()
 		if err != nil {
-			return "", fmt.Errorf("snapshot before switching: %w", err)
+			return "", fmt.Errorf("snapshot before the code moves: %w", err)
 		}
 		snap = name
 		fmt.Fprintln(out, "Database saved as snapshot "+name)
 	}
-	var msg string
-	var err error
-	if steps.Create {
-		msg, err = gitpkg.SwitchNew(path, branch, steps.Base)
-	} else {
-		msg, err = gitpkg.Switch(path, branch)
-	}
+	msg, err := move()
 	if err != nil {
 		return snap, err
 	}

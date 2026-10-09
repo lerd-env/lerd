@@ -1,9 +1,9 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { gitRemote, openErrorModal } = vi.hoisted(() => ({ gitRemote: vi.fn(), openErrorModal: vi.fn() }));
+const { gitRemote, openErrorModal, openPullModal } = vi.hoisted(() => ({ gitRemote: vi.fn(), openErrorModal: vi.fn(), openPullModal: vi.fn() }));
 vi.mock('$stores/sites', () => ({ gitRemote }));
-vi.mock('$stores/modals', () => ({ openErrorModal }));
+vi.mock('$stores/modals', () => ({ openErrorModal, openPullModal }));
 
 import GitSync from './GitSync.svelte';
 
@@ -13,6 +13,7 @@ describe('GitSync', () => {
   beforeEach(() => {
     gitRemote.mockReset();
     openErrorModal.mockReset();
+    openPullModal.mockReset();
   });
 
   it('shows how far behind or ahead the checkout is', () => {
@@ -31,17 +32,28 @@ describe('GitSync', () => {
   });
 
   it('runs the op on the shown checkout and reports git’s summary', async () => {
-    gitRemote.mockResolvedValue({ ok: true, message: 'Already up to date.' });
+    gitRemote.mockResolvedValue({ ok: true, message: 'main -> main' });
     const onDone = vi.fn();
-    render(GitSync, { props: { domain: 'acme.test', branch: 'feature', branchLabel: 'feature', status: synced, onDone } });
+    render(GitSync, { props: { domain: 'acme.test', branch: 'feature', branchLabel: 'feature', status: { ...synced, ahead: 1 }, onDone } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Push to upstream' }));
+    expect(gitRemote).not.toHaveBeenCalled();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Push' }));
+
+    expect(gitRemote).toHaveBeenCalledWith('acme.test', 'push', 'feature');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'main -> main' })).toBeInTheDocument());
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  // Pull asks through its own dialog, which lists what the incoming commits call for.
+  it('opens the pull dialog for the shown checkout', async () => {
+    const onDone = vi.fn();
+    render(GitSync, { props: { domain: 'acme.test', branch: 'feature', branchLabel: 'feature', status: { ...synced, behind: 2 }, onDone } });
 
     await fireEvent.click(screen.getByRole('button', { name: 'Pull from upstream' }));
-    expect(gitRemote).not.toHaveBeenCalled();
-    await fireEvent.click(await screen.findByRole('button', { name: 'Pull' }));
 
-    expect(gitRemote).toHaveBeenCalledWith('acme.test', 'pull', 'feature');
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Already up to date.' })).toBeInTheDocument());
-    expect(onDone).toHaveBeenCalled();
+    expect(openPullModal).toHaveBeenCalledWith('acme.test', 'feature', 'feature', onDone);
+    expect(gitRemote).not.toHaveBeenCalled();
   });
 
   // A quiet fetch prints nothing, which still has to read as done.
@@ -55,8 +67,8 @@ describe('GitSync', () => {
   });
 
   it('does nothing when the confirmation is cancelled', async () => {
-    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', status: synced } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Pull from upstream' }));
+    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', status: { ...synced, ahead: 1 } } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Push to upstream' }));
     await fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
     expect(gitRemote).not.toHaveBeenCalled();
   });
@@ -71,6 +83,7 @@ describe('GitSync', () => {
     await fireEvent.click(pull);
     await fireEvent.click(push);
     expect(screen.queryByText('Pull main?')).toBeNull();
+    expect(openPullModal).not.toHaveBeenCalled();
     expect(gitRemote).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Fetch from upstream' })).toBeEnabled();
   });

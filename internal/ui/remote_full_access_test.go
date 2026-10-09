@@ -228,7 +228,8 @@ func TestIsLoopbackOnlyPath(t *testing.T) {
 		// database snapshot; pull and push act with the host user's git credentials.
 		{"/api/sites/branch-switch", true},
 		{"/api/sites/branch-plan", true},
-		{"/api/sites/myapp.test/git:pull", true},
+		{"/api/sites/pull-plan", true},
+		{"/api/sites/pull", true},
 		{"/api/sites/myapp.test/git:push", true},
 		{"/api/sites/myapp.test/git:fetch", true},
 		{"/api/sites/git-status", false},

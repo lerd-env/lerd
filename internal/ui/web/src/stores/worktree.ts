@@ -169,12 +169,37 @@ export async function streamBranchSwitch(
   steps: BranchSteps,
   onEvent: (e: BranchSwitchEvent) => void
 ): Promise<void> {
-  const qs = new URLSearchParams({ domain, branch });
-  for (const k of ['composer', 'js', 'migrate', 'snapshot'] as const) if (steps[k]) qs.set(k, '1');
+  const qs = stepsQuery(domain, branch, steps);
   if (steps.restore) qs.set('restore', steps.restore);
   if (steps.create) qs.set('create', '1');
   if (steps.base) qs.set('base', steps.base);
-  const res = await apiFetch('/api/sites/branch-switch?' + qs.toString(), { method: 'POST' });
+  await streamSteps('/api/sites/branch-switch?' + qs.toString(), onEvent);
+}
+
+// pullPlan fetches and compares a checkout ('' for the main one, else the
+// worktree's branch) with its upstream, the same way a switch is planned.
+export async function pullPlan(domain: string, branch: string): Promise<BranchPlan> {
+  return apiJson<BranchPlan>('/api/sites/pull-plan?' + new URLSearchParams({ domain, branch }).toString());
+}
+
+// streamPull fast-forwards the checkout and runs the chosen steps, streaming their output.
+export async function streamPull(
+  domain: string,
+  branch: string,
+  steps: Omit<BranchSteps, 'restore'>,
+  onEvent: (e: BranchSwitchEvent) => void
+): Promise<void> {
+  await streamSteps('/api/sites/pull?' + stepsQuery(domain, branch, steps).toString(), onEvent);
+}
+
+function stepsQuery(domain: string, branch: string, steps: Omit<BranchSteps, 'restore'>): URLSearchParams {
+  const qs = new URLSearchParams({ domain, branch });
+  for (const k of ['composer', 'js', 'migrate', 'snapshot'] as const) if (steps[k]) qs.set(k, '1');
+  return qs;
+}
+
+async function streamSteps(url: string, onEvent: (e: BranchSwitchEvent) => void): Promise<void> {
+  const res = await apiFetch(url, { method: 'POST' });
   await readSSE(res, (event, data) => {
     if (event !== 'done') {
       onEvent({ line: data });
