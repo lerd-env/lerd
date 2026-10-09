@@ -533,3 +533,21 @@ func TestJSNeedsInstall_lerdMarkerOlderThanLockfileStillAsks(t *testing.T) {
 		t.Error("a lockfile written after lerd's marker must still require an install")
 	}
 }
+
+// A marker lerd could not write leaves the rescan reinstalling every minute, so
+// the failure is reported instead of passing as a clean install.
+func TestInstallDependencies_unwritableLerdMarkerIsReported(t *testing.T) {
+	stubJSInstall(t, func(projectPath string) {
+		nm := filepath.Join(projectPath, "node_modules")
+		touch(t, filepath.Join(nm, "left-pad", "index.js"))
+		if err := os.Chmod(nm, 0o555); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(nm, 0o755) })
+	})
+	dir := jsProject(t, `{"lockfileVersion":1}`)
+
+	if err := InstallDependencies(dir, io.Discard); err == nil {
+		t.Error("a marker that could not be written must surface as an error")
+	}
+}

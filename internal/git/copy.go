@@ -122,7 +122,9 @@ func InstallDependencies(projectPath string, out io.Writer) error {
 			errs = append(errs, err)
 		} else {
 			stampInstallMarker(marker)
-			stampLerdJSMarker(projectPath, marker)
+			if err := stampLerdJSMarker(projectPath, marker); err != nil {
+				errs = append(errs, fmt.Errorf("js install marker: %w", err))
+			}
 		}
 	}
 
@@ -206,11 +208,15 @@ const lerdJSInstallMarker = ".lerd-installed"
 // stampLerdJSMarker writes lerd's own marker after a successful install whose
 // package manager wrote no marker. Without node_modules nothing was installed,
 // so nothing is written and the check keeps asking.
-func stampLerdJSMarker(projectPath, marker string) {
+func stampLerdJSMarker(projectPath, marker string) error {
 	if _, err := os.Stat(marker); err == nil {
-		return
+		return nil
 	}
-	_ = os.WriteFile(filepath.Join(projectPath, "node_modules", lerdJSInstallMarker), nil, 0o644)
+	err := os.WriteFile(filepath.Join(projectPath, "node_modules", lerdJSInstallMarker), nil, 0o644)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 // HasJSPackages reports whether projectPath has a package.json that installs
