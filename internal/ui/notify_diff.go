@@ -14,9 +14,7 @@ import (
 )
 
 // siteDomainForRoute resolves the site an event or worker names to its primary
-// domain, which the dashboard's hash router keys the Sites tab by. "" when no
-// registered site matches, so the caller links to the sites list rather than
-// to a site that does not exist.
+// domain, or "" when none matches, so the link falls back to the sites list.
 func siteDomainForRoute(name string) string {
 	if s := registeredSite(name); s != nil {
 		return s.PrimaryDomain()
@@ -24,10 +22,8 @@ func siteDomainForRoute(name string) string {
 	return ""
 }
 
-// registeredSite finds the site a name belongs to: the site's own name, a
-// worktree worker's "<site>/<worktree folder>", or the project folder a CLI run
-// without LERD_SITE falls back to, which differs from the name when the site
-// was linked under another one.
+// registeredSite finds the site a name belongs to: its own name, a worktree
+// worker's "<site>/<worktree folder>", or the folder a CLI run reports.
 func registeredSite(name string) *config.Site {
 	parent, _, _ := strings.Cut(name, "/")
 	if parent == "" {
@@ -37,23 +33,38 @@ func registeredSite(name string) *config.Site {
 	if err != nil {
 		return nil
 	}
-	for _, s := range reg.Sites {
-		if s.Name == parent {
-			return &s
-		}
+	want := parent
+	if site, ok := siteFolderNames(reg.Sites)[parent]; ok {
+		want = site
 	}
 	for _, s := range reg.Sites {
-		if filepath.Base(s.Path) == parent {
+		if s.Name == want {
 			return &s
 		}
 	}
 	return nil
 }
 
-// newEventSiteNamer returns the debug receiver's site resolver: an event that
-// names a site's folder is put back on that site, so it shows in the site's
-// Debug tab. The registry is reread at most once per ttl, since query events
-// arrive by the hundred.
+// siteFolderNames maps a project folder to its site where the folder is not
+// itself a site's name and no other site's folder shares it.
+func siteFolderNames(sites []config.Site) map[string]string {
+	names := map[string]bool{}
+	seen := map[string]int{}
+	for _, s := range sites {
+		names[s.Name] = true
+		seen[filepath.Base(s.Path)]++
+	}
+	out := map[string]string{}
+	for _, s := range sites {
+		if f := filepath.Base(s.Path); !names[f] && seen[f] == 1 {
+			out[f] = s.Name
+		}
+	}
+	return out
+}
+
+// newEventSiteNamer puts an event that names a site's folder back on that
+// site, rereading the registry at most once per ttl as events come by the hundred.
 func newEventSiteNamer(ttl time.Duration) func(string) string {
 	var mu sync.Mutex
 	var loaded time.Time
@@ -68,15 +79,7 @@ func newEventSiteNamer(ttl time.Duration) func(string) string {
 			loaded = time.Now()
 			byFolder = map[string]string{}
 			if reg, err := config.LoadSites(); err == nil {
-				names := map[string]bool{}
-				for _, s := range reg.Sites {
-					names[s.Name] = true
-				}
-				for _, s := range reg.Sites {
-					if f := filepath.Base(s.Path); !names[f] {
-						byFolder[f] = s.Name
-					}
-				}
+				byFolder = siteFolderNames(reg.Sites)
 			}
 		}
 		if site, ok := byFolder[name]; ok {

@@ -175,3 +175,24 @@ func TestEventSiteNamer_RenamesFolderOnly(t *testing.T) {
 		}
 	}
 }
+
+// Two projects in folders of the same name say nothing about which one an event
+// came from, so neither claims it.
+func TestSiteFolderNames_SkipsSharedFolder(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	for _, s := range []config.Site{
+		{Name: "alpha", Domains: []string{"alpha.test"}, Path: filepath.Join(t.TempDir(), "app")},
+		{Name: "beta", Domains: []string{"beta.test"}, Path: filepath.Join(t.TempDir(), "app")},
+	} {
+		if err := config.AddSite(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := newEventSiteNamer(time.Minute)("app"); got != "app" {
+		t.Errorf("namer(app) = %q, want app", got)
+	}
+	if got := debugRouteForContext(dumps.Context{Type: "cli", Site: "app"}, dumps.KindJob); got != "#sites" {
+		t.Errorf("route = %q, want #sites", got)
+	}
+}
