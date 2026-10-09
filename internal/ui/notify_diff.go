@@ -86,6 +86,15 @@ func newEventSiteNamer(ttl time.Duration) func(string) string {
 	}
 }
 
+// workerFailureURL opens the site on Overview, where its worker cards and heal
+// action are, rather than on whichever tab was last looked at.
+func workerFailureURL(site string) string {
+	if d := siteDomainForRoute(site); d != "" {
+		return "#sites/" + d + "/overview"
+	}
+	return "#sites"
+}
+
 // newWorkerFailures returns workers in cur whose Unit names weren't in prev.
 // Identity by unit only — a state change on a known-failed unit doesn't
 // fire a fresh notification.
@@ -124,7 +133,7 @@ func notificationForWorkerFailure(w workerheal.UnhealthyWorker) push.Notificatio
 		Body:     worker + " is " + state + ". Open lerd to heal.",
 		Params:   map[string]string{"site": site, "worker": worker, "state": state},
 		Tag:      "lerd-worker-" + w.Unit,
-		URL:      "#sites/" + siteDomainForRoute(site),
+		URL:      workerFailureURL(site),
 		Data:     map[string]string{"unit": w.Unit, "site": site},
 		Urgency:  "high",
 		TTL:      300,

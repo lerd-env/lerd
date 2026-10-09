@@ -68,7 +68,7 @@ func TestSlowRouteNotifier_firesOncePerRoute(t *testing.T) {
 	if len(first) != 1 {
 		t.Fatalf("first pass: got %d notifications, want 1", len(first))
 	}
-	if first[0].Kind != "slow_route" || first[0].URL != "#sites/acme.test/dumps" {
+	if first[0].Kind != "slow_route" || first[0].URL != "#sites/acme.test/overview" {
 		t.Errorf("notification = %+v", first[0])
 	}
 
