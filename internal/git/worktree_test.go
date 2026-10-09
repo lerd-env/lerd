@@ -125,6 +125,9 @@ func TestDetectWorktrees_oneWorktree(t *testing.T) {
 	if wt.Branch != "feature-my-thing" {
 		t.Errorf("Branch = %q, want %q", wt.Branch, "feature-my-thing")
 	}
+	if wt.GitBranch != "feature/my-thing" {
+		t.Errorf("GitBranch = %q, want %q", wt.GitBranch, "feature/my-thing")
+	}
 	if wt.Domain != "feature-my-thing.mysite.test" {
 		t.Errorf("Domain = %q, want %q", wt.Domain, "feature-my-thing.mysite.test")
 	}

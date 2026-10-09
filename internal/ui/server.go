@@ -868,6 +868,7 @@ func buildStatusJSON() ([]byte, error) { return []byte(mustJSON(buildStatus())),
 // the worktree's .lerd.yaml set them explicitly or it's inherited.
 type WorktreeResponse struct {
 	Branch              string `json:"branch"`
+	GitBranch           string `json:"git_branch,omitempty"`
 	Domain              string `json:"domain"`
 	Path                string `json:"path"`
 	PHPVersion          string `json:"php_version,omitempty"`
@@ -1191,6 +1192,7 @@ func buildSites() ([]SiteResponse, error) {
 			wtTunnel, _ := cli.TunnelStatus(e.Name, wt.Branch)
 			worktreeResponses = append(worktreeResponses, WorktreeResponse{
 				Branch:               wt.Branch,
+				GitBranch:            wt.GitBranch,
 				Domain:               wt.Domain,
 				Path:                 wt.Path,
 				PHPVersion:           wt.PHPVersion,

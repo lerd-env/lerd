@@ -14,10 +14,11 @@ import (
 
 // Worktree represents a git worktree checkout for a registered site.
 type Worktree struct {
-	Name   string // subdirectory name under .git/worktrees/
-	Branch string // sanitized branch (subdomain-safe)
-	Path   string // absolute path to checkout dir
-	Domain string // "<sanitized-branch>.<siteDomain>"
+	Name      string // subdirectory name under .git/worktrees/
+	Branch    string // sanitized branch (subdomain-safe)
+	GitBranch string // the branch as git names it, slashes and full length kept
+	Path      string // absolute path to checkout dir
+	Domain    string // "<sanitized-branch>.<siteDomain>"
 }
 
 // MainBranch returns the current branch of the main repo checkout at sitePath,
@@ -82,10 +83,11 @@ func DetectWorktrees(sitePath, siteDomain string) ([]Worktree, error) {
 
 		sanitized := SanitizeBranch(branch)
 		result = append(result, Worktree{
-			Name:   name,
-			Branch: sanitized,
-			Path:   path,
-			Domain: sanitized + "." + siteDomain,
+			Name:      name,
+			Branch:    sanitized,
+			GitBranch: branch,
+			Path:      path,
+			Domain:    sanitized + "." + siteDomain,
 		})
 	}
 	return result, nil

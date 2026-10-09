@@ -61,6 +61,7 @@ type WorkerInfo struct {
 // the *Override flags say which it is so callers can render an "inherited" hint.
 type WorktreeInfo struct {
 	Branch              string
+	GitBranch           string
 	Domain              string
 	Path                string
 	PHPVersion          string
@@ -744,6 +745,7 @@ func (e *EnrichedSite) enrichGit() {
 		for _, wt := range wts {
 			info := WorktreeInfo{
 				Branch:      wt.Branch,
+				GitBranch:   wt.GitBranch,
 				Domain:      wt.Domain,
 				Path:        wt.Path,
 				PHPVersion:  e.PHPVersion,
