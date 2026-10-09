@@ -17,11 +17,16 @@
   }
   let { domain, branch, branchLabel, status, onDone = () => {} }: Props = $props();
 
-  const ops: { op: GitRemoteOp; label: () => string; failed: () => string }[] = [
+  const allOps: { op: GitRemoteOp; label: () => string; failed: () => string }[] = [
     { op: 'fetch', label: m.sites_gitFetch, failed: m.sites_gitFetchFailed },
     { op: 'pull', label: m.sites_gitPull, failed: m.sites_gitPullFailed },
     { op: 'push', label: m.sites_gitPush, failed: m.sites_gitPushFailed }
   ];
+  // With no upstream there is nothing to fetch or pull; the push publishes to origin.
+  const publishing = $derived(!status.upstream);
+  const ops = $derived(
+    publishing ? [{ op: 'push' as const, label: m.sites_gitPublish, failed: m.sites_gitPushFailed }] : allOps
+  );
 
   // Results are keyed by checkout so switching tabs never shows another one's ✓.
   let busy = $state<{ key: string; op: GitRemoteOp } | null>(null);
@@ -38,8 +43,8 @@
 
   // Pull and push change the branch or the remote, so they ask first; fetch
   // only refreshes what is known about the remote.
-  let confirming = $state<(typeof ops)[number] | null>(null);
-  function ask(o: (typeof ops)[number]) {
+  let confirming = $state<(typeof allOps)[number] | null>(null);
+  function ask(o: (typeof allOps)[number]) {
     if (o.op !== 'fetch' && diverged) return;
     if (o.op === 'fetch') void run(o.op, o.failed());
     else confirming = o;
@@ -76,7 +81,7 @@
     <button
       type="button"
       onclick={() => ask(o)}
-      disabled={busy?.key === key || (o.op === 'push' && n === 0)}
+      disabled={busy?.key === key || (o.op === 'push' && n === 0 && !publishing)}
       aria-disabled={held}
       use:tooltip={label}
       aria-label={label}
@@ -114,11 +119,17 @@
 
 <ConfirmModal
   open={confirming !== null}
-  title={confirming?.op === 'push' ? m.gitSync_pushTitle({ branch: branchLabel }) : m.gitSync_pullTitle({ branch: branchLabel })}
-  body={confirming?.op === 'push'
-    ? m.gitSync_pushBody({ branch: branchLabel, count: status.ahead })
-    : m.gitSync_pullBody({ branch: branchLabel })}
-  confirmLabel={confirming?.op === 'push' ? m.gitSync_push() : m.gitSync_pull()}
+  title={confirming?.op !== 'push'
+    ? m.gitSync_pullTitle({ branch: branchLabel })
+    : publishing
+      ? m.gitSync_publishTitle({ branch: branchLabel })
+      : m.gitSync_pushTitle({ branch: branchLabel })}
+  body={confirming?.op !== 'push'
+    ? m.gitSync_pullBody({ branch: branchLabel })
+    : publishing
+      ? m.gitSync_publishBody({ branch: branchLabel })
+      : m.gitSync_pushBody({ branch: branchLabel, count: status.ahead })}
+  confirmLabel={confirming?.op !== 'push' ? m.gitSync_pull() : publishing ? m.gitSync_publish() : m.gitSync_push()}
   onconfirm={confirmed}
   onclose={() => (confirming = null)}
 />
