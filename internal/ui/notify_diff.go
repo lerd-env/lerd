@@ -1,27 +1,89 @@
 package ui
 
 import (
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/push"
 	"github.com/geodro/lerd/internal/workerheal"
 )
 
-// siteDomainForRoute resolves a registered site name to its primary domain
-// so the notification URL can be opened by the dashboard's hash router,
-// which keys the Sites tab by domain. Falls back to the input when no
-// registered site matches (test fixtures, races between unlink and a
-// late-arriving notification).
+// siteDomainForRoute resolves the site an event or worker names to its primary
+// domain, which the dashboard's hash router keys the Sites tab by. "" when no
+// registered site matches, so the caller links to the sites list rather than
+// to a site that does not exist.
 func siteDomainForRoute(name string) string {
-	if s, err := config.FindSite(name); err == nil && s != nil {
-		if d := s.PrimaryDomain(); d != "" {
-			return d
+	if s := registeredSite(name); s != nil {
+		return s.PrimaryDomain()
+	}
+	return ""
+}
+
+// registeredSite finds the site a name belongs to: the site's own name, a
+// worktree worker's "<site>/<worktree folder>", or the project folder a CLI run
+// without LERD_SITE falls back to, which differs from the name when the site
+// was linked under another one.
+func registeredSite(name string) *config.Site {
+	parent, _, _ := strings.Cut(name, "/")
+	if parent == "" {
+		return nil
+	}
+	reg, err := config.LoadSites()
+	if err != nil {
+		return nil
+	}
+	for _, s := range reg.Sites {
+		if s.Name == parent {
+			return &s
 		}
 	}
-	return name
+	for _, s := range reg.Sites {
+		if filepath.Base(s.Path) == parent {
+			return &s
+		}
+	}
+	return nil
+}
+
+// newEventSiteNamer returns the debug receiver's site resolver: an event that
+// names a site's folder is put back on that site, so it shows in the site's
+// Debug tab. The registry is reread at most once per ttl, since query events
+// arrive by the hundred.
+func newEventSiteNamer(ttl time.Duration) func(string) string {
+	var mu sync.Mutex
+	var loaded time.Time
+	byFolder := map[string]string{}
+	return func(name string) string {
+		if name == "" || strings.Contains(name, "/") {
+			return name
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if time.Since(loaded) > ttl {
+			loaded = time.Now()
+			byFolder = map[string]string{}
+			if reg, err := config.LoadSites(); err == nil {
+				names := map[string]bool{}
+				for _, s := range reg.Sites {
+					names[s.Name] = true
+				}
+				for _, s := range reg.Sites {
+					if f := filepath.Base(s.Path); !names[f] {
+						byFolder[f] = s.Name
+					}
+				}
+			}
+		}
+		if site, ok := byFolder[name]; ok {
+			return site
+		}
+		return name
+	}
 }
 
 // newWorkerFailures returns workers in cur whose Unit names weren't in prev.

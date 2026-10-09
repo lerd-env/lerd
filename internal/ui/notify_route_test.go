@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dumps"
@@ -115,5 +117,61 @@ func TestDebugRouteNamesTheLens(t *testing.T) {
 	// A kind with no lens of its own leaves the tab as the user left it.
 	if got := debugRouteForContext(dumps.Context{Site: "rapids"}, "test"); got != "#sites/harborlist.test/dumps" {
 		t.Errorf("unknown kind = %q, want the tab without a lens", got)
+	}
+}
+
+// A job a Horizon worker runs without LERD_SITE names the project folder, which
+// is not the site's name when the site was linked under another one.
+func TestDebugRouteForContext_ResolvesSiteFromFolderName(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := filepath.Join(t.TempDir(), "harbor.com")
+	if err := config.AddSite(config.Site{Name: "harbor", Domains: []string{"harbor.test"}, Path: dir}); err != nil {
+		t.Fatal(err)
+	}
+	if got := debugRouteForContext(dumps.Context{Type: "cli", Site: "harbor.com"}, dumps.KindJob); got != "#sites/harbor.test/dumps/jobs" {
+		t.Errorf("route = %q", got)
+	}
+}
+
+// A worktree's worker tags its events "<site>/<worktree folder>".
+func TestDebugRouteForContext_ResolvesWorktreeToParent(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	if err := config.AddSite(config.Site{Name: "rapids", Domains: []string{"harborlist.test"}, Path: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	if got := debugRouteForContext(dumps.Context{Type: "cli", Site: "rapids/rapids-feat-x"}, dumps.KindJob); got != "#sites/harborlist.test/dumps/jobs" {
+		t.Errorf("route = %q", got)
+	}
+}
+
+// A site name nothing matches must not become a route to a site that does not
+// exist: the request domain is tried next, then the sites list.
+func TestDebugRouteForContext_UnknownSiteNameFallsBack(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	if err := config.AddSite(config.Site{Name: "rapids", Domains: []string{"harborlist.test"}, Path: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	if got := debugRouteForContext(dumps.Context{Site: "gone", Domain: "harborlist.test"}, dumps.KindJob); got != "#sites/harborlist.test/dumps/jobs" {
+		t.Errorf("with domain: route = %q", got)
+	}
+	if got := debugRouteForContext(dumps.Context{Site: "gone"}, dumps.KindJob); got != "#sites" {
+		t.Errorf("without domain: route = %q, want #sites", got)
+	}
+}
+
+func TestEventSiteNamer_RenamesFolderOnly(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	if err := config.AddSite(config.Site{Name: "harbor", Domains: []string{"harbor.test"}, Path: filepath.Join(t.TempDir(), "harbor.com")}); err != nil {
+		t.Fatal(err)
+	}
+	name := newEventSiteNamer(time.Minute)
+	for in, want := range map[string]string{"harbor.com": "harbor", "harbor": "harbor", "harbor/harbor-wt": "harbor/harbor-wt", "other": "other", "": ""} {
+		if got := name(in); got != want {
+			t.Errorf("name(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

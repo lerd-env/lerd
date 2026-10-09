@@ -59,6 +59,7 @@ func startDumpsServer() {
 		srv.SetKeepTests(cfg.IsDevtoolsTests())
 		srv.Resize(cfg.DumpsBuffer())
 	}
+	srv.SetSiteResolver(newEventSiteNamer(10 * time.Second))
 	// Before Load, so the saved slowest requests that no longer fit are pinned again.
 	keepSlowestRequests(srv)
 	go func() {

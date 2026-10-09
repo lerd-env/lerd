@@ -60,8 +60,8 @@ func debugLensForKind(kind string) string {
 // is keyed by, preferring the site the bridge tagged and falling back to the
 // request domain, which survives even when LERD_SITE never reached the process.
 func debugSiteDomain(ctx dumps.Context) string {
-	if ctx.Site != "" {
-		return siteDomainForRoute(ctx.Site)
+	if d := siteDomainForRoute(ctx.Site); d != "" {
+		return d
 	}
 	if ctx.Domain != "" {
 		if s, err := config.FindSiteByDomain(ctx.Domain); err == nil && s != nil {

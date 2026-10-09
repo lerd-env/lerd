@@ -59,6 +59,30 @@ func TestServer_AcceptsValidEvent(t *testing.T) {
 	}
 }
 
+// A CLI run without LERD_SITE names its working folder; the resolver puts the
+// event back on the site it belongs to before it is stored.
+func TestServer_ResolvesSiteName(t *testing.T) {
+	s := startServer(t)
+	s.SetSiteResolver(func(name string) string {
+		if name == "harbor.com" {
+			return "harbor"
+		}
+		return name
+	})
+
+	dialAndSend(t, s.Addr(), mustJSON(t, Event{
+		V: 1, ID: "a", TS: "2026-05-10T00:00:00.000Z", Kind: "job",
+		Ctx: Context{Type: "cli", Site: "harbor.com"},
+	}))
+
+	if !waitFor(func() bool { return s.Len() == 1 }, time.Second) {
+		t.Fatalf("event never landed in ring; len=%d", s.Len())
+	}
+	if got := s.Snapshot()[0].Ctx.Site; got != "harbor" {
+		t.Errorf("site = %q, want harbor", got)
+	}
+}
+
 func TestServer_DropsInvalidJSON(t *testing.T) {
 	s := startServer(t)
 	dialAndSend(t, s.Addr(), "not-json\n")
