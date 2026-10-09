@@ -157,9 +157,33 @@ func TestSnapshotFreshWaitsForInFlightRebuild(t *testing.T) {
 
 	done := make(chan []byte, 1)
 	go func() { done <- slot.fresh() }()
+	select {
+	case got := <-done:
+		t.Fatalf("fresh returned %s while the rebuild was still in flight", got)
+	case <-time.After(50 * time.Millisecond):
+	}
 	close(release)
 	if got := <-done; string(got) != `["fresh"]` {
 		t.Fatalf("got %s, want the rebuilt value", got)
+	}
+}
+
+// A change landing while the broadcast's own rebuild runs would otherwise ship
+// the state that change replaced.
+func TestSnapshotFreshRebuildsWhenInvalidatedMidBuild(t *testing.T) {
+	state := "old"
+	slot := &snapshotSlot{}
+	slot.fn = func() ([]byte, error) {
+		read := state
+		if read == "old" {
+			state = "new"
+			slot.invalidate()
+		}
+		return []byte(read), nil
+	}
+
+	if got := slot.fresh(); string(got) != "new" {
+		t.Fatalf("got %s, want new: fresh shipped a build its own invalidation outdated", got)
 	}
 }
 

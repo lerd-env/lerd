@@ -79,30 +79,37 @@ func (s *snapshotSlot) load(wait bool) []byte {
 	}
 	defer s.build.Unlock()
 
-	s.mu.Lock()
-	if s.data != nil && time.Since(s.at) < currentSnapshotTTL() {
-		b := s.data
+	// A waiting caller retries a build a change outdated mid-flight, capped so a
+	// steady stream of invalidations cannot keep it rebuilding forever.
+	for attempt := 1; ; attempt++ {
+		s.mu.Lock()
+		if s.data != nil && time.Since(s.at) < currentSnapshotTTL() {
+			b := s.data
+			s.mu.Unlock()
+			return b
+		}
+		gen := s.gen
 		s.mu.Unlock()
-		return b
-	}
-	gen := s.gen
-	s.mu.Unlock()
 
-	b, err := s.fn()
-	if err != nil {
-		// Storing this would serve one transient failure as the truth for a
-		// whole TTL, up to five minutes when no tab is counted visible.
-		log.Printf("[snapshot] rebuild failed, keeping previous value: %v", err)
-		return stale
-	}
+		b, err := s.fn()
+		if err != nil {
+			// Storing this would serve one transient failure as the truth for a
+			// whole TTL, up to five minutes when no tab is counted visible.
+			log.Printf("[snapshot] rebuild failed, keeping previous value: %v", err)
+			return stale
+		}
 
-	s.mu.Lock()
-	s.data = b
-	if s.gen == gen {
-		s.at = time.Now()
+		s.mu.Lock()
+		s.data = b
+		current := s.gen == gen
+		if current {
+			s.at = time.Now()
+		}
+		s.mu.Unlock()
+		if current || !wait || attempt == 3 {
+			return b
+		}
 	}
-	s.mu.Unlock()
-	return b
 }
 
 // invalidate drops the cached value's freshness so the next read rebuilds.
