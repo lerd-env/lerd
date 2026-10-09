@@ -954,14 +954,23 @@ func launchTray() error {
 	if err != nil {
 		return err
 	}
-	return exec.Command(exe, "tray").Start()
+	cmd := exec.Command(exe, "tray")
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	// Reaped in the background: unwaited, it stays a zombie under the
+	// long-running lerd-ui, and a start run from the tray menu inherits the
+	// daemon env, so this child is the applet itself and never exits.
+	go cmd.Wait() //nolint:errcheck
+	return nil
 }
 
 // trayProcessPatterns match a running tray applet, launched directly or as the
 // lerd-tray binary, and nothing else. Anchored at the end because `lerd tray
 // off` has to kill the applet from a command line that contains those very
 // words, and an unanchored match takes out the command and its shell with it.
-var trayProcessPatterns = []string{`lerd tray( --mono)?$`, `lerd-tray$`}
+// The detached applet carries --mono or --mono=false.
+var trayProcessPatterns = []string{`lerd tray( --mono(=false)?)?$`, `lerd-tray( --mono(=false)?)?$`}
 
 // killTray kills any running lerd tray process.
 func killTray() {

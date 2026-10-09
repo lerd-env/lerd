@@ -14,6 +14,9 @@ func TestTrayProcessPatterns_MatchTheAppletOnly(t *testing.T) {
 		"/home/u/.local/bin/lerd tray",
 		"/home/u/.local/bin/lerd tray --mono",
 		"/home/u/.local/bin/lerd-tray",
+		"/home/u/.local/bin/lerd tray --mono=false",
+		"/home/u/.local/bin/lerd-tray --mono=false",
+		"/home/u/.local/bin/lerd-tray --mono",
 	}
 	others := []string{
 		"/home/u/.local/bin/lerd tray off",

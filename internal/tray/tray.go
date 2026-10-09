@@ -134,10 +134,14 @@ func Run(mono bool) error {
 	return nil
 }
 
+// lockFile holds the instance lock for the life of the process. It has to be
+// package-level: an unreferenced *os.File is closed by its GC finalizer, which
+// silently drops the flock and lets the next start run a second tray.
+var lockFile *os.File
+
 // acquireLock tries to acquire an exclusive flock on a per-user lock file.
 // It returns true if the lock was acquired (safe to start), false if another
-// instance already holds it. When true is returned the lock is held for the
-// lifetime of the process (the file is intentionally never closed).
+// instance already holds it.
 func acquireLock() bool {
 	dir := os.Getenv("XDG_RUNTIME_DIR")
 	if dir == "" {
@@ -153,9 +157,9 @@ func acquireLock() bool {
 		f.Close()
 		return false
 	}
-	// Write PID for debugging; keep f open to hold the lock.
 	_ = f.Truncate(0)
 	_, _ = fmt.Fprintf(f, "%d\n", os.Getpid())
+	lockFile = f
 	return true
 }
 
