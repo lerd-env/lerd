@@ -173,7 +173,7 @@ The server also sends short instructions when a client connects, telling the ass
 | `framework` | `list`, `add`, `remove`, `prune`, `search`, `update`, `project_new`, `setup` |
 | `diag` | `status`, `doctor`, `doctor_fix`, `site_doctor`, `which`, `check`, `dns_diagnose`, `bug_report`, `analyze_queries`, `route_timing`, `optimize_route`, `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle`, `dumps_buffer`, `browser_events`, `browser_toggle`, `profiler_toggle`, `profiler_status`, `profiler_clear`, `profiler_report`, `xdebug_on`, `xdebug_off`, `xdebug_status` |
 | `logs` | `sources`, `fetch` |
-| `request` | `list` (a site's recent requests and their ids), `lenses` (events per lens for one request), `lens` (one lens's events, paged) |
+| `request` | `list` (a site's recent requests and their ids), `lenses` (events per lens for one request, plus the issues they hold: N+1 and slow queries first, then exceptions, error logs, failed HTTP, failed jobs and browser errors), `lens` (one lens's events, paged) |
 | `worktree` | `list`, `add`, `remove`, `wait`, `db_isolate`, `db_share` |
 | `workspace` | `list`, `create`, `rename`, `delete`, `assign`, `move` |
 
@@ -213,7 +213,7 @@ An assistant is not the one paying for the bandwidth, so the actions that have t
 
 ### Reading logs
 
-The `logs` tool lets an assistant debug a site's logs without opening files by hand. Call `logs` with `action: "sources"` to list every queryable source for a site (`app:<file>` framework logs, `fpm`, `worker:<name>`) plus shared infrastructure (`nginx`, `dns`, `watcher`, `ui`, services, `php<ver>`), then `action: "fetch"` with a `source` and any of `grep` (regex or literal substring), `since`/`until` (relative like `15m`/`2h30m`, or a timestamp), `level` (app logs only), and `lines`. Each `fetch` returns an opaque `cursor`; pass it back as `since` on the next call to receive only the new lines, which is how streaming is modelled over MCP's request/response transport. See [the logs feature page](logs.md) for the full source list, filter semantics, and platform notes.
+The `logs` tool lets an assistant debug a site's logs without opening files by hand. Call `logs` with `action: "sources"` to list every queryable source for a site (`app:<file>` framework logs, `fpm`, `worker:<name>`) plus shared infrastructure (`nginx`, `dns`, `watcher`, `ui`, services, `php<ver>`), then `action: "fetch"` with a `source` and any of `grep` (regex or literal substring), `since`/`until` (relative like `15m`/`2h30m`, or a timestamp), `level` (app logs only), and `lines`. Each `fetch` returns an opaque `cursor`; pass it back as `since` on the next call to receive only the new lines, which is how streaming is modelled over MCP's request/response transport. Passing a worktree's checkout as `path` reads that worktree's own app logs and the logs of the workers started in it. See [the logs feature page](logs.md) for the full source list, filter semantics, and platform notes.
 
 > **Grouped surface:** earlier lerd versions exposed ~80 individual MCP tools (`sites`, `artisan`, `db_set`, …). These were consolidated into the grouped tools above to cut the per-session token cost and sharpen the model's tool selection. Old flat tool names no longer exist; call the group with the matching `action` instead (e.g. `artisan` → `exec` with `action: "artisan"`, `db_set` → `db` with `action: "set"`).
 

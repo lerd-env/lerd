@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -689,6 +690,43 @@ func TestEnrichServices(t *testing.T) {
 			t.Errorf("expected no services, got %v", e.Services)
 		}
 	})
+}
+
+// A native env reaches the service at 127.0.0.1, so the container name is
+// only in the registry record the last `lerd env` wrote.
+func TestEnrich_RecognisesWiredServices(t *testing.T) {
+	installQuadlets(t, "mailpit")
+	fwDir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	def := "name: acme\nlabel: Acme\nversion: \"1\"\npublic_dir: public\nenv:\n  services:\n    mailpit:\n      detect:\n        - key: MAIL_HOST\n"
+	if err := os.WriteFile(filepath.Join(fwDir, "acme@1.yaml"), []byte(def), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("MAIL_HOST=127.0.0.1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	site := config.Site{Name: "shop", Path: dir, Framework: "acme"}
+
+	if e := Enrich(site, EnrichFramework|EnrichServices); len(e.SuggestedServices) != 1 {
+		t.Fatalf("unwired site should be offered mailpit, got %v", e.SuggestedServices)
+	}
+
+	site.WiredServices = []string{"mailpit"}
+	e := Enrich(site, EnrichFramework|EnrichServices)
+	if !slices.Equal(e.Services, []string{"mailpit"}) {
+		t.Errorf("services = %v, want mailpit", e.Services)
+	}
+	if len(e.SuggestedServices) != 0 {
+		t.Errorf("a wired service must not be suggested, got %v", e.SuggestedServices)
+	}
+
+	site.DeclinedServices = []string{"mailpit"}
+	if e := Enrich(site, EnrichServices); len(e.Services) != 0 {
+		t.Errorf("a declined service must stay off, got %v", e.Services)
+	}
 }
 
 // ── Node version filtering ──────────────────────────────────────────────────

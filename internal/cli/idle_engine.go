@@ -58,9 +58,9 @@ func SuspendWorkersForIdle(site *config.Site) []string {
 			// suspended forever. collectRunningWorkers includes such orphans.
 			continue
 		}
-		stopWorkerByName(site, w)
 		suspended = append(suspended, w)
 	}
+	stopWorkersByName(site, suspended)
 	final := appendLostSuspended(site, suspended)
 	// A host-proxy site's dev server is its only request-serving process, so once
 	// idle-suspend stops it the proxy vhost 502s. Swap to the waking page instead.
@@ -102,16 +102,16 @@ func appendLostSuspended(site *config.Site, suspended []string) []string {
 	return suspended
 }
 
-// idleWorkerResumable reports whether ResumeWorkersForIdle (resumeWorkerByName)
+// idleWorkerResumable reports whether ResumeWorkersForIdle (resumeWorkersByName)
 // can bring a worker back. Idle-suspend must never stop a worker it can't
 // restart, or the worker is stranded suspended forever. Mirrors the branches of
-// resumeWorkerByName so the two stay in lockstep.
+// resumeWorkersByName so the two stay in lockstep.
 func idleWorkerResumable(site *config.Site, workerName string) bool {
 	switch workerName {
 	case "stripe":
 		return true
 	case hostProxyWorkerName:
-		// resumeWorkerByName only restarts the host-proxy worker when the project
+		// resumeWorkersByName only restarts the host-proxy worker when the project
 		// still declares a proxy command; without this guard a site whose proxy
 		// block was removed would be suspended but never resumed.
 		proj, _ := config.LoadProjectConfig(site.Path)
@@ -133,9 +133,7 @@ func ResumeWorkersForIdle(site *config.Site, workers []string) {
 	if resolved, err := phpVersionForDir(site.Path); err == nil && resolved != "" {
 		phpVersion = resolved
 	}
-	for _, w := range workers {
-		resumeWorkerByName(site, w, phpVersion)
-	}
+	resumeWorkersByName(site, workers, phpVersion)
 	// Restore the host-proxy proxy vhost the suspend swapped to the waking page,
 	// once the dev server is listening again.
 	restoreHostProxyVhostAfterIdle(site, workers)

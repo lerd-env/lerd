@@ -6347,6 +6347,9 @@ func handleAppLogs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		page, more := applog.Page(all, offset, maxEntries)
+		if tail, err := applog.ParseFile(fullPath, format, applog.MaxReadBytes); err == nil {
+			applog.MarkPastTail(page, offset, len(tail))
+		}
 		writeJSON(w, map[string]any{"entries": page, "more": more})
 		return
 	}

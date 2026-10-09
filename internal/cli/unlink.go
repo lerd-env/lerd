@@ -19,9 +19,7 @@ import (
 func init() {
 	siteops.RemoveProvidedEnv = dropProvidedEnv
 	siteops.StopSiteWorkers = func(site *config.Site) {
-		for _, w := range collectRunningWorkers(site) {
-			stopWorkerByName(site, w)
-		}
+		stopWorkersByName(site, collectRunningWorkers(site))
 		// collectRunningWorkers only reports active units (correct for pause,
 		// which resumes them later). On unlink the site is going away, so tear
 		// the dev-server unit down unconditionally — a stopped or failed one

@@ -6,12 +6,18 @@
     title: string;
     onclose: () => void;
     withFooter?: boolean;
+    withActions?: boolean;
     size?: 'sm' | 'md' | 'lg' | 'xl';
   }
-  let { open, title, onclose, withFooter = false, size = 'md' }: Props = $props();
+  let { open, title, onclose, withFooter = false, withActions = false, size = 'md' }: Props = $props();
 </script>
 
-{#if withFooter}
+{#if withActions}
+  {#snippet actions()}<span data-testid="actions">A</span>{/snippet}
+  <Modal {open} {title} {onclose} {size} {actions}>
+    <div data-testid="body">BODY</div>
+  </Modal>
+{:else if withFooter}
   {#snippet footer()}<span data-testid="footer">F</span>{/snippet}
   <Modal {open} {title} {onclose} {size} {footer}>
     <div data-testid="body">BODY</div>

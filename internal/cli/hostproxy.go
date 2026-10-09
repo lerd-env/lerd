@@ -518,17 +518,35 @@ func StartHostProxyWorktreeServer(site config.Site, wtPath string) error {
 // host-mode worker (launchd/fnm on macOS), reusing the standard worker
 // machinery for auto-restart, logs, and health. No-op in proxy-only mode.
 func startHostProxyWorker(site config.Site, proxy *config.ProxyConfig) {
+	l := prepareHostProxyStart(site, proxy)
+	if l == nil {
+		return
+	}
+	if err := podman.DaemonReloadIfNeeded(l.reload); err != nil {
+		feedback.Warn("daemon-reload: %v", err)
+	}
+	if err := launchWorker(l, false); err != nil {
+		feedback.Warn("starting dev server: %v", err)
+	}
+}
+
+// prepareHostProxyStart writes the dev server's unit without reloading or
+// starting it; nil when the proxy runs no command or the command is refused.
+func prepareHostProxyStart(site config.Site, proxy *config.ProxyConfig) *workerLaunch {
 	w, ok := hostProxyWorker(proxy)
 	if !ok {
-		return
+		return nil
 	}
 	if err := gateHostProxyAutostart(site, proxy.Command); err != nil {
 		feedback.Warn("dev server not started: %v", err)
-		return
+		return nil
 	}
-	if err := WorkerStartForSite(site.Name, site.Path, "", hostProxyWorkerName, w, false); err != nil {
+	l, err := prepareWorkerStart(site.Name, site.Path, "", hostProxyWorkerName, w)
+	if err != nil {
 		feedback.Warn("starting dev server: %v", err)
+		return nil
 	}
+	return l
 }
 
 // gateHostProxyAutostart authorises auto-(re)starting a host-proxy dev command

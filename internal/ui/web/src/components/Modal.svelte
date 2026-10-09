@@ -11,8 +11,9 @@
     size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
     children: Snippet;
     footer?: Snippet;
+    actions?: Snippet;
   }
-  let { open, title, onclose, size = 'md', children, footer }: Props = $props();
+  let { open, title, onclose, size = 'md', children, footer, actions }: Props = $props();
   const uid = $props.id();
   const titleId = `${uid}-title`;
 
@@ -57,6 +58,9 @@
     >
       <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-lerd-border">
         <h3 id={titleId} class="min-w-0 break-words font-semibold text-gray-900 dark:text-white">{title}</h3>
+        {#if actions}
+          <div class="ml-auto shrink-0 flex items-center gap-2">{@render actions()}</div>
+        {/if}
         <button
           onclick={onclose}
           class="shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"

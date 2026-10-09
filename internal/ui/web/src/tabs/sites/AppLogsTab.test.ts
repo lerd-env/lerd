@@ -106,6 +106,23 @@ describe('AppLogsTab', () => {
     expect(parentCalls.every((u) => !u.includes('branch='))).toBe(true);
   });
 
+  it('copies a prompt for an agent from an opened entry', async () => {
+    const writeText = vi.fn(async (_text: string) => {});
+    Object.assign(navigator, { clipboard: { writeText } });
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const body = url.includes('/laravel.log')
+        ? { entries: [{ level: 'ERROR', date: '2026-10-08 12:00:01', message: 'Undefined variable $order', detail: 'trace' }] }
+        : { files: [{ name: 'laravel.log', size: 10 }] };
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as unknown as typeof fetch;
+    render(SiteHarness, { props: { site: siteWith() } });
+
+    (await screen.findByText('Undefined variable $order')).click();
+    (await screen.findByText('Copy for agent')).click();
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalled());
+    expect(writeText.mock.calls[0][0]).toContain('source "app:laravel.log", site "theregistry.test"');
+  });
+
   // The tab has no stream of its own: it used to refresh only because every
   // websocket snapshot invalidated its effect. It polls on its own now.
   describe('polling', () => {

@@ -70,9 +70,7 @@ func PauseSite(name string) error {
 
 	running := collectRunningWorkers(site)
 
-	for _, w := range running {
-		stopWorkerByName(site, w)
-	}
+	stopWorkersByName(site, running)
 
 	// Stop the custom container when pausing a custom container site.
 	if site.IsCustomContainer() {
@@ -291,9 +289,7 @@ func UnpauseSite(name string) error {
 	refreshHostProxyEnvOnResume(site, resumeMode)
 
 	resumed := site.PausedWorkers
-	for _, w := range resumed {
-		resumeWorkerByName(site, w, phpVersion)
-	}
+	resumeWorkersByName(site, resumed, phpVersion)
 
 	site.Paused = false
 	site.PausedWorkers = nil
@@ -527,47 +523,71 @@ func unitIsActiveOrActivating(unit string) bool {
 	return state == "active" || state == "activating"
 }
 
-// stopWorkerByName stops a single named worker for the site.
-func stopWorkerByName(site *config.Site, workerName string) {
-	if workerName == "stripe" {
-		StripeStopForSite(site.Name) //nolint:errcheck
-		return
+// stopWorkersByName stops the named workers of a site. Each unit is torn down
+// first and one daemon-reload follows for all of them, instead of one each.
+func stopWorkersByName(site *config.Site, workers []string) {
+	removed := false
+	for _, w := range workers {
+		if w != "stripe" {
+			removed = tearDownWorker(site.Name, site.Path, w) || removed
+			continue
+		}
+		if step, err := removeWorkerUnit("lerd-stripe-"+site.Name, "stripe listener"); err == nil {
+			step.OK("")
+			removed = true
+		}
 	}
-	WorkerStopForSite(site.Name, site.Path, workerName) //nolint:errcheck
+	if err := podman.DaemonReloadIfNeeded(removed); err != nil {
+		feedback.Warn("daemon-reload: %v", err)
+	}
 }
 
-// resumeWorkerByName restarts a single named worker for the site. It gates on
-// idleWorkerResumable so the set of workers it can bring back is identical to the
-// set idle-suspend is allowed to stop — keeping the two in lockstep means a
-// worker can never be suspended-but-unresumable (stranded). A new resumable
-// worker kind must be taught to idleWorkerResumable or this gate blocks it.
-func resumeWorkerByName(site *config.Site, workerName, phpVersion string) {
-	if !idleWorkerResumable(site, workerName) {
-		return
-	}
-	if workerName == "stripe" {
-		scheme := "http"
-		if site.Secured {
-			scheme = "https"
+// resumeWorkersByName writes every unit, reloads once, then starts them. It
+// gates on idleWorkerResumable, the set idle-suspend may stop, so a worker can
+// never be suspended but unresumable; a new resumable kind must be taught there.
+func resumeWorkersByName(site *config.Site, workers []string, phpVersion string) {
+	var batch []func() error
+	reload := false
+	for _, name := range workers {
+		if !idleWorkerResumable(site, name) {
+			continue
 		}
-		StripeStartForSite(site.Name, site.Path, scheme+"://"+site.PrimaryDomain()) //nolint:errcheck
-		return
-	}
-	if workerName == hostProxyWorkerName {
-		if proj, _ := config.LoadProjectConfig(site.Path); proj != nil && proj.Proxy != nil {
-			startHostProxyWorker(*site, proj.Proxy)
+		if name == "stripe" {
+			scheme := "http"
+			if site.Secured {
+				scheme = "https"
+			}
+			changed, start, err := prepareStripeStart(site.Name, site.Path, scheme+"://"+site.PrimaryDomain())
+			if err != nil {
+				continue
+			}
+			reload = reload || changed
+			batch = append(batch, start)
+			continue
 		}
-		return
+		var l *workerLaunch
+		if name == hostProxyWorkerName {
+			if proj, _ := config.LoadProjectConfig(site.Path); proj != nil && proj.Proxy != nil {
+				l = prepareHostProxyStart(*site, proj.Proxy)
+			}
+		} else {
+			fw, _ := config.GetFrameworkForDir(site.Framework, site.Path)
+			l, _ = prepareWorkerStart(site.Name, site.Path, phpVersion, name, fw.Workers[name])
+		}
+		if l == nil {
+			continue
+		}
+		reload = reload || l.reload
+		// The dev server comes from the proxy block, not the project's worker list.
+		persist := name != hostProxyWorkerName
+		batch = append(batch, func() error { return launchWorker(l, persist) })
 	}
-	fw, ok := config.GetFrameworkForDir(site.Framework, site.Path)
-	if !ok || fw.Workers == nil {
-		return
+	if err := podman.DaemonReloadIfNeeded(reload); err != nil {
+		feedback.Warn("daemon-reload: %v", err)
 	}
-	worker, ok := fw.Workers[workerName]
-	if !ok {
-		return
+	for _, start := range batch {
+		start() //nolint:errcheck
 	}
-	WorkerStartForSite(site.Name, site.Path, phpVersion, workerName, worker, true) //nolint:errcheck
 }
 
 // pausedPageHTML is the static HTML for the shared paused-site landing page.

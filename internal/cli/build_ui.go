@@ -23,32 +23,46 @@ type BuildJob struct {
 }
 
 // RunParallel executes all jobs concurrently with a compact spinner UI.
-// In a non-TTY environment it falls back to plain sequential output.
+// In a non-TTY environment it falls back to plain grouped output.
 // Returns the first non-nil error, or nil if all jobs succeed.
 func RunParallel(jobs []BuildJob) error {
 	if len(jobs) == 0 {
 		return nil
 	}
 	if !term.IsTerminal(int(os.Stdout.Fd())) {
-		return runSequential(jobs)
+		return runWithoutTerminal(jobs, os.Stdout)
 	}
 	return runParallelTUI(jobs)
 }
 
-func runSequential(jobs []BuildJob) error {
-	var firstErr error
+// runWithoutTerminal runs the jobs concurrently like the TUI does, but with no
+// spinner to keep their output apart it buffers each job's output and prints it
+// under its label once the job finishes, so two builds never interleave.
+func runWithoutTerminal(jobs []BuildJob, out io.Writer) error {
+	var (
+		mu       sync.Mutex
+		firstErr error
+		wg       sync.WaitGroup
+	)
 	for _, job := range jobs {
-		// Non-TTY path: announce the label BEFORE the job runs so it heads the
-		// job's streamed output. feedback.Start is non-animated here and prints
-		// nothing until OK/Fail, which would leave the label trailing its output.
-		feedback.Line(job.Label)
-		if err := job.Run(os.Stdout); err != nil {
-			feedback.Warn("%s: %v", job.Label, err)
-			if firstErr == nil {
-				firstErr = err
+		wg.Add(1)
+		go func(job BuildJob) {
+			defer wg.Done()
+			var buf bytes.Buffer
+			err := job.Run(&buf)
+			mu.Lock()
+			defer mu.Unlock()
+			feedback.Line(job.Label)
+			_, _ = out.Write(buf.Bytes())
+			if err != nil {
+				feedback.Warn("%s: %v", job.Label, err)
+				if firstErr == nil {
+					firstErr = err
+				}
 			}
-		}
+		}(job)
 	}
+	wg.Wait()
 	return firstErr
 }
 

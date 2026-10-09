@@ -60,7 +60,7 @@ func installFakeIdleServices(t *testing.T) *fakeIdleServices {
 	return f
 }
 
-func TestSuspendServiceForIdle_WakingPageBeforeStopAndRecordsDependents(t *testing.T) {
+func TestSuspendServicesForIdle_WakingPageBeforeStopAndRecordsDependents(t *testing.T) {
 	f := installFakeIdleServices(t)
 	f.up["mysql"], f.up["phpmyadmin"] = true, true
 	f.deps["mysql"] = []string{"phpmyadmin", "adminer"} // adminer installed but not running
@@ -73,7 +73,7 @@ func TestSuspendServiceForIdle_WakingPageBeforeStopAndRecordsDependents(t *testi
 		return nil
 	}
 
-	stopped, err := SuspendServiceForIdle("mysql")
+	stopped, err := SuspendServicesForIdle([]string{"mysql"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,12 +88,12 @@ func TestSuspendServiceForIdle_WakingPageBeforeStopAndRecordsDependents(t *testi
 	}
 }
 
-func TestSuspendServiceForIdle_StopFailureHoldsNothingAsleep(t *testing.T) {
+func TestSuspendServicesForIdle_StopFailureHoldsNothingAsleep(t *testing.T) {
 	f := installFakeIdleServices(t)
 	f.up["redis"] = true
 	idleStopService = func(string) error { return errors.New("boom") }
 
-	if _, err := SuspendServiceForIdle("redis"); err == nil {
+	if _, err := SuspendServicesForIdle([]string{"redis"}); err == nil {
 		t.Fatal("want the stop error back")
 	}
 	if got := config.IdleSuspendedServices(); len(got) != 0 {
@@ -225,7 +225,7 @@ func TestWakeServicesForIdle_startsServicesInParallel(t *testing.T) {
 	}
 }
 
-func TestSuspendServiceForIdle_flagsBeforeStopping(t *testing.T) {
+func TestSuspendServicesForIdle_flagsBeforeStopping(t *testing.T) {
 	f := installFakeIdleServices(t)
 	f.up["redis"] = true
 	var flaggedAtStop bool
@@ -233,7 +233,7 @@ func TestSuspendServiceForIdle_flagsBeforeStopping(t *testing.T) {
 		flaggedAtStop = config.ServiceIsIdleSuspended("redis")
 		return nil
 	}
-	if _, err := SuspendServiceForIdle("redis"); err != nil {
+	if _, err := SuspendServicesForIdle([]string{"redis"}); err != nil {
 		t.Fatal(err)
 	}
 	if !flaggedAtStop {
@@ -294,5 +294,55 @@ func TestAwaitIdleWake_startsItselfWithoutAWatcher(t *testing.T) {
 	}
 	if len(*pings) != 0 || time.Since(start) > time.Second {
 		t.Fatalf("waited on a watcher that is not running: pings %v after %v", *pings, time.Since(start))
+	}
+}
+
+// Each service is flagged only on its turn: flagging the whole batch first left
+// the later ones asleep on paper but running when the watcher restarted midway,
+// and the next watcher woke them as stale.
+func TestSuspendServicesForIdle_flagsEachServiceOnItsTurn(t *testing.T) {
+	f := installFakeIdleServices(t)
+	f.up["redis"], f.up["mailpit"] = true, true
+	var redisFlaggedAtMailpitStop bool
+	idleStopService = func(name string) error {
+		if name == "mailpit" {
+			redisFlaggedAtMailpitStop = config.ServiceIsIdleSuspended("redis")
+		}
+		delete(f.up, name)
+		return nil
+	}
+
+	stopped, err := SuspendServicesForIdle([]string{"mailpit", "redis"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(stopped, []string{"mailpit", "redis"}) {
+		t.Fatalf("stopped = %v", stopped)
+	}
+	if redisFlaggedAtMailpitStop {
+		t.Fatal("redis was flagged asleep while still running, before its own turn")
+	}
+}
+
+func TestSuspendServicesForIdle_oneStopFailureLeavesTheRestAsleep(t *testing.T) {
+	f := installFakeIdleServices(t)
+	f.up["redis"], f.up["mailpit"] = true, true
+	idleStopService = func(name string) error {
+		if name == "redis" {
+			return errors.New("boom")
+		}
+		f.stopped = append(f.stopped, name)
+		return nil
+	}
+
+	stopped, err := SuspendServicesForIdle([]string{"mailpit", "redis"})
+	if err == nil {
+		t.Fatal("want the redis stop error back")
+	}
+	if !reflect.DeepEqual(stopped, []string{"mailpit"}) {
+		t.Fatalf("stopped = %v, want mailpit only", stopped)
+	}
+	if got := config.IdleSuspendedServices(); !reflect.DeepEqual(got, []string{"mailpit"}) {
+		t.Fatalf("held asleep = %v, want mailpit only", got)
 	}
 }

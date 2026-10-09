@@ -19,11 +19,15 @@ import (
 	"github.com/geodro/lerd/internal/systemd"
 )
 
-// quadletReloadPending records that a previous DaemonReloadIfNeeded call
-// failed without being retried. The next caller forces a reload even when
-// nothing else changed so a transient DBus failure does not leave
-// systemd's cache stale until an external trigger heals it.
+// quadletReloadPending records that systemd is owed a reload, after a failed
+// one or a DeferDaemonReload. The next DaemonReloadIfNeeded call forces it
+// even when nothing else changed, so systemd's cache does not stay stale.
 var quadletReloadPending atomic.Bool
+
+// DeferDaemonReload owes systemd a reload for a unit change nothing needs to
+// see before the next one, such as a quadlet's boot arming, which the
+// generator rereads at boot anyway. The next DaemonReloadIfNeeded settles it.
+func DeferDaemonReload() { quadletReloadPending.Store(true) }
 
 // DaemonReloadIfNeeded reloads systemd when the caller wrote new quadlet
 // content (changed=true) or when a previous reload failed and was never
@@ -359,6 +363,11 @@ func UsePlatformUnitLifecycle(m UnitLifecycleManager) {
 // a sentinel and we fall through to the historical shell-out so launchd
 // users still get the legacy path (a no-op for non-systemd systems).
 func DaemonReload() error {
+	// A test's quadlets live in a temp dir the real manager never reads, so a
+	// reload from a test has nothing to pick up and only disturbs the host.
+	if config.UnderTest() {
+		return nil
+	}
 	if err := systemd.DBusDaemonReload(); err == nil {
 		return nil
 	}

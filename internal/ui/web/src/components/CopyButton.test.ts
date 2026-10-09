@@ -28,6 +28,11 @@ describe('CopyButton', () => {
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('select 1'));
   });
 
+  it('shows a caption beside the icon when given one', () => {
+    render(CopyButton, { props: { text: 'x', label: 'Copy prompt', caption: 'Copy for agent' } });
+    expect(screen.getByLabelText('Copy prompt').textContent?.trim()).toBe('Copy for agent');
+  });
+
   it('confirms with a checkmark that clears itself', async () => {
     Object.assign(navigator, { clipboard: { writeText: vi.fn(async () => {}) } });
     const { container } = render(CopyButton, { props: { text: 'x', label: 'Copy path' } });

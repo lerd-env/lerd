@@ -36,3 +36,13 @@ func TestPage_PastTheEndIsEmpty(t *testing.T) {
 		t.Fatalf("page = %v more = %v, want nothing", got, more)
 	}
 }
+
+func TestMarkPastTail_FlagsOnlyEntriesOlderThanTheTail(t *testing.T) {
+	page, _ := Page(entriesN(10), 4, 4)
+	MarkPastTail(page, 4, 6)
+	for i, e := range page {
+		if want := 4+i >= 6; e.PastTail != want {
+			t.Errorf("entry %d PastTail = %v, want %v", 4+i, e.PastTail, want)
+		}
+	}
+}

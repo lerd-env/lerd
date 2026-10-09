@@ -478,6 +478,12 @@ type StartEvent struct {
 // the same SIGTERM a stop is, so lerd-ui asking for its own unit killed the
 // start half way and left the dashboard unreachable behind a 502.
 func startLerd(emit func(StartEvent), skip []string) error {
+	release, err := podman.LockLifecycle()
+	if err != nil {
+		return fmt.Errorf("lifecycle lock: %w", err)
+	}
+	defer release()
+
 	var emitMu sync.Mutex
 	report := func(e StartEvent) {
 		if emit == nil {
@@ -948,14 +954,44 @@ func launchTray() error {
 	if err != nil {
 		return err
 	}
-	return exec.Command(exe, "tray").Start()
+	cmd := exec.Command(exe, "tray")
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	// Reaped in the background: unwaited, it stays a zombie under the
+	// long-running lerd-ui, and a start run from the tray menu inherits the
+	// daemon env, so this child is the applet itself and never exits.
+	go cmd.Wait() //nolint:errcheck
+	return nil
 }
 
-// trayProcessPatterns match a running tray applet, launched directly or as the
-// lerd-tray binary, and nothing else. Anchored at the end because `lerd tray
-// off` has to kill the applet from a command line that contains those very
-// words, and an unanchored match takes out the command and its shell with it.
-var trayProcessPatterns = []string{`lerd tray( --mono)?$`, `lerd-tray$`}
+// trayProcessPatterns match the applet, bare or with --mono / --mono=false.
+// End anchors keep `lerd tray off` and its shell from matching themselves.
+var trayProcessPatterns = []string{`lerd tray( --mono(=false)?)?$`, `lerd-tray( --mono(=false)?)?$`}
+
+// stopTray sends TERM and escalates to KILL when the applet outlives grace,
+// since a hung applet keeps the lock and its replacement would quit.
+func stopTray(signal func(sig string), running func() bool, grace time.Duration) {
+	signal("TERM")
+	if waitTrayGone(running, grace) {
+		return
+	}
+	signal("KILL")
+	waitTrayGone(running, time.Second)
+}
+
+// waitTrayGone polls until running reports false or the timeout passes, and
+// says whether the applet is gone.
+func waitTrayGone(running func() bool, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for running() {
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return true
+}
 
 // reconcileCustomServices heals custom-service drift on start (issue #678).
 // Failures are non-fatal so one bad service can't block the start sequence.
@@ -1369,6 +1405,11 @@ func spinnerRunner(jobs []lifecycle.Job) error {
 }
 
 func runStop(_ *cobra.Command, _ []string) error {
+	release, err := podman.LockLifecycle()
+	if err != nil {
+		return fmt.Errorf("lifecycle lock: %w", err)
+	}
+	defer release()
 	return lifecycle.Stop(spinnerRunner)
 }
 
@@ -1376,6 +1417,11 @@ func runQuit(_ *cobra.Command, _ []string) error {
 	// killTray runs before the VM stop: it clears any directly-launched tray
 	// instance launchd and systemd know nothing about, and leaving the icon on
 	// screen for the seconds `podman machine stop` takes reads as a hung quit.
+	release, err := podman.LockLifecycle()
+	if err != nil {
+		return fmt.Errorf("lifecycle lock: %w", err)
+	}
+	defer release()
 	return lifecycle.Quit(spinnerRunner, killTray)
 }
 

@@ -2,6 +2,8 @@ package ui
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/geodro/lerd/internal/dumps"
@@ -90,5 +92,25 @@ func TestAnalyzeQueries_NonQueryAndEmptyIgnored(t *testing.T) {
 	rep := analyzeQueries(nil, 0, 0)
 	if len(rep.Requests) != 0 || rep.Requests == nil {
 		t.Fatalf("nil input should yield an empty (non-nil) request list: %+v", rep)
+	}
+}
+
+// rid narrows the report to one request, so a single request's N+1 can be read
+// without the rest of the ring's traffic.
+func TestHandleQueriesAnalyze_FiltersByRequest(t *testing.T) {
+	srv := withDumpsServer(t)
+	for i, rid := range []string{"r1", "r1", "r1", "r2", "r2", "r2"} {
+		ev := aqEvent(rid, fmt.Sprintf("select * from posts where id = %d", i), 1, "/app/Post.php", 9)
+		ev.V, ev.ID = 1, fmt.Sprintf("e%d", i)
+		srv.Push(ev)
+	}
+	rec := httptest.NewRecorder()
+	handleQueriesAnalyze(rec, httptest.NewRequest("GET", "/api/queries/analyze?rid=r2", nil))
+	var got QueryAnalysis
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Requests) != 1 || got.Requests[0].RID != "r2" {
+		t.Errorf("requests = %+v", got.Requests)
 	}
 }

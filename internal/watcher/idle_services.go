@@ -21,7 +21,7 @@ func svcKey(name string) string { return svcKeyPrefix + name }
 var (
 	runningServices = cli.RunningServicesForIdle
 	serviceUsers    = cli.IdleServiceUsers
-	suspendService  = cli.SuspendServiceForIdle
+	suspendServices = cli.SuspendServicesForIdle
 	wakeServices    = cli.WakeServicesForIdle
 	serviceStale    = cli.IdleServiceStateIsStale
 	serviceStartRaw = serviceops.WakeService
@@ -52,7 +52,7 @@ func (e *idleEngine) tickServices(on bool, timeout time.Duration, now time.Time)
 	for _, name := range e.sleepingNames() {
 		candidates[name] = true
 	}
-	var wake []string
+	var wake, sleep []string
 	for name := range candidates {
 		keys, exempt := e.serviceKeys(name)
 		e.mu.Lock()
@@ -74,8 +74,12 @@ func (e *idleEngine) tickServices(on bool, timeout time.Duration, now time.Time)
 			continue
 		}
 		if !exempt && e.minIdle(keys, now) >= timeout {
-			e.suspendServiceAsync(name)
+			sleep = append(sleep, name)
 		}
+	}
+	if len(sleep) > 0 {
+		sort.Strings(sleep)
+		e.suspendServicesAsync(sleep)
 	}
 	if len(wake) > 0 {
 		sort.Strings(wake)
@@ -194,23 +198,35 @@ func (e *idleEngine) sleepingNames() []string {
 	return out
 }
 
-func (e *idleEngine) suspendServiceAsync(name string) {
-	key := svcKey(name)
+// suspendServicesAsync puts the named services to sleep together in the
+// background, skipping any already mid-suspend.
+func (e *idleEngine) suspendServicesAsync(names []string) {
+	var batch []string
 	e.mu.Lock()
-	if e.inFlight[key] {
-		e.mu.Unlock()
+	for _, name := range names {
+		if !e.inFlight[svcKey(name)] {
+			e.inFlight[svcKey(name)] = true
+			batch = append(batch, name)
+		}
+	}
+	e.mu.Unlock()
+	if len(batch) == 0 {
 		return
 	}
-	e.inFlight[key] = true
-	e.mu.Unlock()
 
 	e.spawn("suspend-svc", func() {
-		defer e.clearInFlight(key)
+		defer func() {
+			for _, name := range batch {
+				e.clearInFlight(svcKey(name))
+			}
+		}()
 		e.svcMu.Lock()
 		defer e.svcMu.Unlock()
-		stopped, err := suspendService(name)
+		stopped, err := suspendServices(batch)
 		if err != nil {
-			fmt.Printf("[WARN] idle-suspend service %s: %v\n", name, err)
+			fmt.Printf("[WARN] idle-suspend services %v: %v\n", batch, err)
+		}
+		if len(stopped) == 0 {
 			return
 		}
 		e.mu.Lock()

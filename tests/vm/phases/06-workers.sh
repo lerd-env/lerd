@@ -66,11 +66,36 @@ pid=$(systemctl --user show -p MainPID --value "lerd-queue-$name")
 [ -n "$pid" ] && [ "$pid" != 0 ] && kill "$pid"
 check "6.7 self-heal restarts a killed worker" wait_for 60 unit_active "lerd-queue-$name"
 
+# Two workers, so a site going to sleep or waking is a batch.
+lerd schedule:start </dev/null >/dev/null 2>&1
+# idle_logged <time> <suspended|resumed> <site>: the watcher logged the site
+# going to sleep or waking since then. Unit state alone races a worker that
+# is mid-restart, which reads as not active before idle-suspend ever acts. The
+# site is passed in because check's own local $name shadows the global one.
+idle_logged() { journalctl --user -u lerd-watcher --since "$1" --no-pager -o cat 2>/dev/null | grep -q "^\[idle\] $2 $3:"; }
+# one_reload_per_batch <time>: the watcher paid at most one daemon-reload for
+# each site or service batch it put to sleep or woke since then. The CLI's own
+# reloads (schedule:start just before) are not the watcher's to count.
+one_reload_per_batch() {
+	local reloads batches
+	reloads=$(reloads_since "$1" lerd-watcher)
+	batches=$(journalctl --user -u lerd-watcher --since "$1" --no-pager -o cat 2>/dev/null | grep -cE '^\[idle\] (suspended|resumed) ')
+	echo "reloads=$reloads batches=$batches"
+	[ "$batches" -gt 0 ] && [ "$reloads" -le "$batches" ]
+}
 check "lerd idle on" lerd idle on
 check "lerd idle timeout 1m" lerd idle timeout 1m
-check "workers suspend after the timeout" wait_for 150 bash -c "! systemctl --user is-active --quiet lerd-queue-$name"
+t=@$(date +%s)
+check "workers suspend after the timeout" wait_for 150 idle_logged "$t" suspended "$name"
+check_not "the queue is down" '^active$' systemctl --user is-active "lerd-queue-$name"
+check_not "and the schedule with it" '^active$' systemctl --user is-active "lerd-schedule-$name"
+check "a site's workers sleep with one daemon-reload" one_reload_per_batch "$t"
+t=@$(date +%s)
 curl -ks -o /dev/null "$url"
-check "6.8 hitting the site resumes them" wait_for 60 unit_active "lerd-queue-$name"
+check "6.8 hitting the site resumes them" wait_for 60 idle_logged "$t" resumed "$name"
+check "the queue is back" wait_for 30 unit_active "lerd-queue-$name"
+check "and the schedule" wait_for 30 unit_active "lerd-schedule-$name"
+check "they wake with one daemon-reload" one_reload_per_batch "$t"
 expect_200 "$url"
 check "lerd idle pin" lerd idle pin "$name"
 check_out "6.9 [partial] idle status reports the pinned site" "$name.*pin" bash -c 'lerd idle status | tr "\n" " "'
@@ -191,6 +216,9 @@ export -f snap_count
 check "lerd idle services on" lerd idle services on
 lerd artisan tinker --execute='DB::table("migrations")->insert(["migration" => "vm_snap_'"$RANDOM"'", "batch" => 99]);' </dev/null >/dev/null 2>&1
 check "mysql sleeps after the change" wait_for 240 asleep mysql
+# The rest of that tick's services may still be going down. A watcher restart
+# midway finds one flagged but up, wakes it as stale, and mysql with it.
+check "the services sleeping with it are down too" wait_for 120 only_core
 check "lerd db snapshot:auto on, covering every site" lerd db snapshot:auto on --every 1m --selection opt-out
 before=$(snap_count)
 since=$(date '+%F %T')

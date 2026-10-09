@@ -37,12 +37,19 @@ nginx_with() {
 }
 
 lerd queue:start </dev/null >/dev/null 2>&1
+lerd schedule:start </dev/null >/dev/null 2>&1
+at_most_one_reload() { local n; n=$(reloads_since "$1"); echo "reloads=$n"; [ "$n" -le 1 ]; }
+t=@$(date +%s)
 check_out "8.1 [partial] lerd pause swaps in the landing page" 'paused' bash -c "lerd pause '$name' && curl -sk '$url'"
+check "pause stops both workers with one daemon-reload" at_most_one_reload "$t"
 expect_200 "$url"
 check_not "pause stops the site's workers" '^active$' systemctl --user is-active "lerd-queue-$name"
+t=@$(date +%s)
 check "lerd unpause" lerd unpause "$name"
+check "unpause starts both workers with one daemon-reload" at_most_one_reload "$t"
 expect_200 8.2 "$url"
 check "unpause restarts the workers" wait_for 30 systemctl --user is-active "lerd-queue-$name"
+check "and the schedule" wait_for 30 systemctl --user is-active "lerd-schedule-$name"
 check "lerd restart" lerd restart "$name"
 expect_200 8.3 "$url"
 

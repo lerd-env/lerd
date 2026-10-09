@@ -2,7 +2,9 @@ package cli
 
 import (
 	"regexp"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -14,6 +16,9 @@ func TestTrayProcessPatterns_MatchTheAppletOnly(t *testing.T) {
 		"/home/u/.local/bin/lerd tray",
 		"/home/u/.local/bin/lerd tray --mono",
 		"/home/u/.local/bin/lerd-tray",
+		"/home/u/.local/bin/lerd tray --mono=false",
+		"/home/u/.local/bin/lerd-tray --mono=false",
+		"/home/u/.local/bin/lerd-tray --mono",
 	}
 	others := []string{
 		"/home/u/.local/bin/lerd tray off",
@@ -117,5 +122,47 @@ func TestTrayEnabled_DefaultsOn(t *testing.T) {
 
 	if !trayEnabled() {
 		t.Error("an install that never touched the setting must keep its tray")
+	}
+}
+
+// A replacement started while the old applet still holds the lock exits at
+// once, and the restart ends with no tray at all.
+func TestWaitTrayGone_ReturnsOnceTheOldAppletExits(t *testing.T) {
+	polls := 0
+	running := func() bool { polls++; return polls < 3 }
+	if !waitTrayGone(running, time.Second) {
+		t.Fatal("the old applet exited, so the wait must report it gone")
+	}
+	if polls != 3 {
+		t.Errorf("polled %d times, want 3: the wait must last until the applet is gone", polls)
+	}
+}
+
+func TestWaitTrayGone_GivesUpOnAnAppletThatWillNotDie(t *testing.T) {
+	if waitTrayGone(func() bool { return true }, 100*time.Millisecond) {
+		t.Error("an applet still running at the deadline must not be reported gone")
+	}
+}
+
+// An applet that ignores SIGTERM still holds the lock, so it is killed
+// outright rather than left to make its replacement quit.
+func TestStopTray_KillsAnAppletThatIgnoresTerm(t *testing.T) {
+	var sent []string
+	killed := false
+	signal := func(sig string) {
+		sent = append(sent, sig)
+		killed = killed || sig == "KILL"
+	}
+	stopTray(signal, func() bool { return !killed }, 50*time.Millisecond)
+	if strings.Join(sent, ",") != "TERM,KILL" {
+		t.Errorf("signals sent = %v, want TERM then KILL", sent)
+	}
+}
+
+func TestStopTray_SendsOnlyTermWhenTheAppletExits(t *testing.T) {
+	var sent []string
+	stopTray(func(sig string) { sent = append(sent, sig) }, func() bool { return false }, time.Second)
+	if strings.Join(sent, ",") != "TERM" {
+		t.Errorf("signals sent = %v, want only TERM for an applet that exits on it", sent)
 	}
 }
