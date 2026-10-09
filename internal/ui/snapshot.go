@@ -44,11 +44,20 @@ type snapshotSlot struct {
 
 	data []byte
 	at   time.Time
+	// gen counts invalidations, so a rebuild that began before one keeps its
+	// result stale instead of hiding the mutation for a whole TTL.
+	gen uint64
 
 	fn func() ([]byte, error)
 }
 
-func (s *snapshotSlot) get() []byte {
+func (s *snapshotSlot) get() []byte { return s.load(false) }
+
+// fresh is get for a broadcast that follows a mutation: it waits on an
+// in-flight rebuild rather than shipping the value that mutation replaced.
+func (s *snapshotSlot) fresh() []byte { return s.load(true) }
+
+func (s *snapshotSlot) load(wait bool) []byte {
 	s.mu.Lock()
 	if s.data != nil && time.Since(s.at) < currentSnapshotTTL() {
 		b := s.data
@@ -61,7 +70,7 @@ func (s *snapshotSlot) get() []byte {
 	// A caller holding a usable value never waits on a slow rebuild. A caller
 	// with nothing has to, or it answers with the cold cache's nil and the
 	// dashboard renders that as an empty list.
-	if stale != nil {
+	if stale != nil && !wait {
 		if !s.build.TryLock() {
 			return stale
 		}
@@ -76,6 +85,7 @@ func (s *snapshotSlot) get() []byte {
 		s.mu.Unlock()
 		return b
 	}
+	gen := s.gen
 	s.mu.Unlock()
 
 	b, err := s.fn()
@@ -88,7 +98,9 @@ func (s *snapshotSlot) get() []byte {
 
 	s.mu.Lock()
 	s.data = b
-	s.at = time.Now()
+	if s.gen == gen {
+		s.at = time.Now()
+	}
 	s.mu.Unlock()
 	return b
 }
@@ -97,6 +109,7 @@ func (s *snapshotSlot) get() []byte {
 func (s *snapshotSlot) invalidate() {
 	s.mu.Lock()
 	s.at = time.Time{}
+	s.gen++
 	s.mu.Unlock()
 }
 

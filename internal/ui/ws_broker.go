@@ -173,17 +173,17 @@ func runSnapshotInvalidator() {
 		for _, k := range evt.Kinds {
 			switch k {
 			case eventbus.KindSites:
-				msg.Sites = snapshots.Sites()
+				msg.Sites = snapshots.sites.fresh()
 				// Worker health rides the same KindSites cycle: it's
 				// derived from the same unit-state cache, and the only
 				// signals that can change it (unit lifecycle ops, the
 				// periodic health-watcher) all publish KindSites.
-				msg.UnhealthyWorkers = snapshots.UnhealthyWorkers()
+				msg.UnhealthyWorkers = snapshots.unhealthy.fresh()
 			case eventbus.KindServices:
-				msg.Services = snapshots.Services()
+				msg.Services = snapshots.services.fresh()
 				notifyOnServiceUpdates(msg.Services)
 			case eventbus.KindStatus:
-				msg.Status = snapshots.Status()
+				msg.Status = snapshots.status.fresh()
 				notifyOnPHPBaseUpdates(msg.Status)
 				notifyOnToolUpdates(msg.Status)
 			case eventbus.KindDumpsStatus:
