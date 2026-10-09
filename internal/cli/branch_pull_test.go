@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"errors"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 func gitOut(t *testing.T, dir string, args ...string) string {
@@ -64,26 +67,58 @@ func TestPlanPull_comparesWithTheFetchedUpstream(t *testing.T) {
 	if p.Migrate == nil || !p.Migrate.Needed || p.MigrationsAdded != 1 {
 		t.Errorf("migrate: %+v added %d", p.Migrate, p.MigrationsAdded)
 	}
-	if p.Target == "" {
-		t.Error("the plan does not name the commit it reviewed")
+	if p.Target == "" || p.Branch != "main" || p.Head == "" {
+		t.Errorf("the plan does not name what it reviewed: branch %q head %q target %q", p.Branch, p.Head, p.Target)
 	}
 }
 
-// reviewedTarget plans the pull and returns the commit the plan reviewed.
-func reviewedTarget(t *testing.T, dir string) string {
+// reviewedTarget plans the pull and returns what the plan reviewed.
+func reviewedTarget(t *testing.T, dir string) Reviewed {
 	t.Helper()
 	p, err := planPull(migratingFW, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return p.Target
+	return Reviewed{Branch: p.Branch, Head: p.Head, Commit: p.Target}
+}
+
+// A commit made after the review changes what the pull would merge onto, so
+// the dialog's plan no longer holds.
+func TestPullBranch_refusesWhenTheCheckoutGainedACommit(t *testing.T) {
+	dir := pullSiteFixture(t, func(string) {})
+	reviewed := reviewedTarget(t, dir)
+	gitT(t, dir, "commit", "-q", "--allow-empty", "-m", "after review")
+
+	if _, err := pullBranch(fixed(migratingFW), dir, reviewed, BranchSteps{}, nil, io.Discard); err == nil || !strings.Contains(err.Error(), "review the pull again") {
+		t.Fatalf("want a refusal, got %v", err)
+	}
+}
+
+// A switch between the review and the pull must not fast-forward the branch
+// that is checked out now with the commit reviewed for another.
+func TestPullBranch_refusesWhenTheCheckoutMovedToAnotherBranch(t *testing.T) {
+	dir := pullSiteFixture(t, func(string) {})
+	reviewed := reviewedTarget(t, dir)
+	gitT(t, dir, "switch", "-q", "-c", "other")
+	before := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+
+	_, err := pullBranch(fixed(migratingFW), dir, reviewed, BranchSteps{Migrate: true}, nil, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "other") {
+		t.Fatalf("want a refusal naming the branch now checked out, got %v", err)
+	}
+	if strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD")) != before {
+		t.Error("the other branch was moved")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "migrated")); err == nil {
+		t.Error("migrated after the refusal")
+	}
 }
 
 // Commits pushed after the review are left for the next pull, since the
 // chosen steps never accounted for them.
 func TestPullBranch_stopsAtTheReviewedCommit(t *testing.T) {
 	dir := pullSiteFixture(t, func(string) {})
-	target := reviewedTarget(t, dir)
+	reviewed := reviewedTarget(t, dir)
 	other := t.TempDir()
 	gitT(t, other, "clone", "-q", "-b", "main", strings.TrimSpace(gitOut(t, dir, "remote", "get-url", "origin")), ".")
 	writeMigrations(t, filepath.Join(other, "db"), "late")
@@ -91,17 +126,17 @@ func TestPullBranch_stopsAtTheReviewedCommit(t *testing.T) {
 	gitT(t, other, "commit", "-q", "-m", "late")
 	gitT(t, other, "push", "-q")
 
-	if _, err := pullBranch(fixed(migratingFW), dir, target, BranchSteps{}, nil, io.Discard); err != nil {
+	if _, err := pullBranch(fixed(migratingFW), dir, reviewed, BranchSteps{}, nil, io.Discard); err != nil {
 		t.Fatalf("pullBranch: %v", err)
 	}
-	if got := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD")); got != target {
-		t.Fatalf("HEAD %s, want the reviewed %s", got, target)
+	if got := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD")); got != reviewed.Commit {
+		t.Fatalf("HEAD %s, want the reviewed %s", got, reviewed.Commit)
 	}
 }
 
 func TestPullBranch_needsAReviewedCommit(t *testing.T) {
 	dir := pullSiteFixture(t, func(string) {})
-	if _, err := pullBranch(fixed(migratingFW), dir, "", BranchSteps{}, nil, io.Discard); err == nil {
+	if _, err := pullBranch(fixed(migratingFW), dir, Reviewed{Branch: "main"}, BranchSteps{}, nil, io.Discard); err == nil {
 		t.Fatal("want a refusal without a reviewed commit")
 	}
 }
@@ -149,5 +184,67 @@ func TestPullBranch_refusedPullRunsNothingAfter(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "migrated")); err == nil {
 		t.Error("migrate ran after a refused pull")
+	}
+}
+
+// Worktrees on the parent's database are the ones a migration on main reaches;
+// an isolated one has its own copy and is left out.
+func TestSharedWorktrees(t *testing.T) {
+	dir := switchFixture(t, func(string) {})
+	shared, isolated := filepath.Join(t.TempDir(), "shared"), filepath.Join(t.TempDir(), "own")
+	gitT(t, dir, "worktree", "add", "-q", "-b", "shared", shared)
+	gitT(t, dir, "worktree", "add", "-q", "-b", "own", isolated)
+	if err := config.SetWorktreeDBIsolated(isolated, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got := sharedWorktrees(dir, "acme.test")
+	if len(got) != 1 || got[0] != "shared" {
+		t.Fatalf("shared worktrees = %v, want [shared]", got)
+	}
+}
+
+// The worktrees get their copy of the database as it is now, before the code
+// moves and before any migration runs on it.
+func TestSwitchBranch_isolatesWorktreesBeforeTheCodeMoves(t *testing.T) {
+	dir := switchFixture(t, func(string) {})
+	isolated := false
+	db := &branchDB{isolate: func(io.Writer) error {
+		if b := strings.TrimSpace(gitOut(t, dir, "symbolic-ref", "--short", "HEAD")); b != "main" {
+			t.Errorf("isolated after the switch, on %s", b)
+		}
+		isolated = true
+		return nil
+	}}
+
+	if _, err := switchBranch(fixed(migratingFW), dir, "other", BranchSteps{Isolate: true, Migrate: true}, db, io.Discard); err != nil {
+		t.Fatalf("switchBranch: %v", err)
+	}
+	if !isolated {
+		t.Error("worktrees were not isolated")
+	}
+}
+
+// A failed isolation stops everything: the code stays put and nothing migrates.
+func TestSwitchBranch_failedIsolationMovesNothing(t *testing.T) {
+	dir := switchFixture(t, func(string) {})
+	db := &branchDB{isolate: func(io.Writer) error { return errors.New("clone failed") }}
+
+	if _, err := switchBranch(fixed(migratingFW), dir, "other", BranchSteps{Isolate: true, Migrate: true}, db, io.Discard); err == nil {
+		t.Fatal("want the isolation error")
+	}
+	if b := strings.TrimSpace(gitOut(t, dir, "symbolic-ref", "--short", "HEAD")); b != "main" {
+		t.Errorf("switched to %s after a failed isolation", b)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "migrated")); err == nil {
+		t.Error("migrated after a failed isolation")
+	}
+}
+
+// A worktree's pull has no shared database to hand out copies of.
+func TestPullSite_isolateOnlyFromTheMainCheckout(t *testing.T) {
+	site := &config.Site{Name: "acme", Path: t.TempDir()}
+	if _, err := PullSite(site, t.TempDir(), Reviewed{Branch: "main", Head: "abc", Commit: "def"}, BranchSteps{Isolate: true}, io.Discard); err == nil || !strings.Contains(err.Error(), "main checkout") {
+		t.Fatalf("want a refusal for a worktree, got %v", err)
 	}
 }

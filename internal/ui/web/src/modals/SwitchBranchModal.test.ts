@@ -68,7 +68,7 @@ describe('SwitchBranchModal', () => {
     expect(streamBranchSwitch).toHaveBeenCalledWith(
       'acme.test',
       'dev',
-      { composer: true, js: false, migrate: false, snapshot: false, restore: '', create: false, base: '' },
+      { composer: true, js: false, migrate: false, snapshot: false, isolate: false, restore: '', create: false, base: '' },
       expect.any(Function)
     );
     await waitFor(() => expect(closeModal).toHaveBeenCalled());
@@ -119,6 +119,18 @@ describe('SwitchBranchModal', () => {
       expect(screen.getByText('from a snapshot taken 2d ago')).toBeInTheDocument();
       const order = screen.getAllByRole('switch').map((el) => el.getAttribute('aria-label'));
       expect(order.slice(0, 3)).toEqual(['Snapshot the database first', "Restore dev's database", 'composer install']);
+    });
+
+    // Worktrees on main's database get their copy after the snapshot, before the switch.
+    it('offers to give sharing worktrees their own database, after the snapshot', async () => {
+      branchPlan.mockResolvedValue({ ...plan, db, shared_worktrees: ['feature-x'] });
+      finishWith({ ok: true });
+      render(SwitchBranchModal, { props: { site } });
+      expect(await screen.findByRole('switch', { name: 'Give worktrees their own database first' })).toBeChecked();
+      const order = screen.getAllByRole('switch').map((el) => el.getAttribute('aria-label'));
+      expect(order.slice(0, 2)).toEqual(['Snapshot the database first', 'Give worktrees their own database first']);
+      await fireEvent.click(screen.getByRole('button', { name: 'Switch' }));
+      expect(streamBranchSwitch.mock.calls[0][2]).toMatchObject({ isolate: true });
     });
 
     it('sends the chosen snapshot to restore', async () => {

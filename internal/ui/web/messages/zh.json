@@ -1617,6 +1617,8 @@
   "branchSwitch_conflictsMore": "以及另外 {count} 个",
   "branchSwitch_snapshot": "先为数据库创建快照",
   "branchSwitch_snapshotWhy": "{database} 将作为 {branch} 的副本保存",
+  "branchSwitch_isolate": "先为 worktree 提供各自的数据库",
+  "branchSwitch_isolateWhy": "{branches} 共用 {database},会受到这些迁移影响;每个都会得到它当前状态的副本",
   "branchSwitch_restore": "恢复 {branch} 的数据库",
   "branchSwitch_restoreWhen": "来自 {when} 的快照",
   "branchSwitch_restoreSnapshot": "恢复快照",

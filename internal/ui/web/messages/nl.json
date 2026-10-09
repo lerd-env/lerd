@@ -1617,6 +1617,8 @@
   "branchSwitch_conflictsMore": "en nog {count}",
   "branchSwitch_snapshot": "Eerst een snapshot van de database maken",
   "branchSwitch_snapshotWhy": "{database} wordt bewaard als kopie van {branch}",
+  "branchSwitch_isolate": "Geef worktrees eerst een eigen database",
+  "branchSwitch_isolateWhy": "{branches} delen {database} en zouden deze migraties krijgen; elk krijgt een kopie zoals die nu is",
   "branchSwitch_restore": "Database van {branch} herstellen",
   "branchSwitch_restoreWhen": "uit een snapshot van {when}",
   "branchSwitch_restoreSnapshot": "Snapshot herstellen",

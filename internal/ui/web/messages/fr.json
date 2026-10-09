@@ -1617,6 +1617,8 @@
   "branchSwitch_conflictsMore": "et {count} de plus",
   "branchSwitch_snapshot": "Prendre d'abord un snapshot de la base",
   "branchSwitch_snapshotWhy": "{database} est conservée comme copie de {branch}",
+  "branchSwitch_isolate": "Donner d'abord leur propre base aux worktrees",
+  "branchSwitch_isolateWhy": "{branches} partagent {database} et recevraient ces migrations ; chacun en reçoit une copie dans son état actuel",
   "branchSwitch_restore": "Restaurer la base de {branch}",
   "branchSwitch_restoreWhen": "depuis un snapshot pris {when}",
   "branchSwitch_restoreSnapshot": "Restaurer le snapshot",

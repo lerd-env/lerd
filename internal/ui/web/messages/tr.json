@@ -1617,6 +1617,8 @@
   "branchSwitch_conflictsMore": "ve {count} tane daha",
   "branchSwitch_snapshot": "Önce veritabanının anlık görüntüsünü al",
   "branchSwitch_snapshotWhy": "{database}, {branch} kopyası olarak saklanır",
+  "branchSwitch_isolate": "Önce worktree'lere kendi veritabanını ver",
+  "branchSwitch_isolateWhy": "{branches} {database} veritabanını paylaşıyor ve bu migration'ları alırdı; her biri şu anki halinin bir kopyasını alır",
   "branchSwitch_restore": "{branch} veritabanını geri yükle",
   "branchSwitch_restoreWhen": "{when} alınan anlık görüntüden",
   "branchSwitch_restoreSnapshot": "Anlık görüntüyü geri yükle",

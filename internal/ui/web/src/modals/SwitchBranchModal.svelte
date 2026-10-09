@@ -27,7 +27,7 @@
   let loading = $state(true);
   let plan = $state<BranchPlan | null>(null);
   let planning = $state(false);
-  let on = $state<Record<RowKey, boolean>>({ snapshot: false, restore: false, composer: false, js: false, migrate: false });
+  let on = $state<Record<RowKey, boolean>>({ snapshot: false, isolate: false, restore: false, composer: false, js: false, migrate: false });
   let mode = $state<'existing' | 'new'>('existing');
   let newName = $state('');
   // Where a new branch starts; '' is the commit checked out now.
@@ -132,6 +132,7 @@
       js: on.js,
       migrate: on.migrate,
       snapshot: on.snapshot,
+      isolate: on.isolate,
       restore: on.restore && !creating ? plan?.db?.restore?.name ?? '' : '',
       create: creating,
       base: creating ? base : ''

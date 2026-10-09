@@ -1617,6 +1617,8 @@
   "branchSwitch_conflictsMore": "und {count} weitere",
   "branchSwitch_snapshot": "Zuerst einen Datenbank-Snapshot anlegen",
   "branchSwitch_snapshotWhy": "{database} wird als Kopie von {branch} aufbewahrt",
+  "branchSwitch_isolate": "Worktrees zuerst eine eigene Datenbank geben",
+  "branchSwitch_isolateWhy": "{branches} teilen {database} und bekämen diese Migrationen; jeder erhält eine Kopie im jetzigen Zustand",
   "branchSwitch_restore": "Datenbank von {branch} wiederherstellen",
   "branchSwitch_restoreWhen": "aus einem Snapshot von {when}",
   "branchSwitch_restoreSnapshot": "Snapshot wiederherstellen",

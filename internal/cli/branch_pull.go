@@ -19,6 +19,10 @@ func PlanSitePull(site *config.Site, dir string) (BranchPlan, error) {
 	}
 	if t, ok := snapshotTargetFor(dir); ok {
 		p.DB = &BranchDB{Service: t.Service, Database: t.Database}
+		// Only the main checkout's database is shared; a worktree's pull has none to offer.
+		if dir == site.Path {
+			p.SharedWorktrees = sharedWorktrees(site.Path, site.PrimaryDomain())
+		}
 	}
 	return p, nil
 }
@@ -35,16 +39,28 @@ func planPull(fw *config.Framework, dir string) (BranchPlan, error) {
 	if err != nil {
 		return BranchPlan{}, fmt.Errorf("cannot read the upstream commit")
 	}
+	branch, err := gitpkg.Output(dir, "symbolic-ref", "--short", "HEAD")
+	if err != nil {
+		return BranchPlan{}, fmt.Errorf("not on a branch")
+	}
+	head, err := gitpkg.Output(dir, "rev-parse", "HEAD")
+	if err != nil {
+		return BranchPlan{}, fmt.Errorf("cannot read the checked out commit")
+	}
 	p, err := planBranch(fw, dir, strings.TrimSpace(target))
-	p.Target = strings.TrimSpace(target)
+	p.Target, p.Branch, p.Head = strings.TrimSpace(target), strings.TrimSpace(branch), strings.TrimSpace(head)
 	return p, err
 }
 
-// PullSite fast-forwards the checkout at dir to target, the commit its plan
-// reviewed, and runs the chosen steps around it, one switch or pull per
-// checkout at a time. It returns the snapshot taken first, even on failure, so
-// it can be restored.
-func PullSite(site *config.Site, dir, target string, steps BranchSteps, out io.Writer) (string, error) {
+// Reviewed is what a pull plan looked at: the branch and commit checked out,
+// and the upstream commit it compared them with.
+type Reviewed struct{ Branch, Head, Commit string }
+
+// PullSite fast-forwards the checkout at dir to the commit its plan reviewed
+// and runs the chosen steps around it, one switch or pull per checkout at a
+// time. It returns the snapshot taken first, even on failure, so it can be
+// restored.
+func PullSite(site *config.Site, dir string, r Reviewed, steps BranchSteps, out io.Writer) (string, error) {
 	release := CheckoutLock(dir)
 	if release == nil {
 		return "", fmt.Errorf("a branch switch is running on this checkout")
@@ -54,22 +70,33 @@ func PullSite(site *config.Site, dir, target string, steps BranchSteps, out io.W
 		fw, _ := config.GetFrameworkForDir(site.Framework, dir)
 		return fw
 	}
+	if steps.Isolate && dir != site.Path {
+		return "", fmt.Errorf("only the main checkout's database is shared with worktrees")
+	}
 	var db *branchDB
-	if steps.Snapshot {
+	if steps.Snapshot || steps.Isolate {
 		t, ok := snapshotTargetFor(dir)
 		if !ok {
 			return "", fmt.Errorf("the site's database does not take snapshots")
 		}
 		db = siteBranchDB(site, dir, t, out)
 	}
-	return pullBranch(fwAfter, dir, target, steps, db, out)
+	return pullBranch(fwAfter, dir, r, steps, db, out)
 }
 
-// pullBranch stops at target rather than pulling whatever the remote has now:
-// the chosen steps only account for the commits that were reviewed.
-func pullBranch(fwAfter func() *config.Framework, dir, target string, steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
-	if target == "" {
+// pullBranch stops at the reviewed commit rather than pulling whatever the
+// remote has now: the chosen steps only account for the commits reviewed. It
+// refuses when the checkout has since moved to another branch.
+func pullBranch(fwAfter func() *config.Framework, dir string, r Reviewed, steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
+	if r.Commit == "" || r.Branch == "" || r.Head == "" {
 		return "", fmt.Errorf("no reviewed commit to pull to")
 	}
-	return runAround(fwAfter, dir, func() (string, error) { return gitpkg.FastForward(dir, target) }, steps, db, out)
+	now, _ := gitpkg.Output(dir, "symbolic-ref", "--short", "HEAD")
+	if now = strings.TrimSpace(now); now != r.Branch {
+		return "", fmt.Errorf("the checkout is on %s now, not %s; review the pull again", now, r.Branch)
+	}
+	if head, _ := gitpkg.Output(dir, "rev-parse", "HEAD"); strings.TrimSpace(head) != r.Head {
+		return "", fmt.Errorf("%s has moved since the review; review the pull again", r.Branch)
+	}
+	return runAround(fwAfter, dir, func() (string, error) { return gitpkg.FastForward(dir, r.Commit) }, steps, db, out)
 }

@@ -1617,6 +1617,8 @@
   "branchSwitch_conflictsMore": "và {count} tệp khác",
   "branchSwitch_snapshot": "Tạo snapshot cơ sở dữ liệu trước",
   "branchSwitch_snapshotWhy": "{database} được giữ làm bản sao của {branch}",
+  "branchSwitch_isolate": "Cấp cho worktree cơ sở dữ liệu riêng trước",
+  "branchSwitch_isolateWhy": "{branches} dùng chung {database} và sẽ nhận các migration này; mỗi worktree nhận một bản sao như hiện tại",
   "branchSwitch_restore": "Khôi phục cơ sở dữ liệu của {branch}",
   "branchSwitch_restoreWhen": "từ snapshot {when}",
   "branchSwitch_restoreSnapshot": "Khôi phục snapshot",

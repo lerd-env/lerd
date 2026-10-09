@@ -21,7 +21,7 @@
 
   let plan = $state<BranchPlan | null>(null);
   let planning = $state(true);
-  let on = $state<Record<RowKey, boolean>>({ snapshot: false, restore: false, composer: false, js: false, migrate: false });
+  let on = $state<Record<RowKey, boolean>>({ snapshot: false, isolate: false, restore: false, composer: false, js: false, migrate: false });
   let pulling = $state(false);
   let finished = $state(false);
   let error = $state('');
@@ -55,7 +55,7 @@
     logs = [];
     let done: { ok?: boolean; error?: string; snapshot?: string } = { ok: false };
     try {
-      await streamPull(domain, branch, plan?.target ?? '', { composer: on.composer, js: on.js, migrate: on.migrate, snapshot: on.snapshot }, (ev) => {
+      await streamPull(domain, branch, { branch: plan?.branch, head: plan?.head, target: plan?.target }, { composer: on.composer, js: on.js, migrate: on.migrate, snapshot: on.snapshot, isolate: on.isolate }, (ev) => {
         if (ev.done) done = ev;
         else if (ev.line) logs = [...logs, ev.line];
       });

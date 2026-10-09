@@ -24,13 +24,15 @@ const plan = {
   migrations_missing: 0,
   conflicts: [],
   db: { service: 'mysql', database: 'acme' },
-  target: 'abc123'
+  target: 'abc123',
+  branch: 'feature',
+  head: 'f00d'
 };
 
 const props = { domain: 'acme.test', branch: 'feature', branchLabel: 'feature' };
 
 function finishWith(done: object) {
-  streamPull.mockImplementation(async (_d: string, _b: string, _t: string, _s: object, on: (e: object) => void) => {
+  streamPull.mockImplementation(async (_d: string, _b: string, _r: object, _s: object, on: (e: object) => void) => {
     on({ line: 'Fast-forward' });
     on({ done: true, ...done });
   });
@@ -61,7 +63,7 @@ describe('PullModal', () => {
     await fireEvent.click(await screen.findByRole('switch', { name: 'composer install' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Pull' }));
 
-    expect(streamPull).toHaveBeenCalledWith('acme.test', 'feature', 'abc123', { composer: false, js: false, migrate: true, snapshot: true }, expect.any(Function));
+    expect(streamPull).toHaveBeenCalledWith('acme.test', 'feature', { branch: 'feature', head: 'f00d', target: 'abc123' }, { composer: false, js: false, migrate: true, snapshot: true, isolate: false }, expect.any(Function));
     await waitFor(() => expect(closeModal).toHaveBeenCalled());
     expect(onDone).toHaveBeenCalled();
   });
@@ -79,6 +81,24 @@ describe('PullModal', () => {
     render(PullModal, { props });
     expect(await screen.findByText('Diverged: 2 local and 3 remote commits. Merge or rebase it in your editor or terminal.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Pull' })).toBeDisabled();
+  });
+
+  // A migration on main's database would change it under the worktrees sharing it.
+  it('offers to give sharing worktrees their own database first', async () => {
+    finishWith({ ok: true });
+    pullPlan.mockResolvedValue({ ...plan, shared_worktrees: ['feature-x', 'bugfix-y'] });
+    render(PullModal, { props: { ...props, branch: '' } });
+    const row = await screen.findByRole('switch', { name: 'Give worktrees their own database first' });
+    expect(row).toBeChecked();
+    expect(screen.getByText(/feature-x, bugfix-y share acme/)).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Pull' }));
+    expect(streamPull.mock.calls[0][3]).toMatchObject({ isolate: true });
+  });
+
+  it('leaves the worktrees alone when no migrations come in', async () => {
+    pullPlan.mockResolvedValue({ ...plan, migrations_added: 0, migrate: { label: 'php artisan migrate --force', needed: false }, shared_worktrees: ['feature-x'] });
+    render(PullModal, { props });
+    expect(await screen.findByRole('switch', { name: 'Give worktrees their own database first' })).not.toBeChecked();
   });
 
   it('says so when there is nothing to pull', async () => {

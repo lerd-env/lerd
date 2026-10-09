@@ -1617,6 +1617,8 @@
   "branchSwitch_conflictsMore": "他 {count} 件",
   "branchSwitch_snapshot": "先にデータベースのスナップショットを作成",
   "branchSwitch_snapshotWhy": "{database} を {branch} のコピーとして保存します",
+  "branchSwitch_isolate": "先に worktree へ専用のデータベースを用意する",
+  "branchSwitch_isolateWhy": "{branches} は {database} を共有しており、これらのマイグレーションの影響を受けます。それぞれ現在の状態のコピーを受け取ります",
   "branchSwitch_restore": "{branch} のデータベースを復元",
   "branchSwitch_restoreWhen": "{when} のスナップショットから",
   "branchSwitch_restoreSnapshot": "スナップショットを復元",

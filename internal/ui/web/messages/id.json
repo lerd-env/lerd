@@ -1617,6 +1617,8 @@
   "branchSwitch_conflictsMore": "dan {count} lainnya",
   "branchSwitch_snapshot": "Snapshot database lebih dulu",
   "branchSwitch_snapshotWhy": "{database} disimpan sebagai salinan {branch}",
+  "branchSwitch_isolate": "Beri worktree database sendiri terlebih dahulu",
+  "branchSwitch_isolateWhy": "{branches} berbagi {database} dan akan terkena migrasi ini; masing-masing mendapat salinannya seperti sekarang",
   "branchSwitch_restore": "Pulihkan database {branch}",
   "branchSwitch_restoreWhen": "dari snapshot {when}",
   "branchSwitch_restoreSnapshot": "Pulihkan snapshot",

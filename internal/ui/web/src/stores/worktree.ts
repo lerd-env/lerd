@@ -132,8 +132,13 @@ export interface BranchPlan {
   migrations_added: number;
   migrations_missing: number;
   conflicts?: string[];
-  // The commit a pull plan reviewed; the pull stops there.
+  // What a pull plan reviewed: the upstream commit the pull stops at, and the
+  // branch and commit checked out then, which the pull refuses to run without.
   target?: string;
+  branch?: string;
+  head?: string;
+  // Worktrees on the main checkout's database, which a migration here changes.
+  shared_worktrees?: string[];
   db?: { service: string; database: string; restore?: { name: string; created: string } };
   error?: string;
 }
@@ -147,6 +152,8 @@ export interface BranchSteps {
   js: boolean;
   migrate: boolean;
   snapshot: boolean;
+  // Give the worktrees sharing the database their own copy before anything moves.
+  isolate?: boolean;
   // A snapshot to load once the branch is checked out, or '' for none.
   restore: string;
   // Create makes the branch new, starting at base ('' for the current commit).
@@ -184,23 +191,26 @@ export async function pullPlan(domain: string, branch: string): Promise<BranchPl
   return apiJson<BranchPlan>('/api/sites/pull-plan?' + new URLSearchParams({ domain, branch }).toString());
 }
 
-// streamPull fast-forwards the checkout to target, the commit its plan
-// reviewed, and runs the chosen steps, streaming their output.
+// streamPull fast-forwards the checkout to the commit its plan reviewed and
+// runs the chosen steps, streaming their output. The server refuses when the
+// checkout is no longer on the branch and commit the plan saw.
 export async function streamPull(
   domain: string,
   branch: string,
-  target: string,
+  reviewed: Pick<BranchPlan, 'branch' | 'head' | 'target'>,
   steps: Omit<BranchSteps, 'restore'>,
   onEvent: (e: BranchSwitchEvent) => void
 ): Promise<void> {
   const qs = stepsQuery(domain, branch, steps);
-  qs.set('target', target);
+  qs.set('from', reviewed.branch ?? '');
+  qs.set('head', reviewed.head ?? '');
+  qs.set('target', reviewed.target ?? '');
   await streamSteps('/api/sites/pull?' + qs.toString(), onEvent);
 }
 
 function stepsQuery(domain: string, branch: string, steps: Omit<BranchSteps, 'restore'>): URLSearchParams {
   const qs = new URLSearchParams({ domain, branch });
-  for (const k of ['composer', 'js', 'migrate', 'snapshot'] as const) if (steps[k]) qs.set(k, '1');
+  for (const k of ['composer', 'js', 'migrate', 'snapshot', 'isolate'] as const) if (steps[k]) qs.set(k, '1');
   return qs;
 }
 

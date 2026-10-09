@@ -1617,6 +1617,8 @@
   "branchSwitch_conflictsMore": "și încă {count}",
   "branchSwitch_snapshot": "Fă mai întâi un snapshot al bazei de date",
   "branchSwitch_snapshotWhy": "{database} e păstrată ca o copie pentru {branch}",
+  "branchSwitch_isolate": "Dă worktree-urilor propria bază de date întâi",
+  "branchSwitch_isolateWhy": "{branches} folosesc {database} și ar primi aceste migrări; fiecare primește o copie a ei așa cum e acum",
   "branchSwitch_restore": "Restaurează baza de date pentru {branch}",
   "branchSwitch_restoreWhen": "dintr-un snapshot de acum {when}",
   "branchSwitch_restoreSnapshot": "Restaurează snapshot-ul",
