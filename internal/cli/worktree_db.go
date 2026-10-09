@@ -8,6 +8,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
 	gitpkg "github.com/geodro/lerd/internal/git"
+	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/sitedoctor"
 )
 
@@ -111,7 +112,7 @@ func SetWorktreeDBIsolated(site *config.Site, branch string, isolated bool, sour
 		if err := applyDBEnvUpdate(wtEnv, binding.Format, map[string]string{binding.NameKey: dbName}); err != nil {
 			return fmt.Errorf("rewriting worktree env: %w", err)
 		}
-		return nil
+		return restartWorktreeWorkersFn(site, wt.Path)
 	}
 
 	if entry, removed, err := config.RemoveWorktreeDB(site.Name, branch); err == nil && removed {
@@ -123,6 +124,23 @@ func SetWorktreeDBIsolated(site *config.Site, branch string, isolated bool, sour
 	if _, err := os.Stat(wtEnv); err == nil {
 		if err := applyDBEnvUpdate(wtEnv, binding.Format, map[string]string{binding.NameKey: parentDB}); err != nil {
 			return fmt.Errorf("restoring worktree env: %w", err)
+		}
+	}
+	return restartWorktreeWorkersFn(site, wt.Path)
+}
+
+// restartWorktreeWorkersFn restarts a worktree's running workers; a seam for tests.
+var restartWorktreeWorkersFn = restartRunningWorktreeWorkers
+
+// restartRunningWorktreeWorkers restarts the workers running for the worktree
+// at wtPath, so a process holding a database connection reconnects to the
+// database its env now names.
+func restartRunningWorktreeWorkers(site *config.Site, wtPath string) error {
+	base := config.WorktreeUnitSlug(filepath.Base(wtPath))
+	for _, w := range collectRunningWorktreeWorkersByBase(site, base) {
+		unit := "lerd-" + w + "-" + site.Name + "-" + base
+		if err := podman.RestartUnit(unit); err != nil {
+			return fmt.Errorf("restarting %s: %w", unit, err)
 		}
 	}
 	return nil

@@ -130,3 +130,28 @@ func TestWorktreeDBName_underscoreSlug(t *testing.T) {
 		}
 	}
 }
+
+// A worktree's running workers hold the database connection they started with,
+// so moving the worktree to another database restarts them onto the new one.
+func TestSetWorktreeDBIsolated_restartsTheWorktreesWorkers(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	sitePath, checkout := makeFakeWorktree(t, "feature")
+	for _, dir := range []string{sitePath, checkout} {
+		if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("DB_HOST=lerd-mysql\nDB_DATABASE=acme\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var restarted []string
+	orig := restartWorktreeWorkersFn
+	restartWorktreeWorkersFn = func(_ *config.Site, wtPath string) error { restarted = append(restarted, wtPath); return nil }
+	t.Cleanup(func() { restartWorktreeWorkersFn = orig })
+
+	site := &config.Site{Name: "acme", Path: sitePath, Domains: []string{"acme.test"}}
+	if err := SetWorktreeDBIsolated(site, "feature", false, ""); err != nil {
+		t.Fatalf("SetWorktreeDBIsolated: %v", err)
+	}
+	if len(restarted) != 1 || restarted[0] != checkout {
+		t.Fatalf("restarted %v, want the worktree at %s", restarted, checkout)
+	}
+}
