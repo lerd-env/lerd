@@ -6,14 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/sitedoctor"
-	"github.com/geodro/lerd/internal/sitetpl"
 	"github.com/spf13/cobra"
 )
 
@@ -126,27 +124,18 @@ func migrateCreatedDatabases(path, fwName string, quiet bool) error {
 			fw, _ = config.GetFrameworkForDir(name, path)
 		}
 	}
-	if fw == nil || fw.Doctor == nil || fw.Doctor.MigrateCommand == "" {
+	c, runDir, ok := resolveMigrateCommand(fw, path)
+	if !ok {
 		return nil
 	}
-	for _, c := range sitetpl.ExpandCommands(config.ResolveCommands(fw, nil, path), sitetpl.ForPath(path)) {
-		if c.Name != fw.Doctor.MigrateCommand || c.Command == "" || c.ProjectOrigin {
-			continue
-		}
-		runDir := path
-		if c.CWD != "" && c.CWD != "." {
-			runDir = filepath.Join(path, c.CWD)
-		}
-		cmd := newCommandExec(runDir, c.Command)
-		cmd.Stdout = fixOutput(quiet)
-		cmd.Stderr = fixOutput(quiet)
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("%s: %w", c.Command, err)
-		}
-		if !quiet {
-			fmt.Printf("  %s\n\n", feedback.Dim("ran "+c.Command))
-		}
-		return nil
+	cmd := newCommandExec(runDir, c.Command)
+	cmd.Stdout = fixOutput(quiet)
+	cmd.Stderr = fixOutput(quiet)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s: %w", c.Command, err)
+	}
+	if !quiet {
+		fmt.Printf("  %s\n\n", feedback.Dim("ran "+c.Command))
 	}
 	return nil
 }

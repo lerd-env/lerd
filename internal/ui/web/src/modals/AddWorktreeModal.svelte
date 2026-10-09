@@ -11,6 +11,7 @@
     streamWorktreeAdd,
     type WorktreeOptions
   } from '$stores/worktree';
+  import { branchOptions } from '$lib/branchOptions';
   import { m } from '../paraglide/messages.js';
 
   interface Props {
@@ -40,6 +41,7 @@
   const localBranches = $derived(opts?.local_branches ?? []);
   const remoteBranches = $derived(opts?.remote_branches ?? []);
   const hasAnyBranch = $derived(localBranches.length + remoteBranches.length > 0);
+  const branchChoices = $derived(branchOptions(localBranches, remoteBranches, opts?.branch_dates));
   const buildOptions = $derived(opts?.build_options ?? []);
   const dbOptions = $derived(opts?.db_options ?? []);
   const showMigrate = $derived(Boolean(opts?.can_migrate) && (db === 'empty' || db === 'reset'));
@@ -61,7 +63,7 @@
       opts = o;
       if (seed) {
         build = o.build_default || 'auto';
-        existingBranch = (o.local_branches ?? [])[0] ?? (o.remote_branches ?? [])[0] ?? '';
+        existingBranch = branchOptions(o.local_branches ?? [], o.remote_branches ?? [], o.branch_dates)[0]?.value ?? '';
       }
       const dbo = o.db_options ?? [];
       if (!dbo.some((d) => d.value === db)) db = dbo[0]?.value ?? 'share';
@@ -163,11 +165,8 @@
             <Dropdown
               value={baseRef}
               width="full"
-              options={[
-                { value: '', label: currentBranchLabel(opts?.default_branch_label || 'HEAD') },
-                ...localBranches.map((b) => ({ value: b, label: b })),
-                ...remoteBranches.map((b) => ({ value: b, label: b, description: 'remote' }))
-              ]}
+              options={[{ value: '', label: currentBranchLabel(opts?.default_branch_label || 'HEAD') }, ...branchChoices]}
+              searchable
               onchange={(v) => (baseRef = v)}
             />
           {/if}
@@ -175,10 +174,8 @@
           <Dropdown
             value={existingBranch}
             width="full"
-            options={[
-              ...localBranches.map((b) => ({ value: b, label: b })),
-              ...remoteBranches.map((b) => ({ value: b, label: b, description: 'remote' }))
-            ]}
+            options={branchChoices}
+            searchable
             onchange={(v) => (existingBranch = v)}
           />
         {/if}

@@ -194,6 +194,32 @@ describe('SiteHeader', () => {
     });
   });
 
+  // Git actions run with the host user's credentials and run installs and
+  // migrations, so a remote dashboard without host authority never sees them.
+  describe('git actions', () => {
+    afterEach(() => vi.unstubAllGlobals());
+    const tracking = [{ branch: 'main', path: '/home/u/Code/app', main: true, staged: 0, modified: 0, untracked: 0, conflicted: 0, ahead: 0, behind: 1, upstream: true }];
+
+    it('offers sync and branch switching to the local dashboard', async () => {
+      accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({ checkouts: tracking })))));
+      const { findByRole, getByRole } = render(Harness, { props: { site: worktreeSite } });
+      expect(await findByRole('button', { name: 'Pull from upstream' })).toBeInTheDocument();
+      expect(getByRole('button', { name: 'Switch branch' })).toBeInTheDocument();
+    });
+
+    it('hides them from a remote session without host actions', async () => {
+      accessMode.set({ localControl: false, local: false, lanExposed: true, checked: true });
+      const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ checkouts: tracking }))));
+      vi.stubGlobal('fetch', fetchMock);
+      const { queryByRole } = render(Harness, { props: { site: worktreeSite } });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      await Promise.resolve();
+      expect(queryByRole('button', { name: 'Pull from upstream' })).toBeNull();
+      expect(queryByRole('button', { name: 'Switch branch' })).toBeNull();
+    });
+  });
+
   // The sites store hands the header a fresh site object on every refresh, which
   // reruns the git poll; the marker must survive the gap until the answer lands.
   describe('git marker', () => {

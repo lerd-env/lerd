@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { gitParts, gitMarker, checkoutFor, type GitStatus } from './gitStatus';
 
-const clean: GitStatus = { staged: 0, modified: 0, untracked: 0, conflicted: 0, ahead: 0, behind: 0 };
+const clean: GitStatus = { staged: 0, modified: 0, untracked: 0, conflicted: 0, ahead: 0, behind: 0, upstream: false };
 
 describe('gitParts', () => {
   it('lists nothing for a clean tree', () => {
@@ -9,7 +9,7 @@ describe('gitParts', () => {
   });
 
   it('lists each kind with its count, conflicts first', () => {
-    const s = { staged: 1, modified: 2, untracked: 3, conflicted: 1, ahead: 2, behind: 1 };
+    const s = { staged: 1, modified: 2, untracked: 3, conflicted: 1, ahead: 2, behind: 1, upstream: false };
     expect(gitParts(s).map((p) => `${p.kind}:${p.count}`)).toEqual([
       'conflicted:1', 'untracked:3', 'modified:2', 'staged:1', 'ahead:2', 'behind:1'
     ]);

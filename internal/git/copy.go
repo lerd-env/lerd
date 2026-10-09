@@ -104,11 +104,8 @@ func InstallDependencies(projectPath string, out io.Writer) error {
 	var errs []error
 
 	if composerNeedsInstall(projectPath) {
-		composer := filepath.Join(config.BinDir(), "composer")
-		if err := runIn(projectPath, out, composer, "install", "--no-interaction", "--no-progress"); err != nil {
-			errs = append(errs, fmt.Errorf("composer install: %w", err))
-		} else {
-			stampInstallMarker(filepath.Join(projectPath, "vendor", "composer", "installed.json"))
+		if err := InstallComposer(projectPath, out); err != nil {
+			errs = append(errs, err)
 		}
 	}
 
@@ -135,6 +132,33 @@ func InstallDependencies(projectPath string, out io.Writer) error {
 	// build explicitly via RunFrontendBuild after dependencies are in place.
 
 	return errors.Join(errs...)
+}
+
+// InstallComposer runs composer install whether or not the marker says one is due.
+func InstallComposer(projectPath string, out io.Writer) error {
+	composer := filepath.Join(config.BinDir(), "composer")
+	if err := runIn(projectPath, out, composer, "install", "--no-interaction", "--no-progress"); err != nil {
+		return fmt.Errorf("composer install: %w", err)
+	}
+	stampInstallMarker(filepath.Join(projectPath, "vendor", "composer", "installed.json"))
+	return nil
+}
+
+// InstallJS runs the project's JS package install whether or not one is due.
+func InstallJS(projectPath string, out io.Writer) error {
+	if err := jsInstaller(projectPath, out); err != nil {
+		return err
+	}
+	marker, _ := jsInstallPaths(projectPath)
+	stampInstallMarker(marker)
+	return nil
+}
+
+// JSInstallCommandAt names the install ref's lockfiles call for, like "npm ci",
+// for the project at prefix inside the repository at dir.
+func JSInstallCommandAt(dir, ref, prefix string) string {
+	name, args := jsManagerFor(func(f string) bool { return FileAtRef(dir, ref, prefix+f) })
+	return name + " " + args[0]
 }
 
 // RunNpmScript executes `<package-manager> run <script>` in projectPath,
@@ -308,20 +332,25 @@ func markerStale(marker, ref string) bool {
 
 // jsPackageManager returns the name and install args for the package
 // manager a project uses, picked from the presence of lockfiles.
+func jsPackageManager(projectPath string) (name string, args []string) {
+	return jsManagerFor(func(f string) bool { return hasFile(projectPath, f) })
+}
+
+// jsManagerFor picks the manager from which lockfiles has reports present.
 // Preference order mirrors each manager's lockfile being definitive:
 // pnpm-lock.yaml ▸ yarn.lock ▸ bun.lock(b) ▸ npm lockfile ▸ npm as fallback.
-func jsPackageManager(projectPath string) (name string, args []string) {
+func jsManagerFor(has func(string) bool) (name string, args []string) {
 	switch {
-	case hasFile(projectPath, "pnpm-lock.yaml"):
+	case has("pnpm-lock.yaml"):
 		return "pnpm", []string{"install", "--frozen-lockfile"}
-	case hasFile(projectPath, "yarn.lock"):
+	case has("yarn.lock"):
 		// --immutable covers both yarn classic (v1) and berry (v2+); v1
 		// doesn't understand it but falls back to default install, which
 		// is what we want if the lockfile is already present.
 		return "yarn", []string{"install", "--immutable"}
-	case hasFile(projectPath, "bun.lockb"), hasFile(projectPath, "bun.lock"):
+	case has("bun.lockb"), has("bun.lock"):
 		return "bun", []string{"install", "--frozen-lockfile"}
-	case hasFile(projectPath, "package-lock.json"), hasFile(projectPath, "npm-shrinkwrap.json"):
+	case has("package-lock.json"), has("npm-shrinkwrap.json"):
 		return "npm", []string{"ci", "--no-progress"}
 	default:
 		return "npm", []string{"install", "--no-progress"}

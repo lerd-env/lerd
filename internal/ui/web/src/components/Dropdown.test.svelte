@@ -12,6 +12,7 @@
     placeholder?: string;
     width?: 'auto' | 'full';
     align?: 'left' | 'right';
+    searchable?: boolean;
     onchange: (v: string) => void;
   }
   let {
@@ -25,6 +26,7 @@
     placeholder = '',
     width = 'auto',
     align = 'left',
+    searchable = false,
     onchange
   }: Props = $props();
 </script>
@@ -40,5 +42,6 @@
   {placeholder}
   {width}
   {align}
+  {searchable}
   {onchange}
 />

@@ -224,6 +224,14 @@ func TestIsLoopbackOnlyPath(t *testing.T) {
 		{"/api/sites/myapp.test/env/backups/.env.bkp.20260528-103045", true},
 		{"/api/sites/myapp.test/env/restore", true},
 		{"/api/sites/myapp.test/terminal/anything", true},
+		// Switching branch runs composer, npm and migrations and can restore a
+		// database snapshot; pull and push act with the host user's git credentials.
+		{"/api/sites/branch-switch", true},
+		{"/api/sites/branch-plan", true},
+		{"/api/sites/myapp.test/git:pull", true},
+		{"/api/sites/myapp.test/git:push", true},
+		{"/api/sites/myapp.test/git:fetch", true},
+		{"/api/sites/git-status", false},
 		{"/api/databases", true},
 		{"/api/databases/mysql", true},
 		{"/api/databases/mysql/drop", true},

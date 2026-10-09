@@ -7,6 +7,7 @@ export interface GitStatus {
   conflicted: number;
   ahead: number;
   behind: number;
+  upstream: boolean;
 }
 
 export interface GitCheckout extends GitStatus {

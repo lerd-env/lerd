@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/svelte';
 import { describe, it, expect } from 'vitest';
 import GitStatusBadge from './GitStatusBadge.svelte';
 
-const clean = { staged: 0, modified: 0, untracked: 0, conflicted: 0, ahead: 0, behind: 0 };
+const clean = { staged: 0, modified: 0, untracked: 0, conflicted: 0, ahead: 0, behind: 0, upstream: false };
 
 describe('GitStatusBadge', () => {
   it('shows one * and spells the changes out for the tooltip', () => {

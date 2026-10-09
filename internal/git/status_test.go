@@ -22,7 +22,7 @@ u UU N... 100644 100644 100644 100644 aaa bbb ccc conflict.php
 ! ignored.log
 `
 	got := ParseStatus(out)
-	want := Status{Staged: 3, Modified: 2, Untracked: 2, Conflicted: 1, Ahead: 2, Behind: 1}
+	want := Status{Staged: 3, Modified: 2, Untracked: 2, Conflicted: 1, Ahead: 2, Behind: 1, Upstream: true}
 	if got != want {
 		t.Fatalf("got %+v want %+v", got, want)
 	}
@@ -84,7 +84,7 @@ func TestReadStatus_realRepo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Status{Staged: 1, Modified: 1, Untracked: 2, Ahead: 1, Behind: 1}
+	want := Status{Staged: 1, Modified: 1, Untracked: 2, Ahead: 1, Behind: 1, Upstream: true}
 	if got != want {
 		t.Fatalf("before merge: got %+v want %+v", got, want)
 	}

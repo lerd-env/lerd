@@ -333,11 +333,11 @@ export function activeWorktreeDomain(s: Site, branch: string): string {
   return wt?.domain || s.domain;
 }
 
-async function postAction(path: string): Promise<{ ok: boolean; error?: string }> {
+async function postAction(path: string): Promise<{ ok: boolean; error?: string; message?: string }> {
   try {
     const res = await apiFetch(path, { method: 'POST' });
-    const data = (await res.json()) as { ok?: boolean; error?: string };
-    return { ok: Boolean(data.ok), error: data.error };
+    const data = (await res.json()) as { ok?: boolean; error?: string; message?: string };
+    return { ok: Boolean(data.ok), error: data.error, message: data.message };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
@@ -650,6 +650,9 @@ export async function restoreSiteNginx(
 
 export const restartSite = (d: string) => postAction(site(d, 'restart'));
 export const initGit = (d: string) => postAction(site(d, 'git:init'));
+export type GitRemoteOp = 'fetch' | 'pull' | 'push';
+export const gitRemote = (d: string, op: GitRemoteOp, branch: string) =>
+  postAction(site(d, 'git:' + op) + (branch ? '?branch=' + encodeURIComponent(branch) : ''));
 export const pauseSite = (d: string) => postAction(site(d, 'pause'));
 export const resumeSite = (d: string) => postAction(site(d, 'unpause'));
 export const pinSite = (d: string) => postAction(site(d, 'pin'));
