@@ -477,3 +477,77 @@ func TestStampInstallMarker_doesNotHideARealLockChange(t *testing.T) {
 		t.Error("a lockfile written after the install must still require one")
 	}
 }
+
+// stubJSInstall replaces the JS installer with one that succeeds after running
+// install, so tests can shape what a given package manager leaves on disk.
+func stubJSInstall(t *testing.T, install func(projectPath string)) {
+	t.Helper()
+	ResetJSInstallFailures()
+	prev := jsInstaller
+	jsInstaller = func(projectPath string, _ io.Writer) error {
+		install(projectPath)
+		return nil
+	}
+	t.Cleanup(func() {
+		jsInstaller = prev
+		ResetJSInstallFailures()
+	})
+}
+
+// npm 6 and yarn 1 never write the marker lerd checks for, so a successful
+// install used to leave the tree asking for another one, and the watcher's
+// rescan re-ran npm ci on it every minute for the life of the daemon.
+func TestInstallDependencies_installWithoutPackageManagerMarkerConverges(t *testing.T) {
+	stubJSInstall(t, func(projectPath string) {
+		touch(t, filepath.Join(projectPath, "node_modules", "left-pad", "index.js"))
+	})
+	dir := jsProject(t, `{"lockfileVersion":1}`)
+
+	if err := InstallDependencies(dir, io.Discard); err != nil {
+		t.Fatalf("InstallDependencies: %v", err)
+	}
+
+	if jsNeedsInstall(dir) {
+		t.Error("a successful install without npm's marker still asks for another install")
+	}
+}
+
+func TestInstallDependencies_installThatCreatedNothingKeepsAsking(t *testing.T) {
+	stubJSInstall(t, func(string) {})
+	dir := jsProject(t, `{"lockfileVersion":1}`)
+
+	if err := InstallDependencies(dir, io.Discard); err != nil {
+		t.Fatalf("InstallDependencies: %v", err)
+	}
+
+	if !jsNeedsInstall(dir) {
+		t.Error("an install that left no node_modules must still be asked for")
+	}
+}
+
+func TestJSNeedsInstall_lerdMarkerOlderThanLockfileStillAsks(t *testing.T) {
+	dir := jsProject(t, `{"lockfileVersion":1}`)
+	touchAt(t, filepath.Join(dir, "node_modules", lerdJSInstallMarker), time.Now().Add(-time.Hour))
+
+	if !jsNeedsInstall(dir) {
+		t.Error("a lockfile written after lerd's marker must still require an install")
+	}
+}
+
+// A marker lerd could not write leaves the rescan reinstalling every minute, so
+// the failure is reported instead of passing as a clean install.
+func TestInstallDependencies_unwritableLerdMarkerIsReported(t *testing.T) {
+	stubJSInstall(t, func(projectPath string) {
+		touch(t, filepath.Join(projectPath, "node_modules", "left-pad", "index.js"))
+		// A directory in the marker's place fails the write even for root,
+		// which a read-only node_modules would not.
+		if err := os.Mkdir(filepath.Join(projectPath, "node_modules", lerdJSInstallMarker), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	})
+	dir := jsProject(t, `{"lockfileVersion":1}`)
+
+	if err := InstallDependencies(dir, io.Discard); err == nil {
+		t.Error("a marker that could not be written must surface as an error")
+	}
+}

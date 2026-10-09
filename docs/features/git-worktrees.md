@@ -73,7 +73,7 @@ Frontend build (`npm run build`) is **not** part of the watcher pipeline, it's h
 | Resource | Behaviour |
 |---|---|
 | `vendor/` | Reflink/copy from main when `composer.lock` matches; otherwise skip and let `composer install` build from scratch (no stale autoload entries). |
-| `node_modules/` | Same lockfile-match guard against `pnpm-lock.yaml` / `yarn.lock` / `bun.lock*` / `package-lock.json` / `npm-shrinkwrap.json` (whichever exists). |
+| `node_modules/` | Same lockfile-match guard against `pnpm-lock.yaml` / `yarn.lock` / `bun.lock*` / `package-lock.json` / `npm-shrinkwrap.json` (whichever exists). The install counts as done when the package manager's own marker in `node_modules/` is newer than the lockfile; npm 6 and yarn 1 write none, so lerd writes `node_modules/.lerd-installed` after their install succeeds. Editing the lockfile afterwards triggers a fresh install either way. |
 | `public/build/` | Not seeded. Run `npm run dev` (Vite dev server, hot reload) or `npm run build` (static manifest) inside the worktree. |
 | `worktree_include` paths | Copied from main when the worktree doesn't already have them; see [extra files in a worktree](#extra-files-in-a-worktree). |
 | env file | The framework's env file (Laravel `.env`, Symfony `.env.local`, CakePHP `config/.env`) copied from main; the framework's base-URL key (`APP_URL`, `DEFAULT_URI`, `app.baseURL`) rewritten to `http(s)://<branch>.<site>.test` (or resolved via `env_overrides` when defined). Realigned on every subsequent watcher pass so a branch rename keeps the value current. |
