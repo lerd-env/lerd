@@ -163,3 +163,17 @@ func TestBranches_keepsABranchNamedHEAD(t *testing.T) {
 		t.Error("BranchDates dropped feature/HEAD")
 	}
 }
+
+// A staged rename deletes its old path, so both paths carry uncommitted work.
+func TestDirtyFiles_renameCountsBothPaths(t *testing.T) {
+	dir, _ := pullFixture(t)
+	gitRun(t, dir, "mv", "a", "renamed")
+
+	got := map[string]bool{}
+	for _, f := range DirtyFiles(dir) {
+		got[f] = true
+	}
+	if !got["renamed"] || !got["a"] {
+		t.Fatalf("got %v, want both the new and the old path", got)
+	}
+}

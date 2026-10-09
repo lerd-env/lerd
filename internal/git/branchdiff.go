@@ -73,9 +73,12 @@ func DirtyFiles(dir string) []string {
 			continue
 		}
 		files = append(files, e[3:])
-		// A rename or copy is followed by its source path, which is not dirty itself.
-		if e[0] == 'R' || e[0] == 'C' {
+		// A rename or copy is followed by its source: a rename deletes it, a copy leaves it be.
+		if (e[0] == 'R' || e[0] == 'C') && i+1 < len(entries) {
 			i++
+			if e[0] == 'R' {
+				files = append(files, entries[i])
+			}
 		}
 	}
 	return files

@@ -313,7 +313,7 @@ func TestPlanBranch_siteInARepoSubfolder(t *testing.T) {
 // than letting its installs and migrations land on the other's branch.
 func TestSwitchSiteBranch_refusesAConcurrentSwitch(t *testing.T) {
 	site := &config.Site{Name: "acme", Path: t.TempDir()}
-	release := holdSwitchLock(site.Path)
+	release := CheckoutLock(site.Path)
 	defer release()
 
 	if _, err := SwitchSiteBranch(site, "dev", BranchSteps{}, io.Discard); err == nil || !strings.Contains(err.Error(), "already running") {

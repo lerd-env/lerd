@@ -4237,6 +4237,15 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, SiteActionResponse{Error: "unknown worktree branch"})
 			return
 		}
+		// A pull rewrites files, so it must not land in the middle of a branch switch.
+		if action == "git:pull" {
+			release := cli.CheckoutLock(dir)
+			if release == nil {
+				writeJSON(w, SiteActionResponse{Error: "a branch switch is running on this checkout"})
+				return
+			}
+			defer release()
+		}
 		op := map[string]func(string) (string, error){
 			"git:fetch": gitpkg.Fetch, "git:pull": gitpkg.Pull, "git:push": gitpkg.Push,
 		}[action]

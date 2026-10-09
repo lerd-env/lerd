@@ -86,8 +86,8 @@ func PlanSiteBranch(site *config.Site, branch string) (BranchPlan, error) {
 // switching holds the checkouts with a switch in flight, keyed by path.
 var switching sync.Map
 
-// holdSwitchLock claims path for one switch, returning nil while another runs.
-func holdSwitchLock(path string) (release func()) {
+// CheckoutLock claims path for one switch or pull, returning nil while another runs.
+func CheckoutLock(path string) (release func()) {
 	if _, busy := switching.LoadOrStore(path, struct{}{}); busy {
 		return nil
 	}
@@ -98,7 +98,7 @@ func holdSwitchLock(path string) (release func()) {
 // chosen steps around it, one switch per checkout at a time. It returns the
 // snapshot taken first, even on failure, so it can be restored.
 func SwitchSiteBranch(site *config.Site, branch string, steps BranchSteps, out io.Writer) (string, error) {
-	release := holdSwitchLock(site.Path)
+	release := CheckoutLock(site.Path)
 	if release == nil {
 		return "", fmt.Errorf("a branch switch is already running for %s", site.Name)
 	}

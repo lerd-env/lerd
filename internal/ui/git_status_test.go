@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/geodro/lerd/internal/cli"
 	"github.com/geodro/lerd/internal/config"
 )
 
@@ -295,5 +296,25 @@ func TestHandleSiteBranchSwitch_createsBranch(t *testing.T) {
 	}
 	if got := strings.TrimSpace(runGitOutput(sitePath, "symbolic-ref", "--short", "HEAD")); got != "feature/new" {
 		t.Errorf("on %q, want feature/new", got)
+	}
+}
+
+// A pull fast-forwards files, so it waits out a switch on the same checkout.
+func TestHandleSiteAction_gitPullWaitsForASwitch(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	sitePath := t.TempDir()
+	gitIn(t, sitePath, "init", "-q", "-b", "main")
+	if err := config.AddSite(config.Site{Name: "acme", Path: sitePath, Domains: []string{"acme.test"}}); err != nil {
+		t.Fatal(err)
+	}
+	release := cli.CheckoutLock(sitePath)
+	defer release()
+
+	rec := httptest.NewRecorder()
+	handleSiteAction(rec, httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/git:pull", nil))
+
+	if !strings.Contains(rec.Body.String(), "branch switch is running") {
+		t.Fatalf("want a refusal while a switch runs, got %s", rec.Body.String())
 	}
 }

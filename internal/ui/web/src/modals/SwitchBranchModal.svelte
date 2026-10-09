@@ -189,7 +189,8 @@
   }
 </script>
 
-<Modal open title={m.sites_switchBranch()} onclose={closeModal} size="lg">
+<!-- Closing mid-switch would drop its error and the snapshot restore it offers. -->
+<Modal open title={m.sites_switchBranch()} onclose={() => (switching ? undefined : closeModal())} size="lg">
   {#if !switching && !finished}
     <div class="px-5 py-4 space-y-4">
       <div class="inline-flex rounded-md bg-gray-100 dark:bg-white/5 p-0.5 text-xs" role="tablist">

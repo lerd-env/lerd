@@ -209,6 +209,19 @@ describe('SwitchBranchModal', () => {
     });
   });
 
+  // Its error and snapshot restore only live in the dialog, so it stays put.
+  it('ignores close requests while the switch runs', async () => {
+    streamBranchSwitch.mockReturnValue(new Promise(() => {}));
+    render(SwitchBranchModal, { props: { site } });
+    await screen.findByRole('switch', { name: 'composer install' });
+    await fireEvent.click(screen.getByRole('button', { name: 'Switch' }));
+    await waitFor(() => expect(streamBranchSwitch).toHaveBeenCalled());
+
+    await fireEvent.keyDown(document, { key: 'Escape' });
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    expect(closeModal).not.toHaveBeenCalled();
+  });
+
   it('shows git’s refusal', async () => {
     finishWith({ ok: false, error: 'error: Your local changes would be overwritten' });
     render(SwitchBranchModal, { props: { site } });
