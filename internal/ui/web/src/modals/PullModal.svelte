@@ -32,6 +32,9 @@
 
   const rows = $derived(plan ? planRows(plan, branchLabel) : []);
   const conflicts = $derived(plan?.conflicts ?? []);
+  // The fetch can show the branch diverged since the tab was last read; git
+  // will not fast-forward it, so the pull is held back before any snapshot.
+  const diverged = $derived(!!plan && plan.ahead > 0 && plan.behind > 0);
 
   onMount(async () => {
     try {
@@ -52,7 +55,7 @@
     logs = [];
     let done: { ok?: boolean; error?: string; snapshot?: string } = { ok: false };
     try {
-      await streamPull(domain, branch, { composer: on.composer, js: on.js, migrate: on.migrate, snapshot: on.snapshot }, (ev) => {
+      await streamPull(domain, branch, plan?.target ?? '', { composer: on.composer, js: on.js, migrate: on.migrate, snapshot: on.snapshot }, (ev) => {
         if (ev.done) done = ev;
         else if (ev.line) logs = [...logs, ev.line];
       });
@@ -104,7 +107,11 @@
           thenText={m.pullPlan_then()}
           missingText={m.pullPlan_missingMigrations({ count: plan.migrations_missing })}
         />
-        <p class="text-xs text-gray-500 dark:text-gray-400">{m.gitSync_pullBody({ branch: branchLabel })}</p>
+        {#if diverged}
+          <p class="text-xs text-red-500">{m.gitSync_diverged({ ahead: plan.ahead, behind: plan.behind })}</p>
+        {:else}
+          <p class="text-xs text-gray-500 dark:text-gray-400">{m.gitSync_pullBody({ branch: branchLabel })}</p>
+        {/if}
       {/if}
       {#if error}<p class="text-xs text-red-500 whitespace-pre-line">{error}</p>{/if}
     </div>
@@ -128,7 +135,7 @@
       <DetailButton tone="primary" disabled loading={true}>{m.pullPlan_pulling()}</DetailButton>
     {:else}
       <DetailButton onclick={closeModal}>{m.common_cancel()}</DetailButton>
-      <DetailButton tone="primary" onclick={doPull} disabled={planning || !plan || plan.behind === 0 || conflicts.length > 0}
+      <DetailButton tone="primary" onclick={doPull} disabled={planning || !plan || plan.behind === 0 || conflicts.length > 0 || diverged}
         >{m.gitSync_pull()}</DetailButton
       >
     {/if}

@@ -132,6 +132,8 @@ export interface BranchPlan {
   migrations_added: number;
   migrations_missing: number;
   conflicts?: string[];
+  // The commit a pull plan reviewed; the pull stops there.
+  target?: string;
   db?: { service: string; database: string; restore?: { name: string; created: string } };
   error?: string;
 }
@@ -182,14 +184,18 @@ export async function pullPlan(domain: string, branch: string): Promise<BranchPl
   return apiJson<BranchPlan>('/api/sites/pull-plan?' + new URLSearchParams({ domain, branch }).toString());
 }
 
-// streamPull fast-forwards the checkout and runs the chosen steps, streaming their output.
+// streamPull fast-forwards the checkout to target, the commit its plan
+// reviewed, and runs the chosen steps, streaming their output.
 export async function streamPull(
   domain: string,
   branch: string,
+  target: string,
   steps: Omit<BranchSteps, 'restore'>,
   onEvent: (e: BranchSwitchEvent) => void
 ): Promise<void> {
-  await streamSteps('/api/sites/pull?' + stepsQuery(domain, branch, steps).toString(), onEvent);
+  const qs = stepsQuery(domain, branch, steps);
+  qs.set('target', target);
+  await streamSteps('/api/sites/pull?' + qs.toString(), onEvent);
 }
 
 function stepsQuery(domain: string, branch: string, steps: Omit<BranchSteps, 'restore'>): URLSearchParams {
@@ -200,6 +206,12 @@ function stepsQuery(domain: string, branch: string, steps: Omit<BranchSteps, 're
 
 async function streamSteps(url: string, onEvent: (e: BranchSwitchEvent) => void): Promise<void> {
   const res = await apiFetch(url, { method: 'POST' });
+  // A request refused before anything ran (the site or worktree is gone) answers in plain JSON.
+  if (res.headers.get('Content-Type')?.includes('application/json')) {
+    const r = (await res.json()) as { error?: string };
+    onEvent({ done: true, ok: false, error: r.error });
+    return;
+  }
   await readSSE(res, (event, data) => {
     if (event !== 'done') {
       onEvent({ line: data });

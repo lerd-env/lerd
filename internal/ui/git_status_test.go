@@ -149,7 +149,8 @@ func TestHandleSitePull_worktree(t *testing.T) {
 	mainBefore := runGitOutput(sitePath, "rev-parse", "HEAD")
 
 	rec := httptest.NewRecorder()
-	handleSitePull(rec, httptest.NewRequest(http.MethodPost, "/api/sites/pull?domain=acme.test&branch=feature", nil))
+	target := reviewedTarget(t, "feature")
+	handleSitePull(rec, httptest.NewRequest(http.MethodPost, "/api/sites/pull?domain=acme.test&branch=feature&target="+target, nil))
 
 	if !strings.Contains(rec.Body.String(), `"ok":true`) {
 		t.Fatalf("want ok, got %s", rec.Body.String())
@@ -327,6 +328,21 @@ func pullSite(t *testing.T) (sitePath, other string) {
 	return sitePath, other
 }
 
+// reviewedTarget asks for acme.test's pull plan, as the dialog does before a
+// pull, and returns the commit it reviewed.
+func reviewedTarget(t *testing.T, branch string) string {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	handleSitePullPlan(rec, httptest.NewRequest(http.MethodGet, "/api/sites/pull-plan?domain=acme.test&branch="+branch, nil))
+	var p struct {
+		Target string `json:"target"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil || p.Target == "" {
+		t.Fatalf("no reviewed commit in %s", rec.Body.String())
+	}
+	return p.Target
+}
+
 func TestHandleSitePullPlan(t *testing.T) {
 	pullSite(t)
 
@@ -343,7 +359,7 @@ func TestHandleSitePull(t *testing.T) {
 	sitePath, other := pullSite(t)
 
 	rec := httptest.NewRecorder()
-	handleSitePull(rec, httptest.NewRequest(http.MethodPost, "/api/sites/pull?domain=acme.test", nil))
+	handleSitePull(rec, httptest.NewRequest(http.MethodPost, "/api/sites/pull?domain=acme.test&target="+reviewedTarget(t, ""), nil))
 
 	if !strings.Contains(rec.Body.String(), "event: done") || !strings.Contains(rec.Body.String(), `"ok":true`) {
 		t.Fatalf("want a done event with ok, got %s", rec.Body.String())

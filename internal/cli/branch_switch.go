@@ -35,6 +35,8 @@ type BranchPlan struct {
 	Migrate           *PlanStep `json:"migrate,omitempty"`
 	MigrationsAdded   int       `json:"migrations_added"`
 	MigrationsMissing int       `json:"migrations_missing"`
+	// Target is the commit a pull plan reviewed, which the pull then stops at.
+	Target string `json:"target,omitempty"`
 	// Conflicts are files with uncommitted work that the target branch also
 	// changes; git refuses the switch until they are committed or stashed.
 	Conflicts []string `json:"conflicts"`

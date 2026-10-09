@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
@@ -30,13 +31,20 @@ func planPull(fw *config.Framework, dir string) (BranchPlan, error) {
 	if _, err := gitpkg.Fetch(dir); err != nil {
 		return BranchPlan{}, err
 	}
-	return planBranch(fw, dir, "@{upstream}")
+	target, err := gitpkg.Output(dir, "rev-parse", "@{upstream}")
+	if err != nil {
+		return BranchPlan{}, fmt.Errorf("cannot read the upstream commit")
+	}
+	p, err := planBranch(fw, dir, strings.TrimSpace(target))
+	p.Target = strings.TrimSpace(target)
+	return p, err
 }
 
-// PullSite fast-forwards the checkout at dir and runs the chosen steps around
-// it, one switch or pull per checkout at a time. It returns the snapshot taken
-// first, even on failure, so it can be restored.
-func PullSite(site *config.Site, dir string, steps BranchSteps, out io.Writer) (string, error) {
+// PullSite fast-forwards the checkout at dir to target, the commit its plan
+// reviewed, and runs the chosen steps around it, one switch or pull per
+// checkout at a time. It returns the snapshot taken first, even on failure, so
+// it can be restored.
+func PullSite(site *config.Site, dir, target string, steps BranchSteps, out io.Writer) (string, error) {
 	release := CheckoutLock(dir)
 	if release == nil {
 		return "", fmt.Errorf("a branch switch is running on this checkout")
@@ -54,9 +62,14 @@ func PullSite(site *config.Site, dir string, steps BranchSteps, out io.Writer) (
 		}
 		db = siteBranchDB(site, dir, t, out)
 	}
-	return pullBranch(fwAfter, dir, steps, db, out)
+	return pullBranch(fwAfter, dir, target, steps, db, out)
 }
 
-func pullBranch(fwAfter func() *config.Framework, dir string, steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
-	return runAround(fwAfter, dir, func() (string, error) { return gitpkg.Pull(dir) }, steps, db, out)
+// pullBranch stops at target rather than pulling whatever the remote has now:
+// the chosen steps only account for the commits that were reviewed.
+func pullBranch(fwAfter func() *config.Framework, dir, target string, steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
+	if target == "" {
+		return "", fmt.Errorf("no reviewed commit to pull to")
+	}
+	return runAround(fwAfter, dir, func() (string, error) { return gitpkg.FastForward(dir, target) }, steps, db, out)
 }

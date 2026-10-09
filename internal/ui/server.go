@@ -6847,8 +6847,9 @@ func handleSitePullPlan(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, plan)
 }
 
-// handleSitePull answers POST /api/sites/pull?domain=&branch= plus the chosen
-// steps (composer, js, migrate, snapshot), streaming their output like a switch.
+// handleSitePull answers POST /api/sites/pull?domain=&branch=&target= plus the
+// chosen steps (composer, js, migrate, snapshot), streaming their output like a
+// switch. target is the commit the plan reviewed.
 func handleSitePull(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.NotFound(w, r)
@@ -6866,7 +6867,8 @@ func handleSitePull(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	steps := branchStepsFrom(q)
-	streamSteps(w, func(out io.Writer) (string, error) { return cli.PullSite(site, dir, steps, out) })
+	target := strings.TrimSpace(q.Get("target"))
+	streamSteps(w, func(out io.Writer) (string, error) { return cli.PullSite(site, dir, target, steps, out) })
 }
 
 func branchStepsFrom(q url.Values) cli.BranchSteps {

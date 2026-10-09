@@ -23,13 +23,14 @@ const plan = {
   migrations_added: 1,
   migrations_missing: 0,
   conflicts: [],
-  db: { service: 'mysql', database: 'acme' }
+  db: { service: 'mysql', database: 'acme' },
+  target: 'abc123'
 };
 
 const props = { domain: 'acme.test', branch: 'feature', branchLabel: 'feature' };
 
 function finishWith(done: object) {
-  streamPull.mockImplementation(async (_d: string, _b: string, _s: object, on: (e: object) => void) => {
+  streamPull.mockImplementation(async (_d: string, _b: string, _t: string, _s: object, on: (e: object) => void) => {
     on({ line: 'Fast-forward' });
     on({ done: true, ...done });
   });
@@ -60,7 +61,7 @@ describe('PullModal', () => {
     await fireEvent.click(await screen.findByRole('switch', { name: 'composer install' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Pull' }));
 
-    expect(streamPull).toHaveBeenCalledWith('acme.test', 'feature', { composer: false, js: false, migrate: true, snapshot: true }, expect.any(Function));
+    expect(streamPull).toHaveBeenCalledWith('acme.test', 'feature', 'abc123', { composer: false, js: false, migrate: true, snapshot: true }, expect.any(Function));
     await waitFor(() => expect(closeModal).toHaveBeenCalled());
     expect(onDone).toHaveBeenCalled();
   });
@@ -69,6 +70,14 @@ describe('PullModal', () => {
     pullPlan.mockResolvedValue({ ...plan, conflicts: ['composer.lock'] });
     render(PullModal, { props });
     expect(await screen.findByText(/would be overwritten by the pull/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pull' })).toBeDisabled();
+  });
+
+  // The fetch can reveal local commits as well as incoming ones; git would refuse.
+  it('holds a diverged pull back, saying why', async () => {
+    pullPlan.mockResolvedValue({ ...plan, ahead: 2 });
+    render(PullModal, { props });
+    expect(await screen.findByText('Diverged: 2 local and 3 remote commits. Merge or rebase it in your editor or terminal.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Pull' })).toBeDisabled();
   });
 
