@@ -973,10 +973,23 @@ var trayProcessPatterns = []string{`lerd tray( --mono(=false)?)?$`, `lerd-tray( 
 // replacement launched next does not find the old applet still holding the
 // instance lock and quit, leaving no tray at all.
 func killTray() {
-	for _, pattern := range trayProcessPatterns {
-		exec.Command("pkill", "-f", pattern).Run() //nolint:errcheck
+	signal := func(sig string) {
+		for _, pattern := range trayProcessPatterns {
+			exec.Command("pkill", "-"+sig, "-f", pattern).Run() //nolint:errcheck
+		}
 	}
-	waitTrayGone(trayRunning, 3*time.Second)
+	stopTray(signal, trayRunning, 3*time.Second)
+}
+
+// stopTray sends TERM and escalates to KILL when the applet outlives grace,
+// since a hung applet keeps the lock and its replacement would quit.
+func stopTray(signal func(sig string), running func() bool, grace time.Duration) {
+	signal("TERM")
+	if waitTrayGone(running, grace) {
+		return
+	}
+	signal("KILL")
+	waitTrayGone(running, time.Second)
 }
 
 func trayRunning() bool {

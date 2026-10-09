@@ -2,6 +2,7 @@ package cli
 
 import (
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -140,5 +141,28 @@ func TestWaitTrayGone_ReturnsOnceTheOldAppletExits(t *testing.T) {
 func TestWaitTrayGone_GivesUpOnAnAppletThatWillNotDie(t *testing.T) {
 	if waitTrayGone(func() bool { return true }, 100*time.Millisecond) {
 		t.Error("an applet still running at the deadline must not be reported gone")
+	}
+}
+
+// An applet that ignores SIGTERM still holds the lock, so it is killed
+// outright rather than left to make its replacement quit.
+func TestStopTray_KillsAnAppletThatIgnoresTerm(t *testing.T) {
+	var sent []string
+	killed := false
+	signal := func(sig string) {
+		sent = append(sent, sig)
+		killed = killed || sig == "KILL"
+	}
+	stopTray(signal, func() bool { return !killed }, 50*time.Millisecond)
+	if strings.Join(sent, ",") != "TERM,KILL" {
+		t.Errorf("signals sent = %v, want TERM then KILL", sent)
+	}
+}
+
+func TestStopTray_SendsOnlyTermWhenTheAppletExits(t *testing.T) {
+	var sent []string
+	stopTray(func(sig string) { sent = append(sent, sig) }, func() bool { return false }, time.Second)
+	if strings.Join(sent, ",") != "TERM" {
+		t.Errorf("signals sent = %v, want only TERM for an applet that exits on it", sent)
 	}
 }
