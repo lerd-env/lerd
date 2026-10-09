@@ -106,7 +106,12 @@ check "6.10 lerd idle off resumes everything" wait_for 30 unit_active "lerd-queu
 # Sleeping services. The plan wants a mysql site on https; demo is moved to
 # mysql here as phase 5 does, in case this phase runs without it.
 api() { curl -s -X "$1" -H 'X-Lerd-CSRF: 1' "http://127.0.0.1:7073$2"; }
-asleep() { lerd idle status 2>/dev/null | grep -Eq "sleeping:.*\b$1\b"; }
+# flagged <svc>: listed as sleeping, by its exact name, since \bmysql\b also
+# matches mysql-9-7. asleep also wants it down: a woken service is up and
+# serving a moment before its flag clears.
+flagged() { lerd idle status 2>/dev/null | grep -E '^Services:' | grep -Eq "sleeping: (.*, )?$1(,|\$)"; }
+asleep() { flagged "$1" && ! systemctl --user is-active --quiet "lerd-$1"; }
+export -f flagged asleep
 vhost=$HOME/.local/share/lerd/nginx/conf.d/$(site_host "$DEMO_DIR").conf
 watcher_log() { journalctl --user -u lerd-watcher --since "$1" --no-pager -o cat 2>/dev/null; }
 # cold <args...>: one request to the sleeping site, never following a redirect.
@@ -139,7 +144,7 @@ case ${r%% *} in 200 | 405 | 419) _pass "6.13 a cold POST reaches the app (${r%%
 
 # 6.14 races the stop: the request goes out the moment mysql is listed asleep.
 lerd artisan migrate:status </dev/null >/dev/null 2>&1
-for _ in $(seq 1500); do asleep mysql && break; sleep 0.2; done
+for _ in $(seq 1500); do flagged mysql && break; sleep 0.2; done
 since=$(date '+%F %T')
 r=$(cold "$url")
 echo "--- request during the stop: $r"
@@ -167,7 +172,7 @@ lerd service preset adminer </dev/null >/dev/null 2>&1
 lerd service start adminer </dev/null >/dev/null 2>&1
 dash() { curl -sL -H 'Accept: text/html' --max-time 90 "http://127.0.0.1:7073/_svc/adminer/"; }
 dash_up() { dash | grep -qi 'adminer' && ! dash | grep -q '<title>Waking up'; }
-check "adminer and mysql go to sleep" wait_for 300 bash -c "lerd idle status | grep -Eq 'sleeping:.*adminer' && lerd idle status | grep -Eq 'sleeping:.*mysql'"
+check "adminer and mysql go to sleep" wait_for 300 bash -c "asleep adminer && asleep mysql"
 check_out "6.18 [partial] a sleeping dashboard answers the waking page first" '<title>Waking up' dash
 check "6.18 [partial] then the dashboard itself" wait_for 90 dash_up
 check "6.18 [partial] adminer wakes its databases with it" unit_active lerd-mysql
@@ -181,11 +186,11 @@ while [ $SECONDS -lt $end ]; do
 	api POST "/api/dashboard/keepalive?name=mysql" >/dev/null
 	sleep 10
 done
-check "6.19 an open dashboard keeps mysql awake past the timeout" bash -c '! lerd idle status | grep -Eq "sleeping:.*mysql"'
+check "6.19 an open dashboard keeps mysql awake past the timeout" bash -c '! flagged mysql'
 check "6.19 mysql sleeps once the dashboard closes" wait_for 240 asleep mysql
 
 api POST "/api/dashboard/keepalive?name=mysql" >/dev/null
-wait_for 60 bash -c "! lerd idle status | grep -Eq 'sleeping:.*mysql'"
+wait_for 60 bash -c "! flagged mysql"
 db_count() { api GET /api/databases | python3 -c 'import json,sys; print([len(e.get("databases") or []) for e in json.load(sys.stdin) if e["service"]=="mysql"])'; }
 check_out "6.20 [partial] a sleeping engine's databases list once it wakes" '\[[1-9]' db_count
 
