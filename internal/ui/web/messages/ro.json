@@ -1635,7 +1635,7 @@
   "gitSync_pushBody": "Trimite commit-urile locale de pe {branch} ({count}) în upstream. Niciodată forțat: git refuză dacă remote-ul a mers mai departe.",
   "gitSync_push": "Push",
   "gitSync_publishTitle": "Publici {branch}?",
-  "gitSync_publishBody": "Trimite {branch} în origin cu același nume și îl urmărește de acum înainte. Niciodată forțat: git refuză dacă origin are deja alt {branch}.",
+  "gitSync_publishBody": "Trimite {branch} în origin cu același nume și îl urmărește de acum înainte. Niciodată forțat: dacă origin are deja un {branch} pe care acesta nu se bazează, git refuză.",
   "gitSync_publish": "Publică",
   "dropdown_searchPlaceholder": "Caută…",
   "dropdown_noMatches": "Nicio potrivire",

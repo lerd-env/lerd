@@ -1635,7 +1635,7 @@
   "gitSync_pushBody": "De lokale commits op {branch} ({count}) naar de upstream sturen. Nooit geforceerd: git weigert als de remote verder is.",
   "gitSync_push": "Push",
   "gitSync_publishTitle": "{branch} publiceren?",
-  "gitSync_publishBody": "Pusht {branch} onder dezelfde naam naar origin en volgt hem vanaf dan. Nooit geforceerd: git weigert als origin al een andere {branch} heeft.",
+  "gitSync_publishBody": "Pusht {branch} onder dezelfde naam naar origin en volgt hem vanaf dan. Nooit geforceerd: heeft origin al een {branch} waarop deze niet voortbouwt, dan weigert git.",
   "gitSync_publish": "Publiceren",
   "dropdown_searchPlaceholder": "Zoeken…",
   "dropdown_noMatches": "Geen resultaten",

@@ -29,8 +29,11 @@ func ReadStatus(dir string) (Status, error) {
 	return s, nil
 }
 
+// onBranch is a checkout on a branch that has a commit; before the first one
+// the branch ref does not exist yet.
 func onBranch(porcelain string) bool {
-	return !strings.Contains(porcelain, "# branch.head (detached)")
+	return !strings.Contains(porcelain, "# branch.head (detached)") &&
+		!strings.Contains(porcelain, "# branch.oid (initial)")
 }
 
 func hasOrigin(dir string) bool {

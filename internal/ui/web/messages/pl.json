@@ -1635,7 +1635,7 @@
   "gitSync_pushBody": "Wyślij lokalne commity z {branch} ({count}) do upstreamu. Nigdy wymuszone: git odmówi, jeśli zdalna gałąź poszła dalej.",
   "gitSync_push": "Push",
   "gitSync_publishTitle": "Opublikować {branch}?",
-  "gitSync_publishBody": "Wysyła {branch} do origin pod tą samą nazwą i od tej pory go śledzi. Nigdy wymuszone: git odmówi, jeśli origin ma już inny {branch}.",
+  "gitSync_publishBody": "Wysyła {branch} do origin pod tą samą nazwą i od tej pory go śledzi. Nigdy wymuszone: jeśli origin ma już {branch}, na którym ta gałąź nie bazuje, git odmówi.",
   "gitSync_publish": "Opublikuj",
   "dropdown_searchPlaceholder": "Szukaj…",
   "dropdown_noMatches": "Brak wyników",

@@ -323,3 +323,14 @@ func TestReadStatus_publishable(t *testing.T) {
 		t.Error("without an origin there is nowhere to publish")
 	}
 }
+
+// Before the first commit the branch does not exist yet, so there is nothing to publish.
+func TestReadStatus_notPublishableBeforeFirstCommit(t *testing.T) {
+	remote, dir := t.TempDir(), t.TempDir()
+	gitRun(t, remote, "init", "-q", "--bare")
+	gitRun(t, dir, "init", "-q")
+	gitRun(t, dir, "remote", "add", "origin", remote)
+	if st, _ := ReadStatus(dir); st.Publishable {
+		t.Error("a branch with no commits is not publishable")
+	}
+}

@@ -1635,7 +1635,7 @@
   "gitSync_pushBody": "Kirim commit lokal di {branch} ({count}) ke upstream-nya. Tidak pernah dipaksa: git menolak jika remote sudah berubah.",
   "gitSync_push": "Push",
   "gitSync_publishTitle": "Publikasikan {branch}?",
-  "gitSync_publishBody": "Kirim {branch} ke origin dengan nama yang sama dan lacak sejak itu. Tidak pernah dipaksa: git menolak jika origin sudah punya {branch} yang berbeda.",
+  "gitSync_publishBody": "Kirim {branch} ke origin dengan nama yang sama dan lacak sejak itu. Tidak pernah dipaksa: jika origin sudah punya {branch} yang bukan dasar cabang ini, git menolak.",
   "gitSync_publish": "Publikasikan",
   "dropdown_searchPlaceholder": "Cari…",
   "dropdown_noMatches": "Tidak ada yang cocok",

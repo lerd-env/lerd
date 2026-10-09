@@ -1635,7 +1635,7 @@
   "gitSync_pushBody": "Gửi các commit cục bộ trên {branch} ({count}) lên upstream. Không bao giờ ép buộc: git từ chối nếu remote đã tiến lên.",
   "gitSync_push": "Push",
   "gitSync_publishTitle": "Xuất bản {branch}?",
-  "gitSync_publishBody": "Đẩy {branch} lên origin với cùng tên và theo dõi nó từ đó. Không bao giờ ép buộc: git từ chối nếu origin đã có {branch} khác.",
+  "gitSync_publishBody": "Đẩy {branch} lên origin với cùng tên và theo dõi nó từ đó. Không bao giờ ép buộc: nếu origin đã có {branch} mà nhánh này không dựa trên, git sẽ từ chối.",
   "gitSync_publish": "Xuất bản",
   "dropdown_searchPlaceholder": "Tìm kiếm…",
   "dropdown_noMatches": "Không có kết quả",

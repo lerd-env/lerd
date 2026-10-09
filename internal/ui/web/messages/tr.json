@@ -1635,7 +1635,7 @@
   "gitSync_pushBody": "{branch} üzerindeki yerel commit'leri ({count}) upstream'e gönder. Asla zorlanmaz: uzak dal ilerlediyse git reddeder.",
   "gitSync_push": "Gönder",
   "gitSync_publishTitle": "{branch} yayımlansın mı?",
-  "gitSync_publishBody": "{branch} dalını aynı adla origin'e gönderir ve bundan sonra onu izler. Asla zorlanmaz: origin'de farklı bir {branch} varsa git reddeder.",
+  "gitSync_publishBody": "{branch} dalını aynı adla origin'e gönderir ve bundan sonra onu izler. Asla zorlanmaz: origin'de bu dalın üzerine kurulmadığı bir {branch} varsa git reddeder.",
   "gitSync_publish": "Yayımla",
   "dropdown_searchPlaceholder": "Ara…",
   "dropdown_noMatches": "Eşleşme yok",

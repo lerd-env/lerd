@@ -1635,7 +1635,7 @@
   "gitSync_pushBody": "Invia i commit locali di {branch} ({count}) al suo upstream. Mai forzato: git rifiuta se il remoto è andato avanti.",
   "gitSync_push": "Push",
   "gitSync_publishTitle": "Pubblicare {branch}?",
-  "gitSync_publishBody": "Invia {branch} a origin con lo stesso nome e lo traccia da quel momento. Mai forzato: git rifiuta se origin ha già un {branch} diverso.",
+  "gitSync_publishBody": "Invia {branch} a origin con lo stesso nome e lo traccia da quel momento. Mai forzato: se origin ha già un {branch} da cui questo non deriva, git rifiuta.",
   "gitSync_publish": "Pubblica",
   "dropdown_searchPlaceholder": "Cerca…",
   "dropdown_noMatches": "Nessun risultato",

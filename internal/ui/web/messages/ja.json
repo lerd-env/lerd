@@ -1635,7 +1635,7 @@
   "gitSync_pushBody": "{branch} のローカルコミット ({count}) をアップストリームに送ります。強制はしません。リモートが進んでいる場合は git が拒否します。",
   "gitSync_push": "プッシュ",
   "gitSync_publishTitle": "{branch} を公開しますか?",
-  "gitSync_publishBody": "{branch} を同じ名前で origin に push し、以後それを追跡します。強制はしません: origin に別の {branch} がある場合 git は拒否します。",
+  "gitSync_publishBody": "{branch} を同じ名前で origin に push し、以後それを追跡します。強制はしません: このブランチの元になっていない {branch} が origin にある場合、git は拒否します。",
   "gitSync_publish": "公開",
   "dropdown_searchPlaceholder": "検索…",
   "dropdown_noMatches": "一致なし",

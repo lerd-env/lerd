@@ -1635,7 +1635,7 @@
   "gitSync_pushBody": "将 {branch} 上的本地提交（{count}）推送到其上游。从不强制：若远程已更新，git 会拒绝。",
   "gitSync_push": "推送",
   "gitSync_publishTitle": "发布 {branch}?",
-  "gitSync_publishBody": "以相同名称将 {branch} 推送到 origin,并从此跟踪它。从不强制:如果 origin 已有不同的 {branch},git 会拒绝。",
+  "gitSync_publishBody": "以相同名称将 {branch} 推送到 origin,并从此跟踪它。从不强制:如果 origin 已有一个本分支并非基于其上的 {branch},git 会拒绝。",
   "gitSync_publish": "发布",
   "dropdown_searchPlaceholder": "搜索…",
   "dropdown_noMatches": "无匹配项",
