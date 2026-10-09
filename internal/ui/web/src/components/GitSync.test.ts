@@ -75,6 +75,21 @@ describe('GitSync', () => {
     expect(screen.getByRole('button', { name: 'Fetch from upstream' })).toBeEnabled();
   });
 
+  // With no upstream only publishing makes sense; it goes to origin and starts tracking.
+  it('publishes a branch with no upstream after confirming', async () => {
+    gitRemote.mockResolvedValue({ ok: true, message: "branch 'spike' set up to track 'origin/spike'." });
+    const status = { ...synced, upstream: false, publishable: true };
+    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'spike', status } });
+
+    expect(screen.queryByRole('button', { name: 'Pull from upstream' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Fetch from upstream' })).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Publish to origin' }));
+    expect(screen.getByText('Publish spike?')).toBeInTheDocument();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Publish' }));
+
+    expect(gitRemote).toHaveBeenCalledWith('acme.test', 'push', '');
+  });
+
   it('shows git’s refusal in the error modal', async () => {
     gitRemote.mockResolvedValue({ ok: false, error: 'rejected: fetch first' });
     render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', status: { ...synced, ahead: 1 } } });

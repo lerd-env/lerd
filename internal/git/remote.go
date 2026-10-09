@@ -17,7 +17,8 @@ func Pull(dir string) (string, error) { return runQuiet(dir, "pull", "--ff-only"
 
 // Push sends the branch to its upstream, never forced: a remote that moved on
 // makes git reject it. The explicit refspec keeps push.default and configured
-// push refspecs, which can match every branch or force, out of it.
+// push refspecs, which can match every branch or force, out of it. A branch
+// with no upstream is published to origin under its own name and tracks it.
 func Push(dir string) (string, error) {
 	branch, err := Output(dir, "symbolic-ref", "--short", "HEAD")
 	if err != nil {
@@ -27,7 +28,11 @@ func Push(dir string) (string, error) {
 	remote, _ := Output(dir, "config", "branch."+branch+".remote")
 	merge, _ := Output(dir, "config", "branch."+branch+".merge")
 	if strings.TrimSpace(remote) == "" || strings.TrimSpace(merge) == "" {
-		return "", fmt.Errorf("%s has no upstream to push to", branch)
+		if !hasOrigin(dir) {
+			return "", fmt.Errorf("%s has no upstream to push to", branch)
+		}
+		ref := "refs/heads/" + branch
+		return runQuiet(dir, "push", "--set-upstream", "origin", ref+":"+ref)
 	}
 	// The branch by name, not HEAD: a switch between these calls must not redirect the push.
 	return runQuiet(dir, "push", strings.TrimSpace(remote), "refs/heads/"+branch+":"+strings.TrimSpace(merge))

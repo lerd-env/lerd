@@ -438,7 +438,7 @@
       </div>
       {#if activeEntry}
         {@const git = checkoutFor(gitCheckouts, activeEntry)}
-        {#if git?.upstream && $accessMode.localControl}
+        {#if (git?.upstream || git?.publishable) && $accessMode.localControl}
           <div class="shrink-0 mr-3">
             <GitSync
               domain={site.domain}

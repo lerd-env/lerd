@@ -14,6 +14,8 @@ type Status struct {
 	Ahead      int  `json:"ahead"`
 	Behind     int  `json:"behind"`
 	Upstream   bool `json:"upstream"`
+	// Publishable is a branch with no upstream that Push can send to origin.
+	Publishable bool `json:"publishable"`
 }
 
 // ReadStatus runs `git status` in dir and summarises it.
@@ -22,7 +24,18 @@ func ReadStatus(dir string) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	return ParseStatus(out), nil
+	s := ParseStatus(out)
+	s.Publishable = !s.Upstream && onBranch(out) && hasOrigin(dir)
+	return s, nil
+}
+
+func onBranch(porcelain string) bool {
+	return !strings.Contains(porcelain, "# branch.head (detached)")
+}
+
+func hasOrigin(dir string) bool {
+	_, err := Output(dir, "remote", "get-url", "origin")
+	return err == nil
 }
 
 // ParseStatus reads `git status --porcelain=v2 --branch` output. In a changed

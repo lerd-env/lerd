@@ -255,3 +255,71 @@ func TestPush_ignoresAForcingRefspec(t *testing.T) {
 		t.Error("remote branch was overwritten")
 	}
 }
+
+// A branch with no upstream is published to origin under its own name and
+// tracks it from then on, so the next push is an ordinary one.
+func TestPush_publishesABranchWithNoUpstream(t *testing.T) {
+	dir, other := pullFixture(t)
+	gitRun(t, dir, "switch", "-q", "--no-track", "-c", "feature/x")
+	gitRun(t, dir, "commit", "-q", "--allow-empty", "-m", "x")
+
+	if _, err := Push(dir); err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	gitRun(t, other, "fetch", "-q")
+	if out, _ := Output(other, "rev-parse", "origin/feature/x"); strings.TrimSpace(out) != head(t, dir) {
+		t.Fatal("origin did not receive the branch")
+	}
+	if st, _ := ReadStatus(dir); !st.Upstream || st.Publishable {
+		t.Fatalf("want the branch tracking origin/feature/x, got %+v", st)
+	}
+}
+
+// Publishing never overwrites a same-named branch someone else pushed.
+func TestPush_publishRefusesToOverwrite(t *testing.T) {
+	dir, other := pullFixture(t)
+	gitRun(t, other, "switch", "-q", "-c", "feature/x")
+	gitRun(t, other, "commit", "-q", "--allow-empty", "-m", "theirs")
+	gitRun(t, other, "push", "-q", "origin", "feature/x")
+	theirs := head(t, other)
+	gitRun(t, dir, "switch", "-q", "--no-track", "-c", "feature/x")
+	gitRun(t, dir, "commit", "-q", "--allow-empty", "-m", "ours")
+
+	if _, err := Push(dir); err == nil {
+		t.Fatal("want a rejection, not a forced overwrite")
+	}
+	gitRun(t, other, "fetch", "-q")
+	if out, _ := Output(other, "rev-parse", "origin/feature/x"); strings.TrimSpace(out) != theirs {
+		t.Error("remote branch was overwritten")
+	}
+}
+
+func TestPush_noOriginToPublishTo(t *testing.T) {
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-q")
+	gitRun(t, dir, "commit", "-q", "--allow-empty", "-m", "x")
+
+	if _, err := Push(dir); err == nil || !strings.Contains(err.Error(), "no upstream") {
+		t.Fatalf("want a no-upstream refusal, got %v", err)
+	}
+}
+
+func TestReadStatus_publishable(t *testing.T) {
+	dir, _ := pullFixture(t)
+	if st, _ := ReadStatus(dir); st.Publishable {
+		t.Error("a tracking branch is not publishable")
+	}
+	gitRun(t, dir, "switch", "-q", "--no-track", "-c", "spike")
+	if st, _ := ReadStatus(dir); !st.Publishable {
+		t.Error("a branch with no upstream and an origin is publishable")
+	}
+	gitRun(t, dir, "switch", "-q", "--detach")
+	if st, _ := ReadStatus(dir); st.Publishable {
+		t.Error("a detached HEAD is not publishable")
+	}
+	gitRun(t, dir, "switch", "-q", "spike")
+	gitRun(t, dir, "remote", "rename", "origin", "upstream")
+	if st, _ := ReadStatus(dir); st.Publishable {
+		t.Error("without an origin there is nowhere to publish")
+	}
+}

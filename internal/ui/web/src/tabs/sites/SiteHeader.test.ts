@@ -208,6 +208,15 @@ describe('SiteHeader', () => {
       expect(getByRole('button', { name: 'Switch branch' })).toBeInTheDocument();
     });
 
+    it('offers to publish a branch that has no upstream', async () => {
+      accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
+      const untracked = [{ ...tracking[0], behind: 0, upstream: false, publishable: true }];
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({ checkouts: untracked })))));
+      const { findByRole, queryByRole } = render(Harness, { props: { site: worktreeSite } });
+      expect(await findByRole('button', { name: 'Publish to origin' })).toBeEnabled();
+      expect(queryByRole('button', { name: 'Pull from upstream' })).toBeNull();
+    });
+
     it('hides them from a remote session without host actions', async () => {
       accessMode.set({ localControl: false, local: false, lanExposed: true, checked: true });
       const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ checkouts: tracking }))));
