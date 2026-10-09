@@ -359,3 +359,18 @@ func TestSwitchBranch_migratesWithTheDefinitionAfterCheckout(t *testing.T) {
 func fixed(fw *config.Framework) func() *config.Framework {
 	return func() *config.Framework { return fw }
 }
+
+// The lock holds whichever spelling of the folder each caller has, a symlinked
+// one included, as macOS gives for its temp dirs.
+func TestCheckoutLock_sameFolderThroughASymlink(t *testing.T) {
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	release := CheckoutLock(real)
+	defer release()
+	if CheckoutLock(link) != nil {
+		t.Fatal("a symlinked path took a second lock on the same checkout")
+	}
+}

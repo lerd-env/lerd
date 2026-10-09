@@ -87,7 +87,11 @@ func PlanSiteBranch(site *config.Site, branch string) (BranchPlan, error) {
 var switching sync.Map
 
 // CheckoutLock claims path for one switch or pull, returning nil while another runs.
+// Keyed by the resolved folder, so a symlinked spelling of it is the same checkout.
 func CheckoutLock(path string) (release func()) {
+	if real, err := filepath.EvalSymlinks(path); err == nil {
+		path = real
+	}
 	if _, busy := switching.LoadOrStore(path, struct{}{}); busy {
 		return nil
 	}
