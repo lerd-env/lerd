@@ -3,6 +3,7 @@ package cli
 import (
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -120,5 +121,24 @@ func TestTrayEnabled_DefaultsOn(t *testing.T) {
 
 	if !trayEnabled() {
 		t.Error("an install that never touched the setting must keep its tray")
+	}
+}
+
+// A replacement started while the old applet still holds the lock exits at
+// once, and the restart ends with no tray at all.
+func TestWaitTrayGone_ReturnsOnceTheOldAppletExits(t *testing.T) {
+	polls := 0
+	running := func() bool { polls++; return polls < 3 }
+	if !waitTrayGone(running, time.Second) {
+		t.Fatal("the old applet exited, so the wait must report it gone")
+	}
+	if polls != 3 {
+		t.Errorf("polled %d times, want 3: the wait must last until the applet is gone", polls)
+	}
+}
+
+func TestWaitTrayGone_GivesUpOnAnAppletThatWillNotDie(t *testing.T) {
+	if waitTrayGone(func() bool { return true }, 100*time.Millisecond) {
+		t.Error("an applet still running at the deadline must not be reported gone")
 	}
 }

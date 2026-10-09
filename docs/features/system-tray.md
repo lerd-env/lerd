@@ -9,6 +9,8 @@ lerd tray --mono=false # use the red colour icon instead of monochrome white
 
 The tray detaches from the terminal immediately, your shell prompt returns straight away.
 
+Only one tray runs at a time. Launching it again while one is up does nothing, and `lerd start` or `lerd tray on` replaces the running applet rather than adding a second icon.
+
 ---
 
 ## Menu layout

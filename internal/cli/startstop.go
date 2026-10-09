@@ -972,11 +972,36 @@ func launchTray() error {
 // The detached applet carries --mono or --mono=false.
 var trayProcessPatterns = []string{`lerd tray( --mono(=false)?)?$`, `lerd-tray( --mono(=false)?)?$`}
 
-// killTray kills any running lerd tray process.
+// killTray kills any running lerd tray process and waits for it to exit, so a
+// replacement launched next does not find the old applet still holding the
+// instance lock and quit, leaving no tray at all.
 func killTray() {
 	for _, pattern := range trayProcessPatterns {
 		exec.Command("pkill", "-f", pattern).Run() //nolint:errcheck
 	}
+	waitTrayGone(trayRunning, 3*time.Second)
+}
+
+func trayRunning() bool {
+	for _, pattern := range trayProcessPatterns {
+		if exec.Command("pgrep", "-f", pattern).Run() == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// waitTrayGone polls until running reports false or the timeout passes, and
+// says whether the applet is gone.
+func waitTrayGone(running func() bool, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for running() {
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return true
 }
 
 // reconcileCustomServices heals custom-service drift on start (issue #678).
