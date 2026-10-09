@@ -6,6 +6,9 @@ import { confirmDownload } from './downloadConfirm';
 import type { SiteNginxBackup, LoadNginxBackupsResult, ResetNginxResult, SaveNginxResult, RestoreNginxResult } from './sites';
 
 export const phpVersions = writable<string[]>([]);
+// phpVersionsLoaded tells "not fetched yet" apart from "none installed", which
+// both read as an empty list.
+export const phpVersionsLoaded = writable(false);
 
 // Shown wherever a prerelease version is offered, so it never reads as an
 // ordinary choice. Short enough to sit inside the version card.
@@ -66,6 +69,7 @@ export async function loadPhpVersions() {
   try {
     const list = await apiJson<string[]>('/api/php-versions');
     phpVersions.set(Array.isArray(list) ? list : []);
+    phpVersionsLoaded.set(true);
   } catch {
     /* keep previous */
   }
