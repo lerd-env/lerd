@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, fireEvent } from '@testing-library/svelte';
 import { describe, it, expect, vi } from 'vitest';
 import Harness from './Dropdown.test.svelte';
 
@@ -191,5 +191,55 @@ describe('Dropdown', () => {
   it('full width fills container when width="full"', () => {
     render(Harness, { props: { value: 'a', options: ['a'], width: 'full', onchange: () => {} } });
     expect(screen.getByRole('button').className).toMatch(/w-full/);
+  });
+
+  describe('searchable', () => {
+    const opts = ['main', 'feature/payments', 'feature/search', 'bugfix/login'];
+
+    it('filters the options as you type and picks with Enter', async () => {
+      const onchange = vi.fn();
+      render(Harness, { props: { value: 'main', options: opts, searchable: true, onchange } });
+      await fireEvent.click(screen.getByRole('button', { name: /main/ }));
+      const search = screen.getByPlaceholderText('Search…');
+      await fireEvent.input(search, { target: { value: 'feat' } });
+
+      const shown = Array.from(openMenu().querySelectorAll('[role="option"]')).map((o) => o.textContent?.trim());
+      expect(shown).toEqual(['feature/payments', 'feature/search']);
+
+      await fireEvent.keyDown(search, { key: 'ArrowDown' });
+      await fireEvent.keyDown(search, { key: 'Enter' });
+      expect(onchange).toHaveBeenCalledWith('feature/search');
+    });
+
+    // A space is part of the query, not a pick.
+    it('lets the search field take spaces', async () => {
+      const onchange = vi.fn();
+      render(Harness, { props: { value: 'main', options: opts, searchable: true, onchange } });
+      await fireEvent.click(screen.getByRole('button', { name: /main/ }));
+      await fireEvent.keyDown(screen.getByPlaceholderText('Search…'), { key: ' ' });
+      expect(onchange).not.toHaveBeenCalled();
+      expect(document.querySelector('[role="listbox"]')).not.toBeNull();
+    });
+
+    it('says so when nothing matches', async () => {
+      render(Harness, { props: { value: 'main', options: opts, searchable: true, onchange: () => {} } });
+      await fireEvent.click(screen.getByRole('button', { name: /main/ }));
+      await fireEvent.input(screen.getByPlaceholderText('Search…'), { target: { value: 'zzz' } });
+      expect(screen.getByText('No matches')).toBeInTheDocument();
+    });
+
+    it('starts the search with a letter typed on the closed trigger', async () => {
+      render(Harness, { props: { value: 'main', options: opts, searchable: true, onchange: () => {} } });
+      await fireEvent.keyDown(screen.getByRole('button', { name: /main/ }), { key: 'b' });
+      expect((screen.getByPlaceholderText('Search…') as HTMLInputElement).value).toBe('b');
+      const shown = Array.from(openMenu().querySelectorAll('[role="option"]')).map((o) => o.textContent?.trim());
+      expect(shown).toEqual(['bugfix/login']);
+    });
+
+    it('has no search field unless asked', async () => {
+      render(Harness, { props: { value: 'main', options: opts, onchange: () => {} } });
+      await fireEvent.click(screen.getByRole('button', { name: /main/ }));
+      expect(screen.queryByPlaceholderText('Search…')).toBeNull();
+    });
   });
 });

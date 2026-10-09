@@ -104,11 +104,8 @@ func InstallDependencies(projectPath string, out io.Writer) error {
 	var errs []error
 
 	if composerNeedsInstall(projectPath) {
-		composer := filepath.Join(config.BinDir(), "composer")
-		if err := runIn(projectPath, out, composer, "install", "--no-interaction", "--no-progress"); err != nil {
-			errs = append(errs, fmt.Errorf("composer install: %w", err))
-		} else {
-			stampInstallMarker(filepath.Join(projectPath, "vendor", "composer", "installed.json"))
+		if err := InstallComposer(projectPath, out); err != nil {
+			errs = append(errs, err)
 		}
 	}
 
@@ -132,6 +129,32 @@ func InstallDependencies(projectPath string, out io.Writer) error {
 	// build explicitly via RunFrontendBuild after dependencies are in place.
 
 	return errors.Join(errs...)
+}
+
+// InstallComposer runs composer install whether or not the marker says one is due.
+func InstallComposer(projectPath string, out io.Writer) error {
+	composer := filepath.Join(config.BinDir(), "composer")
+	if err := runIn(projectPath, out, composer, "install", "--no-interaction", "--no-progress"); err != nil {
+		return fmt.Errorf("composer install: %w", err)
+	}
+	stampInstallMarker(filepath.Join(projectPath, "vendor", "composer", "installed.json"))
+	return nil
+}
+
+// InstallJS runs the project's JS package install whether or not one is due.
+func InstallJS(projectPath string, out io.Writer) error {
+	if err := jsInstaller(projectPath, out); err != nil {
+		return err
+	}
+	marker, _ := jsInstallPaths(projectPath)
+	stampInstallMarker(marker)
+	return nil
+}
+
+// JSInstallCommand names the install the project's lockfile calls for, like "npm ci".
+func JSInstallCommand(projectPath string) string {
+	name, args := jsPackageManager(projectPath)
+	return name + " " + args[0]
 }
 
 // RunNpmScript executes `<package-manager> run <script>` in projectPath,

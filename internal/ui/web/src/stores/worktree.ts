@@ -11,6 +11,7 @@ export interface WorktreeOptions {
   local_branches: string[];
   remote_branches: string[];
   default_branch_label: string;
+  branch_dates?: Record<string, number>;
   build_options: LabeledOption[];
   build_default: string;
   db_options: LabeledOption[];
@@ -107,6 +108,80 @@ export async function streamWorktreeAdd(
       }
     } else {
       onEvent({ line: data });
+    }
+  });
+}
+
+export interface PlanStep {
+  label: string;
+  needed: boolean;
+  changed?: string;
+  missing?: boolean;
+}
+
+export interface BranchPlan {
+  ahead: number;
+  behind: number;
+  files: number;
+  composer?: PlanStep;
+  js?: PlanStep;
+  migrate?: PlanStep;
+  migrations_added: number;
+  migrations_missing: number;
+  conflicts?: string[];
+  db?: { service: string; database: string; restore?: { name: string; created: string } };
+  error?: string;
+}
+
+export async function branchPlan(domain: string, branch: string): Promise<BranchPlan> {
+  return apiJson<BranchPlan>('/api/sites/branch-plan?' + new URLSearchParams({ domain, branch }).toString());
+}
+
+export interface BranchSteps {
+  composer: boolean;
+  js: boolean;
+  migrate: boolean;
+  snapshot: boolean;
+  // A snapshot to load once the branch is checked out, or '' for none.
+  restore: string;
+  // Create makes the branch new, starting at base ('' for the current commit).
+  create?: boolean;
+  base?: string;
+}
+
+export interface BranchSwitchEvent {
+  line?: string;
+  done?: boolean;
+  ok?: boolean;
+  error?: string;
+  // The snapshot taken before switching, offered back if a later step failed.
+  snapshot?: string;
+}
+
+// streamBranchSwitch checks branch out in the site's main checkout and runs
+// the chosen steps, streaming their output.
+export async function streamBranchSwitch(
+  domain: string,
+  branch: string,
+  steps: BranchSteps,
+  onEvent: (e: BranchSwitchEvent) => void
+): Promise<void> {
+  const qs = new URLSearchParams({ domain, branch });
+  for (const k of ['composer', 'js', 'migrate', 'snapshot'] as const) if (steps[k]) qs.set(k, '1');
+  if (steps.restore) qs.set('restore', steps.restore);
+  if (steps.create) qs.set('create', '1');
+  if (steps.base) qs.set('base', steps.base);
+  const res = await apiFetch('/api/sites/branch-switch?' + qs.toString(), { method: 'POST' });
+  await readSSE(res, (event, data) => {
+    if (event !== 'done') {
+      onEvent({ line: data });
+      return;
+    }
+    try {
+      const r = JSON.parse(data) as { ok?: boolean; error?: string; snapshot?: string };
+      onEvent({ done: true, ok: Boolean(r.ok), error: r.error, snapshot: r.snapshot || undefined });
+    } catch {
+      onEvent({ done: true, ok: false, error: 'bad done payload' });
     }
   });
 }

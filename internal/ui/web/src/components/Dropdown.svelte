@@ -10,6 +10,7 @@
 
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { m } from '../paraglide/messages.js';
 
   interface Props {
     value: string;
@@ -30,6 +31,8 @@
     // Drawn before each option and before the trigger's label, given the
     // option's value; used where the choice has a mark of its own (frameworks).
     optionIcon?: Snippet<[string]>;
+    // A filter field atop the menu, for lists too long to scan (branches).
+    searchable?: boolean;
   }
   let {
     value,
@@ -45,7 +48,8 @@
     joined = false,
     minMenuWidth = 160,
     align = 'left',
-    optionIcon
+    optionIcon,
+    searchable = false
   }: Props = $props();
 
   let open = $state(false);
@@ -55,6 +59,8 @@
   let highlighted = $state(-1);
   let typeahead = $state('');
   let typeaheadTimer: ReturnType<typeof setTimeout> | null = null;
+  let query = $state('');
+  let searchEl: HTMLInputElement | null = $state(null);
   const menuId = `dd-${Math.random().toString(36).slice(2, 9)}`;
 
   function normalize(opts: typeof options): DropdownOption[] {
@@ -63,6 +69,12 @@
     );
   }
   const normalized = $derived(normalize(options));
+  // Keyboard and highlight work on what is shown, so a filtered list behaves
+  // exactly like a short one.
+  const visible = $derived.by(() => {
+    const q = query.trim().toLowerCase();
+    return q ? normalized.filter((o) => (o.label || o.value).toLowerCase().includes(q)) : normalized;
+  });
 
   function displayFor(opt: DropdownOption): string {
     return label ? label + ' ' + (opt.label || opt.value) : (opt.label || opt.value);
@@ -87,13 +99,18 @@
     if (left + max + margin > window.innerWidth) left = Math.max(margin, window.innerWidth - max - margin);
     if (left < margin) left = margin;
     menuPos = { top: r.bottom + 4, left, width: max };
+    query = '';
     highlighted = selectedIdx >= 0 ? selectedIdx : 0;
     open = true;
-    queueMicrotask(scrollHighlightedIntoView);
+    queueMicrotask(() => {
+      searchEl?.focus();
+      scrollHighlightedIntoView();
+    });
   }
 
   function closeMenu() {
     open = false;
+    query = '';
     highlighted = -1;
     typeahead = '';
     if (typeaheadTimer) {
@@ -121,13 +138,13 @@
   }
 
   function moveHighlight(delta: number) {
-    if (!normalized.length) return;
+    if (!visible.length) return;
     let next = highlighted < 0 ? 0 : highlighted + delta;
-    const n = normalized.length;
+    const n = visible.length;
     next = ((next % n) + n) % n;
     // Skip disabled entries.
     let safety = n;
-    while (normalized[next].disabled && safety-- > 0) {
+    while (visible[next].disabled && safety-- > 0) {
       next = ((next + delta) % n + n) % n;
     }
     highlighted = next;
@@ -138,7 +155,7 @@
     if (typeaheadTimer) clearTimeout(typeaheadTimer);
     typeahead = (typeahead + ch).toLowerCase();
     typeaheadTimer = setTimeout(() => (typeahead = ''), 600);
-    const match = normalized.findIndex(
+    const match = visible.findIndex(
       (o) => !o.disabled && (o.label || o.value).toLowerCase().startsWith(typeahead)
     );
     if (match >= 0) {
@@ -159,12 +176,19 @@
     } else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
       e.stopPropagation();
       if (!open) openMenu();
-      applyTypeahead(e.key);
+      if (searchable) {
+        e.preventDefault();
+        query += e.key;
+        highlighted = 0;
+      } else applyTypeahead(e.key);
     }
   }
 
   function onMenuKey(e: KeyboardEvent) {
     if (!open) return;
+    // In the search field, typed characters (space included) belong to the query.
+    const inSearch = searchable && e.target === searchEl;
+    if (inSearch && (e.key === ' ' || (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey))) return;
     switch (e.key) {
       case 'Escape':
         e.preventDefault();
@@ -186,13 +210,13 @@
         break;
       case 'End':
         e.preventDefault();
-        highlighted = normalized.length - 1;
+        highlighted = visible.length - 1;
         scrollHighlightedIntoView();
         break;
       case 'Enter':
       case ' ':
         e.preventDefault();
-        if (highlighted >= 0 && highlighted < normalized.length) pick(normalized[highlighted]);
+        if (highlighted >= 0 && highlighted < visible.length) pick(visible[highlighted]);
         break;
       case 'Tab':
         closeMenu();
@@ -272,8 +296,23 @@
       style="position: fixed; top: {menuPos.top}px; left: {menuPos.left}px; width: {menuPos.width}px;"
       class="z-50 rounded-lg border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-xl ring-1 ring-black/5 py-1 max-h-72 overflow-y-auto"
     >
-      {#each normalized as opt, i (opt.value + ':' + i)}
-        {#if opt.group && opt.group !== normalized[i - 1]?.group}
+      {#if searchable}
+        <div class="sticky top-0 -mt-1 px-2 pt-2 pb-1 bg-white dark:bg-lerd-card">
+          <input
+            bind:this={searchEl}
+            bind:value={query}
+            oninput={() => (highlighted = 0)}
+            type="text"
+            placeholder={m.dropdown_searchPlaceholder()}
+            class="w-full h-7 px-2 text-xs rounded-md border border-gray-200 dark:border-lerd-border bg-gray-50 dark:bg-white/5 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:border-lerd-red/50"
+          />
+        </div>
+        {#if visible.length === 0}
+          <div class="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">{m.dropdown_noMatches()}</div>
+        {/if}
+      {/if}
+      {#each visible as opt, i (opt.value + ':' + i)}
+        {#if opt.group && opt.group !== visible[i - 1]?.group}
           <div role="presentation" class="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">{opt.group}</div>
         {/if}
         {@const selected = opt.value === value}

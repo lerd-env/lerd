@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { relativeTime } from '$lib/relativeTime';
   import { onMount } from 'svelte';
   import { slide } from 'svelte/transition';
   import StatusDot from '$components/StatusDot.svelte';
@@ -67,17 +68,6 @@
       case 'dns_recovered': return m.activity_dns_recovered();
     }
   }
-
-  function relative(at: number, ref: number): string {
-    const diff = Math.max(0, ref - at);
-    if (diff < 30_000) return m.time_now();
-    const mins = Math.floor(diff / 60_000);
-    if (mins < 60) return m.time_min_ago({ n: Math.max(1, mins) });
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return m.time_hour_ago({ n: hours });
-    const days = Math.floor(hours / 24);
-    return m.time_day_ago({ n: days });
-  }
 </script>
 
 {#if $activity.length === 0}
@@ -91,7 +81,7 @@
       >
         <span class="mt-1.5 shrink-0"><StatusDot color={dotColor[e.kind]} size="xs" /></span>
         <span class="flex-1 text-gray-700 dark:text-gray-300 leading-snug truncate">{label(e)}</span>
-        <span class="shrink-0 text-[10px] font-mono text-gray-500 dark:text-gray-400 mt-0.5">{relative(e.at, $now)}</span>
+        <span class="shrink-0 text-[10px] font-mono text-gray-500 dark:text-gray-400 mt-0.5">{relativeTime(e.at, $now)}</span>
       </div>
     {/each}
   </div>

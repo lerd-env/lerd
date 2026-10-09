@@ -10,6 +10,7 @@ export type ModalKind =
   | "remoteControl"
   | "lanProgress"
   | "worktreeAdd"
+  | "branchSwitch"
   | "worktreeRemove"
   | "phpAdd"
   | "phpRebuild"
@@ -289,6 +290,10 @@ export function openLANProgressModal(lanAction: LANAction) {
 
 export function openWorktreeAddModal(site: Site) {
   modal.set({ kind: "worktreeAdd", site });
+}
+
+export function openBranchSwitchModal(site: Site) {
+  modal.set({ kind: "branchSwitch", site });
 }
 
 export function openWorktreeRemoveModal(site: Site, branch: string) {

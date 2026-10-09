@@ -7,12 +7,13 @@ import (
 
 // Status is a checkout's working-tree state, as a shell prompt summarises it.
 type Status struct {
-	Staged     int `json:"staged"`
-	Modified   int `json:"modified"`
-	Untracked  int `json:"untracked"`
-	Conflicted int `json:"conflicted"`
-	Ahead      int `json:"ahead"`
-	Behind     int `json:"behind"`
+	Staged     int  `json:"staged"`
+	Modified   int  `json:"modified"`
+	Untracked  int  `json:"untracked"`
+	Conflicted int  `json:"conflicted"`
+	Ahead      int  `json:"ahead"`
+	Behind     int  `json:"behind"`
+	Upstream   bool `json:"upstream"`
 }
 
 // ReadStatus runs `git status` in dir and summarises it.
@@ -30,6 +31,8 @@ func ParseStatus(out string) Status {
 	var s Status
 	for _, line := range strings.Split(out, "\n") {
 		switch {
+		case strings.HasPrefix(line, "# branch.upstream "):
+			s.Upstream = true
 		case strings.HasPrefix(line, "# branch.ab "):
 			fmt.Sscanf(strings.TrimPrefix(line, "# branch.ab "), "+%d -%d", &s.Ahead, &s.Behind)
 		case strings.HasPrefix(line, "1 "), strings.HasPrefix(line, "2 "):

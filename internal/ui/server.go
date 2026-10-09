@@ -288,6 +288,8 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/sites/worktree-options", withCORS(handleSiteWorktreeOptions))
 	mux.HandleFunc("/api/sites/git-status", withCORS(handleSiteGitStatus))
 	mux.HandleFunc("/api/sites/worktree-add", withCORS(publishAfter(handleSiteWorktreeAdd, eventbus.KindSites)))
+	mux.HandleFunc("/api/sites/branch-plan", withCORS(handleSiteBranchPlan))
+	mux.HandleFunc("/api/sites/branch-switch", withCORS(publishAfter(handleSiteBranchSwitch, eventbus.KindSites)))
 	mux.HandleFunc("/api/browse", withCORS(handleBrowse))
 	mux.HandleFunc("/api/runs", withCORS(publishAfter(handleRuns, eventbus.KindSites)))
 	mux.HandleFunc("/api/runs/", withCORS(handleRunStream))
@@ -3921,6 +3923,8 @@ type SiteActionResponse struct {
 	// the action: a PHP version clamped to the framework's range, or a target
 	// image that never built part of the declared extension set.
 	Warning string `json:"warning,omitempty"`
+	// Message is a success summary worth showing, like git's last line after a pull.
+	Message string `json:"message,omitempty"`
 }
 
 // handlePHPExtensions reports what a PHP version's image actually carries: its
@@ -4226,6 +4230,23 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "git:fetch", "git:pull", "git:push":
+		dir := resolveSitePath(site, r.URL.Query().Get("branch"))
+		if dir == "" {
+			writeJSON(w, SiteActionResponse{Error: "unknown worktree branch"})
+			return
+		}
+		op := map[string]func(string) (string, error){
+			"git:fetch": gitpkg.Fetch, "git:pull": gitpkg.Pull, "git:push": gitpkg.Push,
+		}[action]
+		out, err := op(dir)
+		if err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		lines := strings.Split(out, "\n")
+		writeJSON(w, SiteActionResponse{OK: true, Message: strings.TrimSpace(lines[len(lines)-1])})
 		return
 	case "restart":
 		if err := cli.RestartSite(site.Name); err != nil {
@@ -6608,6 +6629,7 @@ func handleSiteWorktreeOptions(w http.ResponseWriter, r *http.Request) {
 		"local_branches":       localBranches,
 		"remote_branches":      remoteBranches,
 		"default_branch_label": currentBranch,
+		"branch_dates":         gitpkg.BranchDates(site.Path),
 		"build_options":        worktreeBuildOptions(site),
 		"build_default":        "auto",
 		"db_options":           worktreeDBOptions(site, branch),
@@ -6745,6 +6767,77 @@ func handleSiteWorktreeAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	done(map[string]any{"ok": true, "branch": branch, "domain": branch + "." + site.PrimaryDomain(), "warnings": warnings})
+}
+
+// handleSiteBranchPlan answers GET /api/sites/branch-plan?domain=&branch= with
+// what switching the main checkout to branch would call for.
+func handleSiteBranchPlan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	site, err := config.FindSiteByDomain(r.URL.Query().Get("domain"))
+	if err != nil {
+		http.Error(w, "site not found", http.StatusNotFound)
+		return
+	}
+	plan, err := cli.PlanSiteBranch(site, strings.TrimSpace(r.URL.Query().Get("branch")))
+	if err != nil {
+		writeJSON(w, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, plan)
+}
+
+// handleSiteBranchSwitch answers POST /api/sites/branch-switch?domain=&branch=
+// [&composer=1][&js=1][&migrate=1][&snapshot=1][&restore=<name>][&create=1&base=<ref>]
+// by checking the branch out in the site's main checkout, or creating it from base,
+// and running the chosen steps around it, streaming their output. The done event
+// names any snapshot taken first.
+func handleSiteBranchSwitch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.NotFound(w, r)
+		return
+	}
+	q := r.URL.Query()
+	site, err := config.FindSiteByDomain(q.Get("domain"))
+	if err != nil {
+		writeJSON(w, SiteActionResponse{Error: "site not found"})
+		return
+	}
+	branch := strings.TrimSpace(q.Get("branch"))
+	if branch == "" {
+		writeJSON(w, SiteActionResponse{Error: "branch is required"})
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	steps := cli.BranchSteps{
+		Composer: q.Get("composer") == "1",
+		JS:       q.Get("js") == "1",
+		Migrate:  q.Get("migrate") == "1",
+		Snapshot: q.Get("snapshot") == "1",
+		Restore:  q.Get("restore"),
+		Create:   q.Get("create") == "1",
+		Base:     strings.TrimSpace(q.Get("base")),
+	}
+	sw := &sseLineWriter{w: w, f: flusher}
+	snap, switchErr := cli.SwitchSiteBranch(site, branch, steps, sw)
+	sw.flushTail()
+	payload := map[string]any{"ok": switchErr == nil, "snapshot": snap}
+	if switchErr != nil {
+		payload["error"] = switchErr.Error()
+	}
+	fmt.Fprintf(w, "event: done\ndata: %s\n\n", mustJSON(payload))
+	flusher.Flush()
 }
 
 // syncLerdYAMLWorkersDelayed waits briefly for the worker unit to start, then syncs.

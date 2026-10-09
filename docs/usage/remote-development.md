@@ -340,7 +340,7 @@ The password is bcrypt-hashed (default cost) and stored in `~/.config/lerd/confi
 
 ### Host actions stay local by default
 
-An authenticated remote session drives the dashboard, but the actions that reach the host itself are held back: reading a site's raw `.env` (app key, database credentials, tokens), browsing the filesystem, linking arbitrary paths as sites, dropping or exporting databases, opening a terminal, replacing tooling on the host's PATH, and shutting lerd down. A remote client asking for one of those gets 403 even with valid credentials, and the dashboard hides the controls that map to them.
+An authenticated remote session drives the dashboard, but the actions that reach the host itself are held back: reading a site's raw `.env` (app key, database credentials, tokens), browsing the filesystem, linking arbitrary paths as sites, dropping or exporting databases, fetching, pulling, pushing or switching a site's git branch (which use your git credentials and run installs and migrations), opening a terminal, replacing tooling on the host's PATH, and shutting lerd down. A remote client asking for one of those gets 403 even with valid credentials, and the dashboard hides the controls that map to them.
 
 Opt in when you want the full thing from another device:
 

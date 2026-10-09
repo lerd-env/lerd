@@ -32,6 +32,8 @@ var loopbackOnlyRoutes = []string{
 	"/api/browse",               // browses host filesystem
 	"/api/push/test",            // fires notifications onto subscribed devices
 	"/api/settings/mcp",         // writes AI assistants' config under the host user's home
+	"/api/sites/branch-switch",  // runs composer, npm and migrations; restores database snapshots
+	"/api/sites/branch-plan",    // reads the site's database and its snapshots
 }
 
 // loopbackOnlyRoutePrefixes are endpoint subtrees restricted in full, so a
@@ -56,8 +58,11 @@ var loopbackOnlyRoutePrefixes = []string{
 // new subresource cannot accidentally escape the gate by failing to be
 // re-listed here.
 var loopbackOnlySiteSubactions = []string{
-	"/terminal", // opens an interactive shell on the host
-	"/env",      // raw .env content + backups + restore (APP_KEY, DB creds, tokens)
+	"/terminal",  // opens an interactive shell on the host
+	"/env",       // raw .env content + backups + restore (APP_KEY, DB creds, tokens)
+	"/git:fetch", // the three talk to the remote with the host user's git credentials
+	"/git:pull",
+	"/git:push",
 }
 
 // isLoopbackOnlyPath reports whether the given URL path is in either the

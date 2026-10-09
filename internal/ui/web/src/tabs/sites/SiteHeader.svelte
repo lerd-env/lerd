@@ -29,6 +29,7 @@
     openGroupModal,
     openSiteUnlinkModal,
     openWorktreeAddModal,
+    openBranchSwitchModal,
     openWorktreeRemoveModal
   } from '$stores/modals';
   import Icon from '$components/Icon.svelte';
@@ -46,6 +47,7 @@
   import WorkspacePicker from './WorkspacePicker.svelte';
   import WorkspaceMenuItems from './WorkspaceMenuItems.svelte';
   import GitStatusBadge from '$components/GitStatusBadge.svelte';
+  import GitSync from '$components/GitSync.svelte';
   import BrowserLogsSiteToggle from '$components/BrowserLogsSiteToggle.svelte';
   import { debugCaptureEnabled } from '$stores/queries';
   import { loadGitStatus, checkoutFor, type GitCheckout } from '$lib/gitStatus';
@@ -138,6 +140,9 @@
     return [main, ...wts];
   });
   const showWorktreeTabs = $derived(Boolean(site.branch) && !site.paused);
+  const activeEntry = $derived(
+    tabEntries.find((e) => (e.isMain ? activeWorktreeBranch === '' : e.branch === activeWorktreeBranch))
+  );
 
   // Git state changes outside lerd (an editor, a terminal), so it is polled while
   // the site is open and re-read when the window regains focus.
@@ -175,6 +180,13 @@
       })
       .catch(() => {});
   });
+  // Pull is fast-forward only, so a failure means git refused and its own words say why.
+  function refreshGit() {
+    const domain = site.domain;
+    loadGitStatus(domain)
+      .then((checkouts) => (gitLast = { domain, checkouts }))
+      .catch(() => {});
+  }
   let initingGit = $state(false);
   async function runInitGit() {
     initingGit = true;
@@ -392,6 +404,21 @@
                 <path d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
+          {:else if $accessMode.localControl}
+            <button
+              type="button"
+              onclick={(ev) => {
+                ev.stopPropagation();
+                openBranchSwitchModal(site);
+              }}
+              use:tooltip={m.sites_switchBranch()}
+              aria-label={m.sites_switchBranch()}
+              class="shrink-0 mr-1 w-4 h-4 flex items-center justify-center rounded-sm text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
+            >
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                <path d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+              </svg>
+            </button>
           {/if}
         </div>
       {/each}
@@ -409,6 +436,20 @@
         </button>
       {/if}
       </div>
+      {#if activeEntry}
+        {@const git = checkoutFor(gitCheckouts, activeEntry)}
+        {#if git?.upstream && $accessMode.localControl}
+          <div class="shrink-0 mr-3">
+            <GitSync
+              domain={site.domain}
+              branch={activeEntry.isMain ? '' : activeEntry.branch}
+              branchLabel={activeEntry.branch}
+              status={git}
+              onDone={refreshGit}
+            />
+          </div>
+        {/if}
+      {/if}
     </div>
   {:else if noRepo && !site.paused}
     <div class="flex items-center page-header px-3">
