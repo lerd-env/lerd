@@ -2,6 +2,7 @@ package git
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -15,8 +16,21 @@ func Fetch(dir string) (string, error) { return runQuiet(dir, "fetch") }
 func Pull(dir string) (string, error) { return runQuiet(dir, "pull", "--ff-only") }
 
 // Push sends the branch to its upstream, never forced: a remote that moved on
-// makes git reject it rather than lose someone else's commits.
-func Push(dir string) (string, error) { return runQuiet(dir, "push") }
+// makes git reject it. The explicit refspec keeps push.default and configured
+// push refspecs, which can match every branch or force, out of it.
+func Push(dir string) (string, error) {
+	branch, err := Output(dir, "symbolic-ref", "--short", "HEAD")
+	if err != nil {
+		return "", errors.New("not on a branch")
+	}
+	branch = strings.TrimSpace(branch)
+	remote, _ := Output(dir, "config", "branch."+branch+".remote")
+	merge, _ := Output(dir, "config", "branch."+branch+".merge")
+	if strings.TrimSpace(remote) == "" || strings.TrimSpace(merge) == "" {
+		return "", fmt.Errorf("%s has no upstream to push to", branch)
+	}
+	return runQuiet(dir, "push", strings.TrimSpace(remote), "HEAD:"+strings.TrimSpace(merge))
+}
 
 // Switch checks out branch in the checkout at dir, never forced: changes the
 // other branch would overwrite make git refuse. A remote-tracking ref such as

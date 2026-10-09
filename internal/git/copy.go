@@ -151,9 +151,10 @@ func InstallJS(projectPath string, out io.Writer) error {
 	return nil
 }
 
-// JSInstallCommand names the install the project's lockfile calls for, like "npm ci".
-func JSInstallCommand(projectPath string) string {
-	name, args := jsPackageManager(projectPath)
+// JSInstallCommandAt names the install ref's lockfiles call for, like "npm ci",
+// for the project at prefix inside the repository at dir.
+func JSInstallCommandAt(dir, ref, prefix string) string {
+	name, args := jsManagerFor(func(f string) bool { return FileAtRef(dir, ref, prefix+f) })
 	return name + " " + args[0]
 }
 
@@ -308,20 +309,25 @@ func markerStale(marker, ref string) bool {
 
 // jsPackageManager returns the name and install args for the package
 // manager a project uses, picked from the presence of lockfiles.
+func jsPackageManager(projectPath string) (name string, args []string) {
+	return jsManagerFor(func(f string) bool { return hasFile(projectPath, f) })
+}
+
+// jsManagerFor picks the manager from which lockfiles has reports present.
 // Preference order mirrors each manager's lockfile being definitive:
 // pnpm-lock.yaml ▸ yarn.lock ▸ bun.lock(b) ▸ npm lockfile ▸ npm as fallback.
-func jsPackageManager(projectPath string) (name string, args []string) {
+func jsManagerFor(has func(string) bool) (name string, args []string) {
 	switch {
-	case hasFile(projectPath, "pnpm-lock.yaml"):
+	case has("pnpm-lock.yaml"):
 		return "pnpm", []string{"install", "--frozen-lockfile"}
-	case hasFile(projectPath, "yarn.lock"):
+	case has("yarn.lock"):
 		// --immutable covers both yarn classic (v1) and berry (v2+); v1
 		// doesn't understand it but falls back to default install, which
 		// is what we want if the lockfile is already present.
 		return "yarn", []string{"install", "--immutable"}
-	case hasFile(projectPath, "bun.lockb"), hasFile(projectPath, "bun.lock"):
+	case has("bun.lockb"), has("bun.lock"):
 		return "bun", []string{"install", "--frozen-lockfile"}
-	case hasFile(projectPath, "package-lock.json"), hasFile(projectPath, "npm-shrinkwrap.json"):
+	case has("package-lock.json"), has("npm-shrinkwrap.json"):
 		return "npm", []string{"ci", "--no-progress"}
 	default:
 		return "npm", []string{"install", "--no-progress"}

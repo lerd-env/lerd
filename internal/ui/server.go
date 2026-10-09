@@ -6621,6 +6621,8 @@ func handleSiteWorktreeOptions(w http.ResponseWriter, r *http.Request) {
 		branch = gitpkg.SanitizeBranch(raw)
 	}
 	localBranches, remoteBranches, currentBranch := worktreeBranchCandidates(site.Path)
+	// A new branch can start anywhere, including at a branch open in a worktree.
+	baseLocal, baseRemote := gitpkg.Branches(site.Path)
 	canMigrate := false
 	if _, statErr := os.Stat(filepath.Join(site.Path, "artisan")); statErr == nil {
 		canMigrate = true
@@ -6630,6 +6632,8 @@ func handleSiteWorktreeOptions(w http.ResponseWriter, r *http.Request) {
 		"remote_branches":      remoteBranches,
 		"default_branch_label": currentBranch,
 		"branch_dates":         gitpkg.BranchDates(site.Path),
+		"base_local_branches":  baseLocal,
+		"base_remote_branches": baseRemote,
 		"build_options":        worktreeBuildOptions(site),
 		"build_default":        "auto",
 		"db_options":           worktreeDBOptions(site, branch),
@@ -6789,11 +6793,9 @@ func handleSiteBranchPlan(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, plan)
 }
 
-// handleSiteBranchSwitch answers POST /api/sites/branch-switch?domain=&branch=
-// [&composer=1][&js=1][&migrate=1][&snapshot=1][&restore=<name>][&create=1&base=<ref>]
-// by checking the branch out in the site's main checkout, or creating it from base,
-// and running the chosen steps around it, streaming their output. The done event
-// names any snapshot taken first.
+// handleSiteBranchSwitch answers POST /api/sites/branch-switch?domain=&branch= plus
+// the chosen steps (composer, js, migrate, snapshot, restore, create, base), streaming
+// their output; the done event names any snapshot taken first.
 func handleSiteBranchSwitch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.NotFound(w, r)

@@ -214,3 +214,44 @@ func TestSwitchNew_fromCurrentBranch(t *testing.T) {
 		t.Fatal("want spike at the commit main was on")
 	}
 }
+
+// A matching push default would send every branch; Push sends only this one.
+func TestPush_sendsOnlyTheCurrentBranch(t *testing.T) {
+	dir, other := pullFixture(t)
+	gitRun(t, dir, "config", "push.default", "matching")
+	gitRun(t, dir, "push", "-q", "origin", "main:side")
+	gitRun(t, dir, "branch", "side", "origin/side")
+	gitRun(t, dir, "checkout", "-q", "side")
+	gitRun(t, dir, "commit", "-q", "--allow-empty", "-m", "side work")
+	gitRun(t, dir, "checkout", "-q", "main")
+	gitRun(t, dir, "commit", "-q", "--allow-empty", "-m", "main work")
+
+	if _, err := Push(dir); err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	gitRun(t, other, "fetch", "-q")
+	if out, _ := Output(other, "log", "-1", "--format=%s", "origin/side"); strings.TrimSpace(out) == "side work" {
+		t.Error("push sent another branch")
+	}
+	if out, _ := Output(other, "log", "-1", "--format=%s", "origin/main"); strings.TrimSpace(out) != "main work" {
+		t.Error("push did not send the current branch")
+	}
+}
+
+// A forcing push refspec in the config must not turn Push into a force push.
+func TestPush_ignoresAForcingRefspec(t *testing.T) {
+	dir, other := pullFixture(t)
+	gitRun(t, dir, "config", "remote.origin.push", "+refs/heads/*:refs/heads/*")
+	gitRun(t, other, "commit", "-q", "--allow-empty", "-m", "theirs")
+	gitRun(t, other, "push", "-q")
+	theirs := head(t, other)
+	gitRun(t, dir, "commit", "-q", "--allow-empty", "-m", "ours")
+
+	if _, err := Push(dir); err == nil {
+		t.Fatal("want a rejection, not a forced overwrite")
+	}
+	gitRun(t, other, "pull", "-q")
+	if head(t, other) != theirs {
+		t.Error("remote branch was overwritten")
+	}
+}

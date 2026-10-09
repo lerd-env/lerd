@@ -42,12 +42,14 @@
   let error = $state('');
   let logs = $state<string[]>([]);
   let dates = $state<Record<string, number>>({});
+  let baseLocal = $state<string[]>([]);
+  let baseRemote = $state<string[]>([]);
   let planSeq = 0;
 
   const options = $derived(branchOptions(local, remote, dates));
   const baseOptions = $derived([
     { value: '', label: m.worktreeMgr_currentBranch({ branch: site.branch || 'HEAD' }), description: '' },
-    ...options
+    ...branchOptions(baseLocal.filter((b) => b !== site.branch), baseRemote, dates)
   ]);
   const creating = $derived(mode === 'new');
   const target = $derived(creating ? newName.trim() : branch);
@@ -132,6 +134,8 @@
       local = o.local_branches ?? [];
       remote = o.remote_branches ?? [];
       dates = o.branch_dates ?? {};
+      baseLocal = o.base_local_branches ?? [];
+      baseRemote = o.base_remote_branches ?? [];
       const first = branchOptions(local, remote, dates)[0]?.value;
       if (first) void pick(first);
     } catch (e) {

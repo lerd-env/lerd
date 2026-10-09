@@ -172,6 +172,24 @@ describe('SwitchBranchModal', () => {
       expect(screen.queryByText('Files changed')).toBeNull();
     });
 
+    // A branch open in a worktree can't be switched to here, but it is a fine base.
+    it('offers every branch as a base, including ones a worktree has open', async () => {
+      worktreeOptions.mockResolvedValue({
+        local_branches: ['dev'],
+        remote_branches: [],
+        branch_dates: {},
+        base_local_branches: ['dev', 'main', 'in-worktree'],
+        base_remote_branches: ['origin/main']
+      });
+      render(SwitchBranchModal, { props: { site } });
+      await screen.findByRole('switch', { name: 'composer install' });
+      await fireEvent.click(screen.getByRole('tab', { name: 'New branch' }));
+      const pickers = document.querySelectorAll<HTMLElement>('[aria-haspopup="listbox"]');
+      await fireEvent.click(pickers[pickers.length - 1]);
+      const shown = Array.from(document.querySelectorAll('[role="option"]')).map((o) => o.querySelector('span.block')?.textContent?.trim());
+      expect(shown).toEqual(['main (current)', 'dev', 'in-worktree', 'origin/main']);
+    });
+
     it('refuses a name that is already a branch', async () => {
       render(SwitchBranchModal, { props: { site } });
       await screen.findByRole('switch', { name: 'composer install' });

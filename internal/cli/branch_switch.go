@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
@@ -49,10 +50,9 @@ type BranchDB struct {
 	Restore  *serviceops.Snapshot `json:"restore,omitempty"`
 }
 
-// BranchSteps are what the user chose to run around the switch. Snapshot
-// copies the database before anything moves; Restore names a snapshot to load
-// once the branch is checked out, before migrations run on top of it. Create
-// makes the branch new, starting at Base (the current commit when empty).
+// BranchSteps are what the user chose to run around the switch. Restore loads a
+// snapshot after checkout and before migrations; Create starts the branch at
+// Base, the current commit when empty.
 type BranchSteps struct {
 	Composer, JS, Migrate, Snapshot, Create bool
 	Restore, Base                           string
@@ -83,11 +83,31 @@ func PlanSiteBranch(site *config.Site, branch string) (BranchPlan, error) {
 	return p, nil
 }
 
-// SwitchSiteBranch checks branch out in the site's main checkout, running the
-// chosen steps around it and stopping at the first failure. It returns the name
-// of the snapshot taken before switching, even on failure, so it can be restored.
+// switching holds the checkouts with a switch in flight, keyed by path.
+var switching sync.Map
+
+// holdSwitchLock claims path for one switch, returning nil while another runs.
+func holdSwitchLock(path string) (release func()) {
+	if _, busy := switching.LoadOrStore(path, struct{}{}); busy {
+		return nil
+	}
+	return func() { switching.Delete(path) }
+}
+
+// SwitchSiteBranch checks branch out in the site's main checkout and runs the
+// chosen steps around it, one switch per checkout at a time. It returns the
+// snapshot taken first, even on failure, so it can be restored.
 func SwitchSiteBranch(site *config.Site, branch string, steps BranchSteps, out io.Writer) (string, error) {
-	fw, _ := config.GetFrameworkForDir(site.Framework, site.Path)
+	release := holdSwitchLock(site.Path)
+	if release == nil {
+		return "", fmt.Errorf("a branch switch is already running for %s", site.Name)
+	}
+	defer release()
+	// Resolved after checkout: the target branch may be on another framework version.
+	fwAfter := func() *config.Framework {
+		fw, _ := config.GetFrameworkForDir(site.Framework, site.Path)
+		return fw
+	}
 	var db *branchDB
 	if steps.Snapshot || steps.Restore != "" {
 		t, ok := snapshotTargetFor(site.Path)
@@ -96,7 +116,7 @@ func SwitchSiteBranch(site *config.Site, branch string, steps BranchSteps, out i
 		}
 		db = siteBranchDB(site, t, out)
 	}
-	return switchBranch(fw, site.Path, branch, steps, db, out)
+	return switchBranch(fwAfter, site.Path, branch, steps, db, out)
 }
 
 func siteBranchDB(site *config.Site, t serviceops.SnapshotTarget, out io.Writer) *branchDB {
@@ -123,16 +143,30 @@ func siteBranchDB(site *config.Site, t serviceops.SnapshotTarget, out io.Writer)
 			return s.Name, nil
 		},
 		restore: func(name string) error {
-			if err := ensureServiceRunning(t.Service); err != nil {
+			now, err := restoreTarget(t, func() (serviceops.SnapshotTarget, bool) { return snapshotTargetFor(site.Path) })
+			if err != nil {
 				return err
 			}
-			rep, err := serviceops.RestoreSnapshot(t, name, emit)
+			if err := ensureServiceRunning(now.Service); err != nil {
+				return err
+			}
+			rep, err := serviceops.RestoreSnapshot(now, name, emit)
 			if err == nil && rep.Errors > 0 {
 				err = fmt.Errorf("restoring %s: %s", name, rep.Summary())
 			}
 			return err
 		},
 	}
+}
+
+// restoreTarget re-resolves the database once the target is checked out and
+// refuses when the branch points the site at another one than the snapshot's.
+func restoreTarget(before serviceops.SnapshotTarget, resolve func() (serviceops.SnapshotTarget, bool)) (serviceops.SnapshotTarget, error) {
+	now, ok := resolve()
+	if !ok || now.Service != before.Service || now.Database != before.Database {
+		return now, fmt.Errorf("this branch uses another database (%s on %s), so the snapshot of %s was not restored", now.Database, now.Service, before.Database)
+	}
+	return now, nil
 }
 
 // snapshotTargetFor resolves the site's database, when its engine takes snapshots.
@@ -200,16 +234,18 @@ func planBranch(fw *config.Framework, path, branch string) (BranchPlan, error) {
 		}
 	}
 	p.Ahead, p.Behind = gitpkg.AheadBehind(path, "HEAD", branch)
-	if gitpkg.FileAtRef(path, branch, "composer.json") {
-		p.Composer = installStep("composer install", diff, composerManifests, filepath.Join(path, "vendor"))
+	// Tree paths start at the repository root; a site may sit below it.
+	prefix := gitpkg.RepoPrefix(path)
+	if gitpkg.FileAtRef(path, branch, prefix+"composer.json") {
+		p.Composer = installStep("composer install", diff, prefix, composerManifests, filepath.Join(path, "vendor"))
 	}
-	if gitpkg.FileAtRef(path, branch, "package.json") {
-		p.JS = installStep(gitpkg.JSInstallCommand(path), diff, jsManifests, filepath.Join(path, "node_modules"))
+	if gitpkg.FileAtRef(path, branch, prefix+"package.json") {
+		p.JS = installStep(gitpkg.JSInstallCommandAt(path, branch, prefix), diff, prefix, jsManifests, filepath.Join(path, "node_modules"))
 	}
 	if dir := migrationsDirOf(fw); dir != "" {
-		prefix := strings.TrimSuffix(dir, "/") + "/"
+		migrations := prefix + strings.TrimSuffix(dir, "/") + "/"
 		for f, s := range diff {
-			if strings.HasPrefix(f, prefix) {
+			if strings.HasPrefix(f, migrations) {
 				switch s {
 				case 'A':
 					p.MigrationsAdded++
@@ -226,10 +262,10 @@ func planBranch(fw *config.Framework, path, branch string) (BranchPlan, error) {
 }
 
 // installStep is due when a manifest differs or the install folder is absent.
-func installStep(label string, diff map[string]byte, manifests []string, installDir string) *PlanStep {
+func installStep(label string, diff map[string]byte, prefix string, manifests []string, installDir string) *PlanStep {
 	s := &PlanStep{Label: label}
 	for _, m := range manifests {
-		if _, ok := diff[m]; ok {
+		if _, ok := diff[prefix+m]; ok {
 			s.Changed = m
 			break
 		}
@@ -241,7 +277,7 @@ func installStep(label string, diff map[string]byte, manifests []string, install
 	return s
 }
 
-func switchBranch(fw *config.Framework, path, branch string, steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
+func switchBranch(fwAfter func() *config.Framework, path, branch string, steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
 	snap := ""
 	if steps.Snapshot && db != nil {
 		name, err := db.snapshot()
@@ -279,7 +315,7 @@ func switchBranch(fw *config.Framework, path, branch string, steps BranchSteps, 
 		}
 	}
 	if steps.Migrate {
-		c, dir, ok := resolveMigrateCommand(fw, path)
+		c, dir, ok := resolveMigrateCommand(fwAfter(), path)
 		if !ok {
 			return snap, fmt.Errorf("the framework definition declares no migrate command")
 		}

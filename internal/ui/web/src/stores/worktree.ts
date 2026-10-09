@@ -12,6 +12,9 @@ export interface WorktreeOptions {
   remote_branches: string[];
   default_branch_label: string;
   branch_dates?: Record<string, number>;
+  // Every branch, for a new branch's base: includes ones open in a worktree.
+  base_local_branches?: string[];
+  base_remote_branches?: string[];
   build_options: LabeledOption[];
   build_default: string;
   db_options: LabeledOption[];

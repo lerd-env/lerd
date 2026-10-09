@@ -128,7 +128,7 @@ func TestPlanBranch_absentSteps(t *testing.T) {
 func TestSwitchBranch_runsOnlyTheChosenSteps(t *testing.T) {
 	dir := switchFixture(t, func(string) {})
 
-	if _, err := switchBranch(migratingFW, dir, "other", BranchSteps{Migrate: true}, nil, io.Discard); err != nil {
+	if _, err := switchBranch(fixed(migratingFW), dir, "other", BranchSteps{Migrate: true}, nil, io.Discard); err != nil {
 		t.Fatalf("switchBranch: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "migrated")); err != nil {
@@ -138,7 +138,7 @@ func TestSwitchBranch_runsOnlyTheChosenSteps(t *testing.T) {
 
 func TestSwitchBranch_reportsGitRefusal(t *testing.T) {
 	dir := switchFixture(t, func(string) {})
-	if _, err := switchBranch(migratingFW, dir, "nope", BranchSteps{Migrate: true}, nil, io.Discard); err == nil {
+	if _, err := switchBranch(fixed(migratingFW), dir, "nope", BranchSteps{Migrate: true}, nil, io.Discard); err == nil {
 		t.Fatal("want an error for an unknown branch")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "migrated")); err == nil {
@@ -169,7 +169,7 @@ func TestPlanBranch_reportsConflictingLocalChanges(t *testing.T) {
 		t.Fatalf("conflicts = %v, want composer.lock and added.txt", p.Conflicts)
 	}
 	// The prediction must match git: this switch is one git refuses.
-	if _, err := switchBranch(migratingFW, dir, "other", BranchSteps{}, nil, io.Discard); err == nil {
+	if _, err := switchBranch(fixed(migratingFW), dir, "other", BranchSteps{}, nil, io.Discard); err == nil {
 		t.Error("git switched despite the predicted conflict")
 	}
 }
@@ -205,7 +205,7 @@ func TestSwitchBranch_snapshotsFirstAndRestoresBeforeMigrating(t *testing.T) {
 		},
 	}
 
-	snap, err := switchBranch(migratingFW, dir, "other", BranchSteps{Snapshot: true, Restore: "dev-snap", Migrate: true}, db, io.Discard)
+	snap, err := switchBranch(fixed(migratingFW), dir, "other", BranchSteps{Snapshot: true, Restore: "dev-snap", Migrate: true}, db, io.Discard)
 	if err != nil {
 		t.Fatalf("switchBranch: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestSwitchBranch_failedMigrationKeepsTheSnapshotName(t *testing.T) {
 	}
 	db := &branchDB{snapshot: func() (string, error) { return "before-switch-2", nil }}
 
-	snap, err := switchBranch(failing, dir, "other", BranchSteps{Snapshot: true, Migrate: true}, db, io.Discard)
+	snap, err := switchBranch(fixed(failing), dir, "other", BranchSteps{Snapshot: true, Migrate: true}, db, io.Discard)
 	if err == nil || snap != "before-switch-2" {
 		t.Fatalf("want the migrate error with the snapshot name, got %q, %v", snap, err)
 	}
@@ -262,7 +262,7 @@ func TestBranchSnapshotName(t *testing.T) {
 func TestSwitchBranch_createsANewBranchFromItsBase(t *testing.T) {
 	dir := switchFixture(t, func(dir string) { putFile(t, filepath.Join(dir, "only-on-other"), "x") })
 
-	if _, err := switchBranch(migratingFW, dir, "feature/new", BranchSteps{Create: true, Base: "other", Migrate: true}, nil, io.Discard); err != nil {
+	if _, err := switchBranch(fixed(migratingFW), dir, "feature/new", BranchSteps{Create: true, Base: "other", Migrate: true}, nil, io.Discard); err != nil {
 		t.Fatalf("switchBranch: %v", err)
 	}
 	out, _ := exec.Command("git", "-C", dir, "symbolic-ref", "--short", "HEAD").Output()
@@ -275,4 +275,87 @@ func TestSwitchBranch_createsANewBranchFromItsBase(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "migrated")); err != nil {
 		t.Error("the chosen steps did not run after creating the branch")
 	}
+}
+
+// A site linked below the repository root reads its manifests and migrations
+// under its own folder; git reports paths from the root.
+func TestPlanBranch_siteInARepoSubfolder(t *testing.T) {
+	root := t.TempDir()
+	site := filepath.Join(root, "apps", "shop")
+	gitT(t, root, "init", "-q", "-b", "main")
+	putFile(t, filepath.Join(site, "composer.json"), "{}")
+	putFile(t, filepath.Join(site, "composer.lock"), "v1")
+	writeMigrations(t, filepath.Join(site, "db"), "a")
+	putFile(t, filepath.Join(site, "vendor", "composer", "installed.json"), "{}")
+	putFile(t, filepath.Join(root, ".gitignore"), "vendor/\n")
+	gitT(t, root, "add", ".")
+	gitT(t, root, "commit", "-q", "-m", "base")
+	gitT(t, root, "checkout", "-q", "-b", "other")
+	putFile(t, filepath.Join(site, "composer.lock"), "v2")
+	writeMigrations(t, filepath.Join(site, "db"), "b")
+	gitT(t, root, "add", ".")
+	gitT(t, root, "commit", "-q", "-m", "other")
+	gitT(t, root, "checkout", "-q", "main")
+
+	p, err := planBranch(migratingFW, site, "other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Composer == nil || !p.Composer.Needed || p.Composer.Changed != "composer.lock" {
+		t.Errorf("composer: %+v", p.Composer)
+	}
+	if p.MigrationsAdded != 1 || !p.Migrate.Needed {
+		t.Errorf("migrations added %d, migrate %+v", p.MigrationsAdded, p.Migrate)
+	}
+}
+
+// One switch per checkout: a second request while one runs is refused rather
+// than letting its installs and migrations land on the other's branch.
+func TestSwitchSiteBranch_refusesAConcurrentSwitch(t *testing.T) {
+	site := &config.Site{Name: "acme", Path: t.TempDir()}
+	release := holdSwitchLock(site.Path)
+	defer release()
+
+	if _, err := SwitchSiteBranch(site, "dev", BranchSteps{}, io.Discard); err == nil || !strings.Contains(err.Error(), "already running") {
+		t.Fatalf("want a refusal while another switch runs, got %v", err)
+	}
+}
+
+// The target branch may point the site at another database; restoring the old
+// one's snapshot into it would overwrite the wrong data.
+func TestRestoreTarget(t *testing.T) {
+	before := serviceops.SnapshotTarget{Service: "mysql", Database: "shop"}
+	same := func() (serviceops.SnapshotTarget, bool) { return before, true }
+	moved := func() (serviceops.SnapshotTarget, bool) {
+		return serviceops.SnapshotTarget{Service: "mysql", Database: "shop_v2"}, true
+	}
+	if _, err := restoreTarget(before, same); err != nil {
+		t.Errorf("same database refused: %v", err)
+	}
+	if _, err := restoreTarget(before, moved); err == nil || !strings.Contains(err.Error(), "shop_v2") {
+		t.Errorf("want a refusal naming the new database, got %v", err)
+	}
+}
+
+// The migrate command comes from the definition as it stands after checkout,
+// since the target branch may be on another framework version.
+func TestSwitchBranch_migratesWithTheDefinitionAfterCheckout(t *testing.T) {
+	dir := switchFixture(t, func(string) {})
+	resolved := ""
+	fwAfter := func() *config.Framework {
+		out, _ := exec.Command("git", "-C", dir, "symbolic-ref", "--short", "HEAD").Output()
+		resolved = strings.TrimSpace(string(out))
+		return migratingFW
+	}
+
+	if _, err := switchBranch(fwAfter, dir, "other", BranchSteps{Migrate: true}, nil, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if resolved != "other" {
+		t.Errorf("definition resolved on %q, want after checking out other", resolved)
+	}
+}
+
+func fixed(fw *config.Framework) func() *config.Framework {
+	return func() *config.Framework { return fw }
 }
