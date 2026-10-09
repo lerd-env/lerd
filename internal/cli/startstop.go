@@ -954,20 +954,64 @@ func launchTray() error {
 	if err != nil {
 		return err
 	}
-	return exec.Command(exe, "tray").Start()
+	cmd := exec.Command(exe, "tray")
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	// Reaped in the background: unwaited, it stays a zombie under the
+	// long-running lerd-ui, and a start run from the tray menu inherits the
+	// daemon env, so this child is the applet itself and never exits.
+	go cmd.Wait() //nolint:errcheck
+	return nil
 }
 
-// trayProcessPatterns match a running tray applet, launched directly or as the
-// lerd-tray binary, and nothing else. Anchored at the end because `lerd tray
-// off` has to kill the applet from a command line that contains those very
-// words, and an unanchored match takes out the command and its shell with it.
-var trayProcessPatterns = []string{`lerd tray( --mono)?$`, `lerd-tray$`}
+// trayProcessPatterns match the applet, bare or with --mono / --mono=false.
+// End anchors keep `lerd tray off` and its shell from matching themselves.
+var trayProcessPatterns = []string{`lerd tray( --mono(=false)?)?$`, `lerd-tray( --mono(=false)?)?$`}
 
-// killTray kills any running lerd tray process.
+// killTray kills any running lerd tray process and waits for it to exit, so a
+// replacement launched next does not find the old applet still holding the
+// instance lock and quit, leaving no tray at all.
 func killTray() {
-	for _, pattern := range trayProcessPatterns {
-		exec.Command("pkill", "-f", pattern).Run() //nolint:errcheck
+	signal := func(sig string) {
+		for _, pattern := range trayProcessPatterns {
+			exec.Command("pkill", "-"+sig, "-f", pattern).Run() //nolint:errcheck
+		}
 	}
+	stopTray(signal, trayRunning, 3*time.Second)
+}
+
+// stopTray sends TERM and escalates to KILL when the applet outlives grace,
+// since a hung applet keeps the lock and its replacement would quit.
+func stopTray(signal func(sig string), running func() bool, grace time.Duration) {
+	signal("TERM")
+	if waitTrayGone(running, grace) {
+		return
+	}
+	signal("KILL")
+	waitTrayGone(running, time.Second)
+}
+
+func trayRunning() bool {
+	for _, pattern := range trayProcessPatterns {
+		if exec.Command("pgrep", "-f", pattern).Run() == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// waitTrayGone polls until running reports false or the timeout passes, and
+// says whether the applet is gone.
+func waitTrayGone(running func() bool, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for running() {
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return true
 }
 
 // reconcileCustomServices heals custom-service drift on start (issue #678).
