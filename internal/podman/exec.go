@@ -21,10 +21,10 @@ import (
 // shell-out; the no-direct-exec guard keeps callers outside from bypassing it.
 var (
 	execCommand = func(name string, args ...string) *exec.Cmd {
-		return exec.Command(name, mapVMArgs(args)...)
+		return exec.Command(name, withGuestEnv(mapVMArgs(args))...)
 	}
 	execCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
-		return exec.CommandContext(ctx, name, mapVMArgs(args)...)
+		return exec.CommandContext(ctx, name, withGuestEnv(mapVMArgs(args))...)
 	}
 )
 

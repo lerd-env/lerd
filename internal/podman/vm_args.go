@@ -29,3 +29,14 @@ func mapVMArgs(args []string) []string {
 	}
 	return out
 }
+
+// withGuestEnv adds guestExecEnv to an exec, ahead of the caller's own --env
+// flags so one the caller sets still wins. Anything else is returned as is.
+func withGuestEnv(args []string) []string {
+	if len(guestExecEnv) == 0 || len(args) == 0 || args[0] != "exec" {
+		return args
+	}
+	out := make([]string, 0, len(args)+len(guestExecEnv))
+	out = append(append(append(out, args[0]), guestExecEnv...), args[1:]...)
+	return out
+}
