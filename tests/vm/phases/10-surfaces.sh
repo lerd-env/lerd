@@ -43,6 +43,8 @@ check_out "10.36 [partial] sites and services carry running/total counts" 'SITES
 	bash -c 'tui_screen 140 45 "wait:SERVICES" | tr "\n" " "'
 check_out "10.36 [partial] dns, nginx and the watcher sit at the foot with their state" 'dns +resolving.*nginx +running.*watcher +running' \
 	bash -c 'tui_screen 140 45 "wait:watcher" | tr "\n" " "'
+# Earlier phases can leave the queue stopped, and a stopped worker has no unit to crash.
+check "the demo's queue worker runs" bash -c "lerd queue:start </dev/null >/dev/null 2>&1 && systemctl --user is-active --quiet $queue"
 lerd workspace add vmws </dev/null >/dev/null 2>&1
 check "demo joins a workspace" lerd workspace assign "$name" vmws
 crash_queue
