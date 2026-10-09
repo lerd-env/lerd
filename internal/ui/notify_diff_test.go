@@ -149,7 +149,7 @@ func TestNotificationForWorkerFailure_URLResolvesNameToDomain(t *testing.T) {
 	}
 
 	n := notificationForWorkerFailure(uw("lerd-queue-rapids.service", "rapids", "queue", "failed"))
-	if n.URL != "#sites/harborlist.test" {
-		t.Errorf("URL = %q, want #sites/harborlist.test", n.URL)
+	if n.URL != "#sites/harborlist.test/overview" {
+		t.Errorf("URL = %q, want #sites/harborlist.test/overview", n.URL)
 	}
 }

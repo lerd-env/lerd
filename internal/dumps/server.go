@@ -70,6 +70,9 @@ type Server struct {
 	// keepTests records events from PHPUnit/Pest runs. Off by default: one
 	// suite fills the whole ring and pushes out everything else.
 	keepTests atomic.Bool
+	// siteName maps the site an event names to the registered one, since a
+	// CLI run without LERD_SITE names its working folder instead.
+	siteName atomic.Pointer[func(string) string]
 }
 
 // Listen binds a TCP listener on addr and starts the accept loop. If addr
@@ -201,9 +204,16 @@ func (s *Server) record(e Event) {
 	if !e.Valid() || (e.Ctx.Test && !s.keepTests.Load()) {
 		return
 	}
+	if fn := s.siteName.Load(); fn != nil {
+		e.Ctx.Site = (*fn)(e.Ctx.Site)
+	}
 	s.ring.Append(e)
 	s.hub.Publish(e)
 }
+
+// SetSiteResolver sets how an incoming event's site name is mapped to the
+// registered site before the event is stored.
+func (s *Server) SetSiteResolver(fn func(string) string) { s.siteName.Store(&fn) }
 
 func (s *Server) acceptLoop() {
 	defer s.wg.Done()

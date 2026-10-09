@@ -46,6 +46,11 @@ func TestRunDumpsNotifier_OnlyNotifiesDumpKind(t *testing.T) {
 }
 
 func TestNotificationForDump_Shape(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	if err := config.AddSite(config.Site{Name: "starlane.test", Domains: []string{"starlane.test"}, Path: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
 	evt := dumps.Event{ID: "abc", Kind: "dump", Ctx: dumps.Context{Site: "starlane.test", Type: "fpm"}}
 	n := notificationForDump(evt)
 	if n.Kind != "dump" {
@@ -57,9 +62,6 @@ func TestNotificationForDump_Shape(t *testing.T) {
 	if n.Params["kind"] != "fpm" {
 		t.Errorf("Params.kind = %q", n.Params["kind"])
 	}
-	// No site is registered with that name in this test, so siteDomainForRoute
-	// falls back to the input verbatim. The URL still lands on a sites sub-tab
-	// route shape the frontend can parse.
 	if n.URL != "#sites/starlane.test/dumps/dumps" {
 		t.Errorf("URL = %q", n.URL)
 	}

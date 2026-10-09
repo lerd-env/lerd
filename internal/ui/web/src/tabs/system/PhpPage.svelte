@@ -4,7 +4,7 @@
   import DetailButton from '$components/DetailButton.svelte';
   import PhpDetail from './PhpDetail.svelte';
   import PhpVersionCard from './PhpVersionCard.svelte';
-  import { phpVersions } from '$stores/phpVersions';
+  import { phpVersions, phpVersionsLoaded } from '$stores/phpVersions';
   import { status } from '$stores/status';
   import { sitesByPhp } from '$stores/sites';
   import { routeRest, goToTab } from '$stores/route';
@@ -55,6 +55,7 @@
   // back AND realign the URL — otherwise the hash keeps pointing at the
   // removed version while the page shows the fallback.
   $effect(() => {
+    if (!$phpVersionsLoaded) return;
     if (!active || !$phpVersions.includes(active)) {
       const next = pickInitial();
       if (next && next !== active) {

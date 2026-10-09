@@ -1,27 +1,101 @@
 package ui
 
 import (
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/push"
 	"github.com/geodro/lerd/internal/workerheal"
 )
 
-// siteDomainForRoute resolves a registered site name to its primary domain
-// so the notification URL can be opened by the dashboard's hash router,
-// which keys the Sites tab by domain. Falls back to the input when no
-// registered site matches (test fixtures, races between unlink and a
-// late-arriving notification).
+// siteDomainForRoute resolves the site an event or worker names to its primary
+// domain, or "" when none matches, so the link falls back to the sites list.
 func siteDomainForRoute(name string) string {
-	if s, err := config.FindSite(name); err == nil && s != nil {
-		if d := s.PrimaryDomain(); d != "" {
-			return d
+	if s := registeredSite(name); s != nil {
+		return s.PrimaryDomain()
+	}
+	return ""
+}
+
+// registeredSite finds the site a name belongs to: its own name, a worktree
+// worker's "<site>/<worktree folder>", or the folder a CLI run reports.
+func registeredSite(name string) *config.Site {
+	parent, _, _ := strings.Cut(name, "/")
+	if parent == "" {
+		return nil
+	}
+	reg, err := config.LoadSites()
+	if err != nil {
+		return nil
+	}
+	want := parent
+	if site, ok := siteFolderNames(reg.Sites)[parent]; ok {
+		want = site
+	}
+	for _, s := range reg.Sites {
+		if s.Name == want {
+			return &s
 		}
 	}
-	return name
+	return nil
+}
+
+// siteFolderNames maps a project folder to its site where the folder is not
+// itself a site's name and no other site's folder shares it.
+func siteFolderNames(sites []config.Site) map[string]string {
+	names := map[string]bool{}
+	seen := map[string]int{}
+	for _, s := range sites {
+		names[s.Name] = true
+		seen[filepath.Base(s.Path)]++
+	}
+	out := map[string]string{}
+	for _, s := range sites {
+		if f := filepath.Base(s.Path); !names[f] && seen[f] == 1 {
+			out[f] = s.Name
+		}
+	}
+	return out
+}
+
+// newEventSiteNamer puts an event that names a site's folder back on that
+// site, rereading the registry at most once per ttl as events come by the hundred.
+func newEventSiteNamer(ttl time.Duration) func(string) string {
+	var mu sync.Mutex
+	var loaded time.Time
+	byFolder := map[string]string{}
+	return func(name string) string {
+		if name == "" || strings.Contains(name, "/") {
+			return name
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if time.Since(loaded) > ttl {
+			loaded = time.Now()
+			byFolder = map[string]string{}
+			if reg, err := config.LoadSites(); err == nil {
+				byFolder = siteFolderNames(reg.Sites)
+			}
+		}
+		if site, ok := byFolder[name]; ok {
+			return site
+		}
+		return name
+	}
+}
+
+// workerFailureURL opens the site on Overview, where its worker cards and heal
+// action are, rather than on whichever tab was last looked at.
+func workerFailureURL(site string) string {
+	if d := siteDomainForRoute(site); d != "" {
+		return "#sites/" + d + "/overview"
+	}
+	return "#sites"
 }
 
 // newWorkerFailures returns workers in cur whose Unit names weren't in prev.
@@ -62,7 +136,7 @@ func notificationForWorkerFailure(w workerheal.UnhealthyWorker) push.Notificatio
 		Body:     worker + " is " + state + ". Open lerd to heal.",
 		Params:   map[string]string{"site": site, "worker": worker, "state": state},
 		Tag:      "lerd-worker-" + w.Unit,
-		URL:      "#sites/" + siteDomainForRoute(site),
+		URL:      workerFailureURL(site),
 		Data:     map[string]string{"unit": w.Unit, "site": site},
 		Urgency:  "high",
 		TTL:      300,

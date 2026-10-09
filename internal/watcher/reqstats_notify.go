@@ -66,9 +66,10 @@ func notificationForSlowRoute(site, domain string, r reqstats.RouteStat) push.No
 	if r.Multiplier > 0 {
 		body = fmt.Sprintf("%s is %gx slower than usual (%gms)", r.Route, r.Multiplier, r.P95Millis)
 	}
+	// Request timing and its slowest routes are on the site's Overview.
 	url := "#sites"
 	if domain != "" {
-		url = "#sites/" + domain + "/dumps"
+		url = "#sites/" + domain + "/overview"
 	}
 	return push.Notification{
 		Kind:    "slow_route",
