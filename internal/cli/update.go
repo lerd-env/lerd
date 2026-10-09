@@ -134,24 +134,14 @@ func runUpdate(currentVersion string, beta bool) error {
 	defer cleanup()
 	dl.OK("")
 
-	// Atomically replace lerd.
-	tmp := self + ".tmp"
-	if err := copyFile(filepath.Join(extracted, "lerd"), tmp, 0755); err != nil {
-		return fmt.Errorf("writing update: %w", err)
-	}
-	if err := os.Rename(tmp, self); err != nil {
-		os.Remove(tmp)
+	if err := swapBinary(filepath.Join(extracted, config.ExeName("lerd")), self); err != nil {
 		return fmt.Errorf("replacing binary: %w", err)
 	}
 
 	// Also replace lerd-tray if it was included in this release.
-	trayBin := filepath.Join(extracted, "lerd-tray")
+	trayBin := filepath.Join(extracted, config.ExeName("lerd-tray"))
 	if _, err := os.Stat(trayBin); err == nil {
-		selfTray := filepath.Join(filepath.Dir(self), "lerd-tray")
-		tmpTray := selfTray + ".tmp"
-		if err := copyFile(trayBin, tmpTray, 0755); err == nil {
-			os.Rename(tmpTray, selfTray) //nolint:errcheck
-		}
+		swapBinary(trayBin, filepath.Join(filepath.Dir(self), config.ExeName("lerd-tray"))) //nolint:errcheck
 	}
 
 	// Update the cache so lerd status / doctor stop showing a stale notice.
@@ -644,7 +634,7 @@ func downloadReleaseBinary(version string) (string, func(), error) {
 		return "", func() {}, fmt.Errorf("refusing unsafe release version %q", version)
 	}
 
-	filename := fmt.Sprintf("lerd_%s_%s_%s.tar.gz", ver, runtime.GOOS, arch)
+	filename := releaseArchiveName(ver, arch)
 
 	tmp, err := os.MkdirTemp("", "lerd-update-*")
 	if err != nil {
@@ -658,13 +648,12 @@ func downloadReleaseBinary(version string) (string, func(), error) {
 		return "", func() {}, err
 	}
 
-	cmd := exec.Command("tar", "--no-same-owner", "-xzf", archive, "-C", tmp)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if err := extractReleaseArchive(archive, tmp); err != nil {
 		cleanup()
-		return "", func() {}, fmt.Errorf("extract failed: %w\n%s", err, out)
+		return "", func() {}, fmt.Errorf("extract failed: %w", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(tmp, "lerd")); err != nil {
+	if _, err := os.Stat(filepath.Join(tmp, config.ExeName("lerd"))); err != nil {
 		cleanup()
 		return "", func() {}, fmt.Errorf("binary not found in archive")
 	}
@@ -799,7 +788,7 @@ func backupBinary(self, currentVersion string) {
 	}
 
 	// Back up lerd-tray if it exists next to the main binary.
-	trayPath := filepath.Join(filepath.Dir(self), "lerd-tray")
+	trayPath := filepath.Join(filepath.Dir(self), config.ExeName("lerd-tray"))
 	if _, err := os.Stat(trayPath); err == nil {
 		if err := copyFile(trayPath, config.BackupTrayFile(), 0755); err != nil {
 			feedback.Warn("could not back up lerd-tray: %v", err)
@@ -828,24 +817,14 @@ func runRollback() error {
 
 	feedback.Header(fmt.Sprintf("Rolling back to v%s", prevVersion))
 
-	// Atomically replace lerd.
-	tmp := self + ".tmp"
-	if err := copyFile(bakPath, tmp, 0755); err != nil {
+	if err := swapBinary(bakPath, self); err != nil {
 		return fmt.Errorf("restoring backup: %w", err)
-	}
-	if err := os.Rename(tmp, self); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("replacing binary: %w", err)
 	}
 
 	// Restore lerd-tray if a backup exists.
 	trayBak := config.BackupTrayFile()
 	if _, err := os.Stat(trayBak); err == nil {
-		selfTray := filepath.Join(filepath.Dir(self), "lerd-tray")
-		tmpTray := selfTray + ".tmp"
-		if err := copyFile(trayBak, tmpTray, 0755); err == nil {
-			os.Rename(tmpTray, selfTray) //nolint:errcheck
-		}
+		swapBinary(trayBak, filepath.Join(filepath.Dir(self), config.ExeName("lerd-tray"))) //nolint:errcheck
 	}
 
 	// Remove backup files so you can't double-rollback.

@@ -198,7 +198,7 @@ func detectColor() bool {
 	if os.Getenv("NO_COLOR") != "" {
 		return false
 	}
-	return term.IsTerminal(int(os.Stdout.Fd()))
+	return term.IsTerminal(int(os.Stdout.Fd())) && enableANSI()
 }
 
 // colorEnabledFor reports whether coloured output should be written to w: only

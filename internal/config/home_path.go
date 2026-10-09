@@ -40,8 +40,13 @@ func PathWithin(p, root string) bool {
 		within(resolveExisting(p), resolveExisting(root))
 }
 
+// within accepts the native separator beside "/", so a Windows home
+// (C:\Users\me) contains its own paths.
 func within(p, root string) bool {
-	return p == root || strings.HasPrefix(p, strings.TrimSuffix(root, "/")+"/")
+	root = strings.TrimRight(root, "/"+string(filepath.Separator))
+	return p == root ||
+		strings.HasPrefix(p, root+"/") ||
+		strings.HasPrefix(p, root+string(filepath.Separator))
 }
 
 // resolveExisting resolves symlinks in the longest leading part of p that

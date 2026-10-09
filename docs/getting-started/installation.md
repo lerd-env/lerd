@@ -316,7 +316,7 @@ Tears down the launchd agents, the DNS resolver and the containers, then removes
 
 ## Windows (beta)
 
-There is no native Windows build. Lerd runs on Windows through WSL2, where the standard Linux build works unchanged once systemd and rootless Podman are set up. Windows support is **beta**, it works well for daily development but gets less testing than native Linux or macOS. See the [Windows (WSL2) guide](./wsl2) for the full walkthrough, including the `events_logger` Podman tweak and the mkcert root CA export to the Windows trust store.
+A native Windows build exists but is **experimental**, see the [native Windows page](./windows) for what works. The supported route is WSL2: Lerd runs on Windows through WSL2, where the standard Linux build works unchanged once systemd and rootless Podman are set up. Windows support is **beta**, it works well for daily development but gets less testing than native Linux or macOS. See the [Windows (WSL2) guide](./wsl2) for the full walkthrough, including the `events_logger` Podman tweak and the mkcert root CA export to the Windows trust store.
 
 ## NixOS
 

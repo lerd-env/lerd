@@ -12,10 +12,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/filelock"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	lerdUpdate "github.com/geodro/lerd/internal/update"
 	"github.com/geodro/lerd/internal/version"
@@ -95,9 +95,13 @@ func lerdBin() string {
 }
 
 func defaultLerdBinCandidates() []string {
-	cands := []string{"/opt/homebrew/bin/lerd", "/usr/local/bin/lerd"}
+	var cands []string
+	if exe, err := os.Executable(); err == nil {
+		cands = append(cands, filepath.Join(filepath.Dir(exe), lerdExeName()))
+	}
+	cands = append(cands, packagedLerdBins...)
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		cands = append(cands, filepath.Join(home, ".local", "bin", "lerd"))
+		cands = append(cands, filepath.Join(home, ".local", "bin", lerdExeName()))
 	}
 	return cands
 }
@@ -114,7 +118,9 @@ var (
 // lerdCmd is a thin wrapper around exec.Command that uses the resolved
 // `lerd` binary path so handlers work under launchd's empty PATH.
 func lerdCmd(args ...string) *exec.Cmd {
-	return exec.Command(lerdBin(), args...)
+	cmd := exec.Command(lerdBin(), args...)
+	hideWindow(cmd)
+	return cmd
 }
 
 // Run starts the system tray applet.
@@ -153,7 +159,7 @@ func acquireLock() bool {
 		// Can't create the lock file — allow startup rather than blocking.
 		return true
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err := filelock.TryExclusive(f); err != nil {
 		f.Close()
 		return false
 	}
@@ -172,7 +178,7 @@ func detach(mono bool) error {
 	}
 	// lerd-tray is a standalone binary — no "tray" subcommand needed.
 	var args []string
-	if filepath.Base(exe) != "lerd-tray" {
+	if !isHelperBinary(exe) {
 		args = append(args, "tray")
 	}
 	if mono {
@@ -189,7 +195,7 @@ func detach(mono bool) error {
 	cmd.Stdin = null
 	cmd.Stdout = null
 	cmd.Stderr = null
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	setDetachAttrs(cmd)
 	return cmd.Start()
 }
 
@@ -606,29 +612,6 @@ func handleUpdate(item *systray.MenuItem) {
 				time.Sleep(3 * time.Second)
 				item.SetTitle("Check for update...")
 			}()
-		}
-	}
-}
-
-func openUpdateTerminal(latestVer string) {
-	script := fmt.Sprintf(
-		`echo "Lerd update available: v%s"; `+
-			`read -rp "Update now? [y/N] " ans; `+
-			`[[ "$ans" =~ ^[Yy]$ ]] && lerd update; `+
-			`echo; read -rp "Press Enter to close..."`,
-		latestVer,
-	)
-	terminals := [][]string{
-		{"konsole", "-e", "bash", "-c", script},
-		{"ptyxis", "--", "bash", "-c", script},
-		{"gnome-terminal", "--", "bash", "-c", script},
-		{"xfce4-terminal", "-e", "bash -c '" + script + "'"},
-		{"xterm", "-e", "bash", "-c", script},
-	}
-	for _, t := range terminals {
-		if _, err := exec.LookPath(t[0]); err == nil {
-			_ = exec.Command(t[0], t[1:]...).Start()
-			return
 		}
 	}
 }

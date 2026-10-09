@@ -496,3 +496,18 @@ func TestInstalledDefaultServices_listsOnlyThoseWithAUnit(t *testing.T) {
 		t.Fatalf("installedDefaultServices = %v", got)
 	}
 }
+
+// A Windows install names its tray lerd-tray.exe, beside lerd.exe.
+func TestRemoveInstalledBinaries_keepsTheBinarysExtensionForTheTray(t *testing.T) {
+	dir := t.TempDir()
+	self := filepath.Join(dir, "lerd.exe")
+	tray := filepath.Join(dir, "lerd-tray.exe")
+	mkbin(t, self)
+	mkbin(t, tray)
+
+	removeInstalledBinaries(self)
+
+	if _, err := os.Stat(tray); !os.IsNotExist(err) {
+		t.Errorf("lerd-tray.exe still present")
+	}
+}

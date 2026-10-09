@@ -23,6 +23,7 @@ The install script covers mainstream Linux and macOS on its own. These pages are
 - [Omarchy](/getting-started/omarchy) is the Arch and Hyprland desktop, with the `crun` and `nss` prerequisites, the systemd-resolved detail and the lerd bar widget.
 - [NixOS](/getting-started/nixos) documents the flake based route for immutable and declarative systems.
 - [Windows (WSL2, beta)](/getting-started/wsl2) explains the systemd and mirrored networking setup Windows needs, most of which `lerd wsl:setup` does for you.
+- [Windows (native, experimental)](/getting-started/windows) covers the WSL2-free build on Hyper-V, what works so far and what is still missing.
 
 ## Framework walkthroughs
 

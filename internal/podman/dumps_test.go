@@ -43,6 +43,11 @@ func TestWriteDumpBridgeAssets_WritesPHPAndIni(t *testing.T) {
 	if !strings.Contains(string(ini), "auto_prepend_file=") {
 		t.Errorf("ini missing auto_prepend_file: %s", string(ini))
 	}
+
+	inv, err := os.ReadFile(config.OPcacheInvalidateFile())
+	if err != nil || !strings.Contains(string(inv), "opcache_invalidate(") {
+		t.Errorf("opcache-invalidate.php not written: %v", err)
+	}
 }
 
 func TestWriteDumpBridgeAssets_Idempotent(t *testing.T) {
@@ -94,7 +99,7 @@ func TestRemoveDumpAssets(t *testing.T) {
 	if err := RemoveDumpAssets(); err != nil {
 		t.Fatalf("RemoveDumpAssets: %v", err)
 	}
-	for _, p := range []string{config.DumpsBridgeFile(), config.DumpsIniFile(), config.DumpsEnabledFlagFile()} {
+	for _, p := range []string{config.DumpsBridgeFile(), config.DumpsIniFile(), config.DumpsEnabledFlagFile(), config.OPcacheInvalidateFile()} {
 		if _, err := os.Stat(p); !os.IsNotExist(err) {
 			t.Errorf("%s still present: %v", filepath.Base(p), err)
 		}
@@ -165,6 +170,10 @@ func TestDumpBridgeIsLegacyPHPCompatible(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DevtoolsCollectorPHP: %v", err)
 	}
+	invalidate, err := dumpBridgeFS.ReadFile("dumpbridge/opcache-invalidate.php")
+	if err != nil {
+		t.Fatal(err)
+	}
 	forbidden := map[string]string{
 		"match (":          "match expression (PHP 8.0+)",
 		"match(":           "match expression (PHP 8.0+)",
@@ -187,6 +196,7 @@ func TestDumpBridgeIsLegacyPHPCompatible(t *testing.T) {
 	}{
 		{"dump-bridge.php", bridge},
 		{"devtools-collector.php", collector},
+		{"opcache-invalidate.php", string(invalidate)},
 	} {
 		// preg_match() is PHP 4 and would otherwise trip the match( token.
 		src := strings.ReplaceAll(f.src, "preg_match", "")

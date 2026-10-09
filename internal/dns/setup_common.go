@@ -248,7 +248,7 @@ func WaitReady(timeout time.Duration) error {
 	}
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		conn, err := net.DialTimeout("tcp", "127.0.0.1:5300", 200*time.Millisecond)
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(dnsPort)), 200*time.Millisecond)
 		if err == nil {
 			conn.Close()
 			return nil
@@ -467,7 +467,7 @@ func WriteDnsmasqConfigDual(dir, v4Target, v6Target string) error {
 
 	var sb strings.Builder
 	sb.WriteString("# Lerd DNS configuration\n")
-	sb.WriteString("port=5300\n")
+	fmt.Fprintf(&sb, "port=%d\n", dnsPort)
 	if len(upstreams) > 0 {
 		sb.WriteString("no-resolv\n")
 		for _, ip := range upstreams {
@@ -482,3 +482,10 @@ func WriteDnsmasqConfigDual(dir, v4Target, v6Target string) error {
 
 	return os.WriteFile(filepath.Join(dir, "lerd.conf"), []byte(sb.String()), 0644)
 }
+
+// dnsPort is the port lerd-dns listens on. A platform whose resolver cannot
+// name a port (Windows NRPT) overrides it from an init().
+var dnsPort = 5300
+
+// Port is the port lerd-dns listens on for this host.
+func Port() int { return dnsPort }

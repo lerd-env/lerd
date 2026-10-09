@@ -8,6 +8,8 @@ import (
 
 	"github.com/geodro/lerd/internal/composer"
 	"github.com/geodro/lerd/internal/config"
+	phpDet "github.com/geodro/lerd/internal/php"
+	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 )
 
@@ -36,6 +38,8 @@ func runComposer(args []string) error {
 	}
 	phpArgs := append([]string{composer.PharPath()}, args...)
 	code, runErr := RunPHPCaptureEnv(cwd, phpArgs, []string{composer.ProcessTimeoutEnv()})
+	// vendor/ is outside the source watch, so a changed dependency is flushed here.
+	phpDet.FlushOPcacheForDir(cwd, podman.OPcacheReset)
 
 	// Sync regardless of composer exit status, so a `composer global remove`
 	// that fails partway still cleans up wrappers whose source bin is gone.

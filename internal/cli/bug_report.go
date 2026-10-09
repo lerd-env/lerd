@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -14,7 +13,6 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
 	"github.com/geodro/lerd/internal/version"
@@ -110,6 +108,8 @@ func collectBugReport(w io.Writer, logLines int, anon *anonymizer, filter *logFi
 	section(w, "Installed runtimes")
 	dumpRuntimes(w)
 
+	writePlatformSections(w)
+
 	section(w, "Systemd / launchd unit state")
 	dumpUnitState(w)
 
@@ -117,7 +117,7 @@ func collectBugReport(w io.Writer, logLines int, anon *anonymizer, filter *logFi
 	dumpContainers(w)
 
 	section(w, fmt.Sprintf("Recent service logs (last %d lines)", logLines))
-	dumpServiceLogs(w, logLines, filter)
+	dumpHostLogs(w, logLines, filter)
 
 	section(w, fmt.Sprintf("Recent container logs (last %d lines)", logLines))
 	dumpContainerLogs(w, logLines, filter)
@@ -397,27 +397,6 @@ func dumpContainers(w io.Writer) {
 	}
 }
 
-func dumpServiceLogs(w io.Writer, n int, filter *logFilter) {
-	if platform.Current.UsesMachineVM {
-		fmt.Fprintln(w, "(skipped: journalctl is Linux-only)")
-		return
-	}
-	for _, unit := range lerdUnits() {
-		if isContentUnit(unit) {
-			continue
-		}
-		fmt.Fprintf(w, "── journalctl --user -u %s --no-pager -n %d\n", unit, n)
-		out, err := exec.Command("journalctl", "--user", "-u", unit,
-			"--no-pager", "-n", fmt.Sprintf("%d", n)).CombinedOutput()
-		if err != nil {
-			fmt.Fprintf(w, "(failed: %v)\n", err)
-		}
-		cleaned := filter.clean(strings.TrimRight(string(out), "\n"))
-		fmt.Fprintln(w, cleaned)
-		fmt.Fprintln(w)
-	}
-}
-
 func dumpContainerLogs(w io.Writer, n int, filter *logFilter) {
 	out, err := podman.Run("ps", "-a", "--filter", "name=lerd-", "--format", "{{.Names}}")
 	if err != nil {
@@ -460,12 +439,7 @@ func dumpNetwork(w io.Writer) {
 	}
 	fmt.Fprintln(w)
 
-	fmt.Fprintln(w, "── /etc/resolv.conf")
-	if data, err := os.ReadFile("/etc/resolv.conf"); err == nil {
-		fmt.Fprintln(w, redactResolvConf(strings.TrimRight(string(data), "\n")))
-	} else {
-		fmt.Fprintf(w, "(unreadable: %v)\n", err)
-	}
+	dumpResolverConfig(w)
 	fmt.Fprintln(w)
 
 	fmt.Fprintln(w, "── host gateway probe (host.containers.internal)")

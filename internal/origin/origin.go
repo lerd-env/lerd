@@ -20,6 +20,11 @@ const (
 	nativePHPRepo  = "lerd-env/php" // static PHP builds for the native runtime
 )
 
+// releaseRepo is where releases are published and lerd update looks for them.
+// The Windows alpha builds set it to lerd-env/lerd-windows through -ldflags -X,
+// so their updates never reach for, or offer, the main repo's releases.
+var releaseRepo = mainRepo
+
 // StoreBaseURLs returns the framework-store base. The definitions live under a
 // frameworks/ subdir (index.json + <name>.yaml), not at the repo root.
 func StoreBaseURLs() []string {
@@ -80,7 +85,7 @@ func ReleaseBaseURLs() []string {
 	if list := splitList(os.Getenv("LERD_RELEASES_URL")); len(list) > 0 {
 		return list
 	}
-	return []string{"https://github.com/" + mainRepo + "/releases"}
+	return []string{"https://github.com/" + releaseRepo + "/releases"}
 }
 
 // ReleaseDownloadBases lists release-asset download bases.
@@ -100,7 +105,7 @@ func ReleaseAPIBaseURLs() []string {
 	if list := splitList(os.Getenv("LERD_RELEASES_API_URL")); len(list) > 0 {
 		return list
 	}
-	return []string{"https://api.github.com/repos/" + mainRepo}
+	return []string{"https://api.github.com/repos/" + releaseRepo}
 }
 
 // ToolsManifestURLs lists raw URLs of the pinned host-tool manifest

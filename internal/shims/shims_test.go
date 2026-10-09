@@ -69,6 +69,13 @@ func TestIsShimFile(t *testing.T) {
 	if isShimFile(other) {
 		t.Error("user binary wrongly detected as shim")
 	}
+	// lerd's own binary carries the marker as a constant, and on Windows it
+	// sits in this same bin dir, so a match anywhere in the file would delete it.
+	binary := filepath.Join(dir, "lerd.exe")
+	_ = os.WriteFile(binary, []byte("MZ binary "+strings.Repeat("x", 4096)+marker), 0755)
+	if isShimFile(binary) {
+		t.Error("a binary holding the marker text was taken for a shim")
+	}
 }
 
 func TestRemoveIfShim(t *testing.T) {

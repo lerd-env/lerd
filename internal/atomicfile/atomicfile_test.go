@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -164,6 +165,9 @@ func TestWriteIfChanged_removesItsTempWhenTheWriteFails(t *testing.T) {
 }
 
 func TestWriteIfChanged_appliesTheRequestedMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no Unix permission bits")
+	}
 	path := filepath.Join(t.TempDir(), "snap.json")
 	if _, err := WriteIfChanged(path, []byte("[]"), 0640); err != nil {
 		t.Fatalf("write: %v", err)

@@ -7,6 +7,13 @@ import (
 	"testing"
 )
 
+// The relative path is handed to the container, so it must use / on every host.
+func TestVendorBinRelUsesSlashes(t *testing.T) {
+	if got := vendorBinRel("pint"); got != "vendor/bin/pint" {
+		t.Errorf("vendorBinRel(pint) = %q, want vendor/bin/pint", got)
+	}
+}
+
 func TestVendorBinExists(t *testing.T) {
 	dir := t.TempDir()
 	binDir := filepath.Join(dir, "vendor", "bin")

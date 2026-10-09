@@ -26,6 +26,21 @@ func TestTinkerEnvArgs(t *testing.T) {
 	}
 }
 
+// On Windows the paths are host paths the container only knows by their VM
+// spelling, and a PATH joined with ':' would split C:\ apart besides.
+func TestTinkerEnvArgsGivesContainerPaths(t *testing.T) {
+	got := strings.Join(tinkerEnvArgs(`C:\Sites\app`, `C:\Users\me`, `C:\Users\me\.composer`), " ")
+	for _, want := range []string{
+		"HOME=/mnt/c/Users/me",
+		"COMPOSER_HOME=/mnt/c/Users/me/.composer",
+		"PATH=/mnt/c/Sites/app/vendor/bin:" + podman.ContainerPath + ":/mnt/c/Users/me/.composer/vendor/bin",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("env args %q missing %q", got, want)
+		}
+	}
+}
+
 func TestDetectDumpFunction(t *testing.T) {
 	siteWithVarDumper := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(siteWithVarDumper, "vendor", "symfony", "var-dumper"), 0755); err != nil {

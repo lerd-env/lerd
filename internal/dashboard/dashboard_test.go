@@ -1,8 +1,10 @@
 package dashboard
 
 import (
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -82,5 +84,16 @@ func TestServingIsFalseWhenTheProxyErrors(t *testing.T) {
 
 	if serving(srv.URL) {
 		t.Error("serving() = true for a 502")
+	}
+}
+
+// Windows' resolver cannot resolve *.localhost (only browsers special-case it),
+// so the probe must reach the vhost through loopback by itself.
+func TestServing_ReachesLocalhostNamesWithoutResolver(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	defer srv.Close()
+	_, port, _ := net.SplitHostPort(strings.TrimPrefix(srv.URL, "http://"))
+	if !serving("http://lerd.localhost:" + port) {
+		t.Fatal("serving() = false for a *.localhost name that loopback answers")
 	}
 }

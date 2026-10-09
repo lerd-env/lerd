@@ -70,7 +70,7 @@ func (l *menuList) set(rows []row) int {
 			item.Hide()
 			continue
 		}
-		item.SetTitle(rows[i].title)
+		setItemTitle(item, rows[i].title)
 		item.SetTooltip(rows[i].tooltip)
 		if rows[i].disabled {
 			item.Disable()

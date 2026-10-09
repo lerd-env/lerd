@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/editor"
@@ -92,6 +91,6 @@ func startEditorDetached(argv []string) error {
 func editorCmd(argv []string, null *os.File) *exec.Cmd {
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = null, null, null
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.SysProcAttr = detachedSysProcAttr()
 	return cmd
 }

@@ -29,7 +29,7 @@ LDFLAGS    = -s -w \
              -X $(PKG).Commit=$(COMMIT) \
              -X $(PKG).Date=$(DATE)
 
-.PHONY: build build-tray build-ui install-ui-deps test-ui install install-installer licenses test clean release release-snapshot
+.PHONY: build build-tray build-tray-windows build-ui install-ui-deps test-ui install install-installer licenses test clean release release-snapshot
 
 UI_INSTALL_STAMP = $(UI_DIR)/node_modules/.package-lock.json
 
@@ -50,6 +50,10 @@ build: build-ui
 
 build-tray:
 	CGO_ENABLED=1 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/lerd-tray ./cmd/lerd-tray
+
+# Windows GUI subsystem: no console window flashes when the tray starts.
+build-tray-windows:
+	GOOS=windows CGO_ENABLED=0 go build -ldflags="$(LDFLAGS) -H=windowsgui" -o $(BUILD_DIR)/lerd-tray.exe ./cmd/lerd-tray
 
 install: build build-tray
 	install -Dm755 $(BUILD_DIR)/$(BINARY) $(INSTALL_DIR)/$(BINARY)

@@ -1,16 +1,17 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/hostshell"
 	"github.com/spf13/cobra"
 )
 
@@ -89,7 +90,7 @@ func RunWorktreeSetup(site *config.Site, worktreePath, branch, build, db string,
 	}
 	if migrate := worktreeMigrateCommand(fw); migrate != "" && needsMigrate {
 		logf(log, "Running %s...", migrate)
-		cmd := exec.Command("sh", "-c", migrate)
+		cmd := hostshell.Command(context.Background(), migrate)
 		cmd.Dir = worktreePath
 		cmd.Env = append(os.Environ(), "PATH="+config.PathWithBinDir())
 		cmd.Stdout, cmd.Stderr = log, log

@@ -27,3 +27,7 @@ func installAutostart() {
 		feedback.WarnOn(os.Stderr, "enabling autostart: %v", err)
 	}
 }
+
+// syncLoginAutostart has nothing to do here: login start rides on the service
+// units ApplyAutostart already enables or disables.
+func syncLoginAutostart(bool) {}

@@ -23,6 +23,7 @@ import (
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/envpass"
 	gitpkg "github.com/geodro/lerd/internal/git"
+	"github.com/geodro/lerd/internal/hostshell"
 	"github.com/geodro/lerd/internal/logsource"
 	"github.com/geodro/lerd/internal/nginx"
 	lerdNode "github.com/geodro/lerd/internal/node"
@@ -3116,7 +3117,8 @@ func execCommandsRun(args map[string]any) (any, *rpcError) {
 	if target.CWD != "" && target.CWD != "." {
 		cwd = filepath.Join(site.Path, target.CWD)
 	}
-	cmd := exec.Command("sh", "-c", target.Command)
+	cmd := hostshell.Command(context.Background(), target.Command)
+	hostshell.Hide(cmd)
 	cmd.Dir = cwd
 	cmd.Env = hostCommandEnv()
 	out, runErr := cmd.CombinedOutput()

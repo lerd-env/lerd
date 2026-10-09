@@ -154,6 +154,7 @@ func ApplyAutostart(disabled bool) error {
 			_ = lerdSystemd.EnableService(name)
 		}
 	}
+	syncLoginAutostart(disabled)
 	return nil
 }
 

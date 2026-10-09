@@ -313,6 +313,12 @@ type GlobalConfig struct {
 		// effective value.
 		ExecMode string `yaml:"exec_mode,omitempty" mapstructure:"exec_mode"`
 	} `yaml:"workers,omitempty" mapstructure:"workers"`
+	Machine struct {
+		// Provider is the Podman machine backend on Windows, "hyperv" or "wsl",
+		// saved when lerd creates the machine so every process selects the same
+		// one. Empty lets lerd pick Hyper-V when the host has it, else WSL.
+		Provider string `yaml:"provider,omitempty" mapstructure:"provider"`
+	} `yaml:"machine,omitempty" mapstructure:"machine"`
 	Dumps struct {
 		// Enabled is the single switch for the whole debug window: the dump
 		// bridge AND the lerd_devtools collector (queries, mail, views, events,

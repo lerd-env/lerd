@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -308,8 +309,11 @@ func TestCommandsRun_BinDirOnPath(t *testing.T) {
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	shim := filepath.Join(binDir, "lerdshim")
-	if err := os.WriteFile(shim, []byte("#!/bin/sh\necho shimok\n"), 0o755); err != nil {
+	shim, script := filepath.Join(binDir, "lerdshim"), "#!/bin/sh\necho shimok\n"
+	if runtime.GOOS == "windows" {
+		shim, script = shim+".cmd", "@echo shimok\r\n"
+	}
+	if err := os.WriteFile(shim, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	// Strip BinDir from any inherited PATH so only the fix puts it back.

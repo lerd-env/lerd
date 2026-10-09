@@ -45,7 +45,7 @@ func Disable() {
 // failure. A missing socket fails the dial almost instantly; the write deadline
 // caps a hung send so a caller is never held up.
 func send(msg string) {
-	conn, err := net.Dial("unixgram", config.ControlSocketPath())
+	conn, err := net.Dial(config.ControlNetwork(), config.ControlAddr())
 	if err != nil {
 		return
 	}

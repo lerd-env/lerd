@@ -237,7 +237,7 @@ func runNodeUnmanage(_ *cobra.Command, _ []string) error {
 	// are lerd's to remove; a user-installed nvm and its versions belong to the
 	// user and must be left untouched — we only drop lerd's shims for those.
 	if nodeDet.Active().Name() == "fnm" {
-		fnmPath := filepath.Join(config.BinDir(), "fnm")
+		fnmPath := filepath.Join(config.BinDir(), config.ExeName("fnm"))
 		if _, err := os.Stat(fnmPath); err == nil {
 			if out, err := exec.Command(fnmPath, "list").CombinedOutput(); err == nil {
 				seen := map[string]bool{}

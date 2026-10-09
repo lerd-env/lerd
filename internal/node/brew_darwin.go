@@ -27,3 +27,6 @@ func osBrewNvmScripts() []string {
 	}
 	return out
 }
+
+// needsExecBit: a file only runs when one of its execute bits is set.
+const needsExecBit = true

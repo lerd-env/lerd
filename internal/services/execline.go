@@ -1,6 +1,14 @@
 package services
 
-import "strings"
+import (
+	"path/filepath"
+	"strings"
+)
+
+// literalBackslashes makes SplitExecStart keep a backslash as a path separator
+// unless it precedes a quote. Windows paths (C:\Users\me) would otherwise lose
+// every separator to the escape rule. A var so tests can exercise it anywhere.
+var literalBackslashes = filepath.Separator == '\\'
 
 // SplitExecStart splits a systemd ExecStart= line into argv the way systemd
 // does, honouring single and double quotes so an argument may contain spaces.
@@ -16,11 +24,16 @@ func SplitExecStart(line string) []string {
 		quote   rune // 0 when unquoted, else the open quote
 		escaped bool
 	)
-	for _, r := range line {
+	runes := []rune(line)
+	for i, r := range runes {
 		switch {
 		case escaped:
 			cur.WriteRune(r)
 			escaped = false
+		case r == '\\' && literalBackslashes && !(i+1 < len(runes) && (runes[i+1] == '\'' || runes[i+1] == '"')):
+			// A Windows path separator, not an escape.
+			cur.WriteRune(r)
+			inArg = true
 		case r == '\\' && quote != '\'':
 			// Escapes work outside quotes and inside double quotes, as they do
 			// in systemd and the shell. ShellQuote writes an apostrophe in a

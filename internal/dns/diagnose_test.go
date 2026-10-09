@@ -228,8 +228,8 @@ func TestDiagnose_portClosedStopsChain(t *testing.T) {
 		t.Errorf("FirstFailure = %d, want 2 (port rung)", d.FirstFailure)
 	}
 	hint := d.Steps[2].Hint
-	if !strings.Contains(hint, "ss -tlnp") && !strings.Contains(hint, "lsof") {
-		t.Errorf("hint %q should suggest ss/lsof for the bound port", hint)
+	if !strings.Contains(hint, "ss -tlnp") && !strings.Contains(hint, "lsof") && !strings.Contains(hint, "Get-NetTCPConnection") {
+		t.Errorf("hint %q should suggest ss/lsof/Get-NetTCPConnection for the bound port", hint)
 	}
 }
 
@@ -704,5 +704,20 @@ func TestDiagnose_SkipsResolvedRoutingOnNMDnsmasq(t *testing.T) {
 	}
 	if hook := findStep(d, "resolver hookup"); hook == nil || hook.Status != StepOK {
 		t.Errorf("resolver hookup should still pass: %+v", hook)
+	}
+}
+
+// The config check follows the port lerd writes, which is 53 on Windows (NRPT
+// cannot name a port) and 5300 elsewhere.
+func TestDnsmasqConfigCheckUsesTheConfiguredPort(t *testing.T) {
+	conf := "port=53\naddress=/.test/127.0.0.1\n"
+	if ok, detail := dnsmasqConfigCheck(conf, "test", 53); !ok {
+		t.Errorf("port 53 config rejected: %s", detail)
+	}
+	if ok, _ := dnsmasqConfigCheck(conf, "test", 5300); ok {
+		t.Error("a port=53 config should fail a check for 5300")
+	}
+	if ok, _ := dnsmasqConfigCheck("port=5300\n", "test", 5300); ok {
+		t.Error("a config with no address rule should fail")
 	}
 }

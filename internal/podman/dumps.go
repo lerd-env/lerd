@@ -137,6 +137,10 @@ func WriteDumpBridgeAssets() error {
 	if err != nil {
 		return fmt.Errorf("devtools collector embed: %w", err)
 	}
+	invalidateContent, err := dumpBridgeFS.ReadFile("dumpbridge/opcache-invalidate.php")
+	if err != nil {
+		return fmt.Errorf("opcache invalidate embed: %w", err)
+	}
 
 	for _, asset := range []struct {
 		path    string
@@ -147,6 +151,7 @@ func WriteDumpBridgeAssets() error {
 		{config.LaravelAdapterFile(), string(adapterContent)},
 		{config.DevtoolsCollectorFile(), string(collectorContent)},
 		{config.DevtoolsSeamsFile(), DevtoolsSeamsConf()},
+		{config.OPcacheInvalidateFile(), string(invalidateContent)},
 	} {
 		if info, err := os.Stat(asset.path); err == nil {
 			if info.IsDir() {
@@ -175,6 +180,7 @@ func RemoveDumpAssets() error {
 		config.LaravelAdapterFile(),
 		config.DevtoolsCollectorFile(),
 		config.DevtoolsSeamsFile(),
+		config.OPcacheInvalidateFile(),
 		config.DumpsEnabledFlagFile(),
 		config.DevtoolsWorkersFlagFile(),
 		// Legacy: the devtools collector used to have its own enable sentinel

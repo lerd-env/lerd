@@ -3,6 +3,7 @@ package serviceops
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -83,6 +84,42 @@ func s3ClientFor(service string, env []string) (*minio.Client, error) {
 		return nil, err
 	}
 	return newS3Client(s3Endpoint(service, s), s.access, s.secret)
+}
+
+// maxS3ClockSkew is how far S3 lets a request's signing time drift from its own.
+const maxS3ClockSkew = 15 * time.Minute
+
+// explainClockSkew names the clock when S3 denies a request and this host's time
+// is too far from the server's. rustfs reports that only as "Access Denied".
+func explainClockSkew(err error, serverNow func() (time.Time, error), now time.Time) error {
+	code := minio.ToErrorResponse(err).Code
+	if code != "AccessDenied" && code != "RequestTimeTooSkewed" {
+		return err
+	}
+	at, sErr := serverNow()
+	if sErr != nil {
+		return err
+	}
+	skew, dir := at.Sub(now), "behind"
+	if skew < 0 {
+		skew, dir = -skew, "ahead of"
+	}
+	if skew <= maxS3ClockSkew {
+		return err
+	}
+	return fmt.Errorf("%w: this computer's clock is %s %s the S3 server's, and S3 refuses requests signed more than %s off; correct the system time",
+		err, skew.Round(time.Minute), dir, maxS3ClockSkew)
+}
+
+// s3ServerTime reads the server's clock off the Date header of a plain request.
+func s3ServerTime(c *minio.Client) (time.Time, error) {
+	client := http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Head(c.EndpointURL().String())
+	if err != nil {
+		return time.Time{}, err
+	}
+	resp.Body.Close()
+	return http.ParseTime(resp.Header.Get("Date"))
 }
 
 func newS3Client(endpoint, access, secret string) (*minio.Client, error) {

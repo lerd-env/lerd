@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/hostshell"
 	"github.com/geodro/lerd/internal/logcolor"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/sitetpl"
@@ -241,8 +242,7 @@ func handleCommandRun(w http.ResponseWriter, r *http.Request, site *config.Site,
 	// running inside, then return immediately. The UI handles this by
 	// skipping the modal and showing a toast.
 	if target.Output == config.CommandOutputTerminal {
-		script := terminalCommandScript(cwd, target.Command)
-		if err := openTerminalCommand(script); err != nil {
+		if err := openCommandTerminal(cwd, target.Command); err != nil {
 			writeJSON(w, map[string]any{"error": err.Error()})
 			return
 		}
@@ -263,7 +263,8 @@ func streamShellRun(w http.ResponseWriter, ctx context.Context, cwd, shell strin
 		return
 	}
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", shell)
+	cmd := hostshell.Command(ctx, shell)
+	hostshell.Hide(cmd)
 	cmd.Dir = cwd
 	// Force colour on: the command runs against a pipe, so composer, artisan
 	// and friends would otherwise strip their ANSI escapes and the run modal

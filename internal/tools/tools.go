@@ -7,6 +7,7 @@ package tools
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -143,6 +144,9 @@ func Load(ctx context.Context) *Manifest {
 	for _, src := range sources() {
 		for name, t := range publishedTools(ctx, src) {
 			if t.valid() {
+				if emb, ok := m.Tools[name]; ok {
+					t = mergeMissingPlatforms(t, emb)
+				}
 				m.Tools[name] = t
 			}
 		}
@@ -277,9 +281,9 @@ func binPath(name string) string {
 		// mise's own install location, where lerd puts it too so the user's
 		// shell runs the same mise lerd drives.
 		home, _ := os.UserHomeDir()
-		return filepath.Join(home, ".local", "bin", "mise")
+		return filepath.Join(home, ".local", "bin", config.ExeName("mise"))
 	}
-	return filepath.Join(config.BinDir(), name)
+	return filepath.Join(config.BinDir(), config.ExeName(name))
 }
 
 // stampPath is the version sidecar. mise's stays in lerd's bin dir rather than
@@ -488,7 +492,7 @@ func (m *Manifest) URL(name, goos, goarch string) (string, error) {
 	if len(t.Assets) > 0 {
 		asset, ok = t.Assets[goos+"/"+goarch]
 		if !ok {
-			return "", fmt.Errorf("%s has no release asset for %s/%s", name, goos, goarch)
+			return "", noAssetError{name, goos, goarch}
 		}
 		asset = strings.ReplaceAll(asset, "{version}", t.Version)
 	}
@@ -512,4 +516,65 @@ func BuildIsStale(pinned, installed, publishedAt, installedPublished string) boo
 		return true
 	}
 	return publishedAt != "" && publishedAt != installedPublished
+}
+
+// ErrNoAsset marks a tool that publishes no build for the requested platform,
+// as opposed to a failed download. Callers of optional tools treat it as
+// "unavailable here" instead of aborting.
+var ErrNoAsset = errors.New("no release asset for this platform")
+
+type noAssetError struct{ name, goos, goarch string }
+
+func (e noAssetError) Error() string {
+	return fmt.Sprintf("%s has no release asset for %s/%s", e.name, e.goos, e.goarch)
+}
+
+func (e noAssetError) Unwrap() error { return ErrNoAsset }
+
+// mergeMissingPlatforms fills the platforms a published pin does not list from
+// the embedded one, when both pin the same version. Without it a binary that
+// knows a platform the published manifest has not caught up with (Windows
+// mkcert) would lose it the moment the manifest loads. Where both list a
+// platform the published entry wins, and a pin of another version is left alone
+// since its assets are not interchangeable. The published maps are not modified.
+func mergeMissingPlatforms(pub, emb Tool) Tool {
+	if pub.Version != emb.Version {
+		return pub
+	}
+	listed := pub.Assets // before the merge, to tell which platforms the pin really lists
+	pub.Assets = fillStrings(pub.Assets, emb.Assets)
+	pub.Digests = fillStrings(pub.Digests, emb.Digests)
+	pub.Published = fillStrings(pub.Published, emb.Published)
+	sizes := make(map[string]int64, len(pub.Sizes)+len(emb.Sizes))
+	for k, v := range emb.Sizes {
+		if _, ok := emb.Assets[k]; ok {
+			if _, has := listed[k]; !has {
+				sizes[k] = v
+			}
+		}
+	}
+	for k, v := range pub.Sizes {
+		sizes[k] = v
+	}
+	if len(sizes) > 0 {
+		pub.Sizes = sizes
+	}
+	return pub
+}
+
+// fillStrings returns dst plus every key of src that dst lacks, as a new map.
+func fillStrings(dst, src map[string]string) map[string]string {
+	if len(src) == 0 {
+		return dst
+	}
+	out := make(map[string]string, len(dst)+len(src))
+	for k, v := range src {
+		if _, ok := dst[k]; !ok {
+			out[k] = v
+		}
+	}
+	for k, v := range dst {
+		out[k] = v
+	}
+	return out
 }

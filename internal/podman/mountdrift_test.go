@@ -281,3 +281,18 @@ func TestEnsurePathMountedSyncsPlatformUnitsOnDrift(t *testing.T) {
 		t.Fatalf("synced %v, want both lerd-php84-fpm and lerd-nginx", synced)
 	}
 }
+
+// On Windows podman reports a mount source as the machine path (/mnt/c/...),
+// while lerd asks about the host path (C:\...). Comparing them as they are
+// reported every mount missing and restarted FPM on each lerd php or artisan.
+func TestMountCoversAWindowsPathByItsMachinePath(t *testing.T) {
+	sources := []string{"/mnt/c/Users/me", "/mnt/d/Sites"}
+	for _, p := range []string{`C:\Users\me\projects\app`, `D:\Sites\shop`, `C:\Users\me`} {
+		if !mountCovers(sources, p) {
+			t.Errorf("%s is under a mount podman reports by its machine path", p)
+		}
+	}
+	if mountCovers(sources, `E:\other`) {
+		t.Error("a drive nothing mounts is not covered")
+	}
+}

@@ -52,7 +52,7 @@ func (p *pinnedTools) downloadCtx(ctx context.Context, name, dest string, mode o
 // downloadBinaries on a normal (fnm) install, and on demand when switching
 // back to fnm with `lerd node:manager fnm` after an nvm-only setup.
 func ensureFnmBinary(w io.Writer) error {
-	if _, err := os.Stat(filepath.Join(config.BinDir(), "fnm")); err == nil {
+	if _, err := os.Stat(filepath.Join(config.BinDir(), config.ExeName("fnm"))); err == nil {
 		return nil
 	}
 	var pins pinnedTools
@@ -75,25 +75,17 @@ func ensureMiseBinary(w io.Writer) error {
 }
 
 // installMise downloads the pinned mise tarball and extracts the single binary
-// it carries at mise/bin/mise into ~/.local/bin.
+// it carries at mise/bin/mise into ~/.local/bin. Windows releases ship the
+// bare mise.exe, which is verified and saved there as it is.
 func installMise(pins *pinnedTools, home string, w io.Writer) error {
-	dest := filepath.Join(home, ".local", "bin", "mise")
+	dest := filepath.Join(home, ".local", "bin", config.ExeName("mise"))
 	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
 		return fmt.Errorf("mise install: %w", err)
 	}
-	tarball := dest + ".tar.gz"
-	v, err := pins.download("mise", tarball, 0644, w)
+	v, err := fetchMise(pins, dest, w)
 	if err != nil {
-		return fmt.Errorf("mise download: %w", err)
+		return err
 	}
-	defer os.Remove(tarball)
-	extract := exec.Command("tar", "xzf", tarball, "-C", filepath.Dir(dest), "--strip-components=2", "mise/bin/mise")
-	extract.Stdout = w
-	extract.Stderr = w
-	if err := extract.Run(); err != nil {
-		return fmt.Errorf("mise extract: %w", err)
-	}
-	os.Chmod(dest, 0755) //nolint:errcheck
 	// The stamp is also what marks this mise as lerd's to update later.
 	_ = tools.WriteStamp("mise", v)
 	return nil
@@ -103,7 +95,7 @@ func installMise(pins *pinnedTools, home string, w io.Writer) error {
 // copy in BinDir is lerd's, so it goes rather than lingering as a tool nothing
 // runs; switching back with `lerd node:manager fnm` downloads it again.
 func removeFnmBinary() {
-	fnm := filepath.Join(config.BinDir(), "fnm")
+	fnm := filepath.Join(config.BinDir(), config.ExeName("fnm"))
 	os.Remove(fnm)              //nolint:errcheck
 	os.Remove(fnm + ".version") //nolint:errcheck
 }

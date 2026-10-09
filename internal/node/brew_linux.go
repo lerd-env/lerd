@@ -9,3 +9,6 @@ func misePrefixes() []string { return []string{"/usr/local/bin", "/usr/bin"} }
 func brewBunDirs() []string      { return nil }
 func osUnitPathDirs() []string   { return nil }
 func osBrewNvmScripts() []string { return nil }
+
+// needsExecBit: a file only runs when one of its execute bits is set.
+const needsExecBit = true

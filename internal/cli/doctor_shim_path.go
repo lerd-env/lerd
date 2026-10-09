@@ -40,7 +40,13 @@ func shimShadowSymptom(tool string) string {
 // current shell actually resolves, both with symlinks collapsed so a linked
 // home or bin dir does not read as a shadow.
 func resolvedShimPath(tool string) (shim, resolved string, err error) {
-	shim = realPath(filepath.Join(config.BinDir(), tool))
+	shim = filepath.Join(config.BinDir(), tool)
+	// The shell runs the shim with an executable extension where there is one
+	// (node.cmd on Windows), so resolve it the same way.
+	if withExt, lookErr := exec.LookPath(shim); lookErr == nil {
+		shim = withExt
+	}
+	shim = realPath(shim)
 	found, err := exec.LookPath(tool)
 	if err != nil {
 		return shim, "", err

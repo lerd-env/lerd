@@ -48,6 +48,12 @@ lerd bug-report
 
 This writes a single plain-text file (default: `./lerd-bug-report-<timestamp>.txt`) containing the full `lerd doctor` output, your `config.yaml`, `sites.yaml` and every linked site's `.lerd.yaml`, the state of every `lerd-*` systemd unit, recent journal and container logs for lerd's own infra units, listening sockets on the lerd ports, and a curated set of environment variables.
 
+On Windows the report also carries the Windows release and build, whether the shell is elevated and in the Hyper-V Administrators group, the CPU, memory and hypervisor, which backends the PC has ready (Hyper-V, WSL and its version, the Virtual Machine Platform) and the provider lerd would pick, the Podman client and server versions with the machine's provider, resources and connections, and where lerd is installed. Service logs come from the files under `%LOCALAPPDATA%\lerd\logs`, including the 9p server and the Podman installer log, and the resolver section shows the NRPT rule for the TLD in place of `/etc/resolv.conf`. It runs even when `lerd install` stopped part way, since install copies `lerd.exe` into place first:
+
+```powershell
+& "$env:LOCALAPPDATA\lerd\bin\lerd.exe" bug-report
+```
+
 What gets filtered before it lands on disk:
 
 - Site `.env` files are excluded outright.

@@ -13,3 +13,10 @@ func writeHostDetails(w io.Writer) {
 		fmt.Fprintf(w, "macOS:      %s\n", strings.TrimSpace(string(out)))
 	}
 }
+
+// writePlatformSections has nothing to add on macOS.
+func writePlatformSections(io.Writer) {}
+
+func dumpHostLogs(w io.Writer, _ int, _ *logFilter) {
+	fmt.Fprintln(w, "(skipped: journalctl is Linux-only)")
+}

@@ -464,3 +464,12 @@ func seedActiveSites(t *idle.Tracker) {
 		}
 	}
 }
+
+// controlConn binds the idle-suspend control listener: the unix datagram socket
+// where those exist, loopback UDP on Windows.
+func controlConn() (net.PacketConn, bool) {
+	if config.ControlNetwork() == "udp" {
+		return listenUDP(config.ControlAddr())
+	}
+	return listenDatagram(config.ControlSocketPath())
+}

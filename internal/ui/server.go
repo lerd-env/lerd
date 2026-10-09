@@ -663,6 +663,25 @@ func openTerminalAt(dir string) error {
 	return fmt.Errorf("no terminal emulator found; set $TERMINAL or install kitty, foot, alacritty, wezterm, ghostty, ptyxis, konsole, or gnome-terminal")
 }
 
+// startFirstTerminal starts the first candidate found on PATH, reporting false
+// when there is none.
+func startFirstTerminal(candidates []terminalCmd) (bool, error) {
+	for _, t := range candidates {
+		bin, err := exec.LookPath(t.bin)
+		if err != nil {
+			continue
+		}
+		cmd := exec.Command(bin, t.args...)
+		cmd.Env = terminalEnv()
+		if err := cmd.Start(); err != nil {
+			return true, err
+		}
+		go func() { _ = cmd.Wait() }()
+		return true, nil
+	}
+	return false, nil
+}
+
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v) //nolint:errcheck
@@ -5944,7 +5963,7 @@ func handleLerdUpdateTerminal(w http.ResponseWriter, r *http.Request) {
 	if err != nil || self == "" {
 		self = "lerd"
 	}
-	if err := openTerminalCommand(buildUpdateScript(self)); err != nil {
+	if err := openUpdateTerminal(self); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -6021,18 +6040,8 @@ func terminalEnv() []string {
 }
 
 func openTerminalCommand(script string) error {
-	for _, t := range terminalScriptCandidates(script) {
-		bin, err := exec.LookPath(t.bin)
-		if err != nil {
-			continue
-		}
-		cmd := exec.Command(bin, t.args...)
-		cmd.Env = terminalEnv()
-		if err := cmd.Start(); err != nil {
-			return err
-		}
-		go func() { _ = cmd.Wait() }()
-		return nil
+	if started, err := startFirstTerminal(terminalScriptCandidates(script)); started || err != nil {
+		return err
 	}
 	return fmt.Errorf("no terminal emulator found; set $TERMINAL or install kitty, foot, alacritty, wezterm, ghostty, ptyxis, konsole, or gnome-terminal")
 }

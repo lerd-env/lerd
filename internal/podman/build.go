@@ -149,7 +149,7 @@ func sortPaths(paths []string) {
 
 // mkcertPath returns the path to the mkcert binary managed by lerd.
 func mkcertPath() string {
-	return filepath.Join(config.BinDir(), "mkcert")
+	return filepath.Join(config.BinDir(), config.ExeName("mkcert"))
 }
 
 // mkcertCABlock copies the mkcert rootCA.pem into tmpDir and returns the
@@ -1091,6 +1091,7 @@ func renderFPMQuadletContent(version string) (string, error) {
 	content = strings.ReplaceAll(content, "{{.HostNameLine}}", hostNameLine())
 	content = strings.ReplaceAll(content, "{{.ComposerMountLine}}", composerMountLine())
 	content = strings.ReplaceAll(content, "{{.ContainerPath}}", ContainerPath)
+	content = strings.ReplaceAll(content, "{{.FPMArgs}}", fpmArgs(goosForFPM))
 	content = applyShellMounts(content, short)
 	content = InjectExtraVolumes(content, ExtraVolumePaths())
 	return content, nil

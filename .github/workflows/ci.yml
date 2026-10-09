@@ -242,6 +242,73 @@ jobs:
     steps:
       - run: test "${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && !contains(needs.*.result, 'skipped') }}" = true
 
+  # Builds and vets the Windows binaries, runs the tests written for Windows,
+  # and checks install.ps1 under the Windows PowerShell every Windows ships.
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - name: Keep LF line endings
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: internal/ui/web/package-lock.json
+
+      - name: Build UI
+        working-directory: internal/ui/web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build
+        run: |
+          for arch in amd64 arm64; do
+            GOARCH=$arch go build -tags nogui -o "$RUNNER_TEMP/lerd-$arch.exe" ./cmd/lerd
+            GOARCH=$arch go build -ldflags=-H=windowsgui -o "$RUNNER_TEMP/lerd-tray-$arch.exe" ./cmd/lerd-tray
+          done
+
+      - name: Vet
+        run: |
+          go vet -tags nogui ./...
+          go vet ./...
+
+      - name: Windows tests
+        run: .github/scripts/windows-tests.sh
+
+      - name: Installer tests (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./tests/installer/run-tests.ps1
+
+      - name: Installer tests (PowerShell 7)
+        shell: pwsh
+        run: ./tests/installer/run-tests.ps1
+
+      - name: Lint installer
+        shell: powershell
+        run: |
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck
+          $findings = Invoke-ScriptAnalyzer -Path install.ps1 -Settings tests/installer/PSScriptAnalyzerSettings.psd1
+          $findings | Format-Table -AutoSize
+          if ($findings) { exit 1 }
+
   installer:
     name: Installer Tests
     runs-on: ubuntu-latest

@@ -89,6 +89,10 @@ If you would rather the OS own the colouring entirely, use `lerd tray --mono`, w
 
 ---
 
+
+## Windows
+
+On native Windows the tray is a plain Win32 notification-area icon, with no extra libraries to install. `lerd start` launches `lerd-tray.exe` from beside `lerd.exe`, and `lerd tray on` / `lerd tray off` work as on Linux. The running icon follows the taskbar's light/dark setting (checked every few seconds), and status dots in the menu are drawn as coloured icons because Windows menus render emoji in monochrome. **Check for update...** opens a PowerShell window that offers `lerd update`. Build the helper with `make build-tray-windows`, which produces a GUI-subsystem binary so no console window appears.
 ## Turning the tray off
 
 Some desktops already show what the tray shows. On Omarchy the lerd Glance widget carries the same running state and site list in the bar, which makes the applet a second copy of the same information, and on WSL2 there is no tray host to draw it at all. So the tray is optional:

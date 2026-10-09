@@ -16,6 +16,7 @@ import (
 	"github.com/geodro/lerd/internal/agentenv"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envpass"
+	"github.com/geodro/lerd/internal/hostpath"
 	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/podman"
 )
@@ -195,12 +196,10 @@ func RunTinker(ctx context.Context, sitePath, siteName, branch, code string) (Ti
 // silently swallows the value and the REPL shows nothing for bare
 // expressions like `User::count()`.
 func tinkerEnvArgs(sitePath, home, composerHome string) []string {
-	projectVendorBin := filepath.Join(sitePath, "vendor", "bin")
-	composerBin := filepath.Join(composerHome, "vendor", "bin")
 	return []string{
-		"--env", "HOME=" + home,
-		"--env", "COMPOSER_HOME=" + composerHome,
-		"--env", "PATH=" + projectVendorBin + ":" + podman.ContainerPath + ":" + composerBin,
+		"--env", "HOME=" + hostpath.ToVM(home),
+		"--env", "COMPOSER_HOME=" + hostpath.ToVM(composerHome),
+		"--env", "PATH=" + containerExecPATH(sitePath, composerHome),
 		"--env", "NO_COLOR=1",
 		"--env", "TERM=dumb",
 		"--env", "PSYSH_TRUST_PROJECT=1",

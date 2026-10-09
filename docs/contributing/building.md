@@ -8,6 +8,8 @@ Go is required to build from source. The released binary has no runtime dependen
 
 The installer suite runs under `bats` and shells out to `perl` for the two checks that need a process with no controlling terminal, since `setsid` is util-linux and macOS ships no equivalent. Both are present by default on macOS and on every distro lerd targets.
 
+The Windows installer, `install.ps1`, is tested with Pester 5 through `tests/installer/run-tests.ps1`, which installs Pester for the current user when it is missing. Run it under both `powershell` and `pwsh`, since the script has to keep working on the Windows PowerShell 5.1 every Windows ships.
+
 **Web UI**: the `lerd-ui` dashboard is built from Svelte sources under `internal/ui/web/` and bundled into the Go binary via `//go:embed`. Node.js (20+) and npm are required to rebuild it. `make build` runs `npm install` (once) and `npm run build` automatically before the Go build, so a single `make` command still produces a self-contained binary. If you only change Go code, you can skip the JS build by running `go build` directly against a previously-built `internal/ui/web/dist/` tree.
 
 ## Build commands
