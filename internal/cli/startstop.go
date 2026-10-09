@@ -965,11 +965,8 @@ func launchTray() error {
 	return nil
 }
 
-// trayProcessPatterns match a running tray applet, launched directly or as the
-// lerd-tray binary, and nothing else. Anchored at the end because `lerd tray
-// off` has to kill the applet from a command line that contains those very
-// words, and an unanchored match takes out the command and its shell with it.
-// The detached applet carries --mono or --mono=false.
+// trayProcessPatterns match the applet, bare or with --mono / --mono=false.
+// End anchors keep `lerd tray off` and its shell from matching themselves.
 var trayProcessPatterns = []string{`lerd tray( --mono(=false)?)?$`, `lerd-tray( --mono(=false)?)?$`}
 
 // killTray kills any running lerd tray process and waits for it to exit, so a
