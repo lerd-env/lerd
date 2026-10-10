@@ -112,6 +112,95 @@ func TestSnapshotKeepsStaleWhenRebuildFails(t *testing.T) {
 	}
 }
 
+// A rebuild that read the old state before a mutation invalidated the slot
+// must not stamp its result fresh, or the mutation is hidden for a whole TTL.
+func TestSnapshotInvalidateDuringRebuildIsNotLost(t *testing.T) {
+	state := "old"
+	release := make(chan struct{})
+	entered := make(chan struct{}, 1)
+	slot := &snapshotSlot{fn: func() ([]byte, error) {
+		read := state
+		entered <- struct{}{}
+		<-release
+		return []byte(read), nil
+	}}
+
+	done := make(chan struct{})
+	go func() { slot.get(); close(done) }()
+	<-entered
+
+	state = "new"
+	slot.invalidate()
+	close(release)
+	<-done
+
+	slot.fn = func() ([]byte, error) { return []byte(state), nil }
+	if got := slot.get(); string(got) != "new" {
+		t.Fatalf("got %s, want new: the invalidation during the rebuild was lost", got)
+	}
+}
+
+// The websocket broadcast follows a mutation, so it must carry the rebuilt
+// value: shipping the stale one can land after the client's own fresh read.
+func TestSnapshotFreshWaitsForInFlightRebuild(t *testing.T) {
+	release := make(chan struct{})
+	entered := make(chan struct{}, 1)
+	slot := &snapshotSlot{data: []byte(`["stale"]`), at: time.Now().Add(-time.Hour)}
+	slot.fn = func() ([]byte, error) {
+		entered <- struct{}{}
+		<-release
+		return []byte(`["fresh"]`), nil
+	}
+
+	go slot.get()
+	<-entered
+
+	done := make(chan []byte, 1)
+	go func() { done <- slot.fresh() }()
+	select {
+	case got := <-done:
+		t.Fatalf("fresh returned %s while the rebuild was still in flight", got)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	if got := <-done; string(got) != `["fresh"]` {
+		t.Fatalf("got %s, want the rebuilt value", got)
+	}
+}
+
+// A change landing while the broadcast's own rebuild runs would otherwise ship
+// the state that change replaced.
+func TestSnapshotFreshRebuildsWhenInvalidatedMidBuild(t *testing.T) {
+	state := "old"
+	slot := &snapshotSlot{}
+	slot.fn = func() ([]byte, error) {
+		read := state
+		if read == "old" {
+			state = "new"
+			slot.invalidate()
+		}
+		return []byte(read), nil
+	}
+
+	if got := slot.fresh(); string(got) != "new" {
+		t.Fatalf("got %s, want new: fresh shipped a build its own invalidation outdated", got)
+	}
+}
+
+// Out of retries, fresh leaves the kind out of the broadcast rather than ship an
+// outdated value; the change that outdated it publishes its own broadcast.
+func TestSnapshotFreshOmitsAValueStillOutdatedAfterRetries(t *testing.T) {
+	slot := &snapshotSlot{data: []byte(`["stale"]`)}
+	slot.fn = func() ([]byte, error) {
+		slot.invalidate()
+		return []byte(`["outdated"]`), nil
+	}
+
+	if got := slot.fresh(); got != nil {
+		t.Fatalf("got %s, want nil so the broadcast leaves the kind out", got)
+	}
+}
+
 func TestSnapshotServesCachedValueWithinTTL(t *testing.T) {
 	var builds int
 	slot := &snapshotSlot{fn: func() ([]byte, error) {
