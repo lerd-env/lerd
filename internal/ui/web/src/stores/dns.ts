@@ -1,5 +1,5 @@
 import { m } from '../paraglide/messages.js';
-import { apiJson, apiFetch, decodeJSONResult } from '$lib/api';
+import { apiFetch, decodeJSONResult, sharedJson } from '$lib/api';
 
 export interface DnsUpstreamSettings {
   // upstream holds the user-pinned upstream DNS servers. Empty means lerd
@@ -52,7 +52,7 @@ export function isValidUpstream(entry: string): boolean {
 }
 
 export async function loadDnsUpstream(): Promise<DnsUpstreamSettings> {
-  const res = await apiJson<SettingsResponse>('/api/settings');
+  const res = await sharedJson<SettingsResponse>('/api/settings');
   return {
     upstream: res.dns_upstream ?? [],
     detected: res.dns_upstream_detected ?? []

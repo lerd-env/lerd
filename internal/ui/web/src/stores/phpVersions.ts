@@ -1,6 +1,6 @@
 import { m } from '../paraglide/messages.js';
 import { writable } from 'svelte/store';
-import { apiJson, apiFetch, decodeJSONResult } from '$lib/api';
+import { apiJson, apiFetch, decodeJSONResult, sharedJson } from '$lib/api';
 import { readSSE } from '$lib/sse';
 import { confirmDownload } from './downloadConfirm';
 import type { SiteNginxBackup, LoadNginxBackupsResult, ResetNginxResult, SaveNginxResult, RestoreNginxResult } from './sites';
@@ -67,7 +67,7 @@ export function phpOptionsForSite(
 
 export async function loadPhpVersions() {
   try {
-    const list = await apiJson<string[]>('/api/php-versions');
+    const list = await sharedJson<string[]>('/api/php-versions');
     phpVersions.set(Array.isArray(list) ? list : []);
     phpVersionsLoaded.set(true);
   } catch {

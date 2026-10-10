@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { apiJson, apiFetch } from '$lib/api';
+import { apiFetch, sharedJson } from '$lib/api';
 import { readSSE } from '$lib/sse';
 import { m } from '../paraglide/messages.js';
 
@@ -24,7 +24,7 @@ function normalize(v: string | undefined): PHPRuntime {
 
 export async function loadPHPRuntime() {
   try {
-    const res = await apiJson<SettingsResponse>('/api/settings');
+    const res = await sharedJson<SettingsResponse>('/api/settings');
     phpRuntime.set(normalize(res.php_runtime));
     phpRuntimeApplies.set(Boolean(res.php_runtime_applies));
     // The daemon owns this, not the tab that happened to start the switch: one

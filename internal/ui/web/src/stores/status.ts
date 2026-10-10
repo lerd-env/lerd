@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import { apiFetch, apiJson, decodeJSONResult } from '$lib/api';
+import { apiFetch, decodeJSONResult, sharedJson } from '$lib/api';
 import { wsMessage } from '$lib/ws';
 import { version } from './version';
 
@@ -82,7 +82,7 @@ export const statusLoaded = writable<boolean>(false);
 
 export async function loadStatus() {
   try {
-    applyStatus(await apiJson<StatusResponse>('/api/status'));
+    applyStatus(await sharedJson<StatusResponse>('/api/status'));
   } catch {
     /* keep previous */
   }

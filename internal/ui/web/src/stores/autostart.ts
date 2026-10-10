@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { apiJson, apiFetch } from '$lib/api';
+import { apiFetch, sharedJson } from '$lib/api';
 
 export const autostartEnabled = writable<boolean>(false);
 export const startOnDashboardOpen = writable<boolean>(false);
@@ -18,7 +18,7 @@ interface SettingsResponse {
 
 export async function loadAutostart() {
   try {
-    const res = await apiJson<SettingsResponse>('/api/settings');
+    const res = await sharedJson<SettingsResponse>('/api/settings');
     autostartEnabled.set(Boolean(res.autostart_on_login));
     startOnDashboardOpen.set(Boolean(res.start_on_dashboard_open));
     trayEnabled.set(res.tray_enabled !== false);

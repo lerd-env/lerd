@@ -1,5 +1,5 @@
 import { derived, get, writable } from 'svelte/store';
-import { apiFetch, apiJson } from '$lib/api';
+import { apiFetch, sharedJson } from '$lib/api';
 import { wsMessage } from '$lib/ws';
 import { sites, sitesLoaded } from '$stores/sites';
 import { coreServices } from '$stores/services';
@@ -36,7 +36,7 @@ function legacyDismissed(): boolean {
 
 export async function loadSetup() {
   try {
-    const res = await apiJson<{ setup?: string }>('/api/settings');
+    const res = await sharedJson<{ setup?: string }>('/api/settings');
     const v = res.setup;
     if (v === 'active' || v === 'done') {
       state.set(v);

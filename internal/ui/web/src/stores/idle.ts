@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { apiJson, apiFetch } from '$lib/api';
+import { apiFetch, sharedJson } from '$lib/api';
 
 // Global idle-suspend policy (a single on/off + timeout, not per site).
 export const idleEnabled = writable<boolean>(false);
@@ -14,7 +14,7 @@ interface SettingsResponse {
 
 export async function loadIdle() {
   try {
-    const res = await apiJson<SettingsResponse>('/api/settings');
+    const res = await sharedJson<SettingsResponse>('/api/settings');
     idleEnabled.set(Boolean(res.idle_suspend_enabled));
     idleServices.set(Boolean(res.idle_suspend_services));
     if (typeof res.idle_suspend_timeout_minutes === 'number' && res.idle_suspend_timeout_minutes > 0) {

@@ -678,6 +678,27 @@ func writeJSON(w http.ResponseWriter, v any) {
 	json.NewEncoder(w).Encode(v) //nolint:errcheck
 }
 
+// writeJSONRevalidated is writeJSON for what rarely changes between loads: the
+// browser keeps its copy and asks whether it still holds, and gets an empty 304
+// when it does rather than the whole body again.
+func writeJSONRevalidated(w http.ResponseWriter, r *http.Request, v any) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	sum := sha256.Sum256(b)
+	etag := `"` + hex.EncodeToString(sum[:8]) + `"`
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "no-cache")
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(b)
+}
+
 func mustJSON(v any) string {
 	b, _ := json.Marshal(v) //nolint:errcheck
 	return string(b)
@@ -1991,7 +2012,7 @@ func handleServiceIcons(w http.ResponseWriter, r *http.Request) {
 	if icons == nil {
 		icons = map[string]string{}
 	}
-	writeJSON(w, icons)
+	writeJSONRevalidated(w, r, icons)
 }
 
 // handleFrameworkMarks returns the mark and brand colour of every framework
@@ -2008,7 +2029,7 @@ func handleFrameworkMarks(w http.ResponseWriter, r *http.Request) {
 	if marks == nil {
 		marks = map[string]config.FrameworkMark{}
 	}
-	writeJSON(w, marks)
+	writeJSONRevalidated(w, r, marks)
 }
 
 // handleWorkerMarks returns how each cached framework's workers ask to be
@@ -2021,7 +2042,7 @@ func handleWorkerMarks(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	writeJSON(w, config.WorkerMarks())
+	writeJSONRevalidated(w, r, config.WorkerMarks())
 }
 
 // handleImageEstimate reports what a service or PHP operation would download,
@@ -6360,7 +6381,7 @@ func handleAppLogs(w http.ResponseWriter, r *http.Request) {
 			}
 			info, statErr := os.Stat(fullPath)
 			more := len(page) == maxEntries || (statErr == nil && info.Size() > applog.MaxReadBytes)
-			writeJSON(w, map[string]any{"entries": page, "more": more})
+			writeJSONRevalidated(w, r, map[string]any{"entries": page, "more": more})
 			return
 		}
 		all, err := applog.ParseFile(fullPath, format, 0)
@@ -6372,7 +6393,7 @@ func handleAppLogs(w http.ResponseWriter, r *http.Request) {
 		if tail, err := applog.ParseFile(fullPath, format, applog.MaxReadBytes); err == nil {
 			applog.MarkPastTail(page, offset, len(tail))
 		}
-		writeJSON(w, map[string]any{"entries": page, "more": more})
+		writeJSONRevalidated(w, r, map[string]any{"entries": page, "more": more})
 		return
 	}
 
@@ -6384,7 +6405,7 @@ func handleAppLogs(w http.ResponseWriter, r *http.Request) {
 	if entries == nil {
 		entries = []applog.LogEntry{}
 	}
-	writeJSON(w, map[string]any{"entries": entries})
+	writeJSONRevalidated(w, r, map[string]any{"entries": entries})
 }
 
 // handleBrowse returns a listing of directories for the file browser.

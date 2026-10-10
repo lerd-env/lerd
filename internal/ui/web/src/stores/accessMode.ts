@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { apiJson } from '$lib/api';
+import { sharedJson } from '$lib/api';
 
 // localControl means this request has full dashboard-control authority.
 // Authenticated remote sessions and direct local sessions both set it to true.
@@ -26,7 +26,7 @@ interface AccessModeResponse {
 
 export async function loadAccessMode() {
   try {
-    const res = await apiJson<AccessModeResponse>('/api/access-mode');
+    const res = await sharedJson<AccessModeResponse>('/api/access-mode');
     accessMode.set({
       localControl: Boolean(res.local_control),
       local: Boolean(res.local),
