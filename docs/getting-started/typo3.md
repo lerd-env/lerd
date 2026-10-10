@@ -184,7 +184,7 @@ It runs `typo3 scheduler:run` every minute. Live logs are in the [Web UI](../fea
 
 | Command | What it did |
 |---|---|
-| `lerd link` | Registered `mysite.test` with nginx + dnsmasq, document root `public/` |
+| `lerd link` | Registered `mysite.test` with nginx + lerd-dns, document root `public/` |
 | `lerd init` | Wrote `.lerd.yaml`, issued the TLS certificate, created the `mysite` database, started MySQL and Mailpit |
 | `lerd run setup` | Installed TYPO3 and wrote the connection into `config/system/settings.php` |
 | `lerd env` | Wired `DB.Connections.Default.*` and `MAIL.*` into that file |

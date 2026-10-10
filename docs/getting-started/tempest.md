@@ -147,7 +147,7 @@ Cache validity ................. OK
 
 | Command | What it did |
 |---|---|
-| `lerd link` | Registered `mysite.test` with nginx + dnsmasq, document root `public/` |
+| `lerd link` | Registered `mysite.test` with nginx + lerd-dns, document root `public/` |
 | `lerd init` | Wrote `.lerd.yaml`, issued the TLS certificate, created the `mysite` database, started MySQL and Mailpit |
 | `lerd env` (via init) | Generated `SIGNING_KEY` and wrote `BASE_URI`, `DATABASE_*` and `MAIL_SMTP_*` into `.env` |
 | `lerd setup` | Generated the discovery cache |

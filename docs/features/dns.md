@@ -1,17 +1,17 @@
 # DNS
 
-By default lerd runs `lerd-dns`, a small DNS server built into the lerd binary that runs as a user service, and points the host resolver at it so every site under `*.test` resolves to `127.0.0.1` without any `/etc/hosts` editing. This is the recommended setup and the only mode that supports HTTPS.
+By default lerd runs `lerd-dns`, a small DNS server built into the lerd binary since 1.37 that runs as a user service, and points the host resolver at it so every site under `*.test` resolves to `127.0.0.1` without any `/etc/hosts` editing. This is the recommended setup and the only mode that supports HTTPS.
 
-Earlier versions ran `lerd-dns` as a dnsmasq container on Linux and a Homebrew dnsmasq on macOS. `lerd install` replaces either on upgrade, removing the old container and its image on Linux, and keeps your resolver setup and `lerd.conf` as they are. On macOS the Homebrew `dnsmasq` package is left installed, since lerd cannot tell whether something else uses it; `brew uninstall dnsmasq` is safe if nothing does. `lerd update --rollback` brings the old setup back, the dnsmasq container on Linux and the Homebrew dnsmasq service on macOS. If you downgrade by hand on Linux instead, delete `~/.config/systemd/user/lerd-dns.service` before running the older `lerd install`, or the old version keeps starting a unit it cannot run.
+Up to 1.36, `lerd-dns` was dnsmasq: a container on Linux and a Homebrew service on macOS. From 1.37 it is lerd's own implementation. `lerd install` replaces either on upgrade, removing the old container and its image on Linux, and keeps your resolver setup and `lerd.conf` as they are. On macOS the Homebrew `dnsmasq` package is left installed, since lerd cannot tell whether something else uses it; `brew uninstall dnsmasq` is safe if nothing does. `lerd update --rollback` brings the old setup back, the dnsmasq container on Linux and the Homebrew dnsmasq service on macOS. If you downgrade by hand on Linux instead, delete `~/.config/systemd/user/lerd-dns.service` before running the older `lerd install`, or the old version keeps starting a unit it cannot run.
 
 Like dnsmasq, the built-in server reads every file in `~/.local/share/lerd/dnsmasq/`, skipping dotfiles and editor backups. It understands `port=`, `address=`, `server=` upstreams, per-domain `server=/corp/10.0.0.1` routes and `log-queries`. Anything else, such as a `cname=`, is ignored and named in the lerd-dns log when the files are loaded, so check that log if you had customised the old dnsmasq setup. A per-domain `server=` whose target it cannot use refuses that domain's names rather than sending them to the default upstream.
 
 ## Disabling lerd-managed DNS
 
-Some users would rather not have lerd touch the system resolver, particularly on hosts where another local DNS pipeline (corporate VPN resolver, custom split-horizon setup, strict `systemd-resolved` config) gets confused by the dnsmasq tweak. Answering `n` to the install prompt picks the disabled mode:
+Some users would rather not have lerd touch the system resolver, particularly on hosts where another local DNS pipeline (corporate VPN resolver, custom split-horizon setup, strict `systemd-resolved` config) gets confused by the resolver tweak. Answering `n` to the install prompt picks the disabled mode:
 
 ```
---> Let lerd manage DNS for local sites (No: use *.localhost, no dnsmasq, no HTTPS)? [Y/n] n
+--> Let lerd manage DNS for local sites (No: use *.localhost, no lerd-dns, no HTTPS)? [Y/n] n
 ```
 
 This prompt appears only at the first install; afterward the choice is remembered and you switch with `lerd dns:disable` / `lerd dns:enable` (see [Switching modes](#switching-modes)).
@@ -35,7 +35,7 @@ In this mode your sites are reachable at `http://<name>.localhost`. HTTPS is int
 
 From the CLI the same flow runs as `lerd lan:expose`, which prompts inline for credentials when none are stored yet. The traditional "LAN exposure" panel that talks about exposing sites is hidden in disabled-DNS mode because the only thing the LAN flag actually unlocks here is the dashboard.
 
-For sites, use `lerd lan:share` per project. That assigns a stable port and runs a host-level reverse proxy that rewrites the `Host:` header, so a remote device can reach the site at `http://<host-ip>:<port>` without any DNS setup. `lerd remote-setup` is unavailable in disabled-DNS mode because it relies on the dnsmasq forwarder.
+For sites, use `lerd lan:share` per project. That assigns a stable port and runs a host-level reverse proxy that rewrites the `Host:` header, so a remote device can reach the site at `http://<host-ip>:<port>` without any DNS setup. `lerd remote-setup` is unavailable in disabled-DNS mode because it relies on the lerd-dns forwarder.
 
 ## Switching modes
 
@@ -49,9 +49,9 @@ dns:
 
 The DNS question is asked once, at your first `lerd install`, and then remembered in `config.yaml`. Neither a later `lerd install`, `lerd update`, nor a reinstall over data an uninstall kept asks again or changes the mode, so a deliberate choice is never undone by a reinstall. To flip an existing install, use the dedicated commands:
 
-- `lerd dns:enable` turns lerd-managed DNS on (dnsmasq, `.test`, HTTPS)
+- `lerd dns:enable` turns lerd-managed DNS on (lerd-dns, `.test`, HTTPS)
 - `lerd dns:disable` turns it off, tears down `lerd-dns`, and moves sites to `*.localhost`
-- `lerd dns:repair` re-runs the setup to fix a broken but enabled `.test` (dead CA, dnsmasq, or resolver) without changing the mode
+- `lerd dns:repair` re-runs the setup to fix a broken but enabled `.test` (dead CA, lerd-dns, or resolver) without changing the mode
 
 `dns:enable` and `dns:disable` detect the TLD change, list the affected sites, and offer to migrate everything in one pass:
 

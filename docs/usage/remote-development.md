@@ -21,7 +21,7 @@ This page walks through the full setup so the laptop can browse `https://myapp.t
 └────────────────────────────────┘         └────────────────────────────────┘
 ```
 
-The server runs lerd normally: containers, watcher, dnsmasq, nginx, certs. The laptop forwards `.test` queries to the server's dnsmasq and trusts the server's mkcert root CA. After that, every site you create on the server is reachable from the laptop with no laptop-side action.
+The server runs lerd normally: containers, watcher, lerd-dns, nginx, certs. The laptop forwards `.test` queries to the server's lerd-dns and trusts the server's mkcert root CA. After that, every site you create on the server is reachable from the laptop with no laptop-side action.
 
 ## Server-side setup
 
@@ -51,7 +51,7 @@ The laptop needs to reach:
 |---|---|---|
 | 80 | TCP | nginx (HTTP) |
 | 443 | TCP | nginx (HTTPS) |
-| 5300 | UDP + TCP | lerd dnsmasq |
+| 5300 | UDP + TCP | lerd-dns |
 | 7073 | TCP | lerd dashboard + remote-setup endpoint |
 
 For `ufw`:
@@ -86,7 +86,7 @@ This single command:
   devices. Managed databases, caches, and mail services remain loopback-only
   unless you explicitly enable their LAN access.
 - Restarts `lerd-nginx` so the new bind takes effect.
-- Updates the dnsmasq config so `.test` queries return the server's auto-detected LAN IP instead of `127.0.0.1`, and starts the userspace `lerd-dns-forwarder.service` that bridges `LAN-IP:5300` to `127.0.0.1:5300` (rootless pasta cannot accept LAN-side traffic on its own).
+- Updates the lerd-dns config so `.test` queries return the server's auto-detected LAN IP instead of `127.0.0.1`, and starts the userspace `lerd-dns-forwarder.service` that bridges `LAN-IP:5300` to `127.0.0.1:5300` (rootless pasta cannot accept LAN-side traffic on its own).
 - Persists `lan.exposed: true` in `~/.config/lerd/config.yaml` so reboots and reinstalls restore the exposed state.
 
 Reverse with `lerd lan:unexpose` (also revokes any outstanding remote-setup code). Inspect the current state with `lerd lan:status`.
@@ -328,7 +328,7 @@ Loopback (`127.0.0.1`, `::1`) always bypasses both checks, you can never lock yo
 To open the dashboard up to LAN clients you need both flags on:
 
 ```bash
-lerd lan:expose          # 1. flip nginx to LAN, set up dnsmasq forwarder
+lerd lan:expose          # 1. flip nginx to LAN, set up the DNS forwarder
 lerd remote-control on   # 2. set the Basic auth credentials
 # Username: george         (defaults to $USER, override with --user)
 # Password: ********
@@ -391,7 +391,7 @@ Once the dashboard is exposed and credentials are set, the **Remote dashboard ac
   Host actions are local-only by default for this reason. With the opt-in on,
   anyone who guesses or obtains the dashboard password can read every site's
   `.env`, browse the filesystem and run commands on the machine.
-- **`lerd lan:expose` makes your dnsmasq an open recursive resolver for anyone on the LAN.** Lock down with firewall rules to your subnet, not 0.0.0.0/0.
+- **`lerd lan:expose` makes lerd-dns an open recursive resolver for anyone on the LAN.** Lock down with firewall rules to your subnet, not 0.0.0.0/0.
 - **The mkcert root CA has authority over any HTTPS site on the trusting machine.** Only install the CA on devices you own. Treat the private key (which never leaves the server) as a high-value secret.
 - **The `/api/remote-setup` endpoint hands out the public CA to anyone who can pass the source-IP and code checks.** Don't share active codes.
 - **`lerd remote-control on` uses HTTP, not HTTPS.** The Basic auth credentials travel in plaintext on the LAN. Use only on networks you trust. The dashboard does not currently support HTTPS for itself; if you need TLS, run lerd behind a reverse proxy that terminates HTTPS.

@@ -160,7 +160,7 @@ Application logs are picked up from `writable/logs/*.log` and shown in the [Web 
 
 | Command | What it did |
 |---|---|
-| `lerd link` | Registered `mysite.test` with nginx + dnsmasq, document root `public/` |
+| `lerd link` | Registered `mysite.test` with nginx + lerd-dns, document root `public/` |
 | `lerd init` | Wrote `.lerd.yaml`, issued the TLS certificate, created the `mysite` database, started MySQL, Redis and Mailpit |
 | `lerd env` (via init) | Wrote the `database.*`, `cache.*` and `email.*` keys plus `app.baseURL` and `encryption.key` into `.env` |
 | `lerd setup` | Ran migrations and cleared the cache |

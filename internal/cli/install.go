@@ -1639,7 +1639,7 @@ func resolveDNSChoice(fromUpdate, configExisted bool, dnsFlag string) (want, hav
 	want, needPrompt := dnsManageDecision(fromUpdate, configExisted, flagDNS, prevEnabled)
 	if needPrompt {
 		want = confirmInstallPromptDefault(
-			"Let lerd manage DNS for local sites (No: use *.localhost, no dnsmasq, no HTTPS)?",
+			"Let lerd manage DNS for local sites (No: use *.localhost, no lerd-dns, no HTTPS)?",
 			true,
 		)
 	}

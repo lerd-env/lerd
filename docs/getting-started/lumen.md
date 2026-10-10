@@ -117,7 +117,7 @@ The scheduler runs `schedule:work`, which stays resident and fires each due task
 
 | Command | What it did |
 |---|---|
-| `lerd link` | Registered `api.test` with nginx + dnsmasq, document root `public/` |
+| `lerd link` | Registered `api.test` with nginx + lerd-dns, document root `public/` |
 | `lerd init` | Wrote `.lerd.yaml`, issued the TLS certificate, created the `api` database, started MySQL |
 | `lerd env` (via init) | Generated `APP_KEY` and wrote `DB_*`, `REDIS_*` and `MAIL_*` into `.env` |
 | `lerd setup` | Ran the migrations |

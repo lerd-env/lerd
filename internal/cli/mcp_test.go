@@ -666,7 +666,11 @@ func TestLerdReference_underSizeCeiling(t *testing.T) {
 	// then 37000 → 37450 for the request tool, which reads one request's lenses
 	// by the id its recent row carries, then 37450 → 37600 for dumps_buffer,
 	// which makes room when a request left the buffer before it was read.
-	const ceiling = 37600
+	//
+	// 37600 → 38150 for what 1.37 leaves an assistant to misread: secrets an
+	// env_provider keeps out of .env on purpose, a sleeping service that wakes
+	// on its own, and front_controller in place of a hand-written override.
+	const ceiling = 38150
 	if got := len(lerdReference); got > ceiling {
 		t.Errorf("lerd-reference.md is %d bytes, ceiling is %d — trim before raising", got, ceiling)
 	}

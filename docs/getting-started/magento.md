@@ -222,7 +222,7 @@ Logs are read from `var/log/*.log` and parsed as Monolog for the **App Logs** ta
 
 | Command | What it did |
 |---|---|
-| `lerd link` | Registered `mysite.test` with nginx + dnsmasq, document root `pub/`, plus the `/setup`, `/static/` and `/media/` rules |
+| `lerd link` | Registered `mysite.test` with nginx + lerd-dns, document root `pub/`, plus the `/setup`, `/static/` and `/media/` rules |
 | `lerd init` | Wrote `.lerd.yaml`, issued the TLS certificate, created the `mysite` database, started MySQL, installed and started OpenSearch |
 | `lerd env` (via init) | Wrote the `db.connection.default.*` and `system.default.catalog.search.*` paths into `app/etc/env.php` |
 | `lerd run setup:install` | Installed the store, created the schema and the admin user, set the base URL |

@@ -116,7 +116,7 @@ curl -fsSL https://lerd.sh/install.sh | bash
 
 When the installer asks **"Let lerd manage DNS for local sites?"**, both modes are viable on WSL2:
 
-- **Yes (`.test` domains, dnsmasq, HTTPS)**: confirmed working on WSL2 Ubuntu by a community user. Picks up `systemd-resolved` or NetworkManager if you have one running, and falls back cleanly when neither is the active resolver.
+- **Yes (`.test` domains, lerd-dns, HTTPS)**: confirmed working on WSL2 Ubuntu by a community user. Picks up `systemd-resolved` or NetworkManager if you have one running, and falls back cleanly when neither is the active resolver.
 - **No (`.localhost` domains, no DNS daemon)**: lighter path, no resolver wiring at all, `.localhost` resolves to loopback by RFC 6761. Good if you hit DNS issues with the `.test` mode.
 
 If the installer fails to enable linger automatically, run it by hand and then restart the distro:
