@@ -173,7 +173,7 @@ The site answers on `https://mysite.test` with a trusted certificate. Applicatio
 
 | Command | What it did |
 |---|---|
-| `lerd link` | Registered `mysite.test` with nginx + dnsmasq, document root `webroot/` |
+| `lerd link` | Registered `mysite.test` with nginx + lerd-dns, document root `webroot/` |
 | `lerd init` | Wrote `.lerd.yaml`, issued the TLS certificate, created the `mysite` database, started MySQL, Redis and Mailpit |
 | `lerd env` (via init) | Wrote `DATABASE_URL`, `CACHE_URL` and `EMAIL_TRANSPORT_DEFAULT_URL` into `config/.env` |
 | `lerd setup` | Ran migrations, cleared the cache, built the schema cache |

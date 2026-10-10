@@ -121,7 +121,7 @@ curl -I https://mysite.test/wp/wp-admin/
 
 | Command | What it did |
 |---|---|
-| `lerd link` | Registered `mysite.test` with nginx + dnsmasq, document root `web/` |
+| `lerd link` | Registered `mysite.test` with nginx + lerd-dns, document root `web/` |
 | `lerd init` | Wrote `.lerd.yaml`, issued the TLS certificate, created the `mysite` database, started MySQL |
 | `lerd env` (via init) | Wrote `DB_*` and `WP_HOME` into `.env` |
 | `lerd wp core install` | Installed WordPress into the database |

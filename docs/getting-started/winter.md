@@ -184,7 +184,7 @@ A site still on Laravel Mix uses the same shape with `mix:watch` and no `dev_ser
 
 | Command | What it did |
 |---|---|
-| `lerd link` | Registered `mysite.test` with nginx + dnsmasq, document root `public/` |
+| `lerd link` | Registered `mysite.test` with nginx + lerd-dns, document root `public/` |
 | `lerd init` | Wrote `.lerd.yaml`, issued the TLS certificate, created the `mysite` database, started MySQL |
 | `lerd env` (via init) | Wrote `APP_URL`, `DB_*`, `REDIS_*` and `MAIL_*` into `.env` |
 | `lerd setup` | Ran `winter:up` to apply the module and plugin migrations |

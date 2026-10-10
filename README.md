@@ -33,7 +33,7 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 - 🧱 **Node, Python, Rails and more.** `lerd init` recognises a Node, Python, Rails or Rack, Go or Rust project, runs its dev server on the host under lerd's supervision and serves it at a `.test` domain with HTTPS, services and worktrees included, or as a rootless container from a starter `Containerfile.lerd`.
 
-- 🌳 **First-class git worktrees.** Auto-detected branch domains, per-worktree PHP and Node versions, a database picked from the branch's migrations when a script adds it, wildcard cert SANs and a per-branch Vite worker. A bare `git worktree add` from any tool is provisioned automatically.
+- 🌳 **First-class git worktrees.** Auto-detected branch domains, per-worktree PHP and Node versions, a database picked from the branch's migrations when a script adds it, wildcard cert SANs and a per-branch Vite worker. A bare `git worktree add` from any tool is provisioned automatically, and the site header fetches, pulls, pushes and switches branches, offering the installs and migrations the move needs with the database snapshotted first.
 
 - 🌍 **Share a site.** On your LAN with a stable port and a QR code, or publicly through ngrok, cloudflared, Expose, Pinggy, serveo or localhost.run. Set a base domain once and every share keeps the same URL between runs, through a tunnel service or the reverse proxy you already run.
 
@@ -64,7 +64,7 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 ### Debugging and performance
 
-- 🛰️ **Debug window.** Every `dump()` / `dd()`, SQL with N+1 and slow-query detection, mail, views, events, jobs and outgoing HTTP, per site and branch, in the dashboard, TUI, MCP and `lerd dump tail`. `ray()`, the app log, Sentry or Inspector exceptions and outgoing SMS and Slack messages land there too.
+- 🛰️ **Debug window.** Every `dump()` / `dd()`, SQL with N+1 and slow-query detection, mail, views, events, jobs and outgoing HTTP, per site and branch, in the dashboard, TUI, MCP and `lerd dump tail`. `ray()`, the app log, Sentry or Inspector exceptions, outgoing SMS and Slack messages and the errors a site's pages hit in the browser land there too, and any recent request opens on a timeline of everything it ran.
 
 - 🔥 **[SPX](https://github.com/NoiseByNorthwest/php-spx) profiler** with one-click on/off. Every PHP-FPM request becomes a flame graph viewable in a same-origin Profiler view in the dashboard, with no FPM restart and no code changes, and `lerd profile run` profiles a one-shot artisan or CLI command.
 
@@ -80,7 +80,7 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 - 📚 **The documentation, offline.** Every page ships inside the binary, searchable and rendered in the dashboard, so the one moment you most need the docs, a machine with no internet, is not the moment they stop working. `lerd man` reads the same pages in the terminal.
 
-- 💻 **Terminal dashboard** (`lerd tui`). A btop-style TUI with live status, a site detail pane, inline domain and version editing, a shell drop-in, log tailing, databases with their snapshots and each service's tools and tuning, the same operations surface as the web UI for tmux and SSH.
+- 💻 **Terminal dashboard** (`lerd tui`). A sidebar and a ctrl+p palette that reaches every page, site, service and action, drawn in the terminal's own colours, with live status, worktree tabs, a shell drop-in, log tailing, databases with their snapshots and each service's tools and tuning, for tmux and SSH.
 
 - 🚀 **Start it without a terminal.** The dashboard brings lerd up from its own banner, streaming the start unit by unit. `lerd install` adds Lerd to the macOS Applications folder and the Linux app list, opening as a chromeless app window, so a cold start is a click. The tray is optional.
 
@@ -106,7 +106,7 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 - 💾 **Nothing destructive without a way back.** A `service remove --purge` or a `reinstall --reset-data` snapshots every database first, while the data is still where the engine expects it, so recovery is an ordinary `db:restore -A`. Each engine declares how long it gets to shut down.
 
-- 💤 **Idle-suspend.** Activity-driven suspension of a site's workers (queue, schedule, horizon, reverb, stripe, Vite) after a configurable idle timeout, resumed on the next request, CLI command, MCP call or file save, with per-site pinning.
+- 💤 **Idle-suspend.** Activity-driven suspension of a site's workers (queue, schedule, horizon, reverb, stripe, Vite) after a configurable idle timeout, and opt-in of the services nothing is using, resumed on the next request, CLI command, MCP call or file save, with the request held rather than redirected while they wake and per-site pinning.
 
 - 📶 **Nothing downloads behind your back.** Every command that can pull or rebuild an image names it and its size first, read from the registry manifest. The dashboard asks, an assistant over MCP has to come back with your answer, and `--no-pull`, `LERD_OFFLINE=1` and `lerd start --dry-run` cover a metered link.
 

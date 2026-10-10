@@ -18,7 +18,7 @@ import (
 func NewDNSEnableCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "dns:enable",
-		Short: "Let lerd manage DNS: dnsmasq, .test resolution and HTTPS (repairs if already on)",
+		Short: "Let lerd manage DNS: lerd-dns, .test resolution and HTTPS (repairs if already on)",
 		Args:  cobra.NoArgs,
 		RunE:  runDNSEnable,
 	}
@@ -29,7 +29,7 @@ func NewDNSEnableCmd() *cobra.Command {
 func NewDNSDisableCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "dns:disable",
-		Short: "Stop managing DNS: tear down dnsmasq, sites fall back to *.localhost (no HTTPS)",
+		Short: "Stop managing DNS: tear down lerd-dns, sites fall back to *.localhost (no HTTPS)",
 		Args:  cobra.NoArgs,
 		RunE:  runDNSDisable,
 	}

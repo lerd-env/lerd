@@ -154,7 +154,7 @@ Three checks are specific to NativePHP, and each is gated on the package, so a p
 
 | Command | What it did |
 |---|---|
-| `lerd link` | Registered `myapp.test` with nginx + dnsmasq, document root `public/` |
+| `lerd link` | Registered `myapp.test` with nginx + lerd-dns, document root `public/` |
 | `lerd run native:install` | Installed the native toolchain's own dependencies and unpacked the host PHP binary that drives them |
 | `lerd worker start native` | Launched the Electron window as a supervised host worker |
 | `lerd run native:run` | Built the app and installed it on a simulator, emulator or device |

@@ -1015,6 +1015,9 @@ func wakeHoldLocations() string {
 	return fmt.Sprintf(`    location / {
         # Held requests are not the app's; the hold reports the activity itself.
         access_log off;
+        # Without it nginx swaps only the matched "/" for the hold path, so a
+        # deep link would reach lerd-ui as /_lerd/wake<path> and miss the hold.
+        rewrite ^ %s? break;
         proxy_pass %s;
         proxy_http_version 1.1;
         proxy_set_header X-Lerd-Wake-Host $host;
@@ -1027,7 +1030,7 @@ func wakeHoldLocations() string {
     location @waking {
         try_files /waking.html =503;
         default_type text/html;
-    }`, upstream)
+    }`, WakeHoldPath, upstream)
 }
 
 // writeLandingVhost writes site's static-page vhost (serving htmlFile) to

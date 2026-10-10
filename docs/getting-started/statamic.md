@@ -189,7 +189,7 @@ Application logs come from `storage/logs/*.log` and are parsed as Monolog, so th
 
 | Command | What it did |
 |---|---|
-| `lerd link` | Registered `mysite.test` with nginx + dnsmasq, document root `public/` |
+| `lerd link` | Registered `mysite.test` with nginx + lerd-dns, document root `public/` |
 | `lerd init` | Wrote `.lerd.yaml`, issued the TLS certificate, created the `mysite` database, started MySQL |
 | `lerd env` (via init) | Generated `APP_KEY` and wrote `APP_URL`, `DB_*`, `REDIS_*` and `MAIL_*` into `.env` |
 | `lerd setup` | Installed and built front-end assets, linked storage, ran the Statamic installer, refreshed the Stache |

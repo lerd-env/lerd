@@ -181,7 +181,7 @@ Live logs are in the [Web UI](../features/web-ui.md) at `http://127.0.0.1:7073` 
 
 | Command | What it did |
 |---|---|
-| `lerd link` | Registered `mysite.test` with nginx + dnsmasq, document root `web/` |
+| `lerd link` | Registered `mysite.test` with nginx + lerd-dns, document root `web/` |
 | `lerd init` | Wrote `.lerd.yaml`, issued the TLS certificate, created the `mysite` database, started MySQL, Redis and Mailpit |
 | `lerd env` (via init) | Wrote `DB_*`, `REDIS_*` and `SMTP_*` into `.env` |
 | `drush site:install` | Installed Drupal and wrote the connection into `web/sites/default/settings.php` |

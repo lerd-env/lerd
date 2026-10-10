@@ -60,7 +60,7 @@ Worktrees share independently, served on the flat `<site>-<branch>.<base>` so a 
 | | `lerd lan:share` | `lerd lan:expose` |
 |---|---|---|
 | Scope | One site at a time | All sites at once |
-| Client DNS setup | Not required, plain `IP:port` | Required (forward `.test` to lerd dnsmasq) |
+| Client DNS setup | Not required, plain `IP:port` | Required (forward `.test` to lerd-dns) |
 | Client cert trust | Not required | Required for HTTPS sites |
 | External tools | None | None |
 | Persists across restarts | Yes (port saved in `sites.yaml`) | Yes (`lan.exposed` in `config.yaml`) |

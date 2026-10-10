@@ -11,7 +11,7 @@ lerd status
 ```
 { .annotate }
 
-1. `lerd park` registers the directory with the watcher service. Every subdirectory that looks like a PHP project gets a `.test` domain, no `/etc/hosts` edits, DNS is handled by dnsmasq running in a Podman container.
+1. `lerd park` registers the directory with the watcher service. Every subdirectory that looks like a PHP project gets a `.test` domain, no `/etc/hosts` edits, DNS is handled by lerd-dns, a small DNS server built into lerd.
 2. `lerd status` shows a health summary: DNS, nginx, PHP-FPM containers, services, and cert expiry.
 
 If you only want to register a single project, `cd` into it and run `lerd link` instead of `lerd park`.

@@ -24,7 +24,7 @@
 | `lerd tray` | Launch the system tray applet (detaches from terminal) |
 | `lerd tray icon [default\|high-contrast]` | Choose the running-icon style; high-contrast shows an always-visible green icon for mixed themes like KDE Breeze Twilight; no argument prints the current style |
 | `lerd tray on` / `lerd tray off` | Turn the tray applet on or off. `off` quits the running applet, takes `lerd-tray.service` out of the autostart set, and stops `lerd start` and `lerd install` from launching it again; the preference lives in `config.yaml` under `tray.disabled` and the dashboard's System page carries the same switch |
-| `lerd dns:check` | Walk the DNS chain (container, dnsmasq config, port 5300, dig at 5300, resolver hookup, interface routing, system lookup) and print the layered status with a remediation hint per failure |
+| `lerd dns:check` | Walk the DNS chain (lerd-dns service, dnsmasq config, port 5300, dig at 5300, resolver hookup, interface routing, system lookup) and print the layered status with a remediation hint per failure |
 | `lerd status` | Health summary: DNS, nginx, PHP-FPM containers, watcher, services, cert expiry, LAN exposure and dashboard remote access; shows a notice if an update is available |
 | `lerd which` | Show resolved PHP version, Node version, document root, and nginx config for the current site |
 | `lerd about` | Show version, build info, and project URL |
@@ -114,7 +114,7 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd streaming enable\|disable` | Turn streaming mode on or off as a feature; enabled, it follows screen shares on Linux Wayland |
 | `lerd streaming on` | Hide private workspaces and their sites while screen sharing |
 | `lerd streaming off` | Show private workspaces and their sites again |
-| `lerd env` | Configure `.env` for the current project with lerd service connection settings; backs up the original as `.env.before_lerd` on first run (skipped if lerd has already written to the file) |
+| `lerd env` | Configure `.env` for the current project with lerd service connection settings; backs up the original as `.env.before_lerd` on first run (skipped if lerd has already written to the file). Also runs the project's `env_provider`, asking before the first run; `--yes` approves it without a prompt |
 | `lerd env:restore` | Restore `.env` from the pre-lerd backup (`.env.before_lerd`) |
 | `lerd env:override [KEY=VALUE ...]` | Create/seed a personal, gitignored `.env.lerd_override` whose values win over lerd's defaults on `lerd env`; `LERD_EXTERNAL_SERVICES=` marks services lerd should not start or provision |
 | `lerd env:check` | Compare all `.env` files against `.env.example` and flag missing or extra keys |
@@ -193,6 +193,10 @@ Supported PHP versions: **8.5**, **8.4**, **8.3**, **8.2**, **8.1**, the prerele
 | `lerd dump status` | Show whether the bridge is enabled and how many events are buffered |
 | `lerd dump tail [--site X] [--branch Y] [--ctx fpm\|cli]` | Stream captured dumps to the terminal until Ctrl-C |
 | `lerd dump clear` | Clear the in-memory dump ring without disabling the bridge |
+| `lerd browser-logs on [site]` / `off [site]` | Turn [browser logs](../features/browser-logs.md) on or off for a site, the one in the current directory when no name is given; needs `lerd dump on` for pages to carry the script |
+| `lerd browser-logs status` | Show whether browser logs are on for the site in this directory |
+| `lerd browser-logs presets` | List the store's frontend event presets for this site, marking the detected and active ones |
+| `lerd browser-logs preset on\|off <preset>` | Switch one event preset on or off for this site |
 | `lerd dump buffer [size]` | Show or set how many events the Debug window keeps in memory (5,000 by default, 3,000 to 20,000); a running dashboard resizes straight away |
 | `lerd profile on` | Turn the SPX profiler on so every PHP-FPM site's requests are profiled into flame graphs |
 | `lerd profile off` | Turn the SPX profiler off |

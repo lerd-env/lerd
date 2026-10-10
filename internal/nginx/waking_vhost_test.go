@@ -114,3 +114,20 @@ func TestGenerateVhost_keepsTheWakingVhostWhileAServiceSleeps(t *testing.T) {
 		t.Fatal("a site with nothing asleep got the waking vhost")
 	}
 }
+
+// A proxy_pass carrying a URI swaps only the matched "/" for it, so a deep link
+// reached lerd-ui as /_lerd/wake<rest of path> and missed the hold. Rewriting to
+// the hold path with break makes nginx pass that path alone, whatever was asked.
+func TestGenerateWakingVhost_sendsEveryPathToTheHoldItself(t *testing.T) {
+	confD := setupConfD(t)
+	site := config.Site{Name: "rr", Domains: []string{"rr.test"}, Path: "/srv/rr"}
+	if err := GenerateWakingVhost(site); err != nil {
+		t.Fatalf("GenerateWakingVhost: %v", err)
+	}
+	conf := readConf(t, filepath.Join(confD, "rr.test.conf"))
+	rewrite := strings.Index(conf, "rewrite ^ "+WakeHoldPath+"? break;")
+	proxy := strings.Index(conf, "proxy_pass ")
+	if rewrite < 0 || rewrite > proxy {
+		t.Errorf("waking vhost must rewrite every path to the hold before proxying:\n%s", conf)
+	}
+}
