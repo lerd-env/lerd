@@ -54,7 +54,8 @@ type snapshotSlot struct {
 func (s *snapshotSlot) get() []byte { return s.load(false) }
 
 // fresh is get for a broadcast that follows a mutation: it waits on an
-// in-flight rebuild rather than shipping the value that mutation replaced.
+// in-flight rebuild rather than shipping the value that mutation replaced, and
+// answers nil, leaving the kind out, when every retry came back outdated.
 func (s *snapshotSlot) fresh() []byte { return s.load(true) }
 
 func (s *snapshotSlot) load(wait bool) []byte {
@@ -106,8 +107,13 @@ func (s *snapshotSlot) load(wait bool) []byte {
 			s.at = time.Now()
 		}
 		s.mu.Unlock()
-		if current || !wait || attempt == 3 {
+		if current || !wait {
 			return b
+		}
+		// Still outdated after the last try: leave the kind out of the broadcast,
+		// since the change that outdated it publishes its own.
+		if attempt == 3 {
+			return nil
 		}
 	}
 }

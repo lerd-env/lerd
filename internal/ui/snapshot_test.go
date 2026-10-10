@@ -187,6 +187,20 @@ func TestSnapshotFreshRebuildsWhenInvalidatedMidBuild(t *testing.T) {
 	}
 }
 
+// Out of retries, fresh leaves the kind out of the broadcast rather than ship an
+// outdated value; the change that outdated it publishes its own broadcast.
+func TestSnapshotFreshOmitsAValueStillOutdatedAfterRetries(t *testing.T) {
+	slot := &snapshotSlot{data: []byte(`["stale"]`)}
+	slot.fn = func() ([]byte, error) {
+		slot.invalidate()
+		return []byte(`["outdated"]`), nil
+	}
+
+	if got := slot.fresh(); got != nil {
+		t.Fatalf("got %s, want nil so the broadcast leaves the kind out", got)
+	}
+}
+
 func TestSnapshotServesCachedValueWithinTTL(t *testing.T) {
 	var builds int
 	slot := &snapshotSlot{fn: func() ([]byte, error) {
