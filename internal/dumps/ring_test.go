@@ -553,3 +553,33 @@ func TestRing_ImportKeepsTheOldFileUnlessEveryEventLanded(t *testing.T) {
 		t.Error("a failed import deleted the old buffer")
 	}
 }
+
+// An import that fails part way writes nothing, so the retry on the next
+// start cannot store the same events twice.
+func TestRing_ImportIsAllOrNothing(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dumps-buffer.json")
+	bad := mkEvent("bad")
+	bad.Data = []byte(`{"broken"`) // fails to encode, after "a" was written
+	b, _ := json.Marshal([]Event{mkEvent("a")})
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r, err := OpenRing(filepath.Join(dir, "debug-events.db"), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	if err := r.importEvents([]Event{mkEvent("a"), bad}); err == nil {
+		t.Fatal("an event that cannot be encoded was imported")
+	}
+	if n := r.Len(); n != 0 {
+		t.Errorf("after a failed import the buffer holds %d events, want none", n)
+	}
+	if err := r.Import(path); err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(r.Snapshot()); fmt.Sprint(got) != "[a]" {
+		t.Errorf("after the retry = %v, want each event once", got)
+	}
+}

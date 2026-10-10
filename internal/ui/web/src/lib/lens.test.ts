@@ -110,7 +110,7 @@ describe('createLens', () => {
     lens.destroy();
   });
 
-  it('reads again when the stream reconnects, since nothing replays what it missed', async () => {
+  it('catches up after a reconnect, without moving a reader who scrolled down', async () => {
     answer = () => ({ groups: [group('a')], next: 0 });
     const lens = createLens();
     lens.set({ kind: 'query', site: 'shop' });
@@ -118,11 +118,17 @@ describe('createLens', () => {
     const src = FakeSource.last!;
     src.open();
     await vi.runAllTimersAsync();
-    const before = calls.length;
-    lens.setAtTop(false);
+    let before = calls.length;
     src.open();
     await vi.runAllTimersAsync();
     expect(calls.length - before).toBe(1);
+
+    lens.setAtTop(false);
+    before = calls.length;
+    src.open();
+    await vi.runAllTimersAsync();
+    expect(calls.length - before).toBe(0);
+    expect(get(lens.fresh)).toBe(1);
     lens.destroy();
   });
 

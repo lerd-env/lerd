@@ -226,7 +226,9 @@ export function createLens(): Lens {
     const q = query;
     unsub = onNudge(q, (n) => {
       if (!matches(n, q, q.kind)) return;
-      if (atTop || n.kind === '*') live.call();
+      // Scrolled down, even a catch-up waits for the reader: rereading would
+      // replace the pages they scrolled to with the newest one.
+      if (atTop) live.call();
       else fresh.update((c) => c + 1);
     });
   }

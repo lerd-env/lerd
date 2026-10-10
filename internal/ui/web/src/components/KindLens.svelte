@@ -155,10 +155,15 @@
     if (!expanded[id]) delete details[id];
     else if (!details[id]) fetchEvent(id).then((e) => (expanded[id] ? (details[id] = e) : undefined), () => {});
   }
-  // A row that leaves the page lets go of its whole event, mail HTML included.
+  // A row that leaves the page lets go of its whole event, mail HTML included,
+  // and closes, so coming back it opens and reads it again.
   $effect(() => {
     const held = new Set($lensGroups.flatMap((g) => g.rows.map((r) => r.event.id)));
-    for (const id of Object.keys(details)) if (!held.has(id)) delete details[id];
+    for (const id of Object.keys(details)) {
+      if (held.has(id)) continue;
+      delete details[id];
+      delete expanded[id];
+    }
   });
   function localTime(ts: string): string {
     const d = new Date(ts);

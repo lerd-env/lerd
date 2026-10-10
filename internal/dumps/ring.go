@@ -141,19 +141,36 @@ func (r *Ring) Append(e Event) {
 
 // insert stores e and trims once enough have landed. Callers hold mu.
 func (r *Ring) insert(e Event) error {
+	if err := r.store(r.db, e); err != nil {
+		return err
+	}
+	if r.untrimmed++; r.untrimmed >= trimEvery {
+		r.trim()
+	}
+	return nil
+}
+
+// querier is the database or a transaction on it, which store writes through.
+type querier interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+// store writes e through q. Callers hold mu.
+func (r *Ring) store(q querier, e Event) error {
 	// A worker's row of a Laravel job has no payload, which is only readable
 	// where the job was dispatched, so it takes the queued row's.
 	job, hasPayload := jobUUID(e)
 	if job != "" && !hasPayload {
 		var queued []byte
-		if r.db.QueryRow(`SELECT data FROM events WHERE job = ? ORDER BY seq LIMIT 1`, job).Scan(&queued) == nil {
-			var q struct {
+		if q.QueryRow(`SELECT data FROM events WHERE job = ? ORDER BY seq LIMIT 1`, job).Scan(&queued) == nil {
+			var prior struct {
 				Data struct {
 					Payload json.RawMessage `json:"payload"`
 				} `json:"data"`
 			}
-			if json.Unmarshal(queued, &q) == nil && len(q.Data.Payload) > 0 {
-				e.Data = withPayload(e.Data, q.Data.Payload)
+			if json.Unmarshal(queued, &prior) == nil && len(prior.Data.Payload) > 0 {
+				e.Data = withPayload(e.Data, prior.Data.Payload)
 			}
 		}
 	}
@@ -164,22 +181,16 @@ func (r *Ring) insert(e Event) error {
 	reached := e.reachedRID()
 	var fp string
 	var ms float64
-	if q, ok := e.Query(); ok {
-		fp, ms = normalizeSQL(q.SQL), q.TimeMS
+	if qd, ok := e.Query(); ok {
+		fp, ms = normalizeSQL(qd.SQL), qd.TimeMS
 	}
-	_, err = r.db.Exec(
+	_, err = q.Exec(
 		`INSERT INTO events(id, rid, reached, site, branch, ctx, kind, test, nav, grp, route, worker, facet, hay, fp, ms, job, kept, data, brief)
 		 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		e.ID, e.Ctx.RID, reached, e.Ctx.Site, e.Ctx.Branch, e.Ctx.Type, e.Kind, e.Ctx.Test, e.isPageView(),
 		groupKey(e), routeOf(e), e.Ctx.Worker, facetOf(e), haystack(e), fp, ms, job,
 		r.keep[e.Ctx.RID] || r.keep[reached], data, brief(e, data))
-	if err != nil {
-		return err
-	}
-	if r.untrimmed++; r.untrimmed >= trimEvery {
-		r.trim()
-	}
-	return nil
+	return err
 }
 
 // SetKeep replaces the set of requests whose events outlive the buffer, and
@@ -315,14 +326,32 @@ func (r *Ring) Import(path string) error {
 	if err != nil {
 		return err
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, e := range events {
-		if err := r.insert(e); err != nil {
-			return fmt.Errorf("importing the old debug buffer: %w", err)
-		}
+	if err := r.importEvents(events); err != nil {
+		return fmt.Errorf("importing the old debug buffer: %w", err)
 	}
 	return os.Remove(path)
+}
+
+// importEvents stores events in one transaction, so a failure part way writes
+// none of them and the retry on the next start cannot store any twice.
+func (r *Ring) importEvents(events []Event) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	for _, e := range events {
+		if err := r.store(tx, e); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	r.trim()
+	return nil
 }
 
 // RequestIDs is the set of requests with at least one event in the ring: the
