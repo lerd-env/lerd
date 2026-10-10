@@ -2,28 +2,29 @@
   import LensSearch from '$components/LensSearch.svelte';
   import { onMount, onDestroy, untrack } from 'svelte';
   import { get } from 'svelte/store';
-  import { debugSearch } from '$stores/debugLens';
-  import { startDumpsStream, stopDumpsStream, clearDumps } from '$stores/dumps';
+  import { debugSearch, showTests } from '$stores/debugLens';
+  import { clearDumps } from '$stores/dumps';
   import {
     queryFilterSite,
     queryFilterWorker,
-    knownWorkerCommands,
     devtoolsStatus,
     debugCaptureEnabled,
     refreshDevtoolsStatus,
     setDebugCapture,
     toggleDevtoolsWorkers
   } from '$stores/queries';
-  import { buildKindGroups, knownDebugSites, lensEvents, providePickRequest } from '$stores/debugEvents';
+  import { lensScope, providePickRequest } from '$stores/debugEvents';
   import EmptyState from '$components/EmptyState.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import LensToggle from '$components/LensToggle.svelte';
   import TestEventsToggle from '$components/TestEventsToggle.svelte';
   import TraceBlock from '$components/TraceBlock.svelte';
   import SourcePath from '$components/SourcePath.svelte';
-  import LensLoadMore from '$components/LensLoadMore.svelte';
+  import LensList from '$components/LensList.svelte';
   import LensGroupLabel from '$components/LensGroupLabel.svelte';
-  import { windowGroups, LENS_PAGE } from '$lib/lensWindow';
+  import { groupLabel } from '$lib/eventGroup';
+  import { createLens, fetchEvent, fetchFacets, type FacetLists } from '$lib/lens';
+  import type { DumpEvent } from '$lib/dumpEvent';
   import { m } from '../paraglide/messages.js';
 
   interface Props {
@@ -33,8 +34,8 @@
     pinned?: boolean;
   }
   let { kind, siteScope = '', pinned = false }: Props = $props();
-  // The request filter over the lenses narrows this to one request.
-  const debugEvents = lensEvents();
+  // The Debug tab narrows this to one request, or to the route a search names.
+  const scope = lensScope();
   const scoped = $derived(siteScope !== '');
   // Event `kind` on the wire is singular.
   const wireKind = $derived(
@@ -54,11 +55,9 @@
   let facetFilter = $state('');
 
   onMount(() => {
-    startDumpsStream();
     void refreshDevtoolsStatus();
     if (scoped) textInput = get(debugSearch);
   });
-  onDestroy(() => stopDumpsStream());
 
   let textTimer: ReturnType<typeof setTimeout> | null = null;
   $effect(() => {
@@ -70,19 +69,33 @@
   // Scoped lenses share one search (debugSearch) so it carries across the site's
   // Debug tabs; unscoped keeps a local search.
   const worker = $derived(pinned ? '' : $queryFilterWorker);
-  const effectiveText = $derived(pinned ? '' : scoped ? $debugSearch : localText);
-  const groups = $derived(
-    buildKindGroups($debugEvents, wireKind, scoped ? siteScope : $queryFilterSite, effectiveText, scoped, worker, Boolean($devtoolsStatus?.workers), facetFilter)
-  );
+  const effectiveText = $derived(pinned || $scope.rid || $scope.route ? '' : scoped ? $debugSearch : localText);
+  const site = $derived(scoped ? siteScope : $queryFilterSite);
 
-  // Only the newest LENS_PAGE rows render; the rest arrive as the user
-  // reaches the end. Changing a filter or tab starts the window over.
-  let limit = $state(LENS_PAGE);
-  const win = $derived(windowGroups(groups, (g) => g.events, limit));
-  const filterKey = $derived(`${wireKind}|${scoped ? siteScope : $queryFilterSite}|${effectiveText}|${worker}|${facetFilter}`);
+  // lerd-ui groups, searches and pages this lens; the tab holds one page.
+  const lens = createLens();
+  onDestroy(() => lens.destroy());
   $effect(() => {
-    filterKey;
-    limit = LENS_PAGE;
+    lens.set({
+      kind: wireKind,
+      site,
+      rid: $scope.rid,
+      route: $scope.route,
+      q: effectiveText,
+      worker,
+      workers: wireKind === 'job' || Boolean($devtoolsStatus?.workers),
+      facet: facetFilter,
+      tests: $showTests
+    });
+  });
+
+  // What the toolbar filters by, read alongside the lens and again as it moves.
+  let facetLists = $state<FacetLists>({ sites: [], workers: [], values: [] });
+  const lensGroups = lens.groups;
+  $effect(() => {
+    void $lensGroups;
+    const want = { site, kind: wireKind, tests: $showTests };
+    fetchFacets(want).then((f) => (facetLists = f), () => {});
   });
 
   let enabling = $state(false);
@@ -122,36 +135,25 @@
   );
   const facets = $derived.by(() => {
     if (!facetField) return [] as string[];
-    const seen = new Set(
-      $debugEvents
-        .filter((ev) => ev.kind === wireKind)
-        .map((ev) => (ev.data as Record<string, string> | undefined)?.[facetField])
-        .filter((v): v is string => Boolean(v))
-    );
-    const known = LEVELS.filter((l) => seen.has(l));
-    const rest = Array.from(seen)
-      .filter((v) => !LEVELS.includes(v))
-      .sort();
+    const seen = facetLists.values;
+    const known = LEVELS.filter((l) => seen.includes(l));
+    const rest = seen.filter((v) => !LEVELS.includes(v)).sort();
     return facetField === 'level' ? [...known, ...rest] : rest;
   });
 
-  // A Laravel job's payload is only readable where it was dispatched, so the
-  // worker's rows borrow it from the queued row they share a uuid with. The
-  // other frameworks put it on every row and never reach this.
-  const payloadByUuid = $derived(
-    wireKind !== 'job'
-      ? new Map<string, Record<string, string>>()
-      : new Map(
-          $debugEvents
-            .filter((ev) => ev.kind === 'job')
-            .map((ev) => (ev.data ?? {}) as { uuid?: string; payload?: Record<string, string> })
-            .filter((d) => Boolean(d.uuid && d.payload))
-            .map((d) => [d.uuid as string, d.payload as Record<string, string>])
-        )
-  );
+  async function clear() {
+    await clearDumps();
+    await lens.refresh();
+  }
 
   let expanded = $state<Record<string, boolean>>({});
-  const toggleRow = (id: string) => (expanded[id] = !expanded[id]);
+  // An opened row reads its whole event: the list leaves out the call stack
+  // and a mail's HTML.
+  let details = $state<Record<string, DumpEvent>>({});
+  function toggleRow(id: string) {
+    expanded[id] = !expanded[id];
+    if (expanded[id] && !details[id]) fetchEvent(id).then((e) => (details[id] = e), () => {});
+  }
   function localTime(ts: string): string {
     const d = new Date(ts);
     return isNaN(d.getTime()) ? ts : d.toLocaleTimeString();
@@ -199,7 +201,7 @@
         value={$queryFilterSite}
         options={[
           { value: '', label: m.dumps_filter_allSites() },
-          ...$knownDebugSites.map((s) => ({ value: s, label: s || m.dumps_unknownSite() }))
+          ...facetLists.sites.map((s) => ({ value: s, label: s || m.dumps_unknownSite() }))
         ]}
         onchange={(v) => queryFilterSite.set(v)}
       />
@@ -222,12 +224,12 @@
         onchange={(v) => (facetFilter = v)}
       />
     {/if}
-    {#if $knownWorkerCommands.length > 0}
+    {#if facetLists.workers.length > 0}
       <Dropdown
         value={$queryFilterWorker}
         options={[
           { value: '', label: m.queries_filter_allWorkers() },
-          ...$knownWorkerCommands.map((c) => ({ value: c, label: c }))
+          ...facetLists.workers.map((c) => ({ value: c, label: c }))
         ]}
         onchange={(v) => queryFilterWorker.set(v)}
       />
@@ -241,12 +243,12 @@
       />
     {/if}
     <TestEventsToggle />
-    <button type="button" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => clearDumps()}>{m.common_clear()}</button>
+    <button type="button" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => void clear()}>{m.common_clear()}</button>
   </div>
   {/if}
 
-  <div class="flex-1 overflow-y-auto px-3 pb-3">
-    {#if groups.length === 0}
+  <LensList {lens}>
+    {#snippet empty()}
       {#if !$debugCaptureEnabled}
         <div class="px-3 py-10 text-center space-y-3">
           <p class="text-sm text-gray-500 dark:text-gray-400">{m.debug_disabled_title()}</p>
@@ -260,17 +262,18 @@
           {#snippet hint()}{m.debug_waiting_body()}{/snippet}
         </EmptyState>
       {/if}
-    {:else}
-      {#each win.pages as page (page.group.key)}
-        {@const group = page.group}
+    {/snippet}
+    {#snippet group(g)}
+      {@const ev0 = g.rows[0].event}
         <section class="mb-4">
           <header class="flex items-center gap-2 mb-1 sticky top-0 bg-gray-50 dark:bg-lerd-bg py-1 -mx-3 px-3 z-1">
-            {#if group.worker}<span class="text-[10px] font-semibold uppercase tracking-wide rounded-sm px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 shrink-0">{m.queries_worker_badge()}</span>{/if}
-            {#if !pinned}<LensGroupLabel label={group.label} />{/if}
-            <span class="text-xs text-gray-400 ml-auto whitespace-nowrap font-mono">{localTime(group.ts)}</span>
-            <span class="text-xs text-gray-400 whitespace-nowrap">{page.total}</span>
+            {#if ev0.ctx.worker}<span class="text-[10px] font-semibold uppercase tracking-wide rounded-sm px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 shrink-0">{m.queries_worker_badge()}</span>{/if}
+            {#if !pinned}<LensGroupLabel label={groupLabel(ev0, scoped)} />{/if}
+            <span class="text-xs text-gray-400 ml-auto whitespace-nowrap font-mono">{localTime(ev0.ts)}</span>
+            <span class="text-xs text-gray-400 whitespace-nowrap">{g.count}</span>
           </header>
-          {#each page.rows as ev (ev.id)}
+          {#each g.rows as row (row.event.id)}
+            {@const ev = row.event}
             {@const d = (ev.data ?? {}) as Record<string, any>}
             <div class="rounded-sm border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card mb-1.5 overflow-hidden">
               <button type="button" class="w-full text-left px-2.5 py-1.5 flex items-start gap-2 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => toggleRow(ev.id)}>
@@ -297,6 +300,7 @@
                 </span>
               </button>
               {#if expanded[ev.id]}
+                {@const full = (details[ev.id]?.data ?? {}) as Record<string, any>}
                 <div class="px-2.5 pb-2 pt-1 border-t border-gray-100 dark:border-lerd-border/50 text-[11px] space-y-1.5">
                   {#if wireKind === 'job' && d.exception}<div class="text-rose-600 dark:text-rose-400 break-all">{d.exception}</div>{/if}
                   {#if wireKind === 'job'}
@@ -330,7 +334,7 @@
                     </div>
                   {/if}
                   {#if wireKind === 'job'}
-                    {@const payload = d.payload ?? (d.uuid ? payloadByUuid.get(d.uuid) : undefined)}
+                    {@const payload = d.payload}
                     {#if payload && Object.keys(payload).length}
                       <div>
                         <div class="text-gray-400 mb-0.5">{m.jobs_payload()}</div>
@@ -366,16 +370,14 @@
                     {#if d.views?.length}
                       <div class="text-gray-400 break-all">{m.debug_mail_renderedFrom()} {d.views.join(', ')}</div>
                     {/if}
-                    {#if d.html}<iframe sandbox="" class="w-full h-64 bg-white rounded-sm border border-gray-200 dark:border-lerd-border" srcdoc={d.html} title={d.subject ?? 'mail'}></iframe>{/if}
+                    {#if full.html}<iframe sandbox="" class="w-full h-64 bg-white rounded-sm border border-gray-200 dark:border-lerd-border" srcdoc={full.html} title={d.subject ?? 'mail'}></iframe>{/if}
                   {/if}
-                  {#if wireKind !== 'view'}<TraceBlock src={ev.src} trace={d.trace} />{/if}
+                  {#if wireKind !== 'view'}<TraceBlock src={ev.src} trace={full.trace} />{/if}
                 </div>
               {/if}
             </div>
           {/each}
         </section>
-      {/each}
-      <LensLoadMore shown={win.shown} total={win.total} onmore={() => (limit += LENS_PAGE)} />
-    {/if}
-  </div>
+    {/snippet}
+  </LensList>
 </div>

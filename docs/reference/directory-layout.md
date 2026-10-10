@@ -31,6 +31,7 @@
 ├── vapid-public.key                 # Web Push public key, served to browsers
 ├── push-subscriptions.json          # Browser push subscriptions + per-category prefs (mode 0600)
 ├── nginx-trust-token                # Per-install secret for lerd.localhost → lerd-ui proxy
+├── debug-events.db                  # Debug window buffer (mode 0600, see features/dumps.md)
 ├── sites.yaml
 └── sites.bkp/                      # last 10 versions of sites.yaml (lerd sites:restore)
 ```

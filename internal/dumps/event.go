@@ -135,6 +135,18 @@ func (e Event) OfRequest(rid string) bool {
 	return bytes.Contains(e.Data, []byte(rid)) && e.reachedRID() == rid
 }
 
+// isPageView marks a browser page load or SPA navigation: it names the page a
+// lens groups under rather than being a row of its own.
+func (e Event) isPageView() bool {
+	if e.Kind != KindBrowser {
+		return false
+	}
+	var d struct {
+		Type string `json:"type"`
+	}
+	return json.Unmarshal(e.Data, &d) == nil && d.Type == "navigation"
+}
+
 // reachedRID is the request a browser fetch or XHR reached, or "".
 func (e Event) reachedRID() string {
 	if e.Kind != KindBrowser {

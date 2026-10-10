@@ -1,15 +1,22 @@
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { writable, get } from 'svelte/store';
+import { fakeLensAnswer } from '$lib/fakeLensApi';
+import type { DumpEvent } from '$lib/dumpEvent';
 import { m } from '../../paraglide/messages.js';
 
-// The real streams open an EventSource; the tab only needs the event list.
+// What lerd-ui holds, read through the faked lens endpoints.
+const events: DumpEvent[] = [];
+vi.stubGlobal(
+  'EventSource',
+  class {
+    addEventListener() {}
+    close() {}
+  }
+);
 vi.mock('$stores/dumps', async (orig) => ({
   ...(await orig<typeof import('$stores/dumps')>()),
-  dumps: writable<unknown[]>([]),
-  startDumpsStream: () => {},
-  stopDumpsStream: () => {},
-  clearDumps: () => {},
+  clearDumps: () => Promise.resolve(),
   refreshStatus: () => Promise.resolve()
 }));
 vi.mock('$stores/queries', async (orig) => ({
@@ -19,13 +26,16 @@ vi.mock('$stores/queries', async (orig) => ({
 }));
 vi.mock('$lib/api', async (orig) => ({
   ...(await orig<typeof import('$lib/api')>()),
-  apiJson: (path: string) => (path.startsWith('/api/dumps') ? Promise.resolve([]) : Promise.resolve({ enabled: true, console: [], network: [], navigation: true, resources: false, events: [], presets: {} })),
+  apiJson: (path: string) =>
+    path.startsWith('/api/dumps?')
+      ? Promise.resolve(events.filter((e) => path.includes(`rid=${e.ctx.rid}`)))
+      : path.startsWith('/api/dumps')
+        ? Promise.resolve(fakeLensAnswer(events, path))
+        : Promise.resolve({ enabled: true, console: [], network: [], navigation: true, resources: false, events: [], presets: {} }),
   apiFetch: () => Promise.resolve({ ok: true, json: async () => ({}) })
 }));
 
 import SiteDebugTab from './SiteDebugTab.svelte';
-import { dumps as dumpsStore } from '$stores/dumps';
-import type { Writable } from 'svelte/store';
 import { debugLens, debugSearch } from '$stores/debugLens';
 
 describe('SiteDebugTab full screen', () => {
@@ -55,9 +65,9 @@ describe('SiteDebugTab pinned to one request', () => {
 describe('SiteDebugTab request id', () => {
   it('searches for a request id when it is clicked, which narrows the lenses and opens its timeline', async () => {
     debugLens.set('queries');
-    (dumpsStore as unknown as Writable<unknown[]>).set([
+    events.splice(0, events.length, ...([
       { v: 1, id: 'e1', ts: new Date().toISOString(), kind: 'query', ctx: { type: 'fpm', site: 'shop', request: 'GET /', rid: 'r1' }, src: {}, data: { sql: 'select 1', time_ms: 1 } }
-    ]);
+    ] as DumpEvent[]));
     render(SiteDebugTab, { props: { siteName: 'shop', domain: 'shop.test' } });
 
     await fireEvent.click(await screen.findByRole('button', { name: 'r1' }));

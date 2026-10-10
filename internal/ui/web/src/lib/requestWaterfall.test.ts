@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildWaterfall, condense } from './requestWaterfall';
-import type { DumpEvent } from './dumpsStream';
+import type { DumpEvent } from './dumpEvent';
 
 const e = (kind: string, ts: string, data: unknown, src = { file: '', line: 0 }): DumpEvent =>
   ({ v: 1, id: ts + kind, ts, kind, ctx: { type: 'fpm', request: 'GET /cart' }, src, data }) as DumpEvent;

@@ -1,4 +1,4 @@
-import type { DumpEvent } from './dumpsStream';
+import type { DumpEvent } from './dumpEvent';
 
 // RequestStats is what one request cost, in milliseconds and bytes. Every field
 // but response is absent when nothing captured it.

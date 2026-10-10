@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { requestStats } from './requestStats';
-import type { DumpEvent } from './dumpsStream';
+import type { DumpEvent } from './dumpEvent';
 
 const e = (kind: string, data: unknown): DumpEvent => ({ v: 1, id: kind, ts: '2026-10-07T10:00:00.000Z', kind, ctx: { type: 'fpm' }, src: { file: '', line: 0 }, data }) as DumpEvent;
 

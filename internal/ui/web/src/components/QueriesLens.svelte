@@ -2,31 +2,31 @@
   import LensSearch from '$components/LensSearch.svelte';
   import { onMount, onDestroy, untrack } from 'svelte';
   import { get } from 'svelte/store';
-  import { debugSearch } from '$stores/debugLens';
-  import { startDumpsStream, stopDumpsStream, clearDumps } from '$stores/dumps';
+  import { debugSearch, showTests } from '$stores/debugLens';
+  import { clearDumps } from '$stores/dumps';
   import {
-    buildQueryGroups,
+    SLOW_MS,
     queryFilterText,
     queryFilterSite,
     queryFilterWorker,
-    knownQuerySites,
-    knownWorkerCommands,
     devtoolsStatus,
     debugCaptureEnabled,
     refreshDevtoolsStatus,
     setDebugCapture,
     toggleDevtoolsWorkers
   } from '$stores/queries';
-  import { lensEvents, providePickRequest } from '$stores/debugEvents';
+  import { lensScope, providePickRequest } from '$stores/debugEvents';
   import EmptyState from '$components/EmptyState.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import LensToggle from '$components/LensToggle.svelte';
   import TestEventsToggle from '$components/TestEventsToggle.svelte';
   import TraceBlock from '$components/TraceBlock.svelte';
   import CopyButton from '$components/CopyButton.svelte';
-  import LensLoadMore from '$components/LensLoadMore.svelte';
+  import LensList from '$components/LensList.svelte';
   import LensGroupLabel from '$components/LensGroupLabel.svelte';
-  import { windowGroups, LENS_PAGE } from '$lib/lensWindow';
+  import { groupLabel } from '$lib/eventGroup';
+  import { createLens, fetchEvent, fetchFacets, type FacetLists } from '$lib/lens';
+  import type { DumpEvent, QueryData } from '$lib/dumpEvent';
   import { inlineBindings } from '$lib/sqlInline';
   import { m } from '../paraglide/messages.js';
 
@@ -39,44 +39,47 @@
     pinned?: boolean;
   }
   let { siteScope = '', pinned = false }: Props = $props();
-  // The request filter over the lenses narrows this to one request.
-  const debugEvents = lensEvents();
+  // The Debug tab narrows this to one request, or to the route a search names.
+  const scope = lensScope();
   const scoped = $derived(siteScope !== '');
-  const text = $derived(pinned ? '' : scoped ? $debugSearch : $queryFilterText);
+  const text = $derived(pinned || $scope.rid || $scope.route ? '' : scoped ? $debugSearch : $queryFilterText);
   const worker = $derived(pinned ? '' : $queryFilterWorker);
+  const site = $derived(scoped ? siteScope : $queryFilterSite);
 
-  // Queries ride the dumps SSE stream (shared receiver), so mounting this lens
-  // opens the same reference-counted connection a DumpsTab would.
   let textInput = $state('');
   // Across every site there is no request timeline, so a clicked id becomes this
   // lens's search; inside a site the Debug tab takes the click instead.
   if (!untrack(() => siteScope)) providePickRequest((id) => (textInput = id));
 
   onMount(() => {
-    startDumpsStream();
     void refreshDevtoolsStatus();
     // Scoped lenses share one search (debugSearch), which a deep link like the
     // timing view's Inspect queries seeds; mirror it into the input on open.
     if (scoped) textInput = get(debugSearch);
   });
-  onDestroy(() => {
-    stopDumpsStream();
+
+  // lerd-ui groups the queries by request and flags duplicates and N+1s; the
+  // tab holds one page.
+  const lens = createLens();
+  onDestroy(() => lens.destroy());
+  $effect(() => {
+    lens.set({
+      kind: 'query',
+      site,
+      rid: $scope.rid,
+      route: $scope.route,
+      q: text,
+      worker,
+      workers: Boolean($devtoolsStatus?.workers),
+      tests: $showTests
+    });
   });
 
-  const groups = $derived(
-    buildQueryGroups($debugEvents, scoped ? siteScope : $queryFilterSite, text, scoped, worker, Boolean($devtoolsStatus?.workers))
-  );
-
-  // Only the newest LENS_PAGE rows render; the rest arrive as the user
-  // reaches the end. Changing a filter starts the window over.
-  let limit = $state(LENS_PAGE);
-  const win = $derived(windowGroups(groups, (g) => g.rows, limit));
-  const filterKey = $derived(
-    `${scoped ? siteScope : $queryFilterSite}|${text}|${worker}`
-  );
+  let facetLists = $state<FacetLists>({ sites: [], workers: [], values: [] });
+  const lensGroups = lens.groups;
   $effect(() => {
-    filterKey;
-    limit = LENS_PAGE;
+    void $lensGroups;
+    fetchFacets({ site, tests: $showTests }).then((f) => (facetLists = f), () => {});
   });
 
   let togglingWorkers = $state(false);
@@ -114,6 +117,7 @@
 
   async function onClear() {
     await clearDumps();
+    await lens.refresh();
   }
 
   const fmtMs = (n: number) => (n < 10 ? n.toFixed(2) : n.toFixed(1));
@@ -122,7 +126,13 @@
     return isNaN(d.getTime()) ? ts : d.toLocaleTimeString();
   }
   let expanded = $state<Record<string, boolean>>({});
-  const toggleRow = (id: string) => (expanded[id] = !expanded[id]);
+  // An opened row reads its whole event: the list leaves out the call stack
+  // and a mail's HTML.
+  let details = $state<Record<string, DumpEvent>>({});
+  function toggleRow(id: string) {
+    expanded[id] = !expanded[id];
+    if (expanded[id] && !details[id]) fetchEvent(id).then((e) => (details[id] = e), () => {});
+  }
 </script>
 
 <div class="flex flex-col h-full overflow-hidden">
@@ -134,17 +144,17 @@
         value={$queryFilterSite}
         options={[
           { value: '', label: m.dumps_filter_allSites() },
-          ...$knownQuerySites.map((s) => ({ value: s, label: s || m.dumps_unknownSite() }))
+          ...facetLists.sites.map((s) => ({ value: s, label: s || m.dumps_unknownSite() }))
         ]}
         onchange={(v) => queryFilterSite.set(v)}
       />
     {/if}
-    {#if $devtoolsStatus?.workers && $knownWorkerCommands.length > 0}
+    {#if $devtoolsStatus?.workers && facetLists.workers.length > 0}
       <Dropdown
         value={$queryFilterWorker}
         options={[
           { value: '', label: m.queries_filter_allWorkers() },
-          ...$knownWorkerCommands.map((c) => ({ value: c, label: c }))
+          ...facetLists.workers.map((c) => ({ value: c, label: c }))
         ]}
         onchange={(v) => queryFilterWorker.set(v)}
       />
@@ -167,8 +177,8 @@
   </div>
   {/if}
 
-  <div class="flex-1 overflow-y-auto px-3 pb-3">
-    {#if groups.length === 0}
+  <LensList {lens}>
+    {#snippet empty()}
       {#if !$debugCaptureEnabled}
         <div class="px-3 py-10 text-center space-y-3">
           <p class="text-sm text-gray-500 dark:text-gray-400">{m.queries_disabled_title()}</p>
@@ -189,26 +199,29 @@
           {/snippet}
         </EmptyState>
       {/if}
-    {:else}
-      {#each win.pages as page (page.group.key)}
-        {@const group = page.group}
+    {/snippet}
+    {#snippet group(g)}
+      {@const ev0 = g.rows[0].event}
         <section class="mb-4">
           <header class="flex items-center gap-2 mb-1 sticky top-0 bg-gray-50 dark:bg-lerd-bg py-1 -mx-3 px-3 z-1">
-            {#if group.worker}
+            {#if ev0.ctx.worker}
               <span class="text-[10px] font-semibold uppercase tracking-wide rounded-sm px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 shrink-0">{m.queries_worker_badge()}</span>
             {/if}
-            {#if !pinned}<LensGroupLabel label={group.label} />{/if}
-            {#if group.nPlusOne}
+            {#if !pinned}<LensGroupLabel label={groupLabel(ev0, scoped)} />{/if}
+            {#if g.n_plus_one}
               <span class="text-[10px] font-semibold uppercase tracking-wide rounded-sm px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">{m.queries_nplusone_badge()}</span>
             {/if}
-            <span class="text-xs text-gray-400 ml-auto whitespace-nowrap font-mono">{localTime(group.ts)}</span>
+            <span class="text-xs text-gray-400 ml-auto whitespace-nowrap font-mono">{localTime(ev0.ts)}</span>
             <span class="text-xs text-gray-400 whitespace-nowrap">
-              {m.queries_rollup({ count: group.count, ms: fmtMs(group.totalMs) })}
+              {m.queries_rollup({ count: g.count, ms: fmtMs(g.total_ms) })}
             </span>
           </header>
-          {#each page.rows as row (row.event.id)}
+          {#each g.rows as row (row.event.id)}
+            {@const data = row.event.data as QueryData}
+            {@const duplicate = row.dup >= 2}
+            {@const slow = data.time_ms >= SLOW_MS}
             <div
-              class="rounded-sm border mb-1.5 overflow-hidden {row.duplicate
+              class="rounded-sm border mb-1.5 overflow-hidden {duplicate
                 ? 'border-amber-300 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/10'
                 : 'border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card'}"
             >
@@ -218,41 +231,39 @@
                   class="flex-1 min-w-0 text-left px-2.5 py-1.5 flex items-start gap-2 hover:bg-gray-50 dark:hover:bg-white/5"
                   onclick={() => toggleRow(row.event.id)}
                 >
-                  <code class="text-xs flex-1 break-all text-gray-800 dark:text-gray-200">{row.data.sql}</code>
+                  <code class="text-xs flex-1 break-all text-gray-800 dark:text-gray-200">{data.sql}</code>
                   <span class="flex items-center gap-1 shrink-0">
-                    {#if row.duplicate}
-                      <span class="text-[10px] rounded-sm px-1 py-0.5 bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300" title={m.queries_dup_title()}>{m.queries_dup_badge({ count: row.dupCount })}</span>
+                    {#if duplicate}
+                      <span class="text-[10px] rounded-sm px-1 py-0.5 bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300" title={m.queries_dup_title()}>{m.queries_dup_badge({ count: row.dup })}</span>
                     {/if}
                     <span
-                      class="text-[11px] tabular-nums rounded-sm px-1 py-0.5 {row.slow ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' : 'text-gray-400'}"
-                    >{fmtMs(row.data.time_ms)} ms{#if row.slow}&nbsp;{m.queries_slow_badge()}{/if}</span>
+                      class="text-[11px] tabular-nums rounded-sm px-1 py-0.5 {slow ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' : 'text-gray-400'}"
+                    >{fmtMs(data.time_ms)} ms{#if slow}&nbsp;{m.queries_slow_badge()}{/if}</span>
                   </span>
                 </button>
                 <CopyButton
-                  text={() => inlineBindings(row.data.sql, row.data.bindings)}
+                  text={() => inlineBindings(data.sql, data.bindings)}
                   label={m.queries_copySql()}
                   class="px-2 hover:bg-gray-50 dark:hover:bg-white/5 border-l border-gray-100 dark:border-lerd-border/50"
                 />
               </div>
               {#if expanded[row.event.id]}
                 <div class="px-2.5 pb-2 pt-1 border-t border-gray-100 dark:border-lerd-border/50 text-[11px] space-y-1.5">
-                  {#if row.data.connection}
-                    <div class="text-gray-400">{row.data.connection}{#if row.data.rw_type}&nbsp;({row.data.rw_type}){/if}</div>
+                  {#if data.connection}
+                    <div class="text-gray-400">{data.connection}{#if data.rw_type}&nbsp;({data.rw_type}){/if}</div>
                   {/if}
-                  {#if row.data.bindings && row.data.bindings.length > 0}
+                  {#if data.bindings && data.bindings.length > 0}
                     <div>
                       <span class="text-gray-400 mr-1">{m.queries_bindings()}:</span>
-                      <code class="text-gray-700 dark:text-gray-300 break-all">{JSON.stringify(row.data.bindings)}</code>
+                      <code class="text-gray-700 dark:text-gray-300 break-all">{JSON.stringify(data.bindings)}</code>
                     </div>
                   {/if}
-                  <TraceBlock src={row.event.src} trace={row.data.trace} />
+                  <TraceBlock src={row.event.src} trace={(details[row.event.id]?.data as QueryData | undefined)?.trace} />
                 </div>
               {/if}
             </div>
           {/each}
         </section>
-      {/each}
-      <LensLoadMore shown={win.shown} total={win.total} onmore={() => (limit += LENS_PAGE)} />
-    {/if}
-  </div>
+    {/snippet}
+  </LensList>
 </div>

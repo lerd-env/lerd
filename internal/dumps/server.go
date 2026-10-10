@@ -91,6 +91,12 @@ func Listen(ctx context.Context, addr string) (*Server, error) {
 // or "unix"; for "unix", any pre-existing socket at addr is removed first
 // so a previous lerd-ui crash doesn't pin the path forever.
 func ListenOn(ctx context.Context, network, addr string) (*Server, error) {
+	return ListenWithRing(ctx, network, addr, NewRing(0))
+}
+
+// ListenWithRing is ListenOn buffering into ring, such as one OpenRing keeps
+// on disk so the buffer survives a restart.
+func ListenWithRing(ctx context.Context, network, addr string, ring *Ring) (*Server, error) {
 	if network == "" {
 		network = DefaultNetwork
 	}
@@ -115,7 +121,7 @@ func ListenOn(ctx context.Context, network, addr string) (*Server, error) {
 	}
 	s := &Server{
 		addr:   ln.Addr().String(),
-		ring:   NewRing(0),
+		ring:   ring,
 		hub:    NewHub(),
 		ln:     ln,
 		closed: make(chan struct{}),
@@ -142,6 +148,22 @@ func (s *Server) Snapshot() []Event { return s.ring.Snapshot() }
 // Filter returns a filtered Snapshot.
 func (s *Server) Filter(opts FilterOpts) []Event { return s.ring.Filter(opts) }
 
+// Counts, TestCount, Groups, GroupRows, Sites and Workers are the Debug
+// lenses' queries; see the Ring methods of the same names.
+func (s *Server) Counts(opts FilterOpts) map[string]int { return s.ring.Counts(opts) }
+func (s *Server) TestCount(opts FilterOpts) int         { return s.ring.TestCount(opts) }
+func (s *Server) Groups(opts GroupOpts) GroupPage       { return s.ring.Groups(opts) }
+func (s *Server) GroupRows(opts GroupOpts, key string, off int) []Row {
+	return s.ring.GroupRows(opts, key, off)
+}
+func (s *Server) Sites() []string                         { return s.ring.Sites() }
+func (s *Server) Workers(opts FilterOpts) []string        { return s.ring.Workers(opts) }
+func (s *Server) FacetValues(opts FilterOpts) []string    { return s.ring.FacetValues(opts) }
+func (s *Server) Event(id string) (json.RawMessage, bool) { return s.ring.Event(id) }
+
+// FilterJSON is Filter as the JSON array the API serves.
+func (s *Server) FilterJSON(opts FilterOpts) []byte { return s.ring.FilterJSON(opts) }
+
 // Subscribe returns a buffered channel of new events plus an unsubscribe func.
 func (s *Server) Subscribe() (<-chan Event, func()) { return s.hub.Subscribe() }
 
@@ -158,9 +180,8 @@ func (s *Server) Len() int { return s.ring.Len() }
 func (s *Server) Cap() int            { return s.ring.Cap() }
 func (s *Server) Resize(capacity int) { s.ring.Resize(capacity) }
 
-// Save and Load carry the buffered events across a lerd-ui restart.
-func (s *Server) Save(path string) error { return s.ring.Save(path) }
-func (s *Server) Load(path string) error { return s.ring.Load(path) }
+// Import takes in the buffer an older lerd-ui saved as JSON at path.
+func (s *Server) Import(path string) error { return s.ring.Import(path) }
 
 // ForgetRequests drops every buffered event of the given requests, as their
 // history is removed from request timing.

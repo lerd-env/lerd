@@ -2,18 +2,19 @@
   import LensSearch from '$components/LensSearch.svelte';
   import { onMount, onDestroy, untrack } from 'svelte';
   import { get } from 'svelte/store';
-  import { debugSearch } from '$stores/debugLens';
-  import { startDumpsStream, stopDumpsStream, clearDumps } from '$stores/dumps';
+  import { debugSearch, showTests } from '$stores/debugLens';
+  import { clearDumps } from '$stores/dumps';
   import { queryFilterSite } from '$stores/queries';
   import { siteCaptureOn, loadSiteBrowserLogs, saveSiteBrowserLogs } from '$stores/browserLogs';
-  import { buildKindGroups, knownDebugSites, lensEvents, facetOf, isPageView, providePickRequest } from '$stores/debugEvents';
+  import { lensScope, providePickRequest } from '$stores/debugEvents';
   import EmptyState from '$components/EmptyState.svelte';
   import CaptureOffNotice from '$components/CaptureOffNotice.svelte';
   import Dropdown from '$components/Dropdown.svelte';
-  import LensLoadMore from '$components/LensLoadMore.svelte';
+  import LensList from '$components/LensList.svelte';
   import LensGroupLabel from '$components/LensGroupLabel.svelte';
   import { openBrowserLogsModal } from '$stores/modals';
-  import { windowGroups, LENS_PAGE } from '$lib/lensWindow';
+  import { groupLabel } from '$lib/eventGroup';
+  import { createLens, fetchFacets, type FacetLists } from '$lib/lens';
   import { m } from '../paraglide/messages.js';
 
   // Page views, JavaScript errors, console messages and failed requests the
@@ -25,8 +26,8 @@
     pinned?: boolean;
   }
   let { siteScope = '', pinned = false }: Props = $props();
-  // The request filter over the lenses narrows this to one request.
-  const debugEvents = lensEvents();
+  // The Debug tab narrows this to one request, or to the route a search names.
+  const scope = lensScope();
   const scoped = $derived(siteScope !== '');
   const siteOff = $derived(scoped && $siteCaptureOn[siteScope] === false);
 
@@ -43,13 +44,11 @@
   let typeFilter = $state('');
 
   onMount(() => {
-    startDumpsStream();
     if (scoped) {
       textInput = get(debugSearch);
       loadSiteBrowserLogs(siteScope).catch(() => {});
     }
   });
-  onDestroy(() => stopDumpsStream());
 
   let textTimer: ReturnType<typeof setTimeout> | null = null;
   $effect(() => {
@@ -58,9 +57,24 @@
     textTimer = setTimeout(() => (scoped ? debugSearch.set(v) : (localText = v)), 100);
   });
 
-  const effectiveText = $derived(pinned ? '' : scoped ? $debugSearch : localText);
-  const happened = $derived($debugEvents.filter((ev) => !isPageView(ev)));
-  const groups = $derived(buildKindGroups(happened, 'browser', scoped ? siteScope : $queryFilterSite, effectiveText, scoped, '', true, typeFilter));
+  const effectiveText = $derived(pinned || $scope.rid || $scope.route ? '' : scoped ? $debugSearch : localText);
+  const site = $derived(scoped ? siteScope : $queryFilterSite);
+
+  // lerd-ui groups these per page view and pages them; page views themselves
+  // name their group rather than being rows.
+  const lens = createLens();
+  onDestroy(() => lens.destroy());
+  $effect(() => {
+    lens.set({ kind: 'browser', site, rid: $scope.rid, route: $scope.route, q: effectiveText, facet: typeFilter, tests: $showTests });
+  });
+  const groups = lens.groups;
+
+  let facetLists = $state<FacetLists>({ sites: [], workers: [], values: [] });
+  $effect(() => {
+    void $groups;
+    fetchFacets({ site, kind: 'browser', tests: $showTests }).then((f) => (facetLists = f), () => {});
+  });
+
   // Only the types that were actually reported, grouped and ordered the way a
   // reader scans for trouble: errors first, page events last.
   const TYPES: Array<{ value: string; label: () => string; group: () => string }> = [
@@ -72,17 +86,9 @@
     { value: 'resource', label: m.browser_settings_resources, group: m.browser_group_network },
     { value: 'event', label: m.browser_settings_events, group: m.browser_group_page }
   ];
-  const typeOptions = $derived.by(() => {
-    const seen = new Set($debugEvents.filter((ev) => ev.kind === 'browser').map(facetOf));
-    return TYPES.filter((t) => seen.has(t.value)).map((t) => ({ value: t.value, label: t.label(), group: t.group() }));
-  });
-
-  let limit = $state(LENS_PAGE);
-  const win = $derived(windowGroups(groups, (g) => g.events, limit));
-  $effect(() => {
-    void `${scoped ? siteScope : $queryFilterSite}|${effectiveText}|${typeFilter}`;
-    limit = LENS_PAGE;
-  });
+  const typeOptions = $derived(
+    TYPES.filter((t) => facetLists.values.includes(t.value)).map((t) => ({ value: t.value, label: t.label(), group: t.group() }))
+  );
 
   let expanded = $state<Record<string, boolean>>({});
   const toggleRow = (id: string) => (expanded[id] = !expanded[id]);
@@ -105,7 +111,7 @@
 </script>
 
 <div class="flex flex-col h-full overflow-hidden">
-  {#if !pinned && !(siteOff && groups.length === 0)}
+  {#if !pinned && !(siteOff && $groups.length === 0)}
     <div class="flex items-center gap-2 px-3 py-3 border-b border-gray-200 dark:border-lerd-border flex-wrap">
       <LensSearch bind:value={textInput} placeholder={m.debug_searchPlaceholder()} />
       {#if !scoped}
@@ -113,7 +119,7 @@
           value={$queryFilterSite}
           options={[
             { value: '', label: m.dumps_filter_allSites() },
-            ...$knownDebugSites.map((s) => ({ value: s, label: s || m.dumps_unknownSite() }))
+            ...facetLists.sites.map((s) => ({ value: s, label: s || m.dumps_unknownSite() }))
           ]}
           onchange={(v) => queryFilterSite.set(v)}
         />
@@ -129,12 +135,12 @@
       {#if scoped}
         <button type="button" aria-haspopup="dialog" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => openBrowserLogsModal(siteScope)}>{m.common_settings()}</button>
       {/if}
-      <button type="button" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => clearDumps('browser')}>{m.common_clear()}</button>
+      <button type="button" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => void clearDumps('browser').then(() => lens.refresh())}>{m.common_clear()}</button>
     </div>
   {/if}
 
-  <div class="flex-1 overflow-y-auto px-3 pb-3">
-    {#if groups.length === 0}
+  <LensList {lens}>
+    {#snippet empty()}
       {#if siteOff}
         <CaptureOffNotice title={m.browser_disabled_title()} body={m.browser_disabled_body()} onenable={enableCapture} />
       {:else}
@@ -142,16 +148,17 @@
           {#snippet hint()}{scoped ? m.browser_waiting_body() : m.browser_waiting_global()}{/snippet}
         </EmptyState>
       {/if}
-    {:else}
-      {#each win.pages as page (page.group.key)}
-        {@const group = page.group}
+    {/snippet}
+    {#snippet group(g)}
+      {@const ev0 = g.rows[0].event}
         <section class="mb-4">
           <header class="flex items-center gap-2 mb-1 sticky top-0 bg-gray-50 dark:bg-lerd-bg py-1 -mx-3 px-3 z-1">
-            {#if !pinned}<LensGroupLabel label={group.label} />{/if}
-            <span class="text-xs text-gray-400 ml-auto whitespace-nowrap font-mono">{localTime(group.ts)}</span>
-            <span class="text-xs text-gray-400 whitespace-nowrap">{page.total}</span>
+            {#if !pinned}<LensGroupLabel label={groupLabel(ev0, scoped)} />{/if}
+            <span class="text-xs text-gray-400 ml-auto whitespace-nowrap font-mono">{localTime(ev0.ts)}</span>
+            <span class="text-xs text-gray-400 whitespace-nowrap">{g.count}</span>
           </header>
-          {#each page.rows as ev (ev.id)}
+          {#each g.rows as row (row.event.id)}
+            {@const ev = row.event}
             {@const d = (ev.data ?? {}) as Record<string, any>}
             {@const b = badge(d)}
             <div class="rounded-sm border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card mb-1.5 overflow-hidden">
@@ -173,8 +180,6 @@
             </div>
           {/each}
         </section>
-      {/each}
-      <LensLoadMore shown={win.shown} total={win.total} onmore={() => (limit += LENS_PAGE)} />
-    {/if}
-  </div>
+    {/snippet}
+  </LensList>
 </div>

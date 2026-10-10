@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { QueryFrame } from '$lib/dumpsStream';
+  import type { QueryFrame } from '$lib/dumpEvent';
   import SourcePath from './SourcePath.svelte';
   import { m } from '../paraglide/messages.js';
 

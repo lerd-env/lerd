@@ -322,10 +322,16 @@ func DumpsSocketPath() string {
 	return filepath.Join(RunDir(), "lerd-dumps.sock")
 }
 
-// DumpsBufferFile holds the debug events lerd-ui had buffered when it last
-// stopped, read back at start so a restart keeps what Inspect can open.
+// DumpsBufferFile is where lerd-ui before 1.37 saved its debug buffer on
+// shutdown; a newer one imports it once into DebugEventsDB and deletes it.
 func DumpsBufferFile() string {
 	return filepath.Join(DataDir(), "dumps-buffer.json")
+}
+
+// DebugEventsDB holds the debug buffer, on disk so lerd-ui keeps no events in
+// memory and a restart keeps what Inspect can open.
+func DebugEventsDB() string {
+	return filepath.Join(DataDir(), "debug-events.db")
 }
 
 // DumpsEnabledFlagFile is the sentinel the debug bridge checks on every

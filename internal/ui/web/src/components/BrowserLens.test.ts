@@ -1,31 +1,35 @@
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { writable, get, type Writable } from 'svelte/store';
+import { get } from 'svelte/store';
 import { modal } from '$stores/modals';
 import { debugSearch } from '$stores/debugLens';
 import { m } from '../paraglide/messages.js';
 
-// The real stream opens an EventSource; the lens only needs the event list.
-vi.mock('$stores/dumps', async (orig) => ({
-  ...(await orig<typeof import('$stores/dumps')>()),
-  dumps: writable<unknown[]>([]),
-  startDumpsStream: () => {},
-  stopDumpsStream: () => {},
-  clearDumps: () => {}
-}));
+import { fakeLensAnswer } from '$lib/fakeLensApi';
+import type { DumpEvent } from '$lib/dumpEvent';
 
+// What lerd-ui holds; the lens reads it through the faked lens endpoints, and
+// the site's browser-logs settings come from apiJson's mock.
+const events: DumpEvent[] = [];
 const apiJson = vi.fn();
 const apiFetch = vi.fn();
 vi.mock('$lib/api', async (orig) => ({
   ...(await orig<typeof import('$lib/api')>()),
-  apiJson: (...args: unknown[]) => apiJson(...args),
+  apiJson: (path: string, ...rest: unknown[]) =>
+    path.startsWith('/api/dumps') ? Promise.resolve(fakeLensAnswer(events, path)) : apiJson(path, ...rest),
   apiFetch: (...args: unknown[]) => apiFetch(...args)
 }));
 
 import BrowserLens from './BrowserLens.svelte';
-import { dumps as dumpsStore } from '$stores/dumps';
 
-const dumps = dumpsStore as unknown as Writable<unknown[]>;
+const setEvents = (evs: unknown[]) => events.splice(0, events.length, ...(evs as DumpEvent[]));
+vi.stubGlobal(
+  'EventSource',
+  class {
+    addEventListener() {}
+    close() {}
+  }
+);
 
 const settings = (enabled: boolean) => ({ enabled, console: ['error'], network: [], navigation: true, resources: false, events: [], presets: {} });
 
@@ -44,7 +48,7 @@ describe('BrowserLens per-site opt-in', () => {
   beforeEach(() => {
     apiJson.mockReset();
     apiFetch.mockReset();
-    dumps.set([]);
+    setEvents([]);
   });
 
   it('says a site that has not opted in is off, pointing to the header toggle', async () => {
@@ -70,7 +74,7 @@ describe('BrowserLens per-site opt-in', () => {
 
   it('still lists events captured before the site was turned off', async () => {
     apiJson.mockResolvedValue(settings(false));
-    dumps.set([browserEvent]);
+    setEvents([browserEvent]);
     render(BrowserLens, { props: { siteScope: 'shop' } });
 
     expect(await screen.findByText('old-boom')).toBeTruthy();
@@ -88,7 +92,7 @@ describe('BrowserLens per-site opt-in', () => {
   it('lists what happened on a page without a row for the page load itself', async () => {
     apiJson.mockResolvedValue(settings(true));
     const load = { ...browserEvent, id: 'e0', label: 'navigation', data: { type: 'navigation', nav: 'load', message: 'https://shop.test/', url: 'https://shop.test/' } };
-    dumps.set([load, browserEvent]);
+    setEvents([load, browserEvent]);
     render(BrowserLens, { props: { siteScope: 'shop' } });
 
     await screen.findByText('old-boom');
@@ -106,7 +110,7 @@ describe('BrowserLens per-site opt-in', () => {
   it('drops the toolbar inside one request, so a search left on the Debug tab hides nothing', async () => {
     apiJson.mockResolvedValue(settings(true));
     debugSearch.set('no-such-text');
-    dumps.set([browserEvent]);
+    setEvents([browserEvent]);
     render(BrowserLens, { props: { siteScope: 'shop', pinned: true } });
 
     expect(await screen.findByText('old-boom')).toBeTruthy();
@@ -123,7 +127,7 @@ describe('BrowserLens per-site opt-in', () => {
 describe('BrowserLens across every site', () => {
   it('searches for a request id when it is clicked', async () => {
     apiJson.mockResolvedValue(settings(true));
-    dumps.set([browserEvent]);
+    setEvents([browserEvent]);
     render(BrowserLens, { props: {} });
 
     await fireEvent.click(await screen.findByRole('button', { name: 'p1' }));

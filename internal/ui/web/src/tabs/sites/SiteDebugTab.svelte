@@ -1,6 +1,6 @@
 <script lang="ts">
   import DetailTabs from '$components/DetailTabs.svelte';
-  import { onMount, untrack } from 'svelte';
+  import { onMount, onDestroy, untrack } from 'svelte';
   import DumpsTab from '$tabs/DumpsTab.svelte';
   import QueriesLens from '$components/QueriesLens.svelte';
   import KindLens from '$components/KindLens.svelte';
@@ -11,27 +11,24 @@
   import { requestStats } from '$lib/requestStats';
   import ProfilePrompt from '$components/ProfilePrompt.svelte';
   import { profileKeyFor } from '$stores/profiler';
-  import { writable } from 'svelte/store';
+  import { derived, writable } from 'svelte/store';
   import { apiJson } from '$lib/api';
-  import type { DumpEvent } from '$lib/dumpsStream';
+  import type { DumpEvent } from '$lib/dumpEvent';
   import { buildWaterfall, type ServedRequest } from '$lib/requestWaterfall';
   import { routeQuery } from '$lib/route';
-  import { debugLens, debugLensTabs, debugSearch, type DebugLens } from '$stores/debugLens';
-  import { refreshStatus, startDumpsStream, stopDumpsStream } from '$stores/dumps';
+  import { debugLens, debugLensTabs, debugSearch, showTests, type DebugLens } from '$stores/debugLens';
+  import { refreshStatus } from '$stores/dumps';
   import { refreshDevtoolsStatus, debugCaptureEnabled } from '$stores/queries';
-  import { countKinds, debugEvents, providePickRequest, scopeLensEvents } from '$stores/debugEvents';
+  import { provideLensCounts, provideLensScope, providePickRequest } from '$stores/debugEvents';
+  import { createCounts } from '$lib/lens';
   import Icon from '$components/Icon.svelte';
   import { modal } from '$stores/modals';
   import { tooltip } from '$lib/tooltip';
   import { m } from '../../paraglide/messages.js';
 
-  // The lenses hold the event stream open themselves; the timeline reads it
-  // too, so the tab keeps it open while it is shown.
   onMount(() => {
     void refreshStatus();
     void refreshDevtoolsStatus();
-    startDumpsStream();
-    return stopDumpsStream;
   });
 
   interface Props {
@@ -56,14 +53,21 @@
 
   // Without a pinned request, a search that is exactly one of the site's
   // request ids picks that request, and a picked request gains a timeline.
-  const picked = $derived.by(() => {
+  let picked = $state('');
+  $effect(() => {
     const q = $debugSearch.trim();
-    return !rid && q && $debugEvents.some((ev) => ev.ctx.rid === q && ev.ctx.site === siteName) ? q : '';
+    picked = '';
+    if (rid || !q || /\s/.test(q)) return;
+    apiJson<{ counts: Record<string, number> }>(`/api/dumps/counts?${new URLSearchParams({ site: siteName, rid: q, tests: '1' })}`).then(
+      (r) => {
+        if ($debugSearch.trim() === q && Object.keys(r.counts ?? {}).length > 0) picked = q;
+      },
+      () => {}
+    );
   });
   const scope = writable('');
   $effect(() => scope.set(rid || picked));
-  // A pinned or picked request may predate what the stream replayed; the
-  // server's ring still holds it.
+  // The timeline and the cost strip read the whole request from lerd-ui.
   const fetched = writable<DumpEvent[]>([]);
   $effect(() => {
     const want = rid || picked;
@@ -73,7 +77,14 @@
   // A search shaped like "GET /path" narrows the lenses to that whole route.
   const route = writable('');
   $effect(() => route.set(rid ? '' : routeQuery($debugSearch)));
-  const events = scopeLensEvents(scope, fetched, route);
+  provideLensScope(derived([scope, route], ([$scope, $route]) => ({ rid: $scope, route: $route })));
+  const events = fetched;
+  // The lens bar's badges, counted by lerd-ui for the site or the one request.
+  const kindCounts = createCounts();
+  provideLensCounts(kindCounts);
+  onDestroy(() => kindCounts.destroy());
+  $effect(() => kindCounts.set({ site: siteName, rid: rid || picked, route: rid || picked ? '' : $route, tests: $showTests }));
+  const countsStore = kindCounts.counts;
   let timeline = $state(untrack(() => Boolean(rid)));
   // A request id clicked in a lens becomes the search and opens its timeline.
   providePickRequest((id) => {
@@ -98,7 +109,7 @@
   // Mailer/Twig/EventDispatcher/Messenger/HttpClient seams cover every PHP app).
   const isLaravel = $derived(framework.toLowerCase() === 'laravel');
   const laravelOnly: DebugLens[] = ['cache'];
-  const counts = $derived(countKinds($events, siteName));
+  const counts = $derived($countsStore);
 
   const tabs = $derived([
     ...(rid || picked ? [{ id: 'timeline', label: m.debug_tab_timeline(), group: 'timeline' }] : []),
