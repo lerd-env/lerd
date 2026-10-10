@@ -1,4 +1,6 @@
 <script lang="ts">
+  import BackButton from '$components/BackButton.svelte';
+  import { isDesktop } from '$lib/media';
   import { onDestroy, type Snippet } from 'svelte';
   import StatusPill from '$components/StatusPill.svelte';
   import Icon from '$components/Icon.svelte';
@@ -378,6 +380,7 @@
   class="flex flex-wrap items-center justify-between gap-y-2 px-3 py-1.5 page-header shrink-0"
 >
   <div class="flex items-center gap-3">
+    {#if !$isDesktop}<span class="-ml-1"><BackButton /></span>{/if}
     <!-- A worker has no mark of its own and would draw the generic fallback
          glyph, which says less than the label already does. -->
     {#if !isWorker}

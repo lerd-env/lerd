@@ -1,4 +1,5 @@
 <script lang="ts">
+  import DetailHeader from '$components/DetailHeader.svelte';
   import EditorPicker from '$components/EditorPicker.svelte';
   import { editors, setGlobalEditor } from '$stores/editors';
   import { onMount } from 'svelte';
@@ -226,10 +227,9 @@
 </script>
 
 <div class="flex-1 flex flex-col min-h-0">
-  <div class="shrink-0 flex flex-wrap items-center justify-between gap-y-2 px-3 py-1.5 page-header">
-    <span class="font-semibold text-gray-900 dark:text-white text-base">{m.system_lerd()}</span>
-    <VersionPill />
-  </div>
+  <DetailHeader title={m.system_lerd()}>
+    {#snippet trailing()}<VersionPill />{/snippet}
+  </DetailHeader>
 
   <div class="flex-1 min-h-0 overflow-y-auto p-3 space-y-3 @container">
     <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-3">

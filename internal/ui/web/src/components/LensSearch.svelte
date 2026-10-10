@@ -5,7 +5,8 @@
   let { value = $bindable(''), placeholder }: { value?: string; placeholder: string } = $props();
 </script>
 
-<div class="relative flex-1 min-w-[140px]">
+<!-- A full row on a phone, so the toggles wrap below it rather than squeezing it. -->
+<div class="relative flex-1 min-w-[140px] basis-full sm:basis-auto">
   <input
     class="w-full text-xs pl-2 pr-6 py-1 rounded-sm border border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-card"
     {placeholder}

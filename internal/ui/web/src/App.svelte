@@ -7,7 +7,6 @@
   import SidePanel from '$components/SidePanel.svelte';
   import MobileHeader from '$components/MobileHeader.svelte';
   import MobileNav from '$components/MobileNav.svelte';
-  import MobileBackBar from '$components/MobileBackBar.svelte';
   import { tab, routeRest } from '$stores/route';
   import { isDesktop } from '$lib/media';
   import { loadVersion } from '$stores/version';
@@ -185,7 +184,6 @@
       </div>
     {:else}
       <div class="flex-1 flex flex-col overflow-hidden pb-16">
-        <MobileBackBar />
         {#if $tab === 'sites'}
           <SitesDetail />
         {:else if $tab === 'services'}
