@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import DetailPanel from '$components/DetailPanel.svelte';
   import DetailHeader from '$components/DetailHeader.svelte';
   import DetailTabs from '$components/DetailTabs.svelte';
@@ -13,9 +13,10 @@
   import { status as dumpsStatusValue, refreshStatus, togglePassthrough } from '$stores/dumps';
   import DebugSettings from './DebugSettings.svelte';
   import { refreshDevtoolsStatus, debugCaptureEnabled, setDebugCapture } from '$stores/queries';
-  import { debugLens, debugLensTabs, type DebugLens } from '$stores/debugLens';
+  import { debugLens, debugLensTabs, showTests, type DebugLens } from '$stores/debugLens';
   import { sites } from '$stores/sites';
-  import { countKinds, debugEvents } from '$stores/debugEvents';
+  import { provideLensCounts } from '$stores/debugEvents';
+  import { createCounts } from '$lib/lens';
   import { m } from '../../paraglide/messages.js';
 
   // The global view aggregates every site; Cache comes solely from the Laravel
@@ -24,7 +25,13 @@
   // HttpClient seams).
   const anyLaravel = $derived($sites.some((s) => (s.framework ?? '').toLowerCase() === 'laravel'));
   const laravelOnly: DebugLens[] = ['cache'];
-  const counts = $derived(countKinds($debugEvents));
+  // Every site's badges, counted by lerd-ui and shared with the lenses below.
+  const kindCounts = createCounts();
+  provideLensCounts(kindCounts);
+  onDestroy(() => kindCounts.destroy());
+  $effect(() => kindCounts.set({ tests: $showTests }));
+  const countsStore = kindCounts.counts;
+  const counts = $derived($countsStore);
 
   // Settings sits after the lenses, held here so the site Debug tab, which
   // shares the remembered lens, never lands on it.

@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { apiJson } from '$lib/api';
+import { apiJson, sharedJson } from '$lib/api';
 
 export interface VersionInfo {
   current: string;
@@ -35,7 +35,7 @@ interface VersionResponse {
 export async function loadVersion(force = false) {
   version.update((v) => ({ ...v, checking: true }));
   try {
-    const res = await apiJson<VersionResponse>(force ? '/api/version?refresh=1' : '/api/version');
+    const res = await (force ? apiJson<VersionResponse>('/api/version?refresh=1') : sharedJson<VersionResponse>('/api/version'));
     version.set({
       current: res.current ?? '...',
       latest: res.latest ?? '',

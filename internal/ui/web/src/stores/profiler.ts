@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { apiFetch, apiJson } from '$lib/api';
+import { apiFetch, apiJson, sharedJson } from '$lib/api';
 import { wsMessage } from '$lib/ws';
 
 // profilerEnabled mirrors the global SPX profiler toggle.
@@ -7,7 +7,7 @@ export const profilerEnabled = writable<boolean>(false);
 
 export async function loadProfilerStatus(): Promise<void> {
   try {
-    const s = await apiJson<{ enabled: boolean }>('/api/profiler/status');
+    const s = await sharedJson<{ enabled: boolean }>('/api/profiler/status');
     profilerEnabled.set(Boolean(s.enabled));
   } catch {
     /* keep previous value */

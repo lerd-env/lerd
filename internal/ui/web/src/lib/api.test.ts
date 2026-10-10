@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { apiUrl, wsUrl, apiFetch } from './api';
+import { apiUrl, wsUrl, apiFetch, sharedJson } from './api';
 
 describe('apiUrl', () => {
   it('passes absolute URLs through', () => {
@@ -57,5 +57,27 @@ describe('wsUrl', () => {
     const u = wsUrl('/api/ws');
     expect(u.startsWith('ws://') || u.startsWith('wss://')).toBe(true);
     expect(u.endsWith('/api/ws')).toBe(true);
+  });
+});
+
+describe('sharedJson', () => {
+  it('answers concurrent reads of one path from a single request, each with its own copy', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ theme: 'breeze' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const [a, b] = await Promise.all([sharedJson<{ theme: string }>('/api/settings'), sharedJson<{ theme: string }>('/api/settings')]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(a).toEqual(b);
+    a.theme = 'changed';
+    expect(b.theme).toBe('breeze');
+    vi.unstubAllGlobals();
+  });
+
+  it('reads again once the first answer is in', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await sharedJson('/api/settings');
+    await sharedJson('/api/settings');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.unstubAllGlobals();
   });
 });

@@ -1,4 +1,4 @@
-import type { DumpEvent } from './dumpsStream';
+import type { DumpEvent } from './dumpEvent';
 import { inlineBindings } from './sqlInline';
 
 // One row of a request's timeline: a span (end > start) or a moment (end ===

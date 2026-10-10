@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { groupKey, groupLabel, labelString } from './eventGroup';
-import type { DumpEvent } from '$lib/dumpsStream';
+import type { DumpEvent } from '$lib/dumpEvent';
 
 function ev(over: Partial<DumpEvent['ctx']> & { ts?: string } = {}): DumpEvent {
   const { ts, ...ctx } = over;

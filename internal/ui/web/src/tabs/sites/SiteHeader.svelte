@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import Badge from '$components/Badge.svelte';
+  import BackButton from '$components/BackButton.svelte';
+  import { isDesktop } from '$lib/media';
   import FrameworkMark from '$components/FrameworkMark.svelte';
   import { frameworkMarks } from '$stores/frameworkMarks';
   import {
@@ -346,6 +348,7 @@
   {#if showWorktreeTabs}
     <div class="flex items-center page-header">
       <div class="flex items-center gap-1 px-3 overflow-x-auto flex-1 min-w-0">
+      {#if !$isDesktop}<BackButton />{/if}
       {#each tabEntries as e (e.isMain ? '__main__' : e.branch)}
         {@const isActive = e.isMain ? activeWorktreeBranch === '' : e.branch === activeWorktreeBranch}
         {@const git = checkoutFor(gitCheckouts, e)}
@@ -471,6 +474,7 @@
   {/if}
 
   <div class="p-3 flex items-center gap-3">
+    {#if !$isDesktop && !showWorktreeTabs}<BackButton />{/if}
     <div
       class="group flex-1 min-w-0 flex items-center gap-2 h-8 pl-3 pr-2 rounded-full border bg-gray-50 dark:bg-white/[0.03] transition-colors {site.paused
         ? 'border-gray-200 dark:border-lerd-border opacity-70'

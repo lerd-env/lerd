@@ -1,4 +1,4 @@
-import type { DumpEvent } from '$lib/dumpsStream';
+import type { DumpEvent } from '$lib/dumpEvent';
 
 // Shared request-grouping primitives for every Debug lens (dumps, queries,
 // jobs, views, …). Centralised so the branch rule can't drift between the

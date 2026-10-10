@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { apiJson } from '$lib/api';
+import { sharedJson } from '$lib/api';
 
 export interface FrameworkMark {
   svg?: string;
@@ -15,7 +15,7 @@ export const frameworkMarks = writable<Record<string, FrameworkMark>>({});
 
 export async function loadFrameworkMarks() {
   try {
-    frameworkMarks.set((await apiJson<Record<string, FrameworkMark>>('/api/frameworks/marks')) || {});
+    frameworkMarks.set((await sharedJson<Record<string, FrameworkMark>>('/api/frameworks/marks')) || {});
   } catch {
     /* keep whatever we already drew */
   }

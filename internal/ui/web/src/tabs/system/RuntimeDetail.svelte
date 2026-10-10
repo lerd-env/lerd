@@ -1,4 +1,6 @@
 <script lang="ts">
+  import DetailHeader from '$components/DetailHeader.svelte';
+  import { m } from '../../paraglide/messages.js';
   import { onMount } from 'svelte';
   import { phpRuntime, phpRuntimeApplies, loadPHPRuntime, type PHPRuntime } from '$stores/phpRuntime';
   import { workerModeApplies, loadWorkerMode } from '$stores/workerMode';
@@ -20,12 +22,17 @@
 </script>
 
 <div class="flex-1 overflow-y-auto">
+  <!-- Neither applies on Linux; a link that lands here still gets a header,
+       and with it the way back on a phone. -->
+  {#if !$phpRuntimeApplies && !showWorkerMode}
+    <DetailHeader title={m.system_phpRuntime_title()} />
+  {/if}
   {#if $phpRuntimeApplies}
     <PHPRuntimeDetail onselect={(m) => (selected = m)} />
   {/if}
   {#if showWorkerMode}
     <div class="border-t-8 border-gray-100 dark:border-lerd-bg">
-      <WorkerModeDetail />
+      <WorkerModeDetail back={!$phpRuntimeApplies} />
     </div>
   {/if}
 </div>

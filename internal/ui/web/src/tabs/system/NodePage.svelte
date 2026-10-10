@@ -1,4 +1,5 @@
 <script lang="ts">
+  import DetailHeader from '$components/DetailHeader.svelte';
   import { onMount } from 'svelte';
   import { status, loadStatus } from '$stores/status';
   import { nodeVersions, loadNodeVersions, setDefaultNode, removeNode, installNode, manageNode, unmanageNode, setNodeManager } from '$stores/nodeVersions';
@@ -147,9 +148,8 @@
 </script>
 
 <div class="flex-1 overflow-y-auto">
-  <div class="flex flex-wrap items-center justify-between gap-y-2 px-3 py-1.5 page-header">
-    <div class="flex items-center gap-3">
-      <span class="font-semibold text-gray-900 dark:text-white text-base">{$status.using_system_bun ? m.dashboard_health_jsRuntime() : m.system_nodeJs()}</span>
+  <DetailHeader title={$status.using_system_bun ? m.dashboard_health_jsRuntime() : m.system_nodeJs()}>
+    {#snippet beside()}
       {#if !$status.node_managed_by_lerd}
         <span class="text-[10px] font-medium text-blue-500 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 rounded-sm px-1.5 py-0.5">{m.system_system()}</span>
       {/if}
@@ -162,7 +162,8 @@
           title={$status.using_system_bun ? m.system_node_usingBunHint() : ''}
         >🥟 bun {$status.bun_version}</span>
       {/if}
-    </div>
+    {/snippet}
+    {#snippet trailing()}
     <div class="flex items-center gap-2">
       {#if manageError}<span class="text-xs text-red-500">{manageError}</span>{/if}
       <!-- mise and fnm are always both on offer; nvm is only ever a choice on a
@@ -193,7 +194,8 @@
         >{m.system_node_manage()}</DetailButton>
       {/if}
     </div>
-  </div>
+    {/snippet}
+  </DetailHeader>
 
   <div class="p-3 space-y-3">
     {#if $status.using_system_bun}

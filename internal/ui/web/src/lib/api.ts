@@ -28,6 +28,22 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// sharing holds the reads sharedJson has on their way.
+const sharing = new Map<string, Promise<unknown>>();
+
+// sharedJson is apiJson for what several stores load at the same moment on
+// start (settings, status, icons): callers that ask while a read of the path is
+// on its way share it. Nothing is kept once it lands, and each caller gets its
+// own copy, so one store changing its answer never reaches another.
+export async function sharedJson<T>(path: string): Promise<T> {
+  let pending = sharing.get(path);
+  if (!pending) {
+    pending = apiJson(path).finally(() => sharing.delete(path));
+    sharing.set(path, pending);
+  }
+  return structuredClone(await pending) as T;
+}
+
 /**
  * Decode a response that handlers sometimes return as JSON envelopes and
  * sometimes as plain-text error bodies (via http.Error). Returns the parsed

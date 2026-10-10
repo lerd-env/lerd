@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { normalizeRoute, routeQuery, routeOf } from './route';
-import type { DumpEvent } from '$lib/dumpsStream';
+import type { DumpEvent } from '$lib/dumpEvent';
 
 // The same cases internal/reqstats/route_test.go holds, so a route clicked in the
 // timing view names exactly the requests the watcher grouped under it.

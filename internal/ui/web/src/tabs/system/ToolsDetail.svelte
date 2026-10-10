@@ -1,4 +1,5 @@
 <script lang="ts">
+  import DetailHeader from '$components/DetailHeader.svelte';
   import { status, checkToolUpdates } from '$stores/status';
   import ToolCard from '$components/ToolCard.svelte';
   import CheckUpdatesButton from '$components/CheckUpdatesButton.svelte';
@@ -33,10 +34,9 @@
 </script>
 
 <div class="flex-1 overflow-y-auto">
-  <div class="flex flex-wrap items-center justify-between gap-y-2 px-3 py-1.5 page-header">
-    <span class="font-semibold text-gray-900 dark:text-white text-base">{m.system_tools_title()}</span>
-    <CheckUpdatesButton onclick={runCheck} {checking} title={m.system_tools_checkTitle()} />
-  </div>
+  <DetailHeader title={m.system_tools_title()}>
+    {#snippet trailing()}<CheckUpdatesButton onclick={runCheck} {checking} title={m.system_tools_checkTitle()} />{/snippet}
+  </DetailHeader>
 
   <div class="p-3 space-y-3">
     <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_tools_description()}</p>

@@ -1,16 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, cleanup, waitFor } from '@testing-library/svelte';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { render, cleanup, waitFor, fireEvent } from '@testing-library/svelte';
 import { get } from 'svelte/store';
 import DumpsTab from './DumpsTab.svelte';
-import {
-  dumps,
-  filterSite,
-  filterCtx,
-  filterText,
-  status
-} from '../stores/dumps';
+import { filterSite, filterCtx, filterText, status } from '../stores/dumps';
 import { debugSearch } from '../stores/debugLens';
-import type { DumpEvent } from '../lib/dumpsStream';
+import { installFakeLensApi, type FakeLensApi } from '../lib/fakeLensApi';
+import type { DumpEvent } from '../lib/dumpEvent';
 
 function ev(over: Partial<DumpEvent> & { id: string }): DumpEvent {
   return {
@@ -24,146 +19,84 @@ function ev(over: Partial<DumpEvent> & { id: string }): DumpEvent {
   };
 }
 
-// MockEventSource keeps connect() from actually opening a network socket
-// during the component's onMount.
-class MockEventSource {
-  url: string;
-  listeners: Record<string, ((e: unknown) => void)[]> = {};
-  closed = false;
-  constructor(url: string) {
-    this.url = url;
-  }
-  addEventListener(ev: string, fn: (e: unknown) => void) {
-    (this.listeners[ev] ||= []).push(fn);
-  }
-  close() {
-    this.closed = true;
-  }
-}
-
 describe('DumpsTab', () => {
-  const realES = globalThis.EventSource;
-  const realFetch = globalThis.fetch;
+  let api: FakeLensApi;
 
   beforeEach(() => {
-    dumps.set([]);
+    api = installFakeLensApi();
     filterSite.set('');
     filterCtx.set('');
     filterText.set('');
     debugSearch.set('');
-    status.set({
-      enabled: true,
-      passthrough: false,
-      listening: true,
-      addr: 'unix:/tmp/x',
-      count: 0,
-      subscribers: 0,
-      last_ts: ''
-    });
-    // @ts-expect-error test double
-    globalThis.EventSource = MockEventSource;
-    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ enabled: true }), { status: 200 })) as unknown as typeof fetch;
+    status.set({ enabled: true, passthrough: false, listening: true, addr: 'unix:/tmp/x', count: 0, subscribers: 0, last_ts: '' });
   });
 
   afterEach(() => {
     cleanup();
-    globalThis.EventSource = realES;
-    globalThis.fetch = realFetch;
+    api.restore();
   });
 
-  it('renders dump events that match siteScope', async () => {
-    dumps.set([
+  it('asks lerd-ui for the site dumps and renders them without the site prefix', async () => {
+    api.events.push(
       ev({ id: 'a', ctx: { type: 'fpm', site: 'whitewaters', request: 'GET /matched' } }),
       ev({ id: 'b', ctx: { type: 'fpm', site: 'otherone', request: 'GET /excluded' } })
-    ]);
+    );
     const { container } = render(DumpsTab, { siteScope: 'whitewaters' });
-    await waitFor(() => {
-      // Scoped view drops the [site] prefix — assert the request URL of
-      // the matching event is visible and the excluded one isn't.
-      expect(container.textContent).toContain('GET /matched');
-    });
+    await waitFor(() => expect(container.textContent).toContain('GET /matched'));
     expect(container.textContent).not.toContain('GET /excluded');
     expect(container.textContent).not.toContain('[whitewaters]');
+    expect(api.requests.some((u) => u.startsWith('/api/dumps/groups') && u.includes('kind=dump') && u.includes('site=whitewaters'))).toBe(true);
   });
 
-  it('shows empty state when no events match scope', async () => {
-    dumps.set([
-      ev({ id: 'a', ctx: { type: 'fpm', site: 'someone-else', request: 'GET /' } })
-    ]);
+  it('shows the empty state when the site has no dumps', async () => {
+    api.events.push(ev({ id: 'a', ctx: { type: 'fpm', site: 'someone-else', request: 'GET /' } }));
     const { container } = render(DumpsTab, { siteScope: 'whitewaters' });
-    await waitFor(() => {
-      expect(container.textContent).toMatch(/Waiting for dumps/);
-    });
+    await waitFor(() => expect(container.textContent).toMatch(/Waiting for dumps/));
   });
 
   it('does not mutate global filterSite when scoped', async () => {
     filterSite.set('previously-selected');
-    dumps.set([ev({ id: 'a', ctx: { type: 'fpm', site: 'whitewaters' } })]);
     render(DumpsTab, { siteScope: 'whitewaters' });
-    // Give onMount + effects a chance to run.
     await new Promise((r) => setTimeout(r, 20));
     expect(get(filterSite)).toBe('previously-selected');
   });
 
-  it('shows an Enable button when the bridge is off and the ring-3 is empty', async () => {
-    status.set({
-      enabled: false,
-      passthrough: false,
-      listening: true,
-      addr: 'unix:/tmp/x',
-      count: 0,
-      subscribers: 0,
-      last_ts: ''
-    });
+  it('shows an Enable button when the bridge is off and nothing was captured', async () => {
+    api.enabled = false;
+    status.set({ enabled: false, passthrough: false, listening: true, addr: 'unix:/tmp/x', count: 0, subscribers: 0, last_ts: '' });
     const { container } = render(DumpsTab, { siteScope: 'whitewaters' });
-    await waitFor(() => {
-      expect(container.textContent).toMatch(/Enable debug bridge/);
-    });
+    await waitFor(() => expect(container.textContent).toMatch(/Enable debug bridge/));
     expect(container.textContent).toMatch(/Debug bridge is disabled/);
   });
 
-  it('renders only the first page of rows and grows on load more', async () => {
-    dumps.set(
-      Array.from({ length: 250 }, (_, i) =>
-        ev({
-          id: `e${i}`,
-          ts: `2026-05-10T12:00:${String(i % 60).padStart(2, '0')}.000Z`,
-          ctx: { type: 'fpm', site: 'whitewaters', request: `GET /r${i}`, rid: `r${i}` }
-        })
-      )
-    );
+  it('holds one page of requests and reads the next from where it ended', async () => {
+    for (let i = 0; i < 35; i++) {
+      api.events.push(ev({ id: `e${i}`, ctx: { type: 'fpm', site: 'whitewaters', request: `GET /r${i}`, pid: i } }));
+    }
     const { container, getByRole } = render(DumpsTab, { siteScope: 'whitewaters' });
-    await waitFor(() => {
-      expect(container.querySelectorAll('section').length).toBe(100);
-    });
-    getByRole('button', { name: /Load more/ }).click();
-    await waitFor(() => {
-      expect(container.querySelectorAll('section').length).toBe(200);
-    });
+    await waitFor(() => expect(container.querySelectorAll('section').length).toBe(30));
+    await fireEvent.click(getByRole('button', { name: /Load more/ }));
+    await waitFor(() => expect(container.querySelectorAll('section').length).toBe(35));
+    expect(api.requests.some((u) => u.includes('before='))).toBe(true);
   });
 
-  it('resets the window when the search filter changes', async () => {
-    dumps.set(
-      Array.from({ length: 150 }, (_, i) =>
-        ev({ id: `e${i}`, ctx: { type: 'fpm', site: 'whitewaters', request: `GET /r${i}`, rid: `r${i}` } })
-      )
+  it('sends the search to lerd-ui and shows what it answers', async () => {
+    api.events.push(
+      ev({ id: 'a', ctx: { type: 'fpm', site: 'whitewaters', request: 'GET /invoice', pid: 1 } }),
+      ev({ id: 'b', ctx: { type: 'fpm', site: 'whitewaters', request: 'GET /cart', pid: 2 } })
     );
-    const { container, getByRole } = render(DumpsTab, { siteScope: 'whitewaters' });
-    await waitFor(() => expect(container.querySelectorAll('section').length).toBe(100));
-    getByRole('button', { name: /Load more/ }).click();
-    await waitFor(() => expect(container.querySelectorAll('section').length).toBe(150));
-
-    debugSearch.set('GET /r');
-    await waitFor(() => expect(container.querySelectorAll('section').length).toBe(100));
-  });
-
-  it('reacts to new events pushed into the dumps store', async () => {
     const { container } = render(DumpsTab, { siteScope: 'whitewaters' });
-    expect(container.textContent).toMatch(/Waiting for dumps/);
+    await waitFor(() => expect(container.querySelectorAll('section').length).toBe(2));
+    debugSearch.set('invoice');
+    await waitFor(() => expect(container.querySelectorAll('section').length).toBe(1));
+    expect(api.requests.some((u) => u.includes('q=invoice'))).toBe(true);
+  });
 
-    dumps.update((arr) => [...arr, ev({ id: 'live', ctx: { type: 'fpm', site: 'whitewaters', request: 'GET /live' } })]);
-    await waitFor(() => {
-      expect(container.textContent).toContain('GET /live');
-    });
+  it('reads the page again when lerd-ui says a dump arrived', async () => {
+    const { container } = render(DumpsTab, { siteScope: 'whitewaters' });
+    await waitFor(() => expect(container.textContent).toMatch(/Waiting for dumps/));
+    api.events.push(ev({ id: 'live', ctx: { type: 'fpm', site: 'whitewaters', request: 'GET /live' } }));
+    api.nudge('dump', 'whitewaters');
+    await waitFor(() => expect(container.textContent).toContain('GET /live'), { timeout: 2000 });
   });
 });

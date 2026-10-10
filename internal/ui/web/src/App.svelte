@@ -7,8 +7,8 @@
   import SidePanel from '$components/SidePanel.svelte';
   import MobileHeader from '$components/MobileHeader.svelte';
   import MobileNav from '$components/MobileNav.svelte';
-  import MobileBackBar from '$components/MobileBackBar.svelte';
   import { tab, routeRest } from '$stores/route';
+  import { isDesktop } from '$lib/media';
   import { loadVersion } from '$stores/version';
   import { loadAccessMode, accessMode } from '$stores/accessMode';
   import { loadStatus, statusLoaded, allCoreRunning } from '$stores/status';
@@ -151,28 +151,29 @@
       <MobileHeader />
     {/if}
 
-    <div class="hidden md:flex flex-col flex-1 overflow-hidden">
-      {#if $tab === 'dashboard'}
-        <DashboardTab />
-      {:else if $tab === 'sites'}
-        <SitesDetail />
-      {:else if $tab === 'services'}
-        <ServicesDetail />
-      {:else if $tab === 'system'}
-        <SystemDetail />
-      {/if}
-    </div>
-
-    {#if onApps}
-      <div class="md:hidden flex-1 flex flex-col overflow-hidden pb-16">
+    <!-- One layout is mounted, never both, so a page loads its data once. -->
+    {#if $isDesktop}
+      <div class="flex flex-col flex-1 overflow-hidden">
+        {#if $tab === 'dashboard'}
+          <DashboardTab />
+        {:else if $tab === 'sites'}
+          <SitesDetail />
+        {:else if $tab === 'services'}
+          <ServicesDetail />
+        {:else if $tab === 'system'}
+          <SystemDetail />
+        {/if}
+      </div>
+    {:else if onApps}
+      <div class="flex-1 flex flex-col overflow-hidden pb-16">
         <AppsPage />
       </div>
     {:else if onDashboard}
-      <div class="md:hidden flex-1 overflow-y-auto pb-16">
+      <div class="flex-1 overflow-y-auto pb-16">
         <DashboardTab />
       </div>
     {:else if !showMobileDetail}
-      <div class="md:hidden flex-1 overflow-y-auto pb-16">
+      <div class="flex-1 overflow-y-auto pb-16">
         {#if $tab === 'sites'}
           <SitesTab />
         {:else if $tab === 'services'}
@@ -182,8 +183,7 @@
         {/if}
       </div>
     {:else}
-      <div class="md:hidden flex-1 flex flex-col overflow-hidden pb-16">
-        <MobileBackBar />
+      <div class="flex-1 flex flex-col overflow-hidden pb-16">
         {#if $tab === 'sites'}
           <SitesDetail />
         {:else if $tab === 'services'}

@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { apiJson, apiFetch } from '$lib/api';
+import { apiFetch, sharedJson } from '$lib/api';
 import { m } from '../paraglide/messages.js';
 
 export type WorkerExecMode = 'exec' | 'container';
@@ -39,7 +39,7 @@ function normalizeMode(v: unknown): WorkerExecMode {
 
 export async function loadWorkerMode() {
   try {
-    const res = await apiJson<SettingsResponse>('/api/settings');
+    const res = await sharedJson<SettingsResponse>('/api/settings');
     workerExecMode.set(normalizeMode(res.worker_exec_mode));
     workerModeApplies.set(Boolean(res.worker_mode_applies));
   } catch {

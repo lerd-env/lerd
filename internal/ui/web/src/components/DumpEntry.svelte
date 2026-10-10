@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { DumpEvent } from '$lib/dumpsStream';
+  import type { DumpEvent } from '$lib/dumpEvent';
   import DumpView from './DumpView.svelte';
   import SourcePath from './SourcePath.svelte';
   import { parseDump, looksLikeDump } from '$lib/dump-parser';

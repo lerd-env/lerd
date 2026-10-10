@@ -1,7 +1,9 @@
 package daemon
 
 import (
+	"math"
 	"runtime"
+	"runtime/debug"
 	"testing"
 )
 
@@ -64,5 +66,29 @@ func TestTuneRuntime_respectsExplicitOverride(t *testing.T) {
 
 	if got := TuneRuntime(); got != 7 {
 		t.Errorf("TuneRuntime() = %d, want the operator's 7", got)
+	}
+}
+
+// A daemon gives memory back rather than holding the peak of its largest
+// response, since the dashboard reports it as lerd's footprint.
+func TestTuneRuntime_setsASoftMemoryLimit(t *testing.T) {
+	before := runtime.GOMAXPROCS(0)
+	t.Cleanup(func() { runtime.GOMAXPROCS(before); debug.SetMemoryLimit(math.MaxInt64) })
+
+	TuneRuntime()
+	if got := debug.SetMemoryLimit(-1); got != memoryLimit {
+		t.Errorf("memory limit = %d, want %d", got, memoryLimit)
+	}
+}
+
+func TestTuneRuntime_respectsAnExplicitGOMEMLIMIT(t *testing.T) {
+	before := runtime.GOMAXPROCS(0)
+	t.Cleanup(func() { runtime.GOMAXPROCS(before); debug.SetMemoryLimit(math.MaxInt64) })
+	t.Setenv("GOMEMLIMIT", "1GiB")
+	debug.SetMemoryLimit(1 << 30)
+
+	TuneRuntime()
+	if got := debug.SetMemoryLimit(-1); got != 1<<30 {
+		t.Errorf("memory limit = %d, want the operator's 1GiB", got)
 	}
 }

@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { apiJson } from '$lib/api';
+import { sharedJson } from '$lib/api';
 
 export interface WorkerMark {
   icon?: string;
@@ -17,7 +17,7 @@ export const workerMarks = writable<WorkerMarkSet>({ workers: {}, marks: {} });
 
 export async function loadWorkerMarks() {
   try {
-    const set = await apiJson<WorkerMarkSet>('/api/workers/marks');
+    const set = await sharedJson<WorkerMarkSet>('/api/workers/marks');
     workerMarks.set({ workers: set?.workers ?? {}, marks: set?.marks ?? {} });
   } catch {
     /* keep whatever we already drew */

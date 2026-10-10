@@ -1,4 +1,4 @@
-import { apiFetch, apiJson, apiUrl } from '$lib/api';
+import { apiFetch, apiJson, apiUrl, sharedJson } from '$lib/api';
 import {
   BUILTIN_PALETTES,
   DEFAULT_PALETTE_ID,
@@ -62,7 +62,7 @@ interface ThemesResponse {
 // first paint has something before this answers; the config is what decides.
 export async function loadPalettes() {
   try {
-    const chosen = await apiJson<{ theme?: string }>('/api/settings');
+    const chosen = await sharedJson<{ theme?: string }>('/api/settings');
     if (chosen.theme) adoptTheme(chosen.theme);
     configTheme.set(chosen.theme ?? '');
   } catch {

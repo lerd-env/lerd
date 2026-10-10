@@ -134,8 +134,8 @@ dumps:
                         # requires restarting the FPM container for the value to take
                         # effect (`systemctl --user restart lerd-php<ver>-fpm` or
                         # `lerd restart`).
-  buffer: 5000          # events lerd-ui keeps for the Debug window, about 4.5 KB each
-                        # (5,000 is some 22 MB). Kept between 3000 and 20000. Set with
+  buffer: 5000          # events lerd-ui keeps on disk for the Debug window, about 4.5 KB
+                        # each (5,000 is some 22 MB). Kept between 3000 and 20000. Set with
                         # `lerd dump buffer`, System → Debug → Settings or MCP
                         # `diag dumps_buffer`; a running lerd-ui resizes straight away.
 php:

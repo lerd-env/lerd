@@ -1,4 +1,4 @@
-import type { DumpEvent } from '$lib/dumpsStream';
+import type { DumpEvent } from '$lib/dumpEvent';
 
 // A port of internal/reqstats.NormalizeRoute: the query and fragment drop and
 // id-like segments collapse to ":id", so the Debug tab groups requests under

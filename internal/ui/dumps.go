@@ -50,7 +50,12 @@ func startDumpsServer() {
 			return
 		}
 	}
-	srv, err := dumps.ListenOn(context.Background(), network, addr)
+	ring, err := dumps.OpenRing(config.DebugEventsDB(), 0)
+	if err != nil {
+		fmt.Printf("[WARN] debug buffer: %v, falling back to memory\n", err)
+		ring = dumps.NewRing(0)
+	}
+	srv, err := dumps.ListenWithRing(context.Background(), network, addr, ring)
 	if err != nil {
 		fmt.Printf("[WARN] dumps receiver: %v — `lerd dump tail` and the dashboard Dumps tab will be empty\n", err)
 		return
@@ -60,15 +65,15 @@ func startDumpsServer() {
 		srv.Resize(cfg.DumpsBuffer())
 	}
 	srv.SetSiteResolver(newEventSiteNamer(10 * time.Second))
-	// Before Load, so the saved slowest requests that no longer fit are pinned again.
+	// Before Import, so the slowest requests in an old buffer file stay kept.
 	keepSlowestRequests(srv)
 	go func() {
 		for range time.Tick(keepSlowestEvery) {
 			keepSlowestRequests(srv)
 		}
 	}()
-	if err := srv.Load(config.DumpsBufferFile()); err != nil {
-		fmt.Printf("[WARN] restoring debug events: %v\n", err)
+	if err := srv.Import(config.DumpsBufferFile()); err != nil {
+		fmt.Printf("[WARN] importing the old debug buffer: %v\n", err)
 	}
 	// Worker capture is always on now; an install from before that has no flag.
 	if err := podman.EnsureDevtoolsAssets(); err != nil {
@@ -94,7 +99,7 @@ func handleDumpsList(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	limit, _ := strconv.Atoi(q.Get("limit"))
-	out := srv.Filter(dumps.FilterOpts{
+	out := srv.FilterJSON(dumps.FilterOpts{
 		Site:    resolveSiteName(q.Get("site")),
 		Branch:  q.Get("branch"),
 		Ctx:     q.Get("ctx"),
@@ -103,7 +108,8 @@ func handleDumpsList(w http.ResponseWriter, r *http.Request) {
 		SinceID: q.Get("since"),
 		Limit:   limit,
 	})
-	writeJSON(w, out)
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(out)
 }
 
 // handleDumpsStatus is the JSON-shaped sibling of `lerd dump status`. It
@@ -188,6 +194,10 @@ func handleDumpsStream(w http.ResponseWriter, r *http.Request) {
 		Ctx:    q.Get("ctx"),
 	}
 
+	// notify sends a nudge per event instead of the event: a lens reads what it
+	// shows from the groups endpoint, so it only needs to know to read again.
+	notify := q.Get("notify") == "1"
+
 	// Replay the ring up front so a reconnecting browser sees recent dumps
 	// without a manual refresh. Honour SinceID if the EventSource sent
 	// Last-Event-ID, so reconnections don't double-send.
@@ -202,8 +212,10 @@ func handleDumpsStream(w http.ResponseWriter, r *http.Request) {
 	if since == "" {
 		filt.Limit = streamReplayLimit
 	}
-	for _, ev := range srv.Filter(filt) {
-		writeSSEEvent(w, flusher, ev)
+	if !notify {
+		for _, ev := range srv.Filter(filt) {
+			writeSSEEvent(w, flusher, ev)
+		}
 	}
 
 	ch, unsub := srv.Subscribe()
@@ -236,9 +248,28 @@ func handleDumpsStream(w http.ResponseWriter, r *http.Request) {
 			if filt.Ctx != "" && ev.Ctx.Type != filt.Ctx {
 				continue
 			}
+			if notify {
+				writeSSENudge(w, flusher, ev)
+				continue
+			}
 			writeSSEEvent(w, flusher, ev)
 		}
 	}
+}
+
+// writeSSENudge tells a lens an event of a kind arrived, without the event.
+func writeSSENudge(w http.ResponseWriter, flusher http.Flusher, ev dumps.Event) {
+	b, err := json.Marshal(struct {
+		Kind   string `json:"kind"`
+		Site   string `json:"site"`
+		Branch string `json:"branch,omitempty"`
+		Test   bool   `json:"test,omitempty"`
+	}{ev.Kind, ev.Ctx.Site, ev.Ctx.Branch, ev.Ctx.Test})
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(w, "data: %s\n\n", b)
+	flusher.Flush()
 }
 
 func writeSSEEvent(w http.ResponseWriter, flusher http.Flusher, ev dumps.Event) {

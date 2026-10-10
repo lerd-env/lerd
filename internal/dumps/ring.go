@@ -1,12 +1,16 @@
 package dumps
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
+	"strings"
 	"sync"
+
+	_ "modernc.org/sqlite"
 )
 
 // DefaultCapacity is how many events the ring keeps when dumps.buffer is unset,
@@ -14,187 +18,301 @@ import (
 // 3000 let one push the requests before it out within seconds.
 const DefaultCapacity = 5000
 
-// Ring is a fixed-size ring buffer of Events safe for concurrent use.
-// Snapshots are taken under a read lock and returned in insertion order.
+// Ring is the debug buffer: the newest cap events, plus every event of the kept
+// requests however old. It lives in SQLite rather than memory, since a single
+// slow page can carry thousands of events and lerd-ui has to stay small; a
+// reader decodes only what it asked for. Safe for concurrent use.
 type Ring struct {
-	mu   sync.RWMutex
-	buf  []Event
-	head int // next write index
-	size int // populated entries, 0..cap
-	cap  int
-	// keep names the requests whose events move to pinned, oldest first,
-	// instead of being dropped when the buffer evicts them: each route's
-	// slowest, which the dashboard links to for days after the buffer turns over.
-	keep   map[string]bool
-	pinned []Event
+	mu  sync.Mutex
+	db  *sql.DB
+	cap int
+	// onDisk is false for an in-memory ring, which a restart loses.
+	onDisk bool
+	// keep names the requests whose events survive past the newest cap: each
+	// route's slowest, which the dashboard links to for days.
+	keep map[string]bool
+	// untrimmed counts appends since the last trim. Readers only look at the
+	// newest cap anyway, so the delete runs in batches rather than per event.
+	untrimmed int
 }
 
-// NewRing returns a ring with the given capacity. Non-positive capacity is
-// replaced with DefaultCapacity.
-func NewRing(capacity int) *Ring {
+// trimEvery is how many appends go by between trims.
+const trimEvery = 256
+
+const ringSchema = `
+CREATE TABLE IF NOT EXISTS events (
+  seq     INTEGER PRIMARY KEY,
+  id      TEXT    NOT NULL,
+  rid     TEXT    NOT NULL,
+  reached TEXT    NOT NULL,
+  site    TEXT    NOT NULL,
+  branch  TEXT    NOT NULL,
+  ctx     TEXT    NOT NULL,
+  kind    TEXT    NOT NULL,
+  test    INTEGER NOT NULL,
+  nav     INTEGER NOT NULL,
+  grp     TEXT    NOT NULL,
+  route   TEXT    NOT NULL,
+  worker  TEXT    NOT NULL,
+  facet   TEXT    NOT NULL,
+  hay     TEXT    NOT NULL,
+  fp      TEXT    NOT NULL,
+  ms      REAL    NOT NULL,
+  job     TEXT    NOT NULL,
+  kept    INTEGER NOT NULL DEFAULT 0,
+  data    BLOB    NOT NULL,
+  brief   BLOB    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_events_rid ON events(rid);
+CREATE INDEX IF NOT EXISTS idx_events_reached ON events(reached);
+CREATE INDEX IF NOT EXISTS idx_events_kept ON events(kept);
+CREATE INDEX IF NOT EXISTS idx_events_site_kind ON events(site, kind);
+CREATE INDEX IF NOT EXISTS idx_events_grp ON events(grp);
+CREATE INDEX IF NOT EXISTS idx_events_job ON events(job);
+CREATE INDEX IF NOT EXISTS idx_events_id ON events(id);`
+
+// OpenRing opens (creating if needed) the ring stored at path, so the buffer
+// survives a lerd-ui restart. Non-positive capacity means DefaultCapacity.
+func OpenRing(path string, capacity int) (*Ring, error) {
+	// The buffer is a cache of what PHP sent: losing its last writes to a crash
+	// costs nothing, so commits skip the fsync.
+	if path != ":memory:" {
+		// Events carry SQL bindings and request payloads, so owner-only, and
+		// SQLite gives its WAL and shared-memory files the same mode.
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+		if err != nil {
+			return nil, err
+		}
+		f.Close()
+		if err := os.Chmod(path, 0o600); err != nil {
+			return nil, err
+		}
+	}
+	dsn := path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(OFF)"
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+	// One connection: every call already holds mu, and an in-memory database
+	// exists per connection, so a second one would see an empty ring.
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(ringSchema); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("debug events schema: %w", err)
+	}
 	if capacity <= 0 {
 		capacity = DefaultCapacity
 	}
-	return &Ring{buf: make([]Event, capacity), cap: capacity}
+	return &Ring{db: db, cap: capacity, onDisk: path != ":memory:"}, nil
 }
 
-// Resize changes how many events the ring keeps, carrying over the newest
-// ones that fit, so the size can change without restarting lerd-ui.
+// NewRing returns a ring held in an in-memory database, for a process that does
+// not need the buffer to outlive it.
+func NewRing(capacity int) *Ring {
+	r, err := OpenRing(":memory:", capacity)
+	if err != nil {
+		panic(fmt.Sprintf("in-memory debug buffer: %v", err))
+	}
+	return r
+}
+
+// Close releases the database.
+func (r *Ring) Close() error { return r.db.Close() }
+
+// Resize changes how many events the ring keeps, dropping the oldest that no
+// longer fit unless a kept request ran them.
 func (r *Ring) Resize(capacity int) {
 	if capacity <= 0 {
 		capacity = DefaultCapacity
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	kept := r.snapshot()
-	if len(kept) > capacity {
-		for _, e := range kept[:len(kept)-capacity] {
-			r.pin(e)
-		}
-		kept = kept[len(kept)-capacity:]
-	}
-	buf := make([]Event, capacity)
-	copy(buf, kept)
-	r.buf, r.cap, r.size, r.head = buf, capacity, len(kept), len(kept)%capacity
+	r.cap = capacity
+	r.trim()
 }
 
-// Append stores e, evicting the oldest entry once the ring is full.
+// Append stores e, dropping the oldest event once the ring is full unless it
+// belongs to a kept request.
 func (r *Ring) Append(e Event) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.size == r.cap {
-		r.pin(r.buf[r.head])
+	warnRing("storing an event", r.insert(e))
+}
+
+// insert stores e and trims once enough have landed. Callers hold mu.
+func (r *Ring) insert(e Event) error {
+	if err := r.store(r.db, e); err != nil {
+		return err
 	}
-	r.buf[r.head] = e
-	r.head = (r.head + 1) % r.cap
-	if r.size < r.cap {
-		r.size++
+	if r.untrimmed++; r.untrimmed >= trimEvery {
+		r.trim()
 	}
+	return nil
+}
+
+// querier is the database or a transaction on it, which store writes through.
+type querier interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+// store writes e through q. Callers hold mu.
+func (r *Ring) store(q querier, e Event) error {
+	// A worker's row of a Laravel job has no payload, which is only readable
+	// where the job was dispatched, so it takes the queued row's.
+	job, hasPayload := jobUUID(e)
+	if job != "" && !hasPayload {
+		var queued []byte
+		if q.QueryRow(`SELECT data FROM events WHERE job = ? ORDER BY seq LIMIT 1`, job).Scan(&queued) == nil {
+			var prior struct {
+				Data struct {
+					Payload json.RawMessage `json:"payload"`
+				} `json:"data"`
+			}
+			if json.Unmarshal(queued, &prior) == nil && len(prior.Data.Payload) > 0 {
+				e.Data = withPayload(e.Data, prior.Data.Payload)
+			}
+		}
+	}
+	data, err := json.Marshal(e)
+	if err != nil {
+		return err
+	}
+	reached := e.reachedRID()
+	var fp string
+	var ms float64
+	if qd, ok := e.Query(); ok {
+		fp, ms = normalizeSQL(qd.SQL), qd.TimeMS
+	}
+	_, err = q.Exec(
+		`INSERT INTO events(id, rid, reached, site, branch, ctx, kind, test, nav, grp, route, worker, facet, hay, fp, ms, job, kept, data, brief)
+		 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		e.ID, e.Ctx.RID, reached, e.Ctx.Site, e.Ctx.Branch, e.Ctx.Type, e.Kind, e.Ctx.Test, e.isPageView(),
+		groupKey(e), routeOf(e), e.Ctx.Worker, facetOf(e), haystack(e), fp, ms, job,
+		r.keep[e.Ctx.RID] || r.keep[reached], data, brief(e, data))
+	return err
 }
 
 // SetKeep replaces the set of requests whose events outlive the buffer, and
-// drops the pinned events of any request no longer in it.
+// lets go of the ones no longer in it.
 func (r *Ring) SetKeep(keep map[string]bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.keep = keep
-	r.pinned = r.removePinned(func(e Event) bool { return !r.kept(e) })
-}
-
-// pin sets an evicted event aside when it belongs to a kept request.
-func (r *Ring) pin(e Event) {
-	if r.kept(e) {
-		r.pinned = append(r.pinned, e)
+	tx, err := r.db.Begin()
+	if err != nil {
+		warnRing("marking kept requests", err)
+		return
 	}
-}
-
-// kept reports whether e ran in a kept request or is a browser event naming
-// one as the request it reached.
-func (r *Ring) kept(e Event) bool {
-	return r.keep[e.Ctx.RID] || r.keep[e.reachedRID()]
-}
-
-// removePinned returns the pinned events drop does not match, in order.
-func (r *Ring) removePinned(drop func(Event) bool) []Event {
-	var left []Event
-	for _, e := range r.pinned {
-		if !drop(e) {
-			left = append(left, e)
+	_, err = tx.Exec(`UPDATE events SET kept = 0 WHERE kept = 1`)
+	for rid := range keep {
+		if err != nil {
+			break
 		}
+		_, err = tx.Exec(`UPDATE events SET kept = 1 WHERE rid = ? OR reached = ?`, rid, rid)
 	}
-	return left
+	if err != nil {
+		tx.Rollback()
+		warnRing("marking kept requests", err)
+		return
+	}
+	warnRing("marking kept requests", tx.Commit())
+	r.trim()
 }
 
-// Snapshot returns a copy of the ring contents in insertion order (oldest
-// first). The returned slice is independent of the ring's backing array.
+// trim deletes what fell out of the newest cap events and no kept request ran.
+func (r *Ring) trim() {
+	r.untrimmed = 0
+	_, err := r.db.Exec(`DELETE FROM events WHERE kept = 0 AND seq < ?`, r.floor())
+	warnRing("dropping old events", err)
+}
+
+// floor is the oldest seq still among the newest cap events, 0 while the ring
+// holds fewer.
+func (r *Ring) floor() int64 {
+	var seq int64
+	err := r.db.QueryRow(`SELECT seq FROM events ORDER BY seq DESC LIMIT 1 OFFSET ?`, r.cap-1).Scan(&seq)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0
+	}
+	warnRing("reading the buffer", err)
+	return seq
+}
+
+// Snapshot returns the buffer, the newest cap events, oldest first.
 func (r *Ring) Snapshot() []Event {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.snapshot()
+	return r.Filter(FilterOpts{})
 }
 
-func (r *Ring) snapshot() []Event {
-	out := make([]Event, 0, r.size)
-	if r.size < r.cap {
-		out = append(out, r.buf[:r.size]...)
-		return out
-	}
-	out = append(out, r.buf[r.head:]...)
-	out = append(out, r.buf[:r.head]...)
-	return out
-}
-
-// Len returns the number of populated entries.
+// Len returns how many events the buffer holds, kept requests aside.
 func (r *Ring) Len() int {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.size
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var n int
+	warnRing("counting events", r.db.QueryRow(`SELECT COUNT(*) FROM events WHERE seq >= ?`, r.floor()).Scan(&n))
+	return n
 }
 
-// Cap returns the maximum number of entries the ring can hold.
+// Cap returns the maximum number of events the buffer holds.
 func (r *Ring) Cap() int {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.cap
 }
 
-// Clear empties the ring. Subsequent Snapshot() returns an empty slice.
+// Clear empties the ring, kept requests included.
 func (r *Ring) Clear() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.head = 0
-	r.size = 0
-	r.pinned = nil
-	for i := range r.buf {
-		r.buf[i] = Event{}
-	}
+	_, err := r.db.Exec(`DELETE FROM events`)
+	warnRing("clearing events", err)
 }
 
-// Remove drops every entry drop matches, keeping the rest in order and freeing
-// their slots for new events.
+// Remove drops every event drop matches, kept requests included.
 func (r *Ring) Remove(drop func(Event) bool) {
-	// One lock across the read and the rewrite, or an event appended between
-	// them would be overwritten by the older copy.
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	kept := make([]Event, 0, r.size)
-	for _, e := range r.snapshot() {
-		if !drop(e) {
-			kept = append(kept, e)
+	// First, or rows already out of the buffer would slide back into it once
+	// the removed ones stop counting toward cap.
+	r.trim()
+	rows, err := r.db.Query(`SELECT seq, data FROM events`)
+	if err != nil {
+		warnRing("reading events", err)
+		return
+	}
+	var doomed []int64
+	for rows.Next() {
+		var seq int64
+		var data []byte
+		var e Event
+		if rows.Scan(&seq, &data) == nil && json.Unmarshal(data, &e) == nil && drop(e) {
+			doomed = append(doomed, seq)
 		}
 	}
-	r.pinned = r.removePinned(drop)
-	clear(r.buf)
-	copy(r.buf, kept)
-	r.size = len(kept)
-	r.head = len(kept) % r.cap
-}
-
-// Save writes the ring to path, so a restarted lerd-ui can pick up where this
-// one stopped. Owner-only: events carry SQL bindings and request payloads.
-// Pinned events go first, as the oldest, so a Load with the same keep set
-// evicts them straight back into pinned.
-func (r *Ring) Save(path string) error {
-	r.mu.RLock()
-	events := append(append([]Event(nil), r.pinned...), r.snapshot()...)
-	r.mu.RUnlock()
-	b, err := json.Marshal(events)
+	rows.Close()
+	tx, err := r.db.Begin()
 	if err != nil {
-		return err
+		warnRing("removing events", err)
+		return
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
+	for _, seq := range doomed {
+		if _, err := tx.Exec(`DELETE FROM events WHERE seq = ?`, seq); err != nil {
+			tx.Rollback()
+			warnRing("removing events", err)
+			return
+		}
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	warnRing("removing events", tx.Commit())
 }
 
-// Load appends the events Save wrote to path, oldest first, so the newest that
-// fit survive a smaller ring. A missing file is an empty buffer, not an error.
-func (r *Ring) Load(path string) error {
+// Import appends the events an older lerd-ui saved to a JSON file at path,
+// oldest first, and deletes the file once every one is on disk. Until then it
+// is their only copy, so a write that fails, or a ring held in memory, leaves
+// it for the next start. A missing file is nothing to import.
+func (r *Ring) Import(path string) error {
+	if !r.onDisk {
+		return nil
+	}
 	b, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
@@ -203,26 +321,56 @@ func (r *Ring) Load(path string) error {
 		return err
 	}
 	var events []Event
-	if err := json.Unmarshal(b, &events); err != nil {
+	err = json.Unmarshal(b, &events)
+	b = nil
+	if err != nil {
+		return err
+	}
+	if err := r.importEvents(events); err != nil {
+		return fmt.Errorf("importing the old debug buffer: %w", err)
+	}
+	return os.Remove(path)
+}
+
+// importEvents stores events in one transaction, so a failure part way writes
+// none of them and the retry on the next start cannot store any twice.
+func (r *Ring) importEvents(events []Event) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	tx, err := r.db.Begin()
+	if err != nil {
 		return err
 	}
 	for _, e := range events {
-		r.Append(e)
+		if err := r.store(tx, e); err != nil {
+			tx.Rollback()
+			return err
+		}
 	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	r.trim()
 	return nil
 }
 
 // RequestIDs is the set of requests with at least one event in the ring: the
 // ones a recent request's Inspect can open on something.
 func (r *Ring) RequestIDs() map[string]bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	out := map[string]bool{}
-	for _, e := range append(append([]Event(nil), r.pinned...), r.snapshot()...) {
-		if e.Ctx.RID != "" {
-			out[e.Ctx.RID] = true
-		}
-		if rid := e.reachedRID(); rid != "" {
+	rows, err := r.db.Query(
+		`SELECT rid FROM events WHERE seq >= ?1 OR kept = 1
+		 UNION SELECT reached FROM events WHERE reached != '' AND (seq >= ?1 OR kept = 1)`, r.floor())
+	if err != nil {
+		warnRing("listing requests", err)
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var rid string
+		if rows.Scan(&rid) == nil && rid != "" {
 			out[rid] = true
 		}
 	}
@@ -241,47 +389,176 @@ type FilterOpts struct {
 	// Kind exact-matches Event.Kind when non-empty (e.g. "query", "dump").
 	Kind string
 	// RID keeps one request's events: those it ran, and a browser event that
-	// names it as the request a fetch reached.
+	// names it as the request a fetch reached. A kept request is found even
+	// after it left the buffer.
 	RID string
 	// SinceID drops events whose ID is lexicographically <= SinceID.
 	SinceID string
+	// Before keeps only events whose ID sorts before it, so a list pages back
+	// from the oldest row it already shows.
+	Before string
+	// HideTests leaves out events captured inside a test run.
+	HideTests bool
+	// Route keeps one route as the timing view names it ("GET /users/:id").
+	Route string
 	// Limit caps the returned slice to the most recent N entries.
 	// Zero or negative means no limit.
 	Limit int
 }
 
-// Filter returns a Snapshot filtered by opts, preserving insertion order.
+// Filter returns the events opts selects, oldest first.
 func (r *Ring) Filter(opts FilterOpts) []Event {
-	r.mu.RLock()
-	snap := r.snapshot()
+	out := []Event{}
+	r.eachRow(opts, func(data []byte) {
+		var e Event
+		if json.Unmarshal(data, &e) == nil {
+			out = append(out, e)
+		}
+	})
+	return out
+}
+
+// FilterJSON is Filter encoded as a JSON array, built from the stored rows as
+// they are, so serving thousands of events costs one copy rather than a decode
+// and an encode of each.
+func (r *Ring) FilterJSON(opts FilterOpts) []byte {
+	buf := []byte{'['}
+	r.eachRow(opts, func(data []byte) {
+		if len(buf) > 1 {
+			buf = append(buf, ',')
+		}
+		buf = append(buf, data...)
+	})
+	return append(buf, ']')
+}
+
+// where is the condition opts selects on, and its arguments.
+func (r *Ring) where(opts FilterOpts) (string, []any) {
+	where := []string{"seq >= ?"}
+	args := []any{r.floor()}
 	if opts.RID != "" {
-		snap = append(append([]Event(nil), r.pinned...), snap...)
+		where = []string{"(seq >= ? OR kept = 1)", "(rid = ? OR reached = ?)"}
+		args = append(args, opts.RID, opts.RID)
 	}
-	r.mu.RUnlock()
-	out := make([]Event, 0, len(snap))
-	for _, e := range snap {
-		if opts.Site != "" && e.Ctx.Site != opts.Site {
-			continue
+	for _, f := range []struct{ col, val string }{
+		{"site", opts.Site}, {"branch", opts.Branch}, {"ctx", opts.Ctx}, {"kind", opts.Kind},
+	} {
+		if f.val != "" {
+			where = append(where, f.col+" = ?")
+			args = append(args, f.val)
 		}
-		if opts.Branch != "" && e.Ctx.Branch != opts.Branch {
-			continue
-		}
-		if opts.Ctx != "" && e.Ctx.Type != opts.Ctx {
-			continue
-		}
-		if opts.Kind != "" && e.Kind != opts.Kind {
-			continue
-		}
-		if opts.RID != "" && !e.OfRequest(opts.RID) {
-			continue
-		}
-		if opts.SinceID != "" && e.ID <= opts.SinceID {
-			continue
-		}
-		out = append(out, e)
 	}
-	if opts.Limit > 0 && len(out) > opts.Limit {
-		out = out[len(out)-opts.Limit:]
+	if opts.SinceID != "" {
+		where = append(where, "id > ?")
+		args = append(args, opts.SinceID)
+	}
+	if opts.Before != "" {
+		where = append(where, "id < ?")
+		args = append(args, opts.Before)
+	}
+	if opts.HideTests {
+		where = append(where, "test = 0")
+	}
+	if opts.Route != "" {
+		where = append(where, "route = ?")
+		args = append(args, opts.Route)
+	}
+	return strings.Join(where, " AND "), args
+}
+
+// eachRow calls fn with the stored JSON of every event opts selects, oldest
+// first. data is only valid during the call.
+func (r *Ring) eachRow(opts FilterOpts, fn func(data []byte)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cond, args := r.where(opts)
+	// The newest Limit, oldest first: find where they start, then read forward
+	// on the primary key, so SQLite streams rows instead of sorting a copy.
+	if opts.Limit > 0 {
+		var from int64
+		err := r.db.QueryRow(`SELECT seq FROM events WHERE `+cond+` ORDER BY seq DESC LIMIT 1 OFFSET ?`,
+			append(args, opts.Limit-1)...).Scan(&from)
+		if err == nil {
+			cond += " AND seq >= ?"
+			args = append(args, from)
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			warnRing("reading events", err)
+			return
+		}
+	}
+	rows, err := r.db.Query(`SELECT data FROM events WHERE `+cond+` ORDER BY seq`, args...)
+	if err != nil {
+		warnRing("reading events", err)
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var data sql.RawBytes
+		if rows.Scan(&data) == nil {
+			fn(data)
+		}
+	}
+}
+
+// Counts is how many events of each kind opts selects, page views aside: the
+// lens bar's badges, counted where the events are rather than in a tab.
+func (r *Ring) Counts(opts FilterOpts) map[string]int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cond, args := r.where(opts)
+	out := map[string]int{}
+	rows, err := r.db.Query(`SELECT kind, COUNT(*) FROM events WHERE `+cond+` AND nav = 0 GROUP BY kind`, args...)
+	if err != nil {
+		warnRing("counting events", err)
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var kind string
+		var n int
+		if rows.Scan(&kind, &n) == nil {
+			out[kind] = n
+		}
 	}
 	return out
+}
+
+// TestCount is how many test-run events opts would select with them shown,
+// for the hint that some are hidden.
+func (r *Ring) TestCount(opts FilterOpts) int {
+	opts.HideTests = false
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cond, args := r.where(opts)
+	var n int
+	warnRing("counting events", r.db.QueryRow(`SELECT COUNT(*) FROM events WHERE `+cond+` AND test = 1 AND nav = 0`, args...).Scan(&n))
+	return n
+}
+
+// Sites lists every site with an event in the buffer, for the site filter.
+func (r *Ring) Sites() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := []string{}
+	rows, err := r.db.Query(`SELECT DISTINCT site FROM events WHERE seq >= ? ORDER BY site`, r.floor())
+	if err != nil {
+		warnRing("listing sites", err)
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var site string
+		if rows.Scan(&site) == nil {
+			out = append(out, site)
+		}
+	}
+	return out
+}
+
+// warnRing reports a failed database call on lerd-ui's log. Capture carries on
+// for the next event, so one failed write never stops the stream.
+func warnRing(what string, err error) {
+	if err != nil {
+		fmt.Printf("[WARN] debug buffer, %s: %v\n", what, err)
+	}
 }
