@@ -1,6 +1,7 @@
 import { writable } from 'svelte/store';
 import { apiFetch, apiJson } from '$lib/api';
 import { wsMessage } from '$lib/ws';
+import { nudgeAll } from '$lib/lens';
 
 export interface DumpsStatus {
   enabled: boolean;
@@ -51,6 +52,8 @@ wsMessage.subscribe((msg) => {
 // clearDumps empties the buffer, or with a kind only that kind's events.
 export async function clearDumps(kind?: string): Promise<void> {
   await apiFetch(kind ? `/api/dumps/clear?kind=${encodeURIComponent(kind)}` : '/api/dumps/clear', { method: 'POST' });
+  // Every open lens and badge counter shows what was just cleared.
+  nudgeAll();
   void refreshStatus();
 }
 

@@ -82,7 +82,7 @@ func TestHandleDumpsGroupRows_ReadsFurtherIntoAGroup(t *testing.T) {
 	}
 	var rows []dumps.Row
 	lensGet(t, func(w *httptest.ResponseRecorder) {
-		handleDumpsGroupRows(w, httptest.NewRequest("GET", "/api/dumps/groups/rows?site=acme&kind=query&key=rid:r1&offset=2", nil))
+		handleDumpsGroupRows(w, httptest.NewRequest("GET", "/api/dumps/groups/rows?site=acme&kind=query&key=rid:r1&before=2", nil))
 	}, &rows)
 	if len(rows) != 1 || !strings.Contains(string(rows[0].Event), `"id":"a"`) {
 		t.Errorf("rows = %+v", rows)

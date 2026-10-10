@@ -63,7 +63,7 @@ func TestRing_GroupsCapRowsAndPageWithinAGroup(t *testing.T) {
 	if g.Count != 5 || fmt.Sprint(groupIDs(g)) != "[e5 e4]" {
 		t.Fatalf("group = count %d rows %v, want 5 and the newest two", g.Count, groupIDs(g))
 	}
-	more := r.GroupRows(opts, g.Key, 2)
+	more := r.GroupRows(opts, g.Key, g.Rows[len(g.Rows)-1].Seq)
 	if fmt.Sprint(groupIDs(Group{Rows: more})) != "[e3 e2]" {
 		t.Errorf("more rows = %v", groupIDs(Group{Rows: more}))
 	}
@@ -265,5 +265,21 @@ func TestRing_DumpGroupsFilterByContextAndSearchTheirOutput(t *testing.T) {
 		if keys(GroupOpts{Search: q}) != 1 {
 			t.Errorf("search %q did not find the web dump by label, output or file", q)
 		}
+	}
+}
+
+// A group read further while new events keep landing in it must not hand back
+// a row it already gave: paging follows the last row shown, not an offset.
+func TestRing_GroupRowsPageFromTheLastRowNotAnOffset(t *testing.T) {
+	r := NewRing(50)
+	for i := 1; i <= 5; i++ {
+		r.Append(queryEvent(fmt.Sprintf("e%d", i), "r1", "select 1", 1))
+	}
+	opts := GroupOpts{FilterOpts: FilterOpts{Kind: KindQuery}, Limit: 10, Rows: 2}
+	g := r.Groups(opts).Groups[0]
+	r.Append(queryEvent("e6", "r1", "select 1", 1))
+	more := r.GroupRows(opts, g.Key, g.Rows[len(g.Rows)-1].Seq)
+	if fmt.Sprint(groupIDs(Group{Rows: more})) != "[e3 e2]" {
+		t.Errorf("next rows = %v, want e3 e2 whatever arrived since", groupIDs(Group{Rows: more}))
 	}
 }

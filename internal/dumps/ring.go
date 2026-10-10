@@ -26,6 +26,8 @@ type Ring struct {
 	mu  sync.Mutex
 	db  *sql.DB
 	cap int
+	// onDisk is false for an in-memory ring, which a restart loses.
+	onDisk bool
 	// keep names the requests whose events survive past the newest cap: each
 	// route's slowest, which the dashboard links to for days.
 	keep map[string]bool
@@ -101,7 +103,7 @@ func OpenRing(path string, capacity int) (*Ring, error) {
 	if capacity <= 0 {
 		capacity = DefaultCapacity
 	}
-	return &Ring{db: db, cap: capacity}, nil
+	return &Ring{db: db, cap: capacity, onDisk: path != ":memory:"}, nil
 }
 
 // NewRing returns a ring held in an in-memory database, for a process that does
@@ -134,6 +136,11 @@ func (r *Ring) Resize(capacity int) {
 func (r *Ring) Append(e Event) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	warnRing("storing an event", r.insert(e))
+}
+
+// insert stores e and trims once enough have landed. Callers hold mu.
+func (r *Ring) insert(e Event) error {
 	// A worker's row of a Laravel job has no payload, which is only readable
 	// where the job was dispatched, so it takes the queued row's.
 	job, hasPayload := jobUUID(e)
@@ -152,8 +159,7 @@ func (r *Ring) Append(e Event) {
 	}
 	data, err := json.Marshal(e)
 	if err != nil {
-		warnRing("encoding an event", err)
-		return
+		return err
 	}
 	reached := e.reachedRID()
 	var fp string
@@ -167,10 +173,13 @@ func (r *Ring) Append(e Event) {
 		e.ID, e.Ctx.RID, reached, e.Ctx.Site, e.Ctx.Branch, e.Ctx.Type, e.Kind, e.Ctx.Test, e.isPageView(),
 		groupKey(e), routeOf(e), e.Ctx.Worker, facetOf(e), haystack(e), fp, ms, job,
 		r.keep[e.Ctx.RID] || r.keep[reached], data, brief(e, data))
-	warnRing("storing an event", err)
+	if err != nil {
+		return err
+	}
 	if r.untrimmed++; r.untrimmed >= trimEvery {
 		r.trim()
 	}
+	return nil
 }
 
 // SetKeep replaces the set of requests whose events outlive the buffer, and
@@ -286,8 +295,13 @@ func (r *Ring) Remove(drop func(Event) bool) {
 }
 
 // Import appends the events an older lerd-ui saved to a JSON file at path,
-// oldest first, then deletes the file. A missing file is nothing to import.
+// oldest first, and deletes the file once every one is on disk. Until then it
+// is their only copy, so a write that fails, or a ring held in memory, leaves
+// it for the next start. A missing file is nothing to import.
 func (r *Ring) Import(path string) error {
+	if !r.onDisk {
+		return nil
+	}
 	b, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
@@ -301,8 +315,12 @@ func (r *Ring) Import(path string) error {
 	if err != nil {
 		return err
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	for _, e := range events {
-		r.Append(e)
+		if err := r.insert(e); err != nil {
+			return fmt.Errorf("importing the old debug buffer: %w", err)
+		}
 	}
 	return os.Remove(path)
 }

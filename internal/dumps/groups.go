@@ -51,10 +51,12 @@ type Group struct {
 }
 
 // Row is one event and, for a query, how often its fingerprint ran in the
-// request (1 when unique).
+// request (1 when unique). Seq is its place in the buffer, which reading more
+// of the group pages back from.
 type Row struct {
 	Event json.RawMessage `json:"event"`
 	Dup   int             `json:"dup"`
+	Seq   int64           `json:"seq"`
 }
 
 // GroupPage is one page of a lens. Next reads the page after it, 0 at the end;
@@ -131,11 +133,13 @@ func (r *Ring) Groups(opts GroupOpts) GroupPage {
 	return page
 }
 
-// GroupRows reads more of one group's rows, from offset on, newest first.
-func (r *Ring) GroupRows(opts GroupOpts, key string, offset int) []Row {
+// GroupRows reads more of one group's rows, the ones older than the row at
+// before, newest first. Paging from a row rather than an offset keeps events
+// that land in the group meanwhile from handing back a row already shown.
+func (r *Ring) GroupRows(opts GroupOpts, key string, before int64) []Row {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.rows(opts, key, offset, r.fingerprints(opts, key))
+	return r.rows(opts, key, before, r.fingerprints(opts, key))
 }
 
 // fingerprints counts how often each query shape ran in one group.
@@ -158,23 +162,29 @@ func (r *Ring) fingerprints(opts GroupOpts, key string) map[string]int {
 	return out
 }
 
-func (r *Ring) rows(opts GroupOpts, key string, offset int, dups map[string]int) []Row {
+func (r *Ring) rows(opts GroupOpts, key string, before int64, dups map[string]int) []Row {
 	out := []Row{}
 	cond, args := r.groupWhere(opts)
-	rows, err := r.db.Query(`SELECT brief, fp FROM events WHERE `+cond+` AND grp = ? ORDER BY seq DESC LIMIT ? OFFSET ?`,
-		append(args, key, opts.Rows, offset)...)
+	cond += " AND grp = ?"
+	args = append(args, key)
+	if before > 0 {
+		cond += " AND seq < ?"
+		args = append(args, before)
+	}
+	rows, err := r.db.Query(`SELECT seq, brief, fp FROM events WHERE `+cond+` ORDER BY seq DESC LIMIT ?`, append(args, opts.Rows)...)
 	if err != nil {
 		warnRing("reading a group", err)
 		return out
 	}
 	defer rows.Close()
 	for rows.Next() {
+		var seq int64
 		var data []byte
 		var fp string
-		if rows.Scan(&data, &fp) != nil {
+		if rows.Scan(&seq, &data, &fp) != nil {
 			continue
 		}
-		row := Row{Event: data, Dup: 1}
+		row := Row{Event: data, Dup: 1, Seq: seq}
 		if n := dups[fp]; fp != "" && n > 1 {
 			row.Dup = n
 		}

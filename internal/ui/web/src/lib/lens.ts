@@ -32,7 +32,13 @@ export interface LensRow {
   event: DumpEvent;
   // dup is how often the row's query shape ran in its request.
   dup: number;
+  // seq is the row's place in the buffer, which reading more pages back from.
+  seq: number;
 }
+
+// ROWS_PER_GROUP matches what lerd-ui sends per group and per read of more
+// rows, so a shorter read means the group has no more to give.
+const ROWS_PER_GROUP = 100;
 
 export interface LensGroup {
   key: string;
@@ -65,7 +71,8 @@ export function queryString(q: Record<string, string | boolean | number | undefi
 }
 
 // Nudges come from one notify stream per site and branch, shared by every
-// lens and counter open on them.
+// lens and counter open on them. A nudge of kind "*" asks every reader to read
+// again, after a reconnect or a clear.
 export interface Nudge {
   kind: string;
   site: string;
@@ -81,6 +88,13 @@ export function onNudge(scope: LensScope, fn: (n: Nudge) => void): () => void {
   if (!entry) {
     const subs = new Set<(n: Nudge) => void>();
     const source = new EventSource(apiUrl(`/api/dumps/stream?${queryString({ notify: '1', site: scope.site, branch: scope.branch })}`));
+    // The notify stream replays nothing, so what arrived while it was down
+    // is only seen by reading again once it is back.
+    let opened = false;
+    source.addEventListener('open', () => {
+      if (opened) for (const s of subs) s({ kind: '*', site: '' });
+      opened = true;
+    });
     source.addEventListener('message', (e) => {
       try {
         const n = JSON.parse((e as MessageEvent).data) as Nudge;
@@ -104,8 +118,15 @@ export function onNudge(scope: LensScope, fn: (n: Nudge) => void): () => void {
   };
 }
 
+// nudgeAll asks every open lens and counter to read again, as clearing the
+// buffer changes what they all show.
+export function nudgeAll(): void {
+  for (const { subs } of streams.values()) for (const s of subs) s({ kind: '*', site: '' });
+}
+
 // matches reports whether a nudge concerns what a lens or counter shows.
 export function matches(n: Nudge, scope: LensScope, kind = ''): boolean {
+  if (n.kind === '*') return true;
   if (kind && n.kind !== kind) return false;
   if (scope.site && n.site !== scope.site) return false;
   if (scope.branch && n.branch !== scope.branch) return false;
@@ -205,7 +226,7 @@ export function createLens(): Lens {
     const q = query;
     unsub = onNudge(q, (n) => {
       if (!matches(n, q, q.kind)) return;
-      if (atTop) live.call();
+      if (atTop || n.kind === '*') live.call();
       else fresh.update((c) => c + 1);
     });
   }
@@ -244,9 +265,17 @@ export function createLens(): Lens {
       const mine = gen;
       reading.add(key);
       try {
-        const rows = await apiJson<LensRow[]>(`/api/dumps/groups/rows?${queryString({ ...query, key, offset: g.rows.length })}`);
+        const rows = await apiJson<LensRow[]>(`/api/dumps/groups/rows?${queryString({ ...query, key, before: g.rows[g.rows.length - 1]?.seq })}`);
         if (mine !== gen) return;
-        groups.update((gs) => gs.map((x) => (x.key === key ? { ...x, rows: [...x.rows, ...rows] } : x)));
+        groups.update((gs) =>
+          gs.map((x) => {
+            if (x.key !== key) return x;
+            const all = [...x.rows, ...rows];
+            // A short read is the end of the group, whatever its count said:
+            // older rows can leave the buffer while the list is open.
+            return { ...x, rows: all, count: rows.length < ROWS_PER_GROUP ? all.length : x.count };
+          })
+        );
       } finally {
         reading.delete(key);
       }

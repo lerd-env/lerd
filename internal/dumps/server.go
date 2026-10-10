@@ -153,8 +153,8 @@ func (s *Server) Filter(opts FilterOpts) []Event { return s.ring.Filter(opts) }
 func (s *Server) Counts(opts FilterOpts) map[string]int { return s.ring.Counts(opts) }
 func (s *Server) TestCount(opts FilterOpts) int         { return s.ring.TestCount(opts) }
 func (s *Server) Groups(opts GroupOpts) GroupPage       { return s.ring.Groups(opts) }
-func (s *Server) GroupRows(opts GroupOpts, key string, off int) []Row {
-	return s.ring.GroupRows(opts, key, off)
+func (s *Server) GroupRows(opts GroupOpts, key string, before int64) []Row {
+	return s.ring.GroupRows(opts, key, before)
 }
 func (s *Server) Sites() []string                         { return s.ring.Sites() }
 func (s *Server) Workers(opts FilterOpts) []string        { return s.ring.Workers(opts) }

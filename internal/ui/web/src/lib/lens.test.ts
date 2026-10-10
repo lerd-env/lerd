@@ -14,23 +14,27 @@ vi.mock('$lib/api', async (orig) => ({
 // A stand-in for the notify stream that a test pushes nudges through.
 class FakeSource {
   static last: FakeSource | null = null;
-  listeners: Array<(e: { data: string }) => void> = [];
+  listeners: Array<{ type: string; fn: (e: { data: string }) => void }> = [];
   closed = false;
   constructor(public url: string) {
     FakeSource.last = this;
   }
-  addEventListener(_: string, fn: (e: { data: string }) => void) {
-    this.listeners.push(fn);
+  addEventListener(type: string, fn: (e: { data: string }) => void) {
+    this.listeners.push({ type, fn });
   }
   close() {
     this.closed = true;
   }
   push(n: object) {
-    for (const l of this.listeners) l({ data: JSON.stringify(n) });
+    for (const l of this.listeners) if (l.type === 'message') l.fn({ data: JSON.stringify(n) });
+  }
+  // open is the stream connecting, or reconnecting after a drop.
+  open() {
+    for (const l of this.listeners) if (l.type === 'open') l.fn({ data: '' });
   }
 }
 
-import { createLens, createCounts, matches, queryString, LIVE_MS } from './lens';
+import { createLens, createCounts, matches, queryString, nudgeAll, LIVE_MS } from './lens';
 
 const group = (key: string, rows = 1, count = rows) => ({
   key,
@@ -38,7 +42,7 @@ const group = (key: string, rows = 1, count = rows) => ({
   total_ms: 0,
   slow_count: 0,
   n_plus_one: false,
-  rows: Array.from({ length: rows }, (_, i) => ({ event: { id: `${key}-${i}` }, dup: 1 }))
+  rows: Array.from({ length: rows }, (_, i) => ({ event: { id: `${key}-${i}` }, dup: 1, seq: 100 - i }))
 });
 
 beforeEach(() => {
@@ -83,15 +87,42 @@ describe('createLens', () => {
     lens.destroy();
   });
 
-  it('reads more rows of a group from where its rows end', async () => {
-    answer = (p) => (p.includes('/rows?') ? [{ event: { id: 'x' }, dup: 1 }] : { groups: [group('a', 2, 3)], next: 0 });
+  it('reads more rows of a group from the last row it shows', async () => {
+    answer = (p) => (p.includes('/rows?') ? [{ event: { id: 'x' }, dup: 1, seq: 50 }] : { groups: [group('a', 2, 3)], next: 0 });
     const lens = createLens();
     lens.set({ kind: 'view', site: 'shop' });
     await vi.runAllTimersAsync();
     await lens.loadRows('a');
     expect(calls.at(-1)).toContain('key=a');
-    expect(calls.at(-1)).toContain('offset=2');
+    expect(calls.at(-1)).toContain('before=99');
     expect(get(lens.groups)[0].rows).toHaveLength(3);
+    lens.destroy();
+  });
+
+  it('stops offering more rows once the server runs out', async () => {
+    answer = (p) => (p.includes('/rows?') ? [] : { groups: [group('a', 2, 9)], next: 0 });
+    const lens = createLens();
+    lens.set({ kind: 'view', site: 'shop' });
+    await vi.runAllTimersAsync();
+    await lens.loadRows('a');
+    const g = get(lens.groups)[0];
+    expect(g.rows.length).toBe(g.count);
+    lens.destroy();
+  });
+
+  it('reads again when the stream reconnects, since nothing replays what it missed', async () => {
+    answer = () => ({ groups: [group('a')], next: 0 });
+    const lens = createLens();
+    lens.set({ kind: 'query', site: 'shop' });
+    await vi.runAllTimersAsync();
+    const src = FakeSource.last!;
+    src.open();
+    await vi.runAllTimersAsync();
+    const before = calls.length;
+    lens.setAtTop(false);
+    src.open();
+    await vi.runAllTimersAsync();
+    expect(calls.length - before).toBe(1);
     lens.destroy();
   });
 
@@ -139,6 +170,18 @@ describe('createCounts', () => {
     FakeSource.last!.push({ kind: 'query', site: 'shop' });
     await vi.runAllTimersAsync();
     expect(get(c.counts)).toEqual({ query: 4 });
+    c.destroy();
+  });
+
+  it('reads the badges again when the buffer is cleared', async () => {
+    answer = () => ({ counts: { query: 3 }, hidden_tests: 0 });
+    const c = createCounts();
+    c.set({ site: 'shop' });
+    await vi.runAllTimersAsync();
+    answer = () => ({ counts: {}, hidden_tests: 0 });
+    nudgeAll();
+    await vi.runAllTimersAsync();
+    expect(get(c.counts)).toEqual({});
     c.destroy();
   });
 });

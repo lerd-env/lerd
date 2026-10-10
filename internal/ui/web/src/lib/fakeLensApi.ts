@@ -67,7 +67,7 @@ export function fakeLensAnswer(events: DumpEvent[], url: string, enabled = true)
         total_ms: 0,
         slow_count: 0,
         n_plus_one: false,
-        rows: g.rows.slice(0, 100).map((event) => ({ event, dup: 1 }))
+        rows: g.rows.slice(0, 100).map((event) => ({ event, dup: 1, seq: events.indexOf(event) + 1 }))
       })),
       next: all.length > limit ? page[page.length - 1].last : 0,
       total: matched.length
@@ -77,8 +77,11 @@ export function fakeLensAnswer(events: DumpEvent[], url: string, enabled = true)
   function answer(path: string, p: URLSearchParams): unknown {
     if (path === '/api/dumps/groups') return groups(p);
     if (path === '/api/dumps/groups/rows') {
-      const g = groups(new URLSearchParams({ ...Object.fromEntries(p), limit: '1000' })).groups.find((x) => x.key === p.get('key'));
-      return (g?.rows ?? []).slice(Number(p.get('offset') || 0));
+      const all = new URLSearchParams({ ...Object.fromEntries(p), limit: '1000' });
+      all.delete('before');
+      const g = groups(all).groups.find((x) => x.key === p.get('key'));
+      const before = Number(p.get('before') || 0);
+      return (g?.rows ?? []).filter((r) => !before || r.seq < before);
     }
     if (path === '/api/dumps/counts') {
       const counts: Record<string, number> = {};

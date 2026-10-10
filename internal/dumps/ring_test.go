@@ -250,7 +250,11 @@ func TestRing_ImportTakesInAnOldBufferFileAndDeletesIt(t *testing.T) {
 	if err := os.WriteFile(path, b, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	r := NewRing(2)
+	r, err := OpenRing(filepath.Join(filepath.Dir(path), "debug-events.db"), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
 	if err := r.Import(path); err != nil {
 		t.Fatal(err)
 	}
@@ -517,5 +521,35 @@ func TestRing_SitesListsEverySiteInTheBuffer(t *testing.T) {
 	r.Append(kindEvent("c", "beta", KindView))
 	if got := r.Sites(); fmt.Sprint(got) != "[acme beta]" {
 		t.Errorf("sites = %v", got)
+	}
+}
+
+// An old buffer file is the only copy of its events until they are on disk,
+// so it stays when they could not all be written or the ring is in memory.
+func TestRing_ImportKeepsTheOldFileUnlessEveryEventLanded(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dumps-buffer.json")
+	b, _ := json.Marshal([]Event{mkEvent("a"), mkEvent("b")})
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mem := NewRing(4)
+	if err := mem.Import(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal("an in-memory ring deleted the only copy of the old buffer")
+	}
+
+	disk, err := OpenRing(filepath.Join(dir, "debug-events.db"), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	disk.Close() // every write now fails
+	if err := disk.Import(path); err == nil {
+		t.Error("import into a closed database reported success")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Error("a failed import deleted the old buffer")
 	}
 }

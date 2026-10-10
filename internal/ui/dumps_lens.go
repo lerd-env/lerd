@@ -93,7 +93,8 @@ func handleDumpsGroups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, srv.Groups(lensOpts(r)))
 }
 
-// handleDumpsGroupRows answers more rows of one group, from offset on.
+// handleDumpsGroupRows answers more rows of one group, older than the row whose
+// seq before names.
 func handleDumpsGroupRows(w http.ResponseWriter, r *http.Request) {
 	srv, ok := lensServer(w, r)
 	if !ok {
@@ -103,8 +104,8 @@ func handleDumpsGroupRows(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, []dumps.Row{})
 		return
 	}
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	writeJSON(w, srv.GroupRows(lensOpts(r), r.URL.Query().Get("key"), offset))
+	before, _ := strconv.ParseInt(r.URL.Query().Get("before"), 10, 64)
+	writeJSON(w, srv.GroupRows(lensOpts(r), r.URL.Query().Get("key"), before))
 }
 
 // handleDumpsFacets answers what a lens can filter by: the sites, the worker

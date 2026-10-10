@@ -131,8 +131,14 @@
   let details = $state<Record<string, DumpEvent>>({});
   function toggleRow(id: string) {
     expanded[id] = !expanded[id];
-    if (expanded[id] && !details[id]) fetchEvent(id).then((e) => (details[id] = e), () => {});
+    if (!expanded[id]) delete details[id];
+    else if (!details[id]) fetchEvent(id).then((e) => (expanded[id] ? (details[id] = e) : undefined), () => {});
   }
+  // A row that leaves the page lets go of its whole event, mail HTML included.
+  $effect(() => {
+    const held = new Set($lensGroups.flatMap((g) => g.rows.map((r) => r.event.id)));
+    for (const id of Object.keys(details)) if (!held.has(id)) delete details[id];
+  });
 </script>
 
 <div class="flex flex-col h-full overflow-hidden">
