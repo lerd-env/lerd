@@ -3,10 +3,12 @@ package siteops
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/plugins"
 )
 
 // Indirection points so tests can swap in inert stubs without touching mkcert,
@@ -109,6 +111,9 @@ func SetSecuredCascade(site *config.Site, secured bool) ([]string, error) {
 	_ = notifyDaemonFn(site.PrimaryDomain(), "stripe:refresh")
 	_ = notifyDaemonFn(site.PrimaryDomain(), "lan:refresh")
 	RefreshDevServers(site)
+	payload := plugins.SitePayload(site)
+	payload["secured"] = strconv.FormatBool(secured)
+	plugins.Emit(plugins.EventSiteSecured, payload)
 	if secured && site.IsGroupMain() {
 		return cascadeGroupSecondaries(site)
 	}

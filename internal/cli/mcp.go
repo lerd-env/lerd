@@ -172,7 +172,7 @@ func writeProjectArtefacts(abs string, verbose, createMissing bool) error {
 				log("  updated " + filepath.Base(resolveClientConfigPath(full)))
 			}
 		}
-		for _, cx := range c.Contexts {
+		for _, cx := range clientContexts(c) {
 			if cx.Project == "" {
 				continue
 			}
@@ -378,7 +378,7 @@ func globalContextPath(home, rel string) string {
 
 func writeGlobalContexts(home string, verbose, createMissing bool) error {
 	for _, c := range aiClients {
-		for _, cx := range c.Contexts {
+		for _, cx := range clientContexts(c) {
 			if cx.Global == "" {
 				continue
 			}
@@ -539,7 +539,7 @@ func RemoveGlobalAISkills(home string, verbose bool) error {
 				log("  cleaned " + resolveClientConfigPath(full))
 			}
 		}
-		for _, cx := range c.Contexts {
+		for _, cx := range clientContexts(c) {
 			if cx.Global == "" {
 				continue
 			}
@@ -576,7 +576,7 @@ func RemoveProjectAISkills(abs string, verbose bool) error {
 				log("  cleaned " + resolveClientConfigPath(full))
 			}
 		}
-		for _, cx := range c.Contexts {
+		for _, cx := range clientContexts(c) {
 			if cx.Project == "" {
 				continue
 			}

@@ -144,7 +144,7 @@ func promptDeleteIsolatedDB(site *config.Site, branch string) error {
 	if picked != "drop" {
 		return nil
 	}
-	if _, err := DropDatabase(entry.Service, entry.DBName); err != nil {
+	if err := dropWorktreeDB(entry); err != nil {
 		return fmt.Errorf("dropping %q: %w", entry.DBName, err)
 	}
 	if _, _, err := config.RemoveWorktreeDB(site.Name, branch); err != nil {

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/plugins"
 )
 
 // writeProjectYAML writes a .lerd.yaml containing a commands: block so tests
@@ -113,6 +114,30 @@ commands:
 	}
 	if done.Exit != 0 {
 		t.Errorf("exit code: got %d want 0", done.Exit)
+	}
+}
+
+// A plugin's site commands join the site's list and run its own file with the
+// site handed over, through the same stream as any other command.
+func TestCommandsRun_PluginSiteCommand(t *testing.T) {
+	registerSite(t, "acme", "acme.test")
+	if err := plugins.Scaffold("hello", filepath.Join(plugins.Dir(), "hello")); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	handleSiteAction(rec, httptest.NewRequest(http.MethodGet, "/api/sites/acme.test/commands", nil))
+	if !strings.Contains(rec.Body.String(), `"name":"hello:greet"`) || !strings.Contains(rec.Body.String(), `"plugin":"hello"`) {
+		t.Fatalf("plugin command not listed: %s", rec.Body)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/commands/hello:greet/run", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
+	rec = httptest.NewRecorder()
+	handleSiteAction(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, "data: Hello from hello, acme! (via site_command)") || !strings.Contains(body, `"exit":0`) {
+		t.Errorf("plugin command did not run for the site: %q", body)
 	}
 }
 

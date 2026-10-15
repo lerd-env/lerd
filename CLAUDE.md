@@ -167,6 +167,14 @@ and `lerd-env/services` repos. A store change ships to every install within ~24h
 with no binary release and no Go code. That is the point — resist the urge to
 "just add it in Go."
 
+- **A plugin that needs something lerd does not offer yet** (a new event to
+  hook, or a job like `worktree_database` it can take charge of): extend the
+  plugin system in Go, following `docs/contributing/plugins.md`. Three rules:
+  Go never names a particular plugin, events fire once from the shared
+  operation every surface uses, and a new `provides` job needs a real plugin
+  asking for it. Never help a plugin work around a gap by editing lerd's
+  config files or containers.
+
 ---
 
 ## 6. Commit conventions

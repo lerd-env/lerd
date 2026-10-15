@@ -233,6 +233,12 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/tools/", withCORS(publishAfter(handleTools, eventbus.KindStatus)))
 	mux.HandleFunc("/api/tunnel-qr/", withCORS(handleTunnelQR))
 	mux.HandleFunc("/api/dashboard-qr", withCORS(handleDashboardQR))
+	mux.HandleFunc("/api/plugins", withCORS(handlePluginsList))
+	mux.HandleFunc("/api/plugins/", withCORS(handlePluginAPI))
+	mux.HandleFunc("/plugins/", withCORS(handlePluginUI))
+	mux.HandleFunc("/api/plugin-manager", withCORS(handlePluginManager))
+	mux.HandleFunc("/api/plugin-manager/", withCORS(handlePluginManager))
+	mux.HandleFunc("/api/page-plugins", withCORS(publishAfter(handlePagePlugins, eventbus.KindSites)))
 
 	// Cross-process notifier for CLI/MCP. It requires dashboard-control
 	// authority. PollNow runs in a goroutine so the handler returns under the
@@ -266,6 +272,8 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/services/presets/", withCORS(publishAfter(handleServicePresetInstall, eventbus.KindServices, eventbus.KindStatus)))
 	mux.HandleFunc("/api/services/", withCORS(publishAfter(handleServiceAction, eventbus.KindServices, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/internal/snapshot-run", handleInternalSnapshotNotify)
+	mux.HandleFunc("/api/internal/plugin-failed", handleInternalPluginFailed)
+	notifyPluginFailures()
 	mux.HandleFunc("/api/auto-snapshot", withCORS(handleAutoSnapshot))
 	mux.HandleFunc("/api/auto-snapshot/", withCORS(handleAutoSnapshotSite))
 	mux.HandleFunc("/api/databases", withCORS(handleDatabases))
@@ -429,7 +437,7 @@ func Start(currentVersion string) error {
 	})
 	mux.Handle("/", serveSvelte())
 
-	handler := withWakeHold(withBrowserLogs(withDashboardMounts(withRemoteControlGate(mux))))
+	handler := withWakeHold(withBrowserLogs(withPluginPages(withDashboardMounts(withRemoteControlGate(mux)))))
 
 	// Unix socket listener for the lerd.localhost nginx vhost. Linux only:
 	// on macOS, lerd-nginx runs inside the podman-machine VM and unix

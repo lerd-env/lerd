@@ -9,6 +9,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/idle"
 	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/reqstats"
 )
@@ -58,6 +59,7 @@ func UnlinkSiteCore(site *config.Site, parkedDirs []string) error {
 	if podman.AfterUnitChange != nil {
 		podman.AfterUnitChange("site:" + site.Name)
 	}
+	plugins.Emit(plugins.EventSiteUnlinked, plugins.SitePayload(site))
 	return nil
 }
 

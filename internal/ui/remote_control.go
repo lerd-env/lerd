@@ -51,6 +51,8 @@ var loopbackOnlyRoutePrefixes = []string{
 	// what a directory would be configured with to do it.
 	"/api/runs",
 	"/api/project",
+	// Installs code that later runs as the user.
+	"/api/plugin-manager",
 }
 
 // loopbackOnlySiteSubactions are the per-site actions (under
@@ -79,6 +81,9 @@ func isLoopbackOnlyPath(path string) bool {
 		if path == p || strings.HasPrefix(path, p+"/") {
 			return true
 		}
+	}
+	if isLoopbackOnlyPluginPath(path) {
+		return true
 	}
 	if !strings.HasPrefix(path, "/api/sites/") {
 		return false
@@ -176,7 +181,7 @@ const csrfHeader = "X-Lerd-CSRF"
 func csrfExemptPath(path string) bool {
 	switch path {
 	case "/api/remote-setup", "/api/webhooks/mailpit", "/api/internal/notify",
-		"/api/internal/snapshot-run":
+		"/api/internal/snapshot-run", "/api/internal/plugin-failed":
 		return true
 	}
 	return strings.HasPrefix(path, "/api/sites/") && strings.HasSuffix(path, "/unpause")
@@ -197,6 +202,9 @@ func csrfExemptPath(path string) bool {
 // preflight for its own origins, so the header's presence is proof enough.
 func passesCSRF(r *http.Request) bool {
 	if v, _ := r.Context().Value(ctxKeyUnixSocket{}).(bool); v {
+		return true
+	}
+	if hasValidPluginToken(r) {
 		return true
 	}
 	switch r.Header.Get("Sec-Fetch-Site") {

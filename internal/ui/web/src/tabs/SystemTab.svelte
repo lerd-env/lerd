@@ -18,10 +18,12 @@
   import { autoSnapshot, loadAutoSnapshot } from '$stores/autoSnapshot';
   import { status as dumpsStatusValue, refreshStatus as refreshDumpsStatus } from '$stores/dumps';
   import { notifyPrefs, permissionState, autoSubscribeDisabled, notifyDelivery } from '$lib/notify';
+  import { managedPlugins, loadManagedPlugins } from '$stores/plugins';
   import { onMount } from 'svelte';
   import { m } from '../paraglide/messages.js';
 
   onMount(() => {
+    if ($accessMode.localControl) void loadManagedPlugins().catch(() => {});
     loadWorkerMode();
     loadPHPRuntime();
     void refreshDumpsStatus();
@@ -109,6 +111,20 @@
     <ListRow active={selected === 'tools'} onclick={() => select('tools')} leading={toolsDot} trailing={toolsTrailing}>
       {m.system_tools_title()}
     </ListRow>
+
+    <!-- Installing a plugin is a host action, so the row needs control authority. -->
+    {#if $accessMode.localControl}
+      {@const brokenPlugins = $managedPlugins.some((p) => p.error)}
+      {#snippet pluginsDot()}<StatusDot color={brokenPlugins ? 'red' : $managedPlugins.length ? 'green' : 'gray'} />{/snippet}
+      {#snippet pluginsTrailing()}
+        {#if $managedPlugins.length}
+          <span class="text-[10px] font-medium tabular-nums shrink-0 {selected.startsWith('plugins') ? 'text-lerd-red/70' : 'text-gray-400 dark:text-gray-600'}">{$managedPlugins.length}</span>
+        {/if}
+      {/snippet}
+      <ListRow active={selected === 'plugins' || selected.startsWith('plugins/')} onclick={() => select('plugins')} leading={pluginsDot} trailing={pluginsTrailing}>
+        {m.system_plugins_title()}
+      </ListRow>
+    {/if}
 
     {#snippet notifyDot()}<StatusDot color={notifyEffectiveOn ? 'green' : 'red'} />{/snippet}
     <ListRow active={selected === 'notifications'} onclick={() => select('notifications')} leading={notifyDot}>

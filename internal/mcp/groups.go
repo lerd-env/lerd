@@ -297,6 +297,9 @@ func handleToolCall(params json.RawMessage) (any, *rpcError) {
 
 	actions, ok := groupDispatch[p.Name]
 	if !ok {
+		if plugin, tool := findPluginTool(p.Name); tool != nil {
+			return callPluginTool(plugin, tool, args)
+		}
 		return toolErr("unknown tool: " + p.Name), nil
 	}
 	action := strArg(args, "action")

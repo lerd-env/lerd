@@ -13,6 +13,8 @@
   import { status as dumpsStatus, refreshStatus } from '$stores/dumps';
   import { debugCaptureEnabled } from '$stores/queries';
   import { m } from '../../paraglide/messages.js';
+  import PluginFrame from '$components/PluginFrame.svelte';
+  import { siteTabPlugins } from '$stores/plugins';
 
   let resumeBusy = $state(false);
   async function onResume() {
@@ -30,13 +32,14 @@
   }
   let { site }: Props = $props();
 
-  type TabId = 'overview' | 'logs' | 'tinker' | 'env' | 'dumps';
+  // A plugin's tab is plugin:<name>.
+  type TabId = 'overview' | 'logs' | 'tinker' | 'env' | 'dumps' | `plugin:${string}`;
   const TAB_STORAGE_KEY = 'lerd:siteDetailTab';
 
   function readStoredTab(): TabId {
     if (typeof localStorage === 'undefined') return 'overview';
     const v = localStorage.getItem(TAB_STORAGE_KEY);
-    if (v === 'logs' || v === 'tinker' || v === 'env' || v === 'dumps') return v;
+    if (v === 'logs' || v === 'tinker' || v === 'env' || v === 'dumps' || v?.startsWith('plugin:')) return v as TabId;
     return 'overview';
   }
 
@@ -55,7 +58,11 @@
   const canLogs = $derived(siteHasLogSources(site));
   // A lone Overview tab can't be switched to anything, so don't render the tab
   // row at all when no other tab is available (e.g. static sites).
-  const hasExtraTabs = $derived(canLogs || canEnv || canTinker || canDumps);
+  const hasExtraTabs = $derived(canLogs || canEnv || canTinker || canDumps || $siteTabPlugins.length > 0);
+  const activePlugin = $derived($siteTabPlugins.find((p) => active === `plugin:${p.name}`));
+  // A tab whose plugin is gone (or not loaded yet) shows the overview without
+  // forgetting the choice, so it comes back once the plugin list arrives.
+  const shown = $derived(active.startsWith('plugin:') && !activePlugin ? 'overview' : active);
 
   // The route can deep-link a sub-tab (e.g. dump notifications go to
   // #sites/<domain>/dumps). When the second segment names a tab, honour it
@@ -69,6 +76,8 @@
       nginxOpen = true;
     } else if (seg === 'logs' || seg === 'tinker' || seg === 'env' || seg === 'dumps' || seg === 'overview') {
       active = seg;
+    } else if (seg.startsWith('plugin:')) {
+      active = seg as TabId;
     }
     if (seg === 'dumps' && isDebugLens(parts[2])) debugLens.set(parts[2] as DebugLens);
   });
@@ -124,6 +133,10 @@
   {#if canDumps}
     <button role="tab" aria-selected={active === 'dumps'} tabindex={active === 'dumps' ? 0 : -1} class={tabBtn('dumps', active === 'dumps')} onclick={() => selectTab('dumps')}>{m.debug_title()}</button>
   {/if}
+  {#each $siteTabPlugins as p (p.name)}
+    {@const id = `plugin:${p.name}` as TabId}
+    <button role="tab" aria-selected={active === id} tabindex={active === id ? 0 : -1} class={tabBtn(id, active === id)} onclick={() => selectTab(id)}>{p.site_tab?.title}</button>
+  {/each}
 {/snippet}
 
 <DetailPanel>
@@ -155,20 +168,29 @@
         </button>
       </div>
     </div>
-  {:else if active === 'overview'}
+  {:else if shown === 'overview'}
     <SiteOverview {site} {activeWorktreeBranch} />
-  {:else if active === 'logs'}
+  {:else if shown === 'logs'}
     <SiteLogs {site} {activeWorktreeBranch} />
-  {:else if active === 'env'}
+  {:else if shown === 'env'}
     {#key site.domain + '@' + activeWorktreeBranch}
       <SiteEnvTab {site} branch={activeWorktreeBranch} />
     {/key}
-  {:else if active === 'tinker'}
+  {:else if shown === 'tinker'}
     {#key site.domain + '@' + activeWorktreeBranch}
       <SiteTinkerTab {site} branch={activeWorktreeBranch} />
     {/key}
-  {:else if active === 'dumps'}
+  {:else if shown === 'dumps'}
     <SiteDebugTab siteName={site.name} framework={site.framework} domain={site.domain} branch={activeWorktreeBranch} phpLenses={Boolean(site.uses_php)} origin={site.can_profile ? `${site.tls ? 'https' : 'http'}://${activeWorktreeDomain(site, activeWorktreeBranch)}` : ''} />
+  {:else if activePlugin?.site_tab}
+    <div class="flex-1 min-h-0 flex flex-col">
+      <PluginFrame
+        plugin={activePlugin.name}
+        url={activePlugin.site_tab.url}
+        title={activePlugin.site_tab.title}
+        context={{ site: site.name ?? '', domain: activeWorktreeDomain(site, activeWorktreeBranch), branch: activeWorktreeBranch }}
+      />
+    </div>
   {/if}
 </DetailPanel>
 

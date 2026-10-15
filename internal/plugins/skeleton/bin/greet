@@ -1,0 +1,16 @@
+#!/bin/sh
+# One script serves every surface; LERD_SURFACE says which one called it
+# (cli, site_command, mcp or api). LERD_SITE is set when lerd knows the site;
+# otherwise the name comes from the argument, or the ?site= of an API call.
+set -eu
+
+site="${LERD_SITE:-${1:-}}"
+if [ -z "$site" ] && [ "$LERD_SURFACE" = api ]; then
+  site=$(printf '%s' "${LERD_QUERY:-}" | tr '&' '\n' | sed -n 's/^site=//p')
+fi
+if [ -z "$site" ]; then
+  echo "usage: lerd $LERD_PLUGIN_NAME:greet <site>" >&2
+  exit 2
+fi
+
+echo "Hello from $LERD_PLUGIN_NAME, $site! (via $LERD_SURFACE)"

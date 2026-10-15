@@ -13,8 +13,11 @@
     dashboardOpen,
     openDashboard,
     openDocs,
-    openProfiler
+    openProfiler,
+    openPlugin
   } from '$stores/dashboard';
+  import { railPlugins, loadPlugins } from '$stores/plugins';
+  import PluginIcon from './PluginIcon.svelte';
   import { dashboardIconSvg } from '$lib/dashboardIcons';
   import { profilerEnabled, loadProfilerStatus } from '$stores/profiler';
   import { serviceLabel } from '$stores/services';
@@ -28,6 +31,7 @@
 
   onMount(() => {
     void loadProfilerStatus();
+    void loadPlugins();
   });
 
   // Hide host-local launchers only when dashboard-control authority is
@@ -103,6 +107,11 @@
             compact
             tint={false}
           />
+        </IconButton>
+      {/each}
+      {#each $railPlugins as p (p.name)}
+        <IconButton title={p.page?.title ?? p.name} active={$dashboardOpen?.plugin === p.name} onclick={() => openPlugin(p)}>
+          <PluginIcon icon={p.page?.icon} />
         </IconButton>
       {/each}
     </div>

@@ -10,6 +10,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
 )
@@ -114,6 +115,7 @@ func Apply(plan *Plan, p Policy, d Deps, r Reporter) (*Result, error) {
 	if d.SyncIDEDataSource != nil {
 		res.WroteIDEDataSource = d.SyncIDEDataSource(site.Path)
 	}
+	plugins.Emit(plugins.EventSiteLinked, plugins.SitePayload(&site))
 	return res, nil
 }
 

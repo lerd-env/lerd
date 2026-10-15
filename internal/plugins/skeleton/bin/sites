@@ -1,0 +1,6 @@
+#!/bin/sh
+# Every plugin process may call lerd's own API, the one the dashboard uses:
+# LERD_API_URL and LERD_API_TOKEN are set for it. This prints the sites lerd knows.
+set -eu
+
+curl -fsS -H "X-Lerd-Plugin-Token: $LERD_API_TOKEN" "$LERD_API_URL/api/sites"

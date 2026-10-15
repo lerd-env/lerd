@@ -314,7 +314,7 @@ func RemoveWorktreeAndCleanup(site *config.Site, branch string, force, dropDB bo
 
 	if dropDB {
 		if entry, ok, _ := config.FindWorktreeDB(site.Name, branch); ok {
-			if _, err := DropDatabase(entry.Service, entry.DBName); err != nil {
+			if err := dropWorktreeDB(entry); err != nil {
 				logf(log, "[WARN] dropping database %q: %v", entry.DBName, err)
 			} else {
 				logf(log, "Dropped database %q.", entry.DBName)

@@ -106,6 +106,9 @@ type Site struct {
 	// env. A loopback runtime rewrites the host to 127.0.0.1, so the env alone
 	// no longer says which service the site is on.
 	WiredServices []string `yaml:"wired_services,omitempty"`
+	// PagePlugins are the installed plugins whose page script the user switched
+	// on for this site's pages. Off unless listed here.
+	PagePlugins []string `yaml:"page_plugins,omitempty"`
 	// BrowserLogs holds the site's browser logs settings when the project
 	// has no .lerd.yaml to carry them.
 	BrowserLogs *BrowserLogs `yaml:"browser_logs,omitempty"`
@@ -283,6 +286,7 @@ type siteYAML struct {
 	DismissedServices     []string            `yaml:"dismissed_services,omitempty"`
 	DeclinedServices      []string            `yaml:"declined_services,omitempty"`
 	WiredServices         []string            `yaml:"wired_services,omitempty"`
+	PagePlugins           []string            `yaml:"page_plugins,omitempty"`
 	BrowserLogs           *BrowserLogs        `yaml:"browser_logs,omitempty"`
 	Group                 string              `yaml:"group,omitempty"`
 	GroupSubdomain        string              `yaml:"group_subdomain,omitempty"`
@@ -326,6 +330,7 @@ func (s Site) toYAML() siteYAML {
 		DismissedServices:     s.DismissedServices,
 		DeclinedServices:      s.DeclinedServices,
 		WiredServices:         s.WiredServices,
+		PagePlugins:           s.PagePlugins,
 		BrowserLogs:           s.BrowserLogs,
 		Group:                 s.Group,
 		GroupSubdomain:        s.GroupSubdomain,
@@ -374,6 +379,7 @@ func (sy siteYAML) toSite() Site {
 		DismissedServices:     sy.DismissedServices,
 		DeclinedServices:      sy.DeclinedServices,
 		WiredServices:         sy.WiredServices,
+		PagePlugins:           sy.PagePlugins,
 		BrowserLogs:           sy.BrowserLogs,
 		Group:                 sy.Group,
 		GroupSubdomain:        sy.GroupSubdomain,
@@ -494,6 +500,9 @@ func cloneSiteRegistry(in *SiteRegistry) *SiteRegistry {
 		}
 		if s.WiredServices != nil {
 			cp.WiredServices = append([]string(nil), s.WiredServices...)
+		}
+		if s.PagePlugins != nil {
+			cp.PagePlugins = append([]string(nil), s.PagePlugins...)
 		}
 		if s.BrowserLogs != nil {
 			cp.BrowserLogs = s.BrowserLogs.clone()
@@ -881,6 +890,31 @@ func SetSiteWiredServices(name string, services []string) error {
 			continue
 		}
 		reg.Sites[i].WiredServices = services
+		return SaveSites(reg)
+	}
+	return fmt.Errorf("site %q not found", name)
+}
+
+// SetSitePagePlugin switches a plugin's page script on or off for a site.
+func SetSitePagePlugin(name, plugin string, on bool) error {
+	siteWriteMu.Lock()
+	defer siteWriteMu.Unlock()
+	reg, err := LoadSites()
+	if err != nil {
+		return err
+	}
+	for i := range reg.Sites {
+		if reg.Sites[i].Name != name {
+			continue
+		}
+		list := slices.DeleteFunc(slices.Clone(reg.Sites[i].PagePlugins), func(p string) bool { return p == plugin })
+		if on {
+			list = append(list, plugin)
+		}
+		if len(list) == 0 {
+			list = nil
+		}
+		reg.Sites[i].PagePlugins = list
 		return SaveSites(reg)
 	}
 	return fmt.Errorf("site %q not found", name)

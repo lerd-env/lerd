@@ -10,6 +10,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/imagepull"
+	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -74,6 +75,7 @@ func StartService(name string) error {
 	// else took while it was down, and where a service installed since the last
 	// start first needs its dashboard served.
 	syncDashboardVhost()
+	plugins.Emit(plugins.EventServiceStarted, map[string]string{"service": name})
 	return nil
 }
 
@@ -309,6 +311,7 @@ func StopService(name string) error {
 	// A user stop outranks idle-suspend, which would otherwise wake it again.
 	SetIdleSuspended([]string{name}, false)
 	RegenerateDynamicEnvConsumersForService(name)
+	plugins.Emit(plugins.EventServiceStopped, map[string]string{"service": name})
 	return nil
 }
 

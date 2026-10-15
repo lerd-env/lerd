@@ -10,6 +10,7 @@ import (
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/plugins"
 )
 
 type secureStubs struct {
@@ -109,6 +110,37 @@ func TestSetSecured_securingCallsSecureSiteAndFlipsFlag(t *testing.T) {
 	body, _ := os.ReadFile(filepath.Join(projectDir, ".env"))
 	if !strings.Contains(string(body), "APP_URL=https://myapp.test") {
 		t.Errorf(".env APP_URL not flipped to https:\n%s", body)
+	}
+}
+
+// Plugins hear about the toggle with the new state, from every caller of SetSecured.
+func TestSetSecured_emitsSiteSecuredToPlugins(t *testing.T) {
+	stubSecureDeps(t)
+	projectDir := withTempEnv(t)
+	site := &config.Site{Name: "myapp", Domains: []string{"myapp.test"}, Path: projectDir}
+	if err := config.AddSite(*site); err != nil {
+		t.Fatalf("seed site: %v", err)
+	}
+	dir := filepath.Join(plugins.Dir(), "rec")
+	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := "api_version: 1\nname: rec\nhooks:\n  site.secured: bin/run\n"
+	script := "#!/bin/sh\necho \"$LERD_EVENT $LERD_SITE $LERD_SECURED\" >> \"$LERD_PLUGIN_DATA/seen\"\n"
+	if err := os.WriteFile(filepath.Join(dir, plugins.ManifestFile), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bin", "run"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SetSecured(site, true); err != nil {
+		t.Fatalf("SetSecured: %v", err)
+	}
+
+	seen, _ := os.ReadFile(filepath.Join(plugins.DataDirFor("rec"), "seen"))
+	if strings.TrimSpace(string(seen)) != "site.secured myapp true" {
+		t.Errorf("plugin saw %q", seen)
 	}
 }
 

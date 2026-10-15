@@ -515,7 +515,7 @@ func ApplyWorktreeDBChoice(site *config.Site, branch, choice string, log io.Writ
 		return SetWorktreeDBIsolated(site, branch, true, "empty")
 	case choice == "reset":
 		if preserved, ok, _ := config.FindWorktreeDB(site.Name, branch); ok {
-			if _, err := DropDatabase(preserved.Service, preserved.DBName); err != nil {
+			if err := dropWorktreeDB(preserved); err != nil {
 				return fmt.Errorf("dropping preserved DB %q: %w", preserved.DBName, err)
 			}
 			_, _, _ = config.RemoveWorktreeDB(site.Name, branch)

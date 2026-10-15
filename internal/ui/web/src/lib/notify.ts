@@ -20,6 +20,7 @@ export type NotifyKind =
   | 'mail'
   | 'message'
   | 'worker_failed'
+  | 'plugin_failed'
   | 'job_failed'
   | 'op_done'
   | 'snapshot'
@@ -32,6 +33,7 @@ export const ALL_KINDS: NotifyKind[] = [
   'mail',
   'message',
   'worker_failed',
+  'plugin_failed',
   'job_failed',
   'op_done',
   'snapshot',
@@ -54,6 +56,8 @@ const DEFAULTS: NotifyPrefs = {
     // notification is the only sign it went out. On, like mail.
     message: true,
     worker_failed: true,
+    // A plugin's hooks fail where nobody looks, so this is the only sign.
+    plugin_failed: true,
     // A queued job that fails is a real failure the queue would otherwise
     // swallow, and it is deduped per job class, so it is on by default.
     job_failed: true,

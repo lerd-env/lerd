@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/geodro/lerd/internal/plugins"
 )
 
 // jsonEqual reports whether a and b serialise to the same canonical JSON. Go
@@ -58,6 +60,34 @@ type aiClient struct {
 	NeedsType    bool      // inject "type":"stdio" into the entry (VS Code only)
 	GlobalViaCLI bool      // register global scope via `claude mcp add` instead of a file
 	Contexts     []ctxFile // context/instructions docs this client loads
+	SkillsDir    string    // where the client loads skills from, rel to project root and $HOME; "" = no skills
+}
+
+// clientContexts is the client's own docs plus, for a client that loads skills,
+// one lerd-<plugin>/SKILL.md per installed plugin that ships a skill.
+func clientContexts(c aiClient) []ctxFile {
+	if c.SkillsDir == "" {
+		return c.Contexts
+	}
+	out := append([]ctxFile(nil), c.Contexts...)
+	list, _ := plugins.Load()
+	for _, p := range list {
+		if p.MCP == nil || p.MCP.Skill == "" {
+			continue
+		}
+		path := filepath.Join(c.SkillsDir, "lerd-"+p.Name, "SKILL.md")
+		skill := filepath.Join(p.Dir, p.MCP.Skill)
+		out = append(out, ctxFile{
+			Project: path,
+			Global:  path,
+			Format:  ctxOverwrite,
+			Content: func() string {
+				data, _ := os.ReadFile(skill)
+				return string(data)
+			},
+		})
+	}
+	return out
 }
 
 // aiClients is the single source of truth for every assistant lerd integrates
@@ -73,6 +103,7 @@ var aiClients = []aiClient{
 		MCPFormat:    fmtJSONMcpServers,
 		ServerKey:    "mcpServers",
 		GlobalViaCLI: true,
+		SkillsDir:    filepath.Join(".claude", "skills"),
 		Contexts: []ctxFile{{
 			Project: filepath.Join(".claude", "skills", "lerd", "SKILL.md"),
 			Global:  filepath.Join(".claude", "skills", "lerd", "SKILL.md"),

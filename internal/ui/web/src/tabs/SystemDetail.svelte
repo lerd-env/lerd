@@ -9,6 +9,7 @@
   import NodePage from './system/NodePage.svelte';
   import LerdDetail from './system/LerdDetail.svelte';
   import ToolsDetail from './system/ToolsDetail.svelte';
+  import PluginsDetail from './system/PluginsDetail.svelte';
   import RuntimeDetail from './system/RuntimeDetail.svelte';
   import SnapshotsDetail from './system/SnapshotsDetail.svelte';
 
@@ -39,6 +40,8 @@
   <SnapshotsDetail />
 {:else if selected === 'tools'}
   <ToolsDetail />
+{:else if selected === 'plugins' || selected.startsWith('plugins/')}
+  <PluginsDetail />
 {:else}
   <LerdDetail />
 {/if}

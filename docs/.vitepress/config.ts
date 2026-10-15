@@ -249,6 +249,7 @@ export default defineConfig({
             { text: 'Omarchy Bar Widget', link: '/features/omarchy-glance' },
             { text: 'PhpStorm Plugin', link: '/features/phpstorm-plugin' },
             { text: 'AI Integration (MCP)', link: '/features/mcp' },
+            { text: 'Plugins', link: '/features/plugins' },
           ],
         },
         {
@@ -335,6 +336,7 @@ export default defineConfig({
           items: [
             { text: 'Building from Source', link: '/contributing/building' },
             { text: 'Pull Requests', link: '/contributing/pull-requests' },
+            { text: 'Extending the Plugin System', link: '/contributing/plugins' },
           ],
         },
       ],

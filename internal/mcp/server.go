@@ -201,7 +201,7 @@ func dispatch(req *rpcRequest) (any, *rpcError) {
 			"instructions":    serverInstructions,
 		}, nil
 	case "tools/list":
-		return map[string]any{"tools": toolList()}, nil
+		return map[string]any{"tools": allTools()}, nil
 	case "tools/call":
 		return handleToolCall(req.Params)
 	default:

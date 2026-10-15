@@ -94,6 +94,23 @@ func SetExtraPresetsForTest(fsys fs.FS) { extraPresetsFS = fsys }
 // extra layer, then the embedded bundle as the final, always-present fallback
 // (offline + backwards compatibility).
 func readPresetBytes(name string) ([]byte, bool) {
+	if data, ok := readOwnPresetBytes(name); ok {
+		return data, true
+	}
+	if !validPresetName(name) {
+		return nil, false
+	}
+	if path := pluginDefinitionPath(PluginServices, name); path != "" {
+		if data, err := os.ReadFile(path); err == nil && ValidatePresetYAML(data, name) == nil {
+			return data, true
+		}
+	}
+	return nil, false
+}
+
+// readOwnPresetBytes reads a preset from lerd's own layers, the store cache and
+// the embedded bundle, leaving out what plugins add.
+func readOwnPresetBytes(name string) ([]byte, bool) {
 	if !validPresetName(name) {
 		return nil, false
 	}
@@ -171,7 +188,18 @@ func RemoveStorePreset(name string) error {
 func storePresetStat(name string) (time.Time, int64) {
 	info, err := os.Stat(filepath.Join(StorePresetsDir(), name+".yaml"))
 	if err != nil {
-		return time.Time{}, 0
+		// A plugin's preset is keyed on its own file, so updating or removing
+		// the plugin is picked up the same way. Built-ins skip the plugin scan.
+		if _, err := fs.Stat(presetFS, "presets/"+name+".yaml"); err == nil {
+			return time.Time{}, 0
+		}
+		path := pluginDefinitionPath(PluginServices, name)
+		if path == "" {
+			return time.Time{}, 0
+		}
+		if info, err = os.Stat(path); err != nil {
+			return time.Time{}, 0
+		}
 	}
 	return info.ModTime(), info.Size()
 }
@@ -199,6 +227,7 @@ func presetNames() []string {
 	add(embeddedPresetNames())
 	add(storePresetNames())
 	add(extraPresetNames())
+	add(pluginDefinitionNames(PluginServices))
 	sort.Strings(out)
 	return out
 }

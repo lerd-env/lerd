@@ -21,6 +21,7 @@ import (
 	"github.com/geodro/lerd/internal/lifecycle"
 	"github.com/geodro/lerd/internal/nginx"
 	phpPkg "github.com/geodro/lerd/internal/php"
+	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/services"
@@ -849,6 +850,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 	if len(noImage) > 0 {
 		return fmt.Errorf("not started, their image could not be pulled or built: %s", strings.Join(noImage, ", "))
 	}
+	plugins.Emit(plugins.EventLerdStarted, nil)
 	return nil
 }
 

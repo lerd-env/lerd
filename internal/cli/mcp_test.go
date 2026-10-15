@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/mcp"
+	"github.com/geodro/lerd/internal/plugins"
 )
 
 // TestEveryMCPToolIsDocumented guards against doc drift: the single canonical
@@ -308,6 +309,29 @@ func TestWriteProjectAISkills_writesAllArtefacts(t *testing.T) {
 	}
 	if !ProjectHasLerdSkills(dir) {
 		t.Errorf("ProjectHasLerdSkills should return true after WriteProjectAISkills")
+	}
+}
+
+// A plugin's skill lands beside lerd's own as lerd-<plugin>, and goes with it.
+func TestWriteProjectAISkills_writesAndRemovesPluginSkills(t *testing.T) {
+	isolatePlugins(t)
+	if err := plugins.Scaffold("hello", filepath.Join(plugins.Dir(), "hello")); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := WriteProjectAISkills(dir, false); err != nil {
+		t.Fatalf("WriteProjectAISkills: %v", err)
+	}
+	skill := filepath.Join(dir, ".claude", "skills", "lerd-hello", "SKILL.md")
+	data, err := os.ReadFile(skill)
+	if err != nil || !strings.Contains(string(data), "hello_greet") {
+		t.Fatalf("plugin skill not written: %v %q", err, data)
+	}
+	if err := RemoveProjectAISkills(dir, false); err != nil {
+		t.Fatalf("RemoveProjectAISkills: %v", err)
+	}
+	if _, err := os.Stat(skill); !os.IsNotExist(err) {
+		t.Errorf("plugin skill should be removed with lerd's, err=%v", err)
 	}
 }
 

@@ -1,0 +1,62 @@
+# A lerd plugin. Every key except api_version and name is optional: delete the
+# surfaces you don't need. Reference: https://lerd.sh/features/plugins
+api_version: 1
+name: hello
+version: 0.1.0
+description: A starting point for a lerd plugin
+
+# `lerd hello:greet [site]`
+commands:
+  - name: greet
+    usage: Print a greeting for a site
+    run: bin/greet
+  # `lerd hello:sites`, an example of calling lerd's own API.
+  - name: sites
+    usage: List lerd's sites through its API
+    run: bin/sites
+
+
+# Commands the scripts call beyond their interpreters; bin/sites uses curl.
+requires: [curl]
+# Shown in the site's Commands menu and the command palette.
+site_commands:
+  - name: greet
+    label: Greet
+    description: Print a greeting for this site
+    run: bin/greet
+
+# Event name -> executable. The event payload arrives as JSON on stdin.
+hooks:
+  site.linked: bin/on-event
+  site.unlinked: bin/on-event
+
+# Tools for AI assistants, exposed by `lerd mcp` as hello_greet.
+mcp:
+  skill: SKILL.md
+  tools:
+    - name: greet
+      description: Return a greeting for a lerd site
+      input_schema:
+        type: object
+        properties:
+          site:
+            type: string
+            description: Site name
+      run: bin/greet
+
+# Served at /api/plugins/hello/greet, behind the same access rules as lerd's own API.
+api:
+  - path: greet
+    methods: [GET]
+    run: bin/greet
+
+ui:
+  page:
+    title: Hello
+    icon: ui/icon.svg
+    entry: ui/index.html
+  site_tab:
+    title: Hello
+    entry: ui/site.html
+  # Injected into a site's pages once switched on for that site, never before.
+  page_script: ui/page.js

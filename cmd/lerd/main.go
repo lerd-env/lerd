@@ -33,6 +33,7 @@ import (
 	"github.com/geodro/lerd/internal/nginx"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	phpDet "github.com/geodro/lerd/internal/php"
+	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
 	"github.com/geodro/lerd/internal/store"
@@ -276,6 +277,7 @@ func main() {
 	root.AddCommand(cli.NewRemoteControlFullAccessCmd())
 	root.AddCommand(newWatchCmd())
 	root.AddCommand(newServeUICmd())
+	root.AddCommand(cli.NewPluginCmd())
 
 	// queue:start, horizon:reload and the rest are generated from the workers the
 	// current project's framework declares, so a worker added to the store gets
@@ -287,6 +289,10 @@ func main() {
 			root.AddCommand(cmd)
 		}
 	}
+
+	// Plugins register after every built-in, framework worker commands included,
+	// so a plugin can never shadow one.
+	cli.AddPluginCommands(root)
 
 	maybeDispatchVendorBin(root)
 
@@ -569,6 +575,7 @@ func newWatchCmd() *cobra.Command {
 						// Teach the access feed the new domain now, so the worktree's
 						// first request lands in its request timing rather than nowhere.
 						watcher.RefreshWorktreeIndex()
+						emitWorktreeEvent(plugins.EventWorktreeAdded, sitePath, worktreeName)
 					},
 					func(sitePath, worktreeName string) {
 						if syncWorktree(sitePath, worktreeName, "changed", true) {
@@ -605,6 +612,7 @@ func newWatchCmd() *cobra.Command {
 							}
 						}
 						cli.DropOrphanedWorktreeLANShares(site, liveBranchesForSite(site))
+						emitWorktreeEvent(plugins.EventWorktreeRemoved, sitePath, worktreeName)
 					},
 				)
 				if err != nil {
@@ -831,6 +839,18 @@ func liveBranchesForSite(site *config.Site) map[string]bool {
 		out[w.Branch] = true
 	}
 	return out
+}
+
+// emitWorktreeEvent tells plugins about a worktree of a linked site. worktree
+// is git's name for it, the directory under .git/worktrees.
+func emitWorktreeEvent(event, sitePath, worktree string) {
+	site, err := config.FindSiteByPath(sitePath)
+	if err != nil {
+		return
+	}
+	payload := plugins.SitePayload(site)
+	payload["worktree"] = worktree
+	plugins.Emit(event, payload)
 }
 
 func mainRepoSitePaths() []string {

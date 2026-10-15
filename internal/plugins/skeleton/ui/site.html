@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Hello</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; margin: 1rem; color: #ddd; background: transparent; }
+    @media (prefers-color-scheme: light) { body { color: #222; } }
+  </style>
+</head>
+<body>
+  <pre id="out">Loading...</pre>
+  <script src="lerd.js"></script>
+  <script>
+    const out = document.getElementById('out');
+    lerd.api('greet?site=' + encodeURIComponent(lerd.context.site))
+      .then((text) => { out.textContent = text; })
+      .catch((err) => { out.textContent = err.message; });
+  </script>
+</body>
+</html>

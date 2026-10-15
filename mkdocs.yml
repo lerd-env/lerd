@@ -106,6 +106,7 @@ nav:
       - Project Setup: features/project-setup.md
       - Environment Setup: features/env-setup.md
       - AI Integration (MCP): features/mcp.md
+      - Plugins: features/plugins.md
       - Logs: features/logs.md
   - Reference:
       - Command Reference: reference/commands.md
@@ -114,6 +115,7 @@ nav:
       - Architecture: reference/architecture.md
   - Contributing:
       - Building from Source: contributing/building.md
+      - Extending the Plugin System: contributing/plugins.md
   - Troubleshooting: troubleshooting.md
   - Changelog: changelog.md
 

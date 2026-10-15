@@ -25,6 +25,7 @@ import (
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/platform"
+	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -196,10 +197,10 @@ type VhostData struct {
 	// profiled. SPX_KEY is injected regardless (gated by the $spx_key map)
 	// so the profiler UI is reachable.
 	Profiling bool
-	// BrowserLogsConf is the server-level browser logs block (the script
-	// injection and the locations proxied to lerd-ui), or "" when capture is
-	// off, which leaves the page untouched.
-	BrowserLogsConf string
+	// PageInjectConf is the server-level block that adds scripts to the site's
+	// pages (browser logs, page plugins) and the locations proxied to lerd-ui
+	// for them, or "" when nothing is injected, which leaves the page untouched.
+	PageInjectConf string
 	// RequestTimeout is the nginx request timeout in seconds rendered into the
 	// fastcgi_*_timeout / proxy_*_timeout directives. Resolved per site by
 	// resolveRequestTimeout (project .lerd.yaml, then global config, then 60s).
@@ -512,45 +513,72 @@ func profilerEnabled() bool {
 	return err == nil && cfg.IsProfilerEnabled()
 }
 
-// browserLogsConf renders a site's browser logs block for its vhost:
-// the script injection before </head> and the two locations that hand the
-// script and the reports to lerd-ui, naming the site in headers nginx sets
-// itself. Empty unless debug capture is on and the site opted in.
-func browserLogsConf(siteName, branch string) string {
-	cfg, err := config.LoadGlobal()
-	if err != nil || !cfg.IsDumpsEnabled() {
-		return ""
-	}
+// pageInjectConf renders what a site's vhost adds to its pages: one script
+// injection before </head> for browser logs and every page plugin the site
+// switched on, since nginx rewrites </head> only once, plus the locations that
+// hand those scripts and their calls to lerd-ui, naming the site in headers
+// nginx sets itself. Empty when nothing is injected, which leaves the page alone.
+func pageInjectConf(siteName, branch string) string {
 	site, err := config.FindSite(siteName)
 	if err != nil || site == nil {
 		return ""
 	}
-	settings := config.BrowserLogsFor(*site)
-	if !settings.Enabled {
-		return ""
-	}
-	path := config.BrowserLogsPath
-	location := func(suffix string) string {
-		return fmt.Sprintf(`
+	var tags, blocks string
+	headers := fmt.Sprintf(`
+        proxy_http_version 1.1;
+        proxy_set_header X-Lerd-Site "%s";
+        proxy_set_header X-Lerd-Branch "%s";
+        proxy_set_header X-Lerd-Host $host;`, siteName, branch)
+
+	if cfg, err := config.LoadGlobal(); err == nil && cfg.IsDumpsEnabled() && config.BrowserLogsFor(*site).Enabled {
+		path := config.BrowserLogsPath
+		// The script tag carries the id of the request that served the page, and a
+		// page on another origin may read it off a response, so the browser's
+		// events link to the PHP request behind them.
+		tags += fmt.Sprintf(`<script src="%s.js" data-rid="$upstream_http_x_lerd_rid"></script>`, path)
+		blocks += "\n    add_header Access-Control-Expose-Headers X-Lerd-Rid always;\n"
+		for _, suffix := range []string{"", ".js"} {
+			blocks += fmt.Sprintf(`
     location = %[1]s%[2]s {
         access_log off;
         client_max_body_size 64k;
-        proxy_pass %[3]s%[1]s%[2]s;
-        proxy_http_version 1.1;
-        proxy_set_header X-Lerd-Site "%[4]s";
-        proxy_set_header X-Lerd-Branch "%[5]s";
-        proxy_set_header X-Lerd-Host $host;
+        proxy_pass %[3]s%[1]s%[2]s;%[4]s
     }
-`, path, suffix, lerdUIUpstream(), siteName, branch)
+`, path, suffix, lerdUIUpstream(), headers)
+		}
 	}
-	// The script tag carries the id of the request that served the page, and a
-	// page on another origin may read it off a response, so the browser's
-	// events link to the PHP request behind them.
+
+	if names := pagePlugins(site); len(names) > 0 {
+		for _, name := range names {
+			tags += fmt.Sprintf(`<script src="%s%s/page.js" defer></script>`, plugins.PagePath, name)
+		}
+		blocks += fmt.Sprintf(`
+    location ^~ %s {
+        access_log off;
+        client_max_body_size 1m;
+        proxy_pass %s;%s
+    }
+`, plugins.PagePath, lerdUIUpstream(), headers)
+	}
+
+	if tags == "" {
+		return ""
+	}
 	return fmt.Sprintf(`
-    sub_filter '</head>' '<script src="%s.js" data-rid="$upstream_http_x_lerd_rid"></script></head>';
-    sub_filter_once on;
-    add_header Access-Control-Expose-Headers X-Lerd-Rid always;
-`, path) + location("") + location(".js")
+    sub_filter '</head>' '%s</head>';
+    sub_filter_once on;`, tags) + blocks
+}
+
+// pagePlugins is the site's switched-on page plugins that are still installed
+// and still ship a page script, in the order the site lists them.
+func pagePlugins(site *config.Site) []string {
+	var out []string
+	for _, name := range site.PagePlugins {
+		if p, err := plugins.Find(name); err == nil && p.UI != nil && p.UI.PageScript != "" {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // resolvePublicDir returns the document root subdirectory for a site, resolved
@@ -623,7 +651,7 @@ func renderFPMVhost(site config.Site, phpVersion string, ssl bool) ([]byte, erro
 		FrameworkFastCGI: frameworkFastCGI,
 		FrontController:  resolveFrontController(site),
 	}
-	data.BrowserLogsConf = browserLogsConf(site.Name, "")
+	data.PageInjectConf = pageInjectConf(site.Name, "")
 	if ssl {
 		data.CertDomain = site.PrimaryDomain()
 	}
@@ -704,7 +732,7 @@ func renderContainerVhost(site config.Site, container string, port int, backendS
 		BackendSSL:      backendSSL,
 		RequestTimeout:  resolveRequestTimeout(site.Path, site.PHPVersion),
 	}
-	data.BrowserLogsConf = browserLogsConf(site.Name, "")
+	data.PageInjectConf = pageInjectConf(site.Name, "")
 	if ssl {
 		data.CertDomain = site.PrimaryDomain()
 	}
@@ -806,7 +834,7 @@ func renderHostProxyVhost(site config.Site, tmplName string, ssl bool) ([]byte, 
 		BackendSSL:     site.HostSSL,
 		RequestTimeout: resolveRequestTimeout(site.Path, ""),
 	}
-	data.BrowserLogsConf = browserLogsConf(site.Name, "")
+	data.PageInjectConf = pageInjectConf(site.Name, "")
 	if ssl {
 		data.CertDomain = site.PrimaryDomain()
 	}
@@ -886,7 +914,7 @@ func GenerateWorktreeVhost(domain, path, phpVersion, siteName, branch string) er
 		FrameworkFastCGI: frameworkFastCGI,
 		FrontController:  resolveFrontController(worktreeSite(domain, path, siteName)),
 	}
-	data.BrowserLogsConf = browserLogsConf(siteName, branch)
+	data.PageInjectConf = pageInjectConf(siteName, branch)
 
 	rendered, err := renderVhost(tmpl, data)
 	if err != nil {
@@ -937,7 +965,7 @@ func GenerateWorktreeSSLVhost(domain, path, phpVersion, parentDomain, siteName, 
 		FrameworkFastCGI: frameworkFastCGI,
 		FrontController:  resolveFrontController(worktreeSite(domain, path, siteName)),
 	}
-	data.BrowserLogsConf = browserLogsConf(siteName, branch)
+	data.PageInjectConf = pageInjectConf(siteName, branch)
 
 	rendered, err := renderVhost(tmpl, data)
 	if err != nil {

@@ -376,6 +376,22 @@ Activity-driven worker suspension: lerd gracefully stops each site's suspendable
 | `lerd mcp:inject --path <dir>` | Inject into a specific project directory |
 | `lerd mcp:eject` | Remove the lerd MCP config and AI skill files from the current project (inverse of `mcp:inject`); use `--path <dir>` to target another directory |
 
+## Plugins
+
+See [Plugins](../features/plugins.md).
+
+| Command | Description |
+|---|---|
+| `lerd plugin new <name>` | Create a plugin from the boilerplate in `~/.local/share/lerd/plugins/<name>`, ready to edit |
+| `lerd plugin search [term]` | List the approved plugins in the catalog at plugins.lerd.sh |
+| `lerd plugin install <name>` | Install an approved plugin at the exact commit it was approved at |
+| `lerd plugin update [name...]` | Move catalog plugins to their newly approved commit, all of them when none is named |
+| `lerd plugin install <path\|git-url>` | Install a plugin from a directory or a git repository, outside the catalog |
+| `lerd plugin remove <name>` | Remove a plugin; the data it stored is kept |
+| `lerd plugin list` | List installed plugins and any that failed to load |
+| `lerd plugin page <name> on\|off` | Switch a plugin's page script on or off for the site in the current directory |
+| `lerd <plugin>:<command>` | Run a command an installed plugin declares |
+
 ## Dashboard
 
 | Command | Description |

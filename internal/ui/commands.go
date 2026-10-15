@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/logcolor"
+	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/sitetpl"
 )
@@ -157,7 +159,94 @@ func resolveSiteCommands(site *config.Site, branch string) []config.FrameworkCom
 	}
 	fw, _ := config.GetFrameworkForDir(site.Framework, path)
 	proj, _ := config.LoadProjectConfig(path)
-	return sitetpl.ExpandCommands(config.ResolveCommands(fw, proj, path), sitetpl.ForPath(path))
+	cmds := sitetpl.ExpandCommands(config.ResolveCommands(fw, proj, path), sitetpl.ForPath(path))
+	return append(cmds, pluginSiteCommands()...)
+}
+
+// pluginSiteCommands lists every installed plugin's site commands, named
+// <plugin>:<command> so they cannot shadow a framework command.
+func pluginSiteCommands() []config.FrameworkCommand {
+	list, _ := plugins.Load()
+	var out []config.FrameworkCommand
+	for _, p := range list {
+		for _, c := range p.SiteCommands {
+			out = append(out, config.FrameworkCommand{
+				Name:        p.Name + ":" + c.Name,
+				Label:       c.Label,
+				Description: c.Description,
+				Confirm:     c.Confirm,
+				Command:     filepath.Join(p.Dir, c.Run),
+				Plugin:      p.Name,
+			})
+		}
+	}
+	return out
+}
+
+// runPluginCommand streams a plugin site command like any other, under the same
+// per-site run lock. A plugin is installed by the user, so it needs no approval.
+func runPluginCommand(w http.ResponseWriter, r *http.Request, site *config.Site, target *config.FrameworkCommand, branch string) {
+	cwd := site.Path
+	if branch != "" {
+		if cwd = resolveSitePath(site, branch); cwd == "" {
+			writeJSON(w, map[string]any{"error": "unknown worktree branch: " + branch})
+			return
+		}
+	}
+	release, busyWith, ok := tryAcquireRun(siteRunLockKey(site), target.Name)
+	if !ok {
+		w.WriteHeader(http.StatusConflict)
+		writeJSON(w, map[string]any{"error": "another command is already running on this site: " + busyWith})
+		return
+	}
+	defer release()
+	cmd, err := pluginCommandProcess(target, site, branch, cwd)
+	if err != nil {
+		writeJSON(w, map[string]any{"error": err.Error()})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), pluginSiteCommandLimit(target))
+	defer cancel()
+	code := streamRun(w, ctx, cmd, false)
+	switch {
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		plugins.Failed(plugins.Failure{Plugin: target.Plugin, Surface: plugins.SurfaceSiteCommand, What: target.Name, Error: fmt.Sprintf("timed out after %s", pluginSiteCommandLimit(target))})
+	case code != 0:
+		plugins.Failed(plugins.Failure{Plugin: target.Plugin, Surface: plugins.SurfaceSiteCommand, What: target.Name, Error: fmt.Sprintf("exited with code %d", code)})
+	}
+}
+
+// pluginSiteCommandLimit is how long a plugin site command may run.
+func pluginSiteCommandLimit(target *config.FrameworkCommand) time.Duration {
+	if p, err := plugins.Find(target.Plugin); err == nil {
+		for _, c := range p.SiteCommands {
+			if target.Name == p.Name+":"+c.Name {
+				return c.Limit()
+			}
+		}
+	}
+	return plugins.SiteCommandLimit
+}
+
+// pluginCommandProcess builds the process for a plugin site command, run in cwd
+// with the site handed over the way every plugin surface does it.
+func pluginCommandProcess(target *config.FrameworkCommand, site *config.Site, branch, cwd string) (*exec.Cmd, error) {
+	p, err := plugins.Find(target.Plugin)
+	if err != nil {
+		return nil, err
+	}
+	run, err := filepath.Rel(p.Dir, target.Command)
+	if err != nil {
+		return nil, err
+	}
+	payload := plugins.SitePayload(site)
+	payload["branch"] = branch
+	cmd, err := p.Command(run, plugins.SurfaceSiteCommand, nil, plugins.Env(payload))
+	if err != nil {
+		return nil, err
+	}
+	cmd.Dir = cwd
+	return cmd, nil
 }
 
 // urlRegex matches the first http/https URL in stdout, used when the command
@@ -190,6 +279,10 @@ func handleCommandRun(w http.ResponseWriter, r *http.Request, site *config.Site,
 	}
 	if target.Command == "" {
 		writeJSON(w, map[string]any{"error": "command has no shell invocation"})
+		return
+	}
+	if target.Plugin != "" {
+		runPluginCommand(w, r, site, target, branch)
 		return
 	}
 
@@ -258,34 +351,40 @@ func handleCommandRun(w http.ResponseWriter, r *http.Request, site *config.Site,
 // duration, and (when captureURL) a URL parsed from the output. Shared by the
 // command runner and the doctor fix runner so both produce an identical stream.
 func streamShellRun(w http.ResponseWriter, ctx context.Context, cwd, shell string, captureURL bool) {
-	send, ok := sseSender(w)
-	if !ok {
-		return
-	}
-
-	cmd := exec.CommandContext(ctx, "sh", "-c", shell)
+	cmd := exec.Command("sh", "-c", shell)
 	cmd.Dir = cwd
 	// Force colour on: the command runs against a pipe, so composer, artisan
 	// and friends would otherwise strip their ANSI escapes and the run modal
 	// would show a wall of grey.
 	cmd.Env = logcolor.Environ(append(os.Environ(), "PATH="+config.PathWithBinDir()))
+	streamRun(w, ctx, cmd, captureURL)
+}
+
+// streamRun runs cmd and streams it as streamShellRun describes, killing it
+// when the client goes away.
+func streamRun(w http.ResponseWriter, ctx context.Context, cmd *exec.Cmd, captureURL bool) int {
+	send, ok := sseSender(w)
+	if !ok {
+		return 0
+	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		send("error", "stdout pipe: "+err.Error())
-		return
+		return 0
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		send("error", "stderr pipe: "+err.Error())
-		return
+		return 0
 	}
 
 	start := time.Now()
 	if err := cmd.Start(); err != nil {
 		send("error", "start: "+err.Error())
-		return
+		return 0
 	}
+	defer context.AfterFunc(ctx, func() { _ = cmd.Process.Kill() })()
 
 	// capturedMu guards the builder across the two pipe-reader goroutines;
 	// strings.Builder is not safe for concurrent use. The frame writes are
@@ -326,7 +425,7 @@ func streamShellRun(w http.ResponseWriter, ctx context.Context, cwd, shell strin
 			exitCode = ee.ExitCode()
 		} else {
 			send("error", "wait: "+err.Error())
-			return
+			return 0
 		}
 	}
 
@@ -341,6 +440,7 @@ func streamShellRun(w http.ResponseWriter, ctx context.Context, cwd, shell strin
 	}
 	body, _ := json.Marshal(payload)
 	send("done", string(body))
+	return exitCode
 }
 
 // sseSender opens the event stream a run is reported through and returns the

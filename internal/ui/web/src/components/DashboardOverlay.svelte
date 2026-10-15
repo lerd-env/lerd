@@ -12,6 +12,8 @@
   import StatusDot from './StatusDot.svelte';
   import DetailButton from './DetailButton.svelte';
   import DocsViewer from './DocsViewer.svelte';
+  import PluginFrame from './PluginFrame.svelte';
+  import PluginIcon from './PluginIcon.svelte';
   import { docsLocation, docsSiteURL } from '$stores/docs';
   import {
     isSpxReportView,
@@ -254,7 +256,11 @@
             <Icon name="back" />
           </button>
         {/if}
-        <ServiceIcon name={d.name} icon={d.icon} bare compact />
+        {#if d.plugin}
+          <span class="text-gray-500 dark:text-gray-400"><PluginIcon icon={d.icon} /></span>
+        {:else}
+          <ServiceIcon name={d.name} icon={d.icon} bare compact />
+        {/if}
         <span class="text-sm font-medium text-gray-900 dark:text-white truncate">{d.label || d.name}</span>
       </div>
       <div class="flex items-center gap-2 shrink-0">
@@ -284,7 +290,7 @@
             {busy ? m.profiler_busy() : $profilerEnabled ? m.profiler_disarm() : m.profiler_arm()}
           </button>
         {/if}
-        {#if !isDocs}
+        {#if !isDocs && !d.plugin}
           <button
             onclick={reloadIframe}
             title={m.common_refresh()}
@@ -294,6 +300,8 @@
             <Icon name="refresh" />
           </button>
         {/if}
+        <!-- A plugin page only works inside the dashboard, which carries its API calls. -->
+        {#if !d.plugin}
         <a
           href={externalHref}
           target="_blank"
@@ -302,6 +310,7 @@
           aria-label={m.common_openInNewTab()}
           class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
         ><Icon name="external" /></a>
+        {/if}
         <button
           onclick={closeDashboard}
           title={m.common_close()}
@@ -318,6 +327,8 @@
     <div class="flex-1 min-h-0 flex flex-col overflow-hidden bg-white dark:bg-lerd-bg md:border-l md:border-t md:rounded-tl-xl border-lerd-headerborder">
       {#if isDocs}
         <DocsViewer />
+      {:else if d.plugin}
+        <PluginFrame plugin={d.plugin} url={d.dashboard} title={d.label || d.name} />
       {:else}
         <!-- Keyed on the source so switching dashboards tears the frame down and
              builds a new one. Re-pointing the old frame is a navigation, which

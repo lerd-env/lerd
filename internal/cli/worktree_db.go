@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +10,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
 	gitpkg "github.com/geodro/lerd/internal/git"
+	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/sitedoctor"
 )
@@ -26,7 +29,7 @@ func DropOrphanedWorktreeDBs(site *config.Site) {
 		if live[e.Branch] {
 			continue
 		}
-		_, _ = DropDatabase(e.Service, e.DBName)
+		_ = dropWorktreeDB(e)
 		_, _, _ = config.RemoveWorktreeDB(e.Site, e.Branch)
 	}
 }
@@ -89,6 +92,9 @@ func SetWorktreeDBIsolated(site *config.Site, branch string, isolated bool, sour
 	wtEnv := filepath.Join(wt.Path, binding.File)
 
 	if isolated {
+		if p := plugins.ProviderOf(plugins.JobWorktreeDatabase); p != nil {
+			return isolateWithPlugin(p, site, wt.Path, branch, source, service, parentDB, dbName)
+		}
 		if _, err := CreateDatabase(service, dbName); err != nil {
 			return fmt.Errorf("creating database %q in %s: %w", dbName, service, err)
 		}
@@ -115,18 +121,95 @@ func SetWorktreeDBIsolated(site *config.Site, branch string, isolated bool, sour
 		return restartWorktreeWorkersFn(site, wt.Path)
 	}
 
+	restore := map[string]string{binding.NameKey: parentDB}
 	if entry, removed, err := config.RemoveWorktreeDB(site.Name, branch); err == nil && removed {
-		_, _ = DropDatabase(entry.Service, entry.DBName)
+		_ = dropWorktreeDB(entry)
+		if entry.Provider != "" {
+			restore[binding.HostKey] = parentHost
+		}
 	}
 	if err := setWorktreeDBIsolatedFlag(site.Path, wt.Path, false); err != nil {
 		return err
 	}
 	if _, err := os.Stat(wtEnv); err == nil {
-		if err := applyDBEnvUpdate(wtEnv, binding.Format, map[string]string{binding.NameKey: parentDB}); err != nil {
+		if err := applyDBEnvUpdate(wtEnv, binding.Format, restore); err != nil {
 			return fmt.Errorf("restoring worktree env: %w", err)
 		}
 	}
 	return restartWorktreeWorkersFn(site, wt.Path)
+}
+
+// providedDB is what a plugin in charge of worktree databases answers create
+// with: the database it made and, when it serves it elsewhere, the host.
+type providedDB struct {
+	Host     string `json:"host"`
+	Database string `json:"database"`
+}
+
+// isolateWithPlugin hands the worktree's database to the plugin in charge of
+// it. A failure leaves the worktree sharing the parent's database rather than
+// falling back to a full copy, the cost the plugin is there to avoid.
+func isolateWithPlugin(p *plugins.Plugin, site *config.Site, wtPath, branch, source, service, parentDB, dbName string) error {
+	if kept, ok, _ := config.FindWorktreeDB(site.Name, branch); ok && kept.Provider == p.Name {
+		return connectWorktreeDB(site, wtPath, kept)
+	}
+	if source == "" {
+		source = "empty"
+	}
+	out, err := p.Provide(plugins.JobWorktreeDatabase, "create", map[string]string{
+		"site": site.Name, "site_path": site.Path, "branch": branch, "worktree_path": wtPath,
+		"service": service, "parent_database": parentDB, "database": dbName, "source": source,
+	})
+	if err != nil {
+		return err
+	}
+	var got providedDB
+	dec := json.NewDecoder(bytes.NewReader(out))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&got); err != nil {
+		return fmt.Errorf("plugin %s answered create with %w", p.Name, err)
+	}
+	if got.Database == "" {
+		return fmt.Errorf("plugin %s answered create without a database", p.Name)
+	}
+	entry := config.WorktreeDBEntry{Site: site.Name, Branch: branch, Service: service, DBName: got.Database, Host: got.Host, Provider: p.Name}
+	if err := config.AddWorktreeDB(entry); err != nil {
+		_ = dropWorktreeDB(entry)
+		return fmt.Errorf("recording worktree db: %w", err)
+	}
+	return connectWorktreeDB(site, wtPath, entry)
+}
+
+// connectWorktreeDB points the worktree at a database a plugin made.
+func connectWorktreeDB(site *config.Site, wtPath string, entry config.WorktreeDBEntry) error {
+	if err := setWorktreeDBIsolatedFlag(site.Path, wtPath, true); err != nil {
+		return err
+	}
+	binding := config.DBEnvBindingFor(site.Path)
+	updates := map[string]string{binding.NameKey: entry.DBName}
+	if entry.Host != "" {
+		updates[binding.HostKey] = entry.Host
+	}
+	if err := applyDBEnvUpdate(filepath.Join(wtPath, binding.File), binding.Format, updates); err != nil {
+		return fmt.Errorf("rewriting worktree env: %w", err)
+	}
+	return restartWorktreeWorkersFn(site, wtPath)
+}
+
+// dropWorktreeDB drops a worktree's isolated database through whoever made it.
+func dropWorktreeDB(e config.WorktreeDBEntry) error {
+	if e.Provider == "" {
+		_, err := DropDatabase(e.Service, e.DBName)
+		return err
+	}
+	p, err := plugins.Find(e.Provider)
+	if err != nil {
+		return fmt.Errorf("database %q was made by plugin %s, which is no longer installed: %w", e.DBName, e.Provider, err)
+	}
+	_, err = p.Provide(plugins.JobWorktreeDatabase, "drop", map[string]string{
+		"site": e.Site, "branch": e.Branch, "service": e.Service, "database": e.DBName,
+	})
+	return err
 }
 
 // restartWorktreeWorkersFn restarts a worktree's running workers; a seam for tests.

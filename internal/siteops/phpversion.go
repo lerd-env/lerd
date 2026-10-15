@@ -12,6 +12,7 @@ import (
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/php"
+	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -245,6 +246,9 @@ func SetSitePHPVersion(site *config.Site, version string, opts PHPVersionOpts) (
 	if podman.AfterUnitChange != nil {
 		podman.AfterUnitChange("site:" + site.Name)
 	}
+	payload := plugins.SitePayload(site)
+	payload["php_version"] = version
+	plugins.Emit(plugins.EventSitePHPChanged, payload)
 	return res, nil
 }
 

@@ -4,6 +4,7 @@ import { services, serviceAction, serviceOpenable, type Service } from './servic
 import { adminServiceFor } from './presetSuggestions';
 import { entities } from './entities';
 import { DEFAULT_DOCS_ROUTE, parseDocsHash } from './docs';
+import { plugins, type PluginInfo } from './plugins';
 
 export interface DashboardRef {
   name: string;
@@ -15,6 +16,9 @@ export interface DashboardRef {
   // extraPath is appended to dashboard for the iframe src, used to deep-link
   // a service overlay (e.g. mailpit's /view/{id} for a captured email).
   extraPath?: string;
+  // plugin marks a plugin's rail page, drawn in a sandboxed PluginFrame
+  // rather than the service iframe.
+  plugin?: string;
 }
 
 // The currently-open dashboard, either a real service or the synthetic 'docs' ref.
@@ -241,6 +245,22 @@ export function keepServiceAwake(name: string): () => void {
   return () => clearInterval(timer);
 }
 
+function pluginRef(p: PluginInfo): DashboardRef | null {
+  if (!p.page) return null;
+  return { name: 'plugin:' + p.name, label: p.page.title, dashboard: p.page.url, icon: p.page.icon, plugin: p.name };
+}
+
+export function openPlugin(p: PluginInfo) {
+  const cur = get(dashboardOpen);
+  if (cur && cur.plugin === p.name) {
+    dashboardOpen.set(null);
+    location.hash = fallbackHash();
+    return;
+  }
+  dashboardOpen.set(pluginRef(p));
+  location.hash = 'plugin/' + p.name;
+}
+
 export function closeDashboard() {
   dashboardOpen.set(null);
   location.hash = fallbackHash();
@@ -256,6 +276,10 @@ function refFromHash(): DashboardRef | null {
   if (parseDocsHash(h)) return DOCS_REF;
   if (h === 'profiler') return PROFILER_REF;
   if (h.startsWith('profiler/')) return profilerReportRef(decodeURIComponent(h.slice('profiler/'.length)));
+  if (h.startsWith('plugin/')) {
+    const p = get(plugins).find((x) => x.name === h.slice('plugin/'.length));
+    return p ? pluginRef(p) : null;
+  }
   if (h.startsWith('service/')) {
     const rest = h.slice('service/'.length);
     // service/mailpit/view/<id> deep-links into a specific captured email.
@@ -330,6 +354,10 @@ export function initDashboardRoute() {
   dashboardOpen.set(refFromHash());
   window.addEventListener('hashchange', () => {
     dashboardOpen.set(refFromHash());
+  });
+  // Re-hydrate when plugins load so a #plugin/<name> deep-link resolves.
+  plugins.subscribe(() => {
+    if (location.hash.startsWith('#plugin/')) dashboardOpen.set(refFromHash());
   });
   // Re-hydrate when services load so a #service/<name> deep-link resolves.
   services.subscribe(() => {

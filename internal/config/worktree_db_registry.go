@@ -15,6 +15,10 @@ type WorktreeDBEntry struct {
 	Branch  string `yaml:"branch"`
 	Service string `yaml:"service"`
 	DBName  string `yaml:"db_name"`
+	// Provider is the plugin that made the database, which also drops it, and
+	// Host where it serves it when that is not the service.
+	Provider string `yaml:"provider,omitempty"`
+	Host     string `yaml:"host,omitempty"`
 }
 
 type worktreeDBRegistry struct {

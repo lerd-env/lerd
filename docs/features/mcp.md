@@ -179,6 +179,8 @@ The server also sends short instructions when a client connects, telling the ass
 
 The injected context files document each action's arguments and the key conventions in full.
 
+Installed [plugins](plugins.md) add tools of their own, named `<plugin>_<tool>`, and `lerd mcp:inject` writes each plugin's skill beside lerd's as `.claude/skills/lerd-<plugin>/SKILL.md`. Run it again after installing a plugin.
+
 ### Switching branches from an assistant
 
 A plain `git switch` or `git pull` moves the code but leaves the database on the old branch's schema. The server instructions tell an assistant to keep the two in step with the tools it already has: a `db snapshot` before the switch, a copy of the database through `worktree db_isolate` for worktrees sharing it whenever a migration or a restore is about to change it, then a `db restore` of the snapshot taken on the new branch when there is one, and in either case a composer install through `exec` when `composer.lock` changed, ahead of the new branch's migrations. Snapshots taken through MCP record the site and the branch checked out, so `db snapshots` shows which branch's schema each one holds. When only the old branch had some migrations, the database is ahead of the code; the assistant says so and offers the snapshot rather than rolling anything back on its own.

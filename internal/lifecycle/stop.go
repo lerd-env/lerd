@@ -6,6 +6,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -36,6 +37,7 @@ func Stop(runner ParallelRunner, skip ...string) error {
 	batchStopFn(units)
 
 	_ = runner(stopJobs(units))
+	plugins.Emit(plugins.EventLerdStopped, nil)
 	return nil
 }
 

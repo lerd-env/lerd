@@ -1,0 +1,7 @@
+#!/bin/sh
+# Hooks get the event name in LERD_EVENT and its payload as JSON on stdin.
+# LERD_PLUGIN_DATA is this plugin's own writable directory.
+set -eu
+
+payload=$(cat)
+printf '%s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$LERD_EVENT" "$payload" >>"$LERD_PLUGIN_DATA/events.log"
