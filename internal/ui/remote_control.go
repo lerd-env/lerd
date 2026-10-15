@@ -36,6 +36,7 @@ var loopbackOnlyRoutes = []string{
 	"/api/sites/branch-plan",    // reads the site's database and its snapshots
 	"/api/sites/pull",           // pulls with the host user's git credentials, then runs composer, npm and migrations
 	"/api/sites/pull-plan",      // fetches with the host user's git credentials
+	"/api/sites/git-diff",       // reads uncommitted files, untracked secrets included
 }
 
 // loopbackOnlyRoutePrefixes are endpoint subtrees restricted in full, so a

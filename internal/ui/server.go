@@ -288,6 +288,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/sites/reorder", withCORS(publishAfter(handleSiteReorder, eventbus.KindSites)))
 	mux.HandleFunc("/api/sites/worktree-options", withCORS(handleSiteWorktreeOptions))
 	mux.HandleFunc("/api/sites/git-status", withCORS(handleSiteGitStatus))
+	mux.HandleFunc("/api/sites/git-diff", withCORS(handleSiteGitDiff))
 	mux.HandleFunc("/api/sites/worktree-add", withCORS(publishAfter(handleSiteWorktreeAdd, eventbus.KindSites)))
 	mux.HandleFunc("/api/sites/branch-plan", withCORS(handleSiteBranchPlan))
 	mux.HandleFunc("/api/sites/branch-switch", withCORS(publishAfter(handleSiteBranchSwitch, eventbus.KindSites)))
@@ -6727,6 +6728,56 @@ func handleSiteGitStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	flush()
 	writeJSON(w, map[string]any{"checkouts": checkouts})
+}
+
+// handleSiteGitDiff answers GET /api/sites/git-diff?domain=...&path=... with
+// the files a checkout has changed, or with both versions of one file when
+// section and file are given. path must be one of the site's own checkouts.
+func handleSiteGitDiff(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	q := r.URL.Query()
+	site, err := config.FindSiteByDomain(q.Get("domain"))
+	if err != nil {
+		http.Error(w, "site not found", http.StatusNotFound)
+		return
+	}
+	dir := q.Get("path")
+	if !isSiteCheckout(site.Path, dir) {
+		http.Error(w, "not a checkout of this site", http.StatusBadRequest)
+		return
+	}
+	if q.Get("file") == "" {
+		changes, err := gitpkg.ReadChanges(dir)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, changes)
+		return
+	}
+	versions, err := gitpkg.FileVersions(dir, q.Get("section"), q.Get("file"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, versions)
+}
+
+// isSiteCheckout reports whether dir is the site's main checkout or one of its
+// worktrees, as `git worktree list` spells them.
+func isSiteCheckout(sitePath, dir string) bool {
+	if dir == "" {
+		return false
+	}
+	for _, line := range strings.Split(runGitOutput(sitePath, "worktree", "list", "--porcelain"), "\n") {
+		if line == "worktree "+dir {
+			return true
+		}
+	}
+	return false
 }
 
 // sseLineWriter buffers writes into newline-delimited SSE `data:` frames so

@@ -12,6 +12,7 @@ export type ModalKind =
   | "worktreeAdd"
   | "branchSwitch"
   | "gitPull"
+  | "gitDiff"
   | "worktreeRemove"
   | "phpAdd"
   | "phpRebuild"
@@ -210,6 +211,8 @@ export interface ModalState {
   branch?: string;
   // The checkout to pull: '' for the site's main one, else a worktree's branch.
   pull?: { domain: string; branch: string; label: string };
+  // path is the checkout's folder as git-status reported it.
+  gitDiff?: { domain: string; path: string; branch: string };
   envSave?: EnvSaveTarget;
   envRestore?: EnvRestoreTarget;
   envPropose?: EnvProposeTarget;
@@ -301,6 +304,10 @@ export function openBranchSwitchModal(site: Site) {
 
 export function openPullModal(domain: string, branch: string, label: string, onDone: () => void) {
   modal.set({ kind: "gitPull", pull: { domain, branch, label }, onSuccess: onDone });
+}
+
+export function openGitDiffModal(domain: string, path: string, branch: string) {
+  modal.set({ kind: "gitDiff", gitDiff: { domain, path, branch } });
 }
 
 export function openWorktreeRemoveModal(site: Site, branch: string) {

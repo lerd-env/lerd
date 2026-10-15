@@ -218,15 +218,34 @@ describe('SiteHeader', () => {
       expect(queryByRole('button', { name: 'Pull from upstream' })).toBeNull();
     });
 
+    // A branch with no remote has no sync buttons, but its uncommitted work still has a diff.
+    it('offers the diff only when the checkout has uncommitted work', async () => {
+      accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
+      const local = [{ ...tracking[0], behind: 0, upstream: false, publishable: false, untracked: 1 }];
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({ checkouts: local })))));
+      const { findByRole, queryByRole } = render(Harness, { props: { site: worktreeSite } });
+      expect(await findByRole('button', { name: 'Show uncommitted changes' })).toBeInTheDocument();
+      expect(queryByRole('button', { name: 'Publish to origin' })).toBeNull();
+    });
+
+    it('has no diff for a clean checkout', async () => {
+      accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({ checkouts: tracking })))));
+      const { findByRole, queryByRole } = render(Harness, { props: { site: worktreeSite } });
+      expect(await findByRole('button', { name: 'Pull from upstream' })).toBeInTheDocument();
+      expect(queryByRole('button', { name: 'Show uncommitted changes' })).toBeNull();
+    });
+
     it('hides them from a remote session without host actions', async () => {
       accessMode.set({ localControl: false, local: false, lanExposed: true, checked: true });
-      const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ checkouts: tracking }))));
+      const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ checkouts: [{ ...tracking[0], modified: 1 }] }))));
       vi.stubGlobal('fetch', fetchMock);
       const { queryByRole } = render(Harness, { props: { site: worktreeSite } });
       await waitFor(() => expect(fetchMock).toHaveBeenCalled());
       await Promise.resolve();
       expect(queryByRole('button', { name: 'Pull from upstream' })).toBeNull();
       expect(queryByRole('button', { name: 'Switch branch' })).toBeNull();
+      expect(queryByRole('button', { name: 'Show uncommitted changes' })).toBeNull();
     });
   });
 

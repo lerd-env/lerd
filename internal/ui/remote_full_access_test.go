@@ -233,6 +233,7 @@ func TestIsLoopbackOnlyPath(t *testing.T) {
 		{"/api/sites/myapp.test/git:push", true},
 		{"/api/sites/myapp.test/git:fetch", true},
 		{"/api/sites/git-status", false},
+		{"/api/sites/git-diff", true},
 		{"/api/databases", true},
 		{"/api/databases/mysql", true},
 		{"/api/databases/mysql/drop", true},

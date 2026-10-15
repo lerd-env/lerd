@@ -10,6 +10,7 @@
   import AddWorktreeModal from './AddWorktreeModal.svelte';
   import SwitchBranchModal from './SwitchBranchModal.svelte';
   import PullModal from './PullModal.svelte';
+  import GitDiffModal from './GitDiffModal.svelte';
   import RemoveWorktreeModal from './RemoveWorktreeModal.svelte';
   import AddPhpModal from './AddPhpModal.svelte';
   import RebuildPhpModal from './RebuildPhpModal.svelte';
@@ -59,6 +60,8 @@
   <SwitchBranchModal site={$modal.site} />
 {:else if $modal.kind === 'gitPull' && $modal.pull}
   <PullModal domain={$modal.pull.domain} branch={$modal.pull.branch} branchLabel={$modal.pull.label} onDone={$modal.onSuccess} />
+{:else if $modal.kind === 'gitDiff' && $modal.gitDiff}
+  <GitDiffModal domain={$modal.gitDiff.domain} path={$modal.gitDiff.path} branch={$modal.gitDiff.branch} />
 {:else if $modal.kind === 'worktreeRemove' && $modal.site && $modal.branch}
   <RemoveWorktreeModal site={$modal.site} branch={$modal.branch} />
 {:else if $modal.kind === 'phpAdd'}

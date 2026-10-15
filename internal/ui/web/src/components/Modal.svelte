@@ -9,11 +9,15 @@
     title: string;
     onclose: () => void;
     size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+    /** A fixed-height panel whose body fills it, for an editor. */
+    tall?: boolean;
+    /** Fills the window; a tall panel grows into it rather than jumping. */
+    fullscreen?: boolean;
     children: Snippet;
     footer?: Snippet;
     actions?: Snippet;
   }
-  let { open, title, onclose, size = 'md', children, footer, actions }: Props = $props();
+  let { open, title, onclose, size = 'md', tall = false, fullscreen = false, children, footer, actions }: Props = $props();
   const uid = $props.id();
   const titleId = `${uid}-title`;
 
@@ -54,7 +58,9 @@
       aria-modal="true"
       aria-labelledby={titleId}
       tabindex="-1"
-      class="relative outline-none bg-white dark:bg-lerd-card border border-gray-200 dark:border-lerd-border rounded-xl shadow-2xl w-full {widthClass} mx-4 lerd-panel-in transition-[max-width] duration-200 ease-out"
+      class="relative outline-none bg-white dark:bg-lerd-card border w-full lerd-panel-in transition-[max-width,height,margin,border-radius] duration-200 ease-out {fullscreen
+        ? 'max-w-[100vw] h-dvh mx-0 rounded-none border-transparent flex flex-col'
+        : `border-gray-200 dark:border-lerd-border rounded-xl shadow-2xl ${widthClass} mx-4 ${tall ? 'h-[85vh] flex flex-col' : ''}`}"
     >
       <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-lerd-border">
         <h3 id={titleId} class="min-w-0 break-words font-semibold text-gray-900 dark:text-white">{title}</h3>
