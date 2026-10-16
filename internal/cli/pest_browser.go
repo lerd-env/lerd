@@ -203,6 +203,9 @@ func newPestBrowserInstallCmd() *cobra.Command {
 			"Re-run it after bumping the Playwright version in your project.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			if err := nativePestBrowserRefusal(); err != nil {
+				return err
+			}
 			version, err := phpExtVersion(args)
 			if err != nil {
 				return err
@@ -356,6 +359,9 @@ func newPestBrowserRemoveCmd() *cobra.Command {
 			"with other PHP versions); delete it manually to reclaim disk.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			if err := nativePestBrowserRefusal(); err != nil {
+				return err
+			}
 			version, err := phpExtVersion(args)
 			if err != nil {
 				return err
@@ -413,6 +419,9 @@ func newPestBrowserDoctorCmd() *cobra.Command {
 		Short: "Diagnose the Pest browser testing setup for a PHP version",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			if err := nativePestBrowserRefusal(); err != nil {
+				return err
+			}
 			version, err := phpExtVersion(args)
 			if err != nil {
 				return err

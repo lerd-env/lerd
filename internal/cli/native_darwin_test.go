@@ -110,3 +110,18 @@ func TestVersionShellAllowedUnderContainerRuntime(t *testing.T) {
 		t.Errorf("container runtime must allow a version shell, got: %v", err)
 	}
 }
+
+// pest:browser bakes chromium into the FPM image the native runtime never runs
+// tests in, so it refuses and says where the browser comes from instead.
+func TestPestBrowserRefusesUnderNative(t *testing.T) {
+	nativeMode(t)
+	err := nativePestBrowserRefusal()
+	if err == nil {
+		t.Fatal("expected a refusal under the native runtime")
+	}
+	for _, want := range []string{"native runtime", "lerd npx playwright install chromium"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal should mention %q, got: %v", want, err)
+		}
+	}
+}

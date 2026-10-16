@@ -88,6 +88,8 @@ Pest v4's native [browser testing](https://pestphp.com/docs/browser-testing) (`p
 
 In lerd your tests run inside the PHP-FPM container, so the browser has to live there too. Two facts make that tricky: Playwright's own Chromium is a glibc binary that cannot run on the container's musl libc, and Pest exposes no hook to point Playwright at a remote browser. lerd solves both by baking Alpine's musl-native Chromium into the FPM image and transparently shimming Playwright's browser to it. Xvfb is baked in alongside it so headed runs have a display to draw on.
 
+On macOS with the [native PHP runtime](../features/native-runtime.md) none of this applies: Pest runs on your Mac, so Playwright launches its own browser there and trusts lerd's certificates through the keychain. Install the browser with `lerd npx playwright install chromium`; the `lerd pest:browser` commands refuse under that runtime.
+
 ### 1. Install the Pest browser plugin
 
 ```bash

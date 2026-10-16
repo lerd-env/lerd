@@ -125,6 +125,17 @@ func nativeImageCommandRefusal(command string) error {
 	return fmt.Errorf("%s needs the container runtime: PHP runs from a binary here, with its extensions compiled in and no image to add packages to. Switch with 'lerd php:runtime container', or keep the site on a version whose native build already carries what you need", command)
 }
 
+// nativePestBrowserRefusal returns the error pest:browser fails with under the
+// native runtime. Its setup lives in the FPM image, but here Pest runs on this
+// machine and Playwright launches its own browser, which trusts the keychain.
+func nativePestBrowserRefusal() error {
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg.PHPRuntimeMode() != config.PHPRuntimeNative {
+		return nil
+	}
+	return errors.New("pest:browser sets up a browser inside the PHP container, which the native runtime does not use: Pest runs on this machine and Playwright launches its own browser here, trusting lerd's certificates through the keychain. Install it in the project with 'lerd npx playwright install chromium'")
+}
+
 // nativeTinkerCommand builds the tinker invocation for the native runtime: the
 // host binary, run in the project, with the same php arguments and environment
 // the container path would have passed through podman exec.

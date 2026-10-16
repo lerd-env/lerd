@@ -420,3 +420,10 @@ func TestIndentBlock_PrefixesEveryLine(t *testing.T) {
 		t.Errorf("indentBlock = %q, want %q", got, want)
 	}
 }
+
+func TestPestBrowserAllowedInContainerMode(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := nativePestBrowserRefusal(); err != nil {
+		t.Errorf("container mode must allow pest:browser, got: %v", err)
+	}
+}
