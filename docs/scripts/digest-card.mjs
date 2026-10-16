@@ -1,6 +1,7 @@
 // Renders the per-version social card behind each dev digest's og:image.
 // Reads the tagline and date straight out of the digest page so the card can
-// never drift from what it links to. Requires rsvg-convert (librsvg).
+// never drift from what it links to. Requires rsvg-convert (librsvg) and the
+// Instrument Sans and JetBrains Mono fonts installed, which it draws with.
 //
 //   node docs/scripts/digest-card.mjs            # every digest
 //   node docs/scripts/digest-card.mjs v1.30.0    # just one
@@ -14,15 +15,17 @@ import path from 'node:path'
 const DIGEST_DIR = fileURLToPath(new URL('../public/digest', import.meta.url))
 const OUT_DIR = fileURLToPath(new URL('../public/assets/digest', import.meta.url))
 
+// The landing page's editorial palette and type.
 const BG = '#0a0a0b'
-const RED = '#ff4538'
-const TEXT = '#ece9e2'
-const MUTED = '#9b978e'
-const DIM = '#67645c'
-const LINE = '#2e2e36'
+const RED = '#ff2d20'
+const TEXT = '#f4f4f5'
+const INK2 = '#c4c4cc'
+const MUTED = '#8b8b95'
+const FAINT = '#5d5d66'
+const LINE = '#26262c'
 
-const SANS = 'Fira Sans Compressed, Archivo, DejaVu Sans, sans-serif'
-const MONO = 'JetBrains Mono, DejaVu Sans Mono, monospace'
+const SANS = 'Instrument Sans, sans-serif'
+const MONO = 'JetBrains Mono, monospace'
 
 const esc = (s) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -64,76 +67,48 @@ function read(version) {
 
 function svg(version, { tagline, date, summary }) {
   const [maj, min, patch] = version.replace(/^v/, '').split('.')
-  const taglines = wrap(tagline.toUpperCase(), 46).slice(0, 2)
-  const summaries = wrap(summary.replace(/\.$/, ''), 62)
+  const taglines = wrap(tagline, 50).slice(0, 2)
+  const summaries = wrap(summary.replace(/\.$/, ''), 78)
   if (summaries.length > 3) {
     summaries.length = 3
     summaries[2] = summaries[2].replace(/[,;:]?$/, '') + '…'
   }
 
-  // Bottom-align the block so any combination of line counts clears the footer.
-  const sumY = 546 - (summaries.length - 1) * 32
-  const tagY = sumY - 30 - (taglines.length - 1) * 34
+  // The summary follows however many tagline lines there are.
+  const tagY = 392
+  const sumY = tagY + taglines.length * 46 + 22
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
-  <defs>
-    <radialGradient id="glow" cx="14%" cy="0%" r="70%">
-      <stop offset="0%" stop-color="${RED}" stop-opacity="0.20"/>
-      <stop offset="100%" stop-color="${RED}" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="glow2" cx="96%" cy="100%" r="55%">
-      <stop offset="0%" stop-color="#eda33b" stop-opacity="0.09"/>
-      <stop offset="100%" stop-color="#eda33b" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-
   <rect width="1280" height="640" fill="${BG}"/>
-  <rect width="1280" height="640" fill="url(#glow)"/>
-  <rect width="1280" height="640" fill="url(#glow2)"/>
 
-  <rect x="80" y="72" width="52" height="52" rx="12" fill="${RED}"/>
-  <text x="106" y="109" font-family="${MONO}" font-size="30" font-weight="700"
+  <rect x="80" y="72" width="40" height="40" rx="9" fill="${RED}"/>
+  <text x="100" y="101" font-family="${SANS}" font-size="25" font-weight="700"
         fill="#ffffff" text-anchor="middle">L</text>
-  <text x="150" y="99" font-family="${SANS}" font-size="27" font-weight="700"
-        fill="${TEXT}">lerd</text>
-  <text x="205" y="99" font-family="${MONO}" font-size="18"
-        fill="${DIM}">lerd-env/<tspan fill="${RED}">lerd</tspan></text>
+  <text x="138" y="98" font-family="${MONO}" font-size="16" letter-spacing="1.6"
+        fill="${MUTED}">ENGINEERING DIGEST · ${esc(date)}</text>
+  <text x="1200" y="98" font-family="${MONO}" font-size="16" fill="${MUTED}"
+        text-anchor="end">lerd.sh</text>
 
-  <text x="1200" y="99" font-family="${MONO}" font-size="17" fill="${DIM}"
-        text-anchor="end">${esc(date)}</text>
-
-  <text x="80" y="290" font-family="${SANS}" font-size="182" font-weight="800"
-        fill="${TEXT}" letter-spacing="-6">v${maj}.<tspan fill="${RED}">${min}</tspan>.${patch}</text>
-
-  <rect x="80" y="336" width="1120" height="1" fill="${LINE}"/>
+  <text x="72" y="296" font-family="${SANS}" font-size="188" font-weight="700"
+        fill="${TEXT}" letter-spacing="0">v${maj}.<tspan fill="${RED}">${min}</tspan>.${patch}</text>
 
   ${taglines
     .map(
       (l, i) =>
-        `<text x="80" y="${tagY + i * 34}" font-family="${SANS}" font-size="27" font-weight="700"
-        letter-spacing="1.6" fill="${RED}">${esc(l)}</text>`,
+        `<text x="80" y="${tagY + i * 46}" font-family="${SANS}" font-size="40" font-weight="600"
+        letter-spacing="-0.8" fill="${FAINT}">${esc(l)}</text>`,
     )
     .join('\n  ')}
 
   ${summaries
     .map(
       (l, i) =>
-        `<text x="80" y="${sumY + i * 32}" font-family="${SANS}" font-size="24"
-        fill="${MUTED}">${esc(l)}</text>`,
+        `<text x="80" y="${sumY + i * 32}" font-family="${SANS}" font-size="23"
+        fill="${INK2}">${esc(l)}</text>`,
     )
     .join('\n  ')}
 
-  <text x="80" y="580" font-family="${MONO}" font-size="17" letter-spacing="2.4"
-        fill="${DIM}">ENGINEERING DIGEST</text>
-  <text x="1200" y="580" font-family="${MONO}" font-size="17" fill="${DIM}"
-        text-anchor="end">lerd.sh</text>
-
-  <rect x="0" y="628" width="590" height="12" fill="${RED}"/>
-  <rect x="590" y="628" width="154" height="12" fill="#eda33b"/>
-  <rect x="744" y="628" width="90" height="12" fill="#3dd68c"/>
-  <rect x="834" y="628" width="64" height="12" fill="#6cb2ff"/>
-  <rect x="898" y="628" width="51" height="12" fill="#b394ff"/>
-  <rect x="949" y="628" width="331" height="12" fill="${LINE}"/>
+  <rect x="80" y="${Math.min(sumY + summaries.length * 32 + 8, 600)}" width="1120" height="1" fill="${LINE}"/>
 </svg>`
 }
 

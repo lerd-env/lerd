@@ -22,8 +22,5 @@
     "postcss": "^8.5.10",
     "seroval": "^1.6.3",
     "seroval-plugins": "^1.6.3"
-  },
-  "dependencies": {
-    "asciinema-player": "^3.16.0"
   }
 }

@@ -1,289 +1,220 @@
 /* -----------------------------------------------------------------------
-   Hero image size
-   ----------------------------------------------------------------------- */
-
-.VPHero .image-src {
-  max-width: 520px;
-  width: 100%;
-}
-
-.VPHero .text {
-  font-size: 28px !important;
-}
-
-@media (min-width: 640px) {
-  .VPHero .text {
-    font-size: 32px !important;
-  }
-}
-
-@media (min-width: 960px) {
-  .VPHero .text {
-    font-size: 36px !important;
-    white-space: nowrap;
-  }
-}
-
-/* -----------------------------------------------------------------------
-   Lerd docs — exact app color palette
-   App source: internal/ui/index.html
-   red: #FF2D20 | bg: #0d0d0d | card: #161616 | border: #262626 | muted: #404040
+   Lerd docs, editorial theme. Same type, palette and numbered labels as the
+   landing page (landing.css), applied to VitePress's reading layout.
    ----------------------------------------------------------------------- */
 
 :root {
-  /* Brand — app red */
-  --vp-c-brand-1: #FF2D20;
-  --vp-c-brand-2: #e02419;
-  --vp-c-brand-3: #ff5a50;
-  --vp-c-brand-soft: rgba(255, 45, 32, 0.12);
+  --vp-font-family-base: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --vp-font-family-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 
-  /* Button */
-  --vp-button-brand-bg: #FF2D20;
-  --vp-button-brand-hover-bg: #e02419;
-  --vp-button-brand-active-bg: #c41e10;
+  --vp-c-brand-1: #e0241a;
+  --vp-c-brand-2: #ff2d20;
+  --vp-c-brand-3: #ff5b50;
+  --vp-c-brand-soft: rgba(255, 45, 32, 0.1);
+
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-alt: #f7f7f8;
+  --vp-c-bg-soft: #f4f4f5;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-divider: #e6e6e9;
+  --vp-c-gutter: #e6e6e9;
+  --vp-c-text-1: #0a0a0b;
+  --vp-c-text-2: #4b4b55;
+  --vp-c-text-3: #8b8b95;
+
+  --vp-button-brand-bg: #ff2d20;
+  --vp-button-brand-hover-bg: #ff5b50;
+  --vp-button-brand-active-bg: #e0241a;
   --vp-button-brand-border: transparent;
   --vp-button-brand-text: #ffffff;
+
+  --vp-code-block-bg: #f4f4f5;
+  --vp-custom-block-tip-bg: var(--vp-c-bg-soft);
+  --vp-custom-block-info-bg: var(--vp-c-bg-soft);
+  --lerd-label: #8b8b95;
+  --vp-code-color: var(--vp-c-text-1);
 }
 
-/* Light mode — app uses Tailwind gray defaults in light */
-.vp-doc a {
-  color: var(--vp-c-brand-1);
-}
-
-/* Dark mode — exact app palette */
+/* Dark is the landing page's own palette */
 .dark {
-  --vp-c-bg:        #0d0d0d;
-  --vp-c-bg-soft:   #161616;
-  --vp-c-bg-alt:    #111111;
-  --vp-c-bg-elv:    #161616;
+  --vp-c-brand-1: #ff5b50;
+  --vp-c-brand-2: #ff2d20;
+  --vp-c-brand-3: #ff5b50;
+  --vp-c-brand-soft: rgba(255, 45, 32, 0.12);
 
-  --vp-c-divider:   #262626;
+  --vp-c-bg: #0a0a0b;
+  --vp-c-bg-alt: #0e0e10;
+  --vp-c-bg-soft: #131316;
+  --vp-c-bg-elv: #131316;
+  --vp-c-divider: #26262c;
+  --vp-c-gutter: #26262c;
+  --vp-c-border: #34343c;
+  --vp-c-text-1: #f4f4f5;
+  --vp-c-text-2: #c4c4cc;
+  --vp-c-text-3: #8b8b95;
 
-  --vp-c-text-1:    rgba(255, 255, 255, 0.87);
-  --vp-c-text-2:    rgba(255, 255, 255, 0.55);
-  --vp-c-text-3:    rgba(255, 255, 255, 0.33);
-
-  --vp-c-mute:      #262626;
-  --vp-c-mute-dark: #1a1a1a;
-
-  --vp-code-block-bg: #161616;
-  --vp-code-bg:       #1e1e1e;
-
-  --vp-nav-bg-color:     #0d0d0d;
-  --vp-sidebar-bg-color: #111111;
-
-  --vp-custom-block-tip-border:    transparent;
-  --vp-custom-block-tip-bg:        rgba(255, 45, 32, 0.08);
+  --vp-code-block-bg: #131316;
+  --vp-code-bg: #1d1d22;
+  --vp-nav-bg-color: rgba(10, 10, 11, 0.82);
+  --vp-sidebar-bg-color: #0a0a0b;
+  --lerd-label: #8b8b95;
 }
 
-/* Nav bar */
-.dark .VPNav {
-  background-color: #0d0d0d;
-  border-bottom-color: #262626;
+body {
+  -webkit-font-smoothing: antialiased;
 }
 
-.dark .VPLocalNav {
-  background-color: #0d0d0d;
-  border-bottom-color: #262626;
+/* ---------- Top bar: blurred, one hairline under it ---------- */
+.VPNavBar,
+.VPNavBar.has-sidebar .content-body,
+.VPNavBar:not(.home).top .content-body {
+  background: color-mix(in srgb, var(--vp-c-bg) 82%, transparent) !important;
+  backdrop-filter: blur(12px);
 }
+.VPNavBar .divider-line { background-color: var(--vp-c-divider) !important; }
+.VPNavBarTitle .title { font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
+.VPNavBarMenuLink { font-weight: 500; }
+.VPNavBarMenuLink.active,
+.VPNavBarMenuLink:hover { color: var(--vp-c-text-1); }
+.VPLocalNav { background: color-mix(in srgb, var(--vp-c-bg) 82%, transparent) !important; backdrop-filter: blur(12px); }
 
-/* Sidebar */
-.dark .VPSidebar {
-  background-color: #111111;
-  border-right-color: #262626;
+/* ---------- Sidebar: numbered mono section labels ---------- */
+.VPSidebar { border-right: 1px solid var(--vp-c-divider); }
+.VPSidebar nav { counter-reset: lerd-section; }
+.VPSidebarItem.level-0 { counter-increment: lerd-section; padding-bottom: 20px; }
+.VPSidebarItem.level-0 > .item > .text,
+.VPSidebarItem.level-0 > .item .text:is(h2, h3) {
+  font: 500 11px/1.4 var(--vp-font-family-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lerd-label);
 }
-
-/* Active sidebar item */
-.dark .VPSidebarItem.is-active > .item .link .text {
-  color: #FF2D20;
+.VPSidebarItem.level-0 > .item > .text::before {
+  content: counter(lerd-section, decimal-leading-zero) " / ";
+  color: var(--vp-c-brand-2);
 }
+.VPSidebarItem .link .text { font-size: 14px; }
+.VPSidebarItem.is-active > .item .link > .text { color: var(--vp-c-text-1); font-weight: 600; }
+.VPSidebarItem.is-active > .item .indicator { background-color: var(--vp-c-brand-2); }
 
-.dark .VPSidebarItem.is-active > .item .indicator {
-  background-color: #FF2D20;
+/* ---------- Headings: tight, heavy, a hairline above each section ---------- */
+.vp-doc h1 {
+  font-size: clamp(34px, 4.6vw, 48px);
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+  font-weight: 700;
 }
-
-/* Nav top links active */
-.dark .VPNavBarMenuLink.active,
-.dark .VPNavBarMenuLink:hover {
-  color: #FF2D20;
+.vp-doc h2 {
+  margin-top: 56px;
+  padding-top: 28px;
+  border-top: 1px solid var(--vp-c-divider);
+  font-size: 28px;
+  letter-spacing: -0.025em;
+  font-weight: 700;
 }
+.vp-doc h3 { font-size: 20px; letter-spacing: -0.015em; font-weight: 600; }
+.vp-doc h4 { letter-spacing: -0.01em; }
+.vp-doc p,
+.vp-doc li { color: var(--vp-c-text-2); }
+.vp-doc strong { color: var(--vp-c-text-1); }
 
-/* Code blocks */
-.dark .vp-code-group .tabs {
-  background-color: #161616;
-  border-bottom-color: #262626;
+/* ---------- Links: ink with a red underline ---------- */
+.vp-doc a {
+  color: var(--vp-c-text-1);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--vp-c-brand-2);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
 }
+.vp-doc a:hover { color: var(--vp-c-brand-1); }
+.vp-doc .header-anchor { text-decoration: none; color: var(--vp-c-brand-2); }
 
-.dark div[class*='language-'] {
-  background-color: #161616;
+/* ---------- Code ---------- */
+/* Editorial means square: VitePress rounds these by default. */
+.vp-doc div[class*='language-'],
+.vp-code-group .tabs,
+.vp-doc :not(pre) > code,
+.custom-block { border-radius: 0; }
+.vp-doc :not(pre) > code {
+  border: 1px solid var(--vp-c-divider);
+  padding: 2px 6px;
+  font-size: 0.86em;
+  color: var(--vp-c-text-1);
+  /* A command that wraps keeps its box on every line instead of splitting it. */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
-
-/* Tables */
-.dark .vp-doc th {
-  background-color: #161616;
-}
-
-.dark .vp-doc tr:nth-child(2n) {
-  background-color: rgba(255, 255, 255, 0.02);
-}
-
-/* Custom blocks (tips, warnings, etc.) */
-.dark .custom-block {
-  background-color: #161616;
-  border-color: #262626;
-}
-
-/* Scrollbar */
-.dark ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.dark ::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.dark ::-webkit-scrollbar-thumb {
-  background: #333;
-  border-radius: 3px;
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #444;
-}
-
-/* Home page hero button */
-.VPButton.brand {
-  background-color: #FF2D20 !important;
-  border-color: #FF2D20 !important;
-}
-
-.VPButton.brand:hover {
-  background-color: #e02419 !important;
-  border-color: #e02419 !important;
-}
-
-/* Home features grid: VitePress applies .grid-6 when features.length is a
-   multiple of 3, which lands the cards at 50% width on viewports between
-   640–767px (2 per row) and 33% from 768px upward (3 per row). These
-   overrides promote grid-6 to 3 per row from 640px and 4 per row from
-   960px so multiple-of-three counts stay a clean grid on desktop while
-   readable on tablets. The curated home uses 8 features (grid-4), which
-   VitePress already lays out as a clean 4 × 2; this rule is a safety net
-   if the feature count changes back to a multiple of three. */
-@media (min-width: 640px) {
-  .VPFeatures .item.grid-6 {
-    width: calc(100% / 3) !important;
-  }
-}
-
-@media (min-width: 960px) {
-  .VPFeatures .item.grid-6 {
-    width: calc(100% / 4) !important;
-  }
-}
-
-/* -----------------------------------------------------------------------
-   Home feature cards — lift + brand-red glow on hover, larger icons
-   ----------------------------------------------------------------------- */
-.VPFeatures .VPFeature {
-  transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
-}
-
-.VPFeatures .VPFeature:hover {
-  border-color: var(--vp-c-brand-1);
-  transform: translateY(-3px);
-  box-shadow: 0 14px 34px rgba(255, 45, 32, 0.1);
-}
-
-.VPFeatures .VPFeature .icon {
-  font-size: 24px;
-  width: 48px;
-  height: 48px;
-  display: grid;
-  place-items: center;
-  border-radius: 11px;
-  background: var(--vp-c-brand-soft);
+.vp-doc div[class*='language-'],
+.vp-code-group .tabs {
   border: 1px solid var(--vp-c-divider);
 }
-
-/* -----------------------------------------------------------------------
-   Home page "wow" — borrow the dev-digest's visual signature.
-   All scoped to .VPHome so docs content pages keep the clean reading theme.
-   ----------------------------------------------------------------------- */
-
-/* Faint film-grain over the home view, exactly like the digest */
-.VPHome::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-  opacity: 0.045;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+.vp-code-group .tabs { border-bottom: 0; background: var(--vp-code-block-bg); }
+.vp-doc div[class*='language-'] > span.lang {
+  font: 500 11px var(--vp-font-family-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-/* Hero: red/amber radial glow background + display typography */
-.VPHome .VPHero {
-  position: relative;
-  background:
-    radial-gradient(ellipse 55% 65% at 10% -5%, rgba(255, 45, 32, 0.12), transparent 60%),
-    radial-gradient(ellipse 45% 45% at 95% 110%, rgba(237, 163, 59, 0.06), transparent 60%);
+/* ---------- Tables: mono uppercase heads, hairlines only ---------- */
+.vp-doc table { border-collapse: collapse; }
+.vp-doc tr,
+.vp-doc tr:nth-child(2n) { background: none; }
+.vp-doc th,
+.vp-doc td { border: 0; border-bottom: 1px solid var(--vp-c-divider); }
+.vp-doc th {
+  background: none;
+  font: 500 11px/1.4 var(--vp-font-family-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lerd-label);
 }
 
-.VPHome .VPHero .name .clip {
-  font-family: 'Archivo', var(--vp-font-family-base);
-  font-weight: 900;
-  font-stretch: 125%;
-  letter-spacing: -0.03em;
-  font-size: clamp(56px, 9vw, 104px);
-  line-height: 0.95;
-  background: linear-gradient(180deg, var(--vp-c-brand-3), var(--vp-c-brand-1));
-  -webkit-background-clip: text;
-  background-clip: text;
-  filter: drop-shadow(0 0 32px rgba(255, 45, 32, 0.4));
+/* ---------- Tips, warnings: bordered panels with a mono title ---------- */
+.custom-block {
+  border: 1px solid var(--vp-c-divider);
+  border-left-width: 3px;
+  background: var(--vp-c-bg-soft);
 }
+.custom-block.tip { border-left-color: #34d399; }
+.custom-block.info { border-left-color: #38bdf8; }
+.custom-block.warning { border-left-color: #fbbf24; }
+.custom-block.danger { border-left-color: var(--vp-c-brand-2); }
+.custom-block .custom-block-title {
+  font: 500 11px/1.4 var(--vp-font-family-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lerd-label);
+}
+.custom-block.tip,
+.custom-block.info,
+.custom-block.warning,
+.custom-block.danger,
+.custom-block.details { background: var(--vp-c-bg-soft); color: var(--vp-c-text-2); }
+.custom-block p,
+.custom-block li { color: var(--vp-c-text-2); }
+.vp-doc .custom-block code,
+.vp-doc .custom-block a { color: var(--vp-c-text-1); }
 
-.VPHome .VPHero .text {
-  font-family: 'Archivo', var(--vp-font-family-base);
-  font-weight: 800 !important;
-  letter-spacing: -0.01em;
+/* ---------- Right-hand outline and prev/next ---------- */
+.VPDocAsideOutline .outline-title,
+.VPDocFooter .pager-link .desc {
+  font: 500 11px/1.4 var(--vp-font-family-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lerd-label);
 }
+.VPDocAsideOutline .outline-link.active { color: var(--vp-c-text-1); }
+.VPDocAsideOutline .outline-marker { background-color: var(--vp-c-brand-2); }
+.VPDocFooter .pager-link { border-radius: 0; }
+.VPDocFooter .pager-link:hover { border-color: var(--vp-c-brand-2); }
+.VPDocFooter .pager-link .title { color: var(--vp-c-text-1); font-weight: 600; }
 
-.VPHome .VPHero .tagline {
-  color: var(--vp-c-text-2);
-}
+/* ---------- Buttons ---------- */
+.VPButton { border-radius: 0; }
 
-/* Breathing room between the hero copy and the gif on desktop */
-@media (min-width: 960px) {
-  .VPHome .VPHero .container {
-    gap: 48px;
-  }
-}
-
-/* Action buttons: give the brand CTA a red glow */
-.VPHome .VPHero .actions .VPButton.brand {
-  box-shadow: 0 0 28px rgba(255, 45, 32, 0.28);
-}
-
-/* Feature cards: same corner red glow as the digest banner */
-.VPHome .VPFeature {
-  background:
-    radial-gradient(120% 140% at 0% 0%, rgba(255, 45, 32, 0.09), transparent 55%),
-    var(--vp-c-bg-soft);
-}
-
-/* Feature card titles in the display font */
-.VPHome .VPFeature .title {
-  font-family: 'Archivo', var(--vp-font-family-base);
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-/* Keep the home content above the grain overlay */
-.VPHome .VPHero,
-.VPHome .VPFeatures,
-.VPHome .container {
-  position: relative;
-  z-index: 2;
-}
+/* ---------- Scrollbar ---------- */
+.dark ::-webkit-scrollbar { width: 6px; height: 6px; }
+.dark ::-webkit-scrollbar-track { background: transparent; }
+.dark ::-webkit-scrollbar-thumb { background: #34343c; border-radius: 3px; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #5d5d66; }

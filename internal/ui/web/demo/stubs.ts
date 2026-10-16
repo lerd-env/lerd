@@ -17,6 +17,8 @@ import nodeVersions from './fixtures/node-versions.json';
 import phpInstallable from './fixtures/php-installable.json';
 import lanStatus from './fixtures/lan_status.json';
 import dumpsStatus from './fixtures/dumps_status.json';
+import { fakeLensAnswer } from '$lib/fakeLensAnswer';
+import { demoRequestEvents, ridFor } from './requests';
 import profilerStatus from './fixtures/profiler_status.json';
 import stats from './fixtures/stats.json';
 import disk from './fixtures/disk.json';
@@ -367,8 +369,17 @@ function analyticsFor(domain: string, range: string): unknown {
       at_millis: nowMin - (p.throughput.length - 1 - i) * minute,
       count,
     })),
-    routes: p.routes,
+    // acme.test's requests carry captured events, so its slow routes and recent
+    // rows open into a populated inspector; other sites keep the plain timing.
+    routes: p.routes.map((r) => {
+      const rid = domain === 'acme.test' ? ridFor(r.route) : undefined;
+      if (!rid) return r;
+      const at = p.recent.find((x) => x.route === r.route);
+      const uri = at?.uri ?? (r.example || r.route.split(' ')[1]);
+      return { ...r, slowest: { at_millis: now - (at?.agoSec ?? 60) * 1000, uri, status: at?.status ?? 200, millis: r.recent_p95_millis, rid } };
+    }),
     recent: p.recent.map((r) => ({
+      rid: domain === 'acme.test' ? ridFor(r.route) : undefined,
       at_millis: now - r.agoSec * 1000,
       method: r.method,
       route: r.route,
@@ -546,6 +557,20 @@ function presetInstallStream(name: string, version: string): Response {
     `${JSON.stringify({ phase: 'waiting_ready' })}\n` +
     `${JSON.stringify({ phase: 'done', name: svcName })}\n`;
   return new Response(body, { status: 200, headers: { 'content-type': 'application/x-ndjson' } });
+}
+
+const DEMO_EVENTS = demoRequestEvents();
+
+// Every checkout reports some local work and a commit to pull, so the site
+// header shows its git buttons the way it does on a busy branch.
+function gitCheckouts(domain: string): unknown[] {
+  const site = (sites as Array<{ domain: string; path: string; branch?: string; worktrees?: Array<{ branch: string; path: string }> }>).find((s) => s.domain === domain);
+  if (!site) return [];
+  const dirty = { staged: 1, modified: 3, untracked: 1, conflicted: 0, ahead: 2, behind: 1, upstream: true };
+  return [
+    { ...dirty, branch: site.branch || 'main', path: site.path, main: true },
+    ...(site.worktrees ?? []).map((w) => ({ ...dirty, modified: 1, staged: 0, untracked: 0, ahead: 0, behind: 0, branch: w.branch, path: w.path, main: false })),
+  ];
 }
 
 const realFetch = window.fetch.bind(window);
@@ -737,6 +762,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   // Toggles / actions: pretend they succeeded so the UI flips optimistically.
   if (method !== 'GET' && method !== 'HEAD') return jsonResponse({ ok: true });
   // Anything else we didn't fixture (push keys, favicons, …) — harmless empty.
+  if (path === '/api/dumps') return jsonResponse(DEMO_EVENTS.filter((e) => e.ctx.rid === qs.get('rid')));
+  if (path === '/api/sites/git-status') return jsonResponse({ checkouts: gitCheckouts(qs.get('domain') || '') });
+  if (path.startsWith('/api/dumps/') && path !== '/api/dumps/status' && path !== '/api/dumps/stream')
+    return jsonResponse(fakeLensAnswer(DEMO_EVENTS, path + search));
   if (path.startsWith('/api/')) return jsonResponse({});
   return realFetch(input as RequestInfo, init);
 };
