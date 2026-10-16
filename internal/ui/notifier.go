@@ -85,7 +85,10 @@ func dispatchNotification(n push.Notification) {
 	// notification is the exception: its whole job is to prove the desktop path
 	// works, and it is always sent from the settings panel, which has focus.
 	focused := uiWindowFocused() && !alwaysRaised(n.Kind)
-	switch notifySink(cfg, desktopSupported) {
+	// A desktop app listening can raise a notification even where lerd has no
+	// emitter of its own.
+	nativeSupported := func() bool { return desktopApps.listening() || desktopSupported() }
+	switch notifySink(cfg, nativeSupported) {
 	case sinkOff:
 		return
 	case sinkNative:
@@ -103,7 +106,11 @@ func dispatchNotification(n push.Notification) {
 		if n.Kind != "test" && !cfg.NativeKindEnabled(n.Kind) {
 			return
 		}
-		if _, err := emitDesktopNotification(nativeRequest(n)); err != nil {
+		req := nativeRequest(n)
+		if desktopApps.deliver(req) {
+			return
+		}
+		if _, err := emitDesktopNotification(req); err != nil {
 			fmt.Printf("[notifier] native notify failed: %v\n", err)
 		}
 	default:

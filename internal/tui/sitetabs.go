@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -307,14 +306,13 @@ var (
 // surfaces a status message when no opener exists. The browser detaches, so the
 // command returns as soon as the opener is spawned.
 func (m *Model) openURL(url string) tea.Cmd {
-	opener := platform.Current.Opener
-	if opener == "" {
+	cmd := platform.OpenCommand(url)
+	if cmd == nil {
 		m.setStatus("no browser opener available on "+runtime.GOOS, 3*time.Second)
 		return nil
 	}
 	m.setStatus("opening "+url+"…", 3*time.Second)
 	return func() tea.Msg {
-		cmd := exec.Command(opener, url)
 		runErr := cmd.Start()
 		return ActionResult{Summary: "open " + url, Err: runErr}
 	}

@@ -32,7 +32,10 @@ namespace {
         if (!\is_string($lerdEnvDir) || $lerdEnvDir === '') {
             $lerdEnvDir = '/run/lerd/env';
         }
-        $lerdEnv = @\file_get_contents($lerdEnvDir.'/'.$lerdSite.'.env');
+        // Checked first so a site without one leaves nothing in error_get_last(),
+        // which PsySH rethrows when a signal interrupts its stream_select.
+        $lerdEnvFile = $lerdEnvDir.'/'.$lerdSite.'.env';
+        $lerdEnv = @\is_file($lerdEnvFile) ? @\file_get_contents($lerdEnvFile) : false;
         if (\is_string($lerdEnv)) {
             // The file names the directories it belongs to; a script outside
             // them gets nothing, so a wrong LERD_SITE cannot leak another site's.
@@ -74,7 +77,7 @@ namespace {
                 }
             }
         }
-        unset($lerdEnvDir, $lerdEnv, $lerdScript, $lerdAllowed, $lerdHead, $lerdPairs, $lerdMatches, $lerdMatch, $lerdLine, $root, $k, $v, $q);
+        unset($lerdEnvDir, $lerdEnvFile, $lerdEnv, $lerdScript, $lerdAllowed, $lerdHead, $lerdPairs, $lerdMatches, $lerdMatch, $lerdLine, $root, $k, $v, $q);
     }
     unset($lerdSite);
 

@@ -59,9 +59,8 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 		t.Skip("php cannot read host files (containerised/sandboxed wrapper); native php needed")
 	}
 
-	run := func(site, probeDir string) string {
-		probe := filepath.Join(probeDir, "probe.php")
-		cmd := exec.Command(php, "-n", "-d", "auto_prepend_file="+bridgePath, "-d", "lerd.provided_env_dir="+envDir, probe)
+	run := func(site, script string) string {
+		cmd := exec.Command(php, "-n", "-d", "auto_prepend_file="+bridgePath, "-d", "lerd.provided_env_dir="+envDir, script)
 		cmd.Env = append(os.Environ(), "LERD_SITE="+site, "KEPT=from-process")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -71,14 +70,24 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 	}
 
 	nothing := `[false,null,null,"from-process",false,false,false]`
-	if out, want := run("app", siteDir), `["one","two words","a\nb","from-process","-----BEGIN KEY-----\nabc\n-----END KEY-----","bar","a#b"]`; out != want {
+	if out, want := run("app", filepath.Join(siteDir, "probe.php")), `["one","two words","a\nb","from-process","-----BEGIN KEY-----\nabc\n-----END KEY-----","bar","a#b"]`; out != want {
 		t.Errorf("loaded env = %s, want %s", out, want)
 	}
-	if out := run("../secret", siteDir); out != nothing {
+	if out := run("../secret", filepath.Join(siteDir, "probe.php")); out != nothing {
 		t.Errorf("a traversing LERD_SITE must load nothing, got %s", out)
 	}
-	if out := run("app", otherDir); out != nothing {
+	if out := run("app", filepath.Join(otherDir, "probe.php")); out != nothing {
 		t.Errorf("a script outside the file's roots must load nothing, got %s", out)
+	}
+
+	// PsySH throws whatever error_get_last() holds when stream_select is
+	// interrupted, so a site without a provided env must leave it empty.
+	lastErr := filepath.Join(siteDir, "last-error.php")
+	if err := os.WriteFile(lastErr, []byte(`<?php echo json_encode(error_get_last());`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out := run("missing", lastErr); out != "null" {
+		t.Errorf("a site without a provided env must leave no error behind, got %s", out)
 	}
 }
 

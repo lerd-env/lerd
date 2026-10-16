@@ -273,8 +273,10 @@ func TestRemoveInstalledBinaries_removesLerdAndTray(t *testing.T) {
 	dir := t.TempDir()
 	self := filepath.Join(dir, "lerd")
 	tray := filepath.Join(dir, "lerd-tray")
+	exe := filepath.Join(dir, "lerd.exe")
 	mkbin(t, self)
 	mkbin(t, tray)
+	mkbin(t, exe)
 
 	removeInstalledBinaries(self)
 
@@ -283,6 +285,9 @@ func TestRemoveInstalledBinaries_removesLerdAndTray(t *testing.T) {
 	}
 	if _, err := os.Stat(tray); !os.IsNotExist(err) {
 		t.Errorf("lerd-tray still present: uninstall must not leave a tray a desktop entry can launch")
+	}
+	if _, err := os.Stat(exe); !os.IsNotExist(err) {
+		t.Errorf("lerd.exe still present beside lerd")
 	}
 }
 
@@ -402,12 +407,14 @@ func TestRemoveScriptInstalledBinaries_clearsTheInstallDirPair(t *testing.T) {
 	}
 	lerd := filepath.Join(binDir, "lerd")
 	tray := filepath.Join(binDir, "lerd-tray")
+	exe := filepath.Join(binDir, "lerd.exe")
 	mkbin(t, lerd)
 	mkbin(t, tray)
+	mkbin(t, exe)
 
 	removeScriptInstalledBinaries("/usr/bin/lerd")
 
-	for _, p := range []string{lerd, tray} {
+	for _, p := range []string{lerd, tray, exe} {
 		if _, err := os.Stat(p); !os.IsNotExist(err) {
 			t.Errorf("%s survived, so a broken lerd stays on PATH", p)
 		}

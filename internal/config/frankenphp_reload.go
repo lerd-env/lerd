@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/power"
@@ -21,7 +20,7 @@ func WatcherNeedsPolling(sitePath string) bool {
 	if platform.Current.UsesMachineVM {
 		return true
 	}
-	return wsl.IsWSL() && strings.HasPrefix(sitePath, "/mnt/")
+	return wsl.OnWindowsDrive(sitePath)
 }
 
 // HostCanPollWatchers reports whether any site on this host could need a

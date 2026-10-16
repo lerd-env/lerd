@@ -151,6 +151,7 @@ func runPark(_ *cobra.Command, args []string) error {
 
 	feedback.Begin()
 	feedback.Line("parking " + feedback.Val(absDir))
+	warnWindowsDrive(absDir)
 
 	// Add to parked directories in global config
 	found := false

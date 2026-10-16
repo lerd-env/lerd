@@ -883,7 +883,8 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		// package and rebooting. Leave the unit on disk but don't run it, or
 		// the failures drag the whole systemd user session to "degraded".
 		if !trayEnabled() {
-			// Turned off on purpose: why it couldn't run is not worth a note.
+			// Turned off on purpose, or on WSL, where the Windows desktop app
+			// owns the tray: why it couldn't run is not worth a note.
 			disableTrayUnit()
 		} else if reason := tray.Unavailable(tray.HelperPath()); reason != "" {
 			disableTrayUnit()

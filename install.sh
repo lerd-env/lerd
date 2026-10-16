@@ -653,6 +653,9 @@ cmd_install() {
     # ── Local binary path supplied (e.g. ./build/lerd) ──
     [ -f "$local_binary" ] || die "File not found: $local_binary"
     install -m 755 "$local_binary" "${INSTALL_DIR}/${BINARY}"
+    # lerd.exe is the Windows side of a WSL install; wsl:setup copies it out.
+    local local_exe; local_exe="$(dirname "$local_binary")/lerd.exe"
+    [ -f "$local_exe" ] && install -m 755 "$local_exe" "${INSTALL_DIR}/lerd.exe"
     local version; version="$("${INSTALL_DIR}/${BINARY}" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "dev")"
     success "Installed lerd ${version} (local) → ${INSTALL_DIR}/${BINARY}"
   else
@@ -675,6 +678,7 @@ cmd_install() {
     download_binary "$version" "$arch" "$tmpdir"
     install -m 755 "${tmpdir}/lerd" "${INSTALL_DIR}/${BINARY}"
     [ -f "${tmpdir}/lerd-tray" ] && install -m 755 "${tmpdir}/lerd-tray" "${INSTALL_DIR}/lerd-tray"
+    [ -f "${tmpdir}/lerd.exe" ] && install -m 755 "${tmpdir}/lerd.exe" "${INSTALL_DIR}/lerd.exe"
     rm -rf "$tmpdir"
     success "Installed lerd v${version} → ${INSTALL_DIR}/${BINARY}"
   fi
@@ -700,8 +704,9 @@ cmd_install() {
   fi
 
   # Offer the desktop app on a fresh Linux install. Its own installer does the
-  # download; here we only record the notification sink the user prefers.
-  if [ -z "$was_installed" ] && [ "$(uname -s)" = "Linux" ] && have_tty; then
+  # download; here we only record the notification sink the user prefers. Not
+  # on WSL: the Flatpak cannot run there, the Windows browser is the desktop.
+  if [ -z "$was_installed" ] && [ "$(uname -s)" = "Linux" ] && ! is_wsl && have_tty; then
     offer_desktop_app
   fi
 
@@ -740,6 +745,14 @@ setup_omarchy() {
     warn "Could not add the Lerd Glance plugin. Add it later with:"
     echo -e "     ${CYAN}omarchy-plugin-add ${OMARCHY_PLUGIN_REPO} --enable --yes${RESET}"
   fi
+}
+
+# Overridable so the tests can point the WSL check at a fixture.
+OSRELEASE_FILE="${OSRELEASE_FILE:-/proc/sys/kernel/osrelease}"
+
+# is_wsl reports a WSL distro: its kernel release names Microsoft.
+is_wsl() {
+  grep -qi microsoft "$OSRELEASE_FILE" 2>/dev/null
 }
 
 # offer_desktop_app asks whether to use the Lerd desktop app (which delivers
@@ -784,6 +797,7 @@ cmd_update() {
   download_binary "$latest" "$arch" "$tmpdir"
   install -m 755 "${tmpdir}/lerd" "${INSTALL_DIR}/${BINARY}"
   [ -f "${tmpdir}/lerd-tray" ] && install -m 755 "${tmpdir}/lerd-tray" "${INSTALL_DIR}/lerd-tray"
+  [ -f "${tmpdir}/lerd.exe" ] && install -m 755 "${tmpdir}/lerd.exe" "${INSTALL_DIR}/lerd.exe"
   rm -rf "$tmpdir"
   success "Updated to lerd v${latest}"
   star_note

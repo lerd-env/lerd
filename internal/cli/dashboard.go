@@ -6,6 +6,7 @@ import (
 	"github.com/geodro/lerd/internal/dashboard"
 	"github.com/geodro/lerd/internal/desktopapp"
 	"github.com/geodro/lerd/internal/desktopnotify"
+	"github.com/geodro/lerd/internal/wsl"
 	"github.com/spf13/cobra"
 )
 
@@ -42,6 +43,14 @@ func runDashboard(withSplash bool) error {
 	if desktopnotify.AppInstalled() {
 		if err := desktopnotify.OpenApp(""); err == nil {
 			fmt.Println("Opening the Lerd desktop app")
+			return nil
+		}
+	}
+	// In WSL the dashboard installed as an app (PWA) opens from its Start Menu
+	// shortcut; a Linux browser's app window does not reach Windows.
+	if wsl.IsWSL() {
+		if lnk, ok := wsl.PWAShortcut(); ok && wsl.Open(lnk) == nil {
+			fmt.Println("Opening the Lerd app")
 			return nil
 		}
 	}

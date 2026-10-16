@@ -29,7 +29,7 @@ LDFLAGS    = -s -w \
              -X $(PKG).Commit=$(COMMIT) \
              -X $(PKG).Date=$(DATE)
 
-.PHONY: build build-tray build-ui install-ui-deps test-ui install install-installer licenses test clean release release-snapshot
+.PHONY: build build-windows build-tray build-ui install-ui-deps test-ui install install-installer licenses test clean release release-snapshot
 
 UI_INSTALL_STAMP = $(UI_DIR)/node_modules/.package-lock.json
 
@@ -45,8 +45,12 @@ build-ui: $(UI_INSTALL_STAMP)
 test-ui: $(UI_INSTALL_STAMP)
 	cd $(UI_DIR) && $(JS_PM) run test
 
-build: build-ui
+build: build-ui build-windows
 	CGO_ENABLED=0 go build -tags nogui -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY) ./cmd/lerd
+
+# lerd.exe, the Windows side of a WSL install, built for this machine's arch.
+build-windows:
+	GOOS=windows CGO_ENABLED=0 go build -ldflags="-s -w" -o $(BUILD_DIR)/lerd.exe ./cmd/lerd-windows
 
 build-tray:
 	CGO_ENABLED=1 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/lerd-tray ./cmd/lerd-tray

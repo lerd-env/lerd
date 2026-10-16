@@ -1,6 +1,11 @@
 package ui
 
-import "os/exec"
+import (
+	"os"
+	"os/exec"
+
+	"github.com/geodro/lerd/internal/wsl"
+)
 
 // kdeGlobals is where KDE records the terminal the user picked in System
 // Settings. An absent file or key means they never changed it.
@@ -36,6 +41,12 @@ func linuxDefaultTerminal() string {
 // the freedesktop launcher, the distribution's alternatives link, or the
 // desktop's own setting.
 func osDefaultDirTerminal(dir string) []terminalCmd {
+	// Inside WSL the desktop is Windows, and its terminal is Windows Terminal.
+	if wsl.IsWSL() {
+		if bin, args, ok := wsl.TerminalDir(dir); ok {
+			return []terminalCmd{{bin, args}}
+		}
+	}
 	if t := linuxDefaultTerminal(); t != "" {
 		return []terminalCmd{namedTerminal(t, dir)}
 	}
@@ -43,8 +54,23 @@ func osDefaultDirTerminal(dir string) []terminalCmd {
 }
 
 // Linux has no terminals beyond the known list to fall back on.
-func osFallbackDirTerminals(string) []terminalCmd    { return nil }
-func osFallbackScriptTerminals(string) []terminalCmd { return nil }
+func osFallbackDirTerminals(string) []terminalCmd { return nil }
+
+// osFallbackScriptTerminals is Windows Terminal inside WSL, where none of the
+// known Linux emulators is usually installed.
+func osFallbackScriptTerminals(script string) []terminalCmd {
+	if !wsl.IsWSL() {
+		return nil
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return nil
+	}
+	if bin, args, ok := wsl.TerminalScript(self, script); ok {
+		return []terminalCmd{{bin, args}}
+	}
+	return nil
+}
 
 // terminalBaseEnv carries the graphical session keys a spawned emulator needs to
 // reach the display, which a systemd user service does not always have.

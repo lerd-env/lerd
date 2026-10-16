@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -59,12 +58,11 @@ func handleOpenFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bin, err := exec.LookPath(platform.Current.Opener)
-	if err != nil {
+	cmd := platform.OpenCommand(path)
+	if cmd == nil {
 		http.Error(w, "no file manager opener found", http.StatusInternalServerError)
 		return
 	}
-	cmd := exec.Command(bin, path)
 	if err := cmd.Start(); err != nil {
 		http.Error(w, fmt.Sprintf("launching file manager: %v", err), http.StatusInternalServerError)
 		return

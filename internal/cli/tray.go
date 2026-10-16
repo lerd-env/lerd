@@ -8,6 +8,7 @@ import (
 	"github.com/geodro/lerd/internal/services"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/geodro/lerd/internal/tray"
+	"github.com/geodro/lerd/internal/wsl"
 	"github.com/spf13/cobra"
 )
 
@@ -111,10 +112,17 @@ func healArmedTrayUnit() bool {
 	return true
 }
 
+// noTrayHost reports a host with nothing to show the applet in: WSL, whose
+// desktop is Windows. A var so tests do not depend on where they run.
+var noTrayHost = wsl.IsWSL
+
 // trayEnabled reports the configured preference for the start and install
 // paths. A config that will not load keeps the tray, so a broken file never
 // silently removes a surface the user expects.
 func trayEnabled() bool {
+	if noTrayHost() {
+		return false
+	}
 	cfg, err := config.LoadGlobal()
 	return err != nil || cfg.IsTrayEnabled()
 }

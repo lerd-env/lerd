@@ -46,7 +46,7 @@ If you need help on the [issue tracker](https://github.com/lerd-env/lerd/issues)
 lerd bug-report
 ```
 
-This writes a single plain-text file (default: `./lerd-bug-report-<timestamp>.txt`) containing the full `lerd doctor` output, your `config.yaml`, `sites.yaml` and every linked site's `.lerd.yaml`, the state of every `lerd-*` systemd unit, recent journal and container logs for lerd's own infra units, listening sockets on the lerd ports, and a curated set of environment variables.
+This writes a single plain-text file (default: `./lerd-bug-report-<timestamp>.txt`) containing the full `lerd doctor` output, your `config.yaml`, `sites.yaml` and every linked site's `.lerd.yaml`, the state of every `lerd-*` systemd unit, recent journal and container logs for lerd's own infra units, listening sockets on the lerd ports, and a curated set of environment variables. Inside WSL2 it adds the WSL version, `/etc/wsl.conf`, `.wslconfig`, the Windows-side `lerd.exe` config and agent log, and the `.test` DNS rule lerd added to Windows, with the Windows profile path hidden as well.
 
 What gets filtered before it lands on disk:
 

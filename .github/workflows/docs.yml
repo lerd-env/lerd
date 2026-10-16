@@ -35,6 +35,7 @@ jobs:
           mkdir -p docs/public/assets/screenshots
           cp screenshots/app-*.png docs/public/assets/screenshots/
           cp install.sh docs/public/install.sh
+          cp install.ps1 docs/public/install.ps1
           mkdir -p docs/public/icons
           cp docs/public/assets/logo.svg docs/public/icons/icon.svg
 

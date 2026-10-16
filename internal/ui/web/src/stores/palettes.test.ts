@@ -120,7 +120,7 @@ describe('palettes store', () => {
     await loadPalettes();
 
     const ids = get(palettes).map((p) => p.id);
-    expect(ids.slice(0, 5)).toEqual(['lerd', 'breeze', 'adwaita', 'macos', 'omarchy']);
+    expect(ids.slice(0, 6)).toEqual(['lerd', 'breeze', 'adwaita', 'macos', 'windows', 'omarchy']);
     expect(ids.at(-1)).toBe('lagoon');
   });
 

@@ -117,6 +117,18 @@ func TestSetTrayPreference_PersistsOffAndBackOn(t *testing.T) {
 	}
 }
 
+// WSL's desktop is Windows, with no tray host for the applet, so start and
+// install must not launch it there whatever the preference says.
+func TestTrayEnabled_OffWithoutATrayHost(t *testing.T) {
+	withTempXDG(t)
+	noTrayHost = func() bool { return true }
+	t.Cleanup(func() { noTrayHost = func() bool { return false } })
+
+	if trayEnabled() {
+		t.Error("a host with no tray host must report the tray off")
+	}
+}
+
 func TestTrayEnabled_DefaultsOn(t *testing.T) {
 	withTempXDG(t)
 

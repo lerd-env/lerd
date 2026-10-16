@@ -12,15 +12,6 @@ import (
 	"testing"
 )
 
-func TestOffOn_FlipsState(t *testing.T) {
-	if got := offOn(true); got != "off" {
-		t.Errorf("offOn(true) = %q, want %q", got, "off")
-	}
-	if got := offOn(false); got != "on" {
-		t.Errorf("offOn(false) = %q, want %q", got, "on")
-	}
-}
-
 func TestRunAndRefresh_CallsRefreshAfterCommand(t *testing.T) {
 	called := false
 	runAndRefresh(exec.Command("true"), func() { called = true })

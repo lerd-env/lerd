@@ -290,9 +290,9 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 	}
 
 	// ── WSL2 ─────────────────────────────────────────────────────────────────
-	// Only on WSL: the failure modes here (podman log driver, no tray host, slow
-	// 9P bind mounts) don't exist on a native Linux or macOS host. `lerd wsl:setup`
-	// fixes the first two in one shot.
+	// Only on WSL: the failure modes here (podman log driver, WSL kernels that
+	// break containers, no tray host, slow 9P bind mounts) don't exist on a
+	// native Linux or macOS host. `lerd wsl:setup` fixes the log driver and tray.
 	if wsl.IsWSL() {
 		section = "WSL2"
 		fmt.Fprintln(w, "\n[WSL2]")
@@ -306,23 +306,47 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 			rep.fixLast(manualFixWith("run `lerd wsl:setup` (it needs sudo to write the podman config)"))
 		}
 
-		out, _ := exec.Command("systemctl", "--user", "is-enabled", "lerd-tray.service").Output()
-		if strings.TrimSpace(string(out)) == "masked" {
-			ok("lerd-tray masked (no WSL tray host)")
+		wslConf, _ := os.ReadFile("/etc/wsl.conf")
+		resolvTarget, _ := os.Readlink("/etc/resolv.conf")
+		if wsl.ResolvConfAwaitsRestart(string(wslConf), resolvTarget) {
+			warn("resolv.conf handed to systemd-resolved", "WSL has not restarted since lerd took it over, so .test may not resolve inside the distro")
+			rep.fixLast(manualFixWith("run `wsl --shutdown` from Windows, then reopen the distro"))
+		}
+
+		uid := strconv.Itoa(os.Getuid())
+		if ctl, readErr := os.ReadFile("/sys/fs/cgroup/user.slice/user-" + uid + ".slice/user@" + uid + ".service/cgroup.controllers"); readErr == nil {
+			if missing := wsl.MissingControllers(string(ctl), "pids"); len(missing) > 0 {
+				warn("cgroup controllers delegated", "systemd does not hand "+strings.Join(missing, ", ")+" to your user, so containers fail to start (podman#29749)")
+				rep.fixLast(manualFixWith("update WSL (`wsl --update`, then `wsl --shutdown`), or set cgroup_manager = \"cgroupfs\" under [engine] in ~/.config/containers/containers.conf"))
+			} else {
+				ok("cgroup controllers delegated")
+			}
+		}
+
+		if nv, nvErr := podman.Run("info", "--format", "{{.Host.NetworkBackendInfo.Version}}"); nvErr == nil {
+			kernel, _ := exec.Command("uname", "-r").Output()
+			if wsl.KernelTooOldForNetavark(strings.TrimSpace(string(kernel)), strings.TrimSpace(nv)) {
+				fail("WSL kernel supports netavark", strings.TrimSpace(nv)+" needs a WSL kernel from 6.18 on (NFT_FIB_INET), so containers get no network", "run `wsl --update` and then `wsl --shutdown` from Windows")
+			}
+		}
+
+		if trayUnitOff(trayUnitState()) {
+			ok("lerd-tray off (no WSL tray host)")
 		} else {
 			warn("lerd-tray on WSL", "no tray host on WSL2 so the unit fails, run lerd wsl:setup")
-			rep.fixLast(manualFixWith("run `lerd wsl:setup` (it needs sudo to write the podman config)"))
+			rep.fixLast(manualFixWith("run `lerd wsl:setup`"))
 		}
 
 		if reg, regErr := config.LoadSites(); regErr == nil {
 			var onMnt []string
 			for _, s := range reg.Sites {
-				if strings.HasPrefix(s.Path, "/mnt/") {
+				if wsl.OnWindowsDrive(s.Path) {
 					onMnt = append(onMnt, s.Name)
 				}
 			}
 			if len(onMnt) > 0 {
 				warn("project paths on the WSL fs", "slow 9P mounts for: "+strings.Join(onMnt, ", ")+", move them under $HOME")
+				rep.fixLast(manualFixWith("copy each project under $HOME (`cp -a /mnt/c/... ~/`), `lerd unlink` the old one and `lerd link` the copy; open it from Windows at \\\\wsl.localhost\\" + wsl.Distro() + "\\home\\..."))
 			} else {
 				ok("project paths on the WSL fs")
 			}

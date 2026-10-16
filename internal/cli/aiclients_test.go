@@ -23,6 +23,7 @@ func TestMain(m *testing.M) {
 	claudeAvailable = func() bool { return false }
 	claudeMCP = func(args ...string) ([]byte, error) { return nil, nil }
 	hostbin.ExtraDirs = func() []string { return nil }
+	noTrayHost = func() bool { return false }
 	// A developer running Claude Code under another profile would otherwise
 	// have the global skill tests write into that real profile.
 	os.Unsetenv("CLAUDE_CONFIG_DIR")

@@ -63,6 +63,43 @@ The **update item** shows "Check for update..." when no update information is ca
 
 ---
 
+## Drawing the menu elsewhere
+
+The dashboard serves the same menu, already resolved, so a tray that lerd does not draw itself (the desktop app's, or a status bar module) shows exactly what the applet shows and picks up changes with `lerd update`.
+
+`GET http://127.0.0.1:7073/api/tray` returns the menu as JSON. Labels carry no glyphs: each row says how it is doing in `state` (`running`, `stopped`, `warning` or `disabled`) and leaves the colour to the client, toggles and PHP versions carry `checked`, and a row you can click carries an `action` id.
+
+```json
+{
+  "running": true,
+  "high_contrast_icon": false,
+  "latest_version": "v1.40.0",
+  "items": [
+    { "label": "Running", "state": "running" },
+    { "label": "nginx", "state": "running" },
+    { "separator": true },
+    { "label": "Services (1/2)", "items": [
+      { "label": "mysql", "state": "running", "action": "service stop mysql" },
+      { "label": "redis", "state": "stopped", "action": "service start redis" }
+    ] },
+    { "label": "Settings", "items": [
+      { "label": "Notifications", "checked": true, "action": "notify off" }
+    ] },
+    { "label": "Update to v1.40.0", "action": "update" }
+  ]
+}
+```
+
+To run a row, post its id to `/api/tray/action` with the `X-Lerd-CSRF` header the dashboard's other clients send:
+
+```bash
+curl -X POST -H 'X-Lerd-CSRF: 1' -d '{"action":"service start redis"}' http://127.0.0.1:7073/api/tray/action
+```
+
+Only an id the current menu offers runs. Anything else answers `409`, including a toggle that has flipped since the client drew it, so the client should fetch the menu again. The answer carries the outcome for the client to show as its own notification: `{"ok": true, "title": "redis started"}`, or `{"ok": false, "error": "…", "title": "Couldn't start redis", "body": "…"}` with the last line lerd printed. An empty `title` means there is nothing to report, as when the dashboard opens. `update` opens a terminal running `lerd update`. Like stopping lerd from the dashboard, the action endpoint is only open to the local user.
+
+---
+
 ## Icon appearance
 
 In the default colour mode the icon doubles as a status light: a red **L** when lerd is stopped and a white **L** when it is running. The white running icon would disappear on a light panel, so the tray reads your desktop's light/dark preference and switches the running icon to a dark **L** whenever the panel is light. It reacts live: toggle your system theme and the icon recolours without restarting the tray.

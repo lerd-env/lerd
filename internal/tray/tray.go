@@ -4,7 +4,6 @@ package tray
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,52 +25,6 @@ import (
 // deliberately stays on 127.0.0.1 because the tray should work even
 // before nginx / DNS are up.
 var apiBase = "http://127.0.0.1:7073"
-
-// Snapshot holds the state polled from the Lerd API.
-type Snapshot struct {
-	Running              bool
-	NginxRunning         bool
-	DNSOK                bool
-	DNSDegraded          bool // lerd-dns healthy but the system resolver is bypassed, typically a VPN
-	DNSDisabled          bool // explicit dns.enabled=false from API; zero value falls through to ok/error
-	PHPVersions          []phpInfo
-	PHPDefault           string
-	Services             []serviceInfo
-	ServicesKnown        bool     // the services call answered; an empty list means none, not unread
-	WorkersRunning       int      // per-site worker units currently up
-	WorkersDown          []string // sites lerd considers unhealthy, not merely stopped
-	AutostartEnabled     bool
-	LANExposed           bool   // lerd lan expose state — drives the LAN toggle item
-	LANServicesExposed   bool   // explicit managed-service LAN access preference
-	DumpsEnabled         bool   // lerd dump on/off state — drives the dump toggle item
-	NotificationsEnabled bool   // lerd notify on/off state — drives the notifications toggle item
-	HighContrastIcon     bool   // lerd tray icon high-contrast state — green running icon on any panel
-	LatestVersion        string // non-empty (e.g. "v0.8.5") when a newer version is available
-}
-
-type phpInfo struct {
-	Version string
-}
-
-type serviceInfo struct {
-	Name               string `json:"name"`
-	Status             string `json:"status"`
-	Paused             bool   `json:"paused,omitempty"`
-	QueueSite          string `json:"queue_site,omitempty"`
-	ScheduleWorkerSite string `json:"schedule_worker_site,omitempty"`
-	StripeListenerSite string `json:"stripe_listener_site,omitempty"`
-	ReverbSite         string `json:"reverb_site,omitempty"`
-	HorizonSite        string `json:"horizon_site,omitempty"`
-	WorkerSite         string `json:"worker_site,omitempty"`
-}
-
-// isWorker reports whether an /api/services entry is a synthetic per-site
-// worker unit rather than a real service preset.
-func (s serviceInfo) isWorker() bool {
-	return s.QueueSite != "" || s.ScheduleWorkerSite != "" ||
-		s.StripeListenerSite != "" || s.ReverbSite != "" ||
-		s.HorizonSite != "" || s.WorkerSite != ""
-}
 
 const daemonEnv = "LERD_TRAY_DAEMON"
 
@@ -283,99 +236,14 @@ func fetchSnapshot() *Snapshot {
 	// on an ordinary install; the poll runs every 30s, so waiting is free.
 	client := &http.Client{Timeout: 20 * time.Second}
 
-	snap := &Snapshot{}
-
-	// /api/status
-	type statusResp struct {
-		Nginx struct {
-			Running bool `json:"running"`
-		} `json:"nginx"`
-		DNS struct {
-			OK      bool   `json:"ok"`
-			Status  string `json:"status"`
-			Enabled bool   `json:"enabled"`
-		} `json:"dns"`
-		PHPFPMs []struct {
-			Version string `json:"version"`
-		} `json:"php_fpms"`
-		PHPDefault string `json:"php_default"`
-	}
-	if r, err := client.Get(apiBase + "/api/status"); err == nil {
-		var sr statusResp
-		if json.NewDecoder(r.Body).Decode(&sr) == nil {
-			snap.Running = sr.Nginx.Running
-			snap.NginxRunning = sr.Nginx.Running
-			snap.DNSOK = sr.DNS.OK
-			snap.DNSDegraded = sr.DNS.Status == "degraded"
-			snap.DNSDisabled = !sr.DNS.Enabled
-			snap.PHPDefault = sr.PHPDefault
-			for _, p := range sr.PHPFPMs {
-				snap.PHPVersions = append(snap.PHPVersions, phpInfo{Version: p.Version})
-			}
+	get := func(path string) (io.ReadCloser, error) {
+		r, err := client.Get(apiBase + path)
+		if err != nil {
+			return nil, err
 		}
-		r.Body.Close()
-	} else {
-		// API unreachable — return empty (stopped) snapshot. A lerd that is down
-		// runs no services, so that emptiness is an answer and the menu may act
-		// on it, unlike a services call that simply did not come back.
-		snap.ServicesKnown = true
-		return snap
+		return r.Body, nil
 	}
-
-	snap.AutostartEnabled = lerdSystemd.IsAutostartEnabled()
-
-	// LAN, debug bridge, and notifications all read straight from config —
-	// the tray cares about persisted intent and avoids a new API surface
-	// for each toggle.
-	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil {
-		snap.LANExposed = cfg.LAN.Exposed
-		snap.LANServicesExposed = cfg.LAN.ServicesExposed
-		snap.DumpsEnabled = cfg.IsDumpsEnabled()
-		snap.NotificationsEnabled = cfg.IsNotificationsEnabled()
-		snap.HighContrastIcon = cfg.IsHighContrastTrayIcon()
-	}
-
-	// /api/services — real services only. The per-site worker units mixed into
-	// the same payload are counted rather than discarded; the API lists them
-	// only while they are up, so the count needs no extra call.
-	if r, err := client.Get(apiBase + "/api/services"); err == nil {
-		var all []serviceInfo
-		if json.NewDecoder(r.Body).Decode(&all) == nil {
-			snap.ServicesKnown = true
-			for _, svc := range all {
-				if svc.isWorker() {
-					snap.WorkersRunning++
-					continue
-				}
-				snap.Services = append(snap.Services, svc)
-			}
-		}
-		r.Body.Close()
-	}
-
-	// /api/workers/health knows the difference between a worker that is down
-	// because its site is paused or idle-suspended and one that actually
-	// broke, so the tray reports its verdict instead of counting stopped units.
-	if r, err := client.Get(apiBase + "/api/workers/health"); err == nil {
-		var health struct {
-			Unhealthy []struct {
-				Site string `json:"site"`
-			} `json:"unhealthy"`
-		}
-		if json.NewDecoder(r.Body).Decode(&health) == nil {
-			for _, u := range health.Unhealthy {
-				snap.WorkersDown = append(snap.WorkersDown, u.Site)
-			}
-		}
-		r.Body.Close()
-	}
-
-	// Update check (uses shared disk cache — fast, no extra network call when cache is fresh)
-	if info, _ := lerdUpdate.CachedUpdateCheck(version.Version); info != nil {
-		snap.LatestVersion = info.LatestVersion
-	}
-
-	return snap
+	return readSnapshot(get, LocalSettings)
 }
 
 // iconKind identifies which color-mode icon is currently shown so we don't
@@ -584,15 +452,6 @@ func handleIconStyle(item *systray.MenuItem, refresh func()) {
 func runAndRefresh(cmd *exec.Cmd, refresh func()) {
 	_ = cmd.Run()
 	refresh()
-}
-
-// offOn returns the next-state CLI subcommand for a current boolean: true →
-// "off", false → "on". Keeps the two new toggle handlers DRY.
-func offOn(currentlyEnabled bool) string {
-	if currentlyEnabled {
-		return "off"
-	}
-	return "on"
 }
 
 func handleUpdate(item *systray.MenuItem) {

@@ -5,7 +5,6 @@ package editor
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -34,7 +33,7 @@ type Editor struct {
 // binary finds the editor's command on PATH, under its own name or a Flatpak ID.
 func (e Editor) binary() (string, bool) {
 	for _, name := range append([]string{e.bin}, e.flatpaks...) {
-		if p, err := exec.LookPath(name); err == nil {
+		if p, err := platform.LookPath(name); err == nil {
 			return p, true
 		}
 	}
@@ -180,8 +179,8 @@ func Command(file string, line int) []string {
 		}
 	}
 	// Last resort: hand the file to the platform opener (uses the default app).
-	if p, err := exec.LookPath(platform.Current.Opener); err == nil {
-		return []string{p, file}
+	if cmd := platform.OpenCommand(file); cmd != nil {
+		return cmd.Args
 	}
 	return nil
 }

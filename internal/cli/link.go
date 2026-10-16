@@ -208,6 +208,7 @@ func runLink(args []string) error {
 	}
 	site := res.Site
 	printLinkSummary(site, start, res.WroteIDEDataSource)
+	warnWindowsDrive(cwd)
 
 	if plan.Mode != linker.ModeFPM {
 		return linkApplyProject(cwd, site, proj)

@@ -222,6 +222,7 @@ func main() {
 	root.AddCommand(cli.NewIdleCmd())
 	root.AddCommand(cli.NewStreamingCmd())
 	root.AddCommand(cli.NewWSLSetupCmd())
+	root.AddCommand(cli.NewWSLTermCmd())
 	root.AddCommand(cli.NewProfileCmd())
 	root.AddCommand(cli.NewBrowserLogsCmd())
 	root.AddCommand(cli.NewNotifyCmd())
