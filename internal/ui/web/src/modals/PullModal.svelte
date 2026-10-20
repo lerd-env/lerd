@@ -4,6 +4,9 @@
   import DetailButton from '$components/DetailButton.svelte';
   import PlanReview from '$components/PlanReview.svelte';
   import PlanProgress from '$components/PlanProgress.svelte';
+  import GitCommitList from '$components/GitCommitList.svelte';
+  import GitDiffModal from './GitDiffModal.svelte';
+  import type { GitCommit } from '$lib/gitDiff';
   import { closeModal } from '$stores/modals';
   import { pullPlan, streamPull, type BranchPlan } from '$stores/worktree';
   import { restoreSnapshot } from '$stores/databases';
@@ -15,9 +18,11 @@
     // '' is the main checkout; otherwise the worktree's branch as lerd lists it.
     branch: string;
     branchLabel: string;
+    // The checkout's folder, for the incoming commits' diffs.
+    path: string;
     onDone?: () => void;
   }
-  let { domain, branch, branchLabel, onDone = () => {} }: Props = $props();
+  let { domain, branch, branchLabel, path, onDone = () => {} }: Props = $props();
 
   let plan = $state<BranchPlan | null>(null);
   let planning = $state(true);
@@ -29,6 +34,9 @@
   let failedSnapshot = $state('');
   let restoring = $state(false);
   let restored = $state('');
+  // Opens over this dialog, which keeps its plan underneath.
+  let viewing = $state<GitCommit | null>(null);
+  let viewingFiles = $state(false);
 
   const rows = $derived(plan ? planRows(plan, branchLabel) : []);
   const conflicts = $derived(plan?.conflicts ?? []);
@@ -106,7 +114,10 @@
           conflictsText={m.pullPlan_conflicts()}
           thenText={m.pullPlan_then()}
           missingText={m.pullPlan_missingMigrations({ count: plan.migrations_missing })}
+          onfiles={plan.target ? () => (viewingFiles = true) : undefined}
         />
+        <!-- Read after the plan's fetch, so it lists what the pull will bring. -->
+        <GitCommitList {domain} {path} direction="incoming" onopen={(c) => (viewing = c)} />
         {#if diverged}
           <p class="text-xs text-red-500">{m.gitSync_diverged({ ahead: plan.ahead, behind: plan.behind })}</p>
         {:else}
@@ -143,3 +154,8 @@
     {/if}
   {/snippet}
 </Modal>
+{#if viewing}
+  <GitDiffModal {domain} {path} branch={branchLabel} commit={viewing} onclose={() => (viewing = null)} />
+{:else if viewingFiles && plan?.target}
+  <GitDiffModal {domain} {path} branch={branchLabel} upto={plan.target} onclose={() => (viewingFiles = false)} />
+{/if}

@@ -1,3 +1,9 @@
+<script lang="ts" module>
+  // Open modals, oldest first. A dialog opened over another (a commit's diff
+  // over the push confirmation) must take Escape alone, not close both.
+  const stack: symbol[] = [];
+</script>
+
 <script lang="ts">
   import { onMount, onDestroy, type Snippet } from 'svelte';
   import Icon from './Icon.svelte';
@@ -9,11 +15,15 @@
     title: string;
     onclose: () => void;
     size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+    /** A fixed-height panel whose body fills it, for an editor. */
+    tall?: boolean;
+    /** Fills the window; a tall panel grows into it rather than jumping. */
+    fullscreen?: boolean;
     children: Snippet;
     footer?: Snippet;
     actions?: Snippet;
   }
-  let { open, title, onclose, size = 'md', children, footer, actions }: Props = $props();
+  let { open, title, onclose, size = 'md', tall = false, fullscreen = false, children, footer, actions }: Props = $props();
   const uid = $props.id();
   const titleId = `${uid}-title`;
 
@@ -29,10 +39,17 @@
             : 'max-w-lg'
   );
 
+  const me = Symbol();
+  $effect(() => {
+    if (!open) return;
+    stack.push(me);
+    return () => void stack.splice(stack.indexOf(me), 1);
+  });
+
   // An open modal owns Escape. Marking the event handled lets layers
   // underneath (full-screen editors, hover menus) leave this keypress alone.
   function onKey(e: KeyboardEvent) {
-    if (e.key !== 'Escape' || !open) return;
+    if (e.key !== 'Escape' || !open || stack.at(-1) !== me) return;
     e.preventDefault();
     onclose();
   }
@@ -54,7 +71,9 @@
       aria-modal="true"
       aria-labelledby={titleId}
       tabindex="-1"
-      class="relative flex flex-col max-h-[calc(100dvh-2rem)] outline-none bg-white dark:bg-lerd-card border border-gray-200 dark:border-lerd-border rounded-xl shadow-2xl w-full {widthClass} mx-4 lerd-panel-in transition-[max-width] duration-200 ease-out"
+      class="relative flex flex-col outline-none bg-white dark:bg-lerd-card border w-full lerd-panel-in transition-[max-width,height,margin,border-radius] duration-200 ease-out {fullscreen
+        ? 'max-w-[100vw] h-dvh mx-0 rounded-none border-transparent'
+        : `max-h-[calc(100dvh-2rem)] border-gray-200 dark:border-lerd-border rounded-xl shadow-2xl ${widthClass} mx-4 ${tall ? 'h-[85vh]' : ''}`}"
     >
       <div class="shrink-0 flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-lerd-border">
         <h3 id={titleId} class="min-w-0 break-words font-semibold text-gray-900 dark:text-white">{title}</h3>
@@ -70,7 +89,8 @@
           <Icon name="close" class="w-5 h-5" />
         </button>
       </div>
-      <div class="min-h-0 overflow-y-auto">{@render children()}</div>
+      <!-- A tall body (an editor) fills the panel and scrolls itself. -->
+      <div class="min-h-0 {tall || fullscreen ? 'flex-1 flex flex-col' : 'overflow-y-auto'}">{@render children()}</div>
       {#if footer}
         <div class="shrink-0 px-5 py-3 border-t border-gray-100 dark:border-lerd-border flex items-center justify-end gap-2">
           {@render footer()}

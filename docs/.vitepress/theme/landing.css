@@ -48,7 +48,8 @@
 .lerd-landing .hero h1{font-size:clamp(48px,8vw,104px);line-height:.95;letter-spacing:-.04em;font-weight:700;margin:28px 0;max-width:11ch}
 .lerd-landing .hero h1 span{display:block;color:var(--faint);font-size:.46em;line-height:1.08;letter-spacing:-.03em;margin-top:.3em;max-width:16ch}
 .lerd-landing .hero p{font-size:20px;color:var(--ink-2)}
-.lerd-landing .hero p,.lerd-landing .hero .hero-row{max-width:min(52ch,calc(56vw - 220px))}
+/* stop the copy 40px short of the art at left:56%, measured from where .wrap's content starts */
+.lerd-landing .hero p,.lerd-landing .hero .hero-row{max-width:min(52ch,calc(56vw - max(24px,50vw - var(--maxw)/2 + 24px) - 40px))}
 .lerd-landing .hero-row{display:flex;flex-wrap:wrap;gap:14px;align-items:stretch;margin-top:40px}
 .lerd-landing .cmd{display:flex;align-items:center;gap:14px;padding:12px 14px 12px 18px;border:1px solid var(--line-2);background:var(--panel);font:14px var(--mono);color:var(--ink-2);max-width:100%;overflow:hidden}
 .lerd-landing .cmd i{color:var(--accent);font-style:normal}
@@ -238,7 +239,7 @@
 @media (max-width:960px){
   .lerd-landing .hdr nav{display:none}
   .lerd-landing .hero p,.lerd-landing .hero .hero-row{max-width:none}
-  .lerd-landing .hero-art{position:relative;top:auto;left:auto;width:calc(100% + 40px);margin:48px 0 -48px 24px;opacity:.6}
+  .lerd-landing .hero-art{display:none}
   .lerd-landing .index{display:flex;overflow-x:auto;scrollbar-width:none}
   .lerd-landing .index button{flex:0 0 auto;min-width:120px}
   .lerd-landing .sec-head{grid-template-columns:1fr;gap:12px}

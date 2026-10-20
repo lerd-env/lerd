@@ -13,16 +13,17 @@
     loading?: boolean;
     // Holds the confirm back, for a choice in `extra` that leaves nothing to do.
     disabled?: boolean;
+    size?: 'sm' | 'md';
     // Extra controls rendered under the body, for a confirmation that also
     // carries a choice (a checkbox, a scope toggle) rather than only a yes/no.
     extra?: Snippet;
     onconfirm: () => void;
     onclose: () => void;
   }
-  let { open, title, body, confirmLabel, danger = false, loading = false, disabled = false, extra, onconfirm, onclose }: Props = $props();
+  let { open, title, body, confirmLabel, danger = false, loading = false, disabled = false, size = 'sm', extra, onconfirm, onclose }: Props = $props();
 </script>
 
-<Modal {open} {title} onclose={() => { if (!loading) onclose(); }} size="sm">
+<Modal {open} {title} onclose={() => { if (!loading) onclose(); }} {size}>
   <div class="px-5 py-4">
     <p class="text-sm text-gray-700 dark:text-gray-300">{body}</p>
     {#if extra}

@@ -73,6 +73,8 @@ The card above the table states the schedule at a glance: how often it runs (a c
 
 Two filters narrow the table, by **site** and by **when it was taken** (last 24 hours, 7 days, 30 days, or older than 30), and a long history is paged twenty rows at a time. Each row carries four actions: keep an automatic snapshot (or put it back under retention), download it as a dump, restore it, and delete it. Restore and delete both ask first, naming what they are about to overwrite or remove.
 
+From a site's page, the camera button on its database service card opens this tab already filtered to that site.
+
 A checkbox in front of each row, and one in the table header, select snapshots for removal together. The header checkbox covers the rows on screen, never one the filters or the paging are hiding, while what you picked on another page stays picked, which is what the removal count reflects.
 
 The site column names the site that owns the database, so a snapshot taken by hand and one taken by the schedule read as the same project rather than as a domain and a name.

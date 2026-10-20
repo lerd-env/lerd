@@ -3,7 +3,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { gitRemote, openErrorModal, openPullModal } = vi.hoisted(() => ({ gitRemote: vi.fn(), openErrorModal: vi.fn(), openPullModal: vi.fn() }));
 vi.mock('$stores/sites', () => ({ gitRemote }));
-vi.mock('$stores/modals', () => ({ openErrorModal, openPullModal }));
+vi.mock('$stores/modals', () => ({ openErrorModal, openPullModal, closeModal: vi.fn() }));
+const { loadGitCommits, loadCommitFiles, loadCommitVersions } = vi.hoisted(() => ({
+  loadGitCommits: vi.fn(),
+  loadCommitFiles: vi.fn(),
+  loadCommitVersions: vi.fn()
+}));
+vi.mock('$lib/gitDiff', async (orig) => ({ ...(await orig<object>()), loadGitCommits, loadCommitFiles, loadCommitVersions }));
+vi.mock('$components/MonacoDiffEditor.svelte', async () => ({ default: (await import('../modals/MonacoDiffEditor.stub.svelte')).default }));
 
 import GitSync from './GitSync.svelte';
 
@@ -14,19 +21,42 @@ describe('GitSync', () => {
     gitRemote.mockReset();
     openErrorModal.mockReset();
     openPullModal.mockReset();
+    loadGitCommits.mockReset();
+    loadGitCommits.mockResolvedValue({ commits: [], more: false });
+  });
+
+  // The confirmation names what is about to leave, and each commit opens over it.
+  it('lists the commits a push sends and opens one without losing the confirmation', async () => {
+    loadGitCommits.mockResolvedValue({ commits: [{ hash: 'abc1234def', subject: 'fix: the thing' }], more: false });
+    loadCommitFiles.mockResolvedValue([{ path: 'app.php', status: 'M' }]);
+    loadCommitVersions.mockResolvedValue({ original: 'a', modified: 'b', binary: false, too_large: false, unreadable: false });
+    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', path: '/srv/acme', status: { ...synced, ahead: 1 } } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Push to upstream' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Commits · 1' }));
+    await fireEvent.click(screen.getByText('fix: the thing'));
+    expect(loadGitCommits).toHaveBeenCalledWith('acme.test', '/srv/acme', 'outgoing');
+
+    expect(await screen.findByText('abc1234 fix: the thing')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('diff').dataset.modified).toBe('b'));
+    expect(loadCommitVersions).toHaveBeenCalledWith('acme.test', '/srv/acme', 'abc1234def', 'app.php');
+
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByText('abc1234 fix: the thing')).toBeNull());
+    expect(screen.getByText('Push main?')).toBeInTheDocument();
   });
 
   it('shows how far behind or ahead the checkout is', () => {
-    const { unmount } = render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', status: { ...synced, behind: 2 } } });
+    const { unmount } = render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', path: '/srv/acme', status: { ...synced, behind: 2 } } });
     expect(screen.getByRole('button', { name: 'Pull from upstream' }).textContent).toContain('2');
     unmount();
-    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', status: { ...synced, ahead: 1 } } });
+    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', path: '/srv/acme', status: { ...synced, ahead: 1 } } });
     expect(screen.getByRole('button', { name: 'Push to upstream' }).textContent).toContain('1');
   });
 
   // Push with nothing to send would only ever say "Everything up-to-date".
   it('disables push when nothing is ahead', () => {
-    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', status: synced } });
+    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', path: '/srv/acme', status: synced } });
     expect(screen.getByRole('button', { name: 'Push to upstream' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Pull from upstream' })).toBeEnabled();
   });
@@ -34,7 +64,7 @@ describe('GitSync', () => {
   it('runs the op on the shown checkout and reports git’s summary', async () => {
     gitRemote.mockResolvedValue({ ok: true, message: 'main -> main' });
     const onDone = vi.fn();
-    render(GitSync, { props: { domain: 'acme.test', branch: 'feature', branchLabel: 'feature', status: { ...synced, ahead: 1 }, onDone } });
+    render(GitSync, { props: { domain: 'acme.test', branch: 'feature', branchLabel: 'feature', path: '/srv/acme', status: { ...synced, ahead: 1 }, onDone } });
 
     await fireEvent.click(screen.getByRole('button', { name: 'Push to upstream' }));
     expect(gitRemote).not.toHaveBeenCalled();
@@ -48,18 +78,18 @@ describe('GitSync', () => {
   // Pull asks through its own dialog, which lists what the incoming commits call for.
   it('opens the pull dialog for the shown checkout', async () => {
     const onDone = vi.fn();
-    render(GitSync, { props: { domain: 'acme.test', branch: 'feature', branchLabel: 'feature', status: { ...synced, behind: 2 }, onDone } });
+    render(GitSync, { props: { domain: 'acme.test', branch: 'feature', branchLabel: 'feature', path: '/srv/acme', status: { ...synced, behind: 2 }, onDone } });
 
     await fireEvent.click(screen.getByRole('button', { name: 'Pull from upstream' }));
 
-    expect(openPullModal).toHaveBeenCalledWith('acme.test', 'feature', 'feature', onDone);
+    expect(openPullModal).toHaveBeenCalledWith('acme.test', 'feature', 'feature', '/srv/acme', onDone);
     expect(gitRemote).not.toHaveBeenCalled();
   });
 
   // A quiet fetch prints nothing, which still has to read as done.
   it('says up to date when git printed nothing', async () => {
     gitRemote.mockResolvedValue({ ok: true, message: '' });
-    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', status: synced } });
+    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', path: '/srv/acme', status: synced } });
 
     await fireEvent.click(screen.getByRole('button', { name: 'Fetch from upstream' }));
 
@@ -67,7 +97,7 @@ describe('GitSync', () => {
   });
 
   it('does nothing when the confirmation is cancelled', async () => {
-    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', status: { ...synced, ahead: 1 } } });
+    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', path: '/srv/acme', status: { ...synced, ahead: 1 } } });
     await fireEvent.click(screen.getByRole('button', { name: 'Push to upstream' }));
     await fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
     expect(gitRemote).not.toHaveBeenCalled();
@@ -76,7 +106,7 @@ describe('GitSync', () => {
   // Ahead and behind at once: git refuses both a fast-forward and a push, so
   // the buttons say why instead of failing after a confirmation.
   it('holds pull and push back on a diverged branch, saying why', async () => {
-    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', status: { ...synced, ahead: 2, behind: 3 } } });
+    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', path: '/srv/acme', status: { ...synced, ahead: 2, behind: 3 } } });
     const why = 'Diverged: 2 local and 3 remote commits. Merge or rebase it in your editor or terminal.';
     const [pull, push] = screen.getAllByRole('button', { name: why });
     expect(pull).toHaveAttribute('aria-disabled', 'true');
@@ -92,7 +122,7 @@ describe('GitSync', () => {
   it('publishes a branch with no upstream after confirming', async () => {
     gitRemote.mockResolvedValue({ ok: true, message: "branch 'spike' set up to track 'origin/spike'." });
     const status = { ...synced, upstream: false, publishable: true };
-    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'spike', status } });
+    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'spike', path: '/srv/acme', status } });
 
     expect(screen.queryByRole('button', { name: 'Pull from upstream' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Fetch from upstream' })).toBeNull();
@@ -105,7 +135,7 @@ describe('GitSync', () => {
 
   it('shows git’s refusal in the error modal', async () => {
     gitRemote.mockResolvedValue({ ok: false, error: 'rejected: fetch first' });
-    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', status: { ...synced, ahead: 1 } } });
+    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', path: '/srv/acme', status: { ...synced, ahead: 1 } } });
 
     await fireEvent.click(screen.getByRole('button', { name: 'Push to upstream' }));
     expect(await screen.findByText('Push main?')).toBeInTheDocument();

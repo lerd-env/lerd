@@ -10,6 +10,13 @@ const { pullPlan, streamPull, closeModal, restoreSnapshot } = vi.hoisted(() => (
 vi.mock('$stores/worktree', () => ({ pullPlan, streamPull }));
 vi.mock('$stores/modals', () => ({ closeModal }));
 vi.mock('$stores/databases', () => ({ restoreSnapshot }));
+const { loadGitCommits, loadUptoFiles, loadUptoVersions } = vi.hoisted(() => ({
+  loadGitCommits: vi.fn(),
+  loadUptoFiles: vi.fn(),
+  loadUptoVersions: vi.fn()
+}));
+vi.mock('$lib/gitDiff', async (orig) => ({ ...(await orig<object>()), loadGitCommits, loadUptoFiles, loadUptoVersions }));
+vi.mock('$components/MonacoDiffEditor.svelte', async () => ({ default: (await import('./MonacoDiffEditor.stub.svelte')).default }));
 
 import PullModal from './PullModal.svelte';
 
@@ -29,7 +36,7 @@ const plan = {
   head: 'f00d'
 };
 
-const props = { domain: 'acme.test', branch: 'feature', branchLabel: 'feature' };
+const props = { domain: 'acme.test', branch: 'feature', branchLabel: 'feature', path: '/srv/acme' };
 
 function finishWith(done: object) {
   streamPull.mockImplementation(async (_d: string, _b: string, _r: object, _s: object, on: (e: object) => void) => {
@@ -42,6 +49,42 @@ describe('PullModal', () => {
   beforeEach(() => {
     for (const f of [pullPlan, streamPull, closeModal, restoreSnapshot]) f.mockReset();
     pullPlan.mockResolvedValue(plan);
+    loadGitCommits.mockReset();
+    loadGitCommits.mockResolvedValue({ commits: [], more: false });
+  });
+
+  // Every file across the incoming commits, compared up to the commit the plan reviewed.
+  it('opens the full list of changed files from the files card', async () => {
+    loadUptoFiles.mockResolvedValue([{ path: 'composer.lock', status: 'M' }]);
+    loadUptoVersions.mockResolvedValue({ original: 'a', modified: 'b', binary: false, too_large: false, unreadable: false });
+    render(PullModal, { props });
+
+    await fireEvent.click(await screen.findByRole('button', { name: /Files changed/ }));
+    expect(await screen.findByText('Incoming on feature')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('diff').dataset.modified).toBe('b'));
+    expect(loadUptoFiles).toHaveBeenCalledWith('acme.test', '/srv/acme', 'abc123');
+    expect(loadUptoVersions).toHaveBeenCalledWith('acme.test', '/srv/acme', 'abc123', 'composer.lock');
+
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByText('Incoming on feature')).toBeNull());
+    expect(screen.getByRole('button', { name: 'Pull' })).toBeInTheDocument();
+  });
+
+  // Read only once the plan's fetch is done, so the list is what the pull brings.
+  it('lists the incoming commits after the plan', async () => {
+    let resolvePlan: (p: object) => void = () => {};
+    pullPlan.mockReturnValue(new Promise((r) => (resolvePlan = r)));
+    loadGitCommits.mockResolvedValue({ commits: [{ hash: 'abc1234def', subject: 'feat: incoming' }], more: true });
+    render(PullModal, { props });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(loadGitCommits).not.toHaveBeenCalled();
+
+    resolvePlan(plan);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Commits · 1+' }));
+    expect(screen.getByText('feat: incoming')).toBeVisible();
+    expect(screen.getByText('abc1234')).toBeInTheDocument();
+    expect(screen.getByText('Showing the newest 1.')).toBeInTheDocument();
+    expect(loadGitCommits).toHaveBeenCalledWith('acme.test', '/srv/acme', 'incoming');
   });
 
   // The same picture as a branch switch: what comes in, and what it calls for.

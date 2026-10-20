@@ -155,6 +155,8 @@ Opting out does not stop a lerd service that is already running. Leave it (the t
 
 Use `host.containers.internal` as the host, never `127.0.0.1` or `localhost`. The app runs inside the PHP-FPM container, where loopback is the container itself; `host.containers.internal` is an entry lerd maintains that points at an address it has probed and found routable back to your machine. `lerd doctor` prints the one in force under **Container → Host connectivity**.
 
+A site on the [native runtime](../features/native-runtime.md) is the exception: its PHP runs on your machine, not in a container, so it reaches your server at `127.0.0.1` like any other local program, and `host.containers.internal` does not resolve there.
+
 ### What the host server has to allow
 
 A container is not on your machine's loopback, and what that costs you depends on the platform.

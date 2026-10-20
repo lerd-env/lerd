@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -375,5 +376,71 @@ func TestHandleSitePull_unknownWorktree(t *testing.T) {
 
 	if !strings.Contains(rec.Body.String(), "unknown worktree branch") {
 		t.Fatalf("want the worktree refusal, got %s", rec.Body.String())
+	}
+}
+
+// The diff only opens checkouts the site owns; any other path is refused before git runs.
+func TestHandleSiteGitDiff(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	sitePath := t.TempDir()
+	gitIn(t, sitePath, "init", "-q", "-b", "main")
+	if err := os.WriteFile(filepath.Join(sitePath, "a.php"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, sitePath, "add", "a.php")
+	gitIn(t, sitePath, "commit", "-q", "-m", "init")
+	if err := os.WriteFile(filepath.Join(sitePath, "a.php"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "acme", Path: sitePath, Domains: []string{"acme.test"}}); err != nil {
+		t.Fatal(err)
+	}
+	// git prints the checkout's resolved path, and the dashboard sends back what git-status gave it.
+	main := strings.TrimSpace(strings.TrimPrefix(strings.Split(runGitOutput(sitePath, "worktree", "list", "--porcelain"), "\n")[0], "worktree "))
+
+	get := func(query string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		handleSiteGitDiff(rec, httptest.NewRequest(http.MethodGet, "/api/sites/git-diff?"+query, nil))
+		return rec
+	}
+
+	rec := get("domain=acme.test&path=" + url.QueryEscape(main))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"unstaged":[{"path":"a.php","status":"M"}]`) {
+		t.Fatalf("list: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = get("domain=acme.test&path=" + url.QueryEscape(main) + "&section=unstaged&file=a.php")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"original":"a\n","modified":"changed\n"`) {
+		t.Fatalf("versions: %d %s", rec.Code, rec.Body.String())
+	}
+	head := strings.TrimSpace(runGitOutput(sitePath, "rev-parse", "HEAD"))
+	rec = get("domain=acme.test&path=" + url.QueryEscape(main) + "&commits=outgoing")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `{"hash":"`+head+`","subject":"init","time":`) {
+		t.Fatalf("commits: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = get("domain=acme.test&path=" + url.QueryEscape(main) + "&commit=" + head)
+	if rec.Code != http.StatusOK || rec.Body.String() != `[{"path":"a.php","status":"A"}]`+"\n" {
+		t.Fatalf("commit files: %d %q", rec.Code, rec.Body.String())
+	}
+	rec = get("domain=acme.test&path=" + url.QueryEscape(main) + "&commit=" + head + "&file=a.php")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"original":"","modified":"a\n"`) {
+		t.Fatalf("commit versions: %d %s", rec.Code, rec.Body.String())
+	}
+	// HEAD against itself: nothing would come in.
+	rec = get("domain=acme.test&path=" + url.QueryEscape(main) + "&upto=" + head)
+	if rec.Code != http.StatusOK || rec.Body.String() != "[]\n" {
+		t.Fatalf("upto: %d %q", rec.Code, rec.Body.String())
+	}
+	for _, q := range []string{"&commits=HEAD~1..HEAD", "&commit=main", "&upto=main"} {
+		if rec := get("domain=acme.test&path=" + url.QueryEscape(main) + q); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: got %d", q, rec.Code)
+		}
+	}
+	if rec := get("domain=acme.test&path=" + url.QueryEscape(t.TempDir())); rec.Code != http.StatusBadRequest {
+		t.Errorf("foreign path: got %d", rec.Code)
+	}
+	if rec := get("domain=nope.test&path=" + url.QueryEscape(main)); rec.Code != http.StatusNotFound {
+		t.Errorf("unknown site: got %d", rec.Code)
 	}
 }

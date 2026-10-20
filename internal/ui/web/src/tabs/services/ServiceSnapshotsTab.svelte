@@ -24,10 +24,18 @@
 
   interface Props {
     svc: Service;
+    // A site to open filtered to, from a link on its page.
+    site?: string;
   }
-  let { svc }: Props = $props();
+  let { svc, site = '' }: Props = $props();
 
   onMount(loadAutoSnapshot);
+  // A link from a site page sets the filter, again on each new link while the
+  // tab stays mounted; the dropdown can still change it in between.
+  $effect(() => {
+    siteFilter = site;
+    page = 0;
+  });
   // The snapshots ride along with the engine's databases, so the tab reads the
   // same listing the Databases tab does rather than fetching its own, and skips
   // a service that has no databases for the same reason it does.
@@ -106,7 +114,9 @@
 
   const siteOptions = $derived([
     { value: '', label: m.snapshots_filterAllSites() },
-    ...[...new Set(rows.map((r) => r.site).filter(Boolean))].sort().map((s) => ({ value: s, label: s }))
+    ...[...new Set([...rows.map((r) => r.site), siteFilter].filter(Boolean))]
+      .sort()
+      .map((s) => ({ value: s, label: s }))
   ]);
   const timeOptions = [
     { value: '', label: m.snapshots_filterAnyTime() },
@@ -123,8 +133,17 @@
     return timeFilter === 'older' ? days > 30 : days <= Number(timeFilter);
   }
 
+  // Sites can share one database, and the Site column names only one of them,
+  // so the filter matches any site that owns the row's database.
+  function ownedBy(row: Row, site: string): boolean {
+    if (row.site === site) return true;
+    return $autoSnapshot.sites.some(
+      (s) => s.service === svc.name && s.database === row.database && s.site === site
+    );
+  }
+
   const filtered = $derived(
-    rows.filter((r) => (!siteFilter || r.site === siteFilter) && withinFilter(r.at))
+    rows.filter((r) => (!siteFilter || ownedBy(r, siteFilter)) && withinFilter(r.at))
   );
   const selectedRows = $derived(filtered.filter((r) => selected.has(r.key)));
 

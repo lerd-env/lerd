@@ -12,6 +12,7 @@
   import { services, serviceLabel } from '$stores/services';
   import { databaseAdminFor, openDatabaseAdmin } from '$stores/dashboard';
   import { goToTab } from '$stores/route';
+  import { accessMode } from '$stores/accessMode';
   import { openServiceInstallModal, openSiteServiceRemoveModal } from '$stores/modals';
   import { m } from '../../paraglide/messages.js';
 
@@ -22,8 +23,10 @@
     // Listed in .lerd.yaml, so it can be removed. One the site only reaches
     // through its env file is offered into .lerd.yaml instead.
     declared?: boolean;
+    // The site's name, which snapshots record and the snapshots list filters by.
+    site?: string;
   }
-  let { name, database = '', domain = '', declared = false }: Props = $props();
+  let { name, database = '', domain = '', declared = false, site = '' }: Props = $props();
 
   const svc = $derived($services.find((s) => s.name === name));
   const installed = $derived(Boolean(svc));
@@ -36,6 +39,12 @@
     if (!svc?.is_database || !database) return null;
     return databaseAdminFor(name);
   });
+
+  // Snapshots live on the engine's Services page, which needs the same
+  // authority to show them.
+  const hasSnapshots = $derived(
+    Boolean(svc?.is_database && database && site && $accessMode.localControl)
+  );
 
   // A service listed in .lerd.yaml but absent from the installed set was never
   // installed. Offer to install it rather than routing to a Services tab entry
@@ -101,6 +110,17 @@
       </span>
     </span>
   </button>
+  {#if hasSnapshots}
+    <button
+      type="button"
+      use:tooltip={m.snapshots_title()}
+      aria-label={m.snapshots_title()}
+      onclick={() => goToTab('services', `${name}/snapshots/${encodeURIComponent(site)}`)}
+      class="shrink-0 flex items-center justify-center w-7 h-7 rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+    >
+      <Icon name="camera" class="w-3.5 h-3.5" />
+    </button>
+  {/if}
   {#if dbAdmin}
     <button
       type="button"

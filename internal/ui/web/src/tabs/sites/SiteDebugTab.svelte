@@ -24,6 +24,7 @@
   import Icon from '$components/Icon.svelte';
   import { modal } from '$stores/modals';
   import { tooltip } from '$lib/tooltip';
+  import { growFullscreen } from '$lib/growFullscreen';
   import { m } from '../../paraglide/messages.js';
 
   onMount(() => {
@@ -127,10 +128,14 @@
   // Full screen works like Tinker's: transient, and Escape leaves it only once
   // no modal is stacked on top, since the modal owns Escape first.
   let fullscreen = $state(false);
+  let panel: HTMLDivElement | undefined = $state();
+  function setFullscreen(on: boolean) {
+    void growFullscreen(panel, () => (fullscreen = on));
+  }
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape' && fullscreen && $modal.kind === null && !e.defaultPrevented) {
       e.preventDefault();
-      fullscreen = false;
+      setFullscreen(false);
     }
   }
 
@@ -147,7 +152,7 @@
   {#if !rid && fullscreen && domain}<span class="text-xs font-mono text-gray-600 dark:text-gray-300">{domain}</span>{/if}
   {#if !rid}<button
     type="button"
-    onclick={() => (fullscreen = !fullscreen)}
+    onclick={() => setFullscreen(!fullscreen)}
     class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
     use:tooltip={fullscreen ? m.debug_exitFullscreenTitle() : m.debug_fullscreenTitle()}
     aria-label={fullscreen ? m.debug_exitFullscreenTitle() : m.debug_fullscreenTitle()}
@@ -156,7 +161,7 @@
   </button>{/if}
 {/snippet}
 
-<div class="flex flex-col overflow-hidden {fullscreen ? 'fixed inset-0 z-50 bg-white dark:bg-lerd-bg' : 'h-full'}">
+<div bind:this={panel} class="flex flex-col overflow-hidden {fullscreen ? 'fixed inset-0 z-50 bg-white dark:bg-lerd-bg' : 'h-full'}">
   {#if !$debugCaptureEnabled && !rid}
     <DebugDisabled />
   {:else if !phpLenses}

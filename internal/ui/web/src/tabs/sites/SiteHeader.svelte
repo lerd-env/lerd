@@ -35,6 +35,7 @@
     openBranchSwitchModal,
     openWorktreeRemoveModal
   } from '$stores/modals';
+  import GitChangesButton from '$components/GitChangesButton.svelte';
   import Icon from '$components/Icon.svelte';
   import { tooltip } from '$lib/tooltip';
   import { accessMode } from '$stores/accessMode';
@@ -53,7 +54,7 @@
   import GitSync from '$components/GitSync.svelte';
   import BrowserLogsSiteToggle from '$components/BrowserLogsSiteToggle.svelte';
   import { debugCaptureEnabled } from '$stores/queries';
-  import { loadGitStatus, checkoutFor, type GitCheckout } from '$lib/gitStatus';
+  import { loadGitStatus, checkoutFor, gitDirty, type GitCheckout } from '$lib/gitStatus';
   import { marquee } from '$lib/marquee';
   import { m } from '../../paraglide/messages.js';
 
@@ -444,15 +445,22 @@
       </div>
       {#if activeEntry}
         {@const git = checkoutFor(gitCheckouts, activeEntry)}
-        {#if (git?.upstream || git?.publishable) && $accessMode.localControl}
-          <div class="shrink-0 mr-3">
-            <GitSync
-              domain={site.domain}
-              branch={activeEntry.isMain ? '' : activeEntry.branch}
-              branchLabel={activeEntry.branch}
-              status={git}
-              onDone={refreshGit}
-            />
+        {@const syncs = git?.upstream || git?.publishable}
+        {#if git && (syncs || gitDirty(git)) && $accessMode.localControl}
+          <div class="shrink-0 mr-3 flex items-center gap-0.5">
+            {#if gitDirty(git)}
+              <GitChangesButton domain={site.domain} path={git.path} branchLabel={activeEntry.branch} />
+            {/if}
+            {#if syncs}
+              <GitSync
+                domain={site.domain}
+                branch={activeEntry.isMain ? '' : activeEntry.branch}
+                branchLabel={activeEntry.branch}
+                path={git.path}
+                status={git}
+                onDone={refreshGit}
+              />
+            {/if}
           </div>
         {/if}
       {/if}

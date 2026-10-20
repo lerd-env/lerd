@@ -25,7 +25,8 @@
 
   onMount(loadAutoSnapshot);
 
-  const selected = $derived($routeRest);
+  // routeRest may carry a sub-tab (e.g. "<service>/snapshots/<site>"); match the service segment.
+  const selected = $derived($routeRest.split('/')[0]);
   // One mark for the whole Databases group: is the schedule reaching anything.
   const autoSnapshotOn = $derived($autoSnapshot.sites.some((s) => s.covered));
 

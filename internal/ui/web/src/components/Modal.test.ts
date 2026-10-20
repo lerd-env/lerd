@@ -9,6 +9,15 @@ describe('Modal', () => {
     expect(screen.getByTestId('body')).toBeInTheDocument();
   });
 
+  // An editor sizes itself from its box; a scrolling wrapper would leave it no height.
+  it('lets a tall body fill the panel', () => {
+    const { unmount } = render(Harness, { props: { open: true, title: 'X', onclose: () => {}, tall: true } });
+    expect(screen.getByTestId('body').parentElement!.className).toContain('flex-1');
+    unmount();
+    render(Harness, { props: { open: true, title: 'X', onclose: () => {} } });
+    expect(screen.getByTestId('body').parentElement!.className).toContain('overflow-y-auto');
+  });
+
   it('renders nothing when closed', () => {
     render(Harness, { props: { open: false, title: 'Hello', onclose: () => {} } });
     expect(screen.queryByText('Hello')).not.toBeInTheDocument();

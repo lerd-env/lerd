@@ -164,6 +164,39 @@ describe('ServiceSnapshotsTab', () => {
     expect(getAllByTitle('auto-20260720-100000').length).toBe(1);
   });
 
+  // The site page links here with its own name, so the list opens narrowed.
+  it('opens filtered to the site it was linked from', () => {
+    const { getByRole, queryByText, getAllByTitle } = render(ServiceSnapshotsTab, {
+      props: { svc, site: 'shop' }
+    });
+    expect(getByRole('button', { name: /shop/ })).toBeInTheDocument();
+    expect(queryByText('by-hand')).toBeNull();
+    expect(getAllByTitle('auto-20260720-100000').length).toBe(1);
+  });
+
+  it('finds the snapshots of a database the linked site shares with another', () => {
+    autoSnapshot.set({
+      ...policy,
+      sites: [...policy.sites, { site: 'shop-admin', service: 'mysql', database: 'shop_db', mode: '', covered: false }]
+    });
+    const { queryByText, getAllByTitle } = render(ServiceSnapshotsTab, { props: { svc, site: 'shop-admin' } });
+    expect(queryByText('by-hand')).toBeNull();
+    expect(getAllByTitle('auto-20260720-100000').length).toBe(1);
+  });
+
+  it('follows a link to another site while it stays open', async () => {
+    const { queryByText, getByText, rerender } = render(ServiceSnapshotsTab, { props: { svc, site: 'shop' } });
+    expect(queryByText('by-hand')).toBeNull();
+    await rerender({ svc, site: 'blog' });
+    expect(getByText('by-hand')).toBeInTheDocument();
+  });
+
+  it('says nothing matches when the linked site has no snapshots', () => {
+    const { getByRole, getByText } = render(ServiceSnapshotsTab, { props: { svc, site: 'docs' } });
+    expect(getByRole('button', { name: /docs/ })).toBeInTheDocument();
+    expect(getByText('No snapshots match these filters.')).toBeInTheDocument();
+  });
+
   // A snapshot taken two months ago is out of every recent window.
   it('filters by when the snapshot was taken', async () => {
     const { getByRole, queryByText } = render(ServiceSnapshotsTab, { props: { svc } });

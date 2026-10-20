@@ -33,11 +33,15 @@ export function gitParts(s: GitStatus): { kind: GitPartKind; count: number }[] {
   return ORDER.filter((k) => s[k] > 0).map((kind) => ({ kind, count: s[kind] }));
 }
 
+// gitDirty is uncommitted work of any kind, the part a diff can show.
+export function gitDirty(s: GitStatus): boolean {
+  return s.conflicted + s.untracked + s.modified + s.staged > 0;
+}
+
 // gitMarker is what a minimal shell prompt prints after the branch: one * for
 // any change to the tree, then arrows for commits ahead of or behind upstream.
 export function gitMarker(s: GitStatus): { text: string; conflicted: boolean } {
-  const dirty = s.conflicted + s.untracked + s.modified + s.staged > 0;
-  const text = (dirty ? '*' : '') + (s.ahead > 0 ? '⇡' : '') + (s.behind > 0 ? '⇣' : '');
+  const text = (gitDirty(s) ? '*' : '') + (s.ahead > 0 ? '⇡' : '') + (s.behind > 0 ? '⇣' : '');
   return { text, conflicted: s.conflicted > 0 };
 }
 

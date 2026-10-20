@@ -4,6 +4,9 @@
   import type { GitStatus } from '$lib/gitStatus';
   import { tooltip } from '$lib/tooltip';
   import ConfirmModal from './ConfirmModal.svelte';
+  import GitCommitList from './GitCommitList.svelte';
+  import GitDiffModal from '../modals/GitDiffModal.svelte';
+  import type { GitCommit } from '$lib/gitDiff';
   import { m } from '../paraglide/messages.js';
 
   interface Props {
@@ -12,10 +15,12 @@
     branch: string;
     // The branch name as shown on the tab, for the confirmation copy.
     branchLabel: string;
+    // The checkout's folder as git-status reported it.
+    path: string;
     status: GitStatus;
     onDone?: () => void;
   }
-  let { domain, branch, branchLabel, status, onDone = () => {} }: Props = $props();
+  let { domain, branch, branchLabel, path, status, onDone = () => {} }: Props = $props();
 
   const allOps: { op: GitRemoteOp; label: () => string; failed: () => string }[] = [
     { op: 'fetch', label: m.sites_gitFetch, failed: m.sites_gitFetchFailed },
@@ -45,10 +50,12 @@
   // only refreshes what is known about the remote. Pull asks with what the
   // incoming commits call for, the way a branch switch does.
   let confirming = $state<(typeof allOps)[number] | null>(null);
+  // Opens over the confirmation, which keeps its place underneath.
+  let viewing = $state<GitCommit | null>(null);
   function ask(o: (typeof allOps)[number]) {
     if (o.op !== 'fetch' && diverged) return;
     if (o.op === 'fetch') void run(o.op, o.failed());
-    else if (o.op === 'pull') openPullModal(domain, branch, branchLabel, onDone);
+    else if (o.op === 'pull') openPullModal(domain, branch, branchLabel, path, onDone);
     else confirming = o;
   }
   function confirmed() {
@@ -126,6 +133,14 @@
     ? m.gitSync_publishBody({ branch: branchLabel })
     : m.gitSync_pushBody({ branch: branchLabel, count: status.ahead })}
   confirmLabel={publishing ? m.gitSync_publish() : m.gitSync_push()}
+  size="md"
   onconfirm={confirmed}
   onclose={() => (confirming = null)}
-/>
+>
+  {#snippet extra()}
+    <GitCommitList {domain} {path} direction="outgoing" onopen={(c) => (viewing = c)} />
+  {/snippet}
+</ConfirmModal>
+{#if viewing}
+  <GitDiffModal {domain} {path} branch={branchLabel} commit={viewing} onclose={() => (viewing = null)} />
+{/if}

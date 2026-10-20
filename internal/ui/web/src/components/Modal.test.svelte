@@ -8,8 +8,9 @@
     withFooter?: boolean;
     withActions?: boolean;
     size?: 'sm' | 'md' | 'lg' | 'xl';
+    tall?: boolean;
   }
-  let { open, title, onclose, withFooter = false, withActions = false, size = 'md' }: Props = $props();
+  let { open, title, onclose, withFooter = false, withActions = false, size = 'md', tall = false }: Props = $props();
 </script>
 
 {#if withActions}
@@ -23,7 +24,7 @@
     <div data-testid="body">BODY</div>
   </Modal>
 {:else}
-  <Modal {open} {title} {onclose} {size}>
+  <Modal {open} {title} {onclose} {size} {tall}>
     <div data-testid="body">BODY</div>
   </Modal>
 {/if}

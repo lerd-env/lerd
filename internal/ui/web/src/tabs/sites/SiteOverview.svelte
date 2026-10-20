@@ -39,6 +39,7 @@
             {name}
             database={site.db_database}
             domain={site.domain}
+            site={site.name}
             declared={declared.includes(name)}
           />
         {/each}

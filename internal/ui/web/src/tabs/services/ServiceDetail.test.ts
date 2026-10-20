@@ -1,5 +1,6 @@
 import { render } from '@testing-library/svelte';
 import { describe, it, expect, beforeEach } from 'vitest';
+import { tick } from 'svelte';
 
 // The children perform I/O on mount; replace them with stubs so these tests
 // stay focused on tab visibility.
@@ -13,6 +14,7 @@ vi.mock('$components/LogViewer.svelte', () => import('./ServiceDetail.stub.svelt
 
 import ServiceDetail from './ServiceDetail.svelte';
 import { accessMode } from '$stores/accessMode';
+import { routeRest } from '$stores/route';
 import type { Service } from '$stores/services';
 
 function dbService(): Service {
@@ -50,6 +52,37 @@ describe('ServiceDetail databases tab', () => {
     const svc = { ...dbService(), is_database: false };
     const { queryByRole } = render(ServiceDetail, { props: { svc } });
     expect(queryByRole('tab', { name: 'Snapshots' })).toBeNull();
+  });
+});
+
+describe('ServiceDetail deep link', () => {
+  beforeEach(() => accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true }));
+
+  // A database engine lands on Databases by default; a link naming the
+  // Snapshots tab must win over that on the first render.
+  it('opens on the tab the route names', () => {
+    routeRest.set('mysql/snapshots/shop');
+    const { getByRole } = render(ServiceDetail, { props: { svc: dbService() } });
+    expect(getByRole('tab', { name: 'Snapshots' })).toHaveAttribute('aria-selected', 'true');
+    routeRest.set('');
+  });
+
+  // Hash navigation keeps the panel mounted while the service stays the same.
+  it('follows a route that names a tab while the service stays open', async () => {
+    routeRest.set('mysql');
+    const { getByRole } = render(ServiceDetail, { props: { svc: dbService() } });
+    expect(getByRole('tab', { name: 'Databases' })).toHaveAttribute('aria-selected', 'true');
+    routeRest.set('mysql/snapshots/shop');
+    await tick();
+    expect(getByRole('tab', { name: 'Snapshots' })).toHaveAttribute('aria-selected', 'true');
+    routeRest.set('');
+  });
+
+  it('opens on the default tab without one', () => {
+    routeRest.set('mysql');
+    const { getByRole } = render(ServiceDetail, { props: { svc: dbService() } });
+    expect(getByRole('tab', { name: 'Databases' })).toHaveAttribute('aria-selected', 'true');
+    routeRest.set('');
   });
 });
 

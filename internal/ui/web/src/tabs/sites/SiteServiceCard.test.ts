@@ -2,10 +2,13 @@ import { render, fireEvent } from '@testing-library/svelte';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import SiteServiceCard from './SiteServiceCard.svelte';
 import { services } from '$stores/services';
+import { accessMode } from '$stores/accessMode';
 
 const openServiceDashboard = vi.fn();
 vi.mock('$stores/dashboard', () => ({
-  openServiceDashboard: (s: unknown) => openServiceDashboard(s)
+  openServiceDashboard: (s: unknown) => openServiceDashboard(s),
+  databaseAdminFor: () => null,
+  openDatabaseAdmin: vi.fn()
 }));
 
 const openServiceInstallModal = vi.fn();
@@ -158,5 +161,34 @@ describe('SiteServiceCard', () => {
     await fireEvent.click(getByRole('button', { name: 'Add Redis to .lerd.yaml' }));
     expect(apiFetch).toHaveBeenCalledWith('/api/sites/acme.test/service:declare?name=redis', { method: 'POST' });
     await vi.waitFor(() => expect(loadSites).toHaveBeenCalled());
+  });
+  // Snapshots live on the engine's Services page; the card is the way there
+  // from the site, already narrowed to it.
+  it("opens the engine's snapshots filtered to this site", async () => {
+    accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
+    services.set([{ name: 'mysql', status: 'active', is_database: true } as never]);
+    const { getByRole } = render(SiteServiceCard, {
+      props: { name: 'mysql', database: 'shop_db', domain: 'shop.test', site: 'shop' }
+    });
+    await fireEvent.click(getByRole('button', { name: 'Snapshots' }));
+    expect(location.hash).toBe('#services/mysql/snapshots/shop');
+  });
+
+  it('offers no snapshots button without dashboard-control authority', () => {
+    accessMode.set({ localControl: false, local: false, lanExposed: true, checked: true });
+    services.set([{ name: 'mysql', status: 'active', is_database: true } as never]);
+    const { queryByRole } = render(SiteServiceCard, {
+      props: { name: 'mysql', database: 'shop_db', domain: 'shop.test', site: 'shop' }
+    });
+    expect(queryByRole('button', { name: 'Snapshots' })).toBeNull();
+  });
+
+  it('offers no snapshots button on a service that holds no databases', () => {
+    accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
+    services.set([{ name: 'redis', status: 'active' } as never]);
+    const { queryByRole } = render(SiteServiceCard, {
+      props: { name: 'redis', database: 'shop_db', domain: 'shop.test', site: 'shop' }
+    });
+    expect(queryByRole('button', { name: 'Snapshots' })).toBeNull();
   });
 });

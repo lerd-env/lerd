@@ -14,6 +14,7 @@
   import type { MonacoModule } from '$lib/monaco';
   import type * as Monaco from 'monaco-editor';
   import { onDestroy, onMount } from 'svelte';
+  import { growFullscreen } from '$lib/growFullscreen';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -54,6 +55,7 @@
   let textSize = $state(fontSize(typeof localStorage === 'undefined' ? null : localStorage.getItem(FONT_KEY)));
   let fullscreen = $state(false);
   let fullscreenBtn: HTMLButtonElement | undefined;
+  let panel: HTMLDivElement | undefined = $state();
   let editor: Monaco.editor.IStandaloneCodeEditor | null = null;
 
   // Backend frames each top-level statement's output as `\x1e<line>\x1f<out>`:
@@ -142,13 +144,13 @@
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape' && fullscreen && !modalOnTop && !e.defaultPrevented) {
       e.preventDefault();
-      fullscreen = false;
+      void growFullscreen(panel, () => (fullscreen = false));
       requestAnimationFrame(() => fullscreenBtn?.focus());
     }
   }
 
   function toggleFullscreen() {
-    fullscreen = !fullscreen;
+    void growFullscreen(panel, () => (fullscreen = !fullscreen));
     if (fullscreen) {
       requestAnimationFrame(() => editor?.focus());
     } else {
@@ -296,7 +298,7 @@
 
 <!-- The flex column stays in both modes: full screen only swaps the box it
      lives in, so the panes keep filling the height they are given. -->
-<div class="flex flex-col min-h-0 overflow-hidden gap-3 {fullscreen ? 'fixed inset-0 z-50 bg-white dark:bg-lerd-bg p-3' : 'flex-1 pt-4 px-3 sm:px-5 pb-3 sm:pb-5'}">
+<div bind:this={panel} class="flex flex-col min-h-0 overflow-hidden gap-3 {fullscreen ? 'fixed inset-0 z-50 bg-white dark:bg-lerd-bg p-3' : 'flex-1 pt-4 px-3 sm:px-5 pb-3 sm:pb-5'}">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2">
       <span
