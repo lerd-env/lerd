@@ -68,7 +68,7 @@ Lerd is built for PHP developers who want frictionless local development, on a L
 
 ### Debugging and performance
 
-- 🛰️ **Debug window.** Every `dump()` / `dd()`, SQL with N+1 and slow-query detection, mail, views, events, jobs and outgoing HTTP from any client, per site and branch, in the dashboard, TUI, MCP and `lerd dump tail`. `ray()`, the app log, Sentry or Inspector exceptions, outgoing SMS and Slack messages and the errors a site's pages hit in the browser land there too, and any recent request opens on a timeline of everything it ran.
+- 🛰️ **Debug window.** Every `dump()` / `dd()`, SQL with N+1 and slow-query detection, mail, views, events, jobs and outgoing HTTP from any client on PHP 8.2+, per site and branch, in the dashboard, TUI, MCP and `lerd dump tail`. `ray()`, the app log, Sentry or Inspector exceptions, outgoing SMS and Slack messages and the errors a site's pages hit in the browser land there too, and any recent request opens on a timeline of everything it ran.
 
 - 🔥 **[SPX](https://github.com/NoiseByNorthwest/php-spx) profiler** with one-click on/off. Every PHP-FPM request becomes a flame graph viewable in a same-origin Profiler view in the dashboard, with no FPM restart and no code changes, and `lerd profile run` profiles a one-shot artisan or CLI command.
 
