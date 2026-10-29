@@ -1185,8 +1185,10 @@ const (
 var sleep = time.Sleep
 
 // waitFor polls cond until it holds or timeout passes, reporting whether it held.
+// The wall clock bounds it too, since each launchctl check can take seconds.
 func waitFor(cond func() bool, timeout time.Duration, tick func(time.Duration)) bool {
-	for waited := time.Duration(0); waited < timeout; waited += pollInterval {
+	start := time.Now()
+	for waited := time.Duration(0); waited < timeout && time.Since(start) < timeout; waited += pollInterval {
 		if cond() {
 			return true
 		}

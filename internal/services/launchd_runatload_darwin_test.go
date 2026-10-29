@@ -61,6 +61,17 @@ func TestWaitForPollsUntilConditionHolds(t *testing.T) {
 	}
 }
 
+// Each check runs launchctl, which can be slow, so the wait ends at its timeout
+// in real time rather than only after enough sleeps.
+func TestWaitForStopsAtWallClockTimeout(t *testing.T) {
+	checks := 0
+	ok := waitFor(func() bool { checks++; time.Sleep(200 * time.Millisecond); return false },
+		400*time.Millisecond, func(time.Duration) {})
+	if ok || checks > 3 {
+		t.Errorf("slow checks must not stretch the wait past its timeout, ran %d checks", checks)
+	}
+}
+
 func TestWaitForGivesUp(t *testing.T) {
 	var slept time.Duration
 	if waitFor(func() bool { return false }, time.Second, func(d time.Duration) { slept += d }) {
