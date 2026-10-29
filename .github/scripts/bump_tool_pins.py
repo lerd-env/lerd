@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import sys
+import time
 import urllib.request
 
 FILE = 'internal/tools/tools.yaml'
@@ -83,10 +84,16 @@ def bump(lines, tool, version, download):
     return True
 
 
-def fetch(url):
+def fetch(url, attempts=3):
     req = urllib.request.Request(url, headers={'User-Agent': 'lerd-tool-bump'})
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        return resp.read()
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                return resp.read()
+        except OSError:
+            if attempt == attempts:
+                raise
+            time.sleep(2 * attempt)
 
 
 @functools.cache

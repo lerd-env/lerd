@@ -1,6 +1,7 @@
 import hashlib
 import os
 import unittest
+from unittest import mock
 
 import bump_tool_pins as b
 
@@ -90,6 +91,25 @@ class Bump(unittest.TestCase):
         got = lines()
         b.bump(got, 'composer', '2.11.0', lambda url: self.fail(url))
         self.assertEqual(['    version: "2.11.0"' if l == '    version: "2.10.0"' else l for l in lines()], got)
+
+
+class Fetch(unittest.TestCase):
+    def response(self, body):
+        resp = mock.MagicMock()
+        resp.__enter__.return_value.read.return_value = body
+        return resp
+
+    @mock.patch('time.sleep')
+    def test_retries_a_transient_failure(self, _sleep):
+        with mock.patch('urllib.request.urlopen', side_effect=[OSError('reset'), self.response(b'ok')]):
+            self.assertEqual(b.fetch('https://example.test/a'), b'ok')
+
+    @mock.patch('time.sleep')
+    def test_gives_up_after_the_last_attempt(self, _sleep):
+        with mock.patch('urllib.request.urlopen', side_effect=OSError('down')) as urlopen:
+            with self.assertRaises(OSError):
+                b.fetch('https://example.test/a')
+        self.assertEqual(urlopen.call_count, 3)
 
 
 class RealManifest(unittest.TestCase):
