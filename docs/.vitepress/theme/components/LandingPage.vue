@@ -27,6 +27,13 @@ onMounted(async () => {
 
 // Below 960px the nav folds behind a menu button.
 const menuOpen = ref(false)
+const menuBtn = ref(null)
+// Escape hides the link that had focus, so focus goes back to the button.
+function closeMenu() {
+  if (!menuOpen.value) return
+  menuOpen.value = false
+  menuBtn.value.focus()
+}
 
 const copied = ref(false)
 let copyTimer = null
@@ -132,7 +139,7 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
 <template>
   <div class="lerd-landing">
 
-    <header class="hdr" :class="{ open: menuOpen }" @keydown.esc="menuOpen = false"><div class="wrap">
+    <header class="hdr" :class="{ open: menuOpen }" @keydown.esc="closeMenu"><div class="wrap">
       <a class="brand" href="#top"><img :src="withBase('/assets/logo.svg')" alt="" width="26" height="26">Lerd</a>
       <nav id="hdr-nav" @click="menuOpen = false">
         <a href="#lineup">Features</a>
@@ -153,7 +160,7 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
           <svg class="on-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
         </button>
         <a class="btn ink" href="#start">Install</a>
-        <button class="menu" type="button" aria-controls="hdr-nav" :aria-expanded="menuOpen" :aria-label="menuOpen ? 'Close menu' : 'Open menu'" @click="menuOpen = !menuOpen">
+        <button ref="menuBtn" class="menu" type="button" aria-controls="hdr-nav" :aria-expanded="menuOpen" :aria-label="menuOpen ? 'Close menu' : 'Open menu'" @click="menuOpen = !menuOpen">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path v-if="menuOpen" d="M6 6l12 12M18 6L6 18"/><path v-else d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>
       </div>

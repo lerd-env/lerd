@@ -309,7 +309,7 @@
   .lerd-landing .cta .hero-row .cmd{grid-column:1/-1}
   .lerd-landing .hdr nav{display:none}
   .lerd-landing .menu{display:grid}
-  .lerd-landing .hdr.open nav{display:flex;flex-direction:column;gap:0;position:absolute;top:64px;left:0;right:0;background:var(--bg);border-bottom:1px solid var(--line);padding:8px 24px 16px;font-size:16px}
+  .lerd-landing .hdr.open nav{display:flex;flex-direction:column;gap:0;position:absolute;top:64px;left:0;right:0;background:var(--bg);border-bottom:1px solid var(--line);padding:8px 24px 16px;font-size:16px;max-height:calc(100dvh - 64px);overflow-y:auto}
   .lerd-landing .hdr.open nav a{padding:12px 0;border-bottom:1px solid var(--line)}
   .lerd-landing .hdr.open nav a:last-child{border-bottom:0}
   .lerd-landing .hero p,.lerd-landing .hero .hero-row{max-width:none}
