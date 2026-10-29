@@ -226,7 +226,7 @@ While the [debug window](../features/dumps.md) is capturing, lerd stamps outgoin
 
 ### Meilisearch, per-site indexes
 
-Every site shares the one Meilisearch, so lerd gives each Laravel site its own index prefix, `SCOUT_PREFIX=<site>_`, the same name its database gets. Two projects that both index a `users` model then write to `app_one_users` and `app_two_users` rather than to one index, and switching between them needs no reimport. A site whose indexes were built before the prefix was set finds them empty once, so run `php artisan scout:import` for each searchable model.
+Every site shares the one Meilisearch, so lerd gives each site its own index prefix, named like its database: `SCOUT_PREFIX=<site>_` on Laravel, `MEILISEARCH_PREFIX=<site>_` on Symfony with the Meilisearch bundle. Two projects that both index a `users` model then write to `app_one_users` and `app_two_users` rather than to one index, and switching between them needs no reimport. A site whose indexes were built before the prefix was set finds them empty once, so import them again, with `php artisan scout:import` for each searchable model or `bin/console meilisearch:import`.
 
 ### RustFS, per-site buckets
 
