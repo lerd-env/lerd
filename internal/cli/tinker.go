@@ -16,6 +16,7 @@ import (
 	"github.com/geodro/lerd/internal/agentenv"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envpass"
+	"github.com/geodro/lerd/internal/execguard"
 	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/podman"
 )
@@ -166,7 +167,7 @@ func RunTinker(ctx context.Context, sitePath, siteName, branch, code string) (Ti
 	cmd.Stderr = &stderr
 
 	start := time.Now()
-	runErr := cmd.Run()
+	runErr := execguard.Run(ctx, cmd, container)
 	res.DurationMs = time.Since(start).Milliseconds()
 	res.Stdout = cleanTinkerOutput(stdout.String())
 	res.Stderr = cleanTinkerOutput(stderr.String())

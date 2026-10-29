@@ -21,6 +21,7 @@ import (
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/envpass"
+	"github.com/geodro/lerd/internal/execguard"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/grouping"
 	"github.com/geodro/lerd/internal/logsource"
@@ -392,7 +393,7 @@ func execArtisan(args map[string]any) (any, *rpcError) {
 	cmd := podman.Cmd(cmdArgs...)
 	cmd.Stdout = &out
 	cmd.Stderr = &out
-	if err := cmd.Run(); err != nil {
+	if err := execguard.Run(context.Background(), cmd, container); err != nil {
 		return toolErr(fmt.Sprintf("artisan failed (%v):\n%s", err, stripANSI(out.String()))), nil
 	}
 	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil

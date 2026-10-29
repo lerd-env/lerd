@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/geodro/lerd/internal/agentenv"
 	"github.com/geodro/lerd/internal/envpass"
+	"github.com/geodro/lerd/internal/execguard"
 	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/podman"
 )
@@ -123,7 +125,7 @@ func runVendorBinDirect(cwd, rel string, args []string) error {
 
 	cmd := podman.Cmd(vendorBinExecArgs(cwd, container, rel, args, containerTTY())...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	return runAndPropagate(cmd)
+	return runAndPropagate(cmd, container)
 }
 
 // hostVendorBinPath is the PATH a wrapper gets on the host: the project's own
@@ -178,10 +180,10 @@ func runHostAndReap(cmd *exec.Cmd, started func(*exec.Cmd)) error {
 	return nil
 }
 
-// runAndPropagate runs cmd and exits with the child's status, so a failing
-// composer binary fails the shell that called lerd.
-func runAndPropagate(cmd *exec.Cmd) error {
-	if err := cmd.Run(); err != nil {
+// runAndPropagate runs cmd, an exec into container, and exits with the child's
+// status, so a failing composer binary fails the shell that called lerd.
+func runAndPropagate(cmd *exec.Cmd, container string) error {
+	if err := execguard.Run(context.Background(), cmd, container); err != nil {
 		if exit, ok := err.(*exec.ExitError); ok {
 			os.Exit(exit.ExitCode())
 		}
