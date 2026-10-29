@@ -190,20 +190,44 @@ func Serve() error {
 // server and what it started in the container alive.
 var sessionCtx = context.Background()
 
-// readRequests reads stdin on its own, so a closed session is noticed while a
-// call is in flight; cancel runs at EOF. The error is set once lines closes.
+// readRequests reads stdin on its own and queues what it reads without bound, so
+// requests sent while a call runs never hold it back from seeing a closed
+// session; cancel runs at EOF. The error is set once lines closes.
 func readRequests(r io.Reader, cancel func()) (<-chan []byte, *error) {
+	in := make(chan []byte)
 	lines := make(chan []byte)
 	var scanErr error
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1 MB — handle large artisan output
 	go func() {
-		defer close(lines)
+		defer close(in)
 		defer cancel()
 		for scanner.Scan() {
-			lines <- append([]byte(nil), scanner.Bytes()...)
+			in <- append([]byte(nil), scanner.Bytes()...)
 		}
 		scanErr = scanner.Err()
+	}()
+	go func() {
+		defer close(lines)
+		src := in
+		var queue [][]byte
+		for src != nil || len(queue) > 0 {
+			var out chan []byte
+			var head []byte
+			if len(queue) > 0 {
+				out, head = lines, queue[0]
+			}
+			select {
+			case l, ok := <-src:
+				if !ok {
+					src = nil
+					continue
+				}
+				queue = append(queue, l)
+			case out <- head:
+				queue = queue[1:]
+			}
+		}
 	}()
 	return lines, &scanErr
 }
