@@ -4,6 +4,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -789,6 +790,11 @@ func (m *darwinServiceManager) Start(name string) error {
 	if _, err := launchctl("print", domain+"/"+label); err == nil {
 		alreadyInDomain = true
 		bootout(name, domain, label) //nolint:errcheck
+		// Bootstrapping a job still exiting fails, and the kickstart fallback
+		// below then lands on the dying job, which launchd drops moments later.
+		if !waitFor(func() bool { return !inDomain(domain + "/" + label) }, unloadTimeout, sleep) {
+			return fmt.Errorf("%s is still shutting down after %v, try again once it has stopped", name, unloadTimeout)
+		}
 		// Brief pause so macOS Sequoia+ doesn't reject the immediately-following
 		// bootstrap with a spurious "already bootstrapped" (36) or EBUSY (5) error.
 		time.Sleep(200 * time.Millisecond)
@@ -827,10 +833,11 @@ func (m *darwinServiceManager) Start(name string) error {
 			// mark has to happen here or a start tears the environment down.
 			podman.MarkManagedWatcherStop(name)
 			if kout, kerr := launchctl("kickstart", "-k", domain+"/"+label); kerr != nil {
-				ks := string(kout)
-				// 37 = EALREADY — job is already running, treat as success.
-				if strings.Contains(ks, "37") || strings.Contains(ks, "already running") {
+				if strings.Contains(string(kout), "already running") {
 					return nil
+				}
+				if kickstartInProgress(kerr) {
+					return ensureStarted(name, unitRunning, func(string) error { return kerr })
 				}
 				return fmt.Errorf("launchctl kickstart %s: %w\n%s", name, kerr, kout)
 			}
@@ -1127,7 +1134,14 @@ func ensureStarted(name string, running func(string) bool, kick func(string) err
 	if running(name) {
 		return nil
 	}
-	if err := kick(name); err != nil {
+	err := kick(name)
+	if kickstartInProgress(err) {
+		if waitFor(func() bool { return running(name) }, startTimeout, sleep) {
+			return nil
+		}
+		return fmt.Errorf("launchctl kickstart %s: still not running after %v", name, startTimeout)
+	}
+	if err != nil {
 		return fmt.Errorf("launchctl kickstart %s: %w", name, err)
 	}
 	return nil
@@ -1145,8 +1159,45 @@ func unitRunning(name string) bool {
 
 func kickstartUnit(name string) error {
 	out, err := launchctl("kickstart", uidDomain()+"/"+plistLabel(name))
+	if kickstartInProgress(err) {
+		return err
+	}
 	if err != nil && !strings.Contains(string(out), "already running") {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// kickstartInProgress reports exit 37 (EALREADY): launchd is already starting
+// the job. launchctl prints nothing for it, so only the exit code tells.
+func kickstartInProgress(err error) bool {
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr) && exitErr.ExitCode() == 37
+}
+
+const (
+	unloadTimeout = 30 * time.Second
+	startTimeout  = 10 * time.Second
+	pollInterval  = 100 * time.Millisecond
+)
+
+// sleep is a seam so tests can run the launchd waits without real time passing.
+var sleep = time.Sleep
+
+// waitFor polls cond until it holds or timeout passes, reporting whether it held.
+// The wall clock bounds it too, since each launchctl check can take seconds.
+func waitFor(cond func() bool, timeout time.Duration, tick func(time.Duration)) bool {
+	start := time.Now()
+	for waited := time.Duration(0); waited < timeout && time.Since(start) < timeout; waited += pollInterval {
+		if cond() {
+			return true
+		}
+		tick(pollInterval)
+	}
+	return cond()
+}
+
+func inDomain(target string) bool {
+	_, err := launchctl("print", target)
+	return err == nil
 }
