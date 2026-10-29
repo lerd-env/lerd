@@ -1,7 +1,9 @@
 package mcp
 
 import (
+	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -43,5 +45,35 @@ func TestReadRequests_seesEOFBehindQueuedRequests(t *testing.T) {
 	}
 	if n != 2 {
 		t.Fatalf("delivered %d queued requests, want 2", n)
+	}
+}
+
+// Everything sent during a call waits in memory, so a client that keeps sending
+// has its session ended past the cap instead of growing the queue for good.
+func TestReadRequests_endsTheSessionWhenTooMuchQueuesUp(t *testing.T) {
+	r, w := io.Pipe()
+	cancelled := make(chan struct{})
+	var once sync.Once
+	lines, _ := readRequests(r, func() { once.Do(func() { close(cancelled) }) })
+	go func() {
+		for i := 0; i < maxQueued+2; i++ {
+			if _, err := w.Write([]byte("{\"id\":1}\n")); err != nil {
+				return
+			}
+		}
+	}()
+	<-lines // the call being dispatched; the rest wait unread
+	select {
+	case <-cancelled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("a queue past the cap did not end the session")
+	}
+	w.Close()
+	n := 0
+	for range lines {
+		n++
+	}
+	if n != 0 {
+		t.Fatalf("served %d requests after the session ended", n)
 	}
 }

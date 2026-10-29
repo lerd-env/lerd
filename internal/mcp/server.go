@@ -190,9 +190,13 @@ func Serve() error {
 // server and what it started in the container alive.
 var sessionCtx = context.Background()
 
-// readRequests reads stdin on its own and queues what it reads without bound, so
-// requests sent while a call runs never hold it back from seeing a closed
-// session; cancel runs at EOF. The error is set once lines closes.
+// maxQueued caps what a client may send while a call runs; past it the session
+// is cancelled, the call with it, and nothing more is served.
+const maxQueued = 256
+
+// readRequests reads stdin on its own and queues what it reads, so requests sent
+// while a call runs never hold it back from seeing a closed session; cancel runs
+// at EOF or on overflow. The error is set once lines closes.
 func readRequests(r io.Reader, cancel func()) (<-chan []byte, *error) {
 	in := make(chan []byte)
 	lines := make(chan []byte)
@@ -211,6 +215,9 @@ func readRequests(r io.Reader, cancel func()) (<-chan []byte, *error) {
 		defer close(lines)
 		src := in
 		var queue [][]byte
+		// Past the cap the rest is read and dropped, so EOF still closes lines
+		// after the scan error is set.
+		overflowed := false
 		for src != nil || len(queue) > 0 {
 			var out chan []byte
 			var head []byte
@@ -223,7 +230,15 @@ func readRequests(r io.Reader, cancel func()) (<-chan []byte, *error) {
 					src = nil
 					continue
 				}
+				if overflowed {
+					continue
+				}
 				queue = append(queue, l)
+				if len(queue) > maxQueued {
+					fmt.Fprintf(os.Stderr, "lerd mcp: over %d requests queued behind a running call, ending the session\n", maxQueued)
+					cancel()
+					overflowed, queue = true, nil
+				}
 			case out <- head:
 				queue = queue[1:]
 			}
