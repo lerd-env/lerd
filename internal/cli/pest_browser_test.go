@@ -287,7 +287,7 @@ func TestPestBrowserShim_WrapperPicksModeAtRuntime(t *testing.T) {
 		t.Fatalf("the browser binary was not rewritten to a wrapper:\n%s", wrapper)
 	}
 	stub := filepath.Join(cache, "fake-chromium")
-	if err := os.WriteFile(stub, []byte("#!/bin/sh\necho \"chromium $*\"\n"), 0o755); err != nil {
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\nprintf 'chromium'; printf ' [%s]' \"$@\"; echo\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(cache, "xvfb-run"), []byte("#!/bin/sh\necho \"xvfb-run $*\"\n"), 0o755); err != nil {
@@ -312,6 +312,33 @@ func TestPestBrowserShim_WrapperPicksModeAtRuntime(t *testing.T) {
 	}
 	if got := run("--remote-debugging-pipe"); !strings.HasPrefix(got, "xvfb-run -a ") {
 		t.Errorf("headed launch did not get a virtual display: %s", got)
+	}
+
+	// The container's DNS cannot answer wildcard subdomains for chromium (#2374),
+	// so each linked site's subdomains go to Pest's loopback server while the
+	// names /etc/hosts already points at nginx keep resolving there.
+	hosts := filepath.Join(cache, "hosts")
+	hostsBody := "127.0.0.1 localhost\n::1 localhost\n192.168.127.254 host.containers.internal host.docker.internal\n10.89.0.81 myapp.test\n10.89.0.81 admin.myapp.test\n"
+	if err := os.WriteFile(hosts, []byte(hostsBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wrapper, err = os.ReadFile(browser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(browser, []byte(strings.ReplaceAll(string(wrapper), "/etc/hosts", hosts)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	want := "[--host-resolver-rules=EXCLUDE admin.myapp.test, EXCLUDE myapp.test, MAP *.admin.myapp.test 127.0.0.1, MAP *.myapp.test 127.0.0.1] [--headless]"
+	if got := run("--headless"); !strings.Contains(got, want) {
+		t.Errorf("resolver rules not built from the hosts file:\n got %s\nwant %s", got, want)
+	}
+
+	if err := os.WriteFile(hosts, []byte("127.0.0.1 localhost\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := run("--headless"); strings.Contains(got, "host-resolver-rules") {
+		t.Errorf("resolver rules passed with no linked sites: %s", got)
 	}
 }
 
