@@ -289,7 +289,7 @@
       aria-label={m.sites_timing_inspectRoute()}
       class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
     >
-      <Icon name="eye" class="w-3.5 h-3.5" />
+      <Icon name="filter" class="w-3.5 h-3.5" />
     </button>
   {/if}
 {/snippet}

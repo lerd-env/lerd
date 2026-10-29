@@ -1106,7 +1106,7 @@
   "sites_timing_nothingCaptured": "Hata ayıklama yakalaması bu istek için bir şey tutmuyor: yakalama kapalıydı ya da daha yeni olaylar onu arabellekten dışarı itti.",
   "common_copyForAgent": "Ajan için kopyala",
   "sites_timing_copyForAgentHint": "Bir yapay zekâ asistanının bu isteği lerd üzerinden okuyup sorunlarını düzeltmesi için bir istem kopyalar",
-  "sites_timing_inspectRoute": "Bu rotanın isteklerini incele",
+  "sites_timing_inspectRoute": "Bu rotanın isteklerini Debug içinde göster",
   "sites_timing_latency": "gecikme",
   "sites_timing_perMin": "istek/dk",
   "sites_timing_recent": "Son istekler",

@@ -94,6 +94,24 @@ describe('SiteRequestTiming Recent list', () => {
       expect(getAllByText('/broadcasting/auth').length).toBe(2);
     });
   });
+
+  // The route button jumps to the Debug tab while a request's opens its lenses in
+  // place, so sharing the eye made the two read as the same action.
+  it('draws the route Debug jump with a different icon than a request inspect', async () => {
+    dumpsStatus.set({ enabled: true } as DumpsStatus);
+    loadSiteAnalytics.mockResolvedValueOnce({ ...analytics, recent: [{ ...analytics.recent[0], rid: 'r1' }] });
+    const { getByRole, findAllByRole, findByText } = render(SiteRequestTiming, {
+      props: { site: { domain: 'whitewaters', can_profile: true } }
+    });
+    const routeIcon = (await findAllByRole('button', { name: m.sites_timing_inspectRoute() }))[0].querySelector('path')?.getAttribute('d');
+    await findByText(m.sites_timing_recent());
+    await fireEvent.click(getByRole('button', { name: m.sites_timing_recent() }));
+    const requestIcon = (await findAllByRole('button', { name: m.sites_timing_inspectRequest() }))[0].querySelector('path')?.getAttribute('d');
+    expect(routeIcon).toBeTruthy();
+    expect(requestIcon).toBeTruthy();
+    expect(routeIcon).not.toBe(requestIcon);
+    dumpsStatus.set(null);
+  });
 });
 
 // A request SPX profiled stays inspectable after its debug events are gone, and
