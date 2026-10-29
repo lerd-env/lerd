@@ -139,6 +139,10 @@ A container has no display, and Playwright reacts to that by refusing to launch 
 
 There is nothing to watch, though: the window lives on a virtual screen inside the container. Use screenshots to see what the browser saw, or the Selenium preset above with its noVNC dashboard when you need to watch a session live.
 
+### Tenant subdomains
+
+Tests can visit a site's wildcard subdomains (`acme.myapp.test`) with no setup. The container's DNS answers those names for PHP but not for Chromium, so lerd's shim maps every linked site's subdomains to `127.0.0.1`, where Pest serves the app, and leaves domains lerd already routes to nginx alone. If `lerd pest:browser doctor` reports the shim out of date, run `lerd pest:browser install` again. The native PHP runtime needs none of this, since its browser resolves through your Mac.
+
 ---
 
 ## Other frameworks

@@ -58,6 +58,11 @@ find "$cache" -type f \( -name chrome-headless-shell -o -name headless_shell -o 
   cat > "$b" <<'LERDSHIM'
 #!/bin/sh
 export HOME=/root
+# The container's DNS fails *.site.test for chromium on macOS (#2374): send linked
+# sites' subdomains to 127.0.0.1, where Pest serves, and leave nginx's names alone.
+rules=$(awk '$1 !~ /^(127\.|::1$)/ { for (i = 2; i <= NF; i++) if ($i !~ /\.internal$/) print $i }' /etc/hosts | sort -u |
+  awk '{ ex = ex "EXCLUDE " $0 ", "; mp = mp ", MAP *." $0 " 127.0.0.1" } END { if (NR) print substr(ex, 1, length(ex) - 2) mp }')
+[ -n "$rules" ] && set -- "--host-resolver-rules=$rules" "$@"
 case " $* " in
   *" --headless"*) exec /usr/bin/chromium --no-sandbox "$@" ;;
 esac
@@ -487,7 +492,7 @@ func doctorPestBrowser(version string, w io.Writer) error {
 	check(playwrightOK, "playwright npm package installed", "lerd npm install playwright")
 
 	shimOK := podman.Cmd("exec", container, "sh", "-c",
-		`fs=$(find "${PLAYWRIGHT_BROWSERS_PATH:-`+pestBrowserCachePath+`}" -type f \( -name chrome-headless-shell -o -name headless_shell -o -name chrome \) 2>/dev/null); [ -n "$fs" ] || exit 1; for b in $fs; do head -1 "$b" | grep -q '#!/bin/sh' || exit 1; done`).Run() == nil
+		`fs=$(find "${PLAYWRIGHT_BROWSERS_PATH:-`+pestBrowserCachePath+`}" -type f \( -name chrome-headless-shell -o -name headless_shell -o -name chrome \) 2>/dev/null); [ -n "$fs" ] || exit 1; for b in $fs; do head -1 "$b" | grep -q '#!/bin/sh' && grep -q host-resolver-rules "$b" || exit 1; done`).Run() == nil
 	check(shimOK, "Playwright browser shimmed to musl chromium", "lerd pest:browser install")
 
 	// The checks above can pass while `lerd test` still fails: pest-plugin-browser
