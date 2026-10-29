@@ -14,6 +14,8 @@
     loadCommitVersions,
     loadGitChanges,
     loadGitVersions,
+    loadOutgoingFiles,
+    loadOutgoingVersions,
     loadUptoFiles,
     loadUptoVersions,
     stageFile,
@@ -36,12 +38,16 @@
     commit?: GitCommit;
     // Or what HEAD to this commit changes: everything a pull would bring in.
     upto?: string;
+    // Or everything a push would send.
+    outgoing?: boolean;
+    // Replaces the title for a span the dialog has no wording of its own for.
+    title?: string;
     onclose?: () => void;
   }
-  let { domain, path, branch, commit, upto, onclose = closeModal }: Props = $props();
+  let { domain, path, branch, commit, upto, outgoing = false, title, onclose = closeModal }: Props = $props();
 
-  // Uncommitted work lists one group per section; a commit or a pull is one unnamed group.
-  type Group = { key: GitDiffSection | 'commit' | 'upto'; label: string; files: GitChangedFile[] };
+  // Uncommitted work lists one group per section; a commit, a pull or a push is one unnamed group.
+  type Group = { key: GitDiffSection | 'commit' | 'upto' | 'outgoing'; label: string; files: GitChangedFile[] };
   let groups = $state<Group[] | null>(null);
   let selected = $state<{ group: Group['key']; file: string } | null>(null);
   let versions = $state<GitVersions | null>(null);
@@ -92,8 +98,8 @@
   };
 
   const empty = $derived(!!groups && groups.every((g) => g.files.length === 0));
-  // Only uncommitted work can be staged and committed; a commit or a pull is history.
-  const uncommitted = $derived(!commit && !upto);
+  // Only uncommitted work can be staged and committed; a commit, a pull or a push is history.
+  const uncommitted = $derived(!commit && !upto && !outgoing);
   const stagedCount = $derived(groups?.find((g) => g.key === 'staged')?.files.length ?? 0);
 
   async function loadUncommitted() {
@@ -146,6 +152,8 @@
         groups = [{ key: 'commit', label: '', files: await loadCommitFiles(domain, path, commit.hash) }];
       } else if (upto) {
         groups = [{ key: 'upto', label: '', files: await loadUptoFiles(domain, path, upto) }];
+      } else if (outgoing) {
+        groups = [{ key: 'outgoing', label: '', files: await loadOutgoingFiles(domain, path) }];
       } else {
         await loadUncommitted();
       }
@@ -167,7 +175,9 @@
           ? await loadCommitVersions(domain, path, commit!.hash, file)
           : group === 'upto'
             ? await loadUptoVersions(domain, path, upto!, file)
-            : await loadGitVersions(domain, path, group, file);
+            : group === 'outgoing'
+              ? await loadOutgoingVersions(domain, path, file)
+              : await loadGitVersions(domain, path, group, file);
       // A slower answer for an earlier click must not replace this one.
       if (selected?.group === group && selected.file === file) versions = v;
     } catch (e) {
@@ -176,7 +186,7 @@
   }
 </script>
 
-<Modal open size="2xl" tall {fullscreen} title={commit ? `${commit.hash.slice(0, 7)} ${commit.subject}` : upto ? m.gitDiff_incomingTitle({ branch }) : m.gitDiff_title({ branch })} onclose={close}>
+<Modal open size="2xl" tall {fullscreen} title={title ?? (commit ? `${commit.hash.slice(0, 7)} ${commit.subject}` : upto ? m.gitDiff_incomingTitle({ branch }) : outgoing ? m.gitDiff_outgoingTitle({ branch }) : m.gitDiff_title({ branch }))} onclose={close}>
   {#snippet actions()}
     <!-- Same gap and icon size as the modal's own close button beside them. -->
     <div class="flex items-center gap-3">

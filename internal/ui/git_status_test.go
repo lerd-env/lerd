@@ -450,7 +450,8 @@ func TestHandleSiteGitDiff(t *testing.T) {
 	if rec.Code != http.StatusOK || rec.Body.String() != "[]\n" {
 		t.Fatalf("upto: %d %q", rec.Code, rec.Body.String())
 	}
-	for _, q := range []string{"&commits=HEAD~1..HEAD", "&commit=main", "&upto=main"} {
+	// No upstream, so a push has nothing to compare with.
+	for _, q := range []string{"&commits=HEAD~1..HEAD", "&commit=main", "&upto=main", "&outgoing=1"} {
 		if rec := get("domain=acme.test&path=" + url.QueryEscape(main) + q); rec.Code != http.StatusBadRequest {
 			t.Errorf("%s: got %d", q, rec.Code)
 		}

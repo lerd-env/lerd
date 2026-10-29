@@ -50,7 +50,7 @@ func planPull(fw *config.Framework, dir string) (BranchPlan, error) {
 		return BranchPlan{}, fmt.Errorf("cannot read the checked out commit")
 	}
 	p, err := planBranch(fw, dir, strings.TrimSpace(target))
-	p.Target, p.Branch, p.Head = strings.TrimSpace(target), strings.TrimSpace(branch), strings.TrimSpace(head)
+	p.Branch, p.Head = strings.TrimSpace(branch), strings.TrimSpace(head)
 	return p, err
 }
 

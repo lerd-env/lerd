@@ -4,12 +4,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { gitRemote, openErrorModal, openPullModal } = vi.hoisted(() => ({ gitRemote: vi.fn(), openErrorModal: vi.fn(), openPullModal: vi.fn() }));
 vi.mock('$stores/sites', () => ({ gitRemote }));
 vi.mock('$stores/modals', () => ({ openErrorModal, openPullModal, closeModal: vi.fn() }));
-const { loadGitCommits, loadCommitFiles, loadCommitVersions } = vi.hoisted(() => ({
+const { loadGitCommits, loadCommitFiles, loadCommitVersions, loadOutgoingFiles, loadOutgoingVersions } = vi.hoisted(() => ({
   loadGitCommits: vi.fn(),
   loadCommitFiles: vi.fn(),
-  loadCommitVersions: vi.fn()
+  loadCommitVersions: vi.fn(),
+  loadOutgoingFiles: vi.fn(),
+  loadOutgoingVersions: vi.fn()
 }));
-vi.mock('$lib/gitDiff', async (orig) => ({ ...(await orig<object>()), loadGitCommits, loadCommitFiles, loadCommitVersions }));
+vi.mock('$lib/gitDiff', async (orig) => ({
+  ...(await orig<object>()),
+  loadGitCommits,
+  loadCommitFiles,
+  loadCommitVersions,
+  loadOutgoingFiles,
+  loadOutgoingVersions
+}));
 vi.mock('$components/MonacoDiffEditor.svelte', async () => ({ default: (await import('../modals/MonacoDiffEditor.stub.svelte')).default }));
 
 import GitSync from './GitSync.svelte';
@@ -23,6 +32,23 @@ describe('GitSync', () => {
     openPullModal.mockReset();
     loadGitCommits.mockReset();
     loadGitCommits.mockResolvedValue({ commits: [], more: false });
+    loadOutgoingFiles.mockReset();
+    loadOutgoingFiles.mockResolvedValue([]);
+  });
+
+  // Like the pull dialog, the push confirmation counts what it sends, and the count opens the files.
+  it('shows ahead, behind and the files a push changes, and opens them', async () => {
+    loadOutgoingFiles.mockResolvedValue([{ path: 'app.php', status: 'M' }, { path: 'new.php', status: 'A' }]);
+    loadOutgoingVersions.mockResolvedValue({ original: 'a', modified: 'b', binary: false, too_large: false, unreadable: false });
+    render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', path: '/srv/acme', status: { ...synced, ahead: 3 } } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Push to upstream' }));
+    expect(screen.getByText('Ahead').previousElementSibling?.textContent).toBe('3');
+    await fireEvent.click(await screen.findByRole('button', { name: /^2\s*Files changed$/ }));
+
+    expect(await screen.findByText('Outgoing from main')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('diff').dataset.modified).toBe('b'));
+    expect(loadOutgoingVersions).toHaveBeenCalledWith('acme.test', '/srv/acme', 'app.php');
   });
 
   // The confirmation names what is about to leave, and each commit opens over it.

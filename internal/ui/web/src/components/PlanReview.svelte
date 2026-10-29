@@ -1,9 +1,9 @@
 <script lang="ts">
   import Icon from '$components/Icon.svelte';
   import Toggle from '$components/Toggle.svelte';
+  import SyncStats from '$components/SyncStats.svelte';
   import type { BranchPlan } from '$stores/worktree';
   import type { PlanRow, RowKey } from '$lib/planRows';
-  import { m } from '../paraglide/messages.js';
 
   // What a switch or pull would change and the steps to run after it. The
   // wording that differs between the two comes in from the dialog.
@@ -15,35 +15,13 @@
     missingText: string;
     // Makes the files card open the full list of changed files.
     onfiles?: () => void;
+    filesTitle?: string;
   }
-  let { plan, rows, on = $bindable(), thenText, missingText, onfiles }: Props = $props();
+  let { plan, rows, on = $bindable(), thenText, missingText, onfiles, filesTitle }: Props = $props();
 </script>
 
-{#snippet stat(n: string, label: string, link = false)}
-  <div class="h-full rounded-lg bg-gray-50 dark:bg-white/[0.03] border border-gray-100 dark:border-lerd-border px-3 py-2">
-    <div class="text-lg font-semibold tabular-nums text-gray-800 dark:text-gray-100">{n}</div>
-    <div class="text-[11px] {link ? 'text-lerd-red' : 'text-gray-500 dark:text-gray-400'}">{label}</div>
-  </div>
-{/snippet}
-
 {#if plan.behind + plan.ahead + plan.files > 0}
-  <div class="grid grid-cols-3 gap-2">
-    {#each [[m.branchSwitch_statBehind(), plan.behind], [m.branchSwitch_statAhead(), plan.ahead]] as [label, n] (label)}
-      {@render stat(String(n), String(label))}
-    {/each}
-    {#if onfiles && plan.files > 0}
-      <button
-        type="button"
-        onclick={onfiles}
-        title={m.gitDiff_incomingOpen()}
-        class="text-left rounded-lg transition-colors hover:ring-1 hover:ring-lerd-red/40 focus-visible:ring-1 focus-visible:ring-lerd-red"
-      >
-        {@render stat(String(plan.files), m.branchSwitch_statFiles(), true)}
-      </button>
-    {:else}
-      {@render stat(String(plan.files), m.branchSwitch_statFiles())}
-    {/if}
-  </div>
+  <SyncStats behind={plan.behind} ahead={plan.ahead} files={plan.files} {onfiles} {filesTitle} />
 {/if}
 
 {#if rows.length > 0}

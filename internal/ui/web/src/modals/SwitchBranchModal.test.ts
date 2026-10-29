@@ -13,6 +13,14 @@ vi.mock('$stores/worktree', () => ({ worktreeOptions, branchPlan, streamBranchSw
 vi.mock('$stores/modals', () => ({ closeModal }));
 vi.mock('$stores/databases', () => ({ restoreSnapshot }));
 vi.mock('$stores/sites', () => ({ loadSites: vi.fn() }));
+const { loadGitStatus, loadUptoFiles, loadUptoVersions } = vi.hoisted(() => ({
+  loadGitStatus: vi.fn(),
+  loadUptoFiles: vi.fn(),
+  loadUptoVersions: vi.fn()
+}));
+vi.mock('$lib/gitStatus', () => ({ loadGitStatus }));
+vi.mock('$lib/gitDiff', async (orig) => ({ ...(await orig<object>()), loadUptoFiles, loadUptoVersions }));
+vi.mock('$components/MonacoDiffEditor.svelte', async () => ({ default: (await import('./MonacoDiffEditor.stub.svelte')).default }));
 
 import SwitchBranchModal from './SwitchBranchModal.svelte';
 
@@ -46,6 +54,21 @@ describe('SwitchBranchModal', () => {
       branch_dates: { dev: daysAgo(2), 'origin/release': daysAgo(9) }
     });
     branchPlan.mockResolvedValue(plan);
+    loadGitStatus.mockResolvedValue([{ main: true, path: '/srv/acme', branch: 'main' }]);
+  });
+
+  // The diff is read in the checkout git-status names, which a site below the repository root is not.
+  it('opens every file the switch changes from the files card', async () => {
+    branchPlan.mockResolvedValue({ ...plan, target: 'abc1234def' });
+    loadUptoFiles.mockResolvedValue([{ path: 'app.php', status: 'M' }]);
+    loadUptoVersions.mockResolvedValue({ original: 'a', modified: 'b', binary: false, too_large: false, unreadable: false });
+    render(SwitchBranchModal, { props: { site } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: /^12\s*Files changed$/ }));
+    expect(await screen.findByText('Switching to dev')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('diff').dataset.modified).toBe('b'));
+    expect(loadUptoFiles).toHaveBeenCalledWith('acme.test', '/srv/acme', 'abc1234def');
+    expect(loadUptoVersions).toHaveBeenCalledWith('acme.test', '/srv/acme', 'abc1234def', 'app.php');
   });
 
   // What the diff says is due starts ticked; the rest is the user's choice.

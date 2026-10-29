@@ -36,8 +36,8 @@ type BranchPlan struct {
 	Migrate           *PlanStep `json:"migrate,omitempty"`
 	MigrationsAdded   int       `json:"migrations_added"`
 	MigrationsMissing int       `json:"migrations_missing"`
-	// Target is the commit a pull plan reviewed, which the pull then stops at;
-	// Branch and Head are what was checked out then, which must still be.
+	// Target is the commit the plan compared with, which a pull then stops at;
+	// Branch and Head are what a pull plan saw checked out, which must still be.
 	Target string `json:"target,omitempty"`
 	Branch string `json:"branch,omitempty"`
 	Head   string `json:"head,omitempty"`
@@ -276,7 +276,11 @@ func planBranch(fw *config.Framework, path, branch string) (BranchPlan, error) {
 	if err != nil {
 		return BranchPlan{}, fmt.Errorf("cannot compare with %s", branch)
 	}
-	p := BranchPlan{Files: len(diff), Conflicts: []string{}}
+	target, err := gitpkg.Output(path, "rev-parse", "--verify", "--quiet", branch+"^{commit}")
+	if err != nil {
+		return BranchPlan{}, fmt.Errorf("cannot resolve %s", branch)
+	}
+	p := BranchPlan{Files: len(diff), Target: strings.TrimSpace(target), Conflicts: []string{}}
 	for _, f := range gitpkg.DirtyFiles(path) {
 		if _, ok := diff[f]; ok {
 			p.Conflicts = append(p.Conflicts, f)

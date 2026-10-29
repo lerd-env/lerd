@@ -75,6 +75,10 @@ func TestPlanBranch_nothingChanged(t *testing.T) {
 	if p.Behind != 1 {
 		t.Errorf("behind = %d, want 1", p.Behind)
 	}
+	// The files card opens the diff by this hash, since the diff takes no ref name.
+	if want := strings.TrimSpace(gitOut(t, dir, "rev-parse", "other")); p.Target != want {
+		t.Errorf("target = %q, want %q", p.Target, want)
+	}
 }
 
 func TestPlanBranch_lockfilesAndMigrationsChanged(t *testing.T) {

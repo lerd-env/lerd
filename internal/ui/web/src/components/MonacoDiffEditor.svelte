@@ -20,6 +20,9 @@
   }
   let { original, modified, language = 'plaintext', ignoreSpace = false, sideBySide = true, onStats, hunkAction }: Props = $props();
   let changes = $state<Monaco.editor.ILineChange[]>([]);
+  // Monaco paints both files whole before its diff folds the unchanged lines
+  // away, a frame after the diff lands, so a new file stays hidden until then.
+  let ready = $state(false);
 
   // A block with no lines on the working side sits after its start line.
   const anchor = (c: Monaco.editor.ILineChange) => (c.modifiedEndLineNumber > 0 ? c.modifiedStartLineNumber : Math.max(c.modifiedStartLineNumber, 1));
@@ -52,6 +55,7 @@
         useInlineViewWhenSpaceIsLimited: false
       });
       ed.onDidUpdateDiff(() => {
+        requestAnimationFrame(() => (ready = true));
         const model = ed.getModel();
         changes = ed.getLineChanges() ?? [];
         if (model) onStats?.(diffStats(changes, model.original.getValue(), model.modified.getValue()));
@@ -95,6 +99,7 @@
     const monaco = monacoRef;
     if (!ed || !monaco) return;
     const old = ed.getModel();
+    ready = false;
     ed.setModel({
       original: monaco.editor.createModel(original, language),
       modified: monaco.editor.createModel(modified, language)
@@ -128,7 +133,8 @@
   });
 </script>
 
-<div bind:this={container} class="h-full w-full"></div>
+<!-- Opacity, not visibility: Monaco sets visibility on its own layers, which shows them through a hidden parent. -->
+<div bind:this={container} class="h-full w-full {ready ? '' : 'opacity-0'}"></div>
 
 <style>
   :global(.lerd-hunk) {

@@ -163,3 +163,34 @@ func HeadVersions(dir, hash, path string) (Versions, error) {
 	}
 	return spanVersions(dir, from, to, path)
 }
+
+// outgoingSpan compares where HEAD left its upstream with HEAD, so a push
+// lists only its own changes, never ones the remote made since.
+func outgoingSpan(dir string) (from, to string, err error) {
+	out, err := Output(dir, "merge-base", "@{upstream}", "HEAD")
+	if err != nil {
+		return "", "", fmt.Errorf("the branch tracks no upstream")
+	}
+	if to, err = Output(dir, "rev-parse", "--verify", "--quiet", "HEAD"); err != nil {
+		return "", "", fmt.Errorf("the checkout has no commit yet")
+	}
+	return strings.TrimSpace(out), strings.TrimSpace(to), nil
+}
+
+// OutgoingFiles lists the files a push would change on the upstream.
+func OutgoingFiles(dir string) ([]ChangedFile, error) {
+	from, to, err := outgoingSpan(dir)
+	if err != nil {
+		return nil, err
+	}
+	return spanFiles(dir, from, to)
+}
+
+// OutgoingVersions reads a file where HEAD left its upstream and at HEAD.
+func OutgoingVersions(dir, path string) (Versions, error) {
+	from, to, err := outgoingSpan(dir)
+	if err != nil {
+		return Versions{}, err
+	}
+	return spanVersions(dir, from, to, path)
+}
