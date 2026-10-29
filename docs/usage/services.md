@@ -197,7 +197,7 @@ Services run as Podman containers on the `lerd` network. Two hostnames apply dep
 | MySQL | 8.4 LTS (`mysql:8.4`) | 127.0.0.1 | lerd-mysql | 3306 | root | `lerd` | `lerd` |
 | PostgreSQL | 16 + PostGIS 3.5 | 127.0.0.1 | lerd-postgres | 5432 | postgres | `lerd` | `lerd` |
 | Redis | 7-alpine | 127.0.0.1 | lerd-redis | 6379 | - | - | - |
-| Meilisearch | v1.42 | 127.0.0.1 | lerd-meilisearch | 7700 | - | - | - |
+| Meilisearch | v1.42 | 127.0.0.1 | lerd-meilisearch | 7700 | - | - | per-site index prefix |
 | RustFS | latest | 127.0.0.1 | lerd-rustfs | 9000 | `lerd` | `lerdpassword` | per-site bucket |
 | Mailpit SMTP | latest | 127.0.0.1 | lerd-mailpit | 1025 | - | - | - |
 
@@ -223,6 +223,10 @@ The scoring endpoint is wired by discovery, not by configuration: mailpit is reg
 ### Which template built a message
 
 While the [debug window](../features/dumps.md) is capturing, lerd stamps outgoing Laravel mail with an `X-Lerd-View` header naming the Blade templates the message was rendered from, and the debug window's Mail lens lists them under the recipients. The header travels with the message, so it is also there in Mailpit's own Headers tab. Mail sent from a queue worker carries it only when worker capture is on, since a worker otherwise reports nothing but the jobs it runs.
+
+### Meilisearch, per-site indexes
+
+Every site shares the one Meilisearch, so lerd gives each Laravel site its own index prefix, `SCOUT_PREFIX=<site>_`, the same name its database gets. Two projects that both index a `users` model then write to `app_one_users` and `app_two_users` rather than to one index, and switching between them needs no reimport. A site whose indexes were built before the prefix was set finds them empty once, so run `php artisan scout:import` for each searchable model.
 
 ### RustFS, per-site buckets
 
