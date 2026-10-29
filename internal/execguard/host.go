@@ -2,6 +2,7 @@ package execguard
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -19,6 +20,8 @@ import (
 const (
 	groupGrace = 2 * time.Second
 	groupPoll  = 50 * time.Millisecond
+	// leaderlessTrust spans a few watcher sweeps, which run once a minute.
+	leaderlessTrust = 5 * time.Minute
 )
 
 var (
@@ -153,8 +156,14 @@ func sweepHost(r record, written time.Time) {
 // so a live leader started after the record is the one sign it changed hands.
 func groupIsOurs(pgid int, recorded time.Time) bool {
 	out, err := exec.Command("ps", "-o", "etime=", "-p", strconv.Itoa(pgid)).Output()
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && len(out) == 0 {
+		// No leader leaves nothing to check against, so only a sweep soon after
+		// the run trusts the id; a watcher that was down long may see it reused.
+		return time.Since(recorded) < leaderlessTrust
+	}
 	if err != nil {
-		return true
+		return false
 	}
 	age, ok := parseEtime(strings.TrimSpace(string(out)))
 	return ok && time.Since(recorded) < age+time.Second

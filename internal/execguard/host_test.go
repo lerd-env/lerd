@@ -169,6 +169,36 @@ func TestSweep_killsALateChildWhoseLeaderExited(t *testing.T) {
 	}
 }
 
+// Without a leader nothing proves the group is still the run's, so after a
+// long gap, a watcher that was down, the id may have changed hands: leave it.
+func TestSweep_leavesALeaderlessGroupOfAnOldRecordAlone(t *testing.T) {
+	dir := stubDir(t)
+	pidFile := filepath.Join(t.TempDir(), "pid")
+	cmd := exec.Command("sh", "-c", "sleep 30 & echo $! > "+pidFile)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pgid := cmd.Process.Pid
+	t.Cleanup(func() { _ = syscall.Kill(-pgid, syscall.SIGKILL) })
+	path, err := writeRecord(dir, record{Marker: "host", PGID: pgid, PID: deadPid(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
+	}
+	_ = cmd.Wait()
+	readPid(t, pidFile)
+
+	Sweep()
+
+	if syscall.Kill(-pgid, 0) != nil {
+		t.Fatal("a leaderless group behind an old record was killed")
+	}
+}
+
 // A host run still in progress is its lerd's to end, not the watcher's.
 func TestSweep_leavesARunningHostRunAlone(t *testing.T) {
 	dir := stubDir(t)
