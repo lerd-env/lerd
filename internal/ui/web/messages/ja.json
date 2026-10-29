@@ -1106,7 +1106,7 @@
   "sites_timing_nothingCaptured": "このリクエストのデバッグキャプチャはありません。キャプチャがオフだったか、新しいイベントでバッファから押し出されました。",
   "common_copyForAgent": "エージェント用にコピー",
   "sites_timing_copyForAgentHint": "AI アシスタントが lerd 経由でこのリクエストを読み、問題を修正するためのプロンプトをコピーします",
-  "sites_timing_inspectRoute": "このルートのリクエストを調べる",
+  "sites_timing_inspectRoute": "このルートのリクエストをデバッグで表示",
   "sites_timing_latency": "レイテンシ",
   "sites_timing_perMin": "req/分",
   "sites_timing_recent": "最近のリクエスト",

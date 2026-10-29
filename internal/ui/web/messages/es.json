@@ -1106,7 +1106,7 @@
   "sites_timing_nothingCaptured": "La captura de depuración no guarda nada de esta solicitud: estaba apagada o eventos más nuevos la sacaron del búfer.",
   "common_copyForAgent": "Copiar para el agente",
   "sites_timing_copyForAgentHint": "Copia un prompt para que un asistente de IA lea esta solicitud con lerd y corrija sus problemas",
-  "sites_timing_inspectRoute": "Inspeccionar las solicitudes de esta ruta",
+  "sites_timing_inspectRoute": "Mostrar las solicitudes de esta ruta en Depuración",
   "sites_timing_latency": "latencia",
   "sites_timing_perMin": "sol./min",
   "sites_timing_recent": "Solicitudes recientes",

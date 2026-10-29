@@ -1106,7 +1106,7 @@
   "sites_timing_nothingCaptured": "Debugvastlegging heeft niets voor dit verzoek, omdat vastlegging uit stond of nieuwere gebeurtenissen het uit de buffer duwden.",
   "common_copyForAgent": "Kopiëren voor agent",
   "sites_timing_copyForAgentHint": "Kopieert een prompt waarmee een AI-assistent dit verzoek via lerd leest en de problemen oplost",
-  "sites_timing_inspectRoute": "Verzoeken van deze route inspecteren",
+  "sites_timing_inspectRoute": "Verzoeken van deze route tonen in Debug",
   "sites_timing_latency": "latentie",
   "sites_timing_perMin": "verz./min",
   "sites_timing_recent": "Recente verzoeken",
