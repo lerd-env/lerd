@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -147,11 +148,13 @@ func Serve() error {
 	defer restore()
 
 	enc := json.NewEncoder(stdout)
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1 MB — handle large artisan output
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sessionCtx = ctx
+	lines, scanErr := readRequests(os.Stdin, cancel)
 
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
+	for raw := range lines {
+		line := bytes.TrimSpace(raw)
 		if len(line) == 0 {
 			continue
 		}
@@ -179,7 +182,30 @@ func Serve() error {
 		}
 		_ = enc.Encode(resp)
 	}
-	return scanner.Err()
+	return *scanErr
+}
+
+// sessionCtx ends when the client closes stdin, so a call still running then,
+// an artisan command that never returns, is stopped rather than keeping the
+// server and what it started in the container alive.
+var sessionCtx = context.Background()
+
+// readRequests reads stdin on its own, so a closed session is noticed while a
+// call is in flight; cancel runs at EOF. The error is set once lines closes.
+func readRequests(r io.Reader, cancel func()) (<-chan []byte, *error) {
+	lines := make(chan []byte)
+	var scanErr error
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1 MB — handle large artisan output
+	go func() {
+		defer close(lines)
+		defer cancel()
+		for scanner.Scan() {
+			lines <- append([]byte(nil), scanner.Bytes()...)
+		}
+		scanErr = scanner.Err()
+	}()
+	return lines, &scanErr
 }
 
 // guardStdout repoints os.Stdout at os.Stderr and returns the prior stdout (for
@@ -393,7 +419,7 @@ func execArtisan(args map[string]any) (any, *rpcError) {
 	cmd := podman.Cmd(cmdArgs...)
 	cmd.Stdout = &out
 	cmd.Stderr = &out
-	if err := execguard.Run(context.Background(), cmd, container); err != nil {
+	if err := execguard.Run(sessionCtx, cmd, container); err != nil {
 		return toolErr(fmt.Sprintf("artisan failed (%v):\n%s", err, stripANSI(out.String()))), nil
 	}
 	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
