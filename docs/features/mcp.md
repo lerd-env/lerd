@@ -1,3 +1,12 @@
+---
+title: MCP server for Claude Code, Cursor and Codex
+description: "Lerd's MCP server lets Claude Code, Cursor, Codex and other AI assistants manage your local PHP environment: sites, services, workers, databases, artisan and composer."
+head:
+  - - meta
+    - name: keywords
+      content: lerd mcp server, php mcp server, laravel mcp server, claude code php, cursor mcp php, codex mcp, ai agents local php development, mcp local development environment
+---
+
 # AI Integration (MCP)
 
 Lerd ships a [Model Context Protocol](https://modelcontextprotocol.io/) server, letting AI assistants manage your dev environment directly: run migrations, start services, toggle queue workers, and inspect logs without leaving the chat.
