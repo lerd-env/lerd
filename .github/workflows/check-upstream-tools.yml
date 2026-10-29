@@ -1,9 +1,9 @@
 name: Check Upstream Tool Releases
 
-# Daily check of the host tools lerd pins (composer, fnm, mkcert). Where the
-# PHP image check auto-rebuilds artifacts, the pins live in tools.yaml, so a
-# stale pin becomes a bump PR; merging it publishes the new pins to every
-# install through the fetched manifest, no binary release needed.
+# Daily check of the host tools lerd pins in tools.yaml. Where the PHP image
+# check auto-rebuilds artifacts, the pins live in tools.yaml, so a stale pin
+# becomes a bump PR; merging it publishes the new pins to every install through
+# the fetched manifest, no binary release needed.
 on:
   schedule:
     - cron: '0 6 * * *'
@@ -24,16 +24,58 @@ jobs:
           FILE=internal/tools/tools.yaml
 
           FNM=$(curl -fsSL https://api.github.com/repos/Schniz/fnm/releases/latest | jq -r .tag_name)
-          MKCERT=$(curl -fsSL https://api.github.com/repos/FiloSottile/mkcert/releases/latest | jq -r .tag_name)
+          MISE=$(curl -fsSL https://api.github.com/repos/jdx/mise/releases/latest | jq -r .tag_name)
           COMPOSER=$(curl -fsSL https://getcomposer.org/versions | jq -r '.stable[0].version')
+          pairs=("composer=${COMPOSER}" "fnm=${FNM}" "mise=${MISE}")
 
-          for pair in "composer=${COMPOSER}" "fnm=${FNM}" "mkcert=${MKCERT}"; do
+          # The host PHP pins one build per minor, so each takes the newest patch
+          # of its own minor, and only one static-php.dev ships for all four platforms.
+          LISTING=$(curl -fsSL 'https://dl.static-php.dev/static-php-cli/common/?format=json')
+          for tool in $(yq -r '.tools | keys | .[] | select(test("^php-host-"))' "$FILE"); do
+            minor="${tool#php-host-}"
+            version=$(jq -r --arg m "${minor//./\\.}" '
+              [.[].name | capture("^php-(?<v>" + $m + "\\.[0-9]+)-cli-(linux|macos)-(x86_64|aarch64)\\.tar\\.gz$")]
+              | group_by(.v) | map(select(length == 4) | .[0].v)
+              | sort_by(split(".") | map(tonumber)) | last // ""' <<<"$LISTING")
+            pairs+=("${tool}=${version}")
+          done
+
+          for pair in "${pairs[@]}"; do
             tool="${pair%%=*}" version="${pair#*=}"
             if [ -z "$version" ] || [ "$version" = "null" ]; then
               echo "Skipping ${tool}: upstream lookup failed"
               continue
             fi
-            yq -i ".tools.${tool}.version = \"${version}\"" "$FILE"
+            yq -i ".tools.\"${tool}\".version = \"${version}\"" "$FILE"
+          done
+          git diff --stat
+
+      # A pin that carries digests (and sizes) is checked against them on
+      # download, so a bumped version needs them recomputed or every install of
+      # it would be rejected.
+      - name: Recompute digests of bumped pins
+        run: |
+          set -euo pipefail
+          FILE=internal/tools/tools.yaml
+          git show HEAD:"$FILE" > /tmp/tools-before.yaml
+          for tool in $(yq -r '.tools | to_entries | .[] | select(.value.digests) | .key' "$FILE"); do
+            version=$(yq -r ".tools.\"${tool}\".version" "$FILE")
+            [ "$version" = "$(yq -r ".tools.\"${tool}\".version" /tmp/tools-before.yaml)" ] && continue
+            template=$(yq -r ".tools.\"${tool}\".url" "$FILE")
+            has_sizes=$(yq -r ".tools.\"${tool}\" | has(\"sizes\")" "$FILE")
+            for platform in $(yq -r ".tools.\"${tool}\".assets | keys | .[]" "$FILE"); do
+              asset=$(yq -r ".tools.\"${tool}\".assets.\"${platform}\"" "$FILE")
+              asset="${asset//\{version\}/$version}"
+              url="${template//\{version\}/$version}"
+              url="${url//\{asset\}/$asset}"
+              echo "Hashing ${tool} ${platform}: ${url}"
+              curl -fsSL --retry 3 -o /tmp/tool-asset "$url"
+              digest=$(sha256sum /tmp/tool-asset | cut -d' ' -f1)
+              yq -i ".tools.\"${tool}\".digests.\"${platform}\" = \"${digest}\"" "$FILE"
+              if [ "$has_sizes" = "true" ]; then
+                yq -i ".tools.\"${tool}\".sizes.\"${platform}\" = $(stat -c %s /tmp/tool-asset)" "$FILE"
+              fi
+            done
           done
           git diff --stat
 
@@ -41,10 +83,10 @@ jobs:
         run: |
           set -euo pipefail
           FILE=internal/tools/tools.yaml
-          for tool in composer fnm mkcert; do
-            version=$(yq -r ".tools.${tool}.version" "$FILE")
-            url=$(yq -r ".tools.${tool}.url" "$FILE")
-            asset=$(yq -r ".tools.${tool}.assets.\"linux/amd64\" // \"\"" "$FILE")
+          for tool in $(yq -r '.tools | keys | .[]' "$FILE"); do
+            version=$(yq -r ".tools.\"${tool}\".version" "$FILE")
+            url=$(yq -r ".tools.\"${tool}\".url" "$FILE")
+            asset=$(yq -r ".tools.\"${tool}\".assets.\"linux/amd64\" // \"\"" "$FILE")
             asset="${asset//\{version\}/$version}"
             url="${url//\{version\}/$version}"
             url="${url//\{asset\}/$asset}"
@@ -58,4 +100,4 @@ jobs:
           branch: chore/bump-tool-pins
           commit-message: 'chore: bump pinned host tool versions'
           title: 'chore: bump pinned host tool versions'
-          body: 'Automated bump of the pinned composer, fnm and mkcert versions in internal/tools/tools.yaml to the current upstream releases. The resolved download URLs were verified to exist before this PR was opened. Merging publishes the new pins to every install through the fetched manifest, and the embedded fallback ships with the next release.'
+          body: 'Automated bump of the host tool pins in internal/tools/tools.yaml to the current upstream releases. The resolved download URLs were verified to exist, and the digests and sizes of every bumped pin were recomputed from the downloaded files, before this PR was opened. Merging publishes the new pins to every install through the fetched manifest, and the embedded fallback ships with the next release.'
