@@ -154,10 +154,9 @@ func RunHostVendorBin(cwd, rel string, args []string) error {
 	return nil
 }
 
-// runHostAndReap runs a host binary and ends whatever it leaves behind before
-// returning. The reap cannot be deferred: the exit path below calls os.Exit,
-// which skips defers, and the orphan (pest-plugin-browser leaves a Playwright
-// server) holds the inherited stdout so a pipeline hangs.
+// runHostAndReap runs a host binary and ends what it leaves behind before
+// returning: the exit path's os.Exit skips defers, and a leftover Playwright
+// server holds the inherited stdout so a pipeline hangs.
 func runHostAndReap(cmd *exec.Cmd) error {
 	if err := execguard.Run(context.Background(), cmd, ""); err != nil {
 		if exit, ok := err.(*exec.ExitError); ok {

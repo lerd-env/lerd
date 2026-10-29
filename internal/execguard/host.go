@@ -24,7 +24,7 @@ const (
 var (
 	killGroupFn    = killGroup
 	ownsTerminalFn = ownsTerminal
-	groupIsOursFn  = groupStartedBefore
+	groupIsOursFn  = groupIsOurs
 )
 
 // runHost runs a command on this machine in a process group of its own and ends
@@ -53,24 +53,55 @@ func runHost(ctx context.Context, cmd *exec.Cmd) error {
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
-	select {
-	case err := <-done:
-		finish()
-		return err
-	case <-ctx.Done():
-		killGroupFn(pgid)
-		err := <-done
-		finish()
-		return err
-	case sig := <-sigs:
-		killGroupFn(pgid)
-		err := <-done
-		finish()
-		// The signal was meant for lerd, which still has to act on it.
-		stop()
-		raiseFn(sig)
-		return err
+	stopped, stopWatch := childStops(fg)
+	defer stopWatch()
+	for {
+		select {
+		case err := <-done:
+			finish()
+			return err
+		case <-ctx.Done():
+			killGroupFn(pgid)
+			err := <-done
+			finish()
+			return err
+		case sig := <-sigs:
+			killGroupFn(pgid)
+			err := <-done
+			finish()
+			// The signal was meant for lerd, which still has to act on it.
+			stop()
+			raiseFn(sig)
+			return err
+		case <-stopped:
+			if processStopped(pgid) {
+				suspendWith(pgid)
+			}
+		}
 	}
+}
+
+// childStops reports the run's state changes when it holds the terminal, where
+// Ctrl+Z stops its group and not lerd.
+func childStops(fg bool) (<-chan os.Signal, func()) {
+	ch := make(chan os.Signal, 1)
+	if !fg {
+		return ch, func() {}
+	}
+	signal.Notify(ch, syscall.SIGCHLD)
+	return ch, func() { signal.Stop(ch) }
+}
+
+// suspendWith follows a run Ctrl+Z stopped: lerd takes the terminal back and
+// stops too, so the shell sees the job stop, and on fg hands the terminal back
+// and continues the run. A bg leaves the terminal with the shell.
+func suspendWith(pgid int) {
+	reclaimTerminal()
+	_ = syscall.Kill(os.Getpid(), syscall.SIGSTOP)
+	if ownsTerminalFn() {
+		_ = unix.IoctlSetPointerInt(0, unix.TIOCSPGRP, pgid)
+	}
+	_ = syscall.Kill(-pgid, syscall.SIGCONT)
 }
 
 // hostProcAttr puts the run in its own group, handed the terminal when lerd
@@ -110,32 +141,23 @@ func killGroup(pgid int) {
 	_ = syscall.Kill(-pgid, syscall.SIGKILL)
 }
 
-// sweepHost ends the group a lerd killed outright left behind. Its id is free
-// for reuse once the members are gone, so a group none of whose members
-// predates the record is someone else's.
+// sweepHost ends the group a lerd killed outright left behind.
 func sweepHost(r record, written time.Time) {
 	if groupIsOursFn(r.PGID, written) {
 		killGroupFn(r.PGID)
 	}
 }
 
-// groupStartedBefore reports whether any member of the group started before t.
-func groupStartedBefore(pgid int, t time.Time) bool {
-	out, err := exec.Command("ps", "-A", "-o", "pgid=,etime=").Output()
+// groupIsOurs reports whether pgid still names the run's group. The id is only
+// free again once every member is gone, and whoever takes it leads the new group,
+// so a live leader started after the record is the one sign it changed hands.
+func groupIsOurs(pgid int, recorded time.Time) bool {
+	out, err := exec.Command("ps", "-o", "etime=", "-p", strconv.Itoa(pgid)).Output()
 	if err != nil {
-		return false
+		return true
 	}
-	want := strconv.Itoa(pgid)
-	for _, line := range strings.Split(string(out), "\n") {
-		f := strings.Fields(line)
-		if len(f) != 2 || f[0] != want {
-			continue
-		}
-		if age, ok := parseEtime(f[1]); ok && time.Since(t) < age+time.Second {
-			return true
-		}
-	}
-	return false
+	age, ok := parseEtime(strings.TrimSpace(string(out)))
+	return ok && time.Since(recorded) < age+time.Second
 }
 
 // parseEtime reads ps's elapsed time, [[dd-]hh:]mm:ss.

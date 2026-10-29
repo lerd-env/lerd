@@ -24,3 +24,18 @@ func processStartTime(pid int) string {
 	}
 	return fields[19]
 }
+
+// processStopped reads the state that follows the command name in
+// /proc/<pid>/stat: T when stopped by a signal, t when traced.
+func processStopped(pid int) bool {
+	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return false
+	}
+	s := string(b)
+	i := strings.LastIndexByte(s, ')')
+	if i < 0 || i+2 >= len(s) {
+		return false
+	}
+	return s[i+2] == 'T' || s[i+2] == 't'
+}

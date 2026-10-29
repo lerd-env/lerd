@@ -144,6 +144,31 @@ func TestSweep_leavesAGroupIdTakenAfterTheRunAlone(t *testing.T) {
 	}
 }
 
+// A child started late in the run, outliving a leader that already exited, is
+// still the run's: only a live leader newer than the record means reuse.
+func TestSweep_killsALateChildWhoseLeaderExited(t *testing.T) {
+	dir := stubDir(t)
+	pidFile := filepath.Join(t.TempDir(), "pid")
+	cmd := exec.Command("sh", "-c", "sleep 1; sleep 30 & echo $! > "+pidFile)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pgid := cmd.Process.Pid
+	t.Cleanup(func() { _ = syscall.Kill(-pgid, syscall.SIGKILL) })
+	if _, err := writeRecord(dir, record{Marker: "host", PGID: pgid, PID: deadPid(t)}); err != nil {
+		t.Fatal(err)
+	}
+	_ = cmd.Wait()
+	readPid(t, pidFile)
+
+	Sweep()
+
+	if !waitGone(pgid) {
+		t.Fatal("the run's late child survived the sweep")
+	}
+}
+
 // A host run still in progress is its lerd's to end, not the watcher's.
 func TestSweep_leavesARunningHostRunAlone(t *testing.T) {
 	dir := stubDir(t)
@@ -174,6 +199,37 @@ func deadPid(t *testing.T) int {
 func waitGone(pgid int) bool {
 	for i := 0; i < 150; i++ {
 		if syscall.Kill(-pgid, 0) != nil {
+			return true
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return false
+}
+
+// Ctrl+Z stops the run's group, not lerd, so lerd has to notice and follow.
+func TestProcessStopped_followsStopAndContinue(t *testing.T) {
+	cmd := exec.Command("sleep", "30")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	pid := cmd.Process.Pid
+	if processStopped(pid) {
+		t.Fatal("a running process read as stopped")
+	}
+	_ = syscall.Kill(pid, syscall.SIGSTOP)
+	if !eventually(func() bool { return processStopped(pid) }) {
+		t.Fatal("a stopped process did not read as stopped")
+	}
+	_ = syscall.Kill(pid, syscall.SIGCONT)
+	if !eventually(func() bool { return !processStopped(pid) }) {
+		t.Fatal("a continued process still read as stopped")
+	}
+}
+
+func eventually(cond func() bool) bool {
+	for i := 0; i < 100; i++ {
+		if cond() {
 			return true
 		}
 		time.Sleep(20 * time.Millisecond)

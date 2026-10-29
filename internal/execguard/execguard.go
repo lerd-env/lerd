@@ -79,10 +79,9 @@ var (
 	}
 )
 
-// Run runs cmd, a podman exec into container, under a marker of its own: killed
-// at once if ctx ends or lerd is interrupted, left to Sweep if anything outlives
-// the exec or lerd is killed outright. A cmd that is not a podman exec runs on
-// this machine under its own process group instead, see runHost.
+// Run runs cmd, a podman exec into container, under a marker of its own, killed
+// when ctx ends or lerd is interrupted and left to Sweep otherwise. Any other
+// cmd runs on this machine in a process group of its own, see runHost.
 func Run(ctx context.Context, cmd *exec.Cmd, container string) error {
 	if len(cmd.Args) < 2 || cmd.Args[1] != "exec" {
 		return runHost(ctx, cmd)
