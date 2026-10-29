@@ -3,7 +3,7 @@
 # pin is fixable for every install here, without a binary release.
 tools:
   composer:
-    version: "2.10.3"
+    version: "2.11.0"
     url: https://getcomposer.org/download/{version}/composer.phar
   # mise is signed and notarized under a stable Developer ID, so macOS keeps a
   # Files and Folders grant across version bumps where fnm, which ships
