@@ -147,8 +147,7 @@ func SetSiteAutoSnapshot(name, mode string) error {
 	if err != nil {
 		return err
 	}
-	siteWriteMu.Lock()
-	defer siteWriteMu.Unlock()
+	defer lockSites()()
 	reg, err := LoadSites()
 	if err != nil {
 		return err
