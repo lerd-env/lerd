@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"syscall"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
@@ -55,6 +56,9 @@ type record struct {
 }
 
 var (
+	killAttempts = 3
+	killWait     = 5 * time.Second
+
 	dirFn       = func() string { return filepath.Join(config.DataDir(), "exec") }
 	killFn      = Kill
 	startTimeFn = processStartTime
@@ -82,11 +86,14 @@ func Run(ctx context.Context, cmd *exec.Cmd, container string) error {
 
 	r := record{Container: container, Marker: marker, PID: os.Getpid(), Start: startTimeFn(os.Getpid())}
 	path, recErr := writeRecord(dirFn(), r)
-	forget := func() {
+	// The record outlives the run on every path, so whatever the run leaves in
+	// the container, however it ended, is the next Sweep's to kill.
+	defer func() {
 		if recErr == nil {
-			_ = os.Remove(path)
+			r.Ended = true
+			_ = writeFileAtomic(path, r)
 		}
-	}
+	}()
 	sigs, stop := notifyFn()
 	defer stop()
 	if err := cmd.Start(); err != nil {
@@ -96,25 +103,36 @@ func Run(ctx context.Context, cmd *exec.Cmd, container string) error {
 	go func() { done <- cmd.Wait() }()
 	select {
 	case err := <-done:
-		if recErr == nil {
-			r.Ended = true
-			_ = rewriteRecord(path, r)
-		}
 		return err
 	case <-ctx.Done():
-		killFn(container, marker)
-		err := <-done
-		forget()
-		return err
+		return stopRun(cmd, done, container, marker)
 	case sig := <-sigs:
-		killFn(container, marker)
-		err := <-done
-		forget()
+		err := stopRun(cmd, done, container, marker)
+		if recErr == nil {
+			r.Ended = true
+			_ = writeFileAtomic(path, r)
+		}
 		// The signal was meant for lerd, which still has to act on it.
 		stop()
 		raiseFn(sig)
 		return err
 	}
+}
+
+// stopRun kills the run's container side and waits for the exec to return. A
+// kill that lands before the command has started inside finds nothing, so it
+// is retried, and a podman client that still hangs on is ended locally.
+func stopRun(cmd *exec.Cmd, done <-chan error, container, marker string) error {
+	for range killAttempts {
+		killFn(container, marker)
+		select {
+		case err := <-done:
+			return err
+		case <-time.After(killWait):
+		}
+	}
+	_ = cmd.Process.Kill()
+	return <-done
 }
 
 // Kill ends every process in container that carries one of markers.
@@ -173,18 +191,20 @@ func writeRecord(dir string, r record) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	b, err := json.Marshal(r)
-	if err != nil {
-		return "", err
-	}
 	path := filepath.Join(dir, r.Marker+".json")
-	return path, os.WriteFile(path, b, 0o644)
+	return path, writeFileAtomic(path, r)
 }
 
-func rewriteRecord(path string, r record) error {
+// writeFileAtomic goes through a rename, so Sweep never reads a record half
+// written and drops it as unreadable.
+func writeFileAtomic(path string, r record) error {
 	b, err := json.Marshal(r)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, b, 0o644)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }

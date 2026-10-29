@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
 
 func stubDir(t *testing.T) string {
@@ -131,13 +132,13 @@ func TestRun_killsTheContainerSideWhenInterrupted(t *testing.T) {
 	if len(*killed) != 1 || (*killed)[0] != "lerd-php85-fpm "+markerOf(t, cmd.Args) {
 		t.Fatalf("killed %v, want this run's processes", *killed)
 	}
-	// lerd mcp must still exit on the SIGTERM its session sent it, and the
-	// record goes first, since the signal ends lerd before any defer runs.
+	// lerd mcp must still exit on the SIGTERM its session sent it, with the
+	// record marked ended first, since the signal ends lerd before any defer.
 	if len(raised) != 1 || raised[0] != syscall.SIGTERM {
 		t.Fatalf("raised %v, want the signal passed back to lerd", raised)
 	}
-	if recs := readRecords(t, dirFn()); len(recs) != 0 {
-		t.Fatalf("records = %+v, want none after a signal", recs)
+	if recs := readRecords(t, dirFn()); len(recs) != 1 || !recs[0].Ended {
+		t.Fatalf("records = %+v, want one marked ended for the sweep", recs)
 	}
 }
 
@@ -154,6 +155,74 @@ func TestRun_killsTheContainerSideWhenItsContextEnds(t *testing.T) {
 	_ = Run(ctx, cmd, "lerd-php85-fpm")
 	if len(*killed) != 1 || (*killed)[0] != "lerd-php85-fpm "+markerOf(t, cmd.Args) {
 		t.Fatalf("killed %v, want this run's processes", *killed)
+	}
+}
+
+func stubKillWait(t *testing.T, attempts int) {
+	t.Helper()
+	prevA, prevW := killAttempts, killWait
+	killAttempts, killWait = attempts, 10*time.Millisecond
+	t.Cleanup(func() { killAttempts, killWait = prevA, prevW })
+}
+
+// A kill that lands before the command has started inside the container finds
+// nothing to kill, so it is tried again.
+func TestRun_retriesAKillThatFoundNothingYet(t *testing.T) {
+	stubDir(t)
+	stubSignals(t)
+	stubKillWait(t, 3)
+	cmd := sleeper(t)
+	calls := 0
+	prev := killFn
+	killFn = func(string, ...string) {
+		calls++
+		if calls == 2 {
+			_ = cmd.Process.Kill()
+		}
+	}
+	t.Cleanup(func() { killFn = prev })
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_ = Run(ctx, cmd, "lerd-php85-fpm")
+	if calls != 2 {
+		t.Fatalf("kill tried %d times, want it repeated until the run ended", calls)
+	}
+}
+
+// A run whose container side never answers must not hang lerd: the local
+// podman client is ended, and the record stays for the sweep.
+func TestRun_endsTheClientWhenTheContainerNeverAnswers(t *testing.T) {
+	dir := stubDir(t)
+	stubSignals(t)
+	stubKillWait(t, 2)
+	calls := 0
+	prev := killFn
+	killFn = func(string, ...string) { calls++ }
+	t.Cleanup(func() { killFn = prev })
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_ = Run(ctx, sleeper(t), "lerd-php85-fpm")
+	if calls != 2 {
+		t.Fatalf("kill tried %d times, want 2", calls)
+	}
+	if recs := readRecords(t, dir); len(recs) != 1 || !recs[0].Ended {
+		t.Fatalf("records = %+v, want one marked ended", recs)
+	}
+}
+
+// A record still being written is a .tmp file, which the sweep never reads.
+func TestSweep_leavesARecordBeingWrittenAlone(t *testing.T) {
+	dir := stubDir(t)
+	stubKill(t, nil)
+	tmp := filepath.Join(dir, "half.json.tmp")
+	if err := os.WriteFile(tmp, []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	Sweep()
+	if _, err := os.Stat(tmp); err != nil {
+		t.Fatalf("sweep touched a record being written: %v", err)
 	}
 }
 
