@@ -91,6 +91,17 @@ export const INSTALL = 'curl -fsSL https://lerd.sh/install.sh | bash'
 export const WINDOWS_INSTALLER = 'https://github.com/lerd-env/lerd-desktop/releases/latest/download/Install-Lerd.exe'
 
 /* ---- The lineup: one full-width card per area, screenshot path under public/assets ---- */
+/* ---- AI agents: what an assistant can do through lerd's MCP server ---- */
+export const ASSISTANTS = ['Claude Code', 'Cursor', 'Codex CLI', 'Gemini CLI', 'Copilot', 'Junie', 'Antigravity', 'Windsurf', 'OpenCode']
+export const AGENTS = [
+  { name: 'Manages the environment', cmd: 'site · service · worker', p: 'Links sites, switches PHP and Node versions, starts databases and caches, and runs queue workers and the scheduler.' },
+  { name: 'Runs commands', cmd: 'exec', p: "artisan, composer and the project's own console commands, on the PHP version the site uses." },
+  { name: 'Reads each request', cmd: 'request lenses', p: 'N+1 and slow queries, exceptions, error logs and failed jobs for one request, looked up by its id.' },
+  { name: 'Sees browser errors', cmd: 'diag browser_events', p: "JavaScript errors and failed fetches from the site's pages, once browser logs are on for that site." },
+  { name: 'Works in worktrees', cmd: 'worktree add', p: 'Each worktree gets its own .test domain, its dependencies installed, and a database that is shared, cloned or empty.' },
+  { name: 'Snapshots the database', cmd: 'db snapshot', p: 'Before a branch switch or a migration. Each snapshot records its branch, so the right one can be restored later.' },
+]
+
 export const LINEUP = [
   { id: 'sites', title: 'Sites', h: 'Run lerd init, get a .test domain.',
     p: 'Lerd detects the framework, runs composer and npm, migrates the database, starts the workers and issues a trusted certificate. Nginx and PHP-FPM serve it at https://project.test.',
@@ -126,7 +137,7 @@ export const LINEUP = [
     p: 'Lerd ships an MCP server, so Claude, Cursor, Codex and the others can run artisan and Tinker, start services and workers, read logs and look into slow routes from the chat.',
     alt: 'Lerd Tinker REPL in the browser, the same PHP shell AI assistants drive over MCP',
     tags: ['MCP', 'artisan', 'Tinker'], cli: 'lerd mcp:inject',
-    names: ['Claude Code', 'Cursor', 'Codex CLI', 'Gemini CLI', 'Copilot', 'Junie', 'Antigravity', 'Windsurf'],
+    names: ASSISTANTS,
     more: 'Explore MCP', href: '/features/mcp', shot: 'landing/tinker' },
   { id: 'terminal', title: 'Terminal', h: 'The same dashboard in a terminal.',
     p: 'The TUI shows sites, services, workers and logs, and works with keyboard or mouse. ctrl+p jumps to anything or runs any action, so you can stay in the shell.',
@@ -238,6 +249,7 @@ export const FAQ = [
   { q: 'Does it work on Windows?', a: 'Yes, inside WSL2. The Windows installer sets up WSL2, an Ubuntu distro with your Linux user, Lerd and the Lerd desktop app.', href: '/getting-started/wsl2', link: 'Windows (WSL2) guide' },
   { q: 'Do I have to change my project?', a: 'No. Lerd detects the framework from the repository and serves it as it is. An optional .lerd.yaml pins PHP and Node versions, services and workers.' },
   { q: 'Can it run next to a MySQL or PostgreSQL I already have?', a: 'Yes. When a database installed on the host already holds the default port, Lerd publishes its container on the next free port and writes that into the site .env.' },
+  { q: 'Does Lerd work with Claude Code or Cursor?', a: "Yes. Run lerd mcp:enable-global and Lerd's MCP server is registered with Claude Code, Cursor, Codex CLI, Gemini CLI, GitHub Copilot in VS Code, Junie, Antigravity, Windsurf and OpenCode. The assistant can then manage sites, services, workers and databases, and run artisan and composer.", href: '/features/mcp', link: 'Set up MCP' },
   { q: 'Can I extend it?', a: 'Yes, with community plugins that add commands, dashboard pages, AI tools and services. Each one is reviewed at the exact commit Lerd installs.', href: 'https://plugins.lerd.sh/', link: 'Browse community plugins' },
   { q: 'How do I remove it?', a: 'Run lerd uninstall. It stops the containers and removes the units, the binary and the network, then asks whether to remove your data and the trusted certificate as well.', href: '/getting-started/installation#uninstall', link: 'What uninstall removes' },
 ]
