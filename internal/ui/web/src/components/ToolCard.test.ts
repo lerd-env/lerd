@@ -10,7 +10,7 @@ vi.mock('$stores/status', async (importOriginal) => {
 });
 
 const tool = (over: Partial<ToolStatus>): ToolStatus => ({
-  name: 'mkcert',
+  name: 'fnm',
   installed: 'v1.4.4',
   pinned: 'v1.4.4',
   present: true,
@@ -26,7 +26,7 @@ describe('ToolCard', () => {
 
   it('shows the installed version for an up-to-date tool', () => {
     render(ToolCard, { props: { tool: tool({}) } });
-    expect(screen.getByText('mkcert')).toBeInTheDocument();
+    expect(screen.getByText('fnm')).toBeInTheDocument();
     expect(screen.getByText('v1.4.4')).toBeInTheDocument();
   });
 

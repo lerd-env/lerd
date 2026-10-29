@@ -31,7 +31,7 @@ var platforms = []struct{ goos, goarch string }{
 func TestEmbedded_ResolvesEveryToolOnEveryPlatform(t *testing.T) {
 	offline(t)
 	m := Load(context.Background())
-	for _, name := range []string{"composer", "fnm", "mkcert", "php-host-8.3", "php-host-8.4", "php-host-8.5"} {
+	for _, name := range []string{"composer", "mise", "fnm", "php-host-8.3", "php-host-8.4", "php-host-8.5"} {
 		tool, ok := m.Tools[name]
 		if !ok {
 			t.Fatalf("embedded manifest is missing %s", name)
@@ -55,12 +55,12 @@ func TestEmbedded_ResolvesEveryToolOnEveryPlatform(t *testing.T) {
 func TestURL_ExpandsAssetTemplate(t *testing.T) {
 	offline(t)
 	m := Load(context.Background())
-	got, err := m.URL("mkcert", "linux", "arm64")
+	got, err := m.URL("mise", "linux", "arm64")
 	if err != nil {
 		t.Fatal(err)
 	}
-	v := m.Tools["mkcert"].Version
-	want := "https://github.com/FiloSottile/mkcert/releases/download/" + v + "/mkcert-" + v + "-linux-arm64"
+	v := m.Tools["mise"].Version
+	want := "https://github.com/jdx/mise/releases/download/" + v + "/mise-" + v + "-linux-arm64.tar.gz"
 	if got != want {
 		t.Errorf("URL = %q, want %q", got, want)
 	}
@@ -94,8 +94,8 @@ func TestLoad_OverlaysPublishedPins(t *testing.T) {
 		t.Errorf("published composer pin not applied, URL = %q", url)
 	}
 	// Tools absent from the published manifest keep their embedded pins.
-	if _, err := m.URL("mkcert", "linux", "amd64"); err != nil {
-		t.Errorf("embedded mkcert pin lost after overlay: %v", err)
+	if _, err := m.URL("fnm", "linux", "amd64"); err != nil {
+		t.Errorf("embedded fnm pin lost after overlay: %v", err)
 	}
 }
 
@@ -369,7 +369,7 @@ func TestManifestDigestLookup(t *testing.T) {
 	if got := m.Digest("fnm", "darwin", "arm64"); got != "" {
 		t.Errorf("an unpinned platform must report no digest, got %q", got)
 	}
-	if got := m.Digest("mkcert", "linux", "amd64"); got != "" {
+	if got := m.Digest("nope", "linux", "amd64"); got != "" {
 		t.Errorf("an unknown tool must report no digest, got %q", got)
 	}
 }

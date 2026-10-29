@@ -89,11 +89,3 @@ tools:
       linux/arm64: 13570407
       darwin/amd64: 15606882
       darwin/arm64: 15106458
-  mkcert:
-    version: v1.4.4
-    url: https://github.com/FiloSottile/mkcert/releases/download/{version}/{asset}
-    assets:
-      linux/amd64: mkcert-{version}-linux-amd64
-      linux/arm64: mkcert-{version}-linux-arm64
-      darwin/amd64: mkcert-{version}-darwin-amd64
-      darwin/arm64: mkcert-{version}-darwin-arm64

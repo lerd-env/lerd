@@ -1,7 +1,6 @@
-// Package download is the shared helper behind every binary lerd fetches from
-// the network: composer, fnm, mkcert, phpantom_lsp, and self-update archives.
-// It retries transient failures with a short backoff and cancels stalled
-// transfers, so a momentary CDN hiccup doesn't abort a whole install.
+// Package download fetches every binary lerd pulls from the network (composer,
+// fnm, phpantom_lsp, self-update archives), retrying transient failures and
+// cancelling stalled transfers so a CDN hiccup doesn't abort an install.
 package download
 
 import (

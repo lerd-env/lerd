@@ -1,7 +1,6 @@
 // Package tools resolves the pinned versions and download URLs of the host
-// tools lerd installs (composer, mise, fnm, mkcert). tools.yaml is the source of
-// truth: embedded at build time as the offline fallback, and fetched from
-// GitHub before use so a bad pin can be fixed without a binary release.
+// tools lerd installs from tools.yaml, which is embedded as the offline fallback
+// and fetched from GitHub before use so a bad pin is fixable without a release.
 package tools
 
 import (

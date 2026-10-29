@@ -1435,7 +1435,7 @@
   "system_tools_checkTitle": "向 GitHub 查詢是否有已固定的新版本",
   "system_tools_checkUpToDate": "所有工具均為固定版本",
   "system_tools_current": "目前",
-  "system_tools_description": "lerd 安裝並管理的獨立執行檔：Composer、mise、fnm 和 mkcert。",
+  "system_tools_description": "lerd 安裝並管理的獨立執行檔：Composer、mise 和 fnm。",
   "system_tools_notInstalled": "未安裝",
   "system_tools_title": "工具",
   "system_tools_updateAvailable": "{version} 可用",
