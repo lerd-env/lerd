@@ -279,3 +279,30 @@ func TestStartGuard_outlivesItsNap(t *testing.T) {
 		t.Fatal("the guard ended while its run was still going")
 	}
 }
+
+// SIGSTOP to itself does not stop lerd before its next line runs, so without
+// waiting for the shell's fg, lerd resumed the run as soon as Ctrl+Z stopped it.
+func TestSuspendWith_resumesTheRunOnlyAfterLerdIsContinued(t *testing.T) {
+	prevStop, prevCont, prevOwns := stopSelfFn, continueGroupFn, ownsTerminalFn
+	stopSelfFn = func() {} // a stop that has not taken effect yet
+	resumed := make(chan int, 1)
+	continueGroupFn = func(pgid int) { resumed <- pgid }
+	ownsTerminalFn = func() bool { return false }
+	t.Cleanup(func() { stopSelfFn, continueGroupFn, ownsTerminalFn = prevStop, prevCont, prevOwns })
+
+	go suspendWith(4242)
+	select {
+	case <-resumed:
+		t.Fatal("the run was resumed before lerd was continued")
+	case <-time.After(300 * time.Millisecond):
+	}
+	_ = syscall.Kill(os.Getpid(), syscall.SIGCONT) // what the shell's fg sends
+	select {
+	case pgid := <-resumed:
+		if pgid != 4242 {
+			t.Fatalf("resumed group %d, want 4242", pgid)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("fg did not resume the run")
+	}
+}

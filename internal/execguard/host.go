@@ -98,12 +98,23 @@ func childStops(fg bool) (<-chan os.Signal, func()) {
 // and continues the run. A bg leaves the terminal with the shell.
 func suspendWith(pgid int) {
 	reclaimTerminal()
-	_ = syscall.Kill(os.Getpid(), syscall.SIGSTOP)
+	// The self-stop has not taken effect when kill returns, so the run is only
+	// resumed once the shell's fg has continued lerd.
+	cont := make(chan os.Signal, 1)
+	signal.Notify(cont, syscall.SIGCONT)
+	defer signal.Stop(cont)
+	stopSelfFn()
+	<-cont
 	if ownsTerminalFn() {
 		_ = unix.IoctlSetPointerInt(0, unix.TIOCSPGRP, pgid)
 	}
-	_ = syscall.Kill(-pgid, syscall.SIGCONT)
+	continueGroupFn(pgid)
 }
+
+var (
+	stopSelfFn      = func() { _ = syscall.Kill(os.Getpid(), syscall.SIGSTOP) }
+	continueGroupFn = func(pgid int) { _ = syscall.Kill(-pgid, syscall.SIGCONT) }
+)
 
 // hostProcAttr puts the run in its own group, handed the terminal when lerd
 // holds it so Ctrl+C reaches the run and tinker can read its prompt.
