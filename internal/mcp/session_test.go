@@ -52,17 +52,21 @@ func TestReadRequests_seesEOFBehindQueuedRequests(t *testing.T) {
 // has its session ended past the cap instead of growing the queue for good.
 func TestReadRequests_endsTheSessionWhenTooMuchQueuesUp(t *testing.T) {
 	r, w := io.Pipe()
+	t.Cleanup(func() { w.Close() })
 	cancelled := make(chan struct{})
 	var once sync.Once
 	lines, _ := readRequests(r, func() { once.Do(func() { close(cancelled) }) })
+	if _, err := w.Write([]byte("{\"id\":1}\n")); err != nil {
+		t.Fatal(err)
+	}
+	<-lines // the call being dispatched; what follows waits unread
 	go func() {
-		for i := 0; i < maxQueued+2; i++ {
+		for i := 0; i < maxQueued+1; i++ {
 			if _, err := w.Write([]byte("{\"id\":1}\n")); err != nil {
 				return
 			}
 		}
 	}()
-	<-lines // the call being dispatched; the rest wait unread
 	select {
 	case <-cancelled:
 	case <-time.After(5 * time.Second):
