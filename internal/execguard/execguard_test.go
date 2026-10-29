@@ -249,21 +249,6 @@ func TestSweep_leavesARecordBeingWrittenAlone(t *testing.T) {
 	}
 }
 
-// Host commands, such as a native runtime's php, have no container side.
-func TestRun_leavesACommandThatIsNotAnExecAlone(t *testing.T) {
-	dir := stubDir(t)
-	cmd := exec.Command("true", "-v")
-	if err := Run(context.Background(), cmd, ""); err != nil {
-		t.Fatal(err)
-	}
-	if len(cmd.Args) != 2 {
-		t.Fatalf("args = %v, want them untouched", cmd.Args)
-	}
-	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
-		t.Fatalf("a host command left a record: %v", entries)
-	}
-}
-
 // The watcher kills what finished runs and runs of a lerd killed outright left
 // behind, one exec per container, and never touches a run still in progress.
 func TestSweep_killsWhatEndedOrOrphanedRunsLeft(t *testing.T) {

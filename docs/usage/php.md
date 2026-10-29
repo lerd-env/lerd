@@ -92,6 +92,8 @@ Commands that run in a container get the colour capability of the terminal you s
 
 `podman exec` leaves a command running in the container when whatever started it goes away, so a browser test stopped with Ctrl+C or by a timeout would otherwise keep its headless Chromium and its open pages for good, and those pages keep reconnecting to the site, which counts as activity and stops [idle-suspend](idle-suspend.md) from ever putting it to sleep. lerd stamps every `lerd php`, `lerd console`, `vendor/bin` and tinker run, and the MCP `artisan` tool, with a `LERD_EXEC` variable its children inherit. When lerd is interrupted, the dashboard gives up on a run, or an MCP session closes mid-call, everything carrying that run's stamp in the container is stopped with it. Whatever is still carrying it later, a child the command put in the background, one that Ctrl+C in a terminal did not reach, or the whole run when lerd was killed outright, is stopped by `lerd-watcher` within a minute.
 
+The [native runtime](../features/native-runtime.md) has no container to stamp, so each run gets a process group of its own instead, handed the terminal when you run it from one so Ctrl+C and tinker's prompt behave as usual. When the run ends, passes, fails or is interrupted, whatever is left in its group, such as the Playwright server a Pest browser test starts, is stopped with it, and `lerd-watcher` stops the group of a run whose lerd was killed outright.
+
 ---
 
 ## External environment providers

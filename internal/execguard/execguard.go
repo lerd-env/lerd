@@ -53,6 +53,8 @@ type record struct {
 	// Ended is set when the exec returned on its own. A child it put in the
 	// background, or one Ctrl+C in a terminal did not reach, can outlive it.
 	Ended bool `json:"ended,omitempty"`
+	// PGID marks a run on this machine rather than in a container.
+	PGID int `json:"pgid,omitempty"`
 }
 
 var (
@@ -62,9 +64,12 @@ var (
 	dirFn       = func() string { return filepath.Join(config.DataDir(), "exec") }
 	killFn      = Kill
 	startTimeFn = processStartTime
-	raiseFn     = func(sig os.Signal) {
+	// raiseFn waits for the signal to land: it arrives asynchronously, and a
+	// caller's os.Exit would otherwise end lerd first with the wrong status.
+	raiseFn = func(sig os.Signal) {
 		if p, err := os.FindProcess(os.Getpid()); err == nil {
 			_ = p.Signal(sig)
+			time.Sleep(time.Second)
 		}
 	}
 	notifyFn = func() (<-chan os.Signal, func()) {
@@ -76,10 +81,11 @@ var (
 
 // Run runs cmd, a podman exec into container, under a marker of its own: killed
 // at once if ctx ends or lerd is interrupted, left to Sweep if anything outlives
-// the exec or lerd is killed outright. A cmd that is not a podman exec just runs.
+// the exec or lerd is killed outright. A cmd that is not a podman exec runs on
+// this machine under its own process group instead, see runHost.
 func Run(ctx context.Context, cmd *exec.Cmd, container string) error {
 	if len(cmd.Args) < 2 || cmd.Args[1] != "exec" {
-		return cmd.Run()
+		return runHost(ctx, cmd)
 	}
 	marker := newMarker()
 	cmd.Args = slices.Insert(cmd.Args, 2, "--env", MarkerEnv+"="+marker)
@@ -157,6 +163,13 @@ func Sweep() {
 			continue
 		}
 		if !r.Ended && ownerAlive(r) {
+			continue
+		}
+		if r.PGID > 0 {
+			if info, err := os.Stat(path); err == nil {
+				sweepHost(r, info.ModTime())
+			}
+			swept = append(swept, path)
 			continue
 		}
 		markers[r.Container] = append(markers[r.Container], r.Marker)
