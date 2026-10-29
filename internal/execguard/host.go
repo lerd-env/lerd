@@ -2,12 +2,10 @@ package execguard
 
 import (
 	"context"
-	"errors"
 	"os"
 	"os/exec"
 	"os/signal"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -20,14 +18,13 @@ import (
 const (
 	groupGrace = 2 * time.Second
 	groupPoll  = 50 * time.Millisecond
-	// leaderlessTrust spans a few watcher sweeps, which run once a minute.
-	leaderlessTrust = 5 * time.Minute
+	// guardLife caps how long a guard idles when no watcher runs to sweep it.
+	guardLife = 24 * time.Hour
 )
 
 var (
 	killGroupFn    = killGroup
 	ownsTerminalFn = ownsTerminal
-	groupIsOursFn  = groupIsOurs
 )
 
 // runHost runs a command on this machine in a process group of its own and ends
@@ -42,7 +39,8 @@ func runHost(ctx context.Context, cmd *exec.Cmd) error {
 		return err
 	}
 	pgid := cmd.Process.Pid
-	path, recErr := writeRecord(dirFn(), record{Marker: newMarker(), PGID: pgid, PID: os.Getpid(), Start: startTimeFn(os.Getpid())})
+	guard, _ := startGuard(pgid)
+	path, recErr := writeRecord(dirFn(), record{Marker: newMarker(), PGID: pgid, Guard: guard, PID: os.Getpid(), Start: startTimeFn(os.Getpid())})
 	// The record is only for a lerd killed outright; every other way out
 	// ends the group here and drops it.
 	finish := func() {
@@ -144,48 +142,27 @@ func killGroup(pgid int) {
 	_ = syscall.Kill(-pgid, syscall.SIGKILL)
 }
 
-// sweepHost ends the group a lerd killed outright left behind.
-func sweepHost(r record, written time.Time) {
-	if groupIsOursFn(r.PGID, written) {
-		killGroupFn(r.PGID)
+// startGuard adds an idle member to the run's group. A group id is only free for
+// reuse once every member is gone, so while the guard lives the id is provably
+// the run's. It ignores the hangup and Ctrl+C a dying terminal sends, not TERM.
+func startGuard(pgid int) (int, error) {
+	g := exec.Command("sh", "-c", `trap "" HUP INT; exec sleep `+strconv.Itoa(int(guardLife.Seconds())))
+	g.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pgid: pgid}
+	if err := g.Start(); err != nil {
+		return 0, err
 	}
+	go func() { _ = g.Wait() }()
+	return g.Process.Pid, nil
 }
 
-// groupIsOurs reports whether pgid still names the run's group. The id is only
-// free again once every member is gone, and whoever takes it leads the new group,
-// so a live leader started after the record is the one sign it changed hands.
-func groupIsOurs(pgid int, recorded time.Time) bool {
-	out, err := exec.Command("ps", "-o", "etime=", "-p", strconv.Itoa(pgid)).Output()
-	var exit *exec.ExitError
-	if errors.As(err, &exit) && len(out) == 0 {
-		// No leader leaves nothing to check against, so only a sweep soon after
-		// the run trusts the id; a watcher that was down long may see it reused.
-		return time.Since(recorded) < leaderlessTrust
+// sweepHost ends the group a lerd killed outright left behind, but only while
+// its guard still holds the id; without it the id may belong to someone else.
+func sweepHost(r record) {
+	if r.Guard <= 0 || syscall.Kill(r.Guard, 0) != nil {
+		return
 	}
-	if err != nil {
-		return false
+	if pg, err := syscall.Getpgid(r.Guard); err != nil || pg != r.PGID {
+		return
 	}
-	age, ok := parseEtime(strings.TrimSpace(string(out)))
-	return ok && time.Since(recorded) < age+time.Second
-}
-
-// parseEtime reads ps's elapsed time, [[dd-]hh:]mm:ss.
-func parseEtime(s string) (time.Duration, bool) {
-	days := 0
-	if d, rest, ok := strings.Cut(s, "-"); ok {
-		n, err := strconv.Atoi(d)
-		if err != nil {
-			return 0, false
-		}
-		days, s = n, rest
-	}
-	var secs int
-	for _, part := range strings.Split(s, ":") {
-		n, err := strconv.Atoi(part)
-		if err != nil {
-			return 0, false
-		}
-		secs = secs*60 + n
-	}
-	return time.Duration(days)*24*time.Hour + time.Duration(secs)*time.Second, true
+	killGroupFn(r.PGID)
 }

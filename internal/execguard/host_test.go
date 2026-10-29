@@ -102,11 +102,20 @@ func startGroup(t *testing.T) int {
 	return cmd.Process.Pid
 }
 
+func guardOf(t *testing.T, pgid int) int {
+	t.Helper()
+	pid, err := startGuard(pgid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pid
+}
+
 // A lerd killed outright reaps nothing, so the watcher ends the run's group.
 func TestSweep_killsTheGroupOfAHostRunWhoseLerdIsGone(t *testing.T) {
 	dir := stubDir(t)
 	pgid := startGroup(t)
-	if _, err := writeRecord(dir, record{Marker: "host", PGID: pgid, PID: deadPid(t)}); err != nil {
+	if _, err := writeRecord(dir, record{Marker: "host", PGID: pgid, Guard: guardOf(t, pgid), PID: deadPid(t)}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -120,32 +129,8 @@ func TestSweep_killsTheGroupOfAHostRunWhoseLerdIsGone(t *testing.T) {
 	}
 }
 
-// A group id is free again once its members are gone, so one started after the
-// record belongs to someone else and must be left alone.
-func TestSweep_leavesAGroupIdTakenAfterTheRunAlone(t *testing.T) {
-	dir := stubDir(t)
-	pgid := startGroup(t)
-	path, err := writeRecord(dir, record{Marker: "host", PGID: pgid, PID: deadPid(t)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	old := time.Now().Add(-time.Hour)
-	if err := os.Chtimes(path, old, old); err != nil {
-		t.Fatal(err)
-	}
-
-	Sweep()
-
-	if syscall.Kill(-pgid, 0) != nil {
-		t.Fatal("a group started after the record was killed")
-	}
-	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
-		t.Fatalf("records left %v", entries)
-	}
-}
-
-// A child started late in the run, outliving a leader that already exited, is
-// still the run's: only a live leader newer than the record means reuse.
+// The guard holds the group id while it lives, so a child the run started late,
+// after its leader exited, is still provably the run's.
 func TestSweep_killsALateChildWhoseLeaderExited(t *testing.T) {
 	dir := stubDir(t)
 	pidFile := filepath.Join(t.TempDir(), "pid")
@@ -156,7 +141,7 @@ func TestSweep_killsALateChildWhoseLeaderExited(t *testing.T) {
 	}
 	pgid := cmd.Process.Pid
 	t.Cleanup(func() { _ = syscall.Kill(-pgid, syscall.SIGKILL) })
-	if _, err := writeRecord(dir, record{Marker: "host", PGID: pgid, PID: deadPid(t)}); err != nil {
+	if _, err := writeRecord(dir, record{Marker: "host", PGID: pgid, Guard: guardOf(t, pgid), PID: deadPid(t)}); err != nil {
 		t.Fatal(err)
 	}
 	_ = cmd.Wait()
@@ -169,33 +154,29 @@ func TestSweep_killsALateChildWhoseLeaderExited(t *testing.T) {
 	}
 }
 
-// Without a leader nothing proves the group is still the run's, so after a
-// long gap, a watcher that was down, the id may have changed hands: leave it.
-func TestSweep_leavesALeaderlessGroupOfAnOldRecordAlone(t *testing.T) {
-	dir := stubDir(t)
-	pidFile := filepath.Join(t.TempDir(), "pid")
-	cmd := exec.Command("sh", "-c", "sleep 30 & echo $! > "+pidFile)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	pgid := cmd.Process.Pid
-	t.Cleanup(func() { _ = syscall.Kill(-pgid, syscall.SIGKILL) })
-	path, err := writeRecord(dir, record{Marker: "host", PGID: pgid, PID: deadPid(t)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	old := time.Now().Add(-time.Hour)
-	if err := os.Chtimes(path, old, old); err != nil {
-		t.Fatal(err)
-	}
-	_ = cmd.Wait()
-	readPid(t, pidFile)
+// Without its guard nothing proves the id is still the run's: once every member
+// is gone the id can be reused, so the group is left alone and the record dropped.
+func TestSweep_leavesAGroupWithoutItsGuardAlone(t *testing.T) {
+	for name, guard := range map[string]func(t *testing.T) int{
+		"guard gone":             deadPid,
+		"guard in another group": func(*testing.T) int { return os.Getpid() },
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := stubDir(t)
+			pgid := startGroup(t)
+			if _, err := writeRecord(dir, record{Marker: "host", PGID: pgid, Guard: guard(t), PID: deadPid(t)}); err != nil {
+				t.Fatal(err)
+			}
 
-	Sweep()
+			Sweep()
 
-	if syscall.Kill(-pgid, 0) != nil {
-		t.Fatal("a leaderless group behind an old record was killed")
+			if syscall.Kill(-pgid, 0) != nil {
+				t.Fatal("a group whose guard is not in it was killed")
+			}
+			if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+				t.Fatalf("records left %v", entries)
+			}
+		})
 	}
 }
 
@@ -203,7 +184,7 @@ func TestSweep_leavesALeaderlessGroupOfAnOldRecordAlone(t *testing.T) {
 func TestSweep_leavesARunningHostRunAlone(t *testing.T) {
 	dir := stubDir(t)
 	pgid := startGroup(t)
-	if _, err := writeRecord(dir, record{Marker: "host", PGID: pgid, PID: os.Getpid(), Start: startTimeFn(os.Getpid())}); err != nil {
+	if _, err := writeRecord(dir, record{Marker: "host", PGID: pgid, Guard: guardOf(t, pgid), PID: os.Getpid(), Start: startTimeFn(os.Getpid())}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -265,4 +246,22 @@ func eventually(cond func() bool) bool {
 		time.Sleep(20 * time.Millisecond)
 	}
 	return false
+}
+
+// A lerd killed in a terminal takes the terminal with it, and the hangup reaches
+// the run's group: the guard has to outlast it, or the sweep cannot prove the id.
+func TestStartGuard_outlastsAHangupButNotTerm(t *testing.T) {
+	pgid := startGroup(t)
+	guard := guardOf(t, pgid)
+	time.Sleep(200 * time.Millisecond) // let the guard set its dispositions
+	_ = syscall.Kill(-pgid, syscall.SIGHUP)
+	_ = syscall.Kill(-pgid, syscall.SIGINT)
+	time.Sleep(200 * time.Millisecond)
+	if !alive(guard) {
+		t.Fatal("the guard died on a hangup")
+	}
+	killGroup(pgid)
+	if !waitGone(pgid) {
+		t.Fatal("the guard survived the group being killed")
+	}
 }

@@ -53,8 +53,10 @@ type record struct {
 	// Ended is set when the exec returned on its own. A child it put in the
 	// background, or one Ctrl+C in a terminal did not reach, can outlive it.
 	Ended bool `json:"ended,omitempty"`
-	// PGID marks a run on this machine rather than in a container.
-	PGID int `json:"pgid,omitempty"`
+	// PGID marks a run on this machine rather than in a container, and Guard
+	// is the idle member that keeps that group id from being reused.
+	PGID  int `json:"pgid,omitempty"`
+	Guard int `json:"guard,omitempty"`
 }
 
 var (
@@ -165,9 +167,7 @@ func Sweep() {
 			continue
 		}
 		if r.PGID > 0 {
-			if info, err := os.Stat(path); err == nil {
-				sweepHost(r, info.ModTime())
-			}
+			sweepHost(r)
 			swept = append(swept, path)
 			continue
 		}
