@@ -88,6 +88,8 @@ run_entry() { tui_screen 140 45 "wait:Dashboard" "keys:\\x10" "wait:Go to or do"
 # minutes, so the TUI stays open until it reports the command done; quitting
 # earlier would kill it halfway.
 switch_runtime() { TUI_WAIT=1200 tui_screen 140 45 "wait:Dashboard" "keys:\\x10" "wait:Go to or do" "keys:switch runtime $host" "sleep:1" "keys:\\r" "wait:[✓✖] lerd runtime" >/dev/null; }
+# Each pair starts from off, so a state an earlier run left behind cannot fail it.
+lerd idle unpin "$name" </dev/null >/dev/null 2>&1
 run_entry "toggle keep awake $host"
 check_out "10.41 [partial] keep awake pins the site" "$name.*pin" bash -c 'lerd idle status | tr "\n" " "'
 run_entry "toggle keep awake $host"
@@ -100,6 +102,7 @@ whost=$(site_host "$wk")
 # site_view <domain>: the site's own view, as the TUI draws it.
 site_view() { tui_screen 140 45 "wait:Dashboard" "keys:\\x10" "wait:Go to or do" "keys:$1" "sleep:1" "keys:\\r" "wait:Doctor" "sleep:2"; }
 export -f site_view
+(cd "$wk" && lerd horizon:reload off </dev/null >/dev/null 2>&1)
 run_entry "toggle horizon reload $whost"
 check_out "10.41 [partial] Horizon reload turns on" '● Reload horizon +on' site_view "$whost"
 run_entry "toggle horizon reload $whost"
