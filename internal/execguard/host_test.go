@@ -265,3 +265,17 @@ func TestStartGuard_outlastsAHangupButNotTerm(t *testing.T) {
 		t.Fatal("the guard survived the group being killed")
 	}
 }
+
+// A run can last longer than any one nap, queue:work for days, and the guard has
+// to hold the id for all of it.
+func TestStartGuard_outlivesItsNap(t *testing.T) {
+	prev := guardNap
+	guardNap = time.Second
+	t.Cleanup(func() { guardNap = prev })
+	pgid := startGroup(t)
+	guard := guardOf(t, pgid)
+	time.Sleep(2500 * time.Millisecond)
+	if !alive(guard) {
+		t.Fatal("the guard ended while its run was still going")
+	}
+}

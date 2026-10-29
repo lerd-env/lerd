@@ -18,11 +18,11 @@ import (
 const (
 	groupGrace = 2 * time.Second
 	groupPoll  = 50 * time.Millisecond
-	// guardLife caps how long a guard idles when no watcher runs to sweep it.
-	guardLife = 24 * time.Hour
 )
 
 var (
+	// guardNap is one sleep of the guard's endless loop; it ends only with its group.
+	guardNap       = 24 * time.Hour
 	killGroupFn    = killGroup
 	ownsTerminalFn = ownsTerminal
 )
@@ -146,7 +146,7 @@ func killGroup(pgid int) {
 // reuse once every member is gone, so while the guard lives the id is provably
 // the run's. It ignores the hangup and Ctrl+C a dying terminal sends, not TERM.
 func startGuard(pgid int) (int, error) {
-	g := exec.Command("sh", "-c", `trap "" HUP INT; exec sleep `+strconv.Itoa(int(guardLife.Seconds())))
+	g := exec.Command("sh", "-c", `trap "" HUP INT; while :; do sleep `+strconv.Itoa(int(guardNap.Seconds()))+`; done`)
 	g.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pgid: pgid}
 	if err := g.Start(); err != nil {
 		return 0, err
