@@ -229,6 +229,40 @@ func TestEnsureServiceRunning_clearsThePauseOfAServiceItStarts(t *testing.T) {
 	}
 }
 
+// A database a site's link or env brings up from cold joins Adminer's and
+// pgAdmin's server lists, the same as one started from the services page.
+func TestEnsureServiceRunning_refreshesConsumersOfAServiceItStarts(t *testing.T) {
+	withServiceHome(t)
+	stubLifecycle(t)
+	var refreshed []string
+	prev := ensureRegenConsumersFn
+	ensureRegenConsumersFn = func(name string) { refreshed = append(refreshed, name) }
+	t.Cleanup(func() { ensureRegenConsumersFn = prev })
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "proj-postgres", Image: "docker.io/library/postgres:16", Family: "postgres",
+		Ports: []string{"127.0.0.1:5433:5432"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureServiceRunning("proj-postgres"); err != nil {
+		t.Fatalf("EnsureServiceRunning: %v", err)
+	}
+	if len(refreshed) != 1 || refreshed[0] != "proj-postgres" {
+		t.Fatalf("consumers refreshed for %v, want [proj-postgres]", refreshed)
+	}
+
+	// Every php and composer run asks for its services; one already up must
+	// not rewrite the admin UIs each time.
+	refreshed = nil
+	podman.UnitLifecycle = activeLifecycle{}
+	if err := EnsureServiceRunning("proj-postgres"); err != nil {
+		t.Fatalf("EnsureServiceRunning: %v", err)
+	}
+	if len(refreshed) != 0 {
+		t.Fatalf("a running service refreshed consumers: %v", refreshed)
+	}
+}
+
 type activeLifecycle struct{ noopLifecycle }
 
 func (activeLifecycle) UnitStatus(string) (string, error) { return "active", nil }

@@ -1190,12 +1190,19 @@ func EnsureServiceRunning(name string) error {
 		return err
 	}
 	rememberReady(name, id)
+	// A site's link or env can be what first starts a database, and Adminer and
+	// pgAdmin only list the members of a family that are running.
+	ensureRegenConsumersFn(name)
 	return nil
 }
 
 // activationIDFn names the current run of a service's unit, so a probe that
 // answered is not repeated within it; per platform, a seam for tests.
 var activationIDFn = activationID
+
+// ensureRegenConsumersFn refreshes the admin UIs that list a service's family
+// after EnsureServiceRunning starts it; a seam for tests.
+var ensureRegenConsumersFn = RegenerateDynamicEnvConsumersForService
 
 func readyFile(name string) string {
 	return filepath.Join(config.DataDir(), "service-ready", name)
