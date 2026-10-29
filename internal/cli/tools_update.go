@@ -17,7 +17,7 @@ import (
 func NewToolsUpdateCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "tools:update",
-		Short: "Update composer, mise, fnm and mkcert to their pinned versions",
+		Short: "Update composer, mise and fnm to their pinned versions",
 		Long:  "Re-downloads any managed host tool whose installed version differs from the pinned one. Tools that are not installed (e.g. fnm on an nvm-managed setup) are left alone, and so is a mise lerd did not install itself.",
 		RunE:  runToolsUpdate,
 	}

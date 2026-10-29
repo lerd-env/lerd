@@ -62,13 +62,12 @@ jobs:
       - uses: actions/checkout@v4
 
       # Every platform's build of every pin, each in its own directory, since
-      # they are separate binaries. mkcert stays out: its 2022 release is built
-      # with Go 1.18, so no pin bump clears it until lerd stops using it.
+      # they are separate binaries.
       - name: Download the pinned tools
         run: |
           set -euo pipefail
           FILE=internal/tools/tools.yaml
-          for tool in $(yq -r '.tools | keys | .[] | select(. != "mkcert")' "$FILE"); do
+          for tool in $(yq -r '.tools | keys | .[]' "$FILE"); do
             version=$(yq -r ".tools.\"${tool}\".version" "$FILE")
             template=$(yq -r ".tools.\"${tool}\".url" "$FILE")
             assets=$(yq -r ".tools.\"${tool}\".assets // {} | to_entries | .[].value" "$FILE" | sort -u)

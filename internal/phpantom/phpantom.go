@@ -1,12 +1,6 @@
-// Package phpantom manages the phpantom_lsp PHP language server binary that
-// powers tinker autocomplete, diagnostics, and hover in the web UI.
-//
-// phpantom_lsp (https://github.com/PHPantom-dev/phpantom_lsp) is a single,
-// self-contained Rust binary: it bundles phpstorm-stubs and the Mago parser
-// and needs no PHP runtime to analyze a project. That lets lerd run it on the
-// host pointed at the project directory, alongside the other host tools it
-// already manages (fnm, mkcert, composer) in BinDir, rather than baking it
-// into the per-version PHP container images.
+// Package phpantom manages the phpantom_lsp language server behind tinker's
+// autocomplete, diagnostics and hover. It is a self-contained Rust binary that
+// needs no PHP, so it runs on the host from BinDir instead of in the PHP images.
 package phpantom
 
 import (

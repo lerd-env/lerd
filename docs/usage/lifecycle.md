@@ -343,13 +343,13 @@ A pin may also carry a `digests` map alongside `assets`, giving the sha256 of ea
 
 ```yaml
 tools:
-  mkcert:
-    version: v1.4.4
-    url: https://github.com/FiloSottile/mkcert/releases/download/{version}/{asset}
+  mise:
+    version: v2026.9.12
+    url: https://github.com/jdx/mise/releases/download/{version}/{asset}
     assets:
-      linux/amd64: mkcert-{version}-linux-amd64
+      linux/amd64: mise-{version}-linux-x64.tar.gz
     digests:
-      linux/amd64: 6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
+      linux/amd64: b4058dece685259910d3aba5782445996eea79dbdb3cf952a6eb81aadf0373ff
 ```
 
 Where a digest is given the download is checked against it and rejected on a mismatch. The field is optional, so a manifest without it installs exactly as before, and binaries that predate the field ignore it. Either way a download is written to a temporary file and moved into place only once it is complete, so a failed or rejected download never replaces a working binary.
