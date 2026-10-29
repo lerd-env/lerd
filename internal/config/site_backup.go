@@ -169,7 +169,11 @@ func ReadSitesBackup(name string) (*SiteRegistry, error) {
 // replaces is backed up by the save itself, so restoring the wrong one is
 // undone by restoring again.
 func RestoreSitesBackup(name string) (*SiteRegistry, string, error) {
-	defer lockSites()()
+	unlock, err := lockSites()
+	if err != nil {
+		return nil, "", err
+	}
+	defer unlock()
 
 	names, err := listSitesBackupNames()
 	if err != nil {

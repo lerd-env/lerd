@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -20,7 +21,13 @@ func TestSitesWriterHelperProcess(t *testing.T) {
 	// starts with as the developer's real one and refuses to write to it.
 	t.Setenv("XDG_DATA_HOME", dir)
 	for i := 0; ; i++ {
-		_ = SetSiteIdleSuspendedWorkers("demo", []string{fmt.Sprint("queue-", i%2)})
+		if err := SetSiteIdleSuspendedWorkers("demo", []string{fmt.Sprint("queue-", i%2)}); err != nil {
+			fmt.Fprintln(os.Stderr, "writer:", err)
+			os.Exit(1)
+		}
+		if i == 0 {
+			_ = os.WriteFile(filepath.Join(dir, "writer-ready"), nil, 0644)
+		}
 	}
 }
 
@@ -30,11 +37,14 @@ func TestSitesWriterHelperProcess(t *testing.T) {
 func TestSitePinSurvivesAWriterInAnotherProcess(t *testing.T) {
 	real := os.Getenv("XDG_DATA_HOME")
 	setDataDir(t)
+	dir := os.Getenv("XDG_DATA_HOME")
 	if err := AddSite(Site{Name: "demo", Domains: []string{"demo.test"}, Path: "/srv/demo"}); err != nil {
 		t.Fatal(err)
 	}
+	var out strings.Builder
 	writer := exec.Command(os.Args[0], "-test.run=^TestSitesWriterHelperProcess$")
-	writer.Env = []string{"XDG_DATA_HOME=" + real, "GO_SITES_WRITER_DIR=" + os.Getenv("XDG_DATA_HOME")}
+	writer.Stdout, writer.Stderr = &out, &out
+	writer.Env = []string{"XDG_DATA_HOME=" + real, "GO_SITES_WRITER_DIR=" + dir}
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "XDG_DATA_HOME=") {
 			writer.Env = append(writer.Env, kv)
@@ -43,8 +53,23 @@ func TestSitePinSurvivesAWriterInAnotherProcess(t *testing.T) {
 	if err := writer.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = writer.Process.Kill(); _ = writer.Wait() })
-	time.Sleep(100 * time.Millisecond)
+	exited := make(chan error, 1)
+	go func() { exited <- writer.Wait() }()
+	t.Cleanup(func() { _ = writer.Process.Kill(); <-exited })
+
+	for deadline := time.Now().Add(10 * time.Second); ; {
+		if _, err := os.Stat(filepath.Join(dir, "writer-ready")); err == nil {
+			break
+		}
+		select {
+		case err := <-exited:
+			t.Fatalf("writer exited before its first save (%v): %s", err, out.String())
+		case <-time.After(10 * time.Millisecond):
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("writer never saved: %s", out.String())
+		}
+	}
 
 	lost := 0
 	for i := 0; i < 200; i++ {
@@ -56,6 +81,11 @@ func TestSitePinSurvivesAWriterInAnotherProcess(t *testing.T) {
 		if s, err := FindSite("demo"); err != nil || s.Pinned != want {
 			lost++
 		}
+	}
+	select {
+	case err := <-exited:
+		t.Fatalf("writer stopped mid-test (%v): %s", err, out.String())
+	default:
 	}
 	if lost > 0 {
 		t.Errorf("%d of 200 pin changes were overwritten by the other process", lost)
