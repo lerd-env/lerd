@@ -88,12 +88,13 @@ func Run(ctx context.Context, cmd *exec.Cmd, container string) error {
 	path, recErr := writeRecord(dirFn(), r)
 	// The record outlives the run on every path, so whatever the run leaves in
 	// the container, however it ended, is the next Sweep's to kill.
-	defer func() {
-		if recErr == nil {
+	markEnded := func() {
+		if recErr == nil && !r.Ended {
 			r.Ended = true
 			_ = writeFileAtomic(path, r)
 		}
-	}()
+	}
+	defer markEnded()
 	sigs, stop := notifyFn()
 	defer stop()
 	if err := cmd.Start(); err != nil {
@@ -108,10 +109,7 @@ func Run(ctx context.Context, cmd *exec.Cmd, container string) error {
 		return stopRun(cmd, done, container, marker)
 	case sig := <-sigs:
 		err := stopRun(cmd, done, container, marker)
-		if recErr == nil {
-			r.Ended = true
-			_ = writeFileAtomic(path, r)
-		}
+		markEnded()
 		// The signal was meant for lerd, which still has to act on it.
 		stop()
 		raiseFn(sig)

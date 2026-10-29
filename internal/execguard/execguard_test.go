@@ -142,6 +142,29 @@ func TestRun_killsTheContainerSideWhenInterrupted(t *testing.T) {
 	}
 }
 
+// The re-raised signal ends lerd while Run returns, so a second record write
+// in a defer gets cut short and strands an empty temp file for good.
+func TestRun_writesNothingAfterPassingTheSignalBack(t *testing.T) {
+	dir := stubDir(t)
+	sigs := stubSignals(t)
+	prev := raiseFn
+	raiseFn = func(os.Signal) {
+		entries, _ := os.ReadDir(dir)
+		for _, e := range entries {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
+	t.Cleanup(func() { raiseFn = prev })
+	cmd := sleeper(t)
+	stubKill(t, cmd)
+	sigs <- syscall.SIGINT
+
+	_ = Run(context.Background(), cmd, "lerd-php85-fpm")
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Fatalf("wrote %v after the signal was passed back", entries)
+	}
+}
+
 // The dashboard and MCP give up on a run through its context; the container
 // side goes with it, and only this run's processes, not the others there.
 func TestRun_killsTheContainerSideWhenItsContextEnds(t *testing.T) {
