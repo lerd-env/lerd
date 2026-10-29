@@ -1127,12 +1127,9 @@ func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 	return changed, podman.DaemonReloadIfNeeded(changed)
 }
 
-// EnsureServiceRunning starts the service if it is not already active and
-// waits until it is ready. Recurses through depends_on for custom services.
-// Unlike StartService it does not mark the service manually started, start
-// reverse dependents, or regenerate discover_family consumers — those are
-// user-facing start side effects; this is the "bring it up for env/link/db"
-// helper.
+// EnsureServiceRunning brings a service and its depends_on up for env/link/db and
+// waits until it is ready. Unlike StartService it neither marks it manually started
+// nor starts reverse dependents, but a cold start does refresh discover_family consumers.
 func EnsureServiceRunning(name string) error {
 	unit := "lerd-" + name
 	// A site still naming a service the user removed must not bring it back.
