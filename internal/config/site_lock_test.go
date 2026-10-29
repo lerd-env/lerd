@@ -53,8 +53,10 @@ func TestSitePinSurvivesAWriterInAnotherProcess(t *testing.T) {
 	if err := writer.Start(); err != nil {
 		t.Fatal(err)
 	}
-	exited := make(chan error, 1)
-	go func() { exited <- writer.Wait() }()
+	// Closed once the writer is gone, so every check and the cleanup can wait on it.
+	var waitErr error
+	exited := make(chan struct{})
+	go func() { waitErr = writer.Wait(); close(exited) }()
 	t.Cleanup(func() { _ = writer.Process.Kill(); <-exited })
 
 	for deadline := time.Now().Add(10 * time.Second); ; {
@@ -62,8 +64,8 @@ func TestSitePinSurvivesAWriterInAnotherProcess(t *testing.T) {
 			break
 		}
 		select {
-		case err := <-exited:
-			t.Fatalf("writer exited before its first save (%v): %s", err, out.String())
+		case <-exited:
+			t.Fatalf("writer exited before its first save (%v): %s", waitErr, out.String())
 		case <-time.After(10 * time.Millisecond):
 		}
 		if time.Now().After(deadline) {
@@ -83,8 +85,8 @@ func TestSitePinSurvivesAWriterInAnotherProcess(t *testing.T) {
 		}
 	}
 	select {
-	case err := <-exited:
-		t.Fatalf("writer stopped mid-test (%v): %s", err, out.String())
+	case <-exited:
+		t.Fatalf("writer stopped mid-test (%v): %s", waitErr, out.String())
 	default:
 	}
 	if lost > 0 {
