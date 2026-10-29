@@ -1106,7 +1106,7 @@
   "sites_timing_nothingCaptured": "除錯擷取中沒有此請求的內容：擷取當時已關閉，或較新的事件已將其擠出緩衝區。",
   "common_copyForAgent": "複製給 AI 代理",
   "sites_timing_copyForAgentHint": "複製一段提示詞，讓 AI 助理透過 lerd 讀取此請求並修正其中的問題",
-  "sites_timing_inspectRoute": "檢查此路由的請求",
+  "sites_timing_inspectRoute": "在除錯中顯示此路由的請求",
   "sites_timing_latency": "延遲",
   "sites_timing_perMin": "請求/分鐘",
   "sites_timing_recent": "最近的請求",

@@ -1106,7 +1106,7 @@
   "sites_timing_nothingCaptured": "La capture de débogage ne garde rien pour cette requête : elle était coupée ou des événements plus récents l'ont chassée du tampon.",
   "common_copyForAgent": "Copier pour l’agent",
   "sites_timing_copyForAgentHint": "Copie un prompt pour qu’un assistant IA lise cette requête via lerd et en corrige les problèmes",
-  "sites_timing_inspectRoute": "Inspecter les requêtes de cette route",
+  "sites_timing_inspectRoute": "Afficher les requêtes de cette route dans Débogage",
   "sites_timing_latency": "latence",
   "sites_timing_perMin": "req/min",
   "sites_timing_recent": "Requêtes récentes",
