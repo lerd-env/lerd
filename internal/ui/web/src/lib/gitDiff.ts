@@ -72,6 +72,15 @@ export function loadUptoVersions(domain: string, path: string, hash: string, fil
   return apiJson<GitVersions>(`/api/sites/git-diff?${query(domain, path)}&upto=${hash}&file=${encodeURIComponent(file)}`);
 }
 
+// outgoing compares where HEAD left its upstream with HEAD: every file a push changes.
+export function loadOutgoingFiles(domain: string, path: string): Promise<GitChangedFile[]> {
+  return apiJson<GitChangedFile[]>(`/api/sites/git-diff?${query(domain, path)}&outgoing=1`);
+}
+
+export function loadOutgoingVersions(domain: string, path: string, file: string): Promise<GitVersions> {
+  return apiJson<GitVersions>(`/api/sites/git-diff?${query(domain, path)}&outgoing=1&file=${encodeURIComponent(file)}`);
+}
+
 export interface GitResult {
   ok?: boolean;
   error?: string;

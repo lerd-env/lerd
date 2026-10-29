@@ -6,6 +6,7 @@
   import PlanReview from '$components/PlanReview.svelte';
   import StashRow from '$components/StashRow.svelte';
   import PlanProgress from '$components/PlanProgress.svelte';
+  import GitDiffModal from './GitDiffModal.svelte';
   import { closeModal } from '$stores/modals';
   import { loadSites, type Site } from '$stores/sites';
   import {
@@ -17,6 +18,7 @@
   } from '$stores/worktree';
   import { restoreSnapshot } from '$stores/databases';
   import { branchOptions } from '$lib/branchOptions';
+  import { loadGitStatus } from '$lib/gitStatus';
   import { relativeTime } from '$lib/relativeTime';
   import { planRows, defaultSteps, type PlanRow, type RowKey } from '$lib/planRows';
   import { m } from '../paraglide/messages.js';
@@ -46,6 +48,10 @@
   let baseLocal = $state<string[]>([]);
   let baseRemote = $state<string[]>([]);
   let planSeq = 0;
+  // Opens over this dialog, which keeps its plan underneath.
+  let viewingFiles = $state(false);
+  // The main checkout's folder as git-status reports it, which the diff is read in.
+  let gitPath = $state('');
 
   const options = $derived(branchOptions(local, remote, dates));
   const baseOptions = $derived([
@@ -110,6 +116,10 @@
   }
 
   onMount(async () => {
+    // A failed read only leaves the files card without its link.
+    void loadGitStatus(site.domain)
+      .then((cs) => (gitPath = cs.find((c) => c.main)?.path ?? ''))
+      .catch(() => {});
     try {
       const o = await worktreeOptions(site.domain);
       local = o.local_branches ?? [];
@@ -228,6 +238,8 @@
             bind:on
             thenText={m.branchSwitch_then()}
             missingText={m.branchSwitch_missingMigrations({ count: plan.migrations_missing })}
+            onfiles={plan.target && gitPath ? () => (viewingFiles = true) : undefined}
+            filesTitle={m.gitDiff_switchOpen()}
           />
         {/if}
         <p class="text-xs text-gray-500 dark:text-gray-400">{m.branchSwitch_hint()}</p>
@@ -266,3 +278,13 @@
     {/if}
   {/snippet}
 </Modal>
+{#if viewingFiles && plan?.target}
+  <GitDiffModal
+    domain={site.domain}
+    path={gitPath}
+    branch={site.branch || 'HEAD'}
+    upto={plan.target}
+    title={m.gitDiff_switchTitle({ branch: target })}
+    onclose={() => (viewingFiles = false)}
+  />
+{/if}

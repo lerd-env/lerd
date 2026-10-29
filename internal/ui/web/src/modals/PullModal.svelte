@@ -165,6 +165,7 @@
           thenText={m.pullPlan_then()}
           missingText={m.pullPlan_missingMigrations({ count: plan.migrations_missing })}
           onfiles={plan.target ? () => (viewingFiles = true) : undefined}
+          filesTitle={m.gitDiff_incomingOpen()}
         />
         <!-- Read after the plan's fetch, so it lists what the pull will bring. -->
         <GitCommitList {domain} {path} direction="incoming" onopen={(c) => (viewing = c)} />

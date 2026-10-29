@@ -5,8 +5,9 @@
   import { tooltip } from '$lib/tooltip';
   import ConfirmModal from './ConfirmModal.svelte';
   import GitCommitList from './GitCommitList.svelte';
+  import SyncStats from './SyncStats.svelte';
   import GitDiffModal from '../modals/GitDiffModal.svelte';
-  import type { GitCommit } from '$lib/gitDiff';
+  import { loadOutgoingFiles, type GitCommit } from '$lib/gitDiff';
   import { m } from '../paraglide/messages.js';
 
   interface Props {
@@ -52,11 +53,25 @@
   let confirming = $state<(typeof allOps)[number] | null>(null);
   // Opens over the confirmation, which keeps its place underneath.
   let viewing = $state<GitCommit | null>(null);
+  let viewingFiles = $state(false);
+  // What the push changes, counted from the list the files card opens; null while read.
+  let pushFiles = $state<number | null>(null);
   function ask(o: (typeof allOps)[number]) {
     if (o.op !== 'fetch' && diverged) return;
     if (o.op === 'fetch') void run(o.op, o.failed());
     else if (o.op === 'pull') openPullModal(domain, branch, branchLabel, path, onDone);
-    else confirming = o;
+    else {
+      confirming = o;
+      if (!publishing) void countPushFiles();
+    }
+  }
+  async function countPushFiles() {
+    pushFiles = null;
+    try {
+      pushFiles = (await loadOutgoingFiles(domain, path)).length;
+    } catch {
+      // The card stays without a count; the commit list below still says what goes.
+    }
   }
   function confirmed() {
     const o = confirming;
@@ -138,9 +153,22 @@
   onclose={() => (confirming = null)}
 >
   {#snippet extra()}
-    <GitCommitList {domain} {path} direction="outgoing" onopen={(c) => (viewing = c)} />
+    <div class="space-y-4">
+      {#if !publishing}
+        <SyncStats
+          behind={status.behind}
+          ahead={status.ahead}
+          files={pushFiles}
+          onfiles={() => (viewingFiles = true)}
+          filesTitle={m.gitDiff_outgoingOpen()}
+        />
+      {/if}
+      <GitCommitList {domain} {path} direction="outgoing" onopen={(c) => (viewing = c)} />
+    </div>
   {/snippet}
 </ConfirmModal>
 {#if viewing}
   <GitDiffModal {domain} {path} branch={branchLabel} commit={viewing} onclose={() => (viewing = null)} />
+{:else if viewingFiles}
+  <GitDiffModal {domain} {path} branch={branchLabel} outgoing onclose={() => (viewingFiles = false)} />
 {/if}

@@ -6759,6 +6759,12 @@ func handleSiteGitDiff(w http.ResponseWriter, r *http.Request) {
 	if q.Has("upto") {
 		readFiles, readVersions, hash = gitpkg.HeadFiles, gitpkg.HeadVersions, q.Get("upto")
 	}
+	// A push compares with the upstream git resolves here, so it takes no hash.
+	if q.Has("outgoing") {
+		readFiles = func(dir, _ string) ([]gitpkg.ChangedFile, error) { return gitpkg.OutgoingFiles(dir) }
+		readVersions = func(dir, _, file string) (gitpkg.Versions, error) { return gitpkg.OutgoingVersions(dir, file) }
+		hash = "@{upstream}"
+	}
 	if hash != "" {
 		var v any
 		var err error

@@ -151,3 +151,24 @@ func TestHeadFilesAndVersions(t *testing.T) {
 		t.Error("only a hash may name the commit")
 	}
 }
+
+// What a push sends, across every outgoing commit, leaving out what only the
+// remote has.
+func TestOutgoingFilesAndVersions(t *testing.T) {
+	_, dir := commitsFixture(t)
+
+	files, err := OutgoingFiles(dir)
+	if err != nil || len(files) != 2 || files[0] != (ChangedFile{"a", "M"}) || files[1] != (ChangedFile{"b", "A"}) {
+		t.Fatalf("files: %+v %v", files, err)
+	}
+	if v, err := OutgoingVersions(dir, "a"); err != nil || v.Original != "one\n" || v.Modified != "one\ntwo\n" {
+		t.Errorf("versions: %+v %v", v, err)
+	}
+	if _, err := OutgoingVersions(dir, "theirs"); err == nil {
+		t.Error("a path only the remote changed must be refused")
+	}
+	gitRun(t, dir, "checkout", "-q", "-b", "feature")
+	if _, err := OutgoingFiles(dir); err == nil {
+		t.Error("a branch with no upstream has nothing to compare with")
+	}
+}
