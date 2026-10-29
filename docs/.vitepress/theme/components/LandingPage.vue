@@ -25,6 +25,9 @@ onMounted(async () => {
   for (const key of Object.keys(live)) if (live[key]) counts.value[key] = live[key]
 })
 
+// Below 960px the nav folds behind a menu button.
+const menuOpen = ref(false)
+
 const copied = ref(false)
 let copyTimer = null
 async function copyInstall() {
@@ -129,13 +132,14 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
 <template>
   <div class="lerd-landing">
 
-    <header class="hdr"><div class="wrap">
+    <header class="hdr" :class="{ open: menuOpen }" @keydown.esc="menuOpen = false"><div class="wrap">
       <a class="brand" href="#top"><img :src="withBase('/assets/logo.svg')" alt="" width="26" height="26">Lerd</a>
-      <nav>
+      <nav id="hdr-nav" @click="menuOpen = false">
         <a href="#lineup">Features</a>
+        <a href="#agents">AI agents</a>
         <a href="#frameworks">Frameworks</a>
         <a href="#services">Services</a>
-        <a href="#plugins">Community plugins</a>
+        <a href="#plugins">Plugins</a>
         <a href="#principles">Why Lerd</a>
         <a href="#compare">Compare</a>
         <a href="#faq">FAQ</a>
@@ -149,6 +153,9 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
           <svg class="on-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
         </button>
         <a class="btn ink" href="#start">Install</a>
+        <button class="menu" type="button" aria-controls="hdr-nav" :aria-expanded="menuOpen" :aria-label="menuOpen ? 'Close menu' : 'Open menu'" @click="menuOpen = !menuOpen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path v-if="menuOpen" d="M6 6l12 12M18 6L6 18"/><path v-else d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
       </div>
     </div></header>
 
@@ -211,9 +218,34 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
         </div>
       </div></section>
 
+      <section class="sec" id="agents"><div class="wrap">
+        <div class="sec-head">
+          <div class="label"><b>{{ pad(D.LINEUP.length + 1) }}</b> / AI agents</div>
+          <div>
+            <h2>An MCP server for Claude Code, <span>Cursor and Codex.</span></h2>
+            <p class="sec-lead">Lerd comes with an MCP server, so the assistant you code with can manage your environment as well: link sites, change PHP versions, start services and workers, run artisan and composer, and look at what a request did. One command registers it with every assistant on the list below.</p>
+            <div class="cli agents-cli"><i>$</i> lerd mcp:enable-global</div>
+          </div>
+        </div>
+        <div class="fw-grid rt-grid ag-grid">
+          <div v-for="(a, i) in D.AGENTS" :key="a.name" class="fw">
+            <span class="n">{{ pad(i + 1) }}</span>
+            <h3 class="fw-name">{{ a.name }}</h3>
+            <code class="rt-cmd">{{ a.cmd }}</code>
+            <p class="rt-p">{{ a.p }}</p>
+          </div>
+        </div>
+        <div class="more">
+          <div class="more-row"><span class="label">Works with</span><p><span v-for="(n, i) in D.ASSISTANTS" :key="n"><i v-if="i">·</i>{{ n }}</span></p></div>
+        </div>
+        <div class="plug-links">
+          <a class="btn primary" :href="withBase('/features/mcp')">Set up your assistant →</a>
+        </div>
+      </div></section>
+
       <section class="sec" id="frameworks"><div class="wrap">
         <div class="sec-head">
-          <div class="label"><b>{{ pad(D.LINEUP.length + 1) }}</b> / Frameworks</div>
+          <div class="label"><b>{{ pad(D.LINEUP.length + 2) }}</b> / Frameworks</div>
           <h2>Frameworks Lerd <span>already knows.</span></h2>
         </div>
         <div class="fw-grid">
@@ -228,7 +260,7 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
 
       <section class="sec" id="runtimes"><div class="wrap">
         <div class="sec-head">
-          <div class="label"><b>{{ pad(D.LINEUP.length + 2) }}</b> / Beyond PHP</div>
+          <div class="label"><b>{{ pad(D.LINEUP.length + 3) }}</b> / Beyond PHP</div>
           <div>
             <h2>Your Node, Python and Rails apps, <span>on the same .test domains.</span></h2>
             <p class="sec-lead">lerd init recognises the project, picks its dev server and a free port, and runs it on the host, so file watching and hot reload behave as usual. Lerd restarts it if it dies, keeps its logs and puts nginx with TLS in front. Databases and services go into its .env like on any PHP site. <a :href="withBase('/usage/host-proxy')">Non-PHP apps guide →</a></p>
@@ -246,7 +278,7 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
 
       <section class="sec" id="services"><div class="wrap">
         <div class="sec-head">
-          <div class="label"><b>{{ pad(D.LINEUP.length + 3) }}</b> / Services</div>
+          <div class="label"><b>{{ pad(D.LINEUP.length + 4) }}</b> / Services</div>
           <h2>Databases, caches, search <span>and mail.</span></h2>
         </div>
         <div class="fw-grid">
@@ -265,7 +297,7 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
 
       <section class="sec" id="plugins"><div class="wrap">
         <div class="sec-head">
-          <div class="label"><b>{{ pad(D.LINEUP.length + 4) }}</b> / Community plugins</div>
+          <div class="label"><b>{{ pad(D.LINEUP.length + 5) }}</b> / Community plugins</div>
           <div>
             <h2>Community plugins for <span>everything else.</span></h2>
             <p class="sec-lead">A plugin adds what Lerd doesn't do yet: CLI commands, dashboard pages, site tabs, tools for AI assistants and hooks that run when something happens. Write one in any language that runs on your machine. Every plugin in the catalog is reviewed at the exact commit Lerd installs.</p>
@@ -279,7 +311,7 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
 
       <section class="sec" id="platforms"><div class="wrap">
         <div class="sec-head">
-          <div class="label"><b>{{ pad(D.LINEUP.length + 5) }}</b> / Platforms</div>
+          <div class="label"><b>{{ pad(D.LINEUP.length + 6) }}</b> / Platforms</div>
           <h2>Linux, macOS <span>and Windows.</span></h2>
         </div>
         <div class="grid6 plat">
@@ -294,7 +326,7 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
 
       <section class="sec" id="principles"><div class="wrap">
         <div class="sec-head">
-          <div class="label"><b>{{ pad(D.LINEUP.length + 6) }}</b> / Principles</div>
+          <div class="label"><b>{{ pad(D.LINEUP.length + 7) }}</b> / Principles</div>
           <h2>How Lerd <span>is built.</span></h2>
         </div>
         <div class="grid6">
@@ -304,7 +336,7 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
 
       <section class="sec" id="compare"><div class="wrap">
         <div class="sec-head">
-          <div class="label"><b>{{ pad(D.LINEUP.length + 7) }}</b> / Compare</div>
+          <div class="label"><b>{{ pad(D.LINEUP.length + 8) }}</b> / Compare</div>
           <h2>Lerd next to <span>Herd, Laragon, DDEV, Lando and Sail.</span></h2>
         </div>
         <div class="cmp-wrap">
@@ -323,7 +355,7 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
 
       <section class="sec" id="pricing"><div class="wrap">
         <div class="sec-head">
-          <div class="label"><b>{{ pad(D.LINEUP.length + 8) }}</b> / Pricing</div>
+          <div class="label"><b>{{ pad(D.LINEUP.length + 9) }}</b> / Pricing</div>
           <h2>Free for everyone, <span>with support when you need it.</span></h2>
         </div>
         <div class="grid6 price">
@@ -350,7 +382,7 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
 
       <section class="sec" id="faq"><div class="wrap">
         <div class="sec-head">
-          <div class="label"><b>{{ pad(D.LINEUP.length + 9) }}</b> / FAQ</div>
+          <div class="label"><b>{{ pad(D.LINEUP.length + 10) }}</b> / FAQ</div>
           <h2>Questions <span>people ask first.</span></h2>
         </div>
         <div class="faq">
@@ -362,7 +394,7 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
       </div></section>
 
       <section class="cta" id="start"><div class="wrap">
-        <div class="label"><b>{{ pad(D.LINEUP.length + 10) }}</b> / Get started</div>
+        <div class="label"><b>{{ pad(D.LINEUP.length + 11) }}</b> / Get started</div>
         <h2>Install, then run lerd init.</h2>
         <p>The script installs Lerd and sets up DNS and certificates. Then cd into a project, run lerd init and open its .test address.</p>
         <div class="hero-row">

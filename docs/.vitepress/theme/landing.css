@@ -37,6 +37,7 @@
 .lerd-landing .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px}
 .lerd-landing .brand img{width:26px;height:26px}
 .lerd-landing .hdr nav{display:flex;gap:24px;font-size:14px;color:var(--ink-2)}
+.lerd-landing .hdr nav a{white-space:nowrap}
 .lerd-landing .hdr nav a:hover{color:var(--ink)}
 .lerd-landing .hdr-right{margin-left:auto;display:flex;align-items:center;gap:18px;font-size:14px;color:var(--ink-2)}
 .lerd-landing .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;font-weight:600;font-size:14px;border:1px solid var(--line-2);background:var(--panel);color:var(--ink)}
@@ -54,6 +55,8 @@
 .lerd-landing .gh .stars{font:500 12px var(--mono);color:var(--muted);border:1px solid var(--line-2);padding:3px 7px}
 .lerd-landing .gh:hover .stars{color:var(--amber);border-color:color-mix(in srgb,var(--amber) 30%,transparent)}
 
+.lerd-landing .menu{display:none;place-items:center;width:34px;height:34px;border:1px solid var(--line-2);background:var(--panel);color:var(--ink)}
+.lerd-landing .menu svg{width:18px;height:18px}
 .lerd-landing .discord{display:grid;place-items:center}
 .lerd-landing .discord:hover{color:var(--ink)}
 .lerd-landing .discord svg{width:18px;height:18px}
@@ -167,6 +170,9 @@
 .lerd-landing .rt-grid .fw-name{font-size:18px}
 .lerd-landing .rt-cmd{font:13px var(--mono);color:var(--accent-2);background:none;padding:0}
 .lerd-landing .rt-p{font-size:14px;color:var(--muted);line-height:1.55}
+.lerd-landing .agents-cli{margin-top:24px;font:14px var(--mono);color:var(--ink-2)}
+.lerd-landing .agents-cli i{color:var(--accent);font-style:normal;margin-right:6px}
+.lerd-landing .ag-grid{grid-template-columns:repeat(3,1fr)}
 .lerd-landing .plat .p{min-height:0}
 .lerd-landing .price .p{min-height:0}
 .lerd-landing .price-tag{font:500 13px var(--mono);color:var(--muted);margin-left:8px;letter-spacing:0}
@@ -302,6 +308,10 @@
   .lerd-landing .cta .hero-row{grid-template-columns:1fr 1fr;width:auto}
   .lerd-landing .cta .hero-row .cmd{grid-column:1/-1}
   .lerd-landing .hdr nav{display:none}
+  .lerd-landing .menu{display:grid}
+  .lerd-landing .hdr.open nav{display:flex;flex-direction:column;gap:0;position:absolute;top:64px;left:0;right:0;background:var(--bg);border-bottom:1px solid var(--line);padding:8px 24px 16px;font-size:16px}
+  .lerd-landing .hdr.open nav a{padding:12px 0;border-bottom:1px solid var(--line)}
+  .lerd-landing .hdr.open nav a:last-child{border-bottom:0}
   .lerd-landing .hero p,.lerd-landing .hero .hero-row{max-width:none}
   .lerd-landing .hero-art{display:none}
   .lerd-landing .index{display:flex;overflow-x:auto;scrollbar-width:none}

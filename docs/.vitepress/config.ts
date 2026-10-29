@@ -78,7 +78,7 @@ export default defineConfig({
             description:
               'Open-source local PHP development environment for Linux, macOS and Windows (WSL2): automatic .test domains and HTTPS, per-project PHP 7.4–8.6 and Node, rootless Podman, a built-in Web UI, and an MCP server for AI agents. No Docker daemon.',
             keywords:
-              'local PHP development, Laravel Herd for Linux, Laragon for Linux, Laragon alternative Linux, .test domains, rootless Podman, PHP-FPM, local development environment',
+              'local PHP development, Laravel Herd for Linux, Laragon for Linux, Laragon alternative Linux, .test domains, rootless Podman, PHP-FPM, local development environment, MCP server, AI agents',
             url: SITE_URL,
             downloadUrl: `${SITE_URL}/install.sh`,
             softwareVersion: SOFTWARE_VERSION,
