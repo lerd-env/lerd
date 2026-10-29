@@ -169,9 +169,12 @@ func SaveBrowserLogs(site Site, s BrowserLogsSettings) error {
 		Events:     slices.Clone(s.Events),
 		Presets:    maps.Clone(s.Presets),
 	}
-	siteWriteMu.Lock()
-	defer siteWriteMu.Unlock()
-	reg, err := LoadSites()
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
 	if err != nil {
 		return err
 	}

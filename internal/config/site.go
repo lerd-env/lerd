@@ -431,6 +431,19 @@ func invalidateSitesCache() {
 	sitesCacheMu.Unlock()
 }
 
+// loadSitesFresh reads sites.yaml from disk without the cache, which a
+// read-modify-write under lockSites needs: a stale hit there undoes a save.
+func loadSitesFresh() (*SiteRegistry, error) {
+	data, err := os.ReadFile(SitesFile())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &SiteRegistry{}, nil
+		}
+		return nil, err
+	}
+	return decodeSiteRegistry(data)
+}
+
 // LoadSites reads sites.yaml, returning an empty registry if the file does not exist.
 func LoadSites() (*SiteRegistry, error) {
 	path := SitesFile()
@@ -445,15 +458,7 @@ func LoadSites() (*SiteRegistry, error) {
 	}
 	sitesCacheMu.Unlock()
 
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return &SiteRegistry{}, nil
-		}
-		return nil, err
-	}
-
-	reg, err := decodeSiteRegistry(data)
+	reg, err := loadSitesFresh()
 	if err != nil {
 		return nil, err
 	}
@@ -624,9 +629,12 @@ func AddSite(site Site) error {
 	if filepath.Clean(site.Path) == "/" {
 		return fmt.Errorf("invalid site path %q: lerd would bind-mount / into every container and shadow its rootfs", site.Path)
 	}
-	siteWriteMu.Lock()
-	defer siteWriteMu.Unlock()
-	reg, err := LoadSites()
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
 	if err != nil {
 		return err
 	}
@@ -676,9 +684,12 @@ func ApproveSiteCommand(siteName, command string) error {
 	if command == "" {
 		return nil
 	}
-	siteWriteMu.Lock()
-	defer siteWriteMu.Unlock()
-	reg, err := LoadSites()
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
 	if err != nil {
 		return err
 	}
@@ -697,9 +708,12 @@ func ApproveSiteCommand(siteName, command string) error {
 
 // RemoveSite removes a site by name from the registry.
 func RemoveSite(name string) error {
-	siteWriteMu.Lock()
-	defer siteWriteMu.Unlock()
-	reg, err := LoadSites()
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
 	if err != nil {
 		return err
 	}
@@ -719,9 +733,12 @@ func RemoveSite(name string) error {
 // absent from order is kept and appended after the ordered ones in its original
 // relative position, so paused sites and grouped secondaries are never dropped.
 func ReorderSites(order []string) error {
-	siteWriteMu.Lock()
-	defer siteWriteMu.Unlock()
-	reg, err := LoadSites()
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
 	if err != nil {
 		return err
 	}
@@ -751,9 +768,12 @@ func ReorderSites(order []string) error {
 
 // IgnoreSite marks a site as ignored (used for parked sites that have been unlinked).
 func IgnoreSite(name string) error {
-	siteWriteMu.Lock()
-	defer siteWriteMu.Unlock()
-	reg, err := LoadSites()
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
 	if err != nil {
 		return err
 	}
@@ -772,9 +792,12 @@ func IgnoreSite(name string) error {
 // field, so a stale full-record write (FindSite -> mutate -> AddSite) can't clobber
 // a concurrent change to another field like Paused or Pinned.
 func SetSiteIdleSuspendedWorkers(name string, workers []string) error {
-	siteWriteMu.Lock()
-	defer siteWriteMu.Unlock()
-	reg, err := LoadSites()
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
 	if err != nil {
 		return err
 	}
@@ -792,9 +815,12 @@ func SetSiteIdleSuspendedWorkers(name string, workers []string) error {
 // `lerd idle pin/unpin` can't clobber a concurrent SetSiteIdleSuspendedWorkers
 // write the idle engine makes for the same site.
 func SetSitePinned(name string, pinned bool) error {
-	siteWriteMu.Lock()
-	defer siteWriteMu.Unlock()
-	reg, err := LoadSites()
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
 	if err != nil {
 		return err
 	}
@@ -811,9 +837,12 @@ func SetSitePinned(name string, pinned bool) error {
 // site's commands, the same single-field rewrite under the write lock the other
 // registry mutators do.
 func SetSiteCommandPinned(name, command string, pinned bool) error {
-	siteWriteMu.Lock()
-	defer siteWriteMu.Unlock()
-	reg, err := LoadSites()
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
 	if err != nil {
 		return err
 	}
@@ -833,9 +862,12 @@ func SetSiteCommandPinned(name, command string, pinned bool) error {
 // DismissSiteService records that the user turned down the suggestion of
 // service for the site, under the same write lock as the other mutators.
 func DismissSiteService(name, service string) error {
-	siteWriteMu.Lock()
-	defer siteWriteMu.Unlock()
-	reg, err := LoadSites()
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
 	if err != nil {
 		return err
 	}
@@ -862,9 +894,12 @@ func (s *Site) DeclinesService(service string) bool {
 // under the same write lock as the other mutators. Lifting it on a site the
 // registry does not hold has nothing to lift.
 func SetSiteServiceDeclined(name, service string, declined bool) error {
-	siteWriteMu.Lock()
-	defer siteWriteMu.Unlock()
-	reg, err := LoadSites()
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
 	if err != nil {
 		return err
 	}
@@ -888,9 +923,12 @@ func SetSiteServiceDeclined(name, service string, declined bool) error {
 // SetSiteWiredServices replaces the record of the services `lerd env` wired into
 // the site, under the same write lock as the other mutators.
 func SetSiteWiredServices(name string, services []string) error {
-	siteWriteMu.Lock()
-	defer siteWriteMu.Unlock()
-	reg, err := LoadSites()
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
 	if err != nil {
 		return err
 	}
@@ -917,9 +955,12 @@ func SetSiteOverviewCard(name, plugin string, on bool) error {
 // setSitePluginSwitch adds plugin to, or drops it from, the list field picks
 // out on the named site, listing it once and leaving no empty list behind.
 func setSitePluginSwitch(name, plugin string, on bool, field func(*Site) *[]string) error {
-	siteWriteMu.Lock()
-	defer siteWriteMu.Unlock()
-	reg, err := LoadSites()
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
 	if err != nil {
 		return err
 	}
@@ -947,9 +988,12 @@ func setSitePluginSwitch(name, plugin string, on bool, field func(*Site) *[]stri
 // map, so a resumed worktree leaves no residue in sites.yaml. Uses the same write
 // lock as the other registry mutators.
 func SetWorktreeIdleSuspendedWorkers(name, wtBase string, workers []string) error {
-	siteWriteMu.Lock()
-	defer siteWriteMu.Unlock()
-	reg, err := LoadSites()
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
 	if err != nil {
 		return err
 	}
