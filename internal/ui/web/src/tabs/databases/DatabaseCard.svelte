@@ -48,6 +48,11 @@
   // Ticked to match how the pair was created, since dropping one half and
   // leaving the other is almost never what was meant.
   let dropPaired = $state(true);
+  // Unticked: snapshots are the way back, so deleting them is opted into.
+  let dropSnapshots = $state(false);
+  const dropSnapshotCount = $derived(
+    (active.snapshots?.length ?? 0) + (dropTesting && dropPaired ? (dropTesting.snapshots?.length ?? 0) : 0)
+  );
   let fileInput = $state<HTMLInputElement | null>(null);
   // The dump being imported, from the first byte uploaded to the confirmation
   // or the engine's error; null whenever no import has run on this card.
@@ -180,13 +185,14 @@
   function openDrop() {
     dropError = '';
     dropPaired = true;
+    dropSnapshots = false;
     showDrop = true;
   }
 
   async function confirmDrop() {
     dropBusy = true;
     dropError = '';
-    const res = await dropDatabase(engine.service, active.name, Boolean(dropTesting) && dropPaired);
+    const res = await dropDatabase(engine.service, active.name, Boolean(dropTesting) && dropPaired, dropSnapshots && dropSnapshotCount > 0);
     dropBusy = false;
     if (!res.ok) {
       dropError = res.error || m.common_failed();
@@ -390,6 +396,12 @@
         <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
           <input type="checkbox" bind:checked={dropPaired} class="mt-0.5 accent-lerd-red" />
           <span>{m.databases_dropTesting({ name: dropTesting.name })}</span>
+        </label>
+      {/if}
+      {#if dropSnapshotCount > 0}
+        <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <input type="checkbox" bind:checked={dropSnapshots} class="mt-0.5 accent-lerd-red" />
+          <span>{m.databases_dropSnapshots({ count: dropSnapshotCount })}</span>
         </label>
       {/if}
       {#if dropError}

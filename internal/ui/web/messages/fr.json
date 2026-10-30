@@ -190,6 +190,7 @@
   "databases_drop": "Supprimer",
   "databases_dropBody": "Cela supprime définitivement la base de données et toutes ses données, sans retour possible.",
   "databases_dropTesting": "Supprimer aussi {name}",
+  "databases_dropSnapshots": "Supprimer aussi ses snapshots ({count})",
   "databases_dropTitle": "Supprimer {name} ?",
   "databases_export": "Exporter",
   "databases_import": "Importer",

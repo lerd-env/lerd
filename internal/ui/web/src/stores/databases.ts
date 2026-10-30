@@ -138,11 +138,11 @@ export function createDatabase(service: string, name: string): Promise<Result> {
   return post(service, `/api/databases/${encodeURIComponent(service)}/create`, { name });
 }
 
-// dropDatabase removes one database, and the "<name>_testing" it is paired with
-// when testing is set. The daemon takes both in one call, so the pair the
-// provisioning created is the pair the drop undoes.
-export function dropDatabase(service: string, name: string, testing = false): Promise<Result> {
-  return post(service, `/api/databases/${encodeURIComponent(service)}/drop`, { name, testing });
+// dropDatabase removes one database, and its "<name>_testing" pair when testing
+// is set, in one daemon call so the pair provisioning made is the pair undone.
+// With snapshots set, the snapshots of whatever is dropped go too.
+export function dropDatabase(service: string, name: string, testing = false, snapshots = false): Promise<Result> {
+  return post(service, `/api/databases/${encodeURIComponent(service)}/drop`, { name, testing, snapshots });
 }
 
 export function takeSnapshot(service: string, database: string, name: string): Promise<Result> {

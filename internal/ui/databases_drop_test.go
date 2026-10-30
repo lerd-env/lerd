@@ -47,3 +47,15 @@ func TestDatabaseDropRejectsAnUnusableSibling(t *testing.T) {
 		t.Errorf("error = %q, want a rejection of the over-long sibling", got.Error)
 	}
 }
+
+// Snapshots stay unless the drop asks for them, and an older client that never
+// sends the key keeps them too.
+func TestDecodeDropBodyReadsTheSnapshotsChoice(t *testing.T) {
+	for body, want := range map[string]bool{`{"name":"shop"}`: false, `{"name":"shop","snapshots":true}`: true} {
+		req := httptest.NewRequest(http.MethodPost, "/api/databases/postgres/drop", strings.NewReader(body))
+		got, ok := decodeDropBody(req)
+		if !ok || got.Name != "shop" || got.Snapshots != want {
+			t.Errorf("%s: got %+v, want snapshots=%v", body, got, want)
+		}
+	}
+}

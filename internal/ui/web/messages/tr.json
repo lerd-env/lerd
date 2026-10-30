@@ -190,6 +190,7 @@
   "databases_drop": "Sil",
   "databases_dropBody": "Bu, veritabanını ve içindeki tüm verileri kalıcı olarak siler ve geri alınamaz.",
   "databases_dropTesting": "{name} de silinsin",
+  "databases_dropSnapshots": "Anlık görüntülerini de sil ({count})",
   "databases_dropTitle": "{name} silinsin mi?",
   "databases_export": "Dışa aktar",
   "databases_import": "İçe aktar",

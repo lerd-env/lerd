@@ -190,6 +190,7 @@
   "databases_drop": "删除",
   "databases_dropBody": "这将永久删除该数据库及其所有数据，且无法撤销。",
   "databases_dropTesting": "同时删除 {name}",
+  "databases_dropSnapshots": "同时删除其快照 ({count})",
   "databases_dropTitle": "删除 {name}？",
   "databases_export": "导出",
   "databases_import": "导入",

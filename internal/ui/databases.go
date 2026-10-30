@@ -239,17 +239,23 @@ func decodeDBBody(r *http.Request) (database, name string, ok bool) {
 	return strings.TrimSpace(body.Database), strings.TrimSpace(body.Name), true
 }
 
+// dropRequest is one drop: the database, whether its testing pair goes too,
+// and whether the snapshots of what is dropped are deleted with it.
+type dropRequest struct {
+	Name      string `json:"name"`
+	Testing   bool   `json:"testing"`
+	Snapshots bool   `json:"snapshots"`
+}
+
 // decodeDropBody reads the drop body, which carries the choice to take the
 // paired testing database along with the database named.
-func decodeDropBody(r *http.Request) (name string, withTesting, ok bool) {
-	var body struct {
-		Name    string `json:"name"`
-		Testing bool   `json:"testing"`
-	}
+func decodeDropBody(r *http.Request) (dropRequest, bool) {
+	var body dropRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		return "", false, false
+		return body, false
 	}
-	return strings.TrimSpace(body.Name), body.Testing, true
+	body.Name = strings.TrimSpace(body.Name)
+	return body, true
 }
 
 // dropTargets is what one drop request removes: the database named, plus the
@@ -296,13 +302,13 @@ func handleDatabaseCreate(w http.ResponseWriter, r *http.Request, service string
 }
 
 func handleDatabaseDrop(w http.ResponseWriter, r *http.Request, service string) {
-	name, withTesting, ok := decodeDropBody(r)
+	req, ok := decodeDropBody(r)
 	if !ok {
 		return
 	}
 	// Both halves are validated before either is touched, so a sibling the
 	// suffix pushes past the length limit never costs the database it tests.
-	targets := dropTargets(name, withTesting)
+	targets := dropTargets(req.Name, req.Testing)
 	for _, target := range targets {
 		if !requireDatabaseName(w, target) {
 			return
@@ -316,6 +322,12 @@ func handleDatabaseDrop(w http.ResponseWriter, r *http.Request, service string) 
 		if _, err := serviceops.DropDatabase(service, target); err != nil {
 			writeDBError(w, fmt.Sprintf("dropping %s: %v", target, err))
 			return
+		}
+		if req.Snapshots {
+			if err := serviceops.DeleteDatabaseSnapshots(service, target); err != nil {
+				writeDBError(w, fmt.Sprintf("deleting the snapshots of %s: %v", target, err))
+				return
+			}
 		}
 	}
 	writeDBOK(w)

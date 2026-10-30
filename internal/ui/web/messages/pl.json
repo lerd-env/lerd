@@ -190,6 +190,7 @@
   "databases_drop": "Usuń",
   "databases_dropBody": "Spowoduje to trwałe usunięcie bazy danych i wszystkich jej danych, czego nie można cofnąć.",
   "databases_dropTesting": "Usuń także {name}",
+  "databases_dropSnapshots": "Usuń też jej snapshoty ({count})",
   "databases_dropTitle": "Usunąć {name}?",
   "databases_export": "Eksportuj",
   "databases_import": "Importuj",

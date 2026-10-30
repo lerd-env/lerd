@@ -190,6 +190,7 @@
   "databases_drop": "削除",
   "databases_dropBody": "データベースとそのすべてのデータを完全に削除します。元に戻すことはできません。",
   "databases_dropTesting": "{name} も削除する",
+  "databases_dropSnapshots": "スナップショットも削除 ({count})",
   "databases_dropTitle": "{name} を削除しますか？",
   "databases_export": "エクスポート",
   "databases_import": "インポート",

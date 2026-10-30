@@ -190,6 +190,7 @@
   "databases_drop": "Drop",
   "databases_dropBody": "This permanently deletes the database and all of its data, and cannot be undone.",
   "databases_dropTesting": "Also drop {name}",
+  "databases_dropSnapshots": "Also delete its snapshots ({count})",
   "databases_dropTitle": "Drop {name}?",
   "databases_export": "Export",
   "databases_import": "Import",

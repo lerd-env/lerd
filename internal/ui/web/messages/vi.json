@@ -190,6 +190,7 @@
   "databases_drop": "Xóa",
   "databases_dropBody": "Thao tác này xóa vĩnh viễn cơ sở dữ liệu cùng toàn bộ dữ liệu của nó, và không thể hoàn tác.",
   "databases_dropTesting": "Xóa cả {name}",
+  "databases_dropSnapshots": "Xóa cả các snapshot ({count})",
   "databases_dropTitle": "Xóa {name}?",
   "databases_export": "Xuất",
   "databases_import": "Nhập",

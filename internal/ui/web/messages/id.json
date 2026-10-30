@@ -190,6 +190,7 @@
   "databases_drop": "Hapus",
   "databases_dropBody": "Ini menghapus basis data beserta seluruh datanya secara permanen, dan tidak dapat dibatalkan.",
   "databases_dropTesting": "Hapus juga {name}",
+  "databases_dropSnapshots": "Hapus juga snapshot-nya ({count})",
   "databases_dropTitle": "Hapus {name}?",
   "databases_export": "Ekspor",
   "databases_import": "Impor",

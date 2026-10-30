@@ -190,6 +190,7 @@
   "databases_drop": "Excluir",
   "databases_dropBody": "Isto apaga permanentemente o banco de dados e todos os seus dados, e não pode ser desfeito.",
   "databases_dropTesting": "Excluir também {name}",
+  "databases_dropSnapshots": "Excluir também os snapshots ({count})",
   "databases_dropTitle": "Excluir {name}?",
   "databases_export": "Exportar",
   "databases_import": "Importar",
