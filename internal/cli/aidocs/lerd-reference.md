@@ -170,7 +170,7 @@ Actions: `guide`, `new`, `list`, `install`.
 
 ### Key conventions
 
-- **PHP navigation**: `lerd lsp` is a PHP language server (Claude Code plugin `lerd-php`). With an LSP tool, prefer it to grep for definitions and callers; it misses macros. None in Claude Code? Suggest `lerd mcp:enable-global`, then a restart
+- **PHP navigation, LSP before grep**: `lerd lsp` (Claude Code plugin `lerd-php`, the deferred `LSP` tool: load it) for definitions, callers and types; it follows facades, misses macros. None? Suggest `lerd mcp:enable-global`, then a restart
 - **After a browser test**: take each response's `X-Lerd-Rid` (dumps on) and run `request` `lenses`; fix any `issues`. `browser_toggle` first adds JS errors
 - Discover before acting: `site` `list` for sites, `worker` `list` for a site's workers, `service` `preset_list` before `preset_install`, `exec` `vendor_bins` before `vendor_run`
 - **SQLite has no service**, so every `db` action refuses on a sqlite project, naming the file. That is the out-of-the-box Laravel state: move it with `db` `move` or target a service explicitly, and do not read the refusal as a broken database

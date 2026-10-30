@@ -645,3 +645,13 @@ func TestInitialize_instructionsCheckABrowserTest(t *testing.T) {
 		}
 	}
 }
+
+// Grep cannot follow facades or Eloquent statics, and the skill that says so
+// loads only on a lerd task, so the always-loaded instructions carry the LSP.
+func TestInitialize_instructionsPreferTheLanguageServer(t *testing.T) {
+	for _, want := range []string{"`lerd lsp`", "before grep", "`lerd-php`", "deferred", "macros"} {
+		if !strings.Contains(serverInstructions, want) {
+			t.Errorf("instructions do not mention %q", want)
+		}
+	}
+}
