@@ -127,9 +127,26 @@ const publishPublicUrl = {
     },
 };
 
+// A restart asked for before the first listen (a .env written while a slow
+// plugin is still starting up) binds the port, then the original startup binds
+// it again and leaves the process alive but serving nothing. Hold it until then.
+const holdRestartUntilListening = {
+    name: 'lerd-hold-restart',
+    configureServer(server) {
+        const httpServer = server.httpServer;
+        if (!httpServer || httpServer.listening) return;
+        const listening = new Promise((resolve) => httpServer.once('listening', resolve));
+        const restart = server.restart;
+        server.restart = async (...args) => {
+            await listening;
+            return restart.apply(server, args);
+        };
+    },
+};
+
 const lerd = {
     base: %s,
-    plugins: [publishPublicUrl],
+    plugins: [publishPublicUrl, holdRestartUntilListening],
     server: {
         host: true,
         // lerd proxies this over plain HTTP, so say so rather than leaving it
