@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CoffeeMark from '$components/CoffeeMark.svelte';
   import { pollWhileVisible } from '$lib/pollWhileVisible';
   import { onMount, onDestroy } from 'svelte';
   import Badge from '$components/Badge.svelte';
@@ -49,7 +50,6 @@
   import DomainMorePill from './DomainMorePill.svelte';
   import ShareLink from './ShareLink.svelte';
   import ShareMenu from './ShareMenu.svelte';
-  import WorkspacePicker from './WorkspacePicker.svelte';
   import WorkspaceMenuItems from './WorkspaceMenuItems.svelte';
   import GitStatusBadge from '$components/GitStatusBadge.svelte';
   import GitSync from '$components/GitSync.svelte';
@@ -732,12 +732,6 @@
         </button>
       {/if}
 
-      <!-- A group secondary shows its main's workspace and moves with it, so it
-           has nothing of its own to pick. -->
-      {#if $accessMode.localControl && !activeWorktreeBranch && !site.group_subdomain}
-        <div class="hidden @2xl:block"><WorkspacePicker {site} /></div>
-      {/if}
-
       {#if showLanToggle}
         <ShareMenu
           {site}
@@ -827,6 +821,19 @@
         </button>
       {/if}
 
+      <!-- Pinning lives in the overflow menu; only a pinned site earns a switch here. -->
+      {#if $idleEnabled && site.pinned && !site.paused && !activeWorktreeBranch}
+        <button
+          type="button"
+          onclick={togglePin}
+          disabled={pinBusy}
+          aria-label={m.sites_unpin()}
+          aria-pressed="true"
+          use:tooltip={m.sites_pinned()}
+          class="w-8 h-8 flex items-center justify-center rounded-md transition-colors disabled:opacity-50 text-emerald-500 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+        ><CoffeeMark class="w-4 h-4" /></button>
+      {/if}
+
       <div class="relative" bind:this={overflowEl}>
         <button
           type="button"
@@ -884,9 +891,7 @@
                   ? 'text-amber-600 dark:text-amber-400'
                   : 'text-gray-700 dark:text-gray-200'}"
               >
-                <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill={site.pinned ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" stroke-linejoin="round">
-                  <path d="M16 9V4h1a1 1 0 0 0 0-2H7a1 1 0 0 0 0 2h1v5l-2 3v2h5v5l1 1 1-1v-5h5v-2l-2-3z" />
-                </svg>
+                <CoffeeMark class="w-3.5 h-3.5 shrink-0" />
                 {pinBusy ? '...' : site.pinned ? m.sites_unpin() : m.sites_pin()}
               </button>
             {/if}
@@ -969,12 +974,6 @@
                 {site.group ? 'Manage group' : 'Group with another site'}
               </button>
             {/if}
-            {#if $accessMode.localControl && !activeWorktreeBranch && !site.group_subdomain}
-              <div class="@2xl:hidden border-y border-gray-100 dark:border-lerd-border my-1 py-1">
-                <p class="px-3 pt-0.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">{m.workspaces_pickerLabel()}</p>
-                <WorkspaceMenuItems {site} onDone={() => (overflowOpen = false)} />
-              </div>
-            {/if}
             {#if showLanToggle}
               <button
                 type="button"
@@ -1024,6 +1023,14 @@
                 </svg>
                 {xdebugEnabled ? m.sites_badges_xdebugOn({ mode: xdebugMode }) : m.sites_badges_xdebugDisabled()}
               </button>
+            {/if}
+            <!-- A group secondary shows its main's workspace and moves with it, so it
+                 has nothing of its own to pick. -->
+            {#if $accessMode.localControl && !activeWorktreeBranch && !site.group_subdomain}
+              <div class="border-t border-gray-100 dark:border-lerd-border my-1 py-1">
+                <p class="px-3 pt-0.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">{m.workspaces_pickerLabel()}</p>
+                <WorkspaceMenuItems {site} onDone={() => (overflowOpen = false)} />
+              </div>
             {/if}
             {#if !site.paused || !activeWorktreeBranch}
               <div class="my-1 border-t border-gray-100 dark:border-lerd-border"></div>

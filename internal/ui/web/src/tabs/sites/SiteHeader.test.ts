@@ -9,6 +9,13 @@ import { status } from '$stores/status';
 import { status as dumpsStatus } from '$stores/dumps';
 import { sidePanelHidden } from '$stores/sidePanel';
 import { noRepoBySite } from '$lib/gitStatus';
+import { idleEnabled } from '$stores/idle';
+
+const unpinSite = vi.fn();
+vi.mock('$stores/sites', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('$stores/sites')>();
+  return { ...actual, unpinSite: (...args: unknown[]) => unpinSite(...args) };
+});
 
 const site = {
   domain: 'app.test',
@@ -139,11 +146,13 @@ describe('SiteHeader', () => {
     expect(queryByText(/FrankenPHP/)).not.toBeInTheDocument();
   });
 
-  // Group and workspace leave the bar on a narrow header, so the overflow menu carries them.
+  // Workspace is a set-once choice, so it lives only in the overflow menu;
+  // group joins it there on a narrow header.
   it('offers group and workspace in the overflow menu', async () => {
     accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
     status.update((s) => ({ ...s, workspaces: ['client-a'] }));
-    const { getByLabelText, getByRole } = render(Harness, { props: { site: { ...site, name: 'app' } as unknown as Site } });
+    const { getByLabelText, getByRole, queryByLabelText } = render(Harness, { props: { site: { ...site, name: 'app' } as unknown as Site } });
+    expect(queryByLabelText('Workspace')).toBeNull();
 
     await fireEvent.click(getByLabelText('More actions'));
     const menu = getByRole('menu');
@@ -424,5 +433,24 @@ describe('SiteHeader', () => {
     const paused = { ...worktreeSite, paused: true } as unknown as Site;
     const { container } = render(Harness, { props: { site: paused } });
     expect(container.querySelector('.page-header')).toBeNull();
+  });
+
+  // Pinning stays in the overflow menu; once pinned, the cup in the header
+  // shows it and takes the pin off in one click.
+  it('shows a cup on a pinned site that unpins it', async () => {
+    idleEnabled.set(true);
+    const pinned = { ...site, pinned: true } as unknown as Site;
+    const { getByLabelText } = render(Harness, { props: { site: pinned } });
+    await fireEvent.click(getByLabelText('Unpin'));
+    expect(unpinSite).toHaveBeenCalledWith('app.test');
+  });
+
+  it('shows no cup while idle-suspend is off or the site is not pinned', () => {
+    idleEnabled.set(false);
+    const pinned = { ...site, pinned: true } as unknown as Site;
+    expect(render(Harness, { props: { site: pinned } }).queryByLabelText('Unpin')).toBeNull();
+    idleEnabled.set(true);
+    const { container } = render(Harness, { props: { site } });
+    expect(container.querySelector('[aria-label="Unpin"]')).toBeNull();
   });
 });

@@ -706,6 +706,7 @@
   "services_pin": "Épingler",
   "services_pinTitle": "Épingler, empêcher l'arrêt automatique quand inutilisé",
   "services_pinned": "Épinglé",
+  "services_keptAwakeBy": "Maintenu éveillé par {sites}",
   "services_sleeping": "En veille",
   "services_logsStopped": "Il ne tourne pas, il n'y a donc pas de journaux à diffuser. Ils apparaissent dès qu'il démarre.",
   "services_logsSleeping": "Il est en veille, il n'y a donc pas de journaux à diffuser. Ils apparaissent dès qu'il se réveille.",

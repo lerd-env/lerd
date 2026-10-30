@@ -58,6 +58,8 @@ export interface Service {
   site_count: number;
   site_domains?: string[];
   pinned?: boolean;
+  // The pinned sites keeping it from sleeping.
+  kept_awake_by?: string[];
   paused?: boolean;
   // Stopped by idle-suspend; it wakes on the next request or dashboard visit.
   idle_suspended?: boolean;

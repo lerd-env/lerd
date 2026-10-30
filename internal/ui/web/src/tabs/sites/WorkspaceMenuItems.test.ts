@@ -1,6 +1,6 @@
 import { render, fireEvent } from '@testing-library/svelte';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import WorkspacePicker from './WorkspacePicker.svelte';
+import WorkspaceMenuItems from './WorkspaceMenuItems.svelte';
 import { status } from '$stores/status';
 import type { Site } from '$stores/sites';
 
@@ -18,7 +18,7 @@ function setWorkspaces(names: string[]) {
   status.update((s) => ({ ...s, workspaces: names }));
 }
 
-describe('WorkspacePicker', () => {
+describe('WorkspaceMenuItems', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     assignSiteWorkspace.mockResolvedValue({ ok: true });
@@ -26,42 +26,28 @@ describe('WorkspacePicker', () => {
   });
 
   it('lists the workspaces, None, and a way to make a new one', async () => {
-    const { getByLabelText, getByText } = render(WorkspacePicker, { props: { site: site() } });
-    await fireEvent.click(getByLabelText('Workspace'));
+    const { getByText } = render(WorkspaceMenuItems, { props: { site: site(), onDone: vi.fn() } });
     expect(getByText('Client Work')).toBeTruthy();
     expect(getByText('Side Projects')).toBeTruthy();
     expect(getByText('None')).toBeTruthy();
     expect(getByText('New workspace…')).toBeTruthy();
   });
 
-  it('opens on hover like the share menu', async () => {
-    const { container, getByText, queryByRole } = render(WorkspacePicker, { props: { site: site() } });
-    expect(queryByRole('menu')).toBeNull();
-    await fireEvent.mouseEnter(container.querySelector('div.relative')!);
-    expect(getByText('Client Work')).toBeTruthy();
-  });
 
   it('marks the current workspace as checked', async () => {
-    const { getByLabelText, getByRole } = render(WorkspacePicker, {
-      props: { site: site({ workspace: 'Client Work' }) }
-    });
-    await fireEvent.click(getByLabelText('Workspace'));
+    const { getByRole } = render(WorkspaceMenuItems, { props: { site: site({ workspace: 'Client Work' }), onDone: vi.fn() } });
     expect(getByRole('menuitemradio', { name: 'Client Work' }).getAttribute('aria-checked')).toBe('true');
     expect(getByRole('menuitemradio', { name: 'None' }).getAttribute('aria-checked')).toBe('false');
   });
 
   it('assigns the site to the picked workspace', async () => {
-    const { getByLabelText, getByText } = render(WorkspacePicker, { props: { site: site() } });
-    await fireEvent.click(getByLabelText('Workspace'));
+    const { getByText } = render(WorkspaceMenuItems, { props: { site: site(), onDone: vi.fn() } });
     await fireEvent.click(getByText('Side Projects'));
     expect(assignSiteWorkspace).toHaveBeenCalledWith(['app'], 'Side Projects', false);
   });
 
   it('ungroups the site with None', async () => {
-    const { getByLabelText, getByText } = render(WorkspacePicker, {
-      props: { site: site({ workspace: 'Client Work' }) }
-    });
-    await fireEvent.click(getByLabelText('Workspace'));
+    const { getByText } = render(WorkspaceMenuItems, { props: { site: site({ workspace: 'Client Work' }), onDone: vi.fn() } });
     await fireEvent.click(getByText('None'));
     expect(assignSiteWorkspace).toHaveBeenCalledWith(['app'], '', false);
   });
@@ -69,8 +55,7 @@ describe('WorkspacePicker', () => {
   // Creating and assigning is one round trip, so the server never leaves an
   // empty workspace behind if the assign half were to fail.
   it('creates and assigns a new workspace in one call', async () => {
-    const { getByLabelText, getByText, getByPlaceholderText } = render(WorkspacePicker, { props: { site: site() } });
-    await fireEvent.click(getByLabelText('Workspace'));
+    const { getByText, getByPlaceholderText } = render(WorkspaceMenuItems, { props: { site: site(), onDone: vi.fn() } });
     await fireEvent.click(getByText('New workspace…'));
     await fireEvent.input(getByPlaceholderText('Workspace name'), { target: { value: '  Fresh  ' } });
     await fireEvent.click(getByText('Add'));
@@ -78,24 +63,11 @@ describe('WorkspacePicker', () => {
   });
 
   it('ignores a blank new-workspace name', async () => {
-    const { getByLabelText, getByText, getByPlaceholderText } = render(WorkspacePicker, { props: { site: site() } });
-    await fireEvent.click(getByLabelText('Workspace'));
+    const { getByText, getByPlaceholderText } = render(WorkspaceMenuItems, { props: { site: site(), onDone: vi.fn() } });
     await fireEvent.click(getByText('New workspace…'));
     await fireEvent.input(getByPlaceholderText('Workspace name'), { target: { value: '   ' } });
     await fireEvent.click(getByText('Add'));
     expect(assignSiteWorkspace).not.toHaveBeenCalled();
   });
 
-  // Tabbing on to the next control must not leave this menu open under it.
-  it('closes as soon as keyboard focus leaves it', async () => {
-    const { container, queryByRole } = render(WorkspacePicker, { props: { site: site() } });
-    const wrapper = container.querySelector('div.relative')!;
-    await fireEvent.focusIn(wrapper);
-    expect(queryByRole('menu')).toBeTruthy();
-    const outside = document.createElement('button');
-    document.body.appendChild(outside);
-    await fireEvent.focusOut(wrapper, { relatedTarget: outside });
-    expect(queryByRole('menu')).toBeNull();
-    outside.remove();
-  });
 });

@@ -706,6 +706,7 @@
   "services_pin": "Ghim",
   "services_pinTitle": "Ghim, ngăn tự động dừng khi không dùng",
   "services_pinned": "Đã ghim",
+  "services_keptAwakeBy": "Được giữ chạy bởi {sites}",
   "services_sleeping": "Đang ngủ",
   "services_logsStopped": "Không chạy nên không có log để hiển thị. Log sẽ xuất hiện khi khởi động.",
   "services_logsSleeping": "Đang ngủ nên không có log để hiển thị. Log sẽ xuất hiện khi thức dậy.",

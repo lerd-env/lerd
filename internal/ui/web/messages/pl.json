@@ -706,6 +706,7 @@
   "services_pin": "Przypnij",
   "services_pinTitle": "Przypnij, zapobiegnij automatycznemu zatrzymaniu, gdy nieużywane",
   "services_pinned": "Przypięte",
+  "services_keptAwakeBy": "Utrzymywana przez {sites}",
   "services_sleeping": "Uśpiona",
   "services_logsStopped": "Nie działa, więc nie ma logów do pokazania. Pojawią się po uruchomieniu.",
   "services_logsSleeping": "Jest uśpiona, więc nie ma logów do pokazania. Pojawią się po wybudzeniu.",

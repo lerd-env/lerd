@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -78,6 +80,33 @@ func IdleServiceUsers(name string) (sites []config.Site, consumers []string) {
 		}
 	}
 	return idleSitesUsing(name), consumers
+}
+
+// IdleServicePinnedSites names the pinned sites keeping a service awake,
+// directly or through a service relying on it, walking the users the idle
+// engine walks, so the dashboard can say why a service never sleeps.
+func IdleServicePinnedSites(name string) []string {
+	var out []string
+	seen := map[string]bool{}
+	var walk func(string)
+	walk = func(n string) {
+		if seen[n] {
+			return
+		}
+		seen[n] = true
+		sites, consumers := IdleServiceUsers(n)
+		for _, s := range sites {
+			if s.Pinned && !slices.Contains(out, s.Name) {
+				out = append(out, s.Name)
+			}
+		}
+		for _, c := range consumers {
+			walk(c)
+		}
+	}
+	walk(name)
+	sort.Strings(out)
+	return out
 }
 
 // SuspendServicesForIdle puts services to sleep one after another and returns

@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"reflect"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -344,5 +345,17 @@ func TestSuspendServicesForIdle_oneStopFailureLeavesTheRestAsleep(t *testing.T) 
 	}
 	if got := config.IdleSuspendedServices(); !reflect.DeepEqual(got, []string{"mailpit"}) {
 		t.Fatalf("held asleep = %v, want mailpit only", got)
+	}
+}
+
+func TestIdleServicePinnedSites_FollowsTheServicesRelyingOnIt(t *testing.T) {
+	f := installFakeIdleServices(t)
+	f.users["mailpit"] = []config.Site{{Name: "shop", Pinned: true}, {Name: "blog"}}
+	f.deps["spamassassin"] = []string{"mailpit"}
+	if got := IdleServicePinnedSites("spamassassin"); !slices.Equal(got, []string{"shop"}) {
+		t.Fatalf("pinned sites = %v, want [shop]", got)
+	}
+	if got := IdleServicePinnedSites("redis"); len(got) != 0 {
+		t.Fatalf("unused service kept awake by %v", got)
 	}
 }

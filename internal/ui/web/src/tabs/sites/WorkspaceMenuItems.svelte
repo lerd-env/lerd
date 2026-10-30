@@ -5,14 +5,13 @@
   import type { Site } from '$stores/sites';
   import { m } from '../../paraglide/messages.js';
 
-  // The workspace choices themselves, shared by the header picker and the
-  // overflow menu that takes its place on a narrow header.
+  // The workspace choices in the site header's overflow menu.
   interface Props {
     site: Site;
     onDone: () => void;
-    creating?: boolean;
   }
-  let { site, onDone, creating = $bindable(false) }: Props = $props();
+  let { site, onDone }: Props = $props();
+  let creating = $state(false);
 
   const workspaces = $derived($status.workspaces ?? []);
   const current = $derived(site.workspace ?? '');

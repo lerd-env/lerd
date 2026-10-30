@@ -706,6 +706,7 @@
   "services_pin": "Fixează",
   "services_pinTitle": "Fixează, împiedică oprirea automată când nu este folosit",
   "services_pinned": "Fixat",
+  "services_keptAwakeBy": "Ținut treaz de {sites}",
   "services_sleeping": "Adormit",
   "services_logsStopped": "Nu rulează, deci nu sunt loguri de afișat. Apar imediat ce pornește.",
   "services_logsSleeping": "Doarme, deci nu sunt loguri de afișat. Apar imediat ce se trezește.",

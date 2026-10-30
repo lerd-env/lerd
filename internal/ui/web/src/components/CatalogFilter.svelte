@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import CategoryChips from './CategoryChips.svelte';
 
-  // A catalog's search box and its category chips, the empty key meaning all.
-  // The chips only show when there is more than one category to pick between.
+  // A catalog's search box and its category chips.
   interface Props {
     query: string;
     category: string;
@@ -24,17 +24,4 @@
   />
   {#if trailing}{@render trailing()}{/if}
 </div>
-{#if categories.length > 2}
-  <div class="flex flex-wrap gap-1.5" role="group" aria-label={groupLabel}>
-    {#each categories as c (c.key)}
-      <button
-        type="button"
-        aria-pressed={category === c.key}
-        onclick={() => (category = c.key)}
-        class="h-6 px-2.5 rounded-md border text-[11px] font-medium transition-colors {category === c.key
-          ? 'border-lerd-red/50 text-lerd-red bg-lerd-red/5'
-          : 'border-gray-200 dark:border-lerd-border text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}"
-      >{c.label}</button>
-    {/each}
-  </div>
-{/if}
+<CategoryChips bind:category {categories} {groupLabel} />

@@ -68,7 +68,7 @@ A connection straight to a service's published host port, from a desktop databas
 
 ## Pinning a site
 
-A pinned site is excluded from idle-suspend: its workers stay running even while the feature is on. Pin from the CLI (`lerd idle pin <site>`) or from a site's overflow menu in the dashboard (the Pin item only appears while idle-suspend is enabled). Pinning a site that's currently asleep wakes it immediately.
+A pinned site is excluded from idle-suspend: its workers stay running even while the feature is on. Pin from the CLI (`lerd idle pin <site>`) or from a site's overflow menu in the dashboard (the Pin item only appears while idle-suspend is enabled). Pinning a site that's currently asleep wakes it immediately. In the dashboard and the TUI a pinned site or service carries a coffee cup where a sleeping one carries the moon, green on a running service and gray on a stopped one. A service that a pinned site keeps awake carries the cup too, and its tooltip names the site. A pinned site's own page shows the cup among its toolbar switches, and clicking it unpins the site.
 
 ## Proxy-only sites
 

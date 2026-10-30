@@ -7,6 +7,7 @@
   import ServiceCardShell from '$components/ServiceCardShell.svelte';
   import ViewSwitch from '$components/ViewSwitch.svelte';
   import CatalogFilter from '$components/CatalogFilter.svelte';
+  import CategoryChips from '$components/CategoryChips.svelte';
   import InstalledServiceTile from './InstalledServiceTile.svelte';
   import PresetCard from './PresetCard.svelte';
   import UpdateAllModal from './UpdateAllModal.svelte';
@@ -21,7 +22,7 @@
   import { installablePresets, presetsLoaded, loadPresets } from '$stores/presets';
   import { accessMode } from '$stores/accessMode';
   import { routeRest, goToTab } from '$stores/route';
-  import { groupByCategory, categoryOf, CATEGORY_LABELS, CATEGORY_ORDER, asCategory } from '$lib/presetCategories';
+  import { groupByCategory, categoryOf, categoryChips, CATEGORY_LABELS } from '$lib/presetCategories';
   import { m } from '../../paraglide/messages.js';
 
   const DISCOVER = '_discover';
@@ -34,11 +35,14 @@
   const total = $derived($coreServices.length);
   const outdated = $derived($coreServices.filter((s) => s.update_available));
   const updates = $derived(outdated.length);
-  // Grouped by type like the rail, and within a type the services waiting on an
+  // Ordered by type like the rail, and within a type the services waiting on an
   // update lead so they are not lost among the rest.
-  const installedGroups = $derived(
-    groupByCategory($coreServices).map((g) => ({ ...g, items: [...g.items.filter((s) => s.update_available), ...g.items.filter((s) => !s.update_available)] }))
-  );
+  let installedCategory = $state('');
+  const installedCategories = $derived(categoryChips($coreServices));
+  const shownInstalled = $derived.by(() => {
+    const matches = $coreServices.filter((s) => !installedCategory || categoryOf(s) === installedCategory);
+    return groupByCategory(matches).flatMap((g) => [...g.items.filter((s) => s.update_available), ...g.items.filter((s) => !s.update_available)]);
+  });
 
   // #services is the installed list, #services/_discover the presets to add;
   // a service name never holds an underscore, so no service can take the route.
@@ -73,14 +77,12 @@
     );
   });
   const groups = $derived(groupByCategory(shownPresets));
-  // A category whose last preset went away drops its chip, so drop the filter too.
+  const categories = $derived(categoryChips($installablePresets));
+  // A category whose last item went away drops its chip, so drop the filter too.
   $effect(() => {
     if (category && !categories.some((c) => c.key === category)) category = '';
+    if (installedCategory && !installedCategories.some((c) => c.key === installedCategory)) installedCategory = '';
   });
-  const categories = $derived([
-    { key: '', label: m.services_cat_all() },
-    ...CATEGORY_ORDER.filter((k) => $installablePresets.some((p) => asCategory(p.category) === k)).map((k) => ({ key: k, label: CATEGORY_LABELS[k]() }))
-  ]);
 </script>
 
 <div class="flex-1 flex flex-col min-h-0">
@@ -91,9 +93,8 @@
   <div class="flex-1 min-h-0 overflow-y-auto p-4 space-y-6">
     {#if !discovering}
       <section class="space-y-4">
-        <div class="flex items-center justify-between gap-3">
-          <h2 class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{m.services_dash_installed()}</h2>
-          {#if $accessMode.localControl && updates > 0}
+        {#if $accessMode.localControl && updates > 0}
+          <div class="flex justify-end">
             <button
               onclick={openUpdateAll}
               disabled={updateBatch !== null}
@@ -102,8 +103,8 @@
               <span>↑</span>
               {m.services_updateAll()}
             </button>
-          {/if}
-        </div>
+          </div>
+        {/if}
         {#if results.length > 0}
           <div class="text-xs space-y-0.5">
             {#if updated > 0}
@@ -117,23 +118,20 @@
         {#if $servicesLoaded && total === 0}
           <p class="text-sm text-gray-500 dark:text-gray-400">{m.services_dash_noInstalled()}</p>
         {/if}
-        {#each installedGroups as group (group.key)}
-          <DashboardSection label={CATEGORY_LABELS[group.key]()} sub>
-            {#each group.items as svc (svc.name)}
-              <InstalledServiceTile {svc} />
-            {/each}
-          </DashboardSection>
-        {/each}
-        {#if $accessMode.localControl}
-          <DashboardSection>
-            <ServiceCardShell suggested>
-              <button type="button" onclick={() => goToTab('services', DISCOVER)} class="flex min-w-0 flex-1 items-center gap-3 text-left text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-lerd-red">
-                <span class="shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-lerd-red/10 text-lerd-red"><Icon name="plus" class="w-4 h-4" /></span>
+        <CategoryChips bind:category={installedCategory} categories={installedCategories} groupLabel={m.services_dash_installed()} />
+        <div data-testid="installed-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2">
+          {#each shownInstalled as svc (svc.name)}
+            <InstalledServiceTile {svc} compact />
+          {/each}
+          {#if $accessMode.localControl}
+            <ServiceCardShell compact suggested>
+              <button type="button" onclick={() => goToTab('services', DISCOVER)} class="flex min-w-0 flex-1 items-center gap-2.5 text-left text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-lerd-red">
+                <span class="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg bg-lerd-red/10 text-lerd-red"><Icon name="plus" class="w-4 h-4" /></span>
                 {m.services_dash_addService()}
               </button>
             </ServiceCardShell>
-          </DashboardSection>
-        {/if}
+          {/if}
+        </div>
       </section>
     {:else if $accessMode.localControl}
       <section class="space-y-3">

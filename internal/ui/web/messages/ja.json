@@ -706,6 +706,7 @@
   "services_pin": "ピン留め",
   "services_pinTitle": "ピン留めして、未使用時の自動停止を防ぐ",
   "services_pinned": "ピン留め済み",
+  "services_keptAwakeBy": "{sites} により起動を維持",
   "services_sleeping": "スリープ中",
   "services_logsStopped": "実行されていないため、表示するログはありません。起動すると表示されます。",
   "services_logsSleeping": "スリープ中のため、表示するログはありません。起動すると表示されます。",

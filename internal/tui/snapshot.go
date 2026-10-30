@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -27,6 +28,9 @@ type Snapshot struct {
 	Private map[string]bool
 	// Pinned names the sites excluded from idle-suspend.
 	Pinned map[string]bool
+	// IdleSuspend and IdleServices say whether sites and services can sleep,
+	// which is the only time a pin is worth showing.
+	IdleSuspend, IdleServices bool
 	// HorizonReload names the sites whose horizon restarts on code changes.
 	HorizonReload map[string]bool
 }
@@ -37,14 +41,16 @@ type Snapshot struct {
 // workers) WorkerSite / WorkerKind are set so actions can run the right
 // per-site command instead of `lerd service start/stop` which would fail.
 type ServiceRow struct {
-	Name      string
-	Version   string
-	State     ServiceState
-	Custom    bool
-	Pinned    bool
-	SiteCount int
-	Dashboard string
-	DependsOn []string
+	Name    string
+	Version string
+	State   ServiceState
+	Custom  bool
+	Pinned  bool
+	// KeptAwakeBy names the pinned sites keeping the service from sleeping.
+	KeptAwakeBy []string
+	SiteCount   int
+	Dashboard   string
+	DependsOn   []string
 
 	WorkerSite string
 	WorkerKind string
@@ -75,12 +81,28 @@ type StatusRow struct {
 	LANExposed     bool
 }
 
+// KeptAwakeBy names the pinned sites keeping a service awake. The CLI wires in
+// the idle engine's walk, which this package cannot import without a cycle.
+var KeptAwakeBy = func(string) []string { return nil }
+
+// dropHiddenKeptAwake keeps the sites streaming mode hides out of the names a
+// service view prints, as their own rows are kept out of the sidebar.
+func dropHiddenKeptAwake(rows []ServiceRow, hidden map[string]bool) {
+	for i := range rows {
+		rows[i].KeptAwakeBy = slices.DeleteFunc(rows[i].KeptAwakeBy, func(n string) bool { return hidden[n] })
+	}
+}
+
 // loadSnapshot collects everything the TUI needs in one shot. Called on every
 // refresh tick and on every eventbus publish.
 func loadSnapshot() Snapshot {
 	snap := Snapshot{}
 
 	cfg, _ := config.LoadGlobal()
+	if cfg != nil {
+		snap.IdleSuspend = cfg.IdleSuspend.Enabled
+		snap.IdleServices = cfg.IdleSuspend.Enabled && cfg.IdleSuspend.Services
+	}
 	hidden := map[string]bool{}
 	if reg, err := config.LoadSites(); err == nil {
 		hidden = cfg.StreamingHidden(reg)
@@ -120,6 +142,7 @@ func loadSnapshot() Snapshot {
 	}
 
 	snap.Services = loadServices()
+	dropHiddenKeptAwake(snap.Services, hidden)
 	// Workers live on sites but belong in the services pane too — same
 	// operational surface lerd-ui surfaces as "active" rows for queue,
 	// schedule, etc. Append them after the shared services so the user
@@ -215,12 +238,13 @@ func buildServiceRow(name string, custom bool) ServiceRow {
 		}
 	}
 	return ServiceRow{
-		Name:      name,
-		Version:   version,
-		State:     state,
-		Custom:    custom,
-		Pinned:    config.ServiceIsPinned(name),
-		SiteCount: config.CountSitesUsingService(name),
+		Name:        name,
+		Version:     version,
+		State:       state,
+		Custom:      custom,
+		Pinned:      config.ServiceIsPinned(name),
+		KeptAwakeBy: KeptAwakeBy(name),
+		SiteCount:   config.CountSitesUsingService(name),
 		// Default presets (mailpit, …) carry a dashboard URL too; custom
 		// services have theirs set by the caller. Populating it here lets the
 		// detail pane offer "open dashboard" for built-ins, not just customs.
