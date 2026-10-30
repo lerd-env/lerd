@@ -74,6 +74,11 @@ var (
 			time.Sleep(time.Second)
 		}
 	}
+	// isPodmanExecFn checks the binary as well as the verb: `pnpm exec` or
+	// `composer exec` on this machine would pass a check of the argv alone.
+	isPodmanExecFn = func(c *exec.Cmd) bool {
+		return len(c.Args) > 1 && c.Args[0] == podman.PodmanBin() && c.Args[1] == "exec"
+	}
 	notifyFn = func() (<-chan os.Signal, func()) {
 		ch := make(chan os.Signal, 1)
 		signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
@@ -85,7 +90,7 @@ var (
 // when ctx ends or lerd is interrupted and left to Sweep otherwise. Any other
 // cmd runs on this machine in a process group of its own, see runHost.
 func Run(ctx context.Context, cmd *exec.Cmd, container string) error {
-	if len(cmd.Args) < 2 || cmd.Args[1] != "exec" {
+	if container == "" || !isPodmanExecFn(cmd) {
 		return runHost(ctx, cmd)
 	}
 	marker := newMarker()

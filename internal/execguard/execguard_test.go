@@ -51,6 +51,7 @@ func stubKill(t *testing.T, cmd *exec.Cmd) *[]string {
 // so the argv starts the way Run looks for and the marker lands in its args.
 func sleeper(t *testing.T) *exec.Cmd {
 	t.Helper()
+	stubPodmanExec(t)
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "exec"), []byte("sleep 5\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -58,6 +59,14 @@ func sleeper(t *testing.T) *exec.Cmd {
 	cmd := exec.Command("sh", "exec")
 	cmd.Dir = dir
 	return cmd
+}
+
+// stubPodmanExec lets a stand-in binary with exec as its verb pass for podman.
+func stubPodmanExec(t *testing.T) {
+	t.Helper()
+	prev := isPodmanExecFn
+	isPodmanExecFn = func(c *exec.Cmd) bool { return len(c.Args) > 1 && c.Args[1] == "exec" }
+	t.Cleanup(func() { isPodmanExecFn = prev })
 }
 
 // markerOf reads the marker Run stamped into a podman exec argv.
@@ -74,6 +83,7 @@ func markerOf(t *testing.T, args []string) string {
 // process the run starts inherits it.
 func TestRun_stampsTheExecWithItsOwnMarker(t *testing.T) {
 	stubDir(t)
+	stubPodmanExec(t)
 	cmd := exec.Command("true", "exec", "-i", "lerd-php85-fpm", "php", "-v")
 	if err := Run(context.Background(), cmd, "lerd-php85-fpm"); err != nil {
 		t.Fatal(err)
@@ -88,6 +98,7 @@ func TestRun_stampsTheExecWithItsOwnMarker(t *testing.T) {
 // the sweep, marked ended.
 func TestRun_marksItsRecordEndedWhenTheCommandEnds(t *testing.T) {
 	dir := stubDir(t)
+	stubPodmanExec(t)
 	if err := Run(context.Background(), exec.Command("true", "exec", "c"), "c"); err != nil {
 		t.Fatal(err)
 	}

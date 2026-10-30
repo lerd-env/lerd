@@ -306,3 +306,25 @@ func TestSuspendWith_resumesTheRunOnlyAfterLerdIsContinued(t *testing.T) {
 		t.Fatal("fg did not resume the run")
 	}
 }
+
+// `pnpm exec vite build` or `composer exec` on this machine looks like a podman
+// exec to an argv check, and stamping a marker into it breaks the command.
+func TestRun_aHostCommandWithExecInItsArgsIsLeftAlone(t *testing.T) {
+	stubDir(t)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "exec"), []byte("exit 0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for name, container := range map[string]string{"no container": "", "a container but not podman": "lerd-php85-fpm"} {
+		t.Run(name, func(t *testing.T) {
+			cmd := exec.Command("sh", "exec")
+			cmd.Dir = dir
+			if err := Run(context.Background(), cmd, container); err != nil {
+				t.Fatal(err)
+			}
+			if len(cmd.Args) != 2 {
+				t.Fatalf("args = %v, want them untouched", cmd.Args)
+			}
+		})
+	}
+}
