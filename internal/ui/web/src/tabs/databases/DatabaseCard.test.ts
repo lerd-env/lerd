@@ -138,7 +138,7 @@ describe('DatabaseCard', () => {
     expect(queryByLabelText('Also drop havenly_testing')).not.toBeInTheDocument();
     const confirm = getAllByRole('button', { name: 'Drop' }).at(-1)!;
     await fireEvent.click(confirm);
-    expect(dropDatabase).toHaveBeenCalledWith('mysql', 'havenly_testing', false);
+    expect(dropDatabase).toHaveBeenCalledWith('mysql', 'havenly_testing', false, false);
   });
 
   it('takes the paired testing database along by default, named in full', async () => {
@@ -148,7 +148,7 @@ describe('DatabaseCard', () => {
     await fireEvent.click(getByLabelText('Drop'));
     expect(getByLabelText('Also drop havenly_testing')).toBeChecked();
     await fireEvent.click(getAllByRole('button', { name: 'Drop' }).at(-1)!);
-    expect(dropDatabase).toHaveBeenCalledWith('mysql', 'havenly', true);
+    expect(dropDatabase).toHaveBeenCalledWith('mysql', 'havenly', true, false);
   });
 
   it('leaves the testing database alone when the box is unticked', async () => {
@@ -158,13 +158,28 @@ describe('DatabaseCard', () => {
     await fireEvent.click(getByLabelText('Drop'));
     await fireEvent.click(getByLabelText('Also drop havenly_testing'));
     await fireEvent.click(getAllByRole('button', { name: 'Drop' }).at(-1)!);
-    expect(dropDatabase).toHaveBeenCalledWith('mysql', 'havenly', false);
+    expect(dropDatabase).toHaveBeenCalledWith('mysql', 'havenly', false, false);
   });
 
   it('offers nothing alongside a database with no testing sibling', async () => {
     const { getByLabelText, queryByRole } = render(DatabaseCard, { props: { engine, entry: parent } });
     await fireEvent.click(getByLabelText('Drop'));
     expect(queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  // Snapshots outlive the database unless asked, and the count covers the
+  // testing pair only while it is going too.
+  it('offers to delete the snapshots, unticked, counting what is dropped', async () => {
+    const snap = { name: 's' } as never;
+    const { getByLabelText, getAllByRole } = render(DatabaseCard, {
+      props: { engine, entry: { ...parent, snapshots: [snap, snap] }, testing: { ...testing, snapshots: [snap] } }
+    });
+    await fireEvent.click(getByLabelText('Drop'));
+    expect(getByLabelText('Also delete its snapshots (3)')).not.toBeChecked();
+    await fireEvent.click(getByLabelText('Also drop havenly_testing'));
+    await fireEvent.click(getByLabelText('Also delete its snapshots (2)'));
+    await fireEvent.click(getAllByRole('button', { name: 'Drop' }).at(-1)!);
+    expect(dropDatabase).toHaveBeenCalledWith('mysql', 'havenly', false, true);
   });
 
   it('labels a worktree database with the branch domain it belongs to', () => {

@@ -190,6 +190,7 @@
   "databases_drop": "Verwijderen",
   "databases_dropBody": "Dit verwijdert de database en alle data ervan definitief, en kan niet ongedaan worden gemaakt.",
   "databases_dropTesting": "{name} ook verwijderen",
+  "databases_dropSnapshots": "Ook de snapshots verwijderen ({count})",
   "databases_dropTitle": "{name} verwijderen?",
   "databases_export": "Exporteren",
   "databases_import": "Importeren",

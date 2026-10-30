@@ -190,6 +190,7 @@
   "databases_drop": "Șterge",
   "databases_dropBody": "Aceasta șterge definitiv baza de date și toate datele ei și nu poate fi anulată.",
   "databases_dropTesting": "Șterge și {name}",
+  "databases_dropSnapshots": "Șterge și snapshot-urile ({count})",
   "databases_dropTitle": "Ștergi {name}?",
   "databases_export": "Exportă",
   "databases_import": "Importă",

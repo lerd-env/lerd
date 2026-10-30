@@ -308,6 +308,15 @@ func DeleteSnapshot(service, database, name string, allDatabases bool) error {
 	return os.RemoveAll(snapshotDir(service, database, clean, allDatabases))
 }
 
+// DeleteDatabaseSnapshots removes every snapshot stored for one database, for
+// a drop that was asked to take them along.
+func DeleteDatabaseSnapshots(service, database string) error {
+	if err := ValidateDatabaseName(database); err != nil {
+		return err
+	}
+	return os.RemoveAll(snapshotScopeDir(service, database, false))
+}
+
 // CreateSnapshot dumps the target database (or every database when
 // t.AllDatabases is set) into a new named snapshot under config.SnapshotsDir().
 // An empty name is auto-generated from the current UTC time.

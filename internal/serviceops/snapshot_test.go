@@ -401,3 +401,25 @@ func TestRestoreSnapshotRefusesAnEmptyDump(t *testing.T) {
 		t.Errorf("error should say the dump is empty, got: %v", err)
 	}
 }
+
+// Dropping a database can take its snapshots along, and only its own.
+func TestDeleteDatabaseSnapshots(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	now := time.Now().UTC()
+	seedSnapshot(t, Snapshot{Name: "one", Created: now, Service: "postgres", Family: "postgres", Database: "shop"})
+	seedSnapshot(t, Snapshot{Name: "two", Created: now, Service: "postgres", Family: "postgres", Database: "shop"})
+	seedSnapshot(t, Snapshot{Name: "other", Created: now, Service: "postgres", Family: "postgres", Database: "blog"})
+
+	if err := DeleteDatabaseSnapshots("postgres", "shop"); err != nil {
+		t.Fatalf("DeleteDatabaseSnapshots: %v", err)
+	}
+	if left, _ := ListSnapshots("postgres", "shop", false); len(left) != 0 {
+		t.Errorf("shop still has %d snapshots", len(left))
+	}
+	if left, _ := ListSnapshots("postgres", "blog", false); len(left) != 1 {
+		t.Errorf("blog's snapshot went with shop's")
+	}
+	if err := DeleteDatabaseSnapshots("postgres", "../blog"); err == nil {
+		t.Error("a traversing database name was accepted")
+	}
+}
