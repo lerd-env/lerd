@@ -207,6 +207,7 @@ phases once the next release makes it ordinary.
 |---|---|
 | Plugins: every surface, the catalog, plugin services and the `plugin` MCP tool | 15 |
 | NetworkManager hook keeps a stopped lerd-dns off the uplink | 3 |
+| A command cut short takes what it started with it, in the container and on the host | 4, 14 |
 
 ## Phase 0 — baseline snapshots
 
@@ -504,6 +505,22 @@ left there is where resolved fails over after one dropped upstream query:
       `lerd env --yes`, with no restart
 - [ ] The demo's queue worker runs a job that sees the demo's provided value
 - [ ] Unlinking a site removes its provided-env file
+- [ ] `lerd php`, `lerd artisan` and a `vendor/bin` command stopped with
+      SIGTERM, SIGINT or SIGHUP take what they started in the container with
+      them, a child in a session of its own and one that ignores SIGTERM included
+- [ ] A run killed with `kill -9`, and a run that ended on its own but left a
+      background child, are cleaned up by lerd-watcher within a minute, and two
+      runs at once: stopping one leaves the other running
+- [ ] Ctrl+C on a terminal, and closing the terminal, stop the run in the
+      container
+- [ ] Closing an MCP session during an `artisan` call ends the call and
+      `lerd mcp` exits
+- [ ] The dashboard's tinker gives up after 30 seconds, and when the browser
+      disconnects, and what it started in the container goes with it
+- [ ] A host command (`lerd sail` runs `vendor/bin/sail` on the host) stopped
+      with SIGTERM or `kill -9` takes its whole process group with it, and
+      Ctrl+Z, `fg` and Ctrl+C in an interactive shell stop, resume and end it
+      with the shell still usable
 
 ---
 
@@ -1312,6 +1329,13 @@ skipped rather than quietly passing it.
 - [ ] `lerd machine reclaim` caps the guest journal, vacuums what it grew past,
       trims the filesystem and reports the host disk returned, touching no
       container, image, volume or site data
+- [ ] A native `lerd pest` that passes, and one stopped with Ctrl+C, leave no
+      Playwright server or Chromium behind, and one killed with `kill -9` is
+      cleaned up by lerd-watcher within a minute
+- [ ] Ctrl+Z on a native `lerd php` gives the prompt back with the run stopped,
+      `fg` resumes it in the foreground, and Ctrl+C then ends it
+- [ ] Closing an MCP session during a native `artisan` call ends the call and
+      `lerd mcp` exits
 - [ ] Switching back to the container runtime brings every site home,
       **https → 200**
 
