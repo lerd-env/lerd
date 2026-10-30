@@ -110,3 +110,14 @@ export function groupByCategory<T extends { name: string; category?: string }>(
     items: buckets.get(k)!.slice().sort((a, b) => a.name.localeCompare(b.name))
   }));
 }
+
+// The chips a catalog filter offers: All first, then each type that has an item.
+export function categoryChips(items: { category?: string }[]): { key: string; label: string }[] {
+  return [
+    { key: '', label: m.services_cat_all() },
+    ...CATEGORY_ORDER.filter((k) => items.some((it) => asCategory(it.category) === k)).map((k) => ({
+      key: k,
+      label: CATEGORY_LABELS[k]()
+    }))
+  ];
+}

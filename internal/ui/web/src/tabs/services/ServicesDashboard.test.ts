@@ -72,23 +72,21 @@ describe('ServicesDashboard', () => {
     expect(queryByText('Update all')).toBeNull();
   });
 
-  // Installed services sit under their type like the rail does, and within a
-  // type the ones waiting on an update lead so they are not lost.
-  it('groups installed services by type with updates leading each group', () => {
+  // Installed services share one compact grid ordered by type, with the ones
+  // waiting on an update leading their type, and a chip narrows it to a type.
+  it('lists installed services in one grid and filters them by type', async () => {
     services.set([
       svc({ name: 'mysql', category: 'databases' }),
       svc({ name: 'postgres', category: 'databases', update_available: true }),
       svc({ name: 'redis', category: 'cache' })
     ]);
-    const { container } = render(ServicesDashboard);
-    const sections = [...container.querySelectorAll('section section')].map((sec) => ({
-      label: sec.querySelector('h3')?.textContent,
-      names: [...sec.querySelectorAll('.grid .font-semibold')].map((n) => n.textContent)
-    }));
-    expect(sections.slice(0, 2)).toEqual([
-      { label: 'Databases', names: ['PostgreSQL', 'MySQL'] },
-      { label: 'Cache', names: ['Redis'] }
-    ]);
+    const { container, getByRole, queryByRole } = render(ServicesDashboard);
+    const names = () => [...container.querySelectorAll('[data-testid="installed-grid"] .font-semibold')].map((n) => n.textContent);
+    expect(names()).toEqual(['PostgreSQL', 'MySQL', 'Redis']);
+    expect(container.querySelector('section section h3')).toBeNull();
+    expect(queryByRole('button', { name: 'Messaging' })).toBeNull();
+    await fireEvent.click(getByRole('button', { name: 'Cache' }));
+    expect(names()).toEqual(['Redis']);
   });
 
   // The two halves are separate views, so the long preset list no longer
