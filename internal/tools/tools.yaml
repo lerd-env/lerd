@@ -10,7 +10,7 @@ tools:
   # unsigned, loses it on every pin (#1906). Only installed when the host has no
   # mise of its own.
   mise:
-    version: v2026.9.12
+    version: v2026.10.24
     url: https://github.com/jdx/mise/releases/download/{version}/{asset}
     assets:
       linux/amd64: mise-{version}-linux-x64.tar.gz
@@ -18,10 +18,10 @@ tools:
       darwin/amd64: mise-{version}-macos-x64.tar.gz
       darwin/arm64: mise-{version}-macos-arm64.tar.gz
     digests:
-      linux/amd64: b4058dece685259910d3aba5782445996eea79dbdb3cf952a6eb81aadf0373ff
-      linux/arm64: e4a0921da0a76ce4666832d5b57b6f0eb9f22d149ba92845ebae4c38638c6775
-      darwin/amd64: 22be38ec60632913143bf6a96b0aacfd895fdfe4ce4e8958e942f7bdb5a9185b
-      darwin/arm64: 0f1c7f3e74d8c9ae82976e6990058f2bc68821acc6b4c37a68c206c836692419
+      linux/amd64: 9a6c9c55f5c6372d0af70a9979fe6d742aea3793267a929e1738022143c466cc
+      linux/arm64: 8c8f5d7f748bf3aef431dc50f0ad776270f36025c788aa21c74e2fabdbbd6d3e
+      darwin/amd64: 83a36355bf6ee7c1660300e12dd94464de5c672dab1b8cc33ec4d19356e7ddac
+      darwin/arm64: aa2fc59242db108f97ea9fb2d2e2cb42ff1467fcafe3c91e48d51c841ba67a65
   fnm:
     version: v1.39.0
     url: https://github.com/Schniz/fnm/releases/download/{version}/{asset}
