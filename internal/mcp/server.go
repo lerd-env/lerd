@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/envpass"
+	"github.com/geodro/lerd/internal/execguard"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/grouping"
 	"github.com/geodro/lerd/internal/logsource"
@@ -146,11 +148,13 @@ func Serve() error {
 	defer restore()
 
 	enc := json.NewEncoder(stdout)
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1 MB — handle large artisan output
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sessionCtx = ctx
+	lines, scanErr := readRequests(os.Stdin, cancel)
 
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
+	for raw := range lines {
+		line := bytes.TrimSpace(raw)
 		if len(line) == 0 {
 			continue
 		}
@@ -178,7 +182,69 @@ func Serve() error {
 		}
 		_ = enc.Encode(resp)
 	}
-	return scanner.Err()
+	return *scanErr
+}
+
+// sessionCtx ends when the client closes stdin, so a call still running then,
+// an artisan command that never returns, is stopped rather than keeping the
+// server and what it started in the container alive.
+var sessionCtx = context.Background()
+
+// maxQueued caps what a client may send while a call runs; past it the session
+// is cancelled, the call with it, and nothing more is served.
+const maxQueued = 256
+
+// readRequests reads stdin on its own and queues what it reads, so requests sent
+// while a call runs never hold it back from seeing a closed session; cancel runs
+// at EOF or on overflow. The error is set once lines closes.
+func readRequests(r io.Reader, cancel func()) (<-chan []byte, *error) {
+	in := make(chan []byte)
+	lines := make(chan []byte)
+	var scanErr error
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1 MB — handle large artisan output
+	go func() {
+		defer close(in)
+		defer cancel()
+		for scanner.Scan() {
+			in <- append([]byte(nil), scanner.Bytes()...)
+		}
+		scanErr = scanner.Err()
+	}()
+	go func() {
+		defer close(lines)
+		src := in
+		var queue [][]byte
+		// Past the cap the rest is read and dropped, so EOF still closes lines
+		// after the scan error is set.
+		overflowed := false
+		for src != nil || len(queue) > 0 {
+			var out chan []byte
+			var head []byte
+			if len(queue) > 0 {
+				out, head = lines, queue[0]
+			}
+			select {
+			case l, ok := <-src:
+				if !ok {
+					src = nil
+					continue
+				}
+				if overflowed {
+					continue
+				}
+				queue = append(queue, l)
+				if len(queue) > maxQueued {
+					fmt.Fprintf(os.Stderr, "lerd mcp: over %d requests queued behind a running call, ending the session\n", maxQueued)
+					cancel()
+					overflowed, queue = true, nil
+				}
+			case out <- head:
+				queue = queue[1:]
+			}
+		}
+	}()
+	return lines, &scanErr
 }
 
 // guardStdout repoints os.Stdout at os.Stderr and returns the prior stdout (for
@@ -392,7 +458,7 @@ func execArtisan(args map[string]any) (any, *rpcError) {
 	cmd := podman.Cmd(cmdArgs...)
 	cmd.Stdout = &out
 	cmd.Stderr = &out
-	if err := cmd.Run(); err != nil {
+	if err := execguard.Run(sessionCtx, cmd, container); err != nil {
 		return toolErr(fmt.Sprintf("artisan failed (%v):\n%s", err, stripANSI(out.String()))), nil
 	}
 	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil

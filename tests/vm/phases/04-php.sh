@@ -222,4 +222,175 @@ sed -i '/^env_provider:/d' "$site/.lerd.yaml"
 lerd env </dev/null >/dev/null 2>&1
 rm -f "$site/lerd-vm-provider.sh" "$site/public/env.php"
 expect_200 "$url"
+
+# 4.28-4.33: a command cut short takes what it started with it. Each payload
+# runs `sleep <n>` under a number of its own, so a count of those is the check.
+eg_ver=$(cd "$DEMO_DIR" && lerd php -r 'echo PHP_MAJOR_VERSION.PHP_MINOR_VERSION;' 2>/dev/null)
+eg_c=lerd-php${eg_ver}-fpm
+eg_n=900
+eg_next() { eg_n=$((eg_n + 1)); }
+eg_cnt() { podman exec "$eg_c" sh -c "ps -eo args | grep -c '^sleep $1\$'"; }
+eg_gone() { [ "$(eg_cnt "$1")" = 0 ]; }
+eg_has() { [ "$(eg_cnt "$1")" -ge "$2" ]; }
+eg_up() { wait_for 40 eg_has "$1" "$2"; }
+eg_shape() { # eg_shape <n> own|ignore|detach: a PHP file running that tree
+	local cmd
+	case $2 in
+	own) cmd="setsid sleep $1 & sleep $1" ;;
+	ignore) cmd="setsid sh -c 'trap \"\" TERM; exec sleep $1' & sh -c 'trap \"\" TERM; exec sleep $1'" ;;
+	detach) cmd="setsid sleep $1 >/dev/null 2>&1 &" ;;
+	esac
+	printf "<?php passthru(<<<'SH'\n%s\nSH);\n" "$cmd" >"$DEMO_DIR/storage/lerd-vm-eg-$1.php"
+}
+eg_start() { # eg_start php|artisan|vendor <n>: the lerd pid
+	local rel="storage/lerd-vm-eg-$2.php"
+	cd "$DEMO_DIR" || return
+	case $1 in
+	php) setsid lerd php "$rel" </dev/null >/dev/null 2>&1 & ;;
+	artisan) setsid lerd artisan tinker --execute="require base_path('$rel');" </dev/null >/dev/null 2>&1 & ;;
+	vendor) setsid lerd lerd-vm-egrun "$rel" </dev/null >/dev/null 2>&1 & ;;
+	esac
+	echo $!
+	cd - >/dev/null || return
+}
+printf '#!/bin/sh\nexec php "$@"\n' >"$DEMO_DIR/vendor/bin/lerd-vm-egrun"
+chmod +x "$DEMO_DIR/vendor/bin/lerd-vm-egrun"
+
+eg_ok=1
+for e in php artisan vendor; do
+	for s in TERM INT HUP; do
+		for k in own ignore; do
+			eg_next; eg_shape $eg_n $k
+			pid=$(eg_start $e $eg_n)
+			eg_up $eg_n 2 || { eg_ok=0; echo "$e $s $k never started"; continue; }
+			kill -$s "$pid"
+			wait_for 20 eval "! kill -0 $pid 2>/dev/null"
+			wait_for 15 eg_gone $eg_n || { eg_ok=0; echo "$e SIG$s $k left $(eg_cnt $eg_n)"; }
+		done
+	done
+done
+check "4.28 php, artisan and vendor/bin stopped with TERM, INT or HUP leave nothing in the container" test $eg_ok = 1
+
+eg_next; eg_a=$eg_n; eg_shape $eg_a own; eg_next; eg_b=$eg_n; eg_shape $eg_b own
+pa=$(eg_start php $eg_a); pb=$(eg_start php $eg_b)
+eg_up $eg_a 2 && eg_up $eg_b 2
+kill -TERM "$pa"
+wait_for 15 eg_gone $eg_a
+check_out "4.29 stopping one of two runs leaves the other running" '^2$' eg_cnt $eg_b
+kill -TERM "$pb"
+eg_next; eg_k=$eg_n; eg_shape $eg_k own
+pk=$(eg_start artisan $eg_k); eg_up $eg_k 2; kill -9 "$pk"
+eg_next; eg_d=$eg_n; eg_shape $eg_d detach
+(cd "$DEMO_DIR" && lerd php "storage/lerd-vm-eg-$eg_d.php") </dev/null >/dev/null 2>&1
+check_out "4.29 a run killed with kill -9 is still running right after" '^2$' eg_cnt $eg_k
+check "4.29 lerd-watcher sweeps a run killed with kill -9 within a minute" wait_for 80 eg_gone $eg_k
+check "4.29 lerd-watcher sweeps a background child a finished run left within a minute" wait_for 80 eg_gone $eg_d
+
+for how in ctrlc close; do
+	eg_next; eg_shape $eg_n own
+	python3 - "$DEMO_DIR" "$eg_n" "$how" <<'PY' &
+import os, pty, sys, time
+site, n, how = sys.argv[1:4]
+pid, fd = pty.fork()
+if pid == 0:
+    os.chdir(site)
+    os.execvp("lerd", ["lerd", "php", f"storage/lerd-vm-eg-{n}.php"])
+time.sleep(6)
+if how == "ctrlc":
+    os.write(fd, b"\x03")
+    time.sleep(3)
+os.close(fd)
+os.waitpid(pid, 0)
+PY
+	eg_up $eg_n 1
+	wait
+	check "4.30 $how on a terminal stops the run in the container" wait_for 80 eg_gone $eg_n
+done
+
+eg_next; eg_shape $eg_n own
+eg_fifo=$(mktemp -u); mkfifo "$eg_fifo"
+(cd "$DEMO_DIR" && setsid lerd mcp <"$eg_fifo" >/dev/null 2>&1) &
+exec 7>"$eg_fifo"
+wait_for 10 pgrep -f '^lerd mcp'
+eg_mcp=$(pgrep -nf '^lerd mcp')
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"lerd-vm","version":"1"}}}' \
+	"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"exec\",\"arguments\":{\"action\":\"artisan\",\"path\":\"$DEMO_DIR\",\"args\":[\"tinker\",\"--execute=require base_path('storage/lerd-vm-eg-$eg_n.php');\"]}}}" >&7
+eg_up $eg_n 2
+printf '%s\n' '{"jsonrpc":"2.0","id":3,"method":"tools/list"}' >&7
+exec 7>&-
+check "4.31 closing an MCP session mid-call stops lerd mcp" wait_for 20 eval "! kill -0 $eg_mcp 2>/dev/null"
+check "4.31 closing an MCP session mid-call stops the call in the container" wait_for 15 eg_gone $eg_n
+rm -f "$eg_fifo"
+
+# The dashboard refuses a request without its CSRF header, so a check that the
+# run is gone only means something once the run is seen starting.
+eg_tinker() { curl -s --max-time "$2" -X POST -H 'Content-Type: application/json' -H 'X-Lerd-CSRF: 1' \
+	-d "{\"code\":\"require base_path('storage/lerd-vm-eg-$1.php');\"}" "http://127.0.0.1:7073/api/sites/$(site_host "$DEMO_DIR")/tinker" >/dev/null 2>&1 & }
+eg_next; eg_shape $eg_n own; eg_tinker $eg_n 6
+check "4.32 the dashboard's tinker starts the run" eg_up $eg_n 2
+check "4.32 a browser leaving the dashboard's tinker stops the run" wait_for 20 eg_gone $eg_n
+eg_next; eg_shape $eg_n own; eg_tinker $eg_n 60
+check "4.32 the dashboard's tinker starts the run it will time out" eg_up $eg_n 2
+check "4.32 the dashboard's tinker timeout stops the run" wait_for 45 eg_gone $eg_n
+wait
+
+# lerd sail runs vendor/bin/sail on the host, the one host path Linux reaches.
+eg_sail="$DEMO_DIR/vendor/bin/sail"
+[ -e "$eg_sail" ] && mv "$eg_sail" "$eg_sail.lerd-vm"
+printf '#!/bin/sh\nsleep "$1" & sleep "$1"\n' >"$eg_sail"
+chmod +x "$eg_sail"
+eg_hcnt() { pgrep -fxc "sleep $1"; }
+eg_hgone() { [ "$(eg_hcnt "$1")" = 0 ]; }
+eg_hup() { [ "$(eg_hcnt "$1")" -ge 2 ]; }
+eg_next; (cd "$DEMO_DIR" && setsid lerd sail $eg_n </dev/null >/dev/null 2>&1 &)
+wait_for 20 eg_hup $eg_n
+pkill -TERM -f "^lerd sail $eg_n\$"
+check "4.33 a host command stopped with TERM takes its group with it" wait_for 15 eg_hgone $eg_n
+eg_next; (cd "$DEMO_DIR" && setsid lerd sail $eg_n </dev/null >/dev/null 2>&1 &)
+wait_for 20 eg_hup $eg_n
+pkill -KILL -f "^lerd sail $eg_n\$"
+check "4.33 lerd-watcher sweeps the group of a host command killed with kill -9" wait_for 80 eg_hgone $eg_n
+eg_next
+eg_job=$(python3 - "$DEMO_DIR" "$eg_n" <<'PY'
+import os, pty, select, subprocess, sys, time
+site, n = sys.argv[1:3]
+out = b""
+def drain(fd, secs):
+    global out
+    end = time.time() + secs
+    while time.time() < end:
+        r, _, _ = select.select([fd], [], [], 0.2)
+        if r:
+            try:
+                out += os.read(fd, 4096)
+            except OSError:
+                return
+def states():
+    r = subprocess.run(["ps", "-eo", "stat=,args="], capture_output=True, text=True).stdout
+    return "".join(l.split()[0][0] for l in r.splitlines() if l.split(None, 1)[1:] == [f"sleep {n}"])
+pid, fd = pty.fork()
+if pid == 0:
+    os.chdir(site)
+    os.execvp("bash", ["bash", "--norc", "-i"])
+drain(fd, 1); os.write(fd, f"lerd sail {n}\n".encode()); drain(fd, 5)
+os.write(fd, b"\x1a"); drain(fd, 3)
+stopped = states()
+os.write(fd, f"echo prompt-{n}\n".encode()); drain(fd, 2)
+prompt = out.count(f"prompt-{n}".encode()) >= 2
+os.write(fd, b"fg\n"); drain(fd, 3)
+resumed = states()
+os.write(fd, b"\x03"); drain(fd, 3)
+os.write(fd, f"echo alive-{n}\n".encode()); drain(fd, 2)
+alive = out.count(f"alive-{n}".encode()) >= 2
+os.write(fd, b"exit\n"); drain(fd, 2)
+print(f"stopped={stopped} prompt={prompt} resumed={resumed} alive={alive}")
+PY
+)
+echo "--- job control: $eg_job"
+check_out "4.33 Ctrl+Z stops a host command and gives the prompt back" 'stopped=TT prompt=True' echo "$eg_job"
+check_out "4.33 fg resumes it and Ctrl+C ends it with the shell still usable" 'resumed=SS alive=True' echo "$eg_job"
+check "4.33 nothing of the host command is left after Ctrl+C" wait_for 15 eg_hgone $eg_n
+rm -f "$eg_sail"
+[ -e "$eg_sail.lerd-vm" ] && mv "$eg_sail.lerd-vm" "$eg_sail"
+rm -f "$DEMO_DIR"/storage/lerd-vm-eg-*.php "$DEMO_DIR/vendor/bin/lerd-vm-egrun"
 reclaim

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/execguard"
 	"github.com/geodro/lerd/internal/feedback"
 	nodeDet "github.com/geodro/lerd/internal/node"
 )
@@ -60,13 +62,8 @@ func runDeclaredHostCommand(cwd string, argv []string, extraEnv []string) (int, 
 	cmd.Stderr = os.Stderr
 	// A declared command can leave a server running behind it (pest's browser
 	// plugin starts Playwright), which holds the inherited stdout and hangs a
-	// pipeline; reap whatever outlives the run.
-	grouped := groupNativeRun(cmd)
-	err := cmd.Run()
-	if grouped {
-		reapProcessGroup(cmd)
-	}
-	if err != nil {
+	// pipeline; the guard ends whatever outlives the run.
+	if err := execguard.Run(context.Background(), cmd, ""); err != nil {
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
 			return ee.ExitCode(), true, nil

@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"os/exec"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envpass"
+	"github.com/geodro/lerd/internal/execguard"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 )
@@ -100,7 +102,7 @@ func runConsole(_ *cobra.Command, args []string) error {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := execguard.Run(context.Background(), cmd, container); err != nil {
 		if exit, ok := err.(*exec.ExitError); ok {
 			os.Exit(exit.ExitCode())
 		}

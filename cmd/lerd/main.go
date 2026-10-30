@@ -658,6 +658,9 @@ func newWatchCmd() *cobra.Command {
 			// the auto_cleanup config; never touches service images (--deep).
 			go watcher.WatchCleanup(time.Hour)
 
+			// A lerd killed outright leaves its container commands running.
+			go watcher.WatchExecGuard(time.Minute)
+
 			// Keep the cached framework store index fresh so offline detection and
 			// listing resolve the full catalogue without a network round trip.
 			go store.WatchIndex(6 * time.Hour)

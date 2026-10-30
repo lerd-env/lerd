@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/geodro/lerd/internal/agentenv"
 	"github.com/geodro/lerd/internal/envpass"
+	"github.com/geodro/lerd/internal/execguard"
 	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/podman"
 )
@@ -123,7 +125,7 @@ func runVendorBinDirect(cwd, rel string, args []string) error {
 
 	cmd := podman.Cmd(vendorBinExecArgs(cwd, container, rel, args, containerTTY())...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	return runAndPropagate(cmd)
+	return runAndPropagate(cmd, container)
 }
 
 // hostVendorBinPath is the PATH a wrapper gets on the host: the project's own
@@ -146,30 +148,17 @@ func RunHostVendorBin(cwd, rel string, args []string) error {
 	c.Dir = cwd
 	c.Env = append(os.Environ(), "PATH="+hostVendorBinPath(cwd))
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
-	if err := runHostAndReap(c, nil); err != nil {
+	if err := runHostAndReap(c); err != nil {
 		return err
 	}
 	return nil
 }
 
-// runHostAndReap runs a host binary in its own process group and kills whatever
-// it leaves behind before returning. The reap cannot be deferred: the exit path
-// below calls os.Exit, which skips defers, and the orphan (pest-plugin-browser
-// leaves a Playwright server) holds the inherited stdout so a pipeline hangs.
-// started, when set, is called with the running command, for tests.
-func runHostAndReap(cmd *exec.Cmd, started func(*exec.Cmd)) error {
-	grouped := groupNativeRun(cmd)
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	if started != nil {
-		started(cmd)
-	}
-	err := cmd.Wait()
-	if grouped {
-		reapProcessGroup(cmd)
-	}
-	if err != nil {
+// runHostAndReap runs a host binary and ends what it leaves behind before
+// returning: the exit path's os.Exit skips defers, and a leftover Playwright
+// server holds the inherited stdout so a pipeline hangs.
+func runHostAndReap(cmd *exec.Cmd) error {
+	if err := execguard.Run(context.Background(), cmd, ""); err != nil {
 		if exit, ok := err.(*exec.ExitError); ok {
 			os.Exit(exit.ExitCode())
 		}
@@ -178,10 +167,10 @@ func runHostAndReap(cmd *exec.Cmd, started func(*exec.Cmd)) error {
 	return nil
 }
 
-// runAndPropagate runs cmd and exits with the child's status, so a failing
-// composer binary fails the shell that called lerd.
-func runAndPropagate(cmd *exec.Cmd) error {
-	if err := cmd.Run(); err != nil {
+// runAndPropagate runs cmd, an exec into container, and exits with the child's
+// status, so a failing composer binary fails the shell that called lerd.
+func runAndPropagate(cmd *exec.Cmd, container string) error {
+	if err := execguard.Run(context.Background(), cmd, container); err != nil {
 		if exit, ok := err.(*exec.ExitError); ok {
 			os.Exit(exit.ExitCode())
 		}

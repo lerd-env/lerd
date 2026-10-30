@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/execguard"
 	"github.com/geodro/lerd/internal/logcolor"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
@@ -221,7 +223,7 @@ func RunPHPVersionCaptureEnv(cwd, version string, args []string, extraEnv []stri
 		mapErr = newPathMapWriter(os.Stderr, stage.items)
 		cmd.Stdout, cmd.Stderr = mapOut, mapErr
 	}
-	runErr := cmd.Run()
+	runErr := execguard.Run(context.Background(), cmd, container)
 	if stage != nil {
 		// A failed write-back leaves the caller's file holding the version the
 		// tool meant to replace, which matters more than the tool's own status.

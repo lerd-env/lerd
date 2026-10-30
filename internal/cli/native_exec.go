@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/execguard"
 	"github.com/geodro/lerd/internal/nativephp"
 )
 
@@ -59,9 +61,7 @@ func runNativePHP(cwd, phpVersion string, args []string, extraEnv []string) (int
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	groupNativeRun(cmd)
-	defer reapProcessGroup(cmd)
-	if err := cmd.Run(); err != nil {
+	if err := execguard.Run(context.Background(), cmd, ""); err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
 			return exit.ExitCode(), nil
@@ -73,7 +73,7 @@ func runNativePHP(cwd, phpVersion string, args []string, extraEnv []string) (int
 
 // runHostExec runs a command built by execOnHostIfNative; a var so tests can
 // see what would run without a real php.
-var runHostExec = func(c *exec.Cmd) error { return c.Run() }
+var runHostExec = func(c *exec.Cmd) error { return execguard.Run(context.Background(), c, "") }
 
 // execOnHostIfNative runs argv on the host in place of a podman exec when the
 // native runtime serves dir, and reports whether it did.
