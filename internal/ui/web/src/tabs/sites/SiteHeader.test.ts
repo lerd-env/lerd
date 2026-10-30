@@ -146,11 +146,13 @@ describe('SiteHeader', () => {
     expect(queryByText(/FrankenPHP/)).not.toBeInTheDocument();
   });
 
-  // Group and workspace leave the bar on a narrow header, so the overflow menu carries them.
+  // Workspace is a set-once choice, so it lives only in the overflow menu;
+  // group joins it there on a narrow header.
   it('offers group and workspace in the overflow menu', async () => {
     accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
     status.update((s) => ({ ...s, workspaces: ['client-a'] }));
-    const { getByLabelText, getByRole } = render(Harness, { props: { site: { ...site, name: 'app' } as unknown as Site } });
+    const { getByLabelText, getByRole, queryByLabelText } = render(Harness, { props: { site: { ...site, name: 'app' } as unknown as Site } });
+    expect(queryByLabelText('Workspace')).toBeNull();
 
     await fireEvent.click(getByLabelText('More actions'));
     const menu = getByRole('menu');

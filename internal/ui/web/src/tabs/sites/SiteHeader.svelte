@@ -50,7 +50,6 @@
   import DomainMorePill from './DomainMorePill.svelte';
   import ShareLink from './ShareLink.svelte';
   import ShareMenu from './ShareMenu.svelte';
-  import WorkspacePicker from './WorkspacePicker.svelte';
   import WorkspaceMenuItems from './WorkspaceMenuItems.svelte';
   import GitStatusBadge from '$components/GitStatusBadge.svelte';
   import GitSync from '$components/GitSync.svelte';
@@ -733,12 +732,6 @@
         </button>
       {/if}
 
-      <!-- A group secondary shows its main's workspace and moves with it, so it
-           has nothing of its own to pick. -->
-      {#if $accessMode.localControl && !activeWorktreeBranch && !site.group_subdomain}
-        <div class="hidden @2xl:block"><WorkspacePicker {site} /></div>
-      {/if}
-
       {#if showLanToggle}
         <ShareMenu
           {site}
@@ -981,12 +974,6 @@
                 {site.group ? 'Manage group' : 'Group with another site'}
               </button>
             {/if}
-            {#if $accessMode.localControl && !activeWorktreeBranch && !site.group_subdomain}
-              <div class="@2xl:hidden border-y border-gray-100 dark:border-lerd-border my-1 py-1">
-                <p class="px-3 pt-0.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">{m.workspaces_pickerLabel()}</p>
-                <WorkspaceMenuItems {site} onDone={() => (overflowOpen = false)} />
-              </div>
-            {/if}
             {#if showLanToggle}
               <button
                 type="button"
@@ -1036,6 +1023,14 @@
                 </svg>
                 {xdebugEnabled ? m.sites_badges_xdebugOn({ mode: xdebugMode }) : m.sites_badges_xdebugDisabled()}
               </button>
+            {/if}
+            <!-- A group secondary shows its main's workspace and moves with it, so it
+                 has nothing of its own to pick. -->
+            {#if $accessMode.localControl && !activeWorktreeBranch && !site.group_subdomain}
+              <div class="border-t border-gray-100 dark:border-lerd-border my-1 py-1">
+                <p class="px-3 pt-0.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">{m.workspaces_pickerLabel()}</p>
+                <WorkspaceMenuItems {site} onDone={() => (overflowOpen = false)} />
+              </div>
             {/if}
             {#if !site.paused || !activeWorktreeBranch}
               <div class="my-1 border-t border-gray-100 dark:border-lerd-border"></div>
