@@ -270,3 +270,20 @@ func TestSidebarMarksPinnedRowsWithCoffeeWhileIdleSuspendIsOn(t *testing.T) {
 		t.Fatalf("pinned name shifted:\n%s\n%s", line("mysql"), line("redis"))
 	}
 }
+
+func TestPinnedSiteCupIsDimWhileStopped(t *testing.T) {
+	if g := siteGlyph(siteinfo.EnrichedSite{FPMRunning: true}, true); g.fg != colRunning {
+		t.Fatal("running pinned site cup is not green")
+	}
+	if g := siteGlyph(siteinfo.EnrichedSite{}, true); g.t != glyphAwake || g.fg != colDim {
+		t.Fatalf("stopped pinned site glyph = %+v, want a dim cup", g)
+	}
+}
+
+func TestDropHiddenKeepsPrivateSitesOutOfKeptAwakeBy(t *testing.T) {
+	rows := []ServiceRow{{Name: "redis", KeptAwakeBy: []string{"open", "secret"}}}
+	dropHiddenKeptAwake(rows, map[string]bool{"secret": true})
+	if got := rows[0].KeptAwakeBy; len(got) != 1 || got[0] != "open" {
+		t.Fatalf("kept awake by = %v, want only open", got)
+	}
+}

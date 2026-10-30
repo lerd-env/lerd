@@ -253,8 +253,10 @@ func siteGlyph(s siteinfo.EnrichedSite, awake bool) seg {
 		return bd(glyphFailing, colFailing)
 	case s.Paused:
 		return sp(glyphPaused, colPaused)
-	case awake:
+	case awake && s.FPMRunning:
 		return sp(glyphAwake, colRunning)
+	case awake:
+		return sp(glyphAwake, colDim)
 	case s.FPMRunning:
 		return sp(glyphRunning, colRunning)
 	}

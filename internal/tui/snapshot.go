@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -84,6 +85,14 @@ type StatusRow struct {
 // the idle engine's walk, which this package cannot import without a cycle.
 var KeptAwakeBy = func(string) []string { return nil }
 
+// dropHiddenKeptAwake keeps the sites streaming mode hides out of the names a
+// service view prints, as their own rows are kept out of the sidebar.
+func dropHiddenKeptAwake(rows []ServiceRow, hidden map[string]bool) {
+	for i := range rows {
+		rows[i].KeptAwakeBy = slices.DeleteFunc(rows[i].KeptAwakeBy, func(n string) bool { return hidden[n] })
+	}
+}
+
 // loadSnapshot collects everything the TUI needs in one shot. Called on every
 // refresh tick and on every eventbus publish.
 func loadSnapshot() Snapshot {
@@ -133,6 +142,7 @@ func loadSnapshot() Snapshot {
 	}
 
 	snap.Services = loadServices()
+	dropHiddenKeptAwake(snap.Services, hidden)
 	// Workers live on sites but belong in the services pane too — same
 	// operational surface lerd-ui surfaces as "active" rows for queue,
 	// schedule, etc. Append them after the shared services so the user

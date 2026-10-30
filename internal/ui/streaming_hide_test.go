@@ -75,3 +75,11 @@ func TestHideStreamingServicesDropsAHiddenWorktreesDomain(t *testing.T) {
 		t.Fatalf("site_domains = %v, want open.test", out[0].SiteDomains)
 	}
 }
+
+func TestHideStreamingServicesDropsAHiddenSiteFromKeptAwakeBy(t *testing.T) {
+	in := []ServiceResponse{{Name: "redis", KeptAwakeBy: []string{"open", "secret"}}}
+	out := hideStreamingServices(in, map[string]bool{"secret": true}, map[string]bool{})
+	if len(out[0].KeptAwakeBy) != 1 || out[0].KeptAwakeBy[0] != "open" {
+		t.Fatalf("kept_awake_by = %v, want only open", out[0].KeptAwakeBy)
+	}
+}

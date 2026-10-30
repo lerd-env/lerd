@@ -3,6 +3,7 @@ package ui
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -118,6 +119,9 @@ func hideStreamingServices(list []ServiceResponse, hidden, domains map[string]bo
 				}
 			}
 			s.SiteDomains = kept
+		}
+		if len(s.KeptAwakeBy) > 0 {
+			s.KeptAwakeBy = slices.DeleteFunc(slices.Clone(s.KeptAwakeBy), func(n string) bool { return hidden[n] })
 		}
 		out = append(out, s)
 	}
