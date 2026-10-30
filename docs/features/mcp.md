@@ -177,6 +177,8 @@ In Claude Code, the `lerd-php` plugin from the [lerd-env/claude-plugins](https:/
 
 Restart Claude Code afterwards so the LSP tool appears. Other assistants need nothing from lerd here: OpenCode bundles its own PHP language server, editor-based ones such as Cursor or Copilot use the editor's PHP extension, and Codex and Gemini CLI have no way to attach one. The first `lerd lsp` on a machine downloads the server if `lerd install` has not already, reporting progress on stderr.
 
+Having the tool is not enough on its own, because Claude Code defers it and an assistant reaches for grep out of habit. The server instructions tell it to load the LSP tool and ask it first for definitions, callers, implementations and types, keeping grep for strings, config, non-PHP files and macros. Two gaps make a closing grep worthwhile on a callers question: calls through a facade are found from the facade's `@method` docblock line rather than the method behind it, and calls on untyped properties, such as `$this->x` in a Pest test, have no type to resolve.
+
 ---
 
 ## Available MCP tools
