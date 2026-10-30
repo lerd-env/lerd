@@ -322,12 +322,17 @@ check "4.31 closing an MCP session mid-call stops lerd mcp" wait_for 20 eval "! 
 check "4.31 closing an MCP session mid-call stops the call in the container" wait_for 15 eg_gone $eg_n
 rm -f "$eg_fifo"
 
-eg_tinker() { curl -s --max-time "$2" -X POST -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1:7073' \
-	-d "{\"code\":\"require base_path('storage/lerd-vm-eg-$1.php');\"}" "http://127.0.0.1:7073/api/sites/$(site_host "$DEMO_DIR")/tinker" >/dev/null 2>&1; }
-eg_next; eg_shape $eg_n own; eg_tinker $eg_n 4
-check "4.32 a browser leaving the dashboard's tinker stops the run" wait_for 15 eg_gone $eg_n
+# The dashboard refuses a request without its CSRF header, so a check that the
+# run is gone only means something once the run is seen starting.
+eg_tinker() { curl -s --max-time "$2" -X POST -H 'Content-Type: application/json' -H 'X-Lerd-CSRF: 1' \
+	-d "{\"code\":\"require base_path('storage/lerd-vm-eg-$1.php');\"}" "http://127.0.0.1:7073/api/sites/$(site_host "$DEMO_DIR")/tinker" >/dev/null 2>&1 & }
+eg_next; eg_shape $eg_n own; eg_tinker $eg_n 6
+check "4.32 the dashboard's tinker starts the run" eg_up $eg_n 2
+check "4.32 a browser leaving the dashboard's tinker stops the run" wait_for 20 eg_gone $eg_n
 eg_next; eg_shape $eg_n own; eg_tinker $eg_n 60
-check "4.32 the dashboard's tinker timeout stops the run" wait_for 15 eg_gone $eg_n
+check "4.32 the dashboard's tinker starts the run it will time out" eg_up $eg_n 2
+check "4.32 the dashboard's tinker timeout stops the run" wait_for 45 eg_gone $eg_n
+wait
 
 # lerd sail runs vendor/bin/sail on the host, the one host path Linux reaches.
 eg_sail="$DEMO_DIR/vendor/bin/sail"
