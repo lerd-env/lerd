@@ -7,12 +7,13 @@ import (
 
 	"github.com/geodro/lerd/internal/agentenv"
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/execguard"
 	"github.com/geodro/lerd/internal/nativephp"
 )
 
-// runHostCmd runs a command built by runOnHost; a var so tests can see what
-// would run without a real php.
-var runHostCmd = func(c *exec.Cmd) error { return c.Run() }
+// runHostCmd runs a command built by runOnHost, ended with the session; a var
+// so tests can see what would run without a real php.
+var runHostCmd = func(c *exec.Cmd) error { return execguard.Run(sessionCtx, c, "") }
 
 // nativeRuntime reports whether PHP runs on the host, where there is no FPM
 // container to exec into and starting one would undo the runtime.
