@@ -1473,6 +1473,8 @@ type ServiceResponse struct {
 	SiteCount   int      `json:"site_count"`
 	SiteDomains []string `json:"site_domains,omitempty"`
 	Pinned      bool     `json:"pinned"`
+	// KeptAwakeBy names the pinned sites that keep the service from sleeping.
+	KeptAwakeBy []string `json:"kept_awake_by,omitempty"`
 	// IdleSuspended marks a service idle-suspend stopped; it wakes on its own.
 	IdleSuspended      bool     `json:"idle_suspended,omitempty"`
 	Paused             bool     `json:"paused,omitempty"`
@@ -1721,6 +1723,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		SiteCount:         countSitesUsingService(name),
 		SiteDomains:       sitesUsingService(name),
 		Pinned:            config.ServiceIsPinned(name),
+		KeptAwakeBy:       cli.IdleServicePinnedSites(name),
 		Paused:            config.ServiceIsPaused(name),
 		IdleSuspended:     config.ServiceIsIdleSuspended(name),
 		IsDefault:         isDefault,

@@ -706,6 +706,7 @@
   "services_pin": "固定",
   "services_pinTitle": "固定，閒置時不自動停止",
   "services_pinned": "已固定",
+  "services_keptAwakeBy": "由 {sites} 保持運作",
   "services_sleeping": "休眠中",
   "services_logsStopped": "未執行，因此沒有可顯示的日誌。啟動後即會顯示。",
   "services_logsSleeping": "正在休眠，因此沒有可顯示的日誌。喚醒後即會顯示。",

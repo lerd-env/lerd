@@ -706,6 +706,7 @@
   "services_pin": "Fixar",
   "services_pinTitle": "Fixar, impedir auto-parada quando não usado",
   "services_pinned": "Fixado",
+  "services_keptAwakeBy": "Mantido ativo por {sites}",
   "services_sleeping": "Em repouso",
   "services_logsStopped": "Não está em execução, por isso não há registos a mostrar. Aparecem assim que arrancar.",
   "services_logsSleeping": "Está em repouso, por isso não há registos a mostrar. Aparecem assim que acordar.",

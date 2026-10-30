@@ -247,19 +247,27 @@ func orderByWorkspace(sites []siteinfo.EnrichedSite, of map[string]string, rank 
 	return sites
 }
 
-func siteGlyph(s siteinfo.EnrichedSite) seg {
+func siteGlyph(s siteinfo.EnrichedSite, awake bool) seg {
 	switch {
 	case siteHasFailingWorker(s):
 		return bd(glyphFailing, colFailing)
 	case s.Paused:
 		return sp(glyphPaused, colPaused)
+	case awake:
+		return sp(glyphAwake, colRunning)
 	case s.FPMRunning:
 		return sp(glyphRunning, colRunning)
 	}
 	return sp(glyphStopped, colDim)
 }
 
-func serviceGlyph(st ServiceState) seg {
+func serviceGlyph(st ServiceState, awake bool) seg {
+	switch {
+	case awake && st == stateRunning:
+		return sp(glyphAwake, colRunning)
+	case awake && st == stateStopped:
+		return sp(glyphAwake, colDim)
+	}
 	switch st {
 	case stateRunning:
 		return sp(glyphRunning, colRunning)
@@ -269,6 +277,15 @@ func serviceGlyph(st ServiceState) seg {
 		return sp(glyphSuspended, colPaused)
 	}
 	return sp(glyphStopped, colDim)
+}
+
+// glyphGap is the space between a row's glyph and its name, narrower after
+// the double-width cup so every name starts in the same column.
+func glyphGap(g seg) string {
+	if g.t == glyphAwake {
+		return " "
+	}
+	return "  "
 }
 
 // shortFramework turns "Laravel 12" into "L12" so the tag fits the sidebar.
@@ -363,14 +380,16 @@ func (m *Model) renderSidebar(w, h int) []string {
 			if !slim && s.FrameworkLabel != "" {
 				tag = []seg{sp(shortFramework(s.FrameworkLabel), colDim)}
 			}
-			list = append(list, item(it.key, []seg{sp(indent, nil), siteGlyph(s), sp("  "+name, nil)}, tag))
+			g := siteGlyph(s, m.snap.IdleSuspend && m.snap.Pinned[s.Name])
+			list = append(list, item(it.key, []seg{sp(indent, nil), g, sp(glyphGap(g)+name, nil)}, tag))
 		case sideService:
 			s := m.visibleServices()[it.idx]
 			var tag []seg
 			if !slim && s.Version != "" {
 				tag = []seg{sp(s.Version, colDim)}
 			}
-			list = append(list, item(it.key, []seg{sp("  ", nil), serviceGlyph(s.State), sp("  "+s.Name, nil)}, tag))
+			g := serviceGlyph(s.State, m.snap.IdleServices && (s.Pinned || len(s.KeptAwakeBy) > 0))
+			list = append(list, item(it.key, []seg{sp("  ", nil), g, sp(glyphGap(g)+s.Name, nil)}, tag))
 		}
 	}
 	// Dashboard, Databases and the core rows sit outside the scrolling list.

@@ -230,3 +230,43 @@ func TestTooSmallNamesTheCurrentSize(t *testing.T) {
 		t.Fatalf("render = %q", got)
 	}
 }
+
+// A pinned site or service carries the coffee cup in its status slot, but
+// only while idle-suspend could put it to sleep, and its name stays aligned.
+func TestSidebarMarksPinnedRowsWithCoffeeWhileIdleSuspendIsOn(t *testing.T) {
+	m := sidebarModel()
+	m.snap.Pinned = map[string]bool{"loose": true}
+	m.snap.Services[0].Pinned = true
+	line := func(name string) string {
+		for _, l := range m.renderSidebar(40, 40) {
+			if s := ansi.Strip(l); strings.Contains(s, name) {
+				return s
+			}
+		}
+		t.Fatalf("no sidebar row for %q", name)
+		return ""
+	}
+	if strings.Contains(line("loose.test"), glyphAwake) || strings.Contains(line("mysql"), glyphAwake) {
+		t.Fatal("coffee shown while idle-suspend is off")
+	}
+	m.snap.IdleSuspend = true
+	if !strings.Contains(line("loose.test"), glyphAwake) {
+		t.Fatal("pinned site has no coffee")
+	}
+	if strings.Contains(line("mysql"), glyphAwake) {
+		t.Fatal("pinned service shows coffee while services never sleep")
+	}
+	m.snap.IdleServices = true
+	if !strings.Contains(line("mysql"), glyphAwake) {
+		t.Fatal("pinned service has no coffee")
+	}
+	m.snap.Services[2].KeptAwakeBy = []string{"loose"}
+	if !strings.Contains(line("redis"), glyphAwake) {
+		t.Fatal("service kept awake by a pinned site has no coffee")
+	}
+	m.snap.Services[2].KeptAwakeBy = nil
+	col := func(l, name string) int { return ansi.StringWidth(l[:strings.Index(l, name)]) }
+	if col(line("mysql"), "mysql") != col(line("redis"), "redis") {
+		t.Fatalf("pinned name shifted:\n%s\n%s", line("mysql"), line("redis"))
+	}
+}

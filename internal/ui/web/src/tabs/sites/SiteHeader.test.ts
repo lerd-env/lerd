@@ -9,6 +9,13 @@ import { status } from '$stores/status';
 import { status as dumpsStatus } from '$stores/dumps';
 import { sidePanelHidden } from '$stores/sidePanel';
 import { noRepoBySite } from '$lib/gitStatus';
+import { idleEnabled } from '$stores/idle';
+
+const unpinSite = vi.fn();
+vi.mock('$stores/sites', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('$stores/sites')>();
+  return { ...actual, unpinSite: (...args: unknown[]) => unpinSite(...args) };
+});
 
 const site = {
   domain: 'app.test',
@@ -424,5 +431,24 @@ describe('SiteHeader', () => {
     const paused = { ...worktreeSite, paused: true } as unknown as Site;
     const { container } = render(Harness, { props: { site: paused } });
     expect(container.querySelector('.page-header')).toBeNull();
+  });
+
+  // Pinning stays in the overflow menu; once pinned, the cup in the header
+  // shows it and takes the pin off in one click.
+  it('shows a cup on a pinned site that unpins it', async () => {
+    idleEnabled.set(true);
+    const pinned = { ...site, pinned: true } as unknown as Site;
+    const { getByLabelText } = render(Harness, { props: { site: pinned } });
+    await fireEvent.click(getByLabelText('Unpin'));
+    expect(unpinSite).toHaveBeenCalledWith('app.test');
+  });
+
+  it('shows no cup while idle-suspend is off or the site is not pinned', () => {
+    idleEnabled.set(false);
+    const pinned = { ...site, pinned: true } as unknown as Site;
+    expect(render(Harness, { props: { site: pinned } }).queryByLabelText('Unpin')).toBeNull();
+    idleEnabled.set(true);
+    const { container } = render(Harness, { props: { site } });
+    expect(container.querySelector('[aria-label="Unpin"]')).toBeNull();
   });
 });

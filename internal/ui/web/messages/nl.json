@@ -706,6 +706,7 @@
   "services_pin": "Vastzetten",
   "services_pinTitle": "Vastzetten, voorkomt auto-stop bij inactiviteit",
   "services_pinned": "Vastgezet",
+  "services_keptAwakeBy": "Wakker gehouden door {sites}",
   "services_sleeping": "Slaapt",
   "services_logsStopped": "Draait niet, dus er zijn geen logs om te tonen. Ze verschijnen zodra hij start.",
   "services_logsSleeping": "Slaapt, dus er zijn geen logs om te tonen. Ze verschijnen zodra hij wakker wordt.",

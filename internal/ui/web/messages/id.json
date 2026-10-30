@@ -706,6 +706,7 @@
   "services_pin": "Sematkan",
   "services_pinTitle": "Sematkan, mencegah berhenti otomatis saat tidak digunakan",
   "services_pinned": "Disematkan",
+  "services_keptAwakeBy": "Tetap aktif karena {sites}",
   "services_sleeping": "Tidur",
   "services_logsStopped": "Tidak berjalan, jadi tidak ada log untuk ditampilkan. Log muncul setelah layanan dimulai.",
   "services_logsSleeping": "Sedang tidur, jadi tidak ada log untuk ditampilkan. Log muncul setelah layanan bangun.",

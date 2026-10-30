@@ -1,6 +1,7 @@
-import { render } from '@testing-library/svelte';
+import { render, within } from '@testing-library/svelte';
 import { describe, it, expect } from 'vitest';
 import SiteIndicators from './SiteIndicators.svelte';
+import { idleEnabled } from '$stores/idle';
 import type { Site } from '$stores/sites';
 
 // The moon path is distinctive enough to detect "is the sleep indicator shown".
@@ -104,5 +105,21 @@ describe('SiteIndicators for screen readers', () => {
       props: { site: site({ idle_suspended: true, idle_suspended_workers: ['queue'] }) }
     });
     expect(getByRole('img', { name: /^Workers suspended/ })).toBeInTheDocument();
+  });
+});
+
+describe('SiteIndicators pinned coffee', () => {
+  it('shows the coffee for a pinned site and not for others', () => {
+    idleEnabled.set(true);
+    const pinned = render(SiteIndicators, { props: { site: site({ pinned: true, queue_running: true }) } });
+    expect(pinned.getByTitle('Pinned, never idle-suspended')).toBeTruthy();
+    const plain = render(SiteIndicators, { props: { site: site({ queue_running: true }) } });
+    expect(within(plain.container).queryByTitle('Pinned, never idle-suspended')).toBeNull();
+  });
+
+  it('hides the coffee while idle-suspend is off', () => {
+    idleEnabled.set(false);
+    const { queryByTitle } = render(SiteIndicators, { props: { site: site({ pinned: true }) } });
+    expect(queryByTitle('Pinned, never idle-suspended')).toBeNull();
   });
 });

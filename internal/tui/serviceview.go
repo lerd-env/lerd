@@ -48,7 +48,7 @@ func (m *Model) serviceHeader(svc *ServiceRow, cw int) []string {
 	version = append(version, sp("unit ", colDim), sp("lerd-"+svc.Name, nil))
 	out = append(out, rowLR(nil, cw, []seg{bd(svc.Name, nil), sp("   ", nil)}, version))
 
-	state := []seg{serviceGlyph(svc.State), sp(" "+serviceStateWord(svc.State), colDim)}
+	state := []seg{serviceGlyph(svc.State, m.snap.IdleServices && (svc.Pinned || len(svc.KeptAwakeBy) > 0)), sp(" "+serviceStateWord(svc.State), colDim)}
 	if host, def, extras := servicePortsInfo(svc.Name); host > 0 {
 		state = append(state, sp("    localhost:"+strconv.Itoa(host), nil))
 		if def > 0 && def != host {
@@ -63,7 +63,9 @@ func (m *Model) serviceHeader(svc *ServiceRow, cw int) []string {
 	}
 	var flags []seg
 	if svc.Pinned {
-		flags = append(flags, sp(glyphRunning+" ", colRunning), sp("pinned, never auto-stops", colDim))
+		flags = append(flags, sp(glyphAwake+" ", colRunning), sp("pinned, never auto-stops", colDim))
+	} else if m.snap.IdleServices && len(svc.KeptAwakeBy) > 0 {
+		flags = append(flags, sp(glyphAwake+" ", colRunning), sp("kept awake by "+strings.Join(svc.KeptAwakeBy, ", "), colDim))
 	}
 	if svc.Custom {
 		if len(flags) > 0 {

@@ -706,6 +706,7 @@
   "services_pin": "Fissa",
   "services_pinTitle": "Fissa, impedisce l'arresto automatico quando inutilizzato",
   "services_pinned": "Fissato",
+  "services_keptAwakeBy": "Tenuto sveglio da {sites}",
   "services_sleeping": "In pausa",
   "services_logsStopped": "Non è in esecuzione, quindi non ci sono log da mostrare. Compaiono appena si avvia.",
   "services_logsSleeping": "È in pausa, quindi non ci sono log da mostrare. Compaiono appena si risveglia.",

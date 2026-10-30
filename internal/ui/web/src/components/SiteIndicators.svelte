@@ -2,7 +2,9 @@
   import Icon from '$components/Icon.svelte';
   import StatusDot from '$components/StatusDot.svelte';
   import MoonMark from '$components/MoonMark.svelte';
+  import CoffeeMark from '$components/CoffeeMark.svelte';
   import { runningWorkerColors, idleWorkerColors, siteWorkerFailing, siteHasWorkers, type Site } from '$stores/sites';
+  import { idleEnabled } from '$stores/idle';
   import { m } from '../paraglide/messages.js';
 
   interface Props {
@@ -44,6 +46,11 @@
 {/if}
 {#if siteWorkerFailing(site)}
   <span title={m.sites_workerFailing()} class="shrink-0"><StatusDot color="red" size="xs" pulse label={m.sites_workerFailing()} /></span>
+{/if}
+{#if site.pinned && $idleEnabled}
+  <span class="inline-flex shrink-0 text-gray-400" title={m.sites_pinned()} role="img" aria-label={m.sites_pinned()}>
+    <CoffeeMark class="w-3 h-3" />
+  </span>
 {/if}
 {#if site.idle_suspended && siteHasWorkers(site)}
   <!-- Asleep: keep the worker dots (dimmed) and float a moon above them. A site

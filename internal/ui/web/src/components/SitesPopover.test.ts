@@ -59,4 +59,21 @@ describe('SitesPopover', () => {
     expect(location.hash).toBe('#sites/running.test');
     expect(screen.queryByText('running.test')).not.toBeInTheDocument();
   });
+
+  // A pinned site keeps the service awake, so the control says so and the
+  // list points at which site does it.
+  it('marks the pinned sites when asked to', async () => {
+    sites.set([{ domain: 'pinned.test', pinned: true }, { domain: 'plain.test' }]);
+    const { container } = render(SitesPopover, { props: { domains: ['pinned.test', 'plain.test'], showPinned: true } });
+    expect(container.querySelector('[data-testid="sites-coffee"]')).toBeTruthy();
+    await fireEvent.click(screen.getByLabelText('2 sites'));
+    expect(screen.getAllByTitle('Pinned, never idle-suspended')).toHaveLength(1);
+    expect(screen.getByText('pinned.test').parentElement!.querySelector('[title="Pinned, never idle-suspended"]')).toBeTruthy();
+  });
+
+  it('leaves pins unmarked by default', () => {
+    sites.set([{ domain: 'pinned.test', pinned: true }]);
+    const { container } = render(SitesPopover, { props: { domains: ['pinned.test'] } });
+    expect(container.querySelector('[data-testid="sites-coffee"]')).toBeNull();
+  });
 });

@@ -21,6 +21,7 @@ func NewTuiCmd() *cobra.Command {
 			if !term.IsTerminal(int(os.Stdout.Fd())) {
 				return fmt.Errorf("lerd tui requires an interactive terminal")
 			}
+			tui.KeptAwakeBy = IdleServicePinnedSites
 			return tui.Run(version.Version)
 		},
 	}

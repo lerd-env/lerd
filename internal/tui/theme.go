@@ -63,6 +63,8 @@ const (
 	glyphUnreachable = "⊘"
 	glyphPaused      = "◐"
 	glyphSuspended   = "◔"
+	// Two cells wide, so a row carrying it gives one space back after it.
+	glyphAwake = "☕"
 )
 
 // keyChipStyle wraps a single keybinding name (e.g. " y ", " esc ") in a

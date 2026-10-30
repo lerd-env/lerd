@@ -706,6 +706,7 @@
   "services_pin": "Pin",
   "services_pinTitle": "Pin, prevent auto-stop when unused",
   "services_pinned": "Pinned",
+  "services_keptAwakeBy": "Kept awake by {sites}",
   "services_sleeping": "Sleeping",
   "services_logsStopped": "Not running, so there are no logs to stream. They appear once it starts.",
   "services_logsSleeping": "Asleep, so there are no logs to stream. They appear once it wakes.",
