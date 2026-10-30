@@ -158,3 +158,55 @@ func TestShippedDevServerWrapperTurnsPatternsIntoRegExps(t *testing.T) {
 		t.Errorf("shipped wrapper leaves the origin patterns as strings:\n%s", body)
 	}
 }
+
+// A .env written while a slow plugin is still starting makes Vite restart
+// before its first listen, and the startup then binds the port a second time.
+// Load the real wrapper against a stub vite and ask when the restart runs.
+func TestShippedDevServerWrapperHoldsRestartUntilListening(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node is not installed")
+	}
+	dir := gitRepo(t, "/node_modules\n")
+	stub := map[string]string{
+		"vite.config.js":                 "export default {}\n",
+		"node_modules/vite/package.json": `{"name":"vite","type":"module","main":"index.js"}`,
+		"node_modules/vite/index.js": "export const mergeConfig = (a, b) => ({ ...a, ...b });\n" +
+			"export const loadConfigFromFile = async () => null;\n",
+	}
+	for name, body := range stub {
+		full := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rel, err := writeDevServerWrapper(dir, viteToolForTest(t), devServerAddrFor(true, "myapp.test", []string{"myapp.test"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := `import { EventEmitter } from 'node:events';
+import(process.argv[1]).then(async (m) => {
+	const config = await m.default({ command: 'serve' });
+	const httpServer = Object.assign(new EventEmitter(), { listening: false, address: () => ({ port: 5173 }) });
+	const log = [];
+	const server = { httpServer, restart: async () => log.push('restart') };
+	for (const p of config.plugins) p.configureServer?.(server);
+	const pending = server.restart();
+	await new Promise((r) => setTimeout(r, 20));
+	log.push('listening');
+	httpServer.listening = true;
+	httpServer.emit('listening');
+	await pending;
+	await server.restart();
+	console.log(log.join(' '));
+});`
+	out, err := exec.Command("node", "-e", script, filepath.Join(dir, rel)).CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	if got := strings.TrimSpace(string(out)); got != "listening restart restart" {
+		t.Errorf("order = %q, want the first restart held until listening, then later ones straight through", got)
+	}
+}
