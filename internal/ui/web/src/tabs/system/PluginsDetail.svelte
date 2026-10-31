@@ -19,7 +19,6 @@
 
   let source = $state('');
   let adding = $state(false);
-  let showMore = $state(false);
   let installing = $state(false);
   let openName = $state('');
   const opened = $derived($managedPlugins.find((p) => p.name === openName));
@@ -50,10 +49,6 @@
   const parts = $derived($routeRest.split('/'));
   const browsing = $derived(parts[0] === 'browse');
   const focus = $derived(browsing ? decodeURIComponent(parts[1] ?? '') : '');
-  // Browse unmounts the add dialog but not its flag, which would reopen it on return.
-  $effect(() => {
-    if (browsing) showMore = false;
-  });
 
   async function update(name: string) {
     updating = name;
@@ -139,6 +134,11 @@
               {m.system_plugins_updateAll({ count: updatable.length })}
             </button>
           {/if}
+          {#if $managedPlugins.length}
+            <button type="button" onclick={() => (adding = true)} class="inline-flex items-center gap-1 text-xs font-medium text-lerd-red hover:text-lerd-redhov">
+              <Icon name="plus" class="w-3.5 h-3.5" />{m.system_plugins_installFrom()}
+            </button>
+          {/if}
         </div>
         {#if $managedPlugins.length === 0}
           <div class="flex-1 flex items-center justify-center"><PluginsEmpty oninstall={() => (adding = true)} /></div>
@@ -148,16 +148,12 @@
               <InstalledPluginTile plugin={p} onopen={() => (openName = p.name)} />
             {/each}
             <ServiceCardShell suggested>
-              <button type="button" onclick={() => (showMore = true)} class="flex min-w-0 flex-1 items-center gap-3 text-left text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-lerd-red">
+              <button type="button" onclick={() => goToTab('plugins', 'browse')} class="flex min-w-0 flex-1 items-center gap-3 text-left text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-lerd-red">
                 <span class="shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-lerd-red/10 text-lerd-red"><Icon name="plus" class="w-4 h-4" /></span>
                 {m.system_plugins_addTile()}
               </button>
             </ServiceCardShell>
           </div>
-          <!-- Inside the installed view, so following Browse plugins closes it. -->
-          <Modal open={showMore} title={m.system_plugins_addTile()} size="xl" onclose={() => (showMore = false)}>
-            <div class="px-5"><PluginsEmpty more oninstall={() => ((showMore = false), (adding = true))} /></div>
-          </Modal>
         {/if}
       </section>
     {/if}
