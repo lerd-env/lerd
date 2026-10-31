@@ -276,6 +276,23 @@
   .lerd-landing .pwa-close{margin-left:auto}
 }
 
+/* about page */
+.lerd-landing .about{padding:96px 0 112px;border-bottom:1px solid var(--line)}
+.lerd-landing .about h1{font-size:clamp(40px,6vw,72px);line-height:1;letter-spacing:-.04em;font-weight:700;margin:28px 0 56px}
+.lerd-landing .about-body{display:grid;grid-template-columns:280px 1fr;gap:56px;align-items:start}
+.lerd-landing .about figure img{display:block;width:100%;height:auto;border:1px solid var(--line)}
+.lerd-landing .about figcaption{margin-top:16px;font:500 12px/1.6 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.lerd-landing .about figcaption strong{display:block;color:var(--accent);font-weight:500}
+.lerd-landing .about-text{display:flex;flex-direction:column;gap:24px;max-width:62ch;font-size:19px;color:var(--ink-2)}
+.lerd-landing .about-text a{color:var(--ink);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.lerd-landing .about-text a:hover{color:var(--accent-2)}
+@media (max-width:760px){
+  .lerd-landing .about{padding:64px 0 72px}
+  .lerd-landing .about-body{grid-template-columns:1fr;gap:32px}
+  .lerd-landing .about figure{max-width:220px}
+  .lerd-landing .about-text{font-size:17px}
+}
+
 /* cta + footer */
 .lerd-landing .cta{margin:112px 0 0;padding:96px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .lerd-landing .cta h2{font-size:clamp(40px,6vw,80px);letter-spacing:-.04em;line-height:.98;font-weight:700;max-width:14ch;margin-top:24px}
