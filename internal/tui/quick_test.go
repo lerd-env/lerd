@@ -287,3 +287,43 @@ func TestPaletteOpenedBeforeTheFirstLoadSeesTheSnapshot(t *testing.T) {
 		t.Fatalf("the palette should list what the snapshot brought, got %q", got)
 	}
 }
+
+func TestPaletteRefreshKeepsTheSelectedActionOrDropsIt(t *testing.T) {
+	m := quickModel()
+	m.snap.Services = append(m.snap.Services, ServiceRow{Name: "postgres", State: stateRunning})
+	next, _ := m.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
+	m = typeKeys(next.(*Model), "restart service")
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m = next.(*Model)
+	if got := quickSelected(m); got != "postgres" {
+		t.Fatalf("selected %q, want postgres", got)
+	}
+
+	// mysql stopping removes the row above the selection.
+	moved := m.snap
+	moved.Services = []ServiceRow{{Name: "mysql", State: stateStopped}, {Name: "postgres", State: stateRunning}}
+	next, _ = m.Update(snapshotMsg{snap: moved})
+	m = next.(*Model)
+	if got := quickSelected(m); got != "postgres" {
+		t.Fatalf("after the refresh the selection is %q, want it to stay on postgres", got)
+	}
+
+	// postgres stopping removes the selected action itself.
+	gone := moved
+	gone.Services = []ServiceRow{{Name: "mysql", State: stateRunning}, {Name: "postgres", State: stateStopped}}
+	next, _ = m.Update(snapshotMsg{snap: gone})
+	m = next.(*Model)
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(*Model)
+	if cmd != nil || m.quickActive {
+		t.Fatal("enter ran another action after the selected one disappeared")
+	}
+}
+
+func quickSelected(m *Model) string {
+	matches := m.quickMatches()
+	if m.quickCursor < 0 || m.quickCursor >= len(matches) {
+		return ""
+	}
+	return matches[m.quickCursor].detail
+}
