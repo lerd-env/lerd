@@ -423,6 +423,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case snapshotMsg:
 		m.recordActivity(msg.snap, time.Now())
 		m.snap = msg.snap
+		// An open palette built its list from the previous snapshot, possibly the
+		// empty one before the first load.
+		m.quickCache = nil
 		m.clampCursors()
 		return m, tea.Batch(tickCmd(10*time.Second), m.ensureTiming())
 

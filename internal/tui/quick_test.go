@@ -271,3 +271,19 @@ func TestServiceUpdateKeyWorksInTheOpenedService(t *testing.T) {
 		t.Fatal("u / b do nothing with the service open in the main area")
 	}
 }
+
+func TestPaletteOpenedBeforeTheFirstLoadSeesTheSnapshot(t *testing.T) {
+	loaded := quickModel().snap
+	m := quickModel()
+	m.snap = Snapshot{}
+	next, _ := m.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
+	m = typeKeys(next.(*Model), "restart")
+	if got := quickLabels(m); len(got) != 0 {
+		t.Fatalf("nothing is loaded yet, got %v", got)
+	}
+	next, _ = m.Update(snapshotMsg{snap: loaded})
+	m = next.(*Model)
+	if got := strings.Join(quickLabels(m), "\n"); !strings.Contains(got, "Restart service mysql") {
+		t.Fatalf("the palette should list what the snapshot brought, got %q", got)
+	}
+}
