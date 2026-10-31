@@ -36,6 +36,8 @@ Mouse support is on: clicking a sidebar row opens it, clicking a tab, worktree t
 
 Type to filter; each word matches on its own and in any order, so `drupal https` and `https drupal` find the same entry, and typing a name puts the place before the things done to it. `↑` `↓` select, `enter` runs, `esc` closes. Destructive actions are never offered, as with the keys.
 
+The list stays live while the palette is open: entries follow sites and services as they start, stop or appear, and the selection stays on the entry you picked. If that entry goes away, nothing is selected and `enter` does nothing until you pick again.
+
 ## Sidebar
 
 The sites section groups sites by workspace, in the order the workspaces are configured, with sites in no workspace after them. A workspace folds with `enter`, and a crashed worker inside it rolls up to the workspace row as a count, so a failure stays visible when the workspace is folded. A group's secondary sites sit under their main with a `↳`.
