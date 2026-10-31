@@ -112,7 +112,7 @@ Lerd is built for PHP developers who want frictionless local development, on a L
 
 - 💾 **Nothing destructive without a way back.** A `service remove --purge` or a `reinstall --reset-data` snapshots every database first, while the data is still where the engine expects it, so recovery is an ordinary `db:restore -A`. Each engine declares how long it gets to shut down.
 
-- 💤 **Idle-suspend.** Activity-driven suspension of a site's workers (queue, schedule, horizon, reverb, stripe, Vite) after a configurable idle timeout, and opt-in of the services nothing is using, resumed on the next request, CLI command, MCP call or file save, with the request held rather than redirected while they wake and per-site pinning.
+- 💤 **Idle-suspend.** Activity-driven suspension of a site's workers (queue, schedule, horizon, reverb, stripe, Vite) after a configurable idle timeout, and opt-in of the services nothing is using, resumed on the next request, CLI command, MCP call or file save, with the request held rather than redirected while they wake and per-site pinning, a coffee cup marking what a pin keeps awake.
 
 - 📶 **Nothing downloads behind your back.** Every command that can pull or rebuild an image names it and its size first, read from the registry manifest. The dashboard asks, an assistant over MCP has to come back with your answer, and `--no-pull`, `LERD_OFFLINE=1` and `lerd start --dry-run` cover a metered link.
 
