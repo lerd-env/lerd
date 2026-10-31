@@ -107,13 +107,11 @@ it('removes a plugin from its detail after confirming, broken ones included', as
   await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.url.endsWith('/api/plugin-manager/broken'))).toBe(true));
 });
 
-// Every way to add a plugin sits behind the tile, a folder or git URL included.
+// Installing from a folder or git sits in the Installed header, not behind the tile.
 it('installs from a folder or git in a modal and keeps the field when the install fails', async () => {
-  const { findByText, getByRole, queryByRole, getByLabelText } = render(PluginsDetail);
+  const { findByText, getByRole, getByLabelText } = render(PluginsDetail);
   await findByText('hello');
-  expect(queryByRole('button', { name: 'Install from a folder or git' })).toBeNull();
-  await fireEvent.click(getByRole('button', { name: 'Add a plugin' }));
-  await fireEvent.click(within(getByRole('dialog')).getByRole('button', { name: 'Install from a folder or git' }));
+  await fireEvent.click(getByRole('button', { name: 'Install from a folder or git' }));
   const input = getByLabelText('Folder path or git URL') as HTMLInputElement;
   await fireEvent.input(input, { target: { value: ' https://example.test/plugin.git ' } });
   await fireEvent.click(within(getByRole('dialog')).getByRole('button', { name: 'Install' }));
@@ -149,29 +147,13 @@ it('shows what plugins add and both ways to get one when none is installed', asy
   expect(location.hash).toBe('#plugins/browse');
 });
 
-// With plugins installed the list stays clear: one more tile ends the grid and
-// opens the catalog and build prompts on demand.
-it('opens the catalog and build prompts from a tile after the installed plugins', async () => {
-  const { findByText, getByRole, queryByText } = render(PluginsDetail);
-  await findByText('hello');
-  expect(queryByText('Make Lerd do even more')).toBeNull();
-  await fireEvent.click(getByRole('button', { name: 'Add a plugin' }));
-  const dialog = within(getByRole('dialog'));
-  expect(dialog.getByText('Make Lerd do even more')).toBeTruthy();
-  expect(dialog.getByText('lerd plugin new my-plugin')).toBeTruthy();
-  await fireEvent.click(dialog.getByRole('button', { name: /Browse plugins/ }));
-  expect(location.hash).toBe('#plugins/browse');
-});
-
-// Leaving through Browse closes the dialog for good, so Installed comes back clear.
-it('does not reopen the add dialog on returning from Browse', async () => {
+// With plugins installed one more tile ends the grid and leads to the catalog,
+// where a user expects to find more, rather than a dialog in between.
+it('takes the add tile straight to the catalog', async () => {
   const { findByText, getByRole, queryByRole } = render(PluginsDetail);
   await findByText('hello');
   await fireEvent.click(getByRole('button', { name: 'Add a plugin' }));
-  await fireEvent.click(within(getByRole('dialog')).getByRole('button', { name: /Browse plugins/ }));
-  await waitFor(() => expect(queryByRole('dialog')).toBeNull());
-  await fireEvent.click(getByRole('button', { name: 'Installed' }));
-  await findByText('hello');
+  expect(location.hash).toBe('#plugins/browse');
   expect(queryByRole('dialog')).toBeNull();
 });
 

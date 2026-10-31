@@ -7,9 +7,9 @@
   import { m } from '../../paraglide/messages.js';
 
   // What plugins add and the two ways to get one, the catalog or a plugin of
-  // your own: the whole Installed view before any plugin is, and its foot, with
-  // more set, once some are. A folder or git URL is the third way, kept small.
-  let { more = false, oninstall }: { more?: boolean; oninstall: () => void } = $props();
+  // your own: the whole Installed view before any plugin is. A folder or git
+  // URL is the third way, kept small.
+  let { oninstall }: { oninstall: () => void } = $props();
   const surfaces: [GlyphName, () => string][] = [
     ['terminal', m.system_plugins_chipCommands],
     ['page', m.system_plugins_chipPages],
@@ -24,8 +24,8 @@
 
 <div class="w-full mx-auto max-w-3xl pt-4 pb-6 text-center">
   <div class="flex justify-center"><PluginArt kind="installed" /></div>
-  <h2 class="mt-4 text-xl font-semibold tracking-tight text-gray-900 dark:text-white">{more ? m.system_plugins_installedMoreTitle() : m.system_plugins_emptyTitle()}</h2>
-  <p class="mx-auto mt-1.5 max-w-lg text-sm text-gray-500 dark:text-gray-400">{more ? m.system_plugins_installedMoreLead() : m.system_plugins_emptyLead()}</p>
+  <h2 class="mt-4 text-xl font-semibold tracking-tight text-gray-900 dark:text-white">{m.system_plugins_emptyTitle()}</h2>
+  <p class="mx-auto mt-1.5 max-w-lg text-sm text-gray-500 dark:text-gray-400">{m.system_plugins_emptyLead()}</p>
   <ul class="mt-4 flex flex-wrap justify-center gap-2">
     {#each surfaces as [glyph, label] (glyph)}
       <li class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card px-2.5 py-1 text-xs text-gray-600 dark:text-gray-300">

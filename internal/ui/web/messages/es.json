@@ -1937,8 +1937,6 @@
   "system_plugins_tabFeatures": "Funciones",
   "system_plugins_catalogMoreTitle": "Crea el siguiente",
   "system_plugins_catalogMoreLead": "¿Te falta algo? Crea un plugin para ello y envíalo, y aparecerá aquí para todos los que usan Lerd.",
-  "system_plugins_installedMoreTitle": "Haz que Lerd haga aún más",
-  "system_plugins_installedMoreLead": "Encuentra más en el catálogo o crea el plugin que necesitas.",
   "system_plugins_addTile": "Añadir un plugin",
   "system_plugins_updateAvailable": "Actualización disponible",
   "system_plugins_whatChanged": "Qué cambió",
