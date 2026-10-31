@@ -423,6 +423,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case snapshotMsg:
 		m.recordActivity(msg.snap, time.Now())
 		m.snap = msg.snap
+		m.refreshQuick()
 		m.clampCursors()
 		return m, tea.Batch(tickCmd(10*time.Second), m.ensureTiming())
 

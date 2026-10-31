@@ -446,6 +446,29 @@ func (m *Model) quickMatches() []quickAction {
 	return out
 }
 
+// refreshQuick rebuilds an open palette's list from a new snapshot, which may be
+// the first one. The selection follows its action; if that action is gone the
+// cursor goes to -1, so enter cannot run whatever slid into its row.
+func (m *Model) refreshQuick() {
+	if !m.quickActive {
+		m.quickCache = nil
+		return
+	}
+	old := m.quickMatches()
+	m.quickCache = nil
+	if m.quickCursor < 0 || m.quickCursor >= len(old) {
+		return
+	}
+	sel := old[m.quickCursor]
+	m.quickCursor = -1
+	for i, a := range m.quickMatches() {
+		if a.label == sel.label && a.detail == sel.detail {
+			m.quickCursor = i
+			return
+		}
+	}
+}
+
 func (m *Model) openQuick() {
 	m.quickActive, m.quickQuery, m.quickCursor, m.quickCache = true, "", 0, nil
 }
@@ -464,7 +487,7 @@ func (m *Model) handleQuickKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.quickCursor = clamp(m.quickCursor+1, 0, max(0, len(matches)-1))
 	case "enter":
 		m.quickActive, m.quickCache = false, nil
-		if m.quickCursor < len(matches) {
+		if m.quickCursor >= 0 && m.quickCursor < len(matches) {
 			return m, matches[m.quickCursor].run(m)
 		}
 	case "backspace":
@@ -488,7 +511,9 @@ func (m *Model) withQuickOverlay(lines []string) []string {
 	}
 	pw := min(72, m.width-6)
 	matches := m.quickMatches()
-	m.quickCursor = clamp(m.quickCursor, 0, max(0, len(matches)-1))
+	if m.quickCursor >= 0 {
+		m.quickCursor = clamp(m.quickCursor, 0, max(0, len(matches)-1))
+	}
 
 	box := []string{row(surf.s3, pw)}
 	box = append(box, rowLR(surf.s3, pw, []seg{sp("  ", nil), bd("Go to or do", nil)}, []seg{sp("esc  ", colDim)}))
