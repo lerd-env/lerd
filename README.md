@@ -350,6 +350,10 @@ Using Lerd across a team? Commercial support is available, covering onboarding, 
 
 [Edward van Tonder](https://github.com/EA-Wardie) · [rolaca11](https://github.com/rolaca11) · [rais](https://github.com/raisilhamn) · [Anca Emcken](https://github.com/ancaemcken) · [Allen](https://github.com/yilanboy)
 
+## Author
+
+Lerd is built and maintained by [George Dumitrescu](https://github.com/geodro). Read why it exists on [lerd.sh/about](https://lerd.sh/about).
+
 ## Built on
 
 Lerd stands on a set of excellent open-source projects it bundles or fetches to power the experience:
