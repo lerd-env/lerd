@@ -1,0 +1,27 @@
+name: AI Attribution
+
+on:
+  pull_request:
+    branches: ["main", "release/**"]
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+  contents: read
+
+jobs:
+  attribution:
+    name: No AI attribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Commits and description carry no AI co-author or footer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -o pipefail
+          { gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/commits" --jq '.[].commit.message'
+            printf '%s\n' "$BODY"; } | python3 .github/scripts/ai_attribution.py
