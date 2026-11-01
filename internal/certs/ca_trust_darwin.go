@@ -177,12 +177,9 @@ func RemoveSystemTrust() error {
 	return cmd.Run()
 }
 
-// addTrustedCertArgs builds the sudo'd `security add-trusted-cert` argv that
-// adds rootCA to keychain as a trusted root: -d (admin store),
-// -r trustRoot (the result mkcert itself sets), -k (destination keychain).
-// Split out from RepairSystemTrust so the argument construction is testable
-// without actually shelling out to a command that prompts for a password
-// and writes to the real system keychain.
+// addTrustedCertArgs builds the sudo'd `security add-trusted-cert` argv adding
+// rootCA to keychain as a trusted root, split out so it is testable without
+// prompting for a password or writing to the real system keychain.
 func addTrustedCertArgs(keychain, rootCA string) []string {
 	return []string{"sudo", "security", "add-trusted-cert", "-d", "-r", "trustRoot", "-k", keychain, rootCA}
 }
