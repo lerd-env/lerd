@@ -160,6 +160,14 @@ describe('SiteHeader', () => {
     expect(menu).toHaveTextContent('client-a');
   });
 
+  it('offers grouping on a host-proxy site too', async () => {
+    const { getByLabelText, getByRole } = render(Harness, { props: { site: { ...hostProxySite, name: 'app' } as unknown as Site } });
+
+    expect(getByLabelText('Manage group')).toBeInTheDocument();
+    await fireEvent.click(getByLabelText('More actions'));
+    expect(getByRole('menu')).toHaveTextContent('Group with another site');
+  });
+
   // The editor opens on the host's desktop, so a remote session never sees it,
   // even one with full access.
   it('offers the editor only on the lerd host itself', () => {
