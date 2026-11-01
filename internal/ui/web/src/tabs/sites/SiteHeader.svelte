@@ -718,7 +718,7 @@
         </button>
       {/if}
 
-      {#if !activeWorktreeBranch && !site.host_proxy}
+      {#if !activeWorktreeBranch}
         <button
           type="button"
           onclick={() => openGroupModal(site)}
@@ -958,7 +958,7 @@
                 {m.sites_manageDomains()}
               </button>
             {/if}
-            {#if !activeWorktreeBranch && !site.host_proxy}
+            {#if !activeWorktreeBranch}
               <button
                 type="button"
                 role="menuitem"
