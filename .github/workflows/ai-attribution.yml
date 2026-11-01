@@ -22,5 +22,6 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           BODY: ${{ github.event.pull_request.body }}
         run: |
+          set -o pipefail
           { gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/commits" --jq '.[].commit.message'
             printf '%s\n' "$BODY"; } | python3 .github/scripts/ai_attribution.py

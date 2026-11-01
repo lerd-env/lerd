@@ -2,11 +2,13 @@
 import re
 import sys
 
-TOOLS = r'(claude|anthropic|copilot|openai|chatgpt|codex|cursor|gemini|devin|aider|windsurf|codeium)'
-# Only trailers and footers count, so prose that names a tool still passes.
+# A co-author is judged by its email, since people can share a tool's name.
+AI_EMAILS = (r'@(anthropic\.com|openai\.com|cursor\.com|cognition\.ai|aider\.chat|codeium\.com|windsurf\.com)>'
+             r'|copilot@users\.noreply\.github\.com|(devin-ai-integration|gemini-code-assist)\[bot\]')
+TOOLS = r'(claude|copilot|chatgpt|codex|cursor|gemini|devin|aider|windsurf|codeium)'
 PATTERNS = [
-    re.compile(r'^\s*co-authored-by:.*' + TOOLS, re.I),
-    re.compile(r'generated (with|by)\b.*' + TOOLS, re.I),
+    re.compile(r'^\s*co-authored-by:.*(' + AI_EMAILS + ')', re.I),
+    re.compile(r'^\W*generated (with|by)\s+\W*' + TOOLS, re.I),
 ]
 
 
