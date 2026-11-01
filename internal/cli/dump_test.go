@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -220,5 +221,51 @@ func TestRunDumpBuffer_RefusesWhatIsNotANumber(t *testing.T) {
 	withTempXDG(t)
 	if err := runDumpBuffer([]string{"lots"}); err == nil {
 		t.Fatal("want an error for a size that is not a number")
+	}
+}
+
+// macOS reaches lerd-ui over TCP loopback, where the CSRF gate rejects a POST
+// without the header, so `lerd dump clear` answered 403 there.
+func TestRunDumpClear_SendsCSRFHeaderOverTCP(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen tcp: %v", err)
+	}
+	prevDial := uiClientDial
+	uiClientDial = func() (string, string) { return "tcp", ln.Addr().String() }
+	t.Cleanup(func() { uiClientDial = prevDial })
+	var header atomic.Pointer[string]
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := r.Header.Get("X-Lerd-CSRF")
+		header.Store(&h)
+		if h == "" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})}
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() { _ = srv.Close() })
+
+	if err := runDumpClear(); err != nil {
+		t.Fatalf("runDumpClear: %v", err)
+	}
+	if got := header.Load(); got == nil || *got == "" {
+		t.Fatal("POST /api/dumps/clear went out without X-Lerd-CSRF")
+	}
+}
+
+func TestDumpListener_FollowsThePlatform(t *testing.T) {
+	withTempXDG(t)
+	saved := platform.Current
+	t.Cleanup(func() { platform.Current = saved })
+
+	platform.Current.UsesMachineVM = true
+	if got := dumpListener(); got != "tcp:127.0.0.1:"+config.DumpsTCPPort {
+		t.Errorf("macOS listener = %q", got)
+	}
+	platform.Current.UsesMachineVM = false
+	if got := dumpListener(); got != "unix:"+config.DumpsSocketPath() {
+		t.Errorf("linux listener = %q", got)
 	}
 }
