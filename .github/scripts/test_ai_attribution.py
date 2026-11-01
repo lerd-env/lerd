@@ -12,6 +12,9 @@ class OffendingTest(unittest.TestCase):
         text = 'Body.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n'
         self.assertEqual(len(offending(text)), 1)
 
+    def test_flags_a_footer_with_a_vendor_before_the_tool(self):
+        self.assertEqual(len(offending('Generated with [GitHub Copilot](https://github.com/features/copilot)')), 1)
+
     def test_flags_copilot_in_any_case(self):
         self.assertEqual(len(offending('co-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>')), 1)
 

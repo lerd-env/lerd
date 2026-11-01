@@ -8,7 +8,8 @@ AI_EMAILS = (r'@(anthropic\.com|openai\.com|cursor\.com|cognition\.ai|aider\.cha
 TOOLS = r'(claude|copilot|chatgpt|codex|cursor|gemini|devin|aider|windsurf|codeium)'
 PATTERNS = [
     re.compile(r'^\s*co-authored-by:.*(' + AI_EMAILS + ')', re.I),
-    re.compile(r'^\W*generated (with|by)\s+\W*' + TOOLS, re.I),
+    # A vendor may precede the tool ("GitHub Copilot"), so allow a few words.
+    re.compile(r'^\W*generated (with|by)\b.{0,30}?\b' + TOOLS, re.I),
 ]
 
 
