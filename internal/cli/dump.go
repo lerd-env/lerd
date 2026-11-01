@@ -190,7 +190,7 @@ func runDumpStatus(_ *cobra.Command, _ []string) error {
 		state = feedback.Green("enabled")
 	}
 	fmt.Printf("Debug bridge: %s\n", state)
-	fmt.Printf("Listener:    unix:%s\n", config.DumpsSocketPath())
+	fmt.Printf("Listener:    %s\n", dumpListener())
 	fmt.Printf("Bridge file: %s\n", config.DumpsBridgeFile())
 	fmt.Printf("Bridge ini:  %s\n", config.DumpsIniFile())
 
@@ -210,6 +210,12 @@ func runDumpStatus(_ *cobra.Command, _ []string) error {
 		fmt.Printf("Last event:  %s\n", st.LastTS)
 	}
 	return nil
+}
+
+// dumpListener names where lerd-ui receives dump payloads: a unix socket on
+// Linux, TCP loopback on macOS where the socket can't cross the VM boundary.
+func dumpListener() string {
+	return config.DumpsListenNetwork() + ":" + config.DumpsListenAddr()
 }
 
 func runDumpClear() error {
@@ -390,6 +396,9 @@ func getUnix(path string) ([]byte, int, error) {
 
 func postUnix(path string, body []byte) ([]byte, int, error) {
 	req, _ := http.NewRequest("POST", "http://lerd"+path, strings.NewReader(string(body)))
+	// On macOS this goes over TCP loopback, where lerd-ui's CSRF gate trusts
+	// only requests carrying the header; the unix socket on Linux skips it.
+	req.Header.Set("X-Lerd-CSRF", "1")
 	resp, err := unixHTTPClient().Do(req)
 	if err != nil {
 		return nil, 0, err
