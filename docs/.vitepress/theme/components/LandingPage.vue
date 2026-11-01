@@ -377,11 +377,11 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
         </div>
       </div></section>
       <div class="wrap">
-        <a class="digest" :href="withBase('/digest/v1.37.0.html')" target="_blank" rel="noopener">
+        <a class="digest" :href="withBase('/digest/v1.38.0.html')" target="_blank" rel="noopener">
           <span class="badge ok">NEW</span>
           <span class="digest-body">
-            <span class="digest-title">v1.37.0 dev digest</span>
-            <span class="digest-sub">A timeline for every request from nginx to the browser, services that sleep when nothing uses them, secrets kept out of .env, and a dashboard a tenth of its old size.</span>
+            <span class="digest-title">v1.38.0 dev digest</span>
+            <span class="digest-sub">Lerd on Windows from one installer, plugins from a catalog that approves each one at a commit, certificates issued without mkcert, and a PHP language server for AI agents.</span>
           </span>
           <span class="digest-cta">Read the digest →</span>
         </a>
