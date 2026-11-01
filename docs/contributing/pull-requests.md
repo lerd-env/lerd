@@ -66,6 +66,7 @@ Every PR runs the following checks automatically. All must pass before merging.
 | Installer tests | `bats tests/installer/installer.bats` |
 | Comment blocks | `.githooks/pre-commit origin/main` (or the `release/` branch the pull request targets), the pre-commit hook run over the whole pull request |
 | UI screenshots | PR description has an image when UI files change |
+| No AI attribution | No commit or PR description credits an AI tool with a `Co-Authored-By` trailer or a "Generated with" footer |
 
 The same checks also run daily on `main`, so a Go advisory published between pushes still turns CI red. A separate daily scan audits the web UI's npm dependencies, the published PHP base images and the pinned host tools.
 
