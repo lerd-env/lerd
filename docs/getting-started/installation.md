@@ -272,6 +272,8 @@ The same installer powers Linux and macOS. On macOS it will:
 - Automatically run `lerd install`, which starts Podman Machine, the local CA, DNS, and nginx
 - Put a **Lerd** app in `~/Applications` (see [Lerd in the app list](#lerd-in-the-app-list))
 
+Trusting the local CA writes it into the system keychain, which needs root, so `lerd install` asks for your password through `sudo` at that step. It asks again only when the CA is no longer trusted, for example after a macOS update cleared its trust settings.
+
 ::: info Homebrew is only used for Podman
 The installer itself doesn't require Homebrew. It's used only to install the `podman` dependency when it isn't already present, so you can also install Podman by any other means beforehand.
 :::
