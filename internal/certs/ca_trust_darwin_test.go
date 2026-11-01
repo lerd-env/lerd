@@ -168,7 +168,7 @@ func TestTrustSettingsExported(t *testing.T) {
 
 func TestAddTrustedCertArgs(t *testing.T) {
 	got := addTrustedCertArgs("/Library/Keychains/System.keychain", "/ca/rootCA.pem")
-	want := []string{"add-trusted-cert", "-d", "-r", "trustRoot", "-k", "/Library/Keychains/System.keychain", "/ca/rootCA.pem"}
+	want := []string{"sudo", "security", "add-trusted-cert", "-d", "-r", "trustRoot", "-k", "/Library/Keychains/System.keychain", "/ca/rootCA.pem"}
 	if len(got) != len(want) {
 		t.Fatalf("addTrustedCertArgs = %v, want %v", got, want)
 	}
