@@ -229,7 +229,7 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 | `lerd node:install <version>` | Install a Node.js version globally via fnm |
 | `lerd node:uninstall <version>` | Uninstall a Node.js version via fnm |
 | `lerd node:use <version>` | Set the default Node.js version |
-| `lerd isolate:node <version>` | Pin Node version for cwd: writes `.node-version`, runs `fnm install` |
+| `lerd isolate:node <version>` | Pin Node version for cwd: writes `.node-version` and updates `node_version` in an existing `.lerd.yaml`, runs `fnm install`. The site page and MCP do the same |
 | `lerd node [args...]` | Run `node` using the project's pinned version via fnm |
 | `lerd npm [args...]` | Run `npm` using the project's pinned Node version via fnm |
 | `lerd npx [args...]` | Run `npx` using the project's pinned Node version via fnm |
