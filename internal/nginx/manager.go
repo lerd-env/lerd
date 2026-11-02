@@ -1303,7 +1303,7 @@ func GenerateServiceProxyVhost(domain, upstreamHost string, upstreamPort int, ss
 var ErrNotRunning = errors.New("lerd-nginx is not running")
 
 var (
-	containerRunningFn = podman.ContainerRunning
+	containerRunningFn = podman.ContainerRunningKnown
 	reloadExecFn       = func() error {
 		_, err := podman.Run("exec", "lerd-nginx", "nginx", "-s", "reload")
 		return err
@@ -1342,7 +1342,9 @@ func reloadOnce() error {
 		markReloaded()
 		return nil
 	}
-	if running, rerr := containerRunningFn("lerd-nginx"); rerr == nil && !running {
+	// Only a stop podman confirmed counts: callers treat ErrNotRunning as benign,
+	// so an unreachable podman has to surface as the reload failure it is.
+	if running, known := containerRunningFn("lerd-nginx"); known && !running {
 		return ErrNotRunning
 	}
 	return err
