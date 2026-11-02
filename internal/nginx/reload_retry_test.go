@@ -61,7 +61,7 @@ func stubReload(t *testing.T, execErr error, running bool) {
 	t.Helper()
 	origExec, origRunning := reloadExecFn, containerRunningFn
 	reloadExecFn = func() error { return execErr }
-	containerRunningFn = func(string) (bool, error) { return running, nil }
+	containerRunningFn = func(string) (bool, bool) { return running, true }
 	t.Cleanup(func() { reloadExecFn, containerRunningFn = origExec, origRunning })
 }
 
@@ -95,7 +95,7 @@ func TestReload_SuccessSkipsTheRunningCheck(t *testing.T) {
 	origExec, origRunning := reloadExecFn, containerRunningFn
 	checked := false
 	reloadExecFn = func() error { return nil }
-	containerRunningFn = func(string) (bool, error) { checked = true; return true, nil }
+	containerRunningFn = func(string) (bool, bool) { checked = true; return true, true }
 	t.Cleanup(func() { reloadExecFn, containerRunningFn = origExec, origRunning })
 
 	if err := Reload(); err != nil {
@@ -114,7 +114,7 @@ func TestReload_FailureCarriesConfigTestOutput(t *testing.T) {
 	defer func() { reloadExecFn, containerRunningFn, configTestFn = origReload, origRunning, origTest }()
 
 	reloadExecFn = func() error { return errors.New("exit status 1") }
-	containerRunningFn = func(string) (bool, error) { return true, nil }
+	containerRunningFn = func(string) (bool, bool) { return true, true }
 	configTestFn = func() (string, error) {
 		return `nginx: [emerg] unknown directive "proxy_ssl_conf_command" in /etc/nginx/sites/app.test.conf:42`, errors.New("exit status 1")
 	}
@@ -136,7 +136,7 @@ func TestReload_StoppedContainerSkipsConfigTest(t *testing.T) {
 
 	called := false
 	reloadExecFn = func() error { return errors.New("exit status 1") }
-	containerRunningFn = func(string) (bool, error) { return false, nil }
+	containerRunningFn = func(string) (bool, bool) { return false, true }
 	configTestFn = func() (string, error) { called = true; return "", nil }
 
 	if err := Reload(); !errors.Is(err, ErrNotRunning) {
@@ -159,7 +159,7 @@ func TestReloadWithRetry_DiagnosesOnceNotPerAttempt(t *testing.T) {
 
 	tests := 0
 	reloadExecFn = func() error { return errors.New("exit status 1") }
-	containerRunningFn = func(string) (bool, error) { return true, nil }
+	containerRunningFn = func(string) (bool, bool) { return true, true }
 	configTestFn = func() (string, error) { tests++; return "nginx: [emerg] unknown directive", nil }
 
 	if err := ReloadWithRetry(1200 * time.Millisecond); err == nil {
@@ -178,7 +178,7 @@ func TestReloadWithRetry_WaitsForTheOldWorkers(t *testing.T) {
 
 	reloaded := false
 	reloadExecFn = func() error { reloaded = true; return nil }
-	containerRunningFn = func(string) (bool, error) { return true, nil }
+	containerRunningFn = func(string) (bool, bool) { return true, true }
 	reads := 0
 	nginxWorkerPIDs = func() ([]string, error) {
 		reads++
@@ -215,5 +215,21 @@ func TestReload_marksWhenNginxHasReloaded(t *testing.T) {
 	}
 	if ServesVhostWrittenAt(time.Now().Add(time.Hour)) {
 		t.Fatal("reload counted for a vhost written after it")
+	}
+}
+
+// An unreachable podman cannot say nginx is stopped, so the reload failure must
+// come back as itself rather than as the benign ErrNotRunning.
+func TestReload_UnknownContainerStateIsNotErrNotRunning(t *testing.T) {
+	origReload, origRunning, origTest := reloadExecFn, containerRunningFn, configTestFn
+	defer func() { reloadExecFn, containerRunningFn, configTestFn = origReload, origRunning, origTest }()
+
+	reloadExecFn = func() error { return errors.New("cannot connect to podman") }
+	containerRunningFn = func(string) (bool, bool) { return false, false }
+	configTestFn = func() (string, error) { return "", nil }
+
+	err := Reload()
+	if err == nil || errors.Is(err, ErrNotRunning) {
+		t.Fatalf("expected the reload error, got %v", err)
 	}
 }

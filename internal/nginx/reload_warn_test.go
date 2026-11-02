@@ -29,3 +29,11 @@ func TestReloadOrWarn_HonoursIndent(t *testing.T) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
+
+func TestReloadOrWarn_SilentWhenNginxStopped(t *testing.T) {
+	var buf bytes.Buffer
+	reloadOrWarn(func() error { return ErrNotRunning }, &buf, "")
+	if buf.Len() != 0 {
+		t.Fatalf("expected no output when nginx is stopped, got %q", buf.String())
+	}
+}
