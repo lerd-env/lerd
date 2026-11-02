@@ -294,6 +294,12 @@ func TestEnsureCustomServiceQuadlet_portShiftNoticeAvoidsStdout(t *testing.T) {
 	t.Cleanup(func() { ensureUnitStatus = origStatus })
 	ensureUnitStatus = func(string) (string, error) { return "inactive", nil }
 
+	// Keep nginx out of it: a reload where podman is missing (macOS CI) warns
+	// on stdout, which is not the notice this test is about.
+	origSync := syncLerdVhostFn
+	t.Cleanup(func() { syncLerdVhostFn = origSync })
+	syncLerdVhostFn = func() (bool, error) { return false, nil }
+
 	// Occupy the service's primary host port so the guard is forced to shift it.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
