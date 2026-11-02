@@ -93,6 +93,24 @@ lerd php:ext list                # show your custom extensions and their apk dep
 lerd php:ext remove swoole       # remove from every version and rebuild
 ```
 
+### Prebuilt Zend extensions (ionCube)
+
+`php:ext add` builds from source, through PECL or the PHP source tree, so an extension that is only ever shipped as a ready-made binary cannot go through it. ionCube Loader is the usual one: `lerd php:ext add ioncube` fails because there is nothing to build.
+
+Such a loader needs no rebuild at all. Your home directory is mounted into every PHP container at the same path, so download the loader there and point the version's `php.ini` at it. The images are Alpine, so take the `lin-musl` build for your architecture and the file matching the PHP version:
+
+```bash
+lerd php:ini 8.5
+```
+
+```ini
+zend_extension = "/home/you/.php/ioncube_loader_lin-musl_8.5.so"
+```
+
+Use the per-version file rather than the shared one, since each loader only works on the PHP version it was built for. Saving restarts that version's FPM, and `lerd php -v` run from a site on that version should then mention the ionCube Loader. CLI commands run in the same container, and so do workers in the default exec mode, so they pick it up too.
+
+On macOS with [`lerd workers mode container`](/usage/worker-runtime), each worker runs in its own container that mounts only the project folder, so a loader in your home directory is not visible to it. Keep the loader inside the project there, and restart the site's workers after editing the ini, since saving it only restarts FPM.
+
 ## Locales and internationalisation
 
 The FPM image is Alpine-based, so it uses musl libc rather than glibc. Two consequences worth knowing:
