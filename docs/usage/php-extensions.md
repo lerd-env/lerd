@@ -107,7 +107,9 @@ lerd php:ini 8.5
 zend_extension = "/home/you/.php/ioncube_loader_lin-musl_8.5.so"
 ```
 
-Use the per-version file rather than the shared one, since each loader only works on the PHP version it was built for. Saving restarts that version's FPM, and `lerd php -v` should then mention the ionCube Loader. CLI commands and workers run in the same container, so they pick it up too.
+Use the per-version file rather than the shared one, since each loader only works on the PHP version it was built for. Saving restarts that version's FPM, and `lerd php -v` run from a site on that version should then mention the ionCube Loader. CLI commands run in the same container, and so do workers in the default exec mode, so they pick it up too.
+
+On macOS with [`lerd workers mode container`](/usage/worker-runtime), each worker runs in its own container that mounts only the project folder, so a loader in your home directory is not visible to it. Keep the loader inside the project there, and restart the site's workers after editing the ini, since saving it only restarts FPM.
 
 ## Locales and internationalisation
 
