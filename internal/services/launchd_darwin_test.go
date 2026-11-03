@@ -168,6 +168,7 @@ func TestUnitStatus_SharesOneListAndForgetsItOnMutation(t *testing.T) {
 			return []byte(row), nil
 		case "print":
 			prints++
+			return nil, os.ErrNotExist
 		}
 		return nil, nil
 	}

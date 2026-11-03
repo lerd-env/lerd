@@ -1202,15 +1202,13 @@ func listedStatus(name, plist string, jobs map[string]launchdJob, snapshot map[s
 		return "", false
 	}
 	job, loaded := jobs[plistLabel(name)]
+	if !loaded {
+		// list only shows the caller's domain (an SSH shell is not gui/<uid>), so print decides.
+		return "", false
+	}
 	switch {
 	case job.running, containerRunning(name, snapshot):
 		return "active", true
-	case !loaded:
-		if _, err := os.Stat(plist); err != nil {
-			return "unknown", true
-		}
-		// list only shows the caller's domain (an SSH shell is not gui/<uid>), so print decides.
-		return "", false
 	case job.status != "0":
 		return "failed", true
 	}
