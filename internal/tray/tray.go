@@ -4,6 +4,8 @@ package tray
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -502,11 +504,46 @@ func openUpdateTerminal(latestVer string) {
 		{"xterm", "-e", "bash", "-c", script},
 	}
 	for _, t := range terminals {
-		if _, err := exec.LookPath(t[0]); err == nil {
+		if _, err := lookPathFn(t[0]); err == nil {
 			_ = exec.Command(t[0], t[1:]...).Start()
 			return
 		}
 	}
+	// None of those exist on macOS; lerd-ui knows Terminal and iTerm there.
+	if err := uiUpdateTerminal(); err != nil {
+		fmt.Fprintf(lerdBinWarnW, "lerd-tray: could not open a terminal to run lerd update: %v\n", err)
+	}
+}
+
+// lookPathFn and uiUpdateTerminal are seams for tests.
+var (
+	lookPathFn       = exec.LookPath
+	uiUpdateTerminal = requestUpdateTerminal
+)
+
+// requestUpdateTerminal asks lerd-ui to open the user's terminal on lerd update.
+func requestUpdateTerminal() error {
+	req, err := http.NewRequest(http.MethodPost, apiBase+"/api/lerd/update-terminal", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Lerd-CSRF", "1")
+	res, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	var body struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		return fmt.Errorf("lerd-ui answered %s", res.Status)
+	}
+	if !body.OK {
+		return errors.New(body.Error)
+	}
+	return nil
 }
 
 func handleQuit(item *systray.MenuItem, cancel context.CancelFunc) {

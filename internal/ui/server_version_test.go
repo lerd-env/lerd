@@ -61,6 +61,14 @@ func TestBuildUpdateScript_UsesAbsolutePath(t *testing.T) {
 	}
 }
 
+// On macOS the script is typed into the user's own shell, and zsh reads
+// `read -p` as "read from the coprocess", so the prompt has to be printed.
+func TestBuildUpdateScript_PromptWorksInZsh(t *testing.T) {
+	if got := buildUpdateScript("/usr/local/bin/lerd"); strings.Contains(got, "read -rp") || strings.Contains(got, "read -p") {
+		t.Errorf("script must not use read -p, which zsh rejects, got %q", got)
+	}
+}
+
 // TestBuildUpdateScript_QuotesPathWithSpaces protects the shell substitution
 // when the binary lives under a path with spaces (a Mac install in
 // "/Users/J D/.local/bin/lerd", say). shQuote should single-quote it.
