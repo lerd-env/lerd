@@ -725,6 +725,14 @@ lerd machine reset
 
 This stops the VM, removes it, and re-initialises it. Databases and site data are preserved (they live on the host); container images are rebuilt automatically on the next `lerd start`. See [Start, Stop & Autostart → `lerd machine reset`](usage/lifecycle.md#lerd-machine-reset-macos).
 
+### PHP-FPM fails with "statfs /run/lerd/env: no such file or directory" (macOS)
+
+Symptom: right after the Podman Machine boots, `lerd update` or another command that sets up PHP-FPM prints `podman run lerd-php84-fpm: exit status 125: Error: statfs /run/lerd/env: no such file or directory`, and the container is running a few seconds later anyway.
+
+Cause: FPM mounts the provided env directory from inside the VM, and a freshly booted machine does not have it until `lerd start` creates it. Podman refuses a bind mount whose source is missing.
+
+Fix: lerd now creates that directory before it writes the FPM container, so no earlier `lerd start` is needed. On an older version, run `lerd start` once and the error does not come back.
+
 ### A project on an external drive is created inside the VM (macOS)
 
 Symptom: on macOS, `lerd new` on a path outside your home directory reports the project as created, then the run warns `chdir /Volumes/<drive>/<project>: no such file or directory` and the folder is nowhere on the drive.
