@@ -47,6 +47,13 @@ func SetProjectPHPVersion(dir string, version string) error {
 	})
 }
 
+// SetProjectNodeVersion updates node_version. No-op if .lerd.yaml does not exist.
+func SetProjectNodeVersion(dir string, version string) error {
+	return updateProjectConfig(dir, func(cfg *ProjectConfig) {
+		cfg.NodeVersion = version
+	})
+}
+
 // SetProjectStripe writes the project's Stripe listener settings (webhook path
 // and/or secret env key) to .lerd.yaml, creating the file if needed. An empty
 // argument leaves the corresponding field untouched; when both are empty this
