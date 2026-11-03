@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/geodro/lerd/internal/envfile"
 )
@@ -58,9 +60,39 @@ func defaultDBEnvBinding() DBEnvBinding {
 	return DBEnvBinding{File: ".env", Format: "dotenv", HostKey: "DB_HOST", NameKey: "DB_DATABASE"}
 }
 
+// frameworkForCache holds frameworkFor answers for frameworkForTTL. The services
+// snapshot asks for every site once per service, and each uncached answer reads
+// every framework and plugin definition from disk. A changed definition shows
+// once its entry expires, as the unit-state cache does.
+var frameworkForCache struct {
+	sync.Mutex
+	entries map[string]frameworkForEntry
+}
+
+type frameworkForEntry struct {
+	fw *Framework
+	at time.Time
+}
+
+const frameworkForTTL = 3 * time.Second
+
 // frameworkFor returns the framework definition governing a project directory,
-// or nil when none is detected.
+// or nil when none is detected. Callers must not modify the result.
 func frameworkFor(projectDir string) *Framework {
+	frameworkForCache.Lock()
+	defer frameworkForCache.Unlock()
+	if e, ok := frameworkForCache.entries[projectDir]; ok && time.Since(e.at) < frameworkForTTL {
+		return e.fw
+	}
+	fw := detectFrameworkFor(projectDir)
+	if frameworkForCache.entries == nil {
+		frameworkForCache.entries = map[string]frameworkForEntry{}
+	}
+	frameworkForCache.entries[projectDir] = frameworkForEntry{fw: fw, at: time.Now()}
+	return fw
+}
+
+func detectFrameworkFor(projectDir string) *Framework {
 	name, ok := DetectFrameworkForDir(projectDir)
 	if !ok {
 		return nil

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // wordpressStoreDef mirrors the published wordpress definition: the
@@ -466,5 +467,30 @@ func TestDBTargetsFor_SQLiteProjectHasNoServerTarget(t *testing.T) {
 	got := DBTargetsFor(dir)
 	if len(got) != 1 || got[0].Service != "mysql" || got[0].Database != "shop" {
 		t.Errorf("DBTargetsFor = %+v, want {mysql shop}", got)
+	}
+}
+
+// The services snapshot asks for every site's env file once per service, and
+// an uncached answer reads every framework definition from disk each time.
+func TestFrameworkFor_ReusesAnswerWithinTTL(t *testing.T) {
+	dir := t.TempDir()
+	first := frameworkFor(dir)
+	frameworkForCache.Lock()
+	e, ok := frameworkForCache.entries[dir]
+	frameworkForCache.Unlock()
+	if !ok || e.fw != first {
+		t.Fatal("first answer was not cached")
+	}
+	frameworkForCache.Lock()
+	frameworkForCache.entries[dir] = frameworkForEntry{fw: &Framework{Name: "sentinel"}, at: time.Now()}
+	frameworkForCache.Unlock()
+	if got := frameworkFor(dir); got == nil || got.Name != "sentinel" {
+		t.Errorf("fresh entry not reused, got %v", got)
+	}
+	frameworkForCache.Lock()
+	frameworkForCache.entries[dir] = frameworkForEntry{fw: &Framework{Name: "sentinel"}, at: time.Now().Add(-frameworkForTTL)}
+	frameworkForCache.Unlock()
+	if got := frameworkFor(dir); got != nil && got.Name == "sentinel" {
+		t.Error("expired entry was reused")
 	}
 }
