@@ -150,6 +150,12 @@ if [ "$IFACE" = "lerd0" ]; then
 fi
 
 if [ "$ACTION" = "up" ] || [ "$ACTION" = "dhcp4-change" ] || [ "$ACTION" = "dhcp6-change" ]; then
+    # Only an uplink gets lerd's route. A VPN, overlay or container link owns its
+    # DNS (tailscale0, wg0, docker0), and ~. there sends every query to its resolver.
+    case "$(nmcli -g GENERAL.TYPE device show "$IFACE" 2>/dev/null)" in
+        ethernet|wifi) ;;
+        *) [ -n "$(ip route show default dev "$IFACE" 2>/dev/null)" ] || exit 0 ;;
+    esac
     LERD_DNS=$(nmcli -g IP4.DNS device show "$IFACE" 2>/dev/null | tr '|' '\n' | grep -v '^$' | tr '\n' ' ')
     # A dead :5300 first on the uplink with ~. is where resolved fails over to
     # after one dropped query, stalling all DNS. lerd start re-applies this.
