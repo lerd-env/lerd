@@ -79,7 +79,7 @@ func TestStop_RemovesContainerThatNeverStarted(t *testing.T) {
 
 // A sweep used to fork `launchctl print` once per plist, which the dashboard's
 // five second health watch turned into dozens of forks a tick. One list has to
-// answer every unit it can.
+// answer every unit it lists.
 func TestAllUnitStates_ReadsOneListInsteadOfPrintPerUnit(t *testing.T) {
 	dir := t.TempDir()
 	plists := map[string]string{
@@ -111,7 +111,7 @@ func TestAllUnitStates_ReadsOneListInsteadOfPrintPerUnit(t *testing.T) {
 				"-\t0\tcom.lerd.lerd-mysql\n"), nil
 		}
 		prints++
-		return nil, os.ErrNotExist
+		return []byte("state = waiting\n"), nil
 	}
 
 	got := (&darwinServiceManager{}).AllUnitStates()
@@ -124,8 +124,10 @@ func TestAllUnitStates_ReadsOneListInsteadOfPrintPerUnit(t *testing.T) {
 			t.Errorf("%s = %q, want %q", name, got[name], state)
 		}
 	}
-	if prints != 0 {
-		t.Errorf("launchctl print ran %d times, want 0 when the list answers every unit", prints)
+	// lerd-queue-gone is missing from the list, which an SSH shell also sees for
+	// gui/<uid> jobs, so it alone goes to print.
+	if prints != 1 {
+		t.Errorf("launchctl print ran %d times, want 1 for the unlisted unit", prints)
 	}
 }
 

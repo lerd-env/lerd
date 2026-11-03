@@ -24,6 +24,8 @@ var launchctl = func(args ...string) ([]byte, error) {
 	if len(args) > 0 && launchctlMutates[args[0]] {
 		config.GuardRealLaunchd(strings.Join(args, " "))
 		forgetLaunchdJobs()
+		// Again once it returns: a read during the command may have cached the old state.
+		defer forgetLaunchdJobs()
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -1193,8 +1195,8 @@ func parseLaunchctlList(out string) map[string]launchdJob {
 }
 
 // listedStatus answers what unitStatus would from a `launchctl list` row. ok is
-// false when only print can tell: no list, or a container launcher that exited
-// 0 (crashed after detach, or never ran).
+// false when only print can tell: no list, a job missing from it, or a
+// container launcher that exited 0.
 func listedStatus(name, plist string, jobs map[string]launchdJob, snapshot map[string]bool) (string, bool) {
 	if jobs == nil {
 		return "", false
@@ -1207,7 +1209,8 @@ func listedStatus(name, plist string, jobs map[string]launchdJob, snapshot map[s
 		if _, err := os.Stat(plist); err != nil {
 			return "unknown", true
 		}
-		return "inactive", true
+		// list only shows the caller's domain (an SSH shell is not gui/<uid>), so print decides.
+		return "", false
 	case job.status != "0":
 		return "failed", true
 	}
