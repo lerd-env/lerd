@@ -133,3 +133,14 @@ func TestMatchesRule_WhenEnvAloneNeverMatches(t *testing.T) {
 		t.Error("a rule with only when_env must not match")
 	}
 }
+
+// dotenv drops an inline comment after an unquoted value, so a site annotating
+// its queue connection still runs on Redis.
+func TestMatchesRule_WhenEnvIgnoresInlineComment(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "artisan"), "")
+	writeFile(t, filepath.Join(dir, ".env"), "QUEUE_CONNECTION=redis # local queue\n")
+	if !MatchesRule(dir, FrameworkRule{File: "artisan", WhenEnv: "QUEUE_CONNECTION=redis"}) {
+		t.Error("an inline comment should not change the value when_env compares")
+	}
+}

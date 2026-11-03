@@ -2758,10 +2758,20 @@ func matchesRule(dir string, rule FrameworkRule, hasPackage func(string, string,
 }
 
 // envHolds reports whether the site's .env sets key to value for a "KEY=value"
-// condition. A condition without "=" never holds.
+// condition, dropping an inline " # comment" the way dotenv does.
 func envHolds(dir, cond string) bool {
 	key, want, ok := strings.Cut(cond, "=")
-	return ok && envfile.ReadKey(filepath.Join(dir, ".env"), key) == want
+	if !ok {
+		return false
+	}
+	got := envfile.ReadKey(filepath.Join(dir, ".env"), key)
+	for i := 1; i < len(got); i++ {
+		if got[i] == '#' && (got[i-1] == ' ' || got[i-1] == '\t') {
+			got = strings.TrimSpace(got[:i])
+			break
+		}
+	}
+	return got == want
 }
 
 func matchesFramework(dir string, fw *Framework) bool {

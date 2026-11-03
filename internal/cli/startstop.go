@@ -565,7 +565,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 
 	// Restore quadlets and worker units that may be missing after an
 	// uninstall/reinstall cycle. Reads .lerd.yaml from each active site.
-	restoreSiteInfrastructure()
+	skip = append(skip, restoreSiteInfrastructure()...)
 
 	// Reconcile custom services against their YAMLs (issue #678): regenerate a
 	// missing quadlet, drop an orphan quadlet with no YAML. Data dirs untouched.
@@ -1087,10 +1087,13 @@ func restoreFrankenPHPQuadlet(s config.Site) {
 	}
 }
 
-func restoreSiteInfrastructure() {
+// restoreSiteInfrastructure returns the saved worker units whose rules no
+// longer hold on their site, which it has stopped, so the start pass leaves
+// them down.
+func restoreSiteInfrastructure() (ruledOut []string) {
 	reg, err := config.LoadSites()
 	if err != nil {
-		return
+		return nil
 	}
 
 	// FPM mounts the provided-env dir, so it has to exist before FPM starts.
@@ -1245,6 +1248,15 @@ func restoreSiteInfrastructure() {
 			if ok, _ := workerSupportedOnPlatform(wDef); !ok {
 				continue
 			}
+			// .lerd.yaml keeps the worker, so it comes back once its rules hold again.
+			if err := workerRulesBlock(s.Path, w, wDef); err != nil {
+				if parentEnabled {
+					_ = WorkerStopForSite(s.Name, s.Path, w)
+				}
+				feedback.Warn("%s: %v", s.Name, err)
+				ruledOut = append(ruledOut, unitName)
+				continue
+			}
 			if !parentEnabled {
 				restoreWorker(s.Name, s.Path, phpVersion, w, wDef)
 			}
@@ -1294,6 +1306,7 @@ func restoreSiteInfrastructure() {
 	cleanOrphanTimerUnits()
 
 	podman.DaemonReloadFn() //nolint:errcheck
+	return ruledOut
 }
 
 // cleanOrphanTimerUnits removes lerd-*.timer files whose sibling .service

@@ -429,7 +429,8 @@ workers:
     check:                        # only shown when check passes (optional)
       composer: symfony/messenger # matches a package composer installed, not
                                   # only one composer.json names
-      when_env: ""                # KEY=VALUE the site's .env must also hold (optional).
+      when_env: ""                # KEY=VALUE the site's .env must also hold (optional);
+                                  # an inline # comment after the value is ignored.
                                   # Any rule takes it (check, exclude_check, a command's or
                                   # a doctor check's). Horizon reads only Redis, so its check
                                   # and the queue worker's exclude_check both carry
