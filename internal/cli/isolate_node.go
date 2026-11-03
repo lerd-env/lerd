@@ -50,7 +50,7 @@ func runIsolateNode(_ *cobra.Command, args []string) error {
 			feedback.Warn("updating .lerd.yaml: %v", err)
 		}
 	} else {
-		_ = updateProjectNodeVersionIfExists(cwd, version)
+		_ = config.SetProjectNodeVersion(cwd, version)
 	}
 
 	feedback.Begin()
@@ -67,21 +67,4 @@ func runIsolateNode(_ *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-// updateProjectNodeVersionIfExists writes node_version to .lerd.yaml only when
-// the file is already present. Mirrors the no-op-on-missing semantics of
-// SetProjectPHPVersion so plain `lerd isolate:node` runs on parent sites that
-// haven't opted into .lerd.yaml stay quiet.
-func updateProjectNodeVersionIfExists(dir, version string) error {
-	path := filepath.Join(dir, ".lerd.yaml")
-	if _, err := os.Stat(path); err != nil {
-		return nil
-	}
-	cfg, err := config.LoadProjectConfig(dir)
-	if err != nil || cfg == nil {
-		return err
-	}
-	cfg.NodeVersion = version
-	return config.SaveProjectConfig(dir, cfg)
 }
