@@ -1111,13 +1111,22 @@ func (m *darwinServiceManager) AllUnitStates() map[string]string {
 	if snapshot == nil {
 		snapshot = map[string]bool{}
 	}
+	// One `launchctl list` for the whole sweep too: a print per plist forked
+	// launchctl dozens of times every few seconds while the dashboard was open.
+	var jobs map[string]launchdJob
+	if list, err := launchctl("list"); err == nil {
+		jobs = parseLaunchctlList(string(list))
+	}
 	out := make(map[string]string, len(matches)*2)
 	for _, path := range matches {
 		name := strings.TrimSuffix(filepath.Base(path), ".plist")
 		if !strings.HasPrefix(name, "lerd-") {
 			continue
 		}
-		state, _ := m.unitStatus(name, snapshot)
+		state, ok := listedStatus(name, path, jobs, snapshot)
+		if !ok {
+			state, _ = m.unitStatus(name, snapshot)
+		}
 		if state == "" || state == "unknown" {
 			continue
 		}
@@ -1125,6 +1134,48 @@ func (m *darwinServiceManager) AllUnitStates() map[string]string {
 		out[name+".service"] = state
 	}
 	return out
+}
+
+// launchdJob is one `launchctl list` row: whether the job has a pid, and its
+// last exit status.
+type launchdJob struct {
+	running bool
+	status  string
+}
+
+// parseLaunchctlList reads `launchctl list` output into jobs keyed by label.
+func parseLaunchctlList(out string) map[string]launchdJob {
+	jobs := map[string]launchdJob{}
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) != 3 || f[0] == "PID" {
+			continue
+		}
+		jobs[f[2]] = launchdJob{running: f[0] != "-", status: f[1]}
+	}
+	return jobs
+}
+
+// listedStatus answers what unitStatus would from a `launchctl list` row. ok is
+// false when only print can tell: no list, or a container launcher that exited
+// 0 (crashed after detach, or never ran).
+func listedStatus(name, plist string, jobs map[string]launchdJob, snapshot map[string]bool) (string, bool) {
+	if jobs == nil {
+		return "", false
+	}
+	job, loaded := jobs[plistLabel(name)]
+	switch {
+	case job.running, containerRunning(name, snapshot):
+		return "active", true
+	case !loaded:
+		return "inactive", true
+	case job.status != "0":
+		return "failed", true
+	}
+	if data, err := os.ReadFile(plist); err == nil && isContainerPlist(data) {
+		return "", false
+	}
+	return "inactive", true
 }
 
 // ensureStarted kicks a job that bootstrap left loaded but idle, and leaves a
