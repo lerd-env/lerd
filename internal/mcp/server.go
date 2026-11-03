@@ -4059,10 +4059,20 @@ func execSiteNode(args map[string]any) (any, *rpcError) {
 		return toolOK(out), nil
 	}
 
+	if owns, err := config.LocalOverrideOwns(site.Path, "node_version"); err != nil {
+		return toolErr(err.Error()), nil
+	} else if owns {
+		return toolErr(config.LocalOverrideRefusal("node_version").Error()), nil
+	}
+
 	// Write .node-version pin file in the project.
 	nodeVersionFile := filepath.Join(site.Path, ".node-version")
 	if err := os.WriteFile(nodeVersionFile, []byte(version+"\n"), 0644); err != nil {
 		return toolErr("writing .node-version: " + err.Error()), nil
+	}
+	// .lerd.yaml node_version outranks .node-version in detection.
+	if err := config.SetProjectNodeVersion(site.Path, version); err != nil {
+		return toolErr("updating .lerd.yaml: " + err.Error()), nil
 	}
 
 	// Install the version via the active manager (non-fatal if already installed

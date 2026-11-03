@@ -4250,8 +4250,20 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			}
 			break
 		}
+		if owns, err := config.LocalOverrideOwns(site.Path, "node_version"); err != nil || owns {
+			if err == nil {
+				err = config.LocalOverrideRefusal("node_version")
+			}
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
 		if err := os.WriteFile(filepath.Join(site.Path, ".node-version"), []byte(version+"\n"), 0644); err != nil {
 			writeJSON(w, SiteActionResponse{Error: "writing .node-version: " + err.Error()})
+			return
+		}
+		// .lerd.yaml node_version outranks .node-version in detection.
+		if err := config.SetProjectNodeVersion(site.Path, version); err != nil {
+			writeJSON(w, SiteActionResponse{Error: "updating .lerd.yaml: " + err.Error()})
 			return
 		}
 		site.NodeVersion = version
