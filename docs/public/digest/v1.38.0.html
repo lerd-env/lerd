@@ -345,7 +345,7 @@
   .cmd code { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .copy { font: 500 11px var(--mono); color: var(--muted); border: 1px solid var(--line-2); padding: 4px 8px; flex-shrink: 0; background: none; cursor: pointer; }
   .copy:hover { color: var(--text); }
-  .btn { display: inline-flex; align-items: center; padding: 10px 18px; font-weight: 600; font-size: 14px; border: 1px solid var(--line-2); background: var(--panel); color: var(--text); text-decoration: none; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; font-weight: 600; font-size: 14px; border: 1px solid var(--line-2); background: var(--panel); color: var(--text); text-decoration: none; }
   .btn:hover { border-color: var(--dim); }
   .foot-end { max-width: 1180px; margin: 56px auto 0; padding-top: 24px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-family: var(--mono); font-size: 12px; color: var(--dim); }
   .foot-end a { color: var(--muted); text-decoration: none; }
@@ -668,6 +668,7 @@
     </div>
     <div class="install">
       <div class="cmd"><i>$</i><code>curl -fsSL https://lerd.sh/install.sh | bash</code><button class="copy" type="button">COPY</button></div>
+      <a class="btn" href="https://github.com/lerd-env/lerd-desktop/releases/latest/download/Install-Lerd.exe"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M0 3.4 9.8 2v9.5H0zm10.9-1.6L24 0v11.4H10.9zM0 12.6h9.8V22L0 20.6zm10.9 0H24V24l-13.1-1.9z"/></svg>Windows</a>
       <a class="btn" href="https://lerd.sh/getting-started/installation">Install guide →</a>
     </div>
   </div>
