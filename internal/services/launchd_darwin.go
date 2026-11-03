@@ -22,10 +22,18 @@ import (
 // or unresponsive service can never hang lerd indefinitely.
 var launchctl = func(args ...string) ([]byte, error) {
 	if len(args) > 0 && launchctlMutates[args[0]] {
-		config.GuardRealLaunchd(strings.Join(args, " "))
 		forgetLaunchdJobs()
 		// Again once it returns: a read during the command may have cached the old state.
 		defer forgetLaunchdJobs()
+	}
+	return execLaunchctl(args...)
+}
+
+// execLaunchctl forks the real launchctl, split out so a test can fake the
+// command while still going through launchctl's cache handling.
+var execLaunchctl = func(args ...string) ([]byte, error) {
+	if len(args) > 0 && launchctlMutates[args[0]] {
+		config.GuardRealLaunchd(strings.Join(args, " "))
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

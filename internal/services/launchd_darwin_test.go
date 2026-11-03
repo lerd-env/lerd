@@ -192,3 +192,38 @@ func TestUnitStatus_SharesOneListAndForgetsItOnMutation(t *testing.T) {
 		t.Errorf("a unit with no plist and no job = %q, want unknown", got)
 	}
 }
+
+// A dashboard read that lands while bootstrap is still running caches the old
+// state, so the list has to be dropped again once the command returns.
+func TestLaunchctl_ForgetsListReadDuringMutation(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "lerd-queue-a.plist"), []byte("<plist/>"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	prevDir, prevExec := launchAgentsDirFn, execLaunchctl
+	t.Cleanup(func() { launchAgentsDirFn, execLaunchctl = prevDir, prevExec; forgetLaunchdJobs() })
+	launchAgentsDirFn = func() string { return dir }
+	forgetLaunchdJobs()
+
+	m := &darwinServiceManager{}
+	row := "-\t0\tcom.lerd.lerd-queue-a\n"
+	execLaunchctl = func(args ...string) ([]byte, error) {
+		switch args[0] {
+		case "list":
+			return []byte(row), nil
+		case "bootstrap":
+			if got, _ := m.UnitStatus("lerd-queue-a"); got != "inactive" {
+				t.Errorf("read during bootstrap = %q, want inactive", got)
+			}
+			row = "412\t0\tcom.lerd.lerd-queue-a\n"
+		}
+		return nil, nil
+	}
+
+	if _, err := launchctl("bootstrap", "gui/501", filepath.Join(dir, "lerd-queue-a.plist")); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := m.UnitStatus("lerd-queue-a"); got != "active" {
+		t.Errorf("read after bootstrap = %q, want active", got)
+	}
+}
