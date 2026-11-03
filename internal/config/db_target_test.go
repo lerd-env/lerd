@@ -494,3 +494,24 @@ func TestFrameworkFor_ReusesAnswerWithinTTL(t *testing.T) {
 		t.Error("expired entry was reused")
 	}
 }
+
+// A long-running dashboard visits many worktrees; expired entries for deleted
+// ones must not stay in memory for the life of the process.
+func TestFrameworkFor_DropsExpiredEntriesOnStore(t *testing.T) {
+	gone := filepath.Join(t.TempDir(), "deleted-worktree")
+	frameworkForCache.Lock()
+	if frameworkForCache.entries == nil {
+		frameworkForCache.entries = map[string]frameworkForEntry{}
+	}
+	frameworkForCache.entries[gone] = frameworkForEntry{at: time.Now().Add(-frameworkForTTL)}
+	frameworkForCache.Unlock()
+
+	frameworkFor(t.TempDir())
+
+	frameworkForCache.Lock()
+	_, ok := frameworkForCache.entries[gone]
+	frameworkForCache.Unlock()
+	if ok {
+		t.Error("expired entry survived a store")
+	}
+}

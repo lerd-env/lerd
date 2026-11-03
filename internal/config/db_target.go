@@ -79,13 +79,22 @@ const frameworkForTTL = 3 * time.Second
 // or nil when none is detected. Callers must not modify the result.
 func frameworkFor(projectDir string) *Framework {
 	frameworkForCache.Lock()
-	defer frameworkForCache.Unlock()
-	if e, ok := frameworkForCache.entries[projectDir]; ok && time.Since(e.at) < frameworkForTTL {
+	e, ok := frameworkForCache.entries[projectDir]
+	frameworkForCache.Unlock()
+	if ok && time.Since(e.at) < frameworkForTTL {
 		return e.fw
 	}
+	// Detected unlocked: a definition download must not stall other sites' lookups.
 	fw := detectFrameworkFor(projectDir)
+	frameworkForCache.Lock()
+	defer frameworkForCache.Unlock()
 	if frameworkForCache.entries == nil {
 		frameworkForCache.entries = map[string]frameworkForEntry{}
+	}
+	for dir, old := range frameworkForCache.entries {
+		if time.Since(old.at) >= frameworkForTTL {
+			delete(frameworkForCache.entries, dir)
+		}
 	}
 	frameworkForCache.entries[projectDir] = frameworkForEntry{fw: fw, at: time.Now()}
 	return fw
