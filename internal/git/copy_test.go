@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 func TestCopyTreeNative_RegularFilesAndDirs(t *testing.T) {
@@ -567,5 +569,19 @@ func TestLookJSBin_findsAGlobalShimInLerdsBinDir(t *testing.T) {
 	}
 	if got, ok := lookJSBin("pnpm"); !ok || got != filepath.Join(bin, "pnpm") {
 		t.Fatalf("lookJSBin(pnpm) = %q, %v", got, ok)
+	}
+}
+
+// pnpm and yarn run through `#!/usr/bin/env node`, and the watcher daemon's
+// launchd PATH holds no node, so lerd's bin dir with its node shim has to lead
+// PATH for the install, or every worktree install exits 127 and is retried.
+func TestNodeOnPath_PutsLerdBinDirFirst(t *testing.T) {
+	env := nodeOnPath([]string{"HOME=/h", "PATH=/usr/bin:/bin"})
+	want := "PATH=" + config.BinDir() + string(os.PathListSeparator) + "/usr/bin:/bin"
+	if env[len(env)-1] != want || env[0] != "HOME=/h" || len(env) != 2 {
+		t.Errorf("env = %v, want HOME kept and %s", env, want)
+	}
+	if got := nodeOnPath([]string{"HOME=/h"}); got[len(got)-1] != "PATH="+config.BinDir() {
+		t.Errorf("with no PATH, got %v", got)
 	}
 }
