@@ -1082,13 +1082,20 @@ func TestHostUpstreamDNS_keepsLocalResolversButNotResolvedStubs(t *testing.T) {
 // runDispatcher runs the hook for an "up" on wlan0 against stub commands, with
 // ss reporting listen as its output, and returns what resolvectl was asked.
 func runDispatcher(t *testing.T, listen string) string {
+	return runDispatcherOn(t, "wlan0", "wifi", "", listen)
+}
+
+// runDispatcherOn is runDispatcher for any link, with nmcli reporting nmType and
+// ip reporting route as the link's default route.
+func runDispatcherOn(t *testing.T, iface, nmType, route, listen string) string {
 	t.Helper()
 	bin := t.TempDir()
 	log := filepath.Join(bin, "resolvectl.log")
 	stubs := map[string]string{
 		"ss":         "printf '%s' \"$LISTEN\"",
 		"resolvectl": "echo \"$*\" >> " + log,
-		"nmcli":      "echo 192.168.1.1",
+		"nmcli":      `case "$*" in *GENERAL.TYPE*) echo "` + nmType + `" ;; *) echo 192.168.1.1 ;; esac`,
+		"ip":         `echo "` + route + `"`,
 		"runuser":    "exit 1",
 	}
 	for name, body := range stubs {
@@ -1100,7 +1107,7 @@ func runDispatcher(t *testing.T, listen string) string {
 	if err := os.WriteFile(script, []byte(nmDispatcherScriptFor("test")), 0755); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("/bin/sh", script, "wlan0", "up")
+	cmd := exec.Command("/bin/sh", script, iface, "up")
 	cmd.Env = []string{"PATH=" + bin + ":/usr/bin:/bin", "LISTEN=" + listen}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("dispatcher failed: %v\n%s", err, out)
@@ -1137,6 +1144,29 @@ func TestNMDispatcherScript_routesUplinkOnlyForLoopbackReachableListeners(t *tes
 		got := runDispatcher(t, "UNCONN 0 0 "+addr+" 0.0.0.0:*\n") != ""
 		if got != want {
 			t.Errorf("listener on %s: routed=%v, want %v", addr, got, want)
+		}
+	}
+}
+
+// The catch-all route belongs on the uplink only. On tailscale0 it raced
+// tailscaled and sent all internet DNS to 100.100.100.100. Issue #2413.
+func TestNMDispatcherScript_routesOnlyTheUplink(t *testing.T) {
+	cases := []struct {
+		iface, nmType, route string
+		routed               bool
+	}{
+		{"wlp2s0", "wifi", "", true},
+		{"enp3s0", "ethernet", "", true},
+		{"br0", "bridge", "default via 192.0.2.1 dev br0", true},
+		{"tailscale0", "tun", "", false},
+		{"wg0", "wireguard", "", false},
+		{"docker0", "bridge", "", false},
+		{"virbr0", "bridge", "", false},
+	}
+	for _, c := range cases {
+		got := runDispatcherOn(t, c.iface, c.nmType, c.route, "UNCONN 0 0 127.0.0.1:5300 0.0.0.0:*\n")
+		if routed := strings.Contains(got, "domain "+c.iface+" ~test ~."); routed != c.routed {
+			t.Errorf("%s (%s): routed=%v, want %v; resolvectl calls:\n%s", c.iface, c.nmType, routed, c.routed, got)
 		}
 	}
 }
