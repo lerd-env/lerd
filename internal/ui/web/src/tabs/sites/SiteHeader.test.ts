@@ -462,3 +462,24 @@ describe('SiteHeader', () => {
     expect(container.querySelector('[aria-label="Unpin"]')).toBeNull();
   });
 });
+
+// Every websocket snapshot replaces the site object. Rerunning the git poll on
+// each one read git status for every checkout every couple of seconds while a
+// worker was crash looping, instead of once per poll interval.
+describe('SiteHeader git status poll', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('does not read git again when a snapshot only replaces the site object', async () => {
+    const fetchMock = vi.fn(async (url: string) =>
+      new Response(JSON.stringify(String(url).includes('git-status') ? { checkouts: [] } : { ok: true }))
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const gitReads = () => fetchMock.mock.calls.filter(([u]) => String(u).includes('git-status')).length;
+    const { rerender } = render(Harness, { props: { site: worktreeSite } });
+    await waitFor(() => expect(gitReads()).toBeGreaterThan(0));
+    const before = gitReads();
+    await rerender({ site: { ...worktreeSite, php_version: '8.4' } as unknown as Site });
+    await rerender({ site: { ...worktreeSite, php_version: '8.5' } as unknown as Site });
+    expect(gitReads()).toBe(before);
+  });
+});
