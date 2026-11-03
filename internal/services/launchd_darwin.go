@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
@@ -20,6 +21,17 @@ import (
 // launchctl runs a launchctl command with a 15-second timeout so a throttled
 // or unresponsive service can never hang lerd indefinitely.
 var launchctl = func(args ...string) ([]byte, error) {
+	if len(args) > 0 && launchctlMutates[args[0]] {
+		forgetLaunchdJobs()
+		// Again once it returns: a read during the command may have cached the old state.
+		defer forgetLaunchdJobs()
+	}
+	return execLaunchctl(args...)
+}
+
+// execLaunchctl forks the real launchctl, split out so a test can fake the
+// command while still going through launchctl's cache handling.
+var execLaunchctl = func(args ...string) ([]byte, error) {
 	if len(args) > 0 && launchctlMutates[args[0]] {
 		config.GuardRealLaunchd(strings.Join(args, " "))
 	}
@@ -121,6 +133,7 @@ var (
 	launchAgentsDirFn   = launchAgentsDir
 	containerSnapshotFn = func() map[string]bool { return podman.Cache.Snapshot() }
 	containerExistsFn   = podman.ContainerExists
+	containerRunningFn  = func(name string) bool { return podman.Cache.Running(name) }
 	removeContainerFn   = func(name string) {
 		podman.Cmd("stop", "-t", "5", name).Run() //nolint:errcheck
 		podman.Cmd("rm", "-f", name).Run()        //nolint:errcheck
@@ -136,7 +149,7 @@ func containerRunning(name string, snapshot map[string]bool) bool {
 	if snapshot != nil {
 		return snapshot[name]
 	}
-	return podman.Cache.Running(name)
+	return containerRunningFn(name)
 }
 
 func lerdLogsDir() string {
@@ -999,6 +1012,9 @@ func (m *darwinServiceManager) IsEnabled(name string) bool {
 // container is detached, so we fall back to checking whether the container
 // is actually running rather than trusting launchd's "state = waiting/exited".
 func (m *darwinServiceManager) UnitStatus(name string) (string, error) {
+	if state, ok := listedStatus(name, plistPath(name), cachedLaunchdJobs(), nil); ok {
+		return state, nil
+	}
 	return m.unitStatus(name, nil)
 }
 
@@ -1111,13 +1127,19 @@ func (m *darwinServiceManager) AllUnitStates() map[string]string {
 	if snapshot == nil {
 		snapshot = map[string]bool{}
 	}
+	// One `launchctl list` for the whole sweep too: a print per plist forked
+	// launchctl dozens of times every few seconds while the dashboard was open.
+	jobs := cachedLaunchdJobs()
 	out := make(map[string]string, len(matches)*2)
 	for _, path := range matches {
 		name := strings.TrimSuffix(filepath.Base(path), ".plist")
 		if !strings.HasPrefix(name, "lerd-") {
 			continue
 		}
-		state, _ := m.unitStatus(name, snapshot)
+		state, ok := listedStatus(name, path, jobs, snapshot)
+		if !ok {
+			state, _ = m.unitStatus(name, snapshot)
+		}
 		if state == "" || state == "unknown" {
 			continue
 		}
@@ -1125,6 +1147,84 @@ func (m *darwinServiceManager) AllUnitStates() map[string]string {
 		out[name+".service"] = state
 	}
 	return out
+}
+
+// launchdJob is one `launchctl list` row: whether the job has a pid, and its
+// last exit status.
+type launchdJob struct {
+	running bool
+	status  string
+}
+
+// launchdJobs caches one `launchctl list` for launchdListTTL. Status reads ask
+// per unit, and the dashboard's site and service snapshots ask for every worker
+// of every site, so a print each forked launchctl dozens of times a second.
+var launchdJobs struct {
+	sync.Mutex
+	jobs map[string]launchdJob
+	at   time.Time
+}
+
+const launchdListTTL = 2 * time.Second
+
+// cachedLaunchdJobs returns the cached list, re-reading it once it is stale.
+// nil means launchctl list failed, so callers fall back to print.
+func cachedLaunchdJobs() map[string]launchdJob {
+	launchdJobs.Lock()
+	defer launchdJobs.Unlock()
+	if launchdJobs.jobs == nil || time.Since(launchdJobs.at) > launchdListTTL {
+		out, err := launchctl("list")
+		if err != nil {
+			return nil
+		}
+		launchdJobs.jobs = parseLaunchctlList(string(out))
+		launchdJobs.at = time.Now()
+	}
+	return launchdJobs.jobs
+}
+
+// forgetLaunchdJobs drops the cached list so a read after a start or stop sees it.
+func forgetLaunchdJobs() {
+	launchdJobs.Lock()
+	launchdJobs.jobs = nil
+	launchdJobs.Unlock()
+}
+
+// parseLaunchctlList reads `launchctl list` output into jobs keyed by label.
+func parseLaunchctlList(out string) map[string]launchdJob {
+	jobs := map[string]launchdJob{}
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) != 3 || f[0] == "PID" {
+			continue
+		}
+		jobs[f[2]] = launchdJob{running: f[0] != "-", status: f[1]}
+	}
+	return jobs
+}
+
+// listedStatus answers what unitStatus would from a `launchctl list` row. ok is
+// false when only print can tell: no list, a job missing from it, or a
+// container launcher that exited 0.
+func listedStatus(name, plist string, jobs map[string]launchdJob, snapshot map[string]bool) (string, bool) {
+	if jobs == nil {
+		return "", false
+	}
+	job, loaded := jobs[plistLabel(name)]
+	if !loaded {
+		// list only shows the caller's domain (an SSH shell is not gui/<uid>), so print decides.
+		return "", false
+	}
+	switch {
+	case job.running, containerRunning(name, snapshot):
+		return "active", true
+	case job.status != "0":
+		return "failed", true
+	}
+	if data, err := os.ReadFile(plist); err == nil && isContainerPlist(data) {
+		return "", false
+	}
+	return "inactive", true
 }
 
 // ensureStarted kicks a job that bootstrap left loaded but idle, and leaves a

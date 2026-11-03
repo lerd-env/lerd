@@ -146,8 +146,10 @@ func buildDumpsStatusJSON() []byte {
 		resp.Count = srv.Len()
 		resp.Capacity = srv.Cap()
 		resp.Subscribers = srv.Subscribers()
-		if snap := srv.Snapshot(); len(snap) > 0 {
-			resp.LastTS = snap[len(snap)-1].TS
+		// Only the newest event's time is wanted; decoding the whole buffer for it
+		// cost more than the rest of a dashboard snapshot together.
+		if last := srv.Filter(dumps.FilterOpts{Limit: 1}); len(last) > 0 {
+			resp.LastTS = last[0].TS
 		}
 	}
 	b, _ := json.Marshal(resp)

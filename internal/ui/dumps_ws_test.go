@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/eventbus"
 )
 
@@ -95,5 +96,31 @@ func TestHandleDumpsNotifyChanged_GetIsRejected(t *testing.T) {
 	handleDumpsNotifyChanged(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("status = %d, want 405", rec.Code)
+	}
+}
+
+// The status reads only the newest event, so last_ts must still be its time.
+func TestBuildDumpsStatusJSON_LastTSIsNewestEvent(t *testing.T) {
+	srv, err := dumps.ListenWithRing(t.Context(), "tcp", "127.0.0.1:0", dumps.NewRing(100))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { srv.Close() })
+	for i, ts := range []string{"2026-05-10T00:00:01.000Z", "2026-05-10T00:00:02.000Z", "2026-05-10T00:00:03.000Z"} {
+		srv.Push(dumps.Event{V: 1, ID: string(rune('a' + i)), TS: ts, Kind: "dump", Ctx: dumps.Context{Type: "cli", Site: "x"}})
+	}
+	prev := dumpsServer.Load()
+	dumpsServer.Store(srv)
+	t.Cleanup(func() { dumpsServer.Store(prev) })
+
+	var got struct {
+		Count  int    `json:"count"`
+		LastTS string `json:"last_ts"`
+	}
+	if err := json.Unmarshal(buildDumpsStatusJSON(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Count != 3 || got.LastTS != "2026-05-10T00:00:03.000Z" {
+		t.Errorf("count=%d last_ts=%q, want 3 and the newest event's time", got.Count, got.LastTS)
 	}
 }
