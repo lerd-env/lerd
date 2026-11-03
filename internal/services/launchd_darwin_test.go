@@ -98,6 +98,8 @@ func TestAllUnitStates_ReadsOneListInsteadOfPrintPerUnit(t *testing.T) {
 	t.Cleanup(func() { launchAgentsDirFn, containerSnapshotFn, launchctl = prevDir, prevSnap, prevLaunchctl })
 	launchAgentsDirFn = func() string { return dir }
 	containerSnapshotFn = func() map[string]bool { return map[string]bool{"lerd-mysql": true} }
+	forgetLaunchdJobs()
+	t.Cleanup(forgetLaunchdJobs)
 
 	prints := 0
 	launchctl = func(args ...string) ([]byte, error) {
@@ -140,5 +142,50 @@ func TestListedStatus_ContainerExitZeroDefersToPrint(t *testing.T) {
 	}
 	if _, ok := listedStatus("lerd-mysql", plist, nil, map[string]bool{}); ok {
 		t.Error("without a list every unit must defer to launchctl print")
+	}
+}
+
+// The dashboard's site and service snapshots read UnitStatus for every worker of
+// every site, about fifty launchctl prints a second with one tab open. Reads
+// inside the cache window share one list, read again once it is dropped.
+func TestUnitStatus_SharesOneListAndForgetsItOnMutation(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "lerd-queue-a.plist"), []byte("<plist/>"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	prevDir, prevLaunchctl := launchAgentsDirFn, launchctl
+	t.Cleanup(func() { launchAgentsDirFn, launchctl = prevDir, prevLaunchctl; forgetLaunchdJobs() })
+	launchAgentsDirFn = func() string { return dir }
+	forgetLaunchdJobs()
+
+	lists, prints, row := 0, 0, "412\t0\tcom.lerd.lerd-queue-a\n"
+	launchctl = func(args ...string) ([]byte, error) {
+		switch args[0] {
+		case "list":
+			lists++
+			return []byte(row), nil
+		case "print":
+			prints++
+		}
+		return nil, nil
+	}
+
+	m := &darwinServiceManager{}
+	for i := 0; i < 5; i++ {
+		if got, _ := m.UnitStatus("lerd-queue-a"); got != "active" {
+			t.Fatalf("UnitStatus = %q, want active", got)
+		}
+	}
+	if lists != 1 || prints != 0 {
+		t.Errorf("5 reads ran %d lists and %d prints, want 1 list and no print", lists, prints)
+	}
+
+	row = "-\t0\tcom.lerd.lerd-queue-a\n"
+	forgetLaunchdJobs()
+	if got, _ := m.UnitStatus("lerd-queue-a"); got != "inactive" {
+		t.Errorf("after the list was dropped UnitStatus = %q, want inactive", got)
+	}
+	if got, _ := m.UnitStatus("lerd-missing"); got != "unknown" {
+		t.Errorf("a unit with no plist and no job = %q, want unknown", got)
 	}
 }

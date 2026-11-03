@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
@@ -22,6 +23,7 @@ import (
 var launchctl = func(args ...string) ([]byte, error) {
 	if len(args) > 0 && launchctlMutates[args[0]] {
 		config.GuardRealLaunchd(strings.Join(args, " "))
+		forgetLaunchdJobs()
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -999,6 +1001,9 @@ func (m *darwinServiceManager) IsEnabled(name string) bool {
 // container is detached, so we fall back to checking whether the container
 // is actually running rather than trusting launchd's "state = waiting/exited".
 func (m *darwinServiceManager) UnitStatus(name string) (string, error) {
+	if state, ok := listedStatus(name, plistPath(name), cachedLaunchdJobs(), nil); ok {
+		return state, nil
+	}
 	return m.unitStatus(name, nil)
 }
 
@@ -1113,10 +1118,7 @@ func (m *darwinServiceManager) AllUnitStates() map[string]string {
 	}
 	// One `launchctl list` for the whole sweep too: a print per plist forked
 	// launchctl dozens of times every few seconds while the dashboard was open.
-	var jobs map[string]launchdJob
-	if list, err := launchctl("list"); err == nil {
-		jobs = parseLaunchctlList(string(list))
-	}
+	jobs := cachedLaunchdJobs()
 	out := make(map[string]string, len(matches)*2)
 	for _, path := range matches {
 		name := strings.TrimSuffix(filepath.Base(path), ".plist")
@@ -1141,6 +1143,40 @@ func (m *darwinServiceManager) AllUnitStates() map[string]string {
 type launchdJob struct {
 	running bool
 	status  string
+}
+
+// launchdJobs caches one `launchctl list` for launchdListTTL. Status reads ask
+// per unit, and the dashboard's site and service snapshots ask for every worker
+// of every site, so a print each forked launchctl dozens of times a second.
+var launchdJobs struct {
+	sync.Mutex
+	jobs map[string]launchdJob
+	at   time.Time
+}
+
+const launchdListTTL = 2 * time.Second
+
+// cachedLaunchdJobs returns the cached list, re-reading it once it is stale.
+// nil means launchctl list failed, so callers fall back to print.
+func cachedLaunchdJobs() map[string]launchdJob {
+	launchdJobs.Lock()
+	defer launchdJobs.Unlock()
+	if launchdJobs.jobs == nil || time.Since(launchdJobs.at) > launchdListTTL {
+		out, err := launchctl("list")
+		if err != nil {
+			return nil
+		}
+		launchdJobs.jobs = parseLaunchctlList(string(out))
+		launchdJobs.at = time.Now()
+	}
+	return launchdJobs.jobs
+}
+
+// forgetLaunchdJobs drops the cached list so a read after a start or stop sees it.
+func forgetLaunchdJobs() {
+	launchdJobs.Lock()
+	launchdJobs.jobs = nil
+	launchdJobs.Unlock()
 }
 
 // parseLaunchctlList reads `launchctl list` output into jobs keyed by label.
@@ -1168,6 +1204,9 @@ func listedStatus(name, plist string, jobs map[string]launchdJob, snapshot map[s
 	case job.running, containerRunning(name, snapshot):
 		return "active", true
 	case !loaded:
+		if _, err := os.Stat(plist); err != nil {
+			return "unknown", true
+		}
 		return "inactive", true
 	case job.status != "0":
 		return "failed", true
