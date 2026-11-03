@@ -1109,7 +1109,7 @@ var laravelFramework = &Framework{
 			Command:       "php artisan horizon",
 			ReloadCommand: "php artisan horizon:listen",
 			Restart:       "always",
-			Check:         &FrameworkRule{Composer: "laravel/horizon", WhenEnv: "QUEUE_CONNECTION=redis"},
+			Check:         &FrameworkRule{Composer: "laravel/horizon"},
 			ConflictsWith: []string{"queue"},
 		},
 	},
