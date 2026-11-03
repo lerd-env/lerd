@@ -94,6 +94,13 @@ func workerStartPreflight(sitePath, workerName string, w config.FrameworkWorker)
 	if msg := missingWorkerProgramMsg(workerName, sitePath, w); msg != "" {
 		return errors.New(msg)
 	}
+	return workerRulesBlock(sitePath, workerName, w)
+}
+
+// workerRulesBlock reports why check or exclude_check rule the worker out here.
+// lerd start asks too: a saved worker can stop applying (Horizon after a switch
+// away from Redis) and would otherwise start from its old unit.
+func workerRulesBlock(sitePath, workerName string, w config.FrameworkWorker) error {
 	if w.Check != nil && !config.MatchesRule(sitePath, *w.Check) {
 		if msg := hostWorkerNotReadyMsg(workerName, sitePath, w); msg != "" {
 			return errors.New(msg)
@@ -217,6 +224,9 @@ func errNoUsableNode() error {
 // Keeps the message short — the user only needs to know which dependency
 // triggered the gate, not the full rule shape.
 func describeRule(r config.FrameworkRule) string {
+	if r.WhenEnv != "" {
+		return describeRule(config.FrameworkRule{Composer: r.Composer, File: r.File}) + " with " + r.WhenEnv
+	}
 	switch {
 	case r.Composer != "":
 		return "composer package " + r.Composer

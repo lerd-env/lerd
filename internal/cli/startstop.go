@@ -565,7 +565,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 
 	// Restore quadlets and worker units that may be missing after an
 	// uninstall/reinstall cycle. Reads .lerd.yaml from each active site.
-	restoreSiteInfrastructure()
+	skip = append(skip, restoreSiteInfrastructure()...)
 
 	// Reconcile custom services against their YAMLs (issue #678): regenerate a
 	// missing quadlet, drop an orphan quadlet with no YAML. Data dirs untouched.
@@ -1087,10 +1087,30 @@ func restoreFrankenPHPQuadlet(s config.Site) {
 	}
 }
 
-func restoreSiteInfrastructure() {
+// restoreSavedWorker brings a worker saved in .lerd.yaml back on its site, or
+// stops it when its rules no longer hold there, reporting that it was ruled out.
+// .lerd.yaml keeps it either way, so it returns once the rules hold again.
+func restoreSavedWorker(siteName, sitePath, phpVersion, workerName string, w config.FrameworkWorker, enabled bool) bool {
+	if err := workerRulesBlock(sitePath, workerName, w); err != nil {
+		if enabled {
+			_ = WorkerStopForSite(siteName, sitePath, workerName)
+		}
+		feedback.Warn("%s: %v", siteName, err)
+		return true
+	}
+	if !enabled {
+		restoreWorker(siteName, sitePath, phpVersion, workerName, w)
+	}
+	return false
+}
+
+// restoreSiteInfrastructure returns the saved worker units whose rules no
+// longer hold on their site, which it has stopped, so the start pass leaves
+// them down.
+func restoreSiteInfrastructure() (ruledOut []string) {
 	reg, err := config.LoadSites()
 	if err != nil {
-		return
+		return nil
 	}
 
 	// FPM mounts the provided-env dir, so it has to exist before FPM starts.
@@ -1245,8 +1265,8 @@ func restoreSiteInfrastructure() {
 			if ok, _ := workerSupportedOnPlatform(wDef); !ok {
 				continue
 			}
-			if !parentEnabled {
-				restoreWorker(s.Name, s.Path, phpVersion, w, wDef)
+			if restoreSavedWorker(s.Name, s.Path, phpVersion, w, wDef, parentEnabled) {
+				ruledOut = append(ruledOut, unitName)
 			}
 			// Per-worktree host workers: rewrite each worktree's unit so
 			// stop/start cycles don't leave them stale. The parent unit
@@ -1268,6 +1288,11 @@ func restoreSiteInfrastructure() {
 					continue
 				}
 				if services.Mgr.IsEnabled(WorkerUnitName(s.Name, wt.Path, w)) {
+					continue
+				}
+				// Each checkout answers its own rules: a worktree can have the
+				// dependency its parent lacks.
+				if workerRulesBlock(wt.Path, w, wDef) != nil {
 					continue
 				}
 				wtPHP := config.WorktreePHPVersion(wt.Path, phpVersion)
@@ -1294,6 +1319,7 @@ func restoreSiteInfrastructure() {
 	cleanOrphanTimerUnits()
 
 	podman.DaemonReloadFn() //nolint:errcheck
+	return ruledOut
 }
 
 // cleanOrphanTimerUnits removes lerd-*.timer files whose sibling .service

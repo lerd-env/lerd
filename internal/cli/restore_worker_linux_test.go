@@ -5,6 +5,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -161,5 +162,48 @@ func TestRestoreWorker_devServer_keepsTheGeneratedConfig(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(site, "node_modules", ".lerd", "vite.config.mjs")); err != nil {
 		t.Errorf("expected the generated config on disk: %v", err)
+	}
+}
+
+// A worker saved in .lerd.yaml is stopped on lerd start once its rules stop
+// holding, Horizon after the site moved off Redis, and written back once they
+// hold again.
+func TestRestoreSavedWorker_followsTheRules(t *testing.T) {
+	dir := t.TempDir()
+	registerSite(t, "hq", dir)
+	if err := os.WriteFile(filepath.Join(dir, "composer.json"), []byte(`{"require": {"laravel/horizon": "^5.0"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	horizon := config.FrameworkWorker{
+		Command: "php artisan horizon",
+		Check:   &config.FrameworkRule{Composer: "laravel/horizon", WhenEnv: "QUEUE_CONNECTION=redis"},
+	}
+	writeEnv := func(conn string) {
+		if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("QUEUE_CONNECTION="+conn+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeEnv("database")
+	mgr := &captureWriteMgr{writeChange: true}
+	swapServiceMgr(t, mgr)
+	if !restoreSavedWorker("hq", dir, "8.4", "horizon", horizon, true) {
+		t.Error("horizon on database should be ruled out")
+	}
+	if !slices.Contains(mgr.disableCalls, "lerd-horizon-hq") {
+		t.Errorf("a running horizon should be disabled, got %v", mgr.disableCalls)
+	}
+	if len(mgr.writes) != 0 {
+		t.Errorf("no unit should be written for a ruled out worker, got %v", mgr.writes)
+	}
+
+	writeEnv("redis")
+	mgr = &captureWriteMgr{writeChange: true}
+	swapServiceMgr(t, mgr)
+	if restoreSavedWorker("hq", dir, "8.4", "horizon", horizon, false) {
+		t.Error("horizon on redis should not be ruled out")
+	}
+	if len(mgr.writes) == 0 || mgr.writes[0].name != "lerd-horizon-hq" {
+		t.Errorf("horizon on redis should be written back, got %v", mgr.writes)
 	}
 }

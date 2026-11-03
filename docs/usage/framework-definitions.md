@@ -429,6 +429,17 @@ workers:
     check:                        # only shown when check passes (optional)
       composer: symfony/messenger # matches a package composer installed, not
                                   # only one composer.json names
+      when_env: ""                # KEY=VALUE the site's .env must also hold (optional);
+                                  # an inline # comment after the value is ignored.
+                                  # Any rule takes it (check, exclude_check, a command's or
+                                  # a doctor check's). Horizon reads only Redis, so its check
+                                  # and the queue worker's exclude_check both carry
+                                  # `when_env: QUEUE_CONNECTION=redis`, and a site queueing
+                                  # to the database runs queue:work instead. Never write a
+                                  # rule with only when_env: an older binary drops the key,
+                                  # sees an empty rule and hides what it gates.
+    exclude_check:                # only shown when this rule fails (optional), e.g. queue
+      composer: laravel/horizon   # standing down for horizon
     conflicts_with:               # workers to stop before starting (optional)
       - other-worker
     proxy:                        # nginx proxy config (optional)

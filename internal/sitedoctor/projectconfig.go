@@ -244,6 +244,9 @@ func validateCommands(cfg *config.ProjectConfig) (problems, warnings []string) {
 // describeCheckRule renders a rule for a finding: the reader only needs the
 // dependency that triggered it, not the rule's shape.
 func describeCheckRule(r config.FrameworkRule) string {
+	if r.WhenEnv != "" {
+		return describeCheckRule(config.FrameworkRule{Composer: r.Composer, File: r.File}) + " with " + r.WhenEnv
+	}
 	switch {
 	case r.Composer != "":
 		return "composer package " + r.Composer

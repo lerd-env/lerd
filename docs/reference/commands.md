@@ -302,7 +302,7 @@ Each worker also gets commands under its own name, generated from the current pr
 |---|---|
 | `lerd queue:start` | Start a queue worker for the current project |
 | `lerd queue:stop` | Stop the queue worker for the current project |
-| `lerd horizon:start` | Start Laravel Horizon for the current project as a persistent background service |
+| `lerd horizon:start` | Start Laravel Horizon for the current project as a persistent background service. Horizon reads only Redis, so it runs on sites with `QUEUE_CONNECTION=redis`; on any other connection the regular queue worker runs instead |
 | `lerd horizon:stop` | Stop Horizon |
 | `lerd horizon:reload [on\|off]` | Toggle Horizon auto-reload on file changes for the current site; with no argument prints the current state. Needs the `chokidar` npm package |
 | `lerd reverb:start` | Start the Reverb WebSocket server for the current project as a persistent background service |

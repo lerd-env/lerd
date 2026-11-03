@@ -84,3 +84,39 @@ func TestValidateWorkerUnitFields_RejectsUnknownRestart(t *testing.T) {
 		}
 	}
 }
+
+// Horizon only reads Redis queues. On a site queueing to the database it would
+// run and process nothing, so it stands down there and the queue worker it
+// normally replaces is started instead.
+func TestWorkerStartPreflight_horizonFollowsTheQueueConnection(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "composer.json"), []byte(`{"require": {"laravel/horizon": "^5.0"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	onRedis := &config.FrameworkRule{Composer: "laravel/horizon", WhenEnv: "QUEUE_CONNECTION=redis"}
+	horizon := config.FrameworkWorker{Command: "php artisan horizon", Check: onRedis}
+	queue := config.FrameworkWorker{Command: "php artisan queue:work", ExcludeCheck: onRedis}
+
+	writeEnv := func(conn string) {
+		if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("QUEUE_CONNECTION="+conn+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeEnv("database")
+	err := workerStartPreflight(dir, "horizon", horizon)
+	if err == nil || !strings.Contains(err.Error(), "with QUEUE_CONNECTION=redis") {
+		t.Errorf("horizon on database should be refused naming the connection, got %v", err)
+	}
+	if err := workerStartPreflight(dir, "queue", queue); err != nil {
+		t.Errorf("queue on database should start, got %v", err)
+	}
+
+	writeEnv("redis")
+	if err := workerStartPreflight(dir, "horizon", horizon); err != nil {
+		t.Errorf("horizon on redis should start, got %v", err)
+	}
+	if err := workerStartPreflight(dir, "queue", queue); err == nil {
+		t.Error("queue on redis should stay superseded by horizon")
+	}
+}
