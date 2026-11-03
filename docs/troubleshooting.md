@@ -731,7 +731,7 @@ Symptom: right after the Podman Machine boots, `lerd update` or another command 
 
 Cause: FPM mounts the provided env directory from inside the VM, and a freshly booted machine does not have it until `lerd start` creates it. Podman refuses a bind mount whose source is missing.
 
-Fix: lerd now creates that directory before it writes the FPM container, so no earlier `lerd start` is needed. On an older version, run `lerd start` once and the error does not come back.
+Fix: lerd now creates that directory before it writes the FPM container, so no earlier `lerd start` is needed. On an older version, run `lerd start` after each Podman Machine boot before running a command that sets up PHP-FPM; the directory lives in memory and is gone after every boot.
 
 ### A project on an external drive is created inside the VM (macOS)
 
