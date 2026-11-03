@@ -139,8 +139,10 @@ func TestMatchesRule_WhenEnvAloneNeverMatches(t *testing.T) {
 func TestMatchesRule_WhenEnvIgnoresInlineComment(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "artisan"), "")
-	writeFile(t, filepath.Join(dir, ".env"), "QUEUE_CONNECTION=redis # local queue\n")
-	if !MatchesRule(dir, FrameworkRule{File: "artisan", WhenEnv: "QUEUE_CONNECTION=redis"}) {
-		t.Error("an inline comment should not change the value when_env compares")
+	for _, line := range []string{"QUEUE_CONNECTION=redis # local queue", `QUEUE_CONNECTION="redis" # local queue`} {
+		writeFile(t, filepath.Join(dir, ".env"), line+"\n")
+		if !MatchesRule(dir, FrameworkRule{File: "artisan", WhenEnv: "QUEUE_CONNECTION=redis"}) {
+			t.Errorf("%s should read as redis", line)
+		}
 	}
 }

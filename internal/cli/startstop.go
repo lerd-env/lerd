@@ -1087,6 +1087,23 @@ func restoreFrankenPHPQuadlet(s config.Site) {
 	}
 }
 
+// restoreSavedWorker brings a worker saved in .lerd.yaml back on its site, or
+// stops it when its rules no longer hold there, reporting that it was ruled out.
+// .lerd.yaml keeps it either way, so it returns once the rules hold again.
+func restoreSavedWorker(siteName, sitePath, phpVersion, workerName string, w config.FrameworkWorker, enabled bool) bool {
+	if err := workerRulesBlock(sitePath, workerName, w); err != nil {
+		if enabled {
+			_ = WorkerStopForSite(siteName, sitePath, workerName)
+		}
+		feedback.Warn("%s: %v", siteName, err)
+		return true
+	}
+	if !enabled {
+		restoreWorker(siteName, sitePath, phpVersion, workerName, w)
+	}
+	return false
+}
+
 // restoreSiteInfrastructure returns the saved worker units whose rules no
 // longer hold on their site, which it has stopped, so the start pass leaves
 // them down.
@@ -1248,17 +1265,8 @@ func restoreSiteInfrastructure() (ruledOut []string) {
 			if ok, _ := workerSupportedOnPlatform(wDef); !ok {
 				continue
 			}
-			// .lerd.yaml keeps the worker, so it comes back once its rules hold again.
-			if err := workerRulesBlock(s.Path, w, wDef); err != nil {
-				if parentEnabled {
-					_ = WorkerStopForSite(s.Name, s.Path, w)
-				}
-				feedback.Warn("%s: %v", s.Name, err)
+			if restoreSavedWorker(s.Name, s.Path, phpVersion, w, wDef, parentEnabled) {
 				ruledOut = append(ruledOut, unitName)
-				continue
-			}
-			if !parentEnabled {
-				restoreWorker(s.Name, s.Path, phpVersion, w, wDef)
 			}
 			// Per-worktree host workers: rewrite each worktree's unit so
 			// stop/start cycles don't leave them stale. The parent unit
@@ -1280,6 +1288,11 @@ func restoreSiteInfrastructure() (ruledOut []string) {
 					continue
 				}
 				if services.Mgr.IsEnabled(WorkerUnitName(s.Name, wt.Path, w)) {
+					continue
+				}
+				// Each checkout answers its own rules: a worktree can have the
+				// dependency its parent lacks.
+				if workerRulesBlock(wt.Path, w, wDef) != nil {
 					continue
 				}
 				wtPHP := config.WorktreePHPVersion(wt.Path, phpVersion)

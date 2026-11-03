@@ -2767,7 +2767,7 @@ func envHolds(dir, cond string) bool {
 	got := envfile.ReadKey(filepath.Join(dir, ".env"), key)
 	for i := 1; i < len(got); i++ {
 		if got[i] == '#' && (got[i-1] == ' ' || got[i-1] == '\t') {
-			got = strings.TrimSpace(got[:i])
+			got = strings.Trim(strings.TrimSpace(got[:i]), `"'`)
 			break
 		}
 	}
