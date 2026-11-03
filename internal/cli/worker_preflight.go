@@ -217,6 +217,9 @@ func errNoUsableNode() error {
 // Keeps the message short — the user only needs to know which dependency
 // triggered the gate, not the full rule shape.
 func describeRule(r config.FrameworkRule) string {
+	if r.WhenEnv != "" {
+		return describeRule(config.FrameworkRule{Composer: r.Composer, File: r.File}) + " with " + r.WhenEnv
+	}
 	switch {
 	case r.Composer != "":
 		return "composer package " + r.Composer

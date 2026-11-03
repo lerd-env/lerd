@@ -98,3 +98,38 @@ install:
 		t.Errorf("install block bound wrong: %+v", fw.Install)
 	}
 }
+
+// Horizon only reads Redis, so its worker and the queue worker it replaces are
+// gated on QUEUE_CONNECTION as well as the package. when_env narrows a rule: it
+// must hold in the site's .env on top of the rule's own match.
+func TestMatchesRule_WhenEnv(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "artisan"), "")
+	rule := FrameworkRule{File: "artisan", WhenEnv: "QUEUE_CONNECTION=redis"}
+
+	if MatchesRule(dir, rule) {
+		t.Error("when_env should fail with no .env")
+	}
+	writeFile(t, filepath.Join(dir, ".env"), "QUEUE_CONNECTION=database\n")
+	if MatchesRule(dir, rule) {
+		t.Error("when_env should fail when the value differs")
+	}
+	writeFile(t, filepath.Join(dir, ".env"), "QUEUE_CONNECTION=redis\n")
+	if !MatchesRule(dir, rule) {
+		t.Error("when_env should pass when the value matches")
+	}
+	if MatchesRule(dir, FrameworkRule{File: "missing", WhenEnv: "QUEUE_CONNECTION=redis"}) {
+		t.Error("when_env must not make a failing rule match")
+	}
+}
+
+// A rule holding only when_env is empty to an older binary, which drops the key,
+// and would hide whatever it gates there. It never matches here either, so the
+// store has no reason to write one.
+func TestMatchesRule_WhenEnvAloneNeverMatches(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, ".env"), "QUEUE_CONNECTION=redis\n")
+	if MatchesRule(dir, FrameworkRule{WhenEnv: "QUEUE_CONNECTION=redis"}) {
+		t.Error("a rule with only when_env must not match")
+	}
+}

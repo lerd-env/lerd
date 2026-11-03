@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/geodro/lerd/internal/envfile"
 	"gopkg.in/yaml.v3"
 )
 
@@ -662,6 +663,10 @@ type FrameworkRule struct {
 	VersionKey       string   `yaml:"version_key,omitempty" json:"version_key,omitempty"`             // dot-path to version in composer.json (e.g. extra.symfony.require)
 	VersionFile      string   `yaml:"version_file,omitempty" json:"version_file,omitempty"`           // file to read version from (relative to project root)
 	VersionPattern   string   `yaml:"version_pattern,omitempty" json:"version_pattern,omitempty"`     // regex with capture group for version (e.g. "\\$wp_version = '([^']+)'")
+	// WhenEnv ("KEY=value") narrows the rule to sites whose .env holds that
+	// value. It never matches alone: an older binary drops the key and sees an
+	// empty rule, so it must always ride on a field that binary still reads.
+	WhenEnv string `yaml:"when_env,omitempty" json:"when_env,omitempty"`
 }
 
 // FrameworkEnvConf describes how the framework manages its env file.
@@ -1076,7 +1081,7 @@ var laravelFramework = &Framework{
 			TuneCommand:    "php artisan queue:work --queue={queue} --tries={tries} --timeout={timeout}",
 			RestartCommand: "php artisan queue:restart",
 			Restart:        "always",
-			ExcludeCheck:   &FrameworkRule{Composer: "laravel/horizon"}, // horizon supersedes queue
+			ExcludeCheck:   &FrameworkRule{Composer: "laravel/horizon", WhenEnv: "QUEUE_CONNECTION=redis"}, // horizon supersedes queue, on redis only
 			RequiresService: &WorkerService{
 				Name:    "redis",
 				WhenEnv: "QUEUE_CONNECTION=redis",
@@ -1104,7 +1109,7 @@ var laravelFramework = &Framework{
 			Command:       "php artisan horizon",
 			ReloadCommand: "php artisan horizon:listen",
 			Restart:       "always",
-			Check:         &FrameworkRule{Composer: "laravel/horizon"},
+			Check:         &FrameworkRule{Composer: "laravel/horizon", WhenEnv: "QUEUE_CONNECTION=redis"},
 			ConflictsWith: []string{"queue"},
 		},
 	},
@@ -2728,6 +2733,9 @@ func MatchesDetectRule(dir string, rule FrameworkRule) bool {
 }
 
 func matchesRule(dir string, rule FrameworkRule, hasPackage func(string, string, ...string) bool) bool {
+	if rule.WhenEnv != "" && !envHolds(dir, rule.WhenEnv) {
+		return false
+	}
 	if rule.File != "" {
 		if _, err := os.Stat(filepath.Join(dir, rule.File)); err == nil {
 			return true
@@ -2747,6 +2755,13 @@ func matchesRule(dir string, rule FrameworkRule, hasPackage func(string, string,
 		}
 	}
 	return false
+}
+
+// envHolds reports whether the site's .env sets key to value for a "KEY=value"
+// condition. A condition without "=" never holds.
+func envHolds(dir, cond string) bool {
+	key, want, ok := strings.Cut(cond, "=")
+	return ok && envfile.ReadKey(filepath.Join(dir, ".env"), key) == want
 }
 
 func matchesFramework(dir string, fw *Framework) bool {
