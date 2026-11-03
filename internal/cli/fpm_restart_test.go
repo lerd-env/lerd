@@ -19,10 +19,13 @@ func stubEnsurePath(t *testing.T) {
 
 	origWrite, origBuild := writeFPMQuadlet, buildFPMImageTo
 	origXdebug, origStart, origRestart := ensureXdebugIni, startUnitFn, restartUnitFn
+	origEnvDir := ensureEnvDirFn
 	t.Cleanup(func() {
 		writeFPMQuadlet, buildFPMImageTo = origWrite, origBuild
 		ensureXdebugIni, startUnitFn, restartUnitFn = origXdebug, origStart, origRestart
+		ensureEnvDirFn = origEnvDir
 	})
+	ensureEnvDirFn = func() {}
 	writeFPMQuadlet = func(string) (bool, error) { return false, nil }
 	ensureXdebugIni = func(string) error { return nil }
 }
@@ -136,5 +139,27 @@ func TestEnsureFPMQuadletTo_restartsWhenTheUnitChanged(t *testing.T) {
 	}
 	if !reflect.DeepEqual(restarted, []string{"lerd-php83-fpm"}) {
 		t.Errorf("restarted = %v, want [lerd-php83-fpm]", restarted)
+	}
+}
+
+// On macOS FPM bind-mounts /run/lerd/env from the Podman Machine's tmpfs, which
+// a freshly booted machine lacks, so the dir has to exist before FPM starts on
+// every path that starts it, not only lerd start. Issue #2415.
+func TestEnsureFPMQuadletTo_createsTheEnvDirBeforeStarting(t *testing.T) {
+	stubEnsurePath(t)
+	var steps []string
+	ensureEnvDirFn = func() { steps = append(steps, "mkdir") }
+	startUnitFn = func(string) error { steps = append(steps, "start"); return nil }
+	restartUnitFn = func(string) error { steps = append(steps, "restart"); return nil }
+
+	for _, rebuilt := range []bool{false, true} {
+		steps = nil
+		buildFPMImageTo = func(_ string, _ bool, _ io.Writer) (bool, error) { return rebuilt, nil }
+		if err := ensureFPMQuadletTo("8.4", io.Discard); err != nil {
+			t.Fatalf("ensureFPMQuadletTo: %v", err)
+		}
+		if len(steps) != 2 || steps[0] != "mkdir" {
+			t.Errorf("rebuilt=%v: steps = %v, want the env dir made before the unit starts", rebuilt, steps)
+		}
 	}
 }

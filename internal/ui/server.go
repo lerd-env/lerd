@@ -6026,7 +6026,7 @@ func handleLerdUpdateTerminal(w http.ResponseWriter, r *http.Request) {
 // Extracted so tests can pin the absolute-path quoting without launching
 // a real terminal emulator.
 func buildUpdateScript(executable string) string {
-	return podman.ShellQuote(executable) + ` update; echo; read -rp "Press Enter to close..."`
+	return podman.ShellQuote(executable) + ` update; echo; printf 'Press Enter to close...'; read -r _`
 }
 
 // knownTerminalCommands is the fallback list for running a script, and the

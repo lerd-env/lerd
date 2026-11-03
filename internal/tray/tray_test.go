@@ -5,6 +5,8 @@ package tray
 import (
 	"bytes"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -86,5 +88,44 @@ func TestLerdBin_PrefersLookPathHit(t *testing.T) {
 
 	if got := lerdBin(); got != "/opt/from-path/lerd" {
 		t.Errorf("lerdBin() = %q, want LookPath result", got)
+	}
+}
+
+// macOS has none of the Linux terminals the tray tries, so the update item did
+// nothing there. It now asks lerd-ui, which opens Terminal or iTerm. Issue #2414.
+func TestOpenUpdateTerminal_FallsBackToLerdUI(t *testing.T) {
+	var gotMethod, gotCSRF string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/lerd/update-terminal" {
+			http.NotFound(w, r)
+			return
+		}
+		gotMethod, gotCSRF = r.Method, r.Header.Get("X-Lerd-CSRF")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+	prevBase, prevLook := apiBase, lookPathFn
+	t.Cleanup(func() { apiBase, lookPathFn = prevBase, prevLook })
+	apiBase = srv.URL
+	lookPathFn = func(string) (string, error) { return "", exec.ErrNotFound }
+
+	openUpdateTerminal("9.9.9")
+	if gotMethod != http.MethodPost || gotCSRF == "" {
+		t.Errorf("lerd-ui got method %q csrf %q, want a POST carrying the CSRF header", gotMethod, gotCSRF)
+	}
+}
+
+// A failure is written to the tray's log instead of vanishing.
+func TestOpenUpdateTerminal_LogsWhenNothingOpens(t *testing.T) {
+	prevLook, prevUI, prevW := lookPathFn, uiUpdateTerminal, lerdBinWarnW
+	t.Cleanup(func() { lookPathFn, uiUpdateTerminal, lerdBinWarnW = prevLook, prevUI, prevW })
+	lookPathFn = func(string) (string, error) { return "", exec.ErrNotFound }
+	uiUpdateTerminal = func() error { return errors.New("no terminal emulator found") }
+	var log bytes.Buffer
+	lerdBinWarnW = &log
+
+	openUpdateTerminal("9.9.9")
+	if !strings.Contains(log.String(), "no terminal emulator found") {
+		t.Errorf("log = %q, want the reason nothing opened", log.String())
 	}
 }

@@ -388,6 +388,7 @@ var (
 	ensureXdebugIni = podman.EnsureXdebugIni
 	startUnitFn     = podman.StartUnit
 	restartUnitFn   = podman.RestartUnit
+	ensureEnvDirFn  = ensureProvidedEnvDir
 )
 
 // ensureFPMQuadletTo is like ensureFPMQuadlet but writes build output to w.
@@ -415,6 +416,9 @@ func ensureFPMQuadletTo(phpVersion string, w io.Writer) error {
 	}
 
 	_ = ensureXdebugIni(phpVersion)
+	// FPM mounts the provided-env dir, which a freshly booted Podman Machine
+	// does not have yet, and podman refuses a missing bind source.
+	ensureEnvDirFn()
 
 	// A start is a no-op on an already-active unit, so a version whose image was
 	// just rebuilt here (the deferred half of a php:ext / php:pkg change) would
