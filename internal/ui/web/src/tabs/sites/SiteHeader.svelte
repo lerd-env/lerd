@@ -160,9 +160,12 @@
   // made the marker blink. Keyed by domain so another site's state never shows.
   let gitLast = $state<{ domain: string; checkouts: GitCheckout[] }>({ domain: '', checkouts: [] });
   const gitCheckouts = $derived(gitLast.domain === site.domain ? gitLast.checkouts : []);
+  // Keyed on a string, not the site object every snapshot replaces: rerunning
+  // the effect restarts the poll, and a restart reads git at once.
+  const gitPollDomain = $derived(showWorktreeTabs ? site.domain : '');
   $effect(() => {
-    const domain = site.domain;
-    if (!showWorktreeTabs) return;
+    const domain = gitPollDomain;
+    if (!domain) return;
     return pollWhileVisible(() => {
       loadGitStatus(domain)
         .then((checkouts) => (gitLast = { domain, checkouts }))
