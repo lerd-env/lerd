@@ -57,6 +57,8 @@ The banner is the only in-page surface for a downed worker. The `worker_failed` 
 
 The banner refresh is event-driven: the dashboard reloads health on every `sites` WebSocket push (debounced 500ms), so heal results show up without polling.
 
+On macOS a worker's state is read from one `launchctl list` that lerd reuses for up to two seconds, instead of a `launchctl print` per worker on every refresh. Starting, stopping or healing a worker drops that list, so the change shows on the next read. A worker the list does not show, which is every lerd job when lerd runs from an SSH shell outside your GUI session, is still asked about with `launchctl print`.
+
 ## TUI
 
 Press `H` from any pane to heal every failed worker on the box. The status line tracks progress; the snapshot reloads automatically once heal returns. Failing workers also show as red glyphs (`q`, `s`, `v`, `h`, `•`) in the site list, the same surface the dashboard banner reflects.
