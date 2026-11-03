@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -435,10 +436,29 @@ func runJSInstall(projectPath string, out io.Writer) error {
 		return fmt.Errorf("%s (lockfile present) not found on PATH — install it to hydrate node_modules", name)
 	}
 
-	if err := runIn(projectPath, out, bin, args...); err != nil {
+	if err := runInEnv(projectPath, out, nodeOnPath(os.Environ()), bin, args...); err != nil {
 		return fmt.Errorf("%s %s: %w", name, args[0], err)
 	}
 	return nil
+}
+
+// nodeOnPath puts lerd's bin dir, which holds the node shim, at the front of
+// PATH: pnpm and yarn start with `#!/usr/bin/env node`, and the watcher daemon's
+// launchd PATH has no node, so every install there exited 127.
+func nodeOnPath(env []string) []string {
+	out := make([]string, 0, len(env)+1)
+	path := ""
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
+			path = v
+			continue
+		}
+		out = append(out, kv)
+	}
+	if path == "" {
+		return append(out, "PATH="+config.BinDir())
+	}
+	return append(out, "PATH="+config.BinDir()+string(os.PathListSeparator)+path)
 }
 
 func hasFile(dir, name string) bool {
@@ -447,8 +467,14 @@ func hasFile(dir, name string) bool {
 }
 
 func runIn(dir string, out io.Writer, name string, args ...string) error {
+	return runInEnv(dir, out, nil, name, args...)
+}
+
+// runInEnv is runIn with an explicit environment; nil keeps the process's own.
+func runInEnv(dir string, out io.Writer, env []string, name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
+	cmd.Env = env
 	if out != nil {
 		cmd.Stdout = out
 		cmd.Stderr = out
