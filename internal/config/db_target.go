@@ -60,10 +60,9 @@ func defaultDBEnvBinding() DBEnvBinding {
 	return DBEnvBinding{File: ".env", Format: "dotenv", HostKey: "DB_HOST", NameKey: "DB_DATABASE"}
 }
 
-// frameworkForCache holds frameworkFor answers for frameworkForTTL. The services
-// snapshot asks for every site once per service, and each uncached answer reads
-// every framework and plugin definition from disk. A changed definition shows
-// once its entry expires, as the unit-state cache does.
+// frameworkForCache keeps frameworkFor answers for frameworkForTTL: the services
+// snapshot asks per site per service, and each miss reads every definition from
+// disk. A changed definition shows once its entry expires.
 var frameworkForCache struct {
 	sync.Mutex
 	entries map[string]frameworkForEntry
