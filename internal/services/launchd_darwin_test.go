@@ -151,7 +151,7 @@ func TestListedStatus_ContainerExitZeroDefersToPrint(t *testing.T) {
 // every site, about fifty launchctl prints a second with one tab open. Reads
 // inside the cache window share one list, read again once it is dropped.
 func TestUnitStatus_SharesOneListAndForgetsItOnMutation(t *testing.T) {
-	dir := t.TempDir()
+	dir := isolateUnitStatus(t)
 	if err := os.WriteFile(filepath.Join(dir, "lerd-queue-a.plist"), []byte("<plist/>"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func TestUnitStatus_SharesOneListAndForgetsItOnMutation(t *testing.T) {
 // A dashboard read that lands while bootstrap is still running caches the old
 // state, so the list has to be dropped again once the command returns.
 func TestLaunchctl_ForgetsListReadDuringMutation(t *testing.T) {
-	dir := t.TempDir()
+	dir := isolateUnitStatus(t)
 	if err := os.WriteFile(filepath.Join(dir, "lerd-queue-a.plist"), []byte("<plist/>"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -226,4 +226,19 @@ func TestLaunchctl_ForgetsListReadDuringMutation(t *testing.T) {
 	if got, _ := m.UnitStatus("lerd-queue-a"); got != "active" {
 		t.Errorf("read after bootstrap = %q, want active", got)
 	}
+}
+
+// isolateUnitStatus points plistPath at a fixture LaunchAgents dir and reports
+// every container as stopped, so UnitStatus reads nothing from the real machine.
+func isolateUnitStatus(t *testing.T) string {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, "Library", "LaunchAgents")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	prev := containerRunningFn
+	t.Cleanup(func() { containerRunningFn = prev })
+	containerRunningFn = func(string) bool { return false }
+	return dir
 }

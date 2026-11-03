@@ -133,6 +133,7 @@ var (
 	launchAgentsDirFn   = launchAgentsDir
 	containerSnapshotFn = func() map[string]bool { return podman.Cache.Snapshot() }
 	containerExistsFn   = podman.ContainerExists
+	containerRunningFn  = func(name string) bool { return podman.Cache.Running(name) }
 	removeContainerFn   = func(name string) {
 		podman.Cmd("stop", "-t", "5", name).Run() //nolint:errcheck
 		podman.Cmd("rm", "-f", name).Run()        //nolint:errcheck
@@ -148,7 +149,7 @@ func containerRunning(name string, snapshot map[string]bool) bool {
 	if snapshot != nil {
 		return snapshot[name]
 	}
-	return podman.Cache.Running(name)
+	return containerRunningFn(name)
 }
 
 func lerdLogsDir() string {
