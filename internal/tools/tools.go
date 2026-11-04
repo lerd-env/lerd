@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/node"
 	"github.com/geodro/lerd/internal/origin"
 	"gopkg.in/yaml.v3"
 )
@@ -448,10 +449,14 @@ type ToolStatus struct {
 	Pinned          string `json:"pinned"`
 	Present         bool   `json:"present"`
 	UpdateAvailable bool   `json:"update_available"`
+	// External marks a tool lerd uses but did not install: shown, never pinned
+	// or updated.
+	External bool `json:"external,omitempty"`
 }
 
-// StatusAll compares each installed tool with its pin. A mise lerd did not
-// install is the user's, not a managed tool, so it is left out entirely.
+// StatusAll compares each installed tool with its pin, then adds the Node
+// manager lerd drives if the user installed it, so the report covers what lerd
+// actually runs.
 func StatusAll(ctx context.Context) []ToolStatus {
 	m := Load(ctx)
 	out := make([]ToolStatus, 0, len(Names()))
@@ -468,7 +473,30 @@ func StatusAll(ctx context.Context) []ToolStatus {
 			UpdateAvailable: present && installed != "" && pin != "" && !sameVersion(installed, pin),
 		})
 	}
+	if s, ok := externalManager(); ok {
+		out = append(out, s)
+	}
 	return out
+}
+
+// externalManager reports the active Node manager when it is the user's own.
+// mise is probed directly: InstalledVersion would stamp it, and the stamp is
+// what marks a mise as lerd's to replace.
+func externalManager() (ToolStatus, bool) {
+	switch node.Active().Name() {
+	case "mise":
+		bin := node.MiseBinary()
+		if bin == "" || LerdOwned("mise") {
+			return ToolStatus{}, false
+		}
+		return ToolStatus{Name: "mise", Installed: probeVersion("mise", bin), Present: true, External: true}, true
+	case "nvm":
+		if !node.ScriptPresent() {
+			return ToolStatus{}, false
+		}
+		return ToolStatus{Name: "nvm", Installed: node.NvmVersion(), Present: true, External: true}, true
+	}
+	return ToolStatus{}, false
 }
 
 func sameVersion(a, b string) bool {

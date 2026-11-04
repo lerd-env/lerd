@@ -156,6 +156,51 @@ export async function streamPhpRebuild(
   await readBuildStream(res, onEvent);
 }
 
+export interface PhpUpdateResult {
+  name: string;
+  ok: boolean;
+  error?: string;
+}
+
+// updatePhpVersion runs one rebuild and always answers: a failure is carried in
+// the result so the rest of a batch still runs.
+async function updatePhpVersion(
+  version: string,
+  online?: (version: string, line: string) => void
+): Promise<PhpUpdateResult> {
+  // Stays a failure unless the stream reaches its done frame with ok.
+  let result: PhpUpdateResult = { name: version, ok: false, error: m.common_failed() };
+  try {
+    await streamPhpRebuild(version, (ev) => {
+      if (ev.done) result = ev.ok ? { name: version, ok: true } : { name: version, ok: false, error: ev.error || m.common_failed() };
+      else if (ev.line?.trim()) online?.(version, ev.line);
+    });
+  } catch (e) {
+    result = { name: version, ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
+  }
+  return result;
+}
+
+// updatePhpVersions follows the terminal: images rebuild together like `lerd
+// php:rebuild`, with the server taking restarts in turn, and native builds go
+// one at a time like `lerd php:update`. The batch is already confirmed.
+export async function updatePhpVersions(
+  versions: string[],
+  parallel: boolean,
+  onresult?: (result: PhpUpdateResult) => void,
+  online?: (version: string, line: string) => void
+): Promise<PhpUpdateResult[]> {
+  const one = async (version: string) => {
+    const result = await updatePhpVersion(version, online);
+    onresult?.(result);
+    return result;
+  };
+  if (parallel) return Promise.all(versions.map(one));
+  const results: PhpUpdateResult[] = [];
+  for (const version of versions) results.push(await one(version));
+  return results;
+}
+
 // BaseImageStatus compares a version's image against the prebuilt base it was
 // built from. null when there is nothing to report: no recorded base (a local
 // build) or a registry that could not answer.

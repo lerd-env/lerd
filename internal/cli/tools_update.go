@@ -29,6 +29,10 @@ func runToolsUpdate(_ *cobra.Command, _ []string) error {
 	updated, failed := 0, 0
 	var firstErr error
 	for _, s := range tools.StatusAll(context.Background()) {
+		if s.External {
+			feedback.Note(s.Name + " was not installed by lerd, leaving it alone")
+			continue
+		}
 		if !s.Present {
 			feedback.Note(s.Name + " is not installed, skipping")
 			continue

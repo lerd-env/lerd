@@ -1,12 +1,18 @@
 <script lang="ts">
   import DetailHeader from '$components/DetailHeader.svelte';
-  import { status, checkToolUpdates } from '$stores/status';
+  import { status, checkToolUpdates, type ToolStatus } from '$stores/status';
+  import { accessMode } from '$stores/accessMode';
   import ToolCard from '$components/ToolCard.svelte';
+  import ToolsUpdateModal from '$components/ToolsUpdateModal.svelte';
+  import DetailButton from '$components/DetailButton.svelte';
   import CheckUpdatesButton from '$components/CheckUpdatesButton.svelte';
   import { notifyLocalInfo } from '$lib/notify';
   import { m } from '../../paraglide/messages.js';
 
   const tools = $derived($status.tools ?? []);
+  const outdated = $derived(tools.filter((t) => t.update_available));
+  // What was outdated when the dialog opened, null while it is closed.
+  let updateBatch = $state<ToolStatus[] | null>(null);
 
   let checking = $state(false);
 
@@ -35,7 +41,14 @@
 
 <div class="flex-1 overflow-y-auto">
   <DetailHeader title={m.system_tools_title()}>
-    {#snippet trailing()}<CheckUpdatesButton onclick={runCheck} {checking} title={m.system_tools_checkTitle()} />{/snippet}
+    {#snippet trailing()}
+      <div class="flex items-center gap-2">
+        {#if outdated.length > 0 && $accessMode.localControl}
+          <DetailButton tone="success" onclick={() => (updateBatch = [...outdated])}>{m.services_updateAll()}</DetailButton>
+        {/if}
+        <CheckUpdatesButton onclick={runCheck} {checking} title={m.system_tools_checkTitle()} />
+      </div>
+    {/snippet}
   </DetailHeader>
 
   <div class="p-3 space-y-3">
@@ -48,3 +61,7 @@
     </div>
   </div>
 </div>
+
+{#if updateBatch}
+  <ToolsUpdateModal tools={updateBatch} onclose={() => (updateBatch = null)} />
+{/if}

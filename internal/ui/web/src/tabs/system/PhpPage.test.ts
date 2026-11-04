@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, fireEvent } from '@testing-library/svelte';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import PhpPage from './PhpPage.svelte';
 
@@ -6,12 +6,44 @@ import PhpPage from './PhpPage.svelte';
 vi.mock('./PhpDetail.svelte', async () => ({ default: (await import('../services/ServiceDetail.stub.svelte')).default }));
 import { phpVersions, phpVersionsLoaded } from '$stores/phpVersions';
 import { routeRest } from '$stores/route';
+import { status } from '$stores/status';
+import { accessMode } from '$stores/accessMode';
 
 describe('PhpPage', () => {
   beforeEach(() => {
     globalThis.fetch = (async () => new Response('{}', { status: 200 })) as unknown as typeof fetch;
     phpVersions.set(['8.4', '8.3']);
     phpVersionsLoaded.set(true);
+    status.update((s) => ({ ...s, php_fpms: [] }));
+    accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
+  });
+
+  it('hides Update all while every version is current', () => {
+    render(PhpPage);
+    expect(screen.queryByRole('button', { name: 'Update all' })).toBeNull();
+  });
+
+  it('opens the dialog on the versions that have an update', async () => {
+    status.update((s) => ({
+      ...s,
+      php_fpms: [
+        { version: '8.4', running: true, update_available: true },
+        { version: '8.3', running: true }
+      ] as never
+    }));
+    render(PhpPage);
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Update all' }));
+
+    expect(screen.getByText('PHP 8.4')).toBeInTheDocument();
+    expect(screen.queryByText('PHP 8.3')).toBeNull();
+  });
+
+  it('leaves Update all to the viewer with control', () => {
+    accessMode.set({ localControl: false, local: false, lanExposed: true, checked: true });
+    status.update((s) => ({ ...s, php_fpms: [{ version: '8.4', running: true, update_available: true }] as never }));
+    render(PhpPage);
+    expect(screen.queryByRole('button', { name: 'Update all' })).toBeNull();
   });
 
   // The page heads like every other system page: one title and its action in

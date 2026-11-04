@@ -72,6 +72,22 @@ func nvmScript() string {
 // nvm counts as one.
 func ScriptPresent() bool { return nvmScript() != "" }
 
+// nvmSelfVersionRe matches the version nvm.sh prints for `nvm --version`.
+var nvmSelfVersionRe = regexp.MustCompile(`"--version" \| "-v"\)\s+nvm_echo '([0-9.]+)'`)
+
+// NvmVersion reads nvm's version out of nvm.sh, since status is polled and
+// sourcing the script for it costs a shell each time. Empty when unreadable.
+func NvmVersion() string {
+	data, err := os.ReadFile(nvmScript())
+	if err != nil {
+		return ""
+	}
+	if match := nvmSelfVersionRe.FindSubmatch(data); match != nil {
+		return string(match[1])
+	}
+	return ""
+}
+
 // scriptToSource is nvmScript with $NVM_DIR/nvm.sh as the fallback. A fragment
 // generated on a host with no nvm still has to name a real path: the `[ -s ]`
 // guard in front of it is a runtime check, so a worker unit written before nvm

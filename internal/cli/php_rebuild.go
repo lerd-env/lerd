@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
@@ -138,11 +139,22 @@ func RebuildPHPVersion(version string, w io.Writer) error {
 		fmt.Fprintf(w, "  WARN: storing PHP-FPM image hash: %v\n", err)
 	}
 	fmt.Fprintln(w, "Restarting containers...")
+	restartAfterPHPRebuild(version)
+	fmt.Fprintf(w, "PHP %s image rebuilt.\n", version)
+	return nil
+}
+
+// phpRestartMu keeps parallel dashboard rebuilds from restarting at once, as
+// `lerd php:rebuild` does: a worker snapshot taken while another version's FPM
+// is down would miss the workers BindsTo just stopped.
+var phpRestartMu sync.Mutex
+
+func restartAfterPHPRebuild(version string) {
+	phpRestartMu.Lock()
+	defer phpRestartMu.Unlock()
 	running := runningInContainerWorkers()
 	applyPHPImageChange(version)
 	restartInContainerWorkers(running)
-	fmt.Fprintf(w, "PHP %s image rebuilt.\n", version)
-	return nil
 }
 
 // runningInContainerWorkers snapshots which of the declared podman-exec worker
