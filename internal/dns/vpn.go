@@ -2,23 +2,12 @@ package dns
 
 import (
 	"net"
-	"strings"
+
+	"github.com/geodro/lerd/internal/lanip"
 )
 
-// vpnIfacePrefixes are the interface-name prefixes used by VPN tunnels:
-// OpenVPN/WireGuard/AnyConnect tun*, macOS utun*, tap*, wg*, IPsec, ppp,
-// Cisco AnyConnect cscotun*, ProtonVPN proton*, Mullvad mullvad*.
-var vpnIfacePrefixes = []string{"tun", "utun", "tap", "wg", "ipsec", "ppp", "cscotun", "proton", "mullvad"}
-
 // isVPNIface reports whether an interface name belongs to a VPN tunnel.
-func isVPNIface(name string) bool {
-	for _, prefix := range vpnIfacePrefixes {
-		if strings.HasPrefix(name, prefix) {
-			return true
-		}
-	}
-	return false
-}
+func isVPNIface(name string) bool { return lanip.IsTunnelName(name) }
 
 // VPNActive reports whether a VPN tunnel interface is currently up. It is
 // used to word the "DNS degraded" hint and the doctor diagnostic, since a
