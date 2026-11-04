@@ -1438,6 +1438,8 @@
   "system_tools_checkUpToDate": "Ogni strumento è alla versione fissata",
   "system_tools_current": "aggiornato",
   "system_tools_description": "Binari autonomi che lerd installa e gestisce: Composer, mise e fnm.",
+  "system_tools_external": "tua installazione",
+  "system_tools_externalHint": "lerd lo usa, lo aggiorni tu.",
   "system_tools_notInstalled": "non installato",
   "system_tools_title": "Strumenti",
   "system_tools_updateAvailable": "{version} disponibile",

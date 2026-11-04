@@ -1438,6 +1438,8 @@
   "system_tools_checkUpToDate": "Tüm araçlar sabitlenen sürümde",
   "system_tools_current": "güncel",
   "system_tools_description": "lerd'in kurup yönettiği bağımsız ikili dosyalar: Composer, mise ve fnm.",
+  "system_tools_external": "sizin kurulumunuz",
+  "system_tools_externalHint": "lerd kullanır, güncellemeyi siz yaparsınız.",
   "system_tools_notInstalled": "kurulu değil",
   "system_tools_title": "Araçlar",
   "system_tools_updateAvailable": "{version} mevcut",

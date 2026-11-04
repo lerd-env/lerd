@@ -1438,6 +1438,8 @@
   "system_tools_checkUpToDate": "Todas as ferramentas estão na versão fixada",
   "system_tools_current": "atual",
   "system_tools_description": "Binários independentes que o lerd instala e gerencia: Composer, mise e fnm.",
+  "system_tools_external": "sua instalação",
+  "system_tools_externalHint": "o lerd usa, você atualiza.",
   "system_tools_notInstalled": "não instalado",
   "system_tools_title": "Ferramentas",
   "system_tools_updateAvailable": "{version} disponível",

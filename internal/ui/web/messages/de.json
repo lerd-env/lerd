@@ -1438,6 +1438,8 @@
   "system_tools_checkUpToDate": "Alle Tools sind auf ihrer angepinnten Version",
   "system_tools_current": "aktuell",
   "system_tools_description": "Eigenständige Binaries, die lerd installiert und verwaltet: Composer, mise und fnm.",
+  "system_tools_external": "deine Installation",
+  "system_tools_externalHint": "lerd nutzt es, du aktualisierst es.",
   "system_tools_notInstalled": "nicht installiert",
   "system_tools_title": "Tools",
   "system_tools_updateAvailable": "{version} verfügbar",

@@ -1438,6 +1438,8 @@
   "system_tools_checkUpToDate": "すべてのツールが固定バージョンです",
   "system_tools_current": "最新",
   "system_tools_description": "lerd がインストールして管理するスタンドアロンバイナリ: Composer、mise、fnm。",
+  "system_tools_external": "ユーザー導入",
+  "system_tools_externalHint": "lerd が使用し、更新はユーザーが行います。",
   "system_tools_notInstalled": "未インストール",
   "system_tools_title": "ツール",
   "system_tools_updateAvailable": "{version} が利用可能",

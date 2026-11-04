@@ -1438,6 +1438,8 @@
   "system_tools_checkUpToDate": "Chaque outil est à sa version épinglée",
   "system_tools_current": "à jour",
   "system_tools_description": "Binaires autonomes que lerd installe et gère : Composer, mise et fnm.",
+  "system_tools_external": "votre installation",
+  "system_tools_externalHint": "lerd l'utilise, vous le mettez à jour.",
   "system_tools_notInstalled": "non installé",
   "system_tools_title": "Outils",
   "system_tools_updateAvailable": "{version} disponible",

@@ -1438,6 +1438,8 @@
   "system_tools_checkUpToDate": "Mọi công cụ đều ở phiên bản đã ghim",
   "system_tools_current": "hiện tại",
   "system_tools_description": "Các tệp nhị phân độc lập mà lerd cài đặt và quản lý: Composer, mise và fnm.",
+  "system_tools_external": "bạn tự cài",
+  "system_tools_externalHint": "lerd sử dụng, bạn tự cập nhật.",
   "system_tools_notInstalled": "chưa cài đặt",
   "system_tools_title": "Công cụ",
   "system_tools_updateAvailable": "{version} khả dụng",
