@@ -1,6 +1,10 @@
 package dns
 
-import "os"
+import (
+	"os"
+
+	"github.com/geodro/lerd/internal/lanip"
+)
 
 // lerd0 is the always-up dummy link that keeps .test resolving when every real
 // network link is down. Only the Linux NetworkManager + systemd-resolved path
@@ -9,7 +13,7 @@ import "os"
 // file because the diagnostic chain is built for every platform and reports on
 // the link by name.
 const (
-	lerdDummyIface   = "lerd0"
+	lerdDummyIface   = lanip.DummyIface
 	lerdLinkUnitName = "lerd-dns-link.service"
 	lerdLinkUnit     = "/etc/systemd/system/lerd-dns-link.service"
 )

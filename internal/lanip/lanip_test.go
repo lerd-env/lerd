@@ -65,6 +65,14 @@ func TestPickV4(t *testing.T) {
 			{name: "en1", flags: 0, ips: ips("192.168.9.9")},
 			{name: "utun0", flags: p2p, ips: ips("172.16.0.2")},
 		}, ""},
+		{"lerd's dummy link is never the LAN address", "", []nic{
+			{name: "enp1s0", flags: 0, ips: ips("192.168.122.92")},
+			{name: "lerd0", flags: up, ips: ips("192.0.2.1")},
+		}, ""},
+		{"a public address still wins over the dummy link", "", []nic{
+			{name: "lerd0", flags: up, ips: ips("192.0.2.1")},
+			{name: "eth0", flags: up, ips: ips("203.0.113.5")},
+		}, "203.0.113.5"},
 	}
 	for _, c := range cases {
 		if got := pickV4(net.ParseIP(c.dialed), c.nics); got != c.want {

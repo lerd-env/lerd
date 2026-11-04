@@ -14,6 +14,10 @@ var tunnelPrefixes = []string{"tun", "utun", "tap", "wg", "ipsec", "ppp", "cscot
 
 var containerPrefixes = []string{"docker", "podman", "veth", "bridge", "br-", "vf-", "vz-"}
 
+// DummyIface is lerd's always-up link for offline .test resolution. Its
+// 192.0.2.1 is a placeholder only this host can use, so it is never picked.
+const DummyIface = "lerd0"
+
 // nic is the part of a host interface the address pick looks at.
 type nic struct {
 	name  string
@@ -94,11 +98,11 @@ func globalV6(ip net.IP) bool {
 	return ip != nil && ip.To4() == nil && ip.IsGlobalUnicast() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast()
 }
 
-// usable drops interfaces that are down, loopback or a VPN tunnel.
+// usable drops interfaces that are down, loopback, a VPN tunnel or lerd's dummy.
 func usable(nics []nic) []nic {
 	var out []nic
 	for _, n := range nics {
-		if n.flags&net.FlagUp != 0 && n.flags&net.FlagLoopback == 0 && !isTunnel(n) {
+		if n.flags&net.FlagUp != 0 && n.flags&net.FlagLoopback == 0 && n.name != DummyIface && !isTunnel(n) {
 			out = append(out, n)
 		}
 	}
