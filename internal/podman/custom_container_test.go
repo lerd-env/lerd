@@ -232,3 +232,16 @@ func TestBuildCustomImageArgs_NilConfigSafe(t *testing.T) {
 		t.Errorf("args = %v\nwant %v", args, want)
 	}
 }
+
+func TestIsCustomContainerName(t *testing.T) {
+	for _, name := range []string{"lerd-custom-nestapp", "lerd-custom-nestapp-feat-login"} {
+		if !IsCustomContainerName(name) {
+			t.Errorf("IsCustomContainerName(%q) = false, want true", name)
+		}
+	}
+	for _, name := range []string{"lerd-php85-fpm", "lerd-cfpm-app", "lerd-custom"} {
+		if IsCustomContainerName(name) {
+			t.Errorf("IsCustomContainerName(%q) = true, want false", name)
+		}
+	}
+}

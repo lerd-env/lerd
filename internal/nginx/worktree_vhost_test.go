@@ -214,3 +214,76 @@ func TestGeneratorsRenderFrameworkFastCGIParams(t *testing.T) {
 		}
 	}
 }
+
+// setupCustomWorktreeEnv registers a custom-container parent site and its
+// worktree checkout, so the custom-container branch vhost can be rendered
+// without a PHP-FPM upstream.
+func setupCustomWorktreeEnv(t *testing.T) (parentPath, worktreePath string) {
+	t.Helper()
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	parentPath = filepath.Join(tmp, "nestapp")
+	worktreePath = filepath.Join(tmp, "nestapp-feature")
+	for _, p := range []string{parentPath, worktreePath} {
+		if err := os.MkdirAll(p, 0755); err != nil {
+			t.Fatalf("mkdir %s: %v", p, err)
+		}
+	}
+
+	lerdDir := filepath.Join(tmp, "lerd")
+	if err := os.MkdirAll(lerdDir, 0755); err != nil {
+		t.Fatalf("mkdir lerd: %v", err)
+	}
+	sites := `sites:
+- name: nestapp
+  domains:
+    - nestapp.test
+  path: ` + parentPath + `
+  container_port: 8000
+`
+	if err := os.WriteFile(filepath.Join(lerdDir, "sites.yaml"), []byte(sites), 0644); err != nil {
+		t.Fatalf("write sites.yaml: %v", err)
+	}
+	return parentPath, worktreePath
+}
+
+// A worktree of a custom-container site must proxy to its own container, not
+// fall back to fastcgi_pass on the shared PHP-FPM pool.
+func TestGenerateWorktreeCustomVhostProxiesToBranchContainer(t *testing.T) {
+	_, wt := setupCustomWorktreeEnv(t)
+
+	if err := GenerateWorktreeCustomVhostFor("feature.nestapp.test", wt, "nestapp.test", "nestapp", "feature", false); err != nil {
+		t.Fatalf("GenerateWorktreeCustomVhostFor: %v", err)
+	}
+	out := readWorktreeConf(t, "feature.nestapp.test")
+
+	if !strings.Contains(out, `set $backend "lerd-custom-nestapp-feature";`) {
+		t.Errorf("branch vhost does not target the branch container:\n%s", out)
+	}
+	if !strings.Contains(out, "proxy_pass http://$backend:8000;") {
+		t.Errorf("branch vhost does not proxy to the custom port:\n%s", out)
+	}
+	if strings.Contains(out, "fastcgi_pass") {
+		t.Errorf("custom-container worktree fell back to fastcgi_pass:\n%s", out)
+	}
+}
+
+// The secured worktree variant reuses the parent's wildcard certificate and
+// keeps proxying to the branch container.
+func TestGenerateWorktreeCustomSSLVhostUsesParentCert(t *testing.T) {
+	_, wt := setupCustomWorktreeEnv(t)
+
+	if err := GenerateWorktreeCustomVhostFor("feature.nestapp.test", wt, "nestapp.test", "nestapp", "feature", true); err != nil {
+		t.Fatalf("GenerateWorktreeCustomVhostFor(ssl): %v", err)
+	}
+	out := readWorktreeConf(t, "feature.nestapp.test")
+
+	if !strings.Contains(out, "ssl_certificate /etc/nginx/certs/nestapp.test.crt;") {
+		t.Errorf("worktree SSL vhost does not use the parent wildcard cert:\n%s", out)
+	}
+	if !strings.Contains(out, `set $backend "lerd-custom-nestapp-feature";`) {
+		t.Errorf("worktree SSL vhost does not target the branch container:\n%s", out)
+	}
+}

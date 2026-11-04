@@ -23,6 +23,14 @@ func CustomImageName(siteName string) string {
 	return CustomContainerName(siteName) + ":local"
 }
 
+// IsCustomContainerName reports whether a container name belongs to a custom
+// container site (including one of its worktrees), whose unit bind-mounts the
+// project path itself. Callers that stage paths into the shared FPM container
+// can skip that work for these.
+func IsCustomContainerName(name string) bool {
+	return strings.HasPrefix(name, "lerd-custom-")
+}
+
 // ResolveContainerfile returns the absolute path to the Containerfile for a
 // project. If cfg specifies a Containerfile it is resolved relative to
 // projectPath; otherwise the default "Containerfile.lerd" is used.

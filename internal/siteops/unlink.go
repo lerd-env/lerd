@@ -89,6 +89,7 @@ func TeardownSite(site *config.Site, parkedDirs []string) {
 		_ = podman.StopUnit(podman.CustomContainerName(site.Name))
 		podman.RemoveCustomContainer(site.Name)
 		_ = podman.RemoveCustomContainerQuadlet(site.Name)
+		podman.RemoveAllCustomWorktreeContainers(site.Name)
 	}
 
 	// Same cleanup for FrankenPHP sites: stop and remove the per-site

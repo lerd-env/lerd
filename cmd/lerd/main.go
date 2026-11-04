@@ -613,6 +613,7 @@ func newWatchCmd() *cobra.Command {
 								fmt.Printf("[WARN] nginx reload: %v\n", err)
 							}
 						}
+						cli.CleanupStaleCustomWorktreeContainers(site)
 						cli.DropOrphanedWorktreeLANShares(site, liveBranchesForSite(site))
 						emitWorktreeEvent(plugins.EventWorktreeRemoved, sitePath, worktreeName)
 					},
@@ -1018,6 +1019,7 @@ func scanWorktrees() ([]func(), bool) {
 		if removeStaleWorktreeVhosts(&site, worktrees) {
 			generated = true
 		}
+		cli.CleanupStaleCustomWorktreeContainers(&site)
 		if len(worktrees) == 0 {
 			// A plain secured site never hits the worktree reissue below, so
 			// self-heal its leaf cert here: EnsureCert reuses a still-valid one
@@ -1046,6 +1048,15 @@ func scanWorktrees() ([]func(), bool) {
 					continue
 				}
 				fmt.Printf("Worktree vhost: %s -> %s (host proxy)\n", wt.Branch, wt.Domain)
+			} else if site.IsCustomContainer() {
+				// Same runtime as the parent: the branch gets its own
+				// container, and the vhost proxies to it. Routing is written
+				// here; the container itself starts in provisionWorktree.
+				if err := cli.GenerateCustomContainerWorktreeVhost(site, wt); err != nil {
+					fmt.Printf("[WARN] worktree custom container vhost for %s: %v\n", wt.Domain, err)
+					continue
+				}
+				fmt.Printf("Worktree vhost: %s -> %s (custom container)\n", wt.Branch, wt.Domain)
 			} else {
 				// Inheritance is intentionally NOT run on the boot rescan: it only
 				// fires on genuine creation (the "added" watcher event in
@@ -1094,6 +1105,11 @@ func provisionWorktree(site config.Site, wt gitpkg.Worktree) {
 			fmt.Printf("[WARN] worktree dev server for %s: %v\n", wt.Domain, err)
 		}
 		return
+	}
+	if site.IsCustomContainer() {
+		if err := cli.EnsureCustomContainerWorktreeContainer(site, wt); err != nil {
+			fmt.Printf("[WARN] worktree custom container for %s: %v\n", wt.Domain, err)
+		}
 	}
 	// Per-worktree host workers (e.g. vite) need to be (re)started at daemon
 	// boot too, not just when fsnotify fires onAdded. Without this, units
@@ -1203,6 +1219,26 @@ func syncWorktree(sitePath, worktreeName, action string, pruneStale bool) bool {
 				}
 			}
 			fmt.Printf("Worktree %s: %s -> %s (host proxy)\n", action, wt.Branch, wt.Domain)
+			return true
+		}
+		// A custom-container site keeps its runtime on every branch: the
+		// worktree gets its own container from the parent's image and nginx
+		// proxies the branch domain to it. Without this the branch falls back
+		// to the shared PHP-FPM pool and loses the parent's runtime.
+		if site.IsCustomContainer() {
+			if err := cli.SetupCustomContainerWorktree(*site, wt); err != nil {
+				fmt.Printf("[WARN] worktree custom container for %s: %v\n", wt.Domain, err)
+				return false
+			}
+			if site.Secured {
+				if reissueErr := certs.ReissueCertForWorktree(*site); reissueErr != nil {
+					fmt.Printf("[WARN] reissue cert for worktree %s: %v\n", wt.Domain, reissueErr)
+				}
+			}
+			if shouldAutoStartWorkersOnSync(action) {
+				cli.AutoStartOptedInWorktreeWorkers(site, wt.Path, site.PHPVersion)
+			}
+			fmt.Printf("Worktree %s: %s -> %s (custom container)\n", action, wt.Branch, wt.Domain)
 			return true
 		}
 		effectivePHP := config.WorktreePHPVersion(wt.Path, site.PHPVersion)

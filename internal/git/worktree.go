@@ -93,6 +93,23 @@ func DetectWorktrees(sitePath, siteDomain string) ([]Worktree, error) {
 	return result, nil
 }
 
+// BranchForWorktreePath returns the sanitized branch of the worktree checked
+// out at wtPath under sitePath, or "" when no metadata matches. Callers use it
+// to resolve per-worktree resources (a branch container, for one) from the
+// directory a command was run in.
+func BranchForWorktreePath(sitePath, wtPath string) string {
+	worktrees, err := DetectWorktrees(sitePath, "")
+	if err != nil {
+		return ""
+	}
+	for _, wt := range worktrees {
+		if config.SamePath(wt.Path, wtPath) {
+			return wt.Branch
+		}
+	}
+	return ""
+}
+
 // ServableWorktrees returns the worktrees that should be web-served for a site:
 // DetectWorktrees minus any whose subdomain is reserved by a group secondary.
 // Every path that generates a worktree vhost or certificate SAN should use this

@@ -885,6 +885,51 @@ func GenerateWorktreeVhostFor(domain, path, phpVersion, parentDomain, siteName, 
 	return GenerateWorktreeVhost(domain, path, phpVersion, siteName, branch)
 }
 
+// GenerateWorktreeCustomVhostFor renders a worktree vhost for a site served by
+// its own custom container. The worktree keeps the parent's runtime: nginx
+// reverse-proxies the branch domain to lerd-custom-<site>-<branch>:<port>
+// instead of falling back to fastcgi_pass on the shared PHP-FPM pool.
+//
+// The SSL variant reuses the parent's wildcard certificate, like the PHP
+// worktree path, so a secured site needs no per-branch certificate.
+func GenerateWorktreeCustomVhostFor(domain, path, parentDomain, siteName, branch string, secured bool) error {
+	site := worktreeSite(domain, path, siteName)
+	tmplName := "vhost-custom.conf.tmpl"
+	if secured {
+		tmplName = "vhost-custom-ssl.conf.tmpl"
+	}
+	tmplData, err := GetTemplate(tmplName)
+	if err != nil {
+		return err
+	}
+	tmpl, err := template.New(strings.TrimSuffix(tmplName, ".conf.tmpl")).Parse(string(tmplData))
+	if err != nil {
+		return err
+	}
+	devBase, devPort := detectSiteDevServer(site)
+	data := VhostData{
+		Domain:          domain,
+		ServerNames:     domain + " *." + domain,
+		CustomContainer: podman.CustomWorktreeContainerName(siteName, branch),
+		CustomPort:      site.ContainerPort,
+		BackendSSL:      site.ContainerSSL,
+		DevServerBase:   devBase,
+		DevServerPort:   devPort,
+		RequestTimeout:  resolveRequestTimeout(path, site.PHPVersion),
+		PageInjectConf:  pageInjectConf(siteName, branch),
+		LerdSite:        siteName,
+		LerdBranch:      branch,
+	}
+	if secured {
+		data.CertDomain = parentDomain
+	}
+	rendered, err := renderVhost(tmpl, data)
+	if err != nil {
+		return err
+	}
+	return writeConfD(domain, rendered)
+}
+
 // worktreeSite rebases the parent site onto the worktree checkout: same
 // framework and public_dir, but rooted at the worktree's path and domain, so
 // everything derived from it (document root, framework nginx block) resolves

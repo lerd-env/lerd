@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/podman"
 )
 
 // tempRoot is t.TempDir() with symlinks resolved, so a path spelled the way the
@@ -135,5 +136,58 @@ func TestSiteRootForFromTheOtherHomeSpelling(t *testing.T) {
 	dir := filepath.Join(root, "home", "u", "app", "database")
 	if got := SiteRootFor(dir); got != site {
 		t.Errorf("SiteRootFor(%q) = %q, want the registered %q", dir, got, site)
+	}
+}
+
+// A worktree of a custom-container site must exec into its own branch
+// container once lerd has created it, so `lerd php` and composer run the
+// branch's code rather than the parent checkout's.
+func TestFPMContainerForDir_CustomContainerWorktree(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	stubCustomImagePHP(t, true)
+
+	root := tempRoot(t)
+	site := filepath.Join(root, "app")
+	if err := os.MkdirAll(site, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "app", Path: site, ContainerPort: 8474}); err != nil {
+		t.Fatal(err)
+	}
+
+	wt := filepath.Join(root, "app-feat")
+	meta := filepath.Join(site, ".git", "worktrees", "feat")
+	for _, dir := range []string{wt, meta} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(meta, "gitdir"), []byte(filepath.Join(wt, ".git")+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(meta, "HEAD"), []byte("ref: refs/heads/feat/a\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: "+meta+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Before the branch container exists the parent remains the only reachable
+	// runtime, which is the pre-existing behaviour.
+	if got, want := FPMContainerForDir(wt, "8.5"), "lerd-custom-app"; got != want {
+		t.Errorf("FPMContainerForDir without a branch container = %q, want %q", got, want)
+	}
+
+	unit := podman.CustomWorktreeContainerName("app", "feat-a")
+	if err := os.MkdirAll(config.QuadletDir(), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(config.QuadletDir(), unit+".container"), []byte("[Container]\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := FPMContainerForDir(wt, "8.5"), unit; got != want {
+		t.Errorf("FPMContainerForDir in a worktree = %q, want %q", got, want)
 	}
 }

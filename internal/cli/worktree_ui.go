@@ -11,6 +11,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/lifecycle"
+	"github.com/geodro/lerd/internal/podman"
 )
 
 // warningCapturingWriter forwards every write to the underlying writer while
@@ -299,6 +300,9 @@ func RemoveWorktreeAndCleanup(site *config.Site, branch string, force, dropDB bo
 	}
 	gitArgs = append(gitArgs, wtPath)
 	stopWorktreeUnitsFn(site.Name, wtBase)
+	if site.IsCustomContainer() {
+		podman.RemoveCustomWorktreeContainer(site.Name, gitpkg.SanitizeBranch(branch))
+	}
 	logf(log, "Running: git %s", strings.Join(gitArgs, " "))
 	if err := gitpkg.Run(site.Path, log, gitArgs...); err != nil {
 		return fmt.Errorf("git worktree remove: %w", err)

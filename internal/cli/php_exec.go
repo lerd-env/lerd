@@ -149,14 +149,18 @@ func RunPHPVersionCaptureEnv(cwd, version string, args []string, extraEnv []stri
 
 	home := os.Getenv("HOME")
 
-	// A cwd the container can't reach (an ephemeral /tmp path, not parked and not
-	// listed under mounts:) makes `podman exec -w <cwd>` fail with an opaque crun
-	// chdir error. Refuse with a clear message instead (issue #949).
-	if !podman.PathVisible(cwd, version) && !podman.PathAutoMountable(cwd) {
-		return 0, fmt.Errorf("cannot run php from %s: lerd does not mount temporary system directories (/tmp, /var/tmp, /run) into the PHP container. Run from a path under your home directory or a parked directory, or add the path to mounts: in %s", cwd, config.GlobalConfigFile())
-	}
+	// A custom container unit bind-mounts its project path itself, so the
+	// shared FPM path checks and mounts do not apply to it.
+	if !podman.IsCustomContainerName(container) {
+		// A cwd the container can't reach (an ephemeral /tmp path, not parked and
+		// not listed under mounts:) makes `podman exec -w <cwd>` fail with an
+		// opaque crun chdir error. Refuse with a clear message instead (#949).
+		if !podman.PathVisible(cwd, version) && !podman.PathAutoMountable(cwd) {
+			return 0, fmt.Errorf("cannot run php from %s: lerd does not mount temporary system directories (/tmp, /var/tmp, /run) into the PHP container. Run from a path under your home directory or a parked directory, or add the path to mounts: in %s", cwd, config.GlobalConfigFile())
+		}
 
-	podman.EnsurePathMounted(cwd, version)
+		podman.EnsurePathMounted(cwd, version)
+	}
 
 	// PHP runs the first non-option operand as its script. When that script is an
 	// absolute path the container can't read (e.g. /tmp/ide-phpinfo.php written by

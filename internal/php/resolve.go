@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/geodro/lerd/internal/config"
+	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -113,8 +114,16 @@ var customImageHasPHPFn = podman.CustomImageHasPHP
 // the shared container, where the project is visible through the home mount and
 // php is actually present.
 func FPMContainerForDir(dir, version string) string {
-	if _, parent, ok := WorktreeRootFor(dir); ok {
+	if wt, parent, ok := WorktreeRootFor(dir); ok {
 		if parent.IsCustomContainer() && customImageHasPHPFn(parent.Name) {
+			// A branch of a custom-container site gets its own container when
+			// lerd has created one. Exec into it so `lerd php`/composer in the
+			// checkout run the branch's code, not the parent's. Worktrees
+			// created before that container existed keep the parent fallback.
+			if branch := gitpkg.BranchForWorktreePath(parent.Path, wt); branch != "" &&
+				podman.CustomWorktreeQuadletExists(parent.Name, branch) {
+				return podman.CustomWorktreeContainerName(parent.Name, branch)
+			}
 			return podman.CustomContainerName(parent.Name)
 		}
 		return podman.FPMContainerName(*parent, version)

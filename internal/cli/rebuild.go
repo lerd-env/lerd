@@ -5,6 +5,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 )
@@ -65,6 +66,23 @@ func RebuildSite(name string) error {
 		return err
 	}
 	podman.StoreContainerfileHash(name, site.Path, proj.Container)
+
+	// Worktree containers run from the same image tag, so a rebuild has to
+	// recreate them too or a branch keeps serving the previous image.
+	if site.IsCustomContainer() {
+		if worktrees, err := gitpkg.ServableWorktrees(site.Path, site.PrimaryDomain()); err == nil {
+			for _, wt := range worktrees {
+				unit := podman.CustomWorktreeContainerName(name, wt.Branch)
+				if !podman.CustomWorktreeQuadletExists(name, wt.Branch) {
+					continue
+				}
+				podman.ResetFailedUnit(unit)
+				if err := podman.RestartUnit(unit); err != nil {
+					feedback.Warn("restarting worktree container %s: %v", wt.Branch, err)
+				}
+			}
+		}
+	}
 
 	feedback.Done("rebuilt and restarted " + feedback.Val(name))
 	return nil
