@@ -367,20 +367,20 @@ func WriteDnsmasqConfig(dir string) error {
 // none. Link-local and ULA are skipped: LAN-exposed mode publishes
 // reachable endpoints, and those scopes don't qualify.
 func primaryLANIPv6() string {
-	conn, err := net.Dial("udp6", "[2001:4860:4860::8888]:80")
-	if err == nil {
-		defer conn.Close()
-		ip := conn.LocalAddr().(*net.UDPAddr).IP
-		if ip.IsGlobalUnicast() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast() {
-			return ip.String()
-		}
-	}
 	ifaces, ifErr := net.Interfaces()
 	if ifErr != nil {
 		return ""
 	}
+	conn, err := net.Dial("udp6", "[2001:4860:4860::8888]:80")
+	if err == nil {
+		defer conn.Close()
+		ip := conn.LocalAddr().(*net.UDPAddr).IP
+		if ip.IsGlobalUnicast() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast() && !lanip.IsTunnelAddr(ifaces, ip) {
+			return ip.String()
+		}
+	}
 	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 || lanip.IsTunnelInterface(iface.Name) {
 			continue
 		}
 		addrs, _ := iface.Addrs()

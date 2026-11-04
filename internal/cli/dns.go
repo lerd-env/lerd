@@ -12,6 +12,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
+	"github.com/geodro/lerd/internal/lanip"
 	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
@@ -400,121 +401,11 @@ func reloadAndRestartUnit(unit string) error {
 	return nil
 }
 
-// detectPrimaryLANIP returns the host's primary LAN IPv4 address.
-// The UDP-dial trick is tried first; if the result comes from a VPN tunnel
-// (utun/tun/tap) we fall back to scanning physical interfaces.
+// detectPrimaryLANIP returns the host's primary LAN IPv4 address, skipping
+// VPN tunnels (see lanip.Primary).
 func detectPrimaryLANIP() (string, error) {
-	conn, err := net.Dial("udp4", "1.1.1.1:80")
-	if err == nil {
-		ip := conn.LocalAddr().(*net.UDPAddr).IP
-		conn.Close()
-		if name, ok := interfaceNameForIP(ip); ok && !isTunnelInterface(name) {
-			return ip.String(), nil
-		}
-		// Fell through: the route goes through a VPN tunnel — keep scanning below.
-	}
-
-	ifaces, ifErr := net.Interfaces()
-	if ifErr != nil {
-		return "", fmt.Errorf("listing interfaces: %w", ifErr)
-	}
-	// First pass: physical interfaces only (en*, eth*, wlan*).
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		if isTunnelInterface(iface.Name) || isContainerInterface(iface.Name) {
-			continue
-		}
-		if ip := firstPrivateV4(iface); ip != "" {
-			return ip, nil
-		}
-	}
-	// Second pass: any non-tunnel interface as a last resort.
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		if isTunnelInterface(iface.Name) {
-			continue
-		}
-		if ip := firstPrivateV4(iface); ip != "" {
-			return ip, nil
-		}
+	if ip := lanip.Primary(); ip != "" {
+		return ip, nil
 	}
 	return "", fmt.Errorf("no usable IPv4 address found")
-}
-
-// interfaceNameForIP returns the interface name that owns ip.
-func interfaceNameForIP(ip net.IP) (string, bool) {
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return "", false
-	}
-	for _, iface := range ifaces {
-		addrs, _ := iface.Addrs()
-		for _, addr := range addrs {
-			if ipnet, ok := addr.(*net.IPNet); ok && ipnet.IP.Equal(ip) {
-				return iface.Name, true
-			}
-		}
-	}
-	return "", false
-}
-
-// isTunnelInterface reports whether the interface looks like a VPN tunnel
-// (macOS utun*, Linux tun*/tap*, WireGuard wg*, etc.).
-func isTunnelInterface(name string) bool {
-	for _, prefix := range []string{"utun", "tun", "tap", "wg", "ipsec", "ppp"} {
-		if strings.HasPrefix(name, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-// isContainerInterface reports whether the interface belongs to a container network.
-func isContainerInterface(name string) bool {
-	for _, prefix := range []string{"docker", "podman", "veth", "bridge", "br-", "vf-", "vz-"} {
-		if strings.HasPrefix(name, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-// firstPrivateV4 returns the first RFC-1918 IPv4 address on iface, or "".
-func firstPrivateV4(iface net.Interface) string {
-	addrs, _ := iface.Addrs()
-	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok {
-			v4 := ipnet.IP.To4()
-			if v4 != nil && !v4.IsLoopback() && isPrivateV4(v4) {
-				return v4.String()
-			}
-		}
-	}
-	return ""
-}
-
-// isPrivateV4 reports whether ip is in an RFC-1918 private range.
-func isPrivateV4(ip net.IP) bool {
-	private := []struct{ net, mask [4]byte }{
-		{[4]byte{10, 0, 0, 0}, [4]byte{255, 0, 0, 0}},
-		{[4]byte{172, 16, 0, 0}, [4]byte{255, 240, 0, 0}},
-		{[4]byte{192, 168, 0, 0}, [4]byte{255, 255, 0, 0}},
-	}
-	for _, p := range private {
-		match := true
-		for i := range 4 {
-			if ip[i]&p.mask[i] != p.net[i] {
-				match = false
-				break
-			}
-		}
-		if match {
-			return true
-		}
-	}
-	return false
 }

@@ -1,9 +1,9 @@
 package watcher
 
 import (
-	"net"
 	"time"
 
+	"github.com/geodro/lerd/internal/lanip"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -203,15 +203,5 @@ func nginxIPForWrite(d hostGatewayDeps, live string) string {
 	return "127.0.0.1"
 }
 
-// primaryLANIP returns the local IPv4 address the kernel would use to reach
-// a public destination. Duplicates internal/podman/hosts.go's helper rather
-// than importing it, because we want this watcher cost to stay micro-level
-// and not pay for loading the podman package's init costs on every tick.
-func primaryLANIP() string {
-	conn, err := net.Dial("udp4", "1.1.1.1:80")
-	if err != nil {
-		return ""
-	}
-	defer conn.Close()
-	return conn.LocalAddr().(*net.UDPAddr).IP.String()
-}
+// primaryLANIP returns the host's LAN IPv4, skipping VPN tunnels.
+func primaryLANIP() string { return lanip.Primary() }

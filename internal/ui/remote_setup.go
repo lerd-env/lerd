@@ -13,6 +13,7 @@ import (
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/cli"
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/lanip"
 )
 
 // handleRemoteSetup serves the GET /api/remote-setup endpoint that hands a
@@ -180,32 +181,10 @@ func buildRemoteSetupScript(r *http.Request) (string, error) {
 	return fmt.Sprintf(remoteSetupScriptTemplate, serverIP, tld, caB64), nil
 }
 
-// detectPrimaryLANIP duplicates the logic in cli/dns.go (importing cli from
-// ui would create a cycle later if cli ever needed something from ui). The
-// dial trick discovers which interface the kernel would route a public
-// destination through, without sending any packets.
+// detectPrimaryLANIP returns the host's LAN IPv4, skipping VPN tunnels.
 func detectPrimaryLANIP() (string, error) {
-	conn, err := net.Dial("udp4", "1.1.1.1:80")
-	if err == nil {
-		defer conn.Close()
-		return conn.LocalAddr().(*net.UDPAddr).IP.String(), nil
-	}
-	ifaces, ifErr := net.Interfaces()
-	if ifErr != nil {
-		return "", fmt.Errorf("listing interfaces: %w", ifErr)
-	}
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		addrs, _ := iface.Addrs()
-		for _, addr := range addrs {
-			if ipnet, ok := addr.(*net.IPNet); ok {
-				if v4 := ipnet.IP.To4(); v4 != nil && !v4.IsLoopback() {
-					return v4.String(), nil
-				}
-			}
-		}
+	if ip := lanip.Primary(); ip != "" {
+		return ip, nil
 	}
 	return "", fmt.Errorf("no usable IPv4 address found")
 }
