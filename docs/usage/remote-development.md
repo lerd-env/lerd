@@ -86,10 +86,14 @@ This single command:
   devices. Managed databases, caches, and mail services remain loopback-only
   unless you explicitly enable their LAN access.
 - Restarts `lerd-nginx` so the new bind takes effect.
-- Updates the lerd-dns config so `.test` queries return the server's auto-detected LAN IP instead of `127.0.0.1`, and starts the userspace `lerd-dns-forwarder.service` that bridges `LAN-IP:5300` to `127.0.0.1:5300` (rootless pasta cannot accept LAN-side traffic on its own).
+- Updates the lerd-dns config so `.test` queries return the server's auto-detected LAN IP instead of `127.0.0.1` (see [How the LAN IP is picked](#how-the-lan-ip-is-picked)), and starts the userspace `lerd-dns-forwarder.service` that bridges `LAN-IP:5300` to `127.0.0.1:5300` (rootless pasta cannot accept LAN-side traffic on its own).
 - Persists `lan.exposed: true` in `~/.config/lerd/config.yaml` so reboots and reinstalls restore the exposed state.
 
 Reverse with `lerd lan:unexpose` (also revokes any outstanding remote-setup code). Inspect the current state with `lerd lan:status`.
+
+#### How the LAN IP is picked
+
+lerd asks the kernel which local address it would use to reach the internet. When a VPN holds the default route (Cloudflare WARP in Traffic and DNS mode, WireGuard, OpenVPN, AnyConnect, ProtonVPN, Mullvad), that address belongs to the tunnel and nothing on the LAN can reach it, so lerd skips it and uses the first private address on a physical interface (Wi-Fi or Ethernet) instead. A tunnel is recognised by its interface name (`utun*`, `tun*`, `wg*`, `cscotun*`, `proton*`, `mullvad*`, `CloudflareWARP`, ...) or by the point-to-point flag every tunnel carries. The IPv6 answer follows the same rule, and when the only global IPv6 left is on the tunnel lerd publishes no AAAA record. The VPN can stay on while you work: `.test` keeps resolving to the LAN address.
 
 #### Optional: expose managed services
 

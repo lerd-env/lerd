@@ -363,44 +363,6 @@ func WriteDnsmasqConfig(dir string) error {
 	return WriteDnsmasqConfigFor(dir, target)
 }
 
-// primaryLANIPv6 returns the host's primary global-unicast IPv6, or "" if
-// none. Link-local and ULA are skipped: LAN-exposed mode publishes
-// reachable endpoints, and those scopes don't qualify.
-func primaryLANIPv6() string {
-	conn, err := net.Dial("udp6", "[2001:4860:4860::8888]:80")
-	if err == nil {
-		defer conn.Close()
-		ip := conn.LocalAddr().(*net.UDPAddr).IP
-		if ip.IsGlobalUnicast() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast() {
-			return ip.String()
-		}
-	}
-	ifaces, ifErr := net.Interfaces()
-	if ifErr != nil {
-		return ""
-	}
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		addrs, _ := iface.Addrs()
-		for _, addr := range addrs {
-			ipnet, ok := addr.(*net.IPNet)
-			if !ok {
-				continue
-			}
-			ip := ipnet.IP
-			if ip.To4() != nil {
-				continue
-			}
-			if ip.IsGlobalUnicast() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast() {
-				return ip.String()
-			}
-		}
-	}
-	return ""
-}
-
 // deriveV6Target picks the AAAA target for .test mirroring v4's reach:
 // loopback or empty → ::1; LAN-exposed → host's primary global v6, or "" (no
 // AAAA record) when there is no reachable global v6.
@@ -412,7 +374,7 @@ func deriveV6Target(v4 string) string {
 	// ::1 here would answer remote AAAA queries with their own loopback, and
 	// flipping between a real v6 and ::1 as v6 connectivity comes and goes
 	// would churn the config. Omit AAAA entirely when there's no global v6.
-	return primaryLANIPv6()
+	return lanip.PrimaryV6()
 }
 
 // WriteDnsmasqConfigFor writes the lerd dnsmasq config with `target` as the
