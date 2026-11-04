@@ -329,7 +329,7 @@ lerd tools:update
 
 The pins are read from a manifest that is cached for a day, so a newly published pin can take that long to show up on its own. "Check for updates" on the Tools page re-reads it immediately, and a tool that falls behind also raises an `update_available` notification. The dashboard's System health card counts the tools with an update in a **Tools · N updates** pill. Each card on the Tools page has its own **Update** button, and **Update all** in the page header, or that pill, lists the outdated tools with a switch each and updates the ones left on, one at a time, reporting a failure by tool name without stopping the rest.
 
-Tools that are already at their pinned version are left untouched, and tools that are deliberately absent (fnm on an nvm-managed setup) are skipped. A tool whose version shows as unknown, for example Composer after a `composer self-update`, is re-downloaded at the pinned version.
+Tools that are already at their pinned version are left untouched, and tools that are deliberately absent (fnm on an nvm-managed setup) are skipped. A mise or nvm you installed yourself is listed when it is the Node manager lerd drives, marked as your install in `lerd status` and on the Tools page, and is never updated: it has no pin, and `lerd tools:update` leaves it alone. A tool whose version shows as unknown, for example Composer after a `composer self-update`, is re-downloaded at the pinned version.
 
 Each tool is an independent download, so one that cannot be updated does not stop the others. The run carries on and closes with a count of what failed.
 

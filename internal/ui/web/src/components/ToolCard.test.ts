@@ -46,6 +46,25 @@ describe('ToolCard', () => {
     expect(version.className).toContain('text-gray-400');
   });
 
+  it('shows a tool the user installed as theirs, with no way to update it', () => {
+    render(ToolCard, {
+      props: { tool: tool({ name: 'mise', installed: '2026.9.12', pinned: '', external: true }) }
+    });
+    expect(screen.getByText('2026.9.12')).toBeInTheDocument();
+    expect(screen.getByText('your install')).toBeInTheDocument();
+    expect(screen.queryByText('current')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('keeps a user tool of unknown version marked as theirs', () => {
+    render(ToolCard, {
+      props: { tool: tool({ name: 'nvm', installed: '', pinned: '', external: true }) }
+    });
+    expect(screen.getByText('?')).toBeInTheDocument();
+    expect(screen.getByText('your install')).toBeInTheDocument();
+    expect(screen.queryByText('version unknown')).not.toBeInTheDocument();
+  });
+
   it('applies the update from the card and reports the tool that failed', async () => {
     updateTool.mockResolvedValue({ ok: false, error: 'checksum mismatch for composer' });
 

@@ -1438,6 +1438,8 @@
   "system_tools_checkUpToDate": "所有工具均为固定版本",
   "system_tools_current": "最新",
   "system_tools_description": "lerd 安装并管理的独立二进制文件:Composer、mise 和 fnm。",
+  "system_tools_external": "用户自装",
+  "system_tools_externalHint": "lerd 使用它，由你更新。",
   "system_tools_notInstalled": "未安装",
   "system_tools_title": "工具",
   "system_tools_updateAvailable": "{version} 可用",

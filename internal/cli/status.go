@@ -240,6 +240,8 @@ func runStatus(_ *cobra.Command, _ []string) error {
 			continue // deliberately absent when another manager drives Node
 		}
 		switch {
+		case s.External:
+			ok2(strings.TrimSpace(s.Name + " " + s.Installed + " (your install)"))
 		case !s.Present:
 			warn2(s.Name, "not installed — run: lerd install")
 		case s.UpdateAvailable:

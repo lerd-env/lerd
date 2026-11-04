@@ -29,7 +29,9 @@
 <div class="shrink-0 w-[11rem] flex flex-col gap-2.5 rounded-2xl border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card p-3">
   <div class="flex items-center justify-between gap-2">
     <span class="font-mono text-xs font-semibold text-gray-700 dark:text-gray-300">{tool.name}</span>
-    {#if !tool.present}
+    {#if tool.external}
+      <StatusPill tone="muted" label={m.system_tools_external()} />
+    {:else if !tool.present}
       <StatusPill tone="muted" label={m.system_tools_notInstalled()} />
     {:else if tool.update_available}
       <StatusPill tone="warn" label={m.system_lerd_updateTag()} />
@@ -54,6 +56,9 @@
         title={m.system_tools_updateTooltip({ name: tool.name, version: tool.pinned })}
       >{m.services_update()}</DetailButton>
     {/if}
+  {/if}
+  {#if tool.external}
+    <span class="text-xs text-gray-500 dark:text-gray-400">{m.system_tools_externalHint()}</span>
   {/if}
   {#if error}
     <p class="text-xs text-red-500 break-words" use:tooltip={error}>{error}</p>

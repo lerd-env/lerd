@@ -1438,6 +1438,8 @@
   "system_tools_checkUpToDate": "Every tool is at its pinned version",
   "system_tools_current": "current",
   "system_tools_description": "Standalone binaries lerd installs and manages: Composer, mise and fnm.",
+  "system_tools_external": "your install",
+  "system_tools_externalHint": "lerd uses it, you update it.",
   "system_tools_notInstalled": "not installed",
   "system_tools_title": "Tools",
   "system_tools_updateAvailable": "{version} available",

@@ -1438,6 +1438,8 @@
   "system_tools_checkUpToDate": "Elke tool staat op de vastgezette versie",
   "system_tools_current": "actueel",
   "system_tools_description": "Zelfstandige binaries die lerd installeert en beheert: Composer, mise en fnm.",
+  "system_tools_external": "jouw installatie",
+  "system_tools_externalHint": "lerd gebruikt het, jij werkt het bij.",
   "system_tools_notInstalled": "niet geïnstalleerd",
   "system_tools_title": "Tools",
   "system_tools_updateAvailable": "{version} beschikbaar",

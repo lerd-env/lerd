@@ -1438,6 +1438,8 @@
   "system_tools_checkUpToDate": "Fiecare unealtă este la versiunea fixată",
   "system_tools_current": "actual",
   "system_tools_description": "Binare de sine stătătoare pe care lerd le instalează și le administrează: Composer, mise și fnm.",
+  "system_tools_external": "instalat de tine",
+  "system_tools_externalHint": "lerd îl folosește, tu îl actualizezi.",
   "system_tools_notInstalled": "neinstalat",
   "system_tools_title": "Unelte",
   "system_tools_updateAvailable": "{version} disponibil",

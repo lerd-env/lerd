@@ -45,7 +45,8 @@ export interface StatusResponse {
   // Identifier of the lerd-ui process that answered. A change means the server
   // restarted, so the page is reloaded onto the assets it now serves.
   instance?: string;
-  // Managed host binaries (composer, mise, fnm) against their pinned versions.
+  // Managed host binaries against their pinned versions, plus the Node manager
+  // lerd drives when the user installed it (external: shown, never updated).
   tools?: ToolStatus[];
 }
 
@@ -55,6 +56,7 @@ export interface ToolStatus {
   pinned: string;
   present: boolean;
   update_available: boolean;
+  external?: boolean;
 }
 
 const empty: StatusResponse = {
