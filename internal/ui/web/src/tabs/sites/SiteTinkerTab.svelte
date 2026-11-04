@@ -2,7 +2,7 @@
   import { runTinker, fetchTinkerSnippets, saveTinkerSnippet, deleteTinkerSnippet, activeWorktreeDomain, type TinkerResponse, type TinkerSnippet, type Site } from '$stores/sites';
   import { modal, openErrorModal } from '$stores/modals';
   import { parseDump, looksLikeDump } from '$lib/dump-parser';
-  import { parseBlock, fontSize, FONT_MIN, FONT_MAX, splitRatio } from '$lib/tinker';
+  import { parseBlock, fontSize, FONT_MIN, FONT_MAX, splitRatio, SPLIT_MIN, SPLIT_MAX } from '$lib/tinker';
   import DumpView from '$components/DumpView.svelte';
   import Popover from '$components/Popover.svelte';
   import ConfirmModal from '$components/ConfirmModal.svelte';
@@ -153,6 +153,14 @@
     const r = splitEl.getBoundingClientRect();
     const share = splitDir === SplitDir.Horizontal ? (e.clientX - r.left) / r.width : (e.clientY - r.top) / r.height;
     ratio = splitRatio(String(Math.round(share * 100) / 100));
+  }
+
+  function nudge(e: KeyboardEvent) {
+    const [less, more] = splitDir === SplitDir.Horizontal ? ['ArrowLeft', 'ArrowRight'] : ['ArrowUp', 'ArrowDown'];
+    if (e.key === 'Enter') ratio = 0.5;
+    else if (e.key === less || e.key === more) ratio = splitRatio(String(Math.round((ratio + (e.key === less ? -0.05 : 0.05)) * 100) / 100));
+    else return;
+    e.preventDefault();
   }
 
   $effect(() => {
@@ -508,13 +516,17 @@
       role="separator"
       aria-orientation={splitDir === SplitDir.Horizontal ? 'vertical' : 'horizontal'}
       aria-valuenow={Math.round(ratio * 100)}
-      tabindex="-1"
-      class="group/split shrink-0 flex items-center justify-center touch-none {splitDir === SplitDir.Horizontal ? 'hidden md:flex w-3 cursor-col-resize' : 'h-3 cursor-row-resize'}"
+      aria-valuemin={SPLIT_MIN * 100}
+      aria-valuemax={SPLIT_MAX * 100}
+      aria-label={m.tinker_resizeSplit()}
+      tabindex="0"
+      class="group/split shrink-0 flex items-center justify-center touch-none outline-none focus-visible:ring-2 focus-visible:ring-lerd-red/50 rounded-sm {splitDir === SplitDir.Horizontal ? 'hidden md:flex w-3 cursor-col-resize' : 'h-3 cursor-row-resize'}"
       onpointerdown={startDrag}
       onpointermove={drag}
       onpointerup={() => (dragging = false)}
       onpointercancel={() => (dragging = false)}
       ondblclick={() => (ratio = 0.5)}
+      onkeydown={nudge}
     >
       <div class="rounded-full transition-colors {dragging ? 'bg-lerd-red' : 'bg-gray-300 dark:bg-lerd-border group-hover/split:bg-gray-400 dark:group-hover/split:bg-gray-500'} {splitDir === SplitDir.Horizontal ? 'w-0.5 h-8' : 'h-0.5 w-8'}"></div>
     </div>

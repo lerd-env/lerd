@@ -1558,6 +1558,7 @@
   "tinker_snippetsEmpty": "Ainda não há snippets. Salve o conteúdo do editor para reutilizá-lo aqui.",
   "tinker_splitHorizontalTitle": "Dividir lado a lado",
   "tinker_splitVerticalTitle": "Dividir empilhado",
+  "tinker_resizeSplit": "Redimensionar editor e saída",
   "tinker_textSize": "Tamanho do texto",
   "tinker_textSmaller": "Texto menor",
   "tinker_textLarger": "Texto maior",

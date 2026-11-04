@@ -1558,6 +1558,7 @@
   "tinker_snippetsEmpty": "還沒有程式碼片段。儲存編輯器內容即可在此重複使用。",
   "tinker_splitHorizontalTitle": "左右分割",
   "tinker_splitVerticalTitle": "上下分割",
+  "tinker_resizeSplit": "調整編輯器與輸出的大小",
   "tinker_textSize": "文字大小",
   "tinker_textSmaller": "縮小文字",
   "tinker_textLarger": "放大文字",

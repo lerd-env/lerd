@@ -1558,6 +1558,7 @@
   "tinker_snippetsEmpty": "还没有代码片段。保存编辑器内容即可在此复用。",
   "tinker_splitHorizontalTitle": "左右分屏",
   "tinker_splitVerticalTitle": "上下分屏",
+  "tinker_resizeSplit": "调整编辑器和输出的大小",
   "tinker_textSize": "文字大小",
   "tinker_textSmaller": "缩小文字",
   "tinker_textLarger": "放大文字",

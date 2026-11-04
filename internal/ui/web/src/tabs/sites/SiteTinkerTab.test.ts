@@ -198,6 +198,27 @@ describe('SiteTinkerTab resizable split', () => {
     expect(panes(split)[0].style.flexGrow).toBe('0.5');
   });
 
+  it('resizes from the keyboard along the split and resets on Enter', async () => {
+    const { getByRole } = render(SiteTinkerTab, { props: { site } });
+    const split = document.querySelector('[data-splitdir]') as HTMLElement;
+    const divider = getByRole('separator');
+    expect(divider.tabIndex).toBe(0);
+    await fireEvent.keyDown(divider, { key: 'ArrowLeft' });
+    expect(panes(split)[0].style.flexGrow).toBe('0.45');
+    await fireEvent.keyDown(divider, { key: 'ArrowDown' });
+    expect(panes(split)[0].style.flexGrow).toBe('0.45');
+    await fireEvent.keyDown(divider, { key: 'Enter' });
+    expect(panes(split)[0].style.flexGrow).toBe('0.5');
+  });
+
+  it('uses up and down in the vertical split', async () => {
+    localStorage.setItem('tinker:splitDir', 'vertical');
+    const { getByRole } = render(SiteTinkerTab, { props: { site } });
+    const split = document.querySelector('[data-splitdir]') as HTMLElement;
+    await fireEvent.keyDown(getByRole('separator'), { key: 'ArrowDown' });
+    expect(panes(split)[0].style.flexGrow).toBe('0.55');
+  });
+
   it('restores the stored ratio and resets to even on double click', async () => {
     localStorage.setItem('tinker:splitRatio', '0.25');
     const { getByRole } = render(SiteTinkerTab, { props: { site } });

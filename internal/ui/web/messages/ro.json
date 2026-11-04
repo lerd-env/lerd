@@ -1558,6 +1558,7 @@
   "tinker_snippetsEmpty": "Niciun snippet încă. Salvează conținutul editorului pentru a-l refolosi aici.",
   "tinker_splitHorizontalTitle": "Împarte alăturat",
   "tinker_splitVerticalTitle": "Împarte stivuit",
+  "tinker_resizeSplit": "Redimensionează editorul și rezultatul",
   "tinker_textSize": "Mărime text",
   "tinker_textSmaller": "Text mai mic",
   "tinker_textLarger": "Text mai mare",

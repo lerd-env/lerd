@@ -1558,6 +1558,7 @@
   "tinker_snippetsEmpty": "スニペットはまだありません。エディターの内容を保存するとここで再利用できます。",
   "tinker_splitHorizontalTitle": "左右に分割",
   "tinker_splitVerticalTitle": "上下に分割",
+  "tinker_resizeSplit": "エディターと出力のサイズを変更",
   "tinker_textSize": "文字サイズ",
   "tinker_textSmaller": "文字を小さく",
   "tinker_textLarger": "文字を大きく",

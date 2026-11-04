@@ -1558,6 +1558,7 @@
   "tinker_snippetsEmpty": "Pas encore de snippets. Enregistrez le contenu de l'éditeur pour le réutiliser ici.",
   "tinker_splitHorizontalTitle": "Séparer côte à côte",
   "tinker_splitVerticalTitle": "Séparer empilé",
+  "tinker_resizeSplit": "Redimensionner l'éditeur et la sortie",
   "tinker_textSize": "Taille du texte",
   "tinker_textSmaller": "Texte plus petit",
   "tinker_textLarger": "Texte plus grand",
