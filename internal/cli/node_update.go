@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/geodro/lerd/internal/feedback"
@@ -45,8 +46,11 @@ func updateNodeVersions(ctx context.Context, major string) error {
 			targets = append(targets, s)
 		}
 	}
-	if len(targets) == 0 && major != "" {
-		return fmt.Errorf("Node %s is not installed", major)
+	if len(targets) == 0 {
+		if major != "" {
+			return fmt.Errorf("Node %s is not installed", major)
+		}
+		return errors.New("found no installed Node versions to check")
 	}
 
 	updated, failed := 0, 0

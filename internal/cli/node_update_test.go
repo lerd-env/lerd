@@ -97,3 +97,13 @@ func TestUpdateNodeVersions_NothingBehindIsFine(t *testing.T) {
 		t.Errorf("updated %v", *updated)
 	}
 }
+
+// A manager that cannot list its versions looks the same as an empty host, and
+// neither is a reason to say Node is up to date.
+func TestUpdateNodeVersions_NothingListedIsAnError(t *testing.T) {
+	stubNodeUpdates(t, nil, "")
+
+	if err := updateNodeVersions(context.Background(), ""); err == nil {
+		t.Fatal("reported up to date without seeing a single version")
+	}
+}
