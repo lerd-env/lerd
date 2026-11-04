@@ -45,3 +45,14 @@ export function fontSize(stored: string | null): number {
   if (Number.isNaN(n)) return FONT_DEFAULT;
   return Math.min(FONT_MAX, Math.max(FONT_MIN, n));
 }
+
+export const SPLIT_MIN = 0.15;
+export const SPLIT_MAX = 0.85;
+
+// splitRatio turns the stored editor share of the tinker split into a usable
+// one, so neither pane can be dragged or hand-edited out of sight.
+export function splitRatio(stored: string | null): number {
+  const n = Number.parseFloat(stored ?? '');
+  if (Number.isNaN(n)) return 0.5;
+  return Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, n));
+}

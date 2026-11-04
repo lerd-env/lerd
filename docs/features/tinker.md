@@ -128,6 +128,7 @@ The editor contents are saved to `localStorage` under `tinker:{domain}:draft`, s
 | Duration | Shown after a run, in milliseconds. |
 | Snippets | Opens the snippets menu: load one into the editor, save the editor contents as a new or updated snippet, or delete one. See [Snippets](#snippets). |
 | Split direction | Flips the editor and output between side by side and stacked. Hidden on narrow screens, where stacked is the only sensible layout. The choice is remembered across sessions under `tinker:splitDir`. |
+| Divider | Drag the bar between the editor and output to resize them, left and right or top and bottom. Double click it to go back to an even split. The size is remembered across sessions under `tinker:splitRatio`. |
 | Full screen | Expands the editor and output to fill the viewport, hiding the surrounding navigation. The site domain, and the branch when you are on a worktree, appear next to the mode badge so you can see what you are running against. Press `Esc` or click the button again to leave. |
 | `Copy code` | Copies the editor contents to the clipboard. |
 | Clear | Wipes both the editor and the output. |

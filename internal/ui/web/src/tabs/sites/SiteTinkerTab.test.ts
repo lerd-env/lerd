@@ -139,6 +139,75 @@ describe('SiteTinkerTab split and full screen', () => {
   });
 });
 
+describe('SiteTinkerTab resizable split', () => {
+  // jsdom has no PointerEvent, so fireEvent builds a bare Event without coordinates.
+  beforeEach(() => {
+    if (!('PointerEvent' in window)) {
+      (window as any).PointerEvent = class extends MouseEvent {
+        pointerId: number;
+        constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 0; }
+      };
+    }
+  });
+  function layout(split: HTMLElement) {
+    split.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 600, right: 1000, bottom: 600, x: 0, y: 0, toJSON() {} });
+  }
+  const panes = (split: HTMLElement) => split.querySelectorAll<HTMLElement>(':scope > [data-pane]');
+
+  it('resizes the panes side by side when the divider is dragged', async () => {
+    const { getByRole } = render(SiteTinkerTab, { props: { site } });
+    const split = document.querySelector('[data-splitdir]') as HTMLElement;
+    layout(split);
+    const divider = getByRole('separator');
+    await fireEvent.pointerDown(divider, { clientX: 500, clientY: 300, pointerId: 1 });
+    await fireEvent.pointerMove(divider, { clientX: 300, clientY: 300, pointerId: 1 });
+    await fireEvent.pointerUp(divider, { pointerId: 1 });
+    const [editor, output] = panes(split);
+    expect(editor.style.flexGrow).toBe('0.3');
+    expect(output.style.flexGrow).toBe('0.7');
+    expect(localStorage.getItem('tinker:splitRatio')).toBe('0.3');
+  });
+
+  it('resizes top and bottom in the vertical split', async () => {
+    localStorage.setItem('tinker:splitDir', 'vertical');
+    const { getByRole } = render(SiteTinkerTab, { props: { site } });
+    const split = document.querySelector('[data-splitdir]') as HTMLElement;
+    layout(split);
+    const divider = getByRole('separator');
+    expect(divider.getAttribute('aria-orientation')).toBe('horizontal');
+    await fireEvent.pointerDown(divider, { clientX: 500, clientY: 300, pointerId: 1 });
+    await fireEvent.pointerMove(divider, { clientX: 500, clientY: 420, pointerId: 1 });
+    expect(panes(split)[0].style.flexGrow).toBe('0.7');
+  });
+
+  it('never collapses a pane past the bounds', async () => {
+    const { getByRole } = render(SiteTinkerTab, { props: { site } });
+    const split = document.querySelector('[data-splitdir]') as HTMLElement;
+    layout(split);
+    const divider = getByRole('separator');
+    await fireEvent.pointerDown(divider, { clientX: 500, clientY: 300, pointerId: 1 });
+    await fireEvent.pointerMove(divider, { clientX: -50, clientY: 300, pointerId: 1 });
+    expect(panes(split)[0].style.flexGrow).toBe('0.15');
+  });
+
+  it('ignores pointer moves without a drag in progress', async () => {
+    const { getByRole } = render(SiteTinkerTab, { props: { site } });
+    const split = document.querySelector('[data-splitdir]') as HTMLElement;
+    layout(split);
+    await fireEvent.pointerMove(getByRole('separator'), { clientX: 100, clientY: 300, pointerId: 1 });
+    expect(panes(split)[0].style.flexGrow).toBe('0.5');
+  });
+
+  it('restores the stored ratio and resets to even on double click', async () => {
+    localStorage.setItem('tinker:splitRatio', '0.25');
+    const { getByRole } = render(SiteTinkerTab, { props: { site } });
+    const split = document.querySelector('[data-splitdir]') as HTMLElement;
+    expect(panes(split)[0].style.flexGrow).toBe('0.25');
+    await fireEvent.dblClick(getByRole('separator'));
+    expect(panes(split)[0].style.flexGrow).toBe('0.5');
+  });
+});
+
 describe('SiteTinkerTab snippets menu', () => {
   const seedSnippet: TinkerSnippet = {
     name: 'seed.php',
