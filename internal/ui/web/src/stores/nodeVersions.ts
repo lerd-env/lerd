@@ -3,6 +3,26 @@ import { apiJson, apiFetch } from '$lib/api';
 
 export const nodeVersions = writable<string[]>([]);
 
+export interface NodeVersionStatus {
+  major: string;
+  installed: string;
+  latest?: string;
+  update_available: boolean;
+}
+
+// Fuller than nodeVersions and slower, since it can reach nodejs.org, so it
+// follows the list rather than holding it up.
+export const nodeVersionStatuses = writable<NodeVersionStatus[]>([]);
+
+async function loadNodeVersionStatuses() {
+  try {
+    const list = await apiJson<NodeVersionStatus[]>('/api/node-versions/status');
+    nodeVersionStatuses.set(Array.isArray(list) ? list : []);
+  } catch {
+    /* keep previous */
+  }
+}
+
 export async function loadNodeVersions() {
   try {
     const list = await apiJson<string[]>('/api/node-versions');
@@ -10,6 +30,57 @@ export async function loadNodeVersions() {
   } catch {
     /* keep previous */
   }
+  void loadNodeVersionStatuses();
+}
+
+// checkNodeUpdates re-reads the published releases with the day-long cache
+// bypassed, so a new patch shows up without waiting it out.
+export async function checkNodeUpdates(): Promise<{ ok: boolean; versions?: NodeVersionStatus[] }> {
+  try {
+    const res = await apiFetch('/api/node-versions/check', { method: 'POST' });
+    const out = (await res.json()) as { ok?: boolean; versions?: NodeVersionStatus[] };
+    if (out.versions) nodeVersionStatuses.set(out.versions);
+    return { ok: out.ok === true, versions: out.versions };
+  } catch {
+    return { ok: false };
+  }
+}
+
+// updateNodeVersion installs the newest patch of one major. It answers rather
+// than throws, so the card or dialog that asked can name what failed.
+export async function updateNodeVersion(major: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await apiFetch('/api/node-versions/' + encodeURIComponent(major) + '/update', {
+      method: 'POST'
+    });
+    return (await res.json()) as { ok: boolean; error?: string };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export interface NodeUpdateResult {
+  name: string;
+  ok: boolean;
+  error?: string;
+}
+
+// updateNodeVersions runs one at a time, like `lerd node:update`, and a failure
+// costs only that version. The batch is already confirmed.
+export async function updateNodeVersions(
+  majors: string[],
+  onresult?: (result: NodeUpdateResult) => void,
+  onstart?: (major: string) => void
+): Promise<NodeUpdateResult[]> {
+  const results: NodeUpdateResult[] = [];
+  for (const name of majors) {
+    onstart?.(name);
+    const result = { name, ...(await updateNodeVersion(name)) };
+    results.push(result);
+    onresult?.(result);
+  }
+  await loadNodeVersions();
+  return results;
 }
 
 export async function setDefaultNode(v: string): Promise<boolean> {
@@ -17,8 +88,10 @@ export async function setDefaultNode(v: string): Promise<boolean> {
     const res = await apiFetch('/api/node-versions/' + encodeURIComponent(v) + '/set-default', {
       method: 'POST'
     });
-    if (res.ok) await loadNodeVersions();
-    return res.ok;
+    // The handler answers a refused change with a 200, so the status says nothing.
+    const out = (await res.json().catch(() => ({}))) as { ok?: boolean };
+    if (out.ok) await loadNodeVersions();
+    return out.ok === true;
   } catch {
     return false;
   }

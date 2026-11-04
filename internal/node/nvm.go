@@ -121,11 +121,10 @@ func (nvmManager) shellCmd(args ...string) *exec.Cmd {
 	return exec.Command("bash", full...)
 }
 
-// listFull returns every installed full version (v stripped). --no-alias is
-// essential: without it `nvm ls` also prints alias lines like
-// "lts/iron -> v20.20.2 (-> N/A)" that reference versions which are not actually
-// installed, which would otherwise be miscounted as present.
-func (m nvmManager) listFull() []string {
+// ListFull returns every installed full version (v stripped). --no-alias keeps
+// out alias lines like "lts/iron -> v20.20.2 (-> N/A)", whose versions may not
+// be installed and would otherwise be miscounted as present.
+func (m nvmManager) ListFull() []string {
 	out, err := m.shellCmd("ls", "--no-colors", "--no-alias").Output()
 	if err != nil {
 		return nil
@@ -134,7 +133,7 @@ func (m nvmManager) listFull() []string {
 }
 
 func (m nvmManager) List() []string {
-	return dedupeMajors(m.listFull())
+	return dedupeMajors(m.ListFull())
 }
 
 func (m nvmManager) Install(version string) error {
@@ -145,7 +144,7 @@ func (m nvmManager) Install(version string) error {
 }
 
 func (m nvmManager) Uninstall(version string) error {
-	return uninstallVersions(version, m.listFull(), func(v string) error {
+	return uninstallVersions(version, m.ListFull(), func(v string) error {
 		if out, err := m.shellCmd("uninstall", v).CombinedOutput(); err != nil {
 			return fmt.Errorf("nvm uninstall %s: %s", v, strings.TrimSpace(string(out)))
 		}

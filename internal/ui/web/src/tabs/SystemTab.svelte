@@ -8,7 +8,7 @@
   import { routeRest, goToTab } from '$stores/route';
   import { status, statusLoaded, lerdStatusColor, allCoreRunning } from '$stores/status';
   import { phpVersions } from '$stores/phpVersions';
-  import { nodeVersions } from '$stores/nodeVersions';
+  import { nodeVersions, nodeVersionStatuses } from '$stores/nodeVersions';
   import { sitesByNode } from '$stores/sites';
   import { version } from '$stores/version';
   import { accessMode } from '$stores/accessMode';
@@ -95,6 +95,9 @@
       {#if $status.using_system_bun}
         <span class="text-[10px] font-medium shrink-0 text-amber-600 dark:text-amber-400">🥟 {$status.bun_version}</span>
       {:else}
+        {#if $nodeVersionStatuses.some((s) => s.update_available)}
+          <span class="ml-auto text-xs font-medium text-yellow-600 dark:text-yellow-400">{m.system_lerd_updateTag()}</span>
+        {/if}
         <span class="text-[10px] font-medium tabular-nums shrink-0 {selected === 'node' ? 'text-lerd-red/70' : 'text-gray-400 dark:text-gray-600'}">{$nodeVersions.length}</span>
       {/if}
     {/snippet}

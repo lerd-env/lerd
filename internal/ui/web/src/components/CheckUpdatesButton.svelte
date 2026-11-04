@@ -16,7 +16,7 @@
   } = $props();
 
   const sizing = $derived(
-    size === 'sm' ? 'px-2.5 py-1 rounded-md text-xs' : 'px-3 py-1.5 rounded-lg text-sm'
+    size === 'sm' ? 'px-2.5 py-1 rounded-md text-xs' : 'px-3 py-1.5 rounded-lg text-xs border border-gray-200 dark:border-lerd-border'
   );
 </script>
 
