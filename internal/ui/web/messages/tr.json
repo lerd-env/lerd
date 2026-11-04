@@ -1558,6 +1558,7 @@
   "tinker_snippetsEmpty": "Henüz snippet yok. Burada yeniden kullanmak için düzenleyici içeriğini kaydedin.",
   "tinker_splitHorizontalTitle": "Yan yana böl",
   "tinker_splitVerticalTitle": "Üst üste böl",
+  "tinker_resizeSplit": "Düzenleyici ve çıktıyı yeniden boyutlandır",
   "tinker_textSize": "Metin boyutu",
   "tinker_textSmaller": "Daha küçük metin",
   "tinker_textLarger": "Daha büyük metin",

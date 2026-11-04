@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { peelBlockMarker, parseBlock, fontSize, FONT_MIN, FONT_MAX } from '$lib/tinker';
+import { peelBlockMarker, parseBlock, fontSize, FONT_MIN, FONT_MAX, splitRatio, SPLIT_MIN, SPLIT_MAX } from '$lib/tinker';
 
 const US = String.fromCharCode(0x1f);
 const STX = String.fromCharCode(0x02);
@@ -48,5 +48,21 @@ describe('fontSize', () => {
   it('keeps the size inside the range', () => {
     expect(fontSize(String(FONT_MAX + 4))).toBe(FONT_MAX);
     expect(fontSize(String(FONT_MIN - 4))).toBe(FONT_MIN);
+  });
+});
+
+describe('splitRatio', () => {
+  it('defaults to an even split when nothing usable is stored', () => {
+    expect(splitRatio(null)).toBe(0.5);
+    expect(splitRatio('')).toBe(0.5);
+    expect(splitRatio('wide')).toBe(0.5);
+  });
+
+  it('keeps a stored ratio inside the bounds', () => {
+    expect(splitRatio('0.3')).toBe(0.3);
+    expect(splitRatio('0')).toBe(SPLIT_MIN);
+    expect(splitRatio('-1')).toBe(SPLIT_MIN);
+    expect(splitRatio('1')).toBe(SPLIT_MAX);
+    expect(splitRatio('Infinity')).toBe(SPLIT_MAX);
   });
 });

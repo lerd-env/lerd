@@ -1558,6 +1558,7 @@
   "tinker_snippetsEmpty": "No snippets yet. Save the editor contents to reuse them here.",
   "tinker_splitHorizontalTitle": "Split side by side",
   "tinker_splitVerticalTitle": "Split stacked",
+  "tinker_resizeSplit": "Resize editor and output",
   "tinker_textSize": "Text size",
   "tinker_textSmaller": "Smaller text",
   "tinker_textLarger": "Larger text",

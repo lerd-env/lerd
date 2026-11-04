@@ -1558,6 +1558,7 @@
   "tinker_snippetsEmpty": "Belum ada snippet. Simpan isi editor untuk digunakan kembali di sini.",
   "tinker_splitHorizontalTitle": "Bagi berdampingan",
   "tinker_splitVerticalTitle": "Bagi bertumpuk",
+  "tinker_resizeSplit": "Ubah ukuran editor dan keluaran",
   "tinker_textSize": "Ukuran teks",
   "tinker_textSmaller": "Teks lebih kecil",
   "tinker_textLarger": "Teks lebih besar",

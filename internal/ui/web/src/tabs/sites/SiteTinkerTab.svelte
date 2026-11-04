@@ -2,7 +2,7 @@
   import { runTinker, fetchTinkerSnippets, saveTinkerSnippet, deleteTinkerSnippet, activeWorktreeDomain, type TinkerResponse, type TinkerSnippet, type Site } from '$stores/sites';
   import { modal, openErrorModal } from '$stores/modals';
   import { parseDump, looksLikeDump } from '$lib/dump-parser';
-  import { parseBlock, fontSize, FONT_MIN, FONT_MAX } from '$lib/tinker';
+  import { parseBlock, fontSize, FONT_MIN, FONT_MAX, splitRatio, SPLIT_MIN, SPLIT_MAX } from '$lib/tinker';
   import DumpView from '$components/DumpView.svelte';
   import Popover from '$components/Popover.svelte';
   import ConfirmModal from '$components/ConfirmModal.svelte';
@@ -53,6 +53,11 @@
   // pane together so the two halves always read at the same size.
   const FONT_KEY = 'tinker:fontSize';
   let textSize = $state(fontSize(typeof localStorage === 'undefined' ? null : localStorage.getItem(FONT_KEY)));
+  // The editor's share of the split, global like the direction.
+  const RATIO_KEY = 'tinker:splitRatio';
+  let ratio = $state(splitRatio(typeof localStorage === 'undefined' ? null : localStorage.getItem(RATIO_KEY)));
+  let splitEl: HTMLDivElement | undefined = $state();
+  let dragging = $state(false);
   let fullscreen = $state(false);
   let fullscreenBtn: HTMLButtonElement | undefined;
   let panel: HTMLDivElement | undefined = $state();
@@ -131,6 +136,32 @@
       localStorage.setItem(SPLIT_KEY, splitDir);
     }
   });
+
+  $effect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(RATIO_KEY, String(ratio));
+    }
+  });
+
+  function startDrag(e: PointerEvent) {
+    dragging = true;
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  }
+
+  function drag(e: PointerEvent) {
+    if (!dragging || !splitEl) return;
+    const r = splitEl.getBoundingClientRect();
+    const share = splitDir === SplitDir.Horizontal ? (e.clientX - r.left) / r.width : (e.clientY - r.top) / r.height;
+    ratio = splitRatio(String(Math.round(share * 100) / 100));
+  }
+
+  function nudge(e: KeyboardEvent) {
+    const [less, more] = splitDir === SplitDir.Horizontal ? ['ArrowLeft', 'ArrowRight'] : ['ArrowUp', 'ArrowDown'];
+    if (e.key === 'Enter') ratio = 0.5;
+    else if (e.key === less || e.key === more) ratio = splitRatio(String(Math.round((ratio + (e.key === less ? -0.05 : 0.05)) * 100) / 100));
+    else return;
+    e.preventDefault();
+  }
 
   $effect(() => {
     if (typeof localStorage !== 'undefined') {
@@ -459,11 +490,14 @@
   </div>
 
   <div
-    class="flex-1 flex min-h-0 gap-3 {splitDir === SplitDir.Horizontal ? 'flex-col md:flex-row' : 'flex-col'}"
+    bind:this={splitEl}
+    class="flex-1 flex min-h-0 {splitDir === SplitDir.Horizontal ? 'flex-col md:flex-row gap-3 md:gap-0' : 'flex-col'} {dragging ? 'select-none' : ''}"
     data-splitdir={splitDir}
   >
     <div
-      class="group flex-1 min-h-40 md:min-h-0 flex flex-col rounded-lg border border-gray-200 dark:border-lerd-border overflow-hidden bg-gray-50 dark:bg-lerd-card relative"
+      data-pane
+      style="flex: {ratio} 1 0"
+      class="group min-h-40 md:min-h-0 flex flex-col rounded-lg border border-gray-200 dark:border-lerd-border overflow-hidden bg-gray-50 dark:bg-lerd-card relative"
     >
       <div class="flex-1 min-h-0 overflow-hidden">
         <MonacoEditor bind:value={code} language="php" onReady={onEditorReady} />
@@ -477,9 +511,30 @@
       {/if}
     </div>
 
+    <!-- Below md the horizontal split stacks, so dragging sideways means nothing there. -->
     <div
-      class="flex-1 min-h-30 md:min-h-0 flex flex-col overflow-y-auto rounded-lg border border-gray-200 dark:border-lerd-border bg-gray-50 dark:bg-lerd-card tinker-output py-2"
-      style="font-size: {textSize}px"
+      role="separator"
+      aria-orientation={splitDir === SplitDir.Horizontal ? 'vertical' : 'horizontal'}
+      aria-valuenow={Math.round(ratio * 100)}
+      aria-valuemin={SPLIT_MIN * 100}
+      aria-valuemax={SPLIT_MAX * 100}
+      aria-label={m.tinker_resizeSplit()}
+      tabindex="0"
+      class="group/split shrink-0 flex items-center justify-center touch-none outline-none focus-visible:ring-2 focus-visible:ring-lerd-red/50 rounded-sm {splitDir === SplitDir.Horizontal ? 'hidden md:flex w-3 cursor-col-resize' : 'h-3 cursor-row-resize'}"
+      onpointerdown={startDrag}
+      onpointermove={drag}
+      onpointerup={() => (dragging = false)}
+      onpointercancel={() => (dragging = false)}
+      ondblclick={() => (ratio = 0.5)}
+      onkeydown={nudge}
+    >
+      <div class="rounded-full transition-colors {dragging ? 'bg-lerd-red' : 'bg-gray-300 dark:bg-lerd-border group-hover/split:bg-gray-400 dark:group-hover/split:bg-gray-500'} {splitDir === SplitDir.Horizontal ? 'w-0.5 h-8' : 'h-0.5 w-8'}"></div>
+    </div>
+
+    <div
+      data-pane
+      style="flex: {1 - ratio} 1 0; font-size: {textSize}px"
+      class="min-h-30 md:min-h-0 flex flex-col overflow-y-auto rounded-lg border border-gray-200 dark:border-lerd-border bg-gray-50 dark:bg-lerd-card tinker-output py-2"
     >
       {#if !result && running}
         <p class="text-xs text-gray-400">{m.tinker_running()}</p>

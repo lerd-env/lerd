@@ -1558,6 +1558,7 @@
   "tinker_snippetsEmpty": "Ancora nessuno snippet. Salva il contenuto dell'editor per riutilizzarlo qui.",
   "tinker_splitHorizontalTitle": "Vista affiancata",
   "tinker_splitVerticalTitle": "Vista impilata",
+  "tinker_resizeSplit": "Ridimensiona editor e output",
   "tinker_textSize": "Dimensione testo",
   "tinker_textSmaller": "Testo più piccolo",
   "tinker_textLarger": "Testo più grande",

@@ -1558,6 +1558,7 @@
   "tinker_snippetsEmpty": "Noch keine Snippets. Speichere den Editor-Inhalt, um ihn hier wiederzuverwenden.",
   "tinker_splitHorizontalTitle": "Nebeneinander anordnen",
   "tinker_splitVerticalTitle": "Übereinander anordnen",
+  "tinker_resizeSplit": "Editor und Ausgabe skalieren",
   "tinker_textSize": "Textgröße",
   "tinker_textSmaller": "Kleinerer Text",
   "tinker_textLarger": "Größerer Text",

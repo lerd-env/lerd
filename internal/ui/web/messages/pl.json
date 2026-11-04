@@ -1558,6 +1558,7 @@
   "tinker_snippetsEmpty": "Nie ma jeszcze snippetów. Zapisz zawartość edytora, aby użyć jej tutaj ponownie.",
   "tinker_splitHorizontalTitle": "Widok obok siebie",
   "tinker_splitVerticalTitle": "Widok jeden pod drugim",
+  "tinker_resizeSplit": "Zmień rozmiar edytora i wyniku",
   "tinker_textSize": "Rozmiar tekstu",
   "tinker_textSmaller": "Mniejszy tekst",
   "tinker_textLarger": "Większy tekst",
