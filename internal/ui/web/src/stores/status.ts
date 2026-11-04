@@ -175,6 +175,29 @@ export async function updateTool(name: string): Promise<{ ok: boolean; error?: s
   }
 }
 
+export interface ToolUpdateResult {
+  name: string;
+  ok: boolean;
+  error?: string;
+}
+
+// updateTools applies each tool in turn, so a refused checksum costs that tool
+// alone and the rest still land. The caller has already confirmed the batch.
+export async function updateTools(
+  names: string[],
+  onresult?: (result: ToolUpdateResult) => void,
+  onstart?: (name: string) => void
+): Promise<ToolUpdateResult[]> {
+  const results: ToolUpdateResult[] = [];
+  for (const name of names) {
+    onstart?.(name);
+    const result = { name, ...(await updateTool(name)) };
+    results.push(result);
+    onresult?.(result);
+  }
+  return results;
+}
+
 // checkToolUpdates re-reads the published pins with the 24h cache bypassed.
 // The pins live in one manifest, so this is a single check for every tool
 // rather than one per card.

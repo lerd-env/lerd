@@ -10,7 +10,10 @@
   import { accessMode } from '$stores/accessMode';
   import { profilerEnabled } from '$stores/profiler';
   import { notifyPrefs } from '$lib/notify';
-  import { status, lerdStatusColor, dnsState } from '$stores/status';
+  import ToolsUpdateModal from '$components/ToolsUpdateModal.svelte';
+  import PhpUpdateModal from '$components/PhpUpdateModal.svelte';
+  import { status, lerdStatusColor, dnsState, type ToolStatus } from '$stores/status';
+  import { updatesLabel } from '$stores/services';
   import { sitesByPhp, sitesByNode } from '$stores/sites';
   import { goToTab } from '$stores/route';
   import { m } from '../../paraglide/messages.js';
@@ -33,13 +36,39 @@
     }
   });
 
-  const cardTone = $derived($lerdStatusColor === 'red' ? 'critical' : 'default');
+  const outdatedTools = $derived(($status.tools ?? []).filter((t) => t.update_available));
+  const outdatedPhp = $derived($status.php_fpms.filter((f) => f.update_available).map((f) => f.version));
+  // What was outdated when the dialog opened, null while it is closed.
+  let toolBatch = $state<ToolStatus[] | null>(null);
+  let phpBatch = $state<string[] | null>(null);
+
+  const cardTone = $derived(
+    $lerdStatusColor === 'red' ? 'critical' : outdatedTools.length + outdatedPhp.length > 0 ? 'warn' : 'default'
+  );
   onMount(loadPHPRuntime);
 </script>
 
 <DashboardCard title={m.dashboard_health_title()} tone={cardTone}>
   {#snippet badge()}
-    <StatusPill size="sm" tone={headerTone.tone} label={headerTone.label} />
+    <div class="flex flex-wrap items-center justify-end gap-1.5 min-w-0">
+      <StatusPill size="sm" tone={headerTone.tone} label={headerTone.label} />
+      {#if outdatedPhp.length > 0}
+        <StatusPill
+          size="sm"
+          tone="warn"
+          label={'PHP · ' + updatesLabel(outdatedPhp.length)}
+          onclick={$accessMode.localControl ? () => (phpBatch = [...outdatedPhp]) : undefined}
+        />
+      {/if}
+      {#if outdatedTools.length > 0}
+        <StatusPill
+          size="sm"
+          tone="warn"
+          label={m.system_tools_title() + ' · ' + updatesLabel(outdatedTools.length)}
+          onclick={$accessMode.localControl ? () => (toolBatch = [...outdatedTools]) : undefined}
+        />
+      {/if}
+    </div>
   {/snippet}
 
   {#if $status.dns?.enabled !== false}
@@ -119,6 +148,9 @@
             {#if count > 0}
               <span class="text-gray-500 dark:text-gray-400">· {count}</span>
             {/if}
+            {#if fpm.update_available}
+              <span role="img" class="text-yellow-600 dark:text-yellow-400" aria-label={m.system_php_baseUpdate()}>↑</span>
+            {/if}
           </span>
         {/each}
       </div>
@@ -178,3 +210,10 @@
     >{m.dashboard_health_open()}</button>
   {/snippet}
 </DashboardCard>
+
+{#if toolBatch}
+  <ToolsUpdateModal tools={toolBatch} onclose={() => (toolBatch = null)} />
+{/if}
+{#if phpBatch}
+  <PhpUpdateModal versions={phpBatch} onclose={() => (phpBatch = null)} />
+{/if}
