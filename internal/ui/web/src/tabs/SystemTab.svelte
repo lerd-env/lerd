@@ -82,6 +82,9 @@
       {@const anyFpmRunning = $status.php_fpms.some((f) => f.running)}
       {#snippet phpLeading()}<StatusDot color={anyFpmRunning ? 'green' : 'gray'} />{/snippet}
       {#snippet phpTrailing()}
+        {#if $status.php_fpms.some((f) => f.update_available)}
+          <span class="ml-auto text-xs font-medium text-yellow-600 dark:text-yellow-400">{m.system_lerd_updateTag()}</span>
+        {/if}
         <span class="text-[10px] font-medium tabular-nums shrink-0 {phpSelected ? 'text-lerd-red/70' : 'text-gray-400 dark:text-gray-600'}">{$phpVersions.length}</span>
       {/snippet}
       <ListRow active={phpSelected} onclick={() => select('php')} leading={phpLeading} trailing={phpTrailing}>PHP</ListRow>

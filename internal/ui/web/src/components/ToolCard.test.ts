@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/svelte';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import ToolCard from './ToolCard.svelte';
 import type { ToolStatus } from '$stores/status';
+import { accessMode } from '$stores/accessMode';
 
 const { updateTool } = vi.hoisted(() => ({ updateTool: vi.fn() }));
 vi.mock('$stores/status', async (importOriginal) => {
@@ -22,6 +23,7 @@ describe('ToolCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     updateTool.mockResolvedValue({ ok: true });
+    accessMode.set({ localControl: true, local: true, lanExposed: false, checked: true });
   });
 
   it('shows the installed version for an up-to-date tool', () => {
@@ -44,6 +46,25 @@ describe('ToolCard', () => {
     expect(version.className).toContain('text-gray-400');
   });
 
+  it('shows a tool the user installed as theirs, with no way to update it', () => {
+    render(ToolCard, {
+      props: { tool: tool({ name: 'mise', installed: '2026.9.12', pinned: '', external: true }) }
+    });
+    expect(screen.getByText('2026.9.12')).toBeInTheDocument();
+    expect(screen.getByText('your install')).toBeInTheDocument();
+    expect(screen.queryByText('current')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('keeps a user tool of unknown version marked as theirs', () => {
+    render(ToolCard, {
+      props: { tool: tool({ name: 'nvm', installed: '', pinned: '', external: true }) }
+    });
+    expect(screen.getByText('?')).toBeInTheDocument();
+    expect(screen.getByText('your install')).toBeInTheDocument();
+    expect(screen.queryByText('version unknown')).not.toBeInTheDocument();
+  });
+
   it('applies the update from the card and reports the tool that failed', async () => {
     updateTool.mockResolvedValue({ ok: false, error: 'checksum mismatch for composer' });
 
@@ -51,10 +72,29 @@ describe('ToolCard', () => {
       props: { tool: tool({ name: 'composer', installed: '2.10.2', pinned: '2.10.3', update_available: true }) }
     });
 
-    await fireEvent.click(screen.getByRole('button', { name: /2\.10\.3/ }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Update' }));
 
     expect(updateTool).toHaveBeenCalledWith('composer');
     expect(await screen.findByText(/checksum mismatch/)).toBeInTheDocument();
+  });
+
+  // The version line is information: the action is a button that says what it does.
+  it('keeps the pending version out of the button', () => {
+    render(ToolCard, {
+      props: { tool: tool({ name: 'composer', installed: '2.10.2', pinned: '2.10.3', update_available: true }) }
+    });
+    expect(screen.queryByRole('button', { name: /2\.10\.3/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Update' })).toBeInTheDocument();
+  });
+
+  // /api/tools is loopback-only, so a remote viewer would only get a refusal.
+  it('shows a remote viewer the update without the button', () => {
+    accessMode.set({ localControl: false, local: false, lanExposed: true, checked: true });
+    render(ToolCard, {
+      props: { tool: tool({ name: 'composer', installed: '2.10.2', pinned: '2.10.3', update_available: true }) }
+    });
+    expect(screen.getByText(/2\.10\.3/)).toBeInTheDocument();
+    expect(screen.queryByRole('button')).toBeNull();
   });
 
   it('offers no button when nothing is pending', () => {

@@ -4,8 +4,10 @@
   import DetailButton from '$components/DetailButton.svelte';
   import PhpDetail from './PhpDetail.svelte';
   import PhpVersionCard from './PhpVersionCard.svelte';
+  import PhpUpdateModal from '$components/PhpUpdateModal.svelte';
   import { phpVersions, phpVersionsLoaded } from '$stores/phpVersions';
   import { status } from '$stores/status';
+  import { accessMode } from '$stores/accessMode';
   import { sitesByPhp } from '$stores/sites';
   import { routeRest, goToTab } from '$stores/route';
   import { openPhpAddModal } from '$stores/modals';
@@ -75,19 +77,28 @@
   }
 
   const fpmFor = (v: string) => $status.php_fpms.find((f) => f.version === v);
+
+  const outdated = $derived($status.php_fpms.filter((f) => f.update_available).map((f) => f.version));
+  // What was outdated when the dialog opened, null while it is closed.
+  let updateBatch = $state<string[] | null>(null);
 </script>
 
 <DetailPanel>
   <DetailHeader title="PHP">
     {#snippet trailing()}
-      <DetailButton onclick={() => openPhpAddModal()} title={m.system_php_addHint()}>
-        {#snippet icon()}
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-          </svg>
-        {/snippet}
-        {m.system_php_add()}
-      </DetailButton>
+      <div class="flex items-center gap-2">
+        {#if outdated.length > 0 && $accessMode.localControl}
+          <DetailButton tone="success" onclick={() => (updateBatch = [...outdated])}>{m.services_updateAll()}</DetailButton>
+        {/if}
+        <DetailButton onclick={() => openPhpAddModal()} title={m.system_php_addHint()}>
+          {#snippet icon()}
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+          {/snippet}
+          {m.system_php_add()}
+        </DetailButton>
+      </div>
     {/snippet}
   </DetailHeader>
 
@@ -110,3 +121,7 @@
     <PhpDetail version={active} />
   {/if}
 </DetailPanel>
+
+{#if updateBatch}
+  <PhpUpdateModal versions={updateBatch} onclose={() => (updateBatch = null)} />
+{/if}

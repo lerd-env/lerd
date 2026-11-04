@@ -636,22 +636,133 @@ func TestInstalledVersion_SeesAMiseThatSelfUpdatedRightAway(t *testing.T) {
 	}
 }
 
-// A mise the user installed themselves sits in the same place, and lerd must
-// neither list it as its own nor claim it by stamping what it probed.
-func TestStatusAll_LeavesOutAMiseLerdDidNotInstall(t *testing.T) {
+// useNodeManager points the global config at a Node manager for one test.
+func useNodeManager(t *testing.T, manager string) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := os.MkdirAll(config.ConfigDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "node:\n  manager: " + manager + "\n"
+	if err := os.WriteFile(config.GlobalConfigFile(), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A mise the user installed themselves sits in the same place. lerd drives it,
+// so it is listed, but as theirs: no pin, no update, and probing it must not
+// write the stamp that would claim it.
+func TestStatusAll_ShowsTheUsersMiseReadOnly(t *testing.T) {
 	offline(t)
 	writeHostMise(t)
+	useNodeManager(t, "mise")
 	orig := probeOutput
 	t.Cleanup(func() { probeOutput = orig })
 	probeOutput = func(string, ...string) ([]byte, error) { return []byte("2026.10.2\n"), nil }
 
-	if s, ok := statusOf("mise"); ok {
-		t.Fatalf("the user's own mise is listed as managed: %+v", s)
+	s, ok := statusOf("mise")
+	if !ok {
+		t.Fatal("the mise lerd drives is missing from the tools")
+	}
+	if !s.External || !s.Present || s.Installed != "2026.10.2" {
+		t.Errorf("mise = %+v, want external, present, at 2026.10.2", s)
+	}
+	if s.Pinned != "" || s.UpdateAvailable {
+		t.Errorf("the user's mise was offered lerd's pin: %+v", s)
 	}
 	if v := InstalledVersion("mise"); v != "" {
 		t.Errorf("InstalledVersion(mise) = %q for a mise lerd did not install", v)
 	}
 	if _, err := os.Stat(filepath.Join(config.BinDir(), "mise.version")); err == nil {
 		t.Error("probing the user's mise stamped it as lerd's")
+	}
+}
+
+// A mise that happens to be on the host says nothing about lerd when another
+// manager drives Node.
+func TestStatusAll_LeavesOutAUsersMiseLerdDoesNotDrive(t *testing.T) {
+	offline(t)
+	writeHostMise(t)
+	useNodeManager(t, "fnm")
+
+	if s, ok := statusOf("mise"); ok {
+		t.Fatalf("listed a mise lerd does not use: %+v", s)
+	}
+}
+
+// A mise lerd installed stays managed, listed once.
+func TestStatusAll_ListsLerdsOwnMiseOnce(t *testing.T) {
+	offline(t)
+	writeHostMise(t)
+	useNodeManager(t, "mise")
+	if err := WriteStamp("mise", "2026.10.2"); err != nil {
+		t.Fatal(err)
+	}
+	orig := probeOutput
+	t.Cleanup(func() { probeOutput = orig })
+	probeOutput = func(string, ...string) ([]byte, error) { return []byte("2026.10.2\n"), nil }
+
+	seen := 0
+	for _, s := range StatusAll(context.Background()) {
+		if s.Name != "mise" {
+			continue
+		}
+		seen++
+		if s.External {
+			t.Errorf("lerd's own mise reads as the user's: %+v", s)
+		}
+	}
+	if seen != 1 {
+		t.Errorf("mise listed %d times, want once", seen)
+	}
+}
+
+// nvm is never lerd's, so it can only ever appear read only.
+func TestStatusAll_ShowsAnNvmLerdDrives(t *testing.T) {
+	offline(t)
+	t.Setenv("HOME", t.TempDir())
+	useNodeManager(t, "nvm")
+	dir := t.TempDir()
+	t.Setenv("NVM_DIR", dir)
+	script := "nvm() {\n  case $1 in\n    \"--version\" | \"-v\")\n      nvm_echo '0.40.3'\n    ;;\n  esac\n}\n"
+	if err := os.WriteFile(filepath.Join(dir, "nvm.sh"), []byte(script), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s, ok := statusOf("nvm")
+	if !ok {
+		t.Fatal("the nvm lerd drives is missing from the tools")
+	}
+	if !s.External || !s.Present || s.Installed != "0.40.3" || s.UpdateAvailable {
+		t.Errorf("nvm = %+v, want external, present, at 0.40.3, no update", s)
+	}
+}
+
+// An nvm.sh whose version cannot be read still counts as the tool lerd drives.
+func TestStatusAll_ShowsAnNvmOfUnknownVersion(t *testing.T) {
+	offline(t)
+	t.Setenv("HOME", t.TempDir())
+	useNodeManager(t, "nvm")
+	dir := t.TempDir()
+	t.Setenv("NVM_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, "nvm.sh"), []byte("# nothing here\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s, ok := statusOf("nvm")
+	if !ok || s.Installed != "" || !s.Present {
+		t.Errorf("nvm = %+v (listed %v), want present with no version", s, ok)
+	}
+}
+
+// Selecting nvm with no nvm on the host leaves nothing to show.
+func TestStatusAll_LeavesOutAMissingNvm(t *testing.T) {
+	offline(t)
+	t.Setenv("HOME", t.TempDir())
+	useNodeManager(t, "nvm")
+	t.Setenv("NVM_DIR", t.TempDir())
+
+	if s, ok := statusOf("nvm"); ok {
+		t.Fatalf("listed an nvm that is not there: %+v", s)
 	}
 }

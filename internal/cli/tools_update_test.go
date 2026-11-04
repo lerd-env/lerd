@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 // stubOutdatedTools makes the host look like one where composer and fnm are
@@ -80,4 +82,44 @@ func containsName(names []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// A tool the user installed is shown but never touched. An unknown version is
+// the case that bites: the loop reinstalls lerd's own tools when it sees one.
+func TestRunToolsUpdateLeavesTheUsersMiseAlone(t *testing.T) {
+	stubOutdatedTools(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := os.MkdirAll(config.ConfigDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config.GlobalConfigFile(), []byte("node:\n  manager: mise\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mise := filepath.Join(home, ".local", "bin", "mise")
+	if err := os.MkdirAll(filepath.Dir(mise), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(mise, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var attempted []string
+	orig := updateToolFn
+	t.Cleanup(func() { updateToolFn = orig })
+	updateToolFn = func(_ *pinnedTools, name string) error {
+		attempted = append(attempted, name)
+		return nil
+	}
+
+	if err := runToolsUpdate(nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if containsName(attempted, "mise") {
+		t.Errorf("tried to update the user's own mise: %v", attempted)
+	}
+	if !containsName(attempted, "composer") {
+		t.Errorf("lerd's own tools were not updated: %v", attempted)
+	}
 }

@@ -45,7 +45,8 @@ export interface StatusResponse {
   // Identifier of the lerd-ui process that answered. A change means the server
   // restarted, so the page is reloaded onto the assets it now serves.
   instance?: string;
-  // Managed host binaries (composer, mise, fnm) against their pinned versions.
+  // Managed host binaries against their pinned versions, plus the Node manager
+  // lerd drives when the user installed it (external: shown, never updated).
   tools?: ToolStatus[];
 }
 
@@ -55,6 +56,7 @@ export interface ToolStatus {
   pinned: string;
   present: boolean;
   update_available: boolean;
+  external?: boolean;
 }
 
 const empty: StatusResponse = {
@@ -173,6 +175,29 @@ export async function updateTool(name: string): Promise<{ ok: boolean; error?: s
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+export interface ToolUpdateResult {
+  name: string;
+  ok: boolean;
+  error?: string;
+}
+
+// updateTools applies each tool in turn, so a refused checksum costs that tool
+// alone and the rest still land. The caller has already confirmed the batch.
+export async function updateTools(
+  names: string[],
+  onresult?: (result: ToolUpdateResult) => void,
+  onstart?: (name: string) => void
+): Promise<ToolUpdateResult[]> {
+  const results: ToolUpdateResult[] = [];
+  for (const name of names) {
+    onstart?.(name);
+    const result = { name, ...(await updateTool(name)) };
+    results.push(result);
+    onresult?.(result);
+  }
+  return results;
 }
 
 // checkToolUpdates re-reads the published pins with the 24h cache bypassed.

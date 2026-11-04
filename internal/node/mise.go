@@ -64,6 +64,9 @@ func isExecutableFile(path string) bool {
 
 func (m miseManager) Available() bool { return m.bin != "" }
 
+// MiseBinary is the mise lerd drives on this host, empty when there is none.
+func MiseBinary() string { return newMiseManager().bin }
+
 // tool is the mise selector for a Node version: "node@22", or bare "node" when
 // there is no usable pin, so mise resolves what its own config asks for.
 // "default" is fnm's alias and names no version mise has.
