@@ -10,8 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/geodro/lerd/internal/atomicfile"
 	"github.com/geodro/lerd/internal/config"
 )
 
@@ -69,6 +71,10 @@ func majorOf(version string) string {
 	return strings.SplitN(version, ".", 2)[0]
 }
 
+// releaseMu serialises refreshes, so two dashboards share one fetch and a slow
+// failure cannot write back a cache older than a check that just finished.
+var releaseMu sync.Mutex
+
 type releaseCache struct {
 	CheckedAt time.Time         `json:"checked_at"`
 	Latest    map[string]string `json:"latest"`
@@ -82,6 +88,8 @@ func releaseCacheFile() string {
 // failed fetch keeps the previous answer, which is empty on a host that has
 // never had one, so the caller makes no update claim.
 func latestByMajor(ctx context.Context) map[string]string {
+	releaseMu.Lock()
+	defer releaseMu.Unlock()
 	var cache releaseCache
 	if data, err := os.ReadFile(releaseCacheFile()); err == nil {
 		_ = json.Unmarshal(data, &cache)
@@ -103,6 +111,8 @@ func latestByMajor(ctx context.Context) map[string]string {
 // CheckReleases re-reads the published releases past the day-long cache. A
 // failure leaves the last answer in place and is the caller's to report.
 func CheckReleases(ctx context.Context) error {
+	releaseMu.Lock()
+	defer releaseMu.Unlock()
 	latest, err := fetchLatestByMajor(ctx)
 	if err != nil {
 		return err
@@ -119,7 +129,7 @@ func writeReleaseCache(cache releaseCache) {
 	path := releaseCacheFile()
 	config.GuardRealWrite(path)
 	if os.MkdirAll(filepath.Dir(path), 0o755) == nil {
-		_ = os.WriteFile(path, data, 0o644)
+		_, _ = atomicfile.WriteIfChanged(path, data, 0o644)
 	}
 }
 
@@ -191,8 +201,9 @@ func applyUpdate(m Manager, s VersionStatus, defaultVersion string) (string, err
 	// fnm's default alias holds one exact version, so it has to be pointed again
 	// for a default of "24" to reach the new patch.
 	if defaultVersion == s.Major {
+		// Nothing reads as outdated now, so a retry would never get back here.
 		if err := m.SetDefault(s.Major); err != nil {
-			return "", err
+			return "", fmt.Errorf("Node %s is installed but the default did not move, run lerd node:use %s: %w", s.Latest, s.Major, err)
 		}
 	}
 	return s.Latest, nil

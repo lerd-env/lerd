@@ -15,7 +15,7 @@
   import { loadAccessMode, accessMode } from '$stores/accessMode';
   import { loadStatus, statusLoaded, allCoreRunning } from '$stores/status';
   import { loadPhpVersions } from '$stores/phpVersions';
-  import { loadNodeVersions } from '$stores/nodeVersions';
+  import { watchNodeVersions } from '$stores/nodeVersions';
   import { loadAutostart, startOnDashboardOpen } from '$stores/autostart';
   import { loadPalettes, watchThemeChanges } from '$stores/palettes';
   import { loadIdle } from '$stores/idle';
@@ -56,6 +56,8 @@
   import DashboardTab from '$tabs/DashboardTab.svelte';
   import PluginsDetail from '$tabs/system/PluginsDetail.svelte';
 
+  let stopNodeWatch: (() => void) | undefined;
+
   function handlePageHide() {
     disconnectWs();
   }
@@ -65,7 +67,7 @@
     loadAccessMode();
     loadStatus();
     loadPhpVersions();
-    loadNodeVersions();
+    stopNodeWatch = watchNodeVersions();
     loadAutostart();
     loadPalettes();
     watchThemeChanges();
@@ -93,6 +95,7 @@
 
   onDestroy(() => {
     window.removeEventListener('pagehide', handlePageHide);
+    stopNodeWatch?.();
     disconnectWs();
   });
 

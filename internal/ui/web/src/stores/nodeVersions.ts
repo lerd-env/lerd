@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { apiJson, apiFetch } from '$lib/api';
+import { pollWhileVisible } from '$lib/pollWhileVisible';
 
 export const nodeVersions = writable<string[]>([]);
 
@@ -81,6 +82,14 @@ export async function updateNodeVersions(
   }
   await loadNodeVersions();
   return results;
+}
+
+const WATCH_INTERVAL_MS = 5 * 60_000;
+
+// watchNodeVersions keeps an open dashboard honest: the terminal or another
+// browser can change the versions and neither tells this tab. Returns the stop.
+export function watchNodeVersions(): () => void {
+  return pollWhileVisible(() => void loadNodeVersions(), WATCH_INTERVAL_MS);
 }
 
 export async function setDefaultNode(v: string): Promise<boolean> {

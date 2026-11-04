@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -128,6 +130,7 @@ type fakeManager struct {
 	Manager
 	calls      []string
 	installErr error
+	defaultErr error
 }
 
 func (f *fakeManager) Install(v string) error {
@@ -137,7 +140,7 @@ func (f *fakeManager) Install(v string) error {
 
 func (f *fakeManager) SetDefault(v string) error {
 	f.calls = append(f.calls, "default "+v)
-	return nil
+	return f.defaultErr
 }
 
 var outdated = VersionStatus{Major: "24", Installed: "24.22.2", Latest: "24.22.3", UpdateAvailable: true}
@@ -220,5 +223,53 @@ func TestCheckReleases_FailureKeepsTheLastAnswer(t *testing.T) {
 	}
 	if got := latestByMajor(context.Background()); got["24"] != "24.22.2" {
 		t.Fatalf("lost the cached answer: %v", got)
+	}
+}
+
+// Nothing reads as out of date once the patch is in, so a retry never gets back
+// to the default: the error has to say how to finish the job.
+func TestApplyUpdate_FailedDefaultNamesTheWayToFinish(t *testing.T) {
+	m := &fakeManager{defaultErr: errors.New("alias refused")}
+	_, err := applyUpdate(m, outdated, "24")
+	if err == nil || !strings.Contains(err.Error(), "lerd node:use 24") {
+		t.Fatalf("err = %v, want one naming lerd node:use 24", err)
+	}
+}
+
+// Two dashboards opening at once must share one fetch, not race on the cache.
+func TestLatestByMajor_ConcurrentCallsShareOneFetch(t *testing.T) {
+	hits := serveReleases(t, http.StatusOK, releaseIndex)
+
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if got := latestByMajor(context.Background()); got["24"] != "24.22.3" {
+				t.Errorf("got %v", got)
+			}
+		}()
+	}
+	wg.Wait()
+	if n := hits.Load(); n != 1 {
+		t.Fatalf("fetched %d times, want once", n)
+	}
+}
+
+// A failed background refresh must not undo the answer a check just saved.
+func TestLatestByMajor_FailureDoesNotOverwriteANewerCheck(t *testing.T) {
+	serveReleases(t, http.StatusOK, releaseIndex)
+	if err := CheckReleases(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	orig := releaseIndexURL
+	releaseIndexURL = "http://127.0.0.1:1/index.json"
+	t.Cleanup(func() { releaseIndexURL = orig })
+
+	if err := CheckReleases(context.Background()); err == nil {
+		t.Fatal("a failed check was reported as success")
+	}
+	if got := latestByMajor(context.Background()); got["24"] != "24.22.3" {
+		t.Fatalf("lost the saved answer: %v", got)
 	}
 }
