@@ -227,6 +227,7 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 | Command | Description |
 |---|---|
 | `lerd node:install <version>` | Install a Node.js version globally via fnm |
+| `lerd node:update [major]` | Install the newest patch of one major, or of every installed major that has one |
 | `lerd node:uninstall <version>` | Uninstall a Node.js version via fnm |
 | `lerd node:use <version>` | Set the default Node.js version |
 | `lerd isolate:node <version>` | Pin Node version for cwd: writes `.node-version` and updates `node_version` in an existing `.lerd.yaml`, runs `fnm install`. The site page and MCP do the same |

@@ -2,7 +2,14 @@
   import DetailHeader from '$components/DetailHeader.svelte';
   import { onMount } from 'svelte';
   import { status, loadStatus } from '$stores/status';
-  import { nodeVersions, loadNodeVersions, setDefaultNode, removeNode, installNode, manageNode, unmanageNode, setNodeManager } from '$stores/nodeVersions';
+  import { nodeVersions, nodeVersionStatuses, loadNodeVersions, setDefaultNode, removeNode, installNode, updateNodeVersion, manageNode, unmanageNode, setNodeManager, checkNodeUpdates, type NodeVersionStatus } from '$stores/nodeVersions';
+  import { accessMode } from '$stores/accessMode';
+  import NodeUpdateModal from '$components/NodeUpdateModal.svelte';
+  import VersionCard from '$components/VersionCard.svelte';
+  import Icon from '$components/Icon.svelte';
+  import StatusPill from '$components/StatusPill.svelte';
+  import CheckUpdatesButton from '$components/CheckUpdatesButton.svelte';
+  import { notifyLocalInfo } from '$lib/notify';
   import { sites, sitesByNode } from '$stores/sites';
   import DetailButton from '$components/DetailButton.svelte';
   import SitesPopover from '$components/SitesPopover.svelte';
@@ -28,27 +35,18 @@
   let installDone = $state(false);
   let installError = $state('');
 
-  // staged holds a pending pick the user has clicked but not saved. null
-  // means no staged change (radio reflects nodeDefault). After a successful
-  // save we reset to null explicitly so the Save button disables.
-  let staged = $state<string | null>(null);
-  const selectedDefault = $derived(staged ?? nodeDefault);
-  const dirty = $derived(staged !== null && staged !== nodeDefault);
+  // The pick shows while it saves, then the status decides: a failed save falls
+  // back to the real default rather than leaving the wrong radio lit.
+  const selectedDefault = $derived(defaultBusy ?? nodeDefault);
 
-  async function onSaveDefault() {
-    if (!dirty || staged === null) return;
-    const target = staged;
-    defaultBusy = target;
+  async function onPickDefault(v: string) {
+    if (v === nodeDefault || defaultBusy !== null) return;
+    defaultBusy = v;
     saveError = '';
     try {
-      const ok = await setDefaultNode(target);
+      if (!(await setDefaultNode(v))) saveError = m.common_failed();
       await loadStatus();
       await loadNodeVersions();
-      if (ok) {
-        staged = null;
-      } else {
-        saveError = m.common_failed();
-      }
     } catch (e) {
       saveError = e instanceof Error ? e.message : m.common_failed();
     } finally {
@@ -66,6 +64,44 @@
       await loadNodeVersions();
     } finally {
       removeBusy = null;
+    }
+  }
+
+  const outdated = $derived($nodeVersionStatuses.filter((s) => s.update_available));
+  // What was outdated when the dialog opened, null while it is closed.
+  let updateBatch = $state<NodeVersionStatus[] | null>(null);
+  let updateBusy = $state<string | null>(null);
+  let updateError = $state<Record<string, string>>({});
+
+  // The result stays on this card: a failed download names the version it hit.
+  async function onUpdate(major: string) {
+    updateBusy = major;
+    updateError = { ...updateError, [major]: '' };
+    const res = await updateNodeVersion(major);
+    if (!res.ok) updateError = { ...updateError, [major]: res.error || m.common_failed() };
+    await loadNodeVersions();
+    updateBusy = null;
+  }
+
+  let checking = $state(false);
+
+  // The toast answers the click; the cards follow from the versions it returns.
+  async function runCheck() {
+    checking = true;
+    try {
+      const res = await checkNodeUpdates();
+      const found = res.versions?.some((s) => s.update_available);
+      notifyLocalInfo(
+        'update_check',
+        m.system_nodeJs(),
+        !res.ok
+          ? m.system_tools_checkFailed()
+          : found
+            ? m.system_tools_checkFound()
+            : m.system_node_checkUpToDate()
+      );
+    } finally {
+      checking = false;
     }
   }
 
@@ -166,8 +202,14 @@
     {#snippet trailing()}
     <div class="flex items-center gap-2">
       {#if manageError}<span class="text-xs text-red-500">{manageError}</span>{/if}
+      {#if outdated.length > 0 && $accessMode.localControl}
+        <DetailButton tone="success" onclick={() => (updateBatch = [...outdated])}>{m.services_updateAll()}</DetailButton>
+      {/if}
       <!-- mise and fnm are always both on offer; nvm is only ever a choice on a
            host that has one, and the option disables itself when it does not. -->
+      {#if $status.node_managed_by_lerd}
+        <CheckUpdatesButton onclick={runCheck} {checking} title={m.system_node_checkTitle()} />
+      {/if}
       {#if !$status.using_system_bun}
         <SegmentedControl
           options={managerOptions}
@@ -210,30 +252,22 @@
 
     {#if $nodeVersions.length === 0}
       <p class="text-sm text-gray-400">{m.system_node_noneInstalled()}</p>
-    {:else}
-      {#if $nodeVersions.length > 1}
-        <div class="flex items-center justify-end gap-2">
-          {#if saveError}<span class="text-xs text-red-500">{saveError}</span>{/if}
-          <DetailButton
-            tone="primary"
-            onclick={onSaveDefault}
-            disabled={!dirty || defaultBusy !== null}
-            loading={defaultBusy !== null}
-          >{m.common_save()}</DetailButton>
-        </div>
-      {/if}
-      <div class="space-y-2">
-        {#each $nodeVersions as v (v)}
-          {@const siteDomains = sitesForVersion(v)}
-          {@const siteCount = $sitesByNode.get(v) ?? 0}
-          {@const isDefault = v === nodeDefault}
-          {@const isSelected = v === selectedDefault}
-          {@const canRemove = siteCount === 0 && $status.node_managed_by_lerd && !isDefault}
-          <div class="border {isSelected && !isDefault ? 'border-lerd-red/60 dark:border-lerd-red/60' : 'border-gray-200 dark:border-lerd-border'} rounded-lg p-3 bg-white dark:bg-lerd-card transition-colors">
-            <div class="flex items-center gap-3 flex-wrap">
+    {/if}
+    {#if saveError}<p class="text-xs text-red-500">{saveError}</p>{/if}
+    <div class="flex flex-wrap gap-3">
+      {#each $nodeVersions as v (v)}
+        {@const detail = $nodeVersionStatuses.find((s) => s.major === v)}
+        {@const siteDomains = sitesForVersion(v)}
+        {@const siteCount = $sitesByNode.get(v) ?? 0}
+        {@const isDefault = v === nodeDefault}
+        {@const isSelected = v === selectedDefault}
+        {@const canRemove = siteCount === 0 && $status.node_managed_by_lerd && !isDefault}
+        <VersionCard value={detail?.installed ?? v} wide highlight={isSelected && !isDefault}>
+          {#snippet heading()}
+            <div class="flex items-center gap-2 min-w-0">
               <button
                 type="button"
-                onclick={() => (staged = v === nodeDefault ? null : v)}
+                onclick={() => onPickDefault(v)}
                 disabled={defaultBusy !== null}
                 aria-pressed={isSelected}
                 aria-label={'Node ' + v}
@@ -249,60 +283,93 @@
                     <span class="absolute inset-[2px] rounded-full bg-lerd-red"></span>
                   {/if}
                 </span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white">Node {v}</span>
+                <span class="font-mono text-xs font-semibold text-gray-700 dark:text-gray-300">Node {v}</span>
               </button>
               {#if isDefault}
                 <span class="text-[10px] font-medium text-lerd-red bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded-sm">{m.common_default()}</span>
               {/if}
-              <div class="ml-auto flex items-center gap-2">
-                <SitesPopover domains={siteDomains} />
-                <DetailButton
-                  tone="danger"
-                  onclick={() => onRemove(v)}
-                  disabled={!canRemove || removeBusy === v}
-                  loading={removeBusy === v}
-                  title={!$status.node_managed_by_lerd
-                    ? m.system_node_cannotRemoveSystem()
-                    : isDefault
-                      ? m.system_node_cannotRemoveDefault()
-                      : siteCount > 0
-                        ? m.system_node_cannotRemove()
-                        : m.system_node_removeTitle()}
-                >{m.common_remove()}</DetailButton>
-              </div>
             </div>
-            {#if removeError[v]}
-              <p class="text-xs text-red-500 mt-2">{removeError[v]}</p>
+          {/snippet}
+          {#snippet pill()}
+            {#if detail?.update_available}
+              <StatusPill tone="warn" label={m.system_lerd_updateTag()} />
+            {:else if detail?.latest}
+              <StatusPill tone="ok" label={m.system_tools_current()} />
             {/if}
+          {/snippet}
+          {#if detail?.update_available}
+            <span class="text-xs font-medium text-yellow-700 dark:text-yellow-400 truncate">{m.system_tools_updateAvailable({ version: detail.latest ?? '' })}</span>
+            {#if $accessMode.localControl}
+              <DetailButton
+                tone="success"
+                block
+                onclick={() => onUpdate(v)}
+                disabled={updateBusy !== null}
+                loading={updateBusy === v}
+              >{m.services_update()}</DetailButton>
+            {/if}
+          {/if}
+          <div class="flex items-center justify-between gap-2">
+            <SitesPopover domains={siteDomains} />
+            <div class="ml-auto">
+              <DetailButton
+                tone="danger"
+                onclick={() => onRemove(v)}
+                disabled={!canRemove || removeBusy === v}
+                loading={removeBusy === v}
+                title={!$status.node_managed_by_lerd
+                  ? m.system_node_cannotRemoveSystem()
+                  : isDefault
+                    ? m.system_node_cannotRemoveDefault()
+                    : siteCount > 0
+                      ? m.system_node_cannotRemove()
+                      : m.system_node_removeTitle()}
+                icon={trashIcon}
+              />
+            </div>
           </div>
-        {/each}
-      </div>
-    {/if}
+          {#if removeError[v]}
+            <p class="text-xs text-red-500">{removeError[v]}</p>
+          {/if}
+          {#if updateError[v]}
+            <p class="text-xs text-red-500 break-words">{updateError[v]}</p>
+          {/if}
+        </VersionCard>
+      {/each}
 
-    <div class="border border-dashed border-gray-200 dark:border-lerd-border rounded-lg p-3 bg-gray-50/50 dark:bg-white/2">
-      <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">{m.system_node_installNewTitle()}</p>
-      <p class="text-xs text-gray-400 mb-2">
-        {@html m.system_node_installNewHint({ major: '<code class="font-mono bg-gray-100 dark:bg-white/5 px-1 rounded-sm">22</code>', specific: '<code class="font-mono bg-gray-100 dark:bg-white/5 px-1 rounded-sm">22.12.0</code>', manager: $status.node_manager || 'mise' })}
-      </p>
-      <div class="flex items-center gap-2">
-        <input
-          type="text"
-          bind:value={newVersion}
-          onkeydown={(e) => e.key === 'Enter' && onInstall()}
-          placeholder={m.system_node_installPlaceholder()}
-          disabled={installBusy || !$status.node_managed_by_lerd}
-          title={!$status.node_managed_by_lerd ? m.system_node_managedBySystem() : ''}
-          class="text-sm bg-white dark:bg-lerd-card border border-gray-200 dark:border-lerd-border rounded-lg px-3 py-1.5 w-28 text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-hidden focus:border-lerd-red/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        />
-        <DetailButton
-          tone="primary"
-          onclick={onInstall}
-          disabled={installBusy || !newVersion.trim() || !$status.node_managed_by_lerd}
-          loading={installBusy}
-        >{m.common_install()}</DetailButton>
+      <div class="shrink-0 w-[15rem] flex flex-col gap-2.5 rounded-2xl border border-dashed border-gray-200 dark:border-lerd-border bg-gray-50/50 dark:bg-white/2 p-3">
+        <p class="text-xs font-semibold text-gray-700 dark:text-gray-300">{m.system_node_installNewTitle()}</p>
+        <p class="text-xs text-gray-400">
+          {@html m.system_node_installNewHint({ major: '<code class="font-mono bg-gray-100 dark:bg-white/5 px-1 rounded-sm">22</code>', specific: '<code class="font-mono bg-gray-100 dark:bg-white/5 px-1 rounded-sm">22.12.0</code>', manager: $status.node_manager || 'mise' })}
+        </p>
+        <div class="flex items-center gap-2">
+          <input
+            type="text"
+            bind:value={newVersion}
+            onkeydown={(e) => e.key === 'Enter' && onInstall()}
+            placeholder={m.system_node_installPlaceholder()}
+            disabled={installBusy || !$status.node_managed_by_lerd}
+            title={!$status.node_managed_by_lerd ? m.system_node_managedBySystem() : ''}
+            class="text-sm bg-white dark:bg-lerd-card border border-gray-200 dark:border-lerd-border rounded-lg px-3 py-1.5 w-full min-w-0 text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-hidden focus:border-lerd-red/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+          <DetailButton
+            tone="primary"
+            onclick={onInstall}
+            disabled={installBusy || !newVersion.trim() || !$status.node_managed_by_lerd}
+            loading={installBusy}
+          >{m.common_install()}</DetailButton>
+        </div>
         {#if installDone}<span class="text-xs text-emerald-600 dark:text-emerald-500">{m.system_node_installed()}</span>{/if}
-        {#if installError}<span class="text-xs text-red-500">{installError}</span>{/if}
+        {#if installError}<span class="text-xs text-red-500 break-words">{installError}</span>{/if}
       </div>
     </div>
   </div>
 </div>
+
+{#snippet trashIcon()}
+  <Icon name="trash" class="w-4 h-4" />
+{/snippet}
+
+{#if updateBatch}
+  <NodeUpdateModal versions={updateBatch} onclose={() => (updateBatch = null)} />
+{/if}

@@ -26,6 +26,8 @@ type Manager interface {
 	Available() bool
 	// List returns the installed Node major versions, deduped.
 	List() []string
+	// ListFull returns every installed full version, v stripped.
+	ListFull() []string
 	// Install installs the given version (a major like "20" or a full semver).
 	Install(version string) error
 	// Uninstall removes the given version.

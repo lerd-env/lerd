@@ -300,6 +300,8 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/php-versions/install", withCORS(publishAfter(handlePHPInstall, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/php-versions/", withCORS(publishAfter(handlePHPVersionAction, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/node-versions", withCORS(handleNodeVersions))
+	mux.HandleFunc("/api/node-versions/status", withCORS(handleNodeVersionStatuses))
+	mux.HandleFunc("/api/node-versions/check", withCORS(handleNodeVersionCheck))
 	mux.HandleFunc("/api/node-versions/install", withCORS(publishAfter(handleInstallNodeVersion, eventbus.KindStatus)))
 	mux.HandleFunc("/api/node-versions/", withCORS(publishAfter(handleNodeVersionAction, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/node/manage", withCORS(publishAfter(handleNodeManage, eventbus.KindStatus, eventbus.KindSites)))
@@ -5440,7 +5442,7 @@ func handleNativePHPUpdate(sw *sseLineWriter, done func(map[string]any), version
 }
 
 func handleNodeVersionAction(w http.ResponseWriter, r *http.Request) {
-	// path: /api/node-versions/{version}/{remove|set-default}
+	// path: /api/node-versions/{version}/{remove|set-default|update}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/node-versions/"), "/")
 	if len(parts) != 2 || r.Method != http.MethodPost {
 		http.NotFound(w, r)
@@ -5472,6 +5474,13 @@ func handleNodeVersionAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, map[string]any{"ok": true, "node_default": version})
+	case "update":
+		installed, err := lerdNode.Update(r.Context(), version)
+		if err != nil {
+			writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true, "installed": installed})
 	case "remove":
 		// version is a major; Uninstall removes every installed full version
 		// under it via the active manager.
@@ -5535,6 +5544,28 @@ var validVersion = regexp.MustCompile(`^[0-9]+(\.[0-9]+)*$`)
 // redirect the stream depends on is package-wide, and the switch itself rewrites
 // every site.
 var phpRuntimeSwitching atomic.Bool
+
+func handleNodeVersionStatuses(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, lerdNode.Statuses(r.Context()))
+}
+
+// handleNodeVersionCheck re-reads the published releases with the cache bypassed
+// and answers with the versions as they stand afterwards.
+func handleNodeVersionCheck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !lerdNode.Managed() {
+		writeJSON(w, map[string]any{"ok": false, "error": "lerd is not managing Node.js"})
+		return
+	}
+	if err := lerdNode.CheckReleases(r.Context()); err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "versions": lerdNode.Statuses(r.Context())})
+}
 
 func handleInstallNodeVersion(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

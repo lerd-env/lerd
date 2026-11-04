@@ -24,8 +24,8 @@ func (m fnmManager) Available() bool {
 	return err == nil
 }
 
-// listFull returns every installed full version (v stripped) fnm reports.
-func (m fnmManager) listFull() []string {
+// ListFull returns every installed full version (v stripped) fnm reports.
+func (m fnmManager) ListFull() []string {
 	out, err := exec.Command(m.bin(), "list").Output()
 	if err != nil {
 		return nil
@@ -34,7 +34,7 @@ func (m fnmManager) listFull() []string {
 }
 
 func (m fnmManager) List() []string {
-	return dedupeMajors(m.listFull())
+	return dedupeMajors(m.ListFull())
 }
 
 func (m fnmManager) Install(version string) error {
@@ -45,7 +45,7 @@ func (m fnmManager) Install(version string) error {
 }
 
 func (m fnmManager) Uninstall(version string) error {
-	return uninstallVersions(version, m.listFull(), func(v string) error {
+	return uninstallVersions(version, m.ListFull(), func(v string) error {
 		if out, err := exec.Command(m.bin(), "uninstall", v).CombinedOutput(); err != nil {
 			return fmt.Errorf("fnm uninstall %s: %s", v, strings.TrimSpace(string(out)))
 		}

@@ -77,7 +77,7 @@ func miseTool(version string) string {
 	return "node"
 }
 
-func (m miseManager) listFull() []string {
+func (m miseManager) ListFull() []string {
 	out, err := exec.Command(m.bin, "ls", "node", "--json").Output()
 	if err != nil {
 		return nil
@@ -85,7 +85,7 @@ func (m miseManager) listFull() []string {
 	return parseMiseListFull(string(out))
 }
 
-func (m miseManager) List() []string { return dedupeMajors(m.listFull()) }
+func (m miseManager) List() []string { return dedupeMajors(m.ListFull()) }
 
 func (m miseManager) Install(version string) error {
 	if out, err := exec.Command(m.bin, "install", miseTool(version)).CombinedOutput(); err != nil {
@@ -95,7 +95,7 @@ func (m miseManager) Install(version string) error {
 }
 
 func (m miseManager) Uninstall(version string) error {
-	return uninstallVersions(version, m.listFull(), func(v string) error {
+	return uninstallVersions(version, m.ListFull(), func(v string) error {
 		if out, err := exec.Command(m.bin, "uninstall", "node@"+v).CombinedOutput(); err != nil {
 			return fmt.Errorf("mise uninstall %s: %s", v, strings.TrimSpace(string(out)))
 		}

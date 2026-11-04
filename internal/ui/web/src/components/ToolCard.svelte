@@ -1,5 +1,6 @@
 <script lang="ts">
   import StatusPill from '$components/StatusPill.svelte';
+  import VersionCard from '$components/VersionCard.svelte';
   import DetailButton from '$components/DetailButton.svelte';
   import { updateTool, type ToolStatus } from '$stores/status';
   import { accessMode } from '$stores/accessMode';
@@ -26,9 +27,11 @@
   }
 </script>
 
-<div class="shrink-0 w-[11rem] flex flex-col gap-2.5 rounded-2xl border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card p-3">
-  <div class="flex items-center justify-between gap-2">
+<VersionCard value={display} dimmed={!tool.present || !tool.installed}>
+  {#snippet heading()}
     <span class="font-mono text-xs font-semibold text-gray-700 dark:text-gray-300">{tool.name}</span>
+  {/snippet}
+  {#snippet pill()}
     {#if tool.external}
       <StatusPill tone="muted" label={m.system_tools_external()} />
     {:else if !tool.present}
@@ -40,10 +43,7 @@
     {:else}
       <StatusPill tone="ok" label={m.system_tools_current()} />
     {/if}
-  </div>
-  <span class="font-mono text-2xl font-semibold tabular-nums tracking-tight leading-none {tool.present && tool.installed ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-600'}">
-    {display}
-  </span>
+  {/snippet}
   {#if tool.update_available}
     <span class="text-xs font-medium text-yellow-700 dark:text-yellow-400 truncate">{m.system_tools_updateAvailable({ version: tool.pinned })}</span>
     {#if $accessMode.localControl}
@@ -63,4 +63,4 @@
   {#if error}
     <p class="text-xs text-red-500 break-words" use:tooltip={error}>{error}</p>
   {/if}
-</div>
+</VersionCard>

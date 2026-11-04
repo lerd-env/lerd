@@ -148,6 +148,7 @@ func main() {
 	root.AddCommand(cli.NewWorktreeCmd())
 	root.AddCommand(cli.NewRuntimeCmd())
 	root.AddCommand(cli.NewNodeInstallCmd())
+	root.AddCommand(cli.NewNodeUpdateCmd())
 	root.AddCommand(cli.NewNodeUninstallCmd())
 	root.AddCommand(cli.NewNodeUseCmd())
 	root.AddCommand(cli.NewNodeManageCmd())

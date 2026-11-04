@@ -6,6 +6,7 @@
 |---|---|
 | `lerd node:install <version>` | Install a Node.js version globally |
 | `lerd node:uninstall <version>` | Uninstall a Node.js version |
+| `lerd node:update [major]` | Install the newest patch of one major, or of every installed major that has one |
 | `lerd node:use <version>` | Set the global default Node.js version |
 | `lerd isolate:node <version>` | Pin Node version for cwd: writes `.node-version` and installs the version |
 | `lerd node:manage` | Opt into lerd-managed Node: install the version-manager shims and a default version |
@@ -97,6 +98,19 @@ lerd node:use 22
 Version numbers are normalised to the major only, so `22.11.0` and `22.14.1` are both treated as `22`, and only one entry per major appears in the UI and CLI.
 
 ---
+
+## Newer patches
+
+A version pin like `24` means the newest Node 24 that is installed, so a newer patch only arrives when it is installed. The dashboard's Node page shows the full version behind each major and, when lerd manages Node, compares it with the releases published on nodejs.org. The list is cached for a day, and **Check for updates** on that page re-reads it right away.
+
+A major with a newer patch shows `24.22.3 available` with an **Update** button, and the System health card counts them in a **Node.js · N updates** pill. **Update all** in the page header, or that pill, lists them with a switch each and updates the ones left on, one at a time. From the terminal:
+
+```bash
+lerd node:update        # every major with a newer patch
+lerd node:update 24     # just this one
+```
+
+Older patches stay installed, since a site can pin one exactly. Sites pick up the new patch on their next `node` or `npm` call. A dev server that is already running keeps the Node it started with until you restart it.
 
 ## Version manager: mise, fnm or nvm
 

@@ -31,7 +31,7 @@
       disabled={opt.disabled}
       use:tooltip={opt.title ?? ''}
       onclick={() => !opt.disabled && opt.value !== value && onchange(opt.value)}
-      class="px-2 py-0.5 rounded-md text-[10px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-500 dark:disabled:hover:text-gray-400 {opt.value === value
+      class="px-2.5 py-1 rounded-md text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-500 dark:disabled:hover:text-gray-400 {opt.value === value
         ? 'bg-white dark:bg-lerd-card text-gray-800 dark:text-gray-100 shadow-xs'
         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}"
     >{opt.label}</button>

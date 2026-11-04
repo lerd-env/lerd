@@ -12,6 +12,8 @@
   import { notifyPrefs } from '$lib/notify';
   import ToolsUpdateModal from '$components/ToolsUpdateModal.svelte';
   import PhpUpdateModal from '$components/PhpUpdateModal.svelte';
+  import NodeUpdateModal from '$components/NodeUpdateModal.svelte';
+  import { nodeVersionStatuses, type NodeVersionStatus } from '$stores/nodeVersions';
   import { status, lerdStatusColor, dnsState, type ToolStatus } from '$stores/status';
   import { updatesLabel } from '$stores/services';
   import { sitesByPhp, sitesByNode } from '$stores/sites';
@@ -38,12 +40,14 @@
 
   const outdatedTools = $derived(($status.tools ?? []).filter((t) => t.update_available));
   const outdatedPhp = $derived($status.php_fpms.filter((f) => f.update_available).map((f) => f.version));
+  const outdatedNode = $derived($nodeVersionStatuses.filter((s) => s.update_available));
   // What was outdated when the dialog opened, null while it is closed.
+  let nodeBatch = $state<NodeVersionStatus[] | null>(null);
   let toolBatch = $state<ToolStatus[] | null>(null);
   let phpBatch = $state<string[] | null>(null);
 
   const cardTone = $derived(
-    $lerdStatusColor === 'red' ? 'critical' : outdatedTools.length + outdatedPhp.length > 0 ? 'warn' : 'default'
+    $lerdStatusColor === 'red' ? 'critical' : outdatedTools.length + outdatedPhp.length + outdatedNode.length > 0 ? 'warn' : 'default'
   );
   onMount(loadPHPRuntime);
 </script>
@@ -58,6 +62,14 @@
           tone="warn"
           label={'PHP · ' + updatesLabel(outdatedPhp.length)}
           onclick={$accessMode.localControl ? () => (phpBatch = [...outdatedPhp]) : undefined}
+        />
+      {/if}
+      {#if outdatedNode.length > 0}
+        <StatusPill
+          size="sm"
+          tone="warn"
+          label={m.system_nodeJs() + ' · ' + updatesLabel(outdatedNode.length)}
+          onclick={$accessMode.localControl ? () => (nodeBatch = [...outdatedNode]) : undefined}
         />
       {/if}
       {#if outdatedTools.length > 0}
@@ -216,4 +228,8 @@
 {/if}
 {#if phpBatch}
   <PhpUpdateModal versions={phpBatch} onclose={() => (phpBatch = null)} />
+{/if}
+
+{#if nodeBatch}
+  <NodeUpdateModal versions={nodeBatch} onclose={() => (nodeBatch = null)} />
 {/if}

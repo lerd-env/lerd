@@ -32,10 +32,10 @@
   }: Props = $props();
 
   const toneClass: Record<DetailButtonTone, string> = {
-    primary: 'bg-lerd-red hover:bg-lerd-redhov text-lerd-onred',
+    primary: 'bg-lerd-red hover:bg-lerd-redhov text-lerd-onred border border-transparent',
     secondary:
       'bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-lerd-border',
-    success: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+    success: 'bg-emerald-600 hover:bg-emerald-700 text-white border border-transparent',
     danger:
       'bg-gray-100 dark:bg-white/5 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-500/30 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-lerd-border',
     warn:
