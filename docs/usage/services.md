@@ -160,7 +160,7 @@ A site already pointed at a server through `.env.lerd_override` needs no rewrite
 
 To change a server's password or tools folder, use the cog in the header of its page or `lerd service external <name> --update`, with `--tools` for the folder. lerd connects with the new values first, so a typo leaves the old ones in place, then rewrites the env of every site on the server.
 
-`lerd db:export`, `db:import`, `db:snapshot`, `db:restore` and `db:shell` then work on that server, as do the service's Databases and Snapshots pages and the assistant tools. Snapshots stay on your machine with lerd's other snapshots. Automatic snapshots do not cover an external server, so nothing dumps it on a schedule.
+`lerd db:export`, `db:import`, `db:snapshot`, `db:restore` and `db:shell` then work on that server, as do the service's Databases and Snapshots pages and the assistant tools. Snapshots stay on your machine with lerd's other snapshots. [Automatic snapshots](database.md#automatic-snapshots) cover a site on an external server like any other, and skip the server while it is offline.
 
 `.lerd.yaml` names the service, not the server. On a machine without a service of that name, `lerd env` stops and says so rather than replacing the connection with lerd's own.
 

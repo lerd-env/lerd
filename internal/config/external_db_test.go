@@ -198,6 +198,24 @@ func TestEndpointFromURL(t *testing.T) {
 	}
 }
 
+// Owner badges and automatic snapshots both start from these targets.
+func TestDBTargetsFor_NamesTheExternalServerASiteChose(t *testing.T) {
+	dir := externalServiceProject(t, "DB_CONNECTION=mysql\nDB_HOST=host.containers.internal\nDB_PORT=3306\nDB_DATABASE=shop\n")
+	got := DBTargetsFor(dir)
+	if len(got) != 1 || got[0].Service != "dbngin" || got[0].Database != "shop" {
+		t.Fatalf("targets = %+v", got)
+	}
+}
+
+func TestDBTargetsFor_IgnoresAServerTheEnvLeft(t *testing.T) {
+	dir := externalServiceProject(t, "DB_CONNECTION=mysql\nDB_HOST=elsewhere.example\nDB_PORT=3306\nDB_DATABASE=shop\n")
+	for _, target := range DBTargetsFor(dir) {
+		if target.Service == "dbngin" {
+			t.Fatalf("targets = %+v", target)
+		}
+	}
+}
+
 // db:use writes .lerd.yaml in the site's folder, and until that is committed a
 // worktree has none, yet it is on the same server.
 func TestExternalDBServiceFor_AWorktreeFollowsItsParentsChoice(t *testing.T) {

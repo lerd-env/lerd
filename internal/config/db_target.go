@@ -228,6 +228,11 @@ func DBTargetFor(projectDir string) (DBTarget, bool) {
 // aimed at a lerd engine, so a project whose framework lerd doesn't recognise
 // still shows as the owner of its database.
 func DBTargetsFor(projectDir string) []DBTarget {
+	if svc := ExternalDBServiceFor(projectDir); svc != nil {
+		if name := DBEndpointFor(projectDir).Database; name != "" {
+			return []DBTarget{{Service: svc.Name, Database: name}}
+		}
+	}
 	bindings, file, format := dbEnvBindings(projectDir)
 	vals := envfile.Values(filepath.Join(projectDir, file), format)
 
