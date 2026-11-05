@@ -225,3 +225,26 @@ func TestWakeHold_pingsAgainWhileTheSiteSleeps(t *testing.T) {
 		}
 	}
 }
+
+// A request to a worker's subdomain lands on the site's waking wildcard while a
+// service sleeps, so it wakes that site and is replayed to the worker's host.
+func TestWakeHold_wakesTheSiteBehindAWorkerSubdomain(t *testing.T) {
+	pinged := stubWakeHold(t, 1)
+	dir := t.TempDir()
+	proj := &config.ProjectConfig{Framework: "laravel", CustomWorkers: map[string]config.FrameworkWorker{
+		"docs": {Command: "npx vitepress dev", Proxy: &config.WorkerProxy{Subdomain: "docs"}},
+	}}
+	if err := config.SaveProjectConfig(dir, proj); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "shop", Path: dir, Domains: []string{"shop.test"}, Framework: "laravel"}); err != nil {
+		t.Fatal(err)
+	}
+	got := fakeNginx(t, http.StatusOK, "docs")
+	if w := wakeRequest("docs.shop.test", "/guide"); w.Code != http.StatusOK || got.Host != "docs.shop.test" {
+		t.Fatalf("got %d, replayed to %q", w.Code, got.Host)
+	}
+	if len(*pinged) == 0 || (*pinged)[0] != "shop" {
+		t.Fatalf("pinged %v, want shop", *pinged)
+	}
+}

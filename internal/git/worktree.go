@@ -106,13 +106,9 @@ func ServableWorktrees(sitePath, siteDomain string) ([]Worktree, error) {
 	return FilterReservedWorktrees(wts), nil
 }
 
-// FilterReservedWorktrees drops any worktree whose domain is owned by a
-// registered group secondary (a site whose primary domain is <label>.<main>).
-// Such a subdomain is carved out of the main's space and served by the
-// secondary's own exact-match vhost; letting the main also emit a worktree
-// vhost for it would collide on the same conf file and server_name. Callers
-// pass the worktrees freshly detected for the main site; the reserved set is
-// read from the site registry (cheap, cached).
+// FilterReservedWorktrees drops any worktree whose domain a group secondary or
+// a worker subdomain of the main site already serves, since its vhost would
+// collide with theirs on the same server_name.
 func FilterReservedWorktrees(wts []Worktree) []Worktree {
 	if len(wts) == 0 {
 		return wts
@@ -126,6 +122,13 @@ func FilterReservedWorktrees(wts []Worktree) []Worktree {
 		if s.Group != "" && s.GroupSubdomain != "" {
 			reserved[s.PrimaryDomain()] = true
 		}
+		// Only the site these worktrees belong to can claim their subdomains,
+		// so its definition is the only one worth loading.
+		if hasDomainUnder(wts, s.PrimaryDomain()) {
+			for _, h := range config.WorkerSubdomainHosts(s) {
+				reserved[h] = true
+			}
+		}
 	}
 	if len(reserved) == 0 {
 		return wts
@@ -138,6 +141,15 @@ func FilterReservedWorktrees(wts []Worktree) []Worktree {
 		out = append(out, wt)
 	}
 	return out
+}
+
+func hasDomainUnder(wts []Worktree, primary string) bool {
+	for _, wt := range wts {
+		if strings.HasSuffix(wt.Domain, "."+primary) {
+			return true
+		}
+	}
+	return false
 }
 
 // readBranch reads the branch name from .git/worktrees/<name>/HEAD.

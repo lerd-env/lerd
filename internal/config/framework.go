@@ -353,6 +353,54 @@ type WorkerProxy struct {
 	// to the worker through PortEnvKey. For a server configured from .env, leave
 	// this empty and name the key it reads.
 	Port string `yaml:"port,omitempty"`
+	// Subdomain serves the worker on <subdomain>.<site primary domain>, the whole
+	// host proxied to its port, independently of any path.
+	Subdomain string `yaml:"subdomain,omitempty"`
+}
+
+var subdomainLabel = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
+// ValidateSubdomainLabel accepts the labels a worktree branch sanitises to:
+// lowercase letters, digits and single inner hyphens, at most 50 characters.
+func ValidateSubdomainLabel(label string) error {
+	if len(label) > 50 || !subdomainLabel.MatchString(label) {
+		return fmt.Errorf("subdomain %q is not a valid host label (use lowercase letters, digits and hyphens)", label)
+	}
+	return nil
+}
+
+// WorkerSubdomainHosts returns the hosts the site's workers are served on
+// through a valid proxy subdomain, e.g. docs.app.test.
+func WorkerSubdomainHosts(s Site) []string {
+	fw, ok := GetFrameworkForDir(s.Framework, s.Path)
+	if !ok || !s.ServesWorkerSubdomains() {
+		return nil
+	}
+	var hosts []string
+	for _, np := range fw.DetectProxies(s.Path) {
+		if l := np.Proxy.Subdomain; l != "" && ValidateSubdomainLabel(l) == nil {
+			hosts = append(hosts, l+"."+s.PrimaryDomain())
+		}
+	}
+	return hosts
+}
+
+// FindSiteByHost is FindSiteByDomain that also resolves a worker's subdomain
+// host to its site, loading only definitions of sites the host sits under.
+func FindSiteByHost(host string) (*Site, error) {
+	if s, err := FindSiteByDomain(host); err == nil {
+		return s, nil
+	}
+	reg, err := LoadSites()
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range reg.Sites {
+		if strings.HasSuffix(host, "."+s.PrimaryDomain()) && slices.Contains(WorkerSubdomainHosts(s), host) {
+			return &s, nil
+		}
+	}
+	return nil, fmt.Errorf("site with host %q not found", host)
 }
 
 // OnHost reports whether the worker's server listens on the host rather than

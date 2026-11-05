@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/idle"
 )
 
@@ -119,5 +120,25 @@ func TestReadAccessFeed_ignoresUnmatched(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	if len(activityTracker.Snapshot()) != 0 {
 		t.Error("unmatched host must not create a record")
+	}
+}
+
+// Traffic to a worker's subdomain counts as its site's, so it keeps the site
+// awake like a request to the site's own domain.
+func TestResolveHostToSite_workerSubdomainIsItsSite(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := t.TempDir()
+	proj := &config.ProjectConfig{Framework: "laravel", CustomWorkers: map[string]config.FrameworkWorker{
+		"docs": {Command: "npx vitepress dev", Proxy: &config.WorkerProxy{Subdomain: "docs"}},
+	}}
+	if err := config.SaveProjectConfig(dir, proj); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "app", Domains: []string{"app.test"}, Path: dir, Framework: "laravel"}); err != nil {
+		t.Fatal(err)
+	}
+	if name, ok := resolveHostToSite("docs.app.test"); !ok || name != "app" {
+		t.Errorf("resolveHostToSite(docs.app.test) = %q, %v, want app", name, ok)
 	}
 }

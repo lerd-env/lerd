@@ -25,3 +25,65 @@ func TestDetectProxies_EveryWorkerNotJustTheFirst(t *testing.T) {
 		t.Errorf("reverb proxy = %+v, want the container default and an env port", found[0].Proxy)
 	}
 }
+
+// A worker subdomain lands in a host name, so it takes the labels a worktree
+// branch sanitises to and refuses anything else by name.
+func TestValidateSubdomainLabel(t *testing.T) {
+	for _, ok := range []string{"docs", "api-v2", "a1"} {
+		if err := ValidateSubdomainLabel(ok); err != nil {
+			t.Errorf("ValidateSubdomainLabel(%q) = %v, want nil", ok, err)
+		}
+	}
+	for _, bad := range []string{"", "Docs", "docs.site", "-docs", "docs-", "a--b", "docs_x", "a b"} {
+		if err := ValidateSubdomainLabel(bad); err == nil {
+			t.Errorf("ValidateSubdomainLabel(%q) = nil, want an error", bad)
+		}
+	}
+}
+
+// A worker's subdomain host belongs to its site, so traffic to it wakes and
+// keeps that site awake; a host no worker declares stays unresolved.
+func TestFindSiteByHost_resolvesWorkerSubdomain(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := t.TempDir()
+	proj := &ProjectConfig{Framework: "laravel", CustomWorkers: map[string]FrameworkWorker{
+		"docs": {Command: "npx vitepress dev", Proxy: &WorkerProxy{Subdomain: "docs"}},
+	}}
+	if err := SaveProjectConfig(dir, proj); err != nil {
+		t.Fatal(err)
+	}
+	if err := AddSite(Site{Name: "app", Domains: []string{"app.test"}, Path: dir, Framework: "laravel"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, host := range []string{"app.test", "docs.app.test"} {
+		if s, err := FindSiteByHost(host); err != nil || s.Name != "app" {
+			t.Errorf("FindSiteByHost(%q) = %v, %v, want site app", host, s, err)
+		}
+	}
+	if s, err := FindSiteByHost("other.app.test"); err == nil {
+		t.Errorf("FindSiteByHost(other.app.test) = %s, want not found", s.Name)
+	}
+}
+
+// Only an FPM site serves worker subdomains, so no other shape claims the host
+// from a worktree or a group secondary.
+func TestWorkerSubdomainHosts_onlyAnFPMSiteClaimsThem(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := t.TempDir()
+	proj := &ProjectConfig{Framework: "laravel", CustomWorkers: map[string]FrameworkWorker{
+		"docs": {Command: "npx vitepress dev", Proxy: &WorkerProxy{Subdomain: "docs"}},
+	}}
+	if err := SaveProjectConfig(dir, proj); err != nil {
+		t.Fatal(err)
+	}
+	site := Site{Name: "app", Domains: []string{"app.test"}, Path: dir, Framework: "laravel"}
+	if got := WorkerSubdomainHosts(site); len(got) != 1 {
+		t.Fatalf("FPM site: hosts = %v, want docs.app.test", got)
+	}
+	site.Runtime = "frankenphp"
+	if got := WorkerSubdomainHosts(site); len(got) != 0 {
+		t.Errorf("FrankenPHP site: hosts = %v, want none", got)
+	}
+}

@@ -203,6 +203,12 @@ func (s *Site) IsHostProxy() bool {
 	return s.HostPort > 0
 }
 
+// ServesWorkerSubdomains reports whether the site's own vhost is the FPM one,
+// the only shape that serves workers on their own subdomain.
+func (s *Site) ServesWorkerSubdomains() bool {
+	return !s.IsHostProxy() && !s.IsCustomContainer() && !s.IsFrankenPHP()
+}
+
 // IsProxyOnly returns true when the site is a host-proxy site lerd runs nothing
 // for: nginx forwards to a dev server the user starts themselves, so there is no
 // supervised process to stop.
