@@ -691,7 +691,11 @@ func GenerateVhost(site config.Site, phpVersion string) error {
 	if err != nil {
 		return err
 	}
-	return writeSiteConf(site.PrimaryDomain()+".conf", keepWaking(site, rendered))
+	if err := writeSiteConf(site.PrimaryDomain()+".conf", keepWaking(site, rendered)); err != nil {
+		return err
+	}
+	syncWorkerSubdomainVhosts(site, phpVersion, false)
+	return nil
 }
 
 // GenerateSSLVhost renders the SSL vhost template and writes it to conf.d.
@@ -700,7 +704,11 @@ func GenerateSSLVhost(site config.Site, phpVersion string) error {
 	if err != nil {
 		return err
 	}
-	return writeSiteConf(site.PrimaryDomain()+"-ssl.conf", keepWaking(site, rendered))
+	if err := writeSiteConf(site.PrimaryDomain()+"-ssl.conf", keepWaking(site, rendered)); err != nil {
+		return err
+	}
+	syncWorkerSubdomainVhosts(site, phpVersion, true)
+	return nil
 }
 
 // siteWaitsOnSleepingService is the seam keepWaking asks through.
@@ -1117,6 +1125,7 @@ func writeLandingVhost(site config.Site, htmlFile string) error {
 	if site.Secured {
 		_ = os.Remove(filepath.Join(config.NginxConfD(), site.PrimaryDomain()+"-ssl.conf"))
 	}
+	removeWorkerSubdomainVhosts(site.PrimaryDomain())
 	return nil
 }
 
@@ -1192,6 +1201,7 @@ func RemoveVhost(domain string) error {
 			return err
 		}
 	}
+	removeWorkerSubdomainVhosts(domain)
 	return nil
 }
 

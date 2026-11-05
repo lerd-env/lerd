@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
@@ -78,10 +79,8 @@ func AssignSecondary(main, secondary *config.Site, label string, shareDB bool) e
 	if siblingLabelUsed(reg, main.Name, label, secondary.Name) {
 		return fmt.Errorf("another secondary in group %q already uses the subdomain %q", main.Name, label)
 	}
-	if taken, err := WorktreeLabelTaken(main, label); err != nil {
+	if err := mainLabelFree(main, label); err != nil {
 		return err
-	} else if taken {
-		return fmt.Errorf("the main site %q has a git worktree using the subdomain %q; pick another label", main.Name, label)
 	}
 
 	if shareDB {
@@ -306,10 +305,8 @@ func SetSecondaryLabel(secondary *config.Site, newLabel string) error {
 	if siblingLabelUsed(reg, secondary.Group, newLabel, secondary.Name) {
 		return fmt.Errorf("another secondary in group %q already uses the subdomain %q", secondary.Group, newLabel)
 	}
-	if taken, err := WorktreeLabelTaken(main, newLabel); err != nil {
+	if err := mainLabelFree(main, newLabel); err != nil {
 		return err
-	} else if taken {
-		return fmt.Errorf("the main site %q has a git worktree using the subdomain %q; pick another label", main.Name, newLabel)
 	}
 
 	orig := snapshot(secondary)
@@ -381,6 +378,20 @@ func DissolveGroup(group string) error {
 		firstErr = err
 	}
 	return firstErr
+}
+
+// mainLabelFree refuses a label the main site already serves on: a git
+// worktree's subdomain or one of its workers' proxy subdomains.
+func mainLabelFree(main *config.Site, label string) error {
+	if taken, err := WorktreeLabelTaken(main, label); err != nil {
+		return err
+	} else if taken {
+		return fmt.Errorf("the main site %q has a git worktree using the subdomain %q; pick another label", main.Name, label)
+	}
+	if slices.Contains(config.WorkerSubdomainHosts(*main), ComputeSecondaryDomain(main.PrimaryDomain(), label)) {
+		return fmt.Errorf("the main site %q serves a worker on the subdomain %q; pick another label", main.Name, label)
+	}
+	return nil
 }
 
 // WorktreeLabelTaken reports whether the main site has an active git worktree

@@ -195,6 +195,24 @@ func TestAssignSecondary_rejectsWorktreeLabelCollision(t *testing.T) {
 	}
 }
 
+// A label the main site's worker already serves on is refused, the same as one
+// a worktree uses, so the secondary never shadows a declared worker subdomain.
+func TestAssignSecondary_rejectsWorkerSubdomainCollision(t *testing.T) {
+	setup(t)
+	mainPath := t.TempDir()
+	proj := &config.ProjectConfig{Framework: "laravel", CustomWorkers: map[string]config.FrameworkWorker{
+		"docs": {Command: "npx vitepress dev", Proxy: &config.WorkerProxy{Subdomain: "docs"}},
+	}}
+	if err := config.SaveProjectConfig(mainPath, proj); err != nil {
+		t.Fatal(err)
+	}
+	mustAdd(t, config.Site{Name: "starlane", Domains: []string{"starlane.test"}, Path: mainPath, Framework: "laravel"})
+	mustAdd(t, config.Site{Name: "docs", Domains: []string{"docs.test"}, Path: "/srv/docs"})
+	if err := AssignSecondary(reload(t, "starlane"), reload(t, "docs"), "docs", false); err == nil {
+		t.Error("expected error when a main-site worker already serves on the label")
+	}
+}
+
 func TestAssignSecondary_rejectsMainThatIsSecondary(t *testing.T) {
 	setup(t)
 	mustAdd(t, config.Site{Name: "sub", Domains: []string{"sub.starlane.test"}, Path: "/srv/sub", Group: "starlane", GroupSubdomain: "sub"})

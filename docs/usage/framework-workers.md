@@ -64,6 +64,7 @@ workers:
       default_port: 8080            # starting port for auto-assignment
       upstream: container           # where the server listens: container (default) or host
       port: pinned                  # optional: lerd owns the port instead of .env
+      subdomain: ws                 # optional: also serve it on ws.<site domain>
 ```
 
 A server that answers on more than one path lists them all under `paths`, and each gets its own location block on the same port. Reverb is the case in point: the WebSocket connection lands on `/app` while the HTTP broadcasting API a server-side `ShouldBroadcast` event posts to lives on `/apps/{app_id}/events`, and a path left out falls through to PHP and answers 404. Where both are set, `paths` is the list that gets proxied and `path` is ignored, so a definition keeps `path` alongside it and still proxies on lerd versions released before `paths` existed.
@@ -81,6 +82,12 @@ Stopping a worker clears what it left inside the container. A command that re-en
 Port assignment scans all proxy port env keys across all sites to prevent collisions between different workers and frameworks.
 
 The generated nginx location anchors on `path`, so `/app` proxies `/app` and everything under it without also swallowing an unrelated route that merely starts with the same letters (`/appstore`, say). Write `path` as a literal URL path and lerd normalises it, so `/app`, `/app/` and `app` all anchor identically; a `path` of `/` mounts the worker at the site root and proxies everything. Regex-special characters are escaped (a literal `.` in something like `/socket.io`, for instance) before the path reaches nginx's location block, so write it exactly as the URL reads. A `proxy` block with no `path` names nothing to proxy and is ignored.
+
+**Serving a worker on its own subdomain**: `subdomain` serves the worker on `<subdomain>.<site primary domain>` instead of under a path, with the whole host (WebSocket upgrades included) proxied to the worker's port. A proxy with only `subdomain` adds nothing to the site's own vhost; one with both `path` and `subdomain` gets both. The port and the upstream resolve exactly as they do for a path. The label takes what a worktree branch sanitises to: lowercase letters, digits and single inner hyphens, at most 50 characters. Anything else is refused with a message naming it, never reshaped. A secured site serves the subdomain under its own certificate, which already covers `*.<site domain>`, and the vhost follows the site through secure, unsecure, domain and TLD changes, PHP switches and unlink. While the site is paused, or waits on a sleeping service, the subdomain falls back to the site's landing page.
+
+A worker subdomain shares its namespace with [worktrees](../features/git-worktrees.md) and [site group](site-groups.md) secondaries. A registered site always keeps its host: a secondary already on the label wins and the worker subdomain is not served. Grouping a site under a label one of the main site's workers serves on is refused, as it is for a label a worktree uses. A worker subdomain wins over a worktree: a branch whose subdomain matches it is not served, the same way a secondary reserves its label.
+
+lerd versions released before `subdomain` existed see a proxy with only a subdomain as one with no path, and ignore it.
 
 Anchoring also turns the location into a regex, and nginx runs regex locations in file order ahead of the prefix location it would otherwise have picked, so the proxy takes precedence over lerd's own PHP handling and dotfile deny for anything under `path`. That's the right call for a worker mounted on its own path, but it means a `.php` file or dotfile living under `path` is proxied rather than served by lerd.
 
@@ -210,6 +217,23 @@ custom_workers:
       path: /.well-known/mercure
       port_env_key: MERCURE_PORT
       default_port: 3000
+```
+
+A custom worker running a dev server on the host can take a subdomain of its own, here a VitePress docs site on `docs.<site domain>`:
+
+```yaml
+custom_workers:
+  docs:
+    label: Docs
+    command: npx vitepress dev . --host --port "$DOCS_PORT" --strictPort
+    restart: always
+    host: true
+    proxy:
+      subdomain: docs
+      upstream: host
+      port: pinned
+      port_env_key: DOCS_PORT
+      default_port: 5180
 ```
 
 Custom workers are merged with the framework's workers at runtime. They are committed to git so teammates get the same setup.

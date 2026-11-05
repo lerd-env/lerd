@@ -64,7 +64,13 @@ func RegenerateVhost(site config.Site) error {
 	if !ok {
 		return nil
 	}
-	return writeSiteConf(site.PrimaryDomain()+".conf", rendered)
+	if err := writeSiteConf(site.PrimaryDomain()+".conf", rendered); err != nil {
+		return err
+	}
+	if !site.IsHostProxy() && !site.IsCustomContainer() && !site.IsFrankenPHP() {
+		syncWorkerSubdomainVhosts(site, sitePHPVersion(site), site.Secured)
+	}
+	return nil
 }
 
 // renderSiteVhost renders the vhost for whichever shape the site is, over HTTPS
