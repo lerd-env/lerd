@@ -1544,3 +1544,18 @@ stream_context_set_default(['http' => ['method' => 'POST', 'content' => 'q=1']])
 		t.Errorf("stream = %+v, want POST with body q=1 from the default context", got[0].Data)
 	}
 }
+
+// TestCollectorPHP_OwnPropertiesRaisesNoDeprecation is the collector's copy of
+// the adapter test: it describes payloads for frameworks without an adapter.
+func TestCollectorPHP_OwnPropertiesRaisesNoDeprecation(t *testing.T) {
+	lines := runCollectorPHP(t, `<?php
+require COLLECTOR;
+class Probe { private $held = 'kept'; }
+$raised = [];
+set_error_handler(function ($no, $msg) use (&$raised) { $raised[] = $msg; return true; });
+$props = \Lerd\Collector\own_properties(new Probe());
+restore_error_handler();
+\Lerd\Collector\send(['raised' => $raised, 'props' => $props]);
+`)
+	assertOwnPropertiesSilent(t, lines)
+}
