@@ -158,3 +158,45 @@ func TestExternalDBReachable(t *testing.T) {
 		t.Error("a closed port must read as down")
 	}
 }
+
+func TestUpdateExternalDBPassword_ReplacesItOnceItWorks(t *testing.T) {
+	externalFixture(t, "17.2", nil)
+	if _, err := AddExternalDB(externalReq); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpdateExternalDBPassword("dbngin", "n3w"); err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := os.ReadFile(config.ExternalDBPasswordFile("dbngin")); string(raw) != "n3w" {
+		t.Errorf("password file = %q", raw)
+	}
+	if raw, _ := os.ReadFile(config.ExternalDBClientFile("dbngin")); !strings.Contains(string(raw), "n3w") {
+		t.Errorf("client file = %q", raw)
+	}
+}
+
+// A typo must not replace the password that still works.
+func TestUpdateExternalDBPassword_KeepsTheOldOneWhenTheNewFails(t *testing.T) {
+	externalFixture(t, "17.2", nil)
+	if _, err := AddExternalDB(externalReq); err != nil {
+		t.Fatal(err)
+	}
+	externalProbeFn = func(*config.CustomService, string) (string, error) { return "", errors.New("access denied") }
+	err := UpdateExternalDBPassword("dbngin", "typo")
+	if err == nil || !strings.Contains(err.Error(), "access denied") {
+		t.Fatalf("got %v", err)
+	}
+	if raw, _ := os.ReadFile(config.ExternalDBPasswordFile("dbngin")); string(raw) != "s3cret" {
+		t.Errorf("password file = %q", raw)
+	}
+}
+
+func TestUpdateExternalDBPassword_RefusesAServiceLerdRuns(t *testing.T) {
+	externalFixture(t, "17.2", nil)
+	if err := config.SaveCustomService(&config.CustomService{Name: "ours", Image: "img"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpdateExternalDBPassword("ours", "x"); err == nil {
+		t.Fatal("a service lerd runs has no external password")
+	}
+}

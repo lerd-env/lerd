@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/geodro/lerd/internal/cli"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/serviceops"
 )
@@ -45,6 +46,14 @@ func handleExternalDB(w http.ResponseWriter, r *http.Request) {
 	var req externalDBRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<14)).Decode(&req); err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	if strings.HasSuffix(r.URL.Path, "/password") {
+		if err := cli.UpdateExternalDBPassword(req.Name, req.Password); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
 		return
 	}
 	if msg := req.validate(); msg != "" {

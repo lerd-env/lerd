@@ -201,6 +201,23 @@ func AddExternalDB(req ExternalRequest) (*config.CustomService, error) {
 	return svc, nil
 }
 
+// UpdateExternalDBPassword replaces a server's password, connecting with the new
+// one first so a typo leaves the working one in place. The files are rewritten in
+// place, so the running client sees the new password without a restart.
+func UpdateExternalDBPassword(name, password string) error {
+	svc, err := config.LoadCustomService(name)
+	if err != nil {
+		return err
+	}
+	if svc.External == nil {
+		return fmt.Errorf("%s is not an external server", name)
+	}
+	if _, err := externalProbeFn(svc, password); err != nil {
+		return fmt.Errorf("could not connect to %s: %w", svc.External.Address(), err)
+	}
+	return writeExternalClientFile(svc, password)
+}
+
 func writeExternalClientFile(svc *config.CustomService, password string) error {
 	path := config.ExternalDBClientFile(svc.Name)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

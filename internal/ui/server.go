@@ -276,6 +276,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/image-estimate", withCORS(handleImageEstimate))
 	mux.HandleFunc("/api/services/external", withCORS(publishAfter(handleExternalDB, eventbus.KindServices)))
 	mux.HandleFunc("/api/services/external/test", withCORS(handleExternalDB))
+	mux.HandleFunc("/api/services/external/password", withCORS(handleExternalDB))
 	mux.HandleFunc("/api/services/presets", withCORS(handleServicePresets))
 	mux.HandleFunc("/api/services/icons", withCORS(handleServiceIcons))
 	mux.HandleFunc("/api/frameworks/marks", withCORS(handleFrameworkMarks))

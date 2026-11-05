@@ -146,7 +146,9 @@ lerd db:use dbngin
 
 That saves the choice in `.lerd.yaml` and runs `lerd env`, which writes the connection into your env file under the keys your framework reads. The password goes there too, since the app needs it, and never into `.lerd.yaml`. A database the env file already names is kept and created if it is missing. Worktrees then isolate on that server the way they do on a lerd service, with `lerd db:isolate` or the **Isolated DB** toggle.
 
-On the dashboard, the site's suggested **MySQL** or **PostgreSQL** card lists added servers of that engine next to the presets.
+On the dashboard, use **Use on a site** on the server's Databases tab, or the site's suggested **MySQL** or **PostgreSQL** card, which lists added servers of that engine next to the presets. Either way only the site's env changes: its data stays where it is, so move it across with `lerd db:export` and `lerd db:import` if it should come along.
+
+To change a server's password, use **Change password** on that tab or `lerd service external <name> --update`. lerd connects with the new one first, so a typo leaves the old one in place, then rewrites the env of every site on the server.
 
 `lerd db:export`, `db:import`, `db:snapshot`, `db:restore` and `db:shell` then work on that server, as do the service's Databases and Snapshots pages and the assistant tools. Snapshots stay on your machine with lerd's other snapshots. Automatic snapshots do not cover an external server, so nothing dumps it on a schedule.
 
