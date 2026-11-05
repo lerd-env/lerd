@@ -44,11 +44,12 @@ func VhostDrift(site config.Site) (VhostDriftReport, error) {
 	if err != nil {
 		return VhostDriftReport{}, err
 	}
-	if bytes.Equal(current, rendered) {
-		return report, nil
+	if !bytes.Equal(current, rendered) {
+		report.Drifted = true
+		report.Detail = firstDifference(string(current), string(rendered))
+	} else if path, detail := workerVhostDrift(site); detail != "" {
+		report.Drifted, report.Path, report.Detail = true, path, detail
 	}
-	report.Drifted = true
-	report.Detail = firstDifference(string(current), string(rendered))
 	return report, nil
 }
 
@@ -64,7 +65,11 @@ func RegenerateVhost(site config.Site) error {
 	if !ok {
 		return nil
 	}
-	return writeSiteConf(site.PrimaryDomain()+".conf", rendered)
+	if err := writeSiteConf(site.PrimaryDomain()+".conf", rendered); err != nil {
+		return err
+	}
+	syncWorkerSubdomainVhosts(site, sitePHPVersion(site), site.Secured)
+	return nil
 }
 
 // renderSiteVhost renders the vhost for whichever shape the site is, over HTTPS

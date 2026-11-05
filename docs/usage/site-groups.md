@@ -62,6 +62,8 @@ Sharing rewrites the secondary's `DB_DATABASE`, so it only works between sites o
 
 **Git worktrees.** A worktree of the main repo whose branch sanitises to the same label as a secondary (a branch named `admin` when `admin.astrolov.test` is a secondary) would collide on the same host. Lerd reserves group subdomains: it refuses to assign a label a current main-repo worktree already uses, and it never generates a worktree vhost for a host a secondary already owns. The worktree checkout still exists, it just isn't served on that reserved subdomain.
 
+**Worker subdomains.** A worker of the main site can be served on a subdomain of its own (a proxy `subdomain`, see [Framework Workers](framework-workers.md)). Lerd refuses to assign a label such a worker already serves on, and a secondary that held the label first keeps it: the worker subdomain is then not served.
+
 **Multi-tenant subdomains.** If the main uses wildcard tenant subdomains (via `env_overrides` in `.lerd.yaml`), a grouped subdomain is carved out of that wildcard space: `admin.astrolov.test` is served by the secondary instead of being treated as a tenant of the main. The UI shows a warning when you group a secondary under such a main.
 
 **Renaming the base domain.** Changing the main's domain cascades to every secondary automatically: each one's subdomain is recomputed against the new base domain and its vhost, certificate and `.env` are regenerated.

@@ -266,16 +266,14 @@ func migrateWorktreeVhosts(worktrees []gitpkg.Worktree, newPrimary, phpVersion, 
 	}
 }
 
-// removeStaleVhosts deletes the old <domain>.conf and <domain>-ssl.conf so
-// the next regen pass does not have two vhosts (old + new) competing for the
-// same upstream. Errors are swallowed: missing files are the common case.
+// removeStaleVhosts deletes every vhost of the old domain, worker subdomains
+// included, so the next regen pass has no two vhosts competing for the same
+// upstream. Errors are swallowed: missing files are the common case.
 func removeStaleVhosts(oldDomain string) {
 	if oldDomain == "" {
 		return
 	}
-	for _, suffix := range []string{".conf", "-ssl.conf"} {
-		_ = os.Remove(filepath.Join(config.NginxConfD(), oldDomain+suffix))
-	}
+	_ = nginx.RemoveVhost(oldDomain)
 }
 
 // removeStaleCerts deletes the .crt and .key for a site whose TLS state was

@@ -454,6 +454,8 @@ workers:
       port: pinned                # optional: lerd owns the port, keeps it clear
                                   # of other sites, and hands it to the worker as
                                   # port_env_key in front of its command
+      subdomain: ws               # optional: serve the worker on ws.<site domain>,
+                                  # the whole host proxied to its port
     dev_server:                   # the dev server this worker starts (optional)
       tool: vite                  # believed whatever the command looks like, for
                                   # a worker that reaches the tool through a

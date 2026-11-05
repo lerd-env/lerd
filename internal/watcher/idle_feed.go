@@ -430,7 +430,7 @@ func resolveHostToStatsKey(host string) (string, bool) {
 // siteNameForHost resolves a non-worktree host to the site that owns it, ok=false
 // when no registered site does.
 func siteNameForHost(host string) (string, bool) {
-	site, err := config.FindSiteByDomain(host)
+	site, err := config.FindSiteByHost(host)
 	if err != nil || site == nil {
 		return "", false
 	}

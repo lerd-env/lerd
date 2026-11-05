@@ -83,7 +83,7 @@ func handleWakeHold(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(wakeHoldFailed)
 		return
 	}
-	site, err := config.FindSiteByDomain(host)
+	site, err := config.FindSiteByHost(host)
 	if err != nil || site == nil {
 		w.WriteHeader(wakeHoldFailed)
 		return

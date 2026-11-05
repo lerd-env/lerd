@@ -530,6 +530,33 @@ func TestFilterReservedWorktrees_dropsSecondaryDomain(t *testing.T) {
 	}
 }
 
+// A worker subdomain the main site declares is reserved the same way: the
+// worker's vhost serves that host, so a same-named worktree is not served.
+func TestFilterReservedWorktrees_dropsWorkerSubdomain(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	dir := t.TempDir()
+	proj := &config.ProjectConfig{Framework: "laravel", CustomWorkers: map[string]config.FrameworkWorker{
+		"docs": {Command: "npx vitepress dev", Proxy: &config.WorkerProxy{Subdomain: "docs"}},
+	}}
+	if err := config.SaveProjectConfig(dir, proj); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "starlane", Domains: []string{"starlane.test"}, Path: dir, Framework: "laravel"}); err != nil {
+		t.Fatal(err)
+	}
+
+	wts := []Worktree{
+		{Name: "docs", Branch: "docs", Domain: "docs.starlane.test", Path: "/wt/docs"},
+		{Name: "feat", Branch: "feat", Domain: "feat.starlane.test", Path: "/wt/feat"},
+	}
+	got := FilterReservedWorktrees(wts)
+	if len(got) != 1 || got[0].Domain != "feat.starlane.test" {
+		t.Errorf("expected only feat worktree to survive, got %+v", got)
+	}
+}
+
 func TestFilterReservedWorktrees_noReservations(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
