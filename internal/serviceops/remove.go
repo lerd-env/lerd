@@ -123,6 +123,11 @@ func RemoveService(name string, opts RemoveOptions, emit func(PhaseEvent)) error
 	if existing, err := config.LoadCustomService(name); err == nil {
 		family = existing.Family
 		preset = existing.Preset
+		// The data is on someone else's server: lerd neither dumps it on the way
+		// out nor has anything of its own to wipe.
+		if existing.External != nil {
+			opts.SkipSnapshot, opts.RemoveData = true, false
+		}
 	}
 
 	// Before anything stops: the dump has to come off a running engine, and it

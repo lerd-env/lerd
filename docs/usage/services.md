@@ -126,6 +126,18 @@ A recorded service stays listed while its quadlet is installed, whether the cont
 
 ---
 
+## Adding an external database server
+
+A MySQL, MariaDB or PostgreSQL server lerd does not run, such as DBngin, can be added as a service of its own. In the dashboard, open **Add a service**, pick **External database server** and fill in the host, port, user and password, or from the terminal:
+
+```bash
+lerd service external dbngin --engine mysql --host 127.0.0.1 --port 3306 --user root
+```
+
+lerd asks for the password, or reads it from stdin with `--password-stdin`. It connects first and saves nothing if that fails. Use `127.0.0.1` for a server on this machine.
+
+The service is a small container with the database client tools in it, so nothing has to be installed on your machine and the version is picked to match the server. It holds no data. The server appears on the Services page with its databases, marked offline when it stops answering; start it and reload the page. The password stays in a file only you can read, under lerd's data folder, and removing the service leaves everything on the server alone.
+
 ## Using a service you run on the host
 
 Moving lerd's published port lets a host-installed server keep its own. The step past that is pointing a project at your server instead of lerd's container: the database you already have, with your data and your users, while lerd keeps managing everything else.

@@ -21,6 +21,7 @@ export interface ServicePortMapping {
 
 export interface Service {
   name: string;
+  external?: string;
   // The name the service is shown under, from its definition.
   label?: string;
   status: string;

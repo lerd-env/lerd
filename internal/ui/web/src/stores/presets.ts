@@ -104,6 +104,13 @@ export function availableVersions(p: Preset): PresetVersion[] {
   return (p.versions || []).filter((v) => !installed.has(v.tag));
 }
 
+// matchesExternalDb is the catalog search for the external server entry, which
+// is not a preset; the engine names find it as well as the words on its card.
+export function matchesExternalDb(query: string): boolean {
+  const text = `${m.externalDb_rowTitle()} ${m.externalDb_hint()} mysql mariadb postgres`;
+  return text.toLowerCase().includes(query.trim().toLowerCase());
+}
+
 // Text match for a preset against a free-text query (name, description, image).
 // Shared by the preset modal search and the command palette so both filter the
 // same way. Empty query matches everything; terms are ANDed.

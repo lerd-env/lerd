@@ -273,6 +273,8 @@ func Start(currentVersion string) error {
 	})
 
 	mux.HandleFunc("/api/image-estimate", withCORS(handleImageEstimate))
+	mux.HandleFunc("/api/services/external", withCORS(publishAfter(handleExternalDB, eventbus.KindServices)))
+	mux.HandleFunc("/api/services/external/test", withCORS(handleExternalDB))
 	mux.HandleFunc("/api/services/presets", withCORS(handleServicePresets))
 	mux.HandleFunc("/api/services/icons", withCORS(handleServiceIcons))
 	mux.HandleFunc("/api/frameworks/marks", withCORS(handleFrameworkMarks))
@@ -1417,6 +1419,7 @@ func secondaryPortMappings(defaultPorts []string, sc config.ServiceConfig) []Ser
 // ServiceResponse is the response for GET /api/services.
 type ServiceResponse struct {
 	Name              string            `json:"name"`
+	External          string            `json:"external,omitempty"`
 	Label             string            `json:"label,omitempty"`
 	Status            string            `json:"status"`
 	Version           string            `json:"version,omitempty"`
@@ -1630,6 +1633,15 @@ func resolvePresentation(name string, custom *config.CustomService) presentation
 func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, name, ssOutput string, custom *config.CustomService) ServiceResponse {
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
+	// A client that is up says nothing about the server it points at, and that
+	// is the status anyone looking at this service wants.
+	var external string
+	if ext, err := config.LoadCustomService(name); err == nil && ext.External != nil {
+		external = net.JoinHostPort(ext.External.Host, strconv.Itoa(ext.External.Port))
+		if status == "active" && !serviceops.ExternalDBReachable(*ext.External) {
+			status = "offline"
+		}
+	}
 	if status == "" {
 		status = "inactive"
 	}
@@ -1706,6 +1718,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 	}
 	pres := resolvePresentation(name, custom)
 	resp := ServiceResponse{
+		External:          external,
 		Name:              name,
 		Label:             pres.Label,
 		Status:            status,

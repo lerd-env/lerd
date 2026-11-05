@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 // offering operations it can't perform.
 type dbEngineResponse struct {
 	Service          string            `json:"service"`
+	External         string            `json:"external,omitempty"`
 	Family           string            `json:"family"`
 	Status           string            `json:"status"`
 	Port             int               `json:"port,omitempty"`
@@ -110,6 +113,9 @@ func databaseEngine(name string, siteIndex map[string]dbview.Owner) dbEngineResp
 		DumpFormat:       serviceops.DatabaseDumpFormat(name),
 		Databases:        []dbEntryResponse{},
 		Error:            view.Error,
+	}
+	if svc, err := config.LoadCustomService(name); err == nil && svc.External != nil {
+		eng.External = net.JoinHostPort(svc.External.Host, strconv.Itoa(svc.External.Port))
 	}
 	for _, db := range view.Databases {
 		entry := dbEntryResponse{

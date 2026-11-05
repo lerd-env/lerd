@@ -10,6 +10,7 @@
   import CategoryChips from '$components/CategoryChips.svelte';
   import InstalledServiceTile from './InstalledServiceTile.svelte';
   import PresetCard from './PresetCard.svelte';
+  import ExternalDbCard from './ExternalDbCard.svelte';
   import UpdateAllModal from './UpdateAllModal.svelte';
   import {
     coreServices,
@@ -19,7 +20,7 @@
     type Service,
     type ServiceUpdateResult
   } from '$stores/services';
-  import { installablePresets, presetsLoaded, loadPresets } from '$stores/presets';
+  import { installablePresets, presetsLoaded, loadPresets, matchesExternalDb } from '$stores/presets';
   import { accessMode } from '$stores/accessMode';
   import { routeRest, goToTab } from '$stores/route';
   import { groupByCategory, categoryOf, categoryChips, CATEGORY_LABELS } from '$lib/presetCategories';
@@ -140,6 +141,8 @@
           <p class="text-xs text-gray-400">{m.common_loading()}</p>
         {:else if $installablePresets.length === 0}
           <p class="text-sm text-gray-500 dark:text-gray-400">{m.services_preset_allInstalled()}</p>
+        {:else if groups.length === 0 && matchesExternalDb(query) && (category === '' || category === 'databases')}
+          <ExternalDbCard />
         {:else if groups.length === 0}
           <p class="text-sm text-gray-500 dark:text-gray-400">{m.services_preset_noMatches()}</p>
         {:else}
@@ -149,6 +152,9 @@
                 {#each group.items as preset (preset.name)}
                   <PresetCard {preset} category={group.key} />
                 {/each}
+                {#if group.key === 'databases' && matchesExternalDb(query)}
+                  <ExternalDbCard />
+                {/if}
               </DashboardSection>
             {/each}
           </div>

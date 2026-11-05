@@ -57,9 +57,10 @@
     {/if}
 
     <p class="text-sm text-gray-600 dark:text-gray-400">
-      {m.services_delete_body()}
+      {svc.external ? m.externalDb_removeBody() : m.services_delete_body()}
     </p>
 
+    {#if !svc.external}
     <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
       <input
         type="checkbox"
@@ -73,6 +74,7 @@
         </span>
       </span>
     </label>
+    {/if}
 
     {#if requiresTypedConfirm}
       <TypeNameToConfirm name={svc.name} bind:value={typedName} />

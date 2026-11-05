@@ -5,6 +5,7 @@
   import GroupModal from './GroupModal.svelte';
   import SiteWizardModal from './SiteWizardModal.svelte';
   import PresetModal from './PresetModal.svelte';
+  import ExternalDbModal from './ExternalDbModal.svelte';
   import RemoteControlModal from './RemoteControlModal.svelte';
   import LANProgressModal from './LANProgressModal.svelte';
   import AddWorktreeModal from './AddWorktreeModal.svelte';
@@ -51,6 +52,8 @@
   <SiteWizardModal />
 {:else if $modal.kind === 'preset'}
   <PresetModal />
+{:else if $modal.kind === 'externalDb'}
+  <ExternalDbModal />
 {:else if $modal.kind === 'remoteControl'}
   <RemoteControlModal />
 {:else if $modal.kind === 'lanProgress'}

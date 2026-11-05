@@ -86,6 +86,10 @@ func GenerateCustomQuadlet(svc *config.CustomService) string {
 		fmt.Fprintf(&b, "Volume=%s:%s:%s\n", hostPath, f.Target, flags)
 	}
 
+	if svc.External != nil {
+		fmt.Fprintf(&b, "Volume=%s:%s:ro,z\n", config.ExternalDBClientFile(svc.Name), config.ExternalDBClientTarget(svc.Family))
+	}
+
 	// User tuning override, mounted read-only after the bundled preset config so
 	// the user's values win. Materialised by MaterializeServiceTuning, which runs
 	// before generation, so the host path is guaranteed present for tunable

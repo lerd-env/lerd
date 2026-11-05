@@ -47,6 +47,7 @@ export interface DatabaseEntry {
 
 export interface DatabaseEngine {
   service: string;
+  external?: string;
   family: string;
   status: string;
   port?: number;

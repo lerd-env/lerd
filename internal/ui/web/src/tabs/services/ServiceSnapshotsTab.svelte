@@ -336,7 +336,7 @@
     {/if}
 
     {#if stopped}
-      <p class="text-sm text-gray-500 dark:text-gray-400">{m.databases_startHint()}</p>
+      <p class="text-sm text-gray-500 dark:text-gray-400">{svc.status === 'offline' ? m.externalDb_serverOffline({ address: svc.external ?? '' }) : m.databases_startHint()}</p>
     {:else if !up}
       <LoadingRow />
     {:else if rows.length === 0}

@@ -4,7 +4,7 @@
   import Dropdown from '$components/Dropdown.svelte';
   import DetailButton from '$components/DetailButton.svelte';
   import ServiceIcon from '$components/ServiceIcon.svelte';
-  import { closeModal } from '$stores/modals';
+  import { closeModal, openExternalDbModal } from '$stores/modals';
   import {
     presets,
     presetsLoaded,
@@ -14,12 +14,15 @@
     loadPresets,
     presetAddLabel,
     matchesPresetQuery,
+    matchesExternalDb,
     type Preset
   } from '$stores/presets';
   import { m } from '../paraglide/messages.js';
 
   let query = $state('');
   const filtered = $derived($installablePresets.filter((p) => matchesPresetQuery(p, query)));
+  // Not a preset, so it does not vanish when every preset is installed.
+  const showExternal = $derived(matchesExternalDb(query));
 
   onMount(() => {
     loadPresets();
@@ -51,11 +54,23 @@
     </div>
   {/if}
   <div class="px-5 py-3 max-h-80 overflow-y-auto">
+    {#if showExternal}
+      <div class="border border-gray-100 dark:border-lerd-border rounded-lg p-3 mb-2 last:mb-0">
+        <div class="flex items-center gap-3">
+          <span class="self-start"><ServiceIcon name="external" category="databases" icon="database" compact /></span>
+          <div class="flex-1 min-w-0">
+            <span class="text-sm font-semibold text-gray-900 dark:text-white">{m.externalDb_rowTitle()}</span>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{m.externalDb_hint()}</p>
+          </div>
+          <DetailButton tone="primary" onclick={openExternalDbModal}>{m.common_add()}</DetailButton>
+        </div>
+      </div>
+    {/if}
     {#if !$presetsLoaded}
       <div class="py-4 text-center text-xs text-gray-400">{m.common_loading()}</div>
     {:else if $installablePresets.length === 0}
       <div class="py-4 text-center text-xs text-gray-400">{m.services_preset_allInstalled()}</div>
-    {:else if filtered.length === 0}
+    {:else if filtered.length === 0 && !showExternal}
       <div class="py-4 text-center text-xs text-gray-400">{m.services_preset_noMatches()}</div>
     {:else}
       {#each filtered as p (p.name)}
