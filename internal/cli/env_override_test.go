@@ -147,3 +147,30 @@ func TestOverrideOr(t *testing.T) {
 		t.Errorf("absent key yields empty: got %q", got)
 	}
 }
+
+func TestDropServerKeysFromOverrides(t *testing.T) {
+	overrides := map[string]string{"DB_HOST": "old", "DB_PASSWORD": "stale", "DB_DATABASE": "mine", "MAIL_HOST": "kept"}
+	wired := []string{"DB_CONNECTION=mysql", "DB_HOST=new", "DB_PASSWORD=fresh", "DB_DATABASE=app"}
+
+	dropped := dropServerKeys(overrides, wired, "DB_DATABASE")
+
+	if strings.Join(dropped, ",") != "DB_HOST,DB_PASSWORD" {
+		t.Errorf("dropped = %v, want DB_HOST and DB_PASSWORD", dropped)
+	}
+	if _, ok := overrides["DB_HOST"]; ok {
+		t.Error("a stale host in the override must not beat the chosen server")
+	}
+	if overrides["DB_DATABASE"] != "mine" {
+		t.Error("the database name stays the developer's to override")
+	}
+	if overrides["MAIL_HOST"] != "kept" {
+		t.Error("keys outside the server's connection are left alone")
+	}
+}
+
+func TestDropServerKeysFromOverrides_NothingToDrop(t *testing.T) {
+	overrides := map[string]string{"MAIL_HOST": "kept"}
+	if dropped := dropServerKeys(overrides, []string{"DB_HOST=new"}, "DB_DATABASE"); len(dropped) != 0 {
+		t.Errorf("dropped = %v, want none", dropped)
+	}
+}

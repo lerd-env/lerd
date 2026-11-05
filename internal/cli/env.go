@@ -1226,6 +1226,9 @@ func runEnv(_ *cobra.Command, _ []string) error {
 				continue
 			}
 			vars = wiredVars
+			if dropped := dropServerKeys(envOverrides, vars, config.DBEnvBindingFor(cwd).NameKey); len(dropped) > 0 {
+				envInfo("  %s sets %s, ignoring them in %s\n", svc.Name, strings.Join(dropped, ", "), envOverrideFile)
+			}
 		}
 		switch {
 		case dottedEnv && external:

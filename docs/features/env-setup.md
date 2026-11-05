@@ -110,6 +110,8 @@ On macOS that is all it takes: the connection is delivered to the host's loopbac
 
 The file is personal to the checkout it sits in, so a worktree does not get a copy. A worktree still on the database server its parent marks external stays there when `lerd env` runs inside it: it takes the connection values from the parent's file, and its own database name when it has an isolated one. Nothing else in the parent's file reaches it, and a `.env.lerd_override` of the worktree's own replaces all of this.
 
+A site that chose an [external database server](../usage/services.md#adding-an-external-database-server) with `lerd db:use` takes its connection from that server, so `lerd env` ignores the host, port, user and password in this file and says so. `DB_DATABASE` and every other key still apply.
+
 The value is comma or space separated, so `LERD_EXTERNAL_SERVICES=postgres, redis` opts both out. The reserved key is consumed by lerd and is never written into `.env`. The [site doctor](/features/web-ui) reads it too: a service you run yourself is never reported as missing, and never offered for install, however loudly your project declares it.
 
 The variables lerd writes for an external service are the ones your framework reads, since they are what the override file then overrides. An external MariaDB on Symfony gets the `DATABASE_URL` Doctrine reads, not the Laravel-shaped `DB_*` keys Symfony has no use for. A framework whose env file is a returned PHP array, as Magento's `app/etc/env.php` is, cannot take an override at all: its keys are dotted paths and `.env.lerd_override` is dotenv, so there is no key lerd could write that you would then point at your own instance. lerd writes nothing for it, tells you so, and leaves the connection in `env.php` to you.
