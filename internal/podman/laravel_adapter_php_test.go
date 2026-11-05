@@ -620,3 +620,42 @@ require ADAPTER;
 		t.Errorf("ctx.rid = %q, want the extension's id", e.Ctx.RID)
 	}
 }
+
+// TestLaravelAdapterPHP_OwnPropertiesRaisesNoDeprecation pins that describing a
+// payload stays silent on PHP 8.5, where setAccessible() is deprecated: the app's
+// error handler would log it against every request that fires an event.
+func TestLaravelAdapterPHP_OwnPropertiesRaisesNoDeprecation(t *testing.T) {
+	lines := runLaravelAdapterPHP(t, `<?php
+define('LERD_DEVTOOLS_ON', true);
+require ADAPTER;
+class Probe { private $held = 'kept'; }
+$raised = [];
+set_error_handler(function ($no, $msg) use (&$raised) { $raised[] = $msg; return true; });
+$props = \Lerd\LaravelAdapter\own_properties(new Probe());
+restore_error_handler();
+\Lerd\LaravelAdapter\send(['raised' => $raised, 'props' => $props]);
+`)
+	assertOwnPropertiesSilent(t, lines)
+}
+
+// assertOwnPropertiesSilent reads the single probe event the adapter and
+// collector tests ship: no PHP error raised, and the private value still read.
+func assertOwnPropertiesSilent(t *testing.T, lines []string) {
+	t.Helper()
+	if len(lines) != 1 {
+		t.Fatalf("got %d events, want 1: %v", len(lines), lines)
+	}
+	var e struct {
+		Raised []string          `json:"raised"`
+		Props  map[string]string `json:"props"`
+	}
+	if err := json.Unmarshal([]byte(lines[0]), &e); err != nil {
+		t.Fatalf("bad JSON line %q: %v", lines[0], err)
+	}
+	if len(e.Raised) != 0 {
+		t.Errorf("raised %v, want none", e.Raised)
+	}
+	if e.Props["held"] != "kept" {
+		t.Errorf("props = %v, want the private value read", e.Props)
+	}
+}

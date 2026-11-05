@@ -533,10 +533,14 @@ function own_properties($subject): array
             if (isset($fromTrait[$prop->getName()])) {
                 continue;
             }
+            // Before 8.1 even isInitialized() throws on a private property without this;
+            // it is a no-op after that and deprecated from 8.5.
+            if (\PHP_VERSION_ID < 80100) {
+                $prop->setAccessible(true);
+            }
             if (method_exists($prop, 'isInitialized') && !$prop->isInitialized($subject)) {
                 continue;
             }
-            $prop->setAccessible(true);
             $out[$prop->getName()] = $prop->getValue($subject);
         }
     } catch (\Throwable $_) {
