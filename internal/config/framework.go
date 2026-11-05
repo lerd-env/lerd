@@ -373,7 +373,7 @@ func ValidateSubdomainLabel(label string) error {
 // through a valid proxy subdomain, e.g. docs.app.test.
 func WorkerSubdomainHosts(s Site) []string {
 	fw, ok := GetFrameworkForDir(s.Framework, s.Path)
-	if !ok {
+	if !ok || !s.ServesWorkerSubdomains() {
 		return nil
 	}
 	var hosts []string

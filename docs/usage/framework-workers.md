@@ -83,7 +83,7 @@ Port assignment scans all proxy port env keys across all sites to prevent collis
 
 The generated nginx location anchors on `path`, so `/app` proxies `/app` and everything under it without also swallowing an unrelated route that merely starts with the same letters (`/appstore`, say). Write `path` as a literal URL path and lerd normalises it, so `/app`, `/app/` and `app` all anchor identically; a `path` of `/` mounts the worker at the site root and proxies everything. Regex-special characters are escaped (a literal `.` in something like `/socket.io`, for instance) before the path reaches nginx's location block, so write it exactly as the URL reads. A `proxy` block with no `path` names nothing to proxy and is ignored.
 
-**Serving a worker on its own subdomain**: `subdomain` serves the worker on `<subdomain>.<site primary domain>` instead of under a path, with the whole host (WebSocket upgrades included) proxied to the worker's port. A proxy with only `subdomain` adds nothing to the site's own vhost; one with both `path` and `subdomain` gets both. The port and the upstream resolve exactly as they do for a path. The label takes what a worktree branch sanitises to: lowercase letters, digits and single inner hyphens, at most 50 characters. Anything else is refused with a message naming it, never reshaped. A secured site serves the subdomain under its own certificate, which already covers `*.<site domain>`, and the vhost follows the site through secure, unsecure, domain and TLD changes, PHP switches and unlink. While the site is paused, or waits on a sleeping service, the subdomain falls back to the site's landing page, and a request to it wakes the site the way one to the site's own domain does. Two workers of one site cannot share a label: the first in worker name order keeps it and the other is refused with a message naming both. The site doctor reports a worker subdomain vhost that is missing, out of date or left over from a removed label, and regenerating the vhost repairs it.
+**Serving a worker on its own subdomain**: `subdomain` serves the worker on `<subdomain>.<site primary domain>` instead of under a path, with the whole host (WebSocket upgrades included) proxied to the worker's port. A proxy with only `subdomain` adds nothing to the site's own vhost; one with both `path` and `subdomain` gets both. The port and the upstream resolve exactly as they do for a path. The label takes what a worktree branch sanitises to: lowercase letters, digits and single inner hyphens, at most 50 characters. Anything else is refused with a message naming it, never reshaped. A secured site serves the subdomain under its own certificate, which already covers `*.<site domain>`, and the vhost follows the site through secure, unsecure, domain and TLD changes, PHP switches and unlink. While the site is paused, or waits on a sleeping service, the subdomain falls back to the site's landing page, and a request to it wakes the site the way one to the site's own domain does. Two workers of one site cannot share a label: the first in worker name order keeps it and the other is refused with a message naming both. The site doctor reports a worker subdomain vhost that is missing, out of date or left over from a removed label, and regenerating the vhost repairs it. Only a site served by PHP-FPM serves worker subdomains: on a FrankenPHP, custom container or host-proxy site `subdomain` is ignored, the label stays free for worktrees and secondaries, and switching a site to one of those runtimes removes its worker vhosts.
 
 A worker subdomain shares its namespace with [worktrees](../features/git-worktrees.md) and [site group](site-groups.md) secondaries. A registered site always keeps its host: a secondary already on the label wins and the worker subdomain is not served. Grouping a site under a label one of the main site's workers serves on is refused, as it is for a label a worktree uses. A worker subdomain wins over a worktree: a branch whose subdomain matches it is not served, the same way a secondary reserves its label, and a worktree vhost already on that host is removed when the worker claims it.
 
@@ -234,6 +234,14 @@ custom_workers:
       port: pinned
       port_env_key: DOCS_PORT
       default_port: 5180
+```
+
+Vite answers 403 to a host it does not know, and `--host` only changes the address it listens on, so a Vite based server has to allow the subdomain in its own config. For VitePress that is `.vitepress/config.mjs`:
+
+```js
+export default {
+  vite: { server: { allowedHosts: ['.test'] } },
+}
 ```
 
 Custom workers are merged with the framework's workers at runtime. They are committed to git so teammates get the same setup.

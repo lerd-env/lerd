@@ -224,3 +224,57 @@ func TestVhostDrift_coversWorkerSubdomainVhosts(t *testing.T) {
 		}
 	}
 }
+
+// Every path that rebuilds worktree vhosts, the watcher's sweep and a pause
+// among them, must leave a worker's host alone, or the worktree answers on it.
+func TestGenerateWorktreeVhost_leavesAWorkerSubdomainHostAlone(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{Subdomain: "api", DefaultPort: 5180})
+	if err := config.AddSite(site); err != nil {
+		t.Fatal(err)
+	}
+	wt := t.TempDir()
+	if err := GenerateWorktreeVhost("api.app.test", wt, "8.4", "app", "api"); err != nil {
+		t.Fatal(err)
+	}
+	if err := GeneratePausedWorktreeVhost("api.app.test", "app.test", t.TempDir(), false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(confD, "api.app.test.conf")); !os.IsNotExist(err) {
+		t.Errorf("a worktree vhost landed on the worker's host (err=%v)", err)
+	}
+	if err := GenerateWorktreeVhost("feat.app.test", wt, "8.4", "app", "feat"); err != nil {
+		t.Fatal(err)
+	}
+	readConf(t, filepath.Join(confD, "feat.app.test.conf"))
+}
+
+// Moving off FPM takes the worker vhosts with it: they name an upstream the site
+// no longer has, and the doctor reads one left behind as drift.
+func TestLeavingFPMDropsWorkerSubdomainVhosts(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{Subdomain: "docs", DefaultPort: 5180})
+	worker := filepath.Join(confD, "app.test.worker-docs.conf")
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatal(err)
+	}
+	site.Runtime = "frankenphp"
+	if err := GenerateFrankenPHPVhost(site); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(worker); !os.IsNotExist(err) {
+		t.Errorf("worker vhost survived the switch to FrankenPHP (err=%v)", err)
+	}
+	if err := os.WriteFile(worker, []byte("server {}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if d, err := VhostDrift(site); err != nil || !d.Drifted {
+		t.Errorf("drift = %+v %v, want the leftover reported", d, err)
+	}
+	if err := RegenerateVhost(site); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(worker); !os.IsNotExist(err) {
+		t.Errorf("regenerating kept the leftover worker vhost (err=%v)", err)
+	}
+}

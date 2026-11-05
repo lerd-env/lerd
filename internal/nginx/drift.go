@@ -47,10 +47,8 @@ func VhostDrift(site config.Site) (VhostDriftReport, error) {
 	if !bytes.Equal(current, rendered) {
 		report.Drifted = true
 		report.Detail = firstDifference(string(current), string(rendered))
-	} else if servesWorkerSubdomains(site) {
-		if path, detail := workerVhostDrift(site); detail != "" {
-			report.Drifted, report.Path, report.Detail = true, path, detail
-		}
+	} else if path, detail := workerVhostDrift(site); detail != "" {
+		report.Drifted, report.Path, report.Detail = true, path, detail
 	}
 	return report, nil
 }
@@ -70,9 +68,7 @@ func RegenerateVhost(site config.Site) error {
 	if err := writeSiteConf(site.PrimaryDomain()+".conf", rendered); err != nil {
 		return err
 	}
-	if servesWorkerSubdomains(site) {
-		syncWorkerSubdomainVhosts(site, sitePHPVersion(site), site.Secured)
-	}
+	syncWorkerSubdomainVhosts(site, sitePHPVersion(site), site.Secured)
 	return nil
 }
 

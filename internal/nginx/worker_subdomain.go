@@ -26,12 +26,6 @@ func removeWorkerSubdomainVhosts(primary string) {
 	}
 }
 
-// servesWorkerSubdomains reports whether the site's own vhost is the FPM one,
-// the only shape that serves workers on their own subdomain.
-func servesWorkerSubdomains(site config.Site) bool {
-	return !site.IsHostProxy() && !site.IsCustomContainer() && !site.IsFrankenPHP()
-}
-
 // syncWorkerSubdomainVhosts rewrites the vhosts serving the site's workers on
 // their own subdomain and drops any no longer declared. A worktree vhost on the
 // same host is removed, since nginx would keep answering from it.
@@ -53,7 +47,7 @@ func syncWorkerSubdomainVhosts(site config.Site, phpVersion string, ssl bool) {
 // subdomain, keyed by label, and names every claim refused. While the site
 // waits on a sleeping service its wildcard serves the waking page instead.
 func workerSubdomainVhosts(site config.Site, phpVersion string, ssl bool) (map[string][]byte, []string) {
-	if siteWaitsOnSleepingService(site.Name) {
+	if !site.ServesWorkerSubdomains() || siteWaitsOnSleepingService(site.Name) {
 		return nil, nil
 	}
 	fw, ok := config.GetFrameworkForDir(site.Framework, site.Path)

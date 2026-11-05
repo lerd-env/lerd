@@ -65,3 +65,25 @@ func TestFindSiteByHost_resolvesWorkerSubdomain(t *testing.T) {
 		t.Errorf("FindSiteByHost(other.app.test) = %s, want not found", s.Name)
 	}
 }
+
+// Only an FPM site serves worker subdomains, so no other shape claims the host
+// from a worktree or a group secondary.
+func TestWorkerSubdomainHosts_onlyAnFPMSiteClaimsThem(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := t.TempDir()
+	proj := &ProjectConfig{Framework: "laravel", CustomWorkers: map[string]FrameworkWorker{
+		"docs": {Command: "npx vitepress dev", Proxy: &WorkerProxy{Subdomain: "docs"}},
+	}}
+	if err := SaveProjectConfig(dir, proj); err != nil {
+		t.Fatal(err)
+	}
+	site := Site{Name: "app", Domains: []string{"app.test"}, Path: dir, Framework: "laravel"}
+	if got := WorkerSubdomainHosts(site); len(got) != 1 {
+		t.Fatalf("FPM site: hosts = %v, want docs.app.test", got)
+	}
+	site.Runtime = "frankenphp"
+	if got := WorkerSubdomainHosts(site); len(got) != 0 {
+		t.Errorf("FrankenPHP site: hosts = %v, want none", got)
+	}
+}

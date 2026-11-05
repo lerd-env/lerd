@@ -778,6 +778,13 @@ func renderContainerVhost(site config.Site, container string, port int, backendS
 	return renderVhost(tmpl, data)
 }
 
+// writeNonFPMConf writes the vhost of a site not served by FPM, which drops any
+// worker subdomain vhost it had as an FPM site: only that shape serves them.
+func writeNonFPMConf(site config.Site, name string, rendered []byte) error {
+	removeWorkerSubdomainVhosts(site.PrimaryDomain())
+	return writeSiteConf(name, rendered)
+}
+
 // GenerateFrankenPHPVhost renders the HTTP vhost template for a FrankenPHP
 // site. Nginx reverse-proxies to the per-site lerd-fp-<name>:8000 container
 // using the shared custom-container template.
@@ -786,7 +793,7 @@ func GenerateFrankenPHPVhost(site config.Site) error {
 	if err != nil {
 		return err
 	}
-	return writeSiteConf(site.PrimaryDomain()+".conf", rendered)
+	return writeNonFPMConf(site, site.PrimaryDomain()+".conf", rendered)
 }
 
 // GenerateFrankenPHPSSLVhost renders the HTTPS vhost template for a FrankenPHP site.
@@ -795,7 +802,7 @@ func GenerateFrankenPHPSSLVhost(site config.Site) error {
 	if err != nil {
 		return err
 	}
-	return writeSiteConf(site.PrimaryDomain()+"-ssl.conf", rendered)
+	return writeNonFPMConf(site, site.PrimaryDomain()+"-ssl.conf", rendered)
 }
 
 // GenerateCustomVhost renders the HTTP vhost template for a custom container
@@ -806,7 +813,7 @@ func GenerateCustomVhost(site config.Site) error {
 	if err != nil {
 		return err
 	}
-	return writeSiteConf(site.PrimaryDomain()+".conf", rendered)
+	return writeNonFPMConf(site, site.PrimaryDomain()+".conf", rendered)
 }
 
 // GenerateCustomSSLVhost renders the SSL vhost template for a custom container
@@ -816,7 +823,7 @@ func GenerateCustomSSLVhost(site config.Site) error {
 	if err != nil {
 		return err
 	}
-	return writeSiteConf(site.PrimaryDomain()+"-ssl.conf", rendered)
+	return writeNonFPMConf(site, site.PrimaryDomain()+"-ssl.conf", rendered)
 }
 
 // hostProxyUpstream returns the host address nginx proxies a host-proxy site to.
@@ -850,7 +857,7 @@ func generateHostProxyVhost(site config.Site, tmplName, confName string, ssl boo
 	if err != nil {
 		return err
 	}
-	return writeSiteConf(confName, rendered)
+	return writeNonFPMConf(site, confName, rendered)
 }
 
 // renderHostProxyVhost renders the vhost for a site nginx proxies to a process
@@ -918,6 +925,14 @@ func worktreeVhostConfig(domain, path, phpVersion, siteName string) (publicDir, 
 	return publicDir, fpmContainer, frameworkNginx, frameworkFastCGI, fpmPort
 }
 
+// hostServedBySite reports whether a registered site or one of its workers owns
+// host. Callers rebuild worktree vhosts from every checkout on disk, so this is
+// where a worktree on a reserved label is kept off the host.
+func hostServedBySite(host string) bool {
+	_, err := config.FindSiteByHost(host)
+	return err == nil
+}
+
 // writeConfD writes a rendered vhost to conf.d/<domain>.conf.
 func writeConfD(domain string, rendered []byte) error {
 	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
@@ -943,6 +958,9 @@ func GenerateWorktreeSSLVhost(domain, path, phpVersion, parentDomain, siteName, 
 // writeWorktreeVhost renders one of the PHP vhost templates for a worktree and
 // writes it to conf.d/<domain>.conf. certDomain is empty for plain HTTP.
 func writeWorktreeVhost(tmplName, domain, path, phpVersion, certDomain, siteName, branch string) error {
+	if hostServedBySite(domain) {
+		return nil
+	}
 	tmplData, err := GetTemplate(tmplName)
 	if err != nil {
 		return err
@@ -1147,6 +1165,9 @@ func GenerateWakingVhost(site config.Site) error {
 // GeneratePausedWorktreeVhost writes a paused nginx vhost for a worktree domain.
 // certDomain is the parent site's domain whose cert files back the wildcard.
 func GeneratePausedWorktreeVhost(domain, certDomain, pausedDir string, secured bool) error {
+	if hostServedBySite(domain) {
+		return nil
+	}
 	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
 		return err
 	}
