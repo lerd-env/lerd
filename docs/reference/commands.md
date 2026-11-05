@@ -257,6 +257,7 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 | `lerd service pin <name>` | Pin a service so it is never auto-stopped, whether no site uses it or every site using it is idle |
 | `lerd service unpin <name>` | Unpin a service so it can be auto-stopped when unused |
 | `lerd service add [file.yaml]` | Register a new custom service (from a YAML file or flags) |
+| `lerd service external <name> [--engine] [--host] [--port] [--user] [--password-stdin]` | Add a MySQL, MariaDB or PostgreSQL server lerd does not run as a service |
 | `lerd service preset [name]` | List presets, or install one (use `--version` for multi-version presets); a store-only preset is fetched on demand |
 | `lerd service search [query]` | Browse the external service-preset store; filter by name, description, or family |
 | `lerd service remove <name> [--purge] [--no-snapshot]` | Stop and remove a service (custom or default). With `--purge`, snapshot every database on it, then rename the data dir aside (recoverable as `<name>.pre-remove-<ts>`). `--no-snapshot` skips the snapshot |
@@ -279,6 +280,7 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 | `lerd db:snapshot:keep <name> [--off]` | Keep an automatic snapshot for good, exempt from retention |
 | `lerd db:snapshot:auto status\|on\|off\|site` | Configure scheduled database snapshots, globally or per site |
 | `lerd db:move [--from svc] [--to svc] [--all\|--site name]` | Move sites' databases between two installed services in the same family and repoint their `.env`; wizard when run without flags |
+| `lerd db:use <service>` | Point this project at a database service you added, such as an external server, and rewrite its env |
 
 ## Import
 

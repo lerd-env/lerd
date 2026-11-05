@@ -6,13 +6,21 @@
   import ServiceIcon from '$components/ServiceIcon.svelte';
   import { closeModal, modal } from '$stores/modals';
   import { presets, presetsLoaded, loadPresets, presetsFillingRole, type Preset } from '$stores/presets';
-  import { serviceLabel } from '$stores/services';
+  import { services, serviceLabel } from '$stores/services';
   import { confirmDownload } from '$stores/downloadConfirm';
-  import { addSuggestedService, loadSites } from '$stores/sites';
+  import { addSuggestedService, loadSites, useSiteDatabase } from '$stores/sites';
   import { m } from '../paraglide/messages.js';
 
   const target = $derived($modal.siteServiceAdd);
   const choices = $derived(target ? presetsFillingRole($presets, target.name) : []);
+  // External servers of the same engine fill the role as well as a preset does,
+  // and need no download.
+  const externals = $derived(target ? $services.filter((s) => s.external && fillsRole(s.family, target.name)) : []);
+  const pickedExternal = $derived(externals.find((s) => s.name === preset));
+
+  function fillsRole(family: string | undefined, role: string): boolean {
+    return family === role || (role === 'mysql' && family === 'mariadb');
+  }
 
   let preset = $state('');
   let version = $state('');
@@ -51,11 +59,10 @@
   }
 
   function presetOptions() {
-    return choices.map((p) => ({
-      value: p.name,
-      label: serviceLabel(p.name),
-      description: p.description
-    }));
+    return [
+      ...choices.map((p) => ({ value: p.name, label: serviceLabel(p.name), description: p.description })),
+      ...externals.map((s) => ({ value: s.name, label: s.name, description: m.externalDb_server({ address: s.external ?? '' }) }))
+    ];
   }
 
   function safeClose() {
@@ -63,7 +70,22 @@
     closeModal();
   }
 
+  async function useExternal(name: string) {
+    if (!target) return;
+    busy = true;
+    error = '';
+    const res = await useSiteDatabase(target.domain, name);
+    busy = false;
+    if (!res.ok) {
+      error = res.error || m.common_requestFailed();
+      return;
+    }
+    await loadSites();
+    closeModal();
+  }
+
   async function add() {
+    if (pickedExternal) return useExternal(pickedExternal.name);
     if (busy || !target || !picked) return;
     // Busy from the first await, and the pick held, so what gets added is what
     // the download prompt described.
@@ -98,7 +120,7 @@
       <p class="text-sm text-gray-500 dark:text-gray-400">{m.common_loading()}</p>
     {:else if target}
       <p class="text-sm text-gray-700 dark:text-gray-300">{m.sites_suggestedService_pick()}</p>
-      {#if choices.length > 1}
+      {#if choices.length + externals.length > 1}
         <Dropdown value={preset} options={presetOptions()} onchange={(v) => pick(v)} width="full" disabled={busy}>
           {#snippet optionIcon(name)}<ServiceIcon {name} bare inline />{/snippet}
         </Dropdown>
@@ -114,6 +136,6 @@
 
   {#snippet footer()}
     <DetailButton onclick={safeClose} disabled={busy}>{m.common_cancel()}</DetailButton>
-    <DetailButton tone="primary" onclick={add} loading={busy} disabled={busy || !picked}>{m.common_add()}</DetailButton>
+    <DetailButton tone="primary" onclick={add} loading={busy} disabled={busy || (!picked && !pickedExternal)}>{m.common_add()}</DetailButton>
   {/snippet}
 </Modal>

@@ -686,3 +686,28 @@ func TestReadDBEnv_KeepsWorkingOnLerdsOwnDatabase(t *testing.T) {
 		t.Errorf("got %+v, %v", got, err)
 	}
 }
+
+func TestReadDBEnv_UsesTheExternalServiceTheSiteChose(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	svc := &config.CustomService{Name: "dbngin", Image: "img", Family: "mariadb", External: &config.ExternalDB{Host: "host.containers.internal", Port: 3306, User: "me"}}
+	if err := config.SaveCustomService(svc); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	env := "DB_CONNECTION=mysql\nDB_HOST=host.containers.internal\nDB_PORT=3306\nDB_DATABASE=shop\n"
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(env), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte("services:\n  - dbngin\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := readDBEnv(dir)
+	if err != nil || mcpDBService(got) != "dbngin" {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+	lenient, err := readDBEnvLenient(dir)
+	if err != nil || mcpDBService(lenient) != "dbngin" {
+		t.Fatalf("lenient: %+v, %v", lenient, err)
+	}
+}

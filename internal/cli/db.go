@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
@@ -89,6 +90,21 @@ type dbEnv struct {
 	database   string
 	username   string
 	password   string
+	// external marks a service whose clients read their server from a client file.
+	external bool
+}
+
+// externalDBEnv is the database of a project on an external server it chose,
+// reached through that service's client.
+func externalDBEnv(cwd string, svc *config.CustomService) *dbEnv {
+	binding := config.DBEnvBindingFor(cwd)
+	env := serviceToDBEnv(svc.Name)
+	if config.ExternalDBFamily(svc.Family) == "postgres" {
+		env.connection = "pgsql"
+	}
+	env.database = envfile.Reader(filepath.Join(cwd, binding.File), binding.Format)(binding.NameKey)
+	env.username, env.password, env.external = svc.External.User, "", true
+	return env
 }
 
 // serviceToDBEnv returns dialect and default credentials for a given lerd service name.
@@ -132,6 +148,10 @@ func resolveDB(cwd, flagService, flagDatabase string) (*dbEnv, error) {
 		env = serviceToDBEnv(flagService)
 
 	default:
+		if svc := config.ExternalDBServiceFor(cwd); svc != nil {
+			env = externalDBEnv(cwd, svc)
+			break
+		}
 		// Try .lerd.yaml db: block
 		if pc, err := config.LoadProjectConfig(cwd); err == nil && pc.DB.Service != "" {
 			env = serviceToDBEnv(pc.DB.Service)
@@ -209,6 +229,10 @@ func resolveDBLenient(cwd, flagService, flagDatabase string) (*dbEnv, error) {
 		env = serviceToDBEnv(flagService)
 
 	default:
+		if svc := config.ExternalDBServiceFor(cwd); svc != nil {
+			env = externalDBEnv(cwd, svc)
+			break
+		}
 		if pc, err := config.LoadProjectConfig(cwd); err == nil && pc.DB.Service != "" {
 			env = serviceToDBEnv(pc.DB.Service)
 			if pc.DB.Database != "" {
@@ -574,8 +598,12 @@ func dbShellArgs(env *dbEnv, family string, tty bool) []string {
 		args = append(args, "--tty")
 	}
 	args = append(args, "lerd-"+env.service)
-	switch env.connection {
-	case "pgsql", "postgres":
+	switch {
+	case env.external && (env.connection == "pgsql" || env.connection == "postgres"):
+		args = append(args, "psql")
+	case env.external:
+		args = append(args, "sh", "-c", execFirstCommand(mysqlClientBinaries(family)), "sh")
+	case env.connection == "pgsql" || env.connection == "postgres":
 		args = append(args, "psql", "-U", env.username)
 	default:
 		// Over TCP, like the preset's own commands: a server confined by a host
@@ -649,6 +677,11 @@ func pgDatabaseExistsQuery(name string) string {
 // The name comes from a project's .env, so it is escaped for the literal it
 // lands in rather than trusted.
 func databaseExists(svc, name string) (bool, error) {
+	// An external server's clients take it from the client file, and the flags
+	// below would send them to lerd's own.
+	if s, err := config.LoadCustomService(svc); err == nil && s.External != nil {
+		return serviceops.EntityExists(svc, serviceops.EntityFor(svc, "databases"), name)
+	}
 	container := "lerd-" + svc
 	family := serviceFamily(svc)
 	switch family {

@@ -1423,6 +1423,7 @@ func secondaryPortMappings(defaultPorts []string, sc config.ServiceConfig) []Ser
 type ServiceResponse struct {
 	Name              string            `json:"name"`
 	External          string            `json:"external,omitempty"`
+	Family            string            `json:"family,omitempty"`
 	Label             string            `json:"label,omitempty"`
 	Status            string            `json:"status"`
 	Version           string            `json:"version,omitempty"`
@@ -1638,9 +1639,10 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 	status, _ := podman.UnitStatus(unit)
 	// A client that is up says nothing about the server it points at, and that
 	// is the status anyone looking at this service wants.
-	var external string
+	var external, externalFamily string
 	if ext, err := config.LoadCustomService(name); err == nil && ext.External != nil {
 		external = net.JoinHostPort(ext.External.Host, strconv.Itoa(ext.External.Port))
+		externalFamily = ext.Family
 		if status == "active" && !serviceops.ExternalDBReachable(*ext.External) {
 			status = "offline"
 		}
@@ -1722,6 +1724,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 	pres := resolvePresentation(name, custom)
 	resp := ServiceResponse{
 		External:          external,
+		Family:            externalFamily,
 		Name:              name,
 		Label:             pres.Label,
 		Status:            status,
@@ -4660,6 +4663,9 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "db:use":
+		writeJSON(w, siteDBUse(site, r.URL.Query().Get("name")))
 		return
 	case "db:isolate":
 		branch := r.URL.Query().Get("branch")

@@ -318,7 +318,7 @@ You can change the choice at any time by editing the `services:` list in `.lerd.
 
 A project can use the MySQL, MariaDB or PostgreSQL already installed on the machine instead of lerd's container, keeping your existing data and users while lerd manages the rest. The connection values and the `LERD_EXTERNAL_SERVICES` opt-out go in the project's `.env.lerd_override`; the host server also has to accept a connection that does not come from its own loopback, which on Linux means changing what it listens on and who it grants to. See [Using a service you run on the host](services.md#using-a-service-you-run-on-the-host).
 
-lerd's database commands, such as `lerd db:export`, `lerd db:snapshot` and `lerd db:restore`, run inside its own containers, so they cannot reach a server like that. On such a project they refuse and name the host instead of acting on a database of the same name in lerd's service. Pass `--service <name>` when you do mean a lerd service.
+lerd's database commands, such as `lerd db:export`, `lerd db:snapshot` and `lerd db:restore`, run inside its containers, so they cannot reach a server set up that way. On such a project they refuse and name the host instead of acting on a database of the same name in lerd's service. Pass `--service <name>` when you do mean a lerd service. To use them on your server, [add it as a service](services.md#adding-an-external-database-server) and run `lerd db:use` in the project.
 
 Note that the `lerd db:*` commands on this page resolve their target from the service rather than from `DB_HOST`, so they keep talking to lerd's container. Use your own `mysql` or `psql` client against a host-run server.
 

@@ -2686,6 +2686,9 @@ func execDBExport(args map[string]any) (any, *rpcError) {
 }
 
 type mcpDBEnv struct {
+	// service is set when the project chose an external server, whose host names
+	// no lerd service.
+	service    string
 	connection string
 	host       string
 	database   string
@@ -2698,6 +2701,9 @@ type mcpDBEnv struct {
 // mysql-5-7), with the connection's canonical family service as the fallback.
 func mcpDBService(env *mcpDBEnv) string {
 	if env != nil {
+		if env.service != "" {
+			return env.service
+		}
 		if s := strings.TrimPrefix(env.host, "lerd-"); s != env.host && s != "" {
 			return s
 		}
@@ -2729,10 +2735,14 @@ func readDBEnv(projectPath string) (*mcpDBEnv, error) {
 	if conn == "" {
 		return nil, fmt.Errorf("DB_CONNECTION not set in .env")
 	}
-	if err := refuseExternalDB(projectPath, conn); err != nil {
+	service := ""
+	if svc := config.ExternalDBServiceFor(projectPath); svc != nil {
+		service = svc.Name
+	} else if err := refuseExternalDB(projectPath, conn); err != nil {
 		return nil, err
 	}
 	return &mcpDBEnv{
+		service:    service,
 		connection: conn,
 		host:       vals["DB_HOST"],
 		database:   vals["DB_DATABASE"],
@@ -4531,10 +4541,14 @@ func readDBEnvLenient(projectPath string) (*mcpDBEnv, error) {
 		k, v, _ := strings.Cut(line, "=")
 		vals[strings.TrimSpace(k)] = strings.Trim(strings.TrimSpace(v), `"'`)
 	}
-	if err := refuseExternalDB(projectPath, vals["DB_CONNECTION"]); err != nil {
+	service := ""
+	if svc := config.ExternalDBServiceFor(projectPath); svc != nil {
+		service = svc.Name
+	} else if err := refuseExternalDB(projectPath, vals["DB_CONNECTION"]); err != nil {
 		return nil, err
 	}
 	return &mcpDBEnv{
+		service:    service,
 		connection: vals["DB_CONNECTION"],
 		host:       vals["DB_HOST"],
 		database:   vals["DB_DATABASE"],

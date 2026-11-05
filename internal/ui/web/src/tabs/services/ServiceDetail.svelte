@@ -31,7 +31,7 @@
   let shownService = $state('');
   let shownRoute = $state('');
 
-  const hasEnv = $derived(Boolean(svc.env_vars && Object.keys(svc.env_vars).length > 0));
+  const hasEnv = $derived(!svc.external && (Boolean(svc.env_vars && Object.keys(svc.env_vars).length > 0)));
   const hasTools = $derived(Boolean(svc.client_shims && svc.client_shims.length > 0));
   // Workers publish nothing, so the ports tab tracks the header gear's old guard.
   const hasPorts = $derived(!isServiceWorker(svc) && !svc.external);

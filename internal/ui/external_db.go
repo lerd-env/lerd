@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
+	"os/exec"
 	"strings"
 
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/serviceops"
 )
 
@@ -67,4 +70,22 @@ func handleExternalDB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]string{"name": svc.Name})
+}
+
+// siteDBUse points a site at a database service through the same command the
+// terminal runs, so the env is written by the one code path that knows how.
+func siteDBUse(site *config.Site, service string) SiteActionResponse {
+	if service == "" {
+		return SiteActionResponse{Error: "name parameter required"}
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return SiteActionResponse{Error: err.Error()}
+	}
+	cmd := exec.Command(self, "db:use", service)
+	cmd.Dir = site.Path
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return SiteActionResponse{Error: strings.TrimSpace(string(out))}
+	}
+	return SiteActionResponse{OK: true}
 }

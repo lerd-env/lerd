@@ -208,3 +208,54 @@ func TestMissingExternalService(t *testing.T) {
 		})
 	}
 }
+
+// externalServiceFixture is a project that chose an external server.
+func externalServiceFixture(t *testing.T, family string) string {
+	t.Helper()
+	dir := externalDBFixture(t, "DB_CONNECTION=mysql\nDB_HOST=host.containers.internal\nDB_PORT=3306\nDB_DATABASE=shop\n")
+	svc := &config.CustomService{Name: "dbngin", Image: "img", Family: family, External: &config.ExternalDB{Host: "host.containers.internal", Port: 3306, User: "me"}}
+	if err := config.SaveCustomService(svc); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte("services:\n  - dbngin\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// A server the site chose is reached through its own client, which is what makes
+// every database command work on it.
+func TestResolveDBUsesTheExternalServiceTheSiteChose(t *testing.T) {
+	dir := externalServiceFixture(t, "mariadb")
+	for name, resolve := range map[string]func() (*dbEnv, error){
+		"strict":  func() (*dbEnv, error) { return resolveDB(dir, "", "") },
+		"lenient": func() (*dbEnv, error) { return resolveDBLenient(dir, "", "") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			env, err := resolve()
+			if err != nil || env.service != "dbngin" || env.database != "shop" || !env.external {
+				t.Fatalf("got %+v, %v", env, err)
+			}
+		})
+	}
+	if env, err := resolveDB(dir, "mysql", "other"); err != nil || env.service != "mysql" || env.external {
+		t.Errorf("an explicit service still wins: %+v, %v", env, err)
+	}
+}
+
+func TestDbShellArgs_ExternalReadsTheClientFile(t *testing.T) {
+	for name, env := range map[string]*dbEnv{
+		"mysql":    {service: "dbngin", connection: "mysql", database: "shop", external: true},
+		"postgres": {service: "dbngin", connection: "pgsql", database: "shop", external: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			args := strings.Join(dbShellArgs(env, env.connection, false), " ")
+			if strings.Contains(args, "127.0.0.1") || strings.Contains(args, "-u") || strings.Contains(args, "-U") || strings.Contains(args, "-p") && !strings.Contains(args, "exec") {
+				t.Errorf("lerd's own server leaked in: %s", args)
+			}
+			if !strings.HasSuffix(args, "shop") {
+				t.Errorf("args = %s", args)
+			}
+		})
+	}
+}
