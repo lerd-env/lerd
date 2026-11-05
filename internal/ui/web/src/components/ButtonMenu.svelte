@@ -98,11 +98,11 @@
   </svg>
 {/snippet}
 
-{#snippet cog(tone: DetailButtonTone)}
+{#snippet cog(tone: DetailButtonTone, corners = '')}
   <button
     type="button"
     onclick={onSettings}
-    class="{baseBtn} border-l border-l-black/10 dark:border-l-white/10 px-1.5 {buttonMenuToneClass[tone]}"
+    class="{baseBtn} {corners} border-l border-l-black/10 dark:border-l-white/10 px-1.5 {buttonMenuToneClass[tone]}"
     disabled={busy}
     aria-label={settingsTitle ?? m.common_settings()}
     title={settingsTitle ?? m.common_settings()}
@@ -166,7 +166,7 @@
       {@render inlineButton(inline, tone)}
     {/if}
     {#if onSettings}
-      {@render cog(tone)}
+      {@render cog(tone, 'rounded-r-lg')}
     {/if}
   </div>
 {:else}

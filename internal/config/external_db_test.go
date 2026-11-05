@@ -61,18 +61,8 @@ func TestExternalDBClientContent(t *testing.T) {
 	if got := ExternalDBClientContent("mariadb", e, `p"w\x`); !strings.Contains(got, `password="p\"w\\x"`) || !strings.Contains(got, "port=3307") {
 		t.Errorf("mysql: %q", got)
 	}
-	if got := ExternalDBClientContent("postgres", e, `a:b\c`); got != "host.containers.internal:3307:*:me:a\\:b\\\\c\n" {
+	if got := ExternalDBClientContent("postgres", e, `a:b\c`); got != "127.0.0.1:3307:*:me:a\\:b\\\\c\n" {
 		t.Errorf("postgres: %q", got)
-	}
-}
-
-func TestExternalDBEnv(t *testing.T) {
-	env := ExternalDBEnv("postgres", ExternalDB{Host: "h", Port: 5433, User: "me"})
-	if env["PGDATABASE"] != "postgres" || env["PGHOST"] != "h" || env["PGPORT"] != "5433" || env["PGUSER"] != "me" {
-		t.Errorf("env = %v", env)
-	}
-	if env := ExternalDBEnv("mysql", ExternalDB{}); env != nil {
-		t.Errorf("mysql clients read the client file: %v", env)
 	}
 }
 
@@ -111,7 +101,7 @@ func externalServiceProject(t *testing.T, env string) string {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	svc := &CustomService{Name: "dbngin", Image: "docker.io/library/mariadb:11.8", Family: "mariadb", External: &ExternalDB{Host: "host.containers.internal", Port: 3306, User: "me"}}
+	svc := &CustomService{Name: "dbngin", Family: "mariadb", External: &ExternalDB{Host: "host.containers.internal", Port: 3306, User: "me"}}
 	if err := SaveCustomService(svc); err != nil {
 		t.Fatal(err)
 	}
@@ -205,5 +195,25 @@ func TestEndpointFromURL(t *testing.T) {
 	got := endpointFromURL(`"mysql://me:p%40ss@host.containers.internal:3310/shop?serverVersion=8.4"`)
 	if got != (DBEndpoint{Host: "host.containers.internal", Port: "3310", Database: "shop"}) {
 		t.Errorf("got %+v", got)
+	}
+}
+
+// db:use writes .lerd.yaml in the site's folder, and until that is committed a
+// worktree has none, yet it is on the same server.
+func TestExternalDBServiceFor_AWorktreeFollowsItsParentsChoice(t *testing.T) {
+	site := externalServiceProject(t, "DB_HOST=host.containers.internal\nDB_PORT=3306\nDB_DATABASE=shop\n")
+	checkout := filepath.Join(t.TempDir(), "shop-feature")
+	if err := os.MkdirAll(checkout, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(checkout, ".env"), []byte("DB_HOST=host.containers.internal\nDB_PORT=3306\nDB_DATABASE=shop_feature\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWorktreeMeta(t, site, "feature", checkout)
+	if err := AddSite(Site{Name: "shop", Domains: []string{"shop.test"}, Path: site}); err != nil {
+		t.Fatal(err)
+	}
+	if got := ExternalDBServiceFor(checkout); got == nil || got.Name != "dbngin" {
+		t.Fatalf("got %+v", got)
 	}
 }

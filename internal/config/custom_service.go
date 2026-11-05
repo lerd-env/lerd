@@ -888,7 +888,7 @@ func LoadCustomServiceFromFile(path string) (*CustomService, error) {
 	if svc.Name == "" {
 		return nil, fmt.Errorf("%s: missing required field \"name\"", path)
 	}
-	if svc.Image == "" {
+	if svc.Image == "" && svc.External == nil {
 		return nil, fmt.Errorf("%s: missing required field \"image\"", path)
 	}
 	// Migrate: legacy YAMLs may have a files: block. Strip it and re-save so

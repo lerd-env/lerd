@@ -661,6 +661,9 @@ func newServiceListCmd() *cobra.Command {
 					status = "unknown"
 				}
 				ver := podman.ServiceVersionLabel(svc.Image)
+				if svc.External != nil {
+					status, ver = serviceops.ExternalDBStatus(*svc.External), svc.External.VersionLabel()
+				}
 				tag := "[custom]"
 				if svc.Plugin != "" {
 					tag = "[plugin " + svc.Plugin + "]"

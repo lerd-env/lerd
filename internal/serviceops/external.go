@@ -2,10 +2,13 @@ package serviceops
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -15,11 +18,12 @@ import (
 )
 
 // ExternalRequest is a database server lerd does not run. Engine is the preset
-// whose client tools speak to it.
+// whose commands speak to it, Tools the folder holding its clients, found on the
+// PATH when empty.
 type ExternalRequest struct {
 	Name, Engine, Version, Host string
 	Port                        int
-	User, Password              string
+	User, Password, Tools       string
 }
 
 // containerHost is how a container reaches this machine, which is where a user
@@ -32,7 +36,7 @@ func containerHost(host string) string {
 	return host
 }
 
-// externalService turns a preset into the client-only service for a server.
+// externalService turns a preset into the service for a server.
 func externalService(req ExternalRequest) (*config.CustomService, error) {
 	preset, err := config.EnsurePreset(req.Engine)
 	if err != nil {
@@ -50,12 +54,13 @@ func externalService(req ExternalRequest) (*config.CustomService, error) {
 	if err != nil {
 		return nil, err
 	}
-	ext := config.ExternalDB{Host: containerHost(req.Host), Port: req.Port, User: req.User}
+	tools, err := externalToolsDir(family, req.Tools)
+	if err != nil {
+		return nil, err
+	}
+	ext := config.ExternalDB{Host: containerHost(req.Host), Port: req.Port, User: req.User, Tools: tools}
 	return &config.CustomService{
 		Name:        req.Name,
-		Image:       base.Image,
-		Exec:        "sleep infinity",
-		Init:        true,
 		Family:      family,
 		Label:       req.Name,
 		Description: fmt.Sprintf("External %s at %s:%d", req.Engine, ext.Host, ext.Port),
@@ -63,27 +68,106 @@ func externalService(req ExternalRequest) (*config.CustomService, error) {
 		Icon:        base.Icon,
 		Color:       base.Color,
 		Introspect:  introspect,
-		Environment: config.ExternalDBEnv(family, ext),
 		EnvVars:     base.EnvVars,
 		External:    &ext,
 	}, nil
 }
 
-// externalProbeFn asks the server its version from a throwaway client; a seam
-// for tests. The credentials go in on stdin, so they never reach an argv.
+// externalToolsDir is the folder a server's clients run from: the one the user
+// named, which has to hold them, or the first on the PATH that does.
+func externalToolsDir(family, dir string) (string, error) {
+	if dir = strings.TrimSpace(dir); dir != "" {
+		if missing := config.MissingExternalTools(family, dir); len(missing) > 0 {
+			return "", fmt.Errorf("%s has no %s", dir, strings.Join(missing, " or "))
+		}
+		return dir, nil
+	}
+	if found := config.LocateExternalTools(family, externalSearchDirs()); found != "" {
+		return found, nil
+	}
+	return "", fmt.Errorf("could not find %s on this machine; name the folder that holds them", strings.Join(config.MissingExternalTools(family, ""), " and "))
+}
+
+// externalSearchDirs is the PATH of this process and of the user's login shell:
+// the dashboard runs as a service, with a PATH that lacks what a terminal has.
+func externalSearchDirs() []string {
+	dirs := filepath.SplitList(os.Getenv("PATH"))
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		return dirs
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if out, err := exec.CommandContext(ctx, shell, "-lc", "printenv PATH").Output(); err == nil {
+		dirs = append(dirs, filepath.SplitList(strings.TrimSpace(string(out)))...)
+	}
+	return dirs
+}
+
+// ExternalShell runs shellCmd with a server's own clients, on this machine.
+func ExternalShell(ctx context.Context, svc *config.CustomService, shellCmd string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "sh", append([]string{"-c", shellCmd, "sh"}, args...)...)
+	cmd.Env = config.ExternalDBToolEnv(svc, config.ServiceFilesDir(svc.Name))
+	return cmd
+}
+
+// externalServiceFor is the external server behind a service name, or nil.
+func externalServiceFor(name string) *config.CustomService {
+	if svc, err := config.LoadCustomService(name); err == nil && svc.External != nil {
+		return svc
+	}
+	return nil
+}
+
+// externalProbeFn asks the server its version; a seam for tests. It runs against a
+// throwaway client file, so a password that fails replaces nothing.
 var externalProbeFn = func(svc *config.CustomService, password string) (string, error) {
-	target := config.ExternalDBClientTarget(svc.Family)
-	query := `$(command -v mysql || command -v mariadb) -N -e 'SELECT VERSION()'`
+	home, err := os.MkdirTemp("", "lerd-external-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(home)
+	if err := writeExternalClient(svc, home, password); err != nil {
+		return "", err
+	}
+	query := `$(command -v mariadb || command -v mysql) -N -e 'SELECT VERSION()'`
 	if config.ExternalDBFamily(svc.Family) == "postgres" {
-		query = `psql -d postgres -tAc 'SHOW server_version'`
+		query = `psql -tAc 'SHOW server_version'`
 	}
-	args := []string{"run", "-i", "--rm", "--network", "lerd", "--entrypoint", "sh"}
-	for k, v := range svc.Environment {
-		args = append(args, "-e", k+"="+v)
+	version, err := externalProbeRun(svc, home, query)
+	if err != nil {
+		return "", err
 	}
-	args = append(args, svc.Image, "-c", fmt.Sprintf("cat > %s; chmod 600 %s; exec %s", target, target, query))
-	cmd := podman.Cmd(args...)
-	cmd.Stdin = strings.NewReader(config.ExternalDBClientContent(svc.Family, *svc.External, password))
+	if config.ExternalDBFamily(svc.Family) == "mysql" {
+		return version, mysqlDumpFits(svc.External.Tools, version)
+	}
+	// pg_dump refuses a server newer than itself, so this fails now, not at the
+	// first snapshot.
+	dump, err := externalProbeRun(svc, home, "pg_dump --version")
+	if err != nil {
+		return "", err
+	}
+	if pgDumpTooOld(dump, version) {
+		return "", fmt.Errorf("%s is older than the server's %s; use a newer one", dump, version)
+	}
+	return version, nil
+}
+
+// mysqlDumpFits refuses mariadb-dump against MySQL: it connects, then fails on the
+// first dump over flags only MySQL's own tool knows.
+func mysqlDumpFits(dir, version string) error {
+	if strings.Contains(version, "MariaDB") || len(config.MissingExternalTools("mysql", dir)) > 0 {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(dir, "mysqldump")); err != nil {
+		return fmt.Errorf("the server is MySQL %s, which needs mysqldump, and %s only has mariadb-dump; name a folder with MySQL's clients", version, dir)
+	}
+	return nil
+}
+
+func externalProbeRun(svc *config.CustomService, home, shellCmd string) (string, error) {
+	cmd := exec.Command("sh", "-c", shellCmd)
+	cmd.Env = config.ExternalDBToolEnv(svc, home)
 	var out, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &stderr
 	if err := cmd.Run(); err != nil {
@@ -95,51 +179,37 @@ var externalProbeFn = func(svc *config.CustomService, password string) (string, 
 	return strings.TrimSpace(out.String()), nil
 }
 
-// matchingVersion is the preset tag whose client suits a server, since a dump
-// tool older than the server refuses to run: the same major, or the newest there is.
-func matchingVersion(preset *config.Preset, serverVersion string) string {
-	major := strings.SplitN(serverVersion, ".", 2)[0]
-	newest, newestMajor := "", -1
-	for _, v := range preset.Versions {
-		tagMajor := strings.SplitN(v.Tag, ".", 2)[0]
-		if tagMajor == major {
-			return v.Tag
-		}
-		if n, err := strconv.Atoi(tagMajor); err == nil && n > newestMajor {
-			newest, newestMajor = v.Tag, n
-		}
-	}
-	return newest
+var firstNumber = regexp.MustCompile(`\d+`)
+
+// pgDumpTooOld compares the majors of `pg_dump --version` and server_version.
+func pgDumpTooOld(dump, server string) bool {
+	d, _ := strconv.Atoi(firstNumber.FindString(dump))
+	s, _ := strconv.Atoi(firstNumber.FindString(server))
+	return d < s
 }
 
-// TestExternalDB connects to the server and returns its version, changing nothing.
-func TestExternalDB(req ExternalRequest) (string, error) {
+// ExternalResult is what a connection test found.
+type ExternalResult struct {
+	Version string `json:"version"`
+	Tools   string `json:"tools"`
+}
+
+// TestExternalDB connects to the server with the clients it would use, changing nothing.
+func TestExternalDB(req ExternalRequest) (ExternalResult, error) {
 	svc, err := externalService(req)
 	if err != nil {
-		return "", err
+		return ExternalResult{}, err
 	}
-	if err := externalPullFn(svc.Image); err != nil {
-		return "", err
+	version, err := externalProbeFn(svc, req.Password)
+	if err != nil {
+		return ExternalResult{}, err
 	}
-	return externalProbeFn(svc, req.Password)
+	return ExternalResult{Version: version, Tools: svc.External.Tools}, nil
 }
 
-// externalPullFn fetches a client image lerd does not have yet; a seam for tests.
-var externalPullFn = func(image string) error {
-	if podman.ImageExists(image) {
-		return nil
-	}
-	return podman.PullImageWithProgress(image, func(string) {})
-}
-
-// ExternalDBReachable says whether the server answers on its port. It runs on the
-// machine, where the container's name for it does not resolve.
+// ExternalDBReachable says whether the server answers on its port.
 func ExternalDBReachable(e config.ExternalDB) bool {
-	host := e.Host
-	if host == "host.containers.internal" {
-		host = "127.0.0.1"
-	}
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, strconv.Itoa(e.Port)), 400*time.Millisecond)
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(e.LocalHost(), strconv.Itoa(e.Port)), 400*time.Millisecond)
 	if err != nil {
 		return false
 	}
@@ -147,17 +217,27 @@ func ExternalDBReachable(e config.ExternalDB) bool {
 	return true
 }
 
-// externalStartFn brings the client up; a seam for tests.
-var externalStartFn = func(svc *config.CustomService) error {
-	if err := EnsureCustomServiceQuadlet(svc); err != nil {
-		return err
+// ExternalDBStatus is a server's status: nothing runs here to ask, so it is
+// whether the server answers.
+func ExternalDBStatus(e config.ExternalDB) string {
+	if ExternalDBReachable(e) {
+		return "active"
 	}
-	return StartService(svc.Name)
+	return "offline"
 }
 
-// AddExternalDB saves a server as a service. It connects first, so a wrong host
-// or password leaves nothing behind, and only then picks the client for the
-// version it found.
+// ServiceStatus is a service's status for anything deciding whether to talk to it:
+// its unit's, or for an external server, which has none, whether it answers.
+func ServiceStatus(name string) string {
+	if svc := externalServiceFor(name); svc != nil {
+		return ExternalDBStatus(*svc.External)
+	}
+	status, _ := podman.UnitStatus("lerd-" + name)
+	return status
+}
+
+// AddExternalDB saves a server as a service. It connects first, so a wrong host,
+// password or tools folder leaves nothing behind.
 func AddExternalDB(req ExternalRequest) (*config.CustomService, error) {
 	if ServiceInstalled(req.Name) || config.CustomServiceExists(req.Name) {
 		return nil, fmt.Errorf("a service named %s already exists", req.Name)
@@ -165,46 +245,40 @@ func AddExternalDB(req ExternalRequest) (*config.CustomService, error) {
 	if _, err := config.LoadPreset(req.Name); err == nil {
 		return nil, fmt.Errorf("%s is the name of a lerd service; pick another", req.Name)
 	}
-	version, err := TestExternalDB(req)
+	found, err := TestExternalDB(req)
 	if err != nil {
 		return nil, fmt.Errorf("could not connect to %s:%d: %w", containerHost(req.Host), req.Port, err)
 	}
 	// mysql is how most people name either server, and MySQL's dump flags fail on
 	// MariaDB, so the server's own answer decides.
-	if req.Engine == "mysql" && strings.Contains(version, "MariaDB") {
+	if req.Engine == "mysql" && strings.Contains(found.Version, "MariaDB") {
 		req.Engine, req.Version = "mariadb", ""
-	}
-	if req.Version == "" {
-		if preset, err := config.EnsurePreset(req.Engine); err == nil {
-			req.Version = matchingVersion(preset, version)
-		}
 	}
 	svc, err := externalService(req)
 	if err != nil {
 		return nil, err
 	}
+	svc.External.Version = found.Version
 	if err := config.ValidateCustomService(svc); err != nil {
 		return nil, err
 	}
-	if err := externalPullFn(svc.Image); err != nil {
-		return nil, err
-	}
-	if err := writeExternalClientFile(svc, req.Password); err != nil {
+	if err := writeExternalCredentials(svc, req.Password); err != nil {
 		return nil, err
 	}
 	if err := config.SaveCustomService(svc); err != nil {
 		return nil, fmt.Errorf("saving service config: %w", err)
 	}
-	if err := externalStartFn(svc); err != nil {
-		return svc, err
+	// Adding it again is the explicit install that lifts an earlier remove.
+	if err := config.SetServiceRemoved(svc.Name, false); err != nil {
+		return nil, err
 	}
 	return svc, nil
 }
 
-// UpdateExternalDBPassword replaces a server's password, connecting with the new
-// one first so a typo leaves the working one in place. The files are rewritten in
-// place, so the running client sees the new password without a restart.
-func UpdateExternalDBPassword(name, password string) error {
+// UpdateExternalDB changes a server's password, its tools folder or both, an
+// empty value keeping what is there. It connects with the result first, so a typo
+// leaves the working setup alone.
+func UpdateExternalDB(name, password, tools string) error {
 	svc, err := config.LoadCustomService(name)
 	if err != nil {
 		return err
@@ -212,19 +286,38 @@ func UpdateExternalDBPassword(name, password string) error {
 	if svc.External == nil {
 		return fmt.Errorf("%s is not an external server", name)
 	}
+	if password == "" {
+		saved, err := os.ReadFile(config.ExternalDBPasswordFile(name))
+		if err != nil {
+			return err
+		}
+		password = string(saved)
+	}
+	if strings.TrimSpace(tools) != "" {
+		if svc.External.Tools, err = externalToolsDir(svc.Family, tools); err != nil {
+			return err
+		}
+	}
 	if _, err := externalProbeFn(svc, password); err != nil {
 		return fmt.Errorf("could not connect to %s: %w", svc.External.Address(), err)
 	}
-	return writeExternalClientFile(svc, password)
+	if err := writeExternalCredentials(svc, password); err != nil {
+		return err
+	}
+	return config.SaveCustomService(svc)
 }
 
-func writeExternalClientFile(svc *config.CustomService, password string) error {
-	path := config.ExternalDBClientFile(svc.Name)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+func writeExternalCredentials(svc *config.CustomService, password string) error {
+	dir := config.ServiceFilesDir(svc.Name)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	if err := os.WriteFile(config.ExternalDBPasswordFile(svc.Name), []byte(password), 0o600); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(config.ExternalDBClientContent(svc.Family, *svc.External, password)), 0o600)
+	return writeExternalClient(svc, dir, password)
+}
+
+func writeExternalClient(svc *config.CustomService, dir, password string) error {
+	return os.WriteFile(filepath.Join(dir, config.ExternalDBClientName(svc.Family)), []byte(config.ExternalDBClientContent(svc.Family, *svc.External, password)), 0o600)
 }

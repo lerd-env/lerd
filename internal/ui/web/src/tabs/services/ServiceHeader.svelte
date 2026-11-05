@@ -11,6 +11,8 @@
   import SitesPopover from '$components/SitesPopover.svelte';
   import ParentSiteBadge from './ParentSiteBadge.svelte';
   import ServiceDependencies from './ServiceDependencies.svelte';
+  import ExternalDbSettingsModal from './ExternalDbSettingsModal.svelte';
+  import ExternalDbUseModal from './ExternalDbUseModal.svelte';
   import ServiceDeleteModal from './ServiceDeleteModal.svelte';
   import ServiceReinstallModal from './ServiceReinstallModal.svelte';
   import {
@@ -135,6 +137,8 @@
 
   let localBusy = $state(false);
   let deleteOpen = $state(false);
+  let settingsOpen = $state(false);
+  let useOpen = $state(false);
   let reinstallOpen = $state(false);
   let checking = $state(false);
   let checkMessage = $state<{ text: string; tone: 'ok' | 'info' | 'error' } | null>(null);
@@ -537,7 +541,12 @@
         {m.system_lerd_available({ version: svc.latest_version })}
       </span>
     {/if}
-    <SitesPopover domains={siteDomains} showPinned={$idleEnabled && $idleServices} />
+    <SitesPopover
+      domains={siteDomains}
+      showPinned={$idleEnabled && $idleServices}
+      onadd={svc.external ? () => (useOpen = true) : undefined}
+      addLabel={m.externalDb_useTitle()}
+    />
     <ButtonMenu
       actions={buildActions({
         external: externalIcon,
@@ -553,6 +562,8 @@
         checkUpdates: checkUpdatesIcon
       })}
       inline={pinInGroup && !svc.external ? pinAction(pinIcon) : undefined}
+      onSettings={svc.external ? () => (settingsOpen = true) : undefined}
+      settingsTitle={m.externalDb_settings()}
       {busy}
     />
   </div>
@@ -564,6 +575,11 @@
   onclose={() => (deleteOpen = false)}
   onconfirm={confirmDelete}
 />
+
+{#if svc.external}
+  <ExternalDbSettingsModal open={settingsOpen} {svc} onclose={() => (settingsOpen = false)} />
+  <ExternalDbUseModal open={useOpen} {svc} onclose={() => (useOpen = false)} />
+{/if}
 
 <ServiceReinstallModal
   open={reinstallOpen}

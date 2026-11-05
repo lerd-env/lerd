@@ -8,7 +8,6 @@
   import { keepServiceAwake } from '$stores/dashboard';
   import { pairDatabases } from '$lib/databasePairs';
   import DatabaseCard from '../databases/DatabaseCard.svelte';
-  import ExternalDbControls from './ExternalDbControls.svelte';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -97,7 +96,7 @@
     {/if}
 
     {#if svc.external}
-      <ExternalDbControls {svc} />
+      <p class="text-xs text-gray-500 dark:text-gray-400">{m.externalDb_server({ address: svc.external })}</p>
     {/if}
     {#if engine.error}
       <p class="text-xs text-red-500">{engine.error}</p>

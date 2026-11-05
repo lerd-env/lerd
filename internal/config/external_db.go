@@ -12,13 +12,24 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ExternalDB marks a service as a client for a database server lerd does not run.
-// The container holds no data and its clients point here, so database features
-// work unchanged. The password lives only in the 0600 client file.
+// ExternalDB marks a service as a database server lerd does not run. There is no
+// container behind it: the machine's own clients in Tools talk to the server, and
+// the password lives only in 0600 files.
 type ExternalDB struct {
-	Host string `yaml:"host" json:"host"`
-	Port int    `yaml:"port" json:"port"`
-	User string `yaml:"user" json:"user"`
+	Host    string `yaml:"host" json:"host"`
+	Port    int    `yaml:"port" json:"port"`
+	User    string `yaml:"user" json:"user"`
+	Tools   string `yaml:"tools" json:"tools"`
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
+}
+
+// LocalHost is the server as this machine reaches it, where the name containers
+// use for it does not resolve.
+func (e ExternalDB) LocalHost() string {
+	if e.Host == "host.containers.internal" {
+		return "127.0.0.1"
+	}
+	return e.Host
 }
 
 // Address is the server as people read it.
@@ -38,25 +49,12 @@ func ExternalDBFamily(family string) string {
 	return ""
 }
 
-// ExternalDBClientFile is where the client credentials sit on the host.
-func ExternalDBClientFile(name string) string {
-	return filepath.Join(ServiceFilesDir(name), "external-client")
-}
-
-// ExternalDBClientTarget is where each family's clients read their credentials.
-func ExternalDBClientTarget(family string) string {
-	if ExternalDBFamily(family) == "postgres" {
-		return "/root/.pgpass"
-	}
-	return "/root/.my.cnf"
-}
-
 // ExternalDBClientContent renders the credentials in the family's own format.
 func ExternalDBClientContent(family string, e ExternalDB, password string) string {
 	if ExternalDBFamily(family) == "postgres" {
-		return fmt.Sprintf("%s:%d:*:%s:%s\n", pgpassField(e.Host), e.Port, pgpassField(e.User), pgpassField(password))
+		return fmt.Sprintf("%s:%d:*:%s:%s\n", pgpassField(e.LocalHost()), e.Port, pgpassField(e.User), pgpassField(password))
 	}
-	return fmt.Sprintf("[client]\nhost=%s\nport=%d\nuser=%s\npassword=\"%s\"\n", e.Host, e.Port, e.User, cnfValue(password))
+	return fmt.Sprintf("[client]\nhost=%s\nport=%d\nuser=%s\npassword=\"%s\"\n", e.LocalHost(), e.Port, e.User, cnfValue(password))
 }
 
 func pgpassField(v string) string {
@@ -67,19 +65,8 @@ func cnfValue(v string) string {
 	return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(v)
 }
 
-// ExternalDBEnv is what the postgres clients read for what mysql's take from the
-// client file; .pgpass holds only the password.
-func ExternalDBEnv(family string, e ExternalDB) map[string]string {
-	if ExternalDBFamily(family) != "postgres" {
-		return nil
-	}
-	// PGDATABASE because psql otherwise opens a database named after the user,
-	// which an outside server rarely has; lerd's presets connect as postgres.
-	return map[string]string{"PGHOST": e.Host, "PGPORT": strconv.Itoa(e.Port), "PGUSER": e.User, "PGDATABASE": "postgres", "PGPASSFILE": "/root/.pgpass"}
-}
-
-// clearLerdPassword drops the password every exec passes for lerd's own server,
-// which would otherwise beat the client file.
+// clearLerdPassword drops any password the environment carries, which would
+// otherwise beat the client file.
 func clearLerdPassword(cmd string) string {
 	if strings.TrimSpace(cmd) == "" {
 		return cmd
@@ -90,7 +77,7 @@ func clearLerdPassword(cmd string) string {
 var lerdClientFlags = regexp.MustCompile(`\s+(-h\s*127\.0\.0\.1|-uroot|-plerd|-U\s*postgres)\b`)
 
 // ExternalIntrospect is a preset's database commands without the flags naming
-// lerd's own server, so clients read the external one from the client file. A
+// lerd's own server, so clients read the external one from their client file. A
 // command still naming it is refused, since a store preset may spell these differently.
 func ExternalIntrospect(in *Introspect) (*Introspect, error) {
 	if in == nil {
@@ -122,7 +109,7 @@ func ExternalIntrospect(in *Introspect) (*Introspect, error) {
 }
 
 // ExternalDBPasswordFile keeps the password on its own, for the sites that need it
-// in their env; only the user can read it, like the client file.
+// in their env; only the user can read it, like the client file beside it.
 func ExternalDBPasswordFile(name string) string {
 	return filepath.Join(ServiceFilesDir(name), "external-password")
 }
@@ -166,7 +153,21 @@ func ExternalDBVars(vars []string, e ExternalDB, host, password string) []string
 // its env still names that server. Loopback counts for a site whose PHP runs on
 // the machine, and a host the user changed by hand no longer matches.
 func ExternalDBServiceFor(projectDir string) *CustomService {
-	proj, err := LoadProjectConfig(projectDir)
+	if svc := externalDBPicked(projectDir, projectDir); svc != nil {
+		return svc
+	}
+	// db:use writes .lerd.yaml in the site's folder, which a worktree does not get
+	// until it is committed.
+	if parent, ok := ParentSiteForWorktreeDir(projectDir); ok {
+		return externalDBPicked(parent.Path, projectDir)
+	}
+	return nil
+}
+
+// externalDBPicked is the external service chooser's .lerd.yaml names, when
+// projectDir's env still points at that server.
+func externalDBPicked(chooser, projectDir string) *CustomService {
+	proj, err := LoadProjectConfig(chooser)
 	if err != nil {
 		return nil
 	}

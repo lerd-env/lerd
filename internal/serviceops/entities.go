@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -115,6 +116,15 @@ func entityCommandArgs(service, image string, env []string, shellCmd string, int
 	return append(args, image, "-c", shellCmd)
 }
 
+// entityCmd is an entity's command as it runs: on this machine for an external
+// server, which has no container, and through podman for everything else.
+func entityCmd(ctx context.Context, service, image string, env []string, shellCmd string, interactive bool) *exec.Cmd {
+	if svc := externalServiceFor(service); svc != nil {
+		return ExternalShell(ctx, svc, shellCmd)
+	}
+	return podman.CmdContext(ctx, entityCommandArgs(service, image, env, shellCmd, interactive)...)
+}
+
 // runEntityCommand runs one non-streaming declared command and returns its
 // combined output.
 func runEntityCommand(service string, spec *config.EntitySpec, image string, env []string, shellCmd string, timeout time.Duration) ([]byte, error) {
@@ -123,7 +133,7 @@ func runEntityCommand(service string, spec *config.EntitySpec, image string, env
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	return podman.CmdContext(ctx, entityCommandArgs(service, image, env, shellCmd, false)...).CombinedOutput()
+	return entityCmd(ctx, service, image, env, shellCmd, false).CombinedOutput()
 }
 
 // ListEntities runs a spec's list command and parses its tab-separated rows.
@@ -212,7 +222,7 @@ func streamEntityAction(service string, spec *config.EntitySpec, action, name st
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), dumpRestoreTimeout)
 	defer cancel()
-	cmd := podman.CmdContext(ctx, entityCommandArgs(service, image, env, shellCmd, stdin != nil)...)
+	cmd := entityCmd(ctx, service, image, env, shellCmd, stdin != nil)
 	var stderr bytes.Buffer
 	cmd.Stdout = stdout
 	cmd.Stderr = &stderr

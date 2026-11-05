@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -89,7 +90,7 @@ type dbEnv struct {
 	database   string
 	username   string
 	password   string
-	// external marks a service whose clients read their server from a client file.
+	// external marks a server lerd does not run, reached through the machine's clients.
 	external bool
 }
 
@@ -421,6 +422,9 @@ func dbImportCmd(env *dbEnv) (*exec.Cmd, error) {
 // dbEntityCmd wraps a declared in-container command in the podman exec the CLI
 // streams through, carrying the fixed admin credentials in the env.
 func dbEntityCmd(service, shellCmd string) *exec.Cmd {
+	if svc, err := config.LoadCustomService(service); err == nil && svc.External != nil {
+		return serviceops.ExternalShell(context.Background(), svc, shellCmd)
+	}
 	args := []string{"exec", "-i"}
 	for _, kv := range serviceops.EntityExecEnv() {
 		args = append(args, "-e", kv)
@@ -580,11 +584,29 @@ func runDbShell(flagService, flagDatabase string) error {
 		}
 	}
 
-	cmd := podman.Cmd(dbShellArgs(env, serviceFamily(env.service), isInteractive())...)
+	cmd := dbShellCmd(env, isInteractive())
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// dbShellCmd opens the client: the machine's own for an external server, which
+// reads its credentials from the client file, and the container's otherwise.
+func dbShellCmd(env *dbEnv, tty bool) *exec.Cmd {
+	svc, err := config.LoadCustomService(env.service)
+	if err != nil || svc.External == nil {
+		return podman.Cmd(dbShellArgs(env, serviceFamily(env.service), tty)...)
+	}
+	binaries := mysqlClientBinaries(serviceFamily(env.service))
+	if config.ExternalDBFamily(svc.Family) == "postgres" {
+		binaries = []string{"psql"}
+	}
+	var args []string
+	if env.database != "" {
+		args = []string{env.database}
+	}
+	return serviceops.ExternalShell(context.Background(), svc, execFirstCommand(binaries), args...)
 }
 
 // dbShellArgs builds the podman exec behind db:shell. The MySQL-family client
@@ -597,10 +619,6 @@ func dbShellArgs(env *dbEnv, family string, tty bool) []string {
 	}
 	args = append(args, "lerd-"+env.service)
 	switch {
-	case env.external && (env.connection == "pgsql" || env.connection == "postgres"):
-		args = append(args, "psql")
-	case env.external:
-		args = append(args, "sh", "-c", execFirstCommand(mysqlClientBinaries(family)), "sh")
 	case env.connection == "pgsql" || env.connection == "postgres":
 		args = append(args, "psql", "-U", env.username)
 	default:
@@ -675,8 +693,8 @@ func pgDatabaseExistsQuery(name string) string {
 // The name comes from a project's .env, so it is escaped for the literal it
 // lands in rather than trusted.
 func databaseExists(svc, name string) (bool, error) {
-	// An external server's clients take it from the client file, and the flags
-	// below would send them to lerd's own.
+	// An external server's clients take it from the client file, and the command
+	// below is an exec into a container it does not have.
 	if s, err := config.LoadCustomService(svc); err == nil && s.External != nil {
 		return serviceops.EntityExists(svc, serviceops.EntityFor(svc, "databases"), name)
 	}

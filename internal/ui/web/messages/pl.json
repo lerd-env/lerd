@@ -1637,12 +1637,10 @@
   "externalDb_serverOffline": "Serwer {address} nie odpowiada. Ta strona odświeży się, gdy wróci.",
   "externalDb_rowTitle": "Zewnętrzny serwer baz danych",
   "externalDb_removeBody": "lerd przestaje używać tego serwera. Wszystko na serwerze pozostaje bez zmian.",
-  "externalDb_changePassword": "Zmień hasło",
   "externalDb_use": "Użyj",
   "externalDb_useOnSite": "Użyj na stronie…",
   "externalDb_useHint": "Env strony wskaże tutaj. Jej dane pozostają na miejscu.",
   "externalDb_siteUsing": "{site} używa teraz {name}",
-  "externalDb_passwordChanged": "Hasło zmienione",
   "externalDb_hint": "Serwer, którego lerd nie uruchamia, na przykład DBngin. Użyj 127.0.0.1 dla serwera na tym komputerze.",
   "externalDb_server": "Serwer: {address}",
   "worktreeDb_title": "Odizoluj bazę danych worktree",
@@ -1974,5 +1972,12 @@
   "system_plugins_whatChanged": "Co się zmieniło",
   "system_plugins_updateAll": "Zaktualizuj wszystko ({count})",
   "system_plugins_updatesBadge": "Aktualizacje wtyczek: {count}",
-  "notify_plugin_update_body": "Wersja {version} została zatwierdzona. Zaktualizuj ją na stronie Wtyczki."
+  "notify_plugin_update_body": "Wersja {version} została zatwierdzona. Zaktualizuj ją na stronie Wtyczki.",
+  "externalDb_tools": "Folder narzędzi klienta",
+  "externalDb_toolsHint": "Folder z mysql i mysqldump albo psql i pg_dump. Zostaw puste, aby szukać w PATH.",
+  "externalDb_settings": "Ustawienia serwera",
+  "externalDb_saved": "Zapisano",
+  "externalDb_toolsFound": "Narzędzia klienta z {tools}",
+  "externalDb_keepPassword": "Zostaw puste, aby zachować obecne hasło",
+  "externalDb_useTitle": "Użyj na stronie"
 }

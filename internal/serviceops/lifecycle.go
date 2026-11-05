@@ -41,6 +41,10 @@ func StartService(name string) error {
 			}
 			return fmt.Errorf("unknown service %q", name)
 		}
+		// Someone else runs an external server; there is nothing here to start.
+		if svc.External != nil {
+			return nil
+		}
 		if err := StartDependencies(svc); err != nil {
 			return err
 		}

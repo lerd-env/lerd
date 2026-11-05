@@ -1637,12 +1637,10 @@
   "externalDb_serverOffline": "{address} 上的服务器没有响应。服务器恢复后此页面会自动更新。",
   "externalDb_rowTitle": "外部数据库服务器",
   "externalDb_removeBody": "lerd 将停止使用此服务器。服务器上的所有内容保持不变。",
-  "externalDb_changePassword": "更改密码",
   "externalDb_use": "使用",
   "externalDb_useOnSite": "用于站点…",
   "externalDb_useHint": "站点的 env 将指向这里。其数据保持原位。",
   "externalDb_siteUsing": "{site} 现在使用 {name}",
-  "externalDb_passwordChanged": "密码已更改",
   "externalDb_hint": "不由 lerd 运行的服务器，例如 DBngin。本机服务器请使用 127.0.0.1。",
   "externalDb_server": "服务器：{address}",
   "worktreeDb_title": "隔离 worktree 数据库",
@@ -1974,5 +1972,12 @@
   "system_plugins_whatChanged": "有哪些变化",
   "system_plugins_updateAll": "全部更新 ({count})",
   "system_plugins_updatesBadge": "{count} 个插件更新",
-  "notify_plugin_update_body": "版本 {version} 已获批准。请在插件页面更新。"
+  "notify_plugin_update_body": "版本 {version} 已获批准。请在插件页面更新。",
+  "externalDb_tools": "客户端工具文件夹",
+  "externalDb_toolsHint": "包含 mysql 和 mysqldump，或 psql 和 pg_dump 的文件夹。留空则在 PATH 中查找。",
+  "externalDb_settings": "服务器设置",
+  "externalDb_saved": "已保存",
+  "externalDb_toolsFound": "客户端工具来自 {tools}",
+  "externalDb_keepPassword": "留空以保留当前密码",
+  "externalDb_useTitle": "用于站点"
 }

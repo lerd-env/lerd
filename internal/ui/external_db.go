@@ -20,6 +20,7 @@ type externalDBRequest struct {
 	Port     int    `json:"port"`
 	User     string `json:"user"`
 	Password string `json:"password"`
+	Tools    string `json:"tools"`
 }
 
 func (r externalDBRequest) validate() string {
@@ -33,7 +34,7 @@ func (r externalDBRequest) validate() string {
 }
 
 func (r externalDBRequest) service() serviceops.ExternalRequest {
-	return serviceops.ExternalRequest{Name: r.Name, Engine: r.Engine, Host: strings.TrimSpace(r.Host), Port: r.Port, User: r.User, Password: r.Password}
+	return serviceops.ExternalRequest{Name: r.Name, Engine: r.Engine, Host: strings.TrimSpace(r.Host), Port: r.Port, User: r.User, Password: r.Password, Tools: strings.TrimSpace(r.Tools)}
 }
 
 // handleExternalDB tests or adds a server lerd does not run. A failure answers
@@ -48,8 +49,8 @@ func handleExternalDB(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
-	if strings.HasSuffix(r.URL.Path, "/password") {
-		if err := cli.UpdateExternalDBPassword(req.Name, req.Password); err != nil {
+	if strings.HasSuffix(r.URL.Path, "/update") {
+		if err := cli.UpdateExternalDB(req.Name, req.Password, req.Tools); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -61,12 +62,12 @@ func handleExternalDB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasSuffix(r.URL.Path, "/test") {
-		version, err := serviceops.TestExternalDB(req.service())
+		found, err := serviceops.TestExternalDB(req.service())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		writeJSON(w, map[string]string{"version": version})
+		writeJSON(w, found)
 		return
 	}
 	if req.Name == "" {

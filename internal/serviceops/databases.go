@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/podman"
 )
 
 // introspectTimeout caps a single list-databases exec so a wedged engine can't
@@ -482,7 +481,6 @@ func ImportDatabase(service, database string, r io.Reader, opt ImportOptions) (I
 	// ships no client tooling declares the image its commands run in, and an
 	// import that ignored it would exec a binary that is not there.
 	image, env := actionRuntime(spec, act)
-	args := entityCommandArgs(service, image, env, shellCmd, true)
 	src, err := DumpReader(r)
 	if err != nil {
 		return ImportReport{}, err
@@ -494,7 +492,7 @@ func ImportDatabase(service, database string, r io.Reader, opt ImportOptions) (I
 			Service: service, Family: config.FamilyOfName(service), Database: database, Extensions: DeclaredExtensions(service),
 		}, src)
 	}
-	cmd := podman.CmdContext(ctx, args...)
+	cmd := entityCmd(ctx, service, image, env, shellCmd, true)
 	cmd.Stdin = src
 	out, err := cmd.CombinedOutput()
 	if err != nil {

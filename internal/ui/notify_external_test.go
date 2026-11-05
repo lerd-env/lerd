@@ -35,6 +35,23 @@ func TestExternalDBWatch_AServerAddedLaterIsNotANewFailure(t *testing.T) {
 	}
 }
 
+// A server added or removed in a terminal has no unit for the dashboard to notice.
+func TestExternalDBWatch_RefreshesWhenTheServersChange(t *testing.T) {
+	var w externalDBWatch
+	if _, changed := w.observe(map[string]bool{"a": true}); changed {
+		t.Error("the first round has nothing to compare with")
+	}
+	if _, changed := w.observe(map[string]bool{"a": true, "b": false}); !changed {
+		t.Error("a new server must refresh the list")
+	}
+	if _, changed := w.observe(map[string]bool{"a": true}); !changed {
+		t.Error("a removed server must refresh the list")
+	}
+	if _, changed := w.observe(map[string]bool{"a": true}); changed {
+		t.Error("nothing moved")
+	}
+}
+
 func TestNotificationForExternalDBOffline(t *testing.T) {
 	n := notificationForExternalDBOffline("dbngin", "host.containers.internal:3306")
 	if n.TitleKey != "notify_external_db_offline_title" || n.Params["name"] != "dbngin" || n.URL != "#services/dbngin" {

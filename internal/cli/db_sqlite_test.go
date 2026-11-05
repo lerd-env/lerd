@@ -243,18 +243,28 @@ func TestResolveDBUsesTheExternalServiceTheSiteChose(t *testing.T) {
 	}
 }
 
-func TestDbShellArgs_ExternalReadsTheClientFile(t *testing.T) {
-	for name, env := range map[string]*dbEnv{
-		"mysql":    {service: "dbngin", connection: "mysql", database: "shop", external: true},
-		"postgres": {service: "dbngin", connection: "pgsql", database: "shop", external: true},
-	} {
+func TestDbShellCmd_ExternalRunsTheMachinesClient(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	for name, family := range map[string]string{"mysql": "mysql", "postgres": "postgres"} {
 		t.Run(name, func(t *testing.T) {
-			args := strings.Join(dbShellArgs(env, env.connection, false), " ")
-			if strings.Contains(args, "127.0.0.1") || strings.Contains(args, "-u") || strings.Contains(args, "-U") || strings.Contains(args, "-p") && !strings.Contains(args, "exec") {
+			svc := &config.CustomService{Name: "dbngin", Family: family, External: &config.ExternalDB{Host: "h", Port: 3306, Tools: "/opt/tools"}}
+			if err := config.SaveCustomService(svc); err != nil {
+				t.Fatal(err)
+			}
+			cmd := dbShellCmd(&dbEnv{service: "dbngin", database: "shop", external: true}, false)
+			args := strings.Join(cmd.Args, " ")
+			if cmd.Args[0] != "sh" || strings.Contains(args, "podman") {
+				t.Errorf("want a host shell, got %s", args)
+			}
+			if strings.Contains(args, "127.0.0.1") || strings.Contains(args, "-plerd") {
 				t.Errorf("lerd's own server leaked in: %s", args)
 			}
-			if !strings.HasSuffix(args, "shop") {
+			if !strings.HasSuffix(args, " shop") {
 				t.Errorf("args = %s", args)
+			}
+			if !strings.Contains(strings.Join(cmd.Env, "\n"), "PATH=/opt/tools:") {
+				t.Errorf("env = %v", cmd.Env)
 			}
 		})
 	}

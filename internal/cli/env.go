@@ -1734,6 +1734,9 @@ var createS3Bucket = serviceops.EnsureS3Bucket
 // waits until it is ready to accept connections before returning. A var so the
 // link and env flows can be driven in tests without a live podman.
 var ensureServiceRunning = func(name string) error {
+	if svc, err := config.LoadCustomService(name); err == nil && svc.External != nil {
+		return nil
+	}
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
 	if status != "active" {

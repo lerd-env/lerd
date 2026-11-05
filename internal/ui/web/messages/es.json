@@ -1637,12 +1637,10 @@
   "externalDb_serverOffline": "El servidor en {address} no responde. Esta página se actualizará cuando vuelva.",
   "externalDb_rowTitle": "Servidor de bases de datos externo",
   "externalDb_removeBody": "lerd deja de usar este servidor. Todo lo que hay en él sigue igual.",
-  "externalDb_changePassword": "Cambiar contraseña",
   "externalDb_use": "Usar",
   "externalDb_useOnSite": "Usar en un sitio…",
   "externalDb_useHint": "El env del sitio apunta aquí. Sus datos se quedan donde están.",
   "externalDb_siteUsing": "{site} ahora usa {name}",
-  "externalDb_passwordChanged": "Contraseña cambiada",
   "externalDb_hint": "Un servidor que lerd no ejecuta, como DBngin. Usa 127.0.0.1 para uno en esta máquina.",
   "externalDb_server": "Servidor: {address}",
   "worktreeDb_title": "Aislar la base de datos del worktree",
@@ -1974,5 +1972,12 @@
   "system_plugins_whatChanged": "Qué cambió",
   "system_plugins_updateAll": "Actualizar todo ({count})",
   "system_plugins_updatesBadge": "{count} actualizaciones de plugins",
-  "notify_plugin_update_body": "La versión {version} está aprobada. Actualízala desde la página Plugins."
+  "notify_plugin_update_body": "La versión {version} está aprobada. Actualízala desde la página Plugins.",
+  "externalDb_tools": "Carpeta de herramientas cliente",
+  "externalDb_toolsHint": "La carpeta con mysql y mysqldump, o psql y pg_dump. Déjala vacía para buscar en tu PATH.",
+  "externalDb_settings": "Ajustes del servidor",
+  "externalDb_saved": "Guardado",
+  "externalDb_toolsFound": "Herramientas cliente de {tools}",
+  "externalDb_keepPassword": "Déjala vacía para conservar la contraseña actual",
+  "externalDb_useTitle": "Usar en un sitio"
 }

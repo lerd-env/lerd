@@ -1637,12 +1637,10 @@
   "externalDb_serverOffline": "Máy chủ tại {address} không phản hồi. Trang này sẽ cập nhật khi máy chủ hoạt động lại.",
   "externalDb_rowTitle": "Máy chủ cơ sở dữ liệu bên ngoài",
   "externalDb_removeBody": "lerd ngừng dùng máy chủ này. Mọi thứ trên máy chủ vẫn giữ nguyên.",
-  "externalDb_changePassword": "Đổi mật khẩu",
   "externalDb_use": "Dùng",
   "externalDb_useOnSite": "Dùng cho một trang…",
   "externalDb_useHint": "Env của trang sẽ trỏ tới đây. Dữ liệu vẫn ở nguyên chỗ cũ.",
   "externalDb_siteUsing": "{site} hiện dùng {name}",
-  "externalDb_passwordChanged": "Đã đổi mật khẩu",
   "externalDb_hint": "Máy chủ không do lerd chạy, như DBngin. Dùng 127.0.0.1 cho máy chủ trên máy này.",
   "externalDb_server": "Máy chủ: {address}",
   "worktreeDb_title": "Tách riêng cơ sở dữ liệu worktree",
@@ -1974,5 +1972,12 @@
   "system_plugins_whatChanged": "Những gì đã thay đổi",
   "system_plugins_updateAll": "Cập nhật tất cả ({count})",
   "system_plugins_updatesBadge": "{count} bản cập nhật plugin",
-  "notify_plugin_update_body": "Phiên bản {version} đã được duyệt. Cập nhật từ trang Plugin."
+  "notify_plugin_update_body": "Phiên bản {version} đã được duyệt. Cập nhật từ trang Plugin.",
+  "externalDb_tools": "Thư mục công cụ máy khách",
+  "externalDb_toolsHint": "Thư mục chứa mysql và mysqldump, hoặc psql và pg_dump. Để trống để tìm trong PATH của bạn.",
+  "externalDb_settings": "Cài đặt máy chủ",
+  "externalDb_saved": "Đã lưu",
+  "externalDb_toolsFound": "Công cụ máy khách từ {tools}",
+  "externalDb_keepPassword": "Để trống để giữ mật khẩu hiện tại",
+  "externalDb_useTitle": "Dùng cho một trang"
 }

@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/svelte';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import SitesPopover from './SitesPopover.svelte';
 import { sites } from '$stores/sites';
 import { frameworkMarks } from '$stores/frameworkMarks';
@@ -75,5 +75,15 @@ describe('SitesPopover', () => {
     sites.set([{ domain: 'pinned.test', pinned: true }]);
     const { container } = render(SitesPopover, { props: { domains: ['pinned.test'] } });
     expect(container.querySelector('[data-testid="sites-coffee"]')).toBeNull();
+  });
+
+  it('joins an add button to the count, and keeps it with no sites yet', async () => {
+    const onadd = vi.fn();
+    const { rerender } = render(SitesPopover, { props: { domains: ['running.test'], onadd, addLabel: 'Use on a site' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Use on a site' }));
+    expect(onadd).toHaveBeenCalledOnce();
+    await rerender({ domains: [], onadd, addLabel: 'Use on a site' });
+    expect(screen.getByRole('button', { name: 'Use on a site' })).toBeTruthy();
+    expect(screen.queryByText('0')).toBeNull();
   });
 });

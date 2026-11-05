@@ -1637,12 +1637,10 @@
   "externalDb_serverOffline": "The server at {address} is not answering. This page picks it up once it is back.",
   "externalDb_rowTitle": "External database server",
   "externalDb_removeBody": "lerd stops using this server. Everything on the server stays as it is.",
-  "externalDb_changePassword": "Change password",
   "externalDb_use": "Use",
   "externalDb_useOnSite": "Use on a site…",
   "externalDb_useHint": "The site's env points here. Its data stays where it is.",
   "externalDb_siteUsing": "{site} now uses {name}",
-  "externalDb_passwordChanged": "Password changed",
   "externalDb_hint": "A server lerd does not run, such as DBngin. Use 127.0.0.1 for one on this machine.",
   "externalDb_server": "Server: {address}",
   "worktreeDb_title": "Isolate worktree database",
@@ -1974,5 +1972,12 @@
   "system_plugins_whatChanged": "What changed",
   "system_plugins_updateAll": "Update all ({count})",
   "system_plugins_updatesBadge": "{count} plugin updates",
-  "notify_plugin_update_body": "Version {version} is approved. Update it from the Plugins page."
+  "notify_plugin_update_body": "Version {version} is approved. Update it from the Plugins page.",
+  "externalDb_tools": "Client tools folder",
+  "externalDb_toolsHint": "The folder holding mysql and mysqldump, or psql and pg_dump. Leave it empty to look on your PATH.",
+  "externalDb_settings": "Server settings",
+  "externalDb_saved": "Saved",
+  "externalDb_toolsFound": "Client tools from {tools}",
+  "externalDb_keepPassword": "Leave empty to keep the current password",
+  "externalDb_useTitle": "Use on a site"
 }

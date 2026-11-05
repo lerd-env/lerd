@@ -1637,12 +1637,10 @@
   "externalDb_serverOffline": "Server di {address} tidak merespons. Halaman ini akan diperbarui saat server kembali.",
   "externalDb_rowTitle": "Server database eksternal",
   "externalDb_removeBody": "lerd berhenti memakai server ini. Semua yang ada di server tetap seperti semula.",
-  "externalDb_changePassword": "Ubah kata sandi",
   "externalDb_use": "Gunakan",
   "externalDb_useOnSite": "Gunakan di situs…",
   "externalDb_useHint": "Env situs mengarah ke sini. Datanya tetap di tempatnya.",
   "externalDb_siteUsing": "{site} kini memakai {name}",
-  "externalDb_passwordChanged": "Kata sandi diubah",
   "externalDb_hint": "Server yang tidak dijalankan lerd, seperti DBngin. Gunakan 127.0.0.1 untuk server di mesin ini.",
   "externalDb_server": "Server: {address}",
   "worktreeDb_title": "Isolasi basis data worktree",
@@ -1974,5 +1972,12 @@
   "system_plugins_whatChanged": "Apa yang berubah",
   "system_plugins_updateAll": "Perbarui semua ({count})",
   "system_plugins_updatesBadge": "{count} pembaruan plugin",
-  "notify_plugin_update_body": "Versi {version} sudah disetujui. Perbarui dari halaman Plugin."
+  "notify_plugin_update_body": "Versi {version} sudah disetujui. Perbarui dari halaman Plugin.",
+  "externalDb_tools": "Folder alat klien",
+  "externalDb_toolsHint": "Folder berisi mysql dan mysqldump, atau psql dan pg_dump. Biarkan kosong untuk mencari di PATH Anda.",
+  "externalDb_settings": "Pengaturan server",
+  "externalDb_saved": "Tersimpan",
+  "externalDb_toolsFound": "Alat klien dari {tools}",
+  "externalDb_keepPassword": "Biarkan kosong untuk mempertahankan kata sandi saat ini",
+  "externalDb_useTitle": "Gunakan di situs"
 }

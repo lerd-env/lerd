@@ -13,8 +13,11 @@
     domains: string[];
     // Mark pinned sites, for a service they keep awake while it could sleep.
     showPinned?: boolean;
+    // Joins a + to the group, which shows even with no sites yet.
+    onadd?: () => void;
+    addLabel?: string;
   }
-  let { domains, showPinned = false }: Props = $props();
+  let { domains, showPinned = false, onadd, addLabel }: Props = $props();
 
   // The state comes from the sites store, so a row says what the site is
   // actually doing instead of carrying a decorative dot.
@@ -33,7 +36,14 @@
   }
 </script>
 
+{#snippet addButton(corners: string)}
+  <button type="button" onclick={onadd} title={addLabel} aria-label={addLabel} class="{buttonMenuBaseClass} {corners} px-1.5 {buttonMenuToneClass.secondary}">
+    <Icon name="plus" class="w-3.5 h-3.5" />
+  </button>
+{/snippet}
+
 {#if domains.length > 0}
+  <div class="inline-flex">
   <Popover {label} align="right" width={260}>
     {#snippet triggerButton(toggle: () => void, isOpen: boolean)}
       <button
@@ -42,7 +52,7 @@
         title={label}
         aria-label={label}
         aria-expanded={isOpen}
-        class="{buttonMenuBaseClass} rounded-lg {buttonMenuToneClass.secondary}"
+        class="{buttonMenuBaseClass} {onadd ? 'rounded-l-lg' : 'rounded-lg'} {buttonMenuToneClass.secondary}"
       >
         {#if anyPinned}<span data-testid="sites-coffee" class="inline-flex"><CoffeeMark class="w-3.5 h-3.5" /></span>{/if}
         <Icon name="sites" class="w-3.5 h-3.5" />
@@ -71,4 +81,8 @@
       </ul>
     {/snippet}
   </Popover>
+  {#if onadd}{@render addButton('rounded-r-lg border-l border-l-black/10 dark:border-l-white/10')}{/if}
+  </div>
+{:else if onadd}
+  {@render addButton('rounded-lg')}
 {/if}

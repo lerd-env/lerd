@@ -276,7 +276,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/image-estimate", withCORS(handleImageEstimate))
 	mux.HandleFunc("/api/services/external", withCORS(publishAfter(handleExternalDB, eventbus.KindServices)))
 	mux.HandleFunc("/api/services/external/test", withCORS(handleExternalDB))
-	mux.HandleFunc("/api/services/external/password", withCORS(handleExternalDB))
+	mux.HandleFunc("/api/services/external/update", withCORS(handleExternalDB))
 	mux.HandleFunc("/api/services/presets", withCORS(handleServicePresets))
 	mux.HandleFunc("/api/services/icons", withCORS(handleServiceIcons))
 	mux.HandleFunc("/api/frameworks/marks", withCORS(handleFrameworkMarks))
@@ -1425,6 +1425,7 @@ func secondaryPortMappings(defaultPorts []string, sc config.ServiceConfig) []Ser
 type ServiceResponse struct {
 	Name              string            `json:"name"`
 	External          string            `json:"external,omitempty"`
+	ExternalTools     string            `json:"external_tools,omitempty"`
 	Family            string            `json:"family,omitempty"`
 	Label             string            `json:"label,omitempty"`
 	Status            string            `json:"status"`
@@ -1636,18 +1637,23 @@ func resolvePresentation(name string, custom *config.CustomService) presentation
 
 // list rebuild so it is not re-read and an error cannot blank the card); pass
 // nil for a default preset or to have it loaded by name.
+// serviceVersion comes from the image, or from the server for one with no image.
+func serviceVersion(image string, custom *config.CustomService) string {
+	if custom != nil && custom.External != nil {
+		return custom.External.VersionLabel()
+	}
+	return podman.ServiceVersionLabel(image)
+}
+
 func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, name, ssOutput string, custom *config.CustomService) ServiceResponse {
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
-	// A client that is up says nothing about the server it points at, and that
-	// is the status anyone looking at this service wants.
-	var external, externalFamily string
+	var external, externalFamily, externalTools string
 	if ext, err := config.LoadCustomService(name); err == nil && ext.External != nil {
 		external = ext.External.Address()
 		externalFamily = ext.Family
-		if status == "active" && !serviceops.ExternalDBReachable(*ext.External) {
-			status = "offline"
-		}
+		externalTools = ext.External.Tools
+		status = serviceops.ExternalDBStatus(*ext.External)
 	}
 	if status == "" {
 		status = "inactive"
@@ -1726,11 +1732,12 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 	pres := resolvePresentation(name, custom)
 	resp := ServiceResponse{
 		External:          external,
+		ExternalTools:     externalTools,
 		Family:            externalFamily,
 		Name:              name,
 		Label:             pres.Label,
 		Status:            status,
-		Version:           podman.ServiceVersionLabel(image),
+		Version:           serviceVersion(image, custom),
 		EnvVars:           envMap,
 		Dashboard:         serviceops.WithDashboardPort(dashboardRaw, presetPorts, services[name]),
 		DashboardExternal: dashExternal,

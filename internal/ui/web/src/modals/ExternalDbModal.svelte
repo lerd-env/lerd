@@ -20,9 +20,11 @@
   let port = $state(3306);
   let user = $state('root');
   let password = $state('');
+  let tools = $state('');
   let busy = $state(false);
   let error = $state('');
   let connected = $state('');
+  let foundTools = $state('');
 
   function pickEngine(value: string) {
     if (port === DEFAULT_PORT[engine]) port = DEFAULT_PORT[value];
@@ -39,7 +41,7 @@
       const res = await apiFetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), engine, host, port: Number(port), user, password })
+        body: JSON.stringify({ name: name.trim(), engine, host, port: Number(port), user, password, tools })
       });
       if (res.ok) return res;
       error = (await res.text()).trim() || m.common_requestFailed();
@@ -53,7 +55,10 @@
 
   async function test() {
     const res = await send('/api/services/external/test');
-    if (res) connected = (await res.json()).version;
+    if (!res) return;
+    const found = await res.json();
+    connected = found.version;
+    foundTools = found.tools;
   }
 
   async function add() {
@@ -98,8 +103,14 @@
       <label class={labelClass} for="ext-password">{m.externalDb_password()}</label>
       <input id="ext-password" type="password" bind:value={password} class={fieldClass} disabled={busy} autocomplete="new-password" />
     </div>
+    <div>
+      <label class={labelClass} for="ext-tools">{m.externalDb_tools()}</label>
+      <input id="ext-tools" bind:value={tools} class={fieldClass} disabled={busy} autocomplete="off" spellcheck="false" />
+      <p class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">{m.externalDb_toolsHint()}</p>
+    </div>
     {#if connected}
       <p class="text-xs text-emerald-600 dark:text-emerald-400">{m.externalDb_connected({ version: connected })}</p>
+      <p class="text-[11px] text-gray-500 dark:text-gray-400 break-all">{m.externalDb_toolsFound({ tools: foundTools })}</p>
     {/if}
     {#if error}
       <p class="text-xs text-red-500 break-words">{error}</p>

@@ -1637,12 +1637,10 @@
   "externalDb_serverOffline": "{address} adresindeki sunucu yanıt vermiyor. Sunucu dönünce bu sayfa güncellenir.",
   "externalDb_rowTitle": "Harici veritabanı sunucusu",
   "externalDb_removeBody": "lerd bu sunucuyu kullanmayı bırakır. Sunucudaki her şey olduğu gibi kalır.",
-  "externalDb_changePassword": "Parolayı değiştir",
   "externalDb_use": "Kullan",
   "externalDb_useOnSite": "Bir sitede kullan…",
   "externalDb_useHint": "Sitenin env dosyası buraya yönelir. Verileri olduğu yerde kalır.",
   "externalDb_siteUsing": "{site} artık {name} kullanıyor",
-  "externalDb_passwordChanged": "Parola değiştirildi",
   "externalDb_hint": "DBngin gibi lerd tarafından çalıştırılmayan bir sunucu. Bu makinedeki sunucu için 127.0.0.1 kullanın.",
   "externalDb_server": "Sunucu: {address}",
   "worktreeDb_title": "Worktree veritabanını izole et",
@@ -1974,5 +1972,12 @@
   "system_plugins_whatChanged": "Neler değişti",
   "system_plugins_updateAll": "Tümünü güncelle ({count})",
   "system_plugins_updatesBadge": "{count} eklenti güncellemesi",
-  "notify_plugin_update_body": "{version} sürümü onaylandı. Eklentiler sayfasından güncelleyin."
+  "notify_plugin_update_body": "{version} sürümü onaylandı. Eklentiler sayfasından güncelleyin.",
+  "externalDb_tools": "İstemci araçları klasörü",
+  "externalDb_toolsHint": "mysql ve mysqldump ya da psql ve pg_dump içeren klasör. PATH içinde aramak için boş bırakın.",
+  "externalDb_settings": "Sunucu ayarları",
+  "externalDb_saved": "Kaydedildi",
+  "externalDb_toolsFound": "{tools} içindeki istemci araçları",
+  "externalDb_keepPassword": "Mevcut parolayı korumak için boş bırakın",
+  "externalDb_useTitle": "Bir sitede kullan"
 }

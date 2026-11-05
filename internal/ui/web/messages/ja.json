@@ -1637,12 +1637,10 @@
   "externalDb_serverOffline": "{address} のサーバーが応答しません。復旧するとこのページに反映されます。",
   "externalDb_rowTitle": "外部データベースサーバー",
   "externalDb_removeBody": "lerd はこのサーバーの使用を停止します。サーバー上のものはそのまま残ります。",
-  "externalDb_changePassword": "パスワードを変更",
   "externalDb_use": "使用",
   "externalDb_useOnSite": "サイトで使用…",
   "externalDb_useHint": "サイトの env がここを指すようになります。データは移動しません。",
   "externalDb_siteUsing": "{site} は {name} を使用しています",
-  "externalDb_passwordChanged": "パスワードを変更しました",
   "externalDb_hint": "DBngin など、lerd が実行していないサーバーです。このマシン上のサーバーには 127.0.0.1 を使用します。",
   "externalDb_server": "サーバー: {address}",
   "worktreeDb_title": "ワークツリーのデータベースを分離",
@@ -1974,5 +1972,12 @@
   "system_plugins_whatChanged": "変更点",
   "system_plugins_updateAll": "すべて更新 ({count})",
   "system_plugins_updatesBadge": "プラグインのアップデート {count} 件",
-  "notify_plugin_update_body": "バージョン {version} が承認されました。プラグインページから更新してください。"
+  "notify_plugin_update_body": "バージョン {version} が承認されました。プラグインページから更新してください。",
+  "externalDb_tools": "クライアントツールのフォルダ",
+  "externalDb_toolsHint": "mysql と mysqldump、または psql と pg_dump があるフォルダです。空欄の場合は PATH から探します。",
+  "externalDb_settings": "サーバー設定",
+  "externalDb_saved": "保存しました",
+  "externalDb_toolsFound": "{tools} のクライアントツール",
+  "externalDb_keepPassword": "現在のパスワードを維持するには空欄のままにします",
+  "externalDb_useTitle": "サイトで使用"
 }

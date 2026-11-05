@@ -22,11 +22,16 @@ type externalDBWatch struct {
 }
 
 // observe takes this round's answers and returns the servers that just stopped
-// answering, and whether anything changed at all.
+// answering, and whether anything changed at all, a server coming or going included.
 func (w *externalDBWatch) observe(now map[string]bool) (wentDown []string, changed bool) {
+	changed = w.up != nil && len(now) != len(w.up)
 	for name, up := range now {
 		was, known := w.up[name]
-		if !known || was == up {
+		if !known {
+			changed = changed || w.up != nil
+			continue
+		}
+		if was == up {
 			continue
 		}
 		changed = true

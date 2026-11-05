@@ -993,6 +993,9 @@ func EnsureCustomServiceQuadlet(svc *config.CustomService) error {
 // whether the on-disk unit changed, so family-consumer regen can skip a bounce
 // when discover_family resolved to the same host list.
 func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
+	if svc.External != nil {
+		return false, nil
+	}
 	// Generic port-ownership guard — the single place every service quadlet
 	// (DB presets, redis, meilisearch, custom) passes through. When this service
 	// is down and the host port it would publish can't be bound, shift to the next
@@ -1131,6 +1134,9 @@ func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 // waits until it is ready. Unlike StartService it neither marks it manually started
 // nor starts reverse dependents, but a cold start does refresh discover_family consumers.
 func EnsureServiceRunning(name string) error {
+	if externalServiceFor(name) != nil {
+		return nil
+	}
 	unit := "lerd-" + name
 	// A site still naming a service the user removed must not bring it back.
 	if config.ServiceIsRemoved(name) {
