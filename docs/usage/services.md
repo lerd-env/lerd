@@ -136,7 +136,7 @@ lerd service external dbngin --engine mysql --host 127.0.0.1 --port 3306 --user 
 
 lerd asks for the password, or reads it from stdin with `--password-stdin`. It connects first and saves nothing if that fails. Use `127.0.0.1` for a server on this machine.
 
-The service is a small container with the database client tools in it, so nothing has to be installed on your machine and the version is picked to match the server. It holds no data. The server appears on the Services page with its databases, marked offline when it stops answering; start it and reload the page. The password stays in a file only you can read, under lerd's data folder, and removing the service leaves everything on the server alone.
+The service is a small container with the database client tools in it, so nothing has to be installed on your machine and the version is picked to match the server. It holds no data. The server appears on the Services page with its databases, marked offline when it stops answering, with a notification, and back to normal on its own once it returns. The password stays in a file only you can read, under lerd's data folder, and removing the service leaves everything on the server alone.
 
 To point a project at it, run this inside the project:
 

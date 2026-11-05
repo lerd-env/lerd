@@ -210,6 +210,7 @@ func Start(currentVersion string) error {
 	// that gap by polling the cached detector on a slow tick and publishing
 	// KindSites only when the unhealthy set actually changes.
 	go runWorkerHealthWatcher()
+	go runExternalDBWatcher()
 
 	// WatchDNS lives in the lerd-watcher process; its eventbus publishes
 	// don't cross over here. This in-process probe surfaces DNS transitions
@@ -1641,7 +1642,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 	// is the status anyone looking at this service wants.
 	var external, externalFamily string
 	if ext, err := config.LoadCustomService(name); err == nil && ext.External != nil {
-		external = net.JoinHostPort(ext.External.Host, strconv.Itoa(ext.External.Port))
+		external = ext.External.Address()
 		externalFamily = ext.Family
 		if status == "active" && !serviceops.ExternalDBReachable(*ext.External) {
 			status = "offline"

@@ -22,6 +22,11 @@ type ExternalDB struct {
 	User string `yaml:"user" json:"user"`
 }
 
+// Address is the server as people read it.
+func (e ExternalDB) Address() string {
+	return net.JoinHostPort(e.Host, strconv.Itoa(e.Port))
+}
+
 // ExternalDBFamily is the engine family a preset speaks to, mysql or postgres,
 // or "" for one this feature does not cover.
 func ExternalDBFamily(family string) string {

@@ -4,9 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -115,7 +113,7 @@ func databaseEngine(name string, siteIndex map[string]dbview.Owner) dbEngineResp
 		Error:            view.Error,
 	}
 	if svc, err := config.LoadCustomService(name); err == nil && svc.External != nil {
-		eng.External = net.JoinHostPort(svc.External.Host, strconv.Itoa(svc.External.Port))
+		eng.External = svc.External.Address()
 	}
 	for _, db := range view.Databases {
 		entry := dbEntryResponse{
