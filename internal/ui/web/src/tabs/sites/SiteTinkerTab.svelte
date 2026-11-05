@@ -2,9 +2,11 @@
   import { runTinker, fetchTinkerSnippets, saveTinkerSnippet, deleteTinkerSnippet, activeWorktreeDomain, type TinkerResponse, type TinkerSnippet, type Site } from '$stores/sites';
   import { modal, openErrorModal } from '$stores/modals';
   import { parseDump, looksLikeDump } from '$lib/dump-parser';
-  import { parseBlock, fontSize, FONT_MIN, FONT_MAX, splitRatio, SPLIT_MIN, SPLIT_MAX } from '$lib/tinker';
+  import { parseBlock, splitRatio, SPLIT_MIN, SPLIT_MAX } from '$lib/tinker';
   import DumpView from '$components/DumpView.svelte';
   import Popover from '$components/Popover.svelte';
+  import EditorTextSize from '$components/EditorTextSize.svelte';
+  import { editorFontSize } from '$stores/editorFont';
   import ConfirmModal from '$components/ConfirmModal.svelte';
   import TinkerSnippetSaveModal from './TinkerSnippetSaveModal.svelte';
   import MonacoEditor from '$components/MonacoEditor.svelte';
@@ -49,10 +51,6 @@
     return localStorage.getItem(SPLIT_KEY) === SplitDir.Vertical ? SplitDir.Vertical : SplitDir.Horizontal;
   }
   let splitDir = $state<SplitDir>(loadSplitDir());
-  // Text size is global like the split, and drives the editor and the result
-  // pane together so the two halves always read at the same size.
-  const FONT_KEY = 'tinker:fontSize';
-  let textSize = $state(fontSize(typeof localStorage === 'undefined' ? null : localStorage.getItem(FONT_KEY)));
   // The editor's share of the split, global like the direction.
   const RATIO_KEY = 'tinker:splitRatio';
   let ratio = $state(splitRatio(typeof localStorage === 'undefined' ? null : localStorage.getItem(RATIO_KEY)));
@@ -162,13 +160,6 @@
     else return;
     e.preventDefault();
   }
-
-  $effect(() => {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(FONT_KEY, String(textSize));
-    }
-    editor?.updateOptions({ fontSize: textSize });
-  });
 
   // Escape belongs to the topmost layer: a modal stacked on the tab owns it
   // and closes first, full screen only exits once nothing is stacked on top.
@@ -300,7 +291,6 @@
   // closure reads the current `code` state on each invocation.
   function onEditorReady({ editor: e, monaco }: { editor: Monaco.editor.IStandaloneCodeEditor; monaco: MonacoModule }) {
     editor = e;
-    e.updateOptions({ fontSize: textSize });
     // Intercept at the keydown level rather than via addCommand: Ctrl/Cmd+Enter
     // must run even while the suggestion widget is open (which otherwise
     // captures Enter to accept the highlighted completion).
@@ -358,29 +348,7 @@
       {/if}
     </div>
     <div class="flex items-center gap-3">
-      <Popover label={m.tinker_textSize()} align="right" width={168}>
-        {#snippet triggerButton(toggle)}
-          <button
-            type="button"
-            onclick={toggle}
-            class="block text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-            use:tooltip={m.tinker_textSize()}
-            aria-label={m.tinker_textSize()}
-          >
-            <Icon name="system" class="w-4 h-4" />
-          </button>
-        {/snippet}
-        {#snippet children()}
-          <div class="flex items-center justify-between gap-3 px-3 py-2" data-testid="text-size">
-            <span class="text-xs text-gray-600 dark:text-gray-300">{m.tinker_textSize()}</span>
-            <div class="flex items-center rounded-full border border-gray-200 dark:border-lerd-border text-xs font-mono">
-              <button type="button" class="px-2 py-0.5 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 disabled:opacity-40 disabled:hover:text-gray-500 transition-colors" disabled={textSize <= FONT_MIN} onclick={() => textSize--} aria-label={m.tinker_textSmaller()}>−</button>
-              <span class="w-6 text-center tabular-nums text-gray-700 dark:text-gray-200">{textSize}</span>
-              <button type="button" class="px-2 py-0.5 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 disabled:opacity-40 disabled:hover:text-gray-500 transition-colors" disabled={textSize >= FONT_MAX} onclick={() => textSize++} aria-label={m.tinker_textLarger()}>+</button>
-            </div>
-          </div>
-        {/snippet}
-      </Popover>
+      <EditorTextSize />
       <Popover
         label={m.tinker_snippets()}
         align="right"
@@ -533,13 +501,13 @@
 
     <div
       data-pane
-      style="flex: {1 - ratio} 1 0; font-size: {textSize}px"
+      style="flex: {1 - ratio} 1 0; font-size: {$editorFontSize}px"
       class="min-h-30 md:min-h-0 flex flex-col overflow-y-auto rounded-lg border border-gray-200 dark:border-lerd-border bg-gray-50 dark:bg-lerd-card tinker-output py-2"
     >
       {#if !result && running}
         <p class="text-xs text-gray-400">{m.tinker_running()}</p>
       {:else if !result}
-        <p class="text-[11px] text-gray-500 dark:text-gray-400 font-mono whitespace-pre-line">{placeholder}</p>
+        <p class="text-[0.92em] text-gray-500 dark:text-gray-400 font-mono whitespace-pre-line">{placeholder}</p>
       {:else}
         {#if result.error}
           <div class="output-row" data-line="!">

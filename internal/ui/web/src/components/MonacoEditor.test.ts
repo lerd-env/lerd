@@ -1,6 +1,8 @@
 import { render } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { describe, it, expect, vi } from 'vitest';
 import Harness from './MonacoEditor.test.svelte';
+import { editorFontSize } from '$stores/editorFont';
 
 // Monaco needs canvas/layout/workers that jsdom lacks, so we mock the
 // lazy loader and assert MonacoEditor's wiring against a fake editor.
@@ -10,6 +12,7 @@ const { state } = vi.hoisted(() => ({
     changeHandler: null as (() => void) | null,
     value: '',
     readOnly: false as boolean,
+    fontSize: 0,
     addCommandCalls: 0,
     disposed: false
   }
@@ -20,7 +23,10 @@ vi.mock('$lib/monaco', () => {
     getValue: () => state.value,
     setValue: (v: string) => { state.value = v; },
     onDidChangeModelContent: (cb: () => void) => { state.changeHandler = cb; return { dispose() {} }; },
-    updateOptions: (o: { readOnly?: boolean }) => { if (o.readOnly !== undefined) state.readOnly = o.readOnly; },
+    updateOptions: (o: { readOnly?: boolean; fontSize?: number }) => {
+      if (o.readOnly !== undefined) state.readOnly = o.readOnly;
+      if (o.fontSize !== undefined) state.fontSize = o.fontSize;
+    },
     addCommand: () => { state.addCommandCalls++; },
     dispose: () => { state.disposed = true; }
   };
@@ -72,6 +78,16 @@ describe('MonacoEditor', () => {
     render(Harness, { props: { value: 'x', readOnly: true } });
     await flush();
     expect(state.readOnly).toBe(true);
+  });
+
+  it('opens at the shared text size and follows it', async () => {
+    editorFontSize.set(15);
+    render(Harness, { props: { value: 'x' } });
+    await flush();
+    expect(state.createOpts.fontSize).toBe(15);
+    editorFontSize.set(17);
+    await tick();
+    expect(state.fontSize).toBe(17);
   });
 
   it('hands the editor and monaco to onReady', async () => {

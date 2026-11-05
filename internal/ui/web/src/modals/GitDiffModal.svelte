@@ -5,6 +5,7 @@
   import Icon from '$components/Icon.svelte';
   import { tooltip } from '$lib/tooltip';
   import MonacoDiffEditor from '$components/MonacoDiffEditor.svelte';
+  import EditorTextSize from '$components/EditorTextSize.svelte';
   import GitCommitBox from '$components/GitCommitBox.svelte';
   import { closeModal } from '$stores/modals';
   import {
@@ -190,6 +191,7 @@
   {#snippet actions()}
     <!-- Same gap and icon size as the modal's own close button beside them. -->
     <div class="flex items-center gap-3">
+      <EditorTextSize iconClass="w-5 h-5" />
       <button
         type="button"
         onclick={() => (unified = !unified)}

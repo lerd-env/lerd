@@ -1,6 +1,7 @@
 <script lang="ts">
   import { get } from 'svelte/store';
   import { onMount } from 'svelte';
+  import { editorFontSize } from '$stores/editorFont';
   import { palette, theme } from '$stores/theme';
   import { applyEditorAccent, loadMonaco, lerdThemeName, type MonacoModule } from '$lib/monaco';
   import type * as Monaco from 'monaco-editor';
@@ -74,7 +75,7 @@
         readOnly,
         automaticLayout: true,
         minimap: { enabled: false },
-        fontSize: 12,
+        fontSize: $editorFontSize,
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
         lineNumbersMinChars: 3,
         scrollBeyondLastLine: false,
@@ -170,6 +171,10 @@
   $effect(() => {
     const ro = readOnly;
     editor?.updateOptions({ readOnly: ro });
+  });
+
+  $effect(() => {
+    editor?.updateOptions({ fontSize: $editorFontSize });
   });
 
   // Paint highlightLines as SCM-style added-line decorations: a green gutter bar

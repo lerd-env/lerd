@@ -34,18 +34,6 @@ export function parseBlock(chunk: string): { line?: number; kind: 'query' | 'out
   return { line, kind: 'output', body: rest };
 }
 
-export const FONT_MIN = 10;
-export const FONT_MAX = 20;
-const FONT_DEFAULT = 12;
-
-// fontSize turns the stored text-size preference into a usable size, so a
-// missing or hand-edited value never reaches the editor out of range.
-export function fontSize(stored: string | null): number {
-  const n = Number.parseInt(stored ?? '', 10);
-  if (Number.isNaN(n)) return FONT_DEFAULT;
-  return Math.min(FONT_MAX, Math.max(FONT_MIN, n));
-}
-
 export const SPLIT_MIN = 0.15;
 export const SPLIT_MAX = 0.85;
 
