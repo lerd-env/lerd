@@ -43,6 +43,16 @@ describe('editorFontSize', () => {
     expect(get(await fresh())).toBe(15);
   });
 
+  it('keeps working in memory when the browser refuses to store it', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('full', 'QuotaExceededError');
+    });
+    const store = await fresh();
+    store.set(15);
+    expect(get(store)).toBe(15);
+    setItem.mockRestore();
+  });
+
   it('ignores a corrupt stored size', async () => {
     localStorage.setItem('lerd-editor-font-size', 'huge');
     expect(get(await fresh())).toBe(12);

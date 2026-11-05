@@ -63,6 +63,20 @@ describe('Modal', () => {
     expect(onclose).toHaveBeenCalledTimes(1);
   });
 
+  // The panel lives on <body>, outside the dialog's own focus trap.
+  it('takes keyboard focus into a popover inside it and gives it back on close', async () => {
+    render(Harness, { props: { open: true, title: 'T', onclose: () => {}, withPopover: true } });
+    const trigger = screen.getByRole('button', { name: 'Open' });
+    trigger.focus();
+    await fireEvent.click(trigger);
+    const item = screen.getByRole('button', { name: 'panel item' });
+    expect(document.activeElement).toBe(item);
+    await fireEvent.keyDown(item, { key: 'Tab' });
+    expect(document.activeElement).toBe(item);
+    await fireEvent.keyDown(item, { key: 'Escape' });
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('renders footer slot when provided', () => {
     render(Harness, { props: { open: true, title: 'X', onclose: () => {}, withFooter: true } });
     expect(screen.getByTestId('footer')).toBeInTheDocument();

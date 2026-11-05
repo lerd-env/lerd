@@ -25,7 +25,7 @@
   <Modal {open} {title} {onclose} {size}>
     <Popover label="Open">
       {#snippet trigger()}open{/snippet}
-      {#snippet children()}<span>panel item</span>{/snippet}
+      {#snippet children()}<button type="button">panel item</button>{/snippet}
     </Popover>
   </Modal>
 {:else if withActions}

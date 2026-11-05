@@ -22,12 +22,21 @@ describe('EditorTextSize', () => {
     expect(get(editorFontSize)).toBe(11);
   });
 
-  it('stops at both ends of the range', async () => {
-    editorFontSize.set(FONT_MAX);
+  it('stops at both ends of the range without dropping keyboard focus', async () => {
+    editorFontSize.set(FONT_MAX - 1);
     await open();
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: m.tinker_textLarger() }).disabled).toBe(true);
+    const larger = screen.getByRole('button', { name: m.tinker_textLarger() });
+    larger.focus();
+    await fireEvent.click(larger);
+    await fireEvent.click(larger);
+    expect(get(editorFontSize)).toBe(FONT_MAX);
+    expect(larger.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(larger);
+
     editorFontSize.set(FONT_MIN);
-    await screen.findByText(String(FONT_MIN));
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: m.tinker_textSmaller() }).disabled).toBe(true);
+    const smaller = await screen.findByRole('button', { name: m.tinker_textSmaller() });
+    await fireEvent.click(smaller);
+    expect(get(editorFontSize)).toBe(FONT_MIN);
+    expect(smaller.getAttribute('aria-disabled')).toBe('true');
   });
 });

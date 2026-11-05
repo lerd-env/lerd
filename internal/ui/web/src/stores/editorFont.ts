@@ -18,4 +18,10 @@ export function fontSize(stored: string | null): number {
 // One size for every code surface: tinker, the env and config editors, and diffs.
 export const editorFontSize = writable(fontSize(localStorage.getItem(KEY) ?? localStorage.getItem(LEGACY_KEY)));
 
-editorFontSize.subscribe((size) => localStorage.setItem(KEY, String(size)));
+editorFontSize.subscribe((size) => {
+  try {
+    localStorage.setItem(KEY, String(size));
+  } catch {
+    // Storage full or blocked: the size still applies until the page reloads.
+  }
+});

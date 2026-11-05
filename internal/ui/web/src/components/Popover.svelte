@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import IconButton from '$components/IconButton.svelte';
+  import { dialog } from '$lib/dialog';
   import { portal } from '$lib/portal';
 
   interface Props {
@@ -90,9 +91,12 @@
     <!-- Click-away backdrop; the panel sits above it. -->
     <button use:portal type="button" tabindex="-1" aria-hidden="true" class="fixed inset-0 z-70 cursor-default" onclick={close}
     ></button>
+    <!-- The panel sits outside any modal around it, so it keeps keyboard focus itself. -->
     <div
       use:portal
-      class="z-80 rounded-xl border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-2xl"
+      use:dialog
+      tabindex="-1"
+      class="z-80 outline-none rounded-xl border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-2xl"
       style="position: fixed; left: {pos.left}px; width: {pos.width}px; {align === 'right'
         ? `top: ${pos.top}px`
         : `bottom: ${Math.max(8, window.innerHeight - pos.top)}px`}"
