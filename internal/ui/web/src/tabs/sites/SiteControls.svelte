@@ -94,7 +94,7 @@
       : [])
   ]);
   const nodeValue = $derived(usingBun ? 'bun' : effectiveNode);
-  const dbCapable = $derived((site.services || []).some((s) => /^(mysql|mariadb|postgres)/.test(s)));
+  const dbCapable = $derived(Boolean(site.external_db) || (site.services || []).some((s) => /^(mysql|mariadb|postgres)/.test(s)));
   const dbIsolated = $derived(Boolean(activeWorktree?.db_isolated));
   let dbBusy = $state(false);
   let isolateModalOpen = $state(false);

@@ -138,6 +138,16 @@ lerd asks for the password, or reads it from stdin with `--password-stdin`. It c
 
 The service is a small container with the database client tools in it, so nothing has to be installed on your machine and the version is picked to match the server. It holds no data. The server appears on the Services page with its databases, marked offline when it stops answering; start it and reload the page. The password stays in a file only you can read, under lerd's data folder, and removing the service leaves everything on the server alone.
 
+To point a project at it, run this inside the project:
+
+```bash
+lerd db:use dbngin
+```
+
+That saves the choice in `.lerd.yaml` and runs `lerd env`, which writes the connection into your env file under the keys your framework reads. The password goes there too, since the app needs it, and never into `.lerd.yaml`. A database the env file already names is kept and created if it is missing. Worktrees then isolate on that server the way they do on a lerd service, with `lerd db:isolate` or the **Isolated DB** toggle.
+
+`.lerd.yaml` names the service, not the server. On a machine without a service of that name, `lerd env` stops and says so rather than replacing the connection with lerd's own.
+
 ## Using a service you run on the host
 
 Moving lerd's published port lets a host-installed server keep its own. The step past that is pointing a project at your server instead of lerd's container: the database you already have, with your data and your users, while lerd keeps managing everything else.

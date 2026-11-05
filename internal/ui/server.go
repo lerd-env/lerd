@@ -1074,7 +1074,9 @@ type SiteResponse struct {
 	SuggestedServices []config.ServiceSuggestion `json:"suggested_services,omitempty"`
 	// DBDatabase is the site's DB_DATABASE, so the overview's database card can
 	// open the admin tool straight to this site's database.
-	DBDatabase      string `json:"db_database,omitempty"`
+	DBDatabase string `json:"db_database,omitempty"`
+	// ExternalDB names the external database service the site chose.
+	ExternalDB      string `json:"external_db,omitempty"`
 	LANPort         int    `json:"lan_port,omitempty"`
 	LANShareURL     string `json:"lan_share_url,omitempty"`
 	PublicShared    bool   `json:"public_shared,omitempty"`
@@ -1347,6 +1349,7 @@ func buildSites() ([]SiteResponse, error) {
 			Branch:               e.Branch,
 			Worktrees:            worktreeResponses,
 			Services:             e.Services,
+			ExternalDB:           e.ExternalDB,
 			OverviewCards:        e.OverviewCards,
 			DeclaredServices:     e.DeclaredServices,
 			SuggestedServices:    e.SuggestedServices,

@@ -2,11 +2,14 @@ package config
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/geodro/lerd/internal/envfile"
 	"gopkg.in/yaml.v3"
 )
 
@@ -112,4 +115,63 @@ func ExternalIntrospect(in *Introspect) (*Introspect, error) {
 		}
 	}
 	return &out, nil
+}
+
+// ExternalDBPasswordFile keeps the password on its own, for the sites that need it
+// in their env; only the user can read it, like the client file.
+func ExternalDBPasswordFile(name string) string {
+	return filepath.Join(ServiceFilesDir(name), "external-password")
+}
+
+var urlCredentials = regexp.MustCompile(`://[^/@]*@[^/?]*`)
+
+// ExternalDBVars points a service's env vars at the external server. It goes by
+// what each key is, not by a framework's spelling of it, so a Laravel DB_HOST, a
+// Symfony DATABASE_URL and a dotted PHP config key all land the same way.
+func ExternalDBVars(vars []string, e ExternalDB, host, password string) []string {
+	out := make([]string, 0, len(vars))
+	for _, kv := range vars {
+		k, v, _ := strings.Cut(kv, "=")
+		key := strings.ToUpper(k)
+		switch {
+		case strings.Contains(v, "://"):
+			v = urlCredentials.ReplaceAllString(v, "://"+url.UserPassword(e.User, password).String()+"@"+net.JoinHostPort(host, strconv.Itoa(e.Port)))
+		case strings.Contains(key, "HOST"):
+			v = host
+		case strings.Contains(key, "PORT"):
+			v = strconv.Itoa(e.Port)
+		case strings.Contains(key, "USER"):
+			v = e.User
+		case strings.Contains(key, "PASS"):
+			v = password
+		}
+		out = append(out, k+"="+v)
+	}
+	return out
+}
+
+// ExternalDBServiceFor is the external service a project chose in .lerd.yaml, when
+// its env still names that server. Loopback counts for a site whose PHP runs on
+// the machine, and a host the user changed by hand no longer matches.
+func ExternalDBServiceFor(projectDir string) *CustomService {
+	proj, err := LoadProjectConfig(projectDir)
+	if err != nil {
+		return nil
+	}
+	for _, picked := range proj.Services {
+		svc, err := LoadCustomService(picked.Name)
+		if err == nil && svc.External != nil && ExternalDBEnvMatches(projectDir, svc) {
+			return svc
+		}
+	}
+	return nil
+}
+
+// ExternalDBEnvMatches reports whether a checkout's env still names the server.
+func ExternalDBEnvMatches(projectDir string, svc *CustomService) bool {
+	binding := DBEnvBindingFor(projectDir)
+	read := envfile.Reader(filepath.Join(projectDir, binding.File), binding.Format)
+	host, port := strings.TrimSpace(read(binding.HostKey)), read("DB_PORT")
+	sameHost := host == svc.External.Host || (svc.External.Host == "host.containers.internal" && isLoopbackHost(host))
+	return sameHost && (port == "" || atoiOr(port) == svc.External.Port)
 }

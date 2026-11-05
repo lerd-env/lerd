@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -71,5 +73,100 @@ func TestExternalDBEnv(t *testing.T) {
 	}
 	if env := ExternalDBEnv("mysql", ExternalDB{}); env != nil {
 		t.Errorf("mysql clients read the client file: %v", env)
+	}
+}
+
+func TestExternalDBVars_GoesByWhatEachKeyIs(t *testing.T) {
+	e := ExternalDB{Port: 3307, User: "me"}
+	got := ExternalDBVars([]string{
+		"DB_CONNECTION=mysql",
+		"DB_HOST=lerd-dbngin",
+		"DB_PORT=3306",
+		"DB_DATABASE={{site}}",
+		"DB_USERNAME=root",
+		"DB_PASSWORD=lerd",
+		"DATABASE_URL=mysql://root:lerd@lerd-dbngin:3306/{{site}}?serverVersion=8.4",
+		"db.connection.default.host=lerd-dbngin",
+		"db.connection.default.password=lerd",
+	}, e, "host.containers.internal", "p@ss/w")
+	want := []string{
+		"DB_CONNECTION=mysql",
+		"DB_HOST=host.containers.internal",
+		"DB_PORT=3307",
+		"DB_DATABASE={{site}}",
+		"DB_USERNAME=me",
+		"DB_PASSWORD=p@ss/w",
+		"DATABASE_URL=mysql://me:p%40ss%2Fw@host.containers.internal:3307/{{site}}?serverVersion=8.4",
+		"db.connection.default.host=host.containers.internal",
+		"db.connection.default.password=p@ss/w",
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("got %s, want %s", got[i], want[i])
+		}
+	}
+}
+
+func externalServiceProject(t *testing.T, env string) string {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	svc := &CustomService{Name: "dbngin", Image: "docker.io/library/mariadb:11.8", Family: "mariadb", External: &ExternalDB{Host: "host.containers.internal", Port: 3306, User: "me"}}
+	if err := SaveCustomService(svc); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(env), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte("services:\n  - dbngin\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// A worktree of such a site is isolated through the service the site chose.
+func TestWorktreeDBService_NamesTheExternalServiceTheSiteChose(t *testing.T) {
+	for name, env := range map[string]string{
+		"from a container": "DB_HOST=host.containers.internal\nDB_PORT=3306\nDB_DATABASE=shop\n",
+		"from the machine": "DB_HOST=127.0.0.1\nDB_PORT=3306\nDB_DATABASE=shop\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := WorktreeDBService(externalServiceProject(t, env)); got != "dbngin" {
+				t.Errorf("got %q", got)
+			}
+		})
+	}
+}
+
+// Moved by hand to another server, the choice in .lerd.yaml no longer holds, and
+// cloning through it would write to the wrong one.
+func TestWorktreeDBService_IgnoresAChoiceTheEnvLeft(t *testing.T) {
+	for name, env := range map[string]string{
+		"another host": "DB_HOST=db.example.com\nDB_PORT=3306\nDB_DATABASE=shop\n",
+		"another port": "DB_HOST=host.containers.internal\nDB_PORT=3307\nDB_DATABASE=shop\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := WorktreeDBService(externalServiceProject(t, env)); got == "dbngin" {
+				t.Errorf("got %q", got)
+			}
+		})
+	}
+}
+
+func TestExternalDBEnvMatches(t *testing.T) {
+	dir := externalServiceProject(t, "DB_HOST=host.containers.internal\nDB_PORT=3306\n")
+	svc, err := LoadCustomService("dbngin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ExternalDBEnvMatches(dir, svc) {
+		t.Error("the env names the server")
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("DB_HOST=lerd-mysql\nDB_PORT=3306\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if ExternalDBEnvMatches(dir, svc) {
+		t.Error("a checkout on lerd's service does not name it")
 	}
 }

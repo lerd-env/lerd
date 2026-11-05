@@ -1050,6 +1050,17 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	// someone else's server, not lerd's container.
 	wired := map[string]bool{}
 
+	if name := missingExternalService(cwd); name != "" {
+		return fmt.Errorf("this project uses %s, which is not set up on this machine, so its env was left alone. Add it with `lerd service external %s`, or pick another database with `lerd db:use`", name, name)
+	}
+
+	// .lerd.yaml may not be on a worktree's branch, and the choice is the site's.
+	if branch != "" {
+		if svc := config.ExternalDBServiceFor(site.Path); svc != nil && config.ExternalDBEnvMatches(cwd, svc) {
+			lerdYAMLServices[svc.Name] = true
+		}
+	}
+
 	customs, _ := config.ListCustomServices()
 	var pickedCustoms []*config.CustomService
 	customFromYAML := make(map[string]bool, len(customs))
@@ -1206,6 +1217,16 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		// through that mapping, re-pointed at its own container.
 		external := extServices[svc.Name]
 		vars := wiredVarsFor(fw, svc, role, knownEnvKeys, mapped, external, dottedEnv)
+		siteDB := dbName
+		if svc.External != nil {
+			wiredVars, err := externalDBVars(svc, site, vars)
+			if err != nil {
+				provisionErrs = append(provisionErrs, err)
+				continue
+			}
+			vars = wiredVars
+			siteDB = externalSiteDB(cwd, dbName)
+		}
 		switch {
 		case dottedEnv && external:
 			envInfo("  %s is externally managed — set its connection in %s yourself\n",
@@ -1238,7 +1259,11 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			// mapping names the database itself, via {{site}}, so it only needs pinning
 			// where the preset's keys are what got written.
 			if isDB && !dottedEnv && !mapped {
-				updates["DB_DATABASE"] = dbName
+				updates["DB_DATABASE"] = siteDB
+			}
+			if svc.External != nil {
+				binding := config.DBEnvBindingFor(cwd)
+				updates[binding.NameKey] = siteDB
 			}
 		}
 		if externalManaged(svc.Name, extServices) {
@@ -1255,7 +1280,12 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		}
 		followPorts()
 		if isDB {
-			for _, name := range []string{dbName, dbName + "_testing"} {
+			names := []string{dbName, dbName + "_testing"}
+			// A server the user runs gets the site's database and no more.
+			if svc.External != nil {
+				names = []string{siteDB}
+			}
+			for _, name := range names {
 				created, err := createDatabase(svc.Name, name)
 				if err != nil {
 					provisionErrs = append(provisionErrs, fmt.Errorf("database %q: %w", name, err))
@@ -1446,6 +1476,56 @@ func runEnv(_ *cobra.Command, _ []string) error {
 
 	envInfo("Done.\n")
 	return nil
+}
+
+// missingExternalService names a service .lerd.yaml lists that this machine does
+// not have, when the env points away from lerd: most likely an external server a
+// teammate added, whose connection lerd must not replace with its own defaults.
+func missingExternalService(cwd string) string {
+	proj, err := config.LoadProjectConfig(cwd)
+	if err != nil {
+		return ""
+	}
+	if _, external := config.ExternalDBHost(cwd, "mysql"); !external {
+		return ""
+	}
+	for _, svc := range proj.Services {
+		if svc.Custom != nil || svc.Preset != "" || svc.Name == "sqlite" || config.CustomServiceExists(svc.Name) || config.IsDefaultPreset(svc.Name) {
+			continue
+		}
+		if _, err := config.LoadPreset(svc.Name); err != nil {
+			return svc.Name
+		}
+	}
+	return ""
+}
+
+// externalDBVars points a picked service's env vars at the server it stands for.
+// A site whose PHP runs on the machine reaches that server over loopback.
+func externalDBVars(svc *config.CustomService, site *config.Site, vars []string) ([]string, error) {
+	password, err := os.ReadFile(config.ExternalDBPasswordFile(svc.Name))
+	if err != nil {
+		return nil, fmt.Errorf("reading the password of %s: %w", svc.Name, err)
+	}
+	host := svc.External.Host
+	if host == "host.containers.internal" && usesLoopbackServices(site) {
+		host = "127.0.0.1"
+	}
+	return config.ExternalDBVars(vars, *svc.External, host, string(password)), nil
+}
+
+// externalSiteDB is the database a site uses on a server it was pointed at: the
+// one its env already names, so its data is found, unless that is only a default.
+func externalSiteDB(cwd, dbName string) string {
+	binding := config.DBEnvBindingFor(cwd)
+	current := envfile.Reader(filepath.Join(cwd, binding.File), binding.Format)(binding.NameKey)
+	switch {
+	case current == "" || current == "lerd" || current == "laravel":
+		return dbName
+	case strings.ContainsAny(current, "./"):
+		return dbName
+	}
+	return current
 }
 
 // worktreeDBConnectionKeys are the shared database SERVER coordinates a worktree

@@ -368,6 +368,9 @@ func dbServiceFor(projectDir, host, declared string) string {
 // WorktreeDBService is the lerd service holding a project's database, or "" when
 // no lerd service does, read from the project's env.
 func WorktreeDBService(projectDir string) string {
+	if svc := ExternalDBServiceFor(projectDir); svc != nil {
+		return svc.Name
+	}
 	binding := DBEnvBindingFor(projectDir)
 	service := DBServiceFor(projectDir, envfile.Reader(filepath.Join(projectDir, binding.File), binding.Format)(binding.HostKey))
 	if service == "" {

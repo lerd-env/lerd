@@ -181,3 +181,30 @@ func TestResolveDBLetsAnExplicitServiceThrough(t *testing.T) {
 		t.Errorf("got %+v, %v", env, err)
 	}
 }
+
+// A site on a server someone added stays there when this machine lacks that
+// service: falling back would rewire it to lerd's own MySQL as root.
+func TestMissingExternalService(t *testing.T) {
+	onServer := "DB_CONNECTION=mysql\nDB_HOST=host.containers.internal\nDB_DATABASE=shop\n"
+	for name, tc := range map[string]struct {
+		env, yaml string
+		want      string
+	}{
+		"a service nobody here has": {onServer, "services:\n  - dbngin\n", "dbngin"},
+		"a lerd service":            {onServer, "services:\n  - mysql\n  - redis\n", ""},
+		"nothing listed":            {onServer, "", ""},
+		"on lerd's own database":    {"DB_CONNECTION=mysql\nDB_HOST=lerd-mysql\nDB_DATABASE=shop\n", "services:\n  - dbngin\n", ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := externalDBFixture(t, tc.env)
+			if tc.yaml != "" {
+				if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte(tc.yaml), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := missingExternalService(dir); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

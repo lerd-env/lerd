@@ -64,6 +64,7 @@ func externalService(req ExternalRequest) (*config.CustomService, error) {
 		Color:       base.Color,
 		Introspect:  introspect,
 		Environment: config.ExternalDBEnv(family, ext),
+		EnvVars:     base.EnvVars,
 		External:    &ext,
 	}, nil
 }
@@ -203,6 +204,9 @@ func AddExternalDB(req ExternalRequest) (*config.CustomService, error) {
 func writeExternalClientFile(svc *config.CustomService, password string) error {
 	path := config.ExternalDBClientFile(svc.Name)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	if err := os.WriteFile(config.ExternalDBPasswordFile(svc.Name), []byte(password), 0o600); err != nil {
 		return err
 	}
 	return os.WriteFile(path, []byte(config.ExternalDBClientContent(svc.Family, *svc.External, password)), 0o600)
