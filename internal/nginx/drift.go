@@ -44,11 +44,14 @@ func VhostDrift(site config.Site) (VhostDriftReport, error) {
 	if err != nil {
 		return VhostDriftReport{}, err
 	}
-	if bytes.Equal(current, rendered) {
-		return report, nil
+	if !bytes.Equal(current, rendered) {
+		report.Drifted = true
+		report.Detail = firstDifference(string(current), string(rendered))
+	} else if servesWorkerSubdomains(site) {
+		if path, detail := workerVhostDrift(site); detail != "" {
+			report.Drifted, report.Path, report.Detail = true, path, detail
+		}
 	}
-	report.Drifted = true
-	report.Detail = firstDifference(string(current), string(rendered))
 	return report, nil
 }
 
@@ -67,7 +70,7 @@ func RegenerateVhost(site config.Site) error {
 	if err := writeSiteConf(site.PrimaryDomain()+".conf", rendered); err != nil {
 		return err
 	}
-	if !site.IsHostProxy() && !site.IsCustomContainer() && !site.IsFrankenPHP() {
+	if servesWorkerSubdomains(site) {
 		syncWorkerSubdomainVhosts(site, sitePHPVersion(site), site.Secured)
 	}
 	return nil

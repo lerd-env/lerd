@@ -140,3 +140,87 @@ func TestGeneratePausedVhost_dropsWorkerSubdomainVhosts(t *testing.T) {
 		t.Errorf("paused site kept its worker vhost (err=%v)", err)
 	}
 }
+
+// A worktree served on the label before the worker claimed it loses its vhost,
+// or nginx would keep answering the shared server_name from the worktree file.
+func TestGenerateVhost_workerSubdomainTakesOverAWorktreeVhost(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{Subdomain: "docs", DefaultPort: 5180})
+	if err := os.MkdirAll(confD, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"docs.app.test.conf", "docs.app.test-ssl.conf"} {
+		if err := os.WriteFile(filepath.Join(confD, f), []byte("server {}"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"docs.app.test.conf", "docs.app.test-ssl.conf"} {
+		if _, err := os.Stat(filepath.Join(confD, f)); !os.IsNotExist(err) {
+			t.Errorf("worktree vhost %s survived the worker claiming its host (err=%v)", f, err)
+		}
+	}
+	readConf(t, filepath.Join(confD, "app.test.worker-docs.conf"))
+}
+
+// Two workers claiming one label: the first keeps it, the second is refused
+// rather than silently overwriting the route.
+func TestGenerateVhost_duplicateWorkerSubdomainKeepsTheFirst(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", nil)
+	proj, err := config.LoadProjectConfig(site.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proj.CustomWorkers = map[string]config.FrameworkWorker{
+		"alpha": {Command: "a", Proxy: &config.WorkerProxy{Subdomain: "docs", DefaultPort: 5101}},
+		"beta":  {Command: "b", Proxy: &config.WorkerProxy{Subdomain: "docs", DefaultPort: 5102}},
+	}
+	if err := config.SaveProjectConfig(site.Path, proj); err != nil {
+		t.Fatal(err)
+	}
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatal(err)
+	}
+	if conf := readConf(t, filepath.Join(confD, "app.test.worker-docs.conf")); !strings.Contains(conf, ":5101;") {
+		t.Errorf("the first worker lost its subdomain:\n%s", conf)
+	}
+}
+
+// A missing worker vhost, one on an old port and one for a label no longer
+// declared are all drift, and regenerating repairs each.
+func TestVhostDrift_coversWorkerSubdomainVhosts(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{Subdomain: "docs", DefaultPort: 5180})
+	site.PHPVersion = "8.4"
+	worker := filepath.Join(confD, "app.test.worker-docs.conf")
+	stale := filepath.Join(confD, "app.test.worker-old.conf")
+	breakIt := map[string]func(){
+		"missing": func() { _ = os.Remove(worker) },
+		"old port": func() {
+			b, _ := os.ReadFile(worker)
+			_ = os.WriteFile(worker, []byte(strings.ReplaceAll(string(b), "5180", "5999")), 0644)
+		},
+		"stale": func() { _ = os.WriteFile(stale, []byte("server {}"), 0644) },
+	}
+	for name, breakFn := range breakIt {
+		if err := GenerateVhost(site, "8.4"); err != nil {
+			t.Fatal(err)
+		}
+		if d, err := VhostDrift(site); err != nil || d.Drifted {
+			t.Fatalf("%s: fresh vhosts read as drifted: %+v %v", name, d, err)
+		}
+		breakFn()
+		if d, err := VhostDrift(site); err != nil || !d.Drifted {
+			t.Errorf("%s: drift = %+v %v, want drifted", name, d, err)
+		}
+		if err := RegenerateVhost(site); err != nil {
+			t.Fatal(err)
+		}
+		if d, _ := VhostDrift(site); d.Drifted {
+			t.Errorf("%s: still drifted after regenerating: %s", name, d.Detail)
+		}
+	}
+}

@@ -385,6 +385,24 @@ func WorkerSubdomainHosts(s Site) []string {
 	return hosts
 }
 
+// FindSiteByHost is FindSiteByDomain that also resolves a worker's subdomain
+// host to its site, loading only definitions of sites the host sits under.
+func FindSiteByHost(host string) (*Site, error) {
+	if s, err := FindSiteByDomain(host); err == nil {
+		return s, nil
+	}
+	reg, err := LoadSites()
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range reg.Sites {
+		if strings.HasSuffix(host, "."+s.PrimaryDomain()) && slices.Contains(WorkerSubdomainHosts(s), host) {
+			return &s, nil
+		}
+	}
+	return nil, fmt.Errorf("site with host %q not found", host)
+}
+
 // OnHost reports whether the worker's server listens on the host rather than
 // inside the site's FPM container.
 func (p *WorkerProxy) OnHost() bool { return p != nil && p.Upstream == "host" }
