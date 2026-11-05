@@ -973,6 +973,9 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	// are layered on last so they win over every computed value; extServices names
 	// services lerd writes connection vars for but must not start or provision.
 	envOverrides, extServices := readEnvOverride(cwd)
+	if branch != "" && len(envOverrides) == 0 && len(extServices) == 0 {
+		envOverrides, extServices = worktreeExternalDB(site, branch, cwd)
+	}
 	if _, statErr := os.Stat(filepath.Join(cwd, envOverrideFile)); statErr == nil {
 		ensureOverrideGitignored(cwd)
 	}
@@ -1449,6 +1452,36 @@ func runEnv(_ *cobra.Command, _ []string) error {
 // inherits from its parent. DB_DATABASE is deliberately excluded: it is owned by
 // the isolated-DB logic (or the parent value for a non-isolated worktree).
 var worktreeDBConnectionKeys = []string{"DB_CONNECTION", "DB_HOST", "DB_PORT", "DB_USERNAME", "DB_PASSWORD"}
+
+// worktreeExternalDB is what a worktree still on the server its parent marks
+// external keeps from the parent's override when lerd env runs inside it, since
+// the gitignored file never reaches a checkout. Only that server comes across.
+func worktreeExternalDB(site *config.Site, branch, worktreePath string) (map[string]string, map[string]bool) {
+	parent, parentExternal := readEnvOverride(site.Path)
+	external := map[string]bool{}
+	for name := range parentExternal {
+		if externalDBPicked(map[string]bool{name: true}) {
+			external[name] = true
+		}
+	}
+	binding := config.DBEnvBindingFor(site.Path)
+	current := envfile.Values(filepath.Join(worktreePath, binding.File), binding.Format)
+	if len(external) == 0 || current[binding.HostKey] != parent[binding.HostKey] {
+		return nil, nil
+	}
+	overrides := map[string]string{}
+	for _, k := range worktreeDBConnectionKeys {
+		if v, ok := parent[k]; ok {
+			overrides[k] = v
+		}
+	}
+	if _, isolated, _ := config.FindWorktreeDB(site.Name, branch); !isolated {
+		if v, ok := parent[binding.NameKey]; ok {
+			overrides[binding.NameKey] = v
+		}
+	}
+	return overrides, external
+}
 
 // worktreeEnvTarget is the database and domain a worktree's env names. A
 // worktree is not a registered site, so deriving them from its folder, as for
