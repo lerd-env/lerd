@@ -2,13 +2,16 @@ import { render } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import MonacoDiffEditor from './MonacoDiffEditor.svelte';
+import { editorFontSize } from '$stores/editorFont';
 
 // Monaco needs canvas/layout/workers that jsdom lacks, so the lazy loader is
 // mocked and the diff editor's wiring is checked against a fake.
 const { state } = vi.hoisted(() => ({
   state: {
     diffed: null as (() => void) | null,
-    models: [] as { original: string; modified: string }[]
+    models: [] as { original: string; modified: string }[],
+    created: {} as { fontSize?: number },
+    fontSize: 0
   }
 }));
 
@@ -27,12 +30,17 @@ vi.mock('$lib/monaco', () => {
     },
     getLineChanges: () => [],
     getModifiedEditor: () => side,
-    updateOptions: () => {},
+    updateOptions: (o: { fontSize?: number }) => {
+      if (o.fontSize !== undefined) state.fontSize = o.fontSize;
+    },
     dispose: () => {}
   };
   const monaco = {
     editor: {
-      createDiffEditor: () => editor,
+      createDiffEditor: (_el: HTMLElement, opts: { fontSize?: number }) => {
+        state.created = opts;
+        return editor;
+      },
       createModel: (v: string) => ({ getValue: () => v, dispose: () => {} }),
       setTheme: () => {},
       MouseTargetType: { GUTTER_GLYPH_MARGIN: 2 }
@@ -59,6 +67,16 @@ describe('MonacoDiffEditor', () => {
     state.models = [];
     frames = [];
     vi.stubGlobal('requestAnimationFrame', (f: FrameRequestCallback) => frames.push(f));
+  });
+
+  it('opens at the shared text size and follows it', async () => {
+    editorFontSize.set(15);
+    render(MonacoDiffEditor, { props: { original: 'a', modified: 'b' } });
+    await flush();
+    expect(state.created.fontSize).toBe(15);
+    editorFontSize.set(17);
+    await tick();
+    expect(state.fontSize).toBe(17);
   });
 
   // Monaco paints the whole file before folding it, so nothing shows until the fold has painted.

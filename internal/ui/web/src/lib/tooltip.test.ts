@@ -27,6 +27,18 @@ describe('tooltip action', () => {
     expect(t?.style.opacity).toBe('1');
   });
 
+  // Focus handed back after a mouse click is not a request for the tooltip.
+  it('shows on keyboard focus only', () => {
+    const { btn } = mount('Text size');
+    const visible = (v: boolean) => (btn.matches = (s: string) => s === ':focus-visible' && v);
+    visible(false);
+    btn.dispatchEvent(new FocusEvent('focusin'));
+    expect(tip()?.style.opacity ?? '0').toBe('0');
+    visible(true);
+    btn.dispatchEvent(new FocusEvent('focusin'));
+    expect(tip()?.style.opacity).toBe('1');
+  });
+
   // A label wider than the window, such as a long branch name, wraps instead of running off it.
   it('never grows wider than the window', () => {
     const { btn } = mount('feature/' + 'x'.repeat(400));
