@@ -1,5 +1,6 @@
 <script lang="ts">
   import EnvEditor from '$components/EnvEditor.svelte';
+  import EditorTextSize from '$components/EditorTextSize.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import {
     loadSiteEnv,
@@ -347,6 +348,7 @@
         {/if}
       </div>
       <div class="flex items-center gap-2 shrink-0">
+        <EditorTextSize />
         <button
           type="button"
           onclick={copy}

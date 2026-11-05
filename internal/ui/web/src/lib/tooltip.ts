@@ -96,11 +96,14 @@ export const tooltip: Action<HTMLElement, TooltipParam> = (node, param) => {
     owner = node;
     place(node, opts.label, opts.placement ?? 'bottom');
   };
+  const showOnKeyboardFocus = () => {
+    if (node.matches(':focus-visible')) show();
+  };
   const leave = () => hide(node);
   node.addEventListener('mouseenter', show);
   node.addEventListener('mouseleave', leave);
   node.addEventListener('click', leave);
-  node.addEventListener('focusin', show);
+  node.addEventListener('focusin', showOnKeyboardFocus);
   node.addEventListener('focusout', leave);
   window.addEventListener('scroll', leave, true);
   window.addEventListener('resize', leave);
@@ -116,7 +119,7 @@ export const tooltip: Action<HTMLElement, TooltipParam> = (node, param) => {
       node.removeEventListener('mouseenter', show);
       node.removeEventListener('mouseleave', leave);
       node.removeEventListener('click', leave);
-      node.removeEventListener('focusin', show);
+      node.removeEventListener('focusin', showOnKeyboardFocus);
       node.removeEventListener('focusout', leave);
       window.removeEventListener('scroll', leave, true);
       window.removeEventListener('resize', leave);

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { get } from 'svelte/store';
   import { onMount } from 'svelte';
+  import { editorFontSize } from '$stores/editorFont';
   import { palette, theme } from '$stores/theme';
   import { diffStats, type Hunk } from '$lib/gitDiff';
   import { applyEditorAccent, loadMonaco, lerdThemeName, type MonacoModule } from '$lib/monaco';
@@ -43,7 +44,7 @@
         readOnly: true,
         automaticLayout: true,
         minimap: { enabled: false },
-        fontSize: 12,
+        fontSize: $editorFontSize,
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
         scrollBeyondLastLine: false,
         renderOverviewRuler: false,
@@ -109,7 +110,7 @@
   });
 
   $effect(() => {
-    editor?.updateOptions({ ignoreTrimWhitespace: ignoreSpace, renderSideBySide: sideBySide });
+    editor?.updateOptions({ ignoreTrimWhitespace: ignoreSpace, renderSideBySide: sideBySide, fontSize: $editorFontSize });
   });
 
   let glyphs: Monaco.editor.IEditorDecorationsCollection | undefined;

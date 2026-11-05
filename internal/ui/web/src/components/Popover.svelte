@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import IconButton from '$components/IconButton.svelte';
+  import { dialog } from '$lib/dialog';
   import { portal } from '$lib/portal';
 
   interface Props {
@@ -65,9 +66,17 @@
     open = false;
     onclose?.();
   }
+
+  // Captured, so it reaches an open panel before a modal around it closes too.
+  function onKey(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || !open) return;
+    e.preventDefault();
+    e.stopPropagation();
+    close();
+  }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && close()} onresize={() => open && place()} />
+<svelte:window onkeydowncapture={onKey} onresize={() => open && place()} />
 
 <div class="relative" bind:this={triggerEl}>
   {#if triggerButton}
@@ -82,9 +91,12 @@
     <!-- Click-away backdrop; the panel sits above it. -->
     <button use:portal type="button" tabindex="-1" aria-hidden="true" class="fixed inset-0 z-70 cursor-default" onclick={close}
     ></button>
+    <!-- The panel sits outside any modal around it, so it keeps keyboard focus itself. -->
     <div
       use:portal
-      class="z-80 rounded-xl border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-2xl"
+      use:dialog
+      tabindex="-1"
+      class="z-80 outline-none rounded-xl border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-2xl"
       style="position: fixed; left: {pos.left}px; width: {pos.width}px; {align === 'right'
         ? `top: ${pos.top}px`
         : `bottom: ${Math.max(8, window.innerHeight - pos.top)}px`}"

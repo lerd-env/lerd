@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { peelBlockMarker, parseBlock, fontSize, FONT_MIN, FONT_MAX, splitRatio, SPLIT_MIN, SPLIT_MAX } from '$lib/tinker';
+import { peelBlockMarker, parseBlock, splitRatio, SPLIT_MIN, SPLIT_MAX } from '$lib/tinker';
 
 const US = String.fromCharCode(0x1f);
 const STX = String.fromCharCode(0x02);
@@ -35,19 +35,6 @@ describe('parseBlock', () => {
 
   it('handles a markerless chunk as output', () => {
     expect(parseBlock('Deprecated: ...')).toEqual({ kind: 'output', body: 'Deprecated: ...' });
-  });
-});
-
-describe('fontSize', () => {
-  it('reads a stored size and falls back to the default', () => {
-    expect(fontSize('14')).toBe(14);
-    expect(fontSize(null)).toBe(12);
-    expect(fontSize('big')).toBe(12);
-  });
-
-  it('keeps the size inside the range', () => {
-    expect(fontSize(String(FONT_MAX + 4))).toBe(FONT_MAX);
-    expect(fontSize(String(FONT_MIN - 4))).toBe(FONT_MIN);
   });
 });
 

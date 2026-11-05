@@ -89,7 +89,7 @@ The output panel is styled like a read-only editor: bordered box, monospace, lin
 
 ## Editor
 
-The [Monaco editor](https://microsoft.github.io/monaco-editor/) (the engine behind VS Code) with PHP syntax highlighting, line numbers, bracket matching, undo/redo, and line wrapping. The editor and the result pane wear the chosen Lerd theme: they sit on the theme's surface in light and dark mode, and keywords take its accent colour. The cog in the toolbar opens a text size control that scales the editor and the result pane together, remembered per browser. Monaco is lazy-loaded the first time you open any editor surface, so it never weighs down the initial dashboard load.
+The [Monaco editor](https://microsoft.github.io/monaco-editor/) (the engine behind VS Code) with PHP syntax highlighting, line numbers, bracket matching, undo/redo, and line wrapping. The editor and the result pane wear the chosen Lerd theme: they sit on the theme's surface in light and dark mode, and keywords take its accent colour. The **Aa** button in the toolbar opens a text size control that scales the editor and the result pane together. The size is shared with the `.env` editor and the git diff, which carry the same button, and every other code editor in the dashboard follows it, remembered per browser. Monaco is lazy-loaded the first time you open any editor surface, so it never weighs down the initial dashboard load.
 
 ### Language intelligence (phpantom_lsp)
 
