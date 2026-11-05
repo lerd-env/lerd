@@ -142,6 +142,9 @@ func resolveDB(cwd, flagService, flagDatabase string) (*dbEnv, error) {
 		}
 		// Try framework definition (reads the framework's own env file with its detect rules)
 		if env = resolveDBFromFramework(cwd); env != nil {
+			if err := refuseExternalDB(cwd, env.service); err != nil {
+				return nil, err
+			}
 			break
 		}
 		// Fall back to .env with generic key inference
@@ -155,6 +158,9 @@ func resolveDB(cwd, flagService, flagDatabase string) (*dbEnv, error) {
 			return nil, fmt.Errorf(
 				"no DB config found — use --service <name>, add a db: block to .lerd.yaml, or create a .env file with DB_CONNECTION and DB_DATABASE",
 			)
+		}
+		if err := refuseExternalDB(cwd, loaded.service); err != nil {
+			return nil, err
 		}
 		env = loaded
 	}
@@ -182,6 +188,17 @@ func resolveDBFromFramework(cwd string) *dbEnv {
 	return env
 }
 
+// refuseExternalDB stops a command read from the project's env from running in a
+// lerd container when the database that env names is somewhere else: a dump would
+// find nothing, or a same-named database, and a restore would overwrite that one.
+func refuseExternalDB(cwd, service string) error {
+	host, external := config.ExternalDBHost(cwd, service)
+	if !external {
+		return nil
+	}
+	return fmt.Errorf("this project's database is on %s, which lerd does not run, so lerd's database commands cannot reach it; to act on a lerd service instead, pass --service <name>", host)
+}
+
 // resolveDBLenient is like resolveDB but does not require a database name to be
 // present (used by db:shell and db:create where it is optional).
 func resolveDBLenient(cwd, flagService, flagDatabase string) (*dbEnv, error) {
@@ -200,6 +217,9 @@ func resolveDBLenient(cwd, flagService, flagDatabase string) (*dbEnv, error) {
 			break
 		}
 		if env = resolveDBFromFramework(cwd); env != nil {
+			if err := refuseExternalDB(cwd, env.service); err != nil {
+				return nil, err
+			}
 			break
 		}
 		loaded, err := loadDBEnvLenient(cwd)
@@ -207,6 +227,9 @@ func resolveDBLenient(cwd, flagService, flagDatabase string) (*dbEnv, error) {
 			return nil, err
 		}
 		if loaded != nil {
+			if err := refuseExternalDB(cwd, loaded.service); err != nil {
+				return nil, err
+			}
 			env = loaded
 		} else {
 			env = serviceToDBEnv("mysql") // default to mysql when nothing is configured

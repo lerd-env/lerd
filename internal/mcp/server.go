@@ -2729,6 +2729,9 @@ func readDBEnv(projectPath string) (*mcpDBEnv, error) {
 	if conn == "" {
 		return nil, fmt.Errorf("DB_CONNECTION not set in .env")
 	}
+	if err := refuseExternalDB(projectPath, conn); err != nil {
+		return nil, err
+	}
 	return &mcpDBEnv{
 		connection: conn,
 		host:       vals["DB_HOST"],
@@ -4495,6 +4498,22 @@ func execDBCreate(args map[string]any) (any, *rpcError) {
 	return toolOK(strings.Join(results, "\n")), nil
 }
 
+// refuseExternalDB stops a tool that runs in lerd's container when the site's
+// database is on a server lerd does not run, which that tool cannot reach.
+func refuseExternalDB(projectPath, connection string) error {
+	if !config.IsServerDBDriver(connection) {
+		return nil
+	}
+	service := "mysql"
+	if strings.HasPrefix(strings.ToLower(connection), "p") {
+		service = "postgres"
+	}
+	if host, external := config.ExternalDBHost(projectPath, service); external {
+		return fmt.Errorf("this project's database is on %s, which lerd does not run, so lerd's database tools cannot reach it", host)
+	}
+	return nil
+}
+
 // readDBEnvLenient reads DB connection info from .env without requiring DB_DATABASE.
 func readDBEnvLenient(projectPath string) (*mcpDBEnv, error) {
 	envPath := filepath.Join(projectPath, ".env")
@@ -4511,6 +4530,9 @@ func readDBEnvLenient(projectPath string) (*mcpDBEnv, error) {
 		}
 		k, v, _ := strings.Cut(line, "=")
 		vals[strings.TrimSpace(k)] = strings.Trim(strings.TrimSpace(v), `"'`)
+	}
+	if err := refuseExternalDB(projectPath, vals["DB_CONNECTION"]); err != nil {
+		return nil, err
 	}
 	return &mcpDBEnv{
 		connection: vals["DB_CONNECTION"],

@@ -655,3 +655,34 @@ func TestInitialize_instructionsPreferTheLanguageServer(t *testing.T) {
 		}
 	}
 }
+
+// The db tools run in lerd's container, so a site on an outside server would
+// export, or import over, a same-named database there.
+func TestReadDBEnv_RefusesADatabaseLerdDoesNotServe(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := t.TempDir()
+	env := "DB_CONNECTION=mysql\nDB_HOST=host.containers.internal\nDB_DATABASE=shop\n"
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(env), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readDBEnv(dir); err == nil || !strings.Contains(err.Error(), "does not run") {
+		t.Errorf("readDBEnv: %v", err)
+	}
+	if _, err := readDBEnvLenient(dir); err == nil || !strings.Contains(err.Error(), "does not run") {
+		t.Errorf("readDBEnvLenient: %v", err)
+	}
+}
+
+func TestReadDBEnv_KeepsWorkingOnLerdsOwnDatabase(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := t.TempDir()
+	env := "DB_CONNECTION=mysql\nDB_HOST=lerd-mysql\nDB_DATABASE=shop\n"
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(env), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := readDBEnv(dir); err != nil || got.database != "shop" {
+		t.Errorf("got %+v, %v", got, err)
+	}
+}

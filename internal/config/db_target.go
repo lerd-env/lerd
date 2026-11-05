@@ -4,7 +4,9 @@ import (
 	"net"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -361,6 +363,52 @@ func dbServiceFor(projectDir, host, declared string) string {
 		return declared
 	}
 	return ""
+}
+
+// WorktreeDBService is the lerd service holding a project's database, or "" when
+// no lerd service does, read from the project's env.
+func WorktreeDBService(projectDir string) string {
+	binding := DBEnvBindingFor(projectDir)
+	service := DBServiceFor(projectDir, envfile.Reader(filepath.Join(projectDir, binding.File), binding.Format)(binding.HostKey))
+	if service == "" {
+		return ""
+	}
+	if _, external := ExternalDBHost(projectDir, service); external {
+		return ""
+	}
+	return service
+}
+
+// ExternalDBHost returns the host a project's env names when its database is not
+// on the lerd service given. Loopback only reaches lerd through a port lerd
+// publishes for that service; on any other it is a server on the machine.
+func ExternalDBHost(projectDir, service string) (string, bool) {
+	binding := DBEnvBindingFor(projectDir)
+	read := envfile.Reader(filepath.Join(projectDir, binding.File), binding.Format)
+	host := strings.TrimSpace(read(binding.HostKey))
+	if host == "" {
+		return "", false
+	}
+	if _, marked := envfile.ReadOverride(projectDir); marked[service] {
+		return host, true
+	}
+	if strings.HasPrefix(host, "lerd-") {
+		return "", false
+	}
+	if !isLoopbackHost(host) {
+		return host, true
+	}
+	port := read("DB_PORT")
+	published := ServiceConfigFor(service).HostPorts()
+	if port == "" || len(published) == 0 || slices.Contains(published, atoiOr(port)) {
+		return "", false
+	}
+	return net.JoinHostPort(host, port), true
+}
+
+func atoiOr(s string) int {
+	n, _ := strconv.Atoi(strings.TrimSpace(s))
+	return n
 }
 
 // isLoopbackHost reports whether a host value from an env file points back at

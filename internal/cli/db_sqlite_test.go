@@ -2,8 +2,12 @@ package cli
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 // lerd's database commands drive a database service container. A SQLite project
@@ -101,5 +105,79 @@ func TestResolveDBLenientKeepsTheSQLiteReason(t *testing.T) {
 
 	if _, err := resolveDBLenient(dir, "", ""); !errors.Is(err, errSQLiteProject) {
 		t.Errorf("resolveDBLenient did not surface the sqlite reason: %v", err)
+	}
+}
+
+// externalDBFixture is a project on the env given, under an isolated config with
+// lerd's MySQL published on 3308.
+func externalDBFixture(t *testing.T, env string) string {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+		if c.Services == nil {
+			c.Services = map[string]config.ServiceConfig{}
+		}
+		sc := c.Services["mysql"]
+		sc.Port = 3308
+		c.Services["mysql"] = sc
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return writeEnvFixture(t, env)
+}
+
+// Every db command runs inside lerd's container, so one that read a site on an
+// outside server would dump, or overwrite, any database of the same name there.
+func TestResolveDBRefusesADatabaseLerdDoesNotServe(t *testing.T) {
+	for name, env := range map[string]string{
+		"the machine, from a container": "DB_CONNECTION=mysql\nDB_HOST=host.containers.internal\nDB_PORT=3306\nDB_DATABASE=shop\n",
+		"another machine":               "DB_CONNECTION=mysql\nDB_HOST=db.example.com\nDB_DATABASE=shop\n",
+		"loopback on another port":      "DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3306\nDB_DATABASE=shop\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := externalDBFixture(t, env)
+			if _, err := resolveDB(dir, "", ""); err == nil || !strings.Contains(err.Error(), "--service") {
+				t.Errorf("resolveDB: %v", err)
+			}
+			if _, err := resolveDBLenient(dir, "", ""); err == nil || !strings.Contains(err.Error(), "--service") {
+				t.Errorf("resolveDBLenient: %v", err)
+			}
+		})
+	}
+}
+
+func TestResolveDBRefusesAServiceMarkedExternal(t *testing.T) {
+	dir := externalDBFixture(t, "DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3308\nDB_DATABASE=shop\n")
+	if err := os.WriteFile(filepath.Join(dir, ".env.lerd_override"), []byte("LERD_EXTERNAL_SERVICES=mysql\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolveDB(dir, "", ""); err == nil || !strings.Contains(err.Error(), "--service") {
+		t.Errorf("resolveDB: %v", err)
+	}
+}
+
+func TestResolveDBKeepsWorkingOnLerdsOwnDatabase(t *testing.T) {
+	for name, env := range map[string]string{
+		"the container":         "DB_CONNECTION=mysql\nDB_HOST=lerd-mysql\nDB_DATABASE=shop\n",
+		"the published port":    "DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3308\nDB_DATABASE=shop\n",
+		"loopback with no port": "DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_DATABASE=shop\n",
+		"no host at all":        "DB_CONNECTION=mysql\nDB_DATABASE=shop\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			env, err := resolveDB(externalDBFixture(t, env), "", "")
+			if err != nil || env.service != "mysql" || env.database != "shop" {
+				t.Errorf("got %+v, %v", env, err)
+			}
+		})
+	}
+}
+
+// Naming the service is the user saying which container they mean.
+func TestResolveDBLetsAnExplicitServiceThrough(t *testing.T) {
+	dir := externalDBFixture(t, "DB_CONNECTION=mysql\nDB_HOST=host.containers.internal\nDB_DATABASE=shop\n")
+	env, err := resolveDB(dir, "mysql", "shop")
+	if err != nil || env.service != "mysql" {
+		t.Errorf("got %+v, %v", env, err)
 	}
 }
