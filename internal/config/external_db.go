@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/geodro/lerd/internal/envfile"
 	"gopkg.in/yaml.v3"
 )
 
@@ -134,6 +133,14 @@ var urlCredentials = regexp.MustCompile(`://[^/@]*@[^/?]*`)
 // what each key is, not by a framework's spelling of it, so a Laravel DB_HOST, a
 // Symfony DATABASE_URL and a dotted PHP config key all land the same way.
 func ExternalDBVars(vars []string, e ExternalDB, host, password string) []string {
+	// WordPress and others have no port key, so the host has to carry it.
+	hostValue := net.JoinHostPort(host, strconv.Itoa(e.Port))
+	for _, kv := range vars {
+		k, _, _ := strings.Cut(kv, "=")
+		if strings.Contains(strings.ToUpper(k), "PORT") {
+			hostValue = host
+		}
+	}
 	out := make([]string, 0, len(vars))
 	for _, kv := range vars {
 		k, v, _ := strings.Cut(kv, "=")
@@ -142,7 +149,7 @@ func ExternalDBVars(vars []string, e ExternalDB, host, password string) []string
 		case strings.Contains(v, "://"):
 			v = urlCredentials.ReplaceAllString(v, "://"+url.UserPassword(e.User, password).String()+"@"+net.JoinHostPort(host, strconv.Itoa(e.Port)))
 		case strings.Contains(key, "HOST"):
-			v = host
+			v = hostValue
 		case strings.Contains(key, "PORT"):
 			v = strconv.Itoa(e.Port)
 		case strings.Contains(key, "USER"):
@@ -174,9 +181,7 @@ func ExternalDBServiceFor(projectDir string) *CustomService {
 
 // ExternalDBEnvMatches reports whether a checkout's env still names the server.
 func ExternalDBEnvMatches(projectDir string, svc *CustomService) bool {
-	binding := DBEnvBindingFor(projectDir)
-	read := envfile.Reader(filepath.Join(projectDir, binding.File), binding.Format)
-	host, port := strings.TrimSpace(read(binding.HostKey)), read("DB_PORT")
-	sameHost := host == svc.External.Host || (svc.External.Host == "host.containers.internal" && isLoopbackHost(host))
-	return sameHost && (port == "" || atoiOr(port) == svc.External.Port)
+	e := DBEndpointFor(projectDir)
+	sameHost := e.Host == svc.External.Host || (svc.External.Host == "host.containers.internal" && isLoopbackHost(e.Host))
+	return sameHost && (e.Port == "" || atoiOr(e.Port) == svc.External.Port)
 }

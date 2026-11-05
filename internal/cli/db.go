@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
@@ -97,12 +96,11 @@ type dbEnv struct {
 // externalDBEnv is the database of a project on an external server it chose,
 // reached through that service's client.
 func externalDBEnv(cwd string, svc *config.CustomService) *dbEnv {
-	binding := config.DBEnvBindingFor(cwd)
 	env := serviceToDBEnv(svc.Name)
 	if config.ExternalDBFamily(svc.Family) == "postgres" {
 		env.connection = "pgsql"
 	}
-	env.database = envfile.Reader(filepath.Join(cwd, binding.File), binding.Format)(binding.NameKey)
+	env.database = config.DBEndpointFor(cwd).Database
 	env.username, env.password, env.external = svc.External.User, "", true
 	return env
 }

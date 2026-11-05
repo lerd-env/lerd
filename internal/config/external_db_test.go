@@ -170,3 +170,40 @@ func TestExternalDBEnvMatches(t *testing.T) {
 		t.Error("a checkout on lerd's service does not name it")
 	}
 }
+
+// WordPress has no port key, so a server off the default port has to travel in
+// the host, or the site connects to the wrong place.
+func TestExternalDBVars_NoPortKeyPutsThePortInTheHost(t *testing.T) {
+	got := ExternalDBVars([]string{"DB_NAME=wp", "DB_USER=root", "DB_PASSWORD=lerd", "DB_HOST=lerd-mysql"}, ExternalDB{Port: 3310, User: "me"}, "host.containers.internal", "pw")
+	if got[3] != "DB_HOST=host.containers.internal:3310" || got[1] != "DB_USER=me" || got[2] != "DB_PASSWORD=pw" {
+		t.Errorf("got %v", got)
+	}
+}
+
+func TestDBEndpointFor(t *testing.T) {
+	for name, tc := range map[string]struct {
+		env  string
+		want DBEndpoint
+	}{
+		"separate keys": {"DB_HOST=db.lan\nDB_PORT=3307\nDB_DATABASE=shop\n", DBEndpoint{Host: "db.lan", Port: "3307", Database: "shop"}},
+		"port in host":  {"DB_HOST=db.lan:3310\nDB_DATABASE=shop\n", DBEndpoint{Host: "db.lan", Port: "3310", Database: "shop"}},
+		"nothing set":   {"APP_NAME=x\n", DBEndpoint{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(tc.env), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if got := DBEndpointFor(dir); got != tc.want {
+				t.Errorf("got %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestEndpointFromURL(t *testing.T) {
+	got := endpointFromURL(`"mysql://me:p%40ss@host.containers.internal:3310/shop?serverVersion=8.4"`)
+	if got != (DBEndpoint{Host: "host.containers.internal", Port: "3310", Database: "shop"}) {
+		t.Errorf("got %+v", got)
+	}
+}

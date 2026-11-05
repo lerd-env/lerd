@@ -382,13 +382,46 @@ func WorktreeDBService(projectDir string) string {
 	return service
 }
 
+// DBEndpoint is where a project's env says its database lives, whichever way the
+// framework spells it: separate keys, a host:port, or one connection string.
+type DBEndpoint struct {
+	Host     string
+	Port     string
+	Database string
+}
+
+// DBEndpointFor reads a project's database endpoint from its env.
+func DBEndpointFor(projectDir string) DBEndpoint {
+	bindings, file, format := dbEnvBindings(projectDir)
+	vals := envfile.Values(filepath.Join(projectDir, file), format)
+	for _, b := range bindings {
+		if b.urlKey != "" && serviceDetectedIn(b.detect, vals) {
+			return endpointFromURL(vals[b.urlKey])
+		}
+	}
+	binding := DBEnvBindingFor(projectDir)
+	read := envfile.Reader(filepath.Join(projectDir, binding.File), binding.Format)
+	e := DBEndpoint{Host: strings.TrimSpace(read(binding.HostKey)), Port: read("DB_PORT"), Database: read(binding.NameKey)}
+	if host, port, err := net.SplitHostPort(e.Host); err == nil {
+		e.Host, e.Port = host, port
+	}
+	return e
+}
+
+func endpointFromURL(raw string) DBEndpoint {
+	u, err := url.Parse(strings.Trim(raw, `"'`))
+	if err != nil {
+		return DBEndpoint{}
+	}
+	return DBEndpoint{Host: u.Hostname(), Port: u.Port(), Database: strings.TrimPrefix(u.Path, "/")}
+}
+
 // ExternalDBHost returns the host a project's env names when its database is not
 // on the lerd service given. Loopback only reaches lerd through a port lerd
 // publishes for that service; on any other it is a server on the machine.
 func ExternalDBHost(projectDir, service string) (string, bool) {
-	binding := DBEnvBindingFor(projectDir)
-	read := envfile.Reader(filepath.Join(projectDir, binding.File), binding.Format)
-	host := strings.TrimSpace(read(binding.HostKey))
+	endpoint := DBEndpointFor(projectDir)
+	host := endpoint.Host
 	if host == "" {
 		return "", false
 	}
@@ -401,7 +434,7 @@ func ExternalDBHost(projectDir, service string) (string, bool) {
 	if !isLoopbackHost(host) {
 		return host, true
 	}
-	port := read("DB_PORT")
+	port := endpoint.Port
 	published := ServiceConfigFor(service).HostPorts()
 	if port == "" || len(published) == 0 || slices.Contains(published, atoiOr(port)) {
 		return "", false

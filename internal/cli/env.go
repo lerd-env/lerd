@@ -1219,13 +1219,13 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		vars := wiredVarsFor(fw, svc, role, knownEnvKeys, mapped, external, dottedEnv)
 		siteDB := dbName
 		if svc.External != nil {
-			wiredVars, err := externalDBVars(svc, site, vars)
+			siteDB = externalSiteDB(cwd, dbName)
+			wiredVars, err := externalDBVars(svc, site, vars, siteDB)
 			if err != nil {
 				provisionErrs = append(provisionErrs, err)
 				continue
 			}
 			vars = wiredVars
-			siteDB = externalSiteDB(cwd, dbName)
 		}
 		switch {
 		case dottedEnv && external:
@@ -1261,8 +1261,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			if isDB && !dottedEnv && !mapped {
 				updates["DB_DATABASE"] = siteDB
 			}
-			if svc.External != nil {
-				binding := config.DBEnvBindingFor(cwd)
+			if binding := config.DBEnvBindingFor(cwd); svc.External != nil && binding.NameKey != "" && !strings.Contains(strings.Join(vars, "\n"), "://") {
 				updates[binding.NameKey] = siteDB
 			}
 		}
@@ -1502,7 +1501,7 @@ func missingExternalService(cwd string) string {
 
 // externalDBVars points a picked service's env vars at the server it stands for.
 // A site whose PHP runs on the machine reaches that server over loopback.
-func externalDBVars(svc *config.CustomService, site *config.Site, vars []string) ([]string, error) {
+func externalDBVars(svc *config.CustomService, site *config.Site, vars []string, siteDB string) ([]string, error) {
 	password, err := os.ReadFile(config.ExternalDBPasswordFile(svc.Name))
 	if err != nil {
 		return nil, fmt.Errorf("reading the password of %s: %w", svc.Name, err)
@@ -1511,16 +1510,19 @@ func externalDBVars(svc *config.CustomService, site *config.Site, vars []string)
 	if host == "host.containers.internal" && usesLoopbackServices(site) {
 		host = "127.0.0.1"
 	}
-	return config.ExternalDBVars(vars, *svc.External, host, string(password)), nil
+	named := make([]string, 0, len(vars))
+	for _, kv := range vars {
+		named = append(named, strings.ReplaceAll(kv, "{{site}}", siteDB))
+	}
+	return config.ExternalDBVars(named, *svc.External, host, string(password)), nil
 }
 
 // externalSiteDB is the database a site uses on a server it was pointed at: the
 // one its env already names, so its data is found, unless that is only a default.
 func externalSiteDB(cwd, dbName string) string {
-	binding := config.DBEnvBindingFor(cwd)
-	current := envfile.Reader(filepath.Join(cwd, binding.File), binding.Format)(binding.NameKey)
+	current := config.DBEndpointFor(cwd).Database
 	switch {
-	case current == "" || current == "lerd" || current == "laravel":
+	case current == "" || current == "lerd" || current == "laravel" || current == "app":
 		return dbName
 	case strings.ContainsAny(current, "./"):
 		return dbName
