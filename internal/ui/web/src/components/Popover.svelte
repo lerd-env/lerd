@@ -65,9 +65,17 @@
     open = false;
     onclose?.();
   }
+
+  // Captured, so it reaches an open panel before a modal around it closes too.
+  function onKey(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || !open) return;
+    e.preventDefault();
+    e.stopPropagation();
+    close();
+  }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && close()} onresize={() => open && place()} />
+<svelte:window onkeydowncapture={onKey} onresize={() => open && place()} />
 
 <div class="relative" bind:this={triggerEl}>
   {#if triggerButton}

@@ -52,6 +52,17 @@ describe('Modal', () => {
     expect(onclose).toHaveBeenCalledTimes(1);
   });
 
+  it('leaves itself open when Escape only closes a popover inside it', async () => {
+    const onclose = vi.fn();
+    render(Harness, { props: { open: true, title: 'T', onclose, withPopover: true } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+    await fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByText('panel item')).toBeNull();
+    expect(onclose).not.toHaveBeenCalled();
+    await fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onclose).toHaveBeenCalledTimes(1);
+  });
+
   it('renders footer slot when provided', () => {
     render(Harness, { props: { open: true, title: 'X', onclose: () => {}, withFooter: true } });
     expect(screen.getByTestId('footer')).toBeInTheDocument();
