@@ -259,3 +259,22 @@ func TestDBNameInURL_RoundTripsThroughDBURLWithName(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestSameDBURLHost_ComparesEffectivePorts(t *testing.T) {
+	for name, tc := range map[string]struct {
+		a, b string
+		want bool
+	}{
+		"mysql default written once":    {"mysql://u@h:3306/a", "mysql://u@h/b", true},
+		"postgres default written once": {"postgresql://u@h/a", "postgresql://u@h:5432/b", true},
+		"pdo default written once":      {"mysql:host=h;port=3306;dbname=a", "mysql:host=h;dbname=b", true},
+		"another port":                  {"mysql://u@h:3307/a", "mysql://u@h/b", false},
+		"another host":                  {"mysql://u@h/a", "mysql://u@other/b", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := SameDBURLHost(tc.a, tc.b); got != tc.want {
+				t.Errorf("got %v", got)
+			}
+		})
+	}
+}

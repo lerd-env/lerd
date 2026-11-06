@@ -1556,7 +1556,7 @@ func worktreeExternalDB(site *config.Site, branch, worktreePath string) (map[str
 	}
 	urlKey, mine := config.DBURLFor(worktreePath)
 	isolatedDB := ""
-	if e, ok, _ := config.FindWorktreeDB(site.Name, branch); ok {
+	if e, ok := config.WorktreeDBInUse(site.Name, branch); ok {
 		isolatedDB = e.DBName
 	}
 	if url, ok := carriedDBURL(urlKey, parent, mine, isolatedDB); ok {
@@ -1571,7 +1571,7 @@ func worktreeExternalDB(site *config.Site, branch, worktreePath string) (map[str
 			overrides[k] = v
 		}
 	}
-	if _, isolated, _ := config.FindWorktreeDB(site.Name, branch); !isolated {
+	if _, isolated := config.WorktreeDBInUse(site.Name, branch); !isolated {
 		if v, ok := parent[binding.NameKey]; ok {
 			overrides[binding.NameKey] = v
 		}
@@ -1606,7 +1606,7 @@ func carriedDBURL(key string, parent map[string]string, mine, isolatedDB string)
 // database when it has one and the parent's otherwise, on its branch domain.
 func worktreeEnvTarget(site *config.Site, branch string) (dbName, domain string) {
 	dbName = projectDBName(site.Path)
-	if e, ok, err := config.FindWorktreeDB(site.Name, branch); err == nil && ok {
+	if e, ok := config.WorktreeDBInUse(site.Name, branch); ok {
 		dbName = e.DBName
 	}
 	return dbName, branch + "." + site.PrimaryDomain()

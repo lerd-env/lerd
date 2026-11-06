@@ -436,4 +436,7 @@ func TestIsolateWithPlugin_KeepsARecordWhenItCannotDrop(t *testing.T) {
 	if config.WorktreeDBIsolated(checkout) {
 		t.Error("the worktree still shares the parent's database and must say so")
 	}
+	if name, _ := worktreeEnvTarget(site, "feature"); name == "acme_feature" {
+		t.Error("lerd env would name a leftover the worktree cannot reach")
+	}
 }

@@ -193,6 +193,7 @@ func isolateWithPlugin(p *plugins.Plugin, site *config.Site, wtPath, branch, sou
 			return err
 		}
 		// Left behind, it needs its record for db:share to find and drop it.
+		entry.Leftover = true
 		return errors.Join(err, dropErr, config.AddWorktreeDB(entry))
 	}
 	if err := config.AddWorktreeDB(entry); err != nil {

@@ -445,10 +445,25 @@ func DBURLFor(projectDir string) (key, value string) {
 	return "", ""
 }
 
-// SameDBURLHost reports whether two connection URLs name the same host and port.
+// SameDBURLHost reports whether two connection values reach the same server, a
+// port left out meaning the driver's default.
 func SameDBURLHost(a, b string) bool {
 	x, y := endpointFromURL(a), endpointFromURL(b)
-	return x.Host == y.Host && x.Port == y.Port
+	return x.Host == y.Host && effectivePort(a, x) == effectivePort(b, y)
+}
+
+func effectivePort(raw string, e DBEndpoint) string {
+	if e.Port != "" {
+		return e.Port
+	}
+	raw = strings.ToLower(strings.TrimLeft(raw, `"'`))
+	switch {
+	case strings.HasPrefix(raw, "mysql"), strings.HasPrefix(raw, "maria"):
+		return "3306"
+	case strings.HasPrefix(raw, "pgsql"), strings.HasPrefix(raw, "postgres"):
+		return "5432"
+	}
+	return ""
 }
 
 // DBNameInURL is the database a connection URL names.
