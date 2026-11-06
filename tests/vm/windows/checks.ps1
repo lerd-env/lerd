@@ -1,7 +1,8 @@
 # Checks what the Lerd installer leaves on Windows, one PASS or FAIL line each,
 # in the format the release lanes read. -Absent checks the same things are gone
 # after an uninstall; the distro goes too only when it was deleted, -DistroDeleted.
-param([switch] $Absent, [switch] $DistroDeleted)
+# -Distro names it after an uninstall, which removes the config it is read from.
+param([switch] $Absent, [switch] $DistroDeleted, [string] $Distro)
 $ErrorActionPreference = 'SilentlyContinue'
 $script:fails = 0
 $script:passes = 0
@@ -27,7 +28,7 @@ Check 'W.9 .test resolves through lerd' ($null -ne (Get-DnsClientNrptRule | Wher
 Check 'W.10 lerd CA trusted by Windows' ($null -ne (Get-ChildItem Cert:\CurrentUser\Root | Where-Object { $_.Subject -match 'mkcert' }))
 $distros = (& $wsl -l -q) -replace "`0", '' | Where-Object { $_ -match '\S' }
 # The installer keeps a distro from an earlier run, so ask rather than assume.
-$distro = Get-Content (Join-Path $lerdBin 'lerd-wsl.conf') | Where-Object { $_ -like 'distro=*' } | ForEach-Object { $_.Substring(7) }
+if (-not $Distro) { $Distro = Get-Content (Join-Path $lerdBin 'lerd-wsl.conf') | Where-Object { $_ -like 'distro=*' } | ForEach-Object { $_.Substring(7) } }
 if (-not $Absent -or $DistroDeleted) { Check "W.11 $distro installed" ($distros -contains $distro) }
 if (-not $Absent) {
 	$dash = try { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 http://127.0.0.1:7073/).StatusCode } catch { 0 }
