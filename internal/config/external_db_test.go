@@ -235,3 +235,27 @@ func TestExternalDBServiceFor_AWorktreeFollowsItsParentsChoice(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+func TestDBURLWithName(t *testing.T) {
+	for name, tc := range map[string]struct{ raw, db, want string }{
+		"keeps the query":     {"mysql://me:p%40ss@h:3307/shop?charset=utf8mb4", "shop_b", "mysql://me:p%40ss@h:3307/shop_b?charset=utf8mb4"},
+		"keeps the quotes":    {`"mysql://me:pw@h/shop"`, "shop_b", `"mysql://me:pw@h/shop_b"`},
+		"keeps a fragment":    {"postgresql://me@h/shop#note", "shop_b", "postgresql://me@h/shop_b#note"},
+		"escapes the name":    {"postgresql://me@h/shop", "shop#feature", "postgresql://me@h/shop%23feature"},
+		"no database in path": {"mysql://me@h", "shop", "mysql://me@h"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := DBURLWithName(tc.raw, tc.db); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// A round trip must not change what the name means.
+func TestDBNameInURL_RoundTripsThroughDBURLWithName(t *testing.T) {
+	const raw = "postgresql://me@h/shop%23feature"
+	if got := DBURLWithName("postgresql://me@h/other", DBNameInURL(raw)); got != raw {
+		t.Errorf("got %q", got)
+	}
+}

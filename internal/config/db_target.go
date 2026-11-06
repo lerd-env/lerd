@@ -451,10 +451,10 @@ func DBURLWithName(raw, name string) string {
 	}
 	start := schemeEnd + slash + 1
 	end := len(raw)
-	if i := strings.IndexAny(raw[start:], `?"'`); i >= 0 {
+	if i := strings.IndexAny(raw[start:], `?#"'`); i >= 0 {
 		end = start + i
 	}
-	return raw[:start] + name + raw[end:]
+	return raw[:start] + url.PathEscape(name) + raw[end:]
 }
 
 func endpointFromURL(raw string) DBEndpoint {
