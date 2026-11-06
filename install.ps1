@@ -189,6 +189,16 @@
     ($r.Code -eq 0) -and ($r.Lines -contains $Distro)
   }
 
+  # DistroOffered reports whether wsl.exe can install the distro. Old WSL reads a
+  # legacy list with no versioned Ubuntu. A failed lookup counts as offered, so
+  # the install itself reports the network error rather than a pointless update.
+  function DistroOffered {
+    $r = Capture $RealWSLExe '--list --online'
+    ($r.Code -ne 0) -or [bool]($r.Lines -match "^$([regex]::Escape($Distro))\s")
+  }
+
+  function WSLReady { (WSLInstalled) -and ((DistroInstalled) -or (DistroOffered)) }
+
   # ExistingUser returns the distro's uid 1000 user, the one this script creates.
   function ExistingUser {
     $r = Capture (WSLExe) "-d $Distro -u root --exec id -nu 1000"
@@ -306,7 +316,7 @@
   # EnsureWSL installs WSL from Microsoft's GitHub release. The wsl.exe Windows
   # ships is a stub, and its Store-based install is unreliable.
   function EnsureWSL {
-    if (WSLInstalled) { return }
+    if (WSLReady) { return }
     Step 'Installing WSL...'
     $arch = NativeArch
     $url = (Invoke-RestMethod https://api.github.com/repos/microsoft/WSL/releases/latest).assets |
@@ -327,7 +337,7 @@
     # msiexec returns before Windows Installer finishes registering WSL, and the
     # stub asked in that window offers to install WSL all over again.
     for ($i = 0; $i -lt 60; $i++) {
-      if (WSLInstalled) { return }
+      if (WSLReady) { return }
       Start-Sleep 2
     }
     throw 'WSL was installed but wsl.exe still does not report it'
@@ -635,6 +645,9 @@ namespace LerdSetup {
   if ([Environment]::OSVersion.Version.Build -lt 19041) {
     Warn 'WSL 2 needs Windows 10 2004 (build 19041) or newer.'
     return
+  }
+  if ([Environment]::OSVersion.Version.Build -lt 22621) {
+    Warn 'Mirrored networking needs Windows 11 22H2 or newer. Lerd will install, but .test sites may not open from Windows.'
   }
   Remove-ItemProperty -Path $RunOnceKey -Name 'lerd-setup' -ErrorAction SilentlyContinue
 

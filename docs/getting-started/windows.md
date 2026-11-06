@@ -5,7 +5,7 @@ description: Install Lerd on Windows with one installer. Lerd runs inside WSL2 a
 
 # Lerd for Windows
 
-Lerd runs on Windows through WSL2 (Windows 10 version 2004 or newer, Windows 11 22H2 or newer recommended), and `Install-Lerd.exe` sets the whole thing up for you: WSL, an Ubuntu distro, Podman, Lerd and the Windows integration. Your sites then open at `https://<site>.test` in Windows browsers, with a trusted certificate, and `lerd`, `php` and `composer` work from any Windows terminal.
+Lerd runs on Windows through WSL2 (Windows 10 version 2004 or newer, Windows 11 22H2 or newer recommended, since older versions have no mirrored networking and `.test` sites may not open from Windows), and `Install-Lerd.exe` sets the whole thing up for you: WSL, an Ubuntu distro, Podman, Lerd and the Windows integration. Your sites then open at `https://<site>.test` in Windows browsers, with a trusted certificate, and `lerd`, `php` and `composer` work from any Windows terminal.
 
 ## Install
 
