@@ -447,8 +447,8 @@ func DBURLFor(projectDir string) (key, value string) {
 	return "", ""
 }
 
-// DBURLConnection is every value a URL-keyed framework declares for its database,
-// as a project holds them: the URL, and for Yii the login kept beside it.
+// DBURLConnection is the values a URL-keyed framework declares for its database
+// that a project holds literally: the URL, and for Yii the login beside it.
 func DBURLConnection(projectDir string) map[string]string {
 	bindings, file, format := dbEnvBindings(projectDir)
 	vals := envfile.Values(filepath.Join(projectDir, file), format)
@@ -458,7 +458,9 @@ func DBURLConnection(projectDir string) map[string]string {
 		}
 		out := map[string]string{}
 		for _, k := range b.keys {
-			out[k] = vals[k]
+			if v, ok := vals[k]; ok {
+				out[k] = v
+			}
 		}
 		return out
 	}

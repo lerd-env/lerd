@@ -659,3 +659,37 @@ func TestDSNTarget_ReadsAPDODSN(t *testing.T) {
 		}
 	}
 }
+
+// A value the file computes, such as getenv('DB_USER'), cannot be read back, and
+// copying it as empty would wipe the expression out of the worktree.
+func TestDBURLConnection_LeavesOutWhatItCannotRead(t *testing.T) {
+	setConfigDir(t)
+	installStoreFramework(t, &Framework{
+		Name:   "acme",
+		Detect: []FrameworkRule{{File: "acme.lock"}},
+		Env: FrameworkEnvConf{
+			File:   "db.php",
+			Format: "php-array",
+			Services: map[string]FrameworkServiceDef{
+				"mysql": {
+					Detect: []FrameworkServiceDetect{{Key: "dsn", ValuePrefix: "mysql:"}},
+					Vars:   []string{"dsn=mysql:host=lerd-mysql;dbname={{site}}", "username=root", "password=lerd"},
+				},
+			},
+		},
+	})
+	dir := t.TempDir()
+	writeProjectFile(t, dir, "acme.lock", "")
+	writeProjectFile(t, dir, "db.php", "<?php\nreturn ['dsn' => 'mysql:host=lerd-mysql;dbname=shop', 'username' => getenv('DB_USER'), 'password' => ''];\n")
+
+	got := DBURLConnection(dir)
+	if _, ok := got["username"]; ok {
+		t.Errorf("computed username came across as %q", got["username"])
+	}
+	if v, ok := got["password"]; !ok || v != "" {
+		t.Errorf("a literal empty password must stay: %q %v", v, ok)
+	}
+	if got["dsn"] != "mysql:host=lerd-mysql;dbname=shop" {
+		t.Errorf("dsn = %q", got["dsn"])
+	}
+}
