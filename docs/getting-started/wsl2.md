@@ -13,7 +13,7 @@ Ubuntu 22.04 or newer, or Debian 12 or newer, running on WSL 0.67.6 or newer (th
 Download `Install-Lerd.exe` from the [Lerd desktop app's latest release](https://github.com/lerd-env/lerd-desktop/releases/latest) and run it. It is a wizard that asks for a Linux username and password and two choices, then:
 
 1. Enables the two Windows features WSL 2 runs on and asks to restart. After you sign back in it carries on by itself.
-2. Installs WSL from Microsoft's GitHub release, then an Ubuntu 24.04 distro with your Linux user and systemd.
+2. Installs WSL from Microsoft's GitHub release, or updates a WSL too old to offer a current Ubuntu, then installs the newest Ubuntu LTS WSL offers with your Linux user and systemd. An `Ubuntu-24.04` or newer distro already on the machine is kept and used instead.
 3. Installs the Lerd desktop app, which holds lerd's tray icon and notifications on Windows.
 4. Runs lerd's normal installer inside the distro, trusts lerd's certificate authority in Windows, then runs `lerd wsl:setup`.
 5. Restarts WSL and starts the desktop app.
@@ -28,7 +28,7 @@ For a console install, run this in a PowerShell window. It does not need to be o
 irm https://lerd.sh/install.ps1 | iex
 ```
 
-It takes the same steps as `Install-Lerd.exe` and leaves the same result: WSL, Ubuntu 24.04 with your Linux user, Podman, the Lerd desktop app under `C:\Program Files\Lerd`, lerd itself and `lerd wsl:setup`. It asks for the Linux user and its password, then for the local domain mode and whether lerd manages Node.js, the questions the wizard's pages ask. It runs as you and asks Windows for administrator rights only for the steps that need them: enabling the WSL features, installing the WSL package and unpacking the desktop app, plus the DNS rule `lerd wsl:setup` adds.
+It takes the same steps as `Install-Lerd.exe` and leaves the same result: WSL, the newest Ubuntu LTS with your Linux user, Podman, the Lerd desktop app under `C:\Program Files\Lerd`, lerd itself and `lerd wsl:setup`. It asks for the Linux user and its password, then for the local domain mode and whether lerd manages Node.js, the questions the wizard's pages ask. It runs as you and asks Windows for administrator rights only for the steps that need them: enabling the WSL features, installing the WSL package and unpacking the desktop app, plus the DNS rule `lerd wsl:setup` adds.
 
 When the WSL features need a restart, it offers one and runs again by itself after you sign back in. Like the wizard, running it again after a failure resumes where it stopped. To test an unreleased build, set `$env:LERD_SETUP_LOCAL` to a folder holding `install.sh`, `lerd` and `lerd.exe`, and optionally `lerd-desktop-win32-<arch>.zip`, then run `.\install.ps1` from a checkout.
 

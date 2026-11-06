@@ -11,7 +11,8 @@ G=${1:?user@windows-host}
 KEY=${2:-$(ls ~/.ssh/id_ed25519.pub ~/.ssh/id_rsa.pub 2>/dev/null | head -1)}
 [ -f "$KEY" ] || { echo "no public key; pass one" >&2; exit 2; }
 SSH=(ssh -o BatchMode=yes -o ConnectTimeout=10 "$G")
-DISTRO=Ubuntu-24.04
+# The installer keeps a distro from an earlier run, so ask rather than assume.
+DISTRO=$("${SSH[@]}" 'type %LOCALAPPDATA%\lerd\bin\lerd-wsl.conf' 2>/dev/null | tr -d '\0\r' | sed -n 's/^distro=//p')
 PORT=2222
 
 # as_root <script>: a script run as root in the distro, fed on stdin so no

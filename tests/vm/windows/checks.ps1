@@ -1,7 +1,7 @@
-# Checks what the Lerd installer leaves on Windows, one PASS or FAIL line each,
-# in the format the release lanes read. -Absent checks the same things are gone
-# after an uninstall; the distro goes too only when it was deleted, -DistroDeleted.
-param([switch] $Absent, [switch] $DistroDeleted)
+# Checks the Windows install, one PASS or FAIL line each for the release lanes.
+# -Absent checks removal; -DistroDeleted also checks the distro was deleted.
+# -Distro supplies its name after uninstall removes the config.
+param([switch] $Absent, [switch] $DistroDeleted, [string] $Distro)
 $ErrorActionPreference = 'SilentlyContinue'
 $script:fails = 0
 $script:passes = 0
@@ -12,7 +12,6 @@ function Check([string] $name, [bool] $present) {
 }
 
 $wsl = 'C:\Program Files\WSL\wsl.exe'
-$distro = 'Ubuntu-24.04'
 $lerdBin = Join-Path $env:LOCALAPPDATA 'lerd\bin'
 $uninstallKey = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{6F2B7C1E-3D4A-4E8B-9C2F-1A5D8E7B4C30}_is1'
 
@@ -27,6 +26,8 @@ Check 'W.8 lerd.exe on the user PATH' (([Environment]::GetEnvironmentVariable('P
 Check 'W.9 .test resolves through lerd' ($null -ne (Get-DnsClientNrptRule | Where-Object { $_.Comment -eq 'lerd' }))
 Check 'W.10 lerd CA trusted by Windows' ($null -ne (Get-ChildItem Cert:\CurrentUser\Root | Where-Object { $_.Subject -match 'mkcert' }))
 $distros = (& $wsl -l -q) -replace "`0", '' | Where-Object { $_ -match '\S' }
+# The installer keeps a distro from an earlier run, so ask rather than assume.
+if (-not $Distro) { $Distro = Get-Content (Join-Path $lerdBin 'lerd-wsl.conf') | Where-Object { $_ -like 'distro=*' } | ForEach-Object { $_.Substring(7) } }
 if (-not $Absent -or $DistroDeleted) { Check "W.11 $distro installed" ($distros -contains $distro) }
 if (-not $Absent) {
 	$dash = try { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 http://127.0.0.1:7073/).StatusCode } catch { 0 }

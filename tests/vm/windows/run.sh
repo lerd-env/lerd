@@ -26,7 +26,9 @@ SSH=(ssh -o BatchMode=yes -o ConnectTimeout=10 "$G")
 
 win() { "${SSH[@]}" "$@" 2>/dev/null | tr -d '\0\r'; }
 ps() { win "powershell -NoProfile -ExecutionPolicy Bypass $*"; }
-wsl_user() { win "wsl -d Ubuntu-24.04 --cd ~ -- bash -lc \"$1\""; }
+# The installer keeps a distro from an earlier run, so ask rather than assume.
+distro() { win 'type %LOCALAPPDATA%\lerd\bin\lerd-wsl.conf' | sed -n 's/^distro=//p'; }
+wsl_user() { win "wsl -d $(distro) --cd ~ -- bash -lc \"$1\""; }
 
 # task <name> <command>: an interactive scheduled task, so what it starts
 # shows on the signed-in desktop with admin rights and no UAC prompt.
@@ -82,6 +84,7 @@ if [ "$got" = 'hello from lerd' ]; then echo 'PASS W.14 https://hello.test from 
 [ "${KEEP_INSTALLED:-}" = 1 ] && exit $failed
 
 echo "== uninstall, $DISTRO the distro"
+installed=$(distro)
 uninstaller=$(win "dir /b \"C:\\Program Files\\Lerd\\unins*.exe\"" | head -1)
 flag=$([ "$DISTRO" = delete ] && echo ' -DeleteDistro')
 task lerd-vm-uninstall "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $LANE\\drive-installer.ps1 -Uninstall C:\\Progra~1\\Lerd\\$uninstaller$flag -Log $LANE\\drive.log"
@@ -94,5 +97,5 @@ for _ in $(seq 12); do
 	sleep 5
 done
 absent=$([ "$DISTRO" = delete ] && echo ' -DistroDeleted')
-ps "-File $LANE\\checks.ps1 -Absent$absent" | report
+ps "-File $LANE\\checks.ps1 -Absent$absent -Distro $installed" | report
 exit $failed

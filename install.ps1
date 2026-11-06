@@ -27,7 +27,9 @@
   $ProgressPreference = 'SilentlyContinue'
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-  $Distro = 'Ubuntu-24.04'
+  $FallbackDistro = 'Ubuntu-26.04'
+  $MinUbuntu = 2404
+  $Distro = $FallbackDistro
   # lerd's installer asks sudo for its password, and the steps run detached from
   # the terminal, so the user gets passwordless sudo only while they run.
   $SudoersDropIn = '/etc/sudoers.d/zz-lerd-setup'
@@ -189,10 +191,60 @@
     ($r.Code -eq 0) -and ($r.Lines -contains $Distro)
   }
 
-  # ExistingUser returns the distro's uid 1000 user, the one this script creates.
+  # NewestUbuntu returns the newest Ubuntu-NN.NN in a `wsl` list. Lerd needs
+  # podman 4.5, which Ubuntu ships from 24.04 on, so anything older does not count.
+  function NewestUbuntu([string[]]$lines) {
+    $lines | ForEach-Object { if ($_ -match '^(Ubuntu-(\d\d)\.(\d\d))(\s|$)') { $Matches[1] } } |
+      Where-Object { [int]($_ -replace '\D') -ge $MinUbuntu } |
+      Sort-Object { [int]($_ -replace '\D') } | Select-Object -Last 1
+  }
+
+  # Wired reads the distro or user Windows already runs Lerd with, from lerd-wsl.conf.
+  function Wired([string]$key) {
+    $conf = Join-Path $env:LOCALAPPDATA 'lerd\bin\lerd-wsl.conf'
+    if (Test-Path $conf) {
+      Get-Content $conf | Where-Object { $_ -like "$key=*" } | ForEach-Object { $_.Substring($key.Length + 1).Trim() }
+    }
+  }
+
+  # InstalledDistro is the distro to stay on: the one Lerd runs from, or else the
+  # newest usable Ubuntu. Moving to another would leave the user's sites behind.
+  function InstalledDistro {
+    if (-not (Test-Path $RealWSLExe)) { return $null }
+    $r = Capture $RealWSLExe '-l -q'
+    if ($r.Code -ne 0) { return $null }
+    $wired = Wired 'distro'
+    if ($wired -and ($r.Lines -contains $wired)) { return $wired }
+    NewestUbuntu $r.Lines
+  }
+
+  # OfferedUbuntu is empty on a WSL too old to list a usable Ubuntu. A failed
+  # lookup gives the fallback, so the install reports the network error itself.
+  function OfferedUbuntu {
+    $r = Capture $RealWSLExe '--list --online'
+    if ($r.Code -eq 0) { NewestUbuntu $r.Lines } else { $FallbackDistro }
+  }
+
+  # PickDistro stays on a distro already here: a newer one on offer would
+  # otherwise get a second, empty distro beside it.
+  function PickDistro {
+    $d = InstalledDistro
+    if (-not $d) { $d = OfferedUbuntu }
+    if ($d) { $d } else { $FallbackDistro }
+  }
+
+  function WSLReady { (WSLInstalled) -and ((InstalledDistro) -or (OfferedUbuntu)) }
+
+  # ExistingUser returns the user Lerd runs as here, or else the distro's uid 1000
+  # user, the one this script creates.
   function ExistingUser {
-    $r = Capture (WSLExe) "-d $Distro -u root --exec id -nu 1000"
-    if (($r.Code -eq 0) -and ($r.Lines.Count -gt 0)) { $r.Lines[0] } else { '' }
+    $wired = if ($Distro -eq (Wired 'distro')) { Wired 'user' }
+    foreach ($u in @($wired, 1000)) {
+      if (-not $u) { continue }
+      $r = Capture (WSLExe) "-d $Distro -u root --exec id -nu $u"
+      if (($r.Code -eq 0) -and ($r.Lines.Count -gt 0)) { return $r.Lines[0] }
+    }
+    ''
   }
 
   # LerdInstalledFor reports whether lerd is already in the user's ~/.local/bin,
@@ -228,7 +280,7 @@
 
   function AskUser {
     Write-Host ''
-    Write-Host "  lerd runs inside an Ubuntu 24.04 WSL distro, under its own Linux user."
+    Write-Host "  lerd runs inside an Ubuntu WSL distro, under its own Linux user."
     Write-Host "  Choose a name and a password for that user. sudo asks for this password inside Linux."
     $suggested = LinuxUsername $env:USERNAME
     while ($true) {
@@ -306,7 +358,7 @@
   # EnsureWSL installs WSL from Microsoft's GitHub release. The wsl.exe Windows
   # ships is a stub, and its Store-based install is unreliable.
   function EnsureWSL {
-    if (WSLInstalled) { return }
+    if (WSLReady) { return }
     Step 'Installing WSL...'
     $arch = NativeArch
     $url = (Invoke-RestMethod https://api.github.com/repos/microsoft/WSL/releases/latest).assets |
@@ -327,7 +379,7 @@
     # msiexec returns before Windows Installer finishes registering WSL, and the
     # stub asked in that window offers to install WSL all over again.
     for ($i = 0; $i -lt 60; $i++) {
-      if (WSLInstalled) { return }
+      if (WSLReady) { return }
       Start-Sleep 2
     }
     throw 'WSL was installed but wsl.exe still does not report it'
@@ -341,10 +393,10 @@
 
   # MarkProvisioned makes uid 1000 the distro's default user and tells WSL its
   # first-run setup is done, so the distro never asks for a user of its own.
-  function MarkProvisioned {
+  function MarkProvisioned([int]$uid) {
     Get-ChildItem $LxssKey -ErrorAction SilentlyContinue | ForEach-Object {
       if ((Get-ItemProperty $_.PSPath).DistributionName -eq $Distro) {
-        Set-ItemProperty $_.PSPath -Name DefaultUid -Value 1000 -Type DWord
+        Set-ItemProperty $_.PSPath -Name DefaultUid -Value $uid -Type DWord
         Set-ItemProperty $_.PSPath -Name RunOOBE -Value 0 -Type DWord
       }
     }
@@ -375,8 +427,10 @@
     Run $status (WSLExe) (AsRoot ("f=/etc/wsl.conf; touch `$f`n" +
         "grep -q '^systemd=true' `$f || printf '\n[boot]\nsystemd=true\n' >> `$f`n" +
         "grep -q '^default=' `$f || printf '\n[user]\ndefault=$($S.LinuxUser)\n' >> `$f"))
+    $uid = (Capture (WSLExe) "-d $Distro -u root --exec id -u $($S.LinuxUser)").Lines | Select-Object -First 1
+    if (-not $uid) { $uid = 1000 }
     Run $status (WSLExe) "--terminate $Distro"
-    MarkProvisioned
+    MarkProvisioned $uid
   }
 
   # InstallPackages installs the packages lerd's installer checks for, and turns
@@ -385,7 +439,7 @@
   function InstallPackages {
     Step 'Installing Podman and the packages lerd needs...'
     Run 'Installing the packages' (WSLExe) (AsRoot ("export DEBIAN_FRONTEND=noninteractive`n" +
-        'apt-get update -q && apt-get install -y -q podman uidmap fuse-overlayfs slirp4netns curl git unzip libnss3-tools && ' +
+        '{ ! command -v apt-get >/dev/null || { apt-get update -q && apt-get install -y -q podman uidmap fuse-overlayfs slirp4netns curl git unzip libnss3-tools; }; } && ' +
         "loginctl enable-linger $($S.LinuxUser)"))
   }
 
@@ -636,7 +690,12 @@ namespace LerdSetup {
     Warn 'WSL 2 needs Windows 10 2004 (build 19041) or newer.'
     return
   }
+  if ([Environment]::OSVersion.Version.Build -lt 22621) {
+    Warn 'Mirrored networking needs Windows 11 22H2 or newer. Lerd will install, but .test sites may not open from Windows.'
+  }
   Remove-ItemProperty -Path $RunOnceKey -Name 'lerd-setup' -ErrorAction SilentlyContinue
+
+  $Distro = PickDistro
 
   # The user is asked for after the restart, so it is not typed twice.
   if (-not (WSLFeaturesEnabled)) {
@@ -670,6 +729,7 @@ namespace LerdSetup {
 
   try {
     EnsureWSL
+    $Distro = PickDistro
     EnsureDistro
     EnsureUser
     InstallPackages

@@ -261,7 +261,7 @@ jobs:
           sudo /tmp/bats-core/install.sh /usr/local
 
       - name: Run installer tests
-        run: bats tests/installer/installer.bats
+        run: bats tests/installer/installer.bats tests/installer/pick-distro.bats
 
       - name: Run the comment hook's tests
         run: bats tests/hooks/pre-commit.bats
