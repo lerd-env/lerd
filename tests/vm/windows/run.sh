@@ -27,8 +27,8 @@ SSH=(ssh -o BatchMode=yes -o ConnectTimeout=10 "$G")
 win() { "${SSH[@]}" "$@" 2>/dev/null | tr -d '\0\r'; }
 ps() { win "powershell -NoProfile -ExecutionPolicy Bypass $*"; }
 # The installer keeps a distro from an earlier run, so ask rather than assume.
-ubuntu() { win "wsl -l -q" | grep -E '^Ubuntu-[0-9]' | sort | tail -1; }
-wsl_user() { win "wsl -d $(ubuntu) --cd ~ -- bash -lc \"$1\""; }
+distro() { win 'type %LOCALAPPDATA%\lerd\bin\lerd-wsl.conf' | sed -n 's/^distro=//p'; }
+wsl_user() { win "wsl -d $(distro) --cd ~ -- bash -lc \"$1\""; }
 
 # task <name> <command>: an interactive scheduled task, so what it starts
 # shows on the signed-in desktop with admin rights and no UAC prompt.

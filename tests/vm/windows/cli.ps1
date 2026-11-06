@@ -2,7 +2,7 @@
 # PowerShell and from cmd, in a distro folder and on a drive, one PASS or FAIL
 # line each. Needs a lane run before it: a linked Laravel site in -Site.
 param(
-	[string] $Distro = ((wsl.exe -l -q) -replace "`0", '' | Where-Object { $_ -match '^Ubuntu-\d' } | Sort-Object | Select-Object -Last 1),
+	[string] $Distro = (Get-Content "$env:LOCALAPPDATA\lerd\bin\lerd-wsl.conf" | Where-Object { $_ -like 'distro=*' } | ForEach-Object { $_.Substring(7) }),
 	[string] $User = $env:USERNAME,
 	[string] $Site = 'demo'
 )

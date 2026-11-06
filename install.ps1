@@ -199,11 +199,11 @@
       Sort-Object { [int]($_ -replace '\D') } | Select-Object -Last 1
   }
 
-  # WiredDistro is the distro Windows already runs Lerd from, per lerd-wsl.conf.
-  function WiredDistro {
+  # Wired reads the distro or user Windows already runs Lerd with, from lerd-wsl.conf.
+  function Wired([string]$key) {
     $conf = Join-Path $env:LOCALAPPDATA 'lerd\bin\lerd-wsl.conf'
     if (Test-Path $conf) {
-      Get-Content $conf | Where-Object { $_ -like 'distro=*' } | ForEach-Object { $_.Substring(7).Trim() }
+      Get-Content $conf | Where-Object { $_ -like "$key=*" } | ForEach-Object { $_.Substring($key.Length + 1).Trim() }
     }
   }
 
@@ -213,7 +213,7 @@
     if (-not (Test-Path $RealWSLExe)) { return $null }
     $r = Capture $RealWSLExe '-l -q'
     if ($r.Code -ne 0) { return $null }
-    $wired = WiredDistro
+    $wired = Wired 'distro'
     if ($wired -and ($r.Lines -contains $wired)) { return $wired }
     NewestUbuntu $r.Lines
   }
@@ -235,10 +235,16 @@
 
   function WSLReady { (WSLInstalled) -and ((InstalledDistro) -or (OfferedUbuntu)) }
 
-  # ExistingUser returns the distro's uid 1000 user, the one this script creates.
+  # ExistingUser returns the user Lerd runs as here, or else the distro's uid 1000
+  # user, the one this script creates.
   function ExistingUser {
-    $r = Capture (WSLExe) "-d $Distro -u root --exec id -nu 1000"
-    if (($r.Code -eq 0) -and ($r.Lines.Count -gt 0)) { $r.Lines[0] } else { '' }
+    $wired = if ($Distro -eq (Wired 'distro')) { Wired 'user' }
+    foreach ($u in @($wired, 1000)) {
+      if (-not $u) { continue }
+      $r = Capture (WSLExe) "-d $Distro -u root --exec id -nu $u"
+      if (($r.Code -eq 0) -and ($r.Lines.Count -gt 0)) { return $r.Lines[0] }
+    }
+    ''
   }
 
   # LerdInstalledFor reports whether lerd is already in the user's ~/.local/bin,
@@ -387,10 +393,10 @@
 
   # MarkProvisioned makes uid 1000 the distro's default user and tells WSL its
   # first-run setup is done, so the distro never asks for a user of its own.
-  function MarkProvisioned {
+  function MarkProvisioned([int]$uid) {
     Get-ChildItem $LxssKey -ErrorAction SilentlyContinue | ForEach-Object {
       if ((Get-ItemProperty $_.PSPath).DistributionName -eq $Distro) {
-        Set-ItemProperty $_.PSPath -Name DefaultUid -Value 1000 -Type DWord
+        Set-ItemProperty $_.PSPath -Name DefaultUid -Value $uid -Type DWord
         Set-ItemProperty $_.PSPath -Name RunOOBE -Value 0 -Type DWord
       }
     }
@@ -421,8 +427,10 @@
     Run $status (WSLExe) (AsRoot ("f=/etc/wsl.conf; touch `$f`n" +
         "grep -q '^systemd=true' `$f || printf '\n[boot]\nsystemd=true\n' >> `$f`n" +
         "grep -q '^default=' `$f || printf '\n[user]\ndefault=$($S.LinuxUser)\n' >> `$f"))
+    $uid = (Capture (WSLExe) "-d $Distro -u root --exec id -u $($S.LinuxUser)").Lines | Select-Object -First 1
+    if (-not $uid) { $uid = 1000 }
     Run $status (WSLExe) "--terminate $Distro"
-    MarkProvisioned
+    MarkProvisioned $uid
   }
 
   # InstallPackages installs the packages lerd's installer checks for, and turns
@@ -431,7 +439,7 @@
   function InstallPackages {
     Step 'Installing Podman and the packages lerd needs...'
     Run 'Installing the packages' (WSLExe) (AsRoot ("export DEBIAN_FRONTEND=noninteractive`n" +
-        'apt-get update -q && apt-get install -y -q podman uidmap fuse-overlayfs slirp4netns curl git unzip libnss3-tools && ' +
+        '{ ! command -v apt-get >/dev/null || { apt-get update -q && apt-get install -y -q podman uidmap fuse-overlayfs slirp4netns curl git unzip libnss3-tools; }; } && ' +
         "loginctl enable-linger $($S.LinuxUser)"))
   }
 

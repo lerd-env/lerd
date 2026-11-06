@@ -3,7 +3,7 @@
 $ErrorActionPreference = 'Stop'
 $script = Get-Content (Join-Path $PSScriptRoot '..\..\install.ps1') -Raw
 $start = $script.IndexOf('  # NewestUbuntu returns')
-$end = $script.IndexOf('  # ExistingUser returns')
+$end = $script.IndexOf('  # LerdInstalledFor')
 Invoke-Expression $script.Substring($start, $end - $start)
 
 $FallbackDistro = 'Ubuntu-26.04'
@@ -15,8 +15,15 @@ $conf = Join-Path $root 'lerd\bin\lerd-wsl.conf'
 $null = New-Item -ItemType Directory -Force (Split-Path $conf)
 
 function WSLInstalled { $true }
+function WSLExe { 'wsl' }
 function Capture([string]$exe, [string]$params) {
   if ($params -eq '-l -q') { return @{ Code = 0; Lines = @($script:Installed) } }
+  if ($params -match 'id -nu (\S+)$') {
+    $u = $Matches[1]
+    if ($u -eq '1000') { return @{ Code = 0; Lines = @('first') } }
+    if ($script:Users -contains $u) { return @{ Code = 0; Lines = @($u) } }
+    return @{ Code = 1; Lines = @() }
+  }
   @{ Code = $script:ListCode; Lines = @($script:Offered) }
 }
 
@@ -45,6 +52,17 @@ Case 'an old installed Ubuntu does not count' $null @('Ubuntu-22.04') $current 0
 Case 'the distro Lerd runs in beats a newer one' 'Ubuntu-24.04' @('Ubuntu-24.04', 'Ubuntu-26.04') $current 0 'Ubuntu-24.04' $true
 Case 'the distro Lerd runs in need not be Ubuntu' 'Debian' @('Debian', 'Ubuntu-26.04') $legacy 0 'Debian' $true
 Case 'a removed distro in the config is ignored' 'Ubuntu-24.04' @('Ubuntu-26.04') $current 0 'Ubuntu-26.04' $true
+
+function UserCase($name, $conf_user, $distro, $users, $want) {
+  "distro=Ubuntu-24.04", "user=$conf_user" | Set-Content $conf
+  $script:Users = $users
+  $Distro = $distro
+  $got = ExistingUser
+  if ($got -ne $want) { Write-Output "FAIL $name`: got $got, want $want"; $script:failed++ } else { Write-Output "ok   $name" }
+}
+UserCase 'the user Lerd runs as stays' 'me' 'Ubuntu-24.04' @('me') 'me'
+UserCase 'a removed user falls back to uid 1000' 'gone' 'Ubuntu-24.04' @() 'first'
+UserCase 'another distro ignores the saved user' 'me' 'Ubuntu-26.04' @('me') 'first'
 
 Remove-Item $root -Recurse -Force
 if ($failed) { exit 1 }
