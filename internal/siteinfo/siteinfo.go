@@ -785,7 +785,7 @@ func (e *EnrichedSite) enrichGit() {
 				info.DBIsolated = cfg.DBIsolated
 			}
 			wtBinding := config.DBEnvBindingFor(wt.Path)
-			info.DBDatabase = envfile.Reader(filepath.Join(wt.Path, wtBinding.File), wtBinding.Format)(wtBinding.NameKey)
+			info.DBDatabase = wtBinding.Database(envfile.Reader(filepath.Join(wt.Path, wtBinding.File), wtBinding.Format))
 			if entry, ok, err := config.FindWorktreeLAN(e.Name, wt.Branch); err == nil && ok {
 				info.LANPort = entry.Port
 			}

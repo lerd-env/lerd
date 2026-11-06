@@ -2,6 +2,7 @@ package git
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -600,5 +601,196 @@ func TestEnsureWorktreeEnv_seedsPhpConstAndRewritesURLKey(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(wt, ".env")); !os.IsNotExist(err) {
 		t.Errorf("a root .env was wrongly created for a php-const site")
+	}
+}
+
+// A framework keeping its connection in one URL has no DB_DATABASE to protect, so
+// the key to leave alone is that URL.
+func TestEnsureWorktreeEnv_isolatedDBURLOverrideSkipped(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	main, wt := t.TempDir(), t.TempDir()
+	if err := config.SaveStoreFramework(&config.Framework{
+		Name:   "acme",
+		Detect: []config.FrameworkRule{{File: "acme.lock"}},
+		Env: config.FrameworkEnvConf{
+			File: ".env.local",
+			Services: map[string]config.FrameworkServiceDef{
+				"mysql": {
+					Detect: []config.FrameworkServiceDetect{{Key: "DATABASE_URL", ValuePrefix: "mysql"}},
+					Vars:   []string{"DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/{{site}}"},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for path, body := range map[string]string{
+		filepath.Join(main, "acme.lock"):  "",
+		filepath.Join(main, ".env.local"): "DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/shop\n",
+		filepath.Join(main, ".lerd.yaml"): "env_overrides:\n  DATABASE_URL: \"mysql://root:lerd@lerd-mysql:3306/shop\"\n",
+		filepath.Join(wt, "acme.lock"):    "",
+		filepath.Join(wt, ".env.local"):   "DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/shop_feat\n",
+	} {
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := config.SetWorktreeDBIsolated(wt, true); err != nil {
+		t.Fatal(err)
+	}
+
+	EnsureWorktreeEnv(main, wt, "feat.shop.test", false)
+
+	got, err := os.ReadFile(filepath.Join(wt, ".env.local"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "/shop_feat") {
+		t.Errorf("isolated URL was clobbered by env_overrides:\n%s", got)
+	}
+}
+
+func gitInTest(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-c", "user.email=t@t", "-c", "user.name=t"}, args...)...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+// urlRepoWithWorktree is a site whose connection file is committed with the app's
+// own default, as Yii's config/db.php is, and which lerd has since wired.
+func urlRepoWithWorktree(t *testing.T) (main, wt string) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	main = t.TempDir()
+	wt = filepath.Join(t.TempDir(), "wt")
+	if err := config.SaveStoreFramework(&config.Framework{
+		Name:   "acme",
+		Detect: []config.FrameworkRule{{File: "acme.lock"}},
+		Env: config.FrameworkEnvConf{
+			File: "db.env",
+			Services: map[string]config.FrameworkServiceDef{
+				"mysql": {
+					Detect: []config.FrameworkServiceDetect{{Key: "dsn", ValuePrefix: "mysql:"}},
+					Vars:   []string{"dsn=mysql:host=lerd-mysql;dbname={{site}}"},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"acme.lock": "", "db.env": "dsn=mysql:host=localhost;dbname=appdefault\n"} {
+		if err := os.WriteFile(filepath.Join(main, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitInTest(t, main, "init", "-q")
+	gitInTest(t, main, "add", ".")
+	gitInTest(t, main, "commit", "-qm", "base")
+	gitInTest(t, main, "worktree", "add", "-q", wt, "-b", "feat")
+	if err := os.WriteFile(filepath.Join(main, "db.env"), []byte("dsn=mysql:host=lerd-mysql;dbname=shop\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return main, wt
+}
+
+// The committed default is not a choice the worktree made: left there, it cannot
+// reach the parent's database, and isolating it is refused.
+func TestEnsureWorktreeEnv_replacesACommittedDefaultConnection(t *testing.T) {
+	main, wt := urlRepoWithWorktree(t)
+
+	EnsureWorktreeEnv(main, wt, "feat.shop.test", false)
+
+	got, _ := os.ReadFile(filepath.Join(wt, "db.env"))
+	if !strings.Contains(string(got), "host=lerd-mysql;dbname=shop") {
+		t.Errorf("worktree env = %s", got)
+	}
+}
+
+// A connection changed by hand in the worktree stays: that one is a choice.
+func TestEnsureWorktreeEnv_leavesAConnectionChangedByHand(t *testing.T) {
+	main, wt := urlRepoWithWorktree(t)
+	const mine = "dsn=mysql:host=db.elsewhere;dbname=mine\n"
+	if err := os.WriteFile(filepath.Join(wt, "db.env"), []byte(mine), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	EnsureWorktreeEnv(main, wt, "feat.shop.test", false)
+
+	got, _ := os.ReadFile(filepath.Join(wt, "db.env"))
+	if !strings.Contains(string(got), "host=db.elsewhere;dbname=mine") {
+		t.Errorf("worktree env = %s", got)
+	}
+}
+
+// An explicit template for a branch's connection is a choice too.
+func TestEnsureWorktreeEnv_anEnvOverrideBeatsTheRepair(t *testing.T) {
+	main, wt := urlRepoWithWorktree(t)
+	yaml := "env_overrides:\n  dsn: \"mysql:host=branch.example;dbname={{branch}}\"\n"
+	if err := os.WriteFile(filepath.Join(main, ".lerd.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	EnsureWorktreeEnv(main, wt, "feat.shop.test", false)
+
+	got, _ := os.ReadFile(filepath.Join(wt, "db.env"))
+	if !strings.Contains(string(got), "host=branch.example;dbname=feat") {
+		t.Errorf("worktree env = %s", got)
+	}
+}
+
+// Yii keeps its login beside the dsn, and a server without the login is no use.
+func TestEnsureWorktreeEnv_bringsTheLoginAlongInAPHPArray(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	main := t.TempDir()
+	wt := filepath.Join(t.TempDir(), "wt")
+	if err := config.SaveStoreFramework(&config.Framework{
+		Name:   "acme",
+		Detect: []config.FrameworkRule{{File: "acme.lock"}},
+		Env: config.FrameworkEnvConf{
+			File:   "config/db.php",
+			Format: "php-array",
+			URLKey: "none",
+			Services: map[string]config.FrameworkServiceDef{
+				"mysql": {
+					Detect: []config.FrameworkServiceDetect{{Key: "dsn", ValuePrefix: "mysql:"}},
+					Vars:   []string{"dsn=mysql:host=lerd-mysql;dbname={{site}}", "username=root", "password=lerd"},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	php := func(host, db, user, pass string) string {
+		return "<?php\nreturn [\n    'dsn' => 'mysql:host=" + host + ";dbname=" + db + "',\n    'username' => '" + user + "',\n    'password' => '" + pass + "',\n];\n"
+	}
+	if err := os.MkdirAll(filepath.Join(main, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"acme.lock": "", "config/db.php": php("localhost", "appdefault", "scaffold", "")} {
+		if err := os.WriteFile(filepath.Join(main, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitInTest(t, main, "init", "-q")
+	gitInTest(t, main, "add", ".")
+	gitInTest(t, main, "commit", "-qm", "base")
+	gitInTest(t, main, "worktree", "add", "-q", wt, "-b", "feat")
+	if err := os.WriteFile(filepath.Join(main, "config/db.php"), []byte(php("lerd-mysql", "shop", "root", "lerd")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	EnsureWorktreeEnv(main, wt, "feat.shop.test", false)
+
+	got, _ := os.ReadFile(filepath.Join(wt, "config/db.php"))
+	for _, want := range []string{"host=lerd-mysql;dbname=shop", "'username' => 'root'", "'password' => 'lerd'"} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf("lacks %s:\n%s", want, got)
+		}
 	}
 }

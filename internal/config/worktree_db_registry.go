@@ -19,6 +19,9 @@ type WorktreeDBEntry struct {
 	// Host where it serves it when that is not the service.
 	Provider string `yaml:"provider,omitempty"`
 	Host     string `yaml:"host,omitempty"`
+	// Leftover marks a database the worktree never connected to and the plugin
+	// could not drop, kept only so db:share can clear it.
+	Leftover bool `yaml:"leftover,omitempty"`
 }
 
 type worktreeDBRegistry struct {
@@ -115,6 +118,13 @@ func RemoveWorktreeDB(site, branch string) (WorktreeDBEntry, bool, error) {
 		return WorktreeDBEntry{}, false, nil
 	}
 	return removed, true, saveWorktreeDBRegistryLocked(kept)
+}
+
+// WorktreeDBInUse is the database a worktree is connected to, leaving out a
+// leftover it never was.
+func WorktreeDBInUse(site, branch string) (WorktreeDBEntry, bool) {
+	e, ok, err := FindWorktreeDB(site, branch)
+	return e, ok && err == nil && !e.Leftover
 }
 
 // FindWorktreeDB returns the entry for (site, branch), if present.
