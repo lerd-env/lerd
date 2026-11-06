@@ -2,7 +2,9 @@ package certs
 
 import (
 	"errors"
+	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -28,9 +30,9 @@ func TestBrowserTrustAvailable(t *testing.T) {
 // returns its directory, so each case only has to say what the stores answer.
 func browserTrustFixture(t *testing.T) (caDir string, pem []byte) {
 	t.Helper()
-	origLookup, origRoot, origDirs, origPEM := certutilLookup, caRootFunc, nssDBDirs, nssCertPEM
+	origLookup, origRoot, origDirs, origPEM, origNicks := certutilLookup, caRootFunc, nssDBDirs, nssCertPEM, nssNicknames
 	t.Cleanup(func() {
-		certutilLookup, caRootFunc, nssDBDirs, nssCertPEM = origLookup, origRoot, origDirs, origPEM
+		certutilLookup, caRootFunc, nssDBDirs, nssCertPEM, nssNicknames = origLookup, origRoot, origDirs, origPEM, origNicks
 	})
 	certutilLookup = func() bool { return true }
 	caDir = t.TempDir()
@@ -166,7 +168,8 @@ func TestNSSDBDirsOnlyReportsStoresMkcertWritesTo(t *testing.T) {
 }
 
 // stubCertutil records every certutil call; verify answers true only for the
-// stores in trusted, the way certutil -V does for a CA trusted as an SSL CA.
+// stores in trusted, the way certutil -V does for a CA trusted as an SSL CA, and
+// an import makes its store trusted.
 func stubCertutil(t *testing.T, trusted ...string) *[][]string {
 	t.Helper()
 	orig := runCertutil
@@ -174,12 +177,24 @@ func stubCertutil(t *testing.T, trusted ...string) *[][]string {
 	var calls [][]string
 	runCertutil = func(args ...string) error {
 		calls = append(calls, args)
-		if args[0] == "-V" && !slices.Contains(trusted, strings.TrimPrefix(args[2], "sql:")) {
+		store := strings.TrimPrefix(args[2], "sql:")
+		if args[0] == "-A" {
+			trusted = append(trusted, store)
+		}
+		if args[0] == "-V" && !slices.Contains(trusted, store) {
 			return errors.New("certificate not trusted")
 		}
 		return nil
 	}
 	return &calls
+}
+
+// stubNSSStore serves the given nickname to certificate entries as every store's
+// contents, through both the listing and the per-nickname export.
+func stubNSSStore(t *testing.T, entries map[string][]byte) {
+	t.Helper()
+	nssNicknames = func(string) []string { return slices.Collect(maps.Keys(entries)) }
+	nssCertPEM = func(_, nickname string) []byte { return entries[nickname] }
 }
 
 func imports(calls [][]string) [][]string {
@@ -239,5 +254,100 @@ func TestRemoveBrowserTrustDeletesOnlyWhereItIs(t *testing.T) {
 	want := []string{"-D", "-d", "sql:/home/u/.pki/nssdb", "-n", nickname}
 	if len(*calls) != 1 || !slices.Equal((*calls)[0], want) {
 		t.Fatalf("certutil calls = %v, want one %v", *calls, want)
+	}
+}
+
+// A store holding the CA under another nickname, the state a hand-run certutil
+// or an older mkcert leaves, has it all the same: browsers match certificates,
+// not nicknames.
+func TestBrowserStoresMissingCAFindsTheCAUnderAnotherNickname(t *testing.T) {
+	_, certPEM := browserTrustFixture(t)
+	nssDBDirs = func() []string { return []string{"/home/u/.pki/nssdb"} }
+	stubNSSStore(t, map[string][]byte{"My own name": certPEM})
+
+	if missing := BrowserStoresMissingCA(); len(missing) != 0 {
+		t.Fatalf("BrowserStoresMissingCA() = %v, want none", missing)
+	}
+}
+
+// certutil -A exits 0 without adding anything when the certificate is already
+// stored under another nickname, so success has to be read back from the store.
+func TestInstallBrowserTrustReportsAnImportThatDidNotTake(t *testing.T) {
+	browserTrustFixture(t)
+	stubCertutil(t)
+	stub := runCertutil
+	runCertutil = func(args ...string) error {
+		if args[0] == "-A" {
+			return nil // exits 0, and -V keeps failing because nothing was added
+		}
+		return stub(args...)
+	}
+	nssDBDirs = func() []string { return []string{"/home/u/.pki/nssdb"} }
+	stubNSSStore(t, nil)
+
+	errs := InstallBrowserTrust()
+	if len(errs) != 1 || !strings.Contains(errs[0].Error(), "/home/u/.pki/nssdb") {
+		t.Fatalf("InstallBrowserTrust() = %v, want the store named", errs)
+	}
+}
+
+func TestRemoveBrowserTrustDeletesTheCAUnderAnotherNickname(t *testing.T) {
+	_, certPEM := browserTrustFixture(t)
+	calls := stubCertutil(t)
+	nssDBDirs = func() []string { return []string{"/home/u/.pki/nssdb"} }
+	stubNSSStore(t, map[string][]byte{"My own name": certPEM})
+
+	RemoveBrowserTrust()
+	want := []string{"-D", "-d", "sql:/home/u/.pki/nssdb", "-n", "My own name"}
+	if len(*calls) != 1 || !slices.Equal((*calls)[0], want) {
+		t.Fatalf("certutil calls = %v, want one %v", *calls, want)
+	}
+}
+
+func TestParseNSSNicknames(t *testing.T) {
+	out := "\nCertificate Nickname                                         Trust Attributes\n" +
+		"                                                             SSL,S/MIME,JAR/XPI\n\n" +
+		"Lerd mkcert (someone)                                        C,,  \n" +
+		"cleared                                                      ,,   \n" +
+		"signer                                                       CTu,u,u\n"
+	got := parseNSSNicknames(out)
+	want := []string{"Lerd mkcert (someone)", "cleared", "signer"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("parseNSSNicknames() = %q, want %q", got, want)
+	}
+	if got := parseNSSNicknames(""); len(got) != 0 {
+		t.Fatalf("parseNSSNicknames(empty) = %q, want none", got)
+	}
+}
+
+// The behaviour the fix rests on is certutil's, so this runs the real one
+// against a throwaway database instead of a stub of what it was seen doing.
+func TestBrowserTrustWithRealCertutilAndAForeignNickname(t *testing.T) {
+	if _, err := exec.LookPath("certutil"); err != nil {
+		t.Skip("certutil not installed")
+	}
+	caDir, _ := browserTrustFixture(t)
+	db := t.TempDir()
+	nssDBDirs = func() []string { return []string{db} }
+	ca := filepath.Join(caDir, "rootCA.pem")
+	if err := runCertutil("-N", "-d", "sql:"+db, "--empty-password"); err != nil {
+		t.Fatal(err)
+	}
+	if err := runCertutil("-A", "-d", "sql:"+db, "-t", ",,", "-n", "My own name", "-i", ca); err != nil {
+		t.Fatal(err)
+	}
+
+	if missing := BrowserStoresMissingCA(); len(missing) != 0 {
+		t.Fatalf("BrowserStoresMissingCA() = %v, want none", missing)
+	}
+	if errs := InstallBrowserTrust(); len(errs) != 0 {
+		t.Fatalf("InstallBrowserTrust() = %v", errs)
+	}
+	if err := runCertutil("-V", "-d", "sql:"+db, "-u", "L", "-n", "My own name"); err != nil {
+		t.Fatalf("trust not restored on the stored entry: %v", err)
+	}
+	RemoveBrowserTrust()
+	if nicks := nssNicknames(db); len(nicks) != 0 {
+		t.Fatalf("store still holds %q after removal", nicks)
 	}
 }
