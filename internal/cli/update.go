@@ -78,6 +78,11 @@ func runUpdate(currentVersion string, beta bool) error {
 
 	if !lerdUpdate.VersionGreaterThan(lat, cur) {
 		feedback.Done("already on latest v" + cur)
+		if self, err := selfPath(); err == nil {
+			if err := restoreLerdExe(self, latest); err != nil {
+				feedback.Warn("%v", err)
+			}
+		}
 		return nil
 	}
 
@@ -147,7 +152,12 @@ func runUpdate(currentVersion string, beta bool) error {
 
 	// Also replace the binaries shipped beside lerd that this release includes.
 	for _, name := range companionBinaries() {
-		replaceCompanion(filepath.Join(extracted, name), filepath.Join(filepath.Dir(self), name))
+		if err := replaceCompanion(filepath.Join(extracted, name), filepath.Join(filepath.Dir(self), name)); err != nil {
+			feedback.Warn("updating %s: %v", name, err)
+		}
+	}
+	if releaseLacksLerdExe(extracted) {
+		feedback.Warn("v%s came without lerd.exe, so lerd wsl:setup cannot set up the Windows side", lat)
 	}
 
 	// Update the cache so lerd status / doctor stop showing a stale notice.
@@ -797,15 +807,75 @@ func companionBinaries() []string {
 	return []string{"lerd-tray"}
 }
 
-// replaceCompanion swaps src in for dst when src exists.
-func replaceCompanion(src, dst string) {
+// replaceCompanion swaps src in for dst. An archive without src is not an
+// error, since not every architecture ships every companion.
+func replaceCompanion(src, dst string) error {
 	if _, err := os.Stat(src); err != nil {
-		return
+		return nil
 	}
 	tmp := dst + ".tmp"
-	if err := copyFile(src, tmp, 0755); err == nil {
-		os.Rename(tmp, dst) //nolint:errcheck
+	if err := copyFile(src, tmp, 0755); err != nil {
+		return err
 	}
+	if err := os.Rename(tmp, dst); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// fetchRelease downloads a release archive. Seam for tests.
+var fetchRelease = downloadReleaseBinary
+
+// lerdExeMissing reports whether a WSL install lacks the lerd.exe wsl:setup
+// copies out to Windows.
+func lerdExeMissing(self string) bool {
+	if !platform.Current.WindowsSide {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(filepath.Dir(self), "lerd.exe"))
+	return err != nil
+}
+
+// releaseLacksLerdExe reports whether a WSL install got an extracted release
+// without lerd.exe. It reads the archive because an older copy on disk would
+// otherwise pass for the new one.
+func releaseLacksLerdExe(extracted string) bool {
+	if !platform.Current.WindowsSide {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(extracted, "lerd.exe"))
+	return err != nil
+}
+
+// restoreLerdExe puts back a missing lerd.exe from the release, which is the
+// only place it ships: it has no asset of its own, it rides in the Linux archive.
+func restoreLerdExe(self, latest string) error {
+	if !lerdExeMissing(self) {
+		return nil
+	}
+	if isHomebrewManaged(self) || isSystemPackageManaged(self) {
+		return fmt.Errorf("lerd.exe is missing and %s belongs to a package manager, so lerd update cannot add it; install lerd with the installer for the Windows side", self)
+	}
+	dl := feedback.Start("restoring lerd.exe")
+	extracted, cleanup, err := fetchRelease(latest)
+	if err != nil {
+		dl.Fail(err)
+		return fmt.Errorf("restoring lerd.exe: %w", err)
+	}
+	defer cleanup()
+	if releaseLacksLerdExe(extracted) {
+		err := fmt.Errorf("release %s has no lerd.exe for this architecture", latest)
+		dl.Fail(err)
+		return err
+	}
+	dst := filepath.Join(filepath.Dir(self), "lerd.exe")
+	if err := replaceCompanion(filepath.Join(extracted, "lerd.exe"), dst); err != nil {
+		dl.Fail(err)
+		return fmt.Errorf("restoring lerd.exe: %w", err)
+	}
+	dl.OK("")
+	return nil
 }
 
 // backupBinary copies the current binary and version to backup locations for rollback.

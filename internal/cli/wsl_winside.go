@@ -39,7 +39,7 @@ func installWindowsSide(w io.Writer) error {
 	}
 	exe, err := os.ReadFile(filepath.Join(filepath.Dir(self), "lerd.exe"))
 	if err != nil {
-		return fmt.Errorf("lerd.exe is not installed next to %s; reinstall lerd from a release to get it", self)
+		return fmt.Errorf("lerd.exe is not installed next to %s; run lerd update to fetch it", self)
 	}
 	// Distro falls back from WSL_DISTRO_NAME, which an SSH or systemd session lacks.
 	distro := wsl.Distro()
