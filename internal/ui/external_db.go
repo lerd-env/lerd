@@ -44,6 +44,10 @@ func handleExternalDB(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !hasHostActionAuthority(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	var req externalDBRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<14)).Decode(&req); err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)

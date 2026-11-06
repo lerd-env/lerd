@@ -165,12 +165,22 @@ func mysqlDumpFits(dir, version string) error {
 	return nil
 }
 
+// externalProbeTimeout bounds a test: a host dropping packets would otherwise hang
+// the form for as long as the client cares to wait.
+var externalProbeTimeout = 15 * time.Second
+
 func externalProbeRun(svc *config.CustomService, home, shellCmd string) (string, error) {
-	cmd := exec.Command("sh", "-c", shellCmd)
+	ctx, cancel := context.WithTimeout(context.Background(), externalProbeTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "sh", "-c", shellCmd)
+	cmd.WaitDelay = time.Second
 	cmd.Env = config.ExternalDBToolEnv(svc, home)
 	var out, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &stderr
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("no answer after %s", externalProbeTimeout)
+		}
 		if msg := strings.TrimSpace(stderr.String()); msg != "" {
 			return "", fmt.Errorf("%s", msg)
 		}

@@ -1551,7 +1551,14 @@ func worktreeExternalDB(site *config.Site, branch, worktreePath string) (map[str
 	}
 	binding := config.DBEnvBindingFor(site.Path)
 	current := envfile.Values(filepath.Join(worktreePath, binding.File), binding.Format)
-	if len(external) == 0 || current[binding.HostKey] != parent[binding.HostKey] {
+	if len(external) == 0 {
+		return nil, nil
+	}
+	urlKey := config.DBURLKeyFor(site.Path)
+	if url, ok := carriedDBURL(urlKey, parent, current); ok {
+		return map[string]string{urlKey: url}, external
+	}
+	if current[binding.HostKey] != parent[binding.HostKey] {
 		return nil, nil
 	}
 	overrides := map[string]string{}
@@ -1566,6 +1573,19 @@ func worktreeExternalDB(site *config.Site, branch, worktreePath string) (map[str
 		}
 	}
 	return overrides, external
+}
+
+// carriedDBURL is the parent's connection URL for a worktree still on that server
+// or holding no URL yet; one moved to another server by hand stays there.
+func carriedDBURL(key string, parent, current map[string]string) (string, bool) {
+	url, ok := parent[key]
+	if key == "" || !ok {
+		return "", false
+	}
+	if mine := current[key]; mine != "" && !config.SameDBURLHost(mine, url) {
+		return "", false
+	}
+	return url, true
 }
 
 // worktreeEnvTarget is the database and domain a worktree's env names. A

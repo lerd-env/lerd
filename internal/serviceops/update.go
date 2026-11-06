@@ -69,7 +69,7 @@ func RefreshUpdateAvailability(name string) (*UpdateAvailability, error) {
 
 func computeUpdateAvailable(name string) (*UpdateAvailability, error) {
 	if externalServiceFor(name) != nil {
-		return nil, nil
+		return &UpdateAvailability{Service: name}, nil
 	}
 	svc, strategy, allowMajor, err := resolveServiceForUpdate(name)
 	if err != nil {

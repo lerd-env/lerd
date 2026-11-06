@@ -44,6 +44,9 @@ func SupportsMigration(name string) bool {
 // move across data-incompatible SQL versions (e.g. mysql 8.0 → 9.0). Errors
 // when no handler is registered for the service family.
 func MigrateService(name, targetImage string, emit func(PhaseEvent)) error {
+	if externalServiceFor(name) != nil {
+		return fmt.Errorf("%s is an external server, so upgrading it is up to whatever runs it", name)
+	}
 	unlock := lockService(name)
 	defer unlock()
 

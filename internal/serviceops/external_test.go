@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -129,6 +130,77 @@ func TestAddExternalDB_LiftsAnEarlierRemove(t *testing.T) {
 	}
 	if config.ServiceIsRemoved("dbngin") {
 		t.Error("a server added again must not stay marked removed")
+	}
+}
+
+// lerd's commands name its own postgres account, which an outside server rarely has.
+func TestInstalledExtensions_ConnectsAsTheServersUser(t *testing.T) {
+	externalFixture(t, "17.2", nil)
+	tools := t.TempDir()
+	script := "#!/bin/sh\nfor a in \"$@\"; do [ \"$a\" = -U ] && { echo wrong-account >&2; exit 1; }; done\necho vector\n"
+	if err := os.WriteFile(filepath.Join(tools, "psql"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	svc := &config.CustomService{Name: "dbngin", Family: "postgres", External: &config.ExternalDB{Host: "h", Port: 5432, User: "me", Tools: tools}}
+	if err := config.SaveCustomService(svc); err != nil {
+		t.Fatal(err)
+	}
+	got, err := InstalledExtensions("dbngin", "shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != "vector" {
+		t.Errorf("got %v", got)
+	}
+}
+
+func TestProbe_GivesUpOnAServerThatNeverAnswers(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	tools := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tools, "mysql"), []byte("#!/bin/sh\nexec sleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	orig := externalProbeTimeout
+	externalProbeTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { externalProbeTimeout = orig })
+	svc := &config.CustomService{Name: "dbngin", Family: "mysql", External: &config.ExternalDB{Host: "h", Port: 3306, User: "me", Tools: tools}}
+	start := time.Now()
+	if _, err := externalProbeFn(svc, "pw"); err == nil {
+		t.Fatal("want a timeout")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("waited %s", elapsed)
+	}
+}
+
+// lerd has no engine to upgrade on a server somebody else runs, and the migration
+// commands name lerd's own account on loopback, which could be another server.
+func TestMigrateService_RefusesAnExternalServer(t *testing.T) {
+	externalFixture(t, "17.2", nil)
+	svc := &config.CustomService{Name: "dbngin", Family: "mysql", External: &config.ExternalDB{Host: "h", Port: 3306, User: "me", Tools: "/x"}}
+	if err := config.SaveCustomService(svc); err != nil {
+		t.Fatal(err)
+	}
+	err := MigrateService("dbngin", "docker.io/library/mysql:9.7", func(PhaseEvent) {})
+	if err == nil || !strings.Contains(err.Error(), "external") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+// Callers read fields off the answer, and a nil one crashed lerd service migrate.
+func TestCheckUpdateAvailable_AnExternalServerHasNoImage(t *testing.T) {
+	externalFixture(t, "17.2", nil)
+	svc := &config.CustomService{Name: "dbngin", Family: "mysql", External: &config.ExternalDB{Host: "h", Port: 3306, User: "me", Tools: "/x"}}
+	if err := config.SaveCustomService(svc); err != nil {
+		t.Fatal(err)
+	}
+	got, err := CheckUpdateAvailable("dbngin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.CurrentImage != "" {
+		t.Fatalf("got %+v", got)
 	}
 }
 

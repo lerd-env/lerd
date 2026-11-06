@@ -413,6 +413,24 @@ func DBEndpointFor(projectDir string) DBEndpoint {
 	return e
 }
 
+// DBURLKeyFor is the key a framework keeps its whole connection in, or "" for one
+// that spells it out in separate keys.
+func DBURLKeyFor(projectDir string) string {
+	bindings, _, _ := dbEnvBindings(projectDir)
+	for _, b := range bindings {
+		if b.urlKey != "" {
+			return b.urlKey
+		}
+	}
+	return ""
+}
+
+// SameDBURLHost reports whether two connection URLs name the same host and port.
+func SameDBURLHost(a, b string) bool {
+	x, y := endpointFromURL(a), endpointFromURL(b)
+	return x.Host == y.Host && x.Port == y.Port
+}
+
 func endpointFromURL(raw string) DBEndpoint {
 	u, err := url.Parse(strings.Trim(raw, `"'`))
 	if err != nil {

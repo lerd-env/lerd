@@ -142,6 +142,8 @@ Nothing runs in a container for this service. Dumps, restores, the shell and the
 lerd service external dbngin --engine postgres --port 5432 --tools /path/to/bin
 ```
 
+On Windows lerd runs inside WSL, so the clients have to be Linux ones installed in the distro, such as `mysql-client` or `postgresql-client`: a `mysqldump.exe` on the Windows side does not count. Mirrored networking lets `127.0.0.1` reach a server running on Windows.
+
 The folder has to hold both the client and the dump tool. `pg_dump` refuses a server newer than itself, so lerd checks that as well, and **Test connection** shows the folder it used. A machine with no client tools for the engine gets an error naming them, and nothing is saved.
 
 The server appears on the Services page with its databases, marked offline when it stops answering, with a notification, and back to normal on its own once it returns. The password stays in files only you can read, under lerd's data folder, and removing the service leaves everything on the server alone.

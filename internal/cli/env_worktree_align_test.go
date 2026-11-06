@@ -299,3 +299,26 @@ func TestWorktreeExternalDB_ignoresAParentNotOnAnExternalDatabase(t *testing.T) 
 		t.Errorf("got %v %v", overrides, external)
 	}
 }
+
+// A Symfony parent keeps its server in one URL, which no DB_* key would carry, so
+// the worktree fell back to the framework's default on lerd's own MySQL.
+func TestCarriedDBURL(t *testing.T) {
+	const url = "mysql://me:pw@host.containers.internal:3307/shop"
+	parent := map[string]string{"DATABASE_URL": url}
+
+	if got, ok := carriedDBURL("DATABASE_URL", parent, map[string]string{"DATABASE_URL": "mysql://me:pw@host.containers.internal:3307/other"}); !ok || got != url {
+		t.Errorf("same server: %q %v", got, ok)
+	}
+	if got, ok := carriedDBURL("DATABASE_URL", parent, nil); !ok || got != url {
+		t.Errorf("no URL yet: %q %v", got, ok)
+	}
+	if _, ok := carriedDBURL("DATABASE_URL", parent, map[string]string{"DATABASE_URL": "mysql://me:pw@db.elsewhere:3306/shop"}); ok {
+		t.Error("a worktree moved to another server stays there")
+	}
+	if _, ok := carriedDBURL("", parent, nil); ok {
+		t.Error("a framework with no URL key has nothing to carry")
+	}
+	if _, ok := carriedDBURL("DATABASE_URL", map[string]string{}, nil); ok {
+		t.Error("a parent with no URL has nothing to carry")
+	}
+}

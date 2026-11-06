@@ -320,8 +320,6 @@ A project can use the MySQL, MariaDB or PostgreSQL already installed on the mach
 
 lerd's database commands, such as `lerd db:export`, `lerd db:snapshot` and `lerd db:restore`, run inside its containers, so they cannot reach a server set up that way. On such a project they refuse and name the host instead of acting on a database of the same name in lerd's service. Pass `--service <name>` when you do mean a lerd service. To use them on your server, [add it as a service](services.md#adding-an-external-database-server) and run `lerd db:use` in the project.
 
-Note that the `lerd db:*` commands on this page resolve their target from the service rather than from `DB_HOST`, so they keep talking to lerd's container. Use your own `mysql` or `psql` client against a host-run server.
-
 ---
 
 ## Moving sites between services
