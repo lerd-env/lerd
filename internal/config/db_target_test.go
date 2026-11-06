@@ -352,9 +352,9 @@ func TestDBEnvBindingFor_WordPressKeysAndFormat(t *testing.T) {
 	}
 }
 
-// A DSN-only framework has no standalone name key to rewrite, so the writer
-// gets the default shape and reports the site as unmanaged, as it always has.
-func TestDBEnvBindingFor_DSNFrameworkKeepsTheDefaultShape(t *testing.T) {
+// A DSN-only framework has no standalone name key, so the binding names the key
+// holding the whole connection and writers rename the database inside it.
+func TestDBEnvBindingFor_DSNFrameworkNamesItsURLKey(t *testing.T) {
 	setConfigDir(t)
 	installStoreFramework(t, &Framework{
 		Name:   "acme",
@@ -375,8 +375,8 @@ func TestDBEnvBindingFor_DSNFrameworkKeepsTheDefaultShape(t *testing.T) {
 	writeProjectFile(t, dir, ".env", "DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/shop\n")
 
 	got := DBEnvBindingFor(dir)
-	if got.NameKey != "DB_DATABASE" || got.HostKey != "DB_HOST" {
-		t.Errorf("DBEnvBindingFor = %+v, want the default DB_HOST/DB_DATABASE shape", got)
+	if got.URLKey != "DATABASE_URL" || got.NameKey != "" || got.HostKey != "" {
+		t.Errorf("DBEnvBindingFor = %+v, want the URL key and no separate keys", got)
 	}
 }
 
@@ -591,5 +591,71 @@ func TestWorktreeDBService_ContainerHostIsLerdsWhateverThePort(t *testing.T) {
 	publishMySQL(t, 3308)
 	if got := WorktreeDBService(dir); got != "mysql" {
 		t.Errorf("got %q", got)
+	}
+}
+
+// Every shape a framework declares its database in has to read and rewrite the
+// same way, whichever one the store definition uses.
+func TestDBEnvBinding_ReadsAndRenamesEveryShape(t *testing.T) {
+	for name, tc := range map[string]struct {
+		binding DBEnvBinding
+		env     map[string]string
+		wantDB  string
+		want    map[string]string
+	}{
+		"separate keys": {
+			DBEnvBinding{HostKey: "DB_HOST", NameKey: "DB_DATABASE"},
+			map[string]string{"DB_DATABASE": "shop"}, "shop",
+			map[string]string{"DB_DATABASE": "shop_b"},
+		},
+		"dotted keys": {
+			DBEnvBinding{HostKey: "db.connection.default.host", NameKey: "db.connection.default.dbname"},
+			map[string]string{"db.connection.default.dbname": "shop"}, "shop",
+			map[string]string{"db.connection.default.dbname": "shop_b"},
+		},
+		"connection url": {
+			DBEnvBinding{URLKey: "DATABASE_URL"},
+			map[string]string{"DATABASE_URL": "mysql://root:lerd@lerd-mysql:3306/shop?serverVersion=8.4"}, "shop",
+			map[string]string{"DATABASE_URL": "mysql://root:lerd@lerd-mysql:3306/shop_b?serverVersion=8.4"},
+		},
+		"pdo dsn": {
+			DBEnvBinding{URLKey: "dsn"},
+			map[string]string{"dsn": "mysql:host=lerd-mysql;dbname=shop"}, "shop",
+			map[string]string{"dsn": "mysql:host=lerd-mysql;dbname=shop_b"},
+		},
+		"pdo dsn with more after the name": {
+			DBEnvBinding{URLKey: "dsn"},
+			map[string]string{"dsn": "pgsql:host=lerd-postgres;dbname=shop;port=5432"}, "shop",
+			map[string]string{"dsn": "pgsql:host=lerd-postgres;dbname=shop_b;port=5432"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			read := func(k string) string { return tc.env[k] }
+			if got := tc.binding.Database(read); got != tc.wantDB {
+				t.Errorf("database = %q, want %q", got, tc.wantDB)
+			}
+			got := tc.binding.NameUpdate(read, "shop_b")
+			if len(got) != len(tc.want) {
+				t.Fatalf("update = %v", got)
+			}
+			for k, v := range tc.want {
+				if got[k] != v {
+					t.Errorf("%s = %q, want %q", k, got[k], v)
+				}
+			}
+		})
+	}
+}
+
+func TestDSNTarget_ReadsAPDODSN(t *testing.T) {
+	for value, want := range map[string]DBTarget{
+		"mysql:host=lerd-mysql;dbname=shop":           {Service: "mysql", Database: "shop"},
+		"pgsql:host=lerd-postgres;port=5432;dbname=x": {Service: "postgres", Database: "x"},
+		"mysql:host=127.0.0.1;dbname=shop":            {},
+		"mysql:host=lerd-mysql":                       {},
+	} {
+		if got := dsnTarget(value); got != want {
+			t.Errorf("dsnTarget(%q) = %+v, want %+v", value, got, want)
+		}
 	}
 }

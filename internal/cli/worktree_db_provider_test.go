@@ -252,7 +252,7 @@ func TestSetWorktreeDBIsolated_LoopbackOnAnotherPortIsNotLerds(t *testing.T) {
 	t.Cleanup(func() { createDatabaseFn = orig })
 
 	err := SetWorktreeDBIsolated(site, "feature", true, "empty")
-	if err == nil || !strings.Contains(err.Error(), "does not use a lerd-managed") {
+	if err == nil || !strings.Contains(err.Error(), "not on a lerd service") {
 		t.Fatalf("got %v", err)
 	}
 	if created != "" {
@@ -264,5 +264,73 @@ func removeProvider(t *testing.T) {
 	t.Helper()
 	if err := plugins.Remove("brancher"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// urlFrameworkFixture is a worktree of a site whose framework keeps its whole
+// connection in DATABASE_URL.
+func urlFrameworkFixture(t *testing.T) (*config.Site, string) {
+	t.Helper()
+	site, checkout, _ := providerFixture(t, "")
+	removeProvider(t)
+	if err := config.SaveStoreFramework(&config.Framework{
+		Name:   "acme",
+		Detect: []config.FrameworkRule{{File: "acme.lock"}},
+		Env: config.FrameworkEnvConf{
+			File: ".env.local",
+			Services: map[string]config.FrameworkServiceDef{
+				"mysql": {
+					Detect: []config.FrameworkServiceDetect{{Key: "DATABASE_URL", ValuePrefix: "mysql"}},
+					Vars:   []string{"DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/{{site}}?serverVersion=8.4"},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []string{site.Path, checkout} {
+		for name, body := range map[string]string{
+			"acme.lock":  "",
+			".env.local": "DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/acme?serverVersion=8.4\n",
+		} {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	return site, checkout
+}
+
+func TestSetWorktreeDBIsolated_RenamesTheDatabaseInAConnectionURL(t *testing.T) {
+	site, checkout := urlFrameworkFixture(t)
+	orig := createDatabaseFn
+	created := ""
+	createDatabaseFn = func(service, name string) (bool, error) {
+		created = service + "/" + name
+		return true, nil
+	}
+	t.Cleanup(func() { createDatabaseFn = orig })
+
+	if err := SetWorktreeDBIsolated(site, "feature", true, "empty"); err != nil {
+		t.Fatal(err)
+	}
+	if created != "mysql/acme_feature" {
+		t.Errorf("created %q", created)
+	}
+	if got := readFile(t, filepath.Join(checkout, ".env.local")); !strings.Contains(got, "@lerd-mysql:3306/acme_feature?serverVersion=8.4") {
+		t.Errorf("worktree env = %s", got)
+	}
+}
+
+// A plugin serving from another host cannot be written into a URL lerd only
+// renames the database in, and pointing the branch at the wrong server is worse.
+func TestConnectWorktreeDB_RefusesAHostItCannotWriteIntoAURL(t *testing.T) {
+	site, checkout := urlFrameworkFixture(t)
+	err := connectWorktreeDB(site, checkout, config.WorktreeDBEntry{DBName: "acme_feature", Host: "branch.example"})
+	if err == nil || !strings.Contains(err.Error(), "DATABASE_URL") {
+		t.Fatalf("got %v", err)
+	}
+	if got := readFile(t, filepath.Join(checkout, ".env.local")); strings.Contains(got, "acme_feature") {
+		t.Errorf("worktree env changed: %s", got)
 	}
 }

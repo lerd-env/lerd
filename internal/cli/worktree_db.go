@@ -86,11 +86,10 @@ func SetWorktreeDBIsolated(site *config.Site, branch string, isolated bool, sour
 
 	binding := config.DBEnvBindingFor(site.Path)
 	readParent := envfile.Reader(filepath.Join(site.Path, binding.File), binding.Format)
-	parentDB := readParent(binding.NameKey)
-	parentHost := readParent(binding.HostKey)
+	parentDB := binding.Database(readParent)
 	service := config.WorktreeDBService(site.Path)
 	if parentDB == "" || service == "" {
-		return fmt.Errorf("parent site does not use a lerd-managed mysql/postgres (%s=%q, %s=%q)", binding.HostKey, parentHost, binding.NameKey, parentDB)
+		return fmt.Errorf("the database in %s is not on a lerd service, so this worktree cannot get its own", binding.File)
 	}
 	dbName := WorktreeDBName(parentDB, branch)
 	wtEnv := filepath.Join(wt.Path, binding.File)
@@ -123,13 +122,13 @@ func SetWorktreeDBIsolated(site *config.Site, branch string, isolated bool, sour
 		if err := setWorktreeDBIsolatedFlag(site.Path, wt.Path, true); err != nil {
 			return err
 		}
-		if err := applyDBEnvUpdate(wtEnv, binding.Format, map[string]string{binding.NameKey: dbName}); err != nil {
+		if err := applyDBEnvUpdate(wtEnv, binding.Format, binding.NameUpdate(readParent, dbName)); err != nil {
 			return fmt.Errorf("rewriting worktree env: %w", err)
 		}
 		return restartWorktreeWorkersFn(site, wt.Path)
 	}
 
-	restore := map[string]string{binding.NameKey: parentDB}
+	restore := binding.NameUpdate(readParent, parentDB)
 	if entry, ok, err := config.FindWorktreeDB(site.Name, branch); err == nil && ok {
 		if err := dropWorktreeDB(entry); err != nil {
 			return fmt.Errorf("dropping database %q: %w", entry.DBName, err)
@@ -137,8 +136,8 @@ func SetWorktreeDBIsolated(site *config.Site, branch string, isolated bool, sour
 		if _, _, err := config.RemoveWorktreeDB(site.Name, branch); err != nil {
 			return fmt.Errorf("removing registry entry: %w", err)
 		}
-		if entry.Provider != "" {
-			restore[binding.HostKey] = parentHost
+		if entry.Provider != "" && binding.URLKey == "" {
+			restore[binding.HostKey] = readParent(binding.HostKey)
 		}
 	}
 	if err := setWorktreeDBIsolatedFlag(site.Path, wt.Path, false); err != nil {
@@ -206,7 +205,11 @@ func connectWorktreeDB(site *config.Site, wtPath string, entry config.WorktreeDB
 		return err
 	}
 	binding := config.DBEnvBindingFor(site.Path)
-	updates := map[string]string{binding.NameKey: entry.DBName}
+	if entry.Host != "" && binding.URLKey != "" {
+		return fmt.Errorf("%s keeps its server in %s, which cannot take the host a plugin serves %s from", site.Name, binding.URLKey, entry.DBName)
+	}
+	readParent := envfile.Reader(filepath.Join(site.Path, binding.File), binding.Format)
+	updates := binding.NameUpdate(readParent, entry.DBName)
 	if entry.Host != "" {
 		updates[binding.HostKey] = entry.Host
 	}

@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -36,6 +37,25 @@ type DBEnvBinding struct {
 	Format  string
 	HostKey string
 	NameKey string
+	// URLKey holds the whole connection, for a framework with no separate keys:
+	// Symfony's DATABASE_URL, or Yii's PDO dsn.
+	URLKey string
+}
+
+// Database is the database name this binding reads from an env.
+func (b DBEnvBinding) Database(read func(string) string) string {
+	if b.URLKey != "" {
+		return DBNameInURL(read(b.URLKey))
+	}
+	return read(b.NameKey)
+}
+
+// NameUpdate is the env change that points this binding at another database.
+func (b DBEnvBinding) NameUpdate(read func(string) string, name string) map[string]string {
+	if b.URLKey != "" {
+		return map[string]string{b.URLKey: DBURLWithName(read(b.URLKey), name)}
+	}
+	return map[string]string{b.NameKey: name}
 }
 
 // DBTarget is a database a project points at: the lerd service holding it and
@@ -46,14 +66,11 @@ type DBTarget struct {
 }
 
 // dbServiceBinding is one declared database service and how the framework
-// addresses it. urlKey stands in for the host/name pair when the service is
-// wired through a single connection string (Symfony's DATABASE_URL), which
-// carries both.
+// addresses it.
 type dbServiceBinding struct {
 	DBEnvBinding
 	service string
 	detect  []FrameworkServiceDetect
-	urlKey  string
 }
 
 // defaultDBEnvBinding is the shape Laravel gave everyone, and what a project
@@ -151,7 +168,7 @@ func dbEnvBindings(projectDir string) (bindings []dbServiceBinding, file, format
 			case strings.HasPrefix(val, "lerd-"):
 				b.HostKey = key
 			case strings.Contains(val, "{{site}}") && strings.Contains(val, "lerd-"):
-				b.urlKey = key
+				b.URLKey = key
 			}
 		}
 		out = append(out, b)
@@ -178,12 +195,9 @@ func dbServiceRank(name string) int {
 	return len(families)
 }
 
-// DBEnvBindingFor returns how a project addresses the database it uses: the
-// declared service whose detect rules match its env file wins, then the first
-// database service the framework declares, and finally the default shape, so a
-// writer always has a file and a pair of keys to aim at. A framework that
-// encodes its database in a DSN has no standalone name key, so it too yields
-// the default and the caller reports the site as unmanaged.
+// DBEnvBindingFor returns how a project addresses its database: the declared
+// service its env matches, then the first declared, then the default shape. A
+// framework encoding its database in a DSN has only the URLKey.
 func DBEnvBindingFor(projectDir string) DBEnvBinding {
 	bindings, file, format := dbEnvBindings(projectDir)
 	if len(bindings) == 0 {
@@ -192,7 +206,7 @@ func DBEnvBindingFor(projectDir string) DBEnvBinding {
 	vals := envfile.Values(filepath.Join(projectDir, file), format)
 	var first *DBEnvBinding
 	for _, b := range bindings {
-		if b.NameKey == "" || b.HostKey == "" {
+		if b.URLKey == "" && (b.NameKey == "" || b.HostKey == "") {
 			continue
 		}
 		if serviceDetectedIn(b.detect, vals) {
@@ -289,8 +303,8 @@ func declaredDBTargets(projectDir string, bindings []dbServiceBinding, vals map[
 		}
 		t := DBTarget{}
 		switch {
-		case b.urlKey != "":
-			t = dsnTarget(vals[b.urlKey])
+		case b.URLKey != "":
+			t = dsnTarget(vals[b.URLKey])
 		case b.NameKey != "" && b.HostKey != "":
 			t = DBTarget{
 				Service:  dbServiceFor(projectDir, vals[b.HostKey], b.service),
@@ -377,7 +391,12 @@ func WorktreeDBService(projectDir string) string {
 		return svc.Name
 	}
 	binding := DBEnvBindingFor(projectDir)
-	service := DBServiceFor(projectDir, envfile.Reader(filepath.Join(projectDir, binding.File), binding.Format)(binding.HostKey))
+	read := envfile.Reader(filepath.Join(projectDir, binding.File), binding.Format)
+	host := read(binding.HostKey)
+	if binding.URLKey != "" {
+		host = endpointFromURL(read(binding.URLKey)).Host
+	}
+	service := DBServiceFor(projectDir, host)
 	if service == "" {
 		return ""
 	}
@@ -400,8 +419,8 @@ func DBEndpointFor(projectDir string) DBEndpoint {
 	bindings, file, format := dbEnvBindings(projectDir)
 	vals := envfile.Values(filepath.Join(projectDir, file), format)
 	for _, b := range bindings {
-		if b.urlKey != "" && serviceDetectedIn(b.detect, vals) {
-			return endpointFromURL(vals[b.urlKey])
+		if b.URLKey != "" && serviceDetectedIn(b.detect, vals) {
+			return endpointFromURL(vals[b.URLKey])
 		}
 	}
 	binding := DBEnvBindingFor(projectDir)
@@ -419,8 +438,8 @@ func DBEndpointFor(projectDir string) DBEndpoint {
 func DBURLFor(projectDir string) (key, value string) {
 	bindings, file, format := dbEnvBindings(projectDir)
 	for _, b := range bindings {
-		if b.urlKey != "" {
-			return b.urlKey, envfile.Values(filepath.Join(projectDir, file), format)[b.urlKey]
+		if b.URLKey != "" {
+			return b.URLKey, envfile.Values(filepath.Join(projectDir, file), format)[b.URLKey]
 		}
 	}
 	return "", ""
@@ -437,12 +456,14 @@ func DBNameInURL(raw string) string {
 	return endpointFromURL(raw).Database
 }
 
+var pdoDBName = regexp.MustCompile(`dbname=[^;"']*`)
+
 // DBURLWithName swaps the database in a connection URL by hand, since a rebuilt
 // URL would re-encode a password the framework reads as written.
 func DBURLWithName(raw, name string) string {
 	_, rest, ok := strings.Cut(raw, "://")
 	if !ok {
-		return raw
+		return pdoDBName.ReplaceAllLiteralString(raw, "dbname="+name)
 	}
 	schemeEnd := len(raw) - len(rest)
 	slash := strings.Index(rest, "/")
@@ -458,11 +479,36 @@ func DBURLWithName(raw, name string) string {
 }
 
 func endpointFromURL(raw string) DBEndpoint {
-	u, err := url.Parse(strings.Trim(raw, `"'`))
+	raw = strings.Trim(raw, `"'`)
+	if !strings.Contains(raw, "://") {
+		return endpointFromPDO(raw)
+	}
+	u, err := url.Parse(raw)
 	if err != nil {
 		return DBEndpoint{}
 	}
 	return DBEndpoint{Host: u.Hostname(), Port: u.Port(), Database: strings.TrimPrefix(u.Path, "/")}
+}
+
+// endpointFromPDO reads a PDO DSN, mysql:host=h;port=3306;dbname=shop.
+func endpointFromPDO(raw string) DBEndpoint {
+	var e DBEndpoint
+	_, params, ok := strings.Cut(raw, ":")
+	if !ok {
+		return e
+	}
+	for _, part := range strings.Split(params, ";") {
+		key, value, _ := strings.Cut(part, "=")
+		switch strings.TrimSpace(key) {
+		case "host":
+			e.Host = value
+		case "port":
+			e.Port = value
+		case "dbname":
+			e.Database = value
+		}
+	}
+	return e
 }
 
 // ExternalDBHost returns the host a project's env names when its database is not
@@ -543,19 +589,15 @@ func dsnTarget(value string) DBTarget {
 	if !strings.Contains(value, "lerd-") {
 		return DBTarget{}
 	}
-	u, err := url.Parse(value)
-	if err != nil {
-		return DBTarget{}
-	}
-	service, ok := strings.CutPrefix(u.Hostname(), "lerd-")
+	e := endpointFromURL(value)
+	service, ok := strings.CutPrefix(e.Host, "lerd-")
 	if !ok || service == "" || !dsnServiceHoldsDatabases(service) {
 		return DBTarget{}
 	}
-	db := strings.TrimPrefix(u.Path, "/")
-	if db == "" || strings.Contains(db, "/") {
+	if e.Database == "" || strings.Contains(e.Database, "/") {
 		return DBTarget{}
 	}
-	return DBTarget{Service: service, Database: db}
+	return DBTarget{Service: service, Database: e.Database}
 }
 
 // dsnServiceHoldsDatabases keeps a cache or queue connection string out of the
