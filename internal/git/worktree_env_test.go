@@ -602,3 +602,50 @@ func TestEnsureWorktreeEnv_seedsPhpConstAndRewritesURLKey(t *testing.T) {
 		t.Errorf("a root .env was wrongly created for a php-const site")
 	}
 }
+
+// A framework keeping its connection in one URL has no DB_DATABASE to protect, so
+// the key to leave alone is that URL.
+func TestEnsureWorktreeEnv_isolatedDBURLOverrideSkipped(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	main, wt := t.TempDir(), t.TempDir()
+	if err := config.SaveStoreFramework(&config.Framework{
+		Name:   "acme",
+		Detect: []config.FrameworkRule{{File: "acme.lock"}},
+		Env: config.FrameworkEnvConf{
+			File: ".env.local",
+			Services: map[string]config.FrameworkServiceDef{
+				"mysql": {
+					Detect: []config.FrameworkServiceDetect{{Key: "DATABASE_URL", ValuePrefix: "mysql"}},
+					Vars:   []string{"DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/{{site}}"},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for path, body := range map[string]string{
+		filepath.Join(main, "acme.lock"):  "",
+		filepath.Join(main, ".env.local"): "DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/shop\n",
+		filepath.Join(main, ".lerd.yaml"): "env_overrides:\n  DATABASE_URL: \"mysql://root:lerd@lerd-mysql:3306/shop\"\n",
+		filepath.Join(wt, "acme.lock"):    "",
+		filepath.Join(wt, ".env.local"):   "DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/shop_feat\n",
+	} {
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := config.SetWorktreeDBIsolated(wt, true); err != nil {
+		t.Fatal(err)
+	}
+
+	EnsureWorktreeEnv(main, wt, "feat.shop.test", false)
+
+	got, err := os.ReadFile(filepath.Join(wt, ".env.local"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "/shop_feat") {
+		t.Errorf("isolated URL was clobbered by env_overrides:\n%s", got)
+	}
+}

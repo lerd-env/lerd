@@ -273,6 +273,12 @@ func urlFrameworkFixture(t *testing.T) (*config.Site, string) {
 	t.Helper()
 	site, checkout, _ := providerFixture(t, "")
 	removeProvider(t)
+	writeURLFramework(t, site.Path, checkout)
+	return site, checkout
+}
+
+func writeURLFramework(t *testing.T, dirs ...string) {
+	t.Helper()
 	if err := config.SaveStoreFramework(&config.Framework{
 		Name:   "acme",
 		Detect: []config.FrameworkRule{{File: "acme.lock"}},
@@ -288,7 +294,7 @@ func urlFrameworkFixture(t *testing.T) (*config.Site, string) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	for _, dir := range []string{site.Path, checkout} {
+	for _, dir := range dirs {
 		for name, body := range map[string]string{
 			"acme.lock":  "",
 			".env.local": "DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/acme?serverVersion=8.4\n",
@@ -298,7 +304,6 @@ func urlFrameworkFixture(t *testing.T) (*config.Site, string) {
 			}
 		}
 	}
-	return site, checkout
 }
 
 func TestSetWorktreeDBIsolated_RenamesTheDatabaseInAConnectionURL(t *testing.T) {
@@ -322,6 +327,34 @@ func TestSetWorktreeDBIsolated_RenamesTheDatabaseInAConnectionURL(t *testing.T) 
 	}
 }
 
+// A worktree's own connection options are not the parent's to replace.
+func TestSetWorktreeDBIsolated_KeepsTheWorktreesOwnURLOptions(t *testing.T) {
+	site, checkout := urlFrameworkFixture(t)
+	orig := createDatabaseFn
+	createDatabaseFn = func(string, string) (bool, error) { return true, nil }
+	t.Cleanup(func() { createDatabaseFn = orig })
+	env := filepath.Join(checkout, ".env.local")
+	if err := os.WriteFile(env, []byte("DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/acme?serverVersion=9.7&timeout=5\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SetWorktreeDBIsolated(site, "feature", true, "empty"); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, env); !strings.Contains(got, "/acme_feature?serverVersion=9.7&timeout=5") {
+		t.Errorf("isolating: %s", got)
+	}
+	if _, _, err := config.RemoveWorktreeDB(site.Name, "feature"); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetWorktreeDBIsolated(site, "feature", false, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, env); !strings.Contains(got, "/acme?serverVersion=9.7&timeout=5") {
+		t.Errorf("sharing: %s", got)
+	}
+}
+
 // A plugin serving from another host cannot be written into a URL lerd only
 // renames the database in, and pointing the branch at the wrong server is worse.
 func TestConnectWorktreeDB_RefusesAHostItCannotWriteIntoAURL(t *testing.T) {
@@ -332,5 +365,25 @@ func TestConnectWorktreeDB_RefusesAHostItCannotWriteIntoAURL(t *testing.T) {
 	}
 	if got := readFile(t, filepath.Join(checkout, ".env.local")); strings.Contains(got, "acme_feature") {
 		t.Errorf("worktree env changed: %s", got)
+	}
+	if config.WorktreeDBIsolated(checkout) {
+		t.Error("a refused worktree still shares the parent's database and must say so")
+	}
+}
+
+func TestIsolateWithPlugin_UndoesADatabaseItCannotConnect(t *testing.T) {
+	site, checkout, calls := providerFixture(t, `case "$1" in create) echo '{"database":"acme_feature","host":"branch.example"}';; esac`+"\n")
+	writeURLFramework(t, site.Path, checkout)
+	if err := SetWorktreeDBIsolated(site, "feature", true, "empty"); err == nil || !strings.Contains(err.Error(), "DATABASE_URL") {
+		t.Fatalf("got %v", err)
+	}
+	if _, ok, _ := config.FindWorktreeDB(site.Name, "feature"); ok {
+		t.Error("a refused database must not stay recorded")
+	}
+	if config.WorktreeDBIsolated(checkout) {
+		t.Error("a refused worktree still shares the parent's database and must say so")
+	}
+	if got := readFile(t, calls); !strings.Contains(got, "drop ") {
+		t.Errorf("the plugin was left holding the database: %s", got)
 	}
 }

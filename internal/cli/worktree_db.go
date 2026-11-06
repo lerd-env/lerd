@@ -93,6 +93,7 @@ func SetWorktreeDBIsolated(site *config.Site, branch string, isolated bool, sour
 	}
 	dbName := WorktreeDBName(parentDB, branch)
 	wtEnv := filepath.Join(wt.Path, binding.File)
+	readWorktree := worktreeEnvReader(binding, site.Path, wt.Path)
 
 	if isolated {
 		p := plugins.ProviderOf(plugins.JobWorktreeDatabase)
@@ -122,13 +123,13 @@ func SetWorktreeDBIsolated(site *config.Site, branch string, isolated bool, sour
 		if err := setWorktreeDBIsolatedFlag(site.Path, wt.Path, true); err != nil {
 			return err
 		}
-		if err := applyDBEnvUpdate(wtEnv, binding.Format, binding.NameUpdate(readParent, dbName)); err != nil {
+		if err := applyDBEnvUpdate(wtEnv, binding.Format, binding.NameUpdate(readWorktree, dbName)); err != nil {
 			return fmt.Errorf("rewriting worktree env: %w", err)
 		}
 		return restartWorktreeWorkersFn(site, wt.Path)
 	}
 
-	restore := binding.NameUpdate(readParent, parentDB)
+	restore := binding.NameUpdate(readWorktree, parentDB)
 	if entry, ok, err := config.FindWorktreeDB(site.Name, branch); err == nil && ok {
 		if err := dropWorktreeDB(entry); err != nil {
 			return fmt.Errorf("dropping database %q: %w", entry.DBName, err)
@@ -182,6 +183,10 @@ func isolateWithPlugin(p *plugins.Plugin, site *config.Site, wtPath, branch, sou
 		return fmt.Errorf("plugin %s answered create without a database", p.Name)
 	}
 	entry := config.WorktreeDBEntry{Site: site.Name, Branch: branch, Service: service, DBName: got.Database, Host: got.Host, Provider: p.Name}
+	if err := worktreeHostFits(site, entry); err != nil {
+		_ = dropWorktreeDB(entry)
+		return err
+	}
 	if err := config.AddWorktreeDB(entry); err != nil {
 		_ = dropWorktreeDB(entry)
 		return fmt.Errorf("recording worktree db: %w", err)
@@ -201,15 +206,14 @@ func reconnectKeptDB(inCharge *plugins.Plugin, site *config.Site, wtPath string,
 
 // connectWorktreeDB points the worktree at a kept or plugin-made database.
 func connectWorktreeDB(site *config.Site, wtPath string, entry config.WorktreeDBEntry) error {
+	if err := worktreeHostFits(site, entry); err != nil {
+		return err
+	}
 	if err := setWorktreeDBIsolatedFlag(site.Path, wtPath, true); err != nil {
 		return err
 	}
 	binding := config.DBEnvBindingFor(site.Path)
-	if entry.Host != "" && binding.URLKey != "" {
-		return fmt.Errorf("%s keeps its server in %s, which cannot take the host a plugin serves %s from", site.Name, binding.URLKey, entry.DBName)
-	}
-	readParent := envfile.Reader(filepath.Join(site.Path, binding.File), binding.Format)
-	updates := binding.NameUpdate(readParent, entry.DBName)
+	updates := binding.NameUpdate(worktreeEnvReader(binding, site.Path, wtPath), entry.DBName)
 	if entry.Host != "" {
 		updates[binding.HostKey] = entry.Host
 	}
@@ -217,6 +221,28 @@ func connectWorktreeDB(site *config.Site, wtPath string, entry config.WorktreeDB
 		return fmt.Errorf("rewriting worktree env: %w", err)
 	}
 	return restartWorktreeWorkersFn(site, wtPath)
+}
+
+// worktreeHostFits refuses a database served from another host on a framework
+// that keeps its server in one connection value, which lerd only renames in.
+func worktreeHostFits(site *config.Site, entry config.WorktreeDBEntry) error {
+	if binding := config.DBEnvBindingFor(site.Path); entry.Host != "" && binding.URLKey != "" {
+		return fmt.Errorf("%s keeps its server in %s, which cannot take the host a plugin serves %s from", site.Name, binding.URLKey, entry.DBName)
+	}
+	return nil
+}
+
+// worktreeEnvReader reads the worktree's own value, so its connection options
+// survive a rename, and the parent's when it has none yet.
+func worktreeEnvReader(binding config.DBEnvBinding, sitePath, wtPath string) func(string) string {
+	parent := envfile.Reader(filepath.Join(sitePath, binding.File), binding.Format)
+	mine := envfile.Reader(filepath.Join(wtPath, binding.File), binding.Format)
+	return func(key string) string {
+		if v := mine(key); v != "" {
+			return v
+		}
+		return parent(key)
+	}
 }
 
 // dropWorktreeDB drops a worktree's isolated database through whoever made it.
