@@ -11,7 +11,8 @@ G=${1:?user@windows-host}
 KEY=${2:-$(ls ~/.ssh/id_ed25519.pub ~/.ssh/id_rsa.pub 2>/dev/null | head -1)}
 [ -f "$KEY" ] || { echo "no public key; pass one" >&2; exit 2; }
 SSH=(ssh -o BatchMode=yes -o ConnectTimeout=10 "$G")
-DISTRO=Ubuntu-26.04
+# The installer keeps a distro from an earlier run, so ask rather than assume.
+DISTRO=$("${SSH[@]}" "wsl -l -q" 2>/dev/null | tr -d '\0\r' | grep -E '^Ubuntu-[0-9]' | sort | tail -1)
 PORT=2222
 
 # as_root <script>: a script run as root in the distro, fed on stdin so no

@@ -12,7 +12,6 @@ function Check([string] $name, [bool] $present) {
 }
 
 $wsl = 'C:\Program Files\WSL\wsl.exe'
-$distro = 'Ubuntu-26.04'
 $lerdBin = Join-Path $env:LOCALAPPDATA 'lerd\bin'
 $uninstallKey = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{6F2B7C1E-3D4A-4E8B-9C2F-1A5D8E7B4C30}_is1'
 
@@ -27,7 +26,9 @@ Check 'W.8 lerd.exe on the user PATH' (([Environment]::GetEnvironmentVariable('P
 Check 'W.9 .test resolves through lerd' ($null -ne (Get-DnsClientNrptRule | Where-Object { $_.Comment -eq 'lerd' }))
 Check 'W.10 lerd CA trusted by Windows' ($null -ne (Get-ChildItem Cert:\CurrentUser\Root | Where-Object { $_.Subject -match 'mkcert' }))
 $distros = (& $wsl -l -q) -replace "`0", '' | Where-Object { $_ -match '\S' }
-if (-not $Absent -or $DistroDeleted) { Check "W.11 $distro installed" ($distros -contains $distro) }
+# The installer keeps a distro from an earlier run, so ask rather than assume.
+$distro = $distros | Where-Object { $_ -match '^Ubuntu-\d' } | Sort-Object | Select-Object -Last 1
+if (-not $Absent -or $DistroDeleted) { Check "W.11 Ubuntu installed" ([bool]$distro) }
 if (-not $Absent) {
 	$dash = try { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 http://127.0.0.1:7073/).StatusCode } catch { 0 }
 	Check 'W.12 dashboard answers from Windows' ($dash -eq 200)

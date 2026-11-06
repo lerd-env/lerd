@@ -199,10 +199,23 @@
       Sort-Object { [int]($_ -replace '\D') } | Select-Object -Last 1
   }
 
-  function InstalledUbuntu {
+  # WiredDistro is the distro Windows already runs Lerd from, per lerd-wsl.conf.
+  function WiredDistro {
+    $conf = Join-Path $env:LOCALAPPDATA 'lerd\bin\lerd-wsl.conf'
+    if (Test-Path $conf) {
+      Get-Content $conf | Where-Object { $_ -like 'distro=*' } | ForEach-Object { $_.Substring(7).Trim() }
+    }
+  }
+
+  # InstalledDistro is the distro to stay on: the one Lerd runs from, or else the
+  # newest usable Ubuntu. Moving to another would leave the user's sites behind.
+  function InstalledDistro {
     if (-not (Test-Path $RealWSLExe)) { return $null }
     $r = Capture $RealWSLExe '-l -q'
-    if ($r.Code -eq 0) { NewestUbuntu $r.Lines }
+    if ($r.Code -ne 0) { return $null }
+    $wired = WiredDistro
+    if ($wired -and ($r.Lines -contains $wired)) { return $wired }
+    NewestUbuntu $r.Lines
   }
 
   # OfferedUbuntu is empty on a WSL too old to list a usable Ubuntu. A failed
@@ -212,15 +225,15 @@
     if ($r.Code -eq 0) { NewestUbuntu $r.Lines } else { $FallbackDistro }
   }
 
-  # PickDistro stays on an Ubuntu already here: a newer one on offer would
+  # PickDistro stays on a distro already here: a newer one on offer would
   # otherwise get a second, empty distro beside it.
   function PickDistro {
-    $d = InstalledUbuntu
+    $d = InstalledDistro
     if (-not $d) { $d = OfferedUbuntu }
     if ($d) { $d } else { $FallbackDistro }
   }
 
-  function WSLReady { (WSLInstalled) -and ((InstalledUbuntu) -or (OfferedUbuntu)) }
+  function WSLReady { (WSLInstalled) -and ((InstalledDistro) -or (OfferedUbuntu)) }
 
   # ExistingUser returns the distro's uid 1000 user, the one this script creates.
   function ExistingUser {
