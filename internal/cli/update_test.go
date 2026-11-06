@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -646,5 +647,131 @@ func TestCompanionBinaries_lerdExeOnlyOnWSL(t *testing.T) {
 	platform.Current.WindowsSide = true
 	if got := companionBinaries(); !reflect.DeepEqual(got, []string{"lerd-tray", "lerd.exe"}) {
 		t.Errorf("on WSL got %v, want the tray and lerd.exe", got)
+	}
+}
+
+// restoreFixture is a WSL install at self whose release fetch serves a directory
+// holding the given files, and counts how often it was fetched.
+func restoreFixture(t *testing.T, self string, archived ...string) *int {
+	t.Helper()
+	prevWSL, prevFetch := platform.Current.WindowsSide, fetchRelease
+	t.Cleanup(func() { platform.Current.WindowsSide, fetchRelease = prevWSL, prevFetch })
+	platform.Current.WindowsSide = true
+	if err := os.WriteFile(self, []byte("lerd"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	extracted := t.TempDir()
+	for _, name := range archived {
+		if err := os.WriteFile(filepath.Join(extracted, name), []byte(name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fetched := 0
+	fetchRelease = func(string) (string, func(), error) {
+		fetched++
+		return extracted, func() {}, nil
+	}
+	return &fetched
+}
+
+func TestRestoreLerdExeFetchesItWhenMissing(t *testing.T) {
+	self := filepath.Join(t.TempDir(), "lerd")
+	fetched := restoreFixture(t, self, "lerd", "lerd.exe")
+
+	if err := restoreLerdExe(self, "v1.38.0"); err != nil {
+		t.Fatal(err)
+	}
+	if *fetched != 1 {
+		t.Fatalf("fetched %d times, want once", *fetched)
+	}
+	got, err := os.ReadFile(filepath.Join(filepath.Dir(self), "lerd.exe"))
+	if err != nil || string(got) != "lerd.exe" {
+		t.Fatalf("lerd.exe = %q, %v", got, err)
+	}
+}
+
+func TestRestoreLerdExeLeavesAPresentOneAlone(t *testing.T) {
+	self := filepath.Join(t.TempDir(), "lerd")
+	fetched := restoreFixture(t, self, "lerd", "lerd.exe")
+	exe := filepath.Join(filepath.Dir(self), "lerd.exe")
+	if err := os.WriteFile(exe, []byte("mine"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := restoreLerdExe(self, "v1.38.0"); err != nil {
+		t.Fatal(err)
+	}
+	if *fetched != 0 {
+		t.Fatalf("fetched %d times, want none", *fetched)
+	}
+	if got, _ := os.ReadFile(exe); string(got) != "mine" {
+		t.Fatalf("lerd.exe overwritten with %q", got)
+	}
+}
+
+func TestRestoreLerdExeDoesNothingOffWSL(t *testing.T) {
+	self := filepath.Join(t.TempDir(), "lerd")
+	fetched := restoreFixture(t, self, "lerd", "lerd.exe")
+	platform.Current.WindowsSide = false
+
+	if err := restoreLerdExe(self, "v1.38.0"); err != nil {
+		t.Fatal(err)
+	}
+	if *fetched != 0 {
+		t.Fatalf("fetched %d times, want none", *fetched)
+	}
+}
+
+func TestRestoreLerdExeReportsAReleaseWithoutIt(t *testing.T) {
+	self := filepath.Join(t.TempDir(), "lerd")
+	restoreFixture(t, self, "lerd")
+
+	err := restoreLerdExe(self, "v1.38.0")
+	if err == nil || !strings.Contains(err.Error(), "lerd.exe") {
+		t.Fatalf("restoreLerdExe() = %v, want an error naming lerd.exe", err)
+	}
+}
+
+func TestRestoreLerdExeReportsAFailedDownload(t *testing.T) {
+	self := filepath.Join(t.TempDir(), "lerd")
+	restoreFixture(t, self, "lerd")
+	fetchRelease = func(string) (string, func(), error) { return "", func() {}, errors.New("network down") }
+
+	err := restoreLerdExe(self, "v1.38.0")
+	if err == nil || !strings.Contains(err.Error(), "network down") {
+		t.Fatalf("restoreLerdExe() = %v, want the download error", err)
+	}
+}
+
+// A package manager owns that directory, so a download could only fail or be
+// wiped by the next upgrade: name the problem instead of fetching.
+func TestRestoreLerdExeRefusesAPackagedInstall(t *testing.T) {
+	dir := t.TempDir()
+	fetched := restoreFixture(t, filepath.Join(dir, "lerd"), "lerd", "lerd.exe")
+
+	err := restoreLerdExe("/usr/bin/lerd", "v1.38.0")
+	if err == nil || !strings.Contains(err.Error(), "/usr/bin/lerd") {
+		t.Fatalf("restoreLerdExe() = %v, want an error naming the packaged binary", err)
+	}
+	if *fetched != 0 {
+		t.Fatalf("fetched %d times, want none", *fetched)
+	}
+}
+
+func TestReplaceCompanionSkipsWhatTheArchiveLacks(t *testing.T) {
+	dir := t.TempDir()
+	if err := replaceCompanion(filepath.Join(dir, "absent"), filepath.Join(dir, "dst")); err != nil {
+		t.Fatalf("replaceCompanion() = %v, want nil for an archive without it", err)
+	}
+}
+
+func TestReplaceCompanionReportsAFailedCopy(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	if err := os.WriteFile(src, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := replaceCompanion(src, filepath.Join(dir, "no-such-dir", "dst")); err == nil {
+		t.Fatal("replaceCompanion() = nil, want the copy error")
 	}
 }
