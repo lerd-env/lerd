@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -73,6 +74,45 @@ var nssCertPEM = func(dir, nickname string) []byte {
 	return out
 }
 
+// nssNicknames lists every nickname in the NSS database at dir. certutil can
+// only export one named certificate at a time, so this is the way to walk them.
+var nssNicknames = func(dir string) []string {
+	out, err := exec.Command("certutil", "-d", "sql:"+dir, "-L").Output()
+	if err != nil {
+		return nil
+	}
+	return parseNSSNicknames(string(out))
+}
+
+// nssListingEntry matches a row of certutil -L: a nickname, which may hold
+// spaces, then the three comma-separated trust fields.
+var nssListingEntry = regexp.MustCompile(`^(.*\S)\s+[a-zA-Z]*,[a-zA-Z]*,[a-zA-Z]*\s*$`)
+
+func parseNSSNicknames(out string) []string {
+	var nicknames []string
+	for _, line := range strings.Split(out, "\n") {
+		if m := nssListingEntry.FindStringSubmatch(line); m != nil {
+			nicknames = append(nicknames, m[1])
+		}
+	}
+	return nicknames
+}
+
+// nssNicknameHolding returns the nickname the store at dir keeps the root CA
+// under, or "" when it has none. NSS stores a certificate once, so a CA imported
+// by hand or by an older mkcert stays under that name and no second one is added.
+func nssNicknameHolding(dir, expected string, der []byte) string {
+	if bundleContainsDER(nssCertPEM(dir, expected), der) {
+		return expected
+	}
+	for _, nickname := range nssNicknames(dir) {
+		if bundleContainsDER(nssCertPEM(dir, nickname), der) {
+			return nickname
+		}
+	}
+	return ""
+}
+
 // caNSSNickname is the nickname mkcert stores the root CA under: its own label
 // followed by the certificate's serial in decimal. Deriving it the way mkcert
 // does is what lets the lookup ask for the CA lerd signs with today rather than
@@ -85,16 +125,9 @@ func caNSSNickname(der []byte) string {
 	return "mkcert development CA " + cert.SerialNumber.String()
 }
 
-// BrowserStoresMissingCA returns the NSS databases that do not hold the root CA
-// lerd signs with. A browser reading one of those warns on every .test site even
-// though curl, PHP and openssl are happy, which is the state certutil's mere
-// presence on PATH says nothing about.
-//
-// Empty when every store has it, and equally empty when the question could not
-// be asked: no certutil to ask with, no CA generated yet, or no browser store on
-// the machine. An unanswered check is not a finding. The exported certificate is
-// compared as DER rather than trusted for carrying the right nickname, so a CA
-// regenerated after a store imported the old one reports as missing.
+// BrowserStoresMissingCA returns the NSS databases lacking the root CA lerd signs
+// with, searched by DER so a regenerated CA is missing and a renamed one is not.
+// Empty when every store has it, or when the question could not be asked at all.
 func BrowserStoresMissingCA() []string {
 	if !BrowserTrustAvailable() {
 		return nil
@@ -109,7 +142,7 @@ func BrowserStoresMissingCA() []string {
 	}
 	var missing []string
 	for _, dir := range nssDBDirs() {
-		if !bundleContainsDER(nssCertPEM(dir, nickname), der) {
+		if nssNicknameHolding(dir, nickname, der) == "" {
 			missing = append(missing, dir)
 		}
 	}
@@ -125,9 +158,9 @@ var runCertutil = func(args ...string) error {
 	return nil
 }
 
-// InstallBrowserTrust imports the root CA, under mkcert's nickname, into every
-// NSS database that does not trust it as an SSL CA, which also restores trust
-// flags cleared on a stored copy. Returns the stores that refused.
+// InstallBrowserTrust imports the root CA into every NSS database that does not
+// trust it as an SSL CA, which also restores trust flags cleared on a stored
+// copy. A copy already stored keeps its nickname. Returns the stores that refused.
 func InstallBrowserTrust() []error {
 	if !BrowserTrustAvailable() {
 		return nil
@@ -136,18 +169,28 @@ func InstallBrowserTrust() []error {
 	if err != nil {
 		return []error{err}
 	}
-	nickname := caNSSNickname(rootCADER())
-	if nickname == "" {
+	der := rootCADER()
+	expected := caNSSNickname(der)
+	if expected == "" {
 		return nil
 	}
 	var errs []error
 	for _, dir := range nssDBDirs() {
+		nickname := nssNicknameHolding(dir, expected, der)
+		if nickname == "" {
+			nickname = expected
+		}
 		// The check mkcert -install ran: verify the CA for SSL CA use.
 		if runCertutil("-V", "-d", "sql:"+dir, "-u", "L", "-n", nickname) == nil {
 			continue
 		}
 		if err := runCertutil("-A", "-d", "sql:"+dir, "-t", "C,,", "-n", nickname, "-i", filepath.Join(root, caCertName)); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", dir, err))
+			continue
+		}
+		// certutil -A can exit 0 without adding anything, so only -V proves it took.
+		if err := runCertutil("-V", "-d", "sql:"+dir, "-u", "L", "-n", nickname); err != nil {
+			errs = append(errs, fmt.Errorf("%s: the import did not take: %w", dir, err))
 		}
 	}
 	return errs
@@ -158,12 +201,13 @@ func RemoveBrowserTrust() {
 	if !BrowserTrustAvailable() {
 		return
 	}
-	nickname := caNSSNickname(rootCADER())
-	if nickname == "" {
+	der := rootCADER()
+	expected := caNSSNickname(der)
+	if expected == "" {
 		return
 	}
 	for _, dir := range nssDBDirs() {
-		if nssCertPEM(dir, nickname) != nil {
+		if nickname := nssNicknameHolding(dir, expected, der); nickname != "" {
 			runCertutil("-D", "-d", "sql:"+dir, "-n", nickname) //nolint:errcheck
 		}
 	}
