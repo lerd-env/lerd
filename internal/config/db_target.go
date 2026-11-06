@@ -4,7 +4,9 @@ import (
 	"net"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -226,6 +228,11 @@ func DBTargetFor(projectDir string) (DBTarget, bool) {
 // aimed at a lerd engine, so a project whose framework lerd doesn't recognise
 // still shows as the owner of its database.
 func DBTargetsFor(projectDir string) []DBTarget {
+	if svc := ExternalDBServiceFor(projectDir); svc != nil {
+		if name := DBEndpointFor(projectDir).Database; name != "" {
+			return []DBTarget{{Service: svc.Name, Database: name}}
+		}
+	}
 	bindings, file, format := dbEnvBindings(projectDir)
 	vals := envfile.Values(filepath.Join(projectDir, file), format)
 
@@ -361,6 +368,132 @@ func dbServiceFor(projectDir, host, declared string) string {
 		return declared
 	}
 	return ""
+}
+
+// WorktreeDBService is the lerd service holding a project's database, or "" when
+// no lerd service does, read from the project's env.
+func WorktreeDBService(projectDir string) string {
+	if svc := ExternalDBServiceFor(projectDir); svc != nil {
+		return svc.Name
+	}
+	binding := DBEnvBindingFor(projectDir)
+	service := DBServiceFor(projectDir, envfile.Reader(filepath.Join(projectDir, binding.File), binding.Format)(binding.HostKey))
+	if service == "" {
+		return ""
+	}
+	if _, external := ExternalDBHost(projectDir, service); external {
+		return ""
+	}
+	return service
+}
+
+// DBEndpoint is where a project's env says its database lives, whichever way the
+// framework spells it: separate keys, a host:port, or one connection string.
+type DBEndpoint struct {
+	Host     string
+	Port     string
+	Database string
+}
+
+// DBEndpointFor reads a project's database endpoint from its env.
+func DBEndpointFor(projectDir string) DBEndpoint {
+	bindings, file, format := dbEnvBindings(projectDir)
+	vals := envfile.Values(filepath.Join(projectDir, file), format)
+	for _, b := range bindings {
+		if b.urlKey != "" && serviceDetectedIn(b.detect, vals) {
+			return endpointFromURL(vals[b.urlKey])
+		}
+	}
+	binding := DBEnvBindingFor(projectDir)
+	read := envfile.Reader(filepath.Join(projectDir, binding.File), binding.Format)
+	e := DBEndpoint{Host: strings.TrimSpace(read(binding.HostKey)), Port: read("DB_PORT"), Database: read(binding.NameKey)}
+	if host, port, err := net.SplitHostPort(e.Host); err == nil {
+		e.Host, e.Port = host, port
+	}
+	return e
+}
+
+// DBURLFor is the key a framework keeps its whole connection in and the value a
+// project has there, read from the file the framework declares. The key is "" for
+// a framework that spells the connection out in separate keys.
+func DBURLFor(projectDir string) (key, value string) {
+	bindings, file, format := dbEnvBindings(projectDir)
+	for _, b := range bindings {
+		if b.urlKey != "" {
+			return b.urlKey, envfile.Values(filepath.Join(projectDir, file), format)[b.urlKey]
+		}
+	}
+	return "", ""
+}
+
+// SameDBURLHost reports whether two connection URLs name the same host and port.
+func SameDBURLHost(a, b string) bool {
+	x, y := endpointFromURL(a), endpointFromURL(b)
+	return x.Host == y.Host && x.Port == y.Port
+}
+
+// DBNameInURL is the database a connection URL names.
+func DBNameInURL(raw string) string {
+	return endpointFromURL(raw).Database
+}
+
+// DBURLWithName swaps the database in a connection URL by hand, since a rebuilt
+// URL would re-encode a password the framework reads as written.
+func DBURLWithName(raw, name string) string {
+	_, rest, ok := strings.Cut(raw, "://")
+	if !ok {
+		return raw
+	}
+	schemeEnd := len(raw) - len(rest)
+	slash := strings.Index(rest, "/")
+	if slash < 0 {
+		return raw
+	}
+	start := schemeEnd + slash + 1
+	end := len(raw)
+	if i := strings.IndexAny(raw[start:], `?#"'`); i >= 0 {
+		end = start + i
+	}
+	return raw[:start] + url.PathEscape(name) + raw[end:]
+}
+
+func endpointFromURL(raw string) DBEndpoint {
+	u, err := url.Parse(strings.Trim(raw, `"'`))
+	if err != nil {
+		return DBEndpoint{}
+	}
+	return DBEndpoint{Host: u.Hostname(), Port: u.Port(), Database: strings.TrimPrefix(u.Path, "/")}
+}
+
+// ExternalDBHost returns the host a project's env names when its database is not
+// on the lerd service given. Loopback only reaches lerd through a port lerd
+// publishes for that service; on any other it is a server on the machine.
+func ExternalDBHost(projectDir, service string) (string, bool) {
+	endpoint := DBEndpointFor(projectDir)
+	host := endpoint.Host
+	if host == "" {
+		return "", false
+	}
+	if _, marked := envfile.ReadOverride(projectDir); marked[service] {
+		return host, true
+	}
+	if strings.HasPrefix(host, "lerd-") {
+		return "", false
+	}
+	if !isLoopbackHost(host) {
+		return host, true
+	}
+	port := endpoint.Port
+	published := ServiceConfigFor(service).HostPorts()
+	if port == "" || len(published) == 0 || slices.Contains(published, atoiOr(port)) {
+		return "", false
+	}
+	return net.JoinHostPort(host, port), true
+}
+
+func atoiOr(s string) int {
+	n, _ := strconv.Atoi(strings.TrimSpace(s))
+	return n
 }
 
 // isLoopbackHost reports whether a host value from an env file points back at

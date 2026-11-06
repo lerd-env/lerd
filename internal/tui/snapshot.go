@@ -9,6 +9,7 @@ import (
 	"github.com/geodro/lerd/internal/dns"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/siteinfo"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 )
@@ -235,6 +236,12 @@ func buildServiceRow(name string, custom bool) ServiceRow {
 	if custom && version == "" {
 		if svc, err := config.LoadCustomService(name); err == nil {
 			version = podman.ServiceVersionLabel(svc.Image)
+			if svc.External != nil {
+				version = svc.External.VersionLabel()
+				if serviceops.ExternalDBReachable(*svc.External) {
+					state = stateRunning
+				}
+			}
 		}
 	}
 	return ServiceRow{

@@ -12,7 +12,6 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
-	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
 )
 
@@ -28,8 +27,7 @@ var (
 	autoSnapshotPrune     = serviceops.PruneAutoSnapshots
 	autoSnapshotSupported = func(service string) bool { return serviceops.SnapshotSupported(service, false) }
 	autoSnapshotRunning   = func(service string) bool {
-		status, _ := podman.UnitStatus("lerd-" + service)
-		return status == "active"
+		return serviceops.ServiceStatus(service) == "active"
 	}
 	autoSnapshotStampPathFn = defaultAutoSnapshotStampPath
 	autoSnapshotWhileAsleep = func(service string, fn func() error) error {

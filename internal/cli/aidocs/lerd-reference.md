@@ -173,10 +173,11 @@ Actions: `guide`, `new`, `list`, `install`.
 - **PHP navigation, LSP before grep**: `lerd lsp` (plugin `lerd-php`, deferred `LSP` tool: load it) for definitions, callers, types; facade calls via its `@method` line; grep last. None in Claude Code? Suggest `lerd mcp:enable-global`, restart
 - **After a browser test**: take each response's `X-Lerd-Rid` (dumps on) and run `request` `lenses`; fix any `issues`. `browser_toggle` first adds JS errors
 - Discover before acting: `site` `list` for sites, `worker` `list` for a site's workers, `service` `preset_list` before `preset_install`, `exec` `vendor_bins` before `vendor_run`
-- **SQLite has no service**, so every `db` action refuses on a sqlite project, naming the file. That is the out-of-the-box Laravel state: move it with `db` `move` or target a service explicitly, and do not read the refusal as a broken database
+- **SQLite has no service**, so every `db` action refuses on a sqlite project, naming the file. Move it with `db` `move` or target a service explicitly; the refusal is not a broken database
+- **External servers** (DBngin): the user runs `lerd service external`, then `db` `set`. Other hosts are refused: never use a lerd service instead
 - **A version can be refused by what the project installed**, not just what it declares: the floor in `vendor/composer/platform_check.php` counts too, so a fresh Laravel 13 site rejects 8.3. The refusal names every constraint
 - **Keys owned by `.lerd.local.yaml` cannot be set from here.** That untracked file overrides `.lerd.yaml` key by key, so pinning a version it also sets is refused and nothing is written; tell the user to edit it
-- **Commands return once the change is serving**: a pool restart waits for the pool, a domain change waits for nginx's old workers to retire, so no sleep is needed before a follow-up request
+- **Commands return once the change is serving**, so no sleep is needed before a follow-up request
 - **Domain conflicts on link**: a link drops a domain another site owns (reported in `warnings`) and registers the survivors, falling back to `<dirname>.<tld>`; `.lerd.yaml` is untouched. `domain_add` still hard-errors
 - **Custom APP_URL**: `env` `setup` writes `<scheme>://<primary-domain>`; override via `app_url` in `.lerd.yaml` (committed) or the per-machine `sites.yaml` entry, then re-run `env setup`
 - Built-in service hosts follow `lerd-<name>` (e.g. `lerd-mysql`, `lerd-redis`, `lerd-postgres`); default DB credentials are username `root`, password `lerd`

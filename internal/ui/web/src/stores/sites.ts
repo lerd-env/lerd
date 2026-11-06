@@ -68,6 +68,7 @@ export interface Site {
   idle?: boolean;
   idle_suspended_workers?: string[];
   services?: string[];
+  external_db?: string;
   // Plugins whose card the Overview shows; it arrives with every live update.
   overview_cards?: string[];
   declared_services?: string[];
@@ -649,6 +650,8 @@ export const addSuggestedService = (d: string, name: string, preset = '', versio
   if (version) q.set('version', version);
   return postAction(site(d, 'service:add') + '?' + q.toString());
 };
+export const useSiteDatabase = (d: string, name: string) =>
+  postAction(site(d, 'db:use') + `?name=${encodeURIComponent(name)}`);
 export const removeSiteService = (d: string, name: string) =>
   postAction(site(d, 'service:remove') + `?name=${encodeURIComponent(name)}`);
 export const openInEditor = (d: string, branch: string = '') =>

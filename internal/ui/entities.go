@@ -11,7 +11,6 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
-	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
 )
 
@@ -170,10 +169,7 @@ func rowEntityAction(action string) bool {
 }
 
 func entityOverview(service string, specs []config.EntitySpec) []entityKindResponse {
-	active := false
-	if status, _ := podman.UnitStatus("lerd-" + service); status == "active" {
-		active = true
-	}
+	active := serviceops.ServiceStatus(service) == "active"
 	out := make([]entityKindResponse, 0, len(specs))
 	for i := range specs {
 		spec := &specs[i]
@@ -348,7 +344,7 @@ func handleEntityImport(w http.ResponseWriter, r *http.Request, service, kind st
 // running, or idle-suspend has it asleep and the action wakes it on the way in.
 // A service the user stopped still has to be started first.
 func serviceUsable(service string) bool {
-	if status, _ := podman.UnitStatus("lerd-" + service); status == "active" {
+	if serviceops.ServiceStatus(service) == "active" {
 		return true
 	}
 	return config.ServiceIsIdleSuspended(service)

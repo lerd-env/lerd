@@ -52,6 +52,9 @@
     searchable = false
   }: Props = $props();
 
+  // A full-width trigger sits among a form's inputs, so it matches them.
+  const form = $derived(width === 'full');
+
   let open = $state(false);
   let triggerEl: HTMLButtonElement | null = $state(null);
   let menuEl: HTMLDivElement | null = $state(null);
@@ -279,7 +282,7 @@
     aria-controls={menuId}
     class="{width === 'full' ? 'w-full' : ''} {joined
       ? 'rounded-l-none border-l-0'
-      : ''} inline-flex items-center justify-between gap-1.5 h-7 px-2.5 rounded-md border bg-white dark:bg-lerd-card hover:border-lerd-red hover:text-lerd-red transition-colors text-xs font-medium text-gray-700 dark:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed {inherited ? 'border-dashed border-violet-300 dark:border-violet-700' : 'border-gray-200 dark:border-lerd-border'}"
+      : ''} inline-flex items-center justify-between gap-1.5 {form ? 'h-[34px] px-3 text-sm' : 'h-7 px-2.5 text-xs font-medium'} rounded-md border bg-white dark:bg-lerd-card hover:border-lerd-red hover:text-lerd-red transition-colors text-gray-700 dark:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed {inherited ? 'border-dashed border-violet-300 dark:border-violet-700' : 'border-gray-200 dark:border-lerd-border'}"
   >
     {#if optionIcon && value}
       <span class="shrink-0 flex items-center justify-center w-4">{@render optionIcon(value)}</span>
@@ -327,7 +330,7 @@
           disabled={opt.disabled}
           onclick={() => pick(opt)}
           onmouseenter={() => (highlighted = i)}
-          class="w-full flex items-start gap-2 px-3 py-1.5 text-left text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed {isHighlighted ? 'bg-gray-100 dark:bg-white/10' : 'hover:bg-gray-50 dark:hover:bg-white/5'} {selected ? 'text-lerd-red font-semibold' : 'text-gray-700 dark:text-gray-200'}"
+          class="w-full flex items-start gap-2 px-3 py-1.5 text-left {form ? 'text-sm' : 'text-xs'} transition-colors disabled:opacity-40 disabled:cursor-not-allowed {isHighlighted ? 'bg-gray-100 dark:bg-white/10' : 'hover:bg-gray-50 dark:hover:bg-white/5'} {selected ? 'text-lerd-red font-semibold' : 'text-gray-700 dark:text-gray-200'}"
         >
           <span class="shrink-0 w-3 h-3 mt-0.5">
             {#if selected}

@@ -242,4 +242,12 @@ describe('Dropdown', () => {
       expect(screen.queryByPlaceholderText('Search…')).toBeNull();
     });
   });
+
+  it('matches the inputs around it when it fills a form, and stays compact otherwise', async () => {
+    const { rerender } = render(Harness, { props: { value: 'a', options: ['a'], onchange: () => {}, width: 'full' } });
+    const trigger = screen.getByRole('button');
+    expect(trigger).toHaveClass('h-[34px]', 'text-sm');
+    await rerender({ value: 'a', options: ['a'], onchange: () => {}, width: 'auto' });
+    expect(trigger).toHaveClass('h-7', 'text-xs');
+  });
 });

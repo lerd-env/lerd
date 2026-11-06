@@ -64,7 +64,7 @@
 
 <div class="p-3 sm:p-5 space-y-4 overflow-y-auto">
   {#if stopped}
-    <p class="text-sm text-gray-500 dark:text-gray-400">{m.databases_startHint()}</p>
+    <p class="text-sm text-gray-500 dark:text-gray-400">{svc.status === 'offline' ? m.externalDb_serverOffline({ address: svc.external ?? '' }) : m.databases_startHint()}</p>
   {:else if !up}
     <LoadingRow />
   {:else if failed}
@@ -95,6 +95,9 @@
       </div>
     {/if}
 
+    {#if svc.external}
+      <p class="text-xs text-gray-500 dark:text-gray-400">{m.externalDb_server({ address: svc.external })}</p>
+    {/if}
     {#if engine.error}
       <p class="text-xs text-red-500">{engine.error}</p>
     {:else if engine.databases.length === 0}

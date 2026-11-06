@@ -210,6 +210,7 @@ func Start(currentVersion string) error {
 	// that gap by polling the cached detector on a slow tick and publishing
 	// KindSites only when the unhealthy set actually changes.
 	go runWorkerHealthWatcher()
+	go runExternalDBWatcher()
 
 	// WatchDNS lives in the lerd-watcher process; its eventbus publishes
 	// don't cross over here. This in-process probe surfaces DNS transitions
@@ -273,6 +274,9 @@ func Start(currentVersion string) error {
 	})
 
 	mux.HandleFunc("/api/image-estimate", withCORS(handleImageEstimate))
+	mux.HandleFunc("/api/services/external", withCORS(publishAfter(handleExternalDB, eventbus.KindServices)))
+	mux.HandleFunc("/api/services/external/test", withCORS(handleExternalDB))
+	mux.HandleFunc("/api/services/external/update", withCORS(publishAfter(handleExternalDB, eventbus.KindServices)))
 	mux.HandleFunc("/api/services/presets", withCORS(handleServicePresets))
 	mux.HandleFunc("/api/services/icons", withCORS(handleServiceIcons))
 	mux.HandleFunc("/api/frameworks/marks", withCORS(handleFrameworkMarks))
@@ -1072,7 +1076,9 @@ type SiteResponse struct {
 	SuggestedServices []config.ServiceSuggestion `json:"suggested_services,omitempty"`
 	// DBDatabase is the site's DB_DATABASE, so the overview's database card can
 	// open the admin tool straight to this site's database.
-	DBDatabase      string `json:"db_database,omitempty"`
+	DBDatabase string `json:"db_database,omitempty"`
+	// ExternalDB names the external database service the site chose.
+	ExternalDB      string `json:"external_db,omitempty"`
 	LANPort         int    `json:"lan_port,omitempty"`
 	LANShareURL     string `json:"lan_share_url,omitempty"`
 	PublicShared    bool   `json:"public_shared,omitempty"`
@@ -1345,6 +1351,7 @@ func buildSites() ([]SiteResponse, error) {
 			Branch:               e.Branch,
 			Worktrees:            worktreeResponses,
 			Services:             e.Services,
+			ExternalDB:           e.ExternalDB,
 			OverviewCards:        e.OverviewCards,
 			DeclaredServices:     e.DeclaredServices,
 			SuggestedServices:    e.SuggestedServices,
@@ -1417,6 +1424,9 @@ func secondaryPortMappings(defaultPorts []string, sc config.ServiceConfig) []Ser
 // ServiceResponse is the response for GET /api/services.
 type ServiceResponse struct {
 	Name              string            `json:"name"`
+	External          string            `json:"external,omitempty"`
+	ExternalTools     string            `json:"external_tools,omitempty"`
+	Family            string            `json:"family,omitempty"`
 	Label             string            `json:"label,omitempty"`
 	Status            string            `json:"status"`
 	Version           string            `json:"version,omitempty"`
@@ -1627,9 +1637,24 @@ func resolvePresentation(name string, custom *config.CustomService) presentation
 
 // list rebuild so it is not re-read and an error cannot blank the card); pass
 // nil for a default preset or to have it loaded by name.
+// serviceVersion comes from the image, or from the server for one with no image.
+func serviceVersion(image string, custom *config.CustomService) string {
+	if custom != nil && custom.External != nil {
+		return custom.External.VersionLabel()
+	}
+	return podman.ServiceVersionLabel(image)
+}
+
 func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, name, ssOutput string, custom *config.CustomService) ServiceResponse {
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
+	var external, externalFamily, externalTools string
+	if ext, err := config.LoadCustomService(name); err == nil && ext.External != nil {
+		external = ext.External.Address()
+		externalFamily = ext.Family
+		externalTools = ext.External.Tools
+		status = serviceops.ExternalDBStatus(*ext.External)
+	}
 	if status == "" {
 		status = "inactive"
 	}
@@ -1706,10 +1731,13 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 	}
 	pres := resolvePresentation(name, custom)
 	resp := ServiceResponse{
+		External:          external,
+		ExternalTools:     externalTools,
+		Family:            externalFamily,
 		Name:              name,
 		Label:             pres.Label,
 		Status:            status,
-		Version:           podman.ServiceVersionLabel(image),
+		Version:           serviceVersion(image, custom),
 		EnvVars:           envMap,
 		Dashboard:         serviceops.WithDashboardPort(dashboardRaw, presetPorts, services[name]),
 		DashboardExternal: dashExternal,
@@ -4644,6 +4672,9 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "db:use":
+		writeJSON(w, siteDBUse(site, r.URL.Query().Get("name")))
 		return
 	case "db:isolate":
 		branch := r.URL.Query().Get("branch")

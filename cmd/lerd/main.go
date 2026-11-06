@@ -216,6 +216,7 @@ func main() {
 	root.AddCommand(cli.NewDbSnapshotKeepCmd())
 	root.AddCommand(cli.NewDbSnapshotAutoCmd())
 	root.AddCommand(cli.NewDbMoveCmd())
+	root.AddCommand(cli.NewDbUseCmd())
 	root.AddCommand(cli.NewDbExtensionCmd())
 	root.AddCommand(cli.NewClientExecCmd())
 	root.AddCommand(cli.NewShimsCmd())

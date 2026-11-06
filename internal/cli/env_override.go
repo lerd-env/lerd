@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -65,6 +66,22 @@ func externalDBPicked(external map[string]bool) bool {
 		}
 	}
 	return false
+}
+
+// dropServerKeys removes from overrides the connection keys of a server the site
+// chose, since a stale host or password there would quietly beat that choice. The
+// database name stays, it is what the developer's own data is called.
+func dropServerKeys(overrides map[string]string, wired []string, nameKey string) []string {
+	var dropped []string
+	for _, kv := range wired {
+		k, _, _ := strings.Cut(kv, "=")
+		if _, ok := overrides[k]; ok && k != nameKey {
+			delete(overrides, k)
+			dropped = append(dropped, k)
+		}
+	}
+	slices.Sort(dropped)
+	return dropped
 }
 
 // overrideOr returns the override value for key when present, else the base

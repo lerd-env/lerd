@@ -2,8 +2,12 @@ package cli
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 // lerd's database commands drive a database service container. A SQLite project
@@ -101,5 +105,167 @@ func TestResolveDBLenientKeepsTheSQLiteReason(t *testing.T) {
 
 	if _, err := resolveDBLenient(dir, "", ""); !errors.Is(err, errSQLiteProject) {
 		t.Errorf("resolveDBLenient did not surface the sqlite reason: %v", err)
+	}
+}
+
+// externalDBFixture is a project on the env given, under an isolated config with
+// lerd's MySQL published on 3308.
+func externalDBFixture(t *testing.T, env string) string {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+		if c.Services == nil {
+			c.Services = map[string]config.ServiceConfig{}
+		}
+		sc := c.Services["mysql"]
+		sc.Port = 3308
+		c.Services["mysql"] = sc
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return writeEnvFixture(t, env)
+}
+
+// Every db command runs inside lerd's container, so one that read a site on an
+// outside server would dump, or overwrite, any database of the same name there.
+func TestResolveDBRefusesADatabaseLerdDoesNotServe(t *testing.T) {
+	for name, env := range map[string]string{
+		"the machine, from a container": "DB_CONNECTION=mysql\nDB_HOST=host.containers.internal\nDB_PORT=3306\nDB_DATABASE=shop\n",
+		"another machine":               "DB_CONNECTION=mysql\nDB_HOST=db.example.com\nDB_DATABASE=shop\n",
+		"loopback on another port":      "DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3306\nDB_DATABASE=shop\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := externalDBFixture(t, env)
+			if _, err := resolveDB(dir, "", ""); err == nil || !strings.Contains(err.Error(), "--service") {
+				t.Errorf("resolveDB: %v", err)
+			}
+			if _, err := resolveDBLenient(dir, "", ""); err == nil || !strings.Contains(err.Error(), "--service") {
+				t.Errorf("resolveDBLenient: %v", err)
+			}
+		})
+	}
+}
+
+func TestResolveDBRefusesAServiceMarkedExternal(t *testing.T) {
+	dir := externalDBFixture(t, "DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3308\nDB_DATABASE=shop\n")
+	if err := os.WriteFile(filepath.Join(dir, ".env.lerd_override"), []byte("LERD_EXTERNAL_SERVICES=mysql\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolveDB(dir, "", ""); err == nil || !strings.Contains(err.Error(), "--service") {
+		t.Errorf("resolveDB: %v", err)
+	}
+}
+
+func TestResolveDBKeepsWorkingOnLerdsOwnDatabase(t *testing.T) {
+	for name, env := range map[string]string{
+		"the container":         "DB_CONNECTION=mysql\nDB_HOST=lerd-mysql\nDB_DATABASE=shop\n",
+		"the published port":    "DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3308\nDB_DATABASE=shop\n",
+		"loopback with no port": "DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_DATABASE=shop\n",
+		"no host at all":        "DB_CONNECTION=mysql\nDB_DATABASE=shop\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			env, err := resolveDB(externalDBFixture(t, env), "", "")
+			if err != nil || env.service != "mysql" || env.database != "shop" {
+				t.Errorf("got %+v, %v", env, err)
+			}
+		})
+	}
+}
+
+// Naming the service is the user saying which container they mean.
+func TestResolveDBLetsAnExplicitServiceThrough(t *testing.T) {
+	dir := externalDBFixture(t, "DB_CONNECTION=mysql\nDB_HOST=host.containers.internal\nDB_DATABASE=shop\n")
+	env, err := resolveDB(dir, "mysql", "shop")
+	if err != nil || env.service != "mysql" {
+		t.Errorf("got %+v, %v", env, err)
+	}
+}
+
+// A site on a server someone added stays there when this machine lacks that
+// service: falling back would rewire it to lerd's own MySQL as root.
+func TestMissingExternalService(t *testing.T) {
+	onServer := "DB_CONNECTION=mysql\nDB_HOST=host.containers.internal\nDB_DATABASE=shop\n"
+	for name, tc := range map[string]struct {
+		env, yaml string
+		want      string
+	}{
+		"a service nobody here has": {onServer, "services:\n  - dbngin\n", "dbngin"},
+		"a lerd service":            {onServer, "services:\n  - mysql\n  - redis\n", ""},
+		"nothing listed":            {onServer, "", ""},
+		"on lerd's own database":    {"DB_CONNECTION=mysql\nDB_HOST=lerd-mysql\nDB_DATABASE=shop\n", "services:\n  - dbngin\n", ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := externalDBFixture(t, tc.env)
+			if tc.yaml != "" {
+				if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte(tc.yaml), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := missingExternalService(dir); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// externalServiceFixture is a project that chose an external server.
+func externalServiceFixture(t *testing.T, family string) string {
+	t.Helper()
+	dir := externalDBFixture(t, "DB_CONNECTION=mysql\nDB_HOST=host.containers.internal\nDB_PORT=3306\nDB_DATABASE=shop\n")
+	svc := &config.CustomService{Name: "dbngin", Image: "img", Family: family, External: &config.ExternalDB{Host: "host.containers.internal", Port: 3306, User: "me"}}
+	if err := config.SaveCustomService(svc); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte("services:\n  - dbngin\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// A server the site chose is reached through its own client, which is what makes
+// every database command work on it.
+func TestResolveDBUsesTheExternalServiceTheSiteChose(t *testing.T) {
+	dir := externalServiceFixture(t, "mariadb")
+	for name, resolve := range map[string]func() (*dbEnv, error){
+		"strict":  func() (*dbEnv, error) { return resolveDB(dir, "", "") },
+		"lenient": func() (*dbEnv, error) { return resolveDBLenient(dir, "", "") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			env, err := resolve()
+			if err != nil || env.service != "dbngin" || env.database != "shop" || !env.external {
+				t.Fatalf("got %+v, %v", env, err)
+			}
+		})
+	}
+	if env, err := resolveDB(dir, "mysql", "other"); err != nil || env.service != "mysql" || env.external {
+		t.Errorf("an explicit service still wins: %+v, %v", env, err)
+	}
+}
+
+func TestDbShellCmd_ExternalRunsTheMachinesClient(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	for name, family := range map[string]string{"mysql": "mysql", "postgres": "postgres"} {
+		t.Run(name, func(t *testing.T) {
+			svc := &config.CustomService{Name: "dbngin", Family: family, External: &config.ExternalDB{Host: "h", Port: 3306, Tools: "/opt/tools"}}
+			if err := config.SaveCustomService(svc); err != nil {
+				t.Fatal(err)
+			}
+			cmd := dbShellCmd(&dbEnv{service: "dbngin", database: "shop", external: true}, false)
+			args := strings.Join(cmd.Args, " ")
+			if cmd.Args[0] != "sh" || strings.Contains(args, "podman") {
+				t.Errorf("want a host shell, got %s", args)
+			}
+			if strings.Contains(args, "127.0.0.1") || strings.Contains(args, "-plerd") {
+				t.Errorf("lerd's own server leaked in: %s", args)
+			}
+			if !strings.HasSuffix(args, " shop") {
+				t.Errorf("args = %s", args)
+			}
+			if !strings.Contains(strings.Join(cmd.Env, "\n"), "PATH=/opt/tools:") {
+				t.Errorf("env = %v", cmd.Env)
+			}
+		})
 	}
 }

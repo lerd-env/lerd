@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -89,6 +90,20 @@ type dbEnv struct {
 	database   string
 	username   string
 	password   string
+	// external marks a server lerd does not run, reached through the machine's clients.
+	external bool
+}
+
+// externalDBEnv is the database of a project on an external server it chose,
+// reached through that service's client.
+func externalDBEnv(cwd string, svc *config.CustomService) *dbEnv {
+	env := serviceToDBEnv(svc.Name)
+	if config.ExternalDBFamily(svc.Family) == "postgres" {
+		env.connection = "pgsql"
+	}
+	env.database = config.DBEndpointFor(cwd).Database
+	env.username, env.password, env.external = svc.External.User, "", true
+	return env
 }
 
 // serviceToDBEnv returns dialect and default credentials for a given lerd service name.
@@ -132,6 +147,10 @@ func resolveDB(cwd, flagService, flagDatabase string) (*dbEnv, error) {
 		env = serviceToDBEnv(flagService)
 
 	default:
+		if svc := config.ExternalDBServiceFor(cwd); svc != nil {
+			env = externalDBEnv(cwd, svc)
+			break
+		}
 		// Try .lerd.yaml db: block
 		if pc, err := config.LoadProjectConfig(cwd); err == nil && pc.DB.Service != "" {
 			env = serviceToDBEnv(pc.DB.Service)
@@ -142,6 +161,9 @@ func resolveDB(cwd, flagService, flagDatabase string) (*dbEnv, error) {
 		}
 		// Try framework definition (reads the framework's own env file with its detect rules)
 		if env = resolveDBFromFramework(cwd); env != nil {
+			if err := refuseExternalDB(cwd, env.service); err != nil {
+				return nil, err
+			}
 			break
 		}
 		// Fall back to .env with generic key inference
@@ -155,6 +177,9 @@ func resolveDB(cwd, flagService, flagDatabase string) (*dbEnv, error) {
 			return nil, fmt.Errorf(
 				"no DB config found — use --service <name>, add a db: block to .lerd.yaml, or create a .env file with DB_CONNECTION and DB_DATABASE",
 			)
+		}
+		if err := refuseExternalDB(cwd, loaded.service); err != nil {
+			return nil, err
 		}
 		env = loaded
 	}
@@ -182,6 +207,17 @@ func resolveDBFromFramework(cwd string) *dbEnv {
 	return env
 }
 
+// refuseExternalDB stops a command read from the project's env from running in a
+// lerd container when the database that env names is somewhere else: a dump would
+// find nothing, or a same-named database, and a restore would overwrite that one.
+func refuseExternalDB(cwd, service string) error {
+	host, external := config.ExternalDBHost(cwd, service)
+	if !external {
+		return nil
+	}
+	return fmt.Errorf("this project's database is on %s, which lerd does not run, so lerd's database commands cannot reach it; to act on a lerd service instead, pass --service <name>", host)
+}
+
 // resolveDBLenient is like resolveDB but does not require a database name to be
 // present (used by db:shell and db:create where it is optional).
 func resolveDBLenient(cwd, flagService, flagDatabase string) (*dbEnv, error) {
@@ -192,6 +228,10 @@ func resolveDBLenient(cwd, flagService, flagDatabase string) (*dbEnv, error) {
 		env = serviceToDBEnv(flagService)
 
 	default:
+		if svc := config.ExternalDBServiceFor(cwd); svc != nil {
+			env = externalDBEnv(cwd, svc)
+			break
+		}
 		if pc, err := config.LoadProjectConfig(cwd); err == nil && pc.DB.Service != "" {
 			env = serviceToDBEnv(pc.DB.Service)
 			if pc.DB.Database != "" {
@@ -200,6 +240,9 @@ func resolveDBLenient(cwd, flagService, flagDatabase string) (*dbEnv, error) {
 			break
 		}
 		if env = resolveDBFromFramework(cwd); env != nil {
+			if err := refuseExternalDB(cwd, env.service); err != nil {
+				return nil, err
+			}
 			break
 		}
 		loaded, err := loadDBEnvLenient(cwd)
@@ -207,6 +250,9 @@ func resolveDBLenient(cwd, flagService, flagDatabase string) (*dbEnv, error) {
 			return nil, err
 		}
 		if loaded != nil {
+			if err := refuseExternalDB(cwd, loaded.service); err != nil {
+				return nil, err
+			}
 			env = loaded
 		} else {
 			env = serviceToDBEnv("mysql") // default to mysql when nothing is configured
@@ -376,6 +422,9 @@ func dbImportCmd(env *dbEnv) (*exec.Cmd, error) {
 // dbEntityCmd wraps a declared in-container command in the podman exec the CLI
 // streams through, carrying the fixed admin credentials in the env.
 func dbEntityCmd(service, shellCmd string) *exec.Cmd {
+	if svc, err := config.LoadCustomService(service); err == nil && svc.External != nil {
+		return serviceops.ExternalShell(context.Background(), svc, shellCmd)
+	}
 	args := []string{"exec", "-i"}
 	for _, kv := range serviceops.EntityExecEnv() {
 		args = append(args, "-e", kv)
@@ -535,11 +584,29 @@ func runDbShell(flagService, flagDatabase string) error {
 		}
 	}
 
-	cmd := podman.Cmd(dbShellArgs(env, serviceFamily(env.service), isInteractive())...)
+	cmd := dbShellCmd(env, isInteractive())
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// dbShellCmd opens the client: the machine's own for an external server, which
+// reads its credentials from the client file, and the container's otherwise.
+func dbShellCmd(env *dbEnv, tty bool) *exec.Cmd {
+	svc, err := config.LoadCustomService(env.service)
+	if err != nil || svc.External == nil {
+		return podman.Cmd(dbShellArgs(env, serviceFamily(env.service), tty)...)
+	}
+	binaries := mysqlClientBinaries(serviceFamily(env.service))
+	if config.ExternalDBFamily(svc.Family) == "postgres" {
+		binaries = []string{"psql"}
+	}
+	var args []string
+	if env.database != "" {
+		args = []string{env.database}
+	}
+	return serviceops.ExternalShell(context.Background(), svc, execFirstCommand(binaries), args...)
 }
 
 // dbShellArgs builds the podman exec behind db:shell. The MySQL-family client
@@ -551,8 +618,8 @@ func dbShellArgs(env *dbEnv, family string, tty bool) []string {
 		args = append(args, "--tty")
 	}
 	args = append(args, "lerd-"+env.service)
-	switch env.connection {
-	case "pgsql", "postgres":
+	switch {
+	case env.connection == "pgsql" || env.connection == "postgres":
 		args = append(args, "psql", "-U", env.username)
 	default:
 		// Over TCP, like the preset's own commands: a server confined by a host
@@ -626,6 +693,11 @@ func pgDatabaseExistsQuery(name string) string {
 // The name comes from a project's .env, so it is escaped for the literal it
 // lands in rather than trusted.
 func databaseExists(svc, name string) (bool, error) {
+	// An external server's clients take it from the client file, and the command
+	// below is an exec into a container it does not have.
+	if s, err := config.LoadCustomService(svc); err == nil && s.External != nil {
+		return serviceops.EntityExists(svc, serviceops.EntityFor(svc, "databases"), name)
+	}
 	container := "lerd-" + svc
 	family := serviceFamily(svc)
 	switch family {

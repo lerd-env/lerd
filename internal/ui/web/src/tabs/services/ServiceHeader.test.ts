@@ -103,3 +103,32 @@ describe('ServiceHeader pin', () => {
   });
 });
 
+
+// An external server is not lerd's to pin, update or reinstall, so removing it
+// is all its menu offers.
+describe('ServiceHeader on an external server', () => {
+  afterEach(() => {
+    idleEnabled.set(false);
+    idleServices.set(false);
+  });
+
+  it('offers removal as a plain button, with no menu', () => {
+    idleEnabled.set(true);
+    idleServices.set(true);
+    const svc = service({ name: 'dbngin', external: 'host.containers.internal:3306' });
+    const { queryByTestId } = render(ServiceHeader, { props: { svc } });
+    expect(queryByTestId('button-menu-inline-pin')).toBeNull();
+    expect(queryByTestId('button-menu-toggle')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeTruthy();
+    const text = document.body.textContent ?? '';
+    for (const gone of ['Pin', 'Reinstall', 'Check for updates', 'Stop', 'Restart']) expect(text).not.toContain(gone);
+  });
+
+  it('says offline and offers no start when the server stops answering', () => {
+    const svc = service({ name: 'dbngin', status: 'offline', external: 'host.containers.internal:3306' });
+    render(ServiceHeader, { props: { svc } });
+    expect(screen.getByText('offline')).toBeTruthy();
+    expect(screen.queryByText('Start')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeTruthy();
+  });
+});

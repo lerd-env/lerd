@@ -7,6 +7,7 @@ export type ModalKind =
   | "group"
   | "link"
   | "preset"
+  | "externalDb"
   | "remoteControl"
   | "lanProgress"
   | "worktreeAdd"
@@ -292,6 +293,10 @@ export function openGroupModal(site: Site) {
 
 export function openLinkModal() {
   modal.set({ kind: "link" });
+}
+
+export function openExternalDbModal() {
+  modal.set({ kind: "externalDb" });
 }
 
 export function openPresetModal() {

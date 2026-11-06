@@ -515,3 +515,81 @@ func TestFrameworkFor_DropsExpiredEntriesOnStore(t *testing.T) {
 		t.Error("expired entry survived a store")
 	}
 }
+
+// worktreeDBProject is a project listing mysql in .lerd.yaml with the env given.
+func worktreeDBProject(t *testing.T, env, override string) string {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(env), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte("services:\n  - mysql\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if override != "" {
+		if err := os.WriteFile(filepath.Join(dir, ".env.lerd_override"), []byte(override), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func publishMySQL(t *testing.T, port int) {
+	t.Helper()
+	if err := UpdateGlobal(func(c *GlobalConfig) {
+		sc := c.Services["mysql"]
+		sc.Port = port
+		if c.Services == nil {
+			c.Services = map[string]ServiceConfig{}
+		}
+		c.Services["mysql"] = sc
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A host-proxy site on lerd's MySQL reads loopback on lerd's published port.
+func TestWorktreeDBService_LoopbackOnLerdsPortIsLerds(t *testing.T) {
+	dir := worktreeDBProject(t, "DB_HOST=127.0.0.1\nDB_PORT=3308\nDB_DATABASE=acme\n", "")
+	publishMySQL(t, 3308)
+	if got := WorktreeDBService(dir); got != "mysql" {
+		t.Errorf("got %q", got)
+	}
+}
+
+// Loopback on any other port is a server on the machine, and treating it as
+// lerd's would clone into, or drop from, the wrong one.
+func TestWorktreeDBService_LoopbackOnAnotherPortIsNotLerds(t *testing.T) {
+	dir := worktreeDBProject(t, "DB_HOST=127.0.0.1\nDB_PORT=3306\nDB_DATABASE=acme\n", "")
+	publishMySQL(t, 3308)
+	if got := WorktreeDBService(dir); got != "" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestWorktreeDBService_MarkedExternalIsNotLerds(t *testing.T) {
+	dir := worktreeDBProject(t, "DB_HOST=127.0.0.1\nDB_PORT=3308\nDB_DATABASE=acme\n", "LERD_EXTERNAL_SERVICES=mysql\n")
+	publishMySQL(t, 3308)
+	if got := WorktreeDBService(dir); got != "" {
+		t.Errorf("got %q", got)
+	}
+}
+
+// With no port to compare, the site keeps working as it did.
+func TestWorktreeDBService_LoopbackWithoutAPortStaysLerds(t *testing.T) {
+	dir := worktreeDBProject(t, "DB_HOST=127.0.0.1\nDB_DATABASE=acme\n", "")
+	publishMySQL(t, 3308)
+	if got := WorktreeDBService(dir); got != "mysql" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestWorktreeDBService_ContainerHostIsLerdsWhateverThePort(t *testing.T) {
+	dir := worktreeDBProject(t, "DB_HOST=lerd-mysql\nDB_PORT=3306\nDB_DATABASE=acme\n", "")
+	publishMySQL(t, 3308)
+	if got := WorktreeDBService(dir); got != "mysql" {
+		t.Errorf("got %q", got)
+	}
+}

@@ -126,6 +126,46 @@ A recorded service stays listed while its quadlet is installed, whether the cont
 
 ---
 
+## Adding an external database server
+
+A MySQL, MariaDB or PostgreSQL server lerd does not run, such as DBngin, can be added as a service of its own. In the dashboard, open **Add a service**, pick **External database server** and fill in the host, port, user and password, or from the terminal:
+
+```bash
+lerd service external dbngin --engine mysql --host 127.0.0.1 --port 3306 --user root
+```
+
+lerd asks for the password, or reads it from stdin with `--password-stdin`. It connects first and saves nothing if that fails. Use `127.0.0.1` for a server on this machine.
+
+Nothing runs in a container for this service. Dumps, restores, the shell and the Databases page all use the client tools on your machine, `mysql` and `mysqldump` or `psql` and `pg_dump`. lerd looks for them on your `PATH` and saves the folder it finds. When they live somewhere else, as they do with an app that bundles its own server, name the folder with `--tools` or the **Client tools folder** field:
+
+```bash
+lerd service external dbngin --engine postgres --port 5432 --tools /path/to/bin
+```
+
+On Windows lerd runs inside WSL, so the clients have to be Linux ones installed in the distro, such as `mysql-client` or `postgresql-client`: a `mysqldump.exe` on the Windows side does not count. Mirrored networking lets `127.0.0.1` reach a server running on Windows.
+
+The folder has to hold both the client and the dump tool. `pg_dump` refuses a server newer than itself, so lerd checks that as well, and **Test connection** shows the folder it used. A machine with no client tools for the engine gets an error naming them, and nothing is saved.
+
+The server appears on the Services page with its databases, marked offline when it stops answering, with a notification, and back to normal on its own once it returns. The password stays in files only you can read, under lerd's data folder, and removing the service leaves everything on the server alone.
+
+To point a project at it, run this inside the project:
+
+```bash
+lerd db:use dbngin
+```
+
+That saves the choice in `.lerd.yaml` and runs `lerd env`, which writes the connection into your env file under the keys your framework reads. The password goes there too, since the app needs it, and never into `.lerd.yaml`. A database the env file already names is kept and created if it is missing. Worktrees then isolate on that server the way they do on a lerd service, with `lerd db:isolate` or the **Isolated DB** toggle.
+
+On the dashboard, use the **+** beside the sites count in the server's header, or the site's suggested **MySQL** or **PostgreSQL** card, which lists added servers of that engine next to the presets. Either way only the site's env changes: its data stays where it is, so move it across with `lerd db:export` and `lerd db:import` if it should come along.
+
+A site already pointed at a server through `.env.lerd_override` needs no rewrite: add the server, then run `lerd db:use` or use that **+**. Its host, port, user and password then come from the service, and the old values in the override file are ignored.
+
+To change a server's password or tools folder, use the cog in the header of its page or `lerd service external <name> --update`, with `--tools` for the folder. lerd connects with the new values first, so a typo leaves the old ones in place, then rewrites the env of every site on the server.
+
+`lerd db:export`, `db:import`, `db:snapshot`, `db:restore` and `db:shell` then work on that server, as do the service's Databases and Snapshots pages and the assistant tools. Snapshots stay on your machine with lerd's other snapshots. [Automatic snapshots](database.md#automatic-snapshots) cover a site on an external server like any other, and skip the server while it is offline.
+
+`.lerd.yaml` names the service, not the server. On a machine without a service of that name, `lerd env` stops and says so rather than replacing the connection with lerd's own.
+
 ## Using a service you run on the host
 
 Moving lerd's published port lets a host-installed server keep its own. The step past that is pointing a project at your server instead of lerd's container: the database you already have, with your data and your users, while lerd keeps managing everything else.

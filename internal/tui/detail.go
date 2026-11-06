@@ -152,6 +152,9 @@ func detailRows(s *siteinfo.EnrichedSite) []detailRow {
 // service that supports per-worktree isolation. Mirrors the gate the
 // dashboard uses to render the Isolated DB toggle.
 func siteHasManagedDB(s *siteinfo.EnrichedSite) bool {
+	if s.ExternalDB != "" {
+		return true
+	}
 	for _, svc := range s.Services {
 		switch svc {
 		case "mysql", "mariadb", "postgres":

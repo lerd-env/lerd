@@ -213,7 +213,14 @@ describe('ButtonMenu', () => {
     render(Harness, {
       props: { onSettings: () => {}, actions: [action({ id: 'p', label: 'Solo' })] }
     });
-    expect(screen.getByTestId('button-menu-settings')).toBeInTheDocument();
+    expect(screen.getByTestId('button-menu-settings')).toHaveClass('rounded-r-lg');
+  });
+
+  it('leaves the rounding to the chevron when the cog sits before it', () => {
+    render(Harness, {
+      props: { onSettings: () => {}, actions: [action({ id: 'p', label: 'One' }), action({ id: 'q', label: 'Two' })] }
+    });
+    expect(screen.getByTestId('button-menu-settings')).not.toHaveClass('rounded-r-lg');
   });
 
   it('disables the settings cog when busy', () => {

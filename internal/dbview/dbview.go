@@ -9,7 +9,6 @@ import (
 	"sort"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/siteinfo"
 )
@@ -155,7 +154,7 @@ func InstalledEngines() []string {
 // when the container is running. siteIndex is that engine's slice of
 // SiteIndexes; pass nil to leave owners unresolved.
 func Load(name string, siteIndex map[string]Owner) Engine {
-	status, _ := podman.UnitStatus("lerd-" + name)
+	status := serviceops.ServiceStatus(name)
 	snapOps := serviceops.SnapshotSupported(name, false)
 	eng := Engine{
 		Service:          name,

@@ -271,6 +271,21 @@ func promptAndPersistRemoteControl() error {
 	return nil
 }
 
+// readPasswordOnce prompts for a password that may be empty, as a local database
+// user's often is.
+func readPasswordOnce() (string, error) {
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return "", fmt.Errorf("no terminal to ask for the password on, pipe it in with --password-stdin")
+	}
+	fmt.Fprint(os.Stderr, "Password: ")
+	pw, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Fprintln(os.Stderr)
+	if err != nil {
+		return "", fmt.Errorf("reading password: %w", err)
+	}
+	return string(pw), nil
+}
+
 // readPasswordTwice prompts for a password on stdin twice and returns it
 // when the two inputs match. Used by `lerd remote-control on` so the user
 // doesn't accidentally store a typo'd password they can't reproduce.

@@ -72,6 +72,7 @@ func NewServiceCmd() *cobra.Command {
 	cmd.AddCommand(newServiceStatusCmd())
 	cmd.AddCommand(newServiceListCmd())
 	cmd.AddCommand(newServiceAddCmd())
+	cmd.AddCommand(newServiceExternalCmd())
 	cmd.AddCommand(newServicePresetCmd())
 	cmd.AddCommand(newServiceSearchCmd())
 	cmd.AddCommand(newServiceUpdateCmd())
@@ -660,6 +661,9 @@ func newServiceListCmd() *cobra.Command {
 					status = "unknown"
 				}
 				ver := podman.ServiceVersionLabel(svc.Image)
+				if svc.External != nil {
+					status, ver = serviceops.ExternalDBStatus(*svc.External), svc.External.VersionLabel()
+				}
 				tag := "[custom]"
 				if svc.Plugin != "" {
 					tag = "[plugin " + svc.Plugin + "]"
@@ -1075,9 +1079,11 @@ func newServiceRemoveCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]
+			existing, _ := config.LoadCustomService(name)
+			external := existing != nil && existing.External != nil
 
 			feedback.Begin()
-			if purge {
+			if purge && !external {
 				feedback.Note("removing service " + name + " and ALL its data at " + config.DataSubDir(name))
 			}
 
@@ -1103,7 +1109,7 @@ func newServiceRemoveCmd() *cobra.Command {
 				fmt.Printf("    WARN: client shims: %v\n", err)
 			}
 
-			if !purge {
+			if !purge && !external {
 				fmt.Printf("Data at %s was NOT removed. Pass --purge to wipe it.\n", config.DataSubDir(name))
 			}
 			return nil

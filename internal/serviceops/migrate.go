@@ -44,6 +44,9 @@ func SupportsMigration(name string) bool {
 // move across data-incompatible SQL versions (e.g. mysql 8.0 → 9.0). Errors
 // when no handler is registered for the service family.
 func MigrateService(name, targetImage string, emit func(PhaseEvent)) error {
+	if externalServiceFor(name) != nil {
+		return fmt.Errorf("%s is an external server, so upgrading it is up to whatever runs it", name)
+	}
 	unlock := lockService(name)
 	defer unlock()
 
@@ -154,6 +157,22 @@ func migrateTargetImage(p *config.Preset, currentImage, version string) (string,
 
 func timestamped() string { return time.Now().UTC().Format("20060102-150405") }
 
+// serviceCmd runs shellCmd where a service's clients live: in its container, or
+// on this machine for an external server, which has none.
+func serviceCmd(ctx context.Context, container string, stdin bool, envPairs []string, shellCmd string) *exec.Cmd {
+	if svc := externalServiceFor(strings.TrimPrefix(container, "lerd-")); svc != nil {
+		return ExternalShell(ctx, svc, shellCmd)
+	}
+	args := []string{"exec"}
+	if stdin {
+		args = append(args, "-i")
+	}
+	for _, kv := range envPairs {
+		args = append(args, "--env", kv)
+	}
+	return podman.CmdContext(ctx, append(args, container, "sh", "-c", shellCmd)...)
+}
+
 // containerExec runs shellCmd inside a running container with a hard timeout.
 // envPairs are passed via the exec env (not argv) so secrets don't leak into
 // /proc/<pid>/cmdline. Captured output includes stderr.
@@ -165,12 +184,7 @@ func containerExec(container, shellCmd string, envPairs []string, stdin *os.File
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	args := []string{"exec", "-i"}
-	for _, kv := range envPairs {
-		args = append(args, "--env", kv)
-	}
-	args = append(args, container, "sh", "-c", shellCmd)
-	cmd := podman.CmdContext(ctx, args...)
+	cmd := serviceCmd(ctx, container, true, envPairs, shellCmd)
 	if stdin != nil {
 		cmd.Stdin = stdin
 	}
@@ -188,12 +202,7 @@ func dumpToHost(container, shellCmd string, envPairs []string, hostPath string, 
 	defer out.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	args := []string{"exec"}
-	for _, kv := range envPairs {
-		args = append(args, "--env", kv)
-	}
-	args = append(args, container, "sh", "-c", shellCmd)
-	cmd := podman.CmdContext(ctx, args...)
+	cmd := serviceCmd(ctx, container, false, envPairs, shellCmd)
 	if err := runStreaming(cmd, out); err != nil {
 		return fmt.Errorf("dump command failed: %w", err)
 	}
@@ -224,12 +233,7 @@ func restoreFromHost(container, shellCmd string, envPairs []string, hostPath str
 	defer in.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	args := []string{"exec", "-i"}
-	for _, kv := range envPairs {
-		args = append(args, "--env", kv)
-	}
-	args = append(args, container, "sh", "-c", shellCmd)
-	cmd := podman.CmdContext(ctx, args...)
+	cmd := serviceCmd(ctx, container, true, envPairs, shellCmd)
 	cmd.Stdin = in
 	out, err := cmd.CombinedOutput()
 	if err != nil {

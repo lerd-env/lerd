@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"net"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -28,5 +29,27 @@ func TestServiceUsable(t *testing.T) {
 		if got := serviceUsable(name); got != want {
 			t.Errorf("serviceUsable(%s) = %v, want %v", name, got, want)
 		}
+	}
+}
+
+// An external server has no unit: it is usable while it answers.
+func TestServiceUsable_ExternalServerGoesByWhetherItAnswers(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	svc := &config.CustomService{Name: "dbngin", Family: "mysql", External: &config.ExternalDB{Host: "host.containers.internal", Port: ln.Addr().(*net.TCPAddr).Port}}
+	if err := config.SaveCustomService(svc); err != nil {
+		t.Fatal(err)
+	}
+	if !serviceUsable("dbngin") {
+		t.Error("a server that answers is usable")
+	}
+	ln.Close()
+	if serviceUsable("dbngin") {
+		t.Error("a server that stopped answering is not")
 	}
 }

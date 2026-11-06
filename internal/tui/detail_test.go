@@ -297,6 +297,12 @@ func TestSiteHasManagedDB(t *testing.T) {
 	}
 }
 
+func TestSiteHasManagedDB_ExternalService(t *testing.T) {
+	if !siteHasManagedDB(&siteinfo.EnrichedSite{ExternalDB: "dbngin", Services: []string{"dbngin"}}) {
+		t.Error("a site on an external service can isolate its worktrees")
+	}
+}
+
 // TestDetailRows_WorktreesEmitLANAndVersionRows pins the LAN row + per-
 // worktree PHP/Node picker rows that Phase 4 added on top of the worker +
 // DB rows from Phase 2. PHP appears only on PHP sites (ContainerPort==0,

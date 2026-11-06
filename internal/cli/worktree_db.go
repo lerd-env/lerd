@@ -88,7 +88,7 @@ func SetWorktreeDBIsolated(site *config.Site, branch string, isolated bool, sour
 	readParent := envfile.Reader(filepath.Join(site.Path, binding.File), binding.Format)
 	parentDB := readParent(binding.NameKey)
 	parentHost := readParent(binding.HostKey)
-	service := config.DBServiceFor(site.Path, parentHost)
+	service := config.WorktreeDBService(site.Path)
 	if parentDB == "" || service == "" {
 		return fmt.Errorf("parent site does not use a lerd-managed mysql/postgres (%s=%q, %s=%q)", binding.HostKey, parentHost, binding.NameKey, parentDB)
 	}
@@ -103,7 +103,7 @@ func SetWorktreeDBIsolated(site *config.Site, branch string, isolated bool, sour
 		if p != nil {
 			return isolateWithPlugin(p, site, wt.Path, branch, source, service, parentDB, dbName)
 		}
-		if _, err := CreateDatabase(service, dbName); err != nil {
+		if _, err := createDatabaseFn(service, dbName); err != nil {
 			return fmt.Errorf("creating database %q in %s: %w", dbName, service, err)
 		}
 		if cloneSrc := resolveCloneSource(site, branch, source, parentDB); cloneSrc != "" {
@@ -231,6 +231,9 @@ func dropWorktreeDB(e config.WorktreeDBEntry) error {
 	})
 	return err
 }
+
+// createDatabaseFn creates a database in a lerd service; a seam for tests.
+var createDatabaseFn = CreateDatabase
 
 // restartWorktreeWorkersFn restarts a worktree's running workers; a seam for tests.
 var restartWorktreeWorkersFn = restartRunningWorktreeWorkers

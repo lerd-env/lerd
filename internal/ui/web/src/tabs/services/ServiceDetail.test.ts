@@ -43,6 +43,13 @@ describe('ServiceDetail databases tab', () => {
 
   // Snapshots belong to the databases the engine holds, so the tab follows the
   // same authority and the same is_database guard.
+  it('shows an external server no logs, env, config or ports', () => {
+    const svc = { ...dbService(), external: 'host.containers.internal:3306', tunable: true, env_vars: { DB_HOST: 'x' } };
+    const { queryByRole, getByRole } = render(ServiceDetail, { props: { svc } });
+    expect(getByRole('tab', { name: 'Databases' })).toBeTruthy();
+    for (const name of ['Logs', 'Env', 'Config', 'Ports']) expect(queryByRole('tab', { name })).toBeNull();
+  });
+
   it('shows the Snapshots tab beside Databases', () => {
     const { getByRole } = render(ServiceDetail, { props: { svc: dbService() } });
     expect(getByRole('tab', { name: 'Snapshots' })).toBeInTheDocument();

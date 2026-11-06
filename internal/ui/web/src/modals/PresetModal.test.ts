@@ -3,6 +3,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import PresetModal from './PresetModal.svelte';
 import { presets, presetsLoaded } from '$stores/presets';
 import { serviceIcons } from '$stores/serviceIcons';
+import { modal } from '$stores/modals';
+import { get } from 'svelte/store';
 
 // onMount runs loadPresets() which hits /api/services/presets; make it fail so
 // the seeded store is preserved and the tests drive a known preset list.
@@ -31,6 +33,35 @@ describe('PresetModal search', () => {
     render(PresetModal);
     expect(screen.getByText('redis')).toBeInTheDocument();
     expect(screen.getByText('postgres')).toBeInTheDocument();
+  });
+
+  it('is titled Add a service', () => {
+    render(PresetModal);
+    expect(screen.getByRole('heading', { name: 'Add a service' })).toBeTruthy();
+  });
+
+  it('offers an external database server beside the presets', async () => {
+    render(PresetModal);
+    expect(screen.getByText('External database server')).toBeTruthy();
+    const row = screen.getByText('External database server').closest('.rounded-lg') as HTMLElement;
+    await fireEvent.click(row.querySelector('button') as HTMLButtonElement);
+    expect(get(modal).kind).toBe('externalDb');
+    modal.set({ kind: null } as never);
+  });
+
+  it('keeps the external server when every preset is installed', () => {
+    presets.set([]);
+    render(PresetModal);
+    expect(screen.getByText('External database server')).toBeTruthy();
+  });
+
+  it('finds the external server by search, and hides it otherwise', async () => {
+    render(PresetModal);
+    const search = screen.getByPlaceholderText('Search presets…');
+    await fireEvent.input(search, { target: { value: 'dbngin' } });
+    expect(screen.getByText('External database server')).toBeTruthy();
+    await fireEvent.input(search, { target: { value: 'redis' } });
+    expect(screen.queryByText('External database server')).toBeNull();
   });
 
   it('filters the list as you type', async () => {

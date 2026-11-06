@@ -31,10 +31,10 @@
   let shownService = $state('');
   let shownRoute = $state('');
 
-  const hasEnv = $derived(Boolean(svc.env_vars && Object.keys(svc.env_vars).length > 0));
+  const hasEnv = $derived(!svc.external && (Boolean(svc.env_vars && Object.keys(svc.env_vars).length > 0)));
   const hasTools = $derived(Boolean(svc.client_shims && svc.client_shims.length > 0));
   // Workers publish nothing, so the ports tab tracks the header gear's old guard.
-  const hasPorts = $derived(!isServiceWorker(svc));
+  const hasPorts = $derived(!isServiceWorker(svc) && !svc.external);
   // Database and entity actions require dashboard-control authority because
   // they can read, create, and delete service data. Authenticated remote
   // dashboards receive that authority.
@@ -53,9 +53,9 @@
     { id: 'databases', label: m.databases_title(), hidden: !hasDatabases },
     { id: 'snapshots', label: m.snapshots_title(), hidden: !hasSnapshots },
     { id: 'entities', label: entitiesLabel, hidden: !hasEntities },
-    { id: 'logs', label: m.services_tabs_logs() },
+    { id: 'logs', label: m.services_tabs_logs(), hidden: !!svc.external },
     { id: 'env', label: m.services_env_title(), hidden: !hasEnv },
-    { id: 'config', label: m.services_tabs_tuning(), hidden: !svc.tunable },
+    { id: 'config', label: m.services_tabs_tuning(), hidden: !svc.tunable || !!svc.external },
     { id: 'tools', label: m.services_tabs_tools(), hidden: !hasTools },
     { id: 'ports', label: m.services_tabs_ports(), hidden: !hasPorts }
   ]);
@@ -80,11 +80,12 @@
       shownRoute = $routeRest;
       if (routeTab) active = routeTab;
     }
+    if (active === 'logs' && svc.external) active = 'databases';
     if (active === 'databases' && !hasDatabases) active = fallback;
     if (active === 'snapshots' && !hasSnapshots) active = fallback;
     if (active === 'entities' && !hasEntities) active = fallback;
     if (active === 'env' && !hasEnv) active = fallback;
-    if (active === 'config' && !svc.tunable) active = fallback;
+    if (active === 'config' && (!svc.tunable || svc.external)) active = fallback;
     if (active === 'tools' && !hasTools) active = fallback;
     if (active === 'ports' && !hasPorts) active = fallback;
   });

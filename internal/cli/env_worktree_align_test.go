@@ -223,3 +223,112 @@ func TestAlignWorktreeEnvs_leavesTheParentsOverridesBehind(t *testing.T) {
 		t.Errorf("worktree .env =\n%s\nwant it untouched:\n%s", got, wtEnv)
 	}
 }
+
+// worktreeOnExternalDB is a site whose override points it at the machine's own
+// MySQL and a worktree whose env holds host, returning the site and the checkout.
+func worktreeOnExternalDB(t *testing.T, override, host string) (*config.Site, string) {
+	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	main, checkout := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(main, envOverrideFile), []byte(override), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(checkout, ".env"), []byte("DB_HOST="+host+"\nDB_DATABASE=acme\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return &config.Site{Name: "acme", Path: main, Domains: []string{"acme.test"}}, checkout
+}
+
+const externalMySQLOverride = "DB_HOST=host.containers.internal\nDB_PORT=3307\nDB_DATABASE=acme\nDB_USERNAME=me\nDB_PASSWORD=pw\nAPP_URL=https://mine.test\nREDIS_HOST=redis.example.com\nLERD_EXTERNAL_SERVICES=mysql, redis\n"
+
+// lerd env in such a worktree used to wire it to lerd's own MySQL and create an
+// empty database there. Only the database server comes across, never the rest
+// of what is personal to the parent's checkout.
+func TestWorktreeExternalDB_keepsTheWorktreeOnTheParentsServer(t *testing.T) {
+	site, checkout := worktreeOnExternalDB(t, externalMySQLOverride, "host.containers.internal")
+
+	overrides, external := worktreeExternalDB(site, "feat", checkout)
+
+	for k, want := range map[string]string{"DB_HOST": "host.containers.internal", "DB_PORT": "3307", "DB_USERNAME": "me", "DB_PASSWORD": "pw", "DB_DATABASE": "acme"} {
+		if overrides[k] != want {
+			t.Errorf("%s = %q, want %q (%v)", k, overrides[k], want, overrides)
+		}
+	}
+	if _, ok := overrides["APP_URL"]; ok {
+		t.Errorf("the branch keeps its own URL, got %v", overrides)
+	}
+	if _, ok := overrides["REDIS_HOST"]; ok {
+		t.Errorf("only the database comes across, got %v", overrides)
+	}
+	if !external["mysql"] || external["redis"] {
+		t.Errorf("external = %v, want mysql only", external)
+	}
+}
+
+func TestWorktreeExternalDB_keepsAnIsolatedDatabaseName(t *testing.T) {
+	site, checkout := worktreeOnExternalDB(t, externalMySQLOverride, "host.containers.internal")
+	if err := config.AddWorktreeDB(config.WorktreeDBEntry{Site: "acme", Branch: "feat", DBName: "acme_feat", Provider: "brancher"}); err != nil {
+		t.Fatal(err)
+	}
+
+	overrides, _ := worktreeExternalDB(site, "feat", checkout)
+
+	if _, ok := overrides["DB_DATABASE"]; ok {
+		t.Errorf("an isolated database keeps its name, got %v", overrides)
+	}
+	if overrides["DB_HOST"] != "host.containers.internal" {
+		t.Errorf("overrides = %v", overrides)
+	}
+}
+
+// The rule from the parent's own run still stands: a worktree that left for
+// another server is not pulled back to the parent's.
+func TestWorktreeExternalDB_leavesAWorktreeOnAnotherServerAlone(t *testing.T) {
+	site, checkout := worktreeOnExternalDB(t, externalMySQLOverride, "lerd-mysql")
+
+	if overrides, external := worktreeExternalDB(site, "feat", checkout); len(overrides) != 0 || len(external) != 0 {
+		t.Errorf("got %v %v", overrides, external)
+	}
+}
+
+func TestWorktreeExternalDB_ignoresAParentNotOnAnExternalDatabase(t *testing.T) {
+	site, checkout := worktreeOnExternalDB(t, "DB_HOST=host.containers.internal\nLERD_EXTERNAL_SERVICES=redis\n", "host.containers.internal")
+
+	if overrides, external := worktreeExternalDB(site, "feat", checkout); len(overrides) != 0 || len(external) != 0 {
+		t.Errorf("got %v %v", overrides, external)
+	}
+}
+
+// A Symfony parent keeps its server in one URL, which no DB_* key would carry, so
+// the worktree fell back to the framework's default on lerd's own MySQL.
+func TestCarriedDBURL(t *testing.T) {
+	const url = "mysql://me:pw@host.containers.internal:3307/shop?charset=utf8mb4"
+	parent := map[string]string{"DATABASE_URL": url}
+	onServer := func(db string) string { return "mysql://old:old@host.containers.internal:3307/" + db }
+
+	if got, ok := carriedDBURL("DATABASE_URL", parent, "", ""); !ok || got != url {
+		t.Errorf("no URL yet: %q %v", got, ok)
+	}
+	if got, ok := carriedDBURL("DATABASE_URL", parent, onServer("shop"), ""); !ok || got != url {
+		t.Errorf("sharing the parent's database: %q %v", got, ok)
+	}
+	if got, _ := carriedDBURL("DATABASE_URL", parent, onServer("shop_feature"), ""); got != "mysql://me:pw@host.containers.internal:3307/shop_feature?charset=utf8mb4" {
+		t.Errorf("a branch on its own database writing to the parent's: %q", got)
+	}
+	if got, _ := carriedDBURL("DATABASE_URL", parent, onServer("shop"), "shop_isolated"); got != "mysql://me:pw@host.containers.internal:3307/shop_isolated?charset=utf8mb4" {
+		t.Errorf("the registered isolated database wins: %q", got)
+	}
+	if got, _ := carriedDBURL("DATABASE_URL", map[string]string{"DATABASE_URL": `"` + url + `"`}, onServer("shop_feature"), ""); got != `"mysql://me:pw@host.containers.internal:3307/shop_feature?charset=utf8mb4"` {
+		t.Errorf("a quoted URL stays quoted: %q", got)
+	}
+	if _, ok := carriedDBURL("DATABASE_URL", parent, "mysql://me:pw@db.elsewhere:3306/shop", ""); ok {
+		t.Error("a worktree moved to another server stays there")
+	}
+	if _, ok := carriedDBURL("", parent, "", ""); ok {
+		t.Error("a framework with no URL key has nothing to carry")
+	}
+	if _, ok := carriedDBURL("DATABASE_URL", map[string]string{}, "", ""); ok {
+		t.Error("a parent with no URL has nothing to carry")
+	}
+}

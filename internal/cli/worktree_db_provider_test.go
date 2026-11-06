@@ -219,3 +219,50 @@ func TestDropOrphanedWorktreeDBs_KeepsTheRecordWhenTheDropFails(t *testing.T) {
 		t.Error("the record of a database still out there must be kept")
 	}
 }
+
+// DB_HOST=127.0.0.1 with mysql in .lerd.yaml reads as lerd's container, so a
+// server on the machine used to get its worktree cloned into the wrong one.
+func TestSetWorktreeDBIsolated_LoopbackOnAnotherPortIsNotLerds(t *testing.T) {
+	site, checkout, _ := providerFixture(t, "")
+	removeProvider(t)
+	for _, dir := range []string{site.Path, checkout} {
+		if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("DB_HOST=127.0.0.1\nDB_PORT=3306\nDB_DATABASE=acme\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(site.Path, ".lerd.yaml"), []byte("services:\n  - mysql\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+		if c.Services == nil {
+			c.Services = map[string]config.ServiceConfig{}
+		}
+		sc := c.Services["mysql"]
+		sc.Port = 3308
+		c.Services["mysql"] = sc
+	}); err != nil {
+		t.Fatal(err)
+	}
+	created := ""
+	orig := createDatabaseFn
+	createDatabaseFn = func(service, name string) (bool, error) {
+		created = service + "/" + name
+		return true, nil
+	}
+	t.Cleanup(func() { createDatabaseFn = orig })
+
+	err := SetWorktreeDBIsolated(site, "feature", true, "empty")
+	if err == nil || !strings.Contains(err.Error(), "does not use a lerd-managed") {
+		t.Fatalf("got %v", err)
+	}
+	if created != "" {
+		t.Errorf("lerd created %s", created)
+	}
+}
+
+func removeProvider(t *testing.T) {
+	t.Helper()
+	if err := plugins.Remove("brancher"); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -330,6 +330,8 @@ type CustomService struct {
 	// (mysqldump, pg_dump, psql…) so host tools and IDEs can run them against
 	// external databases. Empty for services with nothing to expose.
 	ClientShims []ClientShim `yaml:"client_shims,omitempty" json:"client_shims,omitempty"`
+	// External, when set, makes this a client for a server lerd does not run.
+	External *ExternalDB `yaml:"external,omitempty" json:"external,omitempty"`
 	// Introspect, when set, lets the databases UI enumerate the databases inside
 	// this engine and read their sizes. Only database-engine presets declare it.
 	Introspect *Introspect `yaml:"introspect,omitempty" json:"introspect,omitempty"`
@@ -886,7 +888,7 @@ func LoadCustomServiceFromFile(path string) (*CustomService, error) {
 	if svc.Name == "" {
 		return nil, fmt.Errorf("%s: missing required field \"name\"", path)
 	}
-	if svc.Image == "" {
+	if svc.Image == "" && svc.External == nil {
 		return nil, fmt.Errorf("%s: missing required field \"image\"", path)
 	}
 	// Migrate: legacy YAMLs may have a files: block. Strip it and re-save so

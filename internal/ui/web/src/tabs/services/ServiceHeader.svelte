@@ -11,6 +11,8 @@
   import SitesPopover from '$components/SitesPopover.svelte';
   import ParentSiteBadge from './ParentSiteBadge.svelte';
   import ServiceDependencies from './ServiceDependencies.svelte';
+  import ExternalDbSettingsModal from './ExternalDbSettingsModal.svelte';
+  import ExternalDbUseModal from './ExternalDbUseModal.svelte';
   import ServiceDeleteModal from './ServiceDeleteModal.svelte';
   import ServiceReinstallModal from './ServiceReinstallModal.svelte';
   import {
@@ -114,7 +116,9 @@
       /* clipboard unavailable; nothing to recover */
     }
   }
-  const pillLabel = $derived(exposedPort ? String(exposedPort) : svc.idle_suspended ? m.services_sleeping() : svc.status);
+  const pillLabel = $derived(
+    exposedPort ? String(exposedPort) : svc.idle_suspended ? m.services_sleeping() : svc.status === 'offline' ? m.externalDb_offline() : svc.status
+  );
   const pillTitle = $derived(
     exposedPort
       ? portCopied
@@ -133,6 +137,8 @@
 
   let localBusy = $state(false);
   let deleteOpen = $state(false);
+  let settingsOpen = $state(false);
+  let useOpen = $state(false);
   let reinstallOpen = $state(false);
   let checking = $state(false);
   let checkMessage = $state<{ text: string; tone: 'ok' | 'info' | 'error' } | null>(null);
@@ -294,7 +300,7 @@
       }));
     }
 
-    if (!isWorker && !active && !updating) {
+    if (!isWorker && !active && !updating && svc.status !== 'offline') {
       rest.push({
         id: 'start',
         tone: 'primary',
@@ -304,7 +310,7 @@
       });
     }
 
-    if (active && !isWorker) {
+    if (active && !isWorker && !svc.external) {
       rest.push({
         id: 'restart',
         icon: icons.restart,
@@ -314,7 +320,7 @@
       });
     }
 
-    if (active) {
+    if (active && !svc.external) {
       rest.push({
         id: 'stop',
         icon: icons.stop,
@@ -323,11 +329,11 @@
       });
     }
 
-    if (!isWorker && !pinInGroup) {
+    if (!isWorker && !pinInGroup && !svc.external) {
       rest.push({ ...pinAction(icons.pin), tone: svc.pinned ? 'warn' : 'secondary' });
     }
 
-    if (!isWorker && !updating) {
+    if (!isWorker && !updating && !svc.external) {
       rest.push({
         id: 'check-updates',
         tone: 'secondary',
@@ -338,7 +344,7 @@
       });
     }
 
-    if (!isWorker && !updating) {
+    if (!isWorker && !updating && !svc.external) {
       rest.push({
         id: 'reinstall',
         tone: 'secondary',
@@ -362,7 +368,7 @@
     }
 
     if (!isWorker) {
-      const removeLabel = svc.is_default ? m.common_remove() : m.services_removeCustom();
+      const removeLabel = svc.is_default || svc.external ? m.common_remove() : m.services_removeCustom();
       rest.push({
         id: 'remove',
         tone: 'danger',
@@ -535,7 +541,12 @@
         {m.system_lerd_available({ version: svc.latest_version })}
       </span>
     {/if}
-    <SitesPopover domains={siteDomains} showPinned={$idleEnabled && $idleServices} />
+    <SitesPopover
+      domains={siteDomains}
+      showPinned={$idleEnabled && $idleServices}
+      onadd={svc.external ? () => (useOpen = true) : undefined}
+      addLabel={m.externalDb_useTitle()}
+    />
     <ButtonMenu
       actions={buildActions({
         external: externalIcon,
@@ -550,7 +561,9 @@
         trash: trashIcon,
         checkUpdates: checkUpdatesIcon
       })}
-      inline={pinInGroup ? pinAction(pinIcon) : undefined}
+      inline={pinInGroup && !svc.external ? pinAction(pinIcon) : undefined}
+      onSettings={svc.external ? () => (settingsOpen = true) : undefined}
+      settingsTitle={m.externalDb_settings()}
       {busy}
     />
   </div>
@@ -562,6 +575,11 @@
   onclose={() => (deleteOpen = false)}
   onconfirm={confirmDelete}
 />
+
+{#if svc.external}
+  <ExternalDbSettingsModal open={settingsOpen} {svc} onclose={() => (settingsOpen = false)} />
+  <ExternalDbUseModal open={useOpen} {svc} onclose={() => (useOpen = false)} />
+{/if}
 
 <ServiceReinstallModal
   open={reinstallOpen}

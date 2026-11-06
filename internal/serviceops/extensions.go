@@ -98,6 +98,15 @@ func extensionForLine(exts []Extension, line string) *Extension {
 	return nil
 }
 
+// psqlFor names lerd's account on its own engines; an external server's clients
+// take theirs from the environment.
+func psqlFor(service string) string {
+	if externalServiceFor(service) != nil {
+		return "psql"
+	}
+	return "psql -U postgres"
+}
+
 // CreateExtension creates one extension in a database, idempotently, so a dump
 // that carries its own CREATE EXTENSION and lerd's own call cannot collide.
 func CreateExtension(service, database, name string) error {
@@ -109,7 +118,7 @@ func CreateExtension(service, database, name string) error {
 	}
 	sql := fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %q", name)
 	out, err := containerExec("lerd-"+service,
-		"psql -U postgres -v ON_ERROR_STOP=1 -d "+podman.ShellQuote(database)+" -c "+podman.ShellQuote(sql),
+		psqlFor(service)+" -v ON_ERROR_STOP=1 -d "+podman.ShellQuote(database)+" -c "+podman.ShellQuote(sql),
 		[]string{"PGPASSWORD=lerd"}, nil, introspectTimeout)
 	if err != nil {
 		return fmt.Errorf("creating extension %s in %s: %w\n%s", name, database, err, strings.TrimSpace(string(out)))
@@ -123,7 +132,7 @@ func InstalledExtensions(service, database string) ([]string, error) {
 		return nil, err
 	}
 	out, err := containerExec("lerd-"+service,
-		"psql -U postgres -At -d "+podman.ShellQuote(database)+" -c "+
+		psqlFor(service)+" -At -d "+podman.ShellQuote(database)+" -c "+
 			podman.ShellQuote("SELECT extname FROM pg_extension ORDER BY extname"),
 		[]string{"PGPASSWORD=lerd"}, nil, introspectTimeout)
 	if err != nil {

@@ -92,6 +92,9 @@ type ConflictingDomain struct {
 
 // EnrichedSite is the superset of site information needed by all surfaces.
 type EnrichedSite struct {
+	// ExternalDB names the external database service the site chose, whose name
+	// says nothing about what it is.
+	ExternalDB string
 	// Base fields from config.Site
 	Name          string
 	Domains       []string
@@ -392,6 +395,9 @@ func Enrich(s config.Site, flags EnrichFlag) EnrichedSite {
 
 	if flags&EnrichGit != 0 {
 		e.enrichGit()
+		if svc := config.ExternalDBServiceFor(e.Path); svc != nil {
+			e.ExternalDB = svc.Name
+		}
 	}
 
 	if flags&EnrichServices != 0 {
