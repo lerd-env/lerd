@@ -1,7 +1,6 @@
-# Checks what the Lerd installer leaves on Windows, one PASS or FAIL line each,
-# in the format the release lanes read. -Absent checks the same things are gone
-# after an uninstall; the distro goes too only when it was deleted, -DistroDeleted.
-# -Distro names it after an uninstall, which removes the config it is read from.
+# Checks the Windows install, one PASS or FAIL line each for the release lanes.
+# -Absent checks removal; -DistroDeleted also checks the distro was deleted.
+# -Distro supplies its name after uninstall removes the config.
 param([switch] $Absent, [switch] $DistroDeleted, [string] $Distro)
 $ErrorActionPreference = 'SilentlyContinue'
 $script:fails = 0
