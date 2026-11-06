@@ -250,6 +250,10 @@ Windows itself is running in a virtual machine. It only means you cannot run a V
 The project is somewhere under `/mnt/c/...`. Move it into `~/projects/` and re-link.
 :::
 
+::: details `lerd wsl:setup` says `lerd.exe` is not installed
+It rides in the release archive, so an install that did not come through the installer can be without it, and `lerd doctor` warns about it under WSL2. Run `lerd update`, which fetches it even when lerd is already on the latest version, then run `lerd wsl:setup` again. A lerd owned by a package manager cannot be repaired this way, so install it with the installer instead.
+:::
+
 ::: details `curl.exe` on Windows rejects a `.test` certificate that browsers accept
 Windows' own curl insists on a certificate revocation check, which a local CA cannot answer. Browsers do not, so this is curl only; `curl.exe --ssl-no-revoke` gets past it.
 :::

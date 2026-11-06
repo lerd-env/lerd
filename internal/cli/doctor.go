@@ -337,6 +337,11 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 			}
 		}
 
+		if self, selfErr := selfPath(); selfErr == nil && lerdExeMissing(self) {
+			warn("lerd.exe beside lerd", "the Windows side cannot be set up or refreshed without it, run lerd update")
+			rep.fixLast(manualFixWith("run `lerd update`, which fetches it from the release"))
+		}
+
 		if trayUnitOff(trayUnitState()) {
 			ok("lerd-tray off (no WSL tray host)")
 		} else {
