@@ -156,7 +156,7 @@ func runUpdate(currentVersion string, beta bool) error {
 			feedback.Warn("updating %s: %v", name, err)
 		}
 	}
-	if lerdExeMissing(self) {
+	if releaseLacksLerdExe(extracted) {
 		feedback.Warn("v%s came without lerd.exe, so lerd wsl:setup cannot set up the Windows side", lat)
 	}
 
@@ -837,6 +837,17 @@ func lerdExeMissing(self string) bool {
 	return err != nil
 }
 
+// releaseLacksLerdExe reports whether a WSL install got an extracted release
+// without lerd.exe. It reads the archive because an older copy on disk would
+// otherwise pass for the new one.
+func releaseLacksLerdExe(extracted string) bool {
+	if !platform.Current.WindowsSide {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(extracted, "lerd.exe"))
+	return err != nil
+}
+
 // restoreLerdExe puts back a missing lerd.exe from the release, which is the
 // only place it ships: it has no asset of its own, it rides in the Linux archive.
 func restoreLerdExe(self, latest string) error {
@@ -853,15 +864,15 @@ func restoreLerdExe(self, latest string) error {
 		return fmt.Errorf("restoring lerd.exe: %w", err)
 	}
 	defer cleanup()
+	if releaseLacksLerdExe(extracted) {
+		err := fmt.Errorf("release %s has no lerd.exe for this architecture", latest)
+		dl.Fail(err)
+		return err
+	}
 	dst := filepath.Join(filepath.Dir(self), "lerd.exe")
 	if err := replaceCompanion(filepath.Join(extracted, "lerd.exe"), dst); err != nil {
 		dl.Fail(err)
 		return fmt.Errorf("restoring lerd.exe: %w", err)
-	}
-	if lerdExeMissing(self) {
-		err := fmt.Errorf("release %s has no lerd.exe for this architecture", latest)
-		dl.Fail(err)
-		return err
 	}
 	dl.OK("")
 	return nil
