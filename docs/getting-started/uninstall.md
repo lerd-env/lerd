@@ -56,7 +56,7 @@ Two things are left for you:
 - **The Lerd CA** in the Windows trust store. Open `certmgr.msc`, go to **Trusted Root Certification Authorities**, and delete it.
 - **The desktop app** in `C:\Program Files\Lerd`. If you used `Install-Lerd.exe`, remove **Lerd** from Add/Remove Programs, which can also delete the WSL distro. After an `install.ps1` install, delete the folder yourself.
 
-To remove the distro and everything in it, run `wsl --unregister Ubuntu-24.04` from PowerShell. That deletes your projects inside it too.
+To remove the distro and everything in it, run `wsl --unregister <distro>` from PowerShell, for example `Ubuntu-26.04`. That deletes your projects inside it too.
 
 ## Leftover files
 

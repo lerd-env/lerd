@@ -2,7 +2,7 @@
 # PowerShell and from cmd, in a distro folder and on a drive, one PASS or FAIL
 # line each. Needs a lane run before it: a linked Laravel site in -Site.
 param(
-	[string] $Distro = 'Ubuntu-24.04',
+	[string] $Distro = 'Ubuntu-26.04',
 	[string] $User = $env:USERNAME,
 	[string] $Site = 'demo'
 )

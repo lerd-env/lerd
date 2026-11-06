@@ -26,7 +26,7 @@ SSH=(ssh -o BatchMode=yes -o ConnectTimeout=10 "$G")
 
 win() { "${SSH[@]}" "$@" 2>/dev/null | tr -d '\0\r'; }
 ps() { win "powershell -NoProfile -ExecutionPolicy Bypass $*"; }
-wsl_user() { win "wsl -d Ubuntu-24.04 --cd ~ -- bash -lc \"$1\""; }
+wsl_user() { win "wsl -d Ubuntu-26.04 --cd ~ -- bash -lc \"$1\""; }
 
 # task <name> <command>: an interactive scheduled task, so what it starts
 # shows on the signed-in desktop with admin rights and no UAC prompt.

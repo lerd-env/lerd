@@ -27,7 +27,9 @@
   $ProgressPreference = 'SilentlyContinue'
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-  $Distro = 'Ubuntu-24.04'
+  $FallbackDistro = 'Ubuntu-26.04'
+  $MinUbuntu = 2404
+  $Distro = $FallbackDistro
   # lerd's installer asks sudo for its password, and the steps run detached from
   # the terminal, so the user gets passwordless sudo only while they run.
   $SudoersDropIn = '/etc/sudoers.d/zz-lerd-setup'
@@ -189,15 +191,36 @@
     ($r.Code -eq 0) -and ($r.Lines -contains $Distro)
   }
 
-  # DistroOffered reports whether wsl.exe can install the distro. Old WSL reads a
-  # legacy list with no versioned Ubuntu. A failed lookup counts as offered, so
-  # the install itself reports the network error rather than a pointless update.
-  function DistroOffered {
-    $r = Capture $RealWSLExe '--list --online'
-    ($r.Code -ne 0) -or [bool]($r.Lines -match "^$([regex]::Escape($Distro))\s")
+  # NewestUbuntu returns the newest Ubuntu-NN.NN in a `wsl` list. Lerd needs
+  # podman 4.5, which Ubuntu ships from 24.04 on, so anything older does not count.
+  function NewestUbuntu([string[]]$lines) {
+    $lines | ForEach-Object { if ($_ -match '^(Ubuntu-(\d\d)\.(\d\d))(\s|$)') { $Matches[1] } } |
+      Where-Object { [int]($_ -replace '\D') -ge $MinUbuntu } |
+      Sort-Object { [int]($_ -replace '\D') } | Select-Object -Last 1
   }
 
-  function WSLReady { (WSLInstalled) -and ((DistroInstalled) -or (DistroOffered)) }
+  function InstalledUbuntu {
+    if (-not (Test-Path $RealWSLExe)) { return $null }
+    $r = Capture $RealWSLExe '-l -q'
+    if ($r.Code -eq 0) { NewestUbuntu $r.Lines }
+  }
+
+  # OfferedUbuntu is empty on a WSL too old to list a usable Ubuntu. A failed
+  # lookup gives the fallback, so the install reports the network error itself.
+  function OfferedUbuntu {
+    $r = Capture $RealWSLExe '--list --online'
+    if ($r.Code -eq 0) { NewestUbuntu $r.Lines } else { $FallbackDistro }
+  }
+
+  # PickDistro stays on an Ubuntu already here: a newer one on offer would
+  # otherwise get a second, empty distro beside it.
+  function PickDistro {
+    $d = InstalledUbuntu
+    if (-not $d) { $d = OfferedUbuntu }
+    if ($d) { $d } else { $FallbackDistro }
+  }
+
+  function WSLReady { (WSLInstalled) -and ((InstalledUbuntu) -or (OfferedUbuntu)) }
 
   # ExistingUser returns the distro's uid 1000 user, the one this script creates.
   function ExistingUser {
@@ -238,7 +261,7 @@
 
   function AskUser {
     Write-Host ''
-    Write-Host "  lerd runs inside an Ubuntu 24.04 WSL distro, under its own Linux user."
+    Write-Host "  lerd runs inside an Ubuntu WSL distro, under its own Linux user."
     Write-Host "  Choose a name and a password for that user. sudo asks for this password inside Linux."
     $suggested = LinuxUsername $env:USERNAME
     while ($true) {
@@ -651,6 +674,8 @@ namespace LerdSetup {
   }
   Remove-ItemProperty -Path $RunOnceKey -Name 'lerd-setup' -ErrorAction SilentlyContinue
 
+  $Distro = PickDistro
+
   # The user is asked for after the restart, so it is not typed twice.
   if (-not (WSLFeaturesEnabled)) {
     try { EnableFeatures } catch { Warn $_.Exception.Message; Warn 'Run the installer again to retry.' }
@@ -683,6 +708,7 @@ namespace LerdSetup {
 
   try {
     EnsureWSL
+    $Distro = PickDistro
     EnsureDistro
     EnsureUser
     InstallPackages

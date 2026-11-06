@@ -12,7 +12,7 @@ function Check([string] $name, [bool] $present) {
 }
 
 $wsl = 'C:\Program Files\WSL\wsl.exe'
-$distro = 'Ubuntu-24.04'
+$distro = 'Ubuntu-26.04'
 $lerdBin = Join-Path $env:LOCALAPPDATA 'lerd\bin'
 $uninstallKey = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{6F2B7C1E-3D4A-4E8B-9C2F-1A5D8E7B4C30}_is1'
 
