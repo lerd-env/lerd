@@ -2,6 +2,7 @@ package git
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -647,5 +648,81 @@ func TestEnsureWorktreeEnv_isolatedDBURLOverrideSkipped(t *testing.T) {
 	}
 	if !strings.Contains(string(got), "/shop_feat") {
 		t.Errorf("isolated URL was clobbered by env_overrides:\n%s", got)
+	}
+}
+
+func gitInTest(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-c", "user.email=t@t", "-c", "user.name=t"}, args...)...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+// urlRepoWithWorktree is a site whose connection file is committed with the app's
+// own default, as Yii's config/db.php is, and which lerd has since wired.
+func urlRepoWithWorktree(t *testing.T) (main, wt string) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	main = t.TempDir()
+	wt = filepath.Join(t.TempDir(), "wt")
+	if err := config.SaveStoreFramework(&config.Framework{
+		Name:   "acme",
+		Detect: []config.FrameworkRule{{File: "acme.lock"}},
+		Env: config.FrameworkEnvConf{
+			File: "db.env",
+			Services: map[string]config.FrameworkServiceDef{
+				"mysql": {
+					Detect: []config.FrameworkServiceDetect{{Key: "dsn", ValuePrefix: "mysql:"}},
+					Vars:   []string{"dsn=mysql:host=lerd-mysql;dbname={{site}}"},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"acme.lock": "", "db.env": "dsn=mysql:host=localhost;dbname=appdefault\n"} {
+		if err := os.WriteFile(filepath.Join(main, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitInTest(t, main, "init", "-q")
+	gitInTest(t, main, "add", ".")
+	gitInTest(t, main, "commit", "-qm", "base")
+	gitInTest(t, main, "worktree", "add", "-q", wt, "-b", "feat")
+	if err := os.WriteFile(filepath.Join(main, "db.env"), []byte("dsn=mysql:host=lerd-mysql;dbname=shop\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return main, wt
+}
+
+// The committed default is not a choice the worktree made: left there, it cannot
+// reach the parent's database, and isolating it is refused.
+func TestEnsureWorktreeEnv_replacesACommittedDefaultConnection(t *testing.T) {
+	main, wt := urlRepoWithWorktree(t)
+
+	EnsureWorktreeEnv(main, wt, "feat.shop.test", false)
+
+	got, _ := os.ReadFile(filepath.Join(wt, "db.env"))
+	if !strings.Contains(string(got), "host=lerd-mysql;dbname=shop") {
+		t.Errorf("worktree env = %s", got)
+	}
+}
+
+// A connection changed by hand in the worktree stays: that one is a choice.
+func TestEnsureWorktreeEnv_leavesAConnectionChangedByHand(t *testing.T) {
+	main, wt := urlRepoWithWorktree(t)
+	const mine = "dsn=mysql:host=db.elsewhere;dbname=mine\n"
+	if err := os.WriteFile(filepath.Join(wt, "db.env"), []byte(mine), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	EnsureWorktreeEnv(main, wt, "feat.shop.test", false)
+
+	got, _ := os.ReadFile(filepath.Join(wt, "db.env"))
+	if !strings.Contains(string(got), "host=db.elsewhere;dbname=mine") {
+		t.Errorf("worktree env = %s", got)
 	}
 }

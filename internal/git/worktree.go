@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -426,10 +427,35 @@ func EnsureWorktreeEnv(mainRepoPath, worktreePath, worktreeDomain string, secure
 		}
 	}
 
+	if key, value, ok := committedDefaultConnection(mainRepoPath, worktreePath, envFile, format); ok {
+		updates[key] = value
+	}
+
 	if len(updates) == 0 {
 		return
 	}
 	_ = envfile.ApplyUpdatesIn(worktreeEnv, format, updates)
+}
+
+// committedDefaultConnection is the parent's connection for a worktree whose file
+// is tracked and untouched, as Yii's config/db.php is: it holds the app's default,
+// not a choice, and cannot reach the parent's database. A hand edit stays.
+func committedDefaultConnection(mainRepoPath, worktreePath, envFile, format string) (key, value string, ok bool) {
+	key, value = config.DBURLFor(mainRepoPath)
+	if key == "" || value == "" {
+		return "", "", false
+	}
+	mine := envfile.Reader(filepath.Join(worktreePath, envFile), format)(key)
+	if mine == "" || config.SameDBURLHost(mine, value) {
+		return "", "", false
+	}
+	if exec.Command("git", "-C", worktreePath, "ls-files", "--error-unmatch", envFile).Run() != nil {
+		return "", "", false
+	}
+	if exec.Command("git", "-C", worktreePath, "diff", "--quiet", "HEAD", "--", envFile).Run() != nil {
+		return "", "", false
+	}
+	return key, value, true
 }
 
 func copyFile(src, dst string) error {
