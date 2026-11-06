@@ -387,3 +387,53 @@ func TestIsolateWithPlugin_UndoesADatabaseItCannotConnect(t *testing.T) {
 		t.Errorf("the plugin was left holding the database: %s", got)
 	}
 }
+
+// The copy goes on the parent's server, so a worktree pointed elsewhere would
+// report isolated while connected to a server that does not have it.
+func TestSetWorktreeDBIsolated_RefusesAWorktreeOnAnotherServer(t *testing.T) {
+	site, checkout := urlFrameworkFixture(t)
+	env := filepath.Join(checkout, ".env.local")
+	const elsewhere = "DATABASE_URL=mysql://me:pw@db.elsewhere:3306/acme\n"
+	if err := os.WriteFile(env, []byte(elsewhere), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	orig := createDatabaseFn
+	created := false
+	createDatabaseFn = func(string, string) (bool, error) {
+		created = true
+		return true, nil
+	}
+	t.Cleanup(func() { createDatabaseFn = orig })
+
+	err := SetWorktreeDBIsolated(site, "feature", true, "empty")
+	if err == nil || !strings.Contains(err.Error(), "another server") {
+		t.Fatalf("got %v", err)
+	}
+	if created || config.WorktreeDBIsolated(checkout) {
+		t.Errorf("created=%v isolated=%v, want nothing changed", created, config.WorktreeDBIsolated(checkout))
+	}
+	if got := readFile(t, env); got != elsewhere {
+		t.Errorf("env changed: %s", got)
+	}
+}
+
+// A database the plugin could not drop has to stay findable, or nothing ever
+// cleans it up. db:share is what clears it later.
+func TestIsolateWithPlugin_KeepsARecordWhenItCannotDrop(t *testing.T) {
+	site, checkout, _ := providerFixture(t, `case "$1" in create) echo '{"database":"acme_feature","host":"branch.example"}';; drop) echo cannot >&2; exit 1;; esac`+"\n")
+	writeURLFramework(t, site.Path, checkout)
+
+	err := SetWorktreeDBIsolated(site, "feature", true, "empty")
+	if err == nil || !strings.Contains(err.Error(), "DATABASE_URL") || !strings.Contains(err.Error(), "acme_feature") {
+		t.Fatalf("got %v", err)
+	}
+	if !strings.Contains(err.Error(), "cannot") {
+		t.Errorf("the failed cleanup must be reported: %v", err)
+	}
+	if _, ok, _ := config.FindWorktreeDB(site.Name, "feature"); !ok {
+		t.Error("the leftover database lost its record")
+	}
+	if config.WorktreeDBIsolated(checkout) {
+		t.Error("the worktree still shares the parent's database and must say so")
+	}
+}

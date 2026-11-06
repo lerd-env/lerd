@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -96,6 +97,9 @@ func SetWorktreeDBIsolated(site *config.Site, branch string, isolated bool, sour
 	readWorktree := worktreeEnvReader(binding, site.Path, wt.Path)
 
 	if isolated {
+		if err := worktreeOnParentServer(binding, site, wt.Path); err != nil {
+			return err
+		}
 		p := plugins.ProviderOf(plugins.JobWorktreeDatabase)
 		if kept, ok, _ := config.FindWorktreeDB(site.Name, branch); ok && (kept.Provider != "" || p != nil) {
 			return reconnectKeptDB(p, site, wt.Path, kept)
@@ -184,8 +188,12 @@ func isolateWithPlugin(p *plugins.Plugin, site *config.Site, wtPath, branch, sou
 	}
 	entry := config.WorktreeDBEntry{Site: site.Name, Branch: branch, Service: service, DBName: got.Database, Host: got.Host, Provider: p.Name}
 	if err := worktreeHostFits(site, entry); err != nil {
-		_ = dropWorktreeDB(entry)
-		return err
+		dropErr := dropWorktreeDB(entry)
+		if dropErr == nil {
+			return err
+		}
+		// Left behind, it needs its record for db:share to find and drop it.
+		return errors.Join(err, dropErr, config.AddWorktreeDB(entry))
 	}
 	if err := config.AddWorktreeDB(entry); err != nil {
 		_ = dropWorktreeDB(entry)
@@ -209,6 +217,9 @@ func connectWorktreeDB(site *config.Site, wtPath string, entry config.WorktreeDB
 	if err := worktreeHostFits(site, entry); err != nil {
 		return err
 	}
+	if err := worktreeOnParentServer(config.DBEnvBindingFor(site.Path), site, wtPath); err != nil {
+		return err
+	}
 	if err := setWorktreeDBIsolatedFlag(site.Path, wtPath, true); err != nil {
 		return err
 	}
@@ -230,6 +241,20 @@ func worktreeHostFits(site *config.Site, entry config.WorktreeDBEntry) error {
 		return fmt.Errorf("%s keeps its server in %s, which cannot take the host a plugin serves %s from", site.Name, binding.URLKey, entry.DBName)
 	}
 	return nil
+}
+
+// worktreeOnParentServer refuses a worktree whose own connection names another
+// server: its database is made on the parent's, where it could not reach it.
+func worktreeOnParentServer(binding config.DBEnvBinding, site *config.Site, wtPath string) error {
+	if binding.URLKey == "" {
+		return nil
+	}
+	mine := envfile.Reader(filepath.Join(wtPath, binding.File), binding.Format)(binding.URLKey)
+	parent := envfile.Reader(filepath.Join(site.Path, binding.File), binding.Format)(binding.URLKey)
+	if mine == "" || config.SameDBURLHost(mine, parent) {
+		return nil
+	}
+	return fmt.Errorf("this worktree's %s points at another server than %s, so it cannot reach a copy made there", binding.URLKey, site.Name)
 }
 
 // worktreeEnvReader reads the worktree's own value, so its connection options
