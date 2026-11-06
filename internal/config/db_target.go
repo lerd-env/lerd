@@ -71,6 +71,7 @@ type dbServiceBinding struct {
 	DBEnvBinding
 	service string
 	detect  []FrameworkServiceDetect
+	keys    []string
 }
 
 // defaultDBEnvBinding is the shape Laravel gave everyone, and what a project
@@ -162,6 +163,7 @@ func dbEnvBindings(projectDir string) (bindings []dbServiceBinding, file, format
 			if !found {
 				continue
 			}
+			b.keys = append(b.keys, key)
 			switch {
 			case val == "{{site}}":
 				b.NameKey = key
@@ -443,6 +445,24 @@ func DBURLFor(projectDir string) (key, value string) {
 		}
 	}
 	return "", ""
+}
+
+// DBURLConnection is every value a URL-keyed framework declares for its database,
+// as a project holds them: the URL, and for Yii the login kept beside it.
+func DBURLConnection(projectDir string) map[string]string {
+	bindings, file, format := dbEnvBindings(projectDir)
+	vals := envfile.Values(filepath.Join(projectDir, file), format)
+	for _, b := range bindings {
+		if b.URLKey == "" || !serviceDetectedIn(b.detect, vals) {
+			continue
+		}
+		out := map[string]string{}
+		for _, k := range b.keys {
+			out[k] = vals[k]
+		}
+		return out
+	}
+	return nil
 }
 
 // SameDBURLHost reports whether two connection values reach the same server, a
