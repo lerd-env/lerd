@@ -1554,8 +1554,12 @@ func worktreeExternalDB(site *config.Site, branch, worktreePath string) (map[str
 	if len(external) == 0 {
 		return nil, nil
 	}
-	urlKey := config.DBURLKeyFor(site.Path)
-	if url, ok := carriedDBURL(urlKey, parent, current); ok {
+	urlKey, mine := config.DBURLFor(worktreePath)
+	isolatedDB := ""
+	if e, ok, _ := config.FindWorktreeDB(site.Name, branch); ok {
+		isolatedDB = e.DBName
+	}
+	if url, ok := carriedDBURL(urlKey, parent, mine, isolatedDB); ok {
 		return map[string]string{urlKey: url}, external
 	}
 	if current[binding.HostKey] != parent[binding.HostKey] {
@@ -1575,15 +1579,23 @@ func worktreeExternalDB(site *config.Site, branch, worktreePath string) (map[str
 	return overrides, external
 }
 
-// carriedDBURL is the parent's connection URL for a worktree still on that server
-// or holding no URL yet; one moved to another server by hand stays there.
-func carriedDBURL(key string, parent, current map[string]string) (string, bool) {
+// carriedDBURL is the parent's connection for a worktree still on that server or
+// holding no URL yet, naming the worktree's own database: taking the parent's
+// would send a branch's migrations there. One moved by hand stays where it is.
+func carriedDBURL(key string, parent map[string]string, mine, isolatedDB string) (string, bool) {
 	url, ok := parent[key]
 	if key == "" || !ok {
 		return "", false
 	}
-	if mine := current[key]; mine != "" && !config.SameDBURLHost(mine, url) {
+	if mine != "" && !config.SameDBURLHost(mine, url) {
 		return "", false
+	}
+	name := isolatedDB
+	if name == "" {
+		name = config.DBNameInURL(mine)
+	}
+	if name != "" {
+		url = config.DBURLWithName(url, name)
 	}
 	return url, true
 }

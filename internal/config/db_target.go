@@ -413,22 +413,48 @@ func DBEndpointFor(projectDir string) DBEndpoint {
 	return e
 }
 
-// DBURLKeyFor is the key a framework keeps its whole connection in, or "" for one
-// that spells it out in separate keys.
-func DBURLKeyFor(projectDir string) string {
-	bindings, _, _ := dbEnvBindings(projectDir)
+// DBURLFor is the key a framework keeps its whole connection in and the value a
+// project has there, read from the file the framework declares. The key is "" for
+// a framework that spells the connection out in separate keys.
+func DBURLFor(projectDir string) (key, value string) {
+	bindings, file, format := dbEnvBindings(projectDir)
 	for _, b := range bindings {
 		if b.urlKey != "" {
-			return b.urlKey
+			return b.urlKey, envfile.Values(filepath.Join(projectDir, file), format)[b.urlKey]
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // SameDBURLHost reports whether two connection URLs name the same host and port.
 func SameDBURLHost(a, b string) bool {
 	x, y := endpointFromURL(a), endpointFromURL(b)
 	return x.Host == y.Host && x.Port == y.Port
+}
+
+// DBNameInURL is the database a connection URL names.
+func DBNameInURL(raw string) string {
+	return endpointFromURL(raw).Database
+}
+
+// DBURLWithName swaps the database in a connection URL by hand, since a rebuilt
+// URL would re-encode a password the framework reads as written.
+func DBURLWithName(raw, name string) string {
+	_, rest, ok := strings.Cut(raw, "://")
+	if !ok {
+		return raw
+	}
+	schemeEnd := len(raw) - len(rest)
+	slash := strings.Index(rest, "/")
+	if slash < 0 {
+		return raw
+	}
+	start := schemeEnd + slash + 1
+	end := len(raw)
+	if i := strings.IndexAny(raw[start:], `?"'`); i >= 0 {
+		end = start + i
+	}
+	return raw[:start] + name + raw[end:]
 }
 
 func endpointFromURL(raw string) DBEndpoint {

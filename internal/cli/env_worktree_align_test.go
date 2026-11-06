@@ -303,22 +303,32 @@ func TestWorktreeExternalDB_ignoresAParentNotOnAnExternalDatabase(t *testing.T) 
 // A Symfony parent keeps its server in one URL, which no DB_* key would carry, so
 // the worktree fell back to the framework's default on lerd's own MySQL.
 func TestCarriedDBURL(t *testing.T) {
-	const url = "mysql://me:pw@host.containers.internal:3307/shop"
+	const url = "mysql://me:pw@host.containers.internal:3307/shop?charset=utf8mb4"
 	parent := map[string]string{"DATABASE_URL": url}
+	onServer := func(db string) string { return "mysql://old:old@host.containers.internal:3307/" + db }
 
-	if got, ok := carriedDBURL("DATABASE_URL", parent, map[string]string{"DATABASE_URL": "mysql://me:pw@host.containers.internal:3307/other"}); !ok || got != url {
-		t.Errorf("same server: %q %v", got, ok)
-	}
-	if got, ok := carriedDBURL("DATABASE_URL", parent, nil); !ok || got != url {
+	if got, ok := carriedDBURL("DATABASE_URL", parent, "", ""); !ok || got != url {
 		t.Errorf("no URL yet: %q %v", got, ok)
 	}
-	if _, ok := carriedDBURL("DATABASE_URL", parent, map[string]string{"DATABASE_URL": "mysql://me:pw@db.elsewhere:3306/shop"}); ok {
+	if got, ok := carriedDBURL("DATABASE_URL", parent, onServer("shop"), ""); !ok || got != url {
+		t.Errorf("sharing the parent's database: %q %v", got, ok)
+	}
+	if got, _ := carriedDBURL("DATABASE_URL", parent, onServer("shop_feature"), ""); got != "mysql://me:pw@host.containers.internal:3307/shop_feature?charset=utf8mb4" {
+		t.Errorf("a branch on its own database writing to the parent's: %q", got)
+	}
+	if got, _ := carriedDBURL("DATABASE_URL", parent, onServer("shop"), "shop_isolated"); got != "mysql://me:pw@host.containers.internal:3307/shop_isolated?charset=utf8mb4" {
+		t.Errorf("the registered isolated database wins: %q", got)
+	}
+	if got, _ := carriedDBURL("DATABASE_URL", map[string]string{"DATABASE_URL": `"` + url + `"`}, onServer("shop_feature"), ""); got != `"mysql://me:pw@host.containers.internal:3307/shop_feature?charset=utf8mb4"` {
+		t.Errorf("a quoted URL stays quoted: %q", got)
+	}
+	if _, ok := carriedDBURL("DATABASE_URL", parent, "mysql://me:pw@db.elsewhere:3306/shop", ""); ok {
 		t.Error("a worktree moved to another server stays there")
 	}
-	if _, ok := carriedDBURL("", parent, nil); ok {
+	if _, ok := carriedDBURL("", parent, "", ""); ok {
 		t.Error("a framework with no URL key has nothing to carry")
 	}
-	if _, ok := carriedDBURL("DATABASE_URL", map[string]string{}, nil); ok {
+	if _, ok := carriedDBURL("DATABASE_URL", map[string]string{}, "", ""); ok {
 		t.Error("a parent with no URL has nothing to carry")
 	}
 }
