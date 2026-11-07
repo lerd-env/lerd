@@ -127,6 +127,15 @@ describe('SetupCard', () => {
     expect(button).toBeEnabled();
   });
 
+  it('explains itself when the browser has notifications blocked', async () => {
+    const { SetupCard, render, screen, fireEvent } = await load({ site: true });
+    vi.stubGlobal('Notification', { permission: 'denied' });
+    render(SetupCard);
+    await fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
+    await vi.waitFor(() => expect(screen.getByText(/site-permission settings/)).toBeInTheDocument());
+    vi.unstubAllGlobals();
+  });
+
   it('registers lerd with the AI assistants from its step', async () => {
     const { SetupCard, render, screen, fireEvent, fetchMock } = await load({ site: true, service: true, notify: true, open: true, idle: true });
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) =>

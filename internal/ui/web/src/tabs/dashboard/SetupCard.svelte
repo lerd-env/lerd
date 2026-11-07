@@ -17,7 +17,7 @@
   const copy: Record<SetupStepId, { title: () => string; hint: () => string; cta: () => string; failed?: () => string; primary?: boolean }> = {
     site: { title: m.setup_site_title, hint: m.setup_site_hint, cta: m.onboarding_link_cta, primary: true },
     service: { title: m.setup_service_title, hint: m.setup_service_hint, cta: m.onboarding_service_cta },
-    notify: { title: m.setup_notify_title, hint: m.setup_notify_hint, cta: m.notify_banner_enable },
+    notify: { title: m.setup_notify_title, hint: m.setup_notify_hint, cta: m.notify_banner_enable, failed: m.notify_settings_denied_generic },
     theme: { title: m.setup_theme_title, hint: m.setup_theme_hint, cta: () => m.setup_theme_cta({ name: $desktopPalette?.name ?? '' }) },
     open: { title: m.setup_open_title, hint: m.setup_open_hint, cta: m.setup_turnOn },
     idle: { title: m.setup_idle_title, hint: m.setup_idle_hint, cta: m.setup_turnOn },
@@ -27,7 +27,7 @@
   const actions: Record<SetupStepId, () => unknown> = {
     site: openLinkModal,
     service: openPresetModal,
-    notify: enableNotifications,
+    notify: async () => (await enableNotifications()) === 'granted',
     theme: useSuggestedTheme,
     open: () => toggleStartOnDashboardOpen(true),
     idle: () => saveIdle(true, $idleTimeoutMinutes),
