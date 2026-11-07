@@ -14,25 +14,39 @@
   const CELEBRATE_MS = 3000;
   const RING = 2 * Math.PI * 15;
 
-  const copy: Record<SetupStepId, { title: () => string; hint: () => string; cta: () => string; primary?: boolean }> = {
+  const copy: Record<SetupStepId, { title: () => string; hint: () => string; cta: () => string; failed?: () => string; primary?: boolean }> = {
     site: { title: m.setup_site_title, hint: m.setup_site_hint, cta: m.onboarding_link_cta, primary: true },
     service: { title: m.setup_service_title, hint: m.setup_service_hint, cta: m.onboarding_service_cta },
-    notify: { title: m.setup_notify_title, hint: m.setup_notify_hint, cta: m.notify_banner_enable },
+    notify: { title: m.setup_notify_title, hint: m.setup_notify_hint, cta: m.notify_banner_enable, failed: m.notify_settings_denied_generic },
     theme: { title: m.setup_theme_title, hint: m.setup_theme_hint, cta: () => m.setup_theme_cta({ name: $desktopPalette?.name ?? '' }) },
     open: { title: m.setup_open_title, hint: m.setup_open_hint, cta: m.setup_turnOn },
     idle: { title: m.setup_idle_title, hint: m.setup_idle_hint, cta: m.setup_turnOn },
-    mcp: { title: m.setup_mcp_title, hint: m.setup_mcp_hint, cta: m.setup_turnOn }
+    mcp: { title: m.setup_mcp_title, hint: m.setup_mcp_hint, cta: m.setup_turnOn, failed: m.system_mcp_failed }
   };
 
-  const actions: Record<SetupStepId, () => void> = {
+  const actions: Record<SetupStepId, () => unknown> = {
     site: openLinkModal,
     service: openPresetModal,
-    notify: () => void enableNotifications(),
+    notify: async () => (await enableNotifications()) === 'granted',
     theme: useSuggestedTheme,
-    open: () => void toggleStartOnDashboardOpen(true),
-    idle: () => void saveIdle(true, $idleTimeoutMinutes),
-    mcp: () => void toggleMCP(true)
+    open: () => toggleStartOnDashboardOpen(true),
+    idle: () => saveIdle(true, $idleTimeoutMinutes),
+    mcp: () => toggleMCP(true)
   };
+
+  // Some steps take a while on the host, and one that fails must not look like
+  // a button that did nothing.
+  let busy = $state<SetupStepId | null>(null);
+  let failed = $state<SetupStepId | null>(null);
+  async function run(id: SetupStepId) {
+    busy = id;
+    failed = null;
+    try {
+      if ((await actions[id]()) === false) failed = id;
+    } finally {
+      busy = null;
+    }
+  }
 
   const doneCount = $derived($setupSteps.filter((s) => s.done).length);
   let celebrating = $state(false);
@@ -102,14 +116,28 @@
             <span class="w-[18px] h-[18px] rounded-full border-[1.5px] border-gray-300 dark:border-gray-600"></span>
             <span class="min-w-0">
               <span class="block text-sm font-semibold text-gray-800 dark:text-gray-100">{c.title()}</span>
-              <span class="block text-xs text-gray-500 dark:text-gray-400">{c.hint()}</span>
+              {#if failed === step.id}
+                <span class="block text-xs text-red-600 dark:text-red-400">{(c.failed ?? m.common_failed)()}</span>
+              {:else}
+                <span class="block text-xs text-gray-500 dark:text-gray-400">{c.hint()}</span>
+              {/if}
             </span>
             {#if $accessMode.localControl}
               <button
                 type="button"
-                onclick={actions[step.id]}
+                onclick={() => run(step.id)}
+                disabled={busy !== null}
+                aria-busy={busy === step.id}
                 class="shrink-0 inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium transition-colors {c.primary ? 'bg-lerd-red hover:bg-lerd-redhov text-lerd-onred' : 'bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/20 text-gray-700 dark:text-gray-200'}"
-              >{c.cta()}</button>
+              >
+                {#if busy === step.id}
+                  <svg class="w-3 h-3 mr-1.5 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                {/if}
+                {c.cta()}
+              </button>
             {:else}
               <span class="text-[11px] text-gray-500 dark:text-gray-400 max-w-[12ch] text-right">{m.onboarding_loopbackOnly()}</span>
             {/if}
