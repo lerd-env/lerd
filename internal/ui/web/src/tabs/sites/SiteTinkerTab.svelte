@@ -479,7 +479,9 @@
       {/if}
     </div>
 
-    <!-- Below md the horizontal split stacks, so dragging sideways means nothing there. -->
+    <!-- Below md the horizontal split stacks, so dragging sideways means nothing there.
+         A focusable separator with a value is ARIA's window splitter, interactive by spec. -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
     <div
       role="separator"
       aria-orientation={splitDir === SplitDir.Horizontal ? 'vertical' : 'horizontal'}

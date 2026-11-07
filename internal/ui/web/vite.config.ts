@@ -22,7 +22,7 @@ export default defineConfig(() => ({
     sourcemap: false,
     target: 'es2022',
     // Embedded in the binary and served from localhost, so chunk size costs nothing.
-    chunkSizeWarningLimit: 3000,
+    chunkSizeWarningLimit: 5000,
     rollupOptions: {
       output: {
         entryFileNames: 'assets/[name]-[hash].js',
