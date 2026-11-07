@@ -175,6 +175,7 @@ func serveDNS(cfg winshim.Config, boot func()) error {
 	}
 	defer pc.Close()
 	log.Printf("answering *.%s on 127.0.0.1:53", cfg.TLD)
+	go selfTest(cfg.TLD)
 	buf := make([]byte, 1500)
 	for {
 		n, addr, err := pc.ReadFrom(buf)
@@ -188,6 +189,19 @@ func serveDNS(cfg winshim.Config, boot func()) error {
 		pc.WriteTo(resp, addr) //nolint:errcheck
 		go waker.Check()
 	}
+}
+
+// selfTest asks the agent's own socket a real question, since one that bound
+// fine can still receive nothing. It retries, as Windows may be busy at login.
+func selfTest(tld string) {
+	var err error
+	for range 3 {
+		if err = winshim.Probe("127.0.0.1:53", tld, 2*time.Second); err == nil {
+			log.Print(winshim.ProbePassed)
+			return
+		}
+	}
+	log.Printf("%s: %v. Something on this machine is intercepting DNS, usually a DNS filter such as NextDNS, so *.%s will not resolve in Windows", winshim.ProbeFailed, err, tld)
 }
 
 func fail(err error) {

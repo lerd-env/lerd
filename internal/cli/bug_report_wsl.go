@@ -14,6 +14,17 @@ import (
 	"github.com/geodro/lerd/internal/wsl"
 )
 
+// windowsDNSIntercepted reports whether the agent's self-test failed, read from
+// its log since the distro cannot see what reaches a socket on the Windows side.
+func windowsDNSIntercepted() bool {
+	local, err := windowsEnvPath("LOCALAPPDATA")
+	if err != nil {
+		return false
+	}
+	data, err := os.ReadFile(filepath.Join(local, "lerd", "bin", "lerd-agent.log"))
+	return err == nil && winshim.ProbeFailedIn(string(data))
+}
+
 // dumpWSL adds what only a WSL install has: the WSL build, the distro and
 // Windows config that shape its networking, and the lerd.exe agent that boots
 // the distro and answers DNS for the site TLD.
