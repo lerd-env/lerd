@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { portal } from '$lib/portal';
   import { gitRemote, type GitRemoteOp } from '$stores/sites';
   import { openErrorModal, openPullModal } from '$stores/modals';
   import type { GitStatus } from '$lib/gitStatus';
@@ -141,6 +142,8 @@
   {/each}
 </div>
 
+<!-- On the body: the site header's @container would frame these fixed dialogs and stack them under the nav rail. -->
+<div use:portal>
 <ConfirmModal
   open={confirming !== null}
   title={publishing ? m.gitSync_publishTitle({ branch: branchLabel }) : m.gitSync_pushTitle({ branch: branchLabel })}
@@ -172,3 +175,4 @@
 {:else if viewingFiles}
   <GitDiffModal {domain} {path} branch={branchLabel} outgoing onclose={() => (viewingFiles = false)} />
 {/if}
+</div>
