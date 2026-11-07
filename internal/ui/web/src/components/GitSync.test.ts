@@ -51,6 +51,21 @@ describe('GitSync', () => {
     expect(loadOutgoingVersions).toHaveBeenCalledWith('acme.test', '/srv/acme', 'app.php');
   });
 
+  // GitSync sits in the site header, whose @container frames fixed children and
+  // stacks them under the nav rail, so its dialogs must live outside it.
+  it('draws the push confirmation and its diff outside the header', async () => {
+    loadOutgoingFiles.mockResolvedValue([{ path: 'app.php', status: 'M' }]);
+    loadOutgoingVersions.mockResolvedValue({ original: 'a', modified: 'b', binary: false, too_large: false, unreadable: false });
+    const { container } = render(GitSync, { props: { domain: 'acme.test', branch: '', branchLabel: 'main', path: '/srv/acme', status: { ...synced, ahead: 1 } } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Push to upstream' }));
+    await fireEvent.click(await screen.findByRole('button', { name: /^1\s*Files changed$/ }));
+    await screen.findByText('Outgoing from main');
+    const dialogs = screen.getAllByRole('dialog');
+    expect(dialogs).toHaveLength(2);
+    for (const d of dialogs) expect(container.contains(d)).toBe(false);
+  });
+
   // The confirmation names what is about to leave, and each commit opens over it.
   it('lists the commits a push sends and opens one without losing the confirmation', async () => {
     loadGitCommits.mockResolvedValue({ commits: [{ hash: 'abc1234def', subject: 'fix: the thing' }], more: false });
