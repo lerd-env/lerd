@@ -1,10 +1,87 @@
 package winshim
 
 import (
+	"fmt"
+	"net"
 	"strings"
+	"time"
 
 	"golang.org/x/net/dns/dnsmessage"
 )
+
+// The agent logs one of these after its self-test, and lerd doctor reads the
+// log from inside the distro, which has no other way to see the Windows side.
+const (
+	ProbePassed = "DNS self-test passed"
+	ProbeFailed = "DNS self-test failed"
+)
+
+// probeID marks the self-test's query, so its answer is told from anyone else's.
+const probeID = 0x1e4d
+
+// Probe sends one real query to addr and waits for its answer. A bind proves
+// nothing on its own: a DNS filter on the host can swallow every well-formed
+// query on port 53 while the socket looks healthy.
+func Probe(addr, tld string, timeout time.Duration) error {
+	// One letter, as a long TLD leaves little room under the 255 byte limit.
+	name, err := dnsmessage.NewName("a." + tld + ".")
+	if err != nil {
+		return err
+	}
+	query, err := (&dnsmessage.Message{
+		Header:    dnsmessage.Header{ID: probeID, RecursionDesired: true},
+		Questions: []dnsmessage.Question{{Name: name, Type: dnsmessage.TypeA, Class: dnsmessage.ClassINET}},
+	}).Pack()
+	if err != nil {
+		return err
+	}
+	conn, err := net.Dial("udp", addr)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return err
+	}
+	if _, err := conn.Write(query); err != nil {
+		return err
+	}
+	buf := make([]byte, 1500)
+	for {
+		n, err := conn.Read(buf)
+		if err != nil {
+			return fmt.Errorf("no answer from %s: %w", addr, err)
+		}
+		var m dnsmessage.Message
+		if err := m.Unpack(buf[:n]); err != nil || !m.Response || m.ID != probeID {
+			continue
+		}
+		if !answersLoopback(m) {
+			return fmt.Errorf("%s answered, but not with loopback: %s", addr, m.RCode)
+		}
+		return nil
+	}
+}
+
+// answersLoopback reports whether a reply is the one the agent gives. A filter
+// that answers for it, with an error or an address of its own, is still in the way.
+func answersLoopback(m dnsmessage.Message) bool {
+	if m.RCode != dnsmessage.RCodeSuccess {
+		return false
+	}
+	for _, a := range m.Answers {
+		if r, ok := a.Body.(*dnsmessage.AResource); ok && r.A == [4]byte{127, 0, 0, 1} {
+			return true
+		}
+	}
+	return false
+}
+
+// ProbeFailedIn reports whether the agent's latest self-test in its log failed.
+// A log with no verdict, from an older lerd.exe, is not a failure.
+func ProbeFailedIn(agentLog string) bool {
+	return strings.LastIndex(agentLog, ProbeFailed) > strings.LastIndex(agentLog, ProbePassed)
+}
 
 // Answer replies to one DNS query: every name under tld is loopback, where nginx
 // listens through mirrored networking, and anything else is refused. Answering

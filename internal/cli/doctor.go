@@ -313,6 +313,11 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 			}
 		}
 
+		if dns.ConfiguredTLD() != "localhost" && windowsDNSIntercepted() {
+			warn("Windows DNS agent", "it receives no queries, so ."+dns.ConfiguredTLD()+" sites do not resolve in Windows; a DNS filter such as NextDNS is usually the cause")
+			rep.fixLast(manualFixWith("stop the DNS filter or add your sites to the Windows hosts file, see Known WSL2 quirks at lerd.sh"))
+		}
+
 		wslConf, _ := os.ReadFile("/etc/wsl.conf")
 		resolvTarget, _ := os.Readlink("/etc/resolv.conf")
 		if wsl.ResolvConfAwaitsRestart(string(wslConf), resolvTarget) {

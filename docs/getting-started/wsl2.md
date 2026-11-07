@@ -252,6 +252,12 @@ Windows itself is running in a virtual machine. It only means you cannot run a V
 The project is somewhere under `/mnt/c/...`. Move it into `~/projects/` and re-link.
 :::
 
+::: details `.test` sites do not resolve in Windows, and `lerd doctor` warns about the Windows DNS agent
+The agent listens on `127.0.0.1:53` and sends itself a real query when it starts. If no answer comes back, something on the Windows side is taking DNS traffic before it reaches the agent, usually a filtering client that hooks port 53 such as NextDNS. The result is in `%LOCALAPPDATA%\lerd\bin\lerd-agent.log`.
+
+Stop that client, or keep it and add each site to `C:\Windows\System32\drivers\etc\hosts` as `127.0.0.1 yoursite.test`. Mirrored networking still reaches nginx, and only name resolution was failing, so that is enough.
+:::
+
 ::: details `lerd wsl:setup` says `lerd.exe` is not installed
 It rides in the release archive, so an install that did not come through the installer can be without it, and `lerd doctor` warns about it under WSL2. Run `lerd update`, which fetches it even when lerd is already on the latest version, then run `lerd wsl:setup` again. A lerd owned by a package manager cannot be repaired this way, so install it with the installer instead.
 :::
