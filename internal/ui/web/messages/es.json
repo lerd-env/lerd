@@ -1724,6 +1724,8 @@
   "gitDiff_exitFullscreen": "Salir de pantalla completa",
   "gitDiff_stage": "Preparar",
   "gitDiff_unstage": "Quitar de preparados",
+  "gitDiff_stageAll": "Preparar todo",
+  "gitDiff_unstageAll": "Quitar todo de preparados",
   "gitDiff_stageHunk": "Preparar este cambio",
   "gitDiff_unstageHunk": "Quitar este cambio de preparados",
   "gitDiff_commitMessage": "Mensaje del commit",

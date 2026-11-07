@@ -1724,6 +1724,8 @@
   "gitDiff_exitFullscreen": "Ieși din ecran complet",
   "gitDiff_stage": "Adaugă în stage",
   "gitDiff_unstage": "Scoate din stage",
+  "gitDiff_stageAll": "Adaugă tot în stage",
+  "gitDiff_unstageAll": "Scoate tot din stage",
   "gitDiff_stageHunk": "Adaugă modificarea în stage",
   "gitDiff_unstageHunk": "Scoate modificarea din stage",
   "gitDiff_commitMessage": "Mesaj de commit",

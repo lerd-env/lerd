@@ -1724,6 +1724,8 @@
   "gitDiff_exitFullscreen": "全画面を終了",
   "gitDiff_stage": "ステージ",
   "gitDiff_unstage": "ステージ解除",
+  "gitDiff_stageAll": "すべてステージ",
+  "gitDiff_unstageAll": "すべてステージ解除",
   "gitDiff_stageHunk": "この変更をステージ",
   "gitDiff_unstageHunk": "この変更のステージを解除",
   "gitDiff_commitMessage": "コミットメッセージ",

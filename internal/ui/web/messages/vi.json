@@ -1724,6 +1724,8 @@
   "gitDiff_exitFullscreen": "Thoát toàn màn hình",
   "gitDiff_stage": "Stage",
   "gitDiff_unstage": "Bỏ stage",
+  "gitDiff_stageAll": "Stage tất cả",
+  "gitDiff_unstageAll": "Bỏ stage tất cả",
   "gitDiff_stageHunk": "Stage thay đổi này",
   "gitDiff_unstageHunk": "Bỏ stage thay đổi này",
   "gitDiff_commitMessage": "Thông điệp commit",

@@ -75,8 +75,13 @@ func SwitchNew(dir, branch, base string) (string, error) {
 // or an error carrying git's own words. Prompts are off: nobody is at a
 // terminal to answer them, and a credential prompt would hang the request.
 func runQuiet(dir string, args ...string) (string, error) {
+	return runQuietIn(dir, "", args...)
+}
+
+func runQuietIn(dir, stdin string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
+	cmd.Stdin = strings.NewReader(stdin)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C")
 	out, err := cmd.CombinedOutput()
 	msg := withoutHints(string(out))

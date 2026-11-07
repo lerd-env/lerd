@@ -78,6 +78,38 @@ func TestStage_takesTheNameLiterally(t *testing.T) {
 	}
 }
 
+// A section's group action moves every file it lists in one call.
+func TestStage_manyThenUnstageMany(t *testing.T) {
+	dir := commitFixture(t)
+	write(t, filepath.Join(dir, "a"), "changed")
+	write(t, filepath.Join(dir, "new"), "new")
+	write(t, filepath.Join(dir, "*.txt"), "star")
+	write(t, filepath.Join(dir, "left"), "left")
+
+	if err := Stage(dir, "a", "new", "*.txt"); err != nil {
+		t.Fatalf("Stage: %v", err)
+	}
+	if got := strings.Fields(mustOut(t, dir, "diff", "--cached", "--name-only")); strings.Join(got, ",") != "*.txt,a,new" {
+		t.Fatalf("staged %v", got)
+	}
+	if err := Unstage(dir, "a", "*.txt"); err != nil {
+		t.Fatalf("Unstage: %v", err)
+	}
+	if got := strings.TrimSpace(mustOut(t, dir, "diff", "--cached", "--name-only")); got != "new" {
+		t.Fatalf("after unstaging, staged %q", got)
+	}
+}
+
+func TestStage_needsAFile(t *testing.T) {
+	dir := commitFixture(t)
+	if err := Stage(dir); err == nil {
+		t.Error("Stage with no file: want an error")
+	}
+	if err := Unstage(dir); err == nil {
+		t.Error("Unstage with no file: want an error")
+	}
+}
+
 func TestUnstage_beforeTheFirstCommit(t *testing.T) {
 	dir := t.TempDir()
 	gitRun(t, dir, "init", "-q")

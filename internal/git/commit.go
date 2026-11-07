@@ -5,21 +5,30 @@ import (
 	"strings"
 )
 
-// Stage adds one file's change to the index, a deletion included. The name is
-// taken literally, so a file called *.txt never stages every text file.
-func Stage(dir, file string) error {
-	_, err := runQuiet(dir, "--literal-pathspecs", "add", "-A", "--", file)
-	return err
+// Stage adds files' changes to the index, deletions included. Names are taken
+// literally, so a file called *.txt never stages every text file.
+func Stage(dir string, files ...string) error {
+	return withPaths(dir, files, "add", "-A")
 }
 
-// Unstage takes one file's change back out of the index, leaving the file as it
-// is. Before the first commit there is no HEAD to restore from, so it is dropped.
-func Unstage(dir, file string) error {
+// Unstage takes files' changes back out of the index, leaving the files as they
+// are. Before the first commit there is no HEAD to restore from, so they are dropped.
+func Unstage(dir string, files ...string) error {
 	if _, err := Output(dir, "rev-parse", "--verify", "-q", "HEAD"); err != nil {
-		_, err = runQuiet(dir, "--literal-pathspecs", "rm", "-q", "--cached", "--", file)
-		return err
+		return withPaths(dir, files, "rm", "-q", "--cached")
 	}
-	_, err := runQuiet(dir, "--literal-pathspecs", "restore", "--staged", "--", file)
+	return withPaths(dir, files, "restore", "--staged")
+}
+
+// withPaths feeds the names on stdin, so a section of thousands of untracked
+// files does not overflow the command line.
+func withPaths(dir string, files []string, args ...string) error {
+	if len(files) == 0 {
+		return errors.New("no file given")
+	}
+	args = append([]string{"--literal-pathspecs"}, args...)
+	args = append(args, "--pathspec-from-file=-", "--pathspec-file-nul")
+	_, err := runQuietIn(dir, strings.Join(files, "\x00"), args...)
 	return err
 }
 
