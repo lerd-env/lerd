@@ -104,6 +104,29 @@ describe('SetupCard', () => {
     const posts = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST');
     expect(posts.map(([, init]) => JSON.parse(String(init!.body)).state)).toEqual(['done']);
   });
+  it('shows the AI assistant step working until the install finishes', async () => {
+    const { SetupCard, render, screen, fireEvent } = await load({ site: true });
+    render(SetupCard);
+    let finish: (r: Response) => void = () => {};
+    globalThis.fetch = vi.fn(() => new Promise<Response>((r) => (finish = r))) as unknown as typeof fetch;
+    const button = screen.getAllByRole('button', { name: 'Turn on' }).pop() as HTMLButtonElement;
+    await fireEvent.click(button);
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-busy', 'true');
+    finish(new Response('{"ok":true}', { status: 200 }));
+    await vi.waitFor(() => expect(screen.getByText('Connect your AI assistant')).toHaveClass('line-through'));
+  });
+
+  it('says so when the AI assistant step fails, and lets it be tried again', async () => {
+    const { SetupCard, render, screen, fireEvent } = await load({ site: true });
+    render(SetupCard);
+    globalThis.fetch = vi.fn(async () => new Response('{"ok":false}', { status: 200 })) as unknown as typeof fetch;
+    const button = screen.getAllByRole('button', { name: 'Turn on' }).pop() as HTMLButtonElement;
+    await fireEvent.click(button);
+    await vi.waitFor(() => expect(screen.getByText(/Registration failed/)).toBeInTheDocument());
+    expect(button).toBeEnabled();
+  });
+
   it('registers lerd with the AI assistants from its step', async () => {
     const { SetupCard, render, screen, fireEvent, fetchMock } = await load({ site: true, service: true, notify: true, open: true, idle: true });
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) =>
