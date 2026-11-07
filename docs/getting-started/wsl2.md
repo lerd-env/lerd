@@ -93,6 +93,8 @@ systemctl --user status
 # should respond without error
 ```
 
+WSL masks the services behind `network-online.target`, so it only comes up when something happens to pull it in. Lerd therefore always skips Podman's network-online wait on WSL, even when the target is active, or a boot could stall for 90 seconds before nginx starts. Lerd publishes on loopback, so it needs no routable network.
+
 ## 2. Mirrored networking (recommended)
 
 Without mirrored networking, `http://yoursite.test` and `http://yoursite.localhost` only respond inside the WSL distro, the Chrome or Edge install on the Windows side cannot reach them. With mirrored networking the WSL2 network interface mirrors the Windows one and loopback works from both sides.

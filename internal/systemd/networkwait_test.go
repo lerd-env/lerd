@@ -12,6 +12,7 @@ func TestNetworkWaitStalls(t *testing.T) {
 		loadState  string
 		dropIn     bool
 		target     string
+		wsl        bool
 		wantStalls bool
 	}{
 		{
@@ -24,6 +25,20 @@ func TestNetworkWaitStalls(t *testing.T) {
 			name:      "ordinary host: target is active",
 			loadState: "loaded",
 			target:    "active",
+		},
+		{
+			name:       "WSL: target happened to be up on this boot",
+			loadState:  "loaded",
+			target:     "active",
+			wsl:        true,
+			wantStalls: true,
+		},
+		{
+			name:      "WSL: already neutralised by lerd",
+			loadState: "loaded",
+			dropIn:    true,
+			target:    "inactive",
+			wsl:       true,
 		},
 		{
 			name:      "already neutralised by lerd",
@@ -52,9 +67,9 @@ func TestNetworkWaitStalls(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := networkWaitStalls(tt.loadState, tt.dropIn, tt.target); got != tt.wantStalls {
-				t.Errorf("networkWaitStalls(%q, %v, %q) = %v, want %v",
-					tt.loadState, tt.dropIn, tt.target, got, tt.wantStalls)
+			if got := networkWaitStalls(tt.loadState, tt.dropIn, tt.target, tt.wsl); got != tt.wantStalls {
+				t.Errorf("networkWaitStalls(%q, %v, %q, %v) = %v, want %v",
+					tt.loadState, tt.dropIn, tt.target, tt.wsl, got, tt.wantStalls)
 			}
 		})
 	}
