@@ -42,9 +42,34 @@ func TestReadChanges(t *testing.T) {
 			}
 		}
 	}
-	same("staged", got.Staged, []ChangedFile{{"a", "M"}, {"b", "D"}})
-	same("unstaged", got.Unstaged, []ChangedFile{{"a", "M"}})
-	same("untracked", got.Untracked, []ChangedFile{{"new file.txt", "?"}})
+	same("staged", got.Staged, []ChangedFile{{Path: "a", Status: "M", Added: 1, Removed: 1}, {Path: "b", Status: "D", Removed: 1}})
+	same("unstaged", got.Unstaged, []ChangedFile{{Path: "a", Status: "M", Added: 1, Removed: 1}})
+	same("untracked", got.Untracked, []ChangedFile{{Path: "new file.txt", Status: "?", Added: 1}})
+}
+
+// A binary file has no lines to count, staged or untracked.
+func TestReadChanges_binaryHasNoCounts(t *testing.T) {
+	dir := changesFixture(t)
+	write(t, filepath.Join(dir, "img.bin"), "\x00\x01\n\x02\n")
+	write(t, filepath.Join(dir, "staged.bin"), "\x00\x01\n")
+	write(t, filepath.Join(dir, "two lines"), "x\ny")
+	gitRun(t, dir, "add", "staged.bin")
+	got, err := ReadChanges(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range append(got.Staged, got.Untracked...) {
+		switch f.Path {
+		case "img.bin", "staged.bin":
+			if f.Added != 0 || f.Removed != 0 {
+				t.Errorf("%s counted %+v", f.Path, f)
+			}
+		case "two lines":
+			if f.Added != 2 {
+				t.Errorf("a last line without a newline still counts: %+v", f)
+			}
+		}
+	}
 }
 
 // Reading a working file takes whatever path it gets, so only listed paths may reach it.
@@ -77,7 +102,7 @@ func TestReadChanges_beforeFirstCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Staged) != 1 || got.Staged[0] != (ChangedFile{"staged.php", "A"}) || len(got.Untracked) != 1 {
+	if len(got.Staged) != 1 || got.Staged[0] != (ChangedFile{Path: "staged.php", Status: "A", Added: 1}) || len(got.Untracked) != 1 {
 		t.Fatalf("got %+v", got)
 	}
 	v, err := FileVersions(dir, SectionStaged, "staged.php")
@@ -167,7 +192,7 @@ func TestFileVersions_unreadableSides(t *testing.T) {
 
 	// git diff lists a conflicted path twice, as U and as M; the dashboard keys rows by path.
 	got, err := ReadChanges(dir)
-	if err != nil || len(got.Unstaged) != 1 || got.Unstaged[0] != (ChangedFile{"c", "U"}) {
+	if err != nil || len(got.Unstaged) != 1 || got.Unstaged[0].Path != "c" || got.Unstaged[0].Status != "U" {
 		t.Fatalf("conflict listed as %+v %v", got.Unstaged, err)
 	}
 	if v, err := FileVersions(dir, SectionUnstaged, "c"); err != nil || !v.Unreadable || v.Modified != "" {

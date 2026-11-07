@@ -25,6 +25,9 @@ const maxVersionBytes = 1 << 20
 type ChangedFile struct {
 	Path   string `json:"path"`
 	Status string `json:"status"`
+	// Lines added and removed; both stay 0 for a binary file.
+	Added   int `json:"added,omitempty"`
+	Removed int `json:"removed,omitempty"`
 }
 
 // Changes is a checkout's uncommitted work split the way `git status` splits it.
@@ -34,28 +37,50 @@ type Changes struct {
 	Untracked []ChangedFile `json:"untracked"`
 }
 
-// ReadChanges lists the files in each section of dir's uncommitted work.
+// ReadChanges lists the files in each section of dir's uncommitted work, with
+// how many lines each adds and removes.
 func ReadChanges(dir string) (Changes, error) {
 	var c Changes
 	var err error
-	if c.Staged, err = sectionFiles(dir, SectionStaged); err != nil {
+	if c.Staged, err = countedSection(dir, SectionStaged); err != nil {
 		return Changes{}, err
 	}
-	if c.Unstaged, err = sectionFiles(dir, SectionUnstaged); err != nil {
+	if c.Unstaged, err = countedSection(dir, SectionUnstaged); err != nil {
 		return Changes{}, err
 	}
-	if c.Untracked, err = sectionFiles(dir, SectionUntracked); err != nil {
+	if c.Untracked, err = countedSection(dir, SectionUntracked); err != nil {
 		return Changes{}, err
 	}
 	return c, nil
 }
 
+// countedSection is sectionFiles with line counts. Counting reads every file
+// in the section, so it is left to the list and kept out of single-file lookups.
+func countedSection(dir, section string) ([]ChangedFile, error) {
+	files, err := sectionFiles(dir, section)
+	if err != nil {
+		return nil, err
+	}
+	if section == SectionUntracked {
+		for i := range files {
+			files[i].Added = untrackedLines(filepath.Join(dir, files[i].Path))
+		}
+		return files, nil
+	}
+	return files, withNumstat(dir, files, sectionArgs(section))
+}
+
+func sectionArgs(section string) []string {
+	if section == SectionStaged {
+		return []string{"diff", "--cached", "--name-status", "--no-renames", "-z"}
+	}
+	return []string{"diff", "--name-status", "--no-renames", "-z"}
+}
+
 func sectionFiles(dir, section string) ([]ChangedFile, error) {
 	switch section {
-	case SectionStaged:
-		return nameStatus(dir, "diff", "--cached", "--name-status", "--no-renames", "-z")
-	case SectionUnstaged:
-		return nameStatus(dir, "diff", "--name-status", "--no-renames", "-z")
+	case SectionStaged, SectionUnstaged:
+		return nameStatus(dir, sectionArgs(section)...)
 	case SectionUntracked:
 		out, err := Output(dir, "ls-files", "--others", "--exclude-standard", "-z")
 		if err != nil {
@@ -70,6 +95,54 @@ func sectionFiles(dir, section string) ([]ChangedFile, error) {
 		return files, nil
 	}
 	return nil, fmt.Errorf("unknown diff section %q", section)
+}
+
+// untrackedLines counts what an untracked file would add; a binary, oversized
+// or unreadable one counts 0, as git's numstat leaves it uncounted.
+func untrackedLines(full string) int {
+	b, err := workingFile(full)
+	if err != nil || len(b) == 0 || bytes.IndexByte(b, 0) >= 0 {
+		return 0
+	}
+	n := bytes.Count(b, []byte("\n"))
+	if b[len(b)-1] != '\n' {
+		n++
+	}
+	return n
+}
+
+// withNumstat fills each file's line counts from the same diff run with
+// --numstat in place of --name-status.
+func withNumstat(dir string, files []ChangedFile, args []string) error {
+	num := make([]string, len(args))
+	for i, a := range args {
+		if a == "--name-status" {
+			a = "--numstat"
+		}
+		num[i] = a
+	}
+	out, err := Output(dir, num...)
+	if err != nil {
+		return err
+	}
+	at := map[string]int{}
+	for i, f := range files {
+		at[f.Path] = i
+	}
+	// Each record is "added\tremoved\tpath"; a binary file has "-" for both.
+	for _, rec := range strings.Split(out, "\x00") {
+		parts := strings.SplitN(rec, "\t", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		i, ok := at[parts[2]]
+		if !ok {
+			continue
+		}
+		files[i].Added, _ = strconv.Atoi(parts[0])
+		files[i].Removed, _ = strconv.Atoi(parts[1])
+	}
+	return nil
 }
 
 func nameStatus(dir string, args ...string) ([]ChangedFile, error) {

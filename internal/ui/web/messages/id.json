@@ -1724,6 +1724,8 @@
   "gitDiff_exitFullscreen": "Keluar dari layar penuh",
   "gitDiff_stage": "Stage",
   "gitDiff_unstage": "Batalkan stage",
+  "gitDiff_stageAll": "Stage semua",
+  "gitDiff_unstageAll": "Batalkan stage semua",
   "gitDiff_stageHunk": "Stage perubahan ini",
   "gitDiff_unstageHunk": "Batalkan stage perubahan ini",
   "gitDiff_commitMessage": "Pesan commit",

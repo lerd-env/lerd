@@ -1724,6 +1724,8 @@
   "gitDiff_exitFullscreen": "Wyjdź z pełnego ekranu",
   "gitDiff_stage": "Dodaj do stage",
   "gitDiff_unstage": "Usuń ze stage",
+  "gitDiff_stageAll": "Dodaj wszystko do stage",
+  "gitDiff_unstageAll": "Usuń wszystko ze stage",
   "gitDiff_stageHunk": "Dodaj tę zmianę do stage",
   "gitDiff_unstageHunk": "Usuń tę zmianę ze stage",
   "gitDiff_commitMessage": "Opis commita",

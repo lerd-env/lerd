@@ -425,7 +425,7 @@ func TestHandleSiteGitDiff(t *testing.T) {
 	}
 
 	rec := get("domain=acme.test&path=" + url.QueryEscape(main))
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"unstaged":[{"path":"a.php","status":"M"}]`) {
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"unstaged":[{"path":"a.php","status":"M","added":1,"removed":1}]`) {
 		t.Fatalf("list: %d %s", rec.Code, rec.Body.String())
 	}
 	rec = get("domain=acme.test&path=" + url.QueryEscape(main) + "&section=unstaged&file=a.php")
@@ -438,7 +438,7 @@ func TestHandleSiteGitDiff(t *testing.T) {
 		t.Fatalf("commits: %d %s", rec.Code, rec.Body.String())
 	}
 	rec = get("domain=acme.test&path=" + url.QueryEscape(main) + "&commit=" + head)
-	if rec.Code != http.StatusOK || rec.Body.String() != `[{"path":"a.php","status":"A"}]`+"\n" {
+	if rec.Code != http.StatusOK || rec.Body.String() != `[{"path":"a.php","status":"A","added":1}]`+"\n" {
 		t.Fatalf("commit files: %d %q", rec.Code, rec.Body.String())
 	}
 	rec = get("domain=acme.test&path=" + url.QueryEscape(main) + "&commit=" + head + "&file=a.php")
@@ -524,6 +524,27 @@ func TestHandleSiteGitCommit(t *testing.T) {
 	}
 	if got := strings.TrimSpace(runGitOutput(sitePath, "log", "-1", "--format=%s")); got != "fix: again" {
 		t.Errorf("last commit %q", got)
+	}
+	// A section's group action sends its whole list.
+	for _, f := range []string{"b.php", "c.php"} {
+		if err := os.WriteFile(filepath.Join(sitePath, f), []byte("new\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := post(main, `{"op":"stage","files":["b.php","c.php"]}`); !strings.Contains(got, `"ok":true`) {
+		t.Fatalf("stage files: %s", got)
+	}
+	if got := strings.Fields(runGitOutput(sitePath, "diff", "--cached", "--name-only")); strings.Join(got, ",") != "b.php,c.php" {
+		t.Fatalf("staged %v", got)
+	}
+	if got := post(main, `{"op":"unstage","files":["b.php","c.php"]}`); !strings.Contains(got, `"ok":true`) {
+		t.Fatalf("unstage files: %s", got)
+	}
+	if got := strings.TrimSpace(runGitOutput(sitePath, "diff", "--cached", "--name-only")); got != "" {
+		t.Fatalf("still staged %q", got)
+	}
+	if got := post(main, `{"op":"stage"}`); !strings.Contains(got, "no file given") {
+		t.Errorf("stage nothing: %s", got)
 	}
 	release := cli.CheckoutLock(main)
 	if got := post(main, `{"op":"stage","file":"a.php"}`); !strings.Contains(got, "switch or pull is running") {

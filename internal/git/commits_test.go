@@ -102,17 +102,18 @@ func TestCommitFilesAndVersions(t *testing.T) {
 
 	cases := []struct {
 		subject, path, status, original, modified string
+		added, removed                            int
 	}{
-		{"base", "a", "A", "", "one\n"},
-		{"edit a", "a", "M", "one\n", "one\ntwo\n"},
-		{"add b", "b", "A", "", "bee\n"},
-		{"drop b", "b", "D", "bee\n", ""},
+		{"base", "a", "A", "", "one\n", 1, 0},
+		{"edit a", "a", "M", "one\n", "one\ntwo\n", 1, 0},
+		{"add b", "b", "A", "", "bee\n", 1, 0},
+		{"drop b", "b", "D", "bee\n", "", 0, 1},
 	}
 	for _, c := range cases {
 		// A short hash, as a user would copy it, names the commit as well.
 		sha := commits[c.subject][:10]
 		files, err := CommitFiles(dir, sha)
-		if err != nil || len(files) != 1 || files[0] != (ChangedFile{c.path, c.status}) {
+		if err != nil || len(files) != 1 || files[0] != (ChangedFile{c.path, c.status, c.added, c.removed}) {
 			t.Fatalf("%s files: %+v %v", c.subject, files, err)
 		}
 		v, err := CommitVersions(dir, sha, c.path)
@@ -138,7 +139,7 @@ func TestHeadFilesAndVersions(t *testing.T) {
 	upstream := strings.TrimSpace(gitOut(t, dir, "rev-parse", "@{upstream}"))
 
 	files, err := HeadFiles(dir, upstream)
-	if err != nil || len(files) != 1 || files[0] != (ChangedFile{"theirs", "A"}) {
+	if err != nil || len(files) != 1 || files[0] != (ChangedFile{Path: "theirs", Status: "A", Added: 1}) {
 		t.Fatalf("files: %+v %v", files, err)
 	}
 	if v, err := HeadVersions(dir, upstream, "theirs"); err != nil || v.Original != "" || v.Modified != "t\n" {
@@ -158,7 +159,7 @@ func TestOutgoingFilesAndVersions(t *testing.T) {
 	_, dir := commitsFixture(t)
 
 	files, err := OutgoingFiles(dir)
-	if err != nil || len(files) != 2 || files[0] != (ChangedFile{"a", "M"}) || files[1] != (ChangedFile{"b", "A"}) {
+	if err != nil || len(files) != 2 || files[0] != (ChangedFile{Path: "a", Status: "M", Added: 1}) || files[1] != (ChangedFile{Path: "b", Status: "A", Added: 1}) {
 		t.Fatalf("files: %+v %v", files, err)
 	}
 	if v, err := OutgoingVersions(dir, "a"); err != nil || v.Original != "one\n" || v.Modified != "one\ntwo\n" {

@@ -1724,6 +1724,8 @@
   "gitDiff_exitFullscreen": "Volledig scherm sluiten",
   "gitDiff_stage": "Stagen",
   "gitDiff_unstage": "Unstagen",
+  "gitDiff_stageAll": "Alles stagen",
+  "gitDiff_unstageAll": "Alles unstagen",
   "gitDiff_stageHunk": "Deze wijziging stagen",
   "gitDiff_unstageHunk": "Deze wijziging unstagen",
   "gitDiff_commitMessage": "Commitbericht",

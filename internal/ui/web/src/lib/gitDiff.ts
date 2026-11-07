@@ -6,6 +6,9 @@ export interface GitChangedFile {
   path: string;
   // git's letter: A, M, D, T, U, or ? for untracked.
   status: string;
+  // Lines added and removed; absent for a binary file.
+  added?: number;
+  removed?: number;
 }
 
 export type GitChanges = Record<GitDiffSection, GitChangedFile[]>;
@@ -97,12 +100,12 @@ function gitCommitApi(domain: string, path: string, body: object): Promise<GitRe
   });
 }
 
-export function stageFile(domain: string, path: string, file: string): Promise<GitResult> {
-  return gitCommitApi(domain, path, { op: 'stage', file });
+export function stageFiles(domain: string, path: string, files: string[]): Promise<GitResult> {
+  return gitCommitApi(domain, path, { op: 'stage', files });
 }
 
-export function unstageFile(domain: string, path: string, file: string): Promise<GitResult> {
-  return gitCommitApi(domain, path, { op: 'unstage', file });
+export function unstageFiles(domain: string, path: string, files: string[]): Promise<GitResult> {
+  return gitCommitApi(domain, path, { op: 'unstage', files });
 }
 
 // One change block, numbered the way LineChange numbers it, with both texts

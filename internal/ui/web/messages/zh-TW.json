@@ -1724,6 +1724,8 @@
   "gitDiff_exitFullscreen": "離開全螢幕",
   "gitDiff_stage": "暫存",
   "gitDiff_unstage": "取消暫存",
+  "gitDiff_stageAll": "全部暫存",
+  "gitDiff_unstageAll": "全部取消暫存",
   "gitDiff_stageHunk": "暫存此變更",
   "gitDiff_unstageHunk": "取消暫存此變更",
   "gitDiff_commitMessage": "提交訊息",

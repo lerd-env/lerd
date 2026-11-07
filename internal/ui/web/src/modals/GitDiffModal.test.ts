@@ -1,15 +1,15 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const { loadGitChanges, loadGitVersions, loadCommitFiles, loadCommitVersions, stageFile, unstageFile, stageHunk, commitChanges, loadLastMessage, closeModal } =
+const { loadGitChanges, loadGitVersions, loadCommitFiles, loadCommitVersions, stageFiles, unstageFiles, stageHunk, commitChanges, loadLastMessage, closeModal } =
   vi.hoisted(() => ({
     stageHunk: vi.fn(),
     loadGitChanges: vi.fn(),
     loadGitVersions: vi.fn(),
     loadCommitFiles: vi.fn(),
     loadCommitVersions: vi.fn(),
-    stageFile: vi.fn(),
-    unstageFile: vi.fn(),
+    stageFiles: vi.fn(),
+    unstageFiles: vi.fn(),
     commitChanges: vi.fn(),
     loadLastMessage: vi.fn(),
     closeModal: vi.fn()
@@ -20,8 +20,8 @@ vi.mock('$lib/gitDiff', async (orig) => ({
   loadGitVersions,
   loadCommitFiles,
   loadCommitVersions,
-  stageFile,
-  unstageFile,
+  stageFiles,
+  unstageFiles,
   stageHunk,
   commitChanges,
   loadLastMessage
@@ -41,7 +41,7 @@ describe('GitDiffModal', () => {
     localStorage.clear();
     loadGitChanges.mockReset();
     loadGitVersions.mockReset();
-    for (const f of [stageFile, unstageFile, stageHunk, commitChanges, loadLastMessage]) f.mockReset();
+    for (const f of [stageFiles, unstageFiles, stageHunk, commitChanges, loadLastMessage]) f.mockReset();
   });
 
   it('opens the first changed file and loads another on click', async () => {
@@ -205,6 +205,54 @@ describe('GitDiffModal', () => {
     expect(screen.getByText('README.md')).toBeInTheDocument();
   });
 
+  it('shows how many lines each file adds and removes', async () => {
+    loadGitChanges.mockResolvedValue({
+      staged: [],
+      unstaged: [{ path: 'a.php', status: 'M', added: 4, removed: 3 }, { path: 'img.png', status: 'M' }],
+      untracked: [{ path: 'new.php', status: '?', added: 5 }]
+    });
+    loadGitVersions.mockResolvedValue(text('a', 'b'));
+    render(GitDiffModal, { props });
+    await screen.findByTestId('diff');
+    const row = (name: string) => within(screen.getByTestId('file-list')).getByText(name).closest('div')!;
+    expect(row('a.php')).toHaveTextContent('+4 −3');
+    expect(row('new.php')).toHaveTextContent('+5');
+    expect(row('new.php')).not.toHaveTextContent('−');
+    expect(row('img.png')).not.toHaveTextContent(/[+−]\d/);
+  });
+
+  it('totals the lines each section adds and removes', async () => {
+    loadGitChanges.mockResolvedValue({
+      staged: [{ path: 's.php', status: 'D', removed: 7 }],
+      unstaged: [{ path: 'a.php', status: 'M', added: 4, removed: 3 }, { path: 'b.php', status: 'M', added: 2, removed: 1 }, { path: 'img.png', status: 'M' }],
+      untracked: [{ path: 'n.php', status: '?', added: 5 }]
+    });
+    loadGitVersions.mockResolvedValue(text('a', 'b'));
+    render(GitDiffModal, { props });
+    await screen.findByTestId('diff');
+    const head = (label: RegExp) => screen.getByText(label).parentElement!;
+    expect(head(/Unstaged · 3/)).toHaveTextContent('+6 −4');
+    // One file already shows its own counts on its row.
+    expect(head(/Staged · 1/)).not.toHaveTextContent('−7');
+    expect(head(/Untracked · 1/)).not.toHaveTextContent('+5');
+  });
+
+  it('keeps a dragged split for the next file, but not for the next dialog', async () => {
+    loadGitChanges.mockResolvedValue({ staged: [], unstaged: [{ path: 'a.php', status: 'M' }, { path: 'b.php', status: 'M' }], untracked: [] });
+    loadGitVersions.mockImplementation(async (_d: string, _p: string, _s: string, file: string) => text('old', `new ${file}`));
+    const first = render(GitDiffModal, { props });
+    expect((await screen.findByTestId('diff')).dataset.split).toBe('undefined');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'drag split' }));
+    await fireEvent.click(within(screen.getByTestId('file-list')).getByText('b.php'));
+    await waitFor(() => expect(screen.getByTestId('diff').dataset.modified).toBe('new b.php'));
+    expect(screen.getByTestId('diff').dataset.split).toBe('0.3');
+
+    first.unmount();
+    render(GitDiffModal, { props });
+    expect((await screen.findByTestId('diff')).dataset.split).toBe('undefined');
+  });
+
   it('says so when a commit changes no files', async () => {
     loadCommitFiles.mockResolvedValue([]);
     render(GitDiffModal, { props: { ...props, commit: { hash: 'abc1234def', subject: 'merge' } } });
@@ -217,19 +265,60 @@ describe('GitDiffModal', () => {
       .mockResolvedValueOnce({ staged: [{ path: 'a.php', status: 'M' }], unstaged: [], untracked: [] })
       .mockResolvedValueOnce({ staged: [], unstaged: [{ path: 'a.php', status: 'M' }], untracked: [] });
     loadGitVersions.mockResolvedValue(text('a', 'b'));
-    stageFile.mockResolvedValue({ ok: true });
-    unstageFile.mockResolvedValue({ ok: true });
+    stageFiles.mockResolvedValue({ ok: true });
+    unstageFiles.mockResolvedValue({ ok: true });
     render(GitDiffModal, { props });
     await screen.findByTestId('diff');
 
     await fireEvent.click(screen.getByRole('button', { name: 'Stage a.php' }));
-    expect(stageFile).toHaveBeenCalledWith('acme.test', '/srv/acme', 'a.php');
+    expect(stageFiles).toHaveBeenCalledWith('acme.test', '/srv/acme', ['a.php']);
     expect(await screen.findByText(/Staged · 1/)).toBeInTheDocument();
     await waitFor(() => expect(loadGitVersions).toHaveBeenLastCalledWith('acme.test', '/srv/acme', 'staged', 'a.php'));
 
     await fireEvent.click(screen.getByRole('button', { name: 'Unstage a.php' }));
-    expect(unstageFile).toHaveBeenCalledWith('acme.test', '/srv/acme', 'a.php');
+    expect(unstageFiles).toHaveBeenCalledWith('acme.test', '/srv/acme', ['a.php']);
     expect(await screen.findByText(/Unstaged · 1/)).toBeInTheDocument();
+  });
+
+  it('stages or unstages a whole section from its header', async () => {
+    const changes = {
+      staged: [{ path: 's.php', status: 'M' }],
+      unstaged: [{ path: 'a.php', status: 'M' }, { path: 'app/b.php', status: 'D' }],
+      untracked: [{ path: 'n1.md', status: '?' }, { path: 'n2.md', status: '?' }]
+    };
+    loadGitChanges.mockResolvedValue(changes);
+    loadGitVersions.mockResolvedValue(text('a', 'b'));
+    stageFiles.mockResolvedValue({ ok: true });
+    unstageFiles.mockResolvedValue({ ok: true });
+    render(GitDiffModal, { props });
+    await screen.findByTestId('diff');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Stage all Untracked' }));
+    expect(stageFiles).toHaveBeenLastCalledWith('acme.test', '/srv/acme', ['n1.md', 'n2.md']);
+    await fireEvent.click(screen.getByRole('button', { name: 'Stage all Unstaged' }));
+    expect(stageFiles).toHaveBeenLastCalledWith('acme.test', '/srv/acme', ['a.php', 'app/b.php']);
+    await fireEvent.click(screen.getByRole('button', { name: 'Unstage all Staged' }));
+    expect(unstageFiles).toHaveBeenLastCalledWith('acme.test', '/srv/acme', ['s.php']);
+    await waitFor(() => expect(loadGitChanges).toHaveBeenCalledTimes(4));
+  });
+
+  it('shows why a section action failed', async () => {
+    loadGitChanges.mockResolvedValue({ staged: [], unstaged: [], untracked: [{ path: 'n.md', status: '?' }] });
+    loadGitVersions.mockResolvedValue(text('', 'b'));
+    stageFiles.mockResolvedValue({ error: 'index.lock exists' });
+    render(GitDiffModal, { props });
+    await screen.findByTestId('diff');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Stage all Untracked' }));
+    expect(await screen.findByText('index.lock exists')).toBeInTheDocument();
+  });
+
+  it('offers no section action on a commit', async () => {
+    loadCommitFiles.mockResolvedValue([{ path: 'a.php', status: 'M' }]);
+    loadCommitVersions.mockResolvedValue(text('a', 'b'));
+    render(GitDiffModal, { props: { ...props, commit: { hash: 'abc1234def', subject: 'fix' } } });
+    await screen.findByTestId('diff');
+    expect(screen.queryByRole('button', { name: /Stage all|Unstage all/ })).toBeNull();
   });
 
   it('commits what is staged, then shows what is left', async () => {

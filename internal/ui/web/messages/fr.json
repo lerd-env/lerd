@@ -1724,6 +1724,8 @@
   "gitDiff_exitFullscreen": "Quitter le plein écran",
   "gitDiff_stage": "Indexer",
   "gitDiff_unstage": "Désindexer",
+  "gitDiff_stageAll": "Tout indexer",
+  "gitDiff_unstageAll": "Tout désindexer",
   "gitDiff_stageHunk": "Indexer ce changement",
   "gitDiff_unstageHunk": "Désindexer ce changement",
   "gitDiff_commitMessage": "Message de commit",

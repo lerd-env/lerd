@@ -19,9 +19,9 @@
     loadOutgoingVersions,
     loadUptoFiles,
     loadUptoVersions,
-    stageFile,
+    stageFiles,
     stageHunk,
-    unstageFile,
+    unstageFiles,
     type GitChangedFile,
     type GitCommit,
     type GitDiffSection,
@@ -57,6 +57,8 @@
   // Outlives the commit box, which goes once the last change is committed.
   let notice = $state('');
   let filesHidden = $state(false);
+  // A dragged split carries over to the next file, for as long as the dialog stays open.
+  let splitRatio = $state<number | undefined>();
   // Keyed by group and folder, so a folder collapsed under Staged stays open under Unstaged.
   let collapsed = $state<Record<string, boolean>>({});
 
@@ -141,10 +143,11 @@
     };
   });
 
-  async function toggleStage(group: Group['key'], file: string) {
-    const res = await (group === 'staged' ? unstageFile : stageFile)(domain, path, file);
+  // One file from its row, or a whole section from its header.
+  async function toggleStage(group: Group['key'], files: string[]) {
+    const res = await (group === 'staged' ? unstageFiles : stageFiles)(domain, path, files);
     if (res.error) error = res.error;
-    else await refresh(file);
+    else await refresh(files.length === 1 ? files[0] : selected?.file);
   }
 
   onMount(async () => {
@@ -241,9 +244,34 @@
         {#each groups ?? [] as g (g.key)}
           {#if g.files.length > 0}
             {#if g.label}
-              <h4 class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-                {g.label} · {g.files.length}
-              </h4>
+              {@const all = g.key === 'staged' ? m.gitDiff_unstageAll() : m.gitDiff_stageAll()}
+              {@const added = g.files.reduce((n, f) => n + (f.added ?? 0), 0)}
+              {@const removed = g.files.reduce((n, f) => n + (f.removed ?? 0), 0)}
+              <!-- Label and totals share a baseline: the totals' system mono font differs per
+                   browser, so centring their boxes leaves the digits off by a pixel or two. -->
+              <div class="flex items-baseline gap-1.5 pl-4 pr-2 pt-2 pb-1">
+                <h4 class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                  {g.label} · {g.files.length}
+                </h4>
+                <!-- A single file's row already shows the same counts. -->
+                <span class="sticky right-8 ml-auto flex gap-1.5 font-mono text-xs tabular-nums">
+                  {#if g.files.length > 1}
+                    {#if added}<span class="text-green-600 dark:text-green-400">+{added}</span>{/if}
+                    {#if removed}<span class="text-red-600 dark:text-red-400">−{removed}</span>{/if}
+                  {/if}
+                </span>
+                {#if uncommitted}
+                  <button
+                    type="button"
+                    onclick={() => toggleStage(g.key, g.files.map((f) => f.path))}
+                    class="sticky right-2 self-center -translate-y-px p-0.5 rounded-sm text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                    use:tooltip={all}
+                    aria-label="{all} {g.label}"
+                  >
+                    <Icon name={g.key === 'staged' ? 'minus' : 'plus'} class="w-3.5 h-3.5" />
+                  </button>
+                {/if}
+              </div>
             {/if}
             {#each fileTreeRows(g.files, (dir) => !!collapsed[`${g.key}:${dir}`]) as row (row.kind + row.path)}
               {@const indent = `padding-left: ${1 + row.depth * 0.75}rem`}
@@ -276,23 +304,25 @@
                   <span class="w-3 shrink-0 font-semibold {statusClass[f.status] ?? 'text-amber-600 dark:text-amber-400'}">{f.status}</span>
                   <span title={f.path}>{row.label}</span>
                 </button>
-                {#if uncommitted}
-                  <!-- Pinned to the pane's visible edge while a long path scrolls; the opaque
-                       base hides text under it and the inner layer repeats the row's tint. -->
-                  <span class="sticky right-0 shrink-0 self-stretch flex bg-white dark:bg-lerd-card">
-                    <span class="flex items-center pl-1 pr-2 {active ? 'bg-gray-100 dark:bg-white/10' : 'group-hover:bg-gray-50 dark:group-hover:bg-white/5'}">
+                <!-- Pinned to the pane's visible edge while a long path scrolls; the opaque
+                     base hides text under it and the inner layer repeats the row's tint. -->
+                <span class="sticky right-0 shrink-0 self-stretch flex bg-white dark:bg-lerd-card">
+                  <span class="flex items-center gap-1.5 pl-1 pr-2 font-mono text-xs tabular-nums {active ? 'bg-gray-100 dark:bg-white/10' : 'group-hover:bg-gray-50 dark:group-hover:bg-white/5'}">
+                    {#if f.added}<span class="text-green-600 dark:text-green-400">+{f.added}</span>{/if}
+                    {#if f.removed}<span class="text-red-600 dark:text-red-400">−{f.removed}</span>{/if}
+                    {#if uncommitted}
                       <button
                         type="button"
-                        onclick={() => toggleStage(g.key, f.path)}
+                        onclick={() => toggleStage(g.key, [f.path])}
                         class="p-0.5 rounded-sm text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                         use:tooltip={staging}
                         aria-label="{staging} {f.path}"
                       >
                         <Icon name={g.key === 'staged' ? 'minus' : 'plus'} class="w-3.5 h-3.5" />
                       </button>
-                    </span>
+                    {/if}
                   </span>
-                {/if}
+                </span>
               </div>
               {/if}
             {/each}
@@ -341,6 +371,8 @@
                 {ignoreSpace}
                 sideBySide={!unified}
                 {hunkAction}
+                {splitRatio}
+                onSplit={(r) => (splitRatio = r)}
                 onStats={(s) => (stats = s)}
               />
             </div>

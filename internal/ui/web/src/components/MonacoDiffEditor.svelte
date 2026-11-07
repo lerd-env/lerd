@@ -1,6 +1,6 @@
 <script lang="ts">
   import { get } from 'svelte/store';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { editorFontSize } from '$stores/editorFont';
   import { palette, theme } from '$stores/theme';
   import { diffStats, type Hunk } from '$lib/gitDiff';
@@ -18,8 +18,12 @@
     onStats?: (s: { added: number; removed: number }) => void;
     /** A gutter button on each change block; unstage draws a minus instead of a plus. */
     hunkAction?: { label: string; unstage: boolean; run: (h: Hunk) => void };
+    /** Share of the width the original side opens with; read once, at creation. */
+    splitRatio?: number;
+    /** Fires with the original side's share whenever the side-by-side layout changes, a drag included. */
+    onSplit?: (ratio: number) => void;
   }
-  let { original, modified, language = 'plaintext', ignoreSpace = false, sideBySide = true, onStats, hunkAction }: Props = $props();
+  let { original, modified, language = 'plaintext', ignoreSpace = false, sideBySide = true, onStats, hunkAction, splitRatio, onSplit }: Props = $props();
   let changes = $state<Monaco.editor.ILineChange[]>([]);
   // Monaco paints both files whole before its diff folds the unchanged lines
   // away, a frame after the diff lands, so a new file stays hidden until then.
@@ -36,6 +40,7 @@
     let disposed = false;
     let unsubTheme: (() => void) | undefined;
     let unsubPalette: (() => void) | undefined;
+    let removeDragListener: (() => void) | undefined;
     void (async () => {
       const monaco = await loadMonaco();
       if (disposed || !container) return;
@@ -52,6 +57,7 @@
         hideUnchangedRegions: { enabled: true },
         ignoreTrimWhitespace: ignoreSpace,
         renderSideBySide: sideBySide,
+        splitViewDefaultRatio: splitRatio,
         // Otherwise a narrow window silently goes unified and the toggle says the opposite.
         useInlineViewWhenSpaceIsLimited: false
       });
@@ -61,6 +67,22 @@
         changes = ed.getLineChanges() ?? [];
         if (model) onStats?.(diffStats(changes, model.original.getValue(), model.modified.getValue()));
       });
+      // Monaco has no event for its sash, but a drag relays out both sides. Only a
+      // drag counts: a new editor passes through in-between layouts as it opens.
+      let dragging = false;
+      container.addEventListener('pointerdown', (e) => (dragging = !!(e.target as Element).closest?.('.monaco-sash.vertical')), true);
+      window.addEventListener('pointerup', stopDrag, true);
+      // The modified side is laid out after the original one, so its width is current here.
+      ed.getModifiedEditor().onDidLayoutChange(() => {
+        // Monaco places the sash where the modified side starts, as a share of the full width.
+        const full = container?.clientWidth ?? 0;
+        const right = ed.getModifiedEditor().getLayoutInfo().width;
+        if (dragging && sideBySide && full > 0 && right > 0) onSplit?.(1 - right / full);
+      });
+      function stopDrag() {
+        dragging = false;
+      }
+      removeDragListener = () => window.removeEventListener('pointerup', stopDrag, true);
       ed.getModifiedEditor().onMouseDown((e) => {
         const model = ed.getModel();
         if (!hunkAction || !model || e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) return;
@@ -87,6 +109,7 @@
       disposed = true;
       unsubTheme?.();
       unsubPalette?.();
+      removeDragListener?.();
       const model = editor?.getModel();
       editor?.dispose();
       model?.original.dispose();
@@ -110,7 +133,8 @@
   });
 
   $effect(() => {
-    editor?.updateOptions({ ignoreTrimWhitespace: ignoreSpace, renderSideBySide: sideBySide, fontSize: $editorFontSize });
+    // Monaco resets the split to half on any update that leaves its ratio out.
+    editor?.updateOptions({ ignoreTrimWhitespace: ignoreSpace, renderSideBySide: sideBySide, fontSize: $editorFontSize, splitViewDefaultRatio: untrack(() => splitRatio) });
   });
 
   let glyphs: Monaco.editor.IEditorDecorationsCollection | undefined;

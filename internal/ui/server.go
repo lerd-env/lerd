@@ -6904,8 +6904,10 @@ func handleSiteGitCommit(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		Op, File, Message string
-		Amend, Push       bool
-		Hunk              gitpkg.Hunk
+		// A section header's group action sends the whole list instead of File.
+		Files       []string
+		Amend, Push bool
+		Hunk        gitpkg.Hunk
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, SiteActionResponse{Error: "invalid request body"})
@@ -6920,12 +6922,16 @@ func handleSiteGitCommit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer release()
+	files := req.Files
+	if req.File != "" {
+		files = append(files, req.File)
+	}
 	var out string
 	switch req.Op {
 	case "stage":
-		err = gitpkg.Stage(dir, req.File)
+		err = gitpkg.Stage(dir, files...)
 	case "unstage":
-		err = gitpkg.Unstage(dir, req.File)
+		err = gitpkg.Unstage(dir, files...)
 	case "stage-hunk", "unstage-hunk":
 		err = gitpkg.StageHunk(dir, req.File, req.Hunk, req.Op == "unstage-hunk")
 	case "commit":
