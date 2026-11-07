@@ -40,7 +40,7 @@ lerd service remove mongodb            # stops + removes; data preserved
 lerd service remove mongodb --purge    # also wipes data dir
 ```
 
-A removed service stays removed. A site whose `.lerd.yaml` still lists it does not bring it back: `lerd install`, `lerd update`, `lerd link` and the commands that start a project's services all skip it, and the site's service card offers an install (+) action instead. Installing it again on purpose (`lerd service preset`, `lerd service add`, `lerd service start`, or that + action) lifts this.
+A removed service stays removed. A site whose `.lerd.yaml` still lists it does not bring it back: `lerd install`, `lerd update`, `lerd link` and the commands that start a project's services all skip it, and the site's service card offers an install (+) action instead. Installing it again on purpose (`lerd service preset`, `lerd service add`, `lerd service start`, that + action, or picking it in the dashboard's site wizard) lifts this.
 
 If a service container is running that no installed service owns, for example one an older lerd restored from a site's `.lerd.yaml` without its definition, the dashboard's **Resources** card marks it *orphaned* and offers a trash button, which stops it and deletes its unit while keeping its data.
 
