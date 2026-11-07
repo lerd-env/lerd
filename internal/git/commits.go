@@ -109,11 +109,25 @@ func headSpan(dir, hash string) (from, to string, err error) {
 	return strings.TrimSpace(out), to, nil
 }
 
-func spanFiles(dir, from, to string) ([]ChangedFile, error) {
+func spanArgs(from, to string) []string {
 	if from == "" {
-		return nameStatus(dir, "diff-tree", "-r", "--root", "--no-commit-id", "--no-renames", "--name-status", "-z", to)
+		return []string{"diff-tree", "-r", "--root", "--no-commit-id", "--no-renames", "--name-status", "-z", to}
 	}
-	return nameStatus(dir, "diff-tree", "-r", "--no-renames", "--name-status", "-z", from, to)
+	return []string{"diff-tree", "-r", "--no-renames", "--name-status", "-z", from, to}
+}
+
+func spanFiles(dir, from, to string) ([]ChangedFile, error) {
+	return nameStatus(dir, spanArgs(from, to)...)
+}
+
+// countedSpan is spanFiles with line counts, for the lists; a single file's
+// lookup only needs to know the path is in the span.
+func countedSpan(dir, from, to string) ([]ChangedFile, error) {
+	files, err := spanFiles(dir, from, to)
+	if err != nil {
+		return nil, err
+	}
+	return files, withNumstat(dir, files, spanArgs(from, to))
 }
 
 func spanVersions(dir, from, to, path string) (Versions, error) {
@@ -134,7 +148,7 @@ func CommitFiles(dir, hash string) ([]ChangedFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	return spanFiles(dir, from, to)
+	return countedSpan(dir, from, to)
 }
 
 // CommitVersions reads a file before and after a commit.
@@ -152,7 +166,7 @@ func HeadFiles(dir, hash string) ([]ChangedFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	return spanFiles(dir, from, to)
+	return countedSpan(dir, from, to)
 }
 
 // HeadVersions reads a file at HEAD and at a commit.
@@ -183,7 +197,7 @@ func OutgoingFiles(dir string) ([]ChangedFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	return spanFiles(dir, from, to)
+	return countedSpan(dir, from, to)
 }
 
 // OutgoingVersions reads a file where HEAD left its upstream and at HEAD.

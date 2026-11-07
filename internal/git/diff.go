@@ -37,28 +37,50 @@ type Changes struct {
 	Untracked []ChangedFile `json:"untracked"`
 }
 
-// ReadChanges lists the files in each section of dir's uncommitted work.
+// ReadChanges lists the files in each section of dir's uncommitted work, with
+// how many lines each adds and removes.
 func ReadChanges(dir string) (Changes, error) {
 	var c Changes
 	var err error
-	if c.Staged, err = sectionFiles(dir, SectionStaged); err != nil {
+	if c.Staged, err = countedSection(dir, SectionStaged); err != nil {
 		return Changes{}, err
 	}
-	if c.Unstaged, err = sectionFiles(dir, SectionUnstaged); err != nil {
+	if c.Unstaged, err = countedSection(dir, SectionUnstaged); err != nil {
 		return Changes{}, err
 	}
-	if c.Untracked, err = sectionFiles(dir, SectionUntracked); err != nil {
+	if c.Untracked, err = countedSection(dir, SectionUntracked); err != nil {
 		return Changes{}, err
 	}
 	return c, nil
 }
 
+// countedSection is sectionFiles with line counts. Counting reads every file
+// in the section, so it is left to the list and kept out of single-file lookups.
+func countedSection(dir, section string) ([]ChangedFile, error) {
+	files, err := sectionFiles(dir, section)
+	if err != nil {
+		return nil, err
+	}
+	if section == SectionUntracked {
+		for i := range files {
+			files[i].Added = untrackedLines(filepath.Join(dir, files[i].Path))
+		}
+		return files, nil
+	}
+	return files, withNumstat(dir, files, sectionArgs(section))
+}
+
+func sectionArgs(section string) []string {
+	if section == SectionStaged {
+		return []string{"diff", "--cached", "--name-status", "--no-renames", "-z"}
+	}
+	return []string{"diff", "--name-status", "--no-renames", "-z"}
+}
+
 func sectionFiles(dir, section string) ([]ChangedFile, error) {
 	switch section {
-	case SectionStaged:
-		return nameStatus(dir, "diff", "--cached", "--name-status", "--no-renames", "-z")
-	case SectionUnstaged:
-		return nameStatus(dir, "diff", "--name-status", "--no-renames", "-z")
+	case SectionStaged, SectionUnstaged:
+		return nameStatus(dir, sectionArgs(section)...)
 	case SectionUntracked:
 		out, err := Output(dir, "ls-files", "--others", "--exclude-standard", "-z")
 		if err != nil {
@@ -67,7 +89,7 @@ func sectionFiles(dir, section string) ([]ChangedFile, error) {
 		files := []ChangedFile{}
 		for _, p := range strings.Split(out, "\x00") {
 			if p != "" {
-				files = append(files, ChangedFile{Path: p, Status: "?", Added: untrackedLines(filepath.Join(dir, p))})
+				files = append(files, ChangedFile{Path: p, Status: "?"})
 			}
 		}
 		return files, nil
@@ -146,7 +168,7 @@ func nameStatus(dir string, args ...string) ([]ChangedFile, error) {
 		seen[f.Path] = len(files)
 		files = append(files, f)
 	}
-	return files, withNumstat(dir, files, args)
+	return files, nil
 }
 
 // Versions are a file's two sides in a section, for a side-by-side editor.
