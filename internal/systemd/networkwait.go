@@ -41,11 +41,14 @@ func NetworkWaitDropInPath() string {
 // networkWaitStalls decides, from the wait unit's load state, whether lerd has
 // already overridden it, and the current state of network-online.target,
 // whether container starts on this host are paying the 90s timeout.
-func networkWaitStalls(loadState string, dropInPresent bool, targetState string) bool {
+func networkWaitStalls(loadState string, dropInPresent bool, targetState string, onWSL bool) bool {
 	if loadState != "loaded" || dropInPresent {
 		return false
 	}
-	return targetState == "inactive" || targetState == "failed"
+	// WSL masks the wait-online services, so the target only comes up when
+	// something happens to pull it in: seeing it active once promises nothing
+	// for the next boot.
+	return onWSL || targetState == "inactive" || targetState == "failed"
 }
 
 // NetworkWaitStalls reports whether podman's network-online wait unit stalls
@@ -55,7 +58,7 @@ func NetworkWaitStalls() bool {
 		return false
 	}
 	_, err := os.Stat(NetworkWaitDropInPath())
-	return networkWaitStalls(unitLoadState(podmanNetworkWaitUnit), err == nil, networkOnlineTargetState())
+	return networkWaitStalls(unitLoadState(podmanNetworkWaitUnit), err == nil, networkOnlineTargetState(), platform.Current.WindowsSide)
 }
 
 // EnsureNoNetworkWaitStall installs the override when podman's wait unit would
