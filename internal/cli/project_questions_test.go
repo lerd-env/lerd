@@ -163,6 +163,31 @@ func TestSaveProjectAnswersKeepsSQLiteOutOfServices(t *testing.T) {
 }
 
 // The dev-server answers write the proxy section link reads, port included.
+// Ticking a service asks for it, so link must not skip it as removed and leave
+// .env wired to a container that never comes up. Others stay removed.
+func TestSaveProjectAnswersBringsBackAPickedRemovedService(t *testing.T) {
+	isolateSetupPlan(t)
+	for _, name := range []string{"mailpit", "redis"} {
+		if err := config.SetServiceRemoved(name, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	dir := t.TempDir()
+	writePlanFixture(t, dir, map[string]string{"composer.json": `{"require":{}}`})
+
+	if err := SaveProjectAnswers(dir, ProjectAnswers{Kind: ProjectKindPHP, Services: []string{"mailpit"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if config.ServiceIsRemoved("mailpit") {
+		t.Error("mailpit was picked but is still marked removed")
+	}
+	if !config.ServiceIsRemoved("redis") {
+		t.Error("redis was not picked and should stay removed")
+	}
+}
+
 func TestSaveProjectAnswersWritesProxyConfig(t *testing.T) {
 	isolateSetupPlan(t)
 	dir := t.TempDir()

@@ -104,6 +104,8 @@ After the wizard, a checkbox list appears with all available steps pre-selected 
 
 The `lerd secure` step is omitted entirely when HTTPS was already enabled in the init wizard, because there is nothing left to do.
 
+The dashboard's Add site wizard ends on the same list, and every step on it is optional. With nothing ticked the footer shows only **Open the site**, which ends the wizard. Ticking a step brings back **Run setup** and **Skip setup**.
+
 On a machine where `.lerd.yaml` already exists the wizard is skipped and the saved configuration is applied silently before the step selector appears.
 
 `lerd link` also applies `.lerd.yaml` when the file is present, so cloning a repo and running `lerd link` is enough to restore the full environment without running `lerd setup` or `lerd init` first. When workers are configured in `.lerd.yaml` but not yet running, `lerd link` prompts to run `lerd setup` so you can install dependencies, run migrations, and start workers in the right order.

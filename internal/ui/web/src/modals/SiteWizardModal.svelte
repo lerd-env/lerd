@@ -599,11 +599,11 @@
         {m.siteWizard_continue()}
       </DetailButton>
     {:else if step === 'setup'}
-      {#if finishedSteps.length > 0 || steps.length === 0}
+      {#if finishedSteps.length > 0 || selectedSteps.length === 0}
         <DetailButton tone="primary" onclick={finish}>{m.siteWizard_finish()}</DetailButton>
       {:else}
         <DetailButton onclick={finish}>{m.siteWizard_skipSetup()}</DetailButton>
-        <DetailButton tone="primary" onclick={runSetup} disabled={selectedSteps.length === 0}>
+        <DetailButton tone="primary" onclick={runSetup}>
           {m.siteWizard_runSetup()}
         </DetailButton>
       {/if}

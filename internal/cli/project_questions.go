@@ -508,7 +508,17 @@ func SaveProjectAnswers(cwd string, answers ProjectAnswers) error {
 	if err != nil {
 		return err
 	}
-	return config.SaveProjectConfig(cwd, cfg)
+	if err := config.SaveProjectConfig(cwd, cfg); err != nil {
+		return err
+	}
+	// Picking a service asks for it: link skips one marked removed, which would
+	// wire .env to a container that never comes up.
+	for _, name := range cfg.ServiceNames() {
+		if err := config.SetServiceRemoved(name, false); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // projectConfigFromAnswers turns answers into the .lerd.yaml a link applies,

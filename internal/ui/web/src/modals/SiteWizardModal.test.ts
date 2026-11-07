@@ -403,6 +403,26 @@ describe('SiteWizardModal', () => {
     await waitFor(() => expect(goToTab).toHaveBeenCalledWith('sites', 'acme.test'));
   });
 
+  // No step is ever required, so a list with nothing ticked just finishes.
+  it('offers only Open the site while no setup step is ticked', async () => {
+    sites.set([{ domain: 'acme.test', path: '/home/u/acme' } as never]);
+    setupSteps.mockResolvedValue([{ label: 'lerd mcp:inject', enabled: false, optional: false }]);
+    localStorage.setItem('lerd.siteWizard', JSON.stringify({ step: 'setup', dir: '/home/u/acme' }));
+
+    render(SiteWizardModal);
+    await screen.findByText('lerd mcp:inject');
+
+    expect(screen.queryByText('Run setup')).toBeNull();
+    expect(screen.queryByText('Skip setup')).toBeNull();
+    await fireEvent.click(screen.getByText('lerd mcp:inject'));
+    expect(await screen.findByText('Run setup')).toBeTruthy();
+    expect(screen.getByText('Skip setup')).toBeTruthy();
+    await fireEvent.click(screen.getByText('lerd mcp:inject'));
+
+    await fireEvent.click(await screen.findByText('Open the site'));
+    await waitFor(() => expect(goToTab).toHaveBeenCalledWith('sites', 'acme.test'));
+  });
+
   // A directory that already is a site has nothing left to ask. Walking the
   // questions again would link it twice; the wizard hands over to the site.
   it('opens a directory that is already linked instead of relinking it', async () => {
