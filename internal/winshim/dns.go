@@ -23,7 +23,8 @@ const probeID = 0x1e4d
 // nothing on its own: a DNS filter on the host can swallow every well-formed
 // query on port 53 while the socket looks healthy.
 func Probe(addr, tld string, timeout time.Duration) error {
-	name, err := dnsmessage.NewName("lerd-self-test." + tld + ".")
+	// One letter, as a long TLD leaves little room under the 255 byte limit.
+	name, err := dnsmessage.NewName("a." + tld + ".")
 	if err != nil {
 		return err
 	}
@@ -51,11 +52,29 @@ func Probe(addr, tld string, timeout time.Duration) error {
 		if err != nil {
 			return fmt.Errorf("no answer from %s: %w", addr, err)
 		}
-		var p dnsmessage.Parser
-		if h, err := p.Start(buf[:n]); err == nil && h.Response && h.ID == probeID {
-			return nil
+		var m dnsmessage.Message
+		if err := m.Unpack(buf[:n]); err != nil || !m.Response || m.ID != probeID {
+			continue
+		}
+		if !answersLoopback(m) {
+			return fmt.Errorf("%s answered, but not with loopback: %s", addr, m.RCode)
+		}
+		return nil
+	}
+}
+
+// answersLoopback reports whether a reply is the one the agent gives. A filter
+// that answers for it, with an error or an address of its own, is still in the way.
+func answersLoopback(m dnsmessage.Message) bool {
+	if m.RCode != dnsmessage.RCodeSuccess {
+		return false
+	}
+	for _, a := range m.Answers {
+		if r, ok := a.Body.(*dnsmessage.AResource); ok && r.A == [4]byte{127, 0, 0, 1} {
+			return true
 		}
 	}
+	return false
 }
 
 // ProbeFailedIn reports whether the agent's latest self-test in its log failed.
