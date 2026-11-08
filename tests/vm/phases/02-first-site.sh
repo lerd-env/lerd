@@ -56,7 +56,8 @@ expect_code "http://$space_host" 200
 
 # nvm with a prefix in ~/.npmrc: setup runs its npm steps and leaves the file alone.
 if [ ! -s "$HOME/.nvm/nvm.sh" ]; then
-	curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | PROFILE=/dev/null bash >/dev/null 2>&1
+	# nvm v0.40.3, by commit so the script that runs cannot change under the tag.
+	curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/977563e97ddc66facf3a8e31c6cff01d236f09bd/install.sh | PROFILE=/dev/null bash >/dev/null 2>&1
 fi
 manager_before=$(lerd node:manager 2>/dev/null | awk '/manager:/ {print $NF}')
 cp -f "$HOME/.npmrc" /tmp/lerd-vm-npmrc 2>/dev/null || : >/tmp/lerd-vm-npmrc
