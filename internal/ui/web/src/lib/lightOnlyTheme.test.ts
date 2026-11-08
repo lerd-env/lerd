@@ -1,3 +1,4 @@
+import { hex } from '../test-colour';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { repaintLightOnly, themeLightOnlyDocument } from './lightOnlyTheme';
 
@@ -25,8 +26,8 @@ describe('repaintLightOnly', () => {
     repaintLightOnly(doc, true);
     // White is the lightest thing the design has, so it lands on the page, and
     // the near-black it wrote text in comes back light enough to read.
-    expect(rule(doc).getPropertyValue('background-color')).toBe('#101010');
-    const text = rule(doc).getPropertyValue('color');
+    expect(hex(rule(doc).getPropertyValue('background-color'))).toBe('#101010');
+    const text = hex(rule(doc).getPropertyValue('color'));
     expect(text).not.toBe('#212529');
     expect(parseInt(text.slice(1, 3), 16)).toBeGreaterThan(0x80);
   });
@@ -34,14 +35,14 @@ describe('repaintLightOnly', () => {
   it('leaves a colour that carries a hue saying what it says', () => {
     const doc = sheetWith('.alert-danger { background-color: #dc3545; border-color: #198754; }');
     repaintLightOnly(doc, true);
-    expect(rule(doc).getPropertyValue('background-color')).toBe('#dc3545');
-    expect(rule(doc).getPropertyValue('border-color')).toBe('#198754');
+    expect(hex(rule(doc).getPropertyValue('background-color'))).toBe('#dc3545');
+    expect(hex(rule(doc).getPropertyValue('border-color'))).toBe('#198754');
   });
 
   it('keeps the tone a filled button already chose for its own text', () => {
     const doc = sheetWith('.btn-primary { background-color: #0d6efd; color: #ffffff; }');
     repaintLightOnly(doc, true);
-    expect(rule(doc).getPropertyValue('color')).toBe('#ffffff');
+    expect(hex(rule(doc).getPropertyValue('color'))).toBe('#ffffff');
   });
 
   it('reaches the colours inside a media block', () => {
@@ -49,7 +50,7 @@ describe('repaintLightOnly', () => {
     const nested = ((doc.styleSheets[0].cssRules[0] as CSSMediaRule).cssRules[0] as CSSStyleRule)
       .style;
     repaintLightOnly(doc, true);
-    expect(nested.getPropertyValue('background-color')).not.toBe('#eeeeee');
+    expect(hex(nested.getPropertyValue('background-color'))).not.toBe('#eeeeee');
   });
 
   it('leaves a design alone where the browser cannot name its colours', () => {
@@ -57,13 +58,13 @@ describe('repaintLightOnly', () => {
     // come back untouched rather than half painted.
     const doc = sheetWith('.err { background-color: pink; border: 1px solid maroon; }');
     repaintLightOnly(doc, true);
-    expect(rule(doc).getPropertyValue('background-color')).toBe('pink');
+    expect(hex(rule(doc).getPropertyValue('background-color'))).toBe('pink');
   });
 
   it('lays a panel flat instead of carrying its sheen onto a dark one', () => {
     const doc = sheetWith('.card-header { background: linear-gradient(#eeeeee, #cccccc); }');
     repaintLightOnly(doc, true);
-    const bg = rule(doc).getPropertyValue('background');
+    const bg = hex(rule(doc).getPropertyValue('background'));
     expect(bg).not.toContain('gradient');
     expect(bg).toMatch(/^#[0-9a-f]{6}$/);
   });
@@ -73,27 +74,27 @@ describe('repaintLightOnly', () => {
     // gradient arrives on background-image with no colour beside it.
     const doc = sheetWith('#nav { background-image: linear-gradient(to right, #f3f3f3, #dadcde); }');
     repaintLightOnly(doc, true);
-    expect(rule(doc).getPropertyValue('background-image')).toBe('none');
-    expect(rule(doc).getPropertyValue('background-color')).toMatch(/^#[0-9a-f]{6}$/);
+    expect(hex(rule(doc).getPropertyValue('background-image'))).toBe('none');
+    expect(hex(rule(doc).getPropertyValue('background-color'))).toMatch(/^#[0-9a-f]{6}$/);
     repaintLightOnly(doc, true);
-    expect(rule(doc).getPropertyValue('background-color')).toMatch(/^#[0-9a-f]{6}$/);
+    expect(hex(rule(doc).getPropertyValue('background-color'))).toMatch(/^#[0-9a-f]{6}$/);
     repaintLightOnly(doc, false);
-    expect(rule(doc).getPropertyValue('background-image')).toContain('gradient');
-    expect(rule(doc).getPropertyValue('background-color')).toBe('');
+    expect(hex(rule(doc).getPropertyValue('background-image'))).toContain('gradient');
+    expect(hex(rule(doc).getPropertyValue('background-color'))).toBe('');
   });
 
   it('drops the shadow a light design lifts its text with', () => {
     const doc = sheetWith('.tab { color: #333333; text-shadow: 0 1px 0 #ffffff; }');
     repaintLightOnly(doc, true);
-    expect(rule(doc).getPropertyValue('text-shadow')).toBe('none');
+    expect(hex(rule(doc).getPropertyValue('text-shadow'))).toBe('none');
     repaintLightOnly(doc, false);
-    expect(rule(doc).getPropertyValue('text-shadow')).toContain('#ffffff');
+    expect(hex(rule(doc).getPropertyValue('text-shadow'))).toContain('#ffffff');
   });
 
   it('keeps a shadow under the panel rather than a halo around it', () => {
     const doc = sheetWith('.note { box-shadow: 0 0 10px #cccccc; }');
     repaintLightOnly(doc, true);
-    const shadow = rule(doc).getPropertyValue('box-shadow');
+    const shadow = hex(rule(doc).getPropertyValue('box-shadow'));
     expect(shadow).toContain('0 0 10px');
     const painted = shadow.match(/#[0-9a-f]{6}/)![0];
     // Darker than the page it sits on, so it reads as a shadow on either side.
@@ -105,8 +106,8 @@ describe('repaintLightOnly', () => {
     // anything is turned around.
     const doc = sheetWith('.btn-success { background-color: #5cb85c; color: #ffffff; }');
     repaintLightOnly(doc, true);
-    expect(rule(doc).getPropertyValue('color')).toBe('#ffffff');
-    const fill = rule(doc).getPropertyValue('background-color');
+    expect(hex(rule(doc).getPropertyValue('color'))).toBe('#ffffff');
+    const fill = hex(rule(doc).getPropertyValue('background-color'));
     expect(fill).not.toBe('#5cb85c');
     const [r, g, b] = [1, 3, 5].map((i) => parseInt(fill.slice(i, i + 2), 16));
     expect(g).toBeGreaterThan(r); // still the green it was saying
@@ -117,7 +118,7 @@ describe('repaintLightOnly', () => {
   it('leaves a filled button alone when its label already reads', () => {
     const doc = sheetWith('.btn-dark { background-color: #14532d; color: #ffffff; }');
     repaintLightOnly(doc, true);
-    expect(rule(doc).getPropertyValue('background-color')).toBe('#14532d');
+    expect(hex(rule(doc).getPropertyValue('background-color'))).toBe('#14532d');
   });
 
   it('leaves the sheet lerd itself wrote alone', () => {
@@ -128,7 +129,7 @@ describe('repaintLightOnly', () => {
     const ours = doc.getElementById('lerd-light-only-theme')!.textContent;
     repaintLightOnly(doc, true);
     expect(doc.getElementById('lerd-light-only-theme')!.textContent).toBe(ours);
-    expect((doc.styleSheets[0].cssRules[0] as CSSStyleRule).style.getPropertyValue('background'))
+    expect(hex((doc.styleSheets[0].cssRules[0] as CSSStyleRule).style.getPropertyValue('background')))
       .toContain('#');
   });
 
@@ -136,8 +137,8 @@ describe('repaintLightOnly', () => {
     const doc = sheetWith('body { background-color: #ffffff; color: #212529; }');
     repaintLightOnly(doc, true);
     repaintLightOnly(doc, false);
-    expect(rule(doc).getPropertyValue('background-color')).toBe('#ffffff');
-    expect(rule(doc).getPropertyValue('color')).toBe('#212529');
+    expect(hex(rule(doc).getPropertyValue('background-color'))).toBe('#ffffff');
+    expect(hex(rule(doc).getPropertyValue('color'))).toBe('#212529');
   });
 
   it('paints a second palette from the design, not from the first palette', () => {
@@ -145,7 +146,7 @@ describe('repaintLightOnly', () => {
     repaintLightOnly(doc, true);
     document.documentElement.style.setProperty('--lerd-bg', '#2a2118');
     repaintLightOnly(doc, true);
-    expect(rule(doc).getPropertyValue('background-color')).toBe('#2a2118');
+    expect(hex(rule(doc).getPropertyValue('background-color'))).toBe('#2a2118');
   });
 });
 

@@ -3,7 +3,7 @@
 // first time an editor surface mounts. Every caller awaits the same
 // promise, so the module, the worker wiring, and the themes are set up
 // exactly once.
-import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
+import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
 import { configLanguages, phpFragmentLanguage } from '$lib/monaco-langs';
 import { editorSurfaces, keywordRule, semanticRules } from '$lib/editor-theme';
 
@@ -12,7 +12,7 @@ import { editorSurfaces, keywordRule, semanticRules } from '$lib/editor-theme';
 // html/css language services (each with its own worker), none of which we
 // use. Pulling editor.api and contributing only the grammars we need keeps
 // the embedded dist (and therefore the lerd binary) lean.
-export type MonacoModule = typeof import('monaco-editor/esm/vs/editor/editor.api');
+export type MonacoModule = typeof import('monaco-editor/editor/editor.api');
 
 let monacoPromise: Promise<MonacoModule> | null = null;
 
@@ -104,12 +104,15 @@ function registerConfigLanguages(monaco: MonacoModule) {
 export function loadMonaco(): Promise<MonacoModule> {
   if (!monacoPromise) {
     monacoPromise = (async () => {
-      const monaco = await import('monaco-editor/esm/vs/editor/editor.api');
+      const monaco = await import('monaco-editor/editor/editor.api');
+      // The core API ships bare since 0.57: find, folding, suggestions, hover
+      // and the icon font are opt-in features, so register them all.
+      await import('monaco-editor/features/register.all');
       // PHP highlighting for tinker; config-format grammars for the
       // nginx/ini/dotenv editors. The stock PHP grammar is re-registered to
       // start inside PHP, since tinker's buffer carries no `<?php` opener.
-      await import('monaco-editor/esm/vs/basic-languages/php/php.contribution');
-      const { language: php } = await import('monaco-editor/esm/vs/basic-languages/php/php');
+      await import('monaco-editor/languages/definitions/php/register');
+      const { language: php } = await import('monaco-editor/languages/definitions/php/php');
       monaco.languages.setMonarchTokensProvider('php', phpFragmentLanguage(php) as any);
       configureWorkers();
       defineThemes(monaco);

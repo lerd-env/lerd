@@ -30,7 +30,7 @@ describe('tooltip action', () => {
   // Focus handed back after a mouse click is not a request for the tooltip.
   it('shows on keyboard focus only', () => {
     const { btn } = mount('Text size');
-    const visible = (v: boolean) => (btn.matches = (s: string) => s === ':focus-visible' && v);
+    const visible = (v: boolean) => (btn.matches = ((s: string) => s === ':focus-visible' && v) as typeof btn.matches);
     visible(false);
     btn.dispatchEvent(new FocusEvent('focusin'));
     expect(tip()?.style.opacity ?? '0').toBe('0');
