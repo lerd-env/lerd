@@ -19,6 +19,7 @@ func FuzzApplyUpdatesRoundTrip(f *testing.F) {
 	f.Add("", "REDIS_PORT", "6379")
 	f.Add("  MAIL_HOST = smtp\r\nexport X=1", "MAIL_HOST", "lerd-mailpit")
 	f.Add("<?php\n$databases = [];\n", "DB_HOST", "lerd-mysql")
+	f.Add("APP_ENV=local\n", "APP_DEBUG", "")
 
 	f.Fuzz(func(t *testing.T, content, key, value string) {
 		if !fuzzKey.MatchString(key) || strings.ContainsAny(value, "\n\r") ||
@@ -30,6 +31,10 @@ func FuzzApplyUpdatesRoundTrip(f *testing.F) {
 			t.Fatal(err)
 		}
 		err := ApplyUpdates(path, map[string]string{key: value})
+		// Checked apart from isPHPSource, so a regression there cannot hide itself.
+		if strings.HasPrefix(strings.TrimLeft(content, " \t\r\n"), "<?php") && err == nil {
+			t.Fatalf("wrote dotenv lines into PHP source %q", content)
+		}
 		if isPHPSource([]byte(content)) {
 			if err == nil {
 				t.Fatalf("wrote dotenv lines into PHP source %q", content)
@@ -39,8 +44,8 @@ func FuzzApplyUpdatesRoundTrip(f *testing.F) {
 		if err != nil {
 			t.Fatalf("ApplyUpdates: %v", err)
 		}
-		if got := ReadValues(path)[key]; got != value {
-			t.Fatalf("wrote %s=%q over %q, read back %q", key, value, content, got)
+		if got, ok := ReadValues(path)[key]; !ok || got != value {
+			t.Fatalf("wrote %s=%q over %q, read back %q (present: %t)", key, value, content, got, ok)
 		}
 	})
 }
