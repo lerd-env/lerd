@@ -1,0 +1,6 @@
+# Advisories with no fixed version that do not reach lerd's code. The UI's
+# npm advisories live in internal/ui/web/osv-scanner.toml, next to its lockfile.
+
+[[IgnoredVulns]]
+id = "GO-2026-5932"
+reason = "Flags every x/crypto version for the openpgp package; lerd imports only x/crypto/bcrypt."
