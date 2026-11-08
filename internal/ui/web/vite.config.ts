@@ -7,10 +7,10 @@ export default defineConfig(() => ({
   plugins: [svelte()],
   resolve: {
     alias: {
-      $lib: resolve(__dirname, 'src/lib'),
-      $components: resolve(__dirname, 'src/components'),
-      $stores: resolve(__dirname, 'src/stores'),
-      $tabs: resolve(__dirname, 'src/tabs')
+      $lib: resolve(import.meta.dirname, 'src/lib'),
+      $components: resolve(import.meta.dirname, 'src/components'),
+      $stores: resolve(import.meta.dirname, 'src/stores'),
+      $tabs: resolve(import.meta.dirname, 'src/tabs')
     },
     conditions: ['browser']
   },
@@ -35,7 +35,7 @@ export default defineConfig(() => ({
     port: 5173,
     // The browser logs script lives with the Go package that embeds it;
     // its tests import it from there.
-    fs: { allow: ['.', resolve(__dirname, '../../browserlogs')] },
+    fs: { allow: ['.', resolve(import.meta.dirname, '../../browserlogs')] },
     proxy: {
       '/api': { target: 'http://localhost:7073', changeOrigin: true, ws: true },
       '/icons': 'http://localhost:7073',

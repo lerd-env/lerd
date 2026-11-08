@@ -5,6 +5,7 @@
     "useDefineForClassFields": true,
     "module": "ESNext",
     "resolveJsonModule": true,
+    "noEmit": true,
     "allowJs": true,
     "checkJs": true,
     "isolatedModules": true,
@@ -13,12 +14,11 @@
     "strict": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "baseUrl": ".",
     "paths": {
-      "$lib/*": ["src/lib/*"],
-      "$components/*": ["src/components/*"],
-      "$stores/*": ["src/stores/*"],
-      "$tabs/*": ["src/tabs/*"]
+      "$lib/*": ["./src/lib/*"],
+      "$components/*": ["./src/components/*"],
+      "$stores/*": ["./src/stores/*"],
+      "$tabs/*": ["./src/tabs/*"]
     },
     "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
