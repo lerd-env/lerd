@@ -82,8 +82,8 @@ func runRuntime(cmd *cobra.Command, args []string) error {
 		// -> 8.5) and silently run a different PHP than the site reports, with
 		// its ini files still mounted from the old version's path.
 		if reason := config.FrankenPHPUnavailableReason(site.PHPVersion); reason != "" {
-			if config.IsPrereleasePHPVersion(site.PHPVersion) {
-				return fmt.Errorf("%s — this site runs on FPM until it ships", reason)
+			if config.FrankenPHPTooNew(site.PHPVersion) {
+				return fmt.Errorf("%s — this site runs on FPM until it does", reason)
 			}
 			return fmt.Errorf("%s — bump it first with 'lerd isolate %s' (or higher)", reason, config.FrankenPHPMinVersion)
 		}

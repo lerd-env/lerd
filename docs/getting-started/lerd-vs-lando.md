@@ -18,7 +18,7 @@ description: 'Lerd and Lando compared on isolation, production parity, reproduci
 | Isolation | Projects share the PHP-FPM container of their PHP version and one server per database engine, each with its own database | Each project has its own services |
 | Production parity | nginx with PHP-FPM on Alpine images; database versions chosen per service; a site can bring its own `Containerfile.lerd` | Recipes mirror hosting platforms such as Pantheon, Platform.sh and Lagoon |
 | Reproducibility | `.lerd.yaml` in the repo records PHP, Node, services, workers and custom containers; optional | `.lando.yml` in the repo, required |
-| PHP versions | 7.4 to 8.5, plus the 8.6 prerelease | Per project, set in the recipe or `.lando.yml` |
+| PHP versions | 7.4 to 8.6 | Per project, set in the recipe or `.lando.yml` |
 | Domains | `<name>.test`, automatic | `*.lndo.site`, automatic |
 | HTTPS | `lerd secure`, trusted local CA | Built in, per project |
 | Non-PHP projects | `Containerfile.lerd` for Node, Python, Go and others | Services for Node, Python, Ruby, Go, .NET |

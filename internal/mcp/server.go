@@ -4188,8 +4188,8 @@ func execSiteRuntime(args map[string]any) (any, *rpcError) {
 	// guard the build normalizes the version up (e.g. 8.1 -> 8.5) and silently
 	// runs a different PHP than the site reports. Mirror the `lerd runtime` guard.
 	if reason := config.FrankenPHPUnavailableReason(site.PHPVersion); reason != "" {
-		if config.IsPrereleasePHPVersion(site.PHPVersion) {
-			return toolErr(reason + " — this site runs on FPM until it ships."), nil
+		if config.FrankenPHPTooNew(site.PHPVersion) {
+			return toolErr(reason + " — this site runs on FPM until it does."), nil
 		}
 		return toolErr(reason + " — bump it first."), nil
 	}

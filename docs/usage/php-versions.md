@@ -173,19 +173,9 @@ lerd isolate 8.0
 lerd fetch 7.4 8.0
 ```
 
-## Prerelease PHP versions
+## PHP 8.6
 
-PHP 8.6 is not released upstream yet, and lerd builds it so a project can run its test suite against it before release. It is offered as a prerelease everywhere a version is picked, in the dashboard's version cards and both PHP dropdowns, so it is never chosen in the belief that it behaves like a released version. Once it is installed, its version card names the stage of the build it carries, alpha, beta or RC, read from the image itself, so the mark follows upstream without a lerd update; before that it reads preview:
+PHP 8.6 is a released version like the others: `lerd fetch` builds it and it is offered everywhere a version is picked. Two parts of its ecosystem have not caught up yet:
 
-- It builds from the `8.6-rc` image the PHP Docker library publishes through beta and RC, because there is no plain `8.6-fpm-alpine` tag until release. That switches to the released tag when 8.6 ships, with nothing to change on your side.
-- `lerd fetch` with no arguments builds the released versions only. A prerelease builds when you name it.
 - FrankenPHP publishes no image for it, so an 8.6 site is served by FPM. Switching a site to the FrankenPHP runtime on 8.6 is refused rather than quietly run on a different PHP, and a site already on FrankenPHP falls back to FPM when it moves to 8.6.
-- PHP 8.6 removed PEAR, so `pecl` is gone from the upstream image and lerd installs PECL extensions from their release tarballs instead. `redis`, `imagick` and `mongodb` still build; `igbinary`, `pcov` and `xdebug` do not compile against 8.6 yet, so they are absent from the image and lerd does not advertise them on that version. They come back as their upstreams catch up. The profiler needs `php-spx`, which is in the same position, so it is unavailable on 8.6.
-- Upstream behaviour still changes between builds, so it is a place to test rather than a default to develop on.
-
-Use it like any other version:
-
-```bash
-lerd fetch 8.6
-lerd isolate 8.6
-```
+- PHP 8.6 removed PEAR, so `pecl` is gone from the upstream image and lerd installs PECL extensions from their release tarballs instead. `redis`, `imagick` and `mongodb` build; `igbinary`, `pcov` and `xdebug` do not compile against 8.6 yet, so they are absent from the image and lerd does not advertise them on that version. They come back as their upstreams catch up. The profiler needs `php-spx`, which is in the same position, so it is unavailable on 8.6.

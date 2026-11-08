@@ -155,7 +155,7 @@ See [Remote / LAN Development](/usage/remote-development) for the full walkthrou
 
 ## PHP
 
-Supported PHP versions: **8.5**, **8.4**, **8.3**, **8.2**, **8.1**, the prerelease **8.6**, and the frozen legacy tier **8.0** and **7.4**. The prerelease tier is opt-in the same way (`lerd fetch 8.6`, `lerd isolate 8.6`), builds from the `8.6-rc` upstream tag while 8.6 is in beta, and is FPM only until FrankenPHP publishes an image for it. The legacy tier is opt-in only (you have to `lerd use 7.4` or `lerd isolate 7.4` explicitly), pulls from `php:7.4-fpm-alpine` / `php:8.0-fpm-alpine` upstream tags, and intentionally skips ext-mongodb (unavailable on those PHP versions). Use the legacy tier for hosted legacy apps; default new projects to 8.4 LTS or 8.5.
+Supported PHP versions: **8.6**, **8.5**, **8.4**, **8.3**, **8.2**, **8.1**, and the frozen legacy tier **8.0** and **7.4**. 8.6 is FPM only until FrankenPHP publishes an image for it. The legacy tier is opt-in only (you have to `lerd use 7.4` or `lerd isolate 7.4` explicitly), pulls from `php:7.4-fpm-alpine` / `php:8.0-fpm-alpine` upstream tags, and intentionally skips ext-mongodb (unavailable on those PHP versions). Use the legacy tier for hosted legacy apps; default new projects to 8.4 LTS or 8.5.
 
 | Command | Description |
 |---|---|

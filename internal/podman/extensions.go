@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"strings"
-
-	"github.com/geodro/lerd/internal/config"
 )
 
 // bundledSince records the first PHP version whose image actually ships an
@@ -16,15 +14,11 @@ var bundledSince = map[string][2]int{
 	"mongodb": {8, 1},
 }
 
-// prereleaseUnbuildable are the third-party extensions whose sources do not yet
-// compile against a prerelease PHP, so the tolerant build drops them and nothing
-// may advertise a name the image never loads. Shrink this as upstream catches
-// up; the base image build fails on anything advertised and missing, so an entry
-// left here too long costs a name, never a broken image.
-var prereleaseUnbuildable = map[string]bool{
-	"igbinary": true,
-	"pcov":     true,
-	"xdebug":   true,
+// notYetBuildable are, per PHP version, the PECL extensions that do not compile
+// against it yet, so nothing advertises a name the image never loads. Shrink it
+// as upstream catches up; a stale entry costs a name, never a broken image.
+var notYetBuildable = map[string]map[string]bool{
+	"8.6": {"igbinary": true, "pcov": true, "xdebug": true},
 }
 
 // BundledExtensions returns the PHP extensions the default lerd FPM image ships
@@ -46,13 +40,12 @@ func BundledExtensions(phpVersion string) []string {
 		"redis", "imagick", "igbinary", "mongodb", "pcov", "xdebug",
 	}
 
-	prerelease := config.IsPrereleasePHPVersion(phpVersion)
 	bundled := make([]string, 0, len(all))
 	for _, ext := range all {
 		if since, gated := bundledSince[ext]; gated && !phpAtLeast(phpVersion, since[0], since[1]) {
 			continue
 		}
-		if prerelease && prereleaseUnbuildable[ext] {
+		if notYetBuildable[phpVersion][ext] {
 			continue
 		}
 		bundled = append(bundled, ext)

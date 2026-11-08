@@ -3,8 +3,6 @@ package podman
 import (
 	"strings"
 	"testing"
-
-	"github.com/geodro/lerd/internal/config"
 )
 
 // TestComposerPlatformNameRoundTrips checks both directions of the name folding:
@@ -74,17 +72,14 @@ func TestBundledExtensionsCoverContainerfile(t *testing.T) {
 	}
 }
 
-// A prerelease PHP outruns the PECL releases: they do not compile against it, so
+// A new PHP outruns the PECL releases: they do not compile against it yet, so
 // the image drops them and BundledExtensions must not promise what it never got.
-func TestBundledExtensionsDropsPECLOnPrerelease(t *testing.T) {
-	if len(config.PrereleasePHPVersions) == 0 {
-		t.Skip("no prerelease version in the supported list")
-	}
-	v := config.PrereleasePHPVersions[0]
+func TestBundledExtensionsDropsPECLNotYetBuildingOn86(t *testing.T) {
+	v := "8.6"
 	got := strings.Join(BundledExtensions(v), " ")
 	for _, ext := range []string{"igbinary", "pcov", "xdebug"} {
 		if strings.Contains(" "+got+" ", " "+ext+" ") {
-			t.Errorf("BundledExtensions(%q) advertises %q, which does not build on a prerelease", v, ext)
+			t.Errorf("BundledExtensions(%q) advertises %q, which does not build on it yet", v, ext)
 		}
 	}
 	for _, ext := range []string{"curl", "intl", "opcache", "pdo_mysql", "redis", "imagick", "mongodb"} {
@@ -94,7 +89,7 @@ func TestBundledExtensionsDropsPECLOnPrerelease(t *testing.T) {
 	}
 	stable := strings.Join(BundledExtensions("8.5"), " ")
 	if !strings.Contains(stable, "xdebug") {
-		t.Error("BundledExtensions(8.5) lost xdebug; the prerelease rule leaked into a released version")
+		t.Error("BundledExtensions(8.5) lost xdebug; the 8.6 rule leaked into 8.5")
 	}
 }
 

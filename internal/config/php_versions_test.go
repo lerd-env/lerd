@@ -161,13 +161,41 @@ func TestFrankenPHPUnavailableReason(t *testing.T) {
 	if got := FrankenPHPUnavailableReason("8.1"); !strings.Contains(got, "or newer") {
 		t.Errorf("FrankenPHPUnavailableReason(8.1) = %q, want the minimum-version reason", got)
 	}
-	for _, v := range PrereleasePHPVersions {
-		got := FrankenPHPUnavailableReason(v)
-		if !strings.Contains(got, "prerelease") {
-			t.Errorf("FrankenPHPUnavailableReason(%q) = %q, want the prerelease reason", v, got)
-		}
-		if strings.Contains(got, "or newer") {
-			t.Errorf("FrankenPHPUnavailableReason(%q) = %q, reads like the version is too old", v, got)
-		}
+	got := FrankenPHPUnavailableReason("8.6")
+	if !strings.Contains(got, "no image for PHP 8.6 yet") {
+		t.Errorf("FrankenPHPUnavailableReason(8.6) = %q, want the not-published-yet reason", got)
+	}
+	if strings.Contains(got, "or newer") || strings.Contains(got, "prerelease") {
+		t.Errorf("FrankenPHPUnavailableReason(8.6) = %q, reads like the version is too old or unreleased", got)
+	}
+}
+
+func TestPHP86IsReleased(t *testing.T) {
+	if IsPrereleasePHPVersion("8.6") {
+		t.Error("IsPrereleasePHPVersion(8.6) = true, want false since 8.6 shipped")
+	}
+	if got := UpstreamPHPTag("8.6"); got != "8.6" {
+		t.Errorf("UpstreamPHPTag(8.6) = %q, want the released 8.6 tag", got)
+	}
+	stable := StablePHPVersions()
+	if stable[len(stable)-1] != "8.6" {
+		t.Errorf("StablePHPVersions() = %v, want 8.6 in a bare fetch", stable)
+	}
+}
+
+// A released PHP can still be newer than any frankenphp image, so that gate
+// stands on its own rather than riding on the prerelease list.
+func TestFrankenPHPStopsAtNewestPublished(t *testing.T) {
+	if IsFrankenPHPVersion("8.6") {
+		t.Error("IsFrankenPHPVersion(8.6) = true; dunglas/frankenphp publishes no 8.6 image")
+	}
+	if !IsFrankenPHPVersion("8.5") {
+		t.Error("IsFrankenPHPVersion(8.5) = false, want true")
+	}
+	if !FrankenPHPTooNew("8.6") || FrankenPHPTooNew("8.1") || FrankenPHPTooNew("8.5") {
+		t.Error("FrankenPHPTooNew must be true only above the newest published image")
+	}
+	if got := LatestFrankenPHPVersion(); got != "8.5" {
+		t.Errorf("LatestFrankenPHPVersion() = %q, want 8.5", got)
 	}
 }
