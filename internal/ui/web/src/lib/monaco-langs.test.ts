@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { compile } from 'monaco-editor/esm/vs/editor/standalone/common/monarch/monarchCompile';
-import { MonarchTokenizer } from 'monaco-editor/esm/vs/editor/standalone/common/monarch/monarchLexer';
-import { language as phpLanguage } from 'monaco-editor/esm/vs/basic-languages/php/php';
+import { compile } from 'monaco-editor/editor/standalone/common/monarch/monarchCompile';
+import { MonarchTokenizer } from 'monaco-editor/editor/standalone/common/monarch/monarchLexer';
+import { language as phpLanguage } from 'monaco-editor/languages/definitions/php/php';
 import { nginxLanguage, iniLanguage, dotenvLanguage, phpFragmentLanguage } from './monaco-langs';
 
 // Drive the config grammars through Monaco's real Monarch engine so a broken

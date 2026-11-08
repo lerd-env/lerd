@@ -1,21 +1,16 @@
 /// <reference types="vite/client" />
 
-// Monaco ships its types only on the package root, not on the deep ESM
-// entrypoints we import to keep the bundle lean. Re-point them here.
-declare module 'monaco-editor/esm/vs/editor/editor.api' {
-  export * from 'monaco-editor';
-}
-declare module 'monaco-editor/esm/vs/basic-languages/php/php.contribution';
-declare module 'monaco-editor/esm/vs/basic-languages/php/php' {
+// Monaco ships no types for the PHP grammar itself, which tinker re-registers.
+declare module 'monaco-editor/languages/definitions/php/php' {
   export const language: { tokenizer: Record<string, unknown> };
 }
 
 // Internal Monarch entrypoints, used only by the grammar tests to tokenise
 // the config languages through Monaco's real engine.
-declare module 'monaco-editor/esm/vs/editor/standalone/common/monarch/monarchCompile' {
+declare module 'monaco-editor/editor/standalone/common/monarch/monarchCompile' {
   export function compile(languageId: string, json: unknown): unknown;
 }
-declare module 'monaco-editor/esm/vs/editor/standalone/common/monarch/monarchLexer' {
+declare module 'monaco-editor/editor/standalone/common/monarch/monarchLexer' {
   export class MonarchTokenizer {
     constructor(languageService: unknown, themeService: unknown, languageId: string, lexer: unknown, configurationService: unknown);
     getInitialState(): unknown;

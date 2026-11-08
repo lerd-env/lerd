@@ -3,7 +3,7 @@ import { svelte, vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/postcss';
 import { resolve } from 'node:path';
 
-const r = (p: string) => resolve(__dirname, p);
+const r = (p: string) => resolve(import.meta.dirname, p);
 
 // Swap specific real components for demo-only versions (e.g. the LAN-share QR,
 // whose image is daemon-served). Matches the import by filename so the relative

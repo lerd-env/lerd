@@ -1,3 +1,4 @@
+import { hex } from '../test-colour';
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   themeMeilisearchDocument,
@@ -53,13 +54,13 @@ describe('repaintMeilisearch', () => {
   it('lands its page grey exactly on the theme page colour', () => {
     const doc = sheetWith('.x { background-color: rgb(250, 251, 254); }');
     repaintMeilisearch(doc, true);
-    expect(rule(doc).getPropertyValue('background-color')).toBe('#141618');
+    expect(hex(rule(doc).getPropertyValue('background-color'))).toBe('#141618');
   });
 
   it('lands its panels on the theme card colour', () => {
     const doc = sheetWith('.x { background-color: rgb(255, 255, 255); }');
     repaintMeilisearch(doc, true);
-    expect(rule(doc).getPropertyValue('background-color')).toBe('#202326');
+    expect(hex(rule(doc).getPropertyValue('background-color'))).toBe('#202326');
   });
 
   // Its stylesheet writes white as the keyword, which no hex or rgb() match
@@ -67,26 +68,26 @@ describe('repaintMeilisearch', () => {
   it('lands the white keyword on the theme card colour', () => {
     const doc = sheetWith('.x { background-color: white; }');
     repaintMeilisearch(doc, true);
-    expect(rule(doc).getPropertyValue('background-color')).toBe('#202326');
+    expect(hex(rule(doc).getPropertyValue('background-color'))).toBe('#202326');
   });
 
   it('puts the theme accent where its own was', () => {
     const doc = sheetWith('.x { color: rgb(228, 19, 89); }');
     repaintMeilisearch(doc, true);
-    expect(rule(doc).color).toBe('#3daee9');
+    expect(hex(rule(doc).color)).toBe('#3daee9');
   });
 
   // Its darkest grey is text, which on a dark page has to read light.
   it('turns its text tone around for dark mode', () => {
     const doc = sheetWith('.x { color: rgb(57, 72, 110); }');
     repaintMeilisearch(doc, true);
-    expect(rule(doc).color).toBe('#e5e7eb');
+    expect(hex(rule(doc).color)).toBe('#e5e7eb');
   });
 
   it('leaves its text tone alone in light mode', () => {
     const doc = sheetWith('.x { color: rgb(57, 72, 110); }');
     repaintMeilisearch(doc, false);
-    expect(rule(doc).color).toBe('#39486e');
+    expect(hex(rule(doc).color)).toBe('#39486e');
   });
 
   it('applies a second theme to its colours, not to the first theme', () => {
@@ -94,13 +95,13 @@ describe('repaintMeilisearch', () => {
     repaintMeilisearch(doc, true);
     document.documentElement.style.setProperty('--lerd-accent', '#fe8019');
     repaintMeilisearch(doc, true);
-    expect(rule(doc).color).toBe('#fe8019');
+    expect(hex(rule(doc).color)).toBe('#fe8019');
   });
 
   it('leaves a colour of its own it does not use for chrome', () => {
     const doc = sheetWith('.x { color: rgb(220, 38, 38); }');
     repaintMeilisearch(doc, true);
-    expect(rule(doc).color).toBe('rgb(220, 38, 38)');
+    expect(hex(rule(doc).color)).toBe('#dc2626');
   });
 });
 
@@ -122,7 +123,7 @@ describe('watchMeilisearchRules', () => {
 
     const sheet = doc.styleSheets[0];
     const at = sheet.insertRule('.late { background-color: rgb(250, 251, 254); }', sheet.cssRules.length);
-    expect((sheet.cssRules[at] as CSSStyleRule).style.getPropertyValue('background-color')).toBe('#141618');
+    expect(hex((sheet.cssRules[at] as CSSStyleRule).style.getPropertyValue('background-color'))).toBe('#141618');
   });
 
   it('patches a realm once, however often it is asked', () => {
