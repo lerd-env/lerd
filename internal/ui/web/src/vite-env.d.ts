@@ -17,3 +17,6 @@ declare module 'monaco-editor/editor/standalone/common/monarch/monarchLexer' {
     tokenize(line: string, hasEOL: boolean, state: unknown): { tokens: { offset: number; type: string }[]; endState: unknown };
   }
 }
+declare module 'monaco-editor/editor/browser/editorExtensions' {
+  export const EditorExtensionsRegistry: { getEditorContributions(): { id: string }[] };
+}
