@@ -11,6 +11,9 @@ on:
     paths:
       - 'internal/podman/devtools/**'
 
+permissions:
+  contents: read
+
 jobs:
   ask:
     runs-on: ubuntu-latest

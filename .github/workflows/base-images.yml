@@ -18,6 +18,9 @@ on:
         required: false
         default: ''
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: PHP ${{ matrix.php }} (${{ matrix.arch.name }})
