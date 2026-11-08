@@ -14,7 +14,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-go@v5
+    - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
       with:
         go-version-file: go.mod
         cache: false
@@ -31,7 +31,7 @@ runs:
       shell: bash
       run: echo "key=go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('go.sum') }}-${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: |
           ${{ env.GOCACHE }}
@@ -41,13 +41,13 @@ runs:
           go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('go.sum') }}-
           go-${{ runner.os }}-${{ github.job }}-
 
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
       with:
         name: ui-dist
         path: internal/ui/web/dist
 
     - if: inputs.tray-deps == 'true'
-      uses: awalsh128/cache-apt-pkgs-action@v1.6.3
+      uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
       with:
         packages: libayatana-appindicator3-dev
         version: "1.0"
