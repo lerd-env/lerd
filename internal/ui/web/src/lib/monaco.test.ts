@@ -11,7 +11,9 @@ describe('loadMonaco', () => {
       ({ matches: false, media: query, addEventListener() {}, removeEventListener() {} }) as unknown as MediaQueryList);
   });
 
-  it('registers the editor features the editors rely on', async () => {
+  // Loading the whole of Monaco takes seconds locally and far longer on a cold
+  // CI runner, so this one test gets its own budget.
+  it('registers the editor features the editors rely on', { timeout: 120_000 }, async () => {
     await loadMonaco();
     const ids = EditorExtensionsRegistry.getEditorContributions().map((c) => c.id);
     expect(ids).toEqual(
