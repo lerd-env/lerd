@@ -5,6 +5,7 @@
 > built-in Web UI.
 
 [![CI](https://github.com/lerd-env/lerd/actions/workflows/ci.yml/badge.svg)](https://github.com/lerd-env/lerd/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/lerd-env/lerd/badge)](https://scorecard.dev/viewer/?uri=github.com/lerd-env/lerd)
 [![Release](https://img.shields.io/github/v/release/lerd-env/lerd)](https://github.com/lerd-env/lerd/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20WSL2-lightgrey)]()
