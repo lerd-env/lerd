@@ -75,7 +75,7 @@ const originals = new WeakMap<CSSStyleDeclaration, Record<string, string>>();
 function formsOf(hex: string): RegExp[] {
   const [r, g, b] = parseHex(hex)!;
   const forms = [
-    new RegExp(hex.replace('#', '#'), 'gi'),
+    new RegExp(hex, 'gi'),
     new RegExp(`rgb\\(\\s*${r},\\s*${g},\\s*${b}\\s*\\)`, 'gi')
   ];
   if (hex === MEILI_WHITE) forms.push(/\bwhite\b/gi);

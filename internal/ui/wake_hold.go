@@ -78,8 +78,9 @@ const wakeHoldReplayed = "X-Lerd-Replayed"
 func handleWakeHold(w http.ResponseWriter, r *http.Request) {
 	host := r.Header.Get("X-Lerd-Wake-Host")
 	uri := r.Header.Get("X-Lerd-Wake-Uri")
-	// A relative path only, so the request can never leave the site.
-	if host == "" || !strings.HasPrefix(uri, "/") || strings.HasPrefix(uri, "//") || r.Header.Get(wakeHoldReplayed) != "" {
+	// A relative path only, so the request can never leave the site. Browsers
+	// read /\ as //, so that prefix is refused along with it.
+	if host == "" || !strings.HasPrefix(uri, "/") || strings.HasPrefix(uri, "//") || strings.HasPrefix(uri, `/\`) || r.Header.Get(wakeHoldReplayed) != "" {
 		w.WriteHeader(wakeHoldFailed)
 		return
 	}

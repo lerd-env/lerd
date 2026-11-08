@@ -434,6 +434,10 @@ func rewriteLocationFrom(loc, targetHost, prefix, basePath string) string {
 			loc += "?" + u.RawQuery
 		}
 	}
+	// Browsers read a leading backslash as a slash, so \\host is off-origin too.
+	if strings.HasPrefix(loc, `\`) {
+		return prefix + "/"
+	}
 	if !strings.HasPrefix(loc, "/") {
 		return loc
 	}
