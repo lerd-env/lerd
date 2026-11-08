@@ -36,7 +36,7 @@ jobs:
           - { name: arm64, runner: ubuntu-24.04-arm }
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Compute base image tag and short version
         id: tag
@@ -207,7 +207,7 @@ jobs:
         php: ["7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5", "8.6"]
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Compute base image tag and short version
         id: tag
@@ -291,7 +291,7 @@ jobs:
       versions: ${{ steps.plan.outputs.versions }}
       count: ${{ steps.plan.outputs.count }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -383,13 +383,13 @@ jobs:
       # source and its marker asserts the compiled extension matches that
       # recipe, so building from a newer tree would publish new source under a
       # tag that promises the old one.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ matrix.entry.tag }}
 
       # The script that renders it comes from this run's own ref, since an old
       # tree predates it.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: current
           sparse-checkout: .github/scripts
