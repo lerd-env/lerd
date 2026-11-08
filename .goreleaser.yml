@@ -232,6 +232,15 @@ brews:
 checksum:
   name_template: "checksums.txt"
 
+# Signing the checksums covers every archive they list. Keyless: cosign proves
+# the signature came from this repository's release workflow through its OIDC
+# token, so there is no key to keep, and the bundle carries what verifying needs.
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args: ["sign-blob", "--bundle=${signature}", "--yes", "${artifact}"]
+
 changelog:
   sort: asc
   use: git

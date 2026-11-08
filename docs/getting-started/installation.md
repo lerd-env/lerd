@@ -331,6 +331,25 @@ Lerd runs on Windows through WSL2, where the standard Linux build works unchange
 
 NixOS's declarative model doesn't fit the one-line installer's imperative DNS and self-install steps, so the community [`lerd-nixos`](https://github.com/lerd-env/lerd-nixos) flake packages the `lerd` binary and provides the `configuration.nix` blocks the stack needs (rootless Podman, `*.test`-only DNS routing, the mkcert CA, and the systemd fixes for `lerd-ui` / `lerd-watcher`). See the [NixOS guide](./nixos) for the complete runbook from a fresh install.
 
+## Verifying a release
+
+Every release after 1.38.0 is signed and carries build provenance, both made by lerd's own release workflow with no key anyone holds. The `checksums.txt` on the release page lists every archive, and its signature sits beside it as `checksums.txt.sigstore.json`. Check the signature with [cosign](https://docs.sigstore.dev/cosign/system_config/installation/), then the archive against the checksums:
+
+```bash
+cosign verify-blob checksums.txt \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/lerd-env/lerd/\.github/workflows/release\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+sha256sum --ignore-missing -c checksums.txt          # Linux
+shasum -a 256 --ignore-missing -c checksums.txt      # macOS
+```
+
+The provenance records which commit and workflow run built each archive. The GitHub CLI checks it directly:
+
+```bash
+gh attestation verify lerd_<version>_linux_amd64.tar.gz --repo lerd-env/lerd
+```
+
 ## Desktop app (optional)
 
 The dashboard runs in any browser, but [Lerd Desktop](https://github.com/lerd-env/lerd-desktop) wraps it in a dedicated window with [native desktop notifications](../features/notifications) for captured mail, worker failures and finished operations. It is optional and entirely separate from the lerd install itself, which keeps working unchanged without it.
