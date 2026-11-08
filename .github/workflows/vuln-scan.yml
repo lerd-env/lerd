@@ -19,9 +19,9 @@ jobs:
     name: UI dependencies
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 20
 
@@ -35,7 +35,7 @@ jobs:
     permissions:
       actions: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Scan the published images
         id: scan
@@ -44,7 +44,7 @@ jobs:
       # A failed scan of one image still rebuilds the ones that were read.
       - name: Trigger base image rebuild
         if: ${{ !cancelled() && steps.scan.outputs.stale != '' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
             await github.rest.actions.createWorkflowDispatch({
@@ -62,7 +62,7 @@ jobs:
     name: Host tools
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Every platform's build of every pin, each in its own directory, since
       # they are separate binaries.
