@@ -14,7 +14,7 @@ jobs:
     permissions:
       actions: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # No saved state: the published base image is the record of what it was
       # built from. The Actions cache used to hold the last seen digests, but
