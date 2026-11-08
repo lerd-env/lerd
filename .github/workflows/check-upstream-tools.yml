@@ -19,7 +19,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Pins that carry digests (and sizes) are checked against them on
       # download, so the script recomputes them for every version it moves.
@@ -44,7 +44,7 @@ jobs:
           done
 
       - name: Open bump PR
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: chore/bump-tool-pins
           commit-message: 'chore: bump pinned host tool versions'

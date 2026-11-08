@@ -14,7 +14,7 @@ jobs:
     name: No AI attribution
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Commits and description carry no AI co-author or footer
         env:

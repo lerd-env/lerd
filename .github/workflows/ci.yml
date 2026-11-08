@@ -17,24 +17,24 @@ jobs:
     name: UI
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Hashes every input of the steps below, so an unchanged UI reuses the last
       # dist and skips the build, its tests and the license check that reads node_modules.
       - id: ui-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: internal/ui/web/dist
           key: ui-${{ hashFiles('internal/ui/web/**', 'go.mod', 'go.sum', 'tools/licensegen/**', 'internal/licenses/**', 'Makefile') }}
 
       - if: steps.ui-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
 
       - if: steps.ui-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -46,7 +46,7 @@ jobs:
 
       # Every Go job embeds web/dist, so it is built once here and shared.
       # dist holds a .vite folder, which upload-artifact skips by default.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ui-dist
           path: internal/ui/web/dist
@@ -68,7 +68,7 @@ jobs:
     needs: ui
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - id: go
         uses: ./.github/actions/go-job
@@ -81,7 +81,7 @@ jobs:
       # Saved on pushes only: PR runs restore it, and keeping them out leaves
       # the repo's 10 GB cache budget to the builds every branch starts from.
       - if: ${{ !cancelled() && github.event_name == 'push' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: |
             ${{ env.GOCACHE }}
@@ -93,7 +93,7 @@ jobs:
     needs: ui
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - id: go
         uses: ./.github/actions/go-job
@@ -104,7 +104,7 @@ jobs:
         run: CGO_ENABLED=1 go test -race ./...
 
       - if: ${{ !cancelled() && github.event_name == 'push' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: |
             ${{ env.GOCACHE }}
@@ -116,7 +116,7 @@ jobs:
     needs: ui
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - id: go
         uses: ./.github/actions/go-job
@@ -141,7 +141,7 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       - if: ${{ !cancelled() && github.event_name == 'push' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: |
             ${{ env.GOCACHE }}
@@ -153,7 +153,7 @@ jobs:
     needs: ui
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - id: go
         uses: ./.github/actions/go-job
@@ -162,7 +162,7 @@ jobs:
         run: CGO_ENABLED=0 go test -tags nogui ./...
 
       - if: ${{ !cancelled() && github.event_name == 'push' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: |
             ${{ env.GOCACHE }}
@@ -174,7 +174,7 @@ jobs:
     needs: ui
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - id: go
         uses: ./.github/actions/go-job
@@ -186,7 +186,7 @@ jobs:
         run: CGO_ENABLED=0 go vet -tags nogui ./...
 
       - if: ${{ !cancelled() && github.event_name == 'push' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: |
             ${{ env.GOCACHE }}
@@ -197,9 +197,9 @@ jobs:
     name: Docs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -256,7 +256,7 @@ jobs:
     name: Installer Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install bats-core
         run: |
@@ -280,7 +280,7 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

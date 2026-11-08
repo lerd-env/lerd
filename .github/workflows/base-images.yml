@@ -36,7 +36,7 @@ jobs:
           - { name: arm64, runner: ubuntu-24.04-arm }
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Compute base image tag and short version
         id: tag
@@ -80,7 +80,7 @@ jobs:
           EOF
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -116,11 +116,11 @@ jobs:
 
       - name: Set up Docker Buildx
         if: steps.check.outputs.exists != 'true'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build and push
         if: steps.check.outputs.exists != 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: /tmp/Containerfile
@@ -175,7 +175,7 @@ jobs:
 
       - name: Set up Go
         if: steps.check.outputs.exists != 'true'
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
 
@@ -207,7 +207,7 @@ jobs:
         php: ["7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5", "8.6"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Compute base image tag and short version
         id: tag
@@ -229,7 +229,7 @@ jobs:
           echo "php_short=${PHP_SHORT}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -291,7 +291,7 @@ jobs:
       versions: ${{ steps.plan.outputs.versions }}
       count: ${{ steps.plan.outputs.count }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -383,13 +383,13 @@ jobs:
       # source and its marker asserts the compiled extension matches that
       # recipe, so building from a newer tree would publish new source under a
       # tag that promises the old one.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ matrix.entry.tag }}
 
       # The script that renders it comes from this run's own ref, since an old
       # tree predates it.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: current
           sparse-checkout: .github/scripts
@@ -403,17 +403,17 @@ jobs:
           echo "php_short=${PHP_SHORT}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: /tmp/Containerfile
@@ -445,7 +445,7 @@ jobs:
           docker run --rm "$IMG" composer --version >/dev/null
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
 
@@ -475,7 +475,7 @@ jobs:
 
     steps:
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

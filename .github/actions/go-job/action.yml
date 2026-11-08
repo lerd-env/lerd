@@ -14,7 +14,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-go@v5
+    - uses: actions/setup-go@v7
       with:
         go-version-file: go.mod
         cache: false
@@ -31,7 +31,7 @@ runs:
       shell: bash
       run: echo "key=go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('go.sum') }}-${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v6
       with:
         path: |
           ${{ env.GOCACHE }}
@@ -41,7 +41,7 @@ runs:
           go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('go.sum') }}-
           go-${{ runner.os }}-${{ github.job }}-
 
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v8
       with:
         name: ui-dist
         path: internal/ui/web/dist
