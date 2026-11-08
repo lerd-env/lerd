@@ -1,0 +1,5 @@
+# Advisories with no fixed version that do not reach lerd's code.
+
+[[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+reason = "deepmerge has no fixed release; it only runs inside vite-plugin-svelte at UI build time and never takes user input."
