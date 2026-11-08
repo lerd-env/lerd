@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Phase 4, PHP versions. The per-version checks run on phpsite, a plain PHP
 # site, so a framework's composer platform constraints do not decide which
-# PHP versions it can be isolated to. Legacy 7.4 and prerelease 8.6 are tier 3.
+# PHP versions it can be isolated to. Legacy 7.4 and 8.6 are tier 3.
 source "$(dirname "$0")/../lib.sh"
 need_demo
 
@@ -76,15 +76,15 @@ if [ "${RUN_TIER3:-}" = 1 ]; then
 	lerd isolate 7.4 </dev/null >/dev/null 2>&1
 	check_out "4.12 a legacy 7.4 site serves on the frozen image" '^7\.4\.' curl -sk "$url"
 	lerd isolate 8.4 </dev/null >/dev/null 2>&1
-	check_not "a bare lerd fetch leaves 8.6 alone" '8\.6' lerd fetch
+	check_out "a bare lerd fetch builds 8.6" '8\.6' lerd fetch
 	lerd use 8.6 </dev/null >/dev/null 2>&1
 	lerd isolate 8.6 </dev/null >/dev/null 2>&1
-	check_out "4.13 8.6 is marked a prerelease and serves" 'prerelease.*8\.6\.' bash -c "lerd php:list | tr '\n' ' '; curl -sk '$url'"
+	check_out "4.13 8.6 serves a released build" '^8\.6\.[0-9]+$' curl -sk "$url"
 	check_out "4.14 8.6 ships redis, imagick and mongodb, no igbinary, pcov or xdebug" '^ok$' bash -c 'm=$(podman exec lerd-php86-fpm php -m); for e in redis imagick mongodb; do grep -qx $e <<<"$m" || exit 1; done; for e in igbinary pcov xdebug; do grep -qx $e <<<"$m" && exit 1; done; echo ok'
 	lerd use 8.5 </dev/null >/dev/null 2>&1
 else
 	skip "4.12 legacy 7.4" "tier 3, set RUN_TIER3=1"
-	skip "4.13 prerelease 8.6" "tier 3, set RUN_TIER3=1"
+	skip "4.13 PHP 8.6" "tier 3, set RUN_TIER3=1"
 	skip "4.14 the 8.6 extension set" "tier 3, set RUN_TIER3=1"
 fi
 

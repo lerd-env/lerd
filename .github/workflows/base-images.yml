@@ -62,7 +62,7 @@ jobs:
           # Prereleases have no plain <version>-fpm-alpine tag until GA, so they
           # build FROM the -rc tag. Mirrors config.UpstreamPHPTag; drop the
           # version from PRERELEASE on release day.
-          PRERELEASE = {'8.6'}
+          PRERELEASE = {}
           version = sys.argv[1]
           tag = version + '-rc' if version in PRERELEASE else version
           with open('internal/podman/quadlets/lerd-php-fpm.Containerfile') as f:
@@ -310,7 +310,7 @@ jobs:
           STABLE = re.compile(r'^v[0-9]+\.[0-9]+(\.[0-9]+)?$')
           # Stable PHP only: a prerelease is newer than these release tags, so
           # no binary they built ever asks for its base image.
-          PHP = ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5']
+          PHP = ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5', '8.6']
           only = [v for v in os.environ['ONLY'].split(',') if v]
           versions = [v for v in PHP if not only or v in only]
 

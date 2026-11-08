@@ -22,9 +22,9 @@ jobs:
           python3 <<'EOF'
           import hashlib, json, os, urllib.error, urllib.request
 
-          # 8.6 is still a prerelease upstream, so it is watched on its -rc tag
-          # (see config.UpstreamPHPTag); swap it for the plain one on release day.
-          VERSIONS = {'8.1': '8.1', '8.2': '8.2', '8.3': '8.3', '8.4': '8.4', '8.5': '8.5', '8.6': '8.6-rc'}
+          # A prerelease is watched on its -rc tag (see config.UpstreamPHPTag);
+          # swap it for the plain one on release day.
+          VERSIONS = {'8.1': '8.1', '8.2': '8.2', '8.3': '8.3', '8.4': '8.4', '8.5': '8.5', '8.6': '8.6'}
           ARCHES = ('amd64', 'arm64')
           ACCEPT = ','.join('application/vnd.' + t for t in (
               'oci.image.index.v1+json', 'docker.distribution.manifest.list.v2+json',

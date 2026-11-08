@@ -145,7 +145,7 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
         </div>
         <div class="meta-row">
         <div class="meta">
-          <div><strong>7.4 – 8.6</strong>PHP versions, 8.6 in preview</div>
+          <div><strong>7.4 – 8.6</strong>PHP versions</div>
           <div v-if="counts.services"><strong>{{ counts.services }}</strong>service presets</div>
           <div v-if="counts.frameworks"><strong>{{ counts.frameworks }}</strong>framework definitions</div>
           <a v-if="counts.plugins" href="#plugins"><strong>{{ counts.plugins }}</strong>community plugins</a>

@@ -76,7 +76,7 @@ passed on, with that run's evidence. When in doubt it runs. Nothing is carried
 across more than one minor release.
 
 **Tier 3, once per release.** The IPv6-off pass, the network-down pull, the
-legacy 7.4 and prerelease 8.6 items, the late-NIC network rig, the reboot items,
+legacy 7.4 and 8.6 items, the late-NIC network rig, the reboot items,
 `lerd uninstall --force` on a second guest, and phase 14. They run on the first
 candidate of a release and are carried to its later candidates unless their
 code changed.
@@ -472,9 +472,9 @@ left there is where resolved fails over after one dropped upstream query:
 - [ ] `lerd php:ini shared` opens in `$EDITOR` and an edit survives a rebuild
 - [ ] Legacy tier: `lerd isolate 7.4` on a throwaway site pulls the frozen image
       and serves **200**, then put the site back on 8.4
-- [ ] Prerelease tier: a bare `lerd fetch` leaves 8.6 alone, `lerd use 8.6`
-      marks it as a prerelease wherever a version is picked, **https → 200**
-      on it, and FrankenPHP does not offer it
+- [ ] PHP 8.6: a bare `lerd fetch` builds it, `lerd use 8.6` serves a
+      released build with no stage mark anywhere a version is picked,
+      **https → 200** on it, and FrankenPHP does not offer it
 - [ ] On 8.6 the image ships redis, imagick and mongodb (built without pecl,
       which 8.6 removed) and advertises no igbinary, pcov or xdebug
 - [ ] `lerd shell 8.5` drops into that version's container from anywhere, and

@@ -18,7 +18,7 @@ description: 'Lerd and DDEV compared on isolation, production parity, reproducib
 | Isolation | Projects share the PHP-FPM container of their PHP version and one server per database engine, each with its own database | Each project has its own containers and database server |
 | Production parity | nginx with PHP-FPM on Alpine images; database versions chosen per service; a site can bring its own `Containerfile.lerd` | Per-project choice of web server, PHP and database version, close to a production image |
 | Reproducibility | `.lerd.yaml` in the repo records PHP, Node, services, workers and custom containers; optional, Lerd works without it | `.ddev/config.yaml` in the repo, required |
-| PHP versions | 7.4 to 8.5, plus the 8.6 prerelease | 5.6 to 8.4 and newer, per project |
+| PHP versions | 7.4 to 8.6 | 5.6 to 8.4 and newer, per project |
 | Domains | `<name>.test`, automatic | `<name>.ddev.site` or custom, automatic |
 | HTTPS | `lerd secure`, trusted local CA | Built in through mkcert |
 | Non-PHP projects | `Containerfile.lerd` for Node, Python, Go and others | `nodejs` and `generic` project types |

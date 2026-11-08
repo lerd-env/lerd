@@ -45,7 +45,7 @@ Lerd is built for PHP developers who want frictionless local development, on a L
 
 ### PHP, Node and runtimes
 
-- 🐘 **Per-project PHP version.** 8.1 to 8.5, a frozen 7.4 / 8.0 legacy tier and 8.6 as a prerelease nothing picks for you, switched with one click. Custom extensions and Alpine packages are declared once for every image lerd builds, and the ODBC stack ships in all of them.
+- 🐘 **Per-project PHP version.** 8.1 to 8.6 and a frozen 7.4 / 8.0 legacy tier, switched with one click. Custom extensions and Alpine packages are declared once for every image lerd builds, and the ODBC stack ships in all of them.
 - ⚡ **PHP on the host, on macOS**. A native runtime runs PHP-FPM, the CLI, composer and the workers on the host, removing the bind-mount boundary a Mac pays on every file PHP reads: a Laravel app with Horizon and Filament went from 62 requests per second to 238. Containers stay the default.
 
 - ⚡ **FrankenPHP runtime.** Per site, as an alternative to shared PHP-FPM, with Laravel Octane and Symfony Runtime worker mode.
