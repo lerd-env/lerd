@@ -1,0 +1,28 @@
+version: 2
+
+# One grouped pull request per ecosystem a week keeps the noise down.
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directories: ["/internal/ui/web", "/docs"]
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ["*"]
+
+  # The composite action is listed too, since "/" only covers workflows.
+  - package-ecosystem: github-actions
+    directories: ["/", "/.github/actions/go-job"]
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

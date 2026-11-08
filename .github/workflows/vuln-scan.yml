@@ -11,6 +11,9 @@ on:
 env:
   GRYPE: docker.io/anchore/grype:v0.120.1
 
+permissions:
+  contents: read
+
 jobs:
   ui:
     name: UI dependencies
