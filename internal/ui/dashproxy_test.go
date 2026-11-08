@@ -118,6 +118,17 @@ func TestRewriteLocation(t *testing.T) {
 		// can't bounce the iframe off-site (foreign absolute URL or scheme-relative).
 		"https://elsewhere.test/x": "/_svc/rabbitmq/",
 		"//evil.com/path":          "/_svc/rabbitmq/",
+		// Browsers read every backslash as a slash, so these leave the mount too.
+		`\\evil.com/path`:        "/_svc/rabbitmq/",
+		`/\evil.com/path`:        "/_svc/rabbitmq/",
+		`https:\\evil.example/x`: "/_svc/rabbitmq/",
+		`https:/\evil.example/x`: "/_svc/rabbitmq/",
+		// Only the part before the query names a host, so a backslash in a
+		// query value is left as the service wrote it.
+		`/search?filter=\d`: `/_svc/rabbitmq/search?filter=\d`,
+		// A scheme with no host still sends the browser to one.
+		"https:/evil.example/x": "/_svc/rabbitmq/",
+		"https:evil.example/x":  "/_svc/rabbitmq/",
 		// A redirect to the upstream's bare origin must land at the mount root,
 		// not become an empty Location (no-op reload).
 		"http://localhost:15672":          "/_svc/rabbitmq/",

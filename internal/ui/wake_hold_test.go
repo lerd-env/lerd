@@ -131,6 +131,8 @@ func TestWakeHold_refusesAnythingButARelativePathOnAKnownSite(t *testing.T) {
 	pinged := stubWakeHold(t, 0)
 	for _, tc := range []struct{ host, uri string }{
 		{"shop.test", "//evil.example/"},
+		// Browsers read a backslash after the first slash as a second slash.
+		{"shop.test", "/\\evil.example/"},
 		{"shop.test", "https://evil.example/"},
 		{"other.test", "/"},
 		{"", "/"},
