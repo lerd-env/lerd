@@ -1,6 +1,8 @@
 version: 2
 
-# One grouped pull request per ecosystem a week keeps the noise down.
+# One grouped pull request per ecosystem a week keeps the noise down. Majors
+# stay out of the group and arrive one per pull request, since each can need
+# code changes and would otherwise hold back every safe bump with it.
 updates:
   - package-ecosystem: gomod
     directory: /
@@ -9,6 +11,7 @@ updates:
     groups:
       go:
         patterns: ["*"]
+        update-types: [minor, patch]
 
   - package-ecosystem: npm
     directories: ["/internal/ui/web", "/docs"]
@@ -17,6 +20,7 @@ updates:
     groups:
       npm:
         patterns: ["*"]
+        update-types: [minor, patch]
 
   # The composite action is listed too, since "/" only covers workflows.
   - package-ecosystem: github-actions
@@ -26,3 +30,4 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+        update-types: [minor, patch]
