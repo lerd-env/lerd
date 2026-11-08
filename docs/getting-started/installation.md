@@ -340,7 +340,8 @@ cosign verify-blob checksums.txt \
   --bundle checksums.txt.sigstore.json \
   --certificate-identity-regexp '^https://github.com/lerd-env/lerd/\.github/workflows/release\.yml@refs/tags/v' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
-sha256sum --ignore-missing -c checksums.txt
+sha256sum --ignore-missing -c checksums.txt          # Linux
+shasum -a 256 --ignore-missing -c checksums.txt      # macOS
 ```
 
 The provenance records which commit and workflow run built each archive. The GitHub CLI checks it directly:
