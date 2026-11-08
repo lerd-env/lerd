@@ -14,7 +14,7 @@ jobs:
     permissions:
       actions: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # No saved state: the published base image is the record of what it was
       # built from. The Actions cache used to hold the last seen digests, but
@@ -82,7 +82,7 @@ jobs:
 
       - name: Trigger base image rebuild
         if: steps.compare.outputs.changed != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
             await github.rest.actions.createWorkflowDispatch({
