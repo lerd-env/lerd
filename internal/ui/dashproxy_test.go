@@ -123,6 +123,9 @@ func TestRewriteLocation(t *testing.T) {
 		`/\evil.com/path`:        "/_svc/rabbitmq/",
 		`https:\\evil.example/x`: "/_svc/rabbitmq/",
 		`https:/\evil.example/x`: "/_svc/rabbitmq/",
+		// Only the part before the query names a host, so a backslash in a
+		// query value is left as the service wrote it.
+		`/search?filter=\d`: `/_svc/rabbitmq/search?filter=\d`,
 		// A scheme with no host still sends the browser to one.
 		"https:/evil.example/x": "/_svc/rabbitmq/",
 		"https:evil.example/x":  "/_svc/rabbitmq/",

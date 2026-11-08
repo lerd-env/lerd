@@ -415,9 +415,13 @@ func rewriteLocation(loc, targetHost, prefix string) string {
 // upstream names its own base path (/solr/...) in the redirect and the browser
 // would follow it out of the mount. basePath is empty for a forwarding mount.
 func rewriteLocationFrom(loc, targetHost, prefix, basePath string) string {
-	// Browsers read every backslash in a URL as a slash, so \\host, /\host and
+	// Browsers read a backslash before the query as a slash, so \\host, /\host and
 	// https:\\host all name another host; normalising first lets the host check see it.
-	loc = strings.ReplaceAll(loc, `\`, "/")
+	if end := strings.IndexAny(loc, "?#"); end >= 0 {
+		loc = strings.ReplaceAll(loc[:end], `\`, "/") + loc[end:]
+	} else {
+		loc = strings.ReplaceAll(loc, `\`, "/")
+	}
 	u, err := url.Parse(loc)
 	if err == nil && u.Scheme != "" && u.Host == "" {
 		// https:/host and https:host carry no host for Go, but a browser still
