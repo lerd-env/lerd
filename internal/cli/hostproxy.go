@@ -345,20 +345,33 @@ func isNodeProject(dir string) bool {
 	return false
 }
 
-// rubyShimDirs returns the Ruby version-manager shim dirs present under home
-// for a Ruby site. Host workers run with a fixed PATH, so a bundle installed
-// through mise, rbenv or asdf would otherwise not resolve.
-func rubyShimDirs(sitePath, home string) []string {
-	if !fileExists(filepath.Join(sitePath, "Gemfile")) && !fileExists(filepath.Join(sitePath, "config.ru")) {
-		return nil
+// hostToolDirs returns the toolDirs and fallbackDirs present on this machine for
+// every runtime whose manifest sitePath has, absolute ones under root. Host workers
+// run with a fixed PATH, so a toolchain outside it would otherwise not resolve.
+func hostToolDirs(sitePath, home, root string) (dirs, fallback []string) {
+	seen := map[string]bool{}
+	present := func(list []string) []string {
+		var out []string
+		for _, d := range list {
+			if filepath.IsAbs(d) {
+				d = filepath.Join(root, d)
+			} else {
+				d = filepath.Join(home, d)
+			}
+			if !seen[d] && fileExists(d) {
+				seen[d] = true
+				out = append(out, d)
+			}
+		}
+		return out
 	}
-	var dirs []string
-	for _, d := range []string{".local/share/mise/shims", ".rbenv/shims", ".asdf/shims"} {
-		if p := filepath.Join(home, d); fileExists(p) {
-			dirs = append(dirs, p)
+	for i := range knownRuntimes {
+		if knownRuntimes[i].presentIn(sitePath) {
+			dirs = append(dirs, present(knownRuntimes[i].toolDirs)...)
+			fallback = append(fallback, present(knownRuntimes[i].fallbackDirs)...)
 		}
 	}
-	return dirs
+	return dirs, fallback
 }
 
 // reservedHostPorts returns host ports already claimed by other host-proxy
