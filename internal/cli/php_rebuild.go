@@ -253,7 +253,7 @@ func runPhpRebuild(cmd *cobra.Command, args []string) error {
 		ver := v
 		jobs = append(jobs, BuildJob{
 			Label: "PHP " + ver,
-			Run:   func(w io.Writer) error { return podman.RebuildFPMImageTo(ver, local, w) },
+			Run:   func(w io.Writer) error { return rebuildFPMImageTo(ver, local, w) },
 		})
 	}
 	// Rebuild the derived FrankenPHP image for any requested version a FrankenPHP
@@ -274,15 +274,44 @@ func runPhpRebuild(cmd *cobra.Command, args []string) error {
 	}
 	plan.Fill().Report(os.Stdout)
 
-	RunParallel(jobs) //nolint:errcheck — individual failures printed by RunParallel
+	// Each failure is printed under its label; the rest still restart below.
+	buildErr := RunParallel(jobs)
 
 	restartFrankenPHPUnits(fpUnits)
 
-	// Store the new Containerfile hash so future updates know images are current.
-	if err := podman.StoreFPMHash(); err != nil {
-		feedback.Warn("could not store image hash: %v", err)
+	// The hash marks every image current, which a failed build leaves untrue.
+	if buildErr == nil {
+		if err := storeFPMHash(); err != nil {
+			feedback.Warn("could not store image hash: %v", err)
+		}
 	}
 
+	label := "PHP-FPM images"
+	if len(versions) == 1 {
+		label = "PHP " + versions[0] + " image"
+	}
+	restartRebuiltPHP(versions)
+
+	if buildErr != nil {
+		if len(versions) == 1 {
+			return fmt.Errorf("%s not rebuilt: %w", label, buildErr)
+		}
+		return fmt.Errorf("not every PHP image rebuilt, see the warnings above: %w", buildErr)
+	}
+	feedback.Done(label + " rebuilt")
+	return nil
+}
+
+// Seams for the php:rebuild steps that reach podman and systemd, so a test can
+// drive the command without touching the machine's real images and units.
+var (
+	rebuildFPMImageTo = podman.RebuildFPMImageTo
+	storeFPMHash      = podman.StoreFPMHash
+)
+
+// restartRebuiltPHP refreshes the host-side files the images read at startup,
+// then restarts each version's FPM and the in-container workers it stopped.
+var restartRebuiltPHP = func(versions []string) {
 	// The image carries the extension; the files it reads at startup (the debug
 	// bridge, the collector, the store-declared capture seams) live on the host
 	// and are written by the binary. Refresh them before the containers come
@@ -292,15 +321,11 @@ func runPhpRebuild(cmd *cobra.Command, args []string) error {
 		feedback.Warn("could not write debug assets: %v", err)
 	}
 
-	label := "PHP-FPM images"
-	if len(versions) == 1 {
-		label = "PHP " + versions[0] + " image"
-	}
 	feedback.Line("restarting containers")
 	running := runningInContainerWorkers()
 	for _, v := range versions {
 		unit := "lerd-php" + strings.ReplaceAll(v, ".", "") + "-fpm"
-		if err := podman.RestartUnit(unit); err != nil {
+		if err := restartOnNewImage(unit); err != nil {
 			feedback.Warn("restart %s: %v", unit, err)
 		} else {
 			feedback.Note("restarted " + unit)
@@ -308,7 +333,14 @@ func runPhpRebuild(cmd *cobra.Command, args []string) error {
 	}
 
 	restartInContainerWorkers(running)
+}
 
-	feedback.Done(label + " rebuilt")
-	return nil
+var restartFPMOnNewImage = podman.RestartUnit
+
+// restartOnNewImage restarts an FPM unit onto the image just built. A unit
+// whose image was missing crash-loops into systemd's start limit during the
+// build, which refuses the restart, so its failed state is cleared first.
+func restartOnNewImage(unit string) error {
+	resetFailedUnit(unit)
+	return restartFPMOnNewImage(unit)
 }
