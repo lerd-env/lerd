@@ -127,17 +127,12 @@ func writeWorkerHostUnit(unitName, sitePath, command, restart, nativePHPVersion 
 	}
 
 	home, _ := os.UserHomeDir()
-	if dirs := hostToolDirs(sitePath, home); len(dirs) > 0 {
-		if extraBinDirs != "" {
-			dirs = append(dirs, extraBinDirs)
-		}
-		extraBinDirs = strings.Join(dirs, ":")
-	}
+	toolDirs, fallbackDirs := hostToolDirs(sitePath, home, "/")
 	phpBinDir, phpIniScanDir := "", ""
 	if nativePHPVersion != "" {
 		phpBinDir, phpIniScanDir = nativephp.ShimDir(nativePHPVersion), nativephp.IniScanDir(nativePHPVersion)
 	}
-	script := buildDarwinHostWorkerGuardScript(execPrefix, config.BinDir(), sitePath, command, workerBinDirs(phpBinDir, extraBinDirs), pidFile, phpIniScanDir)
+	script := buildDarwinHostWorkerGuardScript(execPrefix, config.BinDir(), sitePath, command, workerBinDirs(phpBinDir, extraBinDirs), strings.Join(toolDirs, ":"), strings.Join(fallbackDirs, ":"), pidFile, phpIniScanDir)
 	if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil {
 		return false, fmt.Errorf("writing host worker guard script: %w", err)
 	}

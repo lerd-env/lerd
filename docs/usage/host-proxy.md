@@ -83,11 +83,20 @@ The shell wrapper is there because these servers don't bind from lerd's variable
 
 Rails also answers requests for an unknown `Host` with "Blocked hosts" in development. Recent versions allow `.test` and `.localhost` out of the box, so the default TLDs work as they are; on another TLD, add your site domain in `config/environments/development.rb`, for example `config.hosts << ".dev"`. `lerd init` and the web wizard remind you when they detect a Rails app.
 
-Lerd doesn't manage Ruby itself. The dev server runs with a fixed PATH rather than your login shell's, so for a Ruby project lerd adds the mise, rbenv and asdf shim directories it finds in your home, and the shims pick the version the way they do in your shell: rbenv reads `.ruby-version`, while mise and asdf want `.tool-versions` (or `mise.toml`), since mise ignores `.ruby-version` unless you enable idiomatic version files. A system Ruby in `/usr/bin` works as is. If you'd rather not install Ruby on the host, use a [custom container](custom-containers.md): the starter Containerfile `lerd init` writes for a Rack app installs your gems and runs rackup on the chosen port.
+Lerd doesn't manage Ruby itself; [Finding your toolchain](#finding-your-toolchain) lists where it looks for one. rbenv reads `.ruby-version`, while mise and asdf want `.tool-versions` (or `mise.toml`), since mise ignores `.ruby-version` unless you enable idiomatic version files. If you'd rather not install Ruby on the host, use a [custom container](custom-containers.md): the starter Containerfile `lerd init` writes for a Rack app installs your gems and runs rackup on the chosen port.
 
-## Rust
+## Finding your toolchain
 
-When the only manifest `lerd init` finds is a `Cargo.toml`, it offers `cargo run`. Lerd doesn't manage Rust either, and rustup's installer puts `cargo` in `~/.cargo/bin`, which the dev server's fixed PATH doesn't include, so for any project with a `Cargo.toml` at its root lerd adds that directory when it exists, whatever the command. The rustup proxies there pick the toolchain from `rust-toolchain.toml`, or your default one, as they do in your shell. A distro-packaged cargo in `/usr/bin` works as is. A custom `CARGO_HOME` or `RUSTUP_HOME` isn't followed, so with one, set both in the command and call cargo by its full path. Like any dev server, the app should bind to the `HOST` and `PORT` lerd injects.
+Lerd brings its own handling for Node, but Ruby, Python, Go and Rust come from your machine. The dev server runs with a fixed PATH rather than your login shell's, so for every manifest at the project's root lerd adds the directories where that toolchain usually lives, when they exist. They come right after lerd's own shims, so its `php` still wins:
+
+| Manifest | Added to the dev server's PATH |
+|----------|--------------------------------|
+| `Gemfile`, `config.ru` | mise, rbenv and asdf shims |
+| `pyproject.toml`, `requirements.txt`, `Pipfile`, `manage.py` | mise, pyenv and asdf shims |
+| `go.mod` | mise and asdf shims, then after the system directories `/usr/local/go/bin` from the go.dev installer and `~/go/bin` for tools you `go install`, such as air |
+| `Cargo.toml` | mise and asdf shims, `~/.cargo/bin` from rustup |
+
+Each tool picks the version the way it does in your shell: mise from `mise.toml` or `.tool-versions`, asdf from `.tool-versions`, rbenv and pyenv from `.ruby-version` and `.python-version`, rustup from `rust-toolchain.toml`. A mise shim with no version set falls through to the next directory, while asdf needs one set, `system` included. A toolchain your distro or Homebrew installs works as is. A custom `CARGO_HOME`, `RUSTUP_HOME` or `GOPATH` isn't followed, because lerd's background services rewrite the dev server unit without your shell's environment, so with one, set it in the command and call the tool by its full path.
 
 ## Lifecycle
 

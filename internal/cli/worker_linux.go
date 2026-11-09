@@ -139,7 +139,11 @@ func writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, resta
 	// lerd's shim must lead PATH so wayfinder + friends find `php`; we
 	// rebuild the path systemd's user default would have supplied so
 	// `~/.local/bin` stays reachable — issue #375.
-	envPath := config.BinDir() + ":" + filepath.Join(home, ".local", "bin") + ":/usr/local/bin:/usr/bin:/bin"
+	pathDirs := []string{config.BinDir()}
+	toolDirs, fallbackDirs := hostToolDirs(sitePath, home, "/")
+	pathDirs = append(pathDirs, toolDirs...)
+	pathDirs = append(pathDirs, filepath.Join(home, ".local", "bin"), "/usr/local/bin", "/usr/bin", "/bin")
+	envPath := strings.Join(append(pathDirs, fallbackDirs...), ":")
 
 	shellCommand := command
 	if bun := bunRunnerFor(sitePath, false); bun != "" {
@@ -171,9 +175,6 @@ func writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, resta
 			// on `npm: command not found` every 5 seconds.
 			return false, errNoUsableNode()
 		}
-	}
-	if dirs := hostToolDirs(sitePath, home); len(dirs) > 0 {
-		envPath = strings.Join(dirs, ":") + ":" + envPath
 	}
 	// systemd expands $VAR and %-specifiers in ExecStart before sh runs, so both
 	// are doubled to reach the shell literally.

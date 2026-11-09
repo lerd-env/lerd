@@ -166,36 +166,49 @@ func TestStarterContainerfile(t *testing.T) {
 	})
 }
 
-func TestRubyShimDirs(t *testing.T) {
+func TestHostToolDirs(t *testing.T) {
 	home := t.TempDir()
-	writeFiles(t, home, ".rbenv/shims/bundle", ".asdf/shims/bundle")
-	site := t.TempDir()
-	writeFiles(t, site, "Gemfile")
-	got := rubyShimDirs(site, home)
-	want := []string{filepath.Join(home, ".rbenv/shims"), filepath.Join(home, ".asdf/shims")}
-	if strings.Join(got, ":") != strings.Join(want, ":") {
-		t.Errorf("got %v, want %v", got, want)
-	}
-	if dirs := rubyShimDirs(t.TempDir(), home); dirs != nil {
-		t.Errorf("non-Ruby site got %v, want none", dirs)
-	}
-}
+	writeFiles(t, home, ".local/share/mise/shims/go", ".rbenv/shims/bundle", ".asdf/shims/bundle", ".pyenv/shims/python", ".cargo/bin/cargo", "go/bin/air")
+	root := t.TempDir()
+	writeFiles(t, root, "usr/local/go/bin/go")
+	mise := miseShims
 
-func TestCargoBinDirs(t *testing.T) {
-	home := t.TempDir()
-	writeFiles(t, home, ".cargo/bin/cargo")
-	site := t.TempDir()
-	writeFiles(t, site, "Cargo.toml")
-	got := cargoBinDirs(site, home)
-	want := []string{filepath.Join(home, ".cargo/bin")}
-	if strings.Join(got, ":") != strings.Join(want, ":") {
-		t.Errorf("got %v, want %v", got, want)
+	cases := []struct {
+		name           string
+		manifests      []string
+		dirs, fallback []string
+	}{
+		{"ruby", []string{"Gemfile"}, []string{mise, ".rbenv/shims", ".asdf/shims"}, nil},
+		{"python", []string{"pyproject.toml"}, []string{mise, ".pyenv/shims", ".asdf/shims"}, nil},
+		{"go appends the installer dirs", []string{"go.mod"}, []string{mise, ".asdf/shims"}, []string{"/usr/local/go/bin", "go/bin"}},
+		{"rust", []string{"Cargo.toml"}, []string{mise, ".asdf/shims", ".cargo/bin"}, nil},
+		{"rust with a Gemfile is deduped", []string{"Cargo.toml", "Gemfile"}, []string{mise, ".rbenv/shims", ".asdf/shims", ".cargo/bin"}, nil},
+		{"node gets none", []string{"package.json"}, nil, nil},
+		{"unknown runtime gets none", nil, nil, nil},
 	}
-	if dirs := cargoBinDirs(site, t.TempDir()); dirs != nil {
-		t.Errorf("home without ~/.cargo/bin got %v, want none", dirs)
+	resolve := func(dirs []string) []string {
+		var out []string
+		for _, d := range dirs {
+			if filepath.IsAbs(d) {
+				out = append(out, filepath.Join(root, d))
+			} else {
+				out = append(out, filepath.Join(home, d))
+			}
+		}
+		return out
 	}
-	if dirs := cargoBinDirs(t.TempDir(), home); dirs != nil {
-		t.Errorf("non-Rust site got %v, want none", dirs)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			site := t.TempDir()
+			writeFiles(t, site, c.manifests...)
+			dirs, fallback := hostToolDirs(site, home, root)
+			if strings.Join(dirs, ":") != strings.Join(resolve(c.dirs), ":") {
+				t.Errorf("dirs: got %v, want %v", dirs, resolve(c.dirs))
+			}
+			if strings.Join(fallback, ":") != strings.Join(resolve(c.fallback), ":") {
+				t.Errorf("fallback: got %v, want %v", fallback, resolve(c.fallback))
+			}
+		})
 	}
 }
 

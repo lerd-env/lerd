@@ -299,7 +299,7 @@ func TestWriteWorkerHostUnit_rustAddsCargoBin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading guard script: %v", err)
 	}
-	if want := `export PATH="` + filepath.Join(tmp, ".cargo", "bin") + ":"; !strings.Contains(string(guard), want) {
+	if want := `export PATH="` + config.BinDir() + ":" + filepath.Join(tmp, ".cargo", "bin") + ":"; !strings.Contains(string(guard), want) {
 		t.Errorf("guard script missing %q:\n%s", want, guard)
 	}
 }
