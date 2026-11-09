@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestFailed_RecordsAndNotifiesOnlyWhatIsNew(t *testing.T) {
@@ -131,5 +132,46 @@ func TestFailures_KeepsEveryOneRecordedAtOnce(t *testing.T) {
 	wg.Wait()
 	if got := len(Failures("hello")); got != 30 {
 		t.Errorf("kept %d of 30 failures", got)
+	}
+}
+
+// A command that runs for days writes far more than a failure keeps, so the
+// tail holds on to the end and nothing else.
+func TestTail_KeepsOnlyWhatAFailureKeeps(t *testing.T) {
+	var tail Tail
+	line := strings.Repeat("x", 999) + "\n"
+	for i := 0; i < 100; i++ {
+		_, _ = tail.Write([]byte(line))
+	}
+	_, _ = tail.Write([]byte(strings.Repeat("y", 3*failureKeep)))
+	_, _ = tail.Write([]byte("error: the end\n"))
+
+	got := tail.String()
+	if len(got) != failureKeep {
+		t.Fatalf("tail holds %d bytes, want %d", len(got), failureKeep)
+	}
+	if !strings.HasSuffix(got, "yyyerror: the end\n") {
+		t.Errorf("tail lost the end of the output: %q", got[len(got)-40:])
+	}
+	if cap(tail.buf) > 2*failureKeep {
+		t.Errorf("tail grew to %d bytes of capacity", cap(tail.buf))
+	}
+}
+
+func TestTail_KeepsShortOutputWhole(t *testing.T) {
+	var tail Tail
+	_, _ = tail.Write([]byte("cargo: "))
+	_, _ = tail.Write([]byte("not found\n"))
+	if got := tail.String(); got != "cargo: not found\n" {
+		t.Errorf("tail = %q", got)
+	}
+}
+
+func TestTail_StartsAtAWholeCharacter(t *testing.T) {
+	var tail Tail
+	_, _ = tail.Write([]byte(strings.Repeat("é", failureKeep)))
+	got := tail.String()
+	if !utf8.ValidString(got) || !strings.HasPrefix(got, "é") {
+		t.Errorf("tail starts mid-character: %q", got[:4])
 	}
 }

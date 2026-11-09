@@ -179,6 +179,26 @@ commands:
 	}
 }
 
+// The link is taken from the first line that has one, on whichever stream,
+// however much the command prints around it.
+func TestCommandsRun_URLExtractionKeepsTheFirst(t *testing.T) {
+	sitePath := registerSite(t, "acme", "acme.test")
+	writeProjectYAML(t, sitePath, `
+commands:
+  - name: share
+    label: Share
+    command: "echo starting; echo 'tunnel: https://one.example/a' >&2; sleep 0.1; echo 'also https://two.example/b'; seq 1 2000"
+    output: url
+`)
+	req := httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/commands/share/run?approve=1", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
+	rec := httptest.NewRecorder()
+	handleSiteAction(rec, req)
+	if body := rec.Body.String(); !strings.Contains(body, `"url":"https://one.example/a"`) {
+		t.Errorf("expected the first url in done payload: %q", body[max(0, len(body)-300):])
+	}
+}
+
 func TestCommandsRun_NotFound(t *testing.T) {
 	registerSite(t, "acme", "acme.test")
 	req := httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/commands/missing/run?approve=1", nil)

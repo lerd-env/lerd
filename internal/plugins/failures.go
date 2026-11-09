@@ -12,6 +12,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -49,6 +50,33 @@ func Failed(f Failure) {
 // failureKeep bounds what is kept of a failure's output: its end, where the
 // error usually is.
 const failureKeep = 8000
+
+// Tail keeps the end of what is written to it, as much as a failure keeps, so
+// collecting the output of a command that runs for days costs no more memory
+// than collecting a short one.
+type Tail struct{ buf []byte }
+
+func (t *Tail) Write(p []byte) (int, error) {
+	n := len(p)
+	if len(p) >= failureKeep {
+		p = p[len(p)-failureKeep:]
+		t.buf = t.buf[:0]
+	}
+	if over := len(t.buf) + len(p) - failureKeep; over > 0 {
+		t.buf = append(t.buf[:0], t.buf[over:]...)
+	}
+	t.buf = append(t.buf, p...)
+	return n, nil
+}
+
+// String starts at a whole character, since the cut can land inside one.
+func (t *Tail) String() string {
+	b := t.buf
+	for len(b) > 0 && !utf8.RuneStart(b[0]) {
+		b = b[1:]
+	}
+	return string(b)
+}
 
 // Record keeps f as the plugin's latest failure without telling anyone, for a
 // surface where the user is already watching it fail, and reports whether it
