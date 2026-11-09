@@ -5,3 +5,6 @@ node_modules/
 # bun-based build (lerd on a host where Node is unmanaged) doesn't leave one.
 bun.lockb
 bun.lock
+# paraglide writes a cache beside the inlang settings on every build.
+project.inlang/*
+!project.inlang/settings.json
