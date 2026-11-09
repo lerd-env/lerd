@@ -30,13 +30,25 @@ const hostProbePort = "7073"
 // probeHostFromNginx puts on the exec probe.
 var nginxInspectTimeout = 5 * time.Second
 
+// OnGatewayChange, if set, runs after WriteContainerHosts moves
+// host.containers.internal to a newly probed address. main wires it to the same
+// host-proxy rebind the watcher fires, which this package cannot import.
+var OnGatewayChange func()
+
 // WriteContainerHosts writes the shared /etc/hosts bind-mounted into every
 // PHP-FPM container. host.containers.internal uses an IP that has been
 // verified reachable from inside lerd-nginx; .test domains point at
 // lerd-nginx directly on the lerd bridge network.
 func WriteContainerHosts() error {
-	hostIP := DetectHostGatewayIP()
-	return WriteContainerHostsWith(hostIP, nginxContainerIP())
+	previous := ReadHostGatewayFromFile()
+	hostIP, probed := detectHostGatewayIP()
+	if err := WriteContainerHostsWith(hostIP, nginxContainerIP()); err != nil {
+		return err
+	}
+	if probed && previous != "" && previous != hostIP && OnGatewayChange != nil {
+		OnGatewayChange()
+	}
+	return nil
 }
 
 // WriteContainerHostsWith writes both hosts files from addresses the caller
@@ -136,20 +148,27 @@ func writeBrowserHosts(reg *config.SiteRegistry, nginxIP string, serviceDomains 
 // netavark resolves to 169.254.1.2 but never wires up the bridge alias or
 // DNAT for it, that IP is a dead end and Xdebug times out.
 func DetectHostGatewayIP() string {
+	ip, _ := detectHostGatewayIP()
+	return ip
+}
+
+// detectHostGatewayIP is DetectHostGatewayIP that also reports whether the
+// address came from the reachability probe rather than a fallback.
+func detectHostGatewayIP() (string, bool) {
 	if ip := probeReachableHostIP(); ip != "" {
-		return ip
+		return ip, true
 	}
 	// Probe failed (lerd-ui not yet up, lerd-nginx not yet up, or no
 	// candidate is routable). Fall back to whatever getent returns so the
 	// file is well-formed. The next WriteContainerHosts call (after services
 	// finish starting) gets a fresh probe and updates /etc/hosts in place.
 	if ip := parseHostGatewayFromExec("lerd-nginx"); ip != "" {
-		return ip
+		return ip, false
 	}
 	if ip := parseHostGatewayFromProbe(); ip != "" {
-		return ip
+		return ip, false
 	}
-	return fallbackHostGatewayIP
+	return fallbackHostGatewayIP, false
 }
 
 // DetectHostGatewayIPProbeOnly is like DetectHostGatewayIP but returns ""

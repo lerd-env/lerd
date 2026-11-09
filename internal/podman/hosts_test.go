@@ -323,6 +323,53 @@ func TestWriteContainerHosts_ResolvesNginxIPOncePerCall(t *testing.T) {
 	}
 }
 
+// lerd start re-probes the gateway outside the watcher, so a move it makes has to
+// reach the host-proxy vhosts and dev servers too. A fallback written while nginx
+// is still down is unverified and must not repoint them.
+func TestWriteContainerHosts_ReportsAProbedGatewayMove(t *testing.T) {
+	cases := []struct {
+		name      string
+		previous  string
+		nginxDown bool
+		want      int
+	}{
+		{"probe moves the gateway", "192.168.1.10", false, 1},
+		{"probe confirms the gateway", "169.254.1.2", false, 0},
+		{"nginx down writes an unverified fallback", "192.168.1.10", true, 0},
+		{"first write has nothing to repoint", "", false, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			setupHostsFixture(t, "10.89.7.11")
+			if c.nginxDown {
+				scripted := execCommand
+				execCommand = func(name string, args ...string) *exec.Cmd {
+					if strings.Contains(strings.Join(args, " "), "State.Running") {
+						return fakeExec("false", "", 0)(name, args...)
+					}
+					return scripted(name, args...)
+				}
+			}
+			if c.previous != "" {
+				if err := WriteContainerHostsWith(c.previous, "10.89.7.11"); err != nil {
+					t.Fatalf("seeding the hosts file: %v", err)
+				}
+			}
+			fired := 0
+			prev := OnGatewayChange
+			OnGatewayChange = func() { fired++ }
+			t.Cleanup(func() { OnGatewayChange = prev })
+
+			if err := WriteContainerHosts(); err != nil {
+				t.Fatalf("WriteContainerHosts: %v", err)
+			}
+			if fired != c.want {
+				t.Errorf("OnGatewayChange fired %d times, want %d (gateway now %q)", fired, c.want, ReadHostGatewayFromFile())
+			}
+		})
+	}
+}
+
 // A caller repointing only the nginx IP must not disturb host.containers.internal.
 // Re-detecting it inside the writer let the watcher's nginx path move the gateway
 // without firing OnGatewayIPChange, stranding host-proxy vhosts on a dead address.
