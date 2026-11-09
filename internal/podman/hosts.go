@@ -168,7 +168,7 @@ func probeReachableHostIP() string {
 	if !ContainerRunningQuiet("lerd-nginx") {
 		return ""
 	}
-	for _, ip := range hostCandidates(parseHostGatewayFromExec("lerd-nginx"), lanip.Primary()) {
+	for _, ip := range hostCandidates(parseHostGatewayFromExec("lerd-nginx"), lanip.DummyV4(), lanip.Primary()) {
 		if probeHostFromNginx(ip, hostProbePort) {
 			return ip
 		}
@@ -176,15 +176,11 @@ func probeReachableHostIP() string {
 	return ""
 }
 
-// hostCandidates returns the ordered, deduplicated list of IPs to probe as
-// the host gateway. Order: getent's host.containers.internal (works on
-// macOS/gvproxy and well-configured Linux), the host's primary LAN IP
-// (works whenever the host has any LAN address), and slirp4netns's default
-// 10.0.2.2. host.containers.internal goes first because when it works
-// it's the address Xdebug docs tell users to configure, and on macOS
-// gvproxy makes it the canonical choice. Empty strings are skipped.
-func hostCandidates(getentIP, lanIP string) []string {
-	candidates := make([]string, 0, 3)
+// hostCandidates returns the deduplicated IPs to probe as the host gateway, in
+// order: netavark's host.containers.internal (canonical, gvproxy on macOS), lerd0
+// (independent of the network and not routed on it), the LAN IP, then 10.0.2.2.
+func hostCandidates(getentIP, dummyIP, lanIP string) []string {
+	candidates := make([]string, 0, 4)
 	seen := map[string]bool{}
 	add := func(ip string) {
 		if ip == "" || seen[ip] {
@@ -194,6 +190,7 @@ func hostCandidates(getentIP, lanIP string) []string {
 		candidates = append(candidates, ip)
 	}
 	add(getentIP)
+	add(dummyIP)
 	add(lanIP)
 	add("10.0.2.2")
 	return candidates

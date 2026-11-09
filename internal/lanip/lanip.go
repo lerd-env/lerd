@@ -15,7 +15,8 @@ var tunnelPrefixes = []string{"tun", "utun", "tap", "wg", "ipsec", "ppp", "cscot
 var containerPrefixes = []string{"docker", "podman", "veth", "bridge", "br-", "vf-", "vz-"}
 
 // DummyIface is lerd's always-up link for offline .test resolution. Its
-// 192.0.2.1 is a placeholder only this host can use, so it is never picked.
+// 192.0.2.1 is a placeholder only this host can use, so it is never picked
+// as the LAN address.
 const DummyIface = "lerd0"
 
 // nic is the part of a host interface the address pick looks at.
@@ -36,6 +37,26 @@ func Primary() string {
 // tunnel, or "". Link-local and ULA are skipped: the LAN must reach it.
 func PrimaryV6() string {
 	return pickV6(dialProbe("udp6", "[2001:4860:4860::8888]:80"), hostNICs())
+}
+
+// DummyV4 returns the IPv4 on lerd's dummy link while it is up, or "". The
+// address stays put whatever the real network does and is not routed on it.
+func DummyV4() string {
+	return pickDummyV4(hostNICs())
+}
+
+func pickDummyV4(nics []nic) string {
+	for _, n := range nics {
+		if n.name != DummyIface || n.flags&net.FlagUp == 0 {
+			continue
+		}
+		for _, ip := range n.ips {
+			if v4 := ip.To4(); v4 != nil {
+				return v4.String()
+			}
+		}
+	}
+	return ""
 }
 
 // IsTunnelName reports whether an interface name belongs to a VPN tunnel.

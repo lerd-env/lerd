@@ -146,6 +146,7 @@ func TestHostCandidates(t *testing.T) {
 	cases := []struct {
 		name     string
 		getentIP string
+		dummyIP  string
 		lanIP    string
 		want     []string
 	}{
@@ -160,6 +161,16 @@ func TestHostCandidates(t *testing.T) {
 			want:     []string{"169.254.1.2", "192.168.1.10", "10.0.2.2"},
 		},
 		{
+			// lerd0 goes ahead of the LAN IP: it exists before any network
+			// is up and is not routed on the LAN, so a dev server
+			// bound to it neither fails at boot nor shows up on the LAN.
+			name:     "dummy link ahead of the LAN IP",
+			getentIP: "169.254.1.2",
+			dummyIP:  "192.0.2.1",
+			lanIP:    "192.168.178.15",
+			want:     []string{"169.254.1.2", "192.0.2.1", "192.168.178.15", "10.0.2.2"},
+		},
+		{
 			// Regression: when getent and the LAN IP collide (some setups
 			// alias them), the duplicate must be dropped so we don't probe
 			// the same address twice and waste a 2 s timeout.
@@ -167,6 +178,15 @@ func TestHostCandidates(t *testing.T) {
 			getentIP: "192.168.1.10",
 			lanIP:    "192.168.1.10",
 			want:     []string{"192.168.1.10", "10.0.2.2"},
+		},
+		{
+			// getent already answering with lerd0's address must not probe
+			// it twice.
+			name:     "getent and dummy link collide",
+			getentIP: "192.0.2.1",
+			dummyIP:  "192.0.2.1",
+			lanIP:    "192.168.178.15",
+			want:     []string{"192.0.2.1", "192.168.178.15", "10.0.2.2"},
 		},
 		{
 			// getent fails (no host.containers.internal entry, fresh install,
@@ -187,6 +207,14 @@ func TestHostCandidates(t *testing.T) {
 			want:     []string{"169.254.1.2", "10.0.2.2"},
 		},
 		{
+			// Offline laptop with the dummy link: lerd0 still answers.
+			name:     "lan IP missing, dummy link up",
+			getentIP: "169.254.1.2",
+			dummyIP:  "192.0.2.1",
+			lanIP:    "",
+			want:     []string{"169.254.1.2", "192.0.2.1", "10.0.2.2"},
+		},
+		{
 			// Worst case: nothing detected. The slirp4netns default is the
 			// only thing left to try. Better than returning an empty list,
 			// because on slirp4netns systems 10.0.2.2 actually routes.
@@ -198,13 +226,13 @@ func TestHostCandidates(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := hostCandidates(c.getentIP, c.lanIP)
+			got := hostCandidates(c.getentIP, c.dummyIP, c.lanIP)
 			if len(got) != len(c.want) {
-				t.Fatalf("hostCandidates(%q,%q) = %v, want %v", c.getentIP, c.lanIP, got, c.want)
+				t.Fatalf("hostCandidates(%q,%q,%q) = %v, want %v", c.getentIP, c.dummyIP, c.lanIP, got, c.want)
 			}
 			for i := range got {
 				if got[i] != c.want[i] {
-					t.Errorf("hostCandidates(%q,%q)[%d] = %q, want %q", c.getentIP, c.lanIP, i, got[i], c.want[i])
+					t.Errorf("hostCandidates(%q,%q,%q)[%d] = %q, want %q", c.getentIP, c.dummyIP, c.lanIP, i, got[i], c.want[i])
 				}
 			}
 		})
