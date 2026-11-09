@@ -141,6 +141,44 @@ func TestCommandsRun_PluginSiteCommand(t *testing.T) {
 	}
 }
 
+// An exit the site command declared as its answer, like cargo check finding
+// code that does not compile, is shown as usual but is not the plugin's fault.
+func TestCommandsRun_PluginExpectedExitIsNotAFailure(t *testing.T) {
+	registerSite(t, "acme", "acme.test")
+	dir := filepath.Join(plugins.Dir(), "cargo")
+	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := "api_version: 1\nname: cargo\nsite_commands:\n  - {name: check, label: Check, run: bin/check, expected_exits: [101]}\n"
+	if err := os.WriteFile(filepath.Join(dir, plugins.ManifestFile), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run := func(code string) string {
+		t.Helper()
+		script := "#!/bin/sh\necho 'error[E0425]: cannot find value' >&2\nexit " + code + "\n"
+		if err := os.WriteFile(filepath.Join(dir, "bin", "check"), []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/commands/cargo:check/run", nil)
+		req.RemoteAddr = "127.0.0.1:1234"
+		rec := httptest.NewRecorder()
+		handleSiteAction(rec, req)
+		return rec.Body.String()
+	}
+
+	if body := run("101"); !strings.Contains(body, `"exit":101`) {
+		t.Fatalf("the exit should still reach the run modal: %q", body)
+	}
+	if f, ok := plugins.LastFailure("cargo"); ok {
+		t.Fatalf("an expected exit was recorded as a plugin failure: %+v", f)
+	}
+
+	run("2")
+	if f, ok := plugins.LastFailure("cargo"); !ok || f.Error != "exited with code 2" {
+		t.Errorf("any other exit is still a plugin failure, got %+v %v", f, ok)
+	}
+}
+
 func TestCommandsRun_NonZeroExit(t *testing.T) {
 	sitePath := registerSite(t, "acme", "acme.test")
 	writeProjectYAML(t, sitePath, `

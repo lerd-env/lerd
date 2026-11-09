@@ -64,6 +64,8 @@ func TestReadManifest_Refusals(t *testing.T) {
 		{"overview card outside ui/", "p", "api_version: 1\nname: p\nui:\n  overview_card: {title: P, entry: bin/run}\n", "bin/run"},
 		{"overview card without a title", "p", "api_version: 1\nname: p\nui:\n  overview_card: {entry: ui/card.html}\n", "title"},
 		{"page script outside ui/", "p", "api_version: 1\nname: p\nui:\n  page_script: bin/run\n", "bin/run"},
+		{"expected exit 0", "p", "api_version: 1\nname: p\ncommands:\n  - {name: x, run: bin/run, expected_exits: [0]}\n", "expected exit 0"},
+		{"expected exit past 255", "p", "api_version: 1\nname: p\nsite_commands:\n  - {name: x, label: X, run: bin/run, expected_exits: [1, 256]}\n", "expected exit 256"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -95,5 +97,19 @@ func TestReadManifest_IgnoresUnknownKeys(t *testing.T) {
 	dir := writePlugin(t, t.TempDir(), "p", "api_version: 1\nname: p\nsomething_new: true\n")
 	if _, err := ReadPlugin(dir); err != nil {
 		t.Fatalf("unknown keys should be ignored: %v", err)
+	}
+}
+
+func TestReadManifest_ExpectedExits(t *testing.T) {
+	dir := writePlugin(t, t.TempDir(), "p", "api_version: 1\nname: p\ncommands:\n  - {name: x, run: bin/run, expected_exits: [1]}\nsite_commands:\n  - {name: check, label: Check, run: bin/run, expected_exits: [101]}\n")
+	p, err := ReadPlugin(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.Commands[0].Expects(1) || p.Commands[0].Expects(2) {
+		t.Errorf("command expects %v", p.Commands[0].ExpectedExits)
+	}
+	if !p.SiteCommands[0].Expects(101) || p.SiteCommands[0].Expects(1) {
+		t.Errorf("site command expects %v", p.SiteCommands[0].ExpectedExits)
 	}
 }
