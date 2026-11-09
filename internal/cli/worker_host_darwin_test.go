@@ -280,3 +280,26 @@ func TestWriteWorkerHostUnit_nativePHPGetsIniScanDir(t *testing.T) {
 		}
 	}
 }
+
+// A Rust site runs `cargo run`, which rustup installs into ~/.cargo/bin, a dir
+// the guard script's PATH would otherwise miss.
+func TestWriteWorkerHostUnit_rustAddsCargoBin(t *testing.T) {
+	tmp := withTempXDGAndBin(t)
+	swapMgr(t, &trackingHostMgr{})
+	swapDaemonReload(t)
+	t.Setenv("PATH", t.TempDir())
+	writeFiles(t, tmp, ".cargo/bin/cargo")
+	sitePath := filepath.Join(tmp, "site")
+	writeFiles(t, sitePath, "Cargo.toml")
+
+	if _, err := writeWorkerHostUnit("lerd-app-rusty", sitePath, "cargo run", "always", ""); err != nil {
+		t.Fatalf("writeWorkerHostUnit: %v", err)
+	}
+	guard, err := os.ReadFile(filepath.Join(config.RunDir(), "workers", "lerd-app-rusty.sh"))
+	if err != nil {
+		t.Fatalf("reading guard script: %v", err)
+	}
+	if want := `export PATH="` + config.BinDir() + ":" + filepath.Join(tmp, ".cargo", "bin") + ":"; !strings.Contains(string(guard), want) {
+		t.Errorf("guard script missing %q:\n%s", want, guard)
+	}
+}

@@ -890,7 +890,22 @@ type projectRuntime struct {
 	// project at runtime (same absolute path), so it needs no COPY or WORKDIR; it
 	// only provides the base image and global tools, app deps come from the mount.
 	container string
+	// toolDirs hold the toolchain outside a dev server's fixed PATH, relative to
+	// home unless absolute. They follow lerd's own shims, so its php still wins.
+	toolDirs []string
+	// fallbackDirs follow the system dirs, as installers that say to append them
+	// expect, so a distro or Homebrew toolchain keeps precedence.
+	fallbackDirs []string
 }
+
+// Shim dirs of the version managers that serve any language. A mise shim with
+// no version set falls through to the next PATH entry; asdf needs one set.
+const (
+	miseShims = ".local/share/mise/shims"
+	asdfShims = ".asdf/shims"
+)
+
+var rubyToolDirs = []string{miseShims, ".rbenv/shims", asdfShims}
 
 // knownRuntimes is the single source of truth for non-PHP runtime support.
 // First match wins on detection. Node's manifests mirror isNodeProject so the
@@ -903,6 +918,7 @@ var knownRuntimes = []projectRuntime{
 		manifests:  []string{"config.ru"},
 		devCommand: `sh -c 'exec bundle exec rackup --host "$HOST" --port "$PORT"'`,
 		container:  "FROM docker.io/library/ruby:3.3-slim\nRUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*\nCMD [\"sh\", \"-c\", \"bundle install && exec bundle exec rackup --host 0.0.0.0 --port {port}\"]\n",
+		toolDirs:   rubyToolDirs,
 	},
 	{
 		label:      "Node",
@@ -915,24 +931,32 @@ var knownRuntimes = []projectRuntime{
 		manifests:  []string{"go.mod"},
 		devCommand: "go run .",
 		container:  "FROM docker.io/library/golang:1.23-alpine\n# Optional hot reload: RUN go install github.com/air-verse/air@latest (then CMD [\"air\"])\nCMD [\"go\", \"run\", \".\"]\n",
+		toolDirs:   []string{miseShims, asdfShims},
+		// go.dev's installer unpacks to /usr/local/go; go install puts tools such as air in ~/go/bin.
+		fallbackDirs: []string{"/usr/local/go/bin", "go/bin"},
 	},
 	{
 		label:      "Python",
 		manifests:  []string{"pyproject.toml", "requirements.txt", "Pipfile", "manage.py"},
 		devCommand: "python app.py",
 		container:  "FROM docker.io/library/python:3.12-slim\n# Install app deps at build time only if they aren't in the mounted project.\nCMD [\"python\", \"app.py\"]\n",
+		toolDirs:   []string{miseShims, ".pyenv/shims", asdfShims},
 	},
 	{
 		label:      "Ruby",
 		manifests:  []string{"Gemfile"},
 		devCommand: "ruby app.rb",
 		container:  "FROM docker.io/library/ruby:3.3-alpine\nCMD [\"ruby\", \"app.rb\"]\n",
+		toolDirs:   rubyToolDirs,
 	},
 	{
 		label:      "Rust",
 		manifests:  []string{"Cargo.toml"},
 		devCommand: "cargo run",
 		container:  "FROM docker.io/library/rust:1-alpine\nCMD [\"cargo\", \"run\"]\n",
+		// rustup installs cargo into ~/.cargo/bin. CARGO_HOME is not followed: the
+		// watcher and UI rewrite these units without the user's shell environment.
+		toolDirs: []string{miseShims, asdfShims, ".cargo/bin"},
 	},
 }
 
@@ -941,13 +965,21 @@ var knownRuntimes = []projectRuntime{
 // treating anything without a package.json as an unknown blob.
 func detectProjectRuntime(cwd string) (*projectRuntime, bool) {
 	for i := range knownRuntimes {
-		for _, f := range knownRuntimes[i].manifests {
-			if fileExists(filepath.Join(cwd, f)) {
-				return &knownRuntimes[i], true
-			}
+		if knownRuntimes[i].presentIn(cwd) {
+			return &knownRuntimes[i], true
 		}
 	}
 	return nil, false
+}
+
+// presentIn reports whether any of the runtime's manifests is in dir.
+func (rt *projectRuntime) presentIn(dir string) bool {
+	for _, f := range rt.manifests {
+		if fileExists(filepath.Join(dir, f)) {
+			return true
+		}
+	}
+	return false
 }
 
 // proxyDefaultCommand is the dev command offered when none is saved: the first

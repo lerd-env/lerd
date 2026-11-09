@@ -219,6 +219,74 @@ func TestWriteHostWorkerUnitFile_unmanagedNodeBakesResolvedDir(t *testing.T) {
 	}
 }
 
+// A Rust host-proxy site runs `cargo run`, which rustup installs into
+// ~/.cargo/bin, a dir the unit's fixed PATH would otherwise miss.
+func TestWriteHostWorkerUnitFile_rustAddsCargoBin(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	home := filepath.Join(tmp, "home")
+	t.Setenv("HOME", home)
+	// An empty PATH keeps a bun or node on the test host out of the unit's PATH.
+	t.Setenv("PATH", t.TempDir())
+	cargoBin := filepath.Join(home, ".cargo", "bin")
+	writeFiles(t, home, ".cargo/bin/cargo")
+	sitePath := t.TempDir()
+	writeFiles(t, sitePath, "Cargo.toml")
+
+	if _, err := writeWorkerUnitFile(
+		"lerd-app-rusty", "App", "rusty",
+		sitePath, "", "cargo run",
+		"always", "", "", "", true,
+	); err != nil {
+		t.Fatalf("writeWorkerUnitFile (host): %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmp, "systemd", "user", "lerd-app-rusty.service"))
+	if err != nil {
+		t.Fatalf("read unit: %v", err)
+	}
+	if unit := string(data); !strings.Contains(unit, "Environment=PATH="+config.BinDir()+":"+cargoBin+":") {
+		t.Errorf("unit PATH must carry ~/.cargo/bin right after lerd's shims; got:\n%s", unit)
+	}
+}
+
+// mise and asdf shim dirs hold a shim for every tool they manage, php included,
+// so they must not get ahead of lerd's shims for a site that also has, say, a
+// requirements.txt. Go's installer dirs go last, as go.dev says to add them.
+func TestWriteHostWorkerUnitFile_toolDirsFollowLerdShims(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	home := filepath.Join(tmp, "home")
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", t.TempDir())
+	writeFiles(t, home, ".local/share/mise/shims/php", "go/bin/air")
+	sitePath := t.TempDir()
+	writeFiles(t, sitePath, "requirements.txt", "go.mod")
+
+	if _, err := writeWorkerUnitFile(
+		"lerd-app-mixed", "App", "mixed",
+		sitePath, "", "go run .",
+		"always", "", "", "", true,
+	); err != nil {
+		t.Fatalf("writeWorkerUnitFile (host): %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmp, "systemd", "user", "lerd-app-mixed.service"))
+	if err != nil {
+		t.Fatalf("read unit: %v", err)
+	}
+	unit := string(data)
+	mise := filepath.Join(home, ".local", "share", "mise", "shims")
+	if !strings.Contains(unit, "Environment=PATH="+config.BinDir()+":"+mise+":") {
+		t.Errorf("mise shims must follow lerd's shims; got:\n%s", unit)
+	}
+	if !strings.Contains(unit, ":/usr/bin:/bin:") || !strings.Contains(unit, ":"+filepath.Join(home, "go", "bin")+"\n") {
+		t.Errorf("~/go/bin must come after the system dirs; got:\n%s", unit)
+	}
+}
+
 // With Node unmanaged, no bun, and nothing resolvable anywhere, writing the
 // unit must fail instead of producing a unit that crash-loops on
 // `npm: command not found` — issue #1143.
@@ -279,6 +347,7 @@ func TestWriteHostWorkerUnitFile_nonNodeRunsDirectly(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
+	t.Setenv("HOME", filepath.Join(tmp, "home"))
 
 	binDir := filepath.Join(tmp, "lerd", "bin")
 	os.MkdirAll(binDir, 0755)
