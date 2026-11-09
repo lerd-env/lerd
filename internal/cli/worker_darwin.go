@@ -127,7 +127,7 @@ func writeWorkerHostUnit(unitName, sitePath, command, restart, nativePHPVersion 
 	}
 
 	home, _ := os.UserHomeDir()
-	if dirs := rubyShimDirs(sitePath, home); len(dirs) > 0 {
+	if dirs := hostToolDirs(sitePath, home); len(dirs) > 0 {
 		if extraBinDirs != "" {
 			dirs = append(dirs, extraBinDirs)
 		}

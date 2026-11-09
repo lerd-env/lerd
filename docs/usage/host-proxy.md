@@ -85,6 +85,10 @@ Rails also answers requests for an unknown `Host` with "Blocked hosts" in develo
 
 Lerd doesn't manage Ruby itself. The dev server runs with a fixed PATH rather than your login shell's, so for a Ruby project lerd adds the mise, rbenv and asdf shim directories it finds in your home, and the shims pick the version the way they do in your shell: rbenv reads `.ruby-version`, while mise and asdf want `.tool-versions` (or `mise.toml`), since mise ignores `.ruby-version` unless you enable idiomatic version files. A system Ruby in `/usr/bin` works as is. If you'd rather not install Ruby on the host, use a [custom container](custom-containers.md): the starter Containerfile `lerd init` writes for a Rack app installs your gems and runs rackup on the chosen port.
 
+## Rust
+
+When the only manifest `lerd init` finds is a `Cargo.toml`, it offers `cargo run`. Lerd doesn't manage Rust either, and rustup's installer puts `cargo` in `~/.cargo/bin`, which the dev server's fixed PATH doesn't include, so for any project with a `Cargo.toml` at its root lerd adds that directory when it exists, whatever the command. The rustup proxies there pick the toolchain from `rust-toolchain.toml`, or your default one, as they do in your shell. A distro-packaged cargo in `/usr/bin` works as is. A custom `CARGO_HOME` or `RUSTUP_HOME` isn't followed, so with one, set both in the command and call cargo by its full path. Like any dev server, the app should bind to the `HOST` and `PORT` lerd injects.
+
 ## Lifecycle
 
 The dev server is the site's main process, not a togglable worker. Its health drives the site's running indicator, and its lifecycle follows the site:

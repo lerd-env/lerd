@@ -219,6 +219,38 @@ func TestWriteHostWorkerUnitFile_unmanagedNodeBakesResolvedDir(t *testing.T) {
 	}
 }
 
+// A Rust host-proxy site runs `cargo run`, which rustup installs into
+// ~/.cargo/bin, a dir the unit's fixed PATH would otherwise miss.
+func TestWriteHostWorkerUnitFile_rustAddsCargoBin(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	home := filepath.Join(tmp, "home")
+	t.Setenv("HOME", home)
+	// An empty PATH keeps a bun or node on the test host out of the unit's PATH.
+	t.Setenv("PATH", t.TempDir())
+	cargoBin := filepath.Join(home, ".cargo", "bin")
+	writeFiles(t, home, ".cargo/bin/cargo")
+	sitePath := t.TempDir()
+	writeFiles(t, sitePath, "Cargo.toml")
+
+	if _, err := writeWorkerUnitFile(
+		"lerd-app-rusty", "App", "rusty",
+		sitePath, "", "cargo run",
+		"always", "", "", "", true,
+	); err != nil {
+		t.Fatalf("writeWorkerUnitFile (host): %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmp, "systemd", "user", "lerd-app-rusty.service"))
+	if err != nil {
+		t.Fatalf("read unit: %v", err)
+	}
+	if unit := string(data); !strings.Contains(unit, "Environment=PATH="+cargoBin+":"+config.BinDir()+":") {
+		t.Errorf("unit PATH must lead with ~/.cargo/bin; got:\n%s", unit)
+	}
+}
+
 // With Node unmanaged, no bun, and nothing resolvable anywhere, writing the
 // unit must fail instead of producing a unit that crash-loops on
 // `npm: command not found` — issue #1143.

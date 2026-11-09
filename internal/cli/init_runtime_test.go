@@ -181,6 +181,24 @@ func TestRubyShimDirs(t *testing.T) {
 	}
 }
 
+func TestCargoBinDirs(t *testing.T) {
+	home := t.TempDir()
+	writeFiles(t, home, ".cargo/bin/cargo")
+	site := t.TempDir()
+	writeFiles(t, site, "Cargo.toml")
+	got := cargoBinDirs(site, home)
+	want := []string{filepath.Join(home, ".cargo/bin")}
+	if strings.Join(got, ":") != strings.Join(want, ":") {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if dirs := cargoBinDirs(site, t.TempDir()); dirs != nil {
+		t.Errorf("home without ~/.cargo/bin got %v, want none", dirs)
+	}
+	if dirs := cargoBinDirs(t.TempDir(), home); dirs != nil {
+		t.Errorf("non-Rust site got %v, want none", dirs)
+	}
+}
+
 // Fedora's podman enforces short-name resolution and cannot prompt for a
 // registry without a terminal, so a bare "ruby:3.3-slim" never builds there.
 func TestStarterContainerfile_namesTheRegistry(t *testing.T) {

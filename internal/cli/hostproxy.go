@@ -361,6 +361,25 @@ func rubyShimDirs(sitePath, home string) []string {
 	return dirs
 }
 
+// cargoBinDirs returns ~/.cargo/bin for a Rust site when it exists, since rustup
+// installs cargo there. CARGO_HOME is not read: the watcher and UI rewrite these
+// units too, and their environment would not carry the user's shell value.
+func cargoBinDirs(sitePath, home string) []string {
+	if !fileExists(filepath.Join(sitePath, "Cargo.toml")) {
+		return nil
+	}
+	if p := filepath.Join(home, ".cargo", "bin"); fileExists(p) {
+		return []string{p}
+	}
+	return nil
+}
+
+// hostToolDirs returns the language tool dirs a host worker for sitePath
+// needs on its PATH: Ruby version-manager shims and Rust's cargo bin.
+func hostToolDirs(sitePath, home string) []string {
+	return append(rubyShimDirs(sitePath, home), cargoBinDirs(sitePath, home)...)
+}
+
 // reservedHostPorts returns host ports already claimed by other host-proxy
 // sites in the registry, so two sites never get assigned the same port even
 // when the other site's dev server isn't currently running. exceptSite is
