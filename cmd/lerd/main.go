@@ -74,10 +74,6 @@ func main() {
 	// publish; in the CLI/MCP processes we HTTP-POST to the dashboard.
 	podman.AfterUnitChange = notifyLerdUI
 
-	// lerd start and link re-probe the host gateway outside the watcher, so a move
-	// they make repoints host-proxy vhosts and dev servers the same way.
-	podman.OnGatewayChange = cli.RegenerateHostProxyVhostsOnGatewayChange
-
 	// A PHP image (re)build orphans the previous image. Flag it here and reclaim
 	// once when the command finishes, so a multi-version install/update coalesces
 	// into a single safe-tier sweep instead of one per built version.
