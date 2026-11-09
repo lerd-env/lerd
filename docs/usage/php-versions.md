@@ -104,6 +104,8 @@ Lerd automatically manages which PHP-FPM containers are running based on which v
 
 **Adding a version by hand**: `lerd php:rebuild <version>` names a version this machine has never installed and installs it, registering the unit before it builds so the version shows up in `lerd php:list` either way. That is the command every surface points at when one is missing, so a pin written ahead of the install (`lerd isolate 8.4` in a directory that is not a site yet) has a way to be satisfied without waiting for a link.
 
+**A rebuild that fails** says so: `lerd php:rebuild` (and `lerd php:update` on the container runtime) prints each failed version, still restarts the ones that built, and exits non-zero naming what was not rebuilt. The failed build is not recorded as current, and the version keeps the image it had; rerun `lerd php:rebuild <version>` once the cause is fixed. A version whose unit kept failing while its image was missing is cleared before the restart, so it comes up as soon as the build lands.
+
 **Manual control**: unused PHP versions (no active sites) can be started and stopped manually from the dashboard (System > PHP > Start / Stop). From the CLI:
 
 ```bash

@@ -210,7 +210,7 @@ func rejectPerVersionFlag(cmd *cobra.Command) error {
 // rebuild, printing a manual hint if the restart fails.
 func restartFPMUnit(version string) {
 	unit := "lerd-php" + strings.ReplaceAll(version, ".", "") + "-fpm"
-	if err := podman.RestartUnit(unit); err != nil {
+	if err := restartOnNewImage(unit); err != nil {
 		feedback.Warn("restart %s: %v", unit, err)
 		fmt.Printf("Run: systemctl --user restart %s\n", unit)
 	} else {
