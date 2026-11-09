@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -176,6 +177,74 @@ func TestCommandsRun_PluginExpectedExitIsNotAFailure(t *testing.T) {
 	run("2")
 	if f, ok := plugins.LastFailure("cargo"); !ok || f.Error != "exited with code 2" {
 		t.Errorf("any other exit is still a plugin failure, got %+v %v", f, ok)
+	}
+}
+
+// installWaitPlugin installs "slow", whose site command prints a line and then
+// hangs, with the manifest options given for it.
+func installWaitPlugin(t *testing.T, options string) {
+	t.Helper()
+	dir := filepath.Join(plugins.Dir(), "slow")
+	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		plugins.ManifestFile: "api_version: 1\nname: slow\nsite_commands:\n  - {name: wait, label: Wait, run: bin/wait" + options + "}\n",
+		"bin/wait":           "#!/bin/sh\necho started\nsleep 30\n",
+	}
+	for rel, body := range files {
+		if err := os.WriteFile(filepath.Join(dir, rel), []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// leavingRecorder is a browser that goes away once it has seen line.
+type leavingRecorder struct {
+	*httptest.ResponseRecorder
+	line  string
+	leave context.CancelFunc
+}
+
+// WriteString is what the stream writes through.
+func (l leavingRecorder) WriteString(s string) (int, error) {
+	n, err := l.ResponseRecorder.WriteString(s)
+	if strings.Contains(s, l.line) {
+		l.leave()
+	}
+	return n, err
+}
+
+// Closing the run modal stops the command, and lerd's own kill is not the
+// plugin failing.
+func TestCommandsRun_PluginStoppedByTheUserIsNotAFailure(t *testing.T) {
+	registerSite(t, "acme", "acme.test")
+	installWaitPlugin(t, "")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/commands/slow:wait/run", nil).WithContext(ctx)
+	req.RemoteAddr = "127.0.0.1:1234"
+	rec := leavingRecorder{httptest.NewRecorder(), "data: started", cancel}
+	handleSiteAction(rec, req)
+
+	if !strings.Contains(rec.Body.String(), "data: started") {
+		t.Fatalf("the command never ran: %q", rec.Body)
+	}
+	if f, ok := plugins.LastFailure("slow"); ok {
+		t.Fatalf("a run the user stopped was recorded as a plugin failure: %+v", f)
+	}
+}
+
+// A command that outlives its limit is stopped and is the plugin's failure.
+func TestCommandsRun_PluginPastItsLimitIsAFailure(t *testing.T) {
+	registerSite(t, "acme", "acme.test")
+	installWaitPlugin(t, ", timeout: 300ms")
+	req := httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/commands/slow:wait/run", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
+	handleSiteAction(httptest.NewRecorder(), req)
+
+	if f, ok := plugins.LastFailure("slow"); !ok || f.Error != "timed out after 300ms" {
+		t.Fatalf("a run past its limit should be recorded as timed out, got %+v %v", f, ok)
 	}
 }
 

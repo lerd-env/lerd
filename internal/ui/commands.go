@@ -212,6 +212,8 @@ func runPluginCommand(w http.ResponseWriter, r *http.Request, site *config.Site,
 	switch {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		plugins.Failed(plugins.Failure{Plugin: target.Plugin, Surface: plugins.SurfaceSiteCommand, What: target.Name, Error: fmt.Sprintf("timed out after %s", entry.Limit())})
+	case ctx.Err() != nil:
+		// The user closed the run, and lerd stopped it.
 	case code != 0 && !entry.Expects(code):
 		plugins.Failed(plugins.Failure{Plugin: target.Plugin, Surface: plugins.SurfaceSiteCommand, What: target.Name, Error: fmt.Sprintf("exited with code %d", code)})
 	}
