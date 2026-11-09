@@ -88,6 +88,10 @@ site_commands:              # a site's Commands menu and the command palette
     confirm: false          # ask before running
     run: bin/greet
     timeout: 45m            # longer than the 30 minute default, up to 1h
+  - name: check
+    label: Cargo check
+    run: bin/check
+    expected_exits: [101]   # exits that are the tool's answer, not a plugin fault; commands take it too
 
 hooks:                      # event -> executable
   site.linked: bin/on-event
@@ -352,9 +356,15 @@ A plugin runs as you, with everything you can do, so install only plugins you tr
 
 ## When a plugin fails
 
-Lerd records each plugin's failures, whichever surface they came from: a hook, a command, a site command, an API endpoint, an MCP tool or a job it is in charge of. The last 50 stay in the plugin's own log file, `plugin-failures/<name>.log` in lerd's data folder. Its card on the **Plugins** page shows an amber dot after a failure, and its **Logs** tab lists them in full, newest first. For a plugin installed from the catalog, each one has a **Report to the author** link that opens a new issue on its repository, filled in with the plugin's commit, your lerd version and the error. A failing `lerd <plugin>:<command>` prints the same link in the terminal.
+Lerd records each plugin's failures, whichever surface they came from: a hook, a command, a site command, an API endpoint, an MCP tool or a job it is in charge of. The last 50 stay in the plugin's own log file, `plugin-failures/<name>.log` in lerd's data folder. Its card on the **Plugins** page shows an amber dot after a failure, and its **Logs** tab lists them in full, newest first. For a plugin installed from the catalog, each one has a **Report to the author** link that opens a new issue on its repository, filled in with the plugin's commit, your lerd version and the error. A failing `lerd <plugin>:<command>` prints the same link in the terminal. A site command you stop by closing its run modal is not a failure, since lerd stopped it rather than the plugin.
 
 A failure you were not watching, such as a hook the watcher ran, also raises a **Plugin failures** notification, which can be switched off in the notification settings like any other. The same failure again within the hour stays quiet. Reports go to the plugin's author rather than to lerd, since only they can fix their plugin; the issue says where to send it on if lerd turns out to be at fault.
+
+### When a non-zero exit is the answer
+
+A command that wraps a tool often ends the way the tool did, and for many tools a non-zero exit is an answer rather than a fault: `cargo check` exits 101 when the code does not compile, a test runner exits 1 when a test fails, a linter when it finds something. List those codes under `expected_exits` on the command or site command, and lerd passes them on as usual, to your terminal or the run modal, without recording a failure of the plugin or offering a report. Any other non-zero exit, such as the script crashing or the tool missing, is still recorded. Codes run from 1 to 255; anything else refuses the plugin with a message naming it. An older lerd ignores the key and records those exits as failures, as it always did.
+
+MCP tools and API endpoints have no such list, since their exit code is part of the answer's format: a tool or endpoint that has found something to report exits 0 and says so in what it prints.
 
 ---
 

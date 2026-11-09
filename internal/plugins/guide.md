@@ -57,6 +57,8 @@ ui:                         # only ui/ is served
 
 Events: `site.linked`, `site.unlinked`, `site.secured`, `site.php_changed`, `worktree.added`, `worktree.removed`, `service.started`, `service.stopped`, `lerd.started`, `lerd.stopped`. Any other name refuses the plugin.
 
+A command or site command that ends the way a tool did can list the exits that are the tool's answer, such as `expected_exits: [101]` for `cargo check` finding code that does not compile. They reach the user as usual but are not recorded as the plugin failing; any other non-zero exit still is.
+
 Time limits: hooks and API 30s, MCP tools 2m, site commands 30m, CLI none. `timeout:` raises one entry up to 10m (API, MCP) or 1h (site commands).
 
 ## What an executable gets
