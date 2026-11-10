@@ -29,8 +29,9 @@ var (
 )
 
 type pulledAttempt struct {
-	key string
-	at  time.Time
+	key       string
+	at        time.Time
+	envFailed []string // services whose env run failed, retried after the back-off
 }
 
 // pulledNow is the clock the back-off reads. A seam for the tests.
@@ -73,9 +74,15 @@ func WirePulledServices(site *config.Site) []string {
 	if !ok {
 		return nil
 	}
+	if names, due := retryFailedEnv(site); due {
+		return names
+	}
 	fetchMissingPresets(proj)
 	unwired := unwiredProjectServices(site, proj, fw)
 	key := strings.Join(serviceNamesOf(unwired), ",")
+	if key == "" {
+		return nil
+	}
 	now := pulledNow()
 	pulledServicesMu.Lock()
 	last := pulledServicesTried[site.Path]
@@ -84,7 +91,7 @@ func WirePulledServices(site *config.Site) []string {
 		pulledServicesTried[site.Path] = pulledAttempt{key: key, at: now}
 	}
 	pulledServicesMu.Unlock()
-	if key == "" || tried {
+	if tried {
 		return nil
 	}
 
@@ -115,11 +122,40 @@ func WirePulledServices(site *config.Site) []string {
 			return nil
 		}
 	}
-	if out, err := runSiteEnv(site.Path); err != nil {
-		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-		fmt.Printf("[WARN] lerd env for %s: %v: %s\n", site.Name, err, lines[len(lines)-1])
+	return runPulledEnv(site, serviceNamesOf(apply.Services))
+}
+
+// retryFailedEnv reruns env for a site whose last run failed once the back-off
+// has passed. env marks a service wired before it learns its database or bucket
+// could not be made, so nothing else would bring the site back here.
+func retryFailedEnv(site *config.Site) ([]string, bool) {
+	pulledServicesMu.Lock()
+	last := pulledServicesTried[site.Path]
+	pulledServicesMu.Unlock()
+	if len(last.envFailed) == 0 || pulledNow().Sub(last.at) < pulledRetryAfter {
+		return nil, false
 	}
-	return serviceNamesOf(apply.Services)
+	return runPulledEnv(site, last.envFailed), true
+}
+
+// runPulledEnv runs env for the site and records whether it has to be retried,
+// returning names when it succeeded.
+func runPulledEnv(site *config.Site, names []string) []string {
+	out, err := runSiteEnv(site.Path)
+	pulledServicesMu.Lock()
+	a := pulledServicesTried[site.Path]
+	a.at, a.envFailed = pulledNow(), nil
+	if err != nil {
+		a.envFailed = names
+	}
+	pulledServicesTried[site.Path] = a
+	pulledServicesMu.Unlock()
+	if err != nil {
+		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+		fmt.Printf("[WARN] lerd env for %s, will retry: %v: %s\n", site.Name, err, lines[len(lines)-1])
+		return nil
+	}
+	return names
 }
 
 // fetchMissingPresets caches the store definition of a declared preset this

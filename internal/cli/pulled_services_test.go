@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -232,5 +233,39 @@ func TestWirePulledServices_HoldsEnvUntilTheServiceRuns(t *testing.T) {
 	clock = clock.Add(pulledRetryAfter + time.Second)
 	if applied := WirePulledServices(site); !slices.Equal(applied, []string{"rustfs"}) || len(*envDirs) != 1 {
 		t.Errorf("after recovery applied %v, env ran %d times, want [rustfs] once", applied, len(*envDirs))
+	}
+}
+
+// env records a service as wired before it learns its database or bucket could
+// not be created, so a failed env run is retried by itself after the back-off.
+func TestWirePulledServices_RetriesAFailedEnvRun(t *testing.T) {
+	site := pulledSite(t, config.ProjectService{Name: "mysql"}, config.ProjectService{Name: "rustfs", Preset: "rustfs"})
+	if err := config.SaveCustomService(&config.CustomService{Name: "rustfs", Image: "docker.io/rustfs/rustfs:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	_, envDirs := stubPulledServiceSeams(t)
+	envErr := errors.New("bucket \"demo\": connection refused")
+	runSiteEnv = func(dir string) ([]byte, error) {
+		*envDirs = append(*envDirs, dir)
+		// Like env, it points .env at rustfs before failing on the bucket.
+		_ = os.WriteFile(filepath.Join(dir, ".env"), []byte("DB_HOST=lerd-mysql\nAWS_ENDPOINT=http://lerd-rustfs:9000\n"), 0o644)
+		return nil, envErr
+	}
+	clock := time.Now()
+	prevNow := pulledNow
+	pulledNow = func() time.Time { return clock }
+	t.Cleanup(func() { pulledNow = prevNow })
+
+	WirePulledServices(site)
+	WirePulledServices(site)
+	if len(*envDirs) != 1 {
+		t.Fatalf("env ran %d times inside the back-off, want 1", len(*envDirs))
+	}
+	envErr = nil
+	clock = clock.Add(pulledRetryAfter + time.Second)
+	WirePulledServices(site)
+	WirePulledServices(site)
+	if len(*envDirs) != 2 {
+		t.Errorf("env ran %d times, want one retry after the back-off and none once it passed", len(*envDirs))
 	}
 }
