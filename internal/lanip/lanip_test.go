@@ -102,6 +102,31 @@ func TestPickV6(t *testing.T) {
 	}
 }
 
+func TestPickDummyV4(t *testing.T) {
+	cases := []struct {
+		name string
+		nics []nic
+		want string
+	}{
+		{"the dummy link's address even with the uplink up", []nic{
+			{name: "wlp194s0", flags: up, ips: ips("192.168.178.15")},
+			{name: "lerd0", flags: up, ips: ips("192.0.2.1")},
+		}, "192.0.2.1"},
+		{"the IPv4 address behind a link-local v6", []nic{
+			{name: "lerd0", flags: up, ips: ips("fe80::5090:12ff:fe20:f08d", "192.0.2.1")},
+		}, "192.0.2.1"},
+		{"a dummy link that is down is no use", []nic{
+			{name: "lerd0", flags: 0, ips: ips("192.0.2.1")},
+		}, ""},
+		{"no dummy link, as on macOS", warpHost, ""},
+	}
+	for _, c := range cases {
+		if got := pickDummyV4(c.nics); got != c.want {
+			t.Errorf("%s: pickDummyV4 = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
 func TestIsTunnelName(t *testing.T) {
 	for name, want := range map[string]bool{
 		"utun8": true, "tun0": true, "wg0": true, "CloudflareWARP": true, "ppp0": true,

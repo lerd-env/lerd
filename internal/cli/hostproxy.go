@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
@@ -52,36 +53,132 @@ func RegenerateHostProxyVhostsOnGatewayChange() {
 	}
 	regenerated := false
 	for i := range reg.Sites {
-		s := reg.Sites[i]
-		if !s.IsHostProxy() {
+		if reg.Sites[i].IsHostProxy() && repointHostProxySite(reg.Sites[i]) {
+			regenerated = true
+		}
+	}
+	if regenerated {
+		_ = hostProxyNginxReload()
+	}
+}
+
+// hostProxyNginxReload is the nginx reload the gateway passes use, a seam for tests.
+var hostProxyNginxReload = nginx.Reload
+
+// RepointStaleHostProxySites repoints each host-proxy site whose vhost or running
+// dev server is on another address than the hosts file, which lerd start and link
+// can move without the watcher noticing. Reports whether any site moved.
+func RepointStaleHostProxySites() bool {
+	gateway := hostGatewayBindIP()
+	if platform.Current.UsesMachineVM || gateway == "" {
+		return false
+	}
+	reg, err := config.LoadSites()
+	if err != nil {
+		return false
+	}
+	bind := hostProxyBindAddr()
+	moved := false
+	for _, s := range reg.Sites {
+		if !s.IsHostProxy() || s.Paused || s.Ignored {
 			continue
 		}
-		if err := siteops.RegenerateSiteVhost(&s, s.PrimaryDomain()); err != nil {
-			feedback.Warn("regenerating host-proxy vhost for %s: %v", s.Name, err)
-			continue
+		if (vhostOffGateway(s, gateway) || devServerOffGateway(s, bind)) && repointHostProxySite(s) {
+			moved = true
 		}
-		proxy := parentProxyConfig(s)
-		if proxy != nil {
-			if w, ok := hostProxyWorker(proxy); ok {
-				rebindHostProxyDevServer(proxy, s.Name, s.Path, w)
-			}
+	}
+	if moved {
+		_ = hostProxyNginxReload()
+	}
+	return moved
+}
+
+// proxyPassIP matches the IPv4 address a host-proxy vhost proxies to. Waking
+// and paused pages proxy to no host address, so they never match.
+var proxyPassIP = regexp.MustCompile(`proxy_pass\s+https?://([0-9.]+):\d+;`)
+
+// vhostOffGateway reports whether the site's vhost proxies to an address other
+// than gateway, reading only the file nginx serves.
+func vhostOffGateway(s config.Site, gateway string) bool {
+	data, err := os.ReadFile(filepath.Join(config.NginxConfD(), s.PrimaryDomain()+".conf"))
+	if err != nil {
+		return false
+	}
+	for _, m := range proxyPassIP.FindAllStringSubmatch(string(data), -1) {
+		if m[1] != gateway {
+			return true
 		}
-		if wts, wErr := gitpkg.ServableWorktrees(s.Path, s.PrimaryDomain()); wErr == nil {
-			for _, wt := range wts {
-				_ = certs.RegenerateHostProxyWorktreeVhost(s, wt.Path, wt.Domain, s.Secured)
-				if proxy != nil {
-					port := WorktreeHostPort(proxy.Port, wt.Path, hostProxyPortEnvKey(proxy))
-					if w, ok := hostProxyWorkerForPort(proxy, port); ok {
-						rebindHostProxyDevServer(proxy, s.Name, wt.Path, w)
-					}
+	}
+	return false
+}
+
+// devServerOffGateway reports whether the site's running dev server is bound to
+// another address than bind and may be rebound. The unit file is read first, so
+// a server already on bind costs no status call.
+func devServerOffGateway(s config.Site, bind string) bool {
+	proxy := parentProxyConfig(s)
+	if proxy == nil || !hostProxyShouldBind(proxy) {
+		return false
+	}
+	unit := hostProxyWorkerUnit(s.Name)
+	data, err := os.ReadFile(filepath.Join(config.SystemdUserDir(), unit+".service"))
+	if err != nil {
+		return false
+	}
+	key := regexp.MustCompile(`(?:^|[\s'"])` + regexp.QuoteMeta(hostProxyHostEnvKey(proxy)) + `=([^\s'"]+)`)
+	m := key.FindStringSubmatch(string(data))
+	if m == nil || m[1] == bind || !isServiceActiveOrRestarting(unit) {
+		return false
+	}
+	return gatewayRebindProxy(s) != nil
+}
+
+// repointHostProxySite regenerates a host-proxy site's vhosts, its worktrees'
+// included, and rebinds its running dev servers when their command is the one
+// approved at link. Reports whether the vhost was regenerated.
+func repointHostProxySite(s config.Site) bool {
+	if err := siteops.RegenerateSiteVhost(&s, s.PrimaryDomain()); err != nil {
+		feedback.Warn("regenerating host-proxy vhost for %s: %v", s.Name, err)
+		return false
+	}
+	proxy := gatewayRebindProxy(s)
+	if proxy != nil {
+		if w, ok := hostProxyWorker(proxy); ok {
+			rebindHostProxyDevServer(proxy, s.Name, s.Path, w)
+		}
+	}
+	if wts, wErr := gitpkg.ServableWorktrees(s.Path, s.PrimaryDomain()); wErr == nil {
+		for _, wt := range wts {
+			_ = certs.RegenerateHostProxyWorktreeVhost(s, wt.Path, wt.Domain, s.Secured)
+			if proxy != nil {
+				port := WorktreeHostPort(proxy.Port, wt.Path, hostProxyPortEnvKey(proxy))
+				if w, ok := hostProxyWorkerForPort(proxy, port); ok {
+					rebindHostProxyDevServer(proxy, s.Name, wt.Path, w)
 				}
 			}
 		}
-		regenerated = true
 	}
-	if regenerated {
-		_ = nginx.Reload()
+	return true
+}
+
+// unapprovedRebindWarned remembers the changed command each site was last warned
+// about, so a watcher pass every tick says it once rather than every 30 seconds.
+var unapprovedRebindWarned sync.Map
+
+// gatewayRebindProxy returns the proxy config a gateway rebind may restart the
+// site's dev servers with, or nil when the unattended start gate refuses it.
+func gatewayRebindProxy(s config.Site) *config.ProxyConfig {
+	proxy := parentProxyConfig(s)
+	if proxy == nil {
+		return nil
 	}
+	if err := gateHostProxyAutostart(s, proxy.Command); err != nil {
+		if prev, seen := unapprovedRebindWarned.Swap(s.Name, proxy.Command); !seen || prev != proxy.Command {
+			feedback.Warn("dev server for %s not rebound: %v", s.Name, err)
+		}
+		return nil
+	}
+	return proxy
 }
 
 // rebindHostProxyDevServer rewrites a host-proxy dev server's unit with the

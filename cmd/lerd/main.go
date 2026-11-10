@@ -636,6 +636,7 @@ func newWatchCmd() *cobra.Command {
 			// (which bake the gateway IP into proxy_pass on Linux) are
 			// regenerated so they don't point at the old, now-dead address.
 			watcher.OnGatewayIPChange = cli.RegenerateHostProxyVhostsOnGatewayChange
+			watcher.RepointStaleHostProxy = cli.RepointStaleHostProxySites
 			go watcher.WatchHostGateway(30*time.Second, nil)
 
 			// Self-heal exec-mode framework workers on macOS. Container mode

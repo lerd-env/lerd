@@ -523,6 +523,27 @@ func TestTickHostGatewayWith_stillCatchesALANChangeWithoutInspecting(t *testing.
 	}
 }
 
+// lerd start and link rewrite the hosts file outside this loop, and once the new
+// gateway answers nothing above fires again, so every tick, the settled fast path
+// included, also checks the host-proxy sites against the hosts file.
+func TestTickHostGatewayWith_repointsStaleHostProxySitesEveryTick(t *testing.T) {
+	inspects, passes := 0, 0
+	stale := true
+	deps := gatewayCountingDeps(&inspects)
+	deps.repointStale = func() bool { passes++; moved := stale; stale = false; return moved }
+	state := &hostGatewayState{lastLAN: "192.168.1.10"}
+
+	if changed := tickHostGatewayWith(deps, state, false); !changed {
+		t.Error("repointing a stale site was not reported as a change")
+	}
+	if changed := tickHostGatewayWith(deps, state, false); changed {
+		t.Error("a tick with nothing left to repoint reported a change")
+	}
+	if passes != 2 {
+		t.Errorf("repoint pass ran %d times over 2 ticks, want 2", passes)
+	}
+}
+
 // With nothing moving, the loop settles into inspecting once every
 // hostGatewayInspectEvery+1 ticks rather than once per tick.
 func TestWatchHostGateway_backsOffThePodmanLookupWhenSettled(t *testing.T) {

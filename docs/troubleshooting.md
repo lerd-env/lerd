@@ -153,7 +153,7 @@ If you also saw a stall of up to twenty seconds on `.test` while offline, that w
 
 ### What is the `lerd0` network interface?
 
-`lerd0` is a dummy (virtual) network interface lerd creates on Linux so that `.test` domains keep resolving when you have no network at all. It carries no traffic and connects to nothing; it exists purely to give systemd-resolved a link that is always up to hang the `.test` route on. See the offline entry above for why that is necessary.
+`lerd0` is a dummy (virtual) network interface lerd creates on Linux so that `.test` domains keep resolving when you have no network at all. It connects to nothing; it exists to give systemd-resolved a link that is always up to hang the `.test` route on. See the offline entry above for why that is necessary. Because its `192.0.2.1` never changes and is not routed on your network, lerd also uses it as the host address containers reach the host on when netavark's `host.containers.internal` does not work: `host.containers.internal` in PHP containers (Xdebug) points at it, and [host-proxy](usage/host-proxy.md#binding) dev servers bind it.
 
 It is deliberately marked unmanaged in NetworkManager (`/etc/NetworkManager/conf.d/lerd-dns-link.conf`), so it does not appear as a connection in your desktop's network menu and cannot be switched off by accident. Its only address is `192.0.2.1/32`, from the range RFC 5737 reserves for documentation and which never appears on a real network, so it cannot conflict with anything you connect to.
 
