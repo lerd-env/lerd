@@ -166,13 +166,15 @@ func repointHostProxySite(s config.Site) bool {
 var unapprovedRebindWarned sync.Map
 
 // gatewayRebindProxy returns the proxy config a gateway rebind may restart the
-// site's dev servers with, or nil when its command is not the one approved at
-// link, since the rebind runs unattended and must never run an unreviewed command.
+// site's dev servers with, or nil when the unattended start gate refuses it.
 func gatewayRebindProxy(s config.Site) *config.ProxyConfig {
 	proxy := parentProxyConfig(s)
-	if proxy != nil && proxy.Command != "" && proxy.Command != s.HostCommand {
+	if proxy == nil {
+		return nil
+	}
+	if err := gateHostProxyAutostart(s, proxy.Command); err != nil {
 		if prev, seen := unapprovedRebindWarned.Swap(s.Name, proxy.Command); !seen || prev != proxy.Command {
-			feedback.Warn("dev server for %s not rebound: its command changed since you approved it; run `lerd link` to review it", s.Name)
+			feedback.Warn("dev server for %s not rebound: %v", s.Name, err)
 		}
 		return nil
 	}
