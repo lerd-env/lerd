@@ -313,6 +313,7 @@ func RunMCPDisableGlobal() error {
 		return err
 	}
 	removeWindowsAIClients(true)
+	saveGlobalMCPDeclined(true)
 
 	feedback.Done("done — restart your AI assistant for changes to take effect")
 	return nil
