@@ -1,0 +1,129 @@
+package cli
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+	"sync"
+
+	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/sitedoctor"
+)
+
+// runSiteEnv runs `lerd env` in a site's folder. A seam for the tests.
+var runSiteEnv = func(dir string) ([]byte, error) { return envCommandFor(dir).CombinedOutput() }
+
+// ensurePreset fetches a preset definition from the store. A seam for the tests.
+var ensurePreset = config.EnsurePreset
+
+// presetsFetched remembers the preset names already asked of the store.
+var presetsFetched = map[string]bool{}
+
+// pulledServicesTried remembers, per site, the unwired set last acted on. env
+// writes .env and .lerd.yaml, which wakes the watcher again, and a service env
+// never wires (one with no env mapping) would otherwise rerun it forever.
+var (
+	pulledServicesMu    sync.Mutex
+	pulledServicesTried = map[string]string{}
+)
+
+// unwiredProjectServices are the services .lerd.yaml declares that the env does
+// not point at (the doctor's finding) and lerd never wired, such as one a pull
+// brought in. One lerd wired before was repointed by hand and is left alone.
+func unwiredProjectServices(site *config.Site, proj *config.ProjectConfig, fw *config.Framework) []config.ProjectService {
+	if proj == nil {
+		return nil
+	}
+	unwired := sitedoctor.UnwiredServices(site.Path, fw)
+	var out []config.ProjectService
+	for _, svc := range proj.Services {
+		if !slices.Contains(unwired, svc.Name) || slices.Contains(site.WiredServices, svc.Name) ||
+			site.DeclinesService(svc.Name) || config.ServiceIsRemoved(svc.Name) {
+			continue
+		}
+		out = append(out, svc)
+	}
+	return out
+}
+
+// WirePulledServices starts the services a change to .lerd.yaml added and
+// rewrites the site's env to point at them, returning the ones it applied.
+// A new inline container is left for `lerd link`, which shows it and asks.
+func WirePulledServices(site *config.Site) []string {
+	proj, err := config.LoadProjectConfig(site.Path)
+	if err != nil {
+		return nil
+	}
+	fw, ok := config.GetFrameworkForDir(site.Framework, site.Path)
+	if !ok {
+		return nil
+	}
+	fetchMissingPresets(proj)
+	unwired := unwiredProjectServices(site, proj, fw)
+	key := strings.Join(serviceNamesOf(unwired), ",")
+	pulledServicesMu.Lock()
+	tried := pulledServicesTried[site.Path] == key
+	pulledServicesTried[site.Path] = key
+	pulledServicesMu.Unlock()
+	if key == "" || tried {
+		return nil
+	}
+
+	apply := &config.ProjectConfig{}
+	for _, svc := range unwired {
+		if _, err := config.LoadCustomService(svc.Name); err == nil {
+			// Installed already: start the one on disk, never replace it from the repo.
+			apply.Services = append(apply.Services, config.ProjectService{Name: svc.Name})
+			continue
+		}
+		if svc.Custom != nil {
+			fmt.Printf("[WARN] %s declares a new service %s; run `lerd link` there to review and install it\n", site.Name, svc.Name)
+			continue
+		}
+		apply.Services = append(apply.Services, svc)
+	}
+	if len(apply.Services) == 0 {
+		return nil
+	}
+	if err := linkApplyServices(site.Path, *site, apply); err != nil {
+		fmt.Printf("[WARN] starting new services for %s: %v\n", site.Name, err)
+	}
+	if out, err := runSiteEnv(site.Path); err != nil {
+		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+		fmt.Printf("[WARN] lerd env for %s: %v: %s\n", site.Name, err, lines[len(lines)-1])
+	}
+	return serviceNamesOf(apply.Services)
+}
+
+// fetchMissingPresets caches the store definition of a declared preset this
+// machine has never seen, such as valkey, since only it says which role the
+// service fills. The doctor reads presets offline and would miss it otherwise.
+func fetchMissingPresets(proj *config.ProjectConfig) {
+	for _, svc := range proj.Services {
+		name := svc.Preset
+		if name == "" {
+			name = svc.Name
+		}
+		if svc.Custom != nil || name == "sqlite" || config.PresetExists(name) {
+			continue
+		}
+		if _, err := config.LoadCustomService(svc.Name); err == nil {
+			continue
+		}
+		pulledServicesMu.Lock()
+		asked := presetsFetched[name]
+		presetsFetched[name] = true
+		pulledServicesMu.Unlock()
+		if !asked {
+			_, _ = ensurePreset(name)
+		}
+	}
+}
+
+func serviceNamesOf(svcs []config.ProjectService) []string {
+	out := make([]string, 0, len(svcs))
+	for _, s := range svcs {
+		out = append(out, s.Name)
+	}
+	return out
+}

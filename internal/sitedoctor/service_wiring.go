@@ -38,21 +38,48 @@ func siteReachesServicesOnLoopback(path string) bool {
 }
 
 func checkServiceWiringOn(path, envFile string, fw *config.Framework, loopback bool) (Check, bool) {
-	if fw == nil || len(fw.Env.Services) == 0 {
+	unwired, ok := unwiredServicesOn(path, envFile, fw, loopback)
+	if !ok {
 		return Check{}, false
+	}
+	if len(unwired) == 0 {
+		return Check{Name: "service_wiring", Status: StatusOK, Detail: "every service the project picks is wired into " + envFile}, true
+	}
+	return Check{
+		Name:   "service_wiring",
+		Status: StatusWarn,
+		Fix:    FixEnvSync,
+		Detail: strings.Join(unwired, ", ") + " picked in .lerd.yaml, but nothing in " + envFile +
+			" points at it — run `lerd env` to write the connection, which repoints the app at that service",
+	}, true
+}
+
+// UnwiredServices are the services a project picks in .lerd.yaml that its env
+// file does not point at, the service_wiring check's finding.
+func UnwiredServices(path string, fw *config.Framework) []string {
+	envFile, _, _ := envSetup(fw, path)
+	unwired, _ := unwiredServicesOn(path, envFile, fw, siteReachesServicesOnLoopback(path))
+	return unwired
+}
+
+// unwiredServicesOn reports false when there is nothing to compare: no env
+// mapping, no picked services, or no env file yet.
+func unwiredServicesOn(path, envFile string, fw *config.Framework, loopback bool) ([]string, bool) {
+	if fw == nil || len(fw.Env.Services) == 0 {
+		return nil, false
 	}
 	proj, err := config.LoadProjectConfig(path)
 	if err != nil || proj == nil {
-		return Check{}, false
+		return nil, false
 	}
 	picked := pickedServices(proj)
 	if len(picked) == 0 {
-		return Check{}, false
+		return nil, false
 	}
 	content, err := os.ReadFile(filepath.Join(path, envFile))
 	if err != nil {
 		// The env file is missing, which is the env-present check's finding.
-		return Check{}, false
+		return nil, false
 	}
 
 	_, external := envfile.ReadOverride(path)
@@ -79,16 +106,7 @@ func checkServiceWiringOn(path, envFile string, fw *config.Framework, loopback b
 		}
 		unwired = append(unwired, name)
 	}
-	if len(unwired) == 0 {
-		return Check{Name: "service_wiring", Status: StatusOK, Detail: "every service the project picks is wired into " + envFile}, true
-	}
-	return Check{
-		Name:   "service_wiring",
-		Status: StatusWarn,
-		Fix:    FixEnvSync,
-		Detail: strings.Join(unwired, ", ") + " picked in .lerd.yaml, but nothing in " + envFile +
-			" points at it — run `lerd env` to write the connection, which repoints the app at that service",
-	}, true
+	return unwired, true
 }
 
 // pickedServices returns the services a project declares, from its services
@@ -123,6 +141,9 @@ func frameworkWiresService(fw *config.Framework, name string) bool {
 	role := ""
 	if svc, err := config.LoadCustomService(name); err == nil {
 		role = config.EnvRoleOf(svc)
+	} else if p, err := config.LoadPreset(name); err == nil {
+		// Not installed yet, as after a pull adds it: its preset names the role.
+		role = p.EnvRole
 	}
 	for declared := range fw.Env.Services {
 		if declared == role {
