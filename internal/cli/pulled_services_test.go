@@ -103,7 +103,7 @@ func TestWirePulledServices_StartsNewServiceAndRewritesEnv(t *testing.T) {
 	if !slices.Equal(applied, []string{"rustfs"}) {
 		t.Errorf("applied = %v, want [rustfs]", applied)
 	}
-	if !slices.Equal(*started, []string{"rustfs"}) {
+	if !slices.Equal(slices.Compact(*started), []string{"rustfs"}) {
 		t.Errorf("started = %v, want only rustfs", *started)
 	}
 	if !slices.Equal(*envDirs, []string{site.Path}) {
@@ -208,5 +208,29 @@ func TestWirePulledServices_RetriesAnUnfinishedSetAfterABackOff(t *testing.T) {
 	WirePulledServices(site)
 	if len(*envDirs) != 2 {
 		t.Errorf("env ran %d times after the back-off, want 2", len(*envDirs))
+	}
+}
+
+// env writes a service's keys whether or not its container came up, which would
+// record it as wired and end the retries, so env waits until every one is running.
+func TestWirePulledServices_HoldsEnvUntilTheServiceRuns(t *testing.T) {
+	site := pulledSite(t, config.ProjectService{Name: "mysql"}, config.ProjectService{Name: "rustfs", Preset: "rustfs"})
+	if err := config.SaveCustomService(&config.CustomService{Name: "rustfs", Image: "docker.io/rustfs/rustfs:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	_, envDirs := stubPulledServiceSeams(t)
+	ensureServiceRunning = func(string) error { return os.ErrDeadlineExceeded }
+	clock := time.Now()
+	prevNow := pulledNow
+	pulledNow = func() time.Time { return clock }
+	t.Cleanup(func() { pulledNow = prevNow })
+
+	if applied := WirePulledServices(site); len(applied) != 0 || len(*envDirs) != 0 {
+		t.Fatalf("applied %v and ran env in %v while rustfs is down, want neither", applied, *envDirs)
+	}
+	ensureServiceRunning = func(string) error { return nil }
+	clock = clock.Add(pulledRetryAfter + time.Second)
+	if applied := WirePulledServices(site); !slices.Equal(applied, []string{"rustfs"}) || len(*envDirs) != 1 {
+		t.Errorf("after recovery applied %v, env ran %d times, want [rustfs] once", applied, len(*envDirs))
 	}
 }

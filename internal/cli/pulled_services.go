@@ -107,6 +107,14 @@ func WirePulledServices(site *config.Site) []string {
 	if err := linkApplyServices(site.Path, *site, apply); err != nil {
 		fmt.Printf("[WARN] starting new services for %s: %v\n", site.Name, err)
 	}
+	// env writes the keys even for a container that never came up, which would
+	// mark it wired; hold it so the back-off retries the install instead.
+	for _, svc := range apply.Services {
+		if err := ensureServiceRunning(svc.Name); err != nil {
+			fmt.Printf("[WARN] %s is not running for %s, will retry: %v\n", svc.Name, site.Name, err)
+			return nil
+		}
+	}
 	if out, err := runSiteEnv(site.Path); err != nil {
 		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 		fmt.Printf("[WARN] lerd env for %s: %v: %s\n", site.Name, err, lines[len(lines)-1])
