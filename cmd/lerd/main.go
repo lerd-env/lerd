@@ -787,6 +787,11 @@ func newWatchCmd() *cobra.Command {
 						if siteChanged {
 							_ = config.AddSite(*site)
 						}
+						// A pull can add a service to .lerd.yaml; start it and point the env at it.
+						if applied := cli.WirePulledServices(site); len(applied) > 0 {
+							fmt.Printf("Wired new services for %s: %s\n", site.Name, strings.Join(applied, ", "))
+							eventbus.Default.Publish(eventbus.KindSites)
+						}
 						if err := cli.QueueRestartForSite(site.Name, sitePath, site.PHPVersion); err != nil {
 							fmt.Printf("[WARN] queue restart for %s: %v\n", site.Name, err)
 						}
