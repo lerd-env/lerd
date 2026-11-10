@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -60,6 +61,9 @@ type Command struct {
 	Name  string `yaml:"name" json:"name"`
 	Usage string `yaml:"usage,omitempty" json:"usage,omitempty"`
 	Run   string `yaml:"run" json:"run"`
+	// ExpectedExits are exit codes that are the command's own answer, like
+	// cargo's 101 for code that does not compile, rather than a plugin fault.
+	ExpectedExits []int `yaml:"expected_exits,omitempty" json:"expected_exits,omitempty"`
 }
 
 // SiteCommand runs against one site, from its Commands menu and the palette.
@@ -71,7 +75,14 @@ type SiteCommand struct {
 	Run         string `yaml:"run" json:"run"`
 	// Timeout raises SiteCommandLimit for this command, up to an hour.
 	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	// ExpectedExits works as it does on Command.
+	ExpectedExits []int `yaml:"expected_exits,omitempty" json:"expected_exits,omitempty"`
 }
+
+// Expects reports whether code is one of the command's own answers, so that
+// exit is not recorded as the plugin failing.
+func (c Command) Expects(code int) bool     { return slices.Contains(c.ExpectedExits, code) }
+func (c SiteCommand) Expects(code int) bool { return slices.Contains(c.ExpectedExits, code) }
 
 type MCP struct {
 	Skill string    `yaml:"skill,omitempty" json:"skill,omitempty"`
@@ -172,6 +183,9 @@ func (p *Plugin) validate() error {
 		if err := p.checkNamed("command", c.Name, c.Run, seen); err != nil {
 			return err
 		}
+		if err := checkExits(c.ExpectedExits); err != nil {
+			return fmt.Errorf("command %q: %w", c.Name, err)
+		}
 	}
 	seen = map[string]bool{}
 	for _, c := range p.SiteCommands {
@@ -179,6 +193,9 @@ func (p *Plugin) validate() error {
 			return err
 		}
 		if err := checkLimit(c.Timeout, maxSiteCommandLimit); err != nil {
+			return fmt.Errorf("site command %q: %w", c.Name, err)
+		}
+		if err := checkExits(c.ExpectedExits); err != nil {
 			return fmt.Errorf("site command %q: %w", c.Name, err)
 		}
 	}
@@ -239,6 +256,17 @@ func (p *Plugin) checkNamed(kind, name, run string, seen map[string]bool) error 
 	}
 	seen[name] = true
 	return p.checkExecutable(run)
+}
+
+// checkExits refuses an expected exit no process can end with. Zero is refused
+// too, since it is never a failure to begin with.
+func checkExits(codes []int) error {
+	for _, code := range codes {
+		if code < 1 || code > 255 {
+			return fmt.Errorf("expected exit %d must be between 1 and 255", code)
+		}
+	}
+	return nil
 }
 
 func (p *Plugin) validateMCP() error {

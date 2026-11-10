@@ -228,7 +228,9 @@ func newPluginRunCmd(p *plugins.Plugin, c plugins.Command, name string) *cobra.C
 			run.Stdin, run.Stdout, run.Stderr = os.Stdin, os.Stdout, io.MultiWriter(os.Stderr, &stderr)
 			err = run.Run()
 			if exit, ok := err.(*exec.ExitError); ok {
-				offerPluginReport(plugins.Failure{Plugin: p.Name, Surface: plugins.SurfaceCLI, What: c.Name, Error: strings.TrimSpace(stderr.String() + "\n" + err.Error())})
+				if !c.Expects(exit.ExitCode()) {
+					offerPluginReport(plugins.Failure{Plugin: p.Name, Surface: plugins.SurfaceCLI, What: c.Name, Error: strings.TrimSpace(stderr.String() + "\n" + err.Error())})
+				}
 				os.Exit(exit.ExitCode())
 			}
 			return err

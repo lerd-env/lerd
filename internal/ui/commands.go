@@ -205,27 +205,31 @@ func runPluginCommand(w http.ResponseWriter, r *http.Request, site *config.Site,
 		writeJSON(w, map[string]any{"error": err.Error()})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), pluginSiteCommandLimit(target))
+	entry := pluginSiteCommand(target)
+	ctx, cancel := context.WithTimeout(r.Context(), entry.Limit())
 	defer cancel()
 	code := streamRun(w, ctx, cmd, false)
 	switch {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		plugins.Failed(plugins.Failure{Plugin: target.Plugin, Surface: plugins.SurfaceSiteCommand, What: target.Name, Error: fmt.Sprintf("timed out after %s", pluginSiteCommandLimit(target))})
-	case code != 0:
+		plugins.Failed(plugins.Failure{Plugin: target.Plugin, Surface: plugins.SurfaceSiteCommand, What: target.Name, Error: fmt.Sprintf("timed out after %s", entry.Limit())})
+	case ctx.Err() != nil:
+		// The user closed the run, and lerd stopped it.
+	case code != 0 && !entry.Expects(code):
 		plugins.Failed(plugins.Failure{Plugin: target.Plugin, Surface: plugins.SurfaceSiteCommand, What: target.Name, Error: fmt.Sprintf("exited with code %d", code)})
 	}
 }
 
-// pluginSiteCommandLimit is how long a plugin site command may run.
-func pluginSiteCommandLimit(target *config.FrameworkCommand) time.Duration {
+// pluginSiteCommand is the manifest entry behind a plugin site command, or the
+// defaults when the plugin no longer declares it.
+func pluginSiteCommand(target *config.FrameworkCommand) plugins.SiteCommand {
 	if p, err := plugins.Find(target.Plugin); err == nil {
 		for _, c := range p.SiteCommands {
 			if target.Name == p.Name+":"+c.Name {
-				return c.Limit()
+				return c
 			}
 		}
 	}
-	return plugins.SiteCommandLimit
+	return plugins.SiteCommand{}
 }
 
 // pluginCommandProcess builds the process for a plugin site command, run in cwd
