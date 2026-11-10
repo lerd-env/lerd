@@ -1,0 +1,17 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/lerd-env/lerd/security/advisories/new
+    about: Report it privately, never in a public issue.
+  - name: Framework definition
+    url: https://github.com/lerd-env/frameworks/issues
+    about: Detection, workers, env wiring or commands for a framework.
+  - name: Service preset
+    url: https://github.com/lerd-env/services/issues
+    about: A database, cache, search engine or other service preset.
+  - name: Questions and ideas
+    url: https://github.com/lerd-env/lerd/discussions
+    about: Ask for help or talk an idea through.
+  - name: Discord
+    url: https://discord.gg/5JK54s7xCC
+    about: Chat with other lerd users and the maintainers.
