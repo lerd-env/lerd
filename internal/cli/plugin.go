@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -225,7 +224,7 @@ func newPluginRunCmd(p *plugins.Plugin, c plugins.Command, name string) *cobra.C
 			if err != nil {
 				return err
 			}
-			var stderr bytes.Buffer
+			var stderr plugins.Tail
 			run.Stdin, run.Stdout, run.Stderr = os.Stdin, os.Stdout, io.MultiWriter(os.Stderr, &stderr)
 			err = run.Run()
 			if exit, ok := err.(*exec.ExitError); ok {

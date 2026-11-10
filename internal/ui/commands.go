@@ -393,20 +393,22 @@ func streamRun(w http.ResponseWriter, ctx context.Context, cmd *exec.Cmd, captur
 	}
 	defer context.AfterFunc(ctx, func() { plugins.KillProcessGroup(cmd) })()
 
-	// capturedMu guards the builder across the two pipe-reader goroutines;
-	// strings.Builder is not safe for concurrent use. The frame writes are
-	// serialized by the sender itself.
-	var capturedMu sync.Mutex
-	var captured strings.Builder
+	// Only the first URL is kept, rather than the output it was found in, so a
+	// command that keeps printing costs no memory. Both pipe readers race for it.
+	var urlMu sync.Mutex
+	var firstURL string
 	streamPipe := func(pipe io.Reader, event string) {
 		s := bufio.NewScanner(pipe)
 		s.Buffer(make([]byte, 64*1024), 1024*1024)
 		for s.Scan() {
 			line := s.Text()
-			capturedMu.Lock()
-			captured.WriteString(line)
-			captured.WriteByte('\n')
-			capturedMu.Unlock()
+			if captureURL {
+				urlMu.Lock()
+				if firstURL == "" {
+					firstURL = urlRegex.FindString(line)
+				}
+				urlMu.Unlock()
+			}
 			send(event, line)
 		}
 	}
@@ -440,10 +442,8 @@ func streamRun(w http.ResponseWriter, ctx context.Context, cmd *exec.Cmd, captur
 		"exit":       exitCode,
 		"durationMs": time.Since(start).Milliseconds(),
 	}
-	if captureURL {
-		if u := urlRegex.FindString(captured.String()); u != "" {
-			payload["url"] = u
-		}
+	if firstURL != "" {
+		payload["url"] = firstURL
 	}
 	body, _ := json.Marshal(payload)
 	send("done", string(body))
