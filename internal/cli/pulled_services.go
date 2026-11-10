@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/sitedoctor"
@@ -19,13 +20,23 @@ var ensurePreset = config.EnsurePreset
 // presetsFetched remembers the preset names already asked of the store.
 var presetsFetched = map[string]bool{}
 
-// pulledServicesTried remembers, per site, the unwired set last acted on. env
-// writes .env and .lerd.yaml, which wakes the watcher again, and a service env
-// never wires (one with no env mapping) would otherwise rerun it forever.
+// pulledServicesTried remembers, per site, the unwired set last acted on and
+// when. env rewrites .env, which wakes the watcher again, so a set that failed
+// (a pull that timed out) is retried only once pulledRetryAfter has passed.
 var (
 	pulledServicesMu    sync.Mutex
-	pulledServicesTried = map[string]string{}
+	pulledServicesTried = map[string]pulledAttempt{}
 )
+
+type pulledAttempt struct {
+	key string
+	at  time.Time
+}
+
+// pulledNow is the clock the back-off reads. A seam for the tests.
+var pulledNow = time.Now
+
+const pulledRetryAfter = 5 * time.Minute
 
 // unwiredProjectServices are the services .lerd.yaml declares that the env does
 // not point at (the doctor's finding) and lerd never wired, such as one a pull
@@ -50,6 +61,10 @@ func unwiredProjectServices(site *config.Site, proj *config.ProjectConfig, fw *c
 // rewrites the site's env to point at them, returning the ones it applied.
 // A new inline container is left for `lerd link`, which shows it and asks.
 func WirePulledServices(site *config.Site) []string {
+	// Pausing stops a site's services on purpose; resume brings them back.
+	if site.Paused {
+		return nil
+	}
 	proj, err := config.LoadProjectConfig(site.Path)
 	if err != nil {
 		return nil
@@ -61,9 +76,13 @@ func WirePulledServices(site *config.Site) []string {
 	fetchMissingPresets(proj)
 	unwired := unwiredProjectServices(site, proj, fw)
 	key := strings.Join(serviceNamesOf(unwired), ",")
+	now := pulledNow()
 	pulledServicesMu.Lock()
-	tried := pulledServicesTried[site.Path] == key
-	pulledServicesTried[site.Path] = key
+	last := pulledServicesTried[site.Path]
+	tried := last.key == key && now.Sub(last.at) < pulledRetryAfter
+	if !tried {
+		pulledServicesTried[site.Path] = pulledAttempt{key: key, at: now}
+	}
 	pulledServicesMu.Unlock()
 	if key == "" || tried {
 		return nil

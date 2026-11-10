@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -84,7 +85,7 @@ func stubPulledServiceSeams(t *testing.T) (started, envDirs *[]string) {
 	prevEnv := runSiteEnv
 	runSiteEnv = func(dir string) ([]byte, error) { e = append(e, dir); return nil, nil }
 	t.Cleanup(func() { runSiteEnv = prevEnv })
-	pulledServicesTried = map[string]string{}
+	pulledServicesTried = map[string]pulledAttempt{}
 	return &s, &e
 }
 
@@ -155,5 +156,57 @@ func TestFetchMissingPresets_AsksTheStoreOncePerName(t *testing.T) {
 
 	if !slices.Equal(asked, []string{"no-such-service"}) {
 		t.Errorf("asked the store for %v, want no-such-service once", asked)
+	}
+}
+
+// A versioned entry names its preset separately, and only the preset says it
+// stands in for mysql.
+func TestUnwiredProjectServices_SeesANotYetInstalledVersionedDropIn(t *testing.T) {
+	site := pulledSite(t, config.ProjectService{Name: "mariadb-11-8", Preset: "mariadb", PresetVersion: "11.8"})
+	site.WiredServices = nil
+	if err := os.WriteFile(filepath.Join(site.Path, ".env"), []byte("DB_HOST=127.0.0.1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	proj, _ := config.LoadProjectConfig(site.Path)
+
+	got := serviceNamesOf(unwiredProjectServices(site, proj, pulledFramework()))
+	if !slices.Equal(got, []string{"mariadb-11-8"}) {
+		t.Fatalf("unwired = %v, want [mariadb-11-8]", got)
+	}
+}
+
+// Pausing a site stops its services on purpose; a pull must not start them.
+func TestWirePulledServices_LeavesAPausedSiteAlone(t *testing.T) {
+	site := pulledSite(t, config.ProjectService{Name: "mysql"}, config.ProjectService{Name: "rustfs", Preset: "rustfs"})
+	site.Paused = true
+	started, envDirs := stubPulledServiceSeams(t)
+
+	if applied := WirePulledServices(site); len(applied) != 0 || len(*started) != 0 || len(*envDirs) != 0 {
+		t.Errorf("applied %v, started %v, env in %v, want nothing", applied, *started, *envDirs)
+	}
+}
+
+// An install that failed (the store or registry was down) is tried again on a
+// later change once the back-off has passed, not skipped for good.
+func TestWirePulledServices_RetriesAnUnfinishedSetAfterABackOff(t *testing.T) {
+	site := pulledSite(t, config.ProjectService{Name: "mysql"}, config.ProjectService{Name: "rustfs", Preset: "rustfs"})
+	if err := config.SaveCustomService(&config.CustomService{Name: "rustfs", Image: "docker.io/rustfs/rustfs:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	_, envDirs := stubPulledServiceSeams(t)
+	clock := time.Now()
+	prevNow := pulledNow
+	pulledNow = func() time.Time { return clock }
+	t.Cleanup(func() { pulledNow = prevNow })
+
+	WirePulledServices(site) // env is stubbed, so rustfs stays unwired
+	WirePulledServices(site)
+	if len(*envDirs) != 1 {
+		t.Fatalf("env ran %d times inside the back-off, want 1", len(*envDirs))
+	}
+	clock = clock.Add(pulledRetryAfter + time.Second)
+	WirePulledServices(site)
+	if len(*envDirs) != 2 {
+		t.Errorf("env ran %d times after the back-off, want 2", len(*envDirs))
 	}
 }

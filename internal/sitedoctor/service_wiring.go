@@ -82,13 +82,17 @@ func unwiredServicesOn(path, envFile string, fw *config.Framework, loopback bool
 		return nil, false
 	}
 
+	presets := map[string]string{}
+	for _, svc := range proj.Services {
+		presets[svc.Name] = svc.Preset
+	}
 	_, external := envfile.ReadOverride(path)
 	var unwired []string
 	for _, name := range picked {
 		if name == "sqlite" || external[strings.ToLower(name)] {
 			continue
 		}
-		if !frameworkWiresService(fw, name) {
+		if !frameworkWiresService(fw, name, presets[name]) {
 			continue
 		}
 		if envfile.ReferencesContainer(string(content), name) {
@@ -133,7 +137,7 @@ func pickedServices(proj *config.ProjectConfig) []string {
 // service into its env file, directly or through the family or role a drop-in
 // stands in for, so a project on mariadb is measured against the mysql block
 // that would have wired it.
-func frameworkWiresService(fw *config.Framework, name string) bool {
+func frameworkWiresService(fw *config.Framework, name, preset string) bool {
 	if _, ok := fw.Env.Services[name]; ok {
 		return true
 	}
@@ -141,9 +145,15 @@ func frameworkWiresService(fw *config.Framework, name string) bool {
 	role := ""
 	if svc, err := config.LoadCustomService(name); err == nil {
 		role = config.EnvRoleOf(svc)
-	} else if p, err := config.LoadPreset(name); err == nil {
+	} else {
 		// Not installed yet, as after a pull adds it: its preset names the role.
-		role = p.EnvRole
+		// A versioned entry (mariadb-11-8) names that preset separately.
+		if preset == "" {
+			preset = name
+		}
+		if p, err := config.LoadPreset(preset); err == nil {
+			role = p.EnvRole
+		}
 	}
 	for declared := range fw.Env.Services {
 		if declared == role {
