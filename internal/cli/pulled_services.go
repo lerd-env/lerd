@@ -74,7 +74,7 @@ func WirePulledServices(site *config.Site) []string {
 	if !ok {
 		return nil
 	}
-	if names, due := retryFailedEnv(site); due {
+	if names, due := retryFailedEnv(site, fw); due {
 		return names
 	}
 	fetchMissingPresets(proj)
@@ -128,11 +128,19 @@ func WirePulledServices(site *config.Site) []string {
 // retryFailedEnv reruns env for a site whose last run failed once the back-off
 // has passed. env marks a service wired before it learns its database or bucket
 // could not be made, so nothing else would bring the site back here.
-func retryFailedEnv(site *config.Site) ([]string, bool) {
+func retryFailedEnv(site *config.Site, fw *config.Framework) ([]string, bool) {
 	pulledServicesMu.Lock()
 	last := pulledServicesTried[site.Path]
 	pulledServicesMu.Unlock()
 	if len(last.envFailed) == 0 || pulledNow().Sub(last.at) < pulledRetryAfter {
+		return nil, false
+	}
+	// The env no longer names one of them: the user repointed it, so drop the retry.
+	if repointed := sitedoctor.UnwiredServices(site.Path, fw); slices.ContainsFunc(last.envFailed, func(n string) bool { return slices.Contains(repointed, n) }) {
+		pulledServicesMu.Lock()
+		last.envFailed = nil
+		pulledServicesTried[site.Path] = last
+		pulledServicesMu.Unlock()
 		return nil, false
 	}
 	return runPulledEnv(site, last.envFailed), true

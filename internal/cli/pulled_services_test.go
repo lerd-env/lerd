@@ -269,3 +269,33 @@ func TestWirePulledServices_RetriesAFailedEnvRun(t *testing.T) {
 		t.Errorf("env ran %d times, want one retry after the back-off and none once it passed", len(*envDirs))
 	}
 }
+
+// A connection the user repointed by hand after a failed run is their choice, so
+// the pending retry is dropped rather than run over it.
+func TestWirePulledServices_DropsTheRetryWhenTheUserRepoints(t *testing.T) {
+	site := pulledSite(t, config.ProjectService{Name: "mysql"}, config.ProjectService{Name: "rustfs", Preset: "rustfs"})
+	if err := config.SaveCustomService(&config.CustomService{Name: "rustfs", Image: "docker.io/rustfs/rustfs:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	_, envDirs := stubPulledServiceSeams(t)
+	runSiteEnv = func(dir string) ([]byte, error) {
+		*envDirs = append(*envDirs, dir)
+		_ = os.WriteFile(filepath.Join(dir, ".env"), []byte("DB_HOST=lerd-mysql\nAWS_ENDPOINT=http://lerd-rustfs:9000\n"), 0o644)
+		return nil, errors.New("bucket: connection refused")
+	}
+	clock := time.Now()
+	prevNow := pulledNow
+	pulledNow = func() time.Time { return clock }
+	t.Cleanup(func() { pulledNow = prevNow })
+
+	WirePulledServices(site)
+	if err := os.WriteFile(filepath.Join(site.Path, ".env"), []byte("DB_HOST=lerd-mysql\nAWS_ENDPOINT=https://s3.example.com\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	site.WiredServices = append(site.WiredServices, "rustfs") // env recorded it before failing
+	clock = clock.Add(pulledRetryAfter + time.Second)
+	WirePulledServices(site)
+	if len(*envDirs) != 1 {
+		t.Errorf("env ran %d times, want the retry dropped after the hand edit", len(*envDirs))
+	}
+}
