@@ -33,6 +33,7 @@ import (
 	"github.com/geodro/lerd/internal/version"
 	"github.com/geodro/lerd/internal/wsl"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // disableTrayUnit stops the tray and takes it out of the autostart set, then
@@ -1751,6 +1752,25 @@ func promptSource() (io.Reader, io.Closer, bool) {
 		return tty, tty, true
 	}
 	return nil, nil, false
+}
+
+// askGlobalMCP asks only on a real terminal: promptSource takes any character
+// device, and /dev/null's EOF would read as the default yes.
+func askGlobalMCP(question string) (yes, answered bool) {
+	r := io.Reader(os.Stdin)
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		tty, err := os.Open("/dev/tty")
+		if err != nil {
+			return false, false
+		}
+		defer tty.Close()
+		if !term.IsTerminal(int(tty.Fd())) {
+			return false, false
+		}
+		r = tty
+	}
+	feedback.Prompt(question, true)
+	return readGlobalMCPAnswer(r)
 }
 
 func readConfirmAnswer(r io.Reader, question string, defaultYes bool) bool {

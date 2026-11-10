@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"io"
 	"os"
+	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
@@ -13,8 +15,7 @@ type globalMCPOffer struct {
 	enabled  func() bool
 	declined func() bool
 	decline  func()
-	terminal func() bool
-	ask      func(question string) bool
+	ask      func(question string) (yes, answered bool)
 	enable   func() error
 }
 
@@ -29,15 +30,8 @@ func defaultGlobalMCPOffer() globalMCPOffer {
 			return err == nil && cfg.MCP.GlobalDeclined
 		},
 		decline: func() { saveGlobalMCPDeclined(true) },
-		terminal: func() bool {
-			_, closer, ok := promptSource()
-			if closer != nil {
-				closer.Close()
-			}
-			return ok
-		},
-		ask:    func(q string) bool { return confirmInstallPromptDefault(q, true) },
-		enable: RunMCPEnableGlobal,
+		ask:     askGlobalMCP,
+		enable:  RunMCPEnableGlobal,
 	}
 }
 
@@ -58,15 +52,39 @@ func saveGlobalMCPDeclined(declined bool) {
 // server with the AI assistants. Unattended or terminal-less runs never ask:
 // writing into AI client configs needs a yes from a person.
 func offerGlobalMCP(unattended bool, o globalMCPOffer) {
-	if unattended || o.declined() || o.enabled() || !o.terminal() {
+	if unattended || o.declined() || o.enabled() {
 		return
 	}
-	if !o.ask("Let your AI assistants (Claude Code, Cursor, Codex…) use lerd through MCP (runs lerd mcp:enable-global)?") {
+	yes, answered := o.ask("Let your AI assistants (Claude Code, Cursor, Codex…) use lerd through MCP (runs lerd mcp:enable-global)?")
+	if !answered {
+		return
+	}
+	if !yes {
 		o.decline()
 		feedback.Note("not asking again, turn it on any time under System > Lerd > AI assistants (MCP) in the dashboard, or with lerd mcp:enable-global")
 		return
 	}
 	if err := o.enable(); err != nil {
 		feedback.Warn("could not enable lerd MCP globally: %v", err)
+	}
+}
+
+// readGlobalMCPAnswer counts only a finished line as an answer, so an EOF
+// leaves MCP off without saving a no.
+func readGlobalMCPAnswer(r io.Reader) (yes, answered bool) {
+	buf := make([]byte, 1)
+	var line strings.Builder
+	for {
+		n, err := r.Read(buf)
+		if n > 0 && buf[0] == '\n' {
+			a := strings.ToLower(strings.TrimSpace(line.String()))
+			return a != "n" && a != "no", true
+		}
+		if n > 0 {
+			line.WriteByte(buf[0])
+		}
+		if err != nil {
+			return false, false
+		}
 	}
 }

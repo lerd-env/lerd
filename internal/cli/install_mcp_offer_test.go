@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -11,7 +12,7 @@ func TestOfferGlobalMCP(t *testing.T) {
 		enabled     bool
 		declined    bool
 		unattended  bool
-		terminal    bool
+		answered    bool
 		answer      bool
 		enableErr   error
 		wantAsked   bool
@@ -21,7 +22,7 @@ func TestOfferGlobalMCP(t *testing.T) {
 		{"already enabled is never asked", true, false, false, true, true, nil, false, false, false},
 		{"an earlier no is never asked again", false, true, false, true, true, nil, false, false, false},
 		{"unattended never asks", false, false, true, true, true, nil, false, false, false},
-		{"no terminal never asks", false, false, false, false, true, nil, false, false, false},
+		{"no answer, from no terminal or EOF, changes nothing", false, false, false, false, true, nil, true, false, false},
 		{"yes runs enable-global", false, false, false, true, true, nil, true, true, false},
 		{"no is remembered", false, false, false, true, false, nil, true, false, true},
 		{"enable failure does not abort install", false, false, false, true, true, errors.New("boom"), true, true, false},
@@ -33,8 +34,7 @@ func TestOfferGlobalMCP(t *testing.T) {
 				enabled:  func() bool { return tc.enabled },
 				declined: func() bool { return tc.declined },
 				decline:  func() { saved = true },
-				terminal: func() bool { return tc.terminal },
-				ask:      func(string) bool { asked = true; return tc.answer },
+				ask:      func(string) (bool, bool) { asked = true; return tc.answer, tc.answered },
 				enable:   func() error { enabled = true; return tc.enableErr },
 			})
 			if asked != tc.wantAsked {
@@ -59,5 +59,25 @@ func TestGlobalMCPDeclineIsRemembered(t *testing.T) {
 	o.decline()
 	if !defaultGlobalMCPOffer().declined() {
 		t.Fatal("decline was not persisted")
+	}
+}
+
+func TestReadGlobalMCPAnswer(t *testing.T) {
+	cases := []struct {
+		in                    string
+		wantYes, wantAnswered bool
+	}{
+		{"", false, false},
+		{"y", false, false},
+		{"\n", true, true},
+		{"y\n", true, true},
+		{"n\n", false, true},
+		{"No\n", false, true},
+	}
+	for _, tc := range cases {
+		yes, answered := readGlobalMCPAnswer(strings.NewReader(tc.in))
+		if yes != tc.wantYes || answered != tc.wantAnswered {
+			t.Errorf("%q: got yes=%v answered=%v, want yes=%v answered=%v", tc.in, yes, answered, tc.wantYes, tc.wantAnswered)
+		}
 	}
 }
