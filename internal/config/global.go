@@ -148,6 +148,11 @@ type GlobalConfig struct {
 		// $NVM_DIR. Empty means fall back to $NVM_DIR or ~/.nvm.
 		NvmDir string `yaml:"nvm_dir,omitempty" mapstructure:"nvm_dir"`
 	} `yaml:"node" mapstructure:"node"`
+	MCP struct {
+		// GlobalDeclined records a "no" to install's global MCP question, or a
+		// mcp:disable-global, so install and update stop asking.
+		GlobalDeclined bool `yaml:"global_declined,omitempty" mapstructure:"global_declined"`
+	} `yaml:"mcp" mapstructure:"mcp"`
 	Share struct {
 		// DefaultTool is the tunnel tool "lerd share" uses when no flag is
 		// given: ngrok | cloudflare | expose | serveo | localhost-run.

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -141,6 +142,112 @@ func TestCommandsRun_PluginSiteCommand(t *testing.T) {
 	}
 }
 
+// An exit the site command declared as its answer, like cargo check finding
+// code that does not compile, is shown as usual but is not the plugin's fault.
+func TestCommandsRun_PluginExpectedExitIsNotAFailure(t *testing.T) {
+	registerSite(t, "acme", "acme.test")
+	dir := filepath.Join(plugins.Dir(), "cargo")
+	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := "api_version: 1\nname: cargo\nsite_commands:\n  - {name: check, label: Check, run: bin/check, expected_exits: [101]}\n"
+	if err := os.WriteFile(filepath.Join(dir, plugins.ManifestFile), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run := func(code string) string {
+		t.Helper()
+		script := "#!/bin/sh\necho 'error[E0425]: cannot find value' >&2\nexit " + code + "\n"
+		if err := os.WriteFile(filepath.Join(dir, "bin", "check"), []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/commands/cargo:check/run", nil)
+		req.RemoteAddr = "127.0.0.1:1234"
+		rec := httptest.NewRecorder()
+		handleSiteAction(rec, req)
+		return rec.Body.String()
+	}
+
+	if body := run("101"); !strings.Contains(body, `"exit":101`) {
+		t.Fatalf("the exit should still reach the run modal: %q", body)
+	}
+	if f, ok := plugins.LastFailure("cargo"); ok {
+		t.Fatalf("an expected exit was recorded as a plugin failure: %+v", f)
+	}
+
+	run("2")
+	if f, ok := plugins.LastFailure("cargo"); !ok || f.Error != "exited with code 2" {
+		t.Errorf("any other exit is still a plugin failure, got %+v %v", f, ok)
+	}
+}
+
+// installWaitPlugin installs "slow", whose site command prints a line and then
+// hangs, with the manifest options given for it.
+func installWaitPlugin(t *testing.T, options string) {
+	t.Helper()
+	dir := filepath.Join(plugins.Dir(), "slow")
+	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		plugins.ManifestFile: "api_version: 1\nname: slow\nsite_commands:\n  - {name: wait, label: Wait, run: bin/wait" + options + "}\n",
+		"bin/wait":           "#!/bin/sh\necho started\nsleep 30\n",
+	}
+	for rel, body := range files {
+		if err := os.WriteFile(filepath.Join(dir, rel), []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// leavingRecorder is a browser that goes away once it has seen line.
+type leavingRecorder struct {
+	*httptest.ResponseRecorder
+	line  string
+	leave context.CancelFunc
+}
+
+// WriteString is what the stream writes through.
+func (l leavingRecorder) WriteString(s string) (int, error) {
+	n, err := l.ResponseRecorder.WriteString(s)
+	if strings.Contains(s, l.line) {
+		l.leave()
+	}
+	return n, err
+}
+
+// Closing the run modal stops the command, and lerd's own kill is not the
+// plugin failing.
+func TestCommandsRun_PluginStoppedByTheUserIsNotAFailure(t *testing.T) {
+	registerSite(t, "acme", "acme.test")
+	installWaitPlugin(t, "")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/commands/slow:wait/run", nil).WithContext(ctx)
+	req.RemoteAddr = "127.0.0.1:1234"
+	rec := leavingRecorder{httptest.NewRecorder(), "data: started", cancel}
+	handleSiteAction(rec, req)
+
+	if !strings.Contains(rec.Body.String(), "data: started") {
+		t.Fatalf("the command never ran: %q", rec.Body)
+	}
+	if f, ok := plugins.LastFailure("slow"); ok {
+		t.Fatalf("a run the user stopped was recorded as a plugin failure: %+v", f)
+	}
+}
+
+// A command that outlives its limit is stopped and is the plugin's failure.
+func TestCommandsRun_PluginPastItsLimitIsAFailure(t *testing.T) {
+	registerSite(t, "acme", "acme.test")
+	installWaitPlugin(t, ", timeout: 300ms")
+	req := httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/commands/slow:wait/run", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
+	handleSiteAction(httptest.NewRecorder(), req)
+
+	if f, ok := plugins.LastFailure("slow"); !ok || f.Error != "timed out after 300ms" {
+		t.Fatalf("a run past its limit should be recorded as timed out, got %+v %v", f, ok)
+	}
+}
+
 func TestCommandsRun_NonZeroExit(t *testing.T) {
 	sitePath := registerSite(t, "acme", "acme.test")
 	writeProjectYAML(t, sitePath, `
@@ -176,6 +283,29 @@ commands:
 	body := rec.Body.String()
 	if !strings.Contains(body, `"url":"https://acme.test/login/one-time/abc123"`) {
 		t.Errorf("expected url in done payload: %q", body)
+	}
+}
+
+// The link is the first one the command prints, however much follows it, and
+// is found on either stream. Each case keeps its order on one stream, since
+// nothing orders lines across the two.
+func TestCommandsRun_URLExtractionKeepsTheFirst(t *testing.T) {
+	cases := map[string]string{
+		"first of several": "echo starting; echo 'tunnel: https://one.example/a'; echo 'also https://two.example/b'; seq 1 2000",
+		"on stderr":        "echo starting; echo 'tunnel: https://one.example/a' >&2; seq 1 2000",
+	}
+	for name, command := range cases {
+		t.Run(name, func(t *testing.T) {
+			sitePath := registerSite(t, "acme", "acme.test")
+			writeProjectYAML(t, sitePath, "commands:\n  - name: share\n    label: Share\n    command: \""+command+"\"\n    output: url\n")
+			req := httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/commands/share/run?approve=1", nil)
+			req.RemoteAddr = "127.0.0.1:1234"
+			rec := httptest.NewRecorder()
+			handleSiteAction(rec, req)
+			if body := rec.Body.String(); !strings.Contains(body, `"url":"https://one.example/a"`) {
+				t.Errorf("expected the first url in done payload: %q", body[max(0, len(body)-300):])
+			}
+		})
 	}
 }
 

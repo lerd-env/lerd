@@ -21,7 +21,7 @@ There are two ways to connect lerd to your AI assistant: globally (recommended) 
 
 ### Global registration (recommended)
 
-Run once after installing lerd:
+`lerd install` and `lerd update` offer to turn it on when it is off, and stay quiet once it is on. A "no" is remembered, as is turning it off with `mcp:disable-global` or the dashboard, so neither asks again. Runs with `--unattended` or without a terminal never ask. To turn it on yourself, use the dashboard toggle below or run:
 
 ```bash
 lerd mcp:enable-global

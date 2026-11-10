@@ -133,7 +133,7 @@ func TestBuildDarwinHostWorkerGuardScript_WrapsFnmExec(t *testing.T) {
 	command := "npm run dev"
 
 	execPrefix := "'" + fnm + "' exec --using=22 --"
-	script := buildDarwinHostWorkerGuardScript(execPrefix, binDir, sitePath, command, "", "", "")
+	script := buildDarwinHostWorkerGuardScript(execPrefix, binDir, sitePath, command, "", "", "", "", "")
 
 	if !strings.HasPrefix(script, "#!/bin/sh") {
 		t.Errorf("guard script should start with shebang, got:\n%s", script)
@@ -158,7 +158,7 @@ func TestBuildDarwinHostWorkerGuardScript_EscapesSingleQuotes(t *testing.T) {
 	// as separate shell tokens.
 	script := buildDarwinHostWorkerGuardScript(
 		"'/bin/fnm' exec --using=22 --", "/Users/u/.local/share/lerd/bin", "/site",
-		`node -e 'console.log("x")'`, "", "", "",
+		`node -e 'console.log("x")'`, "", "", "", "", "",
 	)
 	if !strings.Contains(script, `'"'"'console.log("x")'"'"'`) {
 		t.Errorf("expected escaped single quotes in guard script, got:\n%s", script)
@@ -170,7 +170,7 @@ func TestBuildDarwinHostWorkerGuardScript_EscapesSingleQuotes(t *testing.T) {
 // it must lead PATH for the subprocess to find them — issue #375.
 func TestBuildDarwinHostWorkerGuardScript_PrependsLerdBinDirToPath(t *testing.T) {
 	binDir := "/Users/u/.local/share/lerd/bin"
-	script := buildDarwinHostWorkerGuardScript("'/bin/fnm' exec --using=22 --", binDir, "/site", "npm run dev", "", "", "")
+	script := buildDarwinHostWorkerGuardScript("'/bin/fnm' exec --using=22 --", binDir, "/site", "npm run dev", "", "", "", "", "")
 	want := `export PATH="/Users/u/.local/share/lerd/bin:/opt/homebrew/bin:`
 	if !strings.Contains(script, want) {
 		t.Errorf("guard script must prepend lerd BinDir to PATH; got:\n%s", script)
@@ -183,7 +183,7 @@ func TestBuildDarwinHostWorkerGuardScript_PrependsLerdBinDirToPath(t *testing.T)
 func TestBuildDarwinHostWorkerGuardScript_BakesResolvedNodeDirs(t *testing.T) {
 	script := buildDarwinHostWorkerGuardScript(
 		"", "/Users/u/.local/share/lerd/bin", "/site", "npm run dev",
-		"/Users/u/.nvm/versions/node/v22.9.1/bin", "", "",
+		"/Users/u/.nvm/versions/node/v22.9.1/bin", "", "", "", "",
 	)
 	if !strings.Contains(script, `export PATH="/Users/u/.nvm/versions/node/v22.9.1/bin:/Users/u/.local/share/lerd/bin:`) {
 		t.Errorf("guard script must lead PATH with the resolved node dir; got:\n%s", script)
@@ -196,12 +196,12 @@ func TestBuildDarwinHostWorkerGuardScript_BakesResolvedNodeDirs(t *testing.T) {
 // The native php binary has no lerd ini paths compiled in, so the guard must
 // hand it the same scan dirs `lerd php` uses or the worker loads no ini at all.
 func TestBuildDarwinHostWorkerGuardScript_ExportsPhpIniScanDir(t *testing.T) {
-	script := buildDarwinHostWorkerGuardScript("", "/lerd/bin", "/site", "php artisan queue:work", "/lerd/run/native/8.5/bin", "", "/lerd/php/shared:/lerd/run/native/8.5/conf.d")
+	script := buildDarwinHostWorkerGuardScript("", "/lerd/bin", "/site", "php artisan queue:work", "/lerd/run/native/8.5/bin", "", "", "", "/lerd/php/shared:/lerd/run/native/8.5/conf.d")
 	if !strings.Contains(script, "export PHP_INI_SCAN_DIR='/lerd/php/shared:/lerd/run/native/8.5/conf.d'\n") {
 		t.Errorf("guard script must export PHP_INI_SCAN_DIR; got:\n%s", script)
 	}
 
-	plain := buildDarwinHostWorkerGuardScript("", "/lerd/bin", "/site", "npm run dev", "", "", "")
+	plain := buildDarwinHostWorkerGuardScript("", "/lerd/bin", "/site", "npm run dev", "", "", "", "", "")
 	if strings.Contains(plain, "PHP_INI_SCAN_DIR") {
 		t.Errorf("non-native guard must leave PHP_INI_SCAN_DIR alone; got:\n%s", plain)
 	}
@@ -235,7 +235,7 @@ func TestWorkerBuilders_ForceColour(t *testing.T) {
 		t.Errorf("custom container worker unit should force colour:\n%s", custom)
 	}
 
-	guard := buildDarwinHostWorkerGuardScript("'/bin/fnm' exec --using=22 --", "/lerd/bin", "/site", "npm run dev", "", "", "")
+	guard := buildDarwinHostWorkerGuardScript("'/bin/fnm' exec --using=22 --", "/lerd/bin", "/site", "npm run dev", "", "", "", "", "")
 	if !strings.Contains(guard, "export FORCE_COLOR=1") {
 		t.Errorf("host worker guard should export the colour vars:\n%s", guard)
 	}
@@ -268,7 +268,7 @@ func TestBuildWorkerExecCommand_EnvArgsPrecedeContainer(t *testing.T) {
 
 func TestWorkerBuilders_RespectNoColor(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
-	guard := buildDarwinHostWorkerGuardScript("'/bin/fnm' exec --using=22 --", "/lerd/bin", "/site", "npm run dev", "", "", "")
+	guard := buildDarwinHostWorkerGuardScript("'/bin/fnm' exec --using=22 --", "/lerd/bin", "/site", "npm run dev", "", "", "", "", "")
 	if strings.Contains(guard, "FORCE_COLOR") {
 		t.Errorf("NO_COLOR should suppress the colour exports:\n%s", guard)
 	}
@@ -284,7 +284,7 @@ func TestWorkerBuilders_RespectNoColor(t *testing.T) {
 
 func TestDarwinHostWorkerGuard_WorkingDirIsReadableBack(t *testing.T) {
 	site := "/Users/u/Projects/app-feat-login"
-	guard := buildDarwinHostWorkerGuardScript("'/bin/fnm' exec --using=22 --", "/lerd/bin", site, "npm run dev", "", "", "")
+	guard := buildDarwinHostWorkerGuardScript("'/bin/fnm' exec --using=22 --", "/lerd/bin", site, "npm run dev", "", "", "", "", "")
 	if got := services.WorkerGuardWorkingDir(guard); got != site {
 		t.Errorf("WorkerGuardWorkingDir = %q, want %q\n%s", got, site, guard)
 	}
@@ -292,7 +292,7 @@ func TestDarwinHostWorkerGuard_WorkingDirIsReadableBack(t *testing.T) {
 
 func TestDarwinHostWorkerGuard_WorkingDirWithQuoteIsReadableBack(t *testing.T) {
 	site := "/Users/u/it's/app"
-	guard := buildDarwinHostWorkerGuardScript("", "/lerd/bin", site, "npm run dev", "", "", "")
+	guard := buildDarwinHostWorkerGuardScript("", "/lerd/bin", site, "npm run dev", "", "", "", "", "")
 	if got := services.WorkerGuardWorkingDir(guard); got != site {
 		t.Errorf("WorkerGuardWorkingDir = %q, want %q\n%s", got, site, guard)
 	}
@@ -340,5 +340,15 @@ func TestBuildWorkerExecCommand_QuotesASiteNameWithASpace(t *testing.T) {
 
 	if !strings.Contains(exec, `--env=LERD_SITE='my app'`) {
 		t.Errorf("a site name with a space should be quoted:\n%s", exec)
+	}
+}
+
+// Language toolchain dirs follow lerd's shims so a mise or asdf php never wins,
+// and fallback dirs follow the system ones, as go.dev says to add them.
+func TestBuildDarwinHostWorkerGuardScript_toolAndFallbackDirs(t *testing.T) {
+	script := buildDarwinHostWorkerGuardScript("", "/lerd/bin", "/site", "go run .", "", "/u/.local/share/mise/shims", "/usr/local/go/bin:/u/go/bin", "", "")
+	want := `export PATH="/lerd/bin:/u/.local/share/mise/shims:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/go/bin:/u/go/bin:$PATH"`
+	if !strings.Contains(script, want) {
+		t.Errorf("guard script PATH: want %s, got:\n%s", want, script)
 	}
 }
