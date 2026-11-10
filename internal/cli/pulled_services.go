@@ -21,17 +21,16 @@ var ensurePreset = config.EnsurePreset
 var presetsFetched = map[string]bool{}
 
 // pulledServicesTried remembers, per site, the unwired set last acted on and
-// when. env rewrites .env, which wakes the watcher again, so a set that failed
-// (a pull that timed out) is retried only once pulledRetryAfter has passed.
+// when. env rewrites .env, which wakes the watcher again, so a set whose service
+// did not start (a pull that timed out) is retried only after pulledRetryAfter.
 var (
 	pulledServicesMu    sync.Mutex
 	pulledServicesTried = map[string]pulledAttempt{}
 )
 
 type pulledAttempt struct {
-	key       string
-	at        time.Time
-	envFailed []string // services whose env run failed, retried after the back-off
+	key string
+	at  time.Time
 }
 
 // pulledNow is the clock the back-off reads. A seam for the tests.
@@ -73,9 +72,6 @@ func WirePulledServices(site *config.Site) []string {
 	fw, ok := config.GetFrameworkForDir(site.Framework, site.Path)
 	if !ok {
 		return nil
-	}
-	if names, due := retryFailedEnv(site, fw); due {
-		return names
 	}
 	fetchMissingPresets(proj)
 	unwired := unwiredProjectServices(site, proj, fw)
@@ -125,42 +121,14 @@ func WirePulledServices(site *config.Site) []string {
 	return runPulledEnv(site, serviceNamesOf(apply.Services))
 }
 
-// retryFailedEnv reruns env for a site whose last run failed once the back-off
-// has passed. env marks a service wired before it learns its database or bucket
-// could not be made, so nothing else would bring the site back here.
-func retryFailedEnv(site *config.Site, fw *config.Framework) ([]string, bool) {
-	pulledServicesMu.Lock()
-	last := pulledServicesTried[site.Path]
-	pulledServicesMu.Unlock()
-	if len(last.envFailed) == 0 || pulledNow().Sub(last.at) < pulledRetryAfter {
-		return nil, false
-	}
-	// The env no longer names one of them: the user repointed it, so drop the retry.
-	if repointed := sitedoctor.UnwiredServices(site.Path, fw); slices.ContainsFunc(last.envFailed, func(n string) bool { return slices.Contains(repointed, n) }) {
-		pulledServicesMu.Lock()
-		last.envFailed = nil
-		pulledServicesTried[site.Path] = last
-		pulledServicesMu.Unlock()
-		return nil, false
-	}
-	return runPulledEnv(site, last.envFailed), true
-}
-
-// runPulledEnv runs env for the site and records whether it has to be retried,
-// returning names when it succeeded.
+// runPulledEnv runs env for the site, returning names when it succeeded. A run
+// that fails once the services are up (a database or bucket it could not make)
+// is not retried: the env may since hold a hand edit, and the doctor reports it.
 func runPulledEnv(site *config.Site, names []string) []string {
 	out, err := runSiteEnv(site.Path)
-	pulledServicesMu.Lock()
-	a := pulledServicesTried[site.Path]
-	a.at, a.envFailed = pulledNow(), nil
-	if err != nil {
-		a.envFailed = names
-	}
-	pulledServicesTried[site.Path] = a
-	pulledServicesMu.Unlock()
 	if err != nil {
 		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-		fmt.Printf("[WARN] lerd env for %s, will retry: %v: %s\n", site.Name, err, lines[len(lines)-1])
+		fmt.Printf("[WARN] lerd env for %s: %v: %s; run `lerd site:doctor` there\n", site.Name, err, lines[len(lines)-1])
 		return nil
 	}
 	return names

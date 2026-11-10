@@ -155,7 +155,7 @@ Running `lerd env` on a project that already has a `.env` is safe; it only updat
 
 ## Services added by a pull
 
-When `.lerd.yaml` changes on disk, for example after `git pull` or a branch switch brings in a new service, lerd installs and starts that service and runs `lerd env` for the site, so the env points at it straight away. It acts on the same finding as the doctor's Service Wiring check, and only for services lerd has not wired into the site before. That run rewrites the connection keys of every service the project uses, as `lerd env` always does, so keep a value you want to hold in [`.env.lerd_override`](#personal-overrides-envlerd_override). A new inline `custom:` service is not started this way, since its image and command come from the repository: run `lerd link` in the project to review and install it.
+When `.lerd.yaml` changes on disk, for example after `git pull` or a branch switch brings in a new service, lerd installs and starts that service and runs `lerd env` for the site, so the env points at it straight away. It acts on the same finding as the doctor's Service Wiring check, and only for services lerd has not wired into the site before. That run rewrites the connection keys of every service the project uses, as `lerd env` always does, so keep a value you want to hold in [`.env.lerd_override`](#personal-overrides-envlerd_override). A service that fails to start is tried again on a later change after five minutes; a database or bucket that could not be created is reported by `lerd site:doctor` instead, since by then the env may hold your own edits. A new inline `custom:` service is not started this way, since its image and command come from the repository: run `lerd link` in the project to review and install it.
 
 ---
 
