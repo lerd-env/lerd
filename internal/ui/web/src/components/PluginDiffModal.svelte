@@ -51,6 +51,8 @@
       {/if}
     </div>
     <div class="flex-1 min-h-0">
+      <!-- Monaco takes the language only when it is created, so a new file gets a new editor. -->
+      {#key diff}
       {#if diff.original === undefined}
         <MonacoEditor value={diff.modified} language={languageFor(diff.path)} readOnly class="h-full" />
       {:else}
@@ -63,6 +65,7 @@
         onStats={(s) => (stats = s)}
       />
       {/if}
+      {/key}
     </div>
   </div>
 </Modal>
