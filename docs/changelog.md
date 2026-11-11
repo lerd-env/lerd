@@ -7,11 +7,11 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [1.39.0-beta.1] - 2026-11-09
+## [1.39.0-beta.2] - 2026-11-11
 
 A database server lerd does not run is now a service of its own. DBngin, a native MySQL or any MySQL, MariaDB or PostgreSQL server on the machine is added with `lerd service external` or from Add a service, and a site pointed at it with `lerd db:use` gets every database feature lerd has, snapshots, restore, export, import, the shell, browsing and worktree isolation, through the machine's own clients, while commands that cannot reach that server refuse instead of falling through to lerd's own database.
 
-PHP 8.6 leaves the prerelease tier, the Node page shows full versions and moves each major to its newest patch, and the dashboard's System health card counts PHP and tool updates next to service ones, with an Update all dialog for each. A worker's proxy can take a subdomain of its site, so a docs dev server living in the same repository gets `docs.myapp.test` without a second site.
+PHP 8.6 leaves the prerelease tier, the Node page shows full versions and moves each major to its newest patch, and the dashboard's System health card counts PHP and tool updates next to service ones, with an Update all dialog for each. A worker's proxy can take a subdomain of its site, so a docs dev server living in the same repository gets `docs.myapp.test` without a second site. `lerd wp` works on a WordPress site that never used composer, and install and update offer to connect lerd's MCP server to the AI assistants on the machine.
 
 This is also the first signed release: the checksums are signed with cosign and every archive carries build provenance, so a download can be checked for who built it as well as whether it arrived whole.
 
@@ -27,6 +27,9 @@ This is also the first signed release: the checksums are signed with cosign and 
 - **Resize the tinker panes** (#2432) by dragging the divider between editor and output, remembered across sessions, with a double click to bring back an even split.
 - **`lerd doctor` warns when the Windows DNS agent receives nothing** (#2462). A DNS filter such as NextDNS can swallow every query on port 53 while the agent's socket looks healthy, so the agent now sends itself one real query after binding and logs the result, and doctor inside WSL warns when it failed.
 
+- **wp-cli for WordPress sites without composer** (#2511). When a WordPress or Bedrock site has no `vendor/bin/wp`, the first `lerd wp` downloads the wp-cli release lerd pins, checks it against its sha256 and runs it on the site's PHP with `--allow-root` in front, and after that plain `wp` works in the site through a shim, unless a `wp` of your own is already on the PATH. wp-cli then shows on the Tools page and in `lerd tools:update`, so a new pin arrives as an update like composer's, and a project that requires wp-cli through composer keeps using its own copy. A framework declares the tool with the new `vendor_bin_tools` key, and a binary it declares arguments for but nothing provides now says which file is missing instead of reporting an unknown command.
+- **Install and update offer to connect lerd's MCP server** (#2505). `lerd install` and `lerd update` ask once whether to register lerd with the AI assistants on the machine when it is not on yet, and run `mcp:enable-global` on a yes. A no is remembered, as is turning MCP off, and an unattended run or one without a terminal is never asked.
+- **A plugin command can declare the exits that are its answer** (#2500). `expected_exits` on a command or site command lists the codes a wrapped tool uses to answer, such as 101 from `cargo check` on code that does not compile, and those reach the user as before without marking the plugin as failing. Closing the run modal mid-command no longer records a failure either, contributed by @mtolhuys.
 ### Changed
 
 - **PHP 8.6 is a released version** (#2470). A bare `lerd fetch` builds it with the others, and the dashboard, CLI and docs stop calling it a preview. FrankenPHP and igbinary, pcov and xdebug have not caught up yet, so an 8.6 site stays on FPM with a message saying the image is not out.
@@ -37,6 +40,10 @@ This is also the first signed release: the checksums are signed with cosign and 
 
 ### Fixed
 
+- **Dev servers on a host proxy were bound to the Wi-Fi address** (#2502). When `host.containers.internal` did not reach the host, lerd fell back to the LAN address, which does not exist at boot before Wi-Fi connects, exposes the dev server on the network and moves with it. lerd now tries its own always-up lerd0 address first, and the watcher repoints a site's vhost and dev server whenever the gateway moves, restarting a dev server only when its command is still the approved one, contributed by @mtolhuys.
+- **A service a `git pull` added to `.lerd.yaml` was never wired** (#2507). The watcher only re-read the PHP and Node versions, so the service showed on the site while `.env` never got its connection. It now installs and starts new services the way link does and then runs `lerd env`, retries after five minutes when the registry or store was unreachable, leaves paused sites and new inline custom services alone, and reports an env run that failed instead of overwriting a connection edited by hand.
+- **Host dev servers could not find toolchains from rustup, mise, asdf, pyenv or go.dev** (#2496). Their fixed PATH only gained version manager shims for Ruby, so a Rust, Go or Python project kept restarting with its toolchain missing. Each runtime now brings the directories its toolchain lives in, after lerd's own shims so a PHP site never picks up a host php, contributed by @mtolhuys.
+- **A long-running plugin command made lerd's memory grow** (#2499). Everything it wrote to stderr was kept in case it failed, and the dashboard's runner kept every line to look for a URL; both now keep only what they use, contributed by @mtolhuys.
 - **A failed `lerd php:rebuild` reported success** (#2492). It printed "image rebuilt" and exited 0 after a build failed, and stored the image hash so lerd took the stale image for a current one. It now exits non-zero naming what was not rebuilt and still restarts what did build. A version rebuilt for the first time could also crash-loop into systemd's start limit while its image was building, so the restart once it was ready was refused; the restart clears the failed state first.
 - **Worktree database isolation failed on frameworks with a connection URL** (#2453). `db:isolate` and `db:share` only understood separate host and name keys, so Symfony, Contao, CakePHP 3 and Yii were wrongly told the site was not on a lerd service. The env binding now reads the database from the URL or DSN and rewrites only its name.
 - **Switching Node from the site page or MCP did nothing on a pinned site** (#2412). Both wrote `.node-version`, which a `node_version` in `.lerd.yaml` outranks, so a site the setup wizard had pinned kept its old Node. They now update the pin, and refuse when a local override file owns it.
@@ -53,7 +60,7 @@ This is also the first signed release: the checksums are signed with cosign and 
 - **Worktree JS installs on macOS exited 127** (#2422) under launchd's PATH, which has no node for pnpm and yarn; they now run with lerd's node shim first on the PATH, contributed by @prabowosd.
 - **macOS FPM could fail to start right after the Podman Machine booted** (#2424), since only `lerd start` created the env directory it mounts; every path that starts FPM now creates it, contributed by @prabowosd.
 - **The tray's update item did nothing on macOS** (#2425), since it only knew Linux terminals; it now opens the update through lerd-ui, which uses iTerm or Terminal, contributed by @prabowosd.
-- **Dependencies with security advisories** (#2471). `golang.org/x/net` moves to 0.62.0, `golang.org/x/crypto` to 0.58.0 and `github.com/klauspost/compress` to 1.20.2, none of which lerd reached, and the unused MkDocs requirements file is gone.
+- **Dependencies with security advisories** (#2471, #2510). `golang.org/x/net` moves to 0.62.0, `golang.org/x/crypto` to 0.58.0 and `github.com/klauspost/compress` to 1.20.2, none of which lerd reached, the build moves to Go 1.26.11 for GO-2026-6859 in `net/http`, which the dashboard proxy and LAN sharing do reach, and the unused MkDocs requirements file is gone.
 
 ## [1.38.0] - 2026-11-02
 
