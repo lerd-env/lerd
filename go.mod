@@ -2,7 +2,7 @@ module github.com/geodro/lerd
 
 go 1.26.0
 
-toolchain go1.26.10
+toolchain go1.26.11
 
 require (
 	charm.land/bubbletea/v2 v2.1.1
