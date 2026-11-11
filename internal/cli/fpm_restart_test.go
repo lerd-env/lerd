@@ -19,13 +19,14 @@ func stubEnsurePath(t *testing.T) {
 
 	origWrite, origBuild := writeFPMQuadlet, buildFPMImageTo
 	origXdebug, origStart, origRestart := ensureXdebugIni, startUnitFn, restartUnitFn
-	origEnvDir := ensureEnvDirFn
+	origEnvDir, origRunning := ensureEnvDirFn, containerRunningFn
 	t.Cleanup(func() {
 		writeFPMQuadlet, buildFPMImageTo = origWrite, origBuild
 		ensureXdebugIni, startUnitFn, restartUnitFn = origXdebug, origStart, origRestart
-		ensureEnvDirFn = origEnvDir
+		ensureEnvDirFn, containerRunningFn = origEnvDir, origRunning
 	})
 	ensureEnvDirFn = func() {}
+	containerRunningFn = func(string) (bool, error) { return false, nil }
 	writeFPMQuadlet = func(string) (bool, error) { return false, nil }
 	ensureXdebugIni = func(string) error { return nil }
 }
@@ -64,6 +65,24 @@ func TestEnsureFPMQuadletTo_restartsOnlyWhenTheImageWasRebuilt(t *testing.T) {
 	}
 	if len(restarted) != 1 || restarted[0] != "lerd-php83-fpm" {
 		t.Errorf("restarted = %v, want [lerd-php83-fpm]", restarted)
+	}
+}
+
+// On macOS a start re-creates the container, so lerd start restoring sites must
+// leave a running FPM on an unchanged image and unit alone.
+func TestEnsureFPMQuadletTo_leavesARunningContainerAlone(t *testing.T) {
+	stubEnsurePath(t)
+	touched := 0
+	startUnitFn = func(string) error { touched++; return nil }
+	restartUnitFn = func(string) error { touched++; return nil }
+	containerRunningFn = func(string) (bool, error) { return true, nil }
+	buildFPMImageTo = func(_ string, _ bool, _ io.Writer) (bool, error) { return false, nil }
+
+	if err := ensureFPMQuadletTo("8.3", io.Discard); err != nil {
+		t.Fatalf("ensureFPMQuadletTo: %v", err)
+	}
+	if touched != 0 {
+		t.Errorf("a running container on an unchanged image must not be started again, touched %d times", touched)
 	}
 }
 

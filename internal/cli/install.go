@@ -800,7 +800,6 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 			},
 		},
 	}
-	nginxDigestBefore := podman.LocalImageDigest(nginxImage)
 	plan := imagepull.Plan{imagepull.Pull(nginxImage, "the lerd web server image")}
 	withoutKeptImages(plan, podman.OfflineKeeps).Fill().Report(os.Stdout)
 	for _, job := range pullJobs {
@@ -811,7 +810,6 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		}
 		ok()
 	}
-	nginxDigestAfter := podman.LocalImageDigest(nginxImage)
 
 	// Pull/build all service and FPM images before touching DNS. On macOS,
 	// ConfigureResolver() redirects .test DNS through lerd-dns; any registry
@@ -891,7 +889,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 	if autostartOn {
 		running, _ := podman.ContainerRunning("lerd-nginx")
-		if nginxNeedsRestart(running, slices.Contains(changedQuadlets, "lerd-nginx"), nginxDigestBefore, nginxDigestAfter) {
+		if nginxNeedsRestart(running, slices.Contains(changedQuadlets, "lerd-nginx"), podman.ContainerImageID("lerd-nginx"), podman.LocalImageID(nginxImage)) {
 			step("Starting lerd-nginx")
 			if err := services.Mgr.Restart("lerd-nginx"); err != nil {
 				fmt.Printf("    WARN: %v\n", err)
@@ -1182,10 +1180,10 @@ func runPHPRebuild() error {
 }
 
 // nginxNeedsRestart reports whether install must restart lerd-nginx. A restart
-// drops the port bindings, which may not come back if something else grabbed
-// :80 meanwhile, so an unchanged image and quadlet only get a config reload.
-func nginxNeedsRestart(running, quadletChanged bool, digestBefore, digestAfter []string) bool {
-	return !running || quadletChanged || len(digestBefore) == 0 || !slices.Equal(digestBefore, digestAfter)
+// drops the ports, which may not come back if something else grabbed :80, so a
+// container already running the local image (whoever pulled it) gets a reload.
+func nginxNeedsRestart(running, quadletChanged bool, containerImage, localImage string) bool {
+	return !running || quadletChanged || localImage == "" || containerImage != localImage
 }
 
 // withoutKeptImages drops the pulls offline mode will skip, so the disclosure
