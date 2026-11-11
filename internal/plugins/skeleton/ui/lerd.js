@@ -35,6 +35,15 @@ window.lerd = (() => {
         pending.set(id, { resolve, reject });
         window.parent.postMessage({ type: 'lerd:api', id, method, path, body }, '*');
       });
+    },
+    // Opens the dashboard's own diff on two versions of a file, each side named
+    // by before and after, such as the server and this site.
+    diff({ path, original, modified, before, after }) {
+      window.parent.postMessage({ type: 'lerd:diff', path, original, modified, before, after }, '*');
+    },
+    // Opens one file read only in the dashboard's editor, label naming where it is.
+    view({ path, content, label }) {
+      window.parent.postMessage({ type: 'lerd:view', path, content, label }, '*');
     }
   };
 })();

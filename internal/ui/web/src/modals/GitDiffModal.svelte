@@ -5,7 +5,8 @@
   import Icon from '$components/Icon.svelte';
   import { tooltip } from '$lib/tooltip';
   import MonacoDiffEditor from '$components/MonacoDiffEditor.svelte';
-  import EditorTextSize from '$components/EditorTextSize.svelte';
+  import DiffViewActions from '$components/DiffViewActions.svelte';
+  import { readDiffPrefs, writeDiffPrefs } from '$lib/diffPrefs';
   import GitCommitBox from '$components/GitCommitBox.svelte';
   import { closeModal } from '$stores/modals';
   import {
@@ -62,28 +63,11 @@
   // Keyed by group and folder, so a folder collapsed under Staged stays open under Unstaged.
   let collapsed = $state<Record<string, boolean>>({});
 
-  // Full screen, the view and hidden whitespace are remembered, so the next diff opens the way this one was left.
-  const PREFS_KEY = 'lerd:gitDiff';
-  type Prefs = { fullscreen: boolean; unified: boolean; ignoreSpace: boolean };
-  function readPrefs(): Prefs {
-    try {
-      const v = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}');
-      return { fullscreen: v.fullscreen === true, unified: v.unified === true, ignoreSpace: v.ignoreSpace === true };
-    } catch {
-      return { fullscreen: false, unified: false, ignoreSpace: false };
-    }
-  }
-  const prefs = readPrefs();
+  const prefs = readDiffPrefs();
   let fullscreen = $state(prefs.fullscreen);
   let unified = $state(prefs.unified);
   let ignoreSpace = $state(prefs.ignoreSpace);
-  $effect(() => {
-    try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ fullscreen, unified, ignoreSpace }));
-    } catch {
-      /* localStorage may be unavailable (private mode, quota), non-fatal */
-    }
-  });
+  $effect(() => writeDiffPrefs({ fullscreen, unified, ignoreSpace }));
 
   // Close never just restores the size: full screen is a remembered choice, not a step to back out of.
   const close = () => onclose();
@@ -192,18 +176,8 @@
 
 <Modal open size="2xl" tall {fullscreen} title={title ?? (commit ? `${commit.hash.slice(0, 7)} ${commit.subject}` : upto ? m.gitDiff_incomingTitle({ branch }) : outgoing ? m.gitDiff_outgoingTitle({ branch }) : m.gitDiff_title({ branch }))} onclose={close}>
   {#snippet actions()}
-    <!-- Same gap and icon size as the modal's own close button beside them. -->
-    <div class="flex items-center gap-3">
-      <EditorTextSize iconClass="w-5 h-5" />
-      <button
-        type="button"
-        onclick={() => (unified = !unified)}
-        class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-        use:tooltip={unified ? m.gitDiff_sideBySide() : m.gitDiff_unified()}
-        aria-label={unified ? m.gitDiff_sideBySide() : m.gitDiff_unified()}
-      >
-        <Icon name={unified ? 'splitHorizontal' : 'splitVertical'} class="w-5 h-5" />
-      </button>
+    <DiffViewActions bind:fullscreen bind:unified>
+      {#snippet extra()}
       <button
         type="button"
         onclick={() => (filesHidden = !filesHidden)}
@@ -214,16 +188,8 @@
       >
         <Icon name="sidebar" class="w-5 h-5" />
       </button>
-      <button
-        type="button"
-        onclick={() => (fullscreen = !fullscreen)}
-        class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-        use:tooltip={fullscreen ? m.gitDiff_exitFullscreen() : m.tinker_fullscreenTitle()}
-        aria-label={fullscreen ? m.gitDiff_exitFullscreen() : m.tinker_fullscreenTitle()}
-      >
-        <Icon name={fullscreen ? 'minimize' : 'maximize'} class="w-5 h-5" />
-      </button>
-    </div>
+      {/snippet}
+    </DiffViewActions>
   {/snippet}
   {#if notice}<p class="px-5 pt-3 text-xs text-amber-600 dark:text-amber-400">{notice}</p>{/if}
   {#if empty}

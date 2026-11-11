@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { pluginApiPath, answerPluginRequest, pluginTheme } from './pluginBridge';
+import { pluginApiPath, answerPluginRequest, pluginTheme, pluginDiffRequest } from './pluginBridge';
 
 describe('pluginApiPath', () => {
   it('keeps a plugin inside its own endpoints', () => {
@@ -82,5 +82,46 @@ describe('pluginTheme', () => {
     expect(theme.vars['--lerd-light-border']).toBe('#eee8d5');
     expect(theme.vars['--lerd-on-accent']).toBeUndefined();
     root.remove();
+  });
+});
+
+describe('pluginDiffRequest', () => {
+  const frame = {} as Window;
+  const ask = (data: unknown, source: unknown = frame) => pluginDiffRequest({ data, source } as MessageEvent, frame);
+
+  it('takes two versions of a file from the page to show in the dashboard diff', () => {
+    expect(ask({ type: 'lerd:diff', path: 'wp-content/a.php', original: 'a', modified: 'b', before: 'production', after: 'This site' })).toEqual({
+      path: 'wp-content/a.php',
+      original: 'a',
+      modified: 'b',
+      before: 'production',
+      after: 'This site'
+    });
+  });
+
+  it('ignores other frames, other messages and anything not text', () => {
+    expect(ask({ type: 'lerd:diff', path: 'a', original: 'a', modified: 'b' }, {})).toBeNull();
+    expect(ask({ type: 'lerd:api', path: 'a' })).toBeNull();
+    expect(ask({ type: 'lerd:diff', path: 'a', original: 1, modified: 'b' })).toBeNull();
+    expect(ask({ type: 'lerd:diff', original: 'a', modified: 'b' })).toBeNull();
+  });
+
+  it('refuses a version too large to draw', () => {
+    const big = 'x'.repeat(2 * 1024 * 1024 + 1);
+    expect(ask({ type: 'lerd:diff', path: 'a', original: big, modified: 'b' })).toBeNull();
+  });
+});
+
+describe('pluginDiffRequest for a single file', () => {
+  const frame = {} as Window;
+  const ask = (data: unknown) => pluginDiffRequest({ data, source: frame } as MessageEvent, frame);
+
+  it('takes one file to show on its own, with no other side', () => {
+    expect(ask({ type: 'lerd:view', path: 'a.css', content: 'body{}', label: 'production' })).toEqual({
+      path: 'a.css',
+      modified: 'body{}',
+      after: 'production'
+    });
+    expect(ask({ type: 'lerd:view', path: 'a.css', content: 5 })).toBeNull();
   });
 });

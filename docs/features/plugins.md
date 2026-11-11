@@ -307,6 +307,16 @@ await lerd.api('save', { method: 'POST', body: { key: 'value' } });
 
 `lerd.api` only reaches `/api/plugins/<this plugin>/`.
 
+### Showing a diff
+
+A page that compares two versions of a file, such as a local copy and the server's, can open the dashboard's own diff on them instead of drawing one:
+
+```js
+lerd.diff({ path: 'wp-content/themes/shop/style.css', original: serverText, modified: localText, before: 'production', after: 'This site' });
+```
+
+`original` is drawn on the left and `modified` on the right, each up to 2 MB, and the file's extension picks the highlighting. A file that exists on one side only can be shown on its own, read only, with `lerd.view({ path, content, label: 'production' })`. An older lerd ignores the call, so a page that relies on it should say which lerd it needs with `lerd:` in `plugin.yaml`.
+
 ### Speaking the user's language
 
 A page also receives the dashboard's language as `lang`, like `en`, `ro` or `zh-TW`: `lerd.context.lang` in the boilerplate's `ui/lerd.js`, and the page's `<html lang>` when it sets none of its own. A plugin that ships translations picks its strings by it, falling back to English. Switching the dashboard's language reloads the dashboard, and the page with it.

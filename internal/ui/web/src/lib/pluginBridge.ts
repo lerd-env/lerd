@@ -56,6 +56,33 @@ export async function answerPluginRequest(
   }
 }
 
+// Two versions of a file a page wants shown in the dashboard's own diff, with
+// a name for each side, or with lerd:view one file on its own, read only, which
+// leaves original out. Each version is capped so a page cannot stall the editor.
+export interface PluginDiff {
+  path: string;
+  original?: string;
+  modified: string;
+  before?: string;
+  after?: string;
+}
+
+const DIFF_MAX = 2 * 1024 * 1024;
+
+export function pluginDiffRequest(e: MessageEvent, frame: Window | null | undefined): PluginDiff | null {
+  const msg = e.data;
+  if (!frame || e.source !== frame || !msg) return null;
+  const text = (v: unknown, max: number) => typeof v === 'string' && v.length <= max;
+  const label = (v: unknown) => (typeof v === 'string' && v ? v.slice(0, 80) : undefined);
+  if (msg.type === 'lerd:view') {
+    if (!text(msg.path, 512) || !msg.path || !text(msg.content, DIFF_MAX)) return null;
+    return { path: msg.path, modified: msg.content, after: label(msg.label) };
+  }
+  if (msg.type !== 'lerd:diff') return null;
+  if (!text(msg.path, 512) || !msg.path || !text(msg.original, DIFF_MAX) || !text(msg.modified, DIFF_MAX)) return null;
+  return { path: msg.path, original: msg.original, modified: msg.modified, before: label(msg.before), after: label(msg.after) };
+}
+
 // The dashboard tokens a plugin page's base stylesheet reads, by the name the
 // page knows them under.
 const THEME_VARS: Record<string, string> = {
