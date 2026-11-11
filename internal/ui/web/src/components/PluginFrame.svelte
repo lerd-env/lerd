@@ -1,6 +1,7 @@
 <script lang="ts">
   import { apiUrl } from '$lib/api';
-  import { answerPluginRequest, pluginTheme } from '$lib/pluginBridge';
+  import { answerPluginRequest, pluginDiffRequest, pluginTheme, type PluginDiff } from '$lib/pluginBridge';
+  import PluginDiffModal from './PluginDiffModal.svelte';
   import { locale } from '$stores/locale';
 
   interface Props {
@@ -17,6 +18,7 @@
 
   let frame = $state<HTMLIFrameElement | null>(null);
   let height = $state(48);
+  let diff = $state<PluginDiff | null>(null);
 
   // The page learns the dashboard's language with its context, so it can speak
   // it too; a change of language reloads the dashboard and with it the page.
@@ -30,6 +32,11 @@
       if (autoHeight && e.source === frame?.contentWindow && e.data?.type === 'lerd:resize') {
         // Capped, so a page that grows without end cannot push the Overview away.
         height = Math.min(Math.max(Number(e.data.height) || 0, 24), 800);
+        return;
+      }
+      const asked = pluginDiffRequest(e, frame?.contentWindow);
+      if (asked) {
+        diff = asked;
         return;
       }
       void answerPluginRequest(e, plugin, frame?.contentWindow);
@@ -61,3 +68,6 @@
     style:height={autoHeight ? `${height}px` : undefined}
   ></iframe>
 {/key}
+{#if diff}
+  <PluginDiffModal {diff} onclose={() => (diff = null)} />
+{/if}
