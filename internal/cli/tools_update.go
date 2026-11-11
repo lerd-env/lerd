@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
 
-	"github.com/geodro/lerd/internal/composer"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/tools"
 	"github.com/spf13/cobra"
@@ -86,7 +84,7 @@ func updateTool(pins *pinnedTools, name string) error {
 		}
 		return installMise(pins, home, io.Discard)
 	default:
-		return replaceTool(pins, name, composer.PharPath(), io.Discard)
+		return replaceTool(pins, name, tools.Path(name), io.Discard)
 	}
 }
 
@@ -98,7 +96,7 @@ func updateTool(pins *pinnedTools, name string) error {
 // The name is checked against the managed set rather than trusted, since it
 // arrives from a request and decides which path gets written.
 func UpdateOneTool(name string) error {
-	if !slices.Contains(tools.Names(), name) {
+	if !tools.Managed(name) {
 		return fmt.Errorf("unknown tool %q", name)
 	}
 	if !tools.LerdOwned(name) {

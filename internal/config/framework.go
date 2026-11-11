@@ -86,6 +86,10 @@ type Framework struct {
 	// refuses to start as root and lerd's containers are root, so WordPress
 	// declares --allow-root here rather than making every user type it.
 	VendorBinArgs map[string][]string `yaml:"vendor_bin_args,omitempty" json:"vendor_bin_args,omitempty"`
+	// VendorBinTools names the lerd tool standing in for a composer binary the
+	// project lacks, keyed by the binary's name, so lerd wp works without
+	// composer. Version and checksum come from lerd's tools manifest.
+	VendorBinTools map[string]string `yaml:"vendor_bin_tools,omitempty" json:"vendor_bin_tools,omitempty"`
 	// HostCommands names the console commands that must run on the host rather
 	// than in the container, and the binary that runs them. See HostCommand.
 	HostCommands []HostCommand `yaml:"host_commands,omitempty"`
@@ -2107,6 +2111,8 @@ func SanitizeProjectFrameworkDef(def *Framework) *Framework {
 	// Injecting arguments into a binary the user asked for is the project
 	// steering a command it does not own, so only the trusted store may.
 	safe.VendorBinArgs = nil
+	// A tool is code lerd downloads and runs, so a cloned repo may not name one.
+	safe.VendorBinTools = nil
 	return safe
 }
 
