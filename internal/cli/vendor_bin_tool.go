@@ -23,10 +23,10 @@ func vendorBinTool(cwd, name string, w io.Writer) (path string, ok bool, err err
 	if !declared {
 		return "", false, nil
 	}
-	pins := pinnedTools{m: tools.Load(context.Background())}
-	if t, known := pins.m.Tools[tool]; !known || !t.OnDemand {
+	if !tools.OnDemand(tool) {
 		return "", false, fmt.Errorf("vendor_bin_tools.%s: lerd has no on-demand tool %q; update lerd", name, tool)
 	}
+	pins := pinnedTools{m: tools.Load(context.Background())}
 	path = tools.Path(tool)
 	writeVendorBinShim(name)
 	if _, err := os.Stat(path); err == nil {

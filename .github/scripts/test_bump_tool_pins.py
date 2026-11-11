@@ -93,6 +93,38 @@ class Bump(unittest.TestCase):
         self.assertEqual(['    version: "2.11.0"' if l == '    version: "2.10.0"' else l for l in lines()], got)
 
 
+class SingleAsset(unittest.TestCase):
+    PHAR = (
+        'tools:\n'
+        '  wp-cli:\n'
+        '    version: "2.12.0"\n'
+        '    url: https://example.test/v{version}/wp-cli-{version}.phar\n'
+        '    digests:\n'
+        '      linux/amd64: old\n'
+        '      darwin/arm64: old\n'
+        '    sizes:\n'
+        '      linux/amd64: 1\n'
+        '      darwin/arm64: 1\n'
+    ).split('\n')
+
+    # One phar serves every platform, so a bump without assets must still
+    # recompute each digest, or every install would refuse the new download.
+    def test_a_pin_without_assets_recomputes_every_digest(self):
+        got = list(self.PHAR)
+        served = []
+        self.assertTrue(b.bump(got, 'wp-cli', '2.13.0', lambda url: served.append(url) or b'phar'))
+        self.assertEqual(served, ['https://example.test/v2.13.0/wp-cli-2.13.0.phar'])
+        index = b.parse(got)
+        for platform in ('linux/amd64', 'darwin/arm64'):
+            self.assertEqual(b.get(got, index, 'wp-cli', 'digests', platform), hashlib.sha256(b'phar').hexdigest())
+            self.assertEqual(b.get(got, index, 'wp-cli', 'sizes', platform), '4')
+
+    # wp-cli tags carry a v its asset names do not.
+    def test_wp_cli_upstream_drops_the_tag_prefix(self):
+        got = b.upstream('wp-cli', lambda url: {'tag_name': 'v2.13.0'} if 'wp-cli/wp-cli' in url else self.fail(url))
+        self.assertEqual(got, '2.13.0')
+
+
 class Fetch(unittest.TestCase):
     def response(self, body):
         resp = mock.MagicMock()

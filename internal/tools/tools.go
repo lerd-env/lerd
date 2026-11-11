@@ -278,18 +278,26 @@ func Names() []string { return []string{"composer", "mise", "fnm"} }
 // Path is where the named tool lives once lerd has fetched it.
 func Path(name string) string { return binPath(name) }
 
-// Managed reports whether the Tools page lists the tool and may update it: one
-// lerd installs up front, or an on-demand one a site has already fetched.
-func Managed(name string) bool {
-	if slices.Contains(Names(), name) {
-		return true
+// Managed resolves name to the tool the Tools page lists and may update: one
+// lerd installs up front, or an on-demand one already fetched. The returned
+// name is lerd's own copy, so a name from a request never reaches a path.
+func Managed(name string) (string, bool) {
+	for _, n := range Names() {
+		if n == name {
+			return n, true
+		}
 	}
-	return onDemand(name) && fileExists(binPath(name))
+	for _, n := range onDemandNames() {
+		if n == name && fileExists(binPath(n)) {
+			return n, true
+		}
+	}
+	return "", false
 }
 
-// onDemand reads the flag from the embedded pins, the set a path can be
-// derived from without a fetch. Paths must not move with a published manifest.
-func onDemand(name string) bool {
+// OnDemand reports whether this binary ships the tool as on-demand. Read from
+// the embedded pins only: a tool a newer published manifest adds is unknown.
+func OnDemand(name string) bool {
 	return slices.Contains(onDemandNames(), name)
 }
 
@@ -312,7 +320,7 @@ func fileExists(path string) bool {
 
 func binPath(name string) string {
 	// Off lerd's bin dir, which is on PATH: no host PHP runs a phar directly.
-	if onDemand(name) {
+	if OnDemand(name) {
 		return filepath.Join(config.DataDir(), "phars", name+".phar")
 	}
 	switch name {

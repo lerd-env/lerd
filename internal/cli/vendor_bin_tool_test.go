@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -241,5 +243,28 @@ func TestVendorBinTool_LeavesTheUsersWpAlone(t *testing.T) {
 	}
 	if body, _ := os.ReadFile(foreign); string(body) != "#!/bin/sh\necho mine\n" {
 		t.Errorf("overwrote a wp lerd did not write: %q", body)
+	}
+}
+
+// A tool a newer published manifest adds is still unknown to this binary: its
+// paths and the Tools page come from the pins it shipped with, so refuse it.
+func TestVendorBinTool_RefusesAToolOnlyAPublishedManifestKnows(t *testing.T) {
+	dir := frameworkWithTool(t, "newtool")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "tools:\n  newtool:\n    version: \"1.0.0\"\n    url: https://github.com/x/y/releases/download/{version}/newtool.phar\n    on_demand: true\n")
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("LERD_TOOLS_URL", srv.URL+"/tools.yaml")
+	t.Setenv("LERD_TOOLS_HOSTS", "127.0.0.1")
+	if _, ok := tools.Load(context.Background()).Tools["newtool"]; !ok {
+		t.Fatal("test setup: the published manifest did not reach Load")
+	}
+	calls, _ := fakeDownloads(t, nil)
+	_, _, err := vendorBinTool(dir, "wp", io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "newtool") {
+		t.Errorf("err = %v, want a refusal naming newtool", err)
+	}
+	if *calls != 0 {
+		t.Error("a tool this binary does not ship must not be downloaded")
 	}
 }

@@ -8,7 +8,9 @@ import time
 import urllib.request
 
 FILE = 'internal/tools/tools.yaml'
-GITHUB = {'fnm': 'Schniz/fnm', 'mise': 'jdx/mise'}
+GITHUB = {'fnm': 'Schniz/fnm', 'mise': 'jdx/mise', 'wp-cli': 'wp-cli/wp-cli'}
+# Tools whose release tags carry a v that their asset names leave out.
+UNPREFIXED = {'wp-cli'}
 STATIC_PHP = 'https://dl.static-php.dev/static-php-cli/common/?format=json'
 # Edited line by line rather than through a YAML library, so the comments and
 # quoting a bump PR leaves behind are exactly the ones a human wrote.
@@ -56,7 +58,8 @@ def upstream(tool, get_json):
     if tool == 'composer':
         return get_json('https://getcomposer.org/versions')['stable'][0]['version']
     if tool in GITHUB:
-        return get_json(f'https://api.github.com/repos/{GITHUB[tool]}/releases/latest')['tag_name']
+        tag = get_json(f'https://api.github.com/repos/{GITHUB[tool]}/releases/latest')['tag_name']
+        return tag.removeprefix('v') if tool in UNPREFIXED else tag
     if tool.startswith('php-host-'):
         return newest_php_patch(get_json(STATIC_PHP), tool.removeprefix('php-host-'))
     return None
@@ -76,12 +79,22 @@ def bump(lines, tool, version, download):
     put(lines, index, version, tool, 'version')
     if (tool, 'digests') not in index:
         return True
-    for key in [k for k in index if k[:2] == (tool, 'assets') and len(k) == 3]:
-        data = download(asset_url(lines, index, tool, version, key[2]))
-        put(lines, index, hashlib.sha256(data).hexdigest(), tool, 'digests', key[2])
-        if (tool, 'sizes') in index:
-            put(lines, index, str(len(data)), tool, 'sizes', key[2])
+    assets = [k[2] for k in index if k[:2] == (tool, 'assets') and len(k) == 3]
+    if not assets:
+        # One file for every platform, such as a phar: fetch it once.
+        data = download(get(lines, index, tool, 'url').replace('{version}', version))
+        for platform in [k[2] for k in index if k[:2] == (tool, 'digests') and len(k) == 3]:
+            record(lines, index, tool, platform, data)
+        return True
+    for platform in assets:
+        record(lines, index, tool, platform, download(asset_url(lines, index, tool, version, platform)))
     return True
+
+
+def record(lines, index, tool, platform, data):
+    put(lines, index, hashlib.sha256(data).hexdigest(), tool, 'digests', platform)
+    if (tool, 'sizes') in index:
+        put(lines, index, str(len(data)), tool, 'sizes', platform)
 
 
 def fetch(url, attempts=3):

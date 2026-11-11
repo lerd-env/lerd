@@ -1574,6 +1574,12 @@ func mergeUserOverlay(base *Framework) *Framework {
 	if len(overlay.Requires) > 0 {
 		base.Requires = overlay.Requires
 	}
+	for k, v := range overlay.VendorBinTools {
+		if base.VendorBinTools == nil {
+			base.VendorBinTools = map[string]string{}
+		}
+		base.VendorBinTools[k] = v
+	}
 
 	return base
 }

@@ -95,9 +95,10 @@ func updateTool(pins *pinnedTools, name string) error {
 //
 // The name is checked against the managed set rather than trusted, since it
 // arrives from a request and decides which path gets written.
-func UpdateOneTool(name string) error {
-	if !tools.Managed(name) {
-		return fmt.Errorf("unknown tool %q", name)
+func UpdateOneTool(requested string) error {
+	name, ok := tools.Managed(requested)
+	if !ok {
+		return fmt.Errorf("unknown tool %q", requested)
 	}
 	if !tools.LerdOwned(name) {
 		return fmt.Errorf("%s was not installed by lerd, so lerd leaves it alone", name)

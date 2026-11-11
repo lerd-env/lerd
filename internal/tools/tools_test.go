@@ -825,7 +825,8 @@ func TestStatusAll_listsAnOnDemandToolOnceDownloaded(t *testing.T) {
 	if got == nil || !got.Present || !got.UpdateAvailable || got.Installed != "2.0.0" {
 		t.Errorf("wp-cli status = %+v, want present with an update to the pin", got)
 	}
-	if !Managed("wp-cli") || !Managed("composer") || Managed("php-host-8.3") || Managed("nope") {
+	managed := func(n string) bool { _, ok := Managed(n); return ok }
+	if !managed("wp-cli") || !managed("composer") || managed("php-host-8.3") || managed("nope") {
 		t.Error("Managed must cover the up-front tools and downloaded on-demand ones only")
 	}
 }
