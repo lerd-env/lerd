@@ -166,9 +166,8 @@ const postgresTuningTemplate = `# Lerd user tuning for this service.
 // directory has to be pulled in from inside a real config file. This wrapper
 // includes the cluster's own postgresql.conf (every initdb default) first, then
 // the user override directory, so user values win without lerd ever mutating
-// PGDATA. lerd's own defaults sit between the two, so the user file still
-// overrides them. The PGDATA path matches the value pinned by the postgres
-// preset; if it is ever absent, include_if_exists degrades gracefully.
+// PGDATA. The PGDATA path matches the value pinned by the postgres preset; if it
+// is ever absent, include_if_exists degrades gracefully rather than failing.
 const postgresTuningWrapper = `# Lerd-managed postgres config wrapper, do not edit.
 # postgres runs with -c config_file pointing here (see service_tuning.go).
 include_if_exists = '/var/lib/postgresql/data/postgresql.conf'
