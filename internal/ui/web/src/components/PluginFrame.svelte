@@ -1,6 +1,6 @@
 <script lang="ts">
   import { apiUrl } from '$lib/api';
-  import { answerPluginRequest, pluginDiffRequest, pluginTheme, type PluginDiff } from '$lib/pluginBridge';
+  import { answerPluginRequest, pluginDiffRequest, pluginEditRequest, pluginTheme, type PluginDiff, type PluginEdit } from '$lib/pluginBridge';
   import PluginDiffModal from './PluginDiffModal.svelte';
   import { locale } from '$stores/locale';
 
@@ -19,6 +19,15 @@
   let frame = $state<HTMLIFrameElement | null>(null);
   let height = $state(48);
   let diff = $state<PluginDiff | null>(null);
+  let editing = $state<PluginEdit | null>(null);
+
+  // Every edit is answered exactly once: the saved text, or null when it is
+  // cancelled or replaced by another before it was saved.
+  function answerEdit(content: string | null) {
+    if (!editing) return;
+    frame?.contentWindow?.postMessage({ type: 'lerd:edit:result', id: editing.id, content }, '*');
+    editing = null;
+  }
 
   // The page learns the dashboard's language with its context, so it can speak
   // it too; a change of language reloads the dashboard and with it the page.
@@ -37,6 +46,14 @@
       const asked = pluginDiffRequest(e, frame?.contentWindow);
       if (asked) {
         diff = asked;
+        return;
+      }
+      const edit = pluginEditRequest(e, frame?.contentWindow);
+      if (edit) {
+        answerEdit(null);
+        editing = edit;
+        // Tells the page this lerd has an editor, so it does not fall back to its own.
+        frame?.contentWindow?.postMessage({ type: 'lerd:edit:opened', id: edit.id }, '*');
         return;
       }
       void answerPluginRequest(e, plugin, frame?.contentWindow);
@@ -70,4 +87,7 @@
 {/key}
 {#if diff}
   <PluginDiffModal {diff} onclose={() => (diff = null)} />
+{/if}
+{#if editing}
+  <PluginDiffModal diff={{ path: editing.path, modified: editing.content, after: editing.label }} onclose={() => answerEdit(null)} onsave={(text) => answerEdit(text)} />
 {/if}

@@ -83,6 +83,24 @@ export function pluginDiffRequest(e: MessageEvent, frame: Window | null | undefi
   return { path: msg.path, original: msg.original, modified: msg.modified, before: label(msg.before), after: label(msg.after) };
 }
 
+// A file a page hands to the dashboard's editor; the id is how the saved text,
+// or null for a cancel, finds its way back to the page.
+export interface PluginEdit {
+  id: number;
+  path: string;
+  content: string;
+  label?: string;
+}
+
+export function pluginEditRequest(e: MessageEvent, frame: Window | null | undefined): PluginEdit | null {
+  const msg = e.data;
+  if (!frame || e.source !== frame || !msg || msg.type !== 'lerd:edit') return null;
+  if (!Number.isFinite(msg.id) || typeof msg.path !== 'string' || !msg.path || msg.path.length > 512) return null;
+  if (typeof msg.content !== 'string' || msg.content.length > DIFF_MAX) return null;
+  const label = typeof msg.label === 'string' && msg.label ? msg.label.slice(0, 80) : undefined;
+  return { id: msg.id, path: msg.path, content: msg.content, label };
+}
+
 // The dashboard tokens a plugin page's base stylesheet reads, by the name the
 // page knows them under.
 const THEME_VARS: Record<string, string> = {
