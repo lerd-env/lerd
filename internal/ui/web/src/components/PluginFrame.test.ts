@@ -72,3 +72,20 @@ it('edits a file for its page and answers with the saved text, or null on cancel
   (await findByText('Cancel')).click();
   await vi.waitFor(() => expect(sent).toContainEqual({ type: 'lerd:edit:result', id: 8, content: null }));
 });
+
+// When the page that opened the editor is replaced, its edit is cancelled to it
+// and the editor closes, so a save can never land on a page that did not ask.
+it('cancels an open edit to its own page when the frame is replaced', async () => {
+  const { container, findByText, queryByText, rerender } = render(PluginFrame, {
+    props: { plugin: 'hello', url: '/plugins/hello/ui/site.html', title: 'Hello', context: { branch: 'a' } }
+  });
+  const first = container.querySelector('iframe')!;
+  const sent: any[] = [];
+  first.contentWindow!.postMessage = ((m: unknown) => sent.push(m)) as Window['postMessage'];
+  window.dispatchEvent(new MessageEvent('message', { source: first.contentWindow, data: { type: 'lerd:edit', id: 4, path: 'notes.txt', content: 'x' } }));
+  expect(await findByText('notes.txt')).toBeTruthy();
+
+  await rerender({ plugin: 'hello', url: '/plugins/hello/ui/site.html', title: 'Hello', context: { branch: 'b' } });
+  await vi.waitFor(() => expect(sent).toContainEqual({ type: 'lerd:edit:result', id: 4, content: null }));
+  await vi.waitFor(() => expect(queryByText('notes.txt')).toBeNull());
+});
