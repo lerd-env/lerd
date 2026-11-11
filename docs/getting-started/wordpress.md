@@ -98,10 +98,10 @@ These come from the lerd built-in MySQL service. See [Services](../usage/service
 `wp-config-sample.php` ships its authentication keys as placeholders, and because the file now exists WordPress goes straight to the installer without ever offering to write real ones. Replace that block yourself:
 
 ```bash
-wp config shuffle-salts
+lerd wp config shuffle-salts
 ```
 
-Without wp-cli, paste the output of <https://api.wordpress.org/secret-key/1.1/salt/> over the placeholder block in `wp-config.php`.
+`lerd wp` needs nothing installed. When the project has no `vendor/bin/wp` of its own, lerd downloads the wp-cli release it pins, checks it against its sha256, and runs it on the site's PHP. After that first run plain `wp` works in the site too, and wp-cli shows on the dashboard's Tools page, where new releases arrive as an update. A project that requires `wp-cli/wp-cli-bundle` through composer gets its own copy instead.
 
 ---
 

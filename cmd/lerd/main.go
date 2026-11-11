@@ -329,7 +329,11 @@ func maybeDispatchVendorBin(root *cobra.Command) {
 	if err != nil {
 		return
 	}
-	if !cli.VendorBinExists(cwd, first) {
+	if !cli.VendorBinExists(cwd, first) && !cli.HasVendorBinTool(cwd, first) {
+		if err := cli.MissingVendorBin(cwd, first); err != nil {
+			feedback.Fail(err)
+			os.Exit(1)
+		}
 		return
 	}
 	rest := os.Args[2:]

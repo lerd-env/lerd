@@ -83,11 +83,7 @@ WP_HOME=https://mysite.test
 lerd secure
 ```
 
-Bedrock's own `.env.example` also wants `AUTH_KEY` and the other salts. Generate them with wp-cli or paste the block from <https://api.wordpress.org/secret-key/1.1/salt/>:
-
-```bash
-lerd wp dotenv salt regenerate
-```
+Bedrock's own `.env.example` also wants `AUTH_KEY` and the other salts. Take the values from <https://api.wordpress.org/secret-key/1.1/salt/> and write each one into `.env` as `AUTH_KEY='...'`.
 
 ---
 
@@ -102,7 +98,7 @@ lerd wp core install \
   --admin_email=you@example.test
 ```
 
-`lerd wp` runs the wp-cli your project already has in `vendor/`. WordPress refuses to run as root, which every lerd container is, and the flag that lifts it cannot come from a config file, so the definition passes `--allow-root` for you unless you typed it yourself.
+`lerd wp` runs the wp-cli your project has in `vendor/`, and when there is none, the wp-cli release lerd pins, which it downloads once, checks against its sha256 and lists on the dashboard's Tools page. Bedrock does not ship wp-cli, so `lerd composer require --dev wp-cli/wp-cli-bundle` is how you pin a version of your own. WordPress refuses to run as root, which every lerd container is, and the flag that lifts it cannot come from a config file, so the definition passes `--allow-root` for you unless you typed it yourself.
 
 ---
 

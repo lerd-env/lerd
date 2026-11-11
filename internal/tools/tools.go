@@ -15,7 +15,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
@@ -54,6 +56,10 @@ type Tool struct {
 	// version itself moves this and nothing else, so it is what says an install
 	// is holding the older one. Optional, like the two above.
 	Published map[string]string `yaml:"published,omitempty"`
+	// OnDemand marks a tool lerd fetches only when a site needs it, such as a
+	// phar a framework definition names in vendor_bin_tools. It is never
+	// installed up front and shows on the Tools page once it has been fetched.
+	OnDemand bool `yaml:"on_demand,omitempty"`
 }
 
 // Manifest is the parsed tools.yaml.
@@ -80,10 +86,10 @@ var downloadHosts = []string{
 	"raw.githubusercontent.com",
 }
 
-// allowedDownloadHost reports whether an https URL points somewhere a tool may
+// AllowedDownloadHost reports whether an https URL points somewhere a tool may
 // be fetched from. A bare suffix match would let evil-github.com through, so the
 // host is compared whole.
-func allowedDownloadHost(rawURL string) bool {
+func AllowedDownloadHost(rawURL string) bool {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Scheme != "https" || u.Host == "" {
 		return false
@@ -101,7 +107,7 @@ func allowedDownloadHost(rawURL string) bool {
 // version string, an https template pointing at an allowed host, and, where the
 // manifest gives one, a well-formed sha256 per asset.
 func (t Tool) valid() bool {
-	if !versionRe.MatchString(t.Version) || !allowedDownloadHost(t.URL) {
+	if !versionRe.MatchString(t.Version) || !AllowedDownloadHost(t.URL) {
 		return false
 	}
 	for _, d := range t.Digests {
@@ -269,7 +275,54 @@ func fetchPublished(ctx context.Context, urls []string) (map[string]Tool, []byte
 // Names lists the managed tools in display order.
 func Names() []string { return []string{"composer", "mise", "fnm"} }
 
+// Path is where the named tool lives once lerd has fetched it.
+func Path(name string) string { return binPath(name) }
+
+// Managed resolves name to the tool the Tools page lists and may update: one
+// lerd installs up front, or an on-demand one already fetched. The returned
+// name is lerd's own copy, so a name from a request never reaches a path.
+func Managed(name string) (string, bool) {
+	for _, n := range Names() {
+		if n == name {
+			return n, true
+		}
+	}
+	for _, n := range onDemandNames() {
+		if n == name && fileExists(binPath(n)) {
+			return n, true
+		}
+	}
+	return "", false
+}
+
+// OnDemand reports whether this binary ships the tool as on-demand. Read from
+// the embedded pins only: a tool a newer published manifest adds is unknown.
+func OnDemand(name string) bool {
+	return slices.Contains(onDemandNames(), name)
+}
+
+// onDemandNames lists the on-demand tools in a stable order, parsed once.
+var onDemandNames = sync.OnceValue(func() []string {
+	var out []string
+	for name, t := range embeddedManifest().Tools {
+		if t.OnDemand {
+			out = append(out, name)
+		}
+	}
+	slices.Sort(out)
+	return out
+})
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 func binPath(name string) string {
+	// Off lerd's bin dir, which is on PATH: no host PHP runs a phar directly.
+	if OnDemand(name) {
+		return filepath.Join(config.DataDir(), "phars", name+".phar")
+	}
 	switch name {
 	case "composer":
 		return filepath.Join(config.BinDir(), "composer.phar")
@@ -471,6 +524,16 @@ func StatusAll(ctx context.Context) []ToolStatus {
 		out = append(out, ToolStatus{
 			Name: name, Installed: installed, Pinned: pin, Present: present,
 			UpdateAvailable: present && installed != "" && pin != "" && !sameVersion(installed, pin),
+		})
+	}
+	for _, name := range onDemandNames() {
+		if !fileExists(binPath(name)) {
+			continue
+		}
+		pin, installed := m.Tools[name].Version, InstalledVersion(name)
+		out = append(out, ToolStatus{
+			Name: name, Installed: installed, Pinned: pin, Present: true,
+			UpdateAvailable: installed != "" && pin != "" && !sameVersion(installed, pin),
 		})
 	}
 	if s, ok := externalManager(); ok {

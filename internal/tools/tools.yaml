@@ -30,6 +30,23 @@ tools:
       linux/arm64: fnm-arm64.zip
       darwin/amd64: fnm-macos.zip
       darwin/arm64: fnm-macos.zip
+  # wp-cli for WordPress sites that never used composer. A framework names it in
+  # vendor_bin_tools and lerd fetches it on the first `lerd wp`, never up front.
+  # One phar for every platform, so every platform carries the same digest.
+  wp-cli:
+    version: "2.12.0"
+    url: https://github.com/wp-cli/wp-cli/releases/download/v{version}/wp-cli-{version}.phar
+    on_demand: true
+    digests:
+      linux/amd64: ce34ddd838f7351d6759068d09793f26755463b4a4610a5a5c0a97b68220d85c
+      linux/arm64: ce34ddd838f7351d6759068d09793f26755463b4a4610a5a5c0a97b68220d85c
+      darwin/amd64: ce34ddd838f7351d6759068d09793f26755463b4a4610a5a5c0a97b68220d85c
+      darwin/arm64: ce34ddd838f7351d6759068d09793f26755463b4a4610a5a5c0a97b68220d85c
+    sizes:
+      linux/amd64: 7142777
+      linux/arm64: 7142777
+      darwin/amd64: 7142777
+      darwin/arm64: 7142777
   # The PHP a host command falls back to when the runtime a project bundles is
   # short an extension it needs. Full static builds rather than trimmed ones, one
   # per PHP minor because the command runs a project's own code and its

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -98,5 +99,44 @@ func TestApplyVendorBinDefaults_NoDefaults(t *testing.T) {
 	got := applyVendorBinDefaults(nil, []string{"core", "version"})
 	if !reflect.DeepEqual(got, []string{"core", "version"}) {
 		t.Errorf("got %v", got)
+	}
+}
+
+// A binary the framework runs through vendor_bin_args but the project has not
+// installed gets a hint naming it, instead of cobra's bare "unknown command".
+func TestMissingVendorBin_DeclaredButNotInstalled(t *testing.T) {
+	dir := frameworkWithVendorBinArgs(t)
+	err := MissingVendorBin(dir, "wp")
+	if err == nil {
+		t.Fatal("expected an error for a declared binary missing from vendor/bin")
+	}
+	for _, want := range []string{"vendor/bin/wp", "WordPress", "lerd composer require"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
+	}
+}
+
+func TestMissingVendorBin_InstalledOrUndeclared(t *testing.T) {
+	dir := frameworkWithVendorBinArgs(t)
+	if err := MissingVendorBin(dir, "phpunit"); err != nil {
+		t.Errorf("undeclared binary should fall through to cobra, got %v", err)
+	}
+	binDir := filepath.Join(dir, "vendor", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "wp"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := MissingVendorBin(dir, "wp"); err != nil {
+		t.Errorf("installed binary should not be reported missing, got %v", err)
+	}
+}
+
+func TestMissingVendorBin_NoFramework(t *testing.T) {
+	isolateLerdHome(t)
+	if err := MissingVendorBin(t.TempDir(), "wp"); err != nil {
+		t.Errorf("bare dir should fall through to cobra, got %v", err)
 	}
 }

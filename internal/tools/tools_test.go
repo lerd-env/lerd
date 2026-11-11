@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -764,5 +765,68 @@ func TestStatusAll_LeavesOutAMissingNvm(t *testing.T) {
 
 	if s, ok := statusOf("nvm"); ok {
 		t.Fatalf("listed an nvm that is not there: %+v", s)
+	}
+}
+
+// wp-cli is fetched only when a site needs it, so it is pinned and digested
+// like every other download but kept out of what lerd installs up front.
+func TestEmbedded_onDemandPharIsPinnedAndDigested(t *testing.T) {
+	offline(t)
+	m := Load(context.Background())
+	tool, ok := m.Tools["wp-cli"]
+	if !ok || !tool.OnDemand {
+		t.Fatalf("wp-cli = %+v, want an on-demand pin", tool)
+	}
+	if slices.Contains(Names(), "wp-cli") {
+		t.Error("an on-demand tool must not be installed with lerd")
+	}
+	for _, p := range platforms {
+		if d := m.Digest("wp-cli", p.goos, p.goarch); len(d) != 64 {
+			t.Errorf("wp-cli has no sha256 for %s/%s", p.goos, p.goarch)
+		}
+	}
+}
+
+// An on-demand tool lives outside lerd's bin dir, which is on PATH, so a phar
+// no host PHP can run never shadows a command.
+func TestPath_onDemandToolStaysOffPATH(t *testing.T) {
+	offline(t)
+	if got := Path("composer"); got != filepath.Join(config.BinDir(), "composer.phar") {
+		t.Errorf("Path(composer) = %s", got)
+	}
+	if got := Path("wp-cli"); filepath.Dir(got) == config.BinDir() {
+		t.Errorf("Path(wp-cli) = %s, want it outside the bin dir", got)
+	}
+}
+
+func TestStatusAll_listsAnOnDemandToolOnceDownloaded(t *testing.T) {
+	offline(t)
+	t.Setenv("HOME", t.TempDir())
+	for _, s := range StatusAll(context.Background()) {
+		if s.Name == "wp-cli" {
+			t.Fatalf("wp-cli listed before anything downloaded it: %+v", s)
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(Path("wp-cli")), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(Path("wp-cli"), []byte("phar"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteStamp("wp-cli", "2.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	var got *ToolStatus
+	for _, s := range StatusAll(context.Background()) {
+		if s.Name == "wp-cli" {
+			got = &s
+		}
+	}
+	if got == nil || !got.Present || !got.UpdateAvailable || got.Installed != "2.0.0" {
+		t.Errorf("wp-cli status = %+v, want present with an update to the pin", got)
+	}
+	managed := func(n string) bool { _, ok := Managed(n); return ok }
+	if !managed("wp-cli") || !managed("composer") || managed("php-host-8.3") || managed("nope") {
+		t.Error("Managed must cover the up-front tools and downloaded on-demand ones only")
 	}
 }
