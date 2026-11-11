@@ -12,8 +12,14 @@
   interface Props {
     diff: PluginDiff;
     onclose: () => void;
+    // Makes a single file editable; Save hands the text back.
+    onsave?: (text: string) => void;
   }
-  let { diff, onclose }: Props = $props();
+  let { diff, onclose, onsave }: Props = $props();
+  let text = $state('');
+  $effect(() => {
+    text = diff.modified;
+  });
 
   let stats = $state<{ added: number; removed: number } | null>(null);
   const prefs = readDiffPrefs();
@@ -25,7 +31,15 @@
 
 <!-- A plugin's two versions of one file, in the same editor the git diff uses,
      or a single file read only when the page sent no original. -->
-<Modal open title={diff.path} {onclose} size="2xl" tall {fullscreen}>
+{#snippet saveBar()}
+  <div class="flex justify-end gap-2">
+    <button type="button" onclick={onclose} class="text-xs px-2 py-1 rounded-sm border border-gray-300 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5">{m.common_cancel()}</button>
+    <button type="button" onclick={() => onsave?.(text)} class="text-xs px-3 py-1 rounded-sm bg-lerd-red hover:bg-lerd-redhov text-lerd-onred transition-colors">{m.common_save()}</button>
+  </div>
+{/snippet}
+
+<!-- Only an editable file gets a footer; a diff or a view has nothing to save. -->
+<Modal open title={diff.path} {onclose} size="2xl" tall {fullscreen} footer={onsave ? saveBar : undefined}>
   {#snippet actions()}
     <DiffViewActions bind:fullscreen bind:unified split={diff.original !== undefined} />
   {/snippet}
@@ -54,7 +68,11 @@
       <!-- Monaco takes the language only when it is created, so a new file gets a new editor. -->
       {#key diff}
       {#if diff.original === undefined}
-        <MonacoEditor value={diff.modified} language={languageFor(diff.path)} readOnly class="h-full" />
+        {#if onsave}
+          <MonacoEditor bind:value={text} language={languageFor(diff.path)} onSave={() => onsave(text)} class="h-full" />
+        {:else}
+          <MonacoEditor value={diff.modified} language={languageFor(diff.path)} readOnly class="h-full" />
+        {/if}
       {:else}
       <MonacoDiffEditor
         original={diff.original}

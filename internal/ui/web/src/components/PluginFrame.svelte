@@ -1,6 +1,6 @@
 <script lang="ts">
   import { apiUrl } from '$lib/api';
-  import { answerPluginRequest, pluginDiffRequest, pluginTheme, type PluginDiff } from '$lib/pluginBridge';
+  import { answerPluginRequest, pluginDiffRequest, pluginEditRequest, pluginTheme, type PluginDiff, type PluginEdit } from '$lib/pluginBridge';
   import PluginDiffModal from './PluginDiffModal.svelte';
   import { locale } from '$stores/locale';
 
@@ -19,6 +19,23 @@
   let frame = $state<HTMLIFrameElement | null>(null);
   let height = $state(48);
   let diff = $state<PluginDiff | null>(null);
+  // The page that asked is kept with the edit, so the answer goes back to it
+  // even if the frame has since loaded another page.
+  let editing = $state<(PluginEdit & { source: Window }) | null>(null);
+
+  // Every edit is answered exactly once: the saved text, or null when it is
+  // cancelled, replaced by another, or its page is replaced before a save.
+  function answerEdit(content: string | null) {
+    if (!editing) return;
+    editing.source.postMessage({ type: 'lerd:edit:result', id: editing.id, content }, '*');
+    editing = null;
+  }
+
+  // A new src replaces the page in the frame, which can no longer save.
+  $effect(() => {
+    void src;
+    return () => answerEdit(null);
+  });
 
   // The page learns the dashboard's language with its context, so it can speak
   // it too; a change of language reloads the dashboard and with it the page.
@@ -36,7 +53,17 @@
       }
       const asked = pluginDiffRequest(e, frame?.contentWindow);
       if (asked) {
-        diff = asked;
+        // One dialog at a time: a viewer behind the editor would take its Escape.
+        if (!editing) diff = asked;
+        return;
+      }
+      const edit = pluginEditRequest(e, frame?.contentWindow);
+      if (edit) {
+        answerEdit(null);
+        diff = null;
+        editing ={ ...edit, source: e.source as Window };
+        // Tells the page this lerd has an editor, so it does not fall back to its own.
+        frame?.contentWindow?.postMessage({ type: 'lerd:edit:opened', id: edit.id }, '*');
         return;
       }
       void answerPluginRequest(e, plugin, frame?.contentWindow);
@@ -70,4 +97,7 @@
 {/key}
 {#if diff}
   <PluginDiffModal {diff} onclose={() => (diff = null)} />
+{/if}
+{#if editing}
+  <PluginDiffModal diff={{ path: editing.path, modified: editing.content, after: editing.label }} onclose={() => answerEdit(null)} onsave={(text) => answerEdit(text)} />
 {/if}
