@@ -53,13 +53,15 @@
       }
       const asked = pluginDiffRequest(e, frame?.contentWindow);
       if (asked) {
-        diff = asked;
+        // One dialog at a time: a viewer behind the editor would take its Escape.
+        if (!editing) diff = asked;
         return;
       }
       const edit = pluginEditRequest(e, frame?.contentWindow);
       if (edit) {
         answerEdit(null);
-        editing = { ...edit, source: e.source as Window };
+        diff = null;
+        editing ={ ...edit, source: e.source as Window };
         // Tells the page this lerd has an editor, so it does not fall back to its own.
         frame?.contentWindow?.postMessage({ type: 'lerd:edit:opened', id: edit.id }, '*');
         return;

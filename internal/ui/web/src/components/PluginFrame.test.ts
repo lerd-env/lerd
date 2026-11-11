@@ -89,3 +89,24 @@ it('cancels an open edit to its own page when the frame is replaced', async () =
   await vi.waitFor(() => expect(sent).toContainEqual({ type: 'lerd:edit:result', id: 4, content: null }));
   await vi.waitFor(() => expect(queryByText('notes.txt')).toBeNull());
 });
+
+// One dialog at a time: a viewer asked for during an edit would open behind the
+// editor and take its Escape, so it is refused until the edit ends.
+it('keeps the editor the only dialog while an edit is open', async () => {
+  const { container, findByText, queryByText } = render(PluginFrame, {
+    props: { plugin: 'hello', url: '/plugins/hello/ui/site.html', title: 'Hello' }
+  });
+  const frame = container.querySelector('iframe')!;
+  const sent: any[] = [];
+  frame.contentWindow!.postMessage = ((m: unknown) => sent.push(m)) as Window['postMessage'];
+  const post = (data: object) => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data }));
+
+  post({ type: 'lerd:edit', id: 5, path: 'notes.txt', content: 'x' });
+  expect(await findByText('notes.txt')).toBeTruthy();
+  post({ type: 'lerd:view', path: 'other.txt', content: 'y' });
+  await new Promise((r) => setTimeout(r, 0));
+  expect(queryByText('other.txt')).toBeNull();
+
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  await vi.waitFor(() => expect(sent).toContainEqual({ type: 'lerd:edit:result', id: 5, content: null }));
+});
