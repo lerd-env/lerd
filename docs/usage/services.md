@@ -144,6 +144,17 @@ lerd service external dbngin --engine postgres --port 5432 --tools /path/to/bin
 
 On Windows lerd runs inside WSL, so the clients have to be Linux ones installed in the distro, such as `mysql-client` or `postgresql-client`: a `mysqldump.exe` on the Windows side does not count. Mirrored networking lets `127.0.0.1` reach a server running on Windows.
 
+Two more things matter for a MySQL or MariaDB server installed on Windows. Your sites' PHP reaches it from a container, so the server sees those connections coming from your computer's name rather than from `localhost`. MySQL's installer creates only `root@localhost`, which lerd's own tools can use but your site cannot, and the page fails with `Host '<your PC>' is not allowed to connect`. Add the same user for the name that error shows, here `pc`, on the Windows server:
+
+```sql
+CREATE USER 'root'@'pc' IDENTIFIED BY 'your-password';
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'pc' WITH GRANT OPTION;
+```
+
+Avoid `'root'@'%'`: it works too, but lets in any machine on your network that can reach the server.
+
+MariaDB's Windows setup already adds the computer's name, so it needs nothing. Also, with mirrored networking lerd's own MySQL holds port `3306` on Windows as well, so a Windows server on that port cannot start next to it. Move one of them to another port, or run `lerd service stop mysql` if you only use the Windows one.
+
 The folder has to hold both the client and the dump tool. `pg_dump` refuses a server newer than itself, so lerd checks that as well, and **Test connection** shows the folder it used. A machine with no client tools for the engine gets an error naming them, and nothing is saved.
 
 The server appears on the Services page with its databases, marked offline when it stops answering, with a notification, and back to normal on its own once it returns. The password stays in files only you can read, under lerd's data folder, and removing the service leaves everything on the server alone.
