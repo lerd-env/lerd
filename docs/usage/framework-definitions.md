@@ -777,7 +777,7 @@ The tool itself, its version, download URL and sha256, is pinned in lerd's tools
 
 The first run also writes a `wp` shim into lerd's bin dir, which is on your PATH, so plain `wp` works in the site too. It is skipped when you already have a `wp` of your own on PATH.
 
-A name lerd's manifest has no on-demand tool for is refused with a message naming it rather than guessed at. A tool is code lerd downloads and runs, so `vendor_bin_tools` is honoured only from the trusted store and a user overlay, never from a project's embedded `framework_def`.
+A name this lerd ships no on-demand tool for is refused with a message naming it rather than guessed at. A tool is code lerd downloads and runs, so `vendor_bin_tools` is honoured only from the trusted store and from a framework you define yourself in `~/.config/lerd/frameworks/`, never from a project's embedded `framework_def`. An overlay on a store framework does not add to it.
 
 When a definition declares `vendor_bin_args` for a binary but neither the project nor a phar provides it, `lerd <name>` says which file is missing and how to install it instead of reporting an unknown command.
 

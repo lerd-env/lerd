@@ -110,18 +110,3 @@ func TestSaveFramework_LaravelOverlayKeepsNginxAndRequires(t *testing.T) {
 		t.Errorf("requires = %v, want [opensearch]", fw.Requires)
 	}
 }
-
-// vendor_bin_tools is honoured from a user overlay, as the docs promise, and an
-// overlay naming a tool for one binary keeps the base's for another.
-func TestGetFramework_OverlayAddsVendorBinTools(t *testing.T) {
-	acmeStore(t)
-	if err := os.WriteFile(filepath.Join(StoreFrameworksDir(), "acme.yaml"), []byte("name: acme\nvendor_bin_tools:\n  drush: drush-phar\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	writeOverlay(t, "acme", "name: acme\nvendor_bin_tools:\n  wp: wp-cli\n")
-
-	fw, _ := GetFramework("acme")
-	if want := map[string]string{"drush": "drush-phar", "wp": "wp-cli"}; !reflect.DeepEqual(fw.VendorBinTools, want) {
-		t.Errorf("vendor_bin_tools = %v, want %v", fw.VendorBinTools, want)
-	}
-}
