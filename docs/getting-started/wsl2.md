@@ -266,6 +266,10 @@ It rides in the release archive, so an install that did not come through the ins
 Windows' own curl insists on a certificate revocation check, which a local CA cannot answer. Browsers do not, so this is curl only; `curl.exe --ssl-no-revoke` gets past it.
 :::
 
+::: details A database installed on Windows refuses the site, or will not start
+Add it with `lerd service external` and point the site at it with `lerd db:use`, which writes the host the site's container needs. MySQL then usually needs a user allowed from hosts other than `localhost`, and its port must not be `3306` while lerd's MySQL runs. Both are covered under [Adding an external database server](../usage/services.md#adding-an-external-database-server).
+:::
+
 ::: details `podman build` fails on overlay
 `sudo apt install fuse-overlayfs && podman system reset` then run install again.
 :::
