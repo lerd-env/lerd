@@ -91,7 +91,7 @@ func TestPullBranch_refusesWhenTheCheckoutGainedACommit(t *testing.T) {
 	reviewed := reviewedTarget(t, dir)
 	gitT(t, dir, "commit", "-q", "--allow-empty", "-m", "after review")
 
-	if _, err := pullBranch(nil, fixed(migratingFW), dir, reviewed, BranchSteps{}, nil, io.Discard); err == nil || !strings.Contains(err.Error(), "review the pull again") {
+	if _, err := pullBranch(fixed(migratingFW), dir, reviewed, BranchSteps{}, nil, io.Discard); err == nil || !strings.Contains(err.Error(), "review the pull again") {
 		t.Fatalf("want a refusal, got %v", err)
 	}
 }
@@ -104,7 +104,7 @@ func TestPullBranch_refusesWhenTheCheckoutMovedToAnotherBranch(t *testing.T) {
 	gitT(t, dir, "switch", "-q", "-c", "other")
 	before := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
 
-	_, err := pullBranch(nil, fixed(migratingFW), dir, reviewed, BranchSteps{Migrate: true}, nil, io.Discard)
+	_, err := pullBranch(fixed(migratingFW), dir, reviewed, BranchSteps{Migrate: true}, nil, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "other") {
 		t.Fatalf("want a refusal naming the branch now checked out, got %v", err)
 	}
@@ -128,7 +128,7 @@ func TestPullBranch_stopsAtTheReviewedCommit(t *testing.T) {
 	gitT(t, other, "commit", "-q", "-m", "late")
 	gitT(t, other, "push", "-q")
 
-	if _, err := pullBranch(nil, fixed(migratingFW), dir, reviewed, BranchSteps{}, nil, io.Discard); err != nil {
+	if _, err := pullBranch(fixed(migratingFW), dir, reviewed, BranchSteps{}, nil, io.Discard); err != nil {
 		t.Fatalf("pullBranch: %v", err)
 	}
 	if got := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD")); got != reviewed.Commit {
@@ -138,7 +138,7 @@ func TestPullBranch_stopsAtTheReviewedCommit(t *testing.T) {
 
 func TestPullBranch_needsAReviewedCommit(t *testing.T) {
 	dir := pullSiteFixture(t, func(string) {})
-	if _, err := pullBranch(nil, fixed(migratingFW), dir, Reviewed{Branch: "main"}, BranchSteps{}, nil, io.Discard); err == nil {
+	if _, err := pullBranch(fixed(migratingFW), dir, Reviewed{Branch: "main"}, BranchSteps{}, nil, io.Discard); err == nil {
 		t.Fatal("want a refusal without a reviewed commit")
 	}
 }
@@ -160,7 +160,7 @@ func TestPullBranch_snapshotsThenFastForwardsThenMigrates(t *testing.T) {
 		return "before-switch-main", nil
 	}}
 
-	snap, err := pullBranch(nil, fixed(migratingFW), dir, reviewedTarget(t, dir), BranchSteps{Snapshot: true, Migrate: true}, db, io.Discard)
+	snap, err := pullBranch(fixed(migratingFW), dir, reviewedTarget(t, dir), BranchSteps{Snapshot: true, Migrate: true}, db, io.Discard)
 	if err != nil {
 		t.Fatalf("pullBranch: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestPullBranch_refusedPullRunsNothingAfter(t *testing.T) {
 	dir := pullSiteFixture(t, func(dir string) { putFile(t, filepath.Join(dir, "composer.lock"), "theirs") })
 	putFile(t, filepath.Join(dir, "composer.lock"), "mine")
 
-	_, err := pullBranch(nil, fixed(migratingFW), dir, reviewedTarget(t, dir), BranchSteps{Migrate: true}, nil, io.Discard)
+	_, err := pullBranch(fixed(migratingFW), dir, reviewedTarget(t, dir), BranchSteps{Migrate: true}, nil, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "composer.lock") {
 		t.Fatalf("want git's refusal naming the file, got %v", err)
 	}
@@ -219,7 +219,7 @@ func TestSwitchBranch_isolatesWorktreesBeforeTheCodeMoves(t *testing.T) {
 		return nil
 	}}
 
-	if _, err := switchBranch(nil, fixed(migratingFW), dir, "other", BranchSteps{Isolate: true, Migrate: true}, db, io.Discard); err != nil {
+	if _, err := switchBranch(fixed(migratingFW), dir, "other", BranchSteps{Isolate: true, Migrate: true}, db, io.Discard); err != nil {
 		t.Fatalf("switchBranch: %v", err)
 	}
 	if !isolated {
@@ -232,7 +232,7 @@ func TestSwitchBranch_failedIsolationMovesNothing(t *testing.T) {
 	dir := switchFixture(t, func(string) {})
 	db := &branchDB{isolate: func(io.Writer) error { return errors.New("clone failed") }}
 
-	if _, err := switchBranch(nil, fixed(migratingFW), dir, "other", BranchSteps{Isolate: true, Migrate: true}, db, io.Discard); err == nil {
+	if _, err := switchBranch(fixed(migratingFW), dir, "other", BranchSteps{Isolate: true, Migrate: true}, db, io.Discard); err == nil {
 		t.Fatal("want the isolation error")
 	}
 	if b := strings.TrimSpace(gitOut(t, dir, "symbolic-ref", "--short", "HEAD")); b != "main" {
@@ -261,7 +261,7 @@ func TestPullBranch_stashConflictKeepsTheWorkAndRunsTheSteps(t *testing.T) {
 	reviewed := reviewedTarget(t, dir)
 	putFile(t, filepath.Join(dir, "composer.lock"), "local")
 
-	_, err := pullBranch(nil, fixed(migratingFW), dir, reviewed, BranchSteps{Stash: true, Migrate: true}, nil, io.Discard)
+	_, err := pullBranch(fixed(migratingFW), dir, reviewed, BranchSteps{Stash: true, Migrate: true}, nil, io.Discard)
 	var kept *gitpkg.StashKept
 	if !errors.As(err, &kept) || kept.Err != nil || strings.Join(kept.Files, ",") != "composer.lock" {
 		t.Fatalf("want only the kept stash reported, got %v", err)
@@ -279,7 +279,7 @@ func TestPullBranch_stashKeptThenStepFails(t *testing.T) {
 	reviewed := reviewedTarget(t, dir)
 	putFile(t, filepath.Join(dir, "composer.lock"), "local")
 
-	_, err := pullBranch(nil, fixed(&config.Framework{}), dir, reviewed, BranchSteps{Stash: true, Migrate: true}, nil, io.Discard)
+	_, err := pullBranch(fixed(&config.Framework{}), dir, reviewed, BranchSteps{Stash: true, Migrate: true}, nil, io.Discard)
 	var kept *gitpkg.StashKept
 	if !errors.As(err, &kept) || kept.Err == nil || !strings.Contains(kept.Err.Error(), "migrate command") {
 		t.Fatalf("want the kept stash with the migrate error, got %v", err)
@@ -294,7 +294,7 @@ func TestUndoPull_putsTheCodeAndTheKeptWorkBack(t *testing.T) {
 	})
 	reviewed := reviewedTarget(t, dir)
 	putFile(t, filepath.Join(dir, "composer.lock"), "local")
-	_, err := pullBranch(nil, fixed(migratingFW), dir, reviewed, BranchSteps{Stash: true}, nil, io.Discard)
+	_, err := pullBranch(fixed(migratingFW), dir, reviewed, BranchSteps{Stash: true}, nil, io.Discard)
 	var kept *gitpkg.StashKept
 	if !errors.As(err, &kept) || kept.SHA == "" {
 		t.Fatalf("want the stash kept with its commit, got %v", err)
@@ -303,7 +303,7 @@ func TestUndoPull_putsTheCodeAndTheKeptWorkBack(t *testing.T) {
 	var restored string
 	db := &branchDB{restore: func(name string) error { restored = name; return nil }}
 	landed := Reviewed{Branch: "main", Head: reviewed.Commit, Commit: reviewed.Head}
-	if _, err := undoPull(nil, fixed(migratingFW), dir, landed, BranchSteps{Restore: "branch-main-1"}, kept.SHA, db, io.Discard); err != nil {
+	if _, err := undoPull(fixed(migratingFW), dir, landed, BranchSteps{Restore: "branch-main-1"}, kept.SHA, db, io.Discard); err != nil {
 		t.Fatalf("undo: %v", err)
 	}
 	if head := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD")); head != reviewed.Head {
@@ -324,13 +324,13 @@ func TestUndoPull_putsTheCodeAndTheKeptWorkBack(t *testing.T) {
 func TestUndoPull_refusesWhenTheBranchMovedOn(t *testing.T) {
 	dir := pullSiteFixture(t, func(string) {})
 	reviewed := reviewedTarget(t, dir)
-	if _, err := pullBranch(nil, fixed(migratingFW), dir, reviewed, BranchSteps{}, nil, io.Discard); err != nil {
+	if _, err := pullBranch(fixed(migratingFW), dir, reviewed, BranchSteps{}, nil, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	gitT(t, dir, "commit", "-q", "--allow-empty", "-m", "after the pull")
 
 	landed := Reviewed{Branch: "main", Head: reviewed.Commit, Commit: reviewed.Head}
-	if _, err := undoPull(nil, fixed(migratingFW), dir, landed, BranchSteps{}, "", nil, io.Discard); err == nil || !strings.Contains(err.Error(), "moved since the pull") {
+	if _, err := undoPull(fixed(migratingFW), dir, landed, BranchSteps{}, "", nil, io.Discard); err == nil || !strings.Contains(err.Error(), "moved since the pull") {
 		t.Fatalf("want a refusal, got %v", err)
 	}
 }
@@ -341,13 +341,13 @@ func TestUndoPull_carriesUncommittedWork(t *testing.T) {
 		putFile(t, filepath.Join(dir, "composer.lock"), "v2")
 	})
 	reviewed := reviewedTarget(t, dir)
-	if _, err := pullBranch(nil, fixed(migratingFW), dir, reviewed, BranchSteps{}, nil, io.Discard); err != nil {
+	if _, err := pullBranch(fixed(migratingFW), dir, reviewed, BranchSteps{}, nil, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	putFile(t, filepath.Join(dir, "composer.json"), `{"mine":1}`)
 
 	landed := Reviewed{Branch: "main", Head: reviewed.Commit, Commit: reviewed.Head}
-	if _, err := undoPull(nil, fixed(migratingFW), dir, landed, BranchSteps{}, "", nil, io.Discard); err != nil {
+	if _, err := undoPull(fixed(migratingFW), dir, landed, BranchSteps{}, "", nil, io.Discard); err != nil {
 		t.Fatalf("undo: %v", err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dir, "composer.json")); string(b) != `{"mine":1}` {
@@ -363,7 +363,7 @@ func TestUndoPull_carriesUncommittedWork(t *testing.T) {
 func TestUndoPullSite_needsTheSnapshotsDatabase(t *testing.T) {
 	dir := pullSiteFixture(t, func(string) {})
 	reviewed := reviewedTarget(t, dir)
-	if _, err := pullBranch(nil, fixed(migratingFW), dir, reviewed, BranchSteps{}, nil, io.Discard); err != nil {
+	if _, err := pullBranch(fixed(migratingFW), dir, reviewed, BranchSteps{}, nil, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	landed := Reviewed{Branch: "main", Head: reviewed.Commit, Commit: reviewed.Head}

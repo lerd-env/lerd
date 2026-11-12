@@ -649,6 +649,10 @@ func newWatchCmd() *cobra.Command {
 			// migration or sleep/wake bridge churn. No-op on Linux.
 			go watcher.WatchExecWorkers(60 * time.Second)
 
+			// Restart a running dev server after its packages are installed again,
+			// from the dashboard or a terminal: npm ci deletes the config it runs on.
+			go watcher.WatchDevServerInstalls(10 * time.Second)
+
 			// Re-apply the reload watcher's poll cadence when the machine is
 			// plugged in or unplugged. The interval is baked into a worker's
 			// unit and read once at watcher startup, so an unplugged laptop
