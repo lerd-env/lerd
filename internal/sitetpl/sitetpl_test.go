@@ -67,3 +67,27 @@ func TestDBNameFromTheOtherHomeSpelling(t *testing.T) {
 		t.Errorf("DBName(linked spelling) = %q, want shop", got)
 	}
 }
+
+// A database named in .lerd.yaml is the site's database everywhere, so env
+// writes and provisions it rather than the slug of the shortened site name.
+func TestDBNameHonoursProjectDatabase(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := filepath.Join(t.TempDir(), "example.dk")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "example", Path: dir}); err != nil {
+		t.Fatal(err)
+	}
+	if got := DBName(dir); got != "example" {
+		t.Fatalf("without db.database DBName = %q, want example", got)
+	}
+
+	cfg := &config.ProjectConfig{DB: config.ProjectDB{Service: "mysql", Database: "example_dk"}}
+	if err := config.SaveProjectConfig(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if got := DBName(dir); got != "example_dk" {
+		t.Errorf("DBName = %q, want example_dk from .lerd.yaml", got)
+	}
+}

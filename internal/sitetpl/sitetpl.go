@@ -51,10 +51,15 @@ func Apply(s string, ctx Ctx) string {
 	return s
 }
 
-// DBName returns the database handle for the project at path: the site's slug,
-// or the group main's database when the site is a shared-DB group secondary.
+// DBName returns the database handle for the project at path: the group main's
+// database when the site is a shared-DB group secondary, else the db.database
+// its .lerd.yaml names, else the site's slug.
 func DBName(path string) string {
 	name := filepath.Base(path)
+	explicit := ""
+	if pc, err := config.LoadProjectConfig(path); err == nil && pc != nil {
+		explicit = pc.DB.Database
+	}
 	if reg, err := config.LoadSites(); err == nil {
 		for _, s := range reg.Sites {
 			if config.SamePath(s.Path, path) {
@@ -65,6 +70,9 @@ func DBName(path string) string {
 				break
 			}
 		}
+	}
+	if explicit != "" {
+		return explicit
 	}
 	return config.SiteSlug(name)
 }

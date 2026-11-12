@@ -114,6 +114,8 @@ db:
   database: myapp
 ```
 
+A `database` set here is also the name `lerd env` writes into the project's env file and creates, along with its `_testing` twin, in place of the one derived from the site name. A site that shares its group main's database keeps using the main's.
+
 ### Supported `.env` keys
 
 When falling back to `.env` inference, lerd checks the following keys in order to determine the database type:
