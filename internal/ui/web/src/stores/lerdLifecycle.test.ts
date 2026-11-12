@@ -39,6 +39,23 @@ describe('lerdLifecycle store', () => {
     expect(starts).toHaveLength(1);
   });
 
+  // A stop from the tray, CLI or dashboard has to hold: an open tab must not
+  // bring the stack straight back up behind the user's back.
+  it('autoStartOnce leaves a stack the user stopped alone', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      ndjsonResponse(['{"phase":"done"}'])
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const { status } = await import('./status');
+    status.update((s) => ({ ...s, stopped: true }));
+    const { autoStartOnce } = await import('./lerdLifecycle');
+
+    await autoStartOnce();
+
+    const starts = fetchMock.mock.calls.filter((c) => c[0] === '/api/lerd/start');
+    expect(starts).toHaveLength(0);
+  });
+
   it('does not retry after a failed start', async () => {
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
       new Response('nope', { status: 500 })

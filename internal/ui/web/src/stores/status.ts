@@ -32,6 +32,8 @@ export interface StatusResponse {
   bun_version: string;
   using_system_bun: boolean;
   watcher_running: boolean;
+  // Set by a `lerd stop` from any surface, cleared by the next start.
+  stopped?: boolean;
   frankenphp_php_versions: string[];
   // Supported PHP versions upstream has not released yet, labelled as such
   // wherever a version is offered.
