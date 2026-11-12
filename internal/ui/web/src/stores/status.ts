@@ -158,11 +158,9 @@ export const lerdStatusColor = derived([status, statusLoaded, version], ([$s, $l
 });
 
 export const allCoreRunning = derived(status, ($s): boolean => {
-  return Boolean(
-    dnsState($s) !== 'down' &&
-      $s.nginx.running &&
-      ($s.php_fpms || []).every((f) => f.running)
-  );
+  // PHP versions are left out: lerd itself stops one no site uses, and a start
+  // would not bring it back, so counting it made lerd look down forever.
+  return Boolean(dnsState($s) !== 'down' && $s.nginx.running);
 });
 
 // updateTool applies one managed host tool's pinned version. One tool per call:
