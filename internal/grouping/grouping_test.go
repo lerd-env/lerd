@@ -570,3 +570,19 @@ func TestSetSecondarySharedDB_separateLeavesAFileDatabaseAlone(t *testing.T) {
 		t.Errorf("DB_DATABASE = %q, want the SQLite file left alone", got)
 	}
 }
+
+// A WordPress main keeps its database in wp-config.php, not .env, so its shared
+// secondaries must follow the database its .lerd.yaml names.
+func TestSharedDBNameForFollowsMainProjectDatabase(t *testing.T) {
+	setup(t)
+	mainDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(mainDir, ".lerd.yaml"), []byte("db:\n  service: mysql\n  database: starlane_dk\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustAdd(t, config.Site{Name: "starlane", Domains: []string{"starlane.test"}, Path: mainDir, Group: "starlane"})
+	shared := config.Site{Name: "admin", Domains: []string{"admin.starlane.test"}, Path: "/srv/admin", Group: "starlane", GroupSubdomain: "admin", GroupSharedDB: true}
+	mustAdd(t, shared)
+	if name, ok := SharedDBNameFor(&shared); !ok || name != "starlane_dk" {
+		t.Errorf("SharedDBNameFor = %q,%v, want starlane_dk,true", name, ok)
+	}
+}

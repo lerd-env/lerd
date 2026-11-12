@@ -114,7 +114,7 @@ db:
   database: myapp
 ```
 
-A `database` set here is also the name `lerd env` writes into the project's env file and creates, along with its `_testing` twin, in place of the one derived from the site name. A site that shares its group main's database keeps using the main's.
+A `database` set here is also the name `lerd env` writes into the project's env file and creates, along with its `_testing` twin, in place of the one derived from the site name, and a site sharing its group main's database follows this name too. The name may hold letters, digits, underscores, dashes and interior dots; anything else is ignored with a warning and the site-derived name is used.
 
 ### Supported `.env` keys
 
