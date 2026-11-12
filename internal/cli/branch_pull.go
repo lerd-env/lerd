@@ -82,20 +82,20 @@ func PullSite(site *config.Site, dir string, r Reviewed, steps BranchSteps, out 
 		}
 		db = siteBranchDB(site, dir, t, out)
 	}
-	return pullBranch(fwAfter, dir, r, steps, db, out)
+	return pullBranch(site, fwAfter, dir, r, steps, db, out)
 }
 
 // pullBranch stops at the reviewed commit rather than pulling whatever the
 // remote has now: the chosen steps only account for the commits reviewed. It
 // refuses when the checkout has since moved to another branch.
-func pullBranch(fwAfter func() *config.Framework, dir string, r Reviewed, steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
+func pullBranch(site *config.Site, fwAfter func() *config.Framework, dir string, r Reviewed, steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
 	if r.Commit == "" || r.Branch == "" || r.Head == "" {
 		return "", fmt.Errorf("no reviewed commit to pull to")
 	}
 	if err := checkedOut(dir, r); err != nil {
 		return "", fmt.Errorf("%w since the review; review the pull again", err)
 	}
-	return runAround(fwAfter, dir, func() (string, error) { return gitpkg.FastForward(dir, r.Commit) }, steps, db, out)
+	return runAround(site, fwAfter, dir, func() (string, error) { return gitpkg.FastForward(dir, r.Commit) }, steps, db, out)
 }
 
 // checkedOut says what changed when dir is no longer on r's branch and commit.
@@ -132,10 +132,10 @@ func UndoPullSite(site *config.Site, dir string, r Reviewed, steps BranchSteps, 
 		}
 		db = siteBranchDB(site, dir, snapshotTarget(&dbEnv{service: snapDB.Service, database: snapDB.Database}, false), out)
 	}
-	return undoPull(fwAfter, dir, r, steps, keptSHA, db, out)
+	return undoPull(site, fwAfter, dir, r, steps, keptSHA, db, out)
 }
 
-func undoPull(fwAfter func() *config.Framework, dir string, r Reviewed, steps BranchSteps, keptSHA string, db *branchDB, out io.Writer) (string, error) {
+func undoPull(site *config.Site, fwAfter func() *config.Framework, dir string, r Reviewed, steps BranchSteps, keptSHA string, db *branchDB, out io.Writer) (string, error) {
 	if r.Commit == "" || r.Branch == "" || r.Head == "" {
 		return "", fmt.Errorf("no pull to undo")
 	}
@@ -163,5 +163,5 @@ func undoPull(fwAfter func() *config.Framework, dir string, r Reviewed, steps Br
 		return msg, err
 	}
 	steps.Migrate, steps.Stash, steps.Snapshot, steps.Isolate = false, false, false, false
-	return runAround(fwAfter, dir, move, steps, db, out)
+	return runAround(site, fwAfter, dir, move, steps, db, out)
 }

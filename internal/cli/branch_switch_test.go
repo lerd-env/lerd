@@ -132,7 +132,7 @@ func TestPlanBranch_absentSteps(t *testing.T) {
 func TestSwitchBranch_runsOnlyTheChosenSteps(t *testing.T) {
 	dir := switchFixture(t, func(string) {})
 
-	if _, err := switchBranch(fixed(migratingFW), dir, "other", BranchSteps{Migrate: true}, nil, io.Discard); err != nil {
+	if _, err := switchBranch(nil, fixed(migratingFW), dir, "other", BranchSteps{Migrate: true}, nil, io.Discard); err != nil {
 		t.Fatalf("switchBranch: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "migrated")); err != nil {
@@ -142,7 +142,7 @@ func TestSwitchBranch_runsOnlyTheChosenSteps(t *testing.T) {
 
 func TestSwitchBranch_reportsGitRefusal(t *testing.T) {
 	dir := switchFixture(t, func(string) {})
-	if _, err := switchBranch(fixed(migratingFW), dir, "nope", BranchSteps{Migrate: true}, nil, io.Discard); err == nil {
+	if _, err := switchBranch(nil, fixed(migratingFW), dir, "nope", BranchSteps{Migrate: true}, nil, io.Discard); err == nil {
 		t.Fatal("want an error for an unknown branch")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "migrated")); err == nil {
@@ -173,7 +173,7 @@ func TestPlanBranch_reportsConflictingLocalChanges(t *testing.T) {
 		t.Fatalf("conflicts = %v, want composer.lock and added.txt", p.Conflicts)
 	}
 	// The prediction must match git: this switch is one git refuses.
-	if _, err := switchBranch(fixed(migratingFW), dir, "other", BranchSteps{}, nil, io.Discard); err == nil {
+	if _, err := switchBranch(nil, fixed(migratingFW), dir, "other", BranchSteps{}, nil, io.Discard); err == nil {
 		t.Error("git switched despite the predicted conflict")
 	}
 }
@@ -209,7 +209,7 @@ func TestSwitchBranch_snapshotsFirstAndRestoresBeforeMigrating(t *testing.T) {
 		},
 	}
 
-	snap, err := switchBranch(fixed(migratingFW), dir, "other", BranchSteps{Snapshot: true, Restore: "dev-snap", Migrate: true}, db, io.Discard)
+	snap, err := switchBranch(nil, fixed(migratingFW), dir, "other", BranchSteps{Snapshot: true, Restore: "dev-snap", Migrate: true}, db, io.Discard)
 	if err != nil {
 		t.Fatalf("switchBranch: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestSwitchBranch_failedMigrationKeepsTheSnapshotName(t *testing.T) {
 	}
 	db := &branchDB{snapshot: func() (string, error) { return "before-switch-2", nil }}
 
-	snap, err := switchBranch(fixed(failing), dir, "other", BranchSteps{Snapshot: true, Migrate: true}, db, io.Discard)
+	snap, err := switchBranch(nil, fixed(failing), dir, "other", BranchSteps{Snapshot: true, Migrate: true}, db, io.Discard)
 	if err == nil || snap != "before-switch-2" {
 		t.Fatalf("want the migrate error with the snapshot name, got %q, %v", snap, err)
 	}
@@ -245,7 +245,7 @@ func TestSwitchBranch_failureBeforeTheDatabaseOffersNoSnapshot(t *testing.T) {
 	dir := switchFixture(t, func(string) {})
 	db := &branchDB{snapshot: func() (string, error) { return "before-switch-3", nil }}
 
-	snap, err := switchBranch(fixed(migratingFW), dir, "nope", BranchSteps{Snapshot: true, Migrate: true}, db, io.Discard)
+	snap, err := switchBranch(nil, fixed(migratingFW), dir, "nope", BranchSteps{Snapshot: true, Migrate: true}, db, io.Discard)
 	if err == nil || snap != "" {
 		t.Fatalf("want the switch error without a snapshot, got %q, %v", snap, err)
 	}
@@ -281,7 +281,7 @@ func TestBranchSnapshotName(t *testing.T) {
 func TestSwitchBranch_createsANewBranchFromItsBase(t *testing.T) {
 	dir := switchFixture(t, func(dir string) { putFile(t, filepath.Join(dir, "only-on-other"), "x") })
 
-	if _, err := switchBranch(fixed(migratingFW), dir, "feature/new", BranchSteps{Create: true, Base: "other", Migrate: true}, nil, io.Discard); err != nil {
+	if _, err := switchBranch(nil, fixed(migratingFW), dir, "feature/new", BranchSteps{Create: true, Base: "other", Migrate: true}, nil, io.Discard); err != nil {
 		t.Fatalf("switchBranch: %v", err)
 	}
 	out, _ := exec.Command("git", "-C", dir, "symbolic-ref", "--short", "HEAD").Output()
@@ -367,7 +367,7 @@ func TestSwitchBranch_migratesWithTheDefinitionAfterCheckout(t *testing.T) {
 		return migratingFW
 	}
 
-	if _, err := switchBranch(fwAfter, dir, "other", BranchSteps{Migrate: true}, nil, io.Discard); err != nil {
+	if _, err := switchBranch(nil, fwAfter, dir, "other", BranchSteps{Migrate: true}, nil, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	if resolved != "other" {
@@ -408,10 +408,10 @@ func TestSwitchBranch_stashCarriesTheWorkAcross(t *testing.T) {
 	gitT(t, dir, "checkout", "-q", "main")
 	putFile(t, filepath.Join(dir, "notes"), "ours\n2\n3\n4\n5\n")
 
-	if _, err := switchBranch(fixed(migratingFW), dir, "other", BranchSteps{}, nil, io.Discard); err == nil {
+	if _, err := switchBranch(nil, fixed(migratingFW), dir, "other", BranchSteps{}, nil, io.Discard); err == nil {
 		t.Fatal("want git to refuse the switch without the stash")
 	}
-	if _, err := switchBranch(fixed(migratingFW), dir, "other", BranchSteps{Stash: true}, nil, io.Discard); err != nil {
+	if _, err := switchBranch(nil, fixed(migratingFW), dir, "other", BranchSteps{Stash: true}, nil, io.Discard); err != nil {
 		t.Fatalf("switch with stash: %v", err)
 	}
 	if got := strings.TrimSpace(gitOut(t, dir, "branch", "--show-current")); got != "other" {

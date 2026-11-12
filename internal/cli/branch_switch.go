@@ -148,7 +148,7 @@ func SwitchSiteBranch(site *config.Site, branch string, steps BranchSteps, out i
 		}
 		db = siteBranchDB(site, site.Path, t, out)
 	}
-	return switchBranch(fwAfter, site.Path, branch, steps, db, out)
+	return switchBranch(site, fwAfter, site.Path, branch, steps, db, out)
 }
 
 // siteBranchDB snapshots and restores the database of the checkout at path.
@@ -330,8 +330,8 @@ func installStep(label string, diff map[string]byte, prefix string, manifests []
 	return s
 }
 
-func switchBranch(fwAfter func() *config.Framework, path, branch string, steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
-	return runAround(fwAfter, path, func() (string, error) {
+func switchBranch(site *config.Site, fwAfter func() *config.Framework, path, branch string, steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
+	return runAround(site, fwAfter, path, func() (string, error) {
 		if steps.Create {
 			return gitpkg.SwitchNew(path, branch, steps.Base)
 		}
@@ -345,13 +345,13 @@ const stashLabel = "lerd: local changes set aside"
 // runAround moves the checkout's code with move and runs the chosen steps
 // around it: the snapshot before, then restore, installs and migrate after.
 // Work the stash kept is no reason to stop; it comes back as a *StashKept.
-func runAround(fwAfter func() *config.Framework, path string, move func() (string, error), steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
+func runAround(site *config.Site, fwAfter func() *config.Framework, path string, move func() (string, error), steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
 	if steps.Stash {
 		inner := move
 		move = func() (string, error) { return gitpkg.WithStash(path, stashLabel, inner) }
 	}
 	var kept *gitpkg.StashKept
-	snap, err := runSteps(fwAfter, path, func() (string, error) {
+	snap, err := runSteps(site, fwAfter, path, func() (string, error) {
 		msg, err := move()
 		if errors.As(err, &kept) {
 			fmt.Fprintln(out, kept.Error())
@@ -368,7 +368,7 @@ func runAround(fwAfter func() *config.Framework, path string, move func() (strin
 
 // runSteps returns the snapshot taken first when every step ran or a step that
 // changes the database failed; earlier failures leave it as it was, so none is offered.
-func runSteps(fwAfter func() *config.Framework, path string, move func() (string, error), steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
+func runSteps(site *config.Site, fwAfter func() *config.Framework, path string, move func() (string, error), steps BranchSteps, db *branchDB, out io.Writer) (string, error) {
 	snap := ""
 	if steps.Snapshot && db != nil {
 		name, err := db.snapshot()
@@ -403,7 +403,7 @@ func runSteps(fwAfter func() *config.Framework, path string, move func() (string
 		}
 	}
 	if steps.JS {
-		if err := gitpkg.InstallJS(path, out); err != nil {
+		if err := installJSWithWorkersStopped(site, fwAfter, path, out); err != nil {
 			return "", err
 		}
 	}
