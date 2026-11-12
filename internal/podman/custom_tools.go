@@ -37,7 +37,7 @@ func customToolsPath(siteName string) string {
 // for one. A rebuilt image changes the ID and is probed again.
 func CustomImageHasPHP(siteName string) bool {
 	image := CustomImageName(siteName)
-	id := customImageID(image)
+	id := LocalImageID(image)
 	if id == "" {
 		return false
 	}
@@ -49,8 +49,8 @@ func CustomImageHasPHP(siteName string) bool {
 	return has
 }
 
-// customImageID returns the local image's ID, or "" when it isn't built yet.
-func customImageID(image string) string {
+// LocalImageID returns the local image's ID, or "" when it is not present.
+func LocalImageID(image string) string {
 	out, err := Run("image", "inspect", PlatformImage(image), "--format", "{{.Id}}")
 	if err != nil {
 		return ""
