@@ -442,6 +442,13 @@ func LoadProjectConfig(dir string) (*ProjectConfig, error) {
 		cfg.PublicDir = ""
 	}
 
+	if cfg.DB.Database != "" {
+		if err := ValidateDatabaseName(cfg.DB.Database); err != nil {
+			fmt.Printf("[WARN] %s: %v, ignoring db.database\n", path, err)
+			cfg.DB.Database = ""
+		}
+	}
+
 	if err := cfg.Validate(); err != nil {
 		fmt.Printf("[WARN] %s: %v, ignoring proxy:\n", path, err)
 		cfg.Proxy = nil
