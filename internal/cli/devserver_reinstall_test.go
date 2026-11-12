@@ -72,7 +72,7 @@ func touchLater(t *testing.T, path string) {
 // vite, which keeps serving stale bundles. Once the install lands it is restarted;
 // a container worker is left alone, and nothing repeats without a new install.
 func TestDevServerInstallsRestartsADevServerAfterAReinstall(t *testing.T) {
-	_, site, fake, marker := reinstallSite(t)
+	dir, site, fake, marker := reinstallSite(t)
 	installs := NewDevServerInstalls()
 
 	if err := installs.Check(site); err != nil {
@@ -82,12 +82,21 @@ func TestDevServerInstallsRestartsADevServerAfterAReinstall(t *testing.T) {
 		t.Fatalf("the first look only records the install; calls: %v", fake.calls)
 	}
 
+	// A unit written before the pre-start step existed has none until lerd start
+	// rewrites it, so the restart must not count on it for the deleted config.
+	if err := os.RemoveAll(filepath.Join(dir, "node_modules", ".lerd")); err != nil {
+		t.Fatal(err)
+	}
 	touchLater(t, marker)
 	if err := installs.Check(site); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(fake.calls, []string{"restart lerd-vite-myapp"}) {
 		t.Errorf("want only vite restarted; calls: %v", fake.calls)
+	}
+	tool := config.DevServerToolInstalled(dir)
+	if _, err := os.Stat(filepath.Join(dir, tool.WrapperPath)); err != nil {
+		t.Errorf("generated dev server config not written back before the restart: %v", err)
 	}
 
 	if err := installs.Check(site); err != nil {
@@ -180,5 +189,27 @@ func TestRestoreDevServerFilesRefusesAPathNoSiteOwns(t *testing.T) {
 	reinstallSite(t)
 	if err := RestoreDevServerFiles(t.TempDir()); err == nil {
 		t.Error("want an error for a path no site owns")
+	}
+}
+
+// The watcher can start mid-install, before any marker exists: the install that
+// lands next is still one the running dev server has not seen.
+func TestDevServerInstallsCatchesAnInstallRunningAtTheFirstLook(t *testing.T) {
+	_, site, fake, marker := reinstallSite(t)
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	installs := NewDevServerInstalls()
+	if err := installs.Check(site); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(marker, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := installs.Check(site); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(fake.calls, "restart lerd-vite-myapp") {
+		t.Errorf("the install running at the first look was missed; calls: %v", fake.calls)
 	}
 }

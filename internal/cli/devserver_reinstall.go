@@ -60,6 +60,10 @@ func (d *DevServerInstalls) reinstalled(path string) bool {
 		}
 	}
 	if newest.IsZero() {
+		// A first look mid-install records "none yet", so the marker it writes counts as new.
+		if _, known := d.seen[path]; !known {
+			d.seen[path] = time.Time{}
+		}
 		return false
 	}
 	prev, known := d.seen[path]
@@ -67,12 +71,15 @@ func (d *DevServerInstalls) reinstalled(path string) bool {
 	return known && newest.After(prev)
 }
 
-// restartRunningDevServers restarts each running dev server of the checkout; its
-// unit writes the generated config back before starting, so nothing else is due.
+// restartRunningDevServers restarts each running dev server of the checkout. The
+// files are written back first: a unit from before the pre-start step has none.
 func restartRunningDevServers(site *config.Site, path string) error {
 	fw, ok := config.GetFrameworkForDir(site.Framework, path)
 	if !ok || fw == nil {
 		return nil
+	}
+	if err := RestoreDevServerFiles(path); err != nil {
+		return err
 	}
 	names := make([]string, 0, len(fw.Workers))
 	for name := range fw.Workers {
