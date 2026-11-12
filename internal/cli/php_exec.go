@@ -157,6 +157,7 @@ func RunPHPVersionCaptureEnv(cwd, version string, args []string, extraEnv []stri
 	}
 
 	podman.EnsurePathMounted(cwd, version)
+	ensureContainerBindings(cwd)
 
 	// PHP runs the first non-option operand as its script. When that script is an
 	// absolute path the container can't read (e.g. /tmp/ide-phpinfo.php written by

@@ -44,6 +44,15 @@ func withContainerNode(cwd, path string) string {
 	return strings.Replace(path, podman.ContainerPath, bin+":"+podman.ContainerPath, 1)
 }
 
+// ensureContainerBindings gives cwd's node_modules the linux-musl builds Node in
+// the PHP container loads. A failure only warns: the PHP side of the run does
+// not need them, and composer has to keep working offline.
+func ensureContainerBindings(cwd string) {
+	if err := nodeDet.FetchContainerBindings(context.Background(), shellWorkDir(cwd), os.Stderr); err != nil {
+		fmt.Fprintf(os.Stderr, "lerd: warning: Node in the PHP container may not load native packages: %v\n", err)
+	}
+}
+
 // ensureContainerNode fetches the musl build of the exact version the host
 // runs for cwd, once. lerd shell calls it: it is interactive, so the one-off
 // download has someone to wait for it, and the exec shims never block on it.
