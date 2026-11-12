@@ -570,3 +570,48 @@ func TestSetSecondarySharedDB_separateLeavesAFileDatabaseAlone(t *testing.T) {
 		t.Errorf("DB_DATABASE = %q, want the SQLite file left alone", got)
 	}
 }
+
+// A WordPress main keeps its database in wp-config.php, not .env, so its shared
+// secondaries must follow the database its .lerd.yaml names.
+func TestSharedDBNameForFollowsMainProjectDatabase(t *testing.T) {
+	setup(t)
+	mainDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(mainDir, ".lerd.yaml"), []byte("db:\n  service: mysql\n  database: starlane_dk\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustAdd(t, config.Site{Name: "starlane", Domains: []string{"starlane.test"}, Path: mainDir, Group: "starlane"})
+	shared := config.Site{Name: "admin", Domains: []string{"admin.starlane.test"}, Path: "/srv/admin", Group: "starlane", GroupSubdomain: "admin", GroupSharedDB: true}
+	mustAdd(t, shared)
+	if name, ok := SharedDBNameFor(&shared); !ok || name != "starlane_dk" {
+		t.Errorf("SharedDBNameFor = %q,%v, want starlane_dk,true", name, ok)
+	}
+}
+
+// The main's env file holds the database it really uses, an override included,
+// so it outranks the name .lerd.yaml asks for.
+func TestSharedDBNameForPrefersMainEffectiveDatabase(t *testing.T) {
+	setup(t)
+	mainDir := siteWithEnv(t, "pinned_db")
+	if err := os.WriteFile(filepath.Join(mainDir, ".lerd.yaml"), []byte("db:\n  service: mysql\n  database: starlane_dk\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustAdd(t, config.Site{Name: "starlane", Domains: []string{"starlane.test"}, Path: mainDir, Group: "starlane"})
+	shared := config.Site{Name: "admin", Domains: []string{"admin.starlane.test"}, Path: "/srv/admin", Group: "starlane", GroupSubdomain: "admin", GroupSharedDB: true}
+	mustAdd(t, shared)
+	if name, ok := SharedDBNameFor(&shared); !ok || name != "pinned_db" {
+		t.Errorf("SharedDBNameFor = %q,%v, want pinned_db,true", name, ok)
+	}
+}
+
+// The shared name reaches {{site}} in shell commands, so a main whose env file
+// names an unsafe database must not hand it to its secondaries.
+func TestSharedDBNameForRefusesUnsafeMainDatabase(t *testing.T) {
+	setup(t)
+	mainDir := siteWithEnv(t, "'app; id #'")
+	mustAdd(t, config.Site{Name: "starlane", Domains: []string{"starlane.test"}, Path: mainDir, Group: "starlane"})
+	shared := config.Site{Name: "admin", Domains: []string{"admin.starlane.test"}, Path: "/srv/admin", Group: "starlane", GroupSubdomain: "admin", GroupSharedDB: true}
+	mustAdd(t, shared)
+	if name, ok := SharedDBNameFor(&shared); !ok || name != "starlane" {
+		t.Errorf("SharedDBNameFor = %q,%v, want starlane,true", name, ok)
+	}
+}
