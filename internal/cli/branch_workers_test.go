@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -39,62 +38,59 @@ func (f *statefulLifecycle) UnitStatus(name string) (string, error) {
 }
 func (f *statefulLifecycle) AllUnitStates() map[string]string { return nil }
 
-// npm ci replaces node_modules: a vite left running serves stale bundles and
-// loses the config its unit starts it with, so its next restart fails. It has
-// to be stopped around the install and started again, writing that config back.
-func TestInstallJSRestartsRunningDevServerWithItsConfig(t *testing.T) {
+func installTestSite(t *testing.T) (string, *config.Site, *statefulLifecycle) {
+	t.Helper()
+	// A worker start on macOS writes its plist under HOME.
+	t.Setenv("HOME", t.TempDir())
 	dir := devServerSite(t, false)
 	site, err := config.FindSite("myapp")
 	if err != nil {
 		t.Fatal(err)
 	}
-	tool := config.DevServerToolInstalled(dir)
-	wrapper := filepath.Join(dir, tool.WrapperPath)
-
 	fake := &statefulLifecycle{active: map[string]bool{"lerd-vite-myapp": true, "lerd-queue-myapp": true}}
 	podman.UnitLifecycle = fake
 	t.Cleanup(func() { podman.UnitLifecycle = nil })
+	return dir, site, fake
+}
 
-	prev := installJSDeps
-	installJSDeps = func(path string, _ io.Writer) error {
-		fake.calls = append(fake.calls, "install")
-		return os.RemoveAll(filepath.Join(path, "node_modules", ".lerd"))
-	}
-	t.Cleanup(func() { installJSDeps = prev })
+// npm ci replaces node_modules: a vite left running serves stale bundles and
+// loses the config its unit starts it with, so its next restart fails. It has
+// to be restarted after the install, with that config written back first.
+func TestRestartAfterJSInstallBringsBackTheDevServerConfig(t *testing.T) {
+	dir, site, fake := installTestSite(t)
+	fw, _ := config.GetFrameworkForDir(site.Framework, dir)
 
-	fw := func() *config.Framework {
-		f, _ := config.GetFrameworkForDir(site.Framework, dir)
-		return f
+	running := runningHostWorkers(site, fw, dir)
+	if !slices.Equal(running, []string{"vite"}) {
+		t.Fatalf("running host workers = %v, want only vite: queue runs in a container", running)
 	}
-	if err := installJSWithWorkersStopped(site, fw, dir, io.Discard); err != nil {
-		t.Fatalf("install: %v", err)
+	if err := os.RemoveAll(filepath.Join(dir, "node_modules", ".lerd")); err != nil {
+		t.Fatal(err)
 	}
 
-	stop := slices.Index(fake.calls, "stop lerd-vite-myapp")
-	install := slices.Index(fake.calls, "install")
-	start := slices.Index(fake.calls, "start lerd-vite-myapp")
-	if stop < 0 || install < stop || start < install {
-		t.Errorf("want vite stopped, then the install, then vite started; calls: %v", fake.calls)
+	if err := restartAfterJSInstall(site, fw, dir, running); err != nil {
+		t.Fatalf("restart: %v", err)
 	}
-	if slices.Contains(fake.calls, "stop lerd-queue-myapp") {
-		t.Errorf("a container worker does not run on node_modules and was stopped; calls: %v", fake.calls)
+	if !slices.Contains(fake.calls, "restart lerd-vite-myapp") {
+		t.Errorf("vite was not restarted; calls: %v", fake.calls)
 	}
-	if _, err := os.Stat(wrapper); err != nil {
-		t.Errorf("generated dev server config missing after the install: %v", err)
+	if slices.ContainsFunc(fake.calls, func(c string) bool { return c == "restart lerd-queue-myapp" || c == "stop lerd-queue-myapp" }) {
+		t.Errorf("the container worker was touched; calls: %v", fake.calls)
+	}
+	tool := config.DevServerToolInstalled(dir)
+	if _, err := os.Stat(filepath.Join(dir, tool.WrapperPath)); err != nil {
+		t.Errorf("generated dev server config missing after the restart: %v", err)
 	}
 }
 
-// Without a site there are no workers to look for: the install just runs.
-func TestInstallJSWithoutSiteOnlyInstalls(t *testing.T) {
-	ran := false
-	prev := installJSDeps
-	installJSDeps = func(string, io.Writer) error { ran = true; return nil }
-	t.Cleanup(func() { installJSDeps = prev })
+// A worker the new code no longer declares still ran on the old packages.
+func TestRestartAfterJSInstallRestartsAWorkerTheNewCodeDropped(t *testing.T) {
+	dir, site, fake := installTestSite(t)
 
-	if err := installJSWithWorkersStopped(nil, nil, t.TempDir(), io.Discard); err != nil {
-		t.Fatal(err)
+	if err := restartAfterJSInstall(site, &config.Framework{Name: "testfw"}, dir, []string{"vite"}); err != nil {
+		t.Fatalf("restart: %v", err)
 	}
-	if !ran {
-		t.Error("install did not run")
+	if !slices.Contains(fake.calls, "restart lerd-vite-myapp") {
+		t.Errorf("vite was not restarted; calls: %v", fake.calls)
 	}
 }

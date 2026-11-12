@@ -386,6 +386,11 @@ func runSteps(site *config.Site, fwAfter func() *config.Framework, path string, 
 			return "", fmt.Errorf("isolating worktrees: %w", err)
 		}
 	}
+	// Read before the move, so a worker the new code no longer declares is still restarted.
+	var hostWorkers []string
+	if steps.JS {
+		hostWorkers = runningHostWorkers(site, fwAfter(), path)
+	}
 	msg, err := move()
 	if err != nil {
 		return "", err
@@ -403,7 +408,10 @@ func runSteps(site *config.Site, fwAfter func() *config.Framework, path string, 
 		}
 	}
 	if steps.JS {
-		if err := installJSWithWorkersStopped(site, fwAfter, path, out); err != nil {
+		if err := gitpkg.InstallJS(path, out); err != nil {
+			return "", err
+		}
+		if err := restartAfterJSInstall(site, fwAfter(), path, hostWorkers); err != nil {
 			return "", err
 		}
 	}
