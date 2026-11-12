@@ -186,14 +186,16 @@ func usesFileDatabase(path string) bool {
 	return v != "" && !config.IsServerDBDriver(v)
 }
 
-// MainDBName returns the database name a shared-DB secondary should use: the
-// group main's DB_DATABASE, falling back to the main's canonical slug.
+// MainDBName returns the database a shared-DB secondary should use: the one the
+// main's env file names, read the way its framework declares it, else the
+// main's db.database, else its slug.
 func MainDBName(main *config.Site) string {
+	binding := config.DBEnvBindingFor(main.Path)
+	if db := binding.Database(envfile.Reader(filepath.Join(main.Path, binding.File), binding.Format)); db != "" {
+		return db
+	}
 	if pc, err := config.LoadProjectConfig(main.Path); err == nil && pc.DB.Database != "" {
 		return pc.DB.Database
-	}
-	if db := envfile.ReadKey(filepath.Join(main.Path, ".env"), "DB_DATABASE"); db != "" {
-		return db
 	}
 	return config.SiteSlug(main.Name)
 }
