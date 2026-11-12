@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -153,5 +154,116 @@ func TestSetWorktreeDBIsolated_restartsTheWorktreesWorkers(t *testing.T) {
 	}
 	if len(restarted) != 1 || restarted[0] != checkout {
 		t.Fatalf("restarted %v, want the worktree at %s", restarted, checkout)
+	}
+}
+
+// A service that declares no way to drop a database must not report the
+// worktree's database as dropped while it is still there.
+func TestDropWorktreeDB_refusesAServiceWithNoDropAction(t *testing.T) {
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	dir := filepath.Join(cfg, "lerd", "services")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "myengine.yaml"), []byte("name: myengine\nimage: example/engine:1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	err := dropWorktreeDB(config.WorktreeDBEntry{Site: "acme", Branch: "feature", Service: "myengine", DBName: "acme_feature"})
+	if err == nil {
+		t.Fatal("dropWorktreeDB returned nil for a service that cannot drop the database")
+	}
+}
+
+// Isolating on a service that cannot make and drop databases would point the
+// worktree at a database lerd never created and could never remove.
+func TestSetWorktreeDBIsolated_refusesAServiceWithoutDatabaseActions(t *testing.T) {
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := filepath.Join(cfg, "lerd", "services")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "myengine.yaml"), []byte("name: myengine\nimage: example/engine:1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	sitePath, checkout := makeFakeWorktree(t, "feature")
+	for _, d := range []string{sitePath, checkout} {
+		if err := os.WriteFile(filepath.Join(d, ".env"), []byte("DB_HOST=lerd-myengine\nDB_DATABASE=acme\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	created := false
+	orig := createDatabaseFn
+	createDatabaseFn = func(string, string) (bool, error) { created = true; return false, nil }
+	t.Cleanup(func() { createDatabaseFn = orig })
+
+	site := &config.Site{Name: "acme", Path: sitePath, Domains: []string{"acme.test"}}
+	err := SetWorktreeDBIsolated(site, "feature", true, "")
+	if err == nil || created {
+		t.Fatalf("want a refusal before any create, got err=%v created=%v", err, created)
+	}
+}
+
+// writeFamilyOnlyService installs an inline service naming only its family and
+// a fetch hook that serves that family's preset, recording what it fetched.
+func writeFamilyOnlyService(t *testing.T) *[]string {
+	t.Helper()
+	cfg, data := t.TempDir(), t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	t.Setenv("XDG_DATA_HOME", data)
+	dir := filepath.Join(cfg, "lerd", "services")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "acmedb-app.yaml"), []byte("name: acmedb-app\nimage: example/acmedb:1\nfamily: acmedb\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	preset := "name: acmedb\nimage: example/acmedb:1\nfamily: acmedb\nintrospect:\n  entities:\n    - kind: databases\n      list: list-dbs\n      actions:\n        create: make {{name}}\n        drop: drop {{name}}\n"
+	presets := filepath.Join(data, "lerd", "service-presets")
+	var fetched []string
+	config.RegisterPresetFetchHook(func(name string) error {
+		fetched = append(fetched, name)
+		if err := os.MkdirAll(presets, 0755); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(presets, name+".yaml"), []byte(preset), 0644)
+	})
+	t.Cleanup(func() { config.RegisterPresetFetchHook(nil) })
+	return &fetched
+}
+
+func TestSetWorktreeDBIsolated_fetchesTheFamilyPreset(t *testing.T) {
+	fetched := writeFamilyOnlyService(t)
+	sitePath, checkout := makeFakeWorktree(t, "feature")
+	for _, d := range []string{sitePath, checkout} {
+		if err := os.WriteFile(filepath.Join(d, ".env"), []byte("DB_HOST=lerd-acmedb-app\nDB_DATABASE=acme\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var created string
+	origCreate, origRestart := createDatabaseFn, restartWorktreeWorkersFn
+	createDatabaseFn = func(_, name string) (bool, error) { created = name; return true, nil }
+	restartWorktreeWorkersFn = func(*config.Site, string) error { return nil }
+	t.Cleanup(func() { createDatabaseFn, restartWorktreeWorkersFn = origCreate, origRestart })
+
+	site := &config.Site{Name: "acme", Path: sitePath, Domains: []string{"acme.test"}}
+	if err := SetWorktreeDBIsolated(site, "feature", true, ""); err != nil {
+		t.Fatalf("SetWorktreeDBIsolated: %v", err)
+	}
+	if len(*fetched) != 1 || created != "acme_feature" {
+		t.Fatalf("fetched %v, created %q; want the acmedb preset fetched and acme_feature created", *fetched, created)
+	}
+}
+
+func TestDropWorktreeDB_fetchesTheFamilyPreset(t *testing.T) {
+	fetched := writeFamilyOnlyService(t)
+	err := dropWorktreeDB(config.WorktreeDBEntry{Site: "acme", Branch: "feature", Service: "acmedb-app", DBName: "acme_feature"})
+	if len(*fetched) != 1 || (*fetched)[0] != "acmedb" {
+		t.Fatalf("fetched %v, want [acmedb]", *fetched)
+	}
+	if err != nil && strings.Contains(err.Error(), "declares no way") {
+		t.Fatalf("the fetched preset's drop must be used, got %v", err)
 	}
 }

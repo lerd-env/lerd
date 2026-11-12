@@ -272,9 +272,16 @@ func execWorktreeRemove(args map[string]any) (any, *rpcError) {
 	// disk to find the branch in the registry. After git removes the
 	// worktree the path is gone, so a deferred drop wouldn't work.
 	dbDropped := false
+	dbError := ""
 	if !keepDB {
 		if wtPath := worktreePathFor(site, sanitized); wtPath != "" {
-			if _, err := runIn(wtPath, lerdSelf(), "db:share"); err == nil {
+			out, err := worktreeDBShareFn(wtPath)
+			if err != nil {
+				dbError = out
+				if dbError == "" {
+					dbError = err.Error()
+				}
+			} else {
 				dbDropped = true
 			}
 		}
@@ -297,12 +304,16 @@ func execWorktreeRemove(args map[string]any) (any, *rpcError) {
 	if err != nil {
 		return toolErr("git " + strings.Join(gitArgs, " ") + ": " + out), nil
 	}
-	return toolJSON(map[string]any{
+	resp := map[string]any{
 		"ok":                  true,
 		"site":                site.Name,
 		"output":              out,
 		"isolated_db_dropped": dbDropped,
-	}), nil
+	}
+	if dbError != "" {
+		resp["isolated_db_error"] = dbError
+	}
+	return toolJSON(resp), nil
 }
 
 func execWorktreeDBIsolate(args map[string]any) (any, *rpcError) {
@@ -370,6 +381,12 @@ func runIn(dir, name string, args ...string) (string, error) {
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	return strings.TrimSpace(string(out)), err
+}
+
+// worktreeDBShareFn drops a worktree's isolated database through db:share; a
+// seam so tests need no lerd binary.
+var worktreeDBShareFn = func(wtPath string) (string, error) {
+	return runIn(wtPath, lerdSelf(), "db:share")
 }
 
 // worktreeWaitFn is the seam the wait goes through, so tests need neither a

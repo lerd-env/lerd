@@ -32,8 +32,10 @@ type EntityRow struct {
 func resolveIntrospect(service string) *config.Introspect {
 	var stored *config.Introspect
 	presetName := service
+	family := ""
 	if custom, err := config.LoadCustomService(service); err == nil {
 		stored = custom.Introspect
+		family = config.FamilyOf(custom)
 		if custom.Preset != "" {
 			presetName = custom.Preset
 		}
@@ -41,7 +43,33 @@ func resolveIntrospect(service string) *config.Introspect {
 	if p, err := config.LoadPreset(presetName); err == nil && p.Introspect != nil {
 		return p.Introspect
 	}
-	return stored
+	if stored != nil {
+		return stored
+	}
+	// A service defined inline in .lerd.yaml names only its family, and runs
+	// that family's engine, so it takes the family's commands.
+	if p, err := config.LoadPreset(family); err == nil && p.Family == family {
+		return p.Introspect
+	}
+	return nil
+}
+
+// EnsureFamilyPreset fetches the store preset a family-only service borrows its
+// database commands from, which installing it never does. It reaches the
+// network, so it belongs to deliberate operations, never to listing paths.
+func EnsureFamilyPreset(service string) error {
+	custom, err := config.LoadCustomService(service)
+	if err != nil || custom.Preset != "" || custom.Introspect != nil {
+		return nil
+	}
+	family := config.FamilyOf(custom)
+	if family == "" || config.PresetExists(family) {
+		return nil
+	}
+	if _, err := config.EnsurePreset(family); err != nil {
+		return fmt.Errorf("%s takes its database commands from the %s preset: %w", service, family, err)
+	}
+	return nil
 }
 
 // EntityFor resolves the declared entity spec of the given kind for a service.
