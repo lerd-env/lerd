@@ -602,3 +602,16 @@ func TestSharedDBNameForPrefersMainEffectiveDatabase(t *testing.T) {
 		t.Errorf("SharedDBNameFor = %q,%v, want pinned_db,true", name, ok)
 	}
 }
+
+// The shared name reaches {{site}} in shell commands, so a main whose env file
+// names an unsafe database must not hand it to its secondaries.
+func TestSharedDBNameForRefusesUnsafeMainDatabase(t *testing.T) {
+	setup(t)
+	mainDir := siteWithEnv(t, "'app; id #'")
+	mustAdd(t, config.Site{Name: "starlane", Domains: []string{"starlane.test"}, Path: mainDir, Group: "starlane"})
+	shared := config.Site{Name: "admin", Domains: []string{"admin.starlane.test"}, Path: "/srv/admin", Group: "starlane", GroupSubdomain: "admin", GroupSharedDB: true}
+	mustAdd(t, shared)
+	if name, ok := SharedDBNameFor(&shared); !ok || name != "starlane" {
+		t.Errorf("SharedDBNameFor = %q,%v, want starlane,true", name, ok)
+	}
+}

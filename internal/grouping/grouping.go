@@ -187,11 +187,11 @@ func usesFileDatabase(path string) bool {
 }
 
 // MainDBName returns the database a shared-DB secondary should use: the one the
-// main's env file names, read the way its framework declares it, else the
-// main's db.database, else its slug.
+// main's env file names if it passes the name check (it reaches {{site}} in
+// shell commands), else the main's db.database, else its slug.
 func MainDBName(main *config.Site) string {
 	binding := config.DBEnvBindingFor(main.Path)
-	if db := binding.Database(envfile.Reader(filepath.Join(main.Path, binding.File), binding.Format)); db != "" {
+	if db := binding.Database(envfile.Reader(filepath.Join(main.Path, binding.File), binding.Format)); config.ValidateDatabaseName(db) == nil {
 		return db
 	}
 	if pc, err := config.LoadProjectConfig(main.Path); err == nil && pc.DB.Database != "" {
