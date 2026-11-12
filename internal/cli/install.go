@@ -800,8 +800,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 			},
 		},
 	}
-	plan := imagepull.Plan{imagepull.Pull(nginxImage, "the lerd web server image")}
-	withoutKeptImages(plan, podman.OfflineKeeps).Fill().Report(os.Stdout)
+	webServerPullPlan(nginxImage).Fill().Report(os.Stdout)
 	for _, job := range pullJobs {
 		step(job.Label)
 		if err := job.Run(io.Discard); err != nil {
@@ -1186,8 +1185,18 @@ func nginxNeedsRestart(running, quadletChanged bool, containerImage, localImage 
 	return !running || quadletChanged || localImage == "" || containerImage != localImage
 }
 
-// withoutKeptImages drops the pulls offline mode will skip, so the disclosure
-// names only the downloads that really happen.
+var installImageInStore = podman.ImageExists
+
+// webServerPullPlan is the disclosure for install's nginx pull. The pull still
+// runs to refresh a local image, but that moves few or no bytes, so only a
+// first download is announced.
+func webServerPullPlan(image string) imagepull.Plan {
+	plan := imagepull.Plan{imagepull.Pull(image, "the lerd web server image")}
+	return withoutKeptImages(plan, installImageInStore)
+}
+
+// withoutKeptImages drops the pulls of images already in the store, so the
+// disclosure names only the downloads that really happen.
 func withoutKeptImages(plan imagepull.Plan, kept func(string) bool) imagepull.Plan {
 	var out imagepull.Plan
 	for _, it := range plan {
