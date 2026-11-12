@@ -178,7 +178,13 @@ func writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, resta
 	}
 	// systemd expands $VAR and %-specifiers in ExecStart before sh runs, so both
 	// are doubled to reach the shell literally.
-	escaped := strings.NewReplacer("'", `'"'"'`, "$", "$$", "%", "%%").Replace(shellCommand)
+	systemdEscape := strings.NewReplacer("'", `'"'"'`, "$", "$$", "%", "%%")
+	escaped := systemdEscape.Replace(shellCommand)
+	// The leading '-' lets the dev server start even if this step fails.
+	preStart := ""
+	if pre := devServerFilesStep(sitePath); pre != "" {
+		preStart = fmt.Sprintf("ExecStartPre=-/bin/sh -c '%s'\n", systemdEscape.Replace(pre))
+	}
 	// Order after and pull up the site's FPM container: host tools like Vite
 	// run wayfinder (php artisan) at startup, which fails if FPM isn't up yet
 	// at boot. Wants, not BindsTo, so a transient FPM restart can't kill Vite.
@@ -200,11 +206,11 @@ RestartSec=5
 WorkingDirectory=%s
 Environment=PATH=%s
 %sSuccessExitStatus=1 130 143
-ExecStart=/bin/sh -c '%s'
+%sExecStart=/bin/sh -c '%s'
 
 [Install]
 WantedBy=default.target
-`, label, siteName, fpmOrder, restart, sitePath, envPath, logcolor.QuadletEnvLines(), escaped)
+`, label, siteName, fpmOrder, restart, sitePath, envPath, logcolor.QuadletEnvLines(), preStart, escaped)
 
 	_ = services.Mgr.RemoveTimerUnit(unitName)
 	return services.Mgr.WriteServiceUnitIfChanged(unitName, unit)

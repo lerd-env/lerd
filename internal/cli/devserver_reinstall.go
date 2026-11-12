@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -11,6 +12,17 @@ import (
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/podman"
 )
+
+// installMarkers are the files package managers write as an install finishes:
+// npm, pnpm, yarn 1, yarn berry with and without node_modules, and bun.
+var installMarkers = []string{
+	"node_modules/.package-lock.json",
+	"node_modules/.modules.yaml",
+	"node_modules/.yarn-integrity",
+	"node_modules/.yarn-state.yml",
+	".yarn/install-state.gz",
+	"node_modules/.bun-tag",
+}
 
 // DevServerInstalls notices a JS install under a running dev server, whatever
 // ran it, by the marker the package manager writes once the install is done.
@@ -39,20 +51,24 @@ func (d *DevServerInstalls) Check(site *config.Site) error {
 }
 
 // reinstalled reports a marker newer than the one seen last. The first look
-// only records it, and a missing marker is an install still running.
+// only records it, and no marker at all is an install still running.
 func (d *DevServerInstalls) reinstalled(path string) bool {
-	info, err := os.Stat(gitpkg.JSInstallMarker(path))
-	if err != nil {
+	var newest time.Time
+	for _, m := range installMarkers {
+		if info, err := os.Stat(filepath.Join(path, m)); err == nil && info.ModTime().After(newest) {
+			newest = info.ModTime()
+		}
+	}
+	if newest.IsZero() {
 		return false
 	}
 	prev, known := d.seen[path]
-	d.seen[path] = info.ModTime()
-	return known && info.ModTime().After(prev)
+	d.seen[path] = newest
+	return known && newest.After(prev)
 }
 
-// restartRunningDevServers stops each running dev server of the checkout and
-// starts it again: the start writes back the config the install deleted, and
-// on a unit still running it would be a no-op.
+// restartRunningDevServers restarts each running dev server of the checkout; its
+// unit writes the generated config back before starting, so nothing else is due.
 func restartRunningDevServers(site *config.Site, path string) error {
 	fw, ok := config.GetFrameworkForDir(site.Framework, path)
 	if !ok || fw == nil {
@@ -63,7 +79,6 @@ func restartRunningDevServers(site *config.Site, path string) error {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	php := config.WorktreePHPVersion(path, site.PHPVersion)
 	var errs []error
 	for _, name := range names {
 		w := fw.Workers[name]
@@ -71,11 +86,7 @@ func restartRunningDevServers(site *config.Site, path string) error {
 		if !w.Host || !unitIsActiveOrActivating(unit) || config.DevServerToolForWorker(path, w, resolveWorkerCommand(path, name, w)) == nil {
 			continue
 		}
-		if err := podman.StopUnit(unit); err != nil {
-			errs = append(errs, fmt.Errorf("restarting %s after an install: %w", name, err))
-			continue
-		}
-		if err := WorkerStartForSite(site.Name, path, php, name, w, false); err != nil {
+		if err := podman.RestartUnit(unit); err != nil {
 			errs = append(errs, fmt.Errorf("restarting %s after an install: %w", name, err))
 		}
 	}

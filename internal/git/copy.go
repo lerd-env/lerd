@@ -155,13 +155,6 @@ func InstallJS(projectPath string, out io.Writer) error {
 	return nil
 }
 
-// JSInstallMarker is the file the project's package manager writes when an
-// install finishes, so its mtime moves with every install that changed packages.
-func JSInstallMarker(projectPath string) string {
-	marker, _ := jsInstallPaths(projectPath)
-	return marker
-}
-
 // JSInstallCommandAt names the install ref's lockfiles call for, like "npm ci",
 // for the project at prefix inside the repository at dir.
 func JSInstallCommandAt(dir, ref, prefix string) string {

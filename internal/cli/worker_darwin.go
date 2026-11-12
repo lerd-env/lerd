@@ -132,6 +132,10 @@ func writeWorkerHostUnit(unitName, sitePath, command, restart, nativePHPVersion 
 	if nativePHPVersion != "" {
 		phpBinDir, phpIniScanDir = nativephp.ShimDir(nativePHPVersion), nativephp.IniScanDir(nativePHPVersion)
 	}
+	// Runs inside the command's own shell, so the version manager wraps both.
+	if pre := devServerFilesStep(sitePath); pre != "" {
+		command = pre + "; " + command
+	}
 	script := buildDarwinHostWorkerGuardScript(execPrefix, config.BinDir(), sitePath, command, workerBinDirs(phpBinDir, extraBinDirs), strings.Join(toolDirs, ":"), strings.Join(fallbackDirs, ":"), pidFile, phpIniScanDir)
 	if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil {
 		return false, fmt.Errorf("writing host worker guard script: %w", err)

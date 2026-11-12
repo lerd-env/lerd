@@ -69,10 +69,10 @@ func touchLater(t *testing.T, path string) {
 }
 
 // npm ci, from the dashboard or a terminal, replaces node_modules under a running
-// vite, which keeps stale bundles and loses its config. Once the install lands it
-// is restarted with that config written back; a container worker is left alone.
+// vite, which keeps serving stale bundles. Once the install lands it is restarted;
+// a container worker is left alone, and nothing repeats without a new install.
 func TestDevServerInstallsRestartsADevServerAfterAReinstall(t *testing.T) {
-	dir, site, fake, marker := reinstallSite(t)
+	_, site, fake, marker := reinstallSite(t)
 	installs := NewDevServerInstalls()
 
 	if err := installs.Check(site); err != nil {
@@ -82,33 +82,45 @@ func TestDevServerInstallsRestartsADevServerAfterAReinstall(t *testing.T) {
 		t.Fatalf("the first look only records the install; calls: %v", fake.calls)
 	}
 
-	if err := os.RemoveAll(filepath.Join(dir, "node_modules", ".lerd")); err != nil {
-		t.Fatal(err)
-	}
 	touchLater(t, marker)
 	if err := installs.Check(site); err != nil {
 		t.Fatal(err)
 	}
-
-	stop := slices.Index(fake.calls, "stop lerd-vite-myapp")
-	start := slices.Index(fake.calls, "start lerd-vite-myapp")
-	if stop < 0 || start < stop {
-		t.Errorf("want vite stopped and started again; calls: %v", fake.calls)
-	}
-	if slices.ContainsFunc(fake.calls, func(c string) bool { return c == "stop lerd-queue-myapp" || c == "restart lerd-queue-myapp" }) {
-		t.Errorf("the container worker was touched; calls: %v", fake.calls)
-	}
-	tool := config.DevServerToolInstalled(dir)
-	if _, err := os.Stat(filepath.Join(dir, tool.WrapperPath)); err != nil {
-		t.Errorf("generated dev server config missing after the restart: %v", err)
+	if !slices.Equal(fake.calls, []string{"restart lerd-vite-myapp"}) {
+		t.Errorf("want only vite restarted; calls: %v", fake.calls)
 	}
 
-	before := len(fake.calls)
 	if err := installs.Check(site); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.calls) != before {
-		t.Errorf("restarted again with no new install; calls: %v", fake.calls[before:])
+	if len(fake.calls) != 1 {
+		t.Errorf("restarted again with no new install; calls: %v", fake.calls)
+	}
+}
+
+// Yarn 1 writes no install-state file, only its integrity file in node_modules.
+func TestDevServerInstallsSeesAYarnClassicInstall(t *testing.T) {
+	dir, site, fake, marker := reinstallSite(t)
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "yarn.lock"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	integrity := filepath.Join(dir, "node_modules", ".yarn-integrity")
+	if err := os.WriteFile(integrity, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	installs := NewDevServerInstalls()
+	if err := installs.Check(site); err != nil {
+		t.Fatal(err)
+	}
+	touchLater(t, integrity)
+	if err := installs.Check(site); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(fake.calls, "restart lerd-vite-myapp") {
+		t.Errorf("a yarn 1 install went unnoticed; calls: %v", fake.calls)
 	}
 }
 
@@ -145,5 +157,28 @@ func TestDevServerInstallsLeavesAStoppedDevServerStopped(t *testing.T) {
 	}
 	if len(fake.calls) != 0 {
 		t.Errorf("a stopped dev server was touched; calls: %v", fake.calls)
+	}
+}
+
+// npm ci deletes the config a dev server's unit starts it with, so every start
+// writes it back first; without that, the next restart fails on a missing file.
+func TestRestoreDevServerFilesWritesBackTheDeletedConfig(t *testing.T) {
+	dir, _, _, _ := reinstallSite(t)
+	if err := os.RemoveAll(filepath.Join(dir, "node_modules", ".lerd")); err != nil {
+		t.Fatal(err)
+	}
+	if err := RestoreDevServerFiles(dir); err != nil {
+		t.Fatal(err)
+	}
+	tool := config.DevServerToolInstalled(dir)
+	if _, err := os.Stat(filepath.Join(dir, tool.WrapperPath)); err != nil {
+		t.Errorf("generated dev server config not written back: %v", err)
+	}
+}
+
+func TestRestoreDevServerFilesRefusesAPathNoSiteOwns(t *testing.T) {
+	reinstallSite(t)
+	if err := RestoreDevServerFiles(t.TempDir()); err == nil {
+		t.Error("want an error for a path no site owns")
 	}
 }
