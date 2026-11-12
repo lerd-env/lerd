@@ -303,3 +303,26 @@ func TestWriteWorkerHostUnit_rustAddsCargoBin(t *testing.T) {
 		t.Errorf("guard script missing %q:\n%s", want, guard)
 	}
 }
+
+// A dev server's guard script writes its generated config back before the tool
+// starts, so a restart after npm ci deleted it does not fail.
+func TestWriteWorkerHostUnit_restoresDevServerFilesBeforeStart(t *testing.T) {
+	tmp := withTempXDGAndBin(t)
+	swapMgr(t, &trackingHostMgr{})
+	swapDaemonReload(t)
+
+	sitePath := filepath.Join(tmp, "site")
+	if err := os.MkdirAll(filepath.Join(sitePath, "node_modules", "vite"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writeWorkerHostUnit("lerd-vite-mysite", sitePath, "npm run dev", "always", ""); err != nil {
+		t.Fatalf("writeWorkerHostUnit: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(config.RunDir(), "workers", "lerd-vite-mysite.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "dev-server-files") {
+		t.Errorf("guard script does not restore the dev server files:\n%s", body)
+	}
+}

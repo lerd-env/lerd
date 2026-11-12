@@ -78,6 +78,7 @@ func runVersionShell(input string) error {
 func runPhpShellExec(container, workDir string) error {
 	if workDir != "" {
 		ensureContainerNode(workDir, os.Stderr)
+		ensureContainerBindings(workDir)
 	}
 	cmd := podman.Cmd(phpShellExecArgs(container, workDir)...)
 	cmd.Stdin = os.Stdin

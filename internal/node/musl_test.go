@@ -80,7 +80,7 @@ func TestExtractTree_DropsTheTopFolderAndKeepsLinks(t *testing.T) {
 		{name: "node-v22.1.0-linux-x64-musl/bin/npm", link: "../lib/node_modules/npm/bin/npm-cli.js"},
 	}))
 	dest := t.TempDir()
-	if err := extractTree(archive, dest); err != nil {
+	if err := extractTree(archive, dest, true); err != nil {
 		t.Fatal(err)
 	}
 	if b, err := os.ReadFile(filepath.Join(dest, "bin", "node")); err != nil || string(b) != "NODE" {
@@ -98,7 +98,7 @@ func TestExtractTree_RefusesToLeaveItsFolder(t *testing.T) {
 		"relative link": {name: "node/bin/evil", link: "../../../etc/passwd"},
 	} {
 		archive := writeArchive(t, tarball(t, []tarEntry{entry}))
-		if err := extractTree(archive, t.TempDir()); err == nil {
+		if err := extractTree(archive, t.TempDir(), true); err == nil {
 			t.Errorf("%s: an entry outside the archive's folder must be refused", name)
 		}
 	}

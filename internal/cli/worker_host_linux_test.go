@@ -597,3 +597,36 @@ func TestWriteHostWorkerUnitFile_escapesSystemdExpansion(t *testing.T) {
 		t.Errorf("want %s in unit, got:\n%s", want, data)
 	}
 }
+
+// A dev server's unit writes its generated config back before every start, so a
+// restart after npm ci deleted it does not fail; a unit for anything else does not.
+func TestWriteHostWorkerUnitFile_restoresDevServerFilesBeforeStart(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	read := func(unit string) string {
+		data, err := os.ReadFile(filepath.Join(tmp, "systemd", "user", unit+".service"))
+		if err != nil {
+			t.Fatalf("read unit: %v", err)
+		}
+		return string(data)
+	}
+
+	vite := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(vite, "node_modules", "vite"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writeHostWorkerUnitFile("lerd-vite-mysite", "Vite", "mysite", vite, "true", "on-failure", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if unit := read("lerd-vite-mysite"); !strings.Contains(unit, "ExecStartPre=-") || !strings.Contains(unit, "dev-server-files") {
+		t.Errorf("dev server unit does not restore its files before starting:\n%s", unit)
+	}
+
+	if _, err := writeHostWorkerUnitFile("lerd-app-mysite", "App", "mysite", t.TempDir(), "true", "on-failure", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if unit := read("lerd-app-mysite"); strings.Contains(unit, "ExecStartPre") {
+		t.Errorf("a unit with no dev server got a pre-start step:\n%s", unit)
+	}
+}

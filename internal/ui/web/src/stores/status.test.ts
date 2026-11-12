@@ -51,6 +51,25 @@ describe('status store', () => {
     expect(get(coreDown)).toEqual(['DNS', 'Nginx', 'Watcher']);
   });
 
+  // lerd stops a PHP version no site uses, so that one being down is not lerd
+  // being down: counting it made the dashboard start lerd on every page load.
+  it('allCoreRunning ignores a PHP version lerd stopped as unused', async () => {
+    const { status, allCoreRunning } = await import('./status');
+    status.update((s) => ({
+      ...s,
+      dns: { ok: true, status: 'ok', enabled: true, tld: 'test' },
+      nginx: { running: true },
+      php_fpms: [
+        { version: '8.5', running: true, xdebug_enabled: false },
+        { version: '8.6', running: false, xdebug_enabled: false }
+      ],
+      watcher_running: true
+    }));
+    expect(get(allCoreRunning)).toBe(true);
+    status.update((s) => ({ ...s, nginx: { running: false } }));
+    expect(get(allCoreRunning)).toBe(false);
+  });
+
   it('lerdStatusColor is gray before load', async () => {
     const { lerdStatusColor } = await import('./status');
     expect(get(lerdStatusColor)).toBe('gray');
