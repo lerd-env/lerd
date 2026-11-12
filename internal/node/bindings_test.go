@@ -176,3 +176,41 @@ func TestFetchContainerBindings_NothingMissingFetchesNothing(t *testing.T) {
 		t.Fatalf("err = %v, output %q; want a silent no-op", err, out.String())
 	}
 }
+
+// A lockfile supplies both the URL and the hash, so it must not be able to
+// steer a write out of the project through a symlinked folder.
+func TestFetchContainerBindings_StaysInsideTheProject(t *testing.T) {
+	data, sum := npmTarball(t, "x")
+	url := registry(t, map[string][]byte{"/x.tgz": data})
+	dir, outside := t.TempDir(), t.TempDir()
+	writeLock(t, dir, `{"packages": {"node_modules/evil/x-linux-arm64-musl": {"os": ["linux"], "cpu": ["arm64"], "libc": ["musl"], "resolved": "`+url+`/x.tgz", "integrity": "`+sum+`"}}}`)
+	if err := os.Symlink(outside, filepath.Join(dir, "node_modules", "evil")); err != nil {
+		t.Fatal(err)
+	}
+	if err := fetchContainerBindings(context.Background(), dir, "arm64", io.Discard); err == nil {
+		t.Fatal("want a refusal for a path leaving the project")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "x-linux-arm64-musl")); err == nil {
+		t.Error("the package was written outside the project")
+	}
+}
+
+func TestNpmProjectDir_NearestLockfileAbove(t *testing.T) {
+	site := t.TempDir()
+	nested := filepath.Join(site, "packages", "admin")
+	deep := filepath.Join(nested, "src")
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []string{site, nested} {
+		if err := os.WriteFile(filepath.Join(d, "package-lock.json"), []byte("{}"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := NpmProjectDir(deep); got != nested {
+		t.Errorf("NpmProjectDir(deep) = %q, want %q", got, nested)
+	}
+	if got := NpmProjectDir(site); got != site {
+		t.Errorf("NpmProjectDir(site) = %q, want %q", got, site)
+	}
+}

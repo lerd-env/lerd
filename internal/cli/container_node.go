@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	nodeDet "github.com/geodro/lerd/internal/node"
 	"github.com/geodro/lerd/internal/podman"
@@ -44,11 +45,21 @@ func withContainerNode(cwd, path string) string {
 	return strings.Replace(path, podman.ContainerPath, bin+":"+podman.ContainerPath, 1)
 }
 
-// ensureContainerBindings gives cwd's node_modules the linux-musl builds Node in
-// the PHP container loads. A failure only warns: the PHP side of the run does
-// not need them, and composer has to keep working offline.
+// containerBindingsDeadline caps the fetch so a stalled registry delays a PHP
+// command by seconds, not by download's minutes of retries.
+const containerBindingsDeadline = 20 * time.Second
+
+// ensureContainerBindings gives cwd's npm project the linux-musl builds Node in
+// the PHP container loads. It only warns, under a short deadline: the PHP side
+// of the run does not need them, and composer has to keep working offline.
 func ensureContainerBindings(cwd string) {
-	if err := nodeDet.FetchContainerBindings(context.Background(), shellWorkDir(cwd), os.Stderr); err != nil {
+	dir := nodeDet.NpmProjectDir(cwd)
+	if dir == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), containerBindingsDeadline)
+	defer cancel()
+	if err := nodeDet.FetchContainerBindings(ctx, dir, os.Stderr); err != nil {
 		fmt.Fprintf(os.Stderr, "lerd: warning: Node in the PHP container may not load native packages: %v\n", err)
 	}
 }
