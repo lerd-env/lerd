@@ -26,7 +26,7 @@ container images are a separate distribution with their own notices.
 | github.com/catppuccin/go | v0.3.0 | MIT |
 | github.com/cespare/xxhash/v2 | v2.3.0 | MIT |
 | github.com/charmbracelet/colorprofile | v0.4.3 | MIT |
-| github.com/charmbracelet/ultraviolet | v0.0.0-20261008173134-6b8d4baf91b4 | MIT |
+| github.com/charmbracelet/ultraviolet | v0.0.0-20261023060817-a45b7c86333f | MIT |
 | github.com/charmbracelet/x/ansi | v0.11.9 | MIT |
 | github.com/charmbracelet/x/exp/ordered | v0.1.0 | MIT |
 | github.com/charmbracelet/x/exp/slice | v0.0.0-20260719004043-bb9a97036f23 | MIT |
@@ -58,9 +58,9 @@ container images are a separate distribution with their own notices.
 | github.com/klauspost/compress | v1.20.2 | Apache-2.0 |
 | github.com/klauspost/cpuid/v2 | v2.4.0 | MIT |
 | github.com/klauspost/crc32 | v1.3.0 | BSD-3-Clause |
-| github.com/lrstanley/bubblezone/v2 | v2.0.0 | MIT |
+| github.com/lrstanley/bubblezone/v2 | v2.0.1 | MIT |
 | github.com/lucasb-eyer/go-colorful | v1.4.1 | MIT |
-| github.com/mattn/go-runewidth | v0.0.30 | MIT |
+| github.com/mattn/go-runewidth | v0.0.31 | MIT |
 | github.com/microcosm-cc/bluemonday | v1.0.27 | BSD-3-Clause |
 | github.com/miekg/dns | v1.1.73 | BSD-3-Clause |
 | github.com/minio/crc64nvme | v1.1.1 | Apache-2.0 |
@@ -84,7 +84,7 @@ container images are a separate distribution with their own notices.
 | github.com/spf13/viper | v1.21.0 | MIT |
 | github.com/subosito/gotenv | v1.6.0 | MIT |
 | github.com/tinylib/msgp | v1.6.4 | MIT |
-| github.com/xo/terminfo | v1.0.0 | MIT |
+| github.com/xo/terminfo | v1.3.1 | MIT |
 | github.com/yuin/goldmark | v1.8.7 | MIT |
 | github.com/yuin/goldmark-emoji | v1.0.6 | MIT |
 | github.com/zeebo/xxh3 | v1.1.0 | BSD-2-Clause |
@@ -98,15 +98,15 @@ container images are a separate distribution with their own notices.
 | golang.org/x/crypto | v0.58.0 | BSD-3-Clause |
 | golang.org/x/net | v0.62.0 | BSD-3-Clause |
 | golang.org/x/sync | v0.24.0 | BSD-3-Clause |
-| golang.org/x/sys | v0.49.0 | BSD-3-Clause |
+| golang.org/x/sys | v0.50.0 | BSD-3-Clause |
 | golang.org/x/term | v0.47.0 | BSD-3-Clause |
 | golang.org/x/text | v0.43.0 | BSD-3-Clause |
 | gopkg.in/ini.v1 | v1.67.3 | Apache-2.0 |
 | gopkg.in/yaml.v3 | v3.0.1 | Apache-2.0 |
-| modernc.org/libc | v1.79.0 | MIT |
+| modernc.org/libc | v1.80.1 | MIT |
 | modernc.org/mathutil | v1.7.1 | BSD-3-Clause |
 | modernc.org/memory | v1.12.1 | BSD-3-Clause |
-| modernc.org/sqlite | v1.61.1 | AGPL |
+| modernc.org/sqlite | v1.62.0 | AGPL |
 
 ### charm.land/bubbles/v2 v2.0.0, charm.land/bubbletea/v2 v2.1.1
 
@@ -520,7 +520,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### github.com/charmbracelet/ultraviolet v0.0.0-20261008173134-6b8d4baf91b4
+### github.com/charmbracelet/ultraviolet v0.0.0-20261023060817-a45b7c86333f
 
 MIT
 
@@ -2752,7 +2752,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### github.com/lrstanley/bubblezone/v2 v2.0.0
+### github.com/lrstanley/bubblezone/v2 v2.0.1
 
 MIT
 
@@ -2794,7 +2794,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### github.com/mattn/go-runewidth v0.0.30
+### github.com/mattn/go-runewidth v0.0.31
 
 MIT
 
@@ -4081,7 +4081,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### github.com/xo/terminfo v1.0.0
+### github.com/xo/terminfo v1.3.1
 
 MIT
 
@@ -4560,7 +4560,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ```
 
-### golang.org/x/crypto v0.58.0, golang.org/x/net v0.62.0, golang.org/x/sync v0.24.0, golang.org/x/sys v0.49.0, golang.org/x/term v0.47.0, golang.org/x/text v0.43.0
+### golang.org/x/crypto v0.58.0, golang.org/x/net v0.62.0, golang.org/x/sync v0.24.0, golang.org/x/sys v0.50.0, golang.org/x/term v0.47.0, golang.org/x/text v0.43.0
 
 BSD-3-Clause
 
@@ -4792,7 +4792,7 @@ third-party archives.
    limitations under the License.
 ```
 
-### modernc.org/libc v1.79.0
+### modernc.org/libc v1.80.1
 
 MIT
 
@@ -5255,7 +5255,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### modernc.org/sqlite v1.61.1
+### modernc.org/sqlite v1.62.0
 
 AGPL
 
@@ -5332,7 +5332,7 @@ and license texts it points at are the ones you have to carry with you.
 | [Go](https://github.com/golang/go) | -- | BSD-3-Clause | modernc.org/libc | [N1](#N1) |
 | [go-netdb](https://github.com/dominikh/go-netdb) | -- | MIT | modernc.org/libc | [N1](#N1) |
 | [golang.org/x/sys](https://pkg.go.dev/golang.org/x/sys) | v0.49.0 | BSD-3-Clause | github.com/google/pprof, github.com/mattn/go-isatty, modernc.org/libc, modernc.org/memory, `go.mod` | [L3](#L3) |
-| [modernc.org/libc](https://pkg.go.dev/modernc.org/libc) | v1.79.0 | BSD-3-Clause | `go.mod` | [L4](#L4) |
+| [modernc.org/libc](https://pkg.go.dev/modernc.org/libc) | v1.80.1 | BSD-3-Clause | `go.mod` | [L4](#L4) |
 | [modernc.org/mathutil](https://pkg.go.dev/modernc.org/mathutil) | v1.7.1 | BSD-3-Clause | modernc.org/fileutil, modernc.org/libc, modernc.org/memory, `go.mod` | [L4](#L4) |
 | [modernc.org/memory](https://pkg.go.dev/modernc.org/memory) | v1.12.1 | BSD-3-Clause, attribution reference | modernc.org/libc, `go.mod` | [L4](#L4), [L2](#L2), [L5](#L5), [L6](#L6) |
 | [musl libc](https://musl.libc.org/) | -- | MIT | modernc.org/libc | [N1](#N1) |
@@ -5377,8 +5377,8 @@ this one.
 | [golang.org/x/mod](https://pkg.go.dev/golang.org/x/mod) | v0.42.0 | BSD-3-Clause | modernc.org/libc | [L3](#L3) |
 | [golang.org/x/sync](https://pkg.go.dev/golang.org/x/sync) | v0.24.0 | BSD-3-Clause | modernc.org/libc | [L3](#L3) |
 | [golang.org/x/tools](https://pkg.go.dev/golang.org/x/tools) | v0.52.0 | BSD-3-Clause | modernc.org/libc | [L3](#L3) |
-| [modernc.org/cc/v4](https://pkg.go.dev/modernc.org/cc/v4) | v4.30.3 | BSD-3-Clause | modernc.org/libc | [L4](#L4) |
-| [modernc.org/ccgo/v4](https://pkg.go.dev/modernc.org/ccgo/v4) | v4.37.0 | BSD-3-Clause | modernc.org/libc | [L4](#L4) |
+| [modernc.org/cc/v4](https://pkg.go.dev/modernc.org/cc/v4) | v4.30.6-0.20261101114202-1b9d1a076f6b | BSD-3-Clause | modernc.org/libc | [L4](#L4) |
+| [modernc.org/ccgo/v4](https://pkg.go.dev/modernc.org/ccgo/v4) | v4.38.1 | BSD-3-Clause | modernc.org/libc | [L4](#L4) |
 | [modernc.org/gc/v2](https://pkg.go.dev/modernc.org/gc/v2) | v2.6.5 | BSD-3-Clause | modernc.org/libc | [L16](#L16) |
 | [modernc.org/gc/v3](https://pkg.go.dev/modernc.org/gc/v3) | v3.2.0 | BSD-3-Clause | modernc.org/libc | [L16](#L16) |
 | [modernc.org/goabi0](https://pkg.go.dev/modernc.org/goabi0) | v0.2.0 | BSD-3-Clause | modernc.org/libc | [L17](#L17) |
