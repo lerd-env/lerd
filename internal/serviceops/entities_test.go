@@ -1,6 +1,8 @@
 package serviceops
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -55,6 +57,41 @@ func TestEntityForPrefersPresetOverBareStoredDefinition(t *testing.T) {
 	spec := EntityFor("mysql", "databases")
 	if spec == nil || spec.List == "" {
 		t.Fatal("want the bundled mysql preset entity, got none")
+	}
+}
+
+// A service defined inline in .lerd.yaml names its family but no preset, and
+// still has to create and drop databases the way its family's engine does.
+func TestEntityForFallsBackToFamilyPreset(t *testing.T) {
+	writeCustomService(t, "mysql-app", "name: mysql-app\nimage: docker.io/library/mysql:8\nfamily: mysql\n")
+	spec := EntityFor("mysql-app", "databases")
+	if _, ok := entityAction(spec, "drop"); !ok {
+		t.Fatalf("want the mysql family's drop action, got %+v", spec)
+	}
+}
+
+// The reporter's case: a store family whose preset is not in the default stack.
+func TestEntityForFallsBackToANonDefaultFamilyPreset(t *testing.T) {
+	data := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", data)
+	presets := filepath.Join(data, "lerd", "service-presets")
+	if err := os.MkdirAll(presets, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	preset := "name: acmedb\nimage: example/acmedb:1\nfamily: acmedb\nintrospect:\n  entities:\n    - kind: databases\n      list: list-dbs\n      actions:\n        create: make {{name}}\n        drop: drop {{name}}\n"
+	if err := os.WriteFile(filepath.Join(presets, "acmedb.yaml"), []byte(preset), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeCustomService(t, "acmedb-app", "name: acmedb-app\nimage: example/acmedb:1\nfamily: acmedb\n")
+	if _, ok := entityAction(EntityFor("acmedb-app", "databases"), "drop"); !ok {
+		t.Fatal("want the acmedb family preset's drop action")
+	}
+}
+
+func TestEntityForPrefersStoredIntrospectOverFamily(t *testing.T) {
+	writeCustomService(t, "mysql-app", "name: mysql-app\nimage: example/engine:1\nfamily: mysql\nintrospect:\n  list_databases: echo mine\n")
+	if spec := EntityFor("mysql-app", "databases"); spec == nil || spec.List != "echo mine" {
+		t.Fatalf("a declared introspect must win over the family's, got %+v", spec)
 	}
 }
 

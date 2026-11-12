@@ -487,6 +487,12 @@ engine name. The fixed `lerd` admin password is passed through the exec
 environment (`MYSQL_PWD` / `PGPASSWORD`), so commands need no inline credentials
 for MySQL and PostgreSQL; other engines embed theirs the way their client expects.
 
+A service defined inline in a project's `.lerd.yaml` that names a `family:` but
+neither a preset nor its own `introspect:` block takes the entities of that
+family's default preset, so a `family: mariadb` service creates, drops and
+snapshots databases the way the bundled `mariadb` preset does. Those commands
+log in with the fixed `lerd` admin password, so the service has to set it too.
+
 In an action, every `{{name}}` is replaced by the entity name after validation
 against a strict pattern (letters, digits, underscores and dashes only, 64
 characters at most), which is what makes the substitution safe both as a shell

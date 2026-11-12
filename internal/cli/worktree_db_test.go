@@ -155,3 +155,52 @@ func TestSetWorktreeDBIsolated_restartsTheWorktreesWorkers(t *testing.T) {
 		t.Fatalf("restarted %v, want the worktree at %s", restarted, checkout)
 	}
 }
+
+// A service that declares no way to drop a database must not report the
+// worktree's database as dropped while it is still there.
+func TestDropWorktreeDB_refusesAServiceWithNoDropAction(t *testing.T) {
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	dir := filepath.Join(cfg, "lerd", "services")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "myengine.yaml"), []byte("name: myengine\nimage: example/engine:1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	err := dropWorktreeDB(config.WorktreeDBEntry{Site: "acme", Branch: "feature", Service: "myengine", DBName: "acme_feature"})
+	if err == nil {
+		t.Fatal("dropWorktreeDB returned nil for a service that cannot drop the database")
+	}
+}
+
+// Isolating on a service that cannot make and drop databases would point the
+// worktree at a database lerd never created and could never remove.
+func TestSetWorktreeDBIsolated_refusesAServiceWithoutDatabaseActions(t *testing.T) {
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := filepath.Join(cfg, "lerd", "services")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "myengine.yaml"), []byte("name: myengine\nimage: example/engine:1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	sitePath, checkout := makeFakeWorktree(t, "feature")
+	for _, d := range []string{sitePath, checkout} {
+		if err := os.WriteFile(filepath.Join(d, ".env"), []byte("DB_HOST=lerd-myengine\nDB_DATABASE=acme\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	created := false
+	orig := createDatabaseFn
+	createDatabaseFn = func(string, string) (bool, error) { created = true; return false, nil }
+	t.Cleanup(func() { createDatabaseFn = orig })
+
+	site := &config.Site{Name: "acme", Path: sitePath, Domains: []string{"acme.test"}}
+	err := SetWorktreeDBIsolated(site, "feature", true, "")
+	if err == nil || created {
+		t.Fatalf("want a refusal before any create, got err=%v created=%v", err, created)
+	}
+}

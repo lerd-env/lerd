@@ -514,6 +514,25 @@ func TestExecWorktreeRemove_removesADetachedWorktree(t *testing.T) {
 	}
 }
 
+// A drop that fails must say so, and keep the worktree's database on record
+// as not dropped, instead of reporting success from git's side of the remove.
+func TestExecWorktreeRemove_reportsAFailedDrop(t *testing.T) {
+	repo := initRepoSite(t, "demo")
+	wt := filepath.Join(repo, "demo-feature")
+	gitRun(t, repo, "worktree", "add", "-q", "-b", "feature", wt)
+	orig := worktreeDBShareFn
+	worktreeDBShareFn = func(string) (string, error) {
+		return "mariadb-app declares no way to drop a database", errors.New("exit status 1")
+	}
+	t.Cleanup(func() { worktreeDBShareFn = orig })
+
+	result, _ := execWorktreeRemove(map[string]any{"site": "demo", "branch": "feature", "keep_db": false})
+	text := result.(map[string]any)["content"].([]map[string]any)[0]["text"].(string)
+	if !strings.Contains(text, `"isolated_db_dropped": false`) || !strings.Contains(text, "declares no way to drop") {
+		t.Fatalf("want the drop failure reported, got %s", text)
+	}
+}
+
 // samePath compares two paths after resolving symlinks, since git reports the
 // real path and macOS temp dirs sit behind the /var -> /private/var link.
 func samePath(t *testing.T, a, b string) bool {

@@ -32,8 +32,10 @@ type EntityRow struct {
 func resolveIntrospect(service string) *config.Introspect {
 	var stored *config.Introspect
 	presetName := service
+	family := ""
 	if custom, err := config.LoadCustomService(service); err == nil {
 		stored = custom.Introspect
+		family = config.FamilyOf(custom)
 		if custom.Preset != "" {
 			presetName = custom.Preset
 		}
@@ -41,7 +43,15 @@ func resolveIntrospect(service string) *config.Introspect {
 	if p, err := config.LoadPreset(presetName); err == nil && p.Introspect != nil {
 		return p.Introspect
 	}
-	return stored
+	if stored != nil {
+		return stored
+	}
+	// A service defined inline in .lerd.yaml names only its family, and runs
+	// that family's engine, so it takes the family's commands.
+	if p, err := config.LoadPreset(family); err == nil && p.Family == family {
+		return p.Introspect
+	}
+	return nil
 }
 
 // EntityFor resolves the declared entity spec of the given kind for a service.
@@ -299,6 +309,13 @@ func EntityExportFilename(service, kind, name string) string {
 // store-published engine reaches the Databases tab without a Go change.
 func DeclaresDatabases(service string) bool {
 	return EntityFor(service, "databases") != nil
+}
+
+// DeclaresDatabaseAction reports whether a service declares the given action
+// on its databases, so a caller can refuse rather than silently do nothing.
+func DeclaresDatabaseAction(service, action string) bool {
+	_, ok := entityAction(EntityFor(service, "databases"), action)
+	return ok
 }
 
 // ServiceEntities returns the non-database entity specs a service declares.
