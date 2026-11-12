@@ -315,7 +315,22 @@ A page that compares two versions of a file, such as a local copy and the server
 lerd.diff({ path: 'wp-content/themes/shop/style.css', original: serverText, modified: localText, before: 'production', after: 'This site' });
 ```
 
-`original` is drawn on the left and `modified` on the right, each up to 2 MB, and the file's extension picks the highlighting. A file that exists on one side only can be shown on its own, read only, with `lerd.view({ path, content, label: 'production' })`. An older lerd ignores the call, so a page that relies on it should say which lerd it needs with `lerd:` in `plugin.yaml`.
+`original` is drawn on the left and `modified` on the right, each up to 2 MB, and the file's extension picks the highlighting. A file that exists on one side only can be shown on its own, read only, with `lerd.view({ path, content, label: 'production' })`.
+
+### Editing a file
+
+`lerd.edit` opens a file in the dashboard's own editor, with Save and Cancel, and resolves with the saved text, or `null` when the user cancels. The page saves it through its own endpoint:
+
+```js
+try {
+  const text = await lerd.edit({ path: '.lerd/scrub.sql', content: current, label: 'Runs after every pull' });
+  if (text !== null) await lerd.api('scrub', { method: 'POST', body: { content: text } });
+} catch {
+  // An older lerd has no editor for plugin pages: offer a textarea instead.
+}
+```
+
+The call rejects after a moment on a lerd that does not answer, so a page can fall back to its own editor. An older lerd ignores the call, so a page that relies on it should say which lerd it needs with `lerd:` in `plugin.yaml`.
 
 ### Speaking the user's language
 

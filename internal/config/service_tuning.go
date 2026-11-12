@@ -157,6 +157,7 @@ const postgresTuningTemplate = `# Lerd user tuning for this service.
 # work_mem = 16MB
 # maintenance_work_mem = 128MB
 # max_connections = 100
+# max_locks_per_transaction = 256  # parallel test suites drop many tables at once
 `
 
 // postgresTuningWrapper is the lerd-managed config_file postgres is pointed at
@@ -170,6 +171,8 @@ const postgresTuningTemplate = `# Lerd user tuning for this service.
 const postgresTuningWrapper = `# Lerd-managed postgres config wrapper, do not edit.
 # postgres runs with -c config_file pointing here (see service_tuning.go).
 include_if_exists = '/var/lib/postgresql/data/postgresql.conf'
+# Parallel test suites drop many tables at once and run out of the default 64.
+max_locks_per_transaction = 256
 include_dir = '/etc/postgresql/conf.d'
 `
 

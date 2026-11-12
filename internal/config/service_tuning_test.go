@@ -263,6 +263,10 @@ func TestServiceTuningAux(t *testing.T) {
 	if !strings.Contains(content, "include_dir = '/etc/postgresql/conf.d'") {
 		t.Errorf("aux content missing include_dir directive:\n%s", content)
 	}
+	locks := strings.Index(content, "max_locks_per_transaction = 256")
+	if locks < strings.Index(content, "postgresql.conf'") || locks > strings.Index(content, "include_dir") {
+		t.Errorf("aux content must set max_locks_per_transaction between the cluster conf and include_dir:\n%s", content)
+	}
 
 	for _, svc := range []*CustomService{
 		{Name: "mysql", Family: "mysql"},
