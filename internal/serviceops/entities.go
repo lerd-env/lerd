@@ -54,6 +54,24 @@ func resolveIntrospect(service string) *config.Introspect {
 	return nil
 }
 
+// EnsureFamilyPreset fetches the store preset a family-only service borrows its
+// database commands from, which installing it never does. It reaches the
+// network, so it belongs to deliberate operations, never to listing paths.
+func EnsureFamilyPreset(service string) error {
+	custom, err := config.LoadCustomService(service)
+	if err != nil || custom.Preset != "" || custom.Introspect != nil {
+		return nil
+	}
+	family := config.FamilyOf(custom)
+	if family == "" || config.PresetExists(family) {
+		return nil
+	}
+	if _, err := config.EnsurePreset(family); err != nil {
+		return fmt.Errorf("%s takes its database commands from the %s preset: %w", service, family, err)
+	}
+	return nil
+}
+
 // EntityFor resolves the declared entity spec of the given kind for a service.
 // Kind "databases" also honours the legacy list_databases field.
 func EntityFor(service, kind string) *config.EntitySpec {
@@ -309,13 +327,6 @@ func EntityExportFilename(service, kind, name string) string {
 // store-published engine reaches the Databases tab without a Go change.
 func DeclaresDatabases(service string) bool {
 	return EntityFor(service, "databases") != nil
-}
-
-// DeclaresDatabaseAction reports whether a service declares the given action
-// on its databases, so a caller can refuse rather than silently do nothing.
-func DeclaresDatabaseAction(service, action string) bool {
-	_, ok := entityAction(EntityFor(service, "databases"), action)
-	return ok
 }
 
 // ServiceEntities returns the non-database entity specs a service declares.

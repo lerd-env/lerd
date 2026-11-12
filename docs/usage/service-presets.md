@@ -488,9 +488,10 @@ environment (`MYSQL_PWD` / `PGPASSWORD`), so commands need no inline credentials
 for MySQL and PostgreSQL; other engines embed theirs the way their client expects.
 
 A service defined inline in a project's `.lerd.yaml` that names a `family:` but
-neither a preset nor its own `introspect:` block takes the entities of that
-family's default preset, so a `family: mariadb` service creates, drops and
-snapshots databases the way the bundled `mariadb` preset does. Those commands
+neither a preset nor its own `introspect:` block takes the entities of the
+preset named after that family, so a `family: mariadb` service creates, drops
+and snapshots databases the way the `mariadb` preset does. A worktree database
+on such a service fetches that preset from the store when it is not cached yet. Those commands
 log in with the fixed `lerd` admin password, so the service has to set it too.
 
 In an action, every `{{name}}` is replaced by the entity name after validation
