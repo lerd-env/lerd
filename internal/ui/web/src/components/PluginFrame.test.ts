@@ -1,5 +1,5 @@
 import { render } from '@testing-library/svelte';
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import PluginFrame from './PluginFrame.svelte';
 
 // The frame is what keeps a plugin page off lerd's origin: scripts yes, the
@@ -48,4 +48,65 @@ it('opens one file read only when its page asks to view it', async () => {
   expect(await findByText('notes/only-here.txt')).toBeTruthy();
   expect(await findByText('production')).toBeTruthy();
   expect(container.ownerDocument.body.textContent).not.toContain('→');
+});
+
+// A page can hand a file to the dashboard's editor and get the saved text back.
+it('edits a file for its page and answers with the saved text, or null on cancel', async () => {
+  const { container, findByText, queryByText } = render(PluginFrame, {
+    props: { plugin: 'hello', url: '/plugins/hello/ui/site.html', title: 'Hello' }
+  });
+  const frame = container.querySelector('iframe')!;
+  const sent: any[] = [];
+  frame.contentWindow!.postMessage = ((m: unknown) => sent.push(m)) as Window['postMessage'];
+  const ask = (id: number) =>
+    window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data: { type: 'lerd:edit', id, path: '.lerd/scrub.sql', content: 'DELETE FROM x;', label: 'after a pull' } }));
+
+  ask(7);
+  expect(await findByText('.lerd/scrub.sql')).toBeTruthy();
+  expect(sent).toContainEqual({ type: 'lerd:edit:opened', id: 7 });
+  (await findByText('Save')).click();
+  await vi.waitFor(() => expect(sent).toContainEqual({ type: 'lerd:edit:result', id: 7, content: 'DELETE FROM x;' }));
+  await vi.waitFor(() => expect(queryByText('.lerd/scrub.sql')).toBeNull());
+
+  ask(8);
+  (await findByText('Cancel')).click();
+  await vi.waitFor(() => expect(sent).toContainEqual({ type: 'lerd:edit:result', id: 8, content: null }));
+});
+
+// When the page that opened the editor is replaced, its edit is cancelled to it
+// and the editor closes, so a save can never land on a page that did not ask.
+it('cancels an open edit to its own page when the frame is replaced', async () => {
+  const { container, findByText, queryByText, rerender } = render(PluginFrame, {
+    props: { plugin: 'hello', url: '/plugins/hello/ui/site.html', title: 'Hello', context: { branch: 'a' } }
+  });
+  const first = container.querySelector('iframe')!;
+  const sent: any[] = [];
+  first.contentWindow!.postMessage = ((m: unknown) => sent.push(m)) as Window['postMessage'];
+  window.dispatchEvent(new MessageEvent('message', { source: first.contentWindow, data: { type: 'lerd:edit', id: 4, path: 'notes.txt', content: 'x' } }));
+  expect(await findByText('notes.txt')).toBeTruthy();
+
+  await rerender({ plugin: 'hello', url: '/plugins/hello/ui/site.html', title: 'Hello', context: { branch: 'b' } });
+  await vi.waitFor(() => expect(sent).toContainEqual({ type: 'lerd:edit:result', id: 4, content: null }));
+  await vi.waitFor(() => expect(queryByText('notes.txt')).toBeNull());
+});
+
+// One dialog at a time: a viewer asked for during an edit would open behind the
+// editor and take its Escape, so it is refused until the edit ends.
+it('keeps the editor the only dialog while an edit is open', async () => {
+  const { container, findByText, queryByText } = render(PluginFrame, {
+    props: { plugin: 'hello', url: '/plugins/hello/ui/site.html', title: 'Hello' }
+  });
+  const frame = container.querySelector('iframe')!;
+  const sent: any[] = [];
+  frame.contentWindow!.postMessage = ((m: unknown) => sent.push(m)) as Window['postMessage'];
+  const post = (data: object) => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data }));
+
+  post({ type: 'lerd:edit', id: 5, path: 'notes.txt', content: 'x' });
+  expect(await findByText('notes.txt')).toBeTruthy();
+  post({ type: 'lerd:view', path: 'other.txt', content: 'y' });
+  await new Promise((r) => setTimeout(r, 0));
+  expect(queryByText('other.txt')).toBeNull();
+
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  await vi.waitFor(() => expect(sent).toContainEqual({ type: 'lerd:edit:result', id: 5, content: null }));
 });

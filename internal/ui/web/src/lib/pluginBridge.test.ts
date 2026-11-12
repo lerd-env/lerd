@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { pluginApiPath, answerPluginRequest, pluginTheme, pluginDiffRequest } from './pluginBridge';
+import { pluginApiPath, answerPluginRequest, pluginTheme, pluginDiffRequest, pluginEditRequest } from './pluginBridge';
 
 describe('pluginApiPath', () => {
   it('keeps a plugin inside its own endpoints', () => {
@@ -123,5 +123,26 @@ describe('pluginDiffRequest for a single file', () => {
       after: 'production'
     });
     expect(ask({ type: 'lerd:view', path: 'a.css', content: 5 })).toBeNull();
+  });
+});
+
+describe('pluginEditRequest', () => {
+  const frame = {} as Window;
+  const ask = (data: unknown, source: unknown = frame) => pluginEditRequest({ data, source } as MessageEvent, frame);
+
+  it('takes a file for the dashboard editor, with the id to answer by', () => {
+    expect(ask({ type: 'lerd:edit', id: 3, path: '.lerd/scrub.sql', content: 'DELETE FROM x;', label: 'after a pull' })).toEqual({
+      id: 3,
+      path: '.lerd/scrub.sql',
+      content: 'DELETE FROM x;',
+      label: 'after a pull'
+    });
+  });
+
+  it('ignores other frames, a missing id and anything not text', () => {
+    expect(ask({ type: 'lerd:edit', id: 1, path: 'a', content: '' }, {})).toBeNull();
+    expect(ask({ type: 'lerd:edit', path: 'a', content: '' })).toBeNull();
+    expect(ask({ type: 'lerd:edit', id: 1, path: 'a', content: 7 })).toBeNull();
+    expect(ask({ type: 'lerd:edit', id: 1, path: 'a', content: 'x'.repeat(2 * 1024 * 1024 + 1) })).toBeNull();
   });
 });

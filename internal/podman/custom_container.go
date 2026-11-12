@@ -170,7 +170,7 @@ func BuildCustomImageTo(siteName, projectPath string, cfg *config.ContainerConfi
 // it first with rmi -f killed the running container and spent systemd's restart
 // limit on the missing image, leaving the site down.
 func RebuildCustomImage(siteName, projectPath string, cfg *config.ContainerConfig, restart func() error) error {
-	oldID := customImageID(CustomImageName(siteName))
+	oldID := LocalImageID(CustomImageName(siteName))
 	ForgetCustomImageTools(siteName)
 	if err := BuildCustomImage(siteName, projectPath, cfg); err != nil {
 		return err
@@ -178,7 +178,7 @@ func RebuildCustomImage(siteName, projectPath string, cfg *config.ContainerConfi
 	if err := restart(); err != nil {
 		return err
 	}
-	if oldID != "" && oldID != customImageID(CustomImageName(siteName)) {
+	if oldID != "" && oldID != LocalImageID(CustomImageName(siteName)) {
 		_ = execCommand(PodmanBin(), "rmi", oldID).Run()
 	}
 	return nil
