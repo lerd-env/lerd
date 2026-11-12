@@ -523,7 +523,7 @@ func SaveProjectAnswers(cwd string, answers ProjectAnswers) error {
 
 // projectConfigFromAnswers turns answers into the .lerd.yaml a link applies,
 // carrying over the parts of an existing config the questions never ask about
-// (the public dir, the app URL, extra domains, custom workers).
+// (the public dir, the app URL, extra domains, custom workers, the app name).
 func projectConfigFromAnswers(cwd string, defaults *config.ProjectConfig, a ProjectAnswers, httpsAvailable bool) (*config.ProjectConfig, error) {
 	// An empty answer means two different things. The dashboard only renders
 	// the Node question for a PHP project on a machine where lerd manages Node,
@@ -543,6 +543,7 @@ func projectConfigFromAnswers(cwd string, defaults *config.ProjectConfig, a Proj
 		Domains:       defaults.Domains,
 		NodeVersion:   nodeVersion,
 		CustomWorkers: defaults.CustomWorkers,
+		AppName:       defaults.AppName,
 	}
 
 	switch a.Kind {
