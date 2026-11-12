@@ -95,7 +95,9 @@ describe('repaintLightOnly', () => {
     const doc = sheetWith('.note { box-shadow: 0 0 10px #cccccc; }');
     repaintLightOnly(doc, true);
     const shadow = hex(rule(doc).getPropertyValue('box-shadow'));
-    expect(shadow).toContain('0 0 10px');
+    // Browsers serialise the colour first and the lengths with units, so match
+    // the geometry wherever it lands.
+    expect(shadow).toMatch(/\b0(px)? 0(px)? 10px\b/);
     const painted = shadow.match(/#[0-9a-f]{6}/)![0];
     // Darker than the page it sits on, so it reads as a shadow on either side.
     expect(parseInt(painted.slice(1, 3), 16)).toBeLessThan(0x10);
