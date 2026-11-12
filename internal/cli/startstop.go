@@ -726,12 +726,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 			jobs[i] = BuildJob{
 				Label: label,
 				Run: func(w io.Writer) error {
-					var err error
-					if unit == "lerd-dns" {
-						err = podman.RestartUnit(unit)
-					} else {
-						err = podman.StartUnit(unit)
-					}
+					err := startUnit(unit)
 					ev := StartEvent{Phase: "unit", Unit: label}
 					if err != nil {
 						ev.Error = err.Error()
@@ -1527,4 +1522,19 @@ func servicesToRestore(svcs []config.ProjectService, seen map[string]bool) []con
 		out = append(out, svc)
 	}
 	return out
+}
+
+var containerRunningFn = podman.ContainerRunning
+
+// startUnit brings one unit up for lerd start. A running container is left
+// alone: on macOS a start re-creates it, so nginx would drop :80 and fail to
+// rebind if another process took the port meanwhile. lerd-dns always restarts.
+func startUnit(unit string) error {
+	if unit == "lerd-dns" {
+		return restartUnitFn(unit)
+	}
+	if running, _ := containerRunningFn(unit); running {
+		return nil
+	}
+	return startUnitFn(unit)
 }

@@ -163,6 +163,8 @@ This applies to script and source installs in `~/.local/bin`. On a packaged inst
 
 Replacing the binary is only half of an update: quadlets, DNS, nginx config, the user services and the shims all have to be reapplied, which `lerd update` does for you by re-running `lerd install`. A package manager does none of that, so the first lerd command you run at a terminal after the new binary lands reapplies it for you and says so. It runs once per version, and never on a machine where `lerd install` has not run yet, in a script, or from a daemon.
 
+Nginx is only restarted when its image or its quadlet changed, or when it was not running. Otherwise it is reloaded, which picks up the regenerated config without dropping the ports it holds, so sites stay up through an update and a port taken by another process in the meantime cannot keep nginx from coming back.
+
 You can also re-run the installer:
 
 ::: code-group

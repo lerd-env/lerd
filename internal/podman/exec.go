@@ -313,6 +313,16 @@ func ContainerRunning(name string) (bool, error) {
 	return strings.TrimSpace(out) == "true", nil
 }
 
+// ContainerImageID returns the ID of the image the named container runs, or ""
+// when the container does not exist.
+func ContainerImageID(name string) string {
+	out, err := Run("inspect", "--format={{.Image}}", name)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
+}
+
 // ContainerRunningKnown is ContainerRunning that tells a missing container
 // apart from a podman that could not be asked: known is false when inspect
 // failed for any reason other than the container not existing.
