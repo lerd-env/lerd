@@ -5,6 +5,8 @@ package tray
 import (
 	"bytes"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 func TestPickColorIcon(t *testing.T) {
@@ -157,5 +159,29 @@ func TestIconStatePulseAlternatesThenSettles(t *testing.T) {
 	s.setPulsing(false)
 	if s.last != iconKindStoppedDark || !bytes.Equal(applied[len(applied)-1], iconOffWhitePNG) {
 		t.Error("ending the pulse should settle on the real stopped state")
+	}
+}
+
+// With lerd-ui down the snapshot is empty, but the high-contrast choice is saved
+// locally and must still hold, or the stopped icon can vanish on a mixed theme.
+func TestHighContrastSurvivesUnreachableUI(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.SetHighContrastTrayIcon(true)
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatal(err)
+	}
+	var applied [][]byte
+	s := newIconState()
+	s.apply = func(icon []byte) { applied = append(applied, icon) }
+
+	applyIcon(s, &Snapshot{})
+
+	if len(applied) == 0 || !bytes.Equal(applied[len(applied)-1], iconOffRedPNG) {
+		t.Error("a stopped lerd with high contrast saved should show the red slashed icon")
 	}
 }

@@ -411,10 +411,20 @@ func applyLoop(menu *menuState, updateCh <-chan *Snapshot, mono bool, icons *ico
 			continue
 		}
 		if icons != nil {
-			icons.setHighContrast(snap != nil && snap.HighContrastIcon)
-			icons.setRunning(running)
+			applyIcon(icons, snap)
 		}
 	}
+}
+
+// applyIcon sets the colour icon from a poll. High contrast is read from the
+// saved config, not the snapshot, which comes back empty while lerd-ui is down.
+func applyIcon(icons *iconState, snap *Snapshot) {
+	highContrast := false
+	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil {
+		highContrast = cfg.IsHighContrastTrayIcon()
+	}
+	icons.setHighContrast(highContrast)
+	icons.setRunning(snap != nil && snap.Running)
 }
 
 func handleDash(item *systray.MenuItem, refresh func()) {
