@@ -278,6 +278,9 @@ func execWorktreeRemove(args map[string]any) (any, *rpcError) {
 			out, err := worktreeDBShareFn(wtPath)
 			if err != nil {
 				dbError = out
+				if dbError == "" {
+					dbError = err.Error()
+				}
 			} else {
 				dbDropped = true
 			}

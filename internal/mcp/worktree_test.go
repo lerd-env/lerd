@@ -533,6 +533,21 @@ func TestExecWorktreeRemove_reportsAFailedDrop(t *testing.T) {
 	}
 }
 
+// A db:share that dies before printing anything still has to give a reason.
+func TestExecWorktreeRemove_reportsASilentDropFailure(t *testing.T) {
+	repo := initRepoSite(t, "demo")
+	gitRun(t, repo, "worktree", "add", "-q", "-b", "feature", filepath.Join(repo, "demo-feature"))
+	orig := worktreeDBShareFn
+	worktreeDBShareFn = func(string) (string, error) { return "", errors.New("fork/exec lerd: no such file or directory") }
+	t.Cleanup(func() { worktreeDBShareFn = orig })
+
+	result, _ := execWorktreeRemove(map[string]any{"site": "demo", "branch": "feature", "keep_db": false})
+	text := result.(map[string]any)["content"].([]map[string]any)[0]["text"].(string)
+	if !strings.Contains(text, "no such file or directory") {
+		t.Fatalf("want the error as the reason, got %s", text)
+	}
+}
+
 // samePath compares two paths after resolving symlinks, since git reports the
 // real path and macOS temp dirs sit behind the /var -> /private/var link.
 func samePath(t *testing.T, a, b string) bool {
