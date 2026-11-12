@@ -48,7 +48,7 @@ func psQuote(s string) string {
 }
 
 // toastScript registers the app id with the bundled icon, copied from the
-// distro on first use, and shows the toast. The click goes to the desktop app,
+// distro whenever it changed, and shows the toast. The click goes to the desktop app,
 // then an installed PWA, then the dashboard, as on the D-Bus path.
 func toastScript(req Request, iconSrc string) string {
 	esc := func(u string) string { return psQuote(html.EscapeString(u)) }
@@ -57,9 +57,9 @@ $ProgressPreference = 'SilentlyContinue'
 $id = ` + psQuote(ToastAppID) + `
 $icon = Join-Path $env:LOCALAPPDATA 'lerd\notify-icon.png'
 $src = ` + psQuote(iconSrc) + `
-if ($src -and -not (Test-Path -LiteralPath $icon) -and (Test-Path -LiteralPath $src)) {
+if ($src -and (Test-Path -LiteralPath $src) -and (-not (Test-Path $icon) -or (Get-FileHash -LiteralPath $src).Hash -ne (Get-FileHash -LiteralPath $icon).Hash)) {
 	New-Item -ItemType Directory -Force (Split-Path $icon) | Out-Null
-	Copy-Item -LiteralPath $src $icon
+	Copy-Item -Force -LiteralPath $src $icon
 }
 $k = "HKCU:\Software\Classes\AppUserModelId\$id"
 if (-not (Test-Path $k)) { New-Item -Force $k | Out-Null }

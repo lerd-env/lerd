@@ -4,6 +4,7 @@
 package desktopnotify
 
 import (
+	"bytes"
 	_ "embed"
 	"os"
 	"path/filepath"
@@ -33,7 +34,8 @@ func IconPath() string {
 			return
 		}
 		p := filepath.Join(dir, "notify-icon.png")
-		if _, statErr := os.Stat(p); statErr != nil {
+		// Rewritten when it differs, so a new logo replaces one an older lerd cached.
+		if cur, readErr := os.ReadFile(p); readErr != nil || !bytes.Equal(cur, iconPNG) {
 			if err := os.WriteFile(p, iconPNG, 0o644); err != nil {
 				return
 			}
