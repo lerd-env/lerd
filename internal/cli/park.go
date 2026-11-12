@@ -427,7 +427,7 @@ func ensureFPMQuadletTo(phpVersion string, w io.Writer) error {
 	if rebuilt || unitChanged {
 		return restartUnitFn(unitName)
 	}
-	return startUnitFn(unitName)
+	return startUnit(unitName)
 }
 
 // fpmWouldBuildFn is a seam for the check that decides whether a version has

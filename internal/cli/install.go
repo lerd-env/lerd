@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -887,9 +888,17 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	autostartOn := lerdSystemd.IsAutostartEnabled()
 
 	if autostartOn {
-		step("Starting lerd-nginx")
-		if err := services.Mgr.Restart("lerd-nginx"); err != nil {
-			fmt.Printf("    WARN: %v\n", err)
+		running, _ := podman.ContainerRunning("lerd-nginx")
+		if nginxNeedsRestart(running, slices.Contains(changedQuadlets, "lerd-nginx"), podman.ContainerImageID("lerd-nginx"), podman.LocalImageID(nginxImage)) {
+			step("Starting lerd-nginx")
+			if err := services.Mgr.Restart("lerd-nginx"); err != nil {
+				fmt.Printf("    WARN: %v\n", err)
+			}
+		} else {
+			step("Reloading lerd-nginx")
+			if err := nginx.Reload(); err != nil {
+				fmt.Printf("    WARN: %v\n", err)
+			}
 		}
 		ok()
 	}
@@ -1168,6 +1177,13 @@ func runPHPRebuild() error {
 	rebuildCmd.Stderr = os.Stderr
 	rebuildCmd.Stdin = os.Stdin
 	return rebuildCmd.Run()
+}
+
+// nginxNeedsRestart reports whether install must restart lerd-nginx. A restart
+// drops the ports, which may not come back if something else grabbed :80, so a
+// container already running the local image (whoever pulled it) gets a reload.
+func nginxNeedsRestart(running, quadletChanged bool, containerImage, localImage string) bool {
+	return !running || quadletChanged || localImage == "" || containerImage != localImage
 }
 
 // withoutKeptImages drops the pulls offline mode will skip, so the disclosure
