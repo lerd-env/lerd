@@ -62,7 +62,11 @@ interface Notification {
 }
 
 describe('notify dispatcher', () => {
+  // These run as a window in the background, the case that raises a desktop
+  // popup. jsdom 31 reports every document as focused unless told otherwise.
+  let unfocused: { mockRestore(): void };
   beforeEach(async () => {
+    unfocused = vi.spyOn(document, 'hasFocus').mockReturnValue(false);
     MockNotification.instances = [];
     MockNotification.permission = 'granted';
     swShows.length = 0;
@@ -77,6 +81,7 @@ describe('notify dispatcher', () => {
   });
 
   afterEach(() => {
+    unfocused.mockRestore();
     // @ts-expect-error reset
     delete globalThis.Notification;
     removeSWMock();
