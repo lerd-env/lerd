@@ -763,6 +763,9 @@ type StatusResponse struct {
 	BunVersion     string `json:"bun_version"`
 	UsingSystemBun bool   `json:"using_system_bun"`
 	WatcherRunning bool   `json:"watcher_running"`
+	// Stopped is true after a `lerd stop` from any surface until the next start,
+	// so an open dashboard leaves the stack down instead of auto-starting it.
+	Stopped bool `json:"stopped"`
 	// FrankenPHPVersions are the PHP versions dunglas/frankenphp publishes an
 	// image for, so the UI can limit a FrankenPHP site's version dropdown to
 	// the ones it can actually run (intersected client-side with installed).
@@ -913,6 +916,7 @@ func buildStatus() StatusResponse {
 		BunVersion:            bunVersion,
 		UsingSystemBun:        usingSystemBun,
 		WatcherRunning:        watcherRunning,
+		Stopped:               config.IsStopped(),
 		FrankenPHPVersions:    config.FrankenPHPVersions(),
 		PrereleasePHPVersions: config.PrereleasePHPVersions,
 		Home:                  homeDir,
@@ -1297,7 +1301,7 @@ func buildSites() ([]SiteResponse, error) {
 
 		sites = append(sites, SiteResponse{
 			Name:                 e.Name,
-			AppName:              laravelAppName(e.FrameworkName, e.Path),
+			AppName:              siteAppName(e.FrameworkName, e.Path),
 			Domain:               e.PrimaryDomain(),
 			Domains:              e.Domains,
 			ConflictingDomains:   conflicting,
@@ -6291,11 +6295,11 @@ func ensureWorktreeEnvIfBranch(site *config.Site, branch string) {
 	}
 }
 
-// laravelAppName labels a sites-dashboard tile by its Laravel APP_NAME instead
-// of just the URL. Thin wrapper over siteinfo.LaravelAppName so the web and the
-// TUI share one implementation; see there for the gating rules.
-func laravelAppName(frameworkName, sitePath string) string {
-	return siteinfo.LaravelAppName(frameworkName, sitePath)
+// siteAppName labels a sites-dashboard tile by its app name instead of just the
+// URL. Thin wrapper over siteinfo.AppName so the web and the TUI share one
+// implementation; see there for where the name comes from.
+func siteAppName(frameworkName, sitePath string) string {
+	return siteinfo.AppName(frameworkName, sitePath)
 }
 
 // siteHasEnv reports whether the site root contains a .env file. Cheap,

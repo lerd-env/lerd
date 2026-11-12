@@ -1,8 +1,8 @@
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import { apiFetch } from '$lib/api';
 import { readNDJSON } from '$lib/ndjson';
 import { handOverToVhost } from '$lib/vhost';
-import { loadStatus } from './status';
+import { loadStatus, status } from './status';
 
 // StartEvent mirrors cli.StartEvent: a stage of the start sequence, or one unit
 // that has finished starting (error set when it failed).
@@ -105,10 +105,10 @@ export async function lerdStop(): Promise<boolean> {
 // the CLI or the tray.
 let autoStartTried = false;
 
-// autoStartOnce brings the stack up when the dashboard is opened on a stopped
-// lerd and the setting is on, which is what makes opening the app enough.
+// autoStartOnce brings the stack up when the dashboard opens on a stopped lerd
+// and the setting is on, but never one the user stopped: that waits for Start.
 export async function autoStartOnce(): Promise<void> {
-  if (autoStartTried) return;
+  if (autoStartTried || get(status).stopped) return;
   autoStartTried = true;
   await lerdStart();
 }

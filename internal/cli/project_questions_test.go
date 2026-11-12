@@ -314,3 +314,33 @@ func TestProjectConfigFromAnswersKeepsThePinWhereTheQuestionIsNotAsked(t *testin
 		}
 	}
 }
+
+// app_name is never asked about, so reconfiguring a project from the dashboard
+// must not drop the name it carries. Saved and read back so the key survives
+// the file too, not only the struct.
+func TestProjectConfigFromAnswersKeepsTheAppName(t *testing.T) {
+	setNodeManaged(t, false)
+	defaults := &config.ProjectConfig{AppName: "Shop"}
+
+	for _, a := range []ProjectAnswers{
+		{Kind: ProjectKindPHP, PHPVersion: "8.3"},
+		{Kind: ProjectKindProxy, ProxyCommand: "npm run dev", ProxyPort: 5173},
+		{Kind: ProjectKindContainer, ContainerPort: 8080},
+	} {
+		dir := t.TempDir()
+		cfg, err := projectConfigFromAnswers(dir, defaults, a, true)
+		if err != nil {
+			t.Fatalf("%s: %v", a.Kind, err)
+		}
+		if err := config.SaveProjectConfig(dir, cfg); err != nil {
+			t.Fatalf("%s: save: %v", a.Kind, err)
+		}
+		got, err := config.LoadProjectConfig(dir)
+		if err != nil {
+			t.Fatalf("%s: load: %v", a.Kind, err)
+		}
+		if got.AppName != "Shop" {
+			t.Errorf("%s: app_name = %q, want the name kept", a.Kind, got.AppName)
+		}
+	}
+}

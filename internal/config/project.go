@@ -145,6 +145,9 @@ type ProjectConfig struct {
 	// keeps the default (refresh in place). An explicit `lerd mcp:inject` still
 	// writes, since that is the user asking.
 	MCPInject *bool `yaml:"mcp_inject,omitempty"`
+	// AppName titles the site on the dashboard and in the TUI, for a project
+	// whose framework gives lerd no name to read. Wins over a framework's own.
+	AppName string `yaml:"app_name,omitempty"`
 }
 
 // MCPInjectDisabled reports whether the project opted out of automatic MCP
@@ -167,7 +170,7 @@ func (c *ProjectConfig) IsEmpty() bool {
 		!c.DBIsolated && len(c.EnvOverrides) == 0 && len(c.WorktreeInclude) == 0 &&
 		len(c.EnvPassthrough) == 0 && c.EnvProvider == "" &&
 		c.RequestTimeout == 0 && !c.FrontController && c.Stripe == nil &&
-		c.MCPInject == nil
+		c.MCPInject == nil && c.AppName == ""
 }
 
 // Validate reports configuration that can't be honoured. A site is either a

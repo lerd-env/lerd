@@ -339,6 +339,11 @@ func TestProjectConfig_Commands_IsEmpty(t *testing.T) {
 	if cfg.IsEmpty() {
 		t.Error("config with an embedded framework definition should not be empty")
 	}
+
+	cfg = &ProjectConfig{AppName: "My Site"}
+	if cfg.IsEmpty() {
+		t.Error("config with only an app_name should not be empty")
+	}
 }
 
 func TestProjectConfig_Container_IsEmpty(t *testing.T) {

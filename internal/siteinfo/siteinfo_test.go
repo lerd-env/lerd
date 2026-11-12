@@ -202,6 +202,63 @@ func TestLaravelAppName_CachesByModTime(t *testing.T) {
 	}
 }
 
+func TestAppName_ProjectConfigWins(t *testing.T) {
+	writeFile := func(dir, name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	plain := t.TempDir()
+	writeFile(plain, ".lerd.yaml", "app_name: RocketCode Site\n")
+	writeFile(plain, ".env", "APP_NAME=Ignored\n")
+	if got := AppName("", plain); got != "RocketCode Site" {
+		t.Errorf("site with no framework: AppName = %q, want \"RocketCode Site\"", got)
+	}
+
+	laravel := t.TempDir()
+	writeFile(laravel, ".lerd.yaml", "app_name: \"  From yaml  \"\n")
+	writeFile(laravel, ".env", "APP_NAME=From env\n")
+	if got := AppName("laravel", laravel); got != "From yaml" {
+		t.Errorf("app_name should win over APP_NAME, got %q", got)
+	}
+
+	fallback := t.TempDir()
+	writeFile(fallback, ".lerd.yaml", "app_name: \"   \"\n")
+	writeFile(fallback, ".env", "APP_NAME=From env\n")
+	if got := AppName("laravel", fallback); got != "From env" {
+		t.Errorf("blank app_name should fall back to APP_NAME, got %q", got)
+	}
+
+	local := t.TempDir()
+	writeFile(local, ".lerd.yaml", "app_name: Shared\n")
+	writeFile(local, ".lerd.local.yaml", "app_name: Mine\n")
+	if got := AppName("", local); got != "Mine" {
+		t.Errorf(".lerd.local.yaml should override app_name, got %q", got)
+	}
+
+	if got := AppName("", t.TempDir()); got != "" {
+		t.Errorf("no app_name and no framework: AppName = %q, want empty", got)
+	}
+	if got := AppName("", ""); got != "" {
+		t.Errorf("empty path: AppName = %q, want empty", got)
+	}
+}
+
+func TestEnrich_SetsAppNameFromProjectConfig(t *testing.T) {
+	setDataDir(t)
+	stubPodman(t)
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte("app_name: Plain PHP\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if e := Enrich(config.Site{Name: "plain", Path: dir}, EnrichFramework); e.AppName != "Plain PHP" {
+		t.Errorf("Enrich AppName = %q, want \"Plain PHP\"", e.AppName)
+	}
+}
+
 func TestEnrich_SetsAppNameUnderFramework(t *testing.T) {
 	setDataDir(t)
 	stubPodman(t)
