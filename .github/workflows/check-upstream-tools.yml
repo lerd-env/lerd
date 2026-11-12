@@ -44,7 +44,7 @@ jobs:
           done
 
       - name: Open bump PR
-        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c # v6.1.0
+        uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v8.1.2
         with:
           branch: chore/bump-tool-pins
           commit-message: 'chore: bump pinned host tool versions'
