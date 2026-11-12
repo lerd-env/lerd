@@ -393,6 +393,7 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 		CustomWorkers:    filteredCustomWorkers,
 		AppURL:           defaults.AppURL,
 		Domains:          defaults.Domains,
+		AppName:          defaults.AppName,
 		Runtime:          runtime,
 		RuntimeWorker:    runtimeWorker,
 	}, nil
@@ -511,6 +512,7 @@ func runCustomContainerWizard(cwd string, defaults *config.ProjectConfig, gcfg *
 		Container:     containerCfg,
 		AppURL:        defaults.AppURL,
 		Domains:       defaults.Domains,
+		AppName:       defaults.AppName,
 		// This wizard never asks about Node, so a pin the project carries is
 		// not its to drop.
 		NodeVersion: defaults.NodeVersion,
@@ -696,6 +698,7 @@ func runHostProxyWizard(cwd string, defaults *config.ProjectConfig, gcfg *config
 		Proxy:       &config.ProxyConfig{Command: command, Port: port, SSL: false},
 		AppURL:      defaults.AppURL,
 		Domains:     defaults.Domains,
+		AppName:     defaults.AppName,
 		NodeVersion: defaults.NodeVersion,
 	}, nil
 }
