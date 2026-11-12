@@ -129,3 +129,39 @@ func TestOpenUpdateTerminal_LogsWhenNothingOpens(t *testing.T) {
 		t.Errorf("log = %q, want the reason nothing opened", log.String())
 	}
 }
+
+// The tray asks lerd-ui to start or stop rather than running `lerd start` in
+// its own process group: the start relaunches the tray, and as the tray's child
+// it was killed along with it, leaving no tray at all.
+func TestLifecycleViaUI_PostsToTheDaemon(t *testing.T) {
+	var gotPath, gotCSRF string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			gotPath, gotCSRF = r.URL.Path, r.Header.Get("X-Lerd-CSRF")
+		}
+		w.Write([]byte(`{"phase":"done"}` + "\n"))
+	}))
+	defer srv.Close()
+	prev := apiBase
+	apiBase = srv.URL
+	t.Cleanup(func() { apiBase = prev })
+
+	if !lifecycleViaUI("start") {
+		t.Fatal("a daemon that answered should count as reached")
+	}
+	if gotPath != "/api/lerd/start" || gotCSRF != "1" {
+		t.Errorf("posted %q with csrf %q", gotPath, gotCSRF)
+	}
+}
+
+func TestLifecycleViaUI_ReportsAnUnreachableDaemon(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	srv.Close()
+	prev := apiBase
+	apiBase = srv.URL
+	t.Cleanup(func() { apiBase = prev })
+
+	if lifecycleViaUI("stop") {
+		t.Error("an unreachable daemon must leave the command to the CLI")
+	}
+}

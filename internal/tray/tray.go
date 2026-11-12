@@ -420,7 +420,9 @@ func handleToggle(menu *menuState, icons *iconState, refresh func()) {
 			if icons != nil {
 				stop = icons.pulse()
 			}
-			_ = lerdCmd(arg).Run()
+			if !lifecycleViaUI(arg) {
+				_ = lerdCmd(arg).Run()
+			}
 			// Show the outcome asked for until the refresh confirms it, so the
 			// item does not flash back to the old state in between.
 			if icons != nil {
@@ -578,6 +580,24 @@ var (
 )
 
 // requestUpdateTerminal asks lerd-ui to open the user's terminal on lerd update.
+// lifecycleViaUI has lerd-ui start or stop lerd, false only when it is not
+// answering: as the tray's child, a start died when it relaunched the tray.
+func lifecycleViaUI(arg string) bool {
+	req, err := http.NewRequest(http.MethodPost, apiBase+"/api/lerd/"+arg, nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("X-Lerd-CSRF", "1")
+	// No timeout: a cold start streams progress for minutes.
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer res.Body.Close()
+	_, _ = io.Copy(io.Discard, res.Body)
+	return true
+}
+
 func requestUpdateTerminal() error {
 	req, err := http.NewRequest(http.MethodPost, apiBase+"/api/lerd/update-terminal", nil)
 	if err != nil {

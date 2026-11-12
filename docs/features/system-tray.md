@@ -51,7 +51,7 @@ Settings       ▸   Autostart at login: ✔ On   ← enables/disables every ler
                    Turn off system tray       ← `lerd tray off`, quits the applet for good
 ```
 
-The menu refreshes every 30 seconds, and again right after any click so it redraws against the result instead of waiting for the next poll. While **Start Lerd** or **Stop Lerd** runs the item reads **Starting Lerd…** or **Stopping Lerd…** and the colour icon blinks until it finishes. Clicking a service toggles it on/off. Clicking a PHP version sets it as the global default. "Quit Lerd" stops the entire environment before closing.
+The menu refreshes every 30 seconds, and again right after any click so it redraws against the result instead of waiting for the next poll. **Start Lerd** and **Stop Lerd** ask the running dashboard daemon to do the work, falling back to the CLI when it is not up; while the command runs the item reads **Starting Lerd…** or **Stopping Lerd…** and the colour icon blinks until it finishes. Clicking a service toggles it on/off. Clicking a PHP version sets it as the global default. "Quit Lerd" stops the entire environment before closing.
 
 The **Debug bridge** item shells out to `lerd dump on` / `lerd dump off`, see [Dumps](dumps.md). The **Notifications** item shells out to `lerd notify on` / `lerd notify off`, see [Notifications](notifications.md). Both are global toggles, persisted to `config.yaml`.
 
