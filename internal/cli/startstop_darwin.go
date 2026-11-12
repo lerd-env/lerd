@@ -462,11 +462,7 @@ func startPodmanMachineIfNeeded() error {
 // fails we stop with an actionable message instead of letting every later
 // podman command cascade into confusing "exit status 125" errors.
 func startPodmanMachineWithRetry() error {
-	run := func() error {
-		return runMachineStreaming(machineStartTimeout, "machine", "start")
-	}
-
-	err := run()
+	err := startMachine()
 	if err == nil {
 		return nil
 	}
@@ -485,7 +481,7 @@ func startPodmanMachineWithRetry() error {
 	// fully exit and release the SSH port it grabbed. Retrying instantly can
 	// race that release; a short pause lets podman reassign the port cleanly.
 	time.Sleep(3 * time.Second)
-	err = run()
+	err = startMachine()
 	if err == nil {
 		return nil
 	}
