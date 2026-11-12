@@ -24,16 +24,9 @@ var installMarkers = []string{
 	"node_modules/.bun-tag",
 }
 
-// settleChecks is how many unchanged checks a replaced node_modules with no new
-// marker, an install that failed, waits before its dev servers are restarted.
-const settleChecks = 2
-
 // checkoutState is what the last check saw of one checkout.
 type checkoutState struct {
-	marker   time.Time
-	modules  os.FileInfo
-	replaced bool
-	settled  int
+	marker time.Time
 	// units are the dev servers seen running, kept so one a branch change stops
 	// declaring is still restarted onto the new packages.
 	units []string
@@ -72,47 +65,16 @@ func (d *DevServerInstalls) Check(site *config.Site) error {
 	return errors.Join(errs...)
 }
 
-// reinstalled reports a marker newer than the last one, or a node_modules that
-// was replaced and then sat unchanged with no marker, as a failed install leaves
-// it. The first look only records, "no marker yet" included.
+// reinstalled reports a marker newer than the last one; the first look records,
+// "none yet" included. A failed install writes none and is left alone: its
+// packages are broken, and the unit writes the config back on its next start.
 func (d *DevServerInstalls) reinstalled(st *checkoutState, path string, known bool) bool {
 	marker := newestMarker(path)
-	modules, err := os.Stat(filepath.Join(path, "node_modules"))
-	if err != nil {
-		modules = nil
-	}
-	prev := *st
-	st.modules = modules
+	prev := st.marker
 	if !marker.IsZero() {
 		st.marker = marker
 	}
-	if !known {
-		return false
-	}
-	if marker.After(prev.marker) {
-		st.replaced, st.settled = false, 0
-		return true
-	}
-	if modules == nil {
-		return false
-	}
-	if prev.modules != nil && !os.SameFile(prev.modules, modules) {
-		st.replaced, st.settled = true, 0
-		return false
-	}
-	if !st.replaced {
-		return false
-	}
-	if prev.modules == nil || !modules.ModTime().Equal(prev.modules.ModTime()) {
-		st.settled = 0
-		return false
-	}
-	st.settled++
-	if st.settled < settleChecks {
-		return false
-	}
-	st.replaced, st.settled = false, 0
-	return true
+	return known && marker.After(prev)
 }
 
 func newestMarker(path string) time.Time {

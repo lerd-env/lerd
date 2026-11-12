@@ -244,36 +244,3 @@ func TestDevServerInstallsRestartsADevServerTheNewBranchDropped(t *testing.T) {
 		t.Errorf("config not written back for the dropped dev server: %v", err)
 	}
 }
-
-// A failed npm ci replaces node_modules and writes no marker. Once the folder
-// stops changing, the dev server is restarted anyway, and only once.
-func TestDevServerInstallsRestartsAfterAFailedInstallSettles(t *testing.T) {
-	dir, site, fake, marker := reinstallSite(t)
-	installs := NewDevServerInstalls()
-	if err := installs.Check(site); err != nil {
-		t.Fatal(err)
-	}
-
-	nm := filepath.Join(dir, "node_modules")
-	if err := os.Rename(nm, nm+".old"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(nm, "vite"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	_ = marker
-	for i := 0; i < 4; i++ {
-		if err := installs.Check(site); err != nil {
-			t.Fatal(err)
-		}
-	}
-	restarts := 0
-	for _, c := range fake.calls {
-		if c == "restart lerd-vite-myapp" {
-			restarts++
-		}
-	}
-	if restarts != 1 {
-		t.Errorf("want one restart once the failed install settled, got %d; calls: %v", restarts, fake.calls)
-	}
-}
