@@ -410,29 +410,35 @@ func handleDash(item *systray.MenuItem, refresh func()) {
 // what is happening and, in colour mode, the icon blinks until it is done.
 func handleToggle(menu *menuState, icons *iconState, refresh func()) {
 	for range menu.mToggle.ClickedCh {
+		arg, ok := menu.claim()
+		if !ok {
+			continue
+		}
 		go func() {
-			arg := "start"
-			if fetchSnapshot().Running {
-				arg = "stop"
-			}
-			menu.setBusy(arg)
 			stop := func() {}
 			if icons != nil {
 				stop = icons.pulse()
 			}
-			if !lifecycleViaUI(arg) {
-				_ = lerdCmd(arg).Run()
-			}
-			// Show the outcome asked for until the refresh confirms it, so the
+			err := runLifecycle(arg)
+			// On success show the outcome until the refresh confirms it, so the
 			// item does not flash back to the old state in between.
-			if icons != nil {
+			if err == nil && icons != nil {
 				icons.setRunning(arg == "start")
 			}
 			stop()
-			menu.finish(arg == "start")
+			menu.finish(err == nil)
 			refresh()
 		}()
 	}
+}
+
+// runLifecycle starts or stops lerd through lerd-ui, or the CLI when lerd-ui
+// is not answering.
+func runLifecycle(arg string) error {
+	if reached, err := lifecycleViaUI(arg); reached {
+		return err
+	}
+	return lerdCmd(arg).Run()
 }
 
 func handleAutostart(item *systray.MenuItem, refresh func()) {
@@ -580,22 +586,43 @@ var (
 )
 
 // requestUpdateTerminal asks lerd-ui to open the user's terminal on lerd update.
-// lifecycleViaUI has lerd-ui start or stop lerd, false only when it is not
-// answering: as the tray's child, a start died when it relaunched the tray.
-func lifecycleViaUI(arg string) bool {
+// lifecycleViaUI has lerd-ui start or stop lerd; reached is false only when it
+// is not answering: as the tray's child, a start died when it relaunched the tray.
+func lifecycleViaUI(arg string) (reached bool, err error) {
 	req, err := http.NewRequest(http.MethodPost, apiBase+"/api/lerd/"+arg, nil)
 	if err != nil {
-		return false
+		return false, err
 	}
 	req.Header.Set("X-Lerd-CSRF", "1")
 	// No timeout: a cold start streams progress for minutes.
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return false
+		return false, err
 	}
 	defer res.Body.Close()
-	_, _ = io.Copy(io.Discard, res.Body)
-	return true
+	if res.StatusCode >= 300 {
+		return true, fmt.Errorf("lerd-ui answered %s", res.Status)
+	}
+	return true, lifecycleFailure(res.Body)
+}
+
+// lifecycleFailure reads a start's NDJSON progress or a stop's JSON answer and
+// returns the failure either one reports.
+func lifecycleFailure(body io.Reader) error {
+	dec := json.NewDecoder(body)
+	for {
+		var line struct {
+			Phase string `json:"phase"`
+			OK    *bool  `json:"ok"`
+			Error string `json:"error"`
+		}
+		if err := dec.Decode(&line); err != nil {
+			return nil
+		}
+		if line.Phase == "failed" || (line.OK != nil && !*line.OK) {
+			return errors.New(line.Error)
+		}
+	}
 }
 
 func requestUpdateTerminal() error {

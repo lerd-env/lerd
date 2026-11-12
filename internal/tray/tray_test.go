@@ -146,8 +146,8 @@ func TestLifecycleViaUI_PostsToTheDaemon(t *testing.T) {
 	apiBase = srv.URL
 	t.Cleanup(func() { apiBase = prev })
 
-	if !lifecycleViaUI("start") {
-		t.Fatal("a daemon that answered should count as reached")
+	if reached, err := lifecycleViaUI("start"); !reached || err != nil {
+		t.Fatalf("reached %v err %v, want a reached daemon and no error", reached, err)
 	}
 	if gotPath != "/api/lerd/start" || gotCSRF != "1" {
 		t.Errorf("posted %q with csrf %q", gotPath, gotCSRF)
@@ -161,7 +161,28 @@ func TestLifecycleViaUI_ReportsAnUnreachableDaemon(t *testing.T) {
 	apiBase = srv.URL
 	t.Cleanup(func() { apiBase = prev })
 
-	if lifecycleViaUI("stop") {
+	if reached, _ := lifecycleViaUI("stop"); reached {
 		t.Error("an unreachable daemon must leave the command to the CLI")
+	}
+}
+
+// A start that streams a failed event, or a stop that answers ok:false, is a
+// failure: the tray must not go on to show the state it asked for.
+func TestLifecycleViaUI_CarriesTheDaemonsFailureBack(t *testing.T) {
+	for _, body := range []string{
+		`{"phase":"step","step":"units"}` + "\n" + `{"phase":"failed","error":"nginx would not start"}` + "\n",
+		`{"ok":false,"error":"podman is not running"}`,
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Write([]byte(body))
+		}))
+		prev := apiBase
+		apiBase = srv.URL
+		reached, err := lifecycleViaUI("start")
+		apiBase = prev
+		srv.Close()
+		if !reached || err == nil {
+			t.Errorf("body %q: reached %v err %v, want the failure reported", body, reached, err)
+		}
 	}
 }

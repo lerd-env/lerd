@@ -212,21 +212,40 @@ func lifecycleTitle(running bool, busy string) string {
 	}
 }
 
-// setBusy marks a start or stop as running ("" when it is done), so the poller
-// redrawing the menu meanwhile keeps the item saying so.
-func (m *menuState) setBusy(busy string) {
-	m.busyMu.Lock()
-	defer m.busyMu.Unlock()
-	m.busy = busy
-	m.drawToggle()
+// nextLifecycle picks what a click on the item does: what its label says, or
+// nothing while a start or stop is still running.
+func nextLifecycle(running bool, busy string) (string, bool) {
+	if busy != "" {
+		return "", false
+	}
+	if running {
+		return "stop", true
+	}
+	return "start", true
 }
 
-// finish clears the busy state, assuming the command's outcome until the next
-// snapshot says otherwise.
-func (m *menuState) finish(running bool) {
+// claim marks the item busy with the command a click asks for, at once, so the
+// feedback never waits on a state read.
+func (m *menuState) claim() (string, bool) {
 	m.busyMu.Lock()
 	defer m.busyMu.Unlock()
-	m.busy, m.running = "", running
+	arg, ok := nextLifecycle(m.running, m.busy)
+	if ok {
+		m.busy = arg
+		m.drawToggle()
+	}
+	return arg, ok
+}
+
+// finish clears the busy state. A command that succeeded is assumed to have
+// had its effect until the next snapshot; a failed one leaves the old state.
+func (m *menuState) finish(succeeded bool) {
+	m.busyMu.Lock()
+	defer m.busyMu.Unlock()
+	if succeeded {
+		m.running = m.busy == "start"
+	}
+	m.busy = ""
 	m.drawToggle()
 }
 

@@ -271,3 +271,17 @@ func TestLifecycleTitle(t *testing.T) {
 		}
 	}
 }
+
+// The click acts on what the item says, claimed at once, so feedback does not
+// wait on a slow state read and a second click while busy is dropped.
+func TestNextLifecycle(t *testing.T) {
+	if arg, ok := nextLifecycle(false, ""); !ok || arg != "start" {
+		t.Errorf("stopped: got %q %v, want start", arg, ok)
+	}
+	if arg, ok := nextLifecycle(true, ""); !ok || arg != "stop" {
+		t.Errorf("running: got %q %v, want stop", arg, ok)
+	}
+	if _, ok := nextLifecycle(false, "start"); ok {
+		t.Error("a click while a start runs must be ignored")
+	}
+}
