@@ -796,6 +796,12 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   if (path in ROUTES) return jsonResponse(ROUTES[path]);
 
   // Toggles / actions: pretend they succeeded so the UI flips optimistically.
+  // Resizing the Debug buffer answers with the full status, which the store keeps.
+  if (path === '/api/dumps/buffer' && method === 'POST') {
+    const { size } = JSON.parse(String(init?.body || '{}')) as { size?: number };
+    if (size) dumpsStatus.capacity = size;
+    return jsonResponse(dumpsStatus);
+  }
   if (method !== 'GET' && method !== 'HEAD') return jsonResponse({ ok: true });
   // Anything else we didn't fixture (push keys, favicons, …) — harmless empty.
   if (path === '/api/dumps') return jsonResponse(DEMO_EVENTS.filter((e) => e.ctx.rid === qs.get('rid')));
