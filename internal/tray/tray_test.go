@@ -129,3 +129,60 @@ func TestOpenUpdateTerminal_LogsWhenNothingOpens(t *testing.T) {
 		t.Errorf("log = %q, want the reason nothing opened", log.String())
 	}
 }
+
+// The tray asks lerd-ui to start or stop rather than running `lerd start` in
+// its own process group: the start relaunches the tray, and as the tray's child
+// it was killed along with it, leaving no tray at all.
+func TestLifecycleViaUI_PostsToTheDaemon(t *testing.T) {
+	var gotPath, gotCSRF string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			gotPath, gotCSRF = r.URL.Path, r.Header.Get("X-Lerd-CSRF")
+		}
+		w.Write([]byte(`{"phase":"done"}` + "\n"))
+	}))
+	defer srv.Close()
+	prev := apiBase
+	apiBase = srv.URL
+	t.Cleanup(func() { apiBase = prev })
+
+	if reached, err := lifecycleViaUI("start"); !reached || err != nil {
+		t.Fatalf("reached %v err %v, want a reached daemon and no error", reached, err)
+	}
+	if gotPath != "/api/lerd/start" || gotCSRF != "1" {
+		t.Errorf("posted %q with csrf %q", gotPath, gotCSRF)
+	}
+}
+
+func TestLifecycleViaUI_ReportsAnUnreachableDaemon(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	srv.Close()
+	prev := apiBase
+	apiBase = srv.URL
+	t.Cleanup(func() { apiBase = prev })
+
+	if reached, _ := lifecycleViaUI("stop"); reached {
+		t.Error("an unreachable daemon must leave the command to the CLI")
+	}
+}
+
+// A start that streams a failed event, or a stop that answers ok:false, is a
+// failure: the tray must not go on to show the state it asked for.
+func TestLifecycleViaUI_CarriesTheDaemonsFailureBack(t *testing.T) {
+	for _, body := range []string{
+		`{"phase":"step","step":"units"}` + "\n" + `{"phase":"failed","error":"nginx would not start"}` + "\n",
+		`{"ok":false,"error":"podman is not running"}`,
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Write([]byte(body))
+		}))
+		prev := apiBase
+		apiBase = srv.URL
+		reached, err := lifecycleViaUI("start")
+		apiBase = prev
+		srv.Close()
+		if !reached || err == nil {
+			t.Errorf("body %q: reached %v err %v, want the failure reported", body, reached, err)
+		}
+	}
+}

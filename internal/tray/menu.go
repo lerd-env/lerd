@@ -4,6 +4,7 @@ package tray
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/getlantern/systray"
 
@@ -23,6 +24,10 @@ type menuState struct {
 
 	mDash   *systray.MenuItem
 	mToggle *systray.MenuItem
+	// busy is "start" or "stop" while the toggle's command runs, "" otherwise.
+	busyMu  sync.Mutex
+	busy    string
+	running bool
 
 	mSvcs *systray.MenuItem
 	svcs  *menuList
@@ -193,6 +198,67 @@ func statusDot(ok bool) string {
 }
 
 // toggleTitle renders a settings toggle, e.g. "Notifications: ✔ On".
+// lifecycleTitle labels the start/stop item, naming a command still running.
+func lifecycleTitle(running bool, busy string) string {
+	switch {
+	case busy == "start":
+		return "Starting Lerd…"
+	case busy == "stop":
+		return "Stopping Lerd…"
+	case running:
+		return "Stop Lerd"
+	default:
+		return "Start Lerd"
+	}
+}
+
+// nextLifecycle picks what a click on the item does: what its label says, or
+// nothing while a start or stop is still running.
+func nextLifecycle(running bool, busy string) (string, bool) {
+	if busy != "" {
+		return "", false
+	}
+	if running {
+		return "stop", true
+	}
+	return "start", true
+}
+
+// claim marks the item busy with the command a click asks for, at once, so the
+// feedback never waits on a state read.
+func (m *menuState) claim() (string, bool) {
+	m.busyMu.Lock()
+	defer m.busyMu.Unlock()
+	arg, ok := nextLifecycle(m.running, m.busy)
+	if ok {
+		m.busy = arg
+		m.drawToggle()
+	}
+	return arg, ok
+}
+
+// finish clears the busy state. A command that succeeded is assumed to have
+// had its effect until the next snapshot; a failed one leaves the old state.
+func (m *menuState) finish(succeeded bool) {
+	m.busyMu.Lock()
+	defer m.busyMu.Unlock()
+	if succeeded {
+		m.running = m.busy == "start"
+	}
+	m.busy = ""
+	m.drawToggle()
+}
+
+// drawToggle must be called with busyMu held.
+func (m *menuState) drawToggle() {
+	m.mToggle.SetTitle(lifecycleTitle(m.running, m.busy))
+	if m.busy != "" {
+		m.mToggle.Disable()
+	} else {
+		m.mToggle.Enable()
+	}
+}
+
 func toggleTitle(label string, on bool) string {
 	if on {
 		return label + ": ✔ On"
@@ -218,11 +284,13 @@ func (m *menuState) apply(snap *Snapshot) {
 
 	if snap.Running {
 		m.mStatus.SetTitle("🟢 Running")
-		m.mToggle.SetTitle("Stop Lerd")
 	} else {
 		m.mStatus.SetTitle("🔴 Stopped")
-		m.mToggle.SetTitle("Start Lerd")
 	}
+	m.busyMu.Lock()
+	m.running = snap.Running
+	m.drawToggle()
+	m.busyMu.Unlock()
 
 	m.mNginx.SetTitle(fmt.Sprintf("  %s nginx", statusDot(snap.NginxRunning)))
 

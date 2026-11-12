@@ -250,3 +250,38 @@ func TestServiceSection_AnEmptyReadHidesTheSection(t *testing.T) {
 		t.Errorf("serviceSection = %v, %v; want an empty redraw so the section hides", rows, redraw)
 	}
 }
+
+// The start/stop item says what is happening while the command runs, so a click
+// is acknowledged even though lerd start takes a while.
+func TestLifecycleTitle(t *testing.T) {
+	cases := []struct {
+		running bool
+		busy    string
+		want    string
+	}{
+		{false, "", "Start Lerd"},
+		{true, "", "Stop Lerd"},
+		{false, "start", "Starting Lerd…"},
+		{true, "stop", "Stopping Lerd…"},
+		{true, "start", "Starting Lerd…"},
+	}
+	for _, c := range cases {
+		if got := lifecycleTitle(c.running, c.busy); got != c.want {
+			t.Errorf("lifecycleTitle(%v, %q) = %q, want %q", c.running, c.busy, got, c.want)
+		}
+	}
+}
+
+// The click acts on what the item says, claimed at once, so feedback does not
+// wait on a slow state read and a second click while busy is dropped.
+func TestNextLifecycle(t *testing.T) {
+	if arg, ok := nextLifecycle(false, ""); !ok || arg != "start" {
+		t.Errorf("stopped: got %q %v, want start", arg, ok)
+	}
+	if arg, ok := nextLifecycle(true, ""); !ok || arg != "stop" {
+		t.Errorf("running: got %q %v, want stop", arg, ok)
+	}
+	if _, ok := nextLifecycle(false, "start"); ok {
+		t.Error("a click while a start runs must be ignored")
+	}
+}

@@ -198,7 +198,7 @@ func onReady(mono bool) {
 	go runPoller(ctx, updateCh)
 	go applyLoop(menu, updateCh, mono, icons)
 	go handleDash(menu.mDash, refresh)
-	go handleToggle(menu.mToggle, refresh)
+	go handleToggle(menu, icons, refresh)
 	menu.svcs.watch(refresh)
 	menu.php.watch(refresh)
 	go handleAutostart(menu.mAutostart, refresh)
@@ -295,7 +295,11 @@ type iconState struct {
 	running      bool
 	light        bool
 	highContrast bool
-	last         iconKind
+	// pulsing blinks the icon while a start or stop runs; lit is which half of
+	// the blink is showing.
+	pulsing bool
+	lit     bool
+	last    iconKind
 	// apply performs the actual icon swap; overridable in tests so the logic
 	// can be exercised without a live systray.
 	apply func([]byte)
@@ -327,6 +331,42 @@ func (s *iconState) setHighContrast(highContrast bool) {
 	s.refresh()
 }
 
+func (s *iconState) setPulsing(pulsing bool) {
+	s.mu.Lock()
+	s.pulsing, s.lit = pulsing, false
+	s.mu.Unlock()
+	s.refresh()
+}
+
+func (s *iconState) pulseStep() {
+	s.mu.Lock()
+	s.lit = !s.lit
+	s.mu.Unlock()
+	s.refresh()
+}
+
+// pulse blinks the icon until the returned stop is called.
+func (s *iconState) pulse() (stop func()) {
+	s.setPulsing(true)
+	done := make(chan struct{})
+	go func() {
+		t := time.NewTicker(500 * time.Millisecond)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				s.pulseStep()
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		s.setPulsing(false)
+	}
+}
+
 func (s *iconState) refresh() {
 	// Hold the lock across apply so the decision and the swap are atomic:
 	// otherwise two concurrent updates (poller + theme watcher) can run their
@@ -334,7 +374,11 @@ func (s *iconState) refresh() {
 	// s.last. SetIcon never re-enters iconState, so there's no deadlock.
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	kind, icon := pickColorIcon(s.running, s.light, s.highContrast)
+	running := s.running
+	if s.pulsing {
+		running = s.lit
+	}
+	kind, icon := pickColorIcon(running, s.light, s.highContrast)
 	if kind == s.last {
 		return
 	}
@@ -362,19 +406,39 @@ func handleDash(item *systray.MenuItem, refresh func()) {
 	}
 }
 
-func handleToggle(item *systray.MenuItem, refresh func()) {
-	for range item.ClickedCh {
+// handleToggle starts or stops lerd. Either can take a while, so the item says
+// what is happening and, in colour mode, the icon blinks until it is done.
+func handleToggle(menu *menuState, icons *iconState, refresh func()) {
+	for range menu.mToggle.ClickedCh {
+		arg, ok := menu.claim()
+		if !ok {
+			continue
+		}
 		go func() {
-			snap := fetchSnapshot()
-			var arg string
-			if snap.Running {
-				arg = "stop"
-			} else {
-				arg = "start"
+			stop := func() {}
+			if icons != nil {
+				stop = icons.pulse()
 			}
-			runAndRefresh(lerdCmd(arg), refresh)
+			err := runLifecycle(arg)
+			// On success show the outcome until the refresh confirms it, so the
+			// item does not flash back to the old state in between.
+			if err == nil && icons != nil {
+				icons.setRunning(arg == "start")
+			}
+			stop()
+			menu.finish(err == nil)
+			refresh()
 		}()
 	}
+}
+
+// runLifecycle starts or stops lerd through lerd-ui, or the CLI when lerd-ui
+// is not answering.
+func runLifecycle(arg string) error {
+	if reached, err := lifecycleViaUI(arg); reached {
+		return err
+	}
+	return lerdCmd(arg).Run()
 }
 
 func handleAutostart(item *systray.MenuItem, refresh func()) {
@@ -522,6 +586,45 @@ var (
 )
 
 // requestUpdateTerminal asks lerd-ui to open the user's terminal on lerd update.
+// lifecycleViaUI has lerd-ui start or stop lerd; reached is false only when it
+// is not answering: as the tray's child, a start died when it relaunched the tray.
+func lifecycleViaUI(arg string) (reached bool, err error) {
+	req, err := http.NewRequest(http.MethodPost, apiBase+"/api/lerd/"+arg, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("X-Lerd-CSRF", "1")
+	// No timeout: a cold start streams progress for minutes.
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		return true, fmt.Errorf("lerd-ui answered %s", res.Status)
+	}
+	return true, lifecycleFailure(res.Body)
+}
+
+// lifecycleFailure reads a start's NDJSON progress or a stop's JSON answer and
+// returns the failure either one reports.
+func lifecycleFailure(body io.Reader) error {
+	dec := json.NewDecoder(body)
+	for {
+		var line struct {
+			Phase string `json:"phase"`
+			OK    *bool  `json:"ok"`
+			Error string `json:"error"`
+		}
+		if err := dec.Decode(&line); err != nil {
+			return nil
+		}
+		if line.Phase == "failed" || (line.OK != nil && !*line.OK) {
+			return errors.New(line.Error)
+		}
+	}
+}
+
 func requestUpdateTerminal() error {
 	req, err := http.NewRequest(http.MethodPost, apiBase+"/api/lerd/update-terminal", nil)
 	if err != nil {

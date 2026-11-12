@@ -109,3 +109,27 @@ func TestIconStateSkipsRedundant(t *testing.T) {
 		t.Errorf("apply called %d times, want 1", calls)
 	}
 }
+
+// While a start or stop runs the icon blinks between the stopped and running
+// icons, whatever lerd's state is, and settles on the real state afterwards.
+func TestIconStatePulseAlternatesThenSettles(t *testing.T) {
+	var applied [][]byte
+	s := newIconState()
+	s.apply = func(icon []byte) { applied = append(applied, icon) }
+
+	s.setPulsing(true)
+	s.pulseStep()
+	if !bytes.Equal(applied[len(applied)-1], iconWhitePNG) {
+		t.Fatal("first pulse step should light the running icon")
+	}
+	s.pulseStep()
+	if !bytes.Equal(applied[len(applied)-1], iconPNG) {
+		t.Fatal("second pulse step should go back to the stopped icon")
+	}
+	s.pulseStep()
+	s.setRunning(false)
+	s.setPulsing(false)
+	if s.last != iconKindStopped || !bytes.Equal(applied[len(applied)-1], iconPNG) {
+		t.Error("ending the pulse should settle on the real stopped state")
+	}
+}
