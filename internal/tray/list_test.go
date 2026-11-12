@@ -250,3 +250,24 @@ func TestServiceSection_AnEmptyReadHidesTheSection(t *testing.T) {
 		t.Errorf("serviceSection = %v, %v; want an empty redraw so the section hides", rows, redraw)
 	}
 }
+
+// The start/stop item says what is happening while the command runs, so a click
+// is acknowledged even though lerd start takes a while.
+func TestLifecycleTitle(t *testing.T) {
+	cases := []struct {
+		running bool
+		busy    string
+		want    string
+	}{
+		{false, "", "Start Lerd"},
+		{true, "", "Stop Lerd"},
+		{false, "start", "Starting Lerd…"},
+		{true, "stop", "Stopping Lerd…"},
+		{true, "start", "Starting Lerd…"},
+	}
+	for _, c := range cases {
+		if got := lifecycleTitle(c.running, c.busy); got != c.want {
+			t.Errorf("lifecycleTitle(%v, %q) = %q, want %q", c.running, c.busy, got, c.want)
+		}
+	}
+}

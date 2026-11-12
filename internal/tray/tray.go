@@ -198,7 +198,7 @@ func onReady(mono bool) {
 	go runPoller(ctx, updateCh)
 	go applyLoop(menu, updateCh, mono, icons)
 	go handleDash(menu.mDash, refresh)
-	go handleToggle(menu.mToggle, refresh)
+	go handleToggle(menu, icons, refresh)
 	menu.svcs.watch(refresh)
 	menu.php.watch(refresh)
 	go handleAutostart(menu.mAutostart, refresh)
@@ -295,7 +295,11 @@ type iconState struct {
 	running      bool
 	light        bool
 	highContrast bool
-	last         iconKind
+	// pulsing blinks the icon while a start or stop runs; lit is which half of
+	// the blink is showing.
+	pulsing bool
+	lit     bool
+	last    iconKind
 	// apply performs the actual icon swap; overridable in tests so the logic
 	// can be exercised without a live systray.
 	apply func([]byte)
@@ -327,6 +331,42 @@ func (s *iconState) setHighContrast(highContrast bool) {
 	s.refresh()
 }
 
+func (s *iconState) setPulsing(pulsing bool) {
+	s.mu.Lock()
+	s.pulsing, s.lit = pulsing, false
+	s.mu.Unlock()
+	s.refresh()
+}
+
+func (s *iconState) pulseStep() {
+	s.mu.Lock()
+	s.lit = !s.lit
+	s.mu.Unlock()
+	s.refresh()
+}
+
+// pulse blinks the icon until the returned stop is called.
+func (s *iconState) pulse() (stop func()) {
+	s.setPulsing(true)
+	done := make(chan struct{})
+	go func() {
+		t := time.NewTicker(500 * time.Millisecond)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				s.pulseStep()
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		s.setPulsing(false)
+	}
+}
+
 func (s *iconState) refresh() {
 	// Hold the lock across apply so the decision and the swap are atomic:
 	// otherwise two concurrent updates (poller + theme watcher) can run their
@@ -334,7 +374,11 @@ func (s *iconState) refresh() {
 	// s.last. SetIcon never re-enters iconState, so there's no deadlock.
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	kind, icon := pickColorIcon(s.running, s.light, s.highContrast)
+	running := s.running
+	if s.pulsing {
+		running = s.lit
+	}
+	kind, icon := pickColorIcon(running, s.light, s.highContrast)
 	if kind == s.last {
 		return
 	}
@@ -362,17 +406,29 @@ func handleDash(item *systray.MenuItem, refresh func()) {
 	}
 }
 
-func handleToggle(item *systray.MenuItem, refresh func()) {
-	for range item.ClickedCh {
+// handleToggle starts or stops lerd. Either can take a while, so the item says
+// what is happening and, in colour mode, the icon blinks until it is done.
+func handleToggle(menu *menuState, icons *iconState, refresh func()) {
+	for range menu.mToggle.ClickedCh {
 		go func() {
-			snap := fetchSnapshot()
-			var arg string
-			if snap.Running {
+			arg := "start"
+			if fetchSnapshot().Running {
 				arg = "stop"
-			} else {
-				arg = "start"
 			}
-			runAndRefresh(lerdCmd(arg), refresh)
+			menu.setBusy(arg)
+			stop := func() {}
+			if icons != nil {
+				stop = icons.pulse()
+			}
+			_ = lerdCmd(arg).Run()
+			// Show the outcome asked for until the refresh confirms it, so the
+			// item does not flash back to the old state in between.
+			if icons != nil {
+				icons.setRunning(arg == "start")
+			}
+			stop()
+			menu.finish(arg == "start")
+			refresh()
 		}()
 	}
 }

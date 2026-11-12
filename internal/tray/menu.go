@@ -4,6 +4,7 @@ package tray
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/getlantern/systray"
 
@@ -23,6 +24,10 @@ type menuState struct {
 
 	mDash   *systray.MenuItem
 	mToggle *systray.MenuItem
+	// busy is "start" or "stop" while the toggle's command runs, "" otherwise.
+	busyMu  sync.Mutex
+	busy    string
+	running bool
 
 	mSvcs *systray.MenuItem
 	svcs  *menuList
@@ -193,6 +198,48 @@ func statusDot(ok bool) string {
 }
 
 // toggleTitle renders a settings toggle, e.g. "Notifications: ✔ On".
+// lifecycleTitle labels the start/stop item, naming a command still running.
+func lifecycleTitle(running bool, busy string) string {
+	switch {
+	case busy == "start":
+		return "Starting Lerd…"
+	case busy == "stop":
+		return "Stopping Lerd…"
+	case running:
+		return "Stop Lerd"
+	default:
+		return "Start Lerd"
+	}
+}
+
+// setBusy marks a start or stop as running ("" when it is done), so the poller
+// redrawing the menu meanwhile keeps the item saying so.
+func (m *menuState) setBusy(busy string) {
+	m.busyMu.Lock()
+	defer m.busyMu.Unlock()
+	m.busy = busy
+	m.drawToggle()
+}
+
+// finish clears the busy state, assuming the command's outcome until the next
+// snapshot says otherwise.
+func (m *menuState) finish(running bool) {
+	m.busyMu.Lock()
+	defer m.busyMu.Unlock()
+	m.busy, m.running = "", running
+	m.drawToggle()
+}
+
+// drawToggle must be called with busyMu held.
+func (m *menuState) drawToggle() {
+	m.mToggle.SetTitle(lifecycleTitle(m.running, m.busy))
+	if m.busy != "" {
+		m.mToggle.Disable()
+	} else {
+		m.mToggle.Enable()
+	}
+}
+
 func toggleTitle(label string, on bool) string {
 	if on {
 		return label + ": ✔ On"
@@ -218,11 +265,13 @@ func (m *menuState) apply(snap *Snapshot) {
 
 	if snap.Running {
 		m.mStatus.SetTitle("🟢 Running")
-		m.mToggle.SetTitle("Stop Lerd")
 	} else {
 		m.mStatus.SetTitle("🔴 Stopped")
-		m.mToggle.SetTitle("Start Lerd")
 	}
+	m.busyMu.Lock()
+	m.running = snap.Running
+	m.drawToggle()
+	m.busyMu.Unlock()
 
 	m.mNginx.SetTitle(fmt.Sprintf("  %s nginx", statusDot(snap.NginxRunning)))
 
