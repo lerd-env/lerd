@@ -6022,6 +6022,36 @@ const uiUnit = "lerd-ui"
 
 var runStart = cli.RunStart
 
+// runStop is cli.RunStop and pollContainers the read-back after a start or
+// stop, indirected so a test can count it without podman.
+var (
+	runStop        = cli.RunStop
+	pollContainers = readBackContainers
+)
+
+// readBackContainers polls the containers and drops the cached payloads built
+// from the old state, which would otherwise be served until the coalesced
+// publish rebuilds them.
+func readBackContainers() {
+	podman.Cache.PollNow()
+	for _, kind := range []string{eventbus.KindStatus, eventbus.KindServices, eventbus.KindSites} {
+		snapshots.Invalidate(kind)
+	}
+}
+
+// startLerd and stopLerd read the containers back as soon as they finish: with
+// no dashboard open the cache polls once a minute, and the tray showed a
+// stopped lerd as running until it did.
+func startLerd(emit func(cli.StartEvent)) error {
+	defer pollContainers()
+	return runStart(emit, uiUnit)
+}
+
+func stopLerd() error {
+	defer pollContainers()
+	return runStop()
+}
+
 // handleLerdStart runs the same start as the CLI and streams its progress, so
 // the dashboard's start button reports each stage and unit rather than hanging
 // on a request that can take minutes.
@@ -6035,7 +6065,7 @@ func handleLerdStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeLine, _ := startNDJSONStream(w, r)
-	if err := runStart(func(evt cli.StartEvent) { writeLine(evt) }, uiUnit); err != nil {
+	if err := startLerd(func(evt cli.StartEvent) { writeLine(evt) }); err != nil {
 		writeLine(cli.StartEvent{Phase: "failed", Error: err.Error()})
 	}
 }
@@ -6045,7 +6075,7 @@ func handleLerdStop(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if err := cli.RunStop(); err != nil {
+	if err := stopLerd(); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}

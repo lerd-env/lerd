@@ -137,9 +137,9 @@ func handleTrayAction(w http.ResponseWriter, r *http.Request) {
 func runLerdCommand(args []string) (string, error) {
 	switch strings.Join(args, " ") {
 	case "start":
-		return "", runStart(func(cli.StartEvent) {}, uiUnit)
+		return "", startLerd(func(cli.StartEvent) {})
 	case "stop":
-		return "", cli.RunStop()
+		return "", stopLerd()
 	case "quit":
 		return "", cli.RunQuit()
 	}
