@@ -87,7 +87,7 @@ func buildMenu(mono bool) *menuState {
 	// The high-contrast icon toggle only makes sense for the colour icon; in
 	// mono mode the OS recolors the template icon to match the panel itself.
 	if !mono {
-		m.mIconStyle = m.mSettings.AddSubMenuItem("High-contrast icon: Off", "Show an always-visible green running icon instead of the theme-adaptive one")
+		m.mIconStyle = m.mSettings.AddSubMenuItem("High-contrast icon: Off", "Show green while running and red while stopped, visible on any panel")
 	}
 	// One-way on purpose: once the applet is gone there is no menu left to
 	// toggle it back from, so `lerd tray on` and the dashboard own the return.

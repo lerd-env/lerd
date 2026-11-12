@@ -252,7 +252,7 @@ func BuildMenu(snap *Snapshot, opts MenuOptions) Menu {
 	settings = append(settings, lanSvcs,
 		toggle("Debug bridge", "Capture dump() / dd() into the lerd dashboard", snap.DumpsEnabled, "dump", offOn(snap.DumpsEnabled)),
 		toggle("Notifications", "Globally enable or disable lerd notifications", snap.NotificationsEnabled, "notify", offOn(snap.NotificationsEnabled)),
-		toggle("High-contrast icon", "Show an always-visible green running icon instead of the theme-adaptive one", snap.HighContrastIcon, "tray", "icon", iconStyle(snap.HighContrastIcon)),
+		toggle("High-contrast icon", "Show green while running and red while stopped, visible on any panel", snap.HighContrastIcon, "tray", "icon", iconStyle(snap.HighContrastIcon)),
 	)
 	m.Items = append(m.Items, sep, MenuItem{Label: "Settings", Tooltip: "Lerd settings", Items: settings})
 
