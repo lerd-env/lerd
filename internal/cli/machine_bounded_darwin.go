@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/geodro/lerd/internal/feedback"
@@ -42,9 +43,21 @@ func machineQuery(args ...string) ([]byte, error) {
 // timeout, streaming its output. On timeout the context terminates the process
 // so a wedged VM can't hang the caller.
 func runMachineStreaming(timeout time.Duration, args ...string) error {
+	return streamMachine(timeout, nil, args...)
+}
+
+// startMachine runs `podman machine start` in its own process group. vfkit and
+// gvproxy keep the group of whoever started them, so sharing the caller's group
+// would take the VM down when that caller (an MCP session, a terminal) exits.
+func startMachine() error {
+	return streamMachine(machineStartTimeout, &syscall.SysProcAttr{Setpgid: true}, "machine", "start")
+}
+
+func streamMachine(timeout time.Duration, attr *syscall.SysProcAttr, args ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := machineCmdContext(ctx, args...)
+	cmd.SysProcAttr = attr
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

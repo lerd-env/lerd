@@ -110,6 +110,7 @@ describe('ws focus reporting', () => {
   });
 
   it('reports focus on open and on every focus change', async () => {
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(false);
     const { connectWs, disconnectWs } = await import('./ws');
     connectWs();
     const sock = MockWebSocket.instances[0];
@@ -123,6 +124,7 @@ describe('ws focus reporting', () => {
     window.dispatchEvent(new Event('blur'));
     expect(sock.sent.at(-1)).toBe(JSON.stringify({ type: 'focus', focused: false }));
     disconnectWs();
+    hasFocus.mockRestore();
   });
 
   it('keeps saying so while it holds focus, so the lease does not run out', async () => {

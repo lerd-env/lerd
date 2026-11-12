@@ -40,6 +40,8 @@ Walks the install in dependency order:
 
 A live spinner shows the per-unit progress. If a single SSL vhost references a missing certificate file, lerd switches that site back to HTTP automatically and continues; one broken cert no longer blocks the whole nginx start.
 
+A container that is already running is left as it is, so starting lerd again (from the CLI, the dashboard or the tray) does not restart nginx or a service that was fine, and cannot lose a port that another process grabbed in the meantime. `lerd-dns` is the exception and always restarts.
+
 ::: info After a reinstall
 If you ran `lerd uninstall` and then reinstalled, worker units and service quadlets are recreated by `lerd start` from each site's `.lerd.yaml`, and so is the container of a site on the FrankenPHP runtime, also after a `lerd sites:restore`. Sites with a committed `.lerd.yaml` come back fully wired up. Sites without one need their workers restarted manually.
 :::
@@ -80,6 +82,10 @@ rather than holding the command up.
 usually after an upgrade that changed the image recipe. Each version then builds
 behind its own progress line instead of streaming the raw build log; press
 Ctrl+O while it runs to see the output.
+
+The nginx image is listed only when it is not in the local store yet. Install
+still pulls it on every run to pick up a newer image, but refreshing one that
+is already there moves little or nothing, so it is not announced.
 
 To see what a start would fetch without fetching it:
 

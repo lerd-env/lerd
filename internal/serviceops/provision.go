@@ -3,35 +3,15 @@ package serviceops
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
-// databaseNamePattern is the strict shape an entity name must have to reach a
-// path or SQL sink: it must start with a letter, digit or underscore and carry
-// only those plus dashes and interior dots (S3 bucket names carry dots), which
-// covers every name lerd generates while excluding path separators, leading-dot
-// segments like ".." and every shell and SQL metacharacter.
-var databaseNamePattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]*$`)
-
-// maxDatabaseNameLen is MySQL's identifier limit, the tighter of the two engines.
-const maxDatabaseNameLen = 64
-
-// ValidateDatabaseName guards the sinks that assume a slugged name: the snapshot
-// paths built with filepath.Join and the information_schema lookups built by
-// string interpolation.
-func ValidateDatabaseName(name string) error {
-	switch {
-	case name == "":
-		return fmt.Errorf("a database name is required")
-	case len(name) > maxDatabaseNameLen:
-		return fmt.Errorf("database name is longer than %d characters", maxDatabaseNameLen)
-	case !databaseNamePattern.MatchString(name):
-		return fmt.Errorf("invalid database name %q: use letters, digits, underscores and dashes only", name)
-	}
-	return nil
-}
+// ValidateDatabaseName guards the sinks that assume a slugged name; the rule
+// lives in config so .lerd.yaml can refuse a bad db.database as it loads.
+func ValidateDatabaseName(name string) error { return config.ValidateDatabaseName(name) }
 
 // CreateDatabase creates dbName inside the named service container if it does
 // not already exist, through the create action the engine's preset declares.

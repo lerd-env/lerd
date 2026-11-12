@@ -234,6 +234,8 @@ When isolation is enabled lerd asks where the new schema should start from:
 | Clone from main | `mysqldump --single-transaction` (or `pg_dump`) of the parent's DB piped into the new schema, entirely inside the service container. |
 | Clone from another isolated worktree | Same dump/restore pipeline, source is an existing isolated worktree's DB. Useful when staging migrations on top of an already-migrated branch. |
 
+Isolation is refused when the parent's service declares no way to create and drop databases, since lerd could neither make the schema nor remove it later. A drop that fails is reported, and the MCP `worktree` tool's `remove` returns `isolated_db_dropped: false` with the reason in `isolated_db_error`.
+
 The isolated database survives `lerd worktree remove` by default, the wrapper asks at the end whether to drop it, and **Keep the database** is the default. Re-adding the same branch via `lerd worktree add` later detects the preserved entry and offers two extra options at the top of the DB-isolation prompt:
 
 - **Reuse preserved isolated DB**: reconnects the worktree to the same data with no schema changes.

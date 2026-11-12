@@ -1,8 +1,12 @@
 package serviceops
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 const entityEngineYAML = `name: myengine
@@ -55,6 +59,70 @@ func TestEntityForPrefersPresetOverBareStoredDefinition(t *testing.T) {
 	spec := EntityFor("mysql", "databases")
 	if spec == nil || spec.List == "" {
 		t.Fatal("want the bundled mysql preset entity, got none")
+	}
+}
+
+// A service defined inline in .lerd.yaml names its family but no preset, and
+// still has to create and drop databases the way its family's engine does.
+func TestEntityForFallsBackToFamilyPreset(t *testing.T) {
+	writeCustomService(t, "mysql-app", "name: mysql-app\nimage: docker.io/library/mysql:8\nfamily: mysql\n")
+	spec := EntityFor("mysql-app", "databases")
+	if _, ok := entityAction(spec, "drop"); !ok {
+		t.Fatalf("want the mysql family's drop action, got %+v", spec)
+	}
+}
+
+const acmedbPreset = "name: acmedb\nimage: example/acmedb:1\nfamily: acmedb\nintrospect:\n  entities:\n    - kind: databases\n      list: list-dbs\n      actions:\n        create: make {{name}}\n        drop: drop {{name}}\n"
+
+// The reporter's case: a store family whose preset is not in the default stack.
+func TestEntityForFallsBackToANonDefaultFamilyPreset(t *testing.T) {
+	data := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", data)
+	presets := filepath.Join(data, "lerd", "service-presets")
+	if err := os.MkdirAll(presets, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(presets, "acmedb.yaml"), []byte(acmedbPreset), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeCustomService(t, "acmedb-app", "name: acmedb-app\nimage: example/acmedb:1\nfamily: acmedb\n")
+	if _, ok := entityAction(EntityFor("acmedb-app", "databases"), "drop"); !ok {
+		t.Fatal("want the acmedb family preset's drop action")
+	}
+}
+
+// A family preset from the store is fetched when the service needs it, since
+// installing an inline service never pulls the preset it borrows from.
+func TestEnsureFamilyPresetFetchesAnUncachedFamilyPreset(t *testing.T) {
+	data := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", data)
+	presets := filepath.Join(data, "lerd", "service-presets")
+	var fetched []string
+	config.RegisterPresetFetchHook(func(name string) error {
+		fetched = append(fetched, name)
+		if err := os.MkdirAll(presets, 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(presets, name+".yaml"), []byte(acmedbPreset), 0o644)
+	})
+	t.Cleanup(func() { config.RegisterPresetFetchHook(nil) })
+	writeCustomService(t, "acmedb-app", "name: acmedb-app\nimage: example/acmedb:1\nfamily: acmedb\n")
+
+	if err := EnsureFamilyPreset("acmedb-app"); err != nil {
+		t.Fatalf("EnsureFamilyPreset: %v", err)
+	}
+	if len(fetched) != 1 || fetched[0] != "acmedb" {
+		t.Fatalf("fetched %v, want [acmedb]", fetched)
+	}
+	if !DatabaseActionDeclared("acmedb-app", "drop") {
+		t.Fatal("want the fetched preset's drop action")
+	}
+}
+
+func TestEntityForPrefersStoredIntrospectOverFamily(t *testing.T) {
+	writeCustomService(t, "mysql-app", "name: mysql-app\nimage: example/engine:1\nfamily: mysql\nintrospect:\n  list_databases: echo mine\n")
+	if spec := EntityFor("mysql-app", "databases"); spec == nil || spec.List != "echo mine" {
+		t.Fatalf("a declared introspect must win over the family's, got %+v", spec)
 	}
 }
 

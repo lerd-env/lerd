@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -799,8 +800,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 			},
 		},
 	}
-	plan := imagepull.Plan{imagepull.Pull(nginxImage, "the lerd web server image")}
-	withoutKeptImages(plan, podman.OfflineKeeps).Fill().Report(os.Stdout)
+	webServerPullPlan(nginxImage).Fill().Report(os.Stdout)
 	for _, job := range pullJobs {
 		step(job.Label)
 		if err := job.Run(io.Discard); err != nil {
@@ -887,9 +887,17 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	autostartOn := lerdSystemd.IsAutostartEnabled()
 
 	if autostartOn {
-		step("Starting lerd-nginx")
-		if err := services.Mgr.Restart("lerd-nginx"); err != nil {
-			fmt.Printf("    WARN: %v\n", err)
+		running, _ := podman.ContainerRunning("lerd-nginx")
+		if nginxNeedsRestart(running, slices.Contains(changedQuadlets, "lerd-nginx"), podman.ContainerImageID("lerd-nginx"), podman.LocalImageID(nginxImage)) {
+			step("Starting lerd-nginx")
+			if err := services.Mgr.Restart("lerd-nginx"); err != nil {
+				fmt.Printf("    WARN: %v\n", err)
+			}
+		} else {
+			step("Reloading lerd-nginx")
+			if err := nginx.Reload(); err != nil {
+				fmt.Printf("    WARN: %v\n", err)
+			}
 		}
 		ok()
 	}
@@ -1170,8 +1178,25 @@ func runPHPRebuild() error {
 	return rebuildCmd.Run()
 }
 
-// withoutKeptImages drops the pulls offline mode will skip, so the disclosure
-// names only the downloads that really happen.
+// nginxNeedsRestart reports whether install must restart lerd-nginx. A restart
+// drops the ports, which may not come back if something else grabbed :80, so a
+// container already running the local image (whoever pulled it) gets a reload.
+func nginxNeedsRestart(running, quadletChanged bool, containerImage, localImage string) bool {
+	return !running || quadletChanged || localImage == "" || containerImage != localImage
+}
+
+var installImageInStore = podman.ImageExists
+
+// webServerPullPlan is the disclosure for install's nginx pull. The pull still
+// runs to refresh a local image, but that moves few or no bytes, so only a
+// first download is announced.
+func webServerPullPlan(image string) imagepull.Plan {
+	plan := imagepull.Plan{imagepull.Pull(image, "the lerd web server image")}
+	return withoutKeptImages(plan, installImageInStore)
+}
+
+// withoutKeptImages drops the pulls of images already in the store, so the
+// disclosure names only the downloads that really happen.
 func withoutKeptImages(plan imagepull.Plan, kept func(string) bool) imagepull.Plan {
 	var out imagepull.Plan
 	for _, it := range plan {

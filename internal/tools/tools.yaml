@@ -3,14 +3,14 @@
 # pin is fixable for every install here, without a binary release.
 tools:
   composer:
-    version: "2.11.1"
+    version: "2.11.2"
     url: https://getcomposer.org/download/{version}/composer.phar
   # mise is signed and notarized under a stable Developer ID, so macOS keeps a
   # Files and Folders grant across version bumps where fnm, which ships
   # unsigned, loses it on every pin (#1906). Only installed when the host has no
   # mise of its own.
   mise:
-    version: v2026.11.4
+    version: v2026.11.7
     url: https://github.com/jdx/mise/releases/download/{version}/{asset}
     assets:
       linux/amd64: mise-{version}-linux-x64.tar.gz
@@ -18,10 +18,10 @@ tools:
       darwin/amd64: mise-{version}-macos-x64.tar.gz
       darwin/arm64: mise-{version}-macos-arm64.tar.gz
     digests:
-      linux/amd64: e9652ecdc9ac990662ba8346b2b3da95ad9c890ed73768ea4675ef721dcef37e
-      linux/arm64: e168248871cd4f958bb1597dc74d03ec65634bb54bf49c80dbb7999a7ba88471
-      darwin/amd64: b8a74f677aba6a8e418c82870c2321a563391e828b0a2474f61497e2801177de
-      darwin/arm64: d37c01389b0918a19bbf763ee8ed339e533eebdb281be4911e9ad71d00b51477
+      linux/amd64: 3198a5ed5716ca8c17ecfc54521e2769d6cacbf2d13f24f0c2f9706620ec0024
+      linux/arm64: b8de6c8e7aa85752a6a2368df32393552a2d8947b6f4072ecd29a1ad972e5c40
+      darwin/amd64: 69a0eddf86f275cb81be9d49a607460f2c068d77c1c0e37b2d81513074eff36c
+      darwin/arm64: 92f1b9f68b6031a9f77938a0ff8dfd7a77fe9cd918c5b09d0ed434f06ebbd3f2
   fnm:
     version: v1.39.0
     url: https://github.com/Schniz/fnm/releases/download/{version}/{asset}

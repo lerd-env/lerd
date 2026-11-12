@@ -13,6 +13,7 @@ import (
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/sitedoctor"
 )
 
@@ -106,6 +107,12 @@ func SetWorktreeDBIsolated(site *config.Site, branch string, isolated bool, sour
 		}
 		if p != nil {
 			return isolateWithPlugin(p, site, wt.Path, branch, source, service, parentDB, dbName)
+		}
+		if err := serviceops.EnsureFamilyPreset(service); err != nil {
+			return err
+		}
+		if !serviceops.DatabaseActionDeclared(service, "create") || !serviceops.DatabaseActionDeclared(service, "drop") {
+			return fmt.Errorf("%s declares no way to create and drop databases, so this worktree cannot get its own", service)
 		}
 		if _, err := createDatabaseFn(service, dbName); err != nil {
 			return fmt.Errorf("creating database %q in %s: %w", dbName, service, err)
@@ -274,6 +281,12 @@ func worktreeEnvReader(binding config.DBEnvBinding, sitePath, wtPath string) fun
 // dropWorktreeDB drops a worktree's isolated database through whoever made it.
 func dropWorktreeDB(e config.WorktreeDBEntry) error {
 	if e.Provider == "" {
+		if err := serviceops.EnsureFamilyPreset(e.Service); err != nil {
+			return err
+		}
+		if !serviceops.DatabaseActionDeclared(e.Service, "drop") {
+			return fmt.Errorf("%s declares no way to drop a database, so %q is still there; drop it with DROP DATABASE in 'lerd db:shell'", e.Service, e.DBName)
+		}
 		_, err := DropDatabase(e.Service, e.DBName)
 		return err
 	}
