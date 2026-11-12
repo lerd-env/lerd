@@ -214,3 +214,36 @@ func TestNpmProjectDir_NearestLockfileAbove(t *testing.T) {
 		t.Errorf("NpmProjectDir(site) = %q, want %q", got, site)
 	}
 }
+
+// npm drops symlinks from published packages, so one in a binding's tarball can
+// only be there to chain a later write out of the project.
+func TestFetchContainerBindings_RefusesLinksInTheTarball(t *testing.T) {
+	data := tarball(t, []tarEntry{
+		{name: "package/up", link: "."},
+		{name: "package/binding.node", body: "musl"},
+	})
+	sum := sha512.Sum512(data)
+	url := registry(t, map[string][]byte{"/x.tgz": data})
+	dir := t.TempDir()
+	writeLock(t, dir, `{"packages": {"node_modules/x-linux-arm64-musl": {"os": ["linux"], "cpu": ["arm64"], "libc": ["musl"], "resolved": "`+url+`/x.tgz", "integrity": "sha512-`+base64.StdEncoding.EncodeToString(sum[:])+`"}}}`)
+	err := fetchContainerBindings(context.Background(), dir, "arm64", io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("err = %v, want a refusal for a tarball carrying a symlink", err)
+	}
+}
+
+// Two commands started together list the same packages; the one that finishes
+// a package second must take the first one's copy and go on to the rest.
+func TestFetchContainerBinding_AnotherRunInstalledItFirst(t *testing.T) {
+	data, sum := npmTarball(t, "x")
+	url := registry(t, map[string][]byte{"/x.tgz": data})
+	dir := t.TempDir()
+	writeLock(t, dir, "{}", "node_modules/x-linux-arm64-musl")
+	b := ContainerBinding{Path: "node_modules/x-linux-arm64-musl", Resolved: url + "/x.tgz", Integrity: sum}
+	if err := os.WriteFile(filepath.Join(dir, b.Path, "package.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := fetchContainerBinding(context.Background(), dir, b); err != nil {
+		t.Fatalf("a package another run installed is not an error: %v", err)
+	}
+}

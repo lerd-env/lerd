@@ -79,13 +79,20 @@ func fetchContainerBinding(ctx context.Context, dir string, b ContainerBinding) 
 		return fmt.Errorf("%s does not match the integrity package-lock.json records", b.Resolved)
 	}
 	tree := filepath.Join(tmp, "tree")
-	if err := extractTree(archive, tree); err != nil {
+	if err := extractTree(archive, tree, false); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return err
 	}
-	return os.Rename(tree, target)
+	if err := os.Rename(tree, target); err != nil {
+		// Another command started alongside this one installed it first.
+		if _, statErr := os.Stat(target); statErr == nil {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // missingContainerBindings reads package-lock.json rather than node_modules:

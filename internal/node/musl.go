@@ -84,7 +84,7 @@ func MuslBin(ctx context.Context, version string, w io.Writer) (string, error) {
 		return "", err
 	}
 	tree := filepath.Join(tmp, "tree")
-	if err := extractTree(archive, tree); err != nil {
+	if err := extractTree(archive, tree, true); err != nil {
 		return "", err
 	}
 	if err := os.Rename(tree, dir); err != nil {
@@ -112,9 +112,10 @@ func sumFor(path, name string) (string, error) {
 	return "", fmt.Errorf("%s is not in the release's checksums, so this platform has no musl build of it", name)
 }
 
-// extractTree unpacks a release tarball into dest, dropping the top folder
-// every Node tarball wraps its tree in. Nothing may land outside dest.
-func extractTree(archive, dest string) error {
+// extractTree unpacks a tarball into dest, dropping the top folder Node and npm
+// tarballs wrap their tree in. Nothing may land outside dest; links refuses
+// symlinks when false, for archives that never need one.
+func extractTree(archive, dest string, links bool) error {
 	f, err := os.Open(archive)
 	if err != nil {
 		return err
@@ -148,6 +149,9 @@ func extractTree(archive, dest string) error {
 		case tar.TypeReg:
 			err = writeFile(target, tr, os.FileMode(hdr.Mode).Perm())
 		case tar.TypeSymlink:
+			if !links {
+				return fmt.Errorf("%s is a symlink, which this archive should not carry", hdr.Name)
+			}
 			if filepath.IsAbs(hdr.Linkname) || !strings.HasPrefix(filepath.Join(filepath.Dir(target), hdr.Linkname), dest+string(os.PathSeparator)) {
 				return fmt.Errorf("%s links outside the archive's folder", hdr.Name)
 			}
