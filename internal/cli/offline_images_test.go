@@ -29,7 +29,7 @@ func TestRebuildStalePHPImagesOnlineRebuilds(t *testing.T) {
 	}
 }
 
-// Offline install skips the pull of an image already in the store, so the
+// An image already in the store is refreshed, not downloaded, so the
 // disclosure must not announce it.
 func TestWithoutKeptImagesDropsWhatOfflineKeeps(t *testing.T) {
 	plan := imagepull.Plan{
