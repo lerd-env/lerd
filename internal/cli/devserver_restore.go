@@ -25,35 +25,34 @@ func NewDevServerFilesCmd() *cobra.Command {
 	}
 }
 
-// RestoreDevServerFiles writes the generated files of the checkout at path's
-// dev servers. They live in node_modules, which every npm ci deletes, and the
-// unit starts the tool against them.
+// RestoreDevServerFiles writes back the generated dev server files npm ci deletes
+// with node_modules. The config is written whatever the workers declare, since a
+// unit for one a branch change dropped still points at it.
 func RestoreDevServerFiles(path string) error {
 	site := siteOwning(path)
 	if site == nil {
 		return fmt.Errorf("no site owns %s", path)
 	}
 	tool := config.DevServerToolInstalled(path)
-	fw, ok := config.GetFrameworkForDir(site.Framework, path)
-	if tool == nil || !ok || fw == nil {
+	if tool == nil {
 		return nil
 	}
 	addr, err := devServerAddress(site, path)
 	if err != nil {
 		return err
 	}
-	var errs []error
+	_, err = writeDevServerWrapper(path, tool, addr)
+	errs := []error{err}
+	fw, ok := config.GetFrameworkForDir(site.Framework, path)
+	if !ok || fw == nil {
+		return errors.Join(errs...)
+	}
 	for name, w := range fw.Workers {
 		command := resolveWorkerCommand(path, name, w)
-		if !w.Host || config.DevServerToolForWorker(path, w, command) == nil {
+		if !w.Host || config.DevServerToolForWorker(path, w, command) == nil || config.DevServerToolFor(path, command) != nil {
 			continue
 		}
-		if config.DevServerToolFor(path, command) != nil {
-			_, err = writeDevServerWrapper(path, tool, addr)
-		} else {
-			err = restoreDevServerValues(site, path, name, w, tool, addr)
-		}
-		errs = append(errs, err)
+		errs = append(errs, restoreDevServerValues(site, path, name, w, tool, addr))
 	}
 	return errors.Join(errs...)
 }
