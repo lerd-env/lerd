@@ -83,6 +83,10 @@ usually after an upgrade that changed the image recipe. Each version then builds
 behind its own progress line instead of streaming the raw build log; press
 Ctrl+O while it runs to see the output.
 
+The nginx image is listed only when it is not in the local store yet. Install
+still pulls it on every run to pick up a newer image, but refreshing one that
+is already there moves little or nothing, so it is not announced.
+
 To see what a start would fetch without fetching it:
 
 ```bash

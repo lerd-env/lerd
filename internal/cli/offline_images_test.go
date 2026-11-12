@@ -44,3 +44,22 @@ func TestWithoutKeptImagesDropsWhatOfflineKeeps(t *testing.T) {
 		t.Errorf("plan = %+v, want only the alpine pull", got)
 	}
 }
+
+// Online install still pulls nginx to refresh it, but only announces the pull
+// when the image is not in the store yet.
+func TestWebServerPullPlanAnnouncesOnlyAMissingImage(t *testing.T) {
+	t.Setenv("LERD_OFFLINE", "")
+	orig := installImageInStore
+	t.Cleanup(func() { installImageInStore = orig })
+	const nginx = "docker.io/library/nginx:alpine"
+
+	installImageInStore = func(string) bool { return true }
+	if got := webServerPullPlan(nginx); len(got) != 0 {
+		t.Errorf("local image: plan = %+v, want nothing announced", got)
+	}
+
+	installImageInStore = func(string) bool { return false }
+	if got := webServerPullPlan(nginx); len(got) != 1 || got[0].Ref != nginx {
+		t.Errorf("missing image: plan = %+v, want the nginx pull", got)
+	}
+}
