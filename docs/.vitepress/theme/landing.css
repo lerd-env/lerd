@@ -68,7 +68,8 @@
 .lerd-landing .lang summary::-webkit-details-marker{display:none}
 .lerd-landing .lang summary:hover,.lerd-landing .lang[open] summary{color:var(--ink);border-color:var(--faint)}
 .lerd-landing .lang summary svg{width:15px;height:15px}
-.lerd-landing .lang-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:60;min-width:180px;display:flex;flex-direction:column;border:1px solid var(--line-2);background:var(--bg)}
+/* Fifteen languages outgrow a short screen; the menu scrolls inside the space under the sticky header. */
+.lerd-landing .lang-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:60;min-width:180px;max-height:calc(100dvh - 76px);overflow-y:auto;display:flex;flex-direction:column;border:1px solid var(--line-2);background:var(--bg)}
 .lerd-landing .lang-menu a{display:block !important;padding:9px 14px;color:var(--ink-2);font-size:14px}
 .lerd-landing .lang-menu a:hover{background:var(--panel);color:var(--ink)}
 .lerd-landing .lang-menu a[aria-current]{color:var(--ink);font-weight:600}
