@@ -24,7 +24,7 @@ function closeMenu() {
 
 <template>
   <header class="hdr" :class="{ open: menuOpen }" @keydown.esc="closeMenu"><div class="wrap">
-    <a class="brand" :href="`${home}#top`"><img :src="withBase('/assets/logo.svg')" alt="" width="26" height="26">Lerd</a>
+    <a class="brand" :href="`${home}#top`"><img class="on-light" :src="withBase('/assets/logo.svg')" alt="" width="26" height="26"><img class="on-dark" :src="withBase('/assets/logo-dark.svg')" alt="" width="26" height="26">Lerd</a>
     <nav id="hdr-nav" @click="menuOpen = false">
       <a :href="`${home}#lineup`">Features</a>
       <a :href="`${home}#agents`">AI agents</a>

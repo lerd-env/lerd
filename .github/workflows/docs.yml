@@ -38,6 +38,7 @@ jobs:
           cp install.ps1 docs/public/install.ps1
           mkdir -p docs/public/icons
           cp docs/public/assets/logo.svg docs/public/icons/icon.svg
+          cp docs/public/assets/logo-dark.svg docs/public/icons/icon-dark.svg
 
       - name: Build the embedded UI demo
         working-directory: internal/ui/web
