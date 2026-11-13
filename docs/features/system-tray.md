@@ -4,7 +4,7 @@
 
 ```bash
 lerd tray              # launch (detaches from terminal automatically)
-lerd tray --mono       # monochrome template icon the OS recolours
+lerd tray --mono       # monochrome template icon, recoloured by the macOS menu bar
 ```
 
 The tray detaches from the terminal immediately, your shell prompt returns straight away.
@@ -120,7 +120,7 @@ lerd tray icon                 # print the current style
 
 You can also toggle it from the **High-contrast icon** item in the tray menu. It is off by default and persisted to `config.yaml`.
 
-If you would rather the OS own the colouring entirely, use `lerd tray --mono`, which registers a monochrome template icon that GNOME and KDE recolour to match the panel themselves. It draws the containers in a single colour, with the side faces and windows let through at lower opacity so the shape keeps its depth, and slashes them while lerd is stopped.
+On macOS you can let the menu bar own the colouring with `lerd tray --mono`, which registers a template icon that macOS recolours to match the menu bar. On Linux the panel shows that same icon in white rather than recolouring it, so the default colour mode, which follows the panel, is the better choice there. The mono icon draws the containers in a single colour, with the side faces and windows let through at lower opacity so the shape keeps its depth, and slashes them while lerd is stopped.
 
 ---
 

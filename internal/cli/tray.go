@@ -23,7 +23,7 @@ func NewTrayCmd() *cobra.Command {
 			return tray.Run(mono)
 		},
 	}
-	cmd.Flags().BoolVar(&mono, "mono", false, "Use a monochrome template icon (OS recolors it); default is the colour icon, slashed while lerd is stopped")
+	cmd.Flags().BoolVar(&mono, "mono", false, "Use a monochrome template icon (the macOS menu bar recolours it; Linux panels show it white); default is the colour icon, slashed while lerd is stopped")
 	cmd.AddCommand(newTrayIconCmd(), newTrayOnCmd(), newTrayOffCmd())
 	return cmd
 }
