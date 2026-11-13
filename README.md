@@ -91,9 +91,9 @@ Lerd is built for PHP developers who want frictionless local development, on a L
 
 - 💻 **Terminal dashboard** (`lerd tui`). A sidebar and a ctrl+p palette that reaches every page, site, service and action, drawn in the terminal's own colours, with live status, worktree tabs, a shell drop-in, log tailing, databases with their snapshots and each service's tools and tuning, for tmux and SSH.
 
-- 🚀 **Start it without a terminal.** The dashboard brings lerd up from its own banner, streaming the start unit by unit. `lerd install` adds Lerd to the macOS Applications folder and the Linux app list, opening as a chromeless app window, so a cold start is a click. The tray is optional.
+- 🚀 **Start it without a terminal.** The dashboard brings lerd up from its own banner, streaming the start unit by unit. `lerd install` adds Lerd to the macOS Applications folder and the Linux app list, opening as a chromeless app window, so a cold start is a click. The tray is optional, strikes its icon through while lerd is stopped and shows a start as it runs.
 
-- 🔌 **Plugins.** A folder with a `plugin.yaml` and scripts in shell, Python or Node adds commands, hooks, MCP tools, dashboard pages and services of its own, installed from the Plugins page out of a catalog where each plugin is approved at one commit and can be revoked.
+- 🔌 **Plugins.** A folder with a `plugin.yaml` and scripts in shell, Python or Node adds commands, hooks, MCP tools, dashboard pages and services of its own, installed from the Plugins page out of a catalog where each plugin is approved at one commit and can be revoked. Each site picks which plugins show their scripts, Overview cards and tabs.
 
 - 🧩 **PhpStorm plugin.** [Lerd for PhpStorm](https://plugins.jetbrains.com/plugin/34420-lerd) resolves the project you have open to its site and brings its logs, PHP version, workers, services, query findings and dumps into the IDE, with a path in a stack trace one click from the line that threw it.
 
