@@ -4,6 +4,7 @@ package version
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 // These variables are set at build time via:
@@ -28,5 +29,8 @@ func String() string {
 var releaseVersion = regexp.MustCompile(`^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`)
 
 // IsRelease reports whether v is one a user could have installed from a release,
-// as opposed to a build from a checkout.
-func IsRelease(v string) bool { return releaseVersion.MatchString(v) }
+// as opposed to a build from a checkout. A tag built with local edits comes out
+// as 1.37.0-dirty, which has the shape but is not one.
+func IsRelease(v string) bool {
+	return releaseVersion.MatchString(v) && !strings.HasSuffix(v, "-dirty")
+}
