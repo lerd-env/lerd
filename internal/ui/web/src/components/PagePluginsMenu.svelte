@@ -1,16 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Popover from './Popover.svelte';
-  import Toggle from './Toggle.svelte';
   import Icon from './Icon.svelte';
   import { tooltip } from '$lib/tooltip';
   import { notifyLocalFailure } from '$lib/notify';
-  import { loadPagePlugins, setPagePlugin, siteSwitches, type PagePlugin } from '$stores/plugins';
+  import { loadPagePlugins, setPagePlugin, siteSwitches, type PagePlugin, type PagePluginKind } from '$stores/plugins';
   import { m } from '../paraglide/messages.js';
 
-  // Switches what plugins put on one site: scripts on its pages and cards on
-  // its Overview. Draws nothing until an installed plugin has either, so the
-  // header stays as it was.
+  // Switches what plugins put on one site: scripts on its pages, cards on its
+  // Overview and tabs beside it. Draws nothing until an installed plugin has
+  // one of those, so the header stays as it was.
 
   interface Props {
     site: string;
@@ -18,25 +17,42 @@
   }
   let { site, class: cls = '' }: Props = $props();
 
+  const uid = $props.id();
   let busy = $state('');
   const list = $derived($siteSwitches[site] ?? []);
-  const anyOn = $derived(list.some((p) => p.on));
-  const groups = $derived(
+  // Tabs are on until hidden, so only an opt-in switch lights the icon.
+  const anyOn = $derived(list.some((p) => p.on && p.kind !== 'site_tab'));
+  // One row per plugin and a column per kind any of them has, so a plugin's
+  // name and description show once however many switches it brings.
+  const columns = $derived(
     [
-      { title: m.sites_pagePlugins_scripts(), hint: m.sites_pagePlugins_scriptsHint(), items: list.filter((p) => p.kind === 'page_script') },
-      { title: m.sites_pagePlugins_cards(), hint: '', items: list.filter((p) => p.kind === 'overview_card') }
-    ].filter((g) => g.items.length > 0)
+      { kind: 'page_script' as PagePluginKind, title: m.sites_pagePlugins_scripts(), hint: m.sites_pagePlugins_scriptsHint() },
+      { kind: 'overview_card' as PagePluginKind, title: m.sites_tabs_overview(), hint: '' },
+      { kind: 'site_tab' as PagePluginKind, title: m.sites_pagePlugins_tabs(), hint: '' }
+    ].filter((c) => list.some((p) => p.kind === c.kind))
   );
+  const rows = $derived(
+    [...new Set(list.map((p) => p.name))].map((name) => ({
+      name,
+      description: list.find((p) => p.name === name)?.description,
+      switches: columns.map((c) => list.find((p) => p.name === name && p.kind === c.kind))
+    }))
+  );
+
+  // What a checkbox does, in words: the plugin, then the column's own hint.
+  const describe = (description: string | undefined, hint: string) =>
+    [description?.replace(/\.$/, ''), hint].filter(Boolean).join('. ');
 
   onMount(() => {
     loadPagePlugins(site).catch(() => {});
   });
 
-  async function flip(p: PagePlugin) {
+  async function flip(p: PagePlugin, box: HTMLInputElement) {
     busy = p.kind + ':' + p.name;
     try {
       await setPagePlugin(site, p.name, p.kind, !p.on);
     } catch (err) {
+      box.checked = p.on;
       notifyLocalFailure('page_plugin', m.sites_pagePlugins_label(), err instanceof Error ? err.message : String(err));
     } finally {
       busy = '';
@@ -66,27 +82,42 @@
         </button>
       {/snippet}
       {#snippet children()}
-        <div class="py-1.5 divide-y divide-gray-100 dark:divide-lerd-border">
-          {#each groups as g (g.title)}
-            <section class="px-3 py-2">
-              <h4 class="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{g.title}</h4>
-              {#if g.hint}<p class="mt-0.5 text-[11px] leading-snug text-gray-500 dark:text-gray-400">{g.hint}</p>{/if}
-              <ul class="mt-1.5 space-y-0.5">
-                {#each g.items as p (p.name)}
-                  <li class="flex items-start gap-3 rounded-md py-1.5">
-                    <div class="flex-1 min-w-0">
-                      <div class="text-sm font-medium text-gray-900 dark:text-white">{p.name}</div>
-                      {#if p.description}<div class="text-xs leading-snug text-gray-500 dark:text-gray-400 line-clamp-2">{p.description}</div>{/if}
-                    </div>
-                    <span class="pt-1">
-                      <Toggle on={p.on} loading={busy === p.kind + ':' + p.name} disabled={busy !== ''} title={p.name} onclick={() => flip(p)} />
-                    </span>
-                  </li>
+        <table class="w-full my-1.5">
+          <thead>
+            <tr class="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+              <th class="px-3 py-1.5"></th>
+              {#each columns as c (c.kind)}
+                <th class="px-2 py-1.5 text-center font-semibold" use:tooltip={c.hint || undefined}>{c.title}</th>
+              {/each}
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 dark:divide-lerd-border">
+            {#each rows as r (r.name)}
+              <tr>
+                <td class="px-3 py-2">
+                  <span class="text-sm font-medium text-gray-900 dark:text-white" use:tooltip={{ label: r.description ?? '', maxWidth: 280 }}>{r.name}</span>
+                </td>
+                {#each r.switches as p, i (columns[i].kind)}
+                  <td class="px-2 py-2 text-center">
+                    {#if p}
+                      <input
+                        type="checkbox"
+                        class="align-middle accent-lerd-red disabled:opacity-50"
+                        aria-label="{p.name}: {columns[i].title}"
+                        aria-describedby="{uid}-{r.name}-{columns[i].kind}"
+                        use:tooltip={{ label: describe(r.description, columns[i].hint), maxWidth: 280 }}
+                        checked={p.on}
+                        disabled={busy !== ''}
+                        onchange={(e) => flip(p, e.currentTarget)}
+                      />
+                      <span id="{uid}-{r.name}-{columns[i].kind}" class="sr-only">{describe(r.description, columns[i].hint)}</span>
+                    {/if}
+                  </td>
                 {/each}
-              </ul>
-            </section>
-          {/each}
-        </div>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
       {/snippet}
     </Popover>
   </div>

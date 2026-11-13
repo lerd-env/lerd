@@ -62,3 +62,19 @@ func SetOverviewCard(site *config.Site, plugin string, on bool) error {
 	}
 	return config.SetSiteOverviewCard(site.Name, plugin, on)
 }
+
+// SetSiteTab shows or hides a plugin's tab on a site. Tabs are on everywhere
+// until hidden, so hiding needs a plugin with a tab and showing always works,
+// which clears the setting of a removed plugin.
+func SetSiteTab(site *config.Site, plugin string, on bool) error {
+	if !on {
+		p, err := plugins.Find(plugin)
+		if err != nil {
+			return err
+		}
+		if p.UI == nil || p.UI.SiteTab == nil {
+			return fmt.Errorf("plugin %s has no site tab", plugin)
+		}
+	}
+	return config.SetSiteTabHidden(site.Name, plugin, !on)
+}

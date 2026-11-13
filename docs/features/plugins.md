@@ -27,6 +27,7 @@ lerd hello:greet shop       # run one of its commands
 | `lerd plugin list` | List installed plugins, with the reason any of them failed to load |
 | `lerd plugin page <name> on\|off` | Switch a plugin's page script on or off for the site in this directory |
 | `lerd plugin card <name> on\|off` | Switch a plugin's Overview card on or off for the site in this directory |
+| `lerd plugin tab <name> on\|off` | Show or hide a plugin's tab on the site in this directory |
 
 The dashboard does the same on its **Plugins** page, which the puzzle-piece button at the end of the rail's plugin group opens, as do the command palette's **Plugins** and **Browse plugins** and, on a phone, the **Apps** page. **Installed** shows each plugin as a card with whether it loaded; opening one shows what it adds, what it requires, where it came from and its last failure, with **Update** and **Remove**, broken plugins included. The **Add a plugin** card that ends the list opens **Browse**, and **Install from a folder or git** above it opens a dialog that takes a folder path or a git URL. Because installing puts code on the machine, a remote dashboard only shows it once `lerd remote-control full-access on` is set.
 
@@ -296,7 +297,7 @@ It is delivered like every other notification, to the dashboard, Web Push or the
 
 ## Dashboard pages and tabs
 
-A rail page opens in the dashboard's panel, the same place service dashboards open, under its own rule on the rail below lerd's launchers; a site tab sits beside Overview, Logs and the rest, and receives `site`, `domain` and `branch` as query parameters. An Overview card is a section of its own on a site's Overview, below the services, and receives the same parameters. It is off on every site until switched on from the plugin icon in the site's header or with `lerd plugin card <name> on` in the project, and it grows to the height of its page, which the boilerplate's `ui/lerd.js` reports for it.
+A rail page opens in the dashboard's panel, the same place service dashboards open, under its own rule on the rail below lerd's launchers; a site tab sits beside Overview, Logs and the rest, and receives `site`, `domain` and `branch` as query parameters. A tab shows on every site until hidden for one from the plugin icon in the site's header or with `lerd plugin tab <name> off` in the project. An Overview card is a section of its own on a site's Overview, below the services, and receives the same parameters. It is off on every site until switched on from the plugin icon in the site's header or with `lerd plugin card <name> on` in the project, and it grows to the height of its page, which the boilerplate's `ui/lerd.js` reports for it.
 
 Plugin pages run in a sandboxed frame with no access to the dashboard, so a plugin page can never act with the dashboard's standing. It reaches its own API endpoints through the bridge in the boilerplate's `ui/lerd.js`:
 

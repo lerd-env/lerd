@@ -65,7 +65,7 @@ wsMessage.subscribe((msg) => {
 
 // One thing a plugin can put on a site, its page script or its Overview card,
 // and whether the site has it switched on.
-export type PagePluginKind = 'page_script' | 'overview_card';
+export type PagePluginKind = 'page_script' | 'overview_card' | 'site_tab';
 export interface PagePlugin {
   name: string;
   description?: string;
