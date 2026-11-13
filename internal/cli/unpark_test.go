@@ -114,3 +114,54 @@ func TestUnpark_stopsTheWorkersOfEverySiteItRemoves(t *testing.T) {
 		t.Error("gamma was removed, but it lives outside the parked directory")
 	}
 }
+
+// On Bazzite and other ostree hosts $HOME is /home/<user>, a symlink to
+// /var/home/<user>: park stores the folder as typed, while sites are stored
+// resolved, so unpark has to match both through the link.
+func TestUnpark_throughASymlinkedHomeUnlinksTheParkedSites(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", root)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, ".config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, ".local", "share"))
+
+	real := filepath.Join(root, "var", "home")
+	if err := os.MkdirAll(filepath.Join(real, "Projects", "alpha"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "home")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	parkedAsTyped := filepath.Join(link, "Projects")
+
+	var removed []string
+	prevTeardown, prevFinish := teardownSiteFn, finishSiteRemovalFn
+	teardownSiteFn = func(s *config.Site, _ []string) {
+		removed = append(removed, s.Name)
+		_ = config.RemoveSite(s.Name)
+	}
+	finishSiteRemovalFn = func() error { return nil }
+	t.Cleanup(func() { teardownSiteFn, finishSiteRemovalFn = prevTeardown, prevFinish })
+
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.ParkedDirectories = []string{parkedAsTyped}
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{
+		Name: "alpha", Domains: []string{"alpha.test"}, PHPVersion: "8.5",
+		Path: config.CanonicalPath(filepath.Join(parkedAsTyped, "alpha")),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runUnpark(nil, []string{parkedAsTyped}); err != nil {
+		t.Fatalf("runUnpark: %v", err)
+	}
+	if len(removed) != 1 || removed[0] != "alpha" {
+		t.Errorf("unlinked %v, want [alpha]", removed)
+	}
+}

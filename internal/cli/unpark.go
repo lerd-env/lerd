@@ -56,7 +56,7 @@ func runUnpark(_ *cobra.Command, args []string) error {
 	found := false
 	filtered := cfg.ParkedDirectories[:0]
 	for _, pd := range cfg.ParkedDirectories {
-		if pd == absDir {
+		if config.SamePath(pd, absDir) {
 			found = true
 		} else {
 			filtered = append(filtered, pd)
@@ -85,8 +85,11 @@ func runUnpark(_ *cobra.Command, args []string) error {
 	// already false here and the sites are removed rather than ignored.
 	feedback.Begin()
 	removed := 0
+	// Sites are stored resolved, so a folder typed through a symlink such as
+	// an ostree /home has to be resolved before it can prefix them.
+	prefix := config.CanonicalPath(absDir) + string(filepath.Separator)
 	for _, site := range reg.Sites {
-		if !strings.HasPrefix(site.Path, absDir+string(filepath.Separator)) {
+		if !strings.HasPrefix(site.Path, prefix) {
 			continue
 		}
 		teardownSiteFn(&site, cfg.ParkedDirectories)
