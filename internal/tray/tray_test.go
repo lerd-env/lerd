@@ -186,3 +186,39 @@ func TestLifecycleViaUI_CarriesTheDaemonsFailureBack(t *testing.T) {
 		}
 	}
 }
+
+// lerd update restarts the tray, and systemd kills everything in the tray's unit
+// with it, so a terminal the tray started itself took the update down too. The
+// tray hands the update to lerd-ui first, which opens it in a scope of its own.
+func TestOpenUpdateTerminal_AsksLerdUIEvenWithALocalTerminal(t *testing.T) {
+	prevLook, prevStart, prevUI := lookPathFn, startCmdFn, uiUpdateTerminal
+	t.Cleanup(func() { lookPathFn, startCmdFn, uiUpdateTerminal = prevLook, prevStart, prevUI })
+	lookPathFn = func(name string) (string, error) { return "/usr/bin/" + name, nil }
+	var started []string
+	startCmdFn = func(name string, _ ...string) error { started = append(started, name); return nil }
+	asked := false
+	uiUpdateTerminal = func() error { asked = true; return nil }
+
+	openUpdateTerminal("9.9.9")
+	if !asked {
+		t.Error("lerd-ui was not asked to open the update terminal")
+	}
+	if len(started) != 0 {
+		t.Errorf("the tray started %v itself, inside its own unit", started)
+	}
+}
+
+// With lerd-ui down there is no one else to ask, so the tray opens a terminal itself.
+func TestOpenUpdateTerminal_OpensLocallyWhenLerdUIIsDown(t *testing.T) {
+	prevLook, prevStart, prevUI := lookPathFn, startCmdFn, uiUpdateTerminal
+	t.Cleanup(func() { lookPathFn, startCmdFn, uiUpdateTerminal = prevLook, prevStart, prevUI })
+	lookPathFn = func(name string) (string, error) { return "/usr/bin/" + name, nil }
+	var started []string
+	startCmdFn = func(name string, _ ...string) error { started = append(started, name); return nil }
+	uiUpdateTerminal = func() error { return errors.New("connection refused") }
+
+	openUpdateTerminal("9.9.9")
+	if len(started) != 1 {
+		t.Errorf("started %v, want one local terminal", started)
+	}
+}

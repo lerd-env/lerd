@@ -75,3 +75,17 @@ func osFallbackScriptTerminals(script string) []terminalCmd {
 // terminalBaseEnv carries the graphical session keys a spawned emulator needs to
 // reach the display, which a systemd user service does not always have.
 func terminalBaseEnv() []string { return graphicalEnv() }
+
+// scopeLookPath finds systemd-run; a seam for tests.
+var scopeLookPath = exec.LookPath
+
+// ownScope moves a terminal lerd-ui opens into a systemd scope of its own.
+// lerd-ui stops by having systemd kill every process in its unit, so a terminal
+// left there dies with it, and lerd update restarts lerd-ui halfway through.
+func ownScope(bin string, args []string) (string, []string) {
+	run, err := scopeLookPath("systemd-run")
+	if err != nil {
+		return bin, args
+	}
+	return run, append([]string{"--user", "--scope", "--quiet", "--collect", "--", bin}, args...)
+}

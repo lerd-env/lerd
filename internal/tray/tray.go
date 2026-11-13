@@ -582,6 +582,12 @@ func handleUpdate(item *systray.MenuItem) {
 }
 
 func openUpdateTerminal(latestVer string) {
+	// lerd-ui first: lerd update restarts the tray, and a terminal started here
+	// sits in the tray's unit, which systemd kills whole, update included.
+	uiErr := uiUpdateTerminal()
+	if uiErr == nil {
+		return
+	}
 	script := fmt.Sprintf(
 		`echo "Lerd update available: v%s"; `+
 			`read -rp "Update now? [y/N] " ans; `+
@@ -598,19 +604,17 @@ func openUpdateTerminal(latestVer string) {
 	}
 	for _, t := range terminals {
 		if _, err := lookPathFn(t[0]); err == nil {
-			_ = exec.Command(t[0], t[1:]...).Start()
+			_ = startCmdFn(t[0], t[1:]...)
 			return
 		}
 	}
-	// None of those exist on macOS; lerd-ui knows Terminal and iTerm there.
-	if err := uiUpdateTerminal(); err != nil {
-		fmt.Fprintf(lerdBinWarnW, "lerd-tray: could not open a terminal to run lerd update: %v\n", err)
-	}
+	fmt.Fprintf(lerdBinWarnW, "lerd-tray: could not open a terminal to run lerd update: %v\n", uiErr)
 }
 
-// lookPathFn and uiUpdateTerminal are seams for tests.
+// lookPathFn, startCmdFn and uiUpdateTerminal are seams for tests.
 var (
 	lookPathFn       = exec.LookPath
+	startCmdFn       = func(name string, args ...string) error { return exec.Command(name, args...).Start() }
 	uiUpdateTerminal = requestUpdateTerminal
 )
 
