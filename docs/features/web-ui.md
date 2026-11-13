@@ -219,4 +219,4 @@ Links between pages stay inside the dashboard and headings scroll into view, so 
 
 ## Updates
 
-Shows the current version. When an update is available, the Lerd entry exposes an **Open terminal & update** button that launches the host's terminal emulator running `lerd update`. A remote dashboard shows the same action once `lerd remote-control full-access on` is set; the terminal opens on the host that runs Lerd.
+Shows the current version. When an update is available, the Lerd entry exposes an **Open terminal & update** button that launches the host's terminal emulator running `lerd update`. On Linux the terminal runs in a systemd scope of its own, so the update carries on when it restarts the dashboard. A remote dashboard shows the same action once `lerd remote-control full-access on` is set; the terminal opens on the host that runs Lerd.

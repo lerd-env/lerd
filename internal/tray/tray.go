@@ -582,6 +582,12 @@ func handleUpdate(item *systray.MenuItem) {
 }
 
 func openUpdateTerminal(latestVer string) {
+	// lerd-ui first: lerd update restarts the tray, and a terminal started here
+	// sits in the tray's unit, which systemd kills whole, update included.
+	uiErr := uiUpdateTerminal()
+	if uiErr == nil {
+		return
+	}
 	script := fmt.Sprintf(
 		`echo "Lerd update available: v%s"; `+
 			`read -rp "Update now? [y/N] " ans; `+
@@ -598,21 +604,26 @@ func openUpdateTerminal(latestVer string) {
 	}
 	for _, t := range terminals {
 		if _, err := lookPathFn(t[0]); err == nil {
-			_ = exec.Command(t[0], t[1:]...).Start()
+			_ = startCmdFn(t[0], t[1:]...)
 			return
 		}
 	}
-	// None of those exist on macOS; lerd-ui knows Terminal and iTerm there.
-	if err := uiUpdateTerminal(); err != nil {
-		fmt.Fprintf(lerdBinWarnW, "lerd-tray: could not open a terminal to run lerd update: %v\n", err)
-	}
+	fmt.Fprintf(lerdBinWarnW, "lerd-tray: could not open a terminal to run lerd update: %v\n", uiErr)
 }
 
-// lookPathFn and uiUpdateTerminal are seams for tests.
+// lookPathFn, startCmdFn and uiUpdateTerminal are seams for tests.
 var (
 	lookPathFn       = exec.LookPath
+	startCmdFn       = startOwnScope
 	uiUpdateTerminal = requestUpdateTerminal
 )
+
+// startOwnScope starts a command outside the tray's unit, which lerd update
+// restarts, taking everything inside it down.
+func startOwnScope(name string, args ...string) error {
+	bin, rest := lerdSystemd.OwnScope(name, args)
+	return exec.Command(bin, rest...).Start()
+}
 
 // requestUpdateTerminal asks lerd-ui to open the user's terminal on lerd update.
 // lifecycleViaUI has lerd-ui start or stop lerd; reached is false only when it

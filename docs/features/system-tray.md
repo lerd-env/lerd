@@ -59,7 +59,7 @@ The **Services** submenu shows only core services (MySQL, Redis, PostgreSQL, etc
 
 The **workers line** summarises the per-site workers (queue, schedule, Horizon, Reverb, Stripe, and any framework-declared worker) without listing them, since their number grows with your sites. It shows the running count in green, or a red warning naming the site when one has actually broken. A worker stopped because its site is paused or idle-suspended is not a fault, so it never raises the warning, and the line hides itself entirely when nothing is running and nothing is wrong. Workers are still started and stopped from the web UI or their CLI commands.
 
-The **update item** shows "Check for update..." when no update information is cached, and "⬆ Update to vX.Y.Z" once the background checker finds a newer release. Clicking it opens a terminal to run `lerd update`. On Linux the tray starts the first terminal it finds itself; on macOS, where none of those exist, it asks the dashboard (`lerd-ui`) to open Terminal or iTerm instead. If neither works, nothing opens and the reason is written to the tray's log.
+The **update item** shows "Check for update..." when no update information is cached, and "⬆ Update to vX.Y.Z" once the background checker finds a newer release. Clicking it opens a terminal to run `lerd update`. The tray asks the dashboard (`lerd-ui`) to open it, Terminal or iTerm on macOS, and on Linux starts the first terminal it finds itself only when the dashboard is not answering, since the update restarts the tray and would take a terminal started from it down too. If neither works, nothing opens and the reason is written to the tray's log.
 
 ---
 
