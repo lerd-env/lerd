@@ -115,3 +115,31 @@ func TestProvidedEnvHeader_namesTheHomeSpellingWhenHomeIsASymlink(t *testing.T) 
 		}
 	}
 }
+
+// With $HOME already the resolved /var/home/<user>, the containers still mount
+// /home/<user> when it leads there, so the header must name that spelling too.
+func TestProvidedEnvHeader_namesEveryHomeSpellingTheContainersMount(t *testing.T) {
+	root := t.TempDir()
+	real := filepath.Join(root, "var", "home", "me")
+	site := filepath.Join(real, "Projects", "app")
+	if err := os.MkdirAll(site, 0755); err != nil {
+		t.Fatal(err)
+	}
+	homeRoot := filepath.Join(root, "home")
+	if err := os.MkdirAll(homeRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(real, filepath.Join(homeRoot, "me")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", real)
+	prev := homeSpellingsFn
+	homeSpellingsFn = func(home string) []string { return config.HomeSpellingsUnder(home, homeRoot) }
+	t.Cleanup(func() { homeSpellingsFn = prev })
+
+	got := string(providedEnvHeader(config.Site{Name: "app", Path: config.CanonicalPath(site), Domains: []string{"app.test"}}))
+	want := "#lerd-root=" + filepath.Join(homeRoot, "me", "Projects", "app") + "\n"
+	if !strings.Contains(got, want) {
+		t.Errorf("header %q is missing %q", got, want)
+	}
+}

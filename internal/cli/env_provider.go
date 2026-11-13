@@ -81,7 +81,7 @@ func providedEnvHeader(site config.Site) []byte {
 		if real, err := filepath.EvalSymlinks(r); err == nil {
 			r = real
 		}
-		for _, spelling := range []string{r, homeSpelling(r)} {
+		for _, spelling := range append([]string{r}, homeSpellings(r)...) {
 			if spelling == "" || strings.ContainsAny(spelling, "\r\n") {
 				continue
 			}
@@ -91,17 +91,26 @@ func providedEnvHeader(site config.Site) []byte {
 	return b.Bytes()
 }
 
-// homeSpelling returns path as reached through $HOME when $HOME is a symlink,
-// as on Bazzite's /home -> /var/home. The containers mount both spellings
-// separately, so a command run from the $HOME one never resolves to the other.
-func homeSpelling(path string) string {
+// homeSpellingsFn is config.HomeSpellings, swapped in tests for a fake /home.
+var homeSpellingsFn = config.HomeSpellings
+
+// homeSpellings returns path under every other spelling of $HOME the PHP
+// containers mount, such as /home/<user> for /var/home/<user> on Bazzite, since
+// a command run from one spelling never resolves to another inside them.
+func homeSpellings(path string) []string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ""
+		return nil
 	}
 	real := config.CanonicalPath(home)
-	if real == home || !strings.HasPrefix(path, real+string(filepath.Separator)) {
-		return ""
+	if !strings.HasPrefix(path, real+string(filepath.Separator)) {
+		return nil
 	}
-	return home + strings.TrimPrefix(path, real)
+	var out []string
+	for _, h := range homeSpellingsFn(home) {
+		if h != real {
+			out = append(out, h+strings.TrimPrefix(path, real))
+		}
+	}
+	return out
 }
