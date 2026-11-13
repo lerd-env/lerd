@@ -66,6 +66,11 @@ func runUninstall(force, keepData bool) error {
 	if err != nil {
 		return err
 	}
+	// Asked once the uninstall is confirmed, while the person is still reading;
+	// --force and --keep-data promise no prompts, so only a plain run asks.
+	if !force && !keepData {
+		offerUninstallFeedback()
+	}
 	removeData := plan.removeData
 
 	// Global npm packages the npm shim captured into lerd's prefix would

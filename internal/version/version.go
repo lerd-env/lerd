@@ -1,7 +1,11 @@
 // Package version holds build-time version information injected via ldflags.
 package version
 
-import "fmt"
+import (
+	"fmt"
+	"regexp"
+	"strings"
+)
 
 // These variables are set at build time via:
 //
@@ -17,4 +21,16 @@ var (
 // String returns the full version string shown by `lerd --version`.
 func String() string {
 	return fmt.Sprintf("%s (commit %s, built %s)", Version, Commit, Date)
+}
+
+// releaseVersion is the shape of a tagged release, 1.38.0 or 1.38.0-beta.1.
+// A build from a checkout carries `git describe` output instead, or a bare
+// commit hash when no tag is reachable, and neither matches.
+var releaseVersion = regexp.MustCompile(`^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`)
+
+// IsRelease reports whether v is one a user could have installed from a release,
+// as opposed to a build from a checkout. A tag built with local edits comes out
+// as 1.37.0-dirty, which has the shape but is not one.
+func IsRelease(v string) bool {
+	return releaseVersion.MatchString(v) && !strings.HasSuffix(v, "-dirty")
 }

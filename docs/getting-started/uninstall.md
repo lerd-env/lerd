@@ -24,6 +24,10 @@ Without a terminal and without one of those flags, `lerd uninstall` stops before
 
 `--force` answers yes to all four. `--keep-data` answers no to 1 and 4 and yes to 2 and 3.
 
+## Why are you leaving?
+
+Once you confirm a plain `lerd uninstall`, before anything is removed, Lerd asks one optional question: why you are uninstalling, picked from a short list, with room for a sentence of your own. Pressing Enter skips it and nothing is sent. An answer goes to `feedback.lerd.sh` with only the reason, your words, the Lerd version and the operating system, no install id and no address, so it cannot be tied back to you. `--force`, `--keep-data` and runs without a terminal never ask. The Worker that receives it is in `workers/uninstall-feedback` in the Lerd repository.
+
 ## Linux
 
 It stops the watcher before it touches DNS, since the watcher would otherwise repair the setup it sees disappear, and if the watcher cannot be stopped, the uninstall ends there without changing anything. `lerd uninstall` also removes the `lerd` Podman network, the watcher, the desktop entry, the `lerd0` DNS interface and its NetworkManager rule, and `/etc/sysctl.d/99-lerd-ports.conf`. It restores systemd-resolved's fallback DNS servers if Lerd turned them off. On Omarchy it takes the Lerd Glance widget off the bar.
