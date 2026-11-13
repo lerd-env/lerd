@@ -5,6 +5,8 @@ package tray
 import (
 	"bytes"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 func TestPickColorIcon(t *testing.T) {
@@ -16,13 +18,13 @@ func TestPickColorIcon(t *testing.T) {
 		wantKind     iconKind
 		wantIcon     []byte
 	}{
-		{"stopped dark panel", false, false, false, iconKindStopped, iconPNG},
-		{"stopped light panel", false, true, false, iconKindStopped, iconPNG},
+		{"stopped dark panel", false, false, false, iconKindStoppedDark, iconOffWhitePNG},
+		{"stopped light panel", false, true, false, iconKindStoppedLight, iconOffDarkPNG},
 		{"running dark panel", true, false, false, iconKindRunningDark, iconWhitePNG},
 		{"running light panel", true, true, false, iconKindRunningLight, iconDarkPNG},
 		{"high-contrast running dark panel", true, false, true, iconKindRunningHiC, iconGreenPNG},
 		{"high-contrast running light panel", true, true, true, iconKindRunningHiC, iconGreenPNG},
-		{"high-contrast stopped stays red", false, true, true, iconKindStopped, iconPNG},
+		{"high-contrast stopped is red on any panel", false, true, true, iconKindStoppedHiC, iconOffRedPNG},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -37,20 +39,46 @@ func TestPickColorIcon(t *testing.T) {
 	}
 }
 
-// The dark running icon must be a distinct asset from the white one, otherwise
-// the light-panel fix is a no-op.
-func TestRunningIconsDiffer(t *testing.T) {
-	if len(iconDarkPNG) == 0 {
-		t.Fatal("iconDarkPNG is empty")
+// Every state must have its own artwork, otherwise a state change shows nothing.
+func TestTrayIconsAreDistinct(t *testing.T) {
+	icons := map[string][]byte{
+		"white": iconWhitePNG, "dark": iconDarkPNG, "green": iconGreenPNG,
+		"off-white": iconOffWhitePNG, "off-dark": iconOffDarkPNG, "off-red": iconOffRedPNG,
+		"mono": iconMonoPNG, "mono-off": iconMonoOffPNG,
 	}
-	if bytes.Equal(iconDarkPNG, iconWhitePNG) {
-		t.Error("dark and white running icons are identical")
+	seen := map[string]string{}
+	for name, icon := range icons {
+		if len(icon) == 0 {
+			t.Fatalf("%s icon is empty", name)
+		}
+		if other, dup := seen[string(icon)]; dup {
+			t.Errorf("%s and %s icons are identical", name, other)
+		}
+		seen[string(icon)] = name
 	}
-	if len(iconGreenPNG) == 0 {
-		t.Fatal("iconGreenPNG is empty")
+}
+
+// The mono template icon is the only status cue in mono mode, so it must follow
+// the running state too.
+func TestMonoIconFollowsRunning(t *testing.T) {
+	if !bytes.Equal(pickMonoIcon(true), iconMonoPNG) {
+		t.Error("running should show the plain mono icon")
 	}
-	if bytes.Equal(iconGreenPNG, iconPNG) {
-		t.Error("green running icon is identical to the red stopped icon")
+	if !bytes.Equal(pickMonoIcon(false), iconMonoOffPNG) {
+		t.Error("stopped should show the slashed mono icon")
+	}
+}
+
+// A stopped stack must follow the panel too, now that the stopped icon is a
+// tinted slash rather than a red L that read everywhere.
+func TestIconStateStoppedFollowsPanel(t *testing.T) {
+	var applied [][]byte
+	s := newIconState()
+	s.apply = func(icon []byte) { applied = append(applied, icon) }
+
+	s.setLight(true)
+	if s.last != iconKindStoppedLight || !bytes.Equal(applied[len(applied)-1], iconOffDarkPNG) {
+		t.Error("stopped on a light panel should show the dark slashed icon")
 	}
 }
 
@@ -123,13 +151,37 @@ func TestIconStatePulseAlternatesThenSettles(t *testing.T) {
 		t.Fatal("first pulse step should light the running icon")
 	}
 	s.pulseStep()
-	if !bytes.Equal(applied[len(applied)-1], iconPNG) {
+	if !bytes.Equal(applied[len(applied)-1], iconOffWhitePNG) {
 		t.Fatal("second pulse step should go back to the stopped icon")
 	}
 	s.pulseStep()
 	s.setRunning(false)
 	s.setPulsing(false)
-	if s.last != iconKindStopped || !bytes.Equal(applied[len(applied)-1], iconPNG) {
+	if s.last != iconKindStoppedDark || !bytes.Equal(applied[len(applied)-1], iconOffWhitePNG) {
 		t.Error("ending the pulse should settle on the real stopped state")
+	}
+}
+
+// With lerd-ui down the snapshot is empty, but the high-contrast choice is saved
+// locally and must still hold, or the stopped icon can vanish on a mixed theme.
+func TestHighContrastSurvivesUnreachableUI(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.SetHighContrastTrayIcon(true)
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatal(err)
+	}
+	var applied [][]byte
+	s := newIconState()
+	s.apply = func(icon []byte) { applied = append(applied, icon) }
+
+	applyIcon(s, &Snapshot{})
+
+	if len(applied) == 0 || !bytes.Equal(applied[len(applied)-1], iconOffRedPNG) {
+		t.Error("a stopped lerd with high contrast saved should show the red slashed icon")
 	}
 }

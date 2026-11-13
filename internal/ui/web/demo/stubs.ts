@@ -579,7 +579,9 @@ function presetInstallStream(name: string, version: string): Response {
   return new Response(body, { status: 200, headers: { 'content-type': 'application/x-ndjson' } });
 }
 
-const DEMO_EVENTS = demoRequestEvents();
+// The Dumps lens reads this list rather than the stream, so it carries the
+// stream's dump() calls too, or the Dumps tab would only ever say it is waiting.
+const DEMO_EVENTS = [...demoRequestEvents(), ...(debugEvents().filter((e) => e.kind === 'dump') as unknown as ReturnType<typeof demoRequestEvents>)];
 
 // Every checkout reports some local work and a commit to pull, so the site
 // header shows its git buttons the way it does on a busy branch.
@@ -794,6 +796,12 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   if (path in ROUTES) return jsonResponse(ROUTES[path]);
 
   // Toggles / actions: pretend they succeeded so the UI flips optimistically.
+  // Resizing the Debug buffer answers with the full status, which the store keeps.
+  if (path === '/api/dumps/buffer' && method === 'POST') {
+    const { size } = JSON.parse(String(init?.body || '{}')) as { size?: number };
+    if (size) dumpsStatus.capacity = size;
+    return jsonResponse(dumpsStatus);
+  }
   if (method !== 'GET' && method !== 'HEAD') return jsonResponse({ ok: true });
   // Anything else we didn't fixture (push keys, favicons, …) — harmless empty.
   if (path === '/api/dumps') return jsonResponse(DEMO_EVENTS.filter((e) => e.ctx.rid === qs.get('rid')));
@@ -861,6 +869,8 @@ function debugEvents(): Array<Record<string, unknown>> {
   A('query', { data: { sql: 'select * from `orders` where `id` = ?', bindings: [42], time_ms: 0.6, connection: 'mysql', rw_type: 'read' }, src: { file: 'app/Models/Order.php', line: 31 } }, 9000);
   A('query', { data: { sql: 'select * from `order_items` where `order_id` in (?, ?, ?)', bindings: [42, 43, 44], time_ms: 1.4, connection: 'mysql', rw_type: 'read' }, src: { file: 'app/Models/Order.php', line: 52 } }, 8800);
   A('dump', { text: 'App\\Models\\Order {#812\n  id: 42,\n  total: "249.00",\n  status: "shipped",\n}', src: { file: 'app/Http/Controllers/OrderController.php', line: 48 } }, 8600);
+  A('dump', { label: '$cart', text: 'array:3 [\n  "items" => 3\n  "subtotal" => 229.0\n  "coupon" => null\n]', src: { file: 'app/Http/Controllers/OrderController.php', line: 52 } }, 8550);
+  A('dump', { label: 'shipping', text: 'Illuminate\\Support\\Collection {#901\n  #items: array:2 [\n    0 => "standard"\n    1 => "express"\n  ]\n}', src: { file: 'app/Services/Shipping.php', line: 27 } }, 8500);
   A('event', { data: { name: 'App\\Events\\OrderShipped', listeners: 2 }, src: { file: 'app/Events/OrderShipped.php', line: 18 } }, 8400);
   A('mail', { data: { subject: 'Your order has shipped', from: ['shop@acme.test'], to: ['jane@acme.test'] }, src: { file: 'app/Mail/OrderShipped.php', line: 22 } }, 8200);
   A('job', { data: { class: 'App\\Jobs\\SendShipmentNotification', status: 'processed', connection: 'redis' }, src: { file: 'app/Jobs/SendShipmentNotification.php', line: 14 } }, 8000);

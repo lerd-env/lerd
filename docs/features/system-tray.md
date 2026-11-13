@@ -4,7 +4,7 @@
 
 ```bash
 lerd tray              # launch (detaches from terminal automatically)
-lerd tray --mono=false # use the red colour icon instead of monochrome white
+lerd tray --mono       # monochrome template icon, recoloured by the macOS menu bar
 ```
 
 The tray detaches from the terminal immediately, your shell prompt returns straight away.
@@ -102,27 +102,25 @@ Only an id the current menu offers runs. Anything else answers `409`, including 
 
 ## Icon appearance
 
-In the default colour mode the icon doubles as a status light: a red **L** when lerd is stopped and a white **L** when it is running. The white running icon would disappear on a light panel, so the tray reads your desktop's light/dark preference and switches the running icon to a dark **L** whenever the panel is light. It reacts live: toggle your system theme and the icon recolours without restarting the tray.
+The icon is the Lerd logo's stack of containers, and it doubles as a status light: plain while lerd is running, struck through with a slash while it is stopped. In the default colour mode it is drawn light, which would disappear on a light panel, so the tray reads your desktop's light/dark preference and switches to a dark icon whenever the panel is light. It reacts live: toggle your system theme and the icon recolours without restarting the tray.
 
-The preference comes from the cross-desktop XDG desktop portal (`org.freedesktop.appearance` `color-scheme`), so it works the same on GNOME, KDE Plasma, and anything else that implements the portal. On a setup without a portal the tray keeps the white running icon, which is the right default for the common dark panel.
-
-The red stopped icon is left as-is since it reads on both light and dark panels.
+The preference comes from the cross-desktop XDG desktop portal (`org.freedesktop.appearance` `color-scheme`), so it works the same on GNOME, KDE Plasma, and anything else that implements the portal. On a setup without a portal the tray keeps the light icon, which is the right default for the common dark panel.
 
 ### High-contrast icon
 
-The light/dark switch relies on the portal reporting a preference that matches the panel. On mixed themes that pairing breaks: KDE's Breeze Twilight uses light application colours with a dark Plasma panel, so the portal reports "light", the tray hands over the dark running icon, and it vanishes against the dark panel. There is no portable way to read the panel's real colour, so no amount of detection fixes this case.
+The light/dark switch relies on the portal reporting a preference that matches the panel. On mixed themes that pairing breaks: KDE's Breeze Twilight uses light application colours with a dark Plasma panel, so the portal reports "light", the tray hands over the dark icon, and it vanishes against the dark panel. There is no portable way to read the panel's real colour, so no amount of detection fixes this case.
 
-For that, turn on the high-contrast icon. It replaces the theme-adaptive running icon with a single green **L** that reads on any panel, the same way the red stopped icon already does, and stops depending on the panel colour entirely.
+For that, turn on the high-contrast icon. It replaces the theme-adaptive icon with green containers while lerd is running and a red slashed one while it is stopped, both readable on any panel, and stops depending on the panel colour entirely.
 
 ```bash
-lerd tray icon high-contrast   # always-visible green running icon
-lerd tray icon default         # back to the theme-adaptive white/dark icon
+lerd tray icon high-contrast   # always-visible green/red icon
+lerd tray icon default         # back to the theme-adaptive light/dark icon
 lerd tray icon                 # print the current style
 ```
 
 You can also toggle it from the **High-contrast icon** item in the tray menu. It is off by default and persisted to `config.yaml`.
 
-If you would rather the OS own the colouring entirely, use `lerd tray --mono`, which registers a monochrome template icon that GNOME and KDE recolour to match the panel themselves (this mode does not change with lerd state).
+On macOS you can let the menu bar own the colouring with `lerd tray --mono`, which registers a template icon that macOS recolours to match the menu bar. On Linux the panel shows that same icon in white rather than recolouring it, so the default colour mode, which follows the panel, is the better choice there. The mono icon draws the containers in a single colour, with the side faces and windows let through at lower opacity so the shape keeps its depth, and slashes them while lerd is stopped.
 
 ---
 

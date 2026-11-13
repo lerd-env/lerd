@@ -23,7 +23,7 @@ func NewTrayCmd() *cobra.Command {
 			return tray.Run(mono)
 		},
 	}
-	cmd.Flags().BoolVar(&mono, "mono", false, "Use a monochrome template icon (OS recolors it); default is the colour icon that flips white/red with lerd state")
+	cmd.Flags().BoolVar(&mono, "mono", false, "Use a monochrome template icon (the macOS menu bar recolours it; Linux panels show it white); default is the colour icon, slashed while lerd is stopped")
 	cmd.AddCommand(newTrayIconCmd(), newTrayOnCmd(), newTrayOffCmd())
 	return cmd
 }
@@ -130,18 +130,18 @@ func trayStateWord(enabled bool) string {
 	return "off"
 }
 
-// newTrayIconCmd chooses between the theme-adaptive running icon and the
-// always-visible high-contrast one, for panels where light/dark detection
+// newTrayIconCmd chooses between the default icons and the always-visible
+// high-contrast ones, for panels where light/dark detection
 // guesses wrong (mixed themes like KDE Breeze Twilight).
 func newTrayIconCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "icon [default|high-contrast]",
-		Short: "Choose the tray running-icon style",
-		Long: `Choose how the running tray icon is drawn.
+		Short: "Choose the tray icon style",
+		Long: `Choose how the tray icon is drawn.
 
-default        theme-adaptive, white on dark panels and dark on light ones
-high-contrast  a single green icon that stays visible on any panel, including
-               mixed themes like KDE Breeze Twilight where detection guesses wrong
+default        light on dark panels and dark on light ones, slashed while stopped
+high-contrast  green while running and red while stopped, visible on any panel,
+               including mixed themes like KDE Breeze Twilight where detection guesses wrong
 
 Run with no argument to print the current style.`,
 		ValidArgs: []string{"default", "high-contrast"},

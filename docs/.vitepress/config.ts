@@ -40,7 +40,7 @@ export default defineConfig({
   },
 
   head: [
-    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/assets/logo.svg' }],
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/assets/favicon.svg' }],
 
     // Instrument Sans and JetBrains Mono, the landing page's and the docs' type, declared in style.css
     ['link', { rel: 'preload', href: '/assets/fonts/instrument-sans-latin.woff2', as: 'font', type: 'font/woff2', crossorigin: '' }],
@@ -144,7 +144,7 @@ export default defineConfig({
   },
 
   themeConfig: {
-    logo: { src: '/assets/logo.svg', width: 24, height: 24 },
+    logo: { light: '/assets/logo.svg', dark: '/assets/logo-dark.svg', width: 24, height: 24 },
     siteTitle: 'Lerd',
 
     nav: [

@@ -1,3 +1,5 @@
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/public/assets/logo-dark.svg"><img src="docs/public/assets/logo.svg" width="104" alt="Lerd" /></picture></p>
+
 # Lerd
 
 > Open-source local PHP development environment for Linux and macOS,
@@ -370,6 +372,7 @@ Lerd stands on a set of excellent open-source projects it bundles or fetches to 
 - [Composer](https://getcomposer.org) - fetched on the host for dependency operations
 - [Starship](https://starship.rs) - the prompt in the container shell drop-in
 - [Simple Icons](https://simpleicons.org) - the service marks in the dashboard, CC0
+- [The Lerd logo](https://github.com/lerd-env/lerd/issues/1549) - designed by [Claxon](https://github.com/claxonberlin)
 
 ## License
 

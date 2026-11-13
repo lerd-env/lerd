@@ -158,13 +158,12 @@ func detach(mono bool) error {
 
 func onReady(mono bool) {
 	// In mono mode we register a template icon so the OS panel recolors
-	// it to match the theme. In colour mode we set the icon directly —
-	// the applyLoop will then swap between iconPNG (red, stopped) and
-	// iconWhitePNG (white, running) on every state change.
+	// it to match the theme. Both modes start on the stopped icon and the
+	// applyLoop swaps it on every state change.
 	if mono {
-		systray.SetTemplateIcon(iconMonoPNG, iconMonoPNG)
+		systray.SetTemplateIcon(iconMonoOffPNG, iconMonoOffPNG)
 	} else {
-		systray.SetIcon(iconPNG)
+		systray.SetIcon(iconOffWhitePNG)
 	}
 	// SetTitle would show text next to the icon in the macOS menu bar — skip it.
 	systray.SetTooltip("Lerd — local dev environment")
@@ -261,22 +260,25 @@ func fetchSnapshot() *Snapshot {
 type iconKind int
 
 const (
-	iconKindStopped      iconKind = iota // red L, any panel
-	iconKindRunningDark                  // white L, dark panel
-	iconKindRunningLight                 // dark L, light panel
-	iconKindRunningHiC                   // green L, any panel (high-contrast opt-in)
+	iconKindStoppedDark  iconKind = iota // light slashed containers, dark panel
+	iconKindStoppedLight                 // dark slashed containers, light panel
+	iconKindStoppedHiC                   // red slashed containers, any panel (high-contrast opt-in)
+	iconKindRunningDark                  // light containers, dark panel
+	iconKindRunningLight                 // dark containers, light panel
+	iconKindRunningHiC                   // green containers, any panel (high-contrast opt-in)
 )
 
-// pickColorIcon chooses the color-mode icon from the running state, the desktop
-// panel's light/dark preference, and the high-contrast opt-in. With high
-// contrast on, the running indicator is a single green L that reads on any
-// panel, sidestepping the panel-color guess that goes wrong on mixed themes
-// like KDE Breeze Twilight. Otherwise it is white on a dark panel and dark on a
-// light one; the stopped icon is red and reads on both regardless.
+// pickColorIcon matches the panel, light on dark and dark on light, slashed while
+// stopped. High contrast is green running and red stopped, readable on any panel,
+// for mixed themes like KDE Breeze Twilight where the panel-colour guess fails.
 func pickColorIcon(running, light, highContrast bool) (iconKind, []byte) {
 	switch {
+	case !running && highContrast:
+		return iconKindStoppedHiC, iconOffRedPNG
+	case !running && light:
+		return iconKindStoppedLight, iconOffDarkPNG
 	case !running:
-		return iconKindStopped, iconPNG
+		return iconKindStoppedDark, iconOffWhitePNG
 	case highContrast:
 		return iconKindRunningHiC, iconGreenPNG
 	case light:
@@ -306,8 +308,8 @@ type iconState struct {
 }
 
 func newIconState() *iconState {
-	// last defaults to iconKindStopped, matching the red icon onReady sets.
-	return &iconState{last: iconKindStopped, apply: systray.SetIcon}
+	// last defaults to iconKindStoppedDark, matching the icon onReady sets.
+	return &iconState{last: iconKindStoppedDark, apply: systray.SetIcon}
 }
 
 func (s *iconState) setRunning(running bool) {
@@ -386,16 +388,43 @@ func (s *iconState) refresh() {
 	s.apply(icon)
 }
 
+// pickMonoIcon chooses the template icon; the OS recolors it, so the slash is
+// the only status cue mono mode has.
+func pickMonoIcon(running bool) []byte {
+	if running {
+		return iconMonoPNG
+	}
+	return iconMonoOffPNG
+}
+
 func applyLoop(menu *menuState, updateCh <-chan *Snapshot, mono bool, icons *iconState) {
+	monoRunning := false // matches the stopped template icon onReady sets
 	for snap := range updateCh {
 		menu.apply(snap)
-		// In color mode the icon doubles as a status indicator. In mono mode
-		// the OS recolors the template icon, so we leave it alone.
-		if !mono && icons != nil {
-			icons.setHighContrast(snap != nil && snap.HighContrastIcon)
-			icons.setRunning(snap != nil && snap.Running)
+		running := snap != nil && snap.Running
+		if mono {
+			if running != monoRunning {
+				monoRunning = running
+				icon := pickMonoIcon(running)
+				systray.SetTemplateIcon(icon, icon)
+			}
+			continue
+		}
+		if icons != nil {
+			applyIcon(icons, snap)
 		}
 	}
+}
+
+// applyIcon sets the colour icon from a poll. High contrast is read from the
+// saved config, not the snapshot, which comes back empty while lerd-ui is down.
+func applyIcon(icons *iconState, snap *Snapshot) {
+	highContrast := false
+	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil {
+		highContrast = cfg.IsHighContrastTrayIcon()
+	}
+	icons.setHighContrast(highContrast)
+	icons.setRunning(snap != nil && snap.Running)
 }
 
 func handleDash(item *systray.MenuItem, refresh func()) {
