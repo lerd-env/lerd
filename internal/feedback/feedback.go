@@ -1016,3 +1016,35 @@ func humanDur(d time.Duration) string {
 	}
 	return fmt.Sprintf("%.1fs", d.Seconds())
 }
+
+// Ask prints a styled free-text question and returns the trimmed line typed in
+// reply, or "" when it is skipped, stdin hits EOF or nobody is at a terminal.
+func Ask(question string) string {
+	mu.Lock()
+	fmt.Fprintf(target(), "\n%s%s %s ", pad, paint(promptStyle, "?"), question)
+	mu.Unlock()
+
+	if !StdinInteractive() {
+		mu.Lock()
+		fmt.Fprintf(target(), "%s\n", paint(dimStyle, "skipped (not a terminal)"))
+		mu.Unlock()
+		return ""
+	}
+	// One byte at a time, so nothing past the newline is buffered away from
+	// the next prompt.
+	var line []byte
+	b := make([]byte, 1)
+	for {
+		n, err := confirmReader.Read(b)
+		if n == 1 {
+			if b[0] == '\n' {
+				break
+			}
+			line = append(line, b[0])
+		}
+		if err != nil {
+			break
+		}
+	}
+	return strings.TrimSpace(string(line))
+}
