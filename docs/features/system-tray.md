@@ -120,7 +120,7 @@ lerd tray icon                 # print the current style
 
 You can also toggle it from the **High-contrast icon** item in the tray menu. It is off by default and persisted to `config.yaml`.
 
-If you would rather the OS own the colouring entirely, use `lerd tray --mono`, which registers a monochrome template icon that GNOME and KDE recolour to match the panel themselves. It is a flat silhouette of the containers, slashed while lerd is stopped.
+If you would rather the OS own the colouring entirely, use `lerd tray --mono`, which registers a monochrome template icon that GNOME and KDE recolour to match the panel themselves. It draws the containers in a single colour, with the side faces and windows let through at lower opacity so the shape keeps its depth, and slashes them while lerd is stopped.
 
 ---
 
