@@ -20,11 +20,11 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -38,6 +38,7 @@ jobs:
           cp install.ps1 docs/public/install.ps1
           mkdir -p docs/public/icons
           cp docs/public/assets/logo.svg docs/public/icons/icon.svg
+          cp docs/public/assets/logo-dark.svg docs/public/icons/icon-dark.svg
 
       - name: Build the embedded UI demo
         working-directory: internal/ui/web
@@ -53,9 +54,9 @@ jobs:
         working-directory: docs
         run: npm run build
 
-      - uses: actions/configure-pages@v4
+      - uses: actions/configure-pages@1f0c5cde4bc74cd7e1254d0cb4de8d49e9068c7d # v4.0.0
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: docs/.vitepress/dist
 
@@ -67,5 +68,5 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
         id: deployment

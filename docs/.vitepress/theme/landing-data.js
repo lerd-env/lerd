@@ -90,60 +90,21 @@ export const INSTALL = 'curl -fsSL https://lerd.sh/install.sh | bash'
 // releases/latest/download always resolves to the newest desktop release's asset.
 export const WINDOWS_INSTALLER = 'https://github.com/lerd-env/lerd-desktop/releases/latest/download/Install-Lerd.exe'
 
-/* ---- The lineup: one full-width card per area, screenshot path under public/assets ---- */
 /* ---- AI agents: what an assistant can do through lerd's MCP server ---- */
 export const ASSISTANTS = ['Claude Code', 'Cursor', 'Codex CLI', 'Gemini CLI', 'Copilot', 'Junie', 'Antigravity', 'Windsurf', 'OpenCode']
-export const AGENTS = [
-  { name: 'Manages the environment', cmd: 'site · service · worker', p: 'Links sites, switches PHP and Node versions, starts databases and caches, and runs queue workers and the scheduler.' },
-  { name: 'Runs commands', cmd: 'exec', p: "artisan, composer and the project's own console commands, on the PHP version the site uses." },
-  { name: 'Reads each request', cmd: 'request lenses', p: 'N+1 and slow queries, exceptions, error logs and failed jobs for one request, looked up by its id.' },
-  { name: 'Sees browser errors', cmd: 'diag browser_events', p: "JavaScript errors and failed fetches from the site's pages, once browser logs are on for that site." },
-  { name: 'Works in worktrees', cmd: 'worktree add', p: 'Each worktree gets its own .test domain, its dependencies installed, and a database that is shared, cloned or empty.' },
-  { name: 'Snapshots the database', cmd: 'db snapshot', p: 'Before a branch switch or a migration. Each snapshot records its branch, so the right one can be restored later.' },
-]
+// The MCP tool each card in i18n agents.items names, in the same order.
+export const AGENT_CMDS = ['site · service · worker', 'exec', 'request lenses', 'diag browser_events', 'worktree add', 'db snapshot']
 
+/* ---- The lineup: one card per area, copy under i18n lineup.items[id], screenshot under public/assets ---- */
 export const LINEUP = [
-  { id: 'sites', title: 'Sites', h: 'Run lerd init, get a .test domain.',
-    p: 'Lerd detects the framework, runs composer and npm, migrates the database, starts the workers and issues a trusted certificate. Nginx and PHP-FPM serve it at https://project.test.',
-    alt: 'Lerd site page with runtime, workers, services and request timing for acme.test',
-    tags: ['Linux', 'macOS', 'WSL2'], cli: 'lerd init',
-    more: 'Explore sites', href: '/usage/sites', shot: 'landing/site-overview' },
-  { id: 'dashboard', title: 'Dashboard', h: 'A dashboard in the browser.',
-    p: 'Sites, services, workers and PHP versions on one screen. Start and stop things, tail logs, or open a shell or Tinker without leaving the tab. It installs as a PWA too.',
-    alt: 'Lerd web dashboard listing sites, services, workers, system health and resources',
-    tags: ['Web UI', 'PWA', 'Tray'], cli: 'lerd dashboard',
-    more: 'Explore the dashboard', href: '/features/web-ui', shot: 'landing/dashboard' },
-  { id: 'services', title: 'Services', h: 'Services wired into .env.',
-    p: "MySQL, PostgreSQL, Redis, Meilisearch, Mailpit, S3 and about thirty more. Adding one writes its host, port and credentials into the site's .env, and it sleeps while nothing uses it.",
-    alt: 'Lerd services page with installed databases, caches, search and mail services',
-    tags: ['Rootless', 'On demand', 'Idle suspend'], cli: 'lerd service start postgres',
-    more: 'Explore services', href: '/getting-started/services', shot: 'landing/services' },
-  { id: 'requests', title: 'Requests', status: 'NEW', h: 'Find the slow request.',
-    p: 'Lerd times each request and keeps its queries, logs and outgoing calls. Spot the N+1 on a slow route, profile it as an SPX flame graph, and read dump() output in a debug window.',
-    alt: 'Lerd request timing with response time histogram, throughput and slowest routes',
-    tags: ['Flame graphs', 'Queries', 'dump()'], cli: 'lerd profile',
-    more: 'Explore the inspector', href: '/features/request-timing', shot: 'landing/requests-timing' },
-  { id: 'worktrees', title: 'Worktrees', h: 'Worktrees get their own domain.',
-    p: 'Add a git worktree and it gets its own domain, certificate, dependencies and database. The database is cloned from main, shared or left empty, based on the migrations the branch adds.',
-    alt: 'Lerd add worktree dialog with branch, base, database and frontend asset options',
-    tags: ['git', 'Per-branch DB'], cli: 'lerd worktree add feature/checkout',
-    more: 'Explore worktrees', href: '/features/git-worktrees', shot: 'landing/worktree-add' },
-  { id: 'runtimes', title: 'Runtimes', h: 'PHP and Node, pinned per project.',
-    p: 'Each site picks its PHP version, 7.4 to 8.6, and its Node version, and Xdebug is a toggle away. Node, Python and Rails apps get dev servers and HTTPS on the same .test domains.',
-    alt: 'Lerd PHP page with installed PHP-FPM versions and live PHP logs',
-    tags: ['PHP 7.4–8.6', 'Node', 'Python', 'Rails'], cli: 'lerd isolate 8.4',
-    more: 'Explore runtimes', href: '/usage/php', shot: 'landing/system-php' },
-  { id: 'mcp', title: 'AI / MCP', h: 'An MCP server for your AI assistant.',
-    p: 'Lerd ships an MCP server, so Claude, Cursor, Codex and the others can run artisan and Tinker, start services and workers, read logs and look into slow routes from the chat.',
-    alt: 'Lerd Tinker REPL in the browser, the same PHP shell AI assistants drive over MCP',
-    tags: ['MCP', 'artisan', 'Tinker'], cli: 'lerd mcp:inject',
-    names: ASSISTANTS,
-    more: 'Explore MCP', href: '/features/mcp', shot: 'landing/tinker' },
-  { id: 'terminal', title: 'Terminal', h: 'The same dashboard in a terminal.',
-    p: 'The TUI shows sites, services, workers and logs, and works with keyboard or mouse. ctrl+p jumps to anything or runs any action, so you can stay in the shell.',
-    alt: 'Lerd terminal dashboard (TUI) with sites, services, resources and system status',
-    tags: ['TUI', 'Mouse', 'ctrl+p'], cli: 'lerd tui',
-    more: 'Explore the TUI', href: '/features/tui', shot: 'landing/tui-dashboard' },
+  { id: 'sites', cli: 'lerd init', href: '/usage/sites', shot: 'landing/site-overview' },
+  { id: 'dashboard', cli: 'lerd dashboard', href: '/features/web-ui', shot: 'landing/dashboard' },
+  { id: 'services', cli: 'lerd service start postgres', href: '/getting-started/services', shot: 'landing/services' },
+  { id: 'requests', isNew: true, cli: 'lerd profile', href: '/features/request-timing', shot: 'landing/requests-timing' },
+  { id: 'worktrees', cli: 'lerd worktree add feature/checkout', href: '/features/git-worktrees', shot: 'landing/worktree-add' },
+  { id: 'runtimes', cli: 'lerd isolate 8.4', href: '/usage/php', shot: 'landing/system-php' },
+  { id: 'mcp', cli: 'lerd mcp:inject', href: '/features/mcp', shot: 'landing/tinker', names: ASSISTANTS },
+  { id: 'terminal', cli: 'lerd tui', href: '/features/tui', shot: 'landing/tui-dashboard' },
 ]
 
 /* ---- Framework grid: logo key from LOGOS, docs page under /getting-started ---- */
@@ -165,22 +126,14 @@ export const FRAMEWORKS = [
 ]
 
 /* ---- Apps beyond PHP: lerd init picks the dev server, nginx and TLS go in front ---- */
-export const RUNTIMES = [
-  { name: 'Node.js', cmd: 'npm run dev', p: 'Next, Nuxt, NestJS, Vite, Angular or plain Express, on the Node version the project pins.' },
-  { name: 'Python', cmd: 'manage.py runserver', p: 'Django starts with runserver on its own. Flask, FastAPI and the rest run your command.' },
-  { name: 'Rails & Rack', cmd: 'bin/rails server', p: 'Rails runs bin/rails server, a config.ru runs as Rack, and a mise or rbenv Ruby is found.' },
-  { name: 'Go & Rust', cmd: 'go run . / cargo run', p: 'go run . and cargo run work out of the box, or Lerd runs your own file watcher in their place.' },
-  { name: 'Containers', cmd: 'Containerfile.lerd', p: "If you'd rather not install the runtime, Lerd writes a starter Containerfile and runs it rootless." },
-]
+// The command each card in i18n runtimes.items shows, in the same order.
+export const RUNTIME_CMDS = ['npm run dev', 'manage.py runserver', 'bin/rails server', 'go run . / cargo run', 'Containerfile.lerd']
 
-/* ---- Platforms ---- */
+/* ---- Platforms, copy in i18n platforms.items in the same order; a status replaces STABLE ---- */
 export const PLATFORMS = [
-  { name: 'Linux', status: 'STABLE', href: '/getting-started/installation',
-    p: 'Rootless Podman under systemd on Ubuntu, Fedora, Arch, Omarchy and any other systemd distro, with an Omarchy bar widget. No Docker daemon.' },
-  { name: 'macOS', status: 'STABLE', href: '/getting-started/installation',
-    p: 'Local PHP development on a Mac without a paid tier, using the same dashboard, TUI and MCP server. PHP-FPM and workers can also run natively on the host, in beta.' },
-  { name: 'Windows', status: 'WSL2', href: '/getting-started/wsl2',
-    p: 'Lerd runs inside WSL2 with the same CLI, dashboard, services and MCP server. The Windows installer sets it all up, and the WSL2 guide covers each step.' },
+  { name: 'Linux', href: '/getting-started/installation' },
+  { name: 'macOS', href: '/getting-started/installation' },
+  { name: 'Windows', status: 'WSL2', href: '/getting-started/wsl2' },
 ]
 
 /* ---- Services showcase ---- */
@@ -210,46 +163,27 @@ export const SVC_ADMIN = [
   'Elasticvue', 'Typesense Dashboard', 'OpenSearch Dashboards', 'Kafbat UI',
 ]
 
-/* ---- Comparison ---- */
+/* ---- Comparison, row labels in i18n compare.rows in the same order ---- */
 export const CMP = {
   cols: ['Lerd', 'Laravel Herd', 'Laragon', 'DDEV', 'Lando', 'Sail'],
   rows: [
-    { f: 'Runs on Linux',            v: ['yes', 'no', 'no', 'yes', 'yes', 'yes'] },
-    { f: 'Runs on macOS',            v: ['yes', 'yes', 'no', 'yes', 'yes', 'yes'] },
-    { f: 'Runs on Windows',          v: ['yes', 'yes', 'yes', 'yes', 'yes', 'yes'] },
-    { f: 'No Docker daemon',         v: ['yes', 'yes', 'yes', 'no', 'no', 'no'] },
-    { f: 'Rootless',                 v: ['yes', 'yes', 'partial', 'partial', 'partial', 'no'] },
-    { f: 'Open source',              v: ['yes', 'no', 'no', 'yes', 'yes', 'yes'] },
-    { f: 'Free, no paid tier',       v: ['yes', 'partial', 'partial', 'yes', 'yes', 'yes'] },
-    { f: 'Automatic .test + TLS',    v: ['yes', 'yes', 'yes', 'yes', 'partial', 'no'] },
-    { f: 'Zero required config',    v: ['yes', 'yes', 'yes', 'no', 'no', 'no'] },
-    { f: 'Git worktrees as sites',   v: ['yes', 'yes', 'no', 'no', 'no', 'no'] },
-    { f: 'Built-in Web UI',          v: ['yes', 'yes', 'no', 'partial', 'no', 'no'] },
-    { f: 'Terminal dashboard',       v: ['yes', 'no', 'no', 'no', 'no', 'no'] },
-    { f: 'MCP server for AI agents', v: ['yes', 'yes', 'no', 'no', 'no', 'no'] },
-    { f: 'Profiler & debug window',  v: ['yes', 'yes', 'no', 'no', 'no', 'no'] },
-    { f: 'Plugins',                  v: ['yes', 'no', 'no', 'yes', 'yes', 'no'] },
+    ['yes', 'no', 'no', 'yes', 'yes', 'yes'],
+    ['yes', 'yes', 'no', 'yes', 'yes', 'yes'],
+    ['yes', 'yes', 'yes', 'yes', 'yes', 'yes'],
+    ['yes', 'yes', 'yes', 'no', 'no', 'no'],
+    ['yes', 'yes', 'partial', 'partial', 'partial', 'no'],
+    ['yes', 'no', 'no', 'yes', 'yes', 'yes'],
+    ['yes', 'partial', 'partial', 'yes', 'yes', 'yes'],
+    ['yes', 'yes', 'yes', 'yes', 'partial', 'no'],
+    ['yes', 'yes', 'yes', 'no', 'no', 'no'],
+    ['yes', 'yes', 'no', 'no', 'no', 'no'],
+    ['yes', 'yes', 'no', 'partial', 'no', 'no'],
+    ['yes', 'no', 'no', 'no', 'no', 'no'],
+    ['yes', 'yes', 'no', 'no', 'no', 'no'],
+    ['yes', 'yes', 'no', 'no', 'no', 'no'],
+    ['yes', 'no', 'no', 'yes', 'yes', 'no'],
   ],
 }
 
-/* ---- Principles ---- */
-export const PRINCIPLES = [
-  { h: 'Rootless Podman', p: 'Containers run rootless under your own systemd user, with no daemon behind them.' },
-  { h: 'Runs as you', p: 'Installs to ~/.local/bin. DNS, TLS and ports are set up without touching system files.' },
-  { h: 'Detects your project', p: 'Frameworks are detected from the repo. An optional .lerd.yaml adds services or workers.' },
-  { h: 'Updates within a day', p: 'Frameworks and services are versioned definitions that arrive without a release.' },
-  { h: 'Open source, MIT', p: 'All of it is free and in one MIT-licensed binary, with no paid tier and no account.' },
-  { h: 'Stays in your home', p: 'Everything lives under your home directory, so uninstalling leaves the machine as it was.' },
-]
-
-// Answers stay plain text; a question that needs a page links out through href.
-export const FAQ = [
-  { q: 'Is Lerd free?', a: 'Yes. Lerd is MIT licensed and all of it is in the one binary, with no paid tier and no account.' },
-  { q: 'Do I need Docker?', a: 'No. Lerd runs everything as rootless Podman containers under your own user, with no daemon. The installer offers to install Podman if it is missing.' },
-  { q: 'Does it work on Windows?', a: 'Yes, inside WSL2. The Windows installer sets up WSL2, an Ubuntu distro with your Linux user, Lerd and the Lerd desktop app.', href: '/getting-started/wsl2', link: 'Windows (WSL2) guide' },
-  { q: 'Do I have to change my project?', a: 'No. Lerd detects the framework from the repository and serves it as it is. An optional .lerd.yaml pins PHP and Node versions, services and workers.' },
-  { q: 'Can it run next to a MySQL or PostgreSQL I already have?', a: 'Yes. When a database installed on the host already holds the default port, Lerd publishes its container on the next free port and writes that into the site .env.' },
-  { q: 'Does Lerd work with Claude Code or Cursor?', a: "Yes. Run lerd mcp:enable-global and Lerd's MCP server is registered with Claude Code, Cursor, Codex CLI, Gemini CLI, GitHub Copilot in VS Code, Junie, Antigravity, Windsurf and OpenCode. The assistant can then manage sites, services, workers and databases, and run artisan and composer.", href: '/features/mcp', link: 'Set up MCP' },
-  { q: 'Can I extend it?', a: 'Yes, with community plugins that add commands, dashboard pages, AI tools and services. Each one is reviewed at the exact commit Lerd installs.', href: 'https://plugins.lerd.sh/', link: 'Browse community plugins' },
-  { q: 'How do I remove it?', a: 'Run lerd uninstall. It stops the containers and removes the units, the binary and the network, then asks whether to remove your data and the trusted certificate as well.', href: '/getting-started/installation#uninstall', link: 'What uninstall removes' },
-]
+// Where each answer in i18n faq.items links out, in the same order; '' for none.
+export const FAQ_LINKS = ['', '', '/getting-started/wsl2', '', '', '/features/mcp', 'https://plugins.lerd.sh/', '/getting-started/installation#uninstall']

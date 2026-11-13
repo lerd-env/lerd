@@ -3,7 +3,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createMarkdownRenderer, defineConfig } from 'vitepress'
 import { atomFeed, parseReleases, recentChangelog } from './changelog.js'
-import { FAQ } from './theme/landing-data.js'
+import { LOCALES, localeOf, redirectScript } from './theme/i18n/locales.js'
+import { MESSAGES } from './theme/i18n/index.js'
 import { SIDEBAR } from './sidebar.js'
 
 const SITE_URL = 'https://lerd.sh'
@@ -25,6 +26,12 @@ export default defineConfig({
   lang: 'en-US',
   cleanUrls: true,
 
+  // Only the landing page is translated. The root locale has no label, which
+  // keeps the default theme's language menu off the English-only docs.
+  locales: Object.fromEntries(Object.entries(LOCALES).map(([code, l]) =>
+    code === 'en' ? ['root', { lang: 'en-US' }] : [l.path.slice(1, -1), { lang: code, label: l.label, link: l.path }],
+  )),
+
   sitemap: {
     hostname: SITE_URL,
     transformItems(items) {
@@ -40,7 +47,9 @@ export default defineConfig({
   },
 
   head: [
-    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/assets/logo.svg' }],
+    ['script', {}, redirectScript()],
+
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/assets/favicon.svg' }],
 
     // Instrument Sans and JetBrains Mono, the landing page's and the docs' type, declared in style.css
     ['link', { rel: 'preload', href: '/assets/fonts/instrument-sans-latin.woff2', as: 'font', type: 'font/woff2', crossorigin: '' }],
@@ -51,7 +60,6 @@ export default defineConfig({
     // Open Graph
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'Lerd' }],
-    ['meta', { property: 'og:locale', content: 'en_US' }],
     ['meta', { property: 'og:image', content: OG_IMAGE }],
     ['meta', { property: 'og:image:type', content: 'image/png' }],
     ['meta', { property: 'og:image:width', content: '1499' }],
@@ -116,6 +124,14 @@ export default defineConfig({
   },
 
   transformPageData(pageData, { siteConfig }) {
+    const layout = pageData.frontmatter.layout
+    const locale = localeOf(pageData.relativePath)
+    // The landing and about pages draw their copy from frontmatter.t, so each page ships only its own language.
+    if (layout === 'landing' || layout === 'about') pageData.frontmatter.t = MESSAGES[locale]
+    if (layout === 'landing') {
+      pageData.title = pageData.frontmatter.title = MESSAGES[locale].meta.title
+      pageData.description = pageData.frontmatter.description = MESSAGES[locale].meta.description
+    }
     const canonicalUrl = `${SITE_URL}/${pageData.relativePath.replace(/\.md$/, '').replace(/index$/, '')}`
     const description = pageData.frontmatter.description ?? pageData.description ?? siteConfig.site.description
     const title = pageData.frontmatter.title ?? pageData.title ?? siteConfig.site.title
@@ -128,23 +144,28 @@ export default defineConfig({
       ['meta', { property: 'og:url', content: canonicalUrl }],
       ['meta', { name: 'twitter:title', content: title }],
       ['meta', { name: 'twitter:description', content: description }],
+      ['meta', { property: 'og:locale', content: LOCALES[locale].og }],
     )
     if (pageData.relativePath === 'changelog.md') {
       pageData.frontmatter.head.push(['link', { rel: 'alternate', type: 'application/atom+xml', title: 'Lerd releases', href: '/feed.xml' }])
     }
-    // The landing FAQ is rendered from the same list, so the markup and the page never disagree.
-    if (pageData.relativePath === 'index.md') {
+    if (layout === 'landing') {
+      for (const [code, l] of Object.entries(LOCALES)) {
+        pageData.frontmatter.head.push(['link', { rel: 'alternate', hreflang: code, href: `${SITE_URL}${l.path}` }])
+      }
+      pageData.frontmatter.head.push(['link', { rel: 'alternate', hreflang: 'x-default', href: `${SITE_URL}/` }])
+      // The landing FAQ is rendered from the same list, so the markup and the page never disagree.
       const faq = {
         '@context': 'https://schema.org',
         '@type': 'FAQPage',
-        mainEntity: FAQ.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
+        mainEntity: MESSAGES[locale].faq.items.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
       }
       pageData.frontmatter.head.push(['script', { type: 'application/ld+json' }, JSON.stringify(faq)])
     }
   },
 
   themeConfig: {
-    logo: { src: '/assets/logo.svg', width: 24, height: 24 },
+    logo: { light: '/assets/logo.svg', dark: '/assets/logo-dark.svg', width: 24, height: 24 },
     siteTitle: 'Lerd',
 
     nav: [
