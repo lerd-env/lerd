@@ -17,6 +17,7 @@
   }
   let { site, class: cls = '' }: Props = $props();
 
+  const uid = $props.id();
   let busy = $state('');
   const list = $derived($siteSwitches[site] ?? []);
   // Tabs are on until hidden, so only an opt-in switch lights the icon.
@@ -37,6 +38,10 @@
       switches: columns.map((c) => list.find((p) => p.name === name && p.kind === c.kind))
     }))
   );
+
+  // What a checkbox does, in words: the plugin, then the column's own hint.
+  const describe = (description: string | undefined, hint: string) =>
+    [description?.replace(/\.$/, ''), hint].filter(Boolean).join('. ');
 
   onMount(() => {
     loadPagePlugins(site).catch(() => {});
@@ -99,10 +104,13 @@
                         type="checkbox"
                         class="align-middle accent-lerd-red disabled:opacity-50"
                         aria-label="{p.name}: {columns[i].title}"
+                        aria-describedby="{uid}-{r.name}-{columns[i].kind}"
+                        use:tooltip={{ label: describe(r.description, columns[i].hint), maxWidth: 280 }}
                         checked={p.on}
                         disabled={busy !== ''}
                         onchange={(e) => flip(p, e.currentTarget)}
                       />
+                      <span id="{uid}-{r.name}-{columns[i].kind}" class="sr-only">{describe(r.description, columns[i].hint)}</span>
                     {/if}
                   </td>
                 {/each}

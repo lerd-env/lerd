@@ -1,13 +1,19 @@
 package cli
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
@@ -110,9 +116,9 @@ func NewPluginCmd() *cobra.Command {
 			return nil
 		},
 	})
-	cmd.AddCommand(siteSwitchCommand("page", "Switch a plugin's page script on or off for the site in this directory", "page script", siteops.SetPagePlugin))
-	cmd.AddCommand(siteSwitchCommand("card", "Switch a plugin's card on or off on the Overview of the site in this directory", "overview card", siteops.SetOverviewCard))
-	cmd.AddCommand(siteSwitchCommand("tab", "Show or hide a plugin's tab on the site in this directory", "site tab", siteops.SetSiteTab))
+	cmd.AddCommand(siteSwitchCommand("page", "Switch a plugin's page script on or off for the site in this directory", "page script", "page_script", siteops.SetPagePlugin))
+	cmd.AddCommand(siteSwitchCommand("card", "Switch a plugin's card on or off on the Overview of the site in this directory", "overview card", "overview_card", siteops.SetOverviewCard))
+	cmd.AddCommand(siteSwitchCommand("tab", "Show or hide a plugin's tab on the site in this directory", "site tab", "site_tab", siteops.SetSiteTab))
 	return cmd
 }
 
@@ -282,7 +288,7 @@ func commandExists(root *cobra.Command, name string) bool {
 
 // siteSwitchCommand is `lerd plugin <use> <name> on|off`, switching one thing a
 // plugin puts on a site for the site linked in the working directory.
-func siteSwitchCommand(use, short, what string, set func(*config.Site, string, bool) error) *cobra.Command {
+func siteSwitchCommand(use, short, what, kind string, set func(*config.Site, string, bool) error) *cobra.Command {
 	return &cobra.Command{
 		Use:       use + " <name> on|off",
 		Short:     short,
@@ -300,7 +306,7 @@ func siteSwitchCommand(use, short, what string, set func(*config.Site, string, b
 			if err != nil {
 				return fmt.Errorf("no lerd site here; run this from a linked project")
 			}
-			if err := set(site, args[0], args[1] == "on"); err != nil {
+			if err := switchSitePlugin(site, args[0], kind, args[1] == "on", set); err != nil {
 				return err
 			}
 			feedback.Done(fmt.Sprintf("%s %s %s for %s", args[0], what, args[1], site.Name))
@@ -327,6 +333,42 @@ func askPluginNotifications(name string) error {
 	}
 	if !allowed {
 		feedback.Note(fmt.Sprintf("Change it any time with `lerd plugin notifications %s on`.", name))
+	}
+	return nil
+}
+
+// uiSocketPath is where a running lerd-ui listens; swapped out in tests.
+var uiSocketPath = config.UISocketPath
+
+// switchSitePlugin hands the switch to a running lerd-ui, which tells every
+// open dashboard, and makes it here with set only when none answers.
+func switchSitePlugin(site *config.Site, plugin, kind string, on bool, set func(*config.Site, string, bool) error) error {
+	body, err := json.Marshal(map[string]any{"site": site.Name, "plugin": plugin, "kind": kind, "on": on})
+	if err != nil {
+		return err
+	}
+	client := &http.Client{
+		// A page script waits for nginx to reload before lerd-ui answers.
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, "unix", uiSocketPath())
+		}},
+	}
+	req, err := http.NewRequest(http.MethodPost, "http://lerd-ui/api/page-plugins", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Lerd-CSRF", "1")
+	resp, err := client.Do(req)
+	if err != nil {
+		return set(site, plugin, on)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return errors.New(strings.TrimSpace(string(msg)))
 	}
 	return nil
 }

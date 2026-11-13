@@ -43,14 +43,14 @@ it('draws a plugin once with a checkbox per kind it brings, each switched on its
     { name: 'stats', description: 'Request numbers', kind: 'overview_card', on: false },
     { name: 'agents', description: 'Coding agents', kind: 'site_tab', on: true }
   ]);
-  const { findByLabelText, findByText, getAllByText, queryByText, getByLabelText, queryByLabelText, getAllByRole } = render(PagePluginsMenu, { props: { site: 'shop2' } });
+  const { findByLabelText, findByText, getAllByText, queryAllByText, getByLabelText, queryByLabelText, getAllByRole } = render(PagePluginsMenu, { props: { site: 'shop2' } });
   const trigger = await findByLabelText('Plugins on this site');
   // A tab is on until hidden, so it does not light the icon the way an opt-in does.
   expect(trigger.className).toContain('emerald');
   await fireEvent.click(trigger);
   const name = await findByText('stats');
   expect(getAllByText('stats')).toHaveLength(1);
-  expect(queryByText('Request numbers')).toBeNull();
+  expect(queryAllByText('Request numbers').every((el) => el.classList.contains('sr-only'))).toBe(true);
   await fireEvent.mouseEnter(name);
   expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('Request numbers');
   expect(getAllByRole('columnheader').map((h) => h.textContent?.trim())).toEqual(['', 'Pages', 'Overview', 'Tab']);
@@ -118,4 +118,22 @@ it('puts the checkbox back when lerd refuses the switch', async () => {
   await fireEvent.click(box);
   await waitFor(() => expect(box.disabled).toBe(false));
   expect(box.checked).toBe(true);
+});
+
+// The description lives in a tooltip, so a keyboard user must reach it too:
+// it shows when a checkbox gets keyboard focus, and screen readers read it.
+it('gives each checkbox the plugin description for keyboard and screen reader users', async () => {
+  serve([
+    { name: 'stats', description: 'Request numbers', kind: 'page_script', on: false },
+    { name: 'stats', description: 'Request numbers', kind: 'overview_card', on: false }
+  ]);
+  const { findByLabelText, getByLabelText } = render(PagePluginsMenu, { props: { site: 'shop7' } });
+  await fireEvent.click(await findByLabelText('Plugins on this site'));
+  const said = (el: HTMLElement) => document.getElementById(el.getAttribute('aria-describedby') ?? '')?.textContent;
+  const card = getByLabelText('stats: Overview');
+  expect(said(card)).toBe('Request numbers');
+  expect(said(getByLabelText('stats: Pages'))).toBe("Request numbers. The plugin's script runs in the site's own pages.");
+  card.matches = ((s: string): boolean => s === ':focus-visible') as typeof card.matches;
+  await fireEvent.focusIn(card);
+  expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('Request numbers');
 });

@@ -25,3 +25,15 @@ it('leaves out the tabs the site has hidden, and follows a change made elsewhere
   await rerender({ site: site() });
   await findByRole('tab', { name: 'Agents' });
 });
+
+// Hiding the open plugin tab falls back to Overview, and the tab row must say
+// so, or no tab is selected and the row cannot be reached by keyboard.
+it('selects Overview in the tab row once the open plugin tab is hidden', async () => {
+  localStorage.setItem('lerd:siteDetailTab', 'plugin:agents');
+  const { findByRole, rerender } = render(SiteDetail, { props: { site: site() } });
+  expect((await findByRole('tab', { name: 'Agents' })).getAttribute('aria-selected')).toBe('true');
+  await rerender({ site: site({ hidden_tabs: ['agents'] }) });
+  const overview = await findByRole('tab', { name: 'Overview' });
+  expect(overview.getAttribute('aria-selected')).toBe('true');
+  expect(overview.getAttribute('tabindex')).toBe('0');
+});

@@ -62,8 +62,8 @@
   const tabPlugins = $derived($siteTabPlugins.filter((p) => !(site.hidden_tabs ?? []).includes(p.name)));
   const hasExtraTabs = $derived(canLogs || canEnv || canTinker || canDumps || tabPlugins.length > 0);
   const activePlugin = $derived(tabPlugins.find((p) => active === `plugin:${p.name}`));
-  // A tab whose plugin is gone (or not loaded yet) shows the overview without
-  // forgetting the choice, so it comes back once the plugin list arrives.
+  // A tab whose plugin is gone, hidden or not loaded yet shows the overview,
+  // and the tab row marks it, without forgetting the choice for when it returns.
   const shown = $derived(active.startsWith('plugin:') && !activePlugin ? 'overview' : active);
 
   // The route can deep-link a sub-tab (e.g. dump notifications go to
@@ -122,22 +122,22 @@
 </script>
 
 {#snippet tabs()}
-  <button role="tab" aria-selected={active === 'overview'} tabindex={active === 'overview' ? 0 : -1} class={tabBtn('overview', active === 'overview')} onclick={() => selectTab('overview')}>{m.sites_tabs_overview()}</button>
+  <button role="tab" aria-selected={shown === 'overview'} tabindex={shown === 'overview' ? 0 : -1} class={tabBtn('overview', shown === 'overview')} onclick={() => selectTab('overview')}>{m.sites_tabs_overview()}</button>
   {#if canLogs}
-    <button role="tab" aria-selected={active === 'logs'} tabindex={active === 'logs' ? 0 : -1} class={tabBtn('logs', active === 'logs')} onclick={() => selectTab('logs')}>{m.services_tabs_logs()}</button>
+    <button role="tab" aria-selected={shown === 'logs'} tabindex={shown === 'logs' ? 0 : -1} class={tabBtn('logs', shown === 'logs')} onclick={() => selectTab('logs')}>{m.services_tabs_logs()}</button>
   {/if}
   {#if canEnv}
-    <button role="tab" aria-selected={active === 'env'} tabindex={active === 'env' ? 0 : -1} class={tabBtn('env', active === 'env')} onclick={() => selectTab('env')}>{m.sites_tabs_env()}</button>
+    <button role="tab" aria-selected={shown === 'env'} tabindex={shown === 'env' ? 0 : -1} class={tabBtn('env', shown === 'env')} onclick={() => selectTab('env')}>{m.sites_tabs_env()}</button>
   {/if}
   {#if canTinker}
-    <button role="tab" aria-selected={active === 'tinker'} tabindex={active === 'tinker' ? 0 : -1} class={tabBtn('tinker', active === 'tinker')} onclick={() => selectTab('tinker')}>{m.sites_tabs_tinker()}</button>
+    <button role="tab" aria-selected={shown === 'tinker'} tabindex={shown === 'tinker' ? 0 : -1} class={tabBtn('tinker', shown === 'tinker')} onclick={() => selectTab('tinker')}>{m.sites_tabs_tinker()}</button>
   {/if}
   {#if canDumps}
-    <button role="tab" aria-selected={active === 'dumps'} tabindex={active === 'dumps' ? 0 : -1} class={tabBtn('dumps', active === 'dumps')} onclick={() => selectTab('dumps')}>{m.debug_title()}</button>
+    <button role="tab" aria-selected={shown === 'dumps'} tabindex={shown === 'dumps' ? 0 : -1} class={tabBtn('dumps', shown === 'dumps')} onclick={() => selectTab('dumps')}>{m.debug_title()}</button>
   {/if}
   {#each tabPlugins as p (p.name)}
     {@const id = `plugin:${p.name}` as TabId}
-    <button role="tab" aria-selected={active === id} tabindex={active === id ? 0 : -1} class={tabBtn(id, active === id)} onclick={() => selectTab(id)}>{p.site_tab?.title}</button>
+    <button role="tab" aria-selected={shown === id} tabindex={shown === id ? 0 : -1} class={tabBtn(id, shown === id)} onclick={() => selectTab(id)}>{p.site_tab?.title}</button>
   {/each}
 {/snippet}
 
