@@ -66,3 +66,7 @@ bash install.sh --local ./build/lerd
 ```
 
 This runs the full installer flow (prerequisite checks, PATH setup, `lerd install`) using your locally built binary instead of downloading from GitHub.
+
+## Translating the landing page
+
+The landing page at lerd.sh speaks the dashboard's languages. Its copy lives in `docs/.vitepress/theme/i18n/<code>.js`, one file per language, each shaped exactly like `en.js`; commands, links and product names stay in `landing-data.js`. To add a language, copy `en.js`, translate the strings, register it in `i18n/locales.js` and `i18n/index.js`, and add `docs/<path>/index.md` with `layout: landing`. `npm test` in `docs/` fails if a translation misses or adds a string. Visitors to `/` are sent to their browser's language until they pick one from the header.

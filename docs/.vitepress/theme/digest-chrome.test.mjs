@@ -11,7 +11,8 @@ const PAGES = ['../../digest-template.html', '../../public/digest/v1.38.0.html']
 function componentHrefs(vue) {
   const consts = Object.fromEntries([...vue.matchAll(/const (\w+) = '([^']+)'/g)].map((m) => [m[1], m[2]]))
   const tpl = vue.slice(vue.indexOf('<template>'))
-  return [...tpl.matchAll(/(:?)href="([^"]+)"/g)].map(([, bound, v]) => {
+  // The language menu is only on the translated landing page, never in the English-only digest.
+  return [...tpl.matchAll(/(:?)href="([^"]+)"/g)].filter(([, , v]) => v !== 'withBase(l.path)').map(([, bound, v]) => {
     if (!bound) return v
     let m
     if ((m = v.match(/^`\$\{home\}(#\w+)`$/))) return '/' + m[1]

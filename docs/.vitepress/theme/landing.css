@@ -33,10 +33,10 @@
 
 /* header */
 .lerd-landing .hdr{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
-.lerd-landing .hdr .wrap{display:flex;align-items:center;gap:32px;height:64px}
+.lerd-landing .hdr .wrap{display:flex;align-items:center;gap:32px;height:64px;white-space:nowrap}
 .lerd-landing .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px}
 .lerd-landing .brand img{width:26px;height:26px}
-.lerd-landing .hdr nav{display:flex;gap:24px;font-size:14px;color:var(--ink-2)}
+.lerd-landing .hdr nav{display:flex;gap:24px;font-size:14px;color:var(--ink-2);white-space:nowrap}
 .lerd-landing .hdr nav a{white-space:nowrap}
 .lerd-landing .hdr nav a:hover{color:var(--ink)}
 .lerd-landing .hdr-right{margin-left:auto;display:flex;align-items:center;gap:18px;font-size:14px;color:var(--ink-2)}
@@ -51,18 +51,27 @@
 .lerd-landing .btn.ink:hover{background:var(--ink-hi);border-color:var(--ink-hi)}
 .lerd-landing .hdr .btn{height:34px;padding:0 14px;font-size:13px}
 .lerd-landing .btn .stars{font:500 12px var(--mono);color:var(--muted)}
-.lerd-landing .gh{display:inline-flex;align-items:center;gap:8px}
+.lerd-landing .gh{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
 .lerd-landing .gh .stars{font:500 12px var(--mono);color:var(--muted);border:1px solid var(--line-2);padding:3px 7px}
 .lerd-landing .gh:hover .stars{color:var(--amber);border-color:color-mix(in srgb,var(--amber) 30%,transparent)}
 
 .lerd-landing .menu{display:none;place-items:center;width:34px;height:34px;border:1px solid var(--line-2);background:var(--panel);color:var(--ink)}
 .lerd-landing .menu svg{width:18px;height:18px}
-.lerd-landing .discord{display:grid;place-items:center}
-.lerd-landing .discord:hover{color:var(--ink)}
-.lerd-landing .discord svg{width:18px;height:18px}
 .lerd-landing .theme{width:34px;height:34px;display:grid;place-items:center;border:1px solid var(--line-2);background:none;color:var(--ink-2);cursor:pointer}
 .lerd-landing .theme:hover{color:var(--ink);border-color:var(--faint)}
 .lerd-landing .theme svg{width:16px;height:16px}
+/* Language and theme sit together as one joined control. */
+.lerd-landing .prefs{display:flex}
+.lerd-landing .prefs .lang summary{border-right:0}
+.lerd-landing .lang{position:relative}
+.lerd-landing .lang summary{height:34px;padding:0 9px;display:flex;align-items:center;gap:6px;border:1px solid var(--line-2);color:var(--ink-2);font:12px var(--mono);cursor:pointer;list-style:none}
+.lerd-landing .lang summary::-webkit-details-marker{display:none}
+.lerd-landing .lang summary:hover,.lerd-landing .lang[open] summary{color:var(--ink);border-color:var(--faint)}
+.lerd-landing .lang summary svg{width:15px;height:15px}
+.lerd-landing .lang-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:60;min-width:180px;display:flex;flex-direction:column;border:1px solid var(--line-2);background:var(--bg)}
+.lerd-landing .lang-menu a{display:block !important;padding:9px 14px;color:var(--ink-2);font-size:14px}
+.lerd-landing .lang-menu a:hover{background:var(--panel);color:var(--ink)}
+.lerd-landing .lang-menu a[aria-current]{color:var(--ink);font-weight:600}
 /* !important so it beats the layout rules that give each image its display */
 :root:not(.dark) .lerd-landing .on-dark,.dark .lerd-landing .on-light{display:none!important}
 .lerd-landing .fw-gl svg{color:var(--cl)}
@@ -358,3 +367,8 @@
   .lerd-landing .digest-cta{margin-left:0}
 }
 .lerd-landing .zoom:focus{outline:none}
+
+/* Instrument Sans and JetBrains Mono lack most Vietnamese letters, so that page keeps one system face instead of mixing two mid-word. */
+html[lang="vi"] .lerd-landing{--sans:ui-sans-serif,system-ui,sans-serif;--mono:ui-monospace,monospace}
+/* Japanese has no spaces, so without this headings break in the middle of a word. */
+html[lang="ja"] .lerd-landing{word-break:auto-phrase}
