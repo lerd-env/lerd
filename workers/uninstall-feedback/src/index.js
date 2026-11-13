@@ -16,9 +16,36 @@ export function validate(input) {
   return { reason, comment: comment.trim(), version, os };
 }
 
+// readCapped returns the body as text, or null as soon as it passes max bytes,
+// so an oversize body is never held whole.
+async function readCapped(request, max) {
+  if (Number(request.headers.get('content-length') ?? 0) > max) return null;
+  if (!request.body) return '';
+  const reader = request.body.getReader();
+  const chunks = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    all.set(c, at);
+    at += c.byteLength;
+  }
+  return new TextDecoder().decode(all);
+}
+
 export async function record(request, db) {
-  const body = await request.text();
-  if (new TextEncoder().encode(body).length > MAX_BYTES) return reply(413);
+  const body = await readCapped(request, MAX_BYTES);
+  if (body === null) return reply(413);
 
   let parsed;
   try {

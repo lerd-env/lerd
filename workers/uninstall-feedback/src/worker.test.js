@@ -75,3 +75,22 @@ test('a flood from one address is refused and not stored', async () => {
   assert.equal(db.rows.length, 5);
   assert.equal((await worker.fetch(post(good, '/v1/uninstall', '198.51.100.9'), env)).status, 204);
 });
+
+// A body with no length header still has to be cut off at the cap, not read
+// whole first.
+test('an oversize streamed body is refused without reading it all', async () => {
+  let pulled = 0;
+  const stream = new ReadableStream({
+    pull(c) {
+      pulled++;
+      if (pulled > 1000) return c.close();
+      c.enqueue(new Uint8Array(1024));
+    }
+  });
+  const req = new Request('https://feedback.lerd.sh/v1/uninstall', {
+    method: 'POST', body: stream, duplex: 'half', headers: { 'cf-connecting-ip': '192.0.2.1' }
+  });
+  const res = await worker.fetch(req, { DB: fakeDB(), LIMIT: fakeLimit() });
+  assert.equal(res.status, 413);
+  assert.ok(pulled < 20, `read ${pulled} KiB before refusing`);
+});
