@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
@@ -85,11 +84,8 @@ func runUnpark(_ *cobra.Command, args []string) error {
 	// already false here and the sites are removed rather than ignored.
 	feedback.Begin()
 	removed := 0
-	// Sites are stored resolved, so a folder typed through a symlink such as
-	// an ostree /home has to be resolved before it can prefix them.
-	prefix := config.CanonicalPath(absDir) + string(filepath.Separator)
 	for _, site := range reg.Sites {
-		if !strings.HasPrefix(site.Path, prefix) {
+		if !underDir(site.Path, absDir) {
 			continue
 		}
 		teardownSiteFn(&site, cfg.ParkedDirectories)
@@ -105,4 +101,16 @@ func runUnpark(_ *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// underDir reports whether path lies inside dir, asking the filesystem rather
+// than comparing strings: sites are stored resolved while dir comes as typed,
+// through an ostree /home link or in another case on a macOS volume.
+func underDir(path, dir string) bool {
+	for p := filepath.Dir(path); p != filepath.Dir(p); p = filepath.Dir(p) {
+		if config.SamePath(p, dir) {
+			return true
+		}
+	}
+	return false
 }
