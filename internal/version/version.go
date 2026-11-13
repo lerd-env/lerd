@@ -4,7 +4,6 @@ package version
 import (
 	"fmt"
 	"regexp"
-	"strings"
 )
 
 // These variables are set at build time via:
@@ -23,15 +22,11 @@ func String() string {
 	return fmt.Sprintf("%s (commit %s, built %s)", Version, Commit, Date)
 }
 
-// devVersion matches the `git describe` versions a build from a checkout
-// carries, which change with every commit.
-var devVersion = regexp.MustCompile(`-\d+-g[0-9a-f]+`)
+// releaseVersion is the shape of a tagged release, 1.38.0 or 1.38.0-beta.1.
+// A build from a checkout carries `git describe` output instead, or a bare
+// commit hash when no tag is reachable, and neither matches.
+var releaseVersion = regexp.MustCompile(`^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`)
 
 // IsRelease reports whether v is one a user could have installed from a release,
 // as opposed to a build from a checkout.
-func IsRelease(v string) bool {
-	if v == "" || v == "dev" || strings.Contains(v, "dirty") {
-		return false
-	}
-	return !devVersion.MatchString(v)
-}
+func IsRelease(v string) bool { return releaseVersion.MatchString(v) }

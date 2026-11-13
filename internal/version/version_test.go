@@ -8,6 +8,8 @@ func TestIsRelease(t *testing.T) {
 		"1.38.0-beta.1":             true,
 		"":                          false,
 		"dev":                       false,
+		"9d514e93":                  false,
+		"0.1.0-rc1-extra-x":         false,
 		"1.37.0-12-g9d514e93":       false,
 		"1.37.0-12-g9d514e93-dirty": false,
 	} {
