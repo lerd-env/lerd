@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
@@ -56,7 +55,7 @@ func runUnpark(_ *cobra.Command, args []string) error {
 	found := false
 	filtered := cfg.ParkedDirectories[:0]
 	for _, pd := range cfg.ParkedDirectories {
-		if pd == absDir {
+		if config.SamePath(pd, absDir) {
 			found = true
 		} else {
 			filtered = append(filtered, pd)
@@ -86,7 +85,7 @@ func runUnpark(_ *cobra.Command, args []string) error {
 	feedback.Begin()
 	removed := 0
 	for _, site := range reg.Sites {
-		if !strings.HasPrefix(site.Path, absDir+string(filepath.Separator)) {
+		if !underDir(site.Path, absDir) {
 			continue
 		}
 		teardownSiteFn(&site, cfg.ParkedDirectories)
@@ -102,4 +101,16 @@ func runUnpark(_ *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// underDir reports whether path lies inside dir, asking the filesystem rather
+// than comparing strings: sites are stored resolved while dir comes as typed,
+// through an ostree /home link or in another case on a macOS volume.
+func underDir(path, dir string) bool {
+	for p := filepath.Dir(path); p != filepath.Dir(p); p = filepath.Dir(p) {
+		if config.SamePath(p, dir) {
+			return true
+		}
+	}
+	return false
 }

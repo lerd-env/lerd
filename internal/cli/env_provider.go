@@ -81,10 +81,36 @@ func providedEnvHeader(site config.Site) []byte {
 		if real, err := filepath.EvalSymlinks(r); err == nil {
 			r = real
 		}
-		if strings.ContainsAny(r, "\r\n") {
-			continue
+		for _, spelling := range append([]string{r}, homeSpellings(r)...) {
+			if spelling == "" || strings.ContainsAny(spelling, "\r\n") {
+				continue
+			}
+			fmt.Fprintf(&b, "#lerd-root=%s\n", spelling)
 		}
-		fmt.Fprintf(&b, "#lerd-root=%s\n", r)
 	}
 	return b.Bytes()
+}
+
+// homeSpellingsFn is config.HomeSpellings, swapped in tests for a fake /home.
+var homeSpellingsFn = config.HomeSpellings
+
+// homeSpellings returns path under every other spelling of $HOME the PHP
+// containers mount, such as /home/<user> for /var/home/<user> on Bazzite, since
+// a command run from one spelling never resolves to another inside them.
+func homeSpellings(path string) []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	real := config.CanonicalPath(home)
+	if !strings.HasPrefix(path, real+string(filepath.Separator)) {
+		return nil
+	}
+	var out []string
+	for _, h := range homeSpellingsFn(home) {
+		if h != real {
+			out = append(out, h+strings.TrimPrefix(path, real))
+		}
+	}
+	return out
 }

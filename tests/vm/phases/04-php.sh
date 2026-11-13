@@ -106,7 +106,10 @@ driver=$(ls /usr/lib/x86_64-linux-gnu/odbc/libsqlite3odbc.so /usr/lib64/libsqlit
 if [[ $driver == /usr/lib/*.so && $driver != /usr/lib/*/* ]]; then
 	mkdir -p ~/odbc-drivers && cp -L "$driver" ~/odbc-drivers/ && driver=$HOME/odbc-drivers/$(basename "$driver")
 fi
-if [ "$ok" = 1 ] && [ -n "$driver" ] && lerd php:odbc add vmsqlite "$driver" </dev/null && lerd php:odbc list | grep -q vmsqlite && lerd php:odbc remove vmsqlite </dev/null; then
+if [ "$ok" = 1 ] && [ -z "$driver" ] && have rpm-ostree; then
+	# An ostree host layers packages only with a reboot, so the driver cannot come mid-run.
+	skip "4.18 every version has odbc and PDO_ODBC, and a vendor driver registers, lists and unregisters" "no sqliteodbc on this ostree guest (rpm-ostree install needs a reboot)"
+elif [ "$ok" = 1 ] && [ -n "$driver" ] && lerd php:odbc add vmsqlite "$driver" </dev/null && lerd php:odbc list | grep -q vmsqlite && lerd php:odbc remove vmsqlite </dev/null; then
 	_pass "4.18 every version has odbc and PDO_ODBC, and a vendor driver registers, lists and unregisters"
 else
 	_fail "4.18 every version has odbc and PDO_ODBC, and a vendor driver registers, lists and unregisters" "ok=$ok driver=$driver"

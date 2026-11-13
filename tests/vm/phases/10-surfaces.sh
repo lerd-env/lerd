@@ -97,6 +97,9 @@ check_not "10.41 [partial] and unpins it again" "$name.*pin" bash -c 'lerd idle 
 # Phase 12 deletes phase 6's project, so a rerun of this phase alone rebuilds it.
 if [ ! -d "$wk/vendor" ]; then
 	check "scaffold the Horizon project" bash -c "cd '$PROJECTS' && lerd new vmworkers && cd vmworkers && lerd setup --all --skip-open && lerd composer require laravel/horizon -W --no-interaction && lerd artisan horizon:install --no-interaction && lerd npm install -D chokidar"
+	# Horizon only runs when the site queues to Redis, as phase 6 sets it (#2429).
+	sed -i 's/^QUEUE_CONNECTION=.*/QUEUE_CONNECTION=redis/' "$wk/.env"
+	(cd "$wk" && lerd link </dev/null >/dev/null 2>&1)
 fi
 whost=$(site_host "$wk")
 # site_view <domain>: the site's own view, as the TUI draws it.

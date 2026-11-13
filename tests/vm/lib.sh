@@ -119,7 +119,8 @@ site_host() {
 	local h
 	h=$( (cd "$1" 2>/dev/null && lerd which 2>/dev/null) | awk '$1 == "Site" { sub(/,$/, "", $2); print $2; exit }')
 	# lerd which does not answer inside a worktree; lerd sites lists it by path.
-	[ -n "$h" ] || h=$(lerd sites 2>/dev/null | awk -v d="$1" '$NF == d { print ($1 == "↳" ? $3 : $2); exit }')
+	# It prints the resolved path, so compare against that (Bazzite's /home is a link).
+	[ -n "$h" ] || h=$(lerd sites 2>/dev/null | awk -v d="$(realpath -m "$1")" '$NF == d { print ($1 == "↳" ? $3 : $2); exit }')
 	printf '%s' "$h"
 }
 
