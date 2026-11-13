@@ -88,3 +88,30 @@ func TestRefreshProvidedEnv_BrokenProjectConfigFailsLoudly(t *testing.T) {
 		t.Errorf("err = %v, want a .lerd.yaml parse error", err)
 	}
 }
+
+// On Bazzite $HOME is /home/<user>, a symlink to /var/home/<user>, and the PHP
+// containers mount both spellings separately, so a CLI run from the $HOME
+// spelling never resolves to the stored path. The header names both.
+func TestProvidedEnvHeader_namesTheHomeSpellingWhenHomeIsASymlink(t *testing.T) {
+	root := t.TempDir()
+	real := filepath.Join(root, "var", "home")
+	site := filepath.Join(real, "Projects", "app")
+	if err := os.MkdirAll(site, 0755); err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Join(root, "home")
+	if err := os.Symlink(real, home); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+
+	got := string(providedEnvHeader(config.Site{Name: "app", Path: config.CanonicalPath(site), Domains: []string{"app.test"}}))
+	for _, want := range []string{
+		"#lerd-root=" + config.CanonicalPath(site) + "\n",
+		"#lerd-root=" + filepath.Join(home, "Projects", "app") + "\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("header %q is missing %q", got, want)
+		}
+	}
+}

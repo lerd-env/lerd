@@ -81,10 +81,27 @@ func providedEnvHeader(site config.Site) []byte {
 		if real, err := filepath.EvalSymlinks(r); err == nil {
 			r = real
 		}
-		if strings.ContainsAny(r, "\r\n") {
-			continue
+		for _, spelling := range []string{r, homeSpelling(r)} {
+			if spelling == "" || strings.ContainsAny(spelling, "\r\n") {
+				continue
+			}
+			fmt.Fprintf(&b, "#lerd-root=%s\n", spelling)
 		}
-		fmt.Fprintf(&b, "#lerd-root=%s\n", r)
 	}
 	return b.Bytes()
+}
+
+// homeSpelling returns path as reached through $HOME when $HOME is a symlink,
+// as on Bazzite's /home -> /var/home. The containers mount both spellings
+// separately, so a command run from the $HOME one never resolves to the other.
+func homeSpelling(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	real := config.CanonicalPath(home)
+	if real == home || !strings.HasPrefix(path, real+string(filepath.Separator)) {
+		return ""
+	}
+	return home + strings.TrimPrefix(path, real)
 }
