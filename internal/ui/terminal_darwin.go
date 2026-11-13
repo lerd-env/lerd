@@ -63,7 +63,3 @@ func osFallbackScriptTerminals(script string) []terminalCmd {
 // terminalBaseEnv is lerd's own environment: a launchd agent already sits in
 // the user's GUI session.
 func terminalBaseEnv() []string { return os.Environ() }
-
-// ownScope leaves a macOS launch alone: Terminal and iTerm run the command in
-// their own process, outside lerd-ui's launchd job.
-func ownScope(bin string, args []string) (string, []string) { return bin, args }

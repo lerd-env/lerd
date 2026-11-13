@@ -614,9 +614,16 @@ func openUpdateTerminal(latestVer string) {
 // lookPathFn, startCmdFn and uiUpdateTerminal are seams for tests.
 var (
 	lookPathFn       = exec.LookPath
-	startCmdFn       = func(name string, args ...string) error { return exec.Command(name, args...).Start() }
+	startCmdFn       = startOwnScope
 	uiUpdateTerminal = requestUpdateTerminal
 )
+
+// startOwnScope starts a command outside the tray's unit, which lerd update
+// restarts, taking everything inside it down.
+func startOwnScope(name string, args ...string) error {
+	bin, rest := lerdSystemd.OwnScope(name, args)
+	return exec.Command(bin, rest...).Start()
+}
 
 // requestUpdateTerminal asks lerd-ui to open the user's terminal on lerd update.
 // lifecycleViaUI has lerd-ui start or stop lerd; reached is false only when it

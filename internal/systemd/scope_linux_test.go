@@ -1,4 +1,4 @@
-package ui
+package systemd
 
 import (
 	"errors"
@@ -14,7 +14,7 @@ func TestOwnScope_runsTheTerminalInItsOwnSystemdScope(t *testing.T) {
 	scopeLookPath = func(string) (string, error) { return "/usr/bin/systemd-run", nil }
 	t.Cleanup(func() { scopeLookPath = prev })
 
-	bin, args := ownScope("/usr/bin/konsole", []string{"--separate", "-e", "sh", "-c", "lerd update"})
+	bin, args := OwnScope("/usr/bin/konsole", []string{"--separate", "-e", "sh", "-c", "lerd update"})
 	if bin != "/usr/bin/systemd-run" {
 		t.Fatalf("bin = %q, want systemd-run", bin)
 	}
@@ -30,7 +30,7 @@ func TestOwnScope_leavesTheCommandAloneWithoutSystemdRun(t *testing.T) {
 	scopeLookPath = func(string) (string, error) { return "", errors.New("not found") }
 	t.Cleanup(func() { scopeLookPath = prev })
 
-	bin, args := ownScope("/usr/bin/xterm", []string{"-e", "sh"})
+	bin, args := OwnScope("/usr/bin/xterm", []string{"-e", "sh"})
 	if bin != "/usr/bin/xterm" || !slices.Equal(args, []string{"-e", "sh"}) {
 		t.Errorf("got %q %q, want the command unchanged", bin, args)
 	}

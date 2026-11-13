@@ -6210,7 +6210,7 @@ func openTerminalCommand(script string) error {
 		if err != nil {
 			continue
 		}
-		name, args := ownScope(bin, t.args)
+		name, args := lerdSystemd.OwnScope(bin, t.args)
 		cmd := exec.Command(name, args...)
 		cmd.Env = terminalEnv()
 		if err := cmd.Start(); err != nil {
