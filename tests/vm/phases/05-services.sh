@@ -173,7 +173,7 @@ skip "5.24 pgAdmin over plain http keeps its session" "a browser session, phase 
 if getenforce 2>/dev/null | grep -q Enforcing; then
 	# A host with its own mysqldump (Bazzite ships MariaDB's) gets no shim until
 	# asked, so ask, and call the shim by path so the host's never answers.
-	shim=$HOME/.local/share/lerd/bin/mysqldump
+	shim=${XDG_DATA_HOME:-$HOME/.local/share}/lerd/bin/mysqldump
 	[ -x "$shim" ] || lerd shims add mysqldump </dev/null >/dev/null 2>&1
 	check "5.25 mysqldump --result-file through the shim writes the file under SELinux" bash -c "rm -f ~/lerd-vm-dump.sql; '$shim' --result-file ~/lerd-vm-dump.sql '$db' && test -s ~/lerd-vm-dump.sql"
 else

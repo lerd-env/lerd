@@ -130,7 +130,7 @@ Some projects are reported as skipped rather than registered:
   command run, which an unattended sweep should not do on its own. Run `lerd
   link` in the project to set it up, after which the watcher leaves it alone.
 
-Use `lerd unpark <dir>` to stop watching a directory and unlink its sites.
+Use `lerd unpark <dir>` to stop watching a directory and unlink its sites. The directory can be given however you reach it, through a symlinked home such as Bazzite's `/home` or in another case on a macOS volume.
 
 ---
 
