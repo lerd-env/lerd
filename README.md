@@ -1,3 +1,5 @@
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/public/assets/logo-dark.svg"><img src="docs/public/assets/logo.svg" width="104" alt="Lerd" /></picture></p>
+
 # Lerd
 
 > Open-source local PHP development environment for Linux and macOS,
