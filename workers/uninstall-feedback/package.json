@@ -1,0 +1,11 @@
+{
+  "name": "lerd-uninstall-feedback",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test src/*.test.js",
+    "summary": "npx --yes wrangler@4.158.0 d1 execute lerd-uninstall-feedback --remote --command \"$(cat queries/summary.sql)\"",
+    "comments": "npx --yes wrangler@4.158.0 d1 execute lerd-uninstall-feedback --remote --command \"$(cat queries/comments.sql)\"",
+    "deploy": "npx --yes wrangler@4.158.0 deploy"
+  }
+}
