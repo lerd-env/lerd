@@ -112,6 +112,7 @@ func NewPluginCmd() *cobra.Command {
 	})
 	cmd.AddCommand(siteSwitchCommand("page", "Switch a plugin's page script on or off for the site in this directory", "page script", siteops.SetPagePlugin))
 	cmd.AddCommand(siteSwitchCommand("card", "Switch a plugin's card on or off on the Overview of the site in this directory", "overview card", siteops.SetOverviewCard))
+	cmd.AddCommand(siteSwitchCommand("tab", "Show or hide a plugin's tab on the site in this directory", "site tab", siteops.SetSiteTab))
 	return cmd
 }
 

@@ -112,6 +112,9 @@ type Site struct {
 	// OverviewCards are the installed plugins whose card the user switched on
 	// for this site's Overview. Off unless listed here.
 	OverviewCards []string `yaml:"overview_cards,omitempty"`
+	// HiddenTabs are the installed plugins whose site tab the user switched
+	// off for this site. On unless listed here.
+	HiddenTabs []string `yaml:"hidden_tabs,omitempty"`
 	// BrowserLogs holds the site's browser logs settings when the project
 	// has no .lerd.yaml to carry them.
 	BrowserLogs *BrowserLogs `yaml:"browser_logs,omitempty"`
@@ -297,6 +300,7 @@ type siteYAML struct {
 	WiredServices         []string            `yaml:"wired_services,omitempty"`
 	PagePlugins           []string            `yaml:"page_plugins,omitempty"`
 	OverviewCards         []string            `yaml:"overview_cards,omitempty"`
+	HiddenTabs            []string            `yaml:"hidden_tabs,omitempty"`
 	BrowserLogs           *BrowserLogs        `yaml:"browser_logs,omitempty"`
 	Group                 string              `yaml:"group,omitempty"`
 	GroupSubdomain        string              `yaml:"group_subdomain,omitempty"`
@@ -342,6 +346,7 @@ func (s Site) toYAML() siteYAML {
 		WiredServices:         s.WiredServices,
 		PagePlugins:           s.PagePlugins,
 		OverviewCards:         s.OverviewCards,
+		HiddenTabs:            s.HiddenTabs,
 		BrowserLogs:           s.BrowserLogs,
 		Group:                 s.Group,
 		GroupSubdomain:        s.GroupSubdomain,
@@ -392,6 +397,7 @@ func (sy siteYAML) toSite() Site {
 		WiredServices:         sy.WiredServices,
 		PagePlugins:           sy.PagePlugins,
 		OverviewCards:         sy.OverviewCards,
+		HiddenTabs:            sy.HiddenTabs,
 		BrowserLogs:           sy.BrowserLogs,
 		Group:                 sy.Group,
 		GroupSubdomain:        sy.GroupSubdomain,
@@ -523,6 +529,9 @@ func cloneSiteRegistry(in *SiteRegistry) *SiteRegistry {
 		}
 		if s.OverviewCards != nil {
 			cp.OverviewCards = append([]string(nil), s.OverviewCards...)
+		}
+		if s.HiddenTabs != nil {
+			cp.HiddenTabs = append([]string(nil), s.HiddenTabs...)
 		}
 		if s.BrowserLogs != nil {
 			cp.BrowserLogs = s.BrowserLogs.clone()
@@ -956,6 +965,11 @@ func SetSitePagePlugin(name, plugin string, on bool) error {
 // SetSiteOverviewCard switches a plugin's card on or off for a site's Overview.
 func SetSiteOverviewCard(name, plugin string, on bool) error {
 	return setSitePluginSwitch(name, plugin, on, func(s *Site) *[]string { return &s.OverviewCards })
+}
+
+// SetSiteTabHidden hides a plugin's tab on a site, or shows it again.
+func SetSiteTabHidden(name, plugin string, hidden bool) error {
+	return setSitePluginSwitch(name, plugin, hidden, func(s *Site) *[]string { return &s.HiddenTabs })
 }
 
 // setSitePluginSwitch adds plugin to, or drops it from, the list field picks

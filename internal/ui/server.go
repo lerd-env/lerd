@@ -1086,6 +1086,8 @@ type SiteResponse struct {
 	// OverviewCards are the plugins whose card the Overview shows, sent with
 	// the site so a switch made anywhere reaches an Overview already open.
 	OverviewCards []string `json:"overview_cards,omitempty"`
+	// HiddenTabs are the plugins whose tab the site hides, sent the same way.
+	HiddenTabs []string `json:"hidden_tabs,omitempty"`
 	// DeclaredServices are the Services listed in .lerd.yaml, which the site
 	// overview offers to remove.
 	DeclaredServices []string `json:"declared_services,omitempty"`
@@ -1371,6 +1373,7 @@ func buildSites() ([]SiteResponse, error) {
 			Services:             e.Services,
 			ExternalDB:           e.ExternalDB,
 			OverviewCards:        e.OverviewCards,
+			HiddenTabs:           e.HiddenTabs,
 			DeclaredServices:     e.DeclaredServices,
 			SuggestedServices:    e.SuggestedServices,
 			DBDatabase:           envfile.ReadKey(filepath.Join(e.Path, ".env"), "DB_DATABASE"),

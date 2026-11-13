@@ -174,6 +174,8 @@ type EnrichedSite struct {
 	GroupSharedDB  bool
 	// OverviewCards are the plugins whose card the site's Overview shows.
 	OverviewCards []string
+	// HiddenTabs are the plugins whose tab the site hides.
+	HiddenTabs []string
 
 	// Git
 	Branch    string
@@ -337,6 +339,7 @@ func Enrich(s config.Site, flags EnrichFlag) EnrichedSite {
 		GroupSubdomain:        s.GroupSubdomain,
 		GroupSharedDB:         s.GroupSharedDB,
 		OverviewCards:         s.OverviewCards,
+		HiddenTabs:            s.HiddenTabs,
 		IdleSuspendedWorkers:  s.IdleSuspendedWorkers,
 		WorktreeIdleSuspended: s.WorktreeIdleSuspended,
 		OriginalPHPVersion:    s.PHPVersion,

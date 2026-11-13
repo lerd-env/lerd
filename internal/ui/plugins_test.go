@@ -456,15 +456,21 @@ func TestPagePlugins_ListsAndRefusesWithoutAuthority(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("%v: %s", err, rec.Body)
 	}
-	// echo has no page script or card, so only hello's two are offered.
-	if len(got) != 2 || got[0].Name != "hello" || got[0].Kind != kindPageScript || !got[0].On || got[1].Kind != kindOverviewCard || got[1].On {
-		t.Errorf("got %+v, want hello's script on and its card off", got)
+	// echo offers only its tab; hello its script, card and tab.
+	if len(got) != 4 || got[0].Name != "echo" || got[0].Kind != kindSiteTab || !got[0].On ||
+		got[1].Kind != kindPageScript || !got[1].On || got[2].Kind != kindOverviewCard || got[2].On || got[3].Kind != kindSiteTab || !got[3].On {
+		t.Errorf("got %+v, want echo's tab on, hello's script on, its card off and its tab on", got)
 	}
 
 	rec = httptest.NewRecorder()
 	handlePagePlugins(rec, localRequest(http.MethodPost, "/api/page-plugins", `{"site":"shop","plugin":"hello","kind":"overview_card","on":true}`))
 	if site, _ := config.FindSite("shop"); rec.Code != 200 || !slices.Equal(site.OverviewCards, []string{"hello"}) {
 		t.Errorf("card switch = %d %s, OverviewCards %v", rec.Code, rec.Body, site.OverviewCards)
+	}
+	rec = httptest.NewRecorder()
+	handlePagePlugins(rec, localRequest(http.MethodPost, "/api/page-plugins", `{"site":"shop","plugin":"hello","kind":"site_tab","on":false}`))
+	if site, _ := config.FindSite("shop"); rec.Code != 200 || !slices.Equal(site.HiddenTabs, []string{"hello"}) {
+		t.Errorf("tab switch = %d %s, HiddenTabs %v", rec.Code, rec.Body, site.HiddenTabs)
 	}
 	rec = httptest.NewRecorder()
 	handlePagePlugins(rec, localRequest(http.MethodPost, "/api/page-plugins", `{"site":"shop","plugin":"hello","kind":"banner","on":true}`))

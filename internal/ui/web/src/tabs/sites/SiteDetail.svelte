@@ -58,8 +58,10 @@
   const canLogs = $derived(siteHasLogSources(site));
   // A lone Overview tab can't be switched to anything, so don't render the tab
   // row at all when no other tab is available (e.g. static sites).
-  const hasExtraTabs = $derived(canLogs || canEnv || canTinker || canDumps || $siteTabPlugins.length > 0);
-  const activePlugin = $derived($siteTabPlugins.find((p) => active === `plugin:${p.name}`));
+  // Plugin tabs show on every site until hidden for this one.
+  const tabPlugins = $derived($siteTabPlugins.filter((p) => !(site.hidden_tabs ?? []).includes(p.name)));
+  const hasExtraTabs = $derived(canLogs || canEnv || canTinker || canDumps || tabPlugins.length > 0);
+  const activePlugin = $derived(tabPlugins.find((p) => active === `plugin:${p.name}`));
   // A tab whose plugin is gone (or not loaded yet) shows the overview without
   // forgetting the choice, so it comes back once the plugin list arrives.
   const shown = $derived(active.startsWith('plugin:') && !activePlugin ? 'overview' : active);
@@ -133,7 +135,7 @@
   {#if canDumps}
     <button role="tab" aria-selected={active === 'dumps'} tabindex={active === 'dumps' ? 0 : -1} class={tabBtn('dumps', active === 'dumps')} onclick={() => selectTab('dumps')}>{m.debug_title()}</button>
   {/if}
-  {#each $siteTabPlugins as p (p.name)}
+  {#each tabPlugins as p (p.name)}
     {@const id = `plugin:${p.name}` as TabId}
     <button role="tab" aria-selected={active === id} tabindex={active === id ? 0 : -1} class={tabBtn(id, active === id)} onclick={() => selectTab(id)}>{p.site_tab?.title}</button>
   {/each}

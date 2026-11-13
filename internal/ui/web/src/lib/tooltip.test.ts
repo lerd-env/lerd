@@ -27,6 +27,17 @@ describe('tooltip action', () => {
     expect(t?.style.opacity).toBe('1');
   });
 
+  // A sentence wraps at the width it asks for; a short label keeps the window's.
+  it('wraps a long label at its maxWidth', () => {
+    const { btn } = mount({ label: 'Sync a site with its servers', maxWidth: 280 });
+    btn.dispatchEvent(new MouseEvent('mouseenter'));
+    expect(tip()?.style.maxWidth).toBe('280px');
+    btn.dispatchEvent(new MouseEvent('mouseleave'));
+    const other = mount('Enable HTTPS');
+    other.btn.dispatchEvent(new MouseEvent('mouseenter'));
+    expect(tip()?.style.maxWidth).toBe(window.innerWidth - 12 + 'px');
+  });
+
   // Focus handed back after a mouse click is not a request for the tooltip.
   it('shows on keyboard focus only', () => {
     const { btn } = mount('Text size');

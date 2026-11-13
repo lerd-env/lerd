@@ -85,3 +85,32 @@ func TestSetOverviewCard_OnlyForAPluginWithACard(t *testing.T) {
 		t.Errorf("switching off must always work: %v", err)
 	}
 }
+
+func TestSetSiteTab_OnUntilHiddenForTheSite(t *testing.T) {
+	withTempEnv(t)
+	if err := plugins.Scaffold("hello", filepath.Join(plugins.Dir(), "hello")); err != nil {
+		t.Fatal(err)
+	}
+	site := &config.Site{Name: "shop", Domains: []string{"shop.test"}, Path: t.TempDir()}
+	if err := config.AddSite(*site); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetSiteTab(site, "hello", false); err != nil {
+		t.Fatalf("SetSiteTab off: %v", err)
+	}
+	if got, _ := config.FindSite("shop"); !slices.Equal(got.HiddenTabs, []string{"hello"}) {
+		t.Errorf("HiddenTabs = %v, want hello hidden", got.HiddenTabs)
+	}
+	if err := SetSiteTab(site, "hello", true); err != nil {
+		t.Fatalf("SetSiteTab on: %v", err)
+	}
+	if got, _ := config.FindSite("shop"); got.HiddenTabs != nil {
+		t.Errorf("HiddenTabs = %v, want none after switching back on", got.HiddenTabs)
+	}
+	if err := SetSiteTab(site, "gone", false); err == nil {
+		t.Error("hiding the tab of a plugin that is not installed must fail")
+	}
+	if err := SetSiteTab(site, "gone", true); err != nil {
+		t.Errorf("switching on must always work so a removed plugin's setting clears: %v", err)
+	}
+}

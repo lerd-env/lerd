@@ -5,6 +5,8 @@ export type TooltipPlacement = 'bottom' | 'right';
 export interface TooltipOptions {
   label: string;
   placement?: TooltipPlacement;
+  // Wrap at this many pixels, for a sentence rather than a label.
+  maxWidth?: number;
 }
 
 type TooltipParam = string | TooltipOptions | null | undefined;
@@ -51,7 +53,7 @@ function hide(node: HTMLElement) {
   if (box) box.style.opacity = '0';
 }
 
-function place(node: HTMLElement, label: string, placement: TooltipPlacement) {
+function place(node: HTMLElement, label: string, placement: TooltipPlacement, maxWidth?: number) {
   const b = ensure();
   textEl!.textContent = label;
   arrowEl!.className =
@@ -60,7 +62,7 @@ function place(node: HTMLElement, label: string, placement: TooltipPlacement) {
   b.style.opacity = '0';
   b.style.left = '0px';
   b.style.top = '0px';
-  b.style.maxWidth = window.innerWidth - 2 * MARGIN + 'px';
+  b.style.maxWidth = Math.min(window.innerWidth - 2 * MARGIN, maxWidth ?? Infinity) + 'px';
   const r = node.getBoundingClientRect();
   const bw = b.offsetWidth;
   const bh = b.offsetHeight;
@@ -94,7 +96,7 @@ export const tooltip: Action<HTMLElement, TooltipParam> = (node, param) => {
   const show = () => {
     if (!opts.label) return;
     owner = node;
-    place(node, opts.label, opts.placement ?? 'bottom');
+    place(node, opts.label, opts.placement ?? 'bottom', opts.maxWidth);
   };
   const showOnKeyboardFocus = () => {
     if (node.matches(':focus-visible')) show();
@@ -111,7 +113,7 @@ export const tooltip: Action<HTMLElement, TooltipParam> = (node, param) => {
     update(p: TooltipParam) {
       opts = normalize(p);
       if (owner === node) {
-        if (opts.label) place(node, opts.label, opts.placement ?? 'bottom');
+        if (opts.label) place(node, opts.label, opts.placement ?? 'bottom', opts.maxWidth);
         else hide(node);
       }
     },

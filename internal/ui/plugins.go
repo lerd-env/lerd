@@ -316,8 +316,8 @@ func withPluginPages(next http.Handler) http.Handler {
 	})
 }
 
-// pagePlugin is one thing a plugin can put on a site, its page script or its
-// Overview card, and whether the site has it switched on.
+// pagePlugin is one thing a plugin can put on a site, its page script, its
+// Overview card or its tab, and whether the site has it switched on.
 type pagePlugin struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
@@ -328,6 +328,7 @@ type pagePlugin struct {
 const (
 	kindPageScript   = "page_script"
 	kindOverviewCard = "overview_card"
+	kindSiteTab      = "site_tab"
 )
 
 // handlePagePlugins lists what plugins can put on ?site= (GET), or switches one
@@ -367,6 +368,8 @@ func handlePagePlugins(w http.ResponseWriter, r *http.Request) {
 		case "", kindPageScript:
 		case kindOverviewCard:
 			set = siteops.SetOverviewCard
+		case kindSiteTab:
+			set = siteops.SetSiteTab
 		default:
 			http.Error(w, "unknown kind: "+req.Kind, http.StatusBadRequest)
 			return
@@ -391,6 +394,9 @@ func handlePagePlugins(w http.ResponseWriter, r *http.Request) {
 		}
 		if p.UI.OverviewCard != nil {
 			out = append(out, pagePlugin{Name: p.Name, Description: p.Description, Kind: kindOverviewCard, On: slices.Contains(site.OverviewCards, p.Name)})
+		}
+		if p.UI.SiteTab != nil {
+			out = append(out, pagePlugin{Name: p.Name, Description: p.Description, Kind: kindSiteTab, On: !slices.Contains(site.HiddenTabs, p.Name)})
 		}
 	}
 	writeJSON(w, out)
