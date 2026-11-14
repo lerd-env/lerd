@@ -1,6 +1,8 @@
 package plugins
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"strings"
@@ -107,7 +109,8 @@ func answer(cfg *config.GlobalConfig, name, perm string) (allowed bool, scope st
 }
 
 // Scope is what an answer to perm covers, so an update that changes it is
-// asked again: for schedules, each one's name, interval and executable.
+// asked again: for schedules, a hash of each one's name, interval and
+// executable, a fixed size however many a plugin declares.
 func Scope(p *Plugin, perm string) string {
 	if perm != PermissionSchedule {
 		return ""
@@ -117,7 +120,8 @@ func Scope(p *Plugin, perm string) string {
 		parts = append(parts, s.Name+" "+s.Every+" "+s.Run)
 	}
 	slices.Sort(parts)
-	return strings.Join(parts, "\n")
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\n")))
+	return hex.EncodeToString(sum[:])
 }
 
 // forgetPermissions drops every answer about the plugin, so a reinstall asks

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -82,5 +83,34 @@ func TestManagedPlugins_CarryScheduleStateAndList(t *testing.T) {
 	}
 	if len(row.Schedules) != 1 || row.Schedules[0].Name != "sweep" || row.Schedules[0].Every != "1h" {
 		t.Errorf("schedules = %+v", row.Schedules)
+	}
+}
+
+// The answer carries a fixed-size fingerprint of the schedules shown, so a
+// plugin with many of them can still be answered from the dashboard.
+func TestPluginManager_AnswersAPluginWithManySchedules(t *testing.T) {
+	notifyGateConfigDir(t)
+	installAPIPlugin(t)
+	path := filepath.Join(plugins.Dir(), "echo", plugins.ManifestFile)
+	data, _ := os.ReadFile(path)
+	data = append(data, "schedules:\n"...)
+	for i := range 200 {
+		data = append(data, fmt.Sprintf("  - {name: a-rather-long-schedule-name-%03d, every: 1h, run: bin/say}\n", i)...)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var row managedPlugin
+	for _, p := range managedPlugins() {
+		if p.Name == "echo" {
+			row = p
+		}
+	}
+	body, _ := json.Marshal(map[string]any{"allowed": true, "scope": row.ScheduleScope})
+	req := localRequest(http.MethodPost, "/api/plugin-manager/echo/schedule", string(body))
+	rec := httptest.NewRecorder()
+	handlePluginManager(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("answer for 200 schedules: %d %q, want 200", rec.Code, rec.Body)
 	}
 }
