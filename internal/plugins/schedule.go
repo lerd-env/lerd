@@ -49,6 +49,10 @@ var (
 	runsMu sync.Mutex
 
 	scheduleChanged = func() {}
+
+	// stopping is set by StopSchedules; afterStart is a seam for tests.
+	stopping   bool
+	afterStart = func() {}
 )
 
 // SetScheduleNotifier sets what is told when a run starts or ends, so the
@@ -90,10 +94,8 @@ func RunDue(now time.Time) (wait func()) {
 			}
 			scheduleChanged()
 			wg.Add(1)
-			active.Add(1)
 			go func() {
 				defer wg.Done()
-				defer active.Done()
 				defer scheduleChanged()
 				defer release(p.Name, s.Name)
 				p.runSchedule(s, now)
@@ -108,6 +110,7 @@ func RunDue(now time.Time) (wait func()) {
 // the runs to record that they were stopped, since lerd-ui exits right after.
 func StopSchedules() {
 	runningMu.Lock()
+	stopping = true
 	for _, cmd := range running {
 		if cmd != nil {
 			KillProcessGroup(cmd)
@@ -128,20 +131,28 @@ func due(last time.Time, every time.Duration, now time.Time) bool {
 	return last.IsZero() || last.After(now) || now.Sub(last) >= every
 }
 
+// claim reserves a run, refused once shutdown began, and counts it in active
+// under the same lock, so StopSchedules waits for every run it did not refuse.
 func claim(plugin, schedule string) bool {
 	runningMu.Lock()
 	defer runningMu.Unlock()
 	key := plugin + "/" + schedule
-	if _, ok := running[key]; ok {
+	if _, ok := running[key]; ok || stopping {
 		return false
 	}
 	running[key] = nil
+	active.Add(1)
 	return true
 }
 
+// started registers a run's process for StopSchedules, or kills it at once
+// when shutdown began while it was starting.
 func started(plugin, schedule string, cmd *exec.Cmd) {
 	runningMu.Lock()
 	defer runningMu.Unlock()
+	if stopping {
+		KillProcessGroup(cmd)
+	}
 	running[plugin+"/"+schedule] = cmd
 }
 
@@ -149,6 +160,7 @@ func release(plugin, schedule string) {
 	runningMu.Lock()
 	defer runningMu.Unlock()
 	delete(running, plugin+"/"+schedule)
+	active.Done()
 }
 
 func (p *Plugin) runSchedule(s Schedule, at time.Time) {
@@ -159,6 +171,7 @@ func (p *Plugin) runSchedule(s Schedule, at time.Time) {
 		cmd.Stdout, cmd.Stderr = &out, &out
 		var wait func() error
 		if wait, err = startWithin(cmd, s.Limit()); err == nil {
+			afterStart()
 			started(p.Name, s.Name, cmd)
 			err = wait()
 		}

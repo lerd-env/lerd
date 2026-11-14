@@ -337,6 +337,7 @@ func TestRunDue_ARunEndingAfterRemovalLeavesNoRecord(t *testing.T) {
 // otherwise outlive it in their own process group.
 func TestStopSchedules_KillsRunsInProgress(t *testing.T) {
 	isolate(t)
+	resumeAfterStop(t)
 	slowPlugin(t, "slow")
 	wait := RunDue(time.Now())
 	waitForFile(t, filepath.Join(DataDirFor("slow"), "started"))
@@ -415,5 +416,43 @@ func TestAnswerAsShown_UpdateDuringTheAnswerIsAskedAgain(t *testing.T) {
 	p, _ = Find("cron")
 	if got := PermissionState(p, PermissionSchedule); got != PermissionPending {
 		t.Fatalf("state = %q, want pending: the answer covered the schedules shown, not the update", got)
+	}
+}
+
+// resumeAfterStop lets the next test run schedules again after one that shut
+// them down.
+func resumeAfterStop(t *testing.T) {
+	t.Cleanup(func() {
+		runningMu.Lock()
+		stopping = false
+		runningMu.Unlock()
+	})
+}
+
+// A shutdown landing between a run's start and its registration still stops
+// it, and once shutdown began no new run starts.
+func TestStopSchedules_CatchesARunStartingDuringShutdown(t *testing.T) {
+	isolate(t)
+	resumeAfterStop(t)
+	slowPlugin(t, "slow")
+	afterStart = func() {
+		go StopSchedules()
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Cleanup(func() { afterStart = func() {} })
+	done := make(chan struct{})
+	go func() { RunDue(time.Now())(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		_ = os.WriteFile(filepath.Join(DataDirFor("slow"), "go"), nil, 0o644)
+		t.Fatal("a run starting during shutdown kept going")
+	}
+
+	afterStart = func() {}
+	_ = os.Remove(filepath.Join(DataDirFor("slow"), "started"))
+	RunDue(time.Now().Add(time.Hour))()
+	if _, err := os.Stat(filepath.Join(DataDirFor("slow"), "started")); err == nil {
+		t.Fatal("a run started after shutdown began")
 	}
 }
