@@ -85,6 +85,8 @@ if [ "$got" = 'hello from lerd' ]; then echo 'PASS W.14 https://hello.test from 
 
 echo "== uninstall, $DISTRO the distro"
 installed=$(distro)
+# Read before the uninstall, which may delete the distro the CA lives in.
+ca=$(ps "-File $LANE\\checks.ps1 -PrintCaThumb" | tail -1)
 uninstaller=$(win "dir /b \"C:\\Program Files\\Lerd\\unins*.exe\"" | head -1)
 flag=$([ "$DISTRO" = delete ] && echo ' -DeleteDistro')
 task lerd-vm-uninstall "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $LANE\\drive-installer.ps1 -Uninstall C:\\Progra~1\\Lerd\\$uninstaller$flag -Log $LANE\\drive.log"
@@ -97,5 +99,5 @@ for _ in $(seq 12); do
 	sleep 5
 done
 absent=$([ "$DISTRO" = delete ] && echo ' -DistroDeleted')
-ps "-File $LANE\\checks.ps1 -Absent$absent -Distro $installed" | report
+ps "-File $LANE\\checks.ps1 -Absent$absent -Distro $installed${ca:+ -CaThumb $ca}" | report
 exit $failed
