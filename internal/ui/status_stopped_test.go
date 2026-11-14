@@ -11,6 +11,7 @@ import (
 func TestStatusReportsAStopTheUserAskedFor(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	stubPodmanOnPath(t)
 
 	if buildStatus().Stopped {
 		t.Fatal("stopped before any stop")
