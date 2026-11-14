@@ -24,7 +24,13 @@ Check 'W.6 Start menu shortcut' ($null -ne (Get-ChildItem "$env:APPDATA\Microsof
 Check 'W.7 lerd:// handler' (Test-Path 'HKCU:\Software\Classes\lerd')
 Check 'W.8 lerd.exe on the user PATH' (([Environment]::GetEnvironmentVariable('Path', 'User') -split ';') -contains $lerdBin -and (Test-Path (Join-Path $lerdBin 'lerd.exe')))
 Check 'W.9 .test resolves through lerd' ($null -ne (Get-DnsClientNrptRule | Where-Object { $_.Comment -eq 'lerd' }))
-Check 'W.10 lerd CA trusted by Windows' ($null -ne (Get-ChildItem Cert:\CurrentUser\Root | Where-Object { $_.Subject -match 'mkcert' }))
+# This install's own CA, by thumbprint: a guest that held other distros keeps
+# their mkcert CAs, which this uninstall rightly leaves alone.
+$caDistro = if ($Distro) { $Distro } else { (Get-Content (Join-Path $lerdBin 'lerd-wsl.conf') | Where-Object { $_ -like 'distro=*' }) -replace '^distro=', '' }
+$caPem = if ($caDistro) { (& $wsl -d $caDistro -- sh -c 'cat ~/.local/share/mkcert/rootCA.pem') -join "`n" }
+$caThumb = if ($caPem -match 'BEGIN CERTIFICATE') { ([System.Security.Cryptography.X509Certificates.X509Certificate2]::new([System.Text.Encoding]::ASCII.GetBytes($caPem))).Thumbprint }
+$trusted = Get-ChildItem Cert:\CurrentUser\Root | Where-Object { if ($caThumb) { $_.Thumbprint -eq $caThumb } else { $_.Subject -match 'mkcert' } }
+Check 'W.10 lerd CA trusted by Windows' ($null -ne $trusted)
 $distros = (& $wsl -l -q) -replace "`0", '' | Where-Object { $_ -match '\S' }
 # The installer keeps a distro from an earlier run, so ask rather than assume.
 if (-not $Distro) { $Distro = Get-Content (Join-Path $lerdBin 'lerd-wsl.conf') | Where-Object { $_ -like 'distro=*' } | ForEach-Object { $_.Substring(7) } }

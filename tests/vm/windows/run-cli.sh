@@ -17,7 +17,8 @@ scp -q "$HERE/cli.ps1" "$G:${LANE//\\//}/" || exit 2
 win "del $LANE\\cli.log" >/dev/null
 win "schtasks /create /f /tn lerd-vm-cli /it /rl highest /sc once /st 00:00 /tr \"powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command & $LANE\\cli.ps1 | Out-File -Encoding ascii $LANE\\cli.log\"" >/dev/null
 win 'schtasks /run /tn lerd-vm-cli' >/dev/null
-for _ in $(seq 120); do
+# The grid takes over 20 minutes on a 10-core guest; allow an hour.
+for _ in $(seq 360); do
 	win "type $LANE\\cli.log" | grep -q '^SUMMARY' && break
 	sleep 10
 done
