@@ -439,6 +439,8 @@ type managedPlugin struct {
 	// states, and Schedules what it would run and how the last runs went.
 	Schedule  string                   `json:"schedule,omitempty"`
 	Schedules []plugins.ScheduleStatus `json:"schedules,omitempty"`
+	// ScheduleScope is what an answer covers, sent back with it.
+	ScheduleScope string `json:"schedule_scope,omitempty"`
 }
 
 type pluginFailure struct {
@@ -527,15 +529,18 @@ func handlePluginManager(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "a plugin cannot answer for the user", http.StatusForbidden)
 			return
 		}
+		// Scope is what the question showed, so a plugin that changed while it
+		// was open is not approved unseen.
 		var req struct {
-			Allowed bool `json:"allowed"`
+			Allowed bool   `json:"allowed"`
+			Scope   string `json:"scope"`
 		}
-		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<10)).Decode(&req); err != nil {
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&req); err != nil {
 			http.Error(w, "invalid body", http.StatusBadRequest)
 			return
 		}
 		perm := permissionOf(name)
-		if err := plugins.SetPermission(strings.TrimSuffix(name, "/"+perm), perm, req.Allowed); err != nil {
+		if err := plugins.AnswerAsShown(strings.TrimSuffix(name, "/"+perm), perm, req.Allowed, req.Scope); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -602,6 +607,7 @@ func managedPlugins() []managedPlugin {
 			Schedule: plugins.PermissionState(p, plugins.PermissionSchedule)}
 		if len(p.Schedules) > 0 {
 			row.Schedules = plugins.ScheduleStatuses(p)
+			row.ScheduleScope = plugins.Scope(p, plugins.PermissionSchedule)
 		}
 		for _, rel := range p.Screenshots {
 			row.Screenshots = append(row.Screenshots, pluginFileURL(p.Name, rel))

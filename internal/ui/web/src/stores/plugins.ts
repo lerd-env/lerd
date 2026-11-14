@@ -141,6 +141,8 @@ export interface ManagedPlugin {
   // how its last run went.
   schedule?: 'none' | 'pending' | 'allowed' | 'denied';
   schedules?: PluginSchedule[];
+  // What an answer about its schedules covers, sent back with the answer.
+  schedule_scope?: string;
 }
 
 export interface PluginSchedule {
@@ -255,12 +257,12 @@ export async function setPluginNotifications(name: string, allowed: boolean): Pr
   });
 }
 
-// setPluginSchedule records whether a plugin may run on a schedule, from the
-// consent prompt or its card's switch.
-export async function setPluginSchedule(name: string, allowed: boolean): Promise<string> {
+// setPluginSchedule records whether a plugin may run on the schedules the user
+// was shown, scope naming them; lerd refuses it if they have changed since.
+export async function setPluginSchedule(name: string, allowed: boolean, scope: string): Promise<string> {
   return mutate('/api/plugin-manager/' + encodeURIComponent(name) + '/schedule', {
     method: 'POST',
-    body: JSON.stringify({ allowed }),
+    body: JSON.stringify({ allowed, scope }),
     headers: { 'Content-Type': 'application/json' }
   });
 }

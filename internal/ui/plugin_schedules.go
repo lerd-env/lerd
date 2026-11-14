@@ -14,6 +14,7 @@ const scheduleTick = time.Minute
 // lerd-ui is a single service per machine that outlives lerd stop, so each
 // schedule has one runner, and RunDue itself pauses while lerd is stopped.
 func watchPluginSchedules() {
+	plugins.SetScheduleNotifier(broker.broadcastPlugins)
 	go func() {
 		for {
 			time.Sleep(scheduleTick)

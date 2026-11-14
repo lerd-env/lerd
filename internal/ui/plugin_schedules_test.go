@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -51,7 +52,12 @@ func TestPluginManager_ScheduleAnswerIsTheUsers(t *testing.T) {
 	if code := answer(false, `not json`); code != http.StatusBadRequest {
 		t.Fatalf("bad body: %d, want 400", code)
 	}
-	if code := answer(false, `{"allowed":true}`); code != http.StatusOK {
+	p, _ := plugins.Find("echo")
+	shown, _ := json.Marshal(map[string]any{"allowed": true, "scope": plugins.Scope(p, plugins.PermissionSchedule)})
+	if code := answer(false, `{"allowed":true,"scope":"something else"}`); code != http.StatusBadRequest {
+		t.Fatalf("an answer to schedules not shown: %d, want 400", code)
+	}
+	if code := answer(false, string(shown)); code != http.StatusOK {
 		t.Fatalf("from the dashboard: %d, want 200", code)
 	}
 	if got := state(); got != plugins.PermissionAllowed {

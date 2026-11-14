@@ -40,12 +40,12 @@
     return undefined;
   });
   let answering = $state(false);
-  async function answer(name: string, perm: Permission, allowed: boolean) {
-    const set = perm === 'schedule' ? setPluginSchedule : setPluginNotifications;
+  // scope is what the question showed, for schedules the list of them.
+  async function answer(name: string, perm: Permission, allowed: boolean, scope = '') {
     const title = perm === 'schedule' ? m.system_plugins_schedule() : m.system_plugins_notifications();
     answering = true;
     try {
-      const err = await set(name, allowed);
+      const err = perm === 'schedule' ? await setPluginSchedule(name, allowed, scope) : await setPluginNotifications(name, allowed);
       if (err) notifyLocalFailure('plugin_' + perm, title, err);
     } catch (e) {
       notifyLocalFailure('plugin_' + perm, title, String(e));
@@ -194,7 +194,7 @@
     onnotifications={(allowed) => answer(p.name, 'notifications', allowed)}
     schedule={p.schedule}
     schedules={p.schedules}
-    onschedule={(allowed) => answer(p.name, 'schedule', allowed)}
+    onschedule={(allowed) => answer(p.name, 'schedule', allowed, p.schedule_scope)}
     onclose={() => (openName = '')}
   >
     {#snippet actions()}
@@ -216,12 +216,13 @@
 {#if asking}
   {@const name = asking.p.name}
   {@const perm = asking.perm}
+  {@const scope = perm === 'schedule' ? asking.p.schedule_scope : ''}
   {@const list = (asking.p.schedules ?? []).map((s) => s.name + ' ' + m.system_plugins_scheduleEvery({ every: s.every })).join(', ')}
   <Modal open title={perm === 'schedule' ? m.system_plugins_scheduleAskTitle({ name }) : m.system_plugins_notifyAskTitle({ name })} onclose={() => (notLater = [...notLater, name + '/' + perm])}>
     <p class="px-5 py-4 text-sm text-gray-700 dark:text-gray-300">{perm === 'schedule' ? m.system_plugins_scheduleAskBody({ name, list }) : m.system_plugins_notifyAskBody({ name })}</p>
     {#snippet footer()}
-      <DetailButton onclick={() => answer(name, perm, false)} disabled={answering}>{m.system_plugins_notifyDeny()}</DetailButton>
-      <DetailButton tone="primary" onclick={() => answer(name, perm, true)} loading={answering} disabled={answering}>{m.system_plugins_notifyAllow()}</DetailButton>
+      <DetailButton onclick={() => answer(name, perm, false, scope)} disabled={answering}>{m.system_plugins_notifyDeny()}</DetailButton>
+      <DetailButton tone="primary" onclick={() => answer(name, perm, true, scope)} loading={answering} disabled={answering}>{m.system_plugins_notifyAllow()}</DetailButton>
     {/snippet}
   </Modal>
 {/if}

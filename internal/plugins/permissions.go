@@ -50,7 +50,7 @@ func PermissionState(p *Plugin, perm string) string {
 	}
 	allowed, scope, asked := answer(cfg, p.Name, perm)
 	switch {
-	case !asked, scope != p.scope(perm):
+	case !asked, scope != Scope(p, perm):
 		return PermissionPending
 	case allowed:
 		return PermissionAllowed
@@ -75,8 +75,22 @@ func SetPermission(name, perm string, allowed bool) error {
 			c.SetPluginNotifications(name, allowed)
 			return
 		}
-		c.SetPluginPermission(name, perm, allowed, p.scope(perm))
+		c.SetPluginPermission(name, perm, allowed, Scope(p, perm))
 	})
+}
+
+// AnswerAsShown records the user's answer to the question as they saw it:
+// shown is the Scope the question was asked about, and an answer to one the
+// plugin has changed since is refused, so nothing is approved unseen.
+func AnswerAsShown(name, perm string, allowed bool, shown string) error {
+	p, err := Find(name)
+	if err != nil {
+		return err
+	}
+	if p.Asks(perm) && Scope(p, perm) != shown {
+		return fmt.Errorf("%s changed what it asks for since you were asked; look again", name)
+	}
+	return SetPermission(name, perm, allowed)
 }
 
 var permissionLabel = map[string]string{
@@ -92,9 +106,9 @@ func answer(cfg *config.GlobalConfig, name, perm string) (allowed bool, scope st
 	return cfg.PluginPermission(name, perm)
 }
 
-// scope is what an answer to perm covers, so an update that changes it is
+// Scope is what an answer to perm covers, so an update that changes it is
 // asked again: for schedules, each one's name, interval and executable.
-func (p *Plugin) scope(perm string) string {
+func Scope(p *Plugin, perm string) string {
 	if perm != PermissionSchedule {
 		return ""
 	}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -27,24 +28,39 @@ type ScheduleStatus struct {
 	Running   bool      `json:"running,omitempty"`
 }
 
+// scheduleRun is lerd's record of a schedule's last run. A Finished before
+// Started means it is still going, which any process can read.
 type scheduleRun struct {
-	LastRun   time.Time `json:"last_run"`
+	Started   time.Time `json:"started"`
+	Finished  time.Time `json:"finished,omitzero"`
 	LastError string    `json:"last_error,omitempty"`
 }
 
 var (
-	// running holds the plugin/schedule pairs mid-run, so a slow run is never
-	// started a second time by the next tick.
+	// running holds the runs lerd-ui started and has not seen end, so a slow
+	// one is never started twice and StopSchedules can kill them.
 	runningMu sync.Mutex
-	running   = map[string]bool{}
+	running   = map[string]*exec.Cmd{}
 
-	// runsMu serialises the read-modify-write of the runs file.
+	// active counts the runs not yet recorded as ended, for StopSchedules.
+	active sync.WaitGroup
+
+	// runsMu serialises the read-modify-write of a plugin's record file.
 	runsMu sync.Mutex
+
+	scheduleChanged = func() {}
 )
 
-// runsPath is lerd's record of when each schedule last ran. It lives in lerd's
-// data dir rather than the plugin's, which the plugin can write.
-func runsPath() string { return filepath.Join(config.DataDir(), "plugin-schedules.json") }
+// SetScheduleNotifier sets what is told when a run starts or ends, so the
+// dashboard can refresh what it shows.
+func SetScheduleNotifier(fn func()) { scheduleChanged = fn }
+
+// runsPath is lerd's record of a plugin's schedule runs. It lives in lerd's
+// data dir rather than the plugin's, which the plugin can write, one file per
+// plugin so a removal never races a write for another.
+func runsPath(plugin string) string {
+	return filepath.Join(config.DataDir(), "plugin-schedules", plugin+".json")
+}
 
 // RunDue starts every allowed schedule whose interval has passed since it last
 // started, each on its own, and returns a func that waits for the ones it
@@ -55,28 +71,55 @@ func RunDue(now time.Time) (wait func()) {
 		return func() {}
 	}
 	list, _ := Load()
-	runs := readRuns()
 	var wg sync.WaitGroup
 	for _, p := range list {
 		if len(p.Schedules) == 0 || PermissionState(p, PermissionSchedule) != PermissionAllowed {
 			continue
 		}
+		runs := readRuns(p.Name)
 		for _, s := range p.Schedules {
-			if !due(runs[p.Name][s.Name].LastRun, s.Interval(), now) || !claim(p.Name, s.Name) {
+			if !due(runs[s.Name].Started, s.Interval(), now) || !claim(p.Name, s.Name) {
 				continue
 			}
 			// Recorded before it runs, so lerd-ui restarting mid-run does not
-			// start it again at the next tick.
-			recordRun(p.Name, s.Name, scheduleRun{LastRun: now})
+			// start it again; a run whose start cannot be kept is not started.
+			if err := recordStart(p.Name, s.Name, now); err != nil {
+				release(p.Name, s.Name)
+				Failed(Failure{Plugin: p.Name, Surface: SurfaceSchedule, What: s.Name, Error: "could not record the run: " + err.Error()})
+				continue
+			}
+			scheduleChanged()
 			wg.Add(1)
+			active.Add(1)
 			go func() {
 				defer wg.Done()
+				defer active.Done()
+				defer scheduleChanged()
 				defer release(p.Name, s.Name)
 				p.runSchedule(s, now)
 			}()
 		}
 	}
 	return wg.Wait
+}
+
+// StopSchedules kills every run lerd-ui started, for its shutdown: each runs in
+// its own process group, which outlives lerd-ui on macOS. It waits a moment for
+// the runs to record that they were stopped, since lerd-ui exits right after.
+func StopSchedules() {
+	runningMu.Lock()
+	for _, cmd := range running {
+		if cmd != nil {
+			KillProcessGroup(cmd)
+		}
+	}
+	runningMu.Unlock()
+	done := make(chan struct{})
+	go func() { active.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+	}
 }
 
 // due is true for a schedule that never ran, whose interval has passed, or
@@ -89,11 +132,17 @@ func claim(plugin, schedule string) bool {
 	runningMu.Lock()
 	defer runningMu.Unlock()
 	key := plugin + "/" + schedule
-	if running[key] {
+	if _, ok := running[key]; ok {
 		return false
 	}
-	running[key] = true
+	running[key] = nil
 	return true
+}
+
+func started(plugin, schedule string, cmd *exec.Cmd) {
+	runningMu.Lock()
+	defer runningMu.Unlock()
+	running[plugin+"/"+schedule] = cmd
 }
 
 func release(plugin, schedule string) {
@@ -102,19 +151,17 @@ func release(plugin, schedule string) {
 	delete(running, plugin+"/"+schedule)
 }
 
-func isRunning(plugin, schedule string) bool {
-	runningMu.Lock()
-	defer runningMu.Unlock()
-	return running[plugin+"/"+schedule]
-}
-
-func (p *Plugin) runSchedule(s Schedule, started time.Time) {
+func (p *Plugin) runSchedule(s Schedule, at time.Time) {
 	var out Tail
 	cmd, err := p.Command(s.Run, SurfaceSchedule, nil, map[string]string{"LERD_SCHEDULE": s.Name})
 	if err == nil {
 		cmd.Dir = p.Dir
 		cmd.Stdout, cmd.Stderr = &out, &out
-		err = RunWithin(cmd, s.Limit())
+		var wait func() error
+		if wait, err = startWithin(cmd, s.Limit()); err == nil {
+			started(p.Name, s.Name, cmd)
+			err = wait()
+		}
 	}
 
 	status, lastError := "ok", ""
@@ -123,76 +170,111 @@ func (p *Plugin) runSchedule(s Schedule, started time.Time) {
 		lastError = strings.TrimSpace(out.String() + "\n" + status)
 		Failed(Failure{Plugin: p.Name, Surface: SurfaceSchedule, What: s.Name, Error: lastError})
 	}
-	recordRun(p.Name, s.Name, scheduleRun{LastRun: started, LastError: lastError})
+	recordFinish(p.Name, s.Name, at, lastError)
 
 	f, ferr := os.OpenFile(filepath.Join(DataDirFor(p.Name), ScheduleLog), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if ferr != nil {
 		return
 	}
 	defer f.Close()
-	fmt.Fprintf(f, "%s %s %s: %s\n%s", started.Format(time.RFC3339), s.Name, s.Run, status, out.String())
+	fmt.Fprintf(f, "%s %s %s: %s\n%s", at.Format(time.RFC3339), s.Name, s.Run, status, out.String())
 }
 
 // ScheduleStatuses reports each of the plugin's schedules with when it last
-// ran, how that went and when it runs next.
+// ran, how that went and when it runs next. A run still unfinished past its
+// limit was cut off with lerd-ui, and says so.
 func ScheduleStatuses(p *Plugin) []ScheduleStatus {
-	runs := readRuns()[p.Name]
+	runs := readRuns(p.Name)
+	now := time.Now()
 	out := make([]ScheduleStatus, 0, len(p.Schedules))
 	for _, s := range p.Schedules {
 		r := runs[s.Name]
-		st := ScheduleStatus{Name: s.Name, Every: s.Every, LastRun: r.LastRun, LastError: r.LastError, Running: isRunning(p.Name, s.Name)}
-		if !r.LastRun.IsZero() {
-			st.NextRun = r.LastRun.Add(s.Interval())
+		st := ScheduleStatus{Name: s.Name, Every: s.Every, LastRun: r.Started, LastError: r.LastError}
+		if !r.Started.IsZero() {
+			st.NextRun = r.Started.Add(s.Interval())
+			if r.Finished.Before(r.Started) {
+				if now.Sub(r.Started) < s.Limit() {
+					st.Running = true
+				} else {
+					st.LastError = "stopped before it finished"
+				}
+			}
 		}
 		out = append(out, st)
 	}
 	return out
 }
 
-func readRuns() map[string]map[string]scheduleRun {
+func readRuns(plugin string) map[string]scheduleRun {
 	runsMu.Lock()
 	defer runsMu.Unlock()
-	return readRunsLocked()
+	return readRunsLocked(plugin)
 }
 
-func readRunsLocked() map[string]map[string]scheduleRun {
-	runs := map[string]map[string]scheduleRun{}
-	if data, err := os.ReadFile(runsPath()); err == nil {
+func readRunsLocked(plugin string) map[string]scheduleRun {
+	runs := map[string]scheduleRun{}
+	if data, err := os.ReadFile(runsPath(plugin)); err == nil {
 		_ = json.Unmarshal(data, &runs)
 	}
 	return runs
 }
 
-func recordRun(plugin, schedule string, r scheduleRun) {
+func recordStart(plugin, schedule string, at time.Time) error {
 	runsMu.Lock()
 	defer runsMu.Unlock()
-	runs := readRunsLocked()
-	if runs[plugin] == nil {
-		runs[plugin] = map[string]scheduleRun{}
+	runs := readRunsLocked(plugin)
+	runs[schedule] = scheduleRun{Started: at}
+	return writeRunsLocked(plugin, runs)
+}
+
+// recordFinish completes the record its run started. A record that is gone, or
+// that a newer start replaced, means the plugin was removed or reinstalled
+// meanwhile, and is left alone.
+func recordFinish(plugin, schedule string, at time.Time, lastError string) {
+	runsMu.Lock()
+	defer runsMu.Unlock()
+	runs := readRunsLocked(plugin)
+	r, ok := runs[schedule]
+	if !ok || !r.Started.Equal(at) {
+		return
 	}
-	runs[plugin][schedule] = r
-	writeRunsLocked(runs)
+	r.Finished, r.LastError = time.Now(), lastError
+	runs[schedule] = r
+	_ = writeRunsLocked(plugin, runs)
 }
 
 // forgetScheduleRuns drops the plugin's record, so a reinstall starts afresh.
 func forgetScheduleRuns(plugin string) {
 	runsMu.Lock()
 	defer runsMu.Unlock()
-	runs := readRunsLocked()
-	if _, ok := runs[plugin]; !ok {
-		return
-	}
-	delete(runs, plugin)
-	writeRunsLocked(runs)
+	path := runsPath(plugin)
+	config.GuardRealWrite(path)
+	_ = os.Remove(path)
 }
 
-func writeRunsLocked(runs map[string]map[string]scheduleRun) {
+// writeRunsLocked replaces the file whole, so a crash mid-write leaves the
+// previous record rather than a truncated one.
+func writeRunsLocked(plugin string, runs map[string]scheduleRun) error {
 	data, err := json.Marshal(runs)
 	if err != nil {
-		return
+		return err
 	}
-	path := runsPath()
+	path := runsPath(plugin)
 	config.GuardRealWrite(path)
-	_ = os.MkdirAll(filepath.Dir(path), 0o755)
-	_ = os.WriteFile(path, data, 0o644)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), plugin+".*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }

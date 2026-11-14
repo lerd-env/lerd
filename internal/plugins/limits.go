@@ -69,22 +69,34 @@ func checkLimit(raw string, ceiling time.Duration) error {
 // started, once limit passes; the wait still gives up on a child that left the
 // group holding the output open.
 func RunWithin(cmd *exec.Cmd, limit time.Duration) error {
+	wait, err := startWithin(cmd, limit)
+	if err != nil {
+		return err
+	}
+	return wait()
+}
+
+// startWithin is RunWithin split at the start, for a caller that needs the
+// running process before it waits.
+func startWithin(cmd *exec.Cmd, limit time.Duration) (wait func() error, err error) {
 	cmd.WaitDelay = time.Second
 	OwnProcessGroup(cmd)
 	if err := cmd.Start(); err != nil {
-		return err
+		return nil, err
 	}
 	var timedOut atomic.Bool
 	timer := time.AfterFunc(limit, func() {
 		timedOut.Store(true)
 		KillProcessGroup(cmd)
 	})
-	err := cmd.Wait()
-	timer.Stop()
-	if timedOut.Load() {
-		return fmt.Errorf("timed out after %s", limit)
-	}
-	return err
+	return func() error {
+		err := cmd.Wait()
+		timer.Stop()
+		if timedOut.Load() {
+			return fmt.Errorf("timed out after %s", limit)
+		}
+		return err
+	}, nil
 }
 
 // OwnProcessGroup makes cmd the leader of a new process group, so

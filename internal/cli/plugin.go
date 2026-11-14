@@ -340,7 +340,7 @@ func askPluginPermissions(name string) error {
 			continue
 		}
 		allowed := feedback.Confirm(fmt.Sprintf("Allow %s %s?", name, q.allow(p)), false)
-		if err := plugins.SetPermission(name, perm, allowed); err != nil {
+		if err := plugins.AnswerAsShown(name, perm, allowed, plugins.Scope(p, perm)); err != nil {
 			return err
 		}
 		if !allowed {
