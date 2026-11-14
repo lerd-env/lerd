@@ -62,7 +62,7 @@ func NewPluginCmd() *cobra.Command {
 				return err
 			}
 			feedback.Done("Installed plugin " + p.Name)
-			return askPluginNotifications(p.Name)
+			return askPluginPermissions(p.Name)
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
@@ -115,6 +115,13 @@ func NewPluginCmd() *cobra.Command {
 			feedback.Done(fmt.Sprintf("Notifications from %s %s", args[0], args[1]))
 			return nil
 		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:       "schedule <name> [on|off]",
+		Short:     "Show a plugin's schedules, or allow or stop them",
+		Args:      cobra.RangeArgs(1, 2),
+		ValidArgs: []string{"on", "off"},
+		RunE:      runPluginSchedule,
 	})
 	cmd.AddCommand(siteSwitchCommand("page", "Switch a plugin's page script on or off for the site in this directory", "page script", "page_script", siteops.SetPagePlugin))
 	cmd.AddCommand(siteSwitchCommand("card", "Switch a plugin's card on or off on the Overview of the site in this directory", "overview card", "overview_card", siteops.SetOverviewCard))
@@ -198,7 +205,7 @@ func runPluginUpdate(_ *cobra.Command, args []string) error {
 			return err
 		}
 		feedback.Done("Updated plugin " + name)
-		if err := askPluginNotifications(name); err != nil {
+		if err := askPluginPermissions(name); err != nil {
 			return err
 		}
 	}
@@ -315,26 +322,128 @@ func siteSwitchCommand(use, short, what, kind string, set func(*config.Site, str
 	}
 }
 
-// askPluginNotifications asks once whether a plugin may send notifications; an
-// earlier answer holds. Without a terminal nothing is assumed, it stays pending
-// and the dashboard asks next.
-func askPluginNotifications(name string) error {
+// askPluginPermissions asks once about each permission the plugin asks for;
+// an earlier answer holds. Without a terminal nothing is assumed, each stays
+// pending and the dashboard asks next.
+func askPluginPermissions(name string) error {
 	p, err := plugins.Find(name)
-	if err != nil || plugins.NotificationState(p) != plugins.NotificationsPending {
+	if err != nil {
 		return nil
 	}
-	if !isInteractive() {
-		feedback.Note(fmt.Sprintf("%s asks to send you notifications. Allow it with `lerd plugin notifications %s on`.", name, name))
-		return nil
-	}
-	allowed := feedback.Confirm(fmt.Sprintf("Allow %s to send you notifications?", name), false)
-	if err := plugins.SetNotifications(name, allowed); err != nil {
-		return err
-	}
-	if !allowed {
-		feedback.Note(fmt.Sprintf("Change it any time with `lerd plugin notifications %s on`.", name))
+	for _, perm := range plugins.Permissions {
+		if plugins.PermissionState(p, perm) != plugins.PermissionPending {
+			continue
+		}
+		q := permissionQuestions[perm]
+		if !isInteractive() {
+			feedback.Note(fmt.Sprintf("%s asks %s. Allow it with `lerd plugin %s %s on`.", name, q.asks(p), q.command, name))
+			continue
+		}
+		allowed := feedback.Confirm(fmt.Sprintf("Allow %s %s?", name, q.allow(p)), false)
+		if err := plugins.AnswerAsShown(name, perm, allowed, plugins.Scope(p, perm)); err != nil {
+			return err
+		}
+		if !allowed {
+			feedback.Note(fmt.Sprintf("Change it any time with `lerd plugin %s %s on`.", q.command, name))
+		}
 	}
 	return nil
+}
+
+type permissionQuestion struct {
+	command     string
+	asks, allow func(*plugins.Plugin) string
+}
+
+var permissionQuestions = map[string]permissionQuestion{
+	plugins.PermissionNotifications: {
+		command: "notifications",
+		asks:    func(*plugins.Plugin) string { return "to send you notifications" },
+		allow:   func(*plugins.Plugin) string { return "to send you notifications" },
+	},
+	plugins.PermissionSchedule: {
+		command: "schedule",
+		asks:    func(p *plugins.Plugin) string { return "to run on a schedule (" + scheduleSummary(p) + ")" },
+		allow:   func(p *plugins.Plugin) string { return "to run on its own, " + scheduleSummary(p) },
+	},
+}
+
+// scheduleSummary names what runs and how often, like "sweep every 1h".
+func scheduleSummary(p *plugins.Plugin) string {
+	parts := make([]string, 0, len(p.Schedules))
+	for _, s := range p.Schedules {
+		parts = append(parts, s.Name+" every "+s.Every)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// runPluginSchedule shows a plugin's schedules, or allows or stops them.
+func runPluginSchedule(_ *cobra.Command, args []string) error {
+	name := args[0]
+	if len(args) == 2 {
+		if args[1] != "on" && args[1] != "off" {
+			return fmt.Errorf("expected on or off, got %q", args[1])
+		}
+		if err := plugins.SetPermission(name, plugins.PermissionSchedule, args[1] == "on"); err != nil {
+			return err
+		}
+		feedback.Done(fmt.Sprintf("Schedules of %s %s", name, args[1]))
+		return nil
+	}
+	p, err := plugins.Find(name)
+	if err != nil {
+		return err
+	}
+	if len(p.Schedules) == 0 {
+		feedback.Note(name + " has no schedules.")
+		return nil
+	}
+	now := time.Now()
+	var rows [][]string
+	for _, s := range plugins.ScheduleStatuses(p) {
+		rows = append(rows, scheduleRow(s, now))
+	}
+	feedback.Table([]string{"Schedule", "Every", "Last run", "Next run", "Status"}, rows)
+	switch plugins.PermissionState(p, plugins.PermissionSchedule) {
+	case plugins.PermissionAllowed:
+		feedback.Note("Allowed. Stop it with `lerd plugin schedule " + name + " off`.")
+	case plugins.PermissionDenied:
+		feedback.Note("Not allowed, so nothing runs. Allow it with `lerd plugin schedule " + name + " on`.")
+	default:
+		feedback.Note("Waiting for your answer, so nothing runs. Allow it with `lerd plugin schedule " + name + " on`.")
+	}
+	return nil
+}
+
+// scheduleRow is one schedule as `lerd plugin schedule` lists it. A run due
+// already, or one that never ran, goes at lerd-ui's next tick.
+func scheduleRow(s plugins.ScheduleStatus, now time.Time) []string {
+	last, next := "never", "within a minute"
+	if !s.LastRun.IsZero() {
+		last = clockTime(s.LastRun, now)
+	}
+	if !s.NextRun.IsZero() && !s.NextRun.Before(now) {
+		next = clockTime(s.NextRun, now)
+	}
+	status := "waiting"
+	switch {
+	case s.Running:
+		status = "running"
+	case s.LastError != "":
+		status = "failed: " + strings.SplitN(s.LastError, "\n", 2)[0]
+	case !s.LastRun.IsZero():
+		status = "ok"
+	}
+	return []string{s.Name, s.Every, last, next, status}
+}
+
+// clockTime is the time of day for today, with the date for any other day.
+func clockTime(t, now time.Time) string {
+	t = t.In(now.Location())
+	if y, m, d := t.Date(); y == now.Year() && m == now.Month() && d == now.Day() {
+		return t.Format("15:04")
+	}
+	return t.Format("Jan 2 15:04")
 }
 
 // uiSocketPath is where a running lerd-ui listens; swapped out in tests.

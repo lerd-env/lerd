@@ -435,6 +435,12 @@ type managedPlugin struct {
 	// Notifications is none, pending, allowed or denied; pending is the
 	// dashboard's cue to ask.
 	Notifications string `json:"notifications,omitempty"`
+	// Schedule is where it stands on running on a schedule, the same four
+	// states, and Schedules what it would run and how the last runs went.
+	Schedule  string                   `json:"schedule,omitempty"`
+	Schedules []plugins.ScheduleStatus `json:"schedules,omitempty"`
+	// ScheduleScope is what an answer covers, sent back with it.
+	ScheduleScope string `json:"schedule_scope,omitempty"`
 }
 
 type pluginFailure struct {
@@ -517,20 +523,24 @@ func handlePluginManager(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, map[string]bool{"ok": true})
-	case r.Method == http.MethodPost && strings.HasSuffix(name, "/notifications"):
+	case r.Method == http.MethodPost && permissionOf(name) != "":
 		// The answer is the user's: a plugin's own token never gives it.
 		if r.Header.Get(plugins.TokenHeader) != "" {
 			http.Error(w, "a plugin cannot answer for the user", http.StatusForbidden)
 			return
 		}
+		// Scope is what the question showed, so a plugin that changed while it
+		// was open is not approved unseen.
 		var req struct {
-			Allowed bool `json:"allowed"`
+			Allowed bool   `json:"allowed"`
+			Scope   string `json:"scope"`
 		}
-		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<10)).Decode(&req); err != nil {
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&req); err != nil {
 			http.Error(w, "invalid body", http.StatusBadRequest)
 			return
 		}
-		if err := plugins.SetNotifications(strings.TrimSuffix(name, "/notifications"), req.Allowed); err != nil {
+		perm := permissionOf(name)
+		if err := plugins.AnswerAsShown(strings.TrimSuffix(name, "/"+perm), perm, req.Allowed, req.Scope); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -577,12 +587,28 @@ func handlePluginManager(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// permissionOf is the permission a /api/plugin-manager/<name>/<permission>
+// path answers, or empty for any other path.
+func permissionOf(path string) string {
+	for _, perm := range plugins.Permissions {
+		if strings.HasSuffix(path, "/"+perm) {
+			return perm
+		}
+	}
+	return ""
+}
+
 func managedPlugins() []managedPlugin {
 	list, errs := plugins.Load()
 	out := make([]managedPlugin, 0, len(list)+len(errs))
 	for _, p := range list {
 		row := managedPlugin{Name: p.Name, Version: p.Version, Description: p.Description, Adds: p.Surfaces(), Requires: p.Requirements(), Failure: failureFor(p.Name),
-			Features: p.Features(), HasDocs: p.Docs != "", Notifications: plugins.NotificationState(p)}
+			Features: p.Features(), HasDocs: p.Docs != "", Notifications: plugins.NotificationState(p),
+			Schedule: plugins.PermissionState(p, plugins.PermissionSchedule)}
+		if len(p.Schedules) > 0 {
+			row.Schedules = plugins.ScheduleStatuses(p)
+			row.ScheduleScope = plugins.Scope(p, plugins.PermissionSchedule)
+		}
 		for _, rel := range p.Screenshots {
 			row.Screenshots = append(row.Screenshots, pluginFileURL(p.Name, rel))
 		}

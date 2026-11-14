@@ -47,6 +47,8 @@ mcp:
 api:                        # /api/plugins/notes/list
   - {path: list, methods: [GET], run: bin/list}
   - {path: wipe, methods: [POST], run: bin/wipe, loopback_only: true}
+schedules:                  # runs on its own once the user allows it
+  - {name: tidy, every: 1h, run: bin/tidy}
 requires: [jq]              # commands the scripts call beyond their interpreters
 ui:                         # only ui/ is served
   page: {title: Notes, icon: ui/icon.svg, entry: ui/index.html}
@@ -59,13 +61,15 @@ Events: `site.linked`, `site.unlinked`, `site.secured`, `site.php_changed`, `wor
 
 A command or site command that ends the way a tool did can list the exits that are the tool's answer, such as `expected_exits: [101]` for `cargo check` finding code that does not compile. They reach the user as usual but are not recorded as the plugin failing; any other non-zero exit still is.
 
-Time limits: hooks and API 30s, MCP tools 2m, site commands 30m, CLI none. `timeout:` raises one entry up to 10m (API, MCP) or 1h (site commands).
+Time limits: hooks and API 30s, MCP tools 2m, schedules 5m, site commands 30m, CLI none. `timeout:` raises one entry up to 10m (API, MCP, schedules) or 1h (site commands).
+
+For work no event marks, declare `schedules` rather than installing a cron job, systemd timer or launchd agent, which a plugin must never write. `every` is at least `1m`. lerd's dashboard service runs each one with `LERD_SCHEDULE` set, but only after the user allows the plugin to run on a schedule, which lerd asks at install and again whenever an update adds a schedule or changes one's interval or executable; `lerd plugin schedule <name>` shows when each last ran. To let the user pick how often, declare the shortest interval you offer and skip the runs you do not need, reading the setting from the data folder.
 
 ## What an executable gets
 
 | | |
 |---|---|
-| `LERD_SURFACE` | `cli`, `site_command`, `hook`, `mcp` or `api` |
+| `LERD_SURFACE` | `cli`, `site_command`, `hook`, `mcp`, `api` or `schedule` |
 | `LERD_PLUGIN_NAME`, `LERD_PLUGIN_DIR` | the plugin and its folder |
 | `LERD_PLUGIN_DATA` | its writable folder, kept across reinstalls; write nowhere else |
 | `LERD_SITE`, `LERD_SITE_PATH`, `LERD_DOMAIN`, `LERD_BRANCH` | the site, when the surface has one |
@@ -102,6 +106,7 @@ To tell the user something, such as a command to run, declare `notifications: tr
 - MCP tools: call them; lerd lists them as `<name>_<tool>` once the plugin loads, though the client may need its tool list refreshed.
 - API: `curl -fsS http://127.0.0.1:7073/api/plugins/<name>/<path>?site=<site>`.
 - Hooks: cause the event (`lerd service start <svc>`, `lerd link`) and read `hooks.log` in the data folder.
+- Schedules: `lerd plugin schedule <name> on`, wait for the next minute, then read `schedule.log` in the data folder and `lerd plugin schedule <name>`.
 - Pages, tabs and cards: open the dashboard and check the frame shows real data with no console errors; for a card, `lerd plugin card <name> on` in the project first; for a page script, `lerd plugin page <name> on` and load the site.
 - Failures from any surface show on the plugin's card on the dashboard's Plugins page and in `plugin` `list`.
 

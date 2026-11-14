@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"gopkg.in/yaml.v3"
@@ -54,6 +55,19 @@ type Manifest struct {
 	// Notifications says the plugin may tell the user something through lerd's
 	// notifications, which it can only do once the user has allowed it.
 	Notifications bool `yaml:"notifications,omitempty" json:"notifications,omitempty"`
+	// Schedules run on their own, every so often, once the user has allowed
+	// the plugin to run on a schedule.
+	Schedules []Schedule `yaml:"schedules,omitempty" json:"schedules,omitempty"`
+}
+
+// Schedule is an executable lerd runs every Every while the dashboard's
+// service is up.
+type Schedule struct {
+	Name  string `yaml:"name" json:"name"`
+	Every string `yaml:"every" json:"every"`
+	Run   string `yaml:"run" json:"run"`
+	// Timeout raises ScheduleLimit for this schedule, up to ten minutes.
+	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
 }
 
 // Command is a CLI command, invoked as `lerd <plugin>:<name>`.
@@ -215,6 +229,9 @@ func (p *Plugin) validate() error {
 	if err := p.validateAPI(); err != nil {
 		return err
 	}
+	if err := p.validateSchedules(); err != nil {
+		return err
+	}
 	for job, run := range p.Provides {
 		if !jobs[job] {
 			return fmt.Errorf("provides unknown job %q", job)
@@ -312,6 +329,29 @@ func (p *Plugin) validateAPI() error {
 	return nil
 }
 
+func (p *Plugin) validateSchedules() error {
+	seen := map[string]bool{}
+	for _, s := range p.Schedules {
+		if err := p.checkNamed("schedule", s.Name, s.Run, seen); err != nil {
+			return err
+		}
+		if s.Every == "" {
+			return fmt.Errorf("schedule %q needs every, like 15m or 1h", s.Name)
+		}
+		every, err := time.ParseDuration(s.Every)
+		if err != nil {
+			return fmt.Errorf("schedule %q: every %q is not a duration like 15m or 1h", s.Name, s.Every)
+		}
+		if every < minScheduleEvery {
+			return fmt.Errorf("schedule %q: every %s is shorter than %s", s.Name, s.Every, minScheduleEvery)
+		}
+		if err := checkLimit(s.Timeout, maxEntryLimit); err != nil {
+			return fmt.Errorf("schedule %q: %w", s.Name, err)
+		}
+	}
+	return nil
+}
+
 func (p *Plugin) validatePage(page *UIPage) error {
 	if page == nil {
 		return nil
@@ -362,6 +402,7 @@ func (p *Plugin) Surfaces() []string {
 	add("services", p.ships(config.PluginServices))
 	add("frameworks", p.ships(config.PluginFrameworks))
 	add("notifications", p.Notifications)
+	add("schedules", len(p.Schedules) > 0)
 	return out
 }
 

@@ -137,6 +137,21 @@ export interface ManagedPlugin {
   revoked?: PluginRevocation;
   // Whether it may send notifications: pending until the user answers.
   notifications?: 'none' | 'pending' | 'allowed' | 'denied';
+  // Whether it may run on a schedule, the same way, and each schedule with
+  // how its last run went.
+  schedule?: 'none' | 'pending' | 'allowed' | 'denied';
+  schedules?: PluginSchedule[];
+  // What an answer about its schedules covers, sent back with the answer.
+  schedule_scope?: string;
+}
+
+export interface PluginSchedule {
+  name: string;
+  every: string;
+  last_run?: string;
+  last_error?: string;
+  next_run?: string;
+  running?: boolean;
 }
 
 export interface PluginFeature {
@@ -238,6 +253,16 @@ export async function setPluginNotifications(name: string, allowed: boolean): Pr
   return mutate('/api/plugin-manager/' + encodeURIComponent(name) + '/notifications', {
     method: 'POST',
     body: JSON.stringify({ allowed }),
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
+
+// setPluginSchedule records whether a plugin may run on the schedules the user
+// was shown, scope naming them; lerd refuses it if they have changed since.
+export async function setPluginSchedule(name: string, allowed: boolean, scope: string): Promise<string> {
+  return mutate('/api/plugin-manager/' + encodeURIComponent(name) + '/schedule', {
+    method: 'POST',
+    body: JSON.stringify({ allowed, scope }),
     headers: { 'Content-Type': 'application/json' }
   });
 }

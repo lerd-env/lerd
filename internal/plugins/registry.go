@@ -20,6 +20,7 @@ const (
 	SurfaceHook        = "hook"
 	SurfaceMCP         = "mcp"
 	SurfaceAPI         = "api"
+	SurfaceSchedule    = "schedule"
 )
 
 // Dir is where plugins are installed, one directory each.

@@ -221,6 +221,57 @@ it('does not ask about a plugin whose notifications were already answered', asyn
   expect(queryByRole('dialog')).toBeNull();
 });
 
+// Running on a schedule is asked about the same way, naming what would run.
+it('asks whether a plugin may run on a schedule and records the answer', async () => {
+  installed = [{ name: 'hello', schedule: 'pending', schedules: [{ name: 'sweep', every: '1h' }], schedule_scope: 'sweep 1h bin/sweep' }];
+  const plain = globalThis.fetch;
+  globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+    if (String(url).endsWith('/api/plugin-manager/hello/schedule')) {
+      calls.push({ method: 'POST', url: String(url), body: init?.body as string });
+      installed = [{ name: 'hello', schedule: 'denied', schedules: [{ name: 'sweep', every: '1h' }] }];
+      return new Response('{"ok":true}');
+    }
+    return plain(url, init);
+  }) as unknown as typeof fetch;
+
+  const { findByRole, queryByRole } = render(PluginsDetail);
+  const ask = within(await findByRole('dialog'));
+  expect(ask.getByText(/hello asks to run on its own: sweep every 1h/)).toBeTruthy();
+  await fireEvent.click(ask.getByRole('button', { name: "Don't allow" }));
+  await waitFor(() => expect(queryByRole('dialog')).toBeNull());
+  const answer = calls.find((c) => c.url.endsWith('/hello/schedule'));
+  expect(JSON.parse(answer?.body ?? '{}')).toEqual({ allowed: false, scope: 'sweep 1h bin/sweep' });
+});
+
+// The card lists each schedule with how its last run went, beside the switch.
+it('shows a plugin\'s schedules on its card and switches them', async () => {
+  installed = [{ name: 'hello', schedule: 'allowed', schedules: [
+    { name: 'sweep', every: '1h', last_run: '2026-11-14T10:00:00Z', next_run: '2026-11-14T11:00:00Z' },
+    { name: 'report', every: '24h', last_run: '2026-11-14T09:00:00Z', last_error: 'boom\nexit status 2' },
+    { name: 'fresh', every: '15m' }
+  ], schedule_scope: 'fresh 15m bin/x' }];
+  const plain = globalThis.fetch;
+  globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+    if (String(url).endsWith('/api/plugin-manager/hello/schedule')) {
+      calls.push({ method: 'POST', url: String(url), body: init?.body as string });
+      return new Response('{"ok":true}');
+    }
+    return plain(url, init);
+  }) as unknown as typeof fetch;
+
+  const { findByText, getByRole } = render(PluginsDetail);
+  await fireEvent.click(await findByText('hello'));
+  const dialog = within(getByRole('dialog'));
+  expect(dialog.getByText('sweep')).toBeTruthy();
+  expect(dialog.getByText('every 1h')).toBeTruthy();
+  expect(dialog.getByText('failed: boom')).toBeTruthy();
+  expect(dialog.getByText('not run yet')).toBeTruthy();
+  await fireEvent.click(dialog.getByTitle('Schedule'));
+  await waitFor(() => expect(calls.some((c) => c.url.endsWith('/hello/schedule'))).toBe(true));
+  const answer = calls.find((c) => c.url.endsWith('/hello/schedule'));
+  expect(JSON.parse(answer?.body ?? '{}')).toEqual({ allowed: false, scope: 'fresh 15m bin/x' });
+});
+
 // A refused keep leaves the plugin stopped, so the user has to hear why.
 it('reports a keep the server refused', async () => {
   installed = [{ name: 'bad', error: 'revoked', revoked: { name: 'bad', reason: 'x', at: '2026-10-24' } }];

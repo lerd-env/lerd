@@ -14,10 +14,14 @@ const (
 	APILimit         = 30 * time.Second
 	MCPLimit         = 2 * time.Minute
 	SiteCommandLimit = 30 * time.Minute
+	ScheduleLimit    = 5 * time.Minute
 
 	// An entry may ask for longer with timeout:, up to these.
 	maxSiteCommandLimit = time.Hour
 	maxEntryLimit       = 10 * time.Minute
+
+	// minScheduleEvery keeps a schedule from turning into a busy loop.
+	minScheduleEvery = time.Minute
 )
 
 // hookLimit stops a hung hook from holding up the operation that fired it, and
@@ -30,6 +34,10 @@ var (
 func (c SiteCommand) Limit() time.Duration { return limitOr(c.Timeout, SiteCommandLimit) }
 func (t MCPTool) Limit() time.Duration     { return limitOr(t.Timeout, MCPLimit) }
 func (e Endpoint) Limit() time.Duration    { return limitOr(e.Timeout, APILimit) }
+func (s Schedule) Limit() time.Duration    { return limitOr(s.Timeout, ScheduleLimit) }
+
+// Interval is how often the schedule runs; validation made sure it parses.
+func (s Schedule) Interval() time.Duration { d, _ := time.ParseDuration(s.Every); return d }
 
 func limitOr(raw string, def time.Duration) time.Duration {
 	if d, err := time.ParseDuration(raw); err == nil && d > 0 {
@@ -61,22 +69,34 @@ func checkLimit(raw string, ceiling time.Duration) error {
 // started, once limit passes; the wait still gives up on a child that left the
 // group holding the output open.
 func RunWithin(cmd *exec.Cmd, limit time.Duration) error {
+	wait, err := startWithin(cmd, limit)
+	if err != nil {
+		return err
+	}
+	return wait()
+}
+
+// startWithin is RunWithin split at the start, for a caller that needs the
+// running process before it waits.
+func startWithin(cmd *exec.Cmd, limit time.Duration) (wait func() error, err error) {
 	cmd.WaitDelay = time.Second
 	OwnProcessGroup(cmd)
 	if err := cmd.Start(); err != nil {
-		return err
+		return nil, err
 	}
 	var timedOut atomic.Bool
 	timer := time.AfterFunc(limit, func() {
 		timedOut.Store(true)
 		KillProcessGroup(cmd)
 	})
-	err := cmd.Wait()
-	timer.Stop()
-	if timedOut.Load() {
-		return fmt.Errorf("timed out after %s", limit)
-	}
-	return err
+	return func() error {
+		err := cmd.Wait()
+		timer.Stop()
+		if timedOut.Load() {
+			return fmt.Errorf("timed out after %s", limit)
+		}
+		return err
+	}, nil
 }
 
 // OwnProcessGroup makes cmd the leader of a new process group, so

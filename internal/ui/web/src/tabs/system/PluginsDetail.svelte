@@ -11,7 +11,7 @@
   import PluginDetailModal from './PluginDetailModal.svelte';
   import PluginsEmpty from './PluginsEmpty.svelte';
   import ServiceCardShell from '$components/ServiceCardShell.svelte';
-  import { managedPlugins, loadManagedPlugins, installPlugin, removePlugin, updatePlugin, setPluginNotifications, keepRevokedPlugin } from '$stores/plugins';
+  import { managedPlugins, loadManagedPlugins, installPlugin, removePlugin, updatePlugin, setPluginNotifications, setPluginSchedule, keepRevokedPlugin } from '$stores/plugins';
   import { routeRest, goToTab } from '$stores/route';
   import { notifyLocalFailure, notifyLocalInfo } from '$lib/notify';
   import { apiUrl } from '$lib/api';
@@ -26,19 +26,29 @@
   let updating = $state('');
   let confirmName = $state('');
 
-  // A plugin that asks to send notifications sends none until the user answers.
-  // Install and update land here pending, from this page or the terminal, so
-  // the question comes once whichever way it arrived; closing it asks again later.
+  // A plugin asking for notifications or a schedule gets neither until the user
+  // answers. Installs and updates from here or the terminal land pending, so each
+  // question comes once whichever way it arrived; closing one asks again later.
+  type Permission = 'notifications' | 'schedule';
   let notLater = $state<string[]>([]);
-  const asking = $derived($managedPlugins.find((p) => p.notifications === 'pending' && !notLater.includes(p.name)));
+  const asking = $derived.by(() => {
+    for (const p of $managedPlugins) {
+      for (const perm of ['notifications', 'schedule'] as Permission[]) {
+        if (p[perm] === 'pending' && !notLater.includes(p.name + '/' + perm)) return { p, perm };
+      }
+    }
+    return undefined;
+  });
   let answering = $state(false);
-  async function answerNotifications(name: string, allowed: boolean) {
+  // scope is what the question showed, for schedules the list of them.
+  async function answer(name: string, perm: Permission, allowed: boolean, scope = '') {
+    const title = perm === 'schedule' ? m.system_plugins_schedule() : m.system_plugins_notifications();
     answering = true;
     try {
-      const err = await setPluginNotifications(name, allowed);
-      if (err) notifyLocalFailure('plugin_notifications', m.system_plugins_notifications(), err);
+      const err = perm === 'schedule' ? await setPluginSchedule(name, allowed, scope) : await setPluginNotifications(name, allowed);
+      if (err) notifyLocalFailure('plugin_' + perm, title, err);
     } catch (e) {
-      notifyLocalFailure('plugin_notifications', m.system_plugins_notifications(), String(e));
+      notifyLocalFailure('plugin_' + perm, title, String(e));
     } finally {
       answering = false;
     }
@@ -181,7 +191,10 @@
     features={p.features}
     hasDocs={p.has_docs}
     notifications={p.notifications}
-    onnotifications={(allowed) => answerNotifications(p.name, allowed)}
+    onnotifications={(allowed) => answer(p.name, 'notifications', allowed)}
+    schedule={p.schedule}
+    schedules={p.schedules}
+    onschedule={(allowed) => answer(p.name, 'schedule', allowed, p.schedule_scope)}
     onclose={() => (openName = '')}
   >
     {#snippet actions()}
@@ -201,12 +214,15 @@
 {/if}
 
 {#if asking}
-  {@const name = asking.name}
-  <Modal open title={m.system_plugins_notifyAskTitle({ name })} onclose={() => (notLater = [...notLater, name])}>
-    <p class="px-5 py-4 text-sm text-gray-700 dark:text-gray-300">{m.system_plugins_notifyAskBody({ name })}</p>
+  {@const name = asking.p.name}
+  {@const perm = asking.perm}
+  {@const scope = perm === 'schedule' ? asking.p.schedule_scope : ''}
+  {@const list = (asking.p.schedules ?? []).map((s) => s.name + ' ' + m.system_plugins_scheduleEvery({ every: s.every })).join(', ')}
+  <Modal open title={perm === 'schedule' ? m.system_plugins_scheduleAskTitle({ name }) : m.system_plugins_notifyAskTitle({ name })} onclose={() => (notLater = [...notLater, name + '/' + perm])}>
+    <p class="px-5 py-4 text-sm text-gray-700 dark:text-gray-300">{perm === 'schedule' ? m.system_plugins_scheduleAskBody({ name, list }) : m.system_plugins_notifyAskBody({ name })}</p>
     {#snippet footer()}
-      <DetailButton onclick={() => answerNotifications(name, false)} disabled={answering}>{m.system_plugins_notifyDeny()}</DetailButton>
-      <DetailButton tone="primary" onclick={() => answerNotifications(name, true)} loading={answering} disabled={answering}>{m.system_plugins_notifyAllow()}</DetailButton>
+      <DetailButton onclick={() => answer(name, perm, false, scope)} disabled={answering}>{m.system_plugins_notifyDeny()}</DetailButton>
+      <DetailButton tone="primary" onclick={() => answer(name, perm, true, scope)} loading={answering} disabled={answering}>{m.system_plugins_notifyAllow()}</DetailButton>
     {/snippet}
   </Modal>
 {/if}
