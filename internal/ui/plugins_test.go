@@ -487,6 +487,64 @@ func TestPagePlugins_ListsAndRefusesWithoutAuthority(t *testing.T) {
 	}
 }
 
+// installDBTabPlugin adds a plugin whose tab shows only on sites with a database.
+func installDBTabPlugin(t *testing.T) {
+	t.Helper()
+	dir := filepath.Join(plugins.Dir(), "dbtab")
+	if err := os.MkdirAll(filepath.Join(dir, "ui"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := "api_version: 1\nname: dbtab\nui:\n  site_tab: {title: Data, entry: ui/site.html, when: database}\n"
+	if err := os.WriteFile(filepath.Join(dir, plugins.ManifestFile), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ui", "site.html"), []byte("<p>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A tab that asks for a database reaches the dashboard with its condition, and
+// the site's plugin menu offers its switch only where the tab can show.
+func TestPagePlugins_TabWhenDatabase(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	installDBTabPlugin(t)
+
+	rec := httptest.NewRecorder()
+	handlePluginsList(rec, localRequest(http.MethodGet, "/api/plugins", ""))
+	var listed []pluginInfo
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("%v: %s", err, rec.Body)
+	}
+	if len(listed) != 1 || listed[0].SiteTab == nil || listed[0].SiteTab.When != "database" {
+		t.Fatalf("plugins list = %+v, want dbtab's tab with when database", listed)
+	}
+
+	withDB := t.TempDir()
+	if err := os.WriteFile(filepath.Join(withDB, ".lerd.yaml"), []byte("db:\n  service: postgres\n  database: shop\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []config.Site{
+		{Name: "shop", Domains: []string{"shop.test"}, Path: withDB},
+		{Name: "static", Domains: []string{"static.test"}, Path: t.TempDir()},
+	} {
+		if err := config.AddSite(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for site, want := range map[string]int{"shop.test": 1, "static.test": 0} {
+		rec := httptest.NewRecorder()
+		handlePagePlugins(rec, localRequest(http.MethodGet, "/api/page-plugins?site="+site, ""))
+		var got []pagePlugin
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("%v: %s", err, rec.Body)
+		}
+		if len(got) != want {
+			t.Errorf("%s menu = %+v, want %d switches", site, got, want)
+		}
+	}
+}
+
 // serveCatalog points the catalog at a test server listing the given entries.
 func serveCatalog(t *testing.T, listings ...plugins.Listing) {
 	t.Helper()

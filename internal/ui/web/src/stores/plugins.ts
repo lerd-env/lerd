@@ -6,6 +6,8 @@ export interface PluginPage {
   title: string;
   url: string;
   icon?: string;
+  // A site tab's condition: 'database' shows it only on sites with one.
+  when?: string;
 }
 
 export interface PluginInfo {

@@ -52,7 +52,7 @@ schedules:                  # runs on its own once the user allows it
 requires: [jq]              # commands the scripts call beyond their interpreters
 ui:                         # only ui/ is served
   page: {title: Notes, icon: ui/icon.svg, entry: ui/index.html}
-  site_tab: {title: Notes, entry: ui/site.html}
+  site_tab: {title: Notes, entry: ui/site.html}   # add when: database to show it only on sites with one
   overview_card: {title: Notes, entry: ui/card.html}
   page_script: ui/page.js
 ```
@@ -82,7 +82,7 @@ For work no event marks, declare `schedules` rather than installing a cron job, 
 - API endpoints: the body on stdin, `LERD_METHOD`, `LERD_QUERY`; a `site` query parameter hands over the site. Exit 0 answers 200 with stdout (as JSON when it parses), anything else 500 with stderr.
 - Hooks: `LERD_EVENT` and the payload, as JSON on stdin and as `LERD_<KEY>`. Output goes to `hooks.log` in the data folder and never fails the operation.
 
-`curl -fsS -H "X-Lerd-Plugin-Token: $LERD_API_TOKEN" "$LERD_API_URL/api/sites"` lists the sites; `/api/services`, `/api/status`, `/api/stats` and `/api/disk` are the dashboard's own data.
+`curl -fsS -H "X-Lerd-Plugin-Token: $LERD_API_TOKEN" "$LERD_API_URL/api/sites"` lists the sites, each with `has_database` and its `databases` as `{service, database}` pairs to pass to `lerd db:shell --service= --database=`; `/api/services`, `/api/status`, `/api/stats` and `/api/disk` are the dashboard's own data.
 
 To tell the user something, such as a command to run, declare `notifications: true` in plugin.yaml, then POST `{"title": "...", "body": "...", "url": "#sites/<site>", "tag": "..."}` to `$LERD_API_URL/api/notifications/plugin` with the token: only `title` is required (100 characters, `body` 300), `url` must start with `#`, a repeated `tag` replaces the earlier browser notification (desktop notifications show each), unknown fields are refused, and each plugin gets ten a minute. It reaches the user as a notification titled with the plugin's name, and only once they allowed it: lerd asks them at install, or at the update that adds the key, and answers `403` until then or after they switch it off, so treat a `403` as the user's choice and fall back to stderr. Never use it to report progress, and fall back to stderr when it fails, since older lerd answers 404.
 

@@ -139,6 +139,9 @@ type UIPage struct {
 	Title string `yaml:"title" json:"title"`
 	Icon  string `yaml:"icon,omitempty" json:"icon,omitempty"`
 	Entry string `yaml:"entry" json:"entry"`
+	// When limits a site tab to the sites it applies to: "database" shows it
+	// only on sites that point at a database. An older lerd shows it everywhere.
+	When string `yaml:"when,omitempty" json:"when,omitempty"`
 }
 
 // Plugin is a validated manifest and the directory it was read from.
@@ -250,6 +253,9 @@ func (p *Plugin) validate() error {
 		return err
 	}
 	if p.UI != nil {
+		if err := p.UI.validateWhen(); err != nil {
+			return err
+		}
 		for _, page := range []*UIPage{p.UI.Page, p.UI.SiteTab, p.UI.OverviewCard} {
 			if err := p.validatePage(page); err != nil {
 				return err
@@ -367,6 +373,22 @@ func (p *Plugin) validatePage(page *UIPage) error {
 		if err := p.checkUIFile(rel); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// siteTabConditions are the values a site tab's when accepts. A value from a
+// newer lerd is refused by name rather than read as "always".
+var siteTabConditions = map[string]bool{"": true, "database": true}
+
+func (u *UI) validateWhen() error {
+	for _, page := range []*UIPage{u.Page, u.OverviewCard} {
+		if page != nil && page.When != "" {
+			return fmt.Errorf("ui page %q sets when, which only a site tab takes", page.Entry)
+		}
+	}
+	if u.SiteTab != nil && !siteTabConditions[u.SiteTab.When] {
+		return fmt.Errorf("site_tab when %q is not one this lerd knows; use database", u.SiteTab.When)
 	}
 	return nil
 }

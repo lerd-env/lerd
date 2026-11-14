@@ -1089,6 +1089,10 @@ type SiteResponse struct {
 	OverviewCards []string `json:"overview_cards,omitempty"`
 	// HiddenTabs are the plugins whose tab the site hides, sent the same way.
 	HiddenTabs []string `json:"hidden_tabs,omitempty"`
+	// HasDatabase drops the tabs of plugins that show only on sites with one.
+	HasDatabase bool `json:"has_database,omitempty"`
+	// Databases are the server databases the site points at, for plugins.
+	Databases []siteDatabase `json:"databases,omitempty"`
 	// DeclaredServices are the Services listed in .lerd.yaml, which the site
 	// overview offers to remove.
 	DeclaredServices []string `json:"declared_services,omitempty"`
@@ -1375,20 +1379,23 @@ func buildSites() ([]SiteResponse, error) {
 			ExternalDB:           e.ExternalDB,
 			OverviewCards:        e.OverviewCards,
 			HiddenTabs:           e.HiddenTabs,
-			DeclaredServices:     e.DeclaredServices,
-			SuggestedServices:    e.SuggestedServices,
-			DBDatabase:           envfile.ReadKey(filepath.Join(e.Path, ".env"), "DB_DATABASE"),
-			LANPort:              e.LANPort,
-			LANShareURL:          cli.LANShareURL(e.LANPort),
-			PublicShared:         cli.PublicShareRunning(e.Name),
-			PublicShareURL:       config.PublicShareURL(config.PublicShareHost(e.Name, publicBase)),
-			TunnelURL:            tunnel.URL,
-			TunnelTool:           tunnel.Tool,
-			TunnelExternal:       tunnel.External,
-			CustomContainer:      e.ContainerPort > 0,
-			ContainerPort:        e.ContainerPort,
-			ContainerImage:       e.ContainerImage,
-			Runtime:              reportedRuntime(e.Runtime, nativeRuntime, e.ContainerPort, e.HostPort),
+			HasDatabase:          e.HasDatabase,
+			Databases:            siteDatabases(e.Databases),
+
+			DeclaredServices:  e.DeclaredServices,
+			SuggestedServices: e.SuggestedServices,
+			DBDatabase:        envfile.ReadKey(filepath.Join(e.Path, ".env"), "DB_DATABASE"),
+			LANPort:           e.LANPort,
+			LANShareURL:       cli.LANShareURL(e.LANPort),
+			PublicShared:      cli.PublicShareRunning(e.Name),
+			PublicShareURL:    config.PublicShareURL(config.PublicShareHost(e.Name, publicBase)),
+			TunnelURL:         tunnel.URL,
+			TunnelTool:        tunnel.Tool,
+			TunnelExternal:    tunnel.External,
+			CustomContainer:   e.ContainerPort > 0,
+			ContainerPort:     e.ContainerPort,
+			ContainerImage:    e.ContainerImage,
+			Runtime:           reportedRuntime(e.Runtime, nativeRuntime, e.ContainerPort, e.HostPort),
 			PHPLogUnit: phpLogUnit(
 				config.Site{Name: e.Name, Runtime: e.Runtime, ContainerPort: e.ContainerPort, HostPort: e.HostPort},
 				e.PHPVersion,
@@ -7346,4 +7353,18 @@ func serviceRecordPlugin(svc *config.CustomService) string {
 		return ""
 	}
 	return svc.Plugin
+}
+
+// siteDatabase is one database a site points at, as the dashboard sends it.
+type siteDatabase struct {
+	Service  string `json:"service"`
+	Database string `json:"database"`
+}
+
+func siteDatabases(targets []config.DBTarget) []siteDatabase {
+	out := make([]siteDatabase, 0, len(targets))
+	for _, t := range targets {
+		out = append(out, siteDatabase{Service: t.Service, Database: t.Database})
+	}
+	return out
 }

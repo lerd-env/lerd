@@ -129,9 +129,12 @@ provides:                   # jobs the plugin takes over from lerd, see below
 ui:                         # files live under ui/, the only folder the dashboard serves
   page:     {title: Hello, icon: ui/icon.svg, entry: ui/index.html}
   site_tab: {title: Hello, entry: ui/site.html}
+  # site_tab: {title: Data, entry: ui/site.html, when: database}   # only on sites that point at a database
   overview_card: {title: Hello, entry: ui/card.html}   # on a site's Overview once switched on for that site
   page_script: ui/page.js   # runs on a site's pages once switched on for that site
 ```
+
+A site tab shows on every site unless `when` limits it. `when: database` shows it only on sites that point at a database: one a lerd service or an external server holds, a `db:` block in `.lerd.yaml`, or a SQLite file the site's framework detects. The site's plugin menu leaves out the switch for a tab that cannot show there. A lerd from before `when` ignores it and shows the tab everywhere, so a plugin that relies on it should still say something useful on a site without a database.
 
 A manifest written for a newer lerd still loads as long as its `api_version` is one this lerd knows: unknown keys are ignored. An unknown value in a known key, such as a hook for an event this lerd doesn't have, refuses the plugin with a message naming it.
 
@@ -283,6 +286,8 @@ curl -fsS -H "X-Lerd-Plugin-Token: $LERD_API_TOKEN" "$LERD_API_URL/api/sites"
 The token is the plugin's own: lerd derives it from the plugin's name and a secret only your user can read, so a call can be traced to the plugin that made it. For anything else, `$LERD_BIN` runs lerd's CLI.
 
 `/api/services` gives each service's `label`, the name the dashboard shows when its definition sets one (capitalize the `name` when it is absent), and its `domain` when lerd serves it on one, so a plugin listing services needs neither the dashboard's naming rules nor lerd's config files.
+
+`/api/sites` gives each site's `has_database` and `databases`, the server databases it points at as `{service, database}` pairs, read the way lerd's own database commands read them: the `db:` block of `.lerd.yaml` first, which gives none when it names only a service, then the framework's env file and any connection string aimed at a lerd engine. A site on SQLite has `has_database` and no `databases`. Pass a pair to `lerd db:shell --service=<service> --database=<database>` to open it.
 
 ### Telling the user something
 

@@ -37,6 +37,8 @@ type pluginPage struct {
 	Title string `json:"title"`
 	URL   string `json:"url"`
 	Icon  string `json:"icon,omitempty"`
+	// When is the site tab's condition, such as database.
+	When string `json:"when,omitempty"`
 }
 
 // handlePluginRevocations serves GET /api/plugin-revocations: the installed
@@ -70,7 +72,7 @@ func pluginPageInfo(name string, page *plugins.UIPage) *pluginPage {
 	if page == nil {
 		return nil
 	}
-	out := &pluginPage{Title: page.Title, URL: pluginFileURL(name, page.Entry)}
+	out := &pluginPage{Title: page.Title, URL: pluginFileURL(name, page.Entry), When: page.When}
 	if page.Icon != "" {
 		out.Icon = pluginFileURL(name, page.Icon)
 	}
@@ -395,7 +397,9 @@ func handlePagePlugins(w http.ResponseWriter, r *http.Request) {
 		if p.UI.OverviewCard != nil {
 			out = append(out, pagePlugin{Name: p.Name, Description: p.Description, Kind: kindOverviewCard, On: slices.Contains(site.OverviewCards, p.Name)})
 		}
-		if p.UI.SiteTab != nil {
+		// A tab that asks for a database never shows on a site without one, so
+		// it gets no switch there either.
+		if p.UI.SiteTab != nil && (p.UI.SiteTab.When != "database" || config.HasDatabase(site.Path)) {
 			out = append(out, pagePlugin{Name: p.Name, Description: p.Description, Kind: kindSiteTab, On: !slices.Contains(site.HiddenTabs, p.Name)})
 		}
 	}
