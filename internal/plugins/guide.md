@@ -52,7 +52,7 @@ schedules:                  # runs on its own once the user allows it
 requires: [jq]              # commands the scripts call beyond their interpreters
 ui:                         # only ui/ is served
   page: {title: Notes, icon: ui/icon.svg, entry: ui/index.html}
-  site_tab: {title: Notes, entry: ui/site.html}
+  site_tab: {title: Notes, entry: ui/site.html}   # add when: database to show it only on sites with one
   overview_card: {title: Notes, entry: ui/card.html}
   page_script: ui/page.js
 ```

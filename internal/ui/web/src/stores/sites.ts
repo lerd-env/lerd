@@ -72,6 +72,7 @@ export interface Site {
   // Plugins whose card the Overview shows; it arrives with every live update.
   overview_cards?: string[];
   hidden_tabs?: string[];
+  has_database?: boolean;
   declared_services?: string[];
   suggested_services?: ServiceSuggestion[];
   db_database?: string;

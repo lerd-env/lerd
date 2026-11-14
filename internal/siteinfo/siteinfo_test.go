@@ -246,6 +246,22 @@ func TestAppName_ProjectConfigWins(t *testing.T) {
 	}
 }
 
+func TestEnrich_SetsHasDatabase(t *testing.T) {
+	setDataDir(t)
+	stubPodman(t)
+
+	withDB := t.TempDir()
+	if err := os.WriteFile(filepath.Join(withDB, ".lerd.yaml"), []byte("db:\n  service: postgres\n  database: shop\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if !Enrich(config.Site{Name: "shop", Path: withDB}, 0).HasDatabase {
+		t.Error("a site with a database should say so")
+	}
+	if Enrich(config.Site{Name: "static", Path: t.TempDir()}, 0).HasDatabase {
+		t.Error("a site with no database should not claim one")
+	}
+}
+
 func TestEnrich_SetsAppNameFromProjectConfig(t *testing.T) {
 	setDataDir(t)
 	stubPodman(t)

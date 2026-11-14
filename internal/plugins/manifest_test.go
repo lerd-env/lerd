@@ -63,6 +63,8 @@ func TestReadManifest_Refusals(t *testing.T) {
 		{"ui entry outside ui/", "p", "api_version: 1\nname: p\nui:\n  page: {title: P, entry: bin/run}\n", "bin/run"},
 		{"overview card outside ui/", "p", "api_version: 1\nname: p\nui:\n  overview_card: {title: P, entry: bin/run}\n", "bin/run"},
 		{"overview card without a title", "p", "api_version: 1\nname: p\nui:\n  overview_card: {entry: ui/card.html}\n", "title"},
+		{"unknown site tab condition", "p", "api_version: 1\nname: p\nui:\n  site_tab: {title: P, entry: ui/site.html, when: deployed}\n", `"deployed"`},
+		{"condition on a rail page", "p", "api_version: 1\nname: p\nui:\n  page: {title: P, entry: ui/index.html, when: database}\n", "only a site tab"},
 		{"page script outside ui/", "p", "api_version: 1\nname: p\nui:\n  page_script: bin/run\n", "bin/run"},
 		{"expected exit 0", "p", "api_version: 1\nname: p\ncommands:\n  - {name: x, run: bin/run, expected_exits: [0]}\n", "expected exit 0"},
 		{"expected exit past 255", "p", "api_version: 1\nname: p\nsite_commands:\n  - {name: x, label: X, run: bin/run, expected_exits: [1, 256]}\n", "expected exit 256"},
@@ -78,6 +80,23 @@ func TestReadManifest_Refusals(t *testing.T) {
 				t.Errorf("error should name %q, got %v", c.want, err)
 			}
 		})
+	}
+}
+
+func TestReadManifest_SiteTabWhenDatabase(t *testing.T) {
+	dir := writePlugin(t, t.TempDir(), "p", "api_version: 1\nname: p\nui:\n  site_tab: {title: P, entry: ui/site.html, when: database}\n")
+	if err := os.MkdirAll(filepath.Join(dir, "ui"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ui", "site.html"), []byte("<p>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p, err := ReadPlugin(dir)
+	if err != nil {
+		t.Fatalf("a tab shown only on sites with a database should load: %v", err)
+	}
+	if p.UI.SiteTab.When != "database" {
+		t.Errorf("SiteTab.When = %q, want database", p.UI.SiteTab.When)
 	}
 }
 

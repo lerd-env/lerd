@@ -650,3 +650,21 @@ func dsnServiceHoldsDatabases(service string) bool {
 	}
 	return IsDBServiceName(service)
 }
+
+// HasDatabase reports whether a project points at a database of any kind: one a
+// lerd engine or an external server holds, the db block of its .lerd.yaml, or a
+// SQLite file its framework's own detect rules recognise.
+func HasDatabase(projectDir string) bool {
+	if len(DBTargetsFor(projectDir)) > 0 {
+		return true
+	}
+	if pc, err := LoadProjectConfig(projectDir); err == nil && pc.DB.Service != "" {
+		return true
+	}
+	fw := frameworkFor(projectDir)
+	if fw == nil || fw.Env.SQLite == nil {
+		return false
+	}
+	file, format := fw.Env.Resolve(projectDir)
+	return serviceDetectedIn(fw.Env.SQLite.Detect, envfile.Values(filepath.Join(projectDir, file), format))
+}

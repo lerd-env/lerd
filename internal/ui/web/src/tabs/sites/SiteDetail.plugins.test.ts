@@ -37,3 +37,18 @@ it('selects Overview in the tab row once the open plugin tab is hidden', async (
   expect(overview.getAttribute('aria-selected')).toBe('true');
   expect(overview.getAttribute('tabindex')).toBe('0');
 });
+
+// A plugin can ask for its tab only where it has something to show: a database
+// browser on a static site would be an empty tab.
+it('shows a tab that asks for a database only on sites that have one', async () => {
+  plugins.set([
+    { name: 'db-browser', site_tab: { title: 'Database', url: '/plugins/db-browser/ui/site.html', when: 'database' } },
+    { name: 'sync', site_tab: { title: 'Sync', url: '/plugins/sync/ui/tab.html' } }
+  ]);
+  const { findByRole, queryByRole, rerender } = render(SiteDetail, { props: { site: site() } });
+  await findByRole('tab', { name: 'Sync' });
+  expect(queryByRole('tab', { name: 'Database' })).toBeNull();
+
+  await rerender({ site: site({ has_database: true }) });
+  await findByRole('tab', { name: 'Database' });
+});

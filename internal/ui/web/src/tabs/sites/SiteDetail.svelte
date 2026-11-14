@@ -58,8 +58,12 @@
   const canLogs = $derived(siteHasLogSources(site));
   // A lone Overview tab can't be switched to anything, so don't render the tab
   // row at all when no other tab is available (e.g. static sites).
-  // Plugin tabs show on every site until hidden for this one.
-  const tabPlugins = $derived($siteTabPlugins.filter((p) => !(site.hidden_tabs ?? []).includes(p.name)));
+  // Plugin tabs show until hidden here; a `when: database` tab needs a database.
+  const tabPlugins = $derived(
+    $siteTabPlugins.filter(
+      (p) => !(site.hidden_tabs ?? []).includes(p.name) && (p.site_tab?.when !== 'database' || site.has_database)
+    )
+  );
   const hasExtraTabs = $derived(canLogs || canEnv || canTinker || canDumps || tabPlugins.length > 0);
   const activePlugin = $derived(tabPlugins.find((p) => active === `plugin:${p.name}`));
   // A tab whose plugin is gone, hidden or not loaded yet shows the overview,

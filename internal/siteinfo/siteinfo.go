@@ -176,6 +176,9 @@ type EnrichedSite struct {
 	OverviewCards []string
 	// HiddenTabs are the plugins whose tab the site hides.
 	HiddenTabs []string
+	// HasDatabase says the site points at a database, for plugin tabs shown
+	// only where there is one.
+	HasDatabase bool
 
 	// Git
 	Branch    string
@@ -340,6 +343,7 @@ func Enrich(s config.Site, flags EnrichFlag) EnrichedSite {
 		GroupSharedDB:         s.GroupSharedDB,
 		OverviewCards:         s.OverviewCards,
 		HiddenTabs:            s.HiddenTabs,
+		HasDatabase:           config.HasDatabase(s.Path),
 		IdleSuspendedWorkers:  s.IdleSuspendedWorkers,
 		WorktreeIdleSuspended: s.WorktreeIdleSuspended,
 		OriginalPHPVersion:    s.PHPVersion,
