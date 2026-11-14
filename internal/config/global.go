@@ -380,7 +380,15 @@ type GlobalConfig struct {
 		// plugin can write; an absent name has not been asked yet.
 		Plugins map[string]bool `yaml:"plugins,omitempty" mapstructure:"plugins"`
 	} `yaml:"notifications,omitempty" mapstructure:"notifications"`
-	Tray struct {
+	// PluginPermissions holds the user's answer to each permission a plugin
+	// asks for beyond notifications, by plugin and permission; an absent entry
+	// has not been asked yet.
+	PluginPermissions map[string]map[string]bool `yaml:"plugin_permissions,omitempty" mapstructure:"plugin_permissions"`
+	// PluginPermissionScopes records what each answer covered, such as the
+	// schedules a plugin asked to run, so an update that asks for more is asked
+	// again rather than inheriting the answer.
+	PluginPermissionScopes map[string]map[string]string `yaml:"plugin_permission_scopes,omitempty" mapstructure:"plugin_permission_scopes"`
+	Tray                   struct {
 		// HighContrastIcon swaps the running tray icon for a single green glyph
 		// that reads on any panel, instead of the light/dark swap that guesses
 		// wrong on mixed themes like KDE Breeze Twilight. Off by default so the
@@ -996,6 +1004,18 @@ func cloneGlobalConfig(in *GlobalConfig) *GlobalConfig {
 	// Both are written by toggles while requests read the cached copy.
 	out.Notifications.Kinds = maps.Clone(in.Notifications.Kinds)
 	out.Notifications.Plugins = maps.Clone(in.Notifications.Plugins)
+	if in.PluginPermissions != nil {
+		out.PluginPermissions = make(map[string]map[string]bool, len(in.PluginPermissions))
+		for name, perms := range in.PluginPermissions {
+			out.PluginPermissions[name] = maps.Clone(perms)
+		}
+	}
+	if in.PluginPermissionScopes != nil {
+		out.PluginPermissionScopes = make(map[string]map[string]string, len(in.PluginPermissionScopes))
+		for name, scopes := range in.PluginPermissionScopes {
+			out.PluginPermissionScopes[name] = maps.Clone(scopes)
+		}
+	}
 	if in.Workspaces != nil {
 		out.Workspaces = make([]Workspace, len(in.Workspaces))
 		for i, w := range in.Workspaces {
@@ -1372,6 +1392,39 @@ func (c *GlobalConfig) SetPluginNotifications(name string, allowed bool) {
 // ForgetPluginNotifications drops the answer, so a reinstall asks again.
 func (c *GlobalConfig) ForgetPluginNotifications(name string) {
 	delete(c.Notifications.Plugins, name)
+}
+
+// PluginPermission reports what the user answered when the plugin asked for
+// perm, what that answer covered, and whether they have been asked at all.
+func (c *GlobalConfig) PluginPermission(name, perm string) (allowed bool, scope string, asked bool) {
+	allowed, asked = c.PluginPermissions[name][perm]
+	return allowed, c.PluginPermissionScopes[name][perm], asked
+}
+
+// SetPluginPermission records the user's answer and what it covered. Persist
+// via SaveGlobal.
+func (c *GlobalConfig) SetPluginPermission(name, perm string, allowed bool, scope string) {
+	if c.PluginPermissions == nil {
+		c.PluginPermissions = map[string]map[string]bool{}
+	}
+	if c.PluginPermissions[name] == nil {
+		c.PluginPermissions[name] = map[string]bool{}
+	}
+	c.PluginPermissions[name][perm] = allowed
+	if c.PluginPermissionScopes == nil {
+		c.PluginPermissionScopes = map[string]map[string]string{}
+	}
+	if c.PluginPermissionScopes[name] == nil {
+		c.PluginPermissionScopes[name] = map[string]string{}
+	}
+	c.PluginPermissionScopes[name][perm] = scope
+}
+
+// ForgetPluginPermissions drops every answer for the plugin, so a reinstall
+// asks again.
+func (c *GlobalConfig) ForgetPluginPermissions(name string) {
+	delete(c.PluginPermissions, name)
+	delete(c.PluginPermissionScopes, name)
 }
 
 // NotifyKinds is the canonical set of notification categories, mirroring the

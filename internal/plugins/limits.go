@@ -14,10 +14,14 @@ const (
 	APILimit         = 30 * time.Second
 	MCPLimit         = 2 * time.Minute
 	SiteCommandLimit = 30 * time.Minute
+	ScheduleLimit    = 5 * time.Minute
 
 	// An entry may ask for longer with timeout:, up to these.
 	maxSiteCommandLimit = time.Hour
 	maxEntryLimit       = 10 * time.Minute
+
+	// minScheduleEvery keeps a schedule from turning into a busy loop.
+	minScheduleEvery = time.Minute
 )
 
 // hookLimit stops a hung hook from holding up the operation that fired it, and
@@ -30,6 +34,10 @@ var (
 func (c SiteCommand) Limit() time.Duration { return limitOr(c.Timeout, SiteCommandLimit) }
 func (t MCPTool) Limit() time.Duration     { return limitOr(t.Timeout, MCPLimit) }
 func (e Endpoint) Limit() time.Duration    { return limitOr(e.Timeout, APILimit) }
+func (s Schedule) Limit() time.Duration    { return limitOr(s.Timeout, ScheduleLimit) }
+
+// Interval is how often the schedule runs; validation made sure it parses.
+func (s Schedule) Interval() time.Duration { d, _ := time.ParseDuration(s.Every); return d }
 
 func limitOr(raw string, def time.Duration) time.Duration {
 	if d, err := time.ParseDuration(raw); err == nil && d > 0 {
