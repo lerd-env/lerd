@@ -188,7 +188,7 @@ pkill -f "http.server $CATPORT" 2>/dev/null
 write_plugin "$W/vmsched" $'api_version: 1\nname: vmsched\nschedules:\n  - {name: tick, every: 1m, run: bin/tick}\n' \
 	bin/tick $'#!/bin/sh\necho "$LERD_SCHEDULE $LERD_SURFACE" >>"$LERD_PLUGIN_DATA/ticks"\necho ticked\n'
 ticks=$DATA/vmsched/ticks
-rm -f "$ticks"
+rm -f "$ticks" "$DATA/vmsched/schedule.log"
 check "15.20 [partial] a plugin with a schedule installs" lerd plugin install "$W/vmsched"
 check_out "15.20 its schedule waits for an answer" 'Waiting for your answer' lerd plugin schedule vmsched
 sleep 75
