@@ -37,6 +37,7 @@ func TestStreamingModeIsRefusedUntilTheFeatureIsEnabled(t *testing.T) {
 func TestStreamingFeatureIsReportedInStatus(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	stubPodmanOnPath(t)
 
 	if out := postStreaming(t, handleSettingsStreamingEnabled, true); out["ok"] != true {
 		t.Fatalf("enable refused: %v", out)

@@ -15,6 +15,7 @@ func writeDNSConfig(t *testing.T, tld string) {
 	cfgHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", cfgHome)
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	stubPodmanOnPath(t)
 	dir := filepath.Join(cfgHome, "lerd")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -43,5 +44,16 @@ func TestBuildStatus_KeepsAMultiLabelTLD(t *testing.T) {
 
 	if got := buildStatus().DNS.TLD; got != "internal.example.com" {
 		t.Errorf("status reports tld %q, want internal.example.com", got)
+	}
+}
+
+// buildStatus must never reach podman: it would set up rootless storage under
+// the test's XDG_DATA_HOME, which the temp dir cleanup cannot delete.
+func TestBuildStatus_StartsNoContainerStorage(t *testing.T) {
+	writeDNSConfig(t, "test")
+	buildStatus()
+
+	if _, err := os.Stat(filepath.Join(os.Getenv("XDG_DATA_HOME"), "containers")); err == nil {
+		t.Error("buildStatus set up podman storage under the test's XDG_DATA_HOME")
 	}
 }
