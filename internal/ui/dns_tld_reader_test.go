@@ -8,13 +8,6 @@ import (
 	"github.com/geodro/lerd/internal/dns"
 )
 
-// noPodman keeps podman off PATH for a test that builds the status: podman
-// follows XDG_DATA_HOME into the temp dir and leaves storage cleanup can't remove.
-func noPodman(t *testing.T) {
-	t.Helper()
-	t.Setenv("PATH", t.TempDir())
-}
-
 // writeDNSConfig points the config loader at a temp tree holding the given
 // dns.tld, so a reader can be checked against a value the writer refuses.
 func writeDNSConfig(t *testing.T, tld string) {
@@ -22,7 +15,7 @@ func writeDNSConfig(t *testing.T, tld string) {
 	cfgHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", cfgHome)
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	noPodman(t)
+	stubPodmanOnPath(t)
 	dir := filepath.Join(cfgHome, "lerd")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)

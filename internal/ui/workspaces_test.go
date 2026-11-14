@@ -20,7 +20,7 @@ func workspaceEnv(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
-	noPodman(t)
+	stubPodmanOnPath(t)
 }
 
 func postWorkspace(t *testing.T, method, path string, body any) *httptest.ResponseRecorder {
