@@ -179,6 +179,8 @@ type EnrichedSite struct {
 	// HasDatabase says the site points at a database, for plugin tabs shown
 	// only where there is one.
 	HasDatabase bool
+	// Databases are the ones the site points at, for plugins that open them.
+	Databases []config.DBTarget
 
 	// Git
 	Branch    string
@@ -344,6 +346,7 @@ func Enrich(s config.Site, flags EnrichFlag) EnrichedSite {
 		OverviewCards:         s.OverviewCards,
 		HiddenTabs:            s.HiddenTabs,
 		HasDatabase:           config.HasDatabase(s.Path),
+		Databases:             config.SiteDatabases(s.Path),
 		IdleSuspendedWorkers:  s.IdleSuspendedWorkers,
 		WorktreeIdleSuspended: s.WorktreeIdleSuspended,
 		OriginalPHPVersion:    s.PHPVersion,

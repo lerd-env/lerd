@@ -254,8 +254,12 @@ func TestEnrich_SetsHasDatabase(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(withDB, ".lerd.yaml"), []byte("db:\n  service: postgres\n  database: shop\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if !Enrich(config.Site{Name: "shop", Path: withDB}, 0).HasDatabase {
+	e := Enrich(config.Site{Name: "shop", Path: withDB}, 0)
+	if !e.HasDatabase {
 		t.Error("a site with a database should say so")
+	}
+	if len(e.Databases) != 1 || e.Databases[0] != (config.DBTarget{Service: "postgres", Database: "shop"}) {
+		t.Errorf("Databases = %+v, want the one its .lerd.yaml names", e.Databases)
 	}
 	if Enrich(config.Site{Name: "static", Path: t.TempDir()}, 0).HasDatabase {
 		t.Error("a site with no database should not claim one")

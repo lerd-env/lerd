@@ -651,14 +651,23 @@ func dsnServiceHoldsDatabases(service string) bool {
 	return IsDBServiceName(service)
 }
 
-// HasDatabase reports whether a project points at a database of any kind: one a
-// lerd engine or an external server holds, the db block of its .lerd.yaml, or a
-// SQLite file its framework's own detect rules recognise.
-func HasDatabase(projectDir string) bool {
-	if len(DBTargetsFor(projectDir)) > 0 {
-		return true
+// SiteDatabases returns the server databases a project points at: the ones
+// DBTargetsFor finds, or else the db block of its .lerd.yaml.
+func SiteDatabases(projectDir string) []DBTarget {
+	if targets := DBTargetsFor(projectDir); len(targets) > 0 {
+		return targets
 	}
 	if pc, err := LoadProjectConfig(projectDir); err == nil && pc.DB.Service != "" {
+		return []DBTarget{{Service: pc.DB.Service, Database: pc.DB.Database}}
+	}
+	return nil
+}
+
+// HasDatabase reports whether a project points at a database of any kind: a
+// server database SiteDatabases finds, or a SQLite file its framework's own
+// detect rules recognise.
+func HasDatabase(projectDir string) bool {
+	if len(SiteDatabases(projectDir)) > 0 {
 		return true
 	}
 	fw := frameworkFor(projectDir)
