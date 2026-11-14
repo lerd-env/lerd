@@ -287,7 +287,7 @@ The token is the plugin's own: lerd derives it from the plugin's name and a secr
 
 `/api/services` gives each service's `label`, the name the dashboard shows when its definition sets one (capitalize the `name` when it is absent), and its `domain` when lerd serves it on one, so a plugin listing services needs neither the dashboard's naming rules nor lerd's config files.
 
-`/api/sites` gives each site's `has_database` and `databases`, the server databases it points at as `{service, database}` pairs, read the way lerd's own database commands read them: the framework's env file, a connection string, or the `db:` block of `.lerd.yaml`. A site on SQLite has `has_database` and no `databases`. Pass a pair to `lerd db:shell --service=<service> --database=<database>` to open it.
+`/api/sites` gives each site's `has_database` and `databases`, the server databases it points at as `{service, database}` pairs, read the way lerd's own database commands read them: the `db:` block of `.lerd.yaml` first, which gives none when it names only a service, then the framework's env file and any connection string aimed at a lerd engine. A site on SQLite has `has_database` and no `databases`. Pass a pair to `lerd db:shell --service=<service> --database=<database>` to open it.
 
 ### Telling the user something
 

@@ -51,3 +51,31 @@ func TestHasDatabase(t *testing.T) {
 		})
 	}
 }
+
+// db:shell reads the .lerd.yaml db block before the env, so the databases a
+// plugin is handed must follow the same order or it opens a different one.
+func TestSiteDatabases_FollowsTheDBShellOrder(t *testing.T) {
+	setConfigDir(t)
+	installStoreFramework(t, acmeWithSQLite())
+
+	moved := t.TempDir()
+	writeProjectFile(t, moved, "acme.lock", "")
+	writeProjectFile(t, moved, ".env", "DB_CONNECTION=mysql\nDB_HOST=lerd-mysql\nDB_DATABASE=old_shop\n")
+	writeProjectFile(t, moved, ".lerd.yaml", "db:\n  service: postgres\n  database: shop\n")
+	if got := SiteDatabases(moved); len(got) != 1 || got[0] != (DBTarget{Service: "postgres", Database: "shop"}) {
+		t.Errorf("SiteDatabases = %+v, want the .lerd.yaml block's postgres/shop", got)
+	}
+
+	// A block naming only a service makes db:shell open that server with no
+	// database, so there is no database to hand a plugin.
+	serviceOnly := t.TempDir()
+	writeProjectFile(t, serviceOnly, "acme.lock", "")
+	writeProjectFile(t, serviceOnly, ".env", "DB_CONNECTION=mysql\nDB_HOST=lerd-mysql\nDB_DATABASE=old_shop\n")
+	writeProjectFile(t, serviceOnly, ".lerd.yaml", "db:\n  service: mysql\n")
+	if got := SiteDatabases(serviceOnly); len(got) != 0 {
+		t.Errorf("SiteDatabases = %+v, want none for a service-only block", got)
+	}
+	if HasDatabase(serviceOnly) {
+		t.Error("a service-only db block names no database, so the site has none to browse")
+	}
+}

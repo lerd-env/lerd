@@ -651,23 +651,40 @@ func dsnServiceHoldsDatabases(service string) bool {
 	return IsDBServiceName(service)
 }
 
-// SiteDatabases returns the server databases a project points at: the ones
-// DBTargetsFor finds, or else the db block of its .lerd.yaml.
+// dbBlock is the db block of a project's .lerd.yaml, which lerd's database
+// commands read before the env unless the project is on an external server.
+func dbBlock(projectDir string) (ProjectDB, bool) {
+	if ExternalDBServiceFor(projectDir) != nil {
+		return ProjectDB{}, false
+	}
+	pc, err := LoadProjectConfig(projectDir)
+	if err != nil || pc.DB.Service == "" {
+		return ProjectDB{}, false
+	}
+	return pc.DB, true
+}
+
+// SiteDatabases returns the server databases a project points at, in the order
+// lerd's database commands read them: the .lerd.yaml db block, which names none
+// when it names only a service, and otherwise what DBTargetsFor finds.
 func SiteDatabases(projectDir string) []DBTarget {
-	if targets := DBTargetsFor(projectDir); len(targets) > 0 {
-		return targets
+	if block, ok := dbBlock(projectDir); ok {
+		if block.Database == "" {
+			return nil
+		}
+		return []DBTarget{{Service: block.Service, Database: block.Database}}
 	}
-	if pc, err := LoadProjectConfig(projectDir); err == nil && pc.DB.Service != "" {
-		return []DBTarget{{Service: pc.DB.Service, Database: pc.DB.Database}}
-	}
-	return nil
+	return DBTargetsFor(projectDir)
 }
 
 // HasDatabase reports whether a project points at a database of any kind: a
 // server database SiteDatabases finds, or a SQLite file its framework's own
-// detect rules recognise.
+// detect rules recognise. A .lerd.yaml db block decides it on its own.
 func HasDatabase(projectDir string) bool {
-	if len(SiteDatabases(projectDir)) > 0 {
+	if _, ok := dbBlock(projectDir); ok {
+		return len(SiteDatabases(projectDir)) > 0
+	}
+	if len(DBTargetsFor(projectDir)) > 0 {
 		return true
 	}
 	fw := frameworkFor(projectDir)
