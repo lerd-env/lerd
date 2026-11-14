@@ -8,7 +8,7 @@
   import Toggle from '$components/Toggle.svelte';
   import DOMPurify from 'dompurify';
   import { apiUrl } from '$lib/api';
-  import { loadPluginDocs, loadPluginLogs, authorProfile, type PluginFailure, type PluginFeature } from '$stores/plugins';
+  import { loadPluginDocs, loadPluginLogs, authorProfile, type PluginFailure, type PluginFeature, type PluginSchedule } from '$stores/plugins';
   import { m } from '../../paraglide/messages.js';
 
   // One plugin in full, from an installed or a catalog card; an installed one
@@ -40,10 +40,14 @@
     // Set for an installed plugin that sends notifications, with the switch.
     notifications?: 'none' | 'pending' | 'allowed' | 'denied';
     onnotifications?: (allowed: boolean) => void;
+    // Set for an installed plugin with schedules: the switch and each schedule.
+    schedule?: 'none' | 'pending' | 'allowed' | 'denied';
+    schedules?: PluginSchedule[];
+    onschedule?: (allowed: boolean) => void;
     onclose: () => void;
     actions?: Snippet;
   }
-  let { name, description, version, author, icon, images = [], repo, commit, adds = [], requires = [], missing = [], platforms = [], lerd, tags = [], error, installed = false, update, updateVersion, changes, features = [], hasDocs = false, notifications = 'none', onnotifications, onclose, actions }: Props = $props();
+  let { name, description, version, author, icon, images = [], repo, commit, adds = [], requires = [], missing = [], platforms = [], lerd, tags = [], error, installed = false, update, updateVersion, changes, features = [], hasDocs = false, notifications = 'none', onnotifications, schedule = 'none', schedules = [], onschedule, onclose, actions }: Props = $props();
 
   type Tab = 'overview' | 'features' | 'docs' | 'logs';
   let tab = $state<Tab>('overview');
@@ -205,6 +209,26 @@
         {@render label(m.system_plugins_notifications())}
         <dd class="flex items-center">
           <Toggle on={notifications === 'allowed'} title={m.system_plugins_notifications()} onclick={() => onnotifications?.(notifications !== 'allowed')} />
+        </dd>
+      {/if}
+      {#if installed && schedule !== 'none' && onschedule}
+        {@render label(m.system_plugins_schedule())}
+        <dd class="space-y-1.5">
+          <Toggle on={schedule === 'allowed'} title={m.system_plugins_schedule()} onclick={() => onschedule?.(schedule !== 'allowed')} />
+          {#each schedules as s (s.name)}
+            <div class="flex flex-wrap items-baseline gap-x-2 text-gray-600 dark:text-gray-300">
+              <span class="font-mono">{s.name}</span>
+              <span class="text-gray-400">{m.system_plugins_scheduleEvery({ every: s.every })}</span>
+              {#if s.last_run}<span class="text-gray-400 tabular-nums" title={new Date(s.last_run).toLocaleString()}>{m.system_plugins_scheduleLast({ time: new Date(s.last_run).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })}</span>{/if}
+              {#if s.running}
+                <span class="text-gray-500">{m.system_plugins_scheduleRunning()}</span>
+              {:else if s.last_error}
+                <span class="text-red-500" title={s.last_error}>{m.system_plugins_scheduleFailed({ error: s.last_error.split('\n')[0] })}</span>
+              {:else if !s.last_run}
+                <span class="text-gray-400">{m.system_plugins_scheduleNever()}</span>
+              {/if}
+            </div>
+          {/each}
         </dd>
       {/if}
       {#if tags.length}

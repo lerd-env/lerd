@@ -115,6 +115,12 @@ api:                        # served at /api/plugins/hello/greet
     loopback_only: false    # true keeps it to the lerd host, like lerd's own host actions
     timeout: 2m             # longer than the 30 second default, up to 10m
 
+schedules:                  # run on their own, once the user allows it; see Schedules below
+  - name: sweep
+    every: 1h               # a duration of at least 1m, like 15m, 6h or 24h
+    run: bin/sweep
+    timeout: 10m            # longer than the 5 minute default, up to 10m
+
 requires: [jq]              # commands its scripts call, beyond the interpreters lerd reads itself
 
 provides:                   # jobs the plugin takes over from lerd, see below
@@ -200,7 +206,7 @@ Every surface runs the file the same way. Context arrives in environment variabl
 | `LERD_PLUGIN_NAME` | The plugin's name |
 | `LERD_PLUGIN_DIR` | The plugin's folder |
 | `LERD_PLUGIN_DATA` | A writable folder of its own, kept when the plugin is removed or reinstalled |
-| `LERD_SURFACE` | Who ran it: `cli`, `site_command`, `hook`, `mcp` or `api` |
+| `LERD_SURFACE` | Who ran it: `cli`, `site_command`, `hook`, `mcp`, `api` or `schedule` |
 | `LERD_BIN` | The lerd binary, for calling lerd commands |
 | `LERD_API_URL`, `LERD_API_TOKEN` | Access to lerd's API, see below |
 | `LERD_SITE`, `LERD_SITE_PATH`, `LERD_DOMAIN` | The site, when the surface has one |
@@ -212,6 +218,7 @@ Per surface:
 - **MCP tools** get the tool's arguments as JSON on stdin; stdout is the result, and a non-zero exit is reported to the assistant as an error. A `site` argument hands over the site.
 - **API endpoints** get the request body on stdin and `LERD_METHOD` and `LERD_QUERY`; a `site` query parameter hands over the site. A zero exit answers 200 with stdout, served as JSON when it parses as JSON, and any other exit answers 500 with stderr.
 - **Hooks** get `LERD_EVENT` and the event's payload, both as JSON on stdin and as `LERD_<KEY>` variables.
+- **Schedules** get `LERD_SCHEDULE`, the schedule's name, and nothing on stdin. Their output goes to `schedule.log` in the plugin's data folder.
 
 ### How long it may run
 
@@ -224,8 +231,9 @@ Every surface but the CLI stops an executable that runs past its limit, together
 | MCP tools | 2m | 10m |
 | Site commands | 30m | 1h |
 | Jobs under `provides` | 5m | fixed |
+| Schedules | 5m | 10m |
 
-`timeout` takes a duration like `90s` or `10m` on a single site command, MCP tool or API endpoint. A value past the ceiling refuses the plugin with a message naming it.
+`timeout` takes a duration like `90s` or `10m` on a single site command, MCP tool, API endpoint or schedule. A value past the ceiling refuses the plugin with a message naming it.
 
 ### Which language
 
@@ -253,6 +261,16 @@ Lerd reads that first line from every file the manifest runs, and adds anything 
 Events fire once, from wherever the change was made: the CLI, the dashboard, the TUI or an AI assistant. Hooks run one after another once the operation has succeeded; a hook's output and failures go to `hooks.log` in its data folder and never fail the operation. A hook that runs longer than 30 seconds is stopped.
 
 ---
+
+## Schedules
+
+A schedule runs one of the plugin's executables every so often, for work no event marks, such as cleaning up after a pull request merges elsewhere. Lerd's dashboard service runs it, so a plugin never installs a cron job, systemd timer or launchd agent of its own. Schedules pause while lerd is stopped, like lerd's own scheduled workers, and stop with `lerd quit`.
+
+Nothing runs until the user allows it. Installing or updating a plugin that declares schedules asks once, naming each schedule and how often it runs: in the terminal for `lerd plugin install` and `lerd plugin update`, and on the dashboard's Plugins page otherwise, including for one installed from a terminal that could not be asked. The answer covers the schedules it was given for: an update that keeps them keeps the answer, while one that adds a schedule or changes one's name, interval or executable is asked again, a refusal included, and none of the plugin's schedules run until it is answered. Removing the plugin forgets the answer. The plugin's card has a **Schedule** switch and lists each schedule with its interval, when it last ran and how that went, and `lerd plugin schedule <name>` shows the same with when each runs next, while `lerd plugin schedule <name> on` or `off` changes the answer. The answer is kept in lerd's own config, and a request carrying the plugin's token cannot give it.
+
+Lerd checks once a minute. A schedule that never ran goes at the next check after it is allowed, then again once `every` has passed since it last started, and lerd remembers when that was across restarts, so restarting the dashboard does not run it again early. After a laptop sleeps through its time it runs once on waking, not once per missed interval. A run still going when the next one is due is left to finish rather than started twice. A failing run is recorded like any other plugin failure and shown with its error.
+
+A plugin that wants the user to pick how often it runs declares the shortest interval it offers and skips the runs it does not need, reading its own setting from its data folder. Lerd ignores `schedules` before the release that added it, so a plugin that relies on them declares that release in `lerd:`.
 
 ## Calling lerd from a plugin
 

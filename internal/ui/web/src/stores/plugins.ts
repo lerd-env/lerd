@@ -137,6 +137,19 @@ export interface ManagedPlugin {
   revoked?: PluginRevocation;
   // Whether it may send notifications: pending until the user answers.
   notifications?: 'none' | 'pending' | 'allowed' | 'denied';
+  // Whether it may run on a schedule, the same way, and each schedule with
+  // how its last run went.
+  schedule?: 'none' | 'pending' | 'allowed' | 'denied';
+  schedules?: PluginSchedule[];
+}
+
+export interface PluginSchedule {
+  name: string;
+  every: string;
+  last_run?: string;
+  last_error?: string;
+  next_run?: string;
+  running?: boolean;
 }
 
 export interface PluginFeature {
@@ -236,6 +249,16 @@ export async function keepRevokedPlugin(name: string): Promise<string> {
 // notifications, from the consent prompt or a toggle.
 export async function setPluginNotifications(name: string, allowed: boolean): Promise<string> {
   return mutate('/api/plugin-manager/' + encodeURIComponent(name) + '/notifications', {
+    method: 'POST',
+    body: JSON.stringify({ allowed }),
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
+
+// setPluginSchedule records whether a plugin may run on a schedule, from the
+// consent prompt or its card's switch.
+export async function setPluginSchedule(name: string, allowed: boolean): Promise<string> {
+  return mutate('/api/plugin-manager/' + encodeURIComponent(name) + '/schedule', {
     method: 'POST',
     body: JSON.stringify({ allowed }),
     headers: { 'Content-Type': 'application/json' }
