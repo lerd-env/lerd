@@ -1,7 +1,9 @@
 # Checks the Windows install, one PASS or FAIL line each for the release lanes.
 # -Absent checks removal; -DistroDeleted also checks the distro was deleted.
 # -Distro supplies its name after uninstall removes the config.
-param([switch] $Absent, [switch] $DistroDeleted, [string] $Distro)
+# -PrintCaThumb prints this install's CA thumbprint and exits; -CaThumb hands it
+# back after an uninstall that deleted the distro the CA lives in.
+param([switch] $Absent, [switch] $DistroDeleted, [string] $Distro, [switch] $PrintCaThumb, [string] $CaThumb)
 $ErrorActionPreference = 'SilentlyContinue'
 $script:fails = 0
 $script:passes = 0
@@ -15,6 +17,13 @@ $wsl = 'C:\Program Files\WSL\wsl.exe'
 $lerdBin = Join-Path $env:LOCALAPPDATA 'lerd\bin'
 $uninstallKey = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{6F2B7C1E-3D4A-4E8B-9C2F-1A5D8E7B4C30}_is1'
 
+# This install's own CA, by thumbprint: a guest that held other distros keeps
+# their mkcert CAs, which this uninstall rightly leaves alone.
+$caDistro = if ($Distro) { $Distro } else { (Get-Content (Join-Path $lerdBin 'lerd-wsl.conf') | Where-Object { $_ -like 'distro=*' }) -replace '^distro=', '' }
+$caPem = if ($caDistro) { (& $wsl -d $caDistro -- sh -c 'cat ~/.local/share/mkcert/rootCA.pem') -join "`n" }
+$caThumb = if ($CaThumb) { $CaThumb } elseif ($caPem -match 'BEGIN CERTIFICATE') { ([System.Security.Cryptography.X509Certificates.X509Certificate2]::new([System.Text.Encoding]::ASCII.GetBytes($caPem))).Thumbprint }
+if ($PrintCaThumb) { $caThumb; exit }
+
 Check 'W.1 Add/Remove Programs entry' (Test-Path $uninstallKey)
 Check 'W.2 install folder' (Test-Path 'C:\Program Files\Lerd')
 Check 'W.3 desktop app installed' (Test-Path 'C:\Program Files\Lerd\desktop\lerd-desktop.exe')
@@ -24,7 +33,8 @@ Check 'W.6 Start menu shortcut' ($null -ne (Get-ChildItem "$env:APPDATA\Microsof
 Check 'W.7 lerd:// handler' (Test-Path 'HKCU:\Software\Classes\lerd')
 Check 'W.8 lerd.exe on the user PATH' (([Environment]::GetEnvironmentVariable('Path', 'User') -split ';') -contains $lerdBin -and (Test-Path (Join-Path $lerdBin 'lerd.exe')))
 Check 'W.9 .test resolves through lerd' ($null -ne (Get-DnsClientNrptRule | Where-Object { $_.Comment -eq 'lerd' }))
-Check 'W.10 lerd CA trusted by Windows' ($null -ne (Get-ChildItem Cert:\CurrentUser\Root | Where-Object { $_.Subject -match 'mkcert' }))
+$trusted = Get-ChildItem Cert:\CurrentUser\Root | Where-Object { if ($caThumb) { $_.Thumbprint -eq $caThumb } else { $_.Subject -match 'mkcert' } }
+Check 'W.10 lerd CA trusted by Windows' ($null -ne $trusted)
 $distros = (& $wsl -l -q) -replace "`0", '' | Where-Object { $_ -match '\S' }
 # The installer keeps a distro from an earlier run, so ask rather than assume.
 if (-not $Distro) { $Distro = Get-Content (Join-Path $lerdBin 'lerd-wsl.conf') | Where-Object { $_ -like 'distro=*' } | ForEach-Object { $_.Substring(7) } }
