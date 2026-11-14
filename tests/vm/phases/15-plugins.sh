@@ -14,7 +14,7 @@ CATPORT=18765
 
 # A run left half way leaves plugins, a service and a catalog server behind.
 cleanup() {
-	for p in vmplug vmcopy vmbroken vmsvc vmcat vmnew; do lerd plugin remove "$p" </dev/null >/dev/null 2>&1; done
+	for p in vmplug vmcopy vmbroken vmsvc vmcat vmnew vmsched; do lerd plugin remove "$p" </dev/null >/dev/null 2>&1; done
 	lerd service remove vmplugcache </dev/null >/dev/null 2>&1
 	pkill -f "http.server $CATPORT" 2>/dev/null
 }
@@ -182,6 +182,30 @@ check "15.17 the update brought the new commit's files" test -f "$PDIR/vmcat/LAT
 lerd plugin remove vmcat </dev/null >/dev/null 2>&1
 unset LERD_PLUGIN_CATALOG
 pkill -f "http.server $CATPORT" 2>/dev/null
+
+# Schedules: nothing runs until the user allows it, then lerd-ui runs it about
+# once a minute, and off stops it again. Lerd checks once a minute, hence the waits.
+write_plugin "$W/vmsched" $'api_version: 1\nname: vmsched\nschedules:\n  - {name: tick, every: 1m, run: bin/tick}\n' \
+	bin/tick $'#!/bin/sh\necho "$LERD_SCHEDULE $LERD_SURFACE" >>"$LERD_PLUGIN_DATA/ticks"\necho ticked\n'
+ticks=$DATA/vmsched/ticks
+rm -f "$ticks"
+check "15.20 [partial] a plugin with a schedule installs" lerd plugin install "$W/vmsched"
+check_out "15.20 its schedule waits for an answer" 'Waiting for your answer' lerd plugin schedule vmsched
+sleep 75
+check "15.20 nothing runs before it is allowed" test ! -e "$ticks"
+check "15.20 [partial] lerd plugin schedule on allows it" lerd plugin schedule vmsched on
+check "15.20 it runs with its name and the schedule surface" wait_for 150 grep -qx 'tick schedule' "$ticks"
+check "15.20 its output lands in schedule.log" wait_for 10 grep -q ticked "$DATA/vmsched/schedule.log"
+check "15.20 it runs again once its interval has passed" wait_for 150 bash -c "[ \$(wc -l <'$ticks') -ge 2 ]"
+check_out "15.20 lerd plugin schedule reports it allowed" 'Allowed' lerd plugin schedule vmsched
+check "15.20 [partial] off stops it" lerd plugin schedule vmsched off
+before=$(wc -l <"$ticks")
+sleep 130
+check "15.20 nothing runs after off" test "$(wc -l <"$ticks")" -le "$((before + 1))"
+lerd plugin remove vmsched </dev/null >/dev/null 2>&1
+check "15.20 [partial] it installs again" lerd plugin install "$W/vmsched"
+check_out "15.20 removing the plugin forgot the answer" 'Waiting for your answer' lerd plugin schedule vmsched
+lerd plugin remove vmsched </dev/null >/dev/null 2>&1
 
 check "15.18 [partial] lerd plugin remove takes the plugin away" lerd plugin remove vmplug
 check "15.18 its data folder is kept" test -s "$DATA/vmplug/events.log"
