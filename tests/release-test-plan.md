@@ -1386,6 +1386,10 @@ prove what it draws through the API it reads.
 - [ ] `lerd plugin remove` keeps the plugin's data folder
 - [ ] `lerd plugin search` against plugins.lerd.sh answers without an error,
       and the site still answers **http → 200** at the end
+- [ ] A plugin's schedule waits for an answer and runs nothing until
+      `lerd plugin schedule <name> on`, then runs about once a minute with
+      `LERD_SCHEDULE` set and its output in `schedule.log`; `off` stops it, and
+      removing the plugin forgets the answer
 
 ## Sign-off
 
