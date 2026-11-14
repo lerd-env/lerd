@@ -61,29 +61,18 @@ func PermissionState(p *Plugin, perm string) string {
 }
 
 // SetPermission records the user's answer for an installed plugin that asks
-// for perm.
+// for perm, covering what it asks for now.
 func SetPermission(name, perm string, allowed bool) error {
 	p, err := Find(name)
 	if err != nil {
 		return err
 	}
-	if !p.Asks(perm) {
-		return fmt.Errorf("plugin %s does not ask for %s", name, permissionLabel[perm])
-	}
-	return config.UpdateGlobal(func(c *config.GlobalConfig) {
-		// Notifications keep the key they were stored under before
-		// permissions were general, so older binaries still read the answer.
-		if perm == PermissionNotifications {
-			c.SetPluginNotifications(name, allowed)
-			return
-		}
-		c.SetPluginPermission(name, perm, allowed, Scope(p, perm))
-	})
+	return saveAnswer(p, perm, allowed, Scope(p, perm))
 }
 
-// AnswerAsShown records the user's answer to the question as they saw it:
-// shown is the Scope the question was asked about, and an answer to one the
-// plugin has changed since is refused, so nothing is approved unseen.
+// AnswerAsShown records the answer to the question as the user saw it, shown
+// being its Scope: refused if the plugin changed since, and saved as shown, so
+// an update landing after the check is asked again rather than approved unseen.
 func AnswerAsShown(name, perm string, allowed bool, shown string) error {
 	p, err := Find(name)
 	if err != nil {
@@ -92,7 +81,27 @@ func AnswerAsShown(name, perm string, allowed bool, shown string) error {
 	if p.Asks(perm) && Scope(p, perm) != shown {
 		return fmt.Errorf("%s changed what it asks for since you were asked; look again", name)
 	}
-	return SetPermission(name, perm, allowed)
+	answerChecked()
+	return saveAnswer(p, perm, allowed, shown)
+}
+
+// answerChecked is a seam for tests to land an update between AnswerAsShown's
+// check and its save.
+var answerChecked = func() {}
+
+func saveAnswer(p *Plugin, perm string, allowed bool, scope string) error {
+	if !p.Asks(perm) {
+		return fmt.Errorf("plugin %s does not ask for %s", p.Name, permissionLabel[perm])
+	}
+	return config.UpdateGlobal(func(c *config.GlobalConfig) {
+		// Notifications keep the key they were stored under before
+		// permissions were general, so older binaries still read the answer.
+		if perm == PermissionNotifications {
+			c.SetPluginNotifications(p.Name, allowed)
+			return
+		}
+		c.SetPluginPermission(p.Name, perm, allowed, scope)
+	})
 }
 
 var permissionLabel = map[string]string{

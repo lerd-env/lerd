@@ -397,3 +397,23 @@ func TestAnswerAsShown_RefusesSchedulesTheUserDidNotSee(t *testing.T) {
 		t.Fatal("the answer to what was shown should hold")
 	}
 }
+
+// An update landing between the check and the save leaves the answer covering
+// only what was shown, so the plugin is asked again rather than approved.
+func TestAnswerAsShown_UpdateDuringTheAnswerIsAskedAgain(t *testing.T) {
+	isolate(t)
+	schedulePlugin(t, "cron", "#!/bin/sh\n")
+	p, _ := Find("cron")
+	shown := Scope(p, PermissionSchedule)
+	answerChecked = func() {
+		writePlugin(t, Dir(), "cron", "api_version: 1\nname: cron\nschedules:\n  - {name: sweep, every: 1m, run: bin/run}\n")
+	}
+	t.Cleanup(func() { answerChecked = func() {} })
+	if err := AnswerAsShown("cron", PermissionSchedule, true, shown); err != nil {
+		t.Fatal(err)
+	}
+	p, _ = Find("cron")
+	if got := PermissionState(p, PermissionSchedule); got != PermissionPending {
+		t.Fatalf("state = %q, want pending: the answer covered the schedules shown, not the update", got)
+	}
+}
