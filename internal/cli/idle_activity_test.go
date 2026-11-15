@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -32,5 +33,38 @@ func TestMatchWorktreeKey(t *testing.T) {
 				t.Errorf("matchWorktreeKey(%q) = %q, want %q", tc.dir, got, tc.want)
 			}
 		})
+	}
+}
+
+// A plugin runs its own executables, often through lerd's node or php shims in
+// the site's folder, and that is not someone working on the site: it must not
+// wake the site's workers and every service it sleeps on.
+func TestRecordCwdActivity_ignoresAPluginsOwnRuns(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
+	dir := filepath.Join(home, "app")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "app", Domains: []string{"app.test"}, Path: config.CanonicalPath(dir), PHPVersion: "8.5"}); err != nil {
+		t.Fatal(err)
+	}
+	var pinged []string
+	prev := siteActivityPing
+	siteActivityPing = func(key string) { pinged = append(pinged, key) }
+	t.Cleanup(func() { siteActivityPing = prev })
+
+	recordCwdActivity(dir)
+	if len(pinged) != 1 {
+		t.Fatalf("a command in the site pinged %v, want the site once", pinged)
+	}
+
+	pinged = nil
+	t.Setenv("LERD_PLUGIN_NAME", "db-browser")
+	recordCwdActivity(dir)
+	if len(pinged) != 0 {
+		t.Errorf("a plugin's own run marked the site as used: %v", pinged)
 	}
 }
