@@ -384,11 +384,11 @@ onBeforeUnmount(() => { demoOpen.value = false; document.documentElement.style.o
       </div></section>
       <!-- The digest itself is English and changes every release, so only the English page points to it. -->
       <div v-if="lang === 'en-US'" class="wrap">
-        <a class="digest" :href="withBase('/digest/v1.38.0.html')" target="_blank" rel="noopener">
+        <a class="digest" :href="withBase('/digest/v1.39.0.html')" target="_blank" rel="noopener">
           <span class="badge ok">NEW</span>
           <span class="digest-body">
-            <span class="digest-title">v1.38.0 dev digest</span>
-            <span class="digest-sub">Lerd on Windows from one installer, plugins from a catalog that approves each one at a commit, certificates issued without mkcert, and a PHP language server for AI agents.</span>
+            <span class="digest-title">v1.39.0 dev digest</span>
+            <span class="digest-sub">Database servers lerd does not run as services of their own, plugins that run on a schedule, the first signed release, and a new container logo.</span>
           </span>
           <span class="digest-cta">Read the digest →</span>
         </a>
