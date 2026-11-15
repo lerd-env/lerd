@@ -47,7 +47,7 @@ container images are a separate distribution with their own notices.
 | github.com/getlantern/hidden | v0.0.0-20220104173330-f221c5a24770 | Apache-2.0 |
 | github.com/getlantern/ops | v0.0.0-20231025133620-f368ab734534 | Apache-2.0 |
 | github.com/getlantern/systray | v1.2.2 | Apache-2.0 |
-| github.com/go-logr/logr | v1.4.3 | Apache-2.0 |
+| github.com/go-logr/logr | v1.4.4 | Apache-2.0 |
 | github.com/go-logr/stdr | v1.2.2 | Apache-2.0 |
 | github.com/go-stack/stack | v1.8.1 | MIT |
 | github.com/go-viper/mapstructure/v2 | v2.5.0 | MIT |
@@ -89,9 +89,10 @@ container images are a separate distribution with their own notices.
 | github.com/yuin/goldmark-emoji | v1.0.6 | MIT |
 | github.com/zeebo/xxh3 | v1.1.0 | BSD-2-Clause |
 | go.opentelemetry.io/auto/sdk | v1.2.1 | Apache-2.0 |
-| go.opentelemetry.io/otel | v1.44.0 | Apache-2.0 |
-| go.opentelemetry.io/otel/metric | v1.44.0 | Apache-2.0 |
-| go.opentelemetry.io/otel/trace | v1.44.0 | Apache-2.0 |
+| go.opentelemetry.io/otel | v1.47.0 | Apache-2.0 |
+| go.opentelemetry.io/otel/log | v1.47.0 | Apache-2.0 |
+| go.opentelemetry.io/otel/metric | v1.47.0 | Apache-2.0 |
+| go.opentelemetry.io/otel/trace | v1.47.0 | Apache-2.0 |
 | go.uber.org/multierr | v1.11.0 | MIT |
 | go.uber.org/zap | v1.28.0 | MIT |
 | go.yaml.in/yaml/v3 | v3.0.5 | Apache-2.0 |
@@ -1792,7 +1793,7 @@ Apache License
    limitations under the License.
 ```
 
-### github.com/go-logr/logr v1.4.3
+### github.com/go-logr/logr v1.4.4
 
 Apache-2.0
 
@@ -4200,7 +4201,7 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### go.opentelemetry.io/otel v1.44.0, go.opentelemetry.io/otel/metric v1.44.0, go.opentelemetry.io/otel/trace v1.44.0
+### go.opentelemetry.io/otel v1.47.0, go.opentelemetry.io/otel/log v1.47.0, go.opentelemetry.io/otel/metric v1.47.0, go.opentelemetry.io/otel/trace v1.47.0
 
 Apache-2.0
 
