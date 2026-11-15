@@ -255,6 +255,19 @@ func (r *Ring) trim() {
 	_, err := r.db.Exec(`DELETE FROM events WHERE `+droppable+` AND seq < ?2`, settled, r.floor())
 	warnRing("dropping old events", err)
 	r.capKept()
+	// settle just marked the newest seq; a delete that reached it frees seqs
+	// SQLite hands out again, which that mark would wrongly cover.
+	if r.newest() < r.marks[len(r.marks)-1].seq {
+		r.forgetAges()
+	}
+	r.shrinkFile()
+}
+
+// newest is the highest seq in the ring, 0 when it is empty.
+func (r *Ring) newest() int64 {
+	var seq int64
+	warnRing("reading the buffer", r.db.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM events`).Scan(&seq))
+	return seq
 }
 
 // capShare cuts every request to its newest quarter of the buffer.
@@ -283,43 +296,56 @@ func (r *Ring) yieldCLI(settled int64) {
 
 // capKept drops kept requests whole, biggest first, once together they hold
 // more than cap events: a week of slowest routes with debug logging ran to gigabytes.
+// A browser row two kept requests share counts once, under its page.
 func (r *Ring) capKept() {
-	rows, err := r.db.Query(`SELECT rid, (SELECT COUNT(*) FROM events WHERE rid = kept.rid OR reached = kept.rid) AS n
-		FROM kept ORDER BY n DESC`)
+	rows, err := r.db.Query(`SELECT CASE WHEN rid IN (SELECT rid FROM kept) THEN rid ELSE reached END AS owner,
+		COUNT(*) AS n FROM events WHERE ` + keptRow + ` GROUP BY owner ORDER BY n DESC`)
 	if err != nil {
 		warnRing("reading the buffer", err)
 		return
 	}
-	type sized struct {
-		rid string
-		n   int
-	}
-	var all []sized
+	var owners []string
+	var sizes []int
 	total := 0
 	for rows.Next() {
-		var k sized
-		if rows.Scan(&k.rid, &k.n) == nil {
-			all = append(all, k)
-			total += k.n
+		var owner string
+		var n int
+		if rows.Scan(&owner, &n) == nil {
+			owners, sizes = append(owners, owner), append(sizes, n)
+			total += n
 		}
 	}
 	rows.Close()
 	var doomed []string
-	for _, k := range all {
-		if total <= r.cap {
-			break
-		}
-		doomed = append(doomed, k.rid)
-		total -= k.n
+	for i := 0; i < len(owners) && total > r.cap; i++ {
+		doomed = append(doomed, owners[i])
+		total -= sizes[i]
 	}
-	if len(doomed) == 0 {
+	if len(doomed) > 0 {
+		r.dropKept(doomed)
+	}
+}
+
+// dropKept lets go of the given kept requests and deletes their events, all
+// but the browser rows a request still kept also reached.
+func (r *Ring) dropKept(rids []string) {
+	list, _ := json.Marshal(rids)
+	tx, err := r.db.Begin()
+	if err != nil {
+		warnRing("dropping kept requests", err)
 		return
 	}
-	list, _ := json.Marshal(doomed)
-	_, err = r.db.Exec(`DELETE FROM events WHERE rid IN (SELECT value FROM json_each(?1))
-		OR reached IN (SELECT value FROM json_each(?1))`, string(list))
-	warnRing("dropping kept requests", err)
-	r.shrinkFile()
+	_, err = tx.Exec(`DELETE FROM kept WHERE rid IN (SELECT value FROM json_each(?1))`, string(list))
+	if err == nil {
+		_, err = tx.Exec(`DELETE FROM events WHERE (rid IN (SELECT value FROM json_each(?1))
+			OR reached IN (SELECT value FROM json_each(?1))) AND NOT `+keptRow, string(list))
+	}
+	if err != nil {
+		tx.Rollback()
+		warnRing("dropping kept requests", err)
+		return
+	}
+	warnRing("dropping kept requests", tx.Commit())
 }
 
 // shrinkFile gives the disk back once most of the file is free pages, which

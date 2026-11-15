@@ -745,13 +745,13 @@ func TestRing_KeptRequestsHoldNoMoreThanTheBufferBiggestFirst(t *testing.T) {
 
 // passGrace runs two trims trimGrace apart, so the rows appended before the
 // call are old enough for a trim to drop.
-func passGrace(t *testing.T, r *Ring) {
+func passGrace(t *testing.T, r *Ring, keep map[string]bool) {
 	clock := time.Now()
 	ringNow = func() time.Time { return clock }
 	t.Cleanup(func() { ringNow = time.Now })
-	r.SetKeep(nil)
+	r.SetKeep(keep)
 	clock = clock.Add(trimGrace)
-	r.SetKeep(nil)
+	r.SetKeep(keep)
 }
 
 func cliEvent(id, rid string) Event {
@@ -768,7 +768,7 @@ func TestRing_OneRequestHoldsAtMostAQuarterOfTheBuffer(t *testing.T) {
 		r.Append(cliEvent(fmt.Sprint("c", i), "w1"))
 	}
 	r.Append(ridEvent("a", "r1"))
-	passGrace(t, r)
+	passGrace(t, r, nil)
 	if got := ids(r.Snapshot()); fmt.Sprint(got) != "[c3 c4 a]" {
 		t.Fatalf("snapshot = %v, want the CLI run cut to its newest two", got)
 	}
@@ -783,7 +783,7 @@ func TestRing_CLIEventsGoBeforeWebOnes(t *testing.T) {
 	r.Append(cliEvent("c2", "w2"))
 	r.Append(cliEvent("c3", "w3"))
 	r.Append(ridEvent("d", "rd"))
-	passGrace(t, r)
+	passGrace(t, r, nil)
 	if got := ids(r.Snapshot()); fmt.Sprint(got) != "[a b c3 d]" {
 		t.Fatalf("snapshot = %v, want the oldest CLI events dropped first", got)
 	}
@@ -837,5 +837,87 @@ func TestRing_OpenDropsTheUnusedKeptIndex(t *testing.T) {
 	}
 	if n != 0 {
 		t.Fatal("idx_events_kept still exists after open")
+	}
+}
+
+func fetchEvent(id, page, reached string) Event {
+	return Event{V: 1, ID: id, Kind: KindBrowser, Ctx: Context{RID: page}, Data: []byte(`{"type":"fetch","rid":"` + reached + `"}`)}
+}
+
+func rowExists(t *testing.T, r *Ring, id string) bool {
+	t.Helper()
+	var n int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM events WHERE id = ?`, id).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n > 0
+}
+
+// Dropping the newest rows lets SQLite hand their seqs out again, which the
+// ages marked before must not cover.
+func TestRing_TrimGraceStartsOverAfterDroppingKeptRequests(t *testing.T) {
+	r := NewRing(8)
+	r.SetKeep(map[string]bool{"r1": true})
+	for i := 0; i < 9; i++ {
+		r.Append(ridEvent(fmt.Sprint("k", i), "r1"))
+	}
+	passGrace(t, r, map[string]bool{"r1": true})
+	for i := 0; i < 9; i++ {
+		r.Append(mkEvent(fmt.Sprint("n", i)))
+	}
+	r.Resize(8)
+	if !rowExists(t, r, "n0") {
+		t.Fatal("n0 was trimmed before its grace had passed")
+	}
+}
+
+func TestRing_TrimShrinksTheFileWithoutDroppingKeptRequests(t *testing.T) {
+	r, err := OpenRing(filepath.Join(t.TempDir(), "debug-events.db"), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	big := []byte(`{"blob":"` + strings.Repeat("x", 64<<10) + `"}`)
+	for i := 0; i < 50; i++ {
+		e := mkEvent(fmt.Sprint("e", i))
+		e.Data = big
+		r.Append(e)
+	}
+	passGrace(t, r, nil)
+	var pages int
+	if err := r.db.QueryRow(`PRAGMA page_count`).Scan(&pages); err != nil {
+		t.Fatal(err)
+	}
+	if pages > 200 {
+		t.Fatalf("page_count = %d after trimming 48 of 50 large events, want the file shrunk", pages)
+	}
+}
+
+// A browser row a kept page and a kept fetch both hold is one event, not two.
+func TestRing_KeptCeilingCountsASharedRowOnce(t *testing.T) {
+	r := NewRing(2)
+	r.SetKeep(map[string]bool{"page": true, "fetch": true})
+	r.Append(fetchEvent("a", "page", "fetch"))
+	r.Append(ridEvent("f1", "fetch"))
+	r.SetKeep(map[string]bool{"page": true, "fetch": true})
+	if !rowExists(t, r, "a") || !rowExists(t, r, "f1") {
+		t.Fatal("a kept request was dropped though the two distinct events fit")
+	}
+}
+
+func TestRing_DroppingAKeptRequestSparesRowsAnotherStillHolds(t *testing.T) {
+	r := NewRing(2)
+	keep := map[string]bool{"page": true, "fetch": true}
+	r.SetKeep(keep)
+	r.Append(fetchEvent("a", "page", "fetch"))
+	r.Append(ridEvent("p1", "page"))
+	r.Append(ridEvent("p2", "page"))
+	r.Append(ridEvent("f1", "fetch"))
+	r.SetKeep(keep)
+	if got := ids(r.Filter(FilterOpts{RID: "fetch"})); fmt.Sprint(got) != "[a f1]" {
+		t.Fatalf("filter fetch = %v, want the browser row it reached kept", got)
+	}
+	if rowExists(t, r, "p1") {
+		t.Fatal("the biggest kept request was not dropped")
 	}
 }
