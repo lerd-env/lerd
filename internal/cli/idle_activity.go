@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"path/filepath"
 
 	"github.com/geodro/lerd/internal/activityping"
@@ -9,13 +10,21 @@ import (
 	phpDet "github.com/geodro/lerd/internal/php"
 )
 
+// runByPlugin reports whether a plugin started this command. Its executables run
+// in the site's folder through lerd's shims, which is the plugin at work, not
+// the user, so it must not wake the site or every service its env names.
+func runByPlugin() bool { return os.Getenv("LERD_PLUGIN_NAME") != "" }
+
+// siteActivityPing is how a command marks its site as used; a seam for tests.
+var siteActivityPing = activityping.Site
+
 // recordCwdActivity tells lerd-ui that the site containing dir is being worked
 // on, so a CLI/shim command (php, artisan, composer, npm, tinker) keeps the site
 // awake under idle-suspend the same way an HTTP request would — and wakes it if
 // it was asleep. Best-effort: it pings the lerd-ui unix socket with a tight
 // timeout and ignores every failure (lerd-ui not running, dir not in a site).
 func recordCwdActivity(dir string) {
-	if dir == "" {
+	if dir == "" || runByPlugin() {
 		return
 	}
 	site, _ := config.FindSiteByPath(phpDet.SiteRootFor(dir))
@@ -25,10 +34,10 @@ func recordCwdActivity(dir string) {
 	// A command run inside a git worktree checkout must wake that worktree's
 	// own workers, which idle on an independent timer, not the parent site's.
 	if key := worktreeActivityKey(site, dir); key != "" {
-		activityping.Site(key)
+		siteActivityPing(key)
 		return
 	}
-	activityping.Site(site.Name)
+	siteActivityPing(site.Name)
 }
 
 // worktreeActivityKey returns the idle key (site/wtBase) for the site's worktree
