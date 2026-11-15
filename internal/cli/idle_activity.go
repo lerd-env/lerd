@@ -10,6 +10,11 @@ import (
 	phpDet "github.com/geodro/lerd/internal/php"
 )
 
+// runByPlugin reports whether a plugin started this command. Its executables run
+// in the site's folder through lerd's shims, which is the plugin at work, not
+// the user, so it must not wake the site or every service its env names.
+func runByPlugin() bool { return os.Getenv("LERD_PLUGIN_NAME") != "" }
+
 // siteActivityPing is how a command marks its site as used; a seam for tests.
 var siteActivityPing = activityping.Site
 
@@ -19,9 +24,7 @@ var siteActivityPing = activityping.Site
 // it was asleep. Best-effort: it pings the lerd-ui unix socket with a tight
 // timeout and ignores every failure (lerd-ui not running, dir not in a site).
 func recordCwdActivity(dir string) {
-	// A plugin's executables run in the site's folder through these shims, and
-	// that is the plugin at work, not the user: it must not wake the whole site.
-	if dir == "" || os.Getenv("LERD_PLUGIN_NAME") != "" {
+	if dir == "" || runByPlugin() {
 		return
 	}
 	site, _ := config.FindSiteByPath(phpDet.SiteRootFor(dir))
