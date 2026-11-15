@@ -1150,15 +1150,10 @@ func EnsureServiceRunning(name string) error {
 		// Probing readiness costs a container exec, a third of a second under
 		// WSL, on every php or composer run; once a run has answered, it stays
 		// ready until the service starts again under a new activation id.
-		id := activationIDFn(unit)
-		if id != "" && readyActivation(name) == id {
+		if id := activationIDFn(unit); id != "" && readyActivation(name) == id {
 			return nil
 		}
-		if err := waitReadyFn(name, 30*time.Second); err != nil {
-			return fmt.Errorf("%s is active but not yet ready: %w", name, err)
-		}
-		rememberReady(name, id)
-		return nil
+		return resume(name, func() error { return awaitActive(name, unit) })
 	}
 	if IsBuiltin(name) {
 		if err := EnsureDefaultPresetQuadlet(name); err != nil {
@@ -1179,23 +1174,55 @@ func EnsureServiceRunning(name string) error {
 			return err
 		}
 	}
-	if err := pullStartImage(name); err != nil {
+	started := false
+	err := resume(name, func() error {
+		// Another caller may have started it while this one set up its unit.
+		podman.InvalidateUnitStatusCache(unit)
+		if status, _ := podman.UnitStatus(unit); status == "active" {
+			return awaitActive(name, unit)
+		}
+		if err := pullStartImage(name); err != nil {
+			return err
+		}
+		if err := startUnitRetry(unit); err != nil {
+			return err
+		}
+		started = true
+		_ = config.SetServicePaused(name, false)
+		return awaitReady(name, unit, 60*time.Second)
+	})
+	if err != nil {
 		return err
 	}
-	if err := startUnitRetry(unit); err != nil {
-		return err
+	// A site's link or env can be what first starts a database, and Adminer and
+	// pgAdmin only list the members of a family that are running. Outside the
+	// resume, which holds only this service's lock.
+	if started {
+		ensureRegenConsumersFn(name)
 	}
-	_ = config.SetServicePaused(name, false)
-	// Read before probing, so a restart in between cannot mark a run ready
-	// that never answered.
+	return nil
+}
+
+// awaitActive waits for a service that is already up to answer its probe.
+func awaitActive(name, unit string) error {
+	if id := activationIDFn(unit); id != "" && readyActivation(name) == id {
+		return nil
+	}
+	if err := awaitReady(name, unit, 30*time.Second); err != nil {
+		return fmt.Errorf("%s is active but not yet ready: %w", name, err)
+	}
+	return nil
+}
+
+// awaitReady probes a started service and remembers the run that answered.
+// The activation id is read before probing, so a restart in between cannot
+// mark a run ready that never answered.
+func awaitReady(name, unit string, timeout time.Duration) error {
 	id := activationIDFn(unit)
-	if err := waitReadyFn(name, 60*time.Second); err != nil {
+	if err := waitReadyFn(name, timeout); err != nil {
 		return err
 	}
 	rememberReady(name, id)
-	// A site's link or env can be what first starts a database, and Adminer and
-	// pgAdmin only list the members of a family that are running.
-	ensureRegenConsumersFn(name)
 	return nil
 }
 

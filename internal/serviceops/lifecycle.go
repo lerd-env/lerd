@@ -117,13 +117,15 @@ func wakeService(name string, seen map[string]bool) error {
 			}
 		}
 	}
-	if err := wakeStartUnit(unit); err != nil {
-		return err
-	}
-	// A dependency the user had stopped is running again now, so it is no
-	// longer paused.
-	_ = config.SetServicePaused(name, false)
-	return waitReadyFn(name, 60*time.Second)
+	return resume(name, func() error {
+		if err := wakeStartUnit(unit); err != nil {
+			return err
+		}
+		// A dependency the user had stopped is running again now, so it is no
+		// longer paused.
+		_ = config.SetServicePaused(name, false)
+		return awaitReady(name, unit, 60*time.Second)
+	})
 }
 
 // AdministeredServices returns the installed services an admin tool's

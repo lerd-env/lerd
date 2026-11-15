@@ -14,5 +14,17 @@ func TestMain(m *testing.M) {
 	// The port guard asks podman whether a service's container runs; a test
 	// reads "absent" unless it says otherwise, never the machine's own podman.
 	ensureContainerRunning = func(string) (bool, bool) { return false, true }
-	os.Exit(m.Run())
+	// Ready markers and service locks live in the data dir, never the machine's.
+	// A resume helper process keeps its parent's, which it shares the lock with.
+	if os.Getenv("LERD_RESUME_DIR") != "" {
+		os.Exit(m.Run())
+	}
+	data, err := os.MkdirTemp("", "serviceops-data-")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("XDG_DATA_HOME", data)
+	code := m.Run()
+	os.RemoveAll(data)
+	os.Exit(code)
 }
