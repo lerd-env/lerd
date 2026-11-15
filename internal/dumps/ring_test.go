@@ -941,3 +941,23 @@ func TestRing_KeptCeilingRecountsAfterADropThatFreesNothing(t *testing.T) {
 		t.Fatalf("%d kept events left, want at most the buffer's 2", n)
 	}
 }
+
+// Once a dropped page's shared row moves to its fetch, that fetch is the
+// biggest kept request, so it goes before a smaller one whatever their names.
+func TestRing_KeptCeilingRanksByOwnersLeftAfterEachDrop(t *testing.T) {
+	r := NewRing(7)
+	keep := map[string]bool{"page": true, "zfetch": true, "aother": true}
+	r.SetKeep(keep)
+	r.Append(fetchEvent("shared", "page", "zfetch"))
+	for i := 0; i < 5; i++ {
+		r.Append(ridEvent(fmt.Sprint("p", i), "page"))
+	}
+	for i := 0; i < 4; i++ {
+		r.Append(ridEvent(fmt.Sprint("z", i), "zfetch"))
+		r.Append(ridEvent(fmt.Sprint("o", i), "aother"))
+	}
+	r.SetKeep(keep)
+	if !rowExists(t, r, "o0") || rowExists(t, r, "z0") || rowExists(t, r, "shared") {
+		t.Fatal("want the fetch, biggest once the page went, dropped and the smaller request kept")
+	}
+}

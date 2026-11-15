@@ -296,53 +296,79 @@ func (r *Ring) yieldCLI(settled int64) {
 
 // capKept drops kept requests whole, biggest first, once together they hold
 // more than cap events: a week of slowest routes with debug logging ran to gigabytes.
-// A dropped page's shared rows stay with their fetches, so it recounts per batch.
 func (r *Ring) capKept() {
-	for {
-		doomed := r.keptOverCap()
-		if len(doomed) == 0 || !r.dropKept(doomed) {
-			return
-		}
+	if doomed := r.keptOverCap(); len(doomed) > 0 {
+		r.dropKept(doomed)
 	}
 }
 
-// keptOverCap returns the biggest kept requests whose rows bring the kept set
-// back within cap; a browser row two kept requests share counts once, under its page.
+// keptHolders counts kept rows by the kept page and kept fetch holding them,
+// either "" when that one is not kept.
+type keptHolders struct {
+	page, fetch string
+	n           int
+}
+
+// keptOverCap picks the requests to drop from one scan. A row counts once,
+// under its page while the page stays, then under its fetch.
 func (r *Ring) keptOverCap() []string {
-	rows, err := r.db.Query(`SELECT CASE WHEN rid IN (SELECT rid FROM kept) THEN rid ELSE reached END AS owner,
-		COUNT(*) AS n FROM events WHERE ` + keptRow + ` GROUP BY owner ORDER BY n DESC, owner`)
+	rows, err := r.db.Query(`SELECT CASE WHEN rid IN (SELECT rid FROM kept) THEN rid ELSE '' END,
+		CASE WHEN reached IN (SELECT rid FROM kept) AND reached != rid THEN reached ELSE '' END,
+		COUNT(*) FROM events WHERE ` + keptRow + ` GROUP BY 1, 2`)
 	if err != nil {
 		warnRing("reading the buffer", err)
 		return nil
 	}
-	var owners []string
-	var sizes []int
-	total := 0
+	var groups []keptHolders
 	for rows.Next() {
-		var owner string
-		var n int
-		if rows.Scan(&owner, &n) == nil {
-			owners, sizes = append(owners, owner), append(sizes, n)
-			total += n
+		var g keptHolders
+		if rows.Scan(&g.page, &g.fetch, &g.n) == nil {
+			groups = append(groups, g)
 		}
 	}
 	rows.Close()
+	dropped := map[string]bool{}
 	var doomed []string
-	for i := 0; i < len(owners) && total > r.cap; i++ {
-		doomed = append(doomed, owners[i])
-		total -= sizes[i]
+	for {
+		sizes, total := map[string]int{}, 0
+		for _, g := range groups {
+			if owner := g.owner(dropped); owner != "" {
+				sizes[owner] += g.n
+				total += g.n
+			}
+		}
+		if total <= r.cap {
+			return doomed
+		}
+		biggest := ""
+		for owner, n := range sizes {
+			if biggest == "" || n > sizes[biggest] || n == sizes[biggest] && owner < biggest {
+				biggest = owner
+			}
+		}
+		dropped[biggest] = true
+		doomed = append(doomed, biggest)
 	}
-	return doomed
+}
+
+func (g keptHolders) owner(dropped map[string]bool) string {
+	if g.page != "" && !dropped[g.page] {
+		return g.page
+	}
+	if g.fetch != "" && !dropped[g.fetch] {
+		return g.fetch
+	}
+	return ""
 }
 
 // dropKept lets go of the given kept requests and deletes their events, all
-// but the browser rows a request still kept also reached; false when it could not.
-func (r *Ring) dropKept(rids []string) bool {
+// but the browser rows a request still kept also reached.
+func (r *Ring) dropKept(rids []string) {
 	list, _ := json.Marshal(rids)
 	tx, err := r.db.Begin()
 	if err != nil {
 		warnRing("dropping kept requests", err)
-		return false
+		return
 	}
 	_, err = tx.Exec(`DELETE FROM kept WHERE rid IN (SELECT value FROM json_each(?1))`, string(list))
 	if err == nil {
@@ -352,11 +378,9 @@ func (r *Ring) dropKept(rids []string) bool {
 	if err != nil {
 		tx.Rollback()
 		warnRing("dropping kept requests", err)
-		return false
+		return
 	}
-	err = tx.Commit()
-	warnRing("dropping kept requests", err)
-	return err == nil
+	warnRing("dropping kept requests", tx.Commit())
 }
 
 // shrinkFile gives the disk back once most of the file is free pages, which
