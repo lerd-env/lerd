@@ -79,12 +79,12 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_rid ON events(rid);
 CREATE INDEX IF NOT EXISTS idx_events_reached ON events(reached);
-CREATE INDEX IF NOT EXISTS idx_events_kept ON events(kept);
 CREATE INDEX IF NOT EXISTS idx_events_site_kind ON events(site, kind);
 CREATE INDEX IF NOT EXISTS idx_events_grp ON events(grp);
 CREATE INDEX IF NOT EXISTS idx_events_job ON events(job);
 CREATE INDEX IF NOT EXISTS idx_events_id ON events(id);
-CREATE TABLE IF NOT EXISTS kept (rid TEXT PRIMARY KEY);`
+CREATE TABLE IF NOT EXISTS kept (rid TEXT PRIMARY KEY);
+DROP INDEX IF EXISTS idx_events_kept;`
 
 // keptRow selects the events of a kept request: each route's slowest, which the
 // dashboard links to for days. The set lives apart from the events, since
@@ -239,14 +239,161 @@ func (r *Ring) SetKeep(keep map[string]bool) {
 	r.trim()
 }
 
+// droppable selects the rows a trim may delete given the settled seq as ?1:
+// not kept, older than trimGrace, and not of a web request still sending.
+const droppable = `NOT ` + keptRow + ` AND seq <= ?1
+	AND rid NOT IN (SELECT rid FROM events WHERE seq > ?1 AND rid != '' AND ctx = 'fpm')`
+
 // trim deletes what fell out of the newest cap events and no kept request ran,
-// once it is older than trimGrace and its web request has gone quiet that long.
+// once droppable. The biggest requests and CLI runs give way first, so one
+// noisy process cannot push every web request out.
 func (r *Ring) trim() {
 	r.untrimmed = 0
 	settled := r.settle()
-	_, err := r.db.Exec(`DELETE FROM events WHERE NOT `+keptRow+` AND seq < ? AND seq <= ?
-		AND rid NOT IN (SELECT rid FROM events WHERE seq > ? AND rid != '' AND ctx = 'fpm')`, r.floor(), settled, settled)
+	r.capShare(settled)
+	r.yieldCLI(settled)
+	_, err := r.db.Exec(`DELETE FROM events WHERE `+droppable+` AND seq < ?2`, settled, r.floor())
 	warnRing("dropping old events", err)
+	r.capKept()
+	// settle just marked the newest seq; a delete that reached it frees seqs
+	// SQLite hands out again, which that mark would wrongly cover.
+	if r.newest() < r.marks[len(r.marks)-1].seq {
+		r.forgetAges()
+	}
+	r.shrinkFile()
+}
+
+// newest is the highest seq in the ring, 0 when it is empty.
+func (r *Ring) newest() int64 {
+	var seq int64
+	warnRing("reading the buffer", r.db.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM events`).Scan(&seq))
+	return seq
+}
+
+// capShare cuts every request to its newest quarter of the buffer.
+func (r *Ring) capShare(settled int64) {
+	_, err := r.db.Exec(`DELETE FROM events WHERE `+droppable+` AND seq IN (SELECT seq FROM
+		(SELECT seq, ROW_NUMBER() OVER (PARTITION BY rid ORDER BY seq DESC) AS n FROM events WHERE rid != '')
+		WHERE n > ?2)`, settled, max(r.cap/4, 1))
+	warnRing("dropping a large request's old events", err)
+}
+
+// yieldCLI drops the oldest CLI events while the buffer holds more than cap,
+// so the newest cap reach further back into web requests.
+func (r *Ring) yieldCLI(settled int64) {
+	var n int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM events WHERE NOT ` + keptRow).Scan(&n); err != nil {
+		warnRing("counting events", err)
+		return
+	}
+	if n <= r.cap {
+		return
+	}
+	_, err := r.db.Exec(`DELETE FROM events WHERE seq IN (SELECT seq FROM events WHERE ctx = 'cli' AND `+droppable+`
+		ORDER BY seq LIMIT ?2)`, settled, n-r.cap)
+	warnRing("dropping old CLI events", err)
+}
+
+// capKept drops kept requests whole, biggest first, once together they hold
+// more than cap events: a week of slowest routes with debug logging ran to gigabytes.
+func (r *Ring) capKept() {
+	if doomed := r.keptOverCap(); len(doomed) > 0 {
+		r.dropKept(doomed)
+	}
+}
+
+// keptHolders counts kept rows by the kept page and kept fetch holding them,
+// either "" when that one is not kept.
+type keptHolders struct {
+	page, fetch string
+	n           int
+}
+
+// keptOverCap picks the requests to drop from one scan. A row counts once,
+// under its page while the page stays, then under its fetch.
+func (r *Ring) keptOverCap() []string {
+	rows, err := r.db.Query(`SELECT CASE WHEN rid IN (SELECT rid FROM kept) THEN rid ELSE '' END,
+		CASE WHEN reached IN (SELECT rid FROM kept) AND reached != rid THEN reached ELSE '' END,
+		COUNT(*) FROM events WHERE ` + keptRow + ` GROUP BY 1, 2`)
+	if err != nil {
+		warnRing("reading the buffer", err)
+		return nil
+	}
+	var groups []keptHolders
+	for rows.Next() {
+		var g keptHolders
+		if rows.Scan(&g.page, &g.fetch, &g.n) == nil {
+			groups = append(groups, g)
+		}
+	}
+	rows.Close()
+	dropped := map[string]bool{}
+	var doomed []string
+	for {
+		sizes, total := map[string]int{}, 0
+		for _, g := range groups {
+			if owner := g.owner(dropped); owner != "" {
+				sizes[owner] += g.n
+				total += g.n
+			}
+		}
+		if total <= r.cap {
+			return doomed
+		}
+		biggest := ""
+		for owner, n := range sizes {
+			if biggest == "" || n > sizes[biggest] || n == sizes[biggest] && owner < biggest {
+				biggest = owner
+			}
+		}
+		dropped[biggest] = true
+		doomed = append(doomed, biggest)
+	}
+}
+
+func (g keptHolders) owner(dropped map[string]bool) string {
+	if g.page != "" && !dropped[g.page] {
+		return g.page
+	}
+	if g.fetch != "" && !dropped[g.fetch] {
+		return g.fetch
+	}
+	return ""
+}
+
+// dropKept lets go of the given kept requests and deletes their events, all
+// but the browser rows a request still kept also reached.
+func (r *Ring) dropKept(rids []string) {
+	list, _ := json.Marshal(rids)
+	tx, err := r.db.Begin()
+	if err != nil {
+		warnRing("dropping kept requests", err)
+		return
+	}
+	_, err = tx.Exec(`DELETE FROM kept WHERE rid IN (SELECT value FROM json_each(?1))`, string(list))
+	if err == nil {
+		_, err = tx.Exec(`DELETE FROM events WHERE (rid IN (SELECT value FROM json_each(?1))
+			OR reached IN (SELECT value FROM json_each(?1))) AND NOT `+keptRow, string(list))
+	}
+	if err != nil {
+		tx.Rollback()
+		warnRing("dropping kept requests", err)
+		return
+	}
+	warnRing("dropping kept requests", tx.Commit())
+}
+
+// shrinkFile gives the disk back once most of the file is free pages, which
+// SQLite otherwise keeps for reuse: a buffer that once grew stays that size.
+func (r *Ring) shrinkFile() {
+	var free, total int64
+	if r.db.QueryRow(`PRAGMA freelist_count`).Scan(&free) != nil || r.db.QueryRow(`PRAGMA page_count`).Scan(&total) != nil {
+		return
+	}
+	if free*2 > total {
+		_, err := r.db.Exec(`VACUUM`)
+		warnRing("shrinking the buffer file", err)
+	}
 }
 
 // forgetAges drops the trim marks after a delete, since SQLite reuses the
