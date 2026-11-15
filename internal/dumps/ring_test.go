@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -722,5 +723,119 @@ func TestRing_TrimDropsAWorkersOldEventsWhileItRuns(t *testing.T) {
 	r.SetKeep(map[string]bool{"w1": true})
 	if got := ids(r.Filter(FilterOpts{RID: "w1"})); fmt.Sprint(got) != "[late]" {
 		t.Fatalf("filter w1 = %v, want only the worker's event inside the grace", got)
+	}
+}
+
+// Kept requests hold their events past the buffer, but together no more than
+// the buffer itself; the biggest go first, so one huge page costs one request.
+func TestRing_KeptRequestsHoldNoMoreThanTheBufferBiggestFirst(t *testing.T) {
+	r := NewRing(3)
+	r.SetKeep(map[string]bool{"r1": true, "r2": true, "r3": true})
+	r.Append(ridEvent("a1", "r1"))
+	r.Append(ridEvent("b1", "r2"))
+	r.Append(ridEvent("b2", "r2"))
+	r.Append(ridEvent("b3", "r2"))
+	r.Append(ridEvent("c1", "r3"))
+	r.SetKeep(map[string]bool{"r1": true, "r2": true, "r3": true})
+	got := r.RequestIDs()
+	if !got["r1"] || got["r2"] || !got["r3"] {
+		t.Fatalf("request ids = %v, want the biggest kept request dropped whole", got)
+	}
+}
+
+// passGrace runs two trims trimGrace apart, so the rows appended before the
+// call are old enough for a trim to drop.
+func passGrace(t *testing.T, r *Ring) {
+	clock := time.Now()
+	ringNow = func() time.Time { return clock }
+	t.Cleanup(func() { ringNow = time.Now })
+	r.SetKeep(nil)
+	clock = clock.Add(trimGrace)
+	r.SetKeep(nil)
+}
+
+func cliEvent(id, rid string) Event {
+	e := ridEvent(id, rid)
+	e.Ctx.Type = "cli"
+	return e
+}
+
+// One CLI run rendering thousands of views must not push every web request
+// out: past a quarter of the buffer its own oldest events go.
+func TestRing_OneRequestHoldsAtMostAQuarterOfTheBuffer(t *testing.T) {
+	r := NewRing(8)
+	for i := 0; i < 5; i++ {
+		r.Append(cliEvent(fmt.Sprint("c", i), "w1"))
+	}
+	r.Append(ridEvent("a", "r1"))
+	passGrace(t, r)
+	if got := ids(r.Snapshot()); fmt.Sprint(got) != "[c3 c4 a]" {
+		t.Fatalf("snapshot = %v, want the CLI run cut to its newest two", got)
+	}
+}
+
+// When the buffer overflows, finished CLI runs give way before web requests.
+func TestRing_CLIEventsGoBeforeWebOnes(t *testing.T) {
+	r := NewRing(4)
+	r.Append(ridEvent("a", "ra"))
+	r.Append(ridEvent("b", "rb"))
+	r.Append(cliEvent("c1", "w1"))
+	r.Append(cliEvent("c2", "w2"))
+	r.Append(cliEvent("c3", "w3"))
+	r.Append(ridEvent("d", "rd"))
+	passGrace(t, r)
+	if got := ids(r.Snapshot()); fmt.Sprint(got) != "[a b c3 d]" {
+		t.Fatalf("snapshot = %v, want the oldest CLI events dropped first", got)
+	}
+}
+
+func TestRing_DroppingKeptRequestsShrinksTheFile(t *testing.T) {
+	r, err := OpenRing(filepath.Join(t.TempDir(), "debug-events.db"), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	big := []byte(`{"blob":"` + strings.Repeat("x", 64<<10) + `"}`)
+	keep := map[string]bool{}
+	for i := 0; i < 50; i++ {
+		rid := fmt.Sprint("r", i)
+		keep[rid] = true
+		e := ridEvent(rid, rid)
+		e.Data = big
+		r.Append(e)
+	}
+	r.SetKeep(keep)
+	var pages int
+	if err := r.db.QueryRow(`PRAGMA page_count`).Scan(&pages); err != nil {
+		t.Fatal(err)
+	}
+	if pages > 200 {
+		t.Fatalf("page_count = %d after dropping 48 of 50 large requests, want the file shrunk", pages)
+	}
+}
+
+// The kept set lives in its own table, so an index on the old column is only
+// another write per event; a buffer from an older lerd loses it on open.
+func TestRing_OpenDropsTheUnusedKeptIndex(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "debug-events.db")
+	r, err := OpenRing(path, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.db.Exec(`CREATE INDEX IF NOT EXISTS idx_events_kept ON events(kept)`); err != nil {
+		t.Fatal(err)
+	}
+	r.Close()
+	r, err = OpenRing(path, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	var n int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name = 'idx_events_kept'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatal("idx_events_kept still exists after open")
 	}
 }
