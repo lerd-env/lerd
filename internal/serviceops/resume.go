@@ -59,6 +59,10 @@ var resumeReady = func(name string) bool {
 	return id != "" && readyActivation(name) == id
 }
 
+// ServiceReady reports whether a service is up and answered its probe in its
+// current run, the check that lets an asker skip a start.
+func ServiceReady(name string) bool { return resumeReady(name) }
+
 func resumeLocked(name string, bringUp func() error) error {
 	lock, err := openResumeLock(name)
 	if err != nil {

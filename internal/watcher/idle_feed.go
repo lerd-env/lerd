@@ -105,6 +105,7 @@ func StartIdle(notify func(), sourceWatcher func(stop <-chan struct{}) error) {
 	}
 	go runNotifier()
 	startControlSocket()
+	startServiceWakeSocket()
 
 	// The access feed is bound once, for the daemon's life, and fans out to both
 	// request stats (always) and idle activity (only while enabled). Idle used to

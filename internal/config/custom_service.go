@@ -19,6 +19,9 @@ import (
 
 var validServiceName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
+// IsValidServiceName reports whether name is one a service can be saved under.
+func IsValidServiceName(name string) bool { return validServiceName.MatchString(name) }
+
 // EnvDetect defines auto-detection rules for `lerd env`.
 type EnvDetect struct {
 	Key         string `yaml:"key,omitempty"`

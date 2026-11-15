@@ -25,6 +25,8 @@ func TestMain(m *testing.M) {
 	claudeMCP = func(args ...string) ([]byte, error) { return nil, nil }
 	claudePlugin = func(args ...string) ([]byte, error) { return nil, nil }
 	hostbin.ExtraDirs = func() []string { return nil }
+	// A test must never ask the machine's own watcher to start its services.
+	askWatcherToEnsure = func(string, func()) (bool, error) { return false, nil }
 	// A developer running Claude Code under another profile would otherwise
 	// have the global skill tests write into that real profile.
 	os.Unsetenv("CLAUDE_CONFIG_DIR")

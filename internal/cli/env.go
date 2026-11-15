@@ -24,6 +24,7 @@ import (
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
+	"github.com/geodro/lerd/internal/servicewake"
 	"github.com/geodro/lerd/internal/sitedoctor"
 	"github.com/geodro/lerd/internal/sitetpl"
 	"github.com/spf13/cobra"
@@ -1769,18 +1770,31 @@ var ensureServiceRunning = func(name string) error {
 	if svc, err := config.LoadCustomService(name); err == nil && svc.External != nil {
 		return nil
 	}
+	// stderr: a passthrough child (php/console, e.g. a framework MCP server)
+	// owns stdout, and a progress line there corrupts its protocol stream.
+	starting := func() { envInterrupt(func() { fmt.Fprintf(os.Stderr, "  Starting %s...\n", name) }) }
+	// The watcher's one manager starts and probes each service once, however
+	// many lerd processes ask; without it, this process does it itself.
+	if handled, err := askWatcherToEnsure(name, starting); handled {
+		return err
+	}
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
 	if status != "active" {
-		// stderr: a passthrough child (php/console, e.g. a framework MCP server)
-		// owns stdout, and a progress line there corrupts its protocol stream.
-		envInterrupt(func() { fmt.Fprintf(os.Stderr, "  Starting %s...\n", name) })
+		starting()
 	}
 	if awaitIdleWake(name) {
 		return nil
 	}
-	return serviceops.EnsureServiceRunning(name)
+	return localEnsureService(name)
 }
+
+// How ensureServiceRunning asks the watcher, and brings a service up itself
+// when no watcher answers; vars so tests stand in for both.
+var (
+	askWatcherToEnsure = servicewake.Ask
+	localEnsureService = serviceops.EnsureServiceRunning
+)
 
 // resolveAppURL returns the URL lerd should write to APP_URL for the project,
 // applying the standard lerd precedence chain:
