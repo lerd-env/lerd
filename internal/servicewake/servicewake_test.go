@@ -9,10 +9,22 @@ import (
 	"time"
 )
 
+// shortDataHome points lerd's data dir at a short temp path: macOS refuses a
+// unix socket path past 104 bytes, which a test-named t.TempDir() exceeds.
+func shortDataHome(t *testing.T) {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "sw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	t.Setenv("XDG_DATA_HOME", dir)
+}
+
 // serve runs a watcher on a socket of its own for one test.
 func serve(t *testing.T, ready func(string) bool, ensure func(string) error) {
 	t.Helper()
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	shortDataHome(t)
 	l, err := Listen()
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +80,7 @@ func TestServe_refusesWhatIsNotAServiceName(t *testing.T) {
 // No watcher, or one that drops the request, is the caller's cue to bring the
 // service up itself.
 func TestAsk_withoutAnAnswerTheCallerDoesItItself(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	shortDataHome(t)
 	if handled, err := Ask("mysql", nil); handled || err != nil {
 		t.Fatalf("no watcher: handled=%v err=%v, want not handled", handled, err)
 	}
@@ -92,7 +104,7 @@ func TestAsk_withoutAnAnswerTheCallerDoesItItself(t *testing.T) {
 }
 
 func TestListen_onlyThisUserCanAsk(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	shortDataHome(t)
 	l, err := Listen()
 	if err != nil {
 		t.Fatal(err)
