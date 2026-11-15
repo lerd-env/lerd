@@ -318,9 +318,6 @@ func UnpauseSite(name string) error {
 // are not already running. When the site is paused it prints a notice; when it
 // is active it starts any missing services silently.
 func ensureServicesForCwd(cwd string) {
-	if runByPlugin() {
-		return
-	}
 	site, err := config.FindSiteByPath(cwd)
 	if err != nil {
 		return

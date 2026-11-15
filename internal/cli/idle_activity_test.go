@@ -70,9 +70,10 @@ func TestRecordCwdActivity_ignoresAPluginsOwnRuns(t *testing.T) {
 	}
 }
 
-// lerd php, console and vendor binaries first start every service the site's
-// env names; a plugin running one of them must not wake them all either.
-func TestEnsureServicesForCwd_startsNothingForAPlugin(t *testing.T) {
+// A plugin running the site's own code, as the tinker plugin does through lerd
+// php artisan tinker, needs the services the site's env names, so those still
+// start for it; only the site's workers stay asleep.
+func TestEnsureServicesForCwd_stillStartsServicesForAPlugin(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
@@ -91,16 +92,9 @@ func TestEnsureServicesForCwd_startsNothingForAPlugin(t *testing.T) {
 	ensureServiceRunningFn = func(name string) error { started = append(started, name); return nil }
 	t.Cleanup(func() { ensureServiceRunningFn = prev })
 
-	t.Setenv("LERD_PLUGIN_NAME", "")
+	t.Setenv("LERD_PLUGIN_NAME", "tinker")
 	ensureServicesForCwd(dir)
 	if len(started) != 1 || started[0] != "mysql" {
-		t.Fatalf("a command in the site started %v, want mysql", started)
-	}
-
-	started = nil
-	t.Setenv("LERD_PLUGIN_NAME", "db-browser")
-	ensureServicesForCwd(dir)
-	if len(started) != 0 {
-		t.Errorf("a plugin's own run started %v", started)
+		t.Errorf("a plugin's run started %v, want mysql", started)
 	}
 }
