@@ -921,3 +921,23 @@ func TestRing_DroppingAKeptRequestSparesRowsAnotherStillHolds(t *testing.T) {
 		t.Fatal("the biggest kept request was not dropped")
 	}
 }
+
+// Dropping a page whose browser rows two kept fetches still hold frees none of
+// them, so the ceiling must be checked again before it stops dropping.
+func TestRing_KeptCeilingRecountsAfterADropThatFreesNothing(t *testing.T) {
+	r := NewRing(2)
+	keep := map[string]bool{"page": true, "f1": true, "f2": true}
+	r.SetKeep(keep)
+	r.Append(fetchEvent("a", "page", "f1"))
+	r.Append(fetchEvent("b", "page", "f2"))
+	r.Append(ridEvent("e1", "f1"))
+	r.Append(ridEvent("e2", "f2"))
+	r.SetKeep(keep)
+	var n int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM events`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n > 2 {
+		t.Fatalf("%d kept events left, want at most the buffer's 2", n)
+	}
+}
