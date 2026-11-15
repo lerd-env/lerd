@@ -1,6 +1,8 @@
 package serviceops
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -17,21 +19,23 @@ import (
 // join the run in flight; other lerd processes queue on the service's lock and
 // then find it ready or get the error that run left, instead of starting it again.
 func resume(name string, bringUp func() error) error {
-	return resumeAs(name, name, bringUp)
+	return resumeAs(name, name, resumeReady, bringUp)
 }
 
 // resumeStart is resume for a start that does not wait until ready, as an
 // explicit start from the dashboard or the CLI. It shares the service's lock but
 // not its in-flight run, which promises a ready service a start cannot give.
 func resumeStart(name string, start func() error) error {
-	return resumeAs(name+" start", name, start)
+	return resumeAs(name+" start", name, resumeActive, start)
 }
 
 // StartShared runs start for a service through the start every other caller
 // of that service shares, for a caller that starts its unit its own way.
 func StartShared(name string, start func() error) error { return resumeStart(name, start) }
 
-func resumeAs(key, name string, bringUp func() error) error {
+// resumeAs runs bringUp once for the callers of key; settled says whether a run
+// that went before already did what this caller needs.
+func resumeAs(key, name string, settled func(string) bool, bringUp func() error) error {
 	resumeCalls.Lock()
 	if c, ok := resumeCalls.m[key]; ok {
 		resumeCalls.Unlock()
@@ -42,7 +46,7 @@ func resumeAs(key, name string, bringUp func() error) error {
 	resumeCalls.m[key] = c
 	resumeCalls.Unlock()
 
-	c.err = resumeLocked(name, bringUp)
+	c.err = resumeLocked(name, settled, bringUp)
 
 	resumeCalls.Lock()
 	delete(resumeCalls.m, key)
@@ -78,7 +82,16 @@ var resumeReady = func(name string) bool {
 // current run, the check that lets an asker skip a start.
 func ServiceReady(name string) bool { return resumeReady(name) }
 
-func resumeLocked(name string, bringUp func() error) error {
+// resumeActive reports whether a service's unit is up, read fresh, which is all
+// an explicit start promises; a seam for tests.
+var resumeActive = func(name string) bool {
+	unit := "lerd-" + name
+	podman.InvalidateUnitStatusCache(unit)
+	status, _ := podman.UnitStatus(unit)
+	return status == "active"
+}
+
+func resumeLocked(name string, settled func(string) bool, bringUp func() error) error {
 	lock, err := openResumeLock(name)
 	if err != nil {
 		return bringUp() // no lock to share: behave as every caller did before
@@ -93,7 +106,7 @@ func resumeLocked(name string, bringUp func() error) error {
 	}
 	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) //nolint:errcheck
 	if waited {
-		if resumeReady(name) {
+		if settled(name) {
 			return nil
 		}
 		if msg, ok := failedSince(name, waitedFrom); ok {
@@ -107,14 +120,21 @@ func resumeLocked(name string, bringUp func() error) error {
 
 func resumeLockDir() string { return filepath.Join(config.DataDir(), "service-locks") }
 
+// resumeFile names a service's lock or failure file by a hash of its name: the
+// name can come from a project's .env, so it never becomes part of a path.
+func resumeFile(name, ext string) string {
+	sum := sha256.Sum256([]byte(name))
+	return filepath.Join(resumeLockDir(), hex.EncodeToString(sum[:8])+ext)
+}
+
 func openResumeLock(name string) (*os.File, error) {
 	if err := os.MkdirAll(resumeLockDir(), 0o755); err != nil {
 		return nil, err
 	}
-	return os.OpenFile(filepath.Join(resumeLockDir(), name+".lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	return os.OpenFile(resumeFile(name, ".lock"), os.O_CREATE|os.O_RDWR, 0o600)
 }
 
-func failedFile(name string) string { return filepath.Join(resumeLockDir(), name+".failed") }
+func failedFile(name string) string { return resumeFile(name, ".failed") }
 
 // recordResume leaves a failed run's error for the callers that queued behind
 // it, and clears it once a run succeeds.

@@ -61,7 +61,14 @@ func TestResumeHelperProcess(t *testing.T) {
 	}
 	ready := filepath.Join(dir, "ready")
 	resumeReady = func(string) bool { _, err := os.Stat(ready); return err == nil }
-	err := resume("mysql", func() error {
+	// An explicit start only gets the unit up; it never marks the service ready.
+	active := filepath.Join(dir, "active")
+	resumeActive = func(string) bool { _, err := os.Stat(active); return err == nil }
+	run, marks := resume, ready
+	if os.Getenv("LERD_RESUME_KIND") == "start" {
+		run, marks = StartShared, active
+	}
+	err := run("mysql", func() error {
 		f, _ := os.OpenFile(filepath.Join(dir, "runs"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 		fmt.Fprintln(f, os.Getpid())
 		f.Close()
@@ -72,7 +79,7 @@ func TestResumeHelperProcess(t *testing.T) {
 		if os.Getenv("LERD_RESUME_FAIL") != "" {
 			return errors.New("mysql would not start")
 		}
-		return os.WriteFile(ready, nil, 0o644)
+		return os.WriteFile(marks, nil, 0o644)
 	})
 	answer := "ok"
 	if err != nil {
@@ -285,5 +292,49 @@ func TestStartService_sharesTheStartWithEnsureCallers(t *testing.T) {
 	// never handed over as ready by a start that does not wait.
 	if n := probes.Load(); n != 1 {
 		t.Errorf("probed %d times, want once", n)
+	}
+}
+
+// A name can come from a project's .env, so it never becomes part of a path:
+// the lock and failure files stay in the lock folder whatever it holds.
+func TestResume_aNameCannotLeaveTheLockFolder(t *testing.T) {
+	data := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", data)
+	prev := resumeReady
+	resumeReady = func(string) bool { return false }
+	t.Cleanup(func() { resumeReady = prev })
+
+	for _, name := range []string{"../escape", "../../outside", "a/b"} {
+		_ = resume(name, func() error { return errors.New("would not start") })
+	}
+	err := filepath.Walk(data, func(path string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() && filepath.Dir(path) != resumeLockDir() {
+			t.Errorf("wrote %s outside the lock folder", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(data), "outside.lock")); err == nil {
+		t.Error("a name climbed out of the data folder")
+	}
+}
+
+// Explicit starts in separate processes, the dashboard's and a terminal's
+// lerd service start, start the unit once: one that waited finds it up. On
+// macOS a second start would re-create the container under the first.
+func TestStartShared_startsOnceAcrossProcesses(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	var cmds []*exec.Cmd
+	for range 4 {
+		cmds = append(cmds, startHelper(t, dir, "LERD_RESUME_KIND=start"))
+	}
+	for _, c := range cmds {
+		_ = c.Wait()
+	}
+	if runs := lines(t, filepath.Join(dir, "runs")); len(runs) != 1 {
+		t.Errorf("started %d times across processes, want once", len(runs))
 	}
 }
