@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
@@ -597,13 +598,17 @@ func saysDatabaseMissing(out, name string) bool {
 		strings.Contains(out, `database "`+name+`" does not exist`)
 }
 
-// tailBuffer keeps the last max bytes written to it.
+// tailBuffer keeps the last max bytes written to it. The client's stdout and
+// stderr are copied on goroutines of their own, both into one tail.
 type tailBuffer struct {
+	mu  sync.Mutex
 	max int
 	buf []byte
 }
 
 func (t *tailBuffer) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.buf = append(t.buf, p...)
 	if over := len(t.buf) - t.max; over > 0 {
 		t.buf = t.buf[over:]
@@ -611,7 +616,11 @@ func (t *tailBuffer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (t *tailBuffer) String() string { return string(t.buf) }
+func (t *tailBuffer) String() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return string(t.buf)
+}
 
 func runDbShell(flagService, flagDatabase string) error {
 	cwd, err := os.Getwd()

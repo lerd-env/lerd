@@ -116,3 +116,23 @@ func TestOpenDbShell_leavesOtherFailuresAlone(t *testing.T) {
 		}
 	}
 }
+
+// os/exec copies the client's stdout and stderr on goroutines of their own,
+// and both feed the one tail the missing-database check reads.
+func TestTailBuffer_takesBothStreamsAtOnce(t *testing.T) {
+	tail := &tailBuffer{max: 64}
+	done := make(chan struct{})
+	for range 2 {
+		go func() {
+			for range 500 {
+				tail.Write([]byte("Unknown database 'shop'\n"))
+			}
+			done <- struct{}{}
+		}()
+	}
+	<-done
+	<-done
+	if !strings.Contains(tail.String(), "Unknown database 'shop'") || len(tail.String()) > 64 {
+		t.Errorf("tail = %q, want the last 64 bytes of what was written", tail.String())
+	}
+}
