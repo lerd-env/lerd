@@ -1,0 +1,45 @@
+{
+  "tools": [
+    {
+      "name": "ngrok",
+      "label": "ngrok",
+      "binary": "ngrok",
+      "installed": false,
+      "needs_token": true,
+      "install_url": "https://ngrok.com/download"
+    },
+    {
+      "name": "cloudflare",
+      "label": "Cloudflare Tunnel",
+      "binary": "cloudflared",
+      "installed": true,
+      "install_url": "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
+    },
+    {
+      "name": "expose",
+      "label": "Expose",
+      "binary": "expose",
+      "installed": true,
+      "install_url": "https://expose.dev"
+    },
+    {
+      "name": "serveo",
+      "label": "Serveo",
+      "binary": "ssh",
+      "installed": true
+    },
+    {
+      "name": "localhost-run",
+      "label": "localhost.run",
+      "binary": "ssh",
+      "installed": true
+    },
+    {
+      "name": "pinggy",
+      "label": "Pinggy",
+      "binary": "ssh",
+      "installed": true
+    }
+  ],
+  "auto": "cloudflare"
+}
