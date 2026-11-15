@@ -14,13 +14,7 @@
     padding: 32px; text-align: center;
   }
   .card { max-width: 460px; }
-  .mark {
-    width: 52px; height: 52px; margin: 0 auto 20px;
-    background: #ff4538; border-radius: 12px;
-    display: grid; place-items: center;
-    font-family: ui-monospace, monospace; font-weight: 800; font-size: 26px; color: #fff;
-    box-shadow: 0 0 28px rgba(255,69,56,0.4);
-  }
+  .mark { display: block; width: 52px; height: 52px; margin: 0 auto 20px; }
   h1 { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
   p { margin-top: 12px; color: #9b978e; font-size: 14px; line-height: 1.65; }
   code { font-family: ui-monospace, monospace; font-size: 12.5px; color: #eda33b; background: rgba(255,255,255,0.05); border: 1px solid #232329; border-radius: 5px; padding: 1px 6px; }
@@ -30,7 +24,7 @@
 </head>
 <body>
   <div class="card">
-    <div class="mark">L</div>
+    <img class="mark" src="/assets/logo-dark.svg" alt="Lerd" width="52" height="52">
     <h1>SPX flame-graph profiler</h1>
     <p>Turn the profiler on and every request to every PHP-FPM site is captured as an interactive flame graph, viewable right here in the dashboard. This is the static site demo, so the live SPX view is stubbed out. It runs for real once lerd is installed, from the dashboard, <code>lerd profile</code>, or MCP.</p>
     <div class="flame">
