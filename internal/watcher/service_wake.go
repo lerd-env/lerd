@@ -2,6 +2,7 @@ package watcher
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/servicewake"
@@ -10,7 +11,7 @@ import (
 // The steps ensureForCaller takes, vars so tests can stand in for the engine
 // and the containers.
 var (
-	wakeSocketWakeAsleep    = func(names []string) { idleEng.wakeServicesNow(names) }
+	wakeSocketWakeAsleep    = func(names []string) error { return idleEng.wakeServicesNow(names) }
 	wakeSocketEnsureRunning = serviceops.EnsureServiceRunning
 	wakeSocketReady         = serviceops.ServiceReady
 )
@@ -27,12 +28,48 @@ func startServiceWakeSocket() {
 	go servicewake.Serve(l, wakeSocketReady, ensureForCaller)
 }
 
-// ensureForCaller brings a service up for a lerd process that asked. One
-// idle-suspend put to sleep is woken by the engine, which also restores its
-// sites and keeps its own bookkeeping, before every one is ensured ready.
+// ensureForCaller brings a service up for a lerd process that asked, waking one
+// idle-suspend put to sleep through the engine, which restores its sites. A
+// failed wake is the answer; requests arriving together share one attempt.
 func ensureForCaller(name string) error {
-	if serviceAsleep(name) {
-		wakeSocketWakeAsleep([]string{name})
+	return ensureCalls.do(name, func() error {
+		if serviceAsleep(name) {
+			if err := wakeSocketWakeAsleep([]string{name}); err != nil {
+				return err
+			}
+		}
+		return wakeSocketEnsureRunning(name)
+	})
+}
+
+// sharedCalls runs one call per key at a time, handing its result to every
+// caller that asked for the same key while it ran.
+type sharedCalls struct {
+	mu sync.Mutex
+	m  map[string]*sharedCall
+}
+
+type sharedCall struct {
+	done chan struct{}
+	err  error
+}
+
+var ensureCalls = &sharedCalls{m: map[string]*sharedCall{}}
+
+func (s *sharedCalls) do(key string, fn func() error) error {
+	s.mu.Lock()
+	if c, ok := s.m[key]; ok {
+		s.mu.Unlock()
+		<-c.done
+		return c.err
 	}
-	return wakeSocketEnsureRunning(name)
+	c := &sharedCall{done: make(chan struct{})}
+	s.m[key] = c
+	s.mu.Unlock()
+	c.err = fn()
+	s.mu.Lock()
+	delete(s.m, key)
+	s.mu.Unlock()
+	close(c.done)
+	return c.err
 }
