@@ -17,20 +17,35 @@ import (
 // join the run in flight; other lerd processes queue on the service's lock and
 // then find it ready or get the error that run left, instead of starting it again.
 func resume(name string, bringUp func() error) error {
+	return resumeAs(name, name, bringUp)
+}
+
+// resumeStart is resume for a start that does not wait until ready, as an
+// explicit start from the dashboard or the CLI. It shares the service's lock but
+// not its in-flight run, which promises a ready service a start cannot give.
+func resumeStart(name string, start func() error) error {
+	return resumeAs(name+" start", name, start)
+}
+
+// StartShared runs start for a service through the start every other caller
+// of that service shares, for a caller that starts its unit its own way.
+func StartShared(name string, start func() error) error { return resumeStart(name, start) }
+
+func resumeAs(key, name string, bringUp func() error) error {
 	resumeCalls.Lock()
-	if c, ok := resumeCalls.m[name]; ok {
+	if c, ok := resumeCalls.m[key]; ok {
 		resumeCalls.Unlock()
 		<-c.done
 		return c.err
 	}
 	c := &resumeCall{done: make(chan struct{})}
-	resumeCalls.m[name] = c
+	resumeCalls.m[key] = c
 	resumeCalls.Unlock()
 
 	c.err = resumeLocked(name, bringUp)
 
 	resumeCalls.Lock()
-	delete(resumeCalls.m, name)
+	delete(resumeCalls.m, key)
 	resumeCalls.Unlock()
 	close(c.done)
 	return c.err

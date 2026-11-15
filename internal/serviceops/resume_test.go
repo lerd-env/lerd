@@ -214,11 +214,11 @@ func TestEnsureServiceRunning_startsAndProbesOnceForCallersTogether(t *testing.T
 		time.Sleep(150 * time.Millisecond)
 		return nil
 	}
-	prevID, prevRegen := activationIDFn, ensureRegenConsumersFn
+	prevID, prevRegen := activationIDFn, regenConsumersFn
 	activationIDFn = func(string) string { return "run-1" }
 	// The starter's refresh of admin UIs probes on its own; not what is counted here.
-	ensureRegenConsumersFn = func(string) {}
-	t.Cleanup(func() { activationIDFn, ensureRegenConsumersFn = prevID, prevRegen })
+	regenConsumersFn = func(string) {}
+	t.Cleanup(func() { activationIDFn, regenConsumersFn = prevID, prevRegen })
 	if err := config.SaveCustomService(&config.CustomService{
 		Name: "proj-db", Image: "docker.io/library/postgres:16", Ports: []string{"127.0.0.1:5439:5432"},
 	}); err != nil {
@@ -239,6 +239,50 @@ func TestEnsureServiceRunning_startsAndProbesOnceForCallersTogether(t *testing.T
 	if n := life.starts.Load(); n != 1 {
 		t.Errorf("started %d times, want once", n)
 	}
+	if n := probes.Load(); n != 1 {
+		t.Errorf("probed %d times, want once", n)
+	}
+}
+
+// An explicit start from the dashboard, the TUI or MCP and the starts a
+// db:shell or a link make share one StartUnit when they meet.
+func TestStartService_sharesTheStartWithEnsureCallers(t *testing.T) {
+	withServiceHome(t)
+	stubLifecycle(t)
+	life := countingLifecycle{starts: &atomic.Int32{}, up: &atomic.Bool{}}
+	podman.UnitLifecycle = life
+	var probes atomic.Int32
+	waitReadyFn = func(string, time.Duration) error { probes.Add(1); time.Sleep(100 * time.Millisecond); return nil }
+	prevID, prevRegen := activationIDFn, regenConsumersFn
+	activationIDFn = func(string) string { return "run-1" }
+	regenConsumersFn = func(string) {}
+	t.Cleanup(func() { activationIDFn, regenConsumersFn = prevID, prevRegen })
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "proj-db", Image: "docker.io/library/postgres:16", Ports: []string{"127.0.0.1:5439:5432"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			call := EnsureServiceRunning
+			if i%4 == 0 {
+				call = StartService
+			}
+			if err := call("proj-db"); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	if n := life.starts.Load(); n != 1 {
+		t.Errorf("started %d times, want once", n)
+	}
+	// The ensure callers were promised a ready service, so it was probed once,
+	// never handed over as ready by a start that does not wait.
 	if n := probes.Load(); n != 1 {
 		t.Errorf("probed %d times, want once", n)
 	}

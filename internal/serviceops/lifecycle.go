@@ -60,7 +60,7 @@ func StartService(name string) error {
 			return err
 		}
 	}
-	if err := startUnitRetry(unit); err != nil {
+	if err := resumeStart(name, func() error { return startUnitRetry(unit) }); err != nil {
 		return err
 	}
 	_ = config.SetServicePaused(name, false)
@@ -74,7 +74,7 @@ func StartService(name string) error {
 			feedback.Warn("could not start dependent service %s: %v", dep, err)
 		}
 	}
-	RegenerateDynamicEnvConsumersForService(name)
+	regenConsumersFn(name)
 	// Starting is where the port guard shifts a service off a port something
 	// else took while it was down, and where a service installed since the last
 	// start first needs its dashboard served.

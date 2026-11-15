@@ -1198,7 +1198,7 @@ func EnsureServiceRunning(name string) error {
 	// pgAdmin only list the members of a family that are running. Outside the
 	// resume, which holds only this service's lock.
 	if started {
-		ensureRegenConsumersFn(name)
+		regenConsumersFn(name)
 	}
 	return nil
 }
@@ -1230,9 +1230,9 @@ func awaitReady(name, unit string, timeout time.Duration) error {
 // answered is not repeated within it; per platform, a seam for tests.
 var activationIDFn = activationID
 
-// ensureRegenConsumersFn refreshes the admin UIs that list a service's family
-// after EnsureServiceRunning starts it; a seam for tests.
-var ensureRegenConsumersFn = RegenerateDynamicEnvConsumersForService
+// regenConsumersFn refreshes the admin UIs that list a service's family after
+// a start; a seam for tests.
+var regenConsumersFn = RegenerateDynamicEnvConsumersForService
 
 func readyFile(name string) string {
 	return filepath.Join(config.DataDir(), "service-ready", name)
