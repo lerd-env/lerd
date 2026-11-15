@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
@@ -550,6 +551,77 @@ func newDbShellCmd(use string) *cobra.Command {
 	return cmd
 }
 
+var (
+	dbShellRun         = func(cmd *exec.Cmd) error { return cmd.Run() }
+	dbShellInteractive = isInteractive
+	dbShellConfirm     = feedback.Confirm
+)
+
+// openDbShell opens the client on env's database. Whether the database exists
+// is not asked first: the client says so when it is missing, so only then is
+// the user offered it, or told how to make it, and every other run saves a query.
+func openDbShell(env *dbEnv) error {
+	said, err := runDbShellOnce(env)
+	if err == nil || env.database == "" || !saysDatabaseMissing(said, env.database) {
+		return err
+	}
+	if !dbShellInteractive() {
+		return fmt.Errorf("database %q does not exist in %s — run 'lerd db:create %s'", env.database, env.service, env.database)
+	}
+	if !dbShellConfirm(fmt.Sprintf("Database %q does not exist in %s. Create it?", env.database, env.service), true) {
+		return fmt.Errorf("database %q does not exist", env.database)
+	}
+	if _, err := createDatabase(env.service, env.database); err != nil {
+		return fmt.Errorf("creating database %q: %w", env.database, err)
+	}
+	feedback.Done("created database " + feedback.Val(env.database))
+	_, err = runDbShellOnce(env)
+	return err
+}
+
+// runDbShellOnce runs the client and returns the end of what it printed. Both
+// streams are kept: under a pty the client's error comes back on stdout.
+func runDbShellOnce(env *dbEnv) (string, error) {
+	tail := &tailBuffer{max: 4096}
+	cmd := dbShellCmd(env, dbShellInteractive())
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = io.MultiWriter(os.Stdout, tail)
+	cmd.Stderr = io.MultiWriter(os.Stderr, tail)
+	err := dbShellRun(cmd)
+	return tail.String(), err
+}
+
+// saysDatabaseMissing reports whether a client's output is MySQL's, MariaDB's
+// or PostgreSQL's refusal of this very database for not existing.
+func saysDatabaseMissing(out, name string) bool {
+	return strings.Contains(out, "Unknown database '"+name+"'") ||
+		strings.Contains(out, `database "`+name+`" does not exist`)
+}
+
+// tailBuffer keeps the last max bytes written to it. The client's stdout and
+// stderr are copied on goroutines of their own, both into one tail.
+type tailBuffer struct {
+	mu  sync.Mutex
+	max int
+	buf []byte
+}
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = append(t.buf, p...)
+	if over := len(t.buf) - t.max; over > 0 {
+		t.buf = t.buf[over:]
+	}
+	return len(p), nil
+}
+
+func (t *tailBuffer) String() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return string(t.buf)
+}
+
 func runDbShell(flagService, flagDatabase string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -565,30 +637,7 @@ func runDbShell(flagService, flagDatabase string) error {
 		return fmt.Errorf("could not start %s: %w", env.service, err)
 	}
 
-	if env.database != "" {
-		exists, err := databaseExists(env.service, env.database)
-		if err != nil {
-			return fmt.Errorf("checking database %q: %w", env.database, err)
-		}
-		if !exists {
-			if !isInteractive() {
-				return fmt.Errorf("database %q does not exist in %s — run 'lerd db:create %s'", env.database, env.service, env.database)
-			}
-			if !feedback.Confirm(fmt.Sprintf("Database %q does not exist in %s. Create it?", env.database, env.service), true) {
-				return fmt.Errorf("database %q does not exist", env.database)
-			}
-			if _, err := createDatabase(env.service, env.database); err != nil {
-				return fmt.Errorf("creating database %q: %w", env.database, err)
-			}
-			feedback.Done("created database " + feedback.Val(env.database))
-		}
-	}
-
-	cmd := dbShellCmd(env, isInteractive())
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return openDbShell(env)
 }
 
 // dbShellCmd opens the client: the machine's own for an external server, which
@@ -675,61 +724,6 @@ func escapeSQLLiteral(v string) string { return strings.ReplaceAll(v, "'", "''")
 // doubled first, so `\'` cannot escape the doubled quote and end the literal.
 func escapeMySQLLiteral(v string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(v, `\`, `\\`), "'", "''")
-}
-
-// mysqlDatabaseExistsQuery and pgDatabaseExistsQuery build the existence check
-// for one engine family. Separate so the escaping that keeps a name inside its
-// literal is asserted directly rather than through a container.
-func mysqlDatabaseExistsQuery(name string) string {
-	return fmt.Sprintf("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='%s';", escapeMySQLLiteral(name))
-}
-
-func pgDatabaseExistsQuery(name string) string {
-	return fmt.Sprintf("SELECT 1 FROM pg_database WHERE datname='%s';", escapeSQLLiteral(name))
-}
-
-// databaseExists returns whether the named database exists in the given lerd
-// DB service's container. Uses the same admin credentials createDatabase uses.
-// The name comes from a project's .env, so it is escaped for the literal it
-// lands in rather than trusted.
-func databaseExists(svc, name string) (bool, error) {
-	// An external server's clients take it from the client file, and the command
-	// below is an exec into a container it does not have.
-	if s, err := config.LoadCustomService(svc); err == nil && s.External != nil {
-		return serviceops.EntityExists(svc, serviceops.EntityFor(svc, "databases"), name)
-	}
-	container := "lerd-" + svc
-	family := serviceFamily(svc)
-	switch family {
-	case "mysql", "mariadb":
-		var lastErr error
-		for _, bin := range mysqlClientBinaries(family) {
-			check := podman.Cmd("exec", container, bin, "-h", "127.0.0.1", "-uroot", "-plerd",
-				"-sNe", mysqlDatabaseExistsQuery(name))
-			out, err := check.Output()
-			// 127 is a client the image does not ship; any other failure is the
-			// client's own, and the next binary's 127 would only hide it.
-			var exitErr *exec.ExitError
-			if errors.As(err, &exitErr) && exitErr.ExitCode() == 127 {
-				lastErr = err
-				continue
-			}
-			if err != nil {
-				return false, mysqlClientError(err)
-			}
-			return strings.TrimSpace(string(out)) != "0", nil
-		}
-		return false, lastErr
-	case "postgres":
-		cmd := podman.Cmd("exec", container, "psql", "-U", "postgres", "-tAc",
-			pgDatabaseExistsQuery(name))
-		out, err := cmd.Output()
-		if err != nil {
-			return false, err
-		}
-		return strings.TrimSpace(string(out)) == "1", nil
-	}
-	return true, nil
 }
 
 // connToService maps a DB_CONNECTION value to the lerd service name.

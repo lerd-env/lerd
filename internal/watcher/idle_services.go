@@ -253,18 +253,20 @@ func (e *idleEngine) wakeServicesAsync(names []string) {
 }
 
 // wakeServicesNow wakes the named services that are still asleep and returns
-// once they are ready, so a caller can start the workers that need them.
-func (e *idleEngine) wakeServicesNow(names []string) {
+// once they are ready, so a caller can start the workers that need them. The
+// error is the wake's, for a caller that answers someone waiting on it.
+func (e *idleEngine) wakeServicesNow(names []string) error {
 	if e == nil {
-		return
+		return nil
 	}
 	e.svcMu.Lock()
 	defer e.svcMu.Unlock()
 	names = e.asleepOf(names) // an earlier wake queued on svcMu may have done it
 	if len(names) == 0 {
-		return
+		return nil
 	}
-	if err := wakeServices(names); err != nil {
+	err := wakeServices(names)
+	if err != nil {
 		fmt.Printf("[WARN] idle-resume services: %v\n", err)
 	}
 	// A wake is use: without this a service started from outside (a dashboard,
@@ -281,6 +283,7 @@ func (e *idleEngine) wakeServicesNow(names []string) {
 	fmt.Printf("[idle] resumed services: %v\n", names)
 	publishSitesChanged()
 	e.refreshAdminUIs(names)
+	return err
 }
 
 // refreshAdminUIs rewrites admin UIs rendered while their servers slept, which

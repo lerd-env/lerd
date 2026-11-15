@@ -664,6 +664,12 @@ func ControlSocketPath() string {
 	return filepath.Join(RunDir(), "lerd-idle-control.sock")
 }
 
+// ServiceWakeSocketPath is the unix socket the lerd-watcher answers on when a
+// lerd process asks it to bring a service up, so each is started once.
+func ServiceWakeSocketPath() string {
+	return filepath.Join(RunDir(), "lerd-service-wake.sock")
+}
+
 // stoppedMarkerPath is the sentinel `lerd stop` writes and `lerd start` clears.
 // It lets long-running loops (the worker health watcher, heal notifications)
 // tell an intentional shutdown from worker drift.

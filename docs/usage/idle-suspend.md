@@ -58,6 +58,8 @@ A service also wakes when:
 - a request reaches its own domain, for a service that has one;
 - you run `lerd service start`, or turn the setting or idle-suspend off.
 
+However many of these happen at once, a service is started once. Every lerd process asks the watcher, which wakes it and waits until it answers, and tells each asker when it is ready; while the watcher restarts, during `lerd start` or an update, the processes take turns on a lock instead, so still only one of them starts it.
+
 [Automatic snapshots](database.md#snapshots) keep working while a database sleeps. A database asleep since before its last snapshot is skipped, since nothing can have changed. One that went to sleep with changes no snapshot has captured yet is started just for the dump, every due database on it in one go, and stopped again straight after; its sites stay on the waking page and it stays asleep.
 
 An admin UI that lists the servers it finds, phpMyAdmin across your MySQL and MariaDB services for instance, takes that list from the services running when its unit was last written, and that can happen while they sleep. So after a wake that brings up such a service, lerd refreshes the admin UIs of the woken service's family in the background, never while another service is being put to sleep or woken, and restarts one only when its list changed. A phpMyAdmin you open right after a wake can therefore restart once and come back with every server instead of asking for a login.

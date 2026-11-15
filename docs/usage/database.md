@@ -9,7 +9,7 @@ Database commands work with any project type: Laravel, Symfony, NestJS, Next.js,
 | `lerd db:create [name]` | Create a database and a `<name>_testing` database |
 | `lerd db:import [-s service] [-d name] [--fresh] <file.sql>` | Import a SQL dump |
 | `lerd db:export [-s service] [-d name] [-o file.sql]` | Export a database to a SQL dump |
-| `lerd db:shell [-s service] [-d name]` | Open an interactive MySQL, MariaDB or PostgreSQL shell; SQL piped in (`echo "SELECT 1" \| lerd db:shell`) runs and exits |
+| `lerd db:shell [-s service] [-d name]` | Open an interactive MySQL, MariaDB or PostgreSQL shell; SQL piped in (`echo "SELECT 1" \| lerd db:shell`) runs and exits. When the database does not exist, a terminal is offered to create it and SQL piped in is told to run `lerd db:create` |
 | `lerd db:extension list\|add <name>` | List or create the extensions an engine offers |
 | `lerd db:snapshot [name] [-A]` | Create a named, restorable snapshot of a database |
 | `lerd db:snapshots [--all]` | List stored snapshots |

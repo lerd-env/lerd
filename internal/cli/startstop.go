@@ -718,6 +718,10 @@ func startLerd(emit func(StartEvent), skip []string) error {
 	feedback.Line("starting lerd")
 	report(StartEvent{Phase: "step", Step: "units", Total: len(serviceUnits) + len(workerUnits)})
 
+	serviceSet := map[string]bool{}
+	for _, u := range lifecycle.InstalledServiceUnits() {
+		serviceSet[u] = true
+	}
 	makeJobs := func(us []string) []BuildJob {
 		jobs := make([]BuildJob, len(us))
 		for i, u := range us {
@@ -726,7 +730,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 			jobs[i] = BuildJob{
 				Label: label,
 				Run: func(w io.Writer) error {
-					err := startUnit(unit)
+					err := startUnitShared(unit, serviceSet)
 					ev := StartEvent{Phase: "unit", Unit: label}
 					if err != nil {
 						ev.Error = err.Error()
@@ -895,14 +899,16 @@ func startRestoredServices() {
 		RunParallel(pullJobs) //nolint:errcheck
 	}
 
-	// Start the services.
+	// Start the services, each through the start other callers of it share.
 	var startJobs []BuildJob
 	for _, u := range units {
 		unit := u
 		label := strings.TrimSuffix(strings.TrimPrefix(unit, "lerd-"), ".timer")
 		startJobs = append(startJobs, BuildJob{
 			Label: label,
-			Run:   func(_ io.Writer) error { return podman.StartUnit(unit) },
+			Run: func(_ io.Writer) error {
+				return startSharedFn(strings.TrimPrefix(unit, "lerd-"), func() error { return podman.StartUnit(unit) })
+			},
 		})
 	}
 	feedback.Header("Starting services")
@@ -1525,6 +1531,22 @@ func servicesToRestore(svcs []config.ProjectService, seen map[string]bool) []con
 }
 
 var containerRunningFn = podman.ContainerRunning
+
+// How startUnitShared starts a unit; vars so tests stand in for systemd.
+var (
+	startSharedFn = serviceops.StartShared
+	startOneUnit  = startUnit
+)
+
+// startUnitShared starts one unit for lerd start or install. A service goes
+// through the start every other caller of it shares, so a db:shell or the
+// dashboard meeting lerd start does not start it a second time.
+func startUnitShared(unit string, services map[string]bool) error {
+	if !services[unit] {
+		return startOneUnit(unit)
+	}
+	return startSharedFn(strings.TrimPrefix(unit, "lerd-"), func() error { return startOneUnit(unit) })
+}
 
 // startUnit brings one unit up for lerd start. A running container is left
 // alone: on macOS a start re-creates it, so nginx would drop :80 and fail to

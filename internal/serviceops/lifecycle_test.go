@@ -235,9 +235,9 @@ func TestEnsureServiceRunning_refreshesConsumersOfAServiceItStarts(t *testing.T)
 	withServiceHome(t)
 	stubLifecycle(t)
 	var refreshed []string
-	prev := ensureRegenConsumersFn
-	ensureRegenConsumersFn = func(name string) { refreshed = append(refreshed, name) }
-	t.Cleanup(func() { ensureRegenConsumersFn = prev })
+	prev := regenConsumersFn
+	regenConsumersFn = func(name string) { refreshed = append(refreshed, name) }
+	t.Cleanup(func() { regenConsumersFn = prev })
 	if err := config.SaveCustomService(&config.CustomService{
 		Name: "proj-postgres", Image: "docker.io/library/postgres:16", Family: "postgres",
 		Ports: []string{"127.0.0.1:5433:5432"},
