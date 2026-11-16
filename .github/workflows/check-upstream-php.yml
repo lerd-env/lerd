@@ -59,9 +59,17 @@ jobs:
           for version, upstream_tag in VERSIONS.items():
               repo = 'lerd-env/lerd-php' + version.replace('.', '') + '-fpm-base'
               for arch in ARCHES:
-                  upstream = diff_ids('registry-1.docker.io',
-                                      'https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/php:pull',
-                                      'library/php', f'{upstream_tag}-fpm-alpine', arch)
+                  try:
+                      upstream = diff_ids('registry-1.docker.io',
+                                          'https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/php:pull',
+                                          'library/php', f'{upstream_tag}-fpm-alpine', arch)
+                  except urllib.error.HTTPError as e:
+                      if e.code != 404:
+                          raise
+                      # A new minor has no upstream tag until its GA day; skip it
+                      # rather than stop the check for every other version.
+                      print(f'PHP {version}: no {upstream_tag}-fpm-alpine upstream yet, skipped')
+                      break
                   try:
                       ours = diff_ids('ghcr.io', f'https://ghcr.io/token?scope=repository:{repo}:pull',
                                       repo, f'{tag}-{arch}', arch)
