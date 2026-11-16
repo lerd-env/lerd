@@ -56,10 +56,9 @@ export async function loadStats(): Promise<void> {
   }
 }
 
-// startStatsPolling kicks off a 15-second poll loop scoped to dashboard
-// visibility. The Page Visibility API gates polling so a backgrounded tab
-// stops shelling out to podman; the WS pipeline already keeps the rest of
-// the dashboard live, so stats can pause without losing critical signal.
+// startStatsPolling polls every 15s while the dashboard is visible, so a
+// backgrounded tab stops shelling out to podman; the WS pipeline keeps the
+// rest of the dashboard live meanwhile.
 export function startStatsPolling(): () => void {
   return pollWhileVisible(() => void loadStats(), POLL_INTERVAL_MS);
 }
