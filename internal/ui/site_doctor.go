@@ -126,8 +126,8 @@ func handleDoctorFixRun(w http.ResponseWriter, r *http.Request, site *config.Sit
 			return
 		}
 		defer release()
-		workers, err := lerdcli.ApplyWorkerEnv(*site, path)
-		streamHostAction(w, "set the .env value and started "+strings.Join(workers, ", "), err)
+		done, err := lerdcli.ApplyWorkerEnv(*site, path)
+		streamHostAction(w, done, err)
 		return
 	}
 	shell, ok := sitedoctor.DoctorFixCommands[key]

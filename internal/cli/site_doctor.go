@@ -216,14 +216,14 @@ func applySiteDoctorFixes(path, fwName string, resp sitedoctor.Response, quiet b
 			if quiet {
 				restore = feedback.Redirect(os.Stderr)
 			}
-			workers, err := ApplyWorkerEnv(*site, path)
+			done, err := ApplyWorkerEnv(*site, path)
 			restore()
 			if err != nil {
 				feedback.Warn("%v", err)
 			}
-			if len(workers) > 0 {
+			if done != "" {
 				if !quiet {
-					fmt.Printf("  %s\n\n", feedback.Dim("set the .env value and started "+strings.Join(workers, ", ")))
+					fmt.Printf("  %s\n\n", feedback.Dim(done))
 				}
 				fixed = true
 			}

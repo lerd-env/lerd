@@ -14,13 +14,18 @@ import (
 // elsewhere, so the checkout is a worktree and no worker is started.
 func setupWorkerEnvSite(t *testing.T, lerdYAML string) (config.Site, string) {
 	t.Helper()
+	return setupWorkerEnvSiteWith(t, lerdYAML, nil)
+}
+
+func setupWorkerEnvSiteWith(t *testing.T, lerdYAML string, perWorktree *bool) (config.Site, string) {
+	t.Helper()
 	xdg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdg)
 	t.Setenv("XDG_DATA_HOME", xdg)
 	if err := config.SaveFramework(&config.Framework{
 		Name: "gatedfw",
 		Workers: map[string]config.FrameworkWorker{
-			"horizon": {Command: "php artisan horizon", Check: &config.FrameworkRule{Composer: "laravel/horizon", WhenEnv: "QUEUE_CONNECTION=redis"}},
+			"horizon": {Command: "php artisan horizon", PerWorktree: perWorktree, Check: &config.FrameworkRule{Composer: "laravel/horizon", WhenEnv: "QUEUE_CONNECTION=redis"}},
 		},
 		Env: config.FrameworkEnvConf{Services: map[string]config.FrameworkServiceDef{
 			"redis": {Detect: []config.FrameworkServiceDetect{{Key: "QUEUE_CONNECTION", ValuePrefix: "redis"}}},
@@ -52,12 +57,13 @@ func readEnv(t *testing.T, dir string) string {
 
 func TestApplyWorkerEnv_WritesTheGatedValue(t *testing.T) {
 	site, dir := setupWorkerEnvSite(t, "services:\n  - redis\nworkers:\n  - horizon\n")
-	workers, err := ApplyWorkerEnv(site, dir)
+	done, err := ApplyWorkerEnv(site, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(workers) != 1 || workers[0] != "horizon" {
-		t.Errorf("workers = %v, want [horizon]", workers)
+	// horizon is not per_worktree, so nothing runs it for this worktree.
+	if done != "set the .env value" {
+		t.Errorf("done = %q, want only the .env write reported", done)
 	}
 	env := readEnv(t, dir)
 	if !strings.Contains(env, "QUEUE_CONNECTION=redis") || strings.Contains(env, "QUEUE_CONNECTION=sync") {
@@ -71,11 +77,36 @@ func TestApplyWorkerEnv_WritesTheGatedValue(t *testing.T) {
 // Without the service the value points at, the fix leaves .env alone.
 func TestApplyWorkerEnv_SkipsGapWithoutService(t *testing.T) {
 	site, dir := setupWorkerEnvSite(t, "workers:\n  - horizon\n")
-	workers, err := ApplyWorkerEnv(site, dir)
-	if err != nil || workers != nil {
-		t.Fatalf("got workers=%v err=%v, want nothing done", workers, err)
+	done, err := ApplyWorkerEnv(site, dir)
+	if err != nil || done != "" {
+		t.Fatalf("got done=%q err=%v, want nothing done", done, err)
 	}
 	if env := readEnv(t, dir); !strings.Contains(env, "QUEUE_CONNECTION=sync") {
 		t.Errorf(".env = %q, want it untouched", env)
+	}
+}
+
+// A per_worktree worker gated on the value is started for the worktree itself,
+// since nothing else starts it once .env changes.
+func TestApplyWorkerEnv_StartsPerWorktreeWorkerInTheWorktree(t *testing.T) {
+	yes := true
+	site, dir := setupWorkerEnvSiteWith(t, "services:\n  - redis\nworkers:\n  - horizon\n", &yes)
+	var startedAt []string
+	orig := startGatedWorker
+	startGatedWorker = func(_ config.Site, path, name string, _ config.FrameworkWorker) error {
+		startedAt = append(startedAt, name+"@"+path)
+		return nil
+	}
+	t.Cleanup(func() { startGatedWorker = orig })
+
+	done, err := ApplyWorkerEnv(site, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done != "set the .env value and started horizon" {
+		t.Errorf("done = %q", done)
+	}
+	if len(startedAt) != 1 || startedAt[0] != "horizon@"+dir {
+		t.Errorf("started %v, want horizon at the worktree path", startedAt)
 	}
 }
