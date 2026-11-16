@@ -43,6 +43,24 @@ describe('disk store', () => {
     expect(calls[0].method).toBe('POST');
     expect(calls[1].method).toBe('GET');
   });
+
+  // Each scan is a podman system df plus image inspects inside the VM, and
+  // disk usage barely moves, so an open dashboard rescans every few minutes.
+  it('startDiskPolling rescans every five minutes, not every few seconds', async () => {
+    vi.useFakeTimers();
+    try {
+      const { startDiskPolling } = await importDisk();
+      const stop = startDiskPolling();
+      expect(calls.length).toBe(1);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(calls.length).toBe(1);
+      await vi.advanceTimersByTimeAsync(240_000);
+      expect(calls.length).toBe(2);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 async function importDisk() {

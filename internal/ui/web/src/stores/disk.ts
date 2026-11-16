@@ -44,8 +44,9 @@ export const disk = writable<DiskSnapshot>(empty);
 export const diskLoaded = writable<boolean>(false);
 
 // Reclaimable disk comes from a full podman image scan, far heavier than the
-// per-container stats poll, so it refreshes on its own slower cadence.
-const POLL_INTERVAL_MS = 30000;
+// stats poll and slow to change, so it refreshes every few minutes. A reclaim
+// reloads it at once through runCleanup.
+const POLL_INTERVAL_MS = 300_000;
 
 let inflight = false;
 
