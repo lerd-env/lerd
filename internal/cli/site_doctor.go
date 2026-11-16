@@ -205,6 +205,28 @@ func applySiteDoctorFixes(path, fwName string, resp sitedoctor.Response, quiet b
 				}
 				fixed = true
 			}
+		case sitedoctor.FixWorkerEnv:
+			site, ok := siteForCheckout(path)
+			if !ok {
+				continue
+			}
+			// Starting a worker reports its progress, which would land ahead of
+			// the --json report on stdout.
+			restore := func() {}
+			if quiet {
+				restore = feedback.Redirect(os.Stderr)
+			}
+			done, err := ApplyWorkerEnv(*site, path)
+			restore()
+			if err != nil {
+				feedback.Warn("%v", err)
+			}
+			if done != "" {
+				if !quiet {
+					fmt.Printf("  %s\n\n", feedback.Dim(done))
+				}
+				fixed = true
+			}
 		case sitedoctor.FixCreateDatabase:
 			created, err := createMissingDatabases(path, quiet)
 			if err != nil {

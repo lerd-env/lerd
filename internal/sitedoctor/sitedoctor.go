@@ -78,6 +78,9 @@ const (
 	// workers the site no longer declares, a host action for the same reason the
 	// vhost fix is one: the units live outside the container.
 	FixStaleWorkers = "stale_workers_remove"
+	// FixWorkerEnv sets the .env value a listed worker is gated on and starts
+	// it, offered only when that value points at a service the site declares.
+	FixWorkerEnv = "worker_env_set"
 )
 
 // DoctorFixCommands maps each universal fix key to the shell command run in the
@@ -338,6 +341,9 @@ func RunWith(ctx context.Context, path string, fw *config.Framework, opts Option
 	if c, ok := checkStaleWorkers(path, fw); ok {
 		add(c)
 	}
+	if c, ok := checkWorkerEnv(path, fw); ok {
+		add(c)
+	}
 	if c, ok := checkProtectedPath(path); ok {
 		add(c)
 	}
@@ -595,6 +601,7 @@ var universalLabels = map[string]string{
 	"vhost":             "Nginx Vhost",
 	"slow_routes":       "Response Time",
 	"stale_workers":     "Worker Units",
+	"worker_env":        "Worker Env",
 }
 
 // humanize turns a snake_case check name into a Title Case fallback label.

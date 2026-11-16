@@ -93,3 +93,28 @@ func TestCheckProjectConfig_LocalFileAlone(t *testing.T) {
 		t.Fatalf("got ok=%v status=%q, want a failing check", ok, c.Status)
 	}
 }
+
+// A worker whose check fails names the rule, so the reader is not sent to the
+// framework YAML to find out what is missing.
+func TestValidateProjectConfig_FailedWorkerCheckNamesTheRule(t *testing.T) {
+	dir := t.TempDir()
+	writeEnv(t, dir, ".lerd.yaml", "workers:\n  - horizon\n")
+	writeEnv(t, dir, ".env", "QUEUE_CONNECTION=redis\n")
+	_, warnings := ValidateProjectConfig(dir, horizonFramework())
+	want := "worker: horizon needs composer package laravel/horizon with QUEUE_CONNECTION=redis, it will be skipped"
+	if len(warnings) != 1 || warnings[0] != want {
+		t.Errorf("warnings: got %v, want [%q]", warnings, want)
+	}
+}
+
+// Only the env value failing is the worker_env check's finding, so it is not
+// repeated here.
+func TestValidateProjectConfig_EnvGateLeftToWorkerEnv(t *testing.T) {
+	dir := t.TempDir()
+	writeEnv(t, dir, ".lerd.yaml", "workers:\n  - horizon\n")
+	writeEnv(t, dir, ".env", "QUEUE_CONNECTION=sync\n")
+	writeEnv(t, dir, "composer.json", `{"require":{"laravel/horizon":"^5.0"}}`)
+	if _, warnings := ValidateProjectConfig(dir, horizonFramework()); len(warnings) != 0 {
+		t.Errorf("warnings: got %v, want none", warnings)
+	}
+}

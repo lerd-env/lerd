@@ -160,7 +160,8 @@
     services_start: 'Start the stopped services',
     database_create: 'Create the missing database',
     bucket_create: 'Create the missing bucket',
-    stale_workers_remove: 'Remove the stale worker units'
+    stale_workers_remove: 'Remove the stale worker units',
+    worker_env_set: 'Set the .env value and start the worker'
   };
 
   async function runFix(check: DoctorCheck) {

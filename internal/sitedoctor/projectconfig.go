@@ -142,8 +142,8 @@ func validateWorkers(path string, cfg *config.ProjectConfig, fw *config.Framewor
 			continue
 		}
 		switch {
-		case wDef.Check != nil && !config.MatchesRule(path, *wDef.Check):
-			warnings = append(warnings, fmt.Sprintf("worker: %s prerequisite not met (check rule failed)", w))
+		case wDef.Check != nil && !config.MatchesRule(path, *wDef.Check) && !envGateOnly(path, *wDef.Check):
+			warnings = append(warnings, fmt.Sprintf("worker: %s needs %s, it will be skipped", w, describeCheckRule(*wDef.Check)))
 		case wDef.ExcludeCheck != nil && config.MatchesRule(path, *wDef.ExcludeCheck):
 			warnings = append(warnings, fmt.Sprintf("worker: %s superseded by %s, it will be skipped", w, describeCheckRule(*wDef.ExcludeCheck)))
 		}
@@ -239,6 +239,16 @@ func validateCommands(cfg *config.ProjectConfig) (problems, warnings []string) {
 		}
 	}
 	return problems, warnings
+}
+
+// envGateOnly reports a failing rule that would pass without its when_env, the
+// case the worker_env check owns, so one problem is not reported twice.
+func envGateOnly(path string, r config.FrameworkRule) bool {
+	if r.WhenEnv == "" {
+		return false
+	}
+	r.WhenEnv = ""
+	return config.MatchesRule(path, r)
 }
 
 // describeCheckRule renders a rule for a finding: the reader only needs the
