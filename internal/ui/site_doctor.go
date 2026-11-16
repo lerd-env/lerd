@@ -114,6 +114,15 @@ func handleDoctorFixRun(w http.ResponseWriter, r *http.Request, site *config.Sit
 		handleDoctorBucketFix(w, r, site)
 		return
 	}
+	if key == sitedoctor.FixWorkerEnv {
+		path, ok := resolveDoctorPath(w, site, r.URL.Query().Get("branch"))
+		if !ok {
+			return
+		}
+		workers, err := lerdcli.ApplyWorkerEnv(*site, path)
+		streamHostAction(w, "set the .env value and started "+strings.Join(workers, ", "), err)
+		return
+	}
 	shell, ok := sitedoctor.DoctorFixCommands[key]
 	if !ok {
 		writeJSON(w, map[string]any{"error": "unknown doctor fix: " + key})

@@ -205,6 +205,21 @@ func applySiteDoctorFixes(path, fwName string, resp sitedoctor.Response, quiet b
 				}
 				fixed = true
 			}
+		case sitedoctor.FixWorkerEnv:
+			site, err := config.FindSiteByPath(path)
+			if err != nil || site == nil {
+				continue
+			}
+			workers, err := ApplyWorkerEnv(*site, path)
+			if err != nil {
+				feedback.Warn("%v", err)
+			}
+			if len(workers) > 0 {
+				if !quiet {
+					fmt.Printf("  %s\n\n", feedback.Dim("set the .env value and started "+strings.Join(workers, ", ")))
+				}
+				fixed = true
+			}
 		case sitedoctor.FixCreateDatabase:
 			created, err := createMissingDatabases(path, quiet)
 			if err != nil {

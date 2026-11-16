@@ -218,6 +218,24 @@ describe('SiteDoctorModal', () => {
     expect(launchCommand).not.toHaveBeenCalled();
   });
 
+  it('sets a gated worker env value through the fix endpoint', async () => {
+    loadDoctor.mockResolvedValue({
+      checks: [
+        { name: 'worker_env', label: 'Worker Env', status: 'warn', detail: 'horizon needs QUEUE_CONNECTION=redis (currently sync), lerd skips it', fix: 'worker_env_set' }
+      ],
+      failures: 0,
+      warnings: 1
+    });
+    loadCommands.mockResolvedValue([]);
+
+    render(SiteDoctorModal, { props: { open: true, site: site(), branch: '', onclose: () => {} } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Fix' }));
+
+    expect(executeDoctorFix).toHaveBeenCalledWith('acme.test', 'worker_env_set', 'Set the .env value and start the worker', '');
+    expect(launchCommand).not.toHaveBeenCalled();
+  });
+
   it('omits the Fix button when no matching command is available', async () => {
     loadDoctor.mockResolvedValue({
       checks: [{ name: 'storage_link', status: 'warn', detail: 'symlink missing', fix: 'storage:link' }],

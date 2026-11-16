@@ -342,6 +342,19 @@ lerd site:doctor --fix     # disables and removes them
 
 The unit is never removed silently, because it may still be running something you want. A worker whose `check` rule simply stopped matching is not stale: the definition still names it, and the next branch checkout brings it back.
 
+## Workers held back by an env value
+
+A `check` rule can carry `when_env`, so Horizon only runs on `QUEUE_CONNECTION=redis`. When a worker listed in `.lerd.yaml` passes everything except that value, `lerd site:doctor` reports it under **Worker Env**, naming the value it needs and the one the site has. lerd never changes the queue driver on its own, since `sync` or `database` may be what the project wants.
+
+When the wanted value points at a service the site declares (the framework's env detect rules say `QUEUE_CONNECTION=redis` belongs to `redis`), the finding comes with a fix that writes the value into `.env` and starts the worker:
+
+```bash
+lerd site:doctor           # horizon needs QUEUE_CONNECTION=redis (currently sync)
+lerd site:doctor --fix     # sets it and starts horizon
+```
+
+Without that service the finding has no fix, since switching the driver would only move the failure to a service the site does not run.
+
 ## Web UI (worker toggles)
 
 Framework workers appear as toggles in the Sites panel. Workers with a `check` rule only appear when the condition passes. Workers with `conflicts_with` suppress each other (e.g. when Horizon is available, the queue toggle is hidden).
