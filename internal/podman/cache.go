@@ -109,8 +109,8 @@ func (c *ContainerCache) Running(name string) bool {
 // containerRunningBounded is the non-started fallback's container check, bounded
 // by pollTimeout so a stalled VM returns fast (false) instead of hanging.
 func containerRunningBounded(name string) bool {
-	if _, ok := memoRunID(name); ok {
-		return true
+	if _, running, listed := memoRunID(name); running || listed {
+		return running
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
 	defer cancel()

@@ -1,6 +1,9 @@
 package podman
 
 import (
+	"context"
+	"errors"
+	"os/exec"
 	"testing"
 )
 
@@ -46,18 +49,45 @@ func TestRunningMemoDroppedOnUnitChange(t *testing.T) {
 	}
 }
 
-// A container missing from the ps falls through to its own inspect, so a
-// stopped one is never reported running.
-func TestRunningMemoFallsBackForAbsentContainer(t *testing.T) {
+// A container missing from a ps that succeeded is not running, so the daemon's
+// sweeps over every worker of every site don't each cost an inspect.
+func TestRunningMemoAnswersAbsentContainerWithoutInspect(t *testing.T) {
 	withRunningPs(t, "lerd-mysql\t1-2\n")
-	prev := execCommand
-	execCommand = fakeExec("false", "", 0)
-	t.Cleanup(func() { execCommand = prev })
+	inspects := 0
+	prev, prevCtx := execCommand, execCommandContext
+	execCommand = func(name string, args ...string) *exec.Cmd { inspects++; return prev(name, args...) }
+	execCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		inspects++
+		return prevCtx(ctx, name, args...)
+	}
+	t.Cleanup(func() { execCommand, execCommandContext = prev, prevCtx })
 
-	if ok, _ := ContainerRunning("lerd-postgres"); ok {
-		t.Error("lerd-postgres is not in the ps and inspect says stopped, want not running")
+	if ok, _ := ContainerRunning("lerd-queue-acme"); ok {
+		t.Error("lerd-queue-acme is not in the ps, want not running")
+	}
+	if containerRunningBounded("lerd-vite-acme") {
+		t.Error("lerd-vite-acme is not in the ps, want not running")
 	}
 	if got := ContainerRunID("lerd-postgres"); got != "" {
-		t.Errorf("ContainerRunID = %q for a stopped container, want empty", got)
+		t.Errorf("ContainerRunID = %q for a container not in the ps, want empty", got)
+	}
+	if inspects != 0 {
+		t.Errorf("ran %d podman inspects, want none", inspects)
+	}
+}
+
+// When the ps itself failed the memo knows nothing, so each check still asks
+// podman about its container directly.
+func TestRunningMemoFallsBackWhenPsFails(t *testing.T) {
+	prevPs := runningPsFn
+	runningPsFn = func() (string, error) { return "", errors.New("vm stalled") }
+	t.Cleanup(func() { runningPsFn = prevPs; dropRunningMemo() })
+	dropRunningMemo()
+	prev := execCommand
+	execCommand = fakeExec("true", "", 0)
+	t.Cleanup(func() { execCommand = prev })
+
+	if ok, _ := ContainerRunning("lerd-postgres"); !ok {
+		t.Error("ps failed and inspect says running, want running")
 	}
 }
