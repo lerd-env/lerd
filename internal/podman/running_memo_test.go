@@ -81,13 +81,25 @@ func TestRunningMemoAnswersAbsentContainerWithoutInspect(t *testing.T) {
 func TestRunningMemoFallsBackWhenPsFails(t *testing.T) {
 	prevPs := runningPsFn
 	runningPsFn = func() (string, error) { return "", errors.New("vm stalled") }
-	t.Cleanup(func() { runningPsFn = prevPs; dropRunningMemo() })
+	prev, prevCtx := execCommand, execCommandContext
+	t.Cleanup(func() { runningPsFn = prevPs; execCommand, execCommandContext = prev, prevCtx; dropRunningMemo() })
 	dropRunningMemo()
-	prev := execCommand
-	execCommand = fakeExec("true", "", 0)
-	t.Cleanup(func() { execCommand = prev })
 
+	execCommand = fakeExec("true", "", 0)
 	if ok, _ := ContainerRunning("lerd-postgres"); !ok {
-		t.Error("ps failed and inspect says running, want running")
+		t.Error("ContainerRunning: ps failed and inspect says running, want running")
+	}
+	execCommand = fakeExec("true 1-2", "", 0)
+	if got := ContainerRunID("lerd-postgres"); got != "1-2" {
+		t.Errorf("ContainerRunID = %q, want the run id inspect reports", got)
+	}
+	execCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		fake := fakeExec("true", "", 0)(name, args...)
+		cmd := exec.CommandContext(ctx, fake.Path, fake.Args[1:]...)
+		cmd.Env = fake.Env
+		return cmd
+	}
+	if !containerRunningBounded("lerd-postgres") {
+		t.Error("containerRunningBounded: ps failed and inspect says running, want running")
 	}
 }
