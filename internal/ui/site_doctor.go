@@ -119,6 +119,13 @@ func handleDoctorFixRun(w http.ResponseWriter, r *http.Request, site *config.Sit
 		if !ok {
 			return
 		}
+		release, busyWith, ok := tryAcquireRun(siteRunLockKey(site), key)
+		if !ok {
+			w.WriteHeader(http.StatusConflict)
+			writeJSON(w, map[string]any{"error": "another command is already running on this site: " + busyWith})
+			return
+		}
+		defer release()
 		workers, err := lerdcli.ApplyWorkerEnv(*site, path)
 		streamHostAction(w, "set the .env value and started "+strings.Join(workers, ", "), err)
 		return

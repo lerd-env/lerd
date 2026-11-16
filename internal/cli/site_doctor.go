@@ -210,7 +210,14 @@ func applySiteDoctorFixes(path, fwName string, resp sitedoctor.Response, quiet b
 			if err != nil || site == nil {
 				continue
 			}
+			// Starting a worker reports its progress, which would land ahead of
+			// the --json report on stdout.
+			restore := func() {}
+			if quiet {
+				restore = feedback.Redirect(os.Stderr)
+			}
 			workers, err := ApplyWorkerEnv(*site, path)
+			restore()
 			if err != nil {
 				feedback.Warn("%v", err)
 			}
