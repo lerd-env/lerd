@@ -12,11 +12,11 @@ import (
 
 // startGatedWorker starts a worker the worker_env fix just ungated, against the
 // site or, for a worktree, the worktree itself. A var so tests skip systemd.
-var startGatedWorker = func(site config.Site, path, name string, w config.FrameworkWorker) error {
+var startGatedWorker = func(site config.Site, path, php, name string, w config.FrameworkWorker) error {
 	if path == site.Path {
-		return StartFrameworkWorker(site.Name, site.Path, site.PHPVersion, name)
+		return StartFrameworkWorker(site.Name, site.Path, php, name)
 	}
-	return WorkerStartForSite(site.Name, path, site.PHPVersion, name, w, false)
+	return WorkerStartForSite(site.Name, path, php, name, w, false)
 }
 
 // ApplyWorkerEnv writes the .env value each fixable gated worker at path needs
@@ -40,13 +40,17 @@ func ApplyWorkerEnv(site config.Site, path string) (string, error) {
 	if err := envfile.ApplyUpdates(filepath.Join(path, ".env"), updates); err != nil {
 		return "", fmt.Errorf("writing .env: %w", err)
 	}
+	php := site.PHPVersion
+	if path != site.Path {
+		php = config.WorktreePHPVersion(path, site.PHPVersion)
+	}
 	var started []string
 	for _, name := range workers {
 		w := fw.Workers[name]
 		if path != site.Path && !w.IsPerWorktree() {
 			continue
 		}
-		if err := startGatedWorker(site, path, name, w); err != nil {
+		if err := startGatedWorker(site, path, php, name, w); err != nil {
 			return "set the .env value", fmt.Errorf("starting %s: %w", name, err)
 		}
 		started = append(started, name)

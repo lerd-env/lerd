@@ -87,14 +87,15 @@ func TestApplyWorkerEnv_SkipsGapWithoutService(t *testing.T) {
 }
 
 // A per_worktree worker gated on the value is started for the worktree itself,
-// since nothing else starts it once .env changes.
+// on the worktree's own PHP, since nothing else starts it once .env changes.
 func TestApplyWorkerEnv_StartsPerWorktreeWorkerInTheWorktree(t *testing.T) {
 	yes := true
-	site, dir := setupWorkerEnvSiteWith(t, "services:\n  - redis\nworkers:\n  - horizon\n", &yes)
+	site, dir := setupWorkerEnvSiteWith(t, "php_version: \"8.3\"\nservices:\n  - redis\nworkers:\n  - horizon\n", &yes)
+	site.PHPVersion = "8.5"
 	var startedAt []string
 	orig := startGatedWorker
-	startGatedWorker = func(_ config.Site, path, name string, _ config.FrameworkWorker) error {
-		startedAt = append(startedAt, name+"@"+path)
+	startGatedWorker = func(_ config.Site, path, php, name string, _ config.FrameworkWorker) error {
+		startedAt = append(startedAt, name+"@"+path+" php"+php)
 		return nil
 	}
 	t.Cleanup(func() { startGatedWorker = orig })
@@ -106,7 +107,7 @@ func TestApplyWorkerEnv_StartsPerWorktreeWorkerInTheWorktree(t *testing.T) {
 	if done != "set the .env value and started horizon" {
 		t.Errorf("done = %q", done)
 	}
-	if len(startedAt) != 1 || startedAt[0] != "horizon@"+dir {
-		t.Errorf("started %v, want horizon at the worktree path", startedAt)
+	if len(startedAt) != 1 || startedAt[0] != "horizon@"+dir+" php8.3" {
+		t.Errorf("started %v, want horizon at the worktree path on its PHP 8.3", startedAt)
 	}
 }
