@@ -36,7 +36,7 @@ export const statsLoaded = writable<boolean>(false);
 // Must stay below CacheTTL in internal/stats/stats.go, and is mirrored by
 // statsClientPollInterval in internal/ui/stats.go. The endpoint is backed by a
 // ~2s streaming podman stats, so a slower poll misses the cache every time.
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_MS = 15000;
 
 let inflight = false;
 
@@ -56,7 +56,7 @@ export async function loadStats(): Promise<void> {
   }
 }
 
-// startStatsPolling kicks off a 5-second poll loop scoped to dashboard
+// startStatsPolling kicks off a 15-second poll loop scoped to dashboard
 // visibility. The Page Visibility API gates polling so a backgrounded tab
 // stops shelling out to podman; the WS pipeline already keeps the rest of
 // the dashboard live, so stats can pause without losing critical signal.

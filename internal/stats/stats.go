@@ -58,8 +58,8 @@ const readTimeout = 6 * time.Second
 // row's CPU is averaged over, since the rate is measured between refreshes. The
 // cgroup read costs milliseconds, but the podman fallback still streams for ~2s,
 // so every surface polling this package must tick faster than the TTL or it
-// misses the cache every time.
-const CacheTTL = 10 * time.Second
+// misses the cache every time. On macOS each refresh samples inside the VM.
+const CacheTTL = 30 * time.Second
 
 // Read returns a fresh snapshot. Callers that need caching go through Cached,
 // which shares one refresh between lerd-ui and the TUI.
