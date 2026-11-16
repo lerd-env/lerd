@@ -60,3 +60,12 @@ func ApplyWorkerEnv(site config.Site, path string) (string, error) {
 	}
 	return "set the .env value and started " + strings.Join(started, ", "), nil
 }
+
+// siteForCheckout finds the site a checkout belongs to: the site itself, or for
+// a worktree its parent, which the registry does not list by the worktree path.
+func siteForCheckout(path string) (*config.Site, bool) {
+	if site, err := config.FindSiteByPath(path); err == nil && site != nil {
+		return site, true
+	}
+	return config.ParentSiteForWorktreeDir(path)
+}

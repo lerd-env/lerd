@@ -111,3 +111,27 @@ func TestApplyWorkerEnv_StartsPerWorktreeWorkerInTheWorktree(t *testing.T) {
 		t.Errorf("started %v, want horizon at the worktree path on its PHP 8.3", startedAt)
 	}
 }
+
+// Run from a worktree, the CLI fix finds the parent site through git's worktree
+// metadata, since the registry only lists the parent's own folder.
+func TestSiteForCheckout_ResolvesWorktreeToParent(t *testing.T) {
+	site, dir := setupWorkerEnvSite(t, "services:\n  - redis\nworkers:\n  - horizon\n")
+	meta := filepath.Join(site.Path, ".git", "worktrees", "feat")
+	if err := os.MkdirAll(meta, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(meta, "gitdir"), []byte(filepath.Join(dir, ".git")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(site); err != nil {
+		t.Fatal(err)
+	}
+
+	got, ok := siteForCheckout(dir)
+	if !ok || got.Name != site.Name {
+		t.Fatalf("got %+v ok=%v, want the parent site %q", got, ok, site.Name)
+	}
+	if _, ok := siteForCheckout(t.TempDir()); ok {
+		t.Error("an unrelated folder resolved to a site")
+	}
+}

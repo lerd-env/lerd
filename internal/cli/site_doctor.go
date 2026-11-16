@@ -206,8 +206,8 @@ func applySiteDoctorFixes(path, fwName string, resp sitedoctor.Response, quiet b
 				fixed = true
 			}
 		case sitedoctor.FixWorkerEnv:
-			site, err := config.FindSiteByPath(path)
-			if err != nil || site == nil {
+			site, ok := siteForCheckout(path)
+			if !ok {
 				continue
 			}
 			// Starting a worker reports its progress, which would land ahead of
