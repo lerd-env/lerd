@@ -15,6 +15,8 @@ var (
 	runningMemoMu sync.Mutex
 	runningMemo   map[string]string // running container name -> run id
 	runningMemoAt time.Time
+	// runningMemoListed is false when the ps behind the memo failed.
+	runningMemoListed bool
 
 	// runningPsFn lists lerd's running containers as "name\trunID" lines; a
 	// seam for tests.
@@ -30,23 +32,24 @@ func defaultRunningPs() (string, error) {
 }
 
 // memoRunID answers from one podman ps shared by every check in the next
-// second. ok is false when the container is not in it, and callers then ask
-// podman about it directly, so a stale memo never reports a stopped one running.
-func memoRunID(name string) (string, bool) {
+// second. listed is false only when that ps failed, and callers then ask podman
+// about the container directly; a name missing from a ps that worked is stopped.
+func memoRunID(name string) (id string, running, listed bool) {
 	runningMemoMu.Lock()
 	defer runningMemoMu.Unlock()
 	if runningMemo == nil || time.Since(runningMemoAt) > runningMemoTTL {
 		runningMemo = map[string]string{}
 		runningMemoAt = time.Now()
-		out, _ := runningPsFn()
+		out, err := runningPsFn()
+		runningMemoListed = err == nil
 		for _, line := range strings.Split(out, "\n") {
 			if n, id, ok := strings.Cut(strings.TrimSpace(line), "\t"); ok {
 				runningMemo[n] = id
 			}
 		}
 	}
-	id, ok := runningMemo[name]
-	return id, ok
+	id, running = runningMemo[name]
+	return id, running, runningMemoListed
 }
 
 func dropRunningMemo() {
@@ -58,7 +61,7 @@ func dropRunningMemo() {
 // ContainerRunID names the container's current run by its start time and pid,
 // both new on every start; "" when it is not running.
 func ContainerRunID(name string) string {
-	if id, ok := memoRunID(name); ok {
+	if id, running, listed := memoRunID(name); running || listed {
 		return id
 	}
 	out, err := Run("inspect", "--format={{.State.Running}} {{.State.StartedAt.Unix}}-{{.State.Pid}}", name)

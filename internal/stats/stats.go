@@ -54,12 +54,10 @@ var numCPU = runtime.NumCPU
 
 const readTimeout = 6 * time.Second
 
-// CacheTTL is how often Cached pays for a refresh. It also sets the window each
-// row's CPU is averaged over, since the rate is measured between refreshes. The
-// cgroup read costs milliseconds, but the podman fallback still streams for ~2s,
-// so every surface polling this package must tick faster than the TTL or it
-// misses the cache every time.
-const CacheTTL = 10 * time.Second
+// CacheTTL is how often Cached pays for a refresh and the window CPU is averaged
+// over. On macOS each refresh streams podman stats in the VM for ~2s, so every
+// poller must tick faster than the TTL or it misses the cache every time.
+const CacheTTL = 30 * time.Second
 
 // Read returns a fresh snapshot. Callers that need caching go through Cached,
 // which shares one refresh between lerd-ui and the TUI.
