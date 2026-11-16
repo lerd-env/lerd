@@ -81,5 +81,17 @@
     "databases": [
       { "name": "notebook", "size_bytes": 3145728, "site": "notebook.test", "snapshots": [] }
     ]
+  },
+  "dbngin": {
+    "service": "dbngin", "family": "mysql", "status": "active", "port": 3307,
+    "connection_url": "mysql://root@127.0.0.1:3307",
+    "supports_create": true, "supports_export": true, "supports_import": true, "supports_drop": true, "supports_snapshot": true,
+    "databases": [
+      {
+        "name": "metrics", "size_bytes": 23855104, "site": "metrics.test", "snapshots": [
+          { "name": "20261114-221500", "created": "2026-11-14T22:15:00Z", "database": "metrics", "size_bytes": 5767168 }
+        ]
+      }
+    ]
   }
 }

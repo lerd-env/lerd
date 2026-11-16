@@ -14,6 +14,11 @@ import path from 'node:path'
 
 const DIGEST_DIR = fileURLToPath(new URL('../public/digest', import.meta.url))
 const OUT_DIR = fileURLToPath(new URL('../public/assets/digest', import.meta.url))
+// The dark palette's logo, drawn from the file the site serves so the card
+// cannot fall behind it; the card's background is dark.
+const LOGO = readFileSync(fileURLToPath(new URL('../public/assets/logo-dark.svg', import.meta.url)), 'utf8')
+const LOGO_VIEWBOX = LOGO.match(/viewBox="([^"]+)"/)[1]
+const LOGO_INNER = LOGO.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '')
 
 // The landing page's editorial palette and type.
 const BG = '#0a0a0b'
@@ -81,9 +86,7 @@ function svg(version, { tagline, date, summary }) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
   <rect width="1280" height="640" fill="${BG}"/>
 
-  <rect x="80" y="72" width="40" height="40" rx="9" fill="${RED}"/>
-  <text x="100" y="101" font-family="${SANS}" font-size="25" font-weight="700"
-        fill="#ffffff" text-anchor="middle">L</text>
+  <svg x="80" y="72" width="40" height="40" viewBox="${LOGO_VIEWBOX}">${LOGO_INNER}</svg>
   <text x="138" y="98" font-family="${MONO}" font-size="16" letter-spacing="1.6"
         fill="${MUTED}">ENGINEERING DIGEST · ${esc(date)}</text>
   <text x="1200" y="98" font-family="${MONO}" font-size="16" fill="${MUTED}"

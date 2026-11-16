@@ -174,7 +174,16 @@
         }
       ],
       "has_docs": false,
-      "notifications": "none"
+      "notifications": "none",
+      "schedule": "allowed",
+      "schedules": [
+        {
+          "name": "nightly",
+          "every": "24h",
+          "last_run": "2026-11-15T03:00:12Z",
+          "next_run": "2026-11-16T03:00:00Z"
+        }
+      ]
     }
   ],
   "catalog": [

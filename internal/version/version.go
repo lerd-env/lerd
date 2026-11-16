@@ -13,7 +13,7 @@ import (
 //	-X github.com/geodro/lerd/internal/version.Commit=<sha>
 //	-X github.com/geodro/lerd/internal/version.Date=<iso8601>
 var (
-	Version = "1.37.0"
+	Version = "1.39.0"
 	Commit  = "none"
 	Date    = "unknown"
 )

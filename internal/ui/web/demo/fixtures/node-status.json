@@ -1,0 +1,14 @@
+[
+  {
+    "major": "22",
+    "installed": "22.21.0",
+    "latest": "22.23.5",
+    "update_available": true
+  },
+  {
+    "major": "24",
+    "installed": "24.22.3",
+    "latest": "24.22.3",
+    "update_available": false
+  }
+]

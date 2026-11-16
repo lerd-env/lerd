@@ -27,6 +27,8 @@ import databasesFixture from './fixtures/databases.json';
 import autoSnapshot from './fixtures/auto-snapshot.json';
 import docsFixture from './fixtures/docs.json';
 import pluginsFixture from './fixtures/plugins.json';
+import shareTools from './fixtures/share-tools.json';
+import nodeStatus from './fixtures/node-status.json';
 import serviceConfig from './fixtures/service-config.json';
 import phpExtensions from './fixtures/php-extensions.json';
 
@@ -72,6 +74,8 @@ const ROUTES: Record<string, unknown> = {
   '/api/stats': stats,
   '/api/disk': disk,
   '/api/workers/health': workersHealth,
+  '/api/share-tools': shareTools,
+  '/api/node-versions/status': nodeStatus,
   '/api/plugins': pluginsFixture.plugins,
   '/api/plugin-manager': pluginsFixture.managed,
   '/api/plugin-manager/catalog': pluginsFixture.catalog,
@@ -471,9 +475,10 @@ const DOCTOR_LARAVEL = {
     { name: 'migrations', label: 'Migrations', status: 'warn', detail: '2 pending migrations', fix: 'migrate' },
     { name: 'env_drift', label: '.env drift', status: 'ok' },
     { name: 'storage_link', label: 'Storage link', status: 'ok' },
+    { name: 'worker_env', label: 'Worker Env', status: 'warn', detail: 'horizon needs QUEUE_CONNECTION=redis (currently sync), lerd skips it', fix: 'worker_env_set' },
   ],
   failures: 0,
-  warnings: 1,
+  warnings: 2,
 };
 const DOCTOR_OK = {
   checks: [{ name: 'serving', label: 'Serving over HTTPS', status: 'ok' }],
@@ -774,7 +779,14 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   const cmdList = path.match(/^\/api\/sites\/([^/]+)\/commands$/);
   if (cmdList) return jsonResponse({ commands: commandsFor(decodeURIComponent(cmdList[1])) });
   const doctorMatch = path.match(/^\/api\/sites\/([^/]+)\/doctor$/);
-  if (doctorMatch) return jsonResponse(doctorFor(decodeURIComponent(doctorMatch[1])));
+  if (doctorMatch) {
+    // The doctor streams each check as it finishes, then the report, like the daemon.
+    const report = doctorFor(decodeURIComponent(doctorMatch[1])) as { checks: unknown[] };
+    const body =
+      report.checks.map((c) => `event: check\ndata: ${JSON.stringify(c)}\n\n`).join('') +
+      `event: done\ndata: ${JSON.stringify(report)}\n\n`;
+    return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  }
 
   // Managed host tools. The check re-reads the pins, which in the demo are the
   // ones already loaded, and an update applies the pin so the card that asked
@@ -793,7 +805,20 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   }
 
   // Static fixtures
-  if (path in ROUTES) return jsonResponse(ROUTES[path]);
+  // Share settings are answers the dialog reads back, so they have to stick.
+  if (path === '/api/share-tools' && method === 'POST') {
+    const b = JSON.parse(String(init?.body || '{}')) as { base_domain?: string; ngrok_token?: string; ngrok_args?: string; public_base_domain?: string };
+    const st = shareTools as Record<string, unknown>;
+    if (b.base_domain !== undefined) Object.assign(st, { base_domain: b.base_domain, base_domain_answered: true });
+    if (b.ngrok_token !== undefined) st.ngrok_token_set = b.ngrok_token !== '';
+    if (b.ngrok_args !== undefined) st.ngrok_args = b.ngrok_args;
+    if (b.public_base_domain !== undefined) st.public_base_domain = b.public_base_domain;
+    return jsonResponse({ ok: true });
+  }
+  // A page-plugin switch answers with the site's switches; the demo has none.
+  if (path === '/api/page-plugins' && method === 'POST') return jsonResponse([]);
+  // The fixtures are what a read returns; a write to the same path is a save.
+  if (path in ROUTES && (method === 'GET' || method === 'HEAD')) return jsonResponse(ROUTES[path]);
 
   // Toggles / actions: pretend they succeeded so the UI flips optimistically.
   // Resizing the Debug buffer answers with the full status, which the store keeps.
@@ -802,13 +827,48 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     if (size) dumpsStatus.capacity = size;
     return jsonResponse(dumpsStatus);
   }
+  // A plugin's schedule and notification switches are answers the card reads
+  // back, so they have to stick or the switch springs back.
+  const pluginSwitch = path.match(/^\/api\/plugin-manager\/([^/]+)\/(schedule|notifications)$/);
+  if (pluginSwitch && method === 'POST') {
+    const { allowed } = JSON.parse(String(init?.body || '{}')) as { allowed?: boolean };
+    const plugin = (pluginsFixture.managed as Array<Record<string, unknown>>).find((m) => m.name === decodeURIComponent(pluginSwitch[1]));
+    if (plugin) plugin[pluginSwitch[2] === 'schedule' ? 'schedule' : 'notifications'] = allowed ? 'allowed' : 'denied';
+    return jsonResponse({ ok: true });
+  }
+  // Updates change what the next read sees, so the card they came from settles.
+  const nodeUpdate = path.match(/^\/api\/node-versions\/(\d+)\/update$/);
+  if (nodeUpdate && method === 'POST') {
+    const v = (nodeStatus as { major: string; installed: string; latest: string; update_available: boolean }[]).find((n) => n.major === nodeUpdate[1]);
+    if (v) Object.assign(v, { installed: v.latest, update_available: false });
+    return jsonResponse({ ok: true });
+  }
+  const phpRebuild = path.match(/^\/api\/php-versions\/([\d.]+)\/rebuild$/);
+  if (phpRebuild && method === 'POST') {
+    const fpm = (status.php_fpms as { version: string; update_available?: boolean }[]).find((f) => f.version === phpRebuild[1]);
+    if (fpm) fpm.update_available = false;
+    const body =
+      `event: line\ndata: Rebuilding the PHP ${phpRebuild[1]} image on the newer base…\n\n` +
+      `event: done\ndata: ${JSON.stringify({ ok: true, version: phpRebuild[1] })}\n\n`;
+    return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  }
   if (method !== 'GET' && method !== 'HEAD') return jsonResponse({ ok: true });
   // Anything else we didn't fixture (push keys, favicons, …) — harmless empty.
+  // The download notice before a service is added; a preset's image is not on this machine.
+  if (path === '/api/image-estimate') {
+    const preset = qs.get('preset') || qs.get('service') || 'service';
+    return jsonResponse({ image: `docker.io/library/${preset}:${qs.get('version') || 'latest'}`, bytes: 118_400_000, local: false });
+  }
   if (path === '/api/dumps') return jsonResponse(DEMO_EVENTS.filter((e) => e.ctx.rid === qs.get('rid')));
   if (path === '/api/sites/git-status') return jsonResponse({ checkouts: gitCheckouts(qs.get('domain') || '') });
   if (path.startsWith('/api/dumps/') && path !== '/api/dumps/status' && path !== '/api/dumps/stream')
     return jsonResponse(fakeLensAnswer(DEMO_EVENTS, path + search));
-  if (path.startsWith('/api/')) return jsonResponse({});
+  if (path.startsWith('/api/')) {
+    // A page asking for something no fixture answers renders empty; the release
+    // check drives the demo and collects these to find what still needs data.
+    console.warn('[demo] no fixture for GET ' + path);
+    return jsonResponse({});
+  }
   return realFetch(input as RequestInfo, init);
 };
 
