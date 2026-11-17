@@ -406,6 +406,26 @@ func (p *Preset) Resolve(version string) (*CustomService, error) {
 	return p.materialise(picked, name, picked.HostPort), nil
 }
 
+// InstalledVersion returns the version tag an installed service runs. A bare-named
+// install from the preset's single image recorded none, so it is the canonical
+// version, but only while it runs that image line, never across a canonical flip.
+func (p *Preset) InstalledVersion(svc *CustomService) string {
+	if svc.PresetVersion != "" || len(p.Versions) == 0 || svc.Name != p.Name {
+		return svc.PresetVersion
+	}
+	canon := p.canonicalVersion()
+	if canon == nil || !sameImageLine(svc.Image, canon.Image) {
+		return ""
+	}
+	return canon.Tag
+}
+
+// sameImageLine reports whether running is pinned's image or a patch release of
+// it: mongo:7 and mongo:7.0.48 are on the mongo:7 line, mongo:70 is not.
+func sameImageLine(running, pinned string) bool {
+	return running == pinned || strings.HasPrefix(running, pinned+".")
+}
+
 // canonicalVersion returns the version flagged canonical, or nil when none is.
 func (p *Preset) canonicalVersion() *PresetVersion {
 	for i := range p.Versions {
