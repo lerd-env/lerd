@@ -202,13 +202,16 @@ func refreshPresetDefinition(svc *config.CustomService) (*config.CustomService, 
 	// rewrite its {{name}}-templated DB_HOST/connection_url to a container that
 	// does not exist). An alternate install keeps its version-suffixed name.
 	var fresh *config.CustomService
+	// An install made from the preset's single image recorded no version; the
+	// canonical one it runs is written back here, once.
+	version := preset.InstalledVersion(svc)
 	// ResolvePinned pins the canonical instance to its version's port, but only a
 	// multi-version preset has versions to pin; a single-version preset (no
 	// versions list) must go through Resolve or it never receives store refreshes.
 	if svc.Name == preset.Name && len(preset.Versions) > 0 {
-		fresh, err = preset.ResolvePinned(svc.PresetVersion)
+		fresh, err = preset.ResolvePinned(version)
 	} else {
-		fresh, err = preset.Resolve(svc.PresetVersion)
+		fresh, err = preset.Resolve(version)
 	}
 	if err != nil {
 		return svc, false
@@ -223,7 +226,7 @@ func refreshPresetDefinition(svc *config.CustomService) (*config.CustomService, 
 	fresh.Name = svc.Name
 	fresh.Preset = svc.Preset
 	fresh.Plugin = svc.Plugin
-	fresh.PresetVersion = svc.PresetVersion
+	fresh.PresetVersion = version
 	// Ports and the connection URL carry the host-port allocation chosen at
 	// quadlet generation (shifted when the preset default collided), not store
 	// intent, so preserve them like the image. Otherwise reconcile resets a

@@ -128,15 +128,15 @@ func TestStoreHostEmptyWhenBaseIsNotAURL(t *testing.T) {
 func TestServiceStoreBaseURLs_PrefersItsOwnSchema(t *testing.T) {
 	t.Setenv("LERD_SERVICES_BASE_URL", "")
 	got := ServiceStoreBaseURLs()
-	if len(got) != 2 {
-		t.Fatalf("expected the schema path and the legacy fallback, got %v", got)
+	if len(got) != StoreSchema {
+		t.Fatalf("expected one base per schema down to the legacy fallback, got %v", got)
 	}
 	want := fmt.Sprintf("/main/schema/%d/services", StoreSchema)
 	if !strings.HasSuffix(got[0], want) {
 		t.Errorf("first base should be the schema tree %q, got %q", want, got[0])
 	}
-	if !strings.HasSuffix(got[1], "/main/services") {
-		t.Errorf("fallback should be the legacy unprefixed path, got %q", got[1])
+	if last := got[len(got)-1]; !strings.HasSuffix(last, "/main/services") {
+		t.Errorf("fallback should be the legacy unprefixed path, got %q", last)
 	}
 }
 

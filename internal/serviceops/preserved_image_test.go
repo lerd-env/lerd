@@ -201,13 +201,12 @@ func TestCaptureReinstallSpec_emptyPresetVersionRejected(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	// mysql is multi-version, so a custom-service YAML with empty
-	// preset_version is a corruption that would silently bump the user
-	// off whatever tag they were running. captureReinstallSpec must
-	// refuse rather than fall through to DefaultVersion.
+	// An empty preset_version off the canonical image line would silently bump
+	// the user off the tag they run, so captureReinstallSpec must refuse rather
+	// than fall through to DefaultVersion.
 	svc := &config.CustomService{
 		Name:          "mysql",
-		Image:         "docker.io/library/mysql:8.4.9",
+		Image:         "docker.io/library/mysql:5.7.44",
 		Family:        "mysql",
 		PresetVersion: "",
 	}

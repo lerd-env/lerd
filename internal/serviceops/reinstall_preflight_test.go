@@ -383,7 +383,7 @@ func TestRealReinstallInstall_CustomServicePath_CallsStreamingWithPresetName(t *
 		version string
 	}
 	prev := reinstallStreamingFn
-	reinstallStreamingFn = func(name, version string, emit func(PhaseEvent)) (*config.CustomService, error) {
+	reinstallStreamingFn = func(name, version, _ string, emit func(PhaseEvent)) (*config.CustomService, error) {
 		captured.name = name
 		captured.version = version
 		return &config.CustomService{Name: name}, nil

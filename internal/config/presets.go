@@ -4,7 +4,9 @@ import (
 	"embed"
 	"fmt"
 	"path"
+	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -404,6 +406,56 @@ func (p *Preset) Resolve(version string) (*CustomService, error) {
 		name = p.Name + "-" + SanitizeImageTag(picked.Tag)
 	}
 	return p.materialise(picked, name, picked.HostPort), nil
+}
+
+// InstalledVersion returns the version tag an installed service runs. A bare-named
+// install from the preset's single image recorded none, so it is the canonical
+// version, but only while it runs that image line, never across a canonical flip.
+func (p *Preset) InstalledVersion(svc *CustomService) string {
+	if svc.PresetVersion != "" || len(p.Versions) == 0 || svc.Name != p.Name {
+		return svc.PresetVersion
+	}
+	canon := p.canonicalVersion()
+	if canon == nil || !sameImageLine(svc.Image, canon.Image) {
+		return ""
+	}
+	return canon.Tag
+}
+
+// splitImageTag splits an image reference at its tag; a registry port's colon
+// sits before the last slash, so it is never taken for the tag.
+func splitImageTag(image string) (repo, tag string) {
+	at := strings.LastIndex(image, ":")
+	if at < 0 || at < strings.LastIndex(image, "/") {
+		return image, ""
+	}
+	return image[:at], image[at+1:]
+}
+
+// imageTagParts splits a tag around its version: 3.13.7-management-alpine is
+// prefix "", numbers "3.13.7", suffix "-management-alpine".
+var imageTagParts = regexp.MustCompile(`^(\D*)(\d+(?:\.\d+)*)(.*)$`)
+
+// sameImageLine reports whether running is a patch of pinned: same repository,
+// same text around the version, same major and pinned minor. mongo:7.0.48 fits
+// mongo:7 and 8.13.5 fits 8.13.4; mysql:8.0.36 does not fit mysql:8.4.
+func sameImageLine(running, pinned string) bool {
+	if running == pinned {
+		return true
+	}
+	runRepo, runTag := splitImageTag(running)
+	pinRepo, pinTag := splitImageTag(pinned)
+	if runRepo != pinRepo {
+		return false
+	}
+	r, p := imageTagParts.FindStringSubmatch(runTag), imageTagParts.FindStringSubmatch(pinTag)
+	if r == nil || p == nil || r[1] != p[1] || r[3] != p[3] {
+		return false
+	}
+	// Compare as many parts as the pin names, up to the minor: only a patch moves.
+	runParts, pinParts := strings.Split(r[2], "."), strings.Split(p[2], ".")
+	keep := min(len(pinParts), 2)
+	return len(runParts) >= keep && slices.Equal(runParts[:keep], pinParts[:keep])
 }
 
 // canonicalVersion returns the version flagged canonical, or nil when none is.
