@@ -152,7 +152,7 @@ when: framework:laravel@>=10 and framework:laravel@<13
 when: (database and not framework:wordpress) or framework:laravel*
 ```
 
-A site without a framework matches no `framework:` condition, so `not framework:*` means plain PHP, static and proxy sites. The version is the site's major, the one the dashboard shows beside the framework, and a framework whose definitions carry no version matches no `@`. A worktree is judged on its own checkout, so a branch on a newer major can show a tab its main checkout does not. A framework this machine does not know is valid and just never matches.
+`database` and `framework` are the only conditions. `lerd framework list` shows the framework names and versions this machine has, and `lerd framework search` those the store offers. A site without a framework matches no `framework:` condition, so `not framework:*` means plain PHP, static and proxy sites. The version is the site's major, the one the dashboard shows beside the framework, and a framework whose definitions carry no version matches no `@`. A worktree is judged on its own checkout, so a branch on a newer major can show a tab its main checkout does not. A framework this machine does not know is valid and just never matches.
 
 The site's plugin menu leaves out the switch for a tab that cannot show on any of the site's checkouts. Anything else in `when`, such as an unknown condition, `@^12` or a value starting with `!`, which YAML reads as a tag, refuses the plugin with a message naming it. lerd 1.39 knows only `when: database` and refuses the plugin over anything more, and a lerd from before that ignores `when` and shows the tab everywhere, so a plugin that uses conditions declares the release that added them in `lerd:`.
 
