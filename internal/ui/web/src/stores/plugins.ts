@@ -1,6 +1,7 @@
 import { writable, derived } from 'svelte/store';
 import { apiFetch, apiJson } from '$lib/api';
 import { wsMessage } from '$lib/ws';
+import type { Site } from './sites';
 
 export interface PluginPage {
   title: string;
@@ -26,6 +27,14 @@ export interface Checkout {
   has_database?: boolean;
   framework?: string;
   framework_version?: string;
+}
+
+// checkoutOf picks the checkout a site page shows: the worktree on branch, or
+// the main one. A worktree shares the site's framework but not its major.
+export function checkoutOf(site: Site, branch: string): Checkout {
+  const wt = branch ? (site.worktrees ?? []).find((w) => w.branch === branch) : undefined;
+  if (!wt) return site;
+  return { has_database: wt.has_database, framework: site.framework, framework_version: wt.framework_version };
 }
 
 // whenApplies mirrors plugins.Cond.Applies; a missing condition always holds.

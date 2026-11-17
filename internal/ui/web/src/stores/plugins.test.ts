@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
+import whenCases from '../../../../plugins/testdata/when_cases.json';
+import type { Checkout, PluginCond } from './plugins';
+import type { Site } from './sites';
 
 describe('plugins store', () => {
   const realFetch = globalThis.fetch;
@@ -39,35 +42,30 @@ describe('plugins store', () => {
   });
 });
 
+// The cases lerd's own tests run, with the condition as lerd hands it over, so
+// the dashboard and lerd judge every tab the same way.
 describe('whenApplies', () => {
-  it('reads the condition lerd parsed the way lerd does', async () => {
+  const cases = whenCases as { when: string; cond: PluginCond | null; applies: Checkout[]; skips: Checkout[] }[];
+
+  it.each(cases)('judges "$when" as lerd does', async ({ cond, applies, skips }) => {
     const { whenApplies } = await import('./plugins');
-    const laravel12 = { has_database: true, framework: 'laravel', framework_version: '12' };
-    const legacy = { framework: 'laravel-legacy' };
-    const wordpress = { has_database: true, framework: 'wordpress', framework_version: '6' };
-    const plain = { has_database: true };
+    for (const co of applies) expect(whenApplies(cond ?? undefined, co), JSON.stringify(co)).toBe(true);
+    for (const co of skips) expect(whenApplies(cond ?? undefined, co), JSON.stringify(co)).toBe(false);
+  });
+});
 
-    expect(whenApplies(undefined, {})).toBe(true);
-    expect(whenApplies({ is: 'database' }, plain)).toBe(true);
-    expect(whenApplies({ is: 'database' }, legacy)).toBe(false);
-    expect(whenApplies({ is: 'framework', name: 'laravel*' }, legacy)).toBe(true);
-    expect(whenApplies({ is: 'framework', name: 'laravel.x' }, { framework: 'laravelax' })).toBe(false);
-    expect(whenApplies({ is: 'framework', name: '*' }, plain)).toBe(false);
-    expect(whenApplies({ is: 'framework', name: 'laravel', version: 12 }, laravel12)).toBe(true);
-    expect(whenApplies({ is: 'framework', name: 'laravel', cmp: '<', version: 12 }, laravel12)).toBe(false);
-    expect(whenApplies({ is: 'framework', name: 'laravel*', cmp: '>=', version: 1 }, legacy)).toBe(false);
-
-    // (database and not framework:wordpress) or framework:laravel*@>=11
-    const cond = {
-      op: 'or' as const,
-      args: [
-        { op: 'and' as const, args: [{ is: 'database' as const }, { op: 'not' as const, args: [{ is: 'framework' as const, name: 'wordpress' }] }] },
-        { is: 'framework' as const, name: 'laravel*', cmp: '>=' as const, version: 11 }
-      ]
-    };
-    expect(whenApplies(cond, laravel12)).toBe(true);
-    expect(whenApplies(cond, plain)).toBe(true);
-    expect(whenApplies(cond, wordpress)).toBe(false);
-    expect(whenApplies(cond, legacy)).toBe(false);
+describe('checkoutOf', () => {
+  it('reads a worktree on its own major and database, and the main checkout otherwise', async () => {
+    const { checkoutOf } = await import('./plugins');
+    const site = {
+      name: 'shop',
+      framework: 'laravel',
+      framework_version: '10',
+      has_database: true,
+      worktrees: [{ branch: 'upgrade', framework_version: '11' }]
+    } as unknown as Site;
+    expect(checkoutOf(site, 'upgrade')).toEqual({ has_database: undefined, framework: 'laravel', framework_version: '11' });
+    expect(checkoutOf(site, '')).toBe(site);
+    expect(checkoutOf(site, 'gone')).toBe(site);
   });
 });

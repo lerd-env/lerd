@@ -1,65 +1,81 @@
 package plugins
 
 import (
+	"bytes"
+	"encoding/json"
+	"flag"
+	"os"
 	"strings"
 	"testing"
 )
 
-func TestParseWhen_Applies(t *testing.T) {
-	laravel12 := Checkout{HasDatabase: true, Framework: "laravel", FrameworkVersion: "12"}
-	laravel10 := Checkout{Framework: "laravel", FrameworkVersion: "10"}
-	legacy := Checkout{Framework: "laravel-legacy"}
-	wordpress := Checkout{HasDatabase: true, Framework: "wordpress", FrameworkVersion: "6"}
-	plainDB := Checkout{HasDatabase: true}
-	static := Checkout{}
+var updateWhenCases = flag.Bool("update", false, "rewrite testdata/when_cases.json with the parsed conditions")
 
-	cases := []struct {
-		when string
-		yes  []Checkout
-		no   []Checkout
-	}{
-		{"", []Checkout{static, laravel12}, nil},
-		{"database", []Checkout{laravel12, plainDB}, []Checkout{static, laravel10}},
-		{"framework:laravel", []Checkout{laravel12, laravel10}, []Checkout{legacy, wordpress, static}},
-		{"framework:laravel*", []Checkout{laravel12, legacy}, []Checkout{wordpress}},
-		{"framework:*", []Checkout{laravel12, legacy, wordpress}, []Checkout{plainDB, static}},
-		{"not framework:*", []Checkout{plainDB, static}, []Checkout{laravel12}},
-		{"framework:LARAVEL-x", nil, nil},
-		{"framework:laravel@12", []Checkout{laravel12}, []Checkout{laravel10, legacy}},
-		{"framework:laravel@>=11", []Checkout{laravel12}, []Checkout{laravel10}},
-		{"framework:laravel@<=10", []Checkout{laravel10}, []Checkout{laravel12}},
-		{"framework:laravel@>10", []Checkout{laravel12}, []Checkout{laravel10}},
-		{"framework:laravel@<12", []Checkout{laravel10}, []Checkout{laravel12}},
-		{"framework:laravel@>=10 and framework:laravel@<12", []Checkout{laravel10}, []Checkout{laravel12}},
-		{"framework:*@>=10", []Checkout{laravel12, laravel10}, []Checkout{wordpress, legacy}},
-		{"framework:acme-cms", nil, []Checkout{laravel12, static}},
-		// and binds tighter than or, so the parentheses change nothing here.
-		{"database and not framework:wordpress or framework:laravel*@>=11", []Checkout{laravel12, plainDB}, []Checkout{wordpress, laravel10, static}},
-		{"(database and not framework:wordpress) or framework:laravel*@>=11", []Checkout{laravel12, plainDB}, []Checkout{wordpress, laravel10, static}},
-		{"database and (framework:wordpress or framework:laravel)", []Checkout{laravel12, wordpress}, []Checkout{plainDB, laravel10}},
-		{"not not database", []Checkout{plainDB}, []Checkout{static}},
+// whenCase is one row of testdata/when_cases.json, which the dashboard's tests
+// read too, so lerd and the dashboard judge every condition the same way.
+type whenCase struct {
+	When    string          `json:"when"`
+	Cond    json.RawMessage `json:"cond"`
+	Applies []Checkout      `json:"applies"`
+	Skips   []Checkout      `json:"skips"`
+}
+
+// unescapedJSON keeps < and > readable in the fixture.
+func unescapedJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	var out bytes.Buffer
+	enc := json.NewEncoder(&out)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		t.Fatal(err)
 	}
-	for _, c := range cases {
-		cond, err := ParseWhen(c.when)
-		if c.when == "framework:LARAVEL-x" {
-			if err == nil {
-				t.Errorf("%q should be refused", c.when)
-			}
-			continue
-		}
+	return bytes.TrimSuffix(out.Bytes(), []byte("\n"))
+}
+
+func TestParseWhen_SharedCases(t *testing.T) {
+	const file = "testdata/when_cases.json"
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []whenCase
+	if err := json.Unmarshal(data, &cases); err != nil {
+		t.Fatal(err)
+	}
+	for i, c := range cases {
+		cond, err := ParseWhen(c.When)
 		if err != nil {
-			t.Errorf("ParseWhen(%q): %v", c.when, err)
+			t.Errorf("ParseWhen(%q): %v", c.When, err)
 			continue
 		}
-		for _, co := range c.yes {
+		parsed := unescapedJSON(t, cond)
+		var want bytes.Buffer
+		if *updateWhenCases {
+			cases[i].Cond = parsed
+		} else if json.Compact(&want, c.Cond) != nil || want.String() != string(parsed) {
+			t.Errorf("%q parses to %s, the fixture says %s; rerun with -update", c.When, parsed, c.Cond)
+		}
+		for _, co := range c.Applies {
 			if !cond.Applies(co) {
-				t.Errorf("%q should apply to %+v", c.when, co)
+				t.Errorf("%q should apply to %+v", c.When, co)
 			}
 		}
-		for _, co := range c.no {
+		for _, co := range c.Skips {
 			if cond.Applies(co) {
-				t.Errorf("%q should not apply to %+v", c.when, co)
+				t.Errorf("%q should not apply to %+v", c.When, co)
 			}
+		}
+	}
+	if *updateWhenCases {
+		var out bytes.Buffer
+		enc := json.NewEncoder(&out)
+		enc.SetEscapeHTML(false)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(cases); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, out.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
 		}
 	}
 }

@@ -1,4 +1,4 @@
-import { render } from '@testing-library/svelte';
+import { render, fireEvent } from '@testing-library/svelte';
 import { it, expect, beforeEach, vi } from 'vitest';
 import SiteDetail from './SiteDetail.svelte';
 import { plugins } from '$stores/plugins';
@@ -56,8 +56,9 @@ it('shows a tab that asks for a database only on sites that have one', async () 
   await findByRole('tab', { name: 'Database' });
 });
 
-// The main checkout's major decides it, not a worktree's on a newer one.
-it('hides a tab whose framework version condition the main checkout misses', async () => {
+// A worktree can sit on another framework major and database than the main
+// checkout, so switching checkouts changes which tabs show.
+it('follows the checkout picked in the worktree picker', async () => {
   plugins.set([
     {
       name: 'inspect',
@@ -68,15 +69,34 @@ it('hides a tab whose framework version condition the main checkout misses', asy
         cond: { is: 'framework', name: 'laravel', cmp: '>=', version: 11 }
       }
     },
-    { name: 'sync', site_tab: { title: 'Sync', url: '/plugins/sync/ui/tab.html' } }
+    {
+      name: 'db-browser',
+      site_tab: { title: 'Database', url: '/plugins/db-browser/ui/site.html', when: 'database', cond: { is: 'database' } }
+    }
   ]);
+  globalThis.fetch = vi.fn(
+    async (url: string) => new Response(String(url).includes('git-status') ? '{"checkouts":[]}' : '{}')
+  ) as unknown as typeof fetch;
+  localStorage.setItem('lerd:siteDetailTab', 'plugin:db-browser');
   const laravel = site({
+    branch: 'main',
     framework: 'laravel',
     framework_version: '10',
+    has_database: true,
     worktrees: [{ branch: 'upgrade', domain: 'upgrade.shop.test', framework_version: '11' }]
   });
-  const { findByRole, queryByRole, getByRole } = render(SiteDetail, { props: { site: laravel } });
-  await findByRole('tab', { name: 'Sync' });
+  const { findByRole, queryByRole, getAllByText } = render(SiteDetail, { props: { site: laravel } });
+  expect((await findByRole('tab', { name: 'Database' })).getAttribute('aria-selected')).toBe('true');
   expect(queryByRole('tab', { name: 'Laravel' })).toBeNull();
-  expect(getByRole('tab', { name: 'Sync' })).toBeTruthy();
+
+  const checkoutButton = (branch: string) => getAllByText(branch)[0].closest('button')!;
+  await fireEvent.click(checkoutButton('upgrade'));
+  await findByRole('tab', { name: 'Laravel' });
+  expect(queryByRole('tab', { name: 'Database' })).toBeNull();
+  // The open tab stopped matching, so the row falls back to Overview.
+  expect((await findByRole('tab', { name: 'Overview' })).getAttribute('aria-selected')).toBe('true');
+
+  await fireEvent.click(checkoutButton('main'));
+  expect((await findByRole('tab', { name: 'Database' })).getAttribute('aria-selected')).toBe('true');
+  expect(queryByRole('tab', { name: 'Laravel' })).toBeNull();
 });

@@ -22,11 +22,12 @@ type Cond struct {
 	Version *int   `json:"version,omitempty"`
 }
 
-// Checkout is what a condition reads about one checkout of a site.
+// Checkout is what a condition reads about one checkout of a site, named as
+// the dashboard's site list names it.
 type Checkout struct {
-	HasDatabase      bool
-	Framework        string
-	FrameworkVersion string
+	HasDatabase      bool   `json:"has_database,omitempty"`
+	Framework        string `json:"framework,omitempty"`
+	FrameworkVersion string `json:"framework_version,omitempty"`
 }
 
 const (

@@ -151,3 +151,24 @@ func TestEnrichGit_worktreePartialOverride(t *testing.T) {
 		t.Errorf("NodeVersion = %q, want %q (inherited)", w.NodeVersion, "22")
 	}
 }
+
+// A worktree's own database decides it, so a plugin tab can follow the
+// checkout shown rather than the main one.
+func TestEnrichGit_worktreeHasItsOwnDatabase(t *testing.T) {
+	main, checkout := makeWorktreeFixture(t, "feat-db")
+	if err := os.WriteFile(filepath.Join(checkout, ".lerd.yaml"), []byte("db:\n  service: postgres\n  database: feat\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	e := &EnrichedSite{Path: main, Domains: []string{"acme.test"}}
+	e.enrichGit()
+	if len(e.Worktrees) != 1 || !e.Worktrees[0].HasDatabase {
+		t.Fatalf("worktrees = %+v, want feat-db with its database", e.Worktrees)
+	}
+
+	main, _ = makeWorktreeFixture(t, "feat-none")
+	e = &EnrichedSite{Path: main, Domains: []string{"acme.test"}}
+	e.enrichGit()
+	if len(e.Worktrees) != 1 || e.Worktrees[0].HasDatabase {
+		t.Fatalf("worktrees = %+v, want feat-none without a database", e.Worktrees)
+	}
+}

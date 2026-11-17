@@ -575,6 +575,37 @@ func TestPagePlugins_TabWhenFramework(t *testing.T) {
 	}
 }
 
+// The switch belongs to the site, so it is offered when the tab can show on any
+// of its checkouts, such as a worktree with a database of its own.
+func TestPagePlugins_TabWhenOnlyAWorktreeMatches(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	installTabPlugin(t, "database")
+	main := t.TempDir()
+	checkout := addWorktree(t, main, "feat")
+	if err := config.AddSite(config.Site{Name: "shop", Domains: []string{"shop.test"}, Path: main}); err != nil {
+		t.Fatal(err)
+	}
+	menu := func() []pagePlugin {
+		rec := httptest.NewRecorder()
+		handlePagePlugins(rec, localRequest(http.MethodGet, "/api/page-plugins?site=shop.test", ""))
+		var got []pagePlugin
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("%v: %s", err, rec.Body)
+		}
+		return got
+	}
+	if got := menu(); len(got) != 0 {
+		t.Fatalf("menu = %+v, want no switch while no checkout has a database", got)
+	}
+	if err := os.WriteFile(filepath.Join(checkout, ".lerd.yaml"), []byte("db:\n  service: postgres\n  database: feat\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := menu(); len(got) != 1 {
+		t.Errorf("menu = %+v, want the switch once the worktree has a database", got)
+	}
+}
+
 // serveCatalog points the catalog at a test server listing the given entries.
 func serveCatalog(t *testing.T, listings ...plugins.Listing) {
 	t.Helper()
