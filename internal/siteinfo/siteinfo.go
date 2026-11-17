@@ -72,6 +72,8 @@ type WorktreeInfo struct {
 	FrameworkLabel      string
 	DBIsolated          bool
 	DBDatabase          string
+	// HasDatabase says the worktree's checkout points at a database.
+	HasDatabase bool
 	// LANPort, when non-zero, means a per-worktree reverse proxy is
 	// listening on 0.0.0.0:LANPort. Independent of the parent's LAN port.
 	LANPort int
@@ -796,6 +798,7 @@ func (e *EnrichedSite) enrichGit() {
 			}
 			wtBinding := config.DBEnvBindingFor(wt.Path)
 			info.DBDatabase = wtBinding.Database(envfile.Reader(filepath.Join(wt.Path, wtBinding.File), wtBinding.Format))
+			info.HasDatabase = config.HasDatabase(wt.Path)
 			if entry, ok, err := config.FindWorktreeLAN(e.Name, wt.Branch); err == nil && ok {
 				info.LANPort = entry.Port
 			}

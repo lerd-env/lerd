@@ -52,7 +52,7 @@ schedules:                  # runs on its own once the user allows it
 requires: [jq]              # commands the scripts call beyond their interpreters
 ui:                         # only ui/ is served
   page: {title: Notes, icon: ui/icon.svg, entry: ui/index.html}
-  site_tab: {title: Notes, entry: ui/site.html}   # add when: database to show it only on sites with one
+  site_tab: {title: Notes, entry: ui/site.html}   # add when: to show it only where it applies, see below
   overview_card: {title: Notes, entry: ui/card.html}
   page_script: ui/page.js
 ```
@@ -60,6 +60,8 @@ ui:                         # only ui/ is served
 Events: `site.linked`, `site.unlinked`, `site.secured`, `site.php_changed`, `worktree.added`, `worktree.removed`, `service.started`, `service.stopped`, `lerd.started`, `lerd.stopped`. Any other name refuses the plugin.
 
 A command or site command that ends the way a tool did can list the exits that are the tool's answer, such as `expected_exits: [101]` for `cargo check` finding code that does not compile. They reach the user as usual but are not recorded as the plugin failing; any other non-zero exit still is.
+
+A site tab's `when` limits it to the sites it applies to: `database`, `framework:<name>` with `*` as a wildcard, and `framework:<name>@<major>` with `@12`, `@>=11`, `@<=12`, `@>10` or `@<13`, joined by `and`, `or`, `not` and parentheses, as in `when: database and framework:laravel@>=11`. The name is the framework definition's, and a worktree is judged on its own checkout. lerd 1.39 knows only `database`, so a plugin using more declares the release that added it in `lerd:`. Never start the value with `!`, which YAML reads as a tag.
 
 Time limits: hooks and API 30s, MCP tools 2m, schedules 5m, site commands 30m, CLI none. `timeout:` raises one entry up to 10m (API, MCP, schedules) or 1h (site commands).
 

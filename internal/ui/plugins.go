@@ -18,6 +18,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/serviceops"
+	"github.com/geodro/lerd/internal/siteinfo"
 	"github.com/geodro/lerd/internal/siteops"
 )
 
@@ -37,8 +38,10 @@ type pluginPage struct {
 	Title string `json:"title"`
 	URL   string `json:"url"`
 	Icon  string `json:"icon,omitempty"`
-	// When is the site tab's condition, such as database.
-	When string `json:"when,omitempty"`
+	// When is the site tab's condition as written, and Cond the same parsed
+	// for the dashboard to evaluate against the checkout it shows.
+	When string        `json:"when,omitempty"`
+	Cond *plugins.Cond `json:"cond,omitempty"`
 }
 
 // handlePluginRevocations serves GET /api/plugin-revocations: the installed
@@ -72,7 +75,7 @@ func pluginPageInfo(name string, page *plugins.UIPage) *pluginPage {
 	if page == nil {
 		return nil
 	}
-	out := &pluginPage{Title: page.Title, URL: pluginFileURL(name, page.Entry), When: page.When}
+	out := &pluginPage{Title: page.Title, URL: pluginFileURL(name, page.Entry), When: page.When, Cond: page.Cond()}
 	if page.Icon != "" {
 		out.Icon = pluginFileURL(name, page.Icon)
 	}
@@ -387,6 +390,7 @@ func handlePagePlugins(w http.ResponseWriter, r *http.Request) {
 	}
 	list, _ := plugins.Load()
 	out := []pagePlugin{}
+	var checkouts []plugins.Checkout
 	for _, p := range list {
 		if p.UI == nil {
 			continue
@@ -397,13 +401,32 @@ func handlePagePlugins(w http.ResponseWriter, r *http.Request) {
 		if p.UI.OverviewCard != nil {
 			out = append(out, pagePlugin{Name: p.Name, Description: p.Description, Kind: kindOverviewCard, On: slices.Contains(site.OverviewCards, p.Name)})
 		}
-		// A tab that asks for a database never shows on a site without one, so
-		// it gets no switch there either.
-		if p.UI.SiteTab != nil && (p.UI.SiteTab.When != "database" || config.HasDatabase(site.Path)) {
+		// A tab whose when holds on none of the site's checkouts never shows
+		// there, so it gets no switch either.
+		if p.UI.SiteTab != nil && p.UI.SiteTab.When != "" && checkouts == nil {
+			checkouts = siteCheckouts(siteinfo.Enrich(*site, siteinfo.EnrichCLI))
+		}
+		if p.UI.SiteTab != nil && appliesToAny(p.UI.SiteTab.Cond(), checkouts) {
 			out = append(out, pagePlugin{Name: p.Name, Description: p.Description, Kind: kindSiteTab, On: !slices.Contains(site.HiddenTabs, p.Name)})
 		}
 	}
 	writeJSON(w, out)
+}
+
+// siteCheckouts are what a site tab's when reads, for the site and each worktree.
+func siteCheckouts(e siteinfo.EnrichedSite) []plugins.Checkout {
+	out := []plugins.Checkout{{HasDatabase: e.HasDatabase, Framework: e.FrameworkName, FrameworkVersion: e.FrameworkVersion}}
+	for _, wt := range e.Worktrees {
+		out = append(out, plugins.Checkout{HasDatabase: wt.HasDatabase, Framework: e.FrameworkName, FrameworkVersion: wt.FrameworkVersion})
+	}
+	return out
+}
+
+func appliesToAny(c *plugins.Cond, checkouts []plugins.Checkout) bool {
+	if c == nil {
+		return true
+	}
+	return slices.ContainsFunc(checkouts, c.Applies)
 }
 
 // managedPlugin is a row on the dashboard's plugin manager. A plugin that

@@ -59,6 +59,7 @@ export interface Site {
   fpm_running?: boolean;
   framework?: string;
   framework_label?: string;
+  framework_version?: string;
   has_favicon?: boolean;
   has_env?: boolean;
   paused?: boolean;
@@ -108,6 +109,7 @@ export interface Site {
     framework_version?: string;
     framework_label?: string;
     db_isolated?: boolean;
+    has_database?: boolean;
     db_database?: string;
     lan_port?: number;
     lan_share_url?: string;

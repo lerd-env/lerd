@@ -487,14 +487,14 @@ func TestPagePlugins_ListsAndRefusesWithoutAuthority(t *testing.T) {
 	}
 }
 
-// installDBTabPlugin adds a plugin whose tab shows only on sites with a database.
-func installDBTabPlugin(t *testing.T) {
+// installTabPlugin adds a plugin whose tab shows only where when holds.
+func installTabPlugin(t *testing.T, when string) {
 	t.Helper()
 	dir := filepath.Join(plugins.Dir(), "dbtab")
 	if err := os.MkdirAll(filepath.Join(dir, "ui"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	manifest := "api_version: 1\nname: dbtab\nui:\n  site_tab: {title: Data, entry: ui/site.html, when: database}\n"
+	manifest := "api_version: 1\nname: dbtab\nui:\n  site_tab: {title: Data, entry: ui/site.html, when: \"" + when + "\"}\n"
 	if err := os.WriteFile(filepath.Join(dir, plugins.ManifestFile), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -508,7 +508,7 @@ func installDBTabPlugin(t *testing.T) {
 func TestPagePlugins_TabWhenDatabase(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	installDBTabPlugin(t)
+	installTabPlugin(t, "database")
 
 	rec := httptest.NewRecorder()
 	handlePluginsList(rec, localRequest(http.MethodGet, "/api/plugins", ""))
@@ -516,8 +516,8 @@ func TestPagePlugins_TabWhenDatabase(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
 		t.Fatalf("%v: %s", err, rec.Body)
 	}
-	if len(listed) != 1 || listed[0].SiteTab == nil || listed[0].SiteTab.When != "database" {
-		t.Fatalf("plugins list = %+v, want dbtab's tab with when database", listed)
+	if len(listed) != 1 || listed[0].SiteTab == nil || listed[0].SiteTab.When != "database" || listed[0].SiteTab.Cond == nil || listed[0].SiteTab.Cond.Is != "database" {
+		t.Fatalf("plugins list = %+v, want dbtab's tab with when database, parsed", listed)
 	}
 
 	withDB := t.TempDir()
@@ -533,6 +533,36 @@ func TestPagePlugins_TabWhenDatabase(t *testing.T) {
 		}
 	}
 	for site, want := range map[string]int{"shop.test": 1, "static.test": 0} {
+		rec := httptest.NewRecorder()
+		handlePagePlugins(rec, localRequest(http.MethodGet, "/api/page-plugins?site="+site, ""))
+		var got []pagePlugin
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("%v: %s", err, rec.Body)
+		}
+		if len(got) != want {
+			t.Errorf("%s menu = %+v, want %d switches", site, got, want)
+		}
+	}
+}
+
+// A framework condition is judged on the site's framework, and a tab for one
+// gets no switch on a site with another or none.
+func TestPagePlugins_TabWhenFramework(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	installTabPlugin(t, "framework:laravel or framework:sym*")
+
+	for _, s := range []config.Site{
+		{Name: "app", Domains: []string{"app.test"}, Path: t.TempDir(), Framework: "laravel"},
+		{Name: "shop", Domains: []string{"shop.test"}, Path: t.TempDir(), Framework: "symfony"},
+		{Name: "blog", Domains: []string{"blog.test"}, Path: t.TempDir(), Framework: "wordpress"},
+		{Name: "static", Domains: []string{"static.test"}, Path: t.TempDir()},
+	} {
+		if err := config.AddSite(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for site, want := range map[string]int{"app.test": 1, "shop.test": 1, "blog.test": 0, "static.test": 0} {
 		rec := httptest.NewRecorder()
 		handlePagePlugins(rec, localRequest(http.MethodGet, "/api/page-plugins?site="+site, ""))
 		var got []pagePlugin

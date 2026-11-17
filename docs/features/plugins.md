@@ -129,12 +129,32 @@ provides:                   # jobs the plugin takes over from lerd, see below
 ui:                         # files live under ui/, the only folder the dashboard serves
   page:     {title: Hello, icon: ui/icon.svg, entry: ui/index.html}
   site_tab: {title: Hello, entry: ui/site.html}
-  # site_tab: {title: Data, entry: ui/site.html, when: database}   # only on sites that point at a database
+  # site_tab: {title: Data, entry: ui/site.html, when: database}   # only where it applies, see below
   overview_card: {title: Hello, entry: ui/card.html}   # on a site's Overview once switched on for that site
   page_script: ui/page.js   # runs on a site's pages once switched on for that site
 ```
 
-A site tab shows on every site unless `when` limits it. `when: database` shows it only on sites that point at a database: one a lerd service or an external server holds, a `db:` block in `.lerd.yaml`, or a SQLite file the site's framework detects. The site's plugin menu leaves out the switch for a tab that cannot show there. A lerd from before `when` ignores it and shows the tab everywhere, so a plugin that relies on it should still say something useful on a site without a database.
+A site tab shows on every site unless `when` limits it. `when` holds one or more conditions:
+
+| Condition | Holds when |
+|-----------|------------|
+| `database` | The site points at a database: one a lerd service or an external server holds, a `db:` block in `.lerd.yaml`, or a SQLite file the site's framework detects |
+| `framework:<name>` | The site's framework definition has that name, such as `laravel`, `symfony` or `wordpress`. `*` matches any run of characters, so `laravel*` also matches a `laravel-legacy` of your own and `framework:*` any site with a framework |
+| `framework:<name>@<major>` | The same, on that major version: `@12` for exactly 12, or `@>=11`, `@<=12`, `@>10` and `@<13` |
+
+Join conditions with `and`, `or` and `not`, and group them with parentheses. `not` binds tightest, then `and`, then `or`:
+
+```yaml
+when: framework:laravel@>=11
+when: database and not framework:wordpress
+when: framework:laravel or framework:statamic
+when: framework:laravel@>=10 and framework:laravel@<13
+when: (database and not framework:wordpress) or framework:laravel*
+```
+
+A site without a framework matches no `framework:` condition, so `not framework:*` means plain PHP, static and proxy sites. The version is the site's major, the one the dashboard shows beside the framework, and a framework whose definitions carry no version matches no `@`. A worktree is judged on its own checkout, so a branch on a newer major can show a tab its main checkout does not. A framework this machine does not know is valid and just never matches.
+
+The site's plugin menu leaves out the switch for a tab that cannot show on any of the site's checkouts. Anything else in `when`, such as an unknown condition, `@^12` or a value starting with `!`, which YAML reads as a tag, refuses the plugin with a message naming it. lerd 1.39 knows only `when: database` and refuses the plugin over anything more, and a lerd from before that ignores `when` and shows the tab everywhere, so a plugin that uses conditions declares the release that added them in `lerd:`.
 
 A manifest written for a newer lerd still loads as long as its `api_version` is one this lerd knows: unknown keys are ignored. An unknown value in a known key, such as a hook for an event this lerd doesn't have, refuses the plugin with a message naming it.
 

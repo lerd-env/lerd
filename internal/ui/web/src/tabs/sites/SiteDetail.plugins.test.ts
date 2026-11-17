@@ -42,7 +42,10 @@ it('selects Overview in the tab row once the open plugin tab is hidden', async (
 // browser on a static site would be an empty tab.
 it('shows a tab that asks for a database only on sites that have one', async () => {
   plugins.set([
-    { name: 'db-browser', site_tab: { title: 'Database', url: '/plugins/db-browser/ui/site.html', when: 'database' } },
+    {
+      name: 'db-browser',
+      site_tab: { title: 'Database', url: '/plugins/db-browser/ui/site.html', when: 'database', cond: { is: 'database' } }
+    },
     { name: 'sync', site_tab: { title: 'Sync', url: '/plugins/sync/ui/tab.html' } }
   ]);
   const { findByRole, queryByRole, rerender } = render(SiteDetail, { props: { site: site() } });
@@ -51,4 +54,29 @@ it('shows a tab that asks for a database only on sites that have one', async () 
 
   await rerender({ site: site({ has_database: true }) });
   await findByRole('tab', { name: 'Database' });
+});
+
+// The main checkout's major decides it, not a worktree's on a newer one.
+it('hides a tab whose framework version condition the main checkout misses', async () => {
+  plugins.set([
+    {
+      name: 'inspect',
+      site_tab: {
+        title: 'Laravel',
+        url: '/plugins/inspect/ui/site.html',
+        when: 'framework:laravel@>=11',
+        cond: { is: 'framework', name: 'laravel', cmp: '>=', version: 11 }
+      }
+    },
+    { name: 'sync', site_tab: { title: 'Sync', url: '/plugins/sync/ui/tab.html' } }
+  ]);
+  const laravel = site({
+    framework: 'laravel',
+    framework_version: '10',
+    worktrees: [{ branch: 'upgrade', domain: 'upgrade.shop.test', framework_version: '11' }]
+  });
+  const { findByRole, queryByRole, getByRole } = render(SiteDetail, { props: { site: laravel } });
+  await findByRole('tab', { name: 'Sync' });
+  expect(queryByRole('tab', { name: 'Laravel' })).toBeNull();
+  expect(getByRole('tab', { name: 'Sync' })).toBeTruthy();
 });

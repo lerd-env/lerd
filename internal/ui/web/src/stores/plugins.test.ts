@@ -38,3 +38,36 @@ describe('plugins store', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
+
+describe('whenApplies', () => {
+  it('reads the condition lerd parsed the way lerd does', async () => {
+    const { whenApplies } = await import('./plugins');
+    const laravel12 = { has_database: true, framework: 'laravel', framework_version: '12' };
+    const legacy = { framework: 'laravel-legacy' };
+    const wordpress = { has_database: true, framework: 'wordpress', framework_version: '6' };
+    const plain = { has_database: true };
+
+    expect(whenApplies(undefined, {})).toBe(true);
+    expect(whenApplies({ is: 'database' }, plain)).toBe(true);
+    expect(whenApplies({ is: 'database' }, legacy)).toBe(false);
+    expect(whenApplies({ is: 'framework', name: 'laravel*' }, legacy)).toBe(true);
+    expect(whenApplies({ is: 'framework', name: 'laravel.x' }, { framework: 'laravelax' })).toBe(false);
+    expect(whenApplies({ is: 'framework', name: '*' }, plain)).toBe(false);
+    expect(whenApplies({ is: 'framework', name: 'laravel', version: 12 }, laravel12)).toBe(true);
+    expect(whenApplies({ is: 'framework', name: 'laravel', cmp: '<', version: 12 }, laravel12)).toBe(false);
+    expect(whenApplies({ is: 'framework', name: 'laravel*', cmp: '>=', version: 1 }, legacy)).toBe(false);
+
+    // (database and not framework:wordpress) or framework:laravel*@>=11
+    const cond = {
+      op: 'or' as const,
+      args: [
+        { op: 'and' as const, args: [{ is: 'database' as const }, { op: 'not' as const, args: [{ is: 'framework' as const, name: 'wordpress' }] }] },
+        { is: 'framework' as const, name: 'laravel*', cmp: '>=' as const, version: 11 }
+      ]
+    };
+    expect(whenApplies(cond, laravel12)).toBe(true);
+    expect(whenApplies(cond, plain)).toBe(true);
+    expect(whenApplies(cond, wordpress)).toBe(false);
+    expect(whenApplies(cond, legacy)).toBe(false);
+  });
+});

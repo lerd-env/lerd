@@ -14,7 +14,7 @@
   import { debugCaptureEnabled } from '$stores/queries';
   import { m } from '../../paraglide/messages.js';
   import PluginFrame from '$components/PluginFrame.svelte';
-  import { siteTabPlugins } from '$stores/plugins';
+  import { siteTabPlugins, whenApplies } from '$stores/plugins';
 
   let resumeBusy = $state(false);
   async function onResume() {
@@ -58,10 +58,17 @@
   const canLogs = $derived(siteHasLogSources(site));
   // A lone Overview tab can't be switched to anything, so don't render the tab
   // row at all when no other tab is available (e.g. static sites).
-  // Plugin tabs show until hidden here; a `when: database` tab needs a database.
+  // Plugin tabs show until hidden here, and only where their `when` holds for
+  // the checkout shown: a worktree can sit on another framework major.
+  const checkout = $derived.by(() => {
+    const wt = activeWorktreeBranch ? (site.worktrees ?? []).find((w) => w.branch === activeWorktreeBranch) : undefined;
+    return wt
+      ? { has_database: wt.has_database, framework: site.framework, framework_version: wt.framework_version }
+      : site;
+  });
   const tabPlugins = $derived(
     $siteTabPlugins.filter(
-      (p) => !(site.hidden_tabs ?? []).includes(p.name) && (p.site_tab?.when !== 'database' || site.has_database)
+      (p) => !(site.hidden_tabs ?? []).includes(p.name) && whenApplies(p.site_tab?.cond, checkout)
     )
   );
   const hasExtraTabs = $derived(canLogs || canEnv || canTinker || canDumps || tabPlugins.length > 0);
