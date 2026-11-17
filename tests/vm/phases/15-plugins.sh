@@ -45,9 +45,9 @@ export -f mcp_tools
 # manager <python expression on p>: prints the vmplug row of the plugin
 # manager's answer when the expression holds for it.
 manager() {
-	curl -fsS "$UI/api/plugin-manager" | python3 -c "import json,sys
+	python3 -c "import json,sys
 p = next((x for x in json.load(sys.stdin) if x['name'] == 'vmplug'), {})
-print(json.dumps(p)) if ($1) else sys.exit(1)"
+print(json.dumps(p)) if ($1) else sys.exit(1)" <<<"$(curl -fsS "$UI/api/plugin-manager")"
 }
 
 check "15.1 lerd plugin new writes a plugin" lerd plugin new vmplug

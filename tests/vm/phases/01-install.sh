@@ -13,7 +13,8 @@ public_install() {
 	have wget || fetch="curl -fsSL"
 	[ "${LERD_CHANNEL:-}" = beta ] && args=(--beta)
 	set -o pipefail
-	$fetch https://lerd.sh/install.sh | bash -s -- "${args[@]}"
+	# Kept so phase 13 can reinstall from the same script without downloading it again.
+	$fetch https://lerd.sh/install.sh | tee "$HOME/lerd-install.sh" | bash -s -- "${args[@]}"
 }
 local_install() { bash "$HOME/rc/install.sh" --local "$HOME/rc/lerd"; }
 

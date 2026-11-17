@@ -12,9 +12,9 @@ reinstall() {
 	if [ -x "$HOME/rc/lerd" ]; then
 		bash "$HOME/rc/install.sh" --local "$HOME/rc/lerd"
 	elif [ "${LERD_CHANNEL:-}" = beta ]; then
-		curl -fsSL https://lerd.sh/install.sh | bash -s -- --beta
+		bash "$HOME/lerd-install.sh" --beta </dev/null
 	else
-		curl -fsSL https://lerd.sh/install.sh | bash
+		bash "$HOME/lerd-install.sh" </dev/null
 	fi
 }
 

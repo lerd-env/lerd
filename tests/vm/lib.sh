@@ -297,7 +297,7 @@ reclaim() {
 # network, which is where lerd reads an image's size from.
 hub_limited() {
 	local t
-	t=$(curl -s "https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/alpine:pull" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' 2>/dev/null)
+	t=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' 2>/dev/null <<<"$(curl -s "https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/alpine:pull")")
 	[ "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $t" https://registry-1.docker.io/v2/library/alpine/manifests/latest)" = 429 ]
 }
 
