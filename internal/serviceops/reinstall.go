@@ -39,7 +39,7 @@ var (
 	// reinstallStreamingFn lets tests of realReinstallInstall verify the
 	// custom-service path passes spec.presetName (NOT the service name) to
 	// the install streaming function, which is the actual routing fix.
-	reinstallStreamingFn = InstallPresetStreaming
+	reinstallStreamingFn = installPresetOnImage
 	// reinstallFamilyRegenFn drives family-consumer regeneration outside
 	// of InstallPresetByName's internal call: default-preset reinstalls
 	// (where the install path doesn't regen) and the install-failure path
@@ -301,7 +301,7 @@ func realReinstallInstall(name string, spec reinstallSpec, emit func(PhaseEvent)
 		}
 		return &config.CustomService{Name: name}, nil
 	}
-	return reinstallStreamingFn(spec.presetName, spec.version, emit)
+	return reinstallStreamingFn(spec.presetName, spec.version, spec.image, emit)
 }
 
 // reinstallRemoveOptions is how a reinstall asks for its remove. Family regen is

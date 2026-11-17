@@ -398,7 +398,13 @@ func discloseImagePull(image string, emit func(PhaseEvent)) {
 // so a dependency that fails to start still leaves the service installed on
 // disk; this matters for reinstall, which has already removed the prior copy.
 func InstallPresetStreaming(name, version string, emit func(PhaseEvent)) (*config.CustomService, error) {
-	svc, err := resolvePresetForInstall(name, version)
+	return installPresetOnImage(name, version, "", emit)
+}
+
+// installPresetOnImage is InstallPresetStreaming on a given image, so a
+// reinstall puts back the patch release the service ran, not the preset's tag.
+func installPresetOnImage(name, version, image string, emit func(PhaseEvent)) (*config.CustomService, error) {
+	svc, err := resolvePresetOnImage(name, version, image)
 	if err != nil {
 		return nil, err
 	}
@@ -479,6 +485,17 @@ func InstallPresetByName(name, version string) (*config.CustomService, error) {
 	// signs a URL against it.
 	AdoptDefaultServiceDomains()
 	syncDashboardVhost()
+	return svc, nil
+}
+
+// resolvePresetOnImage resolves like an install, then swaps in image when one
+// is given.
+func resolvePresetOnImage(name, version, image string) (*config.CustomService, error) {
+	svc, err := resolvePresetForInstall(name, version)
+	if err != nil || image == "" {
+		return svc, err
+	}
+	svc.Image = image
 	return svc, nil
 }
 

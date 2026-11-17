@@ -96,3 +96,37 @@ func TestRefreshPresetDefinition_recordsTheCanonicalVersionOnASingleImageInstall
 		t.Error("once recorded, the next refresh must be a no-op")
 	}
 }
+
+func TestRealReinstallInstall_addOnKeepsTheRunningImage(t *testing.T) {
+	var image string
+	prev := reinstallStreamingFn
+	reinstallStreamingFn = func(name, version, img string, emit func(PhaseEvent)) (*config.CustomService, error) {
+		image = img
+		return &config.CustomService{Name: name}, nil
+	}
+	t.Cleanup(func() { reinstallStreamingFn = prev })
+
+	spec := reinstallSpec{presetName: "docdb", version: "7", image: "docker.io/library/docdb:7.0.48"}
+	if _, err := realReinstallInstall("docdb", spec, func(PhaseEvent) {}); err != nil {
+		t.Fatalf("realReinstallInstall: %v", err)
+	}
+	if image != spec.image {
+		t.Errorf("reinstall must install the image it captured, got %q", image)
+	}
+}
+
+func TestResolvePresetOnImage_usesTheCapturedImage(t *testing.T) {
+	reconcileEnv(t)
+	writeVersionedDocDB(t)
+
+	svc, err := resolvePresetOnImage("docdb", "7", "docker.io/library/docdb:7.0.48")
+	if err != nil {
+		t.Fatalf("resolvePresetOnImage: %v", err)
+	}
+	if svc.Image != "docker.io/library/docdb:7.0.48" || svc.Name != "docdb" {
+		t.Errorf("want docdb on the captured image, got %q on %q", svc.Name, svc.Image)
+	}
+	if svc, _ = resolvePresetOnImage("docdb", "7", ""); svc.Image != "docker.io/library/docdb:7" {
+		t.Errorf("with nothing captured the preset image stands, got %q", svc.Image)
+	}
+}

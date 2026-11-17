@@ -49,3 +49,26 @@ func TestInstalledVersion_singleImagePresetHasNoVersion(t *testing.T) {
 		t.Errorf("InstalledVersion = %q, want empty", got)
 	}
 }
+
+func TestInstalledVersion_comparesTheVersionNotTheWholeTag(t *testing.T) {
+	cases := []struct {
+		name, canonical, running string
+		want                     bool
+	}{
+		{"a patch under a suffixed tag", "rabbitmq:3-management-alpine", "rabbitmq:3.13.7-management-alpine", true},
+		{"a patch from a fully pinned tag", "elasticsearch:8.13.4", "elasticsearch:8.13.5", true},
+		{"another suffix is another image", "rabbitmq:3-management-alpine", "rabbitmq:3.13.7-alpine", false},
+		{"another major under the same suffix", "rabbitmq:3-management-alpine", "rabbitmq:4-management-alpine", false},
+		{"a tag with no version must match exactly", "redis:latest", "redis:alpine", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := &Preset{Versions: []PresetVersion{{Tag: "c", Image: "docker.io/library/" + c.canonical, Canonical: true}}}
+			p.Name = "svc"
+			got := p.InstalledVersion(&CustomService{Name: "svc", Image: "docker.io/library/" + c.running}) == "c"
+			if got != c.want {
+				t.Errorf("same line = %v, want %v", got, c.want)
+			}
+		})
+	}
+}

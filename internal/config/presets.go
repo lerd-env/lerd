@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"path"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -420,10 +421,37 @@ func (p *Preset) InstalledVersion(svc *CustomService) string {
 	return canon.Tag
 }
 
-// sameImageLine reports whether running is pinned's image or a patch release of
-// it: mongo:7 and mongo:7.0.48 are on the mongo:7 line, mongo:70 is not.
+// splitImageTag splits an image reference at its tag; a registry port's colon
+// sits before the last slash, so it is never taken for the tag.
+func splitImageTag(image string) (repo, tag string) {
+	at := strings.LastIndex(image, ":")
+	if at < 0 || at < strings.LastIndex(image, "/") {
+		return image, ""
+	}
+	return image[:at], image[at+1:]
+}
+
+// imageTagParts splits a tag around its version: 3.13.7-management-alpine is
+// prefix "", numbers "3.13.7", suffix "-management-alpine".
+var imageTagParts = regexp.MustCompile(`^(\D*)(\d+(?:\.\d+)*)(.*)$`)
+
+// sameImageLine reports whether running is on pinned's major line: same
+// repository, same text around the version, same major. mongo:7.0.48 and
+// rabbitmq:3.13.7-management-alpine qualify, mongo:70 and pg18 for pg17 do not.
 func sameImageLine(running, pinned string) bool {
-	return running == pinned || strings.HasPrefix(running, pinned+".")
+	if running == pinned {
+		return true
+	}
+	runRepo, runTag := splitImageTag(running)
+	pinRepo, pinTag := splitImageTag(pinned)
+	if runRepo != pinRepo {
+		return false
+	}
+	r, p := imageTagParts.FindStringSubmatch(runTag), imageTagParts.FindStringSubmatch(pinTag)
+	if r == nil || p == nil || r[1] != p[1] || r[3] != p[3] {
+		return false
+	}
+	return strings.Split(r[2], ".")[0] == strings.Split(p[2], ".")[0]
 }
 
 // canonicalVersion returns the version flagged canonical, or nil when none is.
