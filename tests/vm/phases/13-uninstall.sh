@@ -17,13 +17,10 @@ reinstall() {
 		bash "$HOME/lerd-install.sh" </dev/null
 	fi
 }
-# Phase 1 keeps the installer it ran; a guest installed before it did fetches
-# one here, so a missing copy fails the phase before lerd is removed.
-if [ ! -x "$HOME/rc/lerd" ] && [ ! -s "$HOME/lerd-install.sh" ]; then
-	curl -fsSL -o "$HOME/lerd-install.sh" https://lerd.sh/install.sh || {
-		_fail "setup: fetch the published installer for the reinstall"
-		exit 1
-	}
+# The reinstall reuses the installer phase 1 ran; without it, stop before lerd is removed.
+if [ ! -x "$HOME/rc/lerd" ] && [ ! -f "$HOME/lerd-install.sh" ]; then
+	_fail "setup: no installer saved by phase 1 to reinstall from (vm.sh push, or rerun from phase 1)"
+	exit 1
 fi
 
 check_out "without a terminal or a flag, uninstall refuses and exits non-zero" 'aborted.*exit=[1-9]' bash -c 'lerd uninstall 2>&1 | tr "\n" " "; echo "exit=${PIPESTATUS[0]}"'
