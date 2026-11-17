@@ -60,6 +60,9 @@ func TestInstalledVersion_comparesTheVersionNotTheWholeTag(t *testing.T) {
 		{"another suffix is another image", "rabbitmq:3-management-alpine", "rabbitmq:3.13.7-alpine", false},
 		{"another major under the same suffix", "rabbitmq:3-management-alpine", "rabbitmq:4-management-alpine", false},
 		{"a tag with no version must match exactly", "redis:latest", "redis:alpine", false},
+		{"a pinned minor is kept", "mysql:8.4", "mysql:8.0.36", false},
+		{"a patch under a pinned minor", "mysql:8.4", "mysql:8.4.3", true},
+		{"a fully pinned tag keeps its minor", "elasticsearch:8.13.4", "elasticsearch:8.19.0", false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

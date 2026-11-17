@@ -6,6 +6,7 @@ import (
 	"path"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -435,9 +436,9 @@ func splitImageTag(image string) (repo, tag string) {
 // prefix "", numbers "3.13.7", suffix "-management-alpine".
 var imageTagParts = regexp.MustCompile(`^(\D*)(\d+(?:\.\d+)*)(.*)$`)
 
-// sameImageLine reports whether running is on pinned's major line: same
-// repository, same text around the version, same major. mongo:7.0.48 and
-// rabbitmq:3.13.7-management-alpine qualify, mongo:70 and pg18 for pg17 do not.
+// sameImageLine reports whether running is a patch of pinned: same repository,
+// same text around the version, same major and pinned minor. mongo:7.0.48 fits
+// mongo:7 and 8.13.5 fits 8.13.4; mysql:8.0.36 does not fit mysql:8.4.
 func sameImageLine(running, pinned string) bool {
 	if running == pinned {
 		return true
@@ -451,7 +452,10 @@ func sameImageLine(running, pinned string) bool {
 	if r == nil || p == nil || r[1] != p[1] || r[3] != p[3] {
 		return false
 	}
-	return strings.Split(r[2], ".")[0] == strings.Split(p[2], ".")[0]
+	// Compare as many parts as the pin names, up to the minor: only a patch moves.
+	runParts, pinParts := strings.Split(r[2], "."), strings.Split(p[2], ".")
+	keep := min(len(pinParts), 2)
+	return len(runParts) >= keep && slices.Equal(runParts[:keep], pinParts[:keep])
 }
 
 // canonicalVersion returns the version flagged canonical, or nil when none is.
