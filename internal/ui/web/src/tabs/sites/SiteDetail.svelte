@@ -58,8 +58,7 @@
   const canLogs = $derived(siteHasLogSources(site));
   // A lone Overview tab can't be switched to anything, so don't render the tab
   // row at all when no other tab is available (e.g. static sites).
-  // Plugin tabs show until hidden here, and only where their `when` holds for
-  // the checkout shown: a worktree can sit on another framework major.
+  // Plugin tabs show until hidden, where `when` holds for the checkout shown.
   const checkout = $derived.by(() => {
     const wt = activeWorktreeBranch ? (site.worktrees ?? []).find((w) => w.branch === activeWorktreeBranch) : undefined;
     return wt
