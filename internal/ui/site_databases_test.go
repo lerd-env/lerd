@@ -57,6 +57,14 @@ func addWorktree(t *testing.T, main, branch string) string {
 func TestBuildSites_CarriesWhatATabConditionReads(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	// A cached definition, so the major resolves without reaching the store.
+	store := config.StoreFrameworksDir()
+	if err := os.MkdirAll(store, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(store, "laravel@12.yaml"), []byte("name: laravel\nlabel: Laravel\nversion: \"12\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	main := t.TempDir()
 	if err := os.WriteFile(filepath.Join(main, "composer.json"), []byte(`{"require":{"laravel/framework":"^12.0"}}`), 0o644); err != nil {
 		t.Fatal(err)
