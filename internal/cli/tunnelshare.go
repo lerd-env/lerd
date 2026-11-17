@@ -208,6 +208,8 @@ var tunnelURLPatterns = map[string][]*regexp.Regexp{
 	"expose": {
 		regexp.MustCompile(`(?i)(?:expose-url|public https):\s*(https?://\S+)`),
 		regexp.MustCompile(`(https://[a-zA-Z0-9.-]+\.sharedwithexpose\.com\S*)`),
+		// A custom domain is announced only on the "Public URL" row of the connection table.
+		regexp.MustCompile(`(?i)public url\b.*?(https?://[^\s│|\x1b]+)`),
 	},
 	"serveo":        {regexp.MustCompile(`(https://[a-zA-Z0-9.-]+\.serveo\.net\S*)`)},
 	"localhost-run": {regexp.MustCompile(`(https://[a-z0-9-]+\.lhr\.life\S*)`)},
