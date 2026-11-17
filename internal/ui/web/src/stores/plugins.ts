@@ -37,7 +37,8 @@ export function whenApplies(c: PluginCond | undefined, co: Checkout): boolean {
   if (c.is === 'database') return Boolean(co.has_database);
   if (c.is !== 'framework') return false;
   const name = (co.framework ?? '').toLowerCase();
-  const pattern = new RegExp('^' + (c.name ?? '').replace(/[.]/g, '\\.').replace(/\*/g, '.*') + '$');
+  const parts = (c.name ?? '').split('*').map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const pattern = new RegExp('^' + parts.join('.*') + '$');
   if (!name || !pattern.test(name)) return false;
   if (c.version === undefined) return true;
   if (!/^\d+$/.test(co.framework_version ?? '')) return false;
