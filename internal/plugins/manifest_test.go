@@ -65,6 +65,8 @@ func TestReadManifest_Refusals(t *testing.T) {
 		{"overview card without a title", "p", "api_version: 1\nname: p\nui:\n  overview_card: {entry: ui/card.html}\n", "title"},
 		{"unknown site tab condition", "p", "api_version: 1\nname: p\nui:\n  site_tab: {title: P, entry: ui/site.html, when: deployed}\n", `"deployed"`},
 		{"condition on a rail page", "p", "api_version: 1\nname: p\nui:\n  page: {title: P, entry: ui/index.html, when: database}\n", "only a site tab"},
+		{"condition on an overview card", "p", "api_version: 1\nname: p\nui:\n  overview_card: {title: P, entry: ui/card.html, when: database}\n", "only a site tab"},
+		{"condition that does not parse", "p", "api_version: 1\nname: p\nui:\n  site_tab: {title: P, entry: ui/site.html, when: \"database and\"}\n", `after "and"`},
 		{"page script outside ui/", "p", "api_version: 1\nname: p\nui:\n  page_script: bin/run\n", "bin/run"},
 		{"expected exit 0", "p", "api_version: 1\nname: p\ncommands:\n  - {name: x, run: bin/run, expected_exits: [0]}\n", "expected exit 0"},
 		{"expected exit past 255", "p", "api_version: 1\nname: p\nsite_commands:\n  - {name: x, label: X, run: bin/run, expected_exits: [1, 256]}\n", "expected exit 256"},

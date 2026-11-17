@@ -963,6 +963,7 @@ type WorktreeResponse struct {
 	FrameworkVersion    string `json:"framework_version,omitempty"`
 	FrameworkLabel      string `json:"framework_label,omitempty"`
 	DBIsolated          bool   `json:"db_isolated,omitempty"`
+	HasDatabase         bool   `json:"has_database,omitempty"`
 	DBDatabase          string `json:"db_database,omitempty"`
 	LANPort             int    `json:"lan_port,omitempty"`
 	LANShareURL         string `json:"lan_share_url,omitempty"`
@@ -1022,6 +1023,7 @@ type SiteResponse struct {
 	FPMRunning         bool           `json:"fpm_running"`
 	IsLaravel          bool           `json:"is_laravel"`
 	FrameworkLabel     string         `json:"framework_label"`
+	FrameworkVersion   string         `json:"framework_version,omitempty"`
 	QueueRunning       bool           `json:"queue_running"`
 	QueueFailing       bool           `json:"queue_failing,omitempty"`
 	StripeRunning      bool           `json:"stripe_running"`
@@ -1300,6 +1302,7 @@ func buildSites() ([]SiteResponse, error) {
 				FrameworkVersion:     wt.FrameworkVersion,
 				FrameworkLabel:       wt.FrameworkLabel,
 				DBIsolated:           wt.DBIsolated,
+				HasDatabase:          wt.HasDatabase,
 				DBDatabase:           wt.DBDatabase,
 				LANPort:              lanPort,
 				LANShareURL:          lanURL,
@@ -1337,6 +1340,7 @@ func buildSites() ([]SiteResponse, error) {
 			Framework:            e.FrameworkName,
 			IsLaravel:            e.FrameworkName == "laravel",
 			FrameworkLabel:       e.FrameworkLabel,
+			FrameworkVersion:     e.FrameworkVersion,
 			FPMRunning:           e.FPMRunning,
 			QueueRunning:         e.QueueRunning,
 			QueueFailing:         e.QueueFailing,

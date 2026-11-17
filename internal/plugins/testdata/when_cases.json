@@ -1,0 +1,552 @@
+[
+  {
+    "when": "",
+    "cond": null,
+    "applies": [
+      {},
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      }
+    ],
+    "skips": []
+  },
+  {
+    "when": "database",
+    "cond": {
+      "is": "database"
+    },
+    "applies": [
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      },
+      {
+        "has_database": true
+      }
+    ],
+    "skips": [
+      {},
+      {
+        "framework": "laravel",
+        "framework_version": "10"
+      }
+    ]
+  },
+  {
+    "when": "framework:laravel",
+    "cond": {
+      "is": "framework",
+      "name": "laravel"
+    },
+    "applies": [
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      },
+      {
+        "framework": "laravel",
+        "framework_version": "10"
+      },
+      {
+        "framework": "Laravel",
+        "framework_version": "12"
+      }
+    ],
+    "skips": [
+      {
+        "framework": "laravel-legacy"
+      },
+      {
+        "has_database": true,
+        "framework": "wordpress",
+        "framework_version": "6"
+      },
+      {}
+    ]
+  },
+  {
+    "when": "framework:laravel*",
+    "cond": {
+      "is": "framework",
+      "name": "laravel*"
+    },
+    "applies": [
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      },
+      {
+        "framework": "laravel-legacy"
+      }
+    ],
+    "skips": [
+      {
+        "has_database": true,
+        "framework": "wordpress",
+        "framework_version": "6"
+      }
+    ]
+  },
+  {
+    "when": "framework:*",
+    "cond": {
+      "is": "framework",
+      "name": "*"
+    },
+    "applies": [
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      },
+      {
+        "framework": "laravel-legacy"
+      },
+      {
+        "has_database": true,
+        "framework": "wordpress",
+        "framework_version": "6"
+      }
+    ],
+    "skips": [
+      {
+        "has_database": true
+      },
+      {}
+    ]
+  },
+  {
+    "when": "not framework:*",
+    "cond": {
+      "op": "not",
+      "args": [
+        {
+          "is": "framework",
+          "name": "*"
+        }
+      ]
+    },
+    "applies": [
+      {
+        "has_database": true
+      },
+      {}
+    ],
+    "skips": [
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      }
+    ]
+  },
+  {
+    "when": "framework:laravel.x",
+    "cond": {
+      "is": "framework",
+      "name": "laravel.x"
+    },
+    "applies": [],
+    "skips": [
+      {
+        "framework": "laravelax"
+      }
+    ]
+  },
+  {
+    "when": "framework:laravel@12",
+    "cond": {
+      "is": "framework",
+      "name": "laravel",
+      "version": 12
+    },
+    "applies": [
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      },
+      {
+        "framework": "Laravel",
+        "framework_version": "12"
+      }
+    ],
+    "skips": [
+      {
+        "framework": "laravel",
+        "framework_version": "10"
+      },
+      {
+        "framework": "laravel-legacy"
+      }
+    ]
+  },
+  {
+    "when": "framework:laravel@>=11",
+    "cond": {
+      "is": "framework",
+      "name": "laravel",
+      "cmp": ">=",
+      "version": 11
+    },
+    "applies": [
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      }
+    ],
+    "skips": [
+      {
+        "framework": "laravel",
+        "framework_version": "10"
+      }
+    ]
+  },
+  {
+    "when": "framework:laravel@<=10",
+    "cond": {
+      "is": "framework",
+      "name": "laravel",
+      "cmp": "<=",
+      "version": 10
+    },
+    "applies": [
+      {
+        "framework": "laravel",
+        "framework_version": "10"
+      }
+    ],
+    "skips": [
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      }
+    ]
+  },
+  {
+    "when": "framework:laravel@>10",
+    "cond": {
+      "is": "framework",
+      "name": "laravel",
+      "cmp": ">",
+      "version": 10
+    },
+    "applies": [
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      }
+    ],
+    "skips": [
+      {
+        "framework": "laravel",
+        "framework_version": "10"
+      }
+    ]
+  },
+  {
+    "when": "framework:laravel@<12",
+    "cond": {
+      "is": "framework",
+      "name": "laravel",
+      "cmp": "<",
+      "version": 12
+    },
+    "applies": [
+      {
+        "framework": "laravel",
+        "framework_version": "10"
+      }
+    ],
+    "skips": [
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      }
+    ]
+  },
+  {
+    "when": "framework:laravel@>=10 and framework:laravel@<12",
+    "cond": {
+      "op": "and",
+      "args": [
+        {
+          "is": "framework",
+          "name": "laravel",
+          "cmp": ">=",
+          "version": 10
+        },
+        {
+          "is": "framework",
+          "name": "laravel",
+          "cmp": "<",
+          "version": 12
+        }
+      ]
+    },
+    "applies": [
+      {
+        "framework": "laravel",
+        "framework_version": "10"
+      }
+    ],
+    "skips": [
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      }
+    ]
+  },
+  {
+    "when": "framework:*@>=10",
+    "cond": {
+      "is": "framework",
+      "name": "*",
+      "cmp": ">=",
+      "version": 10
+    },
+    "applies": [
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      },
+      {
+        "framework": "laravel",
+        "framework_version": "10"
+      }
+    ],
+    "skips": [
+      {
+        "has_database": true,
+        "framework": "wordpress",
+        "framework_version": "6"
+      },
+      {
+        "framework": "laravel-legacy"
+      }
+    ]
+  },
+  {
+    "when": "framework:laravel*@>=1",
+    "cond": {
+      "is": "framework",
+      "name": "laravel*",
+      "cmp": ">=",
+      "version": 1
+    },
+    "applies": [
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      }
+    ],
+    "skips": [
+      {
+        "framework": "laravel-legacy"
+      }
+    ]
+  },
+  {
+    "when": "framework:acme-cms",
+    "cond": {
+      "is": "framework",
+      "name": "acme-cms"
+    },
+    "applies": [],
+    "skips": [
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      },
+      {}
+    ]
+  },
+  {
+    "when": "database and not framework:wordpress or framework:laravel*@>=11",
+    "cond": {
+      "op": "or",
+      "args": [
+        {
+          "op": "and",
+          "args": [
+            {
+              "is": "database"
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "is": "framework",
+                  "name": "wordpress"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "is": "framework",
+          "name": "laravel*",
+          "cmp": ">=",
+          "version": 11
+        }
+      ]
+    },
+    "applies": [
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      },
+      {
+        "has_database": true
+      }
+    ],
+    "skips": [
+      {
+        "has_database": true,
+        "framework": "wordpress",
+        "framework_version": "6"
+      },
+      {
+        "framework": "laravel",
+        "framework_version": "10"
+      },
+      {}
+    ]
+  },
+  {
+    "when": "(database and not framework:wordpress) or framework:laravel*@>=11",
+    "cond": {
+      "op": "or",
+      "args": [
+        {
+          "op": "and",
+          "args": [
+            {
+              "is": "database"
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "is": "framework",
+                  "name": "wordpress"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "is": "framework",
+          "name": "laravel*",
+          "cmp": ">=",
+          "version": 11
+        }
+      ]
+    },
+    "applies": [
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      },
+      {
+        "has_database": true
+      }
+    ],
+    "skips": [
+      {
+        "has_database": true,
+        "framework": "wordpress",
+        "framework_version": "6"
+      },
+      {
+        "framework": "laravel",
+        "framework_version": "10"
+      },
+      {}
+    ]
+  },
+  {
+    "when": "database and (framework:wordpress or framework:laravel)",
+    "cond": {
+      "op": "and",
+      "args": [
+        {
+          "is": "database"
+        },
+        {
+          "op": "or",
+          "args": [
+            {
+              "is": "framework",
+              "name": "wordpress"
+            },
+            {
+              "is": "framework",
+              "name": "laravel"
+            }
+          ]
+        }
+      ]
+    },
+    "applies": [
+      {
+        "has_database": true,
+        "framework": "laravel",
+        "framework_version": "12"
+      },
+      {
+        "has_database": true,
+        "framework": "wordpress",
+        "framework_version": "6"
+      }
+    ],
+    "skips": [
+      {
+        "has_database": true
+      },
+      {
+        "framework": "laravel",
+        "framework_version": "10"
+      }
+    ]
+  },
+  {
+    "when": "not not database",
+    "cond": {
+      "op": "not",
+      "args": [
+        {
+          "op": "not",
+          "args": [
+            {
+              "is": "database"
+            }
+          ]
+        }
+      ]
+    },
+    "applies": [
+      {
+        "has_database": true
+      }
+    ],
+    "skips": [
+      {}
+    ]
+  }
+]

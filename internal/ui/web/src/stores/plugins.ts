@@ -1,13 +1,69 @@
 import { writable, derived } from 'svelte/store';
 import { apiFetch, apiJson } from '$lib/api';
 import { wsMessage } from '$lib/ws';
+import type { Site } from './sites';
 
 export interface PluginPage {
   title: string;
   url: string;
   icon?: string;
-  // A site tab's condition: 'database' shows it only on sites with one.
+  // A site tab's condition as written, and as lerd parsed it.
   when?: string;
+  cond?: PluginCond;
+}
+
+// A parsed `when`: an operator over args, or one condition. lerd validated it.
+export interface PluginCond {
+  op?: 'and' | 'or' | 'not';
+  args?: PluginCond[];
+  is?: 'database' | 'framework';
+  name?: string;
+  cmp?: '>=' | '<=' | '>' | '<';
+  version?: number;
+}
+
+// What a condition reads about the checkout a site page shows.
+export interface Checkout {
+  has_database?: boolean;
+  framework?: string;
+  framework_version?: string;
+}
+
+// checkoutOf picks the checkout a site page shows: the worktree on branch, or
+// the main one. A worktree shares the site's framework but not its major.
+export function checkoutOf(site: Site, branch: string): Checkout {
+  const wt = branch ? (site.worktrees ?? []).find((w) => w.branch === branch) : undefined;
+  if (!wt) return site;
+  return { has_database: wt.has_database, framework: site.framework, framework_version: wt.framework_version };
+}
+
+// whenApplies mirrors plugins.Cond.Applies; a missing condition always holds.
+export function whenApplies(c: PluginCond | undefined, co: Checkout): boolean {
+  if (!c) return true;
+  if (c.op === 'and') return (c.args ?? []).every((a) => whenApplies(a, co));
+  if (c.op === 'or') return (c.args ?? []).some((a) => whenApplies(a, co));
+  if (c.op === 'not') return !whenApplies(c.args?.[0], co);
+  if (c.is === 'database') return Boolean(co.has_database);
+  if (c.is !== 'framework') return false;
+  const name = (co.framework ?? '').toLowerCase();
+  const parts = (c.name ?? '').split('*').map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const pattern = new RegExp('^' + parts.join('.*') + '$');
+  if (!name || !pattern.test(name)) return false;
+  if (c.version === undefined) return true;
+  if (!/^\d+$/.test(co.framework_version ?? '')) return false;
+  const have = Number(co.framework_version);
+  switch (c.cmp) {
+    case '>=':
+      return have >= c.version;
+    case '<=':
+      return have <= c.version;
+    case '>':
+      return have > c.version;
+    case '<':
+      return have < c.version;
+    default:
+      return have === c.version;
+  }
 }
 
 export interface PluginInfo {
