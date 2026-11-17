@@ -61,19 +61,19 @@ Static files are declared inline with `content`. A file whose body must be compu
 | `mysql` alternates | `5.7` / `9.7` LTS (canonical 8.4 lives in the default preset) | - | family port `3306` (guard shifts later siblings) |
 | `postgres` alternates | `17` / `18` (canonical 16 lives in the default preset) | - | family port `5432` (guard shifts later siblings) |
 | `postgres-pgvector` | `pgvector/pgvector:pg18` (canonical) / `pg17` / `pg16`, pgvector instead of PostGIS | - | family port `5432` (guard shifts later siblings) |
-| `postgres-timescaledb` | `timescale/timescaledb:latest-pg17` (canonical) / `pg16`, TimescaleDB time-series extension, enabled automatically by `lerd env` / `lerd link` via `site_init` | - | family port `5432` (guard shifts later siblings) |
-| `mariadb` | `12` / `12.3` LTS / `11.8` LTS (default) / `11.4` LTS / `10.11` LTS / `11` (legacy) | - | family port `3306` (guard shifts later siblings) |
-| `mongo` | `docker.io/library/mongo:7` | - | `127.0.0.1:27017` |
+| `postgres-timescaledb` | `timescale/timescaledb:latest-pg17` (canonical) / `pg18` / `pg16`, TimescaleDB time-series extension, enabled automatically by `lerd env` / `lerd link` via `site_init` | - | family port `5432` (guard shifts later siblings) |
+| `mariadb` | `13` / `12` / `12.3` LTS / `11.8` LTS (default) / `11.4` LTS / `10.11` LTS / `11` (legacy) | - | family port `3306` (guard shifts later siblings) |
+| `mongo` | `mongo:7` (canonical) / `8` / `9` | - | family port `27017` (guard shifts later siblings) |
 | `mongo-express` | `docker.io/library/mongo-express:latest` | `mongo` (preset) | `http://localhost:8082` |
 | `selenium` | `docker.io/selenium/standalone-chromium:latest` | - | `http://localhost:7900` (noVNC) |
 | `stripe-mock` | `docker.io/stripemock/stripe-mock:latest` | - | `127.0.0.1:12111` |
 | `memcached` | `docker.io/library/memcached:1.6-alpine` | - | `127.0.0.1:11211` |
 | `valkey` | `docker.io/valkey/valkey:9-alpine` | - | `127.0.0.1:6380` |
-| `rabbitmq` | `docker.io/library/rabbitmq:3-management-alpine` | - | `http://localhost:15672` (mgmt UI, opens in new tab) |
+| `rabbitmq` | `rabbitmq:3-management-alpine` (canonical) / `4-management-alpine` | - | `http://localhost:15672` (mgmt UI, opens in new tab) |
 | `soketi` | `quay.io/soketi/soketi:1.6-16-alpine` | - | `127.0.0.1:6001` |
 | `beanstalkd` | `docker.io/schickling/beanstalkd:latest` | - | `127.0.0.1:11300` |
-| `elasticsearch` | `docker.elastic.co/elasticsearch/elasticsearch:8.13.4` | - | `127.0.0.1:9200` |
-| `opensearch` | `docker.io/opensearchproject/opensearch:2.19.5` | - | `127.0.0.1:9201` |
+| `elasticsearch` | `elasticsearch:8.13.4` (canonical) / `9.5.6` | - | family port `9200` (guard shifts later siblings) |
+| `opensearch` | `opensearch:2.19.5` (canonical) / `3.9.0` | - | family port `9201` (guard shifts later siblings) |
 | `typesense` | `docker.io/typesense/typesense:30.2` | - | `127.0.0.1:8108` |
 | `typesense-dashboard` | `docker.io/bfritscher/typesense-dashboard:latest` | `typesense` (preset) | `http://localhost:8084` |
 | `elasticvue` | `docker.io/cars10/elasticvue:latest` | `elasticsearch` (preset) | `http://localhost:8083` |
@@ -120,7 +120,7 @@ dismissal persists in `localStorage`.
 
 ## Multi-version presets
 
-`mysql`, `postgres` and `mariadb` ship multiple selectable versions. `mysql` and `postgres` mark one version canonical (mysql 8.4 LTS, postgres 16): the canonical version is the default install, recognised as the bare service `mysql` / `postgres` on the canonical host port, and the alternates picker only shows non-canonical versions (it doesn't list 8.4 because that IS the default install). `mariadb` has no canonical version, so there is no bare `mariadb` service: every version, including the default `11.8` LTS, materialises as a distinct custom service named `<family>-<sanitized-tag>` (the default resolves to `mariadb-11-8`). Non-canonical alternates run side-by-side with each other and with the canonical.
+`mysql`, `postgres`, `mariadb` and a number of add-on presets (`mongo`, `elasticsearch`, `opensearch`, `rabbitmq`, `solr`, `clickhouse`, `gotenberg`, `dragonfly`) ship multiple selectable versions. A preset that gains a newer upstream release keeps its existing versions and adds the new one beside them, so an installed service never changes under you. A service installed while its preset still pinned a single image counts as that preset's canonical version, so it keeps its name, its data and its reinstall. `mysql` and `postgres` mark one version canonical (mysql 8.4 LTS, postgres 16): the canonical version is the default install, recognised as the bare service `mysql` / `postgres` on the canonical host port, and the alternates picker only shows non-canonical versions (it doesn't list 8.4 because that IS the default install). `mariadb` has no canonical version, so there is no bare `mariadb` service: every version, including the default `11.8` LTS, materialises as a distinct custom service named `<family>-<sanitized-tag>` (the default resolves to `mariadb-11-8`). Non-canonical alternates run side-by-side with each other and with the canonical.
 
 Host port shows the family default; the first service to claim it keeps it and a
 later same-family sibling is shifted once to the next free port (see below).
