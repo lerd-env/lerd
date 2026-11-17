@@ -96,12 +96,12 @@ container images are a separate distribution with their own notices.
 | go.uber.org/multierr | v1.11.0 | MIT |
 | go.uber.org/zap | v1.28.0 | MIT |
 | go.yaml.in/yaml/v3 | v3.0.5 | Apache-2.0 |
-| golang.org/x/crypto | v0.58.0 | BSD-3-Clause |
+| golang.org/x/crypto | v0.59.0 | BSD-3-Clause |
 | golang.org/x/net | v0.62.0 | BSD-3-Clause |
-| golang.org/x/sync | v0.24.0 | BSD-3-Clause |
+| golang.org/x/sync | v0.25.0 | BSD-3-Clause |
 | golang.org/x/sys | v0.50.0 | BSD-3-Clause |
-| golang.org/x/term | v0.47.0 | BSD-3-Clause |
-| golang.org/x/text | v0.43.0 | BSD-3-Clause |
+| golang.org/x/term | v0.48.0 | BSD-3-Clause |
+| golang.org/x/text | v0.44.0 | BSD-3-Clause |
 | gopkg.in/ini.v1 | v1.67.3 | Apache-2.0 |
 | gopkg.in/yaml.v3 | v3.0.1 | Apache-2.0 |
 | modernc.org/libc | v1.80.1 | MIT |
@@ -4561,7 +4561,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ```
 
-### golang.org/x/crypto v0.58.0, golang.org/x/net v0.62.0, golang.org/x/sync v0.24.0, golang.org/x/sys v0.50.0, golang.org/x/term v0.47.0, golang.org/x/text v0.43.0
+### golang.org/x/crypto v0.59.0, golang.org/x/net v0.62.0, golang.org/x/sync v0.25.0, golang.org/x/sys v0.50.0, golang.org/x/term v0.48.0, golang.org/x/text v0.44.0
 
 BSD-3-Clause
 

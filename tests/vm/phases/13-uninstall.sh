@@ -12,11 +12,16 @@ reinstall() {
 	if [ -x "$HOME/rc/lerd" ]; then
 		bash "$HOME/rc/install.sh" --local "$HOME/rc/lerd"
 	elif [ "${LERD_CHANNEL:-}" = beta ]; then
-		curl -fsSL https://lerd.sh/install.sh | bash -s -- --beta
+		bash "$HOME/lerd-install.sh" --beta </dev/null
 	else
-		curl -fsSL https://lerd.sh/install.sh | bash
+		bash "$HOME/lerd-install.sh" </dev/null
 	fi
 }
+# The reinstall reuses the installer phase 1 ran; without it, stop before lerd is removed.
+if [ ! -x "$HOME/rc/lerd" ] && [ ! -f "$HOME/lerd-install.sh" ]; then
+	_fail "setup: no installer saved by phase 1 to reinstall from (vm.sh push, or rerun from phase 1)"
+	exit 1
+fi
 
 check_out "without a terminal or a flag, uninstall refuses and exits non-zero" 'aborted.*exit=[1-9]' bash -c 'lerd uninstall 2>&1 | tr "\n" " "; echo "exit=${PIPESTATUS[0]}"'
 out=$(lerd uninstall --keep-data </dev/null 2>&1)

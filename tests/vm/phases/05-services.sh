@@ -99,7 +99,7 @@ wait_for 30 bash -c "curl -sf http://\$(podman port lerd-mailpit 8025/tcp | grep
 # A subject of this run's own, so a mail an earlier run left is never found instead.
 sa_subject=vm-sa-$(date +%s)
 lerd artisan tinker --execute="Mail::raw('vm spam check', fn (\$m) => \$m->to('vm@example.test')->subject('$sa_subject'));" </dev/null >/dev/null 2>&1
-sa_msg() { curl -s "http://$(mailpit_web)/api/v1/search?query=subject:$sa_subject&limit=1" | python3 -c 'import json,sys; print(json.load(sys.stdin)["messages"][0]["ID"])' 2>/dev/null; }
+sa_msg() { python3 -c 'import json,sys; print(json.load(sys.stdin)["messages"][0]["ID"])' 2>/dev/null <<<"$(curl -s "http://$(mailpit_web)/api/v1/search?query=subject:$sa_subject&limit=1")"; }
 wait_for 15 sa_msg
 msg=$(sa_msg)
 check_out "5.10 a caught message shows a SpamAssassin score, and removing it unwires mailpit" '"Score".*unwired' bash -c "curl -s 'http://$(mailpit_web)/api/v1/message/$msg/sa-check'; lerd service remove spamassassin >/dev/null 2>&1; podman inspect lerd-mailpit --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -q SPAMASSASSIN || echo unwired"
@@ -109,7 +109,7 @@ lerd dump on </dev/null >/dev/null 2>&1
 wait_for 30 bash -c "curl -sf http://\$(podman port lerd-mailpit 8025/tcp | grep -m1 -o '127\.0\.0\.1:[0-9]*')/api/v1/info"
 view_subject=vm-view-$(date +%s)
 lerd artisan tinker --execute="Mail::send('welcome', [], fn (\$m) => \$m->to('vm@example.test')->subject('$view_subject'));" </dev/null >/dev/null 2>&1
-view_msg() { curl -s "http://$(mailpit_web)/api/v1/search?query=subject:$view_subject&limit=1" | python3 -c 'import json,sys; print(json.load(sys.stdin)["messages"][0]["ID"])' 2>/dev/null; }
+view_msg() { python3 -c 'import json,sys; print(json.load(sys.stdin)["messages"][0]["ID"])' 2>/dev/null <<<"$(curl -s "http://$(mailpit_web)/api/v1/search?query=subject:$view_subject&limit=1")"; }
 wait_for 15 view_msg
 msg=$(view_msg)
 check_out "5.11 a Laravel mail carries X-Lerd-View naming its Blade view" 'X-Lerd-View.*welcome' bash -c "curl -s 'http://$(mailpit_web)/api/v1/message/$msg/headers' | tr -d '\n'"

@@ -13,7 +13,10 @@ public_install() {
 	have wget || fetch="curl -fsSL"
 	[ "${LERD_CHANNEL:-}" = beta ] && args=(--beta)
 	set -o pipefail
-	$fetch https://lerd.sh/install.sh | bash -s -- "${args[@]}"
+	# Phase 13 reinstalls from this copy, so it is kept only once it has installed lerd.
+	rm -f "$HOME/lerd-install.sh"
+	$fetch https://lerd.sh/install.sh | tee "$HOME/lerd-install.sh.part" | bash -s -- "${args[@]}" &&
+		mv "$HOME/lerd-install.sh.part" "$HOME/lerd-install.sh"
 }
 local_install() { bash "$HOME/rc/install.sh" --local "$HOME/rc/lerd"; }
 
