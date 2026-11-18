@@ -60,7 +60,10 @@ func newWorktreeAddCmd() *cobra.Command {
 				return fmt.Errorf("not inside a registered lerd site (cwd=%s)", cwd)
 			}
 
-			args = gitpkg.DeriveWorktreeAddArgs(cwd, args)
+			args, err = gitpkg.DeriveWorktreeAddArgs(cwd, args)
+			if err != nil {
+				return err
+			}
 			gitArgs := append([]string{"worktree", "add"}, args...)
 			feedback.Begin()
 			feedback.Line("git " + strings.Join(gitArgs, " "))

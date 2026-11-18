@@ -132,6 +132,37 @@ describe('autostart store', () => {
     expect(init.method).toBe('POST');
     expect(init.body).toBe(JSON.stringify({ enabled: true }));
   });
+  it('loads worktree_sibling from /api/settings', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ worktree_sibling: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    ) as unknown as typeof fetch;
+    const { worktreeSibling, loadAutostart } = await import('./autostart');
+    await loadAutostart();
+    expect(get(worktreeSibling)).toBe(true);
+  });
+
+  it('toggleWorktreeSibling POSTs and flips store on success', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const { worktreeSibling, toggleWorktreeSibling } = await import('./autostart');
+    expect(get(worktreeSibling)).toBe(false);
+    expect(await toggleWorktreeSibling(true)).toBe(true);
+    expect(get(worktreeSibling)).toBe(true);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/settings/worktree-sibling');
+    expect(init.body).toBe(JSON.stringify({ enabled: true }));
+  });
+
+  it('toggleWorktreeSibling keeps the store when the save fails', async () => {
+    globalThis.fetch = vi.fn(async () => new Response('{}', { status: 500 })) as unknown as typeof fetch;
+    const { worktreeSibling, toggleWorktreeSibling } = await import('./autostart');
+    expect(await toggleWorktreeSibling(true)).toBe(false);
+    expect(get(worktreeSibling)).toBe(false);
+  });
+
   it('loads mcp_global from /api/settings', async () => {
     globalThis.fetch = vi.fn(async () =>
       new Response(JSON.stringify({ mcp_global: true }), {

@@ -79,6 +79,10 @@ type GlobalConfig struct {
 	// placeholders; if omitted, lerd appends the file. Empty = autodetect a
 	// known GUI editor (code/cursor/phpstorm/subl/zed), then xdg-open/open.
 	Editor string `yaml:"editor,omitempty" mapstructure:"editor"`
+	// WorktreeLocation is where a worktree lerd names the folder for is checked
+	// out: "inside" the site (the default) or as a "sibling" next to it, which
+	// keeps IDEs and search tools from indexing every branch with the parent.
+	WorktreeLocation string `yaml:"worktree_location,omitempty" mapstructure:"worktree_location"`
 	// IDEDataSource keeps a JetBrains project's database connection pointed at
 	// lerd, written only into a project that already has a .idea directory. Set
 	// false to leave every IDE file alone.

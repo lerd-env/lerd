@@ -5,6 +5,8 @@ export const autostartEnabled = writable<boolean>(false);
 export const startOnDashboardOpen = writable<boolean>(false);
 export const trayEnabled = writable<boolean>(true);
 export const betaUpdates = writable<boolean>(false);
+// New worktrees go next to the project instead of inside it.
+export const worktreeSibling = writable<boolean>(false);
 // Whether lerd's MCP server is registered with the AI assistants on this machine.
 export const mcpGlobal = writable<boolean>(false);
 
@@ -13,6 +15,7 @@ interface SettingsResponse {
   start_on_dashboard_open?: boolean;
   tray_enabled?: boolean;
   beta_updates?: boolean;
+  worktree_sibling?: boolean;
   mcp_global?: boolean;
 }
 
@@ -23,6 +26,7 @@ export async function loadAutostart() {
     startOnDashboardOpen.set(Boolean(res.start_on_dashboard_open));
     trayEnabled.set(res.tray_enabled !== false);
     betaUpdates.set(Boolean(res.beta_updates));
+    worktreeSibling.set(Boolean(res.worktree_sibling));
     mcpGlobal.set(Boolean(res.mcp_global));
   } catch {
     /* keep previous */
@@ -79,6 +83,20 @@ export async function toggleBetaUpdates(enable: boolean): Promise<boolean> {
       body: JSON.stringify({ enabled: enable })
     });
     if (res.ok) betaUpdates.set(enable);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function toggleWorktreeSibling(enable: boolean): Promise<boolean> {
+  try {
+    const res = await apiFetch('/api/settings/worktree-sibling', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: enable })
+    });
+    if (res.ok) worktreeSibling.set(enable);
     return res.ok;
   } catch {
     return false;

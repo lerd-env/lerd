@@ -182,7 +182,10 @@ func RunWorktreeAdd(site *config.Site, req WorktreeAddRequest, log io.Writer) (s
 		branchInput = req.ExistingBranch
 	}
 	branch := gitpkg.SanitizeBranch(branchInput)
-	checkoutPath := gitpkg.WorktreeCheckoutPath(site.Path, branchInput)
+	checkoutPath, err := gitpkg.WorktreeCheckoutPath(site.Path, branchInput)
+	if err != nil {
+		return "", "", capturer.warnings, err
+	}
 
 	release, err := gitpkg.LockInstall(checkoutPath, 30*time.Second)
 	if err != nil {

@@ -19,9 +19,9 @@ import (
 // single bare existing branch. Anything else is passed through exactly as typed,
 // because guessing which positional is a path and which is a commit-ish is how
 // a wrapper starts checking out the wrong thing.
-func DeriveWorktreeAddArgs(sitePath string, args []string) []string {
+func DeriveWorktreeAddArgs(sitePath string, args []string) ([]string, error) {
 	if hasWorktreePathArg(args) {
-		return args
+		return args, nil
 	}
 
 	// `worktree add -b <branch> <path> [<start-point>]`
@@ -29,12 +29,15 @@ func DeriveWorktreeAddArgs(sitePath string, args []string) []string {
 		if (a == "-b" || a == "-B") && i+1 < len(args) {
 			// A positional before -b is git's own path slot, marker or not.
 			if _, before := splitWorktreeArgs(args[:i]); len(before) > 0 {
-				return args
+				return args, nil
 			}
-			path := WorktreeCheckoutPath(sitePath, args[i+1])
+			path, err := WorktreeCheckoutPath(sitePath, args[i+1])
+			if err != nil {
+				return nil, err
+			}
 			out := append([]string{}, args[:i+2]...)
 			out = append(out, path)
-			return append(out, args[i+2:]...)
+			return append(out, args[i+2:]...), nil
 		}
 	}
 
@@ -43,11 +46,15 @@ func DeriveWorktreeAddArgs(sitePath string, args []string) []string {
 	// is a commit-ish or a path we have no business reordering.
 	flags, positionals := splitWorktreeArgs(args)
 	if len(positionals) != 1 {
-		return args
+		return args, nil
 	}
 	branch := positionals[0]
+	path, err := WorktreeCheckoutPath(sitePath, branch)
+	if err != nil {
+		return nil, err
+	}
 	out := append([]string{}, flags...)
-	return append(out, WorktreeCheckoutPath(sitePath, branch), branch)
+	return append(out, path, branch), nil
 }
 
 // hasWorktreePathArg reports whether the user already named a directory. Only a
@@ -80,21 +87,27 @@ func splitWorktreeArgs(args []string) (flags, positionals []string) {
 	return flags, positionals
 }
 
-// WorktreeCheckoutPath returns the directory a new worktree for branch should
-// be checked out into: a child of the parent site, "<sitePath>/<base>-<slug>"
-// where <base> is filepath.Base(sitePath). Bumps a numeric suffix if the
-// default path already exists. RunWorktreeAdd also writes a `/<base>-*/`
-// pattern into .git/info/exclude so git status doesn't show siblings.
-// Caveat: non-git tools (composer, IDEs, find/rsync/tar) walking the
-// parent tree DO descend into the worktree — gitignore doesn't hide it
-// from them. Most callers don't care; flag if you do.
-func WorktreeCheckoutPath(sitePath, branch string) string {
-	parentBase := filepath.Base(sitePath)
-	base := filepath.Join(sitePath, parentBase+"-"+SanitizeBranch(branch))
+// WorktreeCheckoutPath returns "<root>/<site>-<branch>", root being the site or,
+// with worktree_location: sibling, its parent, so IDEs don't index every branch
+// with the site. A numeric suffix is bumped while the path exists.
+func WorktreeCheckoutPath(sitePath, branch string) (string, error) {
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return "", err
+	}
+	root := sitePath
+	switch cfg.WorktreeLocation {
+	case "", "inside":
+	case "sibling":
+		root = filepath.Dir(sitePath)
+	default:
+		return "", fmt.Errorf("worktree_location %q in config.yaml is not one of inside, sibling", cfg.WorktreeLocation)
+	}
+	base := filepath.Join(root, filepath.Base(sitePath)+"-"+SanitizeBranch(branch))
 	candidate := base
 	for i := 2; ; i++ {
 		if _, err := os.Stat(candidate); os.IsNotExist(err) {
-			return candidate
+			return candidate, nil
 		}
 		candidate = fmt.Sprintf("%s-%d", base, i)
 	}
