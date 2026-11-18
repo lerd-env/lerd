@@ -26,6 +26,10 @@ versions:
     host_port: 3306
 ports:
   - "{{host_port}}:3306"
+# Ubuntu's mysql-server AppArmor profile attaches by path to /usr/sbin/mysqld,
+# even inside rootless containers. The entrypoint finds this copy first on PATH,
+# and --basedir keeps its plugins and messages on /usr.
+exec: sh -c "cp -f /usr/sbin/mysqld /usr/local/sbin/mysqld && exec docker-entrypoint.sh mysqld --basedir=/usr"
 data_dir: /var/lib/mysql
 environment:
   MYSQL_ROOT_PASSWORD: lerd

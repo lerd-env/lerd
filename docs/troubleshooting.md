@@ -19,7 +19,7 @@ It checks the machine, not your projects. A site's own findings, a missing datab
 lerd site:doctor acme.test
 ```
 
-On Ubuntu or Debian with a native MySQL or MariaDB server installed, `lerd doctor` fails while that server's AppArmor profile is enforced. Rootless podman applies no profile of its own, so the host's attaches to the server in lerd's database container too: it stops reading its config, listens on a socket its own client does not look at, so `lerd db:shell` cannot connect, and refuses the signal that stops it. Disabling that profile, or purging the native server if lerd's replaces it, and restarting the service clears it. `lerd install` warns about the same profile.
+On Ubuntu or Debian with a native MySQL or MariaDB server installed, that server's AppArmor profile attaches by path to `/usr/sbin/mysqld` or `/usr/sbin/mariadbd`, and rootless podman applies no profile of its own, so it would also confine the server in lerd's database container. lerd starts the server from a copy under `/usr/local/sbin` instead, which the profile does not match, so the native server and its profile can stay as they are. A database service lerd ran before this change switches over the next time it restarts.
 
 Among the machine checks, `lerd doctor` fails when a PHP container still mounts a folder that no longer exists. Podman refuses to start a container whose mount source is gone, so every site on that PHP version answers 502 until `lerd start` rewrites the container without it.
 

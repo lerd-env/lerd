@@ -153,14 +153,6 @@ func nginxStartError(startErr error, conflicts []PortCheck, holder string) error
 		strings.Join(ports, "/"), holder, FindListenerCmd(ports[0]))
 }
 
-// warnHostMysqldProfiles flags a native server's AppArmor profile, which also
-// confines the database in lerd's container; lerd doctor names the fix.
-func warnHostMysqldProfiles() {
-	for _, p := range enforcedMysqldProfiles("/") {
-		feedback.Warn("%s also confines lerd's MySQL/MariaDB container, which then ignores its config; run lerd doctor for the fix", p)
-	}
-}
-
 // Seams for tests.
 var (
 	installIsWSL         = wsl.IsWSL
@@ -249,7 +241,6 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	healMachineRestartIfNeeded(preEnsureLastUp)
 
 	portConflicts := ensurePortsAvailable()
-	warnHostMysqldProfiles()
 
 	// Resolved before the root pass below, which needs to know whether to
 	// install the resolver sudoers grant. The side effects of a changed answer
