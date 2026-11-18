@@ -1072,6 +1072,7 @@ func scanWorktrees() ([]func(), bool) {
 				// name that version's FPM container or the branch is served by
 				// the parent's PHP.
 				effectivePHP := config.WorktreePHPVersion(wt.Path, s.PHPVersion)
+				podman.EnsurePathMounted(wt.Path, effectivePHP)
 				if err := nginx.GenerateWorktreeVhostFor(wt.Domain, wt.Path, effectivePHP, s.PrimaryDomain(), s.Name, wt.Branch, s.Secured); err != nil {
 					fmt.Printf("[WARN] worktree vhost for %s: %v\n", wt.Domain, err)
 					continue
@@ -1223,6 +1224,9 @@ func syncWorktree(sitePath, worktreeName, action string, pruneStale bool) bool {
 			return true
 		}
 		effectivePHP := config.WorktreePHPVersion(wt.Path, site.PHPVersion)
+		// A checkout beside a site outside home is not under the site's mount,
+		// so the containers need one for it before its vhost can serve it.
+		podman.EnsurePathMounted(wt.Path, effectivePHP)
 		vhostErr := nginx.GenerateWorktreeVhostFor(wt.Domain, wt.Path, effectivePHP, site.PrimaryDomain(), site.Name, wt.Branch, site.Secured)
 		if site.Secured {
 			if reissueErr := certs.ReissueCertForWorktree(*site); reissueErr != nil {

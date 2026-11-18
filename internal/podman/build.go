@@ -56,6 +56,8 @@ func ExtraVolumePaths() []string {
 	if reg, err := config.LoadSites(); err == nil {
 		for _, site := range reg.Sites {
 			candidates = append(candidates, site.Path)
+			// A worktree beside its site is outside the site's own mount.
+			candidates = append(candidates, config.WorktreeCheckouts(site.Path)...)
 		}
 	}
 	var present []string

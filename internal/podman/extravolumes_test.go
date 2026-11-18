@@ -1,6 +1,8 @@
 package podman
 
 import (
+	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -120,5 +122,41 @@ func TestGenerators_refuseUnmountableProjectPath(t *testing.T) {
 	}
 	if _, err := GenerateFrankenPHPQuadlet("app", "/var/www/app", "8.4", nil, nil); err != nil {
 		t.Errorf("GenerateFrankenPHPQuadlet with a real path should succeed: %v", err)
+	}
+}
+
+// A worktree checked out beside a site outside home sits outside the site's own
+// mount, so the containers need it as a mount of its own or the branch's vhost
+// points at files neither nginx nor FPM can read.
+func TestExtraVolumePaths_mountsAWorktreeBesideItsSite(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	outside := t.TempDir()
+	site := filepath.Join(outside, "shop")
+	sibling := filepath.Join(outside, "shop-feat")
+	if err := os.MkdirAll(site, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main"},
+		{"-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init"},
+		{"worktree", "add", "-q", "-b", "feat", sibling},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", site}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	reg := config.SiteRegistry{Sites: []config.Site{{Name: "shop", Path: site}}}
+	if err := config.SaveSites(&reg); err != nil {
+		t.Fatal(err)
+	}
+
+	got := ExtraVolumePaths()
+
+	want := []string{site, sibling}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ExtraVolumePaths() = %v, want %v", got, want)
 	}
 }
