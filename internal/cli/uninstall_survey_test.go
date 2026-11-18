@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"testing"
 )
 
@@ -100,5 +101,25 @@ func TestSendUninstallFeedbackReportsAnUnreachableEndpoint(t *testing.T) {
 
 	if err := sendUninstallFeedback(url, uninstallFeedback{Reason: "other"}); err == nil {
 		t.Fatal("a closed endpoint must come back as an error")
+	}
+}
+
+func TestUninstallSurveyOSReportsWSLAsWindows(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("WSL only exists on linux")
+	}
+	t.Setenv("WSL_DISTRO_NAME", "Ubuntu")
+	if got := uninstallSurveyOS(); got != "windows" {
+		t.Fatalf("os = %q, want windows", got)
+	}
+}
+
+func TestUninstallSurveyOSKeepsPlainLinux(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("linux only")
+	}
+	t.Setenv("WSL_DISTRO_NAME", "")
+	if got := uninstallSurveyOS(); got != "linux" {
+		t.Fatalf("os = %q, want linux", got)
 	}
 }
