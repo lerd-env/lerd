@@ -723,6 +723,11 @@ func startHostProxy(domain string, httpPort, httpsPort int, secured bool) (int, 
 				resp.Header.Set(h, rewriteTunnelURL(v, domain, tunnelHost))
 			}
 		}
+		// Frameworks send asset preloads as Link headers, several URLs per
+		// value, and a dev server URL carries the .test origin.
+		for i, v := range resp.Header.Values("Link") {
+			resp.Header["Link"][i] = string(rewriteTunnelBody([]byte(v), domain, tunnelHost))
+		}
 
 		ct := resp.Header.Get("Content-Type")
 		if !isTextContent(ct) {

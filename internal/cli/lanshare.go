@@ -542,6 +542,11 @@ func startLANShareProxy(domain string, port, httpPort, httpsPort int, secured bo
 			loc = strings.ReplaceAll(loc, "https://"+lanHost, scheme+"://"+lanHost)
 			resp.Header.Set("Location", loc)
 		}
+		// Frameworks send asset preloads as Link headers, several URLs per
+		// value, and a dev server URL carries the .test origin.
+		for i, v := range resp.Header.Values("Link") {
+			resp.Header["Link"][i] = string(rewriteLANShareBody([]byte(v), domain, lanHost, reach))
+		}
 		if scheme == "http" {
 			dropSecureCookieFlag(resp.Header)
 		}

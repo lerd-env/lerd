@@ -730,6 +730,36 @@ func TestLANShareProxy_rewritesHTTPSLocationRedirects(t *testing.T) {
 	}
 }
 
+func TestLANShareProxy_rewritesEveryLinkHeader(t *testing.T) {
+	const domain = "laravel.test"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Link", `<https://laravel.test/@lerd-vite/a.woff2>; rel="preload", <http://laravel.test/b.css>; rel="preload"`)
+		w.Header().Add("Link", `<https://laravel.test/c.js>; rel="modulepreload"`)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	for _, reach := range []shareReach{reachLAN, reachPublic} {
+		_, proxyPort := mustStartLANShareProxy(t, domain, mustExtractPort(t, upstream.URL), 0, false, reach)
+		host := fmt.Sprintf("127.0.0.1:%d", proxyPort)
+		resp, err := http.Get("http://" + host + "/")
+		if err != nil {
+			t.Fatalf("GET: %v", err)
+		}
+		resp.Body.Close()
+
+		base := reach.scheme() + "://" + host
+		want := []string{
+			`<` + base + `/@lerd-vite/a.woff2>; rel="preload", <` + base + `/b.css>; rel="preload"`,
+			`<` + base + `/c.js>; rel="modulepreload"`,
+		}
+		got := resp.Header.Values("Link")
+		if strings.Join(got, "\n") != strings.Join(want, "\n") {
+			t.Errorf("reach %v: Link = %q, want %q", reach, got, want)
+		}
+	}
+}
+
 func TestRewriteLANShareBody_fixesLANIPWithWrongPort(t *testing.T) {
 	// Laravel/Symfony can emit URLs with the LAN IP but SERVER_PORT (443 from
 	// the nginx HTTPS vhost) when X-Forwarded-Port isn't honored — those must
