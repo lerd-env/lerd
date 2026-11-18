@@ -133,7 +133,11 @@ func TestExtraVolumePaths_mountsAWorktreeBesideItsSite(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
-	outside := t.TempDir()
+	// git records the real path, and macOS's temp dir sits behind /var -> /private/var.
+	outside, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	site := filepath.Join(outside, "shop")
 	sibling := filepath.Join(outside, "shop-feat")
 	if err := os.MkdirAll(site, 0o755); err != nil {
