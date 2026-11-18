@@ -60,6 +60,50 @@ func TestIsShell_empty(t *testing.T) {
 	}
 }
 
+func TestNginxStartError(t *testing.T) {
+	busy := []PortCheck{
+		{Port: "80", Label: "nginx HTTP", Container: "lerd-nginx"},
+		{Port: "443", Label: "nginx HTTPS", Container: "lerd-nginx"},
+		{Port: "5300", Label: "DNS", Container: "lerd-dns"},
+	}
+
+	t.Run("nginx started means no error", func(t *testing.T) {
+		if err := nginxStartError(nil, busy, ""); err != nil {
+			t.Fatalf("expected nil, got %v", err)
+		}
+	})
+
+	t.Run("a known holder is named", func(t *testing.T) {
+		err := nginxStartError(fmt.Errorf("exit status 126"), busy, "the system nginx service")
+		if err == nil || !strings.Contains(err.Error(), "in use by the system nginx service") {
+			t.Fatalf("expected the holder named, got %v", err)
+		}
+	})
+
+	t.Run("an unknown holder gets the sudo find command", func(t *testing.T) {
+		err := nginxStartError(fmt.Errorf("exit status 126"), busy, "")
+		if err == nil {
+			t.Fatal("expected an error when nginx did not start")
+		}
+		msg := err.Error()
+		for _, want := range []string{"lerd-nginx did not start", "port 80/443", "sudo " + FindListenerCmd("80"), "lerd install"} {
+			if !strings.Contains(msg, want) {
+				t.Errorf("message %q lacks %q", msg, want)
+			}
+		}
+		if strings.Contains(msg, "5300") {
+			t.Errorf("message %q names the DNS port, which does not stop nginx", msg)
+		}
+	})
+
+	t.Run("no known conflict points at lerd doctor", func(t *testing.T) {
+		err := nginxStartError(fmt.Errorf("exit status 1"), nil, "")
+		if err == nil || !strings.Contains(err.Error(), "lerd doctor") {
+			t.Fatalf("expected a lerd doctor hint, got %v", err)
+		}
+	})
+}
+
 func TestPortPreflightConflicts(t *testing.T) {
 	// Isolate config so nginx ports fall back to the 80/443 defaults and the
 	// DNS check is the fixed 5300, making CollectPortChecks deterministic.

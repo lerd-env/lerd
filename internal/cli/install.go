@@ -108,17 +108,17 @@ func portPreflightConflicts(portList string, containerRunning func(string) bool,
 // local-dev stack such as Laravel Herd or a system nginx/Apache holding 80/443.
 // It is advisory only: install continues so a user who knows the conflict (or
 // plans to remap lerd's ports) isn't blocked.
-func ensurePortsAvailable() {
+func ensurePortsAvailable() []PortCheck {
 	step("Checking required host ports")
 	portList := PortListOutput()
 	if portList == "" {
 		ok()
-		return
+		return nil
 	}
 	conflicts := portPreflightConflicts(portList, podmanContainerRunning, lerdDNSAnswering)
 	if len(conflicts) == 0 {
 		ok()
-		return
+		return nil
 	}
 	fmt.Println()
 	for _, c := range conflicts {
@@ -126,6 +126,32 @@ func ensurePortsAvailable() {
 		feedback.Note("find it: " + FindListenerCmd(c.Port))
 	}
 	feedback.Note("another local stack such as Laravel Herd may be hosting sites; stop it to free these ports, then re-run lerd install")
+	return conflicts
+}
+
+// nginxStartError turns a failed lerd-nginx start into the install's final
+// error, so the run no longer ends on "installation complete" with no site
+// served. A port the preflight found busy is the likely cause, so it is named.
+func nginxStartError(startErr error, conflicts []PortCheck, holder string) error {
+	if startErr == nil {
+		return nil
+	}
+	var ports []string
+	for _, c := range conflicts {
+		if c.Container == "lerd-nginx" {
+			ports = append(ports, c.Port)
+		}
+	}
+	if len(ports) == 0 {
+		return fmt.Errorf("lerd-nginx did not start, so no site is served; run lerd doctor to see why")
+	}
+	if holder != "" {
+		return fmt.Errorf("lerd-nginx did not start, so no site is served: port %s is already in use by %s; stop it, then run lerd install again",
+			strings.Join(ports, "/"), holder)
+	}
+	// Without sudo, ss and lsof hide a root-owned listener such as a system nginx.
+	return fmt.Errorf("lerd-nginx did not start, so no site is served: port %s is already in use by another process (find it: sudo %s); stop it, then run lerd install again",
+		strings.Join(ports, "/"), FindListenerCmd(ports[0]))
 }
 
 // warnHostMysqldProfiles flags a native server's AppArmor profile, which also
@@ -223,7 +249,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	}
 	healMachineRestartIfNeeded(preEnsureLastUp)
 
-	ensurePortsAvailable()
+	portConflicts := ensurePortsAvailable()
 	warnHostMysqldProfiles()
 
 	// Resolved before the root pass below, which needs to know whether to
@@ -886,20 +912,24 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// path, so existing users see no behaviour change.
 	autostartOn := lerdSystemd.IsAutostartEnabled()
 
+	var nginxErr error
 	if autostartOn {
 		running, _ := podman.ContainerRunning("lerd-nginx")
 		if nginxNeedsRestart(running, slices.Contains(changedQuadlets, "lerd-nginx"), podman.ContainerImageID("lerd-nginx"), podman.LocalImageID(nginxImage)) {
 			step("Starting lerd-nginx")
-			if err := services.Mgr.Restart("lerd-nginx"); err != nil {
-				fmt.Printf("    WARN: %v\n", err)
+			if nginxErr = services.Mgr.Restart("lerd-nginx"); nginxErr != nil {
+				fmt.Printf("    WARN: %v\n", nginxErr)
+			} else {
+				ok()
 			}
 		} else {
 			step("Reloading lerd-nginx")
 			if err := nginx.Reload(); err != nil {
 				fmt.Printf("    WARN: %v\n", err)
+			} else {
+				ok()
 			}
 		}
-		ok()
 	}
 
 	step("Writing watcher service")
@@ -1141,6 +1171,10 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// package manager swaps underneath it is recognised on the next command.
 	writeInstalledVersion(version.Version)
 
+	if err := nginxStartError(nginxErr, portConflicts, nginxPortHolder(portConflicts)); err != nil {
+		feedback.Begin()
+		return err
+	}
 	feedback.Begin()
 	feedback.Done("lerd installation complete")
 	feedback.Begin()
@@ -2068,4 +2102,17 @@ func defaultPresetsToRefresh(names []string, installed func(unit string) bool, k
 		}
 	}
 	return out
+}
+
+// nginxPortHolder names the first process found on one of lerd-nginx's busy ports.
+func nginxPortHolder(conflicts []PortCheck) string {
+	for _, c := range conflicts {
+		if c.Container != "lerd-nginx" {
+			continue
+		}
+		if h := PortHolder(c.Port); h != "" {
+			return h
+		}
+	}
+	return ""
 }

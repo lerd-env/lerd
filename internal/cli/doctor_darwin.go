@@ -32,5 +32,8 @@ func FindListenerCmd(port string) string {
 	return "lsof -nP -iTCP:" + port + " -sTCP:LISTEN"
 }
 
+// PortHolder is not looked up on macOS; the error falls back to the find command.
+func PortHolder(string) string { return "" }
+
 // enforcedMysqldProfiles is AppArmor's, which macOS does not have.
 func enforcedMysqldProfiles(string) []string { return nil }
