@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/version"
 )
 
@@ -55,12 +56,21 @@ func offerUninstallFeedback() {
 		return
 	}
 	answer.Version = version.Version
-	answer.OS = runtime.GOOS
+	answer.OS = uninstallSurveyOS(platform.Current)
 	if err := sendUninstallFeedback(uninstallFeedbackURL, answer); err != nil {
 		feedback.Note("could not send it, thanks anyway")
 		return
 	}
 	feedback.Note("thank you, it helps")
+}
+
+// uninstallSurveyOS names the platform the answer comes from. WSL reports as
+// linux to Go, so it is sent as windows to tell those users apart.
+func uninstallSurveyOS(caps platform.Caps) string {
+	if caps.WindowsSide {
+		return "windows"
+	}
+	return runtime.GOOS
 }
 
 // uninstallSurvey turns the replies into an answer, or false when skipped.

@@ -26,7 +26,7 @@ Without a terminal and without one of those flags, `lerd uninstall` stops before
 
 ## Why are you leaving?
 
-Once you confirm a plain `lerd uninstall`, before anything is removed, Lerd asks one optional question: why you are uninstalling, picked from a short list, with room for a sentence of your own. Pressing Enter skips it and nothing is sent. An answer goes to `feedback.lerd.sh` with only the reason, your words, the Lerd version and the operating system, no install id and no address, so it cannot be tied back to you. `--force`, `--keep-data` and runs without a terminal never ask. The Worker that receives it is in `workers/uninstall-feedback` in the Lerd repository.
+Once you confirm a plain `lerd uninstall`, before anything is removed, Lerd asks one optional question: why you are uninstalling, picked from a short list, with room for a sentence of your own. Pressing Enter skips it and nothing is sent. An answer goes to `feedback.lerd.sh` with only the reason, your words, the Lerd version and the operating system (Windows when Lerd runs under WSL), no install id and no address, so it cannot be tied back to you. `--force`, `--keep-data` and runs without a terminal never ask. The Worker that receives it is in `workers/uninstall-feedback` in the Lerd repository.
 
 ## Linux
 

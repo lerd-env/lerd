@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"testing"
+
+	"github.com/geodro/lerd/internal/platform"
 )
 
 // answers feeds a fixed list of replies to the survey, one per question.
@@ -100,5 +103,17 @@ func TestSendUninstallFeedbackReportsAnUnreachableEndpoint(t *testing.T) {
 
 	if err := sendUninstallFeedback(url, uninstallFeedback{Reason: "other"}); err == nil {
 		t.Fatal("a closed endpoint must come back as an error")
+	}
+}
+
+func TestUninstallSurveyOSReportsWSLAsWindows(t *testing.T) {
+	if got := uninstallSurveyOS(platform.Caps{WindowsSide: true}); got != "windows" {
+		t.Fatalf("os = %q, want windows", got)
+	}
+}
+
+func TestUninstallSurveyOSKeepsTheHostOS(t *testing.T) {
+	if got := uninstallSurveyOS(platform.Caps{}); got != runtime.GOOS {
+		t.Fatalf("os = %q, want %s", got, runtime.GOOS)
 	}
 }
