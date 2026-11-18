@@ -1042,12 +1042,11 @@ func reconcileCustomServices() {
 	for _, name := range res.ConfigsApplied {
 		feedback.Warn("applied an updated config to %s and restarted it", name)
 	}
-	// Default-stack services (mysql, postgres, redis…) don't flow through the custom
-	// reconcile above, so apply the same config-drift restart to them: a shipped
-	// preset config bump (e.g. a higher max_allowed_packet) must reach a running
-	// default service on update, not only on an explicit reinstall.
+	// Default-stack services (mysql, redis…) don't flow through the custom reconcile
+	// above, so give them the same pass: a preset change shipped in a new binary, to
+	// a config file or to the unit itself, reaches a running service on start.
 	for _, name := range config.DefaultPresetNames() {
-		if applied, err := serviceops.RestartIfConfigDrifted(name, name); err != nil {
+		if applied, err := serviceops.ReconcileDefaultService(name); err != nil {
 			feedback.Warn("applying config for %s: %v", name, err)
 		} else if applied {
 			feedback.Warn("applied an updated config to %s and restarted it", name)

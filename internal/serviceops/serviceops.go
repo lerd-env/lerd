@@ -815,6 +815,16 @@ func EnsureDefaultPresetQuadletPinned(name, pinnedImage string) error {
 	return EnsureCustomServiceQuadlet(svc)
 }
 
+// ensureDefaultPresetQuadletDiff is EnsureDefaultPresetQuadlet that also
+// reports whether the unit on disk changed.
+func ensureDefaultPresetQuadletDiff(name string) (bool, error) {
+	svc, err := resolveDefaultPresetService(name, "")
+	if err != nil {
+		return false, err
+	}
+	return ensureCustomServiceQuadletDiff(svc)
+}
+
 // resolveDefaultPresetService builds the CustomService a default preset renders
 // to, with the image pins, platform override and version corrections already
 // applied. Split out of EnsureDefaultPresetQuadletPinned so the dynamic_env
