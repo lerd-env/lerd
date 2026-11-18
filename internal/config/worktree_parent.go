@@ -39,6 +39,16 @@ func ParentSiteForWorktreeDir(dir string) (*Site, bool) {
 	return nil, false
 }
 
+// WorktreeMountDir names the folder to bind-mount so a worktree outside its
+// site's own mount can be served: the one holding the checkout, which outlives
+// it, so removing a worktree never leaves a mount podman can't start with.
+func WorktreeMountDir(sitePath, checkout string) (string, bool) {
+	if PathWithin(checkout, sitePath) {
+		return "", false
+	}
+	return filepath.Dir(checkout), true
+}
+
 // WorktreeCheckouts lists the checkout directories git records for the site's
 // worktrees, read from .git/worktrees/*/gitdir, wherever they live on disk.
 func WorktreeCheckouts(sitePath string) []string {

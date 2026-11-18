@@ -88,3 +88,22 @@ func TestParentSiteForWorktreeDir_symlinkedSpelling(t *testing.T) {
 		t.Fatalf("ParentSiteForWorktreeDir via the symlink = %v, %v; want acme", got, ok)
 	}
 }
+
+func TestWorktreeMountDir(t *testing.T) {
+	cases := []struct {
+		name, checkout, want string
+		ok                   bool
+	}{
+		{"inside the site is covered by the site's mount", "/srv/shop/shop-feat", "", false},
+		{"beside the site mounts the folder holding it", "/srv/shop-feat", "/srv", true},
+		{"anywhere else mounts its own parent", "/data/branches/shop-x", "/data/branches", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, ok := WorktreeMountDir("/srv/shop", c.checkout)
+			if got != c.want || ok != c.ok {
+				t.Errorf("WorktreeMountDir = %q, %v; want %q, %v", got, ok, c.want, c.ok)
+			}
+		})
+	}
+}

@@ -157,10 +157,16 @@ func TestExtraVolumePaths_mountsAWorktreeBesideItsSite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := ExtraVolumePaths()
-
-	want := []string{site, sibling}
-	if !reflect.DeepEqual(got, want) {
+	// The folder holding the checkout is mounted, not the checkout itself: it
+	// outlives the worktree, so removing one never leaves a mount behind.
+	want := []string{outside}
+	if got := ExtraVolumePaths(); !reflect.DeepEqual(got, want) {
 		t.Errorf("ExtraVolumePaths() = %v, want %v", got, want)
+	}
+	if out, err := exec.Command("git", "-C", site, "worktree", "remove", sibling).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree remove: %v\n%s", err, out)
+	}
+	if got := ExtraVolumePaths(); !reflect.DeepEqual(got, []string{site}) {
+		t.Errorf("after removal ExtraVolumePaths() = %v, want [%s]", got, site)
 	}
 }
