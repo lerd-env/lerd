@@ -818,6 +818,38 @@ func TestStartHostProxy_rewritesLocationHeader_httpToHttps(t *testing.T) {
 	}
 }
 
+func TestStartHostProxy_rewritesEveryLinkHeader(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Link", `<https://mysite.test/@lerd-vite/a.woff2>; rel="preload"; as="font", <http://mysite.test/b.css>; rel="preload"; as="style"`)
+		w.Header().Add("Link", `<https://mysite.test/c.js>; rel="modulepreload"`)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	if err != nil {
+		t.Fatalf("startHostProxy: %v", err)
+	}
+	defer stop()
+
+	req, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d/", port), nil)
+	req.Host = "share.example.com"
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	want := []string{
+		`<https://share.example.com/@lerd-vite/a.woff2>; rel="preload"; as="font", <https://share.example.com/b.css>; rel="preload"; as="style"`,
+		`<https://share.example.com/c.js>; rel="modulepreload"`,
+	}
+	got := resp.Header.Values("Link")
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("Link = %q, want %q", got, want)
+	}
+}
+
 func TestStartHostProxy_rewritesHTMLBody(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
