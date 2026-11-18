@@ -1,11 +1,17 @@
 package serviceops
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/registry"
 )
 
 // defaultSeams drives ReconcileDefaultService: whether the unit is installed,
@@ -60,5 +66,37 @@ func TestReconcileDefaultService_noRestartWhenTheUnitIsCurrent(t *testing.T) {
 
 	if restarted, err := ReconcileDefaultService("mysql"); err != nil || restarted || slices.Contains(*calls, "restart lerd-mysql") {
 		t.Fatalf("restarted = %v, err = %v, calls = %v, want no restart in a steady state", restarted, err, *calls)
+	}
+}
+
+// The refresh on start must not double as an upgrade: with no image recorded in
+// config, resolving the preset afresh picked the newest minor from the registry.
+func TestEnsureDefaultPresetQuadletDiff_keepsTheInstalledImage(t *testing.T) {
+	reconcileEnv(t)
+	cacheDir := t.TempDir()
+	t.Setenv("LERD_REGISTRY_CACHE_DIR", cacheDir)
+	const installed = "docker.io/library/mysql:8.4.1"
+	ref, err := registry.ParseImage(installed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := sha256.Sum256([]byte(ref.Registry + "/" + ref.Repo))
+	tags := `{"fetched_at":"` + time.Now().UTC().Format(time.RFC3339) + `","tags":[{"name":"8.4.1"},{"name":"8.4.13"}]}`
+	if err := os.WriteFile(filepath.Join(cacheDir, hex.EncodeToString(key[:])+".json"), []byte(tags), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(config.QuadletDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	unit := filepath.Join(config.QuadletDir(), "lerd-mysql.container")
+	if err := os.WriteFile(unit, []byte("[Container]\nImage="+installed+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := ensureDefaultPresetQuadletDiff("mysql"); err != nil {
+		t.Fatal(err)
+	}
+	if got := podman.InstalledImage("lerd-mysql"); got != installed {
+		t.Fatalf("lerd start moved mysql to %s, want it left on %s", got, installed)
 	}
 }
