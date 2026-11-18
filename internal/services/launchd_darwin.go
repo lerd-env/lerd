@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/pfredirect"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -471,6 +472,30 @@ func stripPrivilegedIPBind(port string) string {
 	return port
 }
 
+// publishArgs are the -p values for a PublishPort. A port the pf redirect
+// covers is held on its high loopback port, which gvproxy can bind there;
+// when the bind is wide (LAN exposed) it keeps the wide publish too, so
+// loopback traffic the redirect diverts still lands on nginx.
+func publishArgs(port string, redirected map[int]bool) []string {
+	rest := port
+	loopback := false
+	if r, ok := strings.CutPrefix(port, "127.0.0.1:"); ok {
+		rest, loopback = r, true
+	} else if r, ok := strings.CutPrefix(port, "0.0.0.0:"); ok {
+		rest = r
+	}
+	hostPort, containerPart, ok := strings.Cut(rest, ":")
+	n, err := strconv.Atoi(hostPort)
+	if !ok || err != nil || !redirected[n] {
+		return []string{stripPrivilegedIPBind(port)}
+	}
+	held := fmt.Sprintf("127.0.0.1:%d:%s", pfredirect.Target(n), containerPart)
+	if loopback {
+		return []string{held}
+	}
+	return []string{stripPrivilegedIPBind(port), held}
+}
+
 // stripIPv6PublishPorts normalises bracketed IPv6 PublishPort= lines for gvproxy,
 // which cannot bind both an IPv4 and an IPv6 address on the same port at once.
 //
@@ -548,8 +573,11 @@ func containerToPodmanArgs(c map[string][]string) ([]string, error) {
 	for _, net := range c["Network"] {
 		args = append(args, "--network", net)
 	}
+	redirected := pfredirect.Redirected()
 	for _, port := range c["PublishPort"] {
-		args = append(args, "-p", stripPrivilegedIPBind(port))
+		for _, p := range publishArgs(port, redirected) {
+			args = append(args, "-p", p)
+		}
 	}
 	for _, vol := range c["Volume"] {
 		args = append(args, "-v", stripSELinuxVolOpts(expandSpecifiers(vol)))

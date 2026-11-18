@@ -828,6 +828,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 			fmt.Printf("  WARN: refreshing DNS sudoers rule: %v\n", err)
 		}
 	}
+	applyLoopbackRedirect()
 
 	// Re-apply DNS routing so .test resolves via lerd-dns on every start.
 	// resolvectl settings are ephemeral and reset on reboot; the NM dispatcher

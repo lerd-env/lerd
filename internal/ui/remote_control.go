@@ -714,11 +714,8 @@ func hasValidTrustToken(r *http.Request) bool {
 }
 
 func isLocalControlRequest(r *http.Request) bool {
-	if v, _ := r.Context().Value(ctxKeyUnixSocket{}).(bool); v {
-		return true
-	}
-	if hasValidTrustToken(r) {
-		return true
+	if relayedByVhost(r) {
+		return vhostIsLocal(r)
 	}
 	if forwardedByProxy(r) {
 		return false
@@ -764,15 +761,14 @@ func hasHostActionAuthority(r *http.Request) bool {
 //     per-install token. Kept for backward compatibility with old vhosts
 //     that may still inject the header; new installs use the unix socket.
 func isLoopbackRequest(r *http.Request) bool {
-	if v, _ := r.Context().Value(ctxKeyUnixSocket{}).(bool); v {
-		return true
+	// The vhost goes first: on macOS gvproxy hands it over from a loopback peer.
+	if relayedByVhost(r) {
+		return vhostIsLocal(r)
 	}
 	peer, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		peer = r.RemoteAddr
 	}
-	if ip := net.ParseIP(peer); ip != nil && ip.IsLoopback() {
-		return true
-	}
-	return hasValidTrustToken(r)
+	ip := net.ParseIP(peer)
+	return ip != nil && ip.IsLoopback()
 }

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/pfredirect"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -390,6 +391,9 @@ func TestStripSELinuxVolOpts(t *testing.T) {
 }
 
 func TestContainerToPodmanArgs(t *testing.T) {
+	prev := pfredirect.AnchorPath
+	pfredirect.AnchorPath = filepath.Join(t.TempDir(), "missing")
+	t.Cleanup(func() { pfredirect.AnchorPath = prev })
 	c := map[string][]string{
 		"ContainerName": {"lerd-nginx"},
 		"Image":         {"docker.io/library/nginx:latest"},
@@ -841,5 +845,28 @@ func TestContainerToPodmanArgs_StopTimeoutAppearsOnce(t *testing.T) {
 	}
 	if !slices.Contains(args, "--init") {
 		t.Errorf("the other PodmanArgs must still pass through: %v", args)
+	}
+}
+
+// A loopback bind the pf redirect covers moves to its high port, which gvproxy
+// can hold on 127.0.0.1, instead of being widened to every interface. A wide
+// bind keeps the high port too, or loopback 80 would redirect to nothing.
+func TestPublishArgsMovesRedirectedLoopbackPorts(t *testing.T) {
+	redirected := map[int]bool{80: true, 443: true}
+	cases := map[string][]string{
+		"127.0.0.1:80:80":       {"127.0.0.1:17080:80"},
+		"127.0.0.1:443:443/tcp": {"127.0.0.1:17443:443/tcp"},
+		"80:80":                 {"80:80", "127.0.0.1:17080:80"},
+		"0.0.0.0:443:443":       {"443:443", "127.0.0.1:17443:443"},
+		"127.0.0.1:25:25":       {"25:25"},
+		"127.0.0.1:3306:3306":   {"127.0.0.1:3306:3306"},
+	}
+	for in, want := range cases {
+		if got := publishArgs(in, redirected); !slices.Equal(got, want) {
+			t.Errorf("publishArgs(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := publishArgs("127.0.0.1:80:80", nil); !slices.Equal(got, []string{"80:80"}) {
+		t.Errorf("without a redirect the bind must stay reachable, got %q", got)
 	}
 }

@@ -3,11 +3,12 @@ package platform
 import "os/exec"
 
 var Current = Caps{
-	Opener:           "open",
-	UsesMachineVM:    true,
-	NativePHPRuntime: true,
-	WorkerModes:      true,
-	TrayHost:         true,
+	Opener:                 "open",
+	UsesMachineVM:          true,
+	PrivilegedPortsBindAll: true,
+	NativePHPRuntime:       true,
+	WorkerModes:            true,
+	TrayHost:               true,
 }
 
 // OpenCommand hands target to the default app through open(1).

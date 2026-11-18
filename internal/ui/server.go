@@ -368,6 +368,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/browser-logs/presets", withCORS(handleBrowserLogsPresets))
 	mux.HandleFunc("/_spx/", handleSpxProxy)
 	mux.HandleFunc("/_svc/", handleDashProxy)
+	mux.HandleFunc(vhostClaimPath, handleVhostClaim)
 	mux.HandleFunc("/api/dashboard/keepalive", withCORS(handleDashboardKeepAlive))
 	mux.HandleFunc("/api/queue/", withCORS(handleUnitLogStream))
 	mux.HandleFunc("/api/horizon/", withCORS(handleUnitLogStream))
@@ -481,7 +482,7 @@ func Start(currentVersion string) error {
 	})
 	mux.Handle("/", serveSvelte())
 
-	handler := withWakeHold(withBrowserLogs(withPluginPages(withDashboardMounts(withRemoteControlGate(mux)))))
+	handler := withWakeHold(withVhostClaim(withBrowserLogs(withPluginPages(withDashboardMounts(withRemoteControlGate(mux))))))
 
 	// Unix socket listener for the lerd.localhost nginx vhost. Linux only:
 	// on macOS, lerd-nginx runs inside the podman-machine VM and unix

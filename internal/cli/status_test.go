@@ -43,6 +43,7 @@ func TestPrintRemoteAccessStatus(t *testing.T) {
 		username   string
 		services   bool
 		passHash   string
+		wideBind   string
 		wantSubstr []string
 	}{
 		{
@@ -93,6 +94,15 @@ func TestPrintRemoteAccessStatus(t *testing.T) {
 			},
 		},
 		{
+			name:     "lan off but privileged ports published wide",
+			wideBind: "LAN devices can reach lerd-nginx (80, 443)",
+			wantSubstr: []string{
+				"LAN exposure",
+				"off, yet LAN devices can reach lerd-nginx (80, 443)",
+				"gvproxy",
+			},
+		},
+		{
 			name:    "lan exposed with unknown ip",
 			exposed: true,
 			lanIP:   "",
@@ -111,7 +121,7 @@ func TestPrintRemoteAccessStatus(t *testing.T) {
 			cfg.UI.PasswordHash = tc.passHash
 
 			out := captureStdout(t, func() {
-				printRemoteAccessStatus(cfg, tc.lanIP)
+				printRemoteAccessStatus(cfg, tc.lanIP, tc.wideBind)
 			})
 
 			for _, want := range tc.wantSubstr {

@@ -11,12 +11,13 @@ import (
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/pfredirect"
 )
 
 // runSystemSetup applies the root-level steps individually. macOS has no
-// `lerd bootstrap` to route them through, and both of these are no-ops here:
-// the port sysctl does not exist and there is no linger. The resolver grant is
-// deliberately not part of this pass, see ensureResolverSudoers.
+// `lerd bootstrap` to route them through; the port sysctl and linger are
+// no-ops here. The resolver grant is deliberately not part of this pass, see
+// ensureResolverSudoers.
 func runSystemSetup(_ bool) error {
 	if err := ensureUnprivilegedPorts(); err != nil {
 		return err
@@ -24,7 +25,40 @@ func runSystemSetup(_ bool) error {
 	if err := ensureSystemdLinger(); err != nil {
 		feedback.Warn("%v", err)
 	}
+	ensureLoopbackRedirect()
 	return nil
+}
+
+// ensureLoopbackRedirect installs the pf anchor that keeps nginx's 80 and 443
+// on loopback; without it gvproxy can only publish them on every interface.
+func ensureLoopbackRedirect() {
+	if pfredirect.Pending() {
+		feedback.Sudo("Keeping nginx ports on loopback (pf redirect)")
+	}
+	moved, err := pfredirect.Install(os.Getenv("USER"), dns.SudoWriteFile)
+	loopbackRedirectAdded = moved
+	if err != nil {
+		feedback.Warn("pf redirect for nginx, ports 80 and 443 stay reachable from the network: %v", err)
+	}
+}
+
+// applyLoopbackRedirect re-loads the pf anchor, which a reboot or another
+// tool's `pfctl -f /etc/pf.conf` drops.
+func applyLoopbackRedirect() {
+	if err := pfredirect.Apply(); err != nil {
+		feedback.Warn("loading the pf redirect for nginx: %v", err)
+	}
+}
+
+// removeLoopbackRedirect undoes ensureLoopbackRedirect.
+func removeLoopbackRedirect() {
+	if _, err := os.Stat(pfredirect.AnchorPath); err != nil {
+		return
+	}
+	feedback.Sudo("Removing the pf redirect for nginx")
+	if err := pfredirect.Remove(); err != nil {
+		feedback.Warn("removing the pf redirect: %v", err)
+	}
 }
 
 // ensureResolverSudoers writes the passwordless grant once the DNS choice has

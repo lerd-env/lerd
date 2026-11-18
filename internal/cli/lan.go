@@ -166,7 +166,12 @@ func newLANUnexposeCmd() *cobra.Command {
 				return err
 			}
 			restrict.OK(feedback.Val("127.0.0.1"))
-			feedback.Note("LAN devices can no longer reach sites, services, or the dashboard")
+			if wide := currentLANWideBindSummary(false); wide != "" {
+				feedback.Warn("%s", wide)
+				feedback.Note(lanWideBindHint)
+			} else {
+				feedback.Note("LAN devices can no longer reach sites, services, or the dashboard")
+			}
 			feedback.Note("any active remote-setup code has been revoked")
 			return nil
 		},
@@ -352,6 +357,9 @@ func newLANStatusCmd() *cobra.Command {
 				} else {
 					feedback.Note("managed services: loopback-only")
 				}
+			} else if wide := currentLANWideBindSummary(false); wide != "" {
+				feedback.Warn("not exposed, yet %s", wide)
+				feedback.Note(lanWideBindHint)
 			} else {
 				feedback.Line("loopback-only (127.0.0.1) — LAN devices cannot reach the dashboard")
 			}

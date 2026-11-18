@@ -259,6 +259,11 @@ func WaitReady(timeout time.Duration) error {
 	return fmt.Errorf("lerd-dns not ready after %s", timeout)
 }
 
+// SudoWriteFile is sudoWriteFile for privileged writes outside DNS.
+func SudoWriteFile(path string, content []byte, mode os.FileMode) error {
+	return sudoWriteFile(path, content, mode)
+}
+
 // sudoWriteFile writes content to a system path by piping it through
 // `sudo tee <path>`. Earlier versions wrote a /tmp/lerd-sudo-XXXXXX
 // staging file then ran `sudo cp tmp dst`, which required a sudoers rule

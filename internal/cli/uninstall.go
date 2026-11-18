@@ -101,6 +101,7 @@ func runUninstall(force, keepData bool) error {
 		return err
 	}
 	removePortDropIn()
+	removeLoopbackRedirect()
 
 	if !removeData {
 		_ = config.SetKeptServices(installedDefaultServices(knownServices(), podman.QuadletInstalled))

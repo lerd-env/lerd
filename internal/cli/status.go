@@ -452,7 +452,7 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	// LAN exposure + remote dashboard access
 	fmt.Println("\n[Remote Access]")
 	lanIP, _ := detectPrimaryLANIP()
-	printRemoteAccessStatus(cfg, lanIP)
+	printRemoteAccessStatus(cfg, lanIP, currentLANWideBindSummary(cfg.LAN.Exposed))
 
 	// Update notice
 	if info, _ := lerdUpdate.CachedUpdateCheck(version.Version); info != nil {
@@ -466,14 +466,16 @@ func runStatus(_ *cobra.Command, _ []string) error {
 // printRemoteAccessStatus renders the [Remote Access] section of `lerd status`.
 // Split out from runStatus so it can be tested without mocking podman/DNS/sites.
 // lanIP may be empty — the caller is responsible for detection so tests can
-// inject a deterministic value.
-func printRemoteAccessStatus(cfg *config.GlobalConfig, lanIP string) {
+// inject a deterministic value. wideBind is lanWideBindSummary's finding.
+func printRemoteAccessStatus(cfg *config.GlobalConfig, lanIP, wideBind string) {
 	if cfg.LAN.Exposed {
 		ip := lanIP
 		if ip == "" {
 			ip = "(unknown)"
 		}
 		ok2(fmt.Sprintf("LAN exposure (%s)", ip))
+	} else if wideBind != "" {
+		warn2("LAN exposure", "off, yet "+wideBind+" — "+lanWideBindHint)
 	} else {
 		warn2("LAN exposure", "loopback only — enable with: lerd lan expose")
 	}

@@ -135,6 +135,12 @@ func removeSystemTrustAnchor() {
 	}
 }
 
+// applyLoopbackRedirect is a no-op on Linux, where a loopback bind holds.
+func applyLoopbackRedirect() {}
+
+// removeLoopbackRedirect is a no-op on Linux, see applyLoopbackRedirect.
+func removeLoopbackRedirect() {}
+
 // removePortDropIn drops the sysctl drop-in bootstrap wrote, so the lowered
 // port start stops applying from the next boot. The live value is left alone
 // because another tool may bind a low port under it right now.
