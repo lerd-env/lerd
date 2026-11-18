@@ -214,6 +214,21 @@ func TestWorktreeCheckoutPath_siblingNeedsAFolderTheContainersSee(t *testing.T) 
 	}
 }
 
+// A host-proxy site's dev server runs on the host and nginx only forwards to
+// it, so no container reads the checkout and nothing has to be mounted.
+func TestWorktreeCheckoutPath_siblingOfAHostProxySiteNeedsNoMount(t *testing.T) {
+	useWorktreeLocation(t, "sibling")
+	site := filepath.Join(t.TempDir(), "srv", "shop")
+	if err := config.AddSite(config.Site{Name: "shop", Domains: []string{"shop.test"}, Path: site, HostPort: 5173}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := WorktreeCheckoutPath(site, "feat")
+	if want := filepath.Join(filepath.Dir(site), "shop-feat"); err != nil || got != want {
+		t.Fatalf("got %q, %v want %q", got, err, want)
+	}
+}
+
 func TestWorktreeCheckoutPath_refusesAnUnknownLocation(t *testing.T) {
 	useWorktreeLocation(t, "elsewhere")
 

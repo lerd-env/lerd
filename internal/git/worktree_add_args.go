@@ -100,8 +100,8 @@ func WorktreeCheckoutPath(sitePath, branch string) (string, error) {
 	case "", "inside":
 	case "sibling":
 		root = filepath.Dir(sitePath)
-		if !containersSee(cfg, root) {
-			return "", fmt.Errorf("worktree_location: sibling puts this worktree in %s, which lerd's containers do not mount; add it under mounts: in config.yaml", root)
+		if !servedFromHost(sitePath) && !containersSee(cfg, root) {
+			return "", fmt.Errorf("worktree_location: sibling puts this worktree in %s, which lerd's containers do not mount; add it under mounts: in config.yaml, then run lerd start", root)
 		}
 	default:
 		return "", fmt.Errorf("worktree_location %q in config.yaml is not one of inside, sibling", cfg.WorktreeLocation)
@@ -188,4 +188,11 @@ func containersSee(cfg *config.GlobalConfig, dir string) bool {
 		}
 	}
 	return false
+}
+
+// servedFromHost reports whether the site is a host proxy: its dev server runs
+// on the host and nginx only forwards to it, so no container reads the checkout.
+func servedFromHost(sitePath string) bool {
+	site, err := config.FindSiteByPath(sitePath)
+	return err == nil && site.IsHostProxy()
 }
