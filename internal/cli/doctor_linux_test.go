@@ -28,8 +28,8 @@ LISTEN 0      511             [::]:443          [::]:*
 	}{
 		{"user-owned process is named from ss", "80", userOwned, only("nginx"), "caddy (pid 4242)"},
 		{"another port's process is not borrowed", "443", userOwned, none, ""},
-		{"root listener falls back to a running web server unit", "80", rootOwned, only("httpd"), "the system httpd service"},
-		{"root listener on 443 checks units too", "443", rootOwned, only("apache2"), "the system apache2 service"},
+		{"root listener falls back to a running web server unit", "80", rootOwned, only("httpd"), "another process, possibly the system httpd service"},
+		{"root listener on 443 checks units too", "443", rootOwned, only("apache2"), "another process, possibly the system apache2 service"},
 		{"root listener with no known unit is unknown", "80", rootOwned, none, ""},
 		{"free port names nothing", "80", "", only("nginx"), ""},
 	}

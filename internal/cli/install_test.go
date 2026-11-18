@@ -73,10 +73,16 @@ func TestNginxStartError(t *testing.T) {
 		}
 	})
 
-	t.Run("a known holder is named", func(t *testing.T) {
-		err := nginxStartError(fmt.Errorf("exit status 126"), busy, "the system nginx service")
-		if err == nil || !strings.Contains(err.Error(), "in use by the system nginx service") {
-			t.Fatalf("expected the holder named, got %v", err)
+	t.Run("a holder is named and the find command stays", func(t *testing.T) {
+		// A running service is only a guess at the holder, so the way to check stays.
+		err := nginxStartError(fmt.Errorf("exit status 126"), busy, "another process, possibly the system nginx service")
+		if err == nil {
+			t.Fatal("expected an error when nginx did not start")
+		}
+		for _, want := range []string{"in use by another process, possibly the system nginx service", "sudo " + FindListenerCmd("80")} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("message %q lacks %q", err.Error(), want)
+			}
 		}
 	})
 

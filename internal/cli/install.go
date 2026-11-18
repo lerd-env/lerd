@@ -145,13 +145,12 @@ func nginxStartError(startErr error, conflicts []PortCheck, holder string) error
 	if len(ports) == 0 {
 		return fmt.Errorf("lerd-nginx did not start, so no site is served; run lerd doctor to see why")
 	}
-	if holder != "" {
-		return fmt.Errorf("lerd-nginx did not start, so no site is served: port %s is already in use by %s; stop it, then run lerd install again",
-			strings.Join(ports, "/"), holder)
+	if holder == "" {
+		holder = "another process"
 	}
 	// Without sudo, ss and lsof hide a root-owned listener such as a system nginx.
-	return fmt.Errorf("lerd-nginx did not start, so no site is served: port %s is already in use by another process (find it: sudo %s); stop it, then run lerd install again",
-		strings.Join(ports, "/"), FindListenerCmd(ports[0]))
+	return fmt.Errorf("lerd-nginx did not start, so no site is served: port %s is already in use by %s (find it: sudo %s); stop it, then run lerd install again",
+		strings.Join(ports, "/"), holder, FindListenerCmd(ports[0]))
 }
 
 // warnHostMysqldProfiles flags a native server's AppArmor profile, which also

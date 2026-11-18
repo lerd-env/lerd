@@ -41,7 +41,7 @@ func PortHolder(port string) string {
 }
 
 // systemWebServers are the units likely to hold 80/443 as root, where ss
-// shows no process to an unprivileged caller.
+// shows no process to an unprivileged caller, so one running is a hint only.
 var systemWebServers = []string{"nginx", "httpd", "apache2", "caddy", "lighttpd"}
 
 func portHolder(port, ssOut string, unitActive func(string) bool) string {
@@ -61,7 +61,8 @@ func portHolder(port, ssOut string, unitActive func(string) bool) string {
 	}
 	for _, unit := range systemWebServers {
 		if unitActive(unit) {
-			return "the system " + unit + " service"
+			// Running proves nothing about which port it holds, so it is only a guess.
+			return "another process, possibly the system " + unit + " service"
 		}
 	}
 	return ""
