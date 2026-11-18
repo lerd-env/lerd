@@ -26,6 +26,8 @@
     toggleStartOnDashboardOpen,
     betaUpdates,
     toggleBetaUpdates,
+    worktreeSibling,
+    toggleWorktreeSibling,
     mcpGlobal,
     toggleMCP
   } from '$stores/autostart';
@@ -36,6 +38,8 @@
   import Icon from '$components/Icon.svelte';
   import StatusPill from '$components/StatusPill.svelte';
   import SettingsCard from '$components/SettingsCard.svelte';
+  import SettingRow from '$components/SettingRow.svelte';
+  import SettingToggle from '$components/SettingToggle.svelte';
   import LANServicesSetting from './LANServicesSetting.svelte';
   import LanguageSwitcher from '$components/LanguageSwitcher.svelte';
   import PaletteSwitcher from '$components/PaletteSwitcher.svelte';
@@ -160,6 +164,16 @@
     loadVersion(true);
   }
 
+  let worktreeBusy = $state(false);
+  async function onToggleWorktreeSibling() {
+    worktreeBusy = true;
+    try {
+      await toggleWorktreeSibling(!$worktreeSibling);
+    } finally {
+      worktreeBusy = false;
+    }
+  }
+
   let autostartBusy = $state(false);
   async function onToggleAutostart() {
     autostartBusy = true;
@@ -232,13 +246,8 @@
   </DetailHeader>
 
   <div class="flex-1 min-h-0 overflow-y-auto p-3 space-y-3 @container">
-    <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-3">
-    <!-- One grid, with each row pairing cards of about the same height, so a
-         card never stretches around empty space and a row never ends with a
-         gap. Idle-Suspend is the tallest and takes a full row, as does Tray when
-         the Editor beside it is hidden off the host. The breakpoint reads the
-         pane, not the window, since the sidebar can leave half a screen. -->
-    <SettingsCard>
+    <div class="rounded-xl border border-gray-100 dark:border-lerd-border bg-white dark:bg-lerd-card divide-y divide-gray-100 dark:divide-lerd-border">
+    <div class="px-4 py-3">
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0 text-sm">
           {#if $version.checked && !$version.hasUpdate}
@@ -311,27 +320,21 @@
           {m.system_lerd_starAfter()}
         </p>
       </div>
-    </SettingsCard>
+    </div>
 
-    <SettingsCard>
-      <div class="flex items-center justify-between gap-4 mb-2">
-        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_language_title()}</span>
+    <SettingRow title={m.system_language_title()} description={m.system_language_description()}>
+      {#snippet control()}
         <LanguageSwitcher />
-      </div>
-      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_language_description()}</p>
-    </SettingsCard>
+      {/snippet}
+    </SettingRow>
 
-    <SettingsCard>
-      <div class="flex items-center justify-between mb-2">
-        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_theme_title()}</span>
-        <div class="flex items-center gap-2">
-          {#if $accessMode.localControl}
-            <DetailButton onclick={() => (importThemeOpen = true)}>{m.system_theme_importAction()}</DetailButton>
-          {/if}
-          <PaletteSwitcher />
-        </div>
-      </div>
-      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_theme_description()}</p>
+    <SettingRow title={m.system_theme_title()} description={m.system_theme_description()}>
+      {#snippet control()}
+        {#if $accessMode.localControl}
+          <DetailButton onclick={() => (importThemeOpen = true)}>{m.system_theme_importAction()}</DetailButton>
+        {/if}
+        <PaletteSwitcher />
+      {/snippet}
       {#each userPalettes as p (p.id)}
         <div class="flex items-center justify-between gap-3 mt-2 text-xs">
           <span class="flex items-center gap-2 text-gray-600 dark:text-gray-300">
@@ -381,168 +384,113 @@
           </p>
         </div>
       </div>
+    </SettingRow>
 
-    </SettingsCard>
+    <SettingRow title={m.system_streaming_title()} description={m.system_streaming_description()}>
+      {#snippet control()}
+        <SettingToggle
+          on={streamingEnabled}
+          loading={streamingBusy}
+          onclick={onToggleStreaming}
+          titleOn={m.system_streaming_toggleOn()}
+          titleOff={m.system_streaming_toggleOff()}
+        />
+      {/snippet}
+    </SettingRow>
 
-    <SettingsCard>
-      <div class="flex items-center justify-between gap-3 mb-2">
-        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_streaming_title()}</span>
-        {#if $accessMode.localControl}
-          <Toggle
-            on={streamingEnabled}
-            loading={streamingBusy}
-            onclick={onToggleStreaming}
-            title={streamingEnabled ? m.system_streaming_toggleOff() : m.system_streaming_toggleOn()}
-          />
-        {:else}
-          <StatusPill
-            size="sm"
-            tone={streamingEnabled ? 'ok' : 'muted'}
-            label={streamingEnabled ? m.common_enabled() : m.common_disabled()}
-          />
-        {/if}
-      </div>
-      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_streaming_description()}</p>
-    </SettingsCard>
+    <SettingRow title={m.system_betaUpdates_title()} description={m.system_betaUpdates_description()}>
+      {#snippet control()}
+        <SettingToggle
+          on={$betaUpdates}
+          loading={betaBusy}
+          onclick={onToggleBetaUpdates}
+          titleOn={m.system_betaUpdates_toggleOn()}
+          titleOff={m.system_betaUpdates_toggleOff()}
+        />
+      {/snippet}
+    </SettingRow>
 
-    <SettingsCard>
-      <div class="flex items-center justify-between gap-3 mb-2">
-        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_betaUpdates_title()}</span>
-        {#if $accessMode.localControl}
-          <Toggle
-            on={$betaUpdates}
-            loading={betaBusy}
-            onclick={onToggleBetaUpdates}
-            title={$betaUpdates ? m.system_betaUpdates_toggleOff() : m.system_betaUpdates_toggleOn()}
-          />
-        {:else}
-          <StatusPill
-            size="sm"
-            tone={$betaUpdates ? 'ok' : 'muted'}
-            label={$betaUpdates ? m.common_enabled() : m.common_disabled()}
-          />
-        {/if}
-      </div>
-      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_betaUpdates_description()}</p>
-    </SettingsCard>
+    <SettingRow title={m.system_worktreeSibling_title()} description={m.system_worktreeSibling_description()}>
+      {#snippet control()}
+        <SettingToggle
+          on={$worktreeSibling}
+          loading={worktreeBusy}
+          onclick={onToggleWorktreeSibling}
+          titleOn={m.system_worktreeSibling_toggleOn()}
+          titleOff={m.system_worktreeSibling_toggleOff()}
+        />
+      {/snippet}
+    </SettingRow>
 
-    <SettingsCard>
-      <div class="flex items-center justify-between gap-3 mb-2">
-        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_mcp_title()}</span>
-        {#if $accessMode.localControl}
-          <Toggle
-            on={$mcpGlobal}
-            loading={mcpBusy}
-            onclick={onToggleMCP}
-            title={$mcpGlobal ? m.system_mcp_toggleOff() : m.system_mcp_toggleOn()}
-          />
-        {:else}
-          <StatusPill
-            size="sm"
-            tone={$mcpGlobal ? 'ok' : 'muted'}
-            label={$mcpGlobal ? m.common_enabled() : m.common_disabled()}
-          />
-        {/if}
-      </div>
-      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_mcp_description()}</p>
+    <SettingRow title={m.system_mcp_title()} description={m.system_mcp_description()}>
+      {#snippet control()}
+        <SettingToggle
+          on={$mcpGlobal}
+          loading={mcpBusy}
+          onclick={onToggleMCP}
+          titleOn={m.system_mcp_toggleOn()}
+          titleOff={m.system_mcp_toggleOff()}
+        />
+      {/snippet}
       {#if mcpFailed}
         <p class="mt-2 text-xs text-red-600 dark:text-red-400">{m.system_mcp_failed()}</p>
       {/if}
-    </SettingsCard>
+    </SettingRow>
 
-    <SettingsCard>
-      <div class="flex items-center justify-between gap-3 mb-2">
-        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_autostart_title()}</span>
-        {#if $accessMode.localControl}
-          <Toggle
-            on={$autostartEnabled}
-            loading={autostartBusy}
-            onclick={onToggleAutostart}
-            title={$autostartEnabled ? m.system_autostart_toggleOff() : m.system_autostart_toggleOn()}
-          />
-        {:else}
-          <StatusPill
-            size="sm"
-            tone={$autostartEnabled ? 'ok' : 'muted'}
-            label={$autostartEnabled ? m.common_enabled() : m.common_disabled()}
-          />
-        {/if}
-      </div>
-      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_autostart_description()}</p>
-    </SettingsCard>
+    <SettingRow title={m.system_autostart_title()} description={m.system_autostart_description()}>
+      {#snippet control()}
+        <SettingToggle
+          on={$autostartEnabled}
+          loading={autostartBusy}
+          onclick={onToggleAutostart}
+          titleOn={m.system_autostart_toggleOn()}
+          titleOff={m.system_autostart_toggleOff()}
+        />
+      {/snippet}
+    </SettingRow>
 
-    <SettingsCard>
-      <div class="flex items-center justify-between gap-3 mb-2">
-        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_startOnOpen_title()}</span>
-        {#if $accessMode.localControl}
-          <Toggle
-            on={$startOnDashboardOpen}
-            loading={startOnOpenBusy}
-            onclick={onToggleStartOnOpen}
-            title={$startOnDashboardOpen ? m.system_startOnOpen_toggleOff() : m.system_startOnOpen_toggleOn()}
-          />
-        {:else}
-          <StatusPill
-            size="sm"
-            tone={$startOnDashboardOpen ? 'ok' : 'muted'}
-            label={$startOnDashboardOpen ? m.common_enabled() : m.common_disabled()}
-          />
-        {/if}
-      </div>
-      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_startOnOpen_description()}</p>
-    </SettingsCard>
+    <SettingRow title={m.system_startOnOpen_title()} description={m.system_startOnOpen_description()}>
+      {#snippet control()}
+        <SettingToggle
+          on={$startOnDashboardOpen}
+          loading={startOnOpenBusy}
+          onclick={onToggleStartOnOpen}
+          titleOn={m.system_startOnOpen_toggleOn()}
+          titleOff={m.system_startOnOpen_toggleOff()}
+        />
+      {/snippet}
+    </SettingRow>
 
     {#if $accessMode.local}
-      <SettingsCard>
-        <div class="flex items-center justify-between gap-3 mb-2">
-          <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.editor_settingsTitle()}</span>
+      <SettingRow title={m.editor_settingsTitle()} description={m.editor_settingsDescription()}>
+        {#snippet control()}
           <EditorPicker value={$editors.global === 'custom' ? ($editors.template ?? '') : $editors.global} onchange={setGlobalEditor} />
-        </div>
-        <p class="text-xs text-gray-500 dark:text-gray-400">{m.editor_settingsDescription()}</p>
-      </SettingsCard>
+        {/snippet}
+      </SettingRow>
     {/if}
 
-    <SettingsCard class={$accessMode.local ? '' : '@3xl:col-span-2'}>
-      <div class="flex items-center justify-between gap-3 mb-2">
-        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_tray_title()}</span>
-        {#if $accessMode.localControl}
-          <Toggle
-            on={$trayEnabled}
-            loading={trayBusy}
-            onclick={onToggleTray}
-            title={$trayEnabled ? m.system_tray_toggleOff() : m.system_tray_toggleOn()}
-          />
-        {:else}
-          <StatusPill
-            size="sm"
-            tone={$trayEnabled ? 'ok' : 'muted'}
-            label={$trayEnabled ? m.common_enabled() : m.common_disabled()}
-          />
-        {/if}
-      </div>
-      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_tray_description()}</p>
-    </SettingsCard>
+    <SettingRow title={m.system_tray_title()} description={m.system_tray_description()}>
+      {#snippet control()}
+        <SettingToggle
+          on={$trayEnabled}
+          loading={trayBusy}
+          onclick={onToggleTray}
+          titleOn={m.system_tray_toggleOn()}
+          titleOff={m.system_tray_toggleOff()}
+        />
+      {/snippet}
+    </SettingRow>
 
-    <SettingsCard class="@3xl:col-span-2">
-      <div class="flex items-center justify-between gap-3 mb-2">
-        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_idle_title()}</span>
-        {#if $accessMode.localControl}
-          <Toggle
-            on={$idleEnabled}
-            loading={idleBusy}
-            onclick={onToggleIdle}
-            title={$idleEnabled ? m.system_idle_toggleOff() : m.system_idle_toggleOn()}
-          />
-        {:else}
-          <StatusPill
-            size="sm"
-            tone={$idleEnabled ? 'ok' : 'muted'}
-            label={$idleEnabled ? m.common_enabled() : m.common_disabled()}
-          />
-        {/if}
-      </div>
-      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_idle_description()}</p>
-      <!-- The card spans the row, so its two settings sit side by side. -->
+    <SettingRow title={m.system_idle_title()} description={m.system_idle_description()}>
+      {#snippet control()}
+        <SettingToggle
+          on={$idleEnabled}
+          loading={idleBusy}
+          onclick={onToggleIdle}
+          titleOn={m.system_idle_toggleOn()}
+          titleOff={m.system_idle_toggleOff()}
+        />
+      {/snippet}
       <div class="grid @3xl:grid-cols-2 gap-x-8 gap-y-3 mt-3">
       <div class="flex items-center justify-between gap-4">
         <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_idle_timeoutLabel()}</p>
@@ -586,7 +534,7 @@
         {/if}
       </div>
       </div>
-    </SettingsCard>
+    </SettingRow>
     </div>
 
     {#if $status.dns?.enabled !== false}
