@@ -56,11 +56,6 @@ func ExtraVolumePaths() []string {
 	if reg, err := config.LoadSites(); err == nil {
 		for _, site := range reg.Sites {
 			candidates = append(candidates, site.Path)
-			for _, checkout := range config.WorktreeCheckouts(site.Path) {
-				if dir, ok := config.WorktreeMountDir(site.Path, checkout); ok {
-					candidates = append(candidates, dir)
-				}
-			}
 		}
 	}
 	var present []string

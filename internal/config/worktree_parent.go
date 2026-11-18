@@ -28,49 +28,29 @@ func ParentSiteForWorktreeDir(dir string) (*Site, bool) {
 		if s.Ignored || s.Path == "" {
 			continue
 		}
-		for _, checkout := range WorktreeCheckouts(s.Path) {
+		worktreesDir := filepath.Join(s.Path, ".git", "worktrees")
+		entries, err := os.ReadDir(worktreesDir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(worktreesDir, e.Name(), "gitdir"))
+			if err != nil {
+				continue
+			}
+			gitFile := strings.TrimSpace(string(data))
+			if !filepath.IsAbs(gitFile) {
+				gitFile = filepath.Join(worktreesDir, e.Name(), gitFile)
+			}
 			// SamePath, since git records the real path and a shell's cwd may
 			// spell it through a symlinked /home.
-			if SamePath(checkout, abs) {
+			if SamePath(filepath.Dir(filepath.Clean(gitFile)), abs) {
 				return s, true
 			}
 		}
 	}
 	return nil, false
-}
-
-// WorktreeMountDir names the folder to bind-mount so a worktree outside its
-// site's own mount can be served: the one holding the checkout, which outlives
-// it, so removing a worktree never leaves a mount podman can't start with.
-func WorktreeMountDir(sitePath, checkout string) (string, bool) {
-	if PathWithin(checkout, sitePath) {
-		return "", false
-	}
-	return filepath.Dir(checkout), true
-}
-
-// WorktreeCheckouts lists the checkout directories git records for the site's
-// worktrees, read from .git/worktrees/*/gitdir, wherever they live on disk.
-func WorktreeCheckouts(sitePath string) []string {
-	worktreesDir := filepath.Join(sitePath, ".git", "worktrees")
-	entries, err := os.ReadDir(worktreesDir)
-	if err != nil {
-		return nil
-	}
-	var out []string
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(worktreesDir, e.Name(), "gitdir"))
-		if err != nil {
-			continue
-		}
-		gitFile := strings.TrimSpace(string(data))
-		if !filepath.IsAbs(gitFile) {
-			gitFile = filepath.Join(worktreesDir, e.Name(), gitFile)
-		}
-		out = append(out, filepath.Dir(filepath.Clean(gitFile)))
-	}
-	return out
 }

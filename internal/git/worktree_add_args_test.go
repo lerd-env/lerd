@@ -135,7 +135,7 @@ func mustDerive(t *testing.T, site string, args []string) []string {
 
 // useWorktreeLocation points lerd's config at a scratch home holding the given
 // worktree_location, so a test never reads the real config.yaml.
-func useWorktreeLocation(t *testing.T, location string) {
+func useWorktreeLocation(t *testing.T, location string, mounts ...string) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -146,9 +146,11 @@ func useWorktreeLocation(t *testing.T, location string) {
 		t.Fatal(err)
 	}
 	cfg.WorktreeLocation = location
+	cfg.Mounts = mounts
 	if err := config.SaveGlobal(cfg); err != nil {
 		t.Fatal(err)
 	}
+	return home
 }
 
 func TestWorktreeCheckoutPath(t *testing.T) {
@@ -173,8 +175,8 @@ func TestWorktreeCheckoutPath(t *testing.T) {
 }
 
 func TestWorktreeCheckoutPath_siblingPutsItNextToTheSite(t *testing.T) {
-	useWorktreeLocation(t, "sibling")
-	sites := t.TempDir()
+	home := useWorktreeLocation(t, "sibling")
+	sites := filepath.Join(home, "Sites")
 	parent := filepath.Join(sites, "myapp")
 
 	got, err := WorktreeCheckoutPath(parent, "feature/auth")
@@ -189,6 +191,26 @@ func TestWorktreeCheckoutPath_siblingPutsItNextToTheSite(t *testing.T) {
 	got, _ = WorktreeCheckoutPath(parent, "feature/auth")
 	if got != want+"-2" {
 		t.Fatalf("got %q want %q", got, want+"-2")
+	}
+}
+
+// Outside home the containers only see what a parked directory or mounts:
+// covers, and lerd never mounts the folder beside a site by itself: that folder
+// can be /usr/local, whose mount would hide the PHP image's own files.
+func TestWorktreeCheckoutPath_siblingNeedsAFolderTheContainersSee(t *testing.T) {
+	outside := t.TempDir()
+	site := filepath.Join(outside, "srv", "shop")
+
+	useWorktreeLocation(t, "sibling")
+	_, err := WorktreeCheckoutPath(site, "feat")
+	if err == nil || !strings.Contains(err.Error(), filepath.Dir(site)) || !strings.Contains(err.Error(), "mounts:") {
+		t.Fatalf("want an error naming %s and mounts:, got %v", filepath.Dir(site), err)
+	}
+
+	useWorktreeLocation(t, "sibling", filepath.Join(outside, "srv"))
+	got, err := WorktreeCheckoutPath(site, "feat")
+	if want := filepath.Join(outside, "srv", "shop-feat"); err != nil || got != want {
+		t.Fatalf("with the folder under mounts: got %q, %v want %q", got, err, want)
 	}
 }
 

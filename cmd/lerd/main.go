@@ -1072,7 +1072,6 @@ func scanWorktrees() ([]func(), bool) {
 				// name that version's FPM container or the branch is served by
 				// the parent's PHP.
 				effectivePHP := config.WorktreePHPVersion(wt.Path, s.PHPVersion)
-				mountWorktree(s.Path, wt.Path, effectivePHP)
 				if err := nginx.GenerateWorktreeVhostFor(wt.Domain, wt.Path, effectivePHP, s.PrimaryDomain(), s.Name, wt.Branch, s.Secured); err != nil {
 					fmt.Printf("[WARN] worktree vhost for %s: %v\n", wt.Domain, err)
 					continue
@@ -1224,7 +1223,6 @@ func syncWorktree(sitePath, worktreeName, action string, pruneStale bool) bool {
 			return true
 		}
 		effectivePHP := config.WorktreePHPVersion(wt.Path, site.PHPVersion)
-		mountWorktree(site.Path, wt.Path, effectivePHP)
 		vhostErr := nginx.GenerateWorktreeVhostFor(wt.Domain, wt.Path, effectivePHP, site.PrimaryDomain(), site.Name, wt.Branch, site.Secured)
 		if site.Secured {
 			if reissueErr := certs.ReissueCertForWorktree(*site); reissueErr != nil {
@@ -1407,12 +1405,4 @@ var notifyUI = notifyLerdUI
 func announceSiteFilesChanged() {
 	eventbus.Default.Publish(eventbus.KindSites)
 	notifyUI("sites")
-}
-
-// mountWorktree makes a checkout outside its site's own mount readable by the
-// containers before its vhost is written; under home this changes nothing.
-func mountWorktree(sitePath, checkout, phpVersion string) {
-	if dir, ok := config.WorktreeMountDir(sitePath, checkout); ok {
-		podman.EnsurePathMounted(dir, phpVersion)
-	}
 }

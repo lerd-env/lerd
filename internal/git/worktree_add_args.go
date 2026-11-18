@@ -100,6 +100,9 @@ func WorktreeCheckoutPath(sitePath, branch string) (string, error) {
 	case "", "inside":
 	case "sibling":
 		root = filepath.Dir(sitePath)
+		if !containersSee(cfg, root) {
+			return "", fmt.Errorf("worktree_location: sibling puts this worktree in %s, which lerd's containers do not mount; add it under mounts: in config.yaml", root)
+		}
 	default:
 		return "", fmt.Errorf("worktree_location %q in config.yaml is not one of inside, sibling", cfg.WorktreeLocation)
 	}
@@ -170,4 +173,19 @@ func AppendExclude(sitePath, pattern string) error {
 	}
 	_, err = f.WriteString(prefix + pattern + "\n")
 	return err
+}
+
+// containersSee reports whether the containers already mount dir: home, or a
+// parked directory or mounts: entry over it. lerd never mounts it on its own,
+// since the folder beside a site can be /usr/local, over the image's own files.
+func containersSee(cfg *config.GlobalConfig, dir string) bool {
+	if home, _ := os.UserHomeDir(); home != "" && config.PathWithin(dir, home) {
+		return true
+	}
+	for _, m := range append(append([]string{}, cfg.ParkedDirectories...), cfg.Mounts...) {
+		if config.PathWithin(dir, m) {
+			return true
+		}
+	}
+	return false
 }
