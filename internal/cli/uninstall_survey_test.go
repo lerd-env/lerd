@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"runtime"
 	"testing"
+
+	"github.com/geodro/lerd/internal/platform"
 )
 
 // answers feeds a fixed list of replies to the survey, one per question.
@@ -105,21 +107,13 @@ func TestSendUninstallFeedbackReportsAnUnreachableEndpoint(t *testing.T) {
 }
 
 func TestUninstallSurveyOSReportsWSLAsWindows(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("WSL only exists on linux")
-	}
-	t.Setenv("WSL_DISTRO_NAME", "Ubuntu")
-	if got := uninstallSurveyOS(); got != "windows" {
+	if got := uninstallSurveyOS(platform.Caps{WindowsSide: true}); got != "windows" {
 		t.Fatalf("os = %q, want windows", got)
 	}
 }
 
-func TestUninstallSurveyOSKeepsPlainLinux(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("linux only")
-	}
-	t.Setenv("WSL_DISTRO_NAME", "")
-	if got := uninstallSurveyOS(); got != "linux" {
-		t.Fatalf("os = %q, want linux", got)
+func TestUninstallSurveyOSKeepsTheHostOS(t *testing.T) {
+	if got := uninstallSurveyOS(platform.Caps{}); got != runtime.GOOS {
+		t.Fatalf("os = %q, want %s", got, runtime.GOOS)
 	}
 }
