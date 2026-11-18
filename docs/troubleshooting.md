@@ -257,7 +257,7 @@ cat "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/containers/networks/aardvark-dns/ler
 
 ### Port 80 already in use: "bind: address already in use"
 
-Another web server, often a distro Apache or nginx, or XAMPP, already holds port 80 or 443, so lerd's nginx cannot start and Podman reports `listen tcp 0.0.0.0:80: bind: address already in use`.
+Another web server, often a distro Apache or nginx, or XAMPP, already holds port 80 or 443, so lerd's nginx cannot start and Podman reports `listen tcp 0.0.0.0:80: bind: address already in use`. During `lerd install` the same conflict ends the run with `lerd-nginx did not start, so no site is served: port 80/443 is already in use by …`, naming the process when lerd can see it, or a running system nginx, httpd, apache2, caddy or lighttpd service as the likely cause. A listener owned by root is hidden from `ss` without sudo, so the message always gives the `sudo` command that shows the real owner.
 
 `lerd start` checks for port conflicts before starting containers. If another process is already using a required port, you'll see a warning:
 

@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,6 +30,57 @@ func PortInUse(port string) bool {
 // Linux-only and lsof is the macOS equivalent.
 func FindListenerCmd(port string) string {
 	return "ss -tlnp sport = :" + port
+}
+
+// PortHolder names what listens on port without asking for sudo, or "" when
+// that cannot be told.
+func PortHolder(port string) string {
+	return portHolder(port, PortListOutput(), func(unit string) bool {
+		return exec.Command("systemctl", "is-active", "--quiet", unit+".service").Run() == nil
+	})
+}
+
+// systemWebServers are the units likely to hold 80/443 as root, where ss
+// shows no process to an unprivileged caller, so one running is a hint only.
+var systemWebServers = []string{"nginx", "httpd", "apache2", "caddy", "lighttpd"}
+
+func portHolder(port, ssOut string, unitActive func(string) bool) string {
+	listening := false
+	for _, line := range strings.Split(ssOut, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 || !strings.HasSuffix(fields[3], ":"+port) {
+			continue
+		}
+		listening = true
+		if name, pid, ok := ssProcess(line); ok {
+			return fmt.Sprintf("%s (pid %s)", name, pid)
+		}
+	}
+	if !listening {
+		return ""
+	}
+	for _, unit := range systemWebServers {
+		if unitActive(unit) {
+			// Running proves nothing about which port it holds, so it is only a guess.
+			return "another process, possibly the system " + unit + " service"
+		}
+	}
+	return ""
+}
+
+// ssProcess reads the first process out of an ss line's users:(("name",pid=N,...)).
+func ssProcess(line string) (name, pid string, ok bool) {
+	_, rest, found := strings.Cut(line, `users:(("`)
+	if !found {
+		return "", "", false
+	}
+	name, rest, _ = strings.Cut(rest, `"`)
+	_, rest, found = strings.Cut(rest, "pid=")
+	if !found {
+		return "", "", false
+	}
+	pid, _, _ = strings.Cut(rest, ",")
+	return name, pid, name != ""
 }
 
 // enforcedMysqldProfiles lists the host's enforced AppArmor profiles for a
