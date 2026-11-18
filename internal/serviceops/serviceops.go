@@ -815,6 +815,21 @@ func EnsureDefaultPresetQuadletPinned(name, pinnedImage string) error {
 	return EnsureCustomServiceQuadlet(svc)
 }
 
+// ensureDefaultPresetQuadletDiff re-renders an installed default service's unit
+// on the image it already runs, so a refresh never doubles as an upgrade, and
+// reports whether the unit on disk changed.
+func ensureDefaultPresetQuadletDiff(name string) (bool, error) {
+	installed := podman.InstalledImage("lerd-" + name)
+	if installed == "" {
+		return false, nil
+	}
+	svc, err := resolveDefaultPresetService(name, installed)
+	if err != nil {
+		return false, err
+	}
+	return ensureCustomServiceQuadletDiff(svc)
+}
+
 // resolveDefaultPresetService builds the CustomService a default preset renders
 // to, with the image pins, platform override and version corrections already
 // applied. Split out of EnsureDefaultPresetQuadletPinned so the dynamic_env

@@ -294,3 +294,25 @@ func restartRunningUnit(name string) (bool, error) {
 	}
 	return true, nil
 }
+
+var ensureDefaultQuadletFn = ensureDefaultPresetQuadletDiff
+
+// ReconcileDefaultService is ReconcileServices for one installed default
+// service (mysql, redis...), which keeps no YAML of its own: re-render its unit
+// from the preset and restart a running container that predates the change.
+func ReconcileDefaultService(name string) (bool, error) {
+	if !UnitInstalledFn("lerd-" + name) {
+		return false, nil
+	}
+	changed, err := ensureDefaultQuadletFn(name)
+	if err != nil {
+		return false, fmt.Errorf("regenerating quadlet for %s: %w", name, err)
+	}
+	if applied, err := RestartIfConfigDrifted(name, name); err != nil || applied {
+		return applied, err
+	}
+	if !changed && !containerOlderThanUnit(name) {
+		return false, nil
+	}
+	return restartRunningUnit(name)
+}
