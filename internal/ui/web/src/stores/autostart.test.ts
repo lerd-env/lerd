@@ -145,7 +145,7 @@ describe('autostart store', () => {
   });
 
   it('toggleWorktreeSibling POSTs and flips store on success', async () => {
-    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     const { worktreeSibling, toggleWorktreeSibling } = await import('./autostart');
     expect(get(worktreeSibling)).toBe(false);
@@ -154,6 +154,15 @@ describe('autostart store', () => {
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('/api/settings/worktree-sibling');
     expect(init.body).toBe(JSON.stringify({ enabled: true }));
+  });
+
+  it('toggleWorktreeSibling keeps the store when the server could not save', async () => {
+    globalThis.fetch = vi.fn(
+      async () => new Response(JSON.stringify({ ok: false, error: 'read-only config' }), { status: 200 })
+    ) as unknown as typeof fetch;
+    const { worktreeSibling, toggleWorktreeSibling } = await import('./autostart');
+    expect(await toggleWorktreeSibling(true)).toBe(false);
+    expect(get(worktreeSibling)).toBe(false);
   });
 
   it('toggleWorktreeSibling keeps the store when the save fails', async () => {

@@ -96,8 +96,10 @@ export async function toggleWorktreeSibling(enable: boolean): Promise<boolean> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: enable })
     });
-    if (res.ok) worktreeSibling.set(enable);
-    return res.ok;
+    // A config it could not write comes back as a 200 with ok: false.
+    const saved = res.ok && Boolean((await res.json()).ok);
+    if (saved) worktreeSibling.set(enable);
+    return saved;
   } catch {
     return false;
   }
