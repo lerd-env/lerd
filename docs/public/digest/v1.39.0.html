@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lerd 1.39: external databases, plugin schedules, signed releases</title>
-<meta name="description" content="Engineering digest for lerd v1.39.0: database servers lerd does not run as services of their own, plugins that run on a schedule once allowed, the first signed release, and a new container logo.">
+<meta name="description" content="Engineering digest for lerd v1.39: database servers lerd does not run as services of their own, plugins that run on a schedule once allowed, the first signed release, a new container logo, and the 1.39.1 and 1.39.2 patches.">
 <meta name="theme-color" content="#ffffff">
 <script>
   // Blocked storage only loses the saved choice; the system's theme still applies.
@@ -22,7 +22,7 @@
 <meta property="og:site_name" content="Lerd">
 <meta property="og:locale" content="en_US">
 <meta property="og:title" content="Lerd 1.39: external databases, plugin schedules, signed releases">
-<meta property="og:description" content="Engineering digest for lerd v1.39.0: database servers lerd does not run as services of their own, plugins that run on a schedule once allowed, the first signed release, and a new container logo.">
+<meta property="og:description" content="Engineering digest for lerd v1.39: database servers lerd does not run as services of their own, plugins that run on a schedule once allowed, the first signed release, a new container logo, and the 1.39.1 and 1.39.2 patches.">
 <meta property="og:url" content="https://lerd.sh/digest/v1.39.0.html">
 <meta property="og:image" content="https://lerd.sh/assets/digest/v1.39.0.png">
 <meta property="og:image:width" content="1280">
@@ -406,7 +406,7 @@
   "@context": "https://schema.org",
   "@type": "Article",
   "headline": "lerd v1.39.0 \u2014 dev digest",
-  "description": "Engineering digest for lerd v1.39.0: database servers lerd does not run as services of their own, plugins that run on a schedule once allowed, the first signed release, and a new container logo.",
+  "description": "Engineering digest for lerd v1.39: database servers lerd does not run as services of their own, plugins that run on a schedule once allowed, the first signed release, a new container logo, and the 1.39.1 and 1.39.2 patches.",
   "image": "https://lerd.sh/assets/digest/v1.39.0.png",
   "datePublished": "2026-11-16",
   "dateModified": "2026-11-16",
@@ -455,36 +455,36 @@
   </div></header>
 
 <section class="hero"><div class="wrap">
-<div class="hero-kicker rise d1"><span class="dot"></span> ENGINEERING DIGEST <em>· 2026-11-03 → 2026-11-16</em></div>
+<div class="hero-kicker rise d1"><span class="dot"></span> ENGINEERING DIGEST <em>· 2026-11-03 → 2026-11-19</em></div>
 <h1 class="rise d2">v1.<em>39</em>.0</h1>
 <div class="sub rise d2">Your own database servers, and plugins that run on their own</div>
-<p class="lede rise d3">A database server lerd does not run is now <b>a service of its own</b>, so DBngin or a native MySQL gets snapshots, restore, the shell and worktree isolation like lerd's own. Plugins can <b>run on a schedule</b> once you allow it, keep their tab to sites with a database, and open the dashboard's diff and editor. This is also <b>the first signed release</b>, PHP 8.6 leaves the prerelease tier, the dashboard counts and applies PHP, Node and tool updates, and lerd has a new face, a stack of containers.</p>
+<p class="lede rise d3">A database server lerd does not run is now <b>a service of its own</b>, so DBngin or a native MySQL gets snapshots, restore, the shell and worktree isolation like lerd's own. Plugins can <b>run on a schedule</b> once you allow it, keep their tab to sites with a database, and open the dashboard's diff and editor. This is also <b>the first signed release</b>, PHP 8.6 leaves the prerelease tier, the dashboard counts and applies PHP, Node and tool updates, and lerd has a new face, a stack of containers. Two patches followed: <b>1.39.1</b> kept sites on a Mac off the network while LAN exposure is off, and <b>1.39.2</b> updates nginx like a service and moves every update check off the dashboard's refresh.</p>
 
 <div class="stats rise d4">
-<div class="stat"><div class="n">120</div><div class="l">commits</div></div>
-<div class="stat"><div class="n">108</div><div class="l">merged PRs</div></div>
-<div class="stat"><div class="n">711</div><div class="l">files</div></div>
-<div class="stat green"><div class="n">+32,947</div><div class="l">insertions</div></div>
-<div class="stat red"><div class="n">−8,119</div><div class="l">deletions</div></div>
-<div class="stat amber"><div class="n">7</div><div class="l">contributors</div></div>
+<div class="stat"><div class="n">145</div><div class="l">commits</div></div>
+<div class="stat"><div class="n">126</div><div class="l">merged PRs</div></div>
+<div class="stat"><div class="n">816</div><div class="l">files</div></div>
+<div class="stat green"><div class="n">+39,672</div><div class="l">insertions</div></div>
+<div class="stat red"><div class="n">−8,737</div><div class="l">deletions</div></div>
+<div class="stat amber"><div class="n">9</div><div class="l">contributors</div></div>
 </div>
 
 <div class="diffbar rise d5">
 <div class="bar">
-<i style="width:31%;background:var(--blue)"></i>
-<i style="width:20%;background:var(--violet)"></i>
-<i style="width:16%;background:var(--amber)"></i>
+<i style="width:32%;background:var(--blue)"></i>
+<i style="width:18%;background:var(--violet)"></i>
+<i style="width:14%;background:var(--amber)"></i>
 <i style="width:10%;background:var(--green)"></i>
-<i style="width:7%;background:var(--red)"></i>
-<i style="width:16%;background:var(--line-2)"></i>
+<i style="width:6%;background:var(--red)"></i>
+<i style="width:20%;background:var(--line-2)"></i>
 </div>
 <div class="legend">
-<span><s style="background:var(--blue)"></s>tests 31%</span>
-<span><s style="background:var(--violet)"></s>licence notices 20%</span>
-<span><s style="background:var(--amber)"></s>web UI 16%</span>
+<span><s style="background:var(--blue)"></s>tests 32%</span>
+<span><s style="background:var(--violet)"></s>licence notices 18%</span>
+<span><s style="background:var(--amber)"></s>web UI 14%</span>
 <span><s style="background:var(--green)"></s>docs 10%</span>
-<span><s style="background:var(--red)"></s>cli 7%</span>
-<span><s style="background:var(--line-2)"></s>rest 16%</span>
+<span><s style="background:var(--red)"></s>cli 6%</span>
+<span><s style="background:var(--line-2)"></s>rest 20%</span>
 </div>
 </div>
 </div></section>
@@ -498,6 +498,8 @@
 <a href="#lighter"><i>06</i> Lighter</a>
 <a href="#more"><i>07</i> More</a>
 <a href="#fixes"><i>08</i> Fixes</a>
+<a href="#v1391"><i>09</i> 1.39.1</a>
+<a href="#v1392"><i>10</i> 1.39.2</a>
 </nav>
 
 <!-- ============ 01 DATABASES ============ -->
@@ -649,11 +651,58 @@
 </div>
 </div></section>
 
+<!-- ============ 09 1.39.1 ============ -->
+<section id="v1391" class="chapter fx"><div class="wrap">
+<div class="ch-head">
+<span class="ch-num">09</span>
+<h2>1.39.1</h2>
+<div class="ch-pills"><span class="pill sec">SAFE</span><span class="pill fix">FIX</span></div>
+</div>
+<p class="ch-intro">A security patch on 2026-11-18. <b>On macOS, LAN exposure off now means sites and the dashboard stay on the machine</b>, and the status commands say so only when it is true.</p>
+<div class="cards three">
+<div class="card"><div class="card-pills"><span class="pill sec">SAFE</span></div><h4>Off the network means off</h4><p>On macOS, gvproxy cannot hold a port below 1024 on loopback alone, so lerd-nginx answered <b>every interface on 80 and 443 with LAN exposure off</b>. nginx now sits on loopback ports above 1024 behind a pf redirect, reported by @aaajeetee (GHSA-4g96-8fxp-fwqj).</p></div>
+<div class="card"><div class="card-pills"><span class="pill sec">SAFE</span></div><h4>The vhost proves it is local</h4><p>With LAN exposure on, <code>lerd.localhost</code> gave any browser that reached it local authority. The first visit now goes once through <code>127.0.0.1:7073</code>, which <b>only the machine itself reaches</b>, and comes back with a cookie.</p></div>
+<div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>A tab for one framework <a class="pr" href="https://github.com/lerd-env/lerd/pull/2572">#2572</a></h4><p>A plugin tab's <code>when</code> takes <code>and</code>, <code>or</code>, <code>not</code> and <code>framework:laravel@&gt;=11</code>, so <b>a tab can be kept to the sites it fits</b>, contributed by @ExeQue.</p></div>
+</div>
+<div class="cards three">
+<div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>MySQL out of AppArmor's reach <a class="pr" href="https://github.com/lerd-env/lerd/pull/2586">#2586</a></h4><p>On Ubuntu with a native mysql-server, its profile confined lerd's server by path. The server starts from <code>/usr/local/sbin</code> now, so <b>the native server and its profile can stay</b>.</p></div>
+<div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>A share kept to its own origin <a class="pr" href="https://github.com/lerd-env/lerd/pull/2585">#2585</a></h4><p>Share proxies passed the <code>Link</code> header through, so preloads named the <code>.test</code> host. <b>Every Link value is rewritten like the body</b>.</p></div>
+<div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>An install that says nginx failed <a class="pr" href="https://github.com/lerd-env/lerd/pull/2583">#2583</a></h4><p>With port 80 or 443 taken, install finished as if nginx had started. It now <b>exits with an error naming what holds the port</b>.</p></div>
+</div>
+<div class="cards three">
+<div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>Expose with a custom domain <a class="pr" href="https://github.com/lerd-env/lerd/pull/2577">#2577</a></h4><p>Expose prints a custom domain only on its Public URL row, so the share waited for a URL it already had, contributed by @timodejong95.</p></div>
+<div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>A single-image service reinstalls <a class="pr" href="https://github.com/lerd-env/lerd/pull/2573">#2573</a></h4><p>A service installed from one image recorded no version, so lerd refused to reinstall it once its preset listed versions. <b>It counts as the canonical version now</b>.</p></div>
+<div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>WSL in the uninstall survey <a class="pr" href="https://github.com/lerd-env/lerd/pull/2587">#2587</a></h4><p>The survey sent the Go runtime's system, linux inside WSL, and <b>now sends windows there</b>.</p></div>
+</div>
+</div></section>
+
+<!-- ============ 10 1.39.2 ============ -->
+<section id="v1392" class="chapter fx"><div class="wrap">
+<div class="ch-head">
+<span class="ch-num">10</span>
+<h2>1.39.2</h2>
+<div class="ch-pills"><span class="pill feat">FEAT</span><span class="pill fix">FIX</span></div>
+</div>
+<p class="ch-intro">On 2026-11-19. <b>nginx joins the updates lerd can apply</b>, update checks leave the dashboard's refresh, and the 1.39.1 redirect learns to back out where pf skips loopback.</p>
+<div class="cards three">
+<div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>nginx updates like a service <a class="pr" href="https://github.com/lerd-env/lerd/pull/2601">#2601</a></h4><p>When Docker Hub republishes <code>nginx:alpine</code>, for this month's HTTP/2 fixes say, the System tab flags it and a notification says so. <b>One click, <code>lerd nginx update</code> or the TUI palette</b> pulls it and restarts nginx onto it.</p></div>
+<div class="card"><div class="card-pills"><span class="pill ref">REF</span></div><h4>Update checks once an hour <a class="pr" href="https://github.com/lerd-env/lerd/pull/2601">#2601</a></h4><p>Service, PHP, tool and nginx update answers are worked out hourly and right after anything changes them. With a tab open, <b>about 25 podman calls a minute became one round an hour</b>.</p></div>
+<div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>A framework built on another <a class="pr" href="https://github.com/lerd-env/lerd/pull/2599">#2599</a></h4><p>A definition's <code>based_on</code> names its base, so <b>a CMS built on Symfony wins detection over Symfony</b>, and composer scripts get the framework's memory limit.</p></div>
+</div>
+<div class="cards three">
+<div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>Every site down on a Mac <a class="pr" href="https://github.com/lerd-env/lerd/pull/2598">#2598</a></h4><p>With another tool's pf ruleset skipping <code>lo0</code>, the 1.39.1 redirect loaded but never applied. lerd now <b>checks the redirect carries traffic</b> and backs out when it does not, contributed by @aaajeetee.</p></div>
+<div class="card"><div class="card-pills"><span class="pill sec">SAFE</span></div><h4>A claim link stays home <a class="pr" href="https://github.com/lerd-env/lerd/pull/2602">#2602</a></h4><p>Browsers drop tabs and newlines from a redirect, so a crafted claim link could leave lerd. <b>A <code>next</code> carrying one goes to the dashboard root</b>.</p></div>
+<div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>A refused CA import, said plainly <a class="pr" href="https://github.com/lerd-env/lerd/pull/2589">#2589</a></h4><p>Without a desktop session Windows refuses the import, and <code>wsl:setup</code> blamed a missing certutil. <b>It now tells the two apart</b>.</p></div>
+</div>
+<div class="cards three">
+<div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>Ready means ready <a class="pr" href="https://github.com/lerd-env/lerd/pull/2604">#2604</a></h4><p>Securing a site removed the served vhost before renaming the SSL one onto it, so a reload in between kept the old config and <b>a site could stay on the waking page after it was ready</b>. One rename now.</p></div>
+</div>
+</div></section>
 
 <section class="get">
   <div class="foot-grid">
     <div>
-      <h2>Get v1.39.0 <span>or update.</span></h2>
+      <h2>Get v1.39.2 <span>or update.</span></h2>
       <p class="fn">Install it with the one-line script, or run <code>lerd update</code> if Lerd is already set up. The full
       list of changes is in the <a href="https://lerd.sh/changelog">changelog</a>.</p>
     </div>
@@ -664,7 +713,7 @@
     </div>
   </div>
   <div class="foot-end">
-    <span>lerd v1.39.0 · 2026-11-16 · <a href="/digest/v1.38.0.html">← v1.38.0 digest</a></span>
+    <span>lerd v1.39.0 · 2026-11-19 · <a href="/digest/v1.38.0.html">← v1.38.0 digest</a></span>
     <span><a href="https://github.com/lerd-env/lerd/compare/v1.38.0...v1.39.0">v1.38.0…v1.39.0</a> · <a href="https://lerd.sh/">docs</a> · <a href="https://github.com/lerd-env/lerd">github</a></span>
   </div>
 </section>

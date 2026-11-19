@@ -7,6 +7,28 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.39.2] - 2026-11-19
+
+A patch for the macOS loopback redirect 1.39.1 introduced. On a Mac where another tool had loaded a pf ruleset that skips `lo0`, the redirect loaded but never applied, so every site and the dashboard went down while install, start and doctor all said things were fine. Lerd now checks that the redirect really carries traffic and backs out to the previous bind when it does not. Thanks to @aaajeetee, who reported it and fixed it.
+
+Nginx now gets updated like a service. When Docker Hub republishes the `nginx:alpine` image lerd runs, usually for a security fix such as this month's HTTP/2 releases, the System tab flags it, a notification says so, and one click, `lerd nginx update` or the TUI palette pulls it and restarts nginx onto it. Update checks for services, PHP builds, tools and nginx also stop running on every dashboard refresh: lerd works them out once an hour and again right after anything changes them.
+
+### Added
+
+- **Update nginx from the dashboard, the CLI and the TUI** (#2601). The Nginx entry in the System tab carries an update tag when the image lerd-nginx runs is older than what `nginx:alpine` now serves, and the page gets an Update button and a Check for updates button. `lerd nginx update` and Update nginx in the TUI palette do the same, and a newly flagged update sends the usual update notification. The check reads the tag's digest from Docker Hub's registry with an anonymous token, which does not count against the pull rate limit, at most every six hours.
+- **A framework can declare the framework it is built on** (#2599). A definition's `based_on` names its base, so when both match a project, the base gives way, which lets a CMS built on Symfony win detection over Symfony itself. Composer runs lerd makes for a project also set `COMPOSER_MEMORY_LIMIT` from the framework's declared `memory_limit`, so composer scripts that start their own php stop running out of memory. A value already set in the shell wins.
+
+### Changed
+
+- **Update checks run hourly instead of on every dashboard refresh** (#2601). Service, PHP build, tool and nginx update answers come from a cache in lerd-ui, filled once an hour and dropped when something can change them: a restart of the unit from any surface, a pull, a tool install, or Check for updates. With a dashboard tab open, lerd-ui makes those podman calls once an hour instead of about 25 times a minute. An image changed outside lerd, a plain `podman pull` say, shows at the next hourly check or on Check for updates.
+
+### Fixed
+
+- **A site stuck on the waking page after it was ready** (#2604). Securing a site removed its served vhost before renaming the SSL one onto it, and nginx loads conf.d through a glob, so a reload landing between the two steps failed and kept its previous config, the waking page included. The SSL vhost now replaces the served one in a single rename, and a failed install leaves the served vhost in place.
+- **Every site down on a Mac whose pf ruleset skips loopback** (#2598). The loopback redirect from 1.39.1 loaded but was never evaluated when another tool's pf ruleset carried `set skip on lo0`, so ports 80 and 443 refused connections while nginx waited on the high ports. Loading the anchor now checks that a loopback connection actually reaches its target, and when it does not, install takes the anchor back out so nginx keeps its previous bind, start says why, and doctor names the `lo0` skip and how to repair it, contributed by @aaajeetee.
+- **A crafted dashboard claim link could redirect the browser to another host** (#2602). The redirect after a vhost claim refused a `next` starting with `//` or `/\`, but browsers drop tabs and newlines from a Location header before resolving it, so a link carrying one ended up on an outside host. A `next` containing a tab, newline or carriage return now falls back to the dashboard root.
+- **`lerd wsl:setup` said it could not reach certutil.exe when Windows refused the CA import** (#2589). That refusal happens whenever the import runs without a desktop session, an install over SSH say. wsl:setup now tells the two apart and, for a refusal, asks to run it again from a desktop terminal or import the CA by hand.
+
 ## [1.39.1] - 2026-11-18
 
 A security patch. On macOS, lerd-nginx answered the whole network on ports 80 and 443 even with LAN exposure off, because gvproxy cannot hold a port below 1024 on loopback alone, and the `lerd.localhost` vhost handed whoever reached it the dashboard with local authority. With LAN exposure on, the same vhost did that on Linux too. Both are closed, and the status commands now say when a port is reachable from the network instead of claiming loopback only. Thanks to @aaajeetee for the report.
