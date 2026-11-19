@@ -18,7 +18,7 @@ container images are a separate distribution with their own notices.
 | charm.land/bubbletea/v2 | v2.1.1 | MIT |
 | charm.land/glamour/v2 | v2.0.1 | MIT |
 | charm.land/huh/v2 | v2.0.3 | MIT |
-| charm.land/lipgloss/v2 | v2.0.6 | MIT |
+| charm.land/lipgloss/v2 | v2.1.1 | MIT |
 | github.com/SherClockHolmes/webpush-go | v1.4.0 | MIT |
 | github.com/alecthomas/chroma/v2 | v2.27.0 | MIT |
 | github.com/atotto/clipboard | v0.1.4 | BSD-3-Clause |
@@ -193,7 +193,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### charm.land/lipgloss/v2 v2.0.6
+### charm.land/lipgloss/v2 v2.1.1
 
 MIT
 
