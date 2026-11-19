@@ -59,11 +59,13 @@ func proxyTo(w http.ResponseWriter, r *http.Request, target *url.URL, headers fu
 	rp.ServeHTTP(w, r)
 }
 
+// forwardedHost is nginx's $real_forwarded_host: the host a share tunnel
+// forwarded, else the request's own host without its port, as $host is.
 func forwardedHost(r *http.Request) string {
 	if h := r.Header.Get("X-Forwarded-Host"); h != "" {
 		return h
 	}
-	return r.Host
+	return hostOnly(r.Host)
 }
 
 func forwardedProto(r *http.Request) string {

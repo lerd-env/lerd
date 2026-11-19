@@ -12,6 +12,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/goserver"
+	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
@@ -29,6 +30,7 @@ func NewWebServeCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			h := &goserver.Handler{Sites: registeredSites, Upstream: fpmAddr, Proxy: goserver.SiteTarget, Services: serviceRoutes, WorkerHost: workerHost}
 			h.WakeHold, h.WakeTransport = lerdUI()
+			h.ProfilerUpstream = profilerUpstream
 			served := &goserver.AccessFeed{Next: h, Target: config.AccessLogTarget()}
 			tlsSrv := &http.Server{Addr: listenTLS, Handler: served, TLSConfig: &tls.Config{GetCertificate: h.GetCertificate}}
 			errs := make(chan error, 2)
@@ -97,4 +99,22 @@ func lerdUI() (*url.URL, http.RoundTripper) {
 			return (&net.Dialer{}).DialContext(ctx, "unix", sock)
 		},
 	}
+}
+
+// profilerUpstream is the PHP-FPM and bridge script the SPX dashboard runs on,
+// chosen as the nginx profiler vhost chooses them: the host's PHP-FPM in
+// native mode, else the default version's container.
+func profilerUpstream() (string, string) {
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		cfg = &config.GlobalConfig{}
+	}
+	version := cfg.PHP.DefaultVersion
+	if cfg.PHPRuntimeMode() == config.PHPRuntimeNative {
+		if port, err := nativephp.PortFor(version); err == nil {
+			return net.JoinHostPort(podman.HostGateway, strconv.Itoa(port)), config.DumpsBridgeFile()
+		}
+	}
+	host, port := podman.FPMUpstream(config.Site{PHPVersion: version}, version)
+	return net.JoinHostPort(host, strconv.Itoa(port)), "/usr/local/etc/lerd/dump-bridge.php"
 }

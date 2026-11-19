@@ -37,11 +37,18 @@ type Handler struct {
 	// reached through WakeTransport (its unix socket on Linux) when set.
 	WakeHold      *url.URL
 	WakeTransport http.RoundTripper
+	// ProfilerUpstream is the PHP-FPM serving the SPX UI and the bridge
+	// script it runs there.
+	ProfilerUpstream func() (addr, script string)
 
 	certs certCache
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if hostOnly(strings.ToLower(r.Host)) == profilerHost {
+		h.serveProfiler(w, r)
+		return
+	}
 	// A service domain is an exact name, which outranks a site's wildcard.
 	if svc, ok := h.serviceFor(r.Host); ok {
 		serveService(w, r, svc)
@@ -146,6 +153,9 @@ func (h *Handler) servePHPSite(w http.ResponseWriter, r *http.Request, site conf
 		"DOCUMENT_ROOT":   root,
 		"REQUEST_SCHEME":  scheme(r),
 		"SERVER_PORT":     serverPort(r),
+	}
+	for k, v := range lerdParams(r, site) {
+		params[k] = v
 	}
 	if err := fcgi.Serve(w, r, h.Upstream(site), params); err != nil {
 		log.Printf("lerd web server: %s %s: %v", site.Name, r.URL.Path, err)
