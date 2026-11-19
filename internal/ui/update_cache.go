@@ -8,9 +8,14 @@ import "sync"
 type updateCache struct {
 	mu      sync.Mutex
 	entries map[string]any
+	// drops counts dropFor calls per key ("" for drop-all), so an answer worked
+	// out across a drop of its key is not stored.
+	drops map[string]uint64
 }
 
-func newUpdateCache() *updateCache { return &updateCache{entries: map[string]any{}} }
+func newUpdateCache() *updateCache {
+	return &updateCache{entries: map[string]any{}, drops: map[string]uint64{}}
+}
 
 // updates is lerd-ui's cache, emptied hourly and when what it holds changes.
 var updates = newUpdateCache()
@@ -24,10 +29,13 @@ func cachedUpdate[T any](c *updateCache, key string, compute func() T) T {
 		c.mu.Unlock()
 		return v
 	}
+	mine, all := c.drops[key], c.drops[""]
 	c.mu.Unlock()
 	v := compute()
 	c.mu.Lock()
-	c.entries[key] = v
+	if c.drops[key] == mine && c.drops[""] == all {
+		c.entries[key] = v
+	}
 	c.mu.Unlock()
 	return v
 }
@@ -36,6 +44,7 @@ func cachedUpdate[T any](c *updateCache, key string, compute func() T) T {
 func (c *updateCache) dropFor(unit string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.drops[unit]++
 	if unit == "" {
 		c.entries = map[string]any{}
 		return

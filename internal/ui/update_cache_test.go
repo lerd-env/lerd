@@ -42,3 +42,33 @@ func TestUpdateCache_DropForEmptyRecomputesEverything(t *testing.T) {
 		t.Errorf("computed %d times, want 4", calls)
 	}
 }
+
+// A drop that lands while an answer is being worked out (the nginx digest fetch
+// finishing mid-read, say) means that answer is already stale; storing it would
+// hide the change until the next hourly clear.
+func TestUpdateCache_DropDuringComputeIsNotOverwritten(t *testing.T) {
+	c := newUpdateCache()
+	cachedUpdate(c, "lerd-nginx", func() bool {
+		c.dropFor("lerd-nginx")
+		return false
+	})
+	if !cachedUpdate(c, "lerd-nginx", func() bool { return true }) {
+		t.Error("the answer read before the drop was kept")
+	}
+}
+
+// Workers restart all day; their drops must not stop nginx's answer being kept.
+func TestUpdateCache_OtherUnitsDropsDoNotDiscard(t *testing.T) {
+	c := newUpdateCache()
+	calls := 0
+	compute := func() bool {
+		calls++
+		c.dropFor("lerd-queue-shop")
+		return false
+	}
+	cachedUpdate(c, "lerd-nginx", compute)
+	cachedUpdate(c, "lerd-nginx", compute)
+	if calls != 1 {
+		t.Errorf("computed %d times, want 1: a worker's drop discarded nginx's answer", calls)
+	}
+}
