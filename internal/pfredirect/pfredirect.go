@@ -65,9 +65,9 @@ func Redirected() map[int]bool {
 	return set
 }
 
-// ErrNotEffective means pf took the anchor but loopback connections bypass it,
-// which a ruleset another tool loaded with `set skip on lo0` causes.
-var ErrNotEffective = errors.New("pf loaded the redirect but loopback connections bypass it; " + Repair())
+// ErrNotEffective means pf took the anchor but loopback connections bypass it.
+// Install has already removed the anchor by then, so lerd install brings it back.
+var ErrNotEffective = errors.New("pf loaded the redirect but loopback connections bypass it; if " + skipCheck + " shows lo0 (skip), run sudo " + strings.Join(ReloadArgs(), " ") + ", which also drops rules a VPN or firewall loaded, then lerd install")
 
 // reaches is a var so tests can stand in for pf.
 var reaches = loopbackReaches
@@ -149,8 +149,10 @@ func ReloadArgs() []string {
 // Repair puts the redirect back after a reboot dropped it, and only reloads the
 // main ruleset, which also drops a VPN's or firewall's rules, when lo0 is skipped.
 func Repair() string {
-	return "sudo " + strings.Join(ApplyArgs(), " ") + ", and if sudo pfctl -s Interfaces -i lo0 -v shows lo0 (skip), sudo " + strings.Join(ReloadArgs(), " ") + " before it, which also drops rules a VPN or firewall loaded"
+	return "sudo " + strings.Join(ApplyArgs(), " ") + ", and if " + skipCheck + " shows lo0 (skip), sudo " + strings.Join(ReloadArgs(), " ") + " before it, which also drops rules a VPN or firewall loaded"
 }
+
+const skipCheck = "sudo pfctl -s Interfaces -i lo0 -v"
 
 // Sudoers grants user exactly ApplyArgs without a password, so `lerd start`
 // can re-load the anchor after a reboot drops it.

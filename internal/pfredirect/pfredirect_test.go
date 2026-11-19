@@ -87,8 +87,17 @@ func TestRepairLeadsWithTheGrantedApply(t *testing.T) {
 	if !strings.Contains(got, "lo0 (skip), sudo /sbin/pfctl -f /etc/pf.conf before it") {
 		t.Errorf("Repair() = %q, want the pf.conf reload only on a skipped lo0", got)
 	}
-	if !strings.HasSuffix(ErrNotEffective.Error(), got) {
-		t.Errorf("ErrNotEffective = %q, want the same repair as doctor", ErrNotEffective)
+}
+
+// Install takes the anchor back out before reporting a bypassed redirect, so
+// the error cannot send the user to reload a file that is gone.
+func TestErrNotEffectiveSendsTheUserBackToInstall(t *testing.T) {
+	got := ErrNotEffective.Error()
+	if strings.Contains(got, strings.Join(ApplyArgs(), " ")) {
+		t.Errorf("ErrNotEffective = %q, must not reload the anchor file install removed", got)
+	}
+	if !strings.Contains(got, "lo0 (skip), run sudo /sbin/pfctl -f /etc/pf.conf") || !strings.HasSuffix(got, "then lerd install") {
+		t.Errorf("ErrNotEffective = %q, want the pf.conf reload on a skipped lo0, then lerd install", got)
 	}
 }
 
