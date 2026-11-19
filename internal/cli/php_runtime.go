@@ -329,7 +329,7 @@ func versionsInUse(installed []string) []string {
 // Seams for the worktree sweep, so the switch can be tested without git or nginx.
 var (
 	switchWorktreesFor       = gitpkg.DetectWorktrees
-	switchWriteWorktreeVhost = nginx.GenerateWorktreeVhostFor
+	switchWriteWorktreeVhost = webserver.ApplyWorktree
 )
 
 // regenerateWorktreeVhosts rewrites the vhost of every worktree a site has. A

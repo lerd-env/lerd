@@ -9,7 +9,6 @@ import (
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/envpass"
 	"github.com/geodro/lerd/internal/freeport"
-	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/webserver"
 )
@@ -27,7 +26,7 @@ func regenNginxVhost(siteName, sitePath string) {
 		return
 	}
 	if site.IsCustomContainer() || site.IsFrankenPHP() {
-		if nginx.RegenerateVhost(*site) == nil {
+		if webserver.RegenerateSite(*site) == nil {
 			_ = webserver.Reload()
 		}
 		return

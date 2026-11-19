@@ -11,7 +11,6 @@ import (
 	"github.com/geodro/lerd/internal/activityping"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/lifecycle"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/siteops"
@@ -270,7 +269,7 @@ func swapSiteToWaking(site *config.Site) error {
 	if err := writeWakingHTML(site); err != nil {
 		return err
 	}
-	return nginx.GenerateWakingVhost(*site)
+	return webserver.ApplyWakingSite(*site)
 }
 
 func serviceUnitUp(name string) bool {

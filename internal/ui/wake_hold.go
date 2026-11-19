@@ -15,7 +15,6 @@ import (
 
 	"github.com/geodro/lerd/internal/activityping"
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/webserver"
 )
 
@@ -39,7 +38,7 @@ var (
 // site reached over the LAN has to wake the same as one reached locally.
 func withWakeHold(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == nginx.WakeHoldPath {
+		if r.URL.Path == webserver.WakeHoldPath {
 			if !fromNginx(r) {
 				http.Error(w, "Forbidden", http.StatusForbidden)
 				return
@@ -177,7 +176,7 @@ func siteVhostWaking(domain string) bool {
 		return false
 	}
 	data, err := os.ReadFile(path)
-	if err != nil || strings.Contains(string(data), nginx.WakeHoldPath) {
+	if err != nil || strings.Contains(string(data), webserver.WakeHoldPath) {
 		return err == nil
 	}
 	return !webserver.ServesVhostWrittenAt(st.ModTime())

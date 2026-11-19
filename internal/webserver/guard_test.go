@@ -17,27 +17,16 @@ const nginxPkg = "github.com/geodro/lerd/internal/nginx"
 // list must end empty, and a new direct import fails the test.
 var stillImportsNginx = map[string]bool{
 	"cmd/lerd/main.go":                       true,
-	"internal/certs/secure.go":               true,
-	"internal/cli/devserver.go":              true,
-	"internal/cli/hostproxy.go":              true,
-	"internal/cli/idle_services.go":          true,
 	"internal/cli/install.go":                true,
-	"internal/cli/migrate_tld.go":            true,
 	"internal/cli/pause.go":                  true,
 	"internal/cli/php_runtime.go":            true,
-	"internal/cli/sites_restore.go":          true,
 	"internal/cli/startstop.go":              true,
-	"internal/cli/worker_proxy.go":           true,
 	"internal/profiler/profiler.go":          true,
 	"internal/serviceops/dashboard_vhost.go": true,
 	"internal/serviceops/domain.go":          true,
-	"internal/sitedoctor/vhost.go":           true,
-	"internal/siteops/fpm_vhosts.go":         true,
 	"internal/siteops/nginxoverride.go":      true,
-	"internal/siteops/phpversion.go":         true,
 	"internal/ui/nginx_global.go":            true,
 	"internal/ui/remote_control.go":          true,
-	"internal/ui/wake_hold.go":               true,
 }
 
 func TestOnlyTheSeamImportsNginx(t *testing.T) {

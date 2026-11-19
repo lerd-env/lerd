@@ -10,7 +10,6 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/siteops"
 	"github.com/geodro/lerd/internal/webserver"
 )
@@ -248,7 +247,7 @@ func migrateWorktreeVhosts(worktrees []gitpkg.Worktree, newPrimary, phpVersion, 
 		// the worktree checkout often doesn't have.
 		if proxy != nil {
 			port := WorktreeHostPort(proxy.Port, wt.Path, hostProxyPortEnvKey(proxy))
-			if err := nginx.GenerateWorktreeHostProxyVhostFor(newWTDomain, wt.Path, newPrimary, port, proxy.SSL, secured); err != nil {
+			if err := webserver.ApplyHostProxyWorktree(newWTDomain, wt.Path, newPrimary, port, proxy.SSL, secured); err != nil {
 				fmt.Printf("    WARN: worktree %s: regenerate vhost: %v\n", wt.Branch, err)
 			}
 			if err := config.SyncSiteURL(wt.Path, newWTDomain, secured); err != nil {
@@ -257,7 +256,7 @@ func migrateWorktreeVhosts(worktrees []gitpkg.Worktree, newPrimary, phpVersion, 
 			continue
 		}
 		effectivePHP := config.WorktreePHPVersion(wt.Path, phpVersion)
-		err := nginx.GenerateWorktreeVhostFor(newWTDomain, wt.Path, effectivePHP, newPrimary, siteName, wt.Branch, secured)
+		err := webserver.ApplyWorktree(newWTDomain, wt.Path, effectivePHP, newPrimary, siteName, wt.Branch, secured)
 		if err != nil {
 			fmt.Printf("    WARN: worktree %s: regenerate vhost: %v\n", wt.Branch, err)
 		}
