@@ -63,6 +63,7 @@ var (
 	digestsByID    = map[string][]string{}
 	nginxRefreshMu sync.Mutex
 	nginxRefreshOn bool
+	nginxRefreshWG sync.WaitGroup
 )
 
 func imageDigestsFor(id string) []string {
@@ -105,7 +106,11 @@ var onNginxDigestRefreshed func()
 
 // SetOnNginxDigestRefreshed registers what runs once a background digest fetch
 // finishes, so lerd-ui can rebuild status and announce a republished image.
-func SetOnNginxDigestRefreshed(fn func()) { onNginxDigestRefreshed = fn }
+func SetOnNginxDigestRefreshed(fn func()) {
+	nginxRefreshMu.Lock()
+	onNginxDigestRefreshed = fn
+	nginxRefreshMu.Unlock()
+}
 
 // scheduleNginxDigestRefresh reads through the digest cache, failures included,
 // so an offline machine is asked once per cache window rather than every rebuild.
@@ -116,15 +121,17 @@ func scheduleNginxDigestRefresh(image string) {
 		return
 	}
 	nginxRefreshOn = true
+	nginxRefreshWG.Add(1)
+	fetch, announce := manifestDigestFn, onNginxDigestRefreshed
 	nginxRefreshMu.Unlock()
 	go func() {
-		defer func() {
-			nginxRefreshMu.Lock()
-			nginxRefreshOn = false
-			nginxRefreshMu.Unlock()
-		}()
-		if _, err := manifestDigestFn(image); err == nil && onNginxDigestRefreshed != nil {
-			onNginxDigestRefreshed()
+		defer nginxRefreshWG.Done()
+		_, err := fetch(image)
+		nginxRefreshMu.Lock()
+		nginxRefreshOn = false
+		nginxRefreshMu.Unlock()
+		if err == nil && announce != nil {
+			announce()
 		}
 	}()
 }

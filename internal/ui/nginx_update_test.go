@@ -20,8 +20,15 @@ func stubNginxUpdate(t *testing.T, updated bool, err error) *int {
 
 func postNginx(t *testing.T, method, path string) map[string]any {
 	t.Helper()
+	return postNginxFrom(t, method, path, "127.0.0.1:5555")
+}
+
+func postNginxFrom(t *testing.T, method, path, peer string) map[string]any {
+	t.Helper()
 	rec := httptest.NewRecorder()
-	handleNginxRoutes(rec, httptest.NewRequest(method, path, nil))
+	req := httptest.NewRequest(method, path, nil)
+	req.RemoteAddr = peer
+	handleNginxRoutes(rec, req)
 	if rec.Code != http.StatusOK {
 		return map[string]any{"status": float64(rec.Code)}
 	}
@@ -63,5 +70,24 @@ func TestNginxCheck_OfflineIsNotUpToDate(t *testing.T) {
 	out := postNginx(t, http.MethodPost, "/api/nginx/check")
 	if out["ok"] != false {
 		t.Errorf("out=%v, want ok=false so the UI says the check failed", out)
+	}
+}
+
+// A LAN session without full access sees the flag but may not pull and restart
+// nginx, matching the hidden button.
+func TestNginxUpdate_RefusesRemoteWithoutFullAccess(t *testing.T) {
+	calls := stubNginxUpdate(t, true, nil)
+	prev := checkNginxFn
+	checks := 0
+	checkNginxFn = func() (bool, error) { checks++; return false, nil }
+	t.Cleanup(func() { checkNginxFn = prev })
+	for _, path := range []string{"/api/nginx/update", "/api/nginx/check"} {
+		out := postNginxFrom(t, http.MethodPost, path, "192.168.1.50:5555")
+		if out["status"] != float64(http.StatusForbidden) {
+			t.Errorf("%s from the LAN: got %v, want 403", path, out)
+		}
+	}
+	if *calls != 0 || checks != 0 {
+		t.Errorf("update ran %d times, check %d times, want neither", *calls, checks)
 	}
 }

@@ -38,6 +38,7 @@ func stubNginxRead(t *testing.T, local nginxLocal, cached string, ok bool) {
 	cachedManifestDigestFn = func(string) (string, bool) { return cached, ok }
 	manifestDigestFn = func(string) (string, error) { return "", nil }
 	t.Cleanup(func() {
+		nginxRefreshWG.Wait()
 		nginxLocalFn, cachedManifestDigestFn, manifestDigestFn = prevLocal, prevCached, prevFetch
 	})
 }
@@ -75,7 +76,10 @@ func TestNginxUpdateAvailable_SeesARestartImmediately(t *testing.T) {
 // to wake the status broadcast; otherwise the update waits on an unrelated event.
 func TestNginxDigestRefreshAnnouncesItself(t *testing.T) {
 	prevFetch, prevHook := manifestDigestFn, onNginxDigestRefreshed
-	t.Cleanup(func() { manifestDigestFn, onNginxDigestRefreshed = prevFetch, prevHook })
+	t.Cleanup(func() {
+		nginxRefreshWG.Wait()
+		manifestDigestFn, onNginxDigestRefreshed = prevFetch, prevHook
+	})
 	manifestDigestFn = func(string) (string, error) { return "sha256:new", nil }
 	done := make(chan struct{})
 	SetOnNginxDigestRefreshed(func() { close(done) })

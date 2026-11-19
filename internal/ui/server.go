@@ -196,6 +196,7 @@ func Start(currentVersion string) error {
 	// trades off-up-to-15s latency for an order-of-magnitude CPU saving.
 	podman.Cache.SetOnChange(publisher.trigger)
 	podman.SetOnNginxDigestRefreshed(publishStatus)
+	go watchNginxImage()
 
 	// Drop the cache to idle cadence whenever the desktop session is idle
 	// or locked, so a focused tab on an unattended laptop still saves
