@@ -4,6 +4,10 @@ import json
 import os
 import subprocess
 import sys
+import urllib.error
+import urllib.request
+
+import upstream_php
 
 # 7.4 and 8.0 sit on end-of-life Alpine branches, so a rebuild cannot help them.
 VERSIONS = ('8.1', '8.2', '8.3', '8.4', '8.5', '8.6')
@@ -49,7 +53,20 @@ def upgrades(image):
     return [line.strip() for line in out.splitlines() if 'Upgrading' in line]
 
 
-def main(scan_fn=scan, upgrades_fn=upgrades):
+def released(version):
+    """Whether upstream publishes the php:<version>-fpm-alpine a rebuild builds FROM."""
+    token = json.load(urllib.request.urlopen(
+        'https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/php:pull'))['token']
+    try:
+        upstream_php.fetch(f'https://registry-1.docker.io/v2/library/php/manifests/{version}-fpm-alpine', token)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False
+        raise
+    return True
+
+
+def main(scan_fn=scan, upgrades_fn=upgrades, released_fn=released):
     with open(RECIPE) as f:
         tag = recipe_tag(f.read())
     stale, table, failed = [], [], []
@@ -63,11 +80,16 @@ def main(scan_fn=scan, upgrades_fn=upgrades):
             # every rebuild republish the same packages, so only an image that
             # can upgrade something is rebuilt.
             rebuild = needs_rebuild(found) and bool(upgrades_fn(image))
-        except (subprocess.CalledProcessError, ValueError) as e:
+            # A new minor has no upstream tag until its GA day, so a forced
+            # rebuild of it could only fail.
+            unreleased = rebuild and not released_fn(version)
+        except (subprocess.CalledProcessError, ValueError, urllib.error.URLError) as e:
             print(f'::error::PHP {version}: scanning {image} failed: {e}')
             failed.append(version)
             continue
-        if rebuild:
+        if unreleased:
+            print(f'::notice::PHP {version}: flagged, but upstream has no {version}-fpm-alpine to rebuild from yet')
+        elif rebuild:
             stale.append(version)
         elif needs_rebuild(found):
             print(f'::notice::PHP {version}: flagged, but Alpine has nothing newer to install yet')
