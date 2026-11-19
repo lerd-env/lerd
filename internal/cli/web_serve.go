@@ -23,7 +23,7 @@ func NewWebServeCmd() *cobra.Command {
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			h := &goserver.Handler{Sites: registeredSites, Upstream: fpmAddr}
+			h := &goserver.Handler{Sites: registeredSites, Upstream: fpmAddr, Proxy: goserver.SiteTarget}
 			served := &goserver.AccessFeed{Next: h, Target: config.AccessLogTarget()}
 			tlsSrv := &http.Server{Addr: listenTLS, Handler: served, TLSConfig: &tls.Config{GetCertificate: h.GetCertificate}}
 			errs := make(chan error, 2)

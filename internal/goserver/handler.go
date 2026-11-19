@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -23,6 +24,10 @@ type Handler struct {
 	Sites func() []config.Site
 	// Upstream is the host:port of the PHP-FPM serving a site.
 	Upstream func(config.Site) string
+	// Proxy returns where a site served by its own process (a container, a
+	// FrankenPHP worker, a dev server on the host) is proxied to; ok is false
+	// for a PHP-FPM site.
+	Proxy func(config.Site) (target *url.URL, ok bool)
 
 	certs certCache
 }
@@ -36,6 +41,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if site.Secured && r.TLS == nil {
 		http.Redirect(w, r, httpsURL(r), http.StatusFound)
 		return
+	}
+	if h.Proxy != nil {
+		if target, ok := h.Proxy(site); ok {
+			serveProxied(w, r, target)
+			return
+		}
 	}
 	h.servePHPSite(w, r, site)
 }

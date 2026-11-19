@@ -88,7 +88,7 @@ func TestConformance(t *testing.T) {
 		{goReady: true, name: "front controller", method: "GET", scheme: "http", host: "plain.test", path: "/some/route", status: 200, want: "conformance GET fpm-fcgi"},
 		{goReady: true, name: "php over https", method: "GET", scheme: "https", host: "secure.test", path: "/", status: 200, want: "conformance GET fpm-fcgi"},
 		{goReady: true, name: "secured redirects http", method: "GET", scheme: "http", host: "secure.test", path: "/x?y=1", status: 302, location: "https://secure.test/x?y=1"},
-		{name: "custom container proxied", method: "GET", scheme: "http", host: "custom.test", path: "/", status: 200, want: "Welcome to nginx"},
+		{goReady: true, name: "custom container proxied", method: "GET", scheme: "http", host: "custom.test", path: "/", status: 200, want: "Welcome to nginx"},
 		{name: "paused page", method: "GET", scheme: "http", host: "paused.test", path: "/", want: "conformance paused page"},
 		{goReady: true, name: "unknown host", method: "GET", scheme: "http", host: "nobody.test", path: "/", status: 404},
 	}
