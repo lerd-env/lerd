@@ -38,3 +38,33 @@ func ProcessTimeoutEnv() string {
 func PharPath() string {
 	return filepath.Join(config.BinDir(), "composer.phar")
 }
+
+// MemoryLimitEnv returns COMPOSER_MEMORY_LIMIT from the framework's cli_ini
+// memory_limit: Flex's auto-scripts start php themselves, out of reach of lerd's
+// -d, and forward only this. A non-empty host value wins.
+func MemoryLimitEnv(fw *config.Framework) []string {
+	if v := os.Getenv("COMPOSER_MEMORY_LIMIT"); v != "" {
+		return []string{"COMPOSER_MEMORY_LIMIT=" + v}
+	}
+	if fw == nil || config.ValidatePHPIni(fw.PHP.CLIIni) != nil {
+		return nil
+	}
+	if v := fw.PHP.CLIIni["memory_limit"]; v != "" {
+		return []string{"COMPOSER_MEMORY_LIMIT=" + v}
+	}
+	return nil
+}
+
+// Env returns the environment every composer run for the project at dir gets.
+func Env(dir string) []string {
+	return append([]string{ProcessTimeoutEnv()}, MemoryLimitEnv(frameworkForDir(dir))...)
+}
+
+func frameworkForDir(dir string) *config.Framework {
+	name, ok := config.DetectFrameworkForDir(dir)
+	if !ok {
+		return nil
+	}
+	fw, _ := config.GetFrameworkForDir(name, dir)
+	return fw
+}
