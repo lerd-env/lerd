@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -22,7 +20,7 @@ import (
 // and the vhost on disk.
 var (
 	wakeHoldPing   = activityping.Site
-	wakeHoldAsleep = siteVhostWaking
+	wakeHoldAsleep = webserver.SiteWaking
 	wakeHoldPoll   = 50 * time.Millisecond
 	wakeHoldMax    = 60 * time.Second
 	// wakeHoldRePing resends the wake: one sent while the watcher restarts, as
@@ -163,21 +161,4 @@ func replayToSite(w http.ResponseWriter, r *http.Request, host, uri, scheme stri
 		},
 	}
 	proxy.ServeHTTP(w, r)
-}
-
-// siteVhostWaking reports whether requests to the site still land in the wake
-// hold: its vhost still hands them here, or it has been restored but nginx has
-// not reloaded since. Redirecting before that reload bounces the client straight
-// back, once per poll, while every other site woken with it is restored.
-func siteVhostWaking(domain string) bool {
-	path := filepath.Join(config.NginxConfD(), domain+".conf")
-	st, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	data, err := os.ReadFile(path)
-	if err != nil || strings.Contains(string(data), webserver.WakeHoldPath) {
-		return err == nil
-	}
-	return !webserver.ServesVhostWrittenAt(st.ModTime())
 }

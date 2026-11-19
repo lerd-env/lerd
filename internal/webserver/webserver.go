@@ -59,6 +59,8 @@ type Backend interface {
 	ServedProfilerState() (on, ok bool)
 	// ApplyService serves a service's web UI on its own domain.
 	ApplyService(domain, upstreamHost string, upstreamPort int, ssl, cors bool) error
+	// SiteWaking reports whether the site's requests still go to the wake hold.
+	SiteWaking(domain string) bool
 }
 
 // DriftReport and Repair describe what Drift and Repair found.
@@ -100,6 +102,7 @@ func (nginxBackend) ApplyWakingSite(site config.Site) error      { return nginx.
 func (nginxBackend) Drift(site config.Site) (DriftReport, error) { return nginx.VhostDrift(site) }
 func (nginxBackend) RegenerateSite(site config.Site) error       { return nginx.RegenerateVhost(site) }
 func (nginxBackend) Repair() []Repair                            { return nginx.RepairVhosts() }
+func (nginxBackend) SiteWaking(domain string) bool               { return nginx.SiteWaking(domain) }
 func (nginxBackend) EnsureConfig() error                         { return nginx.EnsureNginxConfig() }
 func (nginxBackend) EnsureDefaultSite() error                    { return nginx.EnsureDefaultVhost() }
 func (nginxBackend) EnsureDashboard() error                      { return nginx.EnsureLerdVhost() }
@@ -167,6 +170,8 @@ func ServedProfilerState() (on, ok bool) { return current.ServedProfilerState() 
 func ApplyService(domain, upstreamHost string, upstreamPort int, ssl, cors bool) error {
 	return current.ApplyService(domain, upstreamHost, upstreamPort, ssl, cors)
 }
+
+func SiteWaking(domain string) bool { return current.SiteWaking(domain) }
 
 // Shared by every backend and by lerd's own pages; they live in nginx until a
 // second backend needs them, then move to a package both import.
