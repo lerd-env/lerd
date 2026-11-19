@@ -12,6 +12,7 @@ import (
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/siteops"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // sitesWithTLD returns the names of registered sites that have at least one
@@ -273,7 +274,7 @@ func removeStaleVhosts(oldDomain string) {
 	if oldDomain == "" {
 		return
 	}
-	_ = nginx.RemoveVhost(oldDomain)
+	_ = webserver.RemoveSite(oldDomain)
 }
 
 // removeStaleCerts deletes the .crt and .key for a site whose TLS state was

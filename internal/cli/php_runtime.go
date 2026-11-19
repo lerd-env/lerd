@@ -20,6 +20,7 @@ import (
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // NewPHPRuntimeCmd returns the `lerd php:runtime` command.
@@ -386,13 +387,7 @@ func regenerateProfilerVhost() {
 }
 
 func regenerateSiteVhost(s *config.Site) error {
-	if s.Secured {
-		if err := nginx.GenerateSSLVhost(*s, s.PHPVersion); err != nil {
-			return err
-		}
-		return nginx.InstallSSLVhost(s.PrimaryDomain())
-	}
-	return nginx.GenerateVhost(*s, s.PHPVersion)
+	return webserver.ApplySite(*s)
 }
 
 // envCommandFor builds the `lerd env` invocation for a site, rooted at its

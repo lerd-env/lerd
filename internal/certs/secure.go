@@ -8,6 +8,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // ErrDNSDisabled signals that the operation requires the lerd-managed DNS /
@@ -31,24 +32,10 @@ func SecureSite(site config.Site) error {
 		return fmt.Errorf("issuing certificate: %w", err)
 	}
 
-	if site.IsHostProxy() {
-		if err := nginx.GenerateHostProxySSLVhost(site); err != nil {
-			return fmt.Errorf("generating host-proxy SSL vhost: %w", err)
-		}
-	} else if site.IsCustomContainer() {
-		if err := nginx.GenerateCustomSSLVhost(site); err != nil {
-			return fmt.Errorf("generating custom SSL vhost: %w", err)
-		}
-	} else if site.IsFrankenPHP() {
-		if err := nginx.GenerateFrankenPHPSSLVhost(site); err != nil {
-			return fmt.Errorf("generating FrankenPHP SSL vhost: %w", err)
-		}
-	} else if err := nginx.GenerateSSLVhost(site, site.PHPVersion); err != nil {
-		return fmt.Errorf("generating SSL vhost: %w", err)
-	}
-
-	if err := nginx.InstallSSLVhost(site.PrimaryDomain()); err != nil {
-		return fmt.Errorf("installing SSL vhost: %w", err)
+	https := site
+	https.Secured = true
+	if err := webserver.ApplySite(https); err != nil {
+		return fmt.Errorf("writing SSL vhost: %w", err)
 	}
 
 	// Regenerate SSL vhosts and sync APP_URL + VITE_REVERB_* for worktrees.
@@ -132,20 +119,10 @@ func UnsecureSite(site config.Site) error {
 		return fmt.Errorf("removing SSL vhost: %w", err)
 	}
 
-	if site.IsHostProxy() {
-		if err := nginx.GenerateHostProxyVhost(site); err != nil {
-			return fmt.Errorf("generating host-proxy HTTP vhost: %w", err)
-		}
-	} else if site.IsCustomContainer() {
-		if err := nginx.GenerateCustomVhost(site); err != nil {
-			return fmt.Errorf("generating custom HTTP vhost: %w", err)
-		}
-	} else if site.IsFrankenPHP() {
-		if err := nginx.GenerateFrankenPHPVhost(site); err != nil {
-			return fmt.Errorf("generating FrankenPHP HTTP vhost: %w", err)
-		}
-	} else if err := nginx.GenerateVhost(site, site.PHPVersion); err != nil {
-		return fmt.Errorf("generating HTTP vhost: %w", err)
+	plain := site
+	plain.Secured = false
+	if err := webserver.ApplySite(plain); err != nil {
+		return fmt.Errorf("writing HTTP vhost: %w", err)
 	}
 
 	// Switch any worktree SSL vhosts back to plain HTTP and sync env.

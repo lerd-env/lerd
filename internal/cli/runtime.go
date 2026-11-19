@@ -8,6 +8,7 @@ import (
 	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
+	"github.com/geodro/lerd/internal/webserver"
 	"github.com/spf13/cobra"
 )
 
@@ -195,17 +196,8 @@ func switchToFPM(site *config.Site) error {
 	_ = config.SetProjectRuntime(site.Path, "", false)
 	siteops.SyncEnvAfterRuntimeSwitch(site, wasNative)
 
-	if site.Secured {
-		if err := nginx.GenerateSSLVhost(*site, site.PHPVersion); err != nil {
-			return fmt.Errorf("regenerating SSL vhost: %w", err)
-		}
-		if err := nginx.InstallSSLVhost(site.PrimaryDomain()); err != nil {
-			return fmt.Errorf("installing SSL vhost: %w", err)
-		}
-	} else {
-		if err := nginx.GenerateVhost(*site, site.PHPVersion); err != nil {
-			return fmt.Errorf("regenerating vhost: %w", err)
-		}
+	if err := webserver.ApplySite(*site); err != nil {
+		return fmt.Errorf("regenerating vhost: %w", err)
 	}
 	_ = nginx.Reload()
 
