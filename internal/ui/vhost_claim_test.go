@@ -155,6 +155,9 @@ func TestVhostClaimNextStaysOnTheVhost(t *testing.T) {
 		"https://evil.test": "/",
 		"":                  "/",
 		"/\\evil.example":   "/",
+		"/\t/evil.example":  "/",
+		"/\n/evil.example":  "/",
+		"/\r/evil.example":  "/",
 	} {
 		if got := safeClaimNext(in); got != want {
 			t.Errorf("safeClaimNext(%q) = %q, want %q", in, got, want)
