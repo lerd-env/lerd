@@ -17,6 +17,7 @@ BINARY="lerd"
 # with native desktop notifications), distributed as a Flatpak. Overridable so
 # the ref URL can move.
 DESKTOP_INSTALL_CMD="${LERD_DESKTOP_INSTALL_CMD:-flatpak install --user https://lerd.sh/lerd.flatpakref}"
+DESKTOP_APP_ID="sh.lerd.Desktop"
 # On Omarchy the Glance bar plugin shows lerd's state, so it replaces the tray.
 OMARCHY_PLUGIN_REPO="https://github.com/lerd-env/lerd-omarchy-glance"
 OMARCHY_PLUGIN_ID="sh.lerd.glance"
@@ -50,6 +51,8 @@ have_tty() { ( : >/dev/tty ) 2>/dev/null; }
 # _ans is seeded because `set -u` is on and a read that never ran leaves it
 # unset, which aborts the script instead of declining the question.
 ask()     { local _ans=""; echo -en "  ${BOLD}?${RESET}  $* [y/N] "; read -r _ans 2>/dev/null </dev/tty || true; [[ "$_ans" =~ ^[Yy]$ ]]; }
+ask_yes() { local _ans=""; echo -en "  ${BOLD}?${RESET}  $* [Y/n] "; read -r _ans 2>/dev/null </dev/tty || true; default_yes "$_ans"; }
+default_yes() { [[ -z "$1" || "$1" =~ ^[Yy]([Ee][Ss])?$ ]]; }
 star_note() {
   echo ""
   echo -e "  ${CYAN}★${RESET}  If lerd is useful to you, a GitHub star helps others find it:"
@@ -689,6 +692,13 @@ cmd_install() {
 
   add_to_path
 
+  # Offer the desktop app on a fresh Linux install. Asked before `lerd install`
+  # so the launcher it writes already knows the app is there and names itself
+  # to match. Not on WSL: the Flatpak cannot run there.
+  if [ -z "$was_installed" ] && [ "$(uname -s)" = "Linux" ] && ! is_wsl && have_tty; then
+    offer_desktop_app
+  fi
+
   echo ""
   info "Running 'lerd install' to complete setup ..."
   echo ""
@@ -705,13 +715,6 @@ cmd_install() {
     "${INSTALL_DIR}/${BINARY}" install ${dns_args[@]+"${dns_args[@]}"} </dev/tty
   else
     "${INSTALL_DIR}/${BINARY}" install ${dns_args[@]+"${dns_args[@]}"}
-  fi
-
-  # Offer the desktop app on a fresh Linux install. Its own installer does the
-  # download; here we only record the notification sink the user prefers. Not
-  # on WSL: the Flatpak cannot run there, the Windows browser is the desktop.
-  if [ -z "$was_installed" ] && [ "$(uname -s)" = "Linux" ] && ! is_wsl && have_tty; then
-    offer_desktop_app
   fi
 
   # Only a fresh install, so an update never re-adds a plugin the user removed.
@@ -759,24 +762,43 @@ is_wsl() {
   grep -qi microsoft "$OSRELEASE_FILE" 2>/dev/null
 }
 
-# offer_desktop_app asks whether to use the Lerd desktop app (which delivers
-# native desktop notifications) or stay on the browser, records the choice via
-# `lerd notify target`, and always prints the command to install the app.
+# offer_desktop_app installs the Lerd desktop app when flatpak is there and the
+# user wants it, which also selects native notifications, and only selects them
+# when the app is already installed. Otherwise it asks
+# whether notifications go native or stay in the browser.
 offer_desktop_app() {
   header "Desktop app"
-  info "Lerd has a desktop app: a dedicated window with native desktop notifications,"
-  info "no browser tab needed. The app installs separately with one command."
-  echo ""
-  if ask "Use the Lerd desktop app? (choose native notifications)"; then
+  if command -v flatpak >/dev/null 2>&1 && flatpak info "$DESKTOP_APP_ID" >/dev/null 2>&1; then
+    "${INSTALL_DIR}/${BINARY}" notify target native >/dev/null 2>&1 || true
+    success "Lerd desktop app found, native desktop notifications enabled"
+    return 0
+  fi
+  if command -v flatpak >/dev/null 2>&1; then
+    info "Lerd has a desktop app: a dedicated window with native desktop notifications,"
+    info "no browser tab needed."
+    echo ""
+    if ask_yes "Install the Lerd desktop app?"; then
+      # Split on purpose, the command is overridable as one string. stdin is the
+      # piped script under curl|bash, so flatpak must never read it.
+      # shellcheck disable=SC2086
+      if $DESKTOP_INSTALL_CMD -y </dev/null; then
+        "${INSTALL_DIR}/${BINARY}" notify target native >/dev/null 2>&1 || true
+        success "Lerd desktop app installed, native desktop notifications enabled"
+        return 0
+      fi
+      warn "Could not install the desktop app."
+    fi
+    info "Install it anytime with:"
+    echo -e "     ${CYAN}${DESKTOP_INSTALL_CMD}${RESET}"
+    echo ""
+  fi
+  if ask_yes "Use native desktop notifications?"; then
     "${INSTALL_DIR}/${BINARY}" notify target native >/dev/null 2>&1 || true
     success "Native desktop notifications enabled"
-    info "Install the desktop app with:"
   else
     "${INSTALL_DIR}/${BINARY}" notify target browser >/dev/null 2>&1 || true
     success "Using browser notifications"
-    info "Prefer a dedicated app later? Install it anytime with:"
   fi
-  echo -e "     ${CYAN}${DESKTOP_INSTALL_CMD}${RESET}"
 }
 
 # ── Update ───────────────────────────────────────────────────────────────────

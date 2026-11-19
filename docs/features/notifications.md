@@ -19,7 +19,7 @@ lerd notify target browser    # WebSocket + Web Push
 lerd notify status            # shows the current sink
 ```
 
-On a fresh Linux install the installer asks whether you want the [Lerd desktop app](#the-desktop-app) (which selects the native sink) or the browser, and remembers the answer. An unset target resolves to **browser**, so every upgrade, every non-interactive install, and every non-Linux install stays on the browser sink unchanged. The switcher and the native sink are offered only when a notification daemon is present (GNOME, KDE, Hyprland/mako, XFCE, dunst, …) or lerd runs inside WSL2; on macOS or a host without one, only browser delivery is shown.
+On a fresh Linux install with Flatpak available, the installer offers to install the [Lerd desktop app](#the-desktop-app), which also selects the native sink. If the app is already installed it selects the native sink without asking. Without Flatpak, or if you decline the app, it asks whether you want native desktop notifications or the browser instead. Both questions default to yes, and the answer is remembered. An unset target resolves to **browser**, so every upgrade, every non-interactive install, and every non-Linux install stays on the browser sink unchanged. The switcher and the native sink are offered only when a notification daemon is present (GNOME, KDE, Hyprland/mako, XFCE, dunst, …) or lerd runs inside WSL2; on macOS or a host without one, only browser delivery is shown.
 
 ## The desktop app
 

@@ -362,4 +362,4 @@ It ships for Linux as a Flatpak:
 flatpak install --user https://lerd.sh/lerd.flatpakref
 ```
 
-Update it with `flatpak update`. Once it is installed, `lerd dashboard` and the tray's **Open Dashboard** open the app instead of a browser tab, and clicking a native notification opens it through its `lerd://` scheme. The one-line installer also offers to set it up for you on Linux.
+Update it with `flatpak update`. Once it is installed, `lerd dashboard` and the tray's **Open Dashboard** open the app instead of a browser tab, and clicking a native notification opens it through its `lerd://` scheme. On a fresh Linux install with Flatpak available, the one-line installer offers to install it for you.
