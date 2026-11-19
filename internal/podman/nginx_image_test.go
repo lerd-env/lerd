@@ -75,14 +75,19 @@ func TestNginxUpdateAvailable_SeesARestartImmediately(t *testing.T) {
 // The background fetch is what notices a republished tag, so finishing it has
 // to wake the status broadcast; otherwise the update waits on an unrelated event.
 func TestNginxDigestRefreshAnnouncesItself(t *testing.T) {
-	prevFetch, prevHook := manifestDigestFn, onNginxDigestRefreshed
+	prevFetch := manifestDigestFn
 	t.Cleanup(func() {
 		nginxRefreshWG.Wait()
-		manifestDigestFn, onNginxDigestRefreshed = prevFetch, prevHook
+		manifestDigestFn = prevFetch
+		SetOnBackgroundRead(nil)
 	})
 	manifestDigestFn = func(string) (string, error) { return "sha256:new", nil }
 	done := make(chan struct{})
-	SetOnNginxDigestRefreshed(func() { close(done) })
+	SetOnBackgroundRead(func(unit string) {
+		if unit == "lerd-nginx" {
+			close(done)
+		}
+	})
 
 	scheduleNginxDigestRefresh("docker.io/library/nginx:alpine")
 	select {

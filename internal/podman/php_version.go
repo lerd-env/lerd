@@ -90,4 +90,11 @@ func probePHPVersion(version string) {
 	phpVerMu.Lock()
 	phpVerCache[version] = phpVerEntry{imageID: id, patch: patch}
 	phpVerMu.Unlock()
+	if cur.patch != patch {
+		announceBackgroundRead(fpmUnit(version))
+	}
+}
+
+func fpmUnit(version string) string {
+	return "lerd-php" + strings.ReplaceAll(version, ".", "") + "-fpm"
 }

@@ -202,8 +202,8 @@ func Start(currentVersion string) error {
 	// counters). Polling at 15s when a UI tab is focused / 60s otherwise
 	// trades off-up-to-15s latency for an order-of-magnitude CPU saving.
 	podman.Cache.SetOnChange(publisher.trigger)
-	podman.SetOnNginxDigestRefreshed(func() {
-		updates.dropFor("lerd-nginx")
+	podman.SetOnBackgroundRead(func(unit string) {
+		updates.dropFor(unit)
 		publishStatus()
 	})
 	go watchUpdates()
