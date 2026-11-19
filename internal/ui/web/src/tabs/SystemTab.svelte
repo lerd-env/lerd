@@ -75,7 +75,12 @@
     {/if}
 
     {#snippet nginxDot()}<StatusDot color={$status.nginx.running ? 'green' : 'gray'} />{/snippet}
-    <ListRow active={selected === 'nginx'} onclick={() => select('nginx')} leading={nginxDot}>{m.system_nginx()}</ListRow>
+    {#snippet nginxTrailing()}
+      {#if $status.nginx.update_available}
+        <span class="ml-auto text-xs font-medium text-yellow-600 dark:text-yellow-400">{m.system_lerd_updateTag()}</span>
+      {/if}
+    {/snippet}
+    <ListRow active={selected === 'nginx'} onclick={() => select('nginx')} leading={nginxDot} trailing={nginxTrailing}>{m.system_nginx()}</ListRow>
 
     {#if $phpVersions.length > 0}
       {@const phpSelected = selected === 'php' || selected.startsWith('php-')}

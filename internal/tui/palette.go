@@ -67,6 +67,7 @@ var paletteCommands = []string{
 	"logs",
 	"mcp",
 	"new",
+	"nginx update",
 	"node:install",
 	"node:remove",
 	"node:use",

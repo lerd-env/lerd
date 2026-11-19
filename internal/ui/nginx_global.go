@@ -90,6 +90,10 @@ func handleNginxRoutes(w http.ResponseWriter, r *http.Request) {
 		handleNginxConfigRestore(w, r)
 	case rest == "reset":
 		handleNginxConfigReset(w, r)
+	case rest == "update":
+		handleNginxUpdate(w, r)
+	case rest == "check":
+		handleNginxCheck(w, r)
 	default:
 		http.NotFound(w, r)
 	}

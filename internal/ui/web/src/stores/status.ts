@@ -19,7 +19,8 @@ export interface PHPStatus {
 
 export interface StatusResponse {
   dns: { ok: boolean; status?: 'ok' | 'degraded' | 'down'; vpn?: boolean; enabled: boolean; tld: string };
-  nginx: { running: boolean };
+  // update_available: lerd-nginx runs an older image than its tag now serves.
+  nginx: { running: boolean; update_available?: boolean };
   php_fpms: PHPStatus[];
   php_default: string;
   node_default: string;
@@ -164,6 +165,27 @@ export const allCoreRunning = derived(status, ($s): boolean => {
   // would not bring it back, so counting it made lerd look down forever.
   return Boolean(dnsState($s) !== 'down' && $s.nginx.running);
 });
+
+// updateNginx pulls the web server image and restarts nginx onto it when it
+// moved. updated is false when nginx already ran the newest image.
+export async function updateNginx(): Promise<{ ok: boolean; updated?: boolean; error?: string }> {
+  try {
+    const res = await apiFetch('/api/nginx/update', { method: 'POST' });
+    return await decodeJSONResult<{ ok: boolean; updated?: boolean; error?: string }>(res);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// checkNginxUpdate asks the registry again with the cache bypassed.
+export async function checkNginxUpdate(): Promise<{ ok: boolean; update_available?: boolean }> {
+  try {
+    const res = await apiFetch('/api/nginx/check', { method: 'POST' });
+    return await decodeJSONResult<{ ok: boolean; update_available?: boolean }>(res);
+  } catch {
+    return { ok: false };
+  }
+}
 
 // updateTool applies one managed host tool's pinned version. One tool per call:
 // a download whose checksum does not match is refused deliberately, and the card

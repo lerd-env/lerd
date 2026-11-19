@@ -206,35 +206,61 @@ func listTagsDockerHub(ref ImageRef) ([]TagInfo, error) {
 }
 
 func fetchDockerHubPage(url string) (*dockerHubResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+	var parsed dockerHubResponse
+	if err := getDockerHub(url, fetchTimeout, &parsed); err != nil {
+		return nil, err
+	}
+	return &parsed, nil
+}
+
+// fetchDockerHubTagDigest reads one tag's digest from the Hub API. An anonymous
+// manifest HEAD against the registry itself is refused, so this is the cheap
+// way to learn what a floating tag like nginx:alpine points at now.
+func fetchDockerHubTagDigest(ref ImageRef) (string, error) {
+	var tag dockerHubTagItem
+	url := fmt.Sprintf("https://hub.docker.com/v2/repositories/%s/tags/%s", ref.Repo, ref.Tag)
+	if err := getDockerHub(url, digestFetchTimeout, &tag); err != nil {
+		return "", err
+	}
+	digest := tag.Digest
+	if digest == "" && len(tag.Images) > 0 {
+		digest = tag.Images[0].Digest
+	}
+	if digest == "" {
+		return "", &UnreachableErr{Cause: fmt.Errorf("docker hub served no digest for %s:%s", ref.Repo, ref.Tag)}
+	}
+	return digest, nil
+}
+
+func getDockerHub(url string, timeout time.Duration, into any) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, &UnreachableErr{Cause: err}
+		return &UnreachableErr{Cause: err}
 	}
 	defer resp.Body.Close()
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized, resp.StatusCode == http.StatusForbidden:
-		return nil, &AuthRequiredErr{Registry: "docker.io"}
+		return &AuthRequiredErr{Registry: "docker.io"}
 	case resp.StatusCode == http.StatusNotFound:
-		return nil, &NotFoundErr{Repo: strings.TrimPrefix(url, "https://hub.docker.com/v2/repositories/")}
+		return &NotFoundErr{Repo: strings.TrimPrefix(url, "https://hub.docker.com/v2/repositories/")}
 	case resp.StatusCode == http.StatusTooManyRequests:
-		return nil, &UnreachableErr{Cause: fmt.Errorf("docker hub rate-limited (429)")}
+		return &UnreachableErr{Cause: fmt.Errorf("docker hub rate-limited (429)")}
 	case resp.StatusCode >= 500:
-		return nil, &UnreachableErr{Cause: fmt.Errorf("docker hub %d", resp.StatusCode)}
+		return &UnreachableErr{Cause: fmt.Errorf("docker hub %d", resp.StatusCode)}
 	case resp.StatusCode != http.StatusOK:
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return nil, fmt.Errorf("docker hub %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("docker hub %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-	var parsed dockerHubResponse
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 5<<20)).Decode(&parsed); err != nil {
-		return nil, &UnreachableErr{Cause: err}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 5<<20)).Decode(into); err != nil {
+		return &UnreachableErr{Cause: err}
 	}
-	return &parsed, nil
+	return nil
 }
 
 // ---- GHCR backend ----------------------------------------------------------

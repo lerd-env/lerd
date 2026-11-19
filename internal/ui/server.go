@@ -195,6 +195,7 @@ func Start(currentVersion string) error {
 	// counters). Polling at 15s when a UI tab is focused / 60s otherwise
 	// trades off-up-to-15s latency for an order-of-magnitude CPU saving.
 	podman.Cache.SetOnChange(publisher.trigger)
+	podman.SetOnNginxDigestRefreshed(publishStatus)
 
 	// Drop the cache to idle cadence whenever the desktop session is idle
 	// or locked, so a focused tab on an unattended laptop still saves
@@ -824,6 +825,9 @@ type DNSStatus struct {
 
 type ServiceCheck struct {
 	Running bool `json:"running"`
+	// UpdateAvailable is true when lerd-nginx runs an older image than its tag
+	// now serves. Read from caches, never from the network.
+	UpdateAvailable bool `json:"update_available,omitempty"`
 }
 
 type PHPStatus struct {
@@ -921,7 +925,7 @@ func buildStatus() StatusResponse {
 	}
 	return StatusResponse{
 		DNS:                   DNSStatus{OK: dnsStatus == dns.StatusOK, Status: string(dnsStatus), VPN: dns.VPNActive(), Enabled: dnsEnabled, TLD: tld},
-		Nginx:                 ServiceCheck{Running: nginxRunning},
+		Nginx:                 ServiceCheck{Running: nginxRunning, UpdateAvailable: nginxRunning && podman.NginxUpdateAvailable()},
 		PHPFPMs:               phpStatuses,
 		PHPDefault:            phpDefault,
 		NodeDefault:           nodeDefault,

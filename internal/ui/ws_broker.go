@@ -191,6 +191,7 @@ func runSnapshotInvalidator() {
 			case eventbus.KindStatus:
 				msg.Status = snapshots.status.fresh()
 				notifyOnPHPBaseUpdates(msg.Status)
+				notifyOnNginxUpdate(msg.Status)
 				notifyOnToolUpdates(msg.Status)
 			case eventbus.KindDumpsStatus:
 				msg.DumpsStatus = buildDumpsStatusJSON()

@@ -61,6 +61,10 @@ func (m *Model) quickActions() []quickAction {
 			})
 		}
 	}
+	add("Update nginx", "", func(m *Model) tea.Cmd {
+		m.setStatus("updating nginx…", 60*time.Second)
+		return tea.Sequence(runLerd("", "nginx", "update"), loadCmd())
+	})
 	add("Add a service preset", "", func(m *Model) tea.Cmd { m.openPaletteIn("", "service preset "); return nil })
 	add("Run a lerd command…", ":", func(m *Model) tea.Cmd { m.openPalette(); return nil })
 	return out

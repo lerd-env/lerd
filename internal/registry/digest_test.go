@@ -147,3 +147,28 @@ func TestManifestDigest_AnonymousRegistry(t *testing.T) {
 		t.Errorf("digest = %q, want sha256:bbb", got)
 	}
 }
+
+// Docker Hub answers an anonymous manifest HEAD with 401, so its digest comes
+// from the Hub tag endpoint, which serves the multi-arch index digest podman
+// records for a pulled tag.
+func TestManifestDigest_DockerHubTag(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/repositories/library/nginx/tags/alpine" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Write([]byte(`{"name":"alpine","digest":"sha256:bbb"}`)) //nolint:errcheck
+	}))
+	defer srv.Close()
+	withStubHTTP(t, srv)
+	withTempCacheDir(t)
+
+	got, err := ManifestDigest("docker.io/library/nginx:alpine")
+	if err != nil {
+		t.Fatalf("ManifestDigest: %v", err)
+	}
+	if got != "sha256:bbb" {
+		t.Errorf("digest = %q, want sha256:bbb", got)
+	}
+}

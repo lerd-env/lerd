@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
 	"github.com/spf13/cobra"
 )
@@ -51,15 +52,35 @@ func addNginxFlags(cmd *cobra.Command, branch *string, location *bool) {
 func NewNginxCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "nginx",
-		Short: "Show, edit, or reset a site's custom nginx override",
+		Short: "Show, edit, or reset a site's custom nginx override, or update nginx",
 		Long: "Manage the per-site nginx override included at the end of a site's\n" +
 			"server block (custom.d/{domain}.conf). Pass --location for the one\n" +
 			"included inside the block that serves the site, the only place a\n" +
 			"fastcgi_param or proxy_set_header override takes effect, and\n" +
 			"--branch to target a worktree's override instead of the main branch's.",
 	}
-	cmd.AddCommand(newNginxShowCmd(), newNginxEditCmd(), newNginxResetCmd())
+	cmd.AddCommand(newNginxShowCmd(), newNginxEditCmd(), newNginxResetCmd(), newNginxUpdateCmd())
 	return cmd
+}
+
+func newNginxUpdateCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "update",
+		Short: "Pull the newest nginx image and restart nginx onto it",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			updated, err := podman.UpdateNginx(cmd.OutOrStdout())
+			if err != nil {
+				return err
+			}
+			if updated {
+				fmt.Fprintln(cmd.OutOrStdout(), "Nginx restarted on the newest image.")
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), "Nginx already runs the newest image.")
+			}
+			return nil
+		},
+	}
 }
 
 func newNginxShowCmd() *cobra.Command {

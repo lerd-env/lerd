@@ -116,6 +116,9 @@ func InvalidateManifestDigest(image string) error {
 var digestGroup = newSingleflight()
 
 func fetchManifestDigest(ref ImageRef) (string, error) {
+	if ref.Registry == "docker.io" {
+		return fetchDockerHubTagDigest(ref)
+	}
 	url := "https://" + ref.Registry + "/v2/" + ref.Repo + "/manifests/" + ref.Tag
 	ctx, cancel := context.WithTimeout(context.Background(), digestFetchTimeout)
 	defer cancel()

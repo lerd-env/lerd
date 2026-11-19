@@ -327,3 +327,11 @@ func quickSelected(m *Model) string {
 	}
 	return matches[m.quickCursor].detail
 }
+
+// The web server image is updated like a service's, so the palette offers it
+// the same way.
+func TestPaletteOffersUpdateNginx(t *testing.T) {
+	if !strings.Contains(strings.Join(quickLabels(quickModel()), "\n"), "Update nginx") {
+		t.Error("palette missing Update nginx")
+	}
+}

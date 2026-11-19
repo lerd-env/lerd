@@ -811,9 +811,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	pullJobs := []BuildJob{
 		{
 			Label: "Pulling " + nginxImage,
-			Run: func(w io.Writer) error {
-				return podman.PullImageTo(nginxImage, w)
-			},
+			Run:   podman.PullNginxImage,
 		},
 	}
 	webServerPullPlan(nginxImage).Fill().Report(os.Stdout)
