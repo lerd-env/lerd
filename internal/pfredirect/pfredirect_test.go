@@ -1,6 +1,7 @@
 package pfredirect
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,5 +73,79 @@ func TestSudoersGrantsExactlyTheApplyCommand(t *testing.T) {
 	}
 	if strings.Count(got, "NOPASSWD") != 1 {
 		t.Errorf("Sudoers() must grant one command only: %q", got)
+	}
+}
+
+// The second command must match the sudoers grant, so the repair asks for a
+// password once at most.
+func TestRepairReloadsPfConfThenTheGrantedApply(t *testing.T) {
+	want := "sudo /sbin/pfctl -f /etc/pf.conf && sudo /sbin/pfctl -E -a com.apple/lerd -f /etc/pf.anchors/lerd"
+	if got := Repair(); got != want {
+		t.Errorf("Repair() = %q, want %q", got, want)
+	}
+}
+
+func TestEffectiveChecksEveryRedirectedPort(t *testing.T) {
+	prev := reaches
+	t.Cleanup(func() { reaches = prev })
+	var probed []int
+	reaches = func(from, to int) bool {
+		probed = append(probed, from)
+		return to == Target(from) && from != 443
+	}
+	useAnchor(t, "")
+	if !Effective() || len(probed) != 0 {
+		t.Errorf("without an anchor there is nothing to check, probed %v", probed)
+	}
+	useAnchor(t, Render([]int{80, 443}))
+	if Effective() {
+		t.Error("Effective() = true with 443 bypassing the redirect")
+	}
+}
+
+func freePort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	return ln.Addr().(*net.TCPAddr).Port
+}
+
+func listenOn(t *testing.T, port int) {
+	t.Helper()
+	ln, err := net.Listen("tcp", loopbackAddr(port))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+}
+
+// Without pf in a test, a port that is its own target stands in for a working
+// redirect, and a listener on the source port for gvproxy's wide bind.
+func TestLoopbackReachesOnlyWhenTheConnectionArrivesOnTheTarget(t *testing.T) {
+	from, to := freePort(t), freePort(t)
+	if !loopbackReaches(to, to) {
+		t.Error("a connection that arrives on the target must count")
+	}
+	if loopbackReaches(from, to) {
+		t.Error("nothing listens on the source port, so nothing was redirected")
+	}
+	listenOn(t, from)
+	if loopbackReaches(from, to) {
+		t.Error("an answer from a wide bind on the source port must not pass for the redirect")
+	}
+}
+
+func TestLoopbackReachesWithTheTargetHeldTrustsAnAnswer(t *testing.T) {
+	from, to := freePort(t), freePort(t)
+	listenOn(t, to)
+	if loopbackReaches(from, to) {
+		t.Error("nothing answers on the source port")
+	}
+	listenOn(t, from)
+	if !loopbackReaches(from, to) {
+		t.Error("with nginx holding the target, an answer on the source port counts")
 	}
 }

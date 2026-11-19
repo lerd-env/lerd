@@ -52,13 +52,20 @@ func Install(user string, writeFile WriteFunc) (moved bool, err error) {
 	return false, nil
 }
 
-// Apply loads the installed anchor without prompting. pf drops anchor rules
-// on reboot and on any `pfctl -f /etc/pf.conf`, so start re-applies it.
+// Apply loads the installed anchor without prompting, then checks loopback
+// traffic takes it. pf drops anchor rules on reboot and on any
+// `pfctl -f /etc/pf.conf`, so start re-applies it.
 func Apply() error {
 	if len(Redirected()) == 0 {
 		return nil
 	}
-	return runSudo(append([]string{"-n"}, ApplyArgs()...)...)
+	if err := runSudo(append([]string{"-n"}, ApplyArgs()...)...); err != nil {
+		return err
+	}
+	if !Effective() {
+		return ErrNotEffective
+	}
+	return nil
 }
 
 // Remove flushes the anchor and deletes its file and grant. pf itself stays enabled,
