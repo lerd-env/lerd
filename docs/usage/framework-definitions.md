@@ -280,6 +280,10 @@ detect:
   - file: symfony.lock
   - composer: symfony/framework-bundle
 
+# The framework this one is built on, whose rules its projects match too
+# (optional). Repeat it on the store index entry.
+based_on: symfony
+
 # Arguments lerd puts in front of a vendor/bin binary, keyed by its name (optional)
 vendor_bin_args:
   wp:
@@ -842,6 +846,8 @@ Detection order:
 3. **Framework store** (interactive): checks the store index and prompts to install, or fetches silently when `.lerd.yaml` specifies the framework name
 
 The first match wins. Detection rules are OR-based, any single matching rule is enough.
+
+A framework built on another one matches that one's rules as well: a Sulu project ships `symfony.lock` like any Symfony app. Such a definition declares `based_on: symfony`, on the YAML and on its entry in the store's `index.json`, since the index is all lerd has when the definition is not on disk yet. When both match, the one naming the other in `based_on` wins, whatever order they were found in. A binary that predates the key ignores it and keeps picking whichever matched first.
 
 ## Document root detection
 
