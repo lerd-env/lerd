@@ -126,6 +126,7 @@ func main() {
 	root.AddCommand(cli.NewInstallCmd())
 	root.AddCommand(cli.NewBootstrapCmd())
 	root.AddCommand(cli.NewPostUpgradeCmd())
+	root.AddCommand(cli.NewWebServeCmd())
 	root.AddCommand(cli.NewStartCmd())
 	root.AddCommand(cli.NewStopCmd())
 	root.AddCommand(cli.NewQuitCmd())

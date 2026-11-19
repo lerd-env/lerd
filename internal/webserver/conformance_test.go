@@ -59,11 +59,14 @@ func TestConformance(t *testing.T) {
 		if s.Secured {
 			writeCert(t, s.PrimaryDomain())
 		}
+		must(config.AddSite(s))
 		must(ApplySite(s))
 	}
 	must(os.MkdirAll(config.PausedDir(), 0o755))
 	must(os.WriteFile(filepath.Join(config.PausedDir(), "paused.html"), []byte("conformance paused page"), 0o644))
-	must(ApplyPausedSite(config.Site{Name: "paused", Domains: []string{"paused.test"}, Path: site}))
+	paused := config.Site{Name: "paused", Domains: []string{"paused.test"}, Path: site, Paused: true}
+	must(config.AddSite(paused))
+	must(ApplyPausedSite(paused))
 
 	h := startHarness(t, tmp, site)
 
@@ -71,18 +74,22 @@ func TestConformance(t *testing.T) {
 		name, method, scheme, host, path, body string
 		status                                 int
 		want, location                         string
+		goReady                                bool
 	}{
-		{name: "php over http", method: "GET", scheme: "http", host: "plain.test", path: "/", status: 200, want: "conformance GET fpm-fcgi"},
-		{name: "post body reaches php", method: "POST", scheme: "http", host: "plain.test", path: "/", body: "hello", status: 200, want: "conformance POST fpm-fcgi hello"},
-		{name: "front controller", method: "GET", scheme: "http", host: "plain.test", path: "/some/route", status: 200, want: "conformance GET fpm-fcgi"},
+		{goReady: true, name: "php over http", method: "GET", scheme: "http", host: "plain.test", path: "/", status: 200, want: "conformance GET fpm-fcgi"},
+		{goReady: true, name: "post body reaches php", method: "POST", scheme: "http", host: "plain.test", path: "/", body: "hello", status: 200, want: "conformance POST fpm-fcgi hello"},
+		{goReady: true, name: "front controller", method: "GET", scheme: "http", host: "plain.test", path: "/some/route", status: 200, want: "conformance GET fpm-fcgi"},
 		{name: "php over https", method: "GET", scheme: "https", host: "secure.test", path: "/", status: 200, want: "conformance GET fpm-fcgi"},
 		{name: "secured redirects http", method: "GET", scheme: "http", host: "secure.test", path: "/x?y=1", status: 302, location: "https://secure.test/x?y=1"},
 		{name: "custom container proxied", method: "GET", scheme: "http", host: "custom.test", path: "/", status: 200, want: "Welcome to nginx"},
 		{name: "paused page", method: "GET", scheme: "http", host: "paused.test", path: "/", want: "conformance paused page"},
-		{name: "unknown host", method: "GET", scheme: "http", host: "nobody.test", path: "/", status: 404},
+		{goReady: true, name: "unknown host", method: "GET", scheme: "http", host: "nobody.test", path: "/", status: 404},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			if h.goServer && !c.goReady {
+				t.Skip("not served by the Go web server yet")
+			}
 			status, body, location := h.do(t, c.method, c.scheme, c.host, c.path, c.body)
 			if c.status != 0 && status != c.status {
 				t.Errorf("status %d, want %d; body %.200q", status, c.status, body)
@@ -140,7 +147,10 @@ func writeCert(t *testing.T, domain string) {
 	write(domain+".key", "EC PRIVATE KEY", kb)
 }
 
-type harness struct{ http, https string }
+type harness struct {
+	http, https string
+	goServer    bool
+}
 
 var podmanEnv []string
 
@@ -186,22 +196,37 @@ func startHarness(t *testing.T, tmp, site string) harness {
 		"-v", site+":"+site+":ro", "localhost/lerd-php84-fpm:local", "php-fpm", "-F", "-R")
 	podman("run", "-d", "--name", id+"-custom", "--network", id, "--network-alias", "lerd-custom-custom", noLabel,
 		"docker.io/library/nginx:alpine")
-	nginxDir := config.NginxDir()
-	podman("run", "-d", "--name", id+"-nginx", "--network", id, noLabel,
-		"-p", "127.0.0.1::80", "-p", "127.0.0.1::443",
-		"-v", conf+":/etc/nginx/nginx.conf:ro",
-		"-v", filepath.Join(nginxDir, "conf.d")+":/etc/nginx/conf.d:ro",
-		"-v", filepath.Join(nginxDir, "custom.d")+":/etc/nginx/custom.d:ro",
-		"-v", filepath.Join(nginxDir, "http.d")+":/etc/nginx/http.d:ro",
-		"-v", filepath.Join(config.CertsDir(), "sites")+":/etc/nginx/certs:ro",
-		"-v", tmp+":"+tmp+":ro",
-		"docker.io/library/nginx:alpine")
+	// LERD_CONFORMANCE_BACKEND=go runs lerd's own server, from the static
+	// binary in LERD_BIN, where nginx would otherwise be.
+	goServer := os.Getenv("LERD_CONFORMANCE_BACKEND") == "go"
+	if goServer {
+		bin := os.Getenv("LERD_BIN")
+		if bin == "" {
+			t.Fatal("LERD_CONFORMANCE_BACKEND=go needs LERD_BIN, a static lerd binary")
+		}
+		podman("run", "-d", "--name", id+"-nginx", "--network", id, noLabel,
+			"-p", "127.0.0.1::80", "-p", "127.0.0.1::443",
+			"-e", "XDG_DATA_HOME="+tmp, "-e", "XDG_CONFIG_HOME="+tmp,
+			"-v", bin+":/usr/local/bin/lerd:ro", "-v", tmp+":"+tmp+":ro",
+			"--entrypoint", "/usr/local/bin/lerd", "docker.io/library/nginx:alpine", "web-serve")
+	} else {
+		nginxDir := config.NginxDir()
+		podman("run", "-d", "--name", id+"-nginx", "--network", id, noLabel,
+			"-p", "127.0.0.1::80", "-p", "127.0.0.1::443",
+			"-v", conf+":/etc/nginx/nginx.conf:ro",
+			"-v", filepath.Join(nginxDir, "conf.d")+":/etc/nginx/conf.d:ro",
+			"-v", filepath.Join(nginxDir, "custom.d")+":/etc/nginx/custom.d:ro",
+			"-v", filepath.Join(nginxDir, "http.d")+":/etc/nginx/http.d:ro",
+			"-v", filepath.Join(config.CertsDir(), "sites")+":/etc/nginx/certs:ro",
+			"-v", tmp+":"+tmp+":ro",
+			"docker.io/library/nginx:alpine")
+	}
 	port := func(p string) string {
 		out := podman("port", id+"-nginx", p)
 		_, port, _ := net.SplitHostPort(strings.Fields(out)[0])
 		return port
 	}
-	h := harness{http: port("80"), https: port("443")}
+	h := harness{http: port("80"), https: port("443"), goServer: goServer}
 	deadline := time.Now().Add(20 * time.Second)
 	for {
 		if c, err := net.DialTimeout("tcp", "127.0.0.1:"+h.http, time.Second); err == nil {
