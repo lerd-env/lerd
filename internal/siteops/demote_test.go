@@ -26,7 +26,7 @@ func (r *recordingLifecycle) UnitStatus(string) (string, error) { return "inacti
 func (r *recordingLifecycle) AllUnitStates() map[string]string  { return map[string]string{} }
 
 // fakePodmanOnPath drops a no-op `podman` binary early on PATH so calls that
-// shell out (nginx.Reload runs `podman exec lerd-nginx ...`) succeed.
+// shell out (webserver.Reload runs `podman exec lerd-nginx ...`) succeed.
 func fakePodmanOnPath(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()

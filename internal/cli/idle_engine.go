@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/nginx"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	"github.com/geodro/lerd/internal/siteinfo"
 	"github.com/geodro/lerd/internal/siteops"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // unitStatesOKFn snapshots every lerd-* unit's state plus a trust flag; a var so
@@ -161,7 +161,7 @@ func swapHostProxyVhostToWaking(site *config.Site, suspended []string) {
 		fmt.Printf("[WARN] idle-suspend waking vhost %s: %v\n", site.Name, err)
 		return
 	}
-	nginx.ReloadOrWarn("")
+	webserver.ReloadOrWarn("")
 }
 
 // restoreHostProxyVhostAfterIdle restores a host-proxy site's proxy vhost after
@@ -185,7 +185,7 @@ func restoreHostProxyVhostAfterIdle(site *config.Site, workers []string) {
 		fmt.Printf("[WARN] idle-resume host-proxy vhost %s: %v\n", site.Name, err)
 		return
 	}
-	nginx.ReloadOrWarn("")
+	webserver.ReloadOrWarn("")
 }
 
 // hostProxyResumeWaitPort returns the host port idle-resume waits on before

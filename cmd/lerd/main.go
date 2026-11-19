@@ -583,7 +583,7 @@ func newWatchCmd() *cobra.Command {
 					},
 					func(sitePath, worktreeName string) {
 						if syncWorktree(sitePath, worktreeName, "added", false) {
-							if err := nginx.Reload(); err != nil {
+							if err := webserver.Reload(); err != nil {
 								fmt.Printf("[WARN] nginx reload: %v\n", err)
 							}
 						}
@@ -594,7 +594,7 @@ func newWatchCmd() *cobra.Command {
 					},
 					func(sitePath, worktreeName string) {
 						if syncWorktree(sitePath, worktreeName, "changed", true) {
-							if err := nginx.Reload(); err != nil {
+							if err := webserver.Reload(); err != nil {
 								fmt.Printf("[WARN] nginx reload: %v\n", err)
 							}
 							eventbus.Default.Publish(eventbus.KindSites)
@@ -622,7 +622,7 @@ func newWatchCmd() *cobra.Command {
 							}
 						}
 						if cleanupWorktreeVhosts(site) {
-							if err := nginx.Reload(); err != nil {
+							if err := webserver.Reload(); err != nil {
 								fmt.Printf("[WARN] nginx reload: %v\n", err)
 							}
 						}
@@ -780,7 +780,7 @@ func newWatchCmd() *cobra.Command {
 									siteChanged = true
 									if !site.Paused {
 										_ = webserver.ApplySite(*site)
-										if err := nginx.Reload(); err != nil {
+										if err := webserver.Reload(); err != nil {
 											fmt.Printf("[WARN] nginx reload after php version change for %s: %v\n", site.Name, err)
 										}
 									}
@@ -831,7 +831,7 @@ func newWatchCmd() *cobra.Command {
 				if err != nil {
 					fmt.Printf("[WARN] registering %s: %v\n", projectPath, err)
 				} else if registered {
-					if err := nginx.Reload(); err != nil {
+					if err := webserver.Reload(); err != nil {
 						fmt.Printf("[WARN] nginx reload: %v\n", err)
 					}
 					eventbus.Default.Publish(eventbus.KindSites)
@@ -945,7 +945,7 @@ func bootScan(cfg *config.GlobalConfig) {
 	}
 
 	if reloadNeeded {
-		if err := nginx.Reload(); err != nil {
+		if err := webserver.Reload(); err != nil {
 			fmt.Printf("[WARN] nginx reload: %v\n", err)
 		}
 	}

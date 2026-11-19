@@ -4,15 +4,15 @@ import (
 	"fmt"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // Indirection points so ApplyDomainChange can be driven without podman or nginx.
 var (
 	writeHostsFn  = podman.WriteContainerHosts
-	reloadNginxFn = nginx.ReloadAndSettle
+	reloadNginxFn = webserver.ReloadAndSettle
 	syncEnvFn     = siteops.SyncEnvIfPrimaryChanged
 )
 

@@ -14,6 +14,7 @@ import (
 	"github.com/geodro/lerd/internal/nginx"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/siteops"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // SpxUIURL is the standalone SPX profiler web UI, served by the
@@ -24,7 +25,7 @@ const SpxUIURL = "http://profiler.localhost/?SPX_UI_URI=/"
 // nginxReloadFn is the nginx reload hook, and servedStateFn the readiness probe.
 // Both are swapped out in tests.
 var (
-	nginxReloadFn = nginx.Reload
+	nginxReloadFn = webserver.Reload
 	servedStateFn = nginx.ServedProfilerState
 )
 

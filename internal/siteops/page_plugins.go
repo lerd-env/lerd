@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/plugins"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // pageVhostsFn rewrites every vhost serving a site, its worktrees included,
@@ -18,7 +18,7 @@ var (
 		}
 		return RegenerateSiteVhost(&s, s.PrimaryDomain())
 	}
-	pageReloadFn = nginx.ReloadAndSettle
+	pageReloadFn = webserver.ReloadAndSettle
 )
 
 // SetPagePlugin switches a plugin's page script on or off for a site's pages

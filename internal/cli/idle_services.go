@@ -15,6 +15,7 @@ import (
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/siteops"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // The service operations idle-suspend drives, vars so tests can stand in for
@@ -26,7 +27,7 @@ var (
 	idleSitesUsing           = config.SitesUsingService
 	idleSwapToWaking         = swapSiteToWaking
 	idleRestoreVhost         = func(s *config.Site) error { return siteops.RegenerateSiteVhost(s, s.PrimaryDomain()) }
-	idleReloadNginx          = func() { nginx.ReloadOrWarn("") }
+	idleReloadNginx          = func() { webserver.ReloadOrWarn("") }
 	idleDependentsOf         = serviceops.DependentsOf
 	idleAdminToolsFor        = serviceops.AdminToolsFor
 	idleDiscoveringConsumers = serviceops.DiscoveringConsumers

@@ -8,14 +8,15 @@ import (
 	"github.com/geodro/lerd/internal/cfgedit"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // NginxTestFn / NginxReloadFn are indirections so tests can stub the
 // podman-bound `nginx -t` and reload. The global-nginx editor reuses these so
 // site and global saves share one validator/reload pair. Defaults are real.
 var (
-	NginxTestFn   = nginx.Test
-	NginxReloadFn = nginx.Reload
+	NginxTestFn   = webserver.Test
+	NginxReloadFn = webserver.Reload
 )
 
 // nginxSiteTemplate seeds the editor when no override exists yet. Everything

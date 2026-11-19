@@ -296,7 +296,7 @@ func TestCustomContainer_NestJS_UnlinkCleanup(t *testing.T) {
 	podman.UnitLifecycle = &noopLifecycle{}
 	t.Cleanup(func() { podman.UnitLifecycle = origStopUnit })
 
-	// We can't call the full UnlinkSiteCore because it calls nginx.Reload,
+	// We can't call the full UnlinkSiteCore because it calls webserver.Reload,
 	// podman.WriteContainerHosts, etc. But we can verify the pieces.
 
 	// Verify the site is removed from registry.

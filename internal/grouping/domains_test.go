@@ -89,7 +89,7 @@ func TestApplyDomainChange_settlesTheReload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(src), "reloadNginxFn = nginx.ReloadAndSettle\n") {
-		t.Error("ApplyDomainChange must reload through nginx.ReloadAndSettle")
+	if !strings.Contains(string(src), "reloadNginxFn = webserver.ReloadAndSettle\n") {
+		t.Error("ApplyDomainChange must reload through webserver.ReloadAndSettle")
 	}
 }

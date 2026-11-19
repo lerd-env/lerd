@@ -98,7 +98,7 @@ func TestSetSecured_securingCallsSecureSiteAndFlipsFlag(t *testing.T) {
 		t.Errorf("certs.UnsecureSite calls = %d, want 0", stubs.unsecureCallCount)
 	}
 	if stubs.reloadCallCount != 1 {
-		t.Errorf("nginx.Reload calls = %d, want 1", stubs.reloadCallCount)
+		t.Errorf("webserver.Reload calls = %d, want 1", stubs.reloadCallCount)
 	}
 	if !site.Secured {
 		t.Errorf("site.Secured = false after secure, want true")
@@ -236,7 +236,7 @@ func TestSetSecured_skipsNotificationsAndAbortsOnCertError(t *testing.T) {
 		t.Errorf("daemon notifications fired after cert failure: %v", stubs.notifications)
 	}
 	if stubs.reloadCallCount != 0 {
-		t.Errorf("nginx.Reload should not run after cert failure")
+		t.Errorf("webserver.Reload should not run after cert failure")
 	}
 }
 
@@ -299,7 +299,7 @@ func TestRenewCert_reissuesSecuredSiteAndReloads(t *testing.T) {
 		t.Errorf("reissue calls = %d, want 1", stubs.reissueCallCount)
 	}
 	if stubs.reloadCallCount != 1 {
-		t.Errorf("nginx.Reload calls = %d, want 1", stubs.reloadCallCount)
+		t.Errorf("webserver.Reload calls = %d, want 1", stubs.reloadCallCount)
 	}
 }
 
@@ -315,7 +315,7 @@ func TestRenewCert_refusesUnsecuredSite(t *testing.T) {
 		t.Errorf("reissue ran on an unsecured site (calls = %d)", stubs.reissueCallCount)
 	}
 	if stubs.reloadCallCount != 0 {
-		t.Errorf("nginx.Reload ran on an unsecured site (calls = %d)", stubs.reloadCallCount)
+		t.Errorf("webserver.Reload ran on an unsecured site (calls = %d)", stubs.reloadCallCount)
 	}
 }
 
@@ -328,7 +328,7 @@ func TestRenewCert_abortsOnReissueError(t *testing.T) {
 		t.Fatalf("RenewCert err = %v, want mkcert boom", err)
 	}
 	if stubs.reloadCallCount != 0 {
-		t.Errorf("nginx.Reload should not run after a reissue failure (calls = %d)", stubs.reloadCallCount)
+		t.Errorf("webserver.Reload should not run after a reissue failure (calls = %d)", stubs.reloadCallCount)
 	}
 }
 

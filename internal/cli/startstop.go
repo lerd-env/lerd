@@ -27,6 +27,7 @@ import (
 	"github.com/geodro/lerd/internal/services"
 	"github.com/geodro/lerd/internal/shims"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
+	"github.com/geodro/lerd/internal/webserver"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -684,7 +685,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 	// Reload nginx if it is already running so regenerated base vhosts (the
 	// dashboard and profiler vhosts) take effect without a full restart.
 	if running, _ := podman.ContainerRunning("lerd-nginx"); running {
-		_ = nginx.Reload()
+		_ = webserver.Reload()
 	}
 
 	// Phase 1: start all infrastructure (containers, FPM, custom containers,

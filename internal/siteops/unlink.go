@@ -8,7 +8,6 @@ import (
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/idle"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/reqstats"
@@ -129,7 +128,7 @@ func TeardownSite(site *config.Site, parkedDirs []string) {
 func FinishSiteRemoval() error {
 	_ = podman.WriteContainerHosts()
 	_ = podman.RewriteFPMQuadlets()
-	return nginx.ReloadAndSettle()
+	return webserver.ReloadAndSettle()
 }
 
 // forgetSiteState drops the per-site request-timing and idle state the watcher

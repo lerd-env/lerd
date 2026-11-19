@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // groupSetup stubs the cert/nginx/daemon side effects and forces DNS on, so the
@@ -192,7 +192,7 @@ func TestEnforceGroupSecondaries_continuesPastFailure(t *testing.T) {
 // secondary counts as repaired rather than failed.
 func TestEnforceGroupSecondaries_toleratesStoppedNginx(t *testing.T) {
 	stubs := groupSetup(t)
-	stubs.reloadErr = nginx.ErrNotRunning
+	stubs.reloadErr = webserver.ErrNotRunning
 	mustAdd(t, mainSite("astrolov", true))
 	mustAdd(t, secondarySite("astrolov-2", "astrolov", "blog", false))
 

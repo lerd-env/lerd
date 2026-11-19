@@ -113,7 +113,7 @@ func PauseSite(name string) error {
 
 	pauseWorktrees(site)
 
-	nginx.ReloadOrWarn("")
+	webserver.ReloadOrWarn("")
 
 	feedback.Start("pausing " + name).OK(feedback.Val(site.PrimaryDomain()))
 
@@ -244,7 +244,7 @@ func UnpauseSite(name string) error {
 	// unpauseHostProxyWorktrees above.
 	restartWorktreeWorkers(site, phpVersion)
 
-	nginx.ReloadOrWarn("")
+	webserver.ReloadOrWarn("")
 
 	startServicesForSite(site.Path)
 

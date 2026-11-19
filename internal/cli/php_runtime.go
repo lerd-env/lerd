@@ -238,7 +238,7 @@ func ApplyPHPRuntime(mode string) error {
 	// site answers 502 while the switch reports success. One unloadable
 	// certificate anywhere is enough to cause it, so say so rather than
 	// swallowing it.
-	if err := nginx.Reload(); err != nil {
+	if err := webserver.Reload(); err != nil {
 		feedback.Warn("nginx did not reload (%v); it is still serving the previous runtime, so sites will answer 502 until 'nginx -t' passes", err)
 	}
 
