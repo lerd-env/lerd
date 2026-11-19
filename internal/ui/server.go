@@ -1838,7 +1838,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 	// can show an "→ v8.4.3" badge. Stopped services also run the check so the
 	// user can pull a newer image without first starting the unit; the registry
 	// layer's 6h disk cache absorbs repeated lookups.
-	if avail, err := serviceops.CheckUpdateAvailable(name); err == nil && avail != nil {
+	if avail := serviceUpdate(name); avail != nil {
 		resp.UpdateStrategy = avail.Strategy
 		resp.UpdateAvailable = avail.Available
 		resp.LatestVersion = avail.LatestTag
@@ -2645,9 +2645,10 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 			err   error
 		)
 		if r.Method == http.MethodPost {
-			avail, err = serviceops.RefreshUpdateAvailability(name)
+			avail, err = refreshServiceUpdateFn(name)
+			updates.dropFor("lerd-" + name)
 		} else {
-			avail, err = serviceops.CheckUpdateAvailable(name)
+			avail, err = checkServiceUpdateFn(name)
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
