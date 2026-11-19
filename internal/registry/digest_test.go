@@ -147,3 +147,65 @@ func TestManifestDigest_AnonymousRegistry(t *testing.T) {
 		t.Errorf("digest = %q, want sha256:bbb", got)
 	}
 }
+
+// dockerHubRegistry answers like Docker Hub: an anonymous token, then a
+// manifest HEAD that needs it. down makes the HEAD fail.
+func dockerHubRegistry(t *testing.T, digest string, down *bool) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/token":
+			if r.URL.Query().Get("service") != "registry.docker.io" {
+				t.Errorf("token asked for service %q", r.URL.Query().Get("service"))
+			}
+			w.Write([]byte(`{"token":"anon"}`)) //nolint:errcheck
+		case r.URL.Path == "/v2/library/nginx/manifests/alpine":
+			if r.Method != http.MethodHead || r.Header.Get("Authorization") != "Bearer anon" {
+				t.Errorf("want an authorised HEAD, got %s with %q", r.Method, r.Header.Get("Authorization"))
+			}
+			if down != nil && *down {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Docker-Content-Digest", digest)
+		default:
+			t.Errorf("unexpected path %q", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+}
+
+// The digest comes from the registry podman pulls from, so it is the index
+// digest podman records, never one platform's manifest.
+func TestManifestDigest_DockerHubTokenFlow(t *testing.T) {
+	srv := dockerHubRegistry(t, "sha256:index", nil)
+	defer srv.Close()
+	withStubHTTP(t, srv)
+	withTempCacheDir(t)
+
+	got, err := ManifestDigest("docker.io/library/nginx:alpine")
+	if err != nil || got != "sha256:index" {
+		t.Errorf("ManifestDigest = %q, %v, want sha256:index", got, err)
+	}
+}
+
+// A manual check that cannot reach the registry must not erase the digest a
+// previous fetch learned: the update it showed is still pending.
+func TestRefreshManifestDigest_FailureKeepsTheKnownDigest(t *testing.T) {
+	down := false
+	srv := dockerHubRegistry(t, "sha256:known", &down)
+	defer srv.Close()
+	withStubHTTP(t, srv)
+	withTempCacheDir(t)
+
+	if _, err := ManifestDigest("docker.io/library/nginx:alpine"); err != nil {
+		t.Fatalf("first fetch: %v", err)
+	}
+	down = true
+	if _, err := RefreshManifestDigest("docker.io/library/nginx:alpine"); err == nil {
+		t.Fatal("a refused refresh must still report its error")
+	}
+	if got, ok := CachedManifestDigest("docker.io/library/nginx:alpine"); !ok || got != "sha256:known" {
+		t.Errorf("cached = %q, %v after a failed refresh, want sha256:known kept", got, ok)
+	}
+}

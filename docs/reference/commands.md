@@ -99,6 +99,7 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd nginx show [site]` | Print the site's custom nginx override; `--path` prints the file path instead of its content |
 | `lerd nginx edit [site]` | Open the override in `$EDITOR`, then validate it with `nginx -t` and reload on save |
 | `lerd nginx reset [site]` | Delete the override and reload nginx; the backups are kept |
+| `lerd nginx update` | Pull the newest `nginx:alpine` image and restart nginx onto it when it moved; `lerd install` and `lerd update` do the same |
 | `lerd nginx … --location` | Target the override included inside the block that serves the site instead of the one at the end of the server block, which is the only place a `fastcgi_param` or `proxy_set_header` override takes effect. `--branch <name>` targets a worktree's override on all three. See [Nginx overrides](../usage/nginx-overrides.md) |
 | `lerd group add <main> <label>` | Group the current site under `<main>` (name or domain) at `<label>.<main-domain>`; add `--share-db` to share the main's database. See [Site Groups](../usage/site-groups.md) |
 | `lerd group label <label>` | Change the current secondary's subdomain label |

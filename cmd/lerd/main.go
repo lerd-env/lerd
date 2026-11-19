@@ -17,6 +17,7 @@ import (
 
 	"bytes"
 	"net/http"
+	"net/url"
 
 	"github.com/geodro/lerd/internal/activityping"
 	"github.com/geodro/lerd/internal/certs"
@@ -38,6 +39,7 @@ import (
 	"github.com/geodro/lerd/internal/siteops"
 	"github.com/geodro/lerd/internal/store"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
+	"github.com/geodro/lerd/internal/tools"
 	"github.com/geodro/lerd/internal/ui"
 	"github.com/geodro/lerd/internal/version"
 	"github.com/geodro/lerd/internal/watcher"
@@ -51,9 +53,9 @@ import (
 // socket. 500ms is more than enough for a loopback round-trip and is barely
 // perceptible. If lerd-ui isn't running the POST fails fast and the CLI
 // command still succeeds.
-func notifyLerdUI(_ string) {
+func notifyLerdUI(unit string) {
 	client := &http.Client{Timeout: 500 * time.Millisecond}
-	req, err := http.NewRequest(http.MethodPost, "http://127.0.0.1:7073/api/internal/notify", bytes.NewReader(nil))
+	req, err := http.NewRequest(http.MethodPost, "http://127.0.0.1:7073/api/internal/notify?unit="+url.QueryEscape(unit), bytes.NewReader(nil))
 	if err != nil {
 		return
 	}
@@ -73,6 +75,9 @@ func main() {
 	// ui.Start reassigns this in its own process for a direct in-process
 	// publish; in the CLI/MCP processes we HTTP-POST to the dashboard.
 	podman.AfterUnitChange = notifyLerdUI
+	// A tool install restarts nothing, so it says so itself; no unit means every
+	// cached update answer in lerd-ui is dropped.
+	tools.OnStampWritten = func() { notifyLerdUI("") }
 
 	// A PHP image (re)build orphans the previous image. Flag it here and reclaim
 	// once when the command finishes, so a multi-version install/update coalesces

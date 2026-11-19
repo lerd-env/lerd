@@ -184,7 +184,14 @@ func Start(currentVersion string) error {
 		eventbus.Default.Publish(eventbus.KindStatus)
 	})
 
-	podman.AfterUnitChange = func(string) { publisher.trigger() }
+	podman.AfterUnitChange = func(unit string) {
+		updates.dropFor(unit)
+		publisher.trigger()
+	}
+	tools.OnStampWritten = func() {
+		updates.dropFor("")
+		publisher.trigger()
+	}
 
 	// External state changes (container crash, systemctl outside lerd-ui,
 	// timer firings) are caught by the periodic podman cache poll instead
@@ -195,6 +202,11 @@ func Start(currentVersion string) error {
 	// counters). Polling at 15s when a UI tab is focused / 60s otherwise
 	// trades off-up-to-15s latency for an order-of-magnitude CPU saving.
 	podman.Cache.SetOnChange(publisher.trigger)
+	podman.SetOnBackgroundRead(func(unit string) {
+		updates.dropFor(unit)
+		publishStatus()
+	})
+	go watchUpdates()
 
 	// Drop the cache to idle cadence whenever the desktop session is idle
 	// or locked, so a focused tab on an unattended laptop still saves
@@ -266,6 +278,9 @@ func Start(currentVersion string) error {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
+		// The CLI names the unit it changed, or none for a change it cannot pin
+		// to one (a tool update), which drops every cached update answer.
+		updates.dropFor(r.URL.Query().Get("unit"))
 		publisher.trigger()
 		w.WriteHeader(http.StatusNoContent)
 	})
@@ -824,6 +839,9 @@ type DNSStatus struct {
 
 type ServiceCheck struct {
 	Running bool `json:"running"`
+	// UpdateAvailable is true when lerd-nginx runs an older image than its tag
+	// now serves. Read from caches, never from the network.
+	UpdateAvailable bool `json:"update_available,omitempty"`
 }
 
 type PHPStatus struct {
@@ -860,12 +878,6 @@ func buildStatus() StatusResponse {
 	// Never nil: the UI reads php_fpms as a list, and a nil slice encodes as null.
 	phpStatuses := []PHPStatus{}
 	native := nativeRuntimeActive()
-	// Loaded once rather than per version: the pins are what says whether a
-	// host build is behind, and they are the same for all of them.
-	var pins *tools.Manifest
-	if native {
-		pins = nativePins()
-	}
 	for _, v := range versions {
 		short := strings.ReplaceAll(v, ".", "")
 		running := phpVersionRunning(v, native,
@@ -877,18 +889,8 @@ func buildStatus() StatusResponse {
 			xdebugMode = cfg.GetXdebugMode(v)
 			ports = cfg.PHP.FPMPorts[v]
 		}
-		// The image and its base describe nothing that is serving under the
-		// native runtime, where the patch is the build on the host and an
-		// update is a newer one having been published.
-		patch, updateAvailable := "", false
-		if native {
-			patch, updateAvailable = nativePHPStatusFor(pins, v)
-		} else {
-			patch = podman.FPMPHPVersion(v)
-			if base := podman.BaseImageFreshness(v); base != nil {
-				updateAvailable = base.Stale
-			}
-		}
+		st := phpState(v, native)
+		patch, updateAvailable := st.Patch, st.Update
 		phpStatuses = append(phpStatuses, PHPStatus{Version: v, Patch: patch, Running: running, XdebugEnabled: xdebugMode != "", XdebugMode: xdebugMode, Ports: ports, UpdateAvailable: updateAvailable})
 	}
 
@@ -908,7 +910,7 @@ func buildStatus() StatusResponse {
 	}
 	usingSystemBun := bunAvailable && !nodeManagedByLerd && !lerdNode.SystemNodeAvailable()
 	toolStatuses := []tools.ToolStatus{}
-	for _, s := range tools.StatusAll(context.Background()) {
+	for _, s := range cachedToolStatus(nodeManager) {
 		if s.Name == "fnm" && nodeManager != "fnm" {
 			continue
 		}
@@ -921,7 +923,7 @@ func buildStatus() StatusResponse {
 	}
 	return StatusResponse{
 		DNS:                   DNSStatus{OK: dnsStatus == dns.StatusOK, Status: string(dnsStatus), VPN: dns.VPNActive(), Enabled: dnsEnabled, TLD: tld},
-		Nginx:                 ServiceCheck{Running: nginxRunning},
+		Nginx:                 ServiceCheck{Running: nginxRunning, UpdateAvailable: nginxRunning && cachedUpdate(updates, "lerd-nginx", podman.NginxUpdateAvailable)},
 		PHPFPMs:               phpStatuses,
 		PHPDefault:            phpDefault,
 		NodeDefault:           nodeDefault,
@@ -1824,7 +1826,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 	// can show an "→ v8.4.3" badge. Stopped services also run the check so the
 	// user can pull a newer image without first starting the unit; the registry
 	// layer's 6h disk cache absorbs repeated lookups.
-	if avail, err := serviceops.CheckUpdateAvailable(name); err == nil && avail != nil {
+	if avail := serviceUpdate(name); avail != nil {
 		resp.UpdateStrategy = avail.Strategy
 		resp.UpdateAvailable = avail.Available
 		resp.LatestVersion = avail.LatestTag
@@ -2631,9 +2633,10 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 			err   error
 		)
 		if r.Method == http.MethodPost {
-			avail, err = serviceops.RefreshUpdateAvailability(name)
+			avail, err = refreshServiceUpdateFn(name)
+			updates.dropFor("lerd-" + name)
 		} else {
-			avail, err = serviceops.CheckUpdateAvailable(name)
+			avail, err = checkServiceUpdateFn(name)
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -5192,7 +5195,9 @@ func handlePHPVersionAction(w http.ResponseWriter, r *http.Request) {
 	// recorded base, or a registry that could not answer.
 	if action == "updates" && len(parts) == 2 {
 		if r.Method == http.MethodPost {
-			writeJSON(w, podman.RefreshBaseImageFreshness(version))
+			fresh := refreshPHPBaseFn(version)
+			updates.dropFor("lerd-php" + strings.ReplaceAll(version, ".", "") + "-fpm")
+			writeJSON(w, fresh)
 			return
 		}
 		writeJSON(w, podman.BaseImageFreshness(version))

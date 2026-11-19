@@ -289,7 +289,16 @@ func listTagsGHCR(ref ImageRef) ([]TagInfo, error) {
 }
 
 func fetchGHCRToken(repo string) (string, error) {
-	tokenURL := fmt.Sprintf("https://ghcr.io/token?scope=repository:%s:pull&service=ghcr.io", repo)
+	return fetchPullToken(fmt.Sprintf("https://ghcr.io/token?scope=repository:%s:pull&service=ghcr.io", repo), "ghcr.io", repo)
+}
+
+// fetchDockerHubToken gets an anonymous pull token for Docker Hub's registry,
+// which refuses a manifest HEAD without one. A HEAD does not count as a pull.
+func fetchDockerHubToken(repo string) (string, error) {
+	return fetchPullToken(fmt.Sprintf("https://auth.docker.io/token?scope=repository:%s:pull&service=registry.docker.io", repo), "docker.io", repo)
+}
+
+func fetchPullToken(tokenURL, registry, repo string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", tokenURL, nil)
@@ -303,11 +312,11 @@ func fetchGHCRToken(repo string) (string, error) {
 	defer resp.Body.Close()
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized, resp.StatusCode == http.StatusForbidden:
-		return "", &AuthRequiredErr{Registry: "ghcr.io"}
+		return "", &AuthRequiredErr{Registry: registry}
 	case resp.StatusCode == http.StatusNotFound:
 		return "", &NotFoundErr{Repo: repo}
 	case resp.StatusCode != http.StatusOK:
-		return "", &UnreachableErr{Cause: fmt.Errorf("ghcr token %d", resp.StatusCode)}
+		return "", &UnreachableErr{Cause: fmt.Errorf("%s token %d", registry, resp.StatusCode)}
 	}
 	var tok ghcrTokenResponse
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&tok); err != nil {

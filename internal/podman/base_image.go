@@ -173,6 +173,7 @@ func scheduleBaseDigestRefresh(version string) {
 		}()
 		for _, ref := range baseImageRefs(version) {
 			if _, err := manifestDigestFn(ref); err == nil {
+				announceBackgroundRead(fpmUnit(version))
 				return
 			}
 		}

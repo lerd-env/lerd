@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -45,6 +46,8 @@ func handleTools(w http.ResponseWriter, r *http.Request) {
 // manifest, so this is a single check for all of them rather than one per card.
 func handleToolCheck(w http.ResponseWriter, r *http.Request) {
 	refreshPinsFn(r.Context())
+	// The pins also say whether a native PHP build is behind, so every answer goes.
+	updates.dropFor("")
 	writeJSON(w, map[string]any{"ok": true, "tools": toolStatusFn(r.Context())})
 }
 
@@ -58,4 +61,11 @@ func handleToolUpdate(w http.ResponseWriter, name string) {
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+// cachedToolStatus is the managed tools' state from lerd-ui's hourly cache.
+// Every install ends in tools.WriteStamp, whose hook drops it. The list carries
+// the active Node manager's own row, so each manager keeps its own entry.
+func cachedToolStatus(nodeManager string) []tools.ToolStatus {
+	return cachedUpdate(updates, "tools:"+nodeManager, func() []tools.ToolStatus { return toolStatusFn(context.Background()) })
 }
