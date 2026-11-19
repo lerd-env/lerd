@@ -106,3 +106,32 @@ func TestDriftAndRegenerateGoThroughNginx(t *testing.T) {
 		t.Fatalf("regenerate left the site drifted: %s", d.Detail)
 	}
 }
+
+// The server-wide config, the catch-all, the dashboard and profiler vhosts and
+// a service domain all land in nginx's directory through the seam.
+func TestBaseConfigAndServicesGoThroughNginx(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	for name, ensure := range map[string]func() error{
+		"config": EnsureConfig, "default site": EnsureDefaultSite, "dashboard": EnsureDashboard, "profiler": EnsureProfiler,
+	} {
+		if err := ensure(); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	if err := ApplyService("mail.lerd.test", "lerd-mailpit", 8025, false, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"../nginx.conf", "_default.conf", "lerd.localhost.conf", "_profiler.conf", "mail.lerd.test.conf"} {
+		if _, err := os.Stat(filepath.Join(config.NginxConfD(), f)); err != nil {
+			t.Errorf("%s not written: %v", f, err)
+		}
+	}
+	if changed, err := SyncDashboard(); err != nil || changed {
+		t.Errorf("dashboard vhost just written reads as stale: changed=%v err=%v", changed, err)
+	}
+	if token, err := LoadOrGenerateTrustToken(); err != nil || token == "" {
+		t.Errorf("no trust token: %v", err)
+	}
+}

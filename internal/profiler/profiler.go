@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/nginx"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/siteops"
 	"github.com/geodro/lerd/internal/webserver"
@@ -26,7 +25,7 @@ const SpxUIURL = "http://profiler.localhost/?SPX_UI_URI=/"
 // Both are swapped out in tests.
 var (
 	nginxReloadFn = webserver.Reload
-	servedStateFn = nginx.ServedProfilerState
+	servedStateFn = webserver.ServedProfilerState
 )
 
 // How long SetProfiling waits for nginx to serve the toggle it was just given,
@@ -63,7 +62,7 @@ func SetProfiling(on bool) (Result, error) {
 	}
 	// The state marker rides along on the profiler vhost, so it has to be written
 	// before nginx is signalled or the probe below would confirm the old setting.
-	if err := nginx.EnsureProfilerVhost(); err != nil {
+	if err := webserver.EnsureProfiler(); err != nil {
 		return Result{}, fmt.Errorf("writing profiler vhost: %w", err)
 	}
 	if err := nginxReloadFn(); err != nil {

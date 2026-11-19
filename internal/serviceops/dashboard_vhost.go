@@ -2,10 +2,10 @@ package serviceops
 
 import (
 	"github.com/geodro/lerd/internal/feedback"
-	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
-var syncLerdVhostFn = nginx.SyncLerdVhost
+var syncLerdVhostFn = webserver.SyncDashboard
 
 // syncDashboardVhost brings lerd's own vhost back in line with the services
 // installed right now. The vhost names the path of every dashboard served at

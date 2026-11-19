@@ -31,7 +31,6 @@ import (
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/imagepull"
 	"github.com/geodro/lerd/internal/lifecycle"
-	"github.com/geodro/lerd/internal/nginx"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/plugins"
@@ -519,7 +518,7 @@ func newWatchCmd() *cobra.Command {
 			fmt.Println("Lerd watcher started, monitoring:", cfg.ParkedDirectories)
 
 			// Ensure the catch-all default vhost is always present.
-			if err := nginx.EnsureDefaultVhost(); err != nil {
+			if err := webserver.EnsureDefaultSite(); err != nil {
 				fmt.Printf("[WARN] default vhost: %v\n", err)
 			}
 
