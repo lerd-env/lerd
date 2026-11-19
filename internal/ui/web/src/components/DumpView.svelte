@@ -60,7 +60,7 @@
       <span>{open ? '[' : '[…]'}</span>
     </button>
     {#if open}
-      <div class="ml-4 border-l border-gray-200 dark:border-lerd-border pl-3">
+      <div class="basis-full ml-4 border-l border-gray-200 dark:border-lerd-border pl-3">
         {#each node.items as item, i (i)}
           <div class="flex flex-wrap items-start gap-x-2">
             <span class="text-gray-400 select-none">{item.key}</span>
@@ -88,7 +88,7 @@
       {#if node.id !== undefined}<span class="text-gray-400">&#123;#{node.id}{open ? '' : ' …'}&#125;</span>{/if}
     </button>
     {#if open}
-      <div class="ml-4 border-l border-gray-200 dark:border-lerd-border pl-3">
+      <div class="basis-full ml-4 border-l border-gray-200 dark:border-lerd-border pl-3">
         {#each node.props as prop, i (i)}
           <div class="flex flex-wrap items-start gap-x-2">
             <span class="select-none {visColor(prop.visibility)}" title={prop.visibility}>{visBadge(prop.visibility)}</span>

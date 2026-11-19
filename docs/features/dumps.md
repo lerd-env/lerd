@@ -31,6 +31,7 @@ The receiver's transport depends on the host:
 
   - The Sites list header has a small antenna toggle. Pulsing emerald dot when capturing, grey when off. With the list hidden, the toggle moves to the site's address row, beside Xdebug.
   - Each dump entry carries the `file:line` it came from, shortened to its last three segments. Click it to open the file in your editor, or use the small copy button beside it to take the full path.
+  - Arrays and objects render as a tree you can fold. Each nested array or object starts on its own line, indented under the key that holds it. Anything deeper than two levels starts folded.
   - The System Health card on the dashboard shows the bridge state alongside DNS / nginx / watcher.
 - **TUI**: press **D** in `lerd tui` to swap the detail pane for the live dump feed (global).
 - **CLI**: `lerd dump tail` streams events to your terminal, with `--site` and `--ctx` filters.
