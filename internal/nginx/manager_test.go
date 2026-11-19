@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -776,6 +777,55 @@ func TestInstallSSLVhost_withoutAnExistingConf(t *testing.T) {
 	}
 }
 
+// nginx reloads by globbing conf.d, so the served conf must never be absent,
+// not even between two steps of an install: a reload landing there fails and
+// keeps the old vhost, such as the waking page. A failed install leaves it.
+func TestInstallSSLVhost_neverLeavesTheServedConfMissing(t *testing.T) {
+	confD := setupConfD(t)
+	os.MkdirAll(confD, 0755)
+	os.WriteFile(filepath.Join(confD, "myapp.test.conf"), []byte("http vhost"), 0644)
+
+	if err := InstallSSLVhost("myapp.test"); err == nil {
+		t.Fatal("expected an error with no -ssl.conf to install")
+	}
+	if got := readConf(t, filepath.Join(confD, "myapp.test.conf")); got != "http vhost" {
+		t.Errorf("served conf = %q, want it untouched", got)
+	}
+}
+
+// A vhost rewritten in place can be read half-written by a reload landing
+// mid-write, which fails it and keeps the old vhost; each writer swaps in a
+// whole new file instead.
+func TestSiteVhostWriters_replaceTheFileInOneStep(t *testing.T) {
+	site := config.Site{Name: "myapp", Domains: []string{"myapp.test"}, Path: "/srv/myapp"}
+	for name, write := range map[string]func() error{
+		"writeConfD":     func() error { return writeConfD("myapp.test", []byte("new")) },
+		"writeSiteConf":  func() error { return writeSiteConf("myapp.test.conf", []byte("new")) },
+		"waking landing": func() error { return GenerateWakingVhost(site) },
+		"paused worktree": func() error {
+			return GeneratePausedWorktreeVhost("myapp.test", "myapp.test", "/paused", false)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			confD := setupConfD(t)
+			os.MkdirAll(confD, 0755)
+			path := filepath.Join(confD, "myapp.test.conf")
+			os.WriteFile(path, []byte("old"), 0644)
+			before, _ := os.Stat(path)
+			if err := write(); err != nil {
+				t.Fatal(err)
+			}
+			after, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if os.SameFile(before, after) {
+				t.Error("vhost was rewritten in place, want a new file renamed over it")
+			}
+		})
+	}
+}
+
 // ── EnsureDefaultVhost ────────────────────────────────────────────────────────
 
 // ── RepairVhosts ─────────────────────────────────────────────────────────────
@@ -1254,8 +1304,30 @@ func TestWriteFileAtomic_writesContentAndLeavesNoTempBehind(t *testing.T) {
 	if err != nil || string(got) != "server { listen 80; }\n" {
 		t.Fatalf("content mismatch or read err: got=%q err=%v", got, err)
 	}
-	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
-		t.Errorf("expected sibling .tmp to be cleaned up, stat err=%v", err)
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 {
+		t.Errorf("expected only the written file in %s, got %d entries", dir, len(entries))
+	}
+}
+
+// The watcher and a CLI command can rewrite one vhost at the same moment; a
+// shared temp name let one rename take the other's file and fail it.
+func TestWriteFileAtomic_concurrentWritersDoNotCollide(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "managed.conf")
+	var wg sync.WaitGroup
+	errs := make(chan error, 200)
+	for i := 0; i < 200; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- WriteFileAtomic(path, []byte("server {}\n"), 0644)
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent WriteFileAtomic: %v", err)
+		}
 	}
 }
 

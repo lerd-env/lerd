@@ -633,7 +633,7 @@ func writeSiteConf(name string, rendered []byte) error {
 	}
 	confPath := filepath.Join(config.NginxConfD(), name)
 	config.GuardRealWrite(confPath)
-	return os.WriteFile(confPath, rendered, 0644)
+	return WriteFileAtomic(confPath, rendered, 0644)
 }
 
 // renderFPMVhost renders the vhost for a site served by fastcgi, over HTTP or,
@@ -725,21 +725,12 @@ func keepWaking(site config.Site, rendered []byte) []byte {
 	return []byte(landingVhostConf(site, config.PausedDir(), "waking.html"))
 }
 
-// InstallSSLVhost moves the SSL vhost every Generate*SSLVhost writes onto the
-// name nginx serves the site under. It is the second half of generating one:
-// conf.d is a glob, so a <domain>-ssl.conf left beside <domain>.conf is loaded
-// as a second server block for the same names, and it sorts first, so nginx
-// keeps the sidecar and ignores the file every other path rewrites. Unlink
-// clears both names, but unsecure removes only the served one and deletes the
-// certificate, leaving a sidecar that points at a file that is gone and a
-// configuration nginx can no longer load at all.
+// InstallSSLVhost moves the -ssl.conf every Generate*SSLVhost writes onto the
+// served <domain>.conf, since conf.d's glob would load both. One rename, so a
+// reload never finds the served file missing.
 func InstallSSLVhost(domain string) error {
 	confD := config.NginxConfD()
-	mainConf := filepath.Join(confD, domain+".conf")
-	if err := os.Remove(mainConf); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return os.Rename(filepath.Join(confD, domain+"-ssl.conf"), mainConf)
+	return os.Rename(filepath.Join(confD, domain+"-ssl.conf"), filepath.Join(confD, domain+".conf"))
 }
 
 // renderContainerVhost renders the vhost for a site nginx reverse-proxies to a
@@ -940,7 +931,7 @@ func writeConfD(domain string, rendered []byte) error {
 	}
 	confPath := filepath.Join(config.NginxConfD(), domain+".conf")
 	config.GuardRealWrite(confPath)
-	return os.WriteFile(confPath, rendered, 0644)
+	return WriteFileAtomic(confPath, rendered, 0644)
 }
 
 // GenerateWorktreeVhost renders the HTTP vhost template for a worktree checkout
@@ -1040,7 +1031,7 @@ func GenerateWorktreeHostProxyVhostFor(domain, path, parentDomain string, upstre
 		return err
 	}
 	config.GuardRealWrite(filepath.Join(config.NginxConfD(), domain+".conf"))
-	return os.WriteFile(filepath.Join(config.NginxConfD(), domain+".conf"), rendered, 0644)
+	return WriteFileAtomic(filepath.Join(config.NginxConfD(), domain+".conf"), rendered, 0644)
 }
 
 // landingVhostConf renders a minimal vhost for site that serves htmlFile (read
@@ -1137,7 +1128,7 @@ func writeLandingVhost(site config.Site, htmlFile string) error {
 	conf := landingVhostConf(site, config.PausedDir(), htmlFile)
 	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+".conf")
 	config.GuardRealWrite(confPath)
-	if err := os.WriteFile(confPath, []byte(conf), 0644); err != nil {
+	if err := WriteFileAtomic(confPath, []byte(conf), 0644); err != nil {
 		return err
 	}
 	if site.Secured {
@@ -1210,7 +1201,7 @@ server {
 
 	confPath := filepath.Join(config.NginxConfD(), domain+".conf")
 	config.GuardRealWrite(confPath)
-	return os.WriteFile(confPath, []byte(conf), 0644)
+	return WriteFileAtomic(confPath, []byte(conf), 0644)
 }
 
 // RemoveVhost deletes the vhost config files for the given domain.
@@ -1709,30 +1700,34 @@ func readFileOrEmpty(path string) string {
 	return string(b)
 }
 
-// WriteFileAtomic writes data to path via a sibling .tmp file followed by
-// a rename, so a crash mid-write can never leave nginx pointing at a
-// half-written conf. Preserves the destination file's mode if it already
-// existed so an out-of-band chmod survives the rewrite; uses the caller's
-// mode only when creating from scratch. Temp file is removed on any error.
+// WriteFileAtomic writes data to a uniquely named sibling then renames it over
+// path, so nginx never reads half a conf and concurrent writers never share a
+// temp file. An existing file keeps its mode; mode applies only to a new one.
 func WriteFileAtomic(path string, data []byte, mode os.FileMode) error {
 	effective := mode
 	if info, err := os.Stat(path); err == nil {
 		effective = info.Mode().Perm()
 	}
-	tmp := path + ".tmp"
-	config.GuardRealWrite(tmp)
-	if err := os.WriteFile(tmp, data, effective); err != nil {
+	config.GuardRealWrite(path)
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	if err := os.Chmod(tmp, effective); err != nil {
+	tmp := f.Name()
+	_, err = f.Write(data)
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Chmod(tmp, effective)
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
 		os.Remove(tmp)
-		return err
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	return nil
+	return err
 }
 
 // renderDefaultVhost returns the canonical _default.conf content. An unknown or
