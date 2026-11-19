@@ -39,6 +39,7 @@ import (
 	"github.com/geodro/lerd/internal/siteops"
 	"github.com/geodro/lerd/internal/store"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
+	"github.com/geodro/lerd/internal/tools"
 	"github.com/geodro/lerd/internal/ui"
 	"github.com/geodro/lerd/internal/version"
 	"github.com/geodro/lerd/internal/watcher"
@@ -74,6 +75,9 @@ func main() {
 	// ui.Start reassigns this in its own process for a direct in-process
 	// publish; in the CLI/MCP processes we HTTP-POST to the dashboard.
 	podman.AfterUnitChange = notifyLerdUI
+	// A tool install restarts nothing, so it says so itself; no unit means every
+	// cached update answer in lerd-ui is dropped.
+	tools.OnStampWritten = func() { notifyLerdUI("") }
 
 	// A PHP image (re)build orphans the previous image. Flag it here and reclaim
 	// once when the command finishes, so a multi-version install/update coalesces

@@ -355,6 +355,10 @@ func LerdOwned(name string) bool {
 	return err == nil
 }
 
+// OnStampWritten runs after a tool install is recorded. The CLI tells lerd-ui,
+// and lerd-ui drops its cached update answers. Nil in tests and other binaries.
+var OnStampWritten func()
+
 // WriteStamp records the installed version of a tool in its sidecar, so
 // status can report it without executing anything.
 func WriteStamp(name, version string) error {
@@ -363,7 +367,13 @@ func WriteStamp(name, version string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(version+"\n"), 0o644)
+	if err := os.WriteFile(path, []byte(version+"\n"), 0o644); err != nil {
+		return err
+	}
+	if OnStampWritten != nil {
+		OnStampWritten()
+	}
+	return nil
 }
 
 // WritePublished records when the build now on disk was published, and clears

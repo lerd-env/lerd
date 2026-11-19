@@ -188,6 +188,10 @@ func Start(currentVersion string) error {
 		updates.dropFor(unit)
 		publisher.trigger()
 	}
+	tools.OnStampWritten = func() {
+		updates.dropFor("")
+		publisher.trigger()
+	}
 
 	// External state changes (container crash, systemctl outside lerd-ui,
 	// timer firings) are caught by the periodic podman cache poll instead
@@ -906,7 +910,7 @@ func buildStatus() StatusResponse {
 	}
 	usingSystemBun := bunAvailable && !nodeManagedByLerd && !lerdNode.SystemNodeAvailable()
 	toolStatuses := []tools.ToolStatus{}
-	for _, s := range tools.StatusAll(context.Background()) {
+	for _, s := range cachedToolStatus() {
 		if s.Name == "fnm" && nodeManager != "fnm" {
 			continue
 		}
