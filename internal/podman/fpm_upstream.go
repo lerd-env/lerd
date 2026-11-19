@@ -3,6 +3,7 @@ package podman
 import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/nativephp"
+	"github.com/geodro/lerd/internal/platform"
 )
 
 // containerFPMPort is the port the shared and per-site FPM containers listen on.
@@ -25,4 +26,17 @@ func FPMUpstream(site config.Site, phpVersion string) (string, int) {
 		return container, containerFPMPort
 	}
 	return HostGateway, port
+}
+
+// HostProxyUpstream is the address a web server in a container reaches a
+// process on the host at: gvproxy's name on macOS, else the routable gateway
+// the probe cached in the hosts file (a pure read, no podman call).
+func HostProxyUpstream() string {
+	if platform.Current.UsesMachineVM {
+		return HostGateway
+	}
+	if ip := ReadHostGatewayFromFile(); ip != "" {
+		return ip
+	}
+	return HostGateway
 }
