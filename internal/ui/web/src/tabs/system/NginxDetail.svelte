@@ -9,7 +9,7 @@
   import { logHighlight } from '$lib/logHighlight';
   import { notifyLocalFailure, notifyLocalInfo } from '$lib/notify';
   import NginxConfigTab from './NginxConfigTab.svelte';
-  import { status, updateNginx, checkNginxUpdate } from '$stores/status';
+  import { status, updateNginx, checkNginxUpdate, loadStatus } from '$stores/status';
   import { accessMode } from '$stores/accessMode';
   import { m } from '../../paraglide/messages.js';
 
@@ -28,6 +28,7 @@
     try {
       const res = await updateNginx();
       if (!res.ok) notifyLocalFailure('update_check', m.system_nginx(), res.error || m.common_failed());
+      else await loadStatus();
     } finally {
       updating = false;
     }
@@ -37,6 +38,7 @@
     checking = true;
     try {
       const res = await checkNginxUpdate();
+      if (res.ok) await loadStatus();
       notifyLocalInfo(
         'update_check',
         m.system_nginx(),
