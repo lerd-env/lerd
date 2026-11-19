@@ -675,24 +675,98 @@ EOF
   echo "$d"
 }
 
-@test "offer_desktop_app yes enables native and prints the install command" {
-  local d; d="$(_fake_lerd_dir)"
-  INSTALL_DIR="$d"; BINARY="lerd"
-  ask() { return 0; }
-  run offer_desktop_app
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"$DESKTOP_INSTALL_CMD"* ]]
-  grep -q "notify target native" "$d/calls"
+# _fake_flatpak puts a flatpak on PATH that logs its args and exits with $2,
+# or with $3 for `flatpak info` (default 1: the app is not installed).
+_fake_flatpak() {
+  local d="$1" rc="$2" info_rc="${3:-1}"
+  cat > "$d/flatpak" <<EOF
+#!/usr/bin/env bash
+echo "flatpak \$@" >> "$d/calls"
+[ "\$1" = info ] && exit $info_rc
+exit $rc
+EOF
+  chmod +x "$d/flatpak"
+  PATH="$d:$PATH"
 }
 
-@test "offer_desktop_app no selects browser and still prints the install command" {
-  local d; d="$(_fake_lerd_dir)"
+# _answers makes ask_yes reply from a list, logging each question it was asked.
+_answers() {
+  ANSWERS=("$@")
+  ask_yes() {
+    echo "$*" >> "$d/asked"
+    local a="${ANSWERS[0]}"; ANSWERS=("${ANSWERS[@]:1}")
+    [ "$a" = y ]
+  }
+}
+
+@test "offer_desktop_app with flatpak installs the app and selects native without a second question" {
+  local d; d="$(_fake_lerd_dir)"; rm -f "$d/asked"
   INSTALL_DIR="$d"; BINARY="lerd"
-  ask() { return 1; }
+  _fake_flatpak "$d" 0
+  _answers y
   run offer_desktop_app
   [ "$status" -eq 0 ]
+  grep -q "flatpak install --user .*lerd.flatpakref" "$d/calls"
+  grep -q "notify target native" "$d/calls"
+  [ "$(wc -l < "$d/asked")" -eq 1 ]
+}
+
+@test "offer_desktop_app with the app already installed asks nothing and selects native" {
+  local d; d="$(_fake_lerd_dir)"; rm -f "$d/asked"
+  INSTALL_DIR="$d"; BINARY="lerd"
+  _fake_flatpak "$d" 0 0
+  _answers
+  run offer_desktop_app
+  [ "$status" -eq 0 ]
+  ! grep -q "flatpak install" "$d/calls"
+  grep -q "notify target native" "$d/calls"
+  [ ! -f "$d/asked" ]
+}
+
+@test "offer_desktop_app with flatpak declined asks about native notifications next" {
+  local d; d="$(_fake_lerd_dir)"; rm -f "$d/asked"
+  INSTALL_DIR="$d"; BINARY="lerd"
+  _fake_flatpak "$d" 0
+  _answers n y
+  run offer_desktop_app
+  [ "$status" -eq 0 ]
+  ! grep -q "flatpak install" "$d/calls"
+  grep -q "notify target native" "$d/calls"
   [[ "$output" == *"$DESKTOP_INSTALL_CMD"* ]]
+  sed -n 2p "$d/asked" | grep -qi "notifications"
+}
+
+@test "offer_desktop_app falls back to the notifications question when the flatpak install fails" {
+  local d; d="$(_fake_lerd_dir)"; rm -f "$d/asked"
+  INSTALL_DIR="$d"; BINARY="lerd"
+  _fake_flatpak "$d" 1
+  _answers y n
+  run offer_desktop_app
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Could not install"* ]]
   grep -q "notify target browser" "$d/calls"
+  [ "$(wc -l < "$d/asked")" -eq 2 ]
+}
+
+@test "offer_desktop_app without flatpak only asks about native notifications" {
+  local d; d="$(_fake_lerd_dir)"; rm -f "$d/asked"
+  INSTALL_DIR="$d"; BINARY="lerd"
+  command() { [ "$1 $2" = "-v flatpak" ] && return 1; builtin command "$@"; }
+  _answers n
+  run offer_desktop_app
+  [ "$status" -eq 0 ]
+  grep -q "notify target browser" "$d/calls"
+  [ "$(wc -l < "$d/asked")" -eq 1 ]
+  grep -qi "notifications" "$d/asked"
+}
+
+@test "default_yes takes Enter and yes, refuses no and anything else" {
+  default_yes ""
+  default_yes "y"
+  default_yes "YES"
+  ! default_yes "n"
+  ! default_yes "No"
+  ! default_yes "maybe"
 }
 
 @test "is_wsl true on a WSL kernel" {
