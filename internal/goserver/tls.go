@@ -22,7 +22,7 @@ func (h *Handler) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 		base := filepath.Join(config.CertsDir(), "sites", svc.Domain)
 		return h.certs.load(base+".crt", base+".key")
 	}
-	site, ok := h.siteFor(hello.ServerName)
+	site, _, ok := h.siteFor(hello.ServerName)
 	if !ok || !site.Secured {
 		return nil, fmt.Errorf("no secured site serves %q", hello.ServerName)
 	}

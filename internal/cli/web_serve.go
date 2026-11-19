@@ -24,7 +24,7 @@ func NewWebServeCmd() *cobra.Command {
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			h := &goserver.Handler{Sites: registeredSites, Upstream: fpmAddr, Proxy: goserver.SiteTarget, Services: serviceRoutes}
+			h := &goserver.Handler{Sites: registeredSites, Upstream: fpmAddr, Proxy: goserver.SiteTarget, Services: serviceRoutes, WorkerHost: workerHost}
 			served := &goserver.AccessFeed{Next: h, Target: config.AccessLogTarget()}
 			tlsSrv := &http.Server{Addr: listenTLS, Handler: served, TLSConfig: &tls.Config{GetCertificate: h.GetCertificate}}
 			errs := make(chan error, 2)
@@ -44,6 +44,16 @@ func registeredSites() []config.Site {
 		return nil
 	}
 	return reg.Sites
+}
+
+// workerHost is where a site's worker listens: the host for one that runs
+// there, else the PHP container the site's own requests go to.
+func workerHost(site config.Site, onHost bool) string {
+	if onHost {
+		return podman.HostProxyUpstream()
+	}
+	host, _, _ := net.SplitHostPort(fpmAddr(site))
+	return host
 }
 
 func fpmAddr(site config.Site) string {

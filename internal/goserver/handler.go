@@ -30,6 +30,9 @@ type Handler struct {
 	Proxy func(config.Site) (target *url.URL, ok bool)
 	// Services returns the service domains to serve, read per request.
 	Services func() []ServiceRoute
+	// WorkerHost is where a site's worker server listens: its PHP container,
+	// or the host for a worker that runs there.
+	WorkerHost func(site config.Site, onHost bool) string
 
 	certs certCache
 }
@@ -40,13 +43,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		serveService(w, r, svc)
 		return
 	}
-	site, ok := h.siteFor(r.Host)
+	site, domain, ok := h.siteFor(r.Host)
 	if !ok {
 		http.NotFound(w, r)
 		return
 	}
 	if site.Secured && r.TLS == nil {
 		http.Redirect(w, r, httpsURL(r), http.StatusFound)
+		return
+	}
+	if h.serveDevServer(w, r, site) {
+		return
+	}
+	if target, ok := h.workerSubdomain(site, domain, r.Host); ok {
+		serveProxied(w, r, target)
 		return
 	}
 	if h.Proxy != nil {
@@ -60,24 +70,24 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // siteFor matches a host to the site that owns it or a subdomain of it, the
 // longest domain winning, as nginx's exact and wildcard server_names do.
-func (h *Handler) siteFor(hostport string) (config.Site, bool) {
+func (h *Handler) siteFor(hostport string) (config.Site, string, bool) {
 	host := strings.ToLower(hostport)
 	if hst, _, err := net.SplitHostPort(host); err == nil {
 		host = hst
 	}
 	var best config.Site
-	bestLen := 0
+	bestDomain := ""
 	for _, s := range h.Sites() {
 		if s.Paused || s.Ignored {
 			continue
 		}
 		for _, d := range s.Domains {
-			if (host == d || strings.HasSuffix(host, "."+d)) && len(d) > bestLen {
-				best, bestLen = s, len(d)
+			if (host == d || strings.HasSuffix(host, "."+d)) && len(d) > len(bestDomain) {
+				best, bestDomain = s, d
 			}
 		}
 	}
-	return best, bestLen > 0
+	return best, bestDomain, bestDomain != ""
 }
 
 // servePHPSite mirrors `try_files $uri $uri/ /index.php?$query_string`: a real
@@ -89,6 +99,10 @@ func (h *Handler) servePHPSite(w http.ResponseWriter, r *http.Request, site conf
 		root = real
 	}
 	urlPath := path.Clean("/" + r.URL.Path)
+	if target, ok := h.workerPath(site, urlPath); ok {
+		serveWorker(w, r, target)
+		return
+	}
 	if hidesDotfile(urlPath) {
 		http.Error(w, "403 Forbidden", http.StatusForbidden)
 		return

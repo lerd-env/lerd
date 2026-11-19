@@ -25,15 +25,30 @@ var insecureBackend = &http.Transport{
 // address and port. Upgrades (WebSocket, Vite HMR) pass through.
 func serveProxied(w http.ResponseWriter, r *http.Request, target *url.URL) {
 	host := forwardedHost(r)
+	proxyTo(w, r, target, func(out *http.Request) {
+		out.Host = host
+		out.Header.Set("X-Forwarded-Host", host)
+		out.Header.Set("X-Forwarded-Proto", forwardedProto(r))
+		out.Header.Set("X-Forwarded-Port", serverPort(r))
+	})
+}
+
+// serveWorker mirrors the vhost's worker location: the request's own Host and
+// scheme, since a worker under the app's path is part of the app.
+func serveWorker(w http.ResponseWriter, r *http.Request, target *url.URL) {
+	proxyTo(w, r, target, func(out *http.Request) {
+		out.Host = r.Host
+		out.Header.Set("X-Forwarded-Proto", scheme(r))
+	})
+}
+
+func proxyTo(w http.ResponseWriter, r *http.Request, target *url.URL, headers func(out *http.Request)) {
 	rp := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(target)
-			pr.Out.Host = host
 			pr.Out.Header.Set("X-Forwarded-For", forwardedFor(r))
 			pr.Out.Header.Set("X-Real-IP", remoteIP(r))
-			pr.Out.Header.Set("X-Forwarded-Host", host)
-			pr.Out.Header.Set("X-Forwarded-Proto", forwardedProto(r))
-			pr.Out.Header.Set("X-Forwarded-Port", serverPort(r))
+			headers(pr.Out)
 		},
 		Transport: insecureBackend,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
