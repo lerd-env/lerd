@@ -7,7 +7,6 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/webserver"
 )
 
@@ -51,7 +50,7 @@ func SecureSite(site config.Site) error {
 				continue
 			}
 			effectivePHP := config.WorktreePHPVersion(wt.Path, site.PHPVersion)
-			_ = nginx.GenerateWorktreeSSLVhost(wt.Domain, wt.Path, effectivePHP, site.PrimaryDomain(), site.Name, wt.Branch)
+			_ = webserver.ApplyWorktree(wt.Domain, wt.Path, effectivePHP, site.PrimaryDomain(), site.Name, wt.Branch, true)
 			config.SyncSiteURL(wt.Path, wt.Domain, true) //nolint:errcheck
 		}
 	}
@@ -136,7 +135,7 @@ func UnsecureSite(site config.Site) error {
 				continue
 			}
 			effectivePHP := config.WorktreePHPVersion(wt.Path, site.PHPVersion)
-			_ = nginx.GenerateWorktreeVhost(wt.Domain, wt.Path, effectivePHP, site.Name, wt.Branch)
+			_ = webserver.ApplyWorktree(wt.Domain, wt.Path, effectivePHP, "", site.Name, wt.Branch, false)
 			config.SyncSiteURL(wt.Path, wt.Domain, false) //nolint:errcheck
 		}
 	}

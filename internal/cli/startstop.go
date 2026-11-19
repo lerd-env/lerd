@@ -682,7 +682,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 	}
 
 	// Pre-flight: repair SSL vhosts with missing cert files so nginx can start.
-	if repairs := nginx.RepairVhosts(); len(repairs) > 0 {
+	if repairs := webserver.RepairSites(); len(repairs) > 0 {
 		for _, r := range repairs {
 			switch r.Reason {
 			case "missing-cert":

@@ -10,7 +10,6 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
@@ -332,9 +331,9 @@ func setWorktreePHPVersion(site *config.Site, branch, version string) error {
 		}
 		_ = podman.EnsureXdebugIni(version)
 		if site.Secured {
-			err = nginx.GenerateWorktreeSSLVhost(wt.Domain, wt.Path, version, site.PrimaryDomain(), site.Name, wt.Branch)
+			err = webserver.ApplyWorktree(wt.Domain, wt.Path, version, site.PrimaryDomain(), site.Name, wt.Branch, true)
 		} else {
-			err = nginx.GenerateWorktreeVhost(wt.Domain, wt.Path, version, site.Name, wt.Branch)
+			err = webserver.ApplyWorktree(wt.Domain, wt.Path, version, "", site.Name, wt.Branch, false)
 		}
 		if err != nil {
 			return fmt.Errorf("regenerating worktree vhost: %w", err)

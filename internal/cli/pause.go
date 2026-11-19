@@ -105,7 +105,7 @@ func PauseSite(name string) error {
 		return fmt.Errorf("writing paused page: %w", err)
 	}
 
-	if err := nginx.GeneratePausedVhost(*site); err != nil {
+	if err := webserver.ApplyPausedSite(*site); err != nil {
 		return fmt.Errorf("generating paused vhost: %w", err)
 	}
 
@@ -750,7 +750,7 @@ func pauseWorktrees(site *config.Site) {
 			feedback.Warn("paused page for worktree %s: %v", wt.Domain, err)
 			continue
 		}
-		if err := nginx.GeneratePausedWorktreeVhost(wt.Domain, site.PrimaryDomain(), config.PausedDir(), site.Secured); err != nil {
+		if err := webserver.ApplyPausedWorktree(wt.Domain, site.PrimaryDomain(), config.PausedDir(), site.Secured); err != nil {
 			feedback.Warn("paused vhost for worktree %s: %v", wt.Domain, err)
 		}
 	}
@@ -783,9 +783,9 @@ func unpauseWorktrees(site *config.Site, phpVersion string) {
 		effectivePHP := config.WorktreePHPVersion(wt.Path, phpVersion)
 		var vhostErr error
 		if site.Secured {
-			vhostErr = nginx.GenerateWorktreeSSLVhost(wt.Domain, wt.Path, effectivePHP, site.PrimaryDomain(), site.Name, wt.Branch)
+			vhostErr = webserver.ApplyWorktree(wt.Domain, wt.Path, effectivePHP, site.PrimaryDomain(), site.Name, wt.Branch, true)
 		} else {
-			vhostErr = nginx.GenerateWorktreeVhost(wt.Domain, wt.Path, effectivePHP, site.Name, wt.Branch)
+			vhostErr = webserver.ApplyWorktree(wt.Domain, wt.Path, effectivePHP, "", site.Name, wt.Branch, false)
 		}
 		if vhostErr != nil {
 			feedback.Warn("restoring worktree vhost %s: %v", wt.Domain, vhostErr)

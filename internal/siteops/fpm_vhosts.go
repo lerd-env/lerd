@@ -5,7 +5,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
-	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // ServedByFPM reports whether a site's requests go through an FPM vhost, the
@@ -48,7 +48,7 @@ func RegenerateFPMSiteVhosts(s config.Site) error {
 	}
 	for _, wt := range worktrees {
 		php := config.WorktreePHPVersion(wt.Path, s.PHPVersion)
-		_ = nginx.GenerateWorktreeVhostFor(wt.Domain, wt.Path, php, s.PrimaryDomain(), s.Name, wt.Branch, s.Secured)
+		_ = webserver.ApplyWorktree(wt.Domain, wt.Path, php, s.PrimaryDomain(), s.Name, wt.Branch, s.Secured)
 	}
 	return nil
 }

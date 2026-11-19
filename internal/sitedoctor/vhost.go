@@ -2,7 +2,6 @@ package sitedoctor
 
 import (
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/webserver"
 )
 
@@ -20,7 +19,7 @@ func checkVhost(path string) (Check, bool) {
 	if err != nil || site == nil {
 		return Check{}, false
 	}
-	drift, err := nginx.VhostDrift(*site)
+	drift, err := webserver.Drift(*site)
 	if err != nil || !drift.Checked {
 		return Check{}, false
 	}
@@ -41,7 +40,7 @@ func FixVhost(path string) error {
 	if err != nil || site == nil {
 		return err
 	}
-	if err := nginx.RegenerateVhost(*site); err != nil {
+	if err := webserver.RegenerateSite(*site); err != nil {
 		return err
 	}
 	webserver.ReloadOrWarn("")

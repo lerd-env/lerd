@@ -6,7 +6,6 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/webserver"
 	"github.com/spf13/cobra"
 )
@@ -75,7 +74,7 @@ func runSitesRestore(name string, list, force bool) error {
 	feedback.Begin()
 	feedback.Start("restoring the site registry").OK(feedback.Val(used))
 	for _, site := range reg.Sites {
-		if err := nginx.RegenerateVhost(site); err != nil {
+		if err := webserver.RegenerateSite(site); err != nil {
 			feedback.Warn("regenerating vhost for %s: %v", site.Name, err)
 		}
 	}
