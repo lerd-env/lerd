@@ -22,11 +22,11 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/siteproxy"
 )
 
 // detectSiteProxy checks the site's framework definition for a worker with a
@@ -58,68 +58,15 @@ type VhostProxy struct {
 }
 
 func detectSiteProxies(site config.Site) []VhostProxy {
-	fw, fwOK := config.GetFrameworkForDir(site.Framework, site.Path)
-	if !fwOK {
-		return nil
-	}
 	var out []VhostProxy
-	for _, np := range fw.DetectProxies(site.Path) {
-		paths := proxyPaths(np.Proxy)
-		if len(paths) == 0 {
-			continue
+	for _, r := range siteproxy.PathRoutes(site) {
+		paths := make([]string, len(r.Paths))
+		for i, p := range r.Paths {
+			paths[i] = regexp.QuoteMeta(p)
 		}
-		out = append(out, VhostProxy{
-			Paths:  paths,
-			Port:   proxyPort(site, np),
-			OnHost: np.Proxy.OnHost(),
-		})
+		out = append(out, VhostProxy{Paths: paths, Port: r.Port, OnHost: r.OnHost})
 	}
 	return out
-}
-
-// proxyPort is the port this worker's server listens on: the one lerd pinned
-// for it, the one the site's .env names, or the definition's default.
-func proxyPort(site config.Site, np config.NamedProxy) int {
-	if np.Proxy.PinnedPort() {
-		if p := site.WorkerPorts[np.Worker]; p > 0 {
-			return p
-		}
-	}
-	port := np.Proxy.DefaultPort
-	if port == 0 {
-		port = 8080
-	}
-	if np.Proxy.PortEnvKey != "" {
-		if v := envfile.ReadKey(filepath.Join(site.Path, ".env"), np.Proxy.PortEnvKey); v != "" {
-			if p, err := strconv.Atoi(v); err == nil && p > 0 {
-				port = p
-			}
-		}
-	}
-	return port
-}
-
-// proxyPaths normalises and escapes the declared paths.
-func proxyPaths(proxy *config.WorkerProxy) []string {
-	declared := proxy.Paths
-	if len(declared) == 0 {
-		declared = []string{proxy.Path}
-	}
-	var paths []string
-	for _, raw := range declared {
-		if raw == "" {
-			continue
-		}
-		// "/" trims to empty, which renders `^(/|$)`: the root and everything
-		// under it, what a root-mounted worker means. Restoring it to "/"
-		// instead would render `^/(/|$)`, matching "/" and "//" and nothing else.
-		p := strings.TrimSuffix(raw, "/")
-		if p != "" && !strings.HasPrefix(p, "/") {
-			p = "/" + p
-		}
-		paths = append(paths, regexp.QuoteMeta(p))
-	}
-	return paths
 }
 
 // detectSiteDevServer returns the prefix and host port for a site whose

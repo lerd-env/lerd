@@ -11,6 +11,7 @@ import (
 	"text/template"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/siteproxy"
 )
 
 // workerVhostConf names a worker subdomain's vhost after its site rather than
@@ -47,31 +48,17 @@ func syncWorkerSubdomainVhosts(site config.Site, phpVersion string, ssl bool) {
 // subdomain, keyed by label, and names every claim refused. While the site
 // waits on a sleeping service its wildcard serves the waking page instead.
 func workerSubdomainVhosts(site config.Site, phpVersion string, ssl bool) (map[string][]byte, []string) {
-	if !site.ServesWorkerSubdomains() || siteWaitsOnSleepingService(site.Name) {
+	if siteWaitsOnSleepingService(site.Name) {
 		return nil, nil
 	}
-	fw, ok := config.GetFrameworkForDir(site.Framework, site.Path)
-	if !ok {
-		return nil, nil
-	}
+	routes, refused := siteproxy.Subdomains(site)
 	vhosts := map[string][]byte{}
-	owners := map[string]string{}
-	var refused []string
-	for _, np := range fw.DetectProxies(site.Path) {
-		label := np.Proxy.Subdomain
-		if label == "" {
-			continue
-		}
-		if first, taken := owners[label]; taken {
-			refused = append(refused, fmt.Sprintf("worker %q subdomain not served: %q is already claimed by worker %q", np.Worker, label, first))
-			continue
-		}
-		rendered, err := renderWorkerSubdomainVhost(site, np, phpVersion, ssl)
+	for label, r := range routes {
+		rendered, err := renderWorkerSubdomainVhost(site, r, phpVersion, ssl)
 		if err != nil {
-			refused = append(refused, fmt.Sprintf("worker %q subdomain not served: %v", np.Worker, err))
+			refused = append(refused, fmt.Sprintf("worker %q subdomain not served: %v", r.Worker, err))
 			continue
 		}
-		owners[label] = np.Worker
 		vhosts[label] = rendered
 	}
 	return vhosts, refused
@@ -79,17 +66,10 @@ func workerSubdomainVhosts(site config.Site, phpVersion string, ssl bool) (map[s
 
 // renderWorkerSubdomainVhost proxies the whole of <label>.<primary> to the
 // worker, under the site's certificate, which already carries *.<primary>.
-func renderWorkerSubdomainVhost(site config.Site, np config.NamedProxy, phpVersion string, ssl bool) ([]byte, error) {
-	label := np.Proxy.Subdomain
-	if err := config.ValidateSubdomainLabel(label); err != nil {
-		return nil, err
-	}
-	host := label + "." + site.PrimaryDomain()
-	if owner, err := config.FindSiteByDomain(host); err == nil {
-		return nil, fmt.Errorf("%s is served by site %q", host, owner.Name)
-	}
+func renderWorkerSubdomainVhost(site config.Site, r siteproxy.Route, phpVersion string, ssl bool) ([]byte, error) {
+	host := r.Subdomain + "." + site.PrimaryDomain()
 	upstream, _ := fpmUpstream(&site, phpVersion)
-	if np.Proxy.OnHost() {
+	if r.OnHost {
 		upstream = hostProxyUpstream()
 	}
 	name := "vhost-custom.conf.tmpl"
@@ -108,7 +88,7 @@ func renderWorkerSubdomainVhost(site config.Site, np config.NamedProxy, phpVersi
 		Domain:          host,
 		ServerNames:     host,
 		CustomContainer: upstream,
-		CustomPort:      proxyPort(site, np),
+		CustomPort:      r.Port,
 		RequestTimeout:  resolveRequestTimeout(site.Path, phpVersion),
 	}
 	if ssl {
