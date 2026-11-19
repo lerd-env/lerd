@@ -49,13 +49,25 @@ func TestPharPathFollowsBinDir(t *testing.T) {
 func TestMemoryLimitEnv(t *testing.T) {
 	withLimit := &config.Framework{PHP: config.FrameworkPHP{CLIIni: map[string]string{"memory_limit": "512M"}}}
 
-	t.Run("from the framework", func(t *testing.T) {
-		t.Setenv("COMPOSER_MEMORY_LIMIT", "")
-		got := MemoryLimitEnv(withLimit)
-		if len(got) != 1 || got[0] != "COMPOSER_MEMORY_LIMIT=512M" {
-			t.Errorf("got %q, want [COMPOSER_MEMORY_LIMIT=512M]", got)
-		}
-	})
+	// Composer raises itself to 1536M unless COMPOSER_MEMORY_LIMIT is set, so a
+	// lower declared value must not pull composer down below that.
+	for declared, want := range map[string]string{
+		"512M":       "1536M",
+		"1048576K":   "1536M",
+		"1536M":      "1536M",
+		"2G":         "2G",
+		"-1":         "-1",
+		"4294967296": "4294967296",
+	} {
+		t.Run("declared "+declared, func(t *testing.T) {
+			t.Setenv("COMPOSER_MEMORY_LIMIT", "")
+			fw := &config.Framework{PHP: config.FrameworkPHP{CLIIni: map[string]string{"memory_limit": declared}}}
+			got := MemoryLimitEnv(fw)
+			if len(got) != 1 || got[0] != "COMPOSER_MEMORY_LIMIT="+want {
+				t.Errorf("got %q, want [COMPOSER_MEMORY_LIMIT=%s]", got, want)
+			}
+		})
+	}
 	t.Run("host value wins", func(t *testing.T) {
 		t.Setenv("COMPOSER_MEMORY_LIMIT", "-1")
 		got := MemoryLimitEnv(withLimit)

@@ -748,7 +748,7 @@ The **CLI SAPI never reads `.user.ini`**, not even from inside the document root
 
 Workers get the directives too. They exec their command straight from a systemd unit, and Magento cannot even bootstrap at PHP's 128M default, so a cron or consumer worker without them simply crash-loops. That makes the value a definition author's responsibility: give it a bounded `memory_limit` rather than `-1`, because a worker runs until you stop it. A worker whose command is not a `php` invocation, a host-side `npm run dev`, is left alone.
 
-Composer is the one place a `-d` cannot reach: its scripts, Symfony Flex's auto-scripts among them, start the container's `php` themselves. So a declared `memory_limit` is also handed to every composer run for the project, `lerd new` included, as `COMPOSER_MEMORY_LIMIT`, the setting those scripts pass on. A `COMPOSER_MEMORY_LIMIT` already set in your shell wins.
+Composer is the one place a `-d` cannot reach: its scripts, Symfony Flex's auto-scripts among them, start the container's `php` themselves. So a declared `memory_limit` is also handed to every composer run for the project, `lerd new` included, as `COMPOSER_MEMORY_LIMIT`, the setting those scripts pass on. Composer itself also takes that value instead of raising itself to 1536M, so a declared value below 1536M is sent as 1536M. A `COMPOSER_MEMORY_LIMIT` already set in your shell wins.
 
 Set only what the CLI needs. Copying a framework's web values across is a trap: CLI `max_execution_time` defaults to `0`, meaning unlimited, so applying a web value of `600` would cap a long install at ten minutes.
 

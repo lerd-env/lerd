@@ -6,6 +6,8 @@ package composer
 import (
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -49,10 +51,34 @@ func MemoryLimitEnv(fw *config.Framework) []string {
 	if fw == nil || config.ValidatePHPIni(fw.PHP.CLIIni) != nil {
 		return nil
 	}
-	if v := fw.PHP.CLIIni["memory_limit"]; v != "" {
-		return []string{"COMPOSER_MEMORY_LIMIT=" + v}
+	v := fw.PHP.CLIIni["memory_limit"]
+	if v == "" {
+		return nil
 	}
-	return nil
+	// Once this is set composer stops raising itself to its own 1536M floor, so
+	// a lower declared value would starve composer rather than help its scripts.
+	if v != "-1" && iniBytes(v) < composerMemoryFloor {
+		v = "1536M"
+	}
+	return []string{"COMPOSER_MEMORY_LIMIT=" + v}
+}
+
+const composerMemoryFloor = 1536 << 20
+
+// iniBytes reads a php.ini size the way composer does: an optional k, m or g
+// suffix over a leading integer.
+func iniBytes(v string) int64 {
+	v = strings.ToLower(v)
+	n, _ := strconv.ParseInt(strings.TrimRight(v, "kmg"), 10, 64)
+	switch v[len(v)-1] {
+	case 'g':
+		n <<= 30
+	case 'm':
+		n <<= 20
+	case 'k':
+		n <<= 10
+	}
+	return n
 }
 
 // Env returns the environment every composer run for the project at dir gets.
