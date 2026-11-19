@@ -56,7 +56,8 @@ def upgrades(image):
 def released(version):
     """Whether upstream publishes the php:<version>-fpm-alpine a rebuild builds FROM."""
     token = json.load(urllib.request.urlopen(
-        'https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/php:pull'))['token']
+        'https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/php:pull',
+        timeout=upstream_php.TIMEOUT))['token']
     try:
         upstream_php.fetch(f'https://registry-1.docker.io/v2/library/php/manifests/{version}-fpm-alpine', token)
     except urllib.error.HTTPError as e:
@@ -83,7 +84,7 @@ def main(scan_fn=scan, upgrades_fn=upgrades, released_fn=released):
             # A new minor has no upstream tag until its GA day, so a forced
             # rebuild of it could only fail.
             unreleased = rebuild and not released_fn(version)
-        except (subprocess.CalledProcessError, ValueError, urllib.error.URLError) as e:
+        except (subprocess.CalledProcessError, ValueError, urllib.error.URLError, TimeoutError) as e:
             print(f'::error::PHP {version}: scanning {image} failed: {e}')
             failed.append(version)
             continue

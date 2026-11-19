@@ -80,13 +80,16 @@ class Main(unittest.TestCase):
         self.assertEqual(self.stale(), 'stale=8.1,8.2,8.3,8.4,8.5')
 
     def test_an_upstream_lookup_error_keeps_the_other_rebuilds(self):
-        def released_fn(version):
-            if version == '8.2':
-                raise urllib.error.URLError('registry down')
-            return True
-        scan = lambda image: {'matches': [match('apk', 'High')] if 'php82' in image or 'php85' in image else []}
-        self.assertEqual(vuln_scan.main(scan, lambda image: ['Upgrading brotli-libs'], released_fn), 1)
-        self.assertEqual(self.stale(), 'stale=8.5')
+        for error in (urllib.error.URLError('registry down'), TimeoutError('read timed out')):
+            with self.subTest(error=error):
+                open(self.output, 'w').close()
+                def released_fn(version):
+                    if version == '8.2':
+                        raise error
+                    return True
+                scan = lambda image: {'matches': [match('apk', 'High')] if 'php82' in image or 'php85' in image else []}
+                self.assertEqual(vuln_scan.main(scan, lambda image: ['Upgrading brotli-libs'], released_fn), 1)
+                self.assertEqual(self.stale(), 'stale=8.5')
 
 
 def released(version):
