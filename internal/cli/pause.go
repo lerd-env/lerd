@@ -158,7 +158,7 @@ func setSiteContainerAutostart(site *config.Site, on bool) bool {
 }
 
 // pauseNginxReload is the nginx reload pause and unpause use, a seam for tests.
-var pauseNginxReload = nginx.ReloadOrWarn
+var pauseNginxReload = webserver.ReloadOrWarn
 
 // hostProxyEnvRefresh regenerates a site's .env by re-running `lerd env`. A
 // package var so tests can stub the re-exec; production points it at runLerdEnvKeepingDB.

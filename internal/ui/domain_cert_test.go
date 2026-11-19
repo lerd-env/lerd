@@ -15,10 +15,9 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
-// stubPodmanOnPath installs a no-op podman binary into stubDir and prepends
-// stubDir to PATH. Without it nginx.Reload would shell out to real podman
-// and create container storage under the test's tmp XDG_DATA_HOME that
-// the runner can't delete (permission denied on overlay diffs).
+// stubPodmanOnPath puts a no-op podman first on PATH, so a reload never shells
+// out to real podman and leaves container storage in the test's tmp dir that
+// the runner can't delete.
 func stubPodmanOnPath(t *testing.T) {
 	t.Helper()
 	stubDir := t.TempDir()

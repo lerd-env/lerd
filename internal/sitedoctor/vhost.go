@@ -3,6 +3,7 @@ package sitedoctor
 import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // checkVhost reports whether the nginx vhost serving the site still matches
@@ -43,6 +44,6 @@ func FixVhost(path string) error {
 	if err := nginx.RegenerateVhost(*site); err != nil {
 		return err
 	}
-	nginx.ReloadOrWarn("")
+	webserver.ReloadOrWarn("")
 	return nil
 }

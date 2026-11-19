@@ -9,10 +9,10 @@ import (
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // fpmImageExists is a seam so tests can decide a version's image is present
@@ -175,7 +175,7 @@ func provision(plan *Plan, site config.Site, p Policy, d Deps, r Reporter) error
 	// the finisher above only reloaded the plain-HTTP config, so without this
 	// the site keeps serving the deleted HTTP vhost from nginx's memory. Retry:
 	// a concurrent cert reissue can briefly race the swap.
-	if err := nginx.ReloadWithRetry(10 * time.Second); err != nil {
+	if err := webserver.ReloadWithRetry(10 * time.Second); err != nil {
 		cert.Fail(err)
 		return err
 	}

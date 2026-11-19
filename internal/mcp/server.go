@@ -25,7 +25,6 @@ import (
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/grouping"
 	"github.com/geodro/lerd/internal/logsource"
-	"github.com/geodro/lerd/internal/nginx"
 	lerdNode "github.com/geodro/lerd/internal/node"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
@@ -4192,7 +4191,7 @@ func execSiteRuntime(args map[string]any) (any, *rpcError) {
 		if err := webserver.ApplySite(*site); err != nil {
 			return toolErr("regenerating vhost: " + err.Error()), nil
 		}
-		_ = nginx.Reload()
+		_ = webserver.Reload()
 		return toolOK(fmt.Sprintf("%s: runtime set to fpm", siteName)), nil
 	}
 

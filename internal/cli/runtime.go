@@ -5,7 +5,6 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
 	"github.com/geodro/lerd/internal/webserver"
@@ -199,7 +198,7 @@ func switchToFPM(site *config.Site) error {
 	if err := webserver.ApplySite(*site); err != nil {
 		return fmt.Errorf("regenerating vhost: %w", err)
 	}
-	_ = nginx.Reload()
+	_ = webserver.Reload()
 
 	// Recreate the workers so their units exec into the shared FPM container
 	// instead of the per-site FrankenPHP one that no longer exists.

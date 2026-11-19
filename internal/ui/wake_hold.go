@@ -16,6 +16,7 @@ import (
 	"github.com/geodro/lerd/internal/activityping"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // The seams the wake hold goes through, vars so tests stand in for the watcher
@@ -179,5 +180,5 @@ func siteVhostWaking(domain string) bool {
 	if err != nil || strings.Contains(string(data), nginx.WakeHoldPath) {
 		return err == nil
 	}
-	return !nginx.ServesVhostWrittenAt(st.ModTime())
+	return !webserver.ServesVhostWrittenAt(st.ModTime())
 }

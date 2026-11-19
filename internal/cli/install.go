@@ -881,7 +881,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 			}
 		} else {
 			step("Reloading lerd-nginx")
-			if err := nginx.Reload(); err != nil {
+			if err := webserver.Reload(); err != nil {
 				fmt.Printf("    WARN: %v\n", err)
 			} else {
 				ok()

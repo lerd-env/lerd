@@ -20,8 +20,8 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dashboard"
 	"github.com/geodro/lerd/internal/dumps"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/siteops"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 //go:embed browser.js
@@ -30,7 +30,7 @@ var scriptTemplate string
 // The hooks SetSite, SaveSite and RefreshVhosts go through, swapped out in tests.
 var (
 	regenerateSiteVhostFn = regenerateSiteVhost
-	nginxReloadFn         = nginx.Reload
+	nginxReloadFn         = webserver.Reload
 )
 
 // Capturable reports whether a site's vhost can carry the capture block:

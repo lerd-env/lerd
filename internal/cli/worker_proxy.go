@@ -28,7 +28,7 @@ func regenNginxVhost(siteName, sitePath string) {
 	}
 	if site.IsCustomContainer() || site.IsFrankenPHP() {
 		if nginx.RegenerateVhost(*site) == nil {
-			_ = nginx.Reload()
+			_ = webserver.Reload()
 		}
 		return
 	}
@@ -36,7 +36,7 @@ func regenNginxVhost(siteName, sitePath string) {
 	serving := *site
 	serving.PHPVersion = phpDet.SiteVersion(sitePath, site.PHPVersion)
 	if webserver.ApplySite(serving) == nil {
-		_ = nginx.Reload()
+		_ = webserver.Reload()
 	}
 }
 
