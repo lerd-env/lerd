@@ -28,8 +28,8 @@ func stubToolStatus(t *testing.T, update bool) *int {
 
 func TestToolStatus_ReadOncePerStatusWindow(t *testing.T) {
 	calls := stubToolStatus(t, false)
-	cachedToolStatus()
-	cachedToolStatus()
+	cachedToolStatus("fnm")
+	cachedToolStatus("fnm")
 	if *calls != 1 {
 		t.Errorf("read tools %d times across two rebuilds, want 1", *calls)
 	}
@@ -37,13 +37,25 @@ func TestToolStatus_ReadOncePerStatusWindow(t *testing.T) {
 
 func TestToolStatus_ManualCheckReplacesTheAnswer(t *testing.T) {
 	stubToolStatus(t, false)
-	cachedToolStatus()
+	cachedToolStatus("fnm")
 	toolStatusFn = func(context.Context) []tools.ToolStatus {
 		return []tools.ToolStatus{{Name: "composer", Present: true, UpdateAvailable: true}}
 	}
 	handleTools(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/tools/check", nil))
 
-	if got := cachedToolStatus(); !got[0].UpdateAvailable {
+	if got := cachedToolStatus("fnm"); !got[0].UpdateAvailable {
 		t.Error("composer still shows the answer from before the manual check")
+	}
+}
+
+// The list carries the active Node manager's row, so switching managers must
+// not serve the list worked out for the other one.
+func TestToolStatus_SwitchingNodeManagerRereads(t *testing.T) {
+	calls := stubToolStatus(t, false)
+	cachedToolStatus("fnm")
+	cachedToolStatus("nvm")
+	cachedToolStatus("fnm")
+	if *calls != 2 {
+		t.Errorf("read tools %d times across fnm, nvm, fnm, want 2", *calls)
 	}
 }

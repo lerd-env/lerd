@@ -910,7 +910,7 @@ func buildStatus() StatusResponse {
 	}
 	usingSystemBun := bunAvailable && !nodeManagedByLerd && !lerdNode.SystemNodeAvailable()
 	toolStatuses := []tools.ToolStatus{}
-	for _, s := range cachedToolStatus() {
+	for _, s := range cachedToolStatus(nodeManager) {
 		if s.Name == "fnm" && nodeManager != "fnm" {
 			continue
 		}

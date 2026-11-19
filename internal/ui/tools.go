@@ -64,7 +64,8 @@ func handleToolUpdate(w http.ResponseWriter, name string) {
 }
 
 // cachedToolStatus is the managed tools' state from lerd-ui's hourly cache.
-// Every install ends in tools.WriteStamp, whose hook drops it.
-func cachedToolStatus() []tools.ToolStatus {
-	return cachedUpdate(updates, "tools", func() []tools.ToolStatus { return toolStatusFn(context.Background()) })
+// Every install ends in tools.WriteStamp, whose hook drops it. The list carries
+// the active Node manager's own row, so each manager keeps its own entry.
+func cachedToolStatus(nodeManager string) []tools.ToolStatus {
+	return cachedUpdate(updates, "tools:"+nodeManager, func() []tools.ToolStatus { return toolStatusFn(context.Background()) })
 }
