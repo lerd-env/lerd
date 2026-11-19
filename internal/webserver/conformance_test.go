@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/reqstats"
 )
 
 // TestConformance serves sites through the current backend in real containers
@@ -68,6 +69,12 @@ func TestConformance(t *testing.T) {
 	must(config.AddSite(paused))
 	must(ApplyPausedSite(paused))
 
+	must(os.MkdirAll(config.RunDir(), 0o755))
+	feed, err := net.ListenPacket("unixgram", config.AccessSocketPath())
+	must(err)
+	defer feed.Close()
+	must(os.Chmod(config.AccessSocketPath(), 0o666))
+
 	h := startHarness(t, tmp, site)
 
 	cases := []struct {
@@ -102,6 +109,30 @@ func TestConformance(t *testing.T) {
 			}
 		})
 	}
+	t.Run("request reaches the access feed", func(t *testing.T) { checkAccessFeed(t, h, feed) })
+}
+
+// Request stats and idle-suspend read the access feed, so every web server has
+// to report a request there in the line the watcher's parsers expect.
+func checkAccessFeed(t *testing.T, h harness, feed net.PacketConn) {
+	t.Helper()
+	h.do(t, "GET", "http", "plain.test", "/feed-probe?x=1", "")
+	buf := make([]byte, 4096)
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+		feed.SetReadDeadline(deadline)
+		n, _, err := feed.ReadFrom(buf)
+		if err != nil {
+			break
+		}
+		rec, ok := reqstats.ParseAccessRecord(buf[:n])
+		if ok && rec.URI == "/feed-probe?x=1" {
+			if rec.Host != "plain.test" || rec.Status != 200 || rec.Method != "GET" {
+				t.Errorf("access feed parsed %+v", rec)
+			}
+			return
+		}
+	}
+	t.Error("no access feed line for the probe request")
 }
 
 func writeSite(t *testing.T, dir string) string {
@@ -208,6 +239,7 @@ func startHarness(t *testing.T, tmp, site string) harness {
 			"-p", "127.0.0.1::80", "-p", "127.0.0.1::443",
 			"-e", "XDG_DATA_HOME="+tmp, "-e", "XDG_CONFIG_HOME="+tmp,
 			"-v", bin+":/usr/local/bin/lerd:ro", "-v", tmp+":"+tmp+":ro",
+			"-v", config.RunDir()+":"+config.RunDir()+":rw",
 			"--entrypoint", "/usr/local/bin/lerd", "docker.io/library/nginx:alpine", "web-serve")
 	} else {
 		nginxDir := config.NginxDir()
@@ -219,6 +251,7 @@ func startHarness(t *testing.T, tmp, site string) harness {
 			"-v", filepath.Join(nginxDir, "http.d")+":/etc/nginx/http.d:ro",
 			"-v", filepath.Join(config.CertsDir(), "sites")+":/etc/nginx/certs:ro",
 			"-v", tmp+":"+tmp+":ro",
+			"-v", config.RunDir()+":"+config.RunDir()+":rw",
 			"docker.io/library/nginx:alpine")
 	}
 	port := func(p string) string {

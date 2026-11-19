@@ -24,9 +24,10 @@ func NewWebServeCmd() *cobra.Command {
 		Args:   cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			h := &goserver.Handler{Sites: registeredSites, Upstream: fpmAddr}
-			tlsSrv := &http.Server{Addr: listenTLS, Handler: h, TLSConfig: &tls.Config{GetCertificate: h.GetCertificate}}
+			served := &goserver.AccessFeed{Next: h, Target: config.AccessLogTarget()}
+			tlsSrv := &http.Server{Addr: listenTLS, Handler: served, TLSConfig: &tls.Config{GetCertificate: h.GetCertificate}}
 			errs := make(chan error, 2)
-			go func() { errs <- http.ListenAndServe(listen, h) }()
+			go func() { errs <- http.ListenAndServe(listen, served) }()
 			go func() { errs <- tlsSrv.ListenAndServeTLS("", "") }()
 			return <-errs
 		},
