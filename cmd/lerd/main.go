@@ -43,6 +43,7 @@ import (
 	"github.com/geodro/lerd/internal/ui"
 	"github.com/geodro/lerd/internal/version"
 	"github.com/geodro/lerd/internal/watcher"
+	"github.com/geodro/lerd/internal/webserver"
 	"github.com/spf13/cobra"
 )
 
@@ -778,11 +779,7 @@ func newWatchCmd() *cobra.Command {
 									site.PHPVersion = detected
 									siteChanged = true
 									if !site.Paused {
-										if site.Secured {
-											_ = nginx.GenerateSSLVhost(*site, detected)
-										} else {
-											_ = nginx.GenerateVhost(*site, detected)
-										}
+										_ = webserver.ApplySite(*site)
 										if err := nginx.Reload(); err != nil {
 											fmt.Printf("[WARN] nginx reload after php version change for %s: %v\n", site.Name, err)
 										}

@@ -14,6 +14,7 @@ import (
 	"github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // fpmReadyTimeout bounds the wait for a freshly started FPM container. Long
@@ -300,7 +301,7 @@ func regenerateSiteVhost(site *config.Site, version string) error {
 		}
 		return nil
 	}
-	if err := nginx.GenerateVhost(*site, version); err != nil {
+	if err := webserver.ApplySite(*site); err != nil {
 		return fmt.Errorf("regenerating vhost: %w", err)
 	}
 	return nil

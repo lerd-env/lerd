@@ -38,6 +38,7 @@ import (
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/geodro/lerd/internal/tools"
 	"github.com/geodro/lerd/internal/version"
+	"github.com/geodro/lerd/internal/webserver"
 	"github.com/geodro/lerd/internal/workerheal"
 	"github.com/geodro/lerd/internal/xdebugops"
 )
@@ -4171,14 +4172,7 @@ func execSiteRuntime(args map[string]any) (any, *rpcError) {
 			return toolErr("updating site: " + err.Error()), nil
 		}
 		_ = config.SetProjectRuntime(site.Path, "", false)
-		if site.Secured {
-			if err := nginx.GenerateSSLVhost(*site, site.PHPVersion); err != nil {
-				return toolErr("regenerating SSL vhost: " + err.Error()), nil
-			}
-			if err := nginx.InstallSSLVhost(site.PrimaryDomain()); err != nil {
-				return toolErr("installing SSL vhost: " + err.Error()), nil
-			}
-		} else if err := nginx.GenerateVhost(*site, site.PHPVersion); err != nil {
+		if err := webserver.ApplySite(*site); err != nil {
 			return toolErr("regenerating vhost: " + err.Error()), nil
 		}
 		_ = nginx.Reload()

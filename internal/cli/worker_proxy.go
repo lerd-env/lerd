@@ -11,6 +11,7 @@ import (
 	"github.com/geodro/lerd/internal/freeport"
 	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // regenNginxVhost regenerates the nginx vhost for the site so proxy blocks are updated.
@@ -36,15 +37,9 @@ func regenNginxVhost(siteName, sitePath string) {
 	if detected, detErr := phpDet.DetectVersion(sitePath); detErr == nil && detected != "" {
 		phpVer = detected
 	}
-	var vhostErr error
-	if site.Secured {
-		if vhostErr = nginx.GenerateSSLVhost(*site, phpVer); vhostErr == nil {
-			vhostErr = nginx.InstallSSLVhost(site.PrimaryDomain())
-		}
-	} else {
-		vhostErr = nginx.GenerateVhost(*site, phpVer)
-	}
-	if vhostErr == nil {
+	serving := *site
+	serving.PHPVersion = phpVer
+	if webserver.ApplySite(serving) == nil {
 		_ = nginx.Reload()
 	}
 }

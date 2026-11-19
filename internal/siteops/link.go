@@ -12,6 +12,7 @@ import (
 	nodeDet "github.com/geodro/lerd/internal/node"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/webserver"
 )
 
 // VersionResult holds the detected and suggested versions for a site.
@@ -136,7 +137,7 @@ func CleanupRelink(path, newName string) bool {
 		}
 		secured = secured || existing.Secured
 		if existing.Name != newName {
-			_ = nginx.RemoveVhost(existing.PrimaryDomain())
+			_ = webserver.RemoveSite(existing.PrimaryDomain())
 			_ = config.RemoveSite(existing.Name)
 		}
 	}
@@ -176,7 +177,7 @@ func FinishSiteOnly(site config.Site, phpVersion string) error {
 			return fmt.Errorf("securing site: %w", err)
 		}
 	} else {
-		if err := nginx.GenerateVhost(site, phpVersion); err != nil {
+		if err := webserver.ApplySite(site); err != nil {
 			return fmt.Errorf("generating vhost: %w", err)
 		}
 	}
@@ -272,7 +273,7 @@ func FinishFrankenPHPLink(site config.Site) error {
 			return fmt.Errorf("securing site: %w", err)
 		}
 	} else {
-		if err := nginx.GenerateFrankenPHPVhost(site); err != nil {
+		if err := webserver.ApplySite(site); err != nil {
 			return fmt.Errorf("generating FrankenPHP vhost: %w", err)
 		}
 	}
@@ -328,7 +329,7 @@ func DemoteFrankenPHPToFPM(site *config.Site) error {
 		if err := certs.SecureSite(*site); err != nil {
 			return fmt.Errorf("regenerating SSL vhost: %w", err)
 		}
-	} else if err := nginx.GenerateVhost(*site, site.PHPVersion); err != nil {
+	} else if err := webserver.ApplySite(*site); err != nil {
 		return fmt.Errorf("regenerating vhost: %w", err)
 	}
 
@@ -374,7 +375,7 @@ func FinishCustomFPMLink(site config.Site, containerCfg *config.ContainerConfig)
 		if err := certs.SecureSite(site); err != nil {
 			return fmt.Errorf("securing site: %w", err)
 		}
-	} else if err := nginx.GenerateVhost(site, site.PHPVersion); err != nil {
+	} else if err := webserver.ApplySite(site); err != nil {
 		return fmt.Errorf("generating vhost: %w", err)
 	}
 
@@ -401,7 +402,7 @@ func FinishHostProxyLink(site config.Site) error {
 			return fmt.Errorf("securing site: %w", err)
 		}
 	} else {
-		if err := nginx.GenerateHostProxyVhost(site); err != nil {
+		if err := webserver.ApplySite(site); err != nil {
 			return fmt.Errorf("generating host-proxy vhost: %w", err)
 		}
 	}
@@ -451,7 +452,7 @@ func FinishCustomLink(site config.Site, containerCfg *config.ContainerConfig) er
 			return fmt.Errorf("securing site: %w", err)
 		}
 	} else {
-		if err := nginx.GenerateCustomVhost(site); err != nil {
+		if err := webserver.ApplySite(site); err != nil {
 			return fmt.Errorf("generating custom vhost: %w", err)
 		}
 	}

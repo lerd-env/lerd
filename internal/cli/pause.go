@@ -18,6 +18,7 @@ import (
 	"github.com/geodro/lerd/internal/services"
 	"github.com/geodro/lerd/internal/siteinfo"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
+	"github.com/geodro/lerd/internal/webserver"
 	"github.com/spf13/cobra"
 )
 
@@ -195,32 +196,14 @@ func UnpauseSite(name string) error {
 	case site.IsCustomContainer():
 		// Start the custom container and restore the proxy vhost.
 		_ = podman.StartUnit(podman.CustomContainerName(site.Name))
-		if site.Secured {
-			if err := nginx.GenerateCustomSSLVhost(*site); err != nil {
-				return fmt.Errorf("generating custom SSL vhost: %w", err)
-			}
-			if err := nginx.InstallSSLVhost(site.PrimaryDomain()); err != nil {
-				return fmt.Errorf("installing SSL vhost: %w", err)
-			}
-		} else {
-			if err := nginx.GenerateCustomVhost(*site); err != nil {
-				return fmt.Errorf("generating custom vhost: %w", err)
-			}
+		if err := webserver.ApplySite(*site); err != nil {
+			return fmt.Errorf("restoring custom vhost: %w", err)
 		}
 	case site.IsHostProxy():
 		// No container; the dev-server worker is restarted below from
 		// PausedWorkers. Just restore the proxy vhost.
-		if site.Secured {
-			if err := nginx.GenerateHostProxySSLVhost(*site); err != nil {
-				return fmt.Errorf("generating host-proxy SSL vhost: %w", err)
-			}
-			if err := nginx.InstallSSLVhost(site.PrimaryDomain()); err != nil {
-				return fmt.Errorf("installing host-proxy SSL vhost: %w", err)
-			}
-		} else {
-			if err := nginx.GenerateHostProxyVhost(*site); err != nil {
-				return fmt.Errorf("generating host-proxy vhost: %w", err)
-			}
+		if err := webserver.ApplySite(*site); err != nil {
+			return fmt.Errorf("restoring host-proxy vhost: %w", err)
 		}
 		// pauseWorktrees swapped each worktree to the paused page; the PHP
 		// unpauseWorktrees below never runs for host-proxy sites, so restore
@@ -228,17 +211,8 @@ func UnpauseSite(name string) error {
 		unpauseHostProxyWorktrees(site)
 	case site.IsFrankenPHP():
 		_ = podman.StartUnit(podman.FrankenPHPContainerName(site.Name))
-		if site.Secured {
-			if err := nginx.GenerateFrankenPHPSSLVhost(*site); err != nil {
-				return fmt.Errorf("generating FrankenPHP SSL vhost: %w", err)
-			}
-			if err := nginx.InstallSSLVhost(site.PrimaryDomain()); err != nil {
-				return fmt.Errorf("installing SSL vhost: %w", err)
-			}
-		} else {
-			if err := nginx.GenerateFrankenPHPVhost(*site); err != nil {
-				return fmt.Errorf("generating FrankenPHP vhost: %w", err)
-			}
+		if err := webserver.ApplySite(*site); err != nil {
+			return fmt.Errorf("restoring FrankenPHP vhost: %w", err)
 		}
 	default:
 		if detected, err := phpDet.DetectVersion(site.Path); err == nil && detected != "" {
@@ -254,17 +228,12 @@ func UnpauseSite(name string) error {
 			}
 		}
 
-		if site.Secured {
-			if err := nginx.GenerateSSLVhost(*site, phpVersion); err != nil {
-				return fmt.Errorf("generating SSL vhost: %w", err)
-			}
-			if err := nginx.InstallSSLVhost(site.PrimaryDomain()); err != nil {
-				return fmt.Errorf("installing SSL vhost: %w", err)
-			}
-		} else {
-			if err := nginx.GenerateVhost(*site, phpVersion); err != nil {
-				return fmt.Errorf("generating vhost: %w", err)
-			}
+		// The vhost follows the version the project pins now, which may have
+		// changed while the site was paused.
+		serving := *site
+		serving.PHPVersion = phpVersion
+		if err := webserver.ApplySite(serving); err != nil {
+			return fmt.Errorf("restoring vhost: %w", err)
 		}
 
 		unpauseWorktrees(site, phpVersion)

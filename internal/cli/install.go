@@ -32,6 +32,7 @@ import (
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/geodro/lerd/internal/tray"
 	"github.com/geodro/lerd/internal/version"
+	"github.com/geodro/lerd/internal/webserver"
 	"github.com/geodro/lerd/internal/wsl"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -594,66 +595,14 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	step("Regenerating vhosts")
 	reg, err := config.LoadSites()
 	if err == nil {
-		cfg, _ := config.LoadGlobal()
 		for _, site := range reg.Sites {
 			// Skip paused and ignored sites — they have their own vhosts
 			// (landing page or none) that should not be overwritten.
 			if site.Paused || site.Ignored {
 				continue
 			}
-			switch {
-			case site.IsHostProxy():
-				if site.Secured {
-					if err := nginx.GenerateHostProxySSLVhost(site); err != nil {
-						fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
-						continue
-					}
-					nginx.InstallSSLVhost(site.PrimaryDomain()) //nolint:errcheck
-				} else {
-					if err := nginx.GenerateHostProxyVhost(site); err != nil {
-						fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
-					}
-				}
-			case site.IsCustomContainer():
-				if site.Secured {
-					if err := nginx.GenerateCustomSSLVhost(site); err != nil {
-						fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
-						continue
-					}
-					nginx.InstallSSLVhost(site.PrimaryDomain()) //nolint:errcheck
-				} else {
-					if err := nginx.GenerateCustomVhost(site); err != nil {
-						fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
-					}
-				}
-			case site.IsFrankenPHP():
-				if site.Secured {
-					if err := nginx.GenerateFrankenPHPSSLVhost(site); err != nil {
-						fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
-						continue
-					}
-					nginx.InstallSSLVhost(site.PrimaryDomain()) //nolint:errcheck
-				} else {
-					if err := nginx.GenerateFrankenPHPVhost(site); err != nil {
-						fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
-					}
-				}
-			default:
-				phpVer := site.PHPVersion
-				if phpVer == "" && cfg != nil {
-					phpVer = cfg.PHP.DefaultVersion
-				}
-				if site.Secured {
-					if err := nginx.GenerateSSLVhost(site, phpVer); err != nil {
-						fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
-						continue
-					}
-					nginx.InstallSSLVhost(site.PrimaryDomain()) //nolint:errcheck
-				} else {
-					if err := nginx.GenerateVhost(site, phpVer); err != nil {
-						fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
-					}
-				}
+			if err := webserver.ApplySite(site); err != nil {
+				fmt.Printf("\n    WARN %s: %v", site.PrimaryDomain(), err)
 			}
 		}
 		rewakeSleepingSites(reg.Sites)
