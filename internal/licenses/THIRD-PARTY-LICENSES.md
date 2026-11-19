@@ -6970,7 +6970,7 @@ SOFTWARE.
 | @emnapi/runtime | 1.11.3 | MIT |
 | @emnapi/wasi-threads | 1.2.3 | MIT |
 | @exodus/bytes | 1.16.0 | MIT |
-| @inlang/paraglide-js | 3.2.1 | MIT |
+| @inlang/paraglide-js | 3.2.2 | MIT |
 | @inlang/recommend-sherlock | 0.2.1 | MIT |
 | @inlang/sdk | 4.2.0 | MIT |
 | @jridgewell/gen-mapping | 0.3.13 | MIT |
@@ -6981,7 +6981,7 @@ SOFTWARE.
 | @lix-js/sdk | 0.20.1 | MIT |
 | @napi-rs/wasm-runtime | 1.2.2 | MIT |
 | @oxc-project/types | 0.156.0 | MIT |
-| @rolldown/pluginutils | 1.0.1 | MIT |
+| @rolldown/pluginutils | 1.1.1 | MIT |
 | @sinclair/typebox | 0.31.30 | MIT |
 | @sveltejs/acorn-typescript | 1.0.13 | MIT |
 | @sveltejs/load-config | 0.2.3 | MIT |
@@ -6994,7 +6994,7 @@ SOFTWARE.
 | @testing-library/jest-dom | 7.0.1 | MIT |
 | @testing-library/svelte | 5.4.2 | MIT |
 | @testing-library/svelte-core | 1.1.3 | MIT |
-| @tsconfig/svelte | 5.0.8 | MIT |
+| @tsconfig/svelte | 5.0.9 | MIT |
 | @tybys/wasm-util | 0.10.3 | MIT |
 | @types/aria-query | 5.0.4 | MIT |
 | @types/chai | 5.2.3 | MIT |
@@ -7051,7 +7051,7 @@ SOFTWARE.
 | is-reference | 3.0.3 | MIT |
 | jiti | 2.7.0 | MIT |
 | js-tokens | 4.0.0 | MIT |
-| jsdom | 31.0.0 | MIT |
+| jsdom | 31.0.1 | MIT |
 | json5 | 2.2.3 | MIT |
 | kysely | 0.28.19 | MIT |
 | lightningcss | 1.33.0 | MPL-2.0 |
@@ -7072,13 +7072,13 @@ SOFTWARE.
 | parse5-parser-stream | 8.1.1 | MIT |
 | picocolors | 1.1.1 | ISC |
 | picomatch | 4.0.7 | MIT |
-| postcss | 8.5.32 | MIT |
+| postcss | 8.5.33 | MIT |
 | pretty-format | 27.5.1 | MIT |
 | punycode | 2.3.1 | MIT |
 | react-is | 17.0.2 | MIT |
 | readdirp | 4.1.2 | MIT |
 | redent | 3.0.0 | MIT |
-| rolldown | 1.2.16 | MIT |
+| rolldown | 1.2.19 | MIT |
 | sade | 1.8.1 | MIT |
 | saxes | 6.0.0 | ISC |
 | source-map-js | 1.2.2 | BSD-3-Clause |
@@ -7104,7 +7104,7 @@ SOFTWARE.
 | urlpattern-polyfill | 10.1.0 | MIT |
 | uuid | 14.0.3 | MIT |
 | valibot | 1.5.0 | MIT |
-| vite | 8.3.6 | MIT |
+| vite | 8.3.8 | MIT |
 | vitefu | 1.1.3 | MIT |
 | vitest | 5.1.0 | MIT |
 | w3c-xmlserializer | 6.0.0 | MIT |
@@ -7460,7 +7460,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @inlang/paraglide-js 3.2.1, @inlang/recommend-sherlock 0.2.1
+### @inlang/paraglide-js 3.2.2, @inlang/recommend-sherlock 0.2.1
 
 MIT
 
@@ -7603,7 +7603,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @rolldown/pluginutils 1.0.1
+### @rolldown/pluginutils 1.1.1
 
 MIT
 
@@ -7815,7 +7815,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @tsconfig/svelte 5.0.8
+### @tsconfig/svelte 5.0.9
 
 MIT
 
@@ -9869,7 +9869,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### jsdom 31.0.0
+### jsdom 31.0.1
 
 MIT
 
@@ -10798,7 +10798,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### postcss 8.5.32
+### postcss 8.5.33
 
 MIT
 
@@ -10881,7 +10881,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### rolldown 1.2.16
+### rolldown 1.2.19
 
 MIT
 
@@ -11397,7 +11397,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### vite 8.3.6
+### vite 8.3.8
 
 MIT
 
