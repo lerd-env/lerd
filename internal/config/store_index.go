@@ -17,6 +17,7 @@ type cachedStoreEntry struct {
 	Versions []string        `json:"versions"`
 	Latest   string          `json:"latest"`
 	Detect   []FrameworkRule `json:"detect"`
+	BasedOn  string          `json:"based_on,omitempty"`
 }
 
 // StorePackageEntry is one composer package the store publishes declarations

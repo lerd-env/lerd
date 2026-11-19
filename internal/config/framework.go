@@ -51,7 +51,10 @@ type Framework struct {
 	// with, a plain hex literal; anything else is dropped rather than reaching
 	// the page as CSS. Declared per version file since that is the only YAML a
 	// framework has, but it describes the family, so every version repeats it.
-	Color     string          `yaml:"color,omitempty"`
+	Color string `yaml:"color,omitempty"`
+	// BasedOn names the framework this one is built on, whose detect rules a
+	// project of this one matches too; detection prefers this one over it.
+	BasedOn   string          `yaml:"based_on,omitempty"`
 	PHP       FrameworkPHP    `yaml:"php,omitempty"`
 	Detect    []FrameworkRule `yaml:"detect,omitempty"`
 	PublicDir string          `yaml:"public_dir"`
@@ -2160,6 +2163,7 @@ func DetectFramework(dir string) (string, bool) {
 	var matches []string
 	matched := map[string]bool{}
 	seen := map[string]bool{}
+	bases := map[string]bool{}
 	for _, fwDir := range frameworkDirs() {
 		entries, _ := filepath.Glob(filepath.Join(fwDir, "*.yaml"))
 		// Every major of a framework gets a look, because majors can detect on
@@ -2185,6 +2189,7 @@ func DetectFramework(dir string) (string, bool) {
 			}
 			matched[fw.Name] = true
 			matches = append(matches, fw.Name)
+			bases[fw.BasedOn] = true
 		}
 		for name := range claimed {
 			seen[name] = true
@@ -2203,6 +2208,7 @@ func DetectFramework(dir string) (string, bool) {
 		}
 		matched[e.Name] = true
 		matches = append(matches, e.Name)
+		bases[e.BasedOn] = true
 	}
 
 	// Built-in Laravel and Symfony as fallbacks.
@@ -2212,6 +2218,9 @@ func DetectFramework(dir string) (string, bool) {
 			matches = append(matches, fw.Name)
 		}
 	}
+
+	// A framework that matched alongside the one built on it gives way to it.
+	matches = slices.DeleteFunc(matches, func(m string) bool { return bases[m] })
 
 	if len(matches) == 0 {
 		return "", false

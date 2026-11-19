@@ -181,16 +181,16 @@ func scaffoldPHPVersion(fw *config.Framework) string {
 // runScaffold executes a scaffold plan from the target's parent directory. When
 // version is set, the containerized create command runs under that PHP rather
 // than the one the parent directory resolves to.
-func runScaffold(plan scaffold, workDir, version string) error {
+func runScaffold(plan scaffold, workDir, version string, env []string) error {
 	if plan.inContainer {
 		var (
 			code int
 			err  error
 		)
 		if version != "" {
-			code, err = RunPHPVersionCaptureEnv(workDir, version, plan.args, []string{composer.ProcessTimeoutEnv()})
+			code, err = RunPHPVersionCaptureEnv(workDir, version, plan.args, env)
 		} else {
-			code, err = RunPHPCaptureEnv(workDir, plan.args, []string{composer.ProcessTimeoutEnv()})
+			code, err = RunPHPCaptureEnv(workDir, plan.args, env)
 		}
 		if err != nil {
 			return err
@@ -203,6 +203,7 @@ func runScaffold(plan scaffold, workDir, version string) error {
 
 	cmd := exec.Command(plan.args[0], plan.args[1:]...)
 	cmd.Dir = workDir
+	cmd.Env = append(os.Environ(), env...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -300,7 +301,9 @@ func runNew(target, frameworkName, frameworkVersion string, extraArgs []string) 
 	feedback.Line(line)
 	fmt.Println()
 
-	if err := runScaffold(plan, filepath.Dir(target), scaffoldVersion); err != nil {
+	// The project does not exist yet, so its composer env comes from fw itself.
+	env := append([]string{composer.ProcessTimeoutEnv()}, composer.MemoryLimitEnv(fw)...)
+	if err := runScaffold(plan, filepath.Dir(target), scaffoldVersion, env); err != nil {
 		return fmt.Errorf("scaffold command failed: %w", err)
 	}
 	if err := scaffoldLanded(target); err != nil {

@@ -28,7 +28,9 @@ and test against, but the pull request goes to **lerd-env/frameworks**.
      `composer create-project laravel/laravel:^12.0`)
    - `php.min` / `php.max` — the versions the framework supports
    - `detect` — marker file, lockfile, or `composer:` package that identifies it,
-     including the major version
+     including the major version.
+     A framework built on another one (a CMS on Symfony) also declares
+     `based_on: <base>` here and on its index entry, so it wins over the base.
    - `env` — `.env` file/format, `key_generation`, and the `services` map that
      wires each service (mysql, postgres, redis, mailpit, …) with detection rules
      and the vars to inject. **Env vars belong to the site, declared here — never

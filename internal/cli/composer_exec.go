@@ -35,7 +35,7 @@ func runComposer(args []string) error {
 		return err
 	}
 	phpArgs := append([]string{composer.PharPath()}, args...)
-	code, runErr := RunPHPCaptureEnv(cwd, phpArgs, []string{composer.ProcessTimeoutEnv()})
+	code, runErr := RunPHPCaptureEnv(cwd, phpArgs, composer.Env(cwd))
 
 	// Sync regardless of composer exit status, so a `composer global remove`
 	// that fails partway still cleans up wrappers whose source bin is gone.

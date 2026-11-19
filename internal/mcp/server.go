@@ -969,8 +969,8 @@ func execStripeConfig(args map[string]any) (any, *rpcError) {
 // so an assistant and the CLI are on the same version of it, and forwards the
 // host variables an external environment provider asked lerd to pass on.
 func composerExecArgs(container, workdir string, env, composerArgs []string) []string {
-	args := []string{"exec", "-w", workdir, "--env", composer.ProcessTimeoutEnv()}
-	for _, e := range env {
+	args := []string{"exec", "-w", workdir}
+	for _, e := range append(composer.Env(workdir), env...) {
 		args = append(args, "--env", e)
 	}
 	args = append(args, envpass.Args(workdir, os.Environ())...)
@@ -996,7 +996,7 @@ func execComposer(args map[string]any) (any, *rpcError) {
 
 	if nativeRuntime() {
 		var out bytes.Buffer
-		if err := runOnHost(projectPath, append([]string{"php", composer.PharPath()}, composerArgs...), &out, composer.ProcessTimeoutEnv()); err != nil {
+		if err := runOnHost(projectPath, append([]string{"php", composer.PharPath()}, composerArgs...), &out, composer.Env(projectPath)...); err != nil {
 			return toolErr(fmt.Sprintf("composer failed (%v):\n%s", err, stripANSI(out.String()))), nil
 		}
 		return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
@@ -3876,6 +3876,7 @@ func execProjectNew(args map[string]any) (any, *rpcError) {
 
 	var out bytes.Buffer
 	cmd := exec.Command(parts[0], parts[1:]...)
+	cmd.Env = append(os.Environ(), composer.MemoryLimitEnv(fw)...)
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 	if err := cmd.Run(); err != nil {
@@ -3911,7 +3912,7 @@ func runComposerInstallIfNeeded(projectPath string, out *bytes.Buffer) error {
 	}
 	out.WriteString("\n\n--- composer install ---\n")
 	if nativeRuntime() {
-		return runOnHost(projectPath, []string{"php", composer.PharPath(), "install", "--no-interaction"}, out, composer.ProcessTimeoutEnv())
+		return runOnHost(projectPath, []string{"php", composer.PharPath(), "install", "--no-interaction"}, out, composer.Env(projectPath)...)
 	}
 	container := phpDet.FPMContainerForDir(projectPath, phpVersion)
 	cmd := podman.Cmd(composerExecArgs(container, projectPath, nil, []string{"install", "--no-interaction"})...)

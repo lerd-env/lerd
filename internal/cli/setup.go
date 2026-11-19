@@ -748,7 +748,8 @@ func composerInContainer(dir string, args ...string) error {
 		version = cfg.PHP.DefaultVersion
 	}
 	composerPhar := composer.PharPath()
-	if took, err := execOnHostIfNative(dir, append([]string{"php", composerPhar}, args...), "COMPOSER_HOME="+composerHomeDir()); took {
+	env := append(composer.Env(dir), "COMPOSER_HOME="+composerHomeDir())
+	if took, err := execOnHostIfNative(dir, append([]string{"php", composerPhar}, args...), env...); took {
 		return err
 	}
 	container := fpmContainerForDir(dir, version)
@@ -757,9 +758,9 @@ func composerInContainer(dir string, args ...string) error {
 
 	home := os.Getenv("HOME")
 
-	cmdArgs := []string{"exec", "-i", "-w", dir,
-		"--env", "HOME=" + home,
-		"--env", "COMPOSER_HOME=" + composerHomeDir(),
+	cmdArgs := []string{"exec", "-i", "-w", dir, "--env", "HOME=" + home}
+	for _, e := range env {
+		cmdArgs = append(cmdArgs, "--env", e)
 	}
 	cmdArgs = append(cmdArgs, debugSiteEnvArgs(dir)...)
 	cmdArgs = append(cmdArgs, container, "php", composerPhar)

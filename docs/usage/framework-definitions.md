@@ -280,6 +280,10 @@ detect:
   - file: symfony.lock
   - composer: symfony/framework-bundle
 
+# The framework this one is built on, whose rules its projects match too
+# (optional). Repeat it on the store index entry.
+based_on: symfony
+
 # Arguments lerd puts in front of a vendor/bin binary, keyed by its name (optional)
 vendor_bin_args:
   wp:
@@ -744,6 +748,8 @@ The **CLI SAPI never reads `.user.ini`**, not even from inside the document root
 
 Workers get the directives too. They exec their command straight from a systemd unit, and Magento cannot even bootstrap at PHP's 128M default, so a cron or consumer worker without them simply crash-loops. That makes the value a definition author's responsibility: give it a bounded `memory_limit` rather than `-1`, because a worker runs until you stop it. A worker whose command is not a `php` invocation, a host-side `npm run dev`, is left alone.
 
+Composer is the one place a `-d` cannot reach: its scripts, Symfony Flex's auto-scripts among them, start the container's `php` themselves. So a declared `memory_limit` is also handed to every composer run for the project, `lerd new` included, as `COMPOSER_MEMORY_LIMIT`, the setting those scripts pass on. Composer itself also takes that value instead of raising itself to 1536M, so a declared value below 1536M is sent as 1536M. A `COMPOSER_MEMORY_LIMIT` already set in your shell wins.
+
 Set only what the CLI needs. Copying a framework's web values across is a trap: CLI `max_execution_time` defaults to `0`, meaning unlimited, so applying a web value of `600` would cap a long install at ten minutes.
 
 `PHP_VALUE`-style directives can set `auto_prepend_file`, which makes every PHP process execute a file from the repo, so `cli_ini` is honoured only from the trusted store and from a user overlay. An embedded `framework_def` in a project's `.lerd.yaml` has it stripped.
@@ -842,6 +848,8 @@ Detection order:
 3. **Framework store** (interactive): checks the store index and prompts to install, or fetches silently when `.lerd.yaml` specifies the framework name
 
 The first match wins. Detection rules are OR-based, any single matching rule is enough.
+
+A framework built on another one matches that one's rules as well: a Sulu project ships `symfony.lock` like any Symfony app. Such a definition declares `based_on: symfony`, on the YAML and on its entry in the store's `index.json`, since the index is all lerd has when the definition is not on disk yet. When both match, the one naming the other in `based_on` wins, whatever order they were found in. A binary that predates the key ignores it and keeps picking whichever matched first.
 
 ## Document root detection
 
