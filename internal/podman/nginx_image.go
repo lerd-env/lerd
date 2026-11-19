@@ -43,7 +43,7 @@ func nginxBehind(local nginxLocal, latest string) bool {
 }
 
 // readNginxLocal costs two podman inspects per status rebuild. The digests of
-// an image ID never change, so those are kept per ID rather than re-read; a
+// an image ID only change on a pull, so those are kept per ID until one; a
 // timed memo here once hid a restart onto another image.
 func readNginxLocal() nginxLocal {
 	running := ContainerImageID(nginxUnit)
@@ -58,12 +58,13 @@ func readNginxLocal() nginxLocal {
 }
 
 var (
-	nginxLocalFn   = readNginxLocal
-	digestsMu      sync.Mutex
-	digestsByID    = map[string][]string{}
-	nginxRefreshMu sync.Mutex
-	nginxRefreshOn bool
-	nginxRefreshWG sync.WaitGroup
+	nginxLocalFn       = readNginxLocal
+	localImageDigestFn = LocalImageDigest
+	digestsMu          sync.Mutex
+	digestsByID        = map[string][]string{}
+	nginxRefreshMu     sync.Mutex
+	nginxRefreshOn     bool
+	nginxRefreshWG     sync.WaitGroup
 )
 
 func imageDigestsFor(id string) []string {
@@ -72,11 +73,19 @@ func imageDigestsFor(id string) []string {
 	if d, ok := digestsByID[id]; ok {
 		return d
 	}
-	d := LocalImageDigest(id)
+	d := localImageDigestFn(id)
 	if len(d) > 0 {
 		digestsByID[id] = d
 	}
 	return d
+}
+
+// forgetImageDigests drops the per-ID digests, which a pull of a republished
+// tag extends on the image ID it already had.
+func forgetImageDigests() {
+	digestsMu.Lock()
+	digestsByID = map[string][]string{}
+	digestsMu.Unlock()
 }
 
 // NginxUpdateAvailable reports whether lerd-nginx is behind, answering from
@@ -144,6 +153,7 @@ func PullNginxImage(w io.Writer) error {
 	if err := PullImageTo(image, w); err != nil {
 		return err
 	}
+	forgetImageDigests()
 	return registry.InvalidateManifestDigest(image)
 }
 
