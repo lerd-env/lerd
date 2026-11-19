@@ -22,10 +22,9 @@ func Pending() bool {
 	return err != nil || len(Redirected()) == 0
 }
 
-// Install writes the grant, then the anchor, and loads it. The grant goes
-// first and a failed load takes the anchor back out: either way round, nginx
-// would sit on a port nothing redirects to. moved reports whether nginx's
-// publish changed, so the caller restarts it.
+// Install writes the grant, then the anchor, and loads it; a failed load or
+// check flushes and removes it, so nginx never waits on a port nothing redirects
+// to. moved reports whether nginx's publish changed, so the caller restarts it.
 func Install(user string, writeFile WriteFunc) (moved bool, err error) {
 	ports := Ports()
 	if len(ports) == 0 {
@@ -47,7 +46,7 @@ func Install(user string, writeFile WriteFunc) (moved bool, err error) {
 		}
 	}
 	if err := Apply(); err != nil {
-		return false, errors.Join(err, runSudo("rm", "-f", AnchorPath))
+		return false, errors.Join(err, runSudo(pfctl, "-a", Anchor, "-F", "all"), runSudo("rm", "-f", AnchorPath))
 	}
 	return false, nil
 }

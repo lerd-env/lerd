@@ -93,7 +93,7 @@ func TestInstallMovesNginxBackWhenAnExistingAnchorWillNotLoad(t *testing.T) {
 // pf can take the anchor and still never apply it, when another ruleset skips
 // lo0, which leaves the sites down exactly as a refused load would.
 func TestInstallTakesTheAnchorBackWhenLoopbackBypassesIt(t *testing.T) {
-	fakeRoot(t, nil)
+	calls := fakeRoot(t, nil)
 	reaches = func(int, int) bool { return false }
 	moved, err := Install("alice", fakeWrite)
 	if !errors.Is(err, ErrNotEffective) {
@@ -101,6 +101,10 @@ func TestInstallTakesTheAnchorBackWhenLoopbackBypassesIt(t *testing.T) {
 	}
 	if moved || len(Redirected()) != 0 {
 		t.Errorf("Install() moved = %v with anchor %v, want nginx left on its wide bind", moved, Redirected())
+	}
+	flush := strings.Join([]string{pfctl, "-a", Anchor, "-F", "all"}, " ")
+	if i := slices.Index(*calls, flush); i < 0 || i != len(*calls)-2 {
+		t.Errorf("calls = %q, want the loaded rules flushed before the anchor file goes", *calls)
 	}
 }
 
