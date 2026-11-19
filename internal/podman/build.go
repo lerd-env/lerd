@@ -1251,9 +1251,9 @@ func RewriteFPMQuadlets() error {
 		httpPort, httpsPort := config.NginxPorts()
 		nginxContent = ApplyNginxPorts(nginxContent, httpPort, httpsPort)
 		nginxContent = InjectExtraVolumes(nginxContent, extraPaths)
-		if changed, err := WriteQuadletDiff("lerd-nginx", nginxContent); err == nil {
-			if changed || UnitMissingMounts("lerd-nginx", extraPaths) || unitMissingHomeAliases("lerd-nginx", aliases) {
-				changedUnits = append(changedUnits, "lerd-nginx")
+		if changed, err := WriteQuadletDiff(WebServerUnit, nginxContent); err == nil {
+			if changed || UnitMissingMounts(WebServerUnit, extraPaths) || unitMissingHomeAliases(WebServerUnit, aliases) {
+				changedUnits = append(changedUnits, WebServerUnit)
 			}
 		}
 	}
@@ -1534,7 +1534,7 @@ func EnsurePathMounted(path, phpVersion string) {
 		unitName := "lerd-php" + short + "-fpm"
 		quadlets = append(quadlets, quadletInfo{unitName, filepath.Join(config.QuadletDir(), unitName+".container")})
 	}
-	quadlets = append(quadlets, quadletInfo{"lerd-nginx", filepath.Join(config.QuadletDir(), "lerd-nginx.container")})
+	quadlets = append(quadlets, quadletInfo{WebServerUnit, filepath.Join(config.QuadletDir(), "lerd-nginx.container")})
 	// Custom-FPM sites serve from their own container, so an out-of-home path
 	// has to reach that quadlet too, not just the shared per-version ones.
 	if reg, regErr := config.LoadSites(); regErr == nil {

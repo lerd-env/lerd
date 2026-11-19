@@ -143,7 +143,7 @@ func DetectHostGatewayIP() string {
 	// candidate is routable). Fall back to whatever getent returns so the
 	// file is well-formed. The next WriteContainerHosts call (after services
 	// finish starting) gets a fresh probe and updates /etc/hosts in place.
-	if ip := parseHostGatewayFromExec("lerd-nginx"); ip != "" {
+	if ip := parseHostGatewayFromExec(WebServerUnit); ip != "" {
 		return ip
 	}
 	if ip := parseHostGatewayFromProbe(); ip != "" {
@@ -165,10 +165,10 @@ func DetectHostGatewayIPProbeOnly() string {
 // open a TCP connection to on hostProbePort, or "" if no candidate works
 // (or the probe can't run because lerd-nginx isn't up).
 func probeReachableHostIP() string {
-	if !ContainerRunningQuiet("lerd-nginx") {
+	if !ContainerRunningQuiet(WebServerUnit) {
 		return ""
 	}
-	for _, ip := range hostCandidates(parseHostGatewayFromExec("lerd-nginx"), lanip.DummyV4(), lanip.Primary()) {
+	for _, ip := range hostCandidates(parseHostGatewayFromExec(WebServerUnit), lanip.DummyV4(), lanip.Primary()) {
 		if probeHostFromNginx(ip, hostProbePort) {
 			return ip
 		}
@@ -201,7 +201,7 @@ func hostCandidates(getentIP, dummyIP, lanIP string) []string {
 // cheaply verify whether the current /etc/hosts entry is still valid before
 // running a full reprobe. Returns false when lerd-nginx isn't running.
 func HostReachable(ip string) bool {
-	if !ContainerRunningQuiet("lerd-nginx") {
+	if !ContainerRunningQuiet(WebServerUnit) {
 		return false
 	}
 	return probeHostFromNginx(ip, hostProbePort)
@@ -295,7 +295,7 @@ func isInfraHostname(name string) bool {
 // probeHostFromNginx returns true if lerd-nginx can open a TCP connection to
 // ip:port within 2 seconds. Uses busybox nc (-z = scan only, -w = timeout).
 func probeHostFromNginx(ip, port string) bool {
-	return runCapped(execCommand(PodmanBin(), "exec", "lerd-nginx", "nc", "-z", "-w", "2", ip, port), 3*time.Second)
+	return runCapped(execCommand(PodmanBin(), "exec", WebServerUnit, "nc", "-z", "-w", "2", ip, port), 3*time.Second)
 }
 
 // dnsProbeTimeout caps the container-side name lookup. A forwarder that is
@@ -313,7 +313,7 @@ func ResolvesFromNginx(name string) bool {
 	if name == "" {
 		return false
 	}
-	return runCapped(execCommand(PodmanBin(), "exec", "lerd-nginx", "getent", "hosts", name), dnsProbeTimeout)
+	return runCapped(execCommand(PodmanBin(), "exec", WebServerUnit, "getent", "hosts", name), dnsProbeTimeout)
 }
 
 // runCapped runs cmd discarding its output and reports whether it exited 0
@@ -384,7 +384,7 @@ func nginxContainerIP() string {
 // lerd-nginx is absent or stopped, so the watcher can tell "no IP yet" apart
 // from a real address and skip the rewrite instead of writing loopback.
 func LookupNginxContainerIP() string {
-	cmd := execCommand(PodmanBin(), "inspect", "lerd-nginx",
+	cmd := execCommand(PodmanBin(), "inspect", WebServerUnit,
 		"--format", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}")
 	out, err := outputWithTimeout(cmd, nginxInspectTimeout)
 	if err != nil {

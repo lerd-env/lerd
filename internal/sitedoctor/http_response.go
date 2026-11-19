@@ -38,7 +38,7 @@ var httpProbe = func(url string) (int, error) {
 }
 
 // nginxUp is hooked for the same reason.
-var nginxUp = func() bool { return podman.ContainerRunningQuiet("lerd-nginx") }
+var nginxUp = func() bool { return podman.ContainerRunningQuiet(podman.WebServerUnit) }
 
 // checkHTTPResponse asks the site for its root and reports what came back.
 // Every other check here reads configuration, and configuration can be perfect

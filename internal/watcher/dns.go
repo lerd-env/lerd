@@ -194,7 +194,7 @@ func hasIPv6Loopback() bool {
 // HTTPS. If nginx can't rebind (e.g. that pending migration), the restart is a
 // no-op the next probe still sees as down, surfacing it for `lerd start`.
 func defaultRepairNginx() error {
-	return podman.RestartUnit("lerd-nginx")
+	return podman.RestartUnit(podman.WebServerUnit)
 }
 
 // defaultRepairDNS brings lerd-dns back. The reset-failed first is the point:

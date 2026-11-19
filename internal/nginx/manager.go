@@ -1327,7 +1327,7 @@ var ErrNotRunning = errors.New("lerd-nginx is not running")
 var (
 	containerRunningFn = podman.ContainerRunningKnown
 	reloadExecFn       = func() error {
-		_, err := podman.Run("exec", "lerd-nginx", "nginx", "-s", "reload")
+		_, err := podman.Run("exec", podman.WebServerUnit, "nginx", "-s", "reload")
 		return err
 	}
 	configTestFn = Test
@@ -1366,7 +1366,7 @@ func reloadOnce() error {
 	}
 	// Only a stop podman confirmed counts: callers treat ErrNotRunning as benign,
 	// so an unreachable podman has to surface as the reload failure it is.
-	if running, known := containerRunningFn("lerd-nginx"); known && !running {
+	if running, known := containerRunningFn(podman.WebServerUnit); known && !running {
 		return ErrNotRunning
 	}
 	return err
@@ -1432,7 +1432,7 @@ func reloadWithRetry(reload func() error, timeout time.Duration) error {
 func Test() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	cmd := podman.CmdContext(ctx, "exec", "lerd-nginx", "nginx", "-t")
+	cmd := podman.CmdContext(ctx, "exec", podman.WebServerUnit, "nginx", "-t")
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
@@ -2304,7 +2304,7 @@ func RewriteNginxQuadlet() (changed bool, err error) {
 	httpPort, httpsPort := config.NginxPorts()
 	content = podman.ApplyNginxPorts(content, httpPort, httpsPort)
 	content = podman.InjectExtraVolumes(content, podman.ExtraVolumePaths())
-	return podman.WriteQuadletDiff("lerd-nginx", content)
+	return podman.WriteQuadletDiff(podman.WebServerUnit, content)
 }
 
 // profilerVhost renders the profiler.localhost vhost for the runtime serving
