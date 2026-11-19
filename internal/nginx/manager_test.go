@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -1303,8 +1304,30 @@ func TestWriteFileAtomic_writesContentAndLeavesNoTempBehind(t *testing.T) {
 	if err != nil || string(got) != "server { listen 80; }\n" {
 		t.Fatalf("content mismatch or read err: got=%q err=%v", got, err)
 	}
-	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
-		t.Errorf("expected sibling .tmp to be cleaned up, stat err=%v", err)
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 {
+		t.Errorf("expected only the written file in %s, got %d entries", dir, len(entries))
+	}
+}
+
+// The watcher and a CLI command can rewrite one vhost at the same moment; a
+// shared temp name let one rename take the other's file and fail it.
+func TestWriteFileAtomic_concurrentWritersDoNotCollide(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "managed.conf")
+	var wg sync.WaitGroup
+	errs := make(chan error, 200)
+	for i := 0; i < 200; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- WriteFileAtomic(path, []byte("server {}\n"), 0644)
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent WriteFileAtomic: %v", err)
+		}
 	}
 }
 

@@ -1700,30 +1700,34 @@ func readFileOrEmpty(path string) string {
 	return string(b)
 }
 
-// WriteFileAtomic writes data to path via a sibling .tmp file followed by
-// a rename, so a crash mid-write can never leave nginx pointing at a
-// half-written conf. Preserves the destination file's mode if it already
-// existed so an out-of-band chmod survives the rewrite; uses the caller's
-// mode only when creating from scratch. Temp file is removed on any error.
+// WriteFileAtomic writes data to a uniquely named sibling then renames it over
+// path, so nginx never reads half a conf and concurrent writers never share a
+// temp file. An existing file keeps its mode; mode applies only to a new one.
 func WriteFileAtomic(path string, data []byte, mode os.FileMode) error {
 	effective := mode
 	if info, err := os.Stat(path); err == nil {
 		effective = info.Mode().Perm()
 	}
-	tmp := path + ".tmp"
-	config.GuardRealWrite(tmp)
-	if err := os.WriteFile(tmp, data, effective); err != nil {
+	config.GuardRealWrite(path)
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	if err := os.Chmod(tmp, effective); err != nil {
+	tmp := f.Name()
+	_, err = f.Write(data)
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Chmod(tmp, effective)
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
 		os.Remove(tmp)
-		return err
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	return nil
+	return err
 }
 
 // renderDefaultVhost returns the canonical _default.conf content. An unknown or
