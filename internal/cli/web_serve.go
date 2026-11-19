@@ -11,6 +11,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/goserver"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/serviceops"
 )
 
 // NewWebServeCmd runs lerd's own web server in the foreground. It is what the
@@ -23,7 +24,7 @@ func NewWebServeCmd() *cobra.Command {
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			h := &goserver.Handler{Sites: registeredSites, Upstream: fpmAddr, Proxy: goserver.SiteTarget}
+			h := &goserver.Handler{Sites: registeredSites, Upstream: fpmAddr, Proxy: goserver.SiteTarget, Services: serviceRoutes}
 			served := &goserver.AccessFeed{Next: h, Target: config.AccessLogTarget()}
 			tlsSrv := &http.Server{Addr: listenTLS, Handler: served, TLSConfig: &tls.Config{GetCertificate: h.GetCertificate}}
 			errs := make(chan error, 2)
@@ -54,4 +55,18 @@ func fpmAddr(site config.Site) string {
 	}
 	host, port := podman.FPMUpstream(site, version)
 	return net.JoinHostPort(host, strconv.Itoa(port))
+}
+
+func serviceRoutes() []goserver.ServiceRoute {
+	tld := config.EffectiveTLD()
+	var routes []goserver.ServiceRoute
+	for _, r := range serviceops.DomainRoutes() {
+		routes = append(routes, goserver.ServiceRoute{
+			Domain:   r.Domain,
+			Upstream: net.JoinHostPort("lerd-"+r.Service, strconv.Itoa(r.Port)),
+			CORS:     r.CORS,
+			TLD:      tld,
+		})
+	}
+	return routes
 }

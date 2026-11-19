@@ -63,6 +63,16 @@ func TestConformance(t *testing.T) {
 		must(config.AddSite(s))
 		must(ApplySite(s))
 	}
+	// A service domain, served from a stand-in on mailpit's web port.
+	cfg, err := config.LoadGlobal()
+	must(err)
+	svc := cfg.Services["mailpit"]
+	svc.Domain, svc.DomainCORS = "mail.test", true
+	cfg.Services["mailpit"] = svc
+	must(config.SaveGlobal(cfg))
+	writeCert(t, "mail.test")
+	must(ApplyService("mail.test", "lerd-mailpit", 8025, true, true))
+
 	must(os.MkdirAll(config.PausedDir(), 0o755))
 	must(os.WriteFile(filepath.Join(config.PausedDir(), "paused.html"), []byte("conformance paused page"), 0o644))
 	paused := config.Site{Name: "paused", Domains: []string{"paused.test"}, Path: site, Paused: true}
@@ -81,6 +91,7 @@ func TestConformance(t *testing.T) {
 		name, method, scheme, host, path, body string
 		status                                 int
 		want, location                         string
+		origin, allowOrigin                    string
 		goReady                                bool
 	}{
 		{goReady: true, name: "php over http", method: "GET", scheme: "http", host: "plain.test", path: "/", status: 200, want: "conformance GET fpm-fcgi"},
@@ -90,6 +101,9 @@ func TestConformance(t *testing.T) {
 		{goReady: true, name: "secured redirects http", method: "GET", scheme: "http", host: "secure.test", path: "/x?y=1", status: 302, location: "https://secure.test/x?y=1"},
 		{goReady: true, name: "custom container proxied", method: "GET", scheme: "http", host: "custom.test", path: "/", status: 200, want: "Welcome to nginx"},
 		{name: "paused page", method: "GET", scheme: "http", host: "paused.test", path: "/", want: "conformance paused page"},
+		{goReady: true, name: "service domain over https", method: "GET", scheme: "https", host: "mail.test", path: "/", status: 200, want: "Welcome to nginx"},
+		{goReady: true, name: "service domain moves to https", method: "GET", scheme: "http", host: "mail.test", path: "/x", status: 301, location: "https://mail.test/x"},
+		{goReady: true, name: "service cors preflight", method: "OPTIONS", scheme: "https", host: "mail.test", path: "/", status: 204, origin: "https://app.test", allowOrigin: "https://app.test"},
 		{goReady: true, name: "unknown host", method: "GET", scheme: "http", host: "nobody.test", path: "/", status: 404},
 	}
 	for _, c := range cases {
@@ -97,7 +111,7 @@ func TestConformance(t *testing.T) {
 			if h.goServer && !c.goReady {
 				t.Skip("not served by the Go web server yet")
 			}
-			status, body, location := h.do(t, c.method, c.scheme, c.host, c.path, c.body)
+			status, body, location, hdr := h.doWith(t, c.method, c.scheme, c.host, c.path, c.body, c.origin)
 			if c.status != 0 && status != c.status {
 				t.Errorf("status %d, want %d; body %.200q", status, c.status, body)
 			}
@@ -106,6 +120,9 @@ func TestConformance(t *testing.T) {
 			}
 			if c.location != "" && location != c.location {
 				t.Errorf("Location %q, want %q", location, c.location)
+			}
+			if c.allowOrigin != "" && hdr.Get("Access-Control-Allow-Origin") != c.allowOrigin {
+				t.Errorf("Allow-Origin %q, want %q", hdr.Get("Access-Control-Allow-Origin"), c.allowOrigin)
 			}
 		})
 	}
@@ -206,7 +223,7 @@ func startHarness(t *testing.T, tmp, site string) harness {
 	}
 	podman("network", "create", id)
 	t.Cleanup(func() {
-		podmanCmd("rm", "-f", "-t", "0", id+"-nginx", id+"-fpm", id+"-custom").Run()
+		podmanCmd("rm", "-f", "-t", "0", id+"-nginx", id+"-fpm", id+"-custom", id+"-svc").Run()
 		podmanCmd("network", "rm", "-f", id).Run()
 	})
 	gw := podman("network", "inspect", "-f", "{{range .Subnets}}{{.Gateway}}{{end}}", id)
@@ -227,6 +244,9 @@ func startHarness(t *testing.T, tmp, site string) harness {
 		"-v", site+":"+site+":ro", "localhost/lerd-php84-fpm:local", "php-fpm", "-F", "-R")
 	podman("run", "-d", "--name", id+"-custom", "--network", id, "--network-alias", "lerd-custom-custom", noLabel,
 		"docker.io/library/nginx:alpine")
+	podman("run", "-d", "--name", id+"-svc", "--network", id, "--network-alias", "lerd-mailpit", noLabel,
+		"--entrypoint", "sh", "docker.io/library/nginx:alpine", "-c",
+		`sed -i 's/listen  *80;/listen 8025;/' /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'`)
 	// LERD_CONFORMANCE_BACKEND=go runs lerd's own server, from the static
 	// binary in LERD_BIN, where nginx would otherwise be.
 	goServer := os.Getenv("LERD_CONFORMANCE_BACKEND") == "go"
@@ -279,6 +299,12 @@ func startHarness(t *testing.T, tmp, site string) harness {
 // site answers to, and returns status, body and redirect target.
 func (h harness) do(t *testing.T, method, scheme, host, path, body string) (int, string, string) {
 	t.Helper()
+	status, b, loc, _ := h.doWith(t, method, scheme, host, path, body, "")
+	return status, b, loc
+}
+
+func (h harness) doWith(t *testing.T, method, scheme, host, path, body, origin string) (int, string, string, http.Header) {
+	t.Helper()
 	port := h.http
 	if scheme == "https" {
 		port = h.https
@@ -301,6 +327,10 @@ func (h harness) do(t *testing.T, method, scheme, host, path, body string) (int,
 		if err != nil {
 			t.Fatal(err)
 		}
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+			req.Header.Set("Access-Control-Request-Headers", "content-type")
+		}
 		resp, err := client.Do(req)
 		if err != nil {
 			lastErr = err
@@ -312,8 +342,8 @@ func (h harness) do(t *testing.T, method, scheme, host, path, body string) (int,
 			lastErr = fmt.Errorf("502: %.200s", b)
 			continue
 		}
-		return resp.StatusCode, string(b), resp.Header.Get("Location")
+		return resp.StatusCode, string(b), resp.Header.Get("Location"), resp.Header
 	}
 	t.Fatalf("%s %s://%s%s: %v", method, scheme, host, path, lastErr)
-	return 0, "", ""
+	return 0, "", "", nil
 }

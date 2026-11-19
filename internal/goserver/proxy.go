@@ -29,11 +29,7 @@ func serveProxied(w http.ResponseWriter, r *http.Request, target *url.URL) {
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(target)
 			pr.Out.Host = host
-			client, _, _ := net.SplitHostPort(r.RemoteAddr)
-			if prior := r.Header.Get("X-Forwarded-For"); prior != "" {
-				client = prior + ", " + client
-			}
-			pr.Out.Header.Set("X-Forwarded-For", client)
+			pr.Out.Header.Set("X-Forwarded-For", forwardedFor(r))
 			pr.Out.Header.Set("X-Real-IP", remoteIP(r))
 			pr.Out.Header.Set("X-Forwarded-Host", host)
 			pr.Out.Header.Set("X-Forwarded-Proto", forwardedProto(r))
@@ -60,6 +56,15 @@ func forwardedProto(r *http.Request) string {
 		return p
 	}
 	return scheme(r)
+}
+
+// forwardedFor is $proxy_add_x_forwarded_for: the incoming chain with this
+// client appended.
+func forwardedFor(r *http.Request) string {
+	if prior := r.Header.Get("X-Forwarded-For"); prior != "" {
+		return prior + ", " + remoteIP(r)
+	}
+	return remoteIP(r)
 }
 
 func remoteIP(r *http.Request) string {

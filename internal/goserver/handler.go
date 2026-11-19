@@ -28,11 +28,18 @@ type Handler struct {
 	// FrankenPHP worker, a dev server on the host) is proxied to; ok is false
 	// for a PHP-FPM site.
 	Proxy func(config.Site) (target *url.URL, ok bool)
+	// Services returns the service domains to serve, read per request.
+	Services func() []ServiceRoute
 
 	certs certCache
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// A service domain is an exact name, which outranks a site's wildcard.
+	if svc, ok := h.serviceFor(r.Host); ok {
+		serveService(w, r, svc)
+		return
+	}
 	site, ok := h.siteFor(r.Host)
 	if !ok {
 		http.NotFound(w, r)

@@ -18,6 +18,10 @@ import (
 // browser asked for. Its subdomains (worktrees, worker subdomains) share it,
 // since lerd issues each site's certificate with a wildcard.
 func (h *Handler) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	if svc, ok := h.serviceFor(hello.ServerName); ok {
+		base := filepath.Join(config.CertsDir(), "sites", svc.Domain)
+		return h.certs.load(base+".crt", base+".key")
+	}
 	site, ok := h.siteFor(hello.ServerName)
 	if !ok || !site.Secured {
 		return nil, fmt.Errorf("no secured site serves %q", hello.ServerName)

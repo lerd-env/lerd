@@ -454,3 +454,23 @@ func firstMapping(ports []string) string {
 	}
 	return ports[0]
 }
+
+// DomainRoute is one service served on its own domain, as the web server
+// needs it: where to send the request and whether to answer CORS.
+type DomainRoute struct {
+	Service, Domain string
+	Port            int
+	CORS            bool
+}
+
+// DomainRoutes lists every service domain with the port and CORS setting its
+// nginx vhost is written with, skipping one that declares no port.
+func DomainRoutes() []DomainRoute {
+	var routes []DomainRoute
+	for service, domain := range config.ServiceDomains() {
+		if port := serviceDomainPort(service); port > 0 {
+			routes = append(routes, DomainRoute{Service: service, Domain: domain, Port: port, CORS: serviceDomainCORS(service)})
+		}
+	}
+	return routes
+}
