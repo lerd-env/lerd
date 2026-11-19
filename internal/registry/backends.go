@@ -206,61 +206,35 @@ func listTagsDockerHub(ref ImageRef) ([]TagInfo, error) {
 }
 
 func fetchDockerHubPage(url string) (*dockerHubResponse, error) {
-	var parsed dockerHubResponse
-	if err := getDockerHub(url, fetchTimeout, &parsed); err != nil {
-		return nil, err
-	}
-	return &parsed, nil
-}
-
-// fetchDockerHubTagDigest reads one tag's digest from the Hub API. An anonymous
-// manifest HEAD against the registry itself is refused, so this is the cheap
-// way to learn what a floating tag like nginx:alpine points at now.
-func fetchDockerHubTagDigest(ref ImageRef) (string, error) {
-	var tag dockerHubTagItem
-	url := fmt.Sprintf("https://hub.docker.com/v2/repositories/%s/tags/%s", ref.Repo, ref.Tag)
-	if err := getDockerHub(url, digestFetchTimeout, &tag); err != nil {
-		return "", err
-	}
-	digest := tag.Digest
-	if digest == "" && len(tag.Images) > 0 {
-		digest = tag.Images[0].Digest
-	}
-	if digest == "" {
-		return "", &UnreachableErr{Cause: fmt.Errorf("docker hub served no digest for %s:%s", ref.Repo, ref.Tag)}
-	}
-	return digest, nil
-}
-
-func getDockerHub(url string, timeout time.Duration, into any) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return &UnreachableErr{Cause: err}
+		return nil, &UnreachableErr{Cause: err}
 	}
 	defer resp.Body.Close()
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized, resp.StatusCode == http.StatusForbidden:
-		return &AuthRequiredErr{Registry: "docker.io"}
+		return nil, &AuthRequiredErr{Registry: "docker.io"}
 	case resp.StatusCode == http.StatusNotFound:
-		return &NotFoundErr{Repo: strings.TrimPrefix(url, "https://hub.docker.com/v2/repositories/")}
+		return nil, &NotFoundErr{Repo: strings.TrimPrefix(url, "https://hub.docker.com/v2/repositories/")}
 	case resp.StatusCode == http.StatusTooManyRequests:
-		return &UnreachableErr{Cause: fmt.Errorf("docker hub rate-limited (429)")}
+		return nil, &UnreachableErr{Cause: fmt.Errorf("docker hub rate-limited (429)")}
 	case resp.StatusCode >= 500:
-		return &UnreachableErr{Cause: fmt.Errorf("docker hub %d", resp.StatusCode)}
+		return nil, &UnreachableErr{Cause: fmt.Errorf("docker hub %d", resp.StatusCode)}
 	case resp.StatusCode != http.StatusOK:
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return fmt.Errorf("docker hub %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("docker hub %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 5<<20)).Decode(into); err != nil {
-		return &UnreachableErr{Cause: err}
+	var parsed dockerHubResponse
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 5<<20)).Decode(&parsed); err != nil {
+		return nil, &UnreachableErr{Cause: err}
 	}
-	return nil
+	return &parsed, nil
 }
 
 // ---- GHCR backend ----------------------------------------------------------
@@ -315,7 +289,16 @@ func listTagsGHCR(ref ImageRef) ([]TagInfo, error) {
 }
 
 func fetchGHCRToken(repo string) (string, error) {
-	tokenURL := fmt.Sprintf("https://ghcr.io/token?scope=repository:%s:pull&service=ghcr.io", repo)
+	return fetchPullToken(fmt.Sprintf("https://ghcr.io/token?scope=repository:%s:pull&service=ghcr.io", repo), "ghcr.io", repo)
+}
+
+// fetchDockerHubToken gets an anonymous pull token for Docker Hub's registry,
+// which refuses a manifest HEAD without one. A HEAD does not count as a pull.
+func fetchDockerHubToken(repo string) (string, error) {
+	return fetchPullToken(fmt.Sprintf("https://auth.docker.io/token?scope=repository:%s:pull&service=registry.docker.io", repo), "docker.io", repo)
+}
+
+func fetchPullToken(tokenURL, registry, repo string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", tokenURL, nil)
@@ -329,11 +312,11 @@ func fetchGHCRToken(repo string) (string, error) {
 	defer resp.Body.Close()
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized, resp.StatusCode == http.StatusForbidden:
-		return "", &AuthRequiredErr{Registry: "ghcr.io"}
+		return "", &AuthRequiredErr{Registry: registry}
 	case resp.StatusCode == http.StatusNotFound:
 		return "", &NotFoundErr{Repo: repo}
 	case resp.StatusCode != http.StatusOK:
-		return "", &UnreachableErr{Cause: fmt.Errorf("ghcr token %d", resp.StatusCode)}
+		return "", &UnreachableErr{Cause: fmt.Errorf("%s token %d", registry, resp.StatusCode)}
 	}
 	var tok ghcrTokenResponse
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&tok); err != nil {

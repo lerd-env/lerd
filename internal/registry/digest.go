@@ -62,12 +62,19 @@ func CachedManifestDigest(image string) (string, bool) {
 // tag. It is a manifest HEAD, so nothing is pulled. Results are cached on disk
 // for manifestDigestTTL, failures included: an unreachable or unauthenticated
 // registry is then retried at most once per window instead of on every check.
-func ManifestDigest(image string) (string, error) {
+func ManifestDigest(image string) (string, error) { return manifestDigest(image, false) }
+
+// RefreshManifestDigest reads the digest straight from the registry, bypassing
+// the cache. Build paths use it so an image is never stamped with a digest that
+// has been superseded within the cache window.
+func RefreshManifestDigest(image string) (string, error) { return manifestDigest(image, true) }
+
+func manifestDigest(image string, force bool) (string, error) {
 	ref, err := ParseImage(image)
 	if err != nil {
 		return "", err
 	}
-	if entry, ok := readDigestCache(ref); ok {
+	if entry, ok := readDigestCache(ref); ok && !force {
 		if entry.Digest == "" {
 			return "", &UnreachableErr{Cause: fmt.Errorf("no digest for %s (cached failure)", image)}
 		}
@@ -75,10 +82,13 @@ func ManifestDigest(image string) (string, error) {
 	}
 	digest, err, _ := digestGroup.Do(digestCachePath(ref), func() (any, error) {
 		d, fetchErr := fetchManifestDigest(ref)
-		writeDigestCache(ref, d)
 		if fetchErr != nil {
+			// A failed fetch keeps the last digest learned rather than erasing
+			// it, so an update already found stays shown while offline.
+			writeDigestCache(ref, lastKnownDigest(ref))
 			return "", fetchErr
 		}
+		writeDigestCache(ref, d)
 		return d, nil
 	})
 	if err != nil {
@@ -87,14 +97,17 @@ func ManifestDigest(image string) (string, error) {
 	return digest.(string), nil
 }
 
-// RefreshManifestDigest reads the digest straight from the registry, replacing
-// whatever was cached. Build paths use it so an image is never stamped with a
-// digest that has been superseded within the cache window.
-func RefreshManifestDigest(image string) (string, error) {
-	if err := InvalidateManifestDigest(image); err != nil {
-		return "", err
+// lastKnownDigest is the cached digest for ref whatever its age, "" when none.
+func lastKnownDigest(ref ImageRef) string {
+	data, err := os.ReadFile(digestCachePath(ref))
+	if err != nil {
+		return ""
 	}
-	return ManifestDigest(image)
+	var entry cachedDigest
+	if json.Unmarshal(data, &entry) != nil {
+		return ""
+	}
+	return entry.Digest
 }
 
 // InvalidateManifestDigest drops the cached digest for image so the next read
@@ -116,10 +129,11 @@ func InvalidateManifestDigest(image string) error {
 var digestGroup = newSingleflight()
 
 func fetchManifestDigest(ref ImageRef) (string, error) {
-	if ref.Registry == "docker.io" {
-		return fetchDockerHubTagDigest(ref)
+	host := ref.Registry
+	if host == "docker.io" {
+		host = "registry-1.docker.io"
 	}
-	url := "https://" + ref.Registry + "/v2/" + ref.Repo + "/manifests/" + ref.Tag
+	url := "https://" + host + "/v2/" + ref.Repo + "/manifests/" + ref.Tag
 	ctx, cancel := context.WithTimeout(context.Background(), digestFetchTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
@@ -127,10 +141,17 @@ func fetchManifestDigest(ref ImageRef) (string, error) {
 		return "", err
 	}
 	req.Header.Set("Accept", manifestAccept)
-	// GHCR always wants a pull token, even for public repos. Other registries
-	// are read anonymously; one that refuses simply yields no digest.
-	if ref.Registry == "ghcr.io" {
-		tok, tokErr := fetchGHCRToken(ref.Repo)
+	// GHCR and Docker Hub want a pull token, even for public repos. Other
+	// registries are read anonymously; one that refuses yields no digest.
+	var tokenFn func(string) (string, error)
+	switch ref.Registry {
+	case "ghcr.io":
+		tokenFn = fetchGHCRToken
+	case "docker.io":
+		tokenFn = fetchDockerHubToken
+	}
+	if tokenFn != nil {
+		tok, tokErr := tokenFn(ref.Repo)
 		if tokErr != nil {
 			return "", tokErr
 		}
