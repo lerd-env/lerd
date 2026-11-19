@@ -123,3 +123,16 @@ func Subdomains(site config.Site) (map[string]Route, []string) {
 	}
 	return routes, refused
 }
+
+// DevServer is the URL prefix and host port of the site's dev server, once one
+// has been pinned to a port and its tool is installed; "" and 0 otherwise.
+func DevServer(site config.Site) (base string, port int) {
+	if site.DevServerPort == 0 {
+		return "", 0
+	}
+	tool := config.DevServerToolInstalled(site.Path)
+	if tool == nil {
+		return "", 0
+	}
+	return tool.Base, site.DevServerPort
+}

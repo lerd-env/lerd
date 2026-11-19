@@ -69,18 +69,10 @@ func detectSiteProxies(site config.Site) []VhostProxy {
 	return out
 }
 
-// detectSiteDevServer returns the prefix and host port for a site whose
-// framework declares a dev server, once that server has been pinned to a port.
-// An unpinned site has never started one, so nothing is proxied.
+// detectSiteDevServer returns the prefix and host port of the site's pinned
+// dev server; see siteproxy.DevServer.
 func detectSiteDevServer(site config.Site) (base string, port int) {
-	if site.DevServerPort == 0 {
-		return "", 0
-	}
-	tool := config.DevServerToolInstalled(site.Path)
-	if tool == nil {
-		return "", 0
-	}
-	return tool.Base, site.DevServerPort
+	return siteproxy.DevServer(site)
 }
 
 // detectWorktreeDevServer is detectSiteDevServer for a worktree checkout, whose
