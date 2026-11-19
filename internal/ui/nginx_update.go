@@ -22,6 +22,7 @@ func handleNginxUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updated, err := updateNginxFn(io.Discard)
+	updates.dropFor("lerd-nginx")
 	publishStatus()
 	if err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
@@ -38,6 +39,7 @@ func handleNginxCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	available, err := checkNginxFn()
+	updates.dropFor("lerd-nginx")
 	publishStatus()
 	if err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
@@ -60,12 +62,15 @@ func nginxActionAllowed(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// watchNginxImage re-reads the nginx update state every hour. Nothing else
-// rebuilds status on an idle machine, and the read is what fetches an expired
-// digest in the background and announces a republished image.
-func watchNginxImage() {
+// watchUpdates empties the update cache every hour and rebuilds, which is the
+// only time lerd asks podman and the registries on its own; everything else
+// reads the cached answers.
+func watchUpdates() {
 	for range time.Tick(time.Hour) {
-		podman.NginxUpdateAvailable()
+		updates.dropFor("")
+		publishStatus()
+		snapshots.Invalidate(eventbus.KindServices)
+		eventbus.Default.Publish(eventbus.KindServices)
 	}
 }
 

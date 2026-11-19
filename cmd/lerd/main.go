@@ -17,6 +17,7 @@ import (
 
 	"bytes"
 	"net/http"
+	"net/url"
 
 	"github.com/geodro/lerd/internal/activityping"
 	"github.com/geodro/lerd/internal/certs"
@@ -51,9 +52,9 @@ import (
 // socket. 500ms is more than enough for a loopback round-trip and is barely
 // perceptible. If lerd-ui isn't running the POST fails fast and the CLI
 // command still succeeds.
-func notifyLerdUI(_ string) {
+func notifyLerdUI(unit string) {
 	client := &http.Client{Timeout: 500 * time.Millisecond}
-	req, err := http.NewRequest(http.MethodPost, "http://127.0.0.1:7073/api/internal/notify", bytes.NewReader(nil))
+	req, err := http.NewRequest(http.MethodPost, "http://127.0.0.1:7073/api/internal/notify?unit="+url.QueryEscape(unit), bytes.NewReader(nil))
 	if err != nil {
 		return
 	}

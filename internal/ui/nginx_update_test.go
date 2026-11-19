@@ -91,3 +91,16 @@ func TestNginxUpdate_RefusesRemoteWithoutFullAccess(t *testing.T) {
 		t.Errorf("update ran %d times, check %d times, want neither", *calls, checks)
 	}
 }
+
+// The update answer is cached for an hour, so applying the update has to drop
+// it or the flag outlives the update.
+func TestNginxUpdate_DropsTheCachedAnswer(t *testing.T) {
+	stubNginxUpdate(t, true, nil)
+	t.Cleanup(func() { updates.dropFor("") })
+	cachedUpdate(updates, "lerd-nginx", func() bool { return true })
+
+	postNginx(t, http.MethodPost, "/api/nginx/update")
+	if cachedUpdate(updates, "lerd-nginx", func() bool { return false }) {
+		t.Error("nginx still reads as behind after the update")
+	}
+}

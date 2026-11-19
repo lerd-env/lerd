@@ -184,7 +184,10 @@ func Start(currentVersion string) error {
 		eventbus.Default.Publish(eventbus.KindStatus)
 	})
 
-	podman.AfterUnitChange = func(string) { publisher.trigger() }
+	podman.AfterUnitChange = func(unit string) {
+		updates.dropFor(unit)
+		publisher.trigger()
+	}
 
 	// External state changes (container crash, systemctl outside lerd-ui,
 	// timer firings) are caught by the periodic podman cache poll instead
@@ -195,8 +198,11 @@ func Start(currentVersion string) error {
 	// counters). Polling at 15s when a UI tab is focused / 60s otherwise
 	// trades off-up-to-15s latency for an order-of-magnitude CPU saving.
 	podman.Cache.SetOnChange(publisher.trigger)
-	podman.SetOnNginxDigestRefreshed(publishStatus)
-	go watchNginxImage()
+	podman.SetOnNginxDigestRefreshed(func() {
+		updates.dropFor("lerd-nginx")
+		publishStatus()
+	})
+	go watchUpdates()
 
 	// Drop the cache to idle cadence whenever the desktop session is idle
 	// or locked, so a focused tab on an unattended laptop still saves
@@ -268,6 +274,9 @@ func Start(currentVersion string) error {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
+		// The CLI names the unit it changed, or none for a change it cannot pin
+		// to one (a tool update), which drops every cached update answer.
+		updates.dropFor(r.URL.Query().Get("unit"))
 		publisher.trigger()
 		w.WriteHeader(http.StatusNoContent)
 	})
@@ -926,7 +935,7 @@ func buildStatus() StatusResponse {
 	}
 	return StatusResponse{
 		DNS:                   DNSStatus{OK: dnsStatus == dns.StatusOK, Status: string(dnsStatus), VPN: dns.VPNActive(), Enabled: dnsEnabled, TLD: tld},
-		Nginx:                 ServiceCheck{Running: nginxRunning, UpdateAvailable: nginxRunning && podman.NginxUpdateAvailable()},
+		Nginx:                 ServiceCheck{Running: nginxRunning, UpdateAvailable: nginxRunning && cachedUpdate(updates, "lerd-nginx", podman.NginxUpdateAvailable)},
 		PHPFPMs:               phpStatuses,
 		PHPDefault:            phpDefault,
 		NodeDefault:           nodeDefault,

@@ -132,7 +132,11 @@ func PullNginxImage(w io.Writer) error {
 	if err := PullImageTo(image, w); err != nil {
 		return err
 	}
-	return registry.InvalidateManifestDigest(image)
+	err := registry.InvalidateManifestDigest(image)
+	// A pull can move the update answer without restarting nginx, so lerd-ui is
+	// told the same way a restart would tell it.
+	notifyUnitChange(nginxUnit)
+	return err
 }
 
 // nginxReadyTimeout matches the restart budget of the global nginx config save.
