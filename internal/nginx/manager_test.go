@@ -792,6 +792,39 @@ func TestInstallSSLVhost_neverLeavesTheServedConfMissing(t *testing.T) {
 	}
 }
 
+// A vhost rewritten in place can be read half-written by a reload landing
+// mid-write, which fails it and keeps the old vhost; each writer swaps in a
+// whole new file instead.
+func TestSiteVhostWriters_replaceTheFileInOneStep(t *testing.T) {
+	site := config.Site{Name: "myapp", Domains: []string{"myapp.test"}, Path: "/srv/myapp"}
+	for name, write := range map[string]func() error{
+		"writeConfD":     func() error { return writeConfD("myapp.test", []byte("new")) },
+		"writeSiteConf":  func() error { return writeSiteConf("myapp.test.conf", []byte("new")) },
+		"waking landing": func() error { return GenerateWakingVhost(site) },
+		"paused worktree": func() error {
+			return GeneratePausedWorktreeVhost("myapp.test", "myapp.test", "/paused", false)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			confD := setupConfD(t)
+			os.MkdirAll(confD, 0755)
+			path := filepath.Join(confD, "myapp.test.conf")
+			os.WriteFile(path, []byte("old"), 0644)
+			before, _ := os.Stat(path)
+			if err := write(); err != nil {
+				t.Fatal(err)
+			}
+			after, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if os.SameFile(before, after) {
+				t.Error("vhost was rewritten in place, want a new file renamed over it")
+			}
+		})
+	}
+}
+
 // ── EnsureDefaultVhost ────────────────────────────────────────────────────────
 
 // ── RepairVhosts ─────────────────────────────────────────────────────────────

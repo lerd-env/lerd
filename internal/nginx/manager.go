@@ -633,7 +633,7 @@ func writeSiteConf(name string, rendered []byte) error {
 	}
 	confPath := filepath.Join(config.NginxConfD(), name)
 	config.GuardRealWrite(confPath)
-	return os.WriteFile(confPath, rendered, 0644)
+	return WriteFileAtomic(confPath, rendered, 0644)
 }
 
 // renderFPMVhost renders the vhost for a site served by fastcgi, over HTTP or,
@@ -931,7 +931,7 @@ func writeConfD(domain string, rendered []byte) error {
 	}
 	confPath := filepath.Join(config.NginxConfD(), domain+".conf")
 	config.GuardRealWrite(confPath)
-	return os.WriteFile(confPath, rendered, 0644)
+	return WriteFileAtomic(confPath, rendered, 0644)
 }
 
 // GenerateWorktreeVhost renders the HTTP vhost template for a worktree checkout
@@ -1031,7 +1031,7 @@ func GenerateWorktreeHostProxyVhostFor(domain, path, parentDomain string, upstre
 		return err
 	}
 	config.GuardRealWrite(filepath.Join(config.NginxConfD(), domain+".conf"))
-	return os.WriteFile(filepath.Join(config.NginxConfD(), domain+".conf"), rendered, 0644)
+	return WriteFileAtomic(filepath.Join(config.NginxConfD(), domain+".conf"), rendered, 0644)
 }
 
 // landingVhostConf renders a minimal vhost for site that serves htmlFile (read
@@ -1128,7 +1128,7 @@ func writeLandingVhost(site config.Site, htmlFile string) error {
 	conf := landingVhostConf(site, config.PausedDir(), htmlFile)
 	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+".conf")
 	config.GuardRealWrite(confPath)
-	if err := os.WriteFile(confPath, []byte(conf), 0644); err != nil {
+	if err := WriteFileAtomic(confPath, []byte(conf), 0644); err != nil {
 		return err
 	}
 	if site.Secured {
@@ -1201,7 +1201,7 @@ server {
 
 	confPath := filepath.Join(config.NginxConfD(), domain+".conf")
 	config.GuardRealWrite(confPath)
-	return os.WriteFile(confPath, []byte(conf), 0644)
+	return WriteFileAtomic(confPath, []byte(conf), 0644)
 }
 
 // RemoveVhost deletes the vhost config files for the given domain.
