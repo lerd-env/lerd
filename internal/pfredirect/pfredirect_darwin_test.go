@@ -18,8 +18,9 @@ var fakeWrite WriteFunc
 func fakeRoot(t *testing.T, loadErr error) *[]string {
 	t.Helper()
 	useAnchor(t, "")
-	prevGrant, prevSudo := SudoersPath, runSudo
+	prevGrant, prevSudo, prevReaches := SudoersPath, runSudo, reaches
 	SudoersPath = filepath.Join(t.TempDir(), "lerd-pf")
+	reaches = func(int, int) bool { return true }
 	var calls []string
 	fakeWrite = func(path string, content []byte, mode os.FileMode) error {
 		calls = append(calls, "write "+path)
@@ -37,7 +38,7 @@ func fakeRoot(t *testing.T, loadErr error) *[]string {
 		}
 		return nil
 	}
-	t.Cleanup(func() { SudoersPath, runSudo = prevGrant, prevSudo })
+	t.Cleanup(func() { SudoersPath, runSudo, reaches = prevGrant, prevSudo, prevReaches })
 	return &calls
 }
 
@@ -86,5 +87,34 @@ func TestInstallMovesNginxBackWhenAnExistingAnchorWillNotLoad(t *testing.T) {
 	moved, err := Install("alice", fakeWrite)
 	if err == nil || !moved || len(Redirected()) != 0 {
 		t.Errorf("Install() = %v, %v with anchor %v, want nginx moved back to its wide bind", moved, err, Redirected())
+	}
+}
+
+// pf can take the anchor and still never apply it, when another ruleset skips
+// lo0, which leaves the sites down exactly as a refused load would.
+func TestInstallTakesTheAnchorBackWhenLoopbackBypassesIt(t *testing.T) {
+	calls := fakeRoot(t, nil)
+	reaches = func(int, int) bool { return false }
+	moved, err := Install("alice", fakeWrite)
+	if !errors.Is(err, ErrNotEffective) {
+		t.Fatalf("Install() error = %v, want ErrNotEffective", err)
+	}
+	if moved || len(Redirected()) != 0 {
+		t.Errorf("Install() moved = %v with anchor %v, want nginx left on its wide bind", moved, Redirected())
+	}
+	flush := strings.Join([]string{pfctl, "-a", Anchor, "-F", "all"}, " ")
+	if i := slices.Index(*calls, flush); i < 0 || i != len(*calls)-2 {
+		t.Errorf("calls = %q, want the loaded rules flushed before the anchor file goes", *calls)
+	}
+}
+
+func TestApplyReportsARedirectLoopbackBypasses(t *testing.T) {
+	fakeRoot(t, nil)
+	if _, err := Install("alice", fakeWrite); err != nil {
+		t.Fatal(err)
+	}
+	reaches = func(from, _ int) bool { return from != 443 }
+	if err := Apply(); !errors.Is(err, ErrNotEffective) {
+		t.Errorf("Apply() = %v, want ErrNotEffective", err)
 	}
 }

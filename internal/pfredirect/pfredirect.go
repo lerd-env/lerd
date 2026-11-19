@@ -5,9 +5,12 @@
 package pfredirect
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -62,6 +65,72 @@ func Redirected() map[int]bool {
 	return set
 }
 
+// ErrNotEffective means pf took the anchor but loopback connections bypass it.
+// Install has already removed the anchor by then, so lerd install brings it back.
+var ErrNotEffective = errors.New("pf loaded the redirect but loopback connections bypass it; if " + skipCheck + " shows lo0 (skip), run sudo " + strings.Join(ReloadArgs(), " ") + ", which also drops rules a VPN or firewall loaded, then lerd install")
+
+// reaches is a var so tests can stand in for pf.
+var reaches = loopbackReaches
+
+const probeTimeout = time.Second
+
+// Effective reports whether loopback connections to every redirected port
+// arrive on its Target.
+func Effective() bool {
+	for p := range Redirected() {
+		if !Reaches(p) {
+			return false
+		}
+	}
+	return true
+}
+
+// Reaches reports whether a loopback connection to port arrives on its Target.
+func Reaches(port int) bool { return reaches(port, Target(port)) }
+
+// loopbackReaches listens on to itself while it is free, so nginx need not be
+// up and a wide bind on from cannot pass for the redirect. With to taken, by
+// nginx, any answer on from counts.
+func loopbackReaches(from, to int) bool {
+	ln, err := net.Listen("tcp", loopbackAddr(to))
+	if err != nil {
+		conn, err := net.DialTimeout("tcp", loopbackAddr(from), probeTimeout)
+		if err != nil {
+			return false
+		}
+		conn.Close()
+		return true
+	}
+	defer ln.Close()
+	conn, err := net.DialTimeout("tcp", loopbackAddr(from), probeTimeout)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+	return acceptsOwn(ln.(*net.TCPListener), conn.LocalAddr().String(), time.Now().Add(probeTimeout))
+}
+
+// acceptsOwn reports whether the connection from local arrives on ln before
+// the deadline. A browser retrying through a working redirect can land first.
+func acceptsOwn(ln *net.TCPListener, local string, deadline time.Time) bool {
+	if err := ln.SetDeadline(deadline); err != nil {
+		return false
+	}
+	for {
+		got, err := ln.Accept()
+		if err != nil {
+			return false
+		}
+		own := got.RemoteAddr().String() == local
+		got.Close()
+		if own {
+			return true
+		}
+	}
+}
+
+func loopbackAddr(port int) string { return fmt.Sprintf("127.0.0.1:%d", port) }
+
 // SudoersPath is its own drop-in so the grant exists whether or not lerd
 // manages DNS, whose drop-in install skips when DNS is off.
 var SudoersPath = "/etc/sudoers.d/lerd-pf"
@@ -70,6 +139,20 @@ var SudoersPath = "/etc/sudoers.d/lerd-pf"
 func ApplyArgs() []string {
 	return []string{pfctl, "-E", "-a", Anchor, "-f", AnchorPath}
 }
+
+// ReloadArgs reloads the main ruleset, dropping a skip on lo0 another tool
+// set. It drops the anchor's rules too, so ApplyArgs has to follow it.
+func ReloadArgs() []string {
+	return []string{pfctl, "-f", "/etc/pf.conf"}
+}
+
+// Repair puts the redirect back after a reboot dropped it, and only reloads the
+// main ruleset, which also drops a VPN's or firewall's rules, when lo0 is skipped.
+func Repair() string {
+	return "sudo " + strings.Join(ApplyArgs(), " ") + ", and if " + skipCheck + " shows lo0 (skip), sudo " + strings.Join(ReloadArgs(), " ") + " before it, which also drops rules a VPN or firewall loaded"
+}
+
+const skipCheck = "sudo pfctl -s Interfaces -i lo0 -v"
 
 // Sudoers grants user exactly ApplyArgs without a password, so `lerd start`
 // can re-load the anchor after a reboot drops it.

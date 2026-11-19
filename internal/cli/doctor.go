@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/cleanup"
@@ -533,9 +531,9 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 	for _, p := range []int{httpPort, httpsPort} {
 		port := strconv.Itoa(p)
 		switch {
-		case nginxRunning && redirected[p] && !loopbackAnswers(p):
+		case nginxRunning && redirected[p] && !pfredirect.Reaches(p):
 			fail("port "+port, fmt.Sprintf("nginx listens on 127.0.0.1:%d but pf is not redirecting %s to it", pfredirect.Target(p), port),
-				"sudo "+strings.Join(pfredirect.ApplyArgs(), " ")+", or lerd stop && lerd start if gvproxy still holds the port")
+				pfredirect.Repair()+", or lerd stop && lerd start if gvproxy still holds the port")
 		case nginxRunning:
 			ok(fmt.Sprintf("port %-4s (nginx running)", port))
 		case PortInUse(port):
@@ -845,14 +843,4 @@ func phpMountsFinding(stale []string) (string, bool) {
 		return "", false
 	}
 	return "mounts folders that no longer exist, so PHP-FPM cannot start: " + strings.Join(stale, ", "), true
-}
-
-// loopbackAnswers reports whether something accepts on 127.0.0.1:port.
-func loopbackAnswers(port int) bool {
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), time.Second)
-	if err != nil {
-		return false
-	}
-	conn.Close()
-	return true
 }
