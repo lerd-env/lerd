@@ -52,11 +52,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, httpsURL(r), http.StatusFound)
 		return
 	}
-	if h.serveDevServer(w, r, site) {
+	if site.Paused {
+		servePaused(w)
 		return
 	}
 	if target, ok := h.workerSubdomain(site, domain, r.Host); ok {
 		serveProxied(w, r, target)
+		return
+	}
+	if wt, ok := worktreeSite(site, domain, r.Host); ok {
+		site = wt
+	}
+	if h.serveDevServer(w, r, site) {
 		return
 	}
 	if h.Proxy != nil {
@@ -78,7 +85,7 @@ func (h *Handler) siteFor(hostport string) (config.Site, string, bool) {
 	var best config.Site
 	bestDomain := ""
 	for _, s := range h.Sites() {
-		if s.Paused || s.Ignored {
+		if s.Ignored {
 			continue
 		}
 		for _, d := range s.Domains {

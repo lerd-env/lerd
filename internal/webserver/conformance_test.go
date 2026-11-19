@@ -100,7 +100,7 @@ func TestConformance(t *testing.T) {
 		{goReady: true, name: "php over https", method: "GET", scheme: "https", host: "secure.test", path: "/", status: 200, want: "conformance GET fpm-fcgi"},
 		{goReady: true, name: "secured redirects http", method: "GET", scheme: "http", host: "secure.test", path: "/x?y=1", status: 302, location: "https://secure.test/x?y=1"},
 		{goReady: true, name: "custom container proxied", method: "GET", scheme: "http", host: "custom.test", path: "/", status: 200, want: "Welcome to nginx"},
-		{name: "paused page", method: "GET", scheme: "http", host: "paused.test", path: "/", want: "conformance paused page"},
+		{goReady: true, name: "paused page", method: "GET", scheme: "http", host: "paused.test", path: "/", want: "conformance paused page"},
 		{goReady: true, name: "service domain over https", method: "GET", scheme: "https", host: "mail.test", path: "/", status: 200, want: "Welcome to nginx"},
 		{goReady: true, name: "service domain moves to https", method: "GET", scheme: "http", host: "mail.test", path: "/x", status: 301, location: "https://mail.test/x"},
 		{goReady: true, name: "service cors preflight", method: "OPTIONS", scheme: "https", host: "mail.test", path: "/", status: 204, origin: "https://app.test", allowOrigin: "https://app.test"},
