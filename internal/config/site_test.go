@@ -81,6 +81,17 @@ func TestAddSite_RejectsUnitInjectionNames(t *testing.T) {
 	}
 }
 
+// A domain names its vhost file in conf.d, so a separator in it would write
+// that file somewhere else.
+func TestAddSite_RejectsPathsInDomains(t *testing.T) {
+	setDataDir(t)
+	for _, domain := range []string{"../../evil.test", "..\\evil.test", "a/b.test"} {
+		if err := AddSite(Site{Name: "x", Domains: []string{"x.test", domain}, Path: "/srv/x"}); err == nil {
+			t.Errorf("AddSite with domain %q should have been rejected", domain)
+		}
+	}
+}
+
 // A project's .lerd.yaml supplies its own domains, and a domain is written into
 // generated files. A quote is never part of a hostname and would close a string
 // literal in whichever file the domain lands in, so the registry refuses it.
