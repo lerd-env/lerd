@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"crypto/tls"
 	"net"
 	"net/http"
 	"strconv"
@@ -15,7 +16,7 @@ import (
 // NewWebServeCmd runs lerd's own web server in the foreground. It is what the
 // web server container runs when lerd serves sites without nginx.
 func NewWebServeCmd() *cobra.Command {
-	var listen string
+	var listen, listenTLS string
 	cmd := &cobra.Command{
 		Use:    "web-serve",
 		Short:  "Serve sites with lerd's built-in web server (runs inside its container)",
@@ -23,10 +24,15 @@ func NewWebServeCmd() *cobra.Command {
 		Args:   cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			h := &goserver.Handler{Sites: registeredSites, Upstream: fpmAddr}
-			return http.ListenAndServe(listen, h)
+			tlsSrv := &http.Server{Addr: listenTLS, Handler: h, TLSConfig: &tls.Config{GetCertificate: h.GetCertificate}}
+			errs := make(chan error, 2)
+			go func() { errs <- http.ListenAndServe(listen, h) }()
+			go func() { errs <- tlsSrv.ListenAndServeTLS("", "") }()
+			return <-errs
 		},
 	}
 	cmd.Flags().StringVar(&listen, "listen", ":80", "address to serve plain HTTP on")
+	cmd.Flags().StringVar(&listenTLS, "listen-tls", ":443", "address to serve HTTPS on")
 	return cmd
 }
 

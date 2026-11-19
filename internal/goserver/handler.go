@@ -23,12 +23,18 @@ type Handler struct {
 	Sites func() []config.Site
 	// Upstream is the host:port of the PHP-FPM serving a site.
 	Upstream func(config.Site) string
+
+	certs certCache
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	site, ok := h.siteFor(r.Host)
 	if !ok {
 		http.NotFound(w, r)
+		return
+	}
+	if site.Secured && r.TLS == nil {
+		http.Redirect(w, r, httpsURL(r), http.StatusFound)
 		return
 	}
 	h.servePHPSite(w, r, site)
