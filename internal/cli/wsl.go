@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -84,6 +85,8 @@ func runWSLSetup(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintln(w, "  - skipped Windows CA trust (run `lerd secure` first, then re-run)")
 	case caSkippedNoInterop:
 		fmt.Fprintln(w, "  ! couldn't reach certutil.exe; import the CA manually (see the WSL2 guide)")
+	case caDeclined:
+		fmt.Fprintln(w, "  ! Windows did not import the mkcert root CA (trust prompt declined, or no desktop session to show it); re-run from a desktop session or import it manually (see the WSL2 guide)")
 	}
 
 	// 5. tray — no StatusNotifier host on WSL, so keep the unit off.
@@ -200,7 +203,21 @@ const (
 	caTrusted caResult = iota
 	caSkippedNoMkcert
 	caSkippedNoInterop
+	caDeclined
 )
+
+// certutilResult tells a certutil that ran and was refused, by a declined trust
+// prompt or a session with no desktop to show it, from one that never ran.
+func certutilResult(err error) caResult {
+	var exitErr *exec.ExitError
+	switch {
+	case err == nil:
+		return caTrusted
+	case errors.As(err, &exitErr):
+		return caDeclined
+	}
+	return caSkippedNoInterop
+}
 
 // trustCAOnWindows copies the mkcert root CA to the Windows profile and imports
 // it into the per-user Root store via certutil.exe (no admin needed), so
@@ -222,10 +239,7 @@ func trustCAOnWindows() caResult {
 	if err != nil {
 		return caSkippedNoInterop
 	}
-	if err := exec.Command(wsl.WindowsTool("certutil.exe"), "-addstore", "-user", "-f", "Root", strings.TrimSpace(string(winPath))).Run(); err != nil {
-		return caSkippedNoInterop
-	}
-	return caTrusted
+	return certutilResult(exec.Command(wsl.WindowsTool("certutil.exe"), "-addstore", "-user", "-f", "Root", strings.TrimSpace(string(winPath))).Run())
 }
 
 // mkcertRootCAPEM finds the root CA's rootCA.pem in CAROOT.

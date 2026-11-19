@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -228,5 +229,22 @@ func TestLANFirewallScript(t *testing.T) {
 	}
 	if !strings.Contains(removeLANFirewallScript, "'lerd-lan'") {
 		t.Errorf("the removal must take the rule: %s", removeLANFirewallScript)
+	}
+}
+
+func TestCertutilResult(t *testing.T) {
+	declined := exec.Command("false").Run()
+	cases := map[string]struct {
+		err  error
+		want caResult
+	}{
+		"imported":         {nil, caTrusted},
+		"windows refused":  {declined, caDeclined},
+		"certutil missing": {exec.ErrNotFound, caSkippedNoInterop},
+	}
+	for name, tc := range cases {
+		if got := certutilResult(tc.err); got != tc.want {
+			t.Errorf("%s: got %v, want %v", name, got, tc.want)
+		}
 	}
 }
