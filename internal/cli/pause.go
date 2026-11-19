@@ -15,7 +15,6 @@ import (
 	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/lifecycle"
-	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
@@ -616,7 +615,7 @@ const pausedPageHTML = `<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Site Paused — Lerd</title>
   <style>
-` + nginx.StatusPageFrameCSS + nginx.StatusPageTextCSS + nginx.StatusPageButtonCSS + `    .btn-primary { background: #FF2D20; color: #fff; }
+` + webserver.StatusPageFrameCSS + webserver.StatusPageTextCSS + webserver.StatusPageButtonCSS + `    .btn-primary { background: #FF2D20; color: #fff; }
     .btn-primary:hover:not(:disabled) { background: #e02419; }
     .btn-primary:disabled { background: #374151; cursor: not-allowed; color: #9ca3af; }
     .btn-secondary { background: #262a36; color: #e5e7eb; border: 1px solid #2d3142; }
@@ -687,7 +686,7 @@ var wakingPageHTML = `<!DOCTYPE html>
   <meta http-equiv="refresh" content="1">
   <title>Waking up</title>
   <style>
-` + nginx.StatusPageFrameCSS + `    .spinner {
+` + webserver.StatusPageFrameCSS + `    .spinner {
       width: 40px;
       height: 40px;
       margin: 0 auto 1.25rem;

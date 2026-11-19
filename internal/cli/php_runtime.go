@@ -16,7 +16,6 @@ import (
 	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nativephp"
-	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
@@ -381,7 +380,7 @@ func regenerateWorktreeVhosts(s *config.Site) {
 // regenerateProfilerVhost rewrites the SPX dashboard's vhost, which belongs to
 // no site, so the sweep over sites never reaches it.
 func regenerateProfilerVhost() {
-	if err := nginx.EnsureProfilerVhost(); err != nil {
+	if err := webserver.EnsureProfiler(); err != nil {
 		feedback.Warn("regenerating the profiler vhost: %v (the SPX dashboard may answer 502)", err)
 	}
 }

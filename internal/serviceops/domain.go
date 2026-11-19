@@ -14,7 +14,6 @@ import (
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/webserver"
 )
@@ -26,9 +25,9 @@ var (
 	domainIssueCertFn = func(domain string) error {
 		return certs.IssueCert(domain, []string{domain}, filepath.Join(config.CertsDir(), "sites"))
 	}
-	domainVhostFn       = nginx.GenerateServiceProxyVhost
+	domainVhostFn       = webserver.ApplyService
 	domainRemoveCertFn  = certs.RemoveSiteCerts
-	domainRemoveVhostFn = nginx.RemoveVhost
+	domainRemoveVhostFn = webserver.RemoveSite
 	domainWriteHostsFn  = podman.WriteContainerHosts
 	domainReloadFn      = webserver.Reload
 	domainWaitServedFn  = waitDomainServed

@@ -42,6 +42,23 @@ type Backend interface {
 	RegenerateSite(site config.Site) error
 	// Repair fixes vhosts that would stop the server starting, before it starts.
 	Repair() []Repair
+	// EnsureConfig writes the server-wide config every site relies on.
+	EnsureConfig() error
+	// EnsureDefaultSite writes the catch-all for hosts no site claims,
+	// keeping a user's edits to it.
+	EnsureDefaultSite() error
+	// EnsureDashboard and SyncDashboard serve lerd's own dashboard domain;
+	// SyncDashboard rewrites it only when stale and reports whether it did.
+	EnsureDashboard() error
+	SyncDashboard() (bool, error)
+	// RewriteUnit rewrites the server's container unit, reporting a change.
+	RewriteUnit() (bool, error)
+	// EnsureProfiler serves the SPX dashboard; ServedProfilerState reads
+	// whether the served config has profiling on (ok false when unknown).
+	EnsureProfiler() error
+	ServedProfilerState() (on, ok bool)
+	// ApplyService serves a service's web UI on its own domain.
+	ApplyService(domain, upstreamHost string, upstreamPort int, ssl, cors bool) error
 }
 
 // DriftReport and Repair describe what Drift and Repair found.
@@ -83,6 +100,16 @@ func (nginxBackend) ApplyWakingSite(site config.Site) error      { return nginx.
 func (nginxBackend) Drift(site config.Site) (DriftReport, error) { return nginx.VhostDrift(site) }
 func (nginxBackend) RegenerateSite(site config.Site) error       { return nginx.RegenerateVhost(site) }
 func (nginxBackend) Repair() []Repair                            { return nginx.RepairVhosts() }
+func (nginxBackend) EnsureConfig() error                         { return nginx.EnsureNginxConfig() }
+func (nginxBackend) EnsureDefaultSite() error                    { return nginx.EnsureDefaultVhost() }
+func (nginxBackend) EnsureDashboard() error                      { return nginx.EnsureLerdVhost() }
+func (nginxBackend) SyncDashboard() (bool, error)                { return nginx.SyncLerdVhost() }
+func (nginxBackend) RewriteUnit() (bool, error)                  { return nginx.RewriteNginxQuadlet() }
+func (nginxBackend) EnsureProfiler() error                       { return nginx.EnsureProfilerVhost() }
+func (nginxBackend) ServedProfilerState() (bool, bool)           { return nginx.ServedProfilerState() }
+func (nginxBackend) ApplyService(domain, upstreamHost string, upstreamPort int, ssl, cors bool) error {
+	return nginx.GenerateServiceProxyVhost(domain, upstreamHost, upstreamPort, ssl, cors)
+}
 
 // current is nginx until a second backend and the switch to it exist.
 var current Backend = nginxBackend{}
@@ -122,3 +149,34 @@ func Drift(site config.Site) (DriftReport, error) { return current.Drift(site) }
 func RegenerateSite(site config.Site) error { return current.RegenerateSite(site) }
 
 func RepairSites() []Repair { return current.Repair() }
+
+func EnsureConfig() error { return current.EnsureConfig() }
+
+func EnsureDefaultSite() error { return current.EnsureDefaultSite() }
+
+func EnsureDashboard() error { return current.EnsureDashboard() }
+
+func SyncDashboard() (bool, error) { return current.SyncDashboard() }
+
+func RewriteUnit() (bool, error) { return current.RewriteUnit() }
+
+func EnsureProfiler() error { return current.EnsureProfiler() }
+
+func ServedProfilerState() (on, ok bool) { return current.ServedProfilerState() }
+
+func ApplyService(domain, upstreamHost string, upstreamPort int, ssl, cors bool) error {
+	return current.ApplyService(domain, upstreamHost, upstreamPort, ssl, cors)
+}
+
+// Shared by every backend and by lerd's own pages; they live in nginx until a
+// second backend needs them, then move to a package both import.
+var (
+	LoadOrGenerateTrustToken = nginx.LoadOrGenerateTrustToken
+	WriteFileAtomic          = nginx.WriteFileAtomic
+)
+
+const (
+	StatusPageFrameCSS  = nginx.StatusPageFrameCSS
+	StatusPageTextCSS   = nginx.StatusPageTextCSS
+	StatusPageButtonCSS = nginx.StatusPageButtonCSS
+)

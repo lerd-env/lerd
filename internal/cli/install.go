@@ -19,7 +19,6 @@ import (
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/imagepull"
 	"github.com/geodro/lerd/internal/lifecycle"
-	"github.com/geodro/lerd/internal/nginx"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/platform"
@@ -582,16 +581,16 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 	// 6. Nginx
 	step("Writing nginx configuration")
-	if err := nginx.EnsureNginxConfig(); err != nil {
+	if err := webserver.EnsureConfig(); err != nil {
 		return err
 	}
-	if err := nginx.EnsureDefaultVhost(); err != nil {
+	if err := webserver.EnsureDefaultSite(); err != nil {
 		return err
 	}
-	if err := nginx.EnsureLerdVhost(); err != nil {
+	if err := webserver.EnsureDashboard(); err != nil {
 		return err
 	}
-	if err := nginx.EnsureProfilerVhost(); err != nil {
+	if err := webserver.EnsureProfiler(); err != nil {
 		return err
 	}
 	// The lerd-nginx quadlet bind-mounts RunDir so the lerd.localhost vhost
