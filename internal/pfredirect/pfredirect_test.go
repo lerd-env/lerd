@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func useAnchor(t *testing.T, content string) {
@@ -76,12 +77,18 @@ func TestSudoersGrantsExactlyTheApplyCommand(t *testing.T) {
 	}
 }
 
-// The second command must match the sudoers grant, so the repair asks for a
-// password once at most.
-func TestRepairReloadsPfConfThenTheGrantedApply(t *testing.T) {
-	want := "sudo /sbin/pfctl -f /etc/pf.conf && sudo /sbin/pfctl -E -a com.apple/lerd -f /etc/pf.anchors/lerd"
-	if got := Repair(); got != want {
-		t.Errorf("Repair() = %q, want %q", got, want)
+// A reboot only drops the anchor, so the granted reload leads, and reloading
+// pf.conf, which wipes a VPN's rules, is offered only for a skipped lo0.
+func TestRepairLeadsWithTheGrantedApply(t *testing.T) {
+	got := Repair()
+	if !strings.HasPrefix(got, "sudo /sbin/pfctl -E -a com.apple/lerd -f /etc/pf.anchors/lerd,") {
+		t.Errorf("Repair() = %q, want it to lead with the granted anchor reload", got)
+	}
+	if !strings.Contains(got, "lo0 (skip), sudo /sbin/pfctl -f /etc/pf.conf before it") {
+		t.Errorf("Repair() = %q, want the pf.conf reload only on a skipped lo0", got)
+	}
+	if !strings.HasSuffix(ErrNotEffective.Error(), got) {
+		t.Errorf("ErrNotEffective = %q, want the same repair as doctor", ErrNotEffective)
 	}
 }
 
@@ -147,5 +154,29 @@ func TestLoopbackReachesWithTheTargetHeldTrustsAnAnswer(t *testing.T) {
 	listenOn(t, from)
 	if !loopbackReaches(from, to) {
 		t.Error("with nginx holding the target, an answer on the source port counts")
+	}
+}
+
+func TestAcceptsOwnSkipsAConnectionThatArrivedFirst(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	other, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	own, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer own.Close()
+	if !acceptsOwn(ln.(*net.TCPListener), own.LocalAddr().String(), time.Now().Add(probeTimeout)) {
+		t.Error("a browser's connection landing first must not hide the probe's own")
+	}
+	if acceptsOwn(ln.(*net.TCPListener), "127.0.0.1:1", time.Now().Add(100*time.Millisecond)) {
+		t.Error("without the probe's own connection the check must fail at the deadline")
 	}
 }

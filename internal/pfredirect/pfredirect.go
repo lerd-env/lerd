@@ -67,7 +67,7 @@ func Redirected() map[int]bool {
 
 // ErrNotEffective means pf took the anchor but loopback connections bypass it,
 // which a ruleset another tool loaded with `set skip on lo0` causes.
-var ErrNotEffective = errors.New("pf loaded the redirect but loopback connections bypass it, most likely because pf skips lo0 (sudo pfctl -s Interfaces -i lo0 -v shows it); reload the main ruleset with sudo " + strings.Join(ReloadArgs(), " ") + ", then run lerd install")
+var ErrNotEffective = errors.New("pf loaded the redirect but loopback connections bypass it; " + Repair())
 
 // reaches is a var so tests can stand in for pf.
 var reaches = loopbackReaches
@@ -107,15 +107,26 @@ func loopbackReaches(from, to int) bool {
 		return false
 	}
 	defer conn.Close()
-	if err := ln.(*net.TCPListener).SetDeadline(time.Now().Add(probeTimeout)); err != nil {
+	return acceptsOwn(ln.(*net.TCPListener), conn.LocalAddr().String(), time.Now().Add(probeTimeout))
+}
+
+// acceptsOwn reports whether the connection from local arrives on ln before
+// the deadline. A browser retrying through a working redirect can land first.
+func acceptsOwn(ln *net.TCPListener, local string, deadline time.Time) bool {
+	if err := ln.SetDeadline(deadline); err != nil {
 		return false
 	}
-	got, err := ln.Accept()
-	if err != nil {
-		return false
+	for {
+		got, err := ln.Accept()
+		if err != nil {
+			return false
+		}
+		own := got.RemoteAddr().String() == local
+		got.Close()
+		if own {
+			return true
+		}
 	}
-	defer got.Close()
-	return got.RemoteAddr().String() == conn.LocalAddr().String()
 }
 
 func loopbackAddr(port int) string { return fmt.Sprintf("127.0.0.1:%d", port) }
@@ -135,9 +146,10 @@ func ReloadArgs() []string {
 	return []string{pfctl, "-f", "/etc/pf.conf"}
 }
 
-// Repair is the command line that puts a dropped or bypassed redirect back.
+// Repair puts the redirect back after a reboot dropped it, and only reloads the
+// main ruleset, which also drops a VPN's or firewall's rules, when lo0 is skipped.
 func Repair() string {
-	return "sudo " + strings.Join(ReloadArgs(), " ") + " && sudo " + strings.Join(ApplyArgs(), " ")
+	return "sudo " + strings.Join(ApplyArgs(), " ") + ", and if sudo pfctl -s Interfaces -i lo0 -v shows lo0 (skip), sudo " + strings.Join(ReloadArgs(), " ") + " before it, which also drops rules a VPN or firewall loaded"
 }
 
 // Sudoers grants user exactly ApplyArgs without a password, so `lerd start`

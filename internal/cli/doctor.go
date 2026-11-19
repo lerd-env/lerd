@@ -533,7 +533,7 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 		switch {
 		case nginxRunning && redirected[p] && !pfredirect.Reaches(p):
 			fail("port "+port, fmt.Sprintf("nginx listens on 127.0.0.1:%d but pf is not redirecting %s to it", pfredirect.Target(p), port),
-				pfredirect.Repair()+", which also clears a skip on lo0 another tool set (sudo pfctl -s Interfaces -i lo0 -v shows it), or lerd stop && lerd start if gvproxy still holds the port")
+				pfredirect.Repair()+", or lerd stop && lerd start if gvproxy still holds the port")
 		case nginxRunning:
 			ok(fmt.Sprintf("port %-4s (nginx running)", port))
 		case PortInUse(port):
