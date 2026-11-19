@@ -42,51 +42,30 @@ func nginxBehind(local nginxLocal, latest string) bool {
 	return true
 }
 
-// readNginxLocal costs two podman inspects per status rebuild. The digests of
-// an image ID only change on a pull, so those are kept per ID until one; a
-// timed memo here once hid a restart onto another image.
+// readNginxLocal reads fresh on every status rebuild, three podman inspects. A
+// pull in another process can add a digest to the same image ID, so any cache
+// held here would keep a finished update flagged.
 func readNginxLocal() nginxLocal {
-	running := ContainerImageID(nginxUnit)
+	running := containerImageIDFn(nginxUnit)
 	if running == "" {
 		return nginxLocal{}
 	}
 	return nginxLocal{
 		RunningID:      running,
-		LocalID:        LocalImageID(ServiceImage(nginxUnit)),
-		RunningDigests: imageDigestsFor(running),
+		LocalID:        localImageIDFn(ServiceImage(nginxUnit)),
+		RunningDigests: localImageDigestFn(running),
 	}
 }
 
 var (
 	nginxLocalFn       = readNginxLocal
 	localImageDigestFn = LocalImageDigest
-	digestsMu          sync.Mutex
-	digestsByID        = map[string][]string{}
+	containerImageIDFn = ContainerImageID
+	localImageIDFn     = LocalImageID
 	nginxRefreshMu     sync.Mutex
 	nginxRefreshOn     bool
 	nginxRefreshWG     sync.WaitGroup
 )
-
-func imageDigestsFor(id string) []string {
-	digestsMu.Lock()
-	defer digestsMu.Unlock()
-	if d, ok := digestsByID[id]; ok {
-		return d
-	}
-	d := localImageDigestFn(id)
-	if len(d) > 0 {
-		digestsByID[id] = d
-	}
-	return d
-}
-
-// forgetImageDigests drops the per-ID digests, which a pull of a republished
-// tag extends on the image ID it already had.
-func forgetImageDigests() {
-	digestsMu.Lock()
-	digestsByID = map[string][]string{}
-	digestsMu.Unlock()
-}
 
 // NginxUpdateAvailable reports whether lerd-nginx is behind, answering from
 // caches only so a status rebuild never waits on the network. A cold digest
@@ -153,7 +132,6 @@ func PullNginxImage(w io.Writer) error {
 	if err := PullImageTo(image, w); err != nil {
 		return err
 	}
-	forgetImageDigests()
 	return registry.InvalidateManifestDigest(image)
 }
 

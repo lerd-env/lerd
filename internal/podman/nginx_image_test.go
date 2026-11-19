@@ -93,16 +93,18 @@ func TestNginxDigestRefreshAnnouncesItself(t *testing.T) {
 }
 
 // Podman records a republished tag's new index digest on the image ID it
-// already had, so a pull must drop what was read for that ID or the update
-// stays flagged after it was applied.
-func TestForgetImageDigestsRereadsAfterAPull(t *testing.T) {
-	prev := localImageDigestFn
-	t.Cleanup(func() { localImageDigestFn = prev; forgetImageDigests() })
+// already had. The pull may run in another process (the CLI, the TUI, lerd
+// install), so lerd-ui's next read must see it with nothing cleared here.
+func TestReadNginxLocal_SeesDigestsAPullAddedElsewhere(t *testing.T) {
+	prevC, prevL, prevD := containerImageIDFn, localImageIDFn, localImageDigestFn
+	t.Cleanup(func() { containerImageIDFn, localImageIDFn, localImageDigestFn = prevC, prevL, prevD })
+	containerImageIDFn = func(string) string { return "aaa" }
+	localImageIDFn = func(string) string { return "aaa" }
 	localImageDigestFn = func(string) []string { return []string{"sha256:old"} }
-	imageDigestsFor("aaa")
+	readNginxLocal()
+
 	localImageDigestFn = func(string) []string { return []string{"sha256:old", "sha256:new"} }
-	forgetImageDigests()
-	if got := imageDigestsFor("aaa"); len(got) != 2 {
-		t.Errorf("imageDigestsFor after a pull = %v, want the digest the pull added", got)
+	if got := readNginxLocal(); nginxBehind(got, "sha256:new") {
+		t.Errorf("digests read = %v, still behind after another process pulled sha256:new", got.RunningDigests)
 	}
 }
