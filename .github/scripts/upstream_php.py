@@ -19,6 +19,8 @@ ACCEPT = ','.join('application/vnd.' + t for t in (
     'oci.image.index.v1+json', 'docker.distribution.manifest.list.v2+json',
     'oci.image.manifest.v1+json', 'docker.distribution.manifest.v2+json'))
 CONTAINERFILE = 'internal/podman/quadlets/lerd-php-fpm.Containerfile'
+# A registry that accepts the connection and then stalls would hang the job.
+TIMEOUT = 30
 
 
 def recipe_tag(recipe):
@@ -31,11 +33,11 @@ def recipe_tag(recipe):
 
 def fetch(url, token, accept=ACCEPT):
     req = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}', 'Accept': accept})
-    return json.load(urllib.request.urlopen(req))
+    return json.load(urllib.request.urlopen(req, timeout=TIMEOUT))
 
 
 def diff_ids(host, token_url, repo, ref, arch):
-    token = json.load(urllib.request.urlopen(token_url))['token']
+    token = json.load(urllib.request.urlopen(token_url, timeout=TIMEOUT))['token']
     m = fetch(f'https://{host}/v2/{repo}/manifests/{ref}', token)
     if 'manifests' in m:
         digest = next(x['digest'] for x in m['manifests']
