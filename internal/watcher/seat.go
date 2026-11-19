@@ -92,7 +92,7 @@ func applySeat(s *seatWatchState) {
 		fg = systemd.SeatForeground()
 	}
 	probe := seatProbe{
-		nginx:      func() string { state, _ := podman.UnitStatus("lerd-nginx"); return state },
+		nginx:      func() string { state, _ := podman.UnitStatus(podman.WebServerUnit); return state },
 		owed:       config.SeatReleased,
 		otherHolds: func() bool { return cli.OtherUserLerd() != "" },
 	}

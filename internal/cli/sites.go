@@ -101,7 +101,7 @@ type orderedSite struct {
 func pausedTag() string { return feedback.Amber("paused") }
 
 // sitesNginxRunningFn reports whether nginx is up; a seam so tests need no podman.
-var sitesNginxRunningFn = func() bool { return podman.Cache.Running("lerd-nginx") }
+var sitesNginxRunningFn = func() bool { return podman.Cache.Running(podman.WebServerUnit) }
 
 // staticSite reports a site nginx serves on its own, with no PHP, container or
 // dev server behind it, so its state is nginx's rather than a PHP pool's.

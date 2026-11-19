@@ -4,6 +4,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -63,6 +64,42 @@ func TestOnlyTheSeamImportsNginx(t *testing.T) {
 	for rel := range stillImportsNginx {
 		if !found[rel] {
 			t.Errorf("%s no longer imports internal/nginx; delete it from stillImportsNginx", rel)
+		}
+	}
+}
+
+// The web server's container is named once, as podman.WebServerUnit, so the
+// LAN bind policy, readiness probes and logs follow whichever server runs.
+func TestOnlyOnePlaceNamesTheWebServerContainer(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const home = "internal/podman/webserver_unit.go"
+	for _, dir := range []string{"cmd", "internal"} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() && d.Name() == "node_modules" {
+				return filepath.SkipDir
+			}
+			rel, _ := filepath.Rel(root, path)
+			rel = filepath.ToSlash(rel)
+			if d.IsDir() || !strings.HasSuffix(rel, ".go") || strings.HasSuffix(rel, "_test.go") || rel == home {
+				return nil
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			if n := strings.Count(string(data), `"lerd-nginx"`); n > 0 {
+				t.Errorf("%s names \"lerd-nginx\" %d times; use podman.WebServerUnit", rel, n)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 }
