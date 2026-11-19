@@ -874,12 +874,6 @@ func buildStatus() StatusResponse {
 	// Never nil: the UI reads php_fpms as a list, and a nil slice encodes as null.
 	phpStatuses := []PHPStatus{}
 	native := nativeRuntimeActive()
-	// Loaded once rather than per version: the pins are what says whether a
-	// host build is behind, and they are the same for all of them.
-	var pins *tools.Manifest
-	if native {
-		pins = nativePins()
-	}
 	for _, v := range versions {
 		short := strings.ReplaceAll(v, ".", "")
 		running := phpVersionRunning(v, native,
@@ -891,18 +885,8 @@ func buildStatus() StatusResponse {
 			xdebugMode = cfg.GetXdebugMode(v)
 			ports = cfg.PHP.FPMPorts[v]
 		}
-		// The image and its base describe nothing that is serving under the
-		// native runtime, where the patch is the build on the host and an
-		// update is a newer one having been published.
-		patch, updateAvailable := "", false
-		if native {
-			patch, updateAvailable = nativePHPStatusFor(pins, v)
-		} else {
-			patch = podman.FPMPHPVersion(v)
-			if base := podman.BaseImageFreshness(v); base != nil {
-				updateAvailable = base.Stale
-			}
-		}
+		st := phpState(v, native)
+		patch, updateAvailable := st.Patch, st.Update
 		phpStatuses = append(phpStatuses, PHPStatus{Version: v, Patch: patch, Running: running, XdebugEnabled: xdebugMode != "", XdebugMode: xdebugMode, Ports: ports, UpdateAvailable: updateAvailable})
 	}
 
@@ -5207,7 +5191,9 @@ func handlePHPVersionAction(w http.ResponseWriter, r *http.Request) {
 	// recorded base, or a registry that could not answer.
 	if action == "updates" && len(parts) == 2 {
 		if r.Method == http.MethodPost {
-			writeJSON(w, podman.RefreshBaseImageFreshness(version))
+			fresh := refreshPHPBaseFn(version)
+			updates.dropFor("lerd-php" + strings.ReplaceAll(version, ".", "") + "-fpm")
+			writeJSON(w, fresh)
 			return
 		}
 		writeJSON(w, podman.BaseImageFreshness(version))
