@@ -1,15 +1,18 @@
 package cli
 
 import (
+	"context"
 	"crypto/tls"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/spf13/cobra"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/goserver"
+	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
 )
@@ -25,6 +28,7 @@ func NewWebServeCmd() *cobra.Command {
 		Args:   cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			h := &goserver.Handler{Sites: registeredSites, Upstream: fpmAddr, Proxy: goserver.SiteTarget, Services: serviceRoutes, WorkerHost: workerHost}
+			h.WakeHold, h.WakeTransport = lerdUI()
 			served := &goserver.AccessFeed{Next: h, Target: config.AccessLogTarget()}
 			tlsSrv := &http.Server{Addr: listenTLS, Handler: served, TLSConfig: &tls.Config{GetCertificate: h.GetCertificate}}
 			errs := make(chan error, 2)
@@ -79,4 +83,18 @@ func serviceRoutes() []goserver.ServiceRoute {
 		})
 	}
 	return routes
+}
+
+// lerdUI is lerd-ui as the web server container reaches it, the same way the
+// nginx waking vhost does: its unix socket on Linux, the host on macOS.
+func lerdUI() (*url.URL, http.RoundTripper) {
+	if platform.Current.UsesMachineVM {
+		return &url.URL{Scheme: "http", Host: "host.containers.internal:7073"}, nil
+	}
+	sock := config.UISocketPath()
+	return &url.URL{Scheme: "http", Host: "lerd-ui"}, &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", sock)
+		},
+	}
 }

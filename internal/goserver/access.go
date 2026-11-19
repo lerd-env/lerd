@@ -25,6 +25,9 @@ func (a *AccessFeed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	rw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 	a.Next.ServeHTTP(rw, r)
+	if rw.skip {
+		return
+	}
 
 	rid := rw.Header().Get("X-Lerd-Rid")
 	if rid == "" {
@@ -64,6 +67,7 @@ func (a *AccessFeed) send(b []byte) {
 type statusWriter struct {
 	http.ResponseWriter
 	status int
+	skip   bool
 }
 
 func (s *statusWriter) WriteHeader(code int) {

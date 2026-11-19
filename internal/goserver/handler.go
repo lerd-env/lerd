@@ -33,6 +33,10 @@ type Handler struct {
 	// WorkerHost is where a site's worker server listens: its PHP container,
 	// or the host for a worker that runs there.
 	WorkerHost func(site config.Site, onHost bool) string
+	// WakeHold is lerd-ui's base URL, where a sleeping site's requests wait,
+	// reached through WakeTransport (its unix socket on Linux) when set.
+	WakeHold      *url.URL
+	WakeTransport http.RoundTripper
 
 	certs certCache
 }
@@ -54,6 +58,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if site.Paused {
 		servePaused(w)
+		return
+	}
+	if h.WakeHold != nil && Waking(site) {
+		h.serveWakeHold(w, r)
 		return
 	}
 	if target, ok := h.workerSubdomain(site, domain, r.Host); ok {
