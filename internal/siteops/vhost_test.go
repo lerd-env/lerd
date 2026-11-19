@@ -3,9 +3,11 @@ package siteops
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/podman"
 )
 
 func seedFile(t *testing.T, path, body string) {
@@ -209,5 +211,29 @@ func TestMoveCustomNginxConfig_carriesLocationScope(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(live, "leasebook.test.location.conf")); !os.IsNotExist(err) {
 		t.Errorf("old location override still present, want renamed")
+	}
+}
+
+// A FrankenPHP site whose vhost is rewritten, by a page plugin toggle or a
+// domain change, keeps proxying to its own FrankenPHP container rather than
+// being handed a PHP-FPM vhost that sends its requests to an FPM pool.
+func TestRegenerateSiteVhostKeepsAFrankenPHPSiteOnItsContainer(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	recordDevServerRefresh(t)
+	site := &config.Site{Name: "fpapp", Domains: []string{"fpapp.test"}, Path: t.TempDir(), PHPVersion: "8.4", Runtime: "frankenphp"}
+
+	if err := RegenerateSiteVhost(site, "fpapp.test"); err != nil {
+		t.Fatalf("RegenerateSiteVhost: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(config.NginxConfD(), "fpapp.test.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := podman.FrankenPHPContainerName("fpapp"); !strings.Contains(string(data), want) {
+		t.Errorf("vhost does not proxy to %s:\n%s", want, data)
+	}
+	if strings.Contains(string(data), "fastcgi_pass") {
+		t.Errorf("FrankenPHP site got a PHP-FPM vhost:\n%s", data)
 	}
 }
