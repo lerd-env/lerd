@@ -732,14 +732,11 @@ func keepWaking(site config.Site, rendered []byte) []byte {
 // keeps the sidecar and ignores the file every other path rewrites. Unlink
 // clears both names, but unsecure removes only the served one and deletes the
 // certificate, leaving a sidecar that points at a file that is gone and a
-// configuration nginx can no longer load at all.
+// configuration nginx can no longer load at all. Rename replaces the served
+// file in one step; removing it first let a reload in between fail.
 func InstallSSLVhost(domain string) error {
 	confD := config.NginxConfD()
-	mainConf := filepath.Join(confD, domain+".conf")
-	if err := os.Remove(mainConf); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return os.Rename(filepath.Join(confD, domain+"-ssl.conf"), mainConf)
+	return os.Rename(filepath.Join(confD, domain+"-ssl.conf"), filepath.Join(confD, domain+".conf"))
 }
 
 // renderContainerVhost renders the vhost for a site nginx reverse-proxies to a

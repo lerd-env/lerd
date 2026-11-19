@@ -776,6 +776,22 @@ func TestInstallSSLVhost_withoutAnExistingConf(t *testing.T) {
 	}
 }
 
+// nginx reloads by globbing conf.d, so the served conf must never be absent,
+// not even between two steps of an install: a reload landing there fails and
+// keeps the old vhost, such as the waking page. A failed install leaves it.
+func TestInstallSSLVhost_neverLeavesTheServedConfMissing(t *testing.T) {
+	confD := setupConfD(t)
+	os.MkdirAll(confD, 0755)
+	os.WriteFile(filepath.Join(confD, "myapp.test.conf"), []byte("http vhost"), 0644)
+
+	if err := InstallSSLVhost("myapp.test"); err == nil {
+		t.Fatal("expected an error with no -ssl.conf to install")
+	}
+	if got := readConf(t, filepath.Join(confD, "myapp.test.conf")); got != "http vhost" {
+		t.Errorf("served conf = %q, want it untouched", got)
+	}
+}
+
 // ── EnsureDefaultVhost ────────────────────────────────────────────────────────
 
 // ── RepairVhosts ─────────────────────────────────────────────────────────────
