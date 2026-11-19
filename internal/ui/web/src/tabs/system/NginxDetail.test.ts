@@ -4,15 +4,16 @@ import NginxDetail from './NginxDetail.svelte';
 import { status } from '$stores/status';
 import { accessMode } from '$stores/accessMode';
 
-const { updateNginx, checkNginxUpdate, notifyLocalInfo, notifyLocalFailure } = vi.hoisted(() => ({
+const { updateNginx, checkNginxUpdate, loadStatus, notifyLocalInfo, notifyLocalFailure } = vi.hoisted(() => ({
   updateNginx: vi.fn(),
   checkNginxUpdate: vi.fn(),
+  loadStatus: vi.fn(),
   notifyLocalInfo: vi.fn(),
   notifyLocalFailure: vi.fn()
 }));
 vi.mock('$stores/status', async (importOriginal) => {
   const actual = await importOriginal<typeof import('$stores/status')>();
-  return { ...actual, updateNginx, checkNginxUpdate };
+  return { ...actual, updateNginx, checkNginxUpdate, loadStatus };
 });
 vi.mock('$lib/notify', async (importOriginal) => {
   const actual = await importOriginal<typeof import('$lib/notify')>();
@@ -69,5 +70,16 @@ describe('NginxDetail', () => {
 
     await waitFor(() => expect(notifyLocalInfo).toHaveBeenCalled());
     expect(notifyLocalInfo.mock.calls[0][2]).toMatch(/newest image/i);
+  });
+
+  // Without a websocket (the lerd.sh demo) nothing else re-reads status, so the
+  // flag and the Update button would outlive the update.
+  it('re-reads status after a successful update', async () => {
+    withNginx({ running: true, update_available: true });
+    updateNginx.mockResolvedValue({ ok: true, updated: true });
+    render(NginxDetail);
+    await fireEvent.click(screen.getByRole('button', { name: 'Update' }));
+
+    await waitFor(() => expect(loadStatus).toHaveBeenCalled());
   });
 });

@@ -748,6 +748,16 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   }
   if (/\/tinker$/.test(path)) return jsonResponse(TINKER_RESPONSE);
 
+  // The nginx image update clears the flag it answered, and the check reports
+  // it, so the System page settles like a real update.
+  const nginxStatus = status.nginx as { update_available?: boolean };
+  if (path === '/api/nginx/update' && method === 'POST') {
+    nginxStatus.update_available = false;
+    return jsonResponse({ ok: true, updated: true });
+  }
+  if (path === '/api/nginx/check' && method === 'POST')
+    return jsonResponse({ ok: true, update_available: Boolean(nginxStatus.update_available) });
+
   // Nginx — global /api/nginx and per-site /api/sites/<domain>/nginx (+ /backups)
   if (path.includes('/nginx')) {
     if (path.includes('/backups')) return /\/backups\/.+/.test(path) ? textResponse(NGINX_TEXT) : jsonResponse([]);
