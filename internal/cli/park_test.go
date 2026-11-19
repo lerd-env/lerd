@@ -2,8 +2,10 @@ package cli
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -130,5 +132,49 @@ func TestRegisterProject_SkipsCustomContainer(t *testing.T) {
 	}
 	if registered {
 		t.Error("RegisterProject should return false for a custom container site")
+	}
+}
+
+// A worktree checked out next to its site, inside a parked directory, is a
+// branch of that site and already served as one, never a site of its own.
+func TestRegisterProject_SkipsAWorktreeOfARegisteredSite(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local/share"))
+
+	parked := filepath.Join(home, "Sites")
+	site := filepath.Join(parked, "shop")
+	if err := os.MkdirAll(site, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(site, "composer.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main"},
+		{"-c", "user.name=t", "-c", "user.email=t@t", "add", "composer.json"},
+		{"-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init"},
+		{"worktree", "add", "-q", "-b", "feat", filepath.Join(parked, "shop-feat")},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", site}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	if err := config.AddSite(config.Site{Name: "shop", Domains: []string{"shop.test"}, Path: site}); err != nil {
+		t.Fatal(err)
+	}
+	// Nothing past the guard may reach the host's podman or mkcert.
+	t.Setenv("PATH", t.TempDir())
+
+	cfg := &config.GlobalConfig{}
+	cfg.DNS.TLD = "test"
+	cfg.PHP.DefaultVersion = "8.4"
+	out, err := RegisterProjectDeferred(filepath.Join(parked, "shop-feat"), cfg, true)
+	if err != nil {
+		t.Fatalf("RegisterProjectDeferred: %v", err)
+	}
+	if out.Registered || !strings.Contains(out.Reason, "worktree of site shop") {
+		t.Fatalf("want it skipped as a worktree of shop, got %+v", out)
 	}
 }

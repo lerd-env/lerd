@@ -408,6 +408,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/settings/streaming", withCORS(publishAfter(handleSettingsStreaming, eventbus.KindStatus, eventbus.KindSites, eventbus.KindServices)))
 	mux.HandleFunc("/api/settings/streaming-enabled", withCORS(publishAfter(handleSettingsStreamingEnabled, eventbus.KindStatus, eventbus.KindSites, eventbus.KindServices)))
 	mux.HandleFunc("/api/settings/beta-updates", withCORS(handleSettingsBetaUpdates))
+	mux.HandleFunc("/api/settings/worktree-sibling", withCORS(handleSettingsWorktreeSibling))
 	mux.HandleFunc("/api/themes", withCORS(handleThemes))
 	mux.HandleFunc("/api/theme.css", withCORS(handleUserCSS))
 	mux.HandleFunc("/api/themes/", withCORS(handleThemeItem))
@@ -5774,9 +5775,10 @@ type SettingsResponse struct {
 	DNSUpstreamDetected       []string `json:"dns_upstream_detected"` // what auto-detection currently sees
 	TrayEnabled               bool     `json:"tray_enabled"`
 	BetaUpdates               bool     `json:"beta_updates"`
-	Theme                     string   `json:"theme"`      // dashboard colour theme id, empty = the default
-	Setup                     string   `json:"setup"`      // first-run checklist: "", "active" or "done"
-	MCPGlobal                 bool     `json:"mcp_global"` // lerd's MCP server is registered with the AI assistants
+	WorktreeSibling           bool     `json:"worktree_sibling"` // new worktrees go next to the project, not inside it
+	Theme                     string   `json:"theme"`            // dashboard colour theme id, empty = the default
+	Setup                     string   `json:"setup"`            // first-run checklist: "", "active" or "done"
+	MCPGlobal                 bool     `json:"mcp_global"`       // lerd's MCP server is registered with the AI assistants
 }
 
 func handleSettings(w http.ResponseWriter, _ *http.Request) {
@@ -5791,6 +5793,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 	theme := ""
 	setup := ""
 	betaUpdates := false
+	worktreeSibling := false
 	var dnsUpstream []string
 	if cfg != nil {
 		mode = cfg.WorkerExecMode()
@@ -5804,6 +5807,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		theme = cfg.UI.Theme
 		setup = cfg.UI.Setup
 		betaUpdates = cfg.IsBetaChannel()
+		worktreeSibling = cfg.WorktreeLocation == "sibling"
 	}
 	writeJSON(w, SettingsResponse{
 		AutostartOnLogin:          lerdSystemd.IsAutostartEnabled(),
@@ -5823,6 +5827,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		Theme:                     theme,
 		Setup:                     setup,
 		BetaUpdates:               betaUpdates,
+		WorktreeSibling:           worktreeSibling,
 		MCPGlobal:                 mcpConfigured(),
 	})
 }
@@ -6052,6 +6057,29 @@ func handleSettingsBetaUpdates(w http.ResponseWriter, r *http.Request) {
 	}
 	lerdUpdate.ForgetCachedLatest()
 	writeJSON(w, map[string]any{"ok": true, "beta_updates": enabled})
+}
+
+func handleSettingsWorktreeSibling(w http.ResponseWriter, r *http.Request) {
+	enabled, ok := readEnabledBody(w, r)
+	if !ok {
+		return
+	}
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg == nil {
+		writeJSON(w, map[string]any{"ok": false, "error": "loading config"})
+		return
+	}
+	// Off clears the key rather than writing "inside", so config.yaml only
+	// carries the setting while it differs from the default.
+	cfg.WorktreeLocation = ""
+	if enabled {
+		cfg.WorktreeLocation = "sibling"
+	}
+	if err := config.SaveGlobal(cfg); err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "worktree_sibling": enabled})
 }
 
 // uiUnit is the unit this process runs as, and runStart is cli.RunStart

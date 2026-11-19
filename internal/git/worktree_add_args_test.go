@@ -7,15 +7,18 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 // The forms docs/features/git-worktrees.md documents, none of which carry a
 // path. Every one of them died on git's usage message before this.
 func TestDeriveWorktreeAddArgs_fillsInTheDocumentedNewBranchForm(t *testing.T) {
+	useWorktreeLocation(t, "")
 	site := t.TempDir()
-	want := WorktreeCheckoutPath(site, "feat-x")
+	want := mustCheckoutPath(t, site, "feat-x")
 
-	got := DeriveWorktreeAddArgs(site, []string{"-b", "feat-x"})
+	got := mustDerive(t, site, []string{"-b", "feat-x"})
 
 	if !reflect.DeepEqual(got, []string{"-b", "feat-x", want}) {
 		t.Errorf("args = %v, want -b feat-x %s", got, want)
@@ -25,10 +28,11 @@ func TestDeriveWorktreeAddArgs_fillsInTheDocumentedNewBranchForm(t *testing.T) {
 // git's form is `-b <branch> <path> [<start-point>]`, so the path goes between
 // the branch and the start point rather than on the end.
 func TestDeriveWorktreeAddArgs_putsThePathBeforeAStartPoint(t *testing.T) {
+	useWorktreeLocation(t, "")
 	site := t.TempDir()
-	want := WorktreeCheckoutPath(site, "feat-x")
+	want := mustCheckoutPath(t, site, "feat-x")
 
-	got := DeriveWorktreeAddArgs(site, []string{"--track", "-b", "feat-x", "origin/feat"})
+	got := mustDerive(t, site, []string{"--track", "-b", "feat-x", "origin/feat"})
 
 	if !reflect.DeepEqual(got, []string{"--track", "-b", "feat-x", want, "origin/feat"}) {
 		t.Errorf("args = %v, want the path before origin/feat", got)
@@ -38,10 +42,11 @@ func TestDeriveWorktreeAddArgs_putsThePathBeforeAStartPoint(t *testing.T) {
 // An existing branch takes git's `<path> <branch>` order, the same shape the
 // dashboard builds.
 func TestDeriveWorktreeAddArgs_existingBranchGetsPathThenBranch(t *testing.T) {
+	useWorktreeLocation(t, "")
 	site := t.TempDir()
-	want := WorktreeCheckoutPath(site, "feature/auth")
+	want := mustCheckoutPath(t, site, "feature/auth")
 
-	got := DeriveWorktreeAddArgs(site, []string{"feature/auth"})
+	got := mustDerive(t, site, []string{"feature/auth"})
 
 	if !reflect.DeepEqual(got, []string{want, "feature/auth"}) {
 		t.Errorf("args = %v, want %s feature/auth", got, want)
@@ -61,10 +66,11 @@ func TestDeriveWorktreeAddArgs_aSlashInABranchIsNotAPath(t *testing.T) {
 
 // Anyone already typing a path keeps the behaviour they have.
 func TestDeriveWorktreeAddArgs_leavesAnExplicitPathAlone(t *testing.T) {
+	useWorktreeLocation(t, "")
 	site := t.TempDir()
 	in := []string{"-b", "feat-x", "../demo-feat-x"}
 
-	if got := DeriveWorktreeAddArgs(site, in); !reflect.DeepEqual(got, in) {
+	if got := mustDerive(t, site, in); !reflect.DeepEqual(got, in) {
 		t.Errorf("args = %v, want them untouched", got)
 	}
 }
@@ -72,10 +78,11 @@ func TestDeriveWorktreeAddArgs_leavesAnExplicitPathAlone(t *testing.T) {
 // git's own shape puts the path first, and a bare folder name there has no path
 // marker, so -b must not add a second path behind it.
 func TestDeriveWorktreeAddArgs_leavesABareFolderBeforeTheBranchFlagAlone(t *testing.T) {
+	useWorktreeLocation(t, "")
 	site := t.TempDir()
 	in := []string{"demo-feat-x", "-b", "feat-x"}
 
-	if got := DeriveWorktreeAddArgs(site, in); !reflect.DeepEqual(got, in) {
+	if got := mustDerive(t, site, in); !reflect.DeepEqual(got, in) {
 		t.Errorf("args = %v, want them untouched", got)
 	}
 }
@@ -83,10 +90,11 @@ func TestDeriveWorktreeAddArgs_leavesABareFolderBeforeTheBranchFlagAlone(t *test
 // Two positionals with no -b could be a path and a commit-ish, or a branch and
 // a commit-ish. Guessing is how a wrapper checks out the wrong thing.
 func TestDeriveWorktreeAddArgs_passesThroughWhenAmbiguous(t *testing.T) {
+	useWorktreeLocation(t, "")
 	site := t.TempDir()
 	in := []string{"--detach", "feat-x", "abc1234"}
 
-	if got := DeriveWorktreeAddArgs(site, in); !reflect.DeepEqual(got, in) {
+	if got := mustDerive(t, site, in); !reflect.DeepEqual(got, in) {
 		t.Errorf("args = %v, want them untouched", got)
 	}
 }
@@ -94,8 +102,9 @@ func TestDeriveWorktreeAddArgs_passesThroughWhenAmbiguous(t *testing.T) {
 // The derived path is a child of the site, which is the layout the dashboard
 // produces and the one .git/info/exclude is written for.
 func TestDeriveWorktreeAddArgs_derivesAChildOfTheSite(t *testing.T) {
+	useWorktreeLocation(t, "")
 	site := t.TempDir()
-	got := DeriveWorktreeAddArgs(site, []string{"-b", "feat-x"})
+	got := mustDerive(t, site, []string{"-b", "feat-x"})
 
 	path := got[len(got)-1]
 	if filepath.Dir(path) != site {
@@ -106,23 +115,129 @@ func TestDeriveWorktreeAddArgs_derivesAChildOfTheSite(t *testing.T) {
 	}
 }
 
+func mustCheckoutPath(t *testing.T, site, branch string) string {
+	t.Helper()
+	p, err := WorktreeCheckoutPath(site, branch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func mustDerive(t *testing.T, site string, args []string) []string {
+	t.Helper()
+	out, err := DeriveWorktreeAddArgs(site, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// useWorktreeLocation points lerd's config at a scratch home holding the given
+// worktree_location, so a test never reads the real config.yaml.
+func useWorktreeLocation(t *testing.T, location string, mounts ...string) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local/share"))
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.WorktreeLocation = location
+	cfg.Mounts = mounts
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatal(err)
+	}
+	return home
+}
+
 func TestWorktreeCheckoutPath(t *testing.T) {
+	useWorktreeLocation(t, "")
 	parent := filepath.Join(t.TempDir(), "myapp")
 
 	// Worktrees live under the parent: <parent>/<parentBase>-<slug>.
-	got := WorktreeCheckoutPath(parent, "feature/auth")
+	got, err := WorktreeCheckoutPath(parent, "feature/auth")
 	want := filepath.Join(parent, "myapp-feature-auth")
-	if got != want {
-		t.Fatalf("got %q want %q", got, want)
+	if err != nil || got != want {
+		t.Fatalf("got %q, %v want %q", got, err, want)
 	}
 
 	// When the default path already exists, it bumps a numeric suffix.
 	if err := os.MkdirAll(want, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	got = WorktreeCheckoutPath(parent, "feature/auth")
+	got, _ = WorktreeCheckoutPath(parent, "feature/auth")
 	if got != want+"-2" {
 		t.Fatalf("got %q want %q", got, want+"-2")
+	}
+}
+
+func TestWorktreeCheckoutPath_siblingPutsItNextToTheSite(t *testing.T) {
+	home := useWorktreeLocation(t, "sibling")
+	sites := filepath.Join(home, "Sites")
+	parent := filepath.Join(sites, "myapp")
+
+	got, err := WorktreeCheckoutPath(parent, "feature/auth")
+	want := filepath.Join(sites, "myapp-feature-auth")
+	if err != nil || got != want {
+		t.Fatalf("got %q, %v want %q", got, err, want)
+	}
+
+	if err := os.MkdirAll(want, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = WorktreeCheckoutPath(parent, "feature/auth")
+	if got != want+"-2" {
+		t.Fatalf("got %q want %q", got, want+"-2")
+	}
+}
+
+// Outside home the containers only see what a parked directory or mounts:
+// covers, and lerd never mounts the folder beside a site by itself: that folder
+// can be /usr/local, whose mount would hide the PHP image's own files.
+func TestWorktreeCheckoutPath_siblingNeedsAFolderTheContainersSee(t *testing.T) {
+	outside := t.TempDir()
+	site := filepath.Join(outside, "srv", "shop")
+
+	useWorktreeLocation(t, "sibling")
+	_, err := WorktreeCheckoutPath(site, "feat")
+	if err == nil || !strings.Contains(err.Error(), filepath.Dir(site)) || !strings.Contains(err.Error(), "mounts:") {
+		t.Fatalf("want an error naming %s and mounts:, got %v", filepath.Dir(site), err)
+	}
+
+	useWorktreeLocation(t, "sibling", filepath.Join(outside, "srv"))
+	got, err := WorktreeCheckoutPath(site, "feat")
+	if want := filepath.Join(outside, "srv", "shop-feat"); err != nil || got != want {
+		t.Fatalf("with the folder under mounts: got %q, %v want %q", got, err, want)
+	}
+}
+
+// A host-proxy site's dev server runs on the host and nginx only forwards to
+// it, so no container reads the checkout and nothing has to be mounted.
+func TestWorktreeCheckoutPath_siblingOfAHostProxySiteNeedsNoMount(t *testing.T) {
+	useWorktreeLocation(t, "sibling")
+	site := filepath.Join(t.TempDir(), "srv", "shop")
+	if err := config.AddSite(config.Site{Name: "shop", Domains: []string{"shop.test"}, Path: site, HostPort: 5173}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := WorktreeCheckoutPath(site, "feat")
+	if want := filepath.Join(filepath.Dir(site), "shop-feat"); err != nil || got != want {
+		t.Fatalf("got %q, %v want %q", got, err, want)
+	}
+}
+
+func TestWorktreeCheckoutPath_refusesAnUnknownLocation(t *testing.T) {
+	useWorktreeLocation(t, "elsewhere")
+
+	_, err := WorktreeCheckoutPath(filepath.Join(t.TempDir(), "myapp"), "feat-x")
+	if err == nil || !strings.Contains(err.Error(), `"elsewhere"`) {
+		t.Fatalf("want an error naming the value, got %v", err)
+	}
+	if _, err := DeriveWorktreeAddArgs(t.TempDir(), []string{"-b", "feat-x"}); err == nil {
+		t.Fatal("DeriveWorktreeAddArgs must surface the bad location")
 	}
 }
 

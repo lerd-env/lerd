@@ -169,7 +169,11 @@ func execWorktreeAdd(args map[string]any) (any, *rpcError) {
 			addArgs = append(addArgs, fmt.Sprint(v))
 		}
 	}
-	gitArgs := append([]string{"worktree", "add"}, gitpkg.DeriveWorktreeAddArgs(site.Path, addArgs)...)
+	addArgs, err := gitpkg.DeriveWorktreeAddArgs(site.Path, addArgs)
+	if err != nil {
+		return toolErr(err.Error()), nil
+	}
+	gitArgs := append([]string{"worktree", "add"}, addArgs...)
 	before := worktreePaths(site)
 	out, err := runIn(site.Path, "git", gitArgs...)
 	if err != nil {

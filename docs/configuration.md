@@ -112,6 +112,11 @@ auto_cleanup: true      # when true (default), lerd reclaims its own orphaned
                         # images in use. Toggle with `lerd cleanup auto on/off`
                         # (or set this key); `lerd cleanup` still works on demand
                         # when off. See reference/commands.md.
+worktree_location: inside  # optional. Where lerd puts a worktree it names the
+                           # folder for (dashboard, MCP, lerd worktree add with no
+                           # path): "inside" the site (default) or "sibling" next
+                           # to it, so an IDE opened on the site does not index
+                           # every branch too. See features/git-worktrees.md.
 parked_directories:
   - ~/Lerd
 services:
