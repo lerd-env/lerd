@@ -322,6 +322,7 @@ func Start(currentVersion string) error {
 	}))
 	mux.HandleFunc("/api/nginx/", withCORS(handleNginxRoutes))
 	mux.HandleFunc("/api/web/", withCORS(handleWebRoutes))
+	mux.HandleFunc("/api/web-server", withCORS(handleWebServerSwitch))
 	mux.HandleFunc("/api/php-versions", withCORS(handlePHPVersions))
 	mux.HandleFunc("/api/php-installable", withCORS(handlePHPInstallable))
 	mux.HandleFunc("/api/php-versions/install", withCORS(publishAfter(handlePHPInstall, eventbus.KindStatus, eventbus.KindSites)))

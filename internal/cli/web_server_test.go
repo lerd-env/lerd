@@ -64,7 +64,7 @@ func unitFileExists(name string) bool {
 
 func TestSwitchWebServer_toGoRewritesTheUnitAndRestarts(t *testing.T) {
 	restarts := stubWebServerSwitch(t, false)
-	if err := switchWebServer("go", &bytes.Buffer{}); err != nil {
+	if err := SwitchWebServer("go", &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
 	if currentWebServer(t) != config.WebServerGo || *restarts != 1 || !strings.Contains(readUnit(t), "lerd web-serve") {
@@ -80,7 +80,7 @@ func TestSwitchWebServer_toGoRewritesTheUnitAndRestarts(t *testing.T) {
 // server they had rather than being left on one that does not start.
 func TestSwitchWebServer_unhealthyRollsBack(t *testing.T) {
 	restarts := stubWebServerSwitch(t, false, errors.New("nothing on :80"))
-	err := switchWebServer("go", &bytes.Buffer{})
+	err := SwitchWebServer("go", &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), "nothing on :80") {
 		t.Fatalf("err %v", err)
 	}
@@ -95,13 +95,13 @@ func TestSwitchWebServer_unhealthyRollsBack(t *testing.T) {
 func TestSwitchWebServer_refusals(t *testing.T) {
 	t.Run("unknown server", func(t *testing.T) {
 		stubWebServerSwitch(t, false)
-		if err := switchWebServer("apache", &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "apache") {
+		if err := SwitchWebServer("apache", &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "apache") {
 			t.Fatalf("err %v", err)
 		}
 	})
 	t.Run("macOS", func(t *testing.T) {
 		stubWebServerSwitch(t, true)
-		if err := switchWebServer("go", &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "macOS") {
+		if err := SwitchWebServer("go", &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "macOS") {
 			t.Fatalf("err %v", err)
 		}
 	})
@@ -112,7 +112,7 @@ func TestSwitchWebServer_refusals(t *testing.T) {
 		override := filepath.Join(config.NginxCustomD(), "shop.test.conf")
 		os.MkdirAll(filepath.Dir(override), 0o755)
 		os.WriteFile(override, []byte("client_max_body_size 100m;\n"), 0o644)
-		err := switchWebServer("go", &bytes.Buffer{})
+		err := SwitchWebServer("go", &bytes.Buffer{})
 		if err == nil || !strings.Contains(err.Error(), "shop.test.conf") {
 			t.Fatalf("err %v", err)
 		}
@@ -124,10 +124,10 @@ func TestSwitchWebServer_refusals(t *testing.T) {
 
 func TestSwitchWebServer_backToNginxRewritesItsUnit(t *testing.T) {
 	stubWebServerSwitch(t, false)
-	if err := switchWebServer("go", &bytes.Buffer{}); err != nil {
+	if err := SwitchWebServer("go", &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := switchWebServer("nginx", &bytes.Buffer{}); err != nil {
+	if err := SwitchWebServer("nginx", &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
 	if currentWebServer(t) != config.WebServerNginx || !strings.Contains(readUnit(t), "nginx:alpine") {

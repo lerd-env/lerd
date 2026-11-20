@@ -75,7 +75,7 @@ func TestWebServerSettings_globalShowEditReset(t *testing.T) {
 // points at the command that edits what the running server reads.
 func TestNginxCmd_refusesWhileLerdServes(t *testing.T) {
 	stubWebServerSwitch(t, false)
-	if err := switchWebServer("go", &bytes.Buffer{}); err != nil {
+	if err := SwitchWebServer("go", &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
 	cmd := NewNginxCmd()

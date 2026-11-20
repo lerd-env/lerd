@@ -42,6 +42,7 @@ var loopbackOnlyRoutes = []string{
 	"/api/sites/pull-undo",      // resets the checkout, runs composer and npm, restores database snapshots
 	"/api/sites/git-diff",       // reads uncommitted files, untracked secrets included
 	"/api/sites/git-commit",     // commits and pushes with the host user's git identity and credentials
+	"/api/web-server",           // swaps the server every site is served by, pulling and restarting containers
 }
 
 // loopbackOnlyRoutePrefixes are endpoint subtrees restricted in full, so a

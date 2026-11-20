@@ -46,7 +46,7 @@ or with --global for every site.`,
 				fmt.Fprintln(cmd.OutOrStdout(), kind)
 				return nil
 			}
-			return switchWebServer(args[0], cmd.OutOrStdout())
+			return SwitchWebServer(args[0], cmd.OutOrStdout())
 		},
 	}
 	cmd.AddCommand(newWebServerShowCmd(), newWebServerEditCmd(), newWebServerResetCmd())
@@ -71,9 +71,9 @@ var (
 	}
 )
 
-// switchWebServer moves the sites to another web server and rolls back to the
+// SwitchWebServer moves the sites to another web server and rolls back to the
 // previous one when the new one does not answer.
-func switchWebServer(to string, out io.Writer) error {
+func SwitchWebServer(to string, out io.Writer) error {
 	if err := config.ValidateWebServer(to); err != nil {
 		return err
 	}

@@ -241,3 +241,19 @@ export async function checkToolUpdates(): Promise<{ ok: boolean; tools?: ToolSta
 // True while lerd's own web server serves: nginx is stopped and removed, so
 // nothing in the dashboard names it or offers its controls.
 export const goWebServer = derived(status, ($s) => $s.web_server === 'go');
+
+// switchWebServer serves every site with nginx or lerd's own web server, the
+// same switch as `lerd web-server`, which rolls back when the new one fails.
+export async function switchWebServer(kind: 'nginx' | 'go'): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await apiFetch('/api/web-server', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind })
+    });
+    const data = await decodeJSONResult<{ ok?: boolean; error?: string }>(res);
+    return { ok: Boolean(data.ok), error: data.error };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}

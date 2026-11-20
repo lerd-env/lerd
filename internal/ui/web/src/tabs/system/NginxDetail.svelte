@@ -9,7 +9,8 @@
   import { logHighlight } from '$lib/logHighlight';
   import { notifyLocalFailure, notifyLocalInfo } from '$lib/notify';
   import NginxConfigTab from './NginxConfigTab.svelte';
-  import { status, updateNginx, checkNginxUpdate, loadStatus, goWebServer } from '$stores/status';
+  import { status, updateNginx, checkNginxUpdate, loadStatus, goWebServer, switchWebServer } from '$stores/status';
+  import ConfirmModal from '$components/ConfirmModal.svelte';
   import { accessMode } from '$stores/accessMode';
   import { m } from '../../paraglide/messages.js';
 
@@ -21,6 +22,20 @@
   ];
 
   let updating = $state(false);
+  let confirmSwitch = $state(false);
+  let switching = $state(false);
+
+  async function applySwitch() {
+    switching = true;
+    try {
+      const res = await switchWebServer($goWebServer ? 'nginx' : 'go');
+      if (!res.ok) notifyLocalFailure('update_check', m.system_webServer_switchFailed(), res.error || m.common_failed());
+      await loadStatus();
+    } finally {
+      switching = false;
+      confirmSwitch = false;
+    }
+  }
   let checking = $state(false);
 
   async function applyUpdate() {
@@ -61,6 +76,9 @@
         {m.services_update()}
       </DetailButton>
     {/if}
+    {#if $accessMode.localControl}
+      <DetailButton onclick={() => (confirmSwitch = true)}>{m.system_webServer_change()}</DetailButton>
+    {/if}
     {#if $accessMode.localControl && !$goWebServer}
       <CheckUpdatesButton onclick={runCheck} {checking} title={m.system_nginx_checkTitle()} />
     {/if}
@@ -83,3 +101,14 @@
     <LogViewer path={$goWebServer ? '/api/logs/lerd-web' : '/api/logs/lerd-nginx'} highlight={logHighlight} />
   {/if}
 </DetailPanel>
+
+<ConfirmModal
+  open={confirmSwitch}
+  title={m.system_webServer_change()}
+  body={$goWebServer ? m.system_webServer_toNginx() : m.system_webServer_toGo()}
+  confirmLabel={m.system_webServer_switch()}
+  loading={switching}
+  size="md"
+  onconfirm={applySwitch}
+  onclose={() => (confirmSwitch = false)}
+/>
