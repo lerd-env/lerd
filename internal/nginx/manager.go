@@ -8,12 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,6 +25,7 @@ import (
 	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/sitephp"
 	"github.com/geodro/lerd/internal/siteproxy"
 )
 
@@ -234,33 +233,17 @@ func frameworkNginxBlock(w io.Writer, framework, domain, snippet, sitePath, publ
 	return indentBlock(strings.TrimRight(expanded, "\n"), "    ")
 }
 
-var fastcgiParamName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-
 // frameworkFastCGIParams renders a framework's fastcgi params as indented
 // fastcgi_param lines, sorted by name. An entry that could break out of its
 // directive is dropped with a warning to w, like a bad snippet.
 func frameworkFastCGIParams(w io.Writer, framework, domain string, params map[string]string, sitePath, publicDir string) string {
-	docRoot := sitePath
-	if publicDir != "" && publicDir != "." {
-		docRoot = filepath.Join(sitePath, publicDir)
+	kept, warnings := sitephp.FastCGIParams(framework, domain, params, sitePath, publicDir)
+	for _, msg := range warnings {
+		fmt.Fprint(w, msg)
 	}
 	var out strings.Builder
-	for _, name := range slices.Sorted(maps.Keys(params)) {
-		value := strings.NewReplacer("{{root}}", sitePath, "{{public}}", docRoot).Replace(params[name])
-		switch {
-		case !fastcgiParamName.MatchString(name):
-			fmt.Fprintf(w, "[WARN] dropping %s fastcgi param %q for %s: not a valid name\n", framework, name, domain)
-		case strings.Contains(value, "{{"):
-			fmt.Fprintf(w, "[WARN] dropping %s fastcgi param %s for %s: unknown {{placeholder}}\n", framework, name, domain)
-		case strings.ContainsAny(value, nginxValueForbidden):
-			fmt.Fprintf(w, "[WARN] dropping %s fastcgi param %s for %s: value would end the directive\n", framework, name, domain)
-		// nginx reads $ as a variable even inside quotes: an unknown one fails the
-		// config for every site, a known one changes what PHP receives.
-		case strings.Contains(value, "$"):
-			fmt.Fprintf(w, "[WARN] dropping %s fastcgi param %s for %s: value contains $, which nginx would read as a variable\n", framework, name, domain)
-		default:
-			fmt.Fprintf(&out, "        fastcgi_param %s %s;\n", name, nginxQuote(value))
-		}
+	for _, p := range kept {
+		fmt.Fprintf(&out, "        fastcgi_param %s %s;\n", p.Name, nginxQuote(p.Value))
 	}
 	return out.String()
 }
@@ -425,50 +408,18 @@ func indentBlock(s, indent string) string {
 // the site at sitePath: project .lerd.yaml wins, then global config, then 60s.
 // An empty sitePath skips the project lookup (site-less proxy vhosts).
 func resolveRequestTimeout(sitePath, phpVersion string) int {
-	if sitePath != "" {
-		if pc, err := config.LoadProjectConfig(sitePath); err == nil && pc.RequestTimeout > 0 {
-			return pc.RequestTimeout
-		}
-	}
-	gc, err := config.LoadGlobal()
-	if err != nil {
-		return config.DefaultRequestTimeout
-	}
-	if gc.Nginx.RequestTimeout > 0 {
-		return gc.Nginx.RequestTimeout
-	}
-	if xdebugDebugs(gc.GetXdebugMode(phpVersion)) {
-		return xdebugDebugRequestTimeout
-	}
-	return config.DefaultRequestTimeout
+	return sitephp.RequestTimeout(sitePath, phpVersion)
 }
 
 // resolveFrontController reports whether the site routes all php through
-// index.php, set by the project's .lerd.yaml or by its framework definition.
-func resolveFrontController(site config.Site) bool {
-	if pc, err := config.LoadProjectConfig(site.Path); err == nil && pc.FrontController {
-		return true
-	}
-	fw, ok := config.GetFrameworkForDir(site.Framework, site.Path)
-	return ok && fw.FrontController
-}
+// index.php; see sitephp.FrontController.
+func resolveFrontController(site config.Site) bool { return sitephp.FrontController(site) }
 
-// xdebugDebugRequestTimeout is what a site gets while its PHP version runs
-// Xdebug in debug mode. A request stopped at a breakpoint sends nginx nothing,
-// so the 60s default answers 504 over a session that is still perfectly alive,
-// and the gateway error is what the user sees instead of their breakpoint.
-const xdebugDebugRequestTimeout = 3600
+// xdebugDebugRequestTimeout and xdebugDebugs are sitephp's, kept under the
+// names the vhost code and its tests use.
+const xdebugDebugRequestTimeout = sitephp.XdebugDebugRequestTimeout
 
-// xdebugDebugs reports whether an xdebug.mode value turns on step debugging.
-// The value is a comma-separated set, so "develop,debug" debugs as well.
-func xdebugDebugs(mode string) bool {
-	for _, m := range strings.Split(mode, ",") {
-		if strings.TrimSpace(m) == "debug" {
-			return true
-		}
-	}
-	return false
-}
+func xdebugDebugs(mode string) bool { return sitephp.XdebugDebugs(mode) }
 
 // phpShort converts "8.4" → "84".
 func phpShort(version string) string {
