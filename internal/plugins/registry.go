@@ -10,6 +10,7 @@ import (
 	"sort"
 
 	"github.com/geodro/lerd/internal/config"
+	"gopkg.in/yaml.v3"
 )
 
 // Surfaces name which part of lerd ran a plugin file, passed as LERD_SURFACE so
@@ -82,15 +83,44 @@ func Load() ([]*Plugin, []LoadError) {
 
 // Find returns the installed plugin called name.
 func Find(name string) (*Plugin, error) {
+	dir, err := pluginDir(name)
+	if err != nil {
+		return nil, err
+	}
+	return ReadPlugin(dir)
+}
+
+// HasPageScript reports whether the installed plugin called name declares a
+// page script. It skips the tool check: lerd's own web server asks from a
+// container without the host's tools, and lerd-ui checks them when serving it.
+func HasPageScript(name string) bool {
+	dir, err := pluginDir(name)
+	if err != nil {
+		return false
+	}
+	data, err := os.ReadFile(filepath.Join(dir, ManifestFile))
+	if err != nil {
+		return false
+	}
+	var m Manifest
+	if yaml.Unmarshal(data, &m) != nil || m.Name != name || !Compatible(m.Lerd) {
+		return false
+	}
+	return m.UI != nil && m.UI.PageScript != ""
+}
+
+// pluginDir is where the plugin called name is installed, refusing a name
+// that is not one and a plugin that has been revoked.
+func pluginDir(name string) (string, error) {
 	if !nameRe.MatchString(name) {
-		return nil, fmt.Errorf("invalid plugin name %q", name)
+		return "", fmt.Errorf("invalid plugin name %q", name)
 	}
 	if revoked := revocations(); len(revoked) > 0 {
 		if r, ok := revocationFor(name, revoked, readKept()); ok {
-			return nil, RevokedError{r}
+			return "", RevokedError{r}
 		}
 	}
-	return ReadPlugin(filepath.Join(Dir(), name))
+	return filepath.Join(Dir(), name), nil
 }
 
 // Command builds the process for one of the plugin's files, with its context

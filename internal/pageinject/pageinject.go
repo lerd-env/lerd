@@ -22,7 +22,7 @@ func BrowserLogs(site config.Site) bool {
 func Plugins(site config.Site) []string {
 	var out []string
 	for _, name := range site.PagePlugins {
-		if p, err := plugins.Find(name); err == nil && p.UI != nil && p.UI.PageScript != "" {
+		if plugins.HasPageScript(name) {
 			out = append(out, name)
 		}
 	}
