@@ -28,13 +28,13 @@ lerd env </dev/null >/dev/null 2>&1
 check_not "lerd doctor is clean" '✗' lerd doctor
 check "11.1 lerd doctor --json is well formed with fix tiers" bash -c 'lerd doctor --json | python3 -c "import json,sys; d=json.load(sys.stdin); assert d[\"findings\"]; [f for f in d[\"findings\"] if \"fix\" in f and \"tier\" in f[\"fix\"]] or True"'
 
-systemctl --user stop lerd-nginx
-check_out "doctor names a stopped nginx and hints lerd start" 'lerd start' lerd doctor
-check "it offers no auto fix for it" bash -c 'lerd doctor --json | python3 -c "
-import json, sys
+systemctl --user stop "$(web_unit)"
+check_out "doctor names a stopped web server and hints lerd start" 'lerd start' lerd doctor
+check "it offers no auto fix for it" bash -c 'lerd doctor --json | WEB_UNIT="$1" python3 -c "
+import json, os, sys
 d = json.load(sys.stdin)
-bad = [f for f in d[\"findings\"] if \"nginx\" in f[\"name\"].lower() and f[\"status\"] != \"ok\" and (f.get(\"fix\") or {}).get(\"tier\") == 1]
-sys.exit(1 if bad else 0)"'
+bad = [f for f in d[\"findings\"] if os.environ[\"WEB_UNIT\"] in f[\"name\"].lower() and f[\"status\"] != \"ok\" and (f.get(\"fix\") or {}).get(\"tier\") == 1]
+sys.exit(1 if bad else 0)"' _ "$(web_unit)"
 check "lerd start brings it back" lerd start
 expect_200 11.2 "$url"
 

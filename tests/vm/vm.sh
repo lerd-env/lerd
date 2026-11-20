@@ -134,7 +134,7 @@ cmd_push() {
 # passthrough: the knobs phase scripts read, forwarded from this shell.
 passthrough() {
 	local v
-	for v in LERD_CHANNEL RUN_TIER3 FROM_VERSION AFTER_REBOOT GITHUB_TOKEN FORCE; do
+	for v in LERD_CHANNEL RUN_TIER3 FROM_VERSION AFTER_REBOOT GITHUB_TOKEN FORCE LERD_WEB_SERVER; do
 		[ -n "${!v:-}" ] && printf '%s=%q ' "$v" "${!v}"
 	done
 }

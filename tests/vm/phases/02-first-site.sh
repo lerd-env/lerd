@@ -32,7 +32,7 @@ fi
 name=$(site_name "$DEMO_DIR")
 host=$(site_host "$DEMO_DIR")
 check_out "2.4 lerd sites lists the site with its PHP version and doc root" "$name +$host +8\\.[0-9].*$DEMO_DIR" lerd sites
-check_out "2.5 lerd which resolves PHP, Node, doc root and nginx config" 'PHP.*[0-9].*Node.*Document root.*Nginx config' bash -c 'lerd which | tr "\n" " "'
+check_out "2.5 lerd which resolves PHP, Node, doc root and nginx config" 'PHP.*[0-9].*Node.*Document root.*(Nginx config|Web server settings)' bash -c 'lerd which | tr "\n" " "'
 
 
 if [ "$(tld)" = localhost ]; then

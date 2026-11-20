@@ -106,7 +106,7 @@ else
 fi
 
 lerd stop </dev/null >/dev/null 2>&1
-check_out "1.13 start --dry-run reports what it would pull and starts nothing" '(Nothing to download|would download).*nginx=(inactive|failed)' bash -c 'lerd start --dry-run 2>&1 | tr "\n" " "; echo nginx=$(systemctl --user is-active lerd-nginx)'
+check_out "1.13 start --dry-run reports what it would pull and starts nothing" '(Nothing to download|would download).*web=(inactive|failed)' bash -c "lerd start --dry-run 2>&1 | tr '\\n' ' '; echo web=\$(systemctl --user is-active $(web_unit))"
 check "1.15 [partial] --no-pull and LERD_OFFLINE=1 still start a working stack" bash -c 'lerd start --no-pull && LERD_OFFLINE=1 lerd start'
 
 if [ "${RUN_TIER3:-}" = 1 ]; then
@@ -144,3 +144,11 @@ else
 	skip "1.19 the Linux application entry cold-starts lerd" "no desktop session on this guest (only omarchy has one)"
 fi
 skip "1.20 the macOS app splash" "macOS only"
+
+if go_mode; then
+	check "1.21 lerd web-server go switches every site to lerd's own web server" lerd web-server go
+	check_out "the switch is recorded" '^go$' bash -c 'lerd web-server | tail -1'
+	check_out "lerd-web serves and nginx is gone" '^lerd-web$' bash -c "podman ps --format '{{.Names}}' | grep -E '^lerd-(nginx|web)$'"
+else
+	skip "1.21 lerd web-server go" "nginx lane, set LERD_WEB_SERVER=go"
+fi

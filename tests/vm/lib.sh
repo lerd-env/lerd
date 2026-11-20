@@ -145,10 +145,27 @@ SHOP_DIR=$PROJECTS/shop
 # quietly when missing, so `vm.sh run <guest> 5` works on a freshly reset guest
 # without paying for phases 1 to 4. A setup that fails ends the phase.
 need_lerd() {
-	have lerd && return
-	echo "--- setup: installing the build in ~/rc"
-	bash "$HOME/rc/install.sh" --local "$HOME/rc/lerd" </dev/null >/dev/null 2>&1 || {
-		_fail "setup: install from ~/rc (vm.sh push first)"
+	if ! have lerd; then
+		echo "--- setup: installing the build in ~/rc"
+		bash "$HOME/rc/install.sh" --local "$HOME/rc/lerd" </dev/null >/dev/null 2>&1 || {
+			_fail "setup: install from ~/rc (vm.sh push first)"
+			exit 1
+		}
+	fi
+	ensure_web_server
+}
+
+# LERD_WEB_SERVER=go runs the lanes on lerd's own web server: phases switch to
+# it once lerd is installed, and the few checks that read nginx's own files or
+# name its unit use their equivalents for the server that runs.
+go_mode() { [ "${LERD_WEB_SERVER:-}" = go ]; }
+web_unit() { if go_mode; then echo lerd-web; else echo lerd-nginx; fi; }
+ensure_web_server() {
+	go_mode || return 0
+	[ "$(lerd web-server 2>/dev/null | tail -1)" = go ] && return 0
+	echo "--- setup: switching to lerd's own web server"
+	lerd web-server go </dev/null >/dev/null 2>&1 || {
+		_fail "setup: lerd web-server go"
 		exit 1
 	}
 }

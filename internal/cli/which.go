@@ -10,6 +10,7 @@ import (
 	"github.com/geodro/lerd/internal/feedback"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	phpDet "github.com/geodro/lerd/internal/php"
+	"github.com/geodro/lerd/internal/webcustom"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +30,7 @@ func whichPHPVersion(site *config.Site, detected string) string {
 func NewWhichCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "which",
-		Short: "Show resolved PHP, Node, document root, and nginx config for the current site",
+		Short: "Show resolved PHP, Node, document root, and web server config for the current site",
 		RunE:  runWhich,
 	}
 }
@@ -52,19 +53,30 @@ func runWhich(_ *cobra.Command, _ []string) error {
 	publicDir := config.PublicDirFor(*site)
 
 	docRoot := filepath.Join(site.Path, publicDir)
-	nginxConf := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+".conf")
+	serverLabel, serverConf := whichServerRow(*site)
 
 	sum := feedback.NewSummary().
 		Row("Site", feedback.Val(strings.Join(site.Domains, ", "))).
 		Row("PHP", phpVersion).
 		Row("Node", nodeVersion).
 		Row("Document root", docRoot).
-		Row("Nginx config", nginxConf)
-	if site.Secured {
+		Row(serverLabel, serverConf)
+	if site.Secured && serverLabel == "Nginx config" {
 		sslConf := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+"-ssl.conf")
 		sum.Row("Nginx SSL", sslConf)
 	}
 	sum.Print()
 
 	return nil
+}
+
+// whichServerRow names the file that configures the site on the server that
+// serves it: the nginx vhost, or lerd's own web server's settings file.
+func whichServerRow(site config.Site) (label, path string) {
+	if cfg, err := config.LoadGlobal(); err == nil {
+		if kind, _ := cfg.WebServerKind(); kind == config.WebServerGo {
+			return "Web server settings", webcustom.SitePath(site.PrimaryDomain())
+		}
+	}
+	return "Nginx config", filepath.Join(config.NginxConfD(), site.PrimaryDomain()+".conf")
 }

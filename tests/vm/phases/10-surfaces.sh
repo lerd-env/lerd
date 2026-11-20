@@ -41,7 +41,7 @@ check_out "10.36 [partial] the sidebar lists the pages" 'Dashboard.*Databases.*P
 	bash -c 'tui_screen 140 45 "wait:SERVICES" | tr "\n" " "'
 check_out "10.36 [partial] sites and services carry running/total counts" 'SITES +[0-9]+/[0-9]+.*SERVICES +[0-9]+/[0-9]+' \
 	bash -c 'tui_screen 140 45 "wait:SERVICES" | tr "\n" " "'
-check_out "10.36 [partial] dns, nginx and the watcher sit at the foot with their state" 'dns +resolving.*nginx +running.*watcher +running' \
+check_out "10.36 [partial] dns, nginx and the watcher sit at the foot with their state" 'dns +resolving.*(nginx|web server) +running.*watcher +running' \
 	bash -c 'tui_screen 140 45 "wait:watcher" | tr "\n" " "'
 # Earlier phases can leave the queue stopped, and a stopped worker has no unit to crash.
 check "the demo's queue worker runs" bash -c "lerd queue:start </dev/null >/dev/null 2>&1 && systemctl --user is-active --quiet $queue"

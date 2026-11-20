@@ -128,7 +128,7 @@ check "lerd idle on" lerd idle on
 check "lerd idle timeout 1m" lerd idle timeout 1m
 check "lerd idle services on" lerd idle services on
 # Services go to sleep one after another, so wait for the last one.
-only_core() { ! podman ps --format '{{.Names}}' | grep -Ev '^lerd-(nginx|dns|php[0-9]+-fpm)$'; }
+only_core() { ! podman ps --format '{{.Names}}' | grep -Ev '^lerd-(nginx|web|dns|php[0-9]+-fpm)$'; }
 check "mysql goes to sleep" wait_for 240 asleep mysql
 check "6.11 [partial] only nginx, dns and php-fpm keep running" wait_for 60 only_core
 svc_json() { api GET /api/services | python3 -c 'import json,sys; print([s.get(sys.argv[2]) for s in json.load(sys.stdin) if s["name"]==sys.argv[1]])' "$1" "$2"; }
@@ -136,7 +136,13 @@ svc_json() { api GET /api/services | python3 -c 'import json,sys; print([s.get(s
 svc_asleep() { svc_json "$1" idle_suspended | grep -q True; }
 wait_for 10 svc_asleep mysql
 check_out "6.11 [partial] the dashboard API marks mysql idle_suspended" '\[True\]' svc_json mysql idle_suspended
-check_out "6.11 [partial] the vhost is switched to the waking one" '_lerd/wake' cat "$vhost"
+# lerd's own web server reads the sleeping flag itself, so the waking state is
+# that flag rather than a swapped vhost file.
+if go_mode; then
+	check "6.11 [partial] the site's requests wait for the wake" flagged mysql
+else
+	check_out "6.11 [partial] the vhost is switched to the waking one" '_lerd/wake' cat "$vhost"
+fi
 r=$(cold "$url")
 echo "--- cold GET: $r"
 [ "${r%% *}" = 200 ] && _pass "6.12 a cold GET answers 200 with no redirect in ${r#* }s" || _fail "6.12 a cold GET answers 200 with no redirect" "got $r"
@@ -163,7 +169,11 @@ expect_200 "6.15" "$url"
 
 wait_for 240 asleep mysql
 lerd install </dev/null >/dev/null 2>&1
-check_out "6.16 lerd install keeps the waking vhost" '_lerd/wake' cat "$vhost"
+if go_mode; then
+	check "6.16 lerd install keeps the site waiting for the wake" flagged mysql
+else
+	check_out "6.16 lerd install keeps the waking vhost" '_lerd/wake' cat "$vhost"
+fi
 expect_200 "6.16" "$url"
 
 wait_for 240 asleep mysql
@@ -215,7 +225,11 @@ lerd service start mysql </dev/null >/dev/null 2>&1
 wait_for 240 asleep mysql
 check "lerd idle services off" lerd idle services off
 check "6.24 idle services off wakes mysql" wait_for 60 unit_active lerd-mysql
-check "6.24 the real vhost is back" wait_for 30 bash -c "! grep -q _lerd/wake '$vhost'"
+if go_mode; then
+	check "6.24 the site is served directly again" wait_for 30 bash -c '! flagged mysql'
+else
+	check "6.24 the real vhost is back" wait_for 30 bash -c "! grep -q _lerd/wake '$vhost'"
+fi
 expect_200 "6.24" "$url"
 
 # 6.21 last: it turns snapshots on and restarts the watcher.

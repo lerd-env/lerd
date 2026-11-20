@@ -27,6 +27,15 @@ for s in (yaml.safe_load(open(path)) or {}).get("sites", []):
 EOF
 }
 
+# web_with <site> <yaml>: lerd web-server edit with an editor that writes the
+# settings file, printf escapes expanded, the way a user would type it.
+web_with() {
+	local site=$1 text=$2 ed=/tmp/lerd-vm-editor.sh
+	printf '#!/bin/sh\nprintf %q > "$1"\n' "$text" >"$ed"
+	chmod +x "$ed"
+	EDITOR=$ed VISUAL=$ed lerd web-server edit "$site"
+}
+
 # nginx_with <site> <text>: runs lerd nginx edit --location with an editor
 # that appends text to the override, the way a user would type it.
 nginx_with() {
@@ -210,23 +219,43 @@ check_out "the unit is the listener, running" '^(active|activating)$' bash -c "s
 check "8.20 lerd stripe:listen stop" lerd stripe:listen stop
 skip "stripe webhooks reaching the app" "needs a real Stripe test key"
 
-check "lerd nginx edit adds a location-scope block" nginx_with "$name" 'add_header X-Lerd-VM location always;'
-# nginx edit returns a moment before the reload serves, so allow it a few seconds.
-has_header() { curl -skI "$url" | grep -qi 'x-lerd-vm: location'; }
-check "the block is served" wait_for 10 has_header
-check "lerd restart" lerd restart "$name"
-check_out "the block survives a restart" 'x-lerd-vm: location' curl -skI "$url"
-check "lerd nginx reset --location" lerd nginx reset --location "$name"
-check "reset puts it back" wait_for 10 bash -c "! curl -skI '$url' | grep -qi x-lerd-vm"
-expect_200 "8.21 [partial]" "$url"
-broken=$(nginx_with "$name" 'bogus_vm_directive on;' 2>&1)
-echo "$broken"
-check_out "the error names the directive and its line" 'bogus_vm_directive.*:[0-9]+' echo "$broken"
-check_out "8.22 a broken directive is rolled back" 'rolled back' echo "$broken"
-check_not "the broken override did not stay" 'bogus_vm_directive' lerd nginx show --location "$name"
-expect_200 "$url"
-lerd nginx reset --location "$name" </dev/null >/dev/null 2>&1
-rm -f /tmp/lerd-vm-editor.sh
+if go_mode; then
+	# lerd's own web server reads a YAML settings file instead of nginx overrides.
+	check "lerd web-server edit adds a response header" web_with "$name" 'headers:\n  X-Lerd-VM: location'
+	has_header() { curl -skI "$url" | grep -qi 'x-lerd-vm: location'; }
+	check "the header is served" wait_for 10 has_header
+	check "lerd restart" lerd restart "$name"
+	check_out "the header survives a restart" 'x-lerd-vm: location' curl -skI "$url"
+	check "lerd web-server reset" lerd web-server reset "$name"
+	check "reset takes it away" wait_for 10 bash -c "! curl -skI '$url' | grep -qi x-lerd-vm"
+	expect_200 "8.21 [partial]" "$url"
+	broken=$(web_with "$name" 'bogus_vm_key: on' 2>&1)
+	echo "$broken"
+	check_out "the error names the file" "$(site_host "$DEMO_DIR")\\.yaml" echo "$broken"
+	check_out "8.22 a broken file is rolled back" 'rolled back' echo "$broken"
+	check_not "the broken file did not stay" 'bogus_vm_key' lerd web-server show "$name"
+	expect_200 "$url"
+	lerd web-server reset "$name" </dev/null >/dev/null 2>&1
+	rm -f /tmp/lerd-vm-editor.sh
+else
+	check "lerd nginx edit adds a location-scope block" nginx_with "$name" 'add_header X-Lerd-VM location always;'
+	# nginx edit returns a moment before the reload serves, so allow it a few seconds.
+	has_header() { curl -skI "$url" | grep -qi 'x-lerd-vm: location'; }
+	check "the block is served" wait_for 10 has_header
+	check "lerd restart" lerd restart "$name"
+	check_out "the block survives a restart" 'x-lerd-vm: location' curl -skI "$url"
+	check "lerd nginx reset --location" lerd nginx reset --location "$name"
+	check "reset puts it back" wait_for 10 bash -c "! curl -skI '$url' | grep -qi x-lerd-vm"
+	expect_200 "8.21 [partial]" "$url"
+	broken=$(nginx_with "$name" 'bogus_vm_directive on;' 2>&1)
+	echo "$broken"
+	check_out "the error names the directive and its line" 'bogus_vm_directive.*:[0-9]+' echo "$broken"
+	check_out "8.22 a broken directive is rolled back" 'rolled back' echo "$broken"
+	check_not "the broken override did not stay" 'bogus_vm_directive' lerd nginx show --location "$name"
+	expect_200 "$url"
+	lerd nginx reset --location "$name" </dev/null >/dev/null 2>&1
+	rm -f /tmp/lerd-vm-editor.sh
+fi
 
 # Registry-only state survives a re-link: share a LAN port and pause first.
 lerd lan:share </dev/null >/dev/null 2>&1

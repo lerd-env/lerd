@@ -28,7 +28,10 @@ git branch -q -D "vmp$tag" 2>/dev/null
 check "lerd worktree add -b $x" lerd worktree add -b "$x"
 check "7.2 the checkout lands inside the project and the parent stays clean" bash -c "test -d '$(wt "$x")' && ! git status --porcelain | grep -q '$x'"
 check "7.9 lerd worktree wait returns once settled" lerd worktree wait "$(wt "$x")" --timeout 10m
-check "7.3 dependencies install, env is seeded, a vhost appears" bash -c "test -d '$(wt "$x")/vendor' && test -f '$(wt "$x")/.env' && ls ~/.local/share/lerd/nginx/conf.d | grep -q '$x'"
+# lerd's own web server writes no vhost; 7.5 checks the worktree is served.
+vhost_appears="ls ~/.local/share/lerd/nginx/conf.d | grep -q '$x'"
+go_mode && vhost_appears=true
+check "7.3 dependencies install, env is seeded, a vhost appears" bash -c "test -d '$(wt "$x")/vendor' && test -f '$(wt "$x")/.env' && $vhost_appears"
 check_out "7.4 lerd sites lists the worktree site" "$x" lerd sites
 expect_200 7.5 "$(wt_url "$x")"
 check_out "7.7 with a shared DB the worktree uses the parent's schema" "^DB_DATABASE=$db\$" grep ^DB_DATABASE= "$(wt "$x")/.env"
