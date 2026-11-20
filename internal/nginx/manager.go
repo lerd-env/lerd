@@ -23,6 +23,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/nativephp"
+	"github.com/geodro/lerd/internal/pageinject"
 	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/plugins"
 	"github.com/geodro/lerd/internal/podman"
@@ -489,19 +490,18 @@ func pageInjectConf(siteName, branch string) string {
 	if err != nil || site == nil {
 		return ""
 	}
-	var tags, blocks string
+	var blocks string
 	headers := fmt.Sprintf(`
         proxy_http_version 1.1;
         proxy_set_header X-Lerd-Site "%s";
         proxy_set_header X-Lerd-Branch "%s";
         proxy_set_header X-Lerd-Host $host;`, siteName, branch)
 
-	if cfg, err := config.LoadGlobal(); err == nil && cfg.IsDumpsEnabled() && config.BrowserLogsFor(*site).Enabled {
+	tags := pageinject.Tags(*site, "$upstream_http_x_lerd_rid")
+	if pageinject.BrowserLogs(*site) {
 		path := config.BrowserLogsPath
-		// The script tag carries the id of the request that served the page, and a
-		// page on another origin may read it off a response, so the browser's
-		// events link to the PHP request behind them.
-		tags += fmt.Sprintf(`<script src="%s.js" data-rid="$upstream_http_x_lerd_rid"></script>`, path)
+		// A page on another origin may read the request id off a response, so
+		// the browser's events link to the PHP request behind them.
 		blocks += "\n    add_header Access-Control-Expose-Headers X-Lerd-Rid always;\n"
 		for _, suffix := range []string{"", ".js"} {
 			blocks += fmt.Sprintf(`
@@ -514,10 +514,7 @@ func pageInjectConf(siteName, branch string) string {
 		}
 	}
 
-	if names := pagePlugins(site); len(names) > 0 {
-		for _, name := range names {
-			tags += fmt.Sprintf(`<script src="%s%s/page.js" defer></script>`, plugins.PagePath, name)
-		}
+	if len(pageinject.Plugins(*site)) > 0 {
 		blocks += fmt.Sprintf(`
     location ^~ %s {
         access_log off;
@@ -533,18 +530,6 @@ func pageInjectConf(siteName, branch string) string {
 	return fmt.Sprintf(`
     sub_filter '</head>' '%s</head>';
     sub_filter_once on;`, tags) + blocks
-}
-
-// pagePlugins is the site's switched-on page plugins that are still installed
-// and still ship a page script, in the order the site lists them.
-func pagePlugins(site *config.Site) []string {
-	var out []string
-	for _, name := range site.PagePlugins {
-		if p, err := plugins.Find(name); err == nil && p.UI != nil && p.UI.PageScript != "" {
-			out = append(out, name)
-		}
-	}
-	return out
 }
 
 // resolvePublicDir returns the document root subdirectory for a site, resolved
