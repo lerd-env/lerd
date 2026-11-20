@@ -1413,9 +1413,9 @@ mode is turned off again for both users.
       site answers within 90 seconds
 - [ ] Switching back hands the ports back, our site answers **http → 200** and
       our dashboard lists our site again
-- [ ] A stack stopped by hand with `lerd stop` stays stopped across two
-      switches away and back: only `lerd-ui` and `lerd-dns` come back,
-      `lerd-nginx` stays inactive
+- [ ] A stack stopped by hand with `lerd stop` stays down across two
+      switches away and back: `lerd-nginx`, `lerd-ui` and `lerd-dns` all stay
+      inactive until `lerd start`
 
 ## Sign-off
 

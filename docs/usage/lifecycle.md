@@ -244,7 +244,7 @@ To have lerd hand the ports over on its own, every user turns on multi-user mode
 lerd multi-user enable
 ```
 
-From then on each user's watcher follows who is on screen. When another user's desktop takes the screen, it stops everything `lerd quit` would, except the watcher itself. When your desktop is back, it starts the stack again once the other user's lerd has let go of the ports, which takes a few seconds. A locked screen still counts as yours. The login screen counts as nobody's, so whichever stack is running keeps running. A stack you stopped by hand stays stopped. Only its dashboard and DNS come back. The watcher is what follows the screen, so after `lerd quit`, which stops the watcher too, nothing comes back until your next login or `lerd start`.
+From then on each user's watcher follows who is on screen. When another user's desktop takes the screen, it stops everything `lerd quit` would, except the watcher itself. When your desktop is back, it starts the stack again once the other user's lerd has let go of the ports, which takes a few seconds. A locked screen still counts as yours. The login screen counts as nobody's, so whichever stack is running keeps running. A stack you stopped by hand stays down when your desktop is back, dashboard and DNS included, until you run `lerd start`. The watcher is what follows the screen, so after `lerd quit`, which stops the watcher too, nothing comes back until your next login or `lerd start`.
 
 On a machine with no screen session, such as a server you only reach over ssh, or WSL, there is nothing to follow, so multi-user mode does nothing there. `lerd multi-user disable` turns it off.
 

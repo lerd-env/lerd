@@ -1,7 +1,6 @@
 package watcher
 
 import (
-	"net/http"
 	"time"
 
 	"github.com/geodro/lerd/internal/cli"
@@ -112,29 +111,13 @@ func releaseSeat(s *seatWatchState) {
 	_ = lifecycle.Quit(lifecycle.SimpleRunner, nil, podman.WatcherUnit)
 }
 
+// resumeSeat starts the stack again, unless it was stopped by hand: that one
+// stays down as lerd quit leaves it, stop marker kept, until lerd start.
 func resumeSeat(s *seatWatchState) {
-	if !s.handStopped {
-		if err := cli.RunStart(nil, podman.WatcherUnit); err != nil {
-			logger.Warn("starting lerd after a user switch", "err", err)
-		}
+	if s.handStopped {
 		return
 	}
-	// Back to what lerd stop leaves: dashboard and DNS up, the rest stopped.
-	for _, unit := range lifecycle.QuitProcessUnits(podman.WatcherUnit) {
-		_ = podman.StartUnit(unit)
-	}
-	// lerd-ui clears the stop marker as it starts, so set it again once it
-	// answers, or worker heal would treat the stopped workers as crashed.
-	waitForDashboard(30 * time.Second)
-	_ = config.MarkStopped()
-}
-
-func waitForDashboard(limit time.Duration) {
-	for deadline := time.Now().Add(limit); time.Now().Before(deadline); time.Sleep(time.Second) {
-		resp, err := http.Get("http://127.0.0.1:7073/api/status")
-		if err == nil {
-			resp.Body.Close()
-			return
-		}
+	if err := cli.RunStart(nil, podman.WatcherUnit); err != nil {
+		logger.Warn("starting lerd after a user switch", "err", err)
 	}
 }
