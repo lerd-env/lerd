@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/geodro/lerd/internal/cli"
@@ -88,18 +89,52 @@ func applySeat(s *seatWatchState) {
 	switch s.decide(cfg.MultiUser, fg, nginxBlocked, otherHolds) {
 	case seatRelease:
 		logger.Info("another user is on screen, releasing lerd's ports")
-		s.handStopped = config.IsStopped()
-		_ = lifecycle.ShutdownForLogout(lifecycle.SimpleRunner)
+		releaseSeat(s)
 	case seatResume:
 		logger.Info("back on screen, starting lerd")
-		if s.handStopped {
-			for _, unit := range lifecycle.QuitProcessUnits(podman.WatcherUnit) {
-				_ = podman.StartUnit(unit)
-			}
-			return
-		}
+		resumeSeat(s)
+	}
+}
+
+// releaseSeat runs lerd quit minus the watcher, under the lifecycle lock so a
+// lerd start in flight cannot bring units back up behind it.
+func releaseSeat(s *seatWatchState) {
+	unlock, err := podman.LockLifecycle()
+	if err != nil {
+		logger.Warn("releasing lerd for another user", "err", err)
+		return
+	}
+	defer unlock()
+	// Read from nginx, not the stop marker: a restarted lerd-ui clears the marker.
+	// Failed or activating is a stack blocked on the ports, which we do want back.
+	state, _ := podman.UnitStatus("lerd-nginx")
+	s.handStopped = state == "inactive"
+	_ = lifecycle.Quit(lifecycle.SimpleRunner, nil, podman.WatcherUnit)
+}
+
+func resumeSeat(s *seatWatchState) {
+	if !s.handStopped {
 		if err := cli.RunStart(nil, podman.WatcherUnit); err != nil {
 			logger.Warn("starting lerd after a user switch", "err", err)
+		}
+		return
+	}
+	// Back to what lerd stop leaves: dashboard and DNS up, the rest stopped.
+	for _, unit := range lifecycle.QuitProcessUnits(podman.WatcherUnit) {
+		_ = podman.StartUnit(unit)
+	}
+	// lerd-ui clears the stop marker as it starts, so set it again once it
+	// answers, or worker heal would treat the stopped workers as crashed.
+	waitForDashboard(30 * time.Second)
+	_ = config.MarkStopped()
+}
+
+func waitForDashboard(limit time.Duration) {
+	for deadline := time.Now().Add(limit); time.Now().Before(deadline); time.Sleep(time.Second) {
+		resp, err := http.Get("http://127.0.0.1:7073/api/status")
+		if err == nil {
+			resp.Body.Close()
+			return
 		}
 	}
 }

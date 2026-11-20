@@ -131,14 +131,18 @@ check "16.5 our lerd holds the ports again" owns_ports "$(id -u)"
 check_out "16.5 our dashboard lists our site again" "\"path\":\"$SELF_DIR\"" sites_api
 
 lerd stop </dev/null >/dev/null 2>&1
-sudo chvt "$OTHER_VT"
-wait_for 90 serves "$OTHER_HOST" vmmu-other
-sudo chvt "$SELF_VT"
-wait_for 90 bash -c "ss -tlne | grep -Eq ':7073 .*uid:$(id -u) '"
-sleep 10 # a resume that wrongly started nginx would have done so by now
-check_out "16.6 lerd-ui and lerd-dns come back" '^active active$' \
-	bash -c 'systemctl --user is-active lerd-ui lerd-dns | paste -sd " "'
-check_out "16.6 lerd-nginx stays stopped" '^inactive$' systemctl --user is-active lerd-nginx
+# Two rounds: the dashboard clears the stop marker when it starts, so a second
+# switch is where a stack stopped by hand used to come back up.
+for round in 1 2; do
+	sudo chvt "$OTHER_VT"
+	wait_for 90 serves "$OTHER_HOST" vmmu-other || seat_state
+	sudo chvt "$SELF_VT"
+	wait_for 90 bash -c "ss -tlne | grep -Eq ':7073 .*uid:$(id -u) '" || seat_state
+	sleep 10 # a resume that wrongly started nginx would have done so by now
+	check_out "16.6 lerd-ui and lerd-dns come back (round $round)" '^active active$' \
+		bash -c 'systemctl --user is-active lerd-ui lerd-dns | paste -sd " "'
+	check_out "16.6 lerd-nginx stays stopped (round $round)" '^inactive$' systemctl --user is-active lerd-nginx
+done
 
 cleanup
 lerd start </dev/null >/dev/null 2>&1
