@@ -10,6 +10,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/goserver"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/sitephp"
 	"github.com/geodro/lerd/internal/webcustom"
 )
 
@@ -22,7 +23,20 @@ const GoImage = "docker.io/library/alpine:latest"
 // per site and nothing has to be reloaded.
 type goBackend struct{}
 
-func (goBackend) ApplySite(config.Site) error         { return nil }
+// ApplySite writes nothing, but names the framework params PHP will not get,
+// as nginx does when it writes the vhost.
+func (goBackend) ApplySite(site config.Site) error {
+	fw, ok := config.GetFrameworkForDir(site.Framework, site.Path)
+	if !ok || fw.Nginx == nil {
+		return nil
+	}
+	_, warnings := sitephp.FastCGIParams(site.Framework, site.PrimaryDomain(), fw.Nginx.FastCGIParams, site.Path, config.PublicDirFor(site))
+	for _, msg := range warnings {
+		fmt.Print(msg)
+	}
+	return nil
+}
+
 func (goBackend) RemoveSite(string) error             { return nil }
 func (goBackend) Reload() error                       { return nil }
 func (goBackend) ReloadWithRetry(time.Duration) error { return nil }

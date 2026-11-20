@@ -1,6 +1,7 @@
 package webserver
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,5 +86,31 @@ func TestGoBackend_podmanRewritesKeepTheGoUnit(t *testing.T) {
 	}
 	if !strings.Contains(content, "/srv/extra") {
 		t.Errorf("the extra mount is lost:\n%s", content)
+	}
+}
+
+// A framework param lerd drops is named at link under either server, so
+// switching to lerd's own web server never hides what PHP will not receive.
+func TestGoBackend_applySiteWarnsAboutDroppedParams(t *testing.T) {
+	useGo(t)
+	if err := config.SaveFramework(&config.Framework{Name: "tb", Label: "Testbench", Nginx: &config.FrameworkNginx{
+		FastCGIParams: map[string]string{"BAD": "$price"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	site := config.Site{Name: "app", Domains: []string{"app.test"}, Path: t.TempDir(), Framework: "tb"}
+
+	r, w, _ := os.Pipe()
+	stdout := os.Stdout
+	os.Stdout = w
+	err := ApplySite(site)
+	os.Stdout = stdout
+	w.Close()
+	out, _ := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), "dropping tb fastcgi param BAD for app.test") {
+		t.Errorf("no warning at link, got %q", out)
 	}
 }
