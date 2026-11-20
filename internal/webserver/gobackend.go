@@ -22,12 +22,15 @@ const GoImage = "docker.io/library/alpine:latest"
 // per site and nothing has to be reloaded.
 type goBackend struct{}
 
-func (goBackend) ApplySite(config.Site) error                        { return nil }
-func (goBackend) RemoveSite(string) error                            { return nil }
-func (goBackend) Reload() error                                      { return nil }
-func (goBackend) ReloadWithRetry(time.Duration) error                { return nil }
-func (goBackend) ReloadAndSettle() error                             { return nil }
-func (goBackend) ServesVhostWrittenAt(time.Time) bool                { return true }
+func (goBackend) ApplySite(config.Site) error         { return nil }
+func (goBackend) RemoveSite(string) error             { return nil }
+func (goBackend) Reload() error                       { return nil }
+func (goBackend) ReloadWithRetry(time.Duration) error { return nil }
+func (goBackend) ReloadAndSettle() error              { return nil }
+func (goBackend) ServesVhostWrittenAt(time.Time) bool { return true }
+
+// ServesWorktree is always true: worktrees are read from git per request.
+func (goBackend) ServesWorktree(string) bool                         { return true }
 func (goBackend) ApplyPausedSite(config.Site) error                  { return nil }
 func (goBackend) ApplyWakingSite(config.Site) error                  { return nil }
 func (goBackend) Drift(config.Site) (DriftReport, error)             { return DriftReport{}, nil }

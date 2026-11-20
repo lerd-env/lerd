@@ -15,6 +15,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
+	"github.com/geodro/lerd/internal/webserver"
 	"github.com/spf13/cobra"
 )
 
@@ -368,9 +369,9 @@ func worktreeEnvFile(worktreePath string) string {
 	return file
 }
 
-// worktreeServed reports whether the watcher has written the worktree's vhost.
-// Before it has, the domain falls through to the parent's wildcard and answers
-// with the parent's code. A path lerd cannot place or serve is not held up.
+// worktreeServed reports whether the web server serves the worktree yet: under
+// nginx, until its vhost is written the domain answers with the parent's code.
+// A path lerd cannot place or serve is not held up.
 func worktreeServed(worktreePath string) bool {
 	site, ok := config.ParentSiteForWorktreeDir(worktreePath)
 	if !ok || site.PrimaryDomain() == "" {
@@ -380,7 +381,7 @@ func worktreeServed(worktreePath string) bool {
 	wts, _ := gitpkg.ServableWorktrees(site.Path, site.PrimaryDomain())
 	for _, wt := range wts {
 		if config.SamePath(wt.Path, abs) {
-			return fileExistsAt(filepath.Join(config.NginxConfD(), wt.Domain+".conf"))
+			return webserver.ServesWorktree(wt.Domain)
 		}
 	}
 	return true

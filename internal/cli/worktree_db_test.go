@@ -106,6 +106,28 @@ func TestWorktreeServed_symlinkedSpelling(t *testing.T) {
 	}
 }
 
+// lerd's own web server serves a worktree straight from git and the registry,
+// so no vhost is ever coming and the wait must not hold for one.
+func TestWorktreeServed_goServerNeedsNoVhost(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	sitePath, checkout := makeFakeWorktree(t, "feat-a")
+	if err := config.AddSite(config.Site{Name: "acme", Path: sitePath, Domains: []string{"acme.test"}}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := config.LoadGlobal()
+	cfg.WebServer = config.WebServerGo
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	if !worktreeServed(checkout) {
+		t.Error("worktreeServed = false under lerd's own web server; the wait would run to its timeout")
+	}
+}
+
 // A directory that is not a worktree of any registered site returns ok=false.
 func TestFindParentSiteForWorktree_unregisteredDir(t *testing.T) {
 	tmp := t.TempDir()

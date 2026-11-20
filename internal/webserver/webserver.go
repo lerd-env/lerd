@@ -3,6 +3,8 @@
 package webserver
 
 import (
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
@@ -28,6 +30,8 @@ type Backend interface {
 	Test() (string, error)
 	// ServesVhostWrittenAt reports whether a config written at mod is live.
 	ServesVhostWrittenAt(mod time.Time) bool
+	// ServesWorktree reports whether a worktree's domain is served yet.
+	ServesWorktree(domain string) bool
 	// ApplyWorktree serves a PHP worktree of a site on its own domain.
 	ApplyWorktree(domain, path, phpVersion, parentDomain, siteName, branch string, secured bool) error
 	// ApplyHostProxyWorktree serves a host-proxy site's worktree from port.
@@ -91,6 +95,10 @@ func (nginxBackend) ReloadWithRetry(d time.Duration) error {
 func (nginxBackend) ReloadAndSettle() error                  { return nginx.ReloadAndSettle() }
 func (nginxBackend) Test() (string, error)                   { return nginx.Test() }
 func (nginxBackend) ServesVhostWrittenAt(mod time.Time) bool { return nginx.ServesVhostWrittenAt(mod) }
+func (nginxBackend) ServesWorktree(domain string) bool {
+	_, err := os.Stat(filepath.Join(config.NginxConfD(), domain+".conf"))
+	return err == nil
+}
 func (nginxBackend) ApplyWorktree(domain, path, phpVersion, parentDomain, siteName, branch string, secured bool) error {
 	return nginx.GenerateWorktreeVhostFor(domain, path, phpVersion, parentDomain, siteName, branch, secured)
 }
@@ -152,6 +160,8 @@ func ReloadAndSettle() error { return current().ReloadAndSettle() }
 func Test() (string, error) { return current().Test() }
 
 func ServesVhostWrittenAt(mod time.Time) bool { return current().ServesVhostWrittenAt(mod) }
+
+func ServesWorktree(domain string) bool { return current().ServesWorktree(domain) }
 
 func ApplyWorktree(domain, path, phpVersion, parentDomain, siteName, branch string, secured bool) error {
 	return current().ApplyWorktree(domain, path, phpVersion, parentDomain, siteName, branch, secured)
