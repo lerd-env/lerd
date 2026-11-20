@@ -126,3 +126,54 @@ func TestWorker_websocketUpgradePassesThrough(t *testing.T) {
 		t.Fatalf("echo %q %v", line, err)
 	}
 }
+
+// In production every request goes through the access feed, and through the
+// injector while browser logs are on, so an upgrade has to survive both.
+func TestWorker_websocketUpgradeThroughTheFeedAndInjector(t *testing.T) {
+	h, site := workerSite(t, &config.WorkerProxy{Path: "/app"})
+	on := true
+	site.BrowserLogs = &config.BrowserLogs{Enabled: &on}
+	h.Sites = func() []config.Site { return []config.Site{site} }
+	cfg, _ := config.LoadGlobal()
+	cfg.SetDumpsEnabled(true)
+	config.SaveGlobal(cfg)
+
+	echo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, rw, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		rw.WriteString("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
+		rw.Flush()
+		line, _ := rw.ReadString('\n')
+		rw.WriteString("echo:" + line)
+		rw.Flush()
+	}))
+	t.Cleanup(echo.Close)
+	_, portStr, _ := net.SplitHostPort(strings.TrimPrefix(echo.URL, "http://"))
+	proj, _ := config.LoadProjectConfig(site.Path)
+	p := proj.CustomWorkers["ws"]
+	p.Proxy.DefaultPort, _ = strconv.Atoi(portStr)
+	proj.CustomWorkers["ws"] = p
+	config.SaveProjectConfig(site.Path, proj)
+
+	srv := httptest.NewServer(&AccessFeed{Next: h, Target: "unix:" + filepath.Join(t.TempDir(), "none.sock")})
+	t.Cleanup(srv.Close)
+	conn, err := net.Dial("tcp", strings.TrimPrefix(srv.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
+	fmt.Fprint(conn, "GET /app/socket HTTP/1.1\r\nHost: app.test\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
+	br := bufio.NewReader(conn)
+	resp, err := http.ReadResponse(br, nil)
+	if err != nil || resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("no switch: %v %v", resp, err)
+	}
+	fmt.Fprint(conn, "ping\n")
+	if line, err := br.ReadString('\n'); err != nil || line != "echo:ping\n" {
+		t.Fatalf("echo %q %v", line, err)
+	}
+}

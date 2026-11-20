@@ -75,8 +75,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		serveProxied(w, r, target)
 		return
 	}
-	if wt, ok := worktreeSite(site, domain, r.Host); ok {
-		site = wt
+	branch := ""
+	if wt, wtBranch, ok := worktreeSite(site, domain, r.Host); ok {
+		site, branch = wt, wtBranch
+	}
+	if h.servePageEndpoints(w, r, site, branch) {
+		return
+	}
+	if in := injecting(w, r, site); in != nil {
+		defer in.finish()
+		w = in
 	}
 	if h.serveDevServer(w, r, site) {
 		return

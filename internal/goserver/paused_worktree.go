@@ -25,14 +25,14 @@ func servePaused(w http.ResponseWriter) {
 // worktreeSite is the site as its git worktree on <branch>.<domain> serves
 // it: the worktree's checkout and PHP version, the dev server port pinned for
 // it. Only a subdomain host is looked up, so the main domain pays nothing.
-func worktreeSite(site config.Site, domain, hostport string) (config.Site, bool) {
+func worktreeSite(site config.Site, domain, hostport string) (config.Site, string, bool) {
 	host := strings.ToLower(hostOnly(hostport))
 	if host == domain || !site.ServesWorkerSubdomains() {
-		return site, false
+		return site, "", false
 	}
 	wts, err := gitpkg.ServableWorktrees(site.Path, site.PrimaryDomain())
 	if err != nil {
-		return site, false
+		return site, "", false
 	}
 	for _, wt := range wts {
 		if wt.Domain != host {
@@ -42,7 +42,7 @@ func worktreeSite(site config.Site, domain, hostport string) (config.Site, bool)
 		wtSite.Path = wt.Path
 		wtSite.PHPVersion = config.WorktreePHPVersion(wt.Path, site.PHPVersion)
 		wtSite.DevServerPort = site.WorktreeDevPorts[filepath.Base(wt.Path)]
-		return wtSite, true
+		return wtSite, wt.Branch, true
 	}
-	return site, false
+	return site, "", false
 }

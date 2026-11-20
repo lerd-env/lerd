@@ -1,6 +1,7 @@
 package goserver
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"net/http"
@@ -80,4 +81,15 @@ func (s *statusWriter) Flush() {
 	if f, ok := s.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// Hijack hands an upgrade (WebSocket, Vite HMR) the raw connection; the
+// feed still reports the 101 the backend answered with.
+func (s *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hj, ok := s.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("lerd web server: %T cannot be hijacked", s.ResponseWriter)
+	}
+	s.status = http.StatusSwitchingProtocols
+	return hj.Hijack()
 }

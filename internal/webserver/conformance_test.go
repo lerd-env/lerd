@@ -43,8 +43,9 @@ func TestConformance(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 
 	site := writeSite(t, filepath.Join(tmp, "site"))
+	on := true
 	sites := map[string]config.Site{
-		"plain":  {Name: "plain", Domains: []string{"plain.test"}, Path: site, PHPVersion: "8.4"},
+		"plain":  {Name: "plain", Domains: []string{"plain.test"}, Path: site, PHPVersion: "8.4", BrowserLogs: &config.BrowserLogs{Enabled: &on}},
 		"secure": {Name: "secure", Domains: []string{"secure.test"}, Path: site, PHPVersion: "8.4", Secured: true},
 		"custom": {Name: "custom", Domains: []string{"custom.test"}, Path: site, ContainerPort: 80},
 	}
@@ -54,6 +55,11 @@ func TestConformance(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// Debug capture on, so the plain site's pages get the browser log reporter.
+	dcfg, err := config.LoadGlobal()
+	must(err)
+	dcfg.SetDumpsEnabled(true)
+	must(config.SaveGlobal(dcfg))
 	must(EnsureConfig())
 	must(EnsureDefaultSite())
 	for _, s := range sites {
@@ -104,6 +110,7 @@ func TestConformance(t *testing.T) {
 		{goReady: true, name: "service domain over https", method: "GET", scheme: "https", host: "mail.test", path: "/", status: 200, want: "Welcome to nginx"},
 		{goReady: true, name: "service domain moves to https", method: "GET", scheme: "http", host: "mail.test", path: "/x", status: 301, location: "https://mail.test/x"},
 		{goReady: true, name: "service cors preflight", method: "OPTIONS", scheme: "https", host: "mail.test", path: "/", status: 204, origin: "https://app.test", allowOrigin: "https://app.test"},
+		{goReady: true, name: "html page gets the reporter", method: "GET", scheme: "http", host: "plain.test", path: "/head.php", status: 200, want: `<script src="/_lerd/browser.js" data-rid=""></script></head>`},
 		{goReady: true, name: "unknown host", method: "GET", scheme: "http", host: "nobody.test", path: "/", status: 404},
 	}
 	for _, c := range cases {
@@ -160,6 +167,9 @@ func writeSite(t *testing.T, dir string) string {
 	}
 	php := `<?php echo "conformance ", $_SERVER["REQUEST_METHOD"], " ", PHP_SAPI, " ", file_get_contents("php://input");`
 	if err := os.WriteFile(filepath.Join(pub, "index.php"), []byte(php), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pub, "head.php"), []byte("<html><head><title>t</title></head><body></body></html>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return dir
