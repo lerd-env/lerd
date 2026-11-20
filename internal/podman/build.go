@@ -1213,8 +1213,25 @@ func renderFPMQuadletContent(version string) (string, error) {
 	return content, nil
 }
 
+// WebServerUnitContent renders the web server's unit with extraPaths mounted.
+// It is nginx's here; the webserver package swaps in the one for the server
+// the config chooses, which podman cannot import.
+var WebServerUnitContent = NginxUnitContent
+
+// NginxUnitContent renders nginx's unit from its template, ports applied and
+// extraPaths mounted.
+func NginxUnitContent(extraPaths []string) (string, error) {
+	content, err := GetQuadletTemplate("lerd-nginx.container")
+	if err != nil {
+		return "", err
+	}
+	httpPort, httpsPort := config.NginxPorts()
+	content = ApplyNginxPorts(content, httpPort, httpsPort)
+	return InjectExtraVolumes(content, extraPaths), nil
+}
+
 // RewriteFPMQuadlets regenerates the quadlet files for all installed PHP-FPM
-// versions and the nginx quadlet. Call this when parked directories or site
+// versions and the web server's. Call this when parked directories or site
 // paths change so that extra volume mounts stay in sync.
 func RewriteFPMQuadlets() error {
 	extraPaths := ExtraVolumePaths()
@@ -1247,11 +1264,8 @@ func RewriteFPMQuadlets() error {
 	}
 
 	// Also rewrite nginx quadlet with the same extra volumes.
-	if nginxContent, err := GetQuadletTemplate("lerd-nginx.container"); err == nil {
-		httpPort, httpsPort := config.NginxPorts()
-		nginxContent = ApplyNginxPorts(nginxContent, httpPort, httpsPort)
-		nginxContent = InjectExtraVolumes(nginxContent, extraPaths)
-		if changed, err := WriteQuadletDiff(WebServerUnit, nginxContent); err == nil {
+	if webContent, err := WebServerUnitContent(extraPaths); err == nil {
+		if changed, err := WriteQuadletDiff(WebServerUnit, webContent); err == nil {
 			if changed || UnitMissingMounts(WebServerUnit, extraPaths) || unitMissingHomeAliases(WebServerUnit, aliases) {
 				changedUnits = append(changedUnits, WebServerUnit)
 			}

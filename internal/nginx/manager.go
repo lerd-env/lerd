@@ -2159,16 +2159,13 @@ func EnsureHttpD() error {
 // into the running nginx container — without this heal, the file would be
 // orphaned on disk and silently ignored.
 func RewriteNginxQuadlet() (changed bool, err error) {
-	content, err := podman.GetQuadletTemplate("lerd-nginx.container")
+	// The template carries only the lerd-owned mounts, so a site or parked
+	// directory outside $HOME has its Volume= line re-injected, or nginx
+	// restarts without the docroot.
+	content, err := podman.NginxUnitContent(podman.ExtraVolumePaths())
 	if err != nil {
 		return false, fmt.Errorf("reading bundled nginx quadlet template: %w", err)
 	}
-	// The template carries only the lerd-owned mounts, so a site or parked
-	// directory outside $HOME must have its Volume= line re-injected here, the
-	// same way RewriteFPMQuadlets does, or nginx restarts without the docroot.
-	httpPort, httpsPort := config.NginxPorts()
-	content = podman.ApplyNginxPorts(content, httpPort, httpsPort)
-	content = podman.InjectExtraVolumes(content, podman.ExtraVolumePaths())
 	return podman.WriteQuadletDiff(podman.WebServerUnit, content)
 }
 

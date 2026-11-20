@@ -189,6 +189,10 @@ type GlobalConfig struct {
 		// the user controls, never a bare TLD. Set via the dashboard's share menu.
 		PublicBaseDomain string `yaml:"public_base_domain,omitempty" mapstructure:"public_base_domain"`
 	} `yaml:"share,omitempty" mapstructure:"share"`
+	// WebServer chooses what serves the sites: "nginx" (the default) or "go",
+	// lerd's own web server. Set through lerd web-server.
+	WebServer string `yaml:"web_server,omitempty" mapstructure:"web_server"`
+
 	Nginx struct {
 		HTTPPort  int `yaml:"http_port"  mapstructure:"http_port"`
 		HTTPSPort int `yaml:"https_port" mapstructure:"https_port"`

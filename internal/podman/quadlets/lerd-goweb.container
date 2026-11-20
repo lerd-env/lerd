@@ -1,0 +1,19 @@
+[Unit]
+Description=Lerd Web Server (lerd's own)
+After=network.target
+
+[Container]
+Image=docker.io/library/alpine:latest
+ContainerName=lerd-nginx
+Network=lerd
+PublishPort=80:80
+PublishPort=443:443
+Volume=%h:%h:ro
+PodmanArgs=--security-opt=label=disable
+Exec=/usr/local/bin/lerd web-serve
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

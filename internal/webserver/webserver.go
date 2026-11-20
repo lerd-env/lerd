@@ -7,6 +7,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/podman"
 )
 
 // Backend is a web server lerd can serve sites through.
@@ -53,6 +54,8 @@ type Backend interface {
 	SyncDashboard() (bool, error)
 	// RewriteUnit rewrites the server's container unit, reporting a change.
 	RewriteUnit() (bool, error)
+	// UnitContent renders that unit with extraPaths mounted.
+	UnitContent(extraPaths []string) (string, error)
 	// EnsureProfiler serves the SPX dashboard; ServedProfilerState reads
 	// whether the served config has profiling on (ok false when unknown).
 	EnsureProfiler() error
@@ -108,70 +111,89 @@ func (nginxBackend) EnsureDefaultSite() error                    { return nginx.
 func (nginxBackend) EnsureDashboard() error                      { return nginx.EnsureLerdVhost() }
 func (nginxBackend) SyncDashboard() (bool, error)                { return nginx.SyncLerdVhost() }
 func (nginxBackend) RewriteUnit() (bool, error)                  { return nginx.RewriteNginxQuadlet() }
-func (nginxBackend) EnsureProfiler() error                       { return nginx.EnsureProfilerVhost() }
-func (nginxBackend) ServedProfilerState() (bool, bool)           { return nginx.ServedProfilerState() }
+func (nginxBackend) UnitContent(extra []string) (string, error) {
+	return podman.NginxUnitContent(extra)
+}
+func (nginxBackend) EnsureProfiler() error             { return nginx.EnsureProfilerVhost() }
+func (nginxBackend) ServedProfilerState() (bool, bool) { return nginx.ServedProfilerState() }
 func (nginxBackend) ApplyService(domain, upstreamHost string, upstreamPort int, ssl, cors bool) error {
 	return nginx.GenerateServiceProxyVhost(domain, upstreamHost, upstreamPort, ssl, cors)
 }
 
-// current is nginx until a second backend and the switch to it exist.
-var current Backend = nginxBackend{}
+// podman rewrites the web server's unit beside the FPM units when a mount
+// changes, and must write the one for the server the config chooses.
+func init() {
+	podman.WebServerUnitContent = func(extra []string) (string, error) { return current().UnitContent(extra) }
+}
 
-func ApplySite(site config.Site) error { return current.ApplySite(site) }
+// current is the backend the config chooses, read on each call so a switch
+// takes effect in every lerd process without a restart.
+func current() Backend {
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return nginxBackend{}
+	}
+	if kind, _ := cfg.WebServerKind(); kind == config.WebServerGo {
+		return goBackend{}
+	}
+	return nginxBackend{}
+}
 
-func RemoveSite(domain string) error { return current.RemoveSite(domain) }
+func ApplySite(site config.Site) error { return current().ApplySite(site) }
 
-func Reload() error { return current.Reload() }
+func RemoveSite(domain string) error { return current().RemoveSite(domain) }
 
-func ReloadWithRetry(timeout time.Duration) error { return current.ReloadWithRetry(timeout) }
+func Reload() error { return current().Reload() }
 
-func ReloadAndSettle() error { return current.ReloadAndSettle() }
+func ReloadWithRetry(timeout time.Duration) error { return current().ReloadWithRetry(timeout) }
 
-func Test() (string, error) { return current.Test() }
+func ReloadAndSettle() error { return current().ReloadAndSettle() }
 
-func ServesVhostWrittenAt(mod time.Time) bool { return current.ServesVhostWrittenAt(mod) }
+func Test() (string, error) { return current().Test() }
+
+func ServesVhostWrittenAt(mod time.Time) bool { return current().ServesVhostWrittenAt(mod) }
 
 func ApplyWorktree(domain, path, phpVersion, parentDomain, siteName, branch string, secured bool) error {
-	return current.ApplyWorktree(domain, path, phpVersion, parentDomain, siteName, branch, secured)
+	return current().ApplyWorktree(domain, path, phpVersion, parentDomain, siteName, branch, secured)
 }
 
 func ApplyHostProxyWorktree(domain, path, parentDomain string, port int, backendSSL, secured bool) error {
-	return current.ApplyHostProxyWorktree(domain, path, parentDomain, port, backendSSL, secured)
+	return current().ApplyHostProxyWorktree(domain, path, parentDomain, port, backendSSL, secured)
 }
 
-func ApplyPausedSite(site config.Site) error { return current.ApplyPausedSite(site) }
+func ApplyPausedSite(site config.Site) error { return current().ApplyPausedSite(site) }
 
 func ApplyPausedWorktree(domain, certDomain, pausedDir string, secured bool) error {
-	return current.ApplyPausedWorktree(domain, certDomain, pausedDir, secured)
+	return current().ApplyPausedWorktree(domain, certDomain, pausedDir, secured)
 }
 
-func ApplyWakingSite(site config.Site) error { return current.ApplyWakingSite(site) }
+func ApplyWakingSite(site config.Site) error { return current().ApplyWakingSite(site) }
 
-func Drift(site config.Site) (DriftReport, error) { return current.Drift(site) }
+func Drift(site config.Site) (DriftReport, error) { return current().Drift(site) }
 
-func RegenerateSite(site config.Site) error { return current.RegenerateSite(site) }
+func RegenerateSite(site config.Site) error { return current().RegenerateSite(site) }
 
-func RepairSites() []Repair { return current.Repair() }
+func RepairSites() []Repair { return current().Repair() }
 
-func EnsureConfig() error { return current.EnsureConfig() }
+func EnsureConfig() error { return current().EnsureConfig() }
 
-func EnsureDefaultSite() error { return current.EnsureDefaultSite() }
+func EnsureDefaultSite() error { return current().EnsureDefaultSite() }
 
-func EnsureDashboard() error { return current.EnsureDashboard() }
+func EnsureDashboard() error { return current().EnsureDashboard() }
 
-func SyncDashboard() (bool, error) { return current.SyncDashboard() }
+func SyncDashboard() (bool, error) { return current().SyncDashboard() }
 
-func RewriteUnit() (bool, error) { return current.RewriteUnit() }
+func RewriteUnit() (bool, error) { return current().RewriteUnit() }
 
-func EnsureProfiler() error { return current.EnsureProfiler() }
+func EnsureProfiler() error { return current().EnsureProfiler() }
 
-func ServedProfilerState() (on, ok bool) { return current.ServedProfilerState() }
+func ServedProfilerState() (on, ok bool) { return current().ServedProfilerState() }
 
 func ApplyService(domain, upstreamHost string, upstreamPort int, ssl, cors bool) error {
-	return current.ApplyService(domain, upstreamHost, upstreamPort, ssl, cors)
+	return current().ApplyService(domain, upstreamHost, upstreamPort, ssl, cors)
 }
 
-func SiteWaking(domain string) bool { return current.SiteWaking(domain) }
+func SiteWaking(domain string) bool { return current().SiteWaking(domain) }
 
 // Shared by every backend and by lerd's own pages; they live in nginx until a
 // second backend needs them, then move to a package both import.

@@ -11,7 +11,7 @@ import (
 // indent as its prefix. A stopped nginx is not a failure, since it reads the
 // vhosts when it starts.
 func ReloadOrWarn(indent string) {
-	reloadOrWarn(current.Reload, os.Stdout, indent)
+	reloadOrWarn(current().Reload, os.Stdout, indent)
 }
 
 func reloadOrWarn(reload func() error, w io.Writer, indent string) {
