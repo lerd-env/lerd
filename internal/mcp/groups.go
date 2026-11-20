@@ -349,7 +349,7 @@ func siteTool() mcpTool {
 				"version":  {Type: "string", Description: "php/node: target version."},
 				"branch":   {Type: "string", Description: "Optional worktree branch (php/node/nginx_*)."},
 				"content":  {Type: "string", Description: "nginx_write: full nginx config."},
-				"scope":    {Type: "string", Enum: []string{"server", "location"}, Description: "nginx_*: server (default) or location. Only a location override can change fastcgi_param or proxy_set_header."},
+				"scope":    {Type: "string", Enum: []string{"server", "location", "web"}, Description: "nginx_*: server (default), location (fastcgi_param/proxy_set_header), or web (lerd's own server's YAML)."},
 				"runtime":  {Type: "string", Enum: []string{"fpm", "frankenphp"}, Description: "runtime: target runtime."},
 				"worker":   {Type: "boolean", Description: "runtime: frankenphp worker mode."},
 			},

@@ -50,7 +50,7 @@ func MoveCustomNginxConfig(oldPrimary, newPrimary string) error {
 	}
 	var firstErr error
 	for _, scope := range nginxScopes {
-		if err := moveCustomNginxScope(oldPrimary, newPrimary, scope.suffix()); err != nil && firstErr == nil {
+		if err := moveCustomNginxScope(oldPrimary, newPrimary, scope); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
@@ -61,8 +61,9 @@ func MoveCustomNginxConfig(oldPrimary, newPrimary string) error {
 // is the scope's filename tail (".conf" or ".location.conf"); the two never
 // collide because no name ending in ".location.conf" also ends in ".conf"
 // preceded by the primary domain.
-func moveCustomNginxScope(oldPrimary, newPrimary, suffix string) error {
-	live := config.NginxCustomD()
+func moveCustomNginxScope(oldPrimary, newPrimary string, scope NginxScope) error {
+	suffix := scope.suffix()
+	live := scope.dir()
 	// The main override is keyed solely by primary domain, so any file already
 	// at the new name can only be a stale orphan from a prior rename (active
 	// sites cannot share a primary), hence clobber=true.
@@ -103,7 +104,7 @@ func moveCustomNginxScope(oldPrimary, newPrimary, suffix string) error {
 		return err
 	}
 
-	bkp := config.NginxCustomDBkp()
+	bkp := scope.bkpDir()
 	entries, err := os.ReadDir(bkp)
 	if err != nil {
 		if os.IsNotExist(err) {

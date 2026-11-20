@@ -112,6 +112,7 @@ export function loadMonaco(): Promise<MonacoModule> {
       // nginx/ini/dotenv editors. The stock PHP grammar is re-registered to
       // start inside PHP, since tinker's buffer carries no `<?php` opener.
       await import('monaco-editor/languages/definitions/php/register');
+      await import('monaco-editor/languages/definitions/yaml/register');
       const { language: php } = await import('monaco-editor/languages/definitions/php/php');
       monaco.languages.setMonarchTokensProvider('php', phpFragmentLanguage(php) as any);
       configureWorkers();

@@ -4,6 +4,7 @@
   import PhpIniTab from '$tabs/system/PhpIniTab.svelte';
   import { type Site } from '$stores/sites';
   import { modal } from '$stores/modals';
+  import { goWebServer } from '$stores/status';
   import { m } from '../paraglide/messages.js';
 
   interface Props {
@@ -42,11 +43,13 @@
       : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300');
 </script>
 
-<Modal {open} title={m.sites_nginx_modalTitle({ domain })} onclose={handleClose} size="xl">
+<Modal {open} title={$goWebServer ? m.sites_web_modalTitle({ domain }) : m.sites_nginx_modalTitle({ domain })} onclose={handleClose} size="xl">
   <div class="h-[70vh] flex flex-col overflow-hidden rounded-b-xl">
     <div class="flex gap-1 px-3 pt-1 border-b border-gray-200 dark:border-gray-700 shrink-0">
-      <button class={tabBtn('server')} onclick={() => (tab = 'server')}>Server block</button>
-      <button class={tabBtn('location')} onclick={() => (tab = 'location')}>Location</button>
+      {#if !$goWebServer}
+        <button class={tabBtn('server')} onclick={() => (tab = 'server')}>Server block</button>
+        <button class={tabBtn('location')} onclick={() => (tab = 'location')}>Location</button>
+      {/if}
       {#if showPhpIni}
         <button class={tabBtn('phpini')} onclick={() => (tab = 'phpini')}>php.ini</button>
       {/if}
@@ -59,8 +62,9 @@
       {:else}
         <!-- Keyed on scope as well as domain so switching tabs remounts the
              editor and reloads the other file instead of keeping the buffer. -->
-        {#key `${domain}:${tab}`}
-          <SiteNginxTab {site} {domain} scope={tab === 'location' ? 'location' : 'server'} onSaved={onclose} />
+        <!-- lerd's own web server has one settings file per site. -->
+        {#key `${domain}:${tab}:${$goWebServer}`}
+          <SiteNginxTab {site} {domain} scope={$goWebServer ? 'web' : tab === 'location' ? 'location' : 'server'} onSaved={onclose} />
         {/key}
       {/if}
     </div>

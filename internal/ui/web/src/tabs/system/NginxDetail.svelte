@@ -15,16 +15,10 @@
 
   type TabId = 'logs' | 'config';
   let active = $state<TabId>('logs');
-  // lerd's own web server has no nginx config to tune and no nginx image to
-  // update, so it shows its running state and logs alone.
-  const tabs = $derived<TabItem<TabId>[]>(
-    $goWebServer
-      ? [{ id: 'logs', label: m.services_tabs_logs() }]
-      : [
-          { id: 'logs', label: m.services_tabs_logs() },
-          { id: 'config', label: m.services_tabs_tuning() }
-        ]
-  );
+  const tabs: TabItem<TabId>[] = [
+    { id: 'logs', label: m.services_tabs_logs() },
+    { id: 'config', label: m.services_tabs_tuning() }
+  ];
 
   let updating = $state(false);
   let checking = $state(false);
@@ -80,8 +74,11 @@
 <DetailPanel>
   <DetailHeader title={$goWebServer ? m.system_webServer() : m.system_nginx()} {trailing} />
   <DetailTabs {tabs} {active} onchange={(id) => (active = id)} />
-  {#if active === 'config' && !$goWebServer}
-    <NginxConfigTab />
+  {#if active === 'config'}
+    <!-- Keyed so switching servers reloads the other file. -->
+    {#key $goWebServer}
+      <NginxConfigTab target={$goWebServer ? 'web' : 'nginx'} />
+    {/key}
   {:else}
     <LogViewer path={$goWebServer ? '/api/logs/lerd-web' : '/api/logs/lerd-nginx'} highlight={logHighlight} />
   {/if}

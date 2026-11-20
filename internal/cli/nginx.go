@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
@@ -134,37 +133,11 @@ func newNginxEditCmd() *cobra.Command {
 			}
 			// Edit a temp copy so the live file is untouched until SaveCustomNginx
 			// snapshots, backs up, validates, and reloads it atomically.
-			tmp, err := os.CreateTemp("", "lerd-nginx-*.conf")
-			if err != nil {
+			edited, ok, err := editInEditor(cmd, got.Body, "lerd-nginx-*.conf", siteops.CustomNginxPath(domain, nginxScope(location)))
+			if err != nil || !ok {
 				return err
 			}
-			tmpPath := tmp.Name()
-			defer os.Remove(tmpPath)
-			if _, err := tmp.WriteString(got.Body); err != nil {
-				_ = tmp.Close()
-				return err
-			}
-			if err := tmp.Close(); err != nil {
-				return err
-			}
-			launched, err := launchEditor(tmpPath)
-			if err != nil {
-				return err
-			}
-			if !launched {
-				fmt.Printf("Override file: %s\n", siteops.CustomNginxPath(domain, nginxScope(location)))
-				fmt.Println("Set $EDITOR to edit it automatically.")
-				return nil
-			}
-			edited, err := os.ReadFile(tmpPath)
-			if err != nil {
-				return err
-			}
-			if string(edited) == got.Body {
-				fmt.Fprintln(cmd.OutOrStdout(), "No changes.")
-				return nil
-			}
-			res, err := siteops.SaveCustomNginx(domain, nginxScope(location), string(edited), got.Exists)
+			res, err := siteops.SaveCustomNginx(domain, nginxScope(location), edited, got.Exists)
 			if err != nil {
 				return err
 			}

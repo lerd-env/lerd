@@ -3,19 +3,24 @@ import { apiJson, apiFetch, decodeJSONResult } from '$lib/api';
 import type { SiteNginxBackup, LoadNginxBackupsResult, ResetNginxResult, SaveNginxResult, RestoreNginxResult } from './sites';
 import { fetchBackupList, fetchBackupText } from '$lib/backups';
 
+/** Which global settings file a call edits: nginx's http-level override, or
+ *  lerd's own web server's settings for every site. Same shapes, other base. */
+export type GlobalConfigTarget = 'nginx' | 'web';
+const base = (t: GlobalConfigTarget) => (t === 'web' ? '/api/web' : '/api/nginx');
+
 export interface NginxConfig {
   path: string;
   content: string;
   exists: boolean;
 }
 
-export async function getNginxConfig(): Promise<NginxConfig> {
-  return apiJson<NginxConfig>('/api/nginx/config');
+export async function getNginxConfig(target: GlobalConfigTarget = 'nginx'): Promise<NginxConfig> {
+  return apiJson<NginxConfig>(base(target) + '/config');
 }
 
-export async function saveNginxConfig(content: string, backup: boolean = false): Promise<SaveNginxResult> {
+export async function saveNginxConfig(content: string, backup: boolean = false, target: GlobalConfigTarget = 'nginx'): Promise<SaveNginxResult> {
   try {
-    const res = await apiFetch('/api/nginx/config', {
+    const res = await apiFetch(base(target) + '/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content, backup })
@@ -41,17 +46,17 @@ export async function saveNginxConfig(content: string, backup: boolean = false):
   }
 }
 
-export async function loadNginxConfigBackups(): Promise<LoadNginxBackupsResult> {
-  return fetchBackupList<SiteNginxBackup>('/api/nginx/backups');
+export async function loadNginxConfigBackups(target: GlobalConfigTarget = 'nginx'): Promise<LoadNginxBackupsResult> {
+  return fetchBackupList<SiteNginxBackup>(base(target) + '/backups');
 }
 
-export async function loadNginxConfigBackupContent(name: string): Promise<string> {
-  return fetchBackupText('/api/nginx/backups/' + encodeURIComponent(name));
+export async function loadNginxConfigBackupContent(name: string, target: GlobalConfigTarget = 'nginx'): Promise<string> {
+  return fetchBackupText(base(target) + '/backups/' + encodeURIComponent(name));
 }
 
-export async function resetNginxConfig(): Promise<ResetNginxResult> {
+export async function resetNginxConfig(target: GlobalConfigTarget = 'nginx'): Promise<ResetNginxResult> {
   try {
-    const res = await apiFetch('/api/nginx/reset', { method: 'POST' });
+    const res = await apiFetch(base(target) + '/reset', { method: 'POST' });
     const data = await decodeJSONResult<{ ok?: boolean; error?: string }>(res);
     return { ok: Boolean(data.ok), error: data.error };
   } catch (e) {
@@ -59,9 +64,9 @@ export async function resetNginxConfig(): Promise<ResetNginxResult> {
   }
 }
 
-export async function restoreNginxConfig(name: string = ''): Promise<RestoreNginxResult> {
+export async function restoreNginxConfig(name: string = '', target: GlobalConfigTarget = 'nginx'): Promise<RestoreNginxResult> {
   try {
-    const res = await apiFetch('/api/nginx/restore', {
+    const res = await apiFetch(base(target) + '/restore', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name })

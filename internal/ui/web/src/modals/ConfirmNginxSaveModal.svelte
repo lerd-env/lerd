@@ -6,6 +6,7 @@
   import { m } from '../paraglide/messages.js';
 
   const target = $derived($modal.nginxSave);
+  const web = $derived(target?.scope === 'web');
   let backup = $state(false);
   let validationOutput = $state('');
 
@@ -21,7 +22,7 @@
 </script>
 
 <ConfigConfirmModal
-  title={m.nginxEditor_confirmTitle()}
+  title={web ? m.webEditor_confirmTitle() : m.nginxEditor_confirmTitle()}
   size="md"
   {target}
   acceptLabel={m.common_save()}
@@ -30,10 +31,10 @@
 >
   {#snippet children(t, busy)}
     <p class="text-sm text-gray-700 dark:text-gray-300">
-      {m.nginxEditor_confirmBody({ domain: t.domain })}
+      {web ? m.webEditor_confirmBody({ domain: t.domain }) : m.nginxEditor_confirmBody({ domain: t.domain })}
     </p>
     {#if t.exists}
-      <BackupCheckbox bind:checked={backup} disabled={busy} label={m.nginxEditor_backupLabel()} file="{t.domain}.conf" />
+      <BackupCheckbox bind:checked={backup} disabled={busy} label={m.nginxEditor_backupLabel()} file={web ? `${t.domain}.yaml` : `${t.domain}.conf`} />
     {/if}
   {/snippet}
   {#snippet notice()}

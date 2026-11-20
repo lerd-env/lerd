@@ -542,12 +542,12 @@ export interface LoadNginxBackupsResult {
  *  included inside the block that serves the site. Only the latter can
  *  override fastcgi_param and proxy_set_header, which nginx resolves per
  *  location and never inherits once a location declares its own. */
-export type NginxScope = 'server' | 'location';
+export type NginxScope = 'server' | 'location' | 'web';
 
 /** Server scope is the default on the backend, so its URL stays unqualified
  *  and every previously bookmarked nginx URL keeps hitting the same file. */
 const nginxURL = (domain: string, scope: NginxScope, sub = '') =>
-  site(domain, 'nginx') + sub + (scope === 'location' ? '?scope=location' : '');
+  site(domain, 'nginx') + sub + (scope === 'server' ? '' : '?scope=' + scope);
 
 export async function getSiteNginx(domain: string, scope: NginxScope): Promise<SiteNginx> {
   return apiJson<SiteNginx>(nginxURL(domain, scope));

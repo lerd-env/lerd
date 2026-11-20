@@ -110,18 +110,21 @@ export interface NginxResetTarget {
 }
 
 export interface NginxGlobalSaveTarget {
+  target?: 'nginx' | 'web';
   content: string;
   original: string;
   exists: boolean;
 }
 
 export interface NginxGlobalRestoreTarget {
+  target?: 'nginx' | 'web';
   current: string;
   backupName: string;
   backup: string;
 }
 
 export interface NginxGlobalResetTarget {
+  target?: 'nginx' | 'web';
   path: string;
 }
 

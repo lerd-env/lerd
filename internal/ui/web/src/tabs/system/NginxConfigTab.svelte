@@ -6,7 +6,8 @@
   import {
     getNginxConfig,
     loadNginxConfigBackups,
-    loadNginxConfigBackupContent
+    loadNginxConfigBackupContent,
+    type GlobalConfigTarget
   } from '$stores/nginx';
   import {
     openNginxGlobalSaveModal,
@@ -15,30 +16,36 @@
   } from '$stores/modals';
   import { onMount } from 'svelte';
 
+  interface Props {
+    /** 'web' edits lerd's own web server's settings for every site. */
+    target?: GlobalConfigTarget;
+  }
+  let { target = 'nginx' }: Props = $props();
+
   const file = new ConfigFile();
 
   onMount(() => {
     void file.load({
-      get: getNginxConfig,
-      backups: loadNginxConfigBackups,
-      backup: loadNginxConfigBackupContent
+      get: () => getNginxConfig(target),
+      backups: () => loadNginxConfigBackups(target),
+      backup: (name) => loadNginxConfigBackupContent(name, target)
     });
     return () => file.dispose();
   });
 
   function restore() {
     void file.restore((backupName, backup, done) =>
-      openNginxGlobalRestoreModal({ current: file.original, backupName, backup }, done)
+      openNginxGlobalRestoreModal({ target, current: file.original, backupName, backup }, done)
     );
   }
 
   function reset() {
-    openNginxGlobalResetModal({ path: file.path }, file.refreshLater());
+    openNginxGlobalResetModal({ target, path: file.path }, file.refreshLater());
   }
 
   function save() {
     openNginxGlobalSaveModal(
-      { content: file.text, original: file.original, exists: file.exists },
+      { target, content: file.text, original: file.original, exists: file.exists },
       file.refreshLater()
     );
   }
@@ -48,6 +55,6 @@
   <ConfigToolbar {file} onReset={reset} onRestore={restore} onSave={save} />
 
   <ConfigFileBody {file}>
-    <NginxEditor bind:value={file.text} />
+    <NginxEditor bind:value={file.text} language={target === 'web' ? 'yaml' : 'nginx'} />
   </ConfigFileBody>
 </div>

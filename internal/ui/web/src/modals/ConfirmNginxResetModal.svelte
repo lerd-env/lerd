@@ -5,6 +5,7 @@
   import { m } from '../paraglide/messages.js';
 
   const target = $derived($modal.nginxReset);
+  const web = $derived(target?.scope === 'web');
 
   async function run(t: NonNullable<typeof target>) {
     const res = await resetSiteNginx(t.domain, t.scope);
@@ -13,7 +14,7 @@
 </script>
 
 <ConfigConfirmModal
-  title={m.nginxEditor_resetTitle()}
+  title={web ? m.webEditor_resetTitle() : m.nginxEditor_resetTitle()}
   size="md"
   {target}
   acceptLabel={m.nginxEditor_resetAccept()}
@@ -22,7 +23,7 @@
 >
   {#snippet children(t)}
     <p class="text-sm text-gray-700 dark:text-gray-300">
-      {m.nginxEditor_resetBody({ domain: t.domain })}
+      {web ? m.webEditor_resetBody({ domain: t.domain }) : m.nginxEditor_resetBody({ domain: t.domain })}
     </p>
     <p class="text-[10px] text-gray-500 dark:text-gray-400 font-mono break-all">{t.path}</p>
   {/snippet}

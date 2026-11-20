@@ -8,6 +8,7 @@ import (
 	"github.com/geodro/lerd/internal/cfgedit"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/webcustom"
 	"github.com/geodro/lerd/internal/webserver"
 )
 
@@ -57,6 +58,7 @@ type NginxScope string
 const (
 	NginxServerScope   NginxScope = "server"
 	NginxLocationScope NginxScope = "location"
+	NginxWebScope      NginxScope = "web"
 )
 
 // ParseNginxScope maps the wire value onto a scope, treating the empty string
@@ -67,6 +69,8 @@ func ParseNginxScope(s string) (NginxScope, error) {
 		return NginxServerScope, nil
 	case NginxLocationScope:
 		return NginxLocationScope, nil
+	case NginxWebScope:
+		return NginxWebScope, nil
 	}
 	return "", fmt.Errorf("unknown nginx override scope %q", s)
 }
@@ -74,22 +78,44 @@ func ParseNginxScope(s string) (NginxScope, error) {
 // suffix is the custom.d filename tail for the scope. The location file must
 // not match the server include's {domain}.conf* glob, hence the infix.
 func (s NginxScope) suffix() string {
-	if s == NginxLocationScope {
+	switch s {
+	case NginxLocationScope:
 		return ".location.conf"
+	case NginxWebScope:
+		return ".yaml"
 	}
 	return ".conf"
 }
 
+// dir and bkpDir are where the scope's files and their backups live: nginx's
+// custom.d for its two scopes, lerd's own web server's for the web scope.
+func (s NginxScope) dir() string {
+	if s == NginxWebScope {
+		return filepath.Dir(webcustom.SitePath("x"))
+	}
+	return config.NginxCustomD()
+}
+
+func (s NginxScope) bkpDir() string {
+	if s == NginxWebScope {
+		return filepath.Join(webcustom.Dir(), "bkp")
+	}
+	return config.NginxCustomDBkp()
+}
+
 func (s NginxScope) template() string {
-	if s == NginxLocationScope {
+	switch s {
+	case NginxLocationScope:
 		return nginxLocationTemplate
+	case NginxWebScope:
+		return webSiteTemplate
 	}
 	return nginxSiteTemplate
 }
 
 // CustomNginxPath is the on-disk path of a domain's custom override.
 func CustomNginxPath(domain string, scope NginxScope) string {
-	return filepath.Join(config.NginxCustomD(), domain+scope.suffix())
+	return filepath.Join(scope.dir(), domain+scope.suffix())
 }
 
 // nginxFile builds the cfgedit.File for a domain's custom override. Backups and
@@ -97,7 +123,7 @@ func CustomNginxPath(domain string, scope NginxScope) string {
 func nginxFile(domain string, scope NginxScope) cfgedit.File {
 	return cfgedit.File{
 		Path:     CustomNginxPath(domain, scope),
-		BkpDir:   config.NginxCustomDBkp(),
+		BkpDir:   scope.bkpDir(),
 		BkpName:  domain + scope.suffix(),
 		Template: scope.template(),
 	}
@@ -105,7 +131,7 @@ func nginxFile(domain string, scope NginxScope) cfgedit.File {
 
 // nginxScopes is every scope, for the whole-site operations (rename, inherit,
 // remove) that have to carry both files.
-var nginxScopes = []NginxScope{NginxServerScope, NginxLocationScope}
+var nginxScopes = []NginxScope{NginxServerScope, NginxLocationScope, NginxWebScope}
 
 // nginxValidate runs `nginx -t` (via the stubbable indirection) so cfgedit can
 // pre-flight a save without importing nginx itself.
@@ -120,6 +146,11 @@ func ReadCustomNginx(domain string, scope NginxScope) (cfgedit.Content, error) {
 // SaveCustomNginx writes, validates with `nginx -t`, rolls back on a failure
 // that names our file, and reloads nginx.
 func SaveCustomNginx(domain string, scope NginxScope, content string, backup bool) (cfgedit.SaveResult, error) {
+	if scope == NginxWebScope {
+		// lerd's own web server rereads the file per request, so there is
+		// nothing to reload; a file it cannot serve is rolled back.
+		return nginxFile(domain, scope).Save(content, cfgedit.SaveOpts{Backup: backup, Validate: webValidate})
+	}
 	return nginxFile(domain, scope).Save(content, cfgedit.SaveOpts{
 		Backup:   backup,
 		Validate: nginxValidate,
@@ -130,7 +161,7 @@ func SaveCustomNginx(domain string, scope NginxScope, content string, backup boo
 
 // ResetCustomNginx deletes the override and reloads nginx. Backups are kept.
 func ResetCustomNginx(domain string, scope NginxScope) error {
-	return nginxFile(domain, scope).Reset(func() error { return NginxReloadFn() })
+	return nginxFile(domain, scope).Reset(scope.apply())
 }
 
 // ListCustomNginxBackups returns a domain's override backups, newest first.
@@ -146,7 +177,7 @@ func ReadCustomNginxBackup(domain string, scope NginxScope, name string) ([]byte
 
 // RestoreCustomNginx swaps a backup over the live override and reloads nginx.
 func RestoreCustomNginx(domain string, scope NginxScope, name string) (cfgedit.RestoreResult, error) {
-	return nginxFile(domain, scope).Restore(name, func() error { return NginxReloadFn() })
+	return nginxFile(domain, scope).Restore(name, scope.apply())
 }
 
 // ValidNginxBackupName reports whether name is a well-formed backup for domain.
@@ -185,7 +216,7 @@ func inheritOneNginxScope(parentDomain, worktreeDomain string, scope NginxScope)
 		}
 		return err
 	}
-	if err := os.MkdirAll(config.NginxCustomD(), 0o755); err != nil {
+	if err := os.MkdirAll(scope.dir(), 0o755); err != nil {
 		return err
 	}
 	return nginx.WriteFileAtomic(dst, data, 0o644)
@@ -211,4 +242,47 @@ func RemoveCustomNginxConfig(domain string) error {
 		}
 	}
 	return firstErr
+}
+
+// apply activates a change to the scope's file: an nginx reload, or nothing
+// for lerd's own web server, which rereads its file on every request.
+func (s NginxScope) apply() func() error {
+	if s == NginxWebScope {
+		return func() error { return nil }
+	}
+	return func() error { return NginxReloadFn() }
+}
+
+// webSiteTemplate seeds the web scope editor: inert until a line is uncommented.
+const webSiteTemplate = `# Lerd per-site settings for lerd's own web server.
+#
+# Read on every request, so a save takes effect at once. Uncomment what you need.
+#
+# headers:
+#   X-Frame-Options: DENY
+# redirects:
+#   - from: /old
+#     to: /new
+#     status: 301
+# proxies:
+#   - path: /api
+#     to: http://host.containers.internal:9000
+# roots:
+#   - path: /setup
+#     root: "{{root}}"
+# max_body_size: 100m
+# fastcgi_params:
+#   APP_FLAG: "on"
+`
+
+// webValidate reads the staged file the way the server will.
+func webValidate(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err.Error(), err
+	}
+	if err := webcustom.Validate(path, data); err != nil {
+		return err.Error(), err
+	}
+	return "", nil
 }

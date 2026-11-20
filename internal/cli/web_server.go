@@ -25,11 +25,13 @@ import (
 
 // NewWebServerCmd shows or switches the web server that serves the sites.
 func NewWebServerCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "web-server [nginx|go]",
 		Short: "Show or switch the web server serving your sites (nginx or lerd's own)",
 		Long: `Show which web server serves your sites, or switch between nginx and lerd's own
-web server written in Go. A switch that does not come up healthy is rolled back.`,
+web server written in Go. A switch that does not come up healthy is rolled back.
+show, edit and reset manage the settings lerd's own web server reads, per site
+or with --global for every site.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
@@ -47,6 +49,8 @@ web server written in Go. A switch that does not come up healthy is rolled back.
 			return switchWebServer(args[0], cmd.OutOrStdout())
 		},
 	}
+	cmd.AddCommand(newWebServerShowCmd(), newWebServerEditCmd(), newWebServerResetCmd())
+	return cmd
 }
 
 // The steps a switch takes outside lerd's own files, swapped in tests.

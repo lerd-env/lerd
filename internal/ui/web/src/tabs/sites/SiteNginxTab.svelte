@@ -72,6 +72,6 @@
   <ConfigToolbar {file} onReset={reset} onRestore={restore} onSave={save} />
 
   <ConfigFileBody {file}>
-    <NginxEditor bind:value={file.text} />
+    <NginxEditor bind:value={file.text} language={scope === 'web' ? 'yaml' : 'nginx'} />
   </ConfigFileBody>
 </div>

@@ -6,12 +6,13 @@
   import { m } from '../paraglide/messages.js';
 
   const target = $derived($modal.nginxGlobalSave);
+  const web = $derived(target?.target === 'web');
   let backup = $state(false);
   let validationOutput = $state('');
 
   async function run(t: NonNullable<typeof target>) {
     validationOutput = '';
-    const res = await saveNginxConfig(t.content, backup);
+    const res = await saveNginxConfig(t.content, backup, t.target);
     if (res.ok) return;
     // nginx's line-and-directive diagnostic; the modal stays open so the
     // user can fix the text in the editor and retry.
@@ -21,7 +22,7 @@
 </script>
 
 <ConfigConfirmModal
-  title={m.nginxEditor_confirmTitle()}
+  title={web ? m.webEditor_confirmTitle() : m.nginxEditor_confirmTitle()}
   size="md"
   {target}
   acceptLabel={m.common_save()}
@@ -30,10 +31,10 @@
 >
   {#snippet children(t, busy)}
     <p class="text-sm text-gray-700 dark:text-gray-300">
-      {m.nginxGlobalEditor_confirmBody()}
+      {web ? m.webGlobalEditor_confirmBody() : m.nginxGlobalEditor_confirmBody()}
     </p>
     {#if t.exists}
-      <BackupCheckbox bind:checked={backup} disabled={busy} label={m.nginxEditor_backupLabel()} file="zz-lerd-user.conf" />
+      <BackupCheckbox bind:checked={backup} disabled={busy} label={m.nginxEditor_backupLabel()} file={web ? "global.yaml" : "zz-lerd-user.conf"} />
     {/if}
   {/snippet}
   {#snippet notice()}

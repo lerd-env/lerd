@@ -660,12 +660,12 @@
         {/if}
       </span>
 
-      {#if !site.paused && !$goWebServer}
+      {#if !site.paused}
         <button
           type="button"
           onclick={onOpenNginx}
-          aria-label={m.sites_nginx_editTitle()}
-          use:tooltip={m.sites_nginx_editTitle()}
+          aria-label={$goWebServer ? m.sites_web_editTitle() : m.sites_nginx_editTitle()}
+          use:tooltip={$goWebServer ? m.sites_web_editTitle() : m.sites_nginx_editTitle()}
           class="shrink-0 -mr-1 p-1 rounded-sm text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
         >
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
