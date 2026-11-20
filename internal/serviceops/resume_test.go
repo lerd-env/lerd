@@ -251,6 +251,37 @@ func TestEnsureServiceRunning_startsAndProbesOnceForCallersTogether(t *testing.T
 	}
 }
 
+// An explicit start that comes after a db:shell or a link already brought the
+// service up finds nothing left to start, however late it arrives.
+func TestStartService_leavesARunningServiceAlone(t *testing.T) {
+	withServiceHome(t)
+	stubLifecycle(t)
+	life := countingLifecycle{starts: &atomic.Int32{}, up: &atomic.Bool{}}
+	podman.UnitLifecycle = life
+	prevID, prevRegen := activationIDFn, regenConsumersFn
+	activationIDFn = func(string) string { return "run-1" }
+	regenConsumersFn = func(string) {}
+	t.Cleanup(func() { activationIDFn, regenConsumersFn = prevID, prevRegen })
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "proj-db", Image: "docker.io/library/postgres:16", Ports: []string{"127.0.0.1:5439:5432"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EnsureServiceRunning("proj-db"); err != nil {
+		t.Fatal(err)
+	}
+	if err := StartService("proj-db"); err != nil {
+		t.Fatal(err)
+	}
+	if n := life.starts.Load(); n != 1 {
+		t.Errorf("started %d times, want once", n)
+	}
+	if !config.ServiceIsManuallyStarted("proj-db") {
+		t.Error("the explicit start was not recorded as one")
+	}
+}
+
 // An explicit start from the dashboard, the TUI or MCP and the starts a
 // db:shell or a link make share one StartUnit when they meet.
 func TestStartService_sharesTheStartWithEnsureCallers(t *testing.T) {
@@ -275,10 +306,8 @@ func TestStartService_sharesTheStartWithEnsureCallers(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			// One explicit start: a second one that arrives after the first
-			// finished is a start of its own, so two would only meet by timing.
 			call := EnsureServiceRunning
-			if i == 0 {
+			if i%4 == 0 {
 				call = StartService
 			}
 			if err := call("proj-db"); err != nil {
