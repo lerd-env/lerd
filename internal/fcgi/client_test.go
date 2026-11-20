@@ -1,6 +1,7 @@
 package fcgi
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -9,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // serveFCGI runs Go's own FastCGI responder as the PHP-FPM stand-in, so the
@@ -35,7 +37,7 @@ func TestServe_passesMethodBodyAndParams(t *testing.T) {
 	req.Header.Set("X-Custom", "c1")
 	rec := httptest.NewRecorder()
 
-	err := Serve(rec, req, addr, map[string]string{"SCRIPT_FILENAME": "/srv/app/public/index.php"})
+	err := Serve(rec, req, addr, map[string]string{"SCRIPT_FILENAME": "/srv/app/public/index.php"}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +65,7 @@ func TestServe_honoursStatusAndLocation(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			addr := serveFCGI(t, c.h)
 			rec := httptest.NewRecorder()
-			if err := Serve(rec, httptest.NewRequest("GET", "http://app.test/", nil), addr, nil); err != nil {
+			if err := Serve(rec, httptest.NewRequest("GET", "http://app.test/", nil), addr, nil, 0); err != nil {
 				t.Fatal(err)
 			}
 			if rec.Code != c.status || rec.Header().Get("Location") != c.loc {
@@ -80,7 +82,7 @@ func TestServe_streamsLargeBodies(t *testing.T) {
 	})
 	big := strings.Repeat("x", 300_000)
 	rec := httptest.NewRecorder()
-	if err := Serve(rec, httptest.NewRequest("PUT", "http://app.test/", strings.NewReader(big)), addr, nil); err != nil {
+	if err := Serve(rec, httptest.NewRequest("PUT", "http://app.test/", strings.NewReader(big)), addr, nil, 0); err != nil {
 		t.Fatal(err)
 	}
 	if rec.Body.Len() != len(big) {
@@ -93,7 +95,21 @@ func TestServe_unreachableUpstreamErrors(t *testing.T) {
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
 	ln.Close()
-	if err := Serve(httptest.NewRecorder(), httptest.NewRequest("GET", "http://app.test/", nil), addr, nil); err == nil {
+	if err := Serve(httptest.NewRecorder(), httptest.NewRequest("GET", "http://app.test/", nil), addr, nil, 0); err == nil {
 		t.Fatal("expected an error for a closed upstream")
+	}
+}
+
+// A responder silent for longer than the timeout is ErrTimeout, which the web
+// server answers with 504 instead of holding the browser.
+func TestServe_silentResponderTimesOut(t *testing.T) {
+	addr := serveFCGI(t, func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(2 * time.Second)
+		w.Write([]byte("late"))
+	})
+	start := time.Now()
+	err := Serve(httptest.NewRecorder(), httptest.NewRequest("GET", "http://app.test/", nil), addr, nil, 300*time.Millisecond)
+	if !errors.Is(err, ErrTimeout) || time.Since(start) > 600*time.Millisecond {
+		t.Fatalf("err %v after %v, want ErrTimeout within the timeout", err, time.Since(start))
 	}
 }

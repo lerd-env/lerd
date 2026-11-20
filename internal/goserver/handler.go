@@ -3,6 +3,7 @@
 package goserver
 
 import (
+	"errors"
 	"log"
 	"net"
 	"net/http"
@@ -12,9 +13,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/fcgi"
+	"github.com/geodro/lerd/internal/sitephp"
 )
 
 // Handler serves every registered site by Host, the way lerd's nginx vhosts do.
@@ -95,7 +98,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	h.servePHPSite(w, r, site)
+	h.servePHPSite(w, r, site, branch)
 }
 
 // siteFor matches a host to the site that owns it or a subdomain of it, the
@@ -123,8 +126,9 @@ func (h *Handler) siteFor(hostport string) (config.Site, string, bool) {
 // servePHPSite mirrors `try_files $uri $uri/ /index.php?$query_string`: a real
 // file is sent as is, a PHP file or a directory's index.php runs itself, and
 // anything else goes to the front controller.
-func (h *Handler) servePHPSite(w http.ResponseWriter, r *http.Request, site config.Site) {
-	root := filepath.Join(site.Path, config.PublicDirFor(site))
+func (h *Handler) servePHPSite(w http.ResponseWriter, r *http.Request, site config.Site, branch string) {
+	publicDir := config.PublicDirFor(site)
+	root := filepath.Join(site.Path, publicDir)
 	if real, err := filepath.EvalSymlinks(root); err == nil {
 		root = real
 	}
@@ -137,21 +141,10 @@ func (h *Handler) servePHPSite(w http.ResponseWriter, r *http.Request, site conf
 		http.Error(w, "403 Forbidden", http.StatusForbidden)
 		return
 	}
-
-	script := "/index.php"
-	full := filepath.Join(root, filepath.FromSlash(urlPath))
-	if fi, err := os.Stat(full); err == nil {
-		switch {
-		case fi.IsDir():
-			if _, err := os.Stat(filepath.Join(full, "index.php")); err == nil {
-				script = path.Join(urlPath, "index.php")
-			}
-		case strings.HasSuffix(urlPath, ".php"):
-			script = urlPath
-		default:
-			http.ServeFile(w, r, full)
-			return
-		}
+	script, pathInfo, static := phpScript(root, urlPath, sitephp.FrontController(site))
+	if static != "" {
+		http.ServeFile(w, r, static)
+		return
 	}
 
 	params := map[string]string{
@@ -159,16 +152,58 @@ func (h *Handler) servePHPSite(w http.ResponseWriter, r *http.Request, site conf
 		"SCRIPT_NAME":     script,
 		"DOCUMENT_URI":    script,
 		"DOCUMENT_ROOT":   root,
+		"PATH_INFO":       pathInfo,
 		"REQUEST_SCHEME":  scheme(r),
 		"SERVER_PORT":     serverPort(r),
 	}
 	for k, v := range lerdParams(r, site) {
 		params[k] = v
 	}
-	if err := fcgi.Serve(w, r, h.Upstream(site), params); err != nil {
+	if branch != "" {
+		params["LERD_BRANCH"] = branch
+	}
+	if fw, ok := config.GetFrameworkForDir(site.Framework, site.Path); ok && fw.Nginx != nil {
+		kept, _ := sitephp.FastCGIParams(site.Framework, site.PrimaryDomain(), fw.Nginx.FastCGIParams, site.Path, publicDir)
+		for _, p := range kept {
+			params[p.Name] = p.Value
+		}
+	}
+	timeout := time.Duration(sitephp.RequestTimeout(site.Path, site.PHPVersion)) * time.Second
+	if err := fcgi.Serve(w, r, h.Upstream(site), params, timeout); err != nil {
 		log.Printf("lerd web server: %s %s: %v", site.Name, r.URL.Path, err)
+		if errors.Is(err, fcgi.ErrTimeout) {
+			http.Error(w, "504 Gateway Timeout", http.StatusGatewayTimeout)
+			return
+		}
 		http.Error(w, "502 Bad Gateway", http.StatusBadGateway)
 	}
+}
+
+// phpScript picks what serves urlPath as the vhost's locations do: a static
+// file as is, a .php path or directory index as the script, else index.php.
+// Front-controller routing sends all PHP to /index.php, splitting PATH_INFO.
+func phpScript(root, urlPath string, frontController bool) (script, pathInfo, static string) {
+	if frontController {
+		if rest, ok := strings.CutPrefix(urlPath, "/index.php"); ok && (rest == "" || strings.HasPrefix(rest, "/")) {
+			return "/index.php", rest, ""
+		}
+	}
+	full := filepath.Join(root, filepath.FromSlash(urlPath))
+	fi, err := os.Stat(full)
+	switch {
+	case err == nil && fi.IsDir():
+		if _, err := os.Stat(filepath.Join(full, "index.php")); err == nil && !frontController {
+			return path.Join(urlPath, "index.php"), "", ""
+		}
+	case strings.HasSuffix(urlPath, ".php"):
+		if frontController {
+			return "/index.php", "", ""
+		}
+		return urlPath, "", ""
+	case err == nil:
+		return "", "", full
+	}
+	return "/index.php", "", ""
 }
 
 // hidesDotfile matches nginx's deny on dot paths, except /.well-known.

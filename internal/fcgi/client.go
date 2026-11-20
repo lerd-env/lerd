@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/textproto"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -29,10 +30,14 @@ const (
 	requestID        = 1
 )
 
-// Serve sends r to the FastCGI responder at addr and writes its response to w.
-// params are added to, and win over, the CGI variables derived from r. An
-// error means no response was written, so the caller can still answer 502.
-func Serve(w http.ResponseWriter, r *http.Request, addr string, params map[string]string) error {
+// ErrTimeout means the responder sent nothing for longer than the timeout,
+// which a web server answers with 504 as nginx's fastcgi_read_timeout does.
+var ErrTimeout = errors.New("fastcgi: responder timed out")
+
+// Serve sends r to the responder at addr and writes its response to w; params
+// win over the CGI variables from r, timeout bounds each wait (0 for none). An
+// error means nothing was written, so the caller can still answer 502 or 504.
+func Serve(w http.ResponseWriter, r *http.Request, addr string, params map[string]string, timeout time.Duration) error {
 	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
 	if err != nil {
 		return err
@@ -52,7 +57,7 @@ func Serve(w http.ResponseWriter, r *http.Request, addr string, params map[strin
 	// streams, as PHP can, would otherwise fill both buffers and stall.
 	go send(conn, env, body) //nolint:errcheck // the response read below reports a dead connection
 
-	out := &stdoutReader{r: bufio.NewReader(conn)}
+	out := &stdoutReader{r: bufio.NewReader(conn), conn: conn, timeout: timeout}
 	if err := writeResponse(w, out); err != nil {
 		return err
 	}
@@ -165,10 +170,15 @@ func writeLen(b *bytes.Buffer, n int) {
 // stdoutReader yields the responder's STDOUT stream and ends at END_REQUEST.
 // STDERR is PHP's error log, kept for the caller's logs rather than the page.
 type stdoutReader struct {
-	r      *bufio.Reader
-	buf    []byte
-	stderr bytes.Buffer
-	done   bool
+	r       *bufio.Reader
+	conn    net.Conn
+	timeout time.Duration
+	buf     []byte
+	stderr  bytes.Buffer
+	done    bool
+	// err is kept once seen: bufio hands an error back once and then reads
+	// again, which would re-arm the timeout for every retry.
+	err error
 }
 
 func (s *stdoutReader) Read(p []byte) (int, error) {
@@ -176,8 +186,11 @@ func (s *stdoutReader) Read(p []byte) (int, error) {
 		if s.done {
 			return 0, io.EOF
 		}
-		if err := s.next(); err != nil {
-			return 0, err
+		if s.err != nil {
+			return 0, s.err
+		}
+		if s.err = s.next(); s.err != nil {
+			return 0, s.err
 		}
 	}
 	n := copy(p, s.buf)
@@ -186,8 +199,14 @@ func (s *stdoutReader) Read(p []byte) (int, error) {
 }
 
 func (s *stdoutReader) next() error {
+	if s.timeout > 0 {
+		s.conn.SetReadDeadline(time.Now().Add(s.timeout))
+	}
 	var h [8]byte
 	if _, err := io.ReadFull(s.r, h[:]); err != nil {
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			return ErrTimeout
+		}
 		return fmt.Errorf("fastcgi: reading record: %w", err)
 	}
 	length := int(binary.BigEndian.Uint16(h[4:6]))
@@ -212,6 +231,9 @@ func writeResponse(w http.ResponseWriter, out *stdoutReader) error {
 	br := bufio.NewReader(out)
 	hdr, err := textproto.NewReader(br).ReadMIMEHeader()
 	if err != nil && !(errors.Is(err, io.EOF) && len(hdr) > 0) {
+		if errors.Is(err, ErrTimeout) {
+			return ErrTimeout
+		}
 		return fmt.Errorf("fastcgi: reading response headers: %w", err)
 	}
 	status := http.StatusOK

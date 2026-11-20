@@ -35,7 +35,7 @@ func (h *Handler) serveProfiler(w http.ResponseWriter, r *http.Request) {
 	addr, script := h.ProfilerUpstream()
 	key, _ := config.LoadOrGenerateProfilerKey()
 	params := map[string]string{"SCRIPT_FILENAME": script, "HTTP_COOKIE": "SPX_KEY=" + key}
-	if err := fcgi.Serve(w, r, addr, params); err != nil {
+	if err := fcgi.Serve(w, r, addr, params, 0); err != nil {
 		log.Printf("lerd web server: profiler: %v", err)
 		http.Error(w, "502 Bad Gateway", http.StatusBadGateway)
 	}
