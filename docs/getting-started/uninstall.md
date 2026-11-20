@@ -21,8 +21,9 @@ Without a terminal and without one of those flags, `lerd uninstall` stops before
 2. **MCP integration**: Lerd's registration in Claude Code, Cursor, Windsurf and Junie, plus the skill and rule files it wrote, globally and in every linked site.
 3. **The Lerd CA**: removed from the system and browser trust stores. The CA files themselves stay in the CA directory.
 4. **Lerd-built images**: `lerd-php*-fpm:local` and `lerd-custom-*:local`. Images pulled from a registry, such as MySQL or Redis, stay, since your data lives in bind mounts rather than in them.
+5. **The Lerd desktop app** (Linux): asked only when the `sh.lerd.Desktop` flatpak is installed for your user, as the installer does it. It is closed first, and its own data goes too when you also said yes to 1. A system-wide install stays, remove it with `sudo flatpak uninstall sh.lerd.Desktop`.
 
-`--force` answers yes to all four. `--keep-data` answers no to 1 and 4 and yes to 2 and 3.
+`--force` answers yes to all five. `--keep-data` answers no to 1, 4 and 5 and yes to 2 and 3, so a reinstall finds the desktop app already there.
 
 ## Why are you leaving?
 
