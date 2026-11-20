@@ -48,3 +48,44 @@ func TestUninstallPlan_ForceRemovesEverything(t *testing.T) {
 		t.Errorf("plan = %+v, want everything removed", p)
 	}
 }
+
+func stubDesktopFlatpak(t *testing.T, installed bool) {
+	t.Helper()
+	orig := desktopFlatpakInstalled
+	desktopFlatpakInstalled = func() bool { return installed }
+	t.Cleanup(func() { desktopFlatpakInstalled = orig })
+}
+
+func TestUninstallPlan_ForceRemovesInstalledDesktopApp(t *testing.T) {
+	stubDesktopFlatpak(t, true)
+	p, err := uninstallPlanFor(true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.removeDesktopApp {
+		t.Error("--force left the Lerd desktop app installed")
+	}
+}
+
+func TestUninstallPlan_NoDesktopAppToRemove(t *testing.T) {
+	stubDesktopFlatpak(t, false)
+	p, err := uninstallPlanFor(true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.removeDesktopApp {
+		t.Error("planned to remove a desktop app that is not installed")
+	}
+}
+
+// A reinstall finds the app already there and reuses it.
+func TestUninstallPlan_KeepDataKeepsDesktopApp(t *testing.T) {
+	stubDesktopFlatpak(t, true)
+	p, err := uninstallPlanFor(false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.removeDesktopApp {
+		t.Error("--keep-data removed the desktop app")
+	}
+}
