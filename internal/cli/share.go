@@ -697,7 +697,7 @@ func startHostProxy(domain string, httpPort, httpsPort int, secured bool) (int, 
 	orig := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		// Save the incoming tunnel host before overwriting.
-		tunnelHost := req.Host
+		tunnelHost := tunnelPublicHost(req)
 		orig(req)
 		// Tell Laravel (and any other framework) the real public host/scheme.
 		req.Header.Set("X-Forwarded-Host", tunnelHost)
@@ -781,6 +781,24 @@ func startHostProxy(domain string, httpPort, httpsPort int, secured bool) (int, 
 
 	port := ln.Addr().(*net.TCPAddr).Port
 	return port, func() { srv.Close() }, nil
+}
+
+// tunnelPublicHost trusts X-Forwarded-Host only when Host is loopback, which is
+// Expose: it sets Host to the proxy's address and the public host there. Other
+// tunnels pass a visitor's own X-Forwarded-Host through, so their Host wins.
+func tunnelPublicHost(req *http.Request) string {
+	host := req.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return req.Host
+	}
+	forwarded, _, _ := strings.Cut(req.Header.Get("X-Forwarded-Host"), ",")
+	if forwarded = strings.TrimSpace(forwarded); forwarded != "" {
+		return forwarded
+	}
+	return req.Host
 }
 
 // rewriteTunnelURL swaps the site's own domain for the public one in a single
