@@ -53,9 +53,9 @@ func TestAskDoesNotReadWithoutATerminal(t *testing.T) {
 func TestAskDropsKeysThatAreNotText(t *testing.T) {
 	defer SetStdinInteractive(true)()
 	captureOut(t)
-	defer setConfirmReader(strings.NewReader("\x1b[B\x1b[A\n\x1b[B2\x1bOA\n\x1b[1;5Cslow\x7f laptop\t\n"))()
+	defer setConfirmReader(strings.NewReader("\x1b[B\x1b[A\n\x1b[B2\x1bOA\n\x1b[1;5Cslow\x7f laptop\t\ntoo\theavy\n"))()
 
-	for _, want := range []string{"", "2", "slow laptop"} {
+	for _, want := range []string{"", "2", "slow laptop", "too heavy"} {
 		if got := Ask("why?"); got != want {
 			t.Fatalf("Ask = %q, want %q", got, want)
 		}
