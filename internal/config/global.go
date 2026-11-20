@@ -425,12 +425,10 @@ type GlobalConfig struct {
 		SkipConfirmation bool `yaml:"skip_confirmation,omitempty" mapstructure:"skip_confirmation"`
 	} `yaml:"host_commands,omitempty" mapstructure:"host_commands"`
 	IdleSuspend struct {
-		// Enabled turns on activity-driven worker suspension: when a site sees
-		// no activity for Timeout, its suspendable workers (queue, horizon, ...)
-		// are gracefully stopped and resumed on the next request. Off by default
-		// so a quiet dev box reclaims worker memory only once the user opts in.
-		// Idle-suspend is a single global policy, not configured per site.
-		Enabled bool `yaml:"enabled,omitempty" mapstructure:"enabled"`
+		// Enabled stops a site's workers after Timeout idle and resumes them on
+		// the next request. On by default; not omitempty, so off persists as an
+		// explicit false instead of reading back as the default.
+		Enabled bool `yaml:"enabled" mapstructure:"enabled"`
 		// Timeout is how long a site must be idle before its workers suspend, as
 		// a Go duration string ("30m"). Empty or unparseable falls back to
 		// DefaultIdleSuspendTimeout; read it via IdleSuspendTimeout.
@@ -439,7 +437,7 @@ type GlobalConfig struct {
 		// once every site using it has been idle past Timeout, and wakes on the
 		// next request. Off by default; only read while Enabled is on.
 		Services bool `yaml:"services,omitempty" mapstructure:"services"`
-	} `yaml:"idle_suspend,omitempty" mapstructure:"idle_suspend"`
+	} `yaml:"idle_suspend" mapstructure:"idle_suspend"`
 	AutoSnapshot struct {
 		// Enabled turns on scheduled database snapshots: every AutoSnapshotEvery,
 		// each covered site's database is dumped through the same machinery
@@ -576,6 +574,7 @@ func defaultConfig() *GlobalConfig {
 	// The schedule ships on, and opt-in keeps it from dumping anything until a
 	// database is asked for.
 	cfg.AutoSnapshot.Enabled = true
+	cfg.IdleSuspend.Enabled = true
 
 	home, _ := os.UserHomeDir()
 	cfg.ParkedDirectories = []string{home + "/Lerd"}

@@ -1,6 +1,6 @@
 # Idle-Suspend
 
-Idle-suspend reclaims the resources a site's background workers hold while you're not using it. When a site sees no activity for the timeout, lerd gracefully stops **all** of its workers and resumes them on the next activity. It's off by default.
+Idle-suspend reclaims the resources a site's background workers hold while you're not using it. When a site sees no activity for the timeout, lerd gracefully stops **all** of its workers and resumes them on the next activity. It's on by default; `lerd idle off` turns it off.
 
 On a typical dev box your sites share one PHP-FPM container, so the per-site resource cost isn't the web tier, it's the workers (queue, Horizon, scheduler, Reverb, the Stripe listener, Vite), which run around the clock whether or not you're working. Idle-suspend stops them while a site is quiet and brings them back the moment the site is used again. Workers are asynchronous, so the request that wakes them is served immediately while they boot in the background.
 
@@ -93,6 +93,6 @@ A site is idle once it has gone `timeout` without any of these. The suspend engi
 
 ## Notes
 
-- Off by default, a quiet dev box only reclaims worker memory once you opt in. While it is off the feature is fully dormant: the `lerd-watcher` does no activity tracking, file watching, or evaluation at all, it only keeps a tiny control socket bound so that toggling it on takes effect immediately. Turning it on or off (via `lerd idle on/off` or the dashboard) persists the choice and signals the watcher to start or tear the subsystem down on the spot. Turning it off, or restarting the watcher while it's off, also brings back any workers a prior session had suspended, so a disabled feature never leaves a site's workers stopped.
+- On by default, so a quiet dev box reclaims worker memory without being asked. While it is off the feature is fully dormant: the `lerd-watcher` does no activity tracking, file watching, or evaluation at all, it only keeps a tiny control socket bound so that toggling it on takes effect immediately. Turning it on or off (via `lerd idle on/off` or the dashboard) persists the choice and signals the watcher to start or tear the subsystem down on the spot. Turning it off, or restarting the watcher while it's off, also brings back any workers a prior session had suspended, so a disabled feature never leaves a site's workers stopped.
 - Workers stopped by idle-suspend are not reported as failed by the health watcher; they're asleep on purpose.
 - Starting a worker any other way re-arms idle-suspend for it. An install, a relink, or `lerd worker start` that brings a worker back clears it from the suspended set, and the `lerd-watcher` verifies the set against the workers actually running when it starts, so a site never stays awake because lerd still thought those workers were asleep.
