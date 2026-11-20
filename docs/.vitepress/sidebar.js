@@ -67,6 +67,7 @@ const DOCS = [
       { text: 'Custom Containers', link: '/usage/custom-containers' },
       { text: 'Host-Proxy Sites', link: '/usage/host-proxy' },
       { text: 'Nginx Overrides', link: '/usage/nginx-overrides' },
+      { text: "lerd's own web server", link: '/usage/web-server' },
     ],
   },
   {

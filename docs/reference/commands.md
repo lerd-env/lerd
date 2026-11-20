@@ -96,6 +96,8 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd unpause [name]` | Resume a paused site: start container, restore vhost, restart workers |
 | `lerd restart [name]` | Restart the container serving one site (custom container, FrankenPHP, PHP-FPM or dev server). Run it inside the site's directory or name the site; it does not restart lerd, for that use `lerd stop` then `lerd start` |
 | `lerd rebuild [name]` | Rebuild the custom container image from Containerfile and restart |
+| `lerd web-server [nginx\|go]` | Show which web server serves the sites, or switch between nginx and lerd's own; a switch that does not come up is rolled back. See [lerd's own web server](../usage/web-server.md) |
+| `lerd web-server show\|edit\|reset [site]` | Print, edit in `$EDITOR` or delete the settings lerd's own web server reads for a site; `--branch` targets a worktree, `--global` every site |
 | `lerd nginx show [site]` | Print the site's custom nginx override; `--path` prints the file path instead of its content |
 | `lerd nginx edit [site]` | Open the override in `$EDITOR`, then validate it with `nginx -t` and reload on save |
 | `lerd nginx reset [site]` | Delete the override and reload nginx; the backups are kept |

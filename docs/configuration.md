@@ -48,6 +48,10 @@ share:
                             # of its own for (a host-header rewrite, a traffic
                             # policy file). Written by lerd share:ngrok-args;
                             # lerd share --ngrok-args wins for a single run.
+web_server: nginx     # optional, default nginx. nginx or go, the web server
+                      # that serves every site. Set with lerd web-server; see
+                      # usage/web-server. The nginx ports and request timeout
+                      # below apply to either one.
 nginx:
   http_port: 80        # host ports nginx publishes. Change these when another
   https_port: 443      # service already owns 80/443; nginx still listens on
