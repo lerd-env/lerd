@@ -783,10 +783,17 @@ func startHostProxy(domain string, httpPort, httpsPort int, secured bool) (int, 
 	return port, func() { srv.Close() }, nil
 }
 
-// tunnelPublicHost prefers the X-Forwarded-Host a tunnel set: Expose rewrites
-// Host to the proxy's own 127.0.0.1 address and sends the public host there.
-// Other tunnels keep the public host in Host.
+// tunnelPublicHost trusts X-Forwarded-Host only when Host is loopback, which is
+// Expose: it sets Host to the proxy's address and the public host there. Other
+// tunnels pass a visitor's own X-Forwarded-Host through, so their Host wins.
 func tunnelPublicHost(req *http.Request) string {
+	host := req.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return req.Host
+	}
 	forwarded, _, _ := strings.Cut(req.Header.Get("X-Forwarded-Host"), ",")
 	if forwarded = strings.TrimSpace(forwarded); forwarded != "" {
 		return forwarded

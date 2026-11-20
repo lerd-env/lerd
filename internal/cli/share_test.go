@@ -791,6 +791,36 @@ func TestStartHostProxy_keepsTunnelForwardedHost(t *testing.T) {
 	}
 }
 
+// ngrok, cloudflared and the SSH tunnels pass a visitor's own X-Forwarded-Host
+// through, so a public Host must win over it or the app builds links for it.
+func TestStartHostProxy_ignoresSpoofedForwardedHost(t *testing.T) {
+	var gotXFH string
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotXFH = r.Header.Get("X-Forwarded-Host")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	if err != nil {
+		t.Fatalf("startHostProxy: %v", err)
+	}
+	defer stop()
+
+	req, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d/", port), nil)
+	req.Host = "abc.trycloudflare.com"
+	req.Header.Set("X-Forwarded-Host", "evil.example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	if gotXFH != "abc.trycloudflare.com" {
+		t.Errorf("X-Forwarded-Host = %q, want %q", gotXFH, "abc.trycloudflare.com")
+	}
+}
+
 func TestStartHostProxy_rewritesLocationHeader(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Location", "http://mysite.test/dashboard")
