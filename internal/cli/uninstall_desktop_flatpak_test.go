@@ -13,7 +13,7 @@ func fakeFlatpak(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	log := filepath.Join(dir, "calls.log")
-	script := "#!/bin/sh\necho \"$*\" >> " + log + "\n"
+	script := "#!/bin/sh\necho \"$*\" >> \"${0%/*}/calls.log\"\n"
 	if err := os.WriteFile(filepath.Join(dir, "flatpak"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
