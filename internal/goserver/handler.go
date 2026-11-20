@@ -49,6 +49,10 @@ type Handler struct {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if hostOnly(strings.ToLower(r.Host)) == dashboardHost {
+		h.serveDashboard(w, r)
+		return
+	}
 	if hostOnly(strings.ToLower(r.Host)) == profilerHost {
 		h.serveProfiler(w, r)
 		return
@@ -60,7 +64,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	site, domain, ok := h.siteFor(r.Host)
 	if !ok {
-		http.NotFound(w, r)
+		serveUnknownHost(w)
 		return
 	}
 	if site.Secured && r.TLS == nil {
