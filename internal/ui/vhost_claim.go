@@ -76,7 +76,7 @@ func needsVhostClaim(r *http.Request) bool {
 	if cfg, err := config.LoadGlobal(); err != nil || cfg == nil || cfg.LAN.Exposed {
 		return true
 	}
-	wide, err := podman.UnitLoopbackPortsPublishedWide(podman.WebServerUnit)
+	wide, err := podman.UnitLoopbackPortsPublishedWide(podman.WebServerUnit())
 	return err != nil || len(wide) > 0
 }
 

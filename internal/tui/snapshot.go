@@ -273,7 +273,7 @@ func loadStatus() StatusRow {
 		DNSOk:        dnsStatus == dns.StatusOK,
 		DNSDegraded:  dnsStatus == dns.StatusDegraded,
 		DNSDisabled:  dnsDisabled,
-		NginxRunning: podman.Cache.Running(podman.WebServerUnit),
+		NginxRunning: podman.Cache.Running(podman.WebServerUnit()),
 		Autostart:    lerdSystemd.IsAutostartEnabled(),
 		LANExposed:   cfg != nil && cfg.LAN.Exposed,
 	}

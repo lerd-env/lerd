@@ -128,7 +128,7 @@ func QuadletInstalled(name string) bool {
 // while CustomServiceQuadletMarker identifies default and custom managed
 // services. Site and worker containers do not publish directly to the LAN.
 func BindQuadletForLAN(name, content string, lanExposed, servicesExposed bool) string {
-	exposed := lanExposed && (name == WebServerUnit ||
+	exposed := lanExposed && (name == WebServerUnit() ||
 		(servicesExposed && strings.Contains(content, CustomServiceQuadletMarker)))
 	return BindForLAN(content, exposed)
 }

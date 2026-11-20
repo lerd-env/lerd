@@ -2,6 +2,7 @@ package podman
 
 import (
 	"fmt"
+	"github.com/geodro/lerd/internal/config"
 	"io"
 	"strings"
 	"sync"
@@ -44,13 +45,13 @@ func nginxBehind(local nginxLocal, latest string) bool {
 // pull in another process can add a digest to the same image ID, so any cache
 // held here would keep a finished update flagged.
 func readNginxLocal() nginxLocal {
-	running := containerImageIDFn(WebServerUnit)
+	running := containerImageIDFn(WebServerUnitFor(config.WebServerNginx))
 	if running == "" {
 		return nginxLocal{}
 	}
 	return nginxLocal{
 		RunningID:      running,
-		LocalID:        localImageIDFn(ServiceImage(WebServerUnit)),
+		LocalID:        localImageIDFn(ServiceImage(WebServerUnitFor(config.WebServerNginx))),
 		RunningDigests: localImageDigestFn(running),
 	}
 }
@@ -69,7 +70,7 @@ var (
 // caches only so a status rebuild never waits on the network. A cold digest
 // is fetched in the background and shows up on a later rebuild.
 func NginxUpdateAvailable() bool {
-	image := ServiceImage(WebServerUnit)
+	image := ServiceImage(WebServerUnitFor(config.WebServerNginx))
 	latest, ok := cachedManifestDigestFn(image)
 	if !ok {
 		scheduleNginxDigestRefresh(image)
@@ -81,7 +82,7 @@ func NginxUpdateAvailable() bool {
 // cache. Blocking, for the manual check. An unreachable registry is returned
 // as an error rather than read as "up to date".
 func CheckNginxUpdate() (bool, error) {
-	latest, err := refreshManifestDigestFn(ServiceImage(WebServerUnit))
+	latest, err := refreshManifestDigestFn(ServiceImage(WebServerUnitFor(config.WebServerNginx)))
 	if err != nil {
 		return nginxBehind(nginxLocalFn(), ""), err
 	}
@@ -107,7 +108,7 @@ func scheduleNginxDigestRefresh(image string) {
 		nginxRefreshOn = false
 		nginxRefreshMu.Unlock()
 		if err == nil {
-			announceBackgroundRead(WebServerUnit)
+			announceBackgroundRead(WebServerUnitFor(config.WebServerNginx))
 		}
 	}()
 }
@@ -116,14 +117,14 @@ func scheduleNginxDigestRefresh(image string) {
 // digest, which would otherwise be older than what was just pulled and read
 // as an update for the rest of its window.
 func PullNginxImage(w io.Writer) error {
-	image := ServiceImage(WebServerUnit)
+	image := ServiceImage(WebServerUnitFor(config.WebServerNginx))
 	if err := PullImageTo(image, w); err != nil {
 		return err
 	}
 	err := registry.InvalidateManifestDigest(image)
 	// A pull can move the update answer without restarting nginx, so lerd-ui is
 	// told the same way a restart would tell it.
-	notifyUnitChange(WebServerUnit)
+	notifyUnitChange(WebServerUnitFor(config.WebServerNginx))
 	return err
 }
 
@@ -135,12 +136,12 @@ const nginxReadyTimeout = 20 * time.Second
 // updated is false when the container already ran the pulled image.
 func UpdateNginx(w io.Writer) (updated bool, err error) {
 	if err := PullNginxImage(w); err != nil {
-		return false, fmt.Errorf("pulling %s: %w", ServiceImage(WebServerUnit), err)
+		return false, fmt.Errorf("pulling %s: %w", ServiceImage(WebServerUnitFor(config.WebServerNginx)), err)
 	}
-	if ContainerImageID(WebServerUnit) == LocalImageID(ServiceImage(WebServerUnit)) {
+	if ContainerImageID(WebServerUnitFor(config.WebServerNginx)) == LocalImageID(ServiceImage(WebServerUnitFor(config.WebServerNginx))) {
 		return false, nil
 	}
-	if err := RestartUnit(WebServerUnit); err != nil {
+	if err := RestartUnit(WebServerUnitFor(config.WebServerNginx)); err != nil {
 		return false, err
 	}
 	if err := WaitReady("nginx", nginxReadyTimeout); err != nil {

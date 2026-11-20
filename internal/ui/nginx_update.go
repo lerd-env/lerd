@@ -22,7 +22,7 @@ func handleNginxUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updated, err := updateNginxFn(io.Discard)
-	updates.dropFor(podman.WebServerUnit)
+	updates.dropFor(podman.WebServerUnit())
 	publishStatus()
 	if err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
@@ -39,7 +39,7 @@ func handleNginxCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	available, err := checkNginxFn()
-	updates.dropFor(podman.WebServerUnit)
+	updates.dropFor(podman.WebServerUnit())
 	publishStatus()
 	if err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})

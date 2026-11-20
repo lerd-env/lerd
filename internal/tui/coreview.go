@@ -38,7 +38,7 @@ var coreProcesses = []coreProcess{
 	{
 		name:  "nginx",
 		about: "serves every site and proxies to PHP and the workers",
-		logs:  LogTarget{Kind: kindPodman, ID: podman.WebServerUnit, Label: "nginx"},
+		logs:  LogTarget{Kind: kindPodman, ID: podman.WebServerUnit(), Label: "nginx"},
 		state: func(s StatusRow) (bool, string) { return runningWord(s.NginxRunning) },
 	},
 	{

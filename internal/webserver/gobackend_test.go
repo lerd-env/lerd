@@ -30,14 +30,14 @@ func TestGoBackend_unitRunsLerdWebServeOnLoopback(t *testing.T) {
 	if _, err := RewriteUnit(); err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(filepath.Join(config.QuadletDir(), podman.WebServerUnit+".container"))
+	data, err := os.ReadFile(filepath.Join(config.QuadletDir(), podman.WebServerUnit()+".container"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	unit := string(data)
 	exe, _ := os.Executable()
 	for _, want := range []string{
-		"ContainerName=" + podman.WebServerUnit,
+		"ContainerName=" + podman.WebServerUnit(),
 		"Exec=/usr/local/bin/lerd web-serve",
 		"Volume=" + exe + ":/usr/local/bin/lerd:ro",
 		"Environment=XDG_DATA_HOME=" + filepath.Dir(config.DataDir()),

@@ -84,7 +84,7 @@ func (b goBackend) RewriteUnit() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return podman.WriteQuadletDiff(podman.WebServerUnit, content)
+	return podman.WriteQuadletDiff(podman.WebServerUnit(), content)
 }
 
 func (goBackend) UnitContent(extraPaths []string) (string, error) {

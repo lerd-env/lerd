@@ -31,7 +31,7 @@ func FPMContainersWanted() bool {
 
 func CoreUnits() []string {
 	cfg, _ := config.LoadGlobal()
-	units := []string{podman.WebServerUnit}
+	units := []string{podman.WebServerUnit()}
 	if cfg == nil || cfg.DNS.Enabled {
 		units = append([]string{"lerd-dns"}, units...)
 	}

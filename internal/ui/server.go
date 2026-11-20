@@ -872,7 +872,7 @@ func buildStatus() StatusResponse {
 	}
 
 	dnsStatus := dns.CheckStatus(tld)
-	nginxRunning := podman.Cache.Running(podman.WebServerUnit)
+	nginxRunning := podman.Cache.Running(podman.WebServerUnit())
 	watcherRunning := services.Mgr.IsActive("lerd-watcher")
 
 	versions, _ := phpPkg.InstalledForRuntime()
@@ -924,7 +924,7 @@ func buildStatus() StatusResponse {
 	}
 	return StatusResponse{
 		DNS:                   DNSStatus{OK: dnsStatus == dns.StatusOK, Status: string(dnsStatus), VPN: dns.VPNActive(), Enabled: dnsEnabled, TLD: tld},
-		Nginx:                 ServiceCheck{Running: nginxRunning, UpdateAvailable: nginxRunning && cachedUpdate(updates, podman.WebServerUnit, podman.NginxUpdateAvailable)},
+		Nginx:                 ServiceCheck{Running: nginxRunning, UpdateAvailable: nginxRunning && cachedUpdate(updates, podman.WebServerUnit(), podman.NginxUpdateAvailable)},
 		PHPFPMs:               phpStatuses,
 		PHPDefault:            phpDefault,
 		NodeDefault:           nodeDefault,

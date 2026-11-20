@@ -68,7 +68,7 @@ func TestOnlyTheSeamImportsNginx(t *testing.T) {
 	}
 }
 
-// The web server's container is named once, as podman.WebServerUnit, so the
+// The web server's container is named once, as podman.WebServerUnit(), so the
 // LAN bind policy, readiness probes and logs follow whichever server runs.
 func TestOnlyOnePlaceNamesTheWebServerContainer(t *testing.T) {
 	root, err := filepath.Abs("../..")
@@ -94,7 +94,7 @@ func TestOnlyOnePlaceNamesTheWebServerContainer(t *testing.T) {
 				return err
 			}
 			if n := strings.Count(string(data), `"lerd-nginx"`); n > 0 {
-				t.Errorf("%s names \"lerd-nginx\" %d times; use podman.WebServerUnit", rel, n)
+				t.Errorf("%s names \"lerd-nginx\" %d times; use podman.WebServerUnit()", rel, n)
 			}
 			return nil
 		})

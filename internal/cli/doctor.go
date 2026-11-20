@@ -507,8 +507,8 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 	switch {
 	case storeHost == "":
 		// A store base with no hostname leaves nothing to look up.
-	case !podman.ContainerRunningQuiet(podman.WebServerUnit):
-		warn("internet DNS from containers", "skipped — lerd-nginx not running (start lerd first)")
+	case !podman.ContainerRunningQuiet(podman.WebServerUnit()):
+		warn("internet DNS from containers", "skipped — "+podman.WebServerUnit()+" not running (start lerd first)")
 	case podman.ResolvesFromNginx(storeHost):
 		ok(fmt.Sprintf("internet DNS from containers (%s)", storeHost))
 	default:
@@ -525,8 +525,8 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 	// host that moved them, probing the defaults reports a conflict that no
 	// config change can resolve (#1544).
 	httpPort, httpsPort := config.NginxPorts()
-	nginxRunning, _ := podman.ContainerRunning(podman.WebServerUnit)
-	nginxInstalled := services.Mgr.ContainerUnitInstalled(podman.WebServerUnit)
+	nginxRunning, _ := podman.ContainerRunning(podman.WebServerUnit())
+	nginxInstalled := services.Mgr.ContainerUnitInstalled(podman.WebServerUnit())
 	redirected := pfredirect.Redirected()
 	for _, p := range []int{httpPort, httpsPort} {
 		port := strconv.Itoa(p)
@@ -629,9 +629,9 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 	}
 
 	if detail, hint, healthy := nginxServiceFinding(nginxInstalled, nginxRunning); healthy {
-		ok("lerd-nginx service running")
+		ok(podman.WebServerUnit() + " service running")
 	} else {
-		fail("lerd-nginx service", detail, hint)
+		fail(podman.WebServerUnit()+" service", detail, hint)
 		if !nginxInstalled {
 			rep.fixLast(autoFix(fixInstall, "", "install the lerd services (lerd install)"))
 		}
@@ -704,8 +704,8 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 	// check surfaces the failure so the user gets a real diagnosis.
 	section = "Container → Host connectivity"
 	fmt.Fprintln(w, "\n[Container → Host connectivity]")
-	if !services.Mgr.IsActive(podman.WebServerUnit) {
-		warn("host reachability probe", "skipped — lerd-nginx not running (start lerd first)")
+	if !services.Mgr.IsActive(podman.WebServerUnit()) {
+		warn("host reachability probe", "skipped — "+podman.WebServerUnit()+" not running (start lerd first)")
 	} else if !services.Mgr.IsActive("lerd-ui") {
 		warn("host reachability probe", "skipped — lerd-ui not running (the probe targets its :7073 listener)")
 	} else if ip := podman.DetectHostGatewayIPProbeOnly(); ip != "" {

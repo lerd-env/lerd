@@ -194,13 +194,13 @@ func runStatus(_ *cobra.Command, _ []string) error {
 
 	// Nginx
 	fmt.Println("\n[Nginx]")
-	running, _ := podman.ContainerRunning(podman.WebServerUnit)
+	running, _ := podman.ContainerRunning(podman.WebServerUnit())
 	if running {
-		ok2("lerd-nginx container")
+		ok2(podman.WebServerUnit() + " container")
 	} else {
-		fail2("lerd-nginx container",
+		fail2(podman.WebServerUnit()+" container",
 			"not running",
-			serviceStatusHint(podman.WebServerUnit))
+			serviceStatusHint(podman.WebServerUnit()))
 	}
 
 	// PHP

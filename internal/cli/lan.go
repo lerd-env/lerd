@@ -86,7 +86,7 @@ func newLANExposeCmd() *cobra.Command {
 		Short: "Make lerd reachable from other devices on the local network",
 		Long: `Exposes lerd sites on a trusted local network:
 
-  - Rewrites lerd-nginx so ports 80 and 443 bind to the LAN.
+  - Rewrites the web server so ports 80 and 443 bind to the LAN.
   - Restarts nginx when its bind changes.
   - Rewrites dnsmasq to answer *.test with the host's LAN IP.
   - Starts the userspace DNS forwarder where the platform requires it.

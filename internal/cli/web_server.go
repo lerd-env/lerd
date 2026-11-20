@@ -55,11 +55,16 @@ var (
 		if err := podman.DaemonReloadFn(); err != nil {
 			return err
 		}
-		return podman.RestartUnit(podman.WebServerUnit)
+		return podman.RestartUnit(podman.WebServerUnit())
 	}
 	webServerHealthy = waitWebServerAnswers
 	webServerPull    = podman.PullImageIfMissing
 	webServerOnVM    = func() bool { return platform.Current.UsesMachineVM }
+	// webServerStop stops and removes the container of the server being left.
+	webServerStop = func(unit string) {
+		_ = podman.StopUnit(unit)
+		podman.RemoveContainer(unit)
+	}
 )
 
 // switchWebServer moves the sites to another web server and rolls back to the
@@ -108,6 +113,18 @@ func switchWebServer(to string, out io.Writer) error {
 // applyWebServer records the choice, writes what that server reads, and
 // restarts the web server unit onto it.
 func applyWebServer(kind string) error {
+	// The other server is stopped and its unit removed, so it cannot come back
+	// at the next login or be mistaken for the one serving.
+	for _, other := range []string{config.WebServerNginx, config.WebServerGo} {
+		if other == kind {
+			continue
+		}
+		unit := podman.WebServerUnitFor(other)
+		webServerStop(unit)
+		if err := podman.RemoveQuadlet(unit); err != nil {
+			return fmt.Errorf("removing %s: %w", unit, err)
+		}
+	}
 	cfg, err := config.LoadGlobal()
 	if err != nil {
 		return err

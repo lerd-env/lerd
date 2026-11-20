@@ -66,7 +66,7 @@ const fpmRestartReadyTimeout = 30 * time.Second
 // milliseconds. Best effort: nginx not running is not this function's problem,
 // and the caller's restart still succeeded.
 var dropNginxUpstreamCache = func() {
-	_, _ = Run("exec", WebServerUnit, "nginx", "-s", "reload")
+	_, _ = Run("exec", WebServerUnit(), "nginx", "-s", "reload")
 }
 
 // waitFPMAccepting polls the same in-container probe EnsureFPMReady uses, but

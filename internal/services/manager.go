@@ -57,7 +57,7 @@ type ServiceManager interface {
 	RemoveContainerUnit(name string) error
 
 	// ListContainerUnits returns container unit names whose files match nameGlob.
-	// e.g. nameGlob="lerd-*" → ["lerd-dns", podman.WebServerUnit, …]
+	// e.g. nameGlob="lerd-*" → ["lerd-dns", podman.WebServerUnit(), …]
 	ListContainerUnits(nameGlob string) []string
 
 	// --- Service lifecycle ---

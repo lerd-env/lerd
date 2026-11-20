@@ -35,6 +35,9 @@ func stubWebServerSwitch(t *testing.T, vm bool, health ...error) *int {
 	}
 	webServerPull = func(string) error { return nil }
 	webServerOnVM = func() bool { return vm }
+	prevStop := webServerStop
+	t.Cleanup(func() { webServerStop = prevStop })
+	webServerStop = func(string) {}
 	return restarts
 }
 
@@ -50,8 +53,13 @@ func currentWebServer(t *testing.T) string {
 
 func readUnit(t *testing.T) string {
 	t.Helper()
-	data, _ := os.ReadFile(filepath.Join(config.QuadletDir(), podman.WebServerUnit+".container"))
+	data, _ := os.ReadFile(filepath.Join(config.QuadletDir(), podman.WebServerUnit()+".container"))
 	return string(data)
+}
+
+func unitFileExists(name string) bool {
+	_, err := os.Stat(filepath.Join(config.QuadletDir(), name+".container"))
+	return err == nil
 }
 
 func TestSwitchWebServer_toGoRewritesTheUnitAndRestarts(t *testing.T) {
@@ -61,6 +69,10 @@ func TestSwitchWebServer_toGoRewritesTheUnitAndRestarts(t *testing.T) {
 	}
 	if currentWebServer(t) != config.WebServerGo || *restarts != 1 || !strings.Contains(readUnit(t), "lerd web-serve") {
 		t.Fatalf("kind %s restarts %d unit:\n%s", currentWebServer(t), *restarts, readUnit(t))
+	}
+	// nginx is gone, not merely idle: its unit no longer exists to start.
+	if unitFileExists("lerd-nginx") || !unitFileExists("lerd-web") {
+		t.Errorf("units: nginx %v, web %v", unitFileExists("lerd-nginx"), unitFileExists("lerd-web"))
 	}
 }
 
@@ -74,6 +86,9 @@ func TestSwitchWebServer_unhealthyRollsBack(t *testing.T) {
 	}
 	if currentWebServer(t) != config.WebServerNginx || *restarts != 2 || strings.Contains(readUnit(t), "lerd web-serve") {
 		t.Fatalf("not rolled back: kind %s restarts %d unit:\n%s", currentWebServer(t), *restarts, readUnit(t))
+	}
+	if unitFileExists("lerd-web") {
+		t.Error("the failed server's unit survived the rollback")
 	}
 }
 
@@ -117,6 +132,9 @@ func TestSwitchWebServer_backToNginxRewritesItsUnit(t *testing.T) {
 	}
 	if currentWebServer(t) != config.WebServerNginx || !strings.Contains(readUnit(t), "nginx:alpine") {
 		t.Fatalf("kind %s unit:\n%s", currentWebServer(t), readUnit(t))
+	}
+	if unitFileExists("lerd-web") {
+		t.Error("lerd's own server's unit survived the switch back")
 	}
 	if _, err := os.Stat(filepath.Join(config.NginxConfD(), "lerd.localhost.conf")); err != nil {
 		t.Errorf("nginx config not rebuilt: %v", err)

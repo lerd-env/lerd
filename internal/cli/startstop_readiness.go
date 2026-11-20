@@ -16,7 +16,7 @@ const serviceReadyTimeout = 30 * time.Second
 
 // nonEngineUnits are started alongside the engines but answer no readiness
 // probe, so waiting on them would add latency to every start for nothing.
-var nonEngineUnits = map[string]bool{"lerd-ui": true, "lerd-watcher": true, podman.WebServerUnit: true, "lerd-dns": true}
+var nonEngineUnits = map[string]bool{"lerd-ui": true, "lerd-watcher": true, podman.WebServerUnit(): true, "lerd-dns": true}
 
 // serviceNamesForReadiness turns the started unit list into the service names
 // worth probing: the engines, without the daemons and timers that have nothing

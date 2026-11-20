@@ -4,7 +4,7 @@ After=network.target
 
 [Container]
 Image=docker.io/library/alpine:latest
-ContainerName=lerd-nginx
+ContainerName=lerd-web
 Network=lerd
 PublishPort=80:80
 PublishPort=443:443

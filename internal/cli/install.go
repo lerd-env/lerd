@@ -95,7 +95,7 @@ func ok()               { fmt.Println(feedback.Green("✓")) }
 // dnsmasq, and the macOS gvproxy forward are not reported as conflicts.
 func portPreflightConflicts(portList string, containerRunning func(string) bool, dnsAnswering func() bool) []PortCheck {
 	var conflicts []PortCheck
-	for _, c := range CollectPortChecks([]string{podman.WebServerUnit, "lerd-dns"}) {
+	for _, c := range CollectPortChecks([]string{podman.WebServerUnit(), "lerd-dns"}) {
 		if isPortConflict(c, portList, containerRunning, dnsAnswering) {
 			conflicts = append(conflicts, c)
 		}
@@ -138,19 +138,19 @@ func nginxStartError(startErr error, conflicts []PortCheck, holder string) error
 	}
 	var ports []string
 	for _, c := range conflicts {
-		if c.Container == podman.WebServerUnit {
+		if c.Container == podman.WebServerUnit() {
 			ports = append(ports, c.Port)
 		}
 	}
 	if len(ports) == 0 {
-		return fmt.Errorf("lerd-nginx did not start, so no site is served; run lerd doctor to see why")
+		return fmt.Errorf("%s did not start, so no site is served; run lerd doctor to see why", podman.WebServerUnit())
 	}
 	if holder == "" {
 		holder = "another process"
 	}
 	// Without sudo, ss and lsof hide a root-owned listener such as a system nginx.
-	return fmt.Errorf("lerd-nginx did not start, so no site is served: port %s is already in use by %s (find it: sudo %s); stop it, then run lerd install again",
-		strings.Join(ports, "/"), holder, FindListenerCmd(ports[0]))
+	return fmt.Errorf("%s did not start, so no site is served: port %s is already in use by %s (find it: sudo %s); stop it, then run lerd install again",
+		podman.WebServerUnit(), strings.Join(ports, "/"), holder, FindListenerCmd(ports[0]))
 }
 
 // Seams for tests.
@@ -651,7 +651,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	}
 
 	step("Writing nginx quadlet")
-	if err := rewriteEmbedded(podman.WebServerUnit); err != nil {
+	if err := rewriteEmbedded(podman.WebServerUnit()); err != nil {
 		return err
 	}
 	ok()
@@ -755,7 +755,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// lerd-dns; doing pulls first ensures the system DNS is intact for all
 	// registry traffic (docker.io, ghcr.io, etc.).
 	// The nginx image is declared once, in the quadlet template.
-	nginxImage := podman.ServiceImage(podman.WebServerUnit)
+	nginxImage := podman.ServiceImage(podman.WebServerUnit())
 	pullJobs := []BuildJob{
 		{
 			Label: "Pulling " + nginxImage,
@@ -804,7 +804,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// actually changed during this install run, EXCEPT lerd-nginx /
 	// lerd-dns (handled separately) and anything we just started above.
 	for _, name := range changedQuadlets {
-		if name == podman.WebServerUnit || name == "lerd-dns" || migratedSet[name] {
+		if name == podman.WebServerUnit() || name == "lerd-dns" || migratedSet[name] {
 			continue
 		}
 		if running, _ := podman.ContainerRunning(name); !running {
@@ -850,10 +850,10 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 	var nginxErr error
 	if autostartOn {
-		running, _ := podman.ContainerRunning(podman.WebServerUnit)
-		if nginxNeedsRestart(running, loopbackRedirectAdded || slices.Contains(changedQuadlets, podman.WebServerUnit), podman.ContainerImageID(podman.WebServerUnit), podman.LocalImageID(nginxImage)) {
+		running, _ := podman.ContainerRunning(podman.WebServerUnit())
+		if nginxNeedsRestart(running, loopbackRedirectAdded || slices.Contains(changedQuadlets, podman.WebServerUnit()), podman.ContainerImageID(podman.WebServerUnit()), podman.LocalImageID(nginxImage)) {
 			step("Starting lerd-nginx")
-			if nginxErr = services.Mgr.Restart(podman.WebServerUnit); nginxErr != nil {
+			if nginxErr = services.Mgr.Restart(podman.WebServerUnit()); nginxErr != nil {
 				fmt.Printf("    WARN: %v\n", nginxErr)
 			} else {
 				ok()
@@ -2047,7 +2047,7 @@ func defaultPresetsToRefresh(names []string, installed func(unit string) bool, k
 // nginxPortHolder names the first process found on one of lerd-nginx's busy ports.
 func nginxPortHolder(conflicts []PortCheck) string {
 	for _, c := range conflicts {
-		if c.Container != podman.WebServerUnit {
+		if c.Container != podman.WebServerUnit() {
 			continue
 		}
 		if h := PortHolder(c.Port); h != "" {

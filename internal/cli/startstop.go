@@ -319,11 +319,11 @@ func CollectPortChecks(units []string) []PortCheck {
 	var checks []PortCheck
 
 	// Nginx ports (configurable).
-	if unitSet[podman.WebServerUnit] {
+	if unitSet[podman.WebServerUnit()] {
 		httpPort, httpsPort := config.NginxPorts()
 		checks = append(checks,
-			PortCheck{strconv.Itoa(httpPort), "nginx HTTP", podman.WebServerUnit},
-			PortCheck{strconv.Itoa(httpsPort), "nginx HTTPS", podman.WebServerUnit},
+			PortCheck{strconv.Itoa(httpPort), "nginx HTTP", podman.WebServerUnit()},
+			PortCheck{strconv.Itoa(httpsPort), "nginx HTTPS", podman.WebServerUnit()},
 		)
 	}
 
@@ -621,7 +621,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 		fmt.Printf("  WARN: nginx quadlet: %v\n", err)
 	} else if quadletChanged {
 		_ = podman.DaemonReloadFn()
-		if err := podman.RestartUnit(podman.WebServerUnit); err != nil {
+		if err := podman.RestartUnit(podman.WebServerUnit()); err != nil {
 			fmt.Printf("  WARN: restarting nginx on the new ports: %v\n", err)
 		}
 	}
@@ -683,7 +683,7 @@ func startLerd(emit func(StartEvent), skip []string) error {
 
 	// Reload nginx if it is already running so regenerated base vhosts (the
 	// dashboard and profiler vhosts) take effect without a full restart.
-	if running, _ := podman.ContainerRunning(podman.WebServerUnit); running {
+	if running, _ := podman.ContainerRunning(podman.WebServerUnit()); running {
 		_ = webserver.Reload()
 	}
 

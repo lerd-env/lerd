@@ -474,8 +474,8 @@ func dumpNetwork(w io.Writer) {
 	fmt.Fprintln(w)
 
 	fmt.Fprintln(w, "── host gateway probe (host.containers.internal)")
-	if !services.Mgr.IsActive(podman.WebServerUnit) || !services.Mgr.IsActive("lerd-ui") {
-		fmt.Fprintln(w, "skipped: lerd-nginx and/or lerd-ui not running")
+	if !services.Mgr.IsActive(podman.WebServerUnit()) || !services.Mgr.IsActive("lerd-ui") {
+		fmt.Fprintln(w, "skipped: "+podman.WebServerUnit()+" and/or lerd-ui not running")
 	} else if ip := podman.DetectHostGatewayIPProbeOnly(); ip != "" {
 		fmt.Fprintf(w, "reachable via %s\n", ip)
 	} else {
@@ -727,13 +727,13 @@ func tldSuffix(domain string) string {
 // help debug lerd itself. State for preset services still appears in the
 // unit-state and container tables.
 var lerdInfraUnits = map[string]struct{}{
-	podman.WebServerUnit: {},
-	"lerd-ui":            {},
-	"lerd-watcher":       {},
-	"lerd-dns":           {},
-	"lerd-tray":          {},
-	"lerd-autostart":     {},
-	"lerd-fpm-init":      {},
+	podman.WebServerUnit(): {},
+	"lerd-ui":              {},
+	"lerd-watcher":         {},
+	"lerd-dns":             {},
+	"lerd-tray":            {},
+	"lerd-autostart":       {},
+	"lerd-fpm-init":        {},
 }
 
 // isContentUnit reports whether logs for this unit should be skipped.
