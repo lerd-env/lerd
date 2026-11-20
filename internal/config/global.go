@@ -87,7 +87,11 @@ type GlobalConfig struct {
 	// lerd, written only into a project that already has a .idea directory. Set
 	// false to leave every IDE file alone.
 	IDEDataSource *bool `yaml:"ide_data_source,omitempty" mapstructure:"ide_data_source"`
-	PHP           struct {
+	// MultiUser hands lerd's ports between users of one machine: the watcher
+	// releases the stack while another user's desktop is on screen and starts
+	// it again when ours is back. Off by default, Linux only.
+	MultiUser bool `yaml:"multi_user,omitempty" mapstructure:"multi_user"`
+	PHP       struct {
 		DefaultVersion string            `yaml:"default_version" mapstructure:"default_version"`
 		XdebugEnabled  map[string]bool   `yaml:"xdebug_enabled"  mapstructure:"xdebug_enabled"`
 		XdebugMode     map[string]string `yaml:"xdebug_mode,omitempty" mapstructure:"xdebug_mode"`

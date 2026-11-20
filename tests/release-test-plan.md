@@ -70,7 +70,8 @@ list` and self-heal; phase 7's `lerd worktree add`, its 200, bare-git add and
 an item whose phase touches a changed package (for example `internal/dns`,
 `internal/nginx` or `internal/certs` for phase 3, `internal/serviceops` for
 phase 5, `internal/ui` for phase 10, `internal/plugins`, `internal/mcp` and
-`internal/siteops` for phase 15) runs; when the diff leaves its packages
+`internal/siteops` for phase 15, `internal/watcher` and `internal/systemd`
+for phase 16) runs; when the diff leaves its packages
 alone it may be recorded as `CARRIED <commit>`, naming the candidate it last
 passed on, with that run's evidence. When in doubt it runs. Nothing is carried
 across more than one minor release.
@@ -1390,6 +1391,31 @@ prove what it draws through the API it reads.
       `lerd plugin schedule <name> on`, then runs about once a minute with
       `LERD_SCHEDULE` set and its output in `schedule.log`; `off` stops it, and
       removing the plugin forgets the answer
+
+## Phase 16 — two users on one machine (Linux)
+
+Runs on its own guest state: it installs the build in `~/rc` when lerd is
+missing, makes a second user `lerdvm2` with its own install of the same build,
+and links one plain PHP site for each user, `vmmuself` and `vmmuother`. Who is
+on screen is driven through logind's seat0: each user gets a console login on a
+spare VT and `chvt` switches between them, so the guest needs a seat and
+passwordless sudo, and is skipped with that reason when it has no seat0. The
+second user is kept between runs, its stack is quit at the end, and multi-user
+mode is turned off again for both users.
+
+- [ ] While our lerd runs, the second user's `lerd install` names us as the
+      user holding the ports and tells us to run `lerd quit`
+- [ ] Its `lerd start` names us the same way
+- [ ] After our `lerd quit`, its `lerd start` serves its site, and the
+      dashboard on 7073 lists its site and none of ours
+- [ ] With `lerd multi-user enable` on for both users, putting the second
+      user's console on screen hands it ports 80, 443, 5300 and 7073, and its
+      site answers within 90 seconds
+- [ ] Switching back hands the ports back, our site answers **http → 200** and
+      our dashboard lists our site again
+- [ ] A stack stopped by hand with `lerd stop` stays stopped across a switch
+      away and back: only `lerd-ui` and `lerd-dns` come back, `lerd-nginx`
+      stays inactive
 
 ## Sign-off
 
