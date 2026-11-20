@@ -9,6 +9,7 @@ import (
 	"image/color"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1046,5 +1047,9 @@ func Ask(question string) string {
 			break
 		}
 	}
-	return strings.TrimSpace(string(line))
+	return strings.TrimSpace(terminalKeys.ReplaceAllString(string(line), ""))
 }
+
+// terminalKeys matches what a cooked terminal passes through for keys that are
+// not text: arrow and function key escape sequences, and stray control bytes.
+var terminalKeys = regexp.MustCompile(`\x1b(\[[0-9;?]*[ -/]*[@-~]|O.|.)?|[\x00-\x1f\x7f]`)
