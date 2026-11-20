@@ -137,6 +137,9 @@ type Framework struct {
 	// Nginx, when set, declares extra server-block config the framework needs
 	// (Magento's /setup, /static, and /media handling). See FrameworkNginx.
 	Nginx *FrameworkNginx `yaml:"nginx,omitempty"`
+	// Web is what lerd's own web server needs where nginx takes a snippet:
+	// paths served from another directory.
+	Web *FrameworkWeb `yaml:"web,omitempty"`
 	// FrontController makes index.php the only script nginx hands to PHP: a
 	// URL naming any other .php file is rewritten onto it, for apps whose
 	// router owns those paths (GLPI 11). Plain data, so a project may set it.
@@ -183,6 +186,19 @@ func (s DevtoolsSeam) Target() (kind, name string) {
 	default:
 		return "class", s.Class
 	}
+}
+
+// FrameworkWeb is the declarative part of a framework's serving rules, read by
+// lerd's own web server, which cannot take an nginx snippet.
+type FrameworkWeb struct {
+	Roots []FrameworkWebRoot `yaml:"roots,omitempty"`
+}
+
+// FrameworkWebRoot serves Path, and anything under it, from Root, which takes
+// the {{root}} (project) and {{public}} (document root) placeholders.
+type FrameworkWebRoot struct {
+	Path string `yaml:"path"`
+	Root string `yaml:"root"`
 }
 
 // FrameworkNginx carries a raw nginx block spliced into the site's server block
@@ -2105,6 +2121,9 @@ func SanitizeProjectFrameworkDef(def *Framework) *Framework {
 	// An nginx snippet is spliced into the site's server block, so it is a
 	// config-injection surface: only the trusted store may declare one.
 	safe.Nginx = nil
+	// A web root serves files from the directory it names, so it is trusted
+	// from the store alone, the same as the nginx snippet it stands in for.
+	safe.Web = nil
 	// A required service pulls an image and starts a container, so an untrusted
 	// definition must not be able to drive that either.
 	safe.Requires = nil

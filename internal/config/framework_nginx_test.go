@@ -85,3 +85,15 @@ func TestSanitizeProjectFrameworkDefKeepsFrontController(t *testing.T) {
 		t.Fatal("front_controller was stripped from the project definition")
 	}
 }
+
+// A web root serves files from where it names, so a project's own definition
+// may not declare one: only the trusted store may.
+func TestSanitizeProjectFrameworkDefStripsWebRoots(t *testing.T) {
+	def := &Framework{Name: "x", Web: &FrameworkWeb{Roots: []FrameworkWebRoot{{Path: "/files", Root: "/etc"}}}}
+	if safe := SanitizeProjectFrameworkDef(def); safe.Web != nil {
+		t.Fatalf("web roots survived sanitising: %+v", safe.Web)
+	}
+	if def.Web == nil {
+		t.Fatal("sanitising mutated the caller's definition")
+	}
+}

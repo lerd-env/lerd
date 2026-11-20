@@ -24,7 +24,7 @@ Workers from the user overlay and project `.lerd.yaml` are merged on top of stor
 `lerd install` seeds the store: it pulls the index early, so detection sees the whole published catalogue rather than only the frameworks compiled into the binary, then fetches every definition the index lists. A fresh machine therefore ends up with the same definitions an established one has, and resolves any of them offline, instead of collecting them one at a time as the projects that need each one turn up. The refresh keeps any definition you already have that the store has since stopped publishing, and the watcher refreshes the index every six hours. An install that cannot reach the store keeps working on the built-ins and seeds itself on the next run.
 
 ::: warning Untrusted projects
-A `.lerd.yaml` ships inside a project, so its embedded `framework_def` is treated as untrusted, and lerd strips its host-execution surfaces when restoring it into the store: `command`-type doctor checks, `host: true` workers, the whole `commands:` list, the `nginx:` block, `requires:`, `vendor_bin_args:`, `vendor_bin_tools:`, and `php.cli_ini` are dropped, because each would otherwise run on your host, rewrite your nginx config, or start containers straight from a cloned repo. Those run only for frameworks that come from the store, a built-in, or your user overlay (`~/.config/lerd/frameworks/`); a definition already installed there is never overwritten by a project's embedded copy. In-container workers, env, symlink, and combo checks are inert and still work from a project definition.
+A `.lerd.yaml` ships inside a project, so its embedded `framework_def` is treated as untrusted, and lerd strips its host-execution surfaces when restoring it into the store: `command`-type doctor checks, `host: true` workers, the whole `commands:` list, the `nginx:` and `web:` blocks, `requires:`, `vendor_bin_args:`, `vendor_bin_tools:`, and `php.cli_ini` are dropped, because each would otherwise run on your host, rewrite your nginx config, or start containers straight from a cloned repo. Those run only for frameworks that come from the store, a built-in, or your user overlay (`~/.config/lerd/frameworks/`); a definition already installed there is never overwritten by a project's embedded copy. In-container workers, env, symlink, and combo checks are inert and still work from a project definition.
 
 A project's own host extensions still work, just with consent: a `host: true` entry in top-level `custom_workers`, and any top-level `commands:` you run via `lerd run` or the dashboard, prompt once showing the exact command before they run on your host, and the approval is remembered per site. Set `host_commands.skip_confirmation: true` (or `host_commands.disabled: true` to refuse them outright) in the global config to change that.
 :::
@@ -836,6 +836,19 @@ A name must be a plain identifier and a value must not contain `{`, `}`, `;`, `#
 An app whose router owns its `.php` URLs needs no snippet at all. `front_controller: true` makes `index.php` the only script nginx runs: a request for any other `.php` file is rewritten onto it, with the original URL still in `REQUEST_URI`, and `PATH_INFO` is split off for URLs like `/index.php/api/status`. GLPI 11 is the case it exists for, where `/front/central.php` is a route rather than a file on disk. It is plain routing rather than raw config, so unlike the snippet it is kept in an embedded `framework_def`, and a project can also set it on its own in `.lerd.yaml` (see [nginx overrides](nginx-overrides.md#a-single-front-controller)).
 
 This is distinct from the per-site [nginx override](nginx-overrides.md) in `custom.d/`, which you author yourself and which is included at the *end* of the server block. Use the framework snippet for what every site of that framework needs; use the override for what one site needs.
+
+### Serving rules for lerd's own web server
+
+lerd's built-in Go web server cannot read an nginx snippet, so a framework that needs a path served from somewhere other than its document root declares it as data under `web.roots`. Each entry serves `path`, and everything under it, from `root`, PHP included, before lerd's own routing. Magento's setup wizard, which lives outside `pub/`, is the case it exists for:
+
+```yaml
+web:
+  roots:
+    - path: /setup
+      root: "{{root}}"
+```
+
+`root` must start with `{{root}}` (the project) or `{{public}}` (its document root) and may not contain `..`, so a definition can only ever serve files from inside the project. An entry that breaks either rule, or uses any other placeholder, is skipped with a message naming it rather than guessed at. Like the nginx block, `web` is stripped from an embedded `framework_def` in a project's `.lerd.yaml`. A framework that sets both keys keeps working on either web server; an older lerd ignores `web` entirely.
 
 ## Framework detection
 

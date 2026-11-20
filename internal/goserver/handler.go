@@ -18,6 +18,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/fcgi"
 	"github.com/geodro/lerd/internal/sitephp"
+	"github.com/geodro/lerd/internal/webcustom"
 )
 
 // Handler serves every registered site by Host, the way lerd's nginx vhosts do.
@@ -82,6 +83,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if wt, wtBranch, ok := worktreeSite(site, domain, r.Host); ok {
 		site, branch = wt, wtBranch
 	}
+	customDomain := site.PrimaryDomain()
+	if branch != "" {
+		customDomain = strings.ToLower(hostOnly(r.Host))
+	}
+	custom, err := webcustom.For(customDomain)
+	if err != nil {
+		log.Printf("lerd web server: %v", err)
+		http.Error(w, "lerd: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if applyCustom(w, r, custom) {
+		return
+	}
 	if h.servePageEndpoints(w, r, site, branch) {
 		return
 	}
@@ -98,7 +112,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	h.servePHPSite(w, r, site, branch)
+	h.servePHPSite(w, r, site, branch, custom)
 }
 
 // siteFor matches a host to the site that owns it or a subdomain of it, the
@@ -126,7 +140,7 @@ func (h *Handler) siteFor(hostport string) (config.Site, string, bool) {
 // servePHPSite mirrors `try_files $uri $uri/ /index.php?$query_string`: a real
 // file is sent as is, a PHP file or a directory's index.php runs itself, and
 // anything else goes to the front controller.
-func (h *Handler) servePHPSite(w http.ResponseWriter, r *http.Request, site config.Site, branch string) {
+func (h *Handler) servePHPSite(w http.ResponseWriter, r *http.Request, site config.Site, branch string, custom webcustom.Custom) {
 	publicDir := config.PublicDirFor(site)
 	root := filepath.Join(site.Path, publicDir)
 	if real, err := filepath.EvalSymlinks(root); err == nil {
@@ -141,7 +155,13 @@ func (h *Handler) servePHPSite(w http.ResponseWriter, r *http.Request, site conf
 		http.Error(w, "403 Forbidden", http.StatusForbidden)
 		return
 	}
-	script, pathInfo, static := phpScript(root, urlPath, sitephp.FrontController(site))
+	frontController := sitephp.FrontController(site)
+	if alt, ok := customRoot(custom, urlPath, site.Path, root); ok {
+		root, frontController = alt, false
+	} else if alt, ok := customRoot(frameworkRoots(site), urlPath, site.Path, root); ok {
+		root, frontController = alt, false
+	}
+	script, pathInfo, static := phpScript(root, urlPath, frontController)
 	if static != "" {
 		http.ServeFile(w, r, static)
 		return
@@ -167,6 +187,9 @@ func (h *Handler) servePHPSite(w http.ResponseWriter, r *http.Request, site conf
 		for _, p := range kept {
 			params[p.Name] = p.Value
 		}
+	}
+	for k, v := range custom.FastCGIParams {
+		params[k] = v
 	}
 	timeout := time.Duration(sitephp.RequestTimeout(site.Path, site.PHPVersion)) * time.Second
 	if err := fcgi.Serve(w, r, h.Upstream(site), params, timeout); err != nil {
