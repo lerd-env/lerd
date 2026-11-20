@@ -275,8 +275,10 @@ func TestStartService_sharesTheStartWithEnsureCallers(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			// One explicit start: a second one that arrives after the first
+			// finished is a start of its own, so two would only meet by timing.
 			call := EnsureServiceRunning
-			if i%4 == 0 {
+			if i == 0 {
 				call = StartService
 			}
 			if err := call("proj-db"); err != nil {
