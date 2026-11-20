@@ -783,10 +783,9 @@ func startHostProxy(domain string, httpPort, httpsPort int, secured bool) (int, 
 	return port, func() { srv.Close() }, nil
 }
 
-// tunnelPublicHost returns the public host a tunnel request was made to. Most
-// tunnels keep it in the Host header, but Expose rewrites Host to the local
-// address it forwards to (127.0.0.1:<port>) and sends the public host as
-// X-Forwarded-Host instead, so that header wins when the tunnel set it.
+// tunnelPublicHost prefers the X-Forwarded-Host a tunnel set: Expose rewrites
+// Host to the proxy's own 127.0.0.1 address and sends the public host there.
+// Other tunnels keep the public host in Host.
 func tunnelPublicHost(req *http.Request) string {
 	forwarded, _, _ := strings.Cut(req.Header.Get("X-Forwarded-Host"), ",")
 	if forwarded = strings.TrimSpace(forwarded); forwarded != "" {
