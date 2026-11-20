@@ -34,3 +34,7 @@ func FindListenerCmd(port string) string {
 
 // PortHolder is not looked up on macOS; the error falls back to the find command.
 func PortHolder(string) string { return "" }
+
+// OtherUserLerd is Linux-only: a macOS user's lerd lives in their own podman
+// machine, so it does not take another user's host ports in the same way.
+func OtherUserLerd() string { return "" }
