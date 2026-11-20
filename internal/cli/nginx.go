@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/geodro/lerd/internal/config"
@@ -57,6 +58,18 @@ func NewNginxCmd() *cobra.Command {
 			"included inside the block that serves the site, the only place a\n" +
 			"fastcgi_param or proxy_set_header override takes effect, and\n" +
 			"--branch to target a worktree's override instead of the main branch's.",
+		// nginx is removed while lerd's own web server serves, so its overrides
+		// would do nothing; say where the running server's settings are.
+		PersistentPreRunE: func(*cobra.Command, []string) error {
+			cfg, err := config.LoadGlobal()
+			if err != nil {
+				return err
+			}
+			if kind, _ := cfg.WebServerKind(); kind == config.WebServerGo {
+				return errors.New("lerd's own web server is serving, so nginx is not running: use lerd web-server show, edit or reset for its settings, or lerd web-server nginx to switch back")
+			}
+			return nil
+		},
 	}
 	cmd.AddCommand(newNginxShowCmd(), newNginxEditCmd(), newNginxResetCmd(), newNginxUpdateCmd())
 	return cmd

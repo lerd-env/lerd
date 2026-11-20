@@ -18,7 +18,7 @@ func NewBrowserLogsCmd() *cobra.Command {
 		Use:   "browser-logs",
 		Short: "Capture JavaScript errors from your sites' pages",
 		Long: `Turn browser logs on or off for a site, the one in this directory unless
-one is named. While debug capture is on (lerd dump on), nginx injects a small
+one is named. While debug capture is on (lerd dump on), the web server injects a small
 script into the HTML of every site that opted in, which reports uncaught errors,
 unhandled promise rejections and, per site, console messages and failed
 requests to the dashboard's Debug view and the MCP diag tool. Settings are

@@ -70,3 +70,21 @@ func TestWebServerSettings_globalShowEditReset(t *testing.T) {
 		t.Error("reset left the file")
 	}
 }
+
+// While lerd's own web server serves, nginx is gone, so lerd nginx refuses and
+// points at the command that edits what the running server reads.
+func TestNginxCmd_refusesWhileLerdServes(t *testing.T) {
+	stubWebServerSwitch(t, false)
+	if err := switchWebServer("go", &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	cmd := NewNginxCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"show", "--path"})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "lerd web-server") {
+		t.Fatalf("lerd nginx ran under lerd's own server: %v %q", err, out.String())
+	}
+}

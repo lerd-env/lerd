@@ -395,7 +395,7 @@ func buildTunnelCommand(tool *shareTool, tunnelName string, target shareTarget, 
 		}
 		stop = stopProxy
 		if !headless {
-			fmt.Printf("Local proxy started on port %d (Host: %s → nginx:%d)\n\n", proxyPort, target.domain, httpPort)
+			fmt.Printf("Local proxy started on port %d (Host: %s → web server :%d)\n\n", proxyPort, target.domain, httpPort)
 		}
 		args := []string{
 			"-o", "StrictHostKeyChecking=no",

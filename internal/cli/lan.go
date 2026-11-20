@@ -186,7 +186,7 @@ func newLANShareCmd() *cobra.Command {
 proxy on 0.0.0.0:<port>. Any device on the same network can reach the site
 at http://<your-LAN-IP>:<port> without configuring DNS or a resolver.
 
-The proxy rewrites the Host header so nginx routes correctly, and rewrites
+The proxy rewrites the Host header so the web server routes correctly, and rewrites
 absolute URLs in HTML/CSS/JS responses so asset and redirect URLs point to
 the LAN address instead of the .test domain.
 
