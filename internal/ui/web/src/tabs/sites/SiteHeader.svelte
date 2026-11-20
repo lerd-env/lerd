@@ -43,7 +43,7 @@
   import { accessMode } from '$stores/accessMode';
   import { editors, loadEditors } from '$stores/editors';
   import { idleEnabled } from '$stores/idle';
-  import { status, loadStatus } from '$stores/status';
+  import { status, loadStatus, goWebServer } from '$stores/status';
   import { xdebugOn, xdebugOff, type XdebugMode } from '$stores/xdebug';
   import { apiBase } from '$lib/api';
   import { homeShorten } from '$lib/path';
@@ -660,7 +660,7 @@
         {/if}
       </span>
 
-      {#if !site.paused}
+      {#if !site.paused && !$goWebServer}
         <button
           type="button"
           onclick={onOpenNginx}

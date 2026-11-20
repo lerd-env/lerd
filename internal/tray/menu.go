@@ -292,7 +292,11 @@ func (m *menuState) apply(snap *Snapshot) {
 	m.drawToggle()
 	m.busyMu.Unlock()
 
-	m.mNginx.SetTitle(fmt.Sprintf("  %s nginx", statusDot(snap.NginxRunning)))
+	label := snap.WebServerLabel
+	if label == "" {
+		label = "nginx"
+	}
+	m.mNginx.SetTitle(fmt.Sprintf("  %s %s", statusDot(snap.NginxRunning), label))
 
 	switch {
 	case snap.DNSDisabled:

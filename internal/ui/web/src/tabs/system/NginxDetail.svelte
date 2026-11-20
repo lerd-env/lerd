@@ -9,16 +9,22 @@
   import { logHighlight } from '$lib/logHighlight';
   import { notifyLocalFailure, notifyLocalInfo } from '$lib/notify';
   import NginxConfigTab from './NginxConfigTab.svelte';
-  import { status, updateNginx, checkNginxUpdate, loadStatus } from '$stores/status';
+  import { status, updateNginx, checkNginxUpdate, loadStatus, goWebServer } from '$stores/status';
   import { accessMode } from '$stores/accessMode';
   import { m } from '../../paraglide/messages.js';
 
   type TabId = 'logs' | 'config';
   let active = $state<TabId>('logs');
-  const tabs: TabItem<TabId>[] = [
-    { id: 'logs', label: m.services_tabs_logs() },
-    { id: 'config', label: m.services_tabs_tuning() }
-  ];
+  // lerd's own web server has no nginx config to tune and no nginx image to
+  // update, so it shows its running state and logs alone.
+  const tabs = $derived<TabItem<TabId>[]>(
+    $goWebServer
+      ? [{ id: 'logs', label: m.services_tabs_logs() }]
+      : [
+          { id: 'logs', label: m.services_tabs_logs() },
+          { id: 'config', label: m.services_tabs_tuning() }
+        ]
+  );
 
   let updating = $state(false);
   let checking = $state(false);
@@ -56,12 +62,12 @@
 
 {#snippet trailing()}
   <div class="flex items-center gap-2">
-    {#if $status.nginx.update_available && $accessMode.localControl}
+    {#if $status.nginx.update_available && $accessMode.localControl && !$goWebServer}
       <DetailButton tone="success" onclick={applyUpdate} loading={updating} disabled={updating} title={m.system_nginx_updateHint()}>
         {m.services_update()}
       </DetailButton>
     {/if}
-    {#if $accessMode.localControl}
+    {#if $accessMode.localControl && !$goWebServer}
       <CheckUpdatesButton onclick={runCheck} {checking} title={m.system_nginx_checkTitle()} />
     {/if}
     <StatusPill
@@ -72,11 +78,11 @@
 {/snippet}
 
 <DetailPanel>
-  <DetailHeader title={m.system_nginx()} {trailing} />
+  <DetailHeader title={$goWebServer ? m.system_webServer() : m.system_nginx()} {trailing} />
   <DetailTabs {tabs} {active} onchange={(id) => (active = id)} />
-  {#if active === 'config'}
+  {#if active === 'config' && !$goWebServer}
     <NginxConfigTab />
-  {:else if active === 'logs'}
-    <LogViewer path="/api/logs/lerd-nginx" highlight={logHighlight} />
+  {:else}
+    <LogViewer path={$goWebServer ? '/api/logs/lerd-web' : '/api/logs/lerd-nginx'} highlight={logHighlight} />
   {/if}
 </DetailPanel>

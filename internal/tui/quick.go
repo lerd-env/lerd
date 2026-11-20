@@ -61,10 +61,14 @@ func (m *Model) quickActions() []quickAction {
 			})
 		}
 	}
-	add("Update nginx", "", func(m *Model) tea.Cmd {
-		m.setStatus("updating nginx…", 60*time.Second)
-		return tea.Sequence(runLerd("", "nginx", "update"), loadCmd())
-	})
+	// nginx is removed while lerd's own web server serves, so there is no
+	// image of it to update.
+	if !goWebServer() {
+		add("Update nginx", "", func(m *Model) tea.Cmd {
+			m.setStatus("updating nginx…", 60*time.Second)
+			return tea.Sequence(runLerd("", "nginx", "update"), loadCmd())
+		})
+	}
 	add("Add a service preset", "", func(m *Model) tea.Cmd { m.openPaletteIn("", "service preset "); return nil })
 	add("Run a lerd command…", ":", func(m *Model) tea.Cmd { m.openPalette(); return nil })
 	return out
@@ -327,7 +331,7 @@ func (m *Model) placeActions() []quickAction {
 	page("Settings", tabSites, detailSettings)
 	page("System", tabSites, detailSystem)
 	page("Debug window", tabSites, detailDumps)
-	for _, c := range coreProcesses {
+	for _, c := range coreProcesses() {
 		name := c.name
 		add("Go to", name, func(m *Model) tea.Cmd {
 			m.switchTab(tabCore)

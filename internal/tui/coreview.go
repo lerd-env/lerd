@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
 	"strings"
 	"time"
@@ -18,35 +19,58 @@ type coreProcess struct {
 	state func(StatusRow) (ok bool, word string)
 }
 
-var coreProcesses = []coreProcess{
-	{
-		name:  "dns",
-		about: "resolves the site domains to this machine",
-		logs:  LogTarget{Kind: kindJournal, ID: "lerd-dns", Label: "dns"},
-		state: func(s StatusRow) (bool, string) {
-			switch {
-			case s.DNSDisabled:
-				return true, "off"
-			case s.DNSOk:
-				return true, "resolving"
-			case s.DNSDegraded:
-				return false, "degraded"
-			}
-			return false, "down"
+// coreProcesses lists lerd's own processes. It is built on each use because
+// the web server's name and unit follow the server the config chooses.
+func coreProcesses() []coreProcess {
+	web := webServerLabel()
+	return []coreProcess{
+		{
+			name:  "dns",
+			about: "resolves the site domains to this machine",
+			logs:  LogTarget{Kind: kindJournal, ID: "lerd-dns", Label: "dns"},
+			state: func(s StatusRow) (bool, string) {
+				switch {
+				case s.DNSDisabled:
+					return true, "off"
+				case s.DNSOk:
+					return true, "resolving"
+				case s.DNSDegraded:
+					return false, "degraded"
+				}
+				return false, "down"
+			},
 		},
-	},
-	{
-		name:  "nginx",
-		about: "serves every site and proxies to PHP and the workers",
-		logs:  LogTarget{Kind: kindPodman, ID: podman.WebServerUnit(), Label: "nginx"},
-		state: func(s StatusRow) (bool, string) { return runningWord(s.NginxRunning) },
-	},
-	{
-		name:  "watcher",
-		about: "keeps workers, vhosts and config in step with your projects",
-		logs:  LogTarget{Kind: kindJournal, ID: "lerd-watcher", Label: "watcher"},
-		state: func(s StatusRow) (bool, string) { return runningWord(s.WatcherRunning) },
-	},
+		{
+			name:  web,
+			about: "serves every site and proxies to PHP and the workers",
+			logs:  LogTarget{Kind: kindPodman, ID: podman.WebServerUnit(), Label: web},
+			state: func(s StatusRow) (bool, string) { return runningWord(s.NginxRunning) },
+		},
+		{
+			name:  "watcher",
+			about: "keeps workers, vhosts and config in step with your projects",
+			logs:  LogTarget{Kind: kindJournal, ID: "lerd-watcher", Label: "watcher"},
+			state: func(s StatusRow) (bool, string) { return runningWord(s.WatcherRunning) },
+		},
+	}
+}
+
+// webServerLabel names what serves the sites: nginx, or "web server" while
+// lerd's own runs and nginx is gone.
+func webServerLabel() string {
+	if goWebServer() {
+		return "web server"
+	}
+	return "nginx"
+}
+
+func goWebServer() bool {
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return false
+	}
+	kind, _ := cfg.WebServerKind()
+	return kind == config.WebServerGo
 }
 
 func runningWord(ok bool) (bool, string) {
@@ -57,7 +81,7 @@ func runningWord(ok bool) (bool, string) {
 }
 
 func coreByName(name string) (coreProcess, bool) {
-	for _, c := range coreProcesses {
+	for _, c := range coreProcesses() {
 		if c.name == name {
 			return c, true
 		}

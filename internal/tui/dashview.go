@@ -42,7 +42,7 @@ func (m *Model) dashAlerts() []dashAlert {
 		}
 		out = append(out, dashAlert{title: "DNS is down", detail: []seg{sp(why, colDim)}})
 	}
-	core(st.NginxRunning, "nginx", "sites refuse connections until it runs")
+	core(st.NginxRunning, webServerLabel(), "sites refuse connections until it runs")
 	core(st.WatcherRunning, "The watcher", "workers and config changes are not being tracked")
 
 	for _, s := range m.snap.Sites {
@@ -400,7 +400,7 @@ func (m *Model) dashSystem(w int) []string {
 	}
 	facts := [][]seg{
 		kv("dns", dns...),
-		kv("nginx", state(st.NginxRunning, "running")...),
+		kv(webServerLabel(), state(st.NginxRunning, "running")...),
 		kv("watcher", state(st.WatcherRunning, "running")...),
 		kv("workers", workers...),
 		kv("autostart", onOff(st.Autostart)),

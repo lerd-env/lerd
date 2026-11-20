@@ -75,7 +75,7 @@ func (m *Model) sideItems() []sideItem {
 		}
 		items = append(items, sideItem{kind: sideService, key: "svc:" + s.Name, idx: i})
 	}
-	for _, c := range coreProcesses {
+	for _, c := range coreProcesses() {
 		items = append(items, sideItem{kind: sideCore, key: "core:" + c.name, text: c.name})
 	}
 	return items
@@ -400,7 +400,7 @@ func (m *Model) renderSidebar(w, h int) []string {
 	}
 
 	foot := []string{blank}
-	for _, c := range coreProcesses {
+	for _, c := range coreProcesses() {
 		ok, word := c.state(m.snap.Status)
 		glyph, fg := sp(glyphRunning, colRunning), colDim
 		if !ok {

@@ -261,3 +261,29 @@ func TestServiceInfo_IsWorker(t *testing.T) {
 		}
 	}
 }
+
+// While lerd's own web server serves, nginx is gone, so the tray names the
+// web server rather than a stopped nginx.
+func TestBuildMenu_namesTheWebServerThatRuns(t *testing.T) {
+	for _, c := range []struct{ server, want string }{{"nginx", "nginx"}, {"go", "web server"}, {"", "nginx"}} {
+		get := func(path string) (io.ReadCloser, error) {
+			if path == "/api/status" {
+				return io.NopCloser(strings.NewReader(`{"nginx":{"running":true},"web_server":"` + c.server + `","dns":{"ok":true}}`)), nil
+			}
+			return io.NopCloser(strings.NewReader(`[]`)), nil
+		}
+		menu := BuildMenu(ReadSnapshot(get, func() Settings { return Settings{} }), MenuOptions{})
+		found := false
+		for _, it := range menu.Items {
+			if it.Label == c.want {
+				found = true
+			}
+			if c.server == "go" && strings.Contains(strings.ToLower(it.Label), "nginx") {
+				t.Errorf("web_server go still shows %q", it.Label)
+			}
+		}
+		if !found {
+			t.Errorf("web_server %q: no %q item in %+v", c.server, c.want, menu.Items)
+		}
+	}
+}

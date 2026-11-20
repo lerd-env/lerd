@@ -1299,6 +1299,7 @@
   "system_mcp_toggleOn": "Înregistrează lerd la asistenții AI",
   "system_mcp_toggleOff": "Scoate lerd din asistenții AI",
   "system_mcp_failed": "Înregistrarea a eșuat. Rulează lerd mcp:enable-global într-un terminal ca să vezi de ce.",
+  "system_webServer": "Server web",
   "system_nginx": "Nginx",
   "system_nginx_checkTitle": "Întreabă Docker Hub dacă s-a publicat o imagine nginx mai nouă",
   "system_nginx_checkUpToDate": "Nginx rulează cea mai nouă imagine",

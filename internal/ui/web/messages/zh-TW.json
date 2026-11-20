@@ -1299,6 +1299,7 @@
   "system_mcp_toggleOn": "將 lerd 註冊到你的 AI 助理",
   "system_mcp_toggleOff": "從你的 AI 助理中取消註冊 lerd",
   "system_mcp_failed": "註冊失敗。在終端機中執行 lerd mcp:enable-global 檢視原因。",
+  "system_webServer": "Web 伺服器",
   "system_nginx": "Nginx",
   "system_nginx_checkTitle": "向 Docker Hub 查詢是否發布了更新的 nginx 映像",
   "system_nginx_checkUpToDate": "Nginx 正在執行最新映像",

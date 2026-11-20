@@ -1299,6 +1299,7 @@
   "system_mcp_toggleOn": "lerd'i yapay zekâ asistanlarınıza kaydet",
   "system_mcp_toggleOff": "lerd'in yapay zekâ asistanlarınızdaki kaydını kaldır",
   "system_mcp_failed": "Kayıt başarısız oldu. Nedenini görmek için bir terminalde lerd mcp:enable-global komutunu çalıştırın.",
+  "system_webServer": "Web sunucusu",
   "system_nginx": "Nginx",
   "system_nginx_checkTitle": "Docker Hub'a daha yeni bir nginx imajı olup olmadığını sor",
   "system_nginx_checkUpToDate": "Nginx en yeni imajı çalıştırıyor",

@@ -9,8 +9,11 @@ import (
 
 // Snapshot holds the state polled from the Lerd API.
 type Snapshot struct {
-	Running              bool
-	NginxRunning         bool
+	Running      bool
+	NginxRunning bool
+	// WebServerLabel names what serves the sites: "nginx", or "web server"
+	// while lerd's own runs and nginx is gone.
+	WebServerLabel       string
 	DNSOK                bool
 	DNSDegraded          bool // lerd-dns healthy but the system resolver is bypassed, typically a VPN
 	DNSDisabled          bool // explicit dns.enabled=false from API; zero value falls through to ok/error
@@ -65,7 +68,8 @@ func ReadSnapshot(get Getter, settings func() Settings) *Snapshot {
 		Nginx struct {
 			Running bool `json:"running"`
 		} `json:"nginx"`
-		DNS struct {
+		WebServer string `json:"web_server"`
+		DNS       struct {
 			OK      bool   `json:"ok"`
 			Status  string `json:"status"`
 			Enabled bool   `json:"enabled"`
@@ -87,6 +91,10 @@ func ReadSnapshot(get Getter, settings func() Settings) *Snapshot {
 	if json.NewDecoder(body).Decode(&sr) == nil {
 		snap.Running = sr.Nginx.Running
 		snap.NginxRunning = sr.Nginx.Running
+		snap.WebServerLabel = "nginx"
+		if sr.WebServer == "go" {
+			snap.WebServerLabel = "web server"
+		}
 		snap.DNSOK = sr.DNS.OK
 		snap.DNSDegraded = sr.DNS.Status == "degraded"
 		snap.DNSDisabled = !sr.DNS.Enabled
@@ -219,7 +227,7 @@ func BuildMenu(snap *Snapshot, opts MenuOptions) Menu {
 	if snap.Running {
 		status = MenuItem{Label: "Running", State: StateRunning}
 	}
-	m.Items = append(m.Items, status, MenuItem{Label: "nginx", State: stateOf(snap.NginxRunning)}, dnsItem(snap))
+	m.Items = append(m.Items, status, MenuItem{Label: snap.webServerLabel(), State: stateOf(snap.NginxRunning)}, dnsItem(snap))
 	if snap.ServicesKnown {
 		if w, ok := workersItem(snap); ok {
 			m.Items = append(m.Items, w)
@@ -454,4 +462,13 @@ func lastLine(out, fallback string) string {
 		return l
 	}
 	return fallback
+}
+
+// webServerLabel is the label for the web server's row, nginx until the API
+// says otherwise.
+func (s *Snapshot) webServerLabel() string {
+	if s.WebServerLabel == "" {
+		return "nginx"
+	}
+	return s.WebServerLabel
 }

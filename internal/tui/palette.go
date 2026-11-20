@@ -15,6 +15,21 @@ import (
 // restart redis` in a terminal. Mirrors the web UI's CommandRunModal /
 // CommandPalette without requiring focus on any particular pane.
 
+// paletteFor is the palette's command list for the server that runs: nginx's
+// own commands are gone while lerd's own web server serves.
+func paletteFor() []string {
+	if !goWebServer() {
+		return paletteCommands
+	}
+	out := make([]string, 0, len(paletteCommands))
+	for _, c := range paletteCommands {
+		if !strings.HasPrefix(c, "nginx") {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // paletteCommands is the curated list of command paths the palette
 // autocompletes against. Hardcoded rather than walked off cobra at runtime
 // to avoid an import cycle (cli already imports tui via NewTuiCmd). Keep
@@ -166,7 +181,7 @@ func (m *Model) handlePaletteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, runPaletteCommand(raw, args, dir)
 	case "tab":
-		m.paletteInput = completePaletteInput(m.paletteInput, paletteCommands)
+		m.paletteInput = completePaletteInput(m.paletteInput, paletteFor())
 		return m, nil
 	case "ctrl+c":
 		m.logTail.Stop()

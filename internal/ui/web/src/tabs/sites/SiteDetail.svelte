@@ -11,6 +11,7 @@
   import { routeRest, goToTab } from '$stores/route';
   import { debugLens, isDebugLens, type DebugLens } from '$stores/debugLens';
   import { status as dumpsStatus, refreshStatus } from '$stores/dumps';
+  import { goWebServer } from '$stores/status';
   import { debugCaptureEnabled } from '$stores/queries';
   import { m } from '../../paraglide/messages.js';
   import PluginFrame from '$components/PluginFrame.svelte';
@@ -80,7 +81,7 @@
     const parts = $routeRest.split('/');
     const seg = parts[1] ?? '';
     if (seg === 'nginx') {
-      nginxOpen = true;
+      nginxOpen = !$goWebServer;
     } else if (seg === 'logs' || seg === 'tinker' || seg === 'env' || seg === 'dumps' || seg === 'overview') {
       active = seg;
     } else if (seg.startsWith('plugin:')) {

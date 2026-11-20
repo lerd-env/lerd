@@ -775,12 +775,16 @@ func mustJSON(v any) string {
 
 // StatusResponse is the response for GET /api/status.
 type StatusResponse struct {
-	DNS               DNSStatus    `json:"dns"`
-	Nginx             ServiceCheck `json:"nginx"`
-	PHPFPMs           []PHPStatus  `json:"php_fpms"`
-	PHPDefault        string       `json:"php_default"`
-	NodeDefault       string       `json:"node_default"`
-	NodeManagedByLerd bool         `json:"node_managed_by_lerd"`
+	DNS DNSStatus `json:"dns"`
+	// Nginx is the web server's own check, under the name every client reads,
+	// whichever server WebServer says runs.
+	Nginx ServiceCheck `json:"nginx"`
+	// WebServer is "nginx" or "go", so the dashboard names what serves.
+	WebServer         string      `json:"web_server"`
+	PHPFPMs           []PHPStatus `json:"php_fpms"`
+	PHPDefault        string      `json:"php_default"`
+	NodeDefault       string      `json:"node_default"`
+	NodeManagedByLerd bool        `json:"node_managed_by_lerd"`
 	// NodeManager is the active Node version manager lerd drives: "mise", "fnm"
 	// or "nvm".
 	NodeManager string `json:"node_manager"`
@@ -873,6 +877,10 @@ func buildStatus() StatusResponse {
 
 	dnsStatus := dns.CheckStatus(tld)
 	nginxRunning := podman.Cache.Running(podman.WebServerUnit())
+	webServer := config.WebServerNginx
+	if cfg != nil {
+		webServer, _ = cfg.WebServerKind()
+	}
 	watcherRunning := services.Mgr.IsActive("lerd-watcher")
 
 	versions, _ := phpPkg.InstalledForRuntime()
@@ -923,8 +931,10 @@ func buildStatus() StatusResponse {
 		workspaces = []string{}
 	}
 	return StatusResponse{
-		DNS:                   DNSStatus{OK: dnsStatus == dns.StatusOK, Status: string(dnsStatus), VPN: dns.VPNActive(), Enabled: dnsEnabled, TLD: tld},
-		Nginx:                 ServiceCheck{Running: nginxRunning, UpdateAvailable: nginxRunning && cachedUpdate(updates, podman.WebServerUnit(), podman.NginxUpdateAvailable)},
+		DNS: DNSStatus{OK: dnsStatus == dns.StatusOK, Status: string(dnsStatus), VPN: dns.VPNActive(), Enabled: dnsEnabled, TLD: tld},
+		Nginx: ServiceCheck{Running: nginxRunning, UpdateAvailable: nginxRunning && webServer == config.WebServerNginx &&
+			cachedUpdate(updates, podman.WebServerUnitFor(config.WebServerNginx), podman.NginxUpdateAvailable)},
+		WebServer:             webServer,
 		PHPFPMs:               phpStatuses,
 		PHPDefault:            phpDefault,
 		NodeDefault:           nodeDefault,

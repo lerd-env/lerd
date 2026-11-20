@@ -251,7 +251,7 @@ func (m *Model) handleHelpModalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // row that fit at the bottom of the screen.
 func (m *Model) renderPaletteModal(w, h int) string {
 	prompt := accentStyle.Render("$ lerd ") + m.paletteInput + "▌"
-	suggestions := paletteSuggestions(m.paletteInput, paletteCommands, 12)
+	suggestions := paletteSuggestions(m.paletteInput, paletteFor(), 12)
 
 	bodyLines := []string{prompt, ""}
 	if m.paletteDir != "" {

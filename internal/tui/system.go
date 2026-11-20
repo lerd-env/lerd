@@ -72,8 +72,12 @@ func (m *Model) systemRows() []systemRow {
 		info("VPN", "active (may bypass lerd-dns)")
 	}
 
-	// Nginx
-	header("Nginx")
+	// The web server, named for the one that runs.
+	if goWebServer() {
+		header("Web server")
+	} else {
+		header("Nginx")
+	}
 	info("Status", runningOrStopped(m.snap.Status.NginxRunning))
 
 	// Watcher

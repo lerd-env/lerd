@@ -1299,6 +1299,7 @@
   "system_mcp_toggleOn": "Register lerd with your AI assistants",
   "system_mcp_toggleOff": "Unregister lerd from your AI assistants",
   "system_mcp_failed": "Registration failed. Run lerd mcp:enable-global in a terminal to see why.",
+  "system_webServer": "Web server",
   "system_nginx": "Nginx",
   "system_nginx_checkTitle": "Ask Docker Hub whether a newer nginx image is published",
   "system_nginx_checkUpToDate": "Nginx runs the newest image",

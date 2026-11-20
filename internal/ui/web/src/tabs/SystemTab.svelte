@@ -6,7 +6,7 @@
   import StatusDot from '$components/StatusDot.svelte';
   import LoadingRow from '$components/LoadingRow.svelte';
   import { routeRest, goToTab } from '$stores/route';
-  import { status, statusLoaded, lerdStatusColor, allCoreRunning } from '$stores/status';
+  import { status, statusLoaded, lerdStatusColor, allCoreRunning, goWebServer } from '$stores/status';
   import { phpVersions } from '$stores/phpVersions';
   import { nodeVersions, nodeVersionStatuses } from '$stores/nodeVersions';
   import { sitesByNode } from '$stores/sites';
@@ -76,11 +76,11 @@
 
     {#snippet nginxDot()}<StatusDot color={$status.nginx.running ? 'green' : 'gray'} />{/snippet}
     {#snippet nginxTrailing()}
-      {#if $status.nginx.update_available}
+      {#if $status.nginx.update_available && !$goWebServer}
         <span class="ml-auto text-xs font-medium text-yellow-600 dark:text-yellow-400">{m.system_lerd_updateTag()}</span>
       {/if}
     {/snippet}
-    <ListRow active={selected === 'nginx'} onclick={() => select('nginx')} leading={nginxDot} trailing={nginxTrailing}>{m.system_nginx()}</ListRow>
+    <ListRow active={selected === 'nginx'} onclick={() => select('nginx')} leading={nginxDot} trailing={nginxTrailing}>{$goWebServer ? m.system_webServer() : m.system_nginx()}</ListRow>
 
     {#if $phpVersions.length > 0}
       {@const phpSelected = selected === 'php' || selected.startsWith('php-')}

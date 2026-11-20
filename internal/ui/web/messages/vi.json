@@ -1299,6 +1299,7 @@
   "system_mcp_toggleOn": "Đăng ký lerd với trợ lý AI",
   "system_mcp_toggleOff": "Hủy đăng ký lerd khỏi trợ lý AI",
   "system_mcp_failed": "Đăng ký thất bại. Chạy lerd mcp:enable-global trong terminal để xem lý do.",
+  "system_webServer": "Máy chủ web",
   "system_nginx": "Nginx",
   "system_nginx_checkTitle": "Hỏi Docker Hub xem có image nginx mới hơn không",
   "system_nginx_checkUpToDate": "Nginx đang chạy image mới nhất",

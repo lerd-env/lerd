@@ -1299,6 +1299,7 @@
   "system_mcp_toggleOn": "Enregistrer lerd auprès de vos assistants IA",
   "system_mcp_toggleOff": "Retirer lerd de vos assistants IA",
   "system_mcp_failed": "L'enregistrement a échoué. Lancez lerd mcp:enable-global dans un terminal pour en voir la raison.",
+  "system_webServer": "Serveur web",
   "system_nginx": "Nginx",
   "system_nginx_checkTitle": "Demander à Docker Hub si une image nginx plus récente est publiée",
   "system_nginx_checkUpToDate": "Nginx utilise l'image la plus récente",

@@ -1299,6 +1299,7 @@
   "system_mcp_toggleOn": "lerd bei deinen KI-Assistenten registrieren",
   "system_mcp_toggleOff": "lerd von deinen KI-Assistenten abmelden",
   "system_mcp_failed": "Registrierung fehlgeschlagen. Führe lerd mcp:enable-global im Terminal aus, um den Grund zu sehen.",
+  "system_webServer": "Webserver",
   "system_nginx": "Nginx",
   "system_nginx_checkTitle": "Bei Docker Hub nach einem neueren nginx-Image fragen",
   "system_nginx_checkUpToDate": "Nginx läuft mit dem neuesten Image",

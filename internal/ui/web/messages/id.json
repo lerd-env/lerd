@@ -1299,6 +1299,7 @@
   "system_mcp_toggleOn": "Daftarkan lerd ke asisten AI Anda",
   "system_mcp_toggleOff": "Hapus lerd dari asisten AI Anda",
   "system_mcp_failed": "Pendaftaran gagal. Jalankan lerd mcp:enable-global di terminal untuk melihat penyebabnya.",
+  "system_webServer": "Server web",
   "system_nginx": "Nginx",
   "system_nginx_checkTitle": "Tanyakan Docker Hub apakah ada image nginx yang lebih baru",
   "system_nginx_checkUpToDate": "Nginx menjalankan image terbaru",

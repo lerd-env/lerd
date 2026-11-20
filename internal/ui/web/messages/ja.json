@@ -1299,6 +1299,7 @@
   "system_mcp_toggleOn": "lerd を AI アシスタントに登録",
   "system_mcp_toggleOff": "lerd を AI アシスタントから登録解除",
   "system_mcp_failed": "登録に失敗しました。ターミナルで lerd mcp:enable-global を実行して原因を確認してください。",
+  "system_webServer": "Webサーバー",
   "system_nginx": "Nginx",
   "system_nginx_checkTitle": "新しい nginx イメージが公開されているか Docker Hub に確認",
   "system_nginx_checkUpToDate": "Nginx は最新のイメージで動作しています",

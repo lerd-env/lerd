@@ -20,7 +20,10 @@ export interface PHPStatus {
 export interface StatusResponse {
   dns: { ok: boolean; status?: 'ok' | 'degraded' | 'down'; vpn?: boolean; enabled: boolean; tld: string };
   // update_available: lerd-nginx runs an older image than its tag now serves.
+  // The check is the web server's whichever one runs, see web_server.
   nginx: { running: boolean; update_available?: boolean };
+  // 'go' while lerd's own web server serves, when nothing names nginx.
+  web_server?: 'nginx' | 'go';
   php_fpms: PHPStatus[];
   php_default: string;
   node_default: string;
@@ -234,3 +237,7 @@ export async function checkToolUpdates(): Promise<{ ok: boolean; tools?: ToolSta
     return { ok: false };
   }
 }
+
+// True while lerd's own web server serves: nginx is stopped and removed, so
+// nothing in the dashboard names it or offers its controls.
+export const goWebServer = derived(status, ($s) => $s.web_server === 'go');
