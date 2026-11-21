@@ -49,12 +49,15 @@ func (s *seatWatchState) decide(enabled bool, fg systemd.Foreground, nginxBlocke
 		// Logging in starts our units at once, and they fail while the other
 		// user's lerd still holds the ports, so that also counts as ours to start.
 		if s.yielded || (prev != systemd.ForegroundSelf && nginxBlocked()) {
-			s.yielded, s.pending = false, true
+			s.pending = true
 		}
 		if !s.pending || otherHolds() {
 			return seatNoop
 		}
-		s.pending = false
+		// yielded holds until the resume runs: switching away while it waits
+		// has nothing new to release, and a second release would read the
+		// stack it already stopped as stopped by hand.
+		s.yielded, s.pending = false, false
 		return seatResume
 	}
 	return seatNoop

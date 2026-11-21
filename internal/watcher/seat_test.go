@@ -30,6 +30,12 @@ func TestSeatWatchState(t *testing.T) {
 			{true, systemd.ForegroundSelf, false, true, seatNoop},
 			{true, systemd.ForegroundSelf, false, false, seatResume},
 		}},
+		{"switching away again before the resume ran releases nothing new", []tick{
+			{true, systemd.ForegroundOther, false, false, seatRelease},
+			{true, systemd.ForegroundSelf, false, true, seatNoop},
+			{true, systemd.ForegroundOther, false, false, seatNoop},
+			{true, systemd.ForegroundSelf, false, false, seatResume},
+		}},
 		{"logging in after the other user's lerd blocked our start", []tick{
 			{true, systemd.ForegroundSelf, true, true, seatNoop},
 			{true, systemd.ForegroundSelf, true, false, seatResume},
