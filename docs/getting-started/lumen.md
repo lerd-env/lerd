@@ -16,31 +16,10 @@ Run `lerd mcp:enable-global` once and your AI assistant (Claude Code, Cursor, Ju
 
 ---
 
-## 1. Create the project
-
-Lumen ships no scaffold through `lerd new`, because Laravel has recommended Laravel itself for new API projects since Lumen went into maintenance. Existing Lumen projects are fully supported, and a new one is one composer command:
-
-::: code-group
-
-```bash [composer]
-cd ~/Lerd
-composer create-project laravel/lumen api
-```
-
-```bash [existing repo]
-cd ~/Lerd
-git clone git@github.com:you/api.git
-cd api && lerd composer install
-```
-
-:::
-
----
-
-## 2. Register the site
+## 1. Register the site
 
 ```bash
-cd api
+cd ~/Lerd/api
 lerd link
 ```
 
@@ -61,7 +40,7 @@ The differences from the Laravel definition are the ones that matter in practice
 
 ---
 
-## 3. Configure PHP, database, services
+## 2. Configure PHP, database, services
 
 ```bash
 lerd init
@@ -83,7 +62,7 @@ Lumen only loads `.env` when the bootstrap file calls `Dotenv`. A project whose 
 
 ---
 
-## 4. Bootstrap the project
+## 3. Bootstrap the project
 
 ```bash
 lerd setup
@@ -93,7 +72,7 @@ Setup offers `php artisan migrate`, and `php artisan db:seed` when you want it.
 
 ---
 
-## 5. Verify
+## 4. Verify
 
 ```bash
 curl -i https://api.test
