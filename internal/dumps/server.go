@@ -81,11 +81,25 @@ type Server struct {
 	conns  map[net.Conn]struct{}
 	// queue carries the bridge's events to the one writer that stores them,
 	// so a connection never waits on the buffer.
-	queue      chan Event
-	queueOnce  sync.Once
-	writerDone chan struct{}
-	lastDrop   atomic.Int64
+	queue       chan queued
+	queuedBytes atomic.Int64
+	queueMu     sync.RWMutex
+	queueShut   bool
+	writerDone  chan struct{}
+	lastDrop    atomic.Int64
 }
+
+// queued is an event waiting to be stored with its size on the wire, or, with
+// flush set, a barrier closed once everything queued before it is stored.
+type queued struct {
+	ev    Event
+	size  int64
+	flush chan struct{}
+}
+
+// queueBytes bounds the bytes of the events waiting or being stored, since a
+// count alone would let a run of large dumps hold gigabytes.
+var queueBytes int64 = 64 << 20
 
 // queueSize bounds the events waiting to be stored. Past it they are dropped:
 // a flood of PHP requests must cost lost debug events, not lerd-ui's memory.
@@ -148,7 +162,7 @@ func ListenWithRing(ctx context.Context, network, addr string, ring *Ring) (*Ser
 		hub:        NewHub(),
 		ln:         ln,
 		closed:     make(chan struct{}),
-		queue:      make(chan Event, queueSize),
+		queue:      make(chan queued, queueSize),
 		writerDone: make(chan struct{}),
 	}
 	go s.writeLoop()
@@ -194,10 +208,16 @@ func (s *Server) FilterJSON(opts FilterOpts) []byte { return s.ring.FilterJSON(o
 func (s *Server) Subscribe() (<-chan Event, func()) { return s.hub.Subscribe() }
 
 // Clear empties the ring. Active subscribers continue to receive events.
-func (s *Server) Clear() { s.ring.Clear() }
+func (s *Server) Clear() {
+	s.flush()
+	s.ring.Clear()
+}
 
 // ClearKind drops the buffered events of one kind and keeps the rest.
-func (s *Server) ClearKind(kind string) { s.ring.Remove(func(e Event) bool { return e.Kind == kind }) }
+func (s *Server) ClearKind(kind string) {
+	s.flush()
+	s.ring.Remove(func(e Event) bool { return e.Kind == kind })
+}
 
 // Len returns the number of buffered events.
 func (s *Server) Len() int { return s.ring.Len() }
@@ -215,6 +235,7 @@ func (s *Server) ForgetRequests(rids []string) {
 	if len(rids) == 0 {
 		return
 	}
+	s.flush()
 	s.ring.Remove(func(e Event) bool {
 		for _, rid := range rids {
 			if e.OfRequest(rid) {
@@ -239,6 +260,7 @@ func (s *Server) Subscribers() int { return s.hub.Count() }
 func (s *Server) SetKeepTests(keep bool) {
 	s.keepTests.Store(keep)
 	if !keep {
+		s.flush()
 		s.ring.Remove(func(e Event) bool { return e.Ctx.Test })
 	}
 }
@@ -267,41 +289,79 @@ func (s *Server) accept(e *Event) bool {
 
 // enqueue hands a bridge event to the writer, or drops it when the queue is
 // full, so the connection that sent it is never held up.
-func (s *Server) enqueue(e Event) {
+func (s *Server) enqueue(e Event, size int64) {
 	if !s.accept(&e) {
 		return
 	}
-	select {
-	case s.queue <- e:
-	default:
-		if now := time.Now().Unix(); now-s.lastDrop.Load() >= 60 {
-			s.lastDrop.Store(now)
-			log.Printf("dumps: events arrive faster than the debug buffer stores them, dropping some")
+	if s.queuedBytes.Add(size) <= queueBytes {
+		select {
+		case s.queue <- queued{ev: e, size: size}:
+			return
+		default:
 		}
 	}
+	s.queuedBytes.Add(-size)
+	if now := time.Now().Unix(); now-s.lastDrop.Load() >= 60 {
+		s.lastDrop.Store(now)
+		log.Printf("dumps: events arrive faster than the debug buffer stores them, dropping some")
+	}
+}
+
+// flush waits until every event queued before it is stored, so a removal that
+// follows also covers them rather than seeing them stored after it.
+func (s *Server) flush() {
+	done := make(chan struct{})
+	s.queueMu.RLock()
+	if s.queueShut {
+		s.queueMu.RUnlock()
+		return
+	}
+	s.queue <- queued{flush: done}
+	s.queueMu.RUnlock()
+	<-done
 }
 
 // writeLoop stores queued events in batches, then publishes them in order, so
 // a subscriber told of an event can already read it.
 func (s *Server) writeLoop() {
 	defer close(s.writerDone)
-	for e := range s.queue {
-		batch := []Event{e}
+	for first := range s.queue {
+		var batch []Event
+		var bytes int64
+		var flushes []chan struct{}
+		// add reports whether to keep filling: a barrier ends the batch, so
+		// what follows it is stored after the removal it stands for.
+		add := func(q queued) bool {
+			if q.flush != nil {
+				flushes = append(flushes, q.flush)
+				return false
+			}
+			batch, bytes = append(batch, q.ev), bytes+q.size
+			return true
+		}
+		more := add(first)
 	fill:
-		for len(batch) < maxBatch {
+		for more && len(batch) < maxBatch {
 			select {
 			case next, ok := <-s.queue:
 				if !ok {
 					break fill
 				}
-				batch = append(batch, next)
+				more = add(next)
 			default:
 				break fill
 			}
 		}
-		s.ring.AppendBatch(batch)
-		for _, ev := range batch {
-			s.hub.Publish(ev)
+		if len(batch) > 0 {
+			beforeStore()
+			s.ring.AppendBatch(batch)
+			for _, ev := range batch {
+				s.hub.Publish(ev)
+			}
+		}
+		s.queuedBytes.Add(-bytes)
+		for _, done := range flushes {
+			close(done)
 		}
 	}
 }
@@ -378,7 +438,7 @@ func (s *Server) handle(conn net.Conn) {
 		if err := json.Unmarshal(line, &ev); err != nil {
 			continue
 		}
-		s.enqueue(ev)
+		s.enqueue(ev, int64(len(line)))
 	}
 	// scanner.Err() is intentionally swallowed: the bridge is fire-and-forget
 	// and connection-level failures (timeout, oversized line) must not affect
@@ -413,8 +473,16 @@ func (s *Server) Close() error {
 		}
 	})
 	s.wg.Wait()
-	// Every connection is done, so nothing sends on the queue any more.
-	s.queueOnce.Do(func() { close(s.queue) })
+	// Every connection is done, so only a flush could still send on the queue.
+	s.queueMu.Lock()
+	if !s.queueShut {
+		s.queueShut = true
+		close(s.queue)
+	}
+	s.queueMu.Unlock()
 	<-s.writerDone
 	return nil
 }
+
+// beforeStore runs ahead of each batch the writer stores; a seam for tests.
+var beforeStore = func() {}
