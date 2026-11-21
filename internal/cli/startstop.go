@@ -491,6 +491,9 @@ func startLerd(emit func(StartEvent), skip []string) error {
 			return err
 		}
 	}
+	// Starting by hand, or the watcher's own resume, settles any start a user
+	// switch owed; a refused start above leaves it owed.
+	_ = config.ClearSeatReleased()
 	release, err := podman.LockLifecycle()
 	if err != nil {
 		return fmt.Errorf("lifecycle lock: %w", err)
@@ -1478,6 +1481,8 @@ func runStop(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("lifecycle lock: %w", err)
 	}
 	defer release()
+	// A stop by hand cancels a start a user switch owed.
+	_ = config.ClearSeatReleased()
 	return lifecycle.Stop(spinnerRunner)
 }
 
@@ -1490,6 +1495,7 @@ func runQuit(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("lifecycle lock: %w", err)
 	}
 	defer release()
+	_ = config.ClearSeatReleased()
 	return lifecycle.Quit(spinnerRunner, killTray)
 }
 

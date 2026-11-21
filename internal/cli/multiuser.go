@@ -36,13 +36,13 @@ func setMultiUser(on bool) error {
 	return nil
 }
 
-// ErrOtherUserOnScreen is lerd start refusing because another user's desktop
+// errOtherUserOnScreen is lerd start refusing because another user's desktop
 // has the screen in multi-user mode; their stack owns the ports until ours is back.
-var ErrOtherUserOnScreen = errors.New("another user's desktop is on screen and multi-user mode is on, so lerd starts again when yours is back; run lerd multi-user disable to start it anyway")
+var errOtherUserOnScreen = errors.New("another user's desktop is on screen and multi-user mode is on, so lerd starts again when yours is back; run lerd multi-user disable to start it anyway")
 
 func seatRefusesStart(multiUser bool, fg systemd.Foreground) error {
 	if !multiUser || fg != systemd.ForegroundOther {
 		return nil
 	}
-	return ErrOtherUserOnScreen
+	return errOtherUserOnScreen
 }

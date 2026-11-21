@@ -122,6 +122,9 @@ wait_for 90 serves "$OTHER_HOST" vmmu-other || seat_state
 check "16.4 the second user's site answers after the switch" serves "$OTHER_HOST" vmmu-other
 wait_for 30 owns_ports "$UID2"
 check "16.4 the second user's lerd holds 80, 443, 5300 and 7073" owns_ports "$UID2"
+# A watcher killed while we are away must still know it owes our stack a start.
+systemctl --user kill -s KILL lerd-watcher
+wait_for 30 systemctl --user is-active --quiet lerd-watcher
 
 sudo chvt "$SELF_VT"
 wait_for 120 serves "$SELF_HOST" vmmu-self
@@ -133,7 +136,15 @@ check_out "16.5 the second user's lerd start is refused while we are on screen" 
 	as_u2 lerd start
 check "16.5 and it left our ports alone" owns_ports "$(id -u)"
 
+# A lerd stop run while we are away cancels the start the switch owed.
+sudo chvt "$OTHER_VT"
+wait_for 90 serves "$OTHER_HOST" vmmu-other || seat_state
 lerd stop </dev/null >/dev/null 2>&1
+sudo chvt "$SELF_VT"
+sleep 30 # a resume that ignored the stop would have started by now
+check_out "16.6 a lerd stop while away keeps our stack down" '^inactive inactive inactive$' \
+	bash -c 'systemctl --user is-active lerd-nginx lerd-ui lerd-dns | paste -sd " "'
+
 # Two rounds, since a stop marker lost on the first would show on the second.
 for round in 1 2; do
 	sudo chvt "$OTHER_VT"

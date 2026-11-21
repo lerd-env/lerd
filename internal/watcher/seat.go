@@ -1,7 +1,6 @@
 package watcher
 
 import (
-	"errors"
 	"time"
 
 	"github.com/geodro/lerd/internal/cli"
@@ -23,15 +22,15 @@ const (
 // systemd and ss on the ticks that need them.
 type seatProbe struct {
 	nginx      func() string // lerd-nginx's ActiveState
+	owed       func() bool   // a release stopped a running stack (config.SeatReleased)
 	otherHolds func() bool   // another user's lerd holds our ports
 }
 
 // seatWatchState hands the stack over between users on one machine. Every
-// switch away releases the whole stack, which costs nothing when it is already
-// down; the only thing remembered is whether we owe it a start.
+// switch away releases the whole stack; whether a start is owed lives on disk,
+// so a restarted watcher still knows and a lerd stop by hand cancels it.
 type seatWatchState struct {
 	prev    systemd.Foreground
-	owed    bool // a release stopped a stack that was meant to run
 	pending bool // ours to start once the ports are free
 }
 
@@ -39,7 +38,7 @@ func (s *seatWatchState) decide(enabled bool, fg systemd.Foreground, p seatProbe
 	prev := s.prev
 	s.prev = fg
 	if !enabled {
-		s.owed, s.pending = false, false
+		s.pending = false
 		return seatNoop
 	}
 	switch fg {
@@ -52,31 +51,16 @@ func (s *seatWatchState) decide(enabled bool, fg systemd.Foreground, p seatProbe
 	case systemd.ForegroundSelf:
 		// Logging in starts our units at once, and they fail while the other
 		// user's lerd still holds the ports, so that also counts as owed.
-		if s.owed || (prev != systemd.ForegroundSelf && blocked(p.nginx())) {
+		if p.owed() || (prev != systemd.ForegroundSelf && blocked(p.nginx())) {
 			s.pending = true
 		}
 		if !s.pending || p.otherHolds() {
 			return seatNoop
 		}
-		s.owed, s.pending = false, false
+		s.pending = false
 		return seatResume
 	}
 	return seatNoop
-}
-
-// released records what a release found. A start already owed stays owed: the
-// stop marker our own earlier release wrote is not the user stopping lerd.
-func (s *seatWatchState) released(wasRunning bool) {
-	s.owed = s.owed || wasRunning
-}
-
-// resumeFailed keeps the start owed when lerd start refused it because the
-// screen changed hands again in between. Other failures are not retried, or a
-// broken start would rerun on every tick.
-func (s *seatWatchState) resumeFailed(err error) {
-	if errors.Is(err, cli.ErrOtherUserOnScreen) {
-		s.owed = true
-	}
 }
 
 func blocked(nginx string) bool { return nginx == "failed" || nginx == "activating" }
@@ -102,33 +86,36 @@ func applySeat(s *seatWatchState) {
 	}
 	probe := seatProbe{
 		nginx:      func() string { state, _ := podman.UnitStatus("lerd-nginx"); return state },
+		owed:       config.SeatReleased,
 		otherHolds: func() bool { return cli.OtherUserLerd() != "" },
 	}
 
 	switch s.decide(cfg.MultiUser, fg, probe) {
 	case seatRelease:
 		logger.Info("another user is on screen, releasing lerd's ports")
-		s.released(releaseSeat())
+		releaseSeat()
 	case seatResume:
+		// lerd start clears the marker, unless it refuses because the screen
+		// changed hands again, which leaves the start owed for next time.
 		logger.Info("back on screen, starting lerd")
 		if err := cli.RunStart(nil, podman.WatcherUnit); err != nil {
 			logger.Warn("starting lerd after a user switch", "err", err)
-			s.resumeFailed(err)
 		}
 	}
 }
 
-// releaseSeat runs lerd quit minus the watcher and reports whether the stack
-// was meant to run. Both happen under the lifecycle lock, so a lerd start or
+// releaseSeat runs lerd quit minus the watcher, and owes a start only if the
+// stack was meant to run. Both under the lifecycle lock, so a lerd start or
 // stop in flight finishes first and its stop marker is the one we read.
-func releaseSeat() (wasRunning bool) {
+func releaseSeat() {
 	unlock, err := podman.LockLifecycle()
 	if err != nil {
 		logger.Warn("releasing lerd for another user", "err", err)
-		return false
+		return
 	}
 	defer unlock()
-	wasRunning = !config.IsStopped()
+	if !config.IsStopped() {
+		_ = config.MarkSeatReleased()
+	}
 	_ = lifecycle.Quit(lifecycle.SimpleRunner, nil, podman.WatcherUnit)
-	return wasRunning
 }

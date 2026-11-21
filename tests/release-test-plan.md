@@ -1411,12 +1411,13 @@ mode is turned off again for both users.
 - [ ] With `lerd multi-user enable` on for both users, putting the second
       user's console on screen hands it ports 80, 443, 5300 and 7073, and its
       site answers within 90 seconds
-- [ ] Switching back hands the ports back, our site answers **http → 200**,
+- [ ] Switching back hands the ports back, even with our watcher killed while
+      we were away, our site answers **http → 200**,
       our dashboard lists our site again, and the second user's `lerd start`
       is refused while we are on screen
-- [ ] A stack stopped by hand with `lerd stop` stays down across two
-      switches away and back: `lerd-nginx`, `lerd-ui` and `lerd-dns` all stay
-      inactive until `lerd start`
+- [ ] A stack stopped by hand with `lerd stop`, whether while away or before
+      two switches away and back, stays down: `lerd-nginx`, `lerd-ui` and
+      `lerd-dns` all stay inactive until `lerd start`
 
 ## Sign-off
 

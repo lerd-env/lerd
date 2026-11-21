@@ -1,10 +1,8 @@
 package watcher
 
 import (
-	"errors"
 	"testing"
 
-	"github.com/geodro/lerd/internal/cli"
 	"github.com/geodro/lerd/internal/systemd"
 )
 
@@ -18,7 +16,7 @@ func TestSeatWatchState(t *testing.T) {
 		enabled    bool
 		fg         systemd.Foreground
 		nginx      string
-		running    bool // what the release finds: no stop marker, so the stack was meant to run
+		owed       bool // the seat-released marker is on disk
 		otherHolds bool
 		want       seatAction
 	}
@@ -26,50 +24,42 @@ func TestSeatWatchState(t *testing.T) {
 		name  string
 		ticks []tick
 	}{
-		{"switching away releases once, switching back resumes", []tick{
-			{true, systemd.ForegroundSelf, on, true, false, seatNoop},
-			{true, systemd.ForegroundOther, on, true, false, seatRelease},
-			{true, systemd.ForegroundOther, off, false, false, seatNoop},
-			{true, systemd.ForegroundSelf, off, false, false, seatResume},
-			{true, systemd.ForegroundSelf, on, true, false, seatNoop},
+		{"switching away releases once, switching back resumes what is owed", []tick{
+			{true, systemd.ForegroundSelf, on, false, false, seatNoop},
+			{true, systemd.ForegroundOther, on, false, false, seatRelease},
+			{true, systemd.ForegroundOther, off, true, false, seatNoop},
+			{true, systemd.ForegroundSelf, off, true, false, seatResume},
+			{true, systemd.ForegroundSelf, on, false, false, seatNoop},
 		}},
 		{"resume waits until the other user's lerd lets go of the ports", []tick{
-			{true, systemd.ForegroundOther, on, true, false, seatRelease},
-			{true, systemd.ForegroundSelf, off, false, true, seatNoop},
-			{true, systemd.ForegroundSelf, off, false, false, seatResume},
+			{true, systemd.ForegroundOther, on, false, false, seatRelease},
+			{true, systemd.ForegroundSelf, off, true, true, seatNoop},
+			{true, systemd.ForegroundSelf, off, true, false, seatResume},
 		}},
-		{"switching away again before the resume ran keeps the start owed", []tick{
-			{true, systemd.ForegroundOther, on, true, false, seatRelease},
-			{true, systemd.ForegroundSelf, off, false, true, seatNoop},
+		{"every switch away releases, even with the stack already down", []tick{
+			{true, systemd.ForegroundOther, on, false, false, seatRelease},
+			{true, systemd.ForegroundSelf, off, true, true, seatNoop},
+			{true, systemd.ForegroundOther, off, true, false, seatRelease},
+			{true, systemd.ForegroundSelf, off, true, false, seatResume},
+		}},
+		{"nothing owed, as after a stop by hand, starts nothing", []tick{
 			{true, systemd.ForegroundOther, off, false, false, seatRelease},
-			{true, systemd.ForegroundSelf, off, false, false, seatResume},
+			{true, systemd.ForegroundSelf, off, false, false, seatNoop},
+			{true, systemd.ForegroundSelf, off, false, false, seatNoop},
 		}},
-		{"a lerd start while the resume waits is released on the next switch away", []tick{
-			{true, systemd.ForegroundOther, on, true, false, seatRelease},
-			{true, systemd.ForegroundSelf, off, false, true, seatNoop},
-			{true, systemd.ForegroundOther, blk, true, false, seatRelease},
-			{true, systemd.ForegroundSelf, off, false, false, seatResume},
+		{"a restarted watcher still resumes what the marker owes", []tick{
+			{true, systemd.ForegroundOther, off, true, false, seatRelease},
+			{true, systemd.ForegroundSelf, off, true, false, seatResume},
 		}},
 		{"logging in after the other user's lerd blocked our start", []tick{
-			{true, systemd.ForegroundSelf, blk, true, true, seatNoop},
-			{true, systemd.ForegroundSelf, blk, true, false, seatResume},
-			{true, systemd.ForegroundSelf, blk, true, false, seatNoop},
-		}},
-		{"a stack stopped by hand is released on every switch but never started", []tick{
-			{true, systemd.ForegroundSelf, off, false, false, seatNoop},
-			{true, systemd.ForegroundOther, off, false, false, seatRelease},
-			{true, systemd.ForegroundSelf, off, false, false, seatNoop},
-			{true, systemd.ForegroundOther, off, false, false, seatRelease},
-			{true, systemd.ForegroundSelf, off, false, false, seatNoop},
-		}},
-		{"a failed nginx with services still up is released all the same", []tick{
-			{true, systemd.ForegroundOther, "failed", true, false, seatRelease},
-			{true, systemd.ForegroundSelf, off, false, false, seatResume},
+			{true, systemd.ForegroundSelf, blk, false, true, seatNoop},
+			{true, systemd.ForegroundSelf, blk, false, false, seatResume},
+			{true, systemd.ForegroundSelf, blk, false, false, seatNoop},
 		}},
 		{"the login screen in between still counts as a switch away", []tick{
-			{true, systemd.ForegroundSelf, on, true, false, seatNoop},
-			{true, systemd.ForegroundNobody, on, true, false, seatNoop},
-			{true, systemd.ForegroundOther, on, true, false, seatRelease},
+			{true, systemd.ForegroundSelf, on, false, false, seatNoop},
+			{true, systemd.ForegroundNobody, on, false, false, seatNoop},
+			{true, systemd.ForegroundOther, on, false, false, seatRelease},
 		}},
 		{"the login screen and an unknown seat leave the stack alone", []tick{
 			{true, systemd.ForegroundNobody, on, true, false, seatNoop},
@@ -86,44 +76,13 @@ func TestSeatWatchState(t *testing.T) {
 			for i, tk := range c.ticks {
 				probe := seatProbe{
 					nginx:      func() string { return tk.nginx },
+					owed:       func() bool { return tk.owed },
 					otherHolds: func() bool { return tk.otherHolds },
 				}
-				got := s.decide(tk.enabled, tk.fg, probe)
-				if got != tk.want {
+				if got := s.decide(tk.enabled, tk.fg, probe); got != tk.want {
 					t.Fatalf("tick %d: decide = %v, want %v", i, got, tk.want)
-				}
-				if got == seatRelease {
-					s.released(tk.running)
 				}
 			}
 		})
-	}
-}
-
-// A resume the start refuses because the screen changed hands again in between
-// stays owed, so the next return starts the stack; any other failure does not.
-func TestSeatResumeRefusedStaysOwed(t *testing.T) {
-	probe := seatProbe{nginx: func() string { return "inactive" }, otherHolds: func() bool { return false }}
-	s := &seatWatchState{}
-	if got := s.decide(true, systemd.ForegroundOther, probe); got != seatRelease {
-		t.Fatalf("first switch away = %v, want release", got)
-	}
-	s.released(true)
-	if got := s.decide(true, systemd.ForegroundSelf, probe); got != seatResume {
-		t.Fatalf("back on screen = %v, want resume", got)
-	}
-	s.resumeFailed(cli.ErrOtherUserOnScreen)
-	if got := s.decide(true, systemd.ForegroundOther, probe); got != seatRelease {
-		t.Fatalf("second switch away = %v, want release", got)
-	}
-	s.released(false) // our own earlier release left the stop marker
-	if got := s.decide(true, systemd.ForegroundSelf, probe); got != seatResume {
-		t.Fatalf("back again = %v, want resume", got)
-	}
-
-	other := &seatWatchState{prev: systemd.ForegroundSelf}
-	other.resumeFailed(errors.New("podman broke"))
-	if got := other.decide(true, systemd.ForegroundSelf, probe); got != seatNoop {
-		t.Fatalf("after another failure = %v, want noop, not a retry every tick", got)
 	}
 }
