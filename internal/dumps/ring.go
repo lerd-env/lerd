@@ -159,6 +159,28 @@ func (r *Ring) Append(e Event) {
 	warnRing("storing an event", r.insert(e))
 }
 
+// AppendBatch stores events in one transaction, so a burst costs one commit
+// rather than one per event, then trims once enough have landed.
+func (r *Ring) AppendBatch(events []Event) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	tx, err := r.db.Begin()
+	if err != nil {
+		warnRing("storing events", err)
+		return
+	}
+	for _, e := range events {
+		warnRing("storing an event", r.store(tx, e))
+	}
+	if err := tx.Commit(); err != nil {
+		warnRing("storing events", err)
+		return
+	}
+	if r.untrimmed += len(events); r.untrimmed >= trimEvery {
+		r.trim()
+	}
+}
+
 // insert stores e and trims once enough have landed. Callers hold mu.
 func (r *Ring) insert(e Event) error {
 	if err := r.store(r.db, e); err != nil {

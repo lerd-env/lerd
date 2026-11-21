@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"sync"
@@ -78,7 +79,20 @@ type Server struct {
 	// request or worker keeps its connection until it is done.
 	connMu sync.Mutex
 	conns  map[net.Conn]struct{}
+	// queue carries the bridge's events to the one writer that stores them,
+	// so a connection never waits on the buffer.
+	queue      chan Event
+	queueOnce  sync.Once
+	writerDone chan struct{}
+	lastDrop   atomic.Int64
 }
+
+// queueSize bounds the events waiting to be stored. Past it they are dropped:
+// a flood of PHP requests must cost lost debug events, not lerd-ui's memory.
+var queueSize = 4096
+
+// maxBatch is the most events stored in one transaction.
+const maxBatch = 512
 
 // idleTimeout ends a connection that has sent nothing for this long, so a
 // stuck or idle bridge can't hold a goroutine forever.
@@ -129,12 +143,15 @@ func ListenWithRing(ctx context.Context, network, addr string, ring *Ring) (*Ser
 		}
 	}
 	s := &Server{
-		addr:   ln.Addr().String(),
-		ring:   ring,
-		hub:    NewHub(),
-		ln:     ln,
-		closed: make(chan struct{}),
+		addr:       ln.Addr().String(),
+		ring:       ring,
+		hub:        NewHub(),
+		ln:         ln,
+		closed:     make(chan struct{}),
+		queue:      make(chan Event, queueSize),
+		writerDone: make(chan struct{}),
 	}
+	go s.writeLoop()
 	s.wg.Add(1)
 	go s.acceptLoop()
 	if ctx != nil && ctx.Done() != nil {
@@ -231,14 +248,62 @@ func (s *Server) SetKeepTests(keep bool) {
 func (s *Server) Push(e Event) { s.record(e) }
 
 func (s *Server) record(e Event) {
+	if s.accept(&e) {
+		s.ring.Append(e)
+		s.hub.Publish(e)
+	}
+}
+
+// accept reports whether e is kept, putting it on its registered site first.
+func (s *Server) accept(e *Event) bool {
 	if !e.Valid() || (e.Ctx.Test && !s.keepTests.Load()) {
-		return
+		return false
 	}
 	if fn := s.siteName.Load(); fn != nil {
 		e.Ctx.Site = (*fn)(e.Ctx.Site)
 	}
-	s.ring.Append(e)
-	s.hub.Publish(e)
+	return true
+}
+
+// enqueue hands a bridge event to the writer, or drops it when the queue is
+// full, so the connection that sent it is never held up.
+func (s *Server) enqueue(e Event) {
+	if !s.accept(&e) {
+		return
+	}
+	select {
+	case s.queue <- e:
+	default:
+		if now := time.Now().Unix(); now-s.lastDrop.Load() >= 60 {
+			s.lastDrop.Store(now)
+			log.Printf("dumps: events arrive faster than the debug buffer stores them, dropping some")
+		}
+	}
+}
+
+// writeLoop stores queued events in batches, then publishes them in order, so
+// a subscriber told of an event can already read it.
+func (s *Server) writeLoop() {
+	defer close(s.writerDone)
+	for e := range s.queue {
+		batch := []Event{e}
+	fill:
+		for len(batch) < maxBatch {
+			select {
+			case next, ok := <-s.queue:
+				if !ok {
+					break fill
+				}
+				batch = append(batch, next)
+			default:
+				break fill
+			}
+		}
+		s.ring.AppendBatch(batch)
+		for _, ev := range batch {
+			s.hub.Publish(ev)
+		}
+	}
 }
 
 // SetSiteResolver sets how an incoming event's site name is mapped to the
@@ -313,7 +378,7 @@ func (s *Server) handle(conn net.Conn) {
 		if err := json.Unmarshal(line, &ev); err != nil {
 			continue
 		}
-		s.record(ev)
+		s.enqueue(ev)
 	}
 	// scanner.Err() is intentionally swallowed: the bridge is fire-and-forget
 	// and connection-level failures (timeout, oversized line) must not affect
@@ -348,5 +413,8 @@ func (s *Server) Close() error {
 		}
 	})
 	s.wg.Wait()
+	// Every connection is done, so nothing sends on the queue any more.
+	s.queueOnce.Do(func() { close(s.queue) })
+	<-s.writerDone
 	return nil
 }
