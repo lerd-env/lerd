@@ -486,19 +486,19 @@ type StartEvent struct {
 // the same SIGTERM a stop is, so lerd-ui asking for its own unit killed the
 // start half way and left the dashboard unreachable behind a 502.
 func startLerd(emit func(StartEvent), skip []string) error {
-	if cfg, _ := config.LoadGlobal(); cfg != nil {
-		if err := seatRefusesStart(cfg.MultiUser, lerdSystemd.SeatForeground()); err != nil {
-			return err
-		}
-	}
-	// Starting by hand, or the watcher's own resume, settles any start a user
-	// switch owed; a refused start above leaves it owed.
-	_ = config.ClearSeatReleased()
 	release, err := podman.LockLifecycle()
 	if err != nil {
 		return fmt.Errorf("lifecycle lock: %w", err)
 	}
 	defer release()
+	// Both under the lock, so a user switch released in flight is seen: the
+	// screen is checked after it, and the start it owed is settled after it.
+	if cfg, _ := config.LoadGlobal(); cfg != nil {
+		if err := seatRefusesStart(cfg.MultiUser, lerdSystemd.SeatForeground()); err != nil {
+			return err
+		}
+	}
+	_ = config.ClearSeatReleased()
 
 	var emitMu sync.Mutex
 	report := func(e StartEvent) {
