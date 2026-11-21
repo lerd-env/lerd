@@ -4,8 +4,13 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"os/user"
+	"strconv"
 	"strings"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 // PortListOutput returns the raw output of ss -tlnp for batch port checks.
@@ -79,4 +84,51 @@ func ssProcess(line string) (name, pid string, ok bool) {
 	}
 	pid, _, _ = strings.Cut(rest, ",")
 	return name, pid, name != ""
+}
+
+// OtherUserLerd names the user whose lerd holds one of the ports lerd needs, or
+// "" when none does. lerd is rootless per user, so a second user's stack cannot
+// start while the first one's is up, and a lingering stack survives logout.
+func OtherUserLerd() string {
+	out, err := exec.Command("ss", "-tlne").Output()
+	if err != nil {
+		return ""
+	}
+	httpPort, httpsPort := config.NginxPorts()
+	ports := []string{strconv.Itoa(httpPort), strconv.Itoa(httpsPort), "5300", "7073"}
+	uid := otherUserLerdUID(string(out), ports, strconv.Itoa(os.Getuid()))
+	if uid == "" {
+		return ""
+	}
+	if u, err := user.LookupId(uid); err == nil {
+		return u.Username
+	}
+	return "uid " + uid
+}
+
+// otherUserLerdUID returns the owner uid of the first listener on ports that
+// runs in a lerd unit of a user other than selfUID. ss -e shows the owner and
+// cgroup of every socket, including ones the caller cannot see a process for.
+func otherUserLerdUID(ssOut string, ports []string, selfUID string) string {
+	for _, line := range strings.Split(ssOut, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 || !strings.Contains(line, "/app.slice/lerd-") {
+			continue
+		}
+		uid := ""
+		for _, f := range fields {
+			if v, found := strings.CutPrefix(f, "uid:"); found {
+				uid = v
+			}
+		}
+		if uid == "" || uid == selfUID {
+			continue
+		}
+		for _, port := range ports {
+			if strings.HasSuffix(fields[3], ":"+port) {
+				return uid
+			}
+		}
+	}
+	return ""
 }

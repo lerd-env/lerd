@@ -231,6 +231,7 @@ func main() {
 	root.AddCommand(cli.NewDumpCmd())
 	root.AddCommand(cli.NewIdleCmd())
 	root.AddCommand(cli.NewStreamingCmd())
+	root.AddCommand(cli.NewMultiUserCmd())
 	root.AddCommand(cli.NewWSLSetupCmd())
 	root.AddCommand(cli.NewWSLTermCmd())
 	root.AddCommand(cli.NewProfileCmd())
@@ -669,6 +670,10 @@ func newWatchCmd() *cobra.Command {
 			// Turn streaming mode on while the screen is shared, for users who
 			// opted in. Returns at once on hosts without PipeWire.
 			go watcher.WatchScreenShare(10 * time.Second)
+
+			// Hand lerd's ports between users of one machine, for those who
+			// opted in with lerd multi-user enable.
+			go watcher.WatchSeat(5 * time.Second)
 
 			// Reclaim orphaned lerd images (safe tier) on a slow daily cadence,
 			// so rebuild leftovers and stale base images don't pile up. Gated by

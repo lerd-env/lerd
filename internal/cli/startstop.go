@@ -394,6 +394,9 @@ func checkPortConflicts(units []string) {
 				fmt.Sprintf("  WARN: port %s (%s) already in use, may fail to start (check: %s)", c.Port, c.Label, FindListenerCmd(c.Port)))
 		}
 	}
+	if other := OtherUserLerd(); other != "" {
+		conflicts = append(conflicts, "  WARN: "+otherUserLerdNote(other))
+	}
 	if len(conflicts) > 0 {
 		fmt.Println("Port conflicts detected:")
 		for _, msg := range conflicts {

@@ -116,7 +116,10 @@ func ensurePortsAvailable() []PortCheck {
 		return nil
 	}
 	conflicts := portPreflightConflicts(portList, podmanContainerRunning, lerdDNSAnswering)
-	if len(conflicts) == 0 {
+	// Checked even with no conflict: another user's dashboard and DNS outlive
+	// their lerd stop, and their DNS answering looks like ours to the check above.
+	other := OtherUserLerd()
+	if len(conflicts) == 0 && other == "" {
 		ok()
 		return nil
 	}
@@ -125,8 +128,18 @@ func ensurePortsAvailable() []PortCheck {
 		feedback.Warn("port %s (%s) is already in use, %s may fail to start", c.Port, c.Label, c.Container)
 		feedback.Note("find it: " + FindListenerCmd(c.Port))
 	}
+	if other != "" {
+		feedback.Warn("%s", otherUserLerdNote(other))
+		return conflicts
+	}
 	feedback.Note("another local stack such as Laravel Herd may be hosting sites; stop it to free these ports, then re-run lerd install")
 	return conflicts
+}
+
+// otherUserLerdNote tells a second user on the machine how to get the ports
+// back. lerd quit, not stop, because stop leaves the dashboard and DNS running.
+func otherUserLerdNote(name string) string {
+	return fmt.Sprintf("the lerd of user %s is running and holds these ports; lerd serves one user at a time, so %s has to run lerd quit first", name, name)
 }
 
 // nginxStartError turns a failed lerd-nginx start into the install's final
@@ -1159,6 +1172,12 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// package manager swaps underneath it is recognised on the next command.
 	writeInstalledVersion(version.Version)
 
+	if nginxErr != nil {
+		if other := OtherUserLerd(); other != "" {
+			feedback.Begin()
+			return fmt.Errorf("lerd-nginx did not start, so no site is served: %s, then run lerd install again", otherUserLerdNote(other))
+		}
+	}
 	if err := nginxStartError(nginxErr, portConflicts, nginxPortHolder(portConflicts)); err != nil {
 		feedback.Begin()
 		return err
