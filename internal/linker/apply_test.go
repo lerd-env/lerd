@@ -210,7 +210,21 @@ func TestEnsureServableFPMImage_warnsWhenTheBuildFails(t *testing.T) {
 	}
 }
 
-// A caller that cannot build (the watcher, or no builder wired) warns plainly
+// A parked project the watcher links onto a version with no image gets it built
+// then, since install only builds for linked sites and nothing else would.
+func TestEnsureServableFPMImage_watcherBuildsAMissingImage(t *testing.T) {
+	withFPMImageExists(t, false)
+	built := ""
+
+	ensureServableFPMImage(&Plan{Mode: ModeFPM}, fpmSite(), WatcherPolicy(),
+		Deps{EnsureFPMQuadlet: func(v string) error { built = v; return nil }}, &recorder{})
+
+	if built != "8.1" {
+		t.Errorf("built = %q, want the site's 8.1 image built on link", built)
+	}
+}
+
+// A caller that cannot build (no builder wired, or builds withheld) warns plainly
 // instead of registering a silent 502.
 func TestEnsureServableFPMImage_warnsWhenBuildsAreWithheld(t *testing.T) {
 	withFPMImageExists(t, false)
@@ -308,8 +322,11 @@ func TestPolicies_capabilities(t *testing.T) {
 	}
 
 	w := WatcherPolicy()
-	if w.ProjectWrites || w.Services || w.Certs || w.RepoCommands || w.ImageBuild || w.Prompt != nil {
-		t.Errorf("the watcher policy must grant nothing: %+v", w)
+	if w.ProjectWrites || w.Services || w.Certs || w.RepoCommands || w.Prompt != nil {
+		t.Errorf("the watcher policy must grant nothing beyond lerd's own image build: %+v", w)
+	}
+	if !w.ImageBuild {
+		t.Error("the watcher must build the PHP image a linked site lands on")
 	}
 	if !w.SkipRegistered {
 		t.Error("the watcher must skip an already registered path")
