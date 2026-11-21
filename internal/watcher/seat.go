@@ -22,16 +22,15 @@ const (
 // systemd and ss on the ticks that need them.
 type seatProbe struct {
 	nginx      func() string // lerd-nginx's ActiveState
-	procsUp    func() bool   // lerd-ui or lerd-dns running
 	otherHolds func() bool   // another user's lerd holds our ports
 }
 
-// seatWatchState hands the stack over between users on one machine. What to
-// release is read from the units each time, so a lerd start or stop in between
-// is always seen; the only thing remembered is whether we owe a start.
+// seatWatchState hands the stack over between users on one machine. Every
+// switch away releases the whole stack, which costs nothing when it is already
+// down; the only thing remembered is whether we owe it a start.
 type seatWatchState struct {
 	prev    systemd.Foreground
-	owed    bool // we stopped a stack that was meant to run
+	owed    bool // a release stopped a stack that was meant to run
 	pending bool // ours to start once the ports are free
 }
 
@@ -45,13 +44,8 @@ func (s *seatWatchState) decide(enabled bool, fg systemd.Foreground, p seatProbe
 	switch fg {
 	case systemd.ForegroundOther:
 		s.pending = false
-		nginx := p.nginx()
-		if nginx != "active" && nginx != "activating" && !p.procsUp() {
+		if prev == systemd.ForegroundOther {
 			return seatNoop
-		}
-		// nginx inactive means stopped by hand: release its ports, owe nothing.
-		if nginx != "inactive" {
-			s.owed = true
 		}
 		return seatRelease
 	case systemd.ForegroundSelf:
@@ -67,6 +61,12 @@ func (s *seatWatchState) decide(enabled bool, fg systemd.Foreground, p seatProbe
 		return seatResume
 	}
 	return seatNoop
+}
+
+// released records what a release found. A start already owed stays owed: the
+// stop marker our own earlier release wrote is not the user stopping lerd.
+func (s *seatWatchState) released(wasRunning bool) {
+	s.owed = s.owed || wasRunning
 }
 
 func blocked(nginx string) bool { return nginx == "failed" || nginx == "activating" }
@@ -91,19 +91,14 @@ func applySeat(s *seatWatchState) {
 		fg = systemd.SeatForeground()
 	}
 	probe := seatProbe{
-		nginx: func() string { state, _ := podman.UnitStatus("lerd-nginx"); return state },
-		procsUp: func() bool {
-			ui, _ := podman.UnitStatus("lerd-ui")
-			dns, _ := podman.UnitStatus("lerd-dns")
-			return ui == "active" || dns == "active"
-		},
+		nginx:      func() string { state, _ := podman.UnitStatus("lerd-nginx"); return state },
 		otherHolds: func() bool { return cli.OtherUserLerd() != "" },
 	}
 
 	switch s.decide(cfg.MultiUser, fg, probe) {
 	case seatRelease:
 		logger.Info("another user is on screen, releasing lerd's ports")
-		releaseSeat()
+		s.released(releaseSeat())
 	case seatResume:
 		logger.Info("back on screen, starting lerd")
 		if err := cli.RunStart(nil, podman.WatcherUnit); err != nil {
@@ -112,14 +107,17 @@ func applySeat(s *seatWatchState) {
 	}
 }
 
-// releaseSeat runs lerd quit minus the watcher, under the lifecycle lock so a
-// lerd start in flight cannot bring units back up behind it.
-func releaseSeat() {
+// releaseSeat runs lerd quit minus the watcher and reports whether the stack
+// was meant to run. Both happen under the lifecycle lock, so a lerd start or
+// stop in flight finishes first and its stop marker is the one we read.
+func releaseSeat() (wasRunning bool) {
 	unlock, err := podman.LockLifecycle()
 	if err != nil {
 		logger.Warn("releasing lerd for another user", "err", err)
-		return
+		return false
 	}
 	defer unlock()
+	wasRunning = !config.IsStopped()
 	_ = lifecycle.Quit(lifecycle.SimpleRunner, nil, podman.WatcherUnit)
+	return wasRunning
 }
