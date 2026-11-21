@@ -79,7 +79,9 @@ out. A registry that does not answer in time leaves the line without a number
 rather than holding the command up.
 
 `lerd install` reports the same block for the PHP versions it has to rebuild,
-usually after an upgrade that changed the image recipe. Each version then builds
+usually after an upgrade that changed the image recipe. It builds only the
+default PHP version and the ones your linked sites run; a project sitting in a
+parked directory gets its version built when the watcher links it. Each version then builds
 behind its own progress line instead of streaming the raw build log; press
 Ctrl+O while it runs to see the output.
 

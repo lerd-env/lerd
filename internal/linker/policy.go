@@ -69,12 +69,11 @@ func CLIPolicy(name string, assumeYes bool, prompt Prompter) Policy {
 	}
 }
 
-// WatcherPolicy is the policy for `lerd park` and the parked-directory watcher.
-// It runs unattended against every subdirectory of a parked tree, so it reads
-// the project's committed configuration but never asks a question, never writes
-// into the project, and never runs anything the repository authored.
+// WatcherPolicy is for `lerd park` and the parked-directory watcher: unattended,
+// no questions, no writes into the project, nothing the repository authored. It
+// may build lerd's own PHP image, since install builds only for linked sites.
 func WatcherPolicy() Policy {
-	return Policy{SkipRegistered: true}
+	return Policy{SkipRegistered: true, ImageBuild: true}
 }
 
 // Mode is how a linked site is served.
