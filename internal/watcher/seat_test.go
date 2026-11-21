@@ -1,8 +1,10 @@
 package watcher
 
 import (
+	"errors"
 	"testing"
 
+	"github.com/geodro/lerd/internal/cli"
 	"github.com/geodro/lerd/internal/systemd"
 )
 
@@ -95,5 +97,33 @@ func TestSeatWatchState(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A resume the start refuses because the screen changed hands again in between
+// stays owed, so the next return starts the stack; any other failure does not.
+func TestSeatResumeRefusedStaysOwed(t *testing.T) {
+	probe := seatProbe{nginx: func() string { return "inactive" }, otherHolds: func() bool { return false }}
+	s := &seatWatchState{}
+	if got := s.decide(true, systemd.ForegroundOther, probe); got != seatRelease {
+		t.Fatalf("first switch away = %v, want release", got)
+	}
+	s.released(true)
+	if got := s.decide(true, systemd.ForegroundSelf, probe); got != seatResume {
+		t.Fatalf("back on screen = %v, want resume", got)
+	}
+	s.resumeFailed(cli.ErrOtherUserOnScreen)
+	if got := s.decide(true, systemd.ForegroundOther, probe); got != seatRelease {
+		t.Fatalf("second switch away = %v, want release", got)
+	}
+	s.released(false) // our own earlier release left the stop marker
+	if got := s.decide(true, systemd.ForegroundSelf, probe); got != seatResume {
+		t.Fatalf("back again = %v, want resume", got)
+	}
+
+	other := &seatWatchState{prev: systemd.ForegroundSelf}
+	other.resumeFailed(errors.New("podman broke"))
+	if got := other.decide(true, systemd.ForegroundSelf, probe); got != seatNoop {
+		t.Fatalf("after another failure = %v, want noop, not a retry every tick", got)
 	}
 }

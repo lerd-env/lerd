@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"errors"
 	"time"
 
 	"github.com/geodro/lerd/internal/cli"
@@ -69,6 +70,15 @@ func (s *seatWatchState) released(wasRunning bool) {
 	s.owed = s.owed || wasRunning
 }
 
+// resumeFailed keeps the start owed when lerd start refused it because the
+// screen changed hands again in between. Other failures are not retried, or a
+// broken start would rerun on every tick.
+func (s *seatWatchState) resumeFailed(err error) {
+	if errors.Is(err, cli.ErrOtherUserOnScreen) {
+		s.owed = true
+	}
+}
+
 func blocked(nginx string) bool { return nginx == "failed" || nginx == "activating" }
 
 // WatchSeat follows who is on screen when multi-user mode is on: it releases
@@ -103,6 +113,7 @@ func applySeat(s *seatWatchState) {
 		logger.Info("back on screen, starting lerd")
 		if err := cli.RunStart(nil, podman.WatcherUnit); err != nil {
 			logger.Warn("starting lerd after a user switch", "err", err)
+			s.resumeFailed(err)
 		}
 	}
 }
