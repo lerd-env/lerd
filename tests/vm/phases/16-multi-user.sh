@@ -107,11 +107,11 @@ as_u2 lerd quit </dev/null >/dev/null 2>&1
 lerd start </dev/null >/dev/null 2>&1
 wait_for 120 serves "$SELF_HOST" vmmu-self
 
+# Before multi-user mode, as if the second user logged in while our lerd runs:
+# its stack starts blocked on our ports. A quit one would not be owed a start.
+as_u2 lerd start </dev/null >/dev/null 2>&1
 check "16.4 [partial] multi-user mode turns on for us" lerd multi-user enable
 check "16.4 [partial] multi-user mode turns on for the second user" as_u2 lerd multi-user enable
-# As if the second user logged in while our lerd runs: its stack starts and is
-# blocked on our ports. A quit stack would count as stopped by hand instead.
-as_u2 lerd start </dev/null >/dev/null 2>&1
 seat_login "$USER" "$SELF_VT" lerdvm-seat-self || _fail "setup: no console login for $USER"
 seat_login "$U2" "$OTHER_VT" lerdvm-seat-other || _fail "setup: no console login for $U2"
 sudo chvt "$SELF_VT"
@@ -129,6 +129,9 @@ expect_200 "16.5" "http://$SELF_HOST/"
 wait_for 30 owns_ports "$(id -u)"
 check "16.5 our lerd holds the ports again" owns_ports "$(id -u)"
 check_out "16.5 our dashboard lists our site again" "\"path\":\"$SELF_DIR\"" sites_api
+check_out "16.5 the second user's lerd start is refused while we are on screen" "another user's desktop is on screen" \
+	as_u2 lerd start
+check "16.5 and it left our ports alone" owns_ports "$(id -u)"
 
 lerd stop </dev/null >/dev/null 2>&1
 # Two rounds, since a stop marker lost on the first would show on the second.

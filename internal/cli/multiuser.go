@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/systemd"
 )
 
 // NewMultiUserCmd returns `lerd multi-user`, which lets several users of one
@@ -31,4 +34,13 @@ func setMultiUser(on bool) error {
 	}
 	feedback.Done("multi-user mode enabled, every user of this machine needs it on")
 	return nil
+}
+
+// seatRefusesStart keeps lerd start off the ports while another user's desktop
+// is on screen in multi-user mode; their stack owns them until ours is back.
+func seatRefusesStart(multiUser bool, fg systemd.Foreground) error {
+	if !multiUser || fg != systemd.ForegroundOther {
+		return nil
+	}
+	return fmt.Errorf("another user's desktop is on screen and multi-user mode is on, so lerd starts again when yours is back; run lerd multi-user disable to start it anyway")
 }

@@ -486,6 +486,11 @@ type StartEvent struct {
 // the same SIGTERM a stop is, so lerd-ui asking for its own unit killed the
 // start half way and left the dashboard unreachable behind a 502.
 func startLerd(emit func(StartEvent), skip []string) error {
+	if cfg, _ := config.LoadGlobal(); cfg != nil {
+		if err := seatRefusesStart(cfg.MultiUser, lerdSystemd.SeatForeground()); err != nil {
+			return err
+		}
+	}
 	release, err := podman.LockLifecycle()
 	if err != nil {
 		return fmt.Errorf("lifecycle lock: %w", err)
