@@ -2,6 +2,10 @@
 
 End-to-end: from `lerd install` to a [Lumen](https://lumen.laravel.com/) API running on `https://api.test` with a queue worker and a scheduler.
 
+::: warning Lumen is not recommended for new projects
+Laravel no longer supports starting new projects with Lumen. PHP's performance gains and [Laravel Octane](https://laravel.com/docs/octane) removed the reason for it, so begin new projects with [Laravel](laravel.md) instead. This page is for existing Lumen apps.
+:::
+
 ::: info Prerequisites
 You've already run `lerd install` once on this machine. If not, see [Installation](installation.md).
 :::
