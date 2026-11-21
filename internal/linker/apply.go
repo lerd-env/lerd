@@ -197,8 +197,8 @@ func ensureServableFPMImage(plan *Plan, site config.Site, p Policy, d Deps, r Re
 	}
 	rebuildHint := fmt.Sprintf("PHP %s is not built, so %s will answer 502 until you run 'lerd php:rebuild %s'",
 		site.PHPVersion, site.Name, site.PHPVersion)
-	// The watcher's unattended sweep withholds image builds; naming the command
-	// keeps it honest rather than silently registering a 502.
+	// Without a builder, naming the command keeps it honest rather than silently
+	// registering a 502.
 	if !p.ImageBuild || d.EnsureFPMQuadlet == nil {
 		r.Warn("%s", rebuildHint)
 		return

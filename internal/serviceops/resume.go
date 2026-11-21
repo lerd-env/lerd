@@ -26,7 +26,13 @@ func resume(name string, bringUp func() error) error {
 // explicit start from the dashboard or the CLI. It shares the service's lock but
 // not its in-flight run, which promises a ready service a start cannot give.
 func resumeStart(name string, start func() error) error {
-	return resumeAs(name+" start", name, resumeActive, start)
+	return resumeAs(name+" start", name, resumeActive, func() error {
+		// Up already, whoever brought it up and however long ago.
+		if resumeActive(name) {
+			return nil
+		}
+		return start()
+	})
 }
 
 // StartShared runs start for a service through the start every other caller

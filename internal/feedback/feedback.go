@@ -9,6 +9,7 @@ import (
 	"image/color"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1046,5 +1047,11 @@ func Ask(question string) string {
 			break
 		}
 	}
-	return strings.TrimSpace(string(line))
+	text := strings.ReplaceAll(string(line), "\t", " ")
+	return strings.TrimSpace(terminalKeys.ReplaceAllString(text, ""))
 }
+
+// terminalKeys matches what a cooked terminal passes through for keys that are
+// not text: arrow and function key escape sequences, and stray control bytes.
+// Tabs are turned into spaces first so they still separate words.
+var terminalKeys = regexp.MustCompile(`\x1b(\[[0-9;?]*[ -/]*[@-~]|O.|.)?|[\x00-\x1f\x7f]`)
