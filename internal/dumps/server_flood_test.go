@@ -102,22 +102,29 @@ func TestServer_QueueHoldsNoMoreThanItsByteBudget(t *testing.T) {
 }
 
 // holdWriter makes the writer wait before each store until release is called,
-// so a test can act while events are known to be queued.
-func holdWriter(t *testing.T) (release func()) {
-	gate := make(chan struct{})
+// and says on reached when it first does, so a test can act while events are
+// known to be queued.
+func holdWriter(t *testing.T) (reached <-chan struct{}, release func()) {
+	gate, at := make(chan struct{}), make(chan struct{})
+	var first sync.Once
 	prev := beforeStore
-	beforeStore = func() { <-gate }
+	beforeStore = func() {
+		first.Do(func() { close(at) })
+		<-gate
+	}
 	t.Cleanup(func() { beforeStore = prev })
 	var once sync.Once
-	return func() { once.Do(func() { close(gate) }) }
+	return at, func() { once.Do(func() { close(gate) }) }
 }
 
 // queueBehindHeldWriter sends one event, which the held writer takes, and four
 // more that stay in the queue behind it.
-func queueBehindHeldWriter(t *testing.T, s *Server, line func(int) string) {
+func queueBehindHeldWriter(t *testing.T, s *Server, reached <-chan struct{}, line func(int) string) {
 	t.Helper()
 	dialAndSend(t, s.Addr(), line(0))
-	if !waitFor(func() bool { return s.openConns() == 0 && len(s.queue) == 0 }, 2*time.Second) {
+	select {
+	case <-reached:
+	case <-time.After(2 * time.Second):
 		t.Fatal("the writer never took the first event")
 	}
 	for i := 1; i < 5; i++ {
@@ -131,10 +138,10 @@ func queueBehindHeldWriter(t *testing.T, s *Server, line func(int) string) {
 // Clearing the buffer also clears what was still queued, so events from
 // before a clear never come back after it.
 func TestServer_ClearCoversQueuedEvents(t *testing.T) {
-	release := holdWriter(t)
+	reached, release := holdWriter(t)
 	s := startServer(t)
 	t.Cleanup(release)
-	queueBehindHeldWriter(t, s, func(i int) string { return floodEvent(t, i) })
+	queueBehindHeldWriter(t, s, reached, func(i int) string { return floodEvent(t, i) })
 	cleared := make(chan struct{})
 	go func() { s.Clear(); close(cleared) }()
 	settleBeforeRelease(cleared)
@@ -148,11 +155,11 @@ func TestServer_ClearCoversQueuedEvents(t *testing.T) {
 
 // Switching test recording off drops the test events still queued too.
 func TestServer_TestRecordingOffCoversQueuedEvents(t *testing.T) {
-	release := holdWriter(t)
+	reached, release := holdWriter(t)
 	s := startServer(t)
 	t.Cleanup(release)
 	s.SetKeepTests(true)
-	queueBehindHeldWriter(t, s, func(i int) string {
+	queueBehindHeldWriter(t, s, reached, func(i int) string {
 		return mustJSON(t, Event{
 			V: 1, ID: "t" + strconv.Itoa(i), TS: "2026-05-10T00:00:00.000Z", Kind: "dump",
 			Ctx: Context{Type: "cli", Site: "x", Test: true},
