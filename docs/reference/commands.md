@@ -112,6 +112,7 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd workspace assign <site> <workspace\|none>` | Move a site into a workspace, or out of one with `none`; assign a group main, not a secondary |
 | `lerd workspace move <name> <position>` | Reposition a workspace in the display order (`0` is first) |
 | `lerd workspace list` | List the workspaces and their sites |
+| `lerd multi-user enable\|disable` | Share a Linux machine with other lerd users: while another user's desktop is on screen, lerd releases its ports, and it starts again when yours is back. See [several users on one machine](../usage/lifecycle.md#several-users-on-one-machine-linux) |
 | `lerd streaming enable\|disable` | Turn streaming mode on or off as a feature; enabled, it follows screen shares on Linux Wayland |
 | `lerd streaming on` | Hide private workspaces and their sites while screen sharing |
 | `lerd streaming off` | Show private workspaces and their sites again |

@@ -234,6 +234,24 @@ None of this runs on Linux, and nothing is missing there. Podman runs natively, 
 
 ---
 
+## Several users on one machine (Linux)
+
+lerd is rootless, so every Linux user who runs it has their own stack: their own sites, config, containers and images. Only one of those stacks can serve at a time, because they all want ports 80, 443, 5300 and 7073. lerd turns on linger for the user who installs it, so that user's stack keeps those ports even after they switch user or log out.
+
+The simple way to take turns is `lerd quit` before the next user starts. `lerd stop` is not enough, because it leaves the dashboard and DNS running. When another user's lerd holds the ports, `lerd start` and `lerd install` name that user and say this.
+
+To have lerd hand the ports over on its own, every user turns on multi-user mode:
+
+```bash
+lerd multi-user enable
+```
+
+From then on each user's watcher follows who is on screen. When another user's desktop takes the screen, it stops everything `lerd quit` would, except the watcher itself. When your desktop is back, it starts the stack again once the other user's lerd has let go of the ports, which takes a few seconds. While another user's desktop is on screen, `lerd start` refuses to take their ports and says so. A locked screen still counts as yours. The login screen counts as nobody's, so whichever stack is running keeps running. A stack you stopped by hand stays down when your desktop is back, dashboard and DNS included, until you run `lerd start`. The watcher is what follows the screen, so after `lerd quit`, which stops the watcher too, nothing comes back until your next login or `lerd start`.
+
+On a machine with no screen session, such as a server you only reach over ssh, or WSL, there is nothing to follow, so multi-user mode does nothing there. `lerd multi-user disable` turns it off.
+
+---
+
 ## `lerd machine reset` (macOS)
 
 ```bash

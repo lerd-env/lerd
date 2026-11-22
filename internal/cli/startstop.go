@@ -394,6 +394,9 @@ func checkPortConflicts(units []string) {
 				fmt.Sprintf("  WARN: port %s (%s) already in use, may fail to start (check: %s)", c.Port, c.Label, FindListenerCmd(c.Port)))
 		}
 	}
+	if other := OtherUserLerd(); other != "" {
+		conflicts = append(conflicts, "  WARN: "+otherUserLerdNote(other))
+	}
 	if len(conflicts) > 0 {
 		fmt.Println("Port conflicts detected:")
 		for _, msg := range conflicts {
@@ -488,6 +491,14 @@ func startLerd(emit func(StartEvent), skip []string) error {
 		return fmt.Errorf("lifecycle lock: %w", err)
 	}
 	defer release()
+	// Both under the lock, so a user switch released in flight is seen: the
+	// screen is checked after it, and the start it owed is settled after it.
+	if cfg, _ := config.LoadGlobal(); cfg != nil {
+		if err := seatRefusesStart(cfg.MultiUser, lerdSystemd.SeatForeground()); err != nil {
+			return err
+		}
+	}
+	_ = config.ClearSeatReleased()
 
 	var emitMu sync.Mutex
 	report := func(e StartEvent) {
@@ -1470,6 +1481,8 @@ func runStop(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("lifecycle lock: %w", err)
 	}
 	defer release()
+	// A stop by hand cancels a start a user switch owed.
+	_ = config.ClearSeatReleased()
 	return lifecycle.Stop(spinnerRunner)
 }
 
@@ -1482,6 +1495,7 @@ func runQuit(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("lifecycle lock: %w", err)
 	}
 	defer release()
+	_ = config.ClearSeatReleased()
 	return lifecycle.Quit(spinnerRunner, killTray)
 }
 
