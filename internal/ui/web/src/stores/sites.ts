@@ -277,18 +277,18 @@ export function siteDotColor(s: Site | undefined): SiteDotColor {
 
 export type WorkerDotColor = 'amber' | 'violet' | 'emerald' | 'sky' | 'indigo';
 
-// Colors for each running worker, used as little status dots in list rows and
-// dashboard tiles. Kept here so the row and tile views never drift apart.
-export function runningWorkerColors(s: Site): WorkerDotColor[] {
-  const dots: WorkerDotColor[] = [];
-  if (s.queue_running) dots.push('amber');
-  if (s.horizon_running) dots.push('amber');
-  if (s.stripe_running) dots.push('violet');
-  if (s.schedule_running) dots.push('emerald');
-  if (s.reverb_running) dots.push('sky');
-  for (const w of s.framework_workers || []) if (w.running) dots.push('indigo');
-  return dots;
+export interface WorkerDot {
+  color: WorkerDotColor;
+  label: string;
 }
+
+const builtinWorkerLabels: Record<string, () => string> = {
+  queue: () => m.services_labels_queueWorker(),
+  horizon: () => m.services_labels_horizon(),
+  stripe: () => m.services_labels_stripeListener(),
+  schedule: () => m.services_labels_scheduler(),
+  reverb: () => m.services_labels_reverb()
+};
 
 function workerColorByName(name: string): WorkerDotColor {
   if (name === 'queue' || name === 'horizon') return 'amber';
@@ -298,13 +298,31 @@ function workerColorByName(name: string): WorkerDotColor {
   return 'indigo';
 }
 
-// idleWorkerColors returns the dot colors to show while a site sleeps: the
-// workers the engine suspended (so they keep their dots, dimmed, instead of
-// disappearing), falling back to whatever is still running during the brief
-// suspend transition.
-export function idleWorkerColors(s: Site): WorkerDotColor[] {
-  const dots = (s.idle_suspended_workers || []).map(workerColorByName);
-  return dots.length > 0 ? dots : runningWorkerColors(s);
+function workerDot(s: Site, name: string): WorkerDot {
+  const fw = (s.framework_workers || []).find((w) => w.name === name);
+  const label = builtinWorkerLabels[name]?.() ?? (fw?.label || name);
+  return { color: workerColorByName(name), label };
+}
+
+// Dots for each running worker, used as little status dots in list rows and
+// dashboard tiles. Kept here so the row and tile views never drift apart.
+export function runningWorkerDots(s: Site): WorkerDot[] {
+  const names: string[] = [];
+  if (s.queue_running) names.push('queue');
+  if (s.horizon_running) names.push('horizon');
+  if (s.stripe_running) names.push('stripe');
+  if (s.schedule_running) names.push('schedule');
+  if (s.reverb_running) names.push('reverb');
+  for (const w of s.framework_workers || []) if (w.running) names.push(w.name);
+  return names.map((n) => workerDot(s, n));
+}
+
+// idleWorkerDots returns the dots to show while a site sleeps: the workers the
+// engine suspended (so they keep their dots, dimmed, instead of disappearing),
+// falling back to whatever is still running during the brief suspend transition.
+export function idleWorkerDots(s: Site): WorkerDot[] {
+  const dots = (s.idle_suspended_workers || []).map((n) => workerDot(s, n));
+  return dots.length > 0 ? dots : runningWorkerDots(s);
 }
 
 // siteHasWorkers reports whether a site has any background worker at all (queue,
