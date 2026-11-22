@@ -63,6 +63,13 @@ func (s *seatWatchState) decide(enabled bool, fg systemd.Foreground, p seatProbe
 	return seatNoop
 }
 
+// seatHeldByOther reports another user's desktop on screen in multi-user mode,
+// when nothing of ours may take a port, not even a brief start for a snapshot.
+var seatHeldByOther = func() bool {
+	cfg, err := config.LoadGlobal()
+	return err == nil && cfg.MultiUser && systemd.SeatForeground() == systemd.ForegroundOther
+}
+
 func blocked(nginx string) bool { return nginx == "failed" || nginx == "activating" }
 
 // WatchSeat follows who is on screen when multi-user mode is on: it releases
@@ -114,6 +121,12 @@ func releaseSeat() {
 		return
 	}
 	defer unlock()
+	// A brief snapshot start holds svcMu; waiting for it means the database it
+	// started is stopped again before the other user's stack needs the port.
+	if idleEng != nil {
+		idleEng.svcMu.Lock()
+		defer idleEng.svcMu.Unlock()
+	}
 	if !config.IsStopped() {
 		_ = config.MarkSeatReleased()
 	}

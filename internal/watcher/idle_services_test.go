@@ -426,6 +426,27 @@ func TestWithServiceBriefly_startsRunsAndStopsWithoutWaking(t *testing.T) {
 	}
 }
 
+// While another user's desktop has the screen in multi-user mode, a snapshot
+// must not start a sleeping database: the ports are theirs until we are back.
+func TestWithServiceBriefly_leavesPortsToTheUserOnScreen(t *testing.T) {
+	f := installFakeServices(t)
+	_ = config.SetServiceIdleSuspended("mysql", true)
+	prevStart, prevStop, prevSeat := serviceStartRaw, serviceStopRaw, seatHeldByOther
+	t.Cleanup(func() { serviceStartRaw, serviceStopRaw, seatHeldByOther = prevStart, prevStop, prevSeat })
+	serviceStartRaw = func(n string) error { f.log("start " + n); return nil }
+	serviceStopRaw = func(n string) error { f.log("stop " + n); return nil }
+	seatHeldByOther = func() bool { return true }
+
+	e := newIdleEngine(idle.NewTracker(nil))
+	err := e.withServiceBriefly("mysql", func() error { f.log("dump"); return nil })
+	if err == nil {
+		t.Fatal("ran the snapshot while another user is on screen")
+	}
+	if got := f.callLog(); len(got) != 0 {
+		t.Fatalf("calls = %v, want none", got)
+	}
+}
+
 // spamassassin has no site of its own; it lives on mailpit's, so it stays up
 // while a site sending mail is busy and wakes with it.
 func TestServiceKeys_followConsumersDownTheChain(t *testing.T) {

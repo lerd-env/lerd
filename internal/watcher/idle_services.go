@@ -359,6 +359,9 @@ func (e *idleEngine) withServiceBriefly(name string, fn func() error) error {
 
 	e.svcMu.Lock()
 	defer e.svcMu.Unlock()
+	if seatHeldByOther() {
+		return fmt.Errorf("another user's desktop is on screen, %s stays asleep", name)
+	}
 	if err := serviceStartRaw(name); err != nil {
 		return err
 	}
