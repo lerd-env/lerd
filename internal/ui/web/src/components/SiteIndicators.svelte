@@ -17,6 +17,10 @@
   // While asleep, keep showing the suspended workers' dots (dimmed) so the site
   // doesn't look like it lost its workers.
   const idleDots = $derived(idleWorkerDots(site));
+  // The dots' tooltips need a mouse, so the group's label carries the names too.
+  const names = (list: WorkerDot[]) => list.map((d) => d.label).join(', ');
+  const runningLabel = $derived(`${m.sites_workersRunning({ count: dots.length })}: ${names(dots)}`);
+  const idleLabel = $derived(`${m.sites_idleHint()} ${names(idleDots)}`);
 
   // A share on a branch counts for the row: the list shows one row per site,
   // and a shared worktree is still that site reachable from outside.
@@ -61,7 +65,7 @@
        from the watcher's activity file, only re-saved every tick) so the moon
        drops in real time on resume instead of lingering until the next poll. -->
   {#if idleDots.length > 0}
-    <span class="relative inline-flex items-center shrink-0" role="img" aria-label={m.sites_idleHint()}>
+    <span class="relative inline-flex items-center shrink-0" role="img" aria-label={idleLabel}>
       <span class="absolute -top-2.5 left-1/2 -translate-x-1/2 z-10 text-sky-500 dark:text-sky-400" use:tooltip={{ label: m.sites_idleHint(), maxWidth: 260 }}>
         <MoonMark class="w-3.5 h-3.5 drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]" />
       </span>
@@ -77,7 +81,7 @@
     </span>
   {/if}
 {:else if dots.length > 0}
-  <span class="inline-flex items-center shrink-0" role="img" aria-label={m.sites_workersRunning({ count: dots.length })}>
+  <span class="inline-flex items-center shrink-0" role="img" aria-label={runningLabel}>
     {#each dots as d, i (i + ':' + d.label)}
       {@render workerDot(d)}
     {/each}

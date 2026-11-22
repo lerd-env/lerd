@@ -97,7 +97,7 @@ describe('SiteIndicators for screen readers', () => {
     const { getByRole } = render(SiteIndicators, {
       props: { site: site({ queue_running: true, schedule_running: true }) }
     });
-    expect(getByRole('img', { name: '2 workers running' })).toBeInTheDocument();
+    expect(getByRole('img', { name: '2 workers running: Queue worker, Scheduler' })).toBeInTheDocument();
   });
 
   it('says the site is asleep', () => {
@@ -105,6 +105,13 @@ describe('SiteIndicators for screen readers', () => {
       props: { site: site({ idle_suspended: true, idle_suspended_workers: ['queue'] }) }
     });
     expect(getByRole('img', { name: /^Workers suspended/ })).toBeInTheDocument();
+  });
+
+  it('names the workers a sleeping site suspended', () => {
+    const { getByRole } = render(SiteIndicators, {
+      props: { site: site({ idle_suspended: true, idle_suspended_workers: ['queue', 'schedule'] }) }
+    });
+    expect(getByRole('img', { name: /^Workers suspended.* Queue worker, Scheduler$/ })).toBeInTheDocument();
   });
 });
 
@@ -126,7 +133,7 @@ describe('SiteIndicators pinned coffee', () => {
 
 // The tooltip each worker dot shows on hover, in row order.
 function dotTooltips(container: HTMLElement): string[] {
-  const group = container.querySelector('[aria-label$="workers running"], [aria-label^="Workers suspended"]');
+  const group = container.querySelector('[aria-label*="workers running"], [aria-label^="Workers suspended"]');
   const dots = Array.from(group!.querySelectorAll('.rounded-full')).map((d) => d.parentElement!);
   return dots.map((dot) => {
     dot.dispatchEvent(new MouseEvent('mouseenter'));
