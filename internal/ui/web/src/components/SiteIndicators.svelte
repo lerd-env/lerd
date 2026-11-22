@@ -3,8 +3,9 @@
   import StatusDot from '$components/StatusDot.svelte';
   import MoonMark from '$components/MoonMark.svelte';
   import CoffeeMark from '$components/CoffeeMark.svelte';
-  import { runningWorkerColors, idleWorkerColors, siteWorkerFailing, siteHasWorkers, type Site } from '$stores/sites';
+  import { runningWorkerDots, idleWorkerDots, siteWorkerFailing, siteHasWorkers, type Site, type WorkerDot } from '$stores/sites';
   import { idleEnabled } from '$stores/idle';
+  import { tooltip } from '$lib/tooltip';
   import { m } from '../paraglide/messages.js';
 
   interface Props {
@@ -12,10 +13,10 @@
   }
   let { site }: Props = $props();
 
-  const dots = $derived(runningWorkerColors(site));
+  const dots = $derived(runningWorkerDots(site));
   // While asleep, keep showing the suspended workers' dots (dimmed) so the site
   // doesn't look like it lost its workers.
-  const idleDots = $derived(idleWorkerColors(site));
+  const idleDots = $derived(idleWorkerDots(site));
 
   // A share on a branch counts for the row: the list shows one row per site,
   // and a shared worktree is still that site reachable from outside.
@@ -60,25 +61,31 @@
        from the watcher's activity file, only re-saved every tick) so the moon
        drops in real time on resume instead of lingering until the next poll. -->
   {#if idleDots.length > 0}
-    <span class="relative inline-flex items-center shrink-0" title={m.sites_idleHint()} role="img" aria-label={m.sites_idleHint()}>
-      <span class="absolute -top-2.5 left-1/2 -translate-x-1/2 text-sky-500 dark:text-sky-400">
+    <span class="relative inline-flex items-center shrink-0" role="img" aria-label={m.sites_idleHint()}>
+      <span class="absolute -top-2.5 left-1/2 -translate-x-1/2 z-10 text-sky-500 dark:text-sky-400" use:tooltip={{ label: m.sites_idleHint(), maxWidth: 260 }}>
         <MoonMark class="w-3.5 h-3.5 drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]" />
       </span>
-      <span class="inline-flex items-center gap-1 opacity-50">
-        {#each idleDots as c, i (i + ':' + c)}
-          <StatusDot color={c} size="xs" />
+      <span class="inline-flex items-center opacity-50">
+        {#each idleDots as d, i (i + ':' + d.label)}
+          {@render workerDot(d)}
         {/each}
       </span>
     </span>
   {:else}
-    <span class="inline-flex shrink-0 text-sky-500 dark:text-sky-400" title={m.sites_idleHint()} role="img" aria-label={m.sites_idleHint()}>
+    <span class="inline-flex shrink-0 text-sky-500 dark:text-sky-400" use:tooltip={{ label: m.sites_idleHint(), maxWidth: 260 }} role="img" aria-label={m.sites_idleHint()}>
       <MoonMark class="w-4 h-4" />
     </span>
   {/if}
 {:else if dots.length > 0}
-  <span class="inline-flex items-center gap-1 shrink-0" role="img" aria-label={m.sites_workersRunning({ count: dots.length })}>
-    {#each dots as c, i (i + ':' + c)}
-      <StatusDot color={c} size="xs" />
+  <span class="inline-flex items-center shrink-0" role="img" aria-label={m.sites_workersRunning({ count: dots.length })}>
+    {#each dots as d, i (i + ':' + d.label)}
+      {@render workerDot(d)}
     {/each}
   </span>
 {/if}
+
+<!-- Padding instead of a gap, so each dot gets a hover target bigger than itself
+     while the dots keep the same spacing. -->
+{#snippet workerDot(d: WorkerDot)}
+  <span class="inline-flex px-0.5 py-1" use:tooltip={d.label}><StatusDot color={d.color} size="xs" /></span>
+{/snippet}

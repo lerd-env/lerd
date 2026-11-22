@@ -123,3 +123,40 @@ describe('SiteIndicators pinned coffee', () => {
     expect(queryByTitle('Pinned, never idle-suspended')).toBeNull();
   });
 });
+
+// The tooltip each worker dot shows on hover, in row order.
+function dotTooltips(container: HTMLElement): string[] {
+  const group = container.querySelector('[aria-label$="workers running"], [aria-label^="Workers suspended"]');
+  const dots = Array.from(group!.querySelectorAll('.rounded-full')).map((d) => d.parentElement!);
+  return dots.map((dot) => {
+    dot.dispatchEvent(new MouseEvent('mouseenter'));
+    const text = document.querySelector('[role="tooltip"]')?.textContent ?? '';
+    dot.dispatchEvent(new MouseEvent('mouseleave'));
+    return text;
+  });
+}
+
+describe('SiteIndicators worker tooltips', () => {
+  it('names each running worker on its own dot', () => {
+    const { container } = render(SiteIndicators, {
+      props: { site: site({ queue_running: true, schedule_running: true }) }
+    });
+    expect(dotTooltips(container)).toEqual(['Queue worker', 'Scheduler']);
+  });
+
+  it('uses the framework label for a framework worker', () => {
+    const { container } = render(SiteIndicators, {
+      props: {
+        site: site({ framework_workers: [{ name: 'pulse', label: 'Pulse', running: true }] } as Partial<Site>)
+      }
+    });
+    expect(dotTooltips(container)).toEqual(['Pulse']);
+  });
+
+  it('names the suspended workers while the site sleeps', () => {
+    const { container } = render(SiteIndicators, {
+      props: { site: site({ idle_suspended: true, idle_suspended_workers: ['queue', 'schedule'] }) }
+    });
+    expect(dotTooltips(container)).toEqual(['Queue worker', 'Scheduler']);
+  });
+});
