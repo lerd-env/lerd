@@ -216,12 +216,9 @@ func waitForHostPort(port int, timeout time.Duration) {
 	}
 }
 
-// SuspendWorktreeWorkersForIdle stops a git worktree's own per-worktree workers
-// (for Laravel that's just vite) by their worktree unit names and returns the
-// names stopped, for the caller to persist. Mirrors SuspendWorkersForIdle but
-// targets lerd-<w>-<site>-<wtBase> units and runs the vite build in the worktree
-// checkout so a sleeping worktree serves built assets. wtPath is the worktree's
-// checkout directory.
+// SuspendWorktreeWorkersForIdle stops the workers running for the worktree at
+// wtPath and returns their names to persist. Vite builds in the worktree's own
+// checkout first, so a sleeping worktree still serves built assets.
 func SuspendWorktreeWorkersForIdle(site *config.Site, wtPath string) []string {
 	running := collectRunningWorktreeWorkers(site, wtPath)
 

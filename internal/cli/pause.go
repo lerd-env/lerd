@@ -468,10 +468,9 @@ func collectRunningWorkers(site *config.Site) []string {
 	return active
 }
 
-// collectRunningWorktreeWorkers returns the active per-worktree workers for the
-// worktree checkout at wtPath, checked by their worktree unit names
-// (lerd-<w>-<site>-<wtBase>). Only workers a framework marks per_worktree:true
-// run per worktree (for Laravel, just vite), so only those are enumerated.
+// collectRunningWorktreeWorkers returns the active workers for the worktree at
+// wtPath by their lerd-<w>-<site>-<wtBase> units. Any worker counts, not only
+// per_worktree ones, since a worktree on its own Redis gets its queue by hand.
 func collectRunningWorktreeWorkers(site *config.Site, wtPath string) []string {
 	return collectRunningWorktreeWorkersByBase(site, config.WorktreeUnitSlug(filepath.Base(wtPath)))
 }
@@ -485,10 +484,8 @@ func collectRunningWorktreeWorkersByBase(site *config.Site, wtBase string) []str
 		return nil
 	}
 	names := make([]string, 0, len(fw.Workers))
-	for wName, w := range fw.Workers {
-		if w.IsPerWorktree() {
-			names = append(names, wName)
-		}
+	for wName := range fw.Workers {
+		names = append(names, wName)
 	}
 	sort.Strings(names)
 

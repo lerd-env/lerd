@@ -179,7 +179,7 @@ Some plugin middleware registers itself ahead of the tool's own base handling an
 
 Stopping a worker that declares a `health.url_file`, whether the framework's or one of a project's own `custom_workers`, removes that file, so a Vite site falls back to its built assets instead of pointing at a server that is gone. A request under the prefix that still reaches a stopped dev server, say from a `public/hot` an app wrote some other way, gets a 502 saying nothing is listening on the dev server port and carries `Access-Control-Allow-Origin`, so a page on another of the site's domains shows that error in its console rather than a CORS failure.
 
-When [idle-suspend](/usage/idle-suspend) is enabled it stops every one of a site's workers once the site has been idle, so workers carry no special configuration for it. A worker marked `per_worktree: true` (Vite is the only one by default) is suspended per worktree, on each worktree's own idle timer.
+When [idle-suspend](/usage/idle-suspend) is enabled it stops every one of a site's workers once the site has been idle, so workers carry no special configuration for it. A worker running for a git worktree, Vite or one you switched on there, is suspended per worktree, on each worktree's own idle timer.
 
 ## Workers a package brings
 

@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/podman"
 )
 
 func TestWorktreeWorkerIdleSuspended(t *testing.T) {
@@ -163,5 +166,41 @@ func TestWorktreeWorkerUnitNaming(t *testing.T) {
 	mainUnit, _ := workerNames("myapp", "/srv/myapp", "vite")
 	if mainUnit != "lerd-vite-myapp" {
 		t.Errorf("main unit = %q, want lerd-vite-myapp", mainUnit)
+	}
+}
+
+// A queue switched on for one worktree runs as that worktree's own unit, so it
+// sleeps with the worktree and restarts on a database isolation like Vite does,
+// even though only Vite starts there on its own.
+func TestCollectRunningWorktreeWorkers_includesWorkersStartedByHand(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	t.Setenv("XDG_DATA_HOME", xdg)
+	if err := os.MkdirAll(filepath.Join(xdg, "lerd", "frameworks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	perWT := true
+	if err := config.SaveFramework(&config.Framework{
+		Name: "testfw",
+		Workers: map[string]config.FrameworkWorker{
+			"vite":     {Command: "npm run dev", Host: true, PerWorktree: &perWT},
+			"queue":    {Command: "php artisan queue:work"},
+			"schedule": {Command: "php artisan schedule:work"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	site := &config.Site{Name: "myapp", Path: t.TempDir(), Framework: "testfw"}
+
+	fake := &statefulLifecycle{active: map[string]bool{
+		"lerd-queue-myapp-feat": true,
+		"lerd-schedule-myapp":   true, // the parent's, not this worktree's
+	}}
+	podman.UnitLifecycle = fake
+	t.Cleanup(func() { podman.UnitLifecycle = nil })
+
+	got := collectRunningWorktreeWorkersByBase(site, "feat")
+	if len(got) != 1 || got[0] != "queue" {
+		t.Errorf("running worktree workers = %v, want [queue]", got)
 	}
 }

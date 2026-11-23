@@ -78,7 +78,7 @@ A [proxy-only site](/usage/host-proxy), one where nginx forwards to a dev server
 
 ## Worktrees
 
-Each git worktree idles on its **own** timer, independent of the main checkout and of the other worktrees. Working on `feature.myapp.test` keeps that worktree's workers alive while the main site and other worktrees can sleep on their own schedules. Suspending a worktree covers the workers a framework marks `per_worktree: true`, for Laravel that's Vite, so it stops the worktree's `lerd-vite-<site>-<branch>` unit (with the same build-on-suspend handling) and resumes it on the worktree's own traffic. A queue or other worker you switch on for a worktree yourself keeps running while the worktree idles.
+Each git worktree idles on its **own** timer, independent of the main checkout and of the other worktrees. Working on `feature.myapp.test` keeps that worktree's workers alive while the main site and other worktrees can sleep on their own schedules. Suspending a worktree stops every worker running for it under its own `lerd-<worker>-<site>-<branch>` unit, Vite (with the same build-on-suspend handling) and any queue or other worker you switched on for the worktree, and resumes them on the worktree's own traffic. The parent's workers follow the parent's timer.
 
 ## How activity is detected
 
