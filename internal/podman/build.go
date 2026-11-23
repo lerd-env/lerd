@@ -1079,6 +1079,9 @@ func RefreshXdebugInis(versions []string) error {
 // already exist as a regular file. This prevents Podman from auto-creating a directory
 // at the bind-mount source path when the container starts before the file is written.
 func EnsureXdebugIni(version string) error {
+	if !config.ValidPHPVersion(version) {
+		return fmt.Errorf("invalid PHP version %q", version)
+	}
 	path := config.PHPConfFile(version)
 	info, err := os.Stat(path)
 	if err == nil && !info.IsDir() && !loadsModuleByPath(path) {
