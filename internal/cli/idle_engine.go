@@ -245,12 +245,9 @@ func ResumeWorktreeWorkersForIdle(site *config.Site, wtPath string, workers []st
 	if resolved, err := phpVersionForDir(wtPath); err == nil && resolved != "" {
 		phpVersion = resolved
 	}
-	fw, ok := config.GetFrameworkForDir(site.Framework, site.Path)
-	if !ok || fw.Workers == nil {
-		return
-	}
+	defs := worktreeWorkerDefs(site, wtPath)
 	for _, w := range workers {
-		worker, ok := fw.Workers[w]
+		worker, ok := defs[w]
 		if !ok {
 			continue
 		}
@@ -288,9 +285,10 @@ func WorktreeIdleSuspendStateIsStale(site *config.Site, wtBase string, suspended
 	if len(suspended) == 0 {
 		return false
 	}
-	running := collectRunningWorktreeWorkersByBase(site, wtBase)
+	states := siteinfo.AllUnitStates()
 	for _, w := range suspended {
-		if containsString(running, w) {
+		unit := "lerd-" + w + "-" + site.Name + "-" + wtBase
+		if unitIsActiveOrActivating(unit) || timerIsActive(states, unit) {
 			return true
 		}
 	}
@@ -425,4 +423,14 @@ func lastBytes(b []byte, n int) []byte {
 		return b
 	}
 	return b[len(b)-n:]
+}
+
+// worktreeWorkerDefs is the worker set a worktree starts from: the site's
+// framework read at the worktree, so the branch's own custom_workers count.
+func worktreeWorkerDefs(site *config.Site, wtPath string) map[string]config.FrameworkWorker {
+	fw, ok := config.GetFrameworkForDir(site.Framework, wtPath)
+	if !ok {
+		return nil
+	}
+	return fw.Workers
 }

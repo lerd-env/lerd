@@ -730,6 +730,9 @@ func enrichWorktreeWorkers(siteName, wtPath string, fw *config.Framework) []Work
 	wtBase := config.WorktreeUnitSlug(filepath.Base(wtPath))
 	names := make([]string, 0, len(fw.Workers))
 	for n, wDef := range fw.Workers {
+		if !wDef.RunsInWorktree() {
+			continue
+		}
 		if wDef.Check != nil && !config.MatchesRule(wtPath, *wDef.Check) {
 			continue
 		}

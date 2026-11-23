@@ -90,3 +90,20 @@ func TestApplyWorktreeWorkerEnv_onlyForNamedWorkersInAWorktree(t *testing.T) {
 		t.Errorf("worktree REDIS_PREFIX = %q, want myapp_feat_database_", got)
 	}
 }
+
+// Starting a proxy worker in a worktree is refused with the reason, rather
+// than starting a second process on the parent's port.
+func TestWorktreeWorkerBlock_refusesProxyWorkersInAWorktree(t *testing.T) {
+	dir, wt := worktreeWorkerEnvSite(t)
+	reverb := config.FrameworkWorker{Command: "php artisan reverb:start", Proxy: &config.WorkerProxy{Path: "/app"}}
+
+	if err := worktreeWorkerBlock("myapp", dir, "reverb", reverb); err != nil {
+		t.Errorf("the parent's reverb was refused: %v", err)
+	}
+	if err := worktreeWorkerBlock("myapp", wt, "reverb", reverb); err == nil {
+		t.Error("a worktree reverb was allowed to start on the parent's port")
+	}
+	if err := worktreeWorkerBlock("myapp", wt, "queue", config.FrameworkWorker{Command: "x"}); err != nil {
+		t.Errorf("a worktree queue was refused: %v", err)
+	}
+}

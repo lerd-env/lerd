@@ -169,10 +169,42 @@ func TestWorktreeWorkerUnitNaming(t *testing.T) {
 	}
 }
 
-// A queue switched on for one worktree runs as that worktree's own unit, so it
-// sleeps with the worktree and restarts on a database isolation like Vite does,
-// even though only Vite starts there on its own.
-func TestCollectRunningWorktreeWorkers_includesWorkersStartedByHand(t *testing.T) {
+// A worker switched on for one worktree runs as that worktree's own unit, so it
+// sleeps with the worktree and restarts on a database isolation, including one
+// only the branch's .lerd.yaml declares. Vite stopped there is not running.
+func TestCollectRunningWorktreeWorkers_readsTheWorktreesOwnWorkers(t *testing.T) {
+	site, wt := worktreeDefsSite(t)
+	fake := &statefulLifecycle{active: map[string]bool{
+		"lerd-queue-myapp-feat":  true,
+		"lerd-export-myapp-feat": true,
+		"lerd-schedule-myapp":    true, // the parent's, not this worktree's
+	}}
+	podman.UnitLifecycle = fake
+	t.Cleanup(func() { podman.UnitLifecycle = nil })
+
+	got := collectRunningWorktreeWorkers(site, wt)
+	if len(got) != 2 || got[0] != "export" || got[1] != "queue" {
+		t.Errorf("running worktree workers = %v, want [export queue]", got)
+	}
+}
+
+// A worktree wakes its workers from its own definition, so a worker only the
+// branch's .lerd.yaml declares comes back with the branch's command.
+func TestWorktreeWorkerDefs_includeTheBranchsCustomWorkers(t *testing.T) {
+	site, wt := worktreeDefsSite(t)
+	defs := worktreeWorkerDefs(site, wt)
+	if defs["export"].Command != "php artisan export:work" {
+		t.Errorf("export = %+v, want the branch's own worker", defs["export"])
+	}
+	if _, ok := defs["queue"]; !ok {
+		t.Errorf("queue missing from %v", defs)
+	}
+}
+
+// worktreeDefsSite is a site on a framework with queue, schedule and a
+// per-worktree vite, and a worktree whose .lerd.yaml adds an export worker.
+func worktreeDefsSite(t *testing.T) (*config.Site, string) {
+	t.Helper()
 	xdg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdg)
 	t.Setenv("XDG_DATA_HOME", xdg)
@@ -183,24 +215,19 @@ func TestCollectRunningWorktreeWorkers_includesWorkersStartedByHand(t *testing.T
 	if err := config.SaveFramework(&config.Framework{
 		Name: "testfw",
 		Workers: map[string]config.FrameworkWorker{
-			"vite":     {Command: "npm run dev", Host: true, PerWorktree: &perWT},
 			"queue":    {Command: "php artisan queue:work"},
 			"schedule": {Command: "php artisan schedule:work"},
+			"vite":     {Command: "npm run dev", Host: true, PerWorktree: &perWT},
 		},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	site := &config.Site{Name: "myapp", Path: t.TempDir(), Framework: "testfw"}
-
-	fake := &statefulLifecycle{active: map[string]bool{
-		"lerd-queue-myapp-feat": true,
-		"lerd-schedule-myapp":   true, // the parent's, not this worktree's
-	}}
-	podman.UnitLifecycle = fake
-	t.Cleanup(func() { podman.UnitLifecycle = nil })
-
-	got := collectRunningWorktreeWorkersByBase(site, "feat")
-	if len(got) != 1 || got[0] != "queue" {
-		t.Errorf("running worktree workers = %v, want [queue]", got)
+	wt := filepath.Join(t.TempDir(), "feat")
+	if err := os.Mkdir(wt, 0o755); err != nil {
+		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(wt, ".lerd.yaml"), []byte("custom_workers:\n  export:\n    command: php artisan export:work\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return &config.Site{Name: "myapp", Path: t.TempDir(), Framework: "testfw"}, wt
 }

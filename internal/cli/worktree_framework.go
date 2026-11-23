@@ -190,3 +190,16 @@ func applyWorktreeWorkerEnv(siteName, sitePath, workerName string) error {
 	}
 	return fmt.Errorf("%s is not a worktree of %s", sitePath, site.Name)
 }
+
+// worktreeWorkerBlock refuses a worker that cannot run as a worktree's own unit,
+// rather than starting a second process on the parent's port.
+func worktreeWorkerBlock(siteName, sitePath, workerName string, w config.FrameworkWorker) error {
+	if w.RunsInWorktree() {
+		return nil
+	}
+	site, err := config.FindSite(siteName)
+	if err != nil || site.Path == "" || config.SamePath(site.Path, sitePath) {
+		return nil
+	}
+	return fmt.Errorf("worker %q serves on a port and route of the main checkout, start it from %s", workerName, site.Path)
+}

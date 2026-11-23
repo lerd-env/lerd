@@ -330,6 +330,13 @@ func (w FrameworkWorker) IsPerWorktree() bool {
 	return w.PerWorktree != nil && *w.PerWorktree
 }
 
+// RunsInWorktree reports whether the worker can run as a worktree's own unit.
+// A proxied worker needs its own port and route on the worktree's domain,
+// which only per_worktree workers get, so it otherwise stays on the parent.
+func (w FrameworkWorker) RunsInWorktree() bool {
+	return w.Proxy == nil || w.IsPerWorktree()
+}
+
 // WorkerDevServer names the dev server a worker starts, for a worker that
 // starts it through something else: a framework's own console command reaches
 // vite as surely as `npm run dev` does, and reading the command cannot tell.

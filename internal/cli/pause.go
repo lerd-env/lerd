@@ -468,35 +468,20 @@ func collectRunningWorkers(site *config.Site) []string {
 	return active
 }
 
-// collectRunningWorktreeWorkers returns the active workers for the worktree at
-// wtPath by their lerd-<w>-<site>-<wtBase> units. Any worker counts, not only
-// per_worktree ones, since a worktree on its own Redis gets its queue by hand.
+// collectRunningWorktreeWorkers returns the workers running for the worktree at
+// wtPath under its own lerd-<w>-<site>-<wtBase> units. The worktree's definition
+// names them, so a worker only the branch declares counts too.
 func collectRunningWorktreeWorkers(site *config.Site, wtPath string) []string {
-	return collectRunningWorktreeWorkersByBase(site, config.WorktreeUnitSlug(filepath.Base(wtPath)))
-}
-
-// collectRunningWorktreeWorkersByBase is collectRunningWorktreeWorkers keyed by
-// the worktree's unit-slug base directly, for callers that hold the base (e.g. a
-// persisted WorktreeIdleSuspended key) but not the checkout path.
-func collectRunningWorktreeWorkersByBase(site *config.Site, wtBase string) []string {
-	fw, ok := config.GetFrameworkForDir(site.Framework, site.Path)
-	if !ok || fw.Workers == nil {
-		return nil
-	}
-	names := make([]string, 0, len(fw.Workers))
-	for wName := range fw.Workers {
-		names = append(names, wName)
-	}
-	sort.Strings(names)
-
+	wtBase := config.WorktreeUnitSlug(filepath.Base(wtPath))
 	var active []string
 	states := siteinfo.AllUnitStates()
-	for _, wName := range names {
+	for wName := range worktreeWorkerDefs(site, wtPath) {
 		unit := "lerd-" + wName + "-" + site.Name + "-" + wtBase
 		if unitIsActiveOrActivating(unit) || timerIsActive(states, unit) {
 			active = append(active, wName)
 		}
 	}
+	sort.Strings(active)
 	return active
 }
 

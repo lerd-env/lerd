@@ -114,3 +114,22 @@ func TestEnrichWorktreeWorkers_failedReported(t *testing.T) {
 		t.Errorf("expected failing flag, got %+v", got)
 	}
 }
+
+// A worker served through a proxy (Reverb) needs its own port and route on the
+// worktree's domain, which only per_worktree workers get, so it stays on main.
+func TestEnrichWorktreeWorkers_keepsProxyWorkersOnMain(t *testing.T) {
+	origUnit := unitStatusFn
+	unitStatusFn = func(string) (string, error) { return "inactive", nil }
+	defer func() { unitStatusFn = origUnit }()
+
+	fw := &config.Framework{
+		Workers: map[string]config.FrameworkWorker{
+			"queue":  {Command: "x"},
+			"reverb": {Command: "x", Proxy: &config.WorkerProxy{Path: "/app"}},
+		},
+	}
+	got := enrichWorktreeWorkers("site", t.TempDir(), fw)
+	if len(got) != 1 || got[0].Name != "queue" {
+		t.Errorf("expected only queue, got %+v", got)
+	}
+}
