@@ -40,7 +40,7 @@ Lerd is built for PHP developers who want frictionless local development, on a L
 
 - 🧱 **Node, Python, Rails and more.** `lerd init` recognises a Node, Python, Rails or Rack, Go or Rust project, runs its dev server on the host under lerd's supervision and serves it at a `.test` domain with HTTPS, services and worktrees included, or as a rootless container from a starter `Containerfile.lerd`.
 
-- 🌳 **First-class git worktrees.** Auto-detected branch domains, per-worktree PHP and Node versions, a database picked from the branch's migrations when a script adds it, wildcard cert SANs and a per-branch Vite worker. A bare `git worktree add` from any tool is provisioned automatically, and the site header fetches, pulls, pushes and switches branches, offering the installs and migrations the move needs with the database snapshotted first. Uncommitted changes open in a diff editor that stages, commits and stashes.
+- 🌳 **First-class git worktrees.** Auto-detected branch domains, per-worktree PHP and Node versions, a database picked from the branch's migrations when a script adds it, wildcard cert SANs and a per-branch Vite worker. New worktrees go inside the site or, with `worktree_location: sibling`, next to it, and a bare `git worktree add` from any tool is provisioned automatically, and the site header fetches, pulls, pushes and switches branches, offering the installs and migrations the move needs with the database snapshotted first. Uncommitted changes open in a diff editor that stages, commits and stashes.
 
 - 🌍 **Share a site.** On your LAN with a stable port and a QR code, or publicly through ngrok, cloudflared, Expose, Pinggy, serveo or localhost.run. Set a base domain once and every share keeps the same URL between runs, through a tunnel service or the reverse proxy you already run.
 
@@ -117,11 +117,13 @@ Lerd is built for PHP developers who want frictionless local development, on a L
 
 - 💾 **Nothing destructive without a way back.** A `service remove --purge` or a `reinstall --reset-data` snapshots every database first, while the data is still where the engine expects it, so recovery is an ordinary `db:restore -A`. Each engine declares how long it gets to shut down.
 
-- 💤 **Idle-suspend.** Activity-driven suspension of a site's workers (queue, schedule, horizon, reverb, stripe, Vite) after a configurable idle timeout, and opt-in of the services nothing is using, resumed on the next request, CLI command, MCP call or file save, with the request held rather than redirected while they wake and per-site pinning, a coffee cup marking what a pin keeps awake.
+- 💤 **Idle-suspend, on by default.** Activity-driven suspension of a site's workers (queue, schedule, horizon, reverb, stripe, Vite) after a configurable idle timeout, and opt-in of the services nothing is using, resumed on the next request, CLI command, MCP call or file save, with the request held rather than redirected while they wake and per-site pinning, a coffee cup marking what a pin keeps awake.
 
 - 📶 **Nothing downloads behind your back.** Every command that can pull or rebuild an image names it and its size first, read from the registry manifest. The dashboard asks, an assistant over MCP has to come back with your answer, and `--no-pull`, `LERD_OFFLINE=1` and `lerd start --dry-run` cover a metered link.
 
 - 📌 **Pinned host tools.** Composer, mise, fnm and wp-cli are pinned behind a published manifest rather than whatever `releases/latest` served that day, so an upstream release cannot break a fresh install, and the System page applies each update on the card that flagged it.
+
+- 👥 **One Linux machine, several users.** When another user's lerd holds the ports, install and start name that user, and `lerd multi-user enable` lets each user's lerd follow the screen, stepping aside when another desktop takes it and coming back with its own.
 
 - 🔒 **Rootless and daemonless.** Podman-native, no Docker required, dual-stack IPv4 + IPv6.
 
@@ -275,7 +277,7 @@ Download [`Install-Lerd.exe`](https://github.com/lerd-env/lerd-desktop/releases/
 
 ### Desktop app (optional)
 
-Prefer a dedicated window to a browser tab? [Lerd Desktop](https://github.com/lerd-env/lerd-desktop) wraps the dashboard in a native app with native desktop notifications for captured mail, worker failures, and finished operations, no browser needed. On Windows `Install-Lerd.exe` installs it for you. Linux, shipped as a Flatpak:
+Prefer a dedicated window to a browser tab? [Lerd Desktop](https://github.com/lerd-env/lerd-desktop) wraps the dashboard in a native app with native desktop notifications for captured mail, worker failures, and finished operations, no browser needed. On Windows `Install-Lerd.exe` installs it for you. On Linux the one-line installer offers it and installs it when flatpak is there, or install the Flatpak yourself:
 
 ```bash
 flatpak install --user https://lerd.sh/lerd.flatpakref
