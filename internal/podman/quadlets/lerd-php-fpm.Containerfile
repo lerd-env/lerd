@@ -219,6 +219,14 @@ RUN apk update && apk upgrade --no-cache && apk add --no-cache \
 # icu-libs, so the package is absent there and the install is skipped.
 RUN apk add --no-cache icu-data-full 2>/dev/null || true
 
+# pg_dump/psql for framework commands like schema:dump. pg_dump refuses a newer
+# server and each Alpine release carries different majors, so take the newest
+# the index lists; picking by index keeps a failed download from downgrading.
+RUN apk update -q \
+    && pg=$(for v in 18 17 16 15 14; do apk search -qe postgresql${v}-client | grep -q . && echo $v && break; done) \
+    && apk add --no-cache postgresql${pg}-client \
+    && rm -rf /var/cache/apk/*
+
 # Runtime system libs for user-configured custom extensions (e.g.
 # imap needs c-client.so). Empty when no custom exts have apk deps.
 {{.CustomExtensionsRuntime}}
