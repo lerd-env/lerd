@@ -132,6 +132,33 @@ func TestEnsureXdebugIni_healsStaleDirectory(t *testing.T) {
 	}
 }
 
+// An install that ran native before the xdebug load moved to the override file
+// still has the host-shaped ini, which FrankenPHP containers mount and fail on.
+func TestEnsureXdebugIni_rewritesAnIniLoadingTheModuleByPath(t *testing.T) {
+	setupConfigHome(t)
+	writeConfigYAML(t, "8.5", true)
+
+	path := config.PHPConfFile("8.5")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := "[xdebug]\nzend_extension=/host/native-php/8.5/modules/xdebug.so\nxdebug.mode=debug\nxdebug.client_host=127.0.0.1\n"
+	if err := os.WriteFile(path, []byte(legacy), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EnsureXdebugIni("8.5"); err != nil {
+		t.Fatalf("EnsureXdebugIni: %v", err)
+	}
+	body, _ := os.ReadFile(path)
+	if strings.Contains(string(body), "zend_extension") || !strings.Contains(string(body), "host.containers.internal") {
+		t.Errorf("want the container-shaped ini, got:\n%s", body)
+	}
+	if !strings.Contains(string(body), "xdebug.mode=debug") {
+		t.Errorf("want the configured mode kept, got:\n%s", body)
+	}
+}
+
 // ── WriteXdebugIni ───────────────────────────────────────────────────────────
 
 func TestWriteXdebugIni_healsStaleDirectoryDirectly(t *testing.T) {

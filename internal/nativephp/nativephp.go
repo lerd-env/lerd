@@ -79,7 +79,7 @@ func OverrideDir(version string) string {
 // The capture socket is reached over loopback rather than the container's host
 // gateway, since here PHP is already on the host.
 func overrideIni(version string) string {
-	return overrideIniWith(DevtoolsExtensionPath(version)) + caLines(CABundlePath())
+	return overrideIniWith(DevtoolsExtensionPath(version)) + xdebugLines(XdebugExtensionPath(version)) + caLines(CABundlePath())
 }
 
 // DevtoolsExtensionPath is where a native build's query-capture extension lives
@@ -142,6 +142,16 @@ func devtoolsLine(path string) string {
 		return ""
 	}
 	return "extension=" + path + "\n"
+}
+
+// xdebugLines loads the build's xdebug.so and points it at the IDE on loopback.
+// They live here, not in 99-xdebug.ini, because the containers mount that file
+// and can neither load a host .so nor reach the host on 127.0.0.1.
+func xdebugLines(path string) string {
+	if path == "" {
+		return ""
+	}
+	return "zend_extension=" + path + "\n" + "xdebug.client_host=127.0.0.1\n"
 }
 
 // systemCABundle is the macOS root store the native build's OpenSSL reads by
