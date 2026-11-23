@@ -42,6 +42,7 @@ func ensureLoopbackRedirect() {
 	}
 	moved, err := portforward.Install(user, dns.SudoWriteFile)
 	loopbackRedirectAdded = moved
+	noteNginxRestart(moved)
 	if err != nil {
 		feedback.Warn("port forward for nginx, ports 80 and 443 stay reachable from the network: %v", err)
 	}
@@ -60,8 +61,16 @@ func pauseNginx() {
 	if !nginxWideFn() {
 		return
 	}
-	nginxPaused = nginxRunningFn()
+	nginxRestartOwed = nginxRunningFn()
 	stopNginxFn() //nolint:errcheck // not running is fine
+}
+
+// noteNginxRestart owes a running nginx a restart when its publish moved, even
+// with autostart off, or it stays on a port nothing forwards to.
+func noteNginxRestart(moved bool) {
+	if moved && nginxRunningFn() {
+		nginxRestartOwed = true
+	}
 }
 
 // nginxPublishesWide reports whether nginx's unit binds its ports on every

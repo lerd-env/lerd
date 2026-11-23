@@ -914,7 +914,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	autostartOn := lerdSystemd.IsAutostartEnabled()
 
 	var nginxErr error
-	if autostartOn || nginxPaused {
+	if autostartOn || nginxRestartOwed {
 		running, _ := podman.ContainerRunning("lerd-nginx")
 		if nginxNeedsRestart(running, loopbackRedirectAdded || slices.Contains(changedQuadlets, "lerd-nginx"), podman.ContainerImageID("lerd-nginx"), podman.LocalImageID(nginxImage)) {
 			step("Starting lerd-nginx")
@@ -1232,9 +1232,9 @@ var installImageInStore = podman.ImageExists
 // quadlet is unchanged then, but nginx must re-publish on its loopback ports.
 var loopbackRedirectAdded bool
 
-// nginxPaused is set when this run stopped a running nginx for the port forward,
-// so it starts again even with autostart off.
-var nginxPaused bool
+// nginxRestartOwed is set when this run stopped a running nginx or moved its
+// publish, so it starts again even with autostart off.
+var nginxRestartOwed bool
 
 // webServerPullPlan is the disclosure for install's nginx pull. The pull still
 // runs to refresh a local image, but that moves few or no bytes, so only a
