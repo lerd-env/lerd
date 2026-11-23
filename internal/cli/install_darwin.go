@@ -12,6 +12,7 @@ import (
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/pfredirect"
+	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/portforward"
 )
 
@@ -35,6 +36,9 @@ func runSystemSetup(_ bool) error {
 func ensureLoopbackRedirect() {
 	user := os.Getenv("USER")
 	if portforward.Pending(user) {
+		// A wide nginx publish holds 0.0.0.0:80 and launchd could not take it;
+		// install starts nginx again afterwards.
+		podman.StopUnit("lerd-nginx") //nolint:errcheck
 		feedback.Sudo("Keeping nginx ports on loopback (launchd port forward)")
 	}
 	moved, err := portforward.Install(user, dns.SudoWriteFile)

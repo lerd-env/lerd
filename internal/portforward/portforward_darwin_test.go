@@ -16,7 +16,7 @@ import (
 func fakeRoot(t *testing.T) *[]string {
 	t.Helper()
 	isolate(t)
-	prevSudo, prevLegacy, prevReaches := runSudo, removeLegacy, reaches
+	prevSudo, prevLegacy, prevReaches, prevLoaded := runSudo, removeLegacy, reaches, loaded
 	var calls []string
 	runSudo = func(args ...string) error {
 		calls = append(calls, strings.Join(args, " "))
@@ -29,7 +29,8 @@ func fakeRoot(t *testing.T) *[]string {
 	}
 	removeLegacy = func() error { calls = append(calls, "remove pf"); return nil }
 	reaches = func(int) bool { return true }
-	t.Cleanup(func() { runSudo, removeLegacy, reaches = prevSudo, prevLegacy, prevReaches })
+	loaded = func(int) bool { return true }
+	t.Cleanup(func() { runSudo, removeLegacy, reaches, loaded = prevSudo, prevLegacy, prevReaches, prevLoaded })
 	return &calls
 }
 
@@ -140,5 +141,51 @@ func TestInstallKeepsTheLegacyRuleWhenThePasswordPromptFails(t *testing.T) {
 	}
 	if slices.Contains(*calls, "remove pf") {
 		t.Errorf("calls = %q, want the pf rule left alone", *calls)
+	}
+}
+
+// An install cut off between writing a job and loading it leaves a current
+// file behind; the next install has to load it, not skip it.
+func TestInstallLoadsAJobWhoseFileIsCurrentButNotLoaded(t *testing.T) {
+	calls := fakeRoot(t)
+	if _, err := Install("alice", fakeWrite); err != nil {
+		t.Fatal(err)
+	}
+	*calls = nil
+	loaded = func(p int) bool { return p != 443 }
+	if _, err := Install("alice", fakeWrite); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(*calls, "launchctl bootstrap system "+PlistPath(443)) || slices.Contains(*calls, "launchctl bootstrap system "+PlistPath(80)) {
+		t.Errorf("calls = %q, want only 443 loaded", *calls)
+	}
+}
+
+// A job file counts as a forward, so one left behind by a failed later write
+// would move nginx to a port nothing serves.
+func TestInstallRollsBackJobsItWroteWhenALaterWriteFails(t *testing.T) {
+	calls := fakeRoot(t)
+	failOn443 := func(path string, content []byte, mode os.FileMode) error {
+		if path == PlistPath(443) {
+			return errors.New("disk full")
+		}
+		return fakeWrite(path, content, mode)
+	}
+	if _, err := Install("alice", failOn443); err == nil {
+		t.Fatal("a failed write must be reported")
+	}
+	if len(Redirected()) != 0 || slices.Contains(*calls, "remove pf") {
+		t.Errorf("Redirected() = %v with calls %q, want nothing left and pf untouched", Redirected(), *calls)
+	}
+}
+
+func TestPendingWhileAJobIsNotLoaded(t *testing.T) {
+	fakeRoot(t)
+	if _, err := Install("alice", fakeWrite); err != nil {
+		t.Fatal(err)
+	}
+	loaded = func(p int) bool { return p != 80 }
+	if !Pending("alice") {
+		t.Error("an unloaded job leaves root work to do")
 	}
 }

@@ -1,7 +1,6 @@
-// Package portforward keeps nginx's privileged ports on loopback on macOS
-// without pf, which turns iCloud Private Relay off while loaded (#2634). A
-// root-owned launchd job holds 127.0.0.1:<port> and starts `lerd port-forward`
-// as the user, handing it the listening socket, which relays to nginx's port.
+// Package portforward serves nginx's privileged ports on macOS without pf, which
+// turns iCloud Private Relay off (#2634): a launchd job holds the port and runs
+// `lerd port-forward` as the user, relaying to nginx's high loopback port.
 package portforward
 
 import (
@@ -29,8 +28,8 @@ func Label(port int) string { return fmt.Sprintf("com.lerd.port-forward-%d", por
 // PlistPath is where the job holding port is defined.
 func PlistPath(port int) string { return filepath.Join(PlistDir, Label(port)+".plist") }
 
-// Render returns the job holding port. Wait mode hands the forwarder the
-// listening socket on stdin, so one process serves every connection.
+// Render returns the job holding port on every interface, so LAN exposure needs
+// no root. Wait mode hands the forwarder the listening socket on stdin.
 func Render(port int, user, bin string) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -58,8 +57,6 @@ func Render(port int, user, bin string) string {
 	<dict>
 		<key>Listeners</key>
 		<dict>
-			<key>SockNodeName</key>
-			<string>127.0.0.1</string>
 			<key>SockServiceName</key>
 			<string>%d</string>
 			<key>SockFamily</key>
@@ -97,6 +94,17 @@ func Redirected() map[int]bool {
 // Reaches reports whether a loopback connection to port arrives on its Target.
 func Reaches(port int) bool { return pfredirect.Reaches(port) }
 
+// Installed reports whether the launchd jobs, not the legacy pf rule, hold
+// nginx's ports. They then serve the LAN too, so nginx never publishes wide.
+func Installed() bool {
+	for _, p := range pfredirect.Ports() {
+		if _, err := os.Stat(PlistPath(p)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // reaches is a var so tests can stand in for launchd.
 var reaches = Reaches
 
@@ -111,15 +119,28 @@ func Effective() bool {
 	return true
 }
 
-// Serve relays every connection ln accepts to 127.0.0.1:to.
-func Serve(ln net.Listener, to int) error {
+// Serve relays every connection ln accepts to 127.0.0.1:to, dropping those
+// from the LAN unless lanAllowed says it is exposed.
+func Serve(ln net.Listener, to int, lanAllowed func() bool) error {
 	for {
 		c, err := ln.Accept()
 		if err != nil {
 			return err
 		}
+		if !allowed(c.LocalAddr(), lanAllowed) {
+			c.Close()
+			continue
+		}
 		go relay(c, fmt.Sprintf("127.0.0.1:%d", to))
 	}
+}
+
+// allowed asks lanAllowed per connection, so an unexpose takes effect at once.
+func allowed(local net.Addr, lanAllowed func() bool) bool {
+	if a, ok := local.(*net.TCPAddr); ok && a.IP.IsLoopback() {
+		return true
+	}
+	return lanAllowed()
 }
 
 func relay(c net.Conn, to string) {

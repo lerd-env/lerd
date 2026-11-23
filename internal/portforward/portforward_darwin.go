@@ -15,11 +15,17 @@ import (
 	"github.com/geodro/lerd/internal/pfredirect"
 )
 
-// Vars so tests can stand in for root.
+// Vars so tests can stand in for root and launchd.
 var (
 	runSudo      = sudo
 	removeLegacy = pfredirect.Remove
+	loaded       = jobLoaded
 )
+
+// jobLoaded asks launchd whether port's job is loaded, which needs no root.
+func jobLoaded(port int) bool {
+	return exec.Command("launchctl", "print", "system/"+Label(port)).Run() == nil
+}
 
 // WriteFunc writes a root-owned file, prompting for a password if needed.
 type WriteFunc func(path string, content []byte, mode os.FileMode) error
@@ -34,7 +40,7 @@ func Pending(user string) bool {
 		return true
 	}
 	for _, p := range pfredirect.Ports() {
-		if !current(p, user) {
+		if !current(p, user) || !loaded(p) {
 			return true
 		}
 	}
@@ -64,7 +70,7 @@ func Install(user string, writeFile WriteFunc) (moved bool, err error) {
 			continue
 		}
 		if err := writeFile(PlistPath(p), []byte(Render(p, user, config.LerdBinary())), 0644); err != nil {
-			return false, fmt.Errorf("writing %s: %w", PlistPath(p), err)
+			return false, errors.Join(fmt.Errorf("writing %s: %w", PlistPath(p), err), removeJobs(func(p int) bool { return slices.Contains(changed, p) }))
 		}
 		changed = append(changed, p)
 	}
@@ -74,7 +80,10 @@ func Install(user string, writeFile WriteFunc) (moved bool, err error) {
 	if err := removeJobs(func(p int) bool { return !slices.Contains(ports, p) }); err != nil {
 		return false, err
 	}
-	for _, p := range changed {
+	for _, p := range ports {
+		if !slices.Contains(changed, p) && loaded(p) {
+			continue
+		}
 		runSudo("launchctl", "bootout", "system/"+Label(p)) //nolint:errcheck // not loaded on a first install
 		if err := runSudo("launchctl", "bootstrap", "system", PlistPath(p)); err != nil {
 			return false, errors.Join(err, Remove())

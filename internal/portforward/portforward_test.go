@@ -30,12 +30,15 @@ func TestRenderRunsTheForwarderAsTheUserWithTheSocketOnStdin(t *testing.T) {
 		"<string>/Users/alice/.local/bin/lerd</string>\n\t\t<string>port-forward</string>\n\t\t<string>--to</string>\n\t\t<string>17080</string>",
 		"<key>UserName</key>\n\t<string>alice</string>",
 		"<key>Wait</key>\n\t\t<true/>",
-		"<key>SockNodeName</key>\n\t\t\t<string>127.0.0.1</string>",
 		"<key>SockServiceName</key>\n\t\t\t<string>80</string>",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("plist missing %q:\n%s", want, got)
 		}
+	}
+	// Every interface, so LAN exposure needs no root; the forwarder gates it.
+	if strings.Contains(got, "SockNodeName") {
+		t.Error("the job must listen on every interface")
 	}
 	if strings.Contains(Render(80, "a<b", "/x&y"), "a<b") {
 		t.Error("values must be XML-escaped")
@@ -83,7 +86,7 @@ func TestServeRelaysBothWays(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ln.Close()
-	go Serve(ln, up.Addr().(*net.TCPAddr).Port)
+	go Serve(ln, up.Addr().(*net.TCPAddr).Port, func() bool { return false })
 
 	c, err := net.Dial("tcp", ln.Addr().String())
 	if err != nil {
@@ -94,5 +97,40 @@ func TestServeRelaysBothWays(t *testing.T) {
 	buf := make([]byte, 4)
 	if _, err := io.ReadFull(c, buf); err != nil || string(buf) != "PING" {
 		t.Errorf("relay returned %q, %v; want PING", buf, err)
+	}
+}
+
+// Off the LAN must mean off: a connection that did not arrive on loopback is
+// dropped unless LAN exposure is on, read fresh for every connection.
+func TestAllowedLetsTheLANInOnlyWhenExposed(t *testing.T) {
+	loop := &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 80}
+	lan := &net.TCPAddr{IP: net.ParseIP("192.168.0.166"), Port: 80}
+	exposed := false
+	lanAllowed := func() bool { return exposed }
+	if !allowed(loop, lanAllowed) {
+		t.Error("loopback must always be served")
+	}
+	if allowed(lan, lanAllowed) {
+		t.Error("the LAN must be dropped while unexposed")
+	}
+	exposed = true
+	if !allowed(lan, lanAllowed) {
+		t.Error("the LAN must be served once exposed")
+	}
+}
+
+func TestInstalledIgnoresTheLegacyAnchor(t *testing.T) {
+	isolate(t)
+	if err := os.WriteFile(pfredirect.AnchorPath, []byte(pfredirect.Render([]int{80, 443})), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if Installed() {
+		t.Error("the pf rule does not cover the LAN, so it must not count")
+	}
+	if err := os.WriteFile(PlistPath(80), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if !Installed() {
+		t.Error("a launchd job should count")
 	}
 }
