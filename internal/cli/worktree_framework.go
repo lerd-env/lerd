@@ -5,10 +5,12 @@ import (
 	"io"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	gitpkg "github.com/geodro/lerd/internal/git"
 )
 
 // requiredWorktreeDBChoice returns the database choice a framework definition
@@ -163,4 +165,28 @@ func planUnattendedWorktreeDB(fw *config.Framework, requested, parentPath, workt
 	}
 	choice = unattendedWorktreeDBChoice(fw, requested)
 	return choice, "", dbChoiceYieldsEmptySchema(choice)
+}
+
+// applyWorktreeWorkerEnv gives a worktree its own queue storage before a worker
+// the definition's worktree.worker_env names starts there. A worktree that never
+// starts one keeps feeding the parent's queue, so nothing is written for it.
+func applyWorktreeWorkerEnv(siteName, sitePath, workerName string) error {
+	site, err := config.FindSite(siteName)
+	if err != nil || site.Path == "" || config.SamePath(site.Path, sitePath) {
+		return nil
+	}
+	fw, ok := config.GetFrameworkForDir(site.Framework, sitePath)
+	if !ok || fw.Worktree == nil || fw.Worktree.WorkerEnv == nil || !slices.Contains(fw.Worktree.WorkerEnv.Workers, workerName) {
+		return nil
+	}
+	wts, err := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain())
+	if err != nil {
+		return fmt.Errorf("detecting worktrees of %s: %w", site.Name, err)
+	}
+	for _, wt := range wts {
+		if config.SamePath(wt.Path, sitePath) {
+			return gitpkg.ApplyWorktreeWorkerEnv(site.Path, sitePath, wt.Domain, site.Secured, fw.Worktree.WorkerEnv.Env)
+		}
+	}
+	return fmt.Errorf("%s is not a worktree of %s", sitePath, site.Name)
 }

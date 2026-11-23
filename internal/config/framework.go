@@ -459,6 +459,16 @@ type FrameworkWorktree struct {
 	// Migrations is the folder, relative to the project root, holding the
 	// schema migrations; comparing it across checkouts picks the database.
 	Migrations string `yaml:"migrations,omitempty"`
+	// WorkerEnv is written into the worktree's env file before one of its
+	// workers starts there, so a worktree queue stops taking the parent's jobs.
+	WorkerEnv *FrameworkWorktreeWorkerEnv `yaml:"worker_env,omitempty"`
+}
+
+// FrameworkWorktreeWorkerEnv names the workers that give a worktree its own
+// queue storage and the env values, with worktree placeholders, that do it.
+type FrameworkWorktreeWorkerEnv struct {
+	Workers []string          `yaml:"workers,omitempty"`
+	Env     map[string]string `yaml:"env,omitempty"`
 }
 
 type FrameworkSetupCmd struct {
