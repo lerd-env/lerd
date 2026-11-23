@@ -30,6 +30,8 @@ Xdebug is configured with:
 - `xdebug.client_host=host.containers.internal` (reaches your host IDE from the container)
 - `xdebug.client_port=9003`
 
+Under the [native runtime](/features/native-runtime), PHP on your machine loads the build's own `xdebug.so` and reaches the IDE on `127.0.0.1` instead. Those two settings come from lerd's native override file rather than the shared Xdebug ini, so FrankenPHP and custom-FPM sites, which still run in containers, keep the values above.
+
 Set your IDE to listen on port `9003`. In VS Code, the default PHP Debug configuration works without changes. In PhpStorm, set **Settings > PHP > Debug > Debug port** to `9003`. The [Lerd PhpStorm plugin](/features/phpstorm-plugin) also shows the site's PHP version, logs and dumps inside the IDE.
 
 Port `9003` is reserved: no lerd service is ever published on it, because a container that held it would answer Xdebug's connect-back itself and your IDE would simply never see a session. An install that already shifted a service onto it before this was reserved keeps it, so `lerd doctor` names the service and the command that moves it:

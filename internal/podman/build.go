@@ -15,7 +15,6 @@ import (
 
 	"github.com/geodro/lerd/internal/composer"
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/origin"
 )
 
@@ -977,33 +976,16 @@ func WriteXdebugIni(version, mode, start string) error {
 	if start == "" {
 		start = "yes"
 	}
-	content := xdebugIniContent(mode, start, nativeXdebugModule(version), config.XdebugClientPort)
+	content := xdebugIniContent(mode, start, config.XdebugClientPort)
 	return os.WriteFile(path, []byte(content), 0644)
 }
 
-// xdebugIniContent builds the ini body. A container image installs xdebug as a
-// package and its own ini loads it, so there only settings are needed. A native
-// build ships the .so beside the binary with nothing loading it, and the IDE
-// listens on the host rather than across the podman gateway.
-func xdebugIniContent(mode, start, modulePath string, port int) string {
-	clientHost := "host.containers.internal"
-	load := ""
-	if modulePath != "" {
-		clientHost = "127.0.0.1"
-		load = "zend_extension=" + modulePath + "\n"
-	}
-	return fmt.Sprintf("[xdebug]\n%sxdebug.mode=%s\nxdebug.start_with_request=%s\nxdebug.client_host=%s\nxdebug.client_port=%d\n",
-		load, mode, start, clientHost, port)
-}
-
-// nativeXdebugModule returns the path the native build's xdebug.so lives at, or
-// "" under the container runtime or when the build did not ship one.
-func nativeXdebugModule(version string) string {
-	cfg, err := config.LoadGlobal()
-	if err != nil || cfg.PHPRuntimeMode() != config.PHPRuntimeNative {
-		return ""
-	}
-	return nativephp.XdebugExtensionPath(version)
+// xdebugIniContent builds the ini body every container mounts, so it is always
+// container-shaped: the image's own ini loads xdebug and the IDE is reached
+// across the podman gateway. The native runtime adds its own lines (nativephp).
+func xdebugIniContent(mode, start string, port int) string {
+	return fmt.Sprintf("[xdebug]\nxdebug.mode=%s\nxdebug.start_with_request=%s\nxdebug.client_host=host.containers.internal\nxdebug.client_port=%d\n",
+		mode, start, port)
 }
 
 // healStaleHostsDir removes a directory podman auto-created at a hosts
@@ -1097,16 +1079,26 @@ func RefreshXdebugInis(versions []string) error {
 // already exist as a regular file. This prevents Podman from auto-creating a directory
 // at the bind-mount source path when the container starts before the file is written.
 func EnsureXdebugIni(version string) error {
+	if !config.ValidPHPVersion(version) {
+		return fmt.Errorf("invalid PHP version %q", version)
+	}
 	path := config.PHPConfFile(version)
 	info, err := os.Stat(path)
-	if err == nil && !info.IsDir() {
-		return nil // already a regular file
+	if err == nil && !info.IsDir() && !loadsModuleByPath(path) {
+		return nil // already a regular, container-shaped file
 	}
 	cfg, cfgErr := config.LoadGlobal()
 	if cfgErr != nil {
 		return cfgErr
 	}
 	return WriteXdebugIni(version, cfg.GetXdebugMode(version), cfg.GetXdebugStart(version))
+}
+
+// loadsModuleByPath reports an ini written for the native runtime before that
+// moved to its own override file. Containers mount it, and it names a host .so.
+func loadsModuleByPath(path string) bool {
+	data, err := os.ReadFile(path)
+	return err == nil && strings.Contains(string(data), "zend_extension=")
 }
 
 // WriteFPMQuadlet writes the systemd quadlet for a PHP-FPM version and reloads the

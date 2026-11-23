@@ -586,6 +586,7 @@ func tinkerCmd(ctx context.Context, sitePath, version string, argv, envArgs []st
 		// from the run with its usual message rather than from here.
 		return podman.CmdContext(ctx, argv...)
 	}
+	_ = ensureXdebugIni(nv)
 	_ = nativephp.WriteOverrides(nv)
 
 	phpArgs := phpArgsFromExecArgv(argv)

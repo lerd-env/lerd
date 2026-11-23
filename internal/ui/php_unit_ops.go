@@ -7,8 +7,9 @@ import (
 
 // Seams for the native side so the routing can be tested without launchd.
 var (
-	nativeEnsureFn = nativephp.Ensure
-	nativeStopFn   = nativephp.Stop
+	nativeEnsureFn    = nativephp.Ensure
+	nativeStopFn      = nativephp.Stop
+	ensureXdebugIniFn = podman.EnsureXdebugIni
 )
 
 // startPHPVersion brings up whatever serves a PHP version: the launchd pool on
@@ -17,6 +18,8 @@ var (
 // that was running.
 func startPHPVersion(native bool, version string) error {
 	if native {
+		// An ini still loading xdebug by path would load it twice beside the overrides.
+		_ = ensureXdebugIniFn(version)
 		return nativeEnsureFn(version)
 	}
 	return podman.StartUnit(podman.FPMUnitName(version))

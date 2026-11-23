@@ -8,7 +8,7 @@ func TestValidPHPVersion(t *testing.T) {
 			t.Errorf("ValidPHPVersion(%q) = false, want true", s)
 		}
 	}
-	for _, s := range []string{"", "8", "8,5", "8.", ".5", "eight.five", "8.5.1", "8.x", " 8.5"} {
+	for _, s := range []string{"", "8", "8,5", "8.", ".5", "eight.five", "8.5.1", "8.x", " 8.5", "../8.5", "8.5/..", "8.5\n"} {
 		if ValidPHPVersion(s) {
 			t.Errorf("ValidPHPVersion(%q) = true, want false", s)
 		}

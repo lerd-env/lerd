@@ -306,6 +306,30 @@ func TestOverrideLoadsDevtoolsOnlyWhenPresent(t *testing.T) {
 	}
 }
 
+// The shared 99-xdebug.ini is container-shaped, so the host's xdebug.so and the
+// loopback IDE address come from here, and only when the build shipped xdebug.
+func TestOverrideLoadsXdebugOnlyWhenPresent(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	if got := overrideIni("8.5"); strings.Contains(got, "xdebug") {
+		t.Errorf("no xdebug.so present, so nothing should be loaded:\n%s", got)
+	}
+
+	so := filepath.Join(ModulesDir("8.5"), "xdebug.so")
+	if err := os.MkdirAll(filepath.Dir(so), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(so, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got := overrideIni("8.5")
+	for _, want := range []string{"zend_extension=" + so, "xdebug.client_host=127.0.0.1"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("override missing %q:\n%s", want, got)
+		}
+	}
+}
+
 // A dev laptop leaves sites idle for hours, and pm=dynamic keeps start_servers
 // workers resident per version the whole time. ondemand lets an untouched pool
 // fall to zero children; the master holds the opcache shared memory, so nothing

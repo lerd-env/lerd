@@ -54,6 +54,8 @@ func runNativePHP(cwd, phpVersion string, args []string, extraEnv []string) (int
 	if err := nativephp.EnsureInstalled(phpVersion, binary); err != nil {
 		return 0, err
 	}
+	// An ini still loading xdebug by path would load it twice beside the overrides.
+	_ = ensureXdebugIni(phpVersion)
 	if err := nativephp.WriteOverrides(phpVersion); err != nil {
 		return 0, fmt.Errorf("writing native php overrides: %w", err)
 	}
