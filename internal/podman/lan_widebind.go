@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/pfredirect"
 	"github.com/geodro/lerd/internal/platform"
+	"github.com/geodro/lerd/internal/portforward"
 )
 
 // LoopbackPortsPublishedWide reports, per installed lerd container, the host
@@ -26,7 +26,7 @@ func LoopbackPortsPublishedWide() (map[string][]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	redirected := pfredirect.Redirected()
+	redirected := portforward.Redirected()
 	for _, path := range paths {
 		ports, err := widePortsIn(path, redirected)
 		if err != nil {
@@ -45,7 +45,7 @@ func UnitLoopbackPortsPublishedWide(unit string) ([]int, error) {
 	if !platform.Current.PrivilegedPortsBindAll {
 		return nil, nil
 	}
-	ports, err := widePortsIn(filepath.Join(config.QuadletDir(), unit+".container"), pfredirect.Redirected())
+	ports, err := widePortsIn(filepath.Join(config.QuadletDir(), unit+".container"), portforward.Redirected())
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
@@ -53,7 +53,7 @@ func UnitLoopbackPortsPublishedWide(unit string) ([]int, error) {
 }
 
 // widePortsIn lists the loopback ports below 1024 the unit at path publishes
-// that no pf redirect covers.
+// that no loopback forward covers.
 func widePortsIn(path string, redirected map[int]bool) ([]int, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {

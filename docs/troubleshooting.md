@@ -280,6 +280,10 @@ The exact command lerd suggests in `lerd doctor` and `lerd start` output is alre
 
 `lerd doctor` also checks for port conflicts as part of its full diagnostic, and adds a dedicated **[Stopped service ports]** section that flags installed services whose host port is already bound by another process. The same warning is shown next to the inactive status pill in the web UI, so you can spot the conflict without running anything: most often this is a system-installed service (Postgres, MySQL, Redis) listening on the default port. Stop the conflicting process and the warning clears on the next snapshot refresh.
 
+### macOS: iCloud Private Relay turns off while lerd is running
+
+macOS shows "some system settings prevent Private Relay from working" and turns iCloud Private Relay off. lerd 1.39.1 and 1.39.2 kept nginx's 80 and 443 on loopback with a pf rule, and macOS turns Private Relay off while any such rule is loaded. Newer versions use a launchd port forward instead, which leaves Private Relay alone, but the old rule stays until you run `lerd install` once to replace it. Private Relay comes back within a few seconds. See [how 80 and 443 stay on loopback](usage/remote-development.md).
+
 ### Error: rootlessport cannot expose privileged port 80
 
 ```

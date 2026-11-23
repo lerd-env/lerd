@@ -9,9 +9,12 @@ import (
 	"path/filepath"
 
 	"github.com/geodro/lerd/internal/certs"
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/pfredirect"
+	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/portforward"
 )
 
 // runSystemSetup applies the root-level steps individually. macOS has no
@@ -29,21 +32,62 @@ func runSystemSetup(_ bool) error {
 	return nil
 }
 
-// ensureLoopbackRedirect installs the pf anchor that keeps nginx's 80 and 443
-// on loopback; without it gvproxy can only publish them on every interface.
+// ensureLoopbackRedirect installs the launchd jobs that keep nginx's 80 and
+// 443 on loopback; without them gvproxy can only publish them on every interface.
 func ensureLoopbackRedirect() {
-	if pfredirect.Pending() {
-		feedback.Sudo("Keeping nginx ports on loopback (pf redirect)")
+	user := os.Getenv("USER")
+	if portforward.Pending(user) {
+		pauseNginx()
+		feedback.Sudo("Keeping nginx ports on loopback (launchd port forward)")
 	}
-	moved, err := pfredirect.Install(os.Getenv("USER"), dns.SudoWriteFile)
+	moved, err := portforward.Install(user, dns.SudoWriteFile)
 	loopbackRedirectAdded = moved
+	noteNginxRestart(moved)
 	if err != nil {
-		feedback.Warn("pf redirect for nginx, ports 80 and 443 stay reachable from the network: %v", err)
+		feedback.Warn("port forward for nginx, ports 80 and 443 stay reachable from the network: %v", err)
 	}
 }
 
-// applyLoopbackRedirect re-loads the pf anchor, which a reboot or another
-// tool's `pfctl -f /etc/pf.conf` drops.
+// Vars so tests can stand in for podman.
+var (
+	nginxRunningFn = func() bool { r, _ := podman.ContainerRunning("lerd-nginx"); return r }
+	stopNginxFn    = func() error { return podman.StopUnit("lerd-nginx") }
+	nginxWideFn    = nginxPublishesWide
+)
+
+// pauseNginx stops a nginx holding 0.0.0.0:80, which launchd could not take
+// then. Install starts it again once its unit is rewritten for the forward.
+func pauseNginx() {
+	if !nginxWideFn() {
+		return
+	}
+	nginxRestartOwed = nginxRunningFn()
+	stopNginxFn() //nolint:errcheck // not running is fine
+}
+
+// noteNginxRestart owes a running nginx a restart when its publish moved, even
+// with autostart off, or it stays on a port nothing forwards to.
+func noteNginxRestart(moved bool) {
+	if moved && nginxRunningFn() {
+		nginxRestartOwed = true
+	}
+}
+
+// nginxPublishesWide reports whether nginx's unit binds its ports on every
+// interface: LAN exposed, or widened because nothing forwards loopback.
+func nginxPublishesWide() bool {
+	if portforward.Installed() {
+		return false
+	}
+	if cfg, err := config.LoadGlobal(); err != nil || cfg == nil || cfg.LAN.Exposed {
+		return true
+	}
+	wide, err := podman.UnitLoopbackPortsPublishedWide("lerd-nginx")
+	return err != nil || len(wide) > 0
+}
+
+// applyLoopbackRedirect re-loads the legacy pf anchor, which a reboot drops,
+// until lerd install replaces it with the launchd port forward.
 func applyLoopbackRedirect() {
 	if err := pfredirect.Apply(); err != nil {
 		feedback.Warn("loading the pf redirect for nginx: %v", err)
@@ -52,12 +96,14 @@ func applyLoopbackRedirect() {
 
 // removeLoopbackRedirect undoes ensureLoopbackRedirect.
 func removeLoopbackRedirect() {
-	if _, err := os.Stat(pfredirect.AnchorPath); err != nil {
-		return
+	if len(portforward.Redirected()) == 0 {
+		if _, err := os.Stat(pfredirect.AnchorPath); err != nil {
+			return
+		}
 	}
-	feedback.Sudo("Removing the pf redirect for nginx")
-	if err := pfredirect.Remove(); err != nil {
-		feedback.Warn("removing the pf redirect: %v", err)
+	feedback.Sudo("Removing the port forward for nginx")
+	if err := portforward.Remove(); err != nil {
+		feedback.Warn("removing the port forward: %v", err)
 	}
 }
 

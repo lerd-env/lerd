@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/pfredirect"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/portforward"
 )
 
 // launchctl runs a launchctl command with a 15-second timeout so a throttled
@@ -472,11 +472,10 @@ func stripPrivilegedIPBind(port string) string {
 	return port
 }
 
-// publishArgs are the -p values for a PublishPort. A port the pf redirect
-// covers is held on its high loopback port, which gvproxy can bind there;
-// when the bind is wide (LAN exposed) it keeps the wide publish too, so
-// loopback traffic the redirect diverts still lands on nginx.
-func publishArgs(port string, redirected map[int]bool) []string {
+// publishArgs are the -p values for a PublishPort. A forwarded port is held on
+// its high loopback port; a wide one keeps its wide publish too, unless the
+// launchd forward already serves the LAN (lanCovered) and holds the port.
+func publishArgs(port string, redirected map[int]bool, lanCovered bool) []string {
 	rest := port
 	loopback := false
 	if r, ok := strings.CutPrefix(port, "127.0.0.1:"); ok {
@@ -489,8 +488,8 @@ func publishArgs(port string, redirected map[int]bool) []string {
 	if !ok || err != nil || !redirected[n] {
 		return []string{stripPrivilegedIPBind(port)}
 	}
-	held := fmt.Sprintf("127.0.0.1:%d:%s", pfredirect.Target(n), containerPart)
-	if loopback {
+	held := fmt.Sprintf("127.0.0.1:%d:%s", portforward.Target(n), containerPart)
+	if loopback || lanCovered {
 		return []string{held}
 	}
 	return []string{stripPrivilegedIPBind(port), held}
@@ -573,9 +572,9 @@ func containerToPodmanArgs(c map[string][]string) ([]string, error) {
 	for _, net := range c["Network"] {
 		args = append(args, "--network", net)
 	}
-	redirected := pfredirect.Redirected()
+	redirected, lanCovered := portforward.Redirected(), portforward.Installed()
 	for _, port := range c["PublishPort"] {
-		for _, p := range publishArgs(port, redirected) {
+		for _, p := range publishArgs(port, redirected, lanCovered) {
 			args = append(args, "-p", p)
 		}
 	}

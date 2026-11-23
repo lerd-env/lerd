@@ -271,6 +271,7 @@ func main() {
 	root.AddCommand(cli.NewDNSDisableCmd())
 	root.AddCommand(cli.NewDNSRepairCmd())
 	root.AddCommand(cli.NewDNSForwarderCmd())
+	root.AddCommand(cli.NewPortForwardCmd())
 	root.AddCommand(cli.NewDNSServeCmd())
 	root.AddCommand(cli.NewDevServerFilesCmd())
 	root.AddCommand(cli.NewLANCmd())

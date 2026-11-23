@@ -1,6 +1,7 @@
 package pfredirect
 
 import (
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -61,31 +62,6 @@ func TestRedirectedEmptyWithoutAMatchingAnchor(t *testing.T) {
 	useAnchor(t, Render([]int{81}))
 	if got := Redirected(); len(got) != 0 {
 		t.Errorf("stale anchor: Redirected() = %v, want empty", got)
-	}
-}
-
-// The grant start needs to re-load the anchor must not depend on lerd
-// managing DNS, or a reboot leaves nginx on a port nothing redirects to.
-func TestSudoersGrantsExactlyTheApplyCommand(t *testing.T) {
-	got := Sudoers("alice")
-	want := "alice ALL=(root) NOPASSWD: /sbin/pfctl -E -a com.apple/lerd -f /etc/pf.anchors/lerd\n"
-	if !strings.HasSuffix(got, want) {
-		t.Errorf("Sudoers() = %q, want it to end with %q", got, want)
-	}
-	if strings.Count(got, "NOPASSWD") != 1 {
-		t.Errorf("Sudoers() must grant one command only: %q", got)
-	}
-}
-
-// A reboot only drops the anchor, so the granted reload leads, and reloading
-// pf.conf, which wipes a VPN's rules, is offered only for a skipped lo0.
-func TestRepairLeadsWithTheGrantedApply(t *testing.T) {
-	got := Repair()
-	if !strings.HasPrefix(got, "sudo /sbin/pfctl -E -a com.apple/lerd -f /etc/pf.anchors/lerd,") {
-		t.Errorf("Repair() = %q, want it to lead with the granted anchor reload", got)
-	}
-	if !strings.Contains(got, "lo0 (skip), sudo /sbin/pfctl -f /etc/pf.conf before it") {
-		t.Errorf("Repair() = %q, want the pf.conf reload only on a skipped lo0", got)
 	}
 }
 
@@ -154,16 +130,69 @@ func TestLoopbackReachesOnlyWhenTheConnectionArrivesOnTheTarget(t *testing.T) {
 	}
 }
 
-func TestLoopbackReachesWithTheTargetHeldTrustsAnAnswer(t *testing.T) {
+// A forwarder relays from a port of its own, so the probe cannot know its
+// connection by address and has to know it by what it sends.
+func TestLoopbackReachesThroughARelay(t *testing.T) {
+	from, to := freePort(t), freePort(t)
+	relay(t, from, to)
+	if !loopbackReaches(from, to) {
+		t.Error("a connection relayed to the target must count")
+	}
+}
+
+// launchd holds the source port even when its forwarder is broken, so with
+// nginx on the target only a reply proves the path works.
+func TestLoopbackReachesWithTheTargetHeldNeedsAReply(t *testing.T) {
 	from, to := freePort(t), freePort(t)
 	listenOn(t, to)
 	if loopbackReaches(from, to) {
 		t.Error("nothing answers on the source port")
 	}
 	listenOn(t, from)
-	if !loopbackReaches(from, to) {
-		t.Error("with nginx holding the target, an answer on the source port counts")
+	if loopbackReaches(from, to) {
+		t.Error("a listener that never replies must not count")
 	}
+	from = freePort(t)
+	answerOn(t, from)
+	if !loopbackReaches(from, to) {
+		t.Error("with nginx holding the target, a reply on the source port counts")
+	}
+}
+
+func relay(t *testing.T, from, to int) {
+	t.Helper()
+	serve(t, from, func(c net.Conn) {
+		up, err := net.Dial("tcp", loopbackAddr(to))
+		if err != nil {
+			return
+		}
+		go io.Copy(up, c)
+		io.Copy(c, up)
+		up.Close()
+	})
+}
+
+func answerOn(t *testing.T, port int) {
+	t.Helper()
+	serve(t, port, func(c net.Conn) { c.Write([]byte("HTTP/1.1 400 Bad Request\r\n\r\n")) })
+}
+
+func serve(t *testing.T, port int, handle func(net.Conn)) {
+	t.Helper()
+	ln, err := net.Listen("tcp", loopbackAddr(port))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() { defer c.Close(); handle(c) }()
+		}
+	}()
 }
 
 func TestAcceptsOwnSkipsAConnectionThatArrivedFirst(t *testing.T) {
@@ -182,10 +211,11 @@ func TestAcceptsOwnSkipsAConnectionThatArrivedFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer own.Close()
-	if !acceptsOwn(ln.(*net.TCPListener), own.LocalAddr().String(), time.Now().Add(probeTimeout)) {
+	own.Write([]byte("probe-token"))
+	if !acceptsOwn(ln.(*net.TCPListener), "probe-token", time.Now().Add(probeTimeout)) {
 		t.Error("a browser's connection landing first must not hide the probe's own")
 	}
-	if acceptsOwn(ln.(*net.TCPListener), "127.0.0.1:1", time.Now().Add(100*time.Millisecond)) {
+	if acceptsOwn(ln.(*net.TCPListener), "probe-token", time.Now().Add(100*time.Millisecond)) {
 		t.Error("without the probe's own connection the check must fail at the deadline")
 	}
 }

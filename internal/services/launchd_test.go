@@ -13,6 +13,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/pfredirect"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/portforward"
 )
 
 // TestHasNonZeroExitCode covers the failure-detection helper for both
@@ -390,10 +391,16 @@ func TestStripSELinuxVolOpts(t *testing.T) {
 	}
 }
 
+// noLoopbackForward hides the host's real pf rule and launchd jobs.
+func noLoopbackForward(t *testing.T) {
+	t.Helper()
+	prev, prevDir := pfredirect.AnchorPath, portforward.PlistDir
+	pfredirect.AnchorPath, portforward.PlistDir = filepath.Join(t.TempDir(), "missing"), t.TempDir()
+	t.Cleanup(func() { pfredirect.AnchorPath, portforward.PlistDir = prev, prevDir })
+}
+
 func TestContainerToPodmanArgs(t *testing.T) {
-	prev := pfredirect.AnchorPath
-	pfredirect.AnchorPath = filepath.Join(t.TempDir(), "missing")
-	t.Cleanup(func() { pfredirect.AnchorPath = prev })
+	noLoopbackForward(t)
 	c := map[string][]string{
 		"ContainerName": {"lerd-nginx"},
 		"Image":         {"docker.io/library/nginx:latest"},
@@ -710,6 +717,7 @@ func TestStripIPv6PublishPorts(t *testing.T) {
 // with no -p flags, so nothing reached the host. The published ports must survive
 // as -p entries in the final podman run args.
 func TestLANExposedPublishPortsSurvive(t *testing.T) {
+	noLoopbackForward(t)
 	content := "[Container]\n" +
 		"Image=docker.io/library/nginx:alpine\n" +
 		"Network=lerd\n" +
@@ -862,11 +870,20 @@ func TestPublishArgsMovesRedirectedLoopbackPorts(t *testing.T) {
 		"127.0.0.1:3306:3306":   {"127.0.0.1:3306:3306"},
 	}
 	for in, want := range cases {
-		if got := publishArgs(in, redirected); !slices.Equal(got, want) {
+		if got := publishArgs(in, redirected, false); !slices.Equal(got, want) {
 			t.Errorf("publishArgs(%q) = %q, want %q", in, got, want)
 		}
 	}
-	if got := publishArgs("127.0.0.1:80:80", nil); !slices.Equal(got, []string{"80:80"}) {
+	if got := publishArgs("127.0.0.1:80:80", nil, false); !slices.Equal(got, []string{"80:80"}) {
 		t.Errorf("without a redirect the bind must stay reachable, got %q", got)
+	}
+}
+
+// The launchd jobs hold 80 and 443 on every interface as root, so a wide
+// publish there could never bind; the forward serves the LAN instead.
+func TestPublishArgsLeavesTheLANToTheLaunchdForward(t *testing.T) {
+	redirected := map[int]bool{80: true}
+	if got := publishArgs("0.0.0.0:80:80", redirected, true); !slices.Equal(got, []string{"127.0.0.1:17080:80"}) {
+		t.Errorf("publishArgs = %q, want only the loopback target", got)
 	}
 }

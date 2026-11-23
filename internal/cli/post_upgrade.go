@@ -35,6 +35,7 @@ var upgradeSkipCommands = map[string]bool{
 	"mcp":           true,
 	"lsp":           true,
 	"dns-forwarder": true,
+	"port-forward":  true,
 
 	// Shims written by addShellShims.
 	"php":         true,

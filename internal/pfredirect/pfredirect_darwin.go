@@ -3,7 +3,6 @@
 package pfredirect
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,44 +11,6 @@ import (
 
 // runSudo is a var so tests can stand in for root.
 var runSudo = sudo
-
-// WriteFunc writes a root-owned file, prompting for a password if needed.
-type WriteFunc func(path string, content []byte, mode os.FileMode) error
-
-// Pending reports whether Install has files to write, which needs a password.
-func Pending() bool {
-	_, err := os.Stat(SudoersPath)
-	return err != nil || len(Redirected()) == 0
-}
-
-// Install writes the grant, then the anchor, and loads it; a failed load or
-// check flushes and removes it, so nginx never waits on a port nothing redirects
-// to. moved reports whether nginx's publish changed, so the caller restarts it.
-func Install(user string, writeFile WriteFunc) (moved bool, err error) {
-	ports := Ports()
-	if len(ports) == 0 {
-		return false, nil
-	}
-	if user == "" {
-		return false, errors.New("cannot determine the current user")
-	}
-	had := len(Redirected()) > 0
-	defer func() { moved = had != (len(Redirected()) > 0) }()
-	if _, statErr := os.Stat(SudoersPath); statErr != nil {
-		if err := writeFile(SudoersPath, []byte(Sudoers(user)), 0440); err != nil {
-			return false, fmt.Errorf("writing %s: %w", SudoersPath, err)
-		}
-	}
-	if !had {
-		if err := writeFile(AnchorPath, []byte(Render(ports)), 0644); err != nil {
-			return false, fmt.Errorf("writing %s: %w", AnchorPath, err)
-		}
-	}
-	if err := Apply(); err != nil {
-		return false, errors.Join(err, runSudo(pfctl, "-a", Anchor, "-F", "all"), runSudo("rm", "-f", AnchorPath))
-	}
-	return false, nil
-}
 
 // Apply loads the installed anchor without prompting, then checks loopback
 // traffic takes it. pf drops anchor rules on reboot and on any
