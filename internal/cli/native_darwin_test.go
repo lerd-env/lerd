@@ -43,6 +43,19 @@ func TestUsesLoopbackServicesUnderNative(t *testing.T) {
 	}
 }
 
+// A FrankenPHP or custom site is not served from the host and its .env names
+// container hosts, so under native its commands still go to its own container.
+func TestNativeRuntimeVersionStepsAsideForASiteWithItsOwnContainer(t *testing.T) {
+	nativeMode(t)
+	orig := runsInOwnContainerFn
+	t.Cleanup(func() { runsInOwnContainerFn = orig })
+	runsInOwnContainerFn = func(string) bool { return true }
+
+	if _, ok := nativeRuntimeVersion(t.TempDir()); ok {
+		t.Error("a site with its own PHP container must take the container path")
+	}
+}
+
 // The php shim runs anywhere, not only inside a registered site. Under the
 // native runtime there is no FPM container to fall back to, so a directory
 // that is not a site must still get native PHP rather than starting one.

@@ -2,9 +2,11 @@ package podman
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
+	"github.com/geodro/lerd/internal/composer"
 	"github.com/geodro/lerd/internal/config"
 )
 
@@ -59,6 +61,7 @@ func GenerateFrankenPHPQuadlet(siteName, projectPath, phpVersion string, entrypo
 	b.WriteString("Network=lerd\n")
 	fmt.Fprintf(&b, "Volume=%s:/etc/hosts:ro,z\n", config.ContainerHostsFile())
 	fmt.Fprintf(&b, "Volume=%s:%s:rw\n", projectPath, projectPath)
+	b.WriteString(frankenPHPComposerMounts())
 	// Debug tooling: bind-mount the same conf.d inis, bridge assets, and runtime
 	// socket dir the FPM container gets, so dump()/dd(), the Debug window
 	// (lerd_devtools), and Xdebug work for requests Octane serves from this
@@ -161,6 +164,24 @@ func WriteFrankenPHPQuadletDiff(siteName, projectPath, phpVersion string, entryp
 		return false, err
 	}
 	return WriteQuadletDiff(FrankenPHPContainerName(siteName), content)
+}
+
+// frankenPHPComposerMounts gives the container lerd's composer and composer's
+// home at their host paths: under the native runtime the site's commands run
+// here, and composer is invoked by that path. A missing source is left out.
+func frankenPHPComposerMounts() string {
+	var b strings.Builder
+	if phar := composer.PharPath(); bindMountable(phar) {
+		if info, err := os.Stat(phar); err == nil && !info.IsDir() {
+			fmt.Fprintf(&b, "Volume=%s:%s:ro\n", phar, phar)
+		}
+	}
+	if home := composer.HomeDir(); bindMountable(home) {
+		if info, err := os.Stat(home); err == nil && info.IsDir() {
+			fmt.Fprintf(&b, "Volume=%s:%s:rw\n", home, home)
+		}
+	}
+	return b.String()
 }
 
 func sortedKeys(m map[string]string) []string {

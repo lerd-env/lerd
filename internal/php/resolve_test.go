@@ -137,3 +137,64 @@ func TestSiteRootForFromTheOtherHomeSpelling(t *testing.T) {
 		t.Errorf("SiteRootFor(%q) = %q, want the registered %q", dir, got, site)
 	}
 }
+
+// Under the native runtime the shared FPM container is stopped and its image
+// may be gone, so a FrankenPHP site's commands go to the site's own container.
+// Container mode keeps the shared one, as it always has.
+func TestFPMContainerForDir_FrankenPHPSite(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	site := filepath.Join(tempRoot(t), "shop")
+	if err := os.MkdirAll(site, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "shop", Path: site, PHPVersion: "8.5", Runtime: "frankenphp"}); err != nil {
+		t.Fatal(err)
+	}
+
+	stubRuntimeInstalled(t, true, nil, nil)
+	if got, want := FPMContainerForDir(site, "8.5"), "lerd-fp-shop"; got != want {
+		t.Errorf("native: FPMContainerForDir = %q, want %q", got, want)
+	}
+	stubRuntimeInstalled(t, false, nil, nil)
+	if got, want := FPMContainerForDir(site, "8.5"), "lerd-php85-fpm"; got != want {
+		t.Errorf("container: FPMContainerForDir = %q, want %q", got, want)
+	}
+}
+
+// Only a site whose PHP has a container of its own leaves the host under the
+// native runtime. A host-proxy site and a custom container without PHP have
+// nowhere else to run it, and a plain site is what the host serves.
+func TestRunsInOwnContainer(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	stubRuntimeInstalled(t, true, nil, nil)
+	root := tempRoot(t)
+	cases := []struct {
+		site     config.Site
+		imagePHP bool
+		want     bool
+	}{
+		{config.Site{Name: "franken", Runtime: "frankenphp"}, false, true},
+		{config.Site{Name: "cfpm", Runtime: "fpm-custom"}, false, true},
+		{config.Site{Name: "custom", ContainerPort: 8474}, true, true},
+		{config.Site{Name: "node", ContainerPort: 3000}, false, false},
+		{config.Site{Name: "proxy", HostPort: 5173}, false, false},
+		{config.Site{Name: "plain"}, false, false},
+	}
+	for _, c := range cases {
+		c.site.Path = filepath.Join(root, c.site.Name)
+		c.site.PHPVersion = "8.5"
+		if err := os.MkdirAll(c.site.Path, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := config.AddSite(c.site); err != nil {
+			t.Fatal(err)
+		}
+		stubCustomImagePHP(t, c.imagePHP)
+		if got := RunsInOwnContainer(c.site.Path); got != c.want {
+			t.Errorf("%s: RunsInOwnContainer = %v, want %v", c.site.Name, got, c.want)
+		}
+	}
+	if RunsInOwnContainer(filepath.Join(root, "elsewhere")) {
+		t.Error("a folder that is no site keeps running on the host")
+	}
+}

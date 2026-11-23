@@ -1,9 +1,50 @@
 package podman
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/composer"
 )
+
+// Under the native runtime a FrankenPHP site's commands run in its container,
+// composer among them, invoked by the phar's host path and needing its home.
+// A source that is not on disk yet is left out rather than mounted empty.
+func TestFrankenPHPQuadletMountsComposer(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	composerHome := t.TempDir()
+	t.Setenv("COMPOSER_HOME", composerHome)
+	phar := composer.PharPath()
+
+	content, err := GenerateFrankenPHPQuadlet("myapp", "/home/user/myapp", "8.4", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(content, phar) {
+		t.Errorf("a phar not downloaded yet must not be mounted:\n%s", content)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(phar), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(phar, []byte("phar"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	content, err = GenerateFrankenPHPQuadlet("myapp", "/home/user/myapp", "8.4", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"Volume=" + phar + ":" + phar + ":ro",
+		"Volume=" + composerHome + ":" + composerHome + ":rw",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("quadlet missing %q:\n%s", want, content)
+		}
+	}
+}
 
 func TestFrankenPHPContainerName(t *testing.T) {
 	got := FrankenPHPContainerName("myapp")

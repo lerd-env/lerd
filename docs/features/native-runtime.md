@@ -35,7 +35,7 @@ When a listener's definition changes, on an upgrade or a reinstall, lerd waits f
 
 The pools run on demand: a version nothing has asked for in a minute drops to zero worker processes instead of holding several resident, which matters on a laptop where sites sit untouched for hours. The first request after that pays a fork, not a warm-up, because the master process owns the opcache shared memory and keeps it across idle periods.
 
-FrankenPHP sites, custom containers and host-proxy sites are unaffected either way: they never used the shared FPM container.
+FrankenPHP sites, custom containers and host-proxy sites are unaffected either way: they never used the shared FPM container. That goes for their commands too. In a FrankenPHP, custom-FPM or PHP-carrying custom container site, `php`, `composer`, `artisan` and the other shims run in the site's own container, where its `.env` hosts resolve, and lerd mounts its composer and composer's home into FrankenPHP containers for that. A host-proxy site, a custom container without PHP, and any folder that is not a site keep running PHP on your machine.
 
 ## Installing and updating
 

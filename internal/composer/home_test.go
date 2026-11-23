@@ -1,4 +1,4 @@
-package cli
+package composer
 
 import (
 	"path/filepath"
@@ -7,7 +7,7 @@ import (
 
 // lerd has to run composer with the home composer itself would pick, or a
 // global auth.json in ~/.composer is never read and private packages fail.
-func TestResolveComposerHome(t *testing.T) {
+func TestResolveHome(t *testing.T) {
 	const home = "/home/u"
 	xdgDir := filepath.Join(home, ".config", "composer")
 	legacy := filepath.Join(home, ".composer")
@@ -45,8 +45,8 @@ func TestResolveComposerHome(t *testing.T) {
 				}
 				return false
 			}
-			if got := resolveComposerHome(environ, home, isDir); got != tc.want {
-				t.Errorf("resolveComposerHome = %q, want %q", got, tc.want)
+			if got := resolveHome(environ, home, isDir); got != tc.want {
+				t.Errorf("resolveHome = %q, want %q", got, tc.want)
 			}
 		})
 	}
