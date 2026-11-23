@@ -46,11 +46,8 @@
     // journal as a read-only tab (no start/stop, the site owns its lifecycle).
     if (site.host_has_dev_server) xs.push({ id: 'devserver', label: m.sites_tabs_devServer() });
     if (activeWorktreeBranch) {
-      // Shared queue/horizon/stripe/schedule/reverb run against main and
-      // their journals don't filter per worktree, so drop them here to
-      // avoid implying isolation. Per-worktree host workers (vite, etc.)
-      // do have their own launchd units — surface those off the
-      // worktree's own framework_workers list.
+      // The parent's workers journal against main, so only the worktree's
+      // own units are listed, off its framework_workers.
       for (const w of activeWorktree?.framework_workers || []) {
         xs.push(workerTab('worker:' + w.name, w.label || w.name, w.running, w.failing));
       }

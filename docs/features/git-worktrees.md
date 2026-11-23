@@ -188,7 +188,7 @@ Picking a tab re-scopes the rest of the detail view to that worktree:
 - The **Tinker** tab REPL runs inside the worktree's PHP context (its own `.env`, its own vendor).
 - The **Request timing** panel shows the branch's own traffic: requests to the worktree's subdomain are recorded against it, and its slow routes open and profile on that subdomain. The parent's timing stays separate, though a worktree's requests still count toward the site when the sites list is ordered by traffic. See [Request timing](./request-timing.md).
 - The **PHP** and **Node** version selectors show the worktree's effective version. A dashed violet border indicates "Inherits from main"; changing the value persists a worktree-only override.
-- Worker toggles (queue, schedule, Horizon, Reverb, custom workers) collapse into a "Workers run from main" pill, those run against main's checkout regardless of which worktree is active. Switch to main to start or stop them.
+- The worker toggles (queue, schedule, Horizon, Reverb, custom workers) start and stop the worktree's own copy of each worker, `lerd-<worker>-<site>-<branch>`, running in the worktree's checkout. The parent's workers keep running from main. Only workers marked `per_worktree` (Vite) start by themselves; the rest are off until you switch them on, which is what a branch with its own Redis or its own job classes needs, since the parent's queue never sees its jobs. Two queue workers on the same Redis database and queue both take jobs from it, so give the worktree its own Redis database first, for example with `REDIS_DB` in [env overrides](#env-overrides). A worktree with no worker that applies shows a "Workers run from main" pill instead.
 - The domain-edit pencil disappears (worktree domains are derived from the parent's primary).
 
 ### Adding and removing worktrees
@@ -214,7 +214,7 @@ node_version: "24"
 
 The override is honoured wherever lerd materialises worktree state on disk: vhost generation on add, rename, pause/unpause, the watcher's startup sweep, and `lerd secure`/`lerd unsecure`. The commands that run PHP in a container follow it too, so `lerd php` and `lerd composer` from inside the checkout use the worktree's version rather than the parent's, whether the worktree sits beside the project or inside it. Switching a worktree's version writes the target version's FPM quadlet the same way a site switch does, so the vhost it generates always has a container behind it. Worktrees with no override inherit the parent's pinned version (not the highest-installed satisfier of `composer.json`/`package.json` constraints, that detection only kicks in for unregistered directories).
 
-Site-level resources stay shared and cannot be overridden per worktree: domain (derived from the parent), TLS certificate (parent's wildcard cert), LAN share port (worktree-scoped LAN share is a separate toggle), workers, and any custom container settings.
+Site-level resources stay shared and cannot be overridden per worktree: domain (derived from the parent), TLS certificate (parent's wildcard cert), LAN share port (worktree-scoped LAN share is a separate toggle), and any custom container settings.
 
 On a site running its own per-site image (`runtime: fpm-custom` or a port-bearing `container:` site), a worktree is served from that image rather than the shared per-version container, and `lerd php` and `lerd composer` inside the checkout exec into it too. Whatever the Containerfile adds is therefore present on the branch exactly as it is on the parent, wherever the checkout lives.
 

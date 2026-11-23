@@ -483,7 +483,7 @@ func workerTool() mcpTool {
 				"action":             {Type: "string", Enum: []string{"list", "start", "stop", "add", "remove", "health", "heal", "mode_get", "mode_set", "queue_start", "queue_stop", "horizon_start", "horizon_stop", "reverb_start", "reverb_stop", "schedule_start", "schedule_stop", "stripe_start", "stripe_stop", "stripe_config"}},
 				"site":               {Type: "string", Description: "Site name (from site list)."},
 				"worker":             {Type: "string", Description: "start/stop: worker name (e.g. messenger, vite)."},
-				"branch":             {Type: "string", Description: "Optional worktree branch (per_worktree workers)."},
+				"branch":             {Type: "string", Description: "Optional worktree branch (its own unit)."},
 				"name":               {Type: "string", Description: "add/remove: worker slug."},
 				"command":            {Type: "string", Description: "add: command run in the FPM container."},
 				"label":              {Type: "string", Description: "add: human-readable label."},
