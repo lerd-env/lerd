@@ -221,10 +221,10 @@ func parseComposerPHP(constraint string) string {
 	return ""
 }
 
-// bestInstalledVersion returns the highest installed PHP version that satisfies
-// the given composer constraint, or "" if none match.
+// bestInstalledVersion returns the highest PHP version the active runtime can
+// serve that satisfies the given composer constraint, or "" if none match.
 func bestInstalledVersion(constraint string) string {
-	installed, err := ListInstalled()
+	installed, err := InstalledForRuntime()
 	if err != nil || len(installed) == 0 {
 		return ""
 	}
@@ -412,10 +412,10 @@ func SatisfiesAll(version string, constraints ...string) bool {
 	return true
 }
 
-// BestInstalledFor returns the newest installed version satisfying every
-// constraint, or "" when the constraints have no installed version in common.
+// BestInstalledFor returns the newest version the active runtime can serve
+// that satisfies every constraint, or "" when none does.
 func BestInstalledFor(constraints ...string) string {
-	installed, err := ListInstalled()
+	installed, err := InstalledForRuntime()
 	if err != nil {
 		return ""
 	}

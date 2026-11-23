@@ -270,7 +270,7 @@ func fillPHPQuestions(q *ProjectQuestions, cwd string, defaults *config.ProjectC
 	}
 
 	q.PHPVersion = wizardPHPDefault(cwd, defaults, gcfg, framework)
-	q.PHPInstalled, _ = phpPkg.ListInstalled()
+	q.PHPInstalled, _ = phpPkg.InstalledForRuntime()
 
 	if lerdManagesNode() {
 		resolved, source := nodeDet.UnpinnedVersion(cwd)

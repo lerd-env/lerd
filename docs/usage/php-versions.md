@@ -62,7 +62,7 @@ This writes `.php-version: 8.5` (so CLI `php`, asdf, and other tools see the rig
 
 The UI PHP version selector and the MCP `site` tool's `php` action follow the same rules; they always write both files when applicable.
 
-The composer constraint is matched against all installed PHP versions using full semver rules (`^`, `~`, `>=`, `<`, `||`, `*`). The highest installed version that satisfies the constraint wins. If no installed version matches, the literal minimum from the constraint is used (and the FPM will be built on first use).
+The composer constraint is matched against all installed PHP versions using full semver rules (`^`, `~`, `>=`, `<`, `||`, `*`). The highest installed version that satisfies the constraint wins. Installed means installed for the active runtime: under the [native runtime](/features/native-runtime) only the native builds count, not the container units kept for switching back, and the dashboard's site wizard offers the same versions. If no installed version matches, the literal minimum from the constraint is used (and the FPM will be built on first use).
 
 ::: tip Overriding a `composer.json` constraint
 If `composer.json` requires `^8.3` but you need to run the project on a specific version, `lerd isolate 8.5` is the right tool. It writes `.php-version` which takes priority over the composer constraint. Running `lerd use 8.5` alone won't help; that only sets the global fallback, which loses to the composer constraint.
