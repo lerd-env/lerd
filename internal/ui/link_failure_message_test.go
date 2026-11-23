@@ -79,6 +79,16 @@ func TestFailureMessage(t *testing.T) {
 			want: "\"./composer.json\" does not contain valid JSON " + strings.Repeat("x", 153) + "… — composer install: exit status 1",
 		},
 		{
+			// "é" is two bytes and straddles the 200-byte cap, so a byte cut
+			// would leave half of it behind.
+			name: "a long reason is cut between characters, never inside one",
+			out: "→ composer install\n" +
+				"In JsonFile.php line 401:\n" +
+				"  \"./composer.json\" does not contain valid JSON " + strings.Repeat("x", 152) + strings.Repeat("é", 100) + "\n" +
+				" ✗ composer install: exit status 1\n",
+			want: "\"./composer.json\" does not contain valid JSON " + strings.Repeat("x", 152) + "… — composer install: exit status 1",
+		},
+		{
 			name: "a bare exit status never borrows output from an earlier step",
 			out:  "→ composer install\nInstalling dependencies\n→ npm run build\n ✗ npm run build: exit status 1\n",
 			want: "npm run build: exit status 1",
