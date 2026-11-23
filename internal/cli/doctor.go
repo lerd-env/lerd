@@ -18,10 +18,10 @@ import (
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/origin"
-	"github.com/geodro/lerd/internal/pfredirect"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/platform"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/portforward"
 	"github.com/geodro/lerd/internal/services"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/geodro/lerd/internal/tools"
@@ -527,13 +527,13 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 	httpPort, httpsPort := config.NginxPorts()
 	nginxRunning, _ := podman.ContainerRunning("lerd-nginx")
 	nginxInstalled := services.Mgr.ContainerUnitInstalled("lerd-nginx")
-	redirected := pfredirect.Redirected()
+	redirected := portforward.Redirected()
 	for _, p := range []int{httpPort, httpsPort} {
 		port := strconv.Itoa(p)
 		switch {
-		case nginxRunning && redirected[p] && !pfredirect.Reaches(p):
-			fail("port "+port, fmt.Sprintf("nginx listens on 127.0.0.1:%d but pf is not redirecting %s to it", pfredirect.Target(p), port),
-				pfredirect.Repair()+", or lerd stop && lerd start if gvproxy still holds the port")
+		case nginxRunning && redirected[p] && !portforward.Reaches(p):
+			fail("port "+port, fmt.Sprintf("nginx listens on 127.0.0.1:%d but nothing forwards %s to it", portforward.Target(p), port),
+				"lerd install, or lerd stop && lerd start if gvproxy still holds the port")
 		case nginxRunning:
 			ok(fmt.Sprintf("port %-4s (nginx running)", port))
 		case PortInUse(port):

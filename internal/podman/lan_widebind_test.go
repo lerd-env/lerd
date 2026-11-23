@@ -9,6 +9,7 @@ import (
 
 	"github.com/geodro/lerd/internal/pfredirect"
 	"github.com/geodro/lerd/internal/platform"
+	"github.com/geodro/lerd/internal/portforward"
 )
 
 func widePrivilegedPorts(t *testing.T, on bool) {
@@ -19,13 +20,13 @@ func widePrivilegedPorts(t *testing.T, on bool) {
 	useAnchor(t, filepath.Join(t.TempDir(), "missing"))
 }
 
-// useAnchor points the pf redirect at path, so the host's real anchor never
-// leaks into a test.
+// useAnchor points the pf redirect at path and the port forward at an empty
+// dir, so the host's real redirect never leaks into a test.
 func useAnchor(t *testing.T, path string) {
 	t.Helper()
-	prev := pfredirect.AnchorPath
-	pfredirect.AnchorPath = path
-	t.Cleanup(func() { pfredirect.AnchorPath = prev })
+	prev, prevDir := pfredirect.AnchorPath, portforward.PlistDir
+	pfredirect.AnchorPath, portforward.PlistDir = path, t.TempDir()
+	t.Cleanup(func() { pfredirect.AnchorPath, portforward.PlistDir = prev, prevDir })
 }
 
 // On macOS a loopback publish below 1024 loses its address, so lan:status said

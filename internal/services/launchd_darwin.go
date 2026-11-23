@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/pfredirect"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/portforward"
 )
 
 // launchctl runs a launchctl command with a 15-second timeout so a throttled
@@ -472,10 +472,10 @@ func stripPrivilegedIPBind(port string) string {
 	return port
 }
 
-// publishArgs are the -p values for a PublishPort. A port the pf redirect
+// publishArgs are the -p values for a PublishPort. A port the loopback forward
 // covers is held on its high loopback port, which gvproxy can bind there;
 // when the bind is wide (LAN exposed) it keeps the wide publish too, so
-// loopback traffic the redirect diverts still lands on nginx.
+// loopback traffic the forward carries still lands on nginx.
 func publishArgs(port string, redirected map[int]bool) []string {
 	rest := port
 	loopback := false
@@ -489,7 +489,7 @@ func publishArgs(port string, redirected map[int]bool) []string {
 	if !ok || err != nil || !redirected[n] {
 		return []string{stripPrivilegedIPBind(port)}
 	}
-	held := fmt.Sprintf("127.0.0.1:%d:%s", pfredirect.Target(n), containerPart)
+	held := fmt.Sprintf("127.0.0.1:%d:%s", portforward.Target(n), containerPart)
 	if loopback {
 		return []string{held}
 	}
@@ -573,7 +573,7 @@ func containerToPodmanArgs(c map[string][]string) ([]string, error) {
 	for _, net := range c["Network"] {
 		args = append(args, "--network", net)
 	}
-	redirected := pfredirect.Redirected()
+	redirected := portforward.Redirected()
 	for _, port := range c["PublishPort"] {
 		for _, p := range publishArgs(port, redirected) {
 			args = append(args, "-p", p)

@@ -13,6 +13,7 @@ import (
 	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/pfredirect"
 	"github.com/geodro/lerd/internal/platform"
+	"github.com/geodro/lerd/internal/portforward"
 )
 
 // claimChain is the part of lerd-ui's handler a lerd.localhost request crosses.
@@ -257,9 +258,9 @@ func nginxPublishedWide(t *testing.T, redirected bool) {
 			t.Fatal(err)
 		}
 	}
-	prevAnchor := pfredirect.AnchorPath
-	pfredirect.AnchorPath = anchor
-	t.Cleanup(func() { pfredirect.AnchorPath = prevAnchor })
+	prevAnchor, prevDir := pfredirect.AnchorPath, portforward.PlistDir
+	pfredirect.AnchorPath, portforward.PlistDir = anchor, t.TempDir()
+	t.Cleanup(func() { pfredirect.AnchorPath, portforward.PlistDir = prevAnchor, prevDir })
 }
 
 // Without the pf redirect, macOS publishes 80 and 443 on every interface even

@@ -1,12 +1,12 @@
-// Package pfredirect keeps nginx's privileged ports on loopback on macOS.
-// gvproxy runs as the user and can only publish a port below 1024 on every
-// interface, so nginx publishes on a high loopback port instead and a pf rule
-// redirects loopback 80 and 443 to it.
+// Package pfredirect is the pf rule lerd used on macOS before the launchd port
+// forward, redirecting loopback 80 and 443 to nginx's high loopback port. Start
+// re-loads it until lerd install replaces it, and the forward reuses its probe.
 package pfredirect
 
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strings"
@@ -90,16 +90,11 @@ func Reaches(port int) bool { return reaches(port, Target(port)) }
 
 // loopbackReaches listens on to itself while it is free, so nginx need not be
 // up and a wide bind on from cannot pass for the redirect. With to taken, by
-// nginx, any answer on from counts.
+// nginx, a reply on from counts: a held socket alone proves nothing.
 func loopbackReaches(from, to int) bool {
 	ln, err := net.Listen("tcp", loopbackAddr(to))
 	if err != nil {
-		conn, err := net.DialTimeout("tcp", loopbackAddr(from), probeTimeout)
-		if err != nil {
-			return false
-		}
-		conn.Close()
-		return true
+		return answers(from)
 	}
 	defer ln.Close()
 	conn, err := net.DialTimeout("tcp", loopbackAddr(from), probeTimeout)
@@ -107,12 +102,33 @@ func loopbackReaches(from, to int) bool {
 		return false
 	}
 	defer conn.Close()
-	return acceptsOwn(ln.(*net.TCPListener), conn.LocalAddr().String(), time.Now().Add(probeTimeout))
+	token := fmt.Sprintf("lerd-probe-%d", time.Now().UnixNano())
+	if _, err := conn.Write([]byte(token)); err != nil {
+		return false
+	}
+	return acceptsOwn(ln.(*net.TCPListener), token, time.Now().Add(probeTimeout))
 }
 
-// acceptsOwn reports whether the connection from local arrives on ln before
-// the deadline. A browser retrying through a working redirect can land first.
-func acceptsOwn(ln *net.TCPListener, local string, deadline time.Time) bool {
+// answers reports whether anything on port replies to a request. nginx answers
+// even plain HTTP sent to its TLS port.
+func answers(port int) bool {
+	conn, err := net.DialTimeout("tcp", loopbackAddr(port), probeTimeout)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(probeTimeout)) //nolint:errcheck
+	if _, err := conn.Write([]byte("HEAD / HTTP/1.0\r\n\r\n")); err != nil {
+		return false
+	}
+	_, err = conn.Read(make([]byte, 1))
+	return err == nil
+}
+
+// acceptsOwn reports whether the connection carrying token arrives on ln
+// before the deadline. A browser retrying through a working redirect can land
+// first, and a relay hides the probe's address, so the token identifies it.
+func acceptsOwn(ln *net.TCPListener, token string, deadline time.Time) bool {
 	if err := ln.SetDeadline(deadline); err != nil {
 		return false
 	}
@@ -121,9 +137,11 @@ func acceptsOwn(ln *net.TCPListener, local string, deadline time.Time) bool {
 		if err != nil {
 			return false
 		}
-		own := got.RemoteAddr().String() == local
+		got.SetReadDeadline(time.Now().Add(probeTimeout / 4)) //nolint:errcheck
+		buf := make([]byte, len(token))
+		_, err = io.ReadFull(got, buf)
 		got.Close()
-		if own {
+		if err == nil && string(buf) == token {
 			return true
 		}
 	}
@@ -146,17 +164,4 @@ func ReloadArgs() []string {
 	return []string{pfctl, "-f", "/etc/pf.conf"}
 }
 
-// Repair puts the redirect back after a reboot dropped it, and only reloads the
-// main ruleset, which also drops a VPN's or firewall's rules, when lo0 is skipped.
-func Repair() string {
-	return "sudo " + strings.Join(ApplyArgs(), " ") + ", and if " + skipCheck + " shows lo0 (skip), sudo " + strings.Join(ReloadArgs(), " ") + " before it, which also drops rules a VPN or firewall loaded"
-}
-
 const skipCheck = "sudo pfctl -s Interfaces -i lo0 -v"
-
-// Sudoers grants user exactly ApplyArgs without a password, so `lerd start`
-// can re-load the anchor after a reboot drops it.
-func Sudoers(user string) string {
-	return fmt.Sprintf("# Lerd: re-loads the loopback redirect for lerd-nginx on start.\n%s ALL=(root) NOPASSWD: %s\n",
-		user, strings.Join(ApplyArgs(), " "))
-}

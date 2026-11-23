@@ -13,6 +13,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/pfredirect"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/portforward"
 )
 
 // TestHasNonZeroExitCode covers the failure-detection helper for both
@@ -391,9 +392,9 @@ func TestStripSELinuxVolOpts(t *testing.T) {
 }
 
 func TestContainerToPodmanArgs(t *testing.T) {
-	prev := pfredirect.AnchorPath
-	pfredirect.AnchorPath = filepath.Join(t.TempDir(), "missing")
-	t.Cleanup(func() { pfredirect.AnchorPath = prev })
+	prev, prevDir := pfredirect.AnchorPath, portforward.PlistDir
+	pfredirect.AnchorPath, portforward.PlistDir = filepath.Join(t.TempDir(), "missing"), t.TempDir()
+	t.Cleanup(func() { pfredirect.AnchorPath, portforward.PlistDir = prev, prevDir })
 	c := map[string][]string{
 		"ContainerName": {"lerd-nginx"},
 		"Image":         {"docker.io/library/nginx:latest"},
