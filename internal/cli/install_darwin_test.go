@@ -62,17 +62,26 @@ func TestEnsureFnmBinary_AlreadyPresent(t *testing.T) {
 }
 
 // Install starts nginx only with autostart on, so a nginx paused for the port
-// forward has to be remembered or it stays down with autostart off.
-func TestPauseNginxRemembersARunningNginx(t *testing.T) {
-	prevRunning, prevStop, prevPaused := nginxRunningFn, stopNginxFn, nginxPaused
-	t.Cleanup(func() { nginxRunningFn, stopNginxFn, nginxPaused = prevRunning, prevStop, prevPaused })
-	for _, running := range []bool{true, false} {
+// forward has to be remembered; one on its loopback port is never stopped.
+func TestPauseNginxStopsOnlyAWideNginxAndRemembersIt(t *testing.T) {
+	prevRunning, prevStop, prevWide, prevPaused := nginxRunningFn, stopNginxFn, nginxWideFn, nginxPaused
+	t.Cleanup(func() {
+		nginxRunningFn, stopNginxFn, nginxWideFn, nginxPaused = prevRunning, prevStop, prevWide, prevPaused
+	})
+	cases := []struct{ wide, running, wantStop, wantPaused bool }{
+		{true, true, true, true},
+		{true, false, true, false},
+		{false, true, false, false},
+	}
+	for _, tc := range cases {
 		stopped := false
-		nginxRunningFn = func() bool { return running }
+		nginxPaused = false
+		nginxWideFn = func() bool { return tc.wide }
+		nginxRunningFn = func() bool { return tc.running }
 		stopNginxFn = func() error { stopped = true; return nil }
 		pauseNginx()
-		if !stopped || nginxPaused != running {
-			t.Errorf("running=%v: stopped=%v nginxPaused=%v", running, stopped, nginxPaused)
+		if stopped != tc.wantStop || nginxPaused != tc.wantPaused {
+			t.Errorf("%+v: stopped=%v nginxPaused=%v", tc, stopped, nginxPaused)
 		}
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/geodro/lerd/internal/certs"
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/pfredirect"
@@ -50,13 +51,30 @@ func ensureLoopbackRedirect() {
 var (
 	nginxRunningFn = func() bool { r, _ := podman.ContainerRunning("lerd-nginx"); return r }
 	stopNginxFn    = func() error { return podman.StopUnit("lerd-nginx") }
+	nginxWideFn    = nginxPublishesWide
 )
 
-// pauseNginx stops nginx so a wide publish cannot hold 0.0.0.0:80 while launchd
-// takes it. Install starts it again once its unit is rewritten for the forward.
+// pauseNginx stops a nginx holding 0.0.0.0:80, which launchd could not take
+// then. Install starts it again once its unit is rewritten for the forward.
 func pauseNginx() {
+	if !nginxWideFn() {
+		return
+	}
 	nginxPaused = nginxRunningFn()
 	stopNginxFn() //nolint:errcheck // not running is fine
+}
+
+// nginxPublishesWide reports whether nginx's unit binds its ports on every
+// interface: LAN exposed, or widened because nothing forwards loopback.
+func nginxPublishesWide() bool {
+	if portforward.Installed() {
+		return false
+	}
+	if cfg, err := config.LoadGlobal(); err != nil || cfg == nil || cfg.LAN.Exposed {
+		return true
+	}
+	wide, err := podman.UnitLoopbackPortsPublishedWide("lerd-nginx")
+	return err != nil || len(wide) > 0
 }
 
 // applyLoopbackRedirect re-loads the legacy pf anchor, which a reboot drops,
