@@ -6628,27 +6628,20 @@ func handleBrowse(w http.ResponseWriter, r *http.Request) {
 func failureMessage(out string) string {
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
 
-	from := -1
-	for i, line := range lines {
-		if strings.Contains(line, "✗") {
-			from = i
-		}
-	}
-
 	var parts []string
-	if from >= 0 {
-		for _, line := range lines[from:] {
-			if t := strings.TrimSpace(strings.ReplaceAll(line, "✗", "")); t != "" {
-				parts = append(parts, t)
+	if from := lastFailureMarker(lines); from >= 0 {
+		// "<step>: exit status 1" only says a child process failed. The child
+		// printed why just above it, so that leads the message.
+		if exitStatusOnly.MatchString(cleanOutputLine(lines[from])) {
+			// Capped on its own so a long reason can't push the failing
+			// step's name off the end.
+			if reason := strings.Join(stepFailureReason(lines[:from]), " — "); reason != "" {
+				parts = append(parts, truncate(reason, 200))
 			}
 		}
-	} else {
-		for i := len(lines) - 1; i >= 0; i-- {
-			if t := strings.TrimSpace(lines[i]); t != "" {
-				parts = append(parts, t)
-				break
-			}
-		}
+		parts = append(parts, nonEmptyOutputLines(lines[from:])...)
+	} else if t := lastOutputLine(lines); t != "" {
+		parts = append(parts, t)
 	}
 
 	msg := strings.Join(parts, " — ")
@@ -6659,6 +6652,89 @@ func failureMessage(out string) string {
 		return strings.TrimSpace(msg[:300]) + "…"
 	}
 	return msg
+}
+
+var exitStatusOnly = regexp.MustCompile(`^([^:]+: )?exit status \d+$`)
+
+// stepFailureReason returns why the failing step said it failed: its own "✗"
+// line, else an exception's message, else its last line. A "→" line opens a
+// step, so output from earlier steps is never borrowed.
+func stepFailureReason(lines []string) []string {
+	for i := len(lines) - 1; i >= 0; i-- {
+		if strings.Contains(lines[i], "→") {
+			lines = lines[i+1:]
+			break
+		}
+	}
+	if from := lastFailureMarker(lines); from >= 0 {
+		return nonEmptyOutputLines(lines[from:])
+	}
+	if msg := exceptionMessage(lines); msg != "" {
+		return []string{msg}
+	}
+	if t := lastOutputLine(lines); t != "" {
+		return []string{t}
+	}
+	return nil
+}
+
+// exceptionHeading matches the line Composer (Symfony Console) prints above an
+// error's message, such as "In JsonFile.php line 347:".
+var exceptionHeading = regexp.MustCompile(`^In \S+ line \d+:$`)
+
+// exceptionMessage returns the paragraph under the first exception heading.
+// Composer follows it with the command's usage, so its last line isn't the
+// reason.
+func exceptionMessage(lines []string) string {
+	for i, line := range lines {
+		if !exceptionHeading.MatchString(cleanOutputLine(line)) {
+			continue
+		}
+		var msg []string
+		for _, next := range lines[i+1:] {
+			t := cleanOutputLine(next)
+			if t == "" && len(msg) > 0 {
+				break
+			}
+			if t != "" {
+				msg = append(msg, t)
+			}
+		}
+		return strings.Join(msg, " ")
+	}
+	return ""
+}
+
+func lastFailureMarker(lines []string) int {
+	for i := len(lines) - 1; i >= 0; i-- {
+		if strings.Contains(lines[i], "✗") {
+			return i
+		}
+	}
+	return -1
+}
+
+func lastOutputLine(lines []string) string {
+	for i := len(lines) - 1; i >= 0; i-- {
+		if t := cleanOutputLine(lines[i]); t != "" {
+			return t
+		}
+	}
+	return ""
+}
+
+func nonEmptyOutputLines(lines []string) []string {
+	var out []string
+	for _, line := range lines {
+		if t := cleanOutputLine(line); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func cleanOutputLine(line string) string {
+	return strings.TrimSpace(strings.ReplaceAll(line, "✗", ""))
 }
 
 // SiteReorderRequest is the JSON body for POST /api/sites/reorder.

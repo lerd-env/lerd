@@ -165,6 +165,8 @@ If a step fails, you are prompted to continue or abort:
   Continue with remaining steps? [y/N]:
 ```
 
+In the dashboard's site wizard, a step that fails with only an exit status is reported with the reason it printed above it, so a missing PHP version reads `PHP 8.6 is not installed (…/php-native-8.6) — composer install: exit status 1` rather than the exit status alone. The reason is the step's own `✗` line when it has one, otherwise the message of a Composer error such as an invalid `composer.json`, otherwise the step's last line of output, and it is never taken from an earlier step.
+
 ---
 
 ## Flags

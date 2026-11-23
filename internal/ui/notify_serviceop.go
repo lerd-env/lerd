@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/geodro/lerd/internal/push"
 )
@@ -100,9 +101,15 @@ func formatOpDuration(d time.Duration) string {
 	return fmt.Sprintf("%dh %dm", h, m)
 }
 
+// truncate keeps s within n bytes, backing up to a character boundary so a
+// multi-byte character is never cut in half.
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n-1] + "…"
+	cut := n - 1
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "…"
 }
