@@ -14,8 +14,6 @@ import (
 	"github.com/geodro/lerd/internal/pfredirect"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/portforward"
-	"github.com/geodro/lerd/internal/services"
-	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 )
 
 // runSystemSetup applies the root-level steps individually. macOS has no
@@ -37,40 +35,28 @@ func runSystemSetup(_ bool) error {
 // 443 on loopback; without them gvproxy can only publish them on every interface.
 func ensureLoopbackRedirect() {
 	user := os.Getenv("USER")
-	resume := func() {}
 	if portforward.Pending(user) {
-		resume = pauseNginx()
+		pauseNginx()
 		feedback.Sudo("Keeping nginx ports on loopback (launchd port forward)")
 	}
 	moved, err := portforward.Install(user, dns.SudoWriteFile)
-	resume()
 	loopbackRedirectAdded = moved
 	if err != nil {
 		feedback.Warn("port forward for nginx, ports 80 and 443 stay reachable from the network: %v", err)
 	}
 }
 
-// Vars so tests can stand in for podman and the service manager.
+// Vars so tests can stand in for podman.
 var (
 	nginxRunningFn = func() bool { r, _ := podman.ContainerRunning("lerd-nginx"); return r }
 	stopNginxFn    = func() error { return podman.StopUnit("lerd-nginx") }
-	startNginxFn   = func() error { return services.Mgr.Start("lerd-nginx") }
-	autostartOnFn  = lerdSystemd.IsAutostartEnabled
 )
 
 // pauseNginx stops nginx so a wide publish cannot hold 0.0.0.0:80 while launchd
-// takes it. Install restarts it with autostart on; resume covers autostart off.
-func pauseNginx() (resume func()) {
-	running := nginxRunningFn()
+// takes it. Install starts it again once its unit is rewritten for the forward.
+func pauseNginx() {
+	nginxPaused = nginxRunningFn()
 	stopNginxFn() //nolint:errcheck // not running is fine
-	if !running || autostartOnFn() {
-		return func() {}
-	}
-	return func() {
-		if err := startNginxFn(); err != nil {
-			feedback.Warn("starting lerd-nginx again: %v", err)
-		}
-	}
 }
 
 // applyLoopbackRedirect re-loads the legacy pf anchor, which a reboot drops,

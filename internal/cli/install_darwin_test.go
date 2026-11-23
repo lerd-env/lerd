@@ -61,29 +61,18 @@ func TestEnsureFnmBinary_AlreadyPresent(t *testing.T) {
 	}
 }
 
-// Install only restarts nginx with autostart on, so pausing it for the port
-// forward must bring it back itself when autostart is off and it was running.
-func TestPauseNginxRestartsWhatInstallWillNot(t *testing.T) {
-	prevRunning, prevStop, prevStart, prevAuto := nginxRunningFn, stopNginxFn, startNginxFn, autostartOnFn
-	t.Cleanup(func() {
-		nginxRunningFn, stopNginxFn, startNginxFn, autostartOnFn = prevRunning, prevStop, prevStart, prevAuto
-	})
-	cases := []struct {
-		running, autostart, wantStart bool
-	}{
-		{true, false, true},
-		{true, true, false},
-		{false, false, false},
-	}
-	for _, tc := range cases {
-		stopped, started := false, false
-		nginxRunningFn = func() bool { return tc.running }
+// Install starts nginx only with autostart on, so a nginx paused for the port
+// forward has to be remembered or it stays down with autostart off.
+func TestPauseNginxRemembersARunningNginx(t *testing.T) {
+	prevRunning, prevStop, prevPaused := nginxRunningFn, stopNginxFn, nginxPaused
+	t.Cleanup(func() { nginxRunningFn, stopNginxFn, nginxPaused = prevRunning, prevStop, prevPaused })
+	for _, running := range []bool{true, false} {
+		stopped := false
+		nginxRunningFn = func() bool { return running }
 		stopNginxFn = func() error { stopped = true; return nil }
-		startNginxFn = func() error { started = true; return nil }
-		autostartOnFn = func() bool { return tc.autostart }
-		pauseNginx()()
-		if !stopped || started != tc.wantStart {
-			t.Errorf("running=%v autostart=%v: stopped=%v started=%v, want started=%v", tc.running, tc.autostart, stopped, started, tc.wantStart)
+		pauseNginx()
+		if !stopped || nginxPaused != running {
+			t.Errorf("running=%v: stopped=%v nginxPaused=%v", running, stopped, nginxPaused)
 		}
 	}
 }
