@@ -314,6 +314,10 @@ For MySQL or PostgreSQL (and their family alternates), the matching `lerd-<servi
 
 You can change the choice at any time by editing the `services:` list in `.lerd.yaml` and re-running `lerd env`, or by running `lerd init --fresh` and picking a different database in the wizard.
 
+### Schema dumps
+
+`php artisan schema:dump` and the schema load that `migrate` does run inside the PHP container, which ships the MySQL and PostgreSQL clients for them (`mysql`, `mysqldump`, `psql`, `pg_dump`). `pg_dump` refuses to dump a server newer than itself, so the image carries the newest PostgreSQL client its Alpine base offers: 18 for PHP 8.2 to 8.5, 17 for PHP 8.1, and 14 for PHP 7.4 and 8.0. On those older PHP versions, dumping a newer server fails with a version mismatch; run the dump from a newer PHP version or lower the service's major.
+
 ---
 
 ## Using a database you run on the host
