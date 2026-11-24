@@ -628,6 +628,7 @@ func newWatchCmd() *cobra.Command {
 							}
 						}
 						cli.DropOrphanedWorktreeLANShares(site, liveBranchesForSite(site))
+						refreshFrankenPHPWorktreeMounts(site)
 						emitWorktreeEvent(plugins.EventWorktreeRemoved, sitePath, worktreeName)
 					},
 				)
@@ -1033,6 +1034,7 @@ func scanWorktrees() ([]func(), bool) {
 		// the watcher was offline (event-driven cleanup needs fsnotify).
 		site := s
 		cli.DropOrphanedWorktreeDBs(&site)
+		refreshFrankenPHPWorktreeMounts(&site)
 		// ServableWorktrees excludes any worktree whose subdomain is owned by a
 		// group secondary: the secondary serves that exact host already.
 		worktrees, err := gitpkg.ServableWorktrees(s.Path, s.PrimaryDomain())
@@ -1283,6 +1285,18 @@ func shouldProvisionWorktreeDBOnSync(action string) bool {
 // it would silently resurrect config the user removed.
 func shouldInheritNginxOnSync(action string) bool {
 	return action == "added"
+}
+
+// refreshFrankenPHPWorktreeMounts drops a removed worktree's mount from a
+// FrankenPHP site's quadlet. The container runs on, but its next start would
+// fail on the missing source and take the main site down with it.
+func refreshFrankenPHPWorktreeMounts(site *config.Site) {
+	if !site.IsFrankenPHP() {
+		return
+	}
+	if _, err := podman.RefreshFrankenPHPQuadlet(*site); err != nil {
+		fmt.Printf("[WARN] refreshing %s worktree mounts: %v\n", podman.FrankenPHPContainerName(site.Name), err)
+	}
 }
 
 // cleanupWorktreeVhosts removes all subdomain vhosts for the given site's

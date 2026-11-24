@@ -39,16 +39,16 @@ func TestEnsureWorktreeMountedRemountsOnlyAMissingSiblingWorktree(t *testing.T) 
 	origMissing, origRemount := worktreeMissingFn, remountFrankenPHPFn
 	t.Cleanup(func() { worktreeMissingFn, remountFrankenPHPFn = origMissing, origRemount })
 	worktreeMissingFn = func(string, string) bool { return missing }
-	remountFrankenPHPFn = func(config.Site) error { remounts++; return nil }
+	remountFrankenPHPFn = func(config.Site, string, string) error { remounts++; return nil }
 
-	ensureWorktreeMounted(sibling, "lerd-fp-app")
+	ensureWorktreeMounted(sibling, "8.5", "lerd-fp-app")
 	if remounts != 1 {
 		t.Fatalf("a sibling worktree the container lacks: remounts = %d, want 1", remounts)
 	}
-	ensureWorktreeMounted(sibling, "lerd-php85-fpm")
-	ensureWorktreeMounted(main, "lerd-fp-app")
+	ensureWorktreeMounted(sibling, "8.5", "lerd-php85-fpm")
+	ensureWorktreeMounted(main, "8.5", "lerd-fp-app")
 	missing = false
-	ensureWorktreeMounted(sibling, "lerd-fp-app")
+	ensureWorktreeMounted(sibling, "8.5", "lerd-fp-app")
 	if remounts != 1 {
 		t.Errorf("remounts = %d, want no more for another container, the project, or a mounted worktree", remounts)
 	}

@@ -140,6 +140,18 @@ func RestartSiteContainersForVersion(version string) {
 	}
 }
 
+// RefreshFrankenPHPQuadlet rewrites a site's quadlet from its current state, so
+// its worktree mounts match what is on disk, building and printing nothing. It
+// reports a change so the caller can restart; a gone mount source fails a start.
+func RefreshFrankenPHPQuadlet(site config.Site) (bool, error) {
+	entrypoint, env := site.FrankenPHPQuadletSpec()
+	changed, err := WriteFrankenPHPQuadletDiff(site.Name, site.Path, site.PHPVersion, entrypoint, env)
+	if err == nil && changed {
+		_ = DaemonReloadFn()
+	}
+	return changed, err
+}
+
 // WriteFrankenPHPQuadlet writes the quadlet for a FrankenPHP site.
 func WriteFrankenPHPQuadlet(siteName, projectPath, phpVersion string, entrypoint []string, env map[string]string) error {
 	_, err := WriteFrankenPHPQuadletDiff(siteName, projectPath, phpVersion, entrypoint, env)

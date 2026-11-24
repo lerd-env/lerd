@@ -78,6 +78,19 @@ func TestFrankenPHPQuadletMountsSiblingWorktrees(t *testing.T) {
 	if strings.Contains(content, "Volume="+inside) {
 		t.Errorf("a worktree inside the project needs no mount of its own:\n%s", content)
 	}
+
+	// A removed worktree must drop out: a mount whose source is gone fails the
+	// container's next start, main site included.
+	if err := os.RemoveAll(sibling); err != nil {
+		t.Fatal(err)
+	}
+	content, err = GenerateFrankenPHPQuadlet("app", main, "8.4", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(content, "Volume="+sibling) {
+		t.Errorf("a removed worktree is still mounted:\n%s", content)
+	}
 }
 
 func TestFrankenPHPContainerName(t *testing.T) {

@@ -73,7 +73,7 @@ func ensureFPMRunning(cwd, version, container string) (string, string, error) {
 		if handled, err := startInstalledFPM(version, container); err != nil {
 			return version, container, err
 		} else if handled {
-			ensureWorktreeMounted(cwd, container)
+			ensureWorktreeMounted(cwd, version, container)
 			return version, container, nil
 		}
 
@@ -108,13 +108,13 @@ var (
 	worktreeMissingFn = func(container, path string) bool {
 		return podman.UnitMissingMounts(container, []string{path})
 	}
-	remountFrankenPHPFn = siteops.FinishFrankenPHPLink
+	remountFrankenPHPFn = remountFrankenPHP
 )
 
 // ensureWorktreeMounted rewrites a FrankenPHP site's container when cwd is a
 // worktree beside the project that it does not mount yet. Its quadlet mounts
 // the worktrees present when written, so a newer one needs one rewrite.
-func ensureWorktreeMounted(cwd, container string) {
+func ensureWorktreeMounted(cwd, version, container string) {
 	wt, parent, ok := phpDet.WorktreeRootFor(cwd)
 	if !ok || !parent.IsFrankenPHP() || container != podman.FrankenPHPContainerName(parent.Name) {
 		return
@@ -122,9 +122,23 @@ func ensureWorktreeMounted(cwd, container string) {
 	if config.PathWithin(wt, parent.Path) || !worktreeMissingFn(container, wt) {
 		return
 	}
-	if err := remountFrankenPHPFn(*parent); err != nil {
-		feedback.Warn("mounting worktree %s into %s: %v", wt, container, err)
+	if err := remountFrankenPHPFn(*parent, version, container); err != nil {
+		feedback.WarnOn(os.Stderr, "mounting worktree %s into %s: %v", wt, container, err)
 	}
+}
+
+// remountFrankenPHP restarts the container onto its rewritten quadlet and waits
+// for it. It builds and prints nothing: the command about to run may be a tool
+// whose stdout is parsed.
+func remountFrankenPHP(site config.Site, version, container string) error {
+	changed, err := podman.RefreshFrankenPHPQuadlet(site)
+	if err != nil || !changed {
+		return err
+	}
+	if err := podman.RestartUnit(container); err != nil {
+		return err
+	}
+	return phpDet.StartFPM(version, container)
 }
 
 // ensureFPMStarted is the no-switch variant of ensureFPMRunning for callers that
