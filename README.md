@@ -8,6 +8,7 @@
 
 [![CI](https://github.com/lerd-env/lerd/actions/workflows/ci.yml/badge.svg)](https://github.com/lerd-env/lerd/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/lerd-env/lerd/badge)](https://scorecard.dev/viewer/?uri=github.com/lerd-env/lerd)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/17068/badge)](https://www.bestpractices.dev/projects/17068)
 [![Release](https://img.shields.io/github/v/release/lerd-env/lerd)](https://github.com/lerd-env/lerd/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20WSL2-lightgrey)]()
@@ -328,6 +329,25 @@ Services work the same way. Lerd ships the default stack, and every add-on lives
 lerd service search                     # browse the store
 lerd service preset pgadmin             # install a store-only preset
 ```
+
+## Project repositories
+
+Lerd is developed across these repositories in the [lerd-env](https://github.com/lerd-env) organization:
+
+| Repository | Purpose |
+|---|---|
+| [lerd](https://github.com/lerd-env/lerd) | CLI, web UI, TUI, tray, MCP server and documentation |
+| [lerd-desktop](https://github.com/lerd-env/lerd-desktop) | Desktop app and Windows installer |
+| [frameworks](https://github.com/lerd-env/frameworks) | Framework definitions |
+| [services](https://github.com/lerd-env/services) | Service presets |
+| [plugins](https://github.com/lerd-env/plugins) | Approved plugin catalog |
+| [php](https://github.com/lerd-env/php) | Static PHP builds for the native macOS runtime |
+| [homebrew-lerd](https://github.com/lerd-env/homebrew-lerd), [lerd-deb](https://github.com/lerd-env/lerd-deb), [lerd-rpm](https://github.com/lerd-env/lerd-rpm), [lerd-nixos](https://github.com/lerd-env/lerd-nixos) | Packaging |
+| [lerd-phpstorm](https://github.com/lerd-env/lerd-phpstorm), [lerd-omarchy-glance](https://github.com/lerd-env/lerd-omarchy-glance), [claude-plugins](https://github.com/lerd-env/claude-plugins) | Editor, desktop and AI integrations |
+| [plugin-db-browser](https://github.com/lerd-env/plugin-db-browser), [plugin-sync](https://github.com/lerd-env/plugin-sync), [plugin-db-import-host](https://github.com/lerd-env/plugin-db-import-host), [plugin-sail](https://github.com/lerd-env/plugin-sail), [plugin-example](https://github.com/lerd-env/plugin-example) | Lerd plugins |
+| [.github](https://github.com/lerd-env/.github) | Organization profile and community files |
+
+The `lerd-windows` and `windows-installer` repositories are archived.
 
 ## Documentation
 
