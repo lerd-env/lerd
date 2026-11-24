@@ -311,6 +311,53 @@ func TestCleanupWorktreeVhosts_prunesRemovedWorktreeOverride(t *testing.T) {
 	}
 }
 
+// Removing one worktree must leave the others' vhosts exactly as they are: a
+// host-proxy survivor rebuilt as a PHP vhost answers 502, and a paused one
+// would lose its paused page.
+func TestCleanupWorktreeVhosts_leavesSurvivorVhostAlone(t *testing.T) {
+	for name, site := range map[string]config.Site{
+		"php":               {PHPVersion: "8.3"},
+		"host proxy":        {HostPort: 5175, HostCommand: "npm run dev"},
+		"paused host proxy": {HostPort: 5175, HostCommand: "npm run dev", Paused: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			isolateConfig(t)
+			mainSite := filepath.Join(t.TempDir(), "myapp")
+			survivor := filepath.Join(t.TempDir(), "myapp-feat")
+			wtMeta := filepath.Join(mainSite, ".git", "worktrees", "feat")
+			confD := config.NginxConfD()
+			for _, d := range []string{wtMeta, survivor, confD} {
+				if err := os.MkdirAll(d, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			feat, gone := filepath.Join(confD, "feat.myapp.test.conf"), filepath.Join(confD, "gone.myapp.test.conf")
+			for p, body := range map[string]string{
+				filepath.Join(wtMeta, "HEAD"):   "ref: refs/heads/feat\n",
+				filepath.Join(wtMeta, "gitdir"): filepath.Join(survivor, ".git") + "\n",
+				feat:                            "# survivor\n",
+				gone:                            "# removed\n",
+			} {
+				if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			site.Name, site.Domains, site.Path = "myapp", []string{"myapp.test"}, mainSite
+
+			if !cleanupWorktreeVhosts(&site) {
+				t.Error("removing a vhost must report a change so nginx reloads")
+			}
+
+			if got, err := os.ReadFile(feat); err != nil || string(got) != "# survivor\n" {
+				t.Errorf("survivor vhost changed: %q, %v", got, err)
+			}
+			if _, err := os.Stat(gone); !os.IsNotExist(err) {
+				t.Errorf("removed worktree's vhost still there: %v", err)
+			}
+		})
+	}
+}
+
 // HEAD writes (commit, checkout, rebase, rename) fire "changed" via
 // fsnotify. Resurrecting host workers on every HEAD write resurrected
 // user stops on every commit — issue #375 (Bruno's Vite).
