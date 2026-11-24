@@ -277,6 +277,12 @@ func TestWorktreeHostPort_withoutEnvFileRecordsPortOnSite(t *testing.T) {
 	if again := WorktreeHostPort("app", 3000, first, "PORT"); again != a {
 		t.Errorf("second call = %d, want stable %d", again, a)
 	}
+	if err := config.ReleaseWorktreeHostPort("app", filepath.Base(first)); err != nil {
+		t.Fatal(err)
+	}
+	if site, _ := config.FindSite("app"); site.WorktreeHostPorts[filepath.Base(first)] != 0 {
+		t.Error("a removed worktree's port stayed reserved")
+	}
 	if _, err := os.Stat(filepath.Join(first, ".env")); !os.IsNotExist(err) {
 		t.Errorf("a .env was created in the worktree: %v", err)
 	}
@@ -339,6 +345,9 @@ func TestBuildHostProxyCommandPort_substitutesPortReferences(t *testing.T) {
 		"vite --port ${PORT}":                    "env PORT=5176 vite --port 5176",
 		"vite --port $PORT --host":               "env PORT=5176 vite --port 5176 --host",
 		"vite --port $PORTAL $PORT_X":            "env PORT=5176 vite --port $PORTAL $PORT_X",
+		"vite --port ${PORT:-${DEV:-5173}} -s":   "env PORT=5176 vite --port 5176 -s",
+		"vite --port ${PORTAL:-1} ${PORT":        "env PORT=5176 vite --port ${PORTAL:-1} ${PORT",
+		"sh -c 'rackup --port \"$PORT\"'":        "env PORT=5176 sh -c 'rackup --port \"5176\"'",
 	}
 	for command, want := range cases {
 		got := buildHostProxyCommandPort(&config.ProxyConfig{Command: command, Port: 5175, InjectHost: &injectHost}, 5176)

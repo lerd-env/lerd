@@ -328,9 +328,49 @@ func buildHostProxyCommandPort(proxy *config.ProxyConfig, port int) string {
 // references, because a wrapping shell expands them before `env` sets KEY, so a
 // worktree would otherwise get the parent's default port.
 func substitutePortReferences(command, key string, port int) string {
-	name := regexp.QuoteMeta(key)
-	pattern := regexp.MustCompile(`\$\{` + name + `(?::?-[^}]*)?\}|\$` + name + `\b`)
-	return pattern.ReplaceAllLiteralString(command, strconv.Itoa(port))
+	var out strings.Builder
+	for i := 0; i < len(command); {
+		if n := portReferenceLen(command[i:], key); n > 0 {
+			out.WriteString(strconv.Itoa(port))
+			i += n
+			continue
+		}
+		out.WriteByte(command[i])
+		i++
+	}
+	return out.String()
+}
+
+// portReferenceLen returns the length of the KEY reference s starts with, 0 if
+// none. A ${KEY:-default} is matched to its balanced closing brace, so a nested
+// default such as ${PORT:-${DEV_PORT:-5173}} is replaced whole.
+func portReferenceLen(s, key string) int {
+	if rest, ok := strings.CutPrefix(s, "$"+key); ok {
+		if rest == "" || !isShellNameChar(rest[0]) {
+			return len(s) - len(rest)
+		}
+		return 0
+	}
+	rest, ok := strings.CutPrefix(s, "${"+key)
+	if !ok || !(strings.HasPrefix(rest, "}") || strings.HasPrefix(rest, "-") || strings.HasPrefix(rest, ":-")) {
+		return 0
+	}
+	depth := 1
+	for j := len(s) - len(rest); j < len(s); j++ {
+		switch s[j] {
+		case '{':
+			depth++
+		case '}':
+			if depth--; depth == 0 {
+				return j + 1
+			}
+		}
+	}
+	return 0
+}
+
+func isShellNameChar(c byte) bool {
+	return c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
 func buildHostProxyCommand(proxy *config.ProxyConfig) string {

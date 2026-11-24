@@ -1075,6 +1075,34 @@ func ClaimWorktreeHostPort(name, wtBase string, pick func() int) (int, error) {
 	return 0, fmt.Errorf("site %q not found", name)
 }
 
+// ReleaseWorktreeHostPort forgets a removed worktree's host-proxy port, so it
+// stops being reserved.
+func ReleaseWorktreeHostPort(name, wtBase string) error {
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
+	if err != nil {
+		return err
+	}
+	for i := range reg.Sites {
+		if reg.Sites[i].Name != name {
+			continue
+		}
+		if _, ok := reg.Sites[i].WorktreeHostPorts[wtBase]; !ok {
+			return nil
+		}
+		delete(reg.Sites[i].WorktreeHostPorts, wtBase)
+		if len(reg.Sites[i].WorktreeHostPorts) == 0 {
+			reg.Sites[i].WorktreeHostPorts = nil
+		}
+		return SaveSites(reg)
+	}
+	return nil
+}
+
 // FindSite returns the site with the given name, or an error if not found.
 func FindSite(name string) (*Site, error) {
 	reg, err := LoadSites()
