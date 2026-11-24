@@ -11,7 +11,7 @@ it('sizes the services grid by the pane, not the window', () => {
   const site = { name: 'shop', domain: 'shop.test', path: '/srv/shop', services: ['redis'] } as unknown as Site;
   const { getByText } = render(SiteOverview, { props: { site } });
 
-  const grid = getByText('Services').nextElementSibling as HTMLElement;
+  const grid = getByText('Services').parentElement!.nextElementSibling as HTMLElement;
   const pane = grid.closest('.\\@container');
   expect(pane).not.toBeNull();
   const cols = [...grid.classList].filter((c) => c.includes('grid-cols-'));

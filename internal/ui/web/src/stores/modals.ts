@@ -38,6 +38,7 @@ export type ModalKind =
   | "siteUnlink"
   | "siteServiceRemove"
   | "siteServiceAdd"
+  | "siteServiceLink"
   | "serviceInstall"
   | "changelog"
   | "error"
@@ -178,6 +179,10 @@ export interface SiteServiceAddTarget {
   name: string;
 }
 
+export interface SiteServiceLinkTarget {
+  domain: string;
+}
+
 export interface ServiceInstallTarget {
   name: string;
 }
@@ -243,6 +248,7 @@ export interface ModalState {
   siteUnlink?: SiteUnlinkTarget;
   siteServiceRemove?: SiteServiceRemoveTarget;
   siteServiceAdd?: SiteServiceAddTarget;
+  siteServiceLink?: SiteServiceLinkTarget;
   serviceInstall?: ServiceInstallTarget;
   error?: ErrorTarget;
 }
@@ -265,6 +271,10 @@ export function openSiteUnlinkModal(target: SiteUnlinkTarget) {
 
 export function openSiteServiceRemoveModal(target: SiteServiceRemoveTarget) {
   modal.set({ kind: "siteServiceRemove", siteServiceRemove: target });
+}
+
+export function openSiteServiceLinkModal(target: SiteServiceLinkTarget) {
+  modal.set({ kind: "siteServiceLink", siteServiceLink: target });
 }
 
 export function openSiteServiceAddModal(target: SiteServiceAddTarget) {

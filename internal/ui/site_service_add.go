@@ -24,7 +24,12 @@ func addSiteService(site *config.Site, name, preset, version string) error {
 	if err != nil {
 		return err
 	}
-	name = svc.Name
+	return wireSiteService(site, svc)
+}
+
+// wireSiteService puts svc in the site's .lerd.yaml and has link and env act on it.
+func wireSiteService(site *config.Site, svc config.ProjectService) error {
+	name := svc.Name
 	if err := config.AddProjectServices(site.Path, []config.ProjectService{svc}); err != nil {
 		return err
 	}
