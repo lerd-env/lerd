@@ -140,9 +140,11 @@ func handleVhostClaim(w http.ResponseWriter, r *http.Request) {
 }
 
 // safeClaimNext keeps the post-claim redirect on the vhost itself. Browsers
-// drop tabs and newlines from a Location, so "/\t/evil" would become "//evil".
+// drop tabs and newlines from a Location, so "/\t/evil" would become "//evil",
+// and http.Redirect cleans "/./\evil" into "/\evil", which they read the same.
 func safeClaimNext(next string) string {
-	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.HasPrefix(next, "/\\") || strings.ContainsAny(next, "\t\n\r") {
+	path, _, _ := strings.Cut(next, "?")
+	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") || strings.Contains(path, "\\") || strings.ContainsAny(next, "\t\n\r") {
 		return "/"
 	}
 	return next
