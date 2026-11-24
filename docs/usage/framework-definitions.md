@@ -576,9 +576,15 @@ worktree:
   commands:                           # console commands run once env and database are ready
     - app:config:import
   migrations: database/migrations     # folder holding the schema migrations, relative to the project root
+  worker_env:                         # written into a worktree's env file before one of these workers starts there
+    workers: [queue, horizon]
+    env:
+      REDIS_PREFIX: "{{parent}}_{{branch}}_database_"
 ```
 
 An app that keeps deployment state in its database cannot share the parent's. Magento hashes its file config and stores the hash in the database, so seeding a worktree's own base URL into `env.php` makes the store refuse to serve until `app:config:import` re-syncs it, and running that import against a shared database would rewrite the hash out from under the parent site. `db_isolation: required` therefore skips the prompt and isolates, `db_source: main` clones the parent's data (an empty schema is useless to a store that cannot bootstrap itself), and `commands` run afterwards, in the worktree, through the framework's own `console` binary.
+
+`worker_env` gives a worktree its own queue storage. A worker in the worktree shares the parent's queue unless something in its env file tells them apart, and the two then take each other's jobs, so a job dispatched on main can run on the branch's code. Before a worker named in `workers` starts in a worktree, from the CLI, the dashboard, the MCP tools or an idle wake-up, lerd writes each `env` key into the worktree's env file, expanding the same <code v-pre>{{parent}}</code>, <code v-pre>{{branch}}</code>, <code v-pre>{{site}}</code>, <code v-pre>{{domain}}</code> and <code v-pre>{{scheme}}</code> placeholders as a project's [env overrides](../features/git-worktrees.md#env-overrides). A worktree that never starts one of those workers is left alone and keeps feeding the parent's queue, which then runs its jobs as before. A key the project's own `env_overrides` sets is left to it, a placeholder lerd does not know refuses the start with a message naming it, and only a dotenv env file can take the keys. Stopping the worker keeps them, so jobs dispatched while it is stopped, or while the worktree is asleep, wait for it rather than going to the parent.
 
 `migrations` names the folder holding the schema migrations. When a worktree is added with no database choice, from the MCP tool or a `lerd worktree add` with no terminal, lerd compares the files in that folder between the new worktree and the parent checkout, the branch the site's own folder has checked out. The same set shares the parent's database. Migrations only the branch has get a copy of the parent's database, and migrations only the parent has mean the branch's code is older than the parent's schema, so it gets an empty database. Either way the definition's `doctor.migrate_command` then runs on the new database. A required isolation or an explicit choice always wins over the comparison.
 

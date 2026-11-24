@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/podman"
 )
 
 func TestWorktreeWorkerIdleSuspended(t *testing.T) {
@@ -163,5 +166,86 @@ func TestWorktreeWorkerUnitNaming(t *testing.T) {
 	mainUnit, _ := workerNames("myapp", "/srv/myapp", "vite")
 	if mainUnit != "lerd-vite-myapp" {
 		t.Errorf("main unit = %q, want lerd-vite-myapp", mainUnit)
+	}
+}
+
+// A worker switched on for one worktree runs as that worktree's own unit, so it
+// sleeps with the worktree and restarts on a database isolation, including one
+// only the branch's .lerd.yaml declares. Vite stopped there is not running.
+func TestCollectRunningWorktreeWorkers_readsTheWorktreesOwnWorkers(t *testing.T) {
+	site, wt := worktreeDefsSite(t)
+	fake := &statefulLifecycle{active: map[string]bool{
+		"lerd-queue-myapp-feat":  true,
+		"lerd-export-myapp-feat": true,
+		"lerd-schedule-myapp":    true, // the parent's, not this worktree's
+	}}
+	podman.UnitLifecycle = fake
+	t.Cleanup(func() { podman.UnitLifecycle = nil })
+
+	got := collectRunningWorktreeWorkers(site, wt)
+	if len(got) != 2 || got[0] != "export" || got[1] != "queue" {
+		t.Errorf("running worktree workers = %v, want [export queue]", got)
+	}
+}
+
+// A worktree wakes its workers from its own definition, so a worker only the
+// branch's .lerd.yaml declares comes back with the branch's command.
+func TestWorktreeWorkerDefs_includeTheBranchsCustomWorkers(t *testing.T) {
+	site, wt := worktreeDefsSite(t)
+	defs := worktreeWorkerDefs(site, wt)
+	if defs["export"].Command != "php artisan export:work" {
+		t.Errorf("export = %+v, want the branch's own worker", defs["export"])
+	}
+	if _, ok := defs["queue"]; !ok {
+		t.Errorf("queue missing from %v", defs)
+	}
+}
+
+// worktreeDefsSite is a site on a framework with queue, schedule and a
+// per-worktree vite, and a worktree whose .lerd.yaml adds an export worker.
+func worktreeDefsSite(t *testing.T) (*config.Site, string) {
+	t.Helper()
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	t.Setenv("XDG_DATA_HOME", xdg)
+	if err := os.MkdirAll(filepath.Join(xdg, "lerd", "frameworks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	perWT := true
+	if err := config.SaveFramework(&config.Framework{
+		Name: "testfw",
+		Workers: map[string]config.FrameworkWorker{
+			"queue":    {Command: "php artisan queue:work"},
+			"schedule": {Command: "php artisan schedule:work"},
+			"vite":     {Command: "npm run dev", Host: true, PerWorktree: &perWT},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	wt := filepath.Join(t.TempDir(), "feat")
+	if err := os.Mkdir(wt, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt, ".lerd.yaml"), []byte("custom_workers:\n  export:\n    command: php artisan export:work\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return &config.Site{Name: "myapp", Path: t.TempDir(), Framework: "testfw"}, wt
+}
+
+// Auto-start reads main's opted-in workers, so a worker only main declares can
+// run in an older branch's worktree and must sleep and wake there too. Where
+// both declare a worker, the branch's definition wins.
+func TestWorktreeWorkerDefs_keepMainsWorkersUnderTheBranchs(t *testing.T) {
+	site, wt := worktreeDefsSite(t)
+	if err := os.WriteFile(filepath.Join(site.Path, ".lerd.yaml"), []byte("custom_workers:\n  watch:\n    command: npm run watch\n  export:\n    command: php artisan export:old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	defs := worktreeWorkerDefs(site, wt)
+	if defs["watch"].Command != "npm run watch" {
+		t.Errorf("watch = %+v, want main's worker kept", defs["watch"])
+	}
+	if defs["export"].Command != "php artisan export:work" {
+		t.Errorf("export = %q, want the branch's command", defs["export"].Command)
 	}
 }

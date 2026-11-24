@@ -720,8 +720,9 @@ func workerLiveness(schedule, serviceState, timerState string) (running, failing
 	return serviceState == "active" || serviceState == "activating", failing
 }
 
-// enrichWorktreeWorkers returns running state for framework workers that the
-// framework yaml flags as per_worktree (default true; q/s/r/h default false).
+// enrichWorktreeWorkers returns running state for every framework worker that
+// applies at the worktree. per_worktree only decides which ones start on their
+// own; the rest are offered stopped, for a branch that needs its own queue.
 func enrichWorktreeWorkers(siteName, wtPath string, fw *config.Framework) []WorkerInfo {
 	if fw == nil || fw.Workers == nil {
 		return nil
@@ -729,10 +730,13 @@ func enrichWorktreeWorkers(siteName, wtPath string, fw *config.Framework) []Work
 	wtBase := config.WorktreeUnitSlug(filepath.Base(wtPath))
 	names := make([]string, 0, len(fw.Workers))
 	for n, wDef := range fw.Workers {
-		if !wDef.IsPerWorktree() {
+		if !wDef.RunsInWorktree() {
 			continue
 		}
 		if wDef.Check != nil && !config.MatchesRule(wtPath, *wDef.Check) {
+			continue
+		}
+		if wDef.ExcludeCheck != nil && config.MatchesRule(wtPath, *wDef.ExcludeCheck) {
 			continue
 		}
 		names = append(names, n)

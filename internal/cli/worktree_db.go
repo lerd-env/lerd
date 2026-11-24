@@ -311,7 +311,7 @@ var restartWorktreeWorkersFn = restartRunningWorktreeWorkers
 // database its env now names.
 func restartRunningWorktreeWorkers(site *config.Site, wtPath string) error {
 	base := config.WorktreeUnitSlug(filepath.Base(wtPath))
-	for _, w := range collectRunningWorktreeWorkersByBase(site, base) {
+	for _, w := range collectRunningWorktreeWorkers(site, wtPath) {
 		unit := "lerd-" + w + "-" + site.Name + "-" + base
 		if err := podman.RestartUnit(unit); err != nil {
 			return fmt.Errorf("restarting %s: %w", unit, err)

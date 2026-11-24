@@ -304,6 +304,15 @@ func prepareWorkerStart(siteName, sitePath, phpVersion, workerName string, w con
 		return nil, nil
 	}
 
+	if err := worktreeWorkerBlock(siteName, sitePath, workerName, w); err != nil {
+		return nil, err
+	}
+	// Before the unit exists, or the worker boots on the parent's queue and
+	// takes its jobs.
+	if err := applyWorktreeWorkerEnv(siteName, sitePath, workerName); err != nil {
+		return nil, fmt.Errorf("worker %s: %w", workerName, err)
+	}
+
 	command := resolveWorkerCommand(sitePath, workerName, w)
 
 	// A host worker from an untrusted project .lerd.yaml (custom_workers) runs its

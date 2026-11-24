@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -216,12 +217,9 @@ func waitForHostPort(port int, timeout time.Duration) {
 	}
 }
 
-// SuspendWorktreeWorkersForIdle stops a git worktree's own per-worktree workers
-// (for Laravel that's just vite) by their worktree unit names and returns the
-// names stopped, for the caller to persist. Mirrors SuspendWorkersForIdle but
-// targets lerd-<w>-<site>-<wtBase> units and runs the vite build in the worktree
-// checkout so a sleeping worktree serves built assets. wtPath is the worktree's
-// checkout directory.
+// SuspendWorktreeWorkersForIdle stops the workers running for the worktree at
+// wtPath and returns their names to persist. Vite builds in the worktree's own
+// checkout first, so a sleeping worktree still serves built assets.
 func SuspendWorktreeWorkersForIdle(site *config.Site, wtPath string) []string {
 	running := collectRunningWorktreeWorkers(site, wtPath)
 
@@ -248,12 +246,9 @@ func ResumeWorktreeWorkersForIdle(site *config.Site, wtPath string, workers []st
 	if resolved, err := phpVersionForDir(wtPath); err == nil && resolved != "" {
 		phpVersion = resolved
 	}
-	fw, ok := config.GetFrameworkForDir(site.Framework, site.Path)
-	if !ok || fw.Workers == nil {
-		return
-	}
+	defs := worktreeWorkerDefs(site, wtPath)
 	for _, w := range workers {
-		worker, ok := fw.Workers[w]
+		worker, ok := defs[w]
 		if !ok {
 			continue
 		}
@@ -291,9 +286,10 @@ func WorktreeIdleSuspendStateIsStale(site *config.Site, wtBase string, suspended
 	if len(suspended) == 0 {
 		return false
 	}
-	running := collectRunningWorktreeWorkersByBase(site, wtBase)
+	states := siteinfo.AllUnitStates()
 	for _, w := range suspended {
-		if containsString(running, w) {
+		unit := "lerd-" + w + "-" + site.Name + "-" + wtBase
+		if unitIsActiveOrActivating(unit) || timerIsActive(states, unit) {
 			return true
 		}
 	}
@@ -428,4 +424,17 @@ func lastBytes(b []byte, n int) []byte {
 		return b
 	}
 	return b[len(b)-n:]
+}
+
+// worktreeWorkerDefs is every worker a worktree can run: main's, which auto-start
+// reads, with the branch's own definitions over them, so a worker either side
+// declares sleeps and wakes with the branch's command where it has one.
+func worktreeWorkerDefs(site *config.Site, wtPath string) map[string]config.FrameworkWorker {
+	defs := map[string]config.FrameworkWorker{}
+	for _, dir := range []string{site.Path, wtPath} {
+		if fw, ok := config.GetFrameworkForDir(site.Framework, dir); ok {
+			maps.Copy(defs, fw.Workers)
+		}
+	}
+	return defs
 }

@@ -2,6 +2,7 @@ package git
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -348,22 +349,17 @@ func EnsureWorktreeEnv(mainRepoPath, worktreePath, worktreeDomain string, secure
 		scheme = "https"
 	}
 
-	// Resolve the env file, its format and url_key through the framework
-	// definition, the same resolver the Env tab, doctor and env wiring use.
-	envFile, urlKey, format := ".env", "APP_URL", "dotenv"
+	envFile, format, fw, ok := worktreeEnvTarget(mainRepoPath)
+	if !ok {
+		return
+	}
+	urlKey := "APP_URL"
 	var worktreeURLKeys []string
-	if fwName, ok := config.DetectFrameworkForDir(mainRepoPath); ok {
-		if fw, ok := config.GetFrameworkForDir(fwName, mainRepoPath); ok {
-			file, f := fw.Env.ResolveWrite(mainRepoPath)
-			if !filepath.IsLocal(file) {
-				return
-			}
-			envFile, format = file, f
-			if k := fw.Env.URLKey; k != "" {
-				urlKey = k
-			}
-			worktreeURLKeys = fw.Env.WorktreeURLKeys
+	if fw != nil {
+		if k := fw.Env.URLKey; k != "" {
+			urlKey = k
 		}
+		worktreeURLKeys = fw.Env.WorktreeURLKeys
 	}
 
 	worktreeEnv := filepath.Join(worktreePath, envFile)
@@ -395,20 +391,7 @@ func EnsureWorktreeEnv(mainRepoPath, worktreePath, worktreeDomain string, secure
 	if format == "dotenv" {
 		cfg, _ := config.LoadProjectConfig(mainRepoPath)
 		if cfg != nil && len(cfg.EnvOverrides) > 0 {
-			// {{site}}: legacy DB-safe slug of the FULL worktree domain, e.g.
-			// feat_a_acme_test. Kept for backward compatibility — new templates
-			// should prefer {{branch}} or {{parent}} which match user intent.
-			// {{branch}}: first segment of the worktree domain, e.g. "feat-a".
-			// {{parent}}: parent site name slug (DB-safe), e.g. "acme".
-			site := config.SiteSlug(worktreeDomain)
-			branch := worktreeDomain
-			if i := strings.IndexByte(worktreeDomain, '.'); i > 0 {
-				branch = worktreeDomain[:i]
-			}
-			parent := ""
-			if s, err := config.FindSiteByPath(mainRepoPath); err == nil && s != nil {
-				parent = config.SiteSlug(s.Name)
-			}
+			tmpl := worktreeTemplate(mainRepoPath, worktreeDomain, scheme)
 			// An isolated worktree's database key belongs to SetWorktreeDBIsolated,
 			// and a template for it would clobber it on the next watcher tick.
 			dbIsolated := config.WorktreeDBIsolated(worktreePath)
@@ -417,12 +400,7 @@ func EnsureWorktreeEnv(mainRepoPath, worktreePath, worktreeDomain string, secure
 				if dbIsolated && (k == "DB_DATABASE" || k == binding.NameKey || k == binding.URLKey) {
 					continue
 				}
-				v = strings.ReplaceAll(v, "{{domain}}", worktreeDomain)
-				v = strings.ReplaceAll(v, "{{scheme}}", scheme)
-				v = strings.ReplaceAll(v, "{{site}}", site)
-				v = strings.ReplaceAll(v, "{{branch}}", branch)
-				v = strings.ReplaceAll(v, "{{parent}}", parent)
-				updates[k] = v
+				updates[k] = tmpl.Replace(v)
 			}
 		}
 	}
@@ -437,6 +415,84 @@ func EnsureWorktreeEnv(mainRepoPath, worktreePath, worktreeDomain string, secure
 		return
 	}
 	_ = envfile.ApplyUpdatesIn(worktreeEnv, format, updates)
+}
+
+// worktreeEnvTarget resolves the env file and format a worktree writes, through
+// the framework definition the Env tab, doctor and env wiring use too. ok is
+// false for a file outside the checkout.
+func worktreeEnvTarget(mainRepoPath string) (envFile, format string, fw *config.Framework, ok bool) {
+	envFile, format = ".env", "dotenv"
+	if fwName, found := config.DetectFrameworkForDir(mainRepoPath); found {
+		if f, found := config.GetFrameworkForDir(fwName, mainRepoPath); found {
+			file, ff := f.Env.ResolveWrite(mainRepoPath)
+			if !filepath.IsLocal(file) {
+				return "", "", nil, false
+			}
+			envFile, format, fw = file, ff, f
+		}
+	}
+	return envFile, format, fw, true
+}
+
+// worktreeTemplate expands the worktree placeholders. {{site}} is the legacy
+// slug of the full domain (feat_a_acme_test), {{branch}} the domain's first
+// label (feat-a) and {{parent}} the parent site's slug (acme).
+func worktreeTemplate(mainRepoPath, worktreeDomain, scheme string) *strings.Replacer {
+	branch := worktreeDomain
+	if i := strings.IndexByte(worktreeDomain, '.'); i > 0 {
+		branch = worktreeDomain[:i]
+	}
+	parent := ""
+	if s, err := config.FindSiteByPath(mainRepoPath); err == nil && s != nil {
+		parent = config.SiteSlug(s.Name)
+	}
+	return strings.NewReplacer(
+		"{{domain}}", worktreeDomain,
+		"{{scheme}}", scheme,
+		"{{site}}", config.SiteSlug(worktreeDomain),
+		"{{branch}}", branch,
+		"{{parent}}", parent,
+	)
+}
+
+// ApplyWorktreeWorkerEnv writes a framework's worktree worker_env into the
+// worktree's env file before a worker it names starts there, so the worker
+// stops sharing the parent's queue. Keys the project's env_overrides set win.
+func ApplyWorktreeWorkerEnv(mainRepoPath, worktreePath, worktreeDomain string, secured bool, env map[string]string) error {
+	envFile, format, _, ok := worktreeEnvTarget(mainRepoPath)
+	if !ok {
+		return nil
+	}
+	if format != envfile.FormatDotenv {
+		return fmt.Errorf("worktree worker_env needs a dotenv env file, %s is %s", envFile, format)
+	}
+	scheme := "http"
+	if secured {
+		scheme = "https"
+	}
+	tmpl := worktreeTemplate(mainRepoPath, worktreeDomain, scheme)
+	cfg, _ := config.LoadProjectConfig(mainRepoPath)
+	updates := map[string]string{}
+	for k, v := range env {
+		if cfg != nil {
+			if _, own := cfg.EnvOverrides[k]; own {
+				continue
+			}
+		}
+		resolved := tmpl.Replace(v)
+		if i := strings.Index(resolved, "{{"); i >= 0 {
+			end := strings.Index(resolved[i:], "}}")
+			if end < 0 {
+				end = len(resolved) - i - 2
+			}
+			return fmt.Errorf("worktree worker_env %s uses %s, a placeholder this lerd does not know; update lerd", k, resolved[i:i+end+2])
+		}
+		updates[k] = resolved
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	return envfile.ApplyUpdatesIn(filepath.Join(worktreePath, envFile), format, updates)
 }
 
 // committedDefaultConnection is the parent's connection for a worktree whose file

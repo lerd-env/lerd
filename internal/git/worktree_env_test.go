@@ -794,3 +794,67 @@ func TestEnsureWorktreeEnv_bringsTheLoginAlongInAPHPArray(t *testing.T) {
 		}
 	}
 }
+
+// A worktree that starts its own queue gets the framework's worker_env, so its
+// jobs stop landing where the parent's worker takes them.
+func TestApplyWorktreeWorkerEnv_writesTemplatesIntoWorktreeEnv(t *testing.T) {
+	main := t.TempDir()
+	wt := t.TempDir()
+	if err := os.WriteFile(filepath.Join(wt, ".env"), []byte("APP_URL=http://feat-a.acme.test\nREDIS_HOST=lerd-redis\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := ApplyWorktreeWorkerEnv(main, wt, "feat-a.acme.test", false, map[string]string{
+		"REDIS_PREFIX":   "{{branch}}_database_",
+		"HORIZON_PREFIX": "{{branch}}_horizon:",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := envfile.Reader(filepath.Join(wt, ".env"), "dotenv")
+	if got := r("REDIS_PREFIX"); got != "feat-a_database_" {
+		t.Errorf("REDIS_PREFIX = %q, want feat-a_database_", got)
+	}
+	if got := r("HORIZON_PREFIX"); got != "feat-a_horizon:" {
+		t.Errorf("HORIZON_PREFIX = %q, want feat-a_horizon:", got)
+	}
+	if got := r("REDIS_HOST"); got != "lerd-redis" {
+		t.Errorf("REDIS_HOST = %q, other keys must stay", got)
+	}
+}
+
+// The project's own env_overrides decide a key it names.
+func TestApplyWorktreeWorkerEnv_projectOverrideWins(t *testing.T) {
+	main := t.TempDir()
+	wt := t.TempDir()
+	if err := os.WriteFile(filepath.Join(main, ".lerd.yaml"), []byte("env_overrides:\n  REDIS_PREFIX: mine_\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt, ".env"), []byte("REDIS_PREFIX=mine_\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ApplyWorktreeWorkerEnv(main, wt, "feat-a.acme.test", false, map[string]string{"REDIS_PREFIX": "{{branch}}_"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := envfile.Reader(filepath.Join(wt, ".env"), "dotenv")("REDIS_PREFIX"); got != "mine_" {
+		t.Errorf("REDIS_PREFIX = %q, the project's override must win", got)
+	}
+}
+
+// A placeholder this lerd does not know is refused by name, never written raw.
+func TestApplyWorktreeWorkerEnv_refusesUnknownPlaceholder(t *testing.T) {
+	main := t.TempDir()
+	wt := t.TempDir()
+	if err := os.WriteFile(filepath.Join(wt, ".env"), []byte("APP_URL=x\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := ApplyWorktreeWorkerEnv(main, wt, "feat-a.acme.test", false, map[string]string{"REDIS_PREFIX": "{{tenant}}_"})
+	if err == nil || !strings.Contains(err.Error(), "{{tenant}}") {
+		t.Fatalf("err = %v, want a refusal naming {{tenant}}", err)
+	}
+	if got := envfile.Reader(filepath.Join(wt, ".env"), "dotenv")("REDIS_PREFIX"); got != "" {
+		t.Errorf("REDIS_PREFIX = %q, nothing may be written", got)
+	}
+}
