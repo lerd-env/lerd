@@ -285,6 +285,12 @@ flatpak install --user https://lerd.sh/lerd.flatpakref
 
 Once it's installed, `lerd dashboard` opens the app instead of the browser.
 
+## Code signing
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+Lerd's application to the program is pending and Windows artifacts are not signed yet. See the [Code signing policy](CODE_SIGNING_POLICY.md).
+
 ## Quick Start
 
 ```bash
