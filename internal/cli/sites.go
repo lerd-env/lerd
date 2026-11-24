@@ -29,7 +29,7 @@ func termWidth() int {
 }
 
 func runSites(_ *cobra.Command, _ []string) error {
-	sites, err := siteinfo.LoadAll(siteinfo.EnrichCLI)
+	sites, err := siteinfo.LoadAll(siteinfo.EnrichCLI | siteinfo.EnrichFPM)
 	if err != nil {
 		return err
 	}
@@ -99,6 +99,19 @@ type orderedSite struct {
 
 func pausedTag() string { return feedback.Amber("paused") }
 
+// siteStatus says whether PHP, or the site's own dev server, is serving it. A
+// paused site is stopped on purpose, so it keeps its own word; stopped is red to
+// stand out in a long list.
+func siteStatus(s siteinfo.EnrichedSite) string {
+	switch {
+	case s.Paused:
+		return pausedTag()
+	case s.FPMRunning:
+		return feedback.Green("running")
+	}
+	return feedback.Red("stopped")
+}
+
 // siteRows renders a site as one main row plus a child row per alias domain and
 // worktree, the nested rows indented inside the first column so the grid keeps
 // its parent/child shape. wide adds the Name and Node columns (≥120 cols);
@@ -108,10 +121,7 @@ func siteRows(s siteinfo.EnrichedSite, grouped, wide bool) [][]string {
 	if s.Secured {
 		tls = "Yes"
 	}
-	status := ""
-	if s.Paused {
-		status = pausedTag()
-	}
+	status := siteStatus(s)
 
 	var rows [][]string
 	if wide {
@@ -144,12 +154,12 @@ func siteRows(s siteinfo.EnrichedSite, grouped, wide bool) [][]string {
 }
 
 // printSiteCompact prints a site as two indented lines (plus its aliases and
-// worktrees) for terminals too narrow for the table. grouped renders a group
-// secondary nested beneath its main.
+// worktrees) for terminals too narrow for the table, tagging only a site that
+// isn't running. grouped renders a group secondary nested beneath its main.
 func printSiteCompact(s siteinfo.EnrichedSite, grouped bool) {
 	status := ""
-	if s.Paused {
-		status = " [" + pausedTag() + "]"
+	if s.Paused || !s.FPMRunning {
+		status = " [" + siteStatus(s) + "]"
 	}
 	tls := ""
 	if s.Secured {
