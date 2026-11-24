@@ -25,7 +25,12 @@ func init() {
 	siteops.RecreateFPMWorkers = func(site *config.Site, workers []string) {
 		startWorkersForSite(site, workers, site.PHPVersion)
 	}
-	siteops.RerunSiteEnv = func(dir string) { rerunSiteEnv(dir) }
+	siteops.RerunSiteEnv = func(dir string) {
+		if site, err := config.FindSiteByPath(dir); err == nil {
+			announceKeptDBs([]config.Site{*site})
+		}
+		rerunSiteEnv(dir)
+	}
 }
 
 // NewRuntimeCmd returns the `lerd runtime` parent command.

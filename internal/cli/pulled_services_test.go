@@ -268,3 +268,20 @@ func TestWirePulledServices_LeavesAFailedEnvRunToTheDoctor(t *testing.T) {
 		t.Errorf("env ran %d times, want the failed run left alone", len(*envDirs))
 	}
 }
+
+// The env run would keep a database that is not lerd's, so starting the pulled
+// engine for it would only repeat on every change; the rest is still wired.
+func TestUnwiredProjectServices_LeavesADatabaseThatIsNotLerds(t *testing.T) {
+	site := pulledSite(t, config.ProjectService{Name: "mysql"}, config.ProjectService{Name: "postgres"},
+		config.ProjectService{Name: "mariadb-11-8", Preset: "mariadb"}, config.ProjectService{Name: "rustfs", Preset: "rustfs"})
+	site.WiredServices = nil
+	if err := os.WriteFile(filepath.Join(site.Path, ".env"), []byte("DB_HOST=db.example.com\nAWS_ENDPOINT=\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	proj, _ := config.LoadProjectConfig(site.Path)
+
+	got := serviceNamesOf(unwiredProjectServices(site, proj, pulledFramework()))
+	if !slices.Equal(got, []string{"rustfs"}) {
+		t.Fatalf("unwired = %v, want [rustfs]", got)
+	}
+}

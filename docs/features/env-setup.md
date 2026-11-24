@@ -155,9 +155,17 @@ Running `lerd env` on a project that already has a `.env` is safe; it only updat
 
 ## Services added by a pull
 
-When `.lerd.yaml` changes on disk, for example after `git pull` or a branch switch brings in a new service, lerd installs and starts that service and runs `lerd env` for the site, so the env points at it straight away. It acts on the same finding as the doctor's Service Wiring check, and only for services lerd has not wired into the site before. That run rewrites the connection keys of every service the project uses, as `lerd env` always does, so keep a value you want to hold in [`.env.lerd_override`](#personal-overrides-envlerd_override). A service that fails to start is tried again on a later change after five minutes; a database or bucket that could not be created is reported by `lerd site:doctor` instead, since by then the env may hold your own edits. A new inline `custom:` service is not started this way, since its image and command come from the repository: run `lerd link` in the project to review and install it.
+When `.lerd.yaml` changes on disk, for example after `git pull` or a branch switch brings in a new service, lerd installs and starts that service and runs `lerd env` for the site, so the env points at it straight away. It acts on the same finding as the doctor's Service Wiring check, and only for services lerd has not wired into the site before. That run rewrites the connection keys of every service the project uses, except a database connection that [is not lerd's](#runs-lerd-starts-itself), so keep any other value you want to hold in [`.env.lerd_override`](#personal-overrides-envlerd_override). A service that fails to start is tried again on a later change after five minutes; a database or bucket that could not be created is reported by `lerd site:doctor` instead, since by then the env may hold your own edits. A new inline `custom:` service is not started this way, since its image and command come from the repository: run `lerd link` in the project to review and install it.
 
 ---
+
+## Runs lerd starts itself
+
+Some changes make lerd run `lerd env` for you: `lerd php:runtime`, moving one site between runtimes, `lerd service port`, `lerd service domain`, unpausing a host-proxy or native site, and [a pull that adds services](#services-added-by-a-pull). Those runs leave a database connection alone when it points at a server that is not lerd's, and name the sites they kept. Everything else in the env still follows the change. `lerd php:runtime` and `lerd service port` also name the sites they are about to rewrite before touching any.
+
+A host other than `lerd-*` counts as someone else's server. On `127.0.0.1` the login decides: the user and password lerd writes mean lerd's own service, whatever port it was on, and any other login means another server on your machine, such as DBngin. A login you set in [`.env.lerd_override`](#personal-overrides-envlerd_override) counts as lerd's.
+
+Running `lerd env` yourself still points the site at lerd. To keep another server for good, add it with [`lerd service external`](../usage/services.md#adding-an-external-database-server) or use [`LERD_EXTERNAL_SERVICES`](#using-your-own-service-instead-of-lerd-s-container).
 
 ## Checking for drift
 

@@ -632,6 +632,8 @@ func NewEnvCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "Print detailed per-service output (used by the MCP server)")
+	cmd.Flags().BoolVar(&envKeepForeignDB, keepForeignDBFlag, false, "Leave a database connection that is not lerd's as it is")
+	_ = cmd.Flags().MarkHidden(keepForeignDBFlag)
 	cmd.Flags().BoolVarP(&envAssumeYes, "yes", "y", false, "Approve the project's env_provider host command without prompting, and remember it")
 	return cmd
 }
@@ -915,6 +917,11 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("reading %s: %w", envRelPath, err)
 	}
 
+	kept := foreignDBToKeep(cwd, envKeepForeignDB)
+	if kept != nil {
+		envInfo("  Keeping the database connection to %s, it is not one of lerd's\n", kept.host)
+	}
+
 	// 3. Detect services and build the set of key→value updates to apply
 	updates := map[string]string{}
 	dbName, domain := projectDBName(cwd), site.PrimaryDomain()
@@ -1073,6 +1080,10 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			detectedFromEnv := frameworkServiceDetected(def, envMap) && !site.DeclinesService(svc)
 			pickedFromYAML := lerdYAMLServices[svc] || extServices[svc]
 
+			if kept.writtenBy(def.Vars) {
+				continue
+			}
+
 			// A drop-in has taken this role over. The custom-service loop below wires
 			// the framework's own keys to the container the project actually uses, so
 			// writing them here first would only boot the service it replaced.
@@ -1122,7 +1133,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			}
 
 			envs := serviceEnvVars(svc)
-			if len(envs) == 0 {
+			if len(envs) == 0 || kept.writtenBy(envs) {
 				continue
 			}
 
@@ -1149,7 +1160,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	// the init wizard / runtime DB prompt. Apply the framework's sqlite env vars;
 	// the database file itself is created after step 4e, once every value that
 	// can name it, the personal override included, has had its say.
-	sqliteWired := projectUsesSQLite(lerdYAMLServices, envMap, fw, externalDBPicked(extServices))
+	sqliteWired := kept == nil && projectUsesSQLite(lerdYAMLServices, envMap, fw, externalDBPicked(extServices))
 	if sqliteWired {
 		envApplyLine("sqlite", !lerdYAMLServices["sqlite"])
 		for _, kv := range sqliteVarsFor(fw) {
@@ -1170,6 +1181,9 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		// The framework's own mapping for this service wins: the framework loop
 		// above already wrote its keys, so the preset's must not land beside them.
 		role, mapped := frameworkServiceRole(fw, svc)
+		if kept.writtenBy(svc.EnvVars) || (mapped && kept.writtenBy(fw.Env.Services[role].Vars)) {
+			continue
+		}
 		if mapped && role == svc.Name {
 			if !extServices[svc.Name] {
 				if err := ensureServiceRunning(svc.Name); err != nil {
@@ -1448,7 +1462,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	// sites a sweep can reach, so whatever this run moved in the parent has to
 	// be carried into them from here.
 	if branch == "" {
-		alignWorktreeEnvs(site, fw, envPath, envRelPath, envFormat, envMap, envOverrides)
+		alignWorktreeEnvs(site, fw, envPath, envRelPath, envFormat, envMap, kept.pinned(fw, envOverrides))
 	}
 
 	// The connection a JetBrains project points at is rebuilt from the same

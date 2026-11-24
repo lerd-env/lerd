@@ -27,7 +27,7 @@ Or from the dashboard: **System → PHP runtime**. Confirming a move to native o
 
 The setting is install-wide, not per site. The FPM container is shared by every site on a PHP version, so sites cannot be moved one at a time.
 
-Switching rewrites each site's `.env` so its services point at the loopback addresses and published ports a host process can reach, regenerates the vhosts, drops the framework config caches so they re-read those files, and restarts the workers. Going native also stops the shared FPM containers, which have nothing left to serve. Going back reverses all of it.
+Switching rewrites each site's `.env` so its services point at the loopback addresses and published ports a host process can reach, regenerates the vhosts, drops the framework config caches so they re-read those files, and restarts the workers. Going native also stops the shared FPM containers, which have nothing left to serve. Going back reverses all of it. The sites about to be rewritten are named first, and a site whose database is [not one of lerd's](env-setup.md#runs-lerd-starts-itself) keeps that connection.
 
 Each PHP version gets one native listener, the same way the FPM container is shared. It is supervised by launchd as `lerd-native-php<version>` and writes to `~/Library/Logs/lerd/`.
 

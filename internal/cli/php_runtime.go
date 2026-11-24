@@ -215,6 +215,13 @@ func ApplyPHPRuntime(mode string) error {
 		}
 	}
 
+	var moving []config.Site
+	for i := range sites.Sites {
+		if switchableToNative(&sites.Sites[i]) {
+			moving = append(moving, sites.Sites[i])
+		}
+	}
+	announceEnvSweep(moving)
 	for i := range sites.Sites {
 		s := &sites.Sites[i]
 		if !switchableToNative(s) {
@@ -369,7 +376,7 @@ func envCommandFor(dir string) *exec.Cmd {
 	if err != nil || self == "" {
 		self = "lerd"
 	}
-	cmd := exec.Command(self, "env")
+	cmd := exec.Command(self, "env", "--"+keepForeignDBFlag)
 	cmd.Dir = dir
 	return cmd
 }
