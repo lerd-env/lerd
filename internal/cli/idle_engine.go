@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -425,12 +426,15 @@ func lastBytes(b []byte, n int) []byte {
 	return b[len(b)-n:]
 }
 
-// worktreeWorkerDefs is the worker set a worktree starts from: the site's
-// framework read at the worktree, so the branch's own custom_workers count.
+// worktreeWorkerDefs is every worker a worktree can run: main's, which auto-start
+// reads, with the branch's own definitions over them, so a worker either side
+// declares sleeps and wakes with the branch's command where it has one.
 func worktreeWorkerDefs(site *config.Site, wtPath string) map[string]config.FrameworkWorker {
-	fw, ok := config.GetFrameworkForDir(site.Framework, wtPath)
-	if !ok {
-		return nil
+	defs := map[string]config.FrameworkWorker{}
+	for _, dir := range []string{site.Path, wtPath} {
+		if fw, ok := config.GetFrameworkForDir(site.Framework, dir); ok {
+			maps.Copy(defs, fw.Workers)
+		}
 	}
-	return fw.Workers
+	return defs
 }

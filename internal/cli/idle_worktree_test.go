@@ -231,3 +231,21 @@ func worktreeDefsSite(t *testing.T) (*config.Site, string) {
 	}
 	return &config.Site{Name: "myapp", Path: t.TempDir(), Framework: "testfw"}, wt
 }
+
+// Auto-start reads main's opted-in workers, so a worker only main declares can
+// run in an older branch's worktree and must sleep and wake there too. Where
+// both declare a worker, the branch's definition wins.
+func TestWorktreeWorkerDefs_keepMainsWorkersUnderTheBranchs(t *testing.T) {
+	site, wt := worktreeDefsSite(t)
+	if err := os.WriteFile(filepath.Join(site.Path, ".lerd.yaml"), []byte("custom_workers:\n  watch:\n    command: npm run watch\n  export:\n    command: php artisan export:old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	defs := worktreeWorkerDefs(site, wt)
+	if defs["watch"].Command != "npm run watch" {
+		t.Errorf("watch = %+v, want main's worker kept", defs["watch"])
+	}
+	if defs["export"].Command != "php artisan export:work" {
+		t.Errorf("export = %q, want the branch's command", defs["export"].Command)
+	}
+}
