@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { cleanup, render, screen, fireEvent } from '@testing-library/svelte';
 import { get } from 'svelte/store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SiteServiceLinkModal from './SiteServiceLinkModal.svelte';
@@ -25,7 +25,7 @@ const addButton = () => screen.getByText('Add').closest('button') as HTMLButtonE
 describe('SiteServiceLinkModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    linkableServices.mockResolvedValue(['mailpit', 'mariadb-12-3']);
+    linkableServices.mockResolvedValue({ names: ['mailpit', 'mariadb-12-3'], writesEnv: true });
     linkSiteService.mockResolvedValue({ ok: true });
   });
   afterEach(() => modal.set({ kind: null }));
@@ -50,8 +50,18 @@ describe('SiteServiceLinkModal', () => {
     expect(loadSites).not.toHaveBeenCalled();
   });
 
+  it('only promises to point the env file where lerd writes one', async () => {
+    open();
+    expect(await screen.findByText(/the env file is pointed at it/)).toBeTruthy();
+    cleanup();
+    linkableServices.mockResolvedValue({ names: ['mailpit'], writesEnv: false });
+    open();
+    expect(await screen.findByText(/Lerd does not write this site's env file/)).toBeTruthy();
+    expect(screen.queryByText(/the env file is pointed at it/)).toBeNull();
+  });
+
   it('says so when there is nothing to add', async () => {
-    linkableServices.mockResolvedValue([]);
+    linkableServices.mockResolvedValue({ names: [], writesEnv: true });
     open();
     expect(await screen.findByText(/Every installed service/)).toBeTruthy();
     expect(addButton().disabled).toBe(true);

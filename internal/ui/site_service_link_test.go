@@ -12,6 +12,17 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
+// useEnvFramework gives the site a framework whose env lerd writes.
+func useEnvFramework(t *testing.T, site *config.Site) {
+	t.Helper()
+	if err := config.SaveFramework(&config.Framework{Name: "testfw", Env: config.FrameworkEnvConf{
+		Services: map[string]config.FrameworkServiceDef{"redis": {Detect: []config.FrameworkServiceDetect{{Key: "REDIS_HOST"}}}},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	site.Framework = "testfw"
+}
+
 func writeLerdYAML(t *testing.T, site *config.Site, body string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(site.Path, ".lerd.yaml"), []byte(body), 0o644); err != nil {
@@ -74,6 +85,7 @@ func TestLinkSiteServiceRefusesWhatIsNotOnOffer(t *testing.T) {
 // alternate is recorded as its preset and version.
 func TestLinkSiteServiceRecordsAVersionedAlternate(t *testing.T) {
 	site, ran := linkTestSite(t)
+	useEnvFramework(t, site)
 	saveService(t, mariadbAlternate())
 	if err := linkSiteService(site, "mariadb-12-3"); err != nil {
 		t.Fatal(err)
@@ -171,7 +183,7 @@ func TestLinkSiteServiceReplacesASQLiteEntryOnlyForADatabase(t *testing.T) {
 func TestSiteServiceLinkableEndpoint(t *testing.T) {
 	site, _ := linkTestSite(t, "mailpit")
 	for domain, want := range map[string]string{
-		site.Domains[0]: `{"services":["mailpit"]}`,
+		site.Domains[0]: `{"services":["mailpit"],"writes_env":false}`,
 		"nope.test":     `{"ok":false,"error":"site not found: nope.test"}`,
 	} {
 		rec := httptest.NewRecorder()
@@ -179,5 +191,42 @@ func TestSiteServiceLinkableEndpoint(t *testing.T) {
 		if got := strings.TrimSpace(rec.Body.String()); rec.Code != 200 || got != want {
 			t.Errorf("%s: %d %s, want %s", domain, rec.Code, got, want)
 		}
+	}
+}
+
+// The file names the preset and the machine may never have fetched it, so the
+// definition comes from the entry, and from the store when it is not cached.
+func TestLinkableServicesReadsADeclaredPresetFromItsEntry(t *testing.T) {
+	prev := ensureServicePreset
+	t.Cleanup(func() { ensureServicePreset = prev })
+	ensureServicePreset = func(name string) (*config.Preset, error) {
+		if name != "postgres-acme" {
+			return nil, errors.New("unknown preset")
+		}
+		return &config.Preset{CustomService: config.CustomService{EnvVars: []string{"DB_HOST=lerd-{{name}}"}}}, nil
+	}
+	for _, entry := range []string{
+		"postgres-acme-17:\n      preset: postgres-acme\n      version: \"17\"",
+		"postgres-acme-17:\n      preset: postgres-acme-17",
+		"postgres-acme-17",
+		"ourdb:\n      image: example.test/ourdb\n      env_vars:\n        - DB_HOST=lerd-ourdb",
+	} {
+		site, _ := linkTestSite(t, "mysql", "mailpit")
+		writeLerdYAML(t, site, "services:\n  - "+entry+"\n")
+		if got := linkableServices(site); !slices.Equal(got, []string{"mailpit"}) {
+			t.Errorf("%s: linkable = %v, want only mailpit", entry, got)
+		}
+	}
+}
+
+// lerd env refuses a site with no env mapping, so there a service is declared
+// and started and nothing fails after the file was saved.
+func TestLinkSiteServiceSkipsEnvWhereThereIsNone(t *testing.T) {
+	site, ran := linkTestSite(t, "mailpit")
+	if err := linkSiteService(site, "mailpit"); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"link --yes"}; !slices.Equal(*ran, want) {
+		t.Errorf("ran %v, want %v", *ran, want)
 	}
 }

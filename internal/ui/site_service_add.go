@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/geodro/lerd/internal/cli"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/siteinfo"
 )
@@ -41,7 +42,12 @@ func wireSiteService(site *config.Site, svc config.ProjectService) error {
 	if err := config.SetSiteServiceDeclined(site.Name, name, false); err != nil {
 		return err
 	}
-	for _, args := range [][]string{{"link", "--yes"}, {"env"}} {
+	steps := [][]string{{"link", "--yes"}}
+	// A plain app has no env mapping and `lerd env` refuses it; it is wired by hand.
+	if cli.WritesEnv(site) {
+		steps = append(steps, []string{"env"})
+	}
+	for _, args := range steps {
 		if out, err := runLerdFn(site.Path, args...); err != nil {
 			return fmt.Errorf("lerd %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(lastLines(string(out), 5)))
 		}

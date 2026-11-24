@@ -1041,6 +1041,7 @@
   "sites_linkService_button": "Dodaj usługę",
   "sites_linkService_title": "Dodaj usługę do {domain}",
   "sites_linkService_body": "Zostanie dodana do .lerd.yaml i uruchomiona, a plik env będzie na nią wskazywał. Usługi, które zastąpiłyby już używaną, na przykład druga baza danych, nie są wyświetlane.",
+  "sites_linkService_bodyNoEnv": "Zostanie dodana do .lerd.yaml i uruchomiona. Lerd nie zapisuje pliku env tej witryny, więc ustaw połączenie w aplikacji samodzielnie.",
   "sites_linkService_empty": "Wszystkie zainstalowane usługi są już używane przez tę witrynę lub zastąpiłyby używaną.",
   "sites_removeService_title": "Usunąć {name} z {domain}?",
   "sites_removeService_body": "Usługa zostanie usunięta z .lerd.yaml, a plik env przestanie na nią wskazywać. Ustawienia, które wybierają ją jako sterownik, np. cache store, musisz zmienić sam. Usługa nadal działa dla innych witryn, a jej dane zostają.",

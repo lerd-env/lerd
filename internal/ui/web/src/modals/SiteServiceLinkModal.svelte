@@ -12,6 +12,7 @@
   const target = $derived($modal.siteServiceLink);
 
   let names = $state<string[] | null>(null);
+  let writesEnv = $state(false);
   let picked = $state('');
   let busy = $state(false);
   let error = $state('');
@@ -27,8 +28,8 @@
   onMount(async () => {
     if (!target) return;
     try {
-      names = await linkableServices(target.domain);
-      picked = names[0] ?? '';
+      ({ names, writesEnv } = await linkableServices(target.domain));
+      picked = names?.[0] ?? '';
     } catch (e) {
       error = e instanceof Error ? e.message : m.common_requestFailed();
     }
@@ -59,7 +60,7 @@
       <Dropdown value={picked} {options} onchange={(v) => (picked = v)} width="full" disabled={busy}>
         {#snippet optionIcon(name)}<ServiceIcon {name} bare inline />{/snippet}
       </Dropdown>
-      <p class="text-xs text-gray-500 dark:text-gray-400">{m.sites_linkService_body()}</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400">{writesEnv ? m.sites_linkService_body() : m.sites_linkService_bodyNoEnv()}</p>
     {:else if names}
       <p class="text-sm text-gray-700 dark:text-gray-300">{m.sites_linkService_empty()}</p>
     {:else if !error}

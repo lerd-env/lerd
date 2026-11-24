@@ -675,11 +675,12 @@ export const addSuggestedService = (d: string, name: string, preset = '', versio
 };
 export const linkSiteService = (d: string, name: string) =>
   postAction(site(d, 'service:link') + `?name=${encodeURIComponent(name)}`);
-// linkableServices are the installed services the site can still be wired to.
-export async function linkableServices(d: string): Promise<string[]> {
-  const out = await apiJson<{ services?: string[]; error?: string }>(site(d, 'service:linkable'));
+// linkableServices are the installed services the site can still be wired to, and
+// whether lerd writes the env file that wires them.
+export async function linkableServices(d: string): Promise<{ names: string[]; writesEnv: boolean }> {
+  const out = await apiJson<{ services?: string[]; writes_env?: boolean; error?: string }>(site(d, 'service:linkable'));
   if (!out.services) throw new Error(out.error || m.common_requestFailed());
-  return out.services;
+  return { names: out.services, writesEnv: Boolean(out.writes_env) };
 }
 export const useSiteDatabase = (d: string, name: string) =>
   postAction(site(d, 'db:use') + `?name=${encodeURIComponent(name)}`);

@@ -1041,6 +1041,7 @@
   "sites_linkService_button": "サービスを追加",
   "sites_linkService_title": "{domain} にサービスを追加",
   "sites_linkService_body": ".lerd.yaml に追加して起動し、env ファイルの接続先をそのサービスにします。2 つ目のデータベースなど、使用中のサービスを置き換えるものは表示されません。",
+  "sites_linkService_bodyNoEnv": ".lerd.yaml に追加して起動します。Lerd はこのサイトの env ファイルを書き込まないため、接続はアプリ側で設定してください。",
   "sites_linkService_empty": "インストール済みのサービスはすべて、このサイトで使用中か、使用中のサービスを置き換えるものです。",
   "sites_removeService_title": "{domain} から {name} を削除しますか？",
   "sites_removeService_body": ".lerd.yaml から外され、env ファイルもそれを指さなくなります。キャッシュストアなど、ドライバーとして選んでいる設定はご自身で変更してください。サービスは他のサイト向けに動き続け、データも残ります。",

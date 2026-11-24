@@ -1041,6 +1041,7 @@
   "sites_linkService_button": "Ajouter un service",
   "sites_linkService_title": "Ajouter un service à {domain}",
   "sites_linkService_body": "Il est ajouté à .lerd.yaml, démarré, et le fichier env pointe vers lui. Les services qui en remplaceraient un déjà utilisé par le site, comme une seconde base de données, ne sont pas proposés.",
+  "sites_linkService_bodyNoEnv": "Il est ajouté à .lerd.yaml et démarré. Lerd n'écrit pas le fichier env de ce site, configurez donc vous-même la connexion dans l'application.",
   "sites_linkService_empty": "Tous les services installés sont déjà utilisés par ce site ou en remplaceraient un.",
   "sites_removeService_title": "Retirer {name} de {domain} ?",
   "sites_removeService_body": "Il est retiré du .lerd.yaml et le fichier env ne pointe plus vers lui. Les réglages qui le choisissent comme driver, comme un cache store, sont à modifier par toi. Le service continue de tourner pour les autres sites et ses données sont conservées.",

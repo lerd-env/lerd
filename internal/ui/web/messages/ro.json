@@ -1041,6 +1041,7 @@
   "sites_linkService_button": "Adaugă serviciu",
   "sites_linkService_title": "Adaugă un serviciu la {domain}",
   "sites_linkService_body": "Este adăugat în .lerd.yaml, pornit, iar fișierul env trimite către el. Serviciile care ar înlocui unul folosit deja de site, cum ar fi o a doua bază de date, nu apar în listă.",
+  "sites_linkService_bodyNoEnv": "Este adăugat în .lerd.yaml și pornit. Lerd nu scrie fișierul env al acestui site, așa că setează conexiunea direct în aplicație.",
   "sites_linkService_empty": "Toate serviciile instalate sunt deja folosite de acest site sau ar înlocui unul folosit.",
   "sites_removeService_title": "Elimini {name} din {domain}?",
   "sites_removeService_body": "Este scos din .lerd.yaml, iar fișierul env nu mai trimite la el. Setările care îl aleg ca driver, cum ar fi un cache store, rămân de schimbat de tine. Serviciul rămâne pornit pentru celelalte site-uri, iar datele rămân.",

@@ -18,8 +18,9 @@ import (
 func linkableServices(site *config.Site) []string {
 	used := siteinfo.Enrich(*site, siteinfo.EnrichServices).Services
 	taken := map[string]bool{}
+	proj, _ := config.LoadProjectConfig(site.Path)
 	for _, name := range used {
-		for _, key := range addressKeys(serviceEnv(name)) {
+		for _, key := range addressKeys(serviceEnv(declaredEntry(proj, name))) {
 			taken[key] = true
 		}
 	}
@@ -53,7 +54,7 @@ func linkSiteService(site *config.Site, name string) error {
 		return fmt.Errorf("%q cannot be added to %s: it is not installed, the site already uses it, or it would replace a service the site uses", name, site.Name)
 	}
 	// Older projects list sqlite, which env would go on wiring over the database.
-	if slices.ContainsFunc(serviceEnv(name), func(kv string) bool { return strings.HasPrefix(kv, "DB_CONNECTION=") }) {
+	if slices.ContainsFunc(serviceEnv(config.ProjectService{Name: name}), func(kv string) bool { return strings.HasPrefix(kv, "DB_CONNECTION=") }) {
 		if proj, err := config.LoadProjectConfig(site.Path); err == nil && slices.Contains(proj.ServiceNames(), "sqlite") {
 			if err := config.RemoveProjectService(site.Path, "sqlite"); err != nil {
 				return err
@@ -63,20 +64,38 @@ func linkSiteService(site *config.Site, name string) error {
 	return wireSiteService(site, cli.ProjectServiceFor(name, nil))
 }
 
-// serviceEnv is the env a service publishes. A name this machine has not
-// installed is read from its preset.
-func serviceEnv(name string) []string {
-	if config.IsDefaultPreset(name) {
-		return config.DefaultPresetEnvVars(name)
+// declaredEntry is how .lerd.yaml lists a service, or its bare name.
+func declaredEntry(proj *config.ProjectConfig, name string) config.ProjectService {
+	if proj != nil {
+		for _, svc := range proj.Services {
+			if svc.Name == name {
+				return svc
+			}
+		}
 	}
-	if svc, err := config.LoadCustomService(name); err == nil {
-		return svc.EnvVars
+	return config.ProjectService{Name: name}
+}
+
+// ensureServicePreset fetches a preset this machine has not cached; a test seam.
+var ensureServicePreset = config.EnsurePreset
+
+// serviceEnv is the env a service publishes. One this machine has not installed
+// is read from its inline definition or from the preset the entry names.
+func serviceEnv(svc config.ProjectService) []string {
+	if config.IsDefaultPreset(svc.Name) {
+		return config.DefaultPresetEnvVars(svc.Name)
 	}
-	p, err := config.LoadPreset(name)
-	if err != nil {
-		// mysql-8-4 is named after the preset it came from.
-		p, err = config.LoadPreset(config.InferFamily(name))
+	if installed, err := config.LoadCustomService(svc.Name); err == nil {
+		return installed.EnvVars
 	}
+	if svc.Custom != nil {
+		return svc.Custom.EnvVars
+	}
+	preset := svc.FromName().Preset
+	if preset == "" {
+		preset = svc.Name
+	}
+	p, err := ensureServicePreset(preset)
 	if err != nil {
 		return nil
 	}
@@ -103,5 +122,5 @@ func handleSiteServiceLinkable(w http.ResponseWriter, domain string) {
 		writeJSON(w, SiteActionResponse{Error: "site not found: " + domain})
 		return
 	}
-	writeJSON(w, map[string][]string{"services": linkableServices(site)})
+	writeJSON(w, map[string]any{"services": linkableServices(site), "writes_env": cli.WritesEnv(site)})
 }

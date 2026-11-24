@@ -1041,6 +1041,7 @@
   "sites_linkService_button": "Hizmet ekle",
   "sites_linkService_title": "{domain} sitesine hizmet ekle",
   "sites_linkService_body": ".lerd.yaml dosyasına eklenir, başlatılır ve env dosyası ona yönlendirilir. İkinci bir veritabanı gibi, sitenin kullandığı bir hizmetin yerini alacak olanlar listelenmez.",
+  "sites_linkService_bodyNoEnv": ".lerd.yaml dosyasına eklenir ve başlatılır. Lerd bu sitenin env dosyasını yazmaz, bağlantıyı uygulamada kendin ayarla.",
   "sites_linkService_empty": "Kurulu tüm hizmetler bu site tarafından zaten kullanılıyor ya da kullanılan birinin yerini alır.",
   "sites_removeService_title": "{name}, {domain} sitesinden kaldırılsın mı?",
   "sites_removeService_body": ".lerd.yaml dosyasından çıkarılır ve env dosyası artık onu göstermez. Onu sürücü olarak seçen ayarları, örneğin bir cache store, senin değiştirmen gerekir. Servis diğer siteler için çalışmaya devam eder ve verileri korunur.",
