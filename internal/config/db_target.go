@@ -258,8 +258,11 @@ func DBTargetsFor(projectDir string) []DBTarget {
 		}
 	}
 	bindings, file, format := dbEnvBindings(projectDir)
-	vals := envfile.Values(filepath.Join(projectDir, file), format)
+	return dbTargetsIn(projectDir, bindings, envfile.Values(filepath.Join(projectDir, file), format))
+}
 
+// dbTargetsIn is DBTargetsFor against env values the caller supplies.
+func dbTargetsIn(projectDir string, bindings []dbServiceBinding, vals map[string]string) []DBTarget {
 	var out []DBTarget
 	claimed := map[string]bool{}
 	add := func(t DBTarget) {

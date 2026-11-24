@@ -1113,7 +1113,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 				continue
 			}
 			wired[svc] = true
-			provisionErrs = append(provisionErrs, provisionWiredService(svc, dbName, envMap, updates)...)
+			provisionErrs = append(provisionErrs, provisionWiredService(cwd, svc, dbName, envMap, updates)...)
 		}
 	} else {
 		// Default Laravel-style detection.
@@ -1152,7 +1152,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 				continue
 			}
 			wired[svc] = true
-			provisionErrs = append(provisionErrs, provisionWiredService(svc, dbName, envMap, updates)...)
+			provisionErrs = append(provisionErrs, provisionWiredService(cwd, svc, dbName, envMap, updates)...)
 		}
 	}
 
@@ -1282,7 +1282,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		}
 		followPorts()
 		if isDB {
-			names := []string{dbName, dbName + "_testing"}
+			names := config.DatabasesToCreate(cwd, dbName, envWithUpdates(envMap, updates))
 			// A server the user runs gets the site's database and no more.
 			if svc.External != nil {
 				names = []string{siteDB}
@@ -1702,15 +1702,23 @@ func CloneDatabase(svc, src, dst string) error { return serviceops.CloneDatabase
 // DropDatabase delegates to serviceops.DropDatabase for cli-package callers.
 func DropDatabase(svc, name string) (bool, error) { return serviceops.DropDatabase(svc, name) }
 
+// envWithUpdates is env as it reads once updates are written.
+func envWithUpdates(env, updates map[string]string) map[string]string {
+	out := make(map[string]string, len(env)+len(updates))
+	maps.Copy(out, env)
+	maps.Copy(out, updates)
+	return out
+}
+
 // provisionWiredService starts a service the site's env now points at and
 // creates what the site needs inside it: its databases, or its bucket.
-func provisionWiredService(svc, dbName string, envMap, updates map[string]string) []error {
+func provisionWiredService(cwd, svc, dbName string, envMap, updates map[string]string) []error {
 	if svc == "mysql" || svc == "postgres" {
 		if err := ensureServiceRunning(svc); err != nil {
 			return []error{fmt.Errorf("%s did not start, so its databases were not created: %w", svc, err)}
 		}
 		var errs []error
-		for _, name := range []string{dbName, dbName + "_testing"} {
+		for _, name := range config.DatabasesToCreate(cwd, dbName, envWithUpdates(envMap, updates)) {
 			created, err := createDatabase(svc, name)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("database %q: %w", name, err))

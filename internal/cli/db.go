@@ -523,7 +523,7 @@ func runDbCreate(flagService string, args []string) error {
 	}
 
 	feedback.Begin()
-	for _, name := range []string{dbName, dbName + "_testing"} {
+	for _, name := range config.DatabasesToCreate(cwd, dbName, nil) {
 		created, err := createDatabase(env.service, name)
 		if err != nil {
 			return fmt.Errorf("creating %q: %w", name, err)
