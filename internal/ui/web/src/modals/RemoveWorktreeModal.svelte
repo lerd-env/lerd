@@ -19,6 +19,10 @@
   let dropDB = $state(false);
   let busy = $state(false);
   let error = $state('');
+  let succeeded = $state(false);
+
+  // The live sites update can drop the worktree before the request answers.
+  const removed = $derived(succeeded || !wt);
 
   async function doRemove() {
     if (!wt) return;
@@ -30,18 +34,18 @@
         error = res.error || m.common_failed();
         return;
       }
+      succeeded = true;
       await loadSites();
-      closeModal();
     } finally {
       busy = false;
     }
   }
 </script>
 
-<Modal open title={m.worktreeMgr_removeTitle({ branch })} onclose={closeModal} size="md">
+<Modal open title={removed ? m.worktreeMgr_removedTitle() : m.worktreeMgr_removeTitle({ branch })} onclose={closeModal} size="md">
   <div class="px-5 py-4 space-y-3">
-    {#if !wt}
-      <p class="text-sm text-gray-500 dark:text-gray-400">{m.worktreeMgr_listEmpty()}</p>
+    {#if removed || !wt}
+      <p class="text-sm text-gray-500 dark:text-gray-400">{m.worktreeMgr_removedBody({ branch })}</p>
     {:else}
       <div class="flex items-center gap-2">
         <svg class="w-3.5 h-3.5 shrink-0 text-violet-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
@@ -65,16 +69,18 @@
           {m.worktreeMgr_dropDb({ db: wt.db_database ?? '' })}
         </label>
       {/if}
+    {/if}
 
-      {#if error}
-        <p class="text-xs text-red-500">{error}</p>
-      {/if}
+    {#if error}
+      <p class="text-xs text-red-500">{error}</p>
     {/if}
   </div>
 
   {#snippet footer()}
-    <DetailButton onclick={closeModal} disabled={busy}>{m.common_cancel()}</DetailButton>
-    {#if wt}
+    {#if removed}
+      <DetailButton tone="primary" onclick={closeModal}>{m.common_close()}</DetailButton>
+    {:else}
+      <DetailButton onclick={closeModal} disabled={busy}>{m.common_cancel()}</DetailButton>
       <DetailButton tone="danger" onclick={doRemove} loading={busy} disabled={busy}>
         {busy ? m.worktreeMgr_removing() : m.common_remove()}
       </DetailButton>
