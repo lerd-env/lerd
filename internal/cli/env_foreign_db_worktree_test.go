@@ -56,7 +56,13 @@ func alignedWorktree(t *testing.T, framework, marker, file, parentEnv, wtEnv, pa
 	if err := runEnv(nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	return envfile.Values(filepath.Join(checkout, file), "dotenv")
+	raw, err := os.ReadFile(filepath.Join(checkout, file))
+	if err != nil {
+		t.Fatal(err)
+	}
+	vals := envfile.Values(filepath.Join(checkout, file), "dotenv")
+	vals["raw"] = string(raw)
+	return vals
 }
 
 func wantValues(t *testing.T, got map[string]string, want string) {
@@ -151,4 +157,39 @@ func TestWorktree_OnAServerTheParentsOverrideNamesIsKept(t *testing.T) {
 	override := "DB_HOST=127.0.0.1\nDB_PORT=3306\nDB_USERNAME=root\nDB_PASSWORD=\n"
 	got := alignedWorktree(t, "laravel", "artisan", ".env", foreignEnv, foreignEnv, override, "", 0)
 	wantValues(t, got, "DB_HOST=127.0.0.1 DB_PORT=3306 DB_DATABASE=my_real_data DB_USERNAME=root DB_PASSWORD=")
+}
+
+func TestMovedDBURL(t *testing.T) {
+	const target = "mysql://root:lerd@127.0.0.1:3399/{{site}}?serverVersion=8.0"
+	for own, want := range map[string]string{
+		`mysql://me:pa'ss@lerd-mysql:3306/shop`:              `mysql://me:pa'ss@127.0.0.1:3399/shop`,
+		`mysql://me:p"a@lerd-mysql:3306/shop`:                `mysql://me:p"a@127.0.0.1:3399/shop`,
+		`"mysql://me:pa'ss@lerd-mysql:3306/shop"`:            `"mysql://me:pa'ss@127.0.0.1:3399/shop"`,
+		`"mysql://me:mine@lerd-mysql:3306/shop" # mine`:      `"mysql://me:mine@127.0.0.1:3399/shop" # mine`,
+		`'mysql://me:mine@lerd-mysql:3306'`:                  `'mysql://me:mine@127.0.0.1:3399'`,
+		`mysql://me:a@b@lerd-mysql:3306/shop`:                `mysql://me:a@b@127.0.0.1:3399/shop`,
+		`mysql://me:p%2F%40@lerd-mysql/shop?x=a@b#c`:         `mysql://me:p%2F%40@127.0.0.1:3399/shop?x=a@b#c`,
+		`mysql://lerd-mysql:3306/shop`:                       `mysql://127.0.0.1:3399/shop`,
+		`mysql://me:mine@lerd-mysql:3306?charset=utf8mb4`:    `mysql://me:mine@127.0.0.1:3399?charset=utf8mb4`,
+		`mysql://me:mine@[::1]:3306/shop`:                    `mysql://me:mine@127.0.0.1:3399/shop`,
+		`mysql://lerd-mysql:lerd-mysql@lerd-mysql:3306/shop`: `mysql://lerd-mysql:lerd-mysql@127.0.0.1:3399/shop`,
+	} {
+		if got := movedDBURL(own, target); got != want {
+			t.Errorf("movedDBURL(%s)\n got %s\nwant %s", own, got, want)
+		}
+	}
+	if got := movedDBURL("mysql:host=lerd-mysql;port=3306;dbname=shop", "mysql:host=lerd-mysql;dbname={{site}}"); got != "mysql:host=lerd-mysql;dbname=shop" {
+		t.Errorf("pdo = %s", got)
+	}
+}
+
+// The whole way through the env file, quoted as Symfony writes it.
+func TestWorktree_URLWithAQuoteInThePasswordFollows(t *testing.T) {
+	got := alignedWorktree(t, "symfony", "symfony.lock", ".env.local",
+		"DATABASE_URL=mysql://root:@127.0.0.1:3306/my_real_data\n",
+		"DATABASE_URL=\"mysql://me:pa'ss@lerd-mysql:3306/shop\"\n", "", "", 3100)
+	// Without the quotes around it Symfony reads the one inside as an opening quote.
+	if want := `DATABASE_URL="mysql://me:pa'ss@127.0.0.1:3306/shop"`; !strings.Contains(got["raw"], want) {
+		t.Errorf("env = %s\nwant %s", got["raw"], want)
+	}
 }

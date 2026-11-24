@@ -5,10 +5,12 @@ import (
 	"maps"
 	neturl "net/url"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
 )
 
@@ -118,7 +120,7 @@ func worktreeLerdDB(site *config.Site, fw *config.Framework, dir string, vals ma
 			rewriteEnvForHostProxy(updates, loopbackServiceNames(map[string]bool{svc: true}, knownServices()))
 		}
 		if url, ok := updates[binding.URLKey]; ok {
-			updates[binding.URLKey] = movedDBURL(vals[binding.URLKey], url)
+			updates[binding.URLKey] = movedDBURL(writtenValue(dir, binding, vals), url)
 		}
 		maps.DeleteFunc(updates, func(k, v string) bool { return strings.Trim(vals[k], `"'`) == v })
 		return updates
@@ -126,20 +128,40 @@ func worktreeLerdDB(site *config.Site, fw *config.Framework, dir string, vals ma
 	return nil
 }
 
+// writtenValue is a connection string as its env file spells it. The readers strip
+// the quotes around a value, which one holding a quote of its own cannot lose.
+func writtenValue(dir string, b config.DBEnvBinding, vals map[string]string) string {
+	if b.Format != "" && b.Format != envfile.FormatDotenv {
+		return vals[b.URLKey]
+	}
+	data, err := os.ReadFile(filepath.Join(dir, b.File))
+	if err != nil {
+		return vals[b.URLKey]
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if k, v, ok := strings.Cut(line, "="); ok && strings.TrimSpace(k) == b.URLKey {
+			return strings.TrimSpace(v)
+		}
+	}
+	return vals[b.URLKey]
+}
+
 // movedDBURL is a connection string pointed at the server another one names. A PDO
 // one holds no login, so it takes the other's whole and keeps the database.
 func movedDBURL(own, target string) string {
-	scheme, rest, isURL := strings.Cut(own, "://")
+	bare := strings.Trim(own, `"'`)
+	scheme, rest, isURL := strings.Cut(bare, "://")
 	t, err := neturl.Parse(target)
 	if !isURL || err != nil {
 		return config.DBURLWithName(target, config.DBNameInURL(own))
 	}
-	end := len(rest)
-	if i := strings.IndexAny(rest, `/?#"'`); i >= 0 {
-		end = i
+	// By hand, since a rebuilt URL re-encodes a password the app reads as written.
+	authority, tail := rest, ""
+	if i := strings.IndexAny(rest, "/?#"); i >= 0 {
+		authority, tail = rest[:i], rest[i:]
 	}
-	start := strings.LastIndex(rest[:end], "@") + 1
-	return scheme + "://" + rest[:start] + t.Host + rest[end:]
+	login := authority[:strings.LastIndex(authority, "@")+1]
+	return strings.Replace(own, bare, scheme+"://"+login+t.Host+tail, 1)
 }
 
 // runLerdEnvKeepingDB is the `lerd env` behind a change lerd makes on its own.
