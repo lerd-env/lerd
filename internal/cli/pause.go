@@ -155,8 +155,8 @@ func setSiteContainerAutostart(site *config.Site, on bool) bool {
 var pauseNginxReload = nginx.ReloadOrWarn
 
 // hostProxyEnvRefresh regenerates a site's .env by re-running `lerd env`. A
-// package var so tests can stub the re-exec; production points it at runLerdEnv.
-var hostProxyEnvRefresh = runLerdEnv
+// package var so tests can stub the re-exec; production points it at runLerdEnvKeepingDB.
+var hostProxyEnvRefresh = runLerdEnvKeepingDB
 
 // refreshHostProxyEnvOnResume regenerates the .env of a site that reaches services
 // over loopback as it unpauses, so a published port that moved while it was paused
@@ -167,6 +167,7 @@ func refreshHostProxyEnvOnResume(site *config.Site, mode string) bool {
 	if site == nil || !usesLoopbackServicesIn(site, mode) {
 		return false
 	}
+	announceKeptDBs([]config.Site{*site})
 	if err := hostProxyEnvRefresh(site.Path); err != nil {
 		feedback.Warn("refreshing host-proxy env on resume: %v", err)
 	}

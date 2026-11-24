@@ -223,7 +223,7 @@ func adoptDefaultServiceDomains() {
 
 // domainSyncEnvFn is the seam the domain sweep re-execs the env step through,
 // swapped in tests so the sweep can be driven without a real project to write.
-var domainSyncEnvFn = runLerdEnvTo
+var domainSyncEnvFn = runLerdEnvKeepingDBTo
 
 // syncServiceDomainSites rewrites the env of every site that uses the service,
 // so a domain that just appeared or just went away reaches the projects pointing
@@ -238,6 +238,7 @@ func syncServiceDomainSites(service string, sites []config.Site) {
 	if len(sites) == 0 {
 		return
 	}
+	announceKeptDBs(sites)
 	bar := feedback.StartProgress(
 		fmt.Sprintf("rewriting .env for %d site%s using %s", len(sites), pluralS(len(sites)), service),
 		len(sites))
@@ -1410,6 +1411,9 @@ func sitesToRefreshForPortMove(sites []config.Site, mode string) []config.Site {
 	return out
 }
 
+// portMoveEnvRefresh is the seam a port move re-runs a site's env through.
+var portMoveEnvRefresh = runLerdEnvKeepingDB
+
 // refreshHostProxySitesForService regenerates the .env of every host-proxy site
 // that uses service, so a published-port change — set manually via `lerd service
 // port` or by the auto port-ownership guard — is reflected in the loopback
@@ -1423,8 +1427,10 @@ func refreshHostProxySitesForService(service string) {
 		mode = cfg.PHPRuntimeMode()
 	}
 	refreshed := 0
-	for _, s := range sitesToRefreshForPortMove(config.SitesUsingService(service), mode) {
-		if err := runLerdEnv(s.Path); err != nil {
+	sites := sitesToRefreshForPortMove(config.SitesUsingService(service), mode)
+	announceEnvSweep(sites)
+	for _, s := range sites {
+		if err := portMoveEnvRefresh(s.Path); err != nil {
 			fmt.Printf("Warning: could not refresh site %q for the new %s port: %v\n", s.Name, service, err)
 			continue
 		}

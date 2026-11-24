@@ -46,8 +46,12 @@ func unwiredProjectServices(site *config.Site, proj *config.ProjectConfig, fw *c
 		return nil
 	}
 	unwired := sitedoctor.UnwiredServices(site.Path, fw)
+	kept := foreignDBToKeep(site.Path, true)
 	var out []config.ProjectService
 	for _, svc := range proj.Services {
+		if kept.filledBy(fw, svc) {
+			continue
+		}
 		if !slices.Contains(unwired, svc.Name) || slices.Contains(site.WiredServices, svc.Name) ||
 			site.DeclinesService(svc.Name) || config.ServiceIsRemoved(svc.Name) {
 			continue

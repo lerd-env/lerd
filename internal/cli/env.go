@@ -632,6 +632,8 @@ func NewEnvCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "Print detailed per-service output (used by the MCP server)")
+	cmd.Flags().BoolVar(&envKeepForeignDB, keepForeignDBFlag, false, "Leave a database connection that is not lerd's as it is")
+	_ = cmd.Flags().MarkHidden(keepForeignDBFlag)
 	cmd.Flags().BoolVarP(&envAssumeYes, "yes", "y", false, "Approve the project's env_provider host command without prompting, and remember it")
 	return cmd
 }
@@ -915,6 +917,11 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("reading %s: %w", envRelPath, err)
 	}
 
+	kept := foreignDBToKeep(cwd, envKeepForeignDB)
+	if kept != nil {
+		envInfo("  Keeping the database connection to %s, it is not one of lerd's\n", kept.host)
+	}
+
 	// 3. Detect services and build the set of key→value updates to apply
 	updates := map[string]string{}
 	dbName, domain := projectDBName(cwd), site.PrimaryDomain()
@@ -1073,6 +1080,10 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			detectedFromEnv := frameworkServiceDetected(def, envMap) && !site.DeclinesService(svc)
 			pickedFromYAML := lerdYAMLServices[svc] || extServices[svc]
 
+			if kept.writtenBy(def.Vars) {
+				continue
+			}
+
 			// A drop-in has taken this role over. The custom-service loop below wires
 			// the framework's own keys to the container the project actually uses, so
 			// writing them here first would only boot the service it replaced.
@@ -1122,7 +1133,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			}
 
 			envs := serviceEnvVars(svc)
-			if len(envs) == 0 {
+			if len(envs) == 0 || kept.writtenBy(envs) {
 				continue
 			}
 
@@ -1149,7 +1160,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	// the init wizard / runtime DB prompt. Apply the framework's sqlite env vars;
 	// the database file itself is created after step 4e, once every value that
 	// can name it, the personal override included, has had its say.
-	sqliteWired := projectUsesSQLite(lerdYAMLServices, envMap, fw, externalDBPicked(extServices))
+	sqliteWired := kept == nil && projectUsesSQLite(lerdYAMLServices, envMap, fw, externalDBPicked(extServices))
 	if sqliteWired {
 		envApplyLine("sqlite", !lerdYAMLServices["sqlite"])
 		for _, kv := range sqliteVarsFor(fw) {
@@ -1170,6 +1181,9 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		// The framework's own mapping for this service wins: the framework loop
 		// above already wrote its keys, so the preset's must not land beside them.
 		role, mapped := frameworkServiceRole(fw, svc)
+		if kept.writtenBy(svc.EnvVars) || (mapped && kept.writtenBy(fw.Env.Services[role].Vars)) {
+			continue
+		}
 		if mapped && role == svc.Name {
 			if !extServices[svc.Name] {
 				if err := ensureServiceRunning(svc.Name); err != nil {
@@ -1448,7 +1462,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	// sites a sweep can reach, so whatever this run moved in the parent has to
 	// be carried into them from here.
 	if branch == "" {
-		alignWorktreeEnvs(site, fw, envPath, envRelPath, envFormat, envMap, envOverrides)
+		alignWorktreeEnvs(site, fw, envPath, envRelPath, envFormat, envMap, envOverrides, kept, envKeepForeignDB)
 	}
 
 	// The connection a JetBrains project points at is rebuilt from the same
@@ -1618,7 +1632,7 @@ func carriedToWorktrees(vals, overrides map[string]string) map[string]string {
 //
 // Scoped to dotenv, the format both the keys and the writer here assume. A
 // worktree without an env file yet is skipped; it is seeded on its next sync.
-func alignWorktreeEnvs(site *config.Site, fw *config.Framework, mainEnvPath, envRelPath, envFormat string, before, overrides map[string]string) {
+func alignWorktreeEnvs(site *config.Site, fw *config.Framework, mainEnvPath, envRelPath, envFormat string, before, overrides map[string]string, kept *keptDB, keepForeign bool) {
 	// A format this binary cannot write is refused by the writer below rather
 	// than guessed at, the way every other write of an env file is.
 	if site == nil || !envfile.KnownFormat(envFormat) {
@@ -1630,25 +1644,26 @@ func alignWorktreeEnvs(site *config.Site, fw *config.Framework, mainEnvPath, env
 	}
 	// The parent's .env already holds what its override pinned, so both sides
 	// drop those keys before anything is handed on.
-	before = carriedToWorktrees(before, overrides)
-	after := carriedToWorktrees(envfile.Values(mainEnvPath, envFormat), overrides)
-	coords := map[string]string{}
-	for _, k := range worktreeDBConnectionKeys {
-		if v := after[k]; v != "" {
-			coords[k] = v
-		}
-	}
+	parentBefore, parentAfter := before, envfile.Values(mainEnvPath, envFormat)
+	overrides = kept.pinned(fw, overrides)
 	for _, wt := range worktrees {
 		wtEnv := filepath.Join(wt.Path, envRelPath)
 		if _, statErr := os.Stat(wtEnv); statErr != nil {
 			continue
 		}
 		wtVals := envfile.Values(wtEnv, envFormat)
+		// Each checkout answers for its own database, whatever the parent is on.
+		wtKept := foreignDBToKeep(wt.Path, keepForeign)
+		pins := wtKept.pinned(fw, overrides)
+		before, after := carriedToWorktrees(parentBefore, pins), carriedToWorktrees(parentAfter, pins)
 		updates := map[string]string{}
-		for k, v := range coords {
-			if wtVals[k] != v {
+		for _, k := range worktreeDBConnectionKeys {
+			if v := after[k]; v != "" && wtVals[k] != v {
 				updates[k] = v
 			}
+		}
+		if kept != nil && wtKept == nil {
+			maps.Copy(updates, worktreeLerdDB(site, fw, wt.Path, wtVals))
 		}
 		maps.Copy(updates, envfile.CarriedValues(wtVals, before, after))
 		// A worktree that predates the runtime switch holds the container names

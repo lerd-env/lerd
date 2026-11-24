@@ -402,12 +402,17 @@ func runLerdEnv(dir string) error {
 // caller whose own stdout carries a machine-readable document passes stderr:
 // the child writes plain prose, and on stdout it lands in the middle of the
 // document and nothing can parse it.
-func runLerdEnvTo(dir string, out io.Writer) error {
+func runLerdEnvTo(dir string, out io.Writer, flags ...string) error {
+	return spawnLerdEnv(dir, out, flags)
+}
+
+// spawnLerdEnv is the re-exec itself, a seam for tests.
+var spawnLerdEnv = func(dir string, out io.Writer, flags []string) error {
 	self, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("resolving lerd executable: %w", err)
 	}
-	cmd := exec.Command(self, "env")
+	cmd := exec.Command(self, append([]string{"env"}, flags...)...)
 	cmd.Dir = dir
 	cmd.Stdout = out
 	cmd.Stderr = os.Stderr

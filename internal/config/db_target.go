@@ -145,8 +145,13 @@ func dbEnvBindings(projectDir string) (bindings []dbServiceBinding, file, format
 		return nil, file, format
 	}
 	file, format = fw.Env.Resolve(projectDir)
-	if len(fw.Env.Services) == 0 {
-		return nil, file, format
+	return dbBindingsIn(fw, file, format), file, format
+}
+
+// dbBindingsIn is dbEnvBindings against an env file named by the caller.
+func dbBindingsIn(fw *Framework, file, format string) []dbServiceBinding {
+	if fw == nil || len(fw.Env.Services) == 0 {
+		return nil
 	}
 	var out []dbServiceBinding
 	for name, def := range fw.Env.Services {
@@ -182,7 +187,7 @@ func dbEnvBindings(projectDir string) (bindings []dbServiceBinding, file, format
 		}
 		return out[i].service < out[j].service
 	})
-	return out, file, format
+	return out
 }
 
 // dbServiceRank orders the database services a framework may declare, so a
@@ -202,10 +207,13 @@ func dbServiceRank(name string) int {
 // framework encoding its database in a DSN has only the URLKey.
 func DBEnvBindingFor(projectDir string) DBEnvBinding {
 	bindings, file, format := dbEnvBindings(projectDir)
+	return pickDBBinding(bindings, envfile.Values(filepath.Join(projectDir, file), format))
+}
+
+func pickDBBinding(bindings []dbServiceBinding, vals map[string]string) DBEnvBinding {
 	if len(bindings) == 0 {
 		return defaultDBEnvBinding()
 	}
-	vals := envfile.Values(filepath.Join(projectDir, file), format)
 	var first *DBEnvBinding
 	for _, b := range bindings {
 		if b.URLKey == "" && (b.NameKey == "" || b.HostKey == "") {
@@ -419,13 +427,18 @@ type DBEndpoint struct {
 // DBEndpointFor reads a project's database endpoint from its env.
 func DBEndpointFor(projectDir string) DBEndpoint {
 	bindings, file, format := dbEnvBindings(projectDir)
+	return dbEndpointIn(projectDir, bindings, file, format)
+}
+
+// dbEndpointIn is DBEndpointFor against an env file named by the caller.
+func dbEndpointIn(projectDir string, bindings []dbServiceBinding, file, format string) DBEndpoint {
 	vals := envfile.Values(filepath.Join(projectDir, file), format)
 	for _, b := range bindings {
 		if b.URLKey != "" && serviceDetectedIn(b.detect, vals) {
 			return endpointFromURL(vals[b.URLKey])
 		}
 	}
-	binding := DBEnvBindingFor(projectDir)
+	binding := pickDBBinding(bindings, vals)
 	read := envfile.Reader(filepath.Join(projectDir, binding.File), binding.Format)
 	e := DBEndpoint{Host: strings.TrimSpace(read(binding.HostKey)), Port: read("DB_PORT"), Database: read(binding.NameKey)}
 	if host, port, err := net.SplitHostPort(e.Host); err == nil {
