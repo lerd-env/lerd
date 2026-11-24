@@ -36,8 +36,12 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 	otherDir := t.TempDir()
-	env := "#lerd-root=" + siteDir + "\n# comment\nPLAIN=one\nSINGLE='two words'\nexport DQ=\"a\\nb\"\nKEPT=from-file\n" +
-		"PEM=\"-----BEGIN KEY-----\nabc\n-----END KEY-----\"\nNOTE=bar # note\nHASH=a#b\n#lerd-root=/\n"
+	toolsDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := "#lerd-root=" + siteDir + "\n#lerd-tools=" + toolsDir + "\n# comment\nPLAIN=one\nSINGLE='two words'\nexport DQ=\"a\\nb\"\nKEPT=from-file\n" +
+		"PEM=\"-----BEGIN KEY-----\nabc\n-----END KEY-----\"\nNOTE=bar # note\nHASH=a#b\n#lerd-root=/\n#lerd-tools=/\n"
 	if err := os.WriteFile(filepath.Join(envDir, "app.env"), []byte(env), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +49,7 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 	script := `<?php echo json_encode(array(getenv("PLAIN"), $_ENV["SINGLE"] ?? null, $_SERVER["DQ"] ?? null, getenv("KEPT"), getenv("PEM"), getenv("NOTE"), getenv("HASH")));`
-	for _, d := range []string{siteDir, otherDir} {
+	for _, d := range []string{siteDir, otherDir, toolsDir} {
 		if err := os.WriteFile(filepath.Join(d, "probe.php"), []byte(script), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -82,13 +86,16 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 	if out := run("app", otherDir); out != nothing {
 		t.Errorf("a script outside the file's roots must load nothing, got %s", out)
 	}
-	// A CLI tool lerd keeps outside the project, like its wp-cli phar, run from
-	// the project loads it; run from anywhere else it still loads nothing.
-	if out := runIn("app", otherDir, siteDir); !strings.HasPrefix(out, `["one"`) {
-		t.Errorf("an out-of-tree CLI script run from the site must load its env, got %s", out)
+	// lerd's own CLI tools, like its wp-cli phar, load it when run from the
+	// project; another project's script never does, wherever it is run from.
+	if out := runIn("app", toolsDir, siteDir); !strings.HasPrefix(out, `["one"`) {
+		t.Errorf("a lerd tool run from the site must load its env, got %s", out)
 	}
-	if out := runIn("app", otherDir, otherDir); out != nothing {
-		t.Errorf("an out-of-tree CLI script run from outside the site must load nothing, got %s", out)
+	if out := runIn("app", toolsDir, otherDir); out != nothing {
+		t.Errorf("a lerd tool run from outside the site must load nothing, got %s", out)
+	}
+	if out := runIn("app", otherDir, siteDir); out != nothing {
+		t.Errorf("another project's script run from the site must load nothing, got %s", out)
 	}
 }
 

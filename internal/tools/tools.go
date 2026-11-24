@@ -318,10 +318,15 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
+// PharDir holds the on-demand tools, the PHP ones lerd runs inside a site.
+func PharDir() string {
+	return filepath.Join(config.DataDir(), "phars")
+}
+
 func binPath(name string) string {
 	// Off lerd's bin dir, which is on PATH: no host PHP runs a phar directly.
 	if OnDemand(name) {
-		return filepath.Join(config.DataDir(), "phars", name+".phar")
+		return filepath.Join(PharDir(), name+".phar")
 	}
 	switch name {
 	case "composer":
