@@ -12,7 +12,7 @@ This page covers getting a project registered and served: the init wizard, linki
 | `lerd unpark [dir]` | Remove a parked directory and unlink all its sites |
 | `lerd link [domain]` | Register the current directory as a site (domain name without TLD, defaults to directory name). On a fresh project in an interactive terminal it runs the `lerd init` wizard first |
 | `lerd unlink` | Unlink the current directory site (removes all domains) |
-| `lerd sites` | Table view of all registered sites |
+| `lerd sites` | Table view of all registered sites, with a Status column saying whether each one is running, stopped or paused |
 | `lerd sites:restore [backup]` | Put the site registry back from one of its automatic backups, showing what it would change and confirming first |
 | `lerd open [name]` | Open the site in the default browser |
 | `lerd code [name]` | Open the site's directory in the configured editor |

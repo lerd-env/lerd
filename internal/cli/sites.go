@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteinfo"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -29,7 +30,7 @@ func termWidth() int {
 }
 
 func runSites(_ *cobra.Command, _ []string) error {
-	sites, err := siteinfo.LoadAll(siteinfo.EnrichCLI)
+	sites, err := siteinfo.LoadAll(siteinfo.EnrichCLI | siteinfo.EnrichFPM)
 	if err != nil {
 		return err
 	}
@@ -99,6 +100,31 @@ type orderedSite struct {
 
 func pausedTag() string { return feedback.Amber("paused") }
 
+// sitesNginxRunningFn reports whether nginx is up; a seam so tests need no podman.
+var sitesNginxRunningFn = func() bool { return podman.Cache.Running("lerd-nginx") }
+
+// staticSite reports a site nginx serves on its own, with no PHP, container or
+// dev server behind it, so its state is nginx's rather than a PHP pool's.
+func staticSite(s siteinfo.EnrichedSite) bool {
+	return !s.UsesPHP && s.ContainerPort == 0 && s.HostPort == 0
+}
+
+// siteStatus says whether the site is being served. A paused site is stopped
+// on purpose, so it keeps its own word; stopped is red to stand out.
+func siteStatus(s siteinfo.EnrichedSite) string {
+	running := s.FPMRunning
+	if staticSite(s) {
+		running = sitesNginxRunningFn()
+	}
+	switch {
+	case s.Paused:
+		return pausedTag()
+	case running:
+		return feedback.Green("running")
+	}
+	return feedback.Red("stopped")
+}
+
 // siteRows renders a site as one main row plus a child row per alias domain and
 // worktree, the nested rows indented inside the first column so the grid keeps
 // its parent/child shape. wide adds the Name and Node columns (≥120 cols);
@@ -108,10 +134,7 @@ func siteRows(s siteinfo.EnrichedSite, grouped, wide bool) [][]string {
 	if s.Secured {
 		tls = "Yes"
 	}
-	status := ""
-	if s.Paused {
-		status = pausedTag()
-	}
+	status := siteStatus(s)
 
 	var rows [][]string
 	if wide {
@@ -144,12 +167,12 @@ func siteRows(s siteinfo.EnrichedSite, grouped, wide bool) [][]string {
 }
 
 // printSiteCompact prints a site as two indented lines (plus its aliases and
-// worktrees) for terminals too narrow for the table. grouped renders a group
-// secondary nested beneath its main.
+// worktrees) for terminals too narrow for the table, tagging only a site that
+// isn't running. grouped renders a group secondary nested beneath its main.
 func printSiteCompact(s siteinfo.EnrichedSite, grouped bool) {
 	status := ""
-	if s.Paused {
-		status = " [" + pausedTag() + "]"
+	if st := siteStatus(s); s.Paused || st != feedback.Green("running") {
+		status = " [" + st + "]"
 	}
 	tls := ""
 	if s.Secured {
