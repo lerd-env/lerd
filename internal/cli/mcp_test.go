@@ -795,10 +795,8 @@ func TestGlobalAISkills_followClaudeConfigDir(t *testing.T) {
 	}
 }
 
-// TestRenderClaudeSkill_frontmatterIsValidYAML keeps the generated SKILL.md
-// frontmatter parseable by strict YAML parsers. The description names things
-// like "MCP tools: run", so an unquoted plain scalar breaks them and tools
-// such as gh skill update skip the skill entirely.
+// TestRenderClaudeSkill_frontmatterIsValidYAML guards against unquoted colons
+// such as "MCP tools: run", which make strict YAML readers reject the skill.
 func TestRenderClaudeSkill_frontmatterIsValidYAML(t *testing.T) {
 	skill := renderClaudeSkill()
 	rest, ok := strings.CutPrefix(skill, "---\n")
