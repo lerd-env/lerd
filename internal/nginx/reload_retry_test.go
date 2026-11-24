@@ -233,3 +233,26 @@ func TestReload_UnknownContainerStateIsNotErrNotRunning(t *testing.T) {
 		t.Fatalf("expected the reload error, got %v", err)
 	}
 }
+
+// On macOS conf.d reaches nginx over the VM's shared folder, which briefly
+// reports a file just renamed over as missing, so the reload retries that.
+func TestReload_RetriesAMissingFileOnce(t *testing.T) {
+	origExec, origRunning := reloadExecFn, containerRunningFn
+	t.Cleanup(func() { reloadExecFn, containerRunningFn = origExec, origRunning })
+	n := 0
+	reloadExecFn = func() error {
+		n++
+		if n < 2 {
+			return errors.New(`open() "/etc/nginx/conf.d/blog.test.conf" failed (2: No such file or directory)`)
+		}
+		return nil
+	}
+	containerRunningFn = func(string) (bool, bool) { return true, true }
+
+	if err := Reload(); err != nil {
+		t.Fatalf("expected the retry to succeed, got %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("expected 2 attempts, got %d", n)
+	}
+}

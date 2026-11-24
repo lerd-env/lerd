@@ -1355,7 +1355,14 @@ func ServesVhostWrittenAt(mod time.Time) bool {
 }
 
 func Reload() error {
-	return withConfigDiagnostics(reloadOnce())
+	err := reloadOnce()
+	// On macOS conf.d reaches nginx over the VM's shared folder, which reports a
+	// file just renamed over as missing for a moment after the rename.
+	if err != nil && strings.Contains(err.Error(), "No such file or directory") {
+		time.Sleep(time.Second)
+		err = reloadOnce()
+	}
+	return withConfigDiagnostics(err)
 }
 
 func reloadOnce() error {
