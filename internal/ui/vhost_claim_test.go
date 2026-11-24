@@ -166,6 +166,26 @@ func TestVhostClaimNextStaysOnTheVhost(t *testing.T) {
 	}
 }
 
+// A browser follows the Location http.Redirect writes, which path-cleans what
+// safeClaimNext let through, so the header itself is what must stay local.
+func TestVhostClaimRedirectStaysOnTheVhost(t *testing.T) {
+	setupConfigDirRaw(t, "", "", true)
+	for next, want := range map[string]string{
+		"/./\\evil.example/":        "/",
+		"/a/../\\evil.example/":     "/",
+		"/a#/../\\evil.example/":    "/",
+		"/./\\evil.example/?x=1":    "/",
+		"/_svc/x/?c=App\\Models\\A": "/_svc/x/?c=App\\Models\\A",
+	} {
+		target := "/?" + vhostClaimParam + "=" + vhostClaims.issue() + "&next=" + url.QueryEscape(next)
+		rec := httptest.NewRecorder()
+		claimChain(&nextHandler{}).ServeHTTP(rec, viaVhost(http.MethodGet, target))
+		if got := rec.Header().Get("Location"); rec.Code != http.StatusFound || got != want {
+			t.Errorf("next=%q: code %d, Location %q, want %q", next, rec.Code, got, want)
+		}
+	}
+}
+
 // viaMachineVhost is the same relay on macOS: nginx runs in the podman VM and
 // reaches lerd-ui over TCP, which gvproxy hands over from a host address, with
 // the trust token instead of the unix socket.
