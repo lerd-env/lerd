@@ -2,8 +2,9 @@
   import SiteIcon from '$components/SiteIcon.svelte';
   import SiteIndicators from '$components/SiteIndicators.svelte';
   import Icon from '$components/Icon.svelte';
+  import StatusDot from '$components/StatusDot.svelte';
   import { goToTab } from '$stores/route';
-  import { openSiteInBrowser, type Site } from '$stores/sites';
+  import { openSiteInBrowser, siteDotColor, type Site } from '$stores/sites';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -61,8 +62,20 @@
           </svg>
         {/if}
       </div>
-      {#if subtitle}
-        <p class="text-[11px] leading-snug text-gray-500 dark:text-gray-400 truncate" title={subtitle}>{subtitle}</p>
+      <!-- Leads with the site's state the way a service tile does, so a stopped
+           site stands out. Paused sites have their own section and count. -->
+      {#if !site.paused || subtitle}
+        <p class="flex min-w-0 items-center gap-2 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+          {#if !site.paused}
+            <span class="flex shrink-0 items-center gap-1">
+              <StatusDot color={siteDotColor(site)} />
+              {site.fpm_running ? m.common_running() : m.common_stopped()}
+            </span>
+          {/if}
+          {#if subtitle}
+            <span class="truncate" title={subtitle}>{subtitle}</span>
+          {/if}
+        </p>
       {/if}
     </div>
   </button>

@@ -48,6 +48,35 @@ describe('SiteTile', () => {
     expect(container.querySelector('.opacity-60')).toBeTruthy();
   });
 
+  // A stopped site's icon is often its favicon or framework mark, which never
+  // changes, so the subline says whether PHP is serving it, as a service does.
+  it('leads the subline with Running when PHP is serving the site', () => {
+    const { getByText, container } = render(SiteTile, {
+      props: { site: site({ fpm_running: true, framework_label: 'Laravel', php_version: '8.5' }) }
+    });
+    expect(getByText('Running')).toBeTruthy();
+    expect(getByText('Laravel · PHP 8.5')).toBeTruthy();
+    expect(container.querySelector('.bg-emerald-500')).toBeTruthy();
+  });
+
+  it('says Stopped with a grey dot when PHP is not serving the site', () => {
+    const { getByText, queryByText, container } = render(SiteTile, {
+      props: { site: site({ fpm_running: false, php_version: '8.4' }) }
+    });
+    expect(getByText('Stopped')).toBeTruthy();
+    expect(queryByText('Running')).toBeNull();
+    expect(container.querySelector('.bg-gray-300')).toBeTruthy();
+  });
+
+  // Paused sites already sit in their own section with a count of their own.
+  it('shows no running state on a paused tile', () => {
+    const { queryByText } = render(SiteTile, {
+      props: { site: site({ paused: true, php_version: '8.5' }) }
+    });
+    expect(queryByText('Running')).toBeNull();
+    expect(queryByText('Stopped')).toBeNull();
+  });
+
   // The dashboard widget renders the same tile in a much narrower column, so
   // it asks for a tighter card rather than restyling the tile.
   it('tightens the card and the icon box when compact', () => {
