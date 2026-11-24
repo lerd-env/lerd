@@ -3,16 +3,16 @@ package siteops
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 )
 
-// RemoveWorktreeVhosts removes every worktree subdomain vhost belonging to the
-// given primary domain and returns the domains it removed. A conf whose domain
-// is a registered site of its own (a group secondary at <label>.<primary>) is
-// left alone: it matches the suffix scan but is not a worktree.
-func RemoveWorktreeVhosts(primaryDomain string) []string {
+// RemoveWorktreeVhosts removes a primary domain's worktree vhosts, except those
+// in keep, and returns the domains removed. A registered site's own subdomain
+// (a group secondary) matches the suffix scan but is left alone.
+func RemoveWorktreeVhosts(primaryDomain string, keep ...string) []string {
 	confD := config.NginxConfD()
 	entries, err := os.ReadDir(confD)
 	if err != nil {
@@ -25,6 +25,9 @@ func RemoveWorktreeVhosts(primaryDomain string) []string {
 			continue
 		}
 		domain := strings.TrimSuffix(e.Name(), ".conf")
+		if slices.Contains(keep, domain) {
+			continue
+		}
 		if _, err := config.FindSiteByDomain(domain); err == nil {
 			continue
 		}

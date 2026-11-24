@@ -1048,7 +1048,7 @@ func scanWorktrees() ([]func(), bool) {
 		// worktree any more — branch renames and detached→named transitions
 		// leave the previous name behind, and that orphan still routes to
 		// the same checkout, masking the new vhost.
-		if removeStaleWorktreeVhosts(&site, worktrees) {
+		if len(removeStaleWorktreeVhosts(&site, worktrees)) > 0 {
 			generated = true
 		}
 		if len(worktrees) == 0 {
@@ -1302,82 +1302,39 @@ func refreshFrankenPHPWorktreeMounts(site *config.Site) {
 	}
 }
 
-// cleanupWorktreeVhosts removes all subdomain vhosts for the given site's
-// domain, then re-generates for worktrees still on disk. Survivors keep their
-// .env; deps and APP_URL are handled by syncWorktree on add/rename, not here.
+// cleanupWorktreeVhosts drops the vhost, nginx override and certificate name of
+// every worktree no longer on disk. Survivors are left as they are: theirs may
+// be a proxy vhost or a paused page, which a rebuild here would lose.
 func cleanupWorktreeVhosts(site *config.Site) bool {
-	removed := siteops.RemoveWorktreeVhosts(site.PrimaryDomain())
-	worktrees, _ := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain())
-	// Drop the custom nginx override + backups for worktrees that are truly
-	// gone. removeWorktreeVhosts wipes every worktree vhost, so a survivor is
-	// any worktree still detected on disk; only the rest are pruned.
-	survivors := map[string]bool{}
-	for _, wt := range worktrees {
-		survivors[wt.Domain] = true
+	worktrees, err := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain())
+	if err != nil {
+		fmt.Printf("[WARN] reading worktrees of %s: %v\n", site.PrimaryDomain(), err)
+		return false
 	}
+	removed := removeStaleWorktreeVhosts(site, worktrees)
 	for _, domain := range removed {
-		if survivors[domain] {
-			continue
-		}
-		// Guard against a separately-registered site whose primary happens to
-		// be a subdomain of this one (e.g. app.test + admin.app.test): its
-		// vhost matches the suffix scan, but its override must not be deleted.
-		if _, err := config.FindSiteByDomain(domain); err == nil {
-			continue
-		}
 		_ = siteops.RemoveCustomNginxConfig(domain)
 	}
-	changed := len(removed) > 0
 	// Shrink the cert SAN list to just the surviving worktrees so removed
 	// branches drop their wildcard SAN.
 	if site.Secured {
-		if reissueErr := certs.ReissueCertForWorktree(*site); reissueErr != nil {
-			fmt.Printf("[WARN] reissue cert for %s: %v\n", site.PrimaryDomain(), reissueErr)
+		if err := certs.ReissueCertForWorktree(*site); err != nil {
+			fmt.Printf("[WARN] reissue cert for %s: %v\n", site.PrimaryDomain(), err)
+			return len(removed) > 0
 		}
+		return true
 	}
-	for _, wt := range worktrees {
-		effectivePHP := config.WorktreePHPVersion(wt.Path, site.PHPVersion)
-		var vhostErr error
-		if site.Secured {
-			vhostErr = nginx.GenerateWorktreeSSLVhost(wt.Domain, wt.Path, effectivePHP, site.PrimaryDomain(), site.Name, wt.Branch)
-		} else {
-			vhostErr = nginx.GenerateWorktreeVhost(wt.Domain, wt.Path, effectivePHP, site.Name, wt.Branch)
-		}
-		if vhostErr != nil {
-			fmt.Printf("[WARN] worktree vhost for %s: %v\n", wt.Domain, vhostErr)
-			continue
-		}
-		changed = true
-	}
-	return changed
+	return len(removed) > 0
 }
 
-func removeStaleWorktreeVhosts(site *config.Site, worktrees []gitpkg.Worktree) bool {
-	current := map[string]bool{}
-	for _, wt := range worktrees {
-		current[wt.Domain+".conf"] = true
+// removeStaleWorktreeVhosts removes the site's worktree vhosts that match none
+// of worktrees and returns their domains.
+func removeStaleWorktreeVhosts(site *config.Site, worktrees []gitpkg.Worktree) []string {
+	keep := make([]string, len(worktrees))
+	for i, wt := range worktrees {
+		keep[i] = wt.Domain
 	}
-	confD := config.NginxConfD()
-	entries, err := os.ReadDir(confD)
-	if err != nil {
-		return false
-	}
-	suffix := "." + site.PrimaryDomain() + ".conf"
-	changed := false
-	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), suffix) && !current[e.Name()] {
-			// A conf whose domain belongs to a separately-registered site (e.g. a
-			// group secondary at <label>.<primary>) is not a stale worktree vhost;
-			// leave it alone.
-			domain := strings.TrimSuffix(e.Name(), ".conf")
-			if _, err := config.FindSiteByDomain(domain); err == nil {
-				continue
-			}
-			_ = os.Remove(filepath.Join(confD, e.Name()))
-			changed = true
-		}
-	}
-	return changed
+	return siteops.RemoveWorktreeVhosts(site.PrimaryDomain(), keep...)
 }
 
 // removeStale removes registered sites whose paths no longer exist on disk.
