@@ -109,6 +109,7 @@ func TestDatabasesToCreateFollowsTheDefinitionsKeys(t *testing.T) {
 	}{
 		{"tests on SQLite", "sqlite:///:memory:", []string{"shop"}},
 		{"tests on the twin", "mysql://root:lerd@lerd-mysql:3306/shop_testing", []string{"shop", "shop_testing"}},
+		{"tests on the twin over loopback", "mysql://root:lerd@127.0.0.1:3306/shop_testing", []string{"shop", "shop_testing"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -134,5 +135,19 @@ func TestDatabasesToCreateFollowsTheDefinitionsKeys(t *testing.T) {
 				t.Errorf("DatabasesToCreate = %v, want %v", got, c.want)
 			}
 		})
+	}
+}
+
+// Under the native runtime lerd env points a site at its engine on loopback, so
+// a twin named in phpunit.xml must count whatever host the env carries.
+func TestDatabasesToCreateKeepsATwinReachedOverLoopback(t *testing.T) {
+	setConfigDir(t)
+	installStoreFramework(t, laravelShapedDef())
+	dir := t.TempDir()
+	writeProjectFile(t, dir, "shaped.lock", "")
+	writeProjectFile(t, dir, ".env", "DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_DATABASE=shop\n")
+	writeProjectFile(t, dir, "phpunit.xml", phpunitWith(`<env name="DB_DATABASE" value="shop_testing"/>`))
+	if got := DatabasesToCreate(dir, "shop", nil); !slices.Equal(got, []string{"shop", "shop_testing"}) {
+		t.Errorf("DatabasesToCreate = %v, want the twin the tests name", got)
 	}
 }

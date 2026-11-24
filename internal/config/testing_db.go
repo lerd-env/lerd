@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/geodro/lerd/internal/envfile"
 )
@@ -41,9 +42,34 @@ func TestingDatabaseWanted(projectDir, db string, env map[string]string) bool {
 		merged = map[string]string{}
 	}
 	maps.Copy(merged, overrides)
-	return slices.ContainsFunc(dbTargetsIn(projectDir, bindings, merged), func(t DBTarget) bool {
-		return t.Database == db+TestingDBSuffix
-	})
+	return slices.Contains(testDatabaseNames(bindings, merged), db+TestingDBSuffix)
+}
+
+// testDatabaseNames is every database name vals declare through the framework's
+// keys. It doesn't ask which host serves them: a native site reaches lerd's
+// engine on loopback, so a name is all the decision needs.
+func testDatabaseNames(bindings []dbServiceBinding, vals map[string]string) []string {
+	read := func(k string) string { return vals[k] }
+	var names []string
+	for _, b := range bindings {
+		if !serviceDetectedIn(b.detect, vals) {
+			continue
+		}
+		if b.URLKey == "" && b.NameKey == "" {
+			names = append(names, vals["DB_DATABASE"])
+			continue
+		}
+		names = append(names, b.Database(read))
+	}
+	if serverDBDriver(vals["DB_CONNECTION"]) {
+		names = append(names, vals["DB_DATABASE"])
+	}
+	for _, k := range []string{"DB_URL", "DATABASE_URL"} {
+		if v := vals[k]; v != "" && !strings.HasPrefix(v, "sqlite") {
+			names = append(names, DBNameInURL(v))
+		}
+	}
+	return names
 }
 
 // touchesDBKeys reports whether overrides set any key the framework reads its
