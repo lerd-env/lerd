@@ -105,7 +105,7 @@ func execProfilerReport(args map[string]any) (any, *rpcError) {
 	cmd := podman.Cmd(cmdArgs...)
 	cmd.Stdout = &out
 	cmd.Stderr = &out
-	runErr := cmd.Run()
+	runErr := runCall(cmd, container)
 
 	report := extractSpxReport(stripANSI(out.String()))
 	if !strings.Contains(report, "SPX Report") {

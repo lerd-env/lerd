@@ -22,7 +22,6 @@ import (
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/envpass"
-	"github.com/geodro/lerd/internal/execguard"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/grouping"
 	"github.com/geodro/lerd/internal/logsource"
@@ -173,7 +172,15 @@ func Serve() error {
 			continue
 		}
 
+		// A client that cancelled is no longer waiting for an answer.
+		id := string(*req.ID)
+		if !calls.begin(id) {
+			continue
+		}
 		result, rpcErr := dispatch(&req)
+		if calls.end(id) {
+			continue
+		}
 		resp := rpcResponse{JSONRPC: "2.0", ID: req.ID}
 		if rpcErr != nil {
 			resp.Error = rpcErr
@@ -207,6 +214,7 @@ func readRequests(r io.Reader, cancel func()) (<-chan []byte, *error) {
 		defer close(in)
 		defer cancel()
 		for scanner.Scan() {
+			noteCancelled(scanner.Bytes())
 			in <- append([]byte(nil), scanner.Bytes()...)
 		}
 		scanErr = scanner.Err()
@@ -458,7 +466,7 @@ func execArtisan(args map[string]any) (any, *rpcError) {
 	cmd := podman.Cmd(cmdArgs...)
 	cmd.Stdout = &out
 	cmd.Stderr = &out
-	if err := execguard.Run(sessionCtx, cmd, container); err != nil {
+	if err := runCall(cmd, container); err != nil {
 		return toolErr(fmt.Sprintf("artisan failed (%v):\n%s", err, stripANSI(out.String()))), nil
 	}
 	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
@@ -1008,7 +1016,7 @@ func execComposer(args map[string]any) (any, *rpcError) {
 	cmd := podman.Cmd(cmdArgs...)
 	cmd.Stdout = &out
 	cmd.Stderr = &out
-	if err := cmd.Run(); err != nil {
+	if err := runCall(cmd, container); err != nil {
 		return toolErr(fmt.Sprintf("composer failed (%v):\n%s", err, stripANSI(out.String()))), nil
 	}
 	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
@@ -1096,7 +1104,7 @@ func execVendorRun(args map[string]any) (any, *rpcError) {
 	cmd := podman.Cmd(cmdArgs...)
 	cmd.Stdout = &out
 	cmd.Stderr = &out
-	if err := cmd.Run(); err != nil {
+	if err := runCall(cmd, container); err != nil {
 		return toolErr(fmt.Sprintf("vendor/bin/%s failed (%v):\n%s", bin, err, stripANSI(out.String()))), nil
 	}
 	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
@@ -3167,8 +3175,11 @@ func execCommandsRun(args map[string]any) (any, *rpcError) {
 	cmd := exec.Command("sh", "-c", target.Command)
 	cmd.Dir = cwd
 	cmd.Env = hostCommandEnv()
-	out, runErr := cmd.CombinedOutput()
-	body := string(out)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	runErr := runCall(cmd, "")
+	body := out.String()
 	if runErr != nil {
 		if ee, ok := runErr.(*exec.ExitError); ok {
 			return toolErr(fmt.Sprintf("exit %d:\n%s", ee.ExitCode(), body)), nil
@@ -3909,7 +3920,7 @@ func runComposerInstallIfNeeded(projectPath string, out *bytes.Buffer) error {
 	cmd := podman.Cmd(composerExecArgs(container, projectPath, nil, []string{"install", "--no-interaction"})...)
 	cmd.Stdout = out
 	cmd.Stderr = out
-	return cmd.Run()
+	return runCall(cmd, container)
 }
 
 // execSetup runs every Default: true entry in the site framework's Setup list
@@ -3956,6 +3967,9 @@ func execSetup(args map[string]any) (any, *rpcError) {
 	var out bytes.Buffer
 	ran, skipped, failed := 0, 0, 0
 	for _, step := range fw.Setup {
+		if calls.context().Err() != nil {
+			return toolErr("setup cancelled:\n" + stripANSI(strings.TrimSpace(out.String()))), nil
+		}
 		if !step.Default {
 			skipped++
 			continue
@@ -3976,7 +3990,7 @@ func execSetup(args map[string]any) (any, *rpcError) {
 			cmd := podman.Cmd(append([]string{"exec", "-i", "-w", projectPath, container}, parts...)...)
 			cmd.Stdout = &out
 			cmd.Stderr = &out
-			runErr = cmd.Run()
+			runErr = runCall(cmd, container)
 		}
 		if err := runErr; err != nil {
 			fmt.Fprintf(&out, "[WARN] %s failed: %v\n", step.Label, err)

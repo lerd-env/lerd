@@ -132,6 +132,10 @@ PHP runs inside the container, so the AI agent environment variables your coding
 
 Commands the `exec` MCP tool runs (`artisan`, `composer`, `vendor_run` for Pest/PHPUnit) go a step further: because reaching them through the MCP server proves an agent is driving the command, lerd injects a neutral `AI_AGENT=lerd-mcp` marker when no real agent variable is present. Pao therefore returns JSON for MCP-originated test runs even if the host environment carries nothing, while a real agent variable is still forwarded as-is when it exists. Manual terminal runs are never given the marker, so their output is unchanged.
 
+### Cancelling a run
+
+A run an assistant starts through `exec` ends with the call that started it. When the client cancels the call or closes the session, the run is stopped with everything it started, the browsers of a Pest browser test included. Profiling runs and `framework` `setup` steps stop the same way. Database, service and worktree operations are not interrupted partway.
+
 ### Running your framework's own MCP server
 
 This is separate from lerd's MCP server. Some frameworks ship their own local MCP server, started as a console command — Laravel MCP does, and it is what [Laravel Boost](https://github.com/laravel/boost) builds on. Such a server has to run where the application runs: started from the host it resolves `lerd-mysql` or `lerd-redis` against nothing, and you end up maintaining a second set of host-only `.env` values just to keep it alive.
