@@ -58,6 +58,8 @@ Context / instructions files:
 
 All clients share a single canonical tool reference, so the guidance never drifts between assistants. When running globally, the server uses the **directory the assistant is opened in** as the site context: no further configuration is needed.
 
+> **Valid YAML frontmatter:** the Claude skill's `description` is written as a quoted string because the text itself contains colons, so strict readers such as `gh skill update` can parse the file. Skills written by older releases carry the unquoted form, which those readers reject; the next `lerd update` rewrites them in place, and `lerd mcp:enable-global` refreshes on demand.
+
 > **Claude Code** is registered via its own `claude mcp add` CLI rather than by editing `~/.claude.json` directly, since that file holds all of Claude's user state. If you run Claude Code under a separate profile with `CLAUDE_CONFIG_DIR` set, run `lerd mcp:enable-global` from a shell where it is set: the skill then goes to `$CLAUDE_CONFIG_DIR/skills/lerd/SKILL.md` and the registration to that profile. Repeat it once per profile.
 
 > **GitHub Copilot** uses VS Code's `servers` key (each entry typed `stdio`), which differs from the `mcpServers` key the other clients use. Its instructions file (`.github/copilot-instructions.md`) is project-scoped only.
