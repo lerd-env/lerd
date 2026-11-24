@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -739,7 +740,7 @@ const cursorDescription = "Lerd local PHP development environment — use the le
 
 // renderClaudeSkill wraps the reference with Claude Code skill frontmatter.
 func renderClaudeSkill() string {
-	return "---\nname: lerd\ndescription: " + skillDescription + "\n---\n" + lerdReference
+	return "---\nname: lerd\ndescription: " + strconv.Quote(skillDescription) + "\n---\n" + lerdReference
 }
 
 // renderCursorRules wraps the reference with Cursor .mdc frontmatter.

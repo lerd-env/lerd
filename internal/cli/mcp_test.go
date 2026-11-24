@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/geodro/lerd/internal/mcp"
 	"github.com/geodro/lerd/internal/plugins"
 )
@@ -790,5 +792,34 @@ func TestGlobalAISkills_followClaudeConfigDir(t *testing.T) {
 	}
 	if _, err := os.Stat(skill); !os.IsNotExist(err) {
 		t.Errorf("skill under CLAUDE_CONFIG_DIR not removed (err=%v)", err)
+	}
+}
+
+// TestRenderClaudeSkill_frontmatterIsValidYAML keeps the generated SKILL.md
+// frontmatter parseable by strict YAML parsers. The description names things
+// like "MCP tools: run", so an unquoted plain scalar breaks them and tools
+// such as gh skill update skip the skill entirely.
+func TestRenderClaudeSkill_frontmatterIsValidYAML(t *testing.T) {
+	skill := renderClaudeSkill()
+	rest, ok := strings.CutPrefix(skill, "---\n")
+	if !ok {
+		t.Fatal("SKILL.md does not start with frontmatter")
+	}
+	end := strings.Index(rest, "\n---")
+	if end < 0 {
+		t.Fatal("frontmatter is never closed")
+	}
+	var meta struct {
+		Name        string `yaml:"name"`
+		Description string `yaml:"description"`
+	}
+	if err := yaml.Unmarshal([]byte(rest[:end]), &meta); err != nil {
+		t.Fatalf("frontmatter is not valid YAML: %v", err)
+	}
+	if meta.Name != "lerd" {
+		t.Errorf("frontmatter name is %q, want lerd", meta.Name)
+	}
+	if meta.Description != skillDescription {
+		t.Errorf("quoted description does not round-trip the text")
 	}
 }
