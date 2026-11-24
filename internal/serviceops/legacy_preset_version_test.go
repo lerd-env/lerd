@@ -24,6 +24,7 @@ func writeVersionedDocDB(t *testing.T) {
 		"  - tag: \"7\"\n    image: docker.io/library/docdb:7\n    canonical: true\n    host_port: 27017\n" +
 		"  - tag: \"9\"\n    image: docker.io/library/docdb:9\n    host_port: 27017\n" +
 		"ports:\n  - \"{{host_port}}:27017\"\n" +
+		"environment:\n  DOC_ADVERTISED: lerd-{{name}}:27017\n" +
 		"env_vars:\n  - DOC_HOST=lerd-{{name}}\n" +
 		"connection_url: doc://127.0.0.1:{{host_port}}/\n"
 	if err := os.WriteFile(filepath.Join(dir, "docdb.yaml"), []byte(body), 0o644); err != nil {
@@ -38,6 +39,7 @@ func legacyDocDB() *config.CustomService {
 		Preset:        "docdb",
 		Image:         "docker.io/library/docdb:7",
 		Ports:         []string{"27017:27017"},
+		Environment:   map[string]string{"DOC_ADVERTISED": "lerd-docdb:27017"},
 		EnvVars:       []string{"DOC_HOST=lerd-docdb"},
 		ConnectionURL: "doc://127.0.0.1:27017/",
 	}
@@ -92,8 +94,31 @@ func TestRefreshPresetDefinition_recordsTheCanonicalVersionOnASingleImageInstall
 		t.Errorf("env must still name the bare service, got %v", fresh.EnvVars)
 	}
 
+	if got := fresh.Environment["DOC_ADVERTISED"]; got != "lerd-docdb:27017" {
+		t.Errorf("the container environment must still name the bare service, got %q", got)
+	}
+
 	if _, again := refreshPresetDefinition(fresh); again {
 		t.Error("once recorded, the next refresh must be a no-op")
+	}
+}
+
+func TestRefreshPresetDefinition_anAlternateNamesItselfInItsEnvironment(t *testing.T) {
+	reconcileEnv(t)
+	writeVersionedDocDB(t)
+	// Installed by a lerd that wrote the placeholder out as text.
+	installed := &config.CustomService{
+		Name: "docdb-9", Preset: "docdb", PresetVersion: "9",
+		Image:       "docker.io/library/docdb:9",
+		Environment: map[string]string{"DOC_ADVERTISED": "lerd-{{name}}:27017"},
+	}
+
+	fresh, changed := refreshPresetDefinition(installed)
+	if got := fresh.Environment["DOC_ADVERTISED"]; !changed || got != "lerd-docdb-9:27017" {
+		t.Fatalf("want the alternate's own host, got changed=%v %q", changed, got)
+	}
+	if _, again := refreshPresetDefinition(fresh); again {
+		t.Error("the next refresh must be a no-op")
 	}
 }
 

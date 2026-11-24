@@ -45,7 +45,7 @@ func StoreHost() string {
 // to 1.35.0 computes that URL for itself and cannot be taught another, so it has
 // to keep meaning what those binaries expect. A newer schema lives under its own
 // prefix, which only a binary that knows the schema asks for.
-const StoreSchema = 3
+const StoreSchema = 4
 
 // schemaBases lists a store's trees from the given schema down to the
 // unprefixed path, which is schema 1 and has no prefix of its own.

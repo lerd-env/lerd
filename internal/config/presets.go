@@ -373,13 +373,9 @@ func SanitizeImageTag(tag string) string {
 	return strings.Trim(b.String(), "-")
 }
 
-// Resolve materialises the preset into a concrete CustomService for the picked
-// version. For single-version presets the embedded CustomService is returned
-// as-is and version is ignored. For multi-version presets, version names a tag
-// in Versions; an empty version selects DefaultVersion. The resolved service's
-// Name is "<family>-<sanitized-tag>" and its Image is taken from the version
-// entry. EnvVars and ConnectionURL are scanned for {{tag}} and {{tag_safe}}
-// placeholders so the family-shared template can reference the picked tag.
+// Resolve builds the service for the picked version, DefaultVersion when empty,
+// named "<family>-<sanitized-tag>" unless canonical (see materialise). A preset
+// without versions is returned as-is and version is ignored.
 func (p *Preset) Resolve(version string) (*CustomService, error) {
 	if len(p.Versions) == 0 {
 		svc := p.CustomService
@@ -505,7 +501,8 @@ func (p *Preset) ResolvePinned(tag string) (*CustomService, error) {
 }
 
 // materialise builds the service for one picked version under the given name,
-// filling the {{name}}, {{tag}}, {{tag_safe}} and {{host_port}} placeholders.
+// filling the {{name}}, {{tag}}, {{tag_safe}} and {{host_port}} placeholders in
+// its ports, environment, env_vars, connection_url and dashboard.
 func (p *Preset) materialise(picked *PresetVersion, name string, hostPort int) *CustomService {
 	safe := SanitizeImageTag(picked.Tag)
 	svc := p.CustomService
@@ -538,6 +535,14 @@ func (p *Preset) materialise(picked *PresetVersion, name string, hostPort int) *
 			out[i] = repl.Replace(kv)
 		}
 		svc.EnvVars = out
+	}
+	if len(svc.Environment) > 0 {
+		// A fresh map: svc shares the preset's own, which the next version resolves from.
+		out := make(map[string]string, len(svc.Environment))
+		for k, v := range svc.Environment {
+			out[k] = repl.Replace(v)
+		}
+		svc.Environment = out
 	}
 	if svc.ConnectionURL != "" {
 		svc.ConnectionURL = repl.Replace(svc.ConnectionURL)

@@ -152,6 +152,19 @@ which case it moves once more rather than fail to start (on Linux; on macOS a re
 canonical port. `lerd service port <service> <port>` overrides the assignment,
 and `lerd service expose <service> <other:3306>` adds an extra mapping.
 
+### Version placeholders
+
+A preset with a `versions:` list is one template shared by every version, and lerd fills these placeholders in its `ports`, `environment`, `env_vars`, `connection_url` and `dashboard` when a version is installed:
+
+| Placeholder | Filled with |
+|---|---|
+| <code v-pre>{{name}}</code> | the service name, bare for the canonical version and `<family>-<sanitized-tag>` for the rest |
+| <code v-pre>{{tag}}</code> | the picked version's tag, such as `4.4` |
+| <code v-pre>{{tag_safe}}</code> | the same tag as it appears in a service name, such as `4-4` |
+| <code v-pre>{{host_port}}</code> | the host port the version declares, before any collision shift |
+
+A service that has to know its own address writes it as <code v-pre>lerd-{{name}}</code>, so a second version points at itself rather than at the canonical container. A preset without a `versions:` list is not filled. Placeholders in `environment` need schema 4 of the service store, since an older binary passes them to the container as plain text.
+
 ### Canonical version pinning
 
 Each default-preset install records which version's tag was canonical at install time in `~/.config/lerd/config.yaml` under `services.<name>.canonical_version`. That pin survives future canonical flips in the bundled YAML: when a later lerd release promotes (say) `postgres 18` to canonical, existing installs whose pin says `16` continue to resolve against 16 and keep their bare service name. New installs land on whatever the YAML currently calls canonical and get pinned to that.

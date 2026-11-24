@@ -1252,6 +1252,63 @@ func TestPresetResolvePinned_KeepsBareName(t *testing.T) {
 	t.Errorf("expected DB_HOST=lerd-postgres in pinned env_vars, got %v", svc.EnvVars)
 }
 
+// A broker advertises its own container name, so every version of the preset has
+// to name itself rather than the canonical install.
+func brokerPreset() *Preset {
+	return &Preset{
+		CustomService: CustomService{
+			Name: "broker",
+			Environment: map[string]string{
+				"ADVERTISED": "PLAINTEXT://lerd-{{name}}:9092",
+				"RELEASE":    "{{tag}}/{{tag_safe}}/{{host_port}}",
+				"FOREIGN":    "{{site}} {{.Value}}",
+			},
+		},
+		DefaultVersion: "4.3",
+		Versions: []PresetVersion{
+			{Tag: "4.3", Image: "example/broker:4.3", Canonical: true, HostPort: 9092},
+			{Tag: "4.4", Image: "example/broker:4.4", HostPort: 9094},
+		},
+	}
+}
+
+func TestPresetResolve_FillsEnvironmentPlaceholders(t *testing.T) {
+	p := brokerPreset()
+	// The alternate resolves first: a fill written into the preset's own map
+	// would leave its name behind for the canonical that follows.
+	for _, want := range []struct{ tag, host, release string }{
+		{"4.4", "lerd-broker-4-4", "4.4/4-4/9094"},
+		{"4.3", "lerd-broker", "4.3/4-3/9092"},
+	} {
+		svc, err := p.Resolve(want.tag)
+		if err != nil {
+			t.Fatalf("Resolve(%s): %v", want.tag, err)
+		}
+		if got := svc.Environment["ADVERTISED"]; got != "PLAINTEXT://"+want.host+":9092" {
+			t.Errorf("%s ADVERTISED = %q, want host %s", want.tag, got, want.host)
+		}
+		if got := svc.Environment["RELEASE"]; got != want.release {
+			t.Errorf("%s RELEASE = %q, want %q", want.tag, got, want.release)
+		}
+		if got := svc.Environment["FOREIGN"]; got != "{{site}} {{.Value}}" {
+			t.Errorf("%s: text that is not a preset placeholder must stay, got %q", want.tag, got)
+		}
+	}
+	if got := p.Environment["ADVERTISED"]; got != "PLAINTEXT://lerd-{{name}}:9092" {
+		t.Errorf("resolving must not write into the preset, got %q", got)
+	}
+}
+
+func TestPresetResolvePinned_EnvironmentKeepsBareName(t *testing.T) {
+	svc, err := brokerPreset().ResolvePinned("4.4")
+	if err != nil {
+		t.Fatalf("ResolvePinned: %v", err)
+	}
+	if got := svc.Environment["ADVERTISED"]; got != "PLAINTEXT://lerd-broker:9092" {
+		t.Errorf("a pinned canonical must name its bare container, got %q", got)
+	}
+}
+
 func TestPresetResolvePinned_UnknownTag(t *testing.T) {
 	p, err := LoadPreset("postgres")
 	if err != nil {
