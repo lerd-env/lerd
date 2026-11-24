@@ -502,7 +502,7 @@ func (e *EnrichedSite) enrichVersions(s config.Site, fw *config.Framework, hasFw
 		if hasFw && !fw.VersionGuessed {
 			phpMin, phpMax = fw.PHP.Min, fw.PHP.Max
 		}
-		detected := phpPkg.DetectVersionClamped(s.Path, phpMin, phpMax, s.PHPVersion)
+		detected := phpPkg.DetectVersionKeeping(s.Path, phpMin, phpMax, s.PHPVersion)
 		if detected != s.PHPVersion {
 			e.PHPVersion = detected
 			e.PHPVersionChanged = true

@@ -117,11 +117,8 @@ func resolvePauseSite(args []string) (*config.Site, error) {
 }
 
 func pauseSiteVersion(site *config.Site) string {
-	if d, err := phpDet.DetectVersion(site.Path); err == nil && d != "" {
+	if d := phpDet.SiteVersion(site.Path, site.PHPVersion); d != "" {
 		return d
-	}
-	if site.PHPVersion != "" {
-		return site.PHPVersion
 	}
 	if cfg, err := config.LoadGlobal(); err == nil {
 		return cfg.PHP.DefaultVersion

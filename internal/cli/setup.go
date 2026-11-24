@@ -742,7 +742,7 @@ func siteHasStripeSecret(cwd string) bool {
 // composerInContainer runs composer inside the project's PHP-FPM container,
 // ensuring the correct PHP version is used for dependency resolution.
 func composerInContainer(dir string, args ...string) error {
-	version, err := phpDet.DetectVersion(dir)
+	version, err := phpDet.VersionForDir(dir)
 	if err != nil {
 		cfg, _ := config.LoadGlobal()
 		version = cfg.PHP.DefaultVersion
@@ -803,7 +803,7 @@ func frameworkInstallStep(cwd string, fw *config.Framework) (setupStep, bool) {
 }
 
 func execInContainer(dir, command string) error {
-	version, err := phpDet.DetectVersion(dir)
+	version, err := phpDet.VersionForDir(dir)
 	if err != nil {
 		cfg, _ := config.LoadGlobal()
 		version = cfg.PHP.DefaultVersion

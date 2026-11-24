@@ -245,9 +245,7 @@ func UnpauseSite(name string) error {
 			}
 		}
 	default:
-		if detected, err := phpDet.DetectVersion(site.Path); err == nil && detected != "" {
-			phpVersion = detected
-		}
+		phpVersion = phpDet.SiteVersion(site.Path, phpVersion)
 
 		if site.IsCustomFPM() {
 			// Per-site FPM container; the shared lerd-php<ver>-fpm is not used.

@@ -670,10 +670,7 @@ func execReverbStart(args map[string]any) (any, *rpcError) {
 	if errResp != nil {
 		return errResp, nil
 	}
-	phpVersion := site.PHPVersion
-	if detected, err := phpDet.DetectVersion(site.Path); err == nil && detected != "" {
-		phpVersion = detected
-	}
+	phpVersion := phpDet.SiteVersion(site.Path, site.PHPVersion)
 	// A custom-FPM site runs its own image, so the unit binds to and execs into
 	// the per-site container rather than the shared one it is never served by.
 	fpmUnit := podman.FPMContainerName(*site, phpVersion)
@@ -734,10 +731,7 @@ func execHorizonStart(args map[string]any) (any, *rpcError) {
 	if readErr != nil || !strings.Contains(string(composerData), `"laravel/horizon"`) {
 		return toolErr("laravel/horizon is not installed in " + siteName), nil
 	}
-	phpVersion := site.PHPVersion
-	if detected, err := phpDet.DetectVersion(site.Path); err == nil && detected != "" {
-		phpVersion = detected
-	}
+	phpVersion := phpDet.SiteVersion(site.Path, site.PHPVersion)
 	// A custom-FPM site runs its own image, so the unit binds to and execs into
 	// the per-site container rather than the shared one it is never served by.
 	fpmUnit := podman.FPMContainerName(*site, phpVersion)
@@ -793,10 +787,7 @@ func execScheduleStart(args map[string]any) (any, *rpcError) {
 	if errResp != nil {
 		return errResp, nil
 	}
-	phpVersion := site.PHPVersion
-	if detected, err := phpDet.DetectVersion(site.Path); err == nil && detected != "" {
-		phpVersion = detected
-	}
+	phpVersion := phpDet.SiteVersion(site.Path, site.PHPVersion)
 	// A custom-FPM site runs its own image, so the unit binds to and execs into
 	// the per-site container rather than the shared one it is never served by.
 	fpmUnit := podman.FPMContainerName(*site, phpVersion)

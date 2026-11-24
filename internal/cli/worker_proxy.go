@@ -32,10 +32,7 @@ func regenNginxVhost(siteName, sitePath string) {
 		return
 	}
 
-	phpVer := site.PHPVersion
-	if detected, detErr := phpDet.DetectVersion(sitePath); detErr == nil && detected != "" {
-		phpVer = detected
-	}
+	phpVer := phpDet.SiteVersion(sitePath, site.PHPVersion)
 	var vhostErr error
 	if site.Secured {
 		if vhostErr = nginx.GenerateSSLVhost(*site, phpVer); vhostErr == nil {

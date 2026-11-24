@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -82,6 +83,12 @@ func SiteUsesPHP(s config.Site) bool {
 //  3. composer.json require.php semver (project requirement)
 //  4. global config default
 func DetectVersion(dir string) (string, error) {
+	return detectVersion(dir, "")
+}
+
+// detectVersion is DetectVersion, except that keep, when composer.json still
+// allows it and the runtime can serve it, beats the newest installed match.
+func detectVersion(dir, keep string) (string, error) {
 	// 1. .lerd.yaml, with .lerd.local.yaml over it — an explicit lerd override
 	//    takes top priority
 	if cfg, err := config.LoadProjectConfig(dir); err == nil && cfg.PHPVersion != "" {
@@ -117,6 +124,9 @@ func DetectVersion(dir string) (string, error) {
 		}
 		if json.Unmarshal(data, &composer) == nil {
 			if phpConstraint, ok := composer.Require["php"]; ok {
+				if keepable(keep, phpConstraint) {
+					return keep, nil
+				}
 				if v := bestInstalledVersion(phpConstraint); v != "" {
 					return v, nil
 				}
@@ -146,6 +156,36 @@ func DetectVersionClamped(dir, phpMin, phpMax, fallback string) string {
 		v = ClampToRange(v, phpMin, phpMax)
 	}
 	return v
+}
+
+// DetectVersionKeeping is DetectVersionClamped for a site already being
+// served on current: a newer PHP its composer.json allows doesn't move it, an
+// explicit pin, a constraint that rules current out or an uninstall does.
+func DetectVersionKeeping(dir, phpMin, phpMax, current string) string {
+	v, err := detectVersion(dir, current)
+	if err != nil {
+		v = current
+	}
+	if phpMin != "" || phpMax != "" {
+		v = ClampToRange(v, phpMin, phpMax)
+	}
+	return v
+}
+
+// SiteVersion is the PHP version an existing site at dir runs on: current,
+// unless its files now ask for another, with no framework clamp applied.
+func SiteVersion(dir, current string) string {
+	return DetectVersionKeeping(dir, "", "", current)
+}
+
+// keepable reports whether version satisfies constraint and is installed for
+// the active runtime, so a site on it can stay there.
+func keepable(version, constraint string) bool {
+	if version == "" || !satisfiesConstraint(version, constraint) {
+		return false
+	}
+	installed, err := InstalledForRuntimeFn()
+	return err == nil && slices.Contains(installed, version)
 }
 
 // ClampToRange checks if version falls within [min, max] and returns the best
@@ -224,7 +264,7 @@ func parseComposerPHP(constraint string) string {
 // bestInstalledVersion returns the highest PHP version the active runtime can
 // serve that satisfies the given composer constraint, or "" if none match.
 func bestInstalledVersion(constraint string) string {
-	installed, err := InstalledForRuntime()
+	installed, err := InstalledForRuntimeFn()
 	if err != nil || len(installed) == 0 {
 		return ""
 	}
@@ -415,7 +455,7 @@ func SatisfiesAll(version string, constraints ...string) bool {
 // BestInstalledFor returns the newest version the active runtime can serve
 // that satisfies every constraint, or "" when none does.
 func BestInstalledFor(constraints ...string) string {
-	installed, err := InstalledForRuntime()
+	installed, err := InstalledForRuntimeFn()
 	if err != nil {
 		return ""
 	}

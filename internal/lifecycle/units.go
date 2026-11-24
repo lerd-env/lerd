@@ -284,7 +284,7 @@ func ActivePHPVersions() map[string]bool {
 				phpMin, phpMax = fw.PHP.Min, fw.PHP.Max
 			}
 		}
-		v := phpPkg.DetectVersionClamped(s.Path, phpMin, phpMax, s.PHPVersion)
+		v := phpPkg.DetectVersionKeeping(s.Path, phpMin, phpMax, s.PHPVersion)
 		if v != "" {
 			active[v] = true
 		}

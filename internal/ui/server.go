@@ -4468,12 +4468,9 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "horizon:start":
-		phpVersion := site.PHPVersion
-		if detected, err := phpPkg.DetectVersion(site.Path); err == nil && detected != "" {
-			phpVersion = detected
-		}
-		go cli.StartFrameworkWorker(site.Name, site.Path, phpVersion, "horizon") //nolint:errcheck
-		go syncLerdYAMLWorkersDelayed(site)
+		phpVersion := phpPkg.SiteVersion(site.Path, site.PHPVersion)
+		go startFrameworkWorkerFn(site.Name, site.Path, phpVersion, "horizon") //nolint:errcheck
+		go syncWorkersLaterFn(site)
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "horizon:stop":
@@ -4488,10 +4485,7 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		return
 	case "horizon:reload":
 		enabled := r.URL.Query().Get("enabled") == "true"
-		phpVersion := site.PHPVersion
-		if detected, err := phpPkg.DetectVersion(site.Path); err == nil && detected != "" {
-			phpVersion = detected
-		}
+		phpVersion := phpPkg.SiteVersion(site.Path, site.PHPVersion)
 		if err := cli.ApplyWorkerReload(site.Name, site.Path, phpVersion, "horizon", enabled); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
@@ -4507,10 +4501,7 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		return
 	case "octane:reload":
 		enabled := r.URL.Query().Get("enabled") == "true"
-		phpVersion := site.PHPVersion
-		if detected, err := phpPkg.DetectVersion(site.Path); err == nil && detected != "" {
-			phpVersion = detected
-		}
+		phpVersion := phpPkg.SiteVersion(site.Path, site.PHPVersion)
 		if err := cli.ApplyOctaneReload(site.Name, site.Path, phpVersion, enabled); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
@@ -4525,12 +4516,9 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "queue:start":
-		phpVersion := site.PHPVersion
-		if detected, err := phpPkg.DetectVersion(site.Path); err == nil && detected != "" {
-			phpVersion = detected
-		}
-		go cli.StartFrameworkWorker(site.Name, site.Path, phpVersion, "queue") //nolint:errcheck
-		go syncLerdYAMLWorkersDelayed(site)
+		phpVersion := phpPkg.SiteVersion(site.Path, site.PHPVersion)
+		go startFrameworkWorkerFn(site.Name, site.Path, phpVersion, "queue") //nolint:errcheck
+		go syncWorkersLaterFn(site)
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "queue:stop":
@@ -4549,7 +4537,7 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			scheme = "https"
 		}
 		go cli.StripeStartForSite(site.Name, site.Path, scheme+"://"+site.PrimaryDomain()) //nolint:errcheck
-		go syncLerdYAMLWorkersDelayed(site)
+		go syncWorkersLaterFn(site)
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "stripe:stop":
@@ -4594,12 +4582,9 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "schedule:start":
-		phpVersion := site.PHPVersion
-		if detected, err := phpPkg.DetectVersion(site.Path); err == nil && detected != "" {
-			phpVersion = detected
-		}
-		go cli.StartFrameworkWorker(site.Name, site.Path, phpVersion, "schedule") //nolint:errcheck
-		go syncLerdYAMLWorkersDelayed(site)
+		phpVersion := phpPkg.SiteVersion(site.Path, site.PHPVersion)
+		go startFrameworkWorkerFn(site.Name, site.Path, phpVersion, "schedule") //nolint:errcheck
+		go syncWorkersLaterFn(site)
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "schedule:stop":
@@ -4613,12 +4598,9 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "reverb:start":
-		phpVersion := site.PHPVersion
-		if detected, err := phpPkg.DetectVersion(site.Path); err == nil && detected != "" {
-			phpVersion = detected
-		}
-		go cli.StartFrameworkWorker(site.Name, site.Path, phpVersion, "reverb") //nolint:errcheck
-		go syncLerdYAMLWorkersDelayed(site)
+		phpVersion := phpPkg.SiteVersion(site.Path, site.PHPVersion)
+		go startFrameworkWorkerFn(site.Name, site.Path, phpVersion, "reverb") //nolint:errcheck
+		go syncWorkersLaterFn(site)
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "reverb:stop":
@@ -5004,10 +4986,7 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 					writeJSON(w, SiteActionResponse{Error: "invalid request body"})
 					return
 				}
-				phpVersion := site.PHPVersion
-				if detected, err := phpPkg.DetectVersion(site.Path); err == nil && detected != "" {
-					phpVersion = detected
-				}
+				phpVersion := phpPkg.SiteVersion(site.Path, site.PHPVersion)
 				if err := cli.ApplyWorkerOptions(site.Name, site.Path, phpVersion, parts[1], body.Values); err != nil {
 					writeJSON(w, SiteActionResponse{Error: err.Error()})
 					return
@@ -5070,15 +5049,12 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 						writeJSON(w, SiteActionResponse{Error: "worker " + workerName + " not defined for this framework"})
 						return
 					}
-					phpVersion := site.PHPVersion
-					if detected, err := phpPkg.DetectVersion(targetPath); err == nil && detected != "" {
-						phpVersion = detected
-					}
+					phpVersion := phpPkg.SiteVersion(targetPath, site.PHPVersion)
 					// WorkerStartForSite appends the worktree suffix when
 					// sitePath != site.Path — pass parent name + worktree path.
 					go cli.WorkerStartForSite(site.Name, targetPath, phpVersion, workerName, worker, branch == "") //nolint:errcheck
 					if branch == "" {
-						go syncLerdYAMLWorkersDelayed(site)
+						go syncWorkersLaterFn(site)
 					}
 				}
 				writeJSON(w, SiteActionResponse{OK: true})
@@ -7403,6 +7379,12 @@ func streamSteps(w http.ResponseWriter, run func(io.Writer) (string, error), rep
 }
 
 // syncLerdYAMLWorkersDelayed waits briefly for the worker unit to start, then syncs.
+// Seams for the dashboard's worker starts, which hand off to goroutines.
+var (
+	startFrameworkWorkerFn = cli.StartFrameworkWorker
+	syncWorkersLaterFn     = syncLerdYAMLWorkersDelayed
+)
+
 func syncLerdYAMLWorkersDelayed(site *config.Site) {
 	time.Sleep(2 * time.Second)
 	if !site.Paused {
