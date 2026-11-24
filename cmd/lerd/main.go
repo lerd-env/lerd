@@ -779,7 +779,7 @@ func newWatchCmd() *cobra.Command {
 										phpMin, phpMax = fw.PHP.Min, fw.PHP.Max
 									}
 								}
-								detected := phpDet.DetectVersionClamped(sitePath, phpMin, phpMax, site.PHPVersion)
+								detected := phpDet.DetectVersionKeeping(sitePath, phpMin, phpMax, site.PHPVersion)
 								if !acceptDetectedPHP(site.Name, site.PHPVersion, detected, phpDet.IsInstalled, os.Stdout) {
 									detected = site.PHPVersion
 								}
