@@ -54,6 +54,8 @@ The wrapper runs `git worktree remove` and, when needed, falls back interactivel
 
 After git succeeds the wrapper asks whether to delete the worktree's isolated database. The default is **Keep the database**: if you re-create the worktree on the same branch later, the dashboard prompt will offer to reuse the preserved data without rebuilding it. Picking **Drop** drops the database and removes its registry entry.
 
+In the dashboard, a worktree tab's remove button asks for confirmation first. Once the worktree is gone the dialog says **Worktree removed** and stays open until you close it, and an error that arrives after that is shown in the same dialog.
+
 ---
 
 ## Auto-setup pipeline (any `git worktree add`)
