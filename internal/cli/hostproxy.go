@@ -33,7 +33,7 @@ func init() {
 		if proxy == nil {
 			return nil
 		}
-		port := WorktreeHostPort(proxy.Port, wtPath, hostProxyPortEnvKey(proxy))
+		port := WorktreeHostPort(site.Name, proxy.Port, wtPath, hostProxyPortEnvKey(proxy))
 		return nginx.GenerateWorktreeHostProxyVhostFor(wtDomain, wtPath, site.PrimaryDomain(), port, proxy.SSL, secured)
 	}
 }
@@ -151,7 +151,7 @@ func repointHostProxySite(s config.Site) bool {
 		for _, wt := range wts {
 			_ = certs.RegenerateHostProxyWorktreeVhost(s, wt.Path, wt.Domain, s.Secured)
 			if proxy != nil {
-				port := WorktreeHostPort(proxy.Port, wt.Path, hostProxyPortEnvKey(proxy))
+				port := WorktreeHostPort(s.Name, proxy.Port, wt.Path, hostProxyPortEnvKey(proxy))
 				if w, ok := hostProxyWorkerForPort(proxy, port); ok {
 					rebindHostProxyDevServer(proxy, s.Name, wt.Path, w)
 				}
@@ -313,14 +313,64 @@ func buildHostProxyCommandPort(proxy *config.ProxyConfig, port int) string {
 	if proxy.Command == "" {
 		return ""
 	}
+	key := hostProxyPortEnvKey(proxy)
+	command := substitutePortReferences(proxy.Command, key, port)
 	if !hostProxyShouldBind(proxy) {
-		return fmt.Sprintf("env %s=%d %s",
-			hostProxyPortEnvKey(proxy), port, proxy.Command)
+		return fmt.Sprintf("env %s=%d %s", key, port, command)
 	}
 	return fmt.Sprintf("env %s=%d %s=%s %s",
-		hostProxyPortEnvKey(proxy), port,
+		key, port,
 		hostProxyHostEnvKey(proxy), hostProxyBindAddr(),
-		proxy.Command)
+		command)
+}
+
+// substitutePortReferences writes the port into $KEY, ${KEY} and ${KEY:-default}
+// references, because a wrapping shell expands them before `env` sets KEY, so a
+// worktree would otherwise get the parent's default port.
+func substitutePortReferences(command, key string, port int) string {
+	var out strings.Builder
+	for i := 0; i < len(command); {
+		if n := portReferenceLen(command[i:], key); n > 0 {
+			out.WriteString(strconv.Itoa(port))
+			i += n
+			continue
+		}
+		out.WriteByte(command[i])
+		i++
+	}
+	return out.String()
+}
+
+// portReferenceLen returns the length of the KEY reference s starts with, 0 if
+// none. A ${KEY:-default} is matched to its balanced closing brace, so a nested
+// default such as ${PORT:-${DEV_PORT:-5173}} is replaced whole.
+func portReferenceLen(s, key string) int {
+	if rest, ok := strings.CutPrefix(s, "$"+key); ok {
+		if rest == "" || !isShellNameChar(rest[0]) {
+			return len(s) - len(rest)
+		}
+		return 0
+	}
+	rest, ok := strings.CutPrefix(s, "${"+key)
+	if !ok || !(strings.HasPrefix(rest, "}") || strings.HasPrefix(rest, "-") || strings.HasPrefix(rest, ":-")) {
+		return 0
+	}
+	depth := 1
+	for j := len(s) - len(rest); j < len(s); j++ {
+		switch s[j] {
+		case '{':
+			depth++
+		case '}':
+			if depth--; depth == 0 {
+				return j + 1
+			}
+		}
+	}
+	return 0
+}
+
+func isShellNameChar(c byte) bool {
+	return c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
 func buildHostProxyCommand(proxy *config.ProxyConfig) string {
@@ -487,6 +537,9 @@ func reservedHostPorts(exceptSite string) map[int]bool {
 			if s.HostPort != 0 {
 				out[s.HostPort] = true
 			}
+			for _, p := range s.WorktreeHostPorts {
+				out[p] = true
+			}
 			// Also reserve ports already assigned to this site's host-proxy
 			// worktrees (persisted in each worktree's .env): a stopped worktree
 			// dev server owns its port, which neither the registry HostPort nor a
@@ -548,17 +601,20 @@ func allocateHostPort(start int, exceptSite string) int {
 }
 
 // WorktreeHostPort returns the dev-server port for a host-proxy site's worktree:
-// the value persisted in the worktree's .env if present, otherwise a freshly
-// allocated free port (best-effort persisted so it stays stable). A worktree is
-// reached by its domain, so a floating port until a .env exists is harmless.
-func WorktreeHostPort(parentPort int, wtPath, portEnvKey string) int {
+// the value persisted in the worktree's .env if present, otherwise one recorded
+// on the parent site, so it stays stable and no two worktrees share it.
+func WorktreeHostPort(siteName string, parentPort int, wtPath, portEnvKey string) int {
 	envPath := filepath.Join(wtPath, ".env")
 	if v := envfile.ReadKey(envPath, portEnvKey); v != "" {
 		if n, _ := strconv.Atoi(v); n > 0 {
 			return n
 		}
 	}
-	port := allocateHostPort(parentPort+1, "")
+	pick := func() int { return allocateHostPort(parentPort+1, "") }
+	port, err := config.ClaimWorktreeHostPort(siteName, filepath.Base(wtPath), pick)
+	if err != nil {
+		port = pick()
+	}
 	if _, err := os.Stat(envPath); err == nil {
 		_ = envfile.ApplyUpdates(envPath, map[string]string{portEnvKey: strconv.Itoa(port)})
 	}
@@ -599,7 +655,7 @@ func GenerateHostProxyWorktreeVhost(site config.Site, wtPath, wtDomain string) e
 	if proxy == nil {
 		return fmt.Errorf("parent site %s has no proxy config to mirror", site.Name)
 	}
-	port := WorktreeHostPort(proxy.Port, wtPath, hostProxyPortEnvKey(proxy))
+	port := WorktreeHostPort(site.Name, proxy.Port, wtPath, hostProxyPortEnvKey(proxy))
 	return nginx.GenerateWorktreeHostProxyVhostFor(wtDomain, wtPath, site.PrimaryDomain(), port, proxy.SSL, site.Secured)
 }
 
@@ -610,7 +666,7 @@ func StartHostProxyWorktreeServer(site config.Site, wtPath string) error {
 	if proxy == nil {
 		return fmt.Errorf("parent site %s has no proxy config to mirror", site.Name)
 	}
-	port := WorktreeHostPort(proxy.Port, wtPath, hostProxyPortEnvKey(proxy))
+	port := WorktreeHostPort(site.Name, proxy.Port, wtPath, hostProxyPortEnvKey(proxy))
 	w, ok := hostProxyWorkerForPort(proxy, port)
 	if !ok {
 		return nil

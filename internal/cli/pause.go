@@ -106,13 +106,13 @@ func PauseSite(name string) error {
 
 	site.Paused = true
 	site.PausedWorkers = running
-	if err := config.AddSite(*site); err != nil {
+	if err := config.SetSitePaused(site.Name, true, running); err != nil {
 		return fmt.Errorf("updating registry: %w", err)
 	}
 
 	pauseWorktrees(site)
 
-	nginx.ReloadOrWarn("")
+	pauseNginxReload("")
 
 	feedback.Start("pausing " + name).OK(feedback.Val(site.PrimaryDomain()))
 
@@ -150,6 +150,9 @@ func setSiteContainerAutostart(site *config.Site, on bool) bool {
 	}
 	return podman.SetQuadletAutostart(unit, on)
 }
+
+// pauseNginxReload is the nginx reload pause and unpause use, a seam for tests.
+var pauseNginxReload = nginx.ReloadOrWarn
 
 // hostProxyEnvRefresh regenerates a site's .env by re-running `lerd env`. A
 // package var so tests can stub the re-exec; production points it at runLerdEnv.
@@ -275,7 +278,7 @@ func UnpauseSite(name string) error {
 	// unpauseHostProxyWorktrees above.
 	restartWorktreeWorkers(site, phpVersion)
 
-	nginx.ReloadOrWarn("")
+	pauseNginxReload("")
 
 	startServicesForSite(site.Path)
 
@@ -293,7 +296,7 @@ func UnpauseSite(name string) error {
 
 	site.Paused = false
 	site.PausedWorkers = nil
-	if err := config.AddSite(*site); err != nil {
+	if err := config.SetSitePaused(site.Name, false, nil); err != nil {
 		return fmt.Errorf("updating registry: %w", err)
 	}
 

@@ -621,6 +621,9 @@ func newWatchCmd() *cobra.Command {
 							if err := cli.StopAllWorkersForWorktree(site.Name, worktreeName); err != nil {
 								fmt.Printf("[WARN] stopping worktree workers for %s/%s: %v\n", site.Name, worktreeName, err)
 							}
+							if err := config.ReleaseWorktreeHostPort(site.Name, worktreeName); err != nil {
+								fmt.Printf("[WARN] releasing worktree port for %s/%s: %v\n", site.Name, worktreeName, err)
+							}
 						}
 						if cleanupWorktreeVhosts(site) {
 							if err := nginx.Reload(); err != nil {

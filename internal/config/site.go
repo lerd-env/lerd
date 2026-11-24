@@ -145,6 +145,9 @@ type Site struct {
 	// port, keyed by the worktree's directory base like the idle map. A
 	// worktree runs its own dev server, so it cannot share the parent's pin.
 	WorktreeDevPorts map[string]int `yaml:"worktree_dev_server_ports,omitempty"`
+	// WorktreeHostPorts records a host-proxy worktree's dev server port, keyed
+	// by the worktree's directory base, for a worktree with no .env to hold it.
+	WorktreeHostPorts map[string]int `yaml:"worktree_host_proxy_ports,omitempty"`
 
 	// WorktreeIdleSuspended records, per git worktree (keyed by the worktree's
 	// unit-slug base), the workers the idle engine stopped while that worktree was
@@ -286,6 +289,7 @@ type siteYAML struct {
 	DevServerPort         int                 `yaml:"dev_server_port,omitempty"`
 	WorkerPorts           map[string]int      `yaml:"worker_ports,omitempty"`
 	WorktreeDevPorts      map[string]int      `yaml:"worktree_dev_server_ports,omitempty"`
+	WorktreeHostPorts     map[string]int      `yaml:"worktree_host_proxy_ports,omitempty"`
 	ContainerPort         int                 `yaml:"container_port,omitempty"`
 	ContainerSSL          bool                `yaml:"container_ssl,omitempty"`
 	Runtime               string              `yaml:"runtime,omitempty"`
@@ -332,6 +336,7 @@ func (s Site) toYAML() siteYAML {
 		DevServerPort:         s.DevServerPort,
 		WorkerPorts:           s.WorkerPorts,
 		WorktreeDevPorts:      s.WorktreeDevPorts,
+		WorktreeHostPorts:     s.WorktreeHostPorts,
 		ContainerPort:         s.ContainerPort,
 		ContainerSSL:          s.ContainerSSL,
 		Runtime:               s.Runtime,
@@ -383,6 +388,7 @@ func (sy siteYAML) toSite() Site {
 		DevServerPort:         sy.DevServerPort,
 		WorkerPorts:           sy.WorkerPorts,
 		WorktreeDevPorts:      sy.WorktreeDevPorts,
+		WorktreeHostPorts:     sy.WorktreeHostPorts,
 		ContainerPort:         sy.ContainerPort,
 		ContainerSSL:          sy.ContainerSSL,
 		Runtime:               sy.Runtime,
@@ -825,6 +831,29 @@ func SetSiteIdleSuspendedWorkers(name string, workers []string) error {
 	return fmt.Errorf("site %q not found", name)
 }
 
+// SetSitePaused updates only a site's pause state under the write lock, so the
+// registry writes a pause or unpause makes along the way, such as a worktree's
+// port claim, are kept.
+func SetSitePaused(name string, paused bool, workers []string) error {
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
+	if err != nil {
+		return err
+	}
+	for i := range reg.Sites {
+		if reg.Sites[i].Name == name {
+			reg.Sites[i].Paused = paused
+			reg.Sites[i].PausedWorkers = workers
+			return SaveSites(reg)
+		}
+	}
+	return fmt.Errorf("site %q not found", name)
+}
+
 // SetSitePinned atomically updates just a site's idle-suspend pin flag. Like
 // SetSiteIdleSuspendedWorkers it rewrites only that field under the write lock, so
 // `lerd idle pin/unpin` can't clobber a concurrent SetSiteIdleSuspendedWorkers
@@ -1037,6 +1066,64 @@ func SetWorktreeIdleSuspendedWorkers(name, wtBase string, workers []string) erro
 		return SaveSites(reg)
 	}
 	return fmt.Errorf("site %q not found", name)
+}
+
+// ClaimWorktreeHostPort returns the host-proxy port recorded for a worktree, or
+// records the one pick returns. It holds the registry lock throughout, so two
+// worktrees claiming at once never get the same port.
+func ClaimWorktreeHostPort(name, wtBase string, pick func() int) (int, error) {
+	unlock, err := lockSites()
+	if err != nil {
+		return 0, err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
+	if err != nil {
+		return 0, err
+	}
+	for i := range reg.Sites {
+		if reg.Sites[i].Name != name {
+			continue
+		}
+		if p := reg.Sites[i].WorktreeHostPorts[wtBase]; p > 0 {
+			return p, nil
+		}
+		port := pick()
+		if reg.Sites[i].WorktreeHostPorts == nil {
+			reg.Sites[i].WorktreeHostPorts = map[string]int{}
+		}
+		reg.Sites[i].WorktreeHostPorts[wtBase] = port
+		return port, SaveSites(reg)
+	}
+	return 0, fmt.Errorf("site %q not found", name)
+}
+
+// ReleaseWorktreeHostPort forgets a removed worktree's host-proxy port, so it
+// stops being reserved.
+func ReleaseWorktreeHostPort(name, wtBase string) error {
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
+	if err != nil {
+		return err
+	}
+	for i := range reg.Sites {
+		if reg.Sites[i].Name != name {
+			continue
+		}
+		if _, ok := reg.Sites[i].WorktreeHostPorts[wtBase]; !ok {
+			return nil
+		}
+		delete(reg.Sites[i].WorktreeHostPorts, wtBase)
+		if len(reg.Sites[i].WorktreeHostPorts) == 0 {
+			reg.Sites[i].WorktreeHostPorts = nil
+		}
+		return SaveSites(reg)
+	}
+	return nil
 }
 
 // FindSite returns the site with the given name, or an error if not found.

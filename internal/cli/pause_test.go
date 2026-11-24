@@ -119,3 +119,34 @@ func TestTimerIsActive(t *testing.T) {
 		t.Error("a failed enumeration must not report a timer active")
 	}
 }
+
+// A worktree added while its site was paused claims its port during unpause, so
+// unpause must not save the copy of the site it loaded before that claim.
+func TestUnpauseSite_keepsPortOfWorktreeAddedWhilePaused(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	t.Setenv("XDG_DATA_HOME", xdg)
+	savedRefresh, savedReload := hostProxyEnvRefresh, pauseNginxReload
+	t.Cleanup(func() { hostProxyEnvRefresh, pauseNginxReload = savedRefresh, savedReload })
+	hostProxyEnvRefresh = func(string) error { return nil }
+	pauseNginxReload = func(string) {}
+	dir := gitRepo(t, "/node_modules\n")
+	if err := config.AddSite(config.Site{Name: "myapp", Path: dir, Domains: []string{"myapp.test"}, HostPort: 3000, Paused: true}); err != nil {
+		t.Fatal(err)
+	}
+	wt := addWorktree(t, dir, "feature")
+
+	if err := UnpauseSite("myapp"); err != nil {
+		t.Fatal(err)
+	}
+	site, err := config.FindSite("myapp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if site.Paused {
+		t.Error("site still paused")
+	}
+	if site.WorktreeHostPorts[filepath.Base(wt)] == 0 {
+		t.Errorf("the port claimed for the worktree during unpause was lost: %v", site.WorktreeHostPorts)
+	}
+}
