@@ -15,6 +15,10 @@ var (
 	containerInstalledFn = ListInstalled
 )
 
+// InstalledForRuntimeFn is what version detection asks, so tests in other
+// packages can say which versions are installed.
+var InstalledForRuntimeFn = InstalledForRuntime
+
 // InstalledForRuntime lists the PHP versions this install can actually serve:
 // the host builds under the native runtime, the FPM units otherwise.
 //

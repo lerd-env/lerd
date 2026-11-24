@@ -230,10 +230,7 @@ func FPMContainer(site *config.Site) string {
 	case site.IsCustomFPM():
 		return podman.CustomFPMContainerName(site.Name)
 	}
-	v := site.PHPVersion
-	if detected, err := phpDet.DetectVersion(site.Path); err == nil && detected != "" {
-		v = detected
-	}
+	v := phpDet.SiteVersion(site.Path, site.PHPVersion)
 	cfg, err := config.LoadGlobal()
 	return fpmTarget(site, v, err == nil && cfg.PHPRuntimeMode() == config.PHPRuntimeNative)
 }

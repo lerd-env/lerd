@@ -1932,7 +1932,7 @@ func consoleExecArgs(dir, version, console string, args ...string) []string {
 }
 
 func consoleIn(dir, console string, args ...string) error {
-	version, err := phpDet.DetectVersion(dir)
+	version, err := phpDet.VersionForDir(dir)
 	if err != nil {
 		cfg, _ := config.LoadGlobal()
 		version = cfg.PHP.DefaultVersion
