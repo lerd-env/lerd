@@ -340,11 +340,16 @@ func (s ProjectService) MarshalYAML() (interface{}, error) {
 // built-ins separately.
 func (s ProjectService) Resolve() (*CustomService, error) {
 	if s.Preset != "" {
-		preset, err := LoadPreset(s.Preset)
+		named := s.FromName()
+		preset, err := LoadPreset(named.Preset)
 		if err != nil {
 			return nil, fmt.Errorf("preset %q referenced by project service %q: %w", s.Preset, s.Name, err)
 		}
-		return preset.Resolve(s.PresetVersion)
+		svc, err := preset.Resolve(named.PresetVersion)
+		if err == nil && named != s && svc.Name != s.Name {
+			return nil, fmt.Errorf("preset %q does not produce a service named %q", named.Preset, s.Name)
+		}
+		return svc, err
 	}
 	if s.Custom != nil {
 		copy := *s.Custom

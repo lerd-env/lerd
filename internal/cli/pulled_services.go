@@ -139,7 +139,7 @@ func runPulledEnv(site *config.Site, names []string) []string {
 // service fills. The doctor reads presets offline and would miss it otherwise.
 func fetchMissingPresets(proj *config.ProjectConfig) {
 	for _, svc := range proj.Services {
-		name := svc.Preset
+		name := svc.FromName().Preset
 		if name == "" {
 			name = svc.Name
 		}

@@ -419,6 +419,27 @@ func linkApplyProject(cwd string, site config.Site, proj *config.ProjectConfig) 
 	return linkApplyServices(cwd, site, proj)
 }
 
+// namedPresetEntry takes the preset and version from the name of a service this
+// machine does not have, when that preset produces exactly that name. A bare name
+// may be somebody's own service or external server, so anything else is left be.
+func namedPresetEntry(svc config.ProjectService) config.ProjectService {
+	named := svc.FromName()
+	if named == svc || config.CustomServiceExists(svc.Name) {
+		return svc
+	}
+	p, err := ensurePreset(named.Preset)
+	if err != nil {
+		return svc
+	}
+	if resolved, err := p.Resolve(named.PresetVersion); err != nil || resolved.Name != svc.Name {
+		return svc
+	}
+	return named
+}
+
+// linkInstallPreset is a seam so tests install nothing.
+var linkInstallPreset = InstallPresetByName
+
 func linkApplyServices(cwd string, site config.Site, proj *config.ProjectConfig) error {
 	if proj == nil {
 		return nil
@@ -440,10 +461,11 @@ func linkApplyServices(cwd string, site config.Site, proj *config.ProjectConfig)
 		if svc.Preset == "" && svc.Custom == nil && config.PresetExists(svc.Name) && !config.IsDefaultPreset(svc.Name) {
 			svc.Preset = svc.Name
 		}
+		svc = namedPresetEntry(svc)
 		if svc.Preset != "" {
 			if _, err := config.LoadCustomService(svc.Name); err != nil {
 				fmt.Printf("  Installing preset %s%s\n", svc.Preset, presetVersionSuffix(svc.PresetVersion))
-				if _, err := InstallPresetByName(svc.Preset, svc.PresetVersion); err != nil {
+				if _, err := linkInstallPreset(svc.Preset, svc.PresetVersion); err != nil {
 					feedback.Warn("installing preset %s: %v", svc.Preset, err)
 					continue
 				}
