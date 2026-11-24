@@ -246,7 +246,7 @@ func migrateWorktreeVhosts(worktrees []gitpkg.Worktree, newPrimary, phpVersion, 
 		// the parent's proxy config rather than the worktree's .lerd.yaml, which
 		// the worktree checkout often doesn't have.
 		if proxy != nil {
-			port := WorktreeHostPort(proxy.Port, wt.Path, hostProxyPortEnvKey(proxy))
+			port := WorktreeHostPort(siteName, proxy.Port, wt.Path, hostProxyPortEnvKey(proxy))
 			if err := nginx.GenerateWorktreeHostProxyVhostFor(newWTDomain, wt.Path, newPrimary, port, proxy.SSL, secured); err != nil {
 				fmt.Printf("    WARN: worktree %s: regenerate vhost: %v\n", wt.Branch, err)
 			}

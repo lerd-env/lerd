@@ -58,6 +58,8 @@ For Node projects the port is auto-assigned: `lerd init` starts from a default a
 
 Lerd sets both sides of the contract: it injects the chosen port via `PORT` (or `port_env_key`) so a server that honours it binds there, and points nginx at the same port. It does not probe the live socket, so a server that ignores the env var and hardcodes a different port will not be reached. For those, name the port directly in the command (for example `vite --port 5173 --strictPort`, or `runserver 0.0.0.0:8000`) so both sides agree.
 
+A command may also read the port itself, as `$PORT`, `${PORT}` or `${PORT:-5173}` (or the same with your `port_env_key`). Lerd writes the assigned port into those references before it starts the server, so `vite --port ${PORT:-5173} --strictPort` binds the parent's port on the site and each worktree's own port in that worktree.
+
 ## Binding
 
 nginx runs inside a container and reaches your dev server over the host gateway, not loopback. A server bound to `127.0.0.1` (the common dev default) is therefore unreachable through the proxy: depending on the framework it surfaces as a connection error, or as a stray all-interfaces HMR socket answering every request with `426 Upgrade Required` (the symptom seen with Nuxt).
@@ -178,6 +180,8 @@ Start your server however you like; nginx proxies the domain to it.
 ## Worktrees
 
 [Git worktrees](../features/git-worktrees.md) of a host-proxy site each run their own dev server from the worktree checkout, mirroring the parent's command on their own auto-assigned port, behind the worktree domain (`branch.site.test`) using the parent's wildcard certificate for HTTPS. Add one from the dashboard's worktree modal or with `git worktree add`; lerd detects it and wires the per-worktree dev server automatically. The modal omits the assets build step for host-proxy sites since the dev server runs continuously.
+
+A worktree keeps its port for good: lerd writes it to the worktree's `.env` under `PORT` (or `port_env_key`), or, for a project that keeps its environment elsewhere, such as a secrets manager, records it on the parent site. Each worktree's port stays reserved, so worktrees started together never share one.
 
 [Database isolation and cloning](database.md) work for host-proxy worktrees: lerd clones the parent database into a per-worktree database and repoints the worktree's `.env`. Migrations are never run as part of isolation, the clone already carries the schema, so there is no need for lerd to know your migration command. If you isolate with an empty schema instead of cloning, run your own migration command in the worktree.
 

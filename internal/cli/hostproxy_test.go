@@ -237,24 +237,48 @@ func TestWorktreeHostPort_readsPersistedEnv(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("PORT=4321\nFOO=bar\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if got := WorktreeHostPort(3000, dir, "PORT"); got != 4321 {
+	if got := WorktreeHostPort("app", 3000, dir, "PORT"); got != 4321 {
 		t.Errorf("WorktreeHostPort = %d, want 4321 (persisted value reused)", got)
 	}
 }
 
 func TestWorktreeHostPort_allocatesAndPersists(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	dir := t.TempDir()
 	// .env exists but has no PORT yet → a fresh port is allocated and written.
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("FOO=bar\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	got := WorktreeHostPort(3000, dir, "PORT")
+	got := WorktreeHostPort("app", 3000, dir, "PORT")
 	if got <= 3000 {
 		t.Errorf("WorktreeHostPort = %d, want a port above the parent's 3000", got)
 	}
 	// Second call must reuse the now-persisted value.
-	if again := WorktreeHostPort(3000, dir, "PORT"); again != got {
+	if again := WorktreeHostPort("app", 3000, dir, "PORT"); again != got {
 		t.Errorf("WorktreeHostPort second call = %d, want stable %d", again, got)
+	}
+}
+
+// A project that keeps its env outside .env (a secrets manager) has nowhere in
+// the worktree to keep the port, so it is recorded on the parent site: two
+// worktrees allocated before either dev server binds still get their own.
+func TestWorktreeHostPort_withoutEnvFileRecordsPortOnSite(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := config.AddSite(config.Site{Name: "app", Domains: []string{"app.test"}, Path: t.TempDir(), HostPort: 3000}); err != nil {
+		t.Fatal(err)
+	}
+	first, second := t.TempDir(), t.TempDir()
+	a := WorktreeHostPort("app", 3000, first, "PORT")
+	b := WorktreeHostPort("app", 3000, second, "PORT")
+	if a <= 3000 || b <= 3000 || a == b {
+		t.Fatalf("worktree ports = %d, %d, want two distinct ports above 3000", a, b)
+	}
+	if again := WorktreeHostPort("app", 3000, first, "PORT"); again != a {
+		t.Errorf("second call = %d, want stable %d", again, a)
+	}
+	if _, err := os.Stat(filepath.Join(first, ".env")); !os.IsNotExist(err) {
+		t.Errorf("a .env was created in the worktree: %v", err)
 	}
 }
 
@@ -304,5 +328,30 @@ func TestGatewayRebindProxy_onlyTheApprovedCommand(t *testing.T) {
 				t.Errorf("rebind command = %q, want %q", got, c.want)
 			}
 		})
+	}
+}
+
+func TestBuildHostProxyCommandPort_substitutesPortReferences(t *testing.T) {
+	injectHost := false
+	cases := map[string]string{
+		"vite --port ${PORT:-5175} --strictPort": "env PORT=5176 vite --port 5176 --strictPort",
+		"vite --port ${PORT-5175}":               "env PORT=5176 vite --port 5176",
+		"vite --port ${PORT}":                    "env PORT=5176 vite --port 5176",
+		"vite --port $PORT --host":               "env PORT=5176 vite --port 5176 --host",
+		"vite --port $PORTAL $PORT_X":            "env PORT=5176 vite --port $PORTAL $PORT_X",
+	}
+	for command, want := range cases {
+		got := buildHostProxyCommandPort(&config.ProxyConfig{Command: command, Port: 5175, InjectHost: &injectHost}, 5176)
+		if got != want {
+			t.Errorf("buildHostProxyCommandPort(%q) = %q, want %q", command, got, want)
+		}
+	}
+}
+
+func TestBuildHostProxyCommandPort_substitutesCustomPortKey(t *testing.T) {
+	injectHost := false
+	got := buildHostProxyCommandPort(&config.ProxyConfig{Command: "serve -p ${APP_PORT:-3000} $PORT", Port: 3000, PortEnvKey: "APP_PORT", InjectHost: &injectHost}, 3001)
+	if want := "env APP_PORT=3001 serve -p 3001 $PORT"; got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
