@@ -3,6 +3,7 @@ package cli
 import (
 	"io"
 	"maps"
+	neturl "net/url"
 	"os"
 	"slices"
 	"strings"
@@ -89,9 +90,9 @@ func (k *keptDB) pinned(fw *config.Framework, overrides map[string]string) map[s
 	return out
 }
 
-// worktreeLerdDB is what a checkout on lerd's database needs to keep reaching it
-// when its parent's connection is kept and so has nothing to hand on. The service
-// it is on and the database it names stay its own.
+// worktreeLerdDB moves a checkout on lerd's database to where lerd is now reached,
+// its parent's connection being kept and so having nothing to hand on. Only the
+// address moves: service, database, login and options stay the checkout's own.
 func worktreeLerdDB(site *config.Site, fw *config.Framework, dir string, vals map[string]string) map[string]string {
 	host := config.DBEndpointFor(dir).Host
 	if fw == nil || host == "" {
@@ -109,7 +110,7 @@ func worktreeLerdDB(site *config.Site, fw *config.Framework, dir string, vals ma
 		updates := map[string]string{}
 		for _, kv := range frameworkVarsForAlternate(fw, role, &config.CustomService{Name: svc}) {
 			k, v, _ := strings.Cut(kv, "=")
-			if k == binding.URLKey || !strings.Contains(v, "{{") {
+			if k == binding.HostKey || k == binding.URLKey || isPortKey(k) {
 				updates[k] = v
 			}
 		}
@@ -117,12 +118,28 @@ func worktreeLerdDB(site *config.Site, fw *config.Framework, dir string, vals ma
 			rewriteEnvForHostProxy(updates, loopbackServiceNames(map[string]bool{svc: true}, knownServices()))
 		}
 		if url, ok := updates[binding.URLKey]; ok {
-			updates[binding.URLKey] = config.DBURLWithName(url, config.DBNameInURL(vals[binding.URLKey]))
+			updates[binding.URLKey] = movedDBURL(vals[binding.URLKey], url)
 		}
 		maps.DeleteFunc(updates, func(k, v string) bool { return strings.Trim(vals[k], `"'`) == v })
 		return updates
 	}
 	return nil
+}
+
+// movedDBURL is a connection string pointed at the server another one names. A PDO
+// one holds no login, so it takes the other's whole and keeps the database.
+func movedDBURL(own, target string) string {
+	scheme, rest, isURL := strings.Cut(own, "://")
+	t, err := neturl.Parse(target)
+	if !isURL || err != nil {
+		return config.DBURLWithName(target, config.DBNameInURL(own))
+	}
+	end := len(rest)
+	if i := strings.IndexAny(rest, `/?#"'`); i >= 0 {
+		end = i
+	}
+	start := strings.LastIndex(rest[:end], "@") + 1
+	return scheme + "://" + rest[:start] + t.Host + rest[end:]
 }
 
 // runLerdEnvKeepingDB is the `lerd env` behind a change lerd makes on its own.

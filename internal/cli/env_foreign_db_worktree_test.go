@@ -18,7 +18,7 @@ const (
 // alignedWorktree runs an automatic env over a site and one worktree, both on
 // the same framework, and returns the worktree's values afterwards. file and
 // marker are the framework's env file and the file it is detected by.
-func alignedWorktree(t *testing.T, framework, marker, file, parentEnv, wtEnv, parentOverride string, hostPort int) map[string]string {
+func alignedWorktree(t *testing.T, framework, marker, file, parentEnv, wtEnv, parentOverride, wtOverride string, hostPort int) map[string]string {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
@@ -46,6 +46,9 @@ func alignedWorktree(t *testing.T, framework, marker, file, parentEnv, wtEnv, pa
 	if err := config.AddSite(site); err != nil {
 		t.Fatal(err)
 	}
+	if wtOverride != "" {
+		write(filepath.Join(checkout, envOverrideFile), wtOverride)
+	}
 	t.Chdir(main)
 	prev := envKeepForeignDB
 	envKeepForeignDB = true
@@ -68,27 +71,27 @@ func wantValues(t *testing.T, got map[string]string, want string) {
 
 // The parent's server is kept, but a checkout on lerd still follows the runtime.
 func TestWorktree_OnLerdFollowsUnderAKeptParent(t *testing.T) {
-	got := alignedWorktree(t, "laravel", "artisan", ".env", foreignEnv, lerdEnv, "", 3100)
+	got := alignedWorktree(t, "laravel", "artisan", ".env", foreignEnv, lerdEnv, "", "", 3100)
 	wantValues(t, got, "DB_HOST=127.0.0.1 DB_PORT=3306 DB_DATABASE=shop_feat DB_USERNAME=root DB_PASSWORD=lerd")
 }
 
 func TestWorktree_OnLerdFollowsBackToContainersUnderAKeptParent(t *testing.T) {
 	wt := strings.ReplaceAll(strings.ReplaceAll(lerdEnv, "lerd-mysql", "127.0.0.1"), "3306", "3399")
-	got := alignedWorktree(t, "laravel", "artisan", ".env", foreignEnv, wt, "", 0)
+	got := alignedWorktree(t, "laravel", "artisan", ".env", foreignEnv, wt, "", "", 0)
 	wantValues(t, got, "DB_HOST=lerd-mysql DB_PORT=3306 DB_DATABASE=shop_feat DB_PASSWORD=lerd")
 }
 
 // A checkout on a drop-in stays on that service, not the one it stands in for.
 func TestWorktree_OnADropInStaysOnItUnderAKeptParent(t *testing.T) {
 	wt := strings.ReplaceAll(strings.ReplaceAll(lerdEnv, "lerd-mysql", "lerd-mariadb-11-8"), "3306", "3399")
-	got := alignedWorktree(t, "laravel", "artisan", ".env", foreignEnv, wt, "", 0)
+	got := alignedWorktree(t, "laravel", "artisan", ".env", foreignEnv, wt, "", "", 0)
 	wantValues(t, got, "DB_HOST=lerd-mariadb-11-8 DB_PORT=3306 DB_DATABASE=shop_feat")
 }
 
 func TestWorktree_URLFollowsUnderAKeptParent(t *testing.T) {
 	got := alignedWorktree(t, "symfony", "symfony.lock", ".env.local",
 		"DATABASE_URL=mysql://root:@127.0.0.1:3306/my_real_data\n",
-		"DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/shop_feat\n", "", 3100)
+		"DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/shop_feat\n", "", "", 3100)
 	if u := got["DATABASE_URL"]; !strings.HasPrefix(strings.Trim(u, `"`), "mysql://root:lerd@127.0.0.1:3306/shop_feat") {
 		t.Errorf("DATABASE_URL = %q", u)
 	}
@@ -96,12 +99,12 @@ func TestWorktree_URLFollowsUnderAKeptParent(t *testing.T) {
 
 // The mirror of the issue: a checkout on its own server under a parent on lerd.
 func TestWorktree_OnAForeignServerIsKeptUnderALerdParent(t *testing.T) {
-	got := alignedWorktree(t, "laravel", "artisan", ".env", lerdEnv, foreignEnv, "", 3100)
+	got := alignedWorktree(t, "laravel", "artisan", ".env", lerdEnv, foreignEnv, "", "", 3100)
 	wantValues(t, got, "DB_HOST=127.0.0.1 DB_PORT=3306 DB_DATABASE=my_real_data DB_USERNAME=root DB_PASSWORD=")
 }
 
 func TestWorktree_OnAForeignServerIsKeptUnderAKeptParent(t *testing.T) {
-	got := alignedWorktree(t, "laravel", "artisan", ".env", foreignEnv, strings.ReplaceAll(foreignEnv, "127.0.0.1", "db.example.com"), "", 3100)
+	got := alignedWorktree(t, "laravel", "artisan", ".env", foreignEnv, strings.ReplaceAll(foreignEnv, "127.0.0.1", "db.example.com"), "", "", 3100)
 	wantValues(t, got, "DB_HOST=db.example.com DB_DATABASE=my_real_data DB_PASSWORD=")
 }
 
@@ -109,11 +112,43 @@ func TestWorktree_OnAForeignServerIsKeptUnderAKeptParent(t *testing.T) {
 // lerd's server, so the port keeps following.
 func TestWorktree_OnLerdWithTheParentsPersonalLoginFollows(t *testing.T) {
 	env := "DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3399\nDB_DATABASE=shop\nDB_USERNAME=me\nDB_PASSWORD=mine\n"
-	got := alignedWorktree(t, "laravel", "artisan", ".env", env, env, "DB_USERNAME=me\nDB_PASSWORD=mine\n", 3100)
+	got := alignedWorktree(t, "laravel", "artisan", ".env", env, env, "DB_USERNAME=me\nDB_PASSWORD=mine\n", "", 3100)
 	wantValues(t, got, "DB_PORT=3306 DB_USERNAME=me DB_PASSWORD=mine")
 }
 
 func TestWorktree_OnSQLiteIsLeftAloneUnderAKeptParent(t *testing.T) {
-	got := alignedWorktree(t, "laravel", "artisan", ".env", foreignEnv, "DB_CONNECTION=sqlite\nDB_HOST=lerd-mysql\n", "", 3100)
+	got := alignedWorktree(t, "laravel", "artisan", ".env", foreignEnv, "DB_CONNECTION=sqlite\nDB_HOST=lerd-mysql\n", "", "", 3100)
 	wantValues(t, got, "DB_CONNECTION=sqlite")
+}
+
+const personalLogin = "DB_USERNAME=me\nDB_PASSWORD=mine\n"
+
+// Only the server moves: a checkout's own login, driver and options stay.
+func TestWorktree_OnLerdKeepsItsOwnLogin(t *testing.T) {
+	wt := "DB_CONNECTION=mariadb\nDB_HOST=lerd-mysql\nDB_PORT=3306\nDB_DATABASE=shop_feat\n" + personalLogin
+	got := alignedWorktree(t, "laravel", "artisan", ".env", foreignEnv, wt, "", personalLogin, 3100)
+	wantValues(t, got, "DB_CONNECTION=mariadb DB_HOST=127.0.0.1 DB_PORT=3306 DB_DATABASE=shop_feat DB_USERNAME=me DB_PASSWORD=mine")
+}
+
+func TestWorktree_URLKeepsItsOwnLoginAndOptions(t *testing.T) {
+	got := alignedWorktree(t, "symfony", "symfony.lock", ".env.local",
+		"DATABASE_URL=mysql://root:@127.0.0.1:3306/my_real_data\n",
+		"DATABASE_URL=mysql://me:mine@lerd-mysql:3306/shop_feat?charset=utf8mb4\n", "", "", 3100)
+	if u := strings.Trim(got["DATABASE_URL"], `"`); u != "mysql://me:mine@127.0.0.1:3306/shop_feat?charset=utf8mb4" {
+		t.Errorf("DATABASE_URL = %q", u)
+	}
+}
+
+// The parent took a personal login after the checkout was made.
+func TestWorktree_OnLerdsDefaultLoginFollowsDespiteTheParents(t *testing.T) {
+	env := "DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3399\nDB_DATABASE=shop\n"
+	got := alignedWorktree(t, "laravel", "artisan", ".env", env+personalLogin, env+"DB_USERNAME=root\nDB_PASSWORD=lerd\n", personalLogin, "", 3100)
+	wantValues(t, got, "DB_HOST=127.0.0.1 DB_PORT=3306")
+}
+
+// A parent's override naming another server is no sign its checkout is on lerd.
+func TestWorktree_OnAServerTheParentsOverrideNamesIsKept(t *testing.T) {
+	override := "DB_HOST=127.0.0.1\nDB_PORT=3306\nDB_USERNAME=root\nDB_PASSWORD=\n"
+	got := alignedWorktree(t, "laravel", "artisan", ".env", foreignEnv, foreignEnv, override, "", 0)
+	wantValues(t, got, "DB_HOST=127.0.0.1 DB_PORT=3306 DB_DATABASE=my_real_data DB_USERNAME=root DB_PASSWORD=")
 }

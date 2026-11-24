@@ -39,6 +39,15 @@ func TestForeignDBHost(t *testing.T) {
 		{"lerd with a personal login", "artisan", map[string]string{
 			".env":               "DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3306\nDB_USERNAME=me\nDB_PASSWORD=mine\n",
 			".env.lerd_override": "DB_USERNAME=me\nDB_PASSWORD=mine\n"}, ""},
+		{"lerd login before a personal one is written", "artisan", map[string]string{
+			".env":               "DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3399\n" + lerdLogin,
+			".env.lerd_override": "DB_USERNAME=me\nDB_PASSWORD=mine\n"}, ""},
+		{"override that names the server too", "artisan", map[string]string{
+			".env":               "DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3306\n" + ownLogin,
+			".env.lerd_override": "DB_HOST=127.0.0.1\n" + ownLogin}, "127.0.0.1:3306"},
+		{"override login for a server marked external", "artisan", map[string]string{
+			".env":               "DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3306\n" + ownLogin,
+			".env.lerd_override": "LERD_EXTERNAL_SERVICES=mysql\n" + ownLogin}, "127.0.0.1:3306"},
 		{"lerd postgres over loopback", "artisan", map[string]string{".env": "DB_CONNECTION=pgsql\nDB_HOST=127.0.0.1\nDB_PORT=5432\nDB_USERNAME=postgres\nDB_PASSWORD=lerd\n"}, ""},
 		{"no host", "artisan", map[string]string{".env": "DB_CONNECTION=mysql\n"}, ""},
 		{"no env", "artisan", map[string]string{}, ""},

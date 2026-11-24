@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/geodro/lerd/internal/envfile"
@@ -63,11 +64,7 @@ func onFileDB(projectDir string) bool {
 func hasLerdDBLogin(projectDir string) bool {
 	file, format := envFileOrSeed(projectDir)
 	vals := envfile.Values(filepath.Join(projectDir, file), format)
-	overrides, _ := envfile.ReadOverride(projectDir)
-	// A checkout holds its parent's login without the file that sets it.
-	if parent, ok := ParentSiteForWorktreeDir(projectDir); ok && len(overrides) == 0 {
-		overrides, _ = envfile.ReadOverride(parent.Path)
-	}
+	overrides := lerdLoginOverrides(projectDir, vals)
 	declared := false
 	blocks := lerdDBVars(projectDir)
 	for _, vars := range blocks {
@@ -82,6 +79,37 @@ func hasLerdDBLogin(projectDir string) bool {
 	}
 	for service := range blocks {
 		if _, external := ExternalDBHost(projectDir, service); !external {
+			return true
+		}
+	}
+	return false
+}
+
+// lerdLoginOverrides are the personal values that can set a login on lerd's server:
+// the project's own, and its parent's, whose file never reaches a checkout. A file
+// that names the server as well speaks for that one, so its login proves nothing.
+func lerdLoginOverrides(projectDir string, vals map[string]string) []map[string]string {
+	dirs := []string{projectDir}
+	if parent, ok := ParentSiteForWorktreeDir(projectDir); ok {
+		dirs = append(dirs, parent.Path)
+	}
+	file, format := envFileOrSeed(projectDir)
+	binding := pickDBBinding(dbBindingsIn(frameworkFor(projectDir), file, format), vals)
+	var out []map[string]string
+	for _, dir := range dirs {
+		overrides, external := envfile.ReadOverride(dir)
+		_, host := overrides[binding.HostKey]
+		_, url := overrides[binding.URLKey]
+		if !host && !url && !anyDBService(external) {
+			out = append(out, overrides)
+		}
+	}
+	return out
+}
+
+func anyDBService(names map[string]bool) bool {
+	for name := range names {
+		if IsDBServiceName(name) {
 			return true
 		}
 	}
@@ -106,23 +134,26 @@ func lerdDBVars(projectDir string) map[string][]string {
 
 // loginMatches compares the user and password a vars block declares, as keys or
 // inside a URL, with a project's values. hasLogin is whether it declares any.
-func loginMatches(vars []string, vals, overrides map[string]string) (matches, hasLogin bool) {
+func loginMatches(vars []string, vals map[string]string, overrides []map[string]string) (matches, hasLogin bool) {
 	matches = true
 	for _, kv := range vars {
 		k, want, _ := strings.Cut(kv, "=")
 		got := vals[k]
 		upper := strings.ToUpper(k)
+		known := []string{want}
 		switch {
 		case strings.Contains(want, "://"):
-			got, want = urlLogin(got), urlLogin(want)
+			got, known = urlLogin(got), []string{urlLogin(want)}
 		case strings.Contains(upper, "USER"), strings.Contains(upper, "PASS"):
-			if v, ok := overrides[k]; ok {
-				want = v
+			for _, o := range overrides {
+				if v, ok := o[k]; ok {
+					known = append(known, v)
+				}
 			}
 		default:
 			continue
 		}
-		if strings.Trim(got, `"'`) != strings.Trim(want, `"'`) {
+		if !slices.ContainsFunc(known, func(v string) bool { return strings.Trim(v, `"'`) == strings.Trim(got, `"'`) }) {
 			matches = false
 		}
 		hasLogin = true
