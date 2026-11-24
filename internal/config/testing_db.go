@@ -57,6 +57,7 @@ func testDatabaseNames(bindings []dbServiceBinding, vals map[string]string) []st
 		}
 		if b.URLKey == "" && b.NameKey == "" {
 			names = append(names, vals["DB_DATABASE"])
+			names = append(names, connectionDatabaseNames(vals)...)
 			continue
 		}
 		names = append(names, b.Database(read))
@@ -68,6 +69,20 @@ func testDatabaseNames(bindings []dbServiceBinding, vals map[string]string) []st
 		if v := vals[k]; v != "" && !strings.HasPrefix(v, "sqlite") {
 			names = append(names, DBNameInURL(v))
 		}
+	}
+	return names
+}
+
+// connectionDatabaseNames is the database each connection string in vals names,
+// whatever key holds it or host it reaches, the fallback for a definition that
+// detects a service without saying which keys address it.
+func connectionDatabaseNames(vals map[string]string) []string {
+	var names []string
+	for _, v := range vals {
+		if strings.HasPrefix(v, "sqlite") || (!strings.Contains(v, "://") && !strings.Contains(v, "dbname=")) {
+			continue
+		}
+		names = append(names, DBNameInURL(v))
 	}
 	return names
 }

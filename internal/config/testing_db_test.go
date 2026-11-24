@@ -151,3 +151,38 @@ func TestDatabasesToCreateKeepsATwinReachedOverLoopback(t *testing.T) {
 		t.Errorf("DatabasesToCreate = %v, want the twin the tests name", got)
 	}
 }
+
+// A definition that detects its service by a key of its own, with no vars to
+// say how it is addressed, still names the twin through that key's URL.
+func TestDatabasesToCreateReadsAConnectionStringUnderAnyKey(t *testing.T) {
+	cases := []struct {
+		name, testDSN string
+		want          []string
+	}{
+		{"tests on the twin", "mysql://root:lerd@lerd-mysql:3306/shop_testing", []string{"shop", "shop_testing"}},
+		{"tests on the twin over loopback", "mysql://root:lerd@127.0.0.1:3306/shop_testing", []string{"shop", "shop_testing"}},
+		{"tests on SQLite", "sqlite:///:memory:", []string{"shop"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			setConfigDir(t)
+			installStoreFramework(t, &Framework{
+				Name:   "dsnonly",
+				Detect: []FrameworkRule{{File: "dsnonly.lock"}},
+				Env: FrameworkEnvConf{
+					File: ".env",
+					Services: map[string]FrameworkServiceDef{
+						"mysql": {Detect: []FrameworkServiceDetect{{Key: "APP_DSN"}}},
+					},
+				},
+			})
+			dir := t.TempDir()
+			writeProjectFile(t, dir, "dsnonly.lock", "")
+			writeProjectFile(t, dir, ".env", "APP_DSN=mysql://root:lerd@lerd-mysql:3306/shop\n")
+			writeProjectFile(t, dir, "phpunit.xml", phpunitWith(`<env name="APP_DSN" value="`+c.testDSN+`"/>`))
+			if got := DatabasesToCreate(dir, "shop", nil); !slices.Equal(got, c.want) {
+				t.Errorf("DatabasesToCreate = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
