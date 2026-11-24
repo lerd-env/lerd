@@ -73,6 +73,7 @@ func ensureFPMRunning(cwd, version, container string) (string, string, error) {
 		if handled, err := startInstalledFPM(version, container); err != nil {
 			return version, container, err
 		} else if handled {
+			ensureWorktreeMounted(cwd, container)
 			return version, container, nil
 		}
 
@@ -99,6 +100,30 @@ func ensureFPMRunning(cwd, version, container string) (string, string, error) {
 		// User switched to an installed version; loop will auto-start it.
 		version = newVersion
 		container = fpmContainerForDir(cwd, version)
+	}
+}
+
+// Seams so the remount can be tested without podman.
+var (
+	worktreeMissingFn = func(container, path string) bool {
+		return podman.UnitMissingMounts(container, []string{path})
+	}
+	remountFrankenPHPFn = siteops.FinishFrankenPHPLink
+)
+
+// ensureWorktreeMounted rewrites a FrankenPHP site's container when cwd is a
+// worktree beside the project that it does not mount yet. Its quadlet mounts
+// the worktrees present when written, so a newer one needs one rewrite.
+func ensureWorktreeMounted(cwd, container string) {
+	wt, parent, ok := phpDet.WorktreeRootFor(cwd)
+	if !ok || !parent.IsFrankenPHP() || container != podman.FrankenPHPContainerName(parent.Name) {
+		return
+	}
+	if config.PathWithin(wt, parent.Path) || !worktreeMissingFn(container, wt) {
+		return
+	}
+	if err := remountFrankenPHPFn(*parent); err != nil {
+		feedback.Warn("mounting worktree %s into %s: %v", wt, container, err)
 	}
 }
 

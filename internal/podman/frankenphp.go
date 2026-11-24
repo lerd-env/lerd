@@ -8,6 +8,7 @@ import (
 
 	"github.com/geodro/lerd/internal/composer"
 	"github.com/geodro/lerd/internal/config"
+	gitpkg "github.com/geodro/lerd/internal/git"
 )
 
 // FrankenPHPContainerName returns the Podman container name for a site's
@@ -61,6 +62,7 @@ func GenerateFrankenPHPQuadlet(siteName, projectPath, phpVersion string, entrypo
 	b.WriteString("Network=lerd\n")
 	fmt.Fprintf(&b, "Volume=%s:/etc/hosts:ro,z\n", config.ContainerHostsFile())
 	fmt.Fprintf(&b, "Volume=%s:%s:rw\n", projectPath, projectPath)
+	b.WriteString(frankenPHPWorktreeMounts(projectPath))
 	b.WriteString(frankenPHPComposerMounts())
 	// Debug tooling: bind-mount the same conf.d inis, bridge assets, and runtime
 	// socket dir the FPM container gets, so dump()/dd(), the Debug window
@@ -159,6 +161,11 @@ func WriteFrankenPHPQuadletDiff(siteName, projectPath, phpVersion string, entryp
 	_ = EnsureDumpAssets()
 	_ = EnsureDevtoolsAssets()
 	_ = EnsureMailAssets()
+	// Created rather than left out, so `composer global` in the container writes
+	// to the host's home instead of one that vanishes with the container.
+	if home := composer.HomeDir(); bindMountable(home) {
+		_ = os.MkdirAll(home, 0o755)
+	}
 	content, err := GenerateFrankenPHPQuadlet(siteName, projectPath, phpVersion, entrypoint, env)
 	if err != nil {
 		return false, err
@@ -168,7 +175,7 @@ func WriteFrankenPHPQuadletDiff(siteName, projectPath, phpVersion string, entryp
 
 // frankenPHPComposerMounts gives the container lerd's composer and composer's
 // home at their host paths: under the native runtime the site's commands run
-// here, and composer is invoked by that path. A missing source is left out.
+// here, and composer is invoked by that path. A phar not downloaded is left out.
 func frankenPHPComposerMounts() string {
 	var b strings.Builder
 	if phar := composer.PharPath(); bindMountable(phar) {
@@ -177,9 +184,22 @@ func frankenPHPComposerMounts() string {
 		}
 	}
 	if home := composer.HomeDir(); bindMountable(home) {
-		if info, err := os.Stat(home); err == nil && info.IsDir() {
-			fmt.Fprintf(&b, "Volume=%s:%s:rw\n", home, home)
+		fmt.Fprintf(&b, "Volume=%s:%s:rw\n", home, home)
+	}
+	return b.String()
+}
+
+// frankenPHPWorktreeMounts mounts the project's worktrees checked out beside
+// it, so a command run in one under the native runtime finds its directory
+// here. A worktree inside the project is already covered by its mount.
+func frankenPHPWorktreeMounts(projectPath string) string {
+	worktrees, _ := gitpkg.DetectWorktrees(projectPath, "")
+	var b strings.Builder
+	for _, wt := range worktrees {
+		if !bindMountable(wt.Path) || config.PathWithin(wt.Path, projectPath) {
+			continue
 		}
+		fmt.Fprintf(&b, "Volume=%s:%s:rw\n", wt.Path, wt.Path)
 	}
 	return b.String()
 }

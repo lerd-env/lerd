@@ -11,10 +11,10 @@ import (
 
 // Under the native runtime a FrankenPHP site's commands run in its container,
 // composer among them, invoked by the phar's host path and needing its home.
-// A source that is not on disk yet is left out rather than mounted empty.
+// The home is mounted even before it exists, so global packages land on the host.
 func TestFrankenPHPQuadletMountsComposer(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	composerHome := t.TempDir()
+	composerHome := filepath.Join(t.TempDir(), "not-created-yet")
 	t.Setenv("COMPOSER_HOME", composerHome)
 	phar := composer.PharPath()
 
@@ -24,6 +24,9 @@ func TestFrankenPHPQuadletMountsComposer(t *testing.T) {
 	}
 	if strings.Contains(content, phar) {
 		t.Errorf("a phar not downloaded yet must not be mounted:\n%s", content)
+	}
+	if !strings.Contains(content, "Volume="+composerHome+":"+composerHome+":rw") {
+		t.Errorf("composer's home must be mounted before it exists:\n%s", content)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(phar), 0755); err != nil {
@@ -43,6 +46,37 @@ func TestFrankenPHPQuadletMountsComposer(t *testing.T) {
 		if !strings.Contains(content, want) {
 			t.Errorf("quadlet missing %q:\n%s", want, content)
 		}
+	}
+}
+
+// A worktree beside the project is outside its mount, so the container mounts
+// it too; one inside the project is already covered and is not mounted twice.
+func TestFrankenPHPQuadletMountsSiblingWorktrees(t *testing.T) {
+	root := t.TempDir()
+	main := filepath.Join(root, "app")
+	sibling := filepath.Join(root, "app-feature")
+	inside := filepath.Join(main, ".worktrees", "fix")
+	for name, wt := range map[string]string{"feature": sibling, "fix": inside} {
+		meta := filepath.Join(main, ".git", "worktrees", name)
+		for _, dir := range []string{meta, wt} {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(meta, "gitdir"), []byte(wt+"/.git\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	content, err := GenerateFrankenPHPQuadlet("app", main, "8.4", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(content, "Volume="+sibling+":"+sibling+":rw") {
+		t.Errorf("sibling worktree not mounted:\n%s", content)
+	}
+	if strings.Contains(content, "Volume="+inside) {
+		t.Errorf("a worktree inside the project needs no mount of its own:\n%s", content)
 	}
 }
 

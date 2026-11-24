@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/siteops"
 )
 
 // nativeMode points the install at the native runtime for one test.
@@ -53,17 +54,17 @@ func TestRuntimeSwitchRewritesEnvWhenServingMoves(t *testing.T) {
 
 	wasNative := site.IsNative()
 	site.Runtime = "frankenphp"
-	if !rerunEnvIfServingMoved(site, wasNative) {
+	if !siteops.SyncEnvAfterRuntimeSwitch(site, wasNative) {
 		t.Error("moving to FrankenPHP must rerun lerd env")
 	}
 	wasNative = site.IsNative()
 	site.RuntimeWorker = true
-	if rerunEnvIfServingMoved(site, wasNative) {
+	if siteops.SyncEnvAfterRuntimeSwitch(site, wasNative) {
 		t.Error("a worker mode flip stays in the container, so .env is already right")
 	}
 	wasNative = site.IsNative()
 	site.Runtime, site.RuntimeWorker = "", false
-	if !rerunEnvIfServingMoved(site, wasNative) {
+	if !siteops.SyncEnvAfterRuntimeSwitch(site, wasNative) {
 		t.Error("moving back to FPM must rerun lerd env")
 	}
 	if len(*ran) != 2 {
