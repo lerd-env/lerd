@@ -132,9 +132,15 @@ PHP runs inside the container, so the AI agent environment variables your coding
 
 Commands the `exec` MCP tool runs (`artisan`, `composer`, `vendor_run` for Pest/PHPUnit) go a step further: because reaching them through the MCP server proves an agent is driving the command, lerd injects a neutral `AI_AGENT=lerd-mcp` marker when no real agent variable is present. Pao therefore returns JSON for MCP-originated test runs even if the host environment carries nothing, while a real agent variable is still forwarded as-is when it exists. Manual terminal runs are never given the marker, so their output is unchanged.
 
+### Running tests
+
+The `test` tool runs a project's tests without the assistant having to know which runner it uses. With no arguments it runs them all; `file` takes a test file or folder and `filter` part of a test's name. The answer starts with `OK (exit 0)` or `FAILED (exit N)`, then the command that ran and its output, cut to its start and end when it is long. Failing tests are a normal answer; a run that could not start is an error.
+
+How a project runs its tests comes from the store, the same declaration `lerd test` uses: see [Running tests](../usage/framework-definitions.md#running-tests).
+
 ### Cancelling a run
 
-A run an assistant starts through `exec` ends with the call that started it. When the client cancels the call or closes the session, the run is stopped with everything it started, the browsers of a Pest browser test included. Profiling runs and `framework` `setup` steps stop the same way. Database, service and worktree operations are not interrupted partway.
+A run an assistant starts through `exec` or `test` ends with the call that started it. When the client cancels the call or closes the session, the run is stopped with everything it started, the browsers of a Pest browser test included. Profiling runs and `framework` `setup` steps stop the same way. Database, service and worktree operations are not interrupted partway.
 
 ### Running your framework's own MCP server
 
@@ -189,7 +195,7 @@ Having the tool is not enough on its own, because Claude Code defers it and an a
 
 ## Available MCP tools
 
-The MCP surface is **fourteen grouped tools**, each driven by an `action` argument. Always pass `action`; start by calling `site` with `action: "list"` to discover sites.
+The MCP surface is **fifteen tools**, each driven by an `action` argument except `test`, which does one thing. Always pass `action`; start by calling `site` with `action: "list"` to discover sites.
 
 The server also sends short instructions when a client connects, telling the assistant to use these tools rather than the raw commands they wrap. Clients such as Claude Code load tool schemas only when needed, so without those instructions an assistant would see just a tool named `worktree` and run `git worktree add` itself, skipping the dependency install, branch domain and database isolation that `add` handles.
 
@@ -202,6 +208,7 @@ The server also sends short instructions when a client connects, telling the ass
 | `runtime` | `versions`, `node_install`, `node_uninstall`, `node_manager`, `php_list`, `ext_list`, `ext_add`, `ext_remove`, `ports_list`, `ports_add`, `ports_remove`, `ini_read`, `ini_write`, `ini_reset` |
 | `worker` | `list` (call first), `start`, `stop`, `add`, `remove`, `health`, `heal`, `mode_get`, `mode_set`, `queue_start`, `queue_stop`, `horizon_start`, `horizon_stop`, `reverb_start`, `reverb_stop`, `schedule_start`, `schedule_stop`, `stripe_start`, `stripe_stop`, `stripe_config` |
 | `exec` | `artisan`, `console`, `composer`, `vendor_bins`, `vendor_run`, `commands_list`, `commands_run`, `command_add`, `command_remove` |
+| `test` | no action: `file` and `filter` are optional |
 | `framework` | `list`, `add`, `remove`, `prune`, `search`, `update`, `project_new`, `setup` |
 | `diag` | `status`, `doctor`, `doctor_fix`, `site_doctor`, `which`, `check`, `dns_diagnose`, `bug_report`, `analyze_queries`, `route_timing`, `optimize_route`, `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle`, `dumps_buffer`, `browser_events`, `browser_toggle`, `profiler_toggle`, `profiler_status`, `profiler_clear`, `profiler_report`, `xdebug_on`, `xdebug_off`, `xdebug_status` |
 | `logs` | `sources`, `fetch` |

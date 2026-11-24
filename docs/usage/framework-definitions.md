@@ -68,7 +68,7 @@ doctor:
       command: test -x vendor/nativephp/electron/resources/js/resources/php/php
 ```
 
-Workers, commands, post-link setup steps and doctor checks are the whole schema, because that is what the duplication was made of. A `removes:` block takes entries away again, which is what a new major of the package needs (see below). Env wiring, detection and services stay with the framework, which is where they belong.
+Workers, commands, post-link setup steps, doctor checks and the [`test`](#running-tests) runner are the whole schema, because that is what the duplication was made of. A `removes:` block takes entries away again, which is what a new major of the package needs (see below). Env wiring, detection and services stay with the framework, which is where they belong.
 
 The layer is merged onto the resolved definition when the project has the package, and only for the frameworks the `frameworks:` list names. An empty list means every framework, which is right for a queue driver and wrong for `nativephp/electron`; `min` and `max` bound the framework majors it applies to, and are compared against the project's own major, so a Laravel 14 project still gets a package that declares `min: "11"`. The package wins any name collision: it is where the entry is maintained now, so a copy left behind in a version file is replaced rather than shadowing it, and the replacement keeps the position the definition listed it in. Your user overlay and a project's `.lerd.yaml` are merged after the package layer and still sit above it.
 
@@ -759,6 +759,23 @@ Composer is the one place a `-d` cannot reach: its scripts, Symfony Flex's auto-
 Set only what the CLI needs. Copying a framework's web values across is a trap: CLI `max_execution_time` defaults to `0`, meaning unlimited, so applying a web value of `600` would cap a long install at ten minutes.
 
 `PHP_VALUE`-style directives can set `auto_prepend_file`, which makes every PHP process execute a file from the repo, so `cli_ini` is honoured only from the trusted store and from a user overlay. An embedded `framework_def` in a project's `.lerd.yaml` has it stripped.
+
+## Running tests
+
+`test` says how a project's tests run, and is what `lerd test` and the MCP `test` tool use. A composer package declares it for its own runner:
+
+```yaml
+package: pestphp/pest
+test:
+  command: php vendor/bin/pest       # the whole suite
+  filter: --filter={filter}          # what narrows it to tests by name (optional)
+  over:                              # packages it is built on, whose runner it replaces (optional)
+    - phpunit/phpunit
+```
+
+`command` is split on spaces with no shell and must start with `php`, so it runs wherever the site's PHP does; anything else is refused with a message naming it. A test file or folder is appended to it. Without `filter`, asking for tests by name is refused rather than running everything.
+
+A framework can declare `test` too, optionally behind a `check:`, and it wins over the packages when the check passes. Laravel declares `php artisan test` this way, on projects that have `nunomaduro/collision`. A project on no framework still gets its package's runner. A user overlay's `test` replaces the store's, and one in a project's embedded `framework_def` is dropped. When nothing declares a runner, `lerd test` runs the framework console's own `test` command.
 
 ## Arguments for a composer binary
 
