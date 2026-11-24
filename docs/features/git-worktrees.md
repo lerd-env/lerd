@@ -266,6 +266,8 @@ When a worktree is removed (via `git worktree remove` directly or `lerd worktree
 3. LAN-share proxy + registry entry (port released).
 4. Isolated database, *only* via `lerd worktree remove`'s explicit prompt or the daemon's `scanWorktrees` startup sweep. Plain `git worktree remove` leaves the DB and its registry entry alone, so the user can recover by re-adding the worktree without losing migrations or seed data.
 
+Only the removed worktree is torn down. The other worktrees of the site keep their vhosts and nginx overrides as they were, whether that is a proxy to a dev server or the paused page.
+
 The startup sweep also catches any registry entries whose worktree directory disappeared while the watcher was offline, restarting `lerd-watcher` reconciles state.
 
 The sweep runs in the background, after the watcher has reported itself ready. It provisions worktrees it finds unprovisioned, which can mean a full `composer install`, and that has no duration worth waiting on: the watcher is up and watching from the first moment either way, so a long install shows up as a worktree that finishes setting itself up a few minutes in, not as a daemon that refuses to start. Use [`lerd worktree wait`](#waiting-for-the-pipeline) when you need to block until a specific worktree is actually ready.
