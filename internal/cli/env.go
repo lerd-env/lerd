@@ -1462,7 +1462,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	// sites a sweep can reach, so whatever this run moved in the parent has to
 	// be carried into them from here.
 	if branch == "" {
-		alignWorktreeEnvs(site, fw, envPath, envRelPath, envFormat, envMap, kept.pinned(fw, envOverrides))
+		alignWorktreeEnvs(site, fw, envPath, envRelPath, envFormat, envMap, envOverrides, kept, envKeepForeignDB)
 	}
 
 	// The connection a JetBrains project points at is rebuilt from the same
@@ -1632,7 +1632,7 @@ func carriedToWorktrees(vals, overrides map[string]string) map[string]string {
 //
 // Scoped to dotenv, the format both the keys and the writer here assume. A
 // worktree without an env file yet is skipped; it is seeded on its next sync.
-func alignWorktreeEnvs(site *config.Site, fw *config.Framework, mainEnvPath, envRelPath, envFormat string, before, overrides map[string]string) {
+func alignWorktreeEnvs(site *config.Site, fw *config.Framework, mainEnvPath, envRelPath, envFormat string, before, overrides map[string]string, kept *keptDB, keepForeign bool) {
 	// A format this binary cannot write is refused by the writer below rather
 	// than guessed at, the way every other write of an env file is.
 	if site == nil || !envfile.KnownFormat(envFormat) {
@@ -1644,25 +1644,26 @@ func alignWorktreeEnvs(site *config.Site, fw *config.Framework, mainEnvPath, env
 	}
 	// The parent's .env already holds what its override pinned, so both sides
 	// drop those keys before anything is handed on.
-	before = carriedToWorktrees(before, overrides)
-	after := carriedToWorktrees(envfile.Values(mainEnvPath, envFormat), overrides)
-	coords := map[string]string{}
-	for _, k := range worktreeDBConnectionKeys {
-		if v := after[k]; v != "" {
-			coords[k] = v
-		}
-	}
+	parentBefore, parentAfter := before, envfile.Values(mainEnvPath, envFormat)
+	overrides = kept.pinned(fw, overrides)
 	for _, wt := range worktrees {
 		wtEnv := filepath.Join(wt.Path, envRelPath)
 		if _, statErr := os.Stat(wtEnv); statErr != nil {
 			continue
 		}
 		wtVals := envfile.Values(wtEnv, envFormat)
+		// Each checkout answers for its own database, whatever the parent is on.
+		wtKept := foreignDBToKeep(wt.Path, keepForeign)
+		pins := wtKept.pinned(fw, overrides)
+		before, after := carriedToWorktrees(parentBefore, pins), carriedToWorktrees(parentAfter, pins)
 		updates := map[string]string{}
-		for k, v := range coords {
-			if wtVals[k] != v {
+		for _, k := range worktreeDBConnectionKeys {
+			if v := after[k]; v != "" && wtVals[k] != v {
 				updates[k] = v
 			}
+		}
+		if kept != nil && wtKept == nil {
+			maps.Copy(updates, worktreeLerdDB(site, fw, wt.Path, wtVals))
 		}
 		maps.Copy(updates, envfile.CarriedValues(wtVals, before, after))
 		// A worktree that predates the runtime switch holds the container names

@@ -64,6 +64,10 @@ func hasLerdDBLogin(projectDir string) bool {
 	file, format := envFileOrSeed(projectDir)
 	vals := envfile.Values(filepath.Join(projectDir, file), format)
 	overrides, _ := envfile.ReadOverride(projectDir)
+	// A checkout holds its parent's login without the file that sets it.
+	if parent, ok := ParentSiteForWorktreeDir(projectDir); ok && len(overrides) == 0 {
+		overrides, _ = envfile.ReadOverride(parent.Path)
+	}
 	declared := false
 	blocks := lerdDBVars(projectDir)
 	for _, vars := range blocks {

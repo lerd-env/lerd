@@ -32,14 +32,12 @@ func foreignDBToKeep(dir string, keep bool) *keptDB {
 	if !foreign {
 		return nil
 	}
-	kept := &keptDB{host: host}
-	binding := config.DBEnvBindingFor(dir)
-	for _, k := range []string{binding.HostKey, binding.URLKey} {
-		if k != "" {
-			kept.keys = append(kept.keys, k)
-		}
-	}
-	return kept
+	return &keptDB{host: host, keys: connectionKeys(config.DBEnvBindingFor(dir))}
+}
+
+// connectionKeys are the env keys naming the server a project's database is on.
+func connectionKeys(b config.DBEnvBinding) []string {
+	return slices.DeleteFunc([]string{b.HostKey, b.URLKey}, func(k string) bool { return k == "" })
 }
 
 // writtenBy reports whether a service's vars would replace the kept connection.
@@ -76,6 +74,9 @@ func (k *keptDB) pinned(fw *config.Framework, overrides map[string]string) map[s
 	for _, key := range worktreeDBConnectionKeys {
 		out[key] = ""
 	}
+	if fw == nil {
+		return out
+	}
 	for _, def := range fw.Env.Services {
 		if !k.writtenBy(def.Vars) {
 			continue
@@ -86,6 +87,42 @@ func (k *keptDB) pinned(fw *config.Framework, overrides map[string]string) map[s
 		}
 	}
 	return out
+}
+
+// worktreeLerdDB is what a checkout on lerd's database needs to keep reaching it
+// when its parent's connection is kept and so has nothing to hand on. The service
+// it is on and the database it names stay its own.
+func worktreeLerdDB(site *config.Site, fw *config.Framework, dir string, vals map[string]string) map[string]string {
+	host := config.DBEndpointFor(dir).Host
+	if fw == nil || host == "" {
+		return nil
+	}
+	binding := config.DBEnvBindingFor(dir)
+	for role, def := range fw.Env.Services {
+		if !frameworkServiceDetected(def, vals) || !(&keptDB{keys: connectionKeys(binding)}).writtenBy(def.Vars) {
+			continue
+		}
+		svc := config.DBServiceFor(dir, host)
+		if svc == "" {
+			svc = role
+		}
+		updates := map[string]string{}
+		for _, kv := range frameworkVarsForAlternate(fw, role, &config.CustomService{Name: svc}) {
+			k, v, _ := strings.Cut(kv, "=")
+			if k == binding.URLKey || !strings.Contains(v, "{{") {
+				updates[k] = v
+			}
+		}
+		if usesLoopbackServices(site) {
+			rewriteEnvForHostProxy(updates, loopbackServiceNames(map[string]bool{svc: true}, knownServices()))
+		}
+		if url, ok := updates[binding.URLKey]; ok {
+			updates[binding.URLKey] = config.DBURLWithName(url, config.DBNameInURL(vals[binding.URLKey]))
+		}
+		maps.DeleteFunc(updates, func(k, v string) bool { return strings.Trim(vals[k], `"'`) == v })
+		return updates
+	}
+	return nil
 }
 
 // runLerdEnvKeepingDB is the `lerd env` behind a change lerd makes on its own.
@@ -120,6 +157,12 @@ func announceKeptDBs(sites []config.Site) {
 		}
 		if host, foreign := config.ForeignDBHost(s.Path); foreign {
 			kept = append(kept, s.Name+" ("+host+")")
+		}
+		worktrees, _ := switchWorktreesFor(s.Path, s.PrimaryDomain())
+		for _, wt := range worktrees {
+			if host, foreign := config.ForeignDBHost(wt.Path); foreign {
+				kept = append(kept, s.Name+"/"+wt.Branch+" ("+host+")")
+			}
 		}
 	}
 	if len(kept) > 0 {

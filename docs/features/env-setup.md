@@ -161,7 +161,7 @@ When `.lerd.yaml` changes on disk, for example after `git pull` or a branch swit
 
 ## Runs lerd starts itself
 
-Some changes make lerd run `lerd env` for you: `lerd php:runtime`, moving one site between runtimes, `lerd service port`, `lerd service domain`, unpausing a host-proxy or native site, and [a pull that adds services](#services-added-by-a-pull). Those runs leave a database connection alone when it points at a server that is not lerd's, and name the sites they kept. Everything else in the env still follows the change. `lerd php:runtime` and `lerd service port` also name the sites they are about to rewrite before touching any.
+Some changes make lerd run `lerd env` for you: `lerd php:runtime`, moving one site between runtimes, `lerd service port`, `lerd service domain`, unpausing a host-proxy or native site, and [a pull that adds services](#services-added-by-a-pull). Those runs leave a database connection alone when it points at a server that is not lerd's, and name the sites they kept. Everything else in the env still follows the change. Worktrees answer for themselves: one on its own server keeps it, and one on lerd's follows even when its parent is kept. `lerd php:runtime` and `lerd service port` also name the sites they are about to rewrite before touching any.
 
 A host other than `lerd-*` counts as someone else's server. On `127.0.0.1` the login decides: the user and password lerd writes mean lerd's own service, whatever port it was on, and any other login means another server on your machine, such as DBngin. A login you set in [`.env.lerd_override`](#personal-overrides-envlerd_override) counts as lerd's.
 
