@@ -79,12 +79,27 @@ func testDatabaseNames(bindings []dbServiceBinding, vals map[string]string) []st
 func connectionDatabaseNames(vals map[string]string) []string {
 	var names []string
 	for _, v := range vals {
-		if strings.HasPrefix(v, "sqlite") || (!strings.Contains(v, "://") && !strings.Contains(v, "dbname=")) {
-			continue
+		if isDBConnectionString(v) {
+			names = append(names, DBNameInURL(v))
 		}
-		names = append(names, DBNameInURL(v))
 	}
 	return names
+}
+
+// isDBConnectionString reports whether v is a URL or PDO DSN for a database
+// engine lerd can serve, so an app or asset URL's path is never read as a name.
+func isDBConnectionString(v string) bool {
+	v = strings.ToLower(strings.Trim(strings.TrimSpace(v), `"'`))
+	scheme, rest, ok := strings.Cut(v, ":")
+	if !ok || (!strings.HasPrefix(rest, "//") && !strings.Contains(rest, "dbname=")) {
+		return false
+	}
+	scheme = strings.TrimPrefix(strings.TrimPrefix(scheme, "pdo-"), "pdo_")
+	switch scheme {
+	case "mysql", "mysql2", "mysqli", "mariadb", "pgsql", "postgres", "postgresql", "mongodb", "mongodb+srv":
+		return true
+	}
+	return false
 }
 
 // touchesDBKeys reports whether overrides set any key the framework reads its

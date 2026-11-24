@@ -161,6 +161,7 @@ func TestDatabasesToCreateReadsAConnectionStringUnderAnyKey(t *testing.T) {
 	}{
 		{"tests on the twin", "mysql://root:lerd@lerd-mysql:3306/shop_testing", []string{"shop", "shop_testing"}},
 		{"tests on the twin over loopback", "mysql://root:lerd@127.0.0.1:3306/shop_testing", []string{"shop", "shop_testing"}},
+		{"tests on the twin through a PDO DSN", "mysql:host=127.0.0.1;port=3306;dbname=shop_testing", []string{"shop", "shop_testing"}},
 		{"tests on SQLite", "sqlite:///:memory:", []string{"shop"}},
 	}
 	for _, c := range cases {
@@ -178,11 +179,32 @@ func TestDatabasesToCreateReadsAConnectionStringUnderAnyKey(t *testing.T) {
 			})
 			dir := t.TempDir()
 			writeProjectFile(t, dir, "dsnonly.lock", "")
-			writeProjectFile(t, dir, ".env", "APP_DSN=mysql://root:lerd@lerd-mysql:3306/shop\n")
+			// An app URL whose path happens to read like the twin is not a database.
+			writeProjectFile(t, dir, ".env", "APP_DSN=mysql://root:lerd@lerd-mysql:3306/shop\nAPP_URL=https://example.test/shop_testing\n")
 			writeProjectFile(t, dir, "phpunit.xml", phpunitWith(`<env name="APP_DSN" value="`+c.testDSN+`"/>`))
 			if got := DatabasesToCreate(dir, "shop", nil); !slices.Equal(got, c.want) {
 				t.Errorf("DatabasesToCreate = %v, want %v", got, c.want)
 			}
 		})
+	}
+}
+
+func TestIsDBConnectionString(t *testing.T) {
+	cases := map[string]bool{
+		"mysql://root:lerd@127.0.0.1:3306/shop": true,
+		"postgresql://root@lerd-postgres/shop":  true,
+		"pdo-mysql://root@lerd-mysql/shop":      true,
+		"mongodb+srv://lerd-mongo/shop":         true,
+		"mysql:host=127.0.0.1;dbname=shop":      true,
+		"https://example.test/shop_testing":     false,
+		"redis://lerd-redis:6379/0":             false,
+		"sqlite:///:memory:":                    false,
+		"mysql":                                 false,
+		"smtp://lerd-mailpit:1025":              false,
+	}
+	for v, want := range cases {
+		if got := isDBConnectionString(v); got != want {
+			t.Errorf("isDBConnectionString(%q) = %v, want %v", v, got, want)
+		}
 	}
 }
