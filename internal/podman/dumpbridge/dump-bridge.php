@@ -40,6 +40,9 @@ namespace {
             // The file names the directories it belongs to; a script outside
             // them gets nothing, so a wrong LERD_SITE cannot leak another site's.
             $lerdScript = isset($_SERVER['SCRIPT_FILENAME']) ? @\realpath($_SERVER['SCRIPT_FILENAME']) : false;
+            // A CLI tool lerd keeps outside the project (its wp-cli phar) counts
+            // when run from inside it, the same cwd lerd derived LERD_SITE from.
+            $lerdCwd = \PHP_SAPI === 'cli' ? @\realpath(\getcwd()) : false;
             $lerdAllowed = false;
             // The header lerd writes comes first; root lines further down are
             // provider output and widen nothing.
@@ -47,6 +50,9 @@ namespace {
             foreach (\preg_split('/\r?\n/', $lerdHead[0]) as $lerdLine) {
                 $root = \rtrim((string) \substr($lerdLine, 11), '/');
                 if ($root !== '' && \is_string($lerdScript) && \strpos($lerdScript, $root.'/') === 0) {
+                    $lerdAllowed = true;
+                }
+                if ($root !== '' && \is_string($lerdCwd) && \strpos($lerdCwd.'/', $root.'/') === 0) {
                     $lerdAllowed = true;
                 }
             }
@@ -77,7 +83,7 @@ namespace {
                 }
             }
         }
-        unset($lerdEnvDir, $lerdEnv, $lerdScript, $lerdAllowed, $lerdHead, $lerdPairs, $lerdMatches, $lerdMatch, $lerdLine, $root, $k, $v, $q);
+        unset($lerdEnvDir, $lerdEnv, $lerdScript, $lerdCwd, $lerdAllowed, $lerdHead, $lerdPairs, $lerdMatches, $lerdMatch, $lerdLine, $root, $k, $v, $q);
     }
     unset($lerdSite);
 

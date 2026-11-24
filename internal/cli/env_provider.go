@@ -67,8 +67,8 @@ func validProvidedEnvSite(name string) bool {
 }
 
 // providedEnvHeader names the directories the file may be loaded from: the site
-// and its worktrees. The prepend refuses a script outside them, so a stale or
-// wrong LERD_SITE (a shell cd'd into another project) loads nothing.
+// and its worktrees. The prepend refuses a script outside them, unless a CLI
+// run's cwd is inside, so a wrong LERD_SITE (another project's shell) loads nothing.
 func providedEnvHeader(site config.Site) []byte {
 	roots := []string{site.Path}
 	if wts, _ := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain()); len(wts) > 0 {

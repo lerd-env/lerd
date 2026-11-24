@@ -59,9 +59,10 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 		t.Skip("php cannot read host files (containerised/sandboxed wrapper); native php needed")
 	}
 
-	run := func(site, probeDir string) string {
+	runIn := func(site, probeDir, cwd string) string {
 		probe := filepath.Join(probeDir, "probe.php")
 		cmd := exec.Command(php, "-n", "-d", "auto_prepend_file="+bridgePath, "-d", "lerd.provided_env_dir="+envDir, probe)
+		cmd.Dir = cwd
 		cmd.Env = append(os.Environ(), "LERD_SITE="+site, "KEPT=from-process")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -69,6 +70,7 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 		}
 		return strings.TrimSpace(string(out))
 	}
+	run := func(site, probeDir string) string { return runIn(site, probeDir, "") }
 
 	nothing := `[false,null,null,"from-process",false,false,false]`
 	if out, want := run("app", siteDir), `["one","two words","a\nb","from-process","-----BEGIN KEY-----\nabc\n-----END KEY-----","bar","a#b"]`; out != want {
@@ -79,6 +81,14 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 	}
 	if out := run("app", otherDir); out != nothing {
 		t.Errorf("a script outside the file's roots must load nothing, got %s", out)
+	}
+	// A CLI tool lerd keeps outside the project, like its wp-cli phar, run from
+	// the project loads it; run from anywhere else it still loads nothing.
+	if out := runIn("app", otherDir, siteDir); !strings.HasPrefix(out, `["one"`) {
+		t.Errorf("an out-of-tree CLI script run from the site must load its env, got %s", out)
+	}
+	if out := runIn("app", otherDir, otherDir); out != nothing {
+		t.Errorf("an out-of-tree CLI script run from outside the site must load nothing, got %s", out)
 	}
 }
 
