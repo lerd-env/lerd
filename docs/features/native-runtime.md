@@ -37,6 +37,8 @@ The pools run on demand: a version nothing has asked for in a minute drops to ze
 
 FrankenPHP sites, custom containers and host-proxy sites are unaffected either way: they never used the shared FPM container. That goes for their commands too. In a FrankenPHP, custom-FPM or PHP-carrying custom container site, `php`, `composer`, `artisan` and the other shims run in the site's own container, where its `.env` hosts resolve, and lerd mounts its composer and composer's home into FrankenPHP containers for that. A host-proxy site, a custom container without PHP, and any folder that is not a site keep running PHP on your machine.
 
+Moving one site between the two with `lerd runtime frankenphp` or `lerd runtime fpm` moves where its PHP runs, so the switch reruns `lerd env` and the site's `.env` points at the addresses the new side can reach. A FrankenPHP site in worker mode restarts its container afterwards, since Octane reads `.env` once when it boots.
+
 ## Installing and updating
 
 The builds are downloaded, not compiled here. Switching to the native runtime fetches whatever versions your sites run, verifying each against a published sha256, and `lerd use <version>` fetches one on demand:

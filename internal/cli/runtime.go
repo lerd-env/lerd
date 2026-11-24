@@ -169,7 +169,19 @@ func runtimeLabel(site *config.Site) string {
 	return "fpm"
 }
 
+// rerunEnvIfServingMoved reruns lerd env when a switch moved the site's PHP
+// between the host and a container under the native runtime, since the two
+// reach services at different addresses. In container mode it never moves.
+func rerunEnvIfServingMoved(site *config.Site, wasNative bool) bool {
+	if site.IsNative() == wasNative {
+		return false
+	}
+	rerunSiteEnv(site.Path)
+	return true
+}
+
 func switchToFPM(site *config.Site) error {
+	wasNative := site.IsNative()
 	// Capture the running workers before teardown: they exec into (and BindsTo)
 	// the FrankenPHP container, so removing it would both stop them and lose
 	// the list we need to re-establish on the shared FPM unit.
@@ -186,6 +198,7 @@ func switchToFPM(site *config.Site) error {
 		return fmt.Errorf("updating site: %w", err)
 	}
 	_ = config.SetProjectRuntime(site.Path, "", false)
+	rerunEnvIfServingMoved(site, wasNative)
 
 	if site.Secured {
 		if err := nginx.GenerateSSLVhost(*site, site.PHPVersion); err != nil {
@@ -227,6 +240,7 @@ func switchToFrankenPHP(site *config.Site, worker bool) error {
 			return err
 		}
 	}
+	wasNative := site.IsNative()
 	// Workers currently exec into the shared FPM container; stop them so they
 	// can be recreated against the per-site FrankenPHP container below.
 	running := collectRunningWorkers(site)
@@ -251,6 +265,14 @@ func switchToFrankenPHP(site *config.Site, worker bool) error {
 		_ = config.SetProjectRuntime(site.Path, prevRuntime, prevWorker)
 		startWorkersForSite(site, running, site.PHPVersion)
 		return err
+	}
+
+	// After the link, so lerd env's own artisan step has the container to run
+	// in. Octane read .env when it booted, so worker mode restarts to reread it.
+	if rerunEnvIfServingMoved(site, wasNative) && worker {
+		if err := podman.RestartUnit(podman.FrankenPHPContainerName(site.Name)); err != nil {
+			feedback.Warn("restarting %s for the new .env: %v", podman.FrankenPHPContainerName(site.Name), err)
+		}
 	}
 
 	// Re-point the site's workers at the new per-site FrankenPHP container.
