@@ -737,7 +737,7 @@ Cause: FPM mounts the provided env directory from inside the VM, and a freshly b
 
 Fix: lerd now creates that directory before it writes the FPM container, so no earlier `lerd start` is needed. On an older version, run `lerd start` after each Podman Machine boot before running a command that sets up PHP-FPM; the directory lives in memory and is gone after every boot.
 
-### nginx reload fails with "open() /etc/nginx/conf.d/<site>.conf failed (No such file or directory)" (macOS)
+### nginx reload fails with "open() ... failed (No such file or directory)" on a vhost that exists (macOS)
 
 Symptom: `lerd install` or another command that regenerates vhosts prints `[WARN] nginx reload: ... open() "/etc/nginx/conf.d/blog.test.conf" failed (2: No such file or directory)`, although the file is there and a later reload succeeds.
 
