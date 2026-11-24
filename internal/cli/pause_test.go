@@ -126,9 +126,10 @@ func TestUnpauseSite_keepsPortOfWorktreeAddedWhilePaused(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdg)
 	t.Setenv("XDG_DATA_HOME", xdg)
-	saved := hostProxyEnvRefresh
-	t.Cleanup(func() { hostProxyEnvRefresh = saved })
+	savedRefresh, savedReload := hostProxyEnvRefresh, pauseNginxReload
+	t.Cleanup(func() { hostProxyEnvRefresh, pauseNginxReload = savedRefresh, savedReload })
 	hostProxyEnvRefresh = func(string) error { return nil }
+	pauseNginxReload = func(string) {}
 	dir := gitRepo(t, "/node_modules\n")
 	if err := config.AddSite(config.Site{Name: "myapp", Path: dir, Domains: []string{"myapp.test"}, HostPort: 3000, Paused: true}); err != nil {
 		t.Fatal(err)
