@@ -540,10 +540,6 @@ func nonDatabaseServiceOptions() []string {
 // resolving built-ins, presets, and inline custom services. Shared by the
 // container and host-proxy wizards.
 func buildProjectServices(selectedServices []string, defaults *config.ProjectConfig) []config.ProjectService {
-	builtIn := make(map[string]bool)
-	for _, s := range knownServices() {
-		builtIn[s] = true
-	}
 	inlineByName := map[string]*config.CustomService{}
 	for _, svc := range defaults.Services {
 		if svc.Custom != nil {
@@ -553,34 +549,36 @@ func buildProjectServices(selectedServices []string, defaults *config.ProjectCon
 
 	services := make([]config.ProjectService, len(selectedServices))
 	for i, name := range selectedServices {
-		if builtIn[name] {
-			services[i] = config.ProjectService{Name: name}
-			continue
-		}
-		var loaded *config.CustomService
-		if svc, err := config.LoadCustomService(name); err == nil {
-			loaded = svc
-		} else if existing := inlineByName[name]; existing != nil {
-			loaded = existing
-		}
-		if loaded != nil && loaded.Preset != "" {
-			services[i] = config.ProjectService{
-				Name:          name,
-				Preset:        loaded.Preset,
-				PresetVersion: loaded.PresetVersion,
-			}
-			continue
-		}
-		// A bundled tool preset (e.g. phpmyadmin, pgadmin) selected but not yet
-		// installed has no on-disk custom service; record it as a preset so link
-		// installs it, rather than a bare name that resolves to nothing and warns.
-		if loaded == nil && config.PresetExists(name) && !config.IsDefaultPreset(name) {
-			services[i] = config.ProjectService{Name: name, Preset: name}
-			continue
-		}
-		services[i] = config.ProjectService{Name: name, Custom: loaded}
+		services[i] = ProjectServiceFor(name, inlineByName[name])
 	}
 	return services
+}
+
+// ProjectServiceFor is the .lerd.yaml entry for a service by name: a bare name
+// for a default preset, a preset reference, or an inline definition, with inline
+// standing in for one this machine does not have.
+func ProjectServiceFor(name string, inline *config.CustomService) config.ProjectService {
+	if isKnownService(name) {
+		return config.ProjectService{Name: name}
+	}
+	loaded := inline
+	if svc, err := config.LoadCustomService(name); err == nil {
+		loaded = svc
+	}
+	// An external server is this machine's, so only its name is committed.
+	if loaded != nil && loaded.External != nil {
+		return config.ProjectService{Name: name}
+	}
+	if loaded != nil && loaded.Preset != "" {
+		return config.ProjectService{Name: name, Preset: loaded.Preset, PresetVersion: loaded.PresetVersion}
+	}
+	// A bundled tool preset (e.g. phpmyadmin, pgadmin) selected but not yet
+	// installed has no on-disk custom service; record it as a preset so link
+	// installs it, rather than a bare name that resolves to nothing and warns.
+	if loaded == nil && config.PresetExists(name) && !config.IsDefaultPreset(name) {
+		return config.ProjectService{Name: name, Preset: name}
+	}
+	return config.ProjectService{Name: name, Custom: loaded}
 }
 
 // runHostProxyWizard runs the init wizard for a host-proxy project (Node, or

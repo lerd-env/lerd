@@ -841,21 +841,9 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		feedback.Warn("%v", err)
 	}
 
-	fwName := site.Framework
-	if fwName == "" {
-		fwName, _ = config.DetectFrameworkForDir(cwd)
-	}
-	if fwName == "" {
-		return fmt.Errorf("no framework detected for this site\nDefine one with 'lerd framework add' or add a framework YAML to %s", config.FrameworksDir())
-	}
-
-	fw, ok := config.GetFrameworkForDir(fwName, cwd)
-	if !ok {
-		return fmt.Errorf("framework %q is not defined\nDefine it with 'lerd framework add'", fwName)
-	}
-
-	if fw.Env.File == "" && fw.Env.Format == "" && len(fw.Env.Services) == 0 {
-		return fmt.Errorf("'lerd env' is not supported for %s\nConfigure the env section in the framework YAML to enable it", fw.Label)
+	fw, err := envFramework(site, cwd)
+	if err != nil {
+		return err
 	}
 
 	// The file lerd writes is the one the framework declares as its own, created
@@ -867,10 +855,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	envRelPath, envFormat := fw.Env.ResolveWrite(cwd)
 	envPath := filepath.Join(cwd, envRelPath)
 
-	exampleRelPath := fw.Env.ExampleFile
-	if exampleRelPath == "" {
-		exampleRelPath = ".env.example"
-	}
+	exampleRelPath := envExampleFile(fw)
 	examplePath := filepath.Join(cwd, exampleRelPath)
 
 	// 1. Create env file from example if it doesn't exist

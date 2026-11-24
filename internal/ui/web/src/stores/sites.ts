@@ -673,6 +673,15 @@ export const addSuggestedService = (d: string, name: string, preset = '', versio
   if (version) q.set('version', version);
   return postAction(site(d, 'service:add') + '?' + q.toString());
 };
+export const linkSiteService = (d: string, name: string) =>
+  postAction(site(d, 'service:link') + `?name=${encodeURIComponent(name)}`);
+// linkableServices are the installed services the site can still be wired to, and
+// whether lerd writes the env file that wires them.
+export async function linkableServices(d: string): Promise<{ names: string[]; writesEnv: boolean }> {
+  const out = await apiJson<{ services?: string[]; writes_env?: boolean; error?: string }>(site(d, 'service:linkable'));
+  if (!out.services) throw new Error(out.error || m.common_requestFailed());
+  return { names: out.services, writesEnv: Boolean(out.writes_env) };
+}
 export const useSiteDatabase = (d: string, name: string) =>
   postAction(site(d, 'db:use') + `?name=${encodeURIComponent(name)}`);
 export const removeSiteService = (d: string, name: string) =>

@@ -4242,6 +4242,11 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if action == "service:linkable" && r.Method == http.MethodGet {
+		handleSiteServiceLinkable(w, domain)
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		http.NotFound(w, r)
 		return
@@ -4422,6 +4427,13 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 	case "service:add":
 		q := r.URL.Query()
 		if err := addSiteService(site, q.Get("name"), q.Get("preset"), q.Get("version")); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "service:link":
+		if err := linkSiteService(site, r.URL.Query().Get("name")); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}

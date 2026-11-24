@@ -386,6 +386,12 @@ runs `lerd link` / `lerd setup`, lerd checks whether the referenced preset
 is installed locally and calls `lerd service preset <name> --version <ver>`
 under the hood if it isn't.
 
+A bare name works too: the trailing numbers are read as the version and the rest
+as the preset, so `- mariadb-12-3` installs mariadb 12.3 on a machine that does
+not have it. It only applies when that preset has the version and would give the
+service that exact name; a service you named yourself is left alone. Releases
+before this one only install a versioned service from the spelled-out form.
+
 Hand-rolled custom services that don't come from a preset still inline their
 full definition into `.lerd.yaml` for portability; see [Custom services](custom-services.md).
 

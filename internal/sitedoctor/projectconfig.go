@@ -178,7 +178,7 @@ func validateServices(cfg *config.ProjectConfig) (problems []string) {
 				problems = append(problems, fmt.Sprintf("service %q: the inline definition has no image", svc.Name))
 			}
 		case svc.Preset != "":
-			if _, err := config.LoadPreset(svc.Preset); err != nil {
+			if _, err := config.LoadPreset(svc.FromName().Preset); err != nil {
 				problems = append(problems, fmt.Sprintf("service %q: unknown preset %q", svc.Name, svc.Preset))
 			}
 		}

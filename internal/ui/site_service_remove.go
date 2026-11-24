@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/geodro/lerd/internal/cli"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/siteinfo"
 )
@@ -27,10 +28,7 @@ func declareSiteService(site *config.Site, name string) error {
 	if !slices.Contains(e.Services, name) || slices.Contains(e.DeclaredServices, name) {
 		return fmt.Errorf("%q is not a service %s uses without declaring it", name, site.Name)
 	}
-	svc := config.ProjectService{Name: name}
-	if !config.IsDefaultPreset(name) {
-		svc.Preset = name
-	}
+	svc := cli.ProjectServiceFor(name, nil)
 	if err := config.AddProjectServices(site.Path, []config.ProjectService{svc}); err != nil {
 		return err
 	}
