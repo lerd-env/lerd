@@ -1,9 +1,97 @@
 package podman
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/composer"
 )
+
+// Under the native runtime a FrankenPHP site's commands run in its container,
+// composer among them, invoked by the phar's host path and needing its home.
+// The home is mounted even before it exists, so global packages land on the host.
+func TestFrankenPHPQuadletMountsComposer(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	composerHome := filepath.Join(t.TempDir(), "not-created-yet")
+	t.Setenv("COMPOSER_HOME", composerHome)
+	phar := composer.PharPath()
+
+	content, err := GenerateFrankenPHPQuadlet("myapp", "/home/user/myapp", "8.4", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(content, phar) {
+		t.Errorf("a phar not downloaded yet must not be mounted:\n%s", content)
+	}
+	if !strings.Contains(content, "Volume="+composerHome+":"+composerHome+":rw") {
+		t.Errorf("composer's home must be mounted before it exists:\n%s", content)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(phar), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(phar, []byte("phar"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	content, err = GenerateFrankenPHPQuadlet("myapp", "/home/user/myapp", "8.4", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"Volume=" + phar + ":" + phar + ":ro",
+		"Volume=" + composerHome + ":" + composerHome + ":rw",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("quadlet missing %q:\n%s", want, content)
+		}
+	}
+}
+
+// A worktree beside the project is outside its mount, so the container mounts
+// it too; one inside the project is already covered and is not mounted twice.
+func TestFrankenPHPQuadletMountsSiblingWorktrees(t *testing.T) {
+	root := t.TempDir()
+	main := filepath.Join(root, "app")
+	sibling := filepath.Join(root, "app-feature")
+	inside := filepath.Join(main, ".worktrees", "fix")
+	for name, wt := range map[string]string{"feature": sibling, "fix": inside} {
+		meta := filepath.Join(main, ".git", "worktrees", name)
+		for _, dir := range []string{meta, wt} {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(meta, "gitdir"), []byte(wt+"/.git\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	content, err := GenerateFrankenPHPQuadlet("app", main, "8.4", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(content, "Volume="+sibling+":"+sibling+":rw") {
+		t.Errorf("sibling worktree not mounted:\n%s", content)
+	}
+	if strings.Contains(content, "Volume="+inside) {
+		t.Errorf("a worktree inside the project needs no mount of its own:\n%s", content)
+	}
+
+	// A removed worktree must drop out: a mount whose source is gone fails the
+	// container's next start, main site included.
+	if err := os.RemoveAll(sibling); err != nil {
+		t.Fatal(err)
+	}
+	content, err = GenerateFrankenPHPQuadlet("app", main, "8.4", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(content, "Volume="+sibling) {
+		t.Errorf("a removed worktree is still mounted:\n%s", content)
+	}
+}
 
 func TestFrankenPHPContainerName(t *testing.T) {
 	got := FrankenPHPContainerName("myapp")

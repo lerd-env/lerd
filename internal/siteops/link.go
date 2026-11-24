@@ -310,6 +310,7 @@ var (
 // changed below the FrankenPHP minimum, mirrored here so the UI and MCP never
 // silently upgrade PHP behind the user's back. The passed site is mutated to FPM.
 func DemoteFrankenPHPToFPM(site *config.Site) error {
+	wasNative := site.IsNative()
 	var workers []string
 	if StopRuntimeWorkers != nil {
 		workers = StopRuntimeWorkers(site)
@@ -323,6 +324,7 @@ func DemoteFrankenPHPToFPM(site *config.Site) error {
 		return fmt.Errorf("updating site registry: %w", err)
 	}
 	_ = config.SetProjectRuntime(site.Path, "", false)
+	SyncEnvAfterRuntimeSwitch(site, wasNative)
 
 	if site.Secured {
 		if err := certs.SecureSite(*site); err != nil {

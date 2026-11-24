@@ -4157,6 +4157,7 @@ func execSiteRuntime(args map[string]any) (any, *rpcError) {
 	if site.IsHostProxy() {
 		return toolErr("host-proxy sites run your dev command on the host, not a PHP runtime"), nil
 	}
+	wasNative := site.IsNative()
 
 	if runtime == "fpm" {
 		if !site.IsFrankenPHP() {
@@ -4171,6 +4172,7 @@ func execSiteRuntime(args map[string]any) (any, *rpcError) {
 			return toolErr("updating site: " + err.Error()), nil
 		}
 		_ = config.SetProjectRuntime(site.Path, "", false)
+		siteops.SyncEnvAfterRuntimeSwitch(site, wasNative)
 		if site.Secured {
 			if err := nginx.GenerateSSLVhost(*site, site.PHPVersion); err != nil {
 				return toolErr("regenerating SSL vhost: " + err.Error()), nil
@@ -4204,6 +4206,7 @@ func execSiteRuntime(args map[string]any) (any, *rpcError) {
 	if err := siteops.FinishFrankenPHPLink(*site); err != nil {
 		return toolErr("linking FrankenPHP site: " + err.Error()), nil
 	}
+	siteops.SyncEnvAfterRuntimeSwitch(site, wasNative)
 	label := "frankenphp"
 	if worker {
 		label = "frankenphp (worker mode)"

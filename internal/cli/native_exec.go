@@ -10,7 +10,12 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/execguard"
 	"github.com/geodro/lerd/internal/nativephp"
+	phpDet "github.com/geodro/lerd/internal/php"
 )
+
+// runsInOwnContainerFn is a seam so the routing can be tested without a site
+// registry or an image to probe.
+var runsInOwnContainerFn = phpDet.RunsInOwnContainer
 
 // nativeExecCommand builds the command that runs PHP for a native site. The
 // project is already on the host filesystem at the path the caller gave, so
@@ -33,6 +38,11 @@ func nativeExecCommand(binary, cwd string, args []string, phpVersion string, ext
 func nativeRuntimeVersion(cwd string) (string, bool) {
 	cfg, err := config.LoadGlobal()
 	if err != nil || cfg.PHPRuntimeMode() != config.PHPRuntimeNative {
+		return "", false
+	}
+	// A site with its own PHP container is not served from the host, and its
+	// .env names container hosts, so its commands take the container path.
+	if runsInOwnContainerFn(cwd) {
 		return "", false
 	}
 	if v, err := phpVersionForDir(cwd); err == nil && v != "" {

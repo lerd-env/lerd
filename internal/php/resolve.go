@@ -113,17 +113,49 @@ var customImageHasPHPFn = podman.CustomImageHasPHP
 // the shared container, where the project is visible through the home mount and
 // php is actually present.
 func FPMContainerForDir(dir, version string) string {
+	site := siteForDir(dir)
+	if site == nil {
+		return podman.SharedFPMContainerName(version)
+	}
+	if container, ok := ownPHPContainer(site); ok {
+		return container
+	}
+	return podman.FPMContainerName(*site, version)
+}
+
+// RunsInOwnContainer reports whether dir belongs to a site whose PHP runs in a
+// container of its own. Under the native runtime that site is not served from
+// the host, so its commands go to that container rather than the host's PHP.
+func RunsInOwnContainer(dir string) bool {
+	site := siteForDir(dir)
+	if site == nil {
+		return false
+	}
+	_, ok := ownPHPContainer(site)
+	return ok
+}
+
+// siteForDir is the registered site a command run in dir belongs to: a
+// worktree's parent, else the site containing dir, else nil.
+func siteForDir(dir string) *config.Site {
 	if _, parent, ok := WorktreeRootFor(dir); ok {
-		if parent.IsCustomContainer() && customImageHasPHPFn(parent.Name) {
-			return podman.CustomContainerName(parent.Name)
-		}
-		return podman.FPMContainerName(*parent, version)
+		return parent
 	}
-	if site, _ := config.FindSiteByPath(SiteRootFor(dir)); site != nil {
-		if site.IsCustomContainer() && customImageHasPHPFn(site.Name) {
-			return podman.CustomContainerName(site.Name)
-		}
-		return podman.FPMContainerName(*site, version)
+	site, _ := config.FindSiteByPath(SiteRootFor(dir))
+	return site
+}
+
+// ownPHPContainer is the per-site container a site's PHP runs in, if any: a
+// custom container that carries PHP, a custom-FPM image, or FrankenPHP's under
+// the native runtime, where the shared FPM container is stopped or gone.
+func ownPHPContainer(site *config.Site) (string, bool) {
+	switch {
+	case site.IsCustomContainer() && customImageHasPHPFn(site.Name):
+		return podman.CustomContainerName(site.Name), true
+	case site.IsCustomFPM():
+		return podman.CustomFPMContainerName(site.Name), true
+	case site.IsFrankenPHP() && nativeRuntimeFn():
+		return podman.FrankenPHPContainerName(site.Name), true
 	}
-	return podman.SharedFPMContainerName(version)
+	return "", false
 }

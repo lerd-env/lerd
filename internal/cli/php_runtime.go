@@ -224,12 +224,7 @@ func ApplyPHPRuntime(mode string) error {
 			feedback.Warn("regenerating the vhost for %s: %v", s.Name, err)
 		}
 		regenerateWorktreeVhosts(s)
-		runEnvIfManaged(s.Path, func() error {
-			if out, err := envCommandFor(s.Path).CombinedOutput(); err != nil {
-				return fmt.Errorf("%v: %s", err, strings.TrimSpace(string(out)))
-			}
-			return nil
-		})
+		rerunSiteEnv(s.Path)
 		startWorkersForSite(s, stopped[s.Name], s.PHPVersion)
 	}
 	regenerateProfilerVhost()
@@ -377,6 +372,17 @@ func envCommandFor(dir string) *exec.Cmd {
 	cmd := exec.Command(self, "env")
 	cmd.Dir = dir
 	return cmd
+}
+
+// rerunSiteEnv runs `lerd env` in a site so its .env follows where its PHP now
+// runs. A var so a switch can be tested without spawning lerd.
+var rerunSiteEnv = func(dir string) {
+	runEnvIfManaged(dir, func() error {
+		if out, err := envCommandFor(dir).CombinedOutput(); err != nil {
+			return fmt.Errorf("%v: %s", err, strings.TrimSpace(string(out)))
+		}
+		return nil
+	})
 }
 
 // unsupportedSitesMessage lists the sites whose PHP has no native runtime, or

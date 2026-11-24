@@ -25,6 +25,7 @@ func init() {
 	siteops.RecreateFPMWorkers = func(site *config.Site, workers []string) {
 		startWorkersForSite(site, workers, site.PHPVersion)
 	}
+	siteops.RerunSiteEnv = func(dir string) { rerunSiteEnv(dir) }
 }
 
 // NewRuntimeCmd returns the `lerd runtime` parent command.
@@ -170,6 +171,7 @@ func runtimeLabel(site *config.Site) string {
 }
 
 func switchToFPM(site *config.Site) error {
+	wasNative := site.IsNative()
 	// Capture the running workers before teardown: they exec into (and BindsTo)
 	// the FrankenPHP container, so removing it would both stop them and lose
 	// the list we need to re-establish on the shared FPM unit.
@@ -186,6 +188,7 @@ func switchToFPM(site *config.Site) error {
 		return fmt.Errorf("updating site: %w", err)
 	}
 	_ = config.SetProjectRuntime(site.Path, "", false)
+	siteops.SyncEnvAfterRuntimeSwitch(site, wasNative)
 
 	if site.Secured {
 		if err := nginx.GenerateSSLVhost(*site, site.PHPVersion); err != nil {
@@ -227,6 +230,7 @@ func switchToFrankenPHP(site *config.Site, worker bool) error {
 			return err
 		}
 	}
+	wasNative := site.IsNative()
 	// Workers currently exec into the shared FPM container; stop them so they
 	// can be recreated against the per-site FrankenPHP container below.
 	running := collectRunningWorkers(site)
@@ -252,6 +256,9 @@ func switchToFrankenPHP(site *config.Site, worker bool) error {
 		startWorkersForSite(site, running, site.PHPVersion)
 		return err
 	}
+
+	// After the link, so lerd env's own artisan step has the container to run in.
+	siteops.SyncEnvAfterRuntimeSwitch(site, wasNative)
 
 	// Re-point the site's workers at the new per-site FrankenPHP container.
 	startWorkersForSite(site, running, site.PHPVersion)

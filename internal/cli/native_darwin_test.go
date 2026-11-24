@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/siteops"
 )
 
 // nativeMode points the install at the native runtime for one test.
@@ -40,6 +41,47 @@ func TestUsesLoopbackServicesUnderNative(t *testing.T) {
 		if got := usesLoopbackServices(c.site); got != c.want {
 			t.Errorf("%s: usesLoopbackServices = %v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+// Under native a plain site reaches services over loopback and a FrankenPHP one
+// by container name, so a switch that moves it rewrites .env, both ways, and a
+// switch that keeps it in the container (a worker mode flip) does not.
+func TestRuntimeSwitchRewritesEnvWhenServingMoves(t *testing.T) {
+	nativeMode(t)
+	ran := stubRerunSiteEnv(t)
+	site := &config.Site{Name: "shop", Path: "/p/shop"}
+
+	wasNative := site.IsNative()
+	site.Runtime = "frankenphp"
+	if !siteops.SyncEnvAfterRuntimeSwitch(site, wasNative) {
+		t.Error("moving to FrankenPHP must rerun lerd env")
+	}
+	wasNative = site.IsNative()
+	site.RuntimeWorker = true
+	if siteops.SyncEnvAfterRuntimeSwitch(site, wasNative) {
+		t.Error("a worker mode flip stays in the container, so .env is already right")
+	}
+	wasNative = site.IsNative()
+	site.Runtime, site.RuntimeWorker = "", false
+	if !siteops.SyncEnvAfterRuntimeSwitch(site, wasNative) {
+		t.Error("moving back to FPM must rerun lerd env")
+	}
+	if len(*ran) != 2 {
+		t.Errorf("lerd env ran %d times, want 2", len(*ran))
+	}
+}
+
+// A FrankenPHP or custom site is not served from the host and its .env names
+// container hosts, so under native its commands still go to its own container.
+func TestNativeRuntimeVersionStepsAsideForASiteWithItsOwnContainer(t *testing.T) {
+	nativeMode(t)
+	orig := runsInOwnContainerFn
+	t.Cleanup(func() { runsInOwnContainerFn = orig })
+	runsInOwnContainerFn = func(string) bool { return true }
+
+	if _, ok := nativeRuntimeVersion(t.TempDir()); ok {
+		t.Error("a site with its own PHP container must take the container path")
 	}
 }
 
