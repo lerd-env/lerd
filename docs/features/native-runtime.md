@@ -23,7 +23,9 @@ lerd php:runtime container   # back to the containers
 lerd php:runtime             # show the current runtime
 ```
 
-Or from the dashboard: **System → PHP runtime**. Confirming a move to native offers to remove the PHP-FPM images at the same time, which reclaims the disk they hold; they are built again if you ever switch back, every missing version at once, the same as `lerd php:runtime` does in a terminal. The offer is only made in that direction, since on the container runtime those images are what serves every site.
+Or from the dashboard: **System → PHP runtime**. Either way, a move to native offers to remove the PHP-FPM images once the switch has succeeded, which reclaims the disk they hold; they are built again if you ever switch back, every missing version at once. In a terminal it is a question that defaults to no. With no terminal to ask in, the command prints a hint instead, and `lerd php:runtime native --remove-images` removes them without asking, on an install that is already native too. The offer is only made in that direction, since on the container runtime those images are what serves every site.
+
+`lerd cleanup` keeps the image of every installed PHP version, so this offer is the way to get that disk back. On macOS the space stays inside the Podman Machine disk until `lerd machine reclaim` returns it, and the command says so after removing them.
 
 The setting is install-wide, not per site. The FPM container is shared by every site on a PHP version, so sites cannot be moved one at a time.
 

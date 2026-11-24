@@ -24,7 +24,8 @@ import (
 
 // NewPHPRuntimeCmd returns the `lerd php:runtime` command.
 func NewPHPRuntimeCmd() *cobra.Command {
-	return &cobra.Command{
+	var removeImages bool
+	cmd := &cobra.Command{
 		Use:   "php:runtime [container|native]",
 		Short: "Show or set where PHP runs (macOS only)",
 		Long: `Show or set where PHP runs for every site the shared FPM container serves.
@@ -44,7 +45,9 @@ one at a time.
 Switching rewrites each site's .env for the service addresses the new runtime
 can reach, regenerates the vhosts, drops the framework config caches, and
 restarts the workers. Going native also stops the shared FPM containers, which
-have nothing left to serve.
+have nothing left to serve, and offers to remove their images. With no
+terminal to ask in it names --remove-images instead, which answers yes up
+front and also works on an install that is already native.
 
 FrankenPHP sites, custom containers and host-proxy sites are unaffected: they
 never used the shared FPM container.`,
@@ -68,19 +71,31 @@ never used the shared FPM container.`,
 			if reason := nativeUnavailableOn(runtime.GOOS, runtime.GOARCH); mode == config.PHPRuntimeNative && reason != "" {
 				return errors.New(reason)
 			}
+			if removeImages && mode != config.PHPRuntimeNative {
+				return errors.New("--remove-images only goes with native: on the container runtime those images serve every site")
+			}
 			prev := cfg.PHPRuntimeMode()
 			feedback.Begin()
 			if prev == mode {
 				feedback.Line("PHP runtime already " + mode)
+				if removeImages {
+					versions, _ := phpDet.ListInstalled()
+					offerFPMImageRemoval(mode, versions, true)
+				}
 				return nil
 			}
 			if err := ApplyPHPRuntime(mode); err != nil {
 				return err
 			}
 			feedback.Done("PHP runtime set to " + feedback.Val(mode) + " (was " + prev + ")")
+			// After the switch, never instead of it, the same as the dashboard.
+			versions, _ := phpDet.ListInstalled()
+			offerFPMImageRemoval(mode, versions, removeImages)
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&removeImages, "remove-images", false, "with native, remove the PHP-FPM images without asking")
+	return cmd
 }
 
 // phpRuntimeFromArgs parses the command's argv. Returns (mode, show, err);
