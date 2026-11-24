@@ -108,7 +108,9 @@ var (
 	worktreeMissingFn = func(container, path string) bool {
 		return podman.UnitMissingMounts(container, []string{path})
 	}
-	remountFrankenPHPFn = remountFrankenPHP
+	remountFrankenPHPFn        = remountFrankenPHP
+	refreshFrankenPHPQuadletFn = podman.RefreshFrankenPHPQuadlet
+	awaitContainerFn           = phpDet.StartFPM
 )
 
 // ensureWorktreeMounted rewrites a FrankenPHP site's container when cwd is a
@@ -128,17 +130,16 @@ func ensureWorktreeMounted(cwd, version, container string) {
 }
 
 // remountFrankenPHP restarts the container onto its rewritten quadlet and waits
-// for it. It builds and prints nothing: the command about to run may be a tool
-// whose stdout is parsed.
+// for it, even when the file had the mount already: the running container does
+// not. It builds and prints nothing, as the command's stdout may be parsed.
 func remountFrankenPHP(site config.Site, version, container string) error {
-	changed, err := podman.RefreshFrankenPHPQuadlet(site)
-	if err != nil || !changed {
+	if _, err := refreshFrankenPHPQuadletFn(site); err != nil {
 		return err
 	}
-	if err := podman.RestartUnit(container); err != nil {
+	if err := restartUnitFn(container); err != nil {
 		return err
 	}
-	return phpDet.StartFPM(version, container)
+	return awaitContainerFn(version, container)
 }
 
 // ensureFPMStarted is the no-switch variant of ensureFPMRunning for callers that

@@ -53,3 +53,30 @@ func TestEnsureWorktreeMountedRemountsOnlyAMissingSiblingWorktree(t *testing.T) 
 		t.Errorf("remounts = %d, want no more for another container, the project, or a mounted worktree", remounts)
 	}
 }
+
+// The startup scan can write a new worktree's mount without restarting, so the
+// quadlet already has it while the running container does not. The remount is
+// only called once the live check found it missing, so it restarts regardless.
+func TestRemountFrankenPHPRestartsWhenTheQuadletAlreadyHasTheMount(t *testing.T) {
+	var steps []string
+	origRefresh, origRestart, origAwait := refreshFrankenPHPQuadletFn, restartUnitFn, awaitContainerFn
+	t.Cleanup(func() {
+		refreshFrankenPHPQuadletFn, restartUnitFn, awaitContainerFn = origRefresh, origRestart, origAwait
+	})
+	refreshFrankenPHPQuadletFn = func(config.Site) (bool, error) { steps = append(steps, "refresh"); return false, nil }
+	restartUnitFn = func(unit string) error { steps = append(steps, "restart "+unit); return nil }
+	awaitContainerFn = func(_, container string) error { steps = append(steps, "await "+container); return nil }
+
+	if err := remountFrankenPHP(config.Site{Name: "app"}, "8.5", "lerd-fp-app"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"refresh", "restart lerd-fp-app", "await lerd-fp-app"}
+	if len(steps) != len(want) {
+		t.Fatalf("steps = %v, want %v", steps, want)
+	}
+	for i := range want {
+		if steps[i] != want[i] {
+			t.Fatalf("steps = %v, want %v", steps, want)
+		}
+	}
+}
