@@ -5,8 +5,8 @@ package cli
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
