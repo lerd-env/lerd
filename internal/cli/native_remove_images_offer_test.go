@@ -21,14 +21,15 @@ type imageOffer struct {
 func stubImageOffer(t *testing.T, onDisk []string, terminal, answer bool) *imageOffer {
 	t.Helper()
 	o := &imageOffer{out: &bytes.Buffer{}}
-	origExists, origRemove, origConfirm := fpmImageExistsFn, removeFPMImageFn, confirmImageRemovalFn
+	origExists, origRemove, origConfirm, origMode := fpmImageExistsFn, removeFPMImageFn, confirmImageRemovalFn, currentPHPRuntimeFn
+	currentPHPRuntimeFn = func() (string, error) { return config.PHPRuntimeNative, nil }
 	fpmImageExistsFn = func(v string) bool { return slices.Contains(onDisk, v) }
 	removeFPMImageFn = func(v string) error { o.removed = append(o.removed, v); return nil }
 	confirmImageRemovalFn = func(string, bool) bool { o.asked = true; return answer }
 	restoreTTY := feedback.SetStdinInteractive(terminal)
 	restoreOut := feedback.Redirect(o.out)
 	t.Cleanup(func() {
-		fpmImageExistsFn, removeFPMImageFn, confirmImageRemovalFn = origExists, origRemove, origConfirm
+		fpmImageExistsFn, removeFPMImageFn, confirmImageRemovalFn, currentPHPRuntimeFn = origExists, origRemove, origConfirm, origMode
 		restoreTTY()
 		restoreOut()
 	})
@@ -108,5 +109,39 @@ func TestOfferFPMImageRemovalNeverOffersUnderTheContainerRuntime(t *testing.T) {
 
 	if o.asked || len(o.removed) != 0 || o.out.Len() != 0 {
 		t.Errorf("asked=%v removed=%v out=%q, want nothing", o.asked, o.removed, o.out.String())
+	}
+}
+
+// A switch back to container while the question waits makes these the images
+// serving every site, so a yes given after that must not remove them.
+func TestOfferFPMImageRemovalRereadsTheRuntimeAfterTheAnswer(t *testing.T) {
+	o := stubImageOffer(t, []string{"8.4"}, true, true)
+	confirmImageRemovalFn = func(string, bool) bool {
+		currentPHPRuntimeFn = func() (string, error) { return config.PHPRuntimeContainer, nil }
+		return true
+	}
+
+	offerFPMImageRemoval(config.PHPRuntimeNative, []string{"8.4"}, false)
+
+	if len(o.removed) != 0 {
+		t.Errorf("removed %v after the runtime moved back to container", o.removed)
+	}
+	if !strings.Contains(o.out.String(), "switch to the native runtime") {
+		t.Errorf("the refusal should be reported, got %q", o.out.String())
+	}
+}
+
+// With no argument the command only shows the runtime, so the flag would be
+// dropped silently; it has to be refused instead.
+func TestPHPRuntimeRefusesRemoveImagesWithoutNative(t *testing.T) {
+	for _, args := range [][]string{{"--remove-images"}, {"container", "--remove-images"}} {
+		cmd := NewPHPRuntimeCmd()
+		cmd.SetArgs(args)
+		cmd.SetOut(&bytes.Buffer{})
+		cmd.SetErr(&bytes.Buffer{})
+		err := cmd.Execute()
+		if err == nil || !strings.Contains(err.Error(), "--remove-images") {
+			t.Errorf("%v: err = %v, want the flag refused", args, err)
+		}
 	}
 }

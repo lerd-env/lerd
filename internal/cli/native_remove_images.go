@@ -20,11 +20,21 @@ var removeFPMImageFn = podman.RemoveFPMImage
 // site, and removing them would take the whole install down until each was
 // built again.
 func RemoveFPMImages(versions []string) (int, error) {
-	cfg, err := config.LoadGlobal()
+	mode, err := currentPHPRuntimeFn()
 	if err != nil {
 		return 0, err
 	}
-	return removeFPMImages(cfg.PHPRuntimeMode(), versions)
+	return removeFPMImages(mode, versions)
+}
+
+// currentPHPRuntimeFn reads the runtime as saved right now, swappable so a test
+// can move it under a question that is still waiting for an answer.
+var currentPHPRuntimeFn = func() (string, error) {
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return "", err
+	}
+	return cfg.PHPRuntimeMode(), nil
 }
 
 // removeFPMImages is RemoveFPMImages with the runtime handed to it, so what it
@@ -94,7 +104,9 @@ func offerFPMImageRemoval(mode string, versions []string, remove bool) {
 			return
 		}
 	}
-	n, err := removeFPMImages(mode, left)
+	// The question can wait any length of time, and a switch back meanwhile
+	// makes these images the ones serving, so re-read the runtime first.
+	n, err := RemoveFPMImages(left)
 	if n > 0 {
 		feedback.Done(fmt.Sprintf("removed %d PHP-FPM image(s)", n))
 		if hint := reclaimedHostHint(); hint != "" {

@@ -57,6 +57,11 @@ never used the shared FPM container.`,
 			if err != nil {
 				return err
 			}
+			// With no argument the command only shows the runtime, so the flag
+			// would be dropped without a word; refuse it like container does.
+			if removeImages && (show || mode != config.PHPRuntimeNative) {
+				return errors.New("--remove-images only goes with `lerd php:runtime native`: on the container runtime those images serve every site")
+			}
 			cfg, err := config.LoadGlobal()
 			if err != nil {
 				return err
@@ -70,9 +75,6 @@ never used the shared FPM container.`,
 			}
 			if reason := nativeUnavailableOn(runtime.GOOS, runtime.GOARCH); mode == config.PHPRuntimeNative && reason != "" {
 				return errors.New(reason)
-			}
-			if removeImages && mode != config.PHPRuntimeNative {
-				return errors.New("--remove-images only goes with native: on the container runtime those images serve every site")
 			}
 			prev := cfg.PHPRuntimeMode()
 			feedback.Begin()
