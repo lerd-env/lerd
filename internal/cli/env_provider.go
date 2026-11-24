@@ -10,6 +10,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
+	"github.com/geodro/lerd/internal/tools"
 )
 
 // refreshProvidedEnv runs the project's env_provider on the host and keeps its
@@ -67,8 +68,8 @@ func validProvidedEnvSite(name string) bool {
 }
 
 // providedEnvHeader names the directories the file may be loaded from: the site
-// and its worktrees. The prepend refuses a script outside them, so a stale or
-// wrong LERD_SITE (a shell cd'd into another project) loads nothing.
+// and its worktrees, then lerd's tool directory, whose scripts count only when
+// run from inside one. Any other script, whatever its LERD_SITE, loads nothing.
 func providedEnvHeader(site config.Site) []byte {
 	roots := []string{site.Path}
 	if wts, _ := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain()); len(wts) > 0 {
@@ -78,17 +79,26 @@ func providedEnvHeader(site config.Site) []byte {
 	}
 	var b bytes.Buffer
 	for _, r := range roots {
-		if real, err := filepath.EvalSymlinks(r); err == nil {
-			r = real
-		}
-		for _, spelling := range append([]string{r}, homeSpellings(r)...) {
-			if spelling == "" || strings.ContainsAny(spelling, "\r\n") {
-				continue
-			}
-			fmt.Fprintf(&b, "#lerd-root=%s\n", spelling)
-		}
+		writeHeaderDir(&b, "root", r)
 	}
+	// After the roots: a prepend that predates this line stops reading there.
+	// The directory itself only exists once a tool was fetched, so it is the
+	// data dir that gets resolved.
+	writeHeaderDir(&b, "tools", filepath.Join(config.CanonicalPath(config.DataDir()), filepath.Base(tools.PharDir())))
 	return b.Bytes()
+}
+
+// writeHeaderDir writes dir under every spelling the PHP containers mount.
+func writeHeaderDir(b *bytes.Buffer, key, dir string) {
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = real
+	}
+	for _, spelling := range append([]string{dir}, homeSpellings(dir)...) {
+		if spelling == "" || strings.ContainsAny(spelling, "\r\n") {
+			continue
+		}
+		fmt.Fprintf(b, "#lerd-%s=%s\n", key, spelling)
+	}
 }
 
 // homeSpellingsFn is config.HomeSpellings, swapped in tests for a fake /home.

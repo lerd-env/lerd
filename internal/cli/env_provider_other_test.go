@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -47,7 +48,7 @@ func TestRefreshProvidedEnv_WritesOwnerOnlyFile(t *testing.T) {
 		t.Fatalf("provided env not written: %v", err)
 	}
 	root, _ := filepath.EvalSymlinks(site.Path)
-	if string(body) != "#lerd-root="+root+"\nSECRET=s3cret\n" {
+	if !strings.HasPrefix(string(body), "#lerd-root="+root+"\n#lerd-tools=") || !strings.HasSuffix(string(body), "\nSECRET=s3cret\n") {
 		t.Errorf("body = %q", body)
 	}
 	if info, _ := os.Stat(file); info.Mode().Perm() != 0o600 {

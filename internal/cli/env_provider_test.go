@@ -143,3 +143,20 @@ func TestProvidedEnvHeader_namesEveryHomeSpellingTheContainersMount(t *testing.T
 		t.Errorf("header %q is missing %q", got, want)
 	}
 }
+
+// wp-cli's phar lives outside every project, so the header names lerd's tool
+// directory, after the roots, for the prepend to tell it from any other script.
+func TestProvidedEnvHeader_namesLerdsToolDirAfterTheRoots(t *testing.T) {
+	data, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_DATA_HOME", data)
+	site := config.CanonicalPath(t.TempDir())
+
+	got := string(providedEnvHeader(config.Site{Name: "app", Path: site, Domains: []string{"app.test"}}))
+	want := "#lerd-tools=" + filepath.Join(data, "lerd", "phars") + "\n"
+	if !strings.HasPrefix(got, "#lerd-root="+site+"\n") || !strings.HasSuffix(got, want) {
+		t.Errorf("header = %q, want the root first and %q last", got, want)
+	}
+}

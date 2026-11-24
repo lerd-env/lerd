@@ -36,8 +36,12 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 	otherDir := t.TempDir()
-	env := "#lerd-root=" + siteDir + "\n# comment\nPLAIN=one\nSINGLE='two words'\nexport DQ=\"a\\nb\"\nKEPT=from-file\n" +
-		"PEM=\"-----BEGIN KEY-----\nabc\n-----END KEY-----\"\nNOTE=bar # note\nHASH=a#b\n#lerd-root=/\n"
+	toolsDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := "#lerd-root=" + siteDir + "\n#lerd-tools=" + toolsDir + "\n# comment\nPLAIN=one\nSINGLE='two words'\nexport DQ=\"a\\nb\"\nKEPT=from-file\n" +
+		"PEM=\"-----BEGIN KEY-----\nabc\n-----END KEY-----\"\nNOTE=bar # note\nHASH=a#b\n#lerd-root=/\n#lerd-tools=/\n"
 	if err := os.WriteFile(filepath.Join(envDir, "app.env"), []byte(env), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +49,7 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 	script := `<?php echo json_encode(array(getenv("PLAIN"), $_ENV["SINGLE"] ?? null, $_SERVER["DQ"] ?? null, getenv("KEPT"), getenv("PEM"), getenv("NOTE"), getenv("HASH")));`
-	for _, d := range []string{siteDir, otherDir} {
+	for _, d := range []string{siteDir, otherDir, toolsDir} {
 		if err := os.WriteFile(filepath.Join(d, "probe.php"), []byte(script), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -59,9 +63,10 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 		t.Skip("php cannot read host files (containerised/sandboxed wrapper); native php needed")
 	}
 
-	run := func(site, probeDir string) string {
+	runIn := func(site, probeDir, cwd string) string {
 		probe := filepath.Join(probeDir, "probe.php")
 		cmd := exec.Command(php, "-n", "-d", "auto_prepend_file="+bridgePath, "-d", "lerd.provided_env_dir="+envDir, probe)
+		cmd.Dir = cwd
 		cmd.Env = append(os.Environ(), "LERD_SITE="+site, "KEPT=from-process")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -69,6 +74,7 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 		}
 		return strings.TrimSpace(string(out))
 	}
+	run := func(site, probeDir string) string { return runIn(site, probeDir, "") }
 
 	nothing := `[false,null,null,"from-process",false,false,false]`
 	if out, want := run("app", siteDir), `["one","two words","a\nb","from-process","-----BEGIN KEY-----\nabc\n-----END KEY-----","bar","a#b"]`; out != want {
@@ -79,6 +85,17 @@ func TestDumpBridge_LoadsProvidedEnv(t *testing.T) {
 	}
 	if out := run("app", otherDir); out != nothing {
 		t.Errorf("a script outside the file's roots must load nothing, got %s", out)
+	}
+	// lerd's own CLI tools, like its wp-cli phar, load it when run from the
+	// project; another project's script never does, wherever it is run from.
+	if out := runIn("app", toolsDir, siteDir); !strings.HasPrefix(out, `["one"`) {
+		t.Errorf("a lerd tool run from the site must load its env, got %s", out)
+	}
+	if out := runIn("app", toolsDir, otherDir); out != nothing {
+		t.Errorf("a lerd tool run from outside the site must load nothing, got %s", out)
+	}
+	if out := runIn("app", otherDir, siteDir); out != nothing {
+		t.Errorf("another project's script run from the site must load nothing, got %s", out)
 	}
 }
 
