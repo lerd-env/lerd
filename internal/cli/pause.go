@@ -106,7 +106,7 @@ func PauseSite(name string) error {
 
 	site.Paused = true
 	site.PausedWorkers = running
-	if err := config.AddSite(*site); err != nil {
+	if err := config.SetSitePaused(site.Name, true, running); err != nil {
 		return fmt.Errorf("updating registry: %w", err)
 	}
 
@@ -293,7 +293,7 @@ func UnpauseSite(name string) error {
 
 	site.Paused = false
 	site.PausedWorkers = nil
-	if err := config.AddSite(*site); err != nil {
+	if err := config.SetSitePaused(site.Name, false, nil); err != nil {
 		return fmt.Errorf("updating registry: %w", err)
 	}
 

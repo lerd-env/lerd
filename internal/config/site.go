@@ -831,6 +831,29 @@ func SetSiteIdleSuspendedWorkers(name string, workers []string) error {
 	return fmt.Errorf("site %q not found", name)
 }
 
+// SetSitePaused updates only a site's pause state under the write lock, so the
+// registry writes a pause or unpause makes along the way, such as a worktree's
+// port claim, are kept.
+func SetSitePaused(name string, paused bool, workers []string) error {
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
+	if err != nil {
+		return err
+	}
+	for i := range reg.Sites {
+		if reg.Sites[i].Name == name {
+			reg.Sites[i].Paused = paused
+			reg.Sites[i].PausedWorkers = workers
+			return SaveSites(reg)
+		}
+	}
+	return fmt.Errorf("site %q not found", name)
+}
+
 // SetSitePinned atomically updates just a site's idle-suspend pin flag. Like
 // SetSiteIdleSuspendedWorkers it rewrites only that field under the write lock, so
 // `lerd idle pin/unpin` can't clobber a concurrent SetSiteIdleSuspendedWorkers
