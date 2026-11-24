@@ -49,32 +49,44 @@ describe('SiteTile', () => {
   });
 
   // A stopped site's icon is often its favicon or framework mark, which never
-  // changes, so the subline says whether PHP is serving it, as a service does.
-  it('leads the subline with Running when PHP is serving the site', () => {
-    const { getByText, container } = render(SiteTile, {
+  // changes, so the subline leads with a dot for whether PHP is serving it,
+  // named in a tooltip and, since a tooltip needs a mouse, to screen readers.
+  function statusTooltip(dot: HTMLElement): string {
+    dot.parentElement!.dispatchEvent(new MouseEvent('mouseenter'));
+    const text = document.querySelector('[role="tooltip"]')?.textContent ?? '';
+    dot.parentElement!.dispatchEvent(new MouseEvent('mouseleave'));
+    return text;
+  }
+
+  it('leads the subline with a green Running dot when PHP is serving the site', () => {
+    const { getByLabelText, getByText, queryByText } = render(SiteTile, {
       props: { site: site({ fpm_running: true, framework_label: 'Laravel', php_version: '8.5' }) }
     });
-    expect(getByText('Running')).toBeTruthy();
+    // The word is the tooltip's, not the tile's, so check before hovering.
+    expect(queryByText('Running')).toBeNull();
     expect(getByText('Laravel · PHP 8.5')).toBeTruthy();
-    expect(container.querySelector('.bg-emerald-500')).toBeTruthy();
+    const dot = getByLabelText('Running');
+    expect(dot.className).toContain('bg-emerald-500');
+    expect(statusTooltip(dot)).toBe('Running');
   });
 
-  it('says Stopped with a grey dot when PHP is not serving the site', () => {
-    const { getByText, queryByText, container } = render(SiteTile, {
+  it('shows a grey Stopped dot when PHP is not serving the site', () => {
+    const { getByLabelText, queryByLabelText } = render(SiteTile, {
       props: { site: site({ fpm_running: false, php_version: '8.4' }) }
     });
-    expect(getByText('Stopped')).toBeTruthy();
-    expect(queryByText('Running')).toBeNull();
-    expect(container.querySelector('.bg-gray-300')).toBeTruthy();
+    const dot = getByLabelText('Stopped');
+    expect(dot.className).toContain('bg-gray-300');
+    expect(statusTooltip(dot)).toBe('Stopped');
+    expect(queryByLabelText('Running')).toBeNull();
   });
 
   // Paused sites already sit in their own section with a count of their own.
   it('shows no running state on a paused tile', () => {
-    const { queryByText } = render(SiteTile, {
+    const { queryByLabelText } = render(SiteTile, {
       props: { site: site({ paused: true, php_version: '8.5' }) }
     });
-    expect(queryByText('Running')).toBeNull();
-    expect(queryByText('Stopped')).toBeNull();
+    expect(queryByLabelText('Running')).toBeNull();
+    expect(queryByLabelText('Stopped')).toBeNull();
   });
 
   // The dashboard widget renders the same tile in a much narrower column, so
