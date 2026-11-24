@@ -10,7 +10,7 @@ import (
 func statusSite(paused, running bool) siteinfo.EnrichedSite {
 	return siteinfo.EnrichedSite{
 		Name: "app", Domains: []string{"app.test"}, Path: "/srv/app", PHPVersion: "8.4",
-		Paused: paused, FPMRunning: running,
+		UsesPHP: true, Paused: paused, FPMRunning: running,
 	}
 }
 
@@ -58,5 +58,27 @@ func TestPrintSiteCompactTagsOnlySitesNotRunning(t *testing.T) {
 				t.Errorf("first line = %q, want %q", strings.SplitN(out, "\n", 2)[0], strings.TrimSuffix(c.want, "\n"))
 			}
 		})
+	}
+}
+
+// nginx serves a static site's files without PHP, so a stopped pool on its
+// version must not mark it stopped; only nginx being down does.
+func TestSiteStatusFollowsNginxForAStaticSite(t *testing.T) {
+	prev := sitesNginxRunningFn
+	t.Cleanup(func() { sitesNginxRunningFn = prev })
+
+	static := statusSite(false, false)
+	static.UsesPHP = false
+
+	sitesNginxRunningFn = func() bool { return true }
+	if got := siteStatus(static); got != "running" {
+		t.Errorf("static site with nginx up = %q, want running", got)
+	}
+	sitesNginxRunningFn = func() bool { return false }
+	if got := siteStatus(static); got != "stopped" {
+		t.Errorf("static site with nginx down = %q, want stopped", got)
+	}
+	if got := siteStatus(statusSite(false, true)); got != "running" {
+		t.Errorf("PHP site with its pool up = %q, want running", got)
 	}
 }

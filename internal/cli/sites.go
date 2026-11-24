@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteinfo"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -99,14 +100,26 @@ type orderedSite struct {
 
 func pausedTag() string { return feedback.Amber("paused") }
 
-// siteStatus says whether PHP, or the site's own dev server, is serving it. A
-// paused site is stopped on purpose, so it keeps its own word; stopped is red to
-// stand out in a long list.
+// sitesNginxRunningFn reports whether nginx is up; a seam so tests need no podman.
+var sitesNginxRunningFn = func() bool { return podman.Cache.Running("lerd-nginx") }
+
+// staticSite reports a site nginx serves on its own, with no PHP, container or
+// dev server behind it, so its state is nginx's rather than a PHP pool's.
+func staticSite(s siteinfo.EnrichedSite) bool {
+	return !s.UsesPHP && s.ContainerPort == 0 && s.HostPort == 0
+}
+
+// siteStatus says whether the site is being served. A paused site is stopped
+// on purpose, so it keeps its own word; stopped is red to stand out.
 func siteStatus(s siteinfo.EnrichedSite) string {
+	running := s.FPMRunning
+	if staticSite(s) {
+		running = sitesNginxRunningFn()
+	}
 	switch {
 	case s.Paused:
 		return pausedTag()
-	case s.FPMRunning:
+	case running:
 		return feedback.Green("running")
 	}
 	return feedback.Red("stopped")
@@ -158,8 +171,8 @@ func siteRows(s siteinfo.EnrichedSite, grouped, wide bool) [][]string {
 // isn't running. grouped renders a group secondary nested beneath its main.
 func printSiteCompact(s siteinfo.EnrichedSite, grouped bool) {
 	status := ""
-	if s.Paused || !s.FPMRunning {
-		status = " [" + siteStatus(s) + "]"
+	if st := siteStatus(s); s.Paused || st != feedback.Green("running") {
+		status = " [" + st + "]"
 	}
 	tls := ""
 	if s.Secured {
