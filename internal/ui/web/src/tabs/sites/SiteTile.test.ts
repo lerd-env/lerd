@@ -48,6 +48,47 @@ describe('SiteTile', () => {
     expect(container.querySelector('.opacity-60')).toBeTruthy();
   });
 
+  // A stopped site's icon is often its favicon or framework mark, which never
+  // changes, so the subline leads with a dot for whether PHP is serving it,
+  // named in a tooltip and, since a tooltip needs a mouse, to screen readers.
+  function statusTooltip(dot: HTMLElement): string {
+    dot.parentElement!.dispatchEvent(new MouseEvent('mouseenter'));
+    const text = document.querySelector('[role="tooltip"]')?.textContent ?? '';
+    dot.parentElement!.dispatchEvent(new MouseEvent('mouseleave'));
+    return text;
+  }
+
+  it('leads the subline with a green Running dot when PHP is serving the site', () => {
+    const { getByLabelText, getByText, queryByText } = render(SiteTile, {
+      props: { site: site({ fpm_running: true, framework_label: 'Laravel', php_version: '8.5' }) }
+    });
+    // The word is the tooltip's, not the tile's, so check before hovering.
+    expect(queryByText('Running')).toBeNull();
+    expect(getByText('Laravel · PHP 8.5')).toBeTruthy();
+    const dot = getByLabelText('Running');
+    expect(dot.className).toContain('bg-emerald-500');
+    expect(statusTooltip(dot)).toBe('Running');
+  });
+
+  it('shows a grey Stopped dot when PHP is not serving the site', () => {
+    const { getByLabelText, queryByLabelText } = render(SiteTile, {
+      props: { site: site({ fpm_running: false, php_version: '8.4' }) }
+    });
+    const dot = getByLabelText('Stopped');
+    expect(dot.className).toContain('bg-gray-300');
+    expect(statusTooltip(dot)).toBe('Stopped');
+    expect(queryByLabelText('Running')).toBeNull();
+  });
+
+  // Paused sites already sit in their own section with a count of their own.
+  it('shows no running state on a paused tile', () => {
+    const { queryByLabelText } = render(SiteTile, {
+      props: { site: site({ paused: true, php_version: '8.5' }) }
+    });
+    expect(queryByLabelText('Running')).toBeNull();
+    expect(queryByLabelText('Stopped')).toBeNull();
+  });
+
   // The dashboard widget renders the same tile in a much narrower column, so
   // it asks for a tighter card rather than restyling the tile.
   it('tightens the card and the icon box when compact', () => {

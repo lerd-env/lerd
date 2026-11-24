@@ -2,8 +2,10 @@
   import SiteIcon from '$components/SiteIcon.svelte';
   import SiteIndicators from '$components/SiteIndicators.svelte';
   import Icon from '$components/Icon.svelte';
+  import StatusDot from '$components/StatusDot.svelte';
+  import { tooltip } from '$lib/tooltip';
   import { goToTab } from '$stores/route';
-  import { openSiteInBrowser, type Site } from '$stores/sites';
+  import { openSiteInBrowser, siteDotColor, type Site } from '$stores/sites';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -25,6 +27,7 @@
   // friendlier than the URL, so it becomes the tile title and the domain drops
   // to the subline. Everything else keeps the domain as the title.
   const title = $derived(site.app_name || site.domain);
+  const state = $derived(site.fpm_running ? m.common_running() : m.common_stopped());
 
   const subtitle = $derived.by(() => {
     const parts: string[] = [];
@@ -61,8 +64,19 @@
           </svg>
         {/if}
       </div>
-      {#if subtitle}
-        <p class="text-[11px] leading-snug text-gray-500 dark:text-gray-400 truncate" title={subtitle}>{subtitle}</p>
+      <!-- Leads with a dot for the site's state, named in its tooltip and to screen
+           readers, so a stopped site stands out. Paused sites have their own section. -->
+      {#if !site.paused || subtitle}
+        <p class="flex min-w-0 items-center gap-1.5 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+          {#if !site.paused}
+            <span class="inline-flex shrink-0 py-1" use:tooltip={state}>
+              <StatusDot color={siteDotColor(site)} label={state} />
+            </span>
+          {/if}
+          {#if subtitle}
+            <span class="truncate" title={subtitle}>{subtitle}</span>
+          {/if}
+        </p>
       {/if}
     </div>
   </button>
