@@ -423,3 +423,21 @@ func TestClearCustomBuildFailure(t *testing.T) {
 		t.Error("cleared failure still reported")
 	}
 }
+
+// The hash of a project-wide context covers no files, so moving between
+// contexts has to show in it.
+func TestEnsureCustomImage_MovingToTheProjectContextRebuilds(t *testing.T) {
+	builds := fakeImageStore(t, true)
+	dir, cfg := writeContextFixture(t)
+	if _, err := EnsureCustomImage("mysite", dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg.BuildContext = "."
+	if changed, err := EnsureCustomImage("mysite", dir, cfg); err != nil || !changed || *builds != 2 {
+		t.Errorf("builds %d, changed %v, err %v", *builds, changed, err)
+	}
+	cfg.BuildContext = ""
+	if _, err := EnsureCustomImage("mysite", dir, cfg); err != nil || *builds != 2 {
+		t.Errorf("\".\" and unset are the same context: builds %d, err %v", *builds, err)
+	}
+}

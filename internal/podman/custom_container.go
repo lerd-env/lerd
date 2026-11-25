@@ -100,11 +100,15 @@ func hashContainerfile(projectPath string, cfg *config.ContainerConfig) string {
 	if cfg != nil {
 		target = cfg.Target
 	}
+	context := ""
+	if root := ResolveBuildContext(projectPath, cfg); root != projectPath {
+		context = "\x00--context=" + root
+	}
 	// Mix the build target into the hash so flipping target: development to
 	// target: production in .lerd.yaml invalidates the cache. Without this,
 	// CustomImageUpToDate would return a stale image when only the target
 	// changed (issue #379).
-	return fmt.Sprintf("%x", md5.Sum([]byte(string(data)+"\x00--target="+target)))
+	return fmt.Sprintf("%x", md5.Sum([]byte(string(data)+"\x00--target="+target+context)))
 }
 
 // hasOwnBuildContext reports whether the build context is a directory of its
