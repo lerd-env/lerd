@@ -294,7 +294,7 @@ func TestToolList_underSizeCeiling(t *testing.T) {
 	// points at instead of sifting every captured event, then 25400 → 25500 for
 	// dumps_buffer and its size, so an assistant whose request left the buffer
 	// can make room for the next one.
-	const ceiling = 25950 // 25500 → 25950 for the plugin tool and its guide
+	const ceiling = 26250 // 25500 → 25950 for the plugin tool and its guide, → 26250 for the test tool
 	got, err := json.Marshal(toolList())
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)

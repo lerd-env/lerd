@@ -179,7 +179,7 @@ func resolveWorkerCommand(sitePath, workerName string, w config.FrameworkWorker)
 	// A worker execs its command straight from its unit, so the framework's
 	// cli_ini has to be folded in here too. Magento cannot even bootstrap at
 	// PHP's 128M default, so a worker without it simply crash-loops.
-	ini := phpIniArgsForDir(sitePath)
+	ini := config.CLIIniArgsForDir(sitePath)
 	w.Command = projectTunedCommand(sitePath, workerName, w)
 	if w.ReloadCommand == "" || !config.ProjectReloadsWorker(sitePath, workerName) {
 		return injectPHPIniIntoCommand(w.Command, ini)

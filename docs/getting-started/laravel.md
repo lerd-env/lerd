@@ -155,7 +155,7 @@ You should see `myapp` listed as `active`, the configured services running, and 
 | `lerd link` | Registered `myapp.test` with nginx + lerd-dns |
 | `lerd init` | Wrote `.lerd.yaml` with PHP 8.5, Node 22, MySQL, Redis, Mailpit, queue, schedule |
 | `lerd env` (via setup) | Injected `DB_HOST=lerd-mysql`, `REDIS_HOST=lerd-redis`, `MAIL_HOST=lerd-mailpit` into `.env` |
-| `lerd db:create` (via env) | Created `myapp` and `myapp_testing` databases |
+| `lerd db:create` (via env) | Created the `myapp` database, and `myapp_testing` too if `phpunit.xml` runs the tests on MySQL rather than SQLite |
 | `lerd secure` (via setup) | Issued an mkcert cert, switched the vhost to HTTPS, set `APP_URL=https://myapp.test` |
 | `lerd worker start queue/schedule` (via setup) | Launched `lerd-queue-myapp` and `lerd-schedule-myapp` systemd units |
 

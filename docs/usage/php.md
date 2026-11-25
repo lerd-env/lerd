@@ -61,7 +61,7 @@ The PATH line goes into your shell rc once, at install, so a PHP that lands belo
 For common workflows there are a few built-in shortcuts:
 
 - `lerd a [args...]`: short alias for `lerd artisan` (also `lerd console`)
-- `lerd test [args...]`: runs `lerd artisan test`
+- `lerd test [args...]`: runs the project's tests with [the runner its framework or test package declares](/usage/framework-definitions#running-tests): `php artisan test` on Laravel, Pest or PHPUnit elsewhere
 
 In addition, any composer-installed binary in the project's `vendor/bin` directory is callable directly as `lerd <name>`. For example, with the usual Laravel dev tooling installed:
 

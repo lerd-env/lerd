@@ -4,20 +4,48 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/geodro/lerd/internal/config"
 	"github.com/spf13/cobra"
 )
 
-// NewTestCmd returns the `lerd test` command — shortcut for `lerd artisan test`.
+// NewTestCmd returns the `lerd test` command, which runs the project's tests
+// the way its framework or test package declares.
 func NewTestCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:                "test [args...]",
-		Short:              "Run framework tests (shortcut for `lerd artisan test`)",
+		Short:              "Run the project's tests",
 		DisableFlagParsing: true,
 		SilenceUsage:       true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runConsole(nil, append([]string{"test"}, args...))
+			cwd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			runner, err := config.TestRunnerForDir(cwd)
+			if err != nil {
+				return err
+			}
+			return runTests(cwd, runner, args)
 		},
 	}
+}
+
+var (
+	testRunPHPFn     = RunPHP
+	testRunConsoleFn = func(args []string) error { return runConsole(nil, args) }
+)
+
+// runTests hands args to runner. A framework that declares none keeps its
+// console's own test command, as lerd test always ran.
+func runTests(cwd string, runner *config.TestRunner, args []string) error {
+	if runner == nil {
+		return testRunConsoleFn(append([]string{"test"}, args...))
+	}
+	argv, err := runner.Argv("", "")
+	if err != nil {
+		return err
+	}
+	return testRunPHPFn(cwd, append(argv[1:], args...))
 }
 
 // NewVendorBinCmd returns the hidden `lerd vendor-bin <name> [args...]` command
