@@ -344,7 +344,7 @@ func RegisterProjectDeferred(projectDir string, cfg *config.GlobalConfig, defer_
 
 	// Quiet build: `lerd park` draws a progress bar this output would break.
 	quietFPM := func(v string) error { return ensureLinkPHP(v, io.Discard) }
-	res, err := linker.Apply(plan, policy, linker.Deps{EnsureFPMQuadlet: quietFPM}, linker.NopReporter{})
+	res, err := linker.Apply(plan, policy, linker.Deps{EnsureFPMQuadlet: quietFPM, EnsureNode: ensureSiteNode}, linker.NopReporter{})
 	if err != nil {
 		return out, err
 	}

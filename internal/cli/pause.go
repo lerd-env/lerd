@@ -246,6 +246,10 @@ func UnpauseSite(name string) error {
 		}
 	}
 
+	if err := ensureSiteNode(*site, cliReporter{}); err != nil {
+		return fmt.Errorf("%s stays paused: %w", site.Name, err)
+	}
+
 	// Re-arm the container's quadlet [Install] that PauseSite stripped, before
 	// starting it, so it autostarts at login again. Gated on the global autostart
 	// flag inside the helper, so unpause never re-arms a globally-disabled site.

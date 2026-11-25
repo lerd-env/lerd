@@ -164,7 +164,7 @@ func (m *Model) runtimeDetail(r runtimeRow, f runtimeFacts, running map[string]b
 		out = append(out, row(nil, w, bd("Node "+r.version, nil)), row(nil, w))
 		out = append(out, kv("default", onOffSeg(r.version == f.defaultNode)))
 		for _, s := range m.snap.Sites {
-			if s.NodeVersion == r.version {
+			if s.NodeVersion == r.version && !s.Paused {
 				users = append(users, siteDomain(&s))
 			}
 		}

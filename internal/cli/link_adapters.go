@@ -62,6 +62,7 @@ func (f feedbackStep) Fail(err error)   { f.s.Fail(err) }
 func linkDeps() linker.Deps {
 	return linker.Deps{
 		EnsureFPMQuadlet:         func(v string) error { return ensureLinkPHP(v, os.Stdout) },
+		EnsureNode:               ensureSiteNode,
 		ReconcileRuntimeQuadlets: reconcileStaleRuntimeQuadlets,
 		StartHostProxyWorker:     startHostProxyWorker,
 		SyncIDEDataSource:        func(root string) bool { return syncIDEDataSource(root).wrote() },

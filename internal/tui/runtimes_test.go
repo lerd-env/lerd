@@ -111,3 +111,21 @@ func TestRuntimeDetailLeavesPausedSitesOut(t *testing.T) {
 		t.Errorf("paused site listed as using PHP 8.3:\n%s", out)
 	}
 }
+
+func TestRuntimeDetailLeavesPausedSitesOutOfNode(t *testing.T) {
+	m := runtimesModel(t)
+	detail := func() string {
+		var b strings.Builder
+		for _, l := range m.runtimeDetail(runtimeRow{kind: "node", version: "20"}, runtimeFacts{defaultNode: "22"}, nil, 80) {
+			b.WriteString(l)
+		}
+		return ansi.Strip(b.String())
+	}
+	if !strings.Contains(detail(), "legacy.test") {
+		t.Fatal("fixture does not list the active site")
+	}
+	m.snap.Sites[1].Paused = true
+	if strings.Contains(detail(), "legacy.test") {
+		t.Error("paused site listed as using Node 20")
+	}
+}
