@@ -131,7 +131,7 @@
   // removable, so the list can hold more than the removal guard's count.
   function sitesForVersion(v: string) {
     return $sites
-      .filter((s) => s.node_version === v || (!s.node_version && v === nodeDefault))
+      .filter((s) => !s.paused && (s.node_version === v || (!s.node_version && v === nodeDefault)))
       .map((s) => s.domain);
   }
 

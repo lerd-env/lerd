@@ -33,6 +33,8 @@ var fpmRunning = func(version string) bool {
 type Deps struct {
 	// EnsureFPMQuadlet builds a PHP version's image and unit.
 	EnsureFPMQuadlet func(version string) error
+	// EnsureNode installs the Node version the site needs when it is missing.
+	EnsureNode func(site config.Site, r Reporter) error
 	// ReconcileRuntimeQuadlets clears a per-site FrankenPHP or custom-FPM unit
 	// the site no longer uses.
 	ReconcileRuntimeQuadlets func(site config.Site)
@@ -91,6 +93,12 @@ func Apply(plan *Plan, p Policy, d Deps, r Reporter) (*Result, error) {
 	// once, starting its worktrees and workers on a version still being built.
 	if err := ensureServableFPMImage(plan, plan.Site, p, d, r); err != nil {
 		return res, err
+	}
+
+	if d.EnsureNode != nil {
+		if err := d.EnsureNode(plan.Site, r); err != nil {
+			return res, err
+		}
 	}
 
 	// Carry a re-link's HTTPS over and drop registrations the rename stranded.

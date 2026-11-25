@@ -193,7 +193,7 @@ wsMessage.subscribe((msg) => {
   if (msg?.sites) applySites(msg.sites);
 });
 
-// A paused site is served by a landing page, so it holds no PHP version.
+// A paused site is served by a landing page, so it holds no PHP or Node version.
 export const sitesByPhp = derived(sites, ($s) => {
   const counts = new Map<string, number>();
   for (const site of $s) {
@@ -205,7 +205,7 @@ export const sitesByPhp = derived(sites, ($s) => {
 export const sitesByNode = derived(sites, ($s) => {
   const counts = new Map<string, number>();
   for (const site of $s) {
-    if (site.node_version) counts.set(site.node_version, (counts.get(site.node_version) ?? 0) + 1);
+    if (site.node_version && !site.paused) counts.set(site.node_version, (counts.get(site.node_version) ?? 0) + 1);
   }
   return counts;
 });

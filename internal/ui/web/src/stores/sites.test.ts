@@ -31,6 +31,16 @@ describe('sites store', () => {
     expect(phpSiteCount('8.4')).toBe(1);
   });
 
+  it('does not count a paused site as using its node version', async () => {
+    const { sites, nodeSiteCount } = await import('./sites');
+    sites.set([
+      { domain: 'a.test', node_version: '20', paused: true },
+      { domain: 'b.test', node_version: '22' }
+    ]);
+    expect(nodeSiteCount('20')).toBe(0);
+    expect(nodeSiteCount('22')).toBe(1);
+  });
+
   it('activeWorktreeDomain returns the parent domain when branch is empty', async () => {
     const { activeWorktreeDomain } = await import('./sites');
     const s = {
