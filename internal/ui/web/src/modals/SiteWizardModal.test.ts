@@ -426,7 +426,7 @@ describe('SiteWizardModal', () => {
     expect(screen.getByText('Skip setup')).toBeTruthy();
     await fireEvent.click(screen.getByText('lerd mcp:inject'));
 
-    await fireEvent.click(await screen.findByText('View in lerd'));
+    await fireEvent.click(await screen.findByText('View in Dashboard'));
     await waitFor(() => expect(goToTab).toHaveBeenCalledWith('sites', 'acme.test'));
   });
 
@@ -456,7 +456,7 @@ describe('SiteWizardModal', () => {
 
     expect(await screen.findByText('Site ready')).toBeTruthy();
     expect(screen.getByText('Open in browser')).toBeTruthy();
-    expect(screen.getByText('View in lerd')).toBeTruthy();
+    expect(screen.getByText('View in Dashboard')).toBeTruthy();
   });
 
   // A paused site serves its landing page, so the tiles offer no browser link.
@@ -466,7 +466,7 @@ describe('SiteWizardModal', () => {
     localStorage.setItem('lerd.siteWizard', JSON.stringify({ step: 'setup', dir: '/home/u/acme' }));
 
     render(SiteWizardModal);
-    expect(await screen.findByText('View in lerd')).toBeTruthy();
+    expect(await screen.findByText('View in Dashboard')).toBeTruthy();
     expect(screen.queryByText('Open in browser')).toBeNull();
   });
 

@@ -851,7 +851,7 @@
   "siteWizard_devCommand": "Geliştirme komutu",
   "siteWizard_devCommandDetected": "Bulunan betikler: {scripts}",
   "siteWizard_devCommandHint": "lerd uygulamayı nasıl başlatsın. Kendin başlatmak için boş bırak.",
-  "siteWizard_finish": "lerd'de görüntüle",
+  "siteWizard_finish": "Panoda görüntüle",
   "siteWizard_framework": "Framework",
   "siteWizard_frankenphp": "FrankenPHP",
   "siteWizard_frankenphpUse": "FrankenPHP çalışma zamanını kullan",

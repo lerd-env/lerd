@@ -851,7 +851,7 @@
   "siteWizard_devCommand": "開発コマンド",
   "siteWizard_devCommandDetected": "検出されたスクリプト: {scripts}",
   "siteWizard_devCommandHint": "lerd がアプリを起動する方法です。空にすると自分で起動します。",
-  "siteWizard_finish": "lerd で表示",
+  "siteWizard_finish": "ダッシュボードで表示",
   "siteWizard_framework": "フレームワーク",
   "siteWizard_frankenphp": "FrankenPHP",
   "siteWizard_frankenphpUse": "FrankenPHP ランタイムを使う",

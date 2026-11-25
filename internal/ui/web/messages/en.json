@@ -851,7 +851,7 @@
   "siteWizard_devCommand": "Dev command",
   "siteWizard_devCommandDetected": "Detected scripts: {scripts}",
   "siteWizard_devCommandHint": "How lerd starts the app. Leave blank to run it yourself.",
-  "siteWizard_finish": "View in lerd",
+  "siteWizard_finish": "View in Dashboard",
   "siteWizard_framework": "Framework",
   "siteWizard_frankenphp": "FrankenPHP",
   "siteWizard_frankenphpUse": "Use the FrankenPHP runtime",

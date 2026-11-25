@@ -851,7 +851,7 @@
   "siteWizard_devCommand": "Comanda de dezvoltare",
   "siteWizard_devCommandDetected": "Scripturi detectate: {scripts}",
   "siteWizard_devCommandHint": "Cum pornește lerd aplicația. Lasă gol ca s-o pornești singur.",
-  "siteWizard_finish": "Vezi în lerd",
+  "siteWizard_finish": "Vezi în tabloul de bord",
   "siteWizard_framework": "Framework",
   "siteWizard_frankenphp": "FrankenPHP",
   "siteWizard_frankenphpUse": "Folosește runtime-ul FrankenPHP",

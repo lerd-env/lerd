@@ -851,7 +851,7 @@
   "siteWizard_devCommand": "Dev-commando",
   "siteWizard_devCommandDetected": "Gevonden scripts: {scripts}",
   "siteWizard_devCommandHint": "Hoe lerd de app start. Laat leeg om hem zelf te starten.",
-  "siteWizard_finish": "Bekijken in lerd",
+  "siteWizard_finish": "Bekijken in dashboard",
   "siteWizard_framework": "Framework",
   "siteWizard_frankenphp": "FrankenPHP",
   "siteWizard_frankenphpUse": "De FrankenPHP-runtime gebruiken",

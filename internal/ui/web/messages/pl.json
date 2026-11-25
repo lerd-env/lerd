@@ -851,7 +851,7 @@
   "siteWizard_devCommand": "Polecenie deweloperskie",
   "siteWizard_devCommandDetected": "Wykryte skrypty: {scripts}",
   "siteWizard_devCommandHint": "Jak lerd uruchamia aplikację. Zostaw puste, aby uruchamiać ją samodzielnie.",
-  "siteWizard_finish": "Zobacz w lerd",
+  "siteWizard_finish": "Zobacz w pulpicie",
   "siteWizard_framework": "Framework",
   "siteWizard_frankenphp": "FrankenPHP",
   "siteWizard_frankenphpUse": "Użyj środowiska FrankenPHP",
