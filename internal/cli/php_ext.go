@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -237,22 +236,11 @@ func reportOtherVersionsStale(rebuilt string) {
 	feedback.Note("PHP " + strings.Join(others, ", ") + " rebuild on next use, or run 'lerd php:rebuild' now")
 }
 
-// phpExtVersion resolves the PHP version from args, cwd detection, or global default.
+// phpExtVersion is phpPkgVersion for a command taking the version as its only
+// optional argument.
 func phpExtVersion(args []string) (string, error) {
 	if len(args) == 1 {
-		return args[0], nil
+		return phpPkgVersion(args[0])
 	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	v, err := phpDet.DetectVersion(cwd)
-	if err != nil {
-		cfg, err := config.LoadGlobal()
-		if err != nil {
-			return "", err
-		}
-		return cfg.PHP.DefaultVersion, nil
-	}
-	return v, nil
+	return phpPkgVersion("")
 }

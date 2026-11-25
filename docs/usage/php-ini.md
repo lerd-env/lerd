@@ -20,7 +20,7 @@ Related: [PHP versions per project](/usage/php-versions), [PHP extensions](/usag
 Each PHP version has a user-editable ini file at `~/.local/share/lerd/php/<version>/98-user.ini`, mounted read-only into the FPM container as `conf.d/98-lerd-user.ini`. Edit it with:
 
 ```bash
-lerd php:ini          # detected/default version
+lerd php:ini          # the site's version, or the detected/default one
 lerd php:ini 8.3      # explicit version
 ```
 
