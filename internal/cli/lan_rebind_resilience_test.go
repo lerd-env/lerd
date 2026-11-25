@@ -46,6 +46,15 @@ func isolateLaunchAgents(t *testing.T) {
 	}
 }
 
+// stubContainerHostsWrite keeps a regenerate from rewriting the real hosts
+// file every PHP container mounts as /etc/hosts.
+func stubContainerHostsWrite(t *testing.T) {
+	t.Helper()
+	prev := writeContainerHostsFn
+	writeContainerHostsFn = func() error { return nil }
+	t.Cleanup(func() { writeContainerHostsFn = prev })
+}
+
 func writeServiceQuadlet(t *testing.T, name, ports string) {
 	t.Helper()
 	dir := config.QuadletDir()
@@ -63,6 +72,7 @@ func writeServiceQuadlet(t *testing.T, name, ports string) {
 func TestRegenerateLANQuadletsRestartsEveryUnitDespiteFailure(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	isolateLaunchAgents(t)
+	stubContainerHostsWrite(t)
 	cfg := &config.GlobalConfig{}
 	cfg.LAN.Exposed = true
 	if err := config.SaveGlobal(cfg); err != nil {
@@ -97,6 +107,7 @@ func TestRegenerateLANQuadletsRestartsEveryUnitDespiteFailure(t *testing.T) {
 func TestRegenerateLANQuadletsHealsRuntimeDrift(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	isolateLaunchAgents(t)
+	stubContainerHostsWrite(t)
 	cfg := &config.GlobalConfig{}
 	if err := config.SaveGlobal(cfg); err != nil {
 		t.Fatalf("SaveGlobal: %v", err)
