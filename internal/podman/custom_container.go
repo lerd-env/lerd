@@ -100,11 +100,48 @@ func hashContainerfile(projectPath string, cfg *config.ContainerConfig) string {
 	if cfg != nil {
 		target = cfg.Target
 	}
+	context := ""
+	if root := ResolveBuildContext(projectPath, cfg); root != projectPath {
+		context = "\x00--context=" + root
+	}
 	// Mix the build target into the hash so flipping target: development to
 	// target: production in .lerd.yaml invalidates the cache. Without this,
 	// CustomImageUpToDate would return a stale image when only the target
 	// changed (issue #379).
-	return fmt.Sprintf("%x", md5.Sum([]byte(string(data)+"\x00--target="+target)))
+	return fmt.Sprintf("%x", md5.Sum([]byte(string(data)+"\x00--target="+target+context)))
+}
+
+// hasOwnBuildContext reports whether the build context is a directory of its
+// own rather than one holding the project, the default.
+func hasOwnBuildContext(projectPath string, cfg *config.ContainerConfig) bool {
+	root, err := filepath.EvalSymlinks(ResolveBuildContext(projectPath, cfg))
+	if err != nil {
+		return true
+	}
+	project, err := filepath.EvalSymlinks(projectPath)
+	if err != nil {
+		return true
+	}
+	rel, err := filepath.Rel(root, project)
+	return err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// EnsureCustomImage builds the site's image when it may be out of date and says
+// whether it changed. Podman's cache judges a context of its own; one holding
+// the project changes on every source edit, so there the Containerfile decides.
+func EnsureCustomImage(siteName, projectPath string, cfg *config.ContainerConfig) (bool, error) {
+	if !hasOwnBuildContext(projectPath, cfg) && CustomImageUpToDate(siteName, projectPath, cfg) {
+		// The files are back to what the image was built from.
+		ClearCustomBuildFailure(siteName)
+		fmt.Println("Container image up to date, skipping build.")
+		return false, nil
+	}
+	before := LocalImageID(CustomImageName(siteName))
+	if err := BuildCustomImage(siteName, projectPath, cfg); err != nil {
+		return false, err
+	}
+	StoreContainerfileHash(siteName, projectPath, cfg)
+	return LocalImageID(CustomImageName(siteName)) != before, nil
 }
 
 func readContainerfileHash(siteName string) string {
@@ -114,6 +151,42 @@ func readContainerfileHash(siteName string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(data))
+}
+
+// CustomBuildFailed reports whether the site's last image build failed, which
+// leaves it serving the image built before.
+func CustomBuildFailed(siteName string) bool {
+	_, err := os.Stat(customBuildFailurePath(siteName))
+	return err == nil
+}
+
+// ClearCustomBuildFailure forgets a recorded failure.
+func ClearCustomBuildFailure(siteName string) {
+	if os.Remove(customBuildFailurePath(siteName)) == nil {
+		notifyCustomBuild(siteName)
+	}
+}
+
+// notifyCustomBuild refreshes an open dashboard, which a build alone does not.
+func notifyCustomBuild(siteName string) {
+	if AfterUnitChange != nil {
+		AfterUnitChange("site:" + siteName)
+	}
+}
+
+func customBuildFailurePath(siteName string) string {
+	return filepath.Join(config.DataDir(), "container-build-failures", siteName)
+}
+
+func recordCustomBuild(siteName string, err error) {
+	if err == nil {
+		ClearCustomBuildFailure(siteName)
+		return
+	}
+	path := customBuildFailurePath(siteName)
+	os.MkdirAll(filepath.Dir(path), 0755)              //nolint:errcheck
+	os.WriteFile(path, []byte(err.Error()+"\n"), 0644) //nolint:errcheck
+	notifyCustomBuild(siteName)
 }
 
 // buildCustomImageArgs assembles the podman build argv for a custom site
@@ -129,7 +202,8 @@ func buildCustomImageArgs(imageName, containerfile, buildCtx string, cfg *config
 
 // BuildCustomImage builds the OCI image for a site's custom container from
 // the user's Containerfile. The image is tagged as lerd-custom-{siteName}:local.
-func BuildCustomImage(siteName, projectPath string, cfg *config.ContainerConfig) error {
+func BuildCustomImage(siteName, projectPath string, cfg *config.ContainerConfig) (err error) {
+	defer func() { recordCustomBuild(siteName, err) }()
 	containerfile := ResolveContainerfile(projectPath, cfg)
 	if _, err := os.Stat(containerfile); err != nil {
 		return fmt.Errorf("containerfile not found: %s", containerfile)
@@ -148,7 +222,8 @@ func BuildCustomImage(siteName, projectPath string, cfg *config.ContainerConfig)
 }
 
 // BuildCustomImageTo builds the custom image, writing progress to w.
-func BuildCustomImageTo(siteName, projectPath string, cfg *config.ContainerConfig, w interface{ Write([]byte) (int, error) }) error {
+func BuildCustomImageTo(siteName, projectPath string, cfg *config.ContainerConfig, w interface{ Write([]byte) (int, error) }) (err error) {
+	defer func() { recordCustomBuild(siteName, err) }()
 	containerfile := ResolveContainerfile(projectPath, cfg)
 	if _, err := os.Stat(containerfile); err != nil {
 		return fmt.Errorf("containerfile not found: %s", containerfile)

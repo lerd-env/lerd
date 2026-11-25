@@ -921,6 +921,8 @@
   "sites_badges_xdebugOff": "オフ",
   "sites_badges_xdebugOn": "Xdebug {mode}",
   "sites_controls_customImageBadge": "カスタムイメージ",
+  "sites_controls_buildFailedBadge": "ビルド失敗",
+  "sites_controls_buildFailedHint": "直前のイメージビルドが失敗したため、サイトは以前のイメージで動作しています。Containerfile を修正して lerd rebuild を実行してください。",
   "sites_controls_dbIsolateFailed": "ワークツリー DB の分離に失敗しました: {error}",
   "sites_controls_dbIsolated": "分離 DB",
   "sites_controls_dbIsolatedTitle": "ワークツリー DB: {db}",

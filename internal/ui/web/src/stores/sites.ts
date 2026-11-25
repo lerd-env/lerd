@@ -80,6 +80,7 @@ export interface Site {
   db_database?: string;
   custom_container?: boolean;
   container_image?: string;
+  container_build_failed?: boolean;
   container_port?: number;
   host_proxy?: boolean;
   host_port?: number;

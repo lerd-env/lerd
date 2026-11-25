@@ -921,6 +921,8 @@
   "sites_badges_xdebugOff": "kapalı",
   "sites_badges_xdebugOn": "Xdebug {mode}",
   "sites_controls_customImageBadge": "özel imaj",
+  "sites_controls_buildFailedBadge": "derleme başarısız",
+  "sites_controls_buildFailedHint": "Son imaj derlemesi başarısız oldu, bu yüzden site hâlâ önceki imajı kullanıyor. Containerfile dosyasını düzeltip lerd rebuild çalıştırın.",
   "sites_controls_dbIsolateFailed": "Worktree DB izolasyonu başarısız: {error}",
   "sites_controls_dbIsolated": "İzole DB",
   "sites_controls_dbIsolatedTitle": "Worktree DB: {db}",

@@ -33,6 +33,7 @@ Read `diag` `action: "status"` for `dns.tld` and `dns.enabled` instead of assumi
 
 #### `site` — sites and their configuration
 Actions: `list` (discover sites — CALL FIRST), `link`, `unlink`, `domain_add`, `domain_remove`, `group_assign`, `group_unassign`, `group_label`, `group_db`, `group_list`, `tls_enable`, `tls_disable`, `tls_renew`, `php`, `node`, `pause`, `unpause`, `restart`, `rebuild`, `runtime`, `nginx_read`, `nginx_write`, `nginx_reset`, `park`, `unpark`.
+- `container_build_failed`: still on the old image, `rebuild`
 - `link` registers a directory; non-PHP sites need `.lerd.yaml` `container.port` + a Containerfile first, or they register as PHP (wrong)
 - `link` runs `lerd link` and returns its output verbatim, so read the reply. It will NOT start a `proxy.command` dev server (`command not approved`); ask the user to run `lerd link --yes`
 - `domain_*` take a domain without the `.test` TLD; you can't remove the last domain

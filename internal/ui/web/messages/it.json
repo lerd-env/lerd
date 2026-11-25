@@ -921,6 +921,8 @@
   "sites_badges_xdebugOff": "off",
   "sites_badges_xdebugOn": "Xdebug {mode}",
   "sites_controls_customImageBadge": "immagine personalizzata",
+  "sites_controls_buildFailedBadge": "build non riuscita",
+  "sites_controls_buildFailedHint": "L'ultima build dell'immagine non è riuscita, quindi il sito usa ancora l'immagine precedente. Correggi il Containerfile ed esegui lerd rebuild.",
   "sites_controls_dbIsolateFailed": "Impossibile isolare il DB del worktree: {error}",
   "sites_controls_dbIsolated": "DB isolato",
   "sites_controls_dbIsolatedTitle": "DB del worktree: {db}",

@@ -462,6 +462,7 @@ func execSites() (any, *rpcError) {
 		CustomContainer bool           `json:"custom_container,omitempty"`
 		ContainerPort   int            `json:"container_port,omitempty"`
 		ContainerSSL    bool           `json:"container_ssl,omitempty"`
+		BuildFailed     bool           `json:"container_build_failed,omitempty"`
 		Workers         []workerStatus `json:"workers,omitempty"`
 	}
 
@@ -515,6 +516,7 @@ func execSites() (any, *rpcError) {
 			CustomContainer: e.ContainerPort > 0,
 			ContainerPort:   e.ContainerPort,
 			ContainerSSL:    e.ContainerSSL,
+			BuildFailed:     e.ContainerBuildFailed,
 			Workers:         workers,
 		})
 	}

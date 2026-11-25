@@ -134,3 +134,14 @@ func TestSiteHeaderNamesASiteWhoseNameIsNotItsDomain(t *testing.T) {
 		t.Fatalf("the header should name a site registered as crm on shop.test:\n%s", out)
 	}
 }
+
+func TestSiteViewHeaderNamesAFailedImageBuild(t *testing.T) {
+	m := siteViewModel()
+	if out := ansi.Strip(m.renderSiteView(140, 40)); strings.Contains(out, "build failed") {
+		t.Fatal("a site whose build did not fail must not say so")
+	}
+	m.snap.Sites[0].ContainerBuildFailed = true
+	if out := ansi.Strip(m.renderSiteView(140, 40)); !strings.Contains(out, "image build failed") {
+		t.Errorf("header does not name the failed build:\n%s", out)
+	}
+}

@@ -1,7 +1,11 @@
 package podman
 
 import (
+	"errors"
+	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -230,5 +234,210 @@ func TestBuildCustomImageArgs_NilConfigSafe(t *testing.T) {
 	want := []string{"build", "-t", "img:local", "-f", "/f", "/ctx"}
 	if !reflect.DeepEqual(args, want) {
 		t.Errorf("args = %v\nwant %v", args, want)
+	}
+}
+
+func writeContextFixture(t *testing.T) (string, *config.ContainerConfig) {
+	t.Helper()
+	dir := t.TempDir()
+	ctx := filepath.Join(dir, ".lerd")
+	if err := os.MkdirAll(ctx, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"Containerfile": "FROM alpine\nCOPY apache.conf /etc/\n", "apache.conf": "one\n"} {
+		if err := os.WriteFile(filepath.Join(ctx, name), []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir, &config.ContainerConfig{Port: 80, Containerfile: ".lerd/Containerfile", BuildContext: ".lerd"}
+}
+
+// fakeImageStore answers image inspects with an ID that counts the builds which
+// changed the image, the way podman's cache leaves the ID alone otherwise.
+func fakeImageStore(t *testing.T, changes bool) (builds *int) {
+	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	builds = new(int)
+	id := 0
+	orig := execCommand
+	t.Cleanup(func() { execCommand = orig })
+	execCommand = func(_ string, args ...string) *exec.Cmd {
+		if args[0] == "build" {
+			*builds++
+			if changes {
+				id++
+			}
+			return exec.Command("true")
+		}
+		return exec.Command("echo", fmt.Sprintf("sha256:%d", id))
+	}
+	return builds
+}
+
+// Only podman knows which files a build copies in and which it ignores, so a
+// context of its own is always handed to its cache (#2698).
+func TestEnsureCustomImage_OwnContextAsksPodman(t *testing.T) {
+	for _, changes := range []bool{true, false} {
+		builds := fakeImageStore(t, changes)
+		dir, cfg := writeContextFixture(t)
+		StoreContainerfileHash("mysite", dir, cfg)
+		changed, err := EnsureCustomImage("mysite", dir, cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if *builds != 1 || changed != changes {
+			t.Errorf("changes %v: builds %d, changed %v", changes, *builds, changed)
+		}
+	}
+}
+
+func TestEnsureCustomImage_SymlinkedContextAsksPodman(t *testing.T) {
+	builds := fakeImageStore(t, true)
+	dir, cfg := writeContextFixture(t)
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(dir, "ctx")); err != nil {
+		t.Fatal(err)
+	}
+	cfg.BuildContext = "ctx"
+	StoreContainerfileHash("mysite", dir, cfg)
+	if _, err := EnsureCustomImage("mysite", dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if *builds != 1 {
+		t.Errorf("builds = %d, want 1", *builds)
+	}
+}
+
+// A context holding the project is full of source, so building from it on every
+// link would remake the image on every edit.
+func TestEnsureCustomImage_ProjectContextKeepsToTheContainerfile(t *testing.T) {
+	for _, buildContext := range []string{"", ".", "./", "..", ".lerd/..", "self"} {
+		builds := fakeImageStore(t, true)
+		dir, cfg := writeContextFixture(t)
+		if err := os.Symlink(dir, filepath.Join(dir, "self")); err != nil {
+			t.Fatal(err)
+		}
+		cfg.BuildContext = buildContext
+		StoreContainerfileHash("mysite", dir, cfg)
+		changed, err := EnsureCustomImage("mysite", dir, cfg)
+		if err != nil || changed || *builds != 0 {
+			t.Errorf("build_context %q: builds %d, changed %v, err %v", buildContext, *builds, changed, err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, ".lerd", "Containerfile"), []byte("FROM busybox\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if changed, err := EnsureCustomImage("mysite", dir, cfg); err != nil || !changed || *builds != 1 {
+			t.Errorf("build_context %q after an edit: builds %d, changed %v, err %v", buildContext, *builds, changed, err)
+		}
+	}
+}
+
+func TestEnsureCustomImage_UpToDateClearsAnEarlierFailure(t *testing.T) {
+	fakeImageStore(t, true)
+	dir, cfg := writeContextFixture(t)
+	cfg.BuildContext = ""
+	StoreContainerfileHash("mysite", dir, cfg)
+	recordCustomBuild("mysite", errors.New("boom"))
+	if _, err := EnsureCustomImage("mysite", dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if CustomBuildFailed("mysite") {
+		t.Error("files back to what the image was built from are not a failed build")
+	}
+}
+
+// An open dashboard only refetches on an event.
+func TestRecordCustomBuild_NotifiesOnEveryChange(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	var got []string
+	orig := AfterUnitChange
+	t.Cleanup(func() { AfterUnitChange = orig })
+	AfterUnitChange = func(name string) { got = append(got, name) }
+	recordCustomBuild("mysite", nil)
+	if len(got) != 0 {
+		t.Errorf("a success with nothing to clear notified %v", got)
+	}
+	recordCustomBuild("mysite", errors.New("boom"))
+	recordCustomBuild("mysite", nil)
+	if !reflect.DeepEqual(got, []string{"site:mysite", "site:mysite"}) {
+		t.Errorf("notified %v", got)
+	}
+}
+
+func stubBuild(t *testing.T, name string) {
+	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	orig := execCommand
+	t.Cleanup(func() { execCommand = orig })
+	execCommand = func(string, ...string) *exec.Cmd { return exec.Command(name) }
+}
+
+func TestBuildCustomImage_RecordsFailureUntilABuildSucceeds(t *testing.T) {
+	builds := map[string]func(string, *config.ContainerConfig) error{
+		"stdout": func(d string, c *config.ContainerConfig) error { return BuildCustomImage("mysite", d, c) },
+		"writer": func(d string, c *config.ContainerConfig) error { return BuildCustomImageTo("mysite", d, c, io.Discard) },
+	}
+	for name, build := range builds {
+		t.Run(name, func(t *testing.T) {
+			dir, cfg := writeContextFixture(t)
+			stubBuild(t, "false")
+			if CustomBuildFailed("mysite") {
+				t.Fatal("no build has run yet")
+			}
+			if err := build(dir, cfg); err == nil {
+				t.Fatal("expected the build to fail")
+			}
+			if !CustomBuildFailed("mysite") {
+				t.Error("a failed build must be recorded")
+			}
+			if CustomBuildFailed("other") {
+				t.Error("another site must not inherit the failure")
+			}
+			execCommand = func(string, ...string) *exec.Cmd { return exec.Command("true") }
+			if err := build(dir, cfg); err != nil {
+				t.Fatal(err)
+			}
+			if CustomBuildFailed("mysite") {
+				t.Error("a successful build must clear the failure")
+			}
+		})
+	}
+}
+
+func TestBuildCustomImage_MissingContainerfileIsAFailure(t *testing.T) {
+	stubBuild(t, "true")
+	if err := BuildCustomImage("mysite", t.TempDir(), nil); err == nil {
+		t.Fatal("expected an error")
+	}
+	if !CustomBuildFailed("mysite") {
+		t.Error("a missing Containerfile must be recorded as a failed build")
+	}
+}
+
+func TestClearCustomBuildFailure(t *testing.T) {
+	stubBuild(t, "false")
+	dir, cfg := writeContextFixture(t)
+	_ = BuildCustomImage("mysite", dir, cfg)
+	ClearCustomBuildFailure("mysite")
+	if CustomBuildFailed("mysite") {
+		t.Error("cleared failure still reported")
+	}
+}
+
+// The hash of a project-wide context covers no files, so moving between
+// contexts has to show in it.
+func TestEnsureCustomImage_MovingToTheProjectContextRebuilds(t *testing.T) {
+	builds := fakeImageStore(t, true)
+	dir, cfg := writeContextFixture(t)
+	if _, err := EnsureCustomImage("mysite", dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg.BuildContext = "."
+	if changed, err := EnsureCustomImage("mysite", dir, cfg); err != nil || !changed || *builds != 2 {
+		t.Errorf("builds %d, changed %v, err %v", *builds, changed, err)
+	}
+	cfg.BuildContext = ""
+	if _, err := EnsureCustomImage("mysite", dir, cfg); err != nil || *builds != 2 {
+		t.Errorf("\".\" and unset are the same context: builds %d, err %v", *builds, err)
 	}
 }

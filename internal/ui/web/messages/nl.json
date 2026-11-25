@@ -921,6 +921,8 @@
   "sites_badges_xdebugOff": "uit",
   "sites_badges_xdebugOn": "Xdebug {mode}",
   "sites_controls_customImageBadge": "aangepaste image",
+  "sites_controls_buildFailedBadge": "build mislukt",
+  "sites_controls_buildFailedHint": "De laatste build van de image is mislukt, dus de site draait nog op de vorige image. Herstel het Containerfile en voer lerd rebuild uit.",
   "sites_controls_dbIsolateFailed": "Worktree DB isoleren mislukt: {error}",
   "sites_controls_dbIsolated": "Geïsoleerde DB",
   "sites_controls_dbIsolatedTitle": "Worktree DB: {db}",

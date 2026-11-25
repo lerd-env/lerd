@@ -921,6 +921,8 @@
   "sites_badges_xdebugOff": "tắt",
   "sites_badges_xdebugOn": "Xdebug {mode}",
   "sites_controls_customImageBadge": "image tùy chỉnh",
+  "sites_controls_buildFailedBadge": "build thất bại",
+  "sites_controls_buildFailedHint": "Lần build image gần nhất thất bại nên trang vẫn chạy image trước đó. Hãy sửa Containerfile rồi chạy lerd rebuild.",
   "sites_controls_dbIsolateFailed": "Không thể tách riêng DB worktree: {error}",
   "sites_controls_dbIsolated": "DB tách riêng",
   "sites_controls_dbIsolatedTitle": "DB worktree: {db}",

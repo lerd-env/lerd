@@ -82,3 +82,21 @@ func TestSiteStatusFollowsNginxForAStaticSite(t *testing.T) {
 		t.Errorf("PHP site with its pool up = %q, want running", got)
 	}
 }
+
+func TestSiteStatusNamesAFailedImageBuild(t *testing.T) {
+	for _, c := range []struct {
+		paused, running bool
+		want            string
+	}{
+		{false, true, "running, build failed"},
+		{false, false, "stopped, build failed"},
+		{true, false, "paused"},
+	} {
+		s := statusSite(c.paused, c.running)
+		s.ContainerPort = 80
+		s.ContainerBuildFailed = true
+		if got := siteStatus(s); got != c.want {
+			t.Errorf("paused %v running %v = %q, want %q", c.paused, c.running, got, c.want)
+		}
+	}
+}

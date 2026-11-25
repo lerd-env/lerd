@@ -119,8 +119,13 @@ func siteStatus(s siteinfo.EnrichedSite) string {
 	switch {
 	case s.Paused:
 		return pausedTag()
+	case running && s.ContainerBuildFailed:
+		return feedback.Amber("running, build failed")
 	case running:
 		return feedback.Green("running")
+	}
+	if s.ContainerBuildFailed {
+		return feedback.Red("stopped, build failed")
 	}
 	return feedback.Red("stopped")
 }
