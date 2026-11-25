@@ -118,7 +118,7 @@ container:
   trust_ca: true
 ```
 
-Lerd adds its CA to the image's trust store as a last build step, on top of the public ones, so there is no certificate to copy into the project. It covers Debian, Alpine and Fedora based images, and sets `NODE_EXTRA_CA_CERTS` for Node, which does not read the system store. The image needs a shell, so a `scratch` or distroless one fails to build. Programs with a trust store of their own, such as Java or Python's `requests`, have to be pointed at it separately. The certificate is at `/usr/local/share/ca-certificates/lerd-mkcert.crt`.
+Lerd adds its CA to the image's trust store as a last build step, on top of the public ones, so there is no certificate to copy into the project. It covers Debian, Alpine and Fedora based images, and sets `NODE_EXTRA_CA_CERTS` for Node, which does not read the system store, keeping any certificates the image already set there. The image needs a shell, so a `scratch` or distroless one fails to build. Programs with a trust store of their own, such as Java or Python's `requests`, have to be pointed at it separately. The certificate is at `/usr/local/share/ca-certificates/lerd-mkcert.crt`.
 
 ## Hot reload
 

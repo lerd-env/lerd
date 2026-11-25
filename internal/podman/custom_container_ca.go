@@ -13,6 +13,7 @@ import (
 const (
 	customCAFile = "lerd-mkcert.crt"
 	customCAPath = "/usr/local/share/ca-certificates/" + customCAFile
+	customNodeCA = "/usr/local/share/lerd-node-ca.pem"
 )
 
 // customCATrustScript adds the CA to whichever trust store the image has. The
@@ -20,6 +21,7 @@ const (
 // without one gets the CA appended to its bundle, or a bundle of its own.
 const customCATrustScript = `set -e
 ca=` + customCAPath + `
+{ [ -z "${NODE_EXTRA_CA_CERTS:-}" ] || cat "$NODE_EXTRA_CA_CERTS" 2>/dev/null || true; echo; cat "$ca"; } > ` + customNodeCA + `
 if command -v update-ca-certificates >/dev/null 2>&1; then
     update-ca-certificates
 elif command -v update-ca-trust >/dev/null 2>&1; then
@@ -55,14 +57,15 @@ func customCACert() ([]byte, error) {
 }
 
 // customCAContainerfile layers the CA on baseID, running as root and handing
-// the image back to the user it ran as. Node reads neither trust store.
+// the image back to the user it ran as. Node reads neither trust store, and its
+// file keeps whatever certificates the image already pointed it at.
 func customCAContainerfile(baseID, user string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "FROM %s\nUSER 0\n", baseID)
 	fmt.Fprintf(&b, "COPY %s %s\n", customCAFile, customCAPath)
 	b.WriteString("COPY trust.sh /tmp/lerd-trust.sh\n")
 	b.WriteString("RUN sh /tmp/lerd-trust.sh && rm /tmp/lerd-trust.sh\n")
-	fmt.Fprintf(&b, "ENV NODE_EXTRA_CA_CERTS=%s\n", customCAPath)
+	fmt.Fprintf(&b, "ENV NODE_EXTRA_CA_CERTS=%s\n", customNodeCA)
 	if user != "" {
 		fmt.Fprintf(&b, "USER %s\n", user)
 	}
