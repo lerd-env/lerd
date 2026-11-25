@@ -314,3 +314,33 @@ check "link after fixing the build" bash -c "cd $ctx && lerd link"
 check "8.27 a good build clears the mark" ctx_clean
 check "8.27 the fixed site is served" wait_for 60 ctx_serves 'second image'
 check "unlink the build_context site" bash -c "cd $ctx && lerd unlink"
+
+# trust_ca on one image of each family, with the HTTPS client it ships. The
+# other site must be secured, so demo is put on https when it was not.
+ca_was=$scheme
+[ "$ca_was" = https ] || check "demo is secured for trust_ca" lerd secure "$name"
+ca_other=https://$(site_host "$DEMO_DIR")
+# trust_ca_site <family> <image> <client...>: links a site on the image and
+# fetches both URLs with the client. The first fetch is without trust_ca, so a
+# client that checks no certificates cannot pass.
+trust_ca_site() {
+	local family=$1 image=$2 dir=$PROJECTS/ccca-$1 unit
+	shift 2
+	mkdir -p "$dir"
+	printf 'FROM %s\nCMD ["sleep", "infinity"]\n' "$image" >"$dir/Containerfile.lerd"
+	printf 'container:\n  port: 8000\n' >"$dir/.lerd.yaml"
+	check "$family image links" bash -c "cd $dir && lerd link"
+	unit=lerd-custom-$(site_name "$dir")
+	check "$family container runs" wait_for 60 podman exec "$unit" true
+	check "$family refuses the lerd certificate without trust_ca" bash -c '! "$@"' _ podman exec "$unit" "$@" "$ca_other"
+	printf 'container:\n  port: 8000\n  trust_ca: true\n' >"$dir/.lerd.yaml"
+	check "$family image rebuilds with trust_ca" bash -c "cd $dir && lerd rebuild"
+	check "$family container runs again" wait_for 60 podman exec "$unit" true
+	check "8.28 $family reaches a secured site" podman exec "$unit" "$@" "$ca_other"
+	check "8.28 $family reaches a public site" podman exec "$unit" "$@" https://example.com
+	check "unlink the $family site" bash -c "cd $dir && lerd unlink"
+}
+trust_ca_site debian docker.io/library/php:8.4-cli curl -fsS -o /dev/null
+trust_ca_site alpine docker.io/library/alpine:3 wget -q -O /dev/null
+trust_ca_site fedora registry.fedoraproject.org/fedora:43 curl -fsS -o /dev/null
+[ "$ca_was" = https ] || lerd unsecure "$name" </dev/null
