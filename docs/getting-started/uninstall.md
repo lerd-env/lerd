@@ -5,7 +5,7 @@ description: How to uninstall Lerd completely on Linux, macOS and Windows (WSL2)
 
 # Uninstall Lerd
 
-To uninstall Lerd, run `lerd uninstall`. It stops every container, removes the systemd or launchd units, the DNS setup, the binary and its `PATH` entry, then asks whether to delete your data, the MCP integration, the local CA and the images Lerd built. Your project folders are never touched.
+To uninstall Lerd, run `lerd uninstall`. It stops every container, removes the systemd or launchd units, the DNS setup, the binary and its `PATH` entry, then asks whether to delete your data, the MCP integration, the local CA and the images Lerd built. Your project code is never touched. Linked sites keep the env values Lerd wrote unless you ask for the originals back.
 
 ```bash
 lerd uninstall              # asks before each optional step
@@ -23,7 +23,9 @@ Without a terminal and without one of those flags, `lerd uninstall` stops before
 4. **Lerd-built images**: `lerd-php*-fpm:local` and `lerd-custom-*:local`. Images pulled from a registry, such as MySQL or Redis, stay, since your data lives in bind mounts rather than in them.
 5. **The Lerd desktop app** (Linux): asked only when the `sh.lerd.Desktop` flatpak is installed for your user, as the installer does it. It is closed first and every installed branch goes, a development build beside the stable one included. Its own data goes too when you also said yes to 1. A system-wide install stays, remove it with `sudo flatpak uninstall sh.lerd.Desktop`.
 
-`--force` answers yes to all five. `--keep-data` answers no to 1, 4 and 5 and yes to 2 and 3, so a reinstall finds the desktop app already there.
+6. **Your original env files**: asked only when a linked site still has Lerd's values and a [`.env.before_lerd`](/features/env-setup#automatic-backup) beside its env file. Yes puts the old value back for every key the backup has and keeps keys added since. On no, the copy stays in the project and Lerd prints where.
+
+`--force` answers yes to the first five. Neither flag restores env files. `--keep-data` answers no to 1, 4 and 5 and yes to 2 and 3, so a reinstall finds the desktop app already there.
 
 ## Why are you leaving?
 
@@ -49,6 +51,10 @@ On Fedora and Ubuntu 26.04, which build the initramfs with dracut, run the `sudo
 ```bash
 brew uninstall lerd
 ```
+
+If another tool such as Laravel Herd had its own `/etc/resolver/test` when Lerd took over `.test`, that file is put back. Start Herd again afterwards so it can take ports 80 and 443.
+
+A resolver replaced by Lerd 1.40.0-beta.1 or older was not saved. Let Herd or Valet write it again, for example with `valet install`.
 
 The Podman machine stays. Remove it with `podman machine rm` if nothing else uses it.
 

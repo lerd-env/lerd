@@ -36,6 +36,8 @@ func NewUninstallCmd() *cobra.Command {
 // uninstallPlan is what an uninstall removes beyond lerd itself.
 type uninstallPlan struct {
 	removeData, removeMCP, removeMkcertCA, purgeImages, removeDesktopApp bool
+	// restoreEnvs are the project paths whose pre-lerd env file goes back.
+	restoreEnvs []string
 }
 
 // uninstallPlanFor settles the plan from the flags, asking only when neither
@@ -56,6 +58,7 @@ func uninstallPlanFor(force, keepData bool) (uninstallPlan, error) {
 		removeMkcertCA:   confirmRemoveMkcertCA(),
 		purgeImages:      confirmPurgeLerdImages(),
 		removeDesktopApp: desktopFlatpakInstalled() && confirmRemoveDesktopApp(),
+		restoreEnvs:      confirmRestoreEnvs(),
 	}, nil
 }
 
@@ -225,6 +228,12 @@ func runUninstall(force, keepData bool) error {
 				}
 			}
 		}
+	}
+
+	// Before the config goes: it names the sites and their frameworks.
+	restoreSiteEnvs(plan.restoreEnvs)
+	for _, path := range registeredEnvBackups() {
+		feedback.Note("the env file from before lerd is still in " + path)
 	}
 
 	step("Removing shell PATH entry")
