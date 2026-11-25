@@ -67,6 +67,17 @@ bash install.sh --local ./build/lerd
 
 This runs the full installer flow (prerequisite checks, PATH setup, `lerd install`) using your locally built binary instead of downloading from GitHub.
 
+## Going back to a release binary
+
+On macOS, delete the installed binary before copying another one into its place:
+
+```bash
+rm ~/.local/bin/lerd
+cp ./lerd ~/.local/bin/lerd
+```
+
+A `cp` straight over the existing file writes into it in place, and macOS can kill the new binary on launch (`zsh: killed`, exit status 137) because the code signature it remembers belongs to the old contents. Your sites stay down until the file is deleted and copied again. Do the same for `lerd-tray` if you replace it too. `make install`, the installer and `lerd update` with its rollback are unaffected, since they put a new file in place rather than writing into the old one.
+
 ## Translating the landing page
 
 The landing page at lerd.sh speaks the dashboard's languages. Its copy lives in `docs/.vitepress/theme/i18n/<code>.js`, one file per language, each shaped exactly like `en.js`; commands, links and product names stay in `landing-data.js`. To add a language, copy `en.js`, translate the strings, register it in `i18n/locales.js` and `i18n/index.js`, and add `docs/<path>/index.md` with `layout: landing`. `npm test` in `docs/` fails if a translation misses or adds a string. Visitors to `/` are sent to their browser's language until they pick one from the header.
