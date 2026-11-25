@@ -14,7 +14,7 @@
   import WizardSetup from './wizard/WizardSetup.svelte';
   import WizardBusy from './wizard/WizardBusy.svelte';
   import { closeModal } from '$stores/modals';
-  import { sites, loadSites } from '$stores/sites';
+  import { sites, loadSites, openSiteInBrowser } from '$stores/sites';
   import { goToTab } from '$stores/route';
   import {
     projectQuestions,
@@ -68,7 +68,8 @@
   let resuming = $state(true);
   let error = $state('');
   let warning = $state('');
-  const domain = $derived($sites.find((s) => s.path === dir)?.domain ?? '');
+  const site = $derived($sites.find((s) => s.path === dir));
+  const domain = $derived(site?.domain ?? '');
 
   // Directories that are already sites, so the browser can mark them and the
   // wizard can offer the site instead of linking it a second time.
@@ -333,6 +334,13 @@
     if (target) goToTab('sites', target);
   }
 
+  // Opened inside the click, before finish awaits anything, so the browser keeps
+  // it a tab the user asked for rather than blocking it as a popup.
+  function openInBrowser() {
+    if (site) openSiteInBrowser(site);
+    finish();
+  }
+
   function cancel() {
     clearWizardState();
     closeModal();
@@ -456,6 +464,13 @@
     alive = false;
   });
 </script>
+
+{#snippet finishButtons()}
+  {#if site && !site.paused}
+    <DetailButton onclick={openInBrowser}>{m.sites_openInBrowser()}</DetailButton>
+  {/if}
+  <DetailButton tone="primary" onclick={finish}>{m.siteWizard_finish()}</DetailButton>
+{/snippet}
 
 <Modal open {title} onclose={running ? park : cancel} size={step === 'questions' ? 'xl' : 'lg'}>
   <!-- The browse steps show their own directory. -->
@@ -601,7 +616,7 @@
       </DetailButton>
     {:else if step === 'setup'}
       {#if finishedSteps.length > 0 || selectedSteps.length === 0}
-        <DetailButton tone="primary" onclick={finish}>{m.siteWizard_finish()}</DetailButton>
+        {@render finishButtons()}
       {:else}
         <DetailButton onclick={finish}>{m.siteWizard_skipSetup()}</DetailButton>
         <DetailButton tone="primary" onclick={runSetup}>
@@ -609,7 +624,7 @@
         </DetailButton>
       {/if}
     {:else if step === 'done'}
-      <DetailButton tone="primary" onclick={finish}>{m.siteWizard_finish()}</DetailButton>
+      {@render finishButtons()}
     {/if}
   {/snippet}
 </Modal>

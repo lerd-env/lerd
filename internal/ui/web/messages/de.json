@@ -851,7 +851,7 @@
   "siteWizard_devCommand": "Dev-Befehl",
   "siteWizard_devCommandDetected": "Erkannte Skripte: {scripts}",
   "siteWizard_devCommandHint": "Wie lerd die App startet. Leer lassen, um sie selbst zu starten.",
-  "siteWizard_finish": "Site öffnen",
+  "siteWizard_finish": "Im Dashboard ansehen",
   "siteWizard_framework": "Framework",
   "siteWizard_frankenphp": "FrankenPHP",
   "siteWizard_frankenphpUse": "FrankenPHP-Runtime verwenden",

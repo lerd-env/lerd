@@ -851,7 +851,7 @@
   "siteWizard_devCommand": "Perintah dev",
   "siteWizard_devCommandDetected": "Skrip terdeteksi: {scripts}",
   "siteWizard_devCommandHint": "Cara lerd menjalankan aplikasi. Kosongkan untuk menjalankannya sendiri.",
-  "siteWizard_finish": "Buka site",
+  "siteWizard_finish": "Lihat di dasbor",
   "siteWizard_framework": "Framework",
   "siteWizard_frankenphp": "FrankenPHP",
   "siteWizard_frankenphpUse": "Gunakan runtime FrankenPHP",
