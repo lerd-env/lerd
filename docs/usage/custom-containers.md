@@ -188,7 +188,7 @@ LAN sharing works transparently since it proxies through nginx.
 lerd rebuild
 ```
 
-`lerd link` reuses the image while nothing it is built from has changed, and otherwise rebuilds it and restarts the container. It compares the Containerfile and `target`, plus every file in `build_context` when that is a directory of its own, such as `.lerd`. A context that holds the project itself, including the default, is not compared, since every source edit would rebuild the image. Run `lerd rebuild` after changing a file the image copies from there.
+`lerd link` rebuilds the image when it is out of date and restarts the container when the image changed. With a `build_context` in a directory of its own, such as `.lerd`, it runs the build every time and Podman's cache decides what is out of date. A context that holds the project itself, including the default, is only rebuilt when the Containerfile or `target` changed, since every source edit would otherwise rebuild the image. Run `lerd rebuild` after changing a file the image copies from there.
 
 When a build fails, the site keeps serving the image built before it. `lerd sites`, the dashboard, the TUI and the MCP site list mark it as a failed build until one succeeds.
 

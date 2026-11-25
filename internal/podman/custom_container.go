@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"crypto/md5"
 	"fmt"
-	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,67 +100,44 @@ func hashContainerfile(projectPath string, cfg *config.ContainerConfig) string {
 	if cfg != nil {
 		target = cfg.Target
 	}
-	ctx, err := hashOwnBuildContext(projectPath, cfg)
-	if err != nil {
-		return ""
-	}
 	// Mix the build target into the hash so flipping target: development to
 	// target: production in .lerd.yaml invalidates the cache. Without this,
 	// CustomImageUpToDate would return a stale image when only the target
 	// changed (issue #379).
-	return fmt.Sprintf("%x", md5.Sum([]byte(string(data)+"\x00--target="+target+ctx)))
+	return fmt.Sprintf("%x", md5.Sum([]byte(string(data)+"\x00--target="+target)))
 }
 
-// hashOwnBuildContext hashes the files of a build context kept in a directory of
-// its own. One holding the project, the default, returns "": hashing it would
-// rebuild the image on every source edit.
-func hashOwnBuildContext(projectPath string, cfg *config.ContainerConfig) (string, error) {
-	root := ResolveBuildContext(projectPath, cfg)
-	rel, err := filepath.Rel(root, projectPath)
+// hasOwnBuildContext reports whether the build context is a directory of its
+// own rather than one holding the project, the default.
+func hasOwnBuildContext(projectPath string, cfg *config.ContainerConfig) bool {
+	root, err := filepath.EvalSymlinks(ResolveBuildContext(projectPath, cfg))
 	if err != nil {
-		return "", err
+		return true
 	}
-	if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", nil
-	}
-	h := md5.New()
-	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		name, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(h, "%s\x00%s\x00", name, info.Mode())
-		switch {
-		case info.Mode()&fs.ModeSymlink != 0:
-			target, err := os.Readlink(path)
-			if err != nil {
-				return err
-			}
-			fmt.Fprintf(h, "%s\x00", target)
-		case info.Mode().IsRegular():
-			fmt.Fprintf(h, "%d\x00", info.Size())
-			f, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-			if _, err := io.Copy(h, f); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	project, err := filepath.EvalSymlinks(projectPath)
 	if err != nil {
-		return "", err
+		return true
 	}
-	return fmt.Sprintf("\x00--context=%x", h.Sum(nil)), nil
+	rel, err := filepath.Rel(root, project)
+	return err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// EnsureCustomImage builds the site's image when it may be out of date and says
+// whether it changed. Podman's cache judges a context of its own; one holding
+// the project changes on every source edit, so there the Containerfile decides.
+func EnsureCustomImage(siteName, projectPath string, cfg *config.ContainerConfig) (bool, error) {
+	if !hasOwnBuildContext(projectPath, cfg) && CustomImageUpToDate(siteName, projectPath, cfg) {
+		// The files are back to what the image was built from.
+		ClearCustomBuildFailure(siteName)
+		fmt.Println("Container image up to date, skipping build.")
+		return false, nil
+	}
+	before := LocalImageID(CustomImageName(siteName))
+	if err := BuildCustomImage(siteName, projectPath, cfg); err != nil {
+		return false, err
+	}
+	StoreContainerfileHash(siteName, projectPath, cfg)
+	return LocalImageID(CustomImageName(siteName)) != before, nil
 }
 
 func readContainerfileHash(siteName string) string {
@@ -183,7 +158,16 @@ func CustomBuildFailed(siteName string) bool {
 
 // ClearCustomBuildFailure forgets a recorded failure.
 func ClearCustomBuildFailure(siteName string) {
-	os.Remove(customBuildFailurePath(siteName)) //nolint:errcheck
+	if os.Remove(customBuildFailurePath(siteName)) == nil {
+		notifyCustomBuild(siteName)
+	}
+}
+
+// notifyCustomBuild refreshes an open dashboard, which a build alone does not.
+func notifyCustomBuild(siteName string) {
+	if AfterUnitChange != nil {
+		AfterUnitChange("site:" + siteName)
+	}
 }
 
 func customBuildFailurePath(siteName string) string {
@@ -198,6 +182,7 @@ func recordCustomBuild(siteName string, err error) {
 	path := customBuildFailurePath(siteName)
 	os.MkdirAll(filepath.Dir(path), 0755)              //nolint:errcheck
 	os.WriteFile(path, []byte(err.Error()+"\n"), 0644) //nolint:errcheck
+	notifyCustomBuild(siteName)
 }
 
 // buildCustomImageArgs assembles the podman build argv for a custom site

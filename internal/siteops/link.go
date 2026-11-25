@@ -435,16 +435,9 @@ func runCustomContainer(siteName string, rebuilt bool) error {
 // site: build the image, write a dedicated quadlet, generate a proxy vhost,
 // update container hosts, and reload nginx.
 func FinishCustomLink(site config.Site, containerCfg *config.ContainerConfig) error {
-	rebuilt := !podman.CustomImageUpToDate(site.Name, site.Path, containerCfg)
-	if !rebuilt {
-		// The files are back to what the image was built from.
-		podman.ClearCustomBuildFailure(site.Name)
-		fmt.Println("Container image up to date, skipping build.")
-	} else {
-		if err := podman.BuildCustomImage(site.Name, site.Path, containerCfg); err != nil {
-			return fmt.Errorf("building custom image: %w", err)
-		}
-		podman.StoreContainerfileHash(site.Name, site.Path, containerCfg)
+	rebuilt, err := podman.EnsureCustomImage(site.Name, site.Path, containerCfg)
+	if err != nil {
+		return fmt.Errorf("building custom image: %w", err)
 	}
 
 	// Pre-create the shared hosts file before writing the unit so that the
