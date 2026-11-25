@@ -87,13 +87,15 @@ lerd db:import -s mysql -d shop --fresh ~/db-backups/shop.sql
 
 Save this as `counts.sql`. It counts the rows in every table of the current database:
 
+The binary sort keeps the tables in the same order whatever character set each side's client uses, so `post_tag` and `posts` don't swap places and read as a difference.
+
 ```sql
 SET SESSION group_concat_max_len = 1000000;
 SELECT GROUP_CONCAT(CONCAT('SELECT ''', table_name, ''' AS tbl, COUNT(*) AS n FROM `', table_name, '`') SEPARATOR ' UNION ALL ')
   INTO @counts
   FROM information_schema.tables
  WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE';
-SET @counts = CONCAT('SELECT * FROM (', @counts, ') c ORDER BY tbl');
+SET @counts = CONCAT('SELECT * FROM (', @counts, ') c ORDER BY CAST(tbl AS BINARY)');
 PREPARE counts FROM @counts;
 EXECUTE counts;
 ```
@@ -178,13 +180,13 @@ It counts the kills since the VM booted and suggests a size. `Lost connection` w
 
 ### Before you import
 
-**Give the VM more memory.** It is a ceiling, not a reservation, so a bigger VM costs nothing while it is idle. Run `lerd machine memory` on its own to see the size it suggests, then pass the size you want in GB:
+**Give the VM more memory.** It is a ceiling, not a reservation, so a bigger VM costs nothing while it is idle. Pick a size in GB up to half the Mac's memory, which is as far as lerd lets the VM go:
 
 ```bash
 lerd machine memory 8
 ```
 
-lerd caps the VM at half the Mac's memory and refuses anything larger, so 8 GB is the most a 16 GB Mac can give it and 12 GB needs a Mac with 24 GB or more. Setting a size restarts the VM and every container with it. See [`lerd machine memory`](../usage/lifecycle.md#lerd-machine-memory-macos). On Linux there is no VM, so this step does not apply.
+That is the most a 16 GB Mac can give it; 12 GB needs a Mac with 24 GB or more, and anything over half is refused. Setting a size restarts the VM and every container with it. After an import that ran out of memory, `lerd machine memory` on its own suggests the next size to try. See [`lerd machine memory`](../usage/lifecycle.md#lerd-machine-memory-macos). On Linux there is no VM, so this step does not apply.
 
 **Size MySQL's buffer pool to fit.** The buffer pool is MySQL's main cache and the largest thing it holds in memory. Set it in lerd's tuning file, which survives updates and reinstalls:
 
@@ -205,7 +207,7 @@ Saving restarts MySQL. Keep it to around a quarter of the VM's memory, 2G on an 
 
 ```bash
 echo "SET GLOBAL innodb_flush_log_at_trx_commit = 2" | lerd db:shell -s mysql
-lerd db:import --fresh ~/db-backups/big.sql
+lerd db:import -s mysql -d big --fresh ~/db-backups/big.sql
 echo "SET GLOBAL innodb_flush_log_at_trx_commit = 1" | lerd db:shell -s mysql
 ```
 
