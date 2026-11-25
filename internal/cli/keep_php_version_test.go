@@ -257,3 +257,35 @@ func TestResumePHPVersion_customFPMIsNotRedetected(t *testing.T) {
 		t.Errorf("resumePHPVersion = %s, want the Containerfile's 8.3", got)
 	}
 }
+
+// Linking sets a framework's range aside when the project's own composer.json
+// rules all of it out, and resuming must agree or the app cannot boot.
+func TestUnpauseSite_projectOverrulesTheFrameworkRange(t *testing.T) {
+	pausedSite(t)
+	ensured := stubResumePHP(t, nil, true)
+	site, err := config.FindSite("shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(config.StoreFrameworksDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for path, body := range map[string]string{
+		filepath.Join(config.StoreFrameworksDir(), "acme@1.yaml"): "name: acme\nlabel: Acme\nversion: \"1\"\npublic_dir: public\nphp:\n  min: \"8.1\"\n  max: \"8.2\"\ndetect:\n  - composer: acme/framework\n",
+		filepath.Join(site.Path, "composer.json"):                 `{"require":{"php":">=8.3","acme/framework":"^1.0"}}`,
+	} {
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	site.Framework = "acme"
+	if err := config.AddSite(*site); err != nil {
+		t.Fatal(err)
+	}
+	if err := UnpauseSite("shop"); err != nil {
+		t.Fatal(err)
+	}
+	if site, _ := config.FindSite("shop"); site.PHPVersion != "8.3" || strings.Join(*ensured, ",") != "8.3" {
+		t.Errorf("registry %s, ensured %v, want 8.3", site.PHPVersion, *ensured)
+	}
+}

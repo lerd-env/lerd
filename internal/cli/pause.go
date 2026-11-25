@@ -194,20 +194,15 @@ func ensureSitePHP(version string, w io.Writer) error {
 	return startUnit(podman.FPMUnitName(version))
 }
 
-// resumePHPVersion is the PHP a resuming site runs on, within its framework's range.
-// A custom-FPM site's comes from its Containerfile and is never re-detected, and a
-// guessed definition's range describes another version of the framework.
+// resumePHPVersion is the PHP a resuming site runs on, within the range linking
+// would hold it to. A custom-FPM site's comes from its Containerfile and is never
+// re-detected.
 func resumePHPVersion(site *config.Site) string {
 	if !siteops.ServedByFPM(*site) || site.IsCustomFPM() {
 		return site.PHPVersion
 	}
-	phpMin, phpMax := "", ""
-	if site.Framework != "" {
-		if fw, ok := config.GetFrameworkForDir(site.Framework, site.Path); ok && !fw.VersionGuessed {
-			phpMin, phpMax = fw.PHP.Min, fw.PHP.Max
-		}
-	}
-	return phpDet.ResumeVersion(site.Path, phpMin, phpMax, site.PHPVersion)
+	link := siteops.DetectSiteVersions(site.Path, site.Framework, site.PHPVersion, site.NodeVersion)
+	return phpDet.ResumeVersion(site.Path, link.PHPMin, link.PHPMax, site.PHPVersion)
 }
 
 // ensureResumePHPs brings up every PHP a resuming site and its worktrees need,
