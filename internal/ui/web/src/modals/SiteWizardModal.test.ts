@@ -129,6 +129,13 @@ describe('SiteWizardModal', () => {
     expect(boxes[1].checked).toBe(false);
   });
 
+  it('names the picked directory once while browsing', async () => {
+    render(SiteWizardModal);
+    await fireEvent.click(await screen.findByText('Link an existing project'));
+    await fireEvent.click(await screen.findByText('acme'));
+    expect(await screen.findAllByText('/home/u/acme')).toHaveLength(1);
+  });
+
   it('opens the next link in the folder it was told to remember', async () => {
     const first = render(SiteWizardModal);
     await fireEvent.click(await screen.findByText('Link an existing project'));

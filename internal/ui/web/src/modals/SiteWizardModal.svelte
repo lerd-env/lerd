@@ -458,7 +458,8 @@
 </script>
 
 <Modal open {title} onclose={running ? park : cancel} size={step === 'questions' ? 'xl' : 'lg'}>
-  {#if step !== 'start' && dir}
+  <!-- The browse steps show their own directory. -->
+  {#if step !== 'start' && step !== 'browse' && step !== 'parent' && dir}
     <div class="px-5 py-3 border-b border-gray-100 dark:border-lerd-border" transition:slide={{ duration: 160 }}>
       <div class="text-xs text-gray-400 mb-1">{m.link_directory()}</div>
       <div class="text-sm font-mono text-gray-700 dark:text-gray-300 truncate">{dir}</div>
