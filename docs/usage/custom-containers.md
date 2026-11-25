@@ -192,6 +192,34 @@ lerd rebuild
 
 When a build fails, the site keeps serving the image built before it. `lerd sites`, the dashboard, the TUI and the MCP site list mark it as a failed build until one succeeds.
 
+## Sharing a Containerfile between projects
+
+Paths in `container` are relative to the project and may point outside it, so several projects can build from one Containerfile:
+
+```yaml
+container:
+  port: 80
+  containerfile: ../shared/Containerfile
+  build_context: ../shared
+```
+
+Each site still gets an image and a container of its own, and Podman reuses the build layers they have in common. The container starts in the project's directory, so a start script in the shared image can use `$PWD` to find it. After changing a file in `../shared`, run `lerd link` in each project to pick it up.
+
+When one project needs something extra, build the shared image once:
+
+```bash
+podman build -t localhost/php73-apache ../shared
+```
+
+Then start that project's own `Containerfile.lerd` from it:
+
+```dockerfile
+FROM localhost/php73-apache
+RUN docker-php-ext-install calendar
+```
+
+Lerd does not track that base image. After building it again, run `lerd rebuild` in the projects that start from it.
+
 ## CLI commands
 
 | Command | Description |
