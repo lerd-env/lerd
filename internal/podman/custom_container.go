@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/md5"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,11 +105,21 @@ func hashContainerfile(projectPath string, cfg *config.ContainerConfig) string {
 	if root := ResolveBuildContext(projectPath, cfg); root != projectPath {
 		context = "\x00--context=" + root
 	}
+	ca := ""
+	if customImageTrustsCA(cfg) {
+		// A CA made anew has to reach the image too. An unreadable one never
+		// matches, so the build runs and says why.
+		cert, err := customCACert()
+		if err != nil {
+			return ""
+		}
+		ca = "\x00--trust-ca=" + string(cert)
+	}
 	// Mix the build target into the hash so flipping target: development to
 	// target: production in .lerd.yaml invalidates the cache. Without this,
 	// CustomImageUpToDate would return a stale image when only the target
 	// changed (issue #379).
-	return fmt.Sprintf("%x", md5.Sum([]byte(string(data)+"\x00--target="+target+context)))
+	return fmt.Sprintf("%x", md5.Sum([]byte(string(data)+"\x00--target="+target+context+ca)))
 }
 
 // hasOwnBuildContext reports whether the build context is a directory of its
@@ -200,6 +211,13 @@ func buildCustomImageArgs(imageName, containerfile, buildCtx string, cfg *config
 	return append(args, buildCtx)
 }
 
+func buildCustomImageFiles(imageName, containerfile, buildCtx string, cfg *config.ContainerConfig, stdout, stderr io.Writer) error {
+	if customImageTrustsCA(cfg) {
+		return buildCustomImageTrustingCA(imageName, containerfile, buildCtx, cfg, stdout, stderr)
+	}
+	return runImageBuild(buildCustomImageArgs(imageName, containerfile, buildCtx, cfg), stdout, stderr)
+}
+
 // BuildCustomImage builds the OCI image for a site's custom container from
 // the user's Containerfile. The image is tagged as lerd-custom-{siteName}:local.
 func BuildCustomImage(siteName, projectPath string, cfg *config.ContainerConfig) (err error) {
@@ -212,10 +230,7 @@ func BuildCustomImage(siteName, projectPath string, cfg *config.ContainerConfig)
 	buildCtx := ResolveBuildContext(projectPath, cfg)
 	imageName := CustomImageName(siteName)
 
-	cmd := execCommand(PodmanBin(), buildCustomImageArgs(imageName, containerfile, buildCtx, cfg)...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := buildCustomImageFiles(imageName, containerfile, buildCtx, cfg, os.Stdout, os.Stderr); err != nil {
 		return fmt.Errorf("building custom image %s: %w", imageName, err)
 	}
 	return nil
@@ -232,10 +247,7 @@ func BuildCustomImageTo(siteName, projectPath string, cfg *config.ContainerConfi
 	buildCtx := ResolveBuildContext(projectPath, cfg)
 	imageName := CustomImageName(siteName)
 
-	cmd := execCommand(PodmanBin(), buildCustomImageArgs(imageName, containerfile, buildCtx, cfg)...)
-	cmd.Stdout = w
-	cmd.Stderr = w
-	if err := cmd.Run(); err != nil {
+	if err := buildCustomImageFiles(imageName, containerfile, buildCtx, cfg, w, w); err != nil {
 		return fmt.Errorf("building custom image %s: %w", imageName, err)
 	}
 	return nil

@@ -30,6 +30,7 @@ type ContainerConfig struct {
 	BuildContext  string `yaml:"build_context,omitempty"` // build context directory, default "."
 	Target        string `yaml:"target,omitempty"`        // multi-stage build target passed as --target to podman build
 	SSL           bool   `yaml:"ssl,omitempty"`           // proxy to the container via HTTPS (app serves TLS on its port)
+	TrustCA       bool   `yaml:"trust_ca,omitempty"`      // add lerd's CA to the image so it can reach other sites over HTTPS
 }
 
 // ProxyConfig holds per-project host-proxy settings. When present in

@@ -61,6 +61,7 @@ The `container` section in `.lerd.yaml` accepts these fields:
 | `build_context` | no | `.` | Build context directory (relative to project root) |
 | `target` | no | (last stage) | Stage to build in a multi-stage Containerfile, passed as `podman build --target`. Useful when your Containerfile has separate `development` and `production` stages and you want lerd to build the dev one locally. |
 | `ssl` | no | `false` | Set to `true` if the app serves HTTPS on its port (nginx will `proxy_pass https://` with `proxy_ssl_verify off`) |
+| `trust_ca` | no | `false` | Add lerd's CA to the image's trust store, so code in the container can call other `.test` sites over HTTPS |
 
 ## How it works
 
@@ -106,6 +107,18 @@ container:
 ```
 
 Nginx will use `proxy_pass https://` and skip certificate verification (`proxy_ssl_verify off`) since the container cert is self-signed. Run `lerd site:doctor` to confirm the setting is recognised.
+
+### Calling other lerd sites over HTTPS
+
+Code in the container does not trust lerd's certificates by default, so a request from one site to another, such as `https://api.test`, fails with a certificate error. Set `trust_ca: true` and link the site again:
+
+```yaml
+container:
+  port: 80
+  trust_ca: true
+```
+
+Lerd adds its CA to the image's trust store as a last build step, on top of the public ones, so there is no certificate to copy into the project. It covers Debian, Alpine and Fedora based images, and sets `NODE_EXTRA_CA_CERTS` for Node, which does not read the system store. The image needs a shell, so a `scratch` or distroless one fails to build. Programs with a trust store of their own, such as Java or Python's `requests`, have to be pointed at it separately. The certificate is at `/usr/local/share/ca-certificates/lerd-mkcert.crt`.
 
 ## Hot reload
 
