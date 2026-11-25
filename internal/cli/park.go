@@ -342,9 +342,7 @@ func RegisterProjectDeferred(projectDir string, cfg *config.GlobalConfig, defer_
 
 	warnMissingExtensions(projectDir, plan.Site.Name, plan.Site.PHPVersion, cfg)
 
-	// Quiet build: `lerd park` draws a progress bar this output would break.
-	quietFPM := func(v string) error { return ensureLinkPHP(v, io.Discard) }
-	res, err := linker.Apply(plan, policy, linker.Deps{EnsureFPMQuadlet: quietFPM, EnsureNode: ensureSiteNode}, linker.NopReporter{})
+	res, err := linker.Apply(plan, policy, parkDeps(), linker.NopReporter{})
 	if err != nil {
 		return out, err
 	}
@@ -355,6 +353,20 @@ func RegisterProjectDeferred(projectDir string, cfg *config.GlobalConfig, defer_
 	out.PHPVersion = res.Site.PHPVersion
 	out.Detail = strings.Join(res.Site.Domains, ", ") + " · php " + res.Site.PHPVersion + " · " + label
 	return out, nil
+}
+
+// warnReporter is quiet except for problems, which print above a progress bar.
+type warnReporter struct{ linker.NopReporter }
+
+func (warnReporter) Warn(format string, a ...any) { feedback.Warn(format, a...) }
+
+// parkDeps keeps builds and installs quiet, since `lerd park` draws a progress bar
+// their output would break.
+func parkDeps() linker.Deps {
+	return linker.Deps{
+		EnsureFPMQuadlet: func(v string) error { return ensureLinkPHP(v, io.Discard) },
+		EnsureNode:       func(s config.Site, _ linker.Reporter) error { return ensureSiteNode(s, warnReporter{}) },
+	}
 }
 
 // parkAdmits reports whether a directory looks enough like a PHP project to

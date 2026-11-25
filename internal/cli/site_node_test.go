@@ -134,6 +134,25 @@ func TestUnpauseSite_nodeInstallFails(t *testing.T) {
 	}
 }
 
+// Park and the watcher keep quiet, but a missing Node still has to be named.
+func TestRegisterProject_saysWhenNodeCannotBeInstalled(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	stubNode(t, errors.New("offline"))
+	dir := t.TempDir()
+	writeNodeFixture(t, map[string]string{filepath.Join(dir, ".nvmrc"): "20"})
+	site := config.Site{Name: "shop", Path: dir, Domains: []string{"shop.test"}}
+
+	out := captureStdout(t, func() {
+		if err := parkDeps().EnsureNode(site, linker.NopReporter{}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(out, "shop") || !strings.Contains(out, "lerd node:install 20") || strings.Contains(out, "installing Node") {
+		t.Errorf("park printed %q, want only a warning naming the site and the command", out)
+	}
+}
+
 func TestLinkDepsInstallNode(t *testing.T) {
 	if linkDeps().EnsureNode == nil {
 		t.Error("lerd link does not install a missing Node")

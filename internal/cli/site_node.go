@@ -50,7 +50,7 @@ func ensureSiteNode(site config.Site, r linker.Reporter) error {
 		if site.IsHostProxy() && dir == site.Path {
 			return fmt.Errorf("installing Node %s, which %s needs: %w", v, site.Name, err)
 		}
-		r.Warn("Node %s is not installed, run 'lerd node:install %s'", v, v)
+		r.Warn("Node %s, which %s needs, is not installed, run 'lerd node:install %s'", v, site.Name, v)
 	}
 	return nil
 }
