@@ -851,7 +851,7 @@
   "siteWizard_devCommand": "Lệnh dev",
   "siteWizard_devCommandDetected": "Script phát hiện được: {scripts}",
   "siteWizard_devCommandHint": "Cách lerd khởi động ứng dụng. Để trống nếu bạn tự chạy.",
-  "siteWizard_finish": "Mở site",
+  "siteWizard_finish": "Xem trong lerd",
   "siteWizard_framework": "Framework",
   "siteWizard_frankenphp": "FrankenPHP",
   "siteWizard_frankenphpUse": "Dùng runtime FrankenPHP",

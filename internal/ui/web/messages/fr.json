@@ -851,7 +851,7 @@
   "siteWizard_devCommand": "Commande de dev",
   "siteWizard_devCommandDetected": "Scripts détectés : {scripts}",
   "siteWizard_devCommandHint": "Comment lerd démarre l'application. Laissez vide pour la démarrer vous-même.",
-  "siteWizard_finish": "Ouvrir le site",
+  "siteWizard_finish": "Voir dans lerd",
   "siteWizard_framework": "Framework",
   "siteWizard_frankenphp": "FrankenPHP",
   "siteWizard_frankenphpUse": "Utiliser le runtime FrankenPHP",

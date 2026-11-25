@@ -411,7 +411,7 @@ describe('SiteWizardModal', () => {
   });
 
   // No step is ever required, so a list with nothing ticked just finishes.
-  it('offers only Open the site while no setup step is ticked', async () => {
+  it('offers only finishing while no setup step is ticked', async () => {
     sites.set([{ domain: 'acme.test', path: '/home/u/acme' } as never]);
     setupSteps.mockResolvedValue([{ label: 'lerd mcp:inject', enabled: false, optional: false }]);
     localStorage.setItem('lerd.siteWizard', JSON.stringify({ step: 'setup', dir: '/home/u/acme' }));
@@ -426,8 +426,48 @@ describe('SiteWizardModal', () => {
     expect(screen.getByText('Skip setup')).toBeTruthy();
     await fireEvent.click(screen.getByText('lerd mcp:inject'));
 
-    await fireEvent.click(await screen.findByText('Open the site'));
+    await fireEvent.click(await screen.findByText('View in lerd'));
     await waitFor(() => expect(goToTab).toHaveBeenCalledWith('sites', 'acme.test'));
+  });
+
+  // The wizard's own button lands on the site's page in the dashboard, so a
+  // second one opens the site itself, on https once it is secured (#2710).
+  it('opens the finished site in the browser and lands on its page', async () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    sites.set([{ name: 'acme', domain: 'acme.test', path: '/home/u/acme', tls: true } as never]);
+    setupSteps.mockResolvedValue([{ label: 'lerd mcp:inject', enabled: false, optional: false }]);
+    localStorage.setItem('lerd.siteWizard', JSON.stringify({ step: 'setup', dir: '/home/u/acme' }));
+
+    render(SiteWizardModal);
+    await fireEvent.click(await screen.findByText('Open in browser'));
+
+    expect(open).toHaveBeenCalledWith('https://acme.test', '_blank', 'noopener');
+    await waitFor(() => expect(goToTab).toHaveBeenCalledWith('sites', 'acme.test'));
+    open.mockRestore();
+  });
+
+  it('offers both ways out once setup has run', async () => {
+    sites.set([{ name: 'acme', domain: 'acme.test', path: '/home/u/acme' } as never]);
+    localStorage.setItem('lerd.siteWizard', JSON.stringify({ step: 'setup', dir: '/home/u/acme' }));
+
+    render(SiteWizardModal);
+    await screen.findByText('composer install');
+    await fireEvent.click(screen.getByText('Run setup'));
+
+    expect(await screen.findByText('Site ready')).toBeTruthy();
+    expect(screen.getByText('Open in browser')).toBeTruthy();
+    expect(screen.getByText('View in lerd')).toBeTruthy();
+  });
+
+  // A paused site serves its landing page, so the tiles offer no browser link.
+  it('offers no browser button for a paused site', async () => {
+    sites.set([{ name: 'acme', domain: 'acme.test', path: '/home/u/acme', paused: true } as never]);
+    setupSteps.mockResolvedValue([{ label: 'lerd mcp:inject', enabled: false, optional: false }]);
+    localStorage.setItem('lerd.siteWizard', JSON.stringify({ step: 'setup', dir: '/home/u/acme' }));
+
+    render(SiteWizardModal);
+    expect(await screen.findByText('View in lerd')).toBeTruthy();
+    expect(screen.queryByText('Open in browser')).toBeNull();
   });
 
   // A directory that already is a site has nothing left to ask. Walking the

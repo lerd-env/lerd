@@ -851,7 +851,7 @@
   "siteWizard_devCommand": "開發指令",
   "siteWizard_devCommandDetected": "偵測到的指令碼：{scripts}",
   "siteWizard_devCommandHint": "lerd 啟動應用程式的方式。留空則由你自行啟動。",
-  "siteWizard_finish": "開啟網站",
+  "siteWizard_finish": "在 lerd 中檢視",
   "siteWizard_framework": "框架",
   "siteWizard_frankenphp": "FrankenPHP",
   "siteWizard_frankenphpUse": "使用 FrankenPHP 執行環境",
