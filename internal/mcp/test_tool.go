@@ -79,23 +79,23 @@ func execTest(args map[string]any) (any, *rpcError) {
 	return toolErr(fmt.Sprintf("the run did not finish: %v\n%s", runErr, body)), nil
 }
 
-// testTarget reads the project root and the test file. Models hand the file over
-// as path often enough that a path inside a project counts as both.
+// testTarget reads the project and the test file in it. The project is the
+// closest one at or above path, and a path below it names the file: models hand
+// the file over as path often enough.
 func testTarget(args map[string]any) (root, file string, err error) {
-	root, file = absFromCwd(strArg(args, "path")), strArg(args, "file")
-	switch {
-	case root != "" && file == "":
-		if project := projectRootOf(root); project != "" && project != root {
-			root, file = project, root
-		}
-	case root == "" && filepath.IsAbs(file):
-		root = projectRootOf(file)
+	path, file := strArg(args, "path"), strArg(args, "file")
+	base := defaultSitePath
+	if filepath.IsAbs(path) {
+		base = path
+	} else if base != "" {
+		base = filepath.Join(base, path)
 	}
-	if root == "" {
-		root = defaultSitePath
-	}
-	if root == "" {
+	if base == "" {
 		return "", "", errors.New("path is required: pass the project root, or open your assistant in it")
+	}
+	root = projectRootOf(base)
+	if file == "" && path != "" && filepath.Clean(base) != root {
+		file = base
 	}
 	if file == "" {
 		return root, "", nil
@@ -109,7 +109,7 @@ func testTarget(args map[string]any) (root, file string, err error) {
 		}
 	}
 	if !filepath.IsLocal(file) {
-		return "", "", fmt.Errorf("file %q is outside the project %s", file, root)
+		return "", "", fmt.Errorf("file %q is outside the project %s; pass the project it is in as path", file, root)
 	}
 	if _, statErr := os.Stat(filepath.Join(root, file)); statErr != nil {
 		return "", "", fmt.Errorf("no file %s in %s; pass a test name as filter instead", file, root)
@@ -117,38 +117,21 @@ func testTarget(args map[string]any) (root, file string, err error) {
 	return root, file, nil
 }
 
-// absFromCwd resolves a relative path against the folder the assistant is in.
-func absFromCwd(path string) string {
-	if path == "" || filepath.IsAbs(path) || defaultSitePath == "" {
-		return path
-	}
-	return filepath.Join(defaultSitePath, path)
-}
-
 // projectRootOf is path itself or the closest folder above it that is a project,
-// empty when none is.
+// and path when none is. A linked site counts without a composer.json.
 func projectRootOf(path string) string {
-	for dir := filepath.Clean(path); ; dir = filepath.Dir(dir) {
-		if isProjectRoot(dir) {
+	path = filepath.Clean(path)
+	for dir := path; ; dir = filepath.Dir(dir) {
+		if _, err := os.Stat(filepath.Join(dir, "composer.json")); err == nil {
+			return dir
+		}
+		if _, err := config.FindSiteByPath(dir); err == nil {
 			return dir
 		}
 		if dir == filepath.Dir(dir) {
-			return ""
+			return path
 		}
 	}
-}
-
-// isProjectRoot counts a linked site too, which may have no composer.json, so
-// one further up is never taken for its project.
-func isProjectRoot(dir string) bool {
-	if dir == defaultSitePath {
-		return true
-	}
-	if _, err := os.Stat(filepath.Join(dir, "composer.json")); err == nil {
-		return true
-	}
-	_, err := config.FindSiteByPath(dir)
-	return err == nil
 }
 
 func cutTestOutput(out string) string {

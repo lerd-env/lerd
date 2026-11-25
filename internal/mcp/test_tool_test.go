@@ -248,3 +248,55 @@ func TestProjectPHPArgs_carryTheFrameworksIni(t *testing.T) {
 		t.Errorf("args = %v, want to end in %v", got, want)
 	}
 }
+
+// An assistant opened in a project's subfolder is still in that project.
+func TestExecTest_openedInASubfolder(t *testing.T) {
+	dir := testProject(t)
+	defaultSitePath = filepath.Join(dir, "tests")
+	file := []string{"vendor/bin/unit", "tests/LoginTest.php"}
+	for _, c := range []struct {
+		args map[string]any
+		argv []string
+	}{
+		{map[string]any{}, []string{"vendor/bin/unit"}},
+		{map[string]any{"file": filepath.Join(dir, "tests/LoginTest.php")}, file},
+		{map[string]any{"file": "tests/LoginTest.php"}, file},
+		{map[string]any{"path": "LoginTest.php"}, file},
+		{map[string]any{"path": dir}, []string{"vendor/bin/unit"}},
+	} {
+		got := stubPHP(t, "", nil)
+		if text, isErr := runTest(t, c.args); isErr || got.root != dir || !slices.Equal(got.argv, c.argv) {
+			t.Errorf("%v ran %+v, want %v: %s", c.args, *got, c.argv, text)
+		}
+	}
+}
+
+// A package kept inside an app is tested by the app's own runner.
+func TestExecTest_nestedPackageFileRunsFromTheProject(t *testing.T) {
+	dir := testProject(t)
+	pkg := filepath.Join(dir, "packages", "foo")
+	if err := os.MkdirAll(pkg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"composer.json", "FooTest.php"} {
+		if err := os.WriteFile(filepath.Join(pkg, f), []byte("{}"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []string{"vendor/bin/unit", "packages/foo/FooTest.php"}
+	for _, file := range []string{"packages/foo/FooTest.php", filepath.Join(pkg, "FooTest.php")} {
+		got := stubPHP(t, "", nil)
+		if text, isErr := runTest(t, map[string]any{"file": file}); isErr || got.root != dir || !slices.Equal(got.argv, want) {
+			t.Errorf("%s ran %+v: %s", file, *got, text)
+		}
+	}
+}
+
+func TestExecTest_fileOutsideTheProjectAsksForThePath(t *testing.T) {
+	testProject(t)
+	got := stubPHP(t, "", nil)
+	text, isErr := runTest(t, map[string]any{"file": filepath.Join(t.TempDir(), "X.php")})
+	if !isErr || !strings.Contains(text, "outside the project") || !strings.Contains(text, "path") || got.argv != nil {
+		t.Errorf("isErr %v: %s", isErr, text)
+	}
+}
