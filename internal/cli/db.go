@@ -487,7 +487,7 @@ func newDbCreateCmd(use string) *cobra.Command {
 	var service string
 	cmd := &cobra.Command{
 		Use:   use + " [name]",
-		Short: "Create a database (and testing database) for the current project",
+		Short: "Create a database for the current project, and its testing database unless the tests run elsewhere",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runDbCreate(service, args)

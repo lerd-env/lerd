@@ -53,6 +53,18 @@ func TestDatabasesToCreate(t *testing.T) {
 		{"a server var counts as well as an env one", map[string]string{
 			"phpunit.xml": phpunitWith(`<server name="DB_CONNECTION" value="sqlite"/>`),
 		}, []string{"shop"}},
+		{"the stock empty DB_URL keeps it", map[string]string{
+			"phpunit.xml": phpunitWith(`<!-- <env name="DB_CONNECTION" value="sqlite"/> --><env name="DB_URL" value=""/>`),
+		}, []string{"shop", "shop_testing"}},
+		{"a connection lerd can't read keeps it", map[string]string{
+			"phpunit.xml": phpunitWith(`<env name="DB_CONNECTION" value="mysql_testing"/><env name="DB_DATABASE" value="shop"/>`),
+		}, []string{"shop", "shop_testing"}},
+		{"tests on a URL naming another database drop it", map[string]string{
+			"phpunit.xml": phpunitWith(`<env name="DB_URL" value="mysql://root:lerd@lerd-mysql:3306/shop_test"/>`),
+		}, []string{"shop"}},
+		{"tests on a SQLite URL drop it", map[string]string{
+			"phpunit.xml": phpunitWith(`<env name="DB_URL" value="sqlite:///:memory:"/>`),
+		}, []string{"shop"}},
 		{"tests naming the twin keep it", map[string]string{
 			"phpunit.xml": phpunitWith(`<env name="DB_DATABASE" value="shop_testing"/>`),
 		}, []string{"shop", "shop_testing"}},
@@ -92,11 +104,25 @@ func TestDatabasesToCreateReadsTheEnvAboutToBeWritten(t *testing.T) {
 	dir := t.TempDir()
 	writeProjectFile(t, dir, "shaped.lock", "")
 	writeProjectFile(t, dir, ".env", "DB_CONNECTION=sqlite\n")
-	writeProjectFile(t, dir, "phpunit.xml", phpunitWith(`<env name="DB_DATABASE" value="shop_testing"/>`))
+	writeProjectFile(t, dir, "phpunit.xml", phpunitWith(`<env name="DB_DATABASE" value="shop_test"/>`))
 
 	next := map[string]string{"DB_CONNECTION": "mysql", "DB_HOST": "lerd-mysql", "DB_DATABASE": "shop"}
-	if got := DatabasesToCreate(dir, "shop", next); !slices.Equal(got, []string{"shop", "shop_testing"}) {
-		t.Errorf("DatabasesToCreate = %v, want the twin the tests name", got)
+	if got := DatabasesToCreate(dir, "shop", next); !slices.Equal(got, []string{"shop"}) {
+		t.Errorf("DatabasesToCreate = %v, want only the site's own", got)
+	}
+}
+
+// A connection of the project's own, named in its env rather than in
+// phpunit.xml, may append the suffix itself, so a name alone can't rule it out.
+func TestDatabasesToCreateKeepsTheTwinBehindAConnectionOfTheProjectsOwn(t *testing.T) {
+	setConfigDir(t)
+	installStoreFramework(t, laravelShapedDef())
+	dir := t.TempDir()
+	writeProjectFile(t, dir, "shaped.lock", "")
+	writeProjectFile(t, dir, ".env", "DB_CONNECTION=mysql_testing\nDB_HOST=lerd-mysql\nDB_DATABASE=shop\n")
+	writeProjectFile(t, dir, "phpunit.xml", phpunitWith(`<env name="DB_DATABASE" value="shop"/>`))
+	if got := DatabasesToCreate(dir, "shop", nil); !slices.Equal(got, []string{"shop", "shop_testing"}) {
+		t.Errorf("DatabasesToCreate = %v, want the twin kept", got)
 	}
 }
 

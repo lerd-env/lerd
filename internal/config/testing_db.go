@@ -2,7 +2,6 @@ package config
 
 import (
 	"encoding/xml"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -25,65 +24,75 @@ func DatabasesToCreate(projectDir, db string, env map[string]string) []string {
 	return []string{db, db + TestingDBSuffix}
 }
 
-// TestingDatabaseWanted reports whether a project's tests use db's testing
-// twin, laying the PHPUnit config's env over the project's. A config that says
-// nothing about the database still wants it, as it always has.
+// TestingDatabaseWanted reports whether a project's tests may use db's testing
+// twin. Only a PHPUnit config that clearly runs them elsewhere, on SQLite or a
+// database by another name, rules it out; anything less keeps it.
 func TestingDatabaseWanted(projectDir, db string, env map[string]string) bool {
-	overrides := phpunitEnv(projectDir)
-	bindings, file, format := dbEnvBindings(projectDir)
-	if !touchesDBKeys(overrides, bindings) {
+	tests := phpunitEnv(projectDir)
+	if len(tests) == 0 {
 		return true
 	}
+	bindings, file, format := dbEnvBindings(projectDir)
 	if env == nil {
 		env = envfile.Values(filepath.Join(projectDir, file), format)
 	}
-	merged := maps.Clone(env)
-	if merged == nil {
-		merged = map[string]string{}
-	}
-	maps.Copy(merged, overrides)
-	return slices.Contains(testDatabaseNames(bindings, merged), db+TestingDBSuffix)
+	return !testsRunElsewhere(bindings, env, tests, db+TestingDBSuffix)
 }
 
-// testDatabaseNames is every database name vals declare through the framework's
-// keys. It doesn't ask which host serves them: a native site reaches lerd's
-// engine on loopback, so a name is all the decision needs.
-func testDatabaseNames(bindings []dbServiceBinding, vals map[string]string) []string {
-	read := func(k string) string { return vals[k] }
+// testsRunElsewhere reports whether the PHPUnit values name a database other
+// than twin. An empty value says nothing, and a connection lerd can't read,
+// such as one appending the suffix itself, leaves the answer open.
+func testsRunElsewhere(bindings []dbServiceBinding, env, tests map[string]string, twin string) bool {
+	if isSQLite(tests["DB_CONNECTION"]) {
+		return true
+	}
+	conn := tests["DB_CONNECTION"]
+	if conn == "" {
+		conn = env["DB_CONNECTION"]
+	}
+	if !serverDBDriver(conn) {
+		return false
+	}
+	urlKeys, nameKeys := testDBKeys(bindings)
 	var names []string
+	for _, k := range urlKeys {
+		switch v := strings.TrimSpace(tests[k]); {
+		case isSQLite(v):
+			return true
+		case isDBConnectionString(v):
+			names = append(names, DBNameInURL(v))
+		}
+	}
+	for _, k := range nameKeys {
+		names = append(names, strings.TrimSpace(tests[k]))
+	}
+	names = slices.DeleteFunc(names, func(n string) bool { return n == "" })
+	return len(names) > 0 && !slices.Contains(names, twin)
+}
+
+// testDBKeys is the keys a framework reads its database from, as URLs and as
+// bare names. A definition that detects a service without saying how it is
+// addressed is read through its detect keys.
+func testDBKeys(bindings []dbServiceBinding) (urlKeys, nameKeys []string) {
+	urlKeys, nameKeys = []string{"DB_URL", "DATABASE_URL"}, []string{"DB_DATABASE"}
 	for _, b := range bindings {
-		if !serviceDetectedIn(b.detect, vals) {
-			continue
+		if b.URLKey != "" {
+			urlKeys = append(urlKeys, b.URLKey)
+		}
+		if b.NameKey != "" {
+			nameKeys = append(nameKeys, b.NameKey)
 		}
 		if b.URLKey == "" && b.NameKey == "" {
-			names = append(names, vals["DB_DATABASE"])
-			names = append(names, connectionDatabaseNames(vals)...)
-			continue
-		}
-		names = append(names, b.Database(read))
-	}
-	if serverDBDriver(vals["DB_CONNECTION"]) {
-		names = append(names, vals["DB_DATABASE"])
-	}
-	for _, k := range []string{"DB_URL", "DATABASE_URL"} {
-		if v := vals[k]; v != "" && !strings.HasPrefix(v, "sqlite") {
-			names = append(names, DBNameInURL(v))
+			for _, d := range b.detect {
+				urlKeys = append(urlKeys, d.Key)
+			}
 		}
 	}
-	return names
+	return urlKeys, nameKeys
 }
 
-// connectionDatabaseNames is the database each connection string in vals names,
-// whatever key holds it or host it reaches, the fallback for a definition that
-// detects a service without saying which keys address it.
-func connectionDatabaseNames(vals map[string]string) []string {
-	var names []string
-	for _, v := range vals {
-		if isDBConnectionString(v) {
-			names = append(names, DBNameInURL(v))
-		}
-	}
-	return names
+func isSQLite(v string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(v)), "sqlite")
 }
 
 // isDBConnectionString reports whether v is a URL or PDO DSN for a database
@@ -98,24 +107,6 @@ func isDBConnectionString(v string) bool {
 	switch scheme {
 	case "mysql", "mysql2", "mysqli", "mariadb", "pgsql", "postgres", "postgresql", "mongodb", "mongodb+srv":
 		return true
-	}
-	return false
-}
-
-// touchesDBKeys reports whether overrides set any key the framework reads its
-// database from, or detects its database service by.
-func touchesDBKeys(overrides map[string]string, bindings []dbServiceBinding) bool {
-	keys := []string{"DB_CONNECTION", "DB_HOST", "DB_DATABASE", "DB_URL", "DATABASE_URL"}
-	for _, b := range bindings {
-		keys = append(keys, b.keys...)
-		for _, d := range b.detect {
-			keys = append(keys, d.Key)
-		}
-	}
-	for _, k := range keys {
-		if _, ok := overrides[k]; ok {
-			return true
-		}
 	}
 	return false
 }

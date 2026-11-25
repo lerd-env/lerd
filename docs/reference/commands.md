@@ -271,7 +271,7 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 
 | Command | Description |
 |---|---|
-| `lerd db:create [name]` | Create a database and a `<name>_testing` database |
+| `lerd db:create [name]` | Create a database, and a `<name>_testing` database unless the project's tests run on another one |
 | `lerd db:import [-d name] <file.sql>` | Import a SQL dump (defaults to site DB from `.env`) |
 | `lerd db:export [-d name] [-o file.sql]` | Export a database to a SQL dump (defaults to site DB from `.env`) |
 | `lerd db:shell` | Open an interactive MySQL or PostgreSQL shell |

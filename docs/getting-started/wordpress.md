@@ -68,7 +68,7 @@ Saved .lerd.yaml
 
 Workers are not shown; the WordPress definition declares none.
 
-Picking MySQL is all the database setup there is. `lerd init` starts the container, creates `myblog` and `myblog_testing` inside it, and rewrites the connection constants in `wp-config.php`:
+Picking MySQL is all the database setup there is. `lerd init` starts the container, creates `myblog` inside it (and `myblog_testing`, unless the project's PHPUnit config runs its tests on another database), and rewrites the connection constants in `wp-config.php`:
 
 ```php
 define( 'DB_NAME',     'myblog' );
@@ -145,7 +145,7 @@ lerd status
 | Command | What it did |
 |---|---|
 | `lerd link` | Detected WordPress, fetched `wordpress@7` from the store, assigned `myblog.test`, set document root to project root |
-| `lerd init` | Wrote `.lerd.yaml` with PHP 8.3 and the MySQL service, created `myblog` and `myblog_testing` inside lerd-mysql |
+| `lerd init` | Wrote `.lerd.yaml` with PHP 8.3 and the MySQL service, created `myblog` inside lerd-mysql, and `myblog_testing` unless the tests run on another database |
 | `lerd env` (via init) | Wrote `DB_NAME`, `DB_USER`, `DB_PASSWORD` and `DB_HOST` into `wp-config.php` |
 | `lerd secure` (via init) | Issued mkcert TLS, switched the vhost to HTTPS, set `WP_HOME` |
 
