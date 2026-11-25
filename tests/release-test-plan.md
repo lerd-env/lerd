@@ -849,6 +849,11 @@ lerd worktree add -b feat-x
 - [ ] `lerd import` pulls a project in from another local environment
 - [ ] Custom container path: a non-PHP project with `Containerfile.lerd` plus
       `container: {port: N}` links, `lerd rebuild` works, **200**
+- [ ] With a `build_context` in a directory of its own, an edit to a file the
+      image copies reaches the page after `lerd link`, and an edit to a file
+      `.containerignore` lists leaves the running container alone
+- [ ] A failed build of a custom container leaves the previous image serving and
+      shows as a failed build in `lerd sites`, until a build succeeds
 
 ---
 
