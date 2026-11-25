@@ -82,11 +82,9 @@ func IdleServiceUsers(name string) (sites []config.Site, consumers []string) {
 	return idleSitesUsing(name), consumers
 }
 
-// IdleServicePinnedSites names the pinned sites keeping a service awake,
-// directly or through a service relying on it, walking the users the idle
-// engine walks, so the dashboard can say why a service never sleeps.
-func IdleServicePinnedSites(name string) []string {
-	var out []string
+// walkServiceUsers visits a service and every service relying on it, each once,
+// with the sites using it, the way the idle engine collects what keeps it awake.
+func walkServiceUsers(name string, visit func(service string, sites []config.Site)) {
 	seen := map[string]bool{}
 	var walk func(string)
 	walk = func(n string) {
@@ -95,18 +93,65 @@ func IdleServicePinnedSites(name string) []string {
 		}
 		seen[n] = true
 		sites, consumers := IdleServiceUsers(n)
-		for _, s := range sites {
-			if s.Pinned && !slices.Contains(out, s.Name) {
-				out = append(out, s.Name)
-			}
-		}
+		visit(n, sites)
 		for _, c := range consumers {
 			walk(c)
 		}
 	}
 	walk(name)
+}
+
+// IdleServicePinnedSites names the pinned sites keeping a service awake,
+// directly or through a service relying on it, so the dashboard can say why a
+// service never sleeps.
+func IdleServicePinnedSites(name string) []string {
+	var out []string
+	walkServiceUsers(name, func(_ string, sites []config.Site) {
+		for _, s := range sites {
+			if s.Pinned && !slices.Contains(out, s.Name) {
+				out = append(out, s.Name)
+			}
+		}
+	})
 	sort.Strings(out)
 	return out
+}
+
+// SleepableServices returns which of the named services sleeping services would
+// stop by the recorded activity, leaving out those no site uses.
+func SleepableServices(names []string, activity map[string]int64, timeout time.Duration, now time.Time) []string {
+	var out []string
+	for _, name := range names {
+		if serviceSleepable(name, activity, timeout, now) {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func serviceSleepable(name string, activity map[string]int64, timeout time.Duration, now time.Time) bool {
+	idle := func(ts int64) bool { return now.Sub(time.Unix(ts, 0)) >= timeout }
+	used, awake := false, false
+	walkServiceUsers(name, func(svc string, sites []config.Site) {
+		// A service has a record only once its dashboard has been opened.
+		if ts, ok := activity["svc:"+svc]; config.ServiceIsPinned(svc) || (ok && !idle(ts)) {
+			awake = true
+		}
+		for i := range sites {
+			s := &sites[i]
+			used = true
+			if ts, ok := activity[s.Name]; s.Pinned || s.IsProxyOnly() || !ok || !idle(ts) {
+				awake = true
+			}
+			for key, ts := range activity {
+				if strings.HasPrefix(key, s.Name+"/") && !idle(ts) {
+					awake = true
+				}
+			}
+		}
+	})
+	return used && !awake
 }
 
 // SuspendServicesForIdle puts services to sleep one after another and returns

@@ -419,6 +419,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/disk", withCORS(handleDisk))
 	mux.HandleFunc("/api/xdebug/", withCORS(publishAfter(handleXdebugAction, eventbus.KindStatus)))
 	mux.HandleFunc("/api/lerd/start", withCORS(handleLerdStart))
+	mux.HandleFunc("/api/idle/services-suggestion", withCORS(handleIdleServicesSuggestion))
 	mux.HandleFunc("/api/machine/memory", withCORS(handleMachineMemory))
 	mux.HandleFunc("/api/lerd/stop", withCORS(handleLerdStop))
 	mux.HandleFunc("/api/lerd/quit", withCORS(handleLerdQuit))
@@ -5856,7 +5857,7 @@ func handleSettingsIdleSuspend(w http.ResponseWriter, r *http.Request) {
 	cfg.IdleSuspend.Enabled = body.Enabled
 	cfg.IdleSuspend.Timeout = (time.Duration(body.TimeoutMinutes) * time.Minute).String()
 	if body.Services != nil {
-		cfg.IdleSuspend.Services = *body.Services
+		cfg.SetIdleServices(*body.Services)
 	}
 	if err := config.SaveGlobal(cfg); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})

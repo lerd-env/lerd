@@ -446,6 +446,9 @@ type GlobalConfig struct {
 		// once every site using it has been idle past Timeout, and wakes on the
 		// next request. Off by default; only read while Enabled is on.
 		Services bool `yaml:"services,omitempty" mapstructure:"services"`
+		// ServicesDeclined records that Services was turned off by hand, so the
+		// dashboard never suggests it again.
+		ServicesDeclined bool `yaml:"services_declined,omitempty" mapstructure:"services_declined"`
 	} `yaml:"idle_suspend" mapstructure:"idle_suspend"`
 	AutoSnapshot struct {
 		// Enabled turns on scheduled database snapshots: every AutoSnapshotEvery,
@@ -499,6 +502,12 @@ func (c *GlobalConfig) AutoCleanupEnabled() bool {
 // DefaultIdleSuspendTimeout is how long a site stays idle before its
 // suspendable workers are stopped, when no explicit timeout is configured.
 const DefaultIdleSuspendTimeout = 30 * time.Minute
+
+// SetIdleServices records a choice about sleeping services.
+func (c *GlobalConfig) SetIdleServices(on bool) {
+	c.IdleSuspend.Services = on
+	c.IdleSuspend.ServicesDeclined = !on
+}
 
 // IdleSuspendTimeout returns the effective global idle timeout, falling back to
 // DefaultIdleSuspendTimeout when unset, unparseable, or non-positive.

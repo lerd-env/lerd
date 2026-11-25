@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { apiFetch, sharedJson } from '$lib/api';
+import { apiFetch, decodeJSONResult, sharedJson } from '$lib/api';
 
 // Global idle-suspend policy (a single on/off + timeout, not per site).
 export const idleEnabled = writable<boolean>(false);
@@ -33,12 +33,14 @@ export async function saveIdle(enabled: boolean, timeoutMinutes: number, service
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled, timeout_minutes: timeoutMinutes, services })
     });
-    if (res.ok) {
+    // A save that failed on the host still answers 200, with ok false.
+    const ok = res.ok && (await decodeJSONResult<{ ok?: boolean }>(res)).ok === true;
+    if (ok) {
       idleEnabled.set(enabled);
       idleTimeoutMinutes.set(timeoutMinutes);
       if (services !== undefined) idleServices.set(services);
     }
-    return res.ok;
+    return ok;
   } catch {
     return false;
   }

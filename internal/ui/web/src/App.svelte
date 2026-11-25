@@ -39,6 +39,7 @@
   import { loadSetup, watchSetup } from '$stores/setup';
   import NotifyBanner from '$components/NotifyBanner.svelte';
   import ThemeSuggestBanner from '$components/ThemeSuggestBanner.svelte';
+  import IdleServicesBanner from '$components/IdleServicesBanner.svelte';
   import RevokedPluginsBanner from '$components/RevokedPluginsBanner.svelte';
   import NotificationToasts from '$components/NotificationToasts.svelte';
   import WizardBubble from '$components/WizardBubble.svelte';
@@ -223,6 +224,7 @@
     <RevokedPluginsBanner />
     <NotifyBanner />
     <ThemeSuggestBanner />
+    <IdleServicesBanner />
     <MachineMemoryBanner />
   </div>
   <NotificationToasts />
