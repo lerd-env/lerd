@@ -55,6 +55,7 @@ func toolList() []mcpTool {
 		runtimeTool(),
 		workerTool(),
 		execTool(),
+		testTool(),
 		frameworkTool(),
 		diagTool(),
 		logsTool(),
@@ -303,6 +304,11 @@ func handleToolCall(params json.RawMessage) (any, *rpcError) {
 		return dispatchWorktree(args)
 	}
 
+	// test does one thing, so it takes no action.
+	if p.Name == "test" {
+		return execTest(args)
+	}
+
 	actions, ok := groupDispatch[p.Name]
 	if !ok {
 		if plugin, tool := findPluginTool(p.Name); tool != nil {
@@ -512,18 +518,18 @@ func workerTool() mcpTool {
 func execTool() mcpTool {
 	return mcpTool{
 		Name:        "exec",
-		Description: "Run project tooling. action: artisan (Laravel), console (other frameworks), composer, pun (PHP format/lint/analyse), vendor_bins, vendor_run (pest, phpunit, pint…), commands_list, commands_run, command_add, command_remove.",
+		Description: "Run project tooling (tests: use test). action: artisan (Laravel), console (other frameworks), composer, pun (PHP lint/format), vendor_bins, vendor_run (pint, phpstan…), commands_list, commands_run, command_add, command_remove.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
 				"action":         {Type: "string", Enum: []string{"artisan", "console", "composer", "pun", "vendor_bins", "vendor_run", "commands_list", "commands_run", "command_add", "command_remove"}},
 				"path":           {Type: "string", Description: "Project root. Defaults to cwd."},
 				"args":           {Type: "array", Items: stringItems, Description: `artisan/console/composer/pun: argv, e.g. ["migrate"].`},
-				"bin":            {Type: "string", Description: "vendor_run: binary name (pest, phpunit, pint)."},
+				"bin":            {Type: "string", Description: "vendor_run: binary name."},
 				"site":           {Type: "string", Description: "commands_*/command_*: site name."},
 				"name":           {Type: "string", Description: "commands_run/command_*: command name."},
 				"command":        {Type: "string", Description: "command_add: shell command (sh -c)."},
-				"force":          {Type: "boolean", Description: "commands_run: required for confirm-gated commands and for project-supplied (.lerd.yaml) commands that run on the host; approval is then remembered per site."},
+				"force":          {Type: "boolean", Description: "commands_run: for confirm-gated or project-supplied (.lerd.yaml) host commands; remembered per site."},
 				"label":          {Type: "string", Description: "command_add: dashboard label."},
 				"description":    {Type: "string", Description: "command_add: tooltip."},
 				"output":         {Type: "string", Enum: []string{"silent", "text", "url", "terminal"}, Description: "command_add: output mode."},

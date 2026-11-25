@@ -487,7 +487,7 @@ func newDbCreateCmd(use string) *cobra.Command {
 	var service string
 	cmd := &cobra.Command{
 		Use:   use + " [name]",
-		Short: "Create a database (and testing database) for the current project",
+		Short: "Create a database for the current project, and its testing database unless the tests run elsewhere",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runDbCreate(service, args)
@@ -523,7 +523,7 @@ func runDbCreate(flagService string, args []string) error {
 	}
 
 	feedback.Begin()
-	for _, name := range []string{dbName, dbName + "_testing"} {
+	for _, name := range config.DatabasesToCreate(cwd, dbName, nil) {
 		created, err := createDatabase(env.service, name)
 		if err != nil {
 			return fmt.Errorf("creating %q: %w", name, err)

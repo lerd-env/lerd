@@ -20,6 +20,8 @@ Download `Install-Lerd.exe` from the [Lerd desktop app's latest release](https:/
 
 Every step checks before it acts, so running it again after a failure picks up where it stopped. Windows asks whether to trust lerd's certificate authority, answer Yes. It is removed from Add/Remove Programs like any other app, keeping the distro or deleting it.
 
+If your Windows account is a standard one and a separate administrator account answers the prompt, the wizard would set lerd up for the administrator. It notices, changes nothing, and offers to open the PowerShell install below as you.
+
 ## Install from PowerShell
 
 For a console install, run this in a PowerShell window. It does not need to be opened as administrator:

@@ -73,7 +73,7 @@ lerd secure
 lerd env
 ```
 
-`lerd env` reads the dsn prefix already in `config/db.php` to tell which service the project uses, starts it, and creates the `yiiapp` and `yiiapp_testing` databases. No application URL is written, because Yii keeps none here and `yii\db\Connection` refuses a key it does not know.
+`lerd env` reads the dsn prefix already in `config/db.php` to tell which service the project uses, starts it, and creates the `yiiapp` database, along with `yiiapp_testing` unless the project's PHPUnit config runs its tests on another database. No application URL is written, because Yii keeps none here and `yii\db\Connection` refuses a key it does not know.
 
 ---
 

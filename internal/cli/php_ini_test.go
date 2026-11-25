@@ -12,7 +12,7 @@ func TestPHPIniArgsSortedAndPaired(t *testing.T) {
 		"memory_limit": "-1",
 		"error_log":    "/tmp/php.log",
 	}}}
-	got := phpIniArgsFor(fw)
+	got := config.CLIIniArgs(fw)
 	want := []string{"-d", "error_log=/tmp/php.log", "-d", "memory_limit=-1"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v want %v", got, want)
@@ -20,10 +20,10 @@ func TestPHPIniArgsSortedAndPaired(t *testing.T) {
 }
 
 func TestPHPIniArgsEmpty(t *testing.T) {
-	if got := phpIniArgsFor(nil); got != nil {
+	if got := config.CLIIniArgs(nil); got != nil {
 		t.Fatalf("nil framework: %v", got)
 	}
-	if got := phpIniArgsFor(&config.Framework{}); got != nil {
+	if got := config.CLIIniArgs(&config.Framework{}); got != nil {
 		t.Fatalf("no ini: %v", got)
 	}
 }
@@ -33,7 +33,7 @@ func TestPHPIniArgsRejectsUnsafe(t *testing.T) {
 	fw := &config.Framework{PHP: config.FrameworkPHP{CLIIni: map[string]string{
 		"memory_limit": "-1 -d auto_prepend_file=/tmp/pwn.php",
 	}}}
-	if got := phpIniArgsFor(fw); got != nil {
+	if got := config.CLIIniArgs(fw); got != nil {
 		t.Fatalf("unsafe ini rendered: %v", got)
 	}
 }

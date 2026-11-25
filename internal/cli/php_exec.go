@@ -129,7 +129,7 @@ func RunPHPVersionCaptureEnv(cwd, version string, args []string, extraEnv []stri
 	}
 	// The CLI SAPI ignores a project's .user.ini, so a framework declaring
 	// php.cli_ini gets it as -d on every PHP process lerd starts for it.
-	args = prependPHPIniArgs(phpIniArgsForDir(cwd), args)
+	args = prependPHPIniArgs(config.CLIIniArgsForDir(cwd), args)
 
 	// Under the native runtime PHP lives on the host next to the project, so
 	// there is no container to exec into and nothing to stage across a mount

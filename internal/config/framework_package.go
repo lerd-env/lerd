@@ -73,6 +73,8 @@ type FrameworkPackage struct {
 	// with the package, so a project on any framework that requires it gets the
 	// same capture.
 	Devtools *FrameworkDevtools `yaml:"devtools,omitempty"`
+	// Test is how the package runs a project's tests.
+	Test *TestRunner `yaml:"test,omitempty"`
 	// Removes takes entries away from the resolved framework, for a major of the
 	// package that dropped a command or a worker. Declaring an entry is how a
 	// package replaces one, and this is how it deletes one, which it cannot do by

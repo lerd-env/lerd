@@ -2,6 +2,8 @@ package cli
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -35,7 +37,7 @@ func stubProvisionSeams(t *testing.T, startErr error) *provisionCalls {
 
 func TestProvisionWiredService_CreatesTheSiteDatabaseAndItsTestingTwin(t *testing.T) {
 	calls := stubProvisionSeams(t, nil)
-	errs := provisionWiredService("mysql", "shop", map[string]string{}, map[string]string{})
+	errs := provisionWiredService(t.TempDir(), "mysql", "shop", map[string]string{}, map[string]string{})
 	if len(errs) != 0 {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
@@ -46,7 +48,7 @@ func TestProvisionWiredService_CreatesTheSiteDatabaseAndItsTestingTwin(t *testin
 
 func TestProvisionWiredService_ReportsADatabaseServiceThatWillNotStart(t *testing.T) {
 	calls := stubProvisionSeams(t, errors.New("timeout"))
-	errs := provisionWiredService("postgres", "shop", map[string]string{}, map[string]string{})
+	errs := provisionWiredService(t.TempDir(), "postgres", "shop", map[string]string{}, map[string]string{})
 	if len(errs) != 1 || !strings.Contains(errs[0].Error(), "postgres did not start") {
 		t.Fatalf("errs = %v", errs)
 	}
@@ -58,7 +60,7 @@ func TestProvisionWiredService_ReportsADatabaseServiceThatWillNotStart(t *testin
 func TestProvisionWiredService_NamesTheBucketAfterTheSiteAndWiresItsURL(t *testing.T) {
 	calls := stubProvisionSeams(t, nil)
 	updates := map[string]string{}
-	provisionWiredService("rustfs", "my_shop", map[string]string{"AWS_BUCKET": "lerd"}, updates)
+	provisionWiredService(t.TempDir(), "rustfs", "my_shop", map[string]string{"AWS_BUCKET": "lerd"}, updates)
 	if updates["AWS_BUCKET"] != "my-shop" || updates["AWS_URL"] != "http://localhost:9000/my-shop" {
 		t.Errorf("updates = %v", updates)
 	}
@@ -69,8 +71,27 @@ func TestProvisionWiredService_NamesTheBucketAfterTheSiteAndWiresItsURL(t *testi
 
 func TestProvisionWiredService_OnlyStartsAnyOtherService(t *testing.T) {
 	calls := stubProvisionSeams(t, nil)
-	provisionWiredService("redis", "shop", map[string]string{}, map[string]string{})
+	provisionWiredService(t.TempDir(), "redis", "shop", map[string]string{}, map[string]string{})
 	if len(calls.started) != 1 || len(calls.databases)+len(calls.buckets) != 0 {
 		t.Errorf("calls = %+v", calls)
+	}
+}
+
+// Tests that run on SQLite have no use for the testing twin (#2668).
+func TestProvisionWiredService_SkipsTheTestingTwinWhenTestsRunOnSQLite(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	calls := stubProvisionSeams(t, nil)
+	dir := t.TempDir()
+	phpunit := `<phpunit><php><env name="DB_CONNECTION" value="sqlite"/><env name="DB_DATABASE" value=":memory:"/></php></phpunit>`
+	if err := os.WriteFile(filepath.Join(dir, "phpunit.xml"), []byte(phpunit), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	updates := map[string]string{"DB_CONNECTION": "mysql", "DB_HOST": "lerd-mysql", "DB_DATABASE": "shop"}
+	if errs := provisionWiredService(dir, "mysql", "shop", map[string]string{}, updates); len(errs) != 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if got := strings.Join(calls.databases, ","); got != "mysql/shop" {
+		t.Errorf("databases = %q, want only the site's own", got)
 	}
 }

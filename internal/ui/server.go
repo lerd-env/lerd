@@ -1750,7 +1750,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		parts := strings.SplitN(kv, "=", 2)
 		if len(parts) == 2 {
 			v := strings.ReplaceAll(parts[1], "{{site}}", handle)
-			v = strings.ReplaceAll(v, "{{site_testing}}", handle+"_testing")
+			v = strings.ReplaceAll(v, "{{site_testing}}", handle+config.TestingDBSuffix)
 			envMap[parts[0]] = v
 		}
 	}
