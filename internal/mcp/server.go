@@ -426,50 +426,18 @@ func execArtisan(args map[string]any) (any, *rpcError) {
 		return toolErr("args is required and must be a non-empty array"), nil
 	}
 
-	phpVersion, err := phpDet.VersionForDir(projectPath)
-	if err != nil {
-		return toolErr(err.Error()), nil
-	}
-
 	consoleCmd, err := config.GetConsoleCommand(projectPath)
 	if err != nil {
 		return toolErr(err.Error()), nil
 	}
-	if nativeRuntime() {
-		var out bytes.Buffer
-		if err := runOnHost(projectPath, append([]string{"php", consoleCmd}, artisanArgs...), &out); err != nil {
-			return toolErr(fmt.Sprintf("artisan failed (%v):\n%s", err, stripANSI(out.String()))), nil
-		}
-		return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
-	}
-
-	short := strings.ReplaceAll(phpVersion, ".", "")
-	container := phpDet.FPMContainerForDir(projectPath, phpVersion)
-	if errBody := ensureFPMStartedMCP(phpVersion, short, container); errBody != nil {
+	out, errBody, err := runProjectPHP(projectPath, append([]string{consoleCmd}, artisanArgs...))
+	if errBody != nil {
 		return errBody, nil
 	}
-	if err := wakeSiteServicesMCP(projectPath); err != nil {
-		return toolErr(err.Error()), nil
+	if err != nil {
+		return toolErr(fmt.Sprintf("artisan failed (%v):\n%s", err, out)), nil
 	}
-
-	// No -it flags — non-interactive, output captured to buffer.
-	cmdArgs := []string{"exec", "-w", projectPath}
-	for _, e := range agentenv.MCPInject(os.Environ()) {
-		cmdArgs = append(cmdArgs, "--env", e)
-	}
-	cmdArgs = append(cmdArgs, envpass.Args(projectPath, os.Environ())...)
-	cmdArgs = append(cmdArgs, phpDet.SiteEnvArgs(projectPath)...)
-	cmdArgs = append(cmdArgs, container, "php", consoleCmd)
-	cmdArgs = append(cmdArgs, artisanArgs...)
-
-	var out bytes.Buffer
-	cmd := podman.Cmd(cmdArgs...)
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	if err := runCall(cmd, container); err != nil {
-		return toolErr(fmt.Sprintf("artisan failed (%v):\n%s", err, stripANSI(out.String()))), nil
-	}
-	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
+	return toolOK(out), nil
 }
 
 func execSites() (any, *rpcError) {
@@ -1101,20 +1069,24 @@ func runProjectPHP(projectPath string, argv []string) (text string, errBody any,
 		return "", toolErr(err.Error()), nil
 	}
 
-	cmdArgs := []string{"exec", "-w", projectPath}
-	for _, e := range agentenv.MCPInject(os.Environ()) {
-		cmdArgs = append(cmdArgs, "--env", e)
-	}
-	cmdArgs = append(cmdArgs, envpass.Args(projectPath, os.Environ())...)
-	cmdArgs = append(cmdArgs, phpDet.SiteEnvArgs(projectPath)...)
-	cmdArgs = append(cmdArgs, container, "php")
-	cmdArgs = append(cmdArgs, argv...)
-
-	cmd := podman.Cmd(cmdArgs...)
+	cmd := podman.Cmd(projectPHPArgs(container, projectPath, argv)...)
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 	err = runCall(cmd, container)
 	return stripANSI(strings.TrimSpace(out.String())), nil, err
+}
+
+// projectPHPArgs is the podman exec that runs php with argv in container.
+func projectPHPArgs(container, projectPath string, argv []string) []string {
+	args := []string{"exec", "-w", projectPath}
+	for _, e := range agentenv.MCPInject(os.Environ()) {
+		args = append(args, "--env", e)
+	}
+	args = append(args, envpass.Args(projectPath, os.Environ())...)
+	args = append(args, phpDet.SiteEnvArgs(projectPath)...)
+	args = append(args, container, "php")
+	args = append(args, config.CLIIniArgsForDir(projectPath)...)
+	return append(args, argv...)
 }
 
 func execNodeInstall(args map[string]any) (any, *rpcError) {

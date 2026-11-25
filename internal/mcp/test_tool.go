@@ -79,18 +79,20 @@ func execTest(args map[string]any) (any, *rpcError) {
 	return toolErr(fmt.Sprintf("the run did not finish: %v\n%s", runErr, body)), nil
 }
 
-// testTarget reads the project root and the test file. Models pass the file as
-// path often enough that a path naming one is taken as it was meant.
+// testTarget reads the project root and the test file. Models hand the file over
+// as path often enough that a path inside a project counts as both.
 func testTarget(args map[string]any) (root, file string, err error) {
-	root, file = strArg(args, "path"), strArg(args, "file")
-	if root != "" && file == "" && looksLikeTestTarget(root) {
-		root, file = "", root
+	root, file = absFromCwd(strArg(args, "path")), strArg(args, "file")
+	switch {
+	case root != "" && file == "":
+		if project := projectRootOf(root); project != "" && project != root {
+			root, file = project, root
+		}
+	case root == "" && filepath.IsAbs(file):
+		root = projectRootOf(file)
 	}
 	if root == "" {
 		root = defaultSitePath
-		if filepath.IsAbs(file) {
-			root = projectRootOf(file)
-		}
 	}
 	if root == "" {
 		return "", "", errors.New("path is required: pass the project root, or open your assistant in it")
@@ -115,24 +117,38 @@ func testTarget(args map[string]any) (root, file string, err error) {
 	return root, file, nil
 }
 
-func looksLikeTestTarget(path string) bool {
-	if !filepath.IsAbs(path) {
-		return true
+// absFromCwd resolves a relative path against the folder the assistant is in.
+func absFromCwd(path string) string {
+	if path == "" || filepath.IsAbs(path) || defaultSitePath == "" {
+		return path
 	}
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
+	return filepath.Join(defaultSitePath, path)
 }
 
-// projectRootOf is the closest folder above file that holds a composer.json.
-func projectRootOf(file string) string {
-	for dir := filepath.Dir(file); ; dir = filepath.Dir(dir) {
-		if _, err := os.Stat(filepath.Join(dir, "composer.json")); err == nil {
+// projectRootOf is path itself or the closest folder above it that is a project,
+// empty when none is.
+func projectRootOf(path string) string {
+	for dir := filepath.Clean(path); ; dir = filepath.Dir(dir) {
+		if isProjectRoot(dir) {
 			return dir
 		}
 		if dir == filepath.Dir(dir) {
-			return defaultSitePath
+			return ""
 		}
 	}
+}
+
+// isProjectRoot counts a linked site too, which may have no composer.json, so
+// one further up is never taken for its project.
+func isProjectRoot(dir string) bool {
+	if dir == defaultSitePath {
+		return true
+	}
+	if _, err := os.Stat(filepath.Join(dir, "composer.json")); err == nil {
+		return true
+	}
+	_, err := config.FindSiteByPath(dir)
+	return err == nil
 }
 
 func cutTestOutput(out string) string {

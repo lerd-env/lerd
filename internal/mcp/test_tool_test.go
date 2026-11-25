@@ -174,3 +174,77 @@ func TestTestTool_isCallableByName(t *testing.T) {
 		t.Errorf("res = %v, err = %v", res, rpcErr)
 	}
 }
+
+// A project in a subfolder of where the assistant was opened is named by a
+// relative path as often as an absolute one.
+func TestExecTest_relativeProjectRoot(t *testing.T) {
+	dir := testProject(t)
+	nested := filepath.Join(dir, "backend")
+	for path, body := range map[string]string{
+		"composer.json":          `{"require-dev":{"acme/unit":"^1.0"}}`,
+		"vendor/bin/unit":        "<?php",
+		"tests/InnerTest.php":    "<?php",
+		"tests/Unit/OneTest.php": "<?php",
+	} {
+		full := filepath.Join(nested, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	whole := []string{"vendor/bin/unit"}
+	inner := []string{"vendor/bin/unit", "tests/InnerTest.php"}
+	for _, c := range []struct {
+		args map[string]any
+		root string
+		argv []string
+	}{
+		{map[string]any{"path": "backend"}, nested, whole},
+		{map[string]any{"path": "./backend/"}, nested, whole},
+		{map[string]any{"path": "backend", "file": "tests/InnerTest.php"}, nested, inner},
+		{map[string]any{"path": "backend/tests/InnerTest.php"}, nested, inner},
+		{map[string]any{"file": "backend/tests/InnerTest.php"}, dir, []string{"vendor/bin/unit", "backend/tests/InnerTest.php"}},
+		{map[string]any{"path": "backend/tests/Unit"}, nested, []string{"vendor/bin/unit", "tests/Unit"}},
+		{map[string]any{"path": filepath.Join(nested, "tests/Unit")}, nested, []string{"vendor/bin/unit", "tests/Unit"}},
+		{map[string]any{"path": "."}, dir, whole},
+		{map[string]any{"path": "tests"}, dir, []string{"vendor/bin/unit", "tests"}},
+	} {
+		got := stubPHP(t, "", nil)
+		if text, isErr := runTest(t, c.args); isErr || got.root != c.root || !slices.Equal(got.argv, c.argv) {
+			t.Errorf("%v ran %+v, want %s %v: %s", c.args, *got, c.root, c.argv, text)
+		}
+	}
+}
+
+// A project without composer.json is its own root, and has no runner to find.
+func TestExecTest_rootWithoutComposer(t *testing.T) {
+	testProject(t)
+	got := stubPHP(t, "", nil)
+	if text, isErr := runTest(t, map[string]any{"path": t.TempDir()}); !isErr || !strings.Contains(text, "no test runner") || got.argv != nil {
+		t.Errorf("isErr %v: %s", isErr, text)
+	}
+}
+
+// The CLI runs a framework's commands with its cli_ini, and tests that need
+// its memory limit must not fail only through MCP.
+func TestProjectPHPArgs_carryTheFrameworksIni(t *testing.T) {
+	dir := testProject(t)
+	def := "name: acme\nlabel: Acme\nversion: \"1\"\npublic_dir: public\nphp:\n  cli_ini:\n    memory_limit: 512M\ndetect:\n  - file: acme.php\n"
+	if err := os.WriteFile(filepath.Join(config.StoreFrameworksDir(), "acme@1.yaml"), []byte(def), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(config.StoreFrameworksDir(), "index.json"),
+		[]byte(`{"frameworks":[{"name":"acme","label":"Acme","versions":["1"],"latest":"1","detect":[{"file":"acme.php"}]}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "acme.php"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := projectPHPArgs("c1", dir, []string{"vendor/bin/unit"})
+	want := []string{"c1", "php", "-d", "memory_limit=512M", "vendor/bin/unit"}
+	if len(got) < len(want) || !slices.Equal(got[len(got)-len(want):], want) {
+		t.Errorf("args = %v, want to end in %v", got, want)
+	}
+}
