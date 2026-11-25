@@ -6,7 +6,7 @@ Database commands work with any project type: Laravel, Symfony, NestJS, Next.js,
 
 | Command | Description |
 |---|---|
-| `lerd db:create [name]` | Create a database and a `<name>_testing` database |
+| `lerd db:create [name]` | Create a database, and a `<name>_testing` database unless the project's tests run on another one |
 | `lerd db:import [-s service] [-d name] [--fresh] <file.sql>` | Import a SQL dump |
 | `lerd db:export [-s service] [-d name] [-o file.sql]` | Export a database to a SQL dump |
 | `lerd db:shell [-s service] [-d name]` | Open an interactive MySQL, MariaDB or PostgreSQL shell; SQL piped in (`echo "SELECT 1" \| lerd db:shell`) runs and exits. When the database does not exist, a terminal is offered to create it and SQL piped in is told to run `lerd db:create` |
@@ -140,7 +140,11 @@ Name is resolved in this order (first match wins):
 2. Database name from the resolution chain above
 3. Project name derived from the registered site name (or directory name)
 
-A `<name>_testing` database is always created alongside the main one. If a database already exists the command reports it instead of failing.
+A `<name>_testing` database is created alongside the main one unless the project's tests run on another database. If a database already exists the command reports it instead of failing.
+
+### When the testing database is created
+
+Lerd reads the project's PHPUnit config, `phpunit.xml` or else the committed `phpunit.xml.dist` or `phpunit.dist.xml`, the same file PHPUnit would pick, and looks at its `<env>` and `<server>` values. The `_testing` database is left out only when those values clearly run the tests on another database: `DB_CONNECTION` set to `sqlite`, as a new Laravel app ships, a SQLite URL, or a database name or URL naming something other than `<name>_testing`. Anything less keeps it, as before: a config that says nothing about the database, one whose database keys are empty, such as the stock `DB_URL` with the SQLite lines commented out so a `.env.testing` takes over, or one picking a connection lerd can't read, such as a `mysql_testing` connection that appends the suffix itself. The keys it checks are the ones the site's framework definition reads its database from, so a framework addressing its database by a single URL is judged on that URL. `lerd env`, `lerd db:create` and the MCP `db` tool's `create` action all decide the same way, and a database created earlier is left alone.
 
 ---
 
@@ -310,7 +314,7 @@ For SQLite, the `database/database.sqlite` file is created automatically if it d
 
 Because no service is started, the commands on this page do not apply to a SQLite project: they drive a database engine running in a container, and SQLite is a file your framework opens directly. Running one there refuses with a message naming the file it found rather than trying to treat the path as a database name. Back a SQLite project up by copying the file, and use your framework's own tooling (`php artisan migrate:fresh`, for example) to reset it. To move the project onto an engine these commands do cover, run `lerd db:move --to mysql`, or point a single command at a service you already have with `--service`.
 
-For MySQL or PostgreSQL (and their family alternates), the matching `lerd-<service>` container is started if it isn't already, and the project database (plus a `_testing` variant) is created via `lerd db:create`.
+For MySQL or PostgreSQL (and their family alternates), the matching `lerd-<service>` container is started if it isn't already, and the project database is created via `lerd db:create`, with a `_testing` variant unless the project's tests run on another database.
 
 You can change the choice at any time by editing the `services:` list in `.lerd.yaml` and re-running `lerd env`, or by running `lerd init --fresh` and picking a different database in the wizard.
 

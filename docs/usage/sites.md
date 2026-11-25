@@ -66,7 +66,7 @@ Wizard defaults are populated intelligently on first run:
 
 The Database step is a single choice rather than a multi-select, so picking MySQL automatically deselects SQLite and vice-versa. After the wizard completes, `lerd env` runs automatically to write your choices to `.env`:
 
-- **MySQL / PostgreSQL**: `DB_CONNECTION` and the related `DB_HOST` / `DB_PORT` / `DB_DATABASE` / `DB_USERNAME` / `DB_PASSWORD` keys are rewritten to point at `lerd-mysql` / `lerd-postgres`, the service is started if it isn't already, and the project database (plus a `_testing` variant) is created.
+- **MySQL / PostgreSQL**: `DB_CONNECTION` and the related `DB_HOST` / `DB_PORT` / `DB_DATABASE` / `DB_USERNAME` / `DB_PASSWORD` keys are rewritten to point at `lerd-mysql` / `lerd-postgres`, the service is started if it isn't already, and the project database is created, plus a `_testing` variant unless the project's tests run on another database.
 - **SQLite**: `DB_CONNECTION=sqlite` and `DB_DATABASE=database/database.sqlite` are written to `.env`, and the `database/database.sqlite` file is created if it doesn't exist. No service is started.
 
 The choice is authoritative: if `.env` already had `DB_CONNECTION=mysql` from a previous setup and you switch to SQLite (or vice versa) in the wizard, lerd skips the auto-detection of the old database and applies your new pick instead.

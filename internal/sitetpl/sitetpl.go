@@ -31,7 +31,7 @@ var versionedServices = []string{"mysql", "postgres", "redis", "meilisearch"}
 func Apply(s string, ctx Ctx) string {
 	if ctx.Site != "" {
 		s = strings.ReplaceAll(s, "{{site}}", ctx.Site)
-		s = strings.ReplaceAll(s, "{{site_testing}}", ctx.Site+"_testing")
+		s = strings.ReplaceAll(s, "{{site_testing}}", ctx.Site+config.TestingDBSuffix)
 	}
 	if ctx.Bucket != "" {
 		s = strings.ReplaceAll(s, "{{bucket}}", ctx.Bucket)

@@ -13,9 +13,9 @@ import (
 	"github.com/geodro/lerd/internal/siteinfo"
 )
 
-// TestingSuffix names the paired testing database lerd creates alongside every
+// TestingSuffix names the paired testing database lerd creates alongside a
 // project database.
-const TestingSuffix = "_testing"
+const TestingSuffix = config.TestingDBSuffix
 
 // Owner is the site a database belongs to: the parent site's domain, plus the
 // branch when the database is a worktree's isolated one. The branch is what

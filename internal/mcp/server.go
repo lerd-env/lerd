@@ -4482,7 +4482,7 @@ func execDBCreate(args map[string]any) (any, *rpcError) {
 
 	svc := mcpDBService(env)
 	var results []string
-	for _, name := range []string{dbName, dbName + "_testing"} {
+	for _, name := range config.DatabasesToCreate(projectPath, dbName, nil) {
 		created, err := serviceops.CreateDatabase(svc, name)
 		if err != nil {
 			return toolErr(fmt.Sprintf("creating %q: %v", name, err)), nil
