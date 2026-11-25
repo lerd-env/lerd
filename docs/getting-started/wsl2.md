@@ -240,7 +240,7 @@ If all of those come back green, `cd ~/projects/myapp && lerd link` behaves exac
 
 ## Uninstalling
 
-`lerd uninstall` inside the distro also cleans up the Windows side: `lerd.exe` and its shims with their PATH entry, the agent's start at login, the Quick access pins, the notification entry, and the Lerd desktop app's start at sign-in, Start menu shortcut and `lerd://` handler. The Windows DNS rule and the `lerd LAN` firewall rule go in one administrator prompt.
+`lerd uninstall` inside the distro also cleans up the Windows side: `lerd.exe` and its shims with their PATH entry, the agent's start at login, the Quick access pins, the notification entry, and the Lerd desktop app's start at sign-in, Start menu shortcut and `lerd://` handler. The Windows DNS rule and the `lerd LAN` firewall rule go in one administrator prompt. Run from a Windows terminal, the uninstall is itself running inside `lerd.exe`, so that file is moved to `%LOCALAPPDATA%\lerd-removed-<number>` and deleted in the background once the uninstall exits, for up to an hour. If Windows shuts down before then, delete that folder yourself.
 
 Two things stay. lerd's CA remains in your Windows trust store, because removing it raises a dialog a script cannot answer; delete it under **Trusted Root Certification Authorities** in `certmgr.msc`. The desktop app's files under `C:\Program Files\Lerd` need administrator rights to remove: with `Install-Lerd.exe` that is its entry in Add/Remove Programs, after an `install.ps1` install delete the folder yourself.
 

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -494,19 +495,31 @@ func removeWindowsSide() error {
 	if err != nil {
 		return err
 	}
-	_, err = powershell(detached(removeOnceUnlockedScript(winDir)))
-	return err
+	winOld := fmt.Sprintf("%s-removed-%d", winDir, time.Now().UnixNano())
+	_, moveErr := powershell(moveAsideScript(winDir, winOld))
+	_, err = powershell(detached(removeMovedScript(winOld)))
+	return errors.Join(moveErr, err)
 }
 
-// removeOnceUnlockedScript keeps trying to delete winDir for a minute. A
-// config in it means lerd was installed again, so it is left alone.
-func removeOnceUnlockedScript(winDir string) string {
-	return fmt.Sprintf(`$d = %s
-for ($i = 0; $i -lt 60 -and (Test-Path -LiteralPath $d); $i++) {
-  if (Test-Path -LiteralPath (Join-Path $d 'bin\%s')) { exit }
-  Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue
+// moveAsideScript empties winDir into winOld beside it and deletes it. Windows
+// lets a running exe be renamed within its volume, but not deleted.
+func moveAsideScript(winDir, winOld string) string {
+	return fmt.Sprintf(`$ErrorActionPreference = 'Stop'
+$d = %s
+$old = %s
+New-Item -ItemType Directory -Path $old | Out-Null
+Get-ChildItem -LiteralPath $d -Recurse -Force -File | ForEach-Object { Move-Item -LiteralPath $_.FullName -Destination (Join-Path $old ([guid]::NewGuid())) }
+Remove-Item -LiteralPath $d -Recurse -Force`, psQuote(winDir), psQuote(winOld))
+}
+
+// removeMovedScript deletes winOld once nothing in it runs. The uninstall can
+// still take a while, reinstalling npm packages, so it waits up to an hour.
+func removeMovedScript(winOld string) string {
+	return fmt.Sprintf(`$old = %s
+for ($i = 0; $i -lt 3600 -and (Test-Path -LiteralPath $old); $i++) {
+  Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction SilentlyContinue
   Start-Sleep 1
-}`, psQuote(winDir), winshim.ConfigName)
+}`, psQuote(winOld))
 }
 
 func removeWindowsSideScript(winBin string) string {

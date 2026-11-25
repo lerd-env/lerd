@@ -205,18 +205,29 @@ func TestRemoveWindowsSideScript_UnregistersTheDesktopApp(t *testing.T) {
 	}
 }
 
-// lerd.exe cannot be deleted while it runs the uninstall, so Windows deletes the
-// folder after it exits, unless a reinstall has put its config there by then.
-func TestRemoveOnceUnlockedScript(t *testing.T) {
-	got := removeOnceUnlockedScript(`C:\Users\O'Brien\AppData\Local\lerd`)
+// lerd.exe cannot be deleted while it runs the uninstall but can be renamed, so
+// only the renamed copy waits for it: a reinstall's folder is never touched.
+func TestMoveAsideScript(t *testing.T) {
+	got := moveAsideScript(`C:\Users\O'Brien\AppData\Local\lerd`, `C:\Users\O'Brien\AppData\Local\lerd-removed-1`)
 	for _, want := range []string{
 		`$d = 'C:\Users\O''Brien\AppData\Local\lerd'`,
-		`if (Test-Path -LiteralPath (Join-Path $d 'bin\lerd-wsl.conf')) { exit }`,
-		`Remove-Item -LiteralPath $d -Recurse -Force`,
+		`$old = 'C:\Users\O''Brien\AppData\Local\lerd-removed-1'`,
+		`Move-Item -LiteralPath`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s:\n%s", want, got)
 		}
+	}
+}
+
+func TestRemoveMovedScript_TouchesOnlyTheMovedFolder(t *testing.T) {
+	got := removeMovedScript(`C:\Users\O'Brien\AppData\Local\lerd-removed-1`)
+	if !strings.Contains(got, `$old = 'C:\Users\O''Brien\AppData\Local\lerd-removed-1'`) ||
+		!strings.Contains(got, `Remove-Item -LiteralPath $old -Recurse -Force`) {
+		t.Errorf("must delete the moved folder:\n%s", got)
+	}
+	if strings.Count(got, "Remove-Item") != 1 {
+		t.Errorf("must delete nothing else:\n%s", got)
 	}
 }
 
