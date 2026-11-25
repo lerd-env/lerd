@@ -1,5 +1,6 @@
 <script lang="ts">
   import ListPanel from '$components/ListPanel.svelte';
+  import CellButtons, { type CellAction } from '$components/CellButtons.svelte';
   import ActionButton from '$components/ActionButton.svelte';
   import DumpBridgeToggle from '$components/DumpBridgeToggle.svelte';
   import ProfilerToggle from '$components/ProfilerToggle.svelte';
@@ -438,6 +439,24 @@
     };
   });
 
+  const listActions = $derived.by(() => {
+    const sort: CellAction = {
+      icon: 'sort',
+      label: m.sites_sort_label(),
+      menu: true,
+      open: sortMenuOpen,
+      onclick: () => ((sortMenuOpen = !sortMenuOpen), (addingWorkspace = false))
+    };
+    if (!$accessMode.localControl) return [sort];
+    const add: CellAction = {
+      icon: 'plus',
+      label: m.workspaces_add(),
+      open: addingWorkspace,
+      onclick: () => ((addingWorkspace = !addingWorkspace), (sortMenuOpen = false))
+    };
+    return [add, sort];
+  });
+
   // The section menus are separate popovers; one document listener closes them.
   $effect(() => {
     if (!menuKey) return;
@@ -529,30 +548,7 @@
       </div>
     {/if}
 
-    {#if $accessMode.localControl}
-      <button
-        type="button"
-        onclick={() => ((addingWorkspace = !addingWorkspace), (sortMenuOpen = false))}
-        title={m.workspaces_add()}
-        aria-label={m.workspaces_add()}
-        aria-expanded={addingWorkspace}
-        class="pointer-events-auto flex items-center justify-center w-7 h-7 rounded-full bg-gray-100 dark:bg-white/10 border border-gray-200 dark:border-white/15 backdrop-blur-sm text-gray-800 dark:text-gray-200 hover:border-lerd-red hover:text-lerd-red transition-colors"
-      >
-        <Icon name="plus" class="w-3.5 h-3.5" />
-      </button>
-    {/if}
-
-    <button
-      type="button"
-      onclick={() => ((sortMenuOpen = !sortMenuOpen), (addingWorkspace = false))}
-      title={m.sites_sort_label()}
-      aria-haspopup="menu"
-      aria-expanded={sortMenuOpen}
-      aria-label={m.sites_sort_label()}
-      class="pointer-events-auto flex items-center justify-center w-7 h-7 rounded-full bg-gray-100 dark:bg-white/10 border border-gray-200 dark:border-white/15 backdrop-blur-sm text-gray-800 dark:text-gray-200 hover:border-lerd-red hover:text-lerd-red transition-colors"
-    >
-      <Icon name="sort" class="w-3.5 h-3.5" />
-    </button>
+    <CellButtons actions={listActions} />
   </div>
 {/snippet}
 
