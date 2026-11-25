@@ -314,3 +314,39 @@ check "link after fixing the build" bash -c "cd $ctx && lerd link"
 check "8.27 a good build clears the mark" ctx_clean
 check "8.27 the fixed site is served" wait_for 60 ctx_serves 'second image'
 check "unlink the build_context site" bash -c "cd $ctx && lerd unlink"
+
+# trust_ca on one image of each family, with the HTTPS client it ships.
+# trust_ca_site <family> <image> <client...>: links a site on the image and
+# fetches both URLs with the client. The first fetch is without trust_ca, so a
+# client that checks no certificates cannot pass.
+trust_ca_site() {
+	local family=$1 image=$2 dir=$PROJECTS/ccca-$1 unit id
+	shift 2
+	mkdir -p "$dir"
+	printf 'FROM %s\nCMD ["sleep", "infinity"]\n' "$image" >"$dir/Containerfile.lerd"
+	printf 'container:\n  port: 8000\n' >"$dir/.lerd.yaml"
+	check "$family image links" bash -c "cd $dir && lerd link"
+	unit=lerd-custom-$(site_name "$dir")
+	check "$family container runs" wait_for 60 podman exec "$unit" true
+	check "$family refuses the lerd certificate without trust_ca" bash -c '! "$@"' _ podman exec "$unit" "$@" "$ca_other"
+	printf 'container:\n  port: 8000\n  trust_ca: true\n' >"$dir/.lerd.yaml"
+	check "$family relink with trust_ca" bash -c "cd $dir && lerd link"
+	check "$family container runs again" wait_for 60 podman exec "$unit" true
+	id=$(podman inspect -f '{{.Id}}' "$unit" 2>/dev/null)
+	check "$family relink with nothing changed" bash -c "cd $dir && lerd link"
+	check "8.28 $family container is left alone by that" test -n "$id" -a "$(podman inspect -f '{{.Id}}' "$unit" 2>/dev/null)" = "$id"
+	check "8.28 $family reaches a secured site" podman exec "$unit" "$@" "$ca_other"
+	check "8.28 $family reaches a public site" podman exec "$unit" "$@" https://example.com
+	check "unlink the $family site" bash -c "cd $dir && lerd unlink"
+}
+if [ "$(tld)" = localhost ]; then
+	skip "8.28 trust_ca on a Debian, an Alpine and a Fedora image" "a .localhost install has no HTTPS"
+else
+	# The other site must be secured, so demo is put on https when it was not.
+	[ "$scheme" = https ] || check "demo is secured for trust_ca" lerd secure "$name"
+	ca_other=https://$(site_host "$DEMO_DIR")
+	trust_ca_site debian docker.io/library/php:8.4-cli curl -fsS -o /dev/null
+	trust_ca_site alpine docker.io/library/alpine:3 wget -q -O /dev/null
+	trust_ca_site fedora registry.fedoraproject.org/fedora:43 curl -fsS -o /dev/null
+	[ "$scheme" = https ] || lerd unsecure "$name" </dev/null
+fi
