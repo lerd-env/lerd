@@ -413,6 +413,11 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 			nodeCfg.SetNodeManager(nodeManager)
 			changed = true
 		}
+		before := nodeCfg.Node
+		nodeDet.RecordFnm(nodeCfg)
+		if nodeCfg.Node.FnmBin != before.FnmBin || nodeCfg.Node.FnmDir != before.FnmDir {
+			changed = true
+		}
 		if nodeCfg.NodeNvmDir() != nvmDirToSave {
 			nodeCfg.SetNodeNvmDir(nvmDirToSave)
 			changed = true

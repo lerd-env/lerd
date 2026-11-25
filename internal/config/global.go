@@ -156,6 +156,10 @@ type GlobalConfig struct {
 		// though systemd/launchd never load the user's shell rc that exports
 		// $NVM_DIR. Empty means fall back to $NVM_DIR or ~/.nvm.
 		NvmDir string `yaml:"nvm_dir,omitempty" mapstructure:"nvm_dir"`
+		// FnmBin and FnmDir are where the user's own fnm and its versions live,
+		// recorded from a terminal so daemons without its shell rc agree with it.
+		FnmBin string `yaml:"fnm_bin,omitempty" mapstructure:"fnm_bin"`
+		FnmDir string `yaml:"fnm_dir,omitempty" mapstructure:"fnm_dir"`
 	} `yaml:"node" mapstructure:"node"`
 	MCP struct {
 		// GlobalDeclined records a "no" to install's global MCP question, or a

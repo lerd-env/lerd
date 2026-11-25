@@ -126,6 +126,9 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 	} else {
 		cfg.SetNodeNvmDir("")
 	}
+	if target == "fnm" {
+		nodeDet.RecordFnm(cfg)
+	}
 	if err := config.SaveGlobal(cfg); err != nil {
 		return fmt.Errorf("saving config: %w", err)
 	}

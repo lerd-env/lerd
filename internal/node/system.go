@@ -154,7 +154,7 @@ func fnmNodeBinDir(version string) string {
 		filepath.Join(home, ".fnm"),
 		filepath.Join(home, "Library", "Application Support", "fnm"),
 	}
-	if d := os.Getenv("FNM_DIR"); d != "" {
+	if d := fnmDir(); d != "" {
 		bases = append([]string{d}, bases...)
 	}
 	for _, fnmBase := range bases {

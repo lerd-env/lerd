@@ -131,7 +131,7 @@ An existing install keeps the manager it already has.
 
 [fnm](https://github.com/Schniz/fnm) was the manager lerd set up before mise. lerd no longer installs it, but drives one that is already there, and only then offers it in the dashboard and in `lerd node:manager`.
 
-- **Your own fnm** (on `PATH`, or where its installer, cargo or a package manager puts it) is treated like your own nvm. lerd follows it when you decline lerd-managed Node, unless you have nvm too, and you can switch to it with `lerd node:manager fnm`. lerd puts no shims on `PATH`, never updates it, and `node:unmanage` leaves its versions alone.
+- **Your own fnm** (on `PATH`, or where its installer, cargo or a package manager puts it) is treated like your own nvm. lerd follows it when you decline lerd-managed Node, unless you have nvm too, and you can switch to it with `lerd node:manager fnm`. A custom `$FNM_DIR` is recorded when you run `lerd install` or `lerd node:manager fnm` from a terminal, so the dashboard and workers use the same versions. lerd puts no shims on `PATH`, never updates it, and `node:unmanage` leaves its versions alone.
 - **An fnm an older lerd installed** in `~/.local/share/lerd/bin/` keeps driving Node, with its shims, and is still updated by `lerd tools:update`. An update never moves you off it. `lerd node:manager mise` carries your installed majors across and then drops that fnm, and there is no way to get it back from lerd.
 
 If the fnm in use is gone, the next `lerd install` sets up mise instead.
