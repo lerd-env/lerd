@@ -1,12 +1,14 @@
 import type { Action } from 'svelte/action';
 
-export type TooltipPlacement = 'bottom' | 'right';
+export type TooltipPlacement = 'bottom' | 'right' | 'top';
 
 export interface TooltipOptions {
   label: string;
   placement?: TooltipPlacement;
   // Wrap at this many pixels, for a sentence rather than a label.
   maxWidth?: number;
+  // Measured instead of the trigger, for one that is still moving into place.
+  anchor?: HTMLElement;
 }
 
 type TooltipParam = string | TooltipOptions | null | undefined;
@@ -53,12 +55,18 @@ function hide(node: HTMLElement) {
   if (box) box.style.opacity = '0';
 }
 
+const ARROW_BORDER: Record<TooltipPlacement, string> = {
+  right: 'border-b border-l',
+  bottom: 'border-t border-l',
+  top: 'border-b border-r'
+};
+
 function place(node: HTMLElement, label: string, placement: TooltipPlacement, maxWidth?: number) {
   const b = ensure();
   textEl!.textContent = label;
   arrowEl!.className =
     'h-2 w-2 rotate-45 border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card ' +
-    (placement === 'right' ? 'border-b border-l' : 'border-t border-l');
+    ARROW_BORDER[placement];
   b.style.opacity = '0';
   b.style.left = '0px';
   b.style.top = '0px';
@@ -78,8 +86,9 @@ function place(node: HTMLElement, label: string, placement: TooltipPlacement, ma
   } else {
     const left = Math.max(MARGIN, Math.min(r.left + r.width / 2 - bw / 2, vw - bw - MARGIN));
     b.style.left = left + 'px';
-    b.style.top = r.bottom + GAP + 'px';
-    arrowEl!.style.top = -ARROW / 2 + 'px';
+    const top = placement === 'top' ? r.top - GAP - bh : r.bottom + GAP;
+    b.style.top = top + 'px';
+    arrowEl!.style.top = (placement === 'top' ? bh - ARROW / 2 - 1 : -ARROW / 2) + 'px';
     arrowEl!.style.left = r.left + r.width / 2 - left - ARROW / 2 + 'px';
   }
   b.style.opacity = '1';
@@ -96,7 +105,7 @@ export const tooltip: Action<HTMLElement, TooltipParam> = (node, param) => {
   const show = () => {
     if (!opts.label) return;
     owner = node;
-    place(node, opts.label, opts.placement ?? 'bottom', opts.maxWidth);
+    place(opts.anchor ?? node, opts.label, opts.placement ?? 'bottom', opts.maxWidth);
   };
   const showOnKeyboardFocus = () => {
     if (node.matches(':focus-visible')) show();
@@ -113,7 +122,7 @@ export const tooltip: Action<HTMLElement, TooltipParam> = (node, param) => {
     update(p: TooltipParam) {
       opts = normalize(p);
       if (owner === node) {
-        if (opts.label) place(node, opts.label, opts.placement ?? 'bottom', opts.maxWidth);
+        if (opts.label) place(opts.anchor ?? node, opts.label, opts.placement ?? 'bottom', opts.maxWidth);
         else hide(node);
       }
     },
