@@ -1,8 +1,9 @@
 import { m } from '../paraglide/messages.js';
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import { apiJson, apiFetch, decodeJSONResult, sharedJson } from '$lib/api';
 import { readSSE } from '$lib/sse';
 import { confirmDownload } from './downloadConfirm';
+import { status, statusLoaded } from './status';
 import type { SiteNginxBackup, LoadNginxBackupsResult, ResetNginxResult, SaveNginxResult, RestoreNginxResult } from './sites';
 import { fetchBackupList, fetchBackupText } from '$lib/backups';
 
@@ -84,6 +85,18 @@ export async function loadPhpVersions() {
     /* keep previous */
   }
 }
+
+// A link, a resumed site or the CLI installs and removes versions without this
+// page asking, so the list follows the versions the live status reports. It is
+// compared with its last report, since under the native runtime the two differ.
+let reported: string | null = null;
+status.subscribe((s) => {
+  const fpms = s.php_fpms ?? [];
+  if (!get(statusLoaded) && fpms.length === 0) return;
+  const now = fpms.map((f) => f.version).sort().join(',');
+  if (reported !== null && now !== reported) void loadPhpVersions();
+  reported = now;
+});
 
 // installablePhpVersions returns the supported PHP versions not yet installed,
 // so the add-version modal can offer them in a dropdown. Throws on request
