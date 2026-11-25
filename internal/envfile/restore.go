@@ -49,10 +49,11 @@ func RestoreValues(path, backup, format string) error {
 
 func isDotenv(format string) bool { return format == "" || format == FormatDotenv }
 
-// envValue is a key's value, or its source when only PHP can work it out.
+// envValue is a key's value, or its source when only PHP can work it out. The
+// kind keeps null apart from an empty string and false from 'false'.
 type envValue struct {
 	text string
-	expr bool
+	kind phpKind
 }
 
 func differing(old, now map[string]envValue) map[string]envValue {
@@ -103,7 +104,7 @@ func tempFile(data []byte) (string, error) {
 func mergePHP(path, format string, changed map[string]envValue) ([]byte, error) {
 	updates := map[string]string{}
 	for k, v := range changed {
-		if v.expr {
+		if v.kind == phpExpr {
 			return nil, fmt.Errorf("%s was a PHP expression", k)
 		}
 		updates[k] = v.text
@@ -163,7 +164,7 @@ func snapshot(path, format string) (map[string]envValue, error) {
 			if v, ok := values[m[1]]; ok {
 				out[m[1]] = envValue{text: v}
 			} else {
-				out[m[1]] = envValue{text: m[2], expr: true}
+				out[m[1]] = envValue{text: m[2], kind: phpExpr}
 			}
 		}
 	default:
@@ -176,7 +177,7 @@ var phpDefine = regexp.MustCompile(`(?i)define\(\s*['"](\w+)['"]\s*,\s*(.*?)\s*\
 
 func collect(prefix string, v *phpValue, out map[string]envValue) {
 	if v.kind != phpArray {
-		out[prefix] = envValue{text: scalarString(v), expr: v.kind == phpExpr}
+		out[prefix] = envValue{text: scalarString(v), kind: v.kind}
 		return
 	}
 	for _, e := range v.entries {

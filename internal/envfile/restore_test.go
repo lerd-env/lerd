@@ -53,6 +53,21 @@ func TestRestoreValues(t *testing.T) {
 	}
 }
 
+// A value whose type the env file still has comes back as that type.
+func TestRestoreValues_keepsPHPTypes(t *testing.T) {
+	dir := t.TempDir()
+	path, backup := filepath.Join(dir, "a.php"), filepath.Join(dir, "a.php.before_lerd")
+	os.WriteFile(backup, []byte("<?php\nreturn ['port' => 3306, 'tls' => false, 'socket' => null];\n"), 0644)
+	os.WriteFile(path, []byte("<?php\nreturn ['port' => 3307, 'tls' => true, 'socket' => null];\n"), 0644)
+	if err := RestoreValues(path, backup, "php-array"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(path)
+	if want := "<?php\nreturn ['port' => 3306, 'tls' => false, 'socket' => null];\n"; string(got) != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
 // Nested arrays keep keys added since, at every level.
 func TestRestoreValues_phpArray(t *testing.T) {
 	dir := t.TempDir()
@@ -80,6 +95,14 @@ func TestRestoreValues_refusesWhatItCannotPutBackWhole(t *testing.T) {
 		{"constant expression replaced", "php-const",
 			"<?php\ndefine('DB_HOST', getenv('DB_HOST'));\n",
 			"<?php\ndefine('DB_HOST', 'lerd-mysql');\n"},
+		{"null would come back as an empty string", "php-array",
+			"<?php\nreturn ['password' => null];\n", "<?php\nreturn ['password' => 'lerd'];\n"},
+		{"null became an empty string", "php-array",
+			"<?php\nreturn ['password' => null];\n", "<?php\nreturn ['password' => ''];\n"},
+		{"false would come back as a truthy string", "php-vars",
+			"<?php\n$db['tls'] = false;\n", "<?php\n$db['tls'] = 'lerd';\n"},
+		{"a number would come back as a string", "php-array",
+			"<?php\nreturn ['port' => 3306];\n", "<?php\nreturn ['port' => 'lerd'];\n"},
 		{"a key added under an old scalar would be lost", "php-array",
 			"<?php\nreturn ['db' => 'x'];\n",
 			"<?php\nreturn ['db' => ['host' => 'lerd-mysql', 'mine' => 'y']];\n"},
