@@ -745,8 +745,8 @@ namespace LerdSetup {
     InstallDesktopApp
     GrantSudo
     try { InstallLerd } finally { RemoveSudoers }
-    StartLerd
-    StartDesktopApp '--hidden'
+    # StartLerd stops the app, so it comes back even when lerd does not.
+    try { StartLerd } finally { StartDesktopApp '--hidden' }
   } catch {
     Write-Host ''
     Write-Host "  The installer could not finish installing lerd: $($_.Exception.Message)" -ForegroundColor Red

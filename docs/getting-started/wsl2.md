@@ -250,6 +250,10 @@ Two things stay. lerd's CA remains in your Windows trust store, because removing
 Windows itself is running in a virtual machine. It only means you cannot run a VM inside WSL, which lerd never needs.
 :::
 
+::: details The dashboard does not answer right after WSL restarts
+Windows keeps port 7073 for two minutes when WSL shuts down while a browser or the desktop app has the dashboard open. lerd-ui retries every two seconds and comes up by itself once the port is free. If it still does not after a few minutes, another Windows program has the port: `netstat -ano | findstr :7073` in a Windows terminal shows which, and the dashboard starts as soon as that program closes.
+:::
+
 ::: details Composer or npm install is painfully slow
 The project is somewhere under `/mnt/c/...`. Move it into `~/projects/` and re-link.
 :::

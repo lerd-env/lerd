@@ -60,6 +60,9 @@ func TestLerdUIUnitKeepsRetryingABusyPort(t *testing.T) {
 	if !strings.Contains(unit, "StartLimitIntervalSec=0\n") {
 		t.Errorf("[Unit] must lift the start limit:\n%s", ui)
 	}
+	if !strings.Contains(service, "Restart=on-failure\n") {
+		t.Errorf("[Service] must retry failures:\n%s", ui)
+	}
 	if !strings.Contains(service, "RestartSec=2\n") {
 		t.Errorf("[Service] must space the retries out:\n%s", ui)
 	}
