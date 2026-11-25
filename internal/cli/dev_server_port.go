@@ -109,8 +109,9 @@ func repointDevServer(site *config.Site) {
 
 func devServerPort(site config.Site, proxy *config.ProxyConfig) int {
 	movable := devServerMovable(site, proxy)
+	held, _ := siteHostPorts(site.Name)
 	available := func(port int) bool {
-		return devServerPortFree(port) && !(movable && otherSiteHasPort(site.Name, port))
+		return devServerPortFree(port) && !(movable && held[port])
 	}
 	moved := site.HostPortMovedFrom == proxy.Port && site.HostPort != proxy.Port
 	if available(proxy.Port) || (movable && !moved && waitForPort(proxy.Port, available)) {
@@ -143,19 +144,6 @@ func devServerMovable(site config.Site, proxy *config.ProxyConfig) bool {
 	return proxy.CanMovePort(fw)
 }
 
-func otherSiteHasPort(name string, port int) bool {
-	reg, err := config.LoadSites()
-	if err != nil {
-		return false
-	}
-	for _, s := range reg.Sites {
-		if s.Name != name && s.HostPort == port {
-			return true
-		}
-	}
-	return false
-}
-
 // restartDevServerMoving restarts a movable dev server through the start path,
 // which settles its port. False leaves the plain restart to the caller.
 func restartDevServerMoving(site *config.Site, unit string) (bool, error) {
@@ -166,9 +154,15 @@ func restartDevServerMoving(site *config.Site, unit string) (bool, error) {
 	if !devServerMovable(*site, proj.Proxy) {
 		return false, nil
 	}
+	// Asked before the stop, so a refused command leaves the server running.
+	if err := gateHostProxyAutostart(*site, proj.Proxy.Command); err != nil {
+		return false, err
+	}
 	if err := podman.StopUnit(unit); err != nil {
 		return false, fmt.Errorf("stopping dev server: %w", err)
 	}
-	startHostProxyWorker(*site, proj.Proxy)
+	if err := launchHostProxy(site, proj.Proxy); err != nil {
+		return false, fmt.Errorf("starting dev server: %w", err)
+	}
 	return true, nil
 }

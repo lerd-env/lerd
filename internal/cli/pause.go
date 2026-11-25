@@ -612,7 +612,10 @@ func resumeWorkersByName(site *config.Site, workers []string, phpVersion string)
 		var l *workerLaunch
 		if name == hostProxyWorkerName {
 			if proj, _ := config.LoadProjectConfig(site.Path); proj != nil && proj.Proxy != nil {
-				l = prepareHostProxyStart(site, proj.Proxy)
+				var err error
+				if l, err = prepareHostProxyStart(site, proj.Proxy); err != nil {
+					feedback.Warn("dev server not started: %v", err)
+				}
 			}
 		} else {
 			fw, _ := config.GetFrameworkForDir(site.Framework, site.Path)

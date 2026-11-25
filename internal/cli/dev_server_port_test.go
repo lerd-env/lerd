@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/podman"
 )
 
 // portFixture registers one host-proxy site on port 43000 and fakes which ports
@@ -141,6 +144,72 @@ func TestSettleDevServerPort_leavesASleepingSiteItsPort(t *testing.T) {
 	}
 	if !settleDevServerPort(site, proxyOn(43000)) || site.HostPort == 43000 {
 		t.Error("started on the port of a sleeping site")
+	}
+}
+
+// A stopped worktree's port is only in the registry.
+func TestSettleDevServerPort_leavesAWorktreeItsPort(t *testing.T) {
+	site, _ := portFixture(t, true)
+	other := config.Site{Name: "shop", Domains: []string{"shop.test"}, Path: t.TempDir(), HostPort: 44000, WorktreeHostPorts: map[string]int{"shop-feature": 43000}}
+	if err := config.AddSite(other); err != nil {
+		t.Fatal(err)
+	}
+	if !settleDevServerPort(site, proxyOn(43000)) || site.HostPort == 43000 {
+		t.Error("took the port of another site's worktree")
+	}
+}
+
+func TestSettleDevServerPort_leavesItsOwnWorktreeItsPort(t *testing.T) {
+	site, _ := portFixture(t, true, 43000)
+	saved, err := config.FindSite("api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved.WorktreeHostPorts = map[string]int{"api-feature": 43001}
+	if err := config.AddSite(*saved); err != nil {
+		t.Fatal(err)
+	}
+	if !settleDevServerPort(site, proxyOn(43000)) || site.HostPort == 43001 {
+		t.Errorf("moved to %d, its own worktree's port", site.HostPort)
+	}
+}
+
+// failingStart is a dev server that stops and then cannot start.
+type failingStart struct{ devServerLifecycle }
+
+func (f *failingStart) Start(unit string) error {
+	f.ops = append(f.ops, "start "+unit)
+	return errors.New("no such unit")
+}
+
+func movableRestart(t *testing.T) {
+	t.Helper()
+	site, _ := portFixture(t, true)
+	if err := os.WriteFile(filepath.Join(site.Path, ".lerd.yaml"), []byte("proxy:\n  command: npm run acme\n  port: 43000\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	prev := podman.DaemonReloadFn
+	podman.DaemonReloadFn = func() error { return nil }
+	t.Cleanup(func() { podman.UnitLifecycle, podman.DaemonReloadFn = nil, prev })
+}
+
+func TestRestartSite_reportsAMovableServerThatDoesNotStart(t *testing.T) {
+	movableRestart(t)
+	podman.UnitLifecycle = &failingStart{}
+	if err := RestartSite("api"); err == nil || !strings.Contains(err.Error(), "no such unit") {
+		t.Errorf("err = %v, want the start failure", err)
+	}
+}
+
+func TestRestartSite_refusedCommandLeavesTheServerRunning(t *testing.T) {
+	movableRestart(t)
+	life := &failingStart{}
+	podman.UnitLifecycle = life
+	if err := os.WriteFile(config.GlobalConfigFile(), []byte("host_proxy:\n  disabled: true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := RestartSite("api"); err == nil || len(life.ops) != 0 {
+		t.Errorf("err = %v, ops = %v, want a refusal that stops nothing", err, life.ops)
 	}
 }
 
