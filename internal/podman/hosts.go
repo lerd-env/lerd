@@ -55,6 +55,7 @@ func WriteContainerHostsWith(hostIP, nginxIP string) error {
 	if err := os.MkdirAll(filepath.Dir(hostsPath), 0755); err != nil {
 		return err
 	}
+	config.GuardRealWrite(hostsPath)
 	if err := os.WriteFile(hostsPath, []byte(content), 0644); err != nil {
 		return err
 	}
@@ -117,6 +118,7 @@ func writeBrowserHosts(reg *config.SiteRegistry, nginxIP string, serviceDomains 
 	writeServiceDomains(&sb, nginxIP, serviceDomains)
 
 	browserPath := config.BrowserHostsFile()
+	config.GuardRealWrite(browserPath)
 	if err := os.MkdirAll(filepath.Dir(browserPath), 0755); err != nil {
 		return err
 	}

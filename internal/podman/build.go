@@ -1023,6 +1023,7 @@ func ensureFPMHostsFile() error {
 		return err
 	}
 	hostIP := DetectHostGatewayIP()
+	config.GuardRealWrite(hostsPath)
 	return os.WriteFile(hostsPath, []byte(
 		"127.0.0.1 localhost\n"+
 			"::1 localhost\n"+
@@ -1050,6 +1051,7 @@ func EnsureServiceHostsFile(shareHosts bool) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
+	config.GuardRealWrite(path)
 	return os.WriteFile(path, []byte("127.0.0.1 localhost\n::1 localhost\n"), 0644)
 }
 
