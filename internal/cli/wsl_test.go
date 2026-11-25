@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/wsl"
 )
 
 // The CA is found in CAROOT, with no mkcert binary anywhere to ask.
@@ -200,6 +202,31 @@ func TestRemoveWindowsSideScript_UnregistersTheDesktopApp(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s:\n%s", want, got)
 		}
+	}
+}
+
+// lerd.exe cannot be deleted while it runs the uninstall, so Windows deletes the
+// folder after it exits, unless a reinstall has put its config there by then.
+func TestRemoveOnceUnlockedScript(t *testing.T) {
+	got := removeOnceUnlockedScript(`C:\Users\O'Brien\AppData\Local\lerd`)
+	for _, want := range []string{
+		`$d = 'C:\Users\O''Brien\AppData\Local\lerd'`,
+		`if (Test-Path -LiteralPath (Join-Path $d 'bin\lerd-wsl.conf')) { exit }`,
+		`Remove-Item -LiteralPath $d -Recurse -Force`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s:\n%s", want, got)
+		}
+	}
+}
+
+func TestDetachedScriptOutlivesItsPowerShell(t *testing.T) {
+	got := detached("exit")
+	if !strings.Contains(got, "Start-Process powershell.exe") || strings.Contains(got, "-Wait") {
+		t.Errorf("must start a process of its own and not wait for it:\n%s", got)
+	}
+	if !strings.Contains(got, wsl.EncodePowerShell("exit")) {
+		t.Errorf("must carry the script encoded:\n%s", got)
 	}
 }
 

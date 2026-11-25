@@ -385,6 +385,11 @@ func elevated(script string) string {
 	return fmt.Sprintf(`Start-Process powershell.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile','-EncodedCommand','%s'`, wsl.EncodePowerShell(script))
 }
 
+// detached wraps script so it runs in a PowerShell that outlives this one.
+func detached(script string) string {
+	return fmt.Sprintf(`Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-NonInteractive','-EncodedCommand','%s'`, wsl.EncodePowerShell(script))
+}
+
 // powershell runs script and returns its stdout alone: PowerShell reports
 // progress ("Preparing modules for first use") as CLIXML on stderr, which
 // would otherwise land in the middle of an answer like "yes".
@@ -475,11 +480,33 @@ func removeWindowsSide() error {
 	// lerd.exe stays locked for a moment after the agent exits.
 	for i := 0; ; i++ {
 		err := os.RemoveAll(dir)
-		if err == nil || i == 10 {
-			return err
+		if err == nil {
+			return nil
+		}
+		if i == 10 {
+			break
 		}
 		time.Sleep(time.Second)
 	}
+	// Run from a Windows terminal, this uninstall is itself inside lerd.exe, so
+	// the last of its linked names stays locked until we exit.
+	winDir, err := windowsPath(dir)
+	if err != nil {
+		return err
+	}
+	_, err = powershell(detached(removeOnceUnlockedScript(winDir)))
+	return err
+}
+
+// removeOnceUnlockedScript keeps trying to delete winDir for a minute. A
+// config in it means lerd was installed again, so it is left alone.
+func removeOnceUnlockedScript(winDir string) string {
+	return fmt.Sprintf(`$d = %s
+for ($i = 0; $i -lt 60 -and (Test-Path -LiteralPath $d); $i++) {
+  if (Test-Path -LiteralPath (Join-Path $d 'bin\%s')) { exit }
+  Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue
+  Start-Sleep 1
+}`, psQuote(winDir), winshim.ConfigName)
 }
 
 func removeWindowsSideScript(winBin string) string {
