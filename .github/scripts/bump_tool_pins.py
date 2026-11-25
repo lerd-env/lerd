@@ -8,7 +8,7 @@ import time
 import urllib.request
 
 FILE = 'internal/tools/tools.yaml'
-GITHUB = {'fnm': 'Schniz/fnm', 'mise': 'jdx/mise', 'wp-cli': 'wp-cli/wp-cli'}
+GITHUB = {'fnm': 'Schniz/fnm', 'mise': 'jdx/mise', 'pun': 'shipfastlabs/pun', 'wp-cli': 'wp-cli/wp-cli'}
 # Tools whose release tags carry a v that their asset names leave out.
 UNPREFIXED = {'wp-cli'}
 STATIC_PHP = 'https://dl.static-php.dev/static-php-cli/common/?format=json'
