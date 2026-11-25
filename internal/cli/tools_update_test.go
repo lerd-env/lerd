@@ -16,6 +16,7 @@ func stubOutdatedTools(t *testing.T) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	bin := filepath.Join(home, "lerd", "bin")
 	if err := os.MkdirAll(bin, 0o755); err != nil {
 		t.Fatal(err)

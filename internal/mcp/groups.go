@@ -8,6 +8,7 @@ import (
 
 	"github.com/geodro/lerd/internal/activityping"
 	"github.com/geodro/lerd/internal/config"
+	lerdNode "github.com/geodro/lerd/internal/node"
 )
 
 // recordToolActivity marks the site a tool call targets as active under
@@ -470,7 +471,7 @@ func runtimeTool() mcpTool {
 				"host":      {Type: "integer", Description: "ports_add/remove: host port."},
 				"container": {Type: "integer", Description: "ports_add: container port."},
 				"shared":    {Type: "boolean", Description: "ini_*: target the shared file (all versions)."},
-				"manager":   {Type: "string", Enum: []string{"mise", "fnm", "nvm"}, Description: "node_manager: target; omit to report the current one."},
+				"manager":   {Type: "string", Enum: lerdNode.Selectable(), Description: "node_manager: target; omit to report the current one."},
 				"content":   {Type: "string", Description: "ini_write: full php.ini contents."},
 				"confirm":   {Type: "boolean", Description: "ext_add: proceed with the disclosed base image download."},
 			},

@@ -830,3 +830,63 @@ func TestStatusAll_listsAnOnDemandToolOnceDownloaded(t *testing.T) {
 		t.Error("Managed must cover the up-front tools and downloaded on-demand ones only")
 	}
 }
+
+func writeFnm(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "fnm"), []byte("b"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// lerd no longer installs fnm: an absent one is neither listed nor updatable, and
+// its own is, while it drives Node.
+func TestStatusAll_ListsLerdsFnmOnlyWhileItDrivesNode(t *testing.T) {
+	offline(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	useNodeManager(t, "fnm")
+
+	if s, ok := statusOf("fnm"); ok {
+		t.Errorf("listed an fnm that is not there: %+v", s)
+	}
+	if LerdOwned("fnm") {
+		t.Error("an absent fnm can still be installed through a tool update")
+	}
+
+	writeFnm(t, config.BinDir())
+	if s, ok := statusOf("fnm"); !ok || !s.Present || s.External {
+		t.Errorf("lerd's own fnm = %+v (listed %v), want present and managed", s, ok)
+	}
+	if !LerdOwned("fnm") {
+		t.Error("lerd's own fnm can no longer be updated")
+	}
+
+	useNodeManager(t, "nvm")
+	if s, ok := statusOf("fnm"); ok {
+		t.Errorf("listed an fnm another manager replaced: %+v", s)
+	}
+}
+
+// The user's own fnm is read only, like their nvm.
+func TestStatusAll_ShowsTheUsersFnmReadOnly(t *testing.T) {
+	offline(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", t.TempDir())
+	useNodeManager(t, "fnm")
+	writeFnm(t, filepath.Join(home, ".cargo", "bin"))
+	orig := probeOutput
+	t.Cleanup(func() { probeOutput = orig })
+	probeOutput = func(string, ...string) ([]byte, error) { return []byte("fnm 1.39.0\n"), nil }
+
+	s, ok := statusOf("fnm")
+	if !ok || !s.External || s.Installed != "1.39.0" || s.Pinned != "" || s.UpdateAvailable {
+		t.Errorf("fnm = %+v (listed %v), want external at 1.39.0 with no pin", s, ok)
+	}
+	if LerdOwned("fnm") {
+		t.Error("the user's fnm reads as lerd's to replace")
+	}
+}

@@ -787,6 +787,9 @@ type StatusResponse struct {
 	// NvmAvailable is true when a user-installed nvm is present (nvm.sh found),
 	// so the dashboard can disable the nvm switch rather than error on click.
 	NvmAvailable bool `json:"nvm_available"`
+	// FnmAvailable is true on an install that still has the retired fnm, the
+	// only kind the dashboard offers it to.
+	FnmAvailable bool `json:"fnm_available"`
 	// BunAvailable is true when a bun binary is installed on the host;
 	// BunVersion carries its version for an at-a-glance reference.
 	// UsingSystemBun is true when lerd isn't managing Node and there's no system
@@ -822,7 +825,7 @@ type StatusResponse struct {
 	// it changes, so a restarted server never leaves a stale page behind.
 	Instance string `json:"instance"`
 	// Tools reports the managed host binaries (composer, mise, fnm) against
-	// their pinned versions; fnm is omitted on nvm-managed setups where its
+	// their pinned versions; fnm is omitted unless it drives Node, where its
 	// absence is deliberate.
 	Tools []tools.ToolStatus `json:"tools"`
 }
@@ -897,7 +900,7 @@ func buildStatus() StatusResponse {
 
 	phpDefault := ""
 	nodeDefault := ""
-	nodeManager := "fnm"
+	nodeManager := "mise"
 	if cfg != nil {
 		phpDefault = cfg.PHP.DefaultVersion
 		nodeDefault = cfg.Node.DefaultVersion
@@ -912,9 +915,6 @@ func buildStatus() StatusResponse {
 	usingSystemBun := bunAvailable && !nodeManagedByLerd && !lerdNode.SystemNodeAvailable()
 	toolStatuses := []tools.ToolStatus{}
 	for _, s := range cachedToolStatus(nodeManager) {
-		if s.Name == "fnm" && nodeManager != "fnm" {
-			continue
-		}
 		toolStatuses = append(toolStatuses, s)
 	}
 	homeDir, _ := os.UserHomeDir()
@@ -931,6 +931,7 @@ func buildStatus() StatusResponse {
 		NodeManagedByLerd:     nodeManagedByLerd,
 		NodeManager:           nodeManager,
 		NvmAvailable:          lerdNode.ManagerByName("nvm").Available(),
+		FnmAvailable:          lerdNode.ManagerByName("fnm").Available(),
 		BunAvailable:          bunAvailable,
 		BunVersion:            bunVersion,
 		UsingSystemBun:        usingSystemBun,
@@ -5563,7 +5564,7 @@ func handleNodeUnmanage(w http.ResponseWriter, r *http.Request) {
 	runNodeMgmtCmd(w, r, "node:unmanage")
 }
 
-// handleNodeSetManager switches the Node version manager lerd drives (fnm/nvm)
+// handleNodeSetManager switches the Node version manager lerd drives
 // by shelling out to `lerd node:manager <manager>`, reusing the CLI's shim +
 // worker-regeneration logic rather than duplicating it here.
 func handleNodeSetManager(w http.ResponseWriter, r *http.Request) {
@@ -5574,8 +5575,12 @@ func handleNodeSetManager(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Manager string `json:"manager"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.Manager != "mise" && req.Manager != "fnm" && req.Manager != "nvm") {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": "invalid manager"})
+		return
+	}
+	if err := lerdNode.CheckSelectable(req.Manager); err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	runNodeMgmtCmd(w, r, "node:manager", req.Manager)

@@ -10,7 +10,7 @@
 | `lerd node:use <version>` | Set the global default Node.js version |
 | `lerd isolate:node <version>` | Pin Node version for cwd: writes `.node-version` and installs the version |
 | `lerd node:manage` | Opt into lerd-managed Node: install the version-manager shims and a default version |
-| `lerd node:unmanage` | Stop managing Node: remove lerd's shims (and, with fnm, the versions it installed) for a clean system |
+| `lerd node:unmanage` | Stop managing Node: remove lerd's shims (and, with an fnm lerd installed, its versions) for a clean system |
 | `lerd js:runtime [bun\|node\|auto]` | Pin the current site's JS runtime (or show it with no argument) |
 | `lerd php:bun install [version]` | Install a musl bun inside the PHP-FPM container |
 | `lerd php:bun remove` | Remove the in-container bun and clear its shared persistent volume |
@@ -112,27 +112,35 @@ lerd node:update 24     # just this one
 
 Older patches stay installed, since a site can pin one exactly. Sites pick up the new patch on their next `node` or `npm` call. A dev server that is already running keeps the Node it started with until you restart it.
 
-## Version manager: mise, fnm or nvm
+## Version manager: mise, nvm or fnm
 
-Node version management runs through a version manager, and lerd supports three: [mise](https://mise.jdx.dev), the default, [fnm](https://github.com/Schniz/fnm), and [nvm](https://github.com/nvm-sh/nvm) if you already have it installed.
+Node version management runs through a version manager, and lerd supports three: [mise](https://mise.jdx.dev), the default, and [nvm](https://github.com/nvm-sh/nvm) or [fnm](#fnm) if you already have one installed.
 
 - **mise** is the default. If you already have mise, that is the one lerd drives, so a version you manage yourself is never shadowed by a second copy. With no mise on the host, lerd installs it to `~/.local/bin/mise`, mise's own location rather than a private one, so your shell and lerd see the same binary. lerd writes `node` / `npm` / `npx` shims into `~/.local/share/lerd/bin/` so those commands reach it from any shell.
-- **fnm** works the same way and stays selectable, with its own shims into `~/.local/share/lerd/bin/`. It is downloaded on demand when you switch to it.
 - **nvm** is never installed by lerd. If `lerd install` finds an existing nvm (via `$NVM_DIR` or `~/.nvm`, or under a Homebrew prefix on macOS, where `brew install nvm` keeps `nvm.sh` in `$(brew --prefix)/opt/nvm` and leaves `~/.nvm` holding only the versions), it picks nvm automatically when you decline lerd-managed Node, so Node stays yours and lerd follows your nvm instead of a manager it would never install a version into. Answering yes uses mise; switch to nvm afterwards with `lerd node:manager nvm` or the dashboard. With nvm, lerd does **not** put node/npm/npx shims on PATH, your shell's nvm keeps owning those binaries (so `which node` and `nvm ls` behave normally). `lerd node` / `lerd npm`, host workers, and the dashboard still drive nvm for install, use, and defaults. lerd never touches the Node versions you installed yourself with nvm.
 
 Installing lerd from a package rather than interactively answers the same question by detection, since a maintainer script has nobody to ask. An existing nvm takes it, exactly as declining does above. With no nvm, lerd manages Node through mise and installs the default version during setup, so the package leaves you a working Node rather than one that appears the first time something reaches for it.
 
 On macOS the choice decides whether folder permissions stick. The system asks before a tool reads `~/Documents`, `~/Desktop` or `~/Downloads`, and it remembers the answer against the signing identity of the binary that asked, not against the folder alone. Tooling lerd runs for a site reads the project, macOS attributes that to the version manager rather than to lerd, and fnm is published with no signature at all, so on Apple Silicon the system ad-hoc signs it on first run and the identity comes out of the bytes. The next pinned version is then a binary it has never seen and the folder is asked for again, with the previous answer lost. mise is signed and notarized under a Developer ID that stays the same from release to release, so an answer given once keeps matching. nvm never asks, being a shell function inside a terminal you already granted. That is why new installs use mise.
 
-The choice is stored in `~/.config/lerd/config.yaml` under `node.manager` (`mise`, `fnm` or `nvm`) and, for nvm, `node.nvm_dir` (so `lerd-ui` and the watcher find nvm even without your shell rc). Switch later with `lerd node:manager mise|fnm|nvm` or from the dashboard's Node page, which shows a **mise / fnm / nvm** toggle (nvm is offered only when it is installed, since there is nothing to switch to otherwise). Switching to fnm downloads it on demand, and switching to mise installs one only when the host has none, then drops the fnm lerd had downloaded once the versions are across, since nothing runs it any more. Switching updates PATH shims, installs under the new manager every version the old one had so nothing a site pins goes missing, and re-syncs host workers so the new manager takes effect at once. `node:install` and `node:use` act on whichever manager is active; `node:uninstall` and `node:unmanage` only ever remove Node versions when lerd owns them and leave your nvm-installed versions alone.
+The choice is stored in `~/.config/lerd/config.yaml` under `node.manager` (`mise`, `nvm` or `fnm`) and, for nvm, `node.nvm_dir` (so `lerd-ui` and the watcher find nvm even without your shell rc). Switch later with `lerd node:manager mise|nvm|fnm` or from the dashboard's Node page, which shows a manager toggle (nvm can be picked only when it is installed, and fnm is shown only when it is). Switching to mise installs one only when the host has none. Switching updates PATH shims, installs under the new manager every version the old one had so nothing a site pins goes missing, and re-syncs host workers so the new manager takes effect at once. `node:install` and `node:use` act on whichever manager is active; `node:uninstall` and `node:unmanage` only ever remove Node versions when lerd owns them and leave your nvm-installed versions alone.
 
-An existing install keeps the manager it already has. A config that names one is left alone, and one from before the setting existed is recognised by the fnm in lerd's bin dir, so an update never moves you off fnm on its own. Moving to mise is `lerd node:manager mise`, which carries your installed majors across before dropping lerd's fnm.
+An existing install keeps the manager it already has.
+
+### fnm
+
+[fnm](https://github.com/Schniz/fnm) was the manager lerd set up before mise. lerd no longer installs it, but drives one that is already there, and only then offers it in the dashboard and in `lerd node:manager`.
+
+- **Your own fnm** (on `PATH`, or where its installer, cargo or a package manager puts it) is treated like your own nvm. lerd follows it when you decline lerd-managed Node, unless you have nvm too, and you can switch to it with `lerd node:manager fnm`. A custom `$FNM_DIR` is recorded when you run `lerd install` or `lerd node:manager fnm` from a terminal, so the dashboard and workers use the same versions. lerd puts no shims on `PATH`, never updates it, and `node:unmanage` leaves its versions alone.
+- **An fnm an older lerd installed** in `~/.local/share/lerd/bin/` keeps driving Node, with its shims, and is still updated by `lerd tools:update`. An update never moves you off it. `lerd node:manager mise` carries your installed majors across and then drops that fnm, and there is no way to get it back from lerd.
+
+If the fnm in use is gone, the next `lerd install` sets up mise instead.
 
 ---
 
 ## Global npm packages
 
-With **fnm**, `npm install -g <pkg>` works through the lerd shim. The package goes to a lerd managed prefix at `~/.local/share/lerd/node-global/`, and lerd writes a small wrapper script for every binary into `~/.local/share/lerd/bin/`, which is already on your `PATH` because `lerd install` adds it. After `npm install -g pm2` you can call `pm2` from any shell directly, no extra setup, on both Linux and macOS regardless of whether lerd itself was installed via Homebrew or curl-pipe.
+With **mise** (or an fnm lerd installed), `npm install -g <pkg>` works through the lerd shim. The package goes to a lerd managed prefix at `~/.local/share/lerd/node-global/`, and lerd writes a small wrapper script for every binary into `~/.local/share/lerd/bin/`, which is already on your `PATH` because `lerd install` adds it. After `npm install -g pm2` you can call `pm2` from any shell directly, no extra setup, on both Linux and macOS regardless of whether lerd itself was installed via Homebrew or curl-pipe.
 
 The wrapper exec's the real binary through the active version manager's default version, so globally installed tools always run on the default node version regardless of the project you are inside when you call them. If you need a specific version for a global tool, change the default with `lerd node:use <version>` before installing it.
 
@@ -152,8 +160,8 @@ The same mechanism applies to `composer global require`. Composer's global vendo
 
 If `lerd install` detects an existing `node`, `npm`, or `npx` on your `PATH` or under a known version-manager directory (nvm, volta, mise, asdf, fnm), it asks **"Let lerd manage Node.js?"** before changing anything. An installed nvm triggers the question too, even with no Node versions in it yet, since nothing else would reveal it.
 
-- **Answer yes**: lerd sets up mise, picks the current LTS, and sets it as the default, writing the `node` / `npm` / `npx` shims into `~/.local/share/lerd/bin/`. Per-project version pinning works as described above (`.node-version` / `.nvmrc`). Switch it to your own nvm, or to fnm, afterwards with `lerd node:manager nvm|fnm`.
-- **Answer no**: lerd writes no node shims, removes any stale ones from a previous opt-in, and stays out of Node on `PATH`. Sites use whatever `node` your shell resolves; per-project pinning is your version manager's job. When you have nvm, that is what `lerd npm`, `lerd npx`, and site setup run through, so they follow your nvm versions rather than failing on an empty fnm, host workers get the version pinned for the site out of the same nvm, and no fnm is downloaded at all. The dashboard's Node tab disables the install controls and points back at `lerd install` if you change your mind.
+- **Answer yes**: lerd sets up mise, picks the current LTS, and sets it as the default, writing the `node` / `npm` / `npx` shims into `~/.local/share/lerd/bin/`. Per-project version pinning works as described above (`.node-version` / `.nvmrc`). Switch it to your own nvm afterwards with `lerd node:manager nvm`.
+- **Answer no**: lerd writes no node shims, removes any stale ones from a previous opt-in, and stays out of Node on `PATH`. Sites use whatever `node` your shell resolves; per-project pinning is your version manager's job. When you have nvm, that is what `lerd npm`, `lerd npx`, and site setup run through, so they follow your nvm versions rather than failing on an empty mise, host workers get the version pinned for the site out of the same nvm, and no fnm is downloaded at all. The dashboard's Node tab disables the install controls and points back at `lerd install` if you change your mind.
 
 With unmanaged Node, host workers (Vite and other `host: true` workers) run against a controlled `PATH` that never includes your login shell's version-manager hooks. lerd therefore resolves where your `node` and `npm` actually live when it generates the worker unit and bakes that directory into it, so a shell-hooked nvm Node or a snap Node works even after a reboot. When `node.manager` is `nvm`, that install wins and the worker gets the same version lerd resolves for the site (`.lerd.yaml`, `.nvmrc`, `.node-version`, `package.json` engines, then the global default), falling back to your nvm default when that version is not installed, since lerd never installs into your nvm. That matters because `lerd npm` in the project runs the same version, and a worker on a different one would run packages that were installed under another Node. Otherwise it checks `PATH` first (plus the Homebrew prefixes on macOS, which the launchd daemons never get on their own, so a unit written by the dashboard resolves the same Node as one written by the CLI), then the known version-manager directories (nvm, volta, mise, asdf, a self-installed fnm), then snap and linuxbrew. If nothing resolvable is found (and bun isn't installed either), the worker is held back with a message telling you to install Node or run `lerd install`, instead of crash-looping on `npm: command not found`.
 
@@ -161,12 +169,12 @@ With unmanaged Node, host workers (Vite and other `host: true` workers) run agai
 
 You can flip the choice at any time without re-running the whole installer:
 
-- `lerd node:manage` opts in (writes the PATH shims when using mise or fnm, or just records managed mode for nvm) and installs a default version.
-- `lerd node:unmanage` removes any node/npm/npx shims and, when lerd owns the manager (fnm), uninstalls the Node versions it installed, leaving a clean system so your own Node (or bun) is used directly. With nvm it only clears managed mode: your nvm versions stay put.
+- `lerd node:manage` opts in (writes the PATH shims when using mise, or just records managed mode for nvm) and installs a default version.
+- `lerd node:unmanage` removes any node/npm/npx shims and, when lerd owns the manager (an fnm it installed), uninstalls the Node versions it installed, leaving a clean system so your own Node (or bun) is used directly. With nvm it only clears managed mode: your nvm versions stay put.
 
 Both also regenerate any host worker units (Vite and other `host: true` workers) so they switch between the managed Node, your system Node, and bun to match the new state. The dashboard and Settings exposes the same toggle: the Node page shows a **Let lerd manage Node** / **Stop managing** button.
 
-The question is asked once and then remembered in `~/.config/lerd/config.yaml` (`node.managed`, alongside `node.manager` for the mise/fnm/nvm choice). After that, neither `lerd install` nor `lerd update` asks again or undoes your choice, you change it only with `lerd node:manage` / `lerd node:unmanage`. A config predating this adopts whatever lerd is currently doing (shims present means managed) as the remembered choice without prompting, so existing installs are never re-asked.
+The question is asked once and then remembered in `~/.config/lerd/config.yaml` (`node.managed`, alongside `node.manager` for the manager choice). After that, neither `lerd install` nor `lerd update` asks again or undoes your choice, you change it only with `lerd node:manage` / `lerd node:unmanage`. A config predating this adopts whatever lerd is currently doing (shims present means managed) as the remembered choice without prompting, so existing installs are never re-asked.
 
 ---
 

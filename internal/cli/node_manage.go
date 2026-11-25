@@ -57,16 +57,16 @@ func runNodeManage(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-// NewNodeManagerCmd returns the node:manager command, which reports or switches
-// the Node version manager lerd drives ("mise", "fnm" or "nvm"). Switching persists the
-// choice and, when lerd is managing Node, rewrites the shims, ensures a default
-// version, and re-syncs host workers so the new manager takes effect at once.
+// NewNodeManagerCmd reports or switches the Node version manager lerd drives. A
+// switch rewrites the shims, ensures a default version and re-syncs host workers
+// when lerd is managing Node.
 func NewNodeManagerCmd() *cobra.Command {
+	managers := nodeDet.Selectable()
 	return &cobra.Command{
-		Use:       "node:manager [mise|fnm|nvm]",
+		Use:       "node:manager [" + strings.Join(managers, "|") + "]",
 		Short:     "Show or switch the Node version manager lerd drives",
 		Args:      cobra.MaximumNArgs(1),
-		ValidArgs: []string{"mise", "fnm", "nvm"},
+		ValidArgs: managers,
 		RunE:      runNodeSetManager,
 	}
 }
@@ -89,26 +89,19 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 	}
 
 	target := args[0]
-	if target != "mise" && target != "fnm" && target != "nvm" {
-		return fmt.Errorf("unknown manager %q — use 'mise', 'fnm' or 'nvm'", target)
+	if err := nodeDet.CheckSelectable(target); err != nil {
+		return err
 	}
-	if target == current {
+	// A mise that is only the default may not be installed yet, so it goes on, and
+	// so does an fnm this terminal finds somewhere new.
+	moved := target == "fnm" && nodeDet.RecordFnm(cfg)
+	if target == current && !moved && nodeDet.ManagerByName(target).Available() {
 		feedback.Begin()
 		feedback.Line("already using " + feedback.Val(target))
 		return nil
 	}
 
 	feedback.Begin()
-	// Fetch fnm on demand when switching back after an nvm-only install that
-	// never downloaded it. Keeps the nvm path lean while leaving a way home.
-	if target == "fnm" && !nodeDet.ManagerByName("fnm").Available() {
-		step := feedback.Start("downloading fnm")
-		if err := ensureFnmBinary(os.Stdout); err != nil {
-			step.Fail(err)
-			return fmt.Errorf("fnm download: %w", err)
-		}
-		step.OK("")
-	}
 	// mise is installed only when the host has none, so a user's own copy stays
 	// the one lerd drives.
 	if target == "mise" && !nodeDet.ManagerByName("mise").Available() {
@@ -126,7 +119,7 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 		case "mise":
 			return fmt.Errorf("mise not found — install failed; check your network and retry")
 		}
-		return fmt.Errorf("fnm not found — download failed; check your network and retry")
+		return fmt.Errorf("%s not found", target)
 	}
 
 	cfg.SetNodeManager(target)
@@ -151,6 +144,8 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 		step.OK("")
 		carried = carryNodeVersions(nodeDet.ManagerByName(current), nodeDet.ManagerByName(target))
 		ensureDefaultNode()
+		regenerateHostWorkers()
+	} else if moved {
 		regenerateHostWorkers()
 	}
 	// Last, and only once every version made it across: the old fnm is what the
@@ -232,10 +227,8 @@ func persistNodeManaged(managed bool) {
 var fnmVersionRe = regexp.MustCompile(`v\d+\.\d+\.\d+`)
 
 func runNodeUnmanage(_ *cobra.Command, _ []string) error {
-	// Uninstall every fnm-managed Node version so no stale binaries linger, but
-	// only when lerd owns the manager. fnm is bundled by lerd, so its versions
-	// are lerd's to remove; a user-installed nvm and its versions belong to the
-	// user and must be left untouched — we only drop lerd's shims for those.
+	// Uninstall the versions of an fnm lerd installed, so no stale binaries linger. A
+	// user's own nvm or fnm keeps its versions: only lerd's shims go.
 	if nodeDet.Active().Name() == "fnm" {
 		fnmPath := filepath.Join(config.BinDir(), "fnm")
 		if _, err := os.Stat(fnmPath); err == nil {

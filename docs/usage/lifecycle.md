@@ -347,7 +347,7 @@ lerd status
 
 Shows a live snapshot: DNS reachability, nginx, PHP-FPM containers, watcher, host tools, services, certificate expiry, and LAN exposure. Run it after every `lerd start` to confirm everything is healthy. See [Troubleshooting](../troubleshooting.md) if anything is reported as down.
 
-The `[Tools]` section lists the host binaries lerd manages (Composer, mise, fnm) with their installed versions, and flags any that differ from the versions lerd currently pins. The same information appears in the web UI under System > Tools, where the pending version on a tool's card is a button that updates that one tool. Apply pending updates from the terminal with:
+The `[Tools]` section lists the host binaries lerd manages (Composer, mise) with their installed versions, and flags any that differ from the versions lerd currently pins. The same information appears in the web UI under System > Tools, where the pending version on a tool's card is a button that updates that one tool. Apply pending updates from the terminal with:
 
 ```bash
 lerd tools:update
@@ -355,7 +355,7 @@ lerd tools:update
 
 The pins are read from a manifest that is cached for a day, so a newly published pin can take that long to show up on its own. "Check for updates" on the Tools page re-reads it immediately, and a tool that falls behind also raises an `update_available` notification. The dashboard's System health card counts the tools with an update in a **Tools · N updates** pill. Each card on the Tools page has its own **Update** button, and **Update all** in the page header, or that pill, lists the outdated tools with a switch each and updates the ones left on, one at a time, reporting a failure by tool name without stopping the rest.
 
-Tools that are already at their pinned version are left untouched, and tools that are deliberately absent (fnm on an nvm-managed setup) are skipped. A mise or nvm you installed yourself is listed when it is the Node manager lerd drives, marked as your install in `lerd status` and on the Tools page, and is never updated: it has no pin, and `lerd tools:update` leaves it alone. A tool whose version shows as unknown, for example Composer after a `composer self-update`, is re-downloaded at the pinned version.
+Tools that are already at their pinned version are left untouched, and tools that are deliberately absent (mise on an nvm-managed setup) are skipped. A mise or nvm you installed yourself is listed when it is the Node manager lerd drives, marked as your install in `lerd status` and on the Tools page, and is never updated: it has no pin, and `lerd tools:update` leaves it alone. A tool whose version shows as unknown, for example Composer after a `composer self-update`, is re-downloaded at the pinned version.
 
 Each tool is an independent download, so one that cannot be updated does not stop the others. The run carries on and closes with a count of what failed.
 
@@ -396,7 +396,7 @@ Where a digest is given the download is checked against it and rejected on a mis
 | lerd's VM is holding more host disk than it uses (macOS) | `lerd machine reclaim` |
 | lerd's VM keeps running out of memory (macOS) | `lerd machine memory` |
 | Verify everything's healthy | `lerd status` |
-| Update Composer / mise / fnm to their pinned versions | `lerd tools:update` |
+| Update Composer / mise to their pinned versions | `lerd tools:update` |
 | Uninstall a service entirely (data preserved) | `lerd service remove <name>` |
 | Uninstall and wipe data (snapshots the databases first) | `lerd service remove <name> --purge` |
 | Reinstall a service in place | `lerd service reinstall <name>` |

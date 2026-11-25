@@ -228,14 +228,14 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 
 | Command | Description |
 |---|---|
-| `lerd node:install <version>` | Install a Node.js version globally via fnm |
+| `lerd node:install <version>` | Install a Node.js version globally |
 | `lerd node:update [major]` | Install the newest patch of one major, or of every installed major that has one |
-| `lerd node:uninstall <version>` | Uninstall a Node.js version via fnm |
+| `lerd node:uninstall <version>` | Uninstall a Node.js version |
 | `lerd node:use <version>` | Set the default Node.js version |
-| `lerd isolate:node <version>` | Pin Node version for cwd: writes `.node-version` and updates `node_version` in an existing `.lerd.yaml`, runs `fnm install`. The site page and MCP do the same |
-| `lerd node [args...]` | Run `node` using the project's pinned version via fnm |
-| `lerd npm [args...]` | Run `npm` using the project's pinned Node version via fnm |
-| `lerd npx [args...]` | Run `npx` using the project's pinned Node version via fnm |
+| `lerd isolate:node <version>` | Pin Node version for cwd: writes `.node-version` and updates `node_version` in an existing `.lerd.yaml`, installs the version. The site page and MCP do the same |
+| `lerd node [args...]` | Run `node` using the project's pinned version |
+| `lerd npm [args...]` | Run `npm` using the project's pinned Node version |
+| `lerd npx [args...]` | Run `npx` using the project's pinned Node version |
 | `lerd js:runtime [bun\|node\|auto]` | Pin the current site's JS runtime in `.lerd.yaml` (the CLI equivalent of the dashboard's bun/Node toggle); with no argument prints the current runtime |
 
 ## Services

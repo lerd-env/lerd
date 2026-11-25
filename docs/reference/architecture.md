@@ -46,7 +46,7 @@ On Linux, lerd requires systemd. Every container runs as a Podman Quadlet (syste
 | PHP-FPM | Podman Quadlet per version (locally built image with all Laravel extensions) |
 | PHP CLI | `php` binary inside the FPM container (`podman exec`) |
 | Composer | pinned `composer.phar` run with the container's PHP, and bind-mounted over `/usr/local/bin/composer` so a shell inside the container runs it too rather than the older copy the image was built with |
-| Node | [fnm](https://github.com/Schniz/fnm) binary, version per project |
+| Node | [mise](https://mise.jdx.dev) or your own nvm, version per project |
 | Services | Podman Quadlet containers |
 | DNS | built-in DNS server (`lerd dns-serve`) as a user service + NetworkManager or systemd-resolved integration |
 | TLS | Lerd's own local CA, in [mkcert](https://github.com/FiloSottile/mkcert)'s layout and format |

@@ -12,8 +12,9 @@ func TestManagerByName(t *testing.T) {
 	cases := map[string]string{
 		"fnm":   "fnm",
 		"nvm":   "nvm",
-		"":      "fnm", // unset defaults to fnm
-		"bogus": "fnm", // unrecognised falls back to fnm
+		"mise":  "mise",
+		"":      "mise", // unset defaults to mise
+		"bogus": "mise", // unrecognised falls back to mise
 	}
 	for in, want := range cases {
 		if got := ManagerByName(in).Name(); got != want {
@@ -25,6 +26,9 @@ func TestManagerByName(t *testing.T) {
 func TestWritesPathShims(t *testing.T) {
 	if !WritesPathShims(fnmManager{}) {
 		t.Error("fnm should write PATH shims")
+	}
+	if WritesPathShims(fnmManager{path: "/home/me/.cargo/bin/fnm"}) {
+		t.Error("a user's own fnm must not get shims ahead of their shell hook")
 	}
 	if WritesPathShims(nvmManager{}) {
 		t.Error("nvm must not write PATH shims (user's nvm owns node/npm/npx)")

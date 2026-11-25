@@ -556,11 +556,15 @@ func TestAddShellShims_LaravelShimRespectsComposerHome(t *testing.T) {
 func TestAddShellShims_NodeShimChecksDefaultAlias(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("HOME", tmp)
 	t.Setenv("SHELL", "/bin/sh")
 
 	binDir := filepath.Join(tmp, "lerd", "bin")
 	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "fnm"), []byte("x"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	if err := addShellShims(true); err != nil {
@@ -652,7 +656,7 @@ func TestDetectSystemNode_findsNvmDirEvenWhenPathIsEmpty(t *testing.T) {
 	}
 }
 
-// detectNvm resolves the nvm dir through the global config first and, on macOS,
+// detectUserManager resolves the nvm dir through the global config first and, on macOS,
 // through the Homebrew prefixes, so without this the assertions read whatever
 // the developer's own machine has installed.
 func isolateNvmLookup(t *testing.T) {
@@ -663,21 +667,57 @@ func isolateNvmLookup(t *testing.T) {
 	t.Cleanup(func() { hostbin.ExtraDirs = prev })
 }
 
+// A user's own fnm counts like an nvm, an nvm next to it wins, and an fnm lerd
+// installed is not the user's.
+func TestDetectUserManager_Fnm(t *testing.T) {
+	isolateNvmLookup(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("NVM_DIR", "")
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	write := func(path string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	write(filepath.Join(home, ".cargo", "bin", "fnm"))
+	if got := detectUserManager(); got != "fnm" {
+		t.Errorf("user's fnm: got %q", got)
+	}
+	write(filepath.Join(home, ".nvm", "nvm.sh"))
+	if got := detectUserManager(); got != "nvm" {
+		t.Errorf("nvm next to fnm: got %q", got)
+	}
+	if err := os.Remove(filepath.Join(home, ".nvm", "nvm.sh")); err != nil {
+		t.Fatal(err)
+	}
+	write(filepath.Join(config.BinDir(), "fnm"))
+	if got := detectUserManager(); got != "" {
+		t.Errorf("lerd's own fnm: got %q", got)
+	}
+}
+
 // An nvm with no Node versions in it is invisible to detectSystemNode, so
-// detectNvm is what makes the management question reach that user at all.
-func TestDetectNvm(t *testing.T) {
+// detectUserManager is what makes the management question reach that user at all.
+func TestDetectUserManager_Nvm(t *testing.T) {
 	t.Run("empty nvm dir under NVM_DIR counts", func(t *testing.T) {
 		isolateNvmLookup(t)
 		tmp := t.TempDir()
 		t.Setenv("NVM_DIR", tmp)
-		if detectNvm() {
-			t.Error("detectNvm true for a directory with no nvm.sh")
+		if detectUserManager() == "nvm" {
+			t.Error("detectUserManager true for a directory with no nvm.sh")
 		}
 		if err := os.WriteFile(filepath.Join(tmp, "nvm.sh"), []byte("#!/bin/bash\n"), 0644); err != nil {
 			t.Fatal(err)
 		}
-		if !detectNvm() {
-			t.Error("detectNvm false even though $NVM_DIR holds nvm.sh")
+		if detectUserManager() != "nvm" {
+			t.Error("detectUserManager false even though $NVM_DIR holds nvm.sh")
 		}
 	})
 
@@ -692,8 +732,8 @@ func TestDetectNvm(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(tmp, ".nvm", "nvm.sh"), []byte("#!/bin/bash\n"), 0644); err != nil {
 			t.Fatal(err)
 		}
-		if !detectNvm() {
-			t.Error("detectNvm false for an nvm.sh in the default ~/.nvm")
+		if detectUserManager() != "nvm" {
+			t.Error("detectUserManager false for an nvm.sh in the default ~/.nvm")
 		}
 	})
 }

@@ -46,10 +46,8 @@ func TestNodeManageDecision(t *testing.T) {
 		{"first install system node and nvm prompts", false, false, nil, true, true, false, false, true, true},
 		{"first install no node at all defaults on", false, false, nil, false, false, false, true, false, true},
 
-		// A package install has nobody to ask, but must still leave a working
-		// Node behind. An existing nvm drives it, otherwise lerd owns it through
-		// fnm and installs a version. Reaching the update branch instead left a
-		// machine with no Node at all and an fnm nothing was installed into.
+		// A package install has nobody to ask, but must still leave a working Node
+		// behind: an existing nvm drives it, otherwise lerd owns it through mise.
 		{"unattended without nvm manages node", true, true, nil, false, false, false, true, false, true},
 		{"unattended with nvm defers to nvm", true, true, nil, false, true, false, false, false, false},
 		{"unattended with system node but no nvm still manages", true, true, nil, true, false, false, true, false, true},
@@ -83,47 +81,57 @@ func TestNodeManagerChoice(t *testing.T) {
 		name         string
 		saved        string
 		wantLerdNode bool
-		nvm          bool
-		fnmInstalled bool
+		userManager  string
+		fnmPresent   bool
+		fnmIsUsers   bool
 		want         string
 	}{
 		// A saved manager is never revisited, whatever the answers are.
-		{"saved nvm survives a managed answer", "nvm", true, true, false, "nvm"},
-		{"saved fnm survives a decline", "fnm", false, true, false, "fnm"},
+		{"saved nvm survives a managed answer", "nvm", true, "nvm", false, false, "nvm"},
+		{"saved fnm survives a decline", "fnm", false, "nvm", true, false, "fnm"},
+		{"saved fnm of the user's survives", "fnm", true, "fnm", true, true, "fnm"},
 
-		// lerd-managed Node drives mise, even when nvm is around: managing means
-		// lerd owns the versions, in its own tool.
-		{"managed picks mise", "", true, false, false, "mise"},
-		{"managed picks mise despite nvm", "", true, true, false, "mise"},
+		// lerd no longer installs fnm, so one that is gone is not fetched again.
+		{"saved fnm that is gone moves to mise", "fnm", true, "", false, false, "mise"},
+		{"saved fnm that is gone follows nvm on a decline", "fnm", false, "nvm", false, false, "nvm"},
 
-		// Declining hands Node back to the user, so lerd follows their nvm
-		// rather than a manager it will never install a version into.
-		{"decline with nvm picks nvm", "", false, true, false, "nvm"},
-		{"decline without nvm keeps mise", "", false, false, false, "mise"},
+		// lerd-managed Node drives mise, even next to the user's own manager:
+		// managing means lerd owns the versions, in its own tool.
+		{"managed picks mise", "", true, "", false, false, "mise"},
+		{"managed picks mise despite nvm", "", true, "nvm", false, false, "mise"},
+		{"managed picks mise despite the user's fnm", "", true, "fnm", true, true, "mise"},
+
+		// Declining hands Node back to the user, so lerd follows their manager
+		// rather than one it will never install a version into.
+		{"decline with nvm picks nvm", "", false, "nvm", false, false, "nvm"},
+		{"decline with the user's fnm picks fnm", "", false, "fnm", true, true, "fnm"},
+		{"decline with neither keeps mise", "", false, "", false, false, "mise"},
 
 		// An fnm in lerd's bin dir with no manager in config is an install from
 		// before the setting existed: it was driving fnm and keeps driving it,
 		// rather than being moved to mise behind the user's back by an update.
-		{"an existing fnm install stays on fnm", "", true, false, true, "fnm"},
-		{"an existing fnm install stays on fnm despite nvm", "", true, true, true, "fnm"},
+		{"an existing fnm install stays on fnm", "", true, "", true, false, "fnm"},
+		{"an existing fnm install stays on fnm despite nvm", "", true, "nvm", true, false, "fnm"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := nodeManagerChoice(tc.saved, tc.wantLerdNode, tc.nvm, tc.fnmInstalled); got != tc.want {
-				t.Errorf("nodeManagerChoice(%q, %v, %v, %v) = %q, want %q", tc.saved, tc.wantLerdNode, tc.nvm, tc.fnmInstalled, got, tc.want)
+			if got := nodeManagerChoice(tc.saved, tc.wantLerdNode, tc.userManager, tc.fnmPresent, tc.fnmIsUsers); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})
 	}
 }
 
 func TestNodeManagerNotice(t *testing.T) {
-	if got := nodeManagerNotice("fnm"); got != "" {
+	if got := nodeManagerNotice("fnm", "nvm"); got != "" {
 		t.Errorf("an fnm kept from an older install should print nothing, got %q", got)
 	}
-	if got := nodeManagerNotice("mise"); !strings.Contains(got, "using mise") {
-		t.Errorf("mise notice = %q", got)
-	}
-	if got := nodeManagerNotice("nvm"); !strings.Contains(got, "leaving Node to your nvm") {
-		t.Errorf("nvm notice = %q", got)
+	for _, user := range []string{"nvm", "fnm"} {
+		if got := nodeManagerNotice("mise", user); !strings.Contains(got, "using mise") || !strings.HasSuffix(got, user) {
+			t.Errorf("mise notice next to %s = %q", user, got)
+		}
+		if got := nodeManagerNotice(user, user); !strings.Contains(got, "leaving Node to your "+user) {
+			t.Errorf("%s notice = %q", user, got)
+		}
 	}
 }

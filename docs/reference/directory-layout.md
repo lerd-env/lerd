@@ -10,7 +10,7 @@
 └── lerd-watcher.service
 
 ~/.local/share/lerd/
-├── bin/                             # fnm, static PHP binaries
+├── bin/                             # shims and the tools lerd downloads
 ├── nginx/
 │   ├── nginx.conf
 │   ├── conf.d/                      # one .conf per site (auto-generated)

@@ -93,16 +93,22 @@ func pathNodeBinDirs() (dirs []string, complete bool) {
 	return []string{nodeDir}, npmDir == nodeDir
 }
 
-// borrowedManagerBinDir returns the node bin dir of a configured manager that
-// belongs to the user rather than to lerd, which today means nvm: lerd only
-// ever borrows an nvm install, while fnm is its own bundled tool and must not
-// override the user's Node on a host where they declined managed Node. version
-// selects a specific major when the manager has it, otherwise its default
-// applies. Empty when the manager is fnm or has nothing installed, so the
-// caller falls through to the usual resolution.
+// borrowedManagerBinDir is the node bin dir of a chosen manager that is the user's
+// own, for version when it has one, else its default. An fnm lerd installed must
+// not override the Node of a user who declined managed Node.
 func borrowedManagerBinDir(version string) string {
 	cfg, err := config.LoadGlobal()
-	if err != nil || cfg == nil || cfg.NodeManager() != "nvm" {
+	if err != nil || cfg == nil {
+		return ""
+	}
+	switch cfg.NodeManager() {
+	case "nvm":
+	case "fnm":
+		if UserFnm() == "" {
+			return ""
+		}
+		return fnmNodeBinDir(version)
+	default:
 		return ""
 	}
 	if version != "" {
@@ -133,10 +139,31 @@ func managerNodeBinDir() string {
 	if dir := bestVersionBin(filepath.Join(home, ".asdf", "installs", "nodejs"), "bin"); dir != "" {
 		return dir
 	}
-	for _, fnmBase := range []string{
+	return fnmNodeBinDir("")
+}
+
+// fnmNodeBinDir resolves an fnm install's bin dir: the newest install under
+// version when fnm has one, else its default alias, else its newest version.
+func fnmNodeBinDir(version string) string {
+	home, _ := os.UserHomeDir()
+	if home == "" {
+		return ""
+	}
+	bases := []string{
 		filepath.Join(home, ".local", "share", "fnm"),
+		filepath.Join(home, ".fnm"),
 		filepath.Join(home, "Library", "Application Support", "fnm"),
-	} {
+	}
+	if d := fnmDir(); d != "" {
+		bases = append([]string{d}, bases...)
+	}
+	for _, fnmBase := range bases {
+		if version != "" {
+			pin := "v" + strings.TrimPrefix(version, "v")
+			if dir := bestVersionBinUnder(filepath.Join(fnmBase, "node-versions"), pin, "installation", "bin"); dir != "" {
+				return dir
+			}
+		}
 		if dir := filepath.Join(fnmBase, "aliases", "default", "bin"); hasNodeAndNpm(dir) {
 			return dir
 		}

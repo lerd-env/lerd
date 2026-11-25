@@ -3,6 +3,7 @@ package config
 import (
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -146,15 +147,19 @@ type GlobalConfig struct {
 		// historical shim-presence behaviour, while an explicit false survives
 		// updates that would otherwise re-add the shims a `node:unmanage` removed.
 		Managed *bool `yaml:"managed,omitempty" mapstructure:"managed"`
-		// Manager selects the Node version manager lerd drives: "fnm" (the
-		// bundled default) or "nvm" (a user-installed nvm). Empty means fnm so
-		// configs predating the field keep working unchanged.
+		// Manager selects the Node version manager lerd drives: "mise"
+		// (the default), or an "nvm" or "fnm" already on the host.
+		// Read it through NodeManager, which resolves an empty one.
 		Manager string `yaml:"manager,omitempty" mapstructure:"manager"`
 		// NvmDir is the nvm install directory when Manager is "nvm". Persisted
 		// at install/switch time so daemons (lerd-ui, watcher) find nvm even
 		// though systemd/launchd never load the user's shell rc that exports
 		// $NVM_DIR. Empty means fall back to $NVM_DIR or ~/.nvm.
 		NvmDir string `yaml:"nvm_dir,omitempty" mapstructure:"nvm_dir"`
+		// FnmBin and FnmDir are where the user's own fnm and its versions live,
+		// recorded from a terminal so daemons without its shell rc agree with it.
+		FnmBin string `yaml:"fnm_bin,omitempty" mapstructure:"fnm_bin"`
+		FnmDir string `yaml:"fnm_dir,omitempty" mapstructure:"fnm_dir"`
 	} `yaml:"node" mapstructure:"node"`
 	MCP struct {
 		// GlobalDeclined records a "no" to install's global MCP question, or a
@@ -1523,11 +1528,15 @@ func (c *GlobalConfig) SetNodeManaged(managed bool) {
 	c.Node.Managed = &managed
 }
 
-// NodeManager returns the configured Node version manager, defaulting to "fnm"
-// when unset so configs predating the field keep the bundled behaviour.
+// NodeManager returns the Node version manager lerd drives, defaulting to mise.
+// A config predating the field was driving lerd's own fnm, so it stays on it
+// while that binary is there.
 func (c *GlobalConfig) NodeManager() string {
 	if c.Node.Manager == "" {
-		return "fnm"
+		if _, err := os.Stat(filepath.Join(BinDir(), "fnm")); err == nil {
+			return "fnm"
+		}
+		return "mise"
 	}
 	return c.Node.Manager
 }
@@ -1544,7 +1553,7 @@ func (c *GlobalConfig) NodeNvmDir() string {
 }
 
 // SetNodeNvmDir records where nvm lives so daemons agree with the CLI. Pass
-// empty to clear (fnm switch, or fall back to $NVM_DIR / ~/.nvm).
+// empty to clear (any other manager, or fall back to $NVM_DIR / ~/.nvm).
 func (c *GlobalConfig) SetNodeNvmDir(dir string) {
 	c.Node.NvmDir = dir
 }

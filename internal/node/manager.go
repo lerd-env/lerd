@@ -1,24 +1,19 @@
 package node
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 )
 
-// Manager abstracts a Node.js version manager so lerd can install, list, and
-// execute Node without hardcoding one tool. Three implementations exist: mise
-// and fnm (binaries lerd can install) and nvm (a user-installed shell
-// function). Callers
-// select one via Active(), which reads the node.manager config setting.
-//
-// Two flavours of output are exposed because lerd drives the manager from two
-// places: directly from Go (Command, used by the CLI/UI/MCP) and from generated
-// shell scripts where the lerd binary may be unreachable — worker units,
-// launchd guard scripts, and PATH shims (ExecPrefix and ShimScript).
+// Manager abstracts a Node version manager: mise, which lerd can install, and fnm
+// and nvm, driven only where already present. Command runs it from Go; ExecPrefix
+// and ShimScript are for generated scripts where lerd may be unreachable.
 type Manager interface {
 	// Name is the manager's identifier: "mise", "fnm" or "nvm".
 	Name() string
@@ -60,10 +55,10 @@ type Manager interface {
 }
 
 // Active returns the Node version manager lerd is configured to drive, honouring
-// the node.manager config setting and defaulting to fnm so configs predating the
-// setting keep the bundled behaviour.
+// the node.manager config setting. See config.GlobalConfig.NodeManager for what
+// an unset one means.
 func Active() Manager {
-	name := "fnm"
+	name := "mise"
 	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil {
 		name = cfg.NodeManager()
 	}
@@ -85,26 +80,48 @@ func Managed() bool {
 	return err == nil
 }
 
-// WritesPathShims reports whether this manager should install node/npm/npx
-// wrappers into lerd's bin dir. fnm needs them (nothing else puts fnm on PATH);
-// nvm must not (the user's shell already loads nvm, and lerd shims ahead of it
-// make `nvm ls` / `nvm use` hang).
+// WritesPathShims reports whether lerd puts node/npm/npx wrappers in its bin dir.
+// nvm and a user's own fnm are loaded by their shell, and lerd shims ahead of nvm
+// make `nvm ls` / `nvm use` hang.
 func WritesPathShims(m Manager) bool {
+	if fnm, ok := m.(fnmManager); ok {
+		return fnm.lerdOwned()
+	}
 	return m.Name() != "nvm"
 }
 
-// ManagerByName returns the manager for an explicit name, defaulting to fnm for
+// ManagerByName returns the manager for an explicit name, defaulting to mise for
 // anything unrecognised (so a garbled config setting never breaks Node). Used by
 // the node:manager switch to probe a target backend before selecting it.
 func ManagerByName(name string) Manager {
 	switch name {
 	case "nvm":
 		return nvmManager{}
-	case "mise":
-		return newMiseManager()
+	case "fnm":
+		return newFnmManager()
 	default:
-		return fnmManager{}
+		return newMiseManager()
 	}
+}
+
+// Selectable lists the managers a switch may offer. lerd no longer
+// installs fnm, so it is on the list only where one is already present.
+func Selectable() []string {
+	if ManagerByName("fnm").Available() {
+		return []string{"mise", "fnm", "nvm"}
+	}
+	return []string{"mise", "nvm"}
+}
+
+// CheckSelectable refuses a manager lerd cannot switch to, naming why.
+func CheckSelectable(name string) error {
+	if slices.Contains(Selectable(), name) {
+		return nil
+	}
+	if name == "fnm" {
+		return fmt.Errorf("fnm is not installed and lerd no longer installs it, use mise or nvm")
+	}
+	return fmt.Errorf("unknown manager %q: use %s", name, strings.Join(Selectable(), " or "))
 }
 
 // execVersion is the selector a manager should activate: the caller's version

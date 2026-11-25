@@ -120,8 +120,8 @@ func TestNodeManagerReportsWithoutSwitching(t *testing.T) {
 		Manager string `json:"manager"`
 	}
 	decodeContent(t, res, &got)
-	if got.Manager != "fnm" && got.Manager != "nvm" {
-		t.Errorf("manager = %q, want fnm or nvm", got.Manager)
+	if got.Manager != "mise" {
+		t.Errorf("manager = %q, want mise", got.Manager)
 	}
 }
 
@@ -135,6 +135,21 @@ func TestNodeManagerRejectsAnUnknownManager(t *testing.T) {
 	}
 	if !strings.Contains(contentText(t, res), "unknown manager") {
 		t.Errorf("expected an unknown-manager error, got %q", contentText(t, res))
+	}
+}
+
+func TestNodeManagerRefusesFnmWhereItIsNotInstalled(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	res, rerr := execNodeManager(map[string]any{"manager": "fnm"})
+	if rerr != nil {
+		t.Fatalf("execNodeManager: %v", rerr.Message)
+	}
+	if !strings.Contains(contentText(t, res), "no longer installs it") {
+		t.Errorf("expected a refusal, got %q", contentText(t, res))
 	}
 }
 
