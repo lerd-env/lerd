@@ -676,8 +676,17 @@ namespace LerdSetup {
   # effect, boots the distro again, and waits for the dashboard to answer.
   function StartLerd {
     Step 'Starting lerd...'
+    # wsl:setup has started the app, and shutting WSL down under its open dashboard
+    # leaves Windows holding 7073 in TIME_WAIT for two minutes.
+    StopDesktopApp
     Run 'Starting lerd' (WSLExe) '--shutdown'
     Run 'Starting lerd' (WSLExe) "-d $Distro --exec /bin/true"
+    # A browser on the dashboard can still do the same. lerd-ui gives up after a few
+    # quick tries, so it is started until it stays.
+    Run 'Starting lerd' (WSLExe) (AsUser ('export XDG_RUNTIME_DIR=/run/user/$(id -u); for i in $(seq 90); do ' +
+        'systemctl --user is-active -q lerd-ui && exit 0; ' +
+        'if systemctl --user is-failed -q lerd-ui; then systemctl --user reset-failed lerd-ui; systemctl --user start --no-block lerd-ui; fi; ' +
+        'sleep 2; done; exit 0'))
     for ($i = 0; $i -lt 90; $i++) {
       try {
         Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 http://127.0.0.1:7073/ | Out-Null
@@ -745,8 +754,8 @@ namespace LerdSetup {
     InstallDesktopApp
     GrantSudo
     try { InstallLerd } finally { RemoveSudoers }
-    StartLerd
-    StartDesktopApp '--hidden'
+    # StartLerd stops the app, so it comes back even when lerd does not.
+    try { StartLerd } finally { StartDesktopApp '--hidden' }
   } catch {
     Write-Host ''
     Write-Host "  The installer could not finish installing lerd: $($_.Exception.Message)" -ForegroundColor Red

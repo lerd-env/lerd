@@ -1,11 +1,15 @@
 [Unit]
 Description=Lerd UI Dashboard
 After=default.target
+# Windows holds the port for two minutes when WSL restarts under an open
+# dashboard, and the default five quick tries would give up long before.
+StartLimitIntervalSec=0
 
 [Service]
 Type=notify
 ExecStart=%h/.local/bin/lerd serve-ui
 Restart=on-failure
+RestartSec=2
 
 [Install]
 WantedBy=default.target

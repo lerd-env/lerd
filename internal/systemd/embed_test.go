@@ -45,3 +45,25 @@ func TestGetUnitKeepsTemplateWhenUnresolved(t *testing.T) {
 		t.Errorf("expected template default, got:\n%s", ui)
 	}
 }
+
+// Windows holds 7073 for two minutes when WSL restarts under an open dashboard,
+// past systemd's default five quick tries, and giving up leaves no dashboard.
+func TestLerdUIUnitKeepsRetryingABusyPort(t *testing.T) {
+	ui, err := GetUnit("lerd-ui")
+	if err != nil {
+		t.Fatalf("GetUnit: %v", err)
+	}
+	unit, service, ok := strings.Cut(ui, "[Service]")
+	if !ok {
+		t.Fatalf("no [Service] section:\n%s", ui)
+	}
+	if !strings.Contains(unit, "StartLimitIntervalSec=0\n") {
+		t.Errorf("[Unit] must lift the start limit:\n%s", ui)
+	}
+	if !strings.Contains(service, "Restart=on-failure\n") {
+		t.Errorf("[Service] must retry failures:\n%s", ui)
+	}
+	if !strings.Contains(service, "RestartSec=2\n") {
+		t.Errorf("[Service] must space the retries out:\n%s", ui)
+	}
+}
