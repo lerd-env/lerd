@@ -81,7 +81,7 @@ For work no event marks, declare `schedules` rather than installing a cron job, 
 - CLI commands: argv, the terminal, the exit code. Run inside a linked project they get the site.
 - Site commands: run in the site's folder (a worktree's when one is picked), output streams to the dashboard.
 - MCP tools: the arguments as JSON on stdin; stdout is the answer, a non-zero exit is an error. A `site` argument hands over the site.
-- API endpoints: the body on stdin, `LERD_METHOD`, `LERD_QUERY`; a `site` query parameter hands over the site. Exit 0 answers 200 with stdout (as JSON when it parses), anything else 500 with stderr.
+- API endpoints: the body on stdin, `LERD_METHOD`, `LERD_QUERY`; a `site` query parameter hands over the site, and a `branch` beside it (send `lerd.context.branch` from a site tab or card) runs the call in that worktree's checkout with `LERD_BRANCH` set, 404 for an unknown one; `LERD_SITE_PATH` stays the main folder. Before lerd 1.40 `branch` is ignored. Exit 0 answers 200 with stdout (as JSON when it parses), anything else 500 with stderr.
 - Hooks: `LERD_EVENT` and the payload, as JSON on stdin and as `LERD_<KEY>`. Output goes to `hooks.log` in the data folder and never fails the operation.
 
 `curl -fsS -H "X-Lerd-Plugin-Token: $LERD_API_TOKEN" "$LERD_API_URL/api/sites"` lists the sites, each with `has_database` and its `databases` as `{service, database}` pairs to pass to `lerd db:shell --service= --database=`; `/api/services`, `/api/status`, `/api/stats` and `/api/disk` are the dashboard's own data.

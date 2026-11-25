@@ -116,6 +116,8 @@ func injectPluginKit(page []byte) []byte {
 func handlePluginUI(w http.ResponseWriter, r *http.Request) {
 	rest := strings.TrimPrefix(path.Clean(r.URL.Path), "/plugins/")
 	name, rel, _ := strings.Cut(rest, "/")
+	// Asked again on every load, so an updated plugin never runs its old scripts.
+	w.Header().Set("Cache-Control", "no-cache")
 	if name == "_lerd" {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		http.ServeFileFS(w, r, pluginKit, "pluginkit/"+rel)
@@ -191,7 +193,7 @@ func handlePluginAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	site, _ := config.FindSite(r.URL.Query().Get("site"))
-	runPluginEndpoint(w, r, p, e, site, "")
+	runPluginEndpoint(w, r, p, e, site, r.URL.Query().Get("branch"))
 }
 
 // runPluginEndpoint answers one call to a plugin endpoint, for the site it
