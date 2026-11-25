@@ -44,7 +44,13 @@ echo "SELECT table_schema, ROUND(SUM(data_length + index_length) / 1024 / 1024) 
 
 ## 3. Export each database
 
-From the project directory:
+Anything that writes to the database after the export starts is left behind on the old server, and changes to existing rows don't show up in a row count. Pause the site first, which stops its queue, schedule and other workers and puts a landing page in front of it, and stop anything else you run against the database yourself:
+
+```bash
+lerd pause
+```
+
+The site stays paused until it is checked in step 6. Then, from the project directory:
 
 ```bash
 mkdir -p ~/db-backups
@@ -57,23 +63,25 @@ The export carries routines, triggers and events, the same as every dump lerd ta
 
 How you do this depends on how the site reaches the old server today:
 
-- **Through `lerd db:use dbngin`**: change `dbngin` to `mysql` (or `postgres`) under `services:` in `.lerd.yaml`, then run `lerd env`.
+- **Through `lerd db:use dbngin`**: change `dbngin` to `mysql` (or `postgres`) under `services:` in `.lerd.yaml`, and under `db:` too if the file has a `service: dbngin` there, then run `lerd env`. The `db:` block wins over everything else when lerd's database commands look for the site's database, so one left behind keeps them pointed at the old server.
 - **Through [`.env.lerd_override`](../features/env-setup.md#using-your-own-service-instead-of-lerd-s-container)**: delete the `DB_*` lines and the database from `LERD_EXTERNAL_SERVICES`, then run `lerd env`.
 - **Through `.env` alone**: run `lerd env`.
 
-`lerd env` writes lerd's connection into the env file and creates an empty database named after the site. To keep the name the site used before, such as `shop_production`, set it as a personal override before running `lerd env`:
+`lerd env` writes lerd's connection into the env file and creates an empty database named after the site. When the old database isn't named after the site, such as `shop_production` for a site called `shop`, keep its name with a personal override before running `lerd env`:
 
 ```bash
 lerd env:override DB_DATABASE=shop_production
 ```
 
+Check where the site points now with `grep DB_ .env`: the host is lerd's, and `DB_DATABASE` is the name to import into.
+
 ## 5. Import
 
 ```bash
-lerd db:import --fresh ~/db-backups/shop.sql
+lerd db:import -s mysql -d shop --fresh ~/db-backups/shop.sql
 ```
 
-Run from the project, it loads into the database the site now uses, which is why the site is pointed at lerd first. `--fresh` drops and recreates it before loading, so a second attempt starts clean rather than colliding with half a first one.
+`--fresh` drops and recreates the database before loading, so a second attempt starts clean rather than colliding with half a first one. That is why the service and database are named outright: a command left to work out its own target drops whatever the project points at, and naming them means it can only be lerd's.
 
 ## 6. Check every row arrived
 
@@ -90,13 +98,16 @@ PREPARE counts FROM @counts;
 EXECUTE counts;
 ```
 
-Run it on both sides and compare:
+Run it on both sides and compare, naming the database you exported in step 3 on the old server and the `DB_DATABASE` you imported into on lerd's:
 
 ```bash
-lerd db:shell -s dbngin -d shop < counts.sql > before.txt
-lerd db:shell -s mysql -d shop < counts.sql > after.txt
-diff before.txt after.txt && echo "every table matches"
+lerd db:shell -s dbngin -d shop < counts.sql > before.txt &&
+  lerd db:shell -s mysql -d shop < counts.sql > after.txt &&
+  test -s before.txt &&
+  diff before.txt after.txt && echo "every table matches"
 ```
+
+Each step only runs when the one before it worked, so a misspelt name or a query that fails stops it there rather than comparing two empty files.
 
 For PostgreSQL, use this `counts.sql` with `-s postgres`:
 
@@ -108,7 +119,7 @@ SELECT table_schema || '.' || table_name AS tbl,
  ORDER BY 1;
 ```
 
-Then load a few pages of the site, and run your migrations' status command to confirm the schema is where you left it. Database clients such as TablePlus or Sequel Ace reach lerd's server with the [service credentials](../usage/services.md#service-credentials).
+Once the counts match, resume the site with `lerd unpause`, load a few pages, and run your migrations' status command to confirm the schema is where you left it. Database clients such as TablePlus or Sequel Ace reach lerd's server with the [service credentials](../usage/services.md#service-credentials).
 
 ## 7. Keep the dump
 
@@ -167,13 +178,13 @@ It counts the kills since the VM booted and suggests a size. `Lost connection` w
 
 ### Before you import
 
-**Give the VM more memory.** It is a ceiling, not a reservation, so a bigger VM costs nothing while it is idle:
+**Give the VM more memory.** It is a ceiling, not a reservation, so a bigger VM costs nothing while it is idle. Run `lerd machine memory` on its own to see the size it suggests, then pass the size you want in GB:
 
 ```bash
-lerd machine memory 12
+lerd machine memory 8
 ```
 
-That restarts the VM and every container with it. See [`lerd machine memory`](../usage/lifecycle.md#lerd-machine-memory-macos). On Linux there is no VM, so this step does not apply.
+lerd caps the VM at half the Mac's memory and refuses anything larger, so 8 GB is the most a 16 GB Mac can give it and 12 GB needs a Mac with 24 GB or more. Setting a size restarts the VM and every container with it. See [`lerd machine memory`](../usage/lifecycle.md#lerd-machine-memory-macos). On Linux there is no VM, so this step does not apply.
 
 **Size MySQL's buffer pool to fit.** The buffer pool is MySQL's main cache and the largest thing it holds in memory. Set it in lerd's tuning file, which survives updates and reinstalls:
 
@@ -183,10 +194,10 @@ lerd service config mysql
 
 ```ini
 [mysqld]
-innodb_buffer_pool_size = 4G
+innodb_buffer_pool_size = 2G
 ```
 
-Saving restarts MySQL. Keep it well under the VM's memory, leaving room for every other container. A larger pool makes a large import faster, but one too large for the VM is what gets MySQL killed: a 15 GB database imported in about a quarter of an hour into a 6 GB VM with the pool at 512 MB, after an attempt at 2 GB ran out of memory with a search engine running alongside.
+Saving restarts MySQL. Keep it to around a quarter of the VM's memory, 2G on an 8 GB VM, leaving room for every other container. A larger pool makes a large import faster, but one too large for the VM is what gets MySQL killed: a 15 GB database imported in about a quarter of an hour into a 6 GB VM with the pool at 512 MB, after an attempt at 2 GB ran out of memory with a search engine running alongside.
 
 **Stop what you do not need** for the length of the import, such as `lerd service stop elasticsearch`.
 
