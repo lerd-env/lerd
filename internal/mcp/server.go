@@ -1026,7 +1026,7 @@ func execPun(args map[string]any) (any, *rpcError) {
 	if len(punArgs) == 0 {
 		return toolErr("args is required and must be a non-empty array, e.g. [\"check\"]"), nil
 	}
-	bin, err := pun.Ensure(context.Background(), io.Discard)
+	bin, err := pun.Ensure(sessionCtx, io.Discard)
 	if err != nil {
 		return toolErr(err.Error()), nil
 	}

@@ -66,10 +66,9 @@ func validBinaries(bins []string) []string {
 	return out
 }
 
-// Target records which service container a tool shim execs into and the
-// candidate binaries to resolve there (mariadb images ship mariadb-dump in
-// place of mysqldump, so the shim tries each in order). A tool lerd runs
-// itself has no service and dispatches to `lerd <tool>` instead.
+// Target records the service container a shim execs into and the candidate
+// binaries to try there (mariadb ships mariadb-dump for mysqldump). A tool lerd
+// runs itself has no service and dispatches to `lerd <tool>` instead.
 type Target struct {
 	Service  string
 	Binaries []string
@@ -296,10 +295,18 @@ func List() []Info {
 // installed service actually exposes the tool, applies the change to the shim
 // dir, and only records the decision once that succeeded, so a toggle that
 // could not be carried out never reads back as done. It never prompts.
-func Set(tool string, enabled bool) error {
-	target, ok := Targets()[tool]
-	if !ok {
-		return fmt.Errorf("no installed service exposes the %q client tool", tool)
+func Set(requested string, enabled bool) error {
+	// The name is taken from the targets, not the request, so only a known
+	// tool name ever reaches a path.
+	var tool string
+	var target Target
+	for name, t := range Targets() {
+		if name == requested {
+			tool, target = name, t
+		}
+	}
+	if tool == "" {
+		return fmt.Errorf("no installed service exposes the %q client tool", requested)
 	}
 	lerdBin := config.LerdBinary()
 	binDir := config.BinDir()

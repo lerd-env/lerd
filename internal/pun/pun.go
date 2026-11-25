@@ -43,7 +43,13 @@ func Ensure(ctx context.Context, w io.Writer) (string, error) {
 		return "", err
 	}
 	fmt.Fprintf(w, "Downloading pun %s\n", pin.Version)
-	archive := dest + ".tar.gz"
+	// Per call, so two first runs at once never share or delete each other's.
+	tmp, err := os.CreateTemp(filepath.Dir(dest), "pun-*.tar.gz")
+	if err != nil {
+		return "", err
+	}
+	archive := tmp.Name()
+	tmp.Close()
 	defer os.Remove(archive)
 	if err := fetch(ctx, url, archive, 0o644, m.Digest(name, runtime.GOOS, runtime.GOARCH), w); err != nil {
 		return "", fmt.Errorf("pun download: %w", err)

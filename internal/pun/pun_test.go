@@ -6,6 +6,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/geodro/lerd/internal/tools"
@@ -54,7 +55,7 @@ func TestEnsureInstallsThePinOnceAndStampsIt(t *testing.T) {
 	if got, want := tools.InstalledVersion("pun"), tools.Load(context.Background()).Tools["pun"].Version; got != want {
 		t.Errorf("stamp = %q, want %q", got, want)
 	}
-	if _, err := os.Stat(bin + ".tar.gz"); err == nil {
+	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(bin), "*.tar.gz")); len(left) > 0 {
 		t.Error("the downloaded archive was left behind")
 	}
 	if _, err := Ensure(context.Background(), io.Discard); err != nil {
