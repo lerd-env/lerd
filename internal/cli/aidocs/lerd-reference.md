@@ -101,9 +101,9 @@ Actions: `list` (CALL FIRST), `start`, `stop`, `add`, `remove`, `health`, `heal`
 - **Idle-suspend (CLI-only)**: `lerd idle on/off` toggles activity-driven suspension globally; suspended workers stop after the idle timeout (`lerd idle timeout <dur>`) and resume on the next request/CLI/MCP/file-save. `lerd idle pin/unpin <site>` exempts a site; `lerd idle status` reports policy and last-active. A worker shown as suspended is healthy, not failed, so do not `heal` it. `lerd idle services on` sleeps idle services too; any request or tool call wakes one, so never `start` or reinstall it
 
 #### `exec` — run tooling in the PHP-FPM container
-Actions: `artisan` (Laravel), `console` (other frameworks), `composer`, `vendor_bins`, `vendor_run`, `commands_list`, `commands_run`, `command_add`, `command_remove`.
-- `artisan`/`console`/`composer` take `args` (array); tinker must use `--execute=<code>` for non-interactive use
-- `vendor_run` is the right way to run project tooling (pest, phpunit, pint, phpstan, rector) — call `vendor_bins` first to discover what's installed, then `vendor_run` with `bin` + `args`; prefer it over `composer exec`. `lerd cpx <package>` (CLI-only) runs a Composer package's binary without adding it to the project
+Actions: `artisan` (Laravel), `console` (other frameworks), `composer`, `pun`, `vendor_bins`, `vendor_run`, `commands_list`, `commands_run`, `command_add`, `command_remove`.
+- `artisan`/`console`/`composer`/`pun` take `args` (array); tinker must use `--execute=<code>` for non-interactive use
+- `vendor_run` runs project tooling (pest, phpunit, pint, phpstan, rector) — call `vendor_bins` first to discover what's installed, then `vendor_run` with `bin` + `args`; prefer it over `composer exec`. `lerd cpx <package>` (CLI-only) runs a Composer package's binary without adding it to the project
 - `commands_*`/`command_*` list, run, add and remove the on-demand commands in a site's `.lerd.yaml` `commands:` block; `commands_run` needs `force: true` for confirm-gated commands
 - **composer over git SSH (CLI-only)**: when `composer` needs a private repo reachable only over SSH, `lerd auth ssh` starts a shared ssh-agent container and loads the host's `~/.ssh/id_*` (or named keys) so passphrase-protected keys work in the FPM container; `lerd auth ssh --list` shows loaded keys, `--remove` flushes them. Keys live only in agent memory and clear on machine restart or `lerd quit`
 

@@ -4,8 +4,6 @@
 package phpantom
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -155,47 +153,7 @@ func EnsureBinary(ctx context.Context, w io.Writer) error {
 	return os.WriteFile(stampPath(), []byte(Version+"\n"), 0o644)
 }
 
-// extractBinary pulls the phpantom_lsp executable out of the gzipped tar
-// stream and installs it at dest via an atomic rename. It extracts to a
-// per-call unique temp file in the same directory so two concurrent installs
-// can never interleave writes into a shared scratch path and rename a
-// corrupted binary into place; the temp is always cleaned up.
+// extractBinary installs the phpantom_lsp executable from the release tarball.
 func extractBinary(r io.Reader, dest string) error {
-	gz, err := gzip.NewReader(r)
-	if err != nil {
-		return err
-	}
-	defer gz.Close()
-
-	tr := tar.NewReader(gz)
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			return fmt.Errorf("phpantom_lsp: %q not found in archive", binName)
-		}
-		if err != nil {
-			return err
-		}
-		if hdr.Typeflag != tar.TypeReg || filepath.Base(hdr.Name) != binName {
-			continue
-		}
-		tmp, err := os.CreateTemp(filepath.Dir(dest), binName+"-*.tmp")
-		if err != nil {
-			return err
-		}
-		tmpName := tmp.Name()
-		defer os.Remove(tmpName) // no-op once renamed; cleans up on any failure
-
-		if _, err := io.Copy(tmp, tr); err != nil { //nolint:gosec // trusted release archive
-			tmp.Close()
-			return err
-		}
-		if err := tmp.Close(); err != nil {
-			return err
-		}
-		if err := os.Chmod(tmpName, 0o755); err != nil {
-			return err
-		}
-		return os.Rename(tmpName, dest)
-	}
+	return download.ExtractTarGzBinary(r, binName, dest)
 }

@@ -336,6 +336,10 @@ func binPath(name string) string {
 		// shell runs the same mise lerd drives.
 		home, _ := os.UserHomeDir()
 		return filepath.Join(home, ".local", "bin", "mise")
+	case "pun":
+		// Off PATH, so a pun the user installed themselves is never shadowed;
+		// the pun shim reaches this one through `lerd pun`.
+		return filepath.Join(config.DataDir(), "pun", "pun")
 	}
 	return filepath.Join(config.BinDir(), name)
 }

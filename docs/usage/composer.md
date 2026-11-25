@@ -45,6 +45,17 @@ The package runs on the PHP version the site is registered on rather than whatev
 
 Requiring it globally also puts a `cpx` shim on your PATH, so bare `cpx` works too and runs through the same container. `lerd cpx` is the explicit form, and the one that tells you what to install when cpx is missing.
 
+## pun
+
+[pun](https://punphp.com) is a single binary that formats, lints and analyses PHP and installs Composer packages, standing in for Pint, PHP-CS-Fixer, Rector, PHPStan and Composer itself. `lerd pun` runs it at the version lerd pins, fetching it the first time:
+
+```bash
+lerd pun check --fix
+lerd pun install
+```
+
+pun is a static binary, so it runs on the host and needs no container. Composer scripts it runs call `php`, which is lerd's shim, so they still run on the PHP version the site is registered on. lerd also puts a `pun` shim on your PATH, so bare `pun` goes through lerd too. It is managed like the database client shims: when you already have a pun of your own, `lerd install` asks before shadowing it, and `lerd shims remove pun` or `lerd shims add pun` changes your mind later. See [Managing shims](/usage/database#managing-shims). AI assistants run it through the `exec` MCP tool with `action: "pun"`, and pun notices the agent and prints one line per problem.
+
 The MCP integration exposes the same surface through two tools, `vendor_bins` (list available binaries) and `vendor_run` (execute one), so AI assistants can discover and run project tooling without per-project configuration.
 
 ## Tools in vendor/bin

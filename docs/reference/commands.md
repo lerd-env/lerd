@@ -367,6 +367,7 @@ Activity-driven worker suspension: lerd gracefully stops each site's suspendable
 | `lerd test [args...]` | Shortcut for `lerd artisan test` |
 | `lerd <vendor-bin> [args...]` | Run any composer-installed binary from the project's `vendor/bin` directory (e.g. `lerd pest`, `lerd pint`, `lerd phpstan`). Real lerd commands always win over vendor binaries with the same name. |
 | `lerd cpx <package> [args...]` | Run a command from any Composer package without adding it to the project, [cpx](https://cpx.dev) being to Composer what npx is to npm. Uses the globally required binary (`lerd composer global require cpx/cpx`) and runs it on the PHP version the project is registered on |
+| `lerd pun [args...]` | Run [pun](https://punphp.com), the PHP formatter, linter, analyser and installer, at the version lerd pins. Fetched on first use and run on the host, where its composer scripts reach the project's PHP through the `php` shim. A `pun` shim on your PATH runs it too, managed with `lerd shims` like the database client shims |
 | `lerd shell [version]` | Open an interactive shell inside the project's PHP-FPM container, or inside a given version's shared container from anywhere |
 
 ## AI integration

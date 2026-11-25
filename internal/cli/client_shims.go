@@ -35,8 +35,8 @@ func clientShimPrompter() shims.Prompter {
 }
 
 // NewShimsCmd returns the `shims` command group for managing the client-tool
-// host shims services expose (mysqldump, pg_dump, psql…). With no subcommand it
-// lists the current state.
+// host shims services expose (mysqldump, pg_dump, psql…) and lerd's own tool
+// shims (pun). With no subcommand it lists the current state.
 func NewShimsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "shims",
@@ -84,7 +84,11 @@ func runShimsList() error {
 		if s.HostHas {
 			note = "  (you have your own " + s.Tool + " on PATH)"
 		}
-		fmt.Printf("  %-14s %-12s %-9s%s\n", s.Tool, s.Service, state, note)
+		owner := s.Service
+		if owner == "" {
+			owner = "lerd"
+		}
+		fmt.Printf("  %-14s %-12s %-9s%s\n", s.Tool, owner, state, note)
 	}
 	return nil
 }

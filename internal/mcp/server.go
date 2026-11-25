@@ -30,6 +30,7 @@ import (
 	lerdNode "github.com/geodro/lerd/internal/node"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/pun"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/siteinfo"
 	"github.com/geodro/lerd/internal/siteops"
@@ -1010,6 +1011,28 @@ func execComposer(args map[string]any) (any, *rpcError) {
 	cmd.Stderr = &out
 	if err := cmd.Run(); err != nil {
 		return toolErr(fmt.Sprintf("composer failed (%v):\n%s", err, stripANSI(out.String()))), nil
+	}
+	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
+}
+
+// execPun runs lerd's pinned pun on the host in the project, fetching it first
+// when needed. pun sees the agent variables, so it prints one line per problem.
+func execPun(args map[string]any) (any, *rpcError) {
+	projectPath := resolvedPath(args)
+	if projectPath == "" {
+		return toolErr("path is required — pass a path argument or open Claude in the project directory"), nil
+	}
+	punArgs := strSliceArg(args, "args")
+	if len(punArgs) == 0 {
+		return toolErr("args is required and must be a non-empty array, e.g. [\"check\"]"), nil
+	}
+	bin, err := pun.Ensure(context.Background(), io.Discard)
+	if err != nil {
+		return toolErr(err.Error()), nil
+	}
+	var out bytes.Buffer
+	if err := runOnHost(projectPath, append([]string{bin}, punArgs...), &out); err != nil {
+		return toolErr(fmt.Sprintf("pun failed (%v):\n%s", err, stripANSI(out.String()))), nil
 	}
 	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
 }

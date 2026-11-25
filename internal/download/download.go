@@ -4,6 +4,8 @@
 package download
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -164,4 +166,47 @@ func (p *progressReader) Read(b []byte) (int, error) {
 		fmt.Fprintf(p.w, "\r      [%s] %d%%", bar, pct*2)
 	}
 	return n, err
+}
+
+// ExtractTarGzBinary pulls the regular file named name out of a gzipped tar
+// stream, at any depth, and installs it executable at dest via an atomic
+// rename from a per-call temp file, so concurrent installs never interleave.
+func ExtractTarGzBinary(r io.Reader, name, dest string) error {
+	gz, err := gzip.NewReader(r)
+	if err != nil {
+		return err
+	}
+	defer gz.Close()
+
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			return fmt.Errorf("%q not found in archive", name)
+		}
+		if err != nil {
+			return err
+		}
+		if hdr.Typeflag != tar.TypeReg || filepath.Base(hdr.Name) != name {
+			continue
+		}
+		tmp, err := os.CreateTemp(filepath.Dir(dest), name+"-*.tmp")
+		if err != nil {
+			return err
+		}
+		tmpName := tmp.Name()
+		defer os.Remove(tmpName) // no-op once renamed; cleans up on any failure
+
+		if _, err := io.Copy(tmp, tr); err != nil { //nolint:gosec // trusted release archive
+			tmp.Close()
+			return err
+		}
+		if err := tmp.Close(); err != nil {
+			return err
+		}
+		if err := os.Chmod(tmpName, 0o755); err != nil {
+			return err
+		}
+		return os.Rename(tmpName, dest)
+	}
 }
