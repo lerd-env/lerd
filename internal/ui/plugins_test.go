@@ -84,6 +84,19 @@ func TestPluginEndpoint_RunsWithRequestOnStdinAndEnv(t *testing.T) {
 	}
 }
 
+// Without it a browser reuses a page for a tenth of its age, so an updated
+// plugin keeps running its old scripts.
+func TestPluginUI_IsRevalidatedOnEveryLoad(t *testing.T) {
+	installAPIPlugin(t)
+	for _, path := range []string{"/plugins/echo/ui/index.html", "/plugins/echo/ui/icon.svg", "/plugins/_lerd/base.css"} {
+		rec := httptest.NewRecorder()
+		handlePluginUI(rec, localRequest(http.MethodGet, path, ""))
+		if cc := rec.Header().Get("Cache-Control"); rec.Code != http.StatusOK || cc != "no-cache" {
+			t.Errorf("%s = %d, Cache-Control %q, want no-cache", path, rec.Code, cc)
+		}
+	}
+}
+
 func TestPluginEndpoint_Errors(t *testing.T) {
 	installAPIPlugin(t)
 	cases := []struct {
