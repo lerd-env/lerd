@@ -10,7 +10,7 @@ php:
 node:
   default_version: "22"
   managed: true           # optional. Whether lerd manages Node (install/use/default
-                          # via the active manager). With mise or fnm that
+                          # via the active manager). With mise that
                           # includes PATH shims; with nvm the user's shell owns
                           # node/npm/npx. Written by the install prompt and by
                           # lerd node:manage / node:unmanage; honoured on lerd
@@ -19,12 +19,12 @@ node:
                           # node shim is on disk.
   manager: mise           # optional. Which version manager lerd drives: "mise"
                           # (the default, installed only when the host has none),
-                          # "fnm", or "nvm" (a user-installed nvm, picked
+                          # or "nvm" (a user-installed nvm, picked
                           # automatically when you decline managed Node and nvm
                           # is present). Switchable from the dashboard's Node
-                          # page; switching to fnm or mise fetches it on demand.
-                          # Empty means fnm, which is what configs predating
-                          # this setting were using.
+                          # page; switching to mise fetches it on demand.
+                          # "fnm" drives one that is already installed. Empty
+                          # means mise, or fnm while an older lerd's is there.
   nvm_dir: ~/.nvm         # optional. Where nvm lives when manager is nvm.
                           # Written at install/switch so lerd-ui and the watcher
                           # (which never load your shell rc) find a custom
@@ -289,7 +289,7 @@ custom_workers:
 | `restart` | no | `always` | `always` or `on-failure` |
 | `schedule` | no | | systemd OnCalendar expression for timer-based workers (e.g. `minutely`, `*-*-* *:00:00`) |
 | `conflicts_with` | no | | List of worker names to stop before starting this one |
-| `host` | no | `false` | Run on the host via fnm instead of inside the PHP-FPM container. Used for Node.js tools (Vite, Tailwind watcher, Encore) that need direct filesystem access for HMR |
+| `host` | no | `false` | Run on the host through the Node version manager instead of inside the PHP-FPM container. Used for Node.js tools (Vite, Tailwind watcher, Encore) that need direct filesystem access for HMR |
 | `per_worktree` | no | `false` | Worker can run independently per git worktree under `lerd-<wname>-<site>-<wt>`. Required for worktree auto-start; without it, host workers stay bound to the parent site only |
 | `replaces_build` | no | `false` | While running, the worker provides the asset manifest so the static `npm run build` step is unnecessary. `lerd worktree add` skips its build prompt when an opted-in `replaces_build` worker is present |
 

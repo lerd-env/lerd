@@ -139,16 +139,18 @@
   let managerBusy = $state(false);
   let manageError = $state('');
 
-  const managerOptions = [
+  const managerOptions = $derived([
     { value: 'mise' as const, label: 'mise', title: m.system_node_managerMise() },
-    { value: 'fnm' as const, label: 'fnm', title: m.system_node_managerFnm() },
+    ...($status.fnm_available
+      ? [{ value: 'fnm' as const, label: 'fnm', title: m.system_node_managerFnm() }]
+      : []),
     {
       value: 'nvm' as const,
       label: 'nvm',
       title: $status.nvm_available ? m.system_node_managerNvm() : m.system_node_managerNvmMissing(),
       disabled: !$status.nvm_available
     }
-  ];
+  ]);
 
   async function onSwitchManager(manager: 'mise' | 'fnm' | 'nvm') {
     if (managerBusy || manageBusy || manager === $status.node_manager) return;
@@ -205,8 +207,8 @@
       {#if outdated.length > 0 && $accessMode.localControl}
         <DetailButton tone="success" onclick={() => (updateBatch = [...outdated])}>{m.services_updateAll()}</DetailButton>
       {/if}
-      <!-- mise and fnm are always both on offer; nvm is only ever a choice on a
-           host that has one, and the option disables itself when it does not. -->
+      <!-- mise is always on offer, the retired fnm only where it is still installed,
+           and nvm disables itself on a host that has none. -->
       {#if $status.node_managed_by_lerd}
         <CheckUpdatesButton onclick={runCheck} {checking} title={m.system_node_checkTitle()} />
       {/if}

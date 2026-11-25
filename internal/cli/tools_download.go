@@ -65,17 +65,6 @@ var (
 	refreshPins      = tools.Refresh
 )
 
-// ensureFnmBinary installs fnm into BinDir when it is missing. Called from
-// downloadBinaries on a normal (fnm) install, and on demand when switching
-// back to fnm with `lerd node:manager fnm` after an nvm-only setup.
-func ensureFnmBinary(w io.Writer) error {
-	if _, err := os.Stat(filepath.Join(config.BinDir(), "fnm")); err == nil {
-		return nil
-	}
-	var pins pinnedTools
-	return installFnm(&pins, w)
-}
-
 // ensureMiseBinary installs mise into its own canonical location when the host
 // has none. A mise the user already manages is left alone: lerd drives whatever
 // it finds, so it never ends up fighting a second copy.
@@ -118,14 +107,15 @@ func installMise(pins *pinnedTools, home string, w io.Writer) error {
 
 // removeFnmBinary drops lerd's own fnm once another manager drives Node. The
 // copy in BinDir is lerd's, so it goes rather than lingering as a tool nothing
-// runs; switching back with `lerd node:manager fnm` downloads it again.
+// runs. fnm is retired, so there is no way back to it from here.
 func removeFnmBinary() {
 	fnm := filepath.Join(config.BinDir(), "fnm")
 	os.Remove(fnm)              //nolint:errcheck
 	os.Remove(fnm + ".version") //nolint:errcheck
 }
 
-// installFnm downloads and extracts the pinned fnm, overwriting any existing
+// installFnm updates an fnm that is still installed: it downloads and extracts
+// the pinned one, overwriting the existing
 // binary, and stamps the installed version.
 func installFnm(pins *pinnedTools, w io.Writer) error {
 	binDir := config.BinDir()

@@ -323,7 +323,6 @@ check_prerequisites_linux() {
   header "Checking prerequisites"
 
   check_cmd podman podman "container runtime"
-  check_cmd unzip unzip "needed to extract fnm"
   check_dns_resolver
   check_systemd_user
   check_podman_rootless

@@ -236,9 +236,6 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	// Tools — the host binaries lerd manages, against their pinned versions.
 	fmt.Println("\n[Tools]")
 	for _, s := range tools.StatusAll(context.Background()) {
-		if s.Name == "fnm" && cfg.NodeManager() != "fnm" {
-			continue // deliberately absent when another manager drives Node
-		}
 		switch {
 		case s.External:
 			ok2(strings.TrimSpace(s.Name + " " + s.Installed + " (your install)"))

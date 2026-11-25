@@ -39,7 +39,7 @@ make install-installer  # installs lerd-installer to ~/.local/bin/
 
 The installer will:
 
-- Check and offer to install missing prerequisites (Podman, NetworkManager, unzip)
+- Check and offer to install missing prerequisites (Podman, NetworkManager)
 - Download the latest `lerd` binary for your architecture (amd64 / arm64)
 - Install it to `~/.local/bin/lerd`
 - Add `~/.local/bin` to your shell's `PATH` (bash, zsh, or fish)
@@ -60,13 +60,13 @@ On Omarchy a fresh install also turns the system tray off (`lerd tray off`) and 
 1. Check that the host ports lerd binds first (HTTP 80, HTTPS 443, DNS 5300) are free
 2. Create XDG config and data directories
 3. Create the `lerd` Podman network
-4. Download static binaries: Composer and fnm or mise
+4. Download static binaries: Composer and mise
 5. Generate the local CA and trust it in your system and browser stores
 6. Write and start the `lerd-dns` and `lerd-nginx` Podman Quadlet containers
 7. Enable the `lerd-watcher` background service (auto-discovers new projects)
 8. Add `~/.local/share/lerd/bin` to your shell's `PATH`
 
-The downloaded tools are pinned to explicit versions, so a fresh install always gets the same Composer and fnm regardless of what upstream shipped that day. The pins live in a small manifest published in the lerd repository: the binary fetches it before downloading and falls back to its embedded copy when offline, so a broken pin can be fixed for every install without waiting for a release. Downloads retry transient network and server errors with a short backoff, and a stalled transfer is cancelled and retried instead of hanging, so a momentary CDN hiccup doesn't abort the install. Already-installed tools are never touched by an upgrade; `lerd status` shows their versions and `lerd tools:update` brings them to the current pins when you want that. That includes the mise lerd installs as the Node manager when the host has none; a mise you installed yourself stays yours, and lerd never lists or replaces it.
+The downloaded tools are pinned to explicit versions, so a fresh install always gets the same Composer and mise regardless of what upstream shipped that day. The pins live in a small manifest published in the lerd repository: the binary fetches it before downloading and falls back to its embedded copy when offline, so a broken pin can be fixed for every install without waiting for a release. Downloads retry transient network and server errors with a short backoff, and a stalled transfer is cancelled and retried instead of hanging, so a momentary CDN hiccup doesn't abort the install. Already-installed tools are never touched by an upgrade; `lerd status` shows their versions and `lerd tools:update` brings them to the current pins when you want that. That includes the mise lerd installs as the Node manager when the host has none; a mise you installed yourself stays yours, and lerd never lists or replaces it.
 
 ::: info Running alongside Laravel Herd or another local stack
 If another tool is already serving sites on ports 80/443 (Laravel Herd, a system nginx/Apache) or holding the DNS port, install prints a warning naming each busy port and how to find the process. Install still continues, so stop the other stack to free the ports first, otherwise `lerd-nginx` and `lerd-dns` will fail to start. When `lerd-nginx` cannot start, install finishes the rest of its setup and then exits with an error naming the busy port, instead of reporting a complete installation; free the port and run `lerd install` again.

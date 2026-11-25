@@ -468,7 +468,7 @@ workers:
       tool: vite                  # believed whatever the command looks like, for
                                   # a worker that reaches the tool through a
                                   # framework's own console command
-    host: false                   # run on the host via fnm instead of in the FPM
+    host: false                   # run on the host instead of in the FPM
                                   # container (optional, default: false). Used for
                                   # HMR-sensitive Node tools (Vite, Tailwind watcher).
     per_worktree: false           # run independently per git worktree under

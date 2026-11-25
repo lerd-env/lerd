@@ -28,16 +28,33 @@ function setStatus(patch: Record<string, unknown>) {
 
 describe('NodePage manager switcher', () => {
   beforeEach(() => {
-    setStatus({ node_managed_by_lerd: true, using_system_bun: false, node_manager: 'fnm', nvm_available: false });
+    setStatus({ node_managed_by_lerd: true, using_system_bun: false, node_manager: 'mise', nvm_available: false, fnm_available: false });
   });
 
-  // mise and fnm are both lerd's to install, so there is always a switch to
-  // make even on a host that has never heard of nvm.
   it('shows the switcher without nvm', () => {
     const { getByRole } = render(NodePage);
     const group = getByRole('group', { name: 'Version manager' });
     expect(group.textContent).toContain('mise');
-    expect(group.textContent).toContain('fnm');
+  });
+
+  // fnm is retired: an install that still has it keeps the choice, no other sees it.
+  it('leaves fnm out where it is not installed', () => {
+    const { getByRole } = render(NodePage);
+    expect(getByRole('group', { name: 'Version manager' }).textContent).not.toContain('fnm');
+  });
+
+  it('keeps fnm where it is still installed', () => {
+    setStatus({ node_manager: 'fnm', fnm_available: true });
+    const { getByRole } = render(NodePage);
+    expect(getByRole('group', { name: 'Version manager' }).textContent).toContain('fnm');
+  });
+
+  // The status arrives after the page renders and changes when a switch drops fnm.
+  it('drops fnm as soon as the status says it is gone', async () => {
+    setStatus({ node_manager: 'fnm', fnm_available: true });
+    const { getByRole } = render(NodePage);
+    setStatus({ node_manager: 'mise', fnm_available: false });
+    await waitFor(() => expect(getByRole('group', { name: 'Version manager' }).textContent).not.toContain('fnm'));
   });
 
   it('hides the switcher when the host runs on system bun', () => {
@@ -50,7 +67,7 @@ describe('NodePage manager switcher', () => {
     setStatus({ nvm_available: true });
     const { getByRole } = render(NodePage);
     const group = getByRole('group', { name: 'Version manager' });
-    expect(group.textContent).toContain('fnm');
+    expect(group.textContent).toContain('mise');
     expect(group.textContent).toContain('nvm');
   });
 

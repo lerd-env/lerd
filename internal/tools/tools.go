@@ -353,6 +353,10 @@ func stampPath(name string) string {
 // installed sits exactly where lerd's would, so only the stamp lerd writes when
 // it installs one marks that copy as lerd's.
 func LerdOwned(name string) bool {
+	if name == "fnm" {
+		// lerd no longer installs fnm, so its own is the one in its bin dir.
+		return fileExists(binPath(name))
+	}
 	if name != "mise" {
 		return true
 	}
@@ -529,7 +533,8 @@ func StatusAll(ctx context.Context) []ToolStatus {
 	m := Load(ctx)
 	out := make([]ToolStatus, 0, len(Names()))
 	for _, name := range Names() {
-		if !LerdOwned(name) {
+		// lerd's own fnm is listed only while it drives Node.
+		if !LerdOwned(name) || (name == "fnm" && node.Active().Name() != "fnm") {
 			continue
 		}
 		pin := m.Tools[name].Version
@@ -568,6 +573,12 @@ func externalManager() (ToolStatus, bool) {
 			return ToolStatus{}, false
 		}
 		return ToolStatus{Name: "mise", Installed: probeVersion("mise", bin), Present: true, External: true}, true
+	case "fnm":
+		bin := node.UserFnm()
+		if bin == "" {
+			return ToolStatus{}, false
+		}
+		return ToolStatus{Name: "fnm", Installed: probeVersion("fnm", bin), Present: true, External: true}, true
 	case "nvm":
 		if !node.ScriptPresent() {
 			return ToolStatus{}, false

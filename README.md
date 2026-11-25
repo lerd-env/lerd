@@ -57,7 +57,7 @@ Lerd is built for PHP developers who want frictionless local development, on a L
 
 - 📱 **NativePHP, desktop and mobile.** The Electron app runs as a host worker and the mobile build reaches an emulator, a simulator or a device. A command whose runtime cannot live in a container is declared as host-only, so `native:run` opens its window instead of dying in the PHP container.
 
-- 📦 **Node.js isolation.** Node 22 or 24 per project, read from `.nvmrc`, `.node-version`, `mise.toml` or `.tool-versions`, through mise (the default for new installs), fnm or an nvm you already have, switchable from the dashboard, and kept on each major's newest patch with one click or `lerd node:update`. Or **bun** as the JS runtime on the host and, opt-in, inside the container.
+- 📦 **Node.js isolation.** Node 22 or 24 per project, read from `.nvmrc`, `.node-version`, `mise.toml` or `.tool-versions`, through mise, or an nvm or fnm you already have, switchable from the dashboard, and kept on each major's newest patch with one click or `lerd node:update`. Or **bun** as the JS runtime on the host and, opt-in, inside the container.
 
 - 🪄 **No per-framework setup.** Workers, env values and the nginx vhost are configured when you link a project. "Env" means whatever file your framework reads, a `.env`, `wp-config.php`, Magento's `env.php` or Drupal's `settings.php`, written in place, and the worker options you pick are committed to `.lerd.yaml`.
 
@@ -123,7 +123,7 @@ Lerd is built for PHP developers who want frictionless local development, on a L
 
 - 📶 **Nothing downloads behind your back.** Every command that can pull or rebuild an image names it and its size first, read from the registry manifest. The dashboard asks, an assistant over MCP has to come back with your answer, and `--no-pull`, `LERD_OFFLINE=1` and `lerd start --dry-run` cover a metered link.
 
-- 📌 **Pinned host tools.** Composer, mise, fnm and wp-cli are pinned behind a published manifest rather than whatever `releases/latest` served that day, so an upstream release cannot break a fresh install, and the System page applies each update on the card that flagged it.
+- 📌 **Pinned host tools.** Composer, mise and wp-cli are pinned behind a published manifest rather than whatever `releases/latest` served that day, so an upstream release cannot break a fresh install, and the System page applies each update on the card that flagged it.
 
 - 👥 **One Linux machine, several users.** When another user's lerd holds the ports, install and start name that user, and `lerd multi-user enable` lets each user's lerd follow the screen, stepping aside when another desktop takes it and coming back with its own.
 

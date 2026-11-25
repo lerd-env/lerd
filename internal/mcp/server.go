@@ -1218,9 +1218,6 @@ func execStatus() (any, *rpcError) {
 		r.PHPFPMs = append(r.PHPFPMs, phpStatus{Version: v, Running: running})
 	}
 	for _, s := range tools.StatusAll(context.Background()) {
-		if s.Name == "fnm" && cfg != nil && cfg.NodeManager() != "fnm" {
-			continue
-		}
 		if s.UpdateAvailable {
 			r.ToolsHint = "a tool differs from its pinned version; the user can apply it with `lerd tools:update` (CLI-only)"
 		}

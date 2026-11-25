@@ -93,7 +93,7 @@ The [Monaco editor](https://microsoft.github.io/monaco-editor/) (the engine behi
 
 ### Language intelligence (phpantom_lsp)
 
-Autocomplete, diagnostics, hover, and signature help are powered by [phpantom_lsp](https://github.com/PHPantom-dev/phpantom_lsp), a fast, self-contained Rust PHP language server. It bundles phpstorm-stubs and the Mago parser, so it needs no PHP runtime to analyze a project, lerd runs it on the host (managed binary in `~/.local/share/lerd/bin/phpantom_lsp`, like `fnm`/`mkcert`/`composer`) pointed at the site's project directory.
+Autocomplete, diagnostics, hover, and signature help are powered by [phpantom_lsp](https://github.com/PHPantom-dev/phpantom_lsp), a fast, self-contained Rust PHP language server. It bundles phpstorm-stubs and the Mago parser, so it needs no PHP runtime to analyze a project, lerd runs it on the host (managed binary in `~/.local/share/lerd/bin/phpantom_lsp`, like `mkcert`/`composer`) pointed at the site's project directory.
 
 Because it analyzes the real project, completions are genuinely project-aware: your Eloquent models, relationships, scopes, casts and Builder chains resolve end-to-end, alongside framework facades, vendor classes, and the PHP standard library. Hover a symbol for its docblock; type `(` inside a call for signature help.
 

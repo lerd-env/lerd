@@ -285,7 +285,8 @@ make build && bash install.sh --local ./build/lerd
 - [ ] Re-running the installer on this machine does **not** ask the DNS question
       again and does not change the mode it settled on
 - [ ] A fresh install drives Node through mise, reusing a host mise when there
-      is one, and `lerd status` lists no missing fnm
+      is one, `lerd status` and the dashboard show no fnm, and
+      `lerd node:manager fnm` is refused while the host has no fnm
 - [ ] On Omarchy a fresh install turns the tray off and puts Lerd Glance on the
       bar, and a Glance plugin already installed is left as it was
 
@@ -1090,6 +1091,7 @@ Other surfaces:
       and switches the manager, `node:unmanage` and `node:uninstall` undo it
 - [ ] `lerd node:manager mise` carries every installed major across and drops
       lerd's fnm, and `lerd status` and the dashboard stop listing fnm
+      and offering it
 - [ ] `lerd npx` and `lerd cpx` both run through the project's own versions
 - [ ] `lerd pest:browser` runs headed, and the headless Playwright binary is
       shimmed so a plain run works too
@@ -1221,7 +1223,8 @@ install with real sites survives the jump.
 - [ ] `lerd update:beta on` and `off` set `update.beta`, the bare command
       reports where the install sits, and the dashboard's Beta updates card on
       the Lerd page agrees with it
-- [ ] An N-1 install with no `node.manager` set stays on fnm after the upgrade
+- [ ] An N-1 install with no `node.manager` set stays on fnm after the upgrade,
+      still offers it in the dashboard, and `lerd tools:update` still updates it
 - [ ] A service installed on N-1 whose preset has since gained a dashboard shows
       it by the next watcher sweep, without a reinstall
 - [ ] A build that is itself a beta follows the beta line whatever the flag says

@@ -10,18 +10,70 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
-// fnmManager drives Schniz/fnm, the single static binary lerd downloads to its
-// bin dir at install time and invokes as `fnm exec --using=<v> -- <cmd>`.
-type fnmManager struct{}
+// fnmManager drives Schniz/fnm, invoked as `fnm exec --using=<v> -- <cmd>`. lerd
+// no longer installs it: the one it drives is left in its bin dir by an older
+// lerd, or is the user's own. An empty path means lerd's.
+type fnmManager struct{ path string }
+
+// newFnmManager resolves the fnm lerd should drive on this host.
+func newFnmManager() fnmManager {
+	home, _ := os.UserHomeDir()
+	return fnmManager{path: findFnm(home, exec.LookPath)}
+}
+
+// findFnm locates a usable fnm: lerd's own, then PATH, then the places fnm's
+// installer, cargo and the package managers use, which a daemon's minimal PATH
+// would miss. Returns "" when there is none.
+func findFnm(home string, lookPath func(string) (string, error)) string {
+	if own := lerdFnm(); isExecutableFile(own) {
+		return own
+	}
+	if p, err := lookPath("fnm"); err == nil {
+		return p
+	}
+	dirs := miseDirs()
+	if home != "" {
+		dirs = append([]string{
+			filepath.Join(home, ".local", "share", "fnm"),
+			filepath.Join(home, ".fnm"),
+			filepath.Join(home, ".cargo", "bin"),
+			filepath.Join(home, ".local", "bin"),
+		}, dirs...)
+	}
+	for _, dir := range dirs {
+		if p := filepath.Join(dir, "fnm"); isExecutableFile(p) {
+			return p
+		}
+	}
+	return ""
+}
+
+func lerdFnm() string { return filepath.Join(config.BinDir(), "fnm") }
+
+// FnmBinary is the fnm lerd drives on this host, empty when there is none.
+func FnmBinary() string { return newFnmManager().path }
+
+// UserFnm is the user's own fnm, empty when lerd's is there or neither is.
+func UserFnm() string {
+	if m := newFnmManager(); m.path != "" && !m.lerdOwned() {
+		return m.path
+	}
+	return ""
+}
+
+func (m fnmManager) lerdOwned() bool { return m.bin() == lerdFnm() }
 
 func (fnmManager) Name() string { return "fnm" }
 
-// bin is the fnm binary lerd ships in its own bin dir.
-func (fnmManager) bin() string { return filepath.Join(config.BinDir(), "fnm") }
+func (m fnmManager) bin() string {
+	if m.path == "" {
+		return lerdFnm()
+	}
+	return m.path
+}
 
 func (m fnmManager) Available() bool {
-	_, err := os.Stat(m.bin())
-	return err == nil
+	return isExecutableFile(m.bin())
 }
 
 // ListFull returns every installed full version (v stripped) fnm reports.

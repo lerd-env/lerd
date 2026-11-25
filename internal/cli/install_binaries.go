@@ -39,10 +39,7 @@ func downloadBinaries(w io.Writer) error {
 	cfg, _ := config.LoadGlobal()
 	switch {
 	case cfg != nil && cfg.NodeManager() == "nvm":
-	case cfg != nil && cfg.NodeManager() == "fnm":
-		if err := ensureFnmBinary(w); err != nil {
-			return err
-		}
+	case cfg != nil && cfg.NodeManager() == "fnm": // retired: kept, never fetched
 	default:
 		if err := ensureMiseBinary(w); err != nil {
 			return err
