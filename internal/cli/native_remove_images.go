@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/geodro/lerd/internal/cleanup"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
@@ -24,8 +25,18 @@ func RemoveFPMImages(versions []string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return removeFPMImages(mode, versions)
+	n, err := removeFPMImages(mode, versions)
+	// The base images they were built on hold the layers until swept, so the
+	// disk only comes back with this, under the same auto_cleanup gate.
+	if n > 0 {
+		sweepOrphanedImagesFn()
+	}
+	return n, err
 }
+
+// sweepOrphanedImagesFn reclaims what a removal leaves dangling, swappable so a
+// test never reaches podman.
+var sweepOrphanedImagesFn = func() { _, _, _ = cleanup.SweepSafe() }
 
 // currentPHPRuntimeFn reads the runtime as saved right now, swappable so a test
 // can move it under a question that is still waiting for an answer.
@@ -96,10 +107,10 @@ func offerFPMImageRemoval(mode string, versions []string, remove bool) {
 	list := strings.Join(left, ", ")
 	if !remove {
 		if !feedback.StdinInteractive() {
-			feedback.Note("The PHP-FPM images for php " + list + " are no longer used. Remove them with: lerd php:runtime native --remove-images")
+			feedback.Note("The PHP-FPM images for php " + list + " no longer serve your sites. Remove them with: lerd php:runtime native --remove-images")
 			return
 		}
-		remove = confirmImageRemovalFn("Remove the PHP-FPM images for php "+list+"? Nothing uses them on the native runtime; switching back rebuilds them.", false)
+		remove = confirmImageRemovalFn("Remove the PHP-FPM images for php "+list+"? They no longer serve your sites on the native runtime; switching back rebuilds them.", false)
 		if !remove {
 			return
 		}

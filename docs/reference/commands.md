@@ -39,7 +39,7 @@
 | `lerd cleanup --dry-run` | Show what would be reclaimed and the approximate size, remove nothing |
 | `lerd cleanup --safe` | Only reclaim images provably built by lerd, leave unused and dangling images alone |
 | `lerd cleanup --yes` | Remove without the confirmation prompt |
-| `lerd cleanup auto on` | Enable automatic cleanup (the default): the watcher's daily deep sweep plus immediate reaping after a PHP rebuild or service update/remove |
+| `lerd cleanup auto on` | Enable automatic cleanup (the default): the watcher's daily deep sweep plus immediate reaping after a PHP rebuild, service update/remove, or PHP-FPM image removal on the native runtime |
 | `lerd cleanup auto off` | Disable automatic cleanup; `lerd cleanup` still works on demand |
 | `lerd cleanup auto status` | Show whether automatic cleanup is enabled |
 | `lerd bug-report [-o file] [--log-lines n] [--show-real-names]` | Dump doctor output, config files, unit state, recent logs, network state and env vars to a plain-text file you can attach to a GitHub issue. Site names, domains, parked paths, home paths and the username are anonymized by default; `--show-real-names` keeps raw values |
