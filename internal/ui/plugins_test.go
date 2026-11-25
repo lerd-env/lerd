@@ -84,6 +84,45 @@ func TestPluginEndpoint_RunsWithRequestOnStdinAndEnv(t *testing.T) {
 	}
 }
 
+// A site tab sends the worktree it is on, and its endpoint runs in that
+// checkout with LERD_BRANCH set; without one it runs in the main folder.
+func TestPluginEndpoint_RunsInTheWorktreeTheQueryNames(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	installAPIPlugin(t)
+	dir := filepath.Join(plugins.Dir(), "echo")
+	if err := os.WriteFile(filepath.Join(dir, "bin", "where"), []byte("#!/bin/sh\nprintf '%s|%s' \"$(pwd -P)\" \"$LERD_BRANCH\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := filepath.Join(dir, plugins.ManifestFile)
+	data, _ := os.ReadFile(manifest)
+	if err := os.WriteFile(manifest, []byte(strings.Replace(string(data), "api:\n", "api:\n  - {path: where, run: bin/where}\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sitePath, _ := filepath.EvalSymlinks(t.TempDir())
+	checkout, _ := filepath.EvalSymlinks(t.TempDir())
+	makeWorktree(t, sitePath, "feat", "feat", checkout)
+	if err := config.AddSite(config.Site{Name: "shop", Domains: []string{"shop.test"}, Path: sitePath}); err != nil {
+		t.Fatal(err)
+	}
+	for query, want := range map[string]string{"site=shop": sitePath + "|", "site=shop&branch=": sitePath + "|", "site=shop&branch=feat": checkout + "|feat"} {
+		rec := httptest.NewRecorder()
+		handlePluginAPI(rec, localRequest(http.MethodGet, "/api/plugins/echo/where?"+query, ""))
+		if rec.Code != http.StatusOK || rec.Body.String() != want {
+			t.Errorf("%s = %d %q, want %q", query, rec.Code, rec.Body, want)
+		}
+	}
+	rec := httptest.NewRecorder()
+	handlePluginAPI(rec, localRequest(http.MethodGet, "/api/plugins/echo/where?site=shop&branch=gone", ""))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("unknown branch = %d %q, want 404", rec.Code, rec.Body)
+	}
+	rec = httptest.NewRecorder()
+	handlePluginAPI(rec, localRequest(http.MethodGet, "/api/plugins/echo/where?branch=feat", ""))
+	if rec.Code != http.StatusOK || !strings.HasSuffix(rec.Body.String(), "/echo|") {
+		t.Errorf("branch without a site = %d %q, want the plugin's own folder", rec.Code, rec.Body)
+	}
+}
+
 // Without it a browser reuses a page for a tenth of its age, so an updated
 // plugin keeps running its old scripts.
 func TestPluginUI_IsRevalidatedOnEveryLoad(t *testing.T) {

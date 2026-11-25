@@ -193,7 +193,7 @@ func handlePluginAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	site, _ := config.FindSite(r.URL.Query().Get("site"))
-	runPluginEndpoint(w, r, p, e, site, "")
+	runPluginEndpoint(w, r, p, e, site, r.URL.Query().Get("branch"))
 }
 
 // runPluginEndpoint answers one call to a plugin endpoint, for the site it

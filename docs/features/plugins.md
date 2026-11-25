@@ -239,7 +239,7 @@ Per surface:
 - **CLI commands** get their arguments on argv and the terminal's stdin, stdout and exit code. Run inside a linked project, they also get the site.
 - **Site commands** run in the site's directory with `LERD_BRANCH` set when a worktree is selected, and stream their output to the dashboard's run modal like any other command.
 - **MCP tools** get the tool's arguments as JSON on stdin; stdout is the result, and a non-zero exit is reported to the assistant as an error. A `site` argument hands over the site.
-- **API endpoints** get the request body on stdin and `LERD_METHOD` and `LERD_QUERY`; a `site` query parameter hands over the site. A zero exit answers 200 with stdout, served as JSON when it parses as JSON, and any other exit answers 500 with stderr.
+- **API endpoints** get the request body on stdin and `LERD_METHOD` and `LERD_QUERY`; a `site` query parameter hands over the site, and a `branch` beside it runs the call in that worktree's checkout with `LERD_BRANCH` set, answering 404 for a branch the site has no worktree of. `LERD_SITE_PATH` stays the main folder. lerd before 1.40 ignores `branch` and runs in the main folder. A zero exit answers 200 with stdout, served as JSON when it parses as JSON, and any other exit answers 500 with stderr.
 - **Hooks** get `LERD_EVENT` and the event's payload, both as JSON on stdin and as `LERD_<KEY>` variables.
 - **Schedules** get `LERD_SCHEDULE`, the schedule's name, and nothing on stdin. Their output goes to `schedule.log` in the plugin's data folder.
 
