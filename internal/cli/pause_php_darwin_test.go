@@ -29,14 +29,14 @@ func TestEnsureSitePHP_native(t *testing.T) {
 	nativeInstallFn = func(string, io.Writer) error { return installErr }
 	nativeStartFn = func(v string) error { started = append(started, v); return nil }
 
-	if err := ensureSitePHP("8.3"); err != nil {
+	if err := ensureSitePHP("8.3", io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	if len(started) != 1 || started[0] != "8.3" || len(*containers) != 0 {
 		t.Errorf("started %v, containers %v, want only native 8.3", started, *containers)
 	}
 	installErr = errors.New("offline")
-	if err := ensureSitePHP("8.3"); err == nil {
+	if err := ensureSitePHP("8.3", io.Discard); err == nil {
 		t.Error("a failed native install must not be swallowed")
 	}
 }

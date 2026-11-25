@@ -23,7 +23,7 @@ When a site is paused:
 - All running workers for that site are stopped (queue, schedule, reverb, stripe, and any custom workers)
 - The nginx vhost is replaced with a minimal landing page that shows a **Resume** button
 - Services no longer needed by any other active site are auto-stopped
-- Its PHP version no longer counts as used: the FPM container stops when no other active site needs it, and you can remove the version
+- Its PHP version no longer counts as used: the FPM container, or the pool under the native runtime, stops when no other active site needs it, and you can remove the version
 - The paused state is persisted, so the site stays paused across `lerd start` / `lerd stop` cycles
 
 The landing page's **Resume** button calls the lerd dashboard API directly, so you can unpause from the browser without opening a terminal.

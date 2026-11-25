@@ -16,6 +16,7 @@ import (
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/imagepull"
 	"github.com/geodro/lerd/internal/lifecycle"
+	"github.com/geodro/lerd/internal/nativephp"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
@@ -1541,7 +1542,19 @@ func activeFrankenPHPVersions() []string {
 	return out
 }
 
-// autoStopUnusedFPMs stops any PHP-FPM container whose PHP version is no longer
+// stopUnusedNativePools stops the running native pools no active version needs.
+func stopUnusedNativePools(installed []string, active map[string]bool, running func(string) bool, stop func(string) error) {
+	for _, v := range installed {
+		if active[v] || !running(v) {
+			continue
+		}
+		if err := stop(v); err != nil {
+			feedback.Warn("stopping native php-fpm %s: %v", v, err)
+		}
+	}
+}
+
+// autoStopUnusedFPMs stops any PHP-FPM container or native pool whose PHP version is no longer
 // referenced by any active (non-ignored, non-paused) site.
 func autoStopUnusedFPMs() {
 	versions, err := phpPkg.ListInstalled()
@@ -1554,6 +1567,12 @@ func autoStopUnusedFPMs() {
 	// explicitly references it (same logic as coreUnits).
 	if cfg, cfgErr := config.LoadGlobal(); cfgErr == nil && cfg != nil {
 		active[cfg.PHP.DefaultVersion] = true
+	}
+	if !lifecycle.FPMContainersWanted() {
+		for _, v := range nativeVersionsWanted() {
+			active[v] = true
+		}
+		stopUnusedNativePools(nativephp.ListInstalled(), active, nativephp.Running, nativephp.Stop)
 	}
 	for _, v := range versions {
 		if active[v] {

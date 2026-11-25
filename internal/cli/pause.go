@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"html"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -183,11 +184,11 @@ var fpmImageExistsFn = func(v string) bool { return podman.ImageExists(podman.FP
 // ensureSitePHP brings up the PHP a site being linked or resumed needs, installing
 // it when it was removed. A failed build is only an error when there is no earlier
 // image to serve from.
-func ensureSitePHP(version string) error {
+func ensureSitePHP(version string, w io.Writer) error {
 	if !lifecycle.FPMContainersWanted() {
-		return bringUpNativePHP(version, os.Stdout)
+		return bringUpNativePHP(version, w)
 	}
-	err := ensureFPMQuadlet(version)
+	err := ensureFPMQuadletTo(version, w)
 	if err == nil || !fpmImageExistsFn(version) {
 		return err
 	}
@@ -272,7 +273,7 @@ func UnpauseSite(name string) error {
 			// Per-site FPM container; the shared lerd-php<ver>-fpm is not used.
 			_ = podman.StartUnit(podman.CustomFPMContainerName(site.Name))
 		} else if phpVersion != "" {
-			if err := ensureSitePHP(phpVersion); err != nil {
+			if err := ensureSitePHP(phpVersion, os.Stdout); err != nil {
 				return fmt.Errorf("%s stays paused, PHP %s could not be brought up: %w", name, phpVersion, err)
 			}
 		}
@@ -767,7 +768,7 @@ func unpauseWorktrees(site *config.Site, phpVersion string) {
 	for _, wt := range worktrees {
 		effectivePHP := config.WorktreePHPVersion(wt.Path, phpVersion)
 		if effectivePHP != phpVersion {
-			if err := ensureSitePHP(effectivePHP); err != nil {
+			if err := ensureSitePHP(effectivePHP, os.Stdout); err != nil {
 				feedback.Warn("bringing up PHP %s for worktree %s: %v", effectivePHP, wt.Domain, err)
 			}
 		}
