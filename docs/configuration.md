@@ -29,10 +29,10 @@ node:
                           # Written at install/switch so lerd-ui and the watcher
                           # (which never load your shell rc) find a custom
                           # $NVM_DIR. Empty falls back to $NVM_DIR or ~/.nvm.
-  fnm_bin: ~/.cargo/bin/fnm # optional. Where your own fnm lives, and fnm_dir its
-  fnm_dir: ~/fnm          # $FNM_DIR when you set one. Recorded from a terminal
+  fnm_bin: /opt/fnm/fnm   # optional. Where your own fnm lives, and fnm_dir its
+  fnm_dir: /opt/fnm/data  # $FNM_DIR when you set one. Recorded from a terminal
                           # by lerd install and lerd node:manager fnm, so lerd-ui
-                          # and the workers run the same versions.
+                          # and the workers run the same versions. Absolute paths.
 shims:
   path_disabled: false    # optional. Set true (or run lerd path:disable) to keep
                           # lerd's shims dir (~/.local/share/lerd/bin with php,

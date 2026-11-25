@@ -38,13 +38,19 @@ func fnmDir() string {
 
 // RecordFnm saves in cfg where this shell finds the user's fnm and its versions.
 // A process without that shell finds neither, so what is missing keeps its value.
-func RecordFnm(cfg *config.GlobalConfig) {
-	if p := UserFnm(); p != "" {
+// Reports whether anything changed; lerd's own fnm is not the user's to record.
+func RecordFnm(cfg *config.GlobalConfig) bool {
+	if isExecutableFile(lerdFnm()) {
+		return false
+	}
+	before := cfg.Node
+	if p, err := exec.LookPath("fnm"); err == nil {
 		cfg.Node.FnmBin = p
 	}
-	if d := os.Getenv("FNM_DIR"); d != "" {
+	if d := os.Getenv("FNM_DIR"); filepath.IsAbs(d) {
 		cfg.Node.FnmDir = d
 	}
+	return cfg.Node.FnmBin != before.FnmBin || cfg.Node.FnmDir != before.FnmDir
 }
 
 // args puts fnm's own flags in front of a subcommand.

@@ -92,8 +92,10 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 	if err := nodeDet.CheckSelectable(target); err != nil {
 		return err
 	}
-	// A mise that is only the default may not be installed yet, so it goes on.
-	if target == current && nodeDet.ManagerByName(target).Available() {
+	// A mise that is only the default may not be installed yet, so it goes on, and
+	// so does an fnm this terminal finds somewhere new.
+	moved := target == "fnm" && nodeDet.RecordFnm(cfg)
+	if target == current && !moved && nodeDet.ManagerByName(target).Available() {
 		feedback.Begin()
 		feedback.Line("already using " + feedback.Val(target))
 		return nil
@@ -126,9 +128,6 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 	} else {
 		cfg.SetNodeNvmDir("")
 	}
-	if target == "fnm" {
-		nodeDet.RecordFnm(cfg)
-	}
 	if err := config.SaveGlobal(cfg); err != nil {
 		return fmt.Errorf("saving config: %w", err)
 	}
@@ -145,6 +144,8 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 		step.OK("")
 		carried = carryNodeVersions(nodeDet.ManagerByName(current), nodeDet.ManagerByName(target))
 		ensureDefaultNode()
+		regenerateHostWorkers()
+	} else if moved {
 		regenerateHostWorkers()
 	}
 	// Last, and only once every version made it across: the old fnm is what the
