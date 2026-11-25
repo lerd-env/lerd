@@ -246,6 +246,14 @@ Two things stay. lerd's CA remains in your Windows trust store, because removing
 
 ## Known WSL2 quirks
 
+::: details install.ps1 says "No applicable app licenses found"
+PowerShell 7 from the Store or an MSIX is registered per account, so it cannot elevate to a separate administrator account that does not have it. Run the installer from Windows PowerShell 5.1 (**Windows PowerShell** in the Start menu), or register PowerShell 7 for that account by running this as the administrator:
+
+```powershell
+Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.PowerShell_8wekyb3d8bbwe
+```
+:::
+
 ::: details WSL prints "Nested virtualisation is not supported on this machine"
 Windows itself is running in a virtual machine. It only means you cannot run a VM inside WSL, which lerd never needs.
 :::

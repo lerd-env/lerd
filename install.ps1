@@ -134,6 +134,15 @@
     @{ Code = $proc.ExitCode; Lines = $lines }
   }
 
+  # Refusal words a failed elevation with what Windows said: a declined prompt and
+  # a broken launch need different fixes. A packaged PowerShell 7 that the admin
+  # account lacks cannot elevate at all, where 5.1 can.
+  function Refusal([string]$said, [string]$edition) {
+    $m = "Windows did not grant administrator rights: $said"
+    if ($edition -eq 'Core') { $m += ' If you did not decline the prompt, run the installer from Windows PowerShell 5.1.' }
+    $m
+  }
+
   # Elevated runs a PowerShell script as administrator, which makes Windows ask,
   # and shows what it printed. It returns the script's exit code.
   function Elevated([string]$body) {
@@ -146,7 +155,7 @@
       $proc = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -WindowStyle Hidden `
         -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $enc
     } catch {
-      throw 'Windows did not grant administrator rights'
+      throw (Refusal $_.Exception.Message $PSVersionTable.PSEdition)
     }
     Get-Content $log -ErrorAction SilentlyContinue | Where-Object { $_.Trim() } | ForEach-Object { Write-Host "      $_" }
     Remove-Item $log -ErrorAction SilentlyContinue
