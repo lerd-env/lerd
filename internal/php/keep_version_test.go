@@ -49,3 +49,36 @@ func TestDetectVersionStillPicksTheNewestForANewSite(t *testing.T) {
 		t.Errorf("DetectVersionClamped = %q, want 8.6", got)
 	}
 }
+
+// Removing the PHP of a paused site must not move the site: resuming it
+// installs that version again, unless its files now rule it out.
+func TestResumeVersion(t *testing.T) {
+	cases := []struct {
+		name     string
+		composer string
+		pin      string
+		current  string
+		want     string
+	}{
+		{"an uninstalled version is kept", "^8.2", "", "8.3", "8.3"},
+		{"a constraint that rules the version out moves it", "^8.4", "", "8.3", "8.5"},
+		{"a pin added while paused wins", "^8.2", "8.4", "8.3", "8.4"},
+		{"no recorded version falls back to detection", "^8.2", "", "", "8.5"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			t.Setenv("XDG_DATA_HOME", t.TempDir())
+			t.Setenv("HOME", t.TempDir())
+			stubRuntimeInstalled(t, false, nil, []string{"8.4", "8.5"})
+			dir := t.TempDir()
+			writeFile(t, dir, "composer.json", `{"require":{"php":"`+c.composer+`"}}`)
+			if c.pin != "" {
+				writeFile(t, dir, ".php-version", c.pin+"\n")
+			}
+			if got := ResumeVersion(dir, c.current); got != c.want {
+				t.Errorf("ResumeVersion = %q, want %q", got, c.want)
+			}
+		})
+	}
+}

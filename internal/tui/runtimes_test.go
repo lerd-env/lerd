@@ -103,3 +103,11 @@ func TestMouseClick_RuntimeRowSelectsIt(t *testing.T) {
 		t.Fatalf("clicking the second runtime row left the cursor at %d", next.(*Model).rtCursor)
 	}
 }
+
+func TestRuntimeDetailLeavesPausedSitesOut(t *testing.T) {
+	m := runtimesModel(t)
+	m.snap.Sites[1].Paused = true
+	if out := ansi.Strip(m.renderRuntimesView(140, 40)); strings.Contains(out, "legacy.test") {
+		t.Errorf("paused site listed as using PHP 8.3:\n%s", out)
+	}
+}

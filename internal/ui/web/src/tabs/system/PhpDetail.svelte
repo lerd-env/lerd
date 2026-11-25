@@ -47,7 +47,7 @@
   const logUnit = $derived(
     $phpRuntime === 'native' ? 'lerd-native-php' + version.replace('.', '') : container
   );
-  const sitesUsing = $derived($sites.filter((s) => s.php_version === version).map((s) => s.domain));
+  const sitesUsing = $derived($sites.filter((s) => s.php_version === version && !s.paused).map((s) => s.domain));
   const baseUpdate = $derived(Boolean(fpm?.update_available));
 
   let defaultBusy = $state(false);

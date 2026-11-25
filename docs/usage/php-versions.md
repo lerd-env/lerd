@@ -64,7 +64,7 @@ The UI PHP version selector and the MCP `site` tool's `php` action follow the sa
 
 The composer constraint is matched against all installed PHP versions using full semver rules (`^`, `~`, `>=`, `<`, `||`, `*`). The highest installed version that satisfies the constraint wins. Installed means installed for the active runtime: under the [native runtime](/features/native-runtime) only the native builds count, not the container units kept for switching back, and the dashboard's site wizard offers the same versions. If no installed version matches, the literal minimum from the constraint is used (and the FPM will be built on first use).
 
-A site that is already linked keeps the version it is served on while its constraint still allows it and that version is installed, so installing a newer PHP does not move it. It moves when the constraint rules its version out, when that version is uninstalled, or when you pin another with `lerd isolate`, `.php-version` or `.lerd.yaml`. Only a new link takes the highest version the constraint allows.
+A site that is already linked keeps the version it is served on while its constraint still allows it and that version is installed, so installing a newer PHP does not move it. It moves when the constraint rules its version out, when that version is uninstalled (a paused site keeps it, see below), or when you pin another with `lerd isolate`, `.php-version` or `.lerd.yaml`. Only a new link takes the highest version the constraint allows.
 
 ::: tip Overriding a `composer.json` constraint
 If `composer.json` requires `^8.3` but you need to run the project on a specific version, `lerd isolate 8.5` is the right tool. It writes `.php-version` which takes priority over the composer constraint. Running `lerd use 8.5` alone won't help; that only sets the global fallback, which loses to the composer constraint.
@@ -94,11 +94,11 @@ Newer-than-shipped versions fall back to the latest definition as before, with i
 
 Lerd automatically manages which PHP-FPM containers are running based on which versions are actually needed by your sites.
 
-**`lerd start`**: only starts FPM containers for versions referenced by at least one site (active or paused). Unused versions are left stopped.
+**`lerd start`**: only starts FPM containers for versions referenced by at least one active site or one of its worktrees. Unused versions are left stopped.
 
-**Auto-stop**: when you unlink a site, lerd checks every installed PHP version. If no remaining active (non-ignored, non-paused) site uses a version, its FPM container is stopped. The version itself stays installed; the container is just not running.
+**Auto-stop**: when you unlink or pause a site, lerd checks every installed PHP version. If no remaining active (non-ignored, non-paused) site uses a version, its FPM container is stopped. The version itself stays installed; the container is just not running.
 
-**Paused sites count**: a site that is paused still counts as using its PHP version, so that version's FPM container is not stopped. When the site is resumed, FPM is guaranteed to be running.
+**Paused sites don't count**: a paused site does not hold its PHP version, so its FPM container can stop and the version can be removed. Lerd remembers the version, and resuming the site installs it again if it was removed. If that install fails with no earlier image to serve from, the site stays paused.
 
 **Auto-start**: FPM is started automatically when you link a site (`lerd link`, `lerd park`, `lerd isolate`) or change the global default (`lerd use`). When unpausing a site, lerd also ensures the required FPM container is running before restoring the nginx vhost.
 

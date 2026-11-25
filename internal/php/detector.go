@@ -83,12 +83,12 @@ func SiteUsesPHP(s config.Site) bool {
 //  3. composer.json require.php semver (project requirement)
 //  4. global config default
 func DetectVersion(dir string) (string, error) {
-	return detectVersion(dir, "")
+	return detectVersion(dir, "", keepable)
 }
 
-// detectVersion is DetectVersion, except that keep, when composer.json still
-// allows it and the runtime can serve it, beats the newest installed match.
-func detectVersion(dir, keep string) (string, error) {
+// detectVersion is DetectVersion, except that keep, when keeps accepts it for
+// composer.json's constraint, beats the newest installed match.
+func detectVersion(dir, keep string, keeps func(version, constraint string) bool) (string, error) {
 	// 1. .lerd.yaml, with .lerd.local.yaml over it — an explicit lerd override
 	//    takes top priority
 	if cfg, err := config.LoadProjectConfig(dir); err == nil && cfg.PHPVersion != "" {
@@ -124,7 +124,7 @@ func detectVersion(dir, keep string) (string, error) {
 		}
 		if json.Unmarshal(data, &composer) == nil {
 			if phpConstraint, ok := composer.Require["php"]; ok {
-				if keepable(keep, phpConstraint) {
+				if keeps(keep, phpConstraint) {
 					return keep, nil
 				}
 				if v := bestInstalledVersion(phpConstraint); v != "" {
@@ -162,7 +162,7 @@ func DetectVersionClamped(dir, phpMin, phpMax, fallback string) string {
 // served on current: a newer PHP its composer.json allows doesn't move it, an
 // explicit pin, a constraint that rules current out or an uninstall does.
 func DetectVersionKeeping(dir, phpMin, phpMax, current string) string {
-	v, err := detectVersion(dir, current)
+	v, err := detectVersion(dir, current, keepable)
 	if err != nil {
 		v = current
 	}
@@ -176,6 +176,16 @@ func DetectVersionKeeping(dir, phpMin, phpMax, current string) string {
 // unless its files now ask for another, with no framework clamp applied.
 func SiteVersion(dir, current string) string {
 	return DetectVersionKeeping(dir, "", "", current)
+}
+
+// ResumeVersion is SiteVersion for a paused site coming back: its PHP may have
+// been removed meanwhile, which is then installed again rather than replaced.
+func ResumeVersion(dir, current string) string {
+	v, err := detectVersion(dir, current, satisfiesConstraint)
+	if err != nil {
+		return current
+	}
+	return v
 }
 
 // keepable reports whether version satisfies constraint and is installed for

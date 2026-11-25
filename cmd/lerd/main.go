@@ -772,7 +772,8 @@ func newWatchCmd() *cobra.Command {
 						// the empty values with defaults.
 						if !site.IsCustomContainer() && !site.IsHostProxy() {
 							// Re-detect PHP version in case .lerd.yaml or .php-version changed.
-							{
+							// A paused site's PHP may be uninstalled; resuming settles it.
+							if !site.Paused {
 								phpMin, phpMax := "", ""
 								if site.Framework != "" {
 									if fw, fwOk := config.GetFrameworkForDir(site.Framework, sitePath); fwOk {
@@ -787,15 +788,13 @@ func newWatchCmd() *cobra.Command {
 									fmt.Printf("PHP version changed for %s: %s -> %s\n", site.Name, site.PHPVersion, detected)
 									site.PHPVersion = detected
 									siteChanged = true
-									if !site.Paused {
-										if site.Secured {
-											_ = nginx.GenerateSSLVhost(*site, detected)
-										} else {
-											_ = nginx.GenerateVhost(*site, detected)
-										}
-										if err := nginx.Reload(); err != nil {
-											fmt.Printf("[WARN] nginx reload after php version change for %s: %v\n", site.Name, err)
-										}
+									if site.Secured {
+										_ = nginx.GenerateSSLVhost(*site, detected)
+									} else {
+										_ = nginx.GenerateVhost(*site, detected)
+									}
+									if err := nginx.Reload(); err != nil {
+										fmt.Printf("[WARN] nginx reload after php version change for %s: %v\n", site.Name, err)
 									}
 								}
 							}

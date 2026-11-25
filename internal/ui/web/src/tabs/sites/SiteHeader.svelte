@@ -46,6 +46,7 @@
   import { status, loadStatus } from '$stores/status';
   import { xdebugOn, xdebugOff, type XdebugMode } from '$stores/xdebug';
   import { apiBase } from '$lib/api';
+  import { notifyLocalFailure } from '$lib/notify';
   import { homeShorten } from '$lib/path';
   import DomainMorePill from './DomainMorePill.svelte';
   import ShareLink from './ShareLink.svelte';
@@ -271,7 +272,8 @@
   async function togglePause() {
     pauseBusy = true;
     try {
-      await (site.paused ? resumeSite(site.domain) : pauseSite(site.domain));
+      const res = await (site.paused ? resumeSite(site.domain) : pauseSite(site.domain));
+      if (!res.ok) notifyLocalFailure('site_pause', site.domain, res.error || m.common_failed());
       await loadSites();
     } finally {
       pauseBusy = false;

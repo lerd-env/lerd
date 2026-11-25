@@ -12,6 +12,7 @@ import (
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
+	"github.com/geodro/lerd/internal/lifecycle"
 	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
@@ -117,6 +118,7 @@ func PauseSite(name string) error {
 	feedback.Start("pausing " + name).OK(feedback.Val(site.PrimaryDomain()))
 
 	autoStopUnusedServices()
+	autoStopUnusedFPMs()
 
 	return nil
 }
@@ -172,6 +174,25 @@ func refreshHostProxyEnvOnResume(site *config.Site, mode string) bool {
 		feedback.Warn("refreshing host-proxy env on resume: %v", err)
 	}
 	return true
+}
+
+// fpmImageExistsFn reports whether a version has an image to serve from, a seam
+// for tests.
+var fpmImageExistsFn = func(v string) bool { return podman.ImageExists(podman.FPMImageName(v)) }
+
+// ensureSitePHP brings up the PHP a site being linked or resumed needs, installing
+// it when it was removed. A failed build is only an error when there is no earlier
+// image to serve from.
+func ensureSitePHP(version string) error {
+	if !lifecycle.FPMContainersWanted() {
+		return bringUpNativePHP(version, os.Stdout)
+	}
+	err := ensureFPMQuadlet(version)
+	if err == nil || !fpmImageExistsFn(version) {
+		return err
+	}
+	feedback.Warn("ensuring FPM for PHP %s: %v", version, err)
+	return startUnit(podman.FPMUnitName(version))
 }
 
 // UnpauseSite restores the site's nginx vhost, restarts any workers that were
@@ -245,14 +266,14 @@ func UnpauseSite(name string) error {
 			}
 		}
 	default:
-		phpVersion = phpDet.SiteVersion(site.Path, phpVersion)
+		phpVersion = phpDet.ResumeVersion(site.Path, phpVersion)
 
 		if site.IsCustomFPM() {
 			// Per-site FPM container; the shared lerd-php<ver>-fpm is not used.
 			_ = podman.StartUnit(podman.CustomFPMContainerName(site.Name))
 		} else if phpVersion != "" {
-			if err := ensureFPMQuadlet(phpVersion); err != nil {
-				feedback.Warn("ensuring FPM for PHP %s: %v", phpVersion, err)
+			if err := ensureSitePHP(phpVersion); err != nil {
+				return fmt.Errorf("%s stays paused, PHP %s could not be brought up: %w", name, phpVersion, err)
 			}
 		}
 
@@ -745,6 +766,11 @@ func unpauseWorktrees(site *config.Site, phpVersion string) {
 	}
 	for _, wt := range worktrees {
 		effectivePHP := config.WorktreePHPVersion(wt.Path, phpVersion)
+		if effectivePHP != phpVersion {
+			if err := ensureSitePHP(effectivePHP); err != nil {
+				feedback.Warn("bringing up PHP %s for worktree %s: %v", effectivePHP, wt.Domain, err)
+			}
+		}
 		var vhostErr error
 		if site.Secured {
 			vhostErr = nginx.GenerateWorktreeSSLVhost(wt.Domain, wt.Path, effectivePHP, site.PrimaryDomain(), site.Name, wt.Branch)
