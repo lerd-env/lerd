@@ -155,6 +155,36 @@ func withFPMImageExists(t *testing.T, exists bool) {
 	t.Cleanup(func() { fpmImageExists = prev })
 }
 
+// withFPMRunning swaps the running seam for one test.
+func withFPMRunning(t *testing.T, running bool) {
+	t.Helper()
+	prev := fpmRunning
+	fpmRunning = func(string) bool { return running }
+	t.Cleanup(func() { fpmRunning = prev })
+}
+
+// Removing a PHP version keeps its image, so a link onto it found the image,
+// skipped it, and setup ran against a container that was not there.
+func TestEnsureServableFPMImage_startsARemovedVersionWhoseImageIsLeft(t *testing.T) {
+	withFPMImageExists(t, true)
+	withFPMRunning(t, false)
+	ensured := ""
+	r := &recorder{}
+	d := Deps{EnsureFPMQuadlet: func(v string) error { ensured = v; return nil }}
+
+	if err := ensureServableFPMImage(&Plan{Mode: ModeFPM}, fpmSite(), Policy{ImageBuild: true}, d, r); err != nil {
+		t.Fatal(err)
+	}
+	if ensured != "8.1" || !r.saw(r.steps, "starting PHP 8.1") {
+		t.Errorf("ensured %q, steps = %v, want 8.1 started", ensured, r.steps)
+	}
+
+	d.EnsureFPMQuadlet = func(string) error { return errors.New("unit failed") }
+	if err := ensureServableFPMImage(&Plan{Mode: ModeFPM}, fpmSite(), Policy{ImageBuild: true}, d, r); err == nil {
+		t.Error("a PHP that does not start must stop the link")
+	}
+}
+
 func fpmSite() config.Site {
 	return config.Site{Name: "myapp", PHPVersion: "8.1"}
 }
@@ -183,6 +213,7 @@ func TestEnsureServableFPMImage_buildsAMissingVersion(t *testing.T) {
 // An already-built version is left alone: no build, no warning.
 func TestEnsureServableFPMImage_skipsAnExistingImage(t *testing.T) {
 	withFPMImageExists(t, true)
+	withFPMRunning(t, true)
 	d := Deps{EnsureFPMQuadlet: func(string) error { t.Fatal("must not build an image that exists"); return nil }}
 	r := &recorder{}
 
@@ -193,20 +224,19 @@ func TestEnsureServableFPMImage_skipsAnExistingImage(t *testing.T) {
 	}
 }
 
-// A failed build keeps the site registered and names the command that fixes it,
-// rather than aborting the link.
-func TestEnsureServableFPMImage_warnsWhenTheBuildFails(t *testing.T) {
+// A failed build stops the link and says which version it could not install.
+func TestEnsureServableFPMImage_stopsWhenTheBuildFails(t *testing.T) {
 	withFPMImageExists(t, false)
 	d := Deps{EnsureFPMQuadlet: func(string) error { return errors.New("no network") }}
 	r := &recorder{}
 
-	ensureServableFPMImage(&Plan{Mode: ModeFPM}, fpmSite(), Policy{ImageBuild: true}, d, r)
+	err := ensureServableFPMImage(&Plan{Mode: ModeFPM}, fpmSite(), Policy{ImageBuild: true}, d, r)
 
 	if len(r.fails) == 0 {
 		t.Error("the failed build was not reported")
 	}
-	if !r.saw(r.warns, "lerd php:rebuild 8.1") {
-		t.Errorf("the warning must name the rebuild command, warns = %v", r.warns)
+	if err == nil || !strings.Contains(err.Error(), "PHP 8.1") {
+		t.Errorf("err = %v, want it to name PHP 8.1", err)
 	}
 }
 

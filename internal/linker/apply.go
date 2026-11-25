@@ -21,6 +21,13 @@ import (
 // image was never built.
 var fpmImageExists = podman.FPMImageExists
 
+// fpmRunning reports whether a version's FPM is up. An image alone is not enough:
+// removing a version keeps its image, and a stopped FPM has nothing to exec into.
+var fpmRunning = func(version string) bool {
+	status, _ := podman.UnitStatus(podman.FPMUnitName(version))
+	return status == "active"
+}
+
 // Deps are the side effects a link needs that live above this package. A nil
 // field means the caller cannot do that thing, and the step is skipped.
 type Deps struct {
@@ -80,6 +87,12 @@ func Apply(plan *Plan, p Policy, d Deps, r Reporter) (*Result, error) {
 		}
 	}
 
+	// Before anything is registered: the watcher acts on a registered site at
+	// once, starting its worktrees and workers on a version still being built.
+	if err := ensureServableFPMImage(plan, plan.Site, p, d, r); err != nil {
+		return res, err
+	}
+
 	// Carry a re-link's HTTPS over and drop registrations the rename stranded.
 	// Resolve already read the secured half; this is the removal.
 	siteops.CleanupRelink(plan.Dir, plan.Site.Name)
@@ -123,8 +136,6 @@ func Apply(plan *Plan, p Policy, d Deps, r Reporter) (*Result, error) {
 // its certificate. The certificate is a separate step from the runtime so
 // mkcert's work gets its own line rather than being buried in the runtime's.
 func provision(plan *Plan, site config.Site, p Policy, d Deps, r Reporter) error {
-	ensureServableFPMImage(plan, site, p, d, r)
-
 	label, detail := provisionLabels(plan, site, r)
 
 	unsecured := site
@@ -185,31 +196,38 @@ func finish(plan *Plan, site config.Site, p Policy) error {
 	}
 }
 
-// ensureServableFPMImage makes the selected version's image exist before the
-// shared FPM unit is (re)started, so a link onto a version this machine never
-// built serves instead of answering 502. The other modes build their own
-// per-site image in their finisher. On a build lerd cannot run here, or one that
-// fails, the site stays registered and the user is told the single command that
-// makes it serve, rather than being left on a silent 502.
-func ensureServableFPMImage(plan *Plan, site config.Site, p Policy, d Deps, r Reporter) {
-	if plan.Mode != ModeFPM || fpmImageExists(site.PHPVersion) {
-		return
+// ensureServableFPMImage makes sure the shared FPM a link needs is built and up;
+// other modes build their own image later. Where builds are withheld it only warns;
+// a failure stops the link, since setup would go on with no PHP to run.
+func ensureServableFPMImage(plan *Plan, site config.Site, p Policy, d Deps, r Reporter) error {
+	if plan.Mode != ModeFPM {
+		return nil
 	}
-	rebuildHint := fmt.Sprintf("PHP %s is not built, so %s will answer 502 until you run 'lerd php:rebuild %s'",
-		site.PHPVersion, site.Name, site.PHPVersion)
+	built := fpmImageExists(site.PHPVersion)
+	if built && fpmRunning(site.PHPVersion) {
+		return nil
+	}
 	// Without a builder, naming the command keeps it honest rather than silently
 	// registering a 502.
-	if !p.ImageBuild || d.EnsureFPMQuadlet == nil {
-		r.Warn("%s", rebuildHint)
-		return
+	if !built && (!p.ImageBuild || d.EnsureFPMQuadlet == nil) {
+		r.Warn("PHP %s is not built, so %s will answer 502 until you run 'lerd php:rebuild %s'",
+			site.PHPVersion, site.Name, site.PHPVersion)
+		return nil
 	}
-	step := r.Step("building PHP " + site.PHPVersion + " image (first use)")
+	if d.EnsureFPMQuadlet == nil {
+		return nil
+	}
+	label := "building PHP " + site.PHPVersion + " image (first use)"
+	if built {
+		label = "starting PHP " + site.PHPVersion
+	}
+	step := r.Step(label)
 	if err := d.EnsureFPMQuadlet(site.PHPVersion); err != nil {
 		step.Fail(err)
-		r.Warn("%s", rebuildHint)
-		return
+		return fmt.Errorf("bringing up PHP %s, which %s needs: %w", site.PHPVersion, site.Name, err)
 	}
 	step.OK("")
+	return nil
 }
 
 // provisionLabels names the provisioning step and its result for a mode.
