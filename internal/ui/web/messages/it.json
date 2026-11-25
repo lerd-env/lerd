@@ -1829,6 +1829,7 @@
   "system_streaming_toggleOff": "Disattiva la modalità streaming",
   "idle_suggest_dismiss": "Mantieni attivi i servizi",
   "idle_suggest_enable": "Sospendi",
+  "idle_suggest_failed": "Impossibile salvare la scelta. Riprova.",
   "idle_suggest_subtitle": "Nessun sito ha usato {services} di recente. Possono dormire finché un sito o la loro dashboard non ne ha bisogno.",
   "idle_suggest_title": "{count} servizi inattivi occupano {size} di memoria",
   "theme_suggest_keep": "Mantieni il tema attuale",

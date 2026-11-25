@@ -1829,6 +1829,7 @@
   "system_streaming_toggleOff": "Tắt chế độ streaming",
   "idle_suggest_dismiss": "Giữ dịch vụ chạy",
   "idle_suggest_enable": "Cho ngủ",
+  "idle_suggest_failed": "Không thể lưu lựa chọn của bạn. Hãy thử lại.",
   "idle_suggest_subtitle": "Gần đây không site nào dùng {services}. Chúng có thể ngủ cho đến khi một site hoặc bảng điều khiển của chúng cần đến.",
   "idle_suggest_title": "{count} dịch vụ nhàn rỗi đang chiếm {size} bộ nhớ",
   "theme_suggest_keep": "Giữ giao diện hiện tại",

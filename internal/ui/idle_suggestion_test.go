@@ -110,3 +110,38 @@ func TestSavingTheTimeoutDoesNotDecline(t *testing.T) {
 		t.Fatalf("a timeout change dropped the suggestion: %+v", got)
 	}
 }
+
+// A save carries only what changed: the dashboard rounds the timeout to whole
+// minutes and may have been open since before the policy changed.
+func TestSavingIdleSuspendLeavesOmittedFieldsAlone(t *testing.T) {
+	stubSuggestion(t, nil, 0)
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.IdleSuspend.Enabled = false
+	cfg.IdleSuspend.Timeout = "90s"
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatal(err)
+	}
+	post := func(body string) string {
+		rec := httptest.NewRecorder()
+		handleSettingsIdleSuspend(rec, httptest.NewRequest(http.MethodPost, "/api/settings/idle-suspend", strings.NewReader(body)))
+		return rec.Body.String()
+	}
+	if got := post(`{"services":true}`); !strings.Contains(got, `"ok":true`) {
+		t.Fatalf("services alone: %s", got)
+	}
+	if cfg, _ = config.LoadGlobal(); cfg.IdleSuspend.Enabled || cfg.IdleSuspend.Timeout != "90s" || !cfg.IdleSuspend.Services {
+		t.Fatalf("services alone saved %+v", cfg.IdleSuspend)
+	}
+	if got := post(`{"enabled":true}`); !strings.Contains(got, `"ok":true`) {
+		t.Fatalf("enabled alone: %s", got)
+	}
+	if cfg, _ = config.LoadGlobal(); !cfg.IdleSuspend.Enabled || cfg.IdleSuspend.Timeout != "90s" {
+		t.Fatalf("enabled alone saved %+v", cfg.IdleSuspend)
+	}
+	if got := post(`{"timeout_minutes":0}`); !strings.Contains(got, `"ok":false`) {
+		t.Fatalf("a zero timeout was accepted: %s", got)
+	}
+}

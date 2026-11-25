@@ -1829,6 +1829,7 @@
   "system_streaming_toggleOff": "Nonaktifkan mode streaming",
   "idle_suggest_dismiss": "Biarkan layanan tetap berjalan",
   "idle_suggest_enable": "Tidurkan",
+  "idle_suggest_failed": "Pilihan Anda tidak dapat disimpan. Coba lagi.",
   "idle_suggest_subtitle": "Tidak ada situs yang memakai {services} belakangan ini. Layanan bisa tidur sampai situs atau dasbornya membutuhkannya.",
   "idle_suggest_title": "{count} layanan idle memakai {size} memori",
   "theme_suggest_keep": "Pertahankan tema saat ini",

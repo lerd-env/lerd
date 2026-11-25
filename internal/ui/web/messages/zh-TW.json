@@ -1829,6 +1829,7 @@
   "system_streaming_toggleOff": "停用直播模式",
   "idle_suggest_dismiss": "保持服務執行",
   "idle_suggest_enable": "讓其休眠",
+  "idle_suggest_failed": "無法儲存你的選擇，請再試一次。",
   "idle_suggest_subtitle": "最近沒有網站使用 {services}。它們可以休眠，直到網站或其儀表板需要時再喚醒。",
   "idle_suggest_title": "{count} 個閒置服務佔用了 {size} 記憶體",
   "theme_suggest_keep": "保留目前主題",

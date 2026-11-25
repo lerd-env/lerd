@@ -1829,6 +1829,7 @@
   "system_streaming_toggleOff": "Wyłącz tryb streamingu",
   "idle_suggest_dismiss": "Pozostaw usługi uruchomione",
   "idle_suggest_enable": "Uśpij",
+  "idle_suggest_failed": "Nie udało się zapisać wyboru. Spróbuj ponownie.",
   "idle_suggest_subtitle": "Żadna witryna nie używała ostatnio: {services}. Mogą spać, dopóki nie będzie ich potrzebować witryna lub ich panel.",
   "idle_suggest_title": "Bezczynne usługi ({count}) zajmują {size} pamięci",
   "theme_suggest_keep": "Zachowaj obecny motyw",

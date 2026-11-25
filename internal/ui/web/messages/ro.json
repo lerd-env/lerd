@@ -1829,6 +1829,7 @@
   "system_streaming_toggleOff": "Dezactivează modul streaming",
   "idle_suggest_dismiss": "Lasă serviciile pornite",
   "idle_suggest_enable": "Lasă-le să doarmă",
+  "idle_suggest_failed": "Alegerea nu a putut fi salvată. Încearcă din nou.",
   "idle_suggest_subtitle": "Niciun site nu a folosit recent {services}. Pot dormi până când un site sau panoul lor are nevoie de ele.",
   "idle_suggest_title": "{count} servicii inactive ocupă {size} de memorie",
   "theme_suggest_keep": "Păstrează tema actuală",

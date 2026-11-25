@@ -1829,6 +1829,7 @@
   "system_streaming_toggleOff": "Streaming-Modus deaktivieren",
   "idle_suggest_dismiss": "Dienste weiterlaufen lassen",
   "idle_suggest_enable": "Schlafen lassen",
+  "idle_suggest_failed": "Deine Auswahl konnte nicht gespeichert werden. Versuche es erneut.",
   "idle_suggest_subtitle": "Keine Site hat {services} zuletzt genutzt. Sie können schlafen, bis eine Site oder ihr Dashboard sie braucht.",
   "idle_suggest_title": "{count} inaktive Dienste belegen {size} Arbeitsspeicher",
   "theme_suggest_keep": "Aktuelles Theme behalten",

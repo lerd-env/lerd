@@ -4,7 +4,7 @@
   import { openLinkModal, openPresetModal } from '$stores/modals';
   import { openDocs } from '$stores/dashboard';
   import { toggleStartOnDashboardOpen, toggleMCP } from '$stores/autostart';
-  import { saveIdle, idleTimeoutMinutes } from '$stores/idle';
+  import { saveIdle } from '$stores/idle';
   import { accessMode } from '$stores/accessMode';
   import { enableNotifications } from '$lib/notify';
   import { desktopPalette, useSuggestedTheme } from '$stores/palettes';
@@ -30,7 +30,7 @@
     notify: async () => (await enableNotifications()) === 'granted',
     theme: useSuggestedTheme,
     open: () => toggleStartOnDashboardOpen(true),
-    idle: () => saveIdle(true, $idleTimeoutMinutes),
+    idle: () => saveIdle({ enabled: true }),
     mcp: () => toggleMCP(true)
   };
 

@@ -1,6 +1,6 @@
-import { get, writable } from 'svelte/store';
+import { writable } from 'svelte/store';
 import { apiJson } from '$lib/api';
-import { idleEnabled, idleTimeoutMinutes, loadIdle, saveIdle } from '$stores/idle';
+import { saveIdle } from '$stores/idle';
 
 // IdleSuggestion mirrors ui.IdleServicesSuggestion: the running services that
 // sleeping services would stop, empty when there is nothing worth asking.
@@ -22,9 +22,8 @@ export async function loadIdleSuggestion() {
 }
 
 // Either answer is saved in the global config, so no other window asks again.
-// The policy is read first: the save carries all of it, and this window may
-// have been open since before it changed.
-export async function answerIdleSuggestion(sleep: boolean) {
-  await loadIdle();
-  if (await saveIdle(get(idleEnabled), get(idleTimeoutMinutes), sleep)) idleSuggestion.set(none);
+export async function answerIdleSuggestion(sleep: boolean): Promise<boolean> {
+  const ok = await saveIdle({ services: sleep });
+  if (ok) idleSuggestion.set(none);
+  return ok;
 }

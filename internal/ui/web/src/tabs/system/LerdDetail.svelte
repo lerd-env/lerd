@@ -91,7 +91,7 @@
   async function onToggleIdle() {
     idleBusy = true;
     try {
-      await saveIdle(!$idleEnabled, $idleTimeoutMinutes);
+      await saveIdle({ enabled: !$idleEnabled });
     } finally {
       idleBusy = false;
     }
@@ -99,7 +99,7 @@
   async function onToggleIdleServices() {
     idleBusy = true;
     try {
-      await saveIdle($idleEnabled, $idleTimeoutMinutes, !$idleServices);
+      await saveIdle({ services: !$idleServices });
     } finally {
       idleBusy = false;
     }
@@ -110,7 +110,7 @@
     if (v === $idleTimeoutMinutes) return;
     idleBusy = true;
     try {
-      await saveIdle($idleEnabled, v);
+      await saveIdle({ timeout_minutes: v });
     } finally {
       idleBusy = false;
     }

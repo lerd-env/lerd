@@ -1829,6 +1829,7 @@
   "system_streaming_toggleOff": "Streamingmodus uitschakelen",
   "idle_suggest_dismiss": "Services laten draaien",
   "idle_suggest_enable": "Laten slapen",
+  "idle_suggest_failed": "Je keuze kon niet worden opgeslagen. Probeer het opnieuw.",
   "idle_suggest_subtitle": "Geen site heeft {services} de laatste tijd gebruikt. Ze kunnen slapen tot een site of hun dashboard ze nodig heeft.",
   "idle_suggest_title": "{count} inactieve services houden {size} geheugen bezet",
   "theme_suggest_keep": "Huidig thema houden",

@@ -1829,6 +1829,7 @@
   "system_streaming_toggleOff": "Disable streaming mode",
   "idle_suggest_dismiss": "Keep services running",
   "idle_suggest_enable": "Let them sleep",
+  "idle_suggest_failed": "Could not save your choice. Try again.",
   "idle_suggest_subtitle": "No site has used {services} lately. They can sleep until a site or their dashboard needs them.",
   "idle_suggest_title": "{count} idle services are holding {size} of memory",
   "theme_suggest_keep": "Keep current theme",

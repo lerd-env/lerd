@@ -7,14 +7,12 @@ import { idleSuggestion } from '$stores/idleSuggestion';
 
 const suggestion = { services: ['meilisearch', 'mysql', 'redis'], mem_bytes: 800 * 1024 * 1024 };
 let answer: object;
-let settings: object;
 let saved: object;
 let posted: Record<string, unknown>[];
 let asked: string[];
 
 beforeEach(() => {
   answer = suggestion;
-  settings = { idle_suspend_enabled: true, idle_suspend_timeout_minutes: 45, idle_suspend_services: false };
   saved = { ok: true };
   posted = [];
   asked = [];
@@ -30,8 +28,7 @@ beforeEach(() => {
         posted.push(JSON.parse(String(init.body)));
         return new Response(JSON.stringify(saved), { status: 200 });
       }
-      const body = String(url).includes('services-suggestion') ? answer : settings;
-      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify(answer), { status: 200, headers: { 'Content-Type': 'application/json' } });
     })
   );
 });
@@ -67,35 +64,26 @@ describe('IdleServicesBanner', () => {
     expect(title()).not.toBeInTheDocument();
   });
 
-  it('turns sleeping services on, keeping the current timeout', async () => {
+  it('turns sleeping services on and saves nothing else', async () => {
     render(IdleServicesBanner);
     (await screen.findByRole('button', { name: 'Let them sleep' })).click();
     await waitFor(() => expect(title()).not.toBeInTheDocument());
-    expect(posted).toEqual([{ enabled: true, timeout_minutes: 45, services: true }]);
+    expect(posted).toEqual([{ services: true }]);
   });
 
   it('records a dismissal as a choice', async () => {
     render(IdleServicesBanner);
     (await screen.findByRole('button', { name: /Keep services running/ })).click();
     await waitFor(() => expect(title()).not.toBeInTheDocument());
-    expect(posted).toEqual([{ enabled: true, timeout_minutes: 45, services: false }]);
+    expect(posted).toEqual([{ services: false }]);
   });
 
-  it('does not turn idle-suspend back on from a stale window', async () => {
-    render(IdleServicesBanner);
-    const dismiss = await screen.findByRole('button', { name: /Keep services running/ });
-    settings = { idle_suspend_enabled: false, idle_suspend_timeout_minutes: 45, idle_suspend_services: false };
-    dismiss.click();
-    await waitFor(() => expect(posted).toEqual([{ enabled: false, timeout_minutes: 45, services: false }]));
-  });
-
-  it('stays up when the save fails', async () => {
+  it('stays up and says so when the save fails', async () => {
     // The daemon answers a failed save with a 200.
     saved = { ok: false, error: 'config is read-only' };
     render(IdleServicesBanner);
     (await screen.findByRole('button', { name: 'Let them sleep' })).click();
-    await waitFor(() => expect(posted.length).toBe(1));
-    await settle();
+    expect(await screen.findByText(/could not save/i)).toBeInTheDocument();
     expect(title()).toBeInTheDocument();
   });
 });

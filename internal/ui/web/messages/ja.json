@@ -1829,6 +1829,7 @@
   "system_streaming_toggleOff": "ストリーミングモードを無効にする",
   "idle_suggest_dismiss": "サービスを動かしたままにする",
   "idle_suggest_enable": "スリープする",
+  "idle_suggest_failed": "選択を保存できませんでした。もう一度お試しください。",
   "idle_suggest_subtitle": "最近 {services} を使ったサイトはありません。サイトかダッシュボードが必要とするまでスリープできます。",
   "idle_suggest_title": "アイドル状態のサービス {count} 個が {size} のメモリを使用中",
   "theme_suggest_keep": "現在のテーマのまま",

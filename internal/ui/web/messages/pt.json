@@ -1829,6 +1829,7 @@
   "system_streaming_toggleOff": "Desativar o modo streaming",
   "idle_suggest_dismiss": "Manter os serviços em execução",
   "idle_suggest_enable": "Adormecer",
+  "idle_suggest_failed": "Não foi possível guardar a sua escolha. Tente novamente.",
   "idle_suggest_subtitle": "Nenhum site usou {services} ultimamente. Podem dormir até um site ou o respetivo painel precisar deles.",
   "idle_suggest_title": "{count} serviços ociosos ocupam {size} de memória",
   "theme_suggest_keep": "Manter o tema atual",

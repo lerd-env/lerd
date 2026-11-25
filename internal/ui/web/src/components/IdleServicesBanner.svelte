@@ -11,6 +11,7 @@
   const POLL_INTERVAL_MS = 5 * 60_000;
 
   let busy = $state(false);
+  let failed = $state(false);
 
   // Only an unanswered question is worth asking the daemon about.
   const askable = $derived($idleEnabled && !$idleServices && $accessMode.localControl && !$setupVisible);
@@ -22,7 +23,7 @@
   async function answer(sleep: boolean) {
     if (busy) return;
     busy = true;
-    await answerIdleSuggestion(sleep);
+    failed = !(await answerIdleSuggestion(sleep));
     busy = false;
   }
 </script>
@@ -30,7 +31,9 @@
 {#if askable && $idleSuggestion.services.length > 0}
   <BottomBanner
     title={m.idle_suggest_title({ count: $idleSuggestion.services.length, size: formatBytes($idleSuggestion.mem_bytes) })}
-    subtitle={m.idle_suggest_subtitle({ services: $idleSuggestion.services.join(', ') })}
+    subtitle={failed
+      ? m.idle_suggest_failed()
+      : m.idle_suggest_subtitle({ services: $idleSuggestion.services.join(', ') })}
     actionLabel={m.idle_suggest_enable()}
     dismissLabel={m.idle_suggest_dismiss()}
     onAction={() => answer(true)}

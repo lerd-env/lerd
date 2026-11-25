@@ -1829,6 +1829,7 @@
   "system_streaming_toggleOff": "Désactiver le mode streaming",
   "idle_suggest_dismiss": "Garder les services actifs",
   "idle_suggest_enable": "Mettre en veille",
+  "idle_suggest_failed": "Impossible d'enregistrer votre choix. Réessayez.",
   "idle_suggest_subtitle": "Aucun site n'a utilisé {services} récemment. Ils peuvent rester en veille jusqu'à ce qu'un site ou leur tableau de bord en ait besoin.",
   "idle_suggest_title": "{count} services inactifs occupent {size} de mémoire",
   "theme_suggest_keep": "Garder le thème actuel",
