@@ -171,6 +171,8 @@ On the dashboard, use the **+** beside the sites count in the server's header, o
 
 A site already pointed at a server through `.env.lerd_override` needs no rewrite: add the server, then run `lerd db:use` or use that **+**. Its host, port, user and password then come from the service, and the old values in the override file are ignored.
 
+To move a server's databases into lerd and stop running it, see [Moving databases from DBngin or Herd](../getting-started/moving-databases.md).
+
 To change a server's password or tools folder, use the cog in the header of its page or `lerd service external <name> --update`, with `--tools` for the folder. lerd connects with the new values first, so a typo leaves the old ones in place, then rewrites the env of every site on the server.
 
 `lerd db:export`, `db:import`, `db:snapshot`, `db:restore` and `db:shell` then work on that server, as do the service's Databases and Snapshots pages and the assistant tools. Snapshots stay on your machine with lerd's other snapshots. [Automatic snapshots](database.md#automatic-snapshots) cover a site on an external server like any other, and skip the server while it is offline.
