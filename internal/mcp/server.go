@@ -22,7 +22,6 @@ import (
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/envpass"
-	"github.com/geodro/lerd/internal/execguard"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/grouping"
 	"github.com/geodro/lerd/internal/logsource"
@@ -46,7 +45,7 @@ const protocolVersion = "2024-11-05"
 
 // serverInstructions is sent on initialize because clients load tool schemas
 // lazily; without it an assistant sees bare tool names and falls back to raw git.
-const serverInstructions = "This project runs on lerd. Prefer lerd's tools over the raw commands they wrap: create and remove git worktrees with the `worktree` tool, never `git worktree add` or `git worktree remove`, because add also installs dependencies, builds assets, issues the branch domain and cert and sets up the database. For a new branch off another ref pass branch plus base, never both in git_args. Leave db unset unless the user chose one: add compares the new branch's migrations with the parent checkout's (the branch the site's own folder has checked out) and picks the database itself, with a `Database:` line in setup_output saying why. If that line is missing, the framework declares no migrations folder, so compare them yourself and never assume: extra migrations on the new branch mean `clone-main` and then run them; migrations only the parent has mean the branch is behind, so suggest merging or use `empty`, which add migrates; the same set means `share`. Around a git switch or pull in a site's folder, keep the database in step with the code. Before it, take a `db` `snapshot`, and when worktrees share this database and it is about to change (new migrations or a restore), give them their own copy with `worktree` `db_isolate` with `source` main (its default is an empty database). After it, compare the two branches' migrations. If `db` `snapshots` lists one whose git_branch is the new branch, offer to `restore` it. Either way run composer when composer.lock changed through `exec`, then its new migrations. Migrations only the old branch had mean the database is ahead of the code: say so and offer the snapshot, never fix it silently. After loading a site's pages in a browser (Playwright, Pest browser, a browser MCP), a clean page is not proof: turn on `diag` `browser_toggle` for the site before the run so its JavaScript errors are recorded too, then read each response's X-Lerd-Rid header (sent while `diag` `dumps_toggle` is on) and check it with `request` `lenses`, treating any issues it lists, N+1 and slow queries, exceptions, error logs, as unfinished work. Then read `diag` `browser_events` for the site, which also holds errors from single-page navigations that carry no request id. Run console commands and composer through `exec`, and manage services and workers through `service` and `worker`. Call `site` with action list first to find the site. For PHP code questions (where a class, method or function is defined, who calls it, what implements an interface, what type a value has) use an LSP tool before grep: `lerd lsp` is lerd's PHP language server: it follows Eloquent statics, scopes, relations and inheritance, and lists only real calls where grep lists every method of the same name. Calls through a facade come from references on the facade's `@method` docblock line, not on the method behind it, and calls on untyped properties such as Pest's `$this->x` are missed, so finish a callers question with a grep. In Claude Code it comes from the `lerd-php` plugin as the `LSP` tool, which is often deferred, so load it first. Grep stays right for macros, strings, config and non-PHP files, or when no LSP tool exists. When the user wants lerd to do something it does not, build them a plugin: read `plugin` `guide` first and follow it."
+const serverInstructions = "This project runs on lerd. Prefer lerd's tools over the raw commands they wrap: create and remove git worktrees with the `worktree` tool, never `git worktree add` or `git worktree remove`, because add also installs dependencies, builds assets, issues the branch domain and cert and sets up the database. For a new branch off another ref pass branch plus base, never both in git_args. Leave db unset unless the user chose one: add compares the new branch's migrations with the parent checkout's (the branch the site's own folder has checked out) and picks the database itself, with a `Database:` line in setup_output saying why. If that line is missing, the framework declares no migrations folder, so compare them yourself and never assume: extra migrations on the new branch mean `clone-main` and then run them; migrations only the parent has mean the branch is behind, so suggest merging or use `empty`, which add migrates; the same set means `share`. Around a git switch or pull in a site's folder, keep the database in step with the code. Before it, take a `db` `snapshot`, and when worktrees share this database and it is about to change (new migrations or a restore), give them their own copy with `worktree` `db_isolate` with `source` main (its default is an empty database). After it, compare the two branches' migrations. If `db` `snapshots` lists one whose git_branch is the new branch, offer to `restore` it. Either way run composer when composer.lock changed through `exec`, then its new migrations. Migrations only the old branch had mean the database is ahead of the code: say so and offer the snapshot, never fix it silently. After loading a site's pages in a browser (Playwright, Pest browser, a browser MCP), a clean page is not proof: turn on `diag` `browser_toggle` for the site before the run so its JavaScript errors are recorded too, then read each response's X-Lerd-Rid header (sent while `diag` `dumps_toggle` is on) and check it with `request` `lenses`, treating any issues it lists, N+1 and slow queries, exceptions, error logs, as unfinished work. Then read `diag` `browser_events` for the site, which also holds errors from single-page navigations that carry no request id. Run tests with the `test` tool and console commands and composer through `exec`, and manage services and workers through `service` and `worker`. Call `site` with action list first to find the site. For PHP code questions (where a class, method or function is defined, who calls it, what implements an interface, what type a value has) use an LSP tool before grep: `lerd lsp` is lerd's PHP language server: it follows Eloquent statics, scopes, relations and inheritance, and lists only real calls where grep lists every method of the same name. Calls through a facade come from references on the facade's `@method` docblock line, not on the method behind it, and calls on untyped properties such as Pest's `$this->x` are missed, so finish a callers question with a grep. In Claude Code it comes from the `lerd-php` plugin as the `LSP` tool, which is often deferred, so load it first. Grep stays right for macros, strings, config and non-PHP files, or when no LSP tool exists. When the user wants lerd to do something it does not, build them a plugin: read `plugin` `guide` first and follow it."
 
 // knownServices returns the default-preset names. Wrapper so the existing
 // MCP call sites (`for _, s := range knownServices`) keep compiling.
@@ -173,7 +172,15 @@ func Serve() error {
 			continue
 		}
 
+		// A client that cancelled is no longer waiting for an answer.
+		id := string(*req.ID)
+		if !calls.begin(id) {
+			continue
+		}
 		result, rpcErr := dispatch(&req)
+		if calls.end(id) {
+			continue
+		}
 		resp := rpcResponse{JSONRPC: "2.0", ID: req.ID}
 		if rpcErr != nil {
 			resp.Error = rpcErr
@@ -207,6 +214,7 @@ func readRequests(r io.Reader, cancel func()) (<-chan []byte, *error) {
 		defer close(in)
 		defer cancel()
 		for scanner.Scan() {
+			noteCancelled(scanner.Bytes())
 			in <- append([]byte(nil), scanner.Bytes()...)
 		}
 		scanErr = scanner.Err()
@@ -418,50 +426,18 @@ func execArtisan(args map[string]any) (any, *rpcError) {
 		return toolErr("args is required and must be a non-empty array"), nil
 	}
 
-	phpVersion, err := phpDet.VersionForDir(projectPath)
-	if err != nil {
-		return toolErr(err.Error()), nil
-	}
-
 	consoleCmd, err := config.GetConsoleCommand(projectPath)
 	if err != nil {
 		return toolErr(err.Error()), nil
 	}
-	if nativeRuntime() {
-		var out bytes.Buffer
-		if err := runOnHost(projectPath, append([]string{"php", consoleCmd}, artisanArgs...), &out); err != nil {
-			return toolErr(fmt.Sprintf("artisan failed (%v):\n%s", err, stripANSI(out.String()))), nil
-		}
-		return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
-	}
-
-	short := strings.ReplaceAll(phpVersion, ".", "")
-	container := phpDet.FPMContainerForDir(projectPath, phpVersion)
-	if errBody := ensureFPMStartedMCP(phpVersion, short, container); errBody != nil {
+	out, errBody, err := runProjectPHP(projectPath, append([]string{consoleCmd}, artisanArgs...))
+	if errBody != nil {
 		return errBody, nil
 	}
-	if err := wakeSiteServicesMCP(projectPath); err != nil {
-		return toolErr(err.Error()), nil
+	if err != nil {
+		return toolErr(fmt.Sprintf("artisan failed (%v):\n%s", err, out)), nil
 	}
-
-	// No -it flags — non-interactive, output captured to buffer.
-	cmdArgs := []string{"exec", "-w", projectPath}
-	for _, e := range agentenv.MCPInject(os.Environ()) {
-		cmdArgs = append(cmdArgs, "--env", e)
-	}
-	cmdArgs = append(cmdArgs, envpass.Args(projectPath, os.Environ())...)
-	cmdArgs = append(cmdArgs, phpDet.SiteEnvArgs(projectPath)...)
-	cmdArgs = append(cmdArgs, container, "php", consoleCmd)
-	cmdArgs = append(cmdArgs, artisanArgs...)
-
-	var out bytes.Buffer
-	cmd := podman.Cmd(cmdArgs...)
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	if err := execguard.Run(sessionCtx, cmd, container); err != nil {
-		return toolErr(fmt.Sprintf("artisan failed (%v):\n%s", err, stripANSI(out.String()))), nil
-	}
-	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
+	return toolOK(out), nil
 }
 
 func execSites() (any, *rpcError) {
@@ -1008,7 +984,7 @@ func execComposer(args map[string]any) (any, *rpcError) {
 	cmd := podman.Cmd(cmdArgs...)
 	cmd.Stdout = &out
 	cmd.Stderr = &out
-	if err := cmd.Run(); err != nil {
+	if err := runCall(cmd, container); err != nil {
 		return toolErr(fmt.Sprintf("composer failed (%v):\n%s", err, stripANSI(out.String()))), nil
 	}
 	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
@@ -1061,45 +1037,56 @@ func execVendorRun(args map[string]any) (any, *rpcError) {
 	}
 	binArgs := strSliceArg(args, "args")
 
+	out, errBody, err := runProjectPHP(projectPath, append([]string{"vendor/bin/" + bin}, binArgs...))
+	if errBody != nil {
+		return errBody, nil
+	}
+	if err != nil {
+		return toolErr(fmt.Sprintf("vendor/bin/%s failed (%v):\n%s", bin, err, out)), nil
+	}
+	return toolOK(out), nil
+}
+
+// runProjectPHP runs php with argv where the project's PHP runs, returning its
+// output. errBody is the tool error to answer with when it could not start.
+func runProjectPHP(projectPath string, argv []string) (text string, errBody any, runErr error) {
 	phpVersion, err := phpDet.VersionForDir(projectPath)
 	if err != nil {
-		return toolErr(err.Error()), nil
+		return "", toolErr(err.Error()), nil
 	}
-
+	var out bytes.Buffer
 	if nativeRuntime() {
-		var out bytes.Buffer
-		if err := runOnHost(projectPath, append([]string{"php", "vendor/bin/" + bin}, binArgs...), &out); err != nil {
-			return toolErr(fmt.Sprintf("vendor/bin/%s failed (%v):\n%s", bin, err, stripANSI(out.String()))), nil
-		}
-		return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
+		err := runOnHost(projectPath, append([]string{"php"}, argv...), &out)
+		return stripANSI(strings.TrimSpace(out.String())), nil, err
 	}
 
 	short := strings.ReplaceAll(phpVersion, ".", "")
 	container := phpDet.FPMContainerForDir(projectPath, phpVersion)
-	if errBody := ensureFPMStartedMCP(phpVersion, short, container); errBody != nil {
-		return errBody, nil
+	if body := ensureFPMStartedMCP(phpVersion, short, container); body != nil {
+		return "", body, nil
 	}
 	if err := wakeSiteServicesMCP(projectPath); err != nil {
-		return toolErr(err.Error()), nil
+		return "", toolErr(err.Error()), nil
 	}
 
-	cmdArgs := []string{"exec", "-w", projectPath}
-	for _, e := range agentenv.MCPInject(os.Environ()) {
-		cmdArgs = append(cmdArgs, "--env", e)
-	}
-	cmdArgs = append(cmdArgs, envpass.Args(projectPath, os.Environ())...)
-	cmdArgs = append(cmdArgs, phpDet.SiteEnvArgs(projectPath)...)
-	cmdArgs = append(cmdArgs, container, "php", "vendor/bin/"+bin)
-	cmdArgs = append(cmdArgs, binArgs...)
-
-	var out bytes.Buffer
-	cmd := podman.Cmd(cmdArgs...)
+	cmd := podman.Cmd(projectPHPArgs(container, projectPath, argv)...)
 	cmd.Stdout = &out
 	cmd.Stderr = &out
-	if err := cmd.Run(); err != nil {
-		return toolErr(fmt.Sprintf("vendor/bin/%s failed (%v):\n%s", bin, err, stripANSI(out.String()))), nil
+	err = runCall(cmd, container)
+	return stripANSI(strings.TrimSpace(out.String())), nil, err
+}
+
+// projectPHPArgs is the podman exec that runs php with argv in container.
+func projectPHPArgs(container, projectPath string, argv []string) []string {
+	args := []string{"exec", "-w", projectPath}
+	for _, e := range agentenv.MCPInject(os.Environ()) {
+		args = append(args, "--env", e)
 	}
-	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
+	args = append(args, envpass.Args(projectPath, os.Environ())...)
+	args = append(args, phpDet.SiteEnvArgs(projectPath)...)
+	args = append(args, container, "php")
+	args = append(args, config.CLIIniArgsForDir(projectPath)...)
+	return append(args, argv...)
 }
 
 func execNodeInstall(args map[string]any) (any, *rpcError) {
@@ -3167,8 +3154,11 @@ func execCommandsRun(args map[string]any) (any, *rpcError) {
 	cmd := exec.Command("sh", "-c", target.Command)
 	cmd.Dir = cwd
 	cmd.Env = hostCommandEnv()
-	out, runErr := cmd.CombinedOutput()
-	body := string(out)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	runErr := runCall(cmd, "")
+	body := out.String()
 	if runErr != nil {
 		if ee, ok := runErr.(*exec.ExitError); ok {
 			return toolErr(fmt.Sprintf("exit %d:\n%s", ee.ExitCode(), body)), nil
@@ -3909,7 +3899,7 @@ func runComposerInstallIfNeeded(projectPath string, out *bytes.Buffer) error {
 	cmd := podman.Cmd(composerExecArgs(container, projectPath, nil, []string{"install", "--no-interaction"})...)
 	cmd.Stdout = out
 	cmd.Stderr = out
-	return cmd.Run()
+	return runCall(cmd, container)
 }
 
 // execSetup runs every Default: true entry in the site framework's Setup list
@@ -3956,6 +3946,9 @@ func execSetup(args map[string]any) (any, *rpcError) {
 	var out bytes.Buffer
 	ran, skipped, failed := 0, 0, 0
 	for _, step := range fw.Setup {
+		if calls.context().Err() != nil {
+			return toolErr("setup cancelled:\n" + stripANSI(strings.TrimSpace(out.String()))), nil
+		}
 		if !step.Default {
 			skipped++
 			continue
@@ -3976,7 +3969,7 @@ func execSetup(args map[string]any) (any, *rpcError) {
 			cmd := podman.Cmd(append([]string{"exec", "-i", "-w", projectPath, container}, parts...)...)
 			cmd.Stdout = &out
 			cmd.Stderr = &out
-			runErr = cmd.Run()
+			runErr = runCall(cmd, container)
 		}
 		if err := runErr; err != nil {
 			fmt.Fprintf(&out, "[WARN] %s failed: %v\n", step.Label, err)

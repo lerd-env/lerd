@@ -2,7 +2,7 @@
 
 This project runs on **lerd**, a Podman-based PHP development environment. It is framework-agnostic: Laravel, Symfony, WordPress, Drupal, Magento, CakePHP and any custom framework are all driven by a framework definition (YAML), never by lerd hardcoding a framework's name. Use the `lerd` MCP server to manage it from the chat.
 
-The MCP surface is **fourteen grouped tools**, each driven by an `action` argument: `site`, `service`, `db`, `env`, `runtime`, `worker`, `exec`, `framework`, `diag`, `logs`, `request`, `worktree`, `workspace`, `plugin`. Always pass `action`. Most actions also accept an optional `path` that defaults to the directory the assistant was opened in (then `LERD_SITE_PATH` if set), so you can usually omit it. Start by calling `site` with `action: "list"` to discover sites.
+The MCP surface is **fifteen tools**, each driven by an `action` argument except `test`: `site`, `service`, `db`, `env`, `runtime`, `worker`, `exec`, `test`, `framework`, `diag`, `logs`, `request`, `worktree`, `workspace`, `plugin`. Always pass `action`. Most actions also accept an optional `path` that defaults to the directory the assistant was opened in (then `LERD_SITE_PATH` if set), so you can usually omit it. Start with `site` `list`.
 
 ### Architecture
 
@@ -102,8 +102,9 @@ Actions: `list` (CALL FIRST), `start`, `stop`, `add`, `remove`, `health`, `heal`
 
 #### `exec` — run tooling in the PHP-FPM container
 Actions: `artisan` (Laravel), `console` (other frameworks), `composer`, `vendor_bins`, `vendor_run`, `commands_list`, `commands_run`, `command_add`, `command_remove`.
-- `artisan`/`console`/`composer` take `args` (array); tinker must use `--execute=<code>` for non-interactive use
-- `vendor_run` is the right way to run project tooling (pest, phpunit, pint, phpstan, rector) — call `vendor_bins` first to discover what's installed, then `vendor_run` with `bin` + `args`; prefer it over `composer exec`. `lerd cpx <package>` (CLI-only) runs a Composer package's binary without adding it to the project
+- `artisan`/`console`/`composer` take `args` (array); tinker needs `--execute=<code>`
+- **Tests: the `test` tool**, not vendor_run or a shell: no arguments runs all; `file`, `filter` narrow
+- `vendor_run` runs other tooling (pint, phpstan): `vendor_bins`, then `bin` + `args`. `lerd cpx <package>` (CLI-only) runs a package's binary without adding it
 - `commands_*`/`command_*` list, run, add and remove the on-demand commands in a site's `.lerd.yaml` `commands:` block; `commands_run` needs `force: true` for confirm-gated commands
 - **composer over git SSH (CLI-only)**: when `composer` needs a private repo reachable only over SSH, `lerd auth ssh` starts a shared ssh-agent container and loads the host's `~/.ssh/id_*` (or named keys) so passphrase-protected keys work in the FPM container; `lerd auth ssh --list` shows loaded keys, `--remove` flushes them. Keys live only in agent memory and clear on machine restart or `lerd quit`
 

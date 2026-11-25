@@ -364,7 +364,7 @@ Activity-driven worker suspension: lerd gracefully stops each site's suspendable
 | `lerd console [args...]` | Run the framework's console command (e.g., `php artisan` for Laravel, `php bin/console` for Symfony) inside the project's PHP-FPM container |
 | `lerd artisan [args...]` | Alias for `lerd console`, equivalent to `php artisan` since the `php` shim also runs inside the FPM container |
 | `lerd a [args...]` | Short alias for `lerd console` / `lerd artisan` |
-| `lerd test [args...]` | Shortcut for `lerd artisan test` |
+| `lerd test [args...]` | Run the project's tests with the runner its framework or test package declares (`php artisan test`, Pest, PHPUnit) |
 | `lerd <vendor-bin> [args...]` | Run any composer-installed binary from the project's `vendor/bin` directory (e.g. `lerd pest`, `lerd pint`, `lerd phpstan`). Real lerd commands always win over vendor binaries with the same name. |
 | `lerd cpx <package> [args...]` | Run a command from any Composer package without adding it to the project, [cpx](https://cpx.dev) being to Composer what npx is to npm. Uses the globally required binary (`lerd composer global require cpx/cpx`) and runs it on the PHP version the project is registered on |
 | `lerd shell [version]` | Open an interactive shell inside the project's PHP-FPM container, or inside a given version's shared container from anywhere |

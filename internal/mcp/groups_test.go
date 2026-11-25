@@ -12,7 +12,8 @@ import (
 // split). worktree is excluded: it routes through dispatchWorktree, not the table.
 func TestGroupDispatch_MatchesSchemaEnums(t *testing.T) {
 	for _, tool := range toolList() {
-		if tool.Name == "worktree" {
+		// test takes no action.
+		if tool.Name == "worktree" || tool.Name == "test" {
 			continue
 		}
 		handlers, ok := groupDispatch[tool.Name]
@@ -58,7 +59,7 @@ func TestWorkerModeActions_split(t *testing.T) {
 
 // TestToolList_groups is a guardrail on the consolidated surface.
 func TestToolList_groups(t *testing.T) {
-	want := []string{"db", "diag", "env", "exec", "framework", "logs", "plugin", "request", "runtime", "service", "site", "worker", "workspace", "worktree"}
+	want := []string{"db", "diag", "env", "exec", "framework", "logs", "plugin", "request", "runtime", "service", "site", "test", "worker", "workspace", "worktree"}
 	got := make([]string, 0, len(toolList()))
 	for _, tool := range toolList() {
 		got = append(got, tool.Name)

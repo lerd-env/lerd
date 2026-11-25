@@ -45,7 +45,7 @@ The package runs on the PHP version the site is registered on rather than whatev
 
 Requiring it globally also puts a `cpx` shim on your PATH, so bare `cpx` works too and runs through the same container. `lerd cpx` is the explicit form, and the one that tells you what to install when cpx is missing.
 
-The MCP integration exposes the same surface through two tools, `vendor_bins` (list available binaries) and `vendor_run` (execute one), so AI assistants can discover and run project tooling without per-project configuration.
+The MCP integration exposes the same surface through two tools, `vendor_bins` (list available binaries) and `vendor_run` (execute one), so AI assistants can discover and run project tooling without per-project configuration. A project's tests have [a tool of their own](/features/mcp#running-tests).
 
 ## Tools in vendor/bin
 

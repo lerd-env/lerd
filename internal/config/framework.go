@@ -103,6 +103,9 @@ type Framework struct {
 	// request with an error about an entity type it can no longer find. A
 	// framework declaring none is left alone.
 	CacheCommand string `yaml:"cache_command,omitempty"`
+	// Test is how the framework runs a project's tests, ahead of whatever the
+	// project's test packages declare.
+	Test *TestRunner `yaml:"test,omitempty" json:"test,omitempty"`
 	// Notifications turns off warnings that cannot apply to this framework.
 	Notifications *FrameworkNotifications `yaml:"notifications,omitempty"`
 	// Console is the console command to run (without 'php' prefix).
@@ -1594,6 +1597,9 @@ func mergeUserOverlay(base *Framework) *Framework {
 	if len(overlay.Requires) > 0 {
 		base.Requires = overlay.Requires
 	}
+	if overlay.Test != nil {
+		base.Test = overlay.Test
+	}
 
 	return base
 }
@@ -2133,6 +2139,8 @@ func SanitizeProjectFrameworkDef(def *Framework) *Framework {
 	safe.VendorBinArgs = nil
 	// A tool is code lerd downloads and runs, so a cloned repo may not name one.
 	safe.VendorBinTools = nil
+	// What lerd test and the MCP test tool run is not a cloned repo's choice.
+	safe.Test = nil
 	return safe
 }
 
