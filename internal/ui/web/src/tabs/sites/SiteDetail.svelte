@@ -12,6 +12,7 @@
   import { debugLens, isDebugLens, type DebugLens } from '$stores/debugLens';
   import { status as dumpsStatus, refreshStatus } from '$stores/dumps';
   import { debugCaptureEnabled } from '$stores/queries';
+  import { notifyLocalFailure } from '$lib/notify';
   import { m } from '../../paraglide/messages.js';
   import PluginFrame from '$components/PluginFrame.svelte';
   import { siteTabPlugins, whenApplies, checkoutOf } from '$stores/plugins';
@@ -20,7 +21,8 @@
   async function onResume() {
     resumeBusy = true;
     try {
-      await resumeSite(site.domain);
+      const res = await resumeSite(site.domain);
+      if (!res.ok) notifyLocalFailure('site_resume', site.domain, res.error || m.common_failed());
       await loadSites();
     } finally {
       resumeBusy = false;

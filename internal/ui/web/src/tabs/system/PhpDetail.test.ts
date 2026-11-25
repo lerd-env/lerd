@@ -81,6 +81,7 @@ describe('PhpDetail', () => {
     sites.set([
       { domain: 'acme.test', php_version: '8.4', fpm_running: true },
       { domain: 'shop.test', php_version: '8.4' },
+      { domain: 'resting.test', php_version: '8.4', paused: true },
       { domain: 'old.test', php_version: '8.3' }
     ]);
     const { container } = render(PhpDetail, { props: { version: '8.4' } });

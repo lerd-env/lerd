@@ -246,6 +246,15 @@ func QuitProcessUnits(skip ...string) []string {
 // it stays up as install-level DNS plumbing (the watcher would restart it).
 func StopUnitSet(skip ...string) []string {
 	units := append(CoreUnits(), AllInstalledServiceUnits()...)
+	// A start skips the FPMs no active site uses; a command can still start one.
+	if FPMContainersWanted() {
+		versions, _ := phpPkg.ListInstalled()
+		for _, v := range versions {
+			if unit := podman.FPMUnitName(v); !slices.Contains(units, unit) {
+				units = append(units, unit)
+			}
+		}
+	}
 	units = append(units, InstalledCustomContainerUnits()...)
 	units = append(units, RegisteredQueueUnits()...)
 	units = append(units, RegisteredStripeUnits()...)
@@ -262,7 +271,7 @@ func StopUnitSet(skip ...string) []string {
 }
 
 // ActivePHPVersions returns the set of PHP versions actually in use by
-// non-ignored, non-paused sites, using live disk detection (.php-version file)
+// non-ignored, non-paused sites and their worktrees, using live disk detection (.php-version file)
 // with the stored registry value as fallback.
 func ActivePHPVersions() map[string]bool {
 	reg, err := config.LoadSites()
@@ -271,7 +280,7 @@ func ActivePHPVersions() map[string]bool {
 	}
 	active := make(map[string]bool)
 	for _, s := range reg.Sites {
-		if s.Ignored {
+		if s.Ignored || s.Paused {
 			continue
 		}
 		phpMin, phpMax := "", ""
@@ -287,6 +296,12 @@ func ActivePHPVersions() map[string]bool {
 		v := phpPkg.DetectVersionKeeping(s.Path, phpMin, phpMax, s.PHPVersion)
 		if v != "" {
 			active[v] = true
+		}
+		worktrees, _ := gitpkg.DetectWorktrees(s.Path, s.PrimaryDomain())
+		for _, wt := range worktrees {
+			if wv := config.WorktreePHPVersion(wt.Path, ""); wv != "" {
+				active[wv] = true
+			}
 		}
 	}
 	return active

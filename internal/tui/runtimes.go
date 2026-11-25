@@ -156,7 +156,7 @@ func (m *Model) runtimeDetail(r runtimeRow, f runtimeFacts, running map[string]b
 			out = append(out, kv("extras", sp(e, nil)))
 		}
 		for _, s := range m.snap.Sites {
-			if s.PHPVersion == r.version {
+			if s.PHPVersion == r.version && !s.Paused {
 				users = append(users, siteDomain(&s))
 			}
 		}

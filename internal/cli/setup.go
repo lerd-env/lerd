@@ -753,6 +753,9 @@ func composerInContainer(dir string, args ...string) error {
 		return err
 	}
 	container := fpmContainerForDir(dir, version)
+	if err := awaitContainerFn(version, container); err != nil {
+		return err
+	}
 
 	podman.EnsurePathMounted(dir, version)
 
@@ -814,6 +817,9 @@ func execInContainer(dir, command string) error {
 		}
 	}
 	container := fpmContainerForDir(dir, version)
+	if err := awaitContainerFn(version, container); err != nil {
+		return err
+	}
 	podman.EnsurePathMounted(dir, version)
 	// This execs php in the container directly, bypassing the shim, so the
 	// framework's cli_ini has to be folded in here too.

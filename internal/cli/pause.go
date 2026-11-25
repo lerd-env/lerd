@@ -3,8 +3,10 @@ package cli
 import (
 	"fmt"
 	"html"
+	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -12,11 +14,13 @@ import (
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
+	"github.com/geodro/lerd/internal/lifecycle"
 	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
 	"github.com/geodro/lerd/internal/siteinfo"
+	"github.com/geodro/lerd/internal/siteops"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/spf13/cobra"
 )
@@ -117,6 +121,7 @@ func PauseSite(name string) error {
 	feedback.Start("pausing " + name).OK(feedback.Val(site.PrimaryDomain()))
 
 	autoStopUnusedServices()
+	autoStopUnusedFPMs()
 
 	return nil
 }
@@ -174,6 +179,54 @@ func refreshHostProxyEnvOnResume(site *config.Site, mode string) bool {
 	return true
 }
 
+// ensureSitePHP brings up the PHP a site being linked or resumed needs, installing
+// it when it was removed. A failed build is only an error when there is no earlier
+// image to serve from.
+func ensureSitePHP(version string, w io.Writer) error {
+	if !lifecycle.FPMContainersWanted() {
+		return bringUpNativePHP(version, w)
+	}
+	err := ensureFPMQuadletTo(version, w)
+	if err == nil || !fpmImageExistsFn(version) {
+		return err
+	}
+	feedback.Warn("ensuring FPM for PHP %s: %v", version, err)
+	return startUnit(podman.FPMUnitName(version))
+}
+
+// resumePHPVersion is the PHP a resuming site runs on, within the range linking
+// would hold it to. A custom-FPM site's comes from its Containerfile and is never
+// re-detected.
+func resumePHPVersion(site *config.Site) string {
+	if !siteops.ServedByFPM(*site) || site.IsCustomFPM() {
+		return site.PHPVersion
+	}
+	link := siteops.DetectSiteVersions(site.Path, site.Framework, site.PHPVersion, site.NodeVersion)
+	return phpDet.ResumeVersion(site.Path, link.PHPMin, link.PHPMax, site.PHPVersion)
+}
+
+// ensureResumePHPs brings up every PHP a resuming site and its worktrees need,
+// before anything is restored, so a failure leaves the whole site paused.
+func ensureResumePHPs(site *config.Site, phpVersion string) error {
+	var versions []string
+	// A custom-FPM site runs its own container, not the shared one.
+	if !site.IsCustomFPM() && phpVersion != "" {
+		versions = append(versions, phpVersion)
+	}
+	worktrees, _ := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain())
+	for _, wt := range worktrees {
+		if v := config.WorktreePHPVersion(wt.Path, phpVersion); v != phpVersion && !slices.Contains(versions, v) {
+			versions = append(versions, v)
+		}
+	}
+	for _, v := range versions {
+		if err := ensureSitePHP(v, os.Stdout); err != nil {
+			return fmt.Errorf("%s stays paused, PHP %s could not be brought up: %w", site.Name, v, err)
+		}
+	}
+	return nil
+}
+
 // UnpauseSite restores the site's nginx vhost, restarts any workers that were
 // running when the site was paused, and clears the paused state.
 func UnpauseSite(name string) error {
@@ -186,7 +239,12 @@ func UnpauseSite(name string) error {
 		return nil
 	}
 
-	phpVersion := site.PHPVersion
+	phpVersion := resumePHPVersion(site)
+	if siteops.ServedByFPM(*site) {
+		if err := ensureResumePHPs(site, phpVersion); err != nil {
+			return err
+		}
+	}
 
 	// Re-arm the container's quadlet [Install] that PauseSite stripped, before
 	// starting it, so it autostarts at login again. Gated on the global autostart
@@ -245,15 +303,9 @@ func UnpauseSite(name string) error {
 			}
 		}
 	default:
-		phpVersion = phpDet.SiteVersion(site.Path, phpVersion)
-
 		if site.IsCustomFPM() {
 			// Per-site FPM container; the shared lerd-php<ver>-fpm is not used.
 			_ = podman.StartUnit(podman.CustomFPMContainerName(site.Name))
-		} else if phpVersion != "" {
-			if err := ensureFPMQuadlet(phpVersion); err != nil {
-				feedback.Warn("ensuring FPM for PHP %s: %v", phpVersion, err)
-			}
 		}
 
 		if site.Secured {
@@ -270,6 +322,14 @@ func UnpauseSite(name string) error {
 		}
 
 		unpauseWorktrees(site, phpVersion)
+	}
+
+	// Commands and workers resolve the version from the registry.
+	if phpVersion != site.PHPVersion {
+		site.PHPVersion = phpVersion
+		if err := config.AddSite(*site); err != nil {
+			return fmt.Errorf("updating registry: %w", err)
+		}
 	}
 
 	// Restart the per-worktree workers PauseSite stopped (Vite). Universal across

@@ -490,11 +490,10 @@ func (e *EnrichedSite) enrichVersions(s config.Site, fw *config.Framework, hasFw
 		return
 	}
 
-	// A custom-FPM site's PHP version is fixed by its Containerfile FROM line, so
-	// don't let detection override it — otherwise this enrichment (run by lerd-ui
-	// and the TUI, then persisted) drifts the stored version away from the image the
-	// container actually runs, undoing what link pinned. Node tooling still applies.
-	if !s.IsCustomFPM() {
+	// A custom-FPM site's PHP comes from its Containerfile and a paused site's may be
+	// uninstalled, so neither is re-detected: the result is persisted and would drift
+	// from the image, or move the site before it resumes. Node still applies.
+	if !s.IsCustomFPM() && !s.Paused {
 		phpMin, phpMax := "", ""
 		// A guessed framework targets a different version than the project, so its
 		// PHP range must not constrain detection, or a Laravel 6 project pinned to

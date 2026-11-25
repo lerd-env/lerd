@@ -1,8 +1,13 @@
 package cli
 
 import (
+	"io"
+	"os"
+
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/lifecycle"
 	"github.com/geodro/lerd/internal/linker"
+	"github.com/geodro/lerd/internal/podman"
 
 	"charm.land/huh/v2"
 )
@@ -56,7 +61,7 @@ func (f feedbackStep) Fail(err error)   { f.s.Fail(err) }
 // JetBrains data-source sync.
 func linkDeps() linker.Deps {
 	return linker.Deps{
-		EnsureFPMQuadlet:         ensureFPMQuadlet,
+		EnsureFPMQuadlet:         func(v string) error { return ensureLinkPHP(v, os.Stdout) },
 		ReconcileRuntimeQuadlets: reconcileStaleRuntimeQuadlets,
 		StartHostProxyWorker:     startHostProxyWorker,
 		SyncIDEDataSource:        func(root string) bool { return syncIDEDataSource(root).wrote() },
@@ -71,4 +76,13 @@ func linkPolicy(name string) linker.Policy {
 	// triggers treats that as consent already given.
 	p.AssumeYes = hostProxyApproved(p.AssumeYes)
 	return p
+}
+
+// ensureLinkPHP brings a version up and waits for its container, since the env and
+// setup steps that follow a link exec into it straight away.
+func ensureLinkPHP(version string, w io.Writer) error {
+	if err := ensureSitePHP(version, w); err != nil || !lifecycle.FPMContainersWanted() {
+		return err
+	}
+	return awaitContainerFn(version, podman.FPMUnitName(version))
 }
