@@ -8,7 +8,6 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
-	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 )
@@ -28,22 +27,17 @@ func NewPhpPkgCmd() *cobra.Command {
 	return cmd
 }
 
-// phpPkgVersion resolves the PHP version from the --php flag, cwd detection, or
-// the global default.
-func phpPkgVersion(flagVer string) (string, error) {
-	if flagVer != "" {
-		return flagVer, nil
+// phpPkgVersion resolves the PHP version a version-scoped command acts on: the
+// one passed explicitly, otherwise the one the current directory is served on.
+func phpPkgVersion(explicit string) (string, error) {
+	if explicit != "" {
+		return explicit, nil
 	}
-	if cwd, err := os.Getwd(); err == nil {
-		if v, err := phpDet.DetectVersion(cwd); err == nil {
-			return v, nil
-		}
-	}
-	cfg, err := config.LoadGlobal()
+	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
-	return cfg.PHP.DefaultVersion, nil
+	return phpVersionForDir(cwd)
 }
 
 func newPhpPkgAddCmd() *cobra.Command {
