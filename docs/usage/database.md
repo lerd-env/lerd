@@ -296,6 +296,8 @@ max_allowed_packet = 1G
 
 When you restore with an external client instead (a GUI, a manual `mysql` call), raise the packet size there too, either with `mysql --max-allowed-packet=1G` or a matching `[client]` entry in the same tuning file.
 
+A restore that dies with `Can't connect to local MySQL server` and leaves the container restarted ran out of memory instead. [Large databases](../getting-started/moving-databases.md#large-databases) covers the VM's memory and MySQL's buffer pool for imports of several gigabytes.
+
 ---
 
 ## Picking a database for a Laravel project
