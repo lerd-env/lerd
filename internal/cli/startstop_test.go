@@ -208,6 +208,44 @@ func TestStopUnitSet_KeepsDNSRunning(t *testing.T) {
 	}
 }
 
+// A PHP no active site needs is left out of the start, but a command run in a
+// paused site can bring it up, so a stop takes every installed FPM down once.
+func TestStopUnitSet_StopsFPMsNoActiveSiteUses(t *testing.T) {
+	withTempXDG(t)
+	cfg := &config.GlobalConfig{}
+	cfg.PHP.DefaultVersion = "8.5"
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+	if err := os.MkdirAll(config.QuadletDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range []string{"lerd-php83-fpm", "lerd-php85-fpm"} {
+		if err := os.WriteFile(filepath.Join(config.QuadletDir(), u+".container"), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := config.AddSite(config.Site{Name: "shop", Path: t.TempDir(), Domains: []string{"shop.test"}, PHPVersion: "8.3", Paused: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	if slices.Contains(lifecycle.CoreUnits(), "lerd-php83-fpm") {
+		t.Error("start must leave the paused site's FPM down")
+	}
+	stop := lifecycle.StopUnitSet()
+	for _, u := range []string{"lerd-php83-fpm", "lerd-php85-fpm"} {
+		n := 0
+		for _, got := range stop {
+			if got == u {
+				n++
+			}
+		}
+		if n != 1 {
+			t.Errorf("%s listed %d times to stop, want once: %v", u, n, stop)
+		}
+	}
+}
+
 // TestQuitProcessUnits_FullTeardown pins that `lerd quit` is a full teardown: it
 // stops lerd-dns (unlike `lerd stop`), and stops lerd-watcher before lerd-dns so
 // the watcher can't restart dns after it goes down.

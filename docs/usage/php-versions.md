@@ -98,7 +98,7 @@ Lerd automatically manages which PHP-FPM containers are running based on which v
 
 **Auto-stop**: when you unlink or pause a site, lerd checks every installed PHP version. If no remaining active (non-ignored, non-paused) site uses a version, its FPM container is stopped. The version itself stays installed; the container is just not running.
 
-**Paused sites don't count**: a paused site does not hold its PHP version, so its FPM container can stop and the version can be removed. Lerd remembers the version, and resuming the site installs it again if it was removed. If that install fails with no earlier image to serve from, the site stays paused.
+**Paused sites don't count**: a paused site does not hold its PHP version, so its FPM container can stop and the version can be removed. Lerd remembers the version, and resuming the site installs it again if it was removed. If that install fails with no earlier image to serve from, for the site or for a worktree pinned to another version, the site stays paused.
 
 **Auto-start**: FPM is started automatically when you link a site (`lerd link`, `lerd park`, `lerd isolate`) or change the global default (`lerd use`). When unpausing a site, lerd also ensures the required FPM container is running before restoring the nginx vhost.
 

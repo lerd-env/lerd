@@ -246,6 +246,15 @@ func QuitProcessUnits(skip ...string) []string {
 // it stays up as install-level DNS plumbing (the watcher would restart it).
 func StopUnitSet(skip ...string) []string {
 	units := append(CoreUnits(), AllInstalledServiceUnits()...)
+	// A start skips the FPMs no active site uses; a command can still start one.
+	if FPMContainersWanted() {
+		versions, _ := phpPkg.ListInstalled()
+		for _, v := range versions {
+			if unit := podman.FPMUnitName(v); !slices.Contains(units, unit) {
+				units = append(units, unit)
+			}
+		}
+	}
 	units = append(units, InstalledCustomContainerUnits()...)
 	units = append(units, RegisteredQueueUnits()...)
 	units = append(units, RegisteredStripeUnits()...)

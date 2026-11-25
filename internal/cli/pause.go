@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
 	"github.com/geodro/lerd/internal/siteinfo"
+	"github.com/geodro/lerd/internal/siteops"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/spf13/cobra"
 )
@@ -192,6 +194,28 @@ func ensureSitePHP(version string, w io.Writer) error {
 	return startUnit(podman.FPMUnitName(version))
 }
 
+// ensureResumePHPs brings up every PHP a resuming site and its worktrees need,
+// before anything is restored, so a failure leaves the whole site paused.
+func ensureResumePHPs(site *config.Site, phpVersion string) error {
+	var versions []string
+	// A custom-FPM site runs its own container, not the shared one.
+	if !site.IsCustomFPM() && phpVersion != "" {
+		versions = append(versions, phpVersion)
+	}
+	worktrees, _ := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain())
+	for _, wt := range worktrees {
+		if v := config.WorktreePHPVersion(wt.Path, phpVersion); v != phpVersion && !slices.Contains(versions, v) {
+			versions = append(versions, v)
+		}
+	}
+	for _, v := range versions {
+		if err := ensureSitePHP(v, os.Stdout); err != nil {
+			return fmt.Errorf("%s stays paused, PHP %s could not be brought up: %w", site.Name, v, err)
+		}
+	}
+	return nil
+}
+
 // UnpauseSite restores the site's nginx vhost, restarts any workers that were
 // running when the site was paused, and clears the paused state.
 func UnpauseSite(name string) error {
@@ -205,6 +229,12 @@ func UnpauseSite(name string) error {
 	}
 
 	phpVersion := site.PHPVersion
+	if siteops.ServedByFPM(*site) {
+		phpVersion = phpDet.ResumeVersion(site.Path, phpVersion)
+		if err := ensureResumePHPs(site, phpVersion); err != nil {
+			return err
+		}
+	}
 
 	// Re-arm the container's quadlet [Install] that PauseSite stripped, before
 	// starting it, so it autostarts at login again. Gated on the global autostart
@@ -263,15 +293,9 @@ func UnpauseSite(name string) error {
 			}
 		}
 	default:
-		phpVersion = phpDet.ResumeVersion(site.Path, phpVersion)
-
 		if site.IsCustomFPM() {
 			// Per-site FPM container; the shared lerd-php<ver>-fpm is not used.
 			_ = podman.StartUnit(podman.CustomFPMContainerName(site.Name))
-		} else if phpVersion != "" {
-			if err := ensureSitePHP(phpVersion, os.Stdout); err != nil {
-				return fmt.Errorf("%s stays paused, PHP %s could not be brought up: %w", name, phpVersion, err)
-			}
 		}
 
 		if site.Secured {
@@ -763,11 +787,6 @@ func unpauseWorktrees(site *config.Site, phpVersion string) {
 	}
 	for _, wt := range worktrees {
 		effectivePHP := config.WorktreePHPVersion(wt.Path, phpVersion)
-		if effectivePHP != phpVersion {
-			if err := ensureSitePHP(effectivePHP, os.Stdout); err != nil {
-				feedback.Warn("bringing up PHP %s for worktree %s: %v", effectivePHP, wt.Domain, err)
-			}
-		}
 		var vhostErr error
 		if site.Secured {
 			vhostErr = nginx.GenerateWorktreeSSLVhost(wt.Domain, wt.Path, effectivePHP, site.PrimaryDomain(), site.Name, wt.Branch)

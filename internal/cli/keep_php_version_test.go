@@ -140,3 +140,46 @@ func TestUnpauseSite_failedBuild(t *testing.T) {
 		}
 	}
 }
+
+// A worktree pinned to a version that cannot be brought up stops the resume
+// before any route is restored, so neither it nor the site is left on a 502.
+func TestUnpauseSite_worktreePHPUnavailable(t *testing.T) {
+	pausedSite(t)
+	stubResumePHP(t, nil, false)
+	site, err := config.FindSite("shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wt := t.TempDir()
+	meta := filepath.Join(site.Path, ".git", "worktrees", "feat")
+	if err := os.MkdirAll(meta, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for path, body := range map[string]string{
+		filepath.Join(meta, "HEAD"):     "ref: refs/heads/feat\n",
+		filepath.Join(meta, "gitdir"):   filepath.Join(wt, ".git") + "\n",
+		filepath.Join(wt, ".git"):       "gitdir: " + meta + "\n",
+		filepath.Join(wt, ".lerd.yaml"): "php_version: \"8.1\"\n",
+	} {
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	buildFPMImageTo = func(v string, _ bool, _ io.Writer) (bool, error) {
+		if v == "8.1" {
+			return false, errors.New("offline")
+		}
+		return false, nil
+	}
+
+	err = UnpauseSite("shop")
+	if err == nil || !strings.Contains(err.Error(), "8.1") {
+		t.Errorf("err = %v, want it to name PHP 8.1", err)
+	}
+	if site, _ := config.FindSite("shop"); site == nil || !site.Paused {
+		t.Error("the site must stay paused")
+	}
+	if confs, _ := filepath.Glob(filepath.Join(config.NginxConfD(), "*shop.test.conf")); len(confs) != 0 {
+		t.Errorf("routes were restored: %v", confs)
+	}
+}
