@@ -177,10 +177,6 @@ func refreshHostProxyEnvOnResume(site *config.Site, mode string) bool {
 	return true
 }
 
-// fpmImageExistsFn reports whether a version has an image to serve from, a seam
-// for tests.
-var fpmImageExistsFn = func(v string) bool { return podman.ImageExists(podman.FPMImageName(v)) }
-
 // ensureSitePHP brings up the PHP a site being linked or resumed needs, installing
 // it when it was removed. A failed build is only an error when there is no earlier
 // image to serve from.
