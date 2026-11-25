@@ -194,6 +194,22 @@ func ensureSitePHP(version string, w io.Writer) error {
 	return startUnit(podman.FPMUnitName(version))
 }
 
+// resumePHPVersion is the PHP a resuming site runs on, within its framework's range.
+// A custom-FPM site's comes from its Containerfile and is never re-detected, and a
+// guessed definition's range describes another version of the framework.
+func resumePHPVersion(site *config.Site) string {
+	if !siteops.ServedByFPM(*site) || site.IsCustomFPM() {
+		return site.PHPVersion
+	}
+	phpMin, phpMax := "", ""
+	if site.Framework != "" {
+		if fw, ok := config.GetFrameworkForDir(site.Framework, site.Path); ok && !fw.VersionGuessed {
+			phpMin, phpMax = fw.PHP.Min, fw.PHP.Max
+		}
+	}
+	return phpDet.ResumeVersion(site.Path, phpMin, phpMax, site.PHPVersion)
+}
+
 // ensureResumePHPs brings up every PHP a resuming site and its worktrees need,
 // before anything is restored, so a failure leaves the whole site paused.
 func ensureResumePHPs(site *config.Site, phpVersion string) error {
@@ -228,9 +244,8 @@ func UnpauseSite(name string) error {
 		return nil
 	}
 
-	phpVersion := site.PHPVersion
+	phpVersion := resumePHPVersion(site)
 	if siteops.ServedByFPM(*site) {
-		phpVersion = phpDet.ResumeVersion(site.Path, phpVersion)
 		if err := ensureResumePHPs(site, phpVersion); err != nil {
 			return err
 		}
@@ -312,6 +327,14 @@ func UnpauseSite(name string) error {
 		}
 
 		unpauseWorktrees(site, phpVersion)
+	}
+
+	// Commands and workers resolve the version from the registry.
+	if phpVersion != site.PHPVersion {
+		site.PHPVersion = phpVersion
+		if err := config.AddSite(*site); err != nil {
+			return fmt.Errorf("updating registry: %w", err)
+		}
 	}
 
 	// Restart the per-worktree workers PauseSite stopped (Vite). Universal across

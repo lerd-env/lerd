@@ -178,14 +178,19 @@ func SiteVersion(dir, current string) string {
 	return DetectVersionKeeping(dir, "", "", current)
 }
 
-// ResumeVersion is SiteVersion for a paused site coming back: its PHP may have
-// been removed meanwhile, which is then installed again rather than replaced.
-func ResumeVersion(dir, current string) string {
+// ResumeVersion is DetectVersionKeeping for a paused site coming back: its PHP may
+// have been removed meanwhile, which is then installed again rather than replaced,
+// and stays the answer when a pin falls outside the framework's range.
+func ResumeVersion(dir, phpMin, phpMax, current string) string {
 	v, err := detectVersion(dir, current, satisfiesConstraint)
 	if err != nil {
 		return current
 	}
-	return v
+	clamped := ClampToRange(v, phpMin, phpMax)
+	if clamped != v && current != "" && ClampToRange(current, phpMin, phpMax) == current {
+		return current
+	}
+	return clamped
 }
 
 // keepable reports whether version satisfies constraint and is installed for

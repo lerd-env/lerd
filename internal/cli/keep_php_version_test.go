@@ -183,3 +183,77 @@ func TestUnpauseSite_worktreePHPUnavailable(t *testing.T) {
 		t.Errorf("routes were restored: %v", confs)
 	}
 }
+
+// A pin changed while the site was paused is saved on resume, or commands would
+// stay on the old version while the web runs the new one.
+func TestUnpauseSite_savesAPinChangedWhilePaused(t *testing.T) {
+	pausedSite(t)
+	stubResumePHP(t, nil, true)
+	site, err := config.FindSite("shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(site.Path, ".php-version"), []byte("8.4\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := UnpauseSite("shop"); err != nil {
+		t.Fatal(err)
+	}
+	if site, _ := config.FindSite("shop"); site.PHPVersion != "8.4" || site.Paused {
+		t.Errorf("registry has PHP %s, paused=%v, want 8.4 resumed", site.PHPVersion, site.Paused)
+	}
+	if v, _ := phpDet.VersionForDir(site.Path); v != "8.4" {
+		t.Errorf("commands run on PHP %s, want 8.4", v)
+	}
+}
+
+// Resuming clamps to the framework's range, as linking does.
+func TestUnpauseSite_keepsTheFrameworkRange(t *testing.T) {
+	pausedSite(t)
+	ensured := stubResumePHP(t, nil, true)
+	site, err := config.FindSite("shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(config.StoreFrameworksDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for path, body := range map[string]string{
+		filepath.Join(config.StoreFrameworksDir(), "acme@1.yaml"): "name: acme\nlabel: Acme\nversion: \"1\"\npublic_dir: public\nphp:\n  min: \"8.3\"\n  max: \"8.4\"\ndetect:\n  - composer: acme/framework\n",
+		filepath.Join(site.Path, "composer.json"):                 `{"require":{"acme/framework":"^1.0"}}`,
+		filepath.Join(site.Path, ".php-version"):                  "8.5\n",
+	} {
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	site.Framework = "acme"
+	if err := config.AddSite(*site); err != nil {
+		t.Fatal(err)
+	}
+	if err := UnpauseSite("shop"); err != nil {
+		t.Fatal(err)
+	}
+	if site, _ := config.FindSite("shop"); site.PHPVersion != "8.3" || strings.Join(*ensured, ",") != "8.3" {
+		t.Errorf("registry %s, ensured %v, want 8.3 kept", site.PHPVersion, *ensured)
+	}
+}
+
+// A custom-FPM site's version comes from its Containerfile, never from detection.
+func TestResumePHPVersion_customFPMIsNotRedetected(t *testing.T) {
+	pausedSite(t)
+	site, err := config.FindSite("shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	site.Runtime = "fpm-custom"
+	if !site.IsCustomFPM() {
+		t.Fatal("fixture is not a custom-FPM site")
+	}
+	if err := os.WriteFile(filepath.Join(site.Path, ".php-version"), []byte("8.4\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := resumePHPVersion(site); got != "8.3" {
+		t.Errorf("resumePHPVersion = %s, want the Containerfile's 8.3", got)
+	}
+}

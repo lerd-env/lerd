@@ -76,7 +76,30 @@ func TestResumeVersion(t *testing.T) {
 			if c.pin != "" {
 				writeFile(t, dir, ".php-version", c.pin+"\n")
 			}
-			if got := ResumeVersion(dir, c.current); got != c.want {
+			if got := ResumeVersion(dir, "", "", c.current); got != c.want {
+				t.Errorf("ResumeVersion = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// The framework's range holds on resume as it does on link: a pin outside it
+// leaves the site on the version it was on, even a removed one.
+func TestResumeVersion_frameworkRange(t *testing.T) {
+	cases := []struct{ name, pin, current, want string }{
+		{"a pin outside keeps the removed version", "8.1", "8.3", "8.3"},
+		{"a pin inside wins", "8.4", "8.3", "8.4"},
+		{"a version outside is clamped too", "8.1", "8.1", "8.4"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			t.Setenv("XDG_DATA_HOME", t.TempDir())
+			t.Setenv("HOME", t.TempDir())
+			stubRuntimeInstalled(t, false, nil, []string{"8.4", "8.5"})
+			dir := t.TempDir()
+			writeFile(t, dir, ".php-version", c.pin+"\n")
+			if got := ResumeVersion(dir, "8.3", "8.4", c.current); got != c.want {
 				t.Errorf("ResumeVersion = %q, want %q", got, c.want)
 			}
 		})
