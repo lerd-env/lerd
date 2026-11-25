@@ -1427,6 +1427,31 @@ mode is turned off again for both users.
       two switches away and back, stays down: `lerd-nginx`, `lerd-ui` and
       `lerd-dns` all stay inactive until `lerd start`
 
+## Phase 17 — coming from another tool and going back
+
+Runs on its own guest state: it uninstalls lerd keeping data, so every install
+in it is a real one, and turns a copy of phase 2's demo into `herdshop`, a
+Laravel project with the `.env` Herd would have left: MySQL on 127.0.0.1 as
+root, its own Redis and mail settings, and keys lerd knows nothing about. The
+plain uninstall is answered on a terminal. Other projects' env files are put
+back at the end, and lerd is left installed.
+
+- [ ] Linking and `lerd env` save the original beside it, byte for byte, as
+      `.env.before_lerd`, and list it in `.gitignore`
+- [ ] The database values now point at lerd, and the project's own keys are
+      untouched
+- [ ] The site answers **http → 200**
+- [ ] `lerd env:restore` puts every old value back and keeps a key added since
+- [ ] `lerd env:restore` recreates a deleted `.env` from the copy
+- [ ] Plain `lerd uninstall` names the project, and answering no leaves its
+      `.env` alone and prints where the copy is
+- [ ] `--keep-data` asks nothing, leaves `.env` alone and prints where the copy
+      is
+- [ ] Plain `lerd uninstall` answered yes puts every old value back and keeps a
+      key added since
+- [ ] macOS: install warns that `/etc/resolver/test` belongs to another tool,
+      and after the uninstall that file holds what it held before
+
 ## Sign-off
 
 One row per lane per guest. A lane passes only when its final 200 check passed

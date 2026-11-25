@@ -44,10 +44,23 @@ if command -v podman >/dev/null 2>&1; then
 fi
 
 # ── Remove /etc/resolver entry ───────────────────────────────────────────────
-if [ -f /etc/resolver/test ]; then
-  echo "  --> Removing /etc/resolver/test (requires sudo)"
-  sudo rm -f /etc/resolver/test
-fi
+# Only lerd's own files, so a resolver Herd or Valet wrote survives, and what
+# lerd replaced at install goes back.
+RESOLVER_DIR="${LERD_RESOLVER_DIR:-/etc/resolver}"
+BACKUP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/lerd/resolver-backup"
+for f in "$RESOLVER_DIR"/*; do
+  [ -f "$f" ] || continue
+  [ "$(cat "$f")" = "$(printf 'nameserver 127.0.0.1\nport 5300')" ] || continue
+  backup="$BACKUP_DIR/${f##*/}"
+  if [ -f "$backup" ]; then
+    echo "  --> Restoring $f (requires sudo)"
+    sudo cp "$backup" "$f"
+    rm -f "$backup"
+  else
+    echo "  --> Removing $f (requires sudo)"
+    sudo rm -f "$f"
+  fi
+done
 
 # ── Remove log files ─────────────────────────────────────────────────────────
 rm -rf "$HOME/Library/Logs/lerd"

@@ -40,7 +40,9 @@ func teardownDNSResolver() {
 	// the sudoers drop-in so they do not prompt, but the header keeps the teardown
 	// visible in the output.
 	feedback.Sudo("Removing DNS configuration")
-	dnsTeardown()
+	if err := dnsTeardown(); err != nil {
+		feedback.Warn("%v", err)
+	}
 }
 
 // Seams so tests can drive the disable path without shelling out to sudo or

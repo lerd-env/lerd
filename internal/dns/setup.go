@@ -887,7 +887,7 @@ func setupNetworkManager() error {
 }
 
 // Teardown removes all lerd DNS configuration from the system and restores normal resolution.
-func Teardown() {
+func Teardown() error {
 	// NM dispatcher script
 	dispatcherScript := "/etc/NetworkManager/dispatcher.d/99-lerd-dns"
 	if _, err := os.Stat(dispatcherScript); err == nil {
@@ -1014,6 +1014,7 @@ func Teardown() {
 	// script, resolvectl, NetworkManager restart) for a tool that is being
 	// removed, which is exactly what the teardown exists to undo.
 	removeSudoersGrant()
+	return nil
 }
 
 // runSudoersRemoval is the seam tests override.

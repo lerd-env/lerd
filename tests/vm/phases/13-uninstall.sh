@@ -8,15 +8,6 @@ scheme=https
 [ "$mode_before" = localhost ] && scheme=http
 db=$(grep '^DB_DATABASE=' "$DEMO_DIR/.env" 2>/dev/null | cut -d= -f2)
 
-reinstall() {
-	if [ -x "$HOME/rc/lerd" ]; then
-		bash "$HOME/rc/install.sh" --local "$HOME/rc/lerd"
-	elif [ "${LERD_CHANNEL:-}" = beta ]; then
-		bash "$HOME/lerd-install.sh" --beta </dev/null
-	else
-		bash "$HOME/lerd-install.sh" </dev/null
-	fi
-}
 # The reinstall reuses the installer phase 1 ran; without it, stop before lerd is removed.
 if [ ! -x "$HOME/rc/lerd" ] && [ ! -f "$HOME/lerd-install.sh" ]; then
 	_fail "setup: no installer saved by phase 1 to reinstall from (vm.sh push, or rerun from phase 1)"

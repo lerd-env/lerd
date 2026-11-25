@@ -36,9 +36,9 @@ func TestRestoreEnvBackup_WritesTheFrameworkFile(t *testing.T) {
 	}
 	original := "<?php\nreturn ['Datasources' => ['default' => ['host' => 'db.example']]];\n"
 	writeFile(t, dir, "config/app_local.php.before_lerd", original)
-	writeFile(t, dir, "config/app_local.php", "<?php\nreturn ['lerd wrote this'];\n")
+	writeFile(t, dir, "config/app_local.php", "<?php\nreturn ['Datasources' => ['default' => ['host' => 'lerd-mysql']]];\n")
 
-	if err := restoreEnvBackup(dir, "config/app_local.php"); err != nil {
+	if err := restoreEnvBackup(dir, "config/app_local.php", "php-array"); err != nil {
 		t.Fatalf("restoreEnvBackup: %v", err)
 	}
 
@@ -56,7 +56,7 @@ func TestRestoreEnvBackup_WritesTheFrameworkFile(t *testing.T) {
 
 func TestRestoreEnvBackup_MissingBackup(t *testing.T) {
 	dir := t.TempDir()
-	err := restoreEnvBackup(dir, "config/app_local.php")
+	err := restoreEnvBackup(dir, "config/app_local.php", "php-array")
 	if err == nil {
 		t.Fatal("expected an error when no backup exists")
 	}
@@ -72,7 +72,7 @@ func TestRestoreEnvBackup_PlainDotenvUnchanged(t *testing.T) {
 	writeFile(t, dir, ".env.before_lerd", "DB_HOST=127.0.0.1\n")
 	writeFile(t, dir, ".env", "DB_HOST=lerd-mysql\n")
 
-	if err := restoreEnvBackup(dir, ".env"); err != nil {
+	if err := restoreEnvBackup(dir, ".env", "dotenv"); err != nil {
 		t.Fatalf("restoreEnvBackup: %v", err)
 	}
 	got, _ := os.ReadFile(filepath.Join(dir, ".env"))

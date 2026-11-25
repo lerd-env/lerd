@@ -2013,9 +2013,9 @@ func NewEnvRestoreCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "env:restore",
 		Short: "Restore the env file from the pre-lerd backup",
-		Long: `Restores the project's env file from the backup that 'lerd env' created the
-first time it was run on this project, kept next to the file itself
-(.env.before_lerd for a plain dotenv project).
+		Long: `Puts the values from the backup 'lerd env' created the first time it was run on
+this project back into the env file, keeping keys added since. The backup sits
+next to the file itself (.env.before_lerd for a plain dotenv project).
 
 Useful when switching back from lerd to Laravel Sail or another environment.`,
 		RunE: runEnvRestore,
@@ -2031,18 +2031,36 @@ func envBackupPath(envRelPath string) string {
 	return envRelPath + ".before_lerd"
 }
 
-// restoreEnvBackup copies the pre-lerd backup back over the env file it was
-// taken from.
-func restoreEnvBackup(cwd, envRelPath string) error {
+// restoreEnvBackup puts the pre-lerd values back into the env file they were
+// saved from, keeping keys added since.
+func restoreEnvBackup(cwd, envRelPath, format string) error {
 	backupRelPath := envBackupPath(envRelPath)
 	backupPath := filepath.Join(cwd, backupRelPath)
 	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
 		return fmt.Errorf("%s not found — run 'lerd env' first to create a backup", backupRelPath)
 	}
-	if err := copyEnvFile(backupPath, filepath.Join(cwd, envRelPath)); err != nil {
+	envPath := filepath.Join(cwd, envRelPath)
+	restore := func() error { return envfile.RestoreValues(envPath, backupPath, format) }
+	if _, err := os.Stat(envPath); os.IsNotExist(err) {
+		restore = func() error { return copyEnvFile(backupPath, envPath) }
+	}
+	if err := restore(); err != nil {
 		return fmt.Errorf("restoring %s: %w", envRelPath, err)
 	}
 	return nil
+}
+
+// frameworkEnvFile is the env file the project's framework declares, not a root
+// .env: restoring there would leave the configuration lerd edited untouched.
+func frameworkEnvFile(dir string) (rel, format string) {
+	if fwName, ok := config.DetectFrameworkForDir(dir); ok {
+		if fw, found := config.GetFrameworkForDir(fwName, dir); found {
+			if rel, format := fw.Env.ResolveWrite(dir); rel != "" {
+				return rel, format
+			}
+		}
+	}
+	return ".env", envfile.FormatDotenv
 }
 
 func runEnvRestore(_ *cobra.Command, _ []string) error {
@@ -2051,18 +2069,8 @@ func runEnvRestore(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	// The file to restore is the one the framework declares, not a root .env:
-	// writing there would leave the real configuration lerd edited untouched.
-	envRelPath := ".env"
-	if fwName, ok := config.DetectFrameworkForDir(cwd); ok {
-		if fw, found := config.GetFrameworkForDir(fwName, cwd); found {
-			if rel, _ := fw.Env.ResolveWrite(cwd); rel != "" {
-				envRelPath = rel
-			}
-		}
-	}
-
-	if err := restoreEnvBackup(cwd, envRelPath); err != nil {
+	envRelPath, format := frameworkEnvFile(cwd)
+	if err := restoreEnvBackup(cwd, envRelPath, format); err != nil {
 		return err
 	}
 	fmt.Printf("Restored %s from %s\n", envRelPath, envBackupPath(envRelPath))

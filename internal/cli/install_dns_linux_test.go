@@ -31,7 +31,7 @@ func TestTeardownDNS_removesResolverPlumbing(t *testing.T) {
 	t.Cleanup(func() { dnsTeardown, dnsResolverConfigured = origTeardown, origConfigured })
 
 	called := false
-	dnsTeardown = func() { called = true }
+	dnsTeardown = func() error { called = true; return nil }
 	dnsResolverConfigured = func() bool { return true } // lerd did write resolver config
 
 	teardownDNS()
@@ -51,7 +51,7 @@ func TestTeardownDNS_skipsWhenLerdNeverConfiguredTheResolver(t *testing.T) {
 	t.Cleanup(func() { dnsTeardown, dnsResolverConfigured = origTeardown, origConfigured })
 
 	called := false
-	dnsTeardown = func() { called = true }
+	dnsTeardown = func() error { called = true; return nil }
 	dnsResolverConfigured = func() bool { return false } // lerd never touched the resolver
 
 	teardownDNS()

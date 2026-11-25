@@ -72,24 +72,39 @@ func ConfigureResolver() error {
 		return nil
 	}
 
+	saved, err := backupForeignResolver(resolverFile, filepath.Join(resolverBackupDir(), tld), content)
+	if err != nil {
+		return fmt.Errorf("saving the existing %s: %w", resolverFile, err)
+	}
+	if saved {
+		feedback.Warn("%s belongs to another tool such as Laravel Herd; its .%s sites stop resolving until lerd uninstall or lerd dns:disable puts it back", resolverFile, tld)
+	}
+
 	feedback.Sudo("Configuring /etc/resolver for ." + tld + " DNS resolution")
 	return sudoWriteFile(resolverFile, content, 0644)
 }
 
-// Teardown removes every /etc/resolver file lerd wrote (matched by content) so
-// disabling DNS never orphans a resolver pointing at the torn-down dnsmasq.
-// Content-matching beats the config TLD: disable flips cfg.DNS.TLD first, so it
-// no longer names the file to remove, and a custom TLD leaves its own to clean.
-func Teardown() {
+// resolverBackupDir holds what other tools had in /etc/resolver. It cannot sit
+// there: macOS reads every file in that directory as a domain.
+func resolverBackupDir() string { return filepath.Join(config.DataDir(), "resolver-backup") }
+
+// Teardown puts back the resolver files lerd replaced and removes the rest it
+// wrote. Matched by content, as disable has already flipped cfg.DNS.TLD and a
+// custom TLD leaves its own file.
+func Teardown() error {
 	stale := staleResolverFiles(resolverDir)
-	if len(stale) == 0 {
-		return
+	unsaved, err := restoreResolvers(stale, resolverBackupDir(), func(path string, body []byte) error {
+		return sudoWriteFile(path, body, 0644)
+	})
+	if len(unsaved) == 0 {
+		return err
 	}
-	rmCmd := exec.Command("sudo", append([]string{"rm", "-f"}, stale...)...)
+	rmCmd := exec.Command("sudo", append([]string{"rm", "-f"}, unsaved...)...)
 	rmCmd.Stdin = os.Stdin
 	rmCmd.Stdout = os.Stdout
 	rmCmd.Stderr = os.Stderr
 	rmCmd.Run() //nolint:errcheck
+	return err
 }
 
 // staleResolverFiles returns the resolver files under dir whose content matches
