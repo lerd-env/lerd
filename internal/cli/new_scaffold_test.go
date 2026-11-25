@@ -32,13 +32,13 @@ func TestScaffoldPlan(t *testing.T) {
 			wantTailEnd: []string{"create-project", "symfony/skeleton", target, "--no-interaction"},
 		},
 		{
-			// A framework free to declare something composer cannot do still
-			// reaches the host binary.
+			// A host scaffold runs in the parent directory, and one like nest new
+			// turns an absolute path into nested folders, so it gets the name.
 			name:        "a non-composer create command stays on the host",
 			create:      "npx create-something",
 			wantPHP:     false,
 			wantBin:     "npx",
-			wantTailEnd: []string{"create-something", target},
+			wantTailEnd: []string{"create-something", filepath.Base(target)},
 		},
 	}
 

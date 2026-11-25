@@ -627,7 +627,7 @@ func WorktreeHostPort(siteName string, parentPort int, wtPath, portEnvKey string
 // worktree checkout usually can't see it).
 func parentProxyConfig(site config.Site) *config.ProxyConfig {
 	if proj, err := config.LoadProjectConfig(site.Path); err == nil && proj.Proxy != nil {
-		return proj.Proxy
+		return liveProxy(site, proj.Proxy)
 	}
 	if site.HostCommand == "" && site.HostPort == 0 {
 		return nil
@@ -684,7 +684,7 @@ func StartHostProxyWorktreeServer(site config.Site, wtPath string) error {
 // host-mode worker (launchd/fnm on macOS), reusing the standard worker
 // machinery for auto-restart, logs, and health. No-op in proxy-only mode.
 func startHostProxyWorker(site config.Site, proxy *config.ProxyConfig) {
-	l := prepareHostProxyStart(site, proxy)
+	l := prepareHostProxyStart(&site, proxy)
 	if l == nil {
 		return
 	}
@@ -698,13 +698,17 @@ func startHostProxyWorker(site config.Site, proxy *config.ProxyConfig) {
 
 // prepareHostProxyStart writes the dev server's unit without reloading or
 // starting it; nil when the proxy runs no command or the command is refused.
-func prepareHostProxyStart(site config.Site, proxy *config.ProxyConfig) *workerLaunch {
-	w, ok := hostProxyWorker(proxy)
-	if !ok {
+func prepareHostProxyStart(site *config.Site, proxy *config.ProxyConfig) *workerLaunch {
+	if proxy.Command == "" {
 		return nil
 	}
-	if err := gateHostProxyAutostart(site, proxy.Command); err != nil {
+	if err := gateHostProxyAutostart(*site, proxy.Command); err != nil {
 		feedback.Warn("dev server not started: %v", err)
+		return nil
+	}
+	settleDevServerPort(site, proxy)
+	w, ok := hostProxyWorker(liveProxy(*site, proxy))
+	if !ok {
 		return nil
 	}
 	l, err := prepareWorkerStart(site.Name, site.Path, "", hostProxyWorkerName, w)

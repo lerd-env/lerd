@@ -58,6 +58,9 @@ type Framework struct {
 	PHP       FrameworkPHP    `yaml:"php,omitempty"`
 	Detect    []FrameworkRule `yaml:"detect,omitempty"`
 	PublicDir string          `yaml:"public_dir"`
+	// DevServer says the project is served by its own dev server on the host
+	// rather than by PHP. It is what init offers; .lerd.yaml's proxy: decides.
+	DevServer *FrameworkDevServer `yaml:"dev_server,omitempty"`
 	// SourceDirs overrides which project directories the activity watcher treats
 	// as source for idle-suspend (a save there keeps the site awake). When empty,
 	// config.DefaultSourceDirs applies. Paths are relative to the project root.
@@ -731,17 +734,43 @@ func ValidatePHPIni(ini map[string]string) error {
 // FrameworkRule is a single detection rule for a framework.
 // Any matching rule is sufficient to identify the framework.
 type FrameworkRule struct {
-	File             string   `yaml:"file,omitempty" json:"file,omitempty"`                           // file must exist in project root
-	MissingFile      string   `yaml:"missing_file,omitempty" json:"missing_file,omitempty"`           // file must NOT exist in project root, for a step that bootstraps a project
-	Composer         string   `yaml:"composer,omitempty" json:"composer,omitempty"`                   // package must be in composer.json require/require-dev
-	ComposerSections []string `yaml:"composer_sections,omitempty" json:"composer_sections,omitempty"` // extra composer.json keys to search (e.g. flex-require)
-	VersionKey       string   `yaml:"version_key,omitempty" json:"version_key,omitempty"`             // dot-path to version in composer.json (e.g. extra.symfony.require)
-	VersionFile      string   `yaml:"version_file,omitempty" json:"version_file,omitempty"`           // file to read version from (relative to project root)
-	VersionPattern   string   `yaml:"version_pattern,omitempty" json:"version_pattern,omitempty"`     // regex with capture group for version (e.g. "\\$wp_version = '([^']+)'")
+	File        string `yaml:"file,omitempty" json:"file,omitempty"`                 // file must exist in project root
+	MissingFile string `yaml:"missing_file,omitempty" json:"missing_file,omitempty"` // file must NOT exist in project root, for a step that bootstraps a project
+	Composer    string `yaml:"composer,omitempty" json:"composer,omitempty"`         // package must be in composer.json require/require-dev
+	// Package gates on a dependency in the project's own language manifest.
+	Package          *ManifestPackage `yaml:"package,omitempty" json:"package,omitempty"`
+	ComposerSections []string         `yaml:"composer_sections,omitempty" json:"composer_sections,omitempty"` // extra composer.json keys to search (e.g. flex-require)
+	VersionKey       string           `yaml:"version_key,omitempty" json:"version_key,omitempty"`             // dot-path to version in composer.json (e.g. extra.symfony.require)
+	VersionFile      string           `yaml:"version_file,omitempty" json:"version_file,omitempty"`           // file to read version from (relative to project root)
+	VersionPattern   string           `yaml:"version_pattern,omitempty" json:"version_pattern,omitempty"`     // regex with capture group for version (e.g. "\\$wp_version = '([^']+)'")
 	// WhenEnv ("KEY=value") narrows the rule to sites whose .env holds that
 	// value. It never matches alone: an older binary drops the key and sees an
 	// empty rule, so it must always ride on a field that binary still reads.
 	WhenEnv string `yaml:"when_env,omitempty" json:"when_env,omitempty"`
+}
+
+// ScaffoldCommand is the command that starts a new project, or "".
+func (fw *Framework) ScaffoldCommand() string {
+	if fw.Create == "" && fw.DevServer != nil {
+		return fw.DevServer.Create
+	}
+	return fw.Create
+}
+
+// FrameworkDevServer is the dev server a non-PHP framework is served by.
+type FrameworkDevServer struct {
+	Command string `yaml:"command"`        // e.g. "npm run start:dev"
+	Port    int    `yaml:"port,omitempty"` // first port to try; the next free one is used
+	// Create is the scaffold command, run on the host. It is not the framework's
+	// own create: an older lerd would run that one and link the result as PHP.
+	Create string `yaml:"create,omitempty"`
+	// PortEnvKey and HostEnvKey name the variables the server reads its port and
+	// bind address from, when they are not PORT and HOST.
+	PortEnvKey string `yaml:"port_env_key,omitempty"`
+	HostEnvKey string `yaml:"host_env_key,omitempty"`
+	// MovePort lets lerd start the server on another port when its own is taken,
+	// which is only true of one that binds the port lerd injects.
+	MovePort bool `yaml:"move_port,omitempty"`
 }
 
 // FrameworkEnvConf describes how the framework manages its env file.
@@ -1396,13 +1425,13 @@ func GetFrameworkForScaffold(name, version string) (*Framework, bool) {
 	// store owns the create command and is free to publish a framework without
 	// one, and that reaches every binary within the day, with nothing gating it
 	// per version. So a name whose built-in can still scaffold keeps it.
-	if base == nil || (base.Create == "" && builtinFramework(name) != nil) {
+	if base == nil || (base.ScaffoldCommand() == "" && builtinFramework(name) != nil) {
 		return GetFramework(name)
 	}
 	// A framework's newest major can ship no project skeleton at all while the
 	// ones before it do. Only a run that pinned that major asked for it, so an
 	// unpinned one starts from the newest definition that can still scaffold.
-	if base.Create == "" && version == "" {
+	if base.ScaffoldCommand() == "" && version == "" {
 		if creatable := newestScaffoldableFramework(name); creatable != nil {
 			base = creatable
 		}
@@ -1422,7 +1451,7 @@ func newestScaffoldableFramework(name string) *Framework {
 		if fw == nil && frameworkFetchHook != nil {
 			fw, _ = frameworkFetchHook(name, v)
 		}
-		if fw != nil && fw.Create != "" {
+		if fw != nil && fw.ScaffoldCommand() != "" {
 			return fw
 		}
 	}
@@ -1437,7 +1466,7 @@ func FrameworkScaffoldSupport(name string) map[string]bool {
 	out := map[string]bool{}
 	for _, path := range versionedFrameworkPaths(name) {
 		if fw := loadFrameworkYAML(path); fw != nil && fw.Version != "" {
-			out[fw.Version] = fw.Create != ""
+			out[fw.Version] = fw.ScaffoldCommand() != ""
 		}
 	}
 	return out
@@ -2125,6 +2154,8 @@ func SanitizeProjectFrameworkDef(def *Framework) *Framework {
 		safe.Workers = nil
 	}
 	safe.Commands = nil
+	// The dev server command runs on the host too.
+	safe.DevServer = nil
 	// An nginx snippet is spliced into the site's server block, so it is a
 	// config-injection surface: only the trusted store may declare one.
 	safe.Nginx = nil
@@ -2812,11 +2843,13 @@ func MatchesRule(dir string, rule FrameworkRule) bool {
 	return matchesRule(dir, rule, ComposerHasInstalled)
 }
 
-// MatchesDetectRule is the same rule against the question detection asks, which
-// is what the project is rather than what is installed under it. A composer rule
-// reads the manifest alone here: a library repo testing against Laravel has
-// laravel/framework in its lock, and that must not make it a Laravel site.
+// MatchesDetectRule asks what the project is, not what is installed under it: a
+// composer rule reads the manifest alone, since a library testing on Laravel is
+// no Laravel site, and a package rule is no answer where composer.json is.
 func MatchesDetectRule(dir string, rule FrameworkRule) bool {
+	if rule.Package != nil && composerSections(dir) != nil {
+		rule.Package = nil
+	}
 	return matchesRule(dir, rule, ComposerHasPackage)
 }
 
@@ -2842,7 +2875,7 @@ func matchesRule(dir string, rule FrameworkRule, hasPackage func(string, string,
 			return true
 		}
 	}
-	return false
+	return rule.Package != nil && rule.Package.matches(dir)
 }
 
 // envHolds reports whether the site's .env sets key to value for a "KEY=value"
@@ -2896,7 +2929,7 @@ func frameworkDetectRules(frameworkName string) []FrameworkRule {
 		}
 		for _, rule := range fw.Detect {
 			key := strings.Join([]string{
-				rule.File, rule.MissingFile, rule.Composer,
+				rule.File, rule.MissingFile, rule.Composer, fmt.Sprintf("%v", rule.Package),
 				strings.Join(rule.ComposerSections, ","),
 				rule.VersionKey, rule.VersionFile, rule.VersionPattern,
 			}, "\x00")

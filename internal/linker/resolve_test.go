@@ -107,6 +107,101 @@ func TestResolve_hostProxyCarriesTheCommandForConsent(t *testing.T) {
 	}
 }
 
+func writeUserFramework(t *testing.T, name string) {
+	t.Helper()
+	if err := os.MkdirAll(config.FrameworksDir(), 0755); err != nil {
+		t.Fatal(err)
+	}
+	body := "name: " + name + "\nworkers:\n  queue:\n    command: node queue.js\n    host: true\n"
+	if err := os.WriteFile(filepath.Join(config.FrameworksDir(), name+".yaml"), []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestResolve_proxiedSitesKeepTheFramework(t *testing.T) {
+	modes := map[string]string{
+		"proxy":     "proxy:\n  port: 3000\n  command: npm run dev\n",
+		"container": "container:\n  port: 3000\n",
+	}
+	for name, yaml := range modes {
+		t.Run(name, func(t *testing.T) {
+			dir := projectDir(t, "api", "framework: acmejs\n"+yaml+"custom_workers:\n  mail:\n    command: node mail.js\n    host: true\n")
+			writeUserFramework(t, "acmejs")
+			plan, err := Resolve(dir, testConfig(), CLIPolicy("", false, nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if plan.Site.Framework != "acmejs" {
+				t.Errorf("framework = %q, want acmejs", plan.Site.Framework)
+			}
+			if plan.Site.PHPVersion != "" {
+				t.Errorf("php = %q, want empty", plan.Site.PHPVersion)
+			}
+
+			fw, ok := config.GetFrameworkForDir(plan.Site.Framework, dir)
+			if !ok || fw.Workers["mail"].Command == "" || fw.Workers["queue"].Command == "" {
+				t.Errorf("workers = %+v, want both the definition's queue and the project's mail", fw)
+			}
+
+			if err := config.AddSite(plan.Site); err != nil {
+				t.Fatal(err)
+			}
+			again, err := Resolve(dir, testConfig(), CLIPolicy("", false, nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if again.Site.Framework != "acmejs" {
+				t.Errorf("framework after a re-link = %q, want acmejs", again.Site.Framework)
+			}
+		})
+		t.Run(name+" naming an unknown one", func(t *testing.T) {
+			dir := projectDir(t, "ghost", "framework: ghostjs\n"+yaml)
+			plan, err := Resolve(dir, testConfig(), CLIPolicy("", false, nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if plan.Site.Framework != "" {
+				t.Errorf("framework = %q, want empty", plan.Site.Framework)
+			}
+		})
+		t.Run(name+" without one", func(t *testing.T) {
+			dir := projectDir(t, "plain", yaml)
+			plan, err := Resolve(dir, testConfig(), CLIPolicy("", false, nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if plan.Site.Framework != "" {
+				t.Errorf("framework = %q, want empty", plan.Site.Framework)
+			}
+		})
+	}
+}
+
+func TestResolve_relinkKeepsAMovedPort(t *testing.T) {
+	dir := projectDir(t, "api", "proxy:\n  port: 3000\n  command: npm run dev\n")
+	moved := config.Site{Name: "api", Domains: []string{"api.test"}, Path: dir, HostPort: 3007, HostPortMovedFrom: 3000}
+	if err := config.AddSite(moved); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := Resolve(dir, testConfig(), CLIPolicy("", false, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Site.HostPort != 3007 || plan.Site.HostPortMovedFrom != 3000 {
+		t.Errorf("port %d from %d, want the moved port kept", plan.Site.HostPort, plan.Site.HostPortMovedFrom)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte("proxy:\n  port: 4000\n  command: npm run dev\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if plan, err = Resolve(dir, testConfig(), CLIPolicy("", false, nil)); err != nil {
+		t.Fatal(err)
+	}
+	if plan.Site.HostPort != 4000 || plan.Site.HostPortMovedFrom != 0 {
+		t.Errorf("port %d from %d, want the newly declared 4000", plan.Site.HostPort, plan.Site.HostPortMovedFrom)
+	}
+}
+
 func TestResolve_containerWithoutPortIsCustomFPM(t *testing.T) {
 	dir := projectDir(t, "legacy", "container:\n  containerfile: Containerfile.lerd\n")
 

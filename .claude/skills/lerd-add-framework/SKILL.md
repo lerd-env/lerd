@@ -31,6 +31,10 @@ and test against, but the pull request goes to **lerd-env/frameworks**.
      including the major version.
      A framework built on another one (a CMS on Symfony) also declares
      `based_on: <base>` here and on its index entry, so it wins over the base.
+   - `dev_server` — only for a framework that is not PHP: the command and port of
+     the dev server it is served by. Such a definition detects with `package:`
+     and never `file:`, which an older lerd would match and serve as PHP, and
+     its workers are `host: true`. Its scaffold command is `dev_server.create`.
    - `env` — `.env` file/format, `key_generation`, and the `services` map that
      wires each service (mysql, postgres, redis, mailpit, …) with detection rules
      and the vars to inject. **Env vars belong to the site, declared here — never

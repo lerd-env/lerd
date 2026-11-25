@@ -150,10 +150,16 @@ func scaffoldPlan(create, target string, extraArgs []string) scaffold {
 	if len(parts) == 0 {
 		return scaffold{}
 	}
+	inContainer := parts[0] == "composer"
+	// A host scaffold runs in the parent directory, and not every one takes an
+	// absolute path: nest new turns it into nested folders.
+	if !inContainer {
+		target = filepath.Base(target)
+	}
 	tail := append(append([]string{}, parts[1:]...), target)
 	tail = append(tail, extraArgs...)
 
-	if parts[0] != "composer" {
+	if !inContainer {
 		return scaffold{args: append([]string{parts[0]}, tail...)}
 	}
 	return scaffold{
@@ -277,7 +283,7 @@ func runNew(target, frameworkName, frameworkVersion string, extraArgs []string) 
 	if !ok {
 		return fmt.Errorf("unknown framework %q — run 'lerd framework list' to see available frameworks", frameworkName)
 	}
-	if fw.Create == "" {
+	if fw.ScaffoldCommand() == "" {
 		return scaffoldUnavailableError(frameworkName, frameworkVersion)
 	}
 
@@ -285,7 +291,7 @@ func runNew(target, frameworkName, frameworkVersion string, extraArgs []string) 
 		return err
 	}
 
-	plan := scaffoldPlan(fw.Create, target, extraArgs)
+	plan := scaffoldPlan(fw.ScaffoldCommand(), target, extraArgs)
 	if len(plan.args) == 0 {
 		return fmt.Errorf("framework %q has an empty create command", frameworkName)
 	}
@@ -294,7 +300,7 @@ func runNew(target, frameworkName, frameworkVersion string, extraArgs []string) 
 
 	start := time.Now()
 	feedback.Begin()
-	line := "scaffolding " + feedback.Val(fw.Label) + " · " + strings.Join(strings.Fields(fw.Create), " ") + " " + target
+	line := "scaffolding " + feedback.Val(fw.Label) + " · " + strings.Join(strings.Fields(fw.ScaffoldCommand()), " ") + " " + target
 	if plan.inContainer && scaffoldVersion != "" {
 		line += " · php " + feedback.Val(scaffoldVersion)
 	}

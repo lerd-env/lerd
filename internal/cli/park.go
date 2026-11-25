@@ -373,8 +373,9 @@ func parkDeps() linker.Deps {
 // register unattended: a framework lerd knows, a real document root, or a
 // composer.json / top-level PHP file.
 func parkAdmits(projectDir string) bool {
-	if _, ok := config.DetectFrameworkForDir(projectDir); ok {
-		return true
+	if name, ok := config.DetectFrameworkForDir(projectDir); ok {
+		// A dev server is a host command, which nothing unattended may start.
+		return frameworkDevServer(name, projectDir) == nil
 	}
 	if config.DetectPublicDir(projectDir) != "." {
 		return true

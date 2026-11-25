@@ -122,9 +122,13 @@ func projectKindFor(cwd string, defaults *config.ProjectConfig) (kind string, ch
 		return ProjectKindContainer, false, nil, ""
 	}
 
-	_, hasFramework := resolveFramework(cwd)
+	framework, hasFramework := resolveFramework(cwd)
 	hasComposer := fileExists(filepath.Join(cwd, "composer.json"))
-	if hasFramework || hasComposer {
+	devServer := frameworkDevServer(framework, cwd)
+	if devServer != nil && !podman.HasContainerfile(cwd) {
+		return ProjectKindProxy, false, nil, ""
+	}
+	if (hasFramework && devServer == nil) || hasComposer {
 		return ProjectKindPHP, false, nil, ""
 	}
 	if podman.HasContainerfile(cwd) {
@@ -305,7 +309,7 @@ func fillProxyQuestions(q *ProjectQuestions, cwd string, defaults *config.Projec
 		command = defaults.Proxy.Command
 	}
 	if command == "" {
-		command = proxyDefaultCommand(cwd, devScripts)
+		command = devServerDefaultCommand(detectedDevServer(cwd), cwd, devScripts)
 	}
 	q.ProxyCommand = command
 	if len(devScripts) > 0 {
@@ -324,7 +328,7 @@ func fillProxyQuestions(q *ProjectQuestions, cwd string, defaults *config.Projec
 			if s, err := config.FindSiteByPath(cwd); err == nil {
 				siteName = s.Name
 			}
-			port = allocateHostPort(defaultDevServerPort, siteName)
+			port = allocateHostPort(devServerStartPort(detectedDevServer(cwd)), siteName)
 		}
 	}
 	q.ProxyPort = port
@@ -552,7 +556,7 @@ func projectConfigFromAnswers(cwd string, defaults *config.ProjectConfig, a Proj
 			return nil, fmt.Errorf("a dev server needs the port it listens on")
 		}
 		cfg.Services = buildProjectServices(persistedServices(a.Database, a.Services), defaults)
-		cfg.Proxy = &config.ProxyConfig{Command: a.ProxyCommand, Port: a.ProxyPort}
+		cfg.Proxy = proxyConfigFor(detectedDevServer(cwd), a.ProxyCommand, a.ProxyPort)
 		if defaults.Proxy != nil {
 			cfg.Proxy.SSL = defaults.Proxy.SSL
 			cfg.Proxy.PortEnvKey = defaults.Proxy.PortEnvKey

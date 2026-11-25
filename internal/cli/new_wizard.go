@@ -101,7 +101,7 @@ func scaffoldCatalogue() []scaffoldChoice {
 		c.Versions = appendVersion(c.Versions, info.Version)
 		c.sawDefinition = true
 		c.scaffolds = config.FrameworkScaffoldSupport(info.Name)
-		if info.Create != "" {
+		if info.ScaffoldCommand() != "" {
 			c.creatable = true
 		}
 		for _, scaffolds := range c.scaffolds {

@@ -1455,6 +1455,43 @@ back at the end, and lerd is left installed.
 - [ ] macOS: install warns that `/etc/resolver/test` belongs to another tool,
       and after the uninstall that file holds what it held before
 
+## Phase 18 — frameworks served by their own dev server
+
+Runs on its own guest state: it needs only lerd and writes the definitions it
+uses (`vmnest`, `vmdjango`, `vmaxum`, `vmrails`) as user definitions, so it
+tests what any definition can declare rather than what the store ships. Each
+app is a real scaffold. A guest with no `python3` venv skips Django, one with
+no cargo and C compiler skips Rust, and one with no rails, bundler and C
+compiler skips Rails. The lane needs at least one guest with all four.
+
+- [ ] `lerd new --framework` scaffolds NestJS through its host create command,
+      into the folder it was asked for
+- [ ] A project is detected from its own manifest (`package.json`,
+      `requirements.txt`, `Gemfile`, `Cargo.toml`) and offered the declared dev
+      command and port, and a plain `lerd link` refuses it naming `lerd init`
+- [ ] A composer project that also uses the package stays a PHP project
+- [ ] A dev-server project under a parked folder is not registered
+- [ ] NestJS answers with its own page: framework kept on the registry, redis
+      and the URL wired, host worker running, a worker with no container
+      refused, `lerd run` and doctor working
+- [ ] The same for Django
+- [ ] The same for Axum
+- [ ] The same for Rails
+- [ ] NestJS, Django and Rails serve a saved file without a restart
+- [ ] With the catalog's `rust` plugin Axum serves a save, and a failed build
+      leaves the last one serving
+- [ ] With another process on its port, unpause says so and starts the site on
+      a free one, with the registry, nginx and the server agreeing
+- [ ] `lerd restart` and a re-link keep the moved port
+- [ ] The committed `.lerd.yaml` is never rewritten by a move
+- [ ] The declared port comes back on a restart once it is free
+- [ ] A sleeping site whose port was taken meanwhile wakes on another
+- [ ] `lerd start` moves a site whose port is taken
+- [ ] A port edited in `.lerd.yaml` reaches nginx and the server on `lerd link`
+- [ ] A command that names its port is never moved, and doctor names the port
+- [ ] A worktree of a dev-server site answers **200** on its own server
+- [ ] The first site answers **200** after all of it
+
 ## Sign-off
 
 One row per lane per guest. A lane passes only when its final 200 check passed

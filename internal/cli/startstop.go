@@ -1145,7 +1145,7 @@ func restoreSiteInfrastructure() (ruledOut []string) {
 		}
 	}
 
-	for _, s := range reg.Sites {
+	for i, s := range reg.Sites {
 		if s.Paused || s.Ignored {
 			continue
 		}
@@ -1218,7 +1218,13 @@ func restoreSiteInfrastructure() (ruledOut []string) {
 		if s.IsHostProxy() && proj.Proxy != nil {
 			if s.HostCommand != "" && proj.Proxy.Command != s.HostCommand {
 				feedback.Warn("%s: dev command in .lerd.yaml changed since link; not auto-starting. Run `lerd link` to review and approve.", s.Name)
-			} else if w, ok := hostProxyWorker(proj.Proxy); ok && !services.Mgr.IsEnabled(hostProxyWorkerUnit(s.Name)) {
+			} else if moved := !containsString(s.IdleSuspendedWorkers, hostProxyWorkerName) && settleDevServerPort(&s, proj.Proxy); moved {
+				// reg is saved at the end of the pass, so it has to agree.
+				reg.Sites[i].HostPort, reg.Sites[i].HostPortMovedFrom = s.HostPort, s.HostPortMovedFrom
+				if w, ok := hostProxyWorker(liveProxy(s, proj.Proxy)); ok {
+					restoreWorker(s.Name, s.Path, "", hostProxyWorkerName, w)
+				}
+			} else if w, ok := hostProxyWorker(liveProxy(s, proj.Proxy)); ok && !services.Mgr.IsEnabled(hostProxyWorkerUnit(s.Name)) {
 				restoreWorker(s.Name, s.Path, "", hostProxyWorkerName, w)
 			}
 		}
