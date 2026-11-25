@@ -226,6 +226,10 @@ func TestRemoveMovedScript_TouchesOnlyTheMovedFolder(t *testing.T) {
 		!strings.Contains(got, `Remove-Item -LiteralPath $old -Recurse -Force`) {
 		t.Errorf("must delete the moved folder:\n%s", got)
 	}
+	// How long the uninstall still runs is unknown, so no limit can be right.
+	if !strings.Contains(got, `while (Test-Path -LiteralPath $old)`) {
+		t.Errorf("must wait until the folder is gone:\n%s", got)
+	}
 	if strings.Count(got, "Remove-Item") != 1 {
 		t.Errorf("must delete nothing else:\n%s", got)
 	}

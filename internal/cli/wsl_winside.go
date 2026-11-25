@@ -512,13 +512,13 @@ Get-ChildItem -LiteralPath $d -Recurse -Force -File | ForEach-Object { Move-Item
 Remove-Item -LiteralPath $d -Recurse -Force`, psQuote(winDir), psQuote(winOld))
 }
 
-// removeMovedScript deletes winOld once nothing in it runs. The uninstall can
-// still take a while, reinstalling npm packages, so it waits up to an hour.
+// removeMovedScript deletes winOld once nothing in it runs, however long the
+// uninstall still takes. Signing out of Windows ends it.
 func removeMovedScript(winOld string) string {
 	return fmt.Sprintf(`$old = %s
-for ($i = 0; $i -lt 3600 -and (Test-Path -LiteralPath $old); $i++) {
+while (Test-Path -LiteralPath $old) {
   Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction SilentlyContinue
-  Start-Sleep 1
+  Start-Sleep 2
 }`, psQuote(winOld))
 }
 
