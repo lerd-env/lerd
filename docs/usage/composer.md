@@ -54,6 +54,10 @@ lerd pun check --fix
 lerd pun install
 ```
 
+::: warning pun is in beta
+pun is still in beta, so expect rough edges, and check its output before relying on it in place of the tools it replaces. Problems with pun itself belong in [its issue tracker](https://github.com/shipfastlabs/pun/issues).
+:::
+
 pun is a static binary, so it runs on the host and needs no container. Composer scripts it runs call `php`, which is lerd's shim, so they still run on the PHP version the site is registered on. lerd also puts a `pun` shim on your PATH, so bare `pun` goes through lerd too. It is managed like the database client shims: when you already have a pun of your own, `lerd install` asks before shadowing it, and `lerd shims remove pun` or `lerd shims add pun` changes your mind later. See [Managing shims](/usage/database#managing-shims). AI assistants run it through the `exec` MCP tool with `action: "pun"`, and pun notices the agent and prints one line per problem.
 
 The MCP integration exposes the same surface through two tools, `vendor_bins` (list available binaries) and `vendor_run` (execute one), so AI assistants can discover and run project tooling without per-project configuration.
