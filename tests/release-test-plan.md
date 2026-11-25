@@ -854,7 +854,7 @@ lerd worktree add -b feat-x
       `.containerignore` lists leaves the running container alone
 - [ ] A failed build of a custom container leaves the previous image serving and
       shows as a failed build in `lerd sites`, until a build succeeds
-- [ ] With `trust_ca: true` a custom container on a Debian, an Alpine and a Fedora
+- [ ] With `trust_ca: true` and a re-link a custom container on a Debian, an Alpine and a Fedora
       image reaches another secured site and a public one over HTTPS (skipped on a
       `.localhost` install, which has no HTTPS)
 
