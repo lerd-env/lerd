@@ -921,6 +921,8 @@
   "sites_badges_xdebugOff": "oprit",
   "sites_badges_xdebugOn": "Xdebug {mode}",
   "sites_controls_customImageBadge": "imagine personalizată",
+  "sites_controls_buildFailedBadge": "build eșuat",
+  "sites_controls_buildFailedHint": "Ultimul build al imaginii a eșuat, așa că site-ul rulează încă imaginea anterioară. Corectează Containerfile și rulează lerd rebuild.",
   "sites_controls_dbIsolateFailed": "Izolarea BD-ului worktree a eșuat: {error}",
   "sites_controls_dbIsolated": "BD izolată",
   "sites_controls_dbIsolatedTitle": "BD worktree: {db}",

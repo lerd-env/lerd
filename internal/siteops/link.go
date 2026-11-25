@@ -419,11 +419,26 @@ func FinishHostProxyLink(site config.Site) error {
 	return nil
 }
 
+// runCustomContainer starts the site's container, restarting a running one when
+// its image was just rebuilt: a start would leave it on the old image.
+func runCustomContainer(siteName string, rebuilt bool) error {
+	unit := podman.CustomContainerName(siteName)
+	if rebuilt {
+		if status, err := podman.UnitStatus(unit); err == nil && status == "active" {
+			return podman.RestartUnit(unit)
+		}
+	}
+	return podman.StartUnit(unit)
+}
+
 // FinishCustomLink performs the post-registration steps for a custom container
 // site: build the image, write a dedicated quadlet, generate a proxy vhost,
 // update container hosts, and reload nginx.
 func FinishCustomLink(site config.Site, containerCfg *config.ContainerConfig) error {
-	if podman.CustomImageUpToDate(site.Name, site.Path, containerCfg) {
+	rebuilt := !podman.CustomImageUpToDate(site.Name, site.Path, containerCfg)
+	if !rebuilt {
+		// The files are back to what the image was built from.
+		podman.ClearCustomBuildFailure(site.Name)
 		fmt.Println("Container image up to date, skipping build.")
 	} else {
 		if err := podman.BuildCustomImage(site.Name, site.Path, containerCfg); err != nil {
@@ -444,7 +459,7 @@ func FinishCustomLink(site config.Site, containerCfg *config.ContainerConfig) er
 	_ = podman.DaemonReloadFn()
 
 	// Start the custom container so the site is immediately reachable.
-	if err := podman.StartUnit(podman.CustomContainerName(site.Name)); err != nil {
+	if err := runCustomContainer(site.Name, rebuilt); err != nil {
 		fmt.Printf("[WARN] starting custom container: %v\n", err)
 	}
 

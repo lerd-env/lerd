@@ -921,6 +921,8 @@
   "sites_badges_xdebugOff": "désactivé",
   "sites_badges_xdebugOn": "Xdebug {mode}",
   "sites_controls_customImageBadge": "image personnalisée",
+  "sites_controls_buildFailedBadge": "échec du build",
+  "sites_controls_buildFailedHint": "Le dernier build de l'image a échoué, le site utilise donc encore l'image précédente. Corrigez le Containerfile et lancez lerd rebuild.",
   "sites_controls_dbIsolateFailed": "Échec de l'isolement de la BDD du worktree : {error}",
   "sites_controls_dbIsolated": "BDD isolée",
   "sites_controls_dbIsolatedTitle": "BDD du worktree : {db}",

@@ -921,6 +921,8 @@
   "sites_badges_xdebugOff": "aus",
   "sites_badges_xdebugOn": "Xdebug {mode}",
   "sites_controls_customImageBadge": "eigenes Image",
+  "sites_controls_buildFailedBadge": "Build fehlgeschlagen",
+  "sites_controls_buildFailedHint": "Der letzte Image-Build ist fehlgeschlagen, die Site läuft daher noch mit dem vorherigen Image. Korrigiere das Containerfile und führe lerd rebuild aus.",
   "sites_controls_dbIsolateFailed": "Fehler beim Isolieren der Worktree-DB: {error}",
   "sites_controls_dbIsolated": "Isolierte DB",
   "sites_controls_dbIsolatedTitle": "Worktree-DB: {db}",

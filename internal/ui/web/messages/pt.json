@@ -921,6 +921,8 @@
   "sites_badges_xdebugOff": "desativado",
   "sites_badges_xdebugOn": "Xdebug {mode}",
   "sites_controls_customImageBadge": "imagem personalizada",
+  "sites_controls_buildFailedBadge": "build falhou",
+  "sites_controls_buildFailedHint": "O último build da imagem falhou, por isso o site ainda usa a imagem anterior. Corrija o Containerfile e execute lerd rebuild.",
   "sites_controls_dbIsolateFailed": "Falha ao isolar BD de worktree: {error}",
   "sites_controls_dbIsolated": "BD isolada",
   "sites_controls_dbIsolatedTitle": "BD de worktree: {db}",

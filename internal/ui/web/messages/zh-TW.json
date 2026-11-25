@@ -921,6 +921,8 @@
   "sites_badges_xdebugOff": "關閉",
   "sites_badges_xdebugOn": "Xdebug {mode}",
   "sites_controls_customImageBadge": "自訂映像檔",
+  "sites_controls_buildFailedBadge": "建置失敗",
+  "sites_controls_buildFailedHint": "上次映像檔建置失敗，網站仍在使用先前的映像檔。請修正 Containerfile 並執行 lerd rebuild。",
   "sites_controls_dbIsolateFailed": "隔離 worktree 資料庫失敗：{error}",
   "sites_controls_dbIsolated": "獨立資料庫",
   "sites_controls_dbIsolatedTitle": "Worktree 資料庫：{db}",

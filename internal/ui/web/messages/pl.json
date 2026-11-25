@@ -921,6 +921,8 @@
   "sites_badges_xdebugOff": "wył.",
   "sites_badges_xdebugOn": "Xdebug {mode}",
   "sites_controls_customImageBadge": "obraz niestandardowy",
+  "sites_controls_buildFailedBadge": "budowanie nieudane",
+  "sites_controls_buildFailedHint": "Ostatnie budowanie obrazu nie powiodło się, więc witryna nadal działa na poprzednim obrazie. Popraw Containerfile i uruchom lerd rebuild.",
   "sites_controls_dbIsolateFailed": "Nie udało się odizolować bazy worktree: {error}",
   "sites_controls_dbIsolated": "Izolowana baza",
   "sites_controls_dbIsolatedTitle": "Baza worktree: {db}",

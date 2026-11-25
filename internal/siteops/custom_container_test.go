@@ -348,3 +348,45 @@ func (n *noopLifecycle) Stop(name string) error                 { return nil }
 func (n *noopLifecycle) Restart(name string) error              { return nil }
 func (n *noopLifecycle) UnitStatus(name string) (string, error) { return "inactive", nil }
 func (n *noopLifecycle) AllUnitStates() map[string]string       { return nil }
+
+type restartLifecycle struct {
+	noopLifecycle
+	status string
+	calls  []string
+}
+
+func (r *restartLifecycle) Start(name string) error { r.calls = append(r.calls, "start"); return nil }
+func (r *restartLifecycle) Restart(name string) error {
+	r.calls = append(r.calls, "restart")
+	return nil
+}
+func (r *restartLifecycle) UnitStatus(string) (string, error) {
+	return r.status, nil
+}
+
+// Starting a running unit is a no-op, so a rebuilt image only reaches the site
+// through a restart (#2698).
+func TestRunCustomContainer_RebuiltImageRestartsARunningContainer(t *testing.T) {
+	for _, tc := range []struct {
+		status  string
+		rebuilt bool
+		want    string
+	}{
+		{"active", true, "restart"},
+		{"active", false, "start"},
+		{"inactive", true, "start"},
+		{"failed", true, "start"},
+	} {
+		lc := &restartLifecycle{status: tc.status}
+		orig := podman.UnitLifecycle
+		podman.UnitLifecycle = lc
+		err := runCustomContainer("nestapp", tc.rebuilt)
+		podman.UnitLifecycle = orig
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(lc.calls) != 1 || lc.calls[0] != tc.want {
+			t.Errorf("status %s rebuilt %v: calls %v, want [%s]", tc.status, tc.rebuilt, lc.calls, tc.want)
+		}
+	}
+}

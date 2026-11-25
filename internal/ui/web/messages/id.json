@@ -921,6 +921,8 @@
   "sites_badges_xdebugOff": "mati",
   "sites_badges_xdebugOn": "Xdebug {mode}",
   "sites_controls_customImageBadge": "image kustom",
+  "sites_controls_buildFailedBadge": "build gagal",
+  "sites_controls_buildFailedHint": "Build image terakhir gagal, jadi situs masih memakai image sebelumnya. Perbaiki Containerfile lalu jalankan lerd rebuild.",
   "sites_controls_dbIsolateFailed": "Gagal mengisolasi DB worktree: {error}",
   "sites_controls_dbIsolated": "DB terisolasi",
   "sites_controls_dbIsolatedTitle": "DB worktree: {db}",

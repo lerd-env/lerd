@@ -271,6 +271,9 @@ func siteVersions(site *siteinfo.EnrichedSite) []seg {
 		php = "custom"
 	}
 	add("php", php)
+	if site.ContainerBuildFailed {
+		add("image", "build failed")
+	}
 	add("node", site.NodeVersion)
 	if site.Runtime == "frankenphp" {
 		rt := "frankenphp"

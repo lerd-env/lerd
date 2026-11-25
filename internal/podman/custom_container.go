@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"crypto/md5"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -100,11 +102,67 @@ func hashContainerfile(projectPath string, cfg *config.ContainerConfig) string {
 	if cfg != nil {
 		target = cfg.Target
 	}
+	ctx, err := hashOwnBuildContext(projectPath, cfg)
+	if err != nil {
+		return ""
+	}
 	// Mix the build target into the hash so flipping target: development to
 	// target: production in .lerd.yaml invalidates the cache. Without this,
 	// CustomImageUpToDate would return a stale image when only the target
 	// changed (issue #379).
-	return fmt.Sprintf("%x", md5.Sum([]byte(string(data)+"\x00--target="+target)))
+	return fmt.Sprintf("%x", md5.Sum([]byte(string(data)+"\x00--target="+target+ctx)))
+}
+
+// hashOwnBuildContext hashes the files of a build context kept in a directory of
+// its own. One holding the project, the default, returns "": hashing it would
+// rebuild the image on every source edit.
+func hashOwnBuildContext(projectPath string, cfg *config.ContainerConfig) (string, error) {
+	root := ResolveBuildContext(projectPath, cfg)
+	rel, err := filepath.Rel(root, projectPath)
+	if err != nil {
+		return "", err
+	}
+	if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", nil
+	}
+	h := md5.New()
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		name, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(h, "%s\x00%s\x00", name, info.Mode())
+		switch {
+		case info.Mode()&fs.ModeSymlink != 0:
+			target, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(h, "%s\x00", target)
+		case info.Mode().IsRegular():
+			fmt.Fprintf(h, "%d\x00", info.Size())
+			f, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			if _, err := io.Copy(h, f); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("\x00--context=%x", h.Sum(nil)), nil
 }
 
 func readContainerfileHash(siteName string) string {
@@ -114,6 +172,32 @@ func readContainerfileHash(siteName string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(data))
+}
+
+// CustomBuildFailed reports whether the site's last image build failed, which
+// leaves it serving the image built before.
+func CustomBuildFailed(siteName string) bool {
+	_, err := os.Stat(customBuildFailurePath(siteName))
+	return err == nil
+}
+
+// ClearCustomBuildFailure forgets a recorded failure.
+func ClearCustomBuildFailure(siteName string) {
+	os.Remove(customBuildFailurePath(siteName)) //nolint:errcheck
+}
+
+func customBuildFailurePath(siteName string) string {
+	return filepath.Join(config.DataDir(), "container-build-failures", siteName)
+}
+
+func recordCustomBuild(siteName string, err error) {
+	if err == nil {
+		ClearCustomBuildFailure(siteName)
+		return
+	}
+	path := customBuildFailurePath(siteName)
+	os.MkdirAll(filepath.Dir(path), 0755)              //nolint:errcheck
+	os.WriteFile(path, []byte(err.Error()+"\n"), 0644) //nolint:errcheck
 }
 
 // buildCustomImageArgs assembles the podman build argv for a custom site
@@ -129,7 +213,8 @@ func buildCustomImageArgs(imageName, containerfile, buildCtx string, cfg *config
 
 // BuildCustomImage builds the OCI image for a site's custom container from
 // the user's Containerfile. The image is tagged as lerd-custom-{siteName}:local.
-func BuildCustomImage(siteName, projectPath string, cfg *config.ContainerConfig) error {
+func BuildCustomImage(siteName, projectPath string, cfg *config.ContainerConfig) (err error) {
+	defer func() { recordCustomBuild(siteName, err) }()
 	containerfile := ResolveContainerfile(projectPath, cfg)
 	if _, err := os.Stat(containerfile); err != nil {
 		return fmt.Errorf("containerfile not found: %s", containerfile)
@@ -148,7 +233,8 @@ func BuildCustomImage(siteName, projectPath string, cfg *config.ContainerConfig)
 }
 
 // BuildCustomImageTo builds the custom image, writing progress to w.
-func BuildCustomImageTo(siteName, projectPath string, cfg *config.ContainerConfig, w interface{ Write([]byte) (int, error) }) error {
+func BuildCustomImageTo(siteName, projectPath string, cfg *config.ContainerConfig, w interface{ Write([]byte) (int, error) }) (err error) {
+	defer func() { recordCustomBuild(siteName, err) }()
 	containerfile := ResolveContainerfile(projectPath, cfg)
 	if _, err := os.Stat(containerfile); err != nil {
 		return fmt.Errorf("containerfile not found: %s", containerfile)

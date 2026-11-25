@@ -205,6 +205,9 @@ type EnrichedSite struct {
 	ContainerPort  int
 	ContainerSSL   bool
 	ContainerImage string
+	// ContainerBuildFailed means the last build of the site's own image failed,
+	// so it still serves the image built before.
+	ContainerBuildFailed bool
 
 	// Host proxy — non-zero HostPort means nginx proxies the domain to a dev
 	// server lerd supervises on the host (the "app" worker).
@@ -336,6 +339,7 @@ func Enrich(s config.Site, flags EnrichFlag) EnrichedSite {
 		ContainerPort:         s.ContainerPort,
 		ContainerSSL:          s.ContainerSSL,
 		ContainerImage:        containerImage(s),
+		ContainerBuildFailed:  (s.IsCustomContainer() || s.IsCustomFPM()) && podman.CustomBuildFailed(s.Name),
 		HostPort:              s.HostPort,
 		HostSSL:               s.HostSSL,
 		HostCommand:           s.HostCommand,
