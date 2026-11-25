@@ -52,7 +52,7 @@ On Fedora and Ubuntu 26.04, which build the initramfs with dracut, run the `sudo
 brew uninstall lerd
 ```
 
-If another tool such as Laravel Herd had its own `/etc/resolver/test` when Lerd took over `.test`, that file is put back. Start Herd again afterwards so it can take ports 80 and 443.
+If another tool such as Laravel Herd had its own `/etc/resolver/test` when Lerd took over `.test`, that file is put back. If it cannot be, the uninstall stops there and names the saved copy. Start Herd again afterwards so it can take ports 80 and 443.
 
 A resolver replaced by Lerd 1.40.0-beta.1 or older was not saved. Let Herd or Valet write it again, for example with `valet install`.
 

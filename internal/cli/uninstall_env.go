@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/geodro/lerd/internal/config"
@@ -9,14 +11,15 @@ import (
 	"github.com/geodro/lerd/internal/feedback"
 )
 
-// sitesWithEnvBackup lists the projects still on lerd's env values that have a
-// copy from before lerd that still differs.
+// sitesWithEnvBackup lists the projects whose env file differs from the copy
+// saved before lerd. One that cannot be compared counts, so its copy is named.
 func sitesWithEnvBackup(sites []config.Site) []string {
 	var paths []string
 	for _, s := range sites {
 		rel, format := frameworkEnvFile(s.Path)
 		envPath := filepath.Join(s.Path, rel)
-		if envFileHasLerd(envPath) && len(envfile.ChangedSince(envPath, envBackupPath(envPath), format)) > 0 {
+		changed, err := envfile.ChangedSince(envPath, envBackupPath(envPath), format)
+		if changed || (err != nil && !errors.Is(err, os.ErrNotExist)) {
 			paths = append(paths, s.Path)
 		}
 	}

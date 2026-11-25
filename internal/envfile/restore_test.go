@@ -18,6 +18,16 @@ func TestRestoreValues(t *testing.T) {
 			"DB_HOST=127.0.0.1\n", "NEW=1\n", "NEW=1\nDB_HOST=127.0.0.1\n"},
 		{"same values in other quotes stay as they are", "dotenv",
 			"A=\"x\"\n", "A=x\n", "A=x\n"},
+		{"a multi-line value comes back whole", "dotenv",
+			"KEY=\"one\ntwo\"\nB=1\n", "A=1\nKEY=x\nB=2\n", "A=1\nKEY=\"one\ntwo\"\nB=1\n"},
+		{"a missing multi-line value comes back whole", "dotenv",
+			"KEY=\"one\ntwo\"\n", "A=1\n", "A=1\nKEY=\"one\ntwo\"\n"},
+		{"a multi-line value is replaced whole", "dotenv",
+			"KEY=old\n", "KEY=\"one\ntwo\"\nNEW=\"a\nb\"\n", "KEY=old\nNEW=\"a\nb\"\n"},
+		{"repeated keys stay in step", "dotenv",
+			"A=1\nA=2\n", "A=9\nA=9\n", "A=1\nA=2\n"},
+		{"export and an apostrophe in a plain value", "dotenv",
+			"export A=it's\nB=1\n", "export A=x\nB=2\n", "export A=it's\nB=1\n"},
 		{"php constants", "php-const",
 			phpHead + "define('DB_HOST', '127.0.0.1');\n",
 			phpHead + "define('DB_HOST', 'lerd-mysql');\ndefine('MINE', 'yes');\n",
@@ -36,8 +46,8 @@ func TestRestoreValues(t *testing.T) {
 			if string(got) != tc.want {
 				t.Errorf("got\n%s\nwant\n%s", got, tc.want)
 			}
-			if left := ChangedSince(path, backup, tc.format); len(left) != 0 {
-				t.Errorf("still changed after a restore: %v", left)
+			if changed, err := ChangedSince(path, backup, tc.format); changed || err != nil {
+				t.Errorf("still changed after a restore (%v)", err)
 			}
 		})
 	}
@@ -58,16 +68,54 @@ func TestRestoreValues_phpArray(t *testing.T) {
 	}
 }
 
-// The line writer cannot put half of a multi-line value back.
-func TestRestoreValues_multiLineValueIsRefused(t *testing.T) {
-	dir := t.TempDir()
-	path, backup := filepath.Join(dir, "env"), filepath.Join(dir, "env.before_lerd")
-	os.WriteFile(backup, []byte("KEY=\"one\ntwo\"\n"), 0644)
-	os.WriteFile(path, []byte("A=1\n"), 0644)
-	if err := RestoreValues(path, backup, "dotenv"); err == nil || !strings.Contains(err.Error(), "KEY") {
-		t.Fatalf("err = %v, want one naming KEY", err)
+// A value only PHP can work out cannot be merged, so the file is left alone.
+func TestRestoreValues_refusesWhatItCannotPutBackWhole(t *testing.T) {
+	cases := []struct{ name, format, before, now string }{
+		{"array expression replaced", "php-array",
+			"<?php\nreturn ['Datasources' => env('DATABASE_URL')];\n",
+			"<?php\nreturn ['Datasources' => ['default' => ['host' => 'lerd-mysql']]];\n"},
+		{"vars expression replaced", "php-vars",
+			"<?php\n$databases['default'] = getenv('DB');\n",
+			"<?php\n$databases['default'] = ['host' => 'lerd-mysql'];\n"},
+		{"constant expression replaced", "php-const",
+			"<?php\ndefine('DB_HOST', getenv('DB_HOST'));\n",
+			"<?php\ndefine('DB_HOST', 'lerd-mysql');\n"},
+		{"a key added under an old scalar would be lost", "php-array",
+			"<?php\nreturn ['db' => 'x'];\n",
+			"<?php\nreturn ['db' => ['host' => 'lerd-mysql', 'mine' => 'y']];\n"},
+		{"unreadable backup", "php-array", "<?php\nreturn [;\n", "<?php\nreturn ['a' => 'b'];\n"},
+		{"unknown format", "toml", "a=1\n", "a=2\n"},
 	}
-	if got, _ := os.ReadFile(path); string(got) != "A=1\n" {
-		t.Errorf("file changed to %q", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path, backup := filepath.Join(dir, "f.php"), filepath.Join(dir, "f.php.before_lerd")
+			os.WriteFile(path, []byte(tc.now), 0644)
+			os.WriteFile(backup, []byte(tc.before), 0644)
+			if err := RestoreValues(path, backup, tc.format); err == nil {
+				t.Error("want an error")
+			}
+			if got, _ := os.ReadFile(path); string(got) != tc.now {
+				t.Errorf("file changed to %q", got)
+			}
+			if changed, err := ChangedSince(path, backup, tc.format); !changed && err == nil {
+				t.Error("the copy must still count as different")
+			}
+		})
+	}
+}
+
+// An expression both files share is no reason to refuse.
+func TestRestoreValues_sharedExpressionIsKept(t *testing.T) {
+	dir := t.TempDir()
+	path, backup := filepath.Join(dir, "f.php"), filepath.Join(dir, "f.php.before_lerd")
+	os.WriteFile(backup, []byte("<?php\nreturn ['debug' => env('D'), 'host' => 'old'];\n"), 0644)
+	os.WriteFile(path, []byte("<?php\nreturn ['debug' => env('D'), 'host' => 'lerd-mysql'];\n"), 0644)
+	if err := RestoreValues(path, backup, "php-array"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(path)
+	if !strings.Contains(string(got), "env('D')") || !strings.Contains(string(got), "'old'") {
+		t.Errorf("got %q", got)
 	}
 }

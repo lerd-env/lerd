@@ -83,7 +83,7 @@ Run it before uninstalling, since the command goes with Lerd; `lerd uninstall` a
 cp .env.before_lerd .env
 ```
 
-A key the backup has goes back to its old value even if you changed it yourself since. The `cp` above is cruder: it replaces the whole file, so keys added since are lost. A missing env file is recreated from the backup, and a value spanning several lines that differs is refused, so copy that one by hand. To keep using Lerd after restoring, run `lerd env` again to re-apply lerd connection values.
+A key the backup has goes back to its old value even if you changed it yourself since. The `cp` above is cruder: it replaces the whole file, so keys added since are lost. A missing env file is recreated from the backup, and a PHP file whose old value was an expression such as `env('DATABASE_URL')` is refused and left as it is, so copy that one by hand. To keep using Lerd after restoring, run `lerd env` again to re-apply lerd connection values.
 
 ---
 

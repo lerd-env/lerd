@@ -26,15 +26,17 @@ func envSite(t *testing.T, env, backup string) config.Site {
 func TestSitesWithEnvBackup(t *testing.T) {
 	const lerdEnv, original = "DB_HOST=lerd-mysql\n", "DB_HOST=127.0.0.1\n"
 	changed := envSite(t, lerdEnv, original)
+	urlOnly := envSite(t, "APP_URL=http://a.test\n", "APP_URL=http://localhost\n")
 	sites := []config.Site{
 		changed,
+		urlOnly,
 		envSite(t, lerdEnv, ""),        // nothing saved
 		envSite(t, original, original), // already restored by hand
 		envSite(t, "", original),       // env file deleted
 		{Name: "gone", Path: filepath.Join(t.TempDir(), "missing")},
 	}
 	got := sitesWithEnvBackup(sites)
-	if want := []string{changed.Path}; !reflect.DeepEqual(got, want) {
+	if want := []string{changed.Path, urlOnly.Path}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("sitesWithEnvBackup = %v, want %v", got, want)
 	}
 }

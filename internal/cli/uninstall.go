@@ -302,11 +302,14 @@ func installedDefaultServices(names []string, installed func(unit string) bool) 
 // stopWatcherThenTeardownDNS stops the watcher first: it heals DNS it finds
 // broken, and mid-uninstall rebuilt lerd0 for a lerd-dns about to be gone. A
 // failed stop is fine only when the watcher is confirmed down.
-func stopWatcherThenTeardownDNS(stop func(string) error, stopped func(string) bool, teardown func()) error {
+func stopWatcherThenTeardownDNS(stop func(string) error, stopped func(string) bool, teardown func() error) error {
 	if err := stop("lerd-watcher"); err != nil && !stopped("lerd-watcher") {
 		return fmt.Errorf("could not stop lerd-watcher before removing the DNS setup, stop it and run lerd uninstall again: %w", err)
 	}
-	teardown()
+	// Going on would delete the saved copy with the data directory.
+	if err := teardown(); err != nil {
+		return fmt.Errorf("%w; fix that or delete the copy, then run lerd uninstall again", err)
+	}
 	return nil
 }
 

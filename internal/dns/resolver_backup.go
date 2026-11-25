@@ -3,6 +3,7 @@ package dns
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -30,18 +31,28 @@ func backupForeignResolver(file, backup string, own []byte) (bool, error) {
 	return true, os.WriteFile(backup, body, 0644)
 }
 
-// restoreResolvers writes back the saved copy of each lerd resolver file and
-// returns the ones that have none, or failed, for the caller to remove.
-func restoreResolvers(files []string, backupDir string, write func(string, []byte) error) []string {
-	var left []string
+// restoreResolvers writes back the saved copy of each lerd resolver file. It
+// returns the files that have none, for the caller to remove, and an error for
+// those whose copy could not be put back, which stay as they are.
+func restoreResolvers(files []string, backupDir string, write func(string, []byte) error) ([]string, error) {
+	var unsaved []string
+	var errs []error
 	for _, f := range files {
 		backup := filepath.Join(backupDir, filepath.Base(f))
 		body, err := os.ReadFile(backup)
-		if err != nil || write(f, body) != nil {
-			left = append(left, f)
+		if errors.Is(err, os.ErrNotExist) {
+			unsaved = append(unsaved, f)
 			continue
 		}
-		os.Remove(backup) //nolint:errcheck
+		if err == nil {
+			err = write(f, body)
+		}
+		if err == nil {
+			err = os.Remove(backup)
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("could not put %s back from %s: %w", f, backup, err))
+		}
 	}
-	return left
+	return unsaved, errors.Join(errs...)
 }

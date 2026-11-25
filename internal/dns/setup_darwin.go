@@ -91,19 +91,20 @@ func resolverBackupDir() string { return filepath.Join(config.DataDir(), "resolv
 // Teardown puts back the resolver files lerd replaced and removes the rest it
 // wrote. Matched by content, as disable has already flipped cfg.DNS.TLD and a
 // custom TLD leaves its own file.
-func Teardown() {
+func Teardown() error {
 	stale := staleResolverFiles(resolverDir)
-	stale = restoreResolvers(stale, resolverBackupDir(), func(path string, body []byte) error {
+	unsaved, err := restoreResolvers(stale, resolverBackupDir(), func(path string, body []byte) error {
 		return sudoWriteFile(path, body, 0644)
 	})
-	if len(stale) == 0 {
-		return
+	if len(unsaved) == 0 {
+		return err
 	}
-	rmCmd := exec.Command("sudo", append([]string{"rm", "-f"}, stale...)...)
+	rmCmd := exec.Command("sudo", append([]string{"rm", "-f"}, unsaved...)...)
 	rmCmd.Stdin = os.Stdin
 	rmCmd.Stdout = os.Stdout
 	rmCmd.Stderr = os.Stderr
 	rmCmd.Run() //nolint:errcheck
+	return err
 }
 
 // staleResolverFiles returns the resolver files under dir whose content matches
