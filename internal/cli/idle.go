@@ -100,7 +100,7 @@ func setIdleServices(on bool) error {
 	if err != nil {
 		return err
 	}
-	cfg.IdleSuspend.Services = on
+	cfg.SetIdleServices(on)
 	if err := config.SaveGlobal(cfg); err != nil {
 		return err
 	}

@@ -419,6 +419,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/disk", withCORS(handleDisk))
 	mux.HandleFunc("/api/xdebug/", withCORS(publishAfter(handleXdebugAction, eventbus.KindStatus)))
 	mux.HandleFunc("/api/lerd/start", withCORS(handleLerdStart))
+	mux.HandleFunc("/api/idle/services-suggestion", withCORS(handleIdleServicesSuggestion))
 	mux.HandleFunc("/api/machine/memory", withCORS(handleMachineMemory))
 	mux.HandleFunc("/api/lerd/stop", withCORS(handleLerdStop))
 	mux.HandleFunc("/api/lerd/quit", withCORS(handleLerdQuit))
@@ -5836,15 +5837,16 @@ func handleSettingsIdleSuspend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Enabled        bool  `json:"enabled"`
-		TimeoutMinutes int   `json:"timeout_minutes"`
-		Services       *bool `json:"services"` // omitted leaves it as it is
+		// An omitted field is left as it is.
+		Enabled        *bool `json:"enabled"`
+		TimeoutMinutes *int  `json:"timeout_minutes"`
+		Services       *bool `json:"services"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
-	if body.TimeoutMinutes < 1 {
+	if body.TimeoutMinutes != nil && *body.TimeoutMinutes < 1 {
 		writeJSON(w, map[string]any{"ok": false, "error": "timeout must be at least 1 minute"})
 		return
 	}
@@ -5853,10 +5855,14 @@ func handleSettingsIdleSuspend(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	cfg.IdleSuspend.Enabled = body.Enabled
-	cfg.IdleSuspend.Timeout = (time.Duration(body.TimeoutMinutes) * time.Minute).String()
+	if body.Enabled != nil {
+		cfg.IdleSuspend.Enabled = *body.Enabled
+	}
+	if body.TimeoutMinutes != nil {
+		cfg.IdleSuspend.Timeout = (time.Duration(*body.TimeoutMinutes) * time.Minute).String()
+	}
 	if body.Services != nil {
-		cfg.IdleSuspend.Services = *body.Services
+		cfg.SetIdleServices(*body.Services)
 	}
 	if err := config.SaveGlobal(cfg); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
@@ -5864,10 +5870,12 @@ func handleSettingsIdleSuspend(w http.ResponseWriter, r *http.Request) {
 	}
 	// Persisted flag is the boot source of truth; this signal makes the running
 	// watcher start the session, or resume all workers and tear it down, now.
-	if body.Enabled {
-		activityping.Enable()
-	} else {
-		activityping.Disable()
+	if body.Enabled != nil {
+		if *body.Enabled {
+			activityping.Enable()
+		} else {
+			activityping.Disable()
+		}
 	}
 	writeJSON(w, map[string]any{"ok": true})
 }
