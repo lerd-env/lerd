@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/wsl"
 )
 
 // The CA is found in CAROOT, with no mkcert binary anywhere to ask.
@@ -200,6 +202,46 @@ func TestRemoveWindowsSideScript_UnregistersTheDesktopApp(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s:\n%s", want, got)
 		}
+	}
+}
+
+// lerd.exe cannot be deleted while it runs the uninstall but can be renamed, so
+// only the renamed copy waits for it: a reinstall's folder is never touched.
+func TestMoveAsideScript(t *testing.T) {
+	got := moveAsideScript(`C:\Users\O'Brien\AppData\Local\lerd`, `C:\Users\O'Brien\AppData\Local\lerd-removed-1`)
+	for _, want := range []string{
+		`$d = 'C:\Users\O''Brien\AppData\Local\lerd'`,
+		`$old = 'C:\Users\O''Brien\AppData\Local\lerd-removed-1'`,
+		`Move-Item -LiteralPath`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s:\n%s", want, got)
+		}
+	}
+}
+
+func TestRemoveMovedScript_TouchesOnlyTheMovedFolder(t *testing.T) {
+	got := removeMovedScript(`C:\Users\O'Brien\AppData\Local\lerd-removed-1`)
+	if !strings.Contains(got, `$old = 'C:\Users\O''Brien\AppData\Local\lerd-removed-1'`) ||
+		!strings.Contains(got, `Remove-Item -LiteralPath $old -Recurse -Force`) {
+		t.Errorf("must delete the moved folder:\n%s", got)
+	}
+	// How long the uninstall still runs is unknown, so no limit can be right.
+	if !strings.Contains(got, `while (Test-Path -LiteralPath $old)`) {
+		t.Errorf("must wait until the folder is gone:\n%s", got)
+	}
+	if strings.Count(got, "Remove-Item") != 1 {
+		t.Errorf("must delete nothing else:\n%s", got)
+	}
+}
+
+func TestDetachedScriptOutlivesItsPowerShell(t *testing.T) {
+	got := detached("exit")
+	if !strings.Contains(got, "Start-Process powershell.exe") || strings.Contains(got, "-Wait") {
+		t.Errorf("must start a process of its own and not wait for it:\n%s", got)
+	}
+	if !strings.Contains(got, wsl.EncodePowerShell("exit")) {
+		t.Errorf("must carry the script encoded:\n%s", got)
 	}
 }
 

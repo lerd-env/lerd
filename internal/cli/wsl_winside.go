@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -385,6 +386,11 @@ func elevated(script string) string {
 	return fmt.Sprintf(`Start-Process powershell.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile','-EncodedCommand','%s'`, wsl.EncodePowerShell(script))
 }
 
+// detached wraps script so it runs in a PowerShell that outlives this one.
+func detached(script string) string {
+	return fmt.Sprintf(`Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-NonInteractive','-EncodedCommand','%s'`, wsl.EncodePowerShell(script))
+}
+
 // powershell runs script and returns its stdout alone: PowerShell reports
 // progress ("Preparing modules for first use") as CLIXML on stderr, which
 // would otherwise land in the middle of an answer like "yes".
@@ -475,11 +481,45 @@ func removeWindowsSide() error {
 	// lerd.exe stays locked for a moment after the agent exits.
 	for i := 0; ; i++ {
 		err := os.RemoveAll(dir)
-		if err == nil || i == 10 {
-			return err
+		if err == nil {
+			return nil
+		}
+		if i == 10 {
+			break
 		}
 		time.Sleep(time.Second)
 	}
+	// Run from a Windows terminal, this uninstall is itself inside lerd.exe, so
+	// the last of its linked names stays locked until we exit.
+	winDir, err := windowsPath(dir)
+	if err != nil {
+		return err
+	}
+	winOld := fmt.Sprintf("%s-removed-%d", winDir, time.Now().UnixNano())
+	_, moveErr := powershell(moveAsideScript(winDir, winOld))
+	_, err = powershell(detached(removeMovedScript(winOld)))
+	return errors.Join(moveErr, err)
+}
+
+// moveAsideScript empties winDir into winOld beside it and deletes it. Windows
+// lets a running exe be renamed within its volume, but not deleted.
+func moveAsideScript(winDir, winOld string) string {
+	return fmt.Sprintf(`$ErrorActionPreference = 'Stop'
+$d = %s
+$old = %s
+New-Item -ItemType Directory -Path $old | Out-Null
+Get-ChildItem -LiteralPath $d -Recurse -Force -File | ForEach-Object { Move-Item -LiteralPath $_.FullName -Destination (Join-Path $old ([guid]::NewGuid())) }
+Remove-Item -LiteralPath $d -Recurse -Force`, psQuote(winDir), psQuote(winOld))
+}
+
+// removeMovedScript deletes winOld once nothing in it runs, however long the
+// uninstall still takes. Signing out of Windows ends it.
+func removeMovedScript(winOld string) string {
+	return fmt.Sprintf(`$old = %s
+while (Test-Path -LiteralPath $old) {
+  Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction SilentlyContinue
+  Start-Sleep 2
+}`, psQuote(winOld))
 }
 
 func removeWindowsSideScript(winBin string) string {
