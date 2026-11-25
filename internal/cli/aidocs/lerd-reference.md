@@ -2,7 +2,7 @@
 
 This project runs on **lerd**, a Podman-based PHP development environment. It is framework-agnostic: Laravel, Symfony, WordPress, Drupal, Magento, CakePHP and any custom framework are all driven by a framework definition (YAML), never by lerd hardcoding a framework's name. Use the `lerd` MCP server to manage it from the chat.
 
-The MCP surface is **fifteen tools**, each driven by an `action` argument except `test`: `site`, `service`, `db`, `env`, `runtime`, `worker`, `exec`, `framework`, `diag`, `logs`, `request`, `worktree`, `workspace`, `plugin`. Always pass `action`. Most actions also accept an optional `path` that defaults to the directory the assistant was opened in (then `LERD_SITE_PATH` if set), so you can usually omit it. Start with `site` `list`.
+The MCP surface is **fifteen tools**, each driven by an `action` argument except `test`: `site`, `service`, `db`, `env`, `runtime`, `worker`, `exec`, `test`, `framework`, `diag`, `logs`, `request`, `worktree`, `workspace`, `plugin`. Always pass `action`. Most actions also accept an optional `path` that defaults to the directory the assistant was opened in (then `LERD_SITE_PATH` if set), so you can usually omit it. Start with `site` `list`.
 
 ### Architecture
 
