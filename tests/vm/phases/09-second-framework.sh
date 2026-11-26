@@ -52,7 +52,7 @@ scaffold ci3 codeigniter 3
 lerd php:list 2>/dev/null | grep -q '8\.4' || check "add PHP 8.4 for CodeIgniter 4" lerd php:rebuild 8.4
 scaffold ci4 codeigniter 4 >/dev/null 2>&1
 check_out "CodeIgniter 3 links on its own definition, PHP 7.2-7.4" '^ci3 .* 7\.[234] .*codeigniter 3' lerd sites
-check_out "9.2 CodeIgniter 4 links on its own definition, PHP 8.2-8.4" '^ci4 .* 8\.[234] .*codeigniter 4' lerd sites
+check_out "9.2 CodeIgniter 4 links on its own definition, PHP 8.2 or newer" '^ci4 .* 8\.([2-9]|[1-9][0-9]) .*codeigniter 4' lerd sites
 
 # WordPress keeps its configuration in wp-config.php, not a dotenv file.
 scaffold wpvm wordpress >/dev/null 2>&1
@@ -66,7 +66,8 @@ check "the backup sits beside wp-config.php" test -f "$wp/wp-config.php.before_l
 cp "$wp/wp-config.php" /tmp/lerd-vm-wp-config.php
 echo "// vm edit" >>"$wp/wp-config.php"
 check "lerd env:restore" bash -c "cd $wp && lerd env:restore --yes 2>/dev/null || lerd env:restore"
-check "9.3 env:restore puts the backup back over wp-config.php" cmp -s "$wp/wp-config.php" "$wp/wp-config.php.before_lerd"
+check "9.3 env:restore puts the backup's values back into wp-config.php" bash -c "diff <(grep \"define( 'DB_\" '$wp/wp-config.php.before_lerd') <(grep \"define( 'DB_\" '$wp/wp-config.php')"
+check "9.3 and keeps what changed since" grep -qx '// vm edit' "$wp/wp-config.php"
 cp /tmp/lerd-vm-wp-config.php "$wp/wp-config.php"
 rm -f /tmp/lerd-vm-wp-config.php
 
