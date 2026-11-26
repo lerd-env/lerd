@@ -169,7 +169,7 @@ nest=$PROJECTS/vmnestapp
 rm -rf "${PROJECTS:?}/vmnestapp"
 check_out "18.1 lerd new scaffolds through a host create command" 'created vmnestapp' bash -c "cd $PROJECTS && lerd new vmnestapp --framework=vmnest"
 check "the project is where lerd said" test -f "$nest/nest-cli.json"
-check "npm install" bash -c "cd $nest && npm install"
+check "npm ci" bash -c "cd $nest && npm ci"
 serve "$nest" nest
 features 18.5 "$nest" nest 'Hello World'
 reloads 18.9 "$nest" nest "$nest/src/app.service.ts" 'Hello World!' 'Hello SAVED'
@@ -338,7 +338,7 @@ rm -rf "${PROJECTS:?}/vmfixed"
 check "lerd worktree add" bash -c "cd $nest && lerd worktree add -b vmbranch"
 wt=$(git -C "$nest" worktree list --porcelain | awk '/^worktree/ { p = $2 } END { print p }')
 check "the worktree is a checkout of its own" bash -c "[ -n '$wt' ] && [ '$wt' != '$nest' ]"
-[ -d "$wt/node_modules" ] || (cd "$wt" && npm install) </dev/null >/dev/null 2>&1
+[ -d "$wt/node_modules" ] || (cd "$wt" && npm ci) </dev/null >/dev/null 2>&1
 [ "$wt" != "$nest" ] && sed -i 's/Hello SAVED/Hello BRANCH/' "$wt/src/app.service.ts"
 # The site's wildcard answers 200 for any branch name, so only the branch's own text counts.
 check "18.19 the worktree serves its own code" wait_for 120 bash -c "curl -s --max-time 20 http://vmbranch.$(site_host "$nest")/ | grep -q 'Hello BRANCH'"
