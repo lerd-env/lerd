@@ -895,6 +895,8 @@
   "siteWizard_useThisFolder": "Folosește acest folder",
   "siteWizard_rememberFolder": "Pornește de aici data viitoare",
   "siteWizard_version": "Versiune",
+  "siteWizard_starter": "Șablon de pornire",
+  "siteWizard_starterNone": "Niciunul",
   "siteWizard_versionLatest": "Cea mai nouă",
   "siteWizard_vitePitfall": "Vite blochează cererile venite prin proxy după antetul Host. Adaugă domeniul site-ului în server.allowedHosts în vite.config și --host în comandă, altfel cererile prin proxy eșuează.",
   "siteWizard_railsPitfall": "Rails blochează cererile trecute prin proxy după antetul Host. Adaugă domeniul site-ului în config.hosts din config/environments/development.rb, altfel cererile prin proxy eșuează.",

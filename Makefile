@@ -29,7 +29,7 @@ LDFLAGS    = -s -w \
              -X $(PKG).Commit=$(COMMIT) \
              -X $(PKG).Date=$(DATE)
 
-.PHONY: build build-windows build-tray build-ui install-ui-deps test-ui install install-installer licenses test dupes clean release release-snapshot
+.PHONY: build build-windows build-tray build-ui install-ui-deps test-ui install install-installer licenses test dupes clean release release-snapshot release-windows
 
 UI_INSTALL_STAMP = $(UI_DIR)/node_modules/.package-lock.json
 
@@ -113,9 +113,13 @@ clean:
 	rm -rf $(BUILD_DIR)
 	rm -rf $(UI_DIR)/dist
 
+# lerd.exe for both arches, unsigned, in dist-windows/ where GoReleaser reads it.
+release-windows:
+	.github/scripts/build-windows.sh $(VERSION)
+
 # Requires goreleaser: https://goreleaser.com/install/
-release:
+release: release-windows
 	goreleaser release --clean
 
-release-snapshot:
+release-snapshot: release-windows
 	goreleaser release --snapshot --clean

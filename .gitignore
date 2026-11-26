@@ -1,6 +1,9 @@
 build/
 dist/
 dist-tray/
+dist-windows/
+dist-windows-signed/
+cmd/lerd-windows/*.syso
 *.tmp
 .venv/
 .idea/

@@ -122,6 +122,44 @@ Removals run after the merge, so a package can replace an entry and drop another
 
 Only the packages listed under `packages` in the store index are ever looked up, so a project's dependency list never turns into a request for a file the store does not have. They are cached in `~/.local/share/lerd/packages/`, under the same file name the store serves, seeded by `lerd install`, refreshed by `lerd framework update` and on the same 24 hour window as a definition, so a package's worker resolves offline exactly like a framework's.
 
+## Starters
+
+A definition's `create:` is one way to start a project of that major. A starter is another, published in the same store as `starters/<framework>/<name>.yaml`, and offered by [`lerd new`](/usage/frameworks#starters) and the dashboard's site wizard once a framework and major are picked. It either swaps the skeleton or requires packages into the one the framework creates, or both:
+
+```yaml
+starter: filament
+label: Filament
+description: A Laravel app with a Filament admin panel   # optional, shown beside the label
+framework:
+  name: laravel
+  min: "11"              # inclusive; max: works the same way, either may be omitted
+require:                 # optional: composer packages, a constraint after a colon is allowed
+  - filament/filament
+```
+
+```yaml
+starter: react
+label: React
+framework:
+  name: laravel
+  min: "13"
+create: composer create-project --no-install --no-plugins --no-scripts --stability=dev laravel/react-starter-kit
+```
+
+`create:` replaces the framework's own and takes the target directory the same way. `require:` runs after the skeleton lands, through lerd's composer and the same PHP the scaffold used. A skeleton created with `--no-install` has no lock yet, so the packages only go into `composer.json` and setup's `composer install` resolves them against the PHP the project is actually set up on; a skeleton that installed its vendor gets a full `composer require` so its lock stays current. A starter must have at least one of the two.
+
+`framework:` is the same shape a package's `frameworks:` entries use, a single framework rather than a list, since the file already sits under that framework's directory. Majors outside the range are not offered, and asking for one by name is refused with the range the starter supports.
+
+A starter has nothing to run after creation on purpose. The project is detected as its framework afterwards, so anything a required package needs to finish its install belongs to that package's definition, as a [`setup:`](#package-definitions) step. That way the step is offered on the first `lerd setup` of a starter project and of any existing project that requires the package by hand; Filament's panel install is gated on `missing_file: app/Providers/Filament` for exactly that reason.
+
+The index lists every starter under `starters`, repeating its `name`, `label`, `description` and `framework` so the create step can offer it without fetching every file first:
+
+```json
+{"name": "filament", "label": "Filament", "description": "A Laravel app with a Filament admin panel", "framework": {"name": "laravel", "min": "11"}}
+```
+
+The store's schema guard fails a pull request whose index entry and file disagree. The file is fetched only when the starter is picked, so a starter never reaches a machine that does not use it, and a lerd that predates starters ignores the key and keeps offering the framework's own `create:` alone.
+
 ## Version resolution
 
 When loading a framework definition for a project, the version is resolved in order:

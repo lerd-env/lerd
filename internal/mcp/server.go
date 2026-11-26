@@ -3835,6 +3835,9 @@ func execProjectNew(args map[string]any) (any, *rpcError) {
 		if frameworkVersion != "" {
 			return toolErr("version needs a framework to apply it to — pass framework alongside it"), nil
 		}
+		if strArg(args, "starter") != "" {
+			return toolErr("starter needs a framework to apply it to — pass framework alongside it"), nil
+		}
 		frameworkName = "laravel"
 	}
 	extraArgs := strSliceArg(args, "args")
@@ -3849,7 +3852,18 @@ func execProjectNew(args map[string]any) (any, *rpcError) {
 	if frameworkVersion != "" && fw.Version != frameworkVersion {
 		return toolErr(fmt.Sprintf("framework %q does not publish major %q (the store serves %q) — use framework_list to see the majors it publishes", frameworkName, frameworkVersion, fw.Version)), nil
 	}
+	var starter *config.Starter
+	if name := strArg(args, "starter"); name != "" {
+		s, err := store.NewClient().ResolveStarter(frameworkName, fw.Version, name)
+		if err != nil {
+			return toolErr(err.Error()), nil
+		}
+		starter = s
+	}
 	create := fw.ScaffoldCommand()
+	if starter != nil && starter.Create != "" {
+		create = starter.Create
+	}
 	if create == "" {
 		return toolErr(fmt.Sprintf("framework %q has no create command — add a 'create' field to its YAML definition", frameworkName)), nil
 	}
@@ -3868,6 +3882,12 @@ func execProjectNew(args map[string]any) (any, *rpcError) {
 	cmd.Stderr = &out
 	if err := cmd.Run(); err != nil {
 		return toolErr(fmt.Sprintf("scaffold command failed (%v):\n%s", err, stripANSI(out.String()))), nil
+	}
+	if starter != nil && len(starter.Require) > 0 {
+		out.WriteString("\n\n--- composer require ---\n")
+		if err := runProjectComposer(projectPath, starter.RequireArgs(projectPath), &out); err != nil {
+			return toolErr(fmt.Sprintf("scaffold succeeded but requiring the %s starter's packages failed: %v\n%s", starter.Label, err, stripANSI(out.String()))), nil
+		}
 	}
 
 	// Framework create commands use --no-install --no-plugins --no-scripts so
@@ -3892,17 +3912,22 @@ func runComposerInstallIfNeeded(projectPath string, out *bytes.Buffer) error {
 	if _, err := os.Stat(filepath.Join(projectPath, "vendor")); err == nil {
 		return nil
 	}
+	out.WriteString("\n\n--- composer install ---\n")
+	return runProjectComposer(projectPath, []string{"install", "--no-interaction"}, out)
+}
 
+// runProjectComposer runs composer with args in the PHP the project at
+// projectPath resolves to, appending its output to out.
+func runProjectComposer(projectPath string, args []string, out *bytes.Buffer) error {
 	phpVersion, err := phpDet.VersionForDir(projectPath)
 	if err != nil || phpVersion == "" {
 		return fmt.Errorf("could not determine PHP version: %w", err)
 	}
-	out.WriteString("\n\n--- composer install ---\n")
 	if nativeRuntime() {
-		return runOnHost(projectPath, []string{"php", composer.PharPath(), "install", "--no-interaction"}, out, composer.Env(projectPath)...)
+		return runOnHost(projectPath, append([]string{"php", composer.PharPath()}, args...), out, composer.Env(projectPath)...)
 	}
 	container := phpDet.FPMContainerForDir(projectPath, phpVersion)
-	cmd := podman.Cmd(composerExecArgs(container, projectPath, nil, []string{"install", "--no-interaction"})...)
+	cmd := podman.Cmd(composerExecArgs(container, projectPath, nil, args)...)
 	cmd.Stdout = out
 	cmd.Stderr = out
 	return runCall(cmd, container)

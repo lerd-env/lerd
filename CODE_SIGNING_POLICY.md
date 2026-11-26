@@ -4,14 +4,15 @@ Free code signing provided by [SignPath.io](https://about.signpath.io), certific
 
 ## Status
 
-Lerd is applying to the SignPath Foundation program. Until the application is accepted and the integration is in place, Windows artifacts are not signed with a SignPath Foundation certificate.
+Lerd is in the SignPath Foundation program. Until the production certificate is issued, only release dry runs are signed, with a test certificate, and released Windows artifacts are not signed.
 
 ## Scope
 
 | Artifact | Built in | Published in |
 | --- | --- | --- |
-| `Install-Lerd.exe`, the Windows installer | [lerd-env/lerd-desktop](https://github.com/lerd-env/lerd-desktop), `installer/` | [lerd-desktop releases](https://github.com/lerd-env/lerd-desktop/releases) |
 | `lerd.exe`, the Windows command and login agent (x64 and Arm64) | [lerd-env/lerd](https://github.com/lerd-env/lerd), `cmd/lerd-windows` | The Linux archives in [lerd releases](https://github.com/lerd-env/lerd/releases), which WSL installs use |
+
+The Windows installer, `Install-Lerd.exe`, is built in [lerd-env/lerd-desktop](https://github.com/lerd-env/lerd-desktop) and is not signed yet. It will be added as a separate project.
 
 The tray icon on Windows belongs to Lerd Desktop, so there is no `lerd-tray.exe`. The Lerd Desktop application itself is outside the current scope and will be added as a separate project.
 

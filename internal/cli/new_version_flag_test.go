@@ -56,7 +56,7 @@ func TestNewVersionNeedsFramework(t *testing.T) {
 // The rejection reaches the user as an error rather than a silently ignored
 // flag, and names the flag it needs.
 func TestRunNewRejectsVersionWithoutFramework(t *testing.T) {
-	err := runNew("myapp", "", "11", nil)
+	err := runNew("myapp", "", "11", "", nil)
 	if err == nil {
 		t.Fatal("expected an error for --framework-version with no --framework")
 	}
