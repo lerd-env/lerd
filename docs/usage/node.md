@@ -97,6 +97,10 @@ lerd node:use 22
 
 Version numbers are normalised to the major only, so `22.11.0` and `22.14.1` are both treated as `22`, and only one entry per major appears in the UI and CLI.
 
+When lerd manages Node, linking a site, with `lerd link` or through a parked directory, and resuming a paused one install the Node version the project and its worktrees need if it is missing. A version that already has a matching release is left as it is, and a project running on bun or in a custom container installs none. If the install fails, lerd warns and carries on, except for a host-proxy site's own version: Node serves that site, so the link stops or the site stays paused.
+
+A paused site does not hold its Node version, so a version only paused sites use can be removed.
+
 ---
 
 ## Newer patches

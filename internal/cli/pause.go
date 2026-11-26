@@ -246,6 +246,10 @@ func UnpauseSite(name string) error {
 		}
 	}
 
+	if err := ensureSiteNode(*site, cliReporter{}); err != nil {
+		return fmt.Errorf("%s stays paused: %w", site.Name, err)
+	}
+
 	// Re-arm the container's quadlet [Install] that PauseSite stripped, before
 	// starting it, so it autostarts at login again. Gated on the global autostart
 	// flag inside the helper, so unpause never re-arms a globally-disabled site.
@@ -608,7 +612,10 @@ func resumeWorkersByName(site *config.Site, workers []string, phpVersion string)
 		var l *workerLaunch
 		if name == hostProxyWorkerName {
 			if proj, _ := config.LoadProjectConfig(site.Path); proj != nil && proj.Proxy != nil {
-				l = prepareHostProxyStart(*site, proj.Proxy)
+				var err error
+				if l, err = prepareHostProxyStart(site, proj.Proxy); err != nil {
+					feedback.Warn("dev server not started: %v", err)
+				}
 			}
 		} else {
 			fw, _ := config.GetFrameworkForDir(site.Framework, site.Path)

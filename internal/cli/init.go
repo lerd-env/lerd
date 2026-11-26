@@ -151,7 +151,11 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 	if alreadyCustom {
 		return runCustomContainerWizard(cwd, defaults, gcfg)
 	}
-	if !hasFramework && !hasComposer && hasContainerfile {
+	devServer := frameworkDevServer(framework, cwd)
+	if devServer != nil && !hasContainerfile {
+		return runHostProxyWizard(cwd, defaults, gcfg)
+	}
+	if (devServer != nil || !hasFramework) && !hasComposer && hasContainerfile {
 		return runCustomContainerWizard(cwd, defaults, gcfg)
 	}
 	if !hasFramework && !hasComposer {
@@ -596,8 +600,9 @@ func runHostProxyWizard(cwd string, defaults *config.ProjectConfig, gcfg *config
 	if defaults.Proxy != nil {
 		command = defaults.Proxy.Command
 	}
+	devServer := detectedDevServer(cwd)
 	if command == "" {
-		command = proxyDefaultCommand(cwd, devScripts)
+		command = devServerDefaultCommand(devServer, cwd, devScripts)
 	}
 	commandDesc := "How lerd starts the app (lerd supervises and restarts it). Blank = run it yourself."
 	if len(devScripts) > 0 {
@@ -618,7 +623,7 @@ func runHostProxyWizard(cwd string, defaults *config.ProjectConfig, gcfg *config
 			if s, err := config.FindSiteByPath(cwd); err == nil {
 				siteName = s.Name
 			}
-			port = allocateHostPort(defaultDevServerPort, siteName)
+			port = allocateHostPort(devServerStartPort(devServer), siteName)
 		}
 	}
 	portStr := strconv.Itoa(port)
@@ -693,7 +698,7 @@ func runHostProxyWizard(cwd string, defaults *config.ProjectConfig, gcfg *config
 	return &config.ProjectConfig{
 		Secured:     persistedSecured(secured, httpsAvailable, defaults.Secured),
 		Services:    buildProjectServices(selectedServices, defaults),
-		Proxy:       &config.ProxyConfig{Command: command, Port: port, SSL: false},
+		Proxy:       proxyConfigFor(devServer, command, port),
 		AppURL:      defaults.AppURL,
 		Domains:     defaults.Domains,
 		AppName:     defaults.AppName,
@@ -994,6 +999,46 @@ func proxyDefaultCommand(cwd string, devScripts []string) string {
 		return devScripts[0]
 	}
 	return defaultDevCommand(cwd)
+}
+
+// frameworkDevServer is the dev server framework name declares, or nil.
+func frameworkDevServer(name, dir string) *config.FrameworkDevServer {
+	fw, ok := config.GetFrameworkForDir(name, dir)
+	if !ok {
+		return nil
+	}
+	return fw.DevServer
+}
+
+func detectedDevServer(dir string) *config.FrameworkDevServer {
+	name, _ := config.DetectFrameworkForDir(dir)
+	return frameworkDevServer(name, dir)
+}
+
+// devServerDefaultCommand is the framework's declared command, else the guess
+// from the project's own scripts.
+func devServerDefaultCommand(d *config.FrameworkDevServer, cwd string, devScripts []string) string {
+	if d != nil && d.Command != "" {
+		return d.Command
+	}
+	return proxyDefaultCommand(cwd, devScripts)
+}
+
+// proxyConfigFor is the proxy block init saves, carrying the variables the
+// framework says its server reads.
+func proxyConfigFor(d *config.FrameworkDevServer, command string, port int) *config.ProxyConfig {
+	proxy := &config.ProxyConfig{Command: command, Port: port}
+	if d != nil {
+		proxy.PortEnvKey, proxy.HostEnvKey = d.PortEnvKey, d.HostEnvKey
+	}
+	return proxy
+}
+
+func devServerStartPort(d *config.FrameworkDevServer) int {
+	if d != nil && d.Port > 0 {
+		return d.Port
+	}
+	return defaultDevServerPort
 }
 
 // defaultDevCommand guesses the host-proxy dev command from the detected

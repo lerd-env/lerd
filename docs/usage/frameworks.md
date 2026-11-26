@@ -1,8 +1,12 @@
 # Frameworks
 
-Lerd uses **framework definitions** to describe how a PHP project type behaves: where the document root is, how to detect it automatically, which env file to use, and which background workers it supports.
+Lerd uses **framework definitions** to describe how a project type behaves: where the document root is, how to detect it automatically, which env file to use, and which background workers it supports.
 
 Laravel has a built-in definition. Other frameworks (Symfony, WordPress, Drupal, CakePHP, Statamic, Magento, etc.) can be installed from the [community store](https://github.com/lerd-env/frameworks) or defined manually.
+
+## Not only PHP
+
+A definition can also describe a framework in another language, such as NestJS, Django, Rails or Axum. Lerd runs the project's own dev server behind its `.test` domain and gives it what a PHP framework gets: detection, `lerd new`, services wired into its env file, workers, commands and doctor checks. Use one from the store, or describe any other framework in a YAML file of your own: see [Frameworks that are not PHP](framework-definitions.md#frameworks-that-are-not-php). A project with no definition can still be served as a plain [host-proxy site](host-proxy.md).
 
 ---
 

@@ -318,6 +318,14 @@
 <div class="shrink-0">
   <div class="flex items-center gap-3">
   <div class="flex items-center gap-3 overflow-x-auto scrollbar-autohide pb-1.5 flex-1 min-w-0" use:scrollbarInPadding={'x'}>
+    {#if site.container_build_failed}
+      <span
+        title={m.sites_controls_buildFailedHint()}
+        class="shrink-0 text-xs text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 rounded-sm px-2 py-1"
+      >
+        {m.sites_controls_buildFailedBadge()}
+      </span>
+    {/if}
     {#if site.custom_container}
       <span class="text-xs text-violet-500 dark:text-violet-400 border border-violet-200 dark:border-violet-500/30 rounded-sm px-2 py-1">
         {(site.container_image || 'container') + ' :' + site.container_port}

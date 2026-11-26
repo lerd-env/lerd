@@ -419,6 +419,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/disk", withCORS(handleDisk))
 	mux.HandleFunc("/api/xdebug/", withCORS(publishAfter(handleXdebugAction, eventbus.KindStatus)))
 	mux.HandleFunc("/api/lerd/start", withCORS(handleLerdStart))
+	mux.HandleFunc("/api/idle/services-suggestion", withCORS(handleIdleServicesSuggestion))
 	mux.HandleFunc("/api/machine/memory", withCORS(handleMachineMemory))
 	mux.HandleFunc("/api/lerd/stop", withCORS(handleLerdStop))
 	mux.HandleFunc("/api/lerd/quit", withCORS(handleLerdQuit))
@@ -1110,18 +1111,19 @@ type SiteResponse struct {
 	// open the admin tool straight to this site's database.
 	DBDatabase string `json:"db_database,omitempty"`
 	// ExternalDB names the external database service the site chose.
-	ExternalDB      string `json:"external_db,omitempty"`
-	LANPort         int    `json:"lan_port,omitempty"`
-	LANShareURL     string `json:"lan_share_url,omitempty"`
-	PublicShared    bool   `json:"public_shared,omitempty"`
-	PublicShareURL  string `json:"public_share_url,omitempty"`
-	TunnelURL       string `json:"tunnel_url,omitempty"`
-	TunnelTool      string `json:"tunnel_tool,omitempty"`
-	TunnelExternal  bool   `json:"tunnel_external,omitempty"`
-	CustomContainer bool   `json:"custom_container,omitempty"`
-	ContainerPort   int    `json:"container_port,omitempty"`
-	ContainerImage  string `json:"container_image,omitempty"`
-	Runtime         string `json:"runtime,omitempty"`
+	ExternalDB           string `json:"external_db,omitempty"`
+	LANPort              int    `json:"lan_port,omitempty"`
+	LANShareURL          string `json:"lan_share_url,omitempty"`
+	PublicShared         bool   `json:"public_shared,omitempty"`
+	PublicShareURL       string `json:"public_share_url,omitempty"`
+	TunnelURL            string `json:"tunnel_url,omitempty"`
+	TunnelTool           string `json:"tunnel_tool,omitempty"`
+	TunnelExternal       bool   `json:"tunnel_external,omitempty"`
+	CustomContainer      bool   `json:"custom_container,omitempty"`
+	ContainerPort        int    `json:"container_port,omitempty"`
+	ContainerImage       string `json:"container_image,omitempty"`
+	ContainerBuildFailed bool   `json:"container_build_failed,omitempty"`
+	Runtime              string `json:"runtime,omitempty"`
 	// PHPLogUnit is the unit the site's PHP log tab streams. Under the native
 	// runtime that is the host listener's launchd log, not a container.
 	PHPLogUnit       string `json:"php_log_unit,omitempty"`
@@ -1391,20 +1393,21 @@ func buildSites() ([]SiteResponse, error) {
 			HasDatabase:          e.HasDatabase,
 			Databases:            siteDatabases(e.Databases),
 
-			DeclaredServices:  e.DeclaredServices,
-			SuggestedServices: e.SuggestedServices,
-			DBDatabase:        envfile.ReadKey(filepath.Join(e.Path, ".env"), "DB_DATABASE"),
-			LANPort:           e.LANPort,
-			LANShareURL:       cli.LANShareURL(e.LANPort),
-			PublicShared:      cli.PublicShareRunning(e.Name),
-			PublicShareURL:    config.PublicShareURL(config.PublicShareHost(e.Name, publicBase)),
-			TunnelURL:         tunnel.URL,
-			TunnelTool:        tunnel.Tool,
-			TunnelExternal:    tunnel.External,
-			CustomContainer:   e.ContainerPort > 0,
-			ContainerPort:     e.ContainerPort,
-			ContainerImage:    e.ContainerImage,
-			Runtime:           reportedRuntime(e.Runtime, nativeRuntime, e.ContainerPort, e.HostPort),
+			DeclaredServices:     e.DeclaredServices,
+			SuggestedServices:    e.SuggestedServices,
+			DBDatabase:           envfile.ReadKey(filepath.Join(e.Path, ".env"), "DB_DATABASE"),
+			LANPort:              e.LANPort,
+			LANShareURL:          cli.LANShareURL(e.LANPort),
+			PublicShared:         cli.PublicShareRunning(e.Name),
+			PublicShareURL:       config.PublicShareURL(config.PublicShareHost(e.Name, publicBase)),
+			TunnelURL:            tunnel.URL,
+			TunnelTool:           tunnel.Tool,
+			TunnelExternal:       tunnel.External,
+			CustomContainer:      e.ContainerPort > 0,
+			ContainerPort:        e.ContainerPort,
+			ContainerImage:       e.ContainerImage,
+			ContainerBuildFailed: e.ContainerBuildFailed,
+			Runtime:              reportedRuntime(e.Runtime, nativeRuntime, e.ContainerPort, e.HostPort),
 			PHPLogUnit: phpLogUnit(
 				config.Site{Name: e.Name, Runtime: e.Runtime, ContainerPort: e.ContainerPort, HostPort: e.HostPort},
 				e.PHPVersion,
@@ -5834,15 +5837,16 @@ func handleSettingsIdleSuspend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Enabled        bool  `json:"enabled"`
-		TimeoutMinutes int   `json:"timeout_minutes"`
-		Services       *bool `json:"services"` // omitted leaves it as it is
+		// An omitted field is left as it is.
+		Enabled        *bool `json:"enabled"`
+		TimeoutMinutes *int  `json:"timeout_minutes"`
+		Services       *bool `json:"services"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
-	if body.TimeoutMinutes < 1 {
+	if body.TimeoutMinutes != nil && *body.TimeoutMinutes < 1 {
 		writeJSON(w, map[string]any{"ok": false, "error": "timeout must be at least 1 minute"})
 		return
 	}
@@ -5851,10 +5855,14 @@ func handleSettingsIdleSuspend(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	cfg.IdleSuspend.Enabled = body.Enabled
-	cfg.IdleSuspend.Timeout = (time.Duration(body.TimeoutMinutes) * time.Minute).String()
+	if body.Enabled != nil {
+		cfg.IdleSuspend.Enabled = *body.Enabled
+	}
+	if body.TimeoutMinutes != nil {
+		cfg.IdleSuspend.Timeout = (time.Duration(*body.TimeoutMinutes) * time.Minute).String()
+	}
 	if body.Services != nil {
-		cfg.IdleSuspend.Services = *body.Services
+		cfg.SetIdleServices(*body.Services)
 	}
 	if err := config.SaveGlobal(cfg); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
@@ -5862,10 +5870,12 @@ func handleSettingsIdleSuspend(w http.ResponseWriter, r *http.Request) {
 	}
 	// Persisted flag is the boot source of truth; this signal makes the running
 	// watcher start the session, or resume all workers and tear it down, now.
-	if body.Enabled {
-		activityping.Enable()
-	} else {
-		activityping.Disable()
+	if body.Enabled != nil {
+		if *body.Enabled {
+			activityping.Enable()
+		} else {
+			activityping.Disable()
+		}
 	}
 	writeJSON(w, map[string]any{"ok": true})
 }

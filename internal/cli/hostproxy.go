@@ -526,39 +526,7 @@ func hostToolDirs(sitePath, home, root string) (dirs, fallback []string) {
 // when the other site's dev server isn't currently running. exceptSite is
 // skipped so re-running init on a site keeps its own port.
 func reservedHostPorts(exceptSite string) map[int]bool {
-	out := map[int]bool{}
-	exceptPort := 0
-	if reg, err := config.LoadSites(); err == nil {
-		for _, s := range reg.Sites {
-			if s.Name == exceptSite {
-				exceptPort = s.HostPort
-				continue
-			}
-			if s.HostPort != 0 {
-				out[s.HostPort] = true
-			}
-			for _, p := range s.WorktreeHostPorts {
-				out[p] = true
-			}
-			// Also reserve ports already assigned to this site's host-proxy
-			// worktrees (persisted in each worktree's .env): a stopped worktree
-			// dev server owns its port, which neither the registry HostPort nor a
-			// bind-probe reveals, so two worktrees could otherwise collide.
-			if s.IsHostProxy() {
-				if proxy := parentProxyConfig(s); proxy != nil {
-					key := hostProxyPortEnvKey(proxy)
-					wts, _ := gitpkg.ServableWorktrees(s.Path, s.PrimaryDomain())
-					for _, wt := range wts {
-						if v := envfile.ReadKey(filepath.Join(wt.Path, ".env"), key); v != "" {
-							if p, _ := strconv.Atoi(v); p > 0 {
-								out[p] = true
-							}
-						}
-					}
-				}
-			}
-		}
-	}
+	out, exceptPort := siteHostPorts(exceptSite)
 	// Reserve host ports lerd services publish (e.g. gotenberg on 3000) even when
 	// the container is stopped: a stopped service still owns its published port
 	// and would collide the moment it starts, which a bind probe can't foresee.
@@ -572,6 +540,42 @@ func reservedHostPorts(exceptSite string) map[int]bool {
 		delete(out, exceptPort)
 	}
 	return out
+}
+
+// siteHostPorts returns the dev-server ports the registered sites hold, whether
+// or not they run, and exceptSite's own main port apart. A stopped worktree's
+// port is in the registry or its .env, which a bind probe cannot see.
+func siteHostPorts(exceptSite string) (ports map[int]bool, exceptPort int) {
+	ports = map[int]bool{}
+	reg, err := config.LoadSites()
+	if err != nil {
+		return ports, 0
+	}
+	for _, s := range reg.Sites {
+		if s.Name == exceptSite {
+			exceptPort = s.HostPort
+		} else if s.HostPort != 0 {
+			ports[s.HostPort] = true
+		}
+		for _, p := range s.WorktreeHostPorts {
+			ports[p] = true
+		}
+		if !s.IsHostProxy() {
+			continue
+		}
+		proxy := parentProxyConfig(s)
+		if proxy == nil {
+			continue
+		}
+		key := hostProxyPortEnvKey(proxy)
+		wts, _ := gitpkg.ServableWorktrees(s.Path, s.PrimaryDomain())
+		for _, wt := range wts {
+			if p, _ := strconv.Atoi(envfile.ReadKey(filepath.Join(wt.Path, ".env"), key)); p > 0 {
+				ports[p] = true
+			}
+		}
+	}
+	return ports, exceptPort
 }
 
 // lerdServiceHostPorts returns every host port a lerd service may publish:
@@ -627,7 +631,7 @@ func WorktreeHostPort(siteName string, parentPort int, wtPath, portEnvKey string
 // worktree checkout usually can't see it).
 func parentProxyConfig(site config.Site) *config.ProxyConfig {
 	if proj, err := config.LoadProjectConfig(site.Path); err == nil && proj.Proxy != nil {
-		return proj.Proxy
+		return liveProxy(site, proj.Proxy)
 	}
 	if site.HostCommand == "" && site.HostPort == 0 {
 		return nil
@@ -684,35 +688,38 @@ func StartHostProxyWorktreeServer(site config.Site, wtPath string) error {
 // host-mode worker (launchd/fnm on macOS), reusing the standard worker
 // machinery for auto-restart, logs, and health. No-op in proxy-only mode.
 func startHostProxyWorker(site config.Site, proxy *config.ProxyConfig) {
-	l := prepareHostProxyStart(site, proxy)
-	if l == nil {
-		return
+	if err := launchHostProxy(&site, proxy); err != nil {
+		feedback.Warn("dev server not started: %v", err)
+	}
+}
+
+// launchHostProxy starts the dev server and reports why it could not.
+func launchHostProxy(site *config.Site, proxy *config.ProxyConfig) error {
+	l, err := prepareHostProxyStart(site, proxy)
+	if err != nil || l == nil {
+		return err
 	}
 	if err := podman.DaemonReloadIfNeeded(l.reload); err != nil {
 		feedback.Warn("daemon-reload: %v", err)
 	}
-	if err := launchWorker(l, false); err != nil {
-		feedback.Warn("starting dev server: %v", err)
-	}
+	return launchWorker(l, false)
 }
 
 // prepareHostProxyStart writes the dev server's unit without reloading or
-// starting it; nil when the proxy runs no command or the command is refused.
-func prepareHostProxyStart(site config.Site, proxy *config.ProxyConfig) *workerLaunch {
-	w, ok := hostProxyWorker(proxy)
+// starting it; nil when the proxy runs no command.
+func prepareHostProxyStart(site *config.Site, proxy *config.ProxyConfig) (*workerLaunch, error) {
+	if proxy.Command == "" {
+		return nil, nil
+	}
+	if err := gateHostProxyAutostart(*site, proxy.Command); err != nil {
+		return nil, err
+	}
+	settleDevServerPort(site, proxy)
+	w, ok := hostProxyWorker(liveProxy(*site, proxy))
 	if !ok {
-		return nil
+		return nil, nil
 	}
-	if err := gateHostProxyAutostart(site, proxy.Command); err != nil {
-		feedback.Warn("dev server not started: %v", err)
-		return nil
-	}
-	l, err := prepareWorkerStart(site.Name, site.Path, "", hostProxyWorkerName, w)
-	if err != nil {
-		feedback.Warn("starting dev server: %v", err)
-		return nil
-	}
-	return l
+	return prepareWorkerStart(site.Name, site.Path, "", hostProxyWorkerName, w)
 }
 
 // gateHostProxyAutostart authorises auto-(re)starting a host-proxy dev command

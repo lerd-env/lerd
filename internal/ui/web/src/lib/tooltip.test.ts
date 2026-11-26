@@ -78,4 +78,22 @@ describe('tooltip action', () => {
     btn.dispatchEvent(new MouseEvent('mouseenter'));
     expect(tip()?.style.opacity ?? '0').toBe('0');
   });
+
+  // A button at the foot of the window has no room below, and one still sliding
+  // into place is measured by the slot it will settle in.
+  it('opens above the anchor when asked', () => {
+    const slot = document.createElement('span');
+    const node = document.createElement('button');
+    slot.appendChild(node);
+    document.body.appendChild(slot);
+    slot.getBoundingClientRect = () => ({ left: 200, right: 228, top: 700, bottom: 728, width: 28, height: 28 }) as DOMRect;
+    const action = tooltip(node, { label: 'Sort', placement: 'top', anchor: slot })!;
+    const box = () => document.querySelector('[role="tooltip"]') as HTMLElement;
+    node.dispatchEvent(new MouseEvent('mouseenter'));
+    expect(box().style.top).toBe('692px');
+    expect(box().style.left).toBe('214px');
+    expect(box().querySelector('.rotate-45')?.className).toMatch(/border-b border-r/);
+    (action as { destroy: () => void }).destroy();
+    slot.remove();
+  });
 });

@@ -342,9 +342,7 @@ func RegisterProjectDeferred(projectDir string, cfg *config.GlobalConfig, defer_
 
 	warnMissingExtensions(projectDir, plan.Site.Name, plan.Site.PHPVersion, cfg)
 
-	// Quiet build: `lerd park` draws a progress bar this output would break.
-	quietFPM := func(v string) error { return ensureLinkPHP(v, io.Discard) }
-	res, err := linker.Apply(plan, policy, linker.Deps{EnsureFPMQuadlet: quietFPM}, linker.NopReporter{})
+	res, err := linker.Apply(plan, policy, parkDeps(), linker.NopReporter{})
 	if err != nil {
 		return out, err
 	}
@@ -357,12 +355,27 @@ func RegisterProjectDeferred(projectDir string, cfg *config.GlobalConfig, defer_
 	return out, nil
 }
 
+// warnReporter is quiet except for problems, which print above a progress bar.
+type warnReporter struct{ linker.NopReporter }
+
+func (warnReporter) Warn(format string, a ...any) { feedback.Warn(format, a...) }
+
+// parkDeps keeps builds and installs quiet, since `lerd park` draws a progress bar
+// their output would break.
+func parkDeps() linker.Deps {
+	return linker.Deps{
+		EnsureFPMQuadlet: func(v string) error { return ensureLinkPHP(v, io.Discard) },
+		EnsureNode:       func(s config.Site, _ linker.Reporter) error { return ensureSiteNode(s, warnReporter{}) },
+	}
+}
+
 // parkAdmits reports whether a directory looks enough like a PHP project to
 // register unattended: a framework lerd knows, a real document root, or a
 // composer.json / top-level PHP file.
 func parkAdmits(projectDir string) bool {
-	if _, ok := config.DetectFrameworkForDir(projectDir); ok {
-		return true
+	if name, ok := config.DetectFrameworkForDir(projectDir); ok {
+		// A dev server is a host command, which nothing unattended may start.
+		return frameworkDevServer(name, projectDir) == nil
 	}
 	if config.DetectPublicDir(projectDir) != "." {
 		return true

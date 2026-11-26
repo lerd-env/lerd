@@ -462,6 +462,7 @@ func execSites() (any, *rpcError) {
 		CustomContainer bool           `json:"custom_container,omitempty"`
 		ContainerPort   int            `json:"container_port,omitempty"`
 		ContainerSSL    bool           `json:"container_ssl,omitempty"`
+		BuildFailed     bool           `json:"container_build_failed,omitempty"`
 		Workers         []workerStatus `json:"workers,omitempty"`
 	}
 
@@ -515,6 +516,7 @@ func execSites() (any, *rpcError) {
 			CustomContainer: e.ContainerPort > 0,
 			ContainerPort:   e.ContainerPort,
 			ContainerSSL:    e.ContainerSSL,
+			BuildFailed:     e.ContainerBuildFailed,
 			Workers:         workers,
 		})
 	}
@@ -936,7 +938,10 @@ func execStripeConfig(args map[string]any) (any, *rpcError) {
 // so an assistant and the CLI are on the same version of it, and forwards the
 // host variables an external environment provider asked lerd to pass on.
 func composerExecArgs(container, workdir string, env, composerArgs []string) []string {
-	args := []string{"exec", "-w", workdir}
+	args := []string{"exec", "-w", workdir,
+		"--env", "HOME=" + os.Getenv("HOME"),
+		"--env", "COMPOSER_HOME=" + composer.HomeDir(),
+	}
 	for _, e := range append(composer.Env(workdir), env...) {
 		args = append(args, "--env", e)
 	}
@@ -3855,7 +3860,7 @@ func execProjectNew(args map[string]any) (any, *rpcError) {
 		}
 		starter = s
 	}
-	create := fw.Create
+	create := fw.ScaffoldCommand()
 	if starter != nil && starter.Create != "" {
 		create = starter.Create
 	}
@@ -3864,11 +3869,14 @@ func execProjectNew(args map[string]any) (any, *rpcError) {
 	}
 
 	parts := strings.Fields(create)
-	parts = append(parts, projectPath)
+	// Run from the parent by name, as lerd new does: not every scaffold takes an
+	// absolute path.
+	parts = append(parts, filepath.Base(projectPath))
 	parts = append(parts, extraArgs...)
 
 	var out bytes.Buffer
 	cmd := exec.Command(parts[0], parts[1:]...)
+	cmd.Dir = filepath.Dir(projectPath)
 	cmd.Env = append(os.Environ(), composer.MemoryLimitEnv(fw)...)
 	cmd.Stdout = &out
 	cmd.Stderr = &out

@@ -85,6 +85,7 @@ func TeardownSite(site *config.Site, parkedDirs []string) {
 	// Clean up the per-project custom container if this site uses one.
 	// The image is kept so relinking is fast; use `lerd rebuild` to
 	// force a fresh build.
+	podman.ClearCustomBuildFailure(site.Name)
 	if site.IsCustomContainer() {
 		_ = podman.StopUnit(podman.CustomContainerName(site.Name))
 		podman.RemoveCustomContainer(site.Name)

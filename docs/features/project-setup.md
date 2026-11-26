@@ -104,7 +104,7 @@ After the wizard, a checkbox list appears with all available steps pre-selected 
 
 The `lerd secure` step is omitted entirely when HTTPS was already enabled in the init wizard, because there is nothing left to do.
 
-The dashboard's Add site wizard ends on the same list, and every step on it is optional. With nothing ticked the footer shows only **Open the site**, which ends the wizard. Ticking a step brings back **Run setup** and **Skip setup**.
+The dashboard's Add site wizard ends on the same list, and every step on it is optional. With nothing ticked the footer offers only the ways to finish: **View in Dashboard**, which ends the wizard on the site's page, and **Open in browser**, which does the same and opens the site itself in a new tab. Ticking a step brings back **Run setup** and **Skip setup**.
 
 On a machine where `.lerd.yaml` already exists the wizard is skipped and the saved configuration is applied silently before the step selector appears.
 

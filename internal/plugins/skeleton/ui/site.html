@@ -11,7 +11,7 @@
   <script src="lerd.js"></script>
   <script>
     const out = document.getElementById('out');
-    lerd.api('greet?site=' + encodeURIComponent(lerd.context.site))
+    lerd.api('greet?site=' + encodeURIComponent(lerd.context.site) + '&branch=' + encodeURIComponent(lerd.context.branch))
       .then((text) => { out.textContent = text; })
       .catch((err) => { out.textContent = err.message; });
   </script>

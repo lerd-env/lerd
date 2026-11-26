@@ -40,7 +40,9 @@ Services prefixed with `From .lerd.yaml` were not referenced in the env file but
 
 ## Automatic backup
 
-The first time `lerd env` modifies an existing env file that has not yet been touched by lerd, it saves a copy next to that file and adds the copy to `.gitignore` (if one exists). Once lerd has written its connection values, subsequent runs skip the backup entirely, so deleting it is safe and it will never be recreated.
+Lerd edits your project's env file: linking a site, the setup wizard and `lerd env` write the connection values of Lerd's services and the site URL into it, so values from Herd, Valet or another tool are replaced. Your original is saved first.
+
+The first time `lerd env` modifies an existing env file that has not yet been touched by lerd, it saves a copy next to that file and adds the copy to `.gitignore` (if one exists). Once lerd has written its connection values, subsequent runs skip the backup entirely, so deleting it is safe and it will never be recreated. An env file that already contains the word `lerd` anywhere counts as touched and gets no copy.
 
 The backup is named after the file it copies, so it sits beside the configuration it belongs to whatever the framework reads:
 
@@ -73,9 +75,15 @@ Done.
 lerd env:restore
 ```
 
-Copies the backup back over the file it was taken from, so a CakePHP project gets its `config/app_local.php` back and a Laravel one its `.env`. Useful when switching a project back to Laravel Sail or another local environment.
+Compares the env file with the backup and puts the old value back for every key the backup has. Keys added since, by you or by Lerd, stay. It works on the file the backup was taken from, so a CakePHP project gets its `config/app_local.php` back and a Laravel one its `.env`. Useful when switching a project back to Laravel Sail or another local environment.
 
-After restoring, run `lerd env` again to re-apply lerd connection values.
+Run it before uninstalling, since the command goes with Lerd; `lerd uninstall` also offers to do it for every linked site. Without Lerd, copy the file back yourself:
+
+```bash
+cp .env.before_lerd .env
+```
+
+A key the backup has goes back to its old value even if you changed it yourself since. The `cp` above is cruder: it replaces the whole file, so keys added since are lost. A missing env file is recreated from the backup, and a PHP file whose old value was an expression such as `env('DATABASE_URL')`, or a `null`, number or boolean that can't be put back as that type, is refused and left as it is, so copy that one by hand. To keep using Lerd after restoring, run `lerd env` again to re-apply lerd connection values.
 
 ---
 

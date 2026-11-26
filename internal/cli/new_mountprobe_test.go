@@ -108,16 +108,39 @@ func TestPrepareScaffoldParentRejectsUnsharedParent(t *testing.T) {
 // is only reported once the project is on the host.
 func TestScaffoldLanded(t *testing.T) {
 	dir := t.TempDir()
-	if err := scaffoldLanded(dir); err != nil {
+	if err := scaffoldLanded(scaffold{inContainer: true}, dir); err != nil {
 		t.Errorf("scaffoldLanded on an existing directory: %v", err)
 	}
 
 	missing := filepath.Join(dir, "new-project")
-	err := scaffoldLanded(missing)
+	err := scaffoldLanded(scaffold{inContainer: true}, missing)
 	if err == nil {
 		t.Fatal("expected an error when the project is not on disk")
 	}
 	if !strings.Contains(err.Error(), missing) {
 		t.Errorf("error = %v, want it to name the target", err)
+	}
+}
+
+// A host tool that put the project elsewhere has nothing to do with a container.
+func TestScaffoldLanded_hostCommand(t *testing.T) {
+	err := scaffoldLanded(scaffold{}, filepath.Join(t.TempDir(), "app"))
+	if err == nil || strings.Contains(err.Error(), "container") {
+		t.Errorf("err = %v, want one that does not blame a container", err)
+	}
+}
+
+// A host command needs its parent to exist and nothing from the containers.
+func TestPrepareScaffoldDir_hostCommandSkipsTheContainerChecks(t *testing.T) {
+	mounted := stubMountSeams(t, false, false)
+	parent := filepath.Join(t.TempDir(), "projects")
+	if err := prepareScaffoldDir(scaffold{}, filepath.Join(parent, "api")); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat(parent); err != nil || !info.IsDir() || *mounted != "" {
+		t.Errorf("parent %v (%v), mounted %q", info, err, *mounted)
+	}
+	if err := prepareScaffoldDir(scaffold{inContainer: true}, filepath.Join(parent, "app")); err == nil {
+		t.Error("a composer scaffold skipped the container checks")
 	}
 }

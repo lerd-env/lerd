@@ -70,6 +70,8 @@ The downloaded tools are pinned to explicit versions, so a fresh install always 
 
 ::: info Running alongside Laravel Herd or another local stack
 If another tool is already serving sites on ports 80/443 (Laravel Herd, a system nginx/Apache) or holding the DNS port, install prints a warning naming each busy port and how to find the process. Install still continues, so stop the other stack to free the ports first, otherwise `lerd-nginx` and `lerd-dns` will fail to start. When `lerd-nginx` cannot start, install finishes the rest of its setup and then exits with an error naming the busy port, instead of reporting a complete installation; free the port and run `lerd install` again.
+
+On macOS, Lerd also takes over `.test` by replacing `/etc/resolver/test`, so Herd's or Valet's sites stop resolving. It warns you, saves their file and puts it back on `lerd uninstall` or `lerd dns:disable`. Linking a project updates its `.env` for Lerd's services and saves the original as [`.env.before_lerd`](/features/env-setup#automatic-backup).
 :::
 
 ---

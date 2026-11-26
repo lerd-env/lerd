@@ -9,6 +9,8 @@ A host-proxy site runs your project's dev server directly on the host instead of
 
 Compared to [custom containers](custom-containers.md), host-proxy sites skip the image build and the container entirely, so they start instantly and file-watch/HMR works natively (no virtiofs inotify caveat). The trade-off is that the dev server runs on the host, so it reaches lerd's services over loopback rather than the container network. Lerd's env writer handles that for you (see [Env](#env)).
 
+When a [framework definition](framework-definitions.md#frameworks-that-are-not-php) describes the project, it brings its dev command, workers, commands, env wiring and doctor checks with it.
+
 ## Quick start
 
 `lerd init` sets it up for you. With no PHP in the project, the wizard recognises the runtime from its manifest and offers proxy mode as the default: a `package.json` is Node and gets its dev script (`start:dev`, `dev`, `serve`, `start` in preference order), a `config.ru` is Rack or Rails, `manage.py` is Django, and a `Gemfile`, `go.mod`, `Cargo.toml`, `pyproject.toml` or `requirements.txt` gets that language's usual command. It auto-assigns a free port and asks about HTTPS and services:
@@ -57,6 +59,10 @@ The `proxy` section in `.lerd.yaml` is mutually exclusive with `container:` (a s
 For Node projects the port is auto-assigned: `lerd init` starts from a default and walks up to the first free port, skipping any port another host-proxy site reserves and any port already bound on the host (so it never silently collides with a lerd service, for example gotenberg on 3000). A port named explicitly in the command is respected and reused. For hand-written configs, set `port` to whatever your server listens on.
 
 Lerd sets both sides of the contract: it injects the chosen port via `PORT` (or `port_env_key`) so a server that honours it binds there, and points nginx at the same port. It does not probe the live socket, so a server that ignores the env var and hardcodes a different port will not be reached. For those, name the port directly in the command (for example `vite --port 5173 --strictPort`, or `runserver 0.0.0.0:8000`) so both sides agree.
+
+When another process has the port as lerd starts the server, what happens depends on the site's framework. With a definition that declares [`move_port`](framework-definitions.md#frameworks-that-are-not-php), lerd waits five seconds for the server's own old process to let go and then starts it on the next free port, points nginx there and says so. The move lives on this machine only: `.lerd.yaml` keeps its port, and the site goes back to it the next time its server starts and finds it free. A command that names the port itself is never moved. Any other site keeps its port: lerd names the command that finds what has it, and `lerd site:doctor` reports it. A port you edit in `.lerd.yaml` reaches nginx and the server on the next `lerd link`.
+
+A server that stays running without its port, as `nest start --watch` does when the port is taken at boot, is moved by `lerd restart`.
 
 A command may also read the port itself, as `$PORT`, `${PORT}` or `${PORT:-5173}` (or the same with your `port_env_key`). Lerd writes the assigned port into those references before it starts the server, so `vite --port ${PORT:-5173} --strictPort` binds the parent's port on the site and each worktree's own port in that worktree.
 

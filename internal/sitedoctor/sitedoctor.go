@@ -335,6 +335,9 @@ func RunWith(ctx context.Context, path string, fw *config.Framework, opts Option
 			add(c)
 		}
 	}
+	if c, ok := checkDevServerPort(path, fw); ok {
+		add(c)
+	}
 	if c, ok := checkVhost(path); ok {
 		add(c)
 	}
@@ -599,6 +602,7 @@ var universalLabels = map[string]string{
 	"node_audit":        "Node Audit",
 	"php_version":       "PHP Version",
 	"vhost":             "Nginx Vhost",
+	"dev_server_port":   "Dev Server Port",
 	"slow_routes":       "Response Time",
 	"stale_workers":     "Worker Units",
 	"worker_env":        "Worker Env",

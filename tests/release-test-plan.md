@@ -849,6 +849,14 @@ lerd worktree add -b feat-x
 - [ ] `lerd import` pulls a project in from another local environment
 - [ ] Custom container path: a non-PHP project with `Containerfile.lerd` plus
       `container: {port: N}` links, `lerd rebuild` works, **200**
+- [ ] With a `build_context` in a directory of its own, an edit to a file the
+      image copies reaches the page after `lerd link`, and an edit to a file
+      `.containerignore` lists leaves the running container alone
+- [ ] A failed build of a custom container leaves the previous image serving and
+      shows as a failed build in `lerd sites`, until a build succeeds
+- [ ] With `trust_ca: true` and a re-link a custom container on a Debian, an Alpine and a Fedora
+      image reaches another secured site and a public one over HTTPS (skipped on a
+      `.localhost` install, which has no HTTPS)
 
 ---
 
@@ -1421,6 +1429,68 @@ mode is turned off again for both users.
 - [ ] A stack stopped by hand with `lerd stop`, whether while away or before
       two switches away and back, stays down: `lerd-nginx`, `lerd-ui` and
       `lerd-dns` all stay inactive until `lerd start`
+
+## Phase 17 — coming from another tool and going back
+
+Runs on its own guest state: it uninstalls lerd keeping data, so every install
+in it is a real one, and turns a copy of phase 2's demo into `herdshop`, a
+Laravel project with the `.env` Herd would have left: MySQL on 127.0.0.1 as
+root, its own Redis and mail settings, and keys lerd knows nothing about. The
+plain uninstall is answered on a terminal. Other projects' env files are put
+back at the end, and lerd is left installed.
+
+- [ ] Linking and `lerd env` save the original beside it, byte for byte, as
+      `.env.before_lerd`, and list it in `.gitignore`
+- [ ] The database values now point at lerd, and the project's own keys are
+      untouched
+- [ ] The site answers **http → 200**
+- [ ] `lerd env:restore` puts every old value back and keeps a key added since
+- [ ] `lerd env:restore` recreates a deleted `.env` from the copy
+- [ ] Plain `lerd uninstall` names the project, and answering no leaves its
+      `.env` alone and prints where the copy is
+- [ ] `--keep-data` asks nothing, leaves `.env` alone and prints where the copy
+      is
+- [ ] Plain `lerd uninstall` answered yes puts every old value back and keeps a
+      key added since
+- [ ] macOS: install warns that `/etc/resolver/test` belongs to another tool,
+      and after the uninstall that file holds what it held before
+
+## Phase 18 — frameworks served by their own dev server
+
+Runs on its own guest state: it needs only lerd and writes the definitions it
+uses (`vmnest`, `vmdjango`, `vmaxum`, `vmrails`) as user definitions, so it
+tests what any definition can declare rather than what the store ships. Each
+app is a real scaffold. A guest with no `python3` venv skips Django, one with
+no cargo and C compiler skips Rust, and one with no rails, bundler and C
+compiler skips Rails. The lane needs at least one guest with all four.
+
+- [ ] `lerd new --framework` scaffolds NestJS through its host create command,
+      into the folder it was asked for
+- [ ] A project is detected from its own manifest (`package.json`,
+      `requirements.txt`, `Gemfile`, `Cargo.toml`) and offered the declared dev
+      command and port, and a plain `lerd link` refuses it naming `lerd init`
+- [ ] A composer project that also uses the package stays a PHP project
+- [ ] A dev-server project under a parked folder is not registered
+- [ ] NestJS answers with its own page: framework kept on the registry, redis
+      and the URL wired, host worker running, a worker with no container
+      refused, `lerd run` and doctor working
+- [ ] The same for Django
+- [ ] The same for Axum
+- [ ] The same for Rails
+- [ ] NestJS, Django and Rails serve a saved file without a restart
+- [ ] With the catalog's `rust` plugin Axum serves a save, and a failed build
+      leaves the last one serving
+- [ ] With another process on its port, unpause says so and starts the site on
+      a free one, with the registry, nginx and the server agreeing
+- [ ] `lerd restart` and a re-link keep the moved port
+- [ ] The committed `.lerd.yaml` is never rewritten by a move
+- [ ] The declared port comes back on a restart once it is free
+- [ ] A sleeping site whose port was taken meanwhile wakes on another
+- [ ] `lerd start` moves a site whose port is taken
+- [ ] A port edited in `.lerd.yaml` reaches nginx and the server on `lerd link`
+- [ ] A command that names its port is never moved, and doctor names the port
+- [ ] A worktree of a dev-server site answers **200** on its own server
+- [ ] The first site answers **200** after all of it
 
 ## Sign-off
 

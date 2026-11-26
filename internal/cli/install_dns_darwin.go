@@ -2,7 +2,10 @@
 
 package cli
 
-import "github.com/geodro/lerd/internal/dns"
+import (
+	"github.com/geodro/lerd/internal/dns"
+	"github.com/geodro/lerd/internal/feedback"
+)
 
 // removeLegacyDNSService has nothing to do on macOS: the Homebrew dnsmasq
 // lerd-dns ran before used the same plist, which installDNSService rewrites
@@ -15,4 +18,8 @@ func prepDNSForRollback() {}
 
 // teardownDNSResolver removes the /etc/resolver files lerd wrote so a disabled
 // setup doesn't leave a resolver pointing at a server that is gone.
-func teardownDNSResolver() { dns.Teardown() }
+func teardownDNSResolver() {
+	if err := dns.Teardown(); err != nil {
+		feedback.Warn("%v", err)
+	}
+}

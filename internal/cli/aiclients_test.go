@@ -30,6 +30,8 @@ func TestMain(m *testing.M) {
 	// A developer running Claude Code under another profile would otherwise
 	// have the global skill tests write into that real profile.
 	os.Unsetenv("CLAUDE_CONFIG_DIR")
+	// Nor install Node through the machine's own version manager.
+	managesNodeFn = func() bool { return false }
 	platform.Current.TrayHost = true
 	// Inside WSL the enable-global path would otherwise write the real Windows profile.
 	platform.Current.WindowsSide = false

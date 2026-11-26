@@ -68,8 +68,14 @@ func Resolve(dir string, cfg *config.GlobalConfig, p Policy) (*Plan, error) {
 		secured = siteops.ResolveSecured(relinkSecured(dir), proj, cfg)
 	}
 
-	// A project that runs in its own container, or a dev server on the host,
-	// is served by proxy: no PHP version, no framework, no runtime to pick.
+	// A project in its own container or on a host dev server is proxied: no PHP and
+	// no runtime to pick. Only a framework with a definition counts, as in lerd
+	// start, so an unknown name cannot hide a container's custom_workers.
+	proxied := proj != nil && (proj.Container != nil && proj.Container.Port > 0 || proj.Proxy != nil && proj.Proxy.Port > 0)
+	proxiedFramework := ""
+	if proxied {
+		proxiedFramework, _ = config.DetectFrameworkForDir(dir)
+	}
 	if proj != nil && proj.Container != nil && proj.Container.Port > 0 {
 		plan.Mode = ModeCustomContainer
 		plan.Site = keepRegistryState(dir, config.Site{
@@ -77,6 +83,7 @@ func Resolve(dir string, cfg *config.GlobalConfig, p Policy) (*Plan, error) {
 			Domains:       kept,
 			Path:          dir,
 			Secured:       secured,
+			Framework:     proxiedFramework,
 			ContainerPort: proj.Container.Port,
 			ContainerSSL:  proj.Container.SSL,
 		})
@@ -90,6 +97,7 @@ func Resolve(dir string, cfg *config.GlobalConfig, p Policy) (*Plan, error) {
 			Domains:     kept,
 			Path:        dir,
 			Secured:     secured,
+			Framework:   proxiedFramework,
 			HostPort:    proj.Proxy.Port,
 			HostSSL:     proj.Proxy.SSL,
 			HostCommand: proj.Proxy.Command,
@@ -98,6 +106,9 @@ func Resolve(dir string, cfg *config.GlobalConfig, p Policy) (*Plan, error) {
 	}
 
 	framework, known := ResolveFramework(dir, p.Prompt != nil)
+	if fw, ok := config.GetFrameworkForDir(framework, dir); ok && fw.DevServer != nil && (proj == nil || proj.Container == nil) {
+		return nil, fmt.Errorf("%s is served by its own dev server, and .lerd.yaml declares no proxy or container for it: run `lerd init` first", fw.Label)
+	}
 	publicDir := ""
 	switch {
 	case proj != nil && proj.PublicDir != "":
@@ -206,7 +217,11 @@ func keepRegistryState(dir string, derived config.Site) config.Site {
 	site.ContainerSSL = derived.ContainerSSL
 	site.Runtime = derived.Runtime
 	site.RuntimeWorker = derived.RuntimeWorker
-	site.HostPort = derived.HostPort
+	// A port moved off this same declared one stays moved: the server may be
+	// running there, and the next start goes back once the declared one is free.
+	if existing.HostPortMovedFrom == 0 || existing.HostPortMovedFrom != derived.HostPort {
+		site.HostPort, site.HostPortMovedFrom = derived.HostPort, 0
+	}
 	site.HostSSL = derived.HostSSL
 	site.HostCommand = derived.HostCommand
 	// An unlink inside a parked directory tombstones the entry so the watcher

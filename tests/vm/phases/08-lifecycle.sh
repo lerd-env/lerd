@@ -275,3 +275,78 @@ check "lerd rebuild" bash -c "cd $cc && lerd rebuild"
 # The rebuilt container takes a moment to answer.
 wait_for 60 bash -c "[ \"\$(curl -ks -o /dev/null -w '%{http_code}' '$(eval echo "$(site_url "$cc")")')\" = 200 ]"
 expect_200 8.25 "$(site_url "$cc")"
+
+# A build context of its own: podman's cache decides what is out of date, and
+# the container restarts only when the image changed.
+ctx=$PROJECTS/ccbuild
+mkdir -p "$ctx/.lerd"
+printf 'FROM docker.io/library/busybox:latest\nCOPY index.html /srv/\nCMD ["httpd", "-f", "-p", "8000", "-h", "/srv"]\n' >"$ctx/.lerd/Containerfile"
+printf 'container:\n  port: 8000\n  containerfile: .lerd/Containerfile\n  build_context: .lerd\n' >"$ctx/.lerd.yaml"
+echo 'notes.txt' >"$ctx/.lerd/.containerignore"
+echo 'first image' >"$ctx/.lerd/index.html"
+check "a build_context project links" bash -c "cd $ctx && lerd link"
+ctx_url=$(site_url "$ctx")
+ctx_name=$(site_name "$ctx")
+ctx_unit=lerd-custom-$ctx_name
+ctx_serves() { curl -ks --max-time 10 "$ctx_url" | grep -qx "$1"; }
+check "the first image is served" wait_for 60 ctx_serves 'first image'
+
+ctx_id=$(podman inspect -f '{{.Id}}' "$ctx_unit" 2>/dev/null)
+echo 'ignored' >"$ctx/.lerd/notes.txt"
+check "link after an ignored edit" bash -c "cd $ctx && lerd link"
+check "8.26 an ignored edit leaves the container alone" test -n "$ctx_id" -a "$(podman inspect -f '{{.Id}}' "$ctx_unit" 2>/dev/null)" = "$ctx_id"
+echo 'second image' >"$ctx/.lerd/index.html"
+check "link after a context edit" bash -c "cd $ctx && lerd link"
+check "8.26 a context edit reaches the page" wait_for 60 ctx_serves 'second image'
+
+# The table row starts with the site's name.
+ctx_row() { lerd sites | grep "^$ctx_name "; }
+ctx_failed() { ctx_row | grep -q 'build failed'; }
+ctx_clean() { ctx_row | grep -qv 'build failed'; }
+check "8.27 no failed build is shown before one" ctx_clean
+cp "$ctx/.lerd/Containerfile" "$ctx/Containerfile.good"
+echo 'RUN false' >>"$ctx/.lerd/Containerfile"
+check "8.27 a failing build fails the link" bash -c "cd $ctx && ! lerd link"
+check "8.27 lerd sites shows the failed build" ctx_failed
+check "8.27 the previous image keeps serving" wait_for 60 ctx_serves 'second image'
+cp "$ctx/Containerfile.good" "$ctx/.lerd/Containerfile"
+check "link after fixing the build" bash -c "cd $ctx && lerd link"
+check "8.27 a good build clears the mark" ctx_clean
+check "8.27 the fixed site is served" wait_for 60 ctx_serves 'second image'
+check "unlink the build_context site" bash -c "cd $ctx && lerd unlink"
+
+# trust_ca on one image of each family, with the HTTPS client it ships.
+# trust_ca_site <family> <image> <client...>: links a site on the image and
+# fetches both URLs with the client. The first fetch is without trust_ca, so a
+# client that checks no certificates cannot pass.
+trust_ca_site() {
+	local family=$1 image=$2 dir=$PROJECTS/ccca-$1 unit id
+	shift 2
+	mkdir -p "$dir"
+	printf 'FROM %s\nCMD ["sleep", "infinity"]\n' "$image" >"$dir/Containerfile.lerd"
+	printf 'container:\n  port: 8000\n' >"$dir/.lerd.yaml"
+	check "$family image links" bash -c "cd $dir && lerd link"
+	unit=lerd-custom-$(site_name "$dir")
+	check "$family container runs" wait_for 60 podman exec "$unit" true
+	check "$family refuses the lerd certificate without trust_ca" bash -c '! "$@"' _ podman exec "$unit" "$@" "$ca_other"
+	printf 'container:\n  port: 8000\n  trust_ca: true\n' >"$dir/.lerd.yaml"
+	check "$family relink with trust_ca" bash -c "cd $dir && lerd link"
+	check "$family container runs again" wait_for 60 podman exec "$unit" true
+	id=$(podman inspect -f '{{.Id}}' "$unit" 2>/dev/null)
+	check "$family relink with nothing changed" bash -c "cd $dir && lerd link"
+	check "8.28 $family container is left alone by that" test -n "$id" -a "$(podman inspect -f '{{.Id}}' "$unit" 2>/dev/null)" = "$id"
+	check "8.28 $family reaches a secured site" podman exec "$unit" "$@" "$ca_other"
+	check "8.28 $family reaches a public site" podman exec "$unit" "$@" https://example.com
+	check "unlink the $family site" bash -c "cd $dir && lerd unlink"
+}
+if [ "$(tld)" = localhost ]; then
+	skip "8.28 trust_ca on a Debian, an Alpine and a Fedora image" "a .localhost install has no HTTPS"
+else
+	# The other site must be secured, so demo is put on https when it was not.
+	[ "$scheme" = https ] || check "demo is secured for trust_ca" lerd secure "$name"
+	ca_other=https://$(site_host "$DEMO_DIR")
+	trust_ca_site debian docker.io/library/php:8.4-cli curl -fsS -o /dev/null
+	trust_ca_site alpine docker.io/library/alpine:3 wget -q -O /dev/null
+	trust_ca_site fedora registry.fedoraproject.org/fedora:43 curl -fsS -o /dev/null
+	[ "$scheme" = https ] || lerd unsecure "$name" </dev/null
+fi

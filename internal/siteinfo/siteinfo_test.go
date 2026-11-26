@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/podman"
 )
 
 func setDataDir(t *testing.T) {
@@ -1312,4 +1313,25 @@ func TestEnrichFPM(t *testing.T) {
 			t.Error("expected FPMRunning = true from the active worker unit")
 		}
 	})
+}
+
+func TestEnrich_ContainerBuildFailed(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := t.TempDir() // no Containerfile, so the build fails before podman runs
+	if err := podman.BuildCustomImage("app", dir, nil); err == nil {
+		t.Fatal("expected the build to fail")
+	}
+	for _, c := range []struct {
+		site config.Site
+		want bool
+	}{
+		{config.Site{Name: "app", Path: dir, ContainerPort: 80}, true},
+		{config.Site{Name: "app", Path: dir, Runtime: "fpm-custom"}, true},
+		{config.Site{Name: "app", Path: dir}, false},
+		{config.Site{Name: "other", Path: dir, ContainerPort: 80}, false},
+	} {
+		if got := Enrich(c.site, 0).ContainerBuildFailed; got != c.want {
+			t.Errorf("%s port %d runtime %q: %v, want %v", c.site.Name, c.site.ContainerPort, c.site.Runtime, got, c.want)
+		}
+	}
 }

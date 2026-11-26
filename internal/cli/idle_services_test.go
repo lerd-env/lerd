@@ -359,3 +359,63 @@ func TestIdleServicePinnedSites_FollowsTheServicesRelyingOnIt(t *testing.T) {
 		t.Fatalf("unused service kept awake by %v", got)
 	}
 }
+
+func TestSleepableServices(t *testing.T) {
+	now := time.Now()
+	old, fresh := now.Add(-time.Hour).Unix(), now.Add(-time.Minute).Unix()
+	proxyOnly := config.Site{Name: "shop", HostPort: 5173}
+	cases := []struct {
+		name     string
+		site     config.Site
+		activity map[string]int64
+		pinned   bool
+		want     bool
+	}{
+		{"its site is idle", config.Site{Name: "shop"}, map[string]int64{"shop": old}, false, true},
+		{"its site is active", config.Site{Name: "shop"}, map[string]int64{"shop": fresh}, false, false},
+		{"its site has no record", config.Site{Name: "shop"}, nil, false, false},
+		{"a worktree is active", config.Site{Name: "shop"}, map[string]int64{"shop": old, "shop/feature": fresh}, false, false},
+		{"another site's worktree is active", config.Site{Name: "shop"}, map[string]int64{"shop": old, "shop2/feature": fresh}, false, true},
+		{"its own dashboard is in use", config.Site{Name: "shop"}, map[string]int64{"shop": old, "svc:mysql": fresh}, false, false},
+		{"its site is pinned", config.Site{Name: "shop", Pinned: true}, map[string]int64{"shop": old}, false, false},
+		{"its site is proxy-only", proxyOnly, map[string]int64{"shop": old}, false, false},
+		{"it is pinned itself", config.Site{Name: "shop"}, map[string]int64{"shop": old}, true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := installFakeIdleServices(t)
+			f.users["mysql"] = []config.Site{tc.site}
+			if tc.pinned {
+				if err := config.SetServicePinned("mysql", true); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got := SleepableServices([]string{"mysql"}, tc.activity, 30*time.Minute, now)
+			if (len(got) == 1) != tc.want {
+				t.Fatalf("sleepable = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSleepableServices_ConsumersCount(t *testing.T) {
+	now := time.Now()
+	old, fresh := now.Add(-time.Hour).Unix(), now.Add(-time.Minute).Unix()
+	f := installFakeIdleServices(t)
+	f.deps["spamassassin"] = []string{"mailpit"}
+	f.users["mailpit"] = []config.Site{{Name: "shop"}}
+
+	if got := SleepableServices([]string{"spamassassin"}, map[string]int64{"shop": old}, 30*time.Minute, now); len(got) != 1 {
+		t.Fatalf("idle through its consumer, got %v", got)
+	}
+	if got := SleepableServices([]string{"spamassassin"}, map[string]int64{"shop": fresh}, 30*time.Minute, now); len(got) != 0 {
+		t.Fatalf("a consumer's active site keeps it awake, got %v", got)
+	}
+}
+
+func TestSleepableServices_LeavesOutServicesNoSiteUses(t *testing.T) {
+	installFakeIdleServices(t)
+	if got := SleepableServices([]string{"redis"}, map[string]int64{"shop": 1}, 30*time.Minute, time.Now()); len(got) != 0 {
+		t.Fatalf("got %v", got)
+	}
+}

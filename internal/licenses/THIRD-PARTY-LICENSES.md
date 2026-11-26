@@ -15,7 +15,7 @@ container images are a separate distribution with their own notices.
 | Package | Version | License |
 | --- | --- | --- |
 | charm.land/bubbles/v2 | v2.0.0 | MIT |
-| charm.land/bubbletea/v2 | v2.1.1 | MIT |
+| charm.land/bubbletea/v2 | v2.1.2 | MIT |
 | charm.land/glamour/v2 | v2.0.1 | MIT |
 | charm.land/huh/v2 | v2.0.3 | MIT |
 | charm.land/lipgloss/v2 | v2.1.1 | MIT |
@@ -27,7 +27,7 @@ container images are a separate distribution with their own notices.
 | github.com/cespare/xxhash/v2 | v2.3.0 | MIT |
 | github.com/charmbracelet/colorprofile | v0.4.3 | MIT |
 | github.com/charmbracelet/ultraviolet | v0.0.0-20261023060817-a45b7c86333f | MIT |
-| github.com/charmbracelet/x/ansi | v0.11.9 | MIT |
+| github.com/charmbracelet/x/ansi | v0.11.10 | MIT |
 | github.com/charmbracelet/x/exp/ordered | v0.1.0 | MIT |
 | github.com/charmbracelet/x/exp/slice | v0.0.0-20260719004043-bb9a97036f23 | MIT |
 | github.com/charmbracelet/x/exp/strings | v0.1.0 | MIT |
@@ -97,7 +97,7 @@ container images are a separate distribution with their own notices.
 | go.uber.org/zap | v1.28.0 | MIT |
 | go.yaml.in/yaml/v3 | v3.0.5 | Apache-2.0 |
 | golang.org/x/crypto | v0.59.0 | BSD-3-Clause |
-| golang.org/x/net | v0.62.0 | BSD-3-Clause |
+| golang.org/x/net | v0.63.0 | BSD-3-Clause |
 | golang.org/x/sync | v0.25.0 | BSD-3-Clause |
 | golang.org/x/sys | v0.50.0 | BSD-3-Clause |
 | golang.org/x/term | v0.48.0 | BSD-3-Clause |
@@ -107,9 +107,9 @@ container images are a separate distribution with their own notices.
 | modernc.org/libc | v1.80.1 | MIT |
 | modernc.org/mathutil | v1.7.1 | BSD-3-Clause |
 | modernc.org/memory | v1.12.1 | BSD-3-Clause |
-| modernc.org/sqlite | v1.62.0 | AGPL |
+| modernc.org/sqlite | v1.63.0 | AGPL |
 
-### charm.land/bubbles/v2 v2.0.0, charm.land/bubbletea/v2 v2.1.1
+### charm.land/bubbles/v2 v2.0.0, charm.land/bubbletea/v2 v2.1.2
 
 MIT
 
@@ -549,7 +549,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### github.com/charmbracelet/x/ansi v0.11.9, github.com/charmbracelet/x/exp/ordered v0.1.0, github.com/charmbracelet/x/exp/slice v0.0.0-20260719004043-bb9a97036f23, github.com/charmbracelet/x/exp/strings v0.1.0, github.com/charmbracelet/x/term v0.2.2, github.com/charmbracelet/x/termios v0.1.1, github.com/charmbracelet/x/windows v0.2.2
+### github.com/charmbracelet/x/ansi v0.11.10, github.com/charmbracelet/x/exp/ordered v0.1.0, github.com/charmbracelet/x/exp/slice v0.0.0-20260719004043-bb9a97036f23, github.com/charmbracelet/x/exp/strings v0.1.0, github.com/charmbracelet/x/term v0.2.2, github.com/charmbracelet/x/termios v0.1.1, github.com/charmbracelet/x/windows v0.2.2
 
 MIT
 
@@ -4561,7 +4561,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ```
 
-### golang.org/x/crypto v0.59.0, golang.org/x/net v0.62.0, golang.org/x/sync v0.25.0, golang.org/x/sys v0.50.0, golang.org/x/term v0.48.0, golang.org/x/text v0.44.0
+### golang.org/x/crypto v0.59.0, golang.org/x/net v0.63.0, golang.org/x/sync v0.25.0, golang.org/x/sys v0.50.0, golang.org/x/term v0.48.0, golang.org/x/text v0.44.0
 
 BSD-3-Clause
 
@@ -5256,7 +5256,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### modernc.org/sqlite v1.62.0
+### modernc.org/sqlite v1.63.0
 
 AGPL
 
@@ -6991,7 +6991,7 @@ SOFTWARE.
 | @tailwindcss/oxide-wasm32-wasi | 4.3.5 | MIT |
 | @tailwindcss/postcss | 4.3.5 | MIT |
 | @testing-library/dom | 10.4.2 | MIT |
-| @testing-library/jest-dom | 7.0.1 | MIT |
+| @testing-library/jest-dom | 8.0.0 | MIT |
 | @testing-library/svelte | 5.4.2 | MIT |
 | @testing-library/svelte-core | 1.1.3 | MIT |
 | @tsconfig/svelte | 5.0.9 | MIT |
@@ -7001,8 +7001,8 @@ SOFTWARE.
 | @types/deep-eql | 4.0.2 | MIT |
 | @types/estree | 1.0.10 | MIT |
 | @types/trusted-types | 2.0.7 | MIT |
-| @vitest/mocker | 5.1.0 | MIT |
-| @vitest/spy | 5.1.0 | MIT |
+| @vitest/mocker | 5.1.1 | MIT |
+| @vitest/spy | 5.1.1 | MIT |
 | acorn | 8.19.0 | MIT |
 | ansi-regex | 5.0.1 | MIT |
 | ansi-styles | 5.2.0 | MIT |
@@ -7036,7 +7036,7 @@ SOFTWARE.
 | es-module-lexer | 2.3.2 | MIT |
 | esm-env | 1.2.2 | MIT |
 | esprima | 4.0.1 | BSD-2-Clause |
-| esrap | 2.4.0 | MIT |
+| esrap | 2.4.2 | MIT |
 | estree-walker | 3.0.3 | MIT |
 | expect-type | 1.4.0 | Apache-2.0 |
 | fdir | 6.5.0 | MIT |
@@ -7084,7 +7084,7 @@ SOFTWARE.
 | source-map-js | 1.2.2 | BSD-3-Clause |
 | std-env | 4.3.0 | MIT |
 | strip-indent | 3.0.0 | MIT |
-| svelte | 5.57.3 | MIT |
+| svelte | 5.59.1 | MIT |
 | svelte-check | 4.7.8 | MIT |
 | svelte-dnd-action | 0.9.80 | MIT |
 | tailwindcss | 4.3.5 | MIT |
@@ -7106,7 +7106,7 @@ SOFTWARE.
 | valibot | 1.5.0 | MIT |
 | vite | 8.3.8 | MIT |
 | vitefu | 1.1.3 | MIT |
-| vitest | 5.1.0 | MIT |
+| vitest | 5.1.1 | MIT |
 | w3c-xmlserializer | 6.0.0 | MIT |
 | webidl-conversions | 8.0.1 | BSD-2-Clause |
 | webpack-virtual-modules | 0.6.2 | MIT |
@@ -7760,7 +7760,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @testing-library/dom 10.4.2, @testing-library/jest-dom 7.0.1
+### @testing-library/dom 10.4.2, @testing-library/jest-dom 8.0.0
 
 MIT
 
@@ -7871,7 +7871,7 @@ MIT License
     SOFTWARE
 ```
 
-### @vitest/mocker 5.1.0, @vitest/spy 5.1.0
+### @vitest/mocker 5.1.1, @vitest/spy 5.1.1
 
 MIT
 
@@ -9494,7 +9494,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### esrap 2.4.0
+### esrap 2.4.2
 
 MIT
 
@@ -10981,7 +10981,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### svelte 5.57.3
+### svelte 5.59.1
 
 MIT
 
@@ -13516,7 +13516,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### vitest 5.1.0
+### vitest 5.1.1
 
 MIT
 

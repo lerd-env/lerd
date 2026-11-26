@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -24,7 +25,7 @@ func TestUninstallStopsTheWatcherBeforeDNSTeardown(t *testing.T) {
 	err := stopWatcherThenTeardownDNS(
 		func(unit string) error { calls = append(calls, "stop "+unit); return nil },
 		func(string) bool { return true },
-		func() { calls = append(calls, "teardown") },
+		func() error { calls = append(calls, "teardown"); return nil },
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -39,7 +40,7 @@ func TestUninstallRefusesDNSTeardownWhileTheWatcherStillRuns(t *testing.T) {
 	err := stopWatcherThenTeardownDNS(
 		func(string) error { return errors.New("no user bus") },
 		func(string) bool { return false },
-		func() { tornDown = true },
+		func() error { tornDown = true; return nil },
 	)
 	if err == nil || tornDown {
 		t.Errorf("err %v, tornDown %v: want an error and the DNS setup left alone", err, tornDown)
@@ -53,10 +54,22 @@ func TestUninstallTearsDNSDownWhenTheWatcherIsAlreadyGone(t *testing.T) {
 	err := stopWatcherThenTeardownDNS(
 		func(string) error { return errors.New("unit not loaded") },
 		func(string) bool { return true },
-		func() { tornDown = true },
+		func() error { tornDown = true; return nil },
 	)
 	if err != nil || !tornDown {
 		t.Errorf("err %v, tornDown %v: want the teardown to run", err, tornDown)
+	}
+}
+
+// Going on after a failed restore would delete the copy with the data dir.
+func TestUninstallStopsWhenDNSTeardownFails(t *testing.T) {
+	err := stopWatcherThenTeardownDNS(
+		func(string) error { return nil },
+		func(string) bool { return true },
+		func() error { return errors.New("could not put it back") },
+	)
+	if err == nil || !strings.Contains(err.Error(), "could not put it back") {
+		t.Errorf("err = %v", err)
 	}
 }
 

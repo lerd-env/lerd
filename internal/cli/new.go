@@ -109,6 +109,19 @@ func newNextStep(typedTarget string, chained bool) string {
 	return "cd " + typedTarget + " && lerd link && lerd setup"
 }
 
+// prepareScaffoldDir readies the parent directory for the command that runs in
+// it: a container has to see it, a host command only needs it to exist.
+func prepareScaffoldDir(plan scaffold, target string) error {
+	if plan.inContainer {
+		return prepareScaffoldParent(target)
+	}
+	parent := filepath.Dir(target)
+	if err := os.MkdirAll(parent, 0755); err != nil {
+		return fmt.Errorf("cannot create %s: %w", parent, err)
+	}
+	return nil
+}
+
 // prepareScaffoldParent creates the target's parent directory and makes it
 // visible inside the PHP container. The scaffold shells out to composer, which
 // is a container shim, so an unmounted parent leaves crun with nothing to chdir
@@ -134,8 +147,11 @@ func prepareScaffoldParent(target string) error {
 // whose bind mount does not reach the real directory takes the whole project
 // with it and composer still exits 0, so a run only reports success once the
 // project is on disk.
-func scaffoldLanded(target string) error {
+func scaffoldLanded(plan scaffold, target string) error {
 	if info, err := os.Stat(target); err != nil || !info.IsDir() {
+		if !plan.inContainer {
+			return fmt.Errorf("the create command reported success but %s is not on disk, so it put the project somewhere else", target)
+		}
 		return fmt.Errorf("the create command reported success but %s is not on disk, so it was written inside the container instead. That happens when the project path is not shared with the Podman Machine VM, which is the usual answer for a drive mounted under /Volumes. Run 'lerd machine reset' to recreate the VM with every mount lerd asks for, or scaffold under your home directory instead", target)
 	}
 	return nil
@@ -159,10 +175,16 @@ func scaffoldPlan(create, target string, extraArgs []string) scaffold {
 	if len(parts) == 0 {
 		return scaffold{}
 	}
+	inContainer := parts[0] == "composer"
+	// A host scaffold runs in the parent directory, and not every one takes an
+	// absolute path: nest new turns it into nested folders.
+	if !inContainer {
+		target = filepath.Base(target)
+	}
 	tail := append(append([]string{}, parts[1:]...), target)
 	tail = append(tail, extraArgs...)
 
-	if parts[0] != "composer" {
+	if !inContainer {
 		return scaffold{args: append([]string{parts[0]}, tail...)}
 	}
 	return scaffold{
@@ -225,7 +247,7 @@ func scaffoldCreate(fw *config.Framework, starter *config.Starter) string {
 	if starter != nil && starter.Create != "" {
 		return starter.Create
 	}
-	return fw.Create
+	return fw.ScaffoldCommand()
 }
 
 // requireStarterPackages adds a starter's packages to the freshly created
@@ -325,13 +347,13 @@ func runNew(target, frameworkName, frameworkVersion, starterName string, extraAr
 		return scaffoldUnavailableError(frameworkName, frameworkVersion)
 	}
 
-	if err := prepareScaffoldParent(target); err != nil {
-		return err
-	}
-
 	plan := scaffoldPlan(create, target, extraArgs)
 	if len(plan.args) == 0 {
 		return fmt.Errorf("framework %q has an empty create command", frameworkName)
+	}
+
+	if err := prepareScaffoldDir(plan, target); err != nil {
+		return err
 	}
 
 	scaffoldVersion := scaffoldPHPVersion(fw)
@@ -354,7 +376,7 @@ func runNew(target, frameworkName, frameworkVersion, starterName string, extraAr
 	if err := runScaffold(plan, filepath.Dir(target), scaffoldVersion, env); err != nil {
 		return fmt.Errorf("scaffold command failed: %w", err)
 	}
-	if err := scaffoldLanded(target); err != nil {
+	if err := scaffoldLanded(plan, target); err != nil {
 		return err
 	}
 	if err := requireStarterPackages(starter, target, scaffoldVersion, env); err != nil {

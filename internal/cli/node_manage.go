@@ -326,7 +326,7 @@ func RegenerateHostWorkersForSite(s config.Site) {
 	// are exactly the npm-on-host commands that should switch to bun.
 	if s.IsHostProxy() {
 		if proj.Proxy != nil {
-			if w, ok := hostProxyWorker(proj.Proxy); ok {
+			if w, ok := hostProxyWorker(liveProxy(s, proj.Proxy)); ok {
 				regenerateWorkerUnit(s.Name, s.Path, "", hostProxyWorkerName, w, hostProxyWorkerUnit(s.Name))
 			}
 		}

@@ -207,6 +207,49 @@ sys.stdout.write(out.decode(errors="replace"))
 PY
 }
 
+# pty_answers <regex=answer>... -- <cmd...>: runs a command on a terminal and
+# answers each prompt once, when its regex shows up in what came after the last
+# answer. Any other prompt is left waiting, and the run fails after 10 minutes.
+pty_answers() {
+	python3 - "$@" <<'PY'
+import os, pty, re, select, sys, time
+args = sys.argv[1:]
+cut = args.index("--")
+answers = [a.rsplit("=", 1) for a in args[:cut]]
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp(args[cut + 1], args[cut + 1:])
+seen, end = "", time.time() + 600
+while time.time() < end:
+    r, _, _ = select.select([fd], [], [], 0.5)
+    if not r: continue
+    try: data = os.read(fd, 65536)
+    except OSError: data = b""
+    if not data:
+        sys.exit(os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1]))
+    sys.stdout.write(data.decode(errors="replace")); sys.stdout.flush()
+    seen += re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", data.decode(errors="replace"))
+    for a in answers:
+        if re.search(a[0], seen, re.S):
+            os.write(fd, a[1].encode() + b"\n")
+            answers.remove(a); seen = ""
+            break
+os.kill(pid, 9)
+sys.exit("pty_answers: no prompt matched: " + seen[-300:])
+PY
+}
+
+# reinstall: puts the build under test back with the installer phase 1 ran.
+reinstall() {
+	if [ -x "$HOME/rc/lerd" ]; then
+		bash "$HOME/rc/install.sh" --local "$HOME/rc/lerd"
+	elif [ "${LERD_CHANNEL:-}" = beta ]; then
+		bash "$HOME/lerd-install.sh" --beta </dev/null
+	else
+		bash "$HOME/lerd-install.sh" </dev/null
+	fi
+}
+
 # need_pyte: true once python3 can import pyte, installing the distro package
 # when it is missing; tui_screen replays the TUI through it.
 need_pyte() {

@@ -61,6 +61,7 @@ The `container` section in `.lerd.yaml` accepts these fields:
 | `build_context` | no | `.` | Build context directory (relative to project root) |
 | `target` | no | (last stage) | Stage to build in a multi-stage Containerfile, passed as `podman build --target`. Useful when your Containerfile has separate `development` and `production` stages and you want lerd to build the dev one locally. |
 | `ssl` | no | `false` | Set to `true` if the app serves HTTPS on its port (nginx will `proxy_pass https://` with `proxy_ssl_verify off`) |
+| `trust_ca` | no | `false` | Add lerd's CA to the image's trust store, so code in the container can call other `.test` sites over HTTPS |
 
 ## How it works
 
@@ -106,6 +107,18 @@ container:
 ```
 
 Nginx will use `proxy_pass https://` and skip certificate verification (`proxy_ssl_verify off`) since the container cert is self-signed. Run `lerd site:doctor` to confirm the setting is recognised.
+
+### Calling other lerd sites over HTTPS
+
+Code in the container does not trust lerd's certificates by default, so a request from one site to another, such as `https://api.test`, fails with a certificate error. Set `trust_ca: true` and link the site again:
+
+```yaml
+container:
+  port: 80
+  trust_ca: true
+```
+
+Lerd adds its CA to the image's trust store as a last build step, on top of the public ones, so there is no certificate to copy into the project. It covers Debian, Alpine and Fedora based images, and sets `NODE_EXTRA_CA_CERTS` for Node, which does not read the system store, keeping any certificates the image already set there. The image needs a shell, so a `scratch` or distroless one fails to build. Programs with a trust store of their own, such as Java or Python's `requests`, have to be pointed at it separately. The certificate is at `/usr/local/share/ca-certificates/lerd-mkcert.crt`.
 
 ## Hot reload
 
@@ -188,7 +201,37 @@ LAN sharing works transparently since it proxies through nginx.
 lerd rebuild
 ```
 
-`lerd link` reuses the cached image if it already exists. Use `lerd rebuild` when you change the Containerfile.
+`lerd link` rebuilds the image when it is out of date and restarts the container when the image changed. With a `build_context` in a directory of its own, such as `.lerd`, it runs the build every time and Podman's cache decides what is out of date. A context that holds the project itself, including the default, is only rebuilt when the Containerfile, `target` or `trust_ca` changed, since every source edit would otherwise rebuild the image. Run `lerd rebuild` after changing a file the image copies from there.
+
+When a build fails, the site keeps serving the image built before it. `lerd sites`, the dashboard, the TUI and the MCP site list mark it as a failed build until one succeeds.
+
+## Sharing a Containerfile between projects
+
+Paths in `container` are relative to the project and may point outside it, so several projects can build from one Containerfile:
+
+```yaml
+container:
+  port: 80
+  containerfile: ../shared/Containerfile
+  build_context: ../shared
+```
+
+Each site still gets an image and a container of its own, and Podman reuses the build layers they have in common. The container starts in the project's directory, so a start script in the shared image can use `$PWD` to find it. After changing a file in `../shared`, run `lerd link` in each project to pick it up.
+
+When one project needs something extra, build the shared image once:
+
+```bash
+podman build -t localhost/php73-apache ../shared
+```
+
+Then start that project's own `Containerfile.lerd` from it:
+
+```dockerfile
+FROM localhost/php73-apache
+RUN docker-php-ext-install calendar
+```
+
+Lerd does not track that base image. After building it again, run `lerd rebuild` in the projects that start from it.
 
 ## CLI commands
 

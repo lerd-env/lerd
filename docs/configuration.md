@@ -264,6 +264,7 @@ When `container` is present, `php_version`, `framework`, and `node_version` are 
 | `port` | yes | | Port the app listens on inside the container |
 | `containerfile` | no | `Containerfile.lerd` | Path to the Containerfile (relative to project root) |
 | `build_context` | no | `.` | Build context directory (relative to project root) |
+| `trust_ca` | no | `false` | Add lerd's CA to the image's trust store, so code in the container can call other `.test` sites over HTTPS |
 
 See [Custom Containers](./usage/custom-containers.md) for the full guide.
 

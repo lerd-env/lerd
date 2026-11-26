@@ -317,6 +317,16 @@ php:
 detect:
   - file: symfony.lock
   - composer: symfony/framework-bundle
+  - package: {file: Gemfile, name: rails}   # a dependency in another language's manifest
+
+# The dev server a framework that is not PHP is served by (optional)
+dev_server:
+  command: npm run start:dev
+  port: 3000                      # the first port init tries
+  port_env_key: PORT              # only when the server reads another name
+  host_env_key: HOST
+  move_port: true                 # start on another port when this one is taken
+  create: npx --yes @acme/cli new # scaffold command, run on the host
 
 # The framework this one is built on, whose rules its projects match too
 # (optional). Repeat it on the store index entry.
@@ -911,6 +921,53 @@ Detection order:
 The first match wins. Detection rules are OR-based, any single matching rule is enough.
 
 A framework built on another one matches that one's rules as well: a Sulu project ships `symfony.lock` like any Symfony app. Such a definition declares `based_on: symfony`, on the YAML and on its entry in the store's `index.json`, since the index is all lerd has when the definition is not on disk yet. When both match, the one naming the other in `based_on` wins, whatever order they were found in. A binary that predates the key ignores it and keeps picking whichever matched first.
+
+A `package:` rule matches a dependency in the project's own manifest: `package.json` (dependencies and devDependencies), `requirements.txt`, `pyproject.toml`, `Gemfile` or `Cargo.toml`. It detects nothing in a project that has a `composer.json`, where such a package is part of the frontend and PHP still serves the site, though a worker's or a command's `check` may use it there. Any other file name matches nothing, with a message naming it.
+
+## Frameworks that are not PHP
+
+A definition with a `dev_server:` describes a project lerd serves as a [host-proxy site](host-proxy.md), in any language. Its env wiring, commands and doctor checks work as they do for a PHP framework:
+
+```yaml
+name: acmejs
+label: AcmeJS
+public_dir: .
+composer: "false"
+detect:
+  - package: {file: package.json, name: "@acme/core"}
+dev_server:
+  command: npm run dev
+  port: 3000
+  move_port: true
+  create: npx --yes @acme/cli new
+env:
+  file: .env
+  format: dotenv
+  services:
+    redis:
+      detect:
+        - key: REDIS_URL
+      vars:
+        - REDIS_URL=redis://lerd-redis:6379/0
+workers:
+  queue:
+    label: Queue
+    command: npm run queue
+    host: true
+commands:
+  - name: lint
+    label: Lint
+    command: npm run lint
+```
+
+`lerd init` and the dashboard's site wizard offer the declared command and port and save them as the `proxy:` block of `.lerd.yaml`. Until a project has that block, or a `container:` one, `lerd link` refuses it rather than serving it as PHP, and a parked folder leaves it alone.
+
+- **Detect with `package:`, never `file:`.** A lerd that predates `dev_server` ignores it, so a `file:` rule would make that lerd serve the project as PHP. It also ignores `package:`, so it leaves the project unrecognised.
+- **Workers need `host: true`.** There is no container to run one in, so any other worker is refused when it is started.
+- **`create`** goes under `dev_server`, since an older lerd would run the top-level one and link the result as PHP. It runs on the host from the parent directory, with the project's name as its last argument. The tool has to be installed there.
+- **Reloading on save** is the dev command's own doing. A server that does not watch its files, such as `cargo run`, needs a command that does. For Rust, the catalog's `rust` plugin adds one: `lerd rust:dev`.
+
+`move_port: true` says the server binds the port lerd injects, so lerd may start it on another one: see [Ports](host-proxy.md#ports). A definition from a cloned project's `.lerd.yaml` cannot declare a `dev_server`.
 
 ## Document root detection
 

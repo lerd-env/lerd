@@ -54,7 +54,7 @@ jobs:
         working-directory: docs
         run: npm run build
 
-      - uses: actions/configure-pages@1f0c5cde4bc74cd7e1254d0cb4de8d49e9068c7d # v4.0.0
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
@@ -70,3 +70,19 @@ jobs:
     steps:
       - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
         id: deployment
+
+  # Tells Bing and the other IndexNow engines which pages changed since the
+  # last stable release. A manual run has no previous tag to diff against.
+  indexnow:
+    if: ${{ github.event_name == 'push' && !contains(github.ref_name, '-') }}
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Submit changed pages
+        run: |
+          prev=$(git describe --tags --abbrev=0 --exclude='*-*' "${GITHUB_REF_NAME}^")
+          git diff --name-only "$prev" "$GITHUB_REF_NAME" -- docs | node docs/scripts/indexnow.mjs

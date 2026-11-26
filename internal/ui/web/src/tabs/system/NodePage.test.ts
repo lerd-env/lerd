@@ -118,6 +118,15 @@ describe('NodePage sites', () => {
     expect(await findByText('two.test')).toBeTruthy();
   });
 
+  it('leaves a paused site out, also one that follows the default', () => {
+    sites.set([
+      { domain: 'resting.test', node_version: '20', paused: true } as Site,
+      { domain: 'plain.test', paused: true } as Site
+    ]);
+    const { container } = render(NodePage);
+    expect(container.querySelector('button[aria-expanded]')).toBeNull();
+  });
+
   // Nothing on it: no button at all rather than a dropdown onto an empty list.
   it('shows no sites button for a version nothing uses', () => {
     sites.set([]);
