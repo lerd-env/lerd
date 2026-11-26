@@ -133,21 +133,12 @@ jobs:
           name: lerd-tray-darwin-arm64
           path: dist-tray/lerd-tray-darwin-arm64
 
-      # SignPath Foundation only signs a PE file whose product name and version
-      # it can check, and a plain Go build carries neither.
       - name: Build lerd.exe
         run: |
           VERSION=${GITHUB_REF_NAME#v}
           if [ "$GITHUB_REF_TYPE" != tag ]; then VERSION=$(git describe --tags --abbrev=0); VERSION=${VERSION#v}; fi
           echo "WINDOWS_VERSION=$VERSION" >> "$GITHUB_ENV"
-          (cd cmd/lerd-windows && go run github.com/tc-hib/go-winres@v0.3.3 simply \
-            --arch amd64,arm64 --manifest none \
-            --product-name Lerd --file-description Lerd --original-filename lerd.exe \
-            --product-version "$VERSION" --file-version "$VERSION")
-          for arch in amd64 arm64; do
-            CGO_ENABLED=0 GOOS=windows GOARCH=$arch go build -ldflags="-s -w" \
-              -o dist-windows/$arch/lerd.exe ./cmd/lerd-windows
-          done
+          .github/scripts/build-windows.sh "$VERSION"
 
       # Only dry runs are signed until the production certificate is in place,
       # since the test certificate is not trusted by Windows.
