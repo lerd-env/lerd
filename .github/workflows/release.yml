@@ -151,12 +151,12 @@ jobs:
 
       # Only dry runs are signed until the production certificate is in place,
       # since the test certificate is not trusted by Windows.
-      - name: Upload unsigned lerd.exe
+      - name: Upload lerd.exe for signing
         if: github.event_name == 'workflow_dispatch'
         id: upload-unsigned-windows
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: lerd-windows-unsigned
+          name: lerd-windows
           path: dist-windows/
           retention-days: 1
 
@@ -223,6 +223,18 @@ jobs:
             --bundle dist/checksums.txt.sigstore.json \
             --certificate-identity-regexp '^https://github.com/lerd-env/lerd/\.github/workflows/release\.yml@' \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+      - name: Verify the archived lerd.exe is signed
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          sudo apt-get install -y osslsigncode
+          for archive in dist/lerd_*_linux_*.tar.gz; do
+            tar -xzf "$archive" -O lerd.exe > lerd.exe
+            osslsigncode extract-signature -in lerd.exe -out lerd.exe.p7
+            echo "$archive:"
+            openssl pkcs7 -inform DER -in lerd.exe.p7 -print_certs -noout
+            rm lerd.exe lerd.exe.p7
+          done
 
       - name: Attach the provenance to the release
         if: github.event_name == 'push'
