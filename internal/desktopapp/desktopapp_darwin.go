@@ -61,13 +61,9 @@ func Path() string {
 	return filepath.Join(dir, Name+".app")
 }
 
-// Install builds the launcher bundle and returns its path. Rebuilt on every run
-// so an upgraded lerd repoints it at the binary that is live now. With the
-// desktop app installed it removes the launcher instead and returns "".
-//
-// The bundle is compiled rather than hand-written: an AppleScript application
-// can draw the progress window that makes clicking the icon readable while the
-// start runs, which a shell script in a bundle cannot.
+// Install builds the launcher bundle and returns its path, rebuilt on every run
+// so it points at the binary that is live now. With the desktop app installed
+// it removes the launcher instead and returns "".
 func Install() (string, error) {
 	app := Path()
 	if app == "" {
@@ -95,6 +91,8 @@ func Install() (string, error) {
 		return "", fmt.Errorf("writing the launcher script: %w", err)
 	}
 
+	// Compiled rather than hand-written: an AppleScript application can draw the
+	// progress window that makes clicking the icon readable while the start runs.
 	built := filepath.Join(work, Name+".app")
 	if out, err := exec.Command(osacompilePath, "-o", built, src).CombinedOutput(); err != nil {
 		return "", fmt.Errorf("compiling the launcher: %w\n%s", err, out)
