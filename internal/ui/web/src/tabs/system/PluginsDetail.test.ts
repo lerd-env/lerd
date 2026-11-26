@@ -2,12 +2,15 @@ import { render, fireEvent, waitFor, within } from '@testing-library/svelte';
 import { it, expect, beforeEach, vi } from 'vitest';
 import PluginsDetail from './PluginsDetail.svelte';
 import * as notify from '$lib/notify';
+import { managedPlugins } from '$stores/plugins';
 
 let installed: object[];
 const calls: { method: string; url: string; body?: string }[] = [];
 
 beforeEach(() => {
   location.hash = '#plugins';
+  // The store outlives a render, so a test must not open the last one's plugins.
+  managedPlugins.set([]);
   installed = [
     { name: 'broken', error: 'api_version 9 needs a newer lerd' },
     { name: 'hello', version: '0.1.0', description: 'Says hello', adds: ['commands', 'page'], requires: ['python3', 'jq'], icon: '/plugins/hello/ui/icon.svg' }
