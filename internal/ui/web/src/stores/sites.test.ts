@@ -84,25 +84,25 @@ describe('sites store', () => {
     expect(siteDotColor(undefined)).toBe('gray');
   });
 
-  it('siteBroken flags a site lerd should serve but cannot, never one stopped on purpose', async () => {
-    const { siteBroken } = await import('./sites');
-    expect(siteBroken({ domain: 'a.test', uses_php: true })).toBe(true);
-    expect(siteBroken({ domain: 'a.test', custom_container: true, container_port: 8000 })).toBe(true);
-    expect(siteBroken({ domain: 'a.test', uses_php: true, fpm_running: true, container_build_failed: true })).toBe(true);
-    expect(siteBroken({ domain: 'a.test', host_proxy: true, host_has_dev_server: true })).toBe(true);
+  it('siteIssue names why a site lerd should serve cannot be served, never one stopped on purpose', async () => {
+    const { siteIssue } = await import('./sites');
+    expect(siteIssue({ domain: 'a.test', uses_php: true })).toBe('php_down');
+    expect(siteIssue({ domain: 'a.test', custom_container: true, container_port: 8000 })).toBe('container_down');
+    expect(siteIssue({ domain: 'a.test', uses_php: true, fpm_running: true, container_build_failed: true })).toBe('build_failed');
+    expect(siteIssue({ domain: 'a.test', host_proxy: true, host_has_dev_server: true })).toBe('dev_server_down');
     // A sleeping queue leaves the site's request-serving process expected up.
-    expect(siteBroken({ domain: 'a.test', uses_php: true, idle_suspended: true, idle_suspended_workers: ['queue'] })).toBe(true);
+    expect(siteIssue({ domain: 'a.test', uses_php: true, idle_suspended: true, idle_suspended_workers: ['queue'] })).toBe('php_down');
     expect(
-      siteBroken({ domain: 'a.test', host_proxy: true, host_has_dev_server: true, idle_suspended: true, idle_suspended_workers: ['queue'] })
-    ).toBe(true);
+      siteIssue({ domain: 'a.test', host_proxy: true, host_has_dev_server: true, idle_suspended: true, idle_suspended_workers: ['queue'] })
+    ).toBe('dev_server_down');
 
-    expect(siteBroken({ domain: 'a.test', uses_php: true, fpm_running: true })).toBe(false);
-    expect(siteBroken({ domain: 'a.test', uses_php: true, paused: true })).toBe(false);
+    expect(siteIssue({ domain: 'a.test', uses_php: true, fpm_running: true })).toBeNull();
+    expect(siteIssue({ domain: 'a.test', uses_php: true, paused: true })).toBeNull();
     expect(
-      siteBroken({ domain: 'a.test', host_proxy: true, host_has_dev_server: true, idle_suspended: true, idle_suspended_workers: ['app'] })
-    ).toBe(false);
-    expect(siteBroken({ domain: 'a.test', host_proxy: true })).toBe(false);
-    expect(siteBroken({ domain: 'a.test' })).toBe(false);
+      siteIssue({ domain: 'a.test', host_proxy: true, host_has_dev_server: true, idle_suspended: true, idle_suspended_workers: ['app'] })
+    ).toBeNull();
+    expect(siteIssue({ domain: 'a.test', host_proxy: true })).toBeNull();
+    expect(siteIssue({ domain: 'a.test' })).toBeNull();
   });
 
   it('brokenSites lists only the broken sites', async () => {

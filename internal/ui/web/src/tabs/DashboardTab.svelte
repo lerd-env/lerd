@@ -4,6 +4,7 @@
   import { unhealthyWorkers } from '$stores/workerHealth';
   import { statusLoaded, coreDown } from '$stores/status';
   import HeroStatus from './dashboard/HeroStatus.svelte';
+  import IssuesPopover from './dashboard/IssuesPopover.svelte';
   import SetupCard from './dashboard/SetupCard.svelte';
   import SystemHealthWidget from './dashboard/SystemHealthWidget.svelte';
   import LerdInfoWidget from './dashboard/LerdInfoWidget.svelte';
@@ -23,14 +24,14 @@
   const servicesActive = $derived($coreServices.filter((s) => s.status === 'active').length);
   const coreHealthy = $derived($statusLoaded && $unhealthyWorkers.length === 0 && $coreDown.length === 0);
   // Yellow while a site lerd should serve is down or a service has crashed.
-  const notAllRunning = $derived($brokenSites.length > 0 || $failedServices.length > 0);
+  const someIssues = $derived($brokenSites.length > 0 || $failedServices.length > 0);
   const pill = $derived(
-    notAllRunning
+    someIssues
       ? {
           box: 'border-yellow-200/70 dark:border-yellow-500/20 bg-yellow-50/60 dark:bg-yellow-500/5 text-yellow-800 dark:text-yellow-300',
           ping: 'bg-yellow-400',
           dot: 'bg-yellow-500',
-          label: m.dashboard_hero_notAllRunning({ sitesRunning, sitesTotal, servicesActive })
+          label: m.dashboard_hero_someIssues({ sitesRunning, sitesTotal, servicesActive })
         }
       : {
           box: 'border-emerald-200/70 dark:border-emerald-500/20 bg-emerald-50/60 dark:bg-emerald-500/5 text-emerald-800 dark:text-emerald-300',
@@ -46,14 +47,17 @@
   <div class="shrink-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-1.5 page-header md:border-b-0!">
     <div class="min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
       <h1 class="sr-only">{m.dashboard_title()}</h1>
-      {#if coreHealthy}
-        <p class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border text-xs font-medium {pill.box}">
-          <span class="relative inline-flex w-2 h-2">
-            <span class="absolute inline-flex w-full h-full rounded-full opacity-70 animate-ping {pill.ping}"></span>
-            <span class="relative inline-flex w-2 h-2 rounded-full {pill.dot}"></span>
-          </span>
-          {pill.label}
-        </p>
+      {#snippet pillBody()}
+        <span class="relative inline-flex w-2 h-2">
+          <span class="absolute inline-flex w-full h-full rounded-full opacity-70 animate-ping {pill.ping}"></span>
+          <span class="relative inline-flex w-2 h-2 rounded-full {pill.dot}"></span>
+        </span>
+        {pill.label}
+      {/snippet}
+      {#if coreHealthy && someIssues}
+        <IssuesPopover box={pill.box} pill={pillBody} />
+      {:else if coreHealthy}
+        <p class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border text-xs font-medium {pill.box}">{@render pillBody()}</p>
       {:else if $coreDown.length > 0}
         <HeroStatus />
       {:else}

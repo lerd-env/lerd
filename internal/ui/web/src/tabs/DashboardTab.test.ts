@@ -15,7 +15,7 @@ vi.mock('./dashboard/ResourcesWidget.svelte', () => import('./services/ServiceDe
 vi.mock('./dashboard/LerdInfoWidget.svelte', () => import('./services/ServiceDetail.stub.svelte'));
 
 const allGood = /running smoothly/;
-const notAll = /Not everything is running/;
+const someIssues = /There are some issues/;
 
 describe('DashboardTab', () => {
   beforeEach(() => {
@@ -31,9 +31,10 @@ describe('DashboardTab', () => {
     services.set([{ name: 'mysql', status: 'active', site_count: 1 }]);
   });
 
-  it('says everything is running smoothly when nothing is broken', () => {
-    const { getByText } = render(DashboardTab);
+  it('says everything is running smoothly when nothing is broken, with nothing to open', () => {
+    const { getByText, queryByRole } = render(DashboardTab);
     expect(getByText(allGood)).toBeTruthy();
+    expect(queryByRole('button', { name: allGood })).toBeNull();
   });
 
   it('says not everything is running while a site cannot be served', () => {
@@ -41,9 +42,9 @@ describe('DashboardTab', () => {
       { domain: 'up.test', uses_php: true, fpm_running: true },
       { domain: 'down.test', uses_php: true }
     ]);
-    const { queryByText, getByText } = render(DashboardTab);
+    const { queryByText, getByRole } = render(DashboardTab);
     expect(queryByText(allGood)).toBeNull();
-    expect(getByText(notAll)).toBeTruthy();
+    expect(getByRole('button', { name: someIssues })).toBeTruthy();
   });
 
   it('says not everything is running while a service has failed', () => {
@@ -53,7 +54,7 @@ describe('DashboardTab', () => {
     ]);
     const { queryByText, getByText } = render(DashboardTab);
     expect(queryByText(allGood)).toBeNull();
-    expect(getByText(notAll)).toBeTruthy();
+    expect(getByText(someIssues)).toBeTruthy();
   });
 
   it('still says everything is running smoothly with a paused site and a stopped service', () => {
