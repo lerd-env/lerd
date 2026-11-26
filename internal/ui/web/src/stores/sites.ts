@@ -281,10 +281,9 @@ export function siteDotColor(s: Site | undefined): SiteDotColor {
 // request-serving process idle-suspend stops; sleeping workers leave PHP serving.
 const hostProxyWorker = 'app';
 
-// siteBroken reports a site lerd should be serving but cannot. Paused sites and
-// a host-proxy site whose dev server is asleep were stopped on purpose; nginx
-// serves a static site on its own, and a host-proxy site's dev server is the
-// user's unless lerd runs it.
+// siteBroken flags sites lerd should serve but cannot, excluding paused sites
+// and sleeping host-proxy servers. nginx serves static sites itself; host-proxy
+// servers belong to the user unless lerd runs them.
 export function siteBroken(s: Site): boolean {
   if (s.paused) return false;
   if (s.host_proxy && s.idle_suspended_workers?.includes(hostProxyWorker)) return false;
