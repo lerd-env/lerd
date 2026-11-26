@@ -93,40 +93,15 @@ builds:
       - -X github.com/geodro/lerd/internal/version.Commit={{.Commit}}
       - -X github.com/geodro/lerd/internal/version.Date={{.Date}}
 
-  # lerd.exe is the Windows side of a WSL install (PATH shim + login agent).
-  # No archive lists these ids; the Linux archive of the same arch picks the
-  # exe up through its files, since that is what a WSL distro downloads.
-  - id: lerd-windows-amd64
-    main: ./cmd/lerd-windows
-    binary: lerd
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - windows
-    goarch:
-      - amd64
-    ldflags:
-      - -s -w
-
-  - id: lerd-windows-arm64
-    main: ./cmd/lerd-windows
-    binary: lerd
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - windows
-    goarch:
-      - arm64
-    ldflags:
-      - -s -w
-
 archives:
   - id: lerd-amd64
     ids: [lerd-amd64, lerd-tray-amd64]
     name_template: "lerd_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format: tar.gz
     files:
-      - src: dist/lerd-windows-amd64_windows_amd64*/lerd.exe
+      # lerd.exe is the Windows side of a WSL install (PATH shim + login agent),
+      # built and signed by the release workflow before GoReleaser runs.
+      - src: dist-windows/amd64/lerd.exe
         strip_parent: true
       - README.md
       - install.sh
@@ -139,7 +114,7 @@ archives:
     name_template: "lerd_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format: tar.gz
     files:
-      - src: dist/lerd-windows-arm64_windows_arm64*/lerd.exe
+      - src: dist-windows/arm64/lerd.exe
         strip_parent: true
       - README.md
       - install.sh
