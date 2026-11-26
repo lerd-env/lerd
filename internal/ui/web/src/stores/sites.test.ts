@@ -90,10 +90,17 @@ describe('sites store', () => {
     expect(siteBroken({ domain: 'a.test', custom_container: true, container_port: 8000 })).toBe(true);
     expect(siteBroken({ domain: 'a.test', uses_php: true, fpm_running: true, container_build_failed: true })).toBe(true);
     expect(siteBroken({ domain: 'a.test', host_proxy: true, host_has_dev_server: true })).toBe(true);
+    // A sleeping queue leaves the site's request-serving process expected up.
+    expect(siteBroken({ domain: 'a.test', uses_php: true, idle_suspended: true, idle_suspended_workers: ['queue'] })).toBe(true);
+    expect(
+      siteBroken({ domain: 'a.test', host_proxy: true, host_has_dev_server: true, idle_suspended: true, idle_suspended_workers: ['queue'] })
+    ).toBe(true);
 
     expect(siteBroken({ domain: 'a.test', uses_php: true, fpm_running: true })).toBe(false);
     expect(siteBroken({ domain: 'a.test', uses_php: true, paused: true })).toBe(false);
-    expect(siteBroken({ domain: 'a.test', host_proxy: true, host_has_dev_server: true, idle_suspended: true })).toBe(false);
+    expect(
+      siteBroken({ domain: 'a.test', host_proxy: true, host_has_dev_server: true, idle_suspended: true, idle_suspended_workers: ['app'] })
+    ).toBe(false);
     expect(siteBroken({ domain: 'a.test', host_proxy: true })).toBe(false);
     expect(siteBroken({ domain: 'a.test' })).toBe(false);
   });

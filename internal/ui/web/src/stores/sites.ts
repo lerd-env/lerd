@@ -277,11 +277,17 @@ export function siteDotColor(s: Site | undefined): SiteDotColor {
   return s.fpm_running ? 'green' : 'gray';
 }
 
-// siteBroken reports a site lerd should be serving but cannot. Paused and
-// idle-suspended sites were stopped on purpose; nginx serves a static site on
-// its own, and a host-proxy site's dev server is the user's unless lerd runs it.
+// The host-proxy dev server's worker name (config.HostProxyWorkerName), the only
+// request-serving process idle-suspend stops; sleeping workers leave PHP serving.
+const hostProxyWorker = 'app';
+
+// siteBroken reports a site lerd should be serving but cannot. Paused sites and
+// a host-proxy site whose dev server is asleep were stopped on purpose; nginx
+// serves a static site on its own, and a host-proxy site's dev server is the
+// user's unless lerd runs it.
 export function siteBroken(s: Site): boolean {
-  if (s.paused || s.idle_suspended) return false;
+  if (s.paused) return false;
+  if (s.host_proxy && s.idle_suspended_workers?.includes(hostProxyWorker)) return false;
   if (s.container_build_failed) return true;
   if (s.fpm_running) return false;
   if (s.host_proxy) return Boolean(s.host_has_dev_server);
