@@ -22,6 +22,8 @@ DESKTOP_APP_ID="sh.lerd.Desktop"
 # by this team. Overridable so tests and mirrors can point elsewhere.
 DESKTOP_DMG_BASE="${LERD_DESKTOP_DMG_BASE:-https://github.com/lerd-env/lerd-desktop/releases/latest/download}"
 DESKTOP_TEAM_ID="ZY476R7D97"
+MACOS_APPS_DIR="${LERD_MACOS_APPS_DIR:-/Applications}"
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 # On Omarchy the Glance bar plugin shows lerd's state, so it replaces the tray.
 OMARCHY_PLUGIN_REPO="https://github.com/lerd-env/lerd-omarchy-glance"
 OMARCHY_PLUGIN_ID="sh.lerd.glance"
@@ -861,7 +863,7 @@ desktop_app_slot() {
 install_desktop_app_macos() {
   local arch dest tmp
   case "$(detect_arch)" in arm64) arch="arm64" ;; *) arch="x64" ;; esac
-  dest="/Applications"; [ -w "$dest" ] || dest="$HOME/Applications"
+  dest="$MACOS_APPS_DIR"; [ -w "$dest" ] || dest="$HOME/Applications"
   desktop_app_slot "$dest" || { warn "${dest}/Lerd.app is another application"; return 1; }
   tmp="$(mktemp -d)"
   if ! fetch "${DESKTOP_DMG_BASE}/Lerd-${arch}.dmg" "${tmp}/Lerd.dmg" \
@@ -880,7 +882,7 @@ install_desktop_app_macos() {
   rm -rf "$tmp"
   [ "$ok" = 1 ] || return 1
   # Registered now so lerd:// opens it, and `lerd install` sees it, before it first runs.
-  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "${dest}/Lerd.app" 2>/dev/null || true
+  "$LSREGISTER" -f "${dest}/Lerd.app" 2>/dev/null || true
 }
 
 # ── Update ───────────────────────────────────────────────────────────────────
