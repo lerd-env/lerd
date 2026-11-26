@@ -143,6 +143,12 @@ func RestartSite(name string) error {
 			return fmt.Errorf("site %q is proxy-only (no command); lerd does not manage its process", name)
 		}
 		unit := hostProxyWorkerUnit(site.Name)
+		if moved, err := restartDevServerMoving(site, unit); err != nil {
+			return err
+		} else if moved {
+			feedback.Done("restarted " + feedback.Val(name) + " · " + unit)
+			return nil
+		}
 		if err := restartDevServer(unit, site.HostPort, hostProxyStopTimeout); err != nil {
 			return err
 		}

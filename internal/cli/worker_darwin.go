@@ -315,6 +315,9 @@ func restoreWorker(siteName, sitePath, phpVersion, workerName string, w config.F
 			return
 		}
 	}
+	if noContainerForWorkerMsg(siteName, workerName, w) != "" {
+		return
+	}
 	// The unit is rewritten here on every `lerd start`, so the proxy port and
 	// the dev server flags have to be rebuilt with it or the worker comes back
 	// on its own port and the site's page is refused the assets it asks for.

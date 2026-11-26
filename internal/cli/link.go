@@ -192,6 +192,10 @@ func runLink(args []string) error {
 		return err
 	}
 	site := res.Site
+	// Starting the dev server may have moved it to another port.
+	if s, err := config.FindSite(site.Name); err == nil && site.IsHostProxy() {
+		site = *s
+	}
 	printLinkSummary(site, start, res.WroteIDEDataSource)
 	warnWindowsDrive(cwd)
 

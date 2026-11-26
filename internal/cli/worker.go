@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -304,6 +305,9 @@ func prepareWorkerStart(siteName, sitePath, phpVersion, workerName string, w con
 		return nil, nil
 	}
 
+	if msg := noContainerForWorkerMsg(siteName, workerName, w); msg != "" {
+		return nil, errors.New(msg)
+	}
 	if err := worktreeWorkerBlock(siteName, sitePath, workerName, w); err != nil {
 		return nil, err
 	}
@@ -640,6 +644,18 @@ func workerNames(siteName, sitePath, workerName string) (unit, display string) {
 func WorkerUnitName(siteName, sitePath, workerName string) string {
 	unit, _ := workerNames(siteName, sitePath, workerName)
 	return unit
+}
+
+// noContainerForWorkerMsg says why a worker has nowhere to run: a host-proxy
+// site has no container, so only a host worker can start on it.
+func noContainerForWorkerMsg(siteName, workerName string, w config.FrameworkWorker) string {
+	if w.Host {
+		return ""
+	}
+	if site, _ := config.FindSite(siteName); site == nil || !site.IsHostProxy() {
+		return ""
+	}
+	return fmt.Sprintf("worker %q runs in a container and %s is served from the host, so it has none. Set host: true on the worker to run it on the host", workerName, siteName)
 }
 
 // resolveWorkerFPMUnit returns the container name that workers for siteName

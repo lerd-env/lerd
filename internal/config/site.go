@@ -79,6 +79,9 @@ type Site struct {
 	// container, and nginx reverse-proxies the domain to a process running on
 	// the host (the dev server) listening on this port.
 	HostPort int `yaml:"host_port,omitempty"`
+	// HostPortMovedFrom is the declared port HostPort stands in for while another
+	// process holds it. Kept here because .lerd.yaml is committed.
+	HostPortMovedFrom int `yaml:"host_port_moved_from,omitempty"`
 	// HostSSL, when true, means the host process serves TLS on its port; nginx
 	// proxies via HTTPS with ssl_verify off.
 	HostSSL bool `yaml:"host_ssl,omitempty"`
@@ -295,6 +298,7 @@ type siteYAML struct {
 	Runtime               string              `yaml:"runtime,omitempty"`
 	RuntimeWorker         bool                `yaml:"runtime_worker,omitempty"`
 	HostPort              int                 `yaml:"host_port,omitempty"`
+	HostPortMovedFrom     int                 `yaml:"host_port_moved_from,omitempty"`
 	HostSSL               bool                `yaml:"host_ssl,omitempty"`
 	HostCommand           string              `yaml:"host_command,omitempty"`
 	ApprovedCommands      []string            `yaml:"approved_commands,omitempty"`
@@ -342,6 +346,7 @@ func (s Site) toYAML() siteYAML {
 		Runtime:               s.Runtime,
 		RuntimeWorker:         s.RuntimeWorker,
 		HostPort:              s.HostPort,
+		HostPortMovedFrom:     s.HostPortMovedFrom,
 		HostSSL:               s.HostSSL,
 		HostCommand:           s.HostCommand,
 		ApprovedCommands:      s.ApprovedCommands,
@@ -394,6 +399,7 @@ func (sy siteYAML) toSite() Site {
 		Runtime:               sy.Runtime,
 		RuntimeWorker:         sy.RuntimeWorker,
 		HostPort:              sy.HostPort,
+		HostPortMovedFrom:     sy.HostPortMovedFrom,
 		HostSSL:               sy.HostSSL,
 		HostCommand:           sy.HostCommand,
 		ApprovedCommands:      sy.ApprovedCommands,
@@ -1096,6 +1102,27 @@ func ClaimWorktreeHostPort(name, wtBase string, pick func() int) (int, error) {
 		return port, SaveSites(reg)
 	}
 	return 0, fmt.Errorf("site %q not found", name)
+}
+
+// SetSiteHostPort records the port a host-proxy site's dev server runs on, and
+// the declared port it stands in for (0 when it is the declared one).
+func SetSiteHostPort(name string, port, movedFrom int) error {
+	unlock, err := lockSites()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	reg, err := loadSitesFresh()
+	if err != nil {
+		return err
+	}
+	for i := range reg.Sites {
+		if reg.Sites[i].Name == name {
+			reg.Sites[i].HostPort, reg.Sites[i].HostPortMovedFrom = port, movedFrom
+			return SaveSites(reg)
+		}
+	}
+	return fmt.Errorf("site %q not found", name)
 }
 
 // ReleaseWorktreeHostPort forgets a removed worktree's host-proxy port, so it

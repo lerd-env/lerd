@@ -225,11 +225,13 @@ func errNoUsableNode() error {
 // triggered the gate, not the full rule shape.
 func describeRule(r config.FrameworkRule) string {
 	if r.WhenEnv != "" {
-		return describeRule(config.FrameworkRule{Composer: r.Composer, File: r.File}) + " with " + r.WhenEnv
+		return describeRule(config.FrameworkRule{Composer: r.Composer, Package: r.Package, File: r.File}) + " with " + r.WhenEnv
 	}
 	switch {
 	case r.Composer != "":
 		return "composer package " + r.Composer
+	case r.Package != nil:
+		return "package " + r.Package.Name + " in " + r.Package.File
 	case r.File != "":
 		return "file " + r.File
 	default:

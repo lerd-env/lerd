@@ -243,6 +243,9 @@ func restoreWorker(siteName, sitePath, phpVersion, workerName string, w config.F
 			return
 		}
 	}
+	if noContainerForWorkerMsg(siteName, workerName, w) != "" {
+		return
+	}
 	command = withWorkerProxyPort(siteName, sitePath, workerName, w, command)
 	// The unit is rewritten here on every `lerd start`, so the dev server flags
 	// have to be rebuilt with it or the worker comes back on its own port and

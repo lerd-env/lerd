@@ -16,12 +16,15 @@ func handleFrameworkCatalogue(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, map[string]any{"frameworks": lerdcli.FrameworkCatalogue()})
 }
 
-// requestDir resolves the ?dir= parameter to an existing directory.
+// requestDir resolves the ?dir= parameter to an existing directory, named by
+// its absolute path. Cleaned from the root, such a path cannot climb above it,
+// while a folder named a..b stays reachable.
 func requestDir(r *http.Request) (string, bool) {
-	dir := filepath.Clean(r.URL.Query().Get("dir"))
-	if dir == "" || dir == "." {
+	raw := r.URL.Query().Get("dir")
+	if !filepath.IsAbs(raw) {
 		return "", false
 	}
+	dir := filepath.Clean("/" + raw)
 	info, err := os.Stat(dir)
 	if err != nil || !info.IsDir() {
 		return "", false

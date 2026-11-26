@@ -3846,16 +3846,20 @@ func execProjectNew(args map[string]any) (any, *rpcError) {
 	if frameworkVersion != "" && fw.Version != frameworkVersion {
 		return toolErr(fmt.Sprintf("framework %q does not publish major %q (the store serves %q) — use framework_list to see the majors it publishes", frameworkName, frameworkVersion, fw.Version)), nil
 	}
-	if fw.Create == "" {
+	create := fw.ScaffoldCommand()
+	if create == "" {
 		return toolErr(fmt.Sprintf("framework %q has no create command — add a 'create' field to its YAML definition", frameworkName)), nil
 	}
 
-	parts := strings.Fields(fw.Create)
-	parts = append(parts, projectPath)
+	parts := strings.Fields(create)
+	// Run from the parent by name, as lerd new does: not every scaffold takes an
+	// absolute path.
+	parts = append(parts, filepath.Base(projectPath))
 	parts = append(parts, extraArgs...)
 
 	var out bytes.Buffer
 	cmd := exec.Command(parts[0], parts[1:]...)
+	cmd.Dir = filepath.Dir(projectPath)
 	cmd.Env = append(os.Environ(), composer.MemoryLimitEnv(fw)...)
 	cmd.Stdout = &out
 	cmd.Stderr = &out
