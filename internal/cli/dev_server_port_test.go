@@ -184,27 +184,34 @@ func (f *failingStart) Start(unit string) error {
 	return errors.New("no such unit")
 }
 
-func movableRestart(t *testing.T) {
+func movableRestart(t *testing.T) *captureEnableMgr {
 	t.Helper()
 	site, _ := portFixture(t, true)
 	if err := os.WriteFile(filepath.Join(site.Path, ".lerd.yaml"), []byte("proxy:\n  command: npm run acme\n  port: 43000\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// Starting a unit arms it through the service manager, launchctl on macOS.
+	mgr := &captureEnableMgr{}
+	swapMgr(t, mgr)
 	prev := podman.DaemonReloadFn
 	podman.DaemonReloadFn = func() error { return nil }
 	t.Cleanup(func() { podman.UnitLifecycle, podman.DaemonReloadFn = nil, prev })
+	return mgr
 }
 
 func TestRestartSite_reportsAMovableServerThatDoesNotStart(t *testing.T) {
-	movableRestart(t)
+	mgr := movableRestart(t)
 	podman.UnitLifecycle = &failingStart{}
 	if err := RestartSite("api"); err == nil || !strings.Contains(err.Error(), "no such unit") {
 		t.Errorf("err = %v, want the start failure", err)
 	}
+	if len(mgr.enabled) != 1 {
+		t.Errorf("enabled %v, want the unit armed through the fake manager", mgr.enabled)
+	}
 }
 
 func TestRestartSite_refusedCommandLeavesTheServerRunning(t *testing.T) {
-	movableRestart(t)
+	_ = movableRestart(t)
 	life := &failingStart{}
 	podman.UnitLifecycle = life
 	if err := os.WriteFile(config.GlobalConfigFile(), []byte("host_proxy:\n  disabled: true\n"), 0o644); err != nil {
