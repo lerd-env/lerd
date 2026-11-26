@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -145,6 +146,34 @@ func TestHandleProjectSetupSteps(t *testing.T) {
 		s, _ := step.(map[string]any)
 		if s["label"] == "lerd open" {
 			t.Error("the dashboard plan should not offer to open a browser on the host")
+		}
+	}
+}
+
+// The wizard names a project folder by its absolute path, so anything else,
+// a relative path or one that climbs, is refused before a file is read.
+func TestRequestDir(t *testing.T) {
+	base := t.TempDir()
+	inside := filepath.Join(base, "app")
+	if err := os.MkdirAll(inside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// From inside, both relative spellings name a folder that exists.
+	t.Chdir(inside)
+	cases := map[string]bool{
+		inside:                         true,
+		inside + "/":                   true,
+		"":                             false,
+		".":                            false,
+		"../app":                       false,
+		"..":                           false,
+		inside + "/../app":             true, // cleaned to inside
+		filepath.Join(base, "missing"): false,
+	}
+	for dir, want := range cases {
+		r := httptest.NewRequest(http.MethodGet, "/api/project/setup-steps?dir="+url.QueryEscape(dir), nil)
+		if _, got := requestDir(r); got != want {
+			t.Errorf("requestDir(%q) = %v, want %v", dir, got, want)
 		}
 	}
 }
