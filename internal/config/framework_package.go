@@ -118,9 +118,9 @@ type FrameworkPackageRemoves struct {
 // of its majors. Min and Max are inclusive and either may be omitted for an
 // open end, the same shape a framework's PHP range uses.
 type FrameworkPackageScope struct {
-	Name string `yaml:"name"`
-	Min  string `yaml:"min,omitempty"`
-	Max  string `yaml:"max,omitempty"`
+	Name string `yaml:"name" json:"name"`
+	Min  string `yaml:"min,omitempty" json:"min,omitempty"`
+	Max  string `yaml:"max,omitempty" json:"max,omitempty"`
 }
 
 // AppliesTo reports whether the package's declarations belong on fw.

@@ -7,11 +7,26 @@ import { modal } from '$stores/modals';
 import type { ServiceSuggestion } from '$stores/sites';
 import { m } from '../paraglide/messages.js';
 
+export interface StarterChoice {
+  name: string;
+  label: string;
+  description?: string;
+  versions: string[];
+}
+
 export interface FrameworkChoice {
   name: string;
   label: string;
   versions?: string[];
   latest?: string;
+  starters?: StarterChoice[];
+}
+
+// startersFor lists a framework's starters that support a major, reading an
+// unpinned version as the latest the store publishes.
+export function startersFor(choice: FrameworkChoice | undefined, version: string): StarterChoice[] {
+  const major = version || choice?.latest || '';
+  return (choice?.starters ?? []).filter((s) => s.versions.includes(major));
 }
 
 export interface ChoiceOption {
@@ -95,6 +110,7 @@ export interface RunRequest {
   name?: string;
   framework?: string;
   framework_version?: string;
+  starter?: string;
   steps?: string[];
 }
 

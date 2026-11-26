@@ -43,6 +43,7 @@
   let name = $state('');
   let framework = $state('');
   let frameworkVersion = $state('');
+  let starter = $state('');
 
   let questions = $state<ProjectQuestions | null>(null);
   let answers = $state<ProjectAnswers | null>(null);
@@ -110,6 +111,7 @@
       name,
       framework,
       frameworkVersion,
+      starter,
       queue,
       runId: runId || undefined,
       runKind: runKind || undefined
@@ -226,7 +228,7 @@
     // aged out of the registry.
     dir = joinPath(parent, finishProjectName(name));
     const ok = await runAndWait(
-      { kind: 'scaffold', dir: parent, name: finishProjectName(name), framework, framework_version: frameworkVersion },
+      { kind: 'scaffold', dir: parent, name: finishProjectName(name), framework, framework_version: frameworkVersion, starter },
       m.siteWizard_scaffolding()
     );
     if (!ok) return;
@@ -396,6 +398,7 @@
       name = saved.name ?? '';
       framework = saved.framework ?? '';
       frameworkVersion = saved.frameworkVersion ?? '';
+      starter = saved.starter ?? '';
       queue = saved.queue ?? [];
       runId = saved.runId ?? '';
       runKind = saved.runKind ?? '';
@@ -506,10 +509,12 @@
         {name}
         {framework}
         {frameworkVersion}
+        {starter}
         onchange={(v) => {
           name = v.name;
           framework = v.framework;
           frameworkVersion = v.frameworkVersion;
+          starter = v.starter;
         }}
         onerror={(msg) => (error = msg)}
       />

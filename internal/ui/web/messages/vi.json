@@ -894,6 +894,8 @@
   "siteWizard_useThisFolder": "Dùng thư mục này",
   "siteWizard_rememberFolder": "Lần sau bắt đầu ở đây",
   "siteWizard_version": "Phiên bản",
+  "siteWizard_starter": "Mẫu khởi đầu",
+  "siteWizard_starterNone": "Không có",
   "siteWizard_versionLatest": "Mới nhất",
   "siteWizard_vitePitfall": "Vite chặn các yêu cầu qua proxy dựa trên header Host. Thêm tên miền của site vào server.allowedHosts trong vite.config và thêm --host vào lệnh, nếu không các yêu cầu qua proxy sẽ lỗi.",
   "siteWizard_railsPitfall": "Rails chặn các yêu cầu qua proxy theo header Host. Hãy thêm tên miền của trang vào config.hosts trong config/environments/development.rb, nếu không các yêu cầu qua proxy sẽ thất bại.",

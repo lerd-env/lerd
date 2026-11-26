@@ -894,6 +894,8 @@
   "siteWizard_useThisFolder": "Use this folder",
   "siteWizard_rememberFolder": "Start here next time",
   "siteWizard_version": "Version",
+  "siteWizard_starter": "Starter",
+  "siteWizard_starterNone": "None",
   "siteWizard_versionLatest": "Latest",
   "siteWizard_vitePitfall": "Vite blocks proxied requests by their Host header. Add the site domain to server.allowedHosts in vite.config, and --host to the command, or requests through the proxy fail.",
   "siteWizard_railsPitfall": "Rails blocks proxied requests by their Host header. Add the site domain to config.hosts in config/environments/development.rb, or requests through the proxy fail.",
