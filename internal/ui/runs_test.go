@@ -162,6 +162,32 @@ func TestRunArgvBuildsScaffold(t *testing.T) {
 	}
 }
 
+func TestRunArgvPassesTheStarterOn(t *testing.T) {
+	parent := t.TempDir()
+	argv, _, _, err := runArgv("/usr/bin/lerd", RunRequest{
+		Kind: runKindScaffold, Dir: parent, Name: "myapp",
+		Framework: "laravel", Starter: "filament",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"/usr/bin/lerd", "new", filepath.Join(parent, "myapp"), "--framework=laravel", "--starter=filament"}
+	if strings.Join(argv, " ") != strings.Join(want, " ") {
+		t.Errorf("argv = %v, want %v", argv, want)
+	}
+}
+
+// A starter becomes part of a store URL, so only a name the store could publish
+// reaches the command line.
+func TestRunArgvRejectsAStarterThatIsNotAName(t *testing.T) {
+	parent := t.TempDir()
+	for _, starter := range []string{"../x", "Filament", "a b", "-x"} {
+		if _, _, _, err := runArgv("/usr/bin/lerd", RunRequest{Kind: runKindScaffold, Dir: parent, Name: "myapp", Framework: "laravel", Starter: starter}); err == nil {
+			t.Errorf("starter %q should be refused", starter)
+		}
+	}
+}
+
 // A name is one directory under the chosen parent. Anything that climbs out of
 // it, or that would be read as a flag, is refused before a command is built.
 func TestRunArgvRejectsEscapingNames(t *testing.T) {

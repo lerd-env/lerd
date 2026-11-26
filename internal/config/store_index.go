@@ -44,6 +44,7 @@ type cachedStoreIndex struct {
 	// NPMPackages are listed apart from Packages, which a lerd that predates
 	// them fetches whole on update and would refuse an npm name from.
 	NPMPackages []StorePackageEntry `json:"npm_packages"`
+	Starters    []StoreStarterEntry `json:"starters"`
 }
 
 // loadCachedStoreIndex reads the locally cached framework store index. Returns

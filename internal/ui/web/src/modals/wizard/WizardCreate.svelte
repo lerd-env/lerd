@@ -5,18 +5,22 @@
   import FrameworkMark from '$components/FrameworkMark.svelte';
   import WizardField from './WizardField.svelte';
   import { slugifyProjectName } from '$lib/projectName';
-  import { frameworkCatalogue, type FrameworkChoice } from '$stores/wizard';
+  import { frameworkCatalogue, startersFor, type FrameworkChoice } from '$stores/wizard';
   import { m } from '../../paraglide/messages.js';
 
-  interface Props {
-    parent: string;
+  interface Choice {
     name: string;
     framework: string;
     frameworkVersion: string;
-    onchange: (v: { name: string; framework: string; frameworkVersion: string }) => void;
+    starter: string;
+  }
+
+  interface Props extends Choice {
+    parent: string;
+    onchange: (v: Choice) => void;
     onerror?: (message: string) => void;
   }
-  let { parent, name, framework, frameworkVersion, onchange, onerror }: Props = $props();
+  let { parent, name, framework, frameworkVersion, starter, onchange, onerror }: Props = $props();
 
   let catalogue = $state<FrameworkChoice[]>([]);
   let loading = $state(false);
@@ -28,9 +32,21 @@
     { value: '', label: m.siteWizard_versionLatest() },
     ...(chosen?.versions ?? []).map((v) => ({ value: v, label: v }))
   ]);
+  const starters = $derived(startersFor(chosen, frameworkVersion));
+  const starterOptions = $derived([
+    { value: '', label: m.siteWizard_starterNone() },
+    ...starters.map((s) => ({ value: s.name, label: s.label, description: s.description }))
+  ]);
 
-  function emit(next: Partial<{ name: string; framework: string; frameworkVersion: string }>) {
-    onchange({ name, framework, frameworkVersion, ...next });
+  function emit(next: Partial<Choice>) {
+    const v = { name, framework, frameworkVersion, starter, ...next };
+    // A starter the newly picked major does not support is dropped rather than
+    // sent along to be refused.
+    const versionChanged = 'frameworkVersion' in next;
+    if (versionChanged && v.starter && !startersFor(chosen, v.frameworkVersion).some((s) => s.name === v.starter)) {
+      v.starter = '';
+    }
+    onchange(v);
   }
 
   onMount(async () => {
@@ -73,7 +89,7 @@
       disabled={loading || catalogue.length === 0}
       placeholder={loading ? m.common_loading() : ''}
       options={catalogue.map((f) => ({ value: f.name, label: f.label }))}
-      onchange={(v) => emit({ framework: v, frameworkVersion: '' })}
+      onchange={(v) => emit({ framework: v, frameworkVersion: '', starter: '' })}
     >
       {#snippet optionIcon(name)}
         <FrameworkMark {name} size="md" />
@@ -90,6 +106,14 @@
           options={versionOptions}
           onchange={(v) => emit({ frameworkVersion: v })}
         />
+      </WizardField>
+    </div>
+  {/if}
+
+  {#if starters.length > 0}
+    <div transition:slide={{ duration: 160 }}>
+      <WizardField label={m.siteWizard_starter()}>
+        <Dropdown value={starter} width="full" options={starterOptions} onchange={(v) => emit({ starter: v })} />
       </WizardField>
     </div>
   {/if}

@@ -894,6 +894,8 @@
   "siteWizard_useThisFolder": "Gunakan folder ini",
   "siteWizard_rememberFolder": "Mulai dari sini lain kali",
   "siteWizard_version": "Versi",
+  "siteWizard_starter": "Starter",
+  "siteWizard_starterNone": "Tidak ada",
   "siteWizard_versionLatest": "Terbaru",
   "siteWizard_vitePitfall": "Vite memblokir permintaan proxy berdasarkan header Host. Tambahkan domain site ke server.allowedHosts di vite.config, dan --host pada perintahnya, atau permintaan lewat proxy akan gagal.",
   "siteWizard_railsPitfall": "Rails memblokir permintaan lewat proxy berdasarkan header Host. Tambahkan domain situs ke config.hosts di config/environments/development.rb, atau permintaan lewat proxy akan gagal.",

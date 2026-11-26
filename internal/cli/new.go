@@ -13,6 +13,7 @@ import (
 	"github.com/geodro/lerd/internal/feedback"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -26,6 +27,7 @@ var (
 func NewNewCmd() *cobra.Command {
 	var frameworkName string
 	var frameworkVersion string
+	var starter string
 
 	cmd := &cobra.Command{
 		Use:   "new [name-or-path]",
@@ -41,6 +43,7 @@ run without a terminal and the questions are too, so scripts keep working.
   lerd new myapp                          # ask which framework to use
   lerd new myapp --framework=symfony      # scaffold Symfony, no questions
   lerd new myapp --framework=laravel --framework-version=11   # scaffold an older major
+  lerd new myapp --framework=laravel --starter=filament       # start from a store starter
   lerd new /path/to/myapp                 # create at an absolute path
   lerd new myapp -- --no-interaction      # pass extra args to the scaffold command
 
@@ -48,13 +51,17 @@ Flags anywhere on the line belong to lerd; everything after '--' is handed to
 the scaffold command untouched.
 
 Every framework's scaffold command comes from its YAML definition:
-  create: composer create-project myvendor/myframework`,
+  create: composer create-project myvendor/myframework
+
+A starter is another way to begin a framework's project, published in the
+store: a different skeleton, packages required into the new project, or both.
+The wizard asks for one when the framework and major picked have any.`,
 		Args:                  cobra.ArbitraryArgs,
 		DisableFlagsInUseLine: true,
 		SilenceUsage:          true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target, extraArgs := newArgs(args, cmd.ArgsLenAtDash())
-			return runNew(target, frameworkName, frameworkVersion, extraArgs)
+			return runNew(target, frameworkName, frameworkVersion, starter, extraArgs)
 		},
 	}
 
@@ -62,6 +69,8 @@ Every framework's scaffold command comes from its YAML definition:
 		"Framework to scaffold; asked on a terminal when omitted, "+defaultScaffoldFramework+" otherwise")
 	cmd.Flags().StringVar(&frameworkVersion, "framework-version", "",
 		"Major to scaffold; requires --framework, defaults to the latest the store publishes")
+	cmd.Flags().StringVar(&starter, "starter", "",
+		"Store starter to begin from, such as filament; requires --framework")
 
 	return cmd
 }
@@ -232,6 +241,29 @@ func runScaffold(plan scaffold, workDir, version string, env []string) error {
 	return cmd.Run()
 }
 
+// scaffoldCreate is the create command a project starts from: a starter's own
+// skeleton when it has one, the framework's otherwise.
+func scaffoldCreate(fw *config.Framework, starter *config.Starter) string {
+	if starter != nil && starter.Create != "" {
+		return starter.Create
+	}
+	return fw.ScaffoldCommand()
+}
+
+// requireStarterPackages adds a starter's packages to the freshly created
+// project, through the same bundled composer and PHP the scaffold ran under.
+func requireStarterPackages(starter *config.Starter, target, version string, env []string) error {
+	if starter == nil || len(starter.Require) == 0 {
+		return nil
+	}
+	feedback.Line("requiring " + feedback.Val(strings.Join(starter.Require, " ")))
+	plan := scaffold{inContainer: true, args: append([]string{composer.PharPath()}, starter.RequireArgs(target)...)}
+	if err := runScaffold(plan, target, version, env); err != nil {
+		return fmt.Errorf("requiring the %s starter's packages failed: %w", starter.Label, err)
+	}
+	return nil
+}
+
 // scaffoldUnavailableError explains a framework lerd cannot start a project
 // from. A major that ships no project skeleton while the ones before it do is
 // not a broken definition, so it names the run that would work instead.
@@ -246,11 +278,14 @@ func scaffoldUnavailableError(name, version string) error {
 	return fmt.Errorf("framework %q has no create command — add a 'create' field to its YAML definition", name)
 }
 
-func runNew(target, frameworkName, frameworkVersion string, extraArgs []string) error {
+func runNew(target, frameworkName, frameworkVersion, starterName string, extraArgs []string) error {
 	interactive := isInteractive()
 
 	if newVersionNeedsFramework(frameworkName, frameworkVersion) {
 		return fmt.Errorf("--framework-version needs a --framework to apply it to")
+	}
+	if starterName != "" && frameworkName == "" {
+		return fmt.Errorf("--starter needs a --framework to apply it to")
 	}
 
 	// Ask for what the command was not told. A terminal gets the catalogue and
@@ -270,11 +305,11 @@ func runNew(target, frameworkName, frameworkVersion string, extraArgs []string) 
 		return err
 	}
 	if newShouldAskFramework(interactive, frameworkName != "") {
-		name, version, err := askScaffoldFramework(scaffoldCatalogue())
+		name, version, starter, err := askScaffoldFramework(scaffoldCatalogue())
 		if err != nil {
 			return err
 		}
-		frameworkName, frameworkVersion = name, version
+		frameworkName, frameworkVersion, starterName = name, version, starter
 	}
 	if frameworkName == "" {
 		frameworkName = defaultScaffoldFramework
@@ -299,11 +334,20 @@ func runNew(target, frameworkName, frameworkVersion string, extraArgs []string) 
 	if !ok {
 		return fmt.Errorf("unknown framework %q — run 'lerd framework list' to see available frameworks", frameworkName)
 	}
-	if fw.ScaffoldCommand() == "" {
+	var starter *config.Starter
+	if starterName != "" {
+		s, err := store.NewClient().ResolveStarter(frameworkName, fw.Version, starterName)
+		if err != nil {
+			return err
+		}
+		starter = s
+	}
+	create := scaffoldCreate(fw, starter)
+	if create == "" {
 		return scaffoldUnavailableError(frameworkName, frameworkVersion)
 	}
 
-	plan := scaffoldPlan(fw.ScaffoldCommand(), target, extraArgs)
+	plan := scaffoldPlan(create, target, extraArgs)
 	if len(plan.args) == 0 {
 		return fmt.Errorf("framework %q has an empty create command", frameworkName)
 	}
@@ -316,7 +360,11 @@ func runNew(target, frameworkName, frameworkVersion string, extraArgs []string) 
 
 	start := time.Now()
 	feedback.Begin()
-	line := "scaffolding " + feedback.Val(fw.Label) + " · " + strings.Join(strings.Fields(fw.ScaffoldCommand()), " ") + " " + target
+	line := "scaffolding " + feedback.Val(fw.Label)
+	if starter != nil {
+		line += " · " + feedback.Val(starter.Label)
+	}
+	line += " · " + strings.Join(strings.Fields(create), " ") + " " + target
 	if plan.inContainer && scaffoldVersion != "" {
 		line += " · php " + feedback.Val(scaffoldVersion)
 	}
@@ -329,6 +377,9 @@ func runNew(target, frameworkName, frameworkVersion string, extraArgs []string) 
 		return fmt.Errorf("scaffold command failed: %w", err)
 	}
 	if err := scaffoldLanded(plan, target); err != nil {
+		return err
+	}
+	if err := requireStarterPackages(starter, target, scaffoldVersion, env); err != nil {
 		return err
 	}
 

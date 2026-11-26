@@ -48,11 +48,13 @@ type Client struct {
 	Fallbacks []string
 }
 
-// Index is the top-level store index listing all available frameworks, and the
-// composer packages that ship declarations of their own.
+// Index is the top-level store index listing all available frameworks, the
+// composer packages that ship declarations of their own, and the starters a new
+// project of a framework can begin from.
 type Index struct {
 	Frameworks []IndexEntry               `json:"frameworks"`
 	Packages   []config.StorePackageEntry `json:"packages,omitempty"`
+	Starters   []config.StoreStarterEntry `json:"starters,omitempty"`
 }
 
 // IndexEntry describes a single framework available in the store.

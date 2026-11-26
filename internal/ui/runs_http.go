@@ -3,6 +3,7 @@ package ui
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/siteops"
 	"net/http"
 	"os"
@@ -19,6 +20,7 @@ type RunRequest struct {
 	Name             string   `json:"name,omitempty"`
 	Framework        string   `json:"framework,omitempty"`
 	FrameworkVersion string   `json:"framework_version,omitempty"`
+	Starter          string   `json:"starter,omitempty"`
 	Steps            []string `json:"steps,omitempty"`
 }
 
@@ -68,6 +70,12 @@ func runArgv(self string, req RunRequest) (argv []string, dir, label string, err
 			argv = append(argv, "--framework="+req.Framework)
 			if req.FrameworkVersion != "" {
 				argv = append(argv, "--framework-version="+req.FrameworkVersion)
+			}
+			if req.Starter != "" {
+				if !config.ValidStarterName(req.Starter) {
+					return nil, "", "", fmt.Errorf("invalid starter: %q", req.Starter)
+				}
+				argv = append(argv, "--starter="+req.Starter)
 			}
 		}
 		return argv, dir, target, nil

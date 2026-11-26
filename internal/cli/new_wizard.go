@@ -38,6 +38,19 @@ type scaffoldChoice struct {
 	// scaffolds answers, for each major a definition was read for, whether that
 	// major can start a project. A major missing from it was never inspected.
 	scaffolds map[string]bool
+	// Starters are the store's other ways to begin a project of this framework.
+	Starters []config.StoreStarterEntry
+}
+
+// startersFor returns the starters that support a major, in the store's order.
+func (c scaffoldChoice) startersFor(version string) []config.StoreStarterEntry {
+	var out []config.StoreStarterEntry
+	for _, s := range c.Starters {
+		if s.Supports(version) {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // canScaffold reports whether the wizard should offer this framework. Not every
@@ -126,6 +139,7 @@ func scaffoldCatalogue() []scaffoldChoice {
 		if c.Label == "" {
 			c.Label = c.Name
 		}
+		c.Starters = config.StoreStarters(c.Name)
 		out = append(out, *c)
 	}
 	return out
@@ -134,10 +148,20 @@ func scaffoldCatalogue() []scaffoldChoice {
 // FrameworkChoice is one framework a new project can be scaffolded from, as the
 // dashboard's create step sees it.
 type FrameworkChoice struct {
-	Name     string   `json:"name"`
-	Label    string   `json:"label"`
-	Versions []string `json:"versions,omitempty"`
-	Latest   string   `json:"latest,omitempty"`
+	Name     string          `json:"name"`
+	Label    string          `json:"label"`
+	Versions []string        `json:"versions,omitempty"`
+	Latest   string          `json:"latest,omitempty"`
+	Starters []StarterChoice `json:"starters,omitempty"`
+}
+
+// StarterChoice is one starter the create step can offer, with the majors of
+// its framework it supports so the page filters without reading a range.
+type StarterChoice struct {
+	Name        string   `json:"name"`
+	Label       string   `json:"label"`
+	Description string   `json:"description,omitempty"`
+	Versions    []string `json:"versions"`
 }
 
 // FrameworkCatalogue lists what a new project can be scaffolded from: the same
@@ -147,7 +171,19 @@ func FrameworkCatalogue() []FrameworkChoice {
 	catalogue := scaffoldCatalogue()
 	out := make([]FrameworkChoice, 0, len(catalogue))
 	for _, c := range catalogue {
-		out = append(out, FrameworkChoice{Name: c.Name, Label: c.Label, Versions: c.Versions, Latest: c.Latest})
+		choice := FrameworkChoice{Name: c.Name, Label: c.Label, Versions: c.Versions, Latest: c.Latest}
+		for _, s := range c.Starters {
+			sc := StarterChoice{Name: s.Name, Label: s.Label, Description: s.Description}
+			for _, v := range c.Versions {
+				if s.Supports(v) {
+					sc.Versions = append(sc.Versions, v)
+				}
+			}
+			if len(sc.Versions) > 0 {
+				choice.Starters = append(choice.Starters, sc)
+			}
+		}
+		out = append(out, choice)
 	}
 	return out
 }
@@ -235,6 +271,25 @@ func versionSelectOptions(c scaffoldChoice) []huh.Option[string] {
 	return opts
 }
 
+// starterSelectOptions renders the starters supporting a major as picker
+// options, led by none so a plain project stays the default. A major no starter
+// supports returns nil, and the question is not asked.
+func starterSelectOptions(c scaffoldChoice, version string) []huh.Option[string] {
+	starters := c.startersFor(version)
+	if len(starters) == 0 {
+		return nil
+	}
+	opts := []huh.Option[string]{huh.NewOption("None, plain "+c.Label, "")}
+	for _, s := range starters {
+		label := s.Label
+		if s.Description != "" {
+			label += " · " + s.Description
+		}
+		opts = append(opts, huh.NewOption(label, s.Name))
+	}
+	return opts
+}
+
 // initialScaffoldFramework picks which entry the framework question starts on:
 // the command's long-standing default when the catalogue offers it, otherwise
 // the first thing it does offer.
@@ -274,12 +329,12 @@ func askProjectName() (string, error) {
 	return strings.TrimSpace(name), err
 }
 
-// askScaffoldFramework prompts for the framework and, when it has more than one
-// major published, for which one. Returns the store name and version to resolve
-// the definition by; an empty version means the latest.
-func askScaffoldFramework(catalogue []scaffoldChoice) (string, string, error) {
+// askScaffoldFramework prompts for the framework, its major when several are
+// published, and a starter when that major has any. An empty version means the
+// latest and an empty starter means none.
+func askScaffoldFramework(catalogue []scaffoldChoice) (string, string, string, error) {
 	if len(catalogue) == 0 {
-		return defaultScaffoldFramework, "", nil
+		return defaultScaffoldFramework, "", "", nil
 	}
 
 	name := initialScaffoldFramework(catalogue)
@@ -289,30 +344,45 @@ func askScaffoldFramework(catalogue []scaffoldChoice) (string, string, error) {
 			Options(frameworkSelectOptions(catalogue)...).
 			Value(&name),
 	)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	choice := scaffoldChoiceByName(catalogue, name)
-	if choice == nil || len(choice.Versions) < 2 {
-		return name, "", nil
+	if choice == nil {
+		return name, "", "", nil
 	}
 
 	version := choice.Latest
-	if !slices.Contains(choice.Versions, version) {
+	if !slices.Contains(choice.Versions, version) && len(choice.Versions) > 0 {
 		version = choice.Versions[0]
 	}
-	if err := huh.NewForm(huh.NewGroup(
-		huh.NewSelect[string]().
-			Title(choice.Label + " version").
-			Options(versionSelectOptions(*choice)...).
-			Value(&version),
-	)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
-		return "", "", err
+	if len(choice.Versions) > 1 {
+		if err := huh.NewForm(huh.NewGroup(
+			huh.NewSelect[string]().
+				Title(choice.Label + " version").
+				Options(versionSelectOptions(*choice)...).
+				Value(&version),
+		)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
+			return "", "", "", err
+		}
 	}
+
+	starter := ""
+	if opts := starterSelectOptions(*choice, version); opts != nil {
+		if err := huh.NewForm(huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Starter").
+				Options(opts...).
+				Value(&starter),
+		)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
+			return "", "", "", err
+		}
+	}
+
 	// The latest needs no pin: resolving without one follows the store as it
 	// publishes new majors instead of freezing on the one listed today.
-	if version == choice.Latest {
+	if version == choice.Latest || len(choice.Versions) < 2 {
 		version = ""
 	}
-	return name, version, nil
+	return name, version, starter, nil
 }

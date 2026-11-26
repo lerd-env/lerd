@@ -894,6 +894,8 @@
   "siteWizard_useThisFolder": "使用此資料夾",
   "siteWizard_rememberFolder": "下次從這裡開始",
   "siteWizard_version": "版本",
+  "siteWizard_starter": "起始範本",
+  "siteWizard_starterNone": "無",
   "siteWizard_versionLatest": "最新",
   "siteWizard_vitePitfall": "Vite 會依 Host 標頭攔截經代理轉發的請求。請把網站網域加入 vite.config 的 server.allowedHosts，並在指令中加上 --host，否則經由代理的請求會失敗。",
   "siteWizard_railsPitfall": "Rails 會依 Host 標頭攔截經代理轉發的請求。請把網站網域加入 config/environments/development.rb 的 config.hosts，否則經由代理的請求會失敗。",

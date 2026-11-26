@@ -43,7 +43,7 @@ git clone git@github.com:you/myapp.git
 
 :::
 
-The `laravel new` installer walks you through starter kit, auth, and database choices interactively. `lerd new` is the framework-agnostic alternative: it runs the bare `composer create-project` so you skip the installer's prompts.
+The `laravel new` installer walks you through starter kit, auth, and database choices interactively. `lerd new` is the framework-agnostic alternative: it runs the bare `composer create-project` so you skip the installer's prompts, or, with a [starter](/usage/frameworks#starters), begins from the React, Vue or Livewire starter kit or from a Laravel app with Filament installed (`lerd new myapp --framework=laravel --starter=filament`).
 
 ---
 

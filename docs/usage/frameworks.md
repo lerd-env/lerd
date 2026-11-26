@@ -144,6 +144,7 @@ lerd new                                # ask for the name, the framework and th
 lerd new myapp                          # ask which framework to use
 lerd new myapp --framework=symfony      # scaffold Symfony, no questions
 lerd new myapp --framework=laravel --framework-version=11   # scaffold an older major
+lerd new myapp --framework=laravel --starter=filament       # start from a store starter
 lerd new /path/to/myapp                 # create at an absolute path
 lerd new myapp -- --no-interaction      # pass extra flags to the scaffold command
 ```
@@ -171,6 +172,26 @@ command at all. The version question leaves those majors out, and a run that
 pinned none scaffolds from the newest one that still has a skeleton, so the
 project on disk is a release that really exists. Asking for that major by name
 with `--framework-version` says so rather than quietly building an older one.
+
+#### Starters
+
+A starter is another way to begin a project of a framework the store already
+defines. It can swap the framework's skeleton for a different one, such as
+Laravel's React, Vue and Livewire starter kits, or require packages into the new
+project, such as Filament on top of a plain Laravel app. When the framework and
+major you picked have starters, the wizard asks for one, defaulting to none; the
+dashboard's site wizard shows the same choice as a Starter field under Version.
+`--starter` answers it without asking, and needs a `--framework` to apply to.
+Each starter supports a range of its framework's majors, and asking for one on a
+major outside it is refused with the range it does support.
+
+A starter only shapes how the project is created. Afterwards it is detected as
+its framework like any other, so a Filament starter ends up a Laravel site with
+the Filament [package layer](/usage/framework-definitions#package-definitions)
+applied, and the first `lerd setup` offers what that package declares, such as
+installing the panel and creating an admin user. Starters are published in the
+framework store under `starters/<framework>/<name>.yaml`; see
+[Starters](/usage/framework-definitions#starters) for the format.
 
 The command then carries the project the rest of the way: it links the new
 directory, which routes a project with no `.lerd.yaml` through the

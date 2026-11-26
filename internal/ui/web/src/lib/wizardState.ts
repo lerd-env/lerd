@@ -11,6 +11,7 @@ export interface WizardState {
   name?: string;
   framework?: string;
   frameworkVersion?: string;
+  starter?: string;
   runId?: string;
   runKind?: string;
   // Setup steps still to run, head first, so a parked setup resumes with the

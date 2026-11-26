@@ -19,12 +19,9 @@ func autoFetchPackage(name, version string) (*config.FrameworkPackage, error) {
 	return NewClient().FetchPackage(name, version)
 }
 
-// packageBases returns the store locations the package layer is served from.
-// Packages sit beside the framework definitions rather than under them, since
-// they are not versions of a framework and were never fetched by a binary that
-// predates them, so the definitions directory in each base is swapped for the
-// packages one.
-func (c *Client) packageBases() []string {
+// siblingBases returns the store locations of dir, a directory beside the
+// framework definitions such as packages or starters, which older binaries never fetch.
+func (c *Client) siblingBases(dir string) []string {
 	bases := append([]string{c.BaseURL}, c.Fallbacks...)
 	out := make([]string, 0, len(bases))
 	for _, base := range bases {
@@ -32,7 +29,7 @@ func (c *Client) packageBases() []string {
 		if cut, ok := strings.CutSuffix(trimmed, "/frameworks"); ok {
 			trimmed = cut
 		}
-		out = append(out, trimmed+"/packages")
+		out = append(out, trimmed+"/"+dir)
 	}
 	return out
 }
@@ -64,7 +61,7 @@ func (c *Client) FetchPackage(name, version string) (*config.FrameworkPackage, e
 	if version != "" {
 		slug += "@" + version
 	}
-	data, err := c.fetchFrom(c.packageBases(), slug+".yaml")
+	data, err := c.fetchFrom(c.siblingBases("packages"), slug+".yaml")
 	if err != nil {
 		return nil, fmt.Errorf("fetching package %s: %w", name, err)
 	}

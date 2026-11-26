@@ -101,3 +101,29 @@ describe('background run feedback', () => {
     expect(get(inAppNotifications)[0].body).toContain('shop');
   });
 });
+
+describe('startersFor', () => {
+  const laravel = {
+    name: 'laravel',
+    label: 'Laravel',
+    versions: ['13', '12', '11'],
+    latest: '13',
+    starters: [
+      { name: 'filament', label: 'Filament', versions: ['13', '12', '11'] },
+      { name: 'react', label: 'React', versions: ['13'] }
+    ]
+  };
+
+  // An empty version is the latest, which is what a scaffold without a pin gets.
+  it('reads an unpinned version as the latest', async () => {
+    const { startersFor } = await import('./wizard');
+    expect(startersFor(laravel, '').map((s) => s.name)).toEqual(['filament', 'react']);
+  });
+
+  it('offers only the starters supporting the major picked', async () => {
+    const { startersFor } = await import('./wizard');
+    expect(startersFor(laravel, '12').map((s) => s.name)).toEqual(['filament']);
+    expect(startersFor({ ...laravel, starters: undefined }, '13')).toEqual([]);
+    expect(startersFor(undefined, '13')).toEqual([]);
+  });
+});

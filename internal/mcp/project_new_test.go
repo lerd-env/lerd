@@ -193,3 +193,45 @@ func TestExecProjectNew_VersionNeedsAFramework(t *testing.T) {
 		t.Fatalf("expected a version-without-framework error, got: %s", resultText(t, resp))
 	}
 }
+
+// A starter with a skeleton of its own is created from that skeleton rather than
+// the framework's, so the target only exists when the starter's command ran.
+func TestExecProjectNew_StartsFromAStartersSkeleton(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/index.json", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"frameworks":[{"name":"acme","label":"Acme","versions":["2"],"latest":"2"}],
+			"starters":[{"name":"kit","label":"Kit","framework":{"name":"acme","min":"2"}}]}`))
+	})
+	mux.HandleFunc("/acme/2.yaml", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("name: acme\nlabel: Acme\nversion: \"2\"\npublic_dir: public\ncreate: \"true\"\n"))
+	})
+	mux.HandleFunc("/starters/acme/kit.yaml", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("starter: kit\nlabel: Kit\nframework:\n  name: acme\n  min: \"2\"\ncreate: touch\n"))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	t.Setenv("LERD_STORE_BASE_URL", srv.URL)
+
+	path := filepath.Join(tmp, "proj")
+	resp, rpcErr := execProjectNew(map[string]any{"path": path, "framework": "acme", "starter": "kit"})
+	if rpcErr != nil {
+		t.Fatalf("rpc error: %v", rpcErr)
+	}
+	if resultIsError(resp) {
+		t.Fatalf("project_new refused the starter: %s", resultText(t, resp))
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("expected the starter's create command to have run: %v", err)
+	}
+}
+
+func TestExecProjectNew_StarterNeedsAFramework(t *testing.T) {
+	resp, _ := execProjectNew(map[string]any{"path": filepath.Join(t.TempDir(), "p"), "starter": "filament"})
+	if !resultIsError(resp) || !strings.Contains(resultText(t, resp), "starter needs a framework") {
+		t.Fatalf("expected a starter without a framework to be refused, got %s", resultText(t, resp))
+	}
+}
