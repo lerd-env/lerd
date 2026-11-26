@@ -158,6 +158,9 @@ func TestRequestDir(t *testing.T) {
 	if err := os.MkdirAll(inside, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(base, "a..b"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	// From inside, both relative spellings name a folder that exists.
 	t.Chdir(inside)
 	cases := map[string]bool{
@@ -168,6 +171,7 @@ func TestRequestDir(t *testing.T) {
 		"../app":                       false,
 		"..":                           false,
 		inside + "/../app":             true, // cleaned to inside
+		filepath.Join(base, "a..b"):    true,
 		filepath.Join(base, "missing"): false,
 	}
 	for dir, want := range cases {

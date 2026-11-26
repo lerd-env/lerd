@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
 	lerdcli "github.com/geodro/lerd/internal/cli"
 )
@@ -18,13 +17,14 @@ func handleFrameworkCatalogue(w http.ResponseWriter, _ *http.Request) {
 }
 
 // requestDir resolves the ?dir= parameter to an existing directory, named by
-// its absolute path. Cleaned, such a path holds no "..", which is the check
-// that keeps a relative or climbing one from reaching a file read.
+// its absolute path. Cleaned from the root, such a path cannot climb above it,
+// while a folder named a..b stays reachable.
 func requestDir(r *http.Request) (string, bool) {
-	dir := filepath.Clean(r.URL.Query().Get("dir"))
-	if !filepath.IsAbs(dir) || strings.Contains(dir, "..") {
+	raw := r.URL.Query().Get("dir")
+	if !filepath.IsAbs(raw) {
 		return "", false
 	}
+	dir := filepath.Clean("/" + raw)
 	info, err := os.Stat(dir)
 	if err != nil || !info.IsDir() {
 		return "", false
