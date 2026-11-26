@@ -307,7 +307,7 @@ If you're running a local development build (a `git describe` version like `1.25
 
 ### Lerd in the app list
 
-`lerd install` writes a small **Lerd** app to `~/Applications`, so lerd shows up in Launchpad, Spotlight and Finder alongside everything else. Clicking it starts lerd if it isn't running and then opens the dashboard, which means the environment can be brought up without ever opening a terminal. If lerd is already serving it goes straight to the dashboard.
+`lerd install` writes a small **Lerd** app to `~/Applications`, so lerd shows up in Launchpad, Spotlight and Finder alongside everything else. Clicking it starts lerd if it isn't running and then opens the [Lerd desktop app](https://github.com/lerd-env/lerd-desktop) if you have it installed, or the dashboard in your browser if you do not, which means the environment can be brought up without ever opening a terminal. If lerd is already serving it goes straight to the dashboard.
 
 A start takes the better part of a minute, so the app shows a native progress window while it runs, naming each unit as it comes up and counting them off against the total. It waits for the start to actually finish rather than for nginx to answer, because the vhost is up well before the databases behind it and a dashboard opened at that moment shows sites returning 500. Nothing about it is a browser window: it is a real application, built at install time with the `osacompile` that ships with macOS.
 
