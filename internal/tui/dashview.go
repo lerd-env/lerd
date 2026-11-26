@@ -160,6 +160,7 @@ func (m *Model) renderDashboard(w, h int) string {
 	cw := w - 2*pad
 	blank := row(nil, cw)
 	var L []string
+	var cards []cardSpan
 
 	right := []seg{}
 	if m.stats.Available {
@@ -170,7 +171,7 @@ func (m *Model) renderDashboard(w, h int) string {
 	alerts := m.dashAlerts()
 	if len(alerts) == 0 {
 		L = append(L, row(nil, cw, sideLabel("Needs attention")), blank)
-		L = append(L, m.dashCard(cw, "", false, []seg{sp(glyphRunning+"  ", colRunning), sp("Everything is running", nil)}, nil)...)
+		L = append(L, m.dashCard(cw, false, []seg{sp(glyphRunning+"  ", colRunning), sp("Everything is running", nil)}, nil)...)
 	} else {
 		hint := []seg{sp("tab ", nil), sp("select", colDim)}
 		if !m.sideFocus {
@@ -182,7 +183,9 @@ func (m *Model) renderDashboard(w, h int) string {
 			if i > 0 {
 				L = append(L, blank)
 			}
+			cards = append(cards, cardSpan{fmt.Sprintf("dashalert:%d", i), len(L), 0})
 			L = append(L, m.alertCard(cw, i, a, !m.sideFocus && i == m.dashCursor)...)
+			cards[len(cards)-1].end = len(L)
 		}
 	}
 
@@ -219,6 +222,11 @@ func (m *Model) renderDashboard(w, h int) string {
 	// short terminal; the last line says when more sits below.
 	m.dashScroll = clamp(m.dashScroll, 0, max(0, len(L)-h))
 	L = L[m.dashScroll:]
+	visible := len(L)
+	if visible > h {
+		visible = h - 1 // the last row becomes the "more below" line
+	}
+	markCards(L, cards, m.dashScroll, visible)
 	for len(L) < h {
 		L = append(L, blank)
 	}
@@ -234,7 +242,7 @@ func (m *Model) renderDashboard(w, h int) string {
 
 // dashCard is a tinted block with a padding row above and below, dropped on
 // short terminals, and an accent bar down its left edge when selected.
-func (m *Model) dashCard(cw int, id string, sel bool, title, detail []seg, hint ...seg) []string {
+func (m *Model) dashCard(cw int, sel bool, title, detail []seg, hint ...seg) []string {
 	bg, bar := surf.s2, sp("  ", nil)
 	if sel {
 		bg, bar = surf.s3, bd("▌ ", colAccent)
@@ -251,12 +259,28 @@ func (m *Model) dashCard(cw int, id string, sel bool, title, detail []seg, hint 
 		out = append(out, row(bg, cw, append([]seg{bar, sp("   ", nil)}, detail...)...))
 	}
 	padRow()
-	// One mark around the whole card: marking each row with the same id keeps
-	// only the last row registered, leaving the title row dead to clicks.
-	if id != "" {
-		out = strings.Split(zone.Mark(id, strings.Join(out, "\n")), "\n")
-	}
 	return out
+}
+
+// cardSpan is a clickable card's zone id and its rows [start, end) in the
+// dashboard before scrolling.
+type cardSpan struct {
+	id         string
+	start, end int
+}
+
+// markCards wraps the on-screen rows of each card in one zone mark. It runs
+// after scrolling because a mark cut in half registers nothing, and one mark
+// per row would leave only the last row clickable.
+func markCards(L []string, cards []cardSpan, scroll, visible int) {
+	for _, c := range cards {
+		from, to := max(c.start-scroll, 0), min(c.end-scroll, visible)
+		if from >= to {
+			continue
+		}
+		marked := strings.Split(zone.Mark(c.id, strings.Join(L[from:to], "\n")), "\n")
+		copy(L[from:to], marked)
+	}
 }
 
 // dashPanelPadX is the tinted margin each side of a panel's content.
@@ -299,7 +323,7 @@ func (m *Model) alertCard(cw, i int, a dashAlert, sel bool) []string {
 		}
 		hint = append(hint, sp("r ", nil), sp(fix, colDim))
 	}
-	return m.dashCard(cw, fmt.Sprintf("dashalert:%d", i), sel, []seg{glyph, bd(a.title, nil)}, a.detail, hint...)
+	return m.dashCard(cw, sel, []seg{glyph, bd(a.title, nil)}, a.detail, hint...)
 }
 
 func (m *Model) dashResources(w int) []string {

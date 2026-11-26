@@ -154,6 +154,35 @@ func TestMouseClick_IgnoresNonLeftPress(t *testing.T) {
 	}
 }
 
+func TestDashboardClick_OpensAnAlertScrolledHalfOutOfView(t *testing.T) {
+	m := NewModel("test")
+	m.snap = fakeSnap()
+	m.snap.Sites[1].QueueFailing = true
+	for i := 0; i < 12; i++ {
+		m.snap.Sites = append(m.snap.Sites, siteinfo.EnrichedSite{Name: fmt.Sprintf("s%d", i), QueueFailing: true})
+	}
+	m.snap.Status = StatusRow{DNSOk: true, NginxRunning: true, WatcherRunning: true}
+	m.activeTab = tabDashboard
+	m.width, m.height = 150, 40
+	// Five rows sit above the first alert card; scroll one past them so its top
+	// padding row is cut off and its title row is the first one on screen.
+	m.dashScroll = 6
+	renderZones(m)
+	if m.dashScroll != 6 {
+		t.Fatalf("dashboard should scroll to 6, clamped to %d", m.dashScroll)
+	}
+
+	z := waitZone("dashalert:0")
+	if z.IsZero() {
+		t.Fatalf("a card scrolled half out of view lost its click zone")
+	}
+	next, _ := m.Update(tea.MouseClickMsg{X: z.StartX + 4, Y: z.StartY, Button: tea.MouseLeft})
+	m = next.(*Model)
+	if m.activeTab != tabSites {
+		t.Fatalf("clicking the visible part of an alert should open its site, got tab %d", m.activeTab)
+	}
+}
+
 func TestDashboardClick_OpensTheAlertSite(t *testing.T) {
 	m := NewModel("test")
 	m.snap = fakeSnap()
