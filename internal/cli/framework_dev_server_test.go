@@ -14,6 +14,7 @@ import (
 // returns a project that only its package.json identifies.
 func nodeFrameworkProject(t *testing.T) string {
 	t.Helper()
+	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	def := "name: acmejs\nlabel: AcmeJS\ndetect:\n  - package: {file: package.json, name: \"@acme/core\"}\ndev_server:\n  command: npm run acme\n  port: 43117\n"
@@ -66,6 +67,7 @@ func TestDevServerFramework_isNeverParkedOrLinkedAsPHP(t *testing.T) {
 }
 
 func TestNoContainerForWorker(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, s := range []config.Site{

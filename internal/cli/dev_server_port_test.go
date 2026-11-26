@@ -16,6 +16,8 @@ import (
 // are taken. moves counts the vhost rewrites.
 func portFixture(t *testing.T, movePort bool, taken ...int) (site *config.Site, moves *int) {
 	t.Helper()
+	// A unit written by a start lands under HOME on macOS (LaunchAgents).
+	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	def := "name: acmejs\nlabel: AcmeJS\ndev_server:\n  command: npm run acme\n"
