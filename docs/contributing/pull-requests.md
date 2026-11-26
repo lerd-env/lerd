@@ -33,6 +33,8 @@ make test
 
 **New functionality must include tests.** PRs that add or change behaviour without corresponding test coverage will not be merged.
 
+If your change alters something a release lane checks, update that check in `tests/vm/phases/` and its line in `tests/release-test-plan.md` in the same PR. You don't need test machines to run them; editing the check is enough, and the lanes run before each release.
+
 ### Vet
 
 ```bash
