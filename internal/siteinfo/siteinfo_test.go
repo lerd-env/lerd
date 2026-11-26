@@ -1205,6 +1205,12 @@ func TestEnrichWorkers(t *testing.T) {
 // ── FPM enrichment ──────────────────────────────────────────────────────────
 
 func TestEnrichFPM(t *testing.T) {
+	// These cover the container runtime; the host's own lerd config must not
+	// switch them onto the native pool check.
+	prevMode := nativeRuntimeFn
+	nativeRuntimeFn = func() bool { return false }
+	t.Cleanup(func() { nativeRuntimeFn = prevMode })
+
 	t.Run("no PHP version means no FPM check", func(t *testing.T) {
 		e := &EnrichedSite{PHPVersion: ""}
 		e.enrichFPM()

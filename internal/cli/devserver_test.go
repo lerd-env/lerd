@@ -42,6 +42,8 @@ func gitRepo(t *testing.T, ignore string) string {
 		{"init", "-q"},
 		{"config", "user.email", "t@example.com"},
 		{"config", "user.name", "t"},
+		// A developer's global ignores (often .lerd.yaml) must not leak into the repo.
+		{"config", "core.excludesFile", os.DevNull},
 	} {
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
