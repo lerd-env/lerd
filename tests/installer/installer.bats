@@ -937,3 +937,70 @@ EOF
   run should_pass_dns_mode "" "localhost"
   [ "$status" -ne 0 ]
 }
+
+# ── offer_desktop_app_macos ───────────────────────────────────────────────────
+
+@test "offer_desktop_app_macos with the app already installed asks nothing and selects native" {
+  local d; d="$(_fake_lerd_dir)"; rm -f "$d/asked"
+  INSTALL_DIR="$d"; BINARY="lerd"
+  desktop_app_macos_path() { echo /Applications/Lerd.app; }
+  _answers
+  run offer_desktop_app_macos
+  [ "$status" -eq 0 ]
+  grep -q "notify target native" "$d/calls"
+  [ ! -f "$d/asked" ]
+}
+
+@test "offer_desktop_app_macos installs the app on yes and selects native" {
+  local d; d="$(_fake_lerd_dir)"; rm -f "$d/asked"
+  INSTALL_DIR="$d"; BINARY="lerd"
+  desktop_app_macos_path() { return 1; }
+  install_desktop_app_macos() { echo installed >> "$d/calls"; }
+  _answers y
+  run offer_desktop_app_macos
+  [ "$status" -eq 0 ]
+  grep -q "installed" "$d/calls"
+  grep -q "notify target native" "$d/calls"
+  [ "$(wc -l < "$d/asked")" -eq 1 ]
+}
+
+# macOS has no native notifier of its own, so without the app there is nothing
+# to ask about notifications.
+@test "offer_desktop_app_macos declined points at the download and asks nothing else" {
+  local d; d="$(_fake_lerd_dir)"; rm -f "$d/asked"
+  INSTALL_DIR="$d"; BINARY="lerd"
+  desktop_app_macos_path() { return 1; }
+  install_desktop_app_macos() { echo installed >> "$d/calls"; }
+  _answers n
+  run offer_desktop_app_macos
+  [ "$status" -eq 0 ]
+  [ ! -f "$d/calls" ]
+  [[ "$output" == *"lerd-desktop/releases/latest"* ]]
+  [ "$(wc -l < "$d/asked")" -eq 1 ]
+}
+
+@test "offer_desktop_app_macos reports a failed install and leaves notifications alone" {
+  local d; d="$(_fake_lerd_dir)"; rm -f "$d/asked"
+  INSTALL_DIR="$d"; BINARY="lerd"
+  desktop_app_macos_path() { return 1; }
+  install_desktop_app_macos() { return 1; }
+  _answers y
+  run offer_desktop_app_macos
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Could not install"* ]]
+  [ ! -f "$d/calls" ]
+}
+
+# The app and lerd's launcher share the name Lerd.app; the app may replace the
+# launcher, never anything else of that name.
+@test "desktop_app_slot takes an empty slot or the launcher, never another app" {
+  [ "$(uname -s)" = Darwin ] || skip "reads app bundles with PlistBuddy"
+  local dir="$BATS_TMPDIR/apps-$$"; rm -rf "$dir"; mkdir -p "$dir"
+  desktop_app_slot "$dir"
+  for id in sh.lerd.launcher com.example.other; do
+    mkdir -p "$dir/Lerd.app/Contents"
+    printf '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>%s</string></dict></plist>' "$id" > "$dir/Lerd.app/Contents/Info.plist"
+    if [ "$id" = sh.lerd.launcher ]; then desktop_app_slot "$dir"; else ! desktop_app_slot "$dir"; fi
+  done
+  rm -rf "$dir"
+}

@@ -18,6 +18,10 @@ BINARY="lerd"
 # the ref URL can move.
 DESKTOP_INSTALL_CMD="${LERD_DESKTOP_INSTALL_CMD:-flatpak install --user https://lerd.sh/lerd.flatpakref}"
 DESKTOP_APP_ID="sh.lerd.Desktop"
+# On macOS the app ships as a notarized DMG from lerd-desktop's releases, signed
+# by this team. Overridable so tests and mirrors can point elsewhere.
+DESKTOP_DMG_BASE="${LERD_DESKTOP_DMG_BASE:-https://github.com/lerd-env/lerd-desktop/releases/latest/download}"
+DESKTOP_TEAM_ID="ZY476R7D97"
 # On Omarchy the Glance bar plugin shows lerd's state, so it replaces the tray.
 OMARCHY_PLUGIN_REPO="https://github.com/lerd-env/lerd-omarchy-glance"
 OMARCHY_PLUGIN_ID="sh.lerd.glance"
@@ -691,11 +695,15 @@ cmd_install() {
 
   add_to_path
 
-  # Offer the desktop app on a fresh Linux install. Asked before `lerd install`
-  # so the launcher it writes already knows the app is there and names itself
-  # to match. Not on WSL: the Flatpak cannot run there.
-  if [ -z "$was_installed" ] && [ "$(uname -s)" = "Linux" ] && ! is_wsl && have_tty; then
-    offer_desktop_app
+  # Offer the desktop app on a fresh install. Asked before `lerd install` so the
+  # launcher it writes already knows the app is there: on Linux it names itself
+  # to match, on macOS it steps aside. Not on WSL: the Flatpak cannot run there.
+  if [ -z "$was_installed" ] && have_tty; then
+    if [ "$(uname -s)" = "Darwin" ]; then
+      offer_desktop_app_macos
+    elif [ "$(uname -s)" = "Linux" ] && ! is_wsl; then
+      offer_desktop_app
+    fi
   fi
 
   echo ""
@@ -798,6 +806,81 @@ offer_desktop_app() {
     "${INSTALL_DIR}/${BINARY}" notify target browser >/dev/null 2>&1 || true
     success "Using browser notifications"
   fi
+}
+
+# offer_desktop_app_macos installs the Lerd desktop app, which starts lerd,
+# opens the dashboard and raises lerd's notifications natively. Without it
+# macOS has no native notifier, so there is no second question to ask.
+offer_desktop_app_macos() {
+  header "Desktop app"
+  if desktop_app_macos_path >/dev/null; then
+    "${INSTALL_DIR}/${BINARY}" notify target native >/dev/null 2>&1 || true
+    success "Lerd desktop app found, native desktop notifications enabled"
+    return 0
+  fi
+  info "Lerd has a desktop app: a dedicated window with native desktop notifications,"
+  info "no browser tab needed."
+  echo ""
+  if ask_yes "Install the Lerd desktop app?"; then
+    if install_desktop_app_macos; then
+      "${INSTALL_DIR}/${BINARY}" notify target native >/dev/null 2>&1 || true
+      success "Lerd desktop app installed, native desktop notifications enabled"
+      return 0
+    fi
+    warn "Could not install the desktop app."
+  fi
+  info "Download it anytime from:"
+  echo -e "     ${CYAN}https://github.com/lerd-env/lerd-desktop/releases/latest${RESET}"
+  echo ""
+}
+
+# bundle_id prints an app bundle's identifier, empty when there is no bundle.
+bundle_id() {
+  /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$1/Contents/Info.plist" 2>/dev/null || true
+}
+
+# desktop_app_macos_path prints where the desktop app is installed, if it is.
+desktop_app_macos_path() {
+  local a
+  for a in /Applications/Lerd.app "$HOME/Applications/Lerd.app"; do
+    if [ "$(bundle_id "$a")" = "$DESKTOP_APP_ID" ]; then echo "$a"; return 0; fi
+  done
+  return 1
+}
+
+# desktop_app_slot is true when <dir>/Lerd.app can take the app: nothing is
+# there, or lerd's own launcher is, which the app replaces.
+desktop_app_slot() {
+  local app="$1/Lerd.app"
+  [ ! -e "$app" ] && return 0
+  [ "$(bundle_id "$app")" = "sh.lerd.launcher" ]
+}
+
+# install_desktop_app_macos copies the app out of its DMG into /Applications,
+# or ~/Applications when that is not writable, as lerd never asks for root.
+install_desktop_app_macos() {
+  local arch dest tmp
+  case "$(detect_arch)" in arm64) arch="arm64" ;; *) arch="x64" ;; esac
+  dest="/Applications"; [ -w "$dest" ] || dest="$HOME/Applications"
+  desktop_app_slot "$dest" || { warn "${dest}/Lerd.app is another application"; return 1; }
+  tmp="$(mktemp -d)"
+  if ! fetch "${DESKTOP_DMG_BASE}/Lerd-${arch}.dmg" "${tmp}/Lerd.dmg" \
+    || ! hdiutil attach -nobrowse -readonly -quiet -mountpoint "${tmp}/mnt" "${tmp}/Lerd.dmg"; then
+    rm -rf "$tmp"; return 1
+  fi
+  # Gatekeeper never sees a file curl downloaded, so the signature is checked here.
+  local ok=0
+  if codesign --verify --deep --strict "${tmp}/mnt/Lerd.app" 2>/dev/null \
+    && codesign -dv "${tmp}/mnt/Lerd.app" 2>&1 | grep -q "TeamIdentifier=${DESKTOP_TEAM_ID}"; then
+    mkdir -p "$dest" && rm -rf "${dest}/Lerd.app" && ditto "${tmp}/mnt/Lerd.app" "${dest}/Lerd.app" && ok=1
+  else
+    warn "The downloaded app is not signed by Lerd, not installing it."
+  fi
+  hdiutil detach -quiet "${tmp}/mnt" || true
+  rm -rf "$tmp"
+  [ "$ok" = 1 ] || return 1
+  # Registered now so lerd:// opens it, and `lerd install` sees it, before it first runs.
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "${dest}/Lerd.app" 2>/dev/null || true
 }
 
 # ── Update ───────────────────────────────────────────────────────────────────

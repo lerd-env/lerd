@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/desktopnotify"
 )
 
 //go:embed assets/lerd.icns
@@ -36,6 +37,11 @@ var (
 		"Frameworks/LaunchServices.framework/Support/lsregister"
 )
 
+// desktopAppInstalled reports whether the Lerd desktop app is there. It starts
+// lerd and opens the dashboard itself, so the launcher would be a second icon
+// named Lerd doing the same job.
+var desktopAppInstalled = desktopnotify.AppInstalled
+
 // appsDir is the user's application folder. ~/Applications is deliberate:
 // /Applications needs root, and lerd never asks for it.
 var appsDir = func() string {
@@ -56,7 +62,8 @@ func Path() string {
 }
 
 // Install builds the launcher bundle and returns its path. Rebuilt on every run
-// so an upgraded lerd repoints it at the binary that is live now.
+// so an upgraded lerd repoints it at the binary that is live now. With the
+// desktop app installed it removes the launcher instead and returns "".
 //
 // The bundle is compiled rather than hand-written: an AppleScript application
 // can draw the progress window that makes clicking the icon readable while the
@@ -65,6 +72,12 @@ func Install() (string, error) {
 	app := Path()
 	if app == "" {
 		return "", fmt.Errorf("locating the home directory")
+	}
+	if desktopAppInstalled() {
+		return "", Remove()
+	}
+	if !replaceable(app) {
+		return "", fmt.Errorf("%s is another application, not lerd's launcher; leaving it alone", app)
 	}
 	if _, err := os.Stat(osacompilePath); err != nil {
 		return "", fmt.Errorf("osacompile is not available: %w", err)
@@ -189,11 +202,22 @@ func registerBundle(app string) {
 	_ = exec.Command(lsregisterPath, "-f", app).Run()
 }
 
-// Remove deletes the launcher bundle. Missing is success.
+// Remove deletes the launcher bundle. Missing is success, and so is an app of
+// another kind at that path, such as the desktop app, which is left alone.
 func Remove() error {
 	app := Path()
-	if app == "" {
+	if app == "" || !replaceable(app) {
 		return nil
 	}
 	return os.RemoveAll(app)
+}
+
+// replaceable is true when nothing is at app or what is there is the launcher.
+// The desktop app is also called Lerd and can be installed to ~/Applications.
+func replaceable(app string) bool {
+	if _, err := os.Stat(app); os.IsNotExist(err) {
+		return true
+	}
+	out, err := exec.Command(plistBuddyPath, "-c", "Print :CFBundleIdentifier", filepath.Join(app, "Contents", "Info.plist")).Output()
+	return err == nil && strings.TrimSpace(string(out)) == bundleID
 }
