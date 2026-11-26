@@ -198,7 +198,8 @@ cp .env /tmp/lerd-vm-env
 rm -f .env.before_lerd
 cp .env.example .env
 lerd env </dev/null >/dev/null 2>&1
-check "11.24 lerd env:restore round trips" bash -c 'test -f .env.before_lerd && lerd env:restore </dev/null && cmp -s .env .env.example'
+# Restore puts every setting the backup has back, and keeps keys lerd added since.
+check "11.24 lerd env:restore round trips" bash -c 'test -f .env.before_lerd && lerd env:restore </dev/null && ! grep -vE "^[[:space:]]*(#|$)" .env.example | grep -vxFf .env'
 cp /tmp/lerd-vm-env .env
 rm -f /tmp/lerd-vm-env
 
