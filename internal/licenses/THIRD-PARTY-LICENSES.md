@@ -6991,7 +6991,7 @@ SOFTWARE.
 | @tailwindcss/oxide-wasm32-wasi | 4.3.5 | MIT |
 | @tailwindcss/postcss | 4.3.5 | MIT |
 | @testing-library/dom | 10.4.2 | MIT |
-| @testing-library/jest-dom | 7.0.1 | MIT |
+| @testing-library/jest-dom | 8.0.0 | MIT |
 | @testing-library/svelte | 5.4.2 | MIT |
 | @testing-library/svelte-core | 1.1.3 | MIT |
 | @tsconfig/svelte | 5.0.9 | MIT |
@@ -7760,7 +7760,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @testing-library/dom 10.4.2, @testing-library/jest-dom 7.0.1
+### @testing-library/dom 10.4.2, @testing-library/jest-dom 8.0.0
 
 MIT
 
