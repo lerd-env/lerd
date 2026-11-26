@@ -167,7 +167,12 @@ func TestDashboardClick_OpensTheAlertSite(t *testing.T) {
 	if z.IsZero() {
 		t.Fatalf("alert card zone not registered after render")
 	}
-	msg := tea.MouseClickMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft}
+	// The whole card must be one zone, so a click on its title row (under the
+	// top padding row) lands.
+	if z.EndY <= z.StartY {
+		t.Fatalf("alert zone should span the whole card, got rows %d-%d", z.StartY, z.EndY)
+	}
+	msg := tea.MouseClickMsg{X: z.StartX + 4, Y: z.StartY + 1, Button: tea.MouseLeft}
 	next, _ := m.Update(msg)
 	m = next.(*Model)
 	if m.activeTab != tabSites {

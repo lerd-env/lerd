@@ -251,10 +251,10 @@ func (m *Model) dashCard(cw int, id string, sel bool, title, detail []seg, hint 
 		out = append(out, row(bg, cw, append([]seg{bar, sp("   ", nil)}, detail...)...))
 	}
 	padRow()
+	// One mark around the whole card: marking each row with the same id keeps
+	// only the last row registered, leaving the title row dead to clicks.
 	if id != "" {
-		for i := range out {
-			out[i] = zone.Mark(id, out[i])
-		}
+		out = strings.Split(zone.Mark(id, strings.Join(out, "\n")), "\n")
 	}
 	return out
 }
