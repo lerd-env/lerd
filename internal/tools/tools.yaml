@@ -53,56 +53,56 @@ tools:
   # composer.lock was resolved against that version. Kept out of Names() because
   # only a project that asks for one ever downloads it.
   php-host-8.3:
-    version: "8.3.32"
-    url: https://dl.static-php.dev/static-php-cli/common/{asset}
+    version: "8.3.36"
+    url: https://dl.static-php.dev/v3/php-bin/common/{asset}
     assets:
       linux/amd64: php-{version}-cli-linux-x86_64.tar.gz
       linux/arm64: php-{version}-cli-linux-aarch64.tar.gz
       darwin/amd64: php-{version}-cli-macos-x86_64.tar.gz
       darwin/arm64: php-{version}-cli-macos-aarch64.tar.gz
     digests:
-      linux/amd64: d7ff2bc40846f4efed2757e5929f7469c96f672fbf33eb4bb80cd695534750fe
-      linux/arm64: e7644c646a62c44627d00e3deff498eeb943814adcc948b3de42a8ebfe07aaf2
-      darwin/amd64: aad1365eb29a6788c59494d39bc71ef5f72a8a384495b0d6004007a768449f8b
-      darwin/arm64: 1cc8148750bd1722031daba1618825a8b7d0a3830bb92c50d8dd844a1dcfb306
+      linux/amd64: 35acaa9e0f4710af4055aa6590ca748e3afa3b57a10cca1eeee70e209dfde808
+      linux/arm64: 4f461e66f10bc80f3b8536859ac934bcce0db7118637b84fb7e9344e3fe07a25
+      darwin/amd64: a781a7e3a9780906361ebf316147c2746b6d49684a94b2d0d15544a9137a87aa
+      darwin/arm64: 61b4cde3a20b860d607514f8cd1ef0e335b960abbb6122b76151431494cfc750
     sizes:
-      linux/amd64: 11744291
-      linux/arm64: 12151982
-      darwin/amd64: 14110296
-      darwin/arm64: 13688227
+      linux/amd64: 13038283
+      linux/arm64: 13655040
+      darwin/amd64: 14395596
+      darwin/arm64: 14369612
   php-host-8.4:
-    version: "8.4.23"
-    url: https://dl.static-php.dev/static-php-cli/common/{asset}
+    version: "8.4.27"
+    url: https://dl.static-php.dev/v3/php-bin/common/{asset}
     assets:
       linux/amd64: php-{version}-cli-linux-x86_64.tar.gz
       linux/arm64: php-{version}-cli-linux-aarch64.tar.gz
       darwin/amd64: php-{version}-cli-macos-x86_64.tar.gz
       darwin/arm64: php-{version}-cli-macos-aarch64.tar.gz
     digests:
-      linux/amd64: 1aeed5bc7967977ca5b1da7163acd91bf9ba3ac56037045d4e91ee2ff2712bb7
-      linux/arm64: 0978d89157292bcc9268a34a73a4d5d2793f8dff1403b5138a94d2af6b7a09b0
-      darwin/amd64: bd1c20f355e73a9f807b24ba62fd98f3a57bc08d063ebb3aa6393909e01ce89e
-      darwin/arm64: bba286e442796dbd420d778a016e2817b31d5036d11b3ba316d19a60de912cdc
+      linux/amd64: 5cdf0c8768984724958dd219c3c27bb27ca0d3a6989b9ffba3520da85a5d8f1d
+      linux/arm64: b883c33e43bcc61cd947907eb09eaabc2ecc0ea70d7e1f571a9022d1c4465737
+      darwin/amd64: a5675d17fe5d55cace683a2515d574a3e0cddeb74d3b9b247433000129263c56
+      darwin/arm64: b1692a87ca293f198020a97be0132b5ffff1c828d7e35c9ca17b19f2fd70bf5f
     sizes:
-      linux/amd64: 12375301
-      linux/arm64: 12768307
-      darwin/amd64: 14862400
-      darwin/arm64: 14435029
+      linux/amd64: 13665304
+      linux/arm64: 14276500
+      darwin/amd64: 15109489
+      darwin/arm64: 15081664
   php-host-8.5:
-    version: "8.5.8"
-    url: https://dl.static-php.dev/static-php-cli/common/{asset}
+    version: "8.5.12"
+    url: https://dl.static-php.dev/v3/php-bin/common/{asset}
     assets:
       linux/amd64: php-{version}-cli-linux-x86_64.tar.gz
       linux/arm64: php-{version}-cli-linux-aarch64.tar.gz
       darwin/amd64: php-{version}-cli-macos-x86_64.tar.gz
       darwin/arm64: php-{version}-cli-macos-aarch64.tar.gz
     digests:
-      linux/amd64: 517a18e0f0874de35669fe134eb3c52508e128a6d1da5bf890760cb800ada410
-      linux/arm64: af995ef6b3187b39932a00714dfb97e44bfa40a9243c4c29f61f19d583950753
-      darwin/amd64: 05751000c6643f82e8377ed19d55bc159f84bbed46ace1fcc6f62be9866c787c
-      darwin/arm64: cba9bd8b38b51ef2c7cebf02af689e4481bbd07f65edc0b63d3a43b04e0c9db7
+      linux/amd64: 570891017ae3c18c52a6cf623910cc6f57050eece35348d3348ab866b4d32f0a
+      linux/arm64: be55f711a4e89015be3f4244c0d3aca1200e5b08dd26e0a1808ca1b9229fde4d
+      darwin/amd64: 492cc40aadb7207433cd15fd6085525d6f8661ce50719c84c2456d0e70f39dd7
+      darwin/arm64: 15b530298ac4e3560d685bbce5031dafa2db062f0b114b620db3fabfe25e326b
     sizes:
-      linux/amd64: 12931817
-      linux/arm64: 13570407
-      darwin/amd64: 15606882
-      darwin/arm64: 15106458
+      linux/amd64: 14562954
+      linux/arm64: 15061264
+      darwin/amd64: 16060700
+      darwin/arm64: 15944416

@@ -155,6 +155,15 @@ class RealManifest(unittest.TestCase):
             self.assertTrue(tool == 'composer' or tool in b.GITHUB or tool.startswith('php-host-'), tool)
             self.assertIn((tool, 'version'), index)
 
+    def test_php_pins_download_from_the_directory_the_bump_lists(self):
+        path = os.path.join(os.path.dirname(__file__), '..', '..', b.FILE)
+        with open(path) as f:
+            lines = f.read().split('\n')
+        index = b.parse(lines)
+        listed = b.STATIC_PHP.removesuffix('?format=json') + '{asset}'
+        for tool in [k[0] for k in index if len(k) == 1 and k[0].startswith('php-host-')]:
+            self.assertEqual(b.get(lines, index, tool, 'url'), listed, tool)
+
 
 if __name__ == '__main__':
     unittest.main()
