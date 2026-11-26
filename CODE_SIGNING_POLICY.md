@@ -16,7 +16,7 @@ The Windows installer, `Install-Lerd.exe`, is built in [lerd-env/lerd-desktop](h
 
 The tray icon on Windows belongs to Lerd Desktop, so there is no `lerd-tray.exe`. The Lerd Desktop application itself is outside the current scope and will be added as a separate project.
 
-Linux and macOS artifacts are outside the SignPath scope. Since 1.39 the `checksums.txt` of each Lerd release, which lists every archive, is signed with cosign (keyless), and every archive has a build provenance attestation.
+Linux and macOS artifacts are outside the SignPath scope. The macOS `lerd` and `lerd-tray` binaries, and the Lerd Desktop DMGs, are signed with the project's Apple Developer ID and notarized by Apple. Since 1.39 the `checksums.txt` of each Lerd release, which lists every archive, is signed with cosign (keyless), and every archive has a build provenance attestation.
 
 Third-party software, such as WSL, Ubuntu and Podman, is not Lerd code and is not signed with the Lerd certificate. The installer does not bundle these components. It downloads them from their own publishers or package repositories during setup.
 

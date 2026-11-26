@@ -204,6 +204,23 @@ brews:
         ~/.local/bin/lerd-cleanup
         brew uninstall lerd
 
+# Signs and notarizes the macOS lerd binaries with the Developer ID, through
+# quill on the Linux runner. Off while the secrets are unset (forks, dry runs
+# without them); GitHub passes an unset secret as an empty string, not a missing one.
+notarize:
+  macos:
+    - enabled: '{{ ne (envOrDefault "MAC_CERT_P12" "") "" }}'
+      ids: [lerd-darwin-amd64, lerd-darwin-arm64]
+      sign:
+        certificate: "{{ .Env.MAC_CERT_P12 }}"
+        password: "{{ .Env.MAC_CERT_PASSWORD }}"
+      notarize:
+        issuer_id: "{{ .Env.APPLE_API_ISSUER }}"
+        key_id: "{{ .Env.APPLE_API_KEY_ID }}"
+        key: "{{ .Env.APPLE_API_KEY_P8 }}"
+        wait: true
+        timeout: 20m
+
 checksum:
   name_template: "checksums.txt"
 
