@@ -58,7 +58,7 @@ YAML file, either by hand or through the import button; see
 
 Everything in the dashboard works from the keyboard. The first Tab stop is a **Skip to content** button that jumps past the rail and the list straight into the page. Dialogs take focus when they open, keep Tab inside them, close on Escape and hand focus back to whatever opened them. Detail tabs (Overview, Logs, Env and the rest) move with the arrow keys, Home and End, and a site row can be reordered by focusing it, pressing Space and moving it with the arrows.
 
-For screen readers, toggles announce themselves as switches with their on or off state, the rail marks the page you are on, and the small icons on a site row (sharing, worktrees, sleeping or failing workers) are read out rather than left to a hover tooltip. A service starting or stopping is announced as it happens, and the browser tab's title names the site or service that is open.
+For screen readers, toggles announce themselves as switches with their on or off state, the rail marks the page you are on, and the small icons on a site row (sharing, worktrees, sleeping or failing workers) are read out rather than left to a hover tooltip. A service starting or stopping is announced as it happens, and the browser tab's title names the site or service that is open. Unlinking the open site returns to the sites list, so neither the title nor the address names it afterwards.
 
 ### Language
 

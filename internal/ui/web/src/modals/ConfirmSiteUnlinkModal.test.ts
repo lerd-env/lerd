@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import ConfirmSiteUnlinkModal from './ConfirmSiteUnlinkModal.svelte';
 import { modal, openSiteUnlinkModal, closeModal } from '$stores/modals';
+import { routeRest, tab } from '$stores/route';
 
 const { unlinkSite, loadSites } = vi.hoisted(() => ({ unlinkSite: vi.fn(), loadSites: vi.fn() }));
 vi.mock('$stores/sites', async (importOriginal) => {
@@ -39,13 +40,35 @@ describe('ConfirmSiteUnlinkModal', () => {
     expect(loadSites).toHaveBeenCalled();
   });
 
+  it('leaves the unlinked site page for the sites list', async () => {
+    location.hash = '#sites/acme.test/env';
+    await vi.waitFor(() => expect(get(routeRest)).toBe('acme.test/env'));
+    const { getByText } = render(ConfirmSiteUnlinkModal);
+    await fireEvent.click(getByText('Unlink'));
+    await vi.waitFor(() => expect(get(routeRest)).toBe(''));
+    expect(get(tab)).toBe('sites');
+    expect(location.hash).toBe('#sites');
+  });
+
+  it('stays on another site page when a different site is unlinked', async () => {
+    location.hash = '#sites/other.test';
+    await vi.waitFor(() => expect(get(routeRest)).toBe('other.test'));
+    const { getByText } = render(ConfirmSiteUnlinkModal);
+    await fireEvent.click(getByText('Unlink'));
+    await vi.waitFor(() => expect(get(modal).kind).toBeNull());
+    expect(location.hash).toBe('#sites/other.test');
+  });
+
   it('stays open and shows the error when the server refuses', async () => {
+    location.hash = '#sites/acme.test';
+    await vi.waitFor(() => expect(get(routeRest)).toBe('acme.test'));
     unlinkSite.mockResolvedValue({ ok: false, error: 'site is not linked' });
     const { getByText } = render(ConfirmSiteUnlinkModal);
     await fireEvent.click(getByText('Unlink'));
     await vi.waitFor(() => expect(getByText('site is not linked')).toBeTruthy());
     expect(loadSites).not.toHaveBeenCalled();
     expect(get(modal).kind).toBe('siteUnlink');
+    expect(location.hash).toBe('#sites/acme.test');
     closeModal();
   });
 });

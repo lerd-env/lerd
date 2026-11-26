@@ -3,6 +3,8 @@
   import DetailButton from '$components/DetailButton.svelte';
   import { closeModal, modal } from '$stores/modals';
   import { unlinkSite, loadSites } from '$stores/sites';
+  import { routeRest, goToTab } from '$stores/route';
+  import { get } from 'svelte/store';
   import { m } from '../paraglide/messages.js';
 
   const target = $derived($modal.siteUnlink);
@@ -19,7 +21,8 @@
     if (!target) return;
     busy = true;
     error = '';
-    const res = await unlinkSite(target.domain);
+    const domain = target.domain;
+    const res = await unlinkSite(domain);
     busy = false;
     if (!res.ok) {
       error = res.error || m.common_failed();
@@ -27,6 +30,8 @@
     }
     await loadSites();
     closeModal();
+    // Leave the route of a site that no longer exists, so the URL and tab title stop naming it.
+    if (get(routeRest).split('/')[0] === domain) goToTab('sites');
   }
 </script>
 
