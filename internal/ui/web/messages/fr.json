@@ -119,6 +119,7 @@
   "dashboard_health_title": "État du système",
   "dashboard_health_watcher": "Surveillance fichiers",
   "dashboard_hero_allGood": "Tout fonctionne · {sitesRunning}/{sitesTotal} sites · {servicesActive} services actifs",
+  "dashboard_hero_notAllRunning": "Tout ne fonctionne pas · {sitesRunning}/{sitesTotal} sites · {servicesActive} services actifs",
   "dashboard_hero_coreDown": "{components} hors service",
   "dashboard_hero_coreDownHint": "Les services principaux sont requis pour que les sites répondent.",
   "dashboard_hero_openSystem": "Ouvrir système",

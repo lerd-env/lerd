@@ -119,6 +119,7 @@
   "dashboard_health_title": "Tình trạng hệ thống",
   "dashboard_health_watcher": "Trình theo dõi tệp",
   "dashboard_hero_allGood": "Mọi thứ đang chạy trơn tru · {sitesRunning}/{sitesTotal} sites · {servicesActive} dịch vụ đang hoạt động",
+  "dashboard_hero_notAllRunning": "Không phải mọi thứ đều đang chạy · {sitesRunning}/{sitesTotal} sites · {servicesActive} dịch vụ đang hoạt động",
   "dashboard_hero_coreDown": "{components} không chạy",
   "dashboard_hero_coreDownHint": "Các dịch vụ lõi là bắt buộc để sites phản hồi.",
   "dashboard_hero_openSystem": "Mở hệ thống",

@@ -277,7 +277,20 @@ export function siteDotColor(s: Site | undefined): SiteDotColor {
   return s.fpm_running ? 'green' : 'gray';
 }
 
-export type WorkerDotColor = 'amber' | 'violet' | 'emerald' | 'sky' | 'indigo';
+// siteBroken reports a site lerd should be serving but cannot. Paused and
+// idle-suspended sites were stopped on purpose; nginx serves a static site on
+// its own, and a host-proxy site's dev server is the user's unless lerd runs it.
+export function siteBroken(s: Site): boolean {
+  if (s.paused || s.idle_suspended) return false;
+  if (s.container_build_failed) return true;
+  if (s.fpm_running) return false;
+  if (s.host_proxy) return Boolean(s.host_has_dev_server);
+  return Boolean(s.uses_php || s.custom_container);
+}
+
+export const brokenSites = derived(sites, ($s) => $s.filter(siteBroken));
+
+export type WorkerDotColor ='amber' | 'violet' | 'emerald' | 'sky' | 'indigo';
 
 export interface WorkerDot {
   color: WorkerDotColor;

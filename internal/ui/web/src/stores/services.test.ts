@@ -80,6 +80,18 @@ describe('services store', () => {
     expect(groups.find((g) => g.key === 'schedule')).toBeUndefined();
   });
 
+  it('failedServices lists core services that failed, never stopped, sleeping or worker units', async () => {
+    const { services, failedServices } = await import('./services');
+    services.set([
+      { name: 'mysql', status: 'active', site_count: 1 },
+      { name: 'mailpit', status: 'failed', site_count: 0 },
+      { name: 'redis', status: 'inactive', site_count: 0 },
+      { name: 'meilisearch', status: 'inactive', site_count: 0, idle_suspended: true },
+      { name: 'queue-foo', status: 'failed', site_count: 0, queue_site: 'foo' }
+    ]);
+    expect(get(failedServices).map((s) => s.name)).toEqual(['mailpit']);
+  });
+
   it('groups core services by category in CATEGORY_ORDER, sorted by name', async () => {
     const { services, coreServiceGroups } = await import('./services');
     services.set([

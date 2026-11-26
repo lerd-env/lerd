@@ -119,6 +119,7 @@
   "dashboard_health_title": "Systeemstatus",
   "dashboard_health_watcher": "Bestandswatcher",
   "dashboard_hero_allGood": "Alles draait soepel · {sitesRunning}/{sitesTotal} sites · {servicesActive} services actief",
+  "dashboard_hero_notAllRunning": "Niet alles draait · {sitesRunning}/{sitesTotal} sites · {servicesActive} services actief",
   "dashboard_hero_coreDown": "{components} draait niet",
   "dashboard_hero_coreDownHint": "Kernservices zijn nodig om sites te laten reageren.",
   "dashboard_hero_openSystem": "Systeem openen",

@@ -119,6 +119,7 @@
   "dashboard_health_title": "系统健康",
   "dashboard_health_watcher": "文件监视器",
   "dashboard_hero_allGood": "一切运行正常 · {sitesRunning}/{sitesTotal} 个站点 · {servicesActive} 个服务活动中",
+  "dashboard_hero_notAllRunning": "部分未在运行 · {sitesRunning}/{sitesTotal} 个站点 · {servicesActive} 个服务活动中",
   "dashboard_hero_coreDown": "{components} 未运行",
   "dashboard_hero_coreDownHint": "核心服务是站点正常响应的必要条件。",
   "dashboard_hero_openSystem": "打开系统",

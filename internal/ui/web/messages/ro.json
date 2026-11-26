@@ -119,6 +119,7 @@
   "dashboard_health_title": "Starea sistemului",
   "dashboard_health_watcher": "Monitor de fișiere",
   "dashboard_hero_allGood": "Totul rulează fără probleme · {sitesRunning}/{sitesTotal} site-uri · {servicesActive} servicii active",
+  "dashboard_hero_notAllRunning": "Nu rulează totul · {sitesRunning}/{sitesTotal} site-uri · {servicesActive} servicii active",
   "dashboard_hero_coreDown": "{components} nu rulează",
   "dashboard_hero_coreDownHint": "Serviciile de bază sunt necesare pentru ca site-urile să răspundă.",
   "dashboard_hero_openSystem": "Deschide sistemul",

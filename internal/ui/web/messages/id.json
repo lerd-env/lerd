@@ -119,6 +119,7 @@
   "dashboard_health_title": "Kesehatan sistem",
   "dashboard_health_watcher": "Pemantau berkas",
   "dashboard_hero_allGood": "Semuanya berjalan lancar · {sitesRunning}/{sitesTotal} situs · {servicesActive} layanan aktif",
+  "dashboard_hero_notAllRunning": "Tidak semuanya berjalan · {sitesRunning}/{sitesTotal} situs · {servicesActive} layanan aktif",
   "dashboard_hero_coreDown": "{components} tidak berjalan",
   "dashboard_hero_coreDownHint": "Layanan inti diperlukan agar situs dapat merespons.",
   "dashboard_hero_openSystem": "Buka sistem",
