@@ -426,6 +426,8 @@ func printServiceUpdatePhase(ev serviceops.PhaseEvent) {
 		feedback.Line("writing quadlet for " + ev.Image)
 	case "restarting_unit":
 		feedback.Line("restarting " + ev.Unit)
+	case "waiting_ready":
+		feedback.Line("waiting for " + ev.Unit + " to accept connections")
 	case "done":
 		if ev.Message != "" {
 			feedback.Done(ev.Message)
@@ -563,20 +565,11 @@ Errors when no previous image is recorded — i.e. the service was never updated
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]
 			emit := func(ev serviceops.PhaseEvent) {
-				switch ev.Phase {
-				case "pulling_image":
-					if ev.Message != "" {
-						feedback.Note(strings.TrimSpace(ev.Message))
-					} else if ev.Image != "" {
-						feedback.Line("pulling " + ev.Image + imagepull.Note(ev.Bytes))
-					}
-				case "writing_quadlet":
-					feedback.Line("writing quadlet for " + ev.Image)
-				case "restarting_unit":
-					feedback.Line("restarting " + ev.Unit)
-				case "done":
+				if ev.Phase == "done" {
 					feedback.Done("rolled back to " + feedback.Val(ev.Image))
+					return
 				}
+				printServiceUpdatePhase(ev)
 			}
 			feedback.Begin()
 			return serviceops.RollbackService(name, emit)
