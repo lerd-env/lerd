@@ -117,7 +117,7 @@
         value={amount}
         aria-label={m.snapshots_auto_every()}
         onchange={(e) => applyInterval(Number(e.currentTarget.value), unit)}
-        class="h-7 w-14 shrink-0 rounded-md rounded-r-none border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card px-2 text-xs font-medium tabular-nums text-gray-700 dark:text-gray-200 focus:outline-none focus:border-lerd-red"
+        class="h-[34px] w-16 shrink-0 rounded-md rounded-r-none border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card px-3 text-sm tabular-nums text-gray-700 dark:text-gray-200 focus:outline-none focus:border-lerd-red"
       />
       <Dropdown
         value={unit}
