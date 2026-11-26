@@ -19,11 +19,11 @@ type notifyTargetResponse struct {
 func newNotifyTargetResponse(cfg *config.GlobalConfig) notifyTargetResponse {
 	r := notifyTargetResponse{
 		Target:          config.NotifyTargetBrowser,
-		NativeSupported: desktopnotify.Supported(),
+		NativeSupported: desktopSupported() || desktopApps.listening(),
 		AppInstalled:    desktopnotify.AppInstalled(),
 	}
 	if cfg != nil {
-		r.Target = cfg.NotificationTarget()
+		r.Target = notifyTarget(cfg)
 		r.Kinds = cfg.EffectiveNativeKinds()
 	}
 	return r

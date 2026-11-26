@@ -195,3 +195,53 @@ func TestHandleDesktopWS_DeliversOverTheSocket(t *testing.T) {
 		t.Errorf("got %+v", got)
 	}
 }
+
+// On macOS lerd has no emitter of its own, so a listening desktop app is what
+// makes the dashboard offer native notifications at all.
+func TestNotifyTargetResponse_ListeningDesktopAppSupportsNative(t *testing.T) {
+	nativeTarget(t, false)
+	if newNotifyTargetResponse(nil).NativeSupported {
+		t.Fatal("native offered with no emitter and no desktop app")
+	}
+	listenAsDesktopApp(t)
+	if !newNotifyTargetResponse(nil).NativeSupported {
+		t.Error("native not offered while a desktop app listens")
+	}
+}
+
+// withNotificationsConfig writes the test's config.yaml and returns it loaded.
+func withNotificationsConfig(t *testing.T, yaml string) *config.GlobalConfig {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfgDir := config.ConfigDir()
+	if err := os.MkdirAll(cfgDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg
+}
+
+func TestNotifyTarget_DesktopAppMakesAnUnchosenTargetNative(t *testing.T) {
+	cfg := withNotificationsConfig(t, "")
+	if got := newNotifyTargetResponse(cfg).Target; got != config.NotifyTargetBrowser {
+		t.Fatalf("target with no app = %q, want browser", got)
+	}
+	listenAsDesktopApp(t)
+	if got := newNotifyTargetResponse(cfg).Target; got != config.NotifyTargetNative {
+		t.Errorf("target with an app listening = %q, want native", got)
+	}
+}
+
+func TestNotifyTarget_ChosenBrowserStaysWithDesktopApp(t *testing.T) {
+	cfg := withNotificationsConfig(t, "notifications:\n  target: browser\n")
+	listenAsDesktopApp(t)
+	if got := newNotifyTargetResponse(cfg).Target; got != config.NotifyTargetBrowser {
+		t.Errorf("target = %q, want the browser the user chose", got)
+	}
+}
