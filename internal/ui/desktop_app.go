@@ -46,6 +46,7 @@ func (h *desktopHub) add() chan []byte {
 	h.mu.Lock()
 	h.peers[ch] = struct{}{}
 	h.mu.Unlock()
+	broker.broadcastNotifyTarget()
 	return ch
 }
 
@@ -53,6 +54,7 @@ func (h *desktopHub) remove(ch chan []byte) {
 	h.mu.Lock()
 	delete(h.peers, ch)
 	h.mu.Unlock()
+	broker.broadcastNotifyTarget()
 }
 
 // listening reports whether a desktop app is connected.

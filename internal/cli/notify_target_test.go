@@ -32,3 +32,19 @@ func TestRunNotifyTarget(t *testing.T) {
 		t.Fatalf("target=%q, want browser", cfg.NotificationTarget())
 	}
 }
+
+// With nothing stored, browser is only the default, and a connected desktop app
+// overrides a default. Choosing it outright has to be saved to stick.
+func TestRunNotifyTarget_SavesBrowserOverAnUnsetTarget(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := runNotifyTarget(config.NotifyTargetBrowser); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Notifications.Target != config.NotifyTargetBrowser {
+		t.Errorf("stored target = %q, want browser saved", cfg.Notifications.Target)
+	}
+}

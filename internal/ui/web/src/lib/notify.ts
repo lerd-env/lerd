@@ -493,6 +493,7 @@ export function initNotify() {
     if (up) void loadNotifyDelivery();
   });
   wsMessage.subscribe((msg) => {
+    if (msg?.type === 'notify_target') void loadNotifyDelivery();
     if (!msg?.notification) return;
     void fireNotification(msg.notification);
   });

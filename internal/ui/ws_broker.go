@@ -141,6 +141,13 @@ func (b *wsBroker) broadcastStreamingOn() {
 	b.broadcast(wsMessage{Kinds: []string{"streaming_on"}})
 }
 
+// broadcastNotifyTarget tells every open dashboard the notification sink may
+// have changed, so it asks again rather than keep raising popups of its own
+// beside a desktop app that now raises them.
+func (b *wsBroker) broadcastNotifyTarget() {
+	b.broadcast(wsMessage{Kinds: []string{"notify_target"}})
+}
+
 func (b *wsBroker) broadcast(msg wsMessage) {
 	b.mu.Lock()
 	var drop []chan wsMessage

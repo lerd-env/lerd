@@ -245,3 +245,27 @@ func TestNotifyTarget_ChosenBrowserStaysWithDesktopApp(t *testing.T) {
 		t.Errorf("target = %q, want the browser the user chose", got)
 	}
 }
+
+// An open page caches the sink it was told at load. An app connecting or
+// leaving can change it, so pages are told to ask again, or they keep raising
+// browser popups beside the app's.
+func TestDesktopHub_ConnectAndLeaveTellPagesTheSinkMayHaveChanged(t *testing.T) {
+	page := broker.add()
+	t.Cleanup(func() { broker.remove(page) })
+
+	expect := func(when string) {
+		t.Helper()
+		select {
+		case msg := <-page:
+			if len(msg.Kinds) != 1 || msg.Kinds[0] != "notify_target" {
+				t.Errorf("%s: page got %v, want notify_target", when, msg.Kinds)
+			}
+		default:
+			t.Errorf("%s: page was told nothing", when)
+		}
+	}
+	app := desktopApps.add()
+	expect("app connected")
+	desktopApps.remove(app)
+	expect("app left")
+}
