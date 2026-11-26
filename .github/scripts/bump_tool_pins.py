@@ -11,7 +11,7 @@ FILE = 'internal/tools/tools.yaml'
 GITHUB = {'fnm': 'Schniz/fnm', 'mise': 'jdx/mise', 'wp-cli': 'wp-cli/wp-cli'}
 # Tools whose release tags carry a v that their asset names leave out.
 UNPREFIXED = {'wp-cli'}
-STATIC_PHP = 'https://dl.static-php.dev/static-php-cli/common/?format=json'
+STATIC_PHP = 'https://dl.static-php.dev/v3/php-bin/common/?format=json'
 # Edited line by line rather than through a YAML library, so the comments and
 # quoting a bump PR leaves behind are exactly the ones a human wrote.
 LINE = re.compile(r'^( *)([^#\s][^:]*):(?: (.*))?$')
