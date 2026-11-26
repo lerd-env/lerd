@@ -109,3 +109,22 @@ func keys(m map[string]string) []string {
 	}
 	return out
 }
+
+func must(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func customSite() config.Site {
+	s := fpmSite()
+	s.ContainerPort = 8080
+	return s
+}
+
+func hostProxySite() config.Site {
+	s := fpmSite()
+	s.HostPort = 5173
+	return s
+}

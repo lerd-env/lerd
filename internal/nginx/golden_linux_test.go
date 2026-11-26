@@ -82,25 +82,6 @@ func TestGoldenRenders(t *testing.T) {
 	}
 }
 
-func must(t *testing.T, err error) {
-	t.Helper()
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func customSite() config.Site {
-	s := fpmSite()
-	s.ContainerPort = 8080
-	return s
-}
-
-func hostProxySite() config.Site {
-	s := fpmSite()
-	s.HostPort = 5173
-	return s
-}
-
 // compareGolden diffs every file under got against the golden directory. The
 // temp root, trust token and SPX key differ per run, so they are masked, and
 // the managed-hash sidecar only hashes them.
