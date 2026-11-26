@@ -938,7 +938,7 @@ func execStripeConfig(args map[string]any) (any, *rpcError) {
 // so an assistant and the CLI are on the same version of it, and forwards the
 // host variables an external environment provider asked lerd to pass on.
 func composerExecArgs(container, workdir string, env, composerArgs []string) []string {
-	args := []string{"exec", "-w", workdir}
+	args := append([]string{"exec", "-w", workdir}, composerHomeEnvArgs()...)
 	for _, e := range append(composer.Env(workdir), env...) {
 		args = append(args, "--env", e)
 	}
@@ -946,6 +946,16 @@ func composerExecArgs(container, workdir string, env, composerArgs []string) []s
 	args = append(args, phpDet.SiteEnvArgs(workdir)...)
 	args = append(args, container, "php", composer.PharPath())
 	return append(args, composerArgs...)
+}
+
+// composerHomeEnvArgs passes the host HOME and composer home, as lerd composer does,
+// so a global auth.json is read. With no known home the container default stays.
+func composerHomeEnvArgs() []string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return nil
+	}
+	return []string{"--env", "HOME=" + home, "--env", "COMPOSER_HOME=" + composer.HomeDir()}
 }
 
 func execComposer(args map[string]any) (any, *rpcError) {

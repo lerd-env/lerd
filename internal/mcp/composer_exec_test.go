@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -41,5 +42,32 @@ func TestComposerExecArgsForwardsProviderEnv(t *testing.T) {
 	}
 	if strings.Contains(joined, "s.secret") {
 		t.Errorf("value must stay out of argv: %v", args)
+	}
+}
+
+func TestComposerExecArgsUsesHostComposerHome(t *testing.T) {
+	home := t.TempDir()
+	if err := os.Mkdir(filepath.Join(home, ".composer"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("HOME", home)
+	t.Setenv("COMPOSER_HOME", "")
+	joined := strings.Join(composerExecArgs("lerd-php85-fpm", "/home/u/site", nil, []string{"install"}), " ")
+	if !strings.Contains(joined, "--env HOME="+home+" ") {
+		t.Errorf("host HOME not passed: %v", joined)
+	}
+	if !strings.Contains(joined, "--env COMPOSER_HOME="+filepath.Join(home, ".composer")+" ") {
+		t.Errorf("host composer home not passed, a global auth.json would not be read: %v", joined)
+	}
+}
+
+func TestComposerExecArgsWithoutHomeLeavesContainerDefault(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("HOME", "")
+	t.Setenv("COMPOSER_HOME", "")
+	joined := strings.Join(composerExecArgs("lerd-php85-fpm", "/home/u/site", nil, []string{"install"}), " ")
+	if strings.Contains(joined, "HOME=") {
+		t.Errorf("no host home known, nothing should be passed: %v", joined)
 	}
 }
