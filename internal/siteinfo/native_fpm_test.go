@@ -57,3 +57,21 @@ func TestEnrichFPMKeepsContainerSitesUnderNative(t *testing.T) {
 		t.Errorf("frankenphp site asked %q, running=%v", asked, e.FPMRunning)
 	}
 }
+
+// A custom FPM site is served by its own lerd-cfpm container, so it reads as
+// running while that container is up even with no shared FPM container at all.
+func TestEnrichFPMChecksTheCustomFPMContainer(t *testing.T) {
+	for _, native := range []bool{false, true} {
+		prevMode, prevContainer := nativeRuntimeFn, containerRunningFn
+		nativeRuntimeFn = func() bool { return native }
+		containerRunningFn = func(name string) (bool, error) {
+			return name == "lerd-cfpm-shop", nil
+		}
+		e := &EnrichedSite{PHPVersion: "8.4", Runtime: "fpm-custom", Name: "shop"}
+		e.enrichFPM()
+		nativeRuntimeFn, containerRunningFn = prevMode, prevContainer
+		if !e.FPMRunning {
+			t.Errorf("native=%v: a running custom FPM container must read as running", native)
+		}
+	}
+}

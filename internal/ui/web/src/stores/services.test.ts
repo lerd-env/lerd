@@ -87,9 +87,10 @@ describe('services store', () => {
       { name: 'mailpit', status: 'failed', site_count: 0 },
       { name: 'redis', status: 'inactive', site_count: 0 },
       { name: 'meilisearch', status: 'inactive', site_count: 0, idle_suspended: true },
-      { name: 'queue-foo', status: 'failed', site_count: 0, queue_site: 'foo' }
+      { name: 'queue-foo', status: 'failed', site_count: 0, queue_site: 'foo' },
+      { name: 'staging-db', status: 'offline', site_count: 1, external: 'db.internal:3306' }
     ]);
-    expect(get(failedServices).map((s) => s.name)).toEqual(['mailpit']);
+    expect(get(failedServices).map((s) => s.name)).toEqual(['mailpit', 'staging-db']);
   });
 
   it('groups core services by category in CATEGORY_ORDER, sorted by name', async () => {
