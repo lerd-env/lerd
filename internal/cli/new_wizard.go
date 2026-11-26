@@ -329,10 +329,9 @@ func askProjectName() (string, error) {
 	return strings.TrimSpace(name), err
 }
 
-// askScaffoldFramework prompts for the framework, for which major when it has
-// more than one published, and for a starter when that major has any. Returns
-// the store name and version to resolve the definition by, an empty version
-// meaning the latest, and the starter, empty for none.
+// askScaffoldFramework prompts for the framework, its major when several are
+// published, and a starter when that major has any. An empty version means the
+// latest and an empty starter means none.
 func askScaffoldFramework(catalogue []scaffoldChoice) (string, string, string, error) {
 	if len(catalogue) == 0 {
 		return defaultScaffoldFramework, "", "", nil

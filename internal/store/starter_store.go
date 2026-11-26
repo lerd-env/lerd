@@ -8,10 +8,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ResolveStarter finds a starter the store lists for a framework, checks it
-// supports the major being created, and fetches its definition. The cached
-// index answers first; a starter it does not list sends for a fresh one, since
-// the store may have published it since the last refresh.
+// ResolveStarter finds a listed starter, checks it supports the major, and
+// fetches it. A starter the cached index lacks refreshes the index first.
 func (c *Client) ResolveStarter(framework, version, name string) (*config.Starter, error) {
 	if !config.ValidStarterName(name) {
 		return nil, fmt.Errorf("invalid starter name %q", name)

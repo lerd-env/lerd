@@ -8,11 +8,8 @@ import (
 	"strings"
 )
 
-// Starter is another way to start a project of a framework the store already
-// defines: a different skeleton to create from, packages to require into the new
-// project, or both. It only applies at creation. The project is detected as its
-// framework afterwards, so whatever a required package needs to finish its
-// install is that package's own setup step, offered by lerd setup as usual.
+// Starter is another way to create a project of a store framework: its own
+// skeleton, packages to require into it, or both. It only applies at creation.
 type Starter struct {
 	// Starter is the name the file is published under, starters/<framework>/<name>.yaml.
 	Starter     string `yaml:"starter"`
@@ -88,11 +85,8 @@ func (s *Starter) Validate() error {
 	return nil
 }
 
-// RequireArgs is the composer command line, after the binary, that requires the
-// starter's packages into the project at dir. A skeleton created without
-// installing has no lock yet, and resolving one now would pin it to the PHP the
-// scaffold ran under rather than the one the project is set up on, so the
-// packages only go into composer.json for setup's install to resolve.
+// RequireArgs is the composer command line that requires the starter's packages
+// into dir. Without a lock they only go into composer.json, for setup to resolve.
 func (s *Starter) RequireArgs(dir string) []string {
 	args := []string{"require", "--no-interaction"}
 	if _, err := os.Stat(filepath.Join(dir, "composer.lock")); err != nil {

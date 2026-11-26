@@ -19,11 +19,8 @@ func autoFetchPackage(name, version string) (*config.FrameworkPackage, error) {
 	return NewClient().FetchPackage(name, version)
 }
 
-// siblingBases returns the store locations a directory beside the framework
-// definitions is served from. Packages and starters sit beside them rather than
-// under them, since neither is a version of a framework and no binary that
-// predates them ever fetched them, so the definitions directory in each base is
-// swapped for dir.
+// siblingBases returns the store locations of dir, a directory beside the
+// framework definitions such as packages or starters, which older binaries never fetch.
 func (c *Client) siblingBases(dir string) []string {
 	bases := append([]string{c.BaseURL}, c.Fallbacks...)
 	out := make([]string, 0, len(bases))

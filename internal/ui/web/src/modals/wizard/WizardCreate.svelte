@@ -42,8 +42,8 @@
     const v = { name, framework, frameworkVersion, starter, ...next };
     // A starter the newly picked major does not support is dropped rather than
     // sent along to be refused.
-    const fw = catalogue.find((f) => f.name === v.framework);
-    if (v.starter && !startersFor(fw, v.frameworkVersion).some((s) => s.name === v.starter)) {
+    const versionChanged = 'frameworkVersion' in next;
+    if (versionChanged && v.starter && !startersFor(chosen, v.frameworkVersion).some((s) => s.name === v.starter)) {
       v.starter = '';
     }
     onchange(v);
