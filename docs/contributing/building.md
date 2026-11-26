@@ -44,6 +44,10 @@ CGO_ENABLED=0 GOARCH=arm64 GOOS=linux go build -tags nogui -o ./build/lerd-arm64
 
 The UI only needs to be built once per source-tree state; the emitted `dist/` is architecture-independent.
 
+## Signing lerd.exe
+
+Releases build `lerd.exe` before GoReleaser with `.github/scripts/build-windows.sh`, which `make release` and `make release-snapshot` run too, and which embeds the product name Lerd and the release version that SignPath requires. Running the Release workflow by hand from the Actions tab is a dry run: it sends both builds to SignPath with the test certificate, packages the signed copies, and fails if the `lerd.exe` in an archive carries no signature. Tagged releases ship `lerd.exe` unsigned until the production certificate is issued. The rules SignPath enforces are in `.signpath/artifact-configuration.xml`, and the [code signing policy](https://github.com/lerd-env/lerd/blob/main/CODE_SIGNING_POLICY.md) covers who approves a request.
+
 ## Developing the web UI
 
 ```bash
