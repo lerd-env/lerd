@@ -7001,8 +7001,8 @@ SOFTWARE.
 | @types/deep-eql | 4.0.2 | MIT |
 | @types/estree | 1.0.10 | MIT |
 | @types/trusted-types | 2.0.7 | MIT |
-| @vitest/mocker | 5.1.0 | MIT |
-| @vitest/spy | 5.1.0 | MIT |
+| @vitest/mocker | 5.1.1 | MIT |
+| @vitest/spy | 5.1.1 | MIT |
 | acorn | 8.19.0 | MIT |
 | ansi-regex | 5.0.1 | MIT |
 | ansi-styles | 5.2.0 | MIT |
@@ -7036,7 +7036,7 @@ SOFTWARE.
 | es-module-lexer | 2.3.2 | MIT |
 | esm-env | 1.2.2 | MIT |
 | esprima | 4.0.1 | BSD-2-Clause |
-| esrap | 2.4.0 | MIT |
+| esrap | 2.4.2 | MIT |
 | estree-walker | 3.0.3 | MIT |
 | expect-type | 1.4.0 | Apache-2.0 |
 | fdir | 6.5.0 | MIT |
@@ -7084,7 +7084,7 @@ SOFTWARE.
 | source-map-js | 1.2.2 | BSD-3-Clause |
 | std-env | 4.3.0 | MIT |
 | strip-indent | 3.0.0 | MIT |
-| svelte | 5.57.3 | MIT |
+| svelte | 5.59.1 | MIT |
 | svelte-check | 4.7.8 | MIT |
 | svelte-dnd-action | 0.9.80 | MIT |
 | tailwindcss | 4.3.5 | MIT |
@@ -7106,7 +7106,7 @@ SOFTWARE.
 | valibot | 1.5.0 | MIT |
 | vite | 8.3.8 | MIT |
 | vitefu | 1.1.3 | MIT |
-| vitest | 5.1.0 | MIT |
+| vitest | 5.1.1 | MIT |
 | w3c-xmlserializer | 6.0.0 | MIT |
 | webidl-conversions | 8.0.1 | BSD-2-Clause |
 | webpack-virtual-modules | 0.6.2 | MIT |
@@ -7871,7 +7871,7 @@ MIT License
     SOFTWARE
 ```
 
-### @vitest/mocker 5.1.0, @vitest/spy 5.1.0
+### @vitest/mocker 5.1.1, @vitest/spy 5.1.1
 
 MIT
 
@@ -9494,7 +9494,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### esrap 2.4.0
+### esrap 2.4.2
 
 MIT
 
@@ -10981,7 +10981,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### svelte 5.57.3
+### svelte 5.59.1
 
 MIT
 
@@ -13516,7 +13516,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### vitest 5.1.0
+### vitest 5.1.1
 
 MIT
 
