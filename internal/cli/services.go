@@ -426,6 +426,8 @@ func printServiceUpdatePhase(ev serviceops.PhaseEvent) {
 		feedback.Line("writing quadlet for " + ev.Image)
 	case "restarting_unit":
 		feedback.Line("restarting " + ev.Unit)
+	case "waiting_ready":
+		feedback.Line("waiting for " + ev.Unit + " to accept connections")
 	case "done":
 		if ev.Message != "" {
 			feedback.Done(ev.Message)
