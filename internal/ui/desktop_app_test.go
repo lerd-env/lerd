@@ -145,7 +145,14 @@ func TestHandleDesktopWS_DeliversOverTheSocket(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	// The handler unregisters the app only once it sees the socket close, after
+	// this test returns; later tests must not find it still listening.
+	t.Cleanup(func() {
+		conn.Close()
+		for deadline := time.Now().Add(2 * time.Second); desktopApps.listening() && time.Now().Before(deadline); {
+			time.Sleep(10 * time.Millisecond)
+		}
+	})
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 	_, _ = io.WriteString(conn, "GET /api/desktop/ws HTTP/1.1\r\nHost: 127.0.0.1\r\n"+
 		"Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"+
