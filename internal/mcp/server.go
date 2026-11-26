@@ -938,7 +938,10 @@ func execStripeConfig(args map[string]any) (any, *rpcError) {
 // so an assistant and the CLI are on the same version of it, and forwards the
 // host variables an external environment provider asked lerd to pass on.
 func composerExecArgs(container, workdir string, env, composerArgs []string) []string {
-	args := []string{"exec", "-w", workdir}
+	args := []string{"exec", "-w", workdir,
+		"--env", "HOME=" + os.Getenv("HOME"),
+		"--env", "COMPOSER_HOME=" + composer.HomeDir(),
+	}
 	for _, e := range append(composer.Env(workdir), env...) {
 		args = append(args, "--env", e)
 	}
