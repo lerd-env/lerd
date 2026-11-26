@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { changedUrls, submission } from './indexnow.js'
+import { LOCALES } from './theme/i18n/locales.js'
 
 test('maps changed pages to their clean URLs', () => {
   assert.deepEqual(changedUrls([
@@ -16,6 +17,21 @@ test('maps changed pages to their clean URLs', () => {
     'https://lerd.sh/changelog',
     'https://lerd.sh/digest/v1.39.2.html',
   ])
+})
+
+test('maps the theme files a page is built from to that page', () => {
+  assert.deepEqual(changedUrls([
+    'docs/.vitepress/theme/i18n/en.js',
+    'docs/.vitepress/theme/i18n/zh-TW.js',
+    'docs/.vitepress/theme/components/AboutPage.vue',
+  ]), ['https://lerd.sh/', 'https://lerd.sh/zh-tw/', 'https://lerd.sh/about'])
+})
+
+test('a shared landing file sends every translated landing page, once', () => {
+  const urls = changedUrls(['docs/.vitepress/theme/landing-data.js', 'docs/index.md'])
+  assert.equal(urls.length, Object.keys(LOCALES).length)
+  assert.equal(new Set(urls).size, urls.length)
+  assert.ok(urls.includes('https://lerd.sh/de/'))
 })
 
 test('skips files that are not pages, and the noindex archive', () => {
