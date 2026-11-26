@@ -424,10 +424,10 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/lerd/stop", withCORS(handleLerdStop))
 	mux.HandleFunc("/api/lerd/quit", withCORS(handleLerdQuit))
 	mux.HandleFunc("/api/lerd/update-terminal", withCORS(handleLerdUpdateTerminal))
-	// Only the Windows desktop app uses these: it draws lerd's tray and raises its
-	// notifications, which lerd inside WSL cannot do itself.
+	// The desktop app raises lerd's notifications where lerd has no emitter of
+	// its own: inside WSL and on macOS. Only the Windows one draws lerd's tray.
+	mux.HandleFunc("/api/desktop/ws", handleDesktopWS)
 	if platform.Current.WindowsSide {
-		mux.HandleFunc("/api/desktop/ws", handleDesktopWS)
 		mux.HandleFunc("/api/tray", withCORS(handleTray))
 		mux.HandleFunc("/api/tray/action", withCORS(publishAfter(handleTrayAction, eventbus.KindStatus, eventbus.KindServices, eventbus.KindSites)))
 	}

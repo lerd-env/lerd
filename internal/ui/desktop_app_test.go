@@ -145,7 +145,14 @@ func TestHandleDesktopWS_DeliversOverTheSocket(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	// The handler unregisters the app only once it sees the socket close, after
+	// this test returns; later tests must not find it still listening.
+	t.Cleanup(func() {
+		conn.Close()
+		for deadline := time.Now().Add(2 * time.Second); desktopApps.listening() && time.Now().Before(deadline); {
+			time.Sleep(10 * time.Millisecond)
+		}
+	})
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 	_, _ = io.WriteString(conn, "GET /api/desktop/ws HTTP/1.1\r\nHost: 127.0.0.1\r\n"+
 		"Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"+
@@ -194,4 +201,78 @@ func TestHandleDesktopWS_DeliversOverTheSocket(t *testing.T) {
 	if got.Title != "redis stopped" || got.Urgency != "critical" {
 		t.Errorf("got %+v", got)
 	}
+}
+
+// On macOS lerd has no emitter of its own, so a listening desktop app is what
+// makes the dashboard offer native notifications at all.
+func TestNotifyTargetResponse_ListeningDesktopAppSupportsNative(t *testing.T) {
+	nativeTarget(t, false)
+	if newNotifyTargetResponse(nil).NativeSupported {
+		t.Fatal("native offered with no emitter and no desktop app")
+	}
+	listenAsDesktopApp(t)
+	if !newNotifyTargetResponse(nil).NativeSupported {
+		t.Error("native not offered while a desktop app listens")
+	}
+}
+
+// withNotificationsConfig writes the test's config.yaml and returns it loaded.
+func withNotificationsConfig(t *testing.T, yaml string) *config.GlobalConfig {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfgDir := config.ConfigDir()
+	if err := os.MkdirAll(cfgDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg
+}
+
+func TestNotifyTarget_DesktopAppMakesAnUnchosenTargetNative(t *testing.T) {
+	cfg := withNotificationsConfig(t, "")
+	if got := newNotifyTargetResponse(cfg).Target; got != config.NotifyTargetBrowser {
+		t.Fatalf("target with no app = %q, want browser", got)
+	}
+	listenAsDesktopApp(t)
+	if got := newNotifyTargetResponse(cfg).Target; got != config.NotifyTargetNative {
+		t.Errorf("target with an app listening = %q, want native", got)
+	}
+}
+
+func TestNotifyTarget_ChosenBrowserStaysWithDesktopApp(t *testing.T) {
+	cfg := withNotificationsConfig(t, "notifications:\n  target: browser\n")
+	listenAsDesktopApp(t)
+	if got := newNotifyTargetResponse(cfg).Target; got != config.NotifyTargetBrowser {
+		t.Errorf("target = %q, want the browser the user chose", got)
+	}
+}
+
+// An open page caches the sink it was told at load. An app connecting or
+// leaving can change it, so pages are told to ask again, or they keep raising
+// browser popups beside the app's.
+func TestDesktopHub_ConnectAndLeaveTellPagesTheSinkMayHaveChanged(t *testing.T) {
+	page := broker.add()
+	t.Cleanup(func() { broker.remove(page) })
+
+	expect := func(when string) {
+		t.Helper()
+		select {
+		case msg := <-page:
+			if len(msg.Kinds) != 1 || msg.Kinds[0] != "notify_target" {
+				t.Errorf("%s: page got %v, want notify_target", when, msg.Kinds)
+			}
+		default:
+			t.Errorf("%s: page was told nothing", when)
+		}
+	}
+	app := desktopApps.add()
+	expect("app connected")
+	desktopApps.remove(app)
+	expect("app left")
 }

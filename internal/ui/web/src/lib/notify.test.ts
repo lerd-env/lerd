@@ -195,6 +195,23 @@ describe('notify dispatcher', () => {
     fetchSpy.mockRestore();
   });
 
+  // A desktop app connecting can move an unset sink to native under a page that
+  // already loaded; the page has to follow, or it doubles the app's popups.
+  it('asks for the sink again when lerd says it may have changed', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ target: 'browser' }), { status: 200 }))
+      .mockResolvedValue(new Response(JSON.stringify({ target: 'native' }), { status: 200 }));
+    const { initNotify, notifyDelivery } = await import('./notify');
+    const { wsMessage } = await import('./ws');
+
+    initNotify();
+    await vi.waitFor(() => expect(get(notifyDelivery)).toBe('browser'));
+    wsMessage.set({ type: 'notify_target' });
+    await vi.waitFor(() => expect(get(notifyDelivery)).toBe('native'));
+    fetchSpy.mockRestore();
+  });
+
   it('raises nothing on the desktop while the dashboard window has focus', async () => {
     const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
     const { initNotify } = await import('./notify');

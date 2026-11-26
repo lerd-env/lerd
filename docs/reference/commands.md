@@ -400,7 +400,7 @@ See [Community plugins](../features/plugins.md).
 
 | Command | Description |
 |---|---|
-| `lerd dashboard` | Open the Lerd dashboard, as a Chromium app window on Linux when one is available, otherwise in the default browser |
+| `lerd dashboard` | Open the Lerd dashboard, in the Lerd desktop app when it is installed, otherwise as a Chromium app window on Linux when one is available, or in the default browser |
 
 ## Shell completion
 

@@ -14,9 +14,11 @@ func withAppsDir(t *testing.T) string {
 		t.Skip("osacompile is not available on this host")
 	}
 	dir := t.TempDir()
-	origApps, origLS := appsDir, lsregisterPath
-	t.Cleanup(func() { appsDir = origApps; lsregisterPath = origLS })
+	origApps, origLS, origApp := appsDir, lsregisterPath, desktopAppInstalled
+	t.Cleanup(func() { appsDir = origApps; lsregisterPath = origLS; desktopAppInstalled = origApp })
 	appsDir = func() string { return dir }
+	// The host may have the desktop app, which would make Install step aside.
+	desktopAppInstalled = func() bool { return false }
 	// Keep the real LaunchServices database out of the tests.
 	lsregisterPath = filepath.Join(dir, "no-such-lsregister")
 	return dir
@@ -187,5 +189,65 @@ func TestRemoveDeletesTheBundleAndToleratesItsAbsence(t *testing.T) {
 	}
 	if err := Remove(); err != nil {
 		t.Errorf("second Remove() error: %v", err)
+	}
+}
+
+// foreignBundle puts an app that is not lerd's launcher at the launcher's path,
+// the way the desktop app lands there when /Applications is not writable.
+func foreignBundle(t *testing.T) string {
+	t.Helper()
+	app := Path()
+	if err := os.MkdirAll(filepath.Join(app, "Contents"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	plist := `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>sh.lerd.Desktop</string></dict></plist>`
+	if err := os.WriteFile(filepath.Join(app, "Contents", "Info.plist"), []byte(plist), 0644); err != nil {
+		t.Fatal(err)
+	}
+	return app
+}
+
+func withDesktopApp(t *testing.T, installed bool) {
+	t.Helper()
+	prev := desktopAppInstalled
+	t.Cleanup(func() { desktopAppInstalled = prev })
+	desktopAppInstalled = func() bool { return installed }
+}
+
+func TestInstallStepsAsideForTheDesktopApp(t *testing.T) {
+	withAppsDir(t)
+	withDesktopApp(t, false)
+	app, err := Install()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	withDesktopApp(t, true)
+	got, err := Install()
+	if err != nil {
+		t.Fatalf("Install() error: %v", err)
+	}
+	if got != "" {
+		t.Errorf("Install() = %q, want no launcher beside the desktop app", got)
+	}
+	if _, err := os.Stat(app); !os.IsNotExist(err) {
+		t.Errorf("old launcher still present beside the desktop app: %v", err)
+	}
+}
+
+func TestInstallAndRemoveNeverTouchAnotherApp(t *testing.T) {
+	withAppsDir(t)
+	withDesktopApp(t, false)
+	app := foreignBundle(t)
+
+	if _, err := Install(); err == nil {
+		t.Error("Install() replaced an app that is not the launcher")
+	}
+	if err := Remove(); err != nil {
+		t.Errorf("Remove() error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(app, "Contents", "Info.plist")); err != nil {
+		t.Errorf("the other app was touched: %v", err)
 	}
 }

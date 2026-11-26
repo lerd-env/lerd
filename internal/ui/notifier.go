@@ -29,10 +29,19 @@ func notifySink(cfg *config.GlobalConfig, nativeSupported func() bool) sink {
 	if cfg == nil || !cfg.IsNotificationsEnabled() {
 		return sinkOff
 	}
-	if cfg.NotificationTarget() == config.NotifyTargetNative && nativeSupported() {
+	if notifyTarget(cfg) == config.NotifyTargetNative && nativeSupported() {
 		return sinkNative
 	}
 	return sinkBrowser
+}
+
+// notifyTarget is the sink in effect: the one the user chose, or native while a
+// desktop app listens and none was chosen, since raising them is what it is for.
+func notifyTarget(cfg *config.GlobalConfig) string {
+	if cfg.Notifications.Target == "" && desktopApps.listening() {
+		return config.NotifyTargetNative
+	}
+	return cfg.NotificationTarget()
 }
 
 // nativeRequest maps a notification to a native desktop request, using the

@@ -97,7 +97,9 @@ func runNotifyTarget(target string) error {
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
-	if cfg.NotificationTarget() == target {
+	// Compared against what is stored, not the default: an unset target follows a
+	// connected desktop app, so choosing browser outright has to be saved.
+	if cfg.Notifications.Target == target {
 		fmt.Printf("Notification target already %s.\n", target)
 		return nil
 	}
