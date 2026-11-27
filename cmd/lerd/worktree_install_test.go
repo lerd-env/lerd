@@ -19,35 +19,55 @@ func stubWorktreeDeps(t *testing.T) *int {
 
 func TestInstallWorktreeDeps_installsWhenNobodyElseIs(t *testing.T) {
 	calls := stubWorktreeDeps(t)
-	installWorktreeDeps(t.TempDir(), t.TempDir(), "b.site.test", false)
+	if !installWorktreeDeps(t.TempDir(), t.TempDir(), "b.site.test", false) {
+		t.Fatal("reported another install with the lock free")
+	}
 	if *calls != 1 {
 		t.Fatalf("installed %d times, want 1", *calls)
 	}
 }
 
-// While lerd worktree add installs, the worktree's dev server must not start on
-// a half-filled node_modules, so the watcher waits for that install to end.
-func TestInstallWorktreeDeps_waitsForAnInstallAlreadyRunning(t *testing.T) {
+// The watcher's event loop calls this, so a held lock must be reported at once,
+// never waited on there.
+func TestInstallWorktreeDeps_reportsAHeldLockWithoutWaiting(t *testing.T) {
 	calls := stubWorktreeDeps(t)
 	wt := t.TempDir()
 	release, err := gitpkg.LockInstall(wt, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer release()
+	start := time.Now()
+	if installWorktreeDeps(t.TempDir(), wt, "b.site.test", false) {
+		t.Fatal("reported an install of its own while another held the lock")
+	}
+	if waited := time.Since(start); waited > 200*time.Millisecond {
+		t.Errorf("waited %s on the held lock", waited)
+	}
+	if *calls != 0 {
+		t.Errorf("installed %d times on top of the running install, want 0", *calls)
+	}
+}
+
+// A new worktree's servers start only once the install holding its lock is done.
+func TestWaitForWorktreeInstall_returnsOnceTheHolderIsDone(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	wt := t.TempDir()
+	release, err := gitpkg.LockInstall(wt, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
 	done := make(chan struct{})
-	go func() { installWorktreeDeps(t.TempDir(), wt, "b.site.test", false); close(done) }()
+	go func() { waitForWorktreeInstall(wt); close(done) }()
 	select {
 	case <-done:
-		t.Fatal("returned while another install still held the lock")
+		t.Fatal("returned while the install still held the lock")
 	case <-time.After(300 * time.Millisecond):
 	}
 	release()
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		t.Fatal("still waiting after the other install finished")
-	}
-	if *calls != 0 {
-		t.Errorf("installed %d times on top of the running install, want 0", *calls)
+		t.Fatal("still waiting after the install finished")
 	}
 }

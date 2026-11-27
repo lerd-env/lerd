@@ -1183,17 +1183,37 @@ var ensureWorktreeDepsFn = func(sitePath, path, domain string, secured bool) {
 	gitpkg.EnsureWorktreeDeps(sitePath, path, domain, secured, nil)
 }
 
-// installWorktreeDeps installs a new worktree's dependencies, or waits for the
-// install the CLI or dashboard already runs for it: workers and dev servers
-// started on a half-filled node_modules fail their first build.
-func installWorktreeDeps(sitePath, path, domain string, secured bool) {
-	if release, ok, _ := gitpkg.TryLockInstall(path); ok {
-		ensureWorktreeDepsFn(sitePath, path, domain, secured)
-		release()
-		return
+// installWorktreeDeps installs a worktree's dependencies, and reports false
+// without waiting when another install already holds its lock.
+func installWorktreeDeps(sitePath, path, domain string, secured bool) bool {
+	release, ok, _ := gitpkg.TryLockInstall(path)
+	if !ok {
+		return false
 	}
-	if release, err := gitpkg.LockInstall(path, 10*time.Minute); err == nil {
-		release()
+	ensureWorktreeDepsFn(sitePath, path, domain, secured)
+	release()
+	return true
+}
+
+// waitForWorktreeInstall returns once no install holds path's lock. The lock
+// is a flock, gone with its holder, so this ends when that install does.
+func waitForWorktreeInstall(path string) {
+	for {
+		if held, err := gitpkg.InstallInFlight(path); err != nil || !held {
+			return
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
+// finishWorktreeAfterInstall runs a new worktree's setup once the install that
+// held its lock is done, so its servers start on complete dependencies.
+func finishWorktreeAfterInstall(sitePath, worktreeName, path string) {
+	waitForWorktreeInstall(path)
+	if syncWorktree(sitePath, worktreeName, "added", false) {
+		if err := nginx.Reload(); err != nil {
+			fmt.Printf("[WARN] nginx reload: %v\n", err)
+		}
 	}
 }
 
@@ -1224,7 +1244,12 @@ func syncWorktree(sitePath, worktreeName, action string, pruneStale bool) bool {
 		// Skip the install when the UI/CLI holds the cross-process lock:
 		// it is running composer/npm install with streamed output and
 		// would race the watcher's vendor seed otherwise.
-		installWorktreeDeps(sitePath, wt.Path, wt.Domain, site.Secured)
+		if !installWorktreeDeps(sitePath, wt.Path, wt.Domain, site.Secured) && action == "added" {
+			// Another install holds the lock, often the watcher's own rescan. Finish
+			// off the event loop once it is done, so other worktrees carry on.
+			go finishWorktreeAfterInstall(sitePath, worktreeName, wt.Path)
+			return false
+		}
 		// Provision the isolated DB for a worktree that committed
 		// db_isolated: true but was never run through `lerd worktree add`.
 		// Gated to genuine creation like the worker/nginx seeding below: on
