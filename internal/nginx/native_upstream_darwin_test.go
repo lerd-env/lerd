@@ -116,3 +116,20 @@ func TestNativeUpstreamsCoverEverySupportedVersion(t *testing.T) {
 		}
 	}
 }
+
+// A worktree's vhost can be the first native one written, after an upgrade or
+// when only its dev server starts, so it writes the upstreams it names too.
+func TestGenerateWorktreeVhost_nativeWritesTheUpstreamsItNames(t *testing.T) {
+	confD := setupConfD(t)
+	nativeMode(t)
+	if err := GenerateWorktreeVhost("feat.nativeapp.test", "/srv/nativeapp-feat", "8.4", "nativeapp", "feat"); err != nil {
+		t.Fatalf("GenerateWorktreeVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "feat.nativeapp.test.conf"))
+	if !strings.Contains(content, "fastcgi_pass lerd_native_php84;") {
+		t.Fatalf("native worktree vhost should pass to the 8.4 upstream, got:\n%s", content)
+	}
+	if !strings.Contains(readConf(t, filepath.Join(confD, nativeUpstreamsFile)), "upstream lerd_native_php84 {") {
+		t.Error("the upstream the worktree vhost names was not written")
+	}
+}

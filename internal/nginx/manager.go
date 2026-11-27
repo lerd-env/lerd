@@ -932,6 +932,9 @@ func writeConfD(domain string, rendered []byte) error {
 	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
 		return err
 	}
+	if err := ensureNativeUpstreamsFor(rendered); err != nil {
+		return err
+	}
 	confPath := filepath.Join(config.NginxConfD(), domain+".conf")
 	config.GuardRealWrite(confPath)
 	return WriteFileAtomic(confPath, rendered, 0644)
