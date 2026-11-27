@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -148,5 +149,116 @@ func TestSetEnv(t *testing.T) {
 	}
 	if err := setEnv(t.TempDir()+"/missing", map[string]string{"A": "b"}); err == nil {
 		t.Error("missing .env accepted")
+	}
+}
+
+func TestVerdict_zeroBaselineAndFailedTargets(t *testing.T) {
+	cases := []struct {
+		key           string
+		old, new, nse float64
+		want          string
+	}{
+		{"idle.cpu_pct.ctr.lerd-redis", 0, 20, 0, "REGRESSED"}, // a new steady drain from nothing
+		{"idle.cpu_pct.ctr.lerd-redis", 0, 0.2, 0, ""},         // jitter under the floor
+		{"idle.cpu_pct.ctr.lerd-redis", 20, 0, 0, "improved"},
+		{"req.min_cpus", 1, -1, 0, "REGRESSED"}, // even four cores now fail
+		{"req.min_cpus", -1, 1, 0, "improved"},  // it passes again
+		{"req.min_cpus", -1, -1, 0, ""},
+		{"req.min_cpu_score", 1200, -2400, 0, "REGRESSED"},
+	}
+	for _, c := range cases {
+		if got := verdict(c.key, c.old, c.new, c.nse); got != c.want {
+			t.Errorf("verdict(%s, %v→%v) = %q; want %q", c.key, c.old, c.new, got, c.want)
+		}
+	}
+}
+
+func TestRoleOf_nativePHP(t *testing.T) {
+	if got := roleOf("/Users/u/.local/share/lerd/bin/php-native-fpm-8.4 --nodaemonize -y x.conf"); got != "native-fpm" {
+		t.Errorf("roleOf(native fpm) = %q; want native-fpm", got)
+	}
+}
+
+func TestSharersOf(t *testing.T) {
+	sites := "Name  Domain  PHP  Node  TLS  Framework  Status  Path\n" +
+		"bench-laravel  bench-laravel.test  8.4  22  No  Laravel 13  running  /h/Lerd/bench-laravel\n" +
+		"shop  shop.test  8.4  22  Yes  Laravel 12  running  /h/shop\n" +
+		"blog  blog.test  8.5  22  No  Laravel 12  running  /h/blog\n" +
+		"↳ alias  crisu.test\n"
+	if got := sharersOf(sites, "8.4", "bench-laravel"); len(got) != 1 || got[0] != "shop" {
+		t.Errorf("sharersOf = %v; want [shop]", got)
+	}
+	if got := sharersOf(sites, "8.3", "bench-laravel"); len(got) != 0 {
+		t.Errorf("sharersOf on an unused version = %v; want none", got)
+	}
+}
+
+// Ctrl+C during the restore must wait for it rather than exit with a
+// container still throttled, and nothing may limit a container after it.
+func TestCleanups_runOnceAndMakeLateCallersWait(t *testing.T) {
+	var c cleanups
+	var order []string
+	release := make(chan struct{})
+	c.add(func() { order = append(order, "first added") })
+	c.add(func() { <-release; order = append(order, "last added") })
+	done := make(chan struct{})
+	go func() { c.run(); close(done) }()
+	time.Sleep(20 * time.Millisecond)
+	second := make(chan struct{})
+	go func() { c.run(); close(second) }()
+	select {
+	case <-second:
+		t.Fatal("a second run returned before the first finished")
+	case <-time.After(30 * time.Millisecond):
+	}
+	close(release)
+	<-done
+	<-second
+	if len(order) != 2 || order[0] != "last added" {
+		t.Errorf("ran %v; want each once, newest first", order)
+	}
+}
+
+func TestFixtureDir_refusesAFolderTheBenchDidNotMake(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.php"), []byte("<?php mine();"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := claimFixtureDir(dir); err == nil {
+		t.Fatal("claimed a folder holding someone else's project")
+	}
+	fresh := filepath.Join(t.TempDir(), "bench-fixture")
+	if err := claimFixtureDir(fresh); err != nil {
+		t.Fatalf("a missing folder must be claimable: %v", err)
+	}
+	if err := claimFixtureDir(fresh); err != nil {
+		t.Fatalf("the bench's own folder must stay claimable: %v", err)
+	}
+}
+
+// A Ctrl+C that lands while a site is being linked must still unlink it, so
+// the action and the registration of its undo happen as one step.
+func TestCleanups_guardRegistersTheUndoOfAnActionInFlight(t *testing.T) {
+	var c cleanups
+	started, finish := make(chan struct{}), make(chan struct{})
+	undone := false
+	go func() {
+		_ = c.guard(func() (func(), error) {
+			close(started)
+			<-finish
+			return func() { undone = true }, nil
+		})
+	}()
+	<-started
+	ran := make(chan struct{})
+	go func() { c.run(); close(ran) }()
+	time.Sleep(20 * time.Millisecond)
+	close(finish)
+	<-ran
+	if !undone {
+		t.Fatal("a run during the action skipped its undo")
+	}
+	if err := c.guard(func() (func(), error) { t.Error("an action ran after cleanup"); return nil, nil }); err == nil {
+		t.Error("guard after cleanup did not refuse")
 	}
 }

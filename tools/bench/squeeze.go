@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
+	"sync"
 	"time"
 
 	"github.com/geodro/lerd/internal/podman"
@@ -28,15 +27,16 @@ const (
 	fixturePHP     = "8.4"
 )
 
+// squeezeShared allows squeezing a PHP container other sites also run on.
+var squeezeShared bool
+
 // squeeze throttles the fixture's nginx and FPM containers step by step and
 // records the fewest CPUs that still serve a scaffolded framework page in time.
 func squeeze(m map[string]float64) error {
-	url, unlink, err := linkLaravel()
+	url, err := linkLaravel()
 	if err != nil {
 		return err
 	}
-	defer unlink()
-
 	ctrs, err := servingContainers(laravelFixture)
 	if err != nil {
 		return err
@@ -44,16 +44,17 @@ func squeeze(m map[string]float64) error {
 	if want := "lerd-php" + strings.ReplaceAll(fixturePHP, ".", "") + "-fpm"; ctrs[1] != want {
 		return fmt.Errorf("fixture is served by %s, expected %s", ctrs[1], want)
 	}
-	restore, err := limitable(ctrs)
+	// The cap lands on the whole container, so every site on it slows too and
+	// their work skews the numbers.
+	sites, _ := runCmd("lerd", "sites")
+	if others := sharersOf(sites, fixturePHP, laravelFixture); len(others) > 0 && !squeezeShared {
+		return fmt.Errorf("PHP %s is shared with %s; their work would skew the squeeze and they would be throttled too. Pass -squeeze-shared to go ahead", fixturePHP, strings.Join(others, ", "))
+	}
+	lim, err := newLimiter(ctrs)
 	if err != nil {
 		return err
 	}
-	defer restore()
-	// A throttled container must never outlive the bench, so undo on Ctrl+C too.
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-	go func() { <-sig; restore(); os.Exit(130) }()
-	defer signal.Stop(sig)
+	cleanup.add(lim.restore)
 
 	client := newClient()
 	for i := 0; i < 10; i++ { // warm caches before the first level
@@ -64,7 +65,7 @@ func squeeze(m map[string]float64) error {
 	var peakMB float64
 	var p95s []float64
 	for _, cpus := range squeezeLevels {
-		if err := setCPUs(ctrs, cpus); err != nil {
+		if err := lim.set(cpus); err != nil {
 			return err
 		}
 		_, p95, err := load(client, url, 4, 10*time.Second)
@@ -84,6 +85,7 @@ func squeeze(m map[string]float64) error {
 		fmt.Fprintf(os.Stderr, "    %g CPUs: p95 %.0f ms\n", cpus, p95)
 		p95s = append(p95s, p95)
 	}
+	lim.restore()
 	m["req.min_cpus"] = lowestPassing(squeezeLevels, p95s, minP95ms)
 	m["req.rec_cpus"] = lowestPassing(squeezeLevels, p95s, recP95ms)
 	m["req.serving_mem_mb_peak"] = peakMB
@@ -94,6 +96,21 @@ func squeeze(m map[string]float64) error {
 	m["req.min_cpu_score"] = m["req.min_cpus"] * m["calib.single_mbps"]
 	m["req.rec_cpu_score"] = m["req.rec_cpus"] * m["calib.single_mbps"]
 	return nil
+}
+
+// sharersOf names the other sites `lerd sites` lists on a PHP version.
+func sharersOf(sitesOutput, php, self string) []string {
+	var out []string
+	for i, l := range strings.Split(sitesOutput, "\n") {
+		f := strings.Fields(l)
+		if i == 0 || len(f) < 3 || strings.HasPrefix(f[0], "↳") || f[0] == self {
+			continue
+		}
+		if f[2] == php {
+			out = append(out, f[0])
+		}
+	}
+	return out
 }
 
 // lowestPassing walks the levels from most to fewest CPUs and returns the last
@@ -110,56 +127,52 @@ func lowestPassing(levels, p95s []float64, limit float64) float64 {
 	return best
 }
 
-// linkLaravel scaffolds the framework fixture once, then links it for the run
-// and unlinks it afterwards unless it was linked before the bench started.
-func linkLaravel() (string, func(), error) {
+// linkLaravel scaffolds the framework fixture once, links it for the run and
+// returns its URL; the unlink is registered the moment the link exists.
+func linkLaravel() (string, error) {
 	home, _ := os.UserHomeDir()
 	dir := filepath.Join(home, "Lerd", laravelFixture)
-	url := "http://" + laravelFixture + ".test/"
-	sites, _ := runCmd("lerd", "sites")
-	wasLinked := strings.Contains(sites, laravelFixture+".test")
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		step("scaffolding " + dir + " (once)")
-		if _, err := runCmd("lerd", "new", dir, "--framework=laravel"); err != nil {
-			return "", nil, fmt.Errorf("lerd new: %w", err)
+		// lerd new links what it scaffolds, so this run owns that link too.
+		if err := cleanup.guard(func() (func(), error) {
+			if _, err := runCmd("lerd", "new", dir, "--framework=laravel"); err != nil {
+				return unlinkLater(dir), fmt.Errorf("lerd new: %w", err)
+			}
+			return unlinkLater(dir), nil
+		}); err != nil {
+			return "", err
 		}
+		if err := os.WriteFile(filepath.Join(dir, fixtureMarker), nil, 0o644); err != nil {
+			return "", err
+		}
+	} else if err := claimFixtureDir(dir); err != nil {
+		return "", err
 	}
-	if now, _ := runCmd("lerd", "sites"); !strings.Contains(now, laravelFixture+".test") {
-		if err := inDir(dir, "lerd", "link", "--yes"); err != nil {
-			return "", nil, err
-		}
+	if err := linkSite(laravelFixture, dir); err != nil {
+		return "", err
 	}
 	// Pin a PHP version so the cap lands on an FPM container no worker shares.
 	if err := inDir(dir, "lerd", "isolate", fixturePHP); err != nil {
-		return "", nil, err
+		return "", err
 	}
 	// Without a terminal lerd new stops after scaffolding, so finish it here once.
 	if _, err := os.Stat(filepath.Join(dir, "vendor")); os.IsNotExist(err) {
 		step("running lerd setup in " + dir + " (once)")
 		if err := inDir(dir, "lerd", "setup", "--all", "--skip-open"); err != nil {
-			return "", nil, err
+			return "", err
 		}
 	}
 	// Keep sessions and cache in memory so the squeeze measures CPU, not
 	// SQLite fsyncs that stall whenever the disk is busy.
 	if err := setEnv(filepath.Join(dir, ".env"), map[string]string{"SESSION_DRIVER": "array", "CACHE_STORE": "array"}); err != nil {
-		return "", nil, err
+		return "", err
 	}
-	undo := func() {}
-	if !wasLinked {
-		undo = func() {
-			unlink := exec.Command("lerd", "unlink")
-			unlink.Dir = dir
-			if out, err := unlink.CombinedOutput(); err != nil {
-				fmt.Fprintf(os.Stderr, "bench: lerd unlink: %v: %s\n", err, out)
-			}
-		}
+	url, err := siteURL(laravelFixture)
+	if err != nil {
+		return "", err
 	}
-	if err := waitOK(newClient(), url, 60*time.Second); err != nil {
-		undo()
-		return "", nil, err
-	}
-	return url, undo, nil
+	return url, waitOK(newClient(), url, 60*time.Second)
 }
 
 // setEnv rewrites the given keys in a dotenv file, appending any that are missing.
@@ -227,12 +240,21 @@ func cgroupCPUMax(ctr string) (string, error) {
 	return filepath.Join("/sys/fs/cgroup", path, "cpu.max"), nil
 }
 
-// limitable records each container's cpu.max and returns the undo.
-func limitable(ctrs []string) (func(), error) {
+// limiter caps containers through cgroup v2 and puts their original cpu.max
+// back. Both hold the lock, so a restore waits for a write under way and no
+// write lands after it.
+type limiter struct {
+	mu       sync.Mutex
+	ctrs     []string
+	orig     map[string]string
+	restored bool
+}
+
+func newLimiter(ctrs []string) (*limiter, error) {
 	if runtime.GOOS != "linux" {
 		return nil, fmt.Errorf("-squeeze needs Linux cgroup v2, not %s", runtime.GOOS)
 	}
-	orig := map[string]string{}
+	l := &limiter{ctrs: ctrs, orig: map[string]string{}}
 	for _, c := range ctrs {
 		f, err := cgroupCPUMax(c)
 		if err != nil {
@@ -242,33 +264,37 @@ func limitable(ctrs []string) (func(), error) {
 		if err != nil {
 			return nil, err
 		}
-		orig[f] = strings.TrimSpace(string(b))
+		l.orig[f] = strings.TrimSpace(string(b))
 	}
-	done := false
-	return func() {
-		if done {
-			return
-		}
-		done = true
-		for f, line := range orig {
-			if err := os.WriteFile(f, []byte(line), 0o644); err != nil {
-				fmt.Fprintf(os.Stderr, "bench: could not restore %s, run: echo %q > %s\n", f, line, f)
-			}
-		}
-	}, nil
+	return l, nil
 }
 
-func setCPUs(ctrs []string, cpus float64) error {
-	for _, c := range ctrs {
-		f, err := cgroupCPUMax(c)
-		if err != nil {
-			return err
-		}
+func (l *limiter) set(cpus float64) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.restored {
+		return fmt.Errorf("limits already restored")
+	}
+	for f := range l.orig {
 		if err := os.WriteFile(f, []byte(cpuMaxLine(cpus)), 0o644); err != nil {
-			return fmt.Errorf("limit %s: %w", c, err)
+			return fmt.Errorf("limit %s: %w", f, err)
 		}
 	}
 	return nil
+}
+
+func (l *limiter) restore() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.restored {
+		return
+	}
+	l.restored = true
+	for f, line := range l.orig {
+		if err := os.WriteFile(f, []byte(line), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "bench: could not restore %s, run: echo %q > %s\n", f, line, f)
+		}
+	}
 }
 
 // cpuMaxLine renders a CPU count as a cgroup v2 cpu.max line, 100ms period.

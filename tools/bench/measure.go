@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -140,6 +141,10 @@ func hostUsage() (map[string]usage, error) {
 
 func roleOf(args string) string {
 	exe, rest, _ := strings.Cut(args, " ")
+	// macOS's native PHP serves sites from the host, one FPM per version.
+	if strings.HasPrefix(filepath.Base(exe), "php-native-fpm-") {
+		return "native-fpm"
+	}
 	cmd := strings.TrimSpace(filepath.Base(exe) + " " + rest)
 	for _, r := range hostRoles {
 		if cmd == r.match || strings.HasPrefix(cmd, r.match+" ") {
@@ -274,39 +279,92 @@ func parseSizeMB(s string) (float64, error) {
 
 const fixtureName = "bench-fixture"
 
-// linkFixture links a one-line PHP site and returns its URL and an undo that
-// unlinks it again, unless it was already linked before the run.
-func linkFixture() (string, func(), error) {
+// fixtureMarker marks a fixture folder as the bench's own, so it never writes
+// into a project that happens to sit at the same path.
+const fixtureMarker = ".lerd-bench"
+
+// claimFixtureDir creates dir for the bench, or accepts it when the bench made
+// it, and refuses a folder that holds anything else.
+func claimFixtureDir(dir string) error {
+	if _, err := os.Stat(filepath.Join(dir, fixtureMarker)); err == nil {
+		return nil
+	}
+	if entries, err := os.ReadDir(dir); err == nil && len(entries) > 0 {
+		return fmt.Errorf("%s already exists and was not made by the bench; move it away first", dir)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, fixtureMarker), nil, 0o644)
+}
+
+// linkSite links dir unless the site is already linked, registering the unlink
+// with the run's cleanup the moment the link exists.
+func linkSite(name, dir string) error {
+	if _, ok := siteDomain(name); ok {
+		return nil
+	}
+	return cleanup.guard(func() (func(), error) {
+		if err := inDir(dir, "lerd", "link", "--yes"); err != nil {
+			return nil, err
+		}
+		return unlinkLater(dir), nil
+	})
+}
+
+func unlinkLater(dir string) func() {
+	return func() {
+		if err := inDir(dir, "lerd", "unlink"); err != nil {
+			fmt.Fprintln(os.Stderr, "bench:", err)
+		}
+	}
+}
+
+// siteDomain is the domain lerd gave a linked site, with whatever suffix it uses.
+func siteDomain(name string) (string, bool) {
+	out, _ := runCmd("lerd", "sites")
+	for _, l := range strings.Split(out, "\n") {
+		if f := strings.Fields(l); len(f) >= 2 && f[0] == name {
+			return f[1], true
+		}
+	}
+	return "", false
+}
+
+// siteURL is where nginx serves a linked site over plain http.
+func siteURL(name string) (string, error) {
+	domain, ok := siteDomain(name)
+	if !ok {
+		return "", fmt.Errorf("site %s is not linked", name)
+	}
+	port := 80
+	if cfg, err := config.LoadGlobal(); err == nil && cfg.Nginx.HTTPPort > 0 {
+		port = cfg.Nginx.HTTPPort
+	}
+	if port == 80 {
+		return "http://" + domain + "/", nil
+	}
+	return fmt.Sprintf("http://%s:%d/", domain, port), nil
+}
+
+// linkFixture links a one-line PHP site for the run and returns its URL.
+func linkFixture() (string, error) {
 	home, _ := os.UserHomeDir()
 	dir := filepath.Join(home, "Lerd", fixtureName)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", nil, err
+	if err := claimFixtureDir(dir); err != nil {
+		return "", err
 	}
 	if err := os.WriteFile(filepath.Join(dir, "index.php"), []byte("<?php echo 'ok';\n"), 0o644); err != nil {
-		return "", nil, err
+		return "", err
 	}
-	url := "http://" + fixtureName + ".test/"
-	undo := func() {}
-	sites, _ := runCmd("lerd", "sites")
-	if !strings.Contains(sites, fixtureName+".test") {
-		link := exec.Command("lerd", "link", "--yes")
-		link.Dir = dir
-		if out, err := link.CombinedOutput(); err != nil {
-			return "", nil, fmt.Errorf("lerd link: %v: %s", err, strings.TrimSpace(string(out)))
-		}
-		undo = func() {
-			unlink := exec.Command("lerd", "unlink")
-			unlink.Dir = dir
-			if out, err := unlink.CombinedOutput(); err != nil {
-				fmt.Fprintf(os.Stderr, "bench: lerd unlink: %v: %s\n", err, out)
-			}
-		}
+	if err := linkSite(fixtureName, dir); err != nil {
+		return "", err
 	}
-	if err := waitOK(newClient(), url, 30*time.Second); err != nil {
-		undo()
-		return "", nil, err
+	url, err := siteURL(fixtureName)
+	if err != nil {
+		return "", err
 	}
-	return url, undo, nil
+	return url, waitOK(newClient(), url, 30*time.Second)
 }
 
 func newClient() *http.Client {

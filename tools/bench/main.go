@@ -6,15 +6,19 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"math"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 )
 
@@ -41,6 +45,7 @@ func main() {
 	cold := flag.Bool("cold", false, "stop and start lerd to time a cold start (restarts your stack)")
 	idle := flag.Duration("idle", 10*time.Second, "window for sampling idle CPU")
 	squeezeCPU := flag.Bool("squeeze", false, "throttle the fixture's nginx and FPM to find the minimum CPUs")
+	flag.BoolVar(&squeezeShared, "squeeze-shared", false, "squeeze even when other sites share the fixture's PHP container (they are throttled too)")
 	runs := flag.Int("runs", 3, "repetitions; each metric is the median across them")
 	history := flag.String("history", defaultHistory(), "history file to append to")
 	flag.Parse()
@@ -52,6 +57,18 @@ func main() {
 }
 
 func run(cold, squeezeCPU bool, idle time.Duration, runs int, history string) error {
+	// Links and CPU limits register their undo as they happen; it runs once,
+	// on return, on error and on Ctrl+C alike.
+	defer cleanup.run()
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sig)
+	go func() {
+		if _, ok := <-sig; ok {
+			cleanup.run()
+			os.Exit(130)
+		}
+	}()
 	if runs < 1 {
 		return fmt.Errorf("-runs must be at least 1, got %d", runs)
 	}
@@ -79,11 +96,10 @@ func run(cold, squeezeCPU bool, idle time.Duration, runs int, history string) er
 	}
 
 	step("linking the fixture site")
-	url, unlink, err := linkFixture()
+	url, err := linkFixture()
 	if err != nil {
 		return err
 	}
-	defer unlink()
 
 	for i := 1; i <= runs; i++ {
 		step(fmt.Sprintf("run %d/%d", i, runs))
@@ -259,8 +275,25 @@ func verdict(key string, old, new, noise float64) string {
 	if strings.HasPrefix(key, "calib.") || key == "containers.count" {
 		return "" // the machine, not lerd
 	}
+	// A requirement of -1 means even the most CPUs failed, not a small number.
+	if strings.HasPrefix(key, "req.") && (old < 0 || new < 0) {
+		switch {
+		case old >= 0 && new < 0:
+			return "REGRESSED"
+		case old < 0 && new >= 0:
+			return "improved"
+		}
+		return ""
+	}
 	diff := new - old
-	if math.Abs(diff) < absFloor(key) || old == 0 || math.Abs(diff)/old <= max(0.10, 2*noise) {
+	if math.Abs(diff) < absFloor(key) {
+		return ""
+	}
+	// From zero there is no ratio to take; past the floor, the change is real.
+	if old != 0 && math.Abs(diff)/old <= max(0.10, 2*noise) {
+		return ""
+	}
+	if old == 0 && absFloor(key) == 0 {
 		return ""
 	}
 	worse := diff > 0
@@ -285,6 +318,50 @@ func absFloor(key string) float64 {
 		return 0.5
 	}
 	return 0
+}
+
+// cleanups is a run's undo list: links and CPU limits add theirs as they are
+// made. run takes them newest first, once; a second caller, such as Ctrl+C
+// during the deferred run, waits for it instead of exiting mid-restore.
+type cleanups struct {
+	mu  sync.Mutex
+	fns []func()
+	ran bool
+}
+
+var cleanup cleanups
+
+func (c *cleanups) add(fn func()) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.fns = append(c.fns, fn)
+}
+
+// guard runs an action and registers the undo it returns as one step, so a
+// Ctrl+C landing mid-action waits for it and then undoes it.
+func (c *cleanups) guard(action func() (undo func(), err error)) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.ran {
+		return errors.New("interrupted")
+	}
+	undo, err := action()
+	if undo != nil {
+		c.fns = append(c.fns, undo)
+	}
+	return err
+}
+
+func (c *cleanups) run() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.ran {
+		return
+	}
+	c.ran = true
+	for i := len(c.fns) - 1; i >= 0; i-- {
+		c.fns[i]()
+	}
 }
 
 // delta formats the change from old to new as a signed percentage.
