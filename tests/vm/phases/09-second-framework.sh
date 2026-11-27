@@ -114,11 +114,13 @@ check_out "9.13 [partial] the global binary runs on the host" 'Laravel Installer
 
 # NativePHP: desktop and mobile are package layers on Laravel.
 nat=$PROJECTS/natvm
-if [ ! -d "$nat" ]; then
-	(cd "$PROJECTS" && lerd new natvm </dev/null >/dev/null 2>&1)
-	# desktop 2.4 stopped requiring php-bin, but native:install still unpacks PHP from it.
-	(cd "$nat" && lerd link </dev/null >/dev/null 2>&1 && lerd composer require nativephp/desktop nativephp/php-bin -W --no-interaction </dev/null >/dev/null 2>&1)
-fi
+# Always a fresh project: on an earlier run's, setup --all seeds again and fails
+# on the rows it left, and native:install has already filled what 9.16 names.
+[ -d "$nat" ] && (cd "$nat" && lerd unlink </dev/null >/dev/null 2>&1)
+rm -rf "${PROJECTS:?}/natvm"
+(cd "$PROJECTS" && lerd new natvm </dev/null >/dev/null 2>&1)
+# desktop 2.4 stopped requiring php-bin, but native:install still unpacks PHP from it.
+(cd "$nat" && lerd link </dev/null >/dev/null 2>&1 && lerd composer require nativephp/desktop nativephp/php-bin -W --no-interaction </dev/null >/dev/null 2>&1)
 check_not "a NativePHP desktop project finishes setup --all" '✗' bash -c "cd $nat && lerd link && lerd setup --all --skip-open"
 # Before native:install the package check has something missing to name.
 check_out "9.16 site:doctor runs the package's own check and names what is missing" 'nativephp_runtime|native:install' bash -c "cd $nat && lerd site:doctor"
