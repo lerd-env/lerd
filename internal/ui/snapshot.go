@@ -19,7 +19,8 @@ import (
 // minutes of staleness there is fine because explicit mutations invalidate
 // via AfterUnitChange and are reflected on the next tray poll regardless.
 const (
-	snapshotTTLActive = 15 * time.Second
+	// Outlasts the tray's poll, or every poll would pay a rebuild.
+	snapshotTTLActive = 60 * time.Second
 	snapshotTTLIdle   = 5 * time.Minute
 )
 

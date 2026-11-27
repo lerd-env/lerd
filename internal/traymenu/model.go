@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 )
 
 // Snapshot holds the state polled from the Lerd API.
@@ -146,6 +147,9 @@ func ReadSnapshot(get Getter, settings func() Settings) *Snapshot {
 
 // State is how a menu entry is doing; each client picks its own colour for it.
 type State string
+
+// PollInterval is how often the tray re-reads lerd-ui's snapshot.
+const PollInterval = 30 * time.Second
 
 const (
 	StateRunning  State = "running"
