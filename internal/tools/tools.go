@@ -376,10 +376,13 @@ func WriteStamp(name, version string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
+	// Rewritten even when unchanged, since its mtime is what InstalledVersion
+	// trusts, but announced only on a new version: re-reading one is no install.
+	prev, _ := os.ReadFile(path)
 	if err := os.WriteFile(path, []byte(version+"\n"), 0o644); err != nil {
 		return err
 	}
-	if OnStampWritten != nil {
+	if OnStampWritten != nil && strings.TrimSpace(string(prev)) != version {
 		OnStampWritten()
 	}
 	return nil
