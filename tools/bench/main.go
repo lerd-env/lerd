@@ -403,7 +403,28 @@ func fixtureDir(name string) string { return filepath.Join(fixtureRoot, name) }
 // shares the name still counts as theirs.
 func benchOwnedRow(line string) bool {
 	f := strings.Fields(line)
-	return len(f) > 0 && benchFixtures[f[0]] && strings.HasSuffix(strings.TrimSpace(line), fixtureDir(f[0]))
+	if len(f) == 0 || !benchFixtures[f[0]] {
+		return false
+	}
+	// The path is the last column and may hold spaces, so it runs from the
+	// last " /" to the end.
+	line = strings.TrimSpace(line)
+	i := strings.LastIndex(line, " /")
+	if i < 0 {
+		return false
+	}
+	return samePath(line[i+1:], fixtureDir(f[0]))
+}
+
+// samePath compares two folders through any symlinks, since lerd may list a
+// site under /var/home while $HOME says /home.
+func samePath(a, b string) bool {
+	if a == b {
+		return true
+	}
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	return errA == nil && errB == nil && ra == rb
 }
 
 // userSiteCount counts the user's sites in `lerd sites`, without the header,

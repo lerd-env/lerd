@@ -272,3 +272,26 @@ func TestCleanups_guardRegistersTheUndoOfAnActionInFlight(t *testing.T) {
 		t.Error("guard after cleanup did not refuse")
 	}
 }
+
+// On Silverblue /home is a symlink to /var/home, so lerd may list a fixture
+// under either spelling of the same folder.
+func TestBenchOwnedRow_followsSymlinkedHomes(t *testing.T) {
+	real := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(real, "Lerd", "bench-fixture"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "home")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	old := fixtureRoot
+	fixtureRoot = filepath.Join(link, "Lerd")
+	t.Cleanup(func() { fixtureRoot = old })
+	row := "bench-fixture  bench-fixture.test  8.4  22  No    running  " + filepath.Join(real, "Lerd", "bench-fixture")
+	if !benchOwnedRow(row) {
+		t.Error("the bench's fixture listed under its resolved path was not recognised")
+	}
+	if benchOwnedRow("bench-fixture  bench-fixture.test  8.4  22  No    running  /elsewhere/bench-fixture") {
+		t.Error("a same-named site elsewhere was taken for the fixture")
+	}
+}
