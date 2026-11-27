@@ -119,6 +119,8 @@ workers:
       file: vite.config.js
 ```
 
+On Linux a host worker gets 10 seconds to exit once it is stopped, slept or restarted before systemd kills what is left, so a dev server that misses the signal while it is still starting cannot hold the stop for systemd's default 90 seconds.
+
 The `command` is wrapped in `/bin/sh -c` so shell features (`&&`, `|`, env-var expansion, redirects) work as written. A composite command like `npm run build && npm run preview` runs end-to-end without quoting tricks.
 
 Host workers auto-start in three places:
