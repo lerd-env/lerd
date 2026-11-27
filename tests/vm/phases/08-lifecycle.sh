@@ -187,6 +187,21 @@ check "lerd share:tool pinggy" lerd share:tool pinggy
 check_out "share:tool records it" 'pinggy' lerd share:tool
 check_out "share:token reports the providers" 'ngrok|pinggy' lerd share:token
 check_out "share:domain reports the base domain" '.' lerd share:domain
+# A file in the site's RustFS bucket, linked from a page, for 8.29.
+python3 - <<'PY'
+import yaml
+cfg = yaml.safe_load(open(".lerd.yaml")) or {}
+svcs = cfg.get("services") or []
+if "rustfs" not in [x if isinstance(x, str) else x.get("name") for x in svcs]:
+    svcs.append("rustfs")
+cfg["services"] = svcs
+yaml.safe_dump(cfg, open(".lerd.yaml", "w"), sort_keys=False)
+PY
+lerd env </dev/null >/dev/null 2>&1
+bucket=$(sed -n 's/^AWS_BUCKET="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' .env | head -1)
+echo shared-from-the-bucket >/tmp/lerd-vm-share.txt
+curl -s -o /dev/null --aws-sigv4 'aws:amz:us-east-1:s3' --user lerd:lerdpassword -T /tmp/lerd-vm-share.txt "http://localhost:9000/$bucket/vm-share.txt"
+grep -q vm-storage routes/web.php || echo "Route::get('/vm-storage', fn () => '<img src=\"'.config('filesystems.disks.s3.url').'/vm-share.txt\">');" >>routes/web.php
 share_log=/tmp/lerd-vm-share.log
 (setsid lerd share </dev/null >"$share_log" 2>&1 &)
 public=""
@@ -197,6 +212,10 @@ for _ in $(seq 60); do
 done
 check_not "8.18 lerd share uses the recorded tool without asking" '\[y/N\]|\[Y/n\]|choose a' cat "$share_log"
 expect_200 8.19 "${public:-https://no-public-url.invalid}"
+file_url=$(curl -sk --max-time 30 "${public:-https://no-public-url.invalid}/vm-storage" | grep -Eo 'https://[^"]+/vm-share\.txt' | head -1)
+echo "bucket file -> ${file_url:-none}"
+check_out "8.29 a bucket file linked from the page is served through the share" "^https://${public#https://}/__lerd_vite__/[0-9]+/$bucket/vm-share\.txt shared-from-the-bucket$" bash -c "printf '%s ' '$file_url'; curl -sk --max-time 30 '$file_url'"
+rm -f /tmp/lerd-vm-share.txt
 pkill -f 'lerd share' 2>/dev/null
 lerd share:tool auto </dev/null >/dev/null 2>&1
 rm -f "$share_log"

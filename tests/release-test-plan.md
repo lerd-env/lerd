@@ -858,6 +858,8 @@ lerd worktree add -b feat-x
 - [ ] With `trust_ca: true` and a re-link a custom container on a Debian, an Alpine and a Fedora
       image reaches another secured site and a public one over HTTPS (skipped on a
       `.localhost` install, which has no HTTPS)
+- [ ] On a public `lerd share` of a site that keeps its files in RustFS, a
+      bucket file linked from a page points at the tunnel and loads from it
 
 ---
 
