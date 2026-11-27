@@ -319,6 +319,11 @@ func satisfiesConstraint(version, constraint string) bool {
 func satisfiesSingle(major, minor int, constraint string) bool {
 	// Handle AND constraints: ">=8.1 <8.5", ">=8.1,<8.5"
 	parts := splitAND(constraint)
+	// A hyphen range, "8.2 - 8.5", is inclusive at both ends. At major.minor
+	// granularity "<=8.5" covers both "- 8.5" (<8.6) and "- 8.5.3".
+	if len(parts) == 3 && parts[1] == "-" {
+		return satisfiesSingle(major, minor, ">="+parts[0]) && satisfiesSingle(major, minor, "<="+parts[2])
+	}
 	if len(parts) > 1 {
 		for _, p := range parts {
 			if !satisfiesSingle(major, minor, p) {

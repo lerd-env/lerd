@@ -101,6 +101,14 @@ check_out "9.18 the dashboard's tinker shows a WordPress bare expression" 'strin
 check_out "9.18 and a WordPress fatal's message" 'Call to undefined function vm_nope' tinker "$wp" '"vm_nope()"'
 check_out "9.18 and a Drupal bare expression" '"stdout":"[^"]*\\"1[0-9]\.' tinker "$drup" '"\\Drupal::VERSION"'
 
+# Yii 3 writes its PHP range as a hyphen range ("8.2 - 8.5"), which lerd used to
+# read as matching nothing, so link fell back to 8.2 under a lock needing 8.4.
+scaffold y3 yii 3 >/dev/null 2>&1
+y3=$PROJECTS/y3
+check_out "9.19 Yii 3 links on the Yii 3 definition, on PHP 8.4 or newer" '^y3 .* 8\.([4-9]|[1-9][0-9]) .*yii 3' lerd sites
+check_out "9.19 [partial] the Yii 3 app answers" '^200$' code "$(site_url "$y3")"
+check_out "9.19 and its tinker has the DI container" 'Yiisoft.{1,4}Di.{1,4}Container' tinker "$y3" '"get_class($container)"'
+
 # Packages: horizon belongs to Laravel only, messenger to Symfony only. Horizon
 # goes into phase 6's throwaway project, never demo, where it would supersede
 # the queue worker for every phase after this one.
