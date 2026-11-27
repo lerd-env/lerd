@@ -47,49 +47,61 @@ func SetServicePinned(name string, v bool) error {
 // keeping its configuration in wp-config.php or app/etc/env.php counts the same
 // as one keeping it in .env.
 func SitesUsingService(name string) []Site {
+	return LoadServiceUsage().Sites(name)
+}
+
+// ServiceUsage is what every active site references, read once, so a caller
+// asking about many services (the dashboard's services list) reads each site's
+// project and env files one time instead of once per service.
+type ServiceUsage struct {
+	sites []siteRefs
+}
+
+type siteRefs struct {
+	site     Site
+	declared []string // services listed in .lerd.yaml
+	env      string
+}
+
+// LoadServiceUsage reads the project and env file of every active site.
+func LoadServiceUsage() *ServiceUsage {
+	u := &ServiceUsage{}
 	reg, err := LoadSites()
 	if err != nil {
-		return nil
+		return u
 	}
-	domain := ServiceDomain(name)
-	var out []Site
 	for _, s := range reg.Sites {
 		if s.Ignored || s.Paused {
 			continue
 		}
-		// A loopback runtime rewrites the host to 127.0.0.1, so a site's env
-		// stops naming the container and only lerd's own record still does.
-		if slices.Contains(s.WiredServices, name) {
-			out = append(out, s)
-			continue
-		}
+		r := siteRefs{site: s}
 		if proj, pErr := LoadProjectConfig(s.Path); pErr == nil {
-			matched := false
 			for _, svc := range proj.Services {
-				if svc.Name == name {
-					out = append(out, s)
-					matched = true
-					break
-				}
-			}
-			if matched {
-				continue
+				r.declared = append(r.declared, svc.Name)
 			}
 		}
 		envFile, _ := EnvFileFor(s.Path)
-		if data, err := os.ReadFile(filepath.Join(s.Path, envFile)); err == nil {
-			if envfile.ReferencesContainer(string(data), name) {
-				out = append(out, s)
-				continue
-			}
-			// A site whose env was rewritten to the service's domain no longer
-			// names the container at all, so without this it drops out of every
-			// sweep that keeps it wired: the one that would put the container
-			// name back when the domain goes away, and the provisioning that
-			// keeps its database or bucket there.
-			if domain != "" && strings.Contains(string(data), domain) {
-				out = append(out, s)
-			}
+		if data, rErr := os.ReadFile(filepath.Join(s.Path, envFile)); rErr == nil {
+			r.env = string(data)
+		}
+		u.sites = append(u.sites, r)
+	}
+	return u
+}
+
+// Sites returns the sites using the service, by the rules SitesUsingService documents.
+func (u *ServiceUsage) Sites(name string) []Site {
+	domain := ServiceDomain(name)
+	var out []Site
+	for _, r := range u.sites {
+		// A loopback runtime or a service domain rewrites the host, so the env
+		// may no longer name the container and only lerd's record or the
+		// domain still ties the site to it.
+		if slices.Contains(r.site.WiredServices, name) ||
+			slices.Contains(r.declared, name) ||
+			envfile.ReferencesContainer(r.env, name) ||
+			(domain != "" && strings.Contains(r.env, domain)) {
+			out = append(out, r.site)
 		}
 	}
 	return out

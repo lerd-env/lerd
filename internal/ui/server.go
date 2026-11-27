@@ -1619,7 +1619,7 @@ func loadServicesMap() map[string]config.ServiceConfig {
 }
 
 func buildServiceResponse(name string) ServiceResponse {
-	return buildServiceResponseWithPortList(loadServicesMap(), name, "", nil)
+	return buildServiceResponseWithPortList(loadServicesMap(), config.LoadServiceUsage(), name, "", nil)
 }
 
 // buildServiceResponseWithPortList is the single builder for a service's UI
@@ -1686,7 +1686,7 @@ func serviceVersion(image string, custom *config.CustomService) string {
 	return podman.ServiceVersionLabel(image)
 }
 
-func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, name, ssOutput string, custom *config.CustomService) ServiceResponse {
+func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, usage *config.ServiceUsage, name, ssOutput string, custom *config.CustomService) ServiceResponse {
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
 	var external, externalFamily, externalTools string
@@ -1771,6 +1771,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		image = custom.Image
 	}
 	pres := resolvePresentation(name, custom)
+	users := usage.Sites(name)
 	resp := ServiceResponse{
 		External:          external,
 		ExternalTools:     externalTools,
@@ -1791,8 +1792,8 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		Preset:            presetNameOf(name, custom),
 		Port:              hostPort,
 		Domain:            services[name].Domain,
-		SiteCount:         countSitesUsingService(name),
-		SiteDomains:       sitesUsingService(name),
+		SiteCount:         len(users),
+		SiteDomains:       primaryDomains(users),
 		Pinned:            config.ServiceIsPinned(name),
 		KeptAwakeBy:       cli.IdleServicePinnedSites(name),
 		Paused:            config.ServiceIsPaused(name),
@@ -1892,6 +1893,8 @@ func buildServicesList() []ServiceResponse {
 	// Load the global config once for the whole rebuild; effectiveHostPort reads
 	// the shared Services map instead of re-loading (and deep-cloning) it per service.
 	svcCfg := loadServicesMap()
+	// Read every site's files once too, rather than once per service.
+	usage := config.LoadServiceUsage()
 
 	defaultNames := siteinfo.KnownServices()
 	services := make([]ServiceResponse, 0, len(defaultNames))
@@ -1902,14 +1905,14 @@ func buildServicesList() []ServiceResponse {
 		if !serviceops.ServiceInstalled(name) {
 			continue
 		}
-		services = append(services, buildServiceResponseWithPortList(svcCfg, name, ssOutput, nil))
+		services = append(services, buildServiceResponseWithPortList(svcCfg, usage, name, ssOutput, nil))
 	}
 	// Optional presets (gotenberg, mongo, …) and user services materialise as
 	// custom services; they go through the SAME builder as the default presets
 	// so every field is populated identically for both kinds.
 	customs, _ := config.ListCustomServices()
 	for _, svc := range customs {
-		services = append(services, buildServiceResponseWithPortList(svcCfg, svc.Name, ssOutput, svc))
+		services = append(services, buildServiceResponseWithPortList(svcCfg, usage, svc.Name, ssOutput, svc))
 	}
 	for _, siteName := range listActiveQueueWorkers() {
 		services = append(services, ServiceResponse{
@@ -3098,48 +3101,12 @@ func ensureCustomServiceQuadlet(svc *config.CustomService) error {
 	return serviceops.EnsureCustomServiceQuadlet(svc)
 }
 
-// countSitesUsingService counts how many active site .env files reference lerd-{name}.
-func countSitesUsingService(name string) int {
-	return config.CountSitesUsingService(name)
-}
-
-// sitesUsingService returns the domains of active sites that use the named service.
-// Checks both .lerd.yaml services list and .env file references.
-func sitesUsingService(name string) []string {
-	reg, err := config.LoadSites()
-	if err != nil {
-		return nil
+func primaryDomains(sites []config.Site) []string {
+	var out []string
+	for _, s := range sites {
+		out = append(out, s.PrimaryDomain())
 	}
-	needle := "lerd-" + name
-	var domains []string
-	for _, s := range reg.Sites {
-		if s.Ignored || s.Paused {
-			continue
-		}
-		// Check .lerd.yaml services list first.
-		if proj, pErr := config.LoadProjectConfig(s.Path); pErr == nil {
-			found := false
-			for _, svc := range proj.Services {
-				if svc.Name == name {
-					found = true
-					break
-				}
-			}
-			if found {
-				domains = append(domains, s.PrimaryDomain())
-				continue
-			}
-		}
-		// Fall back to .env scanning.
-		data, err := os.ReadFile(filepath.Join(s.Path, ".env"))
-		if err != nil {
-			continue
-		}
-		if strings.Contains(string(data), needle) {
-			domains = append(domains, s.PrimaryDomain())
-		}
-	}
-	return domains
+	return out
 }
 
 // serviceRecentLogs is implemented per-platform in logs_linux.go / logs_darwin.go.
