@@ -21,7 +21,7 @@ import (
 
 // Version pins the phpantom_lsp release lerd installs. Bump alongside a
 // tested upgrade; the binary is re-fetched when the on-disk copy is missing.
-const Version = "0.11.1"
+const Version = "1.1.0"
 
 const binName = "phpantom_lsp"
 
