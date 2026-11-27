@@ -12,6 +12,7 @@ This page covers getting a project registered and served: the init wizard, linki
 | `lerd unpark [dir]` | Remove a parked directory and unlink all its sites |
 | `lerd link [domain]` | Register the current directory as a site (domain name without TLD, defaults to directory name). On a fresh project in an interactive terminal it runs the `lerd init` wizard first |
 | `lerd unlink` | Unlink the current directory site (removes all domains) |
+| `lerd unlink --delete-files` | Unlink the site and delete its project directory from disk, after confirming; add `--yes` to skip the confirmation |
 | `lerd sites` | Table view of all registered sites, with a Status column saying whether each one is running, stopped or paused |
 | `lerd sites:restore [backup]` | Put the site registry back from one of its automatic backups, showing what it would change and confirming first |
 | `lerd open [name]` | Open the site in the default browser |
@@ -227,6 +228,12 @@ success.
 When you unlink a site that lives inside a parked directory, the vhost is removed but the registry entry is kept and marked as *ignored*; the watcher will not re-register it on its next scan. Running `lerd link` in that directory clears the ignored flag and restores the site.
 
 Either way, unlinking also drops the site's per-site [request-timing](../features/request-timing.md) and idle state: its rows in the durable request store, its entries in the persisted request-timing and idle-activity snapshots, and the running watcher's in-memory copy, so an unlinked site leaves no stale traffic history behind. A site's git worktrees are covered too.
+
+### Deleting the project directory
+
+Unlinking keeps the project's files. To remove them as well, run `lerd unlink --delete-files`, or tick **Also delete the project folder from disk** in the dashboard's unlink dialog. Before anything is unlinked, lerd names the folder and what goes with it: the worktrees inside it, worktrees beside it that stay behind with their git data gone, checkouts with uncommitted changes, and commits that are on no remote, counting a detached checkout, a tag, a stash or a submodule branch that only lives there. If git cannot read part of the project, say a damaged index, it says which part, since its work may be missing from the list. You then confirm by typing the site's name. Without a terminal, `--yes` is the confirmation, and the dashboard only offers the option when it is open on the lerd host itself.
+
+The folder is deleted permanently, not moved to the Trash, and only after the unlink has finished, so a failed delete leaves a cleanly unlinked site and says what is still on disk. A parked site's ignored entry is dropped too, since there is no folder left for the watcher to find. lerd refuses to delete a folder that is not a project: your home directory, a parked directory or mounted folder or any folder holding one, a folder holding another linked site (unlink that one first), lerd's own files, a symlink, or anything outside the folders its containers mount, judged by where the path really leads, so a folder above the project replaced by a symlink cannot send the delete elsewhere. A project linked outside your home directory counts, since lerd mounts it by its own path. The site's databases are left alone, and deleting a folder is not offered over MCP or in the TUI.
 
 ---
 

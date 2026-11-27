@@ -4251,6 +4251,11 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if action == "unlink:preview" && r.Method == http.MethodGet {
+		handleSiteUnlinkPreview(w, r, domain)
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		http.NotFound(w, r)
 		return
@@ -4351,7 +4356,12 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			cli.RegenerateHostWorkersForSite(*site)
 		}
 	case "unlink":
-		if err := cli.UnlinkSite(site.Name); err != nil {
+		opts, refusal := unlinkOptions(r, site.Name)
+		if refusal != "" {
+			writeJSON(w, SiteActionResponse{Error: refusal})
+			return
+		}
+		if err := cli.UnlinkSiteWith(site.Name, opts); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}

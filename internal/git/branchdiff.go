@@ -61,9 +61,16 @@ func BranchDates(dir string) map[string]int64 {
 
 // DirtyFiles lists the paths with uncommitted work: staged, modified or untracked.
 func DirtyFiles(dir string) []string {
+	files, _ := DirtyFilesErr(dir)
+	return files
+}
+
+// DirtyFilesErr is DirtyFiles for a caller that must tell a clean checkout from
+// one git could not read.
+func DirtyFilesErr(dir string) ([]string, error) {
 	out, err := Output(dir, "status", "--porcelain=v1", "-z", "--untracked-files=all")
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	var files []string
 	entries := strings.Split(out, "\x00")
@@ -81,7 +88,7 @@ func DirtyFiles(dir string) []string {
 			}
 		}
 	}
-	return files
+	return files, nil
 }
 
 // RepoPrefix is dir's path inside its repository, "apps/shop/" for a site

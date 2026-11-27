@@ -684,7 +684,24 @@ export const pauseSite = (d: string) => postAction(site(d, 'pause'));
 export const resumeSite = (d: string) => postAction(site(d, 'unpause'));
 export const pinSite = (d: string) => postAction(site(d, 'pin'));
 export const unpinSite = (d: string) => postAction(site(d, 'unpin'));
-export const unlinkSite = (d: string) => postAction(site(d, 'unlink'));
+// unlinkSite unlinks a site and, given the site's name typed back, deletes its directory.
+export const unlinkSite = (d: string, deleteDirConfirm?: string) =>
+  postAction(
+    site(d, 'unlink') +
+      (deleteDirConfirm === undefined ? '' : `?delete_dir=1&confirm=${encodeURIComponent(deleteDirConfirm)}`)
+  );
+
+// What deleting a site's directory takes with it; refused says why it cannot be.
+export interface SiteDirReport {
+  path: string;
+  inside_worktrees?: string[];
+  outside_worktrees?: string[];
+  uncommitted?: string[];
+  unpushed?: number;
+  unchecked?: string[];
+  refused?: string;
+}
+export const previewSiteDirDelete = (d: string) => apiJson<SiteDirReport>(site(d, 'unlink:preview'));
 // addSuggestedService takes up a suggestion, as preset at version when the
 // picker chose another preset or version for it.
 export const addSuggestedService = (d: string, name: string, preset = '', version = '') => {

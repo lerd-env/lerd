@@ -350,3 +350,45 @@ else
 	trust_ca_site fedora registry.fedoraproject.org/fedora:43 curl -fsS -o /dev/null
 	[ "$scheme" = https ] || lerd unsecure "$name" </dev/null
 fi
+
+# Deleting a site's folder on unlink. Each folder is new to this run (mkdir
+# without -p fails on one that exists), so cleanup removes only what it made.
+mkdeletable() { mkdir -p "$1/public" && echo '{}' >"$1/composer.json" && echo "<?php echo 'ok';" >"$1/public/index.php"; }
+run_id=$(date +%s)$$
+delpark=$HOME/lerd-vm-delete-$run_id
+holder=$HOME/lerd-vm-holder-$run_id
+made=()
+if mkdir "$delpark" && made+=("$delpark") && mkdir "$holder" && made+=("$holder"); then
+	mkdeletable "$delpark/gone"
+	# lerd sites prints the resolved path (Bazzite's /home is a link), so the
+	# searches use it, resolved once while the folder still exists.
+	gone_path=$(realpath -m "$delpark/gone")
+	lerd park "$delpark" </dev/null >/dev/null 2>&1
+	check "the parked site to delete is linked" wait_for 90 bash -c "lerd sites | grep -qF '$gone_path'"
+	gone=$(site_name "$delpark/gone")
+	check_out "8.29 unlink --delete-files with no terminal asks for --yes" 'pass --yes' lerd unlink "$gone" --delete-files
+	check "8.29 the site stays linked with its folder on disk" bash -c "lerd sites | grep -qF '$gone_path' && test -d '$delpark/gone'"
+	check "8.30 unlink --delete-files --yes deletes the folder" bash -c "lerd unlink '$gone' --delete-files --yes && test ! -e '$delpark/gone'"
+	check_not "8.30 and drops it from lerd sites" "$gone_path" lerd sites
+
+	mkdeletable "$holder"
+	mkdir "$holder/inner"
+	(cd "$holder" && lerd link </dev/null >/dev/null 2>&1)
+	lerd park "$holder/inner" </dev/null >/dev/null 2>&1
+	held=$(site_name "$holder")
+	check_out "8.31 unlink --delete-files refuses a site holding a parked directory" 'holds a folder lerd mounts' lerd unlink "$held" --delete-files --yes
+	expect_200 8.31 "$(site_url "$holder")"
+	lerd unpark "$holder/inner" </dev/null >/dev/null 2>&1
+
+	mkdeletable "$holder/admin"
+	(cd "$holder/admin" && lerd link </dev/null >/dev/null 2>&1)
+	admin=$(site_name "$holder/admin")
+	check_out "8.32 unlink --delete-files refuses a site holding another linked site" 'holds the linked site' lerd unlink "$held" --delete-files --yes
+	check "8.32 and leaves both folders in place" test -d "$holder/admin/public"
+	lerd unlink "$admin" </dev/null >/dev/null 2>&1
+	lerd unlink "$held" </dev/null >/dev/null 2>&1
+	lerd unpark "$delpark" </dev/null >/dev/null 2>&1
+else
+	check "8.29 the run's own test folders could be created" false
+fi
+for dir in ${made[@]+"${made[@]}"}; do rm -rf "$dir"; done
