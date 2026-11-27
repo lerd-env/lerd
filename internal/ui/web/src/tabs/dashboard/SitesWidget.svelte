@@ -5,7 +5,7 @@
   import SitesEmptyState from '$components/SitesEmptyState.svelte';
   import Icon from '$components/Icon.svelte';
   import SiteTile from '$tabs/sites/SiteTile.svelte';
-  import { sites, sitesLoaded, siteWorkerFailing } from '$stores/sites';
+  import { sites, sitesLoaded, siteWorkerFailing, brokenSites } from '$stores/sites';
   import { status } from '$stores/status';
   import { openLinkModal } from '$stores/modals';
   import { goToTab } from '$stores/route';
@@ -31,7 +31,7 @@
         {#if total > 0 || !$status.streaming_mode}<StreamingToggle />{/if}
         <StatusPill
           size="sm"
-          tone={failing > 0 ? 'error' : running > 0 ? 'ok' : 'muted'}
+          tone={failing > 0 ? 'error' : $brokenSites.length > 0 ? 'warn' : running > 0 ? 'ok' : 'muted'}
           label={m.dashboard_sites_summary({ running, total })}
         />
       </span>

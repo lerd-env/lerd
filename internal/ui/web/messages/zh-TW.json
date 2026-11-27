@@ -118,7 +118,7 @@
   "dashboard_health_profiler": "效能分析器",
   "dashboard_health_title": "系統健康",
   "dashboard_health_watcher": "檔案監視器",
-  "dashboard_hero_allGood": "一切運作正常 · {sitesRunning}/{sitesTotal} 個網站 · {servicesActive} 個服務運作中",
+  "dashboard_hero_allGood": "Lerd 運作順暢",
   "dashboard_hero_coreDown": "{components} 未執行",
   "dashboard_hero_coreDownHint": "核心服務是網站正常回應的必要條件。",
   "dashboard_hero_openSystem": "開啟系統",

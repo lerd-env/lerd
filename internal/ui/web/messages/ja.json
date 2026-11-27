@@ -118,7 +118,7 @@
   "dashboard_health_profiler": "プロファイラ",
   "dashboard_health_title": "システム状態",
   "dashboard_health_watcher": "ファイルウォッチャー",
-  "dashboard_hero_allGood": "すべて順調に稼働中 · サイト {sitesRunning}/{sitesTotal} · サービス {servicesActive} 件稼働中",
+  "dashboard_hero_allGood": "Lerd は正常に稼働しています",
   "dashboard_hero_coreDown": "{components} が稼働していません",
   "dashboard_hero_coreDownHint": "サイトが応答するにはコアサービスが必要です。",
   "dashboard_hero_openSystem": "システムを開く",

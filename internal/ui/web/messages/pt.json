@@ -118,7 +118,7 @@
   "dashboard_health_profiler": "Perfilador",
   "dashboard_health_title": "Saúde do sistema",
   "dashboard_health_watcher": "Monitor de arquivos",
-  "dashboard_hero_allGood": "Tudo funcionando · {sitesRunning}/{sitesTotal} sites · {servicesActive} serviços ativos",
+  "dashboard_hero_allGood": "O Lerd está funcionando bem",
   "dashboard_hero_coreDown": "{components} fora do ar",
   "dashboard_hero_coreDownHint": "Os serviços principais são necessários para que os sites respondam.",
   "dashboard_hero_openSystem": "Abrir sistema",

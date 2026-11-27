@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { sites } from '$stores/sites';
-  import { coreServices } from '$stores/services';
   import { unhealthyWorkers } from '$stores/workerHealth';
   import { statusLoaded, coreDown } from '$stores/status';
   import HeroStatus from './dashboard/HeroStatus.svelte';
@@ -17,10 +15,8 @@
   import { m } from '../paraglide/messages.js';
 
   // Stack status sits beside the title in both states, so neither a healthy
-  // nor a broken stack burns a row of vertical space above the cards.
-  const sitesRunning = $derived($sites.filter((s) => s.fpm_running && !s.paused).length);
-  const sitesTotal = $derived($sites.length);
-  const servicesActive = $derived($coreServices.filter((s) => s.status === 'active').length);
+  // nor a broken stack burns a row of vertical space above the cards. It speaks
+  // for lerd itself; sites and services report their own state in their cards.
   const everythingHealthy = $derived($statusLoaded && $unhealthyWorkers.length === 0 && $coreDown.length === 0);
 </script>
 
@@ -35,7 +31,7 @@
             <span class="absolute inline-flex w-full h-full rounded-full bg-emerald-400 opacity-70 animate-ping"></span>
             <span class="relative inline-flex w-2 h-2 rounded-full bg-emerald-500"></span>
           </span>
-          {m.dashboard_hero_allGood({ sitesRunning, sitesTotal, servicesActive })}
+          {m.dashboard_hero_allGood()}
         </p>
       {:else if $coreDown.length > 0}
         <HeroStatus />

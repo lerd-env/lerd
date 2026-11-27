@@ -118,7 +118,7 @@
   "dashboard_health_profiler": "Profilleyici",
   "dashboard_health_title": "Sistem sağlığı",
   "dashboard_health_watcher": "Dosya izleyici",
-  "dashboard_hero_allGood": "Her şey yolunda · {sitesRunning}/{sitesTotal} site · {servicesActive} servis aktif",
+  "dashboard_hero_allGood": "Lerd sorunsuz çalışıyor",
   "dashboard_hero_coreDown": "{components} çalışmıyor",
   "dashboard_hero_coreDownHint": "Sitelerin yanıt vermesi için çekirdek servisler gereklidir.",
   "dashboard_hero_openSystem": "Sistemi aç",
