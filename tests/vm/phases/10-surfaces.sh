@@ -249,7 +249,7 @@ rm -rf "$HOME/lerd-vm-fakebin"
 dashboard_frames() {
 	python3 - "$1" <<'PY'
 import socket, sys, time
-s = socket.create_connection(("127.0.0.1", 7073))
+s = socket.create_connection(("127.0.0.1", 7073), timeout=20)
 s.sendall(b"GET /api/ws HTTP/1.1\r\nHost: 127.0.0.1:7073\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
           b"Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n")
 buf = b""
