@@ -523,6 +523,9 @@ left there is where resolved fails over after one dropped upstream query:
       with SIGTERM or `kill -9` takes its whole process group with it, and
       Ctrl+Z, `fg` and Ctrl+C in an interactive shell stop, resume and end it
       with the shell still usable
+- [ ] A root CA added on the host (a company CA in the distro's local anchor
+      folder) is refused inside the PHP image until `lerd php:trust-host-ca on`
+      and `lerd php:rebuild`, then trusted, and gone again after `off` and a rebuild
 
 ---
 

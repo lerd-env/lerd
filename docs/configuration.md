@@ -161,6 +161,8 @@ php:
                         # mounts it into every PHP container, so one registration
                         # covers every version and every site. The driver file
                         # itself stays where the vendor's installer put it.
+  trust_host_ca: false  # trust the root CAs this machine added (a company CA)
+                        # in every PHP image (`lerd php:trust-host-ca`).
   ext_apk_deps:         # extra Alpine packages required at build time by
                         # `lerd php:ext add <ext> --apk-deps <pkgs>` invocations.
                         # Keyed by extension name (build deps don't vary by PHP

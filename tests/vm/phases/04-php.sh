@@ -396,4 +396,36 @@ check "4.33 nothing of the host command is left after Ctrl+C" wait_for 15 eg_hgo
 rm -f "$eg_sail"
 [ -e "$eg_sail.lerd-vm" ] && mv "$eg_sail.lerd-vm" "$eg_sail"
 rm -f "$DEMO_DIR"/storage/lerd-vm-eg-*.php "$DEMO_DIR/vendor/bin/lerd-vm-egrun"
+
+# A root the host added (a company CA) reaches the PHP image only once the user
+# opts in, and leaves it again when they opt out.
+hc_dir=$HOME/lerd-vm-hostca
+for hc in "/usr/local/share/ca-certificates update-ca-certificates" "/etc/pki/ca-trust/source/anchors update-ca-trust extract" "/etc/ca-certificates/trust-source/anchors trust extract-compat"; do
+	read -r hc_anchor hc_update <<<"$hc"
+	[ -d "$hc_anchor" ] && command -v "${hc_update%% *}" >/dev/null && break
+	hc_anchor=
+done
+hc_probe() { wait_for 30 podman exec lerd-php84-fpm true >/dev/null 2>&1; podman exec lerd-php84-fpm php -r '$c=curl_init("https://host.containers.internal:8443/");curl_setopt($c,CURLOPT_RETURNTRANSFER,1);echo curl_exec($c)===false?"curl-".curl_errno($c):"http-".curl_getinfo($c,CURLINFO_HTTP_CODE),"\n";'; }
+if [ -z "$hc_anchor" ]; then
+	skip "4.34 a root the host added is trusted in the PHP image only while php:trust-host-ca is on" "no known CA anchor folder on this guest"
+else
+	mkdir -p "$hc_dir"
+	openssl req -x509 -newkey rsa:2048 -nodes -keyout "$hc_dir/ca.key" -out "$hc_dir/ca.crt" -days 2 -subj "/CN=lerd-vm company root" 2>/dev/null
+	openssl req -newkey rsa:2048 -nodes -keyout "$hc_dir/srv.key" -out "$hc_dir/srv.csr" -subj "/CN=host.containers.internal" 2>/dev/null
+	printf 'subjectAltName=DNS:host.containers.internal\n' >"$hc_dir/ext.cnf"
+	openssl x509 -req -in "$hc_dir/srv.csr" -CA "$hc_dir/ca.crt" -CAkey "$hc_dir/ca.key" -CAcreateserial -out "$hc_dir/srv.crt" -days 2 -extfile "$hc_dir/ext.cnf" 2>/dev/null
+	sudo cp "$hc_dir/ca.crt" "$hc_anchor/lerd-vm-company.crt" && sudo $hc_update >/dev/null 2>&1
+	systemctl --user reset-failed lerd-vm-hostca 2>/dev/null
+	systemd-run --user --unit=lerd-vm-hostca openssl s_server -quiet -www -accept 8443 -cert "$hc_dir/srv.crt" -key "$hc_dir/srv.key" >/dev/null 2>&1
+	check_out "4.34 the PHP image does not trust a root the host added while the opt-in is off" '^curl-60$' hc_probe
+	check "lerd php:trust-host-ca on" lerd php:trust-host-ca on
+	check "lerd php:rebuild 8.4" lerd php:rebuild 8.4
+	check_out "4.34 with php:trust-host-ca on a rebuilt image reaches a host signed by that root" '^http-200$' hc_probe
+	lerd php:trust-host-ca off </dev/null >/dev/null 2>&1
+	check "lerd php:rebuild 8.4" lerd php:rebuild 8.4
+	check_out "4.34 turning it off and rebuilding takes the root out again" '^curl-60$' hc_probe
+	systemctl --user stop lerd-vm-hostca 2>/dev/null
+	sudo rm -f "$hc_anchor/lerd-vm-company.crt" && sudo $hc_update >/dev/null 2>&1
+	rm -rf "$hc_dir"
+fi
 reclaim
